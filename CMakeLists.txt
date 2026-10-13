@@ -1,5 +1,6 @@
 #### VGMPlay (libvgm-based) ####
-cmake_minimum_required(VERSION 3.6)	# actual minimum is 3.3
+# minimum 3.14 is required by CPM.cmake (used by libvgm's zlib dependency)
+cmake_minimum_required(VERSION 3.20)
 if(POLICY CMP0042)
 	cmake_policy(SET CMP0042 NEW)
 endif()
@@ -16,7 +17,36 @@ include(GNUInstallDirs)
 
 list(APPEND CMAKE_MODULE_PATH "${PROJECT_SOURCE_DIR}/libs/cmake_modules/")
 
-find_package(libvgm REQUIRED)
+# --- static MSVC runtime (/MT) ---
+# Link the C/C++ runtime statically, so that the resulting executable only depends on
+# Windows system DLLs instead of requiring the VC++ Redistributable to be installed.
+# (Use CMAKE_MSVC_RUNTIME_LIBRARY=MultiThreadedDLL to link against the runtime DLLs.)
+if(MSVC)
+	set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>" CACHE STRING
+		"MSVC runtime library to use (MultiThreaded = static, MultiThreadedDLL = dynamic)")
+endif()
+
+# --- libvgm ---
+# Build the libvgm submodule as part of this project (one-shot build, static libraries).
+# If the submodule is not checked out, fall back to an installed libvgm package.
+if(EXISTS "${PROJECT_SOURCE_DIR}/libvgm/CMakeLists.txt")
+	# defaults for the in-tree libvgm build
+	set(LIBRARY_TYPE "STATIC" CACHE STRING "libvgm: library build type (STATIC/SHARED)")
+	set(BUILD_TESTS OFF CACHE BOOL "libvgm: build test programs")
+	set(BUILD_PLAYER OFF CACHE BOOL "libvgm: build the libvgm command-line player")
+	set(BUILD_VGM2WAV OFF CACHE BOOL "libvgm: build the vgm2wav tool")
+	if(WIN32)
+		# Use the WinAPI for charset conversion: the libiconv bundled with libvgm
+		# is a DLL import library and would add a runtime dependency.
+		set(UTIL_CHARCNV_ICONV OFF CACHE BOOL "libvgm: charset conversion via iconv")
+		set(UTIL_CHARCNV_WINAPI ON CACHE BOOL "libvgm: charset conversion via the WinAPI")
+	endif()
+	add_subdirectory(libvgm)
+	set(LIBVGM_TARGETS vgm-utils vgm-audio vgm-emu vgm-player)
+else()
+	find_package(libvgm REQUIRED)
+	set(LIBVGM_TARGETS libvgm::vgm-utils libvgm::vgm-audio libvgm::vgm-emu libvgm::vgm-player)
+endif()
 
 if(MSVC)
 	if(CMAKE_CL_64)
@@ -173,7 +203,7 @@ endif()
 add_executable(${EXE_NAME} ${HEADERS} ${SOURCES} ${PLAYER_HEADERS} ${PLAYER_FILES})
 target_compile_definitions(${EXE_NAME} PRIVATE ${PLAYER_DEFS})
 target_include_directories(${EXE_NAME} PRIVATE ${PROJECT_SOURCE_DIR} ${INCLUDES})
-target_link_libraries(${EXE_NAME} PRIVATE ${LIBRARIES} libvgm::vgm-utils libvgm::vgm-audio libvgm::vgm-emu libvgm::vgm-player ${PLAYER_LIBS})
+target_link_libraries(${EXE_NAME} PRIVATE ${LIBRARIES} ${LIBVGM_TARGETS} ${PLAYER_LIBS})
 #add_sanitizers(${EXE_NAME})
 
 install(TARGETS ${EXE_NAME} RUNTIME DESTINATION "${CMAKE_INSTALL_BINDIR}")

@@ -96,3 +96,10 @@ $RECYCLE.BIN/
 # Mac crap
 .DS_Store
 
+#############
+## CMake/Ninja build output (see build.ps1)
+#############
+
+dist/
+compile_commands.json
+
