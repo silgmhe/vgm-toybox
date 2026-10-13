@@ -8,11 +8,13 @@ namespace
 	constexpr int kCardGap = 10;
 	constexpr int kCardPadding = 12;
 	constexpr int kTopRowHeight = 32;
-	constexpr int kTransportHeight = 122;
+	constexpr int kTransportHeight = 132;		// 34 (buttons) + 5 + 12 (loop marker) + 1 + 22 (slider) + 8 + 26 + padding
 	constexpr int kRowGap = 8;
 	constexpr int kTransportButtonSize = 34;
+	constexpr int kLoopMarkerHeight = 12;
 	constexpr float kCardRadius = 10.0f;
 	constexpr float kButtonRadius = 8.0f;
+	constexpr float kSliderThumbRadius = 6.5f;	// must match LightLookAndFeel::drawLinearSlider
 
 	// --- macOS-flavoured light palette -------------------------------------------------
 	juce::Colour windowColour (void)		{ return juce::Colour (0xfff2f2f7); }
@@ -39,6 +41,28 @@ namespace
 		g.fillRoundedRectangle (area, kCardRadius);
 		g.setColour (borderColour());
 		g.drawRoundedRectangle (area.reduced (0.5f), kCardRadius, 1.0f);
+	}
+
+	/** The "repeat" glyph: a ring with an arrow head on the top and the bottom edge. */
+	void drawRepeatGlyph (juce::Graphics& g, juce::Rectangle<float> iconArea, juce::Colour colour)
+	{
+		g.setColour (colour);
+
+		juce::Path ring;
+		ring.addRoundedRectangle (iconArea.getX(), iconArea.getY(), iconArea.getWidth(), iconArea.getHeight(),
+								  iconArea.getWidth() * 0.34f);
+		g.strokePath (ring, juce::PathStrokeType (juce::jmax (1.1f, iconArea.getWidth() * 0.12f),
+												  juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+
+		const float head = iconArea.getWidth() * 0.36f;
+		juce::Path heads;
+		heads.addTriangle (iconArea.getRight() - head, iconArea.getY() - head * 0.5f,
+						   iconArea.getRight() - head, iconArea.getY() + head * 0.5f,
+						   iconArea.getRight(), iconArea.getY());
+		heads.addTriangle (iconArea.getX() + head, iconArea.getBottom() - head * 0.5f,
+						   iconArea.getX() + head, iconArea.getBottom() + head * 0.5f,
+						   iconArea.getX(), iconArea.getBottom());
+		g.fillPath (heads);
 	}
 
 	int loopBoxIdForCount (int loops)
@@ -210,13 +234,15 @@ void VGMPlayAudioProcessorEditor::LightLookAndFeel::drawLinearSlider (juce::Grap
 	const bool enabled = slider.isEnabled();
 	const float centreY = (float) y + (float) height * 0.5f;
 	constexpr float trackHeight = 4.0f;
-	constexpr float thumbRadius = 6.5f;
+	constexpr float thumbRadius = kSliderThumbRadius;	// shared with the loop point marker
 
 	const juce::Rectangle<float> track ((float) x, centreY - trackHeight * 0.5f, (float) width, trackHeight);
 	g.setColour (slider.findColour (juce::Slider::backgroundColourId).withMultipliedAlpha (enabled ? 1.0f : 0.6f));
 	g.fillRoundedRectangle (track, trackHeight * 0.5f);
 
-	const float thumbX = juce::jlimit (track.getX() + thumbRadius, track.getRight() - thumbRadius, sliderPos);
+	// getSliderLayout() has already inset the slider bounds by the thumb radius, so sliderPos
+	// maps directly onto the track (insetting it again would shift the thumb against the mouse)
+	const float thumbX = juce::jlimit (track.getX(), track.getRight(), sliderPos);
 
 	if (enabled && thumbX > track.getX() + 1.0f)
 	{
@@ -326,21 +352,7 @@ void VGMPlayAudioProcessorEditor::IconButton::paintButton (juce::Graphics& g, bo
 	}
 	else
 	{
-		// a ring with an arrow head on the top and the bottom edge: the usual "repeat" symbol
-		juce::Path ring;
-		ring.addRoundedRectangle (iconArea.getX(), iconArea.getY(), iconArea.getWidth(), iconArea.getHeight(),
-								  iconArea.getWidth() * 0.34f);
-		g.strokePath (ring, juce::PathStrokeType (1.7f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
-
-		const float head = iconArea.getWidth() * 0.36f;
-		juce::Path heads;
-		heads.addTriangle (iconArea.getRight() - head, iconArea.getY() - head * 0.5f,
-						   iconArea.getRight() - head, iconArea.getY() + head * 0.5f,
-						   iconArea.getRight(), iconArea.getY());
-		heads.addTriangle (iconArea.getX() + head, iconArea.getBottom() - head * 0.5f,
-						   iconArea.getX() + head, iconArea.getBottom() + head * 0.5f,
-						   iconArea.getX(), iconArea.getBottom());
-		g.fillPath (heads);
+		drawRepeatGlyph (g, iconArea, iconColour);
 	}
 }
 
@@ -502,6 +514,28 @@ void VGMPlayAudioProcessorEditor::paint (juce::Graphics& g)
 		g.drawText ("UNCHECK TO MUTE", chipsHeaderBounds, juce::Justification::centredRight);
 	}
 
+	// loop point marker above the position slider (only for songs that have a loop point)
+	if (loopMarkerNormalised >= 0.0 && ! loopMarkerBounds.isEmpty())
+	{
+		const float iconSize = (float) kLoopMarkerHeight - 1.0f;
+		const float travel = (float) loopMarkerBounds.getWidth() - 2.0f * kSliderThumbRadius;
+		const float centreX = (float) loopMarkerBounds.getX() + kSliderThumbRadius
+								+ juce::jlimit (0.0f, 1.0f, (float) loopMarkerNormalised) * travel;
+		const auto iconArea = juce::Rectangle<float> (iconSize, iconSize)
+								  .withCentre ({ centreX, (float) loopMarkerBounds.getCentreY() });
+
+		// a hairline down to the track turns it into a cue marker; the slider thumb covers it
+		// while the position is at the loop point
+		const float lineBottom = (float) positionSlider.getBounds().getCentreY();
+		if (lineBottom > iconArea.getBottom())
+		{
+			g.setColour (accentColour().withAlpha (0.4f));
+			g.fillRect (centreX - 0.5f, iconArea.getBottom(), 1.0f, lineBottom - iconArea.getBottom());
+		}
+
+		drawRepeatGlyph (g, iconArea, accentColour());
+	}
+
 	// dashed outline while a file is dragged over the editor
 	if (dropHintLabel.isVisible())
 	{
@@ -539,7 +573,9 @@ void VGMPlayAudioProcessorEditor::resized (void)
 		row.removeFromLeft (18);
 		loopButton.setBounds (row.removeFromLeft (kTransportButtonSize));
 
-		inner.removeFromTop (kRowGap);
+		inner.removeFromTop (5);
+		loopMarkerBounds = inner.removeFromTop (kLoopMarkerHeight);
+		inner.removeFromTop (1);
 		positionSlider.setBounds (inner.removeFromTop (22));
 		inner.removeFromTop (kRowGap);
 
@@ -733,6 +769,8 @@ void VGMPlayAudioProcessorEditor::updateControls (void)
 {
 	const bool loaded = engine.isLoaded();
 	const bool playing = engine.isPlaying();
+	const double duration = engine.getDurationSeconds();
+	const double position = engine.getPositionSeconds();
 
 	playButton.setToggleState (loaded && playing, juce::dontSendNotification);
 	pauseButton.setToggleState (loaded && ! playing && ! engine.isFinished(), juce::dontSendNotification);
@@ -746,6 +784,19 @@ void VGMPlayAudioProcessorEditor::updateControls (void)
 		loopButton.setToggleState (loops == 0, juce::dontSendNotification);
 		loopButton.setTooltip (loopTooltip (loops));
 		loopBox.setSelectedId (loopBoxIdForCount (loops), juce::dontSendNotification);
+	}
+
+	// loop point marker above the position slider (negative = nothing to show; the value only
+	// changes when another file is loaded or the sample rate changed)
+	{
+		const double loopPoint = loaded ? engine.getLoopPointSeconds() : -1.0;
+		const double normalised = (loopPoint >= 0.0 && duration > 0.0)
+									  ? juce::jlimit (0.0, 1.0, loopPoint / duration) : -1.0;
+		if (normalised != loopMarkerNormalised)
+		{
+			loopMarkerNormalised = normalised;
+			repaint (loopMarkerBounds);
+		}
 	}
 
 	// song info
@@ -773,8 +824,7 @@ void VGMPlayAudioProcessorEditor::updateControls (void)
 		appendTag ("Date", engine.getTag ("DATE"));
 		detailsLabel.setText (details.trim(), juce::dontSendNotification);
 
-		infoLabel.setText (file.getFileName() + "   -   " + formatTime (engine.getPositionSeconds()) + " / "
-							   + formatTime (engine.getDurationSeconds()),
+		infoLabel.setText (file.getFileName() + "   -   " + formatTime (position) + " / " + formatTime (duration),
 						   juce::dontSendNotification);
 	}
 	else
@@ -810,7 +860,7 @@ void VGMPlayAudioProcessorEditor::updateControls (void)
 
 	if (loaded)
 	{
-		status << "   " << formatTime (engine.getPositionSeconds()) << " / " << formatTime (engine.getDurationSeconds());
+		status << "   " << formatTime (position) << " / " << formatTime (duration);
 	}
 
 	statusLabel.setColour (juce::Label::textColourId,

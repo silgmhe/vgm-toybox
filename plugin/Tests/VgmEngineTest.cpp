@@ -163,6 +163,52 @@ int main (int argc, char* argv[])
 	std::printf ("    duration = %.2f s (was %.2f s), position = %.2f s\n",
 				 engine.getDurationSeconds(), durationBefore, engine.getPositionSeconds());
 
+	// --- loop forever + seek ------------------------------------------------------------------
+	// With an infinite loop libvgm reports a negative total time ("infinite runtime"), which must
+	// not leak into the seek bar: the duration would be 0 and every seek would be clamped to 0.
+	std::printf ("[7] loop / seek checks\n");
+	engine.setLoopCount (1);
+	const double oneLoopLength = engine.getDurationSeconds();
+	engine.setLoopCount (2);
+	const double twoLoopLength = engine.getDurationSeconds();
+	engine.setLoopCount (0);
+	const double foreverLength = engine.getDurationSeconds();
+	if (oneLoopLength <= 0.0 || foreverLength <= 0.0)
+	{
+		std::printf ("    FAIL: duration is %.2f s with 1 loop, %.2f s while looping forever\n",
+					 oneLoopLength, foreverLength);
+		return 3;
+	}
+
+	engine.setPositionSeconds (foreverLength * 0.5);
+	const double seekedPosition = engine.getPositionSeconds();
+	std::printf ("    duration: %.2f s (1 loop) / %.2f s (2 loops) / %.2f s (forever)\n",
+				 oneLoopLength, twoLoopLength, foreverLength);
+	std::printf ("    seek to %.2f s -> %.2f s\n", foreverLength * 0.5, seekedPosition);
+
+	// the loop point is what the editor marks above the position slider; a file that "plays
+	// twice as long with 2 loops" must also report one (the 2-loop time proves it has a loop point)
+	const double loopPoint = engine.getLoopPointSeconds();
+	if (twoLoopLength > oneLoopLength * 1.5)
+	{
+		if (loopPoint <= 0.0 || loopPoint >= foreverLength)
+		{
+			std::printf ("    FAIL: loop point is %.2f s (song length %.2f s)\n", loopPoint, foreverLength);
+			return 3;
+		}
+		std::printf ("    loop point: %.2f s (%.0f%% of the song - where the seek bar jumps back to)\n",
+					 loopPoint, 100.0 * loopPoint / foreverLength);
+	}
+	else
+	{
+		std::printf ("    loop point: none (the file has no loop)\n");
+	}
+	if (seekedPosition < foreverLength * 0.25)
+	{
+		std::printf ("    FAIL: the seek did not take effect (position %.2f s)\n", seekedPosition);
+		return 3;
+	}
+
 	const double rms = (sampleCount > 0) ? std::sqrt (sumOfSquares / (double) sampleCount) : 0.0;
 	const juce::File outputFile = inputFile.withFileExtension (".rendered.wav");
 	writeWavFile (outputFile, left, right, sampleRate);

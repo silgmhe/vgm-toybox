@@ -58,6 +58,9 @@ public:
 	bool isFinished (void) const { return finished.load(); }
 	double getPositionSeconds (void) const;
 	double getDurationSeconds (void) const;
+	/** Position of the loop point inside a single playthrough, or a negative value if the song
+		has no loop point (or nothing is loaded). */
+	double getLoopPointSeconds (void) const;
 	int getLoopCount (void) const { return loopCount; }
 	double getFadeSeconds (void) const { return fadeSeconds; }
 	float getMasterVolume (void) const { return masterVolume; }
@@ -73,6 +76,7 @@ private:
 	UINT8 handleEvent (UINT8 evtType, void* evtParam);
 
 	void applyOutputSettings (void);
+	double getPlayLengthSeconds (void) const;	// caller must hold the lock
 	void updatePlayerConfig (void);
 	void enumerateTags (void);
 	void enumerateChips (void);

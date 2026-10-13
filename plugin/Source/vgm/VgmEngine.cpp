@@ -281,7 +281,7 @@ void VgmEngine::setPositionSeconds (double seconds)
 		return;
 	}
 
-	const double duration = player.GetTotalTime (PLAYTIME_LOOP_INCL | PLAYTIME_TIME_PBK);
+	const double duration = getPlayLengthSeconds();
 	const double target = juce::jlimit (0.0, juce::jmax (0.0, duration), seconds);
 
 	player.Seek (PLAYPOS_SAMPLE, (UINT32) (target * sampleRate));
@@ -342,17 +342,57 @@ double VgmEngine::getPositionSeconds (void) const
 	{
 		return 0.0;
 	}
-	return player.GetCurTime (PLAYTIME_LOOP_INCL | PLAYTIME_TIME_PBK);
+
+	// While looping forever the absolute position keeps growing, so report the position that
+	// jumps back to the loop start on every repetition - the same mode getPlayLengthSeconds()
+	// measures the duration in.
+	const bool loopingForever = (player.GetTotalTime (PLAYTIME_LOOP_INCL | PLAYTIME_TIME_PBK) < 0.0);
+	return player.GetCurTime (loopingForever ? PLAYTIME_TIME_PBK
+											 : (PLAYTIME_LOOP_INCL | PLAYTIME_TIME_PBK));
 }
 
 double VgmEngine::getDurationSeconds (void) const
 {
 	const juce::ScopedLock sl (lock);
+	return getPlayLengthSeconds();
+}
+
+double VgmEngine::getLoopPointSeconds (void) const
+{
+	const juce::ScopedLock sl (lock);
+	if (player.GetPlayer() == NULL)
+	{
+		return -1.0;
+	}
+
+	// GetLoopTime() is the *length* of the loop, so the loop point is the length of a single
+	// playthrough minus that length - the position the seek bar jumps back to on every repetition.
+	const double loopLength = player.GetLoopTime();
+	if (loopLength <= 0.0)
+	{
+		return -1.0;	// no loop point
+	}
+	return juce::jmax (0.0, getPlayLengthSeconds() - loopLength);
+}
+
+double VgmEngine::getPlayLengthSeconds (void) const
+{
 	if (player.GetPlayer() == NULL)
 	{
 		return 0.0;
 	}
-	return player.GetTotalTime (PLAYTIME_LOOP_INCL | PLAYTIME_TIME_PBK);
+
+	const double total = player.GetTotalTime (PLAYTIME_LOOP_INCL | PLAYTIME_TIME_PBK);
+	if (total > 0.0)
+	{
+		return total;
+	}
+
+	// "loop forever": PlayerA::GetTotalTime() returns a negative value to indicate an infinite
+	// runtime (see its comment "indicates infinite runtime"), which would make the seek bar
+	// unwritable - the position would be clamped to 0 on every refresh. Use the length of a
+	// single playthrough instead and let the position jump back at every repetition.
+	return juce::jmax (0.0, player.GetTotalTime (PLAYTIME_TIME_PBK));
 }
 
 juce::String VgmEngine::getTag (const juce::String& tagName) const

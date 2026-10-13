@@ -101,6 +101,8 @@ private:
 	juce::Rectangle<int> chipsCardBounds;
 	juce::Rectangle<int> chipsHeaderBounds;
 	juce::Rectangle<int> transportCardBounds;
+	juce::Rectangle<int> loopMarkerBounds;	// strip above the position slider
+	double loopMarkerNormalised = -1.0;		// < 0 = the song has no loop point to show
 
 	std::unique_ptr<juce::FileChooser> fileChooser;
 	bool userIsDragging = false;
