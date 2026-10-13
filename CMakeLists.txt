@@ -48,6 +48,14 @@ else()
 	set(LIBVGM_TARGETS libvgm::vgm-utils libvgm::vgm-audio libvgm::vgm-emu libvgm::vgm-player)
 endif()
 
+# --- JUCE-based GUI plugin (VST3 + standalone) ---
+# Uses the same libvgm libraries as the command-line player. JUCE itself is fetched with
+# CPM by plugin/CMakeLists.txt (see JUCE_TAG / JUCE_REPOSITORY there).
+option(VGMPLAY_BUILD_PLUGIN "build the JUCE-based GUI plugin (VST3 + standalone)" ON)
+if(VGMPLAY_BUILD_PLUGIN)
+	add_subdirectory(plugin)
+endif()
+
 if(MSVC)
 	if(CMAKE_CL_64)
 		set(MSVC_POSTFIX "64")

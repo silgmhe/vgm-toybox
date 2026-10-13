@@ -3,7 +3,12 @@ This file provides guidance to CodeBuddy when working with code in this reposito
 
 ## Overview
 
-VGMPlay is a command-line player for video game music log formats: `.vgm`/`.vgz` (Video Game Music), `.s98`, `.dro` (DOSBox RAW OPL), `.gym` (Genecyst), plus `.m3u` playlists. It is a thin C++ CLI frontend around the **libvgm** library, which lives in this repository as a git submodule (`libvgm/`, https://github.com/ValleyBell/libvgm.git). `libs/inih` and `libs/wingetopt` are also submodules. Application version is in `version.h` (`APP_NAME`, `VGMPLAY_VER_STR`, `VGM_VER_STR`); changelog is in `Updates.txt`; `VGMPlay.txt` is the user readme.
+VGMPlay is a player for video game music log formats: `.vgm`/`.vgz` (Video Game Music), `.s98`, `.dro` (DOSBox RAW OPL), `.gym` (Genecyst), plus `.m3u` playlists. It is a C++ frontend around the **libvgm** library, which lives in this repository as a git submodule (`libvgm/`, https://github.com/ValleyBell/libvgm.git). `libs/inih` and `libs/wingetopt` are also submodules. Application version is in `version.h` (`APP_NAME`, `VGMPLAY_VER_STR`, `VGM_VER_STR`); changelog is in `Updates.txt`; `VGMPlay.txt` is the user readme.
+
+The repository builds two front-ends on top of the same libvgm libraries:
+
+1. **`VGMPlay64.exe` / `vgmplay`** — the classic command-line player (root directory sources, `PLAYSTATE_*`-driven render loop in `playctrl.cpp`).
+2. **`plugin/`** — a JUCE-based GUI plugin (VST3 + standalone) with a transport UI, seekable progress bar and per-chip mute buttons. See "GUI plugin" in the architecture section.
 
 Because there is no README at the repository root, the two authoritative docs are `VGMPlay.txt` (keys, supported formats) and `libvgm/Compiling.txt` (build notes for the library).
 
@@ -19,8 +24,9 @@ Everything is built in **one CMake tree**: the root project adds the libvgm subm
 
 ```bash
 # Windows: MSVC + Ninja + static runtime, output in .\dist (+ clangd database)
-.\build.ps1                      # options: -Arch x86 | -Config Debug | -Clean
+.\build.ps1                      # options: -Arch x86 | -Config Debug | -Clean | -NoPlugin | -Proxy <url>
 build.bat -Clean                 # wrapper for cmd.exe
+build.bat -NoPlugin              # command-line player only (skips the JUCE download/build)
 
 # manual equivalent (any platform/toolchain)
 cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release \
@@ -35,6 +41,8 @@ The executable is `VGMPlay64.exe` (x64 MSVC), `VGMPlay.exe` (Win32 MSVC) or `vgm
 Static runtime: the root `CMakeLists.txt` sets `CMAKE_MSVC_RUNTIME_LIBRARY=MultiThreaded` (`/MT`) for every target, so the executable does not require the VC++ Redistributable, a UCRT DLL or `zlib1.dll` — only Windows system DLLs (check with `dumpbin /dependents`). Pass `-DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreadedDLL` to use the runtime DLLs instead.
 
 zlib is compiled from source into the package, so no zlib DLL is needed. Related cache variables: `LIBVGM_ZLIB_FROM_SOURCE` (default `ON`; `OFF` uses a system zlib via `find_package(ZLIB)`), `LIBVGM_ZLIB_TAG` (`v1.3.1`), `LIBVGM_ZLIB_MIRRORS` / `LIBVGM_ZLIB_REPOSITORY` (the build probes GitHub first, then the Gitee mirror, because GitHub is not always reachable), `CPM_SOURCE_CACHE` (source cache, e.g. `H:/cmake_cache`).
+
+The **JUCE plugin** is part of the default build (`VGMPLAY_BUILD_PLUGIN`, set to `OFF` by `-NoPlugin`). `plugin/CMakeLists.txt` fetches JUCE with CPM (`JUCE_TAG`, default `8.0.9`; `JUCE_MIRRORS` / `JUCE_REPOSITORY` work like the zlib ones) and builds a VST3 + a standalone application. `build.ps1` exports the Windows system proxy (`HTTP(S)_PROXY`) before configuring, because git/CPM do not read the Windows proxy settings — use `-Proxy <url>` to override or `-NoProxy` to disable.
 
 Notable CMake cache variables: root project `MEDIA_CONTROLS` = `OFF`/`WIN_KEYS`/`WIN_SMTC`/`DBUS` (default `WIN_KEYS` on Windows, `DBUS` on Linux when DBus1 is found, otherwise `OFF`); libvgm-side `BUILD_LIBAUDIO`, `BUILD_LIBEMU`, `BUILD_LIBPLAYER`, `BUILD_TESTS`, `BUILD_PLAYER`, `BUILD_VGM2WAV`, `LIBRARY_TYPE` (`STATIC` default), `SNDEMU__ALL` plus per-chip `SNDEMU_<CHIP>_*` and `AUDIODRV_*` switches. Set `SNDEMU__ALL=OFF` (then enable individual `SNDEMU_<CHIP>_ALL` or `SNDEMU_<CHIP>_<CORE>` options) to compile only selected sound cores.
 
@@ -65,6 +73,15 @@ build/vgmtest song.vgz
 ```
 
 For end-to-end verification, play a file (or dump audio with `-w`) and compare while listening; WAV dumps written by the app use the same render path as live output, so they are the practical regression artifact.
+
+The plugin's playback engine can be tested without a DAW: `plugin/Tests/VgmEngineTest.cpp` renders a file offline with exactly the same `VgmEngine` class that the VST3/standalone plugin uses. It is not part of the default build and has to be built explicitly:
+
+```bash
+cmake --build build --target vgm_engine_test
+build/plugin/vgm_engine_test song.vgz 5        # renders up to 5 s, writes song.rendered.wav
+```
+
+It prints the tags, the chip list, the final position and the peak/RMS of the rendered audio (a peak of ~0.15 is expected for the bundled test tone); exit code 2 means the output was silent.
 
 Linux build dependencies: `libinih-dev` (otherwise the bundled `libs/inih` submodule is used), `zlib1g-dev`, and for the audio drivers `libasound2-dev` / `libpulse-dev` / `libao-dev`; `libdbus-1-dev` for MPRIS media controls. MSVC needs no extra packages (`libs/wingetopt` supplies `getopt_long` on MSVC; MinGW/Linux use the system implementation).
 
@@ -116,6 +133,27 @@ The root project builds libvgm in-tree: `add_subdirectory(libvgm)` creates the f
 - `libvgm/audio/` — `AudioStream.h` (`AUDDRV_INFO`, `AudioDrv_*`, `Audio_*`, `AERR_*`) with one file per driver under `audio/drivers/` (WaveWriter is the file logger), plus data forwarding so output and logging drivers can be chained (`AudioDrv_DataForward_Add`, used for WAV dumping).
 - `libvgm/emu/` — `SoundEmu.h` (`SndEmu_GetDevDecl`, `SndEmu_Start2`, `SndEmu_Stop`, ...), `EmuStructs.h` (`DEV_DECL`, `DEV_INFO`, `RWF_*` flags), `SoundDevs.h` (all `DEVID_*` IDs), `Resampler.c` (`Resmpl_*`, modes `RSMODE_*`, output format is `WAVE_32BS`). Chip cores are a flat `emu/cores/` directory: an interface/register file per chip (`*intf.c`) plus one or more emulation implementations (e.g. Nuked-OPN2, MAME, EMU cores). Adding a core means adding files there and wiring `SNDEMU_*` options in `emu/CMakeLists.txt`.
 - `libvgm/player/` — `PlayerBase` (`playerbase.hpp`) is the abstract engine (`LoadFile`/`Start`/`Stop`/`Seek`/`Render`, `PLREVT_*` event and `PLRLOG_*` log levels, `PLR_SONG_INFO`/`PLR_DEV_INFO`/`PLR_DEV_OPTS` structures). `PlayerA` (`playera.hpp`) is the front-end facade that owns registered engines, sets output settings/volume/fade/loop/speed, and dispatches rendering to whichever engine loaded the file. Format engines: `VGMPlayer`, `S98Player`, `DROPlayer`, `GYMPlayer`; `playerbase.cpp` provides format detection (`PlayerCanLoadFile`). Note this is a C++ class API — there is no flat C `PLR_*` functional API in this version, and `stdtype.h`/`common_def.h` live in the libvgm root.
+
+### GUI plugin (`plugin/`, JUCE)
+
+`plugin/` is a JUCE plugin target (`juce_add_plugin`, VST3 + Standalone) that links the same in-tree libvgm libraries as the command-line player — `vgm-player`, `vgm-emu`, `vgm-utils`, but **not** `vgm-audio`, because a plugin must never open an audio device itself. JUCE is fetched with CPM (`plugin/CMakeLists.txt`), the plugin is enabled by the root option `VGMPLAY_BUILD_PLUGIN`.
+
+Files and responsibilities:
+
+- `Source/vgm/VgmEngine.{h,cpp}` — the whole libvgm integration. Owns one `PlayerA` with all four format engines, loads files through `MemoryLoader` (handles `.vgz` gzip containers), applies the player `Config` (master volume, loop count, fade, **`endSilenceSmpls = 0`** so a DAW does not get trailing silence) and enumerates tags/chips for the UI.
+- `Source/PluginProcessor.{h,cpp}` — `AudioProcessor` with one stereo output bus, `processBlock` forwards to `VgmEngine::render`, and the file path plus the transport settings are saved with the host session in `getStateInformation`. The **standalone ignores restored state on purpose** (`wrapperType == wrapperType_Standalone` makes `setStateInformation` return immediately), so double-clicking `VGMPlay.exe` always starts with an empty player; only a plugin inside a host restores its session.
+- `Source/PluginEditor.{h,cpp}` — the GUI: file chooser + drag & drop, an info card (title/tags/file name/position), play/pause/stop plus a **loop-forever toggle button**, a draggable position slider, loop/fade/volume controls and one checkbox per chip (ticked = audible). All colours come from the nested `LightLookAndFeel` (macOS-like light theme: white cards on `#f2f2f7`, hairline borders, `#0a84ff` accent); the palette helpers are at the top of the `.cpp`. Note that the loop button and the loop combo box are two views of the same value (`VgmEngine::getLoopCount()`) and `updateControls()` keeps them in sync. Trap: a slider's text box gets its colours and its text formatting **baked in when `setTextBoxStyle()` creates the label** (`LookAndFeel_V2::createSliderTextBox`), and at that point the slider has no parent yet, so the lookup falls back to the *default* (dark) `LookAndFeel_V4` - white text on the white card. Therefore `volumeSlider` gets its `Slider::textBox*` colours, its suffix and its `textFromValueFunction` *before* `setTextBoxStyle()`, plus an `updateText()` afterwards.
+- `Tests/VgmEngineTest.cpp` — offline renderer used to verify the engine (see "Tests and validation").
+
+Threading contract: the audio thread calls `render()`, which uses a **try**-lock on the engine mutex and outputs silence while a file is being loaded (so the GUI never blocks the audio callback for long). The message thread uses a normal lock for loading, seeking, muting and configuration. Never call into libvgm from the message thread without that lock.
+
+Three traps that already caused bugs — keep them in mind when changing the render path:
+
+- `PlayerA::Render(bufSize, data)` takes a **byte** count and **returns the number of bytes written**, not samples (`bytes / (bits/8 * channels)` gives samples). `SetOutputSettings(rate, 2, 32, maxBlockSize)` selects 32-bit integer stereo output; libvgm packs 24-bit internal samples by shifting them left by 8, so the float conversion factor is `1.0f / 2147483648.0f`.
+- `PlayerA::SetSampleRate()` **skips the player that is currently playing**, so a song that is already loaded keeps running at the old rate when the output sample rate changes (audible as wrong pitch and playback speed). `VgmEngine::prepare()` therefore re-loads the current file when the rate or the block size changes, and a file must never be loaded before the first `prepare()` call.
+- libvgm mixes all chips into one stereo buffer (`Resmpl_Execute` *accumulates* into the destination). There is no per-chip output API yet, which is why the plugin currently has a single stereo bus — see the per-chip multi-out plan below.
+
+Roadmap for the DAW multi-out feature: each chip can already be muted/disabled from outside (`SetDeviceMuting` with `PLR_DEV_OPTS.muteOpts.disable` skips the chip's resampler and therefore its emulation), and `GetSongDeviceInfo` lists the chips with their `PLR_DEV_ID`. A real per-chip stem output should be added in libvgm as a small render tap (a per-device output buffer used in the `_devices` loop of the four `*Player::Render` functions, next to the existing `Resmpl_Execute(&clDev->resmpl, smplStep, &data[curSmpl])`), because rendering the song once per chip (N player instances with solo-muting) would cost N times the CPU and memory.
 
 ### Conventions
 

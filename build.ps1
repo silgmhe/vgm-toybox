@@ -34,13 +34,23 @@
 .PARAMETER Clean
     Delete the build/dist directories and compile_commands.json before configuring.
 
-.EXAMPLE
-    .\build.ps1
-    Builds a release build for x64.
+.PARAMETER Proxy
+    Proxy URL used for the dependency downloads (e.g. http://127.0.0.1:7897). Defaults to the
+    Windows system proxy. Relevant because git/CPM do not read the Windows proxy settings.
+
+.PARAMETER NoProxy
+    Do not use any proxy for the dependency downloads.
+
+.PARAMETER NoPlugin
+    Only build the command-line player and skip the JUCE plugin (much faster).
 
 .EXAMPLE
-    .\build.ps1 -Config Debug -Clean
-    Rebuilds everything from scratch with debug settings.
+    .\build.ps1
+    Builds a release build for x64 (command-line player + JUCE plugin).
+
+.EXAMPLE
+    .\build.ps1 -Config Debug -Clean -NoPlugin
+    Rebuilds everything from scratch with debug settings, without the plugin.
 #>
 [CmdletBinding()]
 param(
@@ -50,7 +60,13 @@ param(
 	[ValidateSet('Release', 'Debug', 'RelWithDebInfo', 'MinSizeRel')]
 	[string]$Config = 'Release',
 
-	[switch]$Clean
+	[switch]$Clean,
+
+	[string]$Proxy = '',
+
+	[switch]$NoProxy,
+
+	[switch]$NoPlugin
 )
 
 $ErrorActionPreference = 'Stop'
@@ -124,6 +140,52 @@ function Initialize-MsvcEnvironment {
 	}
 }
 
+# Dependency downloads (zlib, JUCE) use git, which does not read the Windows proxy settings -
+# export them as environment variables for this process (and thus for CMake/CPM).
+function Initialize-NetworkProxy {
+	param([string]$ProxyUrl, [switch]$Disabled)
+
+	if ($Disabled) {
+		Write-Host 'proxy usage disabled by -NoProxy' -ForegroundColor DarkGray
+		return
+	}
+	if (-not $ProxyUrl) {
+		$settings = Get-ItemProperty 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Internet Settings' -ErrorAction SilentlyContinue
+		if ($settings -and $settings.ProxyEnable -eq 1 -and $settings.ProxyServer) {
+			$server = $settings.ProxyServer
+			if ($server -match '=') {
+				# "http=host:port;https=host:port"
+				$parts = @{}
+				foreach ($entry in $server.Split(';')) {
+					$pair = $entry.Split('=', 2)
+					if ($pair.Count -eq 2) {
+						$parts[$pair[0].Trim().ToLowerInvariant()] = $pair[1].Trim()
+					}
+				}
+				if ($parts.ContainsKey('https')) {
+					$server = $parts['https']
+				} elseif ($parts.ContainsKey('http')) {
+					$server = $parts['http']
+				} else {
+					$server = ''
+				}
+			}
+			if ($server) {
+				if ($server -notmatch '^[a-zA-Z][a-zA-Z0-9+.-]*://') {
+					$server = "http://$server"
+				}
+				$ProxyUrl = $server
+			}
+		}
+	}
+	if ($ProxyUrl) {
+		Write-Host "using proxy $ProxyUrl for dependency downloads" -ForegroundColor DarkGray
+		foreach ($name in @('HTTP_PROXY', 'HTTPS_PROXY', 'http_proxy', 'https_proxy', 'ALL_PROXY', 'all_proxy')) {
+			[System.Environment]::SetEnvironmentVariable($name, $ProxyUrl, 'Process')
+		}
+	}
+}
+
 if ($Clean) {
 	Write-Step 'Cleaning'
 	foreach ($dir in @($BuildDir, $DistDir)) {
@@ -141,6 +203,9 @@ if ($Clean) {
 Write-Step 'Initializing the MSVC environment'
 Initialize-MsvcEnvironment -TargetArch $Arch
 
+Write-Step 'Setting up dependency downloads'
+Initialize-NetworkProxy -ProxyUrl $Proxy -Disabled:$NoProxy
+
 Write-Step 'Checking git submodules'
 if (-not (Test-Path -LiteralPath (Join-Path $RepoRoot 'libvgm\CMakeLists.txt'))) {
 	Invoke-Native 'git' @('-C', $RepoRoot, 'submodule', 'update', '--init', '--recursive')
@@ -150,15 +215,21 @@ Write-Step "Configuring ($Arch, $Config, static runtime $RuntimeLib)"
 $sourceDir = $RepoRoot.Replace('\', '/')
 $buildDir = $BuildDir.Replace('\', '/')
 $distDir = $DistDir.Replace('\', '/')
-Invoke-Native 'cmake' @(
-	'-S', $sourceDir,
-	'-B', $buildDir,
-	'-G', 'Ninja',
+$cmakeOptions = @(
 	"-DCMAKE_BUILD_TYPE=$Config",
 	"-DCMAKE_MSVC_RUNTIME_LIBRARY=$RuntimeLib",
 	"-DCMAKE_INSTALL_PREFIX=$distDir",
 	'-DCMAKE_EXPORT_COMPILE_COMMANDS=ON'
 )
+if ($NoPlugin) {
+	$cmakeOptions += '-DVGMPLAY_BUILD_PLUGIN=OFF'
+	Write-Host 'plugin build disabled by -NoPlugin' -ForegroundColor DarkGray
+}
+Invoke-Native 'cmake' (@(
+	'-S', $sourceDir,
+	'-B', $buildDir,
+	'-G', 'Ninja'
+) + $cmakeOptions)
 
 Write-Step 'Building'
 Invoke-Native 'cmake' @('--build', $buildDir)
@@ -182,6 +253,27 @@ foreach ($file in @('VGMPlay.ini', 'Updates.txt', 'VGMPlay.txt')) {
 	}
 }
 
+# the JUCE plugin artefacts (VST3 bundle + standalone application)
+$artefactsDir = Join-Path $BuildDir 'plugin\VGMPlay_artefacts'
+$vst3Bundle = $null
+$standaloneApp = $null
+if (Test-Path -LiteralPath $artefactsDir) {
+	$vst3Bundle = Get-ChildItem -LiteralPath $artefactsDir -Filter 'VGMPlay.vst3' -Directory -Recurse |
+		Select-Object -First 1
+	if ($vst3Bundle) {
+		$vst3Target = Join-Path $DistDir 'VST3'
+		New-Item -ItemType Directory -Force -Path $vst3Target | Out-Null
+		Copy-Item -LiteralPath $vst3Bundle.FullName -Destination $vst3Target -Recurse -Force
+	}
+	$standaloneApp = Get-ChildItem -LiteralPath $artefactsDir -Filter 'VGMPlay.exe' -File -Recurse |
+		Where-Object { $_.DirectoryName -notlike '*VST3*' } | Select-Object -First 1
+	if ($standaloneApp) {
+		$standaloneTarget = Join-Path $DistDir 'Standalone'
+		New-Item -ItemType Directory -Force -Path $standaloneTarget | Out-Null
+		Copy-Item -LiteralPath $standaloneApp.FullName -Destination $standaloneTarget -Force
+	}
+}
+
 Write-Step 'Updating compile_commands.json'
 $generatedDb = Join-Path $BuildDir 'compile_commands.json'
 if (Test-Path -LiteralPath $generatedDb) {
@@ -194,6 +286,12 @@ if (Test-Path -LiteralPath $generatedDb) {
 Write-Step 'Result'
 $exePath = Join-Path $DistDir $exe.Name
 Write-Host ("executable : {0} ({1:N0} bytes)" -f $exePath, (Get-Item -LiteralPath $exePath).Length)
+if ($vst3Bundle) {
+	Write-Host ("VST3       : {0}" -f (Join-Path $DistDir 'VST3\VGMPlay.vst3'))
+}
+if ($standaloneApp) {
+	Write-Host ("standalone : {0}" -f (Join-Path $DistDir 'Standalone\VGMPlay.exe'))
+}
 Write-Host ("dist folder: {0}" -f $DistDir)
 Write-Host ''
 
