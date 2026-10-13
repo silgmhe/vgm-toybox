@@ -263,14 +263,24 @@ if (Test-Path -LiteralPath $artefactsDir) {
 	if ($vst3Bundle) {
 		$vst3Target = Join-Path $DistDir 'VST3'
 		New-Item -ItemType Directory -Force -Path $vst3Target | Out-Null
-		Copy-Item -LiteralPath $vst3Bundle.FullName -Destination $vst3Target -Recurse -Force
+		try {
+			Copy-Item -LiteralPath $vst3Bundle.FullName -Destination $vst3Target -Recurse -Force -ErrorAction Stop
+		} catch {
+			throw ("Could not copy the VST3 bundle to '{0}' - a host (DAW) is probably still using it. " +
+					"Close it and run the script again. ({1})" -f $vst3Target, $_.Exception.Message)
+		}
 	}
 	$standaloneApp = Get-ChildItem -LiteralPath $artefactsDir -Filter 'VGMPlay.exe' -File -Recurse |
 		Where-Object { $_.DirectoryName -notlike '*VST3*' } | Select-Object -First 1
 	if ($standaloneApp) {
 		$standaloneTarget = Join-Path $DistDir 'Standalone'
 		New-Item -ItemType Directory -Force -Path $standaloneTarget | Out-Null
-		Copy-Item -LiteralPath $standaloneApp.FullName -Destination $standaloneTarget -Force
+		try {
+			Copy-Item -LiteralPath $standaloneApp.FullName -Destination $standaloneTarget -Force -ErrorAction Stop
+		} catch {
+			throw ("Could not copy the standalone application to '{0}' - VGMPlay.exe is probably still running. " +
+					"Close it and run the script again. ({1})" -f $standaloneTarget, $_.Exception.Message)
+		}
 	}
 }
 
