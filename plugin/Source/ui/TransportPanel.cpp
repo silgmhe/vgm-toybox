@@ -36,12 +36,14 @@ TransportPanel::TransportPanel (vgmplay::VgmEngine& engineToUse)
 	// --- transport buttons ---
 	playButton.onClick = [this] { startPlayback(); };
 	pauseButton.onClick = [this] { pausePlayback(); };
-	stopButton.onClick = [this] { stopToPlaybackStart(); };
+	stopButton.onClick = [this] { stopTransport(); };
 	loopButton.onClick = [this] { setLoopForever (! loopButton.getToggleState()); };
+	cursorButton.onClick = [this] { setStartCursorEnabled (! cursorButton.getToggleState()); };
 	playButton.setTooltip ("Play (space)");
 	pauseButton.setTooltip ("Pause (enter)");
 	stopButton.setTooltip ("Stop - return to the playback start marker");
-	for (auto* button : { &playButton, &pauseButton, &stopButton, &loopButton })
+	cursorButton.setTooltip ("Playback start cursor - when off, Stop goes back to the beginning of the song");
+	for (auto* button : { &playButton, &pauseButton, &stopButton, &loopButton, &cursorButton })
 	{
 		button->setColour (juce::TextButton::buttonColourId, theme::card());
 		button->setColour (juce::TextButton::buttonOnColourId, theme::accent());
@@ -49,6 +51,7 @@ TransportPanel::TransportPanel (vgmplay::VgmEngine& engineToUse)
 		button->setColour (juce::TextButton::textColourOnId, juce::Colours::white);
 		addAndMakeVisible (*button);
 	}
+	cursorButton.setToggleState (startCursorEnabled, juce::dontSendNotification);
 
 	// --- playback start cursor (the drag strip above the seek bar) ---
 	startMarkerDragArea.setMouseCursor (juce::MouseCursor::LeftRightResizeCursor);
@@ -131,6 +134,8 @@ void TransportPanel::resized (void)
 	stopButton.setBounds (row.removeFromLeft (kButtonSize));
 	row.removeFromLeft (18);
 	loopButton.setBounds (row.removeFromLeft (kButtonSize));
+	row.removeFromLeft (6);
+	cursorButton.setBounds (row.removeFromLeft (kButtonSize));
 
 	inner.removeFromTop (5);
 	markerBandBounds = inner.removeFromTop (kLoopMarkerHeight);
@@ -152,12 +157,16 @@ void TransportPanel::paintCardContent (juce::Graphics& g)
 	// playback start cursor (the strip above the seek bar drags it - see StartMarkerDragArea)
 	paintPlaybackStartCursor (g);
 
-	// The loop toggle glows in the accent colour while it is on. The card paints it (and
-	// therefore behind the button): a component cannot draw outside its own bounds.
-	if (loopButton.getToggleState())
+	// The loop and the cursor toggle glow in the accent colour while they are on. The card
+	// paints them (and therefore behind the buttons): a component cannot draw outside its
+	// own bounds.
+	for (auto* button : { &loopButton, &cursorButton })
 	{
-		drawSoftShadow (g, loopButton.getBounds().toFloat(), theme::buttonRadius,
-						theme::accentGlow(), theme::accentGlowBlur, { 0, theme::accentGlowOffsetY });
+		if (button->getToggleState())
+		{
+			drawSoftShadow (g, button->getBounds().toFloat(), theme::buttonRadius,
+							theme::accentGlow(), theme::accentGlowBlur, { 0, theme::accentGlowOffsetY });
+		}
 	}
 
 	// loop point marker above the position slider (only for songs that have a loop point)
@@ -187,7 +196,7 @@ void TransportPanel::paintCardContent (juce::Graphics& g)
 
 void TransportPanel::paintPlaybackStartCursor (juce::Graphics& g) const
 {
-	if (! engine.isLoaded() || markerBandBounds.isEmpty())
+	if (! startCursorEnabled || ! engine.isLoaded() || markerBandBounds.isEmpty())
 	{
 		return;
 	}
@@ -216,7 +225,7 @@ void TransportPanel::movePlaybackStartToBandX (int bandX)
 {
 	const double duration = engine.getDurationSeconds();
 	const float travel = (float) markerBandBounds.getWidth() - 2.0f * theme::sliderThumbRadius;
-	if (! engine.isLoaded() || duration <= 0.0 || travel <= 1.0f)
+	if (! startCursorEnabled || ! engine.isLoaded() || duration <= 0.0 || travel <= 1.0f)
 	{
 		return;
 	}
@@ -269,7 +278,7 @@ void TransportPanel::seekToSeconds (double seconds)
 
 	// while the transport is running the cursor stays where it is; a stationary transport
 	// carries it along, so the position and the cursor cannot drift apart
-	if (! engine.isPlaying())
+	if (startCursorEnabled && ! engine.isPlaying())
 	{
 		setPlaybackStart (seconds);
 	}
@@ -280,8 +289,8 @@ void TransportPanel::startPlayback (void)
 	paused = false;
 
 	// a finished song starts over at the playback start cursor (VgmEngine::play() would
-	// restart it from the very beginning)
-	if (engine.isFinished())
+	// restart it from the very beginning - which is what happens with the cursor off)
+	if (startCursorEnabled && engine.isFinished())
 	{
 		engine.setPositionSeconds (playbackStartSeconds);
 	}
@@ -290,12 +299,27 @@ void TransportPanel::startPlayback (void)
 	refresh();
 }
 
-void TransportPanel::stopToPlaybackStart (void)
+void TransportPanel::stopTransport (void)
 {
 	paused = false;
 	engine.stop();
-	engine.setPositionSeconds (playbackStartSeconds);
+
+	// with the cursor switched off the transport behaves like a player: Stop goes back to
+	// the beginning of the song
+	if (startCursorEnabled)
+	{
+		engine.setPositionSeconds (playbackStartSeconds);
+	}
+
 	refresh();
+}
+
+void TransportPanel::setStartCursorEnabled (bool shouldBeEnabled)
+{
+	startCursorEnabled = shouldBeEnabled;
+	cursorButton.setToggleState (shouldBeEnabled, juce::dontSendNotification);
+	startMarkerDragArea.setVisible (shouldBeEnabled);
+	repaint();	// the marker and the button's glow appear/disappear
 }
 
 void TransportPanel::pausePlayback (void)
@@ -382,9 +406,16 @@ void TransportPanel::refresh (void)
 
 void TransportPanel::togglePlayStop (void)
 {
+	if (! startCursorEnabled)
+	{
+		// with the cursor off, space carries the classic media-player binding
+		togglePlayPause();
+		return;
+	}
+
 	if (engine.isPlaying())
 	{
-		stopToPlaybackStart();
+		stopTransport();
 	}
 	else
 	{

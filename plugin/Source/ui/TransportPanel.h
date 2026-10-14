@@ -16,7 +16,10 @@ namespace vgmplay::ui
 	refresh(). The editor keeps no transport state of its own.
 
 	DAW-flavoured transport: the playback start cursor is where Stop (and a finished song)
-	returns to. Its marker sits in the strip above the seek bar and can be dragged.
+	returns to. Its marker sits in the strip above the seek bar and can be dragged. The
+	cursor toggle next to the loop button switches the whole feature off, which leaves a
+	plain player: no marker, Stop returns to the beginning of the song and space falls back
+	to toggling play/pause.
 */
 class TransportPanel : public CardComponent
 {
@@ -29,7 +32,8 @@ public:
 	/** Pulls the transport state, the loop/fade setting and the position from the engine. */
 	void refresh (void);
 
-	/** Space key: stops (back to the playback start cursor) while playing, plays otherwise. */
+	/** Space key: with the start cursor on, stops (back to the cursor) while playing and
+		plays otherwise; with it off, toggles play/pause like a media player. */
 	void togglePlayStop (void);
 
 	/** Enter key: pauses (staying put) while playing, plays otherwise. */
@@ -60,9 +64,10 @@ private:
 	void paintCardContent (juce::Graphics& g) override;
 
 	void startPlayback (void);
-	void stopToPlaybackStart (void);
+	void stopTransport (void);
 	void pausePlayback (void);
 	void setLoopForever (bool shouldLoopForever);
+	void setStartCursorEnabled (bool shouldBeEnabled);
 
 	void paintPlaybackStartCursor (juce::Graphics& g) const;
 	void movePlaybackStartToBandX (int bandX);
@@ -75,6 +80,7 @@ private:
 	IconButton pauseButton { "Pause", IconButton::Icon::pause };
 	IconButton stopButton { "Stop", IconButton::Icon::stop };
 	IconButton loopButton { "Loop", IconButton::Icon::loop };
+	IconButton cursorButton { "Playback start", IconButton::Icon::playStart };
 	juce::Slider positionSlider;
 	juce::Slider volumeSlider;
 	juce::ComboBox loopBox;
@@ -88,7 +94,8 @@ private:
 	double playbackStartSeconds = 0.0;		// where stop (and a finished song) returns to
 	int lastLoopCount = -1;					// for the loop tooltip
 	bool userIsDragging = false;
-	bool paused = false;	// the last stop-like action was "pause" (not "stop") - drives the button lights
+	bool paused = false;			// the last stop-like action was "pause" (not "stop") - drives the button lights
+	bool startCursorEnabled = true;	// off = plain player: no marker, Stop returns to the beginning
 
 	JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (TransportPanel)
 };
