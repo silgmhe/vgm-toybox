@@ -28,8 +28,15 @@ struct ChipEntry
 
 	The message thread uses loadFile()/play()/pause()/stop()/setPositionSeconds() and reads the
 	playback state, while the audio thread calls render(). All access to the libvgm player objects
-	is serialised through one lock: the audio thread uses a *try*-lock (and outputs silence if the
-	message thread is currently loading a file), the message thread uses a normal lock.
+	is serialised through one lock: the audio thread uses a *try*-lock at the top of render()
+	(and outputs silence if the message thread is in the middle of a command), the message thread
+	uses a normal lock for commands and for the short cache refreshes.
+
+	That try-lock is why every value the UI polls at the 20 Hz refresh is served lock-free: the
+	position is an atomic render() publishes once per block, the duration and the loop point are
+	cached whenever the file/config changes, and the tags are only touched from the message
+	thread. Every lock a UI poll *would* take is a chance for the try-lock to fail - and a failed
+	try-lock costs a whole silent block, which is audible as a faint tick.
 */
 class VgmEngine
 {
@@ -56,11 +63,15 @@ public:
 	bool isLoaded (void) const { return loaded; }
 	bool isPlaying (void) const { return playing.load(); }
 	bool isFinished (void) const { return finished.load(); }
-	double getPositionSeconds (void) const;
-	double getDurationSeconds (void) const;
+	/** Lock-free snapshot of the playback position: render() publishes it once per block and
+		every seek updates it, so the 20 Hz UI polling never contends for the render lock. */
+	double getPositionSeconds (void) const { return positionSeconds.load(); }
+	/** Song length, cached while the lock is held when the file, the loop count, the fade time
+		or the sample rate changes - read without the lock. */
+	double getDurationSeconds (void) const { return cachedDurationSeconds; }
 	/** Position of the loop point inside a single playthrough, or a negative value if the song
 		has no loop point (or nothing is loaded). */
-	double getLoopPointSeconds (void) const;
+	double getLoopPointSeconds (void) const { return cachedLoopPointSeconds; }
 	int getLoopCount (void) const { return loopCount; }
 	double getFadeSeconds (void) const { return fadeSeconds; }
 	float getMasterVolume (void) const { return masterVolume; }
@@ -77,6 +88,7 @@ private:
 
 	void applyOutputSettings (void);
 	double getPlayLengthSeconds (void) const;	// caller must hold the lock
+	void refreshCachedTimes (void);				// caller must hold the lock
 	void updatePlayerConfig (void);
 	void enumerateTags (void);
 	void enumerateChips (void);
@@ -98,9 +110,16 @@ private:
 	double fadeSeconds = 3.0;
 	float masterVolume = 1.0f;
 
+	// song facts for the lock-free getters - written on the message thread while the lock is
+	// held (load / loop / fade / sample-rate changes), read without the lock
+	double cachedDurationSeconds = 0.0;
+	double cachedLoopPointSeconds = -1.0;
+	bool loopsForever = false;
+
 	std::atomic<bool> loaded { false };
 	std::atomic<bool> playing { false };
 	std::atomic<bool> finished { false };
+	std::atomic<double> positionSeconds { 0.0 };	// published by render(), read by the UI
 
 	JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (VgmEngine)
 };

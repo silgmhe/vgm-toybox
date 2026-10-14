@@ -20,6 +20,10 @@ namespace
 	constexpr float kInt32ToFloat = 1.0f / 2147483648.0f;
 	constexpr int kBytesPerSample = 8;					// 32 bit * 2 channels
 
+	// The engine is constructed on the message thread - remember it, so the log callback can
+	// stay silent on the audio thread (see below).
+	juce::Thread::ThreadID messageThreadId = {};
+
 	juce::String fccToString (UINT32 fcc)
 	{
 		char text[5] = { 0, 0, 0, 0, 0 };
@@ -46,6 +50,14 @@ namespace
 		{
 			return;
 		}
+
+		// libvgm can log from inside the render call - building these strings or entering the
+		// logger allocates, so never do it on the audio thread
+		if (juce::Thread::getCurrentThreadId() != messageThreadId)
+		{
+			return;
+		}
+
 		const juce::String tag = (srcType == PLRLOGSRC_PLR) ? juce::String (player->GetPlayerName())
 															: juce::String (srcTag);
 		juce::Logger::writeToLog ("[VGMPlay/" + tag + "] " + juce::String (message).trim());
@@ -54,6 +66,7 @@ namespace
 
 VgmEngine::VgmEngine()
 {
+	messageThreadId = juce::Thread::getCurrentThreadId();
 	player.RegisterPlayerEngine (new VGMPlayer);
 	player.RegisterPlayerEngine (new S98Player);
 	player.RegisterPlayerEngine (new DROPlayer);
@@ -122,6 +135,7 @@ void VgmEngine::prepare (double newSampleRate, int maxBlock)
 
 	applyOutputSettings();
 	updatePlayerConfig();
+	refreshCachedTimes();	// the fade time scales with the sample rate
 }
 
 bool VgmEngine::loadFile (const juce::File& file, juce::String& errorMessage)
@@ -178,7 +192,9 @@ bool VgmEngine::loadFile (const juce::File& file, juce::String& errorMessage)
 	updatePlayerConfig();
 	player.Start();			// the sound cores only exist after starting playback
 	enumerateChips();
+	refreshCachedTimes();	// the song facts the lock-free getters serve - valid after Start()
 
+	positionSeconds = 0.0;
 	loaded = true;
 	finished = false;
 	playing = true;
@@ -211,6 +227,11 @@ void VgmEngine::resetState (void)
 	currentFile = juce::File();
 	chips.clear();
 	tags.clear();
+
+	positionSeconds = 0.0;
+	cachedDurationSeconds = 0.0;
+	cachedLoopPointSeconds = -1.0;
+	loopsForever = false;
 }
 
 void VgmEngine::applyOutputSettings (void)
@@ -271,6 +292,7 @@ void VgmEngine::stop (void)
 	{
 		player.Seek (PLAYPOS_SAMPLE, 0);
 	}
+	positionSeconds = 0.0;
 }
 
 void VgmEngine::setPositionSeconds (double seconds)
@@ -285,6 +307,7 @@ void VgmEngine::setPositionSeconds (double seconds)
 	const double target = juce::jlimit (0.0, juce::jmax (0.0, duration), seconds);
 
 	player.Seek (PLAYPOS_SAMPLE, (UINT32) (target * sampleRate));
+	positionSeconds = target;
 	finished = false;
 }
 
@@ -293,6 +316,7 @@ void VgmEngine::setLoopCount (int loops)
 	const juce::ScopedLock sl (lock);
 	loopCount = loops;
 	updatePlayerConfig();
+	refreshCachedTimes();	// the cached duration includes the loop repetitions
 }
 
 void VgmEngine::setFadeSeconds (double seconds)
@@ -300,6 +324,7 @@ void VgmEngine::setFadeSeconds (double seconds)
 	const juce::ScopedLock sl (lock);
 	fadeSeconds = seconds;
 	updatePlayerConfig();
+	refreshCachedTimes();	// the cached duration includes the fade time
 }
 
 void VgmEngine::setMasterVolume (float linear)
@@ -335,44 +360,28 @@ void VgmEngine::setChipMuted (size_t chipIndex, bool shouldBeMuted)
 	pBase->SetDeviceMuting (chip.devID, muteOpts);
 }
 
-double VgmEngine::getPositionSeconds (void) const
+void VgmEngine::refreshCachedTimes (void)
 {
-	const juce::ScopedLock sl (lock);
 	if (player.GetPlayer() == NULL)
 	{
-		return 0.0;
+		cachedDurationSeconds = 0.0;
+		cachedLoopPointSeconds = -1.0;
+		loopsForever = false;
+		return;
 	}
+
+	cachedDurationSeconds = getPlayLengthSeconds();
 
 	// While looping forever the absolute position keeps growing, so report the position that
 	// jumps back to the loop start on every repetition - the same mode getPlayLengthSeconds()
 	// measures the duration in.
-	const bool loopingForever = (player.GetTotalTime (PLAYTIME_LOOP_INCL | PLAYTIME_TIME_PBK) < 0.0);
-	return player.GetCurTime (loopingForever ? PLAYTIME_TIME_PBK
-											 : (PLAYTIME_LOOP_INCL | PLAYTIME_TIME_PBK));
-}
-
-double VgmEngine::getDurationSeconds (void) const
-{
-	const juce::ScopedLock sl (lock);
-	return getPlayLengthSeconds();
-}
-
-double VgmEngine::getLoopPointSeconds (void) const
-{
-	const juce::ScopedLock sl (lock);
-	if (player.GetPlayer() == NULL)
-	{
-		return -1.0;
-	}
+	loopsForever = (player.GetTotalTime (PLAYTIME_LOOP_INCL | PLAYTIME_TIME_PBK) < 0.0);
 
 	// GetLoopTime() is the *length* of the loop, so the loop point is the length of a single
 	// playthrough minus that length - the position the seek bar jumps back to on every repetition.
 	const double loopLength = player.GetLoopTime();
-	if (loopLength <= 0.0)
-	{
-		return -1.0;	// no loop point
-	}
-	return juce::jmax (0.0, getPlayLengthSeconds() - loopLength);
+	cachedLoopPointSeconds = (loopLength > 0.0) ? juce::jmax (0.0, cachedDurationSeconds - loopLength)
+												: -1.0;
 }
 
 double VgmEngine::getPlayLengthSeconds (void) const
@@ -397,7 +406,9 @@ double VgmEngine::getPlayLengthSeconds (void) const
 
 juce::String VgmEngine::getTag (const juce::String& tagName) const
 {
-	const juce::ScopedLock sl (lock);
+	// no lock: the map is only ever mutated from the message thread (load/reset) and the UI
+	// polls it at 20 Hz - taking the render lock here would make the audio thread's try-lock
+	// fail every now and then, dropping a whole block to silence
 	auto it = tags.find (tagName);
 	return (it == tags.end()) ? juce::String() : it->second;
 }
@@ -479,9 +490,7 @@ void VgmEngine::enumerateChips (void)
 
 void VgmEngine::render (float* const* outputs, int numSamples)
 {
-	const juce::ScopedTryLock stl (lock);
-
-	if (! stl.isLocked() || ! playing.load() || ! loaded.load())
+	const auto clearOutputs = [&]
 	{
 		for (int ch = 0; ch < 2; ++ch)
 		{
@@ -490,6 +499,23 @@ void VgmEngine::render (float* const* outputs, int numSamples)
 				juce::FloatVectorOperations::clear (outputs[ch], numSamples);
 			}
 		}
+	};
+
+	// check the cheap atomics first: while paused or idle the audio thread must not touch
+	// the lock at all (a failed try-lock costs a whole silent block)
+	if (! playing.load() || ! loaded.load())
+	{
+		clearOutputs();
+		return;
+	}
+
+	// The lock now only guards the player objects against the (rare, user-initiated) commands -
+	// the 20 Hz UI polling reads cached values instead, so this try-lock succeeds while the
+	// song plays.
+	const juce::ScopedTryLock stl (lock);
+	if (! stl.isLocked())
+	{
+		clearOutputs();
 		return;
 	}
 
@@ -509,6 +535,14 @@ void VgmEngine::render (float* const* outputs, int numSamples)
 		const int tail = numSamples - outSamples;
 		juce::FloatVectorOperations::clear (outputs[0] + outSamples, tail);
 		juce::FloatVectorOperations::clear (outputs[1] + outSamples, tail);
+	}
+
+	// publish the position for the lock-free UI getter (an O(1) query, still under the lock)
+	const double position = player.GetCurTime (loopsForever ? PLAYTIME_TIME_PBK
+															: (PLAYTIME_LOOP_INCL | PLAYTIME_TIME_PBK));
+	if (position >= 0.0)
+	{
+		positionSeconds.store (position);
 	}
 
 	if (finished.load())
