@@ -64,6 +64,14 @@ juce_add_plugin(VGMPlay
 target_sources(VGMPlay PRIVATE
 	Source/PluginProcessor.cpp
 	Source/PluginEditor.cpp
+	Source/ui/CardComponent.cpp
+	Source/ui/ChipPanel.cpp
+	Source/ui/DropHintOverlay.cpp
+	Source/ui/IconButton.cpp
+	Source/ui/Icons.cpp
+	Source/ui/LightLookAndFeel.cpp
+	Source/ui/SongInfoPanel.cpp
+	Source/ui/TransportPanel.cpp
 	Source/vgm/VgmEngine.cpp
 )
 
