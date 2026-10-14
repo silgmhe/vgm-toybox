@@ -3,7 +3,7 @@
 #include "CardComponent.h"
 #include "IconButton.h"
 
-namespace vgmplay { class VgmEngine; }
+namespace vgmplay { class MixerEngine; }
 
 namespace vgmplay::ui
 {
@@ -27,7 +27,7 @@ public:
 	/** 34 (buttons) + 5 + 12 (marker strip) + 1 + 22 (slider) + 8 + 26 (settings) + 2 * 12 (padding). */
 	static constexpr int preferredHeight = 132;
 
-	explicit TransportPanel (vgmplay::VgmEngine& engineToUse);
+	explicit TransportPanel (vgmplay::MixerEngine& engineToUse);
 
 	/** Pulls the transport state, the loop/fade setting and the position from the engine. */
 	void refresh (void);
@@ -74,7 +74,7 @@ private:
 	void setPlaybackStart (double seconds);
 	juce::Rectangle<int> playbackStartRepaintArea (double seconds) const;
 
-	vgmplay::VgmEngine& engine;
+	vgmplay::MixerEngine& engine;
 
 	IconButton playButton { "Play", IconButton::Icon::play };
 	IconButton pauseButton { "Pause", IconButton::Icon::pause };

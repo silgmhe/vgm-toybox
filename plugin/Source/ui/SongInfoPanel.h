@@ -2,7 +2,7 @@
 
 #include "CardComponent.h"
 
-namespace vgmplay { class VgmEngine; }
+namespace vgmplay { class MixerEngine; }
 
 namespace vgmplay::ui
 {
@@ -18,7 +18,7 @@ public:
 	static constexpr int preferredHeight = 96;
 	static constexpr int minHeight = 70;
 
-	explicit SongInfoPanel (const vgmplay::VgmEngine& engineToUse);
+	explicit SongInfoPanel (const vgmplay::MixerEngine& engineToUse);
 
 	/** Updates title, tags and the file/position line. */
 	void refresh (void);
@@ -26,7 +26,7 @@ public:
 private:
 	void resized (void) override;
 
-	const vgmplay::VgmEngine& engine;
+	const vgmplay::MixerEngine& engine;
 
 	juce::Label titleLabel;
 	juce::Label detailsLabel;

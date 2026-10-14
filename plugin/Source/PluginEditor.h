@@ -44,7 +44,7 @@ private:
 	void updateStatusLine (void);
 
 	VGMPlayAudioProcessor& processor;
-	vgmplay::VgmEngine& engine;
+	vgmplay::MixerEngine& engine;
 
 	vgmplay::ui::LightLookAndFeel lookAndFeel;
 

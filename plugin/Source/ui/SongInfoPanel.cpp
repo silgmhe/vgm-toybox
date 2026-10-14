@@ -3,12 +3,12 @@
 #include "Format.h"
 #include "Theme.h"
 
-#include "vgm/VgmEngine.h"
+#include "vgm/MixerEngine.h"
 
 namespace vgmplay::ui
 {
 
-SongInfoPanel::SongInfoPanel (const vgmplay::VgmEngine& engineToUse)
+SongInfoPanel::SongInfoPanel (const vgmplay::MixerEngine& engineToUse)
 	: engine (engineToUse)
 {
 	titleLabel.setFont (juce::Font (juce::FontOptions (18.0f, juce::Font::bold)));

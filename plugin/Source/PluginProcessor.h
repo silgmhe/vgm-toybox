@@ -2,7 +2,7 @@
 
 #include <juce_audio_processors/juce_audio_processors.h>
 
-#include "vgm/VgmEngine.h"
+#include "vgm/MixerEngine.h"
 
 /**
 	Audio processor of the VGMPlay plugin.
@@ -40,10 +40,10 @@ public:
 	void getStateInformation (juce::MemoryBlock& destData) override;
 	void setStateInformation (const void* data, int sizeInBytes) override;
 
-	vgmplay::VgmEngine& getEngine (void) { return engine; }
+	vgmplay::MixerEngine& getEngine (void) { return engine; }
 
 private:
-	vgmplay::VgmEngine engine;
+	vgmplay::MixerEngine engine;
 
 	JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (VGMPlayAudioProcessor)
 };

@@ -55,7 +55,7 @@ juce::AudioProcessorEditor* VGMPlayAudioProcessor::createEditor (void)
 
 void VGMPlayAudioProcessor::getStateInformation (juce::MemoryBlock& destData)
 {
-	VgmEngine& eng = engine;
+	MixerEngine& eng = engine;
 
 	juce::XmlElement state ("VGMPlayState");
 	state.setAttribute ("file", eng.getFile().getFullPathName());
@@ -81,7 +81,7 @@ void VGMPlayAudioProcessor::setStateInformation (const void* data, int sizeInByt
 		return;
 	}
 
-	VgmEngine& eng = engine;
+	MixerEngine& eng = engine;
 	eng.setLoopCount (state->getIntAttribute ("loopCount", 1));
 	eng.setFadeSeconds (state->getDoubleAttribute ("fadeSeconds", 3.0));
 	eng.setMasterVolume ((float) state->getDoubleAttribute ("volume", 1.0));

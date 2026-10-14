@@ -72,7 +72,9 @@ target_sources(VGMPlay PRIVATE
 	Source/ui/LightLookAndFeel.cpp
 	Source/ui/SongInfoPanel.cpp
 	Source/ui/TransportPanel.cpp
-	Source/vgm/VgmEngine.cpp
+	Source/vgm/MixerEngine.cpp
+	Source/vgm/TrackLayout.cpp
+	Source/vgm/TrackPlayer.cpp
 )
 
 target_include_directories(VGMPlay PRIVATE Source)
@@ -94,17 +96,20 @@ target_link_libraries(VGMPlay PRIVATE
 	juce::juce_recommended_lto_flags
 )
 
-# --- console test for the playback engine (not built by default) ---
-# Renders a VGM/VGZ file offline into a WAV file, e.g.:
-#   cmake --build <build dir> --target vgm_engine_test
-#   <build dir>/plugin/vgm_engine_test test.vgz 5
-add_executable(vgm_engine_test EXCLUDE_FROM_ALL
-	Tests/VgmEngineTest.cpp
-	Source/vgm/VgmEngine.cpp
+# --- console test for the mixer engine (not built by default) ---
+# Renders a VGM/VGZ file offline (plain player and per-channel mixer), writes the plain render
+# to a WAV and checks the mixer acceptance criteria, e.g.:
+#   cmake --build <build dir> --target vgm_mixer_test
+#   <build dir>/plugin/vgm_mixer_test test.vgz 5
+add_executable(vgm_mixer_test EXCLUDE_FROM_ALL
+	Tests/MixerEngineTest.cpp
+	Source/vgm/MixerEngine.cpp
+	Source/vgm/TrackLayout.cpp
+	Source/vgm/TrackPlayer.cpp
 )
-target_include_directories(vgm_engine_test PRIVATE Source)
-target_compile_definitions(vgm_engine_test PRIVATE JUCE_STANDALONE_APPLICATION=1)
-target_link_libraries(vgm_engine_test PRIVATE
+target_include_directories(vgm_mixer_test PRIVATE Source)
+target_compile_definitions(vgm_mixer_test PRIVATE JUCE_STANDALONE_APPLICATION=1)
+target_link_libraries(vgm_mixer_test PRIVATE
 	${LIBVGM_TARGETS}
 	juce::juce_core
 	juce::juce_audio_basics
