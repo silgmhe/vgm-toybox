@@ -121,12 +121,17 @@ bool VGMPlayAudioProcessorEditor::keyPressed (const juce::KeyPress& key)
 {
 	if (key == juce::KeyPress::spaceKey)
 	{
+		transportPanel.togglePlayStop();
+		return true;
+	}
+	if (key == juce::KeyPress::returnKey)
+	{
 		transportPanel.togglePlayPause();
 		return true;
 	}
 	if (key == juce::KeyPress::homeKey)
 	{
-		engine.setPositionSeconds (0.0);
+		transportPanel.seekToSeconds (0.0);
 		return true;
 	}
 	if (key == juce::KeyPress::leftKey)

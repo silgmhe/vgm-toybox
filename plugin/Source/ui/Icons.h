@@ -11,4 +11,8 @@ namespace vgmplay::ui
 	slider and the drop hint area. */
 void drawRepeatGlyph (juce::Graphics& g, juce::Rectangle<float> iconArea, juce::Colour colour);
 
+/** The "play from here" glyph (a bar followed by a right-pointing triangle) of the playback
+	start cursor above the position slider. */
+void drawPlayStartGlyph (juce::Graphics& g, juce::Rectangle<float> iconArea, juce::Colour colour);
+
 } // namespace vgmplay::ui

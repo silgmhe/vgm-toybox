@@ -24,4 +24,19 @@ void drawRepeatGlyph (juce::Graphics& g, juce::Rectangle<float> iconArea, juce::
 	g.fillPath (heads);
 }
 
+void drawPlayStartGlyph (juce::Graphics& g, juce::Rectangle<float> iconArea, juce::Colour colour)
+{
+	g.setColour (colour);
+
+	const float barWidth = juce::jmax (1.2f, iconArea.getWidth() * 0.18f);
+	g.fillRoundedRectangle (iconArea.removeFromLeft (barWidth), barWidth * 0.5f);
+
+	iconArea.removeFromLeft (iconArea.getWidth() * 0.16f);
+	juce::Path head;
+	head.addTriangle (iconArea.getX(), iconArea.getY(),
+					  iconArea.getX(), iconArea.getBottom(),
+					  iconArea.getRight(), iconArea.getCentreY());
+	g.fillPath (head);
+}
+
 } // namespace vgmplay::ui

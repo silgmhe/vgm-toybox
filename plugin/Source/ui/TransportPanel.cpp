@@ -34,13 +34,13 @@ TransportPanel::TransportPanel (vgmplay::VgmEngine& engineToUse)
 	: engine (engineToUse)
 {
 	// --- transport buttons ---
-	playButton.onClick = [this] { engine.play(); refresh(); };
-	pauseButton.onClick = [this] { engine.pause(); refresh(); };
-	stopButton.onClick = [this] { engine.stop(); refresh(); };
+	playButton.onClick = [this] { startPlayback(); };
+	pauseButton.onClick = [this] { pausePlayback(); };
+	stopButton.onClick = [this] { stopToPlaybackStart(); };
 	loopButton.onClick = [this] { setLoopForever (! loopButton.getToggleState()); };
 	playButton.setTooltip ("Play (space)");
-	pauseButton.setTooltip ("Pause (space)");
-	stopButton.setTooltip ("Stop (reset to the beginning)");
+	pauseButton.setTooltip ("Pause (enter)");
+	stopButton.setTooltip ("Stop - return to the playback start marker");
 	for (auto* button : { &playButton, &pauseButton, &stopButton, &loopButton })
 	{
 		button->setColour (juce::TextButton::buttonColourId, theme::card());
@@ -49,6 +49,11 @@ TransportPanel::TransportPanel (vgmplay::VgmEngine& engineToUse)
 		button->setColour (juce::TextButton::textColourOnId, juce::Colours::white);
 		addAndMakeVisible (*button);
 	}
+
+	// --- playback start cursor (the drag strip above the seek bar) ---
+	startMarkerDragArea.setMouseCursor (juce::MouseCursor::LeftRightResizeCursor);
+	startMarkerDragArea.setTooltip ("Playback start - drag to set where playback begins and Stop returns to");
+	addAndMakeVisible (startMarkerDragArea);
 
 	// --- seek bar ---
 	positionSlider.setSliderStyle (juce::Slider::LinearHorizontal);
@@ -60,7 +65,7 @@ TransportPanel::TransportPanel (vgmplay::VgmEngine& engineToUse)
 	positionSlider.onDragEnd = [this]
 	{
 		userIsDragging = false;
-		engine.setPositionSeconds (positionSlider.getValue() * engine.getDurationSeconds());
+		seekToSeconds (positionSlider.getValue() * engine.getDurationSeconds());
 	};
 	addAndMakeVisible (positionSlider);
 
@@ -128,7 +133,8 @@ void TransportPanel::resized (void)
 	loopButton.setBounds (row.removeFromLeft (kButtonSize));
 
 	inner.removeFromTop (5);
-	loopMarkerBounds = inner.removeFromTop (kLoopMarkerHeight);
+	markerBandBounds = inner.removeFromTop (kLoopMarkerHeight);
+	startMarkerDragArea.setBounds (markerBandBounds.withTop (markerBandBounds.getY() - 3));
 	inner.removeFromTop (1);
 	positionSlider.setBounds (inner.removeFromTop (22));
 	inner.removeFromTop (theme::rowGap);
@@ -143,6 +149,9 @@ void TransportPanel::resized (void)
 
 void TransportPanel::paintCardContent (juce::Graphics& g)
 {
+	// playback start cursor (the strip above the seek bar drags it - see StartMarkerDragArea)
+	paintPlaybackStartCursor (g);
+
 	// The loop toggle glows in the accent colour while it is on. The card paints it (and
 	// therefore behind the button): a component cannot draw outside its own bounds.
 	if (loopButton.getToggleState())
@@ -152,17 +161,17 @@ void TransportPanel::paintCardContent (juce::Graphics& g)
 	}
 
 	// loop point marker above the position slider (only for songs that have a loop point)
-	if (loopMarkerNormalised < 0.0 || loopMarkerBounds.isEmpty())
+	if (loopMarkerNormalised < 0.0 || markerBandBounds.isEmpty())
 	{
 		return;
 	}
 
 	const float iconSize = (float) kLoopMarkerHeight - 1.0f;
-	const float travel = (float) loopMarkerBounds.getWidth() - 2.0f * theme::sliderThumbRadius;
-	const float centreX = (float) loopMarkerBounds.getX() + theme::sliderThumbRadius
+	const float travel = (float) markerBandBounds.getWidth() - 2.0f * theme::sliderThumbRadius;
+	const float centreX = (float) markerBandBounds.getX() + theme::sliderThumbRadius
 							+ juce::jlimit (0.0f, 1.0f, (float) loopMarkerNormalised) * travel;
 	const auto iconArea = juce::Rectangle<float> (iconSize, iconSize)
-							  .withCentre ({ centreX, (float) loopMarkerBounds.getCentreY() });
+							  .withCentre ({ centreX, (float) markerBandBounds.getCentreY() });
 
 	// a hairline down to the track turns it into a cue marker; the slider thumb covers it
 	// while the position is at the loop point
@@ -176,14 +185,137 @@ void TransportPanel::paintCardContent (juce::Graphics& g)
 	drawRepeatGlyph (g, iconArea, theme::accent());
 }
 
+void TransportPanel::paintPlaybackStartCursor (juce::Graphics& g) const
+{
+	if (! engine.isLoaded() || markerBandBounds.isEmpty())
+	{
+		return;
+	}
+
+	const double duration = engine.getDurationSeconds();
+	const float normalised = (duration > 0.0) ? juce::jlimit (0.0f, 1.0f, (float) (playbackStartSeconds / duration)) : 0.0f;
+	const float centreX = (float) markerBandBounds.getX() + theme::sliderThumbRadius
+							+ normalised * ((float) markerBandBounds.getWidth() - 2.0f * theme::sliderThumbRadius);
+
+	const float iconSize = (float) kLoopMarkerHeight - 2.0f;
+	const auto iconArea = juce::Rectangle<float> (iconSize, iconSize)
+							  .withCentre ({ centreX, (float) markerBandBounds.getCentreY() });
+
+	// a hairline down to the track marks the position, like the loop point marker's
+	const float lineBottom = (float) positionSlider.getBounds().getCentreY();
+	if (lineBottom > iconArea.getBottom())
+	{
+		g.setColour (theme::primaryText().withAlpha (0.30f));
+		g.fillRect (centreX - 0.5f, iconArea.getBottom(), 1.0f, lineBottom - iconArea.getBottom());
+	}
+
+	drawPlayStartGlyph (g, iconArea, theme::primaryText());
+}
+
+void TransportPanel::movePlaybackStartToBandX (int bandX)
+{
+	const double duration = engine.getDurationSeconds();
+	const float travel = (float) markerBandBounds.getWidth() - 2.0f * theme::sliderThumbRadius;
+	if (! engine.isLoaded() || duration <= 0.0 || travel <= 1.0f)
+	{
+		return;
+	}
+
+	const float normalised = juce::jlimit (0.0f, 1.0f, ((float) bandX - theme::sliderThumbRadius) / travel);
+
+	setPlaybackStart ((double) normalised * duration);
+
+	// a stationary transport follows the cursor, so the next Play (or space) starts right
+	// there; while playing the marker only moves - the song keeps rolling
+	if (! engine.isPlaying())
+	{
+		engine.setPositionSeconds (playbackStartSeconds);
+		refresh();
+	}
+}
+
+juce::Rectangle<int> TransportPanel::playbackStartRepaintArea (double seconds) const
+{
+	const double duration = engine.getDurationSeconds();
+	if (! engine.isLoaded() || duration <= 0.0 || markerBandBounds.isEmpty())
+	{
+		return {};
+	}
+
+	const float normalised = juce::jlimit (0.0f, 1.0f, (float) (seconds / duration));
+	const float centreX = (float) markerBandBounds.getX() + theme::sliderThumbRadius
+							+ normalised * ((float) markerBandBounds.getWidth() - 2.0f * theme::sliderThumbRadius);
+
+	const int top = markerBandBounds.getY() - 2;
+	const int bottom = positionSlider.getBounds().getCentreY() + 2;
+	return juce::Rectangle<int> (juce::roundToInt (centreX) - kLoopMarkerHeight, top,
+								 2 * kLoopMarkerHeight, bottom - top);
+}
+
+void TransportPanel::setPlaybackStart (double seconds)
+{
+	// repaint the columns of the old and the new marker - the hairline reaches down to
+	// the slider, and repainting the whole card on every drag event would be wasteful
+	const auto oldArea = playbackStartRepaintArea (playbackStartSeconds);
+	playbackStartSeconds = seconds;
+	repaint (oldArea.getUnion (playbackStartRepaintArea (playbackStartSeconds)));
+}
+
+void TransportPanel::seekToSeconds (double seconds)
+{
+	const double duration = engine.getDurationSeconds();
+	seconds = juce::jlimit (0.0, duration, seconds);
+	engine.setPositionSeconds (seconds);
+
+	// while the transport is running the cursor stays where it is; a stationary transport
+	// carries it along, so the position and the cursor cannot drift apart
+	if (! engine.isPlaying())
+	{
+		setPlaybackStart (seconds);
+	}
+}
+
+void TransportPanel::startPlayback (void)
+{
+	paused = false;
+
+	// a finished song starts over at the playback start cursor (VgmEngine::play() would
+	// restart it from the very beginning)
+	if (engine.isFinished())
+	{
+		engine.setPositionSeconds (playbackStartSeconds);
+	}
+
+	engine.play();
+	refresh();
+}
+
+void TransportPanel::stopToPlaybackStart (void)
+{
+	paused = false;
+	engine.stop();
+	engine.setPositionSeconds (playbackStartSeconds);
+	refresh();
+}
+
+void TransportPanel::pausePlayback (void)
+{
+	paused = true;
+	engine.pause();
+	refresh();
+}
+
 void TransportPanel::refresh (void)
 {
 	const bool loaded = engine.isLoaded();
 	const bool playing = engine.isPlaying();
 	const double duration = engine.getDurationSeconds();
 
+	// the button lights follow the transport: playing lights Play, the last stop-like action
+	// lights Pause or Stop ("stop" also covers a song that finished)
 	playButton.setToggleState (loaded && playing, juce::dontSendNotification);
-	pauseButton.setToggleState (loaded && ! playing && ! engine.isFinished(), juce::dontSendNotification);
+	pauseButton.setToggleState (loaded && ! playing && paused, juce::dontSendNotification);
+	stopButton.setToggleState (loaded && ! playing && ! paused, juce::dontSendNotification);
 	positionSlider.setEnabled (loaded);
 
 	// The loop button and the loop combo box show the same engine setting. Compare them against
@@ -219,6 +351,15 @@ void TransportPanel::refresh (void)
 		fadeBox.repaint();
 	}
 
+	// the playback start cursor belongs to the song - reset it when another file is loaded
+	const auto& file = engine.getFile();
+	if (file != lastFile)
+	{
+		lastFile = file;
+		playbackStartSeconds = 0.0;
+		repaint();
+	}
+
 	// loop point marker (negative = nothing to show; the value only changes when another file
 	// is loaded or the sample rate changed)
 	const double loopPoint = loaded ? engine.getLoopPointSeconds() : -1.0;
@@ -227,7 +368,7 @@ void TransportPanel::refresh (void)
 	if (normalised != loopMarkerNormalised)
 	{
 		loopMarkerNormalised = normalised;
-		repaint (loopMarkerBounds);
+		repaint (markerBandBounds);
 	}
 
 	// play position (the slider is left alone while the user drags it)
@@ -239,22 +380,33 @@ void TransportPanel::refresh (void)
 	}
 }
 
+void TransportPanel::togglePlayStop (void)
+{
+	if (engine.isPlaying())
+	{
+		stopToPlaybackStart();
+	}
+	else
+	{
+		startPlayback();
+	}
+}
+
 void TransportPanel::togglePlayPause (void)
 {
 	if (engine.isPlaying())
 	{
-		engine.pause();
+		pausePlayback();
 	}
 	else
 	{
-		engine.play();
+		startPlayback();
 	}
-	refresh();
 }
 
 void TransportPanel::seekRelative (double seconds)
 {
-	engine.setPositionSeconds (engine.getPositionSeconds() + seconds);
+	seekToSeconds (engine.getPositionSeconds() + seconds);
 }
 
 void TransportPanel::setLoopForever (bool shouldLoopForever)
