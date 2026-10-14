@@ -629,6 +629,12 @@ void VGMPlayAudioProcessorEditor::resized (void)
 	}
 
 	dropHintLabel.setBounds (getLocalBounds().reduced (kMargin));
+
+	// The cards, the section header and the loop marker are painted from the bounds computed
+	// above, and changing those bounds does not repaint anything by itself (adding or removing
+	// child components only repaints the children). Without this, a file loaded through the
+	// file chooser showed its chip checkboxes but neither the chips card nor its header.
+	repaint();
 }
 
 //==============================================================================
@@ -706,6 +712,8 @@ void VGMPlayAudioProcessorEditor::fileDragExit (const juce::StringArray&)
 void VGMPlayAudioProcessorEditor::filesDropped (const juce::StringArray& files, int, int)
 {
 	dropHintLabel.setVisible (false);
+	repaint();		// erase the dashed drop outline (like fileDragExit() does)
+
 	for (const auto& path : files)
 	{
 		if (path.endsWithIgnoreCase (".vgm") || path.endsWithIgnoreCase (".vgz"))
@@ -776,14 +784,29 @@ void VGMPlayAudioProcessorEditor::updateControls (void)
 	pauseButton.setToggleState (loaded && ! playing && ! engine.isFinished(), juce::dontSendNotification);
 	positionSlider.setEnabled (loaded);
 
-	// the loop button and the loop combo box show the same setting - refresh both when it changed
+	// The loop button and the loop combo box show the same engine setting. Compare them against
+	// the controls themselves instead of a cached value and repaint them explicitly: both
+	// setToggleState() and setSelectedId() skip their repaint when they think that nothing
+	// changed, which left the button looking "on" while the combo box said "1x".
 	const int loops = engine.getLoopCount();
-	if (loops != lastLoopCount)
+	const bool loopForever = (loops == 0);
+	const int loopId = loopBoxIdForCount (loops);
+	const bool loopChanged = (loops != lastLoopCount);
+
+	if (loopChanged)
 	{
 		lastLoopCount = loops;
-		loopButton.setToggleState (loops == 0, juce::dontSendNotification);
 		loopButton.setTooltip (loopTooltip (loops));
-		loopBox.setSelectedId (loopBoxIdForCount (loops), juce::dontSendNotification);
+	}
+	if (loopChanged || loopButton.getToggleState() != loopForever)
+	{
+		loopButton.setToggleState (loopForever, juce::dontSendNotification);
+		loopButton.repaint();
+	}
+	if (loopChanged || loopBox.getSelectedId() != loopId)
+	{
+		loopBox.setSelectedId (loopId, juce::dontSendNotification);
+		loopBox.repaint();
 	}
 
 	// loop point marker above the position slider (negative = nothing to show; the value only
