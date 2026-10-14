@@ -1,6 +1,7 @@
 #include "TransportPanel.h"
 
 #include "Icons.h"
+#include "SoftShadow.h"
 #include "Theme.h"
 
 #include "vgm/VgmEngine.h"
@@ -142,6 +143,14 @@ void TransportPanel::resized (void)
 
 void TransportPanel::paintCardContent (juce::Graphics& g)
 {
+	// The loop toggle glows in the accent colour while it is on. The card paints it (and
+	// therefore behind the button): a component cannot draw outside its own bounds.
+	if (loopButton.getToggleState())
+	{
+		drawSoftShadow (g, loopButton.getBounds().toFloat(), theme::buttonRadius,
+						theme::accentGlow(), theme::accentGlowBlur, { 0, theme::accentGlowOffsetY });
+	}
+
 	// loop point marker above the position slider (only for songs that have a loop point)
 	if (loopMarkerNormalised < 0.0 || loopMarkerBounds.isEmpty())
 	{
@@ -192,7 +201,9 @@ void TransportPanel::refresh (void)
 	if (loopButton.getToggleState() != loopForever)
 	{
 		loopButton.setToggleState (loopForever, juce::dontSendNotification);
-		loopButton.repaint();
+		// repaint a ring around the button as well - the accent glow (see
+		// paintCardContent()) reaches past the button bounds
+		repaint (loopButton.getBounds().expanded (theme::accentGlowBlur + theme::accentGlowOffsetY + 2));
 	}
 	if (loopBox.getSelectedId() != loopId)
 	{

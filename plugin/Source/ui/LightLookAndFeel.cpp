@@ -1,5 +1,6 @@
 #include "LightLookAndFeel.h"
 
+#include "SoftShadow.h"
 #include "Theme.h"
 
 namespace vgmplay::ui
@@ -90,8 +91,11 @@ void LightLookAndFeel::drawTickBox (juce::Graphics& g, juce::Component& componen
 
 	if (ticked)
 	{
-		g.setColour (isEnabled ? component.findColour (juce::ToggleButton::tickColourId)
-							   : component.findColour (juce::ToggleButton::tickDisabledColourId));
+		const auto tickedColour = isEnabled ? component.findColour (juce::ToggleButton::tickColourId)
+											: component.findColour (juce::ToggleButton::tickDisabledColourId);
+		drawSoftShadow (g, box, radius, theme::controlShadow().withMultipliedAlpha (isEnabled ? 1.0f : 0.45f),
+						theme::controlShadowBlur, { 0, 1 });
+		g.setColour (tickedColour);
 		g.fillRoundedRectangle (box, radius);
 
 		juce::Path tick;
@@ -157,8 +161,8 @@ void LightLookAndFeel::drawLinearSlider (juce::Graphics& g, int x, int y, int wi
 	}
 
 	const auto thumb = juce::Rectangle<float> (thumbRadius * 2.0f, thumbRadius * 2.0f).withCentre ({ thumbX, centreY });
-	g.setColour (juce::Colours::black.withAlpha (enabled ? 0.12f : 0.06f));
-	g.fillEllipse (thumb.translated (0.0f, 0.5f));
+	drawSoftShadow (g, thumb, thumbRadius, theme::controlShadow().withMultipliedAlpha (enabled ? 1.0f : 0.45f),
+					theme::controlShadowBlur, { 0, 1 });
 	g.setColour (slider.findColour (juce::Slider::thumbColourId));
 	g.fillEllipse (thumb);
 	g.setColour (juce::Colour (0xffc5c5cb));

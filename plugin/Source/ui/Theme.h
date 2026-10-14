@@ -13,11 +13,14 @@ namespace vgmplay::ui::theme
 
 // --- palette ------------------------------------------------------------------------
 inline juce::Colour window (void)		{ return juce::Colour (0xfff2f2f7); }
+inline juce::Colour windowTop (void)	{ return juce::Colour (0xfff9f9fc); }
+inline juce::Colour windowBottom (void)	{ return juce::Colour (0xffecedf2); }
 inline juce::Colour card (void)			{ return juce::Colour (0xffffffff); }
 inline juce::Colour accent (void)		{ return juce::Colour (0xff0a84ff); }
 inline juce::Colour primaryText (void)	{ return juce::Colour (0xff1d1d1f); }
 inline juce::Colour secondaryText (void){ return juce::Colour (0xff74747a); }
 inline juce::Colour border (void)		{ return juce::Colour (0xffd7d7dd); }
+inline juce::Colour cardBorder (void)	{ return juce::Colour (0xffe6e6ec); }
 inline juce::Colour track (void)		{ return juce::Colour (0xffdcdce2); }
 inline juce::Colour error (void)		{ return juce::Colour (0xffd70015); }
 
@@ -34,5 +37,24 @@ inline constexpr float buttonRadius = 8.0f;
 /** Radius of the position slider thumb. LightLookAndFeel draws the thumb, TransportPanel
 	draws the loop point marker on top of the track - both have to use the same value. */
 inline constexpr float sliderThumbRadius = 6.5f;
+
+// --- elevation ----------------------------------------------------------------------
+// Everything that floats above the window casts a soft, blurred shadow: the cards a
+// two-layer one (a wide "key" light below the shape plus a tight "ambient" contact
+// shadow), filled accent controls a coloured glow. All of them are just a few percent
+// opaque, so the depth stays subtle.
+inline juce::Colour cardAmbientShadow (void)	{ return juce::Colour (0x14000000); }
+inline juce::Colour cardKeyShadow (void)		{ return juce::Colour (0x11000000); }
+inline constexpr int cardAmbientBlur = 3;
+inline constexpr int cardKeyBlur = 16;
+inline constexpr int cardKeyOffsetY = 5;
+
+inline juce::Colour accentGlow (void)			{ return juce::Colour (0x4d0a84ff); }
+inline constexpr int accentGlowBlur = 12;
+inline constexpr int accentGlowOffsetY = 3;
+
+// slider thumbs and ticked checkboxes (their shadow fits inside their own bounds)
+inline juce::Colour controlShadow (void)		{ return juce::Colour (0x38000000); }
+inline constexpr int controlShadowBlur = 5;
 
 } // namespace vgmplay::ui::theme

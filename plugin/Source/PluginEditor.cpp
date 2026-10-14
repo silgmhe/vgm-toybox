@@ -1,6 +1,7 @@
 #include "PluginEditor.h"
 
 #include "ui/Format.h"
+#include "ui/SoftShadow.h"
 #include "ui/Theme.h"
 
 using namespace vgmplay;
@@ -55,7 +56,23 @@ VGMPlayAudioProcessorEditor::~VGMPlayAudioProcessorEditor()
 
 void VGMPlayAudioProcessorEditor::paint (juce::Graphics& g)
 {
-	g.fillAll (theme::window());
+	// a faint vertical gradient gives the window some depth
+	g.setGradientFill (juce::ColourGradient (theme::windowTop(), 0.0f, 0.0f,
+											 theme::windowBottom(), 0.0f, (float) getHeight(), false));
+	g.fillRect (getLocalBounds());
+
+	// The cards and the open button are clipped to their own bounds, so the soft shadows
+	// they cast onto the window have to be painted here, before them. drawSoftShadow()
+	// skips the blur whenever the repaint is entirely inside a shape (a moving slider
+	// thumb, a label that changed its text), so ordinary refresh repaints stay cheap.
+	drawCardShadow (g, songInfoPanel.getBounds().toFloat());
+	drawCardShadow (g, transportPanel.getBounds().toFloat());
+	if (chipPanel.isVisible() && ! chipPanel.getBounds().isEmpty())
+	{
+		drawCardShadow (g, chipPanel.getBounds().toFloat());
+	}
+	drawSoftShadow (g, openButton.getBounds().toFloat(), theme::buttonRadius,
+					theme::accentGlow(), theme::accentGlowBlur, { 0, theme::accentGlowOffsetY });
 }
 
 void VGMPlayAudioProcessorEditor::resized (void)
@@ -91,6 +108,10 @@ void VGMPlayAudioProcessorEditor::resized (void)
 	}
 
 	dropHint.setBounds (getLocalBounds());
+
+	// The card shadows are painted by paint(), outside the card bounds - a relayout has
+	// to clear the ring around a card that moved, appeared or changed size.
+	repaint();
 }
 
 //==============================================================================

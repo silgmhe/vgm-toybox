@@ -8,11 +8,14 @@ namespace vgmplay::ui
 /**
 	Base class of the white "cards" the editor is built from.
 
-	The card paints its own background (soft shadow, white fill, hairline border), so a
-	subclass only lays out its child components and - if needed - draws content on top of the
-	card in paintCardContent(). Keeping the bounds and the background in the same component is
-	what removes the old parallel state: the editor no longer stores card rectangles that both
-	paint() and resized() have to agree on, and there is no repaint() to call by hand.
+	The card paints its own background (white fill, hairline border), so a subclass only
+	lays out its child components and - if needed - draws content on top of the card in
+	paintCardContent(). Keeping the bounds and the background in the same component is
+	what removes the old parallel state: the editor no longer stores card rectangles that
+	both paint() and resized() have to agree on, and there is no repaint() to call by hand.
+
+	The soft shadow behind the card is painted by the editor (see its paint()), not here:
+	JUCE clips every component to its own bounds, so the card could not draw outside itself.
 */
 class CardComponent : public juce::Component
 {
