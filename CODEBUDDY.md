@@ -42,7 +42,7 @@ Static runtime: the root `CMakeLists.txt` sets `CMAKE_MSVC_RUNTIME_LIBRARY=Multi
 
 zlib is compiled from source into the package, so no zlib DLL is needed. Related cache variables: `LIBVGM_ZLIB_FROM_SOURCE` (default `ON`; `OFF` uses a system zlib via `find_package(ZLIB)`), `LIBVGM_ZLIB_TAG` (`v1.3.1`), `LIBVGM_ZLIB_MIRRORS` / `LIBVGM_ZLIB_REPOSITORY` (the build probes GitHub first, then the Gitee mirror, because GitHub is not always reachable), `CPM_SOURCE_CACHE` (source cache, e.g. `H:/cmake_cache`).
 
-The **JUCE plugin** is part of the default build (`VGMPLAY_BUILD_PLUGIN`, set to `OFF` by `-NoPlugin`). `plugin/CMakeLists.txt` fetches JUCE with CPM (`JUCE_TAG`, default `8.0.9`; `JUCE_MIRRORS` / `JUCE_REPOSITORY` work like the zlib ones) and builds a VST3 + a standalone application. `build.ps1` exports the Windows system proxy (`HTTP(S)_PROXY`) before configuring, because git/CPM do not read the Windows proxy settings — use `-Proxy <url>` to override or `-NoProxy` to disable.
+The **JUCE plugin** is part of the default build (`TOYBOX_BUILD_PLUGIN`, set to `OFF` by `-NoPlugin`). `plugin/CMakeLists.txt` fetches JUCE with CPM (`JUCE_TAG`, default `8.0.9`; `JUCE_MIRRORS` / `JUCE_REPOSITORY` work like the zlib ones) and builds a VST3 + a standalone application. `build.ps1` exports the Windows system proxy (`HTTP(S)_PROXY`) before configuring, because git/CPM do not read the Windows proxy settings — use `-Proxy <url>` to override or `-NoProxy` to disable.
 
 Notable CMake cache variables: root project `MEDIA_CONTROLS` = `OFF`/`WIN_KEYS`/`WIN_SMTC`/`DBUS` (default `WIN_KEYS` on Windows, `DBUS` on Linux when DBus1 is found, otherwise `OFF`); libvgm-side `BUILD_LIBAUDIO`, `BUILD_LIBEMU`, `BUILD_LIBPLAYER`, `BUILD_TESTS`, `BUILD_PLAYER`, `BUILD_VGM2WAV`, `LIBRARY_TYPE` (`STATIC` default), `SNDEMU__ALL` plus per-chip `SNDEMU_<CHIP>_*` and `AUDIODRV_*` switches. Set `SNDEMU__ALL=OFF` (then enable individual `SNDEMU_<CHIP>_ALL` or `SNDEMU_<CHIP>_<CORE>` options) to compile only selected sound cores.
 
@@ -143,7 +143,7 @@ The root project builds libvgm in-tree: `add_subdirectory(libvgm)` creates the f
 
 ### GUI plugin (`plugin/`, JUCE)
 
-`plugin/` is a JUCE plugin target (`juce_add_plugin`, VST3 + Standalone) that links the same in-tree libvgm libraries as the command-line player — `vgm-player`, `vgm-emu`, `vgm-utils`, but **not** `vgm-audio`, because a plugin must never open an audio device itself. JUCE is fetched with CPM (`plugin/CMakeLists.txt`), the plugin is enabled by the root option `VGMPLAY_BUILD_PLUGIN`.
+`plugin/` is a JUCE plugin target (`juce_add_plugin`, VST3 + Standalone) that links the same in-tree libvgm libraries as the command-line player — `vgm-player`, `vgm-emu`, `vgm-utils`, but **not** `vgm-audio`, because a plugin must never open an audio device itself. JUCE is fetched with CPM (`plugin/CMakeLists.txt`), the plugin is enabled by the root option `TOYBOX_BUILD_PLUGIN`.
 
 Files and responsibilities:
 

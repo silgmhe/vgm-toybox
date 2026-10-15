@@ -189,7 +189,7 @@ struct MixerTrack
 - **注意**：本里程碑不做新格式实现、不改 UI/混音行为、不做多轨输出（那是紧随其后的下一个功能）；重采样器只定接口，实现延后到 SPC 里程碑。
 
 ### M3.0 — 多轨 Audio Output（Kontakt 式多输出，✅ 已完成 2026-10-16）
-- **目标**：插件对外声明可配置数量的立体声输出总线（默认 64，构建期 `-DVGMPLAY_OUTPUT_BUSES=`），每个 Mixer 轨道可**单选**输出目标 —— `Master`（内部求和总线，默认）或任意真实总线（`Out 1/2`…），Master 自己的目标也可选（默认 `Out 1/2`，不可自指）。
+- **目标**：插件对外声明可配置数量的立体声输出总线（默认 64，构建期 `-DTOYBOX_OUTPUT_BUSES=`），每个 Mixer 轨道可**单选**输出目标 —— `Master`（内部求和总线，默认）或任意真实总线（`Out 1/2`…），Master 自己的目标也可选（默认 `Out 1/2`，不可自指）。
 - **交付**：`playback/OutputRouting.h`（总线常量、`OutputBusBuffers`、目标命名）、引擎的每轨输出目标原子量 + Master 目标/静音 + 多总线 `render()`；插件多总线声明与布局策略；通道条底部输出下拉（含"（未连接）"标注与关闭混音器置灰）、Master 条静音按钮。
 - **验收**：默认全 Master 路由下 `vgm_mixer_test` 仍 **−1000.00 dB 逐样本一致**；`vgm_core_test` 8 项路由检查（直出/搬移/静音/未连接/求和守恒）全部通过且数值与解析预期吻合；VST3 + standalone 构建与冒烟通过。
 - **设计与 ADR**：`docs/multitrack-output-design.md`（含 7 条 ADR、风险表、实施记录）。

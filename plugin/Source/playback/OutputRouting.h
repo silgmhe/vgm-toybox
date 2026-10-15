@@ -10,21 +10,21 @@
 	The count is a **build-time** constant because a VST3 host fixes the bus layout when it loads
 	the plugin - it cannot change while the plugin runs. Override it on the command line:
 
-	    cmake -S . -B build -DVGMPLAY_OUTPUT_BUSES=16
+	    cmake -S . -B build -DTOYBOX_OUTPUT_BUSES=16
 
 	Bus 0 is `Out 1/2` (the main bus, activated by default); the other buses are `Out 3/4`,
 	`Out 5/6`, ... and are **inactive by default** - the user enables the ones they need in the
 	host (the same model Kontakt and every other multi-output instrument uses).
 */
-#ifndef VGMPLAY_OUTPUT_BUSES
-	#define VGMPLAY_OUTPUT_BUSES 64
+#ifndef TOYBOX_OUTPUT_BUSES
+	#define TOYBOX_OUTPUT_BUSES 64
 #endif
 
 namespace vgmplay::playback
 {
 
 /** Number of stereo output buses this build declares. */
-inline constexpr int kOutputBusCount = VGMPLAY_OUTPUT_BUSES;
+inline constexpr int kOutputBusCount = TOYBOX_OUTPUT_BUSES;
 
 /** Destination of a track (or of the master bus): -1 = the internal master bus, >= 0 = a real bus. */
 using OutputTarget = int;

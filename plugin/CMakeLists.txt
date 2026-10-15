@@ -1,5 +1,5 @@
-#### VGMPlay JUCE plugin (VST3 + Standalone) ####
-# Builds the GUI/plugin front-end of VGMPlay. The audio rendering is done by the same libvgm
+#### VGMToybox JUCE plugin (VST3 + Standalone) ####
+# Builds the GUI/plugin front-end of VGMToybox. The audio rendering is done by the same libvgm
 # libraries that the command-line player uses (vgm-player/vgm-emu/vgm-utils, no audio drivers).
 
 # --- JUCE (fetched with CPM) ---
@@ -49,17 +49,25 @@ endif()
 # buses is a build-time constant (Source/playback/OutputRouting.h). Bus 0 is "Out 1/2" - the
 # main bus, activated by default - the other buses are inactive until the user enables them in
 # the host (the usual multi-output instrument model). Lower it for a lighter plugin:
-#   cmake -S . -B build -DVGMPLAY_OUTPUT_BUSES=16
-set(VGMPLAY_OUTPUT_BUSES "64" CACHE STRING
+#   cmake -S . -B build -DTOYBOX_OUTPUT_BUSES=16
+set(TOYBOX_OUTPUT_BUSES "64" CACHE STRING
 	"Number of stereo output buses the plugin declares (bus 0 = \"Out 1/2\" = the main bus)")
 
 # --- plugin target ---
-juce_add_plugin(VGMPlay
-	COMPANY_NAME "VGMPlay"
+juce_add_plugin(VGMToybox
+	COMPANY_NAME "VGM Toybox"
+	# The plugin codes are the identity a host keeps for the plugin, so they are deliberately
+	# left alone: changing them makes every DAW project that references this plugin lose it (a
+	# rename would also let the new build sit next to an installed older one).
 	PLUGIN_MANUFACTURER_CODE Vgmp
 	PLUGIN_CODE Vgm1
-	PRODUCT_NAME "VGMPlay"
-	DESCRIPTION "VGM/VGZ player"
+	PRODUCT_NAME "VGM Toybox"
+	# The bundle id defaults to "com.<COMPANY_NAME>.<target>", and COMPANY_NAME has a space in it,
+	# which JUCE warns about - spell the id out (spaces are not valid in a bundle identifier).
+	BUNDLE_ID "com.vgmtoybox.VGMToybox"
+	# the format list is the backend registry's job (it drives the file dialogs and hints), this
+	# is just the one-line blurb a host shows
+	DESCRIPTION "Chiptune player (VGM, VGZ, S98, DRO, GYM)"
 	FORMATS VST3 Standalone
 	IS_SYNTH TRUE
 	NEEDS_MIDI_INPUT FALSE
@@ -70,7 +78,7 @@ juce_add_plugin(VGMPlay
 	VST3_CATEGORIES "Instrument"
 )
 
-target_sources(VGMPlay PRIVATE
+target_sources(VGMToybox PRIVATE
 	Source/PluginProcessor.cpp
 	Source/PluginEditor.cpp
 	Source/playback/BackendRegistry.cpp
@@ -92,10 +100,10 @@ target_sources(VGMPlay PRIVATE
 	Source/ui/TransportPanel.cpp
 )
 
-target_include_directories(VGMPlay PRIVATE Source)
+target_include_directories(VGMToybox PRIVATE Source)
 
-target_compile_definitions(VGMPlay PUBLIC
-	VGMPLAY_OUTPUT_BUSES=${VGMPLAY_OUTPUT_BUSES}
+target_compile_definitions(VGMToybox PUBLIC
+	TOYBOX_OUTPUT_BUSES=${TOYBOX_OUTPUT_BUSES}
 	JUCE_WEB_BROWSER=0
 	JUCE_USE_CURL=0
 	JUCE_VST3_CAN_REPLACE_VST2=0
@@ -103,7 +111,7 @@ target_compile_definitions(VGMPlay PUBLIC
 	JUCE_STRICT_REFCOUNTEDPOINTER=1
 )
 
-target_link_libraries(VGMPlay PRIVATE
+target_link_libraries(VGMToybox PRIVATE
 	# libvgm (built by the parent project, see the root CMakeLists.txt)
 	${LIBVGM_TARGETS}
 	juce::juce_audio_processors
@@ -140,7 +148,7 @@ add_executable(vgm_core_test EXCLUDE_FROM_ALL
 )
 target_include_directories(vgm_core_test PRIVATE Source)
 target_compile_definitions(vgm_core_test PRIVATE
-	VGMPLAY_OUTPUT_BUSES=${VGMPLAY_OUTPUT_BUSES}
+	TOYBOX_OUTPUT_BUSES=${TOYBOX_OUTPUT_BUSES}
 	JUCE_STANDALONE_APPLICATION=1)
 target_link_libraries(vgm_core_test PRIVATE
 	juce::juce_core
@@ -150,7 +158,7 @@ target_link_libraries(vgm_core_test PRIVATE
 
 target_include_directories(vgm_mixer_test PRIVATE Source)
 target_compile_definitions(vgm_mixer_test PRIVATE
-	VGMPLAY_OUTPUT_BUSES=${VGMPLAY_OUTPUT_BUSES}
+	TOYBOX_OUTPUT_BUSES=${TOYBOX_OUTPUT_BUSES}
 	JUCE_STANDALONE_APPLICATION=1)
 target_link_libraries(vgm_mixer_test PRIVATE
 	${LIBVGM_TARGETS}

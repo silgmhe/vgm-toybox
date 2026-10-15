@@ -21,7 +21,7 @@
 | R9 | 路由**不保存**到宿主会话（换歌重置，与其它轨道参数一致）；本里程碑只做这一个功能 |
 | R10 | standalone：一般只有 `Out 1/2` 有效，其余标注未连接 |
 | R11 | 后端不支持"每轨隔离渲染"时，多输出降级为只有 Master 路径，UI 置灰（能力位驱动） |
-| A | 总线数量的"可配置"= **构建期** CMake 变量 `VGMPLAY_OUTPUT_BUSES`（默认 64）—— VST3 总线布局是静态的 |
+| A | 总线数量的"可配置"= **构建期** CMake 变量 `TOYBOX_OUTPUT_BUSES`（默认 64）—— VST3 总线布局是静态的 |
 | B | Master 静音 = Master 条 M 按钮；静音时 Master 表归零 |
 | C | 关闭混音器 + Master 静音 = 整首静音（此时只有 Master 路径） |
 | D | 主总线在宿主中显示名统一为 `Out 1/2` |
@@ -69,14 +69,14 @@
 
 ```cpp
 // playback/OutputRouting.h（新文件；只有常量与别名，不依赖任何格式引擎）
-#ifndef VGMPLAY_OUTPUT_BUSES
-	#define VGMPLAY_OUTPUT_BUSES 64			// 构建期可覆盖（CMake: -DVGMPLAY_OUTPUT_BUSES=16）
+#ifndef TOYBOX_OUTPUT_BUSES
+	#define TOYBOX_OUTPUT_BUSES 64			// 构建期可覆盖（CMake: -DTOYBOX_OUTPUT_BUSES=16）
 #endif
 
 namespace vgmplay::playback
 {
 	/** 插件声明的立体声输出总线数量（Out 1/2 = 0 号总线）。 */
-	inline constexpr int kOutputBusCount = VGMPLAY_OUTPUT_BUSES;
+	inline constexpr int kOutputBusCount = TOYBOX_OUTPUT_BUSES;
 
 	/** 轨道/总线的输出目标：-1 = 内部 Master 总线，>= 0 = 真实总线序号。 */
 	using OutputTarget = int;
@@ -248,7 +248,7 @@ for (int bus = 1; bus < playback::kOutputBusCount; ++bus)
 
 ### ADR-1：总线数量构建期固定（CMake 变量，默认 64）
 **上下文**：VST3 的总线布局在插件实例化时声明，运行期不可变。
-**决策**：`-DVGMPLAY_OUTPUT_BUSES=64`（默认），编译进常量 `playback::kOutputBusCount`。
+**决策**：`-DTOYBOX_OUTPUT_BUSES=64`（默认），编译进常量 `playback::kOutputBusCount`。
 **备选**：运行期可配置（不可行：需重建插件）、写死 64（无法裁剪，小工程也背 128 通道）。
 **后果**：改数量要重编译；换取零运行期复杂度与宿主兼容性。
 
@@ -306,7 +306,7 @@ for (int bus = 1; bus < playback::kOutputBusCount; ++bus)
 | **P4** | 测试补齐：直出/搬移/静音/未连接/降级/关闭混音器/性能对照 | §7.2 全绿 |
 | **P5** | 文档（`CODEBUDDY.md`、`docs/mixer-milestones.md` 记录 M3.0）、dist 构建与冒烟 | 交付 |
 
-**CMake 变量**：`VGMPLAY_OUTPUT_BUSES`（`CACHE STRING`，默认 `64`），以编译定义传给插件与两个测试目标。
+**CMake 变量**：`TOYBOX_OUTPUT_BUSES`（`CACHE STRING`，默认 `64`），以编译定义传给插件与两个测试目标。
 
 **非目标（本里程碑不做）**：路由持久化（R9）、多 Send/每 Send 电平、每总线音量、离线导出多轨 WAV、运行期修改总线数量、M3 示波器/频谱（仍搁置）。
 

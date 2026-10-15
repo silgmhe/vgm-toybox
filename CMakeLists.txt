@@ -51,8 +51,8 @@ endif()
 # --- JUCE-based GUI plugin (VST3 + standalone) ---
 # Uses the same libvgm libraries as the command-line player. JUCE itself is fetched with
 # CPM by plugin/CMakeLists.txt (see JUCE_TAG / JUCE_REPOSITORY there).
-option(VGMPLAY_BUILD_PLUGIN "build the JUCE-based GUI plugin (VST3 + standalone)" ON)
-if(VGMPLAY_BUILD_PLUGIN)
+option(TOYBOX_BUILD_PLUGIN "build the JUCE-based GUI plugin (VST3 + standalone)" ON)
+if(TOYBOX_BUILD_PLUGIN)
 	add_subdirectory(plugin)
 endif()
 
