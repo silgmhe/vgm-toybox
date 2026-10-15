@@ -51,6 +51,10 @@ MixerPanel::MixerPanel (vgmplay::PlaybackEngine& engineToUse)
 	// the master fader is the mixer's own master gain - a stage of its own, in front of the
 	// transport card's output volume (neither control drives the other)
 	masterStrip.onGainChanged = [this] (float gain) { engine.setMixerMasterGain (gain); };
+	// the master strip's M silences the master bus (tracks sent to real buses keep playing) and
+	// its selector picks the bus the master mix goes to - never the master itself
+	masterStrip.onMuteChanged = [this] (bool muted) { engine.setMasterMuted (muted); };
+	masterStrip.onOutputChanged = [this] (playback::OutputTarget target) { engine.setMasterOutput (target); };
 	addAndMakeVisible (masterStrip);
 
 	addAndMakeVisible (viewport);
@@ -76,6 +80,7 @@ void MixerPanel::rebuildStrips (void)
 		strip->onPanChanged = [this, index] (float pan) { engine.setTrackPan (index, pan); };
 		strip->onMuteChanged = [this, index] (bool muted) { engine.setTrackMute (index, muted); };
 		strip->onSoloChanged = [this, index] (bool soloed) { engine.setTrackSolo (index, soloed); };
+		strip->onOutputChanged = [this, index] (playback::OutputTarget target) { engine.setTrackOutput (index, target); };
 
 		strips.add (strip);
 		holder.addAndMakeVisible (strip);
@@ -118,7 +123,47 @@ void MixerPanel::refresh (void)
 	const bool playing = engine.isPlaying();
 	const float decay = playing ? kMeterDecay : kMeterStopDecay;
 
+	// --- the output selectors -----------------------------------------------------------------
+	// The item list is rebuilt only when it can have changed (the host's bus layout) or when a
+	// strip shows something else than the engine - rebuilding 65 combo items per strip on every
+	// tick would be pointless work.
+	std::uint64_t connectivity = 0;
+	for (int bus = 0; bus < playback::kOutputBusCount; ++bus)
+	{
+		if (engine.isOutputBusConnected (bus))
+		{
+			connectivity |= (std::uint64_t) 1 << bus;
+		}
+	}
+
+	const bool routesChanged = (connectivity != lastOutputConnectivity);
+	lastOutputConnectivity = connectivity;
+
+	std::vector<ChannelStrip::OutputOption> trackOutputs;
+	std::vector<ChannelStrip::OutputOption> masterOutputs;
+
+	if (routesChanged)
+	{
+		ChannelStrip::OutputOption masterOption;
+		masterOption.target = playback::kMasterOutput;
+		masterOption.name = "Master";
+		trackOutputs.push_back (masterOption);		// a track may send to the master bus …
+
+		for (int bus = 0; bus < playback::kOutputBusCount; ++bus)
+		{
+			ChannelStrip::OutputOption option;
+			option.target = bus;
+			option.name = playback::outputBusName (bus);
+			option.connected = engine.isOutputBusConnected (bus);
+
+			trackOutputs.push_back (option);		// … or go straight to a real bus
+			masterOutputs.push_back (option);		// the master has no "Master" entry (R3)
+		}
+	}
+
+	const bool mixerActive = engine.isMixerEnabled();
 	const auto& chips = engine.getChips();
+
 	for (size_t i = 0; i < tracks.size() && i < (size_t) strips.size(); ++i)
 	{
 		meterLeft[i] = decayPeak (playing ? engine.getTrackPeak (i, 0) : 0.0f, meterLeft[i], decay);
@@ -128,13 +173,26 @@ void MixerPanel::refresh (void)
 									engine.isTrackMuted (i), engine.isTrackSoloed (i),
 									meterLeft[i], meterRight[i],
 									deviceIsMuted (chips, tracks[i].deviceId) ? 0.45f : 1.0f);
+
+		if (routesChanged || strips[(int) i]->getShownOutput() != engine.getTrackOutput (i))
+		{
+			strips[(int) i]->setOutputOptions (trackOutputs, engine.getTrackOutput (i));
+		}
+		strips[(int) i]->setMixerActive (mixerActive);
 	}
 
 	masterPeakL = decayPeak (playing ? engine.getOutputPeak (0) : 0.0f, masterPeakL, decay);
 	masterPeakR = decayPeak (playing ? engine.getOutputPeak (1) : 0.0f, masterPeakR, decay);
-	// the master gain is applied in both modes, so its strip is never dimmed
-	masterStrip.setValues (engine.getMixerMasterGain(), 0.0f, false, false,
+	// the master strip is never dimmed: its gain is applied in both modes and its output
+	// selector works with the mixer on and off (switched off it is the only path)
+	masterStrip.setValues (engine.getMixerMasterGain(), 0.0f, engine.isMasterMuted(), false,
 						   masterPeakL, masterPeakR, 1.0f);
+
+	if (routesChanged || masterStrip.getShownOutput() != engine.getMasterOutput())
+	{
+		masterStrip.setOutputOptions (masterOutputs, engine.getMasterOutput());
+	}
+	masterStrip.setMixerActive (true);
 }
 
 void MixerPanel::resized (void)

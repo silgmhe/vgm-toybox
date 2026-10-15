@@ -40,6 +40,10 @@ namespace
 	/** RMS of a sine of amplitude 0.25 - the level of exactly one fake track. */
 	constexpr double kTrackRms = 0.25 / 1.4142135623730951;
 
+	/** Output buses the routing checks render into; the rest count as "not connected".
+		(A namespace-scope constant, so the lambdas below can use it as an array bound.) */
+	constexpr int kRoutedBuses = 3;
+
 	struct RenderedBuffer
 	{
 		double rms = 0.0;
@@ -226,6 +230,100 @@ int main (int /*argc*/, char* /*argv*/[])
 	renderSeconds (engine, 0.05, sampleRate, blockSize);	// the audio callback keeps running
 	check (engine.getOutputPeak (0) == 0.0f, "stopping clears the master meter");
 	check (engine.getTrackPeak (0, 0) == 0.0f, "stopping clears the track meters");
+
+	// ------------------------------------------------- [5] output routing (multi-out)
+	std::printf ("[5] output routing\n");
+
+	// The routing checks render into kRoutedBuses buses; the others (up to kOutputBusCount) are
+	// simply not handed over, which is exactly how a host reports "this bus is not connected".
+	std::vector<std::vector<float>> busBuffersL ((size_t) kRoutedBuses, std::vector<float> ((size_t) blockSize));
+	std::vector<std::vector<float>> busBuffersR ((size_t) kRoutedBuses, std::vector<float> ((size_t) blockSize));
+
+	const auto renderBuses = [&] (double seconds)
+	{
+		std::vector<RenderedBuffer> result ((size_t) kRoutedBuses);
+		const int totalSamples = (int) (seconds * sampleRate);
+		std::vector<double> sums ((size_t) kRoutedBuses, 0.0);
+
+		vgmplay::playback::OutputBusBuffers buses[kRoutedBuses];
+		for (int bus = 0; bus < kRoutedBuses; ++bus)
+		{
+			buses[bus] = { busBuffersL[(size_t) bus].data(), busBuffersR[(size_t) bus].data() };
+		}
+
+		size_t count = 0;
+		while ((int) count < totalSamples)
+		{
+			engine.render (buses, kRoutedBuses, blockSize);
+
+			for (int i = 0; i < blockSize && (int) count < totalSamples; ++i)
+			{
+				for (int bus = 0; bus < kRoutedBuses; ++bus)
+				{
+					const double value = (double) busBuffersL[(size_t) bus][(size_t) i];
+					sums[(size_t) bus] += value * value;
+					result[(size_t) bus].peak = juce::jmax (result[(size_t) bus].peak, std::abs (value));
+				}
+				++count;
+			}
+		}
+
+		for (int bus = 0; bus < kRoutedBuses; ++bus)
+		{
+			result[(size_t) bus].rms = (count > 0) ? std::sqrt (sums[(size_t) bus] / (double) count) : 0.0;
+		}
+		return result;
+	};
+
+	engine.setMixerEnabled (true);
+	engine.setPositionSeconds (0.0);
+	engine.play();
+	const auto baseline = renderBuses (renderLength);
+	check (near (baseline[0].rms, expectedAll, 0.002), "everything on the master path fills the main bus");
+	check (baseline[1].rms < 1e-9 && baseline[2].rms < 1e-9, "the other buses stay silent");
+
+	// one track straight to "Out 3/4"
+	engine.setTrackOutput (0, 1);
+	engine.setPositionSeconds (0.0);
+	const auto routed = renderBuses (renderLength);
+	std::printf ("    track 1 -> Out 3/4: main %.6f, Out 3/4 %.6f\n", routed[0].rms, routed[1].rms);
+	check (near (routed[1].rms, kTrackRms, 0.002), "the direct out carries exactly that one track");
+	check (routed[0].rms < expectedAll - 0.01, "and that track left the master mix");
+	check (near (std::sqrt (routed[0].rms * routed[0].rms
+							+ routed[1].rms * routed[1].rms
+							+ routed[2].rms * routed[2].rms),
+				 expectedAll, 0.002),
+		   "all buses together still equal the untouched mix");
+	engine.setTrackOutput (0, vgmplay::playback::kMasterOutput);
+
+	// the master mix follows the master's own target
+	engine.setMasterOutput (2);
+	engine.setPositionSeconds (0.0);
+	const auto moved = renderBuses (renderLength);
+	check (moved[0].rms < 1e-9 && near (moved[2].rms, expectedAll, 0.002),
+		   "the master mix moves to the master's target bus");
+	engine.setMasterOutput (0);
+
+	// muting the master silences only the master path
+	engine.setTrackOutput (0, 1);
+	engine.setMasterMuted (true);
+	engine.setPositionSeconds (0.0);
+	const auto mutedMaster = renderBuses (renderLength);
+	check (mutedMaster[0].rms < 1e-9, "a muted master bus is silent");
+	check (near (mutedMaster[1].rms, kTrackRms, 0.002), "while the direct out keeps playing");
+	check (engine.getOutputPeak (0) == 0.0f, "and the master meter reads zero");
+	engine.setMasterMuted (false);
+	engine.setTrackOutput (0, vgmplay::playback::kMasterOutput);
+
+	// a track whose target bus is not connected drops out (bus 5 is not rendered here)
+	engine.setTrackOutput (1, 5);
+	engine.setPositionSeconds (0.0);
+	const auto dropped = renderBuses (renderLength);
+	const double expectedRest = kTrackRms * std::sqrt (2.0);	// the two remaining tones
+	std::printf ("    track 2 -> an unconnected bus: main %.6f (expected %.6f)\n",
+				 dropped[0].rms, expectedRest);
+	check (near (dropped[0].rms, expectedRest, 0.002), "a track on an unconnected bus is silent");
+	engine.setTrackOutput (1, vgmplay::playback::kMasterOutput);
 
 	// -------------------------------------------------------- [4] the mixer switched off
 	std::printf ("[4] the mixer switched off (single un-isolated player)\n");

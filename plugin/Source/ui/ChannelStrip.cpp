@@ -13,6 +13,8 @@ namespace
 	constexpr int kKnobHeight = 30;
 	constexpr int kButtonHeight = 24;	// the M/S buttons share the full strip width
 	constexpr int kButtonGap = 6;
+	constexpr int kOutputHeight = 22;	// the output selector sits at the very bottom
+	constexpr int kOutputGap = 6;
 	constexpr int kColumnGap = 3;
 	constexpr int kMeterWidth = 15;		// two 6 px bars with a 3 px gap
 	constexpr int kMeterGap = 3;
@@ -71,6 +73,19 @@ ChannelStrip::ChannelStrip (void)
 		}
 	};
 
+	// the output selector: single choice (Master = send to the internal master bus, or a real
+	// output bus = direct out), filled by MixerPanel through setOutputOptions()
+	outputBox.setTooltip ("Output bus");
+	outputBox.onChange = [this]
+	{
+		const int index = outputBox.getSelectedId() - 1;
+		if (index >= 0 && index < (int) outputOptions.size() && onOutputChanged != nullptr)
+		{
+			onOutputChanged (outputOptions[(size_t) index].target);
+		}
+	};
+	addAndMakeVisible (outputBox);
+
 	addAndMakeVisible (gainSlider);
 	addAndMakeVisible (panKnob);
 	addAndMakeVisible (muteButton);
@@ -83,8 +98,15 @@ void ChannelStrip::setup (const juce::String& name, bool isMasterStrip)
 	master = isMasterStrip;
 
 	panKnob.setVisible (! master);
-	muteButton.setVisible (! master);
 	soloButton.setVisible (! master);
+
+	// the master strip has no solo, but its mute silences what the master bus contributes to
+	// its own target bus (tracks sent to real buses keep playing - see setMasterMuted)
+	muteButton.setVisible (true);
+	muteButton.setTooltip (master ? "Mute the master bus output"
+								  : "Mute this track");
+	outputBox.setTooltip (master ? "Output bus - where the master mix goes"
+								 : "Output bus - where this track goes");
 	gainSlider.setTooltip (master ? "Mixer master gain - the output volume sits behind it "
 									"(double-click: 100%)"
 								  : "Gain (double-click: 100%)");
@@ -119,11 +141,53 @@ void ChannelStrip::setValues (float gain, float pan, bool muted, bool soloed,
 	}
 }
 
+void ChannelStrip::setOutputOptions (const std::vector<OutputOption>& options, playback::OutputTarget selected)
+{
+	outputOptions = options;
+	shownOutput = selected;
+
+	outputBox.clear (juce::dontSendNotification);
+
+	bool selectedSomething = false;
+	for (size_t i = 0; i < outputOptions.size(); ++i)
+	{
+		const OutputOption& option = outputOptions[i];
+		const int itemId = (int) i + 1;
+
+		// a bus the host has not connected is still selectable - the track routed to it is
+		// silent, and the label says why (docs/multitrack-output-design.md, R6/E)
+		outputBox.addItem (option.connected ? option.name : option.name + " (not connected)", itemId);
+
+		if (option.target == selected)
+		{
+			outputBox.setSelectedId (itemId, juce::dontSendNotification);
+			selectedSomething = true;
+		}
+	}
+
+	if (! selectedSomething && outputBox.getNumItems() > 0)
+	{
+		outputBox.setSelectedId (1, juce::dontSendNotification);
+	}
+}
+
+void ChannelStrip::setMixerActive (bool active)
+{
+	// the routing is inactive while the mixer is off: the selector stays visible (the values are
+	// kept) but greyed out
+	outputBox.setEnabled (active);
+}
+
 void ChannelStrip::resized (void)
 {
 	auto inner = getLocalBounds().reduced (6, 6);
 	nameBounds = inner.removeFromTop (kNameHeight);
 	inner.removeFromTop (3);
+
+	// the output selector takes the bottom row; the M/S row (or the master's reserved space
+	// for it) sits directly above, so the fader and graduations stay aligned between strips
+	outputBox.setBounds (inner.removeFromBottom (kOutputHeight));
+	inner.removeFromBottom (kOutputGap);
 
 	if (master)
 	{

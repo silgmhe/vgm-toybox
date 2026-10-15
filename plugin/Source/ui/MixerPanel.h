@@ -25,7 +25,7 @@ class MixerPanel : public CardComponent
 public:
 	/** Smallest height that still shows the header and a part of the first strip row - the
 		editor reserves it when it hands out the space between the chips and transport cards. */
-	static constexpr int minimumHeight = 140;
+	static constexpr int minimumHeight = 166;
 
 	explicit MixerPanel (vgmplay::PlaybackEngine& engineToUse);
 
@@ -59,6 +59,7 @@ private:
 	juce::String loadedFile;			// detects "another song was loaded" for the rebuild
 	int loadedTrackCount = -1;
 	juce::Rectangle<int> masterColumn;	// set by resized(), the strip itself is placed by layoutStrips()
+	std::uint64_t lastOutputConnectivity = 0;	// rebuilds the selectors when the host's layout changes
 	std::vector<float> meterLeft, meterRight;	// decayed peaks, one per track
 	float masterPeakL = 0.0f;
 	float masterPeakR = 0.0f;

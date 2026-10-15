@@ -2,6 +2,8 @@
 
 #include <cstdint>
 
+#include <juce_core/juce_core.h>
+
 /**
 	Output routing: how many stereo buses the plugin declares and where a track can send its audio.
 
