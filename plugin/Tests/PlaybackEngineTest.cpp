@@ -88,7 +88,8 @@ namespace
 		result.right.reserve ((size_t) totalSamples);
 
 		std::vector<float> blockL ((size_t) blockSize), blockR ((size_t) blockSize);
-		float* outputs[2] = { blockL.data(), blockR.data() };
+		// the main bus only: this test keeps every track on the master path (bus 0 == "Out 1/2")
+		vgmplay::playback::OutputBusBuffers buses[1] = { { blockL.data(), blockR.data() } };
 
 		double sumOfSquares = 0.0;
 		size_t sampleCount = 0;
@@ -97,7 +98,7 @@ namespace
 		{
 			std::fill (blockL.begin(), blockL.end(), 0.0f);
 			std::fill (blockR.begin(), blockR.end(), 0.0f);
-			engine.render (outputs, blockSize);
+			engine.render (buses, 1, blockSize);
 
 			for (int i = 0; i < blockSize && (int) result.left.size() < totalSamples; i ++)
 			{
@@ -281,8 +282,8 @@ int main (int argc, char* argv[])
 		renderSeconds (engine, seconds, sampleRate, blockSize);
 
 		std::vector<float> blockL ((size_t) blockSize), blockR ((size_t) blockSize);
-		float* outputs[2] = { blockL.data(), blockR.data() };
-		engine.render (outputs, blockSize);
+		vgmplay::playback::OutputBusBuffers buses[1] = { { blockL.data(), blockR.data() } };
+		engine.render (buses, 1, blockSize);
 		double blockPeak = 0.0;
 		for (int i = 0; i < blockSize; ++i)
 		{
@@ -299,11 +300,11 @@ int main (int argc, char* argv[])
 	const auto timeRender = [&engine, blockSize]
 	{
 		std::vector<float> blockL ((size_t) blockSize), blockR ((size_t) blockSize);
-		float* outputs[2] = { blockL.data(), blockR.data() };
+		vgmplay::playback::OutputBusBuffers buses[1] = { { blockL.data(), blockR.data() } };
 		const auto start = juce::Time::getHighResolutionTicks();
 		for (int i = 0; i < 20; ++i)
 		{
-			engine.render (outputs, blockSize);
+			engine.render (buses, 1, blockSize);
 		}
 		return juce::Time::highResolutionTicksToSeconds (juce::Time::getHighResolutionTicks() - start);
 	};

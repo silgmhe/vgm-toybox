@@ -7,6 +7,7 @@
 
 #include <juce_core/juce_core.h>
 
+#include "playback/OutputRouting.h"
 #include "playback/SongBackend.h"
 
 namespace vgmplay
@@ -117,8 +118,26 @@ public:
 	/** Position of one track's player - used to verify that the tracks stay in sync. */
 	double getTrackPositionSeconds (size_t trackIndex) const;
 
+	// --- output routing ---
+	/** Destination of one track: `kMasterOutput` (the default) or a real bus index. Values
+		outside the declared range are clamped to the master bus. Lock-free (one atomic). */
+	void setTrackOutput (size_t trackIndex, playback::OutputTarget target);
+	playback::OutputTarget getTrackOutput (size_t trackIndex) const;
+
+	/** Destination of the master bus itself - a real bus, never the master (clamped to bus 0). */
+	void setMasterOutput (playback::OutputTarget busIndex);
+	playback::OutputTarget getMasterOutput (void) const { return masterOutput.load(); }
+
+	/** Mutes what the master bus contributes to its target bus (direct outputs keep playing). */
+	void setMasterMuted (bool shouldBeMuted) { masterMuted.store (shouldBeMuted); }
+	bool isMasterMuted (void) const { return masterMuted.load(); }
+
+	/** Which buses the host connected in the last block (published by render(), read lock-free). */
+	bool isOutputBusConnected (int busIndex) const;
+
 	// --- audio thread ---
-	void render (float* const* outputs, int numSamples);
+	/** Renders into the host's bus buffers (`numBuses` must be `kOutputBusCount`). */
+	void render (const playback::OutputBusBuffers* buses, int numBuses, int numSamples);
 
 private:
 	struct TrackState
@@ -129,6 +148,7 @@ private:
 		std::atomic<bool> solo { false };
 		std::atomic<float> peakL { 0.0f };
 		std::atomic<float> peakR { 0.0f };
+		std::atomic<playback::OutputTarget> output { playback::kMasterOutput };
 	};
 
 	/** Audio thread, lock-free: report silence on the meters (see render()). */
@@ -151,6 +171,7 @@ private:
 	std::unique_ptr<playback::ISongInstance> song;		// the open song (backend object)
 	std::vector<std::unique_ptr<playback::ITrackPlayer>> trackPlayers;
 	std::vector<float> mixLeft, mixRight;				// per-track scratch for render()
+	std::vector<float> masterLeft, masterRight;			// the internal master bus sum
 	std::vector<std::unique_ptr<TrackState>> tracks;	// one per layout entry (UI state)
 	std::vector<playback::TrackInfo> trackLayout;
 	std::atomic<int> soloCount { 0 };
@@ -182,6 +203,14 @@ private:
 	std::atomic<double> positionSeconds { 0.0 };	// published by render(), read by the UI
 	std::atomic<float> outputPeakL { 0.0f };		// master meter, published by render()
 	std::atomic<float> outputPeakR { 0.0f };
+
+	// Output routing: the master bus target/mute and the connectivity the host showed us in the
+	// last block (bit i = bus i was connected; bus 0 counts as connected until told otherwise).
+	std::atomic<playback::OutputTarget> masterOutput { 0 };		// Out 1/2 by default
+	std::atomic<bool> masterMuted { false };
+	std::atomic<std::uint64_t> connectedBuses { 1 };
+	static_assert (playback::kOutputBusCount <= 64,
+				   "more than 64 output buses need the connectivity mask to become an array");
 
 	JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (PlaybackEngine)
 };

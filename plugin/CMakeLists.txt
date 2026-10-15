@@ -44,6 +44,15 @@ if(NOT TARGET juce_audio_processors)
 	)
 endif()
 
+# --- output buses ---------------------------------------------------------------------------
+# A VST3 host fixes the bus layout when it loads the plugin, so the number of stereo output
+# buses is a build-time constant (Source/playback/OutputRouting.h). Bus 0 is "Out 1/2" - the
+# main bus, activated by default - the other buses are inactive until the user enables them in
+# the host (the usual multi-output instrument model). Lower it for a lighter plugin:
+#   cmake -S . -B build -DVGMPLAY_OUTPUT_BUSES=16
+set(VGMPLAY_OUTPUT_BUSES "64" CACHE STRING
+	"Number of stereo output buses the plugin declares (bus 0 = \"Out 1/2\" = the main bus)")
+
 # --- plugin target ---
 juce_add_plugin(VGMPlay
 	COMPANY_NAME "VGMPlay"
@@ -86,6 +95,7 @@ target_sources(VGMPlay PRIVATE
 target_include_directories(VGMPlay PRIVATE Source)
 
 target_compile_definitions(VGMPlay PUBLIC
+	VGMPLAY_OUTPUT_BUSES=${VGMPLAY_OUTPUT_BUSES}
 	JUCE_WEB_BROWSER=0
 	JUCE_USE_CURL=0
 	JUCE_VST3_CAN_REPLACE_VST2=0
@@ -129,7 +139,9 @@ add_executable(vgm_core_test EXCLUDE_FROM_ALL
 	Source/backends/fake/FakeBackend.cpp
 )
 target_include_directories(vgm_core_test PRIVATE Source)
-target_compile_definitions(vgm_core_test PRIVATE JUCE_STANDALONE_APPLICATION=1)
+target_compile_definitions(vgm_core_test PRIVATE
+	VGMPLAY_OUTPUT_BUSES=${VGMPLAY_OUTPUT_BUSES}
+	JUCE_STANDALONE_APPLICATION=1)
 target_link_libraries(vgm_core_test PRIVATE
 	juce::juce_core
 	juce::juce_audio_basics
@@ -137,7 +149,9 @@ target_link_libraries(vgm_core_test PRIVATE
 )
 
 target_include_directories(vgm_mixer_test PRIVATE Source)
-target_compile_definitions(vgm_mixer_test PRIVATE JUCE_STANDALONE_APPLICATION=1)
+target_compile_definitions(vgm_mixer_test PRIVATE
+	VGMPLAY_OUTPUT_BUSES=${VGMPLAY_OUTPUT_BUSES}
+	JUCE_STANDALONE_APPLICATION=1)
 target_link_libraries(vgm_mixer_test PRIVATE
 	${LIBVGM_TARGETS}
 	juce::juce_core

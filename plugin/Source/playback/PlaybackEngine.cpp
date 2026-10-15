@@ -34,6 +34,10 @@ void PlaybackEngine::prepare (double newSampleRate, int maxBlock)
 	// the scratch the mix renders each track into (allocated here, never on the audio thread)
 	mixLeft.assign ((size_t) maxBlockSize, 0.0f);
 	mixRight.assign ((size_t) maxBlockSize, 0.0f);
+	// the internal master bus: tracks routed to `Master` accumulate here before it is handed to
+	// the master's own target bus
+	masterLeft.assign ((size_t) maxBlockSize, 0.0f);
+	masterRight.assign ((size_t) maxBlockSize, 0.0f);
 
 	if (! loaded.load() || ! settingsChanged)
 	{
@@ -585,22 +589,76 @@ void PlaybackEngine::resetState (void)
 }
 
 //==============================================================================
+// output routing (plain atomics - the audio thread reads them per block, no lock)
+
+void PlaybackEngine::setTrackOutput (size_t trackIndex, playback::OutputTarget target)
+{
+	if (trackIndex >= tracks.size())
+	{
+		return;
+	}
+
+	// anything outside the declared buses falls back to the master bus, so the mix stays valid
+	tracks[trackIndex]->output.store (playback::isRealOutputBus (target) ? target : playback::kMasterOutput);
+}
+
+playback::OutputTarget PlaybackEngine::getTrackOutput (size_t trackIndex) const
+{
+	return (trackIndex < tracks.size()) ? tracks[trackIndex]->output.load() : playback::kMasterOutput;
+}
+
+void PlaybackEngine::setMasterOutput (playback::OutputTarget busIndex)
+{
+	// the master bus cannot target itself: anything invalid becomes bus 0 ("Out 1/2")
+	masterOutput.store (playback::isRealOutputBus (busIndex) ? busIndex : 0);
+}
+
+bool PlaybackEngine::isOutputBusConnected (int busIndex) const
+{
+	if (busIndex < 0 || busIndex >= playback::kOutputBusCount)
+	{
+		return false;
+	}
+
+	return (connectedBuses.load() & ((std::uint64_t) 1 << busIndex)) != 0;
+}
+
+//==============================================================================
 // audio thread
 
-void PlaybackEngine::render (float* const* outputs, int numSamples)
+void PlaybackEngine::render (const playback::OutputBusBuffers* buses, int numBuses, int numSamples)
 {
-	// clear first: the early exits and the mix path both leave the rest of the block silent
-	for (int ch = 0; ch < 2; ++ch)
+	const int busCount = juce::jmin (numBuses, playback::kOutputBusCount);
+
+	// Publish which buses the host connected (the mixer card marks the others "not connected").
+	// This runs before the early exits - the layout is valid while nothing plays, too.
+	std::uint64_t connected = 0;
+	for (int bus = 0; bus < busCount; ++bus)
 	{
-		if (outputs[ch] != nullptr)
+		if (buses[bus].isConnected())
 		{
-			juce::FloatVectorOperations::clear (outputs[ch], numSamples);
+			connected |= (std::uint64_t) 1 << bus;
+		}
+	}
+	connectedBuses.store (connected);
+
+	// clear every connected bus first: the early exits and the mix path both leave the rest
+	// of the block silent (a bus the host did not connect has no buffers to clear)
+	for (int bus = 0; bus < busCount; ++bus)
+	{
+		if (buses[bus].left != nullptr)
+		{
+			juce::FloatVectorOperations::clear (buses[bus].left, numSamples);
+		}
+		if (buses[bus].right != nullptr)
+		{
+			juce::FloatVectorOperations::clear (buses[bus].right, numSamples);
 		}
 	}
 
 	// check the cheap atomics first: while paused or idle the audio thread must not touch
 	// the lock at all (a failed try-lock costs a whole silent block)
-	if (! playing.load() || ! loaded.load() || outputs[0] == nullptr || outputs[1] == nullptr)
+	if (! playing.load() || ! loaded.load())
 	{
 		// No block publishes a level while nothing renders, so the meters would freeze at the
 		// last block's peak - report silence instead. (The UI is not gated on this, it also
@@ -629,20 +687,27 @@ void PlaybackEngine::render (float* const* outputs, int numSamples)
 		return;
 	}
 
+	// The master bus accumulates its own copy - tracks routed to a real bus never pass through
+	// it, so the master fader/mute/meter only ever see what was sent to the master.
+	juce::FloatVectorOperations::clear (masterLeft.data(), usable);
+	juce::FloatVectorOperations::clear (masterRight.data(), usable);
+
+	const playback::OutputTarget masterTarget = masterOutput.load();
+	const bool masterTargetConnected = buses != nullptr
+										&& playback::isRealOutputBus (masterTarget)
+										&& masterTarget < busCount
+										&& buses[masterTarget].isConnected();
+
 	if (! mixerEnabled)
 	{
 		// the strips are inactive in plain player mode, so their meters stay at zero instead of
 		// freezing at whatever they showed when the mixer was switched off
 		clearTrackPeaks();
 
+		// plain player mode is the master path on its own: the single player renders the whole
+		// song, so switching the mixer off is "only the master bus outputs"
 		playback::ITrackPlayer& player = *trackPlayers[0];
-		const int rendered = player.render (mixLeft.data(), mixRight.data(), usable);
-
-		for (int i = 0; i < rendered; ++i)
-		{
-			outputs[0][i] = mixLeft[(size_t) i];
-			outputs[1][i] = mixRight[(size_t) i];
-		}
+		player.render (masterLeft.data(), masterRight.data(), usable);
 	}
 	else
 	{
@@ -669,14 +734,33 @@ void PlaybackEngine::render (float* const* outputs, int numSamples)
 			const float gainL = gain * (pan > 0.0f ? 1.0f - pan : 1.0f);
 			const float gainR = gain * (pan < 0.0f ? 1.0f + pan : 1.0f);
 
+			// where this track goes: the internal master bus, or straight to one output bus
+			const playback::OutputTarget target = state.output.load();
+			const bool toMaster = (target == playback::kMasterOutput);
+			const bool toBus = ! toMaster
+							   && playback::isRealOutputBus (target)
+							   && target < busCount
+							   && buses[target].isConnected();
+
+			float* destL = toMaster ? masterLeft.data() : (toBus ? buses[target].left : nullptr);
+			float* destR = toMaster ? masterRight.data() : (toBus ? buses[target].right : nullptr);
+
 			float peakL = 0.0f;
 			float peakR = 0.0f;
 			for (int i = 0; i < rendered; ++i)
 			{
 				const float l = mixLeft[(size_t) i] * gainL;
 				const float r = mixRight[(size_t) i] * gainR;
-				outputs[0][i] += l;
-				outputs[1][i] += r;
+
+				// a track whose target bus is not connected is silent (the strip's dropdown
+				// marks that bus as "not connected", so this is never a surprise)
+				if (destL != nullptr)
+				{
+					destL[i] += l;
+					destR[i] += r;
+				}
+
+				// the track meter keeps showing the track's own level, wherever it is routed
 				peakL = juce::jmax (peakL, std::abs (l));
 				peakR = juce::jmax (peakR, std::abs (r));
 			}
@@ -685,32 +769,61 @@ void PlaybackEngine::render (float* const* outputs, int numSamples)
 		}
 	}
 
-	// the mixer master (the master strip's fader): a mix-time gain on the finished sum
+	// --- the master bus: fader -> mute -> meter -> its target bus -----------------------------
+	// the mixer master (the master strip's fader): a mix-time gain on the master sum
 	const float mixerMaster = mixerMasterGain.load();
 	if (mixerMaster != 1.0f)
 	{
-		juce::FloatVectorOperations::multiply (outputs[0], mixerMaster, numSamples);
-		juce::FloatVectorOperations::multiply (outputs[1], mixerMaster, numSamples);
+		juce::FloatVectorOperations::multiply (masterLeft.data(), mixerMaster, usable);
+		juce::FloatVectorOperations::multiply (masterRight.data(), mixerMaster, usable);
 	}
 
-	// the master meter: the level of the finished mix (both modes), read lock-free by the UI
+	if (masterMuted.load())
+	{
+		// muting the master silences only what the master contributes - tracks on real buses
+		// keep playing, and the master meter (which measures the master bus) reads zero
+		juce::FloatVectorOperations::clear (masterLeft.data(), usable);
+		juce::FloatVectorOperations::clear (masterRight.data(), usable);
+	}
+
+	// the master meter: the level of the master bus, read lock-free by the UI
 	float peakL = 0.0f;
 	float peakR = 0.0f;
-	for (int i = 0; i < numSamples; ++i)
+	for (int i = 0; i < usable; ++i)
 	{
-		peakL = juce::jmax (peakL, std::abs (outputs[0][i]));
-		peakR = juce::jmax (peakR, std::abs (outputs[1][i]));
+		peakL = juce::jmax (peakL, std::abs (masterLeft[(size_t) i]));
+		peakR = juce::jmax (peakR, std::abs (masterRight[(size_t) i]));
 	}
 	outputPeakL.store (peakL);
 	outputPeakR.store (peakR);
 
-	// The output volume (the transport card's slider) is the very last stage - after the master
-	// meter, so the mixer meters keep showing the mixer's own level while it is pulled down.
+	if (masterTargetConnected)
+	{
+		float* destL = buses[masterTarget].left;
+		float* destR = buses[masterTarget].right;
+		for (int i = 0; i < usable; ++i)
+		{
+			destL[i] += masterLeft[(size_t) i];
+			destR[i] += masterRight[(size_t) i];
+		}
+	}
+
+	// The output volume (the transport card's slider) is the very last stage and applies to
+	// every bus - it is the plugin's own output level, so direct outputs are not exempt.
 	const float outputVolume = masterVolume.load();
 	if (outputVolume != 1.0f)
 	{
-		juce::FloatVectorOperations::multiply (outputs[0], outputVolume, numSamples);
-		juce::FloatVectorOperations::multiply (outputs[1], outputVolume, numSamples);
+		for (int bus = 0; bus < busCount; ++bus)
+		{
+			if (buses[bus].left != nullptr)
+			{
+				juce::FloatVectorOperations::multiply (buses[bus].left, outputVolume, numSamples);
+			}
+			if (buses[bus].right != nullptr)
+			{
+				juce::FloatVectorOperations::multiply (buses[bus].right, outputVolume, numSamples);
+			}
+		}
 	}
 
 	// publish the position for the lock-free UI getter (an O(1) query, still under the lock);

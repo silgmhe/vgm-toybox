@@ -44,8 +44,11 @@ void VGMPlayAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
 
 	if (numChannels >= 2 && numSamples > 0)
 	{
-		float* outputs[2] = { buffer.getWritePointer (0), buffer.getWritePointer (1) };
-		engine.render (outputs, numSamples);
+		// still the single main bus here - the additional output buses arrive with the bus
+		// declaration (the engine takes a bus array either way)
+		playback::OutputBusBuffers buses[1];
+		buses[0] = { buffer.getWritePointer (0), buffer.getWritePointer (1) };
+		engine.render (buses, 1, numSamples);
 	}
 	else
 	{

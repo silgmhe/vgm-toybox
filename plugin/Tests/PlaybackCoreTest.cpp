@@ -53,7 +53,7 @@ namespace
 		const int totalSamples = (int) (seconds * sampleRate);
 
 		std::vector<float> blockL ((size_t) blockSize), blockR ((size_t) blockSize);
-		float* outputs[2] = { blockL.data(), blockR.data() };
+		vgmplay::playback::OutputBusBuffers buses[1] = { { blockL.data(), blockR.data() } };
 
 		double sumL = 0.0;
 		double sumR = 0.0;
@@ -63,7 +63,7 @@ namespace
 		{
 			std::fill (blockL.begin(), blockL.end(), 0.0f);
 			std::fill (blockR.begin(), blockR.end(), 0.0f);
-			engine.render (outputs, blockSize);
+			engine.render (buses, 1, blockSize);
 
 			for (int i = 0; i < blockSize && (int) count < totalSamples; ++i)
 			{
