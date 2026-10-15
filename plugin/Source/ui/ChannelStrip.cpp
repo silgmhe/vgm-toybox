@@ -5,7 +5,7 @@
 #include "MeterScale.h"
 #include "Theme.h"
 
-namespace vgmplay::ui
+namespace toybox::ui
 {
 namespace
 {
@@ -315,4 +315,4 @@ void ChannelStrip::drawScale (juce::Graphics& g) const
 	}
 }
 
-} // namespace vgmplay::ui
+} // namespace toybox::ui

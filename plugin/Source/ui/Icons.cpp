@@ -2,7 +2,7 @@
 
 #include <array>
 
-namespace vgmplay::ui
+namespace toybox::ui
 {
 
 void drawRepeatGlyph (juce::Graphics& g, juce::Rectangle<float> iconArea, juce::Colour colour)
@@ -141,4 +141,4 @@ void drawSlidersGlyph (juce::Graphics& g, juce::Rectangle<float> iconArea, juce:
 	}
 }
 
-} // namespace vgmplay::ui
+} // namespace toybox::ui

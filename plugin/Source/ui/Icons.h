@@ -2,7 +2,7 @@
 
 #include <juce_gui_basics/juce_gui_basics.h>
 
-namespace vgmplay::ui
+namespace toybox::ui
 {
 
 /** The "repeat" glyph (a ring with an arrow head on the top and the bottom edge).
@@ -25,4 +25,4 @@ void drawSpreadOutputsGlyph (juce::Graphics& g, juce::Rectangle<float> iconArea,
 /** The "send to master" glyph: several tracks on the left converging into one bus on the right. */
 void drawMergeToMasterGlyph (juce::Graphics& g, juce::Rectangle<float> iconArea, juce::Colour colour);
 
-} // namespace vgmplay::ui
+} // namespace toybox::ui

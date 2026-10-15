@@ -4,7 +4,7 @@
 
 #include "playback/BackendRegistry.h"
 
-namespace vgmplay::backends::fake
+namespace toybox::backends::fake
 {
 
 namespace
@@ -114,7 +114,7 @@ namespace
 			info.loopPointSeconds = kLoopPointSeconds;
 			info.loopsForever = false;
 			info.tags["Title"] = "Fake Song";
-			info.tags["Artist"] = "VGMPlay tests";
+			info.tags["Artist"] = "VGM Toybox tests";
 
 			playback::ChipInfo chipA;
 			chipA.name = "Fake Tone A";
@@ -198,9 +198,9 @@ std::unique_ptr<playback::ISongInstance> FakeBackend::open (const playback::Song
 	return std::make_unique<FakeSongInstance>();
 }
 
-} // namespace vgmplay::backends::fake
+} // namespace toybox::backends::fake
 
-namespace vgmplay::playback
+namespace toybox::playback
 {
 /**
 	The composition root of the build that links this file: the core test target links it
@@ -219,4 +219,4 @@ void registerBuiltInBackends (void)
 	BackendRegistry::getInstance().add (std::make_unique<backends::fake::FakeBackend>());
 }
 
-} // namespace vgmplay::playback
+} // namespace toybox::playback

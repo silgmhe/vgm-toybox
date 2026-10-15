@@ -3,7 +3,7 @@
 #include "stdtype.h"
 #include "player/playerbase.hpp"
 
-namespace vgmplay::backends::libvgm
+namespace toybox::backends::libvgm
 {
 
 /** Channel number -> position of its mute bit inside PLR_MUTE_OPTS::chnMute[2] (32 bits each). */
@@ -64,4 +64,4 @@ inline PLR_MUTE_OPTS chipMuteOptions (bool muted, bool isolatedPlayer)
 	return opts;
 }
 
-} // namespace vgmplay::backends::libvgm
+} // namespace toybox::backends::libvgm

@@ -3,9 +3,9 @@
 #include "CardComponent.h"
 #include "IconButton.h"
 
-namespace vgmplay { class PlaybackEngine; }
+namespace toybox { class PlaybackEngine; }
 
-namespace vgmplay::ui
+namespace toybox::ui
 {
 
 /**
@@ -27,7 +27,7 @@ public:
 	/** 34 (buttons) + 5 + 12 (marker strip) + 1 + 22 (slider) + 8 + 26 (settings) + 2 * 12 (padding). */
 	static constexpr int preferredHeight = 132;
 
-	explicit TransportPanel (vgmplay::PlaybackEngine& engineToUse);
+	explicit TransportPanel (toybox::PlaybackEngine& engineToUse);
 
 	/** Pulls the transport state, the loop/fade setting and the position from the engine. */
 	void refresh (void);
@@ -74,7 +74,7 @@ private:
 	void setPlaybackStart (double seconds);
 	juce::Rectangle<int> playbackStartRepaintArea (double seconds) const;
 
-	vgmplay::PlaybackEngine& engine;
+	toybox::PlaybackEngine& engine;
 
 	IconButton playButton { "Play", IconButton::Icon::play };
 	IconButton pauseButton { "Pause", IconButton::Icon::pause };
@@ -100,4 +100,4 @@ private:
 	JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (TransportPanel)
 };
 
-} // namespace vgmplay::ui
+} // namespace toybox::ui

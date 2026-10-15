@@ -5,7 +5,7 @@
 
 #include "SongBackend.h"
 
-namespace vgmplay::playback
+namespace toybox::playback
 {
 
 /**
@@ -56,4 +56,4 @@ private:
 /** Registers the backends this build was compiled with - call once, from the plugin. */
 void registerBuiltInBackends (void);
 
-} // namespace vgmplay::playback
+} // namespace toybox::playback

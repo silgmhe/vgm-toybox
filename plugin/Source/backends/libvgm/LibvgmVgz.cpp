@@ -4,7 +4,7 @@
 #include "utils/DataLoader.h"
 #include "utils/MemoryLoader.h"
 
-namespace vgmplay::backends::libvgm
+namespace toybox::backends::libvgm
 {
 
 bool isCompressedImage (const void* data, std::size_t size)
@@ -48,4 +48,4 @@ bool flattenCompressedImage (const void* data, std::size_t size, juce::MemoryBlo
 	return success;
 }
 
-} // namespace vgmplay::backends::libvgm
+} // namespace toybox::backends::libvgm

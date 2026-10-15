@@ -3,7 +3,7 @@
 #include "SoftShadow.h"
 #include "Theme.h"
 
-namespace vgmplay::ui
+namespace toybox::ui
 {
 namespace
 {
@@ -23,7 +23,7 @@ namespace
 		return (decayed < 0.0005f) ? 0.0f : decayed;	// -66 dB is silence on a meter
 	}
 
-	bool deviceIsMuted (const std::vector<vgmplay::ChipEntry>& chips, vgmplay::playback::DeviceId deviceId)
+	bool deviceIsMuted (const std::vector<toybox::ChipEntry>& chips, toybox::playback::DeviceId deviceId)
 	{
 		for (const auto& chip : chips)
 		{
@@ -36,7 +36,7 @@ namespace
 	}
 }
 
-MixerPanel::MixerPanel (vgmplay::PlaybackEngine& engineToUse)
+MixerPanel::MixerPanel (toybox::PlaybackEngine& engineToUse)
 	: engine (engineToUse)
 {
 	mixerToggle.onClick = [this]
@@ -368,4 +368,4 @@ void MixerPanel::StripHolder::paint (juce::Graphics& g)
 	}
 }
 
-} // namespace vgmplay::ui
+} // namespace toybox::ui

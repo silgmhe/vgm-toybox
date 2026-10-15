@@ -2,7 +2,7 @@
 
 #include "backends/libvgm/LibvgmBackend.h"
 
-namespace vgmplay::playback
+namespace toybox::playback
 {
 
 /**
@@ -26,9 +26,9 @@ void registerBuiltInBackends (void)
 	BackendRegistry::getInstance().add (std::make_unique<backends::libvgm::LibvgmBackend>());
 
 	// optional backends go here, e.g. a SNES/SPC engine:
-	// #if VGMPLAY_ENABLE_SPC_BACKEND
+	// #if TOYBOX_ENABLE_SPC_BACKEND
 	//	BackendRegistry::getInstance().add (std::make_unique<backends::spc::SpcBackend>());
 	// #endif
 }
 
-} // namespace vgmplay::playback
+} // namespace toybox::playback

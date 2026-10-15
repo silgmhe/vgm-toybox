@@ -4,7 +4,7 @@
 
 #include "playback/BackendRegistry.h"
 
-namespace vgmplay
+namespace toybox
 {
 
 PlaybackEngine::PlaybackEngine (void)
@@ -51,7 +51,7 @@ void PlaybackEngine::prepare (double newSampleRate, int maxBlock)
 	rebuildPlayers (errorMessage);
 	if (! errorMessage.isEmpty())
 	{
-		juce::Logger::writeToLog ("[VGMPlay] reload after sample rate change failed: " + errorMessage);
+		juce::Logger::writeToLog ("[VGM Toybox] reload after sample rate change failed: " + errorMessage);
 	}
 }
 
@@ -119,7 +119,7 @@ void PlaybackEngine::setMixerEnabled (bool shouldBeEnabled)
 	rebuildPlayers (errorMessage);
 	if (! errorMessage.isEmpty())
 	{
-		juce::Logger::writeToLog ("[VGMPlay] switching the mixer failed: " + errorMessage);
+		juce::Logger::writeToLog ("[VGM Toybox] switching the mixer failed: " + errorMessage);
 	}
 }
 
@@ -863,4 +863,4 @@ void PlaybackEngine::render (const playback::OutputBusBuffers* buses, int numBus
 	}
 }
 
-} // namespace vgmplay
+} // namespace toybox

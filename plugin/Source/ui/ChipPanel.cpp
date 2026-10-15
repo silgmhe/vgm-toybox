@@ -6,7 +6,7 @@
 
 #include <utility>
 
-namespace vgmplay::ui
+namespace toybox::ui
 {
 namespace
 {
@@ -16,7 +16,7 @@ namespace
 	constexpr int kButtonWidth = 118;		// minimum width of one checkbox (incl. gap)
 }
 
-void ChipPanel::rebuild (const std::vector<vgmplay::ChipEntry>& chips, MuteCallback onMuteChanged)
+void ChipPanel::rebuild (const std::vector<toybox::ChipEntry>& chips, MuteCallback onMuteChanged)
 {
 	muteCallback = std::move (onMuteChanged);
 	chipButtons.clear();
@@ -93,4 +93,4 @@ void ChipPanel::paintCardContent (juce::Graphics& g)
 	g.drawText ("UNCHECK TO MUTE", headerBounds, juce::Justification::centredRight);
 }
 
-} // namespace vgmplay::ui
+} // namespace toybox::ui

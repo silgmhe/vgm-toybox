@@ -2,7 +2,7 @@
 
 #include "playback/SongBackend.h"
 
-namespace vgmplay::backends::libvgm
+namespace toybox::backends::libvgm
 {
 
 /**
@@ -24,4 +24,4 @@ public:
 												  juce::String& errorMessage) override;
 };
 
-} // namespace vgmplay::backends::libvgm
+} // namespace toybox::backends::libvgm

@@ -4,8 +4,8 @@
 #include "ui/SoftShadow.h"
 #include "ui/Theme.h"
 
-using namespace vgmplay;
-using namespace vgmplay::ui;
+using namespace toybox;
+using namespace toybox::ui;
 
 #include "playback/BackendRegistry.h"
 
@@ -19,7 +19,7 @@ namespace
 	constexpr int kIdleRefreshHz = 10;
 }
 
-VGMPlayAudioProcessorEditor::VGMPlayAudioProcessorEditor (VGMPlayAudioProcessor& p)
+ToyboxAudioProcessorEditor::ToyboxAudioProcessorEditor (ToyboxAudioProcessor& p)
 	: AudioProcessorEditor (&p),
 	  processor (p),
 	  engine (p.getEngine()),
@@ -77,7 +77,7 @@ VGMPlayAudioProcessorEditor::VGMPlayAudioProcessorEditor (VGMPlayAudioProcessor&
 	startTimerHz (refreshHz);
 }
 
-VGMPlayAudioProcessorEditor::~VGMPlayAudioProcessorEditor()
+ToyboxAudioProcessorEditor::~ToyboxAudioProcessorEditor()
 {
 	stopTimer();
 	setLookAndFeel (nullptr);
@@ -86,7 +86,7 @@ VGMPlayAudioProcessorEditor::~VGMPlayAudioProcessorEditor()
 //==============================================================================
 // painting / layout
 
-void VGMPlayAudioProcessorEditor::paint (juce::Graphics& g)
+void ToyboxAudioProcessorEditor::paint (juce::Graphics& g)
 {
 	// a faint vertical gradient gives the window some depth
 	g.setGradientFill (juce::ColourGradient (theme::windowTop(), 0.0f, 0.0f,
@@ -111,7 +111,7 @@ void VGMPlayAudioProcessorEditor::paint (juce::Graphics& g)
 					theme::accentGlow(), theme::accentGlowBlur, { 0, theme::accentGlowOffsetY });
 }
 
-void VGMPlayAudioProcessorEditor::resized (void)
+void ToyboxAudioProcessorEditor::resized (void)
 {
 	auto area = getLocalBounds().reduced (theme::margin);
 
@@ -175,7 +175,7 @@ void VGMPlayAudioProcessorEditor::resized (void)
 //==============================================================================
 // keyboard / drag & drop
 
-bool VGMPlayAudioProcessorEditor::keyPressed (const juce::KeyPress& key)
+bool ToyboxAudioProcessorEditor::keyPressed (const juce::KeyPress& key)
 {
 	if (key == juce::KeyPress::spaceKey)
 	{
@@ -205,7 +205,7 @@ bool VGMPlayAudioProcessorEditor::keyPressed (const juce::KeyPress& key)
 	return false;
 }
 
-bool VGMPlayAudioProcessorEditor::isInterestedInFileDrag (const juce::StringArray& files)
+bool ToyboxAudioProcessorEditor::isInterestedInFileDrag (const juce::StringArray& files)
 {
 	for (const auto& path : files)
 	{
@@ -217,18 +217,18 @@ bool VGMPlayAudioProcessorEditor::isInterestedInFileDrag (const juce::StringArra
 	return false;
 }
 
-void VGMPlayAudioProcessorEditor::fileDragEnter (const juce::StringArray&, int, int)
+void ToyboxAudioProcessorEditor::fileDragEnter (const juce::StringArray&, int, int)
 {
 	dropHint.setVisible (true);
 	dropHint.toFront (false);
 }
 
-void VGMPlayAudioProcessorEditor::fileDragExit (const juce::StringArray&)
+void ToyboxAudioProcessorEditor::fileDragExit (const juce::StringArray&)
 {
 	dropHint.setVisible (false);
 }
 
-void VGMPlayAudioProcessorEditor::filesDropped (const juce::StringArray& files, int, int)
+void ToyboxAudioProcessorEditor::filesDropped (const juce::StringArray& files, int, int)
 {
 	dropHint.setVisible (false);
 
@@ -245,7 +245,7 @@ void VGMPlayAudioProcessorEditor::filesDropped (const juce::StringArray& files, 
 //==============================================================================
 // file loading
 
-void VGMPlayAudioProcessorEditor::openFileChooser (void)
+void ToyboxAudioProcessorEditor::openFileChooser (void)
 {
 	const juce::File startDir = engine.getFile().existsAsFile() ? engine.getFile().getParentDirectory()
 																: juce::File::getSpecialLocation (juce::File::userMusicDirectory);
@@ -265,7 +265,7 @@ void VGMPlayAudioProcessorEditor::openFileChooser (void)
 							  });
 }
 
-void VGMPlayAudioProcessorEditor::loadFile (const juce::File& file)
+void ToyboxAudioProcessorEditor::loadFile (const juce::File& file)
 {
 	juce::String errorMessage;
 	if (! engine.loadFile (file, errorMessage))
@@ -285,7 +285,7 @@ void VGMPlayAudioProcessorEditor::loadFile (const juce::File& file)
 	resized();					// the mixer card may have appeared or disappeared
 }
 
-void VGMPlayAudioProcessorEditor::rebuildChipButtons (void)
+void ToyboxAudioProcessorEditor::rebuildChipButtons (void)
 {
 	chipPanel.rebuild (engine.getChips(), [this] (size_t chipIndex, bool shouldBeMuted)
 										   {
@@ -297,7 +297,7 @@ void VGMPlayAudioProcessorEditor::rebuildChipButtons (void)
 //==============================================================================
 // periodic refresh
 
-void VGMPlayAudioProcessorEditor::timerCallback (void)
+void ToyboxAudioProcessorEditor::timerCallback (void)
 {
 	// only a running transport animates the meters and the seek bar - that is when the higher
 	// rate is worth anything
@@ -314,7 +314,7 @@ void VGMPlayAudioProcessorEditor::timerCallback (void)
 	updateStatusLine();
 }
 
-void VGMPlayAudioProcessorEditor::updateStatusLine (void)
+void ToyboxAudioProcessorEditor::updateStatusLine (void)
 {
 	juce::String status;
 	if (lastError.isNotEmpty())

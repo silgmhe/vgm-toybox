@@ -115,7 +115,7 @@ LibvgmBackend            SpcBackend(未来)        FakeBackend(测试)         �
 ### 4.2 接口草图
 
 ```cpp
-namespace vgmplay::playback
+namespace toybox::playback
 {
 /** 一个隔离的渲染实例（今 TrackPlayer 的角色）。生命周期只在消息线程。 */
 class ITrackPlayer
@@ -321,7 +321,7 @@ Source/
 
 ### ADR-008：编译期后端注册 + 源码级守卫（**不做运行期加载**）
 **上下文**：本产品的交付形态是 **VST3 插件（+ 独立运行）**——插件必须是一个自包含、可签名、可合规分发的二进制，运行在宿主进程里；而可替换的"格式引擎"在后端侧（libvgm 静态链接、未来 SPC 可能受许可限制）。在宿主进程内加载第三方动态库会引入 ABI 兼容、崩溃归因、代码签名与许可合规四类风险，且收益仅是"少一次重编译"。
-**决策**：① 后端**编译期**注册（`BackendRegistry` 在插件启动时填充，可选后端用条件编译开关，如 `VGMPLAY_ENABLE_SPC_BACKEND`）；② 构建脚本加一条守卫 —— `Source/` 下除 `backends/` 外不得出现 libvgm 头 `#include`。
+**决策**：① 后端**编译期**注册（`BackendRegistry` 在插件启动时填充，可选后端用条件编译开关，如 `TOYBOX_ENABLE_SPC_BACKEND`）；② 构建脚本加一条守卫 —— `Source/` 下除 `backends/` 外不得出现 libvgm 头 `#include`。
 **备选**：运行期动态库加载（已否决，理由见上）；把后端做成独立进程（否决：实时音频路径不可接受）。
 **后果**：解耦可机械验证、发布物是单一插件二进制、许可合规在发布时一次性决定；代价是新增格式必须重新编译（对当前规模无影响）。
 

@@ -20,13 +20,13 @@
 	shared layout state that could go stale - the failure mode the old paint()/resized() pair
 	used to have.
 */
-class VGMPlayAudioProcessorEditor : public juce::AudioProcessorEditor,
+class ToyboxAudioProcessorEditor : public juce::AudioProcessorEditor,
 									private juce::Timer,
 									public juce::FileDragAndDropTarget
 {
 public:
-	explicit VGMPlayAudioProcessorEditor (VGMPlayAudioProcessor&);
-	~VGMPlayAudioProcessorEditor() override;
+	explicit ToyboxAudioProcessorEditor (ToyboxAudioProcessor&);
+	~ToyboxAudioProcessorEditor() override;
 
 	void paint (juce::Graphics& g) override;
 	void resized (void) override;
@@ -44,18 +44,18 @@ private:
 	void rebuildChipButtons (void);
 	void updateStatusLine (void);
 
-	VGMPlayAudioProcessor& processor;
-	vgmplay::PlaybackEngine& engine;
+	ToyboxAudioProcessor& processor;
+	toybox::PlaybackEngine& engine;
 
-	vgmplay::ui::LightLookAndFeel lookAndFeel;
+	toybox::ui::LightLookAndFeel lookAndFeel;
 
 	juce::TextButton openButton { "Open file..." };
 	juce::Label statusLabel;
-	vgmplay::ui::SongInfoPanel songInfoPanel;
-	vgmplay::ui::TransportPanel transportPanel;
-	vgmplay::ui::ChipPanel chipPanel;
-	vgmplay::ui::MixerPanel mixerPanel;
-	vgmplay::ui::DropHintOverlay dropHint;
+	toybox::ui::SongInfoPanel songInfoPanel;
+	toybox::ui::TransportPanel transportPanel;
+	toybox::ui::ChipPanel chipPanel;
+	toybox::ui::MixerPanel mixerPanel;
+	toybox::ui::DropHintOverlay dropHint;
 
 	juce::TooltipWindow tooltipWindow { this, 650 };	// declared last: destroyed first
 
@@ -63,5 +63,5 @@ private:
 	juce::String lastError;
 	int refreshHz = 0;	// the rate the refresh timer currently runs at (see timerCallback())
 
-	JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (VGMPlayAudioProcessorEditor)
+	JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (ToyboxAudioProcessorEditor)
 };

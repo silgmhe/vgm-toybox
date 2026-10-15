@@ -51,13 +51,13 @@ namespace
 		double peak = 0.0;
 	};
 
-	RenderedBuffer renderSeconds (vgmplay::PlaybackEngine& engine, double seconds, double sampleRate, int blockSize)
+	RenderedBuffer renderSeconds (toybox::PlaybackEngine& engine, double seconds, double sampleRate, int blockSize)
 	{
 		RenderedBuffer result;
 		const int totalSamples = (int) (seconds * sampleRate);
 
 		std::vector<float> blockL ((size_t) blockSize), blockR ((size_t) blockSize);
-		vgmplay::playback::OutputBusBuffers buses[1] = { { blockL.data(), blockR.data() } };
+		toybox::playback::OutputBusBuffers buses[1] = { { blockL.data(), blockR.data() } };
 
 		double sumL = 0.0;
 		double sumR = 0.0;
@@ -99,10 +99,10 @@ int main (int /*argc*/, char* /*argv*/[])
 
 	// the fake backend only looks at the extension, but loadFile() needs a real file
 	const auto file = juce::File::getSpecialLocation (juce::File::tempDirectory)
-						  .getChildFile ("vgmplay_core_test.fake");
+						  .getChildFile ("toybox_core_test.fake");
 	file.replaceWithText ("fake song");
 
-	vgmplay::PlaybackEngine engine;
+	toybox::PlaybackEngine engine;
 	engine.prepare (sampleRate, blockSize);
 
 	// ---------------------------------------------------------------- [1] the port
@@ -245,7 +245,7 @@ int main (int /*argc*/, char* /*argv*/[])
 		const int totalSamples = (int) (seconds * sampleRate);
 		std::vector<double> sums ((size_t) kRoutedBuses, 0.0);
 
-		vgmplay::playback::OutputBusBuffers buses[kRoutedBuses];
+		toybox::playback::OutputBusBuffers buses[kRoutedBuses];
 		for (int bus = 0; bus < kRoutedBuses; ++bus)
 		{
 			buses[bus] = { busBuffersL[(size_t) bus].data(), busBuffersR[(size_t) bus].data() };
@@ -294,7 +294,7 @@ int main (int /*argc*/, char* /*argv*/[])
 							+ routed[2].rms * routed[2].rms),
 				 expectedAll, 0.002),
 		   "all buses together still equal the untouched mix");
-	engine.setTrackOutput (0, vgmplay::playback::kMasterOutput);
+	engine.setTrackOutput (0, toybox::playback::kMasterOutput);
 
 	// the master mix follows the master's own target
 	engine.setMasterOutput (2);
@@ -313,7 +313,7 @@ int main (int /*argc*/, char* /*argv*/[])
 	check (near (mutedMaster[1].rms, kTrackRms, 0.002), "while the direct out keeps playing");
 	check (engine.getOutputPeak (0) == 0.0f, "and the master meter reads zero");
 	engine.setMasterMuted (false);
-	engine.setTrackOutput (0, vgmplay::playback::kMasterOutput);
+	engine.setTrackOutput (0, toybox::playback::kMasterOutput);
 
 	// a track whose target bus is not connected drops out (bus 5 is not rendered here)
 	engine.setTrackOutput (1, 5);
@@ -323,13 +323,13 @@ int main (int /*argc*/, char* /*argv*/[])
 	std::printf ("    track 2 -> an unconnected bus: main %.6f (expected %.6f)\n",
 				 dropped[0].rms, expectedRest);
 	check (near (dropped[0].rms, expectedRest, 0.002), "a track on an unconnected bus is silent");
-	engine.setTrackOutput (1, vgmplay::playback::kMasterOutput);
+	engine.setTrackOutput (1, toybox::playback::kMasterOutput);
 
 	// --------------------------------------- [6] the routing scheme new songs start with
 	std::printf ("[6] the default routing scheme\n");
 
 	// spreading applies to the loaded song right away ...
-	engine.setDefaultRouting (vgmplay::playback::DefaultRouting::spreadAcrossBuses);
+	engine.setDefaultRouting (toybox::playback::DefaultRouting::spreadAcrossBuses);
 	check (engine.getTrackOutput (0) == 0, "spread sends track 1 to Out 1/2");
 	check (engine.getTrackOutput (1) == 1, "spread sends track 2 to Out 3/4");
 	check (engine.getTrackOutput (2) == 2, "spread sends track 3 to Out 5/6");
@@ -338,18 +338,18 @@ int main (int /*argc*/, char* /*argv*/[])
 	engine.setPositionSeconds (0.0);
 	engine.play();
 	check (engine.loadFile (file, error), "the song loads again");
-	check (engine.getDefaultRouting() == vgmplay::playback::DefaultRouting::spreadAcrossBuses,
+	check (engine.getDefaultRouting() == toybox::playback::DefaultRouting::spreadAcrossBuses,
 		   "the scheme survived the load");
 	check (engine.getTrackOutput (0) == 0 && engine.getTrackOutput (1) == 1,
 		   "and the new song starts spread across the buses");
 
 	// switching back to the master scheme applies and sticks the same way
-	engine.setDefaultRouting (vgmplay::playback::DefaultRouting::master);
-	check (engine.getTrackOutput (0) == vgmplay::playback::kMasterOutput,
+	engine.setDefaultRouting (toybox::playback::DefaultRouting::master);
+	check (engine.getTrackOutput (0) == toybox::playback::kMasterOutput,
 		   "sending everything to the master applies at once");
 	check (engine.loadFile (file, error), "the song loads once more");
-	check (engine.getTrackOutput (0) == vgmplay::playback::kMasterOutput
-			   && engine.getTrackOutput (1) == vgmplay::playback::kMasterOutput,
+	check (engine.getTrackOutput (0) == toybox::playback::kMasterOutput
+			   && engine.getTrackOutput (1) == toybox::playback::kMasterOutput,
 		   "and the new song starts on the master bus");
 	engine.setPositionSeconds (0.0);
 	engine.play();

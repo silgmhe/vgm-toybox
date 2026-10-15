@@ -5,9 +5,9 @@
 
 #include "CardComponent.h"
 
-namespace vgmplay { struct ChipEntry; }
+namespace toybox { struct ChipEntry; }
 
-namespace vgmplay::ui
+namespace toybox::ui
 {
 
 /**
@@ -24,7 +24,7 @@ public:
 	ChipPanel (void) = default;
 
 	/** Rebuilds the checkbox list and remembers how to report mute changes. */
-	void rebuild (const std::vector<vgmplay::ChipEntry>& chips, MuteCallback onMuteChanged);
+	void rebuild (const std::vector<toybox::ChipEntry>& chips, MuteCallback onMuteChanged);
 
 	bool hasChips (void) const { return ! chipButtons.isEmpty(); }
 
@@ -42,4 +42,4 @@ private:
 	JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (ChipPanel)
 };
 
-} // namespace vgmplay::ui
+} // namespace toybox::ui

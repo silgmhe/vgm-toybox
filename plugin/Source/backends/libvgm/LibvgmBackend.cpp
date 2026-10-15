@@ -3,7 +3,7 @@
 #include "LibvgmSongInstance.h"
 #include "LibvgmVgz.h"
 
-namespace vgmplay::backends::libvgm
+namespace toybox::backends::libvgm
 {
 
 juce::StringArray LibvgmBackend::getFileExtensions (void) const
@@ -35,4 +35,4 @@ std::unique_ptr<playback::ISongInstance> LibvgmBackend::open (const playback::So
 	return instance;
 }
 
-} // namespace vgmplay::backends::libvgm
+} // namespace toybox::backends::libvgm

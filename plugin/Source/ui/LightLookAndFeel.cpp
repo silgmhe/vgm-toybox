@@ -3,7 +3,7 @@
 #include "SoftShadow.h"
 #include "Theme.h"
 
-namespace vgmplay::ui
+namespace toybox::ui
 {
 
 LightLookAndFeel::LightLookAndFeel (void)
@@ -315,4 +315,4 @@ void LightLookAndFeel::positionComboBoxText (juce::ComboBox& box, juce::Label& l
 	label.setJustificationType (juce::Justification::centredLeft);
 }
 
-} // namespace vgmplay::ui
+} // namespace toybox::ui

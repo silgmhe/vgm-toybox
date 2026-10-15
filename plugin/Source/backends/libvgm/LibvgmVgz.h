@@ -2,7 +2,7 @@
 
 #include <juce_core/juce_core.h>
 
-namespace vgmplay::backends::libvgm
+namespace toybox::backends::libvgm
 {
 
 /** True when the image starts with the gzip magic - a .vgz wrapped VGM. */
@@ -13,4 +13,4 @@ bool isCompressedImage (const void* data, std::size_t size);
 	a dozen players. Plain images pass through unchanged. */
 bool flattenCompressedImage (const void* data, std::size_t size, juce::MemoryBlock& plain);
 
-} // namespace vgmplay::backends::libvgm
+} // namespace toybox::backends::libvgm

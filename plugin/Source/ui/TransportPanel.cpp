@@ -7,7 +7,7 @@
 
 #include "playback/PlaybackEngine.h"
 
-namespace vgmplay::ui
+namespace toybox::ui
 {
 namespace
 {
@@ -31,7 +31,7 @@ namespace
 	}
 }
 
-TransportPanel::TransportPanel (vgmplay::PlaybackEngine& engineToUse)
+TransportPanel::TransportPanel (toybox::PlaybackEngine& engineToUse)
 	: engine (engineToUse)
 {
 	// --- transport buttons ---
@@ -459,4 +459,4 @@ void TransportPanel::setLoopForever (bool shouldLoopForever)
 	refresh();
 }
 
-} // namespace vgmplay::ui
+} // namespace toybox::ui

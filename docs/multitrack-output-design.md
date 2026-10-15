@@ -73,7 +73,7 @@
 	#define TOYBOX_OUTPUT_BUSES 64			// 构建期可覆盖（CMake: -DTOYBOX_OUTPUT_BUSES=16）
 #endif
 
-namespace vgmplay::playback
+namespace toybox::playback
 {
 	/** 插件声明的立体声输出总线数量（Out 1/2 = 0 号总线）。 */
 	inline constexpr int kOutputBusCount = TOYBOX_OUTPUT_BUSES;

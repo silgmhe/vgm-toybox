@@ -7,7 +7,7 @@
 
 #include "LibvgmVgz.h"
 
-namespace vgmplay::backends::libvgm
+namespace toybox::backends::libvgm
 {
 
 namespace
@@ -316,4 +316,4 @@ std::unique_ptr<playback::ITrackPlayer> LibvgmSongInstance::createPlayer (juce::
 	return player;
 }
 
-} // namespace vgmplay::backends::libvgm
+} // namespace toybox::backends::libvgm

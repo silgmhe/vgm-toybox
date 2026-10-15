@@ -4,7 +4,7 @@
 
 #include <juce_core/juce_core.h>
 
-namespace vgmplay::ui::meter
+namespace toybox::ui::meter
 {
 
 /**
@@ -57,4 +57,4 @@ inline constexpr float tickDbs[] = { 0.0f, -6.0f, -12.0f, -24.0f, -48.0f };
 inline constexpr const char* tickLabels[] = { "0", "6", "12", "24", "48" };
 inline constexpr int tickCount = (int) (sizeof (tickDbs) / sizeof (tickDbs[0]));
 
-} // namespace vgmplay::ui::meter
+} // namespace toybox::ui::meter

@@ -13,13 +13,13 @@ if(NOT TARGET juce_audio_processors)
 	# resolve it without knowing the layout of the build tree
 	set(_cpm_module "${CMAKE_CURRENT_SOURCE_DIR}/../libvgm/cmake/CPM.cmake")
 	if(NOT EXISTS "${_cpm_module}")
-		message(FATAL_ERROR "vgmplay: '${_cpm_module}' not found - run 'git submodule update --init --recursive'")
+		message(FATAL_ERROR "VGM Toybox: '${_cpm_module}' not found - run 'git submodule update --init --recursive'")
 	endif()
 
 	# pick the first reachable repository (GitHub is not accessible from everywhere)
 	if(NOT JUCE_REPOSITORY)
 		foreach(_juce_repo IN LISTS JUCE_MIRRORS)
-			message(STATUS "vgmplay: probing JUCE repository ${_juce_repo} ...")
+			message(STATUS "VGM Toybox: probing JUCE repository ${_juce_repo} ...")
 			file(DOWNLOAD "${_juce_repo}/info/refs?service=git-upload-pack"
 				"${CMAKE_CURRENT_BINARY_DIR}/juce_repo_probe.txt" TIMEOUT 6 STATUS _juce_probe_status)
 			list(GET _juce_probe_status 0 _juce_probe_code)
@@ -31,7 +31,7 @@ if(NOT TARGET juce_audio_processors)
 		file(REMOVE "${CMAKE_CURRENT_BINARY_DIR}/juce_repo_probe.txt")
 	endif()
 	if(NOT JUCE_REPOSITORY)
-		message(FATAL_ERROR "vgmplay: no reachable JUCE repository - "
+		message(FATAL_ERROR "VGM Toybox: no reachable JUCE repository - "
 			"set JUCE_REPOSITORY=<url> or put the JUCE sources into CPM_SOURCE_CACHE")
 	endif()
 

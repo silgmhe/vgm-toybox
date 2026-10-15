@@ -2,7 +2,7 @@
 
 #include "playback/SongBackend.h"
 
-namespace vgmplay::backends::fake
+namespace toybox::backends::fake
 {
 
 /**
@@ -28,4 +28,4 @@ public:
 												  juce::String& errorMessage) override;
 };
 
-} // namespace vgmplay::backends::fake
+} // namespace toybox::backends::fake

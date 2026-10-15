@@ -8,7 +8,7 @@
 	have exactly one definition. The light look is macOS-flavoured: white cards on a light grey
 	window, hairline borders, a blue accent for anything that is "on".
 */
-namespace vgmplay::ui::theme
+namespace toybox::ui::theme
 {
 
 // --- palette ------------------------------------------------------------------------
@@ -66,4 +66,4 @@ inline constexpr int accentGlowOffsetY = 3;
 inline juce::Colour controlShadow (void)		{ return juce::Colour (0x38000000); }
 inline constexpr int controlShadowBlur = 5;
 
-} // namespace vgmplay::ui::theme
+} // namespace toybox::ui::theme

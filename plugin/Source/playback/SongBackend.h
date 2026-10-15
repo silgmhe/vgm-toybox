@@ -37,7 +37,7 @@
 	4. Backends never call back into the core from the audio thread - the "finished" state is a
 	   plain atomic the backend writes and the core reads.
 */
-namespace vgmplay::playback
+namespace toybox::playback
 {
 
 /** Opaque handle of a sound device inside the loaded song. Was libvgm's `PLR_DEV_INFO::id`. */
@@ -186,4 +186,4 @@ public:
 	virtual std::unique_ptr<ISongInstance> open (const SongMemory& memory, juce::String& errorMessage) = 0;
 };
 
-} // namespace vgmplay::playback
+} // namespace toybox::playback

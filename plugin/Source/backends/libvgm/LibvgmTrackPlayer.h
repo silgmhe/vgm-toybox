@@ -12,7 +12,7 @@
 
 #include "playback/SongBackend.h"
 
-namespace vgmplay::backends::libvgm
+namespace toybox::backends::libvgm
 {
 
 /**
@@ -84,4 +84,4 @@ private:
 	JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (LibvgmTrackPlayer)
 };
 
-} // namespace vgmplay::backends::libvgm
+} // namespace toybox::backends::libvgm

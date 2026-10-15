@@ -10,7 +10,7 @@
 #include "playback/OutputRouting.h"
 #include "playback/SongBackend.h"
 
-namespace vgmplay
+namespace toybox
 {
 
 /** Metadata of one sound chip used by the current song (the user's mute toggle lives here). */
@@ -225,4 +225,4 @@ private:
 	JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (PlaybackEngine)
 };
 
-} // namespace vgmplay
+} // namespace toybox

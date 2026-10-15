@@ -1,6 +1,6 @@
 #include "BackendRegistry.h"
 
-namespace vgmplay::playback
+namespace toybox::playback
 {
 
 BackendRegistry& BackendRegistry::getInstance (void)
@@ -75,4 +75,4 @@ juce::StringArray BackendRegistry::getBackendNames (void) const
 	return names;
 }
 
-} // namespace vgmplay::playback
+} // namespace toybox::playback

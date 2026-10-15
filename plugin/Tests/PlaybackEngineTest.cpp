@@ -80,7 +80,7 @@ namespace
 	};
 
 	/** Renders up to `seconds` of the engine output (stops early when the song ends). */
-	RenderedBuffer renderSeconds (vgmplay::PlaybackEngine& engine, double seconds, int sampleRate, int blockSize)
+	RenderedBuffer renderSeconds (toybox::PlaybackEngine& engine, double seconds, int sampleRate, int blockSize)
 	{
 		RenderedBuffer result;
 		const int totalSamples = (int) (seconds * sampleRate);
@@ -89,7 +89,7 @@ namespace
 
 		std::vector<float> blockL ((size_t) blockSize), blockR ((size_t) blockSize);
 		// the main bus only: this test keeps every track on the master path (bus 0 == "Out 1/2")
-		vgmplay::playback::OutputBusBuffers buses[1] = { { blockL.data(), blockR.data() } };
+		toybox::playback::OutputBusBuffers buses[1] = { { blockL.data(), blockR.data() } };
 
 		double sumOfSquares = 0.0;
 		size_t sampleCount = 0;
@@ -177,7 +177,7 @@ int main (int argc, char* argv[])
 
 	// --- [1] load ---------------------------------------------------------------------------
 	std::printf ("[1] creating engine (sample rate %d, block size %d)\n", sampleRate, blockSize);
-	vgmplay::PlaybackEngine engine;
+	toybox::PlaybackEngine engine;
 	engine.prepare ((double) sampleRate, blockSize);
 
 	juce::String errorMessage;
@@ -226,7 +226,7 @@ int main (int argc, char* argv[])
 					 tracks[i].groupName.toRawUTF8(), tracks[i].name.toRawUTF8());
 	}
 
-	std::set<vgmplay::playback::DeviceId> deviceIDs;
+	std::set<toybox::playback::DeviceId> deviceIDs;
 	bool namesOk = ! tracks.empty();
 	for (const auto& track : tracks)
 	{
@@ -282,7 +282,7 @@ int main (int argc, char* argv[])
 		renderSeconds (engine, seconds, sampleRate, blockSize);
 
 		std::vector<float> blockL ((size_t) blockSize), blockR ((size_t) blockSize);
-		vgmplay::playback::OutputBusBuffers buses[1] = { { blockL.data(), blockR.data() } };
+		toybox::playback::OutputBusBuffers buses[1] = { { blockL.data(), blockR.data() } };
 		engine.render (buses, 1, blockSize);
 		double blockPeak = 0.0;
 		for (int i = 0; i < blockSize; ++i)
@@ -300,7 +300,7 @@ int main (int argc, char* argv[])
 	const auto timeRender = [&engine, blockSize]
 	{
 		std::vector<float> blockL ((size_t) blockSize), blockR ((size_t) blockSize);
-		vgmplay::playback::OutputBusBuffers buses[1] = { { blockL.data(), blockR.data() } };
+		toybox::playback::OutputBusBuffers buses[1] = { { blockL.data(), blockR.data() } };
 		const auto start = juce::Time::getHighResolutionTicks();
 		for (int i = 0; i < 20; ++i)
 		{

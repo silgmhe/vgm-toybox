@@ -3,7 +3,7 @@
 #include "Icons.h"
 #include "Theme.h"
 
-namespace vgmplay::ui
+namespace toybox::ui
 {
 
 void IconButton::paintButton (juce::Graphics& g, bool isMouseOverButton, bool isButtonDown)
@@ -84,4 +84,4 @@ void IconButton::paintButton (juce::Graphics& g, bool isMouseOverButton, bool is
 	}
 }
 
-} // namespace vgmplay::ui
+} // namespace toybox::ui

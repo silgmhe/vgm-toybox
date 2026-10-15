@@ -4,7 +4,7 @@
 
 #include "Theme.h"
 
-namespace vgmplay::ui
+namespace toybox::ui
 {
 
 DropHintOverlay::DropHintOverlay (void)
@@ -40,4 +40,4 @@ void DropHintOverlay::resized (void)
 	label.setBounds (getLocalBounds().reduced (theme::margin));
 }
 
-} // namespace vgmplay::ui
+} // namespace toybox::ui

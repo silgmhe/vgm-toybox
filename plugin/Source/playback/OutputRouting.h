@@ -20,7 +20,7 @@
 	#define TOYBOX_OUTPUT_BUSES 64
 #endif
 
-namespace vgmplay::playback
+namespace toybox::playback
 {
 
 /** Number of stereo output buses this build declares. */
@@ -82,4 +82,4 @@ inline juce::String outputTargetName (OutputTarget target)
 	return (target == kMasterOutput) ? juce::String ("Master") : outputBusName (target);
 }
 
-} // namespace vgmplay::playback
+} // namespace toybox::playback

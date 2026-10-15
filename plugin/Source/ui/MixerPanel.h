@@ -9,7 +9,7 @@
 
 #include "playback/PlaybackEngine.h"
 
-namespace vgmplay::ui
+namespace toybox::ui
 {
 
 /**
@@ -27,7 +27,7 @@ public:
 		editor reserves it when it hands out the space between the chips and transport cards. */
 	static constexpr int minimumHeight = 166;
 
-	explicit MixerPanel (vgmplay::PlaybackEngine& engineToUse);
+	explicit MixerPanel (toybox::PlaybackEngine& engineToUse);
 
 	/** Rebuilds the strips when another song is loaded and refreshes values and meters. */
 	void refresh (void);
@@ -53,7 +53,7 @@ private:
 	/** Every track goes back to the internal master bus. */
 	void sendTrackOutputsToMaster (void);
 
-	vgmplay::PlaybackEngine& engine;
+	toybox::PlaybackEngine& engine;
 	IconButton mixerToggle { "Mixer", IconButton::Icon::sliders };
 	// the two routing shortcuts in the card header: spread every track over the output buses,
 	// or send all of them back to the master bus
@@ -76,4 +76,4 @@ private:
 	JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (MixerPanel)
 };
 
-} // namespace vgmplay::ui
+} // namespace toybox::ui

@@ -8,7 +8,7 @@
 
 #include "LibvgmMuteIsolation.h"
 
-namespace vgmplay::backends::libvgm
+namespace toybox::backends::libvgm
 {
 
 namespace
@@ -35,7 +35,7 @@ namespace
 
 		const juce::String tag = (srcType == PLRLOGSRC_PLR) ? juce::String (player->GetPlayerName())
 															: juce::String (srcTag);
-		juce::Logger::writeToLog ("[VGMPlay/" + tag + "] " + juce::String (message).trim());
+		juce::Logger::writeToLog ("[VGM Toybox/" + tag + "] " + juce::String (message).trim());
 	}
 }
 
@@ -326,4 +326,4 @@ UINT8 LibvgmTrackPlayer::handleEvent (UINT8 evtType, void* /*evtParam*/)
 	return 0x00;
 }
 
-} // namespace vgmplay::backends::libvgm
+} // namespace toybox::backends::libvgm

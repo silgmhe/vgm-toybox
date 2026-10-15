@@ -6,10 +6,10 @@
 #include "playback/BackendRegistry.h"
 #include "playback/PlaybackEngine.h"
 
-namespace vgmplay::ui
+namespace toybox::ui
 {
 
-SongInfoPanel::SongInfoPanel (const vgmplay::PlaybackEngine& engineToUse)
+SongInfoPanel::SongInfoPanel (const toybox::PlaybackEngine& engineToUse)
 	: engine (engineToUse)
 {
 	titleLabel.setFont (juce::Font (juce::FontOptions (18.0f, juce::Font::bold)));
@@ -77,4 +77,4 @@ void SongInfoPanel::refresh (void)
 					   juce::dontSendNotification);
 }
 
-} // namespace vgmplay::ui
+} // namespace toybox::ui
