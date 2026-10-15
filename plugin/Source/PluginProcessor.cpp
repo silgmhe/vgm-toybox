@@ -7,7 +7,7 @@
 using namespace vgmplay;
 
 VGMPlayAudioProcessor::VGMPlayAudioProcessor()
-	: AudioProcessor (BusesProperties().withOutput ("Output", juce::AudioChannelSet::stereo(), true))
+	: AudioProcessor (buildBusesProperties())
 {
 	// The composition root: registering the backends here means every UI text, tooltip and file
 	// filter that asks the registry (built while this object exists) sees the real format list.
@@ -25,7 +25,27 @@ void VGMPlayAudioProcessor::releaseResources (void)
 
 bool VGMPlayAudioProcessor::isBusesLayoutSupported (const BusesLayout& layouts) const
 {
-	return layouts.getMainOutputChannelSet() == juce::AudioChannelSet::stereo();
+	// Every bus is either stereo or switched off (ADR-7 - no mono paths anywhere), and the main
+	// bus may be off as long as at least one other bus is on: a host that routes all tracks to
+	// extra outputs is a normal way to use a multi-output instrument.
+	bool anyEnabled = false;
+	for (int bus = 0; bus < layouts.outputBuses.size(); ++bus)
+	{
+		const auto& set = layouts.outputBuses.getReference (bus);
+		if (set.isDisabled())
+		{
+			continue;
+		}
+
+		if (set != juce::AudioChannelSet::stereo())
+		{
+			return false;
+		}
+
+		anyEnabled = true;
+	}
+
+	return anyEnabled;
 }
 
 void VGMPlayAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midiMessages)
@@ -34,26 +54,22 @@ void VGMPlayAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
 	juce::ScopedNoDenormals noDenormals;
 
 	const int numSamples = buffer.getNumSamples();
-	const int numChannels = buffer.getNumChannels();
 
-	// libvgm renders stereo only - silence any additional channels of the output bus
-	for (int ch = 2; ch < numChannels; ++ch)
+	// Every enabled bus (a disabled one has no channels, which reads as "not connected"): the
+	// engine clears each one before it renders, so nothing has to be silenced here - and a bus
+	// the host has not enabled is simply not in the buffer.
+	playback::OutputBusBuffers buses[playback::kOutputBusCount];
+	for (int bus = 0; bus < playback::kOutputBusCount; ++bus)
 	{
-		buffer.clear (ch, 0, numSamples);
+		auto& busBuffer = getBusBuffer (buffer, false, bus);
+		if (busBuffer.getNumChannels() >= 2)
+		{
+			buses[bus].left = busBuffer.getWritePointer (0);
+			buses[bus].right = busBuffer.getWritePointer (1);
+		}
 	}
 
-	if (numChannels >= 2 && numSamples > 0)
-	{
-		// still the single main bus here - the additional output buses arrive with the bus
-		// declaration (the engine takes a bus array either way)
-		playback::OutputBusBuffers buses[1];
-		buses[0] = { buffer.getWritePointer (0), buffer.getWritePointer (1) };
-		engine.render (buses, 1, numSamples);
-	}
-	else
-	{
-		buffer.clear();
-	}
+	engine.render (buses, playback::kOutputBusCount, numSamples);
 }
 
 juce::AudioProcessorEditor* VGMPlayAudioProcessor::createEditor (void)

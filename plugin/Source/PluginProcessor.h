@@ -43,6 +43,25 @@ public:
 	vgmplay::PlaybackEngine& getEngine (void) { return engine; }
 
 private:
+	/** "Out 1/2" (the main bus, activated) plus the additional buses, which start **inactive**:
+		a host only allocates the ones the user enables (docs/multitrack-output-design.md, ADR-2),
+		so out of the box the plugin behaves exactly as it did before. Defined here because
+		`BusesProperties` is a protected nested type of `AudioProcessor`. */
+	static BusesProperties buildBusesProperties (void)
+	{
+		BusesProperties properties;
+		properties = properties.withOutput (vgmplay::playback::outputBusName (0),
+											juce::AudioChannelSet::stereo(), true);
+
+		for (int bus = 1; bus < vgmplay::playback::kOutputBusCount; ++bus)
+		{
+			properties = properties.withOutput (vgmplay::playback::outputBusName (bus),
+												juce::AudioChannelSet::stereo(), false);
+		}
+
+		return properties;
+	}
+
 	vgmplay::PlaybackEngine engine;
 
 	JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (VGMPlayAudioProcessor)
