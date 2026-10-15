@@ -5,12 +5,12 @@ This file provides guidance to CodeBuddy when working with code in this reposito
 
 This repository plays video game music log formats: `.vgm`/`.vgz` (Video Game Music), `.s98`, `.dro` (DOSBox RAW OPL), `.gym` (Genecyst), plus `.m3u` playlists. Both front-ends are C++ around the **libvgm** library, which lives here as a git submodule (`libvgm/`, https://github.com/ValleyBell/libvgm.git). `libs/inih` and `libs/wingetopt` are also submodules. The command-line player's version is in `version.h` (`APP_NAME`, `VGMPLAY_VER_STR`, `VGM_VER_STR`); changelog is in `Updates.txt`; `VGMPlay.txt` is its user readme.
 
-The fork's own product is **VGM Toybox** (`vgm-toybox`) — the two names are deliberately distinct: everything the plugin builds is "VGM Toybox", while the command-line player keeps the upstream "VGMPlay" identity, so the upstream tool and this fork's plugin never get mixed up.
+The fork's own product is **VGMToybox** (`vgm-toybox`) — the two names are deliberately distinct: everything the plugin builds is "VGMToybox", while the command-line player keeps the upstream "VGMPlay" identity, so the upstream tool and this fork's plugin never get mixed up.
 
 The repository builds two front-ends on top of the same libvgm libraries:
 
 1. **`VGMPlay64.exe` / `vgmplay`** — the classic command-line player (root directory sources, `PLAYSTATE_*`-driven render loop in `playctrl.cpp`), upstream's, name and all.
-2. **`plugin/`** — **VGM Toybox**: a JUCE-based GUI plugin (VST3 + standalone, artefacts `VGM Toybox.vst3` / `VGM Toybox.exe`) with a transport UI, seekable progress bar, per-chip mute buttons and a DAW-style mixer with multi-output routing. See "GUI plugin" in the architecture section.
+2. **`plugin/`** — **VGMToybox**: a JUCE-based GUI plugin (VST3 + standalone, artefacts `VGMToybox.vst3` / `VGMToybox.exe`) with a transport UI, seekable progress bar, per-chip mute buttons and a DAW-style mixer with multi-output routing. See "GUI plugin" in the architecture section.
 
 The authoritative docs are `README.md` (what the product is, attribution, build), `VGMPlay.txt` (keys, supported formats) and `libvgm/Compiling.txt` (build notes for the library).
 

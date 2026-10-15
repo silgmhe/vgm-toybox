@@ -273,7 +273,7 @@ $artefactsDir = Join-Path $BuildDir 'plugin\VGMToybox_artefacts'
 $vst3Bundle = $null
 $standaloneApp = $null
 if (Test-Path -LiteralPath $artefactsDir) {
-	$vst3Bundle = Get-ChildItem -LiteralPath $artefactsDir -Filter 'VGM Toybox.vst3' -Directory -Recurse |
+	$vst3Bundle = Get-ChildItem -LiteralPath $artefactsDir -Filter 'VGMToybox.vst3' -Directory -Recurse |
 		Select-Object -First 1
 	if ($vst3Bundle) {
 		$vst3Target = Join-Path $DistDir 'VST3'
@@ -285,7 +285,7 @@ if (Test-Path -LiteralPath $artefactsDir) {
 					"Close it and run the script again. ({1})" -f $vst3Target, $_.Exception.Message)
 		}
 	}
-	$standaloneApp = Get-ChildItem -LiteralPath $artefactsDir -Filter 'VGM Toybox.exe' -File -Recurse |
+	$standaloneApp = Get-ChildItem -LiteralPath $artefactsDir -Filter 'VGMToybox.exe' -File -Recurse |
 		Where-Object { $_.DirectoryName -notlike '*VST3*' } | Select-Object -First 1
 	if ($standaloneApp) {
 		$standaloneTarget = Join-Path $DistDir 'Standalone'
@@ -293,7 +293,7 @@ if (Test-Path -LiteralPath $artefactsDir) {
 		try {
 			Copy-Item -LiteralPath $standaloneApp.FullName -Destination $standaloneTarget -Force -ErrorAction Stop
 		} catch {
-			throw ("Could not copy the standalone application to '{0}' - VGM Toybox.exe is probably still running. " +
+			throw ("Could not copy the standalone application to '{0}' - VGMToybox.exe is probably still running. " +
 					"Close it and run the script again. ({1})" -f $standaloneTarget, $_.Exception.Message)
 		}
 	}
@@ -303,7 +303,7 @@ Write-Step 'Updating compile_commands.json'
 $generatedDb = Join-Path $BuildDir 'compile_commands.json'
 if (Test-Path -LiteralPath $generatedDb) {
 	Copy-Item -LiteralPath $generatedDb -Destination $CompileDb -Force
-	Write-Host "wrote $CompileDb (all libvgm + VGM Toybox sources, for clangd)"
+	Write-Host "wrote $CompileDb (all libvgm + VGMToybox sources, for clangd)"
 } else {
 	Write-Warning "'$generatedDb' not found - clangd will not have a compilation database."
 }
@@ -312,10 +312,10 @@ Write-Step 'Result'
 $exePath = Join-Path $DistDir $exe.Name
 Write-Host ("executable : {0} ({1:N0} bytes)" -f $exePath, (Get-Item -LiteralPath $exePath).Length)
 if ($vst3Bundle) {
-	Write-Host ("VST3       : {0}" -f (Join-Path $DistDir 'VST3\VGM Toybox.vst3'))
+	Write-Host ("VST3       : {0}" -f (Join-Path $DistDir 'VST3\VGMToybox.vst3'))
 }
 if ($standaloneApp) {
-	Write-Host ("standalone : {0}" -f (Join-Path $DistDir 'Standalone\VGM Toybox.exe'))
+	Write-Host ("standalone : {0}" -f (Join-Path $DistDir 'Standalone\VGMToybox.exe'))
 }
 Write-Host ("dist folder: {0}" -f $DistDir)
 Write-Host ''

@@ -35,7 +35,7 @@ namespace
 
 		const juce::String tag = (srcType == PLRLOGSRC_PLR) ? juce::String (player->GetPlayerName())
 															: juce::String (srcTag);
-		juce::Logger::writeToLog ("[VGM Toybox/" + tag + "] " + juce::String (message).trim());
+		juce::Logger::writeToLog ("[VGMToybox/" + tag + "] " + juce::String (message).trim());
 	}
 }
 

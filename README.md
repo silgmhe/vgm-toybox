@@ -1,13 +1,13 @@
-# VGM Toybox
+# VGMToybox
 
 A chiptune music player as a **VST3 plugin** (plus a standalone application), built on
 [libvgm](https://github.com/ValleyBell/libvgm.git). Load a `.vgm`/`.vgz` (or `.s98`, `.dro`,
 `.gym`) file, play it on a DAW track and mix it like any other instrument.
 
-> **Naming.** The fork's product is **VGM Toybox** (`vgm-toybox`). The command-line player in the
+> **Naming.** The fork's product is **VGMToybox** (`vgm-toybox`). The command-line player in the
 > repository root keeps the upstream **VGMPlay** identity - name, `VGMPlay.ini`, `VGMPlay64.exe` and
 > all - so the upstream tool and this plugin never get mixed up. The plugin's artefacts are
-> `VGM Toybox.vst3` and `VGM Toybox.exe`.
+> `VGMToybox.vst3` and `VGMToybox.exe`.
 
 ## What it does
 
@@ -35,8 +35,8 @@ The script locates Visual Studio, configures with CMake + Ninja and copies every
 
 | Artefact | What it is |
 |---|---|
-| `dist\VST3\VGM Toybox.vst3` | the plugin |
-| `dist\Standalone\VGM Toybox.exe` | the same engine as a standalone application |
+| `dist\VST3\VGMToybox.vst3` | the plugin |
+| `dist\Standalone\VGMToybox.exe` | the same engine as a standalone application |
 | `dist\VGMPlay64.exe` + `VGMPlay.ini`, `VGMPlay.txt` | the **upstream command-line player**, built from the repository root |
 
 Options: `-NoPlugin` (command-line player only), `-Proxy <url>` / `-NoProxy`. For a lighter build
@@ -64,7 +64,7 @@ build/plugin/vgm_core_test
 
 ## Installing in a DAW
 
-Copy `VGM Toybox.vst3` into your VST3 folder and rescan. To use the separate outputs, enable the
+Copy `VGMToybox.vst3` into your VST3 folder and rescan. To use the separate outputs, enable the
 extra buses for the plugin instance in the host (that step is the host's, not the plugin's).
 If an older `VGMPlay.vst3` from this project is installed, **delete it first**: the plugin codes
 are deliberately unchanged, so a host would see the two bundles as the same plugin.

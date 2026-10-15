@@ -1,4 +1,4 @@
-# VGM Toybox Mixer 混音器 — 需求整理 · 实现方案 · 里程碑
+# VGMToybox Mixer 混音器 — 需求整理 · 实现方案 · 里程碑
 
 > 状态：M1 / M2 已完成并验证通过（见 §4）；**M2.5（播放后端解耦）全部完成**（P1 端口标准 + libvgm 适配器 + 核心测试 + 源码守卫；P2 `PlaybackEngine` 更名；P3 扩展名数据驱动，见 `docs/playback-backend-design.md` §9.2b）；**M3.0（多轨 Audio Output）已完成并验证**（见 `docs/multitrack-output-design.md` §11）；**M3（示波器 + 频谱）与 M4（打磨 / 持久化）按用户决定暂时搁置**，功能已可用、分支随时可交付
 > 分支：`feature/mixer`
@@ -60,7 +60,7 @@
 ### 3.1 总体架构
 
 ```
-┌───────────────────────── VGM Toybox 插件 ────────────────────────────┐
+┌───────────────────────── VGMToybox 插件 ────────────────────────────┐
 │ PlaybackEngine（新，接管音频路径；对外 API 兼容现 VgmEngine）              │
 │                                                                      │
 │  TrackPlayer × N  ──每轨一个 libvgm 实例（共享同一份文件内存）──┐      │

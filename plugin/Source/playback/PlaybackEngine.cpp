@@ -51,7 +51,7 @@ void PlaybackEngine::prepare (double newSampleRate, int maxBlock)
 	rebuildPlayers (errorMessage);
 	if (! errorMessage.isEmpty())
 	{
-		juce::Logger::writeToLog ("[VGM Toybox] reload after sample rate change failed: " + errorMessage);
+		juce::Logger::writeToLog ("[VGMToybox] reload after sample rate change failed: " + errorMessage);
 	}
 }
 
@@ -119,7 +119,7 @@ void PlaybackEngine::setMixerEnabled (bool shouldBeEnabled)
 	rebuildPlayers (errorMessage);
 	if (! errorMessage.isEmpty())
 	{
-		juce::Logger::writeToLog ("[VGM Toybox] switching the mixer failed: " + errorMessage);
+		juce::Logger::writeToLog ("[VGMToybox] switching the mixer failed: " + errorMessage);
 	}
 }
 

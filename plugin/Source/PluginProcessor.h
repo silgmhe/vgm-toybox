@@ -5,7 +5,7 @@
 #include "playback/PlaybackEngine.h"
 
 /**
-	Audio processor of the VGM Toybox plugin.
+	Audio processor of the VGMToybox plugin.
 
 	The plugin renders VGM/VGZ files (which are loaded through the GUI) with libvgm and has its
 	own transport: it does not need MIDI or the host transport to produce sound.
@@ -25,7 +25,7 @@ public:
 	juce::AudioProcessorEditor* createEditor() override;
 	bool hasEditor() const override { return true; }
 
-	const juce::String getName() const override { return "VGM Toybox"; }
+	const juce::String getName() const override { return "VGMToybox"; }
 	bool acceptsMidi() const override { return false; }
 	bool producesMidi() const override { return false; }
 	bool isMidiEffect() const override { return false; }

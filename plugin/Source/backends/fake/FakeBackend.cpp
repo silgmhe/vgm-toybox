@@ -114,7 +114,7 @@ namespace
 			info.loopPointSeconds = kLoopPointSeconds;
 			info.loopsForever = false;
 			info.tags["Title"] = "Fake Song";
-			info.tags["Artist"] = "VGM Toybox tests";
+			info.tags["Artist"] = "VGMToybox tests";
 
 			playback::ChipInfo chipA;
 			chipA.name = "Fake Tone A";

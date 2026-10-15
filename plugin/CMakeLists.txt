@@ -55,15 +55,18 @@ set(TOYBOX_OUTPUT_BUSES "64" CACHE STRING
 
 # --- plugin target ---
 juce_add_plugin(VGMToybox
-	COMPANY_NAME "VGM Toybox"
+	# no spaces anywhere in the product name: it lands in file names, window titles and command
+	# lines, and a space is a liability in every one of those places
+	COMPANY_NAME "VGMToybox"
 	# The plugin codes are the identity a host keeps for the plugin, so they are deliberately
 	# left alone: changing them makes every DAW project that references this plugin lose it (a
 	# rename would also let the new build sit next to an installed older one).
 	PLUGIN_MANUFACTURER_CODE Vgmp
 	PLUGIN_CODE Vgm1
-	PRODUCT_NAME "VGM Toybox"
-	# The bundle id defaults to "com.<COMPANY_NAME>.<target>", and COMPANY_NAME has a space in it,
-	# which JUCE warns about - spell the id out (spaces are not valid in a bundle identifier).
+	PRODUCT_NAME "VGMToybox"
+	# Spelled out rather than derived from "com.<COMPANY_NAME>.<target>": the id stays a stable
+	# lowercase slug, and it never picks up a space if the names above ever gain one (JUCE warns
+	# about those, and build.ps1 treats a cmake warning as a failure).
 	BUNDLE_ID "com.vgmtoybox.VGMToybox"
 	# the format list is the backend registry's job (it drives the file dialogs and hints), this
 	# is just the one-line blurb a host shows
