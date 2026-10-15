@@ -139,10 +139,21 @@ void MixerPanel::refresh (void)
 	const bool routesChanged = (connectivity != lastOutputConnectivity);
 	lastOutputConnectivity = connectivity;
 
+	// A strip needs its list rebuilt when the host layout changed *or* when it shows a different
+	// target than the engine (the user just picked one). Both cases fill the lists - handing an
+	// empty list to the selector would leave it without items.
+	bool selectionChanged = false;
+	for (size_t i = 0; i < tracks.size() && i < (size_t) strips.size(); ++i)
+	{
+		selectionChanged = selectionChanged
+						   || strips[(int) i]->getShownOutput() != engine.getTrackOutput (i);
+	}
+	selectionChanged = selectionChanged || masterStrip.getShownOutput() != engine.getMasterOutput();
+
 	std::vector<ChannelStrip::OutputOption> trackOutputs;
 	std::vector<ChannelStrip::OutputOption> masterOutputs;
 
-	if (routesChanged)
+	if (routesChanged || selectionChanged)
 	{
 		ChannelStrip::OutputOption masterOption;
 		masterOption.target = playback::kMasterOutput;

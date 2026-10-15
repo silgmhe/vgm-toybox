@@ -143,6 +143,11 @@ void ChannelStrip::setValues (float gain, float pan, bool muted, bool soloed,
 
 void ChannelStrip::setOutputOptions (const std::vector<OutputOption>& options, playback::OutputTarget selected)
 {
+	if (options.empty())
+	{
+		return;		// never empty the selector: an empty list would leave it unusable
+	}
+
 	outputOptions = options;
 	shownOutput = selected;
 
@@ -213,7 +218,13 @@ void ChannelStrip::resized (void)
 	}
 	else
 	{
-		inner.removeFromBottom (kButtonHeight + 6);
+		// The master strip has no solo, but its mute (it silences what the master bus
+		// contributes) sits exactly where the tracks' M/S row is, so the fader and graduations
+		// stay aligned between strips.
+		auto buttons = inner.removeFromBottom (kButtonHeight);
+		const int buttonWidth = (buttons.getWidth() - kButtonGap) / 2;
+		muteButton.setBounds (buttons.removeFromLeft (buttonWidth));
+		inner.removeFromBottom (6);
 	}
 
 	// meter | graduations | fader, all three sharing the remaining height
