@@ -70,6 +70,14 @@ void IconButton::paintButton (juce::Graphics& g, bool isMouseOverButton, bool is
 	{
 		drawSlidersGlyph (g, iconArea, iconColour);
 	}
+	else if (icon == Icon::spreadOutputs)
+	{
+		drawSpreadOutputsGlyph (g, iconArea, iconColour);
+	}
+	else if (icon == Icon::mergeToMaster)
+	{
+		drawMergeToMasterGlyph (g, iconArea, iconColour);
+	}
 	else
 	{
 		drawRepeatGlyph (g, iconArea, iconColour);

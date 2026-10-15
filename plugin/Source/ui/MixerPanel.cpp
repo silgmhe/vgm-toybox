@@ -57,6 +57,16 @@ MixerPanel::MixerPanel (vgmplay::PlaybackEngine& engineToUse)
 	masterStrip.onOutputChanged = [this] (playback::OutputTarget target) { engine.setMasterOutput (target); };
 	addAndMakeVisible (masterStrip);
 
+	// the two routing shortcuts in the card header
+	spreadOutputsButton.setTooltip ("Send every track to its own output bus "
+									"(track 1 -> Out 1/2, track 2 -> Out 3/4, ...)");
+	spreadOutputsButton.onClick = [this] { spreadTrackOutputs(); };
+	addAndMakeVisible (spreadOutputsButton);
+
+	mergeToMasterButton.setTooltip ("Send every track back to the master bus");
+	mergeToMasterButton.onClick = [this] { sendTrackOutputsToMaster(); };
+	addAndMakeVisible (mergeToMasterButton);
+
 	addAndMakeVisible (viewport);
 	viewport.setViewedComponent (&holder, false);
 	viewport.setScrollBarsShown (true, true);
@@ -117,6 +127,12 @@ void MixerPanel::refresh (void)
 		mixerToggle.setToggleState (engine.isMixerEnabled(), juce::dontSendNotification);
 		repaint (mixerToggle.getBounds().expanded (theme::accentGlowBlur + theme::accentGlowOffsetY + 2));
 	}
+
+	// the routing shortcuts are only meaningful while the mixer routes per track (with the mixer
+	// off every track ends up on the master path anyway - R8)
+	const bool canRoute = engine.isMixerEnabled() && ! engine.getTracks().empty();
+	spreadOutputsButton.setEnabled (canRoute);
+	mergeToMasterButton.setEnabled (canRoute);
 
 	// A stopped (or paused) transport means silence, whatever the last rendered block left
 	// behind, and the meters drop quickly - they must never freeze at the last level.
@@ -206,6 +222,35 @@ void MixerPanel::refresh (void)
 	masterStrip.setMixerActive (true);
 }
 
+void MixerPanel::spreadTrackOutputs (void)
+{
+	const size_t numTracks = engine.getTracks().size();
+
+	for (size_t i = 0; i < numTracks; ++i)
+	{
+		// track 1 -> Out 1/2 (bus 0), track 2 -> Out 3/4 (bus 1), ... - tracks beyond the
+		// declared buses keep going to the master, there is no bus left to give them
+		const playback::OutputTarget target = ((int) i < playback::kOutputBusCount)
+												  ? (playback::OutputTarget) i
+												  : playback::kMasterOutput;
+		engine.setTrackOutput (i, target);
+	}
+
+	refresh();		// the strips' selectors follow right away
+}
+
+void MixerPanel::sendTrackOutputsToMaster (void)
+{
+	const size_t numTracks = engine.getTracks().size();
+
+	for (size_t i = 0; i < numTracks; ++i)
+	{
+		engine.setTrackOutput (i, playback::kMasterOutput);
+	}
+
+	refresh();
+}
+
 void MixerPanel::resized (void)
 {
 	if (getLocalBounds().isEmpty())
@@ -216,7 +261,13 @@ void MixerPanel::resized (void)
 	auto inner = getLocalBounds().reduced (theme::cardPadding, 8);
 
 	headerBounds = inner.removeFromTop (kHeaderHeight);
+
+	// the header's right edge: the mixer toggle, then the two routing shortcuts to its left
 	mixerToggle.setBounds (headerBounds.removeFromRight (kHeaderHeight));
+	headerBounds.removeFromRight (6);
+	spreadOutputsButton.setBounds (headerBounds.removeFromRight (kHeaderHeight));
+	headerBounds.removeFromRight (6);
+	mergeToMasterButton.setBounds (headerBounds.removeFromRight (kHeaderHeight));
 
 	inner.removeFromTop (4);
 

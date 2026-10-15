@@ -195,6 +195,10 @@ for (int bus = 1; bus < playback::kOutputBusCount; ++bus)
 - 刷新时组装 `OutputOption` 列表（哪些总线"已连接"由引擎上报：`PlaybackEngine::isOutputBusConnected (int)`，由插件每块写入的原子位图提供）；
 - 把每轨 `getTrackOutput()` 与 `getMasterOutput()` / `isMasterMuted()` 喂给通道条（沿用现有 `setValues` 外挂两个参数的方法，不破坏既有签名）。
 - Master 条的回调：`onOutputChanged` → `setMasterOutput`；`onMuteChanged` → `setMasterMuted`。
+- 卡片头部（混音开关左侧）另有两个**路由快捷按钮**（后加的便利功能）：
+  - **分散输出**：轨道 *n* → 总线 *n*（`Out 1/2`、`Out 3/4`…）；超出总线数量的轨道留在 Master（没有总线可分）。
+  - **全部回 Master**：所有轨道目标改回 `Master`。
+  - 两者在**关闭混音器时置灰**（此时路由不生效，R8），点击后立即 `refresh()`，下拉同步更新。
 
 ### 6.3 引擎侧的"已连接"上报
 

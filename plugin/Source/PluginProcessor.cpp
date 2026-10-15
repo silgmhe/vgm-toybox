@@ -61,7 +61,10 @@ void VGMPlayAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
 	playback::OutputBusBuffers buses[playback::kOutputBusCount];
 	for (int bus = 0; bus < playback::kOutputBusCount; ++bus)
 	{
-		auto& busBuffer = getBusBuffer (buffer, false, bus);
+		// getBusBuffer() hands out a view *by value* (it just points into `buffer`), so it is
+		// taken by value here - binding a non-const reference to it is a construction MSVC
+		// happens to accept but the standard does not.
+		auto busBuffer = getBusBuffer (buffer, false, bus);
 		if (busBuffer.getNumChannels() >= 2)
 		{
 			buses[bus].left = busBuffer.getWritePointer (0);

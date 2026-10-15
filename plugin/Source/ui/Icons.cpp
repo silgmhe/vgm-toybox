@@ -1,5 +1,7 @@
 #include "Icons.h"
 
+#include <array>
+
 namespace vgmplay::ui
 {
 
@@ -37,6 +39,84 @@ void drawPlayStartGlyph (juce::Graphics& g, juce::Rectangle<float> iconArea, juc
 					  iconArea.getX(), iconArea.getBottom(),
 					  iconArea.getRight(), iconArea.getCentreY());
 	g.fillPath (head);
+}
+
+namespace
+{
+	/** The three heights the fan-in/fan-out glyphs connect (top, middle, bottom lane). */
+	std::array<float, 3> laneCentres (juce::Rectangle<float> iconArea, float lineWidth)
+	{
+		return { iconArea.getY() + lineWidth * 0.5f,
+				 iconArea.getCentreY(),
+				 iconArea.getBottom() - lineWidth * 0.5f };
+	}
+}
+
+void drawSpreadOutputsGlyph (juce::Graphics& g, juce::Rectangle<float> iconArea, juce::Colour colour)
+{
+	// one source bus on the left, fanning out into three output buses
+	g.setColour (colour);
+
+	const float lineWidth = juce::jmax (1.2f, iconArea.getWidth() * 0.11f);
+	const float sourceX = iconArea.getX();
+	const float splitX = iconArea.getX() + iconArea.getWidth() * 0.42f;
+	const float headLength = lineWidth * 2.6f;
+	const float endX = iconArea.getRight() - headLength * 0.9f;
+	const float centreY = iconArea.getCentreY();
+	const auto lanes = laneCentres (iconArea, lineWidth);
+
+	// the source (a vertical bar hugging the left edge)
+	g.fillRoundedRectangle (sourceX, iconArea.getY(), lineWidth, iconArea.getHeight(), lineWidth * 0.5f);
+
+	juce::Path fan;
+
+	for (float y : lanes)
+	{
+		fan.startNewSubPath (sourceX + lineWidth, centreY);
+		fan.lineTo (splitX, y);
+		fan.lineTo (endX, y);
+	}
+
+	g.strokePath (fan, juce::PathStrokeType (lineWidth, juce::PathStrokeType::curved,
+											 juce::PathStrokeType::rounded));
+
+	for (float y : lanes)
+	{
+		juce::Path arrow;
+		arrow.addTriangle (endX, y - headLength * 0.5f,
+						   endX, y + headLength * 0.5f,
+						   endX + headLength * 0.9f, y);
+		g.fillPath (arrow);
+	}
+}
+
+void drawMergeToMasterGlyph (juce::Graphics& g, juce::Rectangle<float> iconArea, juce::Colour colour)
+{
+	// three tracks on the left converging into the one master bus on the right
+	g.setColour (colour);
+
+	const float lineWidth = juce::jmax (1.2f, iconArea.getWidth() * 0.11f);
+	const float headLength = lineWidth * 2.6f;
+	const float startX = iconArea.getX() + headLength * 0.2f;
+	const float mergeX = iconArea.getX() + iconArea.getWidth() * 0.58f;
+	const float busX = iconArea.getRight() - lineWidth;
+	const float centreY = iconArea.getCentreY();
+	const auto lanes = laneCentres (iconArea, lineWidth);
+
+	juce::Path merge;
+
+	for (float y : lanes)
+	{
+		merge.startNewSubPath (startX, y);
+		merge.lineTo (mergeX, centreY);
+		merge.lineTo (busX, centreY);
+	}
+
+	g.strokePath (merge, juce::PathStrokeType (lineWidth, juce::PathStrokeType::curved,
+											   juce::PathStrokeType::rounded));
+
+	// the destination (the master bus, a vertical bar hugging the right edge)
+	g.fillRoundedRectangle (busX, iconArea.getY(), lineWidth, iconArea.getHeight(), lineWidth * 0.5f);
 }
 
 void drawSlidersGlyph (juce::Graphics& g, juce::Rectangle<float> iconArea, juce::Colour colour)

@@ -5,11 +5,11 @@
 namespace vgmplay::ui
 {
 
-/** Small button that draws a play/pause/stop/loop/playStart/sliders icon instead of a text label. */
+/** Small button that draws one of the Icons glyphs instead of a text label. */
 class IconButton : public juce::Button
 {
 public:
-	enum class Icon { play, pause, stop, loop, playStart, sliders };
+	enum class Icon { play, pause, stop, loop, playStart, sliders, spreadOutputs, mergeToMaster };
 
 	IconButton (const juce::String& buttonName, Icon iconToDraw)
 		: juce::Button (buttonName), icon (iconToDraw)

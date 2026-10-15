@@ -48,9 +48,17 @@ private:
 	void rebuildStrips (void);
 	/** Lays the strips out in their groups and sizes the holder (call after any change). */
 	void layoutStrips (void);
+	/** Track n goes to bus n ("track 1 -> Out 1/2", "track 2 -> Out 3/4", ...). */
+	void spreadTrackOutputs (void);
+	/** Every track goes back to the internal master bus. */
+	void sendTrackOutputsToMaster (void);
 
 	vgmplay::PlaybackEngine& engine;
 	IconButton mixerToggle { "Mixer", IconButton::Icon::sliders };
+	// the two routing shortcuts in the card header: spread every track over the output buses,
+	// or send all of them back to the master bus
+	IconButton spreadOutputsButton { "Spread outputs", IconButton::Icon::spreadOutputs };
+	IconButton mergeToMasterButton { "Send to master", IconButton::Icon::mergeToMaster };
 	juce::Viewport viewport;
 	StripHolder holder;
 	juce::OwnedArray<ChannelStrip> strips;
