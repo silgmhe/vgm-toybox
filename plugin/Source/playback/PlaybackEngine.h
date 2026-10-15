@@ -7,48 +7,50 @@
 
 #include <juce_core/juce_core.h>
 
-#include "stdtype.h"
-
-#include "TrackLayout.h"
-#include "TrackPlayer.h"
+#include "playback/SongBackend.h"
 
 namespace vgmplay
 {
 
-/** Metadata of one sound chip used by the current song. */
+/** Metadata of one sound chip used by the current song (the user's mute toggle lives here). */
 struct ChipEntry
 {
 	juce::String name;
 	juce::String core;
-	UINT32 devID = 0;			// PLR_DEV_ID() as reported by libvgm (for SetDeviceMuting)
-	bool muted = false;			// muted by the user
+	playback::DeviceId deviceId {};		// the backend's opaque device handle
+	bool muted = false;					// muted by the user
 };
 
 /**
-	The playback engine: wraps libvgm's PlayerA and adds the mixer.
+	The playback engine: drives a format backend through the playback port and adds the mixer.
 
-	Plain player mode (the default) renders through a single, un-isolated player instance - the
-	classic behaviour. Mixer mode renders one isolated TrackPlayer per channel of the song and
-	sums them with per-track gain / pan / mute / solo applied in the mix, which turns every chip
-	channel into a mixer track. Both modes share the file image (one copy in memory) and all
-	song metadata; switching the mode rebuilds the players at the current position.
+	No format engine is ever touched directly - `playback::BackendRegistry` picks a backend for
+	the loaded image and everything below that goes through `ISongInstance` / `ITrackPlayer`
+	(Source/playback/SongBackend.h). Swapping or adding a format engine therefore never touches
+	this class, the UI or the host integration: see docs/playback-backend-design.md.
 
-	Threading stays as before: all access to the libvgm player objects is serialised through one
-	lock. The message thread takes it for commands and for (re)building the players, the audio
-	thread try-locks at the top of render() and outputs silence when a command is in flight.
-	Everything the UI polls at 20 Hz is served lock-free - position/peaks are atomics, duration
-	and loop point are cached song facts, tags and the track list are message-thread data (the
-	track parameters are plain atomics the mix reads without touching the lock). A failed
-	try-lock costs a whole silent block, which is audible as a faint tick.
+	Plain player mode renders through a single, un-isolated player - the classic behaviour.
+	Mixer mode renders one isolated player per track of the song and sums them with per-track
+	gain / pan / mute / solo applied in the mix, which turns every chip channel into a mixer
+	track. Both modes share the file image and all song metadata; switching the mode rebuilds
+	the players at the current position.
+
+	Threading stays as before: all access to the players is serialised through one lock. The
+	message thread takes it for commands and for (re)building the players, the audio thread
+	try-locks at the top of render() and outputs silence when a command is in flight. Everything
+	the UI polls at 15/10 Hz is served lock-free - position/peaks are atomics, duration and loop
+	point are cached song facts, tags and the track list are message-thread data (the track
+	parameters are plain atomics the mix reads without touching the lock). A failed try-lock
+	costs a whole silent block, which is audible as a faint tick.
 */
-class MixerEngine
+class PlaybackEngine
 {
 public:
-	MixerEngine (void);
-	~MixerEngine (void);
+	PlaybackEngine (void);
+	~PlaybackEngine (void);
 
 	// --- message thread ---
-	/** Loads a .vgm/.vgz file and starts playback. Returns false and fills errorMessage on failure. */
+	/** Loads a song file and starts playback. Returns false and fills errorMessage on failure. */
 	bool loadFile (const juce::File& file, juce::String& errorMessage);
 	void unloadFile (void);
 	/** Sets the output sample rate / maximum block size (host sample rate). */
@@ -72,7 +74,7 @@ public:
 	bool isPlaying (void) const { return playing.load(); }
 	bool isFinished (void) const { return finished.load(); }
 	/** Lock-free snapshot of the playback position: render() publishes it once per block and
-		every seek updates it, so the 20 Hz UI polling never contends for the render lock. */
+		every seek updates it, so the UI polling never contends for the render lock. */
 	double getPositionSeconds (void) const { return positionSeconds.load(); }
 	/** Song length, cached while the lock is held when the file, the loop count, the fade time
 		or the sample rate changes - read without the lock. */
@@ -94,8 +96,8 @@ public:
 	/** Rebuilds the players for the other mode, keeping the position and the playing state. */
 	void setMixerEnabled (bool shouldBeEnabled);
 
-	/** One entry per channel of the loaded song - the list exists in both modes. */
-	const std::vector<TrackLayoutEntry>& getTracks (void) const { return trackLayout; }
+	/** One entry per track the backend reports - the list exists in both modes. */
+	const std::vector<playback::TrackInfo>& getTracks (void) const { return trackLayout; }
 
 	/** Track parameters. They are stored in atomics, so the audio thread reads them without
 		ever contending for the engine lock. Note that in plain player mode the mix is not
@@ -129,26 +131,32 @@ private:
 		std::atomic<float> peakR { 0.0f };
 	};
 
+	/** Audio thread, lock-free: report silence on the meters (see render()). */
+	void clearTrackPeaks (void);
+	void clearOutputPeaks (void);
+
 	double getPlayLengthSeconds (void) const;			// caller must hold the lock
 	void refreshCachedTimes (void);						// caller must hold the lock
-	void applyConfigToPlayer (TrackPlayer& track);		// caller must hold the lock
-	void updatePlayerConfig (void);						// caller must hold the lock
+	void updatePlayerTimeline (void);					// caller must hold the lock
 	void enumerateTags (void);
 	void enumerateChips (void);
 	void applyTrackIsolation (void);					// caller must hold the lock
+	void applyChipMutes (void);							// caller must hold the lock
 	bool createPlayers (juce::String& errorMessage);	// caller must hold the lock
 	void destroyPlayers (void);
 	void rebuildPlayers (juce::String& errorMessage);	// caller must hold the lock
 	void resetState (void);
 
 	mutable juce::CriticalSection lock;
-	std::vector<std::unique_ptr<TrackPlayer>> trackPlayers;
+	std::unique_ptr<playback::ISongInstance> song;		// the open song (backend object)
+	std::vector<std::unique_ptr<playback::ITrackPlayer>> trackPlayers;
+	std::vector<float> mixLeft, mixRight;				// per-track scratch for render()
 	std::vector<std::unique_ptr<TrackState>> tracks;	// one per layout entry (UI state)
-	std::vector<TrackLayoutEntry> trackLayout;
+	std::vector<playback::TrackInfo> trackLayout;
 	std::atomic<int> soloCount { 0 };
 	bool mixerEnabled = true;	// the mixer card is always there - off is the CPU-saving opt-out
 
-	juce::MemoryBlock fileData;			// the song image; every track's loader points into it
+	juce::MemoryBlock fileData;			// the song image; the backend loads its players from it
 	juce::File currentFile;
 	std::vector<ChipEntry> chips;
 	std::map<juce::String, juce::String> tags;
@@ -175,7 +183,7 @@ private:
 	std::atomic<float> outputPeakL { 0.0f };		// master meter, published by render()
 	std::atomic<float> outputPeakR { 0.0f };
 
-	JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (MixerEngine)
+	JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (PlaybackEngine)
 };
 
 } // namespace vgmplay

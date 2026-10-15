@@ -1,6 +1,6 @@
 # VGMPlay Mixer 混音器 — 需求整理 · 实现方案 · 里程碑
 
-> 状态：M1 / M2 已完成并验证通过（见 §4）；**M3（示波器 + 频谱）与 M4（打磨 / 持久化）按用户决定暂时搁置**，功能已可用、分支随时可交付
+> 状态：M1 / M2 已完成并验证通过（见 §4）；**M2.5（播放后端解耦）全部完成**（P1 端口标准 + libvgm 适配器 + 核心测试 + 源码守卫；P2 `PlaybackEngine` 更名；P3 扩展名数据驱动，见 `docs/playback-backend-design.md` §9.2b）；**M3（示波器 + 频谱）与 M4（打磨 / 持久化）按用户决定暂时搁置**，功能已可用、分支随时可交付
 > 分支：`feature/mixer`
 > 日期：2026-10-15
 
@@ -61,7 +61,7 @@
 
 ```
 ┌──────────────────────────── VGMPlay 插件 ────────────────────────────┐
-│ MixerEngine（新，接管音频路径；对外 API 兼容现 VgmEngine）              │
+│ PlaybackEngine（新，接管音频路径；对外 API 兼容现 VgmEngine）              │
 │                                                                      │
 │  TrackPlayer × N  ──每轨一个 libvgm 实例（共享同一份文件内存）──┐      │
 │    ├─ PlayerA/VGMPlayer（目标设备 + 目标通道可听）              │      │
@@ -79,7 +79,7 @@
 └──────────────────────────────────────────────────────────────┘
 ```
 
-**迁移策略（零回归）**：把现有 `VgmEngine` 重构为「`TrackPlayer`（单轨渲染+加载/seek/配置）」+「`MixerEngine`（编排 N 个 TrackPlayer + 混音 + 对外 API）」。`N = 1` 时即当前行为（逐样本一致）；启用 Mixer 模式时重建为 `N = 通道总数`。
+**迁移策略（零回归）**：把现有 `VgmEngine` 重构为「`TrackPlayer`（单轨渲染+加载/seek/配置）」+「`PlaybackEngine`（编排 N 个 TrackPlayer + 混音 + 对外 API）」。`N = 1` 时即当前行为（逐样本一致）；启用 Mixer 模式时重建为 `N = 通道总数`。
 
 ### 3.2 音频通路与同步
 
@@ -127,12 +127,12 @@ struct MixerTrack
 | 文件 | 职责 |
 |---|---|
 | `plugin/Source/vgm/TrackLayout.{h,cpp}` | 通道枚举（设备+通道数+名称+掩码位映射）、分组构建 |
-| `plugin/Source/vgm/MixerEngine.{h,cpp}` | 多实例编排、混音、无锁对外接口 |
+| `plugin/Source/vgm/PlaybackEngine.{h,cpp}` | 多实例编排、混音、无锁对外接口 |
 | `plugin/Source/vgm/TrackPlayer.{h,cpp}` | 由现 `VgmEngine` 拆出的单轨引擎 |
 | `plugin/Source/ui/MixerPanel.{h,cpp}` | 混音器卡片（分组 + 通道条容器） |
 | `plugin/Source/ui/ChannelStrip.{h,cpp}` | 单通道条控件 |
 | `plugin/Source/ui/ScopeView.{h,cpp}` / `SpectrumView.{h,cpp}` | 可视化组件 |
-| `Tests/MixerEngineTest.cpp` | 离线验收测试（见 §4 M1） |
+| `Tests/PlaybackEngineTest.cpp` | 离线验收测试（见 §4 M1） |
 
 ### 3.7 关键决策（ADR 摘要）
 
@@ -161,7 +161,7 @@ struct MixerTrack
 ## 4. 里程碑
 
 ### M1 — 引擎：多轨渲染骨架（无 UI，可测）✅ 已完成（2026-10-15）
-- **交付**：`Source/vgm/TrackLayout.{h,cpp}`（通道枚举/分组/命名）、`Source/vgm/TrackPlayer.{h,cpp}`（单轨 libvgm 实例，由 `VgmEngine` 拆分）、`Source/vgm/MixerEngine.{h,cpp}`（N 实例 + 混音 + 无锁接口，取代 `VgmEngine`）；离线验收测试 `Tests/MixerEngineTest.cpp`（目标 `vgm_mixer_test`）。
+- **交付**：`Source/vgm/TrackLayout.{h,cpp}`（通道枚举/分组/命名）、`Source/vgm/TrackPlayer.{h,cpp}`（单轨 libvgm 实例，由 `VgmEngine` 拆分）、`Source/vgm/PlaybackEngine.{h,cpp}`（N 实例 + 混音 + 无锁接口，取代 `VgmEngine`）；离线验收测试 `Tests/PlaybackEngineTest.cpp`（目标 `vgm_mixer_test`）。
 - **验收结果**（`chips_test.vgz` / `test.vgm` / `test_loop.vgm`，全部通过）：
   1. ✅ 轨道数 = 设备通道数（SEGA PSG = 4 轨：`1` / `2` / `3` / `Noise`，名称取自 libvgm `channelNames`；`.vgz` 与 `.vgm` 均验证）；
   2. ✅ 单位增益求和与单实例渲染**逐样本一致（差 −1000 dB = 完全相同）**；
@@ -179,8 +179,14 @@ struct MixerTrack
   4. ✅ 全部静音 → 输出静音；关闭混音模式 → 恢复与单实例一致的混合。
 - **重要发现（测试方法）**：libvgm 在 seek 时**不复位振荡器相位**，因此任何"由 seek 开始"的两次渲染都无法逐样本一致（≈ −30 dB，**单实例模式完全相同**）——比较混音结果时要用电平/频谱，或让两侧走同一种起点。已记录进 `CODEBUDDY.md` 的测试章节。
 - **UI 细化（第二轮，按用户反馈）**：M/S 按钮加大到 24 px 高并**均分整个通道条宽度**（不再出现省略号）；通道条加高到 170 px 且**随卡片高度伸展**（最大化时长推子）；电平表/推子保持垂直；Mixer 卡片**自适应 Sound Chips 与走带卡片之间的全部区域**；窗口**只保留最小尺寸 660×520**（解除上限）并为独立运行窗口**补上最大化按钮**。
-- **音量架构（第四轮，按用户反馈）**：Master 推子与走带总音量**解耦为串联两级** —— `MixerEngine::setMixerMasterGain()`（Master 条推子，作用于混音结果）→ `MixerEngine::setMasterVolume()`（走带滑块，引擎末级；libvgm 的 `cfg.masterVol` 固定为单位增益）。两者互不读取、互不驱动，Master 表位于两级之间（拉低总音量时混音表仍显示混音自身电平）。关闭混音器时两级依然有效，音量逻辑无需额外状态。
+- **音量架构（第四轮，按用户反馈）**：Master 推子与走带总音量**解耦为串联两级** —— `PlaybackEngine::setMixerMasterGain()`（Master 条推子，作用于混音结果）→ `PlaybackEngine::setMasterVolume()`（走带滑块，引擎末级；libvgm 的 `cfg.masterVol` 固定为单位增益）。两者互不读取、互不驱动，Master 表位于两级之间（拉低总音量时混音表仍显示混音自身电平）。关闭混音器时两级依然有效，音量逻辑无需额外状态。
 - **UI 细化（第三轮，按用户反馈）**：新增 `ui/MeterScale.h` —— 所有增益控制改为 **dB 对数行程**（-60…+6 dB 线性映射，0 dB 位于行程 60/66；通道条推子、Master 推子、走带卡片总音量滑块共用同一曲线）；电平表柱高按**同一 dB 刻度**增长并新增**刻度线**（0 dB 加粗，标注 0/6/12/24/48）；柱子颜色改为**自下而上的渐变**（绿 → 约 -6 dB 转琥珀 → 0 dB 起转红），超过 0 dB 顶部爆红。
+
+### M2.5 — 播放后端解耦（插入里程碑，**设计待评审**）
+- **背景**：下一步除 VGM/VGZ 外要支持其它格式（首个目标：SNES `.spc`，因硬件机制无法转成 VGM），因此需要把播放引擎核心与 libvgm 解耦，定义中间层标准。
+- **设计**：`docs/playback-backend-design.md`（端口-适配器 + 注册表；`ISongBackend`/`ISongInstance`/`ITrackPlayer` 三个端口；能力位与隔离模式；8 条 ADR；风险与迁移计划）。核心文件将迁入 `Source/playback/`，libvgm 代码整体搬进 `Source/backends/libvgm/`，并加"核心不得 include libvgm"的构建守卫。
+- **验收**：现有 `vgm_mixer_test` 保持全绿且 `−1000 dB` 逐样本数值不变；新增 `FakeBackend` 全链路测试（无 libvgm 的情况下验证混音与时间线）；UI 调用点不变；源码守卫可演示失败。
+- **注意**：本里程碑不做新格式实现、不改 UI/混音行为、不做多轨输出（那是紧随其后的下一个功能）；重采样器只定接口，实现延后到 SPC 里程碑。
 
 ### M3 — 可视化：示波器 + 频谱（**暂时搁置**，未开始）
 - **交付**：`ScopeView`（滚动波形，20–30 fps）、`SpectrumView`（FFT 对数轴）、每轨独立数据通路。

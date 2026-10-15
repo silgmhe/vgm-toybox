@@ -21,7 +21,7 @@
 #include <juce_audio_basics/juce_audio_basics.h>
 #include <juce_core/juce_core.h>
 
-#include "vgm/MixerEngine.h"
+#include "playback/PlaybackEngine.h"
 
 namespace
 {
@@ -80,7 +80,7 @@ namespace
 	};
 
 	/** Renders up to `seconds` of the engine output (stops early when the song ends). */
-	RenderedBuffer renderSeconds (vgmplay::MixerEngine& engine, double seconds, int sampleRate, int blockSize)
+	RenderedBuffer renderSeconds (vgmplay::PlaybackEngine& engine, double seconds, int sampleRate, int blockSize)
 	{
 		RenderedBuffer result;
 		const int totalSamples = (int) (seconds * sampleRate);
@@ -176,7 +176,7 @@ int main (int argc, char* argv[])
 
 	// --- [1] load ---------------------------------------------------------------------------
 	std::printf ("[1] creating engine (sample rate %d, block size %d)\n", sampleRate, blockSize);
-	vgmplay::MixerEngine engine;
+	vgmplay::PlaybackEngine engine;
 	engine.prepare ((double) sampleRate, blockSize);
 
 	juce::String errorMessage;
@@ -225,11 +225,11 @@ int main (int argc, char* argv[])
 					 tracks[i].groupName.toRawUTF8(), tracks[i].name.toRawUTF8());
 	}
 
-	std::set<UINT32> deviceIDs;
+	std::set<vgmplay::playback::DeviceId> deviceIDs;
 	bool namesOk = ! tracks.empty();
 	for (const auto& track : tracks)
 	{
-		deviceIDs.insert (track.deviceID);
+		deviceIDs.insert (track.deviceId);
 		namesOk = namesOk && track.name.isNotEmpty() && track.groupName.isNotEmpty();
 	}
 	check (! tracks.empty(), "the song has mixer tracks");

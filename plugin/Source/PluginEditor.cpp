@@ -7,6 +7,8 @@
 using namespace vgmplay;
 using namespace vgmplay::ui;
 
+#include "playback/BackendRegistry.h"
+
 namespace
 {
 	// The UI repaints on demand, so the refresh rate is exactly what the GPU pays for: on
@@ -31,7 +33,7 @@ VGMPlayAudioProcessorEditor::VGMPlayAudioProcessorEditor (VGMPlayAudioProcessor&
 	openButton.onClick = [this] { openFileChooser(); };
 	openButton.setColour (juce::TextButton::buttonColourId, theme::accent());
 	openButton.setColour (juce::TextButton::textColourOffId, juce::Colours::white);
-	openButton.setTooltip ("Open a .vgm / .vgz file");
+	openButton.setTooltip ("Open a " + playback::BackendRegistry::getInstance().getExtensionListText() + " file");
 	addAndMakeVisible (openButton);
 
 	statusLabel.setFont (juce::Font (juce::FontOptions (12.5f)));
@@ -207,7 +209,7 @@ bool VGMPlayAudioProcessorEditor::isInterestedInFileDrag (const juce::StringArra
 {
 	for (const auto& path : files)
 	{
-		if (path.endsWithIgnoreCase (".vgm") || path.endsWithIgnoreCase (".vgz"))
+		if (playback::BackendRegistry::getInstance().isSupportedFile (juce::File (path)))
 		{
 			return true;
 		}
@@ -232,7 +234,7 @@ void VGMPlayAudioProcessorEditor::filesDropped (const juce::StringArray& files, 
 
 	for (const auto& path : files)
 	{
-		if (path.endsWithIgnoreCase (".vgm") || path.endsWithIgnoreCase (".vgz"))
+		if (playback::BackendRegistry::getInstance().isSupportedFile (juce::File (path)))
 		{
 			loadFile (juce::File (path));
 			break;
@@ -247,7 +249,11 @@ void VGMPlayAudioProcessorEditor::openFileChooser (void)
 {
 	const juce::File startDir = engine.getFile().existsAsFile() ? engine.getFile().getParentDirectory()
 																: juce::File::getSpecialLocation (juce::File::userMusicDirectory);
-	fileChooser = std::make_unique<juce::FileChooser> ("Open a VGM file", startDir, "*.vgm;*.vgz");
+	// the caption and the filter come from the registry: adding a backend adds it to the dialog
+	const auto& registry = playback::BackendRegistry::getInstance();
+	fileChooser = std::make_unique<juce::FileChooser> ("Open a " + registry.getExtensionListText() + " file",
+													   startDir,
+													   registry.getFileWildcard());
 	fileChooser->launchAsync (juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectFiles,
 							  [this] (const juce::FileChooser& chooser)
 							  {

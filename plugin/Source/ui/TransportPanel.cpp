@@ -5,7 +5,7 @@
 #include "SoftShadow.h"
 #include "Theme.h"
 
-#include "vgm/MixerEngine.h"
+#include "playback/PlaybackEngine.h"
 
 namespace vgmplay::ui
 {
@@ -31,7 +31,7 @@ namespace
 	}
 }
 
-TransportPanel::TransportPanel (vgmplay::MixerEngine& engineToUse)
+TransportPanel::TransportPanel (vgmplay::PlaybackEngine& engineToUse)
 	: engine (engineToUse)
 {
 	// --- transport buttons ---
@@ -293,7 +293,7 @@ void TransportPanel::startPlayback (void)
 {
 	paused = false;
 
-	// a finished song starts over at the playback start cursor (MixerEngine::play() would
+	// a finished song starts over at the playback start cursor (PlaybackEngine::play() would
 	// restart it from the very beginning - which is what happens with the cursor off)
 	if (startCursorEnabled && engine.isFinished())
 	{
