@@ -37,7 +37,7 @@ The script locates Visual Studio, configures with CMake + Ninja and copies every
 |---|---|
 | `dist\VST3\VGMToybox.vst3` | the plugin |
 | `dist\Standalone\VGMToybox.exe` | the same engine as a standalone application |
-| `dist\VGMPlay64.exe` + `VGMPlay.ini`, `VGMPlay.txt` | the **upstream command-line player**, built from the repository root |
+| `dist\VGMPlay64.exe` + `VGMPlay.ini`, `VGMPlay.txt` | the **upstream command-line player**, built from `vgmplayer/` |
 
 Options: `-NoPlugin` (command-line player only), `-Proxy <url>` / `-NoProxy`. For a lighter build
 with fewer output buses, configure with the cache variable first - it is a build-time constant
@@ -75,8 +75,8 @@ This project stands on other people's work and keeps the notices visible:
 
 - **libvgm** - the emulation and playback library the plugin links against (git submodule,
   https://github.com/ValleyBell/libvgm.git), by Valley Bell and contributors.
-- **VGMPlay** - the command-line player whose sources sit in the repository root; its name, files
-  and documentation are untouched.
+- **VGMPlay** - the command-line player whose sources sit in `vgmplayer/`; its name, files and
+  documentation are untouched.
 - The emulator cores under `libvgm/emu/cores/` carry their own licence headers; they are the reason
   this tree is not simply "one author's code".
 

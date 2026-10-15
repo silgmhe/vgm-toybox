@@ -9,7 +9,7 @@ The fork's own product is **VGMToybox** (`vgm-toybox`) — the two names are del
 
 The repository builds two front-ends on top of the same libvgm libraries:
 
-1. **`VGMPlay64.exe` / `vgmplay`** — the classic command-line player (root directory sources, `PLAYSTATE_*`-driven render loop in `playctrl.cpp`), upstream's, name and all.
+1. **`VGMPlay64.exe` / `vgmplay`** — the classic command-line player (sources in `vgmplayer/`, `PLAYSTATE_*`-driven render loop in `playctrl.cpp`), upstream's, name and all.
 2. **`plugin/`** — **VGMToybox**: a JUCE-based GUI plugin (VST3 + standalone, artefacts `VGMToybox.vst3` / `VGMToybox.exe`) with a transport UI, seekable progress bar, per-chip mute buttons and a DAW-style mixer with multi-output routing. See "GUI plugin" in the architecture section.
 
 The authoritative docs are `README.md` (what the product is, attribution, build), `VGMPlay.txt` (keys, supported formats) and `libvgm/Compiling.txt` (build notes for the library).
@@ -101,7 +101,7 @@ Linux build dependencies: `libinih-dev` (otherwise the bundled `libs/inih` submo
 The repository is not one program but a library + application pair:
 
 1. **`libvgm/` (submodule)** — four libraries: `vgm-utils` (data loaders with zlib/`.vgz` support, OS thread/mutex abstraction, charset conversion), `vgm-audio` (audio output drivers + `AudioStream` abstraction), `vgm-emu` (sound chip emulation cores + resampling), `vgm-player` (format playback engines). It also still ships a CMake package config (`libvgm::` namespace) and pkg-config files for out-of-tree consumers.
-2. **Repository root** — the VGMPlay CLI application (`main.cpp`, `playctrl.cpp`, `playcfg.cpp`, `config.cpp`, `mediainfo.cpp`, `m3uargparse.cpp`, `utils.cpp`, `mediactrl*.cpp`).
+2. **`vgmplayer/`** — the VGMPlay CLI application (`main.cpp`, `playctrl.cpp`, `playcfg.cpp`, `config.cpp`, `mediainfo.cpp`, `m3uargparse.cpp`, `utils.cpp`, `mediactrl*.cpp`), its `VGMPlay.ini` template and its two text documents. Moved out of the repository root so that the two front-ends sit beside each other; the target, name and install rules are unchanged. The root `CMakeLists.txt` only assembles the project (`add_subdirectory(vgmplayer)`, `add_subdirectory(plugin)`) and owns the libvgm setup the two share.
 
 The root project builds libvgm in-tree: `add_subdirectory(libvgm)` creates the four static targets (`vgm-utils`, `vgm-audio`, `vgm-emu`, `vgm-player`) in the same build tree and links them directly, so one configure + build produces the executable. Two constraints inside `libvgm/` exist because of this and must be kept in mind:
 
@@ -114,7 +114,7 @@ The root project builds libvgm in-tree: `add_subdirectory(libvgm)` creates the f
 
 **Configuration**: `Configuration` (`config.hpp/cpp`) is a generic `map<section, CfgSection>` where each section keeps unordered entries plus an *ordered* list used for channel `Mute*`/`Pan*` keys where order matters. Two sources are built as `Configuration` objects and merged with `operator+=`; command line wins over INI (`playerCfg += argCfg`). `playcfg.cpp` then converts the merged config into typed structures: `GeneralOptions` (sample rate/bits, volume, loops, fade/pause times, resampler mode, WAV logging mode and path, log levels, audio driver/device selection, UI options) and `ChipOptions[0x300]` (per-chip core choice, per-channel mute and pan, extra options). The `CFG_CHIP_LIST` table maps libvgm `DEV_ID` values to INI section names (`[YM2612]`, `[NES APU]`, ...); `[Chip]` applies to every instance of that chip, while `[Chip-0]`/`[Chip-1]` target a single instance (stored in slots `0x100 + devID*2 + inst`). `ApplyCfg_General`/`ApplyCfg_Chip` push the result into the `PlayerA` facade via `SetConfiguration`/`SetDeviceOptions`.
 
-**INI search order** (`InitAppSearchPaths` in `main.cpp`): Unix install datadir, executable directory, the directory the app was invoked from, per-user config dir (`%USERPROFILE%/.vgmplay/` on Windows, `$XDG_CONFIG_HOME|~/.config` + `/vgmplay/` elsewhere), then `./`. First `VGMPlay.ini`/`vgmplay.ini` found is loaded; `-C` overrides the search entirely. `VGMPlay.ini` in the repo root is the default template and is installed next to the binary.
+**INI search order** (`InitAppSearchPaths` in `main.cpp`): Unix install datadir, executable directory, the directory the app was invoked from, per-user config dir (`%USERPROFILE%/.vgmplay/` on Windows, `$XDG_CONFIG_HOME|~/.config` + `/vgmplay/` elsewhere), then `./`. First `VGMPlay.ini`/`vgmplay.ini` found is loaded; `-C` overrides the search entirely. `VGMPlay.ini` in `vgmplayer/` is the default template and is installed next to the binary.
 
 **Song list**: `m3uargparse.cpp` expands command-line arguments into `songList` (one entry per playable file, with optional playlist back-reference) and `plList` (playlist files); `.m3u` files are recursively read and must only reference supported formats.
 

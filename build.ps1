@@ -251,18 +251,21 @@ Invoke-Native 'cmake' @('--build', $buildDir)
 
 Write-Step 'Creating the distribution folder'
 New-Item -ItemType Directory -Force -Path $DistDir | Out-Null
-$exe = Get-ChildItem -LiteralPath $BuildDir -Filter 'VGMPlay*.exe' -File |
+# The player is a subdirectory project (vgmplayer/), so its executable sits one level down in the
+# build tree - search recursively so this keeps working wherever the target lands.
+$exe = Get-ChildItem -LiteralPath $BuildDir -Filter 'VGMPlay*.exe' -File -Recurse |
 	Sort-Object LastWriteTime -Descending | Select-Object -First 1
 if (-not $exe) {
-	$exe = Get-ChildItem -LiteralPath $BuildDir -Filter 'vgmplay*' -File |
+	$exe = Get-ChildItem -LiteralPath $BuildDir -Filter 'vgmplay*' -File -Recurse |
 		Sort-Object LastWriteTime -Descending | Select-Object -First 1
 }
 if (-not $exe) {
 	throw "No VGMPlay executable found in '$BuildDir'."
 }
 Copy-Item -LiteralPath $exe.FullName -Destination $DistDir -Force
+# the player's INI template and its two text documents live next to its sources now
 foreach ($file in @('VGMPlay.ini', 'Updates.txt', 'VGMPlay.txt')) {
-	$src = Join-Path $RepoRoot $file
+	$src = Join-Path $RepoRoot ('vgmplayer\' + $file)
 	if (Test-Path -LiteralPath $src) {
 		Copy-Item -LiteralPath $src -Destination $DistDir -Force
 	}
@@ -303,7 +306,7 @@ Write-Step 'Updating compile_commands.json'
 $generatedDb = Join-Path $BuildDir 'compile_commands.json'
 if (Test-Path -LiteralPath $generatedDb) {
 	Copy-Item -LiteralPath $generatedDb -Destination $CompileDb -Force
-	Write-Host "wrote $CompileDb (all libvgm + VGMToybox sources, for clangd)"
+	Write-Host "wrote $CompileDb (all sources: vgmplayer, plugin, libvgm, for clangd)"
 } else {
 	Write-Warning "'$generatedDb' not found - clangd will not have a compilation database."
 }
