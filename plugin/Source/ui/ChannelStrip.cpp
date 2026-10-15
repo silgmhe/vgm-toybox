@@ -1,5 +1,6 @@
 #include "ChannelStrip.h"
 
+#include "MeterScale.h"
 #include "Theme.h"
 
 namespace vgmplay::ui
@@ -10,14 +11,16 @@ namespace
 	constexpr int kKnobHeight = 30;
 	constexpr int kButtonHeight = 24;	// the M/S buttons share the full strip width
 	constexpr int kButtonGap = 6;
-	constexpr int kFaderGap = 4;
-	constexpr int kMeterWidth = 10;		// column: two 3 px bars with a 2 px gap
+	constexpr int kColumnGap = 3;
+	constexpr int kMeterWidth = 15;		// two 6 px bars with a 3 px gap
+	constexpr int kMeterGap = 3;
+	constexpr int kScaleWidth = 16;		// graduation line + its tiny label
 }
 
 ChannelStrip::ChannelStrip (void)
 {
 	// the slider colours come from LightLookAndFeel (accent track, white handle)
-	gainSlider.setRange (0.0, 2.0, 0.01);
+	gainSlider.setNormalisableRange (meter::gainRange());	// dB-linear travel, linear gain value
 	gainSlider.setDoubleClickReturnValue (true, 1.0);
 	gainSlider.setTooltip ("Gain (double-click: 100%)");
 	gainSlider.onValueChange = [this]
@@ -80,7 +83,9 @@ void ChannelStrip::setup (const juce::String& name, bool isMasterStrip)
 	panKnob.setVisible (! master);
 	muteButton.setVisible (! master);
 	soloButton.setVisible (! master);
-	gainSlider.setTooltip (master ? "Master volume (double-click: 100%)" : "Gain (double-click: 100%)");
+	gainSlider.setTooltip (master ? "Mixer master gain - the output volume sits behind it "
+									"(double-click: 100%)"
+								  : "Gain (double-click: 100%)");
 
 	resized();
 	repaint();
@@ -109,12 +114,14 @@ void ChannelStrip::resized (void)
 
 	if (master)
 	{
-		inner.removeFromTop (2);
+		// The master strip has no knob and no buttons, but it keeps their space: its fader and
+		// graduations then line up with the track strips instead of being twice as long.
+		inner.removeFromTop (kKnobHeight + 4);
 	}
 	else
 	{
 		panKnob.setBounds (inner.removeFromTop (kKnobHeight));
-		inner.removeFromTop (kFaderGap);
+		inner.removeFromTop (4);
 	}
 
 	if (! master)
@@ -127,11 +134,16 @@ void ChannelStrip::resized (void)
 		soloButton.setBounds (buttons.removeFromLeft (buttonWidth));
 		inner.removeFromBottom (6);
 	}
+	else
+	{
+		inner.removeFromBottom (kButtonHeight + 6);
+	}
 
-	// the meter column sits left of the fader, both filling the remaining height
-	auto meterColumn = inner.removeFromLeft (kMeterWidth);
-	meterBounds = meterColumn.withSizeKeepingCentre (8, meterColumn.getHeight());
-	inner.removeFromLeft (kFaderGap);
+	// meter | graduations | fader, all three sharing the remaining height
+	meterBounds = inner.removeFromLeft (kMeterWidth);
+	inner.removeFromLeft (kColumnGap);
+	scaleBounds = inner.removeFromLeft (kScaleWidth);
+	inner.removeFromLeft (kColumnGap);
 	gainSlider.setBounds (inner);
 }
 
@@ -148,29 +160,71 @@ void ChannelStrip::paint (juce::Graphics& g)
 	g.drawText (stripName, nameBounds, juce::Justification::centred, true);
 
 	drawMeter (g);
+	drawScale (g);
 }
 
 void ChannelStrip::drawMeter (juce::Graphics& g) const
 {
-	auto bars = meterBounds;
-	const auto drawBar = [] (juce::Graphics& graphics, juce::Rectangle<int> bar, float level)
+	if (meterBounds.isEmpty())
 	{
-		graphics.setColour (theme::track());
-		graphics.fillRoundedRectangle (bar.toFloat(), 1.5f);
+		return;
+	}
 
-		const float clamped = juce::jlimit (0.0f, 1.0f, level);
-		const float filled = (float) bar.getHeight() * clamped;
+	// The gradient is anchored to the full bar, so a partially filled bar already shows the
+	// colours of the level it reaches: green at the bottom, amber around -6 dB, red from 0 dB up.
+	juce::ColourGradient gradient (theme::meterLow(),
+								   (float) meterBounds.getCentreX(), (float) meterBounds.getBottom(),
+								   theme::meterHigh(),
+								   (float) meterBounds.getCentreX(), (float) meterBounds.getY(), false);
+	gradient.addColour (meter::dbToPosition (-18.0f), theme::meterLow());
+	gradient.addColour (meter::dbToPosition (-6.0f), theme::meterMid());
+	gradient.addColour (meter::dbToPosition (0.0f), theme::meterHigh());
+
+	const auto drawBar = [&g, &gradient] (juce::Rectangle<int> bar, float level)
+	{
+		g.setColour (theme::track());
+		g.fillRoundedRectangle (bar.toFloat(), 1.5f);
+
+		// the height follows the dB scale, so quiet material keeps a usable resolution
+		const float filled = (float) bar.getHeight() * meter::levelToPosition (level);
 		if (filled >= 1.0f)
 		{
-			graphics.setColour (clamped >= 0.99f ? theme::error() : theme::accent());
-			graphics.fillRoundedRectangle (bar.toFloat().withTop ((float) bar.getBottom() - filled), 1.5f);
+			g.setGradientFill (gradient);
+			g.fillRoundedRectangle (bar.toFloat().withTop ((float) bar.getBottom() - filled), 1.5f);
 		}
 	};
 
-	const int barWidth = juce::jmax (2, (bars.getWidth() - 2) / 2);
-	drawBar (g, bars.removeFromLeft (barWidth), peakL);
-	bars.removeFromLeft (2);
-	drawBar (g, bars.removeFromLeft (barWidth), peakR);
+	auto bars = meterBounds;
+	const int barWidth = juce::jmax (2, (bars.getWidth() - kMeterGap) / 2);
+	drawBar (bars.removeFromLeft (barWidth), peakL);
+	bars.removeFromLeft (kMeterGap);
+	drawBar (bars.removeFromLeft (barWidth), peakR);
+}
+
+void ChannelStrip::drawScale (juce::Graphics& g) const
+{
+	if (scaleBounds.isEmpty())
+	{
+		return;
+	}
+
+	for (int i = 0; i < meter::tickCount; ++i)
+	{
+		const float position = meter::dbToPosition (meter::tickDbs[i]);
+		const float y = (float) scaleBounds.getBottom() - position * (float) scaleBounds.getHeight();
+		const bool isZeroDb = (meter::tickDbs[i] == 0.0f);
+
+		// 0 dB is the one graduation that matters most - it gets a darker tick and label
+		g.setColour (isZeroDb ? theme::primaryText().withAlpha (0.6f)
+							  : theme::secondaryText().withAlpha (0.45f));
+		g.fillRect ((float) scaleBounds.getX(), y - 0.5f, 5.0f, 1.0f);
+
+		g.setColour (isZeroDb ? theme::primaryText() : theme::secondaryText());
+		g.setFont (juce::Font (juce::FontOptions (7.5f, isZeroDb ? juce::Font::bold : juce::Font::plain)));
+		g.drawText (juce::String (meter::tickLabels[i]),
+					scaleBounds.withTrimmedLeft (6).withHeight (9).withY (juce::roundToInt (y) - 4),
+					juce::Justification::centred, false);
+	}
 }
 
 } // namespace vgmplay::ui

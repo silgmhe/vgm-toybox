@@ -9,7 +9,7 @@ namespace
 {
 	constexpr int kHeaderHeight = 22;
 	constexpr int kGroupHeaderHeight = 16;		// painted above each row of strips
-	constexpr int kStripWidth = 74;
+	constexpr int kStripWidth = 88;				// meter + graduations + fader, see ChannelStrip
 	constexpr int kStripGap = 6;
 	constexpr int kGroupGap = 10;
 	constexpr float kMeterDecay = 0.82f;		// per 20 Hz tick (~0.3 s falloff)
@@ -39,7 +39,9 @@ MixerPanel::MixerPanel (vgmplay::MixerEngine& engineToUse)
 	addAndMakeVisible (mixerToggle);
 
 	masterStrip.setup ("MASTER", true);
-	masterStrip.onGainChanged = [this] (float gain) { engine.setMasterVolume (gain); };
+	// the master fader is the mixer's own master gain - a stage of its own, in front of the
+	// transport card's output volume (neither control drives the other)
+	masterStrip.onGainChanged = [this] (float gain) { engine.setMixerMasterGain (gain); };
 	addAndMakeVisible (masterStrip);
 
 	addAndMakeVisible (viewport);
@@ -117,8 +119,9 @@ void MixerPanel::refresh (void)
 
 	masterPeakL = juce::jmax (engine.getOutputPeak (0), masterPeakL * kMeterDecay);
 	masterPeakR = juce::jmax (engine.getOutputPeak (1), masterPeakR * kMeterDecay);
-	masterStrip.setValues (engine.getMasterVolume(), 0.0f, false, false,
-						   masterPeakL, masterPeakR, engine.isMixerEnabled() ? 1.0f : 0.55f);
+	// the master gain is applied in both modes, so its strip is never dimmed
+	masterStrip.setValues (engine.getMixerMasterGain(), 0.0f, false, false,
+						   masterPeakL, masterPeakR, 1.0f);
 }
 
 void MixerPanel::resized (void)
@@ -135,11 +138,9 @@ void MixerPanel::resized (void)
 
 	inner.removeFromTop (4);
 
-	// the master strip is pinned at the right of the scrollable rows, aligned with the first
-	// strip row (its group header sits above that row)
-	auto masterArea = inner.removeFromRight (kStripWidth);
-	masterArea.removeFromTop (kGroupHeaderHeight + 2);
-	masterStrip.setBounds (masterArea.removeFromTop (ChannelStrip::preferredHeight));
+	// the master strip is pinned at the right of the scrollable rows - layoutStrips() places
+	// it, because it follows the height of the strip rows
+	masterColumn = inner.removeFromRight (kStripWidth);
 
 	inner.removeFromRight (8);
 	viewport.setBounds (inner);
@@ -199,6 +200,12 @@ void MixerPanel::layoutStrips (void)
 	}
 
 	holder.setSize (juce::jmax (contentWidth, visibleWidth), juce::jmax (y, visibleHeight));
+
+	// the master strip rides along with the strips (aligned with the first row, clamped to the
+	// card so a small mixer card never lets it overflow)
+	const int masterTop = masterColumn.getY() + kGroupHeaderHeight + 2;
+	const int masterHeight = juce::jlimit (0, juce::jmax (0, masterColumn.getBottom() - masterTop), stripHeight);
+	masterStrip.setBounds (masterColumn.getX(), masterTop, masterColumn.getWidth(), masterHeight);
 }
 
 void MixerPanel::paintCardContent (juce::Graphics& g)

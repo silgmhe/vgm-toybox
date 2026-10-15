@@ -434,6 +434,45 @@ int main (int argc, char* argv[])
 		engine.setTrackMute (i, false);
 	}
 
+	// --- [9] the two volume stages (mixer master, then the output volume) -------------------
+	std::printf ("[9] volume stages\n");
+
+	engine.setMixerEnabled (true);
+	engine.setLoopCount (1);
+
+	// rendered shorter than the song: the master meter shows the *last* block, and the final
+	// blocks of a finished song are silent
+	const double shortLength = renderLength * 0.5;
+
+	engine.setPositionSeconds (0.0);
+	engine.play();
+	const auto unity = renderSeconds (engine, shortLength, sampleRate, blockSize);
+
+	engine.setMixerMasterGain (0.5f);
+	engine.setPositionSeconds (0.0);
+	engine.play();
+	const auto masterHalf = renderSeconds (engine, shortLength, sampleRate, blockSize);
+	const float meterWithMaster = engine.getOutputPeak (0);
+	const double masterRatio = (unity.rms > 0.0) ? masterHalf.rms / unity.rms : 0.0;
+	std::printf ("    mixer master 0.5 -> rms ratio %.3f, master meter %.4f\n",
+				 masterRatio, meterWithMaster);
+	check (std::abs (masterRatio - 0.5) < 0.01, "the mixer master gain scales the whole mix");
+
+	engine.setMasterVolume (0.5f);
+	engine.setPositionSeconds (0.0);
+	engine.play();
+	const auto volumeHalf = renderSeconds (engine, shortLength, sampleRate, blockSize);
+	const float meterWithVolume = engine.getOutputPeak (0);
+	const double volumeRatio = (unity.rms > 0.0) ? volumeHalf.rms / unity.rms : 0.0;
+	std::printf ("    output volume 0.5 on top -> rms ratio %.3f, master meter %.4f\n",
+				 volumeRatio, meterWithVolume);
+	check (std::abs (volumeRatio - 0.25) < 0.01, "the output volume is a second, independent stage");
+	check (std::abs (meterWithVolume - meterWithMaster) < 0.01f,
+		   "the master meter shows the mixer level, not the output volume");
+
+	engine.setMasterVolume (1.0f);
+	engine.setMixerMasterGain (1.0f);
+
 	const juce::File outputFile = inputFile.withFileExtension (".rendered.wav");
 	writeWavFile (outputFile, plain.left, plain.right, sampleRate);
 

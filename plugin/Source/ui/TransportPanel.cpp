@@ -1,6 +1,7 @@
 #include "TransportPanel.h"
 
 #include "Icons.h"
+#include "MeterScale.h"
 #include "SoftShadow.h"
 #include "Theme.h"
 
@@ -84,14 +85,15 @@ TransportPanel::TransportPanel (vgmplay::MixerEngine& engineToUse)
 	volumeSlider.setColour (juce::Slider::textBoxHighlightColourId, theme::accent().withAlpha (0.25f));
 	// the text formatting has to be in place before the text box is created as well, otherwise
 	// the box keeps showing the default formatting of the initial value
-	volumeSlider.setRange (0.0, 2.0, 0.01);
+	// the travel follows the same dB scale as the mixer meters (the value stays a linear gain)
+	volumeSlider.setNormalisableRange (meter::gainRange());
 	volumeSlider.setTextValueSuffix (" %");
 	volumeSlider.textFromValueFunction = [] (double value) { return juce::String (juce::roundToInt (value * 100.0)); };
 	volumeSlider.valueFromTextFunction = [] (const juce::String& text) { return text.getDoubleValue() / 100.0; };
 	volumeSlider.setTextBoxStyle (juce::Slider::TextBoxRight, false, 52, 22);
 	volumeSlider.setValue (engine.getMasterVolume(), juce::dontSendNotification);
 	volumeSlider.updateText();
-	volumeSlider.setTooltip ("Master volume");
+	volumeSlider.setTooltip ("Output volume - the last stage of the engine, after the mixer master");
 	volumeSlider.onValueChange = [this] { engine.setMasterVolume ((float) volumeSlider.getValue()); };
 	addAndMakeVisible (volumeSlider);
 

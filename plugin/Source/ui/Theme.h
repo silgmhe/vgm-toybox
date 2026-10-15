@@ -28,6 +28,11 @@ inline juce::Colour error (void)		{ return juce::Colour (0xffd70015); }
 inline juce::Colour mute (void)			{ return juce::Colour (0xffe5484d); }
 inline juce::Colour solo (void)			{ return juce::Colour (0xfff5c518); }
 
+// the meter gradient: quiet is green, loud turns amber, 0 dB and above are red
+inline juce::Colour meterLow (void)		{ return juce::Colour (0xff34c759); }
+inline juce::Colour meterMid (void)		{ return juce::Colour (0xffffcc00); }
+inline juce::Colour meterHigh (void)	{ return juce::Colour (0xffff3b30); }
+
 // --- metrics ------------------------------------------------------------------------
 inline constexpr int margin = 14;			// window border
 inline constexpr int cardGap = 10;			// gap between two cards (or a card and the top row)

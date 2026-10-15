@@ -60,7 +60,12 @@ public:
 	void setPositionSeconds (double seconds);
 	void setLoopCount (int loops);			// 0 = loop forever
 	void setFadeSeconds (double seconds);
+	/** The output volume: the **last** gain stage of the engine, applied after every mixer
+		track and after the mixer's own master gain. Lock-free (one atomic). */
 	void setMasterVolume (float linear);	// 1.0 = 100 %
+	/** The mixer's master gain - the master strip's fader. It scales the sum of the tracks
+		and sits *before* the output volume, so both controls are independent stages. */
+	void setMixerMasterGain (float linear);	// 1.0 = 100 %
 	void setChipMuted (size_t chipIndex, bool shouldBeMuted);
 
 	bool isLoaded (void) const { return loaded; }
@@ -77,7 +82,8 @@ public:
 	double getLoopPointSeconds (void) const { return cachedLoopPointSeconds; }
 	int getLoopCount (void) const { return loopCount; }
 	double getFadeSeconds (void) const { return fadeSeconds; }
-	float getMasterVolume (void) const { return masterVolume; }
+	float getMasterVolume (void) const { return masterVolume.load(); }
+	float getMixerMasterGain (void) const { return mixerMasterGain.load(); }
 	const juce::File& getFile (void) const { return currentFile; }
 	juce::String getTag (const juce::String& tagName) const;
 	const std::vector<ChipEntry>& getChips (void) const { return chips; }
@@ -151,7 +157,10 @@ private:
 	int maxBlockSize = 512;
 	int loopCount = 1;
 	double fadeSeconds = 3.0;
-	float masterVolume = 1.0f;
+	// Two independent volume stages - render() applies the mixer master first and the output
+	// volume last, so neither control is driven by the other.
+	std::atomic<float> masterVolume { 1.0f };		// output volume (transport card slider)
+	std::atomic<float> mixerMasterGain { 1.0f };	// mixer master (master strip fader)
 
 	// song facts for the lock-free getters - written on the message thread while the lock is
 	// held (load / loop / fade / sample-rate changes), read without the lock

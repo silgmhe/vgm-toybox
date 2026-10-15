@@ -58,6 +58,7 @@ private:
 
 	juce::String loadedFile;			// detects "another song was loaded" for the rebuild
 	int loadedTrackCount = -1;
+	juce::Rectangle<int> masterColumn;	// set by resized(), the strip itself is placed by layoutStrips()
 	std::vector<float> meterLeft, meterRight;	// decayed peaks, one per track
 	float masterPeakL = 0.0f;
 	float masterPeakR = 0.0f;

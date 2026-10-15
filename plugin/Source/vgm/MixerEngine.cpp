@@ -259,13 +259,15 @@ void MixerEngine::setFadeSeconds (double seconds)
 
 void MixerEngine::setMasterVolume (float linear)
 {
-	const juce::ScopedLock sl (lock);
-	masterVolume = juce::jmax (0.0f, linear);
+	// The output volume is applied by render() itself (the last gain stage), so no player has
+	// to be touched and no lock is needed.
+	masterVolume.store (juce::jmax (0.0f, linear));
+}
 
-	for (auto& track : trackPlayers)
-	{
-		track->player().SetMasterVolume ((INT32) (masterVolume * 0x10000));
-	}
+void MixerEngine::setMixerMasterGain (float linear)
+{
+	// the mixer master is a mix-time gain like the track gains: one atomic, read by render()
+	mixerMasterGain.store (juce::jmax (0.0f, linear));
 }
 
 void MixerEngine::setChipMuted (size_t chipIndex, bool shouldBeMuted)
@@ -561,7 +563,7 @@ void MixerEngine::applyConfigToPlayer (TrackPlayer& track)
 {
 	PlayerA::Config cfg = track.player().GetConfiguration();
 
-	cfg.masterVol = (INT32) (masterVolume * 0x10000);
+	cfg.masterVol = 0x10000;	// unity - the output volume is applied by render(), not by libvgm
 	cfg.loopCount = (UINT32) juce::jmax (0, loopCount);
 	cfg.fadeSmpls = (UINT32) (juce::jmax (0.0, fadeSeconds) * sampleRate);
 	cfg.endSilenceSmpls = 0;	// a plugin should not render trailing silence
@@ -866,6 +868,14 @@ void MixerEngine::render (float* const* outputs, int numSamples)
 		}
 	}
 
+	// the mixer master (the master strip's fader): a mix-time gain on the finished sum
+	const float mixerMaster = mixerMasterGain.load();
+	if (mixerMaster != 1.0f)
+	{
+		juce::FloatVectorOperations::multiply (outputs[0], mixerMaster, numSamples);
+		juce::FloatVectorOperations::multiply (outputs[1], mixerMaster, numSamples);
+	}
+
 	// the master meter: the level of the finished mix (both modes), read lock-free by the UI
 	float peakL = 0.0f;
 	float peakR = 0.0f;
@@ -876,6 +886,15 @@ void MixerEngine::render (float* const* outputs, int numSamples)
 	}
 	outputPeakL.store (peakL);
 	outputPeakR.store (peakR);
+
+	// The output volume (the transport card's slider) is the very last stage - after the master
+	// meter, so the mixer meters keep showing the mixer's own level while it is pulled down.
+	const float outputVolume = masterVolume.load();
+	if (outputVolume != 1.0f)
+	{
+		juce::FloatVectorOperations::multiply (outputs[0], outputVolume, numSamples);
+		juce::FloatVectorOperations::multiply (outputs[1], outputVolume, numSamples);
+	}
 
 	// publish the position for the lock-free UI getter (an O(1) query, still under the lock);
 	// track 0 carries the song timeline in both modes

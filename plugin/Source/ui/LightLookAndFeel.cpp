@@ -205,16 +205,27 @@ void LightLookAndFeel::drawVerticalSlider (juce::Graphics& g, int x, int y, int 
 		g.fillRoundedRectangle (track.withTop (thumbY), trackWidth * 0.5f);
 	}
 
-	// a fader cap instead of the round thumb of the horizontal sliders
-	const auto cap = juce::Rectangle<float> (juce::jmin ((float) width, 24.0f), 11.0f)
-						 .withCentre ({ centreX, thumbY });
-	drawSoftShadow (g, cap, 3.0f, theme::controlShadow().withMultipliedAlpha (enabled ? 1.0f : 0.45f),
+	// A fader cap instead of the round thumb of the horizontal sliders: the small square knob
+	// of a real console fader, with a slight bevel and the groove a finger grips it by.
+	constexpr float capRadius = 3.5f;
+	const float capSize = juce::jmin (juce::jmin ((float) width, (float) height) * 0.45f, 15.0f);
+	const auto cap = juce::Rectangle<float> (capSize, capSize).withCentre ({ centreX, thumbY });
+
+	drawSoftShadow (g, cap, capRadius, theme::controlShadow().withMultipliedAlpha (enabled ? 1.0f : 0.45f),
 					theme::controlShadowBlur, { 0, 1 });
-	g.setColour (slider.findColour (juce::Slider::thumbColourId));
-	g.fillRoundedRectangle (cap, 3.0f);
+	g.setGradientFill (juce::ColourGradient (juce::Colours::white, cap.getCentreX(), cap.getY(),
+											 juce::Colour (0xffe6e6ec), cap.getCentreX(), cap.getBottom(), false));
+	g.fillRoundedRectangle (cap, capRadius);
 	g.setColour (juce::Colour (0xffc5c5cb));
-	g.drawRoundedRectangle (cap.reduced (0.5f), 3.0f, 1.0f);
-	g.fillRect (cap.getX() + 3.0f, cap.getCentreY() - 0.5f, cap.getWidth() - 6.0f, 1.0f);
+	g.drawRoundedRectangle (cap.reduced (0.5f), capRadius, 1.0f);
+
+	const float grooveInset = capRadius + 1.0f;
+	g.setColour (juce::Colour (0xff8e8e96));
+	g.fillRect (cap.getX() + grooveInset, cap.getCentreY() - 1.0f,
+				cap.getWidth() - 2.0f * grooveInset, 2.0f);
+	g.setColour (juce::Colours::white.withAlpha (0.85f));
+	g.fillRect (cap.getX() + grooveInset, cap.getCentreY() + 1.0f,
+				cap.getWidth() - 2.0f * grooveInset, 1.0f);
 }
 
 void LightLookAndFeel::drawRotarySlider (juce::Graphics& g, int x, int y, int width, int height,

@@ -9,9 +9,12 @@ namespace vgmplay::ui
 
 /**
 	One mixer channel strip in the usual DAW layout: the track name on top, the pan knob below
-	it, the vertical level meter next to the vertical gain fader and - on track strips - the
-	mute (red) and solo (amber) buttons at the bottom. The master strip reuses the same class
-	with the knob and the buttons hidden.
+	it, a vertical level meter with its dB graduations next to the vertical gain fader and - on
+	track strips - the mute (red) and solo (amber) buttons at the bottom. The master strip
+	reuses the same class with the knob and the buttons hidden.
+
+	Both the meter height and the fader travel follow the dB scale of `MeterScale.h`, so the cap
+	lines up with the tick marks and with the level the channel produces.
 
 	The strip never reads the engine - MixerPanel feeds it through setValues() and forwards the
 	user's changes through the callbacks, so it does not know where the values come from.
@@ -40,6 +43,7 @@ public:
 
 private:
 	void drawMeter (juce::Graphics& g) const;
+	void drawScale (juce::Graphics& g) const;
 
 	juce::TextButton muteButton { "M" };
 	juce::TextButton soloButton { "S" };
@@ -49,6 +53,7 @@ private:
 	juce::String stripName;
 	juce::Rectangle<int> nameBounds;
 	juce::Rectangle<int> meterBounds;
+	juce::Rectangle<int> scaleBounds;
 	bool master = false;
 	float peakL = 0.0f;
 	float peakR = 0.0f;
