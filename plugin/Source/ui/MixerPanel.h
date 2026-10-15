@@ -7,7 +7,7 @@
 #include "ChannelStrip.h"
 #include "IconButton.h"
 
-#include "playback/MixerEngine.h"
+#include "playback/PlaybackEngine.h"
 
 namespace vgmplay::ui
 {
@@ -17,7 +17,7 @@ namespace vgmplay::ui
 	live in a Viewport (with horizontal and vertical scrollbars), the master strip stays pinned
 	at the right.
 
-	Mixing happens in MixerEngine - the panel only forwards the user's changes and polls the
+	Mixing happens in PlaybackEngine - the panel only forwards the user's changes and polls the
 	lock-free values in refresh(), so the audio thread never reads anything from here.
 */
 class MixerPanel : public CardComponent
@@ -27,7 +27,7 @@ public:
 		editor reserves it when it hands out the space between the chips and transport cards. */
 	static constexpr int minimumHeight = 140;
 
-	explicit MixerPanel (vgmplay::MixerEngine& engineToUse);
+	explicit MixerPanel (vgmplay::PlaybackEngine& engineToUse);
 
 	/** Rebuilds the strips when another song is loaded and refreshes values and meters. */
 	void refresh (void);
@@ -49,7 +49,7 @@ private:
 	/** Lays the strips out in their groups and sizes the holder (call after any change). */
 	void layoutStrips (void);
 
-	vgmplay::MixerEngine& engine;
+	vgmplay::PlaybackEngine& engine;
 	IconButton mixerToggle { "Mixer", IconButton::Icon::sliders };
 	juce::Viewport viewport;
 	StripHolder holder;

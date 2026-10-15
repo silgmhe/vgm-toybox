@@ -35,7 +35,7 @@ namespace
 	}
 }
 
-MixerPanel::MixerPanel (vgmplay::MixerEngine& engineToUse)
+MixerPanel::MixerPanel (vgmplay::PlaybackEngine& engineToUse)
 	: engine (engineToUse)
 {
 	mixerToggle.onClick = [this]

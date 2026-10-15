@@ -1,5 +1,7 @@
 #include "DropHintOverlay.h"
 
+#include "playback/BackendRegistry.h"
+
 #include "Theme.h"
 
 namespace vgmplay::ui
@@ -13,7 +15,10 @@ DropHintOverlay::DropHintOverlay (void)
 	label.setFont (juce::Font (juce::FontOptions (22.0f, juce::Font::bold)));
 	label.setColour (juce::Label::textColourId, theme::accent());
 	label.setJustificationType (juce::Justification::centred);
-	label.setText ("Drop a VGM / VGZ file here", juce::dontSendNotification);
+	// the format list comes from the backend registry - a build with more backends advertises
+	// them without touching this file
+	label.setText ("Drop a " + playback::BackendRegistry::getInstance().getExtensionListText() + " file here",
+				   juce::dontSendNotification);
 	label.setInterceptsMouseClicks (false, false);
 	addAndMakeVisible (label);
 

@@ -3,12 +3,13 @@
 #include "Format.h"
 #include "Theme.h"
 
-#include "playback/MixerEngine.h"
+#include "playback/BackendRegistry.h"
+#include "playback/PlaybackEngine.h"
 
 namespace vgmplay::ui
 {
 
-SongInfoPanel::SongInfoPanel (const vgmplay::MixerEngine& engineToUse)
+SongInfoPanel::SongInfoPanel (const vgmplay::PlaybackEngine& engineToUse)
 	: engine (engineToUse)
 {
 	titleLabel.setFont (juce::Font (juce::FontOptions (18.0f, juce::Font::bold)));
@@ -43,7 +44,8 @@ void SongInfoPanel::refresh (void)
 	{
 		titleLabel.setText ("No file loaded", juce::dontSendNotification);
 		detailsLabel.setText ({}, juce::dontSendNotification);
-		fileLabel.setText ("Load a .vgm / .vgz file with the button above or drop one onto this window.",
+		fileLabel.setText ("Load a " + playback::BackendRegistry::getInstance().getExtensionListText()
+						   + " file with the button above or drop one onto this window.",
 						   juce::dontSendNotification);
 		return;
 	}

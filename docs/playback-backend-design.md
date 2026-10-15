@@ -373,6 +373,11 @@ Source/
 | 测试（解耦证明） | 新增 `vgm_core_test`：核心 + `FakeBackend`（三音合成后端），**不链接任何 libvgm 代码**——仍依赖 libvgm 的核心会直接链接失败；含 20 项解析式校验（三音求和 0.306186、单音 0.176777、增益/声像/静音/独奏/两级音量/seek/结束/关闭混音）全部通过 |
 | 源码守卫 | `build.ps1` 在构建前扫描 `plugin/Source`：`backends/` 之外出现任何 libvgm 头 include 即报错 |
 
+**P2 / P3（已完成）**：
+
+- **P2 更名**：`MixerEngine` → **`PlaybackEngine`**（文件 `playback/PlaybackEngine.{h,cpp}`，测试文件 `Tests/PlaybackEngineTest.cpp`）。`vgm_mixer_test` 这个**目标名保留** —— 它验证的是"混音验收口径"，不是类名；`vgm_core_test` 同理。
+- **P3 数据驱动**：`BackendRegistry` 新增 `getFileWildcard()`（`*.vgm;*.vgz;…`）、`getExtensionListText()`（`.vgm .vgz …`）与 `isSupportedFile()`；**打开按钮提示、文件对话框标题与过滤器、拖放判定、拖放提示文案、信息卡提示**全部改读注册表。注册在 `PluginProcessor` 构造时完成（组合根，先于 UI 构建）。副作用是 libvgm 早已支持的 `.s98/.dro/.gym` 顺带暴露到界面 —— 新增/裁剪格式现在只改注册，UI 一行都不用动。
+
 **实施中的三处端口精化**（已同步进 `SongBackend.h`，与 §4.2 的初稿有差异）：
 
 1. `ITrackPlayer` 不再有 `prepare()`/`load()`：玩家由 `ISongInstance::createPlayer()` **建好即就绪**（已按宿主采样率准备好、已加载）。原因：`.vgz` 之类容器的解包属于后端内部事务，核心不该知道"要给哪个内存给它"。
@@ -399,7 +404,7 @@ Source/
 | # | 问题 | 建议 |
 |---|---|---|
 | D1 | 分支：在本分支做，还是新开 `feature/playback-backend` 并从当前分支拉出？ | **新开分支**（与多轨输出分开，便于独立验收与回滚） |
-| D2 | `MixerEngine` 是否顺带更名 `PlaybackEngine`（文件移到 `Source/playback/`）？ | P1 里保留原名，P2 做机械重命名（一次提交，diff 干净） |
+| D2 | `MixerEngine` 是否顺带更名 `PlaybackEngine`（文件移到 `Source/playback/`）？ | ✅ 已执行：P1 保留原名搬家，P2 一次机械重命名（含测试文件；`vgm_mixer_test` 目标名保留） |
 | D3 | SPC 后端路线（SNESAPU / snes9x / 自研 DSP 模拟）与许可 | 留到 SPC 里程碑单独评审；本里程碑只保证"可编译期可选" |
 | D4 | 隔离降级策略：`isolation == none` 时是"单轨"还是"不给混音卡片" | 沿用今天的"单轨"（不丢芯片卡片与整轨推子） |
 

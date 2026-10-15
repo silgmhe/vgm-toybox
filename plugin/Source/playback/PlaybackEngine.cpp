@@ -1,4 +1,4 @@
-#include "MixerEngine.h"
+#include "PlaybackEngine.h"
 
 #include <juce_audio_basics/juce_audio_basics.h>
 
@@ -7,11 +7,11 @@
 namespace vgmplay
 {
 
-MixerEngine::MixerEngine (void)
+PlaybackEngine::PlaybackEngine (void)
 {
 }
 
-MixerEngine::~MixerEngine (void)
+PlaybackEngine::~PlaybackEngine (void)
 {
 	const juce::ScopedLock sl (lock);
 	resetState();
@@ -20,7 +20,7 @@ MixerEngine::~MixerEngine (void)
 //==============================================================================
 // message thread
 
-void MixerEngine::prepare (double newSampleRate, int maxBlock)
+void PlaybackEngine::prepare (double newSampleRate, int maxBlock)
 {
 	const juce::ScopedLock sl (lock);
 
@@ -51,7 +51,7 @@ void MixerEngine::prepare (double newSampleRate, int maxBlock)
 	}
 }
 
-bool MixerEngine::loadFile (const juce::File& file, juce::String& errorMessage)
+bool PlaybackEngine::loadFile (const juce::File& file, juce::String& errorMessage)
 {
 	// The lock is held for the whole operation: the audio thread will output silence
 	// (it uses a try-lock) while a file is being loaded.
@@ -90,13 +90,13 @@ bool MixerEngine::loadFile (const juce::File& file, juce::String& errorMessage)
 	return true;
 }
 
-void MixerEngine::unloadFile (void)
+void PlaybackEngine::unloadFile (void)
 {
 	const juce::ScopedLock sl (lock);
 	resetState();
 }
 
-void MixerEngine::setMixerEnabled (bool shouldBeEnabled)
+void PlaybackEngine::setMixerEnabled (bool shouldBeEnabled)
 {
 	const juce::ScopedLock sl (lock);
 	if (shouldBeEnabled == mixerEnabled)
@@ -119,7 +119,7 @@ void MixerEngine::setMixerEnabled (bool shouldBeEnabled)
 	}
 }
 
-void MixerEngine::play (void)
+void PlaybackEngine::play (void)
 {
 	if (! loaded.load())
 	{
@@ -132,12 +132,12 @@ void MixerEngine::play (void)
 	playing = true;
 }
 
-void MixerEngine::pause (void)
+void PlaybackEngine::pause (void)
 {
 	playing = false;
 }
 
-void MixerEngine::stop (void)
+void PlaybackEngine::stop (void)
 {
 	playing = false;
 	finished = false;
@@ -150,7 +150,7 @@ void MixerEngine::stop (void)
 	positionSeconds = 0.0;
 }
 
-void MixerEngine::setPositionSeconds (double seconds)
+void PlaybackEngine::setPositionSeconds (double seconds)
 {
 	const juce::ScopedLock sl (lock);
 	if (trackPlayers.empty())
@@ -171,7 +171,7 @@ void MixerEngine::setPositionSeconds (double seconds)
 	finished = false;
 }
 
-void MixerEngine::setLoopCount (int loops)
+void PlaybackEngine::setLoopCount (int loops)
 {
 	const juce::ScopedLock sl (lock);
 	loopCount = loops;
@@ -179,7 +179,7 @@ void MixerEngine::setLoopCount (int loops)
 	refreshCachedTimes();	// the cached duration includes the loop repetitions
 }
 
-void MixerEngine::setFadeSeconds (double seconds)
+void PlaybackEngine::setFadeSeconds (double seconds)
 {
 	const juce::ScopedLock sl (lock);
 	fadeSeconds = seconds;
@@ -187,20 +187,20 @@ void MixerEngine::setFadeSeconds (double seconds)
 	refreshCachedTimes();	// the cached duration includes the fade time
 }
 
-void MixerEngine::setMasterVolume (float linear)
+void PlaybackEngine::setMasterVolume (float linear)
 {
 	// The output volume is applied by render() itself (the last gain stage), so no player has
 	// to be touched and no lock is needed.
 	masterVolume.store (juce::jmax (0.0f, linear));
 }
 
-void MixerEngine::setMixerMasterGain (float linear)
+void PlaybackEngine::setMixerMasterGain (float linear)
 {
 	// the mixer master is a mix-time gain like the track gains: one atomic, read by render()
 	mixerMasterGain.store (juce::jmax (0.0f, linear));
 }
 
-void MixerEngine::setChipMuted (size_t chipIndex, bool shouldBeMuted)
+void PlaybackEngine::setChipMuted (size_t chipIndex, bool shouldBeMuted)
 {
 	const juce::ScopedLock sl (lock);
 	if (chipIndex >= chips.size())
@@ -224,7 +224,7 @@ void MixerEngine::setChipMuted (size_t chipIndex, bool shouldBeMuted)
 //==============================================================================
 // mixer parameters (plain atomics - the audio thread reads them without the lock)
 
-void MixerEngine::setTrackGain (size_t trackIndex, float linearGain)
+void PlaybackEngine::setTrackGain (size_t trackIndex, float linearGain)
 {
 	if (trackIndex < tracks.size())
 	{
@@ -232,12 +232,12 @@ void MixerEngine::setTrackGain (size_t trackIndex, float linearGain)
 	}
 }
 
-float MixerEngine::getTrackGain (size_t trackIndex) const
+float PlaybackEngine::getTrackGain (size_t trackIndex) const
 {
 	return (trackIndex < tracks.size()) ? tracks[trackIndex]->gain.load() : 0.0f;
 }
 
-void MixerEngine::setTrackPan (size_t trackIndex, float pan)
+void PlaybackEngine::setTrackPan (size_t trackIndex, float pan)
 {
 	if (trackIndex < tracks.size())
 	{
@@ -245,12 +245,12 @@ void MixerEngine::setTrackPan (size_t trackIndex, float pan)
 	}
 }
 
-float MixerEngine::getTrackPan (size_t trackIndex) const
+float PlaybackEngine::getTrackPan (size_t trackIndex) const
 {
 	return (trackIndex < tracks.size()) ? tracks[trackIndex]->pan.load() : 0.0f;
 }
 
-void MixerEngine::setTrackMute (size_t trackIndex, bool shouldBeMuted)
+void PlaybackEngine::setTrackMute (size_t trackIndex, bool shouldBeMuted)
 {
 	if (trackIndex < tracks.size())
 	{
@@ -258,12 +258,12 @@ void MixerEngine::setTrackMute (size_t trackIndex, bool shouldBeMuted)
 	}
 }
 
-bool MixerEngine::isTrackMuted (size_t trackIndex) const
+bool PlaybackEngine::isTrackMuted (size_t trackIndex) const
 {
 	return (trackIndex < tracks.size()) && tracks[trackIndex]->mute.load();
 }
 
-void MixerEngine::setTrackSolo (size_t trackIndex, bool shouldBeSoloed)
+void PlaybackEngine::setTrackSolo (size_t trackIndex, bool shouldBeSoloed)
 {
 	if (trackIndex >= tracks.size())
 	{
@@ -280,12 +280,12 @@ void MixerEngine::setTrackSolo (size_t trackIndex, bool shouldBeSoloed)
 	soloCount.fetch_add (shouldBeSoloed ? 1 : -1);
 }
 
-bool MixerEngine::isTrackSoloed (size_t trackIndex) const
+bool PlaybackEngine::isTrackSoloed (size_t trackIndex) const
 {
 	return (trackIndex < tracks.size()) && tracks[trackIndex]->solo.load();
 }
 
-float MixerEngine::getTrackPeak (size_t trackIndex, int channel) const
+float PlaybackEngine::getTrackPeak (size_t trackIndex, int channel) const
 {
 	if (trackIndex >= tracks.size())
 	{
@@ -296,12 +296,12 @@ float MixerEngine::getTrackPeak (size_t trackIndex, int channel) const
 	return (channel == 1) ? state.peakR.load() : state.peakL.load();
 }
 
-float MixerEngine::getOutputPeak (int channel) const
+float PlaybackEngine::getOutputPeak (int channel) const
 {
 	return (channel == 1) ? outputPeakR.load() : outputPeakL.load();
 }
 
-double MixerEngine::getTrackPositionSeconds (size_t trackIndex) const
+double PlaybackEngine::getTrackPositionSeconds (size_t trackIndex) const
 {
 	const juce::ScopedLock sl (lock);
 	if (trackIndex >= trackPlayers.size())
@@ -315,7 +315,7 @@ double MixerEngine::getTrackPositionSeconds (size_t trackIndex) const
 //==============================================================================
 // song facts
 
-void MixerEngine::refreshCachedTimes (void)
+void PlaybackEngine::refreshCachedTimes (void)
 {
 	if (song == nullptr)
 	{
@@ -331,12 +331,12 @@ void MixerEngine::refreshCachedTimes (void)
 	loopsForever = info.loopsForever;
 }
 
-double MixerEngine::getPlayLengthSeconds (void) const
+double PlaybackEngine::getPlayLengthSeconds (void) const
 {
 	return (song != nullptr) ? song->getInfo().durationSeconds : 0.0;
 }
 
-juce::String MixerEngine::getTag (const juce::String& tagName) const
+juce::String PlaybackEngine::getTag (const juce::String& tagName) const
 {
 	// no lock: the map is only ever mutated from the message thread (load/reset) and the UI
 	// polls it at 15 Hz - taking the render lock here would make the audio thread's try-lock
@@ -345,7 +345,7 @@ juce::String MixerEngine::getTag (const juce::String& tagName) const
 	return (it == tags.end()) ? juce::String() : it->second;
 }
 
-void MixerEngine::enumerateTags (void)
+void PlaybackEngine::enumerateTags (void)
 {
 	tags.clear();
 
@@ -355,7 +355,7 @@ void MixerEngine::enumerateTags (void)
 	}
 }
 
-void MixerEngine::enumerateChips (void)
+void PlaybackEngine::enumerateChips (void)
 {
 	// keep the mute toggles when the same song is rebuilt (sample-rate change, mode switch)
 	std::map<playback::DeviceId, bool> previousMutes;
@@ -391,7 +391,7 @@ void MixerEngine::enumerateChips (void)
 //==============================================================================
 // player bookkeeping (the lock is held by the caller)
 
-void MixerEngine::updatePlayerTimeline (void)
+void PlaybackEngine::updatePlayerTimeline (void)
 {
 	if (song != nullptr)
 	{
@@ -403,7 +403,7 @@ void MixerEngine::updatePlayerTimeline (void)
 	}
 }
 
-void MixerEngine::applyChipMutes (void)
+void PlaybackEngine::applyChipMutes (void)
 {
 	for (auto& player : trackPlayers)
 	{
@@ -414,7 +414,7 @@ void MixerEngine::applyChipMutes (void)
 	}
 }
 
-void MixerEngine::applyTrackIsolation (void)
+void PlaybackEngine::applyTrackIsolation (void)
 {
 	if (! mixerEnabled)
 	{
@@ -430,7 +430,7 @@ void MixerEngine::applyTrackIsolation (void)
 	}
 }
 
-bool MixerEngine::createPlayers (juce::String& errorMessage)
+bool PlaybackEngine::createPlayers (juce::String& errorMessage)
 {
 	destroyPlayers();
 
@@ -512,12 +512,12 @@ bool MixerEngine::createPlayers (juce::String& errorMessage)
 	return true;
 }
 
-void MixerEngine::destroyPlayers (void)
+void PlaybackEngine::destroyPlayers (void)
 {
 	trackPlayers.clear();
 }
 
-void MixerEngine::rebuildPlayers (juce::String& errorMessage)
+void PlaybackEngine::rebuildPlayers (juce::String& errorMessage)
 {
 	const bool wasPlaying = playing.load();
 	const double position = getPositionSeconds();
@@ -542,7 +542,7 @@ void MixerEngine::rebuildPlayers (juce::String& errorMessage)
 	}
 }
 
-void MixerEngine::resetState (void)
+void PlaybackEngine::resetState (void)
 {
 	playing = false;
 	finished = false;
@@ -568,7 +568,7 @@ void MixerEngine::resetState (void)
 //==============================================================================
 // audio thread
 
-void MixerEngine::render (float* const* outputs, int numSamples)
+void PlaybackEngine::render (float* const* outputs, int numSamples)
 {
 	// clear first: the early exits and the mix path both leave the rest of the block silent
 	for (int ch = 0; ch < 2; ++ch)

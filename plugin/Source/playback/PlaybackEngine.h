@@ -43,11 +43,11 @@ struct ChipEntry
 	parameters are plain atomics the mix reads without touching the lock). A failed try-lock
 	costs a whole silent block, which is audible as a faint tick.
 */
-class MixerEngine
+class PlaybackEngine
 {
 public:
-	MixerEngine (void);
-	~MixerEngine (void);
+	PlaybackEngine (void);
+	~PlaybackEngine (void);
 
 	// --- message thread ---
 	/** Loads a song file and starts playback. Returns false and fills errorMessage on failure. */
@@ -179,7 +179,7 @@ private:
 	std::atomic<float> outputPeakL { 0.0f };		// master meter, published by render()
 	std::atomic<float> outputPeakR { 0.0f };
 
-	JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (MixerEngine)
+	JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (PlaybackEngine)
 };
 
 } // namespace vgmplay

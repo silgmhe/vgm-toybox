@@ -12,13 +12,13 @@
 	The playback backend port - the standard every format engine (libvgm today, an SNES/SPC
 	engine tomorrow) is plugged into.
 
-	Nothing in this header may include a format engine's headers: the core (MixerEngine and
+	Nothing in this header may include a format engine's headers: the core (PlaybackEngine and
 	everything above it) only ever sees these types. The rule is enforced by a source guard in
 	the build script ("no backend headers outside Source/backends/").
 
 	Three ports, from the outside in:
 
-	  plugins and players -> MixerEngine -> ISongBackend -> ISongInstance -> ITrackPlayer
+	  plugins and players -> PlaybackEngine -> ISongBackend -> ISongInstance -> ITrackPlayer
 
 	* `ISongBackend`  recognises a file image and opens it.
 	* `ISongInstance` is one open song: its metadata, its tracks and its capabilities.

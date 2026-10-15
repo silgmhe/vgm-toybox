@@ -21,7 +21,8 @@
 
 #include <juce_audio_basics/juce_audio_basics.h>
 
-#include "playback/MixerEngine.h"
+#include "playback/BackendRegistry.h"
+#include "playback/PlaybackEngine.h"
 
 namespace
 {
@@ -46,7 +47,7 @@ namespace
 		double peak = 0.0;
 	};
 
-	RenderedBuffer renderSeconds (vgmplay::MixerEngine& engine, double seconds, double sampleRate, int blockSize)
+	RenderedBuffer renderSeconds (vgmplay::PlaybackEngine& engine, double seconds, double sampleRate, int blockSize)
 	{
 		RenderedBuffer result;
 		const int totalSamples = (int) (seconds * sampleRate);
@@ -97,7 +98,7 @@ int main (int /*argc*/, char* /*argv*/[])
 						  .getChildFile ("vgmplay_core_test.fake");
 	file.replaceWithText ("fake song");
 
-	vgmplay::MixerEngine engine;
+	vgmplay::PlaybackEngine engine;
 	engine.prepare (sampleRate, blockSize);
 
 	// ---------------------------------------------------------------- [1] the port

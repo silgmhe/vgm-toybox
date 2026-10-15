@@ -30,8 +30,15 @@ public:
 	/** The backend that can open this image, or nullptr when no registered backend can. */
 	ISongBackend* findFor (const SongMemory& memory) const;
 
-	/** All extensions of all backends, for the file chooser ("*.vgm;*.vgz;..."). */
+	/** All extensions of all backends (".vgm", ".vgz", ...). */
 	juce::StringArray getFileExtensions (void) const;
+	/** The same list as a file chooser wildcard ("*.vgm;*.vgz"). */
+	juce::String getFileWildcard (void) const;
+	/** The same list as readable text (".vgm .vgz") for tooltips, hints and file dialogs. */
+	juce::String getExtensionListText (void) const;
+	/** True when a registered backend handles this file - the drag & drop filter (the backend
+		does its own, magic-based check when it opens). */
+	bool isSupportedFile (const juce::File& file) const;
 
 	/** Human-readable list of the registered backends ("VGM (libvgm)", ...) for the tooltips. */
 	juce::StringArray getBackendNames (void) const;

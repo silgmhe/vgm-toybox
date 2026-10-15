@@ -45,11 +45,11 @@ private:
 	void updateStatusLine (void);
 
 	VGMPlayAudioProcessor& processor;
-	vgmplay::MixerEngine& engine;
+	vgmplay::PlaybackEngine& engine;
 
 	vgmplay::ui::LightLookAndFeel lookAndFeel;
 
-	juce::TextButton openButton { "Open VGM..." };
+	juce::TextButton openButton { "Open file..." };
 	juce::Label statusLabel;
 	vgmplay::ui::SongInfoPanel songInfoPanel;
 	vgmplay::ui::TransportPanel transportPanel;

@@ -1,5 +1,7 @@
 #include "PluginProcessor.h"
 
+#include "playback/BackendRegistry.h"
+
 #include "PluginEditor.h"
 
 using namespace vgmplay;
@@ -7,6 +9,9 @@ using namespace vgmplay;
 VGMPlayAudioProcessor::VGMPlayAudioProcessor()
 	: AudioProcessor (BusesProperties().withOutput ("Output", juce::AudioChannelSet::stereo(), true))
 {
+	// The composition root: registering the backends here means every UI text, tooltip and file
+	// filter that asks the registry (built while this object exists) sees the real format list.
+	vgmplay::playback::registerBuiltInBackends();
 }
 
 void VGMPlayAudioProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
@@ -55,7 +60,7 @@ juce::AudioProcessorEditor* VGMPlayAudioProcessor::createEditor (void)
 
 void VGMPlayAudioProcessor::getStateInformation (juce::MemoryBlock& destData)
 {
-	MixerEngine& eng = engine;
+	PlaybackEngine& eng = engine;
 
 	juce::XmlElement state ("VGMPlayState");
 	state.setAttribute ("file", eng.getFile().getFullPathName());
@@ -81,7 +86,7 @@ void VGMPlayAudioProcessor::setStateInformation (const void* data, int sizeInByt
 		return;
 	}
 
-	MixerEngine& eng = engine;
+	PlaybackEngine& eng = engine;
 	eng.setLoopCount (state->getIntAttribute ("loopCount", 1));
 	eng.setFadeSeconds (state->getDoubleAttribute ("fadeSeconds", 3.0));
 	eng.setMasterVolume ((float) state->getDoubleAttribute ("volume", 1.0));

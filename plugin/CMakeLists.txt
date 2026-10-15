@@ -65,7 +65,7 @@ target_sources(VGMPlay PRIVATE
 	Source/PluginProcessor.cpp
 	Source/PluginEditor.cpp
 	Source/playback/BackendRegistry.cpp
-	Source/playback/MixerEngine.cpp
+	Source/playback/PlaybackEngine.cpp
 	Source/backends/BuiltInBackends.cpp
 	Source/backends/libvgm/LibvgmBackend.cpp
 	Source/backends/libvgm/LibvgmSongInstance.cpp
@@ -108,9 +108,9 @@ target_link_libraries(VGMPlay PRIVATE
 #   cmake --build <build dir> --target vgm_mixer_test
 #   <build dir>/plugin/vgm_mixer_test test.vgz 5
 add_executable(vgm_mixer_test EXCLUDE_FROM_ALL
-	Tests/MixerEngineTest.cpp
+	Tests/PlaybackEngineTest.cpp
 	Source/playback/BackendRegistry.cpp
-	Source/playback/MixerEngine.cpp
+	Source/playback/PlaybackEngine.cpp
 	Source/backends/BuiltInBackends.cpp
 	Source/backends/libvgm/LibvgmBackend.cpp
 	Source/backends/libvgm/LibvgmSongInstance.cpp
@@ -118,14 +118,14 @@ add_executable(vgm_mixer_test EXCLUDE_FROM_ALL
 	Source/backends/libvgm/LibvgmVgz.cpp
 )
 # --- console test for the playback core (not built by default) ---
-# Drives MixerEngine through the fake tone backend. Deliberately links **no libvgm code**: if
+# Drives PlaybackEngine through the fake tone backend. Deliberately links **no libvgm code**: if
 # the core still depended on the format engine, this target would not link.
 #   cmake --build <build dir> --target vgm_core_test
 #   <build dir>/plugin/vgm_core_test
 add_executable(vgm_core_test EXCLUDE_FROM_ALL
 	Tests/PlaybackCoreTest.cpp
 	Source/playback/BackendRegistry.cpp
-	Source/playback/MixerEngine.cpp
+	Source/playback/PlaybackEngine.cpp
 	Source/backends/fake/FakeBackend.cpp
 )
 target_include_directories(vgm_core_test PRIVATE Source)

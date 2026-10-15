@@ -2,7 +2,7 @@
 
 #include "Theme.h"
 
-#include "playback/MixerEngine.h"
+#include "playback/PlaybackEngine.h"
 
 #include <utility>
 

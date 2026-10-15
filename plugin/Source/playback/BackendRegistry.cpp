@@ -43,6 +43,27 @@ juce::StringArray BackendRegistry::getFileExtensions (void) const
 	return extensions;
 }
 
+juce::String BackendRegistry::getFileWildcard (void) const
+{
+	juce::StringArray wildcards;
+	for (const auto& extension : getFileExtensions())
+	{
+		wildcards.add ("*" + extension);
+	}
+
+	return wildcards.joinIntoString (";");
+}
+
+juce::String BackendRegistry::getExtensionListText (void) const
+{
+	return getFileExtensions().joinIntoString (" ");
+}
+
+bool BackendRegistry::isSupportedFile (const juce::File& file) const
+{
+	return getFileExtensions().contains (file.getFileExtension().toLowerCase(), true);
+}
+
 juce::StringArray BackendRegistry::getBackendNames (void) const
 {
 	juce::StringArray names;
