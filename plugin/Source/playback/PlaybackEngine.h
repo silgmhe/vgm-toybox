@@ -131,6 +131,10 @@ private:
 		std::atomic<float> peakR { 0.0f };
 	};
 
+	/** Audio thread, lock-free: report silence on the meters (see render()). */
+	void clearTrackPeaks (void);
+	void clearOutputPeaks (void);
+
 	double getPlayLengthSeconds (void) const;			// caller must hold the lock
 	void refreshCachedTimes (void);						// caller must hold the lock
 	void updatePlayerTimeline (void);					// caller must hold the lock

@@ -213,6 +213,20 @@ int main (int /*argc*/, char* /*argv*/[])
 	renderSeconds (engine, 0.8, sampleRate, blockSize);
 	check (engine.isFinished(), "the song reports its end");
 
+	// the meters must not freeze at the last level when the transport stops (no block publishes
+	// a peak then - render() returns early, so the engine reports silence instead)
+	engine.setMixerEnabled (true);
+	engine.setPositionSeconds (0.2);
+	engine.play();
+	renderSeconds (engine, 0.1, sampleRate, blockSize);
+	check (engine.getOutputPeak (0) > 0.01f, "the master meter reads a level while it plays");
+	check (engine.getTrackPeak (0, 0) > 0.01f, "the track meters read a level while it plays");
+
+	engine.stop();
+	renderSeconds (engine, 0.05, sampleRate, blockSize);	// the audio callback keeps running
+	check (engine.getOutputPeak (0) == 0.0f, "stopping clears the master meter");
+	check (engine.getTrackPeak (0, 0) == 0.0f, "stopping clears the track meters");
+
 	// -------------------------------------------------------- [4] the mixer switched off
 	std::printf ("[4] the mixer switched off (single un-isolated player)\n");
 

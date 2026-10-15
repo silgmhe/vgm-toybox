@@ -12,13 +12,14 @@ namespace
 	constexpr int kStripWidth = 88;				// meter + graduations + fader, see ChannelStrip
 	constexpr int kStripGap = 6;
 	constexpr int kGroupGap = 10;
-	constexpr float kMeterDecay = 0.82f;		// per 20 Hz tick (~0.3 s falloff)
+	constexpr float kMeterDecay = 0.82f;		// per refresh tick while playing (~0.3 s falloff)
+	constexpr float kMeterStopDecay = 0.55f;	// while the transport is stopped they drop fast
 
-	/** Peak decay for the meters: rise instantly, fall slowly and settle exactly at zero, so
+	/** Peak decay for the meters: rise instantly, fall smoothly and settle exactly at zero, so
 		the strips stop repainting (they skip a frame when the level does not move). */
-	float decayPeak (float peak, float previous)
+	float decayPeak (float peak, float previous, float decay)
 	{
-		const float decayed = juce::jmax (peak, previous * kMeterDecay);
+		const float decayed = juce::jmax (peak, previous * decay);
 		return (decayed < 0.0005f) ? 0.0f : decayed;	// -66 dB is silence on a meter
 	}
 
@@ -112,11 +113,16 @@ void MixerPanel::refresh (void)
 		repaint (mixerToggle.getBounds().expanded (theme::accentGlowBlur + theme::accentGlowOffsetY + 2));
 	}
 
+	// A stopped (or paused) transport means silence, whatever the last rendered block left
+	// behind, and the meters drop quickly - they must never freeze at the last level.
+	const bool playing = engine.isPlaying();
+	const float decay = playing ? kMeterDecay : kMeterStopDecay;
+
 	const auto& chips = engine.getChips();
 	for (size_t i = 0; i < tracks.size() && i < (size_t) strips.size(); ++i)
 	{
-		meterLeft[i] = decayPeak (engine.getTrackPeak (i, 0), meterLeft[i]);
-		meterRight[i] = decayPeak (engine.getTrackPeak (i, 1), meterRight[i]);
+		meterLeft[i] = decayPeak (playing ? engine.getTrackPeak (i, 0) : 0.0f, meterLeft[i], decay);
+		meterRight[i] = decayPeak (playing ? engine.getTrackPeak (i, 1) : 0.0f, meterRight[i], decay);
 
 		strips[(int) i]->setValues (engine.getTrackGain (i), engine.getTrackPan (i),
 									engine.isTrackMuted (i), engine.isTrackSoloed (i),
@@ -124,8 +130,8 @@ void MixerPanel::refresh (void)
 									deviceIsMuted (chips, tracks[i].deviceId) ? 0.45f : 1.0f);
 	}
 
-	masterPeakL = decayPeak (engine.getOutputPeak (0), masterPeakL);
-	masterPeakR = decayPeak (engine.getOutputPeak (1), masterPeakR);
+	masterPeakL = decayPeak (playing ? engine.getOutputPeak (0) : 0.0f, masterPeakL, decay);
+	masterPeakR = decayPeak (playing ? engine.getOutputPeak (1) : 0.0f, masterPeakR, decay);
 	// the master gain is applied in both modes, so its strip is never dimmed
 	masterStrip.setValues (engine.getMixerMasterGain(), 0.0f, false, false,
 						   masterPeakL, masterPeakR, 1.0f);

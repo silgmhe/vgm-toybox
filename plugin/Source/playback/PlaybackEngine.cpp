@@ -313,6 +313,25 @@ double PlaybackEngine::getTrackPositionSeconds (size_t trackIndex) const
 }
 
 //==============================================================================
+// meters
+
+void PlaybackEngine::clearTrackPeaks (void)
+{
+	// plain atomics, so this needs no lock and is safe from the audio thread
+	for (auto& track : tracks)
+	{
+		track->peakL.store (0.0f);
+		track->peakR.store (0.0f);
+	}
+}
+
+void PlaybackEngine::clearOutputPeaks (void)
+{
+	outputPeakL.store (0.0f);
+	outputPeakR.store (0.0f);
+}
+
+//==============================================================================
 // song facts
 
 void PlaybackEngine::refreshCachedTimes (void)
@@ -583,6 +602,15 @@ void PlaybackEngine::render (float* const* outputs, int numSamples)
 	// the lock at all (a failed try-lock costs a whole silent block)
 	if (! playing.load() || ! loaded.load() || outputs[0] == nullptr || outputs[1] == nullptr)
 	{
+		// No block publishes a level while nothing renders, so the meters would freeze at the
+		// last block's peak - report silence instead. (The UI is not gated on this, it also
+		// drops its meters when the transport is not playing; this keeps the engine's getters
+		// truthful for every other reader.)
+		if (! playing.load())
+		{
+			clearTrackPeaks();
+			clearOutputPeaks();
+		}
 		return;
 	}
 
@@ -603,6 +631,10 @@ void PlaybackEngine::render (float* const* outputs, int numSamples)
 
 	if (! mixerEnabled)
 	{
+		// the strips are inactive in plain player mode, so their meters stay at zero instead of
+		// freezing at whatever they showed when the mixer was switched off
+		clearTrackPeaks();
+
 		playback::ITrackPlayer& player = *trackPlayers[0];
 		const int rendered = player.render (mixLeft.data(), mixRight.data(), usable);
 
