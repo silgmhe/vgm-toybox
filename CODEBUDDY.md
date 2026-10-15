@@ -3,14 +3,16 @@ This file provides guidance to CodeBuddy when working with code in this reposito
 
 ## Overview
 
-VGMPlay is a player for video game music log formats: `.vgm`/`.vgz` (Video Game Music), `.s98`, `.dro` (DOSBox RAW OPL), `.gym` (Genecyst), plus `.m3u` playlists. It is a C++ frontend around the **libvgm** library, which lives in this repository as a git submodule (`libvgm/`, https://github.com/ValleyBell/libvgm.git). `libs/inih` and `libs/wingetopt` are also submodules. Application version is in `version.h` (`APP_NAME`, `VGMPLAY_VER_STR`, `VGM_VER_STR`); changelog is in `Updates.txt`; `VGMPlay.txt` is the user readme.
+This repository plays video game music log formats: `.vgm`/`.vgz` (Video Game Music), `.s98`, `.dro` (DOSBox RAW OPL), `.gym` (Genecyst), plus `.m3u` playlists. Both front-ends are C++ around the **libvgm** library, which lives here as a git submodule (`libvgm/`, https://github.com/ValleyBell/libvgm.git). `libs/inih` and `libs/wingetopt` are also submodules. The command-line player's version is in `version.h` (`APP_NAME`, `VGMPLAY_VER_STR`, `VGM_VER_STR`); changelog is in `Updates.txt`; `VGMPlay.txt` is its user readme.
+
+The fork's own product is **VGM Toybox** (`vgm-toybox`) — the two names are deliberately distinct: everything the plugin builds is "VGM Toybox", while the command-line player keeps the upstream "VGMPlay" identity, so the upstream tool and this fork's plugin never get mixed up.
 
 The repository builds two front-ends on top of the same libvgm libraries:
 
-1. **`VGMPlay64.exe` / `vgmplay`** — the classic command-line player (root directory sources, `PLAYSTATE_*`-driven render loop in `playctrl.cpp`).
-2. **`plugin/`** — a JUCE-based GUI plugin (VST3 + standalone) with a transport UI, seekable progress bar and per-chip mute buttons. See "GUI plugin" in the architecture section.
+1. **`VGMPlay64.exe` / `vgmplay`** — the classic command-line player (root directory sources, `PLAYSTATE_*`-driven render loop in `playctrl.cpp`), upstream's, name and all.
+2. **`plugin/`** — **VGM Toybox**: a JUCE-based GUI plugin (VST3 + standalone, artefacts `VGM Toybox.vst3` / `VGM Toybox.exe`) with a transport UI, seekable progress bar, per-chip mute buttons and a DAW-style mixer with multi-output routing. See "GUI plugin" in the architecture section.
 
-Because there is no README at the repository root, the two authoritative docs are `VGMPlay.txt` (keys, supported formats) and `libvgm/Compiling.txt` (build notes for the library).
+The authoritative docs are `README.md` (what the product is, attribution, build), `VGMPlay.txt` (keys, supported formats) and `libvgm/Compiling.txt` (build notes for the library).
 
 ## Build commands
 
@@ -42,7 +44,7 @@ Static runtime: the root `CMakeLists.txt` sets `CMAKE_MSVC_RUNTIME_LIBRARY=Multi
 
 zlib is compiled from source into the package, so no zlib DLL is needed. Related cache variables: `LIBVGM_ZLIB_FROM_SOURCE` (default `ON`; `OFF` uses a system zlib via `find_package(ZLIB)`), `LIBVGM_ZLIB_TAG` (`v1.3.1`), `LIBVGM_ZLIB_MIRRORS` / `LIBVGM_ZLIB_REPOSITORY` (the build probes GitHub first, then the Gitee mirror, because GitHub is not always reachable), `CPM_SOURCE_CACHE` (source cache, e.g. `H:/cmake_cache`).
 
-The **JUCE plugin** is part of the default build (`TOYBOX_BUILD_PLUGIN`, set to `OFF` by `-NoPlugin`). `plugin/CMakeLists.txt` fetches JUCE with CPM (`JUCE_TAG`, default `8.0.9`; `JUCE_MIRRORS` / `JUCE_REPOSITORY` work like the zlib ones) and builds a VST3 + a standalone application. `build.ps1` exports the Windows system proxy (`HTTP(S)_PROXY`) before configuring, because git/CPM do not read the Windows proxy settings — use `-Proxy <url>` to override or `-NoProxy` to disable.
+The **JUCE plugin** is part of the default build (`TOYBOX_BUILD_PLUGIN`, set to `OFF` by `-NoPlugin`). `plugin/CMakeLists.txt` fetches JUCE with CPM (`JUCE_TAG`, default `8.0.9`; `JUCE_MIRRORS` / `JUCE_REPOSITORY` work like the zlib ones) and builds a VST3 + a standalone application. Its `PLUGIN_MANUFACTURER_CODE`/`PLUGIN_CODE` are deliberately left at the original values: they are the identity a host keeps for a plugin, so changing them would make every DAW project that references this build lose it - the renamed parts are the display name, the bundle id, the target and the artefacts. The saved-state XML tag follows the same rule: it is written as `VGMToyboxState` but the old `VGMPlayState` is still accepted when reading. `build.ps1` exports the Windows system proxy (`HTTP(S)_PROXY`) before configuring, because git/CPM do not read the Windows proxy settings — use `-Proxy <url>` to override or `-NoProxy` to disable.
 
 Notable CMake cache variables: root project `MEDIA_CONTROLS` = `OFF`/`WIN_KEYS`/`WIN_SMTC`/`DBUS` (default `WIN_KEYS` on Windows, `DBUS` on Linux when DBus1 is found, otherwise `OFF`); libvgm-side `BUILD_LIBAUDIO`, `BUILD_LIBEMU`, `BUILD_LIBPLAYER`, `BUILD_TESTS`, `BUILD_PLAYER`, `BUILD_VGM2WAV`, `LIBRARY_TYPE` (`STATIC` default), `SNDEMU__ALL` plus per-chip `SNDEMU_<CHIP>_*` and `AUDIODRV_*` switches. Set `SNDEMU__ALL=OFF` (then enable individual `SNDEMU_<CHIP>_ALL` or `SNDEMU_<CHIP>_<CORE>` options) to compile only selected sound cores.
 
