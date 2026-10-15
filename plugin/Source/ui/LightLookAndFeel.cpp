@@ -32,13 +32,24 @@ LightLookAndFeel::LightLookAndFeel (void)
 	setColour (juce::Slider::trackColourId,						theme::accent());
 	setColour (juce::Slider::thumbColourId,						juce::Colours::white);
 	setColour (juce::Slider::textBoxTextColourId,				theme::primaryText());
-	setColour (juce::Slider::textBoxBackgroundColourId,			juce::Colours::transparentBlack);
+	// Not transparentBlack: createSliderTextBox() feeds this colour to the editing TextEditor
+	// with alpha forced to 1, so a transparent background would become an opaque black box.
+	setColour (juce::Slider::textBoxBackgroundColourId,			theme::card());
 	setColour (juce::Slider::textBoxOutlineColourId,			juce::Colours::transparentBlack);
 	setColour (juce::Slider::textBoxHighlightColourId,			theme::accent().withAlpha (0.25f));
 
 	setColour (juce::ToggleButton::textColourId,				theme::primaryText());
 	setColour (juce::ToggleButton::tickColourId,				theme::accent());
 	setColour (juce::ToggleButton::tickDisabledColourId,		theme::border());
+
+	// text editors (the slider text boxes when they are being typed into) - the light scheme
+	// would be readable by itself, these just keep them on the app's palette
+	setColour (juce::TextEditor::backgroundColourId,			theme::card());
+	setColour (juce::TextEditor::textColourId,					theme::primaryText());
+	setColour (juce::TextEditor::outlineColourId,				theme::border());
+	setColour (juce::TextEditor::focusedOutlineColourId,		theme::accent());
+	setColour (juce::TextEditor::highlightColourId,				theme::accent().withAlpha (0.25f));
+	setColour (juce::TextEditor::highlightedTextColourId,		juce::Colours::white);
 
 	setColour (juce::TooltipWindow::backgroundColourId,			juce::Colour (0xf7ffffff));
 	setColour (juce::TooltipWindow::textColourId,				theme::primaryText());

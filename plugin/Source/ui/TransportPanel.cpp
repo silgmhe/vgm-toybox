@@ -80,7 +80,10 @@ TransportPanel::TransportPanel (vgmplay::MixerEngine& engineToUse)
 	// this slider has no parent yet, so the lookup would fall back to the default (dark)
 	// LookAndFeel - the number would stay white for the lifetime of that label.
 	volumeSlider.setColour (juce::Slider::textBoxTextColourId, theme::primaryText());
-	volumeSlider.setColour (juce::Slider::textBoxBackgroundColourId, juce::Colours::transparentBlack);
+	// Must be opaque: JUCE's createSliderTextBox() copies this colour into the *editor* that
+	// appears while typing and forces alpha to 1, so a transparent black would turn into an
+	// opaque black box with dark text in it.
+	volumeSlider.setColour (juce::Slider::textBoxBackgroundColourId, theme::card());
 	volumeSlider.setColour (juce::Slider::textBoxOutlineColourId, theme::border());
 	volumeSlider.setColour (juce::Slider::textBoxHighlightColourId, theme::accent().withAlpha (0.25f));
 	// the text formatting has to be in place before the text box is created as well, otherwise
