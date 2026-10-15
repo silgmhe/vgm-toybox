@@ -7,6 +7,16 @@
 using namespace vgmplay;
 using namespace vgmplay::ui;
 
+namespace
+{
+	// The UI repaints on demand, so the refresh rate is exactly what the GPU pays for: on
+	// Windows every repaint makes the desktop compositor touch the window area again. 15 Hz
+	// while a song plays (meters and the seek bar move) is smooth enough, and when nothing
+	// moves the timer only refreshes state at a low rate - there is nothing to repaint then.
+	constexpr int kPlayingRefreshHz = 15;
+	constexpr int kIdleRefreshHz = 10;
+}
+
 VGMPlayAudioProcessorEditor::VGMPlayAudioProcessorEditor (VGMPlayAudioProcessor& p)
 	: AudioProcessorEditor (&p),
 	  processor (p),
@@ -61,7 +71,8 @@ VGMPlayAudioProcessorEditor::VGMPlayAudioProcessorEditor (VGMPlayAudioProcessor&
 		}
 	}
 
-	startTimerHz (20);
+	refreshHz = kIdleRefreshHz;
+	startTimerHz (refreshHz);
 }
 
 VGMPlayAudioProcessorEditor::~VGMPlayAudioProcessorEditor()
@@ -282,6 +293,15 @@ void VGMPlayAudioProcessorEditor::rebuildChipButtons (void)
 
 void VGMPlayAudioProcessorEditor::timerCallback (void)
 {
+	// only a running transport animates the meters and the seek bar - that is when the higher
+	// rate is worth anything
+	const int wantedHz = engine.isPlaying() ? kPlayingRefreshHz : kIdleRefreshHz;
+	if (wantedHz != refreshHz)
+	{
+		refreshHz = wantedHz;
+		startTimerHz (refreshHz);
+	}
+
 	transportPanel.refresh();
 	songInfoPanel.refresh();
 	mixerPanel.refresh();

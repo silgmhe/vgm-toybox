@@ -1,5 +1,7 @@
 #include "ChannelStrip.h"
 
+#include <cmath>
+
 #include "MeterScale.h"
 #include "Theme.h"
 
@@ -103,7 +105,18 @@ void ChannelStrip::setValues (float gain, float pan, bool muted, bool soloed,
 	peakR = peakRValue;
 
 	setAlpha (dim);		// dims the strip (and its controls) while its chip is muted
-	repaint();			// the meters changed
+
+	// Only the meter area is repainted, and only when it actually moved: repainting the strip
+	// would drag its child controls into every frame, and each of those draws a blurred
+	// shadow - that is what makes the difference between a quiet mixer and a busy GPU.
+	const bool meterMoved = (std::abs (peakL - drawnPeakL) > 0.001f
+							 || std::abs (peakR - drawnPeakR) > 0.001f);
+	if (meterMoved)
+	{
+		drawnPeakL = peakL;
+		drawnPeakR = peakR;
+		repaint (meterBounds.isEmpty() ? getLocalBounds() : meterBounds.expanded (1));
+	}
 }
 
 void ChannelStrip::resized (void)

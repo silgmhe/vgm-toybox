@@ -61,6 +61,7 @@ private:
 
 	std::unique_ptr<juce::FileChooser> fileChooser;
 	juce::String lastError;
+	int refreshHz = 0;	// the rate the refresh timer currently runs at (see timerCallback())
 
 	JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (VGMPlayAudioProcessorEditor)
 };

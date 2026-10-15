@@ -57,6 +57,9 @@ private:
 	bool master = false;
 	float peakL = 0.0f;
 	float peakR = 0.0f;
+	// what the meter area currently shows - the 20 Hz refresh only repaints when this changes
+	float drawnPeakL = -1.0f;
+	float drawnPeakR = -1.0f;
 
 	JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (ChannelStrip)
 };

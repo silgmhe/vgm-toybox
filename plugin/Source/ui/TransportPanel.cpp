@@ -405,7 +405,15 @@ void TransportPanel::refresh (void)
 	{
 		const double position = engine.getPositionSeconds();
 		const double sliderValue = (duration > 0.0) ? juce::jlimit (0.0, 1.0, position / duration) : 0.0;
-		positionSlider.setValue (sliderValue, juce::dontSendNotification);
+
+		// A value change repaints the whole seek bar, so movements that would not even shift the
+		// thumb by half a pixel are dropped - on a long song that is a window-area present for
+		// nothing.
+		const double width = (double) juce::jmax (1, positionSlider.getWidth());
+		if (std::abs (sliderValue - positionSlider.getValue()) * width >= 0.5)
+		{
+			positionSlider.setValue (sliderValue, juce::dontSendNotification);
+		}
 	}
 }
 

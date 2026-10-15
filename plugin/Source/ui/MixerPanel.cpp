@@ -14,6 +14,14 @@ namespace
 	constexpr int kGroupGap = 10;
 	constexpr float kMeterDecay = 0.82f;		// per 20 Hz tick (~0.3 s falloff)
 
+	/** Peak decay for the meters: rise instantly, fall slowly and settle exactly at zero, so
+		the strips stop repainting (they skip a frame when the level does not move). */
+	float decayPeak (float peak, float previous)
+	{
+		const float decayed = juce::jmax (peak, previous * kMeterDecay);
+		return (decayed < 0.0005f) ? 0.0f : decayed;	// -66 dB is silence on a meter
+	}
+
 	bool deviceIsMuted (const std::vector<vgmplay::ChipEntry>& chips, UINT32 deviceID)
 	{
 		for (const auto& chip : chips)
@@ -107,9 +115,8 @@ void MixerPanel::refresh (void)
 	const auto& chips = engine.getChips();
 	for (size_t i = 0; i < tracks.size() && i < (size_t) strips.size(); ++i)
 	{
-		// the meters rise instantly and fall slowly
-		meterLeft[i] = juce::jmax (engine.getTrackPeak (i, 0), meterLeft[i] * kMeterDecay);
-		meterRight[i] = juce::jmax (engine.getTrackPeak (i, 1), meterRight[i] * kMeterDecay);
+		meterLeft[i] = decayPeak (engine.getTrackPeak (i, 0), meterLeft[i]);
+		meterRight[i] = decayPeak (engine.getTrackPeak (i, 1), meterRight[i]);
 
 		strips[(int) i]->setValues (engine.getTrackGain (i), engine.getTrackPan (i),
 									engine.isTrackMuted (i), engine.isTrackSoloed (i),
@@ -117,8 +124,8 @@ void MixerPanel::refresh (void)
 									deviceIsMuted (chips, tracks[i].deviceID) ? 0.45f : 1.0f);
 	}
 
-	masterPeakL = juce::jmax (engine.getOutputPeak (0), masterPeakL * kMeterDecay);
-	masterPeakR = juce::jmax (engine.getOutputPeak (1), masterPeakR * kMeterDecay);
+	masterPeakL = decayPeak (engine.getOutputPeak (0), masterPeakL);
+	masterPeakR = decayPeak (engine.getOutputPeak (1), masterPeakR);
 	// the master gain is applied in both modes, so its strip is never dimmed
 	masterStrip.setValues (engine.getMixerMasterGain(), 0.0f, false, false,
 						   masterPeakL, masterPeakR, 1.0f);
