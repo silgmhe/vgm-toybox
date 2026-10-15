@@ -119,6 +119,11 @@ public:
 	double getTrackPositionSeconds (size_t trackIndex) const;
 
 	// --- output routing ---
+	/** The routing scheme **newly loaded songs** start with - the mixer card's two shortcut
+		buttons set it. Applying it also re-routes the song that is loaded right now. */
+	void setDefaultRouting (playback::DefaultRouting mode);
+	playback::DefaultRouting getDefaultRouting (void) const { return defaultRouting; }
+
 	/** Destination of one track: `kMasterOutput` (the default) or a real bus index. Values
 		outside the declared range are clamped to the master bus. Lock-free (one atomic). */
 	void setTrackOutput (size_t trackIndex, playback::OutputTarget target);
@@ -162,6 +167,8 @@ private:
 	void enumerateChips (void);
 	void applyTrackIsolation (void);					// caller must hold the lock
 	void applyChipMutes (void);							// caller must hold the lock
+	/** Sets every track (and a new song's tracks) to the current routing scheme. */
+	void applyDefaultRouting (void);					// caller must hold the lock
 	bool createPlayers (juce::String& errorMessage);	// caller must hold the lock
 	void destroyPlayers (void);
 	void rebuildPlayers (juce::String& errorMessage);	// caller must hold the lock
@@ -176,6 +183,9 @@ private:
 	std::vector<playback::TrackInfo> trackLayout;
 	std::atomic<int> soloCount { 0 };
 	bool mixerEnabled = true;	// the mixer card is always there - off is the CPU-saving opt-out
+	// the routing scheme new songs start with (message thread only - the audio thread reads the
+	// per-track targets, never this)
+	playback::DefaultRouting defaultRouting = playback::DefaultRouting::master;
 
 	juce::MemoryBlock fileData;			// the song image; the backend loads its players from it
 	juce::File currentFile;

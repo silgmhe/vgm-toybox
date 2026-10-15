@@ -134,6 +134,18 @@ void MixerPanel::refresh (void)
 	spreadOutputsButton.setEnabled (canRoute);
 	mergeToMasterButton.setEnabled (canRoute);
 
+	// They behave like a radio pair for the current *default*: the active scheme lights up, so
+	// a glance tells which routing a newly loaded song will start with.
+	const bool spreadDefault = (engine.getDefaultRouting() == playback::DefaultRouting::spreadAcrossBuses);
+	if (spreadOutputsButton.getToggleState() != spreadDefault)
+	{
+		spreadOutputsButton.setToggleState (spreadDefault, juce::dontSendNotification);
+	}
+	if (mergeToMasterButton.getToggleState() == spreadDefault)
+	{
+		mergeToMasterButton.setToggleState (! spreadDefault, juce::dontSendNotification);
+	}
+
 	// A stopped (or paused) transport means silence, whatever the last rendered block left
 	// behind, and the meters drop quickly - they must never freeze at the last level.
 	const bool playing = engine.isPlaying();
@@ -224,30 +236,14 @@ void MixerPanel::refresh (void)
 
 void MixerPanel::spreadTrackOutputs (void)
 {
-	const size_t numTracks = engine.getTracks().size();
-
-	for (size_t i = 0; i < numTracks; ++i)
-	{
-		// track 1 -> Out 1/2 (bus 0), track 2 -> Out 3/4 (bus 1), ... - tracks beyond the
-		// declared buses keep going to the master, there is no bus left to give them
-		const playback::OutputTarget target = ((int) i < playback::kOutputBusCount)
-												  ? (playback::OutputTarget) i
-												  : playback::kMasterOutput;
-		engine.setTrackOutput (i, target);
-	}
-
+	// the engine applies the scheme to the loaded song *and* remembers it for the next one
+	engine.setDefaultRouting (playback::DefaultRouting::spreadAcrossBuses);
 	refresh();		// the strips' selectors follow right away
 }
 
 void MixerPanel::sendTrackOutputsToMaster (void)
 {
-	const size_t numTracks = engine.getTracks().size();
-
-	for (size_t i = 0; i < numTracks; ++i)
-	{
-		engine.setTrackOutput (i, playback::kMasterOutput);
-	}
-
+	engine.setDefaultRouting (playback::DefaultRouting::master);
 	refresh();
 }
 

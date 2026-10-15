@@ -437,6 +437,16 @@ void PlaybackEngine::applyChipMutes (void)
 	}
 }
 
+void PlaybackEngine::applyDefaultRouting (void)
+{
+	// Track n goes to bus n under `spreadAcrossBuses`, everything to the master otherwise. The
+	// scheme survives loading another song: createPlayers() applies it to the fresh track states.
+	for (size_t i = 0; i < tracks.size(); ++i)
+	{
+		tracks[i]->output.store (playback::defaultTargetForTrack (defaultRouting, (int) i));
+	}
+}
+
 void PlaybackEngine::applyTrackIsolation (void)
 {
 	if (! mixerEnabled)
@@ -502,6 +512,10 @@ bool PlaybackEngine::createPlayers (juce::String& errorMessage)
 		{
 			tracks.push_back (std::make_unique<TrackState>());
 		}
+
+		// A new song inherits the routing scheme the user picked with the mixer card's shortcut
+		// buttons - untouched, that is "everything to the master bus", the classic behaviour.
+		applyDefaultRouting();
 	}
 
 	// One player per track when the backend can isolate them, a single un-isolated one
@@ -611,6 +625,14 @@ void PlaybackEngine::setMasterOutput (playback::OutputTarget busIndex)
 {
 	// the master bus cannot target itself: anything invalid becomes bus 0 ("Out 1/2")
 	masterOutput.store (playback::isRealOutputBus (busIndex) ? busIndex : 0);
+}
+
+void PlaybackEngine::setDefaultRouting (playback::DefaultRouting mode)
+{
+	// the lock guards the track list while it is walked; the targets themselves are atomics
+	const juce::ScopedLock sl (lock);
+	defaultRouting = mode;
+	applyDefaultRouting();
 }
 
 bool PlaybackEngine::isOutputBusConnected (int busIndex) const

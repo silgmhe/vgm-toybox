@@ -195,10 +195,11 @@ for (int bus = 1; bus < playback::kOutputBusCount; ++bus)
 - 刷新时组装 `OutputOption` 列表（哪些总线"已连接"由引擎上报：`PlaybackEngine::isOutputBusConnected (int)`，由插件每块写入的原子位图提供）；
 - 把每轨 `getTrackOutput()` 与 `getMasterOutput()` / `isMasterMuted()` 喂给通道条（沿用现有 `setValues` 外挂两个参数的方法，不破坏既有签名）。
 - Master 条的回调：`onOutputChanged` → `setMasterOutput`；`onMuteChanged` → `setMasterMuted`。
-- 卡片头部（混音开关左侧）另有两个**路由快捷按钮**（后加的便利功能）：
-  - **分散输出**：轨道 *n* → 总线 *n*（`Out 1/2`、`Out 3/4`…）；超出总线数量的轨道留在 Master（没有总线可分）。
-  - **全部回 Master**：所有轨道目标改回 `Master`。
-  - 两者在**关闭混音器时置灰**（此时路由不生效，R8），点击后立即 `refresh()`，下拉同步更新。
+- 卡片头部（混音开关左侧）另有两个**路由快捷按钮**（后加的便利功能），它们设置的是引擎的**默认路由方案** `DefaultRouting`：
+  - **分散输出**（`spreadAcrossBuses`）：轨道 *n* → 总线 *n*（`Out 1/2`、`Out 3/4`…）；超出总线数量的轨道留在 Master（没有总线可分）。
+  - **全部回 Master**（`master`）：所有轨道目标改回 `Master`（**默认方案**，未触碰时即今天的行为）。
+  - 点击 → `PlaybackEngine::setDefaultRouting()`：**立即作用于当前歌曲**，并且**之后加载的每首歌都以该方案开始**（轨道状态在新歌加载时由 `createPlayers()` 创建，随即套用该方案）。方案**跨文件保持**，与"不持久化到宿主会话"（R9）不冲突：它是本次运行期的偏好，不写入会话。
+  - 两个按钮同时充当**单选指示**（当前方案高亮）；**关闭混音器时置灰**（此时路由不生效，R8）；点击后立即 `refresh()`，下拉同步更新。
 
 ### 6.3 引擎侧的"已连接"上报
 

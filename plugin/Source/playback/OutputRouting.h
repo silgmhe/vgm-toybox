@@ -38,6 +38,27 @@ inline bool isRealOutputBus (OutputTarget target)
 	return target >= 0 && target < kOutputBusCount;
 }
 
+/** The routing scheme a freshly loaded song starts with (the mixer card's shortcut buttons). */
+enum class DefaultRouting
+{
+	/** Everything goes to the internal master bus - the classic single-output behaviour. */
+	master,
+	/** Track n goes to bus n: track 1 -> "Out 1/2", track 2 -> "Out 3/4", ... */
+	spreadAcrossBuses
+};
+
+/** Where track `trackIndex` goes under a routing scheme. Tracks beyond the declared buses stay
+	on the master - there is no bus left to give them. */
+inline OutputTarget defaultTargetForTrack (DefaultRouting mode, int trackIndex)
+{
+	if (mode == DefaultRouting::spreadAcrossBuses && trackIndex >= 0 && trackIndex < kOutputBusCount)
+	{
+		return trackIndex;
+	}
+
+	return kMasterOutput;
+}
+
 /** One stereo pair per output bus, as the host hands it to our render().
 	A bus the host has not connected has both pointers null (nothing is rendered into it). */
 struct OutputBusBuffers

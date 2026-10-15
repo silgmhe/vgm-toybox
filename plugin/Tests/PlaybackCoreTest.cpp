@@ -325,6 +325,35 @@ int main (int /*argc*/, char* /*argv*/[])
 	check (near (dropped[0].rms, expectedRest, 0.002), "a track on an unconnected bus is silent");
 	engine.setTrackOutput (1, vgmplay::playback::kMasterOutput);
 
+	// --------------------------------------- [6] the routing scheme new songs start with
+	std::printf ("[6] the default routing scheme\n");
+
+	// spreading applies to the loaded song right away ...
+	engine.setDefaultRouting (vgmplay::playback::DefaultRouting::spreadAcrossBuses);
+	check (engine.getTrackOutput (0) == 0, "spread sends track 1 to Out 1/2");
+	check (engine.getTrackOutput (1) == 1, "spread sends track 2 to Out 3/4");
+	check (engine.getTrackOutput (2) == 2, "spread sends track 3 to Out 5/6");
+
+	// ... and the next song inherits it (loading the same file again = a fresh track list)
+	engine.setPositionSeconds (0.0);
+	engine.play();
+	check (engine.loadFile (file, error), "the song loads again");
+	check (engine.getDefaultRouting() == vgmplay::playback::DefaultRouting::spreadAcrossBuses,
+		   "the scheme survived the load");
+	check (engine.getTrackOutput (0) == 0 && engine.getTrackOutput (1) == 1,
+		   "and the new song starts spread across the buses");
+
+	// switching back to the master scheme applies and sticks the same way
+	engine.setDefaultRouting (vgmplay::playback::DefaultRouting::master);
+	check (engine.getTrackOutput (0) == vgmplay::playback::kMasterOutput,
+		   "sending everything to the master applies at once");
+	check (engine.loadFile (file, error), "the song loads once more");
+	check (engine.getTrackOutput (0) == vgmplay::playback::kMasterOutput
+			   && engine.getTrackOutput (1) == vgmplay::playback::kMasterOutput,
+		   "and the new song starts on the master bus");
+	engine.setPositionSeconds (0.0);
+	engine.play();
+
 	// -------------------------------------------------------- [4] the mixer switched off
 	std::printf ("[4] the mixer switched off (single un-isolated player)\n");
 
