@@ -225,6 +225,21 @@ if ($NoPlugin) {
 	$cmakeOptions += '-DVGMPLAY_BUILD_PLUGIN=OFF'
 	Write-Host 'plugin build disabled by -NoPlugin' -ForegroundColor DarkGray
 }
+# --- the playback core must stay free of format engine headers -------------------------------
+# The whole point of the playback port (docs/playback-backend-design.md) is that everything
+# outside Source/backends/ is format agnostic - a stray include would silently put libvgm back
+# into the UI, so it fails the build instead.
+Write-Step 'Checking the backend isolation'
+$isolationOffenders = Get-ChildItem -Path (Join-Path $SourceDir 'plugin\Source') -Recurse -File -Include '*.h', '*.cpp' |
+	Where-Object { $_.FullName -notmatch '\\backends\\' } |
+	Select-String -Pattern '#include\s+"(stdtype\.h|player/|emu/|utils/|vgm/)'
+if ($isolationOffenders) {
+	$isolationOffenders | ForEach-Object {
+		Write-Host ('  {0}:{1}: {2}' -f $_.Path, $_.LineNumber, $_.Line.Trim()) -ForegroundColor Red
+	}
+	throw 'A file outside plugin/Source/backends/ includes a format engine header.'
+}
+
 Invoke-Native 'cmake' (@(
 	'-S', $sourceDir,
 	'-B', $buildDir,

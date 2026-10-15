@@ -2,7 +2,7 @@
 
 #include <juce_audio_processors/juce_audio_processors.h>
 
-#include "vgm/MixerEngine.h"
+#include "playback/MixerEngine.h"
 
 /**
 	Audio processor of the VGMPlay plugin.

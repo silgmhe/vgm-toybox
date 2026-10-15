@@ -64,6 +64,13 @@ juce_add_plugin(VGMPlay
 target_sources(VGMPlay PRIVATE
 	Source/PluginProcessor.cpp
 	Source/PluginEditor.cpp
+	Source/playback/BackendRegistry.cpp
+	Source/playback/MixerEngine.cpp
+	Source/backends/BuiltInBackends.cpp
+	Source/backends/libvgm/LibvgmBackend.cpp
+	Source/backends/libvgm/LibvgmSongInstance.cpp
+	Source/backends/libvgm/LibvgmTrackPlayer.cpp
+	Source/backends/libvgm/LibvgmVgz.cpp
 	Source/ui/CardComponent.cpp
 	Source/ui/ChannelStrip.cpp
 	Source/ui/ChipPanel.cpp
@@ -74,9 +81,6 @@ target_sources(VGMPlay PRIVATE
 	Source/ui/MixerPanel.cpp
 	Source/ui/SongInfoPanel.cpp
 	Source/ui/TransportPanel.cpp
-	Source/vgm/MixerEngine.cpp
-	Source/vgm/TrackLayout.cpp
-	Source/vgm/TrackPlayer.cpp
 )
 
 target_include_directories(VGMPlay PRIVATE Source)
@@ -105,10 +109,33 @@ target_link_libraries(VGMPlay PRIVATE
 #   <build dir>/plugin/vgm_mixer_test test.vgz 5
 add_executable(vgm_mixer_test EXCLUDE_FROM_ALL
 	Tests/MixerEngineTest.cpp
-	Source/vgm/MixerEngine.cpp
-	Source/vgm/TrackLayout.cpp
-	Source/vgm/TrackPlayer.cpp
+	Source/playback/BackendRegistry.cpp
+	Source/playback/MixerEngine.cpp
+	Source/backends/BuiltInBackends.cpp
+	Source/backends/libvgm/LibvgmBackend.cpp
+	Source/backends/libvgm/LibvgmSongInstance.cpp
+	Source/backends/libvgm/LibvgmTrackPlayer.cpp
+	Source/backends/libvgm/LibvgmVgz.cpp
 )
+# --- console test for the playback core (not built by default) ---
+# Drives MixerEngine through the fake tone backend. Deliberately links **no libvgm code**: if
+# the core still depended on the format engine, this target would not link.
+#   cmake --build <build dir> --target vgm_core_test
+#   <build dir>/plugin/vgm_core_test
+add_executable(vgm_core_test EXCLUDE_FROM_ALL
+	Tests/PlaybackCoreTest.cpp
+	Source/playback/BackendRegistry.cpp
+	Source/playback/MixerEngine.cpp
+	Source/backends/fake/FakeBackend.cpp
+)
+target_include_directories(vgm_core_test PRIVATE Source)
+target_compile_definitions(vgm_core_test PRIVATE JUCE_STANDALONE_APPLICATION=1)
+target_link_libraries(vgm_core_test PRIVATE
+	juce::juce_core
+	juce::juce_audio_basics
+	juce::juce_recommended_config_flags
+)
+
 target_include_directories(vgm_mixer_test PRIVATE Source)
 target_compile_definitions(vgm_mixer_test PRIVATE JUCE_STANDALONE_APPLICATION=1)
 target_link_libraries(vgm_mixer_test PRIVATE

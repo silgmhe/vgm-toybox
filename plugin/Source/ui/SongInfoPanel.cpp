@@ -3,7 +3,7 @@
 #include "Format.h"
 #include "Theme.h"
 
-#include "vgm/MixerEngine.h"
+#include "playback/MixerEngine.h"
 
 namespace vgmplay::ui
 {

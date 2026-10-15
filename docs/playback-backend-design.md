@@ -362,6 +362,25 @@ Source/
 5. 独立运行与 VST3 构建、冒烟测试通过；`dist` 可听可用。
 6. 文档：`CODEBUDDY.md` 新增"播放后端端口"章节；`docs/mixer-milestones.md` 记录 M2.5。
 
+### 9.2b 实施记录（P1，已完成 2026-10-15）
+
+| 项 | 结果 |
+|---|---|
+| 端口 + 注册表 | `Source/playback/SongBackend.h`（三端口 + 边界类型 + 能力位 + 隔离模式）、`BackendRegistry.{h,cpp}`（编译期注册 + 扩展名查询） |
+| libvgm 适配器 | `Source/backends/libvgm/`：`LibvgmBackend`（识别 + 打开）、`LibvgmSongInstance`（探针玩家：标签/设备/轨道/时间线）、`LibvgmTrackPlayer`（原 `TrackPlayer` + 端口）、`LibvgmMuteIsolation.h`（mute 位序/挂起映射）、`LibvgmVgz`（解包） |
+| 核心 | `MixerEngine` 迁至 `Source/playback/`，**零 libvgm include**；旧的 `Source/vgm/*` 已删除 |
+| 测试（硬门禁） | `vgm_mixer_test` 全部通过，`plain vs mixer` 仍为 **−1000.00 dB（逐样本一致）**，其余电平检查数值与重构前完全相同 |
+| 测试（解耦证明） | 新增 `vgm_core_test`：核心 + `FakeBackend`（三音合成后端），**不链接任何 libvgm 代码**——仍依赖 libvgm 的核心会直接链接失败；含 20 项解析式校验（三音求和 0.306186、单音 0.176777、增益/声像/静音/独奏/两级音量/seek/结束/关闭混音）全部通过 |
+| 源码守卫 | `build.ps1` 在构建前扫描 `plugin/Source`：`backends/` 之外出现任何 libvgm 头 include 即报错 |
+
+**实施中的三处端口精化**（已同步进 `SongBackend.h`，与 §4.2 的初稿有差异）：
+
+1. `ITrackPlayer` 不再有 `prepare()`/`load()`：玩家由 `ISongInstance::createPlayer()` **建好即就绪**（已按宿主采样率准备好、已加载）。原因：`.vgz` 之类容器的解包属于后端内部事务，核心不该知道"要给哪个内存给它"。
+2. `ISongInstance` 增加 `bool prepare(rate, block, error)`：实例需要一个探针玩家来产出元数据与时间线事实，而探针必须在正确的采样率下建立。
+3. `ITrackPlayer::pause()` 允许是空操作（libvgm 只在 `Render()` 中推进，暂停本就在核心侧体现为"不渲染"）。
+
+**实施中的重要发现**：libvgm 的 `GetSongDeviceInfo()` 与 `GetLoopTime()` 只有在玩家**开始播放（`Start()`）之后**才报告完整结果——探针玩家若停在加载态，VGM 会退化成"单设备无通道"（本次出现 1 轨 1 芯片、混音静音的假象）。适配器现在与旧实现一致：`load → setTimeline → start → 枚举 → 取时间线事实`。
+
 ### 9.3 回滚策略
 
 每步一个提交；P1 是唯一的大步，其"只搬家不改逻辑"约束保证失败时 `git revert` 即可回到今天的状态。

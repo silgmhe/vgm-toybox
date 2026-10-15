@@ -22,11 +22,11 @@ namespace
 		return (decayed < 0.0005f) ? 0.0f : decayed;	// -66 dB is silence on a meter
 	}
 
-	bool deviceIsMuted (const std::vector<vgmplay::ChipEntry>& chips, UINT32 deviceID)
+	bool deviceIsMuted (const std::vector<vgmplay::ChipEntry>& chips, vgmplay::playback::DeviceId deviceId)
 	{
 		for (const auto& chip : chips)
 		{
-			if (chip.devID == deviceID)
+			if (chip.deviceId == deviceId)
 			{
 				return chip.muted;
 			}
@@ -121,7 +121,7 @@ void MixerPanel::refresh (void)
 		strips[(int) i]->setValues (engine.getTrackGain (i), engine.getTrackPan (i),
 									engine.isTrackMuted (i), engine.isTrackSoloed (i),
 									meterLeft[i], meterRight[i],
-									deviceIsMuted (chips, tracks[i].deviceID) ? 0.45f : 1.0f);
+									deviceIsMuted (chips, tracks[i].deviceId) ? 0.45f : 1.0f);
 	}
 
 	masterPeakL = decayPeak (engine.getOutputPeak (0), masterPeakL);

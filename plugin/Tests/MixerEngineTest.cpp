@@ -21,7 +21,7 @@
 #include <juce_audio_basics/juce_audio_basics.h>
 #include <juce_core/juce_core.h>
 
-#include "vgm/MixerEngine.h"
+#include "playback/MixerEngine.h"
 
 namespace
 {
@@ -225,11 +225,11 @@ int main (int argc, char* argv[])
 					 tracks[i].groupName.toRawUTF8(), tracks[i].name.toRawUTF8());
 	}
 
-	std::set<UINT32> deviceIDs;
+	std::set<vgmplay::playback::DeviceId> deviceIDs;
 	bool namesOk = ! tracks.empty();
 	for (const auto& track : tracks)
 	{
-		deviceIDs.insert (track.deviceID);
+		deviceIDs.insert (track.deviceId);
 		namesOk = namesOk && track.name.isNotEmpty() && track.groupName.isNotEmpty();
 	}
 	check (! tracks.empty(), "the song has mixer tracks");
