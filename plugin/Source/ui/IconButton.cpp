@@ -66,6 +66,10 @@ void IconButton::paintButton (juce::Graphics& g, bool isMouseOverButton, bool is
 	{
 		drawPlayStartGlyph (g, iconArea, iconColour);
 	}
+	else if (icon == Icon::sliders)
+	{
+		drawSlidersGlyph (g, iconArea, iconColour);
+	}
 	else
 	{
 		drawRepeatGlyph (g, iconArea, iconColour);

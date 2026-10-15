@@ -12,7 +12,8 @@ VGMPlayAudioProcessorEditor::VGMPlayAudioProcessorEditor (VGMPlayAudioProcessor&
 	  processor (p),
 	  engine (p.getEngine()),
 	  songInfoPanel (engine),
-	  transportPanel (engine)
+	  transportPanel (engine),
+	  mixerPanel (engine)
 {
 	setLookAndFeel (&lookAndFeel);
 
@@ -33,6 +34,8 @@ VGMPlayAudioProcessorEditor::VGMPlayAudioProcessorEditor (VGMPlayAudioProcessor&
 	addAndMakeVisible (transportPanel);
 	// hidden until a file with sound chips is loaded (ChipPanel::rebuild sets the visibility)
 	addChildComponent (chipPanel);
+	// hidden while no song with tracks is loaded (MixerPanel::refresh sets the visibility)
+	addChildComponent (mixerPanel);
 	// full-size overlay, hidden until a file is dragged over the editor
 	addChildComponent (dropHint);
 
@@ -40,8 +43,24 @@ VGMPlayAudioProcessorEditor::VGMPlayAudioProcessorEditor (VGMPlayAudioProcessor&
 	updateStatusLine();
 
 	setResizable (true, true);
-	setResizeLimits (640, 420, 1400, 900);
-	setSize (780, 470);
+	// only a minimum size: the layout stretches, so the window can be resized freely and even
+	// be maximised - the mixer card takes whatever the middle has to offer
+	setResizeLimits (660, 520, 32768, 32768);
+	setSize (820, 650);		// room for the cards down to the mixer without scrolling the window
+
+	// The standalone window only offers minimise/close; add the maximise button so it can fill
+	// the screen. Hosts manage their own windows, so this happens for the standalone wrapper
+	// only (the editor copes with any size either way).
+	if (processor.wrapperType == juce::AudioProcessor::wrapperType_Standalone)
+	{
+		if (auto* window = dynamic_cast<juce::DocumentWindow*> (getTopLevelComponent()))
+		{
+			window->setTitleBarButtonsRequired (juce::DocumentWindow::minimiseButton
+												| juce::DocumentWindow::maximiseButton
+												| juce::DocumentWindow::closeButton, false);
+		}
+	}
+
 	startTimerHz (20);
 }
 
@@ -71,6 +90,10 @@ void VGMPlayAudioProcessorEditor::paint (juce::Graphics& g)
 	{
 		drawCardShadow (g, chipPanel.getBounds().toFloat());
 	}
+	if (mixerPanel.isVisible() && ! mixerPanel.getBounds().isEmpty())
+	{
+		drawCardShadow (g, mixerPanel.getBounds().toFloat());
+	}
 	drawSoftShadow (g, openButton.getBounds().toFloat(), theme::buttonRadius,
 					theme::accentGlow(), theme::accentGlowBlur, { 0, theme::accentGlowOffsetY });
 }
@@ -97,14 +120,36 @@ void VGMPlayAudioProcessorEditor::resized (void)
 	songInfoPanel.setBounds (area.removeFromTop (infoHeight));
 	area.removeFromTop (theme::cardGap);
 
-	// chip mute card (+ section header) - it does not take any space while it is hidden
+	// chip mute card (+ section header) - it takes no space while it is hidden and never eats
+	// into the mixer's minimum height
 	if (chipPanel.hasChips())
 	{
-		const int chipsHeight = juce::jmin (chipPanel.getPreferredHeight (area.getWidth()), area.getHeight());
+		const int chipsHeight = juce::jmin (chipPanel.getPreferredHeight (area.getWidth()),
+											juce::jmax (0, area.getHeight() - MixerPanel::minimumHeight));
 		if (chipsHeight > 0)
 		{
 			chipPanel.setBounds (area.removeFromTop (chipsHeight));
+			area.removeFromTop (theme::cardGap);
 		}
+		else
+		{
+			chipPanel.setBounds ({});
+		}
+	}
+	else
+	{
+		chipPanel.setBounds ({});
+	}
+
+	// The mixer card owns the whole area between the chips card and the transport card - it
+	// simply follows the window height (its strips scroll inside).
+	if (mixerPanel.isVisible())
+	{
+		mixerPanel.setBounds (area);
+	}
+	else
+	{
+		mixerPanel.setBounds ({});
 	}
 
 	dropHint.setBounds (getLocalBounds());
@@ -216,9 +261,11 @@ void VGMPlayAudioProcessorEditor::loadFile (const juce::File& file)
 	}
 
 	rebuildChipButtons();
+	mixerPanel.refresh();		// the track list belongs to the new song (may show/hide the card)
 	transportPanel.refresh();
 	songInfoPanel.refresh();
 	updateStatusLine();
+	resized();					// the mixer card may have appeared or disappeared
 }
 
 void VGMPlayAudioProcessorEditor::rebuildChipButtons (void)
@@ -237,6 +284,7 @@ void VGMPlayAudioProcessorEditor::timerCallback (void)
 {
 	transportPanel.refresh();
 	songInfoPanel.refresh();
+	mixerPanel.refresh();
 	updateStatusLine();
 }
 

@@ -24,6 +24,10 @@ inline juce::Colour cardBorder (void)	{ return juce::Colour (0xffe6e6ec); }
 inline juce::Colour track (void)		{ return juce::Colour (0xffdcdce2); }
 inline juce::Colour error (void)		{ return juce::Colour (0xffd70015); }
 
+// the mixer's mute (red) and solo (amber) buttons follow the DAW convention
+inline juce::Colour mute (void)			{ return juce::Colour (0xffe5484d); }
+inline juce::Colour solo (void)			{ return juce::Colour (0xfff5c518); }
+
 // --- metrics ------------------------------------------------------------------------
 inline constexpr int margin = 14;			// window border
 inline constexpr int cardGap = 10;			// gap between two cards (or a card and the top row)

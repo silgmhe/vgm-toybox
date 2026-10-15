@@ -10,12 +10,17 @@
 namespace vgmplay
 {
 
-/** One mixer track: a single channel of one sound device of the loaded song. */
+/** One mixer track: a single channel of one sound device of the loaded song.
+
+	Devices whose core cannot mute single channels (`SetMuteMask == NULL`) cannot be isolated
+	channel by channel - they stay one single track (`isolatable == false`, `channelIndex` -1)
+	so that their audio is not duplicated. */
 struct TrackLayoutEntry
 {
 	UINT32 deviceID = 0;		// PLR_DEV_ID() value of the device - the key for SetDeviceMuting()
 	int deviceIndex = 0;		// device order in the song (tracks sharing it form one group)
-	int channelIndex = 0;		// channel number inside the device (0-based)
+	int channelIndex = 0;		// channel number inside the device (0-based, -1 = whole device)
+	bool isolatable = true;		// false: the core cannot mute single channels
 	juce::String name;			// channel name from the core ("Pulse 1", ...) or "Ch n" as fallback
 	juce::String groupName;		// group header text (device name, "#2" when the type repeats)
 };

@@ -65,11 +65,13 @@ target_sources(VGMPlay PRIVATE
 	Source/PluginProcessor.cpp
 	Source/PluginEditor.cpp
 	Source/ui/CardComponent.cpp
+	Source/ui/ChannelStrip.cpp
 	Source/ui/ChipPanel.cpp
 	Source/ui/DropHintOverlay.cpp
 	Source/ui/IconButton.cpp
 	Source/ui/Icons.cpp
 	Source/ui/LightLookAndFeel.cpp
+	Source/ui/MixerPanel.cpp
 	Source/ui/SongInfoPanel.cpp
 	Source/ui/TransportPanel.cpp
 	Source/vgm/MixerEngine.cpp

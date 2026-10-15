@@ -54,6 +54,35 @@ std::vector<TrackLayoutEntry> buildTrackLayout (const PlayerBase& player)
 			groupName << " #" << instanceNumber;
 		}
 
+		// Does the core that is going to play this device support per-channel muting? Without it
+		// the channels cannot be isolated, and the device has to stay one single track.
+		bool isolatable = false;
+		if (decl != nullptr)
+		{
+			for (const DEV_DEF* const* core = decl->cores; *core != nullptr; ++core)
+			{
+				if ((*core)->coreID == info.core)
+				{
+					isolatable = ((*core)->SetMuteMask != nullptr);
+					break;
+				}
+			}
+		}
+
+		if (! isolatable)
+		{
+			TrackLayoutEntry entry;
+			entry.deviceID = info.id;
+			entry.deviceIndex = deviceIndex;
+			entry.channelIndex = -1;
+			entry.isolatable = false;
+			entry.name = "All";
+			entry.groupName = groupName;
+			layout.push_back (std::move (entry));
+			++deviceIndex;
+			continue;
+		}
+
 		for (int channel = 0; channel < channelCount; ++channel)
 		{
 			TrackLayoutEntry entry;

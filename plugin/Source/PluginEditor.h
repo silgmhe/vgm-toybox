@@ -6,12 +6,13 @@
 #include "ui/ChipPanel.h"
 #include "ui/DropHintOverlay.h"
 #include "ui/LightLookAndFeel.h"
+#include "ui/MixerPanel.h"
 #include "ui/SongInfoPanel.h"
 #include "ui/TransportPanel.h"
 
 /**
 	The plugin window: a top row (open button + status line) and the cards from the ui/
-	module (song info, chip mutes, transport).
+	module (song info, chip mutes, mixer, transport).
 
 	The editor only assembles the panels, turns keyboard shortcuts and file drops into calls
 	on the panels/engine and runs the 20 Hz refresh timer. Every panel lays itself out, paints
@@ -53,6 +54,7 @@ private:
 	vgmplay::ui::SongInfoPanel songInfoPanel;
 	vgmplay::ui::TransportPanel transportPanel;
 	vgmplay::ui::ChipPanel chipPanel;
+	vgmplay::ui::MixerPanel mixerPanel;
 	vgmplay::ui::DropHintOverlay dropHint;
 
 	juce::TooltipWindow tooltipWindow { this, 650 };	// declared last: destroyed first

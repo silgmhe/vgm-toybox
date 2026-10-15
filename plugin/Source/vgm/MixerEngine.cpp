@@ -375,6 +375,11 @@ float MixerEngine::getTrackPeak (size_t trackIndex, int channel) const
 	return (channel == 1) ? state.peakR.load() : state.peakL.load();
 }
 
+float MixerEngine::getOutputPeak (int channel) const
+{
+	return (channel == 1) ? outputPeakR.load() : outputPeakL.load();
+}
+
 double MixerEngine::getTrackPositionSeconds (size_t trackIndex) const
 {
 	const juce::ScopedLock sl (lock);
@@ -628,15 +633,20 @@ void MixerEngine::applyTrackIsolation (void)
 				continue;
 			}
 
-			// the track's device: every channel muted except the track's own one
+			// the track's device: every channel muted except the track's own one (a device whose
+			// core cannot mute single channels carries all of its channels on one track)
 			PLR_MUTE_OPTS isolate = {};
 			isolate.disable = 0x00;
 			for (int half = 0; half < 2; ++half)
 			{
-				UINT32 mask = 0xFFFFFFFF;
-				if (channelMuteHalf (entry.channelIndex) == half)
+				UINT32 mask = 0x00;
+				if (entry.isolatable && entry.channelIndex >= 0)
 				{
-					mask &= ~channelMuteBit (entry.channelIndex);
+					mask = 0xFFFFFFFF;
+					if (channelMuteHalf (entry.channelIndex) == half)
+					{
+						mask &= ~channelMuteBit (entry.channelIndex);
+					}
 				}
 				isolate.chnMute[half] = mask;
 			}
@@ -855,6 +865,17 @@ void MixerEngine::render (float* const* outputs, int numSamples)
 			state.peakR.store (peakR);
 		}
 	}
+
+	// the master meter: the level of the finished mix (both modes), read lock-free by the UI
+	float peakL = 0.0f;
+	float peakR = 0.0f;
+	for (int i = 0; i < numSamples; ++i)
+	{
+		peakL = juce::jmax (peakL, std::abs (outputs[0][i]));
+		peakR = juce::jmax (peakR, std::abs (outputs[1][i]));
+	}
+	outputPeakL.store (peakL);
+	outputPeakR.store (peakR);
 
 	// publish the position for the lock-free UI getter (an O(1) query, still under the lock);
 	// track 0 carries the song timeline in both modes

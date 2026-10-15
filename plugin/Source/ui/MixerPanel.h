@@ -1,0 +1,69 @@
+#pragma once
+
+#include <utility>
+#include <vector>
+
+#include "CardComponent.h"
+#include "ChannelStrip.h"
+#include "IconButton.h"
+
+#include "vgm/MixerEngine.h"
+
+namespace vgmplay::ui
+{
+
+/**
+	The mixer card below the chips card: one strip per chip channel, grouped by chip. The strips
+	live in a Viewport (with horizontal and vertical scrollbars), the master strip stays pinned
+	at the right.
+
+	Mixing happens in MixerEngine - the panel only forwards the user's changes and polls the
+	lock-free values in refresh(), so the audio thread never reads anything from here.
+*/
+class MixerPanel : public CardComponent
+{
+public:
+	/** Smallest height that still shows the header and a part of the first strip row - the
+		editor reserves it when it hands out the space between the chips and transport cards. */
+	static constexpr int minimumHeight = 140;
+
+	explicit MixerPanel (vgmplay::MixerEngine& engineToUse);
+
+	/** Rebuilds the strips when another song is loaded and refreshes values and meters. */
+	void refresh (void);
+
+private:
+	/** Viewport content: hosts the strips and paints the group headers above them. */
+	class StripHolder : public juce::Component
+	{
+	public:
+		void paint (juce::Graphics& g) override;
+
+		std::vector<std::pair<juce::String, juce::Rectangle<int>>> groupHeaders;
+	};
+
+	void resized (void) override;
+	void paintCardContent (juce::Graphics& g) override;
+
+	void rebuildStrips (void);
+	/** Lays the strips out in their groups and sizes the holder (call after any change). */
+	void layoutStrips (void);
+
+	vgmplay::MixerEngine& engine;
+	IconButton mixerToggle { "Mixer", IconButton::Icon::sliders };
+	juce::Viewport viewport;
+	StripHolder holder;
+	juce::OwnedArray<ChannelStrip> strips;
+	ChannelStrip masterStrip;
+
+	juce::String loadedFile;			// detects "another song was loaded" for the rebuild
+	int loadedTrackCount = -1;
+	std::vector<float> meterLeft, meterRight;	// decayed peaks, one per track
+	float masterPeakL = 0.0f;
+	float masterPeakR = 0.0f;
+	juce::Rectangle<int> headerBounds;
+
+	JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (MixerPanel)
+};
+
+} // namespace vgmplay::ui

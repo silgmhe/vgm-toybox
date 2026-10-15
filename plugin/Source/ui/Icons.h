@@ -15,4 +15,8 @@ void drawRepeatGlyph (juce::Graphics& g, juce::Rectangle<float> iconArea, juce::
 	start cursor above the position slider. */
 void drawPlayStartGlyph (juce::Graphics& g, juce::Rectangle<float> iconArea, juce::Colour colour);
 
+/** The "mixer" glyph (three vertical faders with their knobs at different heights) of the
+	mixer card's on/off toggle. */
+void drawSlidersGlyph (juce::Graphics& g, juce::Rectangle<float> iconArea, juce::Colour colour);
+
 } // namespace vgmplay::ui

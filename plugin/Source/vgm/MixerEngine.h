@@ -104,6 +104,8 @@ public:
 	bool isTrackSoloed (size_t trackIndex) const;
 	/** Peak level of the track's isolated output in the last rendered block (0 = L, 1 = R). */
 	float getTrackPeak (size_t trackIndex, int channel) const;
+	/** Peak level of the final mix in the last rendered block (0 = L, 1 = R). */
+	float getOutputPeak (int channel) const;
 	/** Position of one track's player - used to verify that the tracks stay in sync. */
 	double getTrackPositionSeconds (size_t trackIndex) const;
 
@@ -138,7 +140,7 @@ private:
 	std::vector<std::unique_ptr<TrackState>> tracks;	// one per layout entry (UI state)
 	std::vector<TrackLayoutEntry> trackLayout;
 	std::atomic<int> soloCount { 0 };
-	bool mixerEnabled = false;
+	bool mixerEnabled = true;	// the mixer card is always there - off is the CPU-saving opt-out
 
 	juce::MemoryBlock fileData;			// the song image; every track's loader points into it
 	juce::File currentFile;
@@ -161,6 +163,8 @@ private:
 	std::atomic<bool> playing { false };
 	std::atomic<bool> finished { false };
 	std::atomic<double> positionSeconds { 0.0 };	// published by render(), read by the UI
+	std::atomic<float> outputPeakL { 0.0f };		// master meter, published by render()
+	std::atomic<float> outputPeakR { 0.0f };
 
 	JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (MixerEngine)
 };

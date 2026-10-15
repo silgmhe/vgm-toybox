@@ -113,7 +113,12 @@ namespace
 		return result;
 	}
 
-	/** RMS level of (reference - other), in dB relative to the reference RMS. */
+	/** RMS level of (reference - other), in dB relative to the reference RMS.
+
+		Note: two renders are only sample-exact when both followed the same seek history -
+		libvgm re-warms the emulation after a backwards seek in a way a fresh start does not
+		(plain player mode shows exactly the same), so a comparison that mixes histories can
+		never be tighter than ~-30 dB. */
 	double differenceDb (const RenderedBuffer& reference, const RenderedBuffer& other)
 	{
 		const size_t count = juce::jmin (reference.left.size(), other.left.size());
@@ -194,6 +199,9 @@ int main (int argc, char* argv[])
 
 	const double songLength = engine.getDurationSeconds();
 	const double renderLength = (songLength > 0.0) ? juce::jmin (seconds, songLength * 0.9) : seconds;
+
+	// the mixer is on by default - start from the plain player, so that [2] is the reference
+	engine.setMixerEnabled (false);
 
 	engine.setLoopCount (1);
 	engine.setFadeSeconds (0.0);
@@ -331,6 +339,100 @@ int main (int argc, char* argv[])
 	const auto sanity = renderSeconds (engine, 0.1, sampleRate, blockSize);
 	std::printf ("    peak %.4f\n", sanity.peak);
 	check (sanity.peak > 0.001, "the plain player still produces audio");
+
+	// For reference: libvgm's backwards seek does not reproduce a fresh start sample-exactly -
+	// the plain player shows the very same difference, so it is the emulation's seek warm-up
+	// and not the mixer (which is why the comparisons below give both sides the same history).
+	engine.setPositionSeconds (0.0);
+	engine.play();
+	const auto plainAgain = renderSeconds (engine, renderLength, sampleRate, blockSize);
+	std::printf ("    plain render again after a seek: difference %.1f dB (libvgm re-warms after a seek)\n",
+				 differenceDb (plain, plainAgain));
+
+	// --- [8] the mixer parameters (mute / solo / gain / pan) --------------------------------
+	std::printf ("[8] mixer parameters\n");
+
+	// Levels are compared, not samples: libvgm does not reset the oscillators when it seeks, so
+	// two renders that were both started by a seek differ in fine detail - plain player mode
+	// shows the very same difference (see "plain render again after a seek" above).
+	const auto renderFromStart = [&] (void)
+	{
+		engine.setPositionSeconds (0.0);
+		engine.play();
+		return renderSeconds (engine, renderLength, sampleRate, blockSize);
+	};
+
+	engine.setMixerEnabled (true);
+	engine.setLoopCount (1);
+
+	// soloing track 0 must sound like muting every other track
+	engine.setTrackSolo (0, true);
+	const auto soloed = renderFromStart();
+
+	engine.setTrackSolo (0, false);
+	for (size_t i = 0; i < tracks.size(); ++i)
+	{
+		engine.setTrackMute (i, i != 0);
+	}
+	const auto onlyFirst = renderFromStart();
+
+	const double soloLevelDelta = (onlyFirst.rms > 0.0)
+									? std::abs (soloed.rms - onlyFirst.rms) / onlyFirst.rms : 1.0;
+	std::printf ("    solo: rms %.6f vs mute-others: rms %.6f (level delta %.4f %%)\n",
+				 soloed.rms, onlyFirst.rms, 100.0 * soloLevelDelta);
+	check (soloLevelDelta < 0.01, "solo sounds like muting every other track (level within 1%)");
+
+	{
+		// the very same solo state rendered once more: what is left is the seek warm-up
+		engine.setTrackSolo (0, true);
+		const auto soloAgain = renderFromStart();
+		engine.setTrackSolo (0, false);
+		std::printf ("    the same solo state re-rendered after a seek differs by %.1f dB\n",
+					 differenceDb (soloed, soloAgain));
+	}
+
+	// panning the remaining track hard left silences the right channel
+	engine.setTrackPan (0, -1.0f);
+	const auto panned = renderFromStart();
+	double rightSum = 0.0;
+	for (float value : panned.right)
+	{
+		rightSum += (double) value * (double) value;
+	}
+	const double rightRms = panned.right.empty() ? 0.0 : std::sqrt (rightSum / (double) panned.right.size());
+	std::printf ("    pan hard left: left peak %.4f, right rms %.6f\n", panned.peak, rightRms);
+	check (rightRms < 0.001, "panning hard left silences the right channel");
+	check (panned.peak > 0.001, "the left channel keeps playing");
+
+	// gain 0.5 halves the level
+	engine.setTrackPan (0, 0.0f);
+	engine.setTrackGain (0, 0.5f);
+	const auto halved = renderFromStart();
+	const double gainRatio = (onlyFirst.rms > 0.0) ? halved.rms / onlyFirst.rms : 0.0;
+	std::printf ("    gain 0.5 -> rms ratio %.3f\n", gainRatio);
+	check (std::abs (gainRatio - 0.5) < 0.02, "gain 0.5 halves the level");
+
+	// muting every track silences the mixer, and the plain player ignores the strip settings
+	engine.setTrackGain (0, 1.0f);
+	for (size_t i = 0; i < tracks.size(); ++i)
+	{
+		engine.setTrackMute (i, true);
+	}
+	engine.setPositionSeconds (0.0);
+	engine.play();
+	const auto allMuted = renderSeconds (engine, renderLength, sampleRate, blockSize);
+	check (allMuted.rms < 0.001, "muting every track silences the mixer");
+
+	engine.setMixerEnabled (false);
+	engine.setPositionSeconds (0.0);
+	engine.play();
+	const auto backToPlain = renderSeconds (engine, renderLength, sampleRate, blockSize);
+	check (differenceDb (plain, backToPlain) < 0.5, "switching the mixer off restores the plain mix");
+
+	for (size_t i = 0; i < tracks.size(); ++i)
+	{
+		engine.setTrackMute (i, false);
+	}
 
 	const juce::File outputFile = inputFile.withFileExtension (".rendered.wav");
 	writeWavFile (outputFile, plain.left, plain.right, sampleRate);

@@ -39,4 +39,26 @@ void drawPlayStartGlyph (juce::Graphics& g, juce::Rectangle<float> iconArea, juc
 	g.fillPath (head);
 }
 
+void drawSlidersGlyph (juce::Graphics& g, juce::Rectangle<float> iconArea, juce::Colour colour)
+{
+	g.setColour (colour);
+
+	const float lineWidth = juce::jmax (1.0f, iconArea.getWidth() * 0.10f);
+	const float knobWidth = juce::jmax (3.0f, iconArea.getWidth() * 0.36f);
+	const float knobHeight = juce::jmax (2.5f, iconArea.getHeight() * 0.20f);
+	const float knobCentres[] = { 0.30f, 0.68f, 0.46f };
+
+	for (int i = 0; i < 3; ++i)
+	{
+		const float x = iconArea.getX() + iconArea.getWidth() * (0.20f + 0.30f * (float) i);
+
+		// the fader rail
+		g.fillRoundedRectangle (x - lineWidth * 0.5f, iconArea.getY(),
+								lineWidth, iconArea.getHeight(), lineWidth * 0.5f);
+		// the knob, wide enough to read as one at this size
+		const float knobY = iconArea.getY() + knobCentres[i] * (iconArea.getHeight() - knobHeight);
+		g.fillRoundedRectangle (x - knobWidth * 0.5f, knobY, knobWidth, knobHeight, knobHeight * 0.35f);
+	}
+}
+
 } // namespace vgmplay::ui
