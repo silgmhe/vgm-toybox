@@ -12,7 +12,9 @@ endif()
 if(POLICY CMP0048)
 	cmake_policy(SET CMP0048 NEW)
 endif()
-project(vgmplay VERSION 0.5 LANGUAGES C CXX)
+# The project is the umbrella for both front-ends, so it carries the product name. The player
+# subdirectory still names its own target "VGMPlay64" - the upstream identity lives there.
+project(vgmtoybox VERSION 0.5 LANGUAGES C CXX)
 
 #set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${PROJECT_BINARY_DIR}/bin)
 #set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${PROJECT_BINARY_DIR}/bin)
