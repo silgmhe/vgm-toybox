@@ -85,7 +85,7 @@ inline constexpr int buttonShadowInset = 4;   // 见 §5
 按钮的"可见形状" = `getLocalBounds().reduced(buttonShadowInset)`，投影在 inset 空间里绘制。这样：
 
 - 任何父组件**都不需要**为按钮补画阴影，新增按钮零适配；
-- 代价是按钮占位比可见形状大 8px（走带按钮 34 → 视觉 26，可接受；布局尺寸不变，只是内缩）。
+- 代价是按钮要多占 `2 × inset` 的空间（当前 4px）：**布局必须按"可见面 + 4"给尺寸**，否则按钮看起来就变小了 —— 这正是第一版把头部按钮从 22px 缩到 14px 的原因（见 §8 与实施记录）。
 
 ### 4.3 唯一的例外：彩色 glow（L2）
 
@@ -120,9 +120,9 @@ inline juce::Colour buttonMaterial (void)   { return juce::Colour (0xffffffff); 
 inline juce::Colour buttonHairline (void)   { return juce::Colour (0xffd0d0d8); }  // 收边
 // --- 抬升（单层）---
 inline juce::Colour buttonShadow (void)     { return juce::Colour (0x26000000); }  // ~15% 黑
-inline constexpr int buttonShadowBlur     = 3;
+inline constexpr int buttonShadowBlur     = 2;    // 紧贴的投影：可见面只能让出很少空间
 inline constexpr int buttonShadowOffsetY  = 1;
-inline constexpr int buttonShadowInset    = 4;    // 按钮自留的阴影空间（小控件按高度 15% 缩放）
+inline constexpr int buttonShadowInset    = 2;    // 按钮自留的阴影空间（小控件按高度 15% 缩放）
 // --- 状态系数 ---
 inline constexpr float buttonHoverDarken   = 0.04f;
 inline constexpr float buttonPressedDarken = 0.08f;
@@ -172,13 +172,15 @@ inline float buttonRadiusFor (float height) { return juce::jmin (height * 0.2f, 
 
 **尺寸档（沿用现值，规范只做"登记"）**
 
-| 用途 | 高度 | 位置 |
+| 用途 | 尺寸（占位 / 可见面） | 位置 |
 |---|---|---|
-| 走带按钮 | 34（`kButtonSize`） | `TransportPanel.cpp` |
-| 卡片头部图标按钮 | `kHeaderHeight` | `MixerPanel.cpp` |
-| 混音 M/S | 24（`kButtonHeight`） | `ChannelStrip.cpp` |
-| 顶行主操作 | 32（`theme::topRowHeight`） | `PluginEditor.cpp` |
-| 输出/loop/fade 下拉 | 22 / 26 | `ChannelStrip.cpp` / `TransportPanel.cpp` |
+| 走带按钮 | 40 / **36**（`kButtonSize`） | `TransportPanel.cpp` |
+| 卡片头部图标按钮 | 26 / **22**（`kHeaderHeight`） | `MixerPanel.cpp` |
+| 混音 M/S | 28 / **24**（`kButtonHeight`） | `ChannelStrip.cpp` |
+| 顶行主操作 | 32（`theme::topRowHeight`，M-UI.3 处理） | `PluginEditor.cpp` |
+| 输出/loop/fade 下拉 | 22 / 26（M-UI.3 处理） | `ChannelStrip.cpp` / `TransportPanel.cpp` |
+
+> **占位 = 可见面 + 4**（`2 × buttonShadowInset`）：阴影空间由按钮自己保留，所以布局尺寸里要把它算进去 —— 第一版漏了这一步，头部按钮就从 22px 被挤成 14px。改按钮尺寸时请照此推算。
 
 **圆角**：`buttonRadiusFor(height)`（§5），同一行内必须一致。
 **图标**：图标区 = 形状 `reduced(宽 × iconInsetRatio, 高 × iconInsetRatio)`；描边类字形线宽 = 形状高 × 0.11（与 `Icons.cpp` 现状一致）。

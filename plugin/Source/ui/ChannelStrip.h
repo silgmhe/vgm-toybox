@@ -26,7 +26,7 @@ class ChannelStrip : public juce::Component
 {
 public:
 	/** Height the strip lays itself out for (MixerPanel uses it for its own layout). */
-	static constexpr int preferredHeight = 196;
+	static constexpr int preferredHeight = 200;
 
 	/** One entry of the output selector: the internal master bus or a real output bus. */
 	struct OutputOption

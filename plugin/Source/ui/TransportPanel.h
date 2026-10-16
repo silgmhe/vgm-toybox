@@ -24,8 +24,8 @@ namespace toybox::ui
 class TransportPanel : public CardComponent
 {
 public:
-	/** 34 (buttons) + 5 + 12 (marker strip) + 1 + 22 (slider) + 8 + 26 (settings) + 2 * 12 (padding). */
-	static constexpr int preferredHeight = 132;
+	/** 40 (buttons) + 5 + 12 (marker strip) + 1 + 22 (slider) + 8 + 26 (settings) + 2 * 12 (padding). */
+	static constexpr int preferredHeight = 138;
 
 	explicit TransportPanel (toybox::PlaybackEngine& engineToUse);
 

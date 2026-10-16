@@ -25,7 +25,7 @@ class MixerPanel : public CardComponent
 public:
 	/** Smallest height that still shows the header and a part of the first strip row - the
 		editor reserves it when it hands out the space between the chips and transport cards. */
-	static constexpr int minimumHeight = 166;
+	static constexpr int minimumHeight = 174;
 
 	explicit MixerPanel (toybox::PlaybackEngine& engineToUse);
 

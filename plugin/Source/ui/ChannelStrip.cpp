@@ -11,7 +11,9 @@ namespace
 {
 	constexpr int kNameHeight = 13;
 	constexpr int kKnobHeight = 30;
-	constexpr int kButtonHeight = 24;	// the M/S buttons share the full strip width
+	// The M/S buttons share the full strip width; the height is the face (24, as before) plus the
+	// shadow room each button reserves (ButtonPaint.h).
+	constexpr int kButtonHeight = 28;
 	constexpr int kButtonGap = 6;
 	constexpr int kOutputHeight = 22;	// the output selector sits at the very bottom
 	constexpr int kOutputGap = 6;

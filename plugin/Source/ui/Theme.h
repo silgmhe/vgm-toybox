@@ -76,9 +76,11 @@ inline constexpr int controlShadowBlur = 5;
 inline juce::Colour buttonMaterial (void)	{ return juce::Colour (0xffffffff); }
 inline juce::Colour buttonHairline (void)	{ return juce::Colour (0xffd0d0d8); }
 inline juce::Colour buttonShadow (void)		{ return juce::Colour (0x26000000); }
-inline constexpr int buttonShadowBlur = 3;
+inline constexpr int buttonShadowBlur = 2;		// tight: the face can only spare a little room
 inline constexpr int buttonShadowOffsetY = 1;
-inline constexpr int buttonShadowInset = 4;		// room the face reserves for its shadow
+// The room the face reserves for its shadow. Kept to 2 px: the shadow is small, and every pixel
+// spent here comes off the button (the layouts hand out `face + 2 * inset`, see docs §8).
+inline constexpr int buttonShadowInset = 2;
 
 inline constexpr float buttonHoverDarken = 0.04f;
 inline constexpr float buttonPressedDarken = 0.08f;

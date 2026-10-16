@@ -12,7 +12,10 @@ namespace toybox::ui
 {
 namespace
 {
-	constexpr int kButtonSize = 34;
+	// The buttons reserve their own shadow room inside this (ButtonPaint.h), so the size here is
+	// the face plus 2 * buttonShadowInset - a 40 px box paints a 36 px face, slightly larger than
+	// the 34 px the buttons used to be before they had a shadow.
+	constexpr int kButtonSize = 40;
 	constexpr int kLoopMarkerHeight = 12;
 
 	int loopBoxIdForCount (int loops)
