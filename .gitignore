@@ -103,3 +103,8 @@ $RECYCLE.BIN/
 dist/
 compile_commands.json
 
+# A clean-room VST2 SDK was dropped in here while the VST2 question was open. The format is on hold
+# (docs/desgin/maintenance-policy.md section 5) and the folder stays out of git: it is kept on disk
+# in case the question is picked up again, and nobody has to remember that it is untracked.
+libs/vst2sdk/
+
