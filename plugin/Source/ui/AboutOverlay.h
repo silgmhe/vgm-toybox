@@ -48,7 +48,11 @@ public:
 			link.setButtonText (address);
 			link.setURL (juce::URL (address));
 			link.setComponentID (linkId);
-			link.setFont (juce::Font (juce::FontOptions (13.0f)), juce::Justification::centredLeft);
+			// All three arguments on purpose: the second is a bool (resizeToMatchComponentHeight),
+			// so passing a Justification there compiles - it converts - and quietly leaves the text
+			// on the third parameter's default, which is centred. That is exactly what happened
+			// here: the links looked centred because the justification was never set.
+			link.setFont (juce::Font (juce::FontOptions (13.0f)), false, juce::Justification::centredLeft);
 			link.setColour (juce::HyperlinkButton::textColourId, theme::accent());
 			addAndMakeVisible (link);
 		};
