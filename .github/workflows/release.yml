@@ -157,7 +157,12 @@ jobs:
     - name: Create the release
       env:
         GH_TOKEN: ${{ github.token }}
+      # This job checks nothing out - it only receives the built packages - so gh has no .git here to
+      # read the repository from, and it stopped with "fatal: not a git repository" before it had
+      # looked at a single package. Naming the repository is what makes the command independent of
+      # the working directory; the token above still decides whether it is allowed to write.
       run: |
         gh release create "$GITHUB_REF_NAME" packages/* \
+          --repo "$GITHUB_REPOSITORY" \
           --title "VGMToybox $GITHUB_REF_NAME" \
           --notes-file notes.md
