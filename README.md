@@ -52,15 +52,16 @@ cmake -S . -B build -DTOYBOX_OUTPUT_BUSES=16
 
 ### Tests
 
-Both are console targets, built on demand and safe to run anywhere:
+All three are console targets, built on demand and safe to run anywhere:
 
 | Target | Covers |
 |---|---|
 | `vgm_mixer_test <file> [seconds]` | the libvgm path end to end: per-track isolation, the mixer parameters, the two volume stages, output routing - and the sample-exact gate "the unity-gain mixer mix equals the plain mix" (`-1000.00 dB`). |
 | `vgm_core_test` | the playback core through the fake backend. It deliberately links **no libvgm code**, so a core that still depended on the format engine would not link. |
+| `vgm_ui_test` | the button faces, rendered into images: the shadow under a face, the rounded corner where the hairline stops, the tighter shadow while pressed, the accent ring on focus and the glow a container paints behind a toggled button (see `docs/ui-button-design.md`). |
 
 ```bash
-cmake --build build --target vgm_core_test
+cmake --build build --target vgm_core_test   # or vgm_mixer_test / vgm_ui_test
 build/plugin/vgm_core_test
 ```
 
@@ -70,6 +71,24 @@ Copy `VGMToybox.vst3` into your VST3 folder and rescan. To use the separate outp
 extra buses for the plugin instance in the host (that step is the host's, not the plugin's).
 If an older `VGMPlay.vst3` from this project is installed, **delete it first**: the plugin codes
 are deliberately unchanged, so a host would see the two bundles as the same plugin.
+
+## Recording stems into a DAW
+
+The multi-output routing exists for one workflow: record every chip on its own track in a single
+pass instead of soloing chips one by one.
+
+![Recording the output buses of VGMToybox into a DAW](docs/assets/multitrack-recording-in-daw.png)
+
+1. **Enable the extra buses** for the plugin instance in the host - only `Out 1/2` is active until
+   you do (the same step Kontakt users know).
+2. **Route the strips**: click *spread outputs* in the mixer card header (track 1 -> `Out 1/2`,
+   track 2 -> `Out 3/4`, …) and then adjust individual strips in their output selector where that
+   does not fit - or send everything to the master bus and leave the routing alone.
+3. **Arm one host track per bus and record.** Each chip channel lands on its own track, and the
+   routing choice is remembered as the default for the next song you load.
+
+Every strip is a separately rendered libvgm instance, so the stems add up to exactly the mix you
+would have heard - `vgm_mixer_test` proves that sum is sample-exact.
 
 ## Licence and attribution
 
