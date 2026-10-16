@@ -24,10 +24,12 @@ param(
     # read-only: report who Windows would actually hand each format to, and which executable that
     # is - the quickest way to tell "the association never fired" from "it fired a stale copy"
     [switch] $Status,
-    # drop Explorer's per-user "UserChoice" for these formats so the Classes default applies
-    # again. Windows writes that entry when someone picks an application in the Open-with dialog,
-    # it overrides everything else - including -SetDefault - and a stale one is the usual reason a
-    # double click appears to do nothing at all.
+    # try to drop Explorer's per-user "UserChoice" for these formats so the Classes default
+    # applies again. Windows writes that entry when someone picks an application in the Open-with
+    # dialog, it overrides everything else - including -SetDefault - and a stale one is the usual
+    # reason a double click appears to do nothing at all. Best effort only: Windows protects the
+    # key, refuses to delete it and prints a note instead (the Open-with dialog's "Always use this
+    # app" is the way that always works).
     [switch] $ClearUserChoice
 )
 
@@ -54,8 +56,21 @@ function Set-KeyValue([string] $Path, [string] $Name, [string] $Value)
 
 function Remove-Key([string] $Path)
 {
+    if (-not (Test-Path -LiteralPath $Path)) { return }
     if (-not $PSCmdlet.ShouldProcess($Path, 'remove')) { return }
-    if (Test-Path -LiteralPath $Path) { Remove-Item -LiteralPath $Path -Recurse -Force }
+
+    # reg.exe rather than Remove-Item: the registry provider throws on a key that holds only values
+    # ("Cannot delete a subkey tree because the subkey does not exist"), and Explorer's UserChoice
+    # is protected against tampering - which has to be reportable and survivable, not fatal, since
+    # the rest of the registration is still worth doing.
+    $null = & reg.exe delete ($Path -replace '^HKCU:\\', 'HKCU\') /f 2>&1
+
+    if ($LASTEXITCODE -ne 0)
+    {
+        Write-Host ("  could not remove {0}" -f $Path)
+        Write-Host "  (Windows protects Explorer's UserChoice; use the Open-with dialog and tick"
+        Write-Host "   'Always use this app' to change it)"
+    }
 }
 
 function Get-DefaultValue([string] $Path)

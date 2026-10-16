@@ -125,12 +125,15 @@ If a double-click then does nothing, two things tell you why:
   another folder shows up.
 
 The trap behind most "I changed the association and nothing happened": when an application is
-picked in the Open-with dialog, Windows records the choice per user in `FileExts\.vgm\UserChoice`,
-and **that entry overrides every other association** - it cannot be written by a script, and if it
-points at a copy that has since moved or been replaced, a double-click can do nothing at all. Pick
-the application in that dialog with *Always use this app*, or run
-`RegisterFileTypes.cmd /clearuserchoice /default` to drop the stale choice and fall back to these
-keys.
+picked in the Open-with dialog, Windows records the choice per user in `FileExts\.<ext>\UserChoice`,
+and **that entry overrides every other association**. It is protected against tampering - a script
+cannot write it, and Windows refuses to delete it either - so the only way to change it is through
+that dialog: pick the application and tick *Always use this app*.
+
+One consequence worth taking seriously: if that recorded choice points at a copy of the executable
+that has since been moved or deleted, a double click can do nothing at all while the very same
+program started from a command line works perfectly. Keep one copy of the application, replace the
+file in place when upgrading, and the association keeps working.
 
 ## Licence and attribution
 
