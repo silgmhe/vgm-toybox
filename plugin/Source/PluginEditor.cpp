@@ -67,7 +67,9 @@ ToyboxAudioProcessorEditor::ToyboxAudioProcessorEditor (ToyboxAudioProcessor& p)
 	addAndMakeVisible (viewStack);
 
 	menu.viewNames = viewStack.getViewNames();
-	menu.currentView = viewStack.getCurrentViewIndex();
+	// The menu asks the stack which page is on screen every time it builds the View menu, so the
+	// tick follows any switch - this menu, Ctrl+1..9, or a page changed from code.
+	menu.getCurrentView = [this] { return viewStack.getCurrentViewIndex(); };
 	menu.onSelectView = [this] (int index) { viewStack.setCurrentView (index); };
 
 	// The pages are told what the engine holds right now: an editor can be created while a song is

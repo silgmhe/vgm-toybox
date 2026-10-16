@@ -37,8 +37,12 @@ public:
 	/** The pages, in menu order - filled from the window's ViewStack. */
 	juce::StringArray viewNames;
 
-	/** Index of the page on screen, so the View menu can tick it. */
-	int currentView = 0;
+	/** Asks the window which page is on screen, and is read every time the menu is built.
+
+		Deliberately a question rather than a copy of the index: the first version kept a copy that
+		the window was supposed to update, nothing did, and the tick stayed on Play after switching
+		pages. There is nothing to keep in step now. */
+	std::function<int (void)> getCurrentView;
 
 	/** True in the standalone build - see the class comment. */
 	bool standalone = false;
@@ -82,7 +86,7 @@ public:
 			for (int i = 0; i < viewNames.size(); ++i)
 			{
 				juce::PopupMenu::Item item { viewNames[i] };
-				item.isTicked = (i == currentView);
+				item.isTicked = (i == currentViewIndex());
 				if (i < 9)
 				{
 					item.shortcutKeyDescription = "Ctrl+" + juce::String (i + 1);
@@ -110,6 +114,12 @@ public:
 	void menuItemSelected (int, int) override {}	// the items act for themselves
 
 private:
+	/** The page on screen, as the window reports it at this moment. */
+	int currentViewIndex (void) const
+	{
+		return getCurrentView != nullptr ? getCurrentView() : 0;
+	}
+
 	/** The window may not have wired everything up (a menu can be opened during construction). */
 	static void call (const std::function<void()>& action)
 	{

@@ -72,15 +72,7 @@ public:
 		view->setBounds (getLocalBounds());
 		view->setVisible (true);
 		view->refresh();
-
-		if (onViewChanged != nullptr)
-		{
-			onViewChanged (current);
-		}
 	}
-
-	/** Called when the page changed - the window keeps the menu's tick in step with this. */
-	std::function<void (int)> onViewChanged;
 
 	void refresh (void)
 	{
