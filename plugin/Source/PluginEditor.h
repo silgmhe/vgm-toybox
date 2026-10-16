@@ -3,6 +3,7 @@
 #include <juce_audio_processors/juce_audio_processors.h>
 
 #include "PluginProcessor.h"
+#include "ui/AboutOverlay.h"
 #include "ui/ChipPanel.h"
 #include "ui/DropHintOverlay.h"
 #include "ui/LightLookAndFeel.h"
@@ -72,11 +73,11 @@ private:
 	toybox::ui::ChipPanel chipPanel;
 	toybox::ui::MixerPanel mixerPanel;
 	toybox::ui::DropHintOverlay dropHint;
+	toybox::ui::AboutOverlay aboutOverlay;	// in-window, so it can never block the application
 
 	juce::TooltipWindow tooltipWindow { this, 650 };	// declared last: destroyed first
 
 	std::unique_ptr<juce::FileChooser> fileChooser;
-	juce::ScopedMessageBox aboutBox;	// keeps the Help > About window alive while it is open
 	juce::String lastError;
 	int refreshHz = 0;	// the rate the refresh timer currently runs at (see timerCallback())
 

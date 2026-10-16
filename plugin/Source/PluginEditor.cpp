@@ -70,6 +70,11 @@ ToyboxAudioProcessorEditor::ToyboxAudioProcessorEditor (ToyboxAudioProcessor& p)
 	// full-size overlay, hidden until a file is dragged over the editor
 	addChildComponent (dropHint);
 
+	// Help > About, drawn inside the window on purpose - ui/AboutOverlay.h has the story of what
+	// a dialog of its own did to this application
+	addChildComponent (aboutOverlay);
+	aboutOverlay.onClose = [this] { aboutOverlay.setVisible (false); };
+
 	rebuildChipButtons();
 	updateStatusLine();
 
@@ -197,6 +202,11 @@ void ToyboxAudioProcessorEditor::resized (void)
 
 	dropHint.setBounds (getLocalBounds());
 
+	if (aboutOverlay.isVisible())
+	{
+		aboutOverlay.setBounds (getLocalBounds());
+	}
+
 	// The card shadows are painted by paint(), outside the card bounds - a relayout has
 	// to clear the ring around a card that moved, appeared or changed size.
 	repaint();
@@ -212,6 +222,13 @@ bool ToyboxAudioProcessorEditor::keyPressed (const juce::KeyPress& key)
 	if ((code == 'o' || code == 'O') && key.getModifiers().isCommandDown())
 	{
 		openFileChooser();
+		return true;
+	}
+
+	// escape dismisses the About box, like any other dialog
+	if (key == juce::KeyPress::escapeKey && aboutOverlay.isVisible())
+	{
+		aboutOverlay.setVisible (false);
 		return true;
 	}
 
@@ -339,21 +356,10 @@ void ToyboxAudioProcessorEditor::closeSong (void)
 
 void ToyboxAudioProcessorEditor::showAbout (void)
 {
-	const auto formats = playback::BackendRegistry::getInstance().getExtensionListText();
-
-	// The returned handle owns the window: dropping it would close the dialog again, so it is kept
-	// as a member (the same pattern JUCE's own standalone wrapper uses).
-	aboutBox = juce::AlertWindow::showScopedAsync (
-		juce::MessageBoxOptions::makeOptionsOk (juce::AlertWindow::InfoIcon,
-											   "About VGMToybox",
-											   "VGMToybox " + juce::String (JucePlugin_VersionString) + juce::newLine
-												   + "A chiptune player for " + formats + " songs." + juce::newLine
-												   + juce::newLine
-												   + "by silgmhe - built on VGMPlay and libvgm by Valley Bell and "
-													 "contributors." + juce::newLine
-												   + "https://github.com/silgmhe/vgm-toybox")
-			.withAssociatedComponent (this),
-		nullptr);
+	aboutOverlay.setBounds (getLocalBounds());
+	aboutOverlay.setVisible (true);
+	aboutOverlay.toFront (false);
+	aboutOverlay.grabKeyboardFocus();	// so escape works without clicking first
 }
 
 void ToyboxAudioProcessorEditor::openStartupSong (void)
