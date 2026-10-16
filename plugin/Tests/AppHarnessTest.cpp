@@ -503,18 +503,17 @@ private:
 		if (tokens[1].startsWith ("menu."))
 		{
 			auto* menu = findMenu();
-			const toybox::ui::MenuEntry* entry = (menu != nullptr) ? menu->findEntry (tokens[1].substring (5))
-																   : nullptr;
-			if (entry == nullptr)
+			toybox::ui::MenuEntry entry;
+			if (menu == nullptr || ! menu->findEntry (tokens[1].substring (5), entry))
 			{
 				report (false, "assert: no menu entry '" + tokens[1] + "'");
 				return;
 			}
 
 			juce::String actual;
-			if (tokens[2] == "checked") { actual = entry->checked ? "true" : "false"; }
-			else if (tokens[2] == "enabled") { actual = entry->enabled ? "true" : "false"; }
-			else if (tokens[2] == "label") { actual = entry->label; }
+			if (tokens[2] == "checked") { actual = entry.checked ? "true" : "false"; }
+			else if (tokens[2] == "enabled") { actual = entry.enabled ? "true" : "false"; }
+			else if (tokens[2] == "label") { actual = entry.label; }
 			else { report (false, "assert: menu fields are checked, enabled and label"); return; }
 
 			report (fieldMatches (actual, tokens[3], tokens[4]),

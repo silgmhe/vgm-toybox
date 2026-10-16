@@ -29,5 +29,26 @@ press ctrl+1
 assert view.play       visible == true
 assert view.visualiser visible == false
 
-# space reaches the transport (the shortcut the transport card documents)
+# space reaches the transport (the shortcut the transport card documents); with nothing loaded it
+# does nothing, and the status line still says so
 press space
+tick
+assert editor.status text contains "No file"
+
+# The View menu as text - and the regression that started this: the tick follows the page. It used
+# to be checkable only in a screenshot (docs/review, the `99aa57a` bug). `tick` is not needed here:
+# the menu asks the window which page is on screen every time it is described.
+menu
+assert menu.view.play       checked == true
+assert menu.view.visualiser checked == false
+press ctrl+2
+assert menu.view.visualiser checked == true
+assert menu.view.play       checked == false
+press ctrl+1
+assert menu.view.play       checked == true
+assert menu.view.visualiser checked == false
+
+# the File menu is the standalone's, with the labels it shows (multi-word values need quotes)
+assert menu.file.open  label == "Open Song..."
+assert menu.file.close label == "Close Song"
+assert menu.file.exit  label == Exit

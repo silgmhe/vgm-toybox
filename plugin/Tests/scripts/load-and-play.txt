@@ -24,11 +24,23 @@ assert chip.0 checked == false
 click chip.0
 assert chip.0 checked == true
 
-# the transport answers the keys the transport card documents; "handled" is all this runner can say
-# about them without a message loop
+# the transport answers the keys the transport card documents
 press enter
 press enter
+
+# ... and the keys really reach the engine: a tick asks the window for one frame of refresh, and
+# the status line is what the transport says afterwards (before `tick` it would still read the old
+# text, which is why the command exists)
 press space
+tick
+assert editor.status text contains "Paused"
+
+# The menu does what the window does: this is the File > Close Song item, invoked by its id, with
+# no menu ever opening. The song goes, the status line says so, and the page stays.
+menu invoke file.close
+tick
+assert editor.status text contains "No file"
+assert view.play visible == true
 
 # the window still fits its contents after all of that
 dump view.play

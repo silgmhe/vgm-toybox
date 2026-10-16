@@ -180,8 +180,12 @@ public:
 		return text;
 	}
 
-	/** Finds an entry by id; null when there is no such entry. */
-	const MenuEntry* findEntry (const juce::String& id) const
+	/** Fills `out` with **a copy** of the entry with this id; false when there is no such entry.
+
+		A copy rather than a pointer on purpose: the groups are built on demand, so a pointer into
+		them dangles the moment this returns. It did - and the caller then called a garbage
+		std::function, which answered "no" in one place and corrupted the heap in another. */
+	bool findEntry (const juce::String& id, MenuEntry& out) const
 	{
 		for (const auto& group : buildGroups())
 		{
@@ -189,12 +193,13 @@ public:
 			{
 				if (entry.id == id)
 				{
-					return &entry;
+					out = entry;
+					return true;
 				}
 			}
 		}
 
-		return nullptr;
+		return false;
 	}
 
 	/** Runs the action of the entry with this id.
@@ -204,14 +209,14 @@ public:
 		"done", and answering true for an empty action would hide exactly that. */
 	bool invoke (const juce::String& id)
 	{
-		const MenuEntry* found = findEntry (id);
-		if (found == nullptr || found->action == nullptr)
+		MenuEntry entry;
+
+		if (! findEntry (id, entry) || entry.action == nullptr)
 		{
 			return false;
 		}
 
-		// the entry is a copy inside the returned vector, so its action is safe to call here
-		found->action();
+		entry.action();		// a copy of the entry, so the action is alive here
 		return true;
 	}
 
