@@ -89,7 +89,7 @@ juce_add_plugin(VGMToybox
 	COMPANY_NAME "silgmhe"
 	COMPANY_WEBSITE "https://github.com/silgmhe/vgm-toybox"
 	COMPANY_EMAIL "silgmhe@gmail.com"
-	COMPANY_COPYRIGHT "Copyright (c) 2026 silgmhe - based on VGMPlay and libvgm by Valley Bell and contributors"
+	COMPANY_COPYRIGHT "Copyright (c) 2026 silgmhe - AGPL-3.0-or-later - based on VGMPlay and libvgm by Valley Bell and contributors"
 	# The plugin codes are the identity a host keeps for the plugin, so they are deliberately
 	# left alone: changing them makes every DAW project that references this plugin lose it (a
 	# rename would also let the new build sit next to an installed older one).

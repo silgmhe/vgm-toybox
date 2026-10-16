@@ -1,4 +1,4 @@
-*.dsp text eol=crlf
-*.dsw text eol=crlf
-*.sln text eol=crlf
-*.vcxproj* text eol=crlf
+# The licence text keeps its own line endings: the wording is what counts, and a line-ending rewrite
+# turns a licence file into a diff for no reason. Everything else is left to git's settings on the
+# machine that checks it out.
+LICENSE text eol=lf

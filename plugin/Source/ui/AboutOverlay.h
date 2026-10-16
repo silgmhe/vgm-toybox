@@ -102,6 +102,12 @@ public:
 		g.setFont (juce::Font (juce::FontOptions (12.5f)));
 		g.drawFittedText ("by silgmhe - built on VGMPlay and libvgm by Valley Bell and contributors.",
 						  inner.removeFromTop (18), juce::Justification::centredLeft, 2);
+		inner.removeFromTop (10);
+
+		g.setColour (theme::secondaryText());
+		g.setFont (juce::Font (juce::FontOptions (12.5f)));
+		g.drawText ("Licensed under the AGPL-3.0-or-later.", inner.removeFromTop (18),
+					juce::Justification::centredLeft, false);
 	}
 
 	void resized (void) override
