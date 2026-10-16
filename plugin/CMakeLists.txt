@@ -218,6 +218,24 @@ target_link_libraries(vgm_ui_test PRIVATE
 	juce::juce_recommended_config_flags
 )
 
+# --- console harness for the window (not built by default) --------------------------------------
+# Phase 0 of docs/desgin/testing-architecture.md: can the editor be built and laid out without a
+# window, and can its structure be read as text? It links the plugin's shared code - the STATIC
+# target juce_add_plugin creates - so it drives the same PluginEditor the application uses, and the
+# command and assertion language grows on top of what is here.
+#   cmake --build <build dir> --target vgm_app_test
+#   <build dir>/plugin/vgm_app_test
+add_executable(vgm_app_test EXCLUDE_FROM_ALL
+	Tests/AppHarnessTest.cpp
+)
+target_include_directories(vgm_app_test PRIVATE Source)
+target_link_libraries(vgm_app_test PRIVATE
+	VGMToybox
+	juce::juce_audio_processors
+	juce::juce_audio_utils
+	juce::juce_recommended_config_flags
+)
+
 target_include_directories(vgm_mixer_test PRIVATE Source)
 target_compile_definitions(vgm_mixer_test PRIVATE
 	TOYBOX_OUTPUT_BUSES=${TOYBOX_OUTPUT_BUSES}
