@@ -1,5 +1,6 @@
 #include "MixerPanel.h"
 
+#include "ButtonPaint.h"
 #include "SoftShadow.h"
 #include "Theme.h"
 
@@ -121,11 +122,13 @@ void MixerPanel::refresh (void)
 		return;
 	}
 
-	// the toggle follows the engine; a flip repaints the ring around the button as well
+	// The header buttons follow the engine. A flip has to repaint the area around the button as
+	// well, because the accent glow the card paints (paintCardContent()) reaches past the button
+	// bounds.
 	if (mixerToggle.getToggleState() != engine.isMixerEnabled())
 	{
 		mixerToggle.setToggleState (engine.isMixerEnabled(), juce::dontSendNotification);
-		repaint (mixerToggle.getBounds().expanded (theme::accentGlowBlur + theme::accentGlowOffsetY + 2));
+		repaint (buttonGlowBounds (mixerToggle.getBounds()));
 	}
 
 	// the routing shortcuts are only meaningful while the mixer routes per track (with the mixer
@@ -135,15 +138,18 @@ void MixerPanel::refresh (void)
 	mergeToMasterButton.setEnabled (canRoute);
 
 	// They behave like a radio pair for the current *default*: the active scheme lights up, so
-	// a glance tells which routing a newly loaded song will start with.
+	// a glance tells which routing a newly loaded song will start with. Both get the same glow
+	// as the mixer toggle - it used to be missing here (docs/ui-button-design.md §2).
 	const bool spreadDefault = (engine.getDefaultRouting() == playback::DefaultRouting::spreadAcrossBuses);
 	if (spreadOutputsButton.getToggleState() != spreadDefault)
 	{
 		spreadOutputsButton.setToggleState (spreadDefault, juce::dontSendNotification);
+		repaint (buttonGlowBounds (spreadOutputsButton.getBounds()));
 	}
 	if (mergeToMasterButton.getToggleState() == spreadDefault)
 	{
 		mergeToMasterButton.setToggleState (! spreadDefault, juce::dontSendNotification);
+		repaint (buttonGlowBounds (mergeToMasterButton.getBounds()));
 	}
 
 	// A stopped (or paused) transport means silence, whatever the last rendered block left
@@ -339,12 +345,15 @@ void MixerPanel::layoutStrips (void)
 
 void MixerPanel::paintCardContent (juce::Graphics& g)
 {
-	// The mixer toggle glows in the accent colour while the mixer is on. The card paints it
-	// (and therefore behind the button): a component cannot draw outside its own bounds.
-	if (mixerToggle.getToggleState())
+	// The three header buttons glow in the accent colour while they are on. The card paints them
+	// (and therefore behind the buttons): the glow reaches further than the shadow room a button
+	// keeps inside its own bounds (ButtonPaint.h).
+	for (auto* button : { &mixerToggle, &spreadOutputsButton, &mergeToMasterButton })
 	{
-		drawSoftShadow (g, mixerToggle.getBounds().toFloat(), theme::buttonRadius,
-						theme::accentGlow(), theme::accentGlowBlur, { 0, theme::accentGlowOffsetY });
+		if (button->getToggleState())
+		{
+			drawButtonGlow (g, button->getBounds());
+		}
 	}
 
 	if (headerBounds.isEmpty())

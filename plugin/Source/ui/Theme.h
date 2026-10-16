@@ -66,4 +66,34 @@ inline constexpr int accentGlowOffsetY = 3;
 inline juce::Colour controlShadow (void)		{ return juce::Colour (0x38000000); }
 inline constexpr int controlShadowBlur = 5;
 
+// --- buttons (docs/ui-button-design.md) -----------------------------------------------
+// One language for every button: a neutral white face with a hairline, or a filled accent /
+// semantic colour, and **one** soft shadow that makes it read as floating above the card.
+// The shadow is painted inside the button's own bounds - the visible face is inset by
+// `buttonShadowInset` (see ButtonPaint.h) - so no parent has to know about it. One layer, flat
+// material, no gradient on purpose: a juce::DropShadow blurs an image per call, so every extra
+// layer costs the GPU again.
+inline juce::Colour buttonMaterial (void)	{ return juce::Colour (0xffffffff); }
+inline juce::Colour buttonHairline (void)	{ return juce::Colour (0xffd0d0d8); }
+inline juce::Colour buttonShadow (void)		{ return juce::Colour (0x26000000); }
+inline constexpr int buttonShadowBlur = 3;
+inline constexpr int buttonShadowOffsetY = 1;
+inline constexpr int buttonShadowInset = 4;		// room the face reserves for its shadow
+
+inline constexpr float buttonHoverDarken = 0.04f;
+inline constexpr float buttonPressedDarken = 0.08f;
+inline constexpr int buttonPressedBlurShift = -2;	// pressing shrinks the shadow (physical cue)
+inline constexpr int buttonPressedOffsetShift = -1;
+inline constexpr float buttonDisabledAlpha = 0.45f;
+inline constexpr float buttonDisabledIconAlpha = 0.40f;
+
+inline juce::Colour focusRing (void)		{ return juce::Colour (0x660a84ff); }
+inline constexpr float focusRingThickness = 2.0f;
+
+inline constexpr float iconInsetRatio = 0.28f;	// glyph area = face inset by this much
+
+/** Corner radius of a button of the given height - smaller controls are less rounded. This is
+	the one radius rule; ComboBox, TextButton and IconButton all go through it. */
+inline float buttonRadiusFor (float height)	{ return juce::jmin (height * 0.2f, buttonRadius); }
+
 } // namespace toybox::ui::theme

@@ -1,5 +1,6 @@
 #include "TransportPanel.h"
 
+#include "ButtonPaint.h"
 #include "Icons.h"
 #include "MeterScale.h"
 #include "SoftShadow.h"
@@ -163,14 +164,13 @@ void TransportPanel::paintCardContent (juce::Graphics& g)
 	paintPlaybackStartCursor (g);
 
 	// The loop and the cursor toggle glow in the accent colour while they are on. The card
-	// paints them (and therefore behind the buttons): a component cannot draw outside its
-	// own bounds.
+	// paints them (and therefore behind the buttons): the glow reaches further than the shadow
+	// room a button keeps inside its own bounds (ButtonPaint.h).
 	for (auto* button : { &loopButton, &cursorButton })
 	{
 		if (button->getToggleState())
 		{
-			drawSoftShadow (g, button->getBounds().toFloat(), theme::buttonRadius,
-							theme::accentGlow(), theme::accentGlowBlur, { 0, theme::accentGlowOffsetY });
+			drawButtonGlow (g, button->getBounds());
 		}
 	}
 
@@ -362,9 +362,9 @@ void TransportPanel::refresh (void)
 	if (loopButton.getToggleState() != loopForever)
 	{
 		loopButton.setToggleState (loopForever, juce::dontSendNotification);
-		// repaint a ring around the button as well - the accent glow (see
-		// paintCardContent()) reaches past the button bounds
-		repaint (loopButton.getBounds().expanded (theme::accentGlowBlur + theme::accentGlowOffsetY + 2));
+		// repaint a ring around the button as well - the accent glow (see paintCardContent())
+		// reaches past the button bounds
+		repaint (buttonGlowBounds (loopButton.getBounds()));
 	}
 	if (loopBox.getSelectedId() != loopId)
 	{

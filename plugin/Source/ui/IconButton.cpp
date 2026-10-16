@@ -1,5 +1,6 @@
 #include "IconButton.h"
 
+#include "ButtonPaint.h"
 #include "Icons.h"
 #include "Theme.h"
 
@@ -8,38 +9,30 @@ namespace toybox::ui
 
 void IconButton::paintButton (juce::Graphics& g, bool isMouseOverButton, bool isButtonDown)
 {
-	const auto bounds = getLocalBounds().toFloat().reduced (0.5f);
+	// The face comes from the shared painter (docs/ui-button-design.md): a neutral material or the
+	// accent/semantic fill, with the soft shadow inside the button's own bounds.
 	const bool toggled = getToggleState();
+	const bool enabled = isEnabled();
+	const auto bounds = getLocalBounds().toFloat();
 
-	auto background = toggled ? findColour (juce::TextButton::buttonOnColourId)
-							 : findColour (juce::TextButton::buttonColourId);
+	ButtonFace face;
+	face.level = toggled ? ButtonLevel::filled : ButtonLevel::material;
+	face.toggled = toggled;
+	face.enabled = enabled;
+	face.hovered = isMouseOverButton;
+	face.pressed = isButtonDown;
+	face.hasFocus = hasKeyboardFocus (false);
+	face.fill = findColour (juce::TextButton::buttonOnColourId);
+
+	drawButtonFace (g, bounds, face);
+
 	auto iconColour = toggled ? findColour (juce::TextButton::textColourOnId)
 							  : findColour (juce::TextButton::textColourOffId);
+	iconColour = iconColour.withMultipliedAlpha (enabled ? 1.0f : theme::buttonDisabledIconAlpha);
 
-	if (! isEnabled())
-	{
-		background = background.withMultipliedAlpha (0.5f);
-		iconColour = iconColour.withMultipliedAlpha (0.4f);
-	}
-	else if (isButtonDown)
-	{
-		background = background.darker (0.10f);
-	}
-	else if (isMouseOverButton)
-	{
-		background = background.darker (0.05f);
-	}
-
-	g.setColour (background);
-	g.fillRoundedRectangle (bounds, theme::buttonRadius);
-
-	if (! toggled)
-	{
-		g.setColour (theme::border());
-		g.drawRoundedRectangle (bounds.reduced (0.5f), theme::buttonRadius, 1.0f);
-	}
-
-	const auto iconArea = bounds.reduced (bounds.getWidth() * 0.28f, bounds.getHeight() * 0.28f);
+	const auto shape = buttonFaceShape (bounds);
+	const auto iconArea = shape.reduced (shape.getWidth() * theme::iconInsetRatio,
+										 shape.getHeight() * theme::iconInsetRatio);
 	g.setColour (iconColour);
 
 	if (icon == Icon::play)

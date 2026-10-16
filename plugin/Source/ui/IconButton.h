@@ -18,6 +18,10 @@ public:
 
 	void paintButton (juce::Graphics& g, bool isMouseOverButton, bool isButtonDown) override;
 
+	// the focus ring (ButtonPaint.h) is only correct if focus changes repaint the button
+	void focusGained (juce::Component::FocusChangeType) override { repaint(); }
+	void focusLost (juce::Component::FocusChangeType) override { repaint(); }
+
 private:
 	Icon icon;
 
