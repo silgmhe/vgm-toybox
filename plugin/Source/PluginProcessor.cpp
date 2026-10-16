@@ -3,6 +3,7 @@
 #include "playback/BackendRegistry.h"
 
 #include "PluginEditor.h"
+#include "playback/StartupSong.h"
 
 using namespace toybox;
 
@@ -21,35 +22,31 @@ juce::File ToyboxAudioProcessor::getStartupFile (void) const
 		return {};
 	}
 
-	// The arguments come from the application **already split**. The raw command line string is
-	// re-quoted for display and cannot be split reliably by hand: on Windows a path with spaces
-	// turns up there with backslashes in front of the quotes, which is not something a quote-aware
-	// tokeniser is expected to undo (it made every "18 Some Song.vgz" silently fail).
+	// Which argument is a song is a rule of its own, with the arguments already split and "can this
+	// be played" supplied by the registry - see playback/StartupSong.h, where vgm_core_test can
+	// reach it (it could not from here, which is how a path with a space in it stayed broken).
 	const auto arguments = juce::JUCEApplicationBase::getCommandLineParameterArray();
-	if (arguments.isEmpty())
-	{
-		return {};
-	}
-
-	// Only something that exists *and* is a format we play counts, so an option of the
-	// standalone's own - or anything else in the line - cannot make it open something random.
 	const auto& registry = playback::BackendRegistry::getInstance();
 
-	for (const auto& argument : arguments)
+	const auto song = playback::chooseStartupSong (arguments, [&registry] (const juce::File& file)
+																{
+																	return registry.isSupportedFile (file);
+																});
+	if (song.existsAsFile())
 	{
-		const juce::File candidate (argument);
-		if (candidate.existsAsFile() && registry.isSupportedFile (candidate))
-		{
-			return candidate;
-		}
+		return song;
 	}
 
-	// Nothing usable: leave a breadcrumb. "I double-clicked a song and nothing happened" is
-	// otherwise impossible to diagnose from the outside.
-	juce::File::getSpecialLocation (juce::File::tempDirectory)
-		.getChildFile ("vgmtoybox-startup.log")
-		.replaceWithText ("Started with: " + arguments.joinIntoString (" ") + juce::newLine
-						  + "No argument was a supported song file." + juce::newLine);
+	// Nothing usable: leave a breadcrumb, because "I double-clicked a song and nothing happened" is
+	// otherwise impossible to diagnose from the outside. A launch with no arguments stays silent -
+	// there was nothing to fail at.
+	if (! arguments.isEmpty())
+	{
+		juce::File::getSpecialLocation (juce::File::tempDirectory)
+			.getChildFile ("vgmtoybox-startup.log")
+			.replaceWithText ("Started with: " + arguments.joinIntoString (" ") + juce::newLine
+							  + "No argument was a supported song file." + juce::newLine);
+	}
 
 	return {};
 }

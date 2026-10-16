@@ -23,6 +23,7 @@
 
 #include "playback/BackendRegistry.h"
 #include "playback/PlaybackEngine.h"
+#include "playback/StartupSong.h"
 
 namespace
 {
@@ -363,6 +364,58 @@ int main (int /*argc*/, char* /*argv*/[])
 	const auto plain = renderSeconds (engine, renderLength, sampleRate, blockSize);
 	std::printf ("    plain player: rms %.6f\n", plain.rms);
 	check (near (plain.rms, expectedAll, 0.002), "the plain player renders the whole fake song");
+
+	// ------------------------------------------- [5] which argument becomes the startup song
+	// The rule behind "double-click a song and it starts playing" is a pure function
+	// (playback/StartupSong.h) precisely so it can be checked here. The defect it used to carry -
+	// a song whose name contains a space was never recognised, because the raw command line string
+	// was split by hand - was one line of it, and nothing could reach it from a test.
+	std::printf ("[5] startup arguments\n");
+
+	const auto args = [] (std::initializer_list<const char*> list)
+	{
+		juce::StringArray array;
+		for (const auto* text : list)
+		{
+			array.add (text);
+		}
+		return array;
+	};
+	const auto canOpen = [] (const juce::File& candidate) { return candidate.hasFileExtension (".vgm"); };
+
+	check (toybox::playback::chooseStartupSong (args ({}), canOpen) == juce::File (),
+		   "no arguments: there is nothing to open");
+	check (toybox::playback::chooseStartupSong (args ({ "--some-option" }), canOpen) == juce::File (),
+		   "an option alone is not a song");
+
+	// the case that used to fail: a real file whose name contains spaces
+	const auto spacedSong = juce::File::getSpecialLocation (juce::File::tempDirectory)
+								.getChildFile ("toybox startup test.vgm");
+	spacedSong.replaceWithText ("fake song");
+
+	check (toybox::playback::chooseStartupSong (args ({ spacedSong.getFullPathName().toRawUTF8() }), canOpen) == spacedSong,
+		   "a song whose path contains spaces is recognised");
+	check (toybox::playback::chooseStartupSong (args ({ "--some-option", spacedSong.getFullPathName().toRawUTF8() }), canOpen) == spacedSong,
+		   "an option in front of the song does not hide it");
+
+	const auto otherSong = juce::File::getSpecialLocation (juce::File::tempDirectory)
+							   .getChildFile ("toybox startup test 2.vgm");
+	otherSong.replaceWithText ("fake song");
+	check (toybox::playback::chooseStartupSong (args ({ spacedSong.getFullPathName().toRawUTF8(),
+													   otherSong.getFullPathName().toRawUTF8() }), canOpen) == spacedSong,
+		   "the first usable argument wins");
+
+	const auto notASong = juce::File::getSpecialLocation (juce::File::tempDirectory)
+							  .getChildFile ("toybox startup test.txt");
+	notASong.replaceWithText ("not a song");
+	check (toybox::playback::chooseStartupSong (args ({ notASong.getFullPathName().toRawUTF8() }), canOpen) == juce::File (),
+		   "an existing file the backends cannot open is not a song");
+	check (toybox::playback::chooseStartupSong (args ({ "/definitely/missing.vgz" }), canOpen) == juce::File (),
+		   "a path that does not exist is not a song");
+
+	spacedSong.deleteFile();
+	otherSong.deleteFile();
+	notASong.deleteFile();
 
 	file.deleteFile();
 
