@@ -125,6 +125,19 @@ Two things worth knowing:
 
 ## Licence and attribution
 
+**VGMToybox is licensed under the GNU Affero General Public License, version 3 or later** -
+[`LICENSE`](LICENSE) holds the full text, unmodified. In practice: use it, read it, learn from it,
+make music with it. If you distribute a modified build - or run one as a network service - the
+source comes with it, under the same licence. Songs you make with it are yours; a DAW hosting the
+plugin is not a derivative work of it.
+
+Why AGPL rather than something permissive: **JUCE** is dual-licensed as AGPLv3 or commercial
+(`LICENSE.md` line 7), so the free path fixes the licence of everything that links it. Turning this
+into an MIT project would take a commercial JUCE licence, not a different line in this file.
+
+The one part that is not ours to license is the command-line player in `vgmplayer/`: it is a fork of
+Valley Bell's VGMPlay and keeps its upstream terms.
+
 This project stands on other people's work and keeps the notices visible. The libraries are
 **vendored as source under `libs/`** rather than pulled in as git submodules, so they can be
 patched in place:
@@ -138,18 +151,27 @@ patched in place:
 **VGMPlay**, the command-line player in `vgmplayer/`, comes from upstream
 `ValleyBell/vgmplay-libvgm`; its name, files and documentation are untouched.
 
-One note before redistributing widely: **neither Valley Bell project ships a licence file** - not
-in the vendored trees, and not on GitHub - so the exact terms are worth confirming with the author.
-Meanwhile the sources' own headers are the authority: the plugin links libvgm statically, and
-`libs/libvgm/emu/cores/` mixes emulator cores that each carry their own (mostly permissive)
-notice. Keep every one of them intact.
+**libvgm is the one dependency whose terms are not written down in a file.** Neither Valley Bell
+project ships a licence file - not in the vendored trees, and not on GitHub - so this is recorded
+here rather than assumed: on 2026-10-17 the author confirmed on the forum that use is fine as long
+as the project stays open source, which it does (AGPL-3.0-or-later, see above). Keep that thread;
+confirm it again before syncing the library, and ask for a licence file when the chance comes up,
+because a file is sturdier than a forum reply.
+
+Where the sources carry their own header, that header is the authority: the plugin links libvgm
+statically, and `libs/libvgm/emu/cores/` mixes emulator cores that each carry their own (mostly
+permissive) notice. Keep every one of them intact.
 
 ## Documentation
 
 | Document | Content |
 |---|---|
 | `CODEBUDDY.md` | architecture, threading and real-time rules, build/test conventions |
-| `docs/playback-backend-design.md` | the playback port every format engine plugs into (the standard, the ADRs, the migration) |
-| `docs/mixer-milestones.md` | mixer requirements, design and milestones |
-| `docs/multitrack-output-design.md` | the multi-output routing design (buses, targets, ADRs) |
+| `docs/desgin/playback-backend-design.md` | the playback port every format engine plugs into (the standard, the ADRs, the migration) |
+| `docs/desgin/mixer-milestones.md` | mixer requirements, design and milestones |
+| `docs/desgin/multitrack-output-design.md` | the multi-output routing design (buses, targets, ADRs) |
+| `docs/desgin/ui-button-design.md` | the button face every control draws through |
+| `docs/desgin/testing-architecture.md` | how the window is verified as text (and what the pixel path is still for) |
+| `docs/desgin/maintenance-policy.md` | the legacy front-end, libvgm updates, and the licence |
+| `docs/review/` | code reviews and their repair records |
 | `VGMPlay.txt` | the upstream command-line player's readme (keys, formats) |
