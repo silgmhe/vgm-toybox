@@ -56,15 +56,22 @@ set(TOYBOX_OUTPUT_BUSES "64" CACHE STRING
 
 # --- plugin target ---
 juce_add_plugin(VGMToybox
-	# no spaces anywhere in the product name: it lands in file names, window titles and command
-	# lines, and a space is a liability in every one of those places
-	COMPANY_NAME "VGMToybox"
+	# --- identity ---------------------------------------------------------------------------
+	# The product is VGMToybox - no spaces anywhere, because the name lands in file names, window
+	# titles and command lines. The vendor and author fields are the GitHub account this fork
+	# lives under, so a host shows who built the plugin next to the product name (JUCE turns them
+	# into JucePlugin_Manufacturer / _ManufacturerWebsite / _ManufacturerEmail and shows the
+	# copyright in the platform metadata).
+	PRODUCT_NAME "VGMToybox"
+	COMPANY_NAME "silgmhe"
+	COMPANY_WEBSITE "https://github.com/silgmhe/vgm-toybox"
+	COMPANY_EMAIL "silgmhe@gmail.com"
+	COMPANY_COPYRIGHT "Copyright (c) 2026 silgmhe - based on VGMPlay and libvgm by Valley Bell and contributors"
 	# The plugin codes are the identity a host keeps for the plugin, so they are deliberately
 	# left alone: changing them makes every DAW project that references this plugin lose it (a
 	# rename would also let the new build sit next to an installed older one).
 	PLUGIN_MANUFACTURER_CODE Vgmp
 	PLUGIN_CODE Vgm1
-	PRODUCT_NAME "VGMToybox"
 	# Spelled out rather than derived from "com.<COMPANY_NAME>.<target>": the id stays a stable
 	# lowercase slug, and it never picks up a space if the names above ever gain one (JUCE warns
 	# about those, and build.ps1 treats a cmake warning as a failure).
