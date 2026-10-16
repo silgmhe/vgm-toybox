@@ -29,6 +29,27 @@ protected:
 	/** Called after the card background has been drawn - draw card content here. */
 	virtual void paintCardContent (juce::Graphics&) {}
 
+	/** The vertical inset between a card's edge and its content (the horizontal one is
+		theme::cardPadding). */
+	static constexpr int contentInsetY = 8;
+
+	/** Height of a header row that holds only text. A card whose header holds buttons reserves
+		their size instead, so this is the common case rather than a rule. */
+	static constexpr int textHeaderHeight = 20;
+
+	/** The header row: the bounds inset by the standard padding, its top `headerHeight` pixels.
+		Empty when there is no room. */
+	juce::Rectangle<int> getCardHeaderArea (int headerHeight) const;
+
+	/** The area a card's content owns: the same inset bounds, less that header row. Both cards used
+		to spell this out themselves, and the visualisation page would have made it a third copy of
+		the same four lines. */
+	juce::Rectangle<int> getCardInnerArea (int headerHeight = 0) const;
+
+	/** Paints a header row: a bold caption on the left, optional text on the right. */
+	static void paintCardHeaderRow (juce::Graphics& g, juce::Rectangle<int> header,
+									const juce::String& title, const juce::String& rightText = {});
+
 private:
 	JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (CardComponent)
 };

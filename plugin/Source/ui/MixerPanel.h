@@ -29,10 +29,18 @@ public:
 
 	explicit MixerPanel (toybox::PlaybackEngine& engineToUse);
 
-	/** Rebuilds the strips when another song is loaded and refreshes values and meters. */
+	/** What the timer calls: a structure check plus the value updates - see the split below. */
 	void refresh (void);
 
 private:
+	/** Rebuilds the strips when another song is loaded. Called from refresh(), which is why the
+		per-tick path does nothing but compare a file name and a track count. */
+	void syncStructure (void);
+
+	/** Everything that changes while a song plays: the header buttons, the meters, the strips and
+		their output selectors. Only reached when a song is loaded. */
+	void refreshValues (void);
+
 	/** Viewport content: hosts the strips and paints the group headers above them. */
 	class StripHolder : public juce::Component
 	{

@@ -8,9 +8,10 @@ namespace toybox::ui
 {
 namespace
 {
-	// The header buttons carry their own shadow room, so this is the face (22, as before they
-	// were given a shadow) plus 2 * buttonShadowInset - see docs/ui-button-design.md §8.
-	constexpr int kHeaderHeight = 26;
+	// The header row is as tall as the buttons in it. Each button carries its own shadow room, so
+	// this is the face (22, as before they were given a shadow) plus 2 * buttonShadowInset - see
+	// docs/ui-button-design.md §8.
+	constexpr int kHeaderButtonSize = 26;
 	constexpr int kGroupHeaderHeight = 16;		// painted above each row of strips
 	constexpr int kStripWidth = 88;				// meter + graduations + fader, see ChannelStrip
 	constexpr int kStripGap = 6;
@@ -109,20 +110,34 @@ void MixerPanel::rebuildStrips (void)
 
 void MixerPanel::refresh (void)
 {
-	const auto& tracks = engine.getTracks();
-	const juce::String file = engine.getFile().getFullPathName();
+	// Which strips exist changes only with the song, so that part is a check rather than work: the
+	// path the timer calls 10-15 times a second stays value-only, because anything else would cost
+	// more than the meters it is there to show.
+	syncStructure();
 
-	if (file != loadedFile || (int) tracks.size() != loadedTrackCount)
-	{
-		loadedFile = file;
-		loadedTrackCount = (int) tracks.size();
-		rebuildStrips();
-	}
-
-	if (tracks.empty())
+	if (engine.getTracks().empty())
 	{
 		return;
 	}
+
+	refreshValues();
+}
+
+void MixerPanel::syncStructure (void)
+{
+	const juce::String file = engine.getFile().getFullPathName();
+
+	if (file != loadedFile || (int) engine.getTracks().size() != loadedTrackCount)
+	{
+		loadedFile = file;
+		loadedTrackCount = (int) engine.getTracks().size();
+		rebuildStrips();
+	}
+}
+
+void MixerPanel::refreshValues (void)
+{
+	const auto& tracks = engine.getTracks();
 
 	// The header buttons follow the engine. A flip has to repaint the area around the button as
 	// well, because the accent glow the card paints (paintCardContent()) reaches past the button
@@ -262,18 +277,16 @@ void MixerPanel::resized (void)
 		return;		// the editor had no room for the card - keep the children as they are
 	}
 
-	auto inner = getLocalBounds().reduced (theme::cardPadding, 8);
-
-	headerBounds = inner.removeFromTop (kHeaderHeight);
+	headerBounds = getCardHeaderArea (kHeaderButtonSize);
+	auto inner = getCardInnerArea (kHeaderButtonSize);
+	inner.removeFromTop (4);
 
 	// the header's right edge: the mixer toggle, then the two routing shortcuts to its left
-	mixerToggle.setBounds (headerBounds.removeFromRight (kHeaderHeight));
+	mixerToggle.setBounds (headerBounds.removeFromRight (kHeaderButtonSize));
 	headerBounds.removeFromRight (6);
-	spreadOutputsButton.setBounds (headerBounds.removeFromRight (kHeaderHeight));
+	spreadOutputsButton.setBounds (headerBounds.removeFromRight (kHeaderButtonSize));
 	headerBounds.removeFromRight (6);
-	mergeToMasterButton.setBounds (headerBounds.removeFromRight (kHeaderHeight));
-
-	inner.removeFromTop (4);
+	mergeToMasterButton.setBounds (headerBounds.removeFromRight (kHeaderButtonSize));
 
 	// the master strip is pinned at the right of the scrollable rows - layoutStrips() places
 	// it, because it follows the height of the strip rows
@@ -358,15 +371,7 @@ void MixerPanel::paintCardContent (juce::Graphics& g)
 		}
 	}
 
-	if (headerBounds.isEmpty())
-	{
-		return;
-	}
-
-	g.setFont (juce::Font (juce::FontOptions (10.5f, juce::Font::bold)));
-	g.setColour (theme::secondaryText());
-	g.drawText ("MIXER", headerBounds, juce::Justification::centredLeft);
-	g.drawText ("MUTE / SOLO / GAIN / PAN", headerBounds, juce::Justification::centredRight);
+	paintCardHeaderRow (g, headerBounds, "MIXER", "MUTE / SOLO / GAIN / PAN");
 }
 
 void MixerPanel::StripHolder::paint (juce::Graphics& g)
