@@ -154,13 +154,26 @@ target_sources(VGMToybox PRIVATE
 
 target_include_directories(VGMToybox PRIVATE Source)
 
-target_compile_definitions(VGMToybox PUBLIC
-	TOYBOX_OUTPUT_BUSES=${TOYBOX_OUTPUT_BUSES}
+# The JUCE configuration *every* target in this project compiles with.
+#
+# JUCE compiles its modules into each target that uses them, so a define that sits on one target
+# only is not a policy - it is a difference waiting for a machine that cares. JUCE_USE_CURL is the
+# one that found one: it defaults to on for Linux, its juce_core.cpp then includes <curl/curl.h>,
+# and the plugin was the only target saying no. vgm_core_test compiles juce_core.cpp itself and did
+# not say it, so the CI's Ubuntu runner - which has no libcurl and no reason to grow one, since
+# nothing here talks to the network - stopped there instead of at anything to do with this project.
+# The targets that link VGMToybox inherit the list; the console ones are given it below.
+set(TOYBOX_JUCE_DEFINITIONS
 	JUCE_WEB_BROWSER=0
 	JUCE_USE_CURL=0
 	JUCE_VST3_CAN_REPLACE_VST2=0
 	JUCE_DISPLAY_SPLASH_SCREEN=0
 	JUCE_STRICT_REFCOUNTEDPOINTER=1
+)
+
+target_compile_definitions(VGMToybox PUBLIC
+	${TOYBOX_JUCE_DEFINITIONS}
+	TOYBOX_OUTPUT_BUSES=${TOYBOX_OUTPUT_BUSES}
 	TOYBOX_GIT_COMMIT="${TOYBOX_GIT_COMMIT}"
 )
 
@@ -201,6 +214,7 @@ add_executable(vgm_core_test EXCLUDE_FROM_ALL
 )
 target_include_directories(vgm_core_test PRIVATE Source)
 target_compile_definitions(vgm_core_test PRIVATE
+	${TOYBOX_JUCE_DEFINITIONS}
 	TOYBOX_OUTPUT_BUSES=${TOYBOX_OUTPUT_BUSES}
 	JUCE_STANDALONE_APPLICATION=1)
 target_link_libraries(vgm_core_test PRIVATE
@@ -222,7 +236,9 @@ add_executable(vgm_ui_test EXCLUDE_FROM_ALL
 	Source/ui/Icons.cpp
 )
 target_include_directories(vgm_ui_test PRIVATE Source)
-target_compile_definitions(vgm_ui_test PRIVATE JUCE_STANDALONE_APPLICATION=1)
+target_compile_definitions(vgm_ui_test PRIVATE
+	${TOYBOX_JUCE_DEFINITIONS}
+	JUCE_STANDALONE_APPLICATION=1)
 target_link_libraries(vgm_ui_test PRIVATE
 	juce::juce_gui_basics
 	juce::juce_recommended_config_flags
@@ -248,6 +264,7 @@ target_link_libraries(vgm_app_test PRIVATE
 
 target_include_directories(vgm_mixer_test PRIVATE Source)
 target_compile_definitions(vgm_mixer_test PRIVATE
+	${TOYBOX_JUCE_DEFINITIONS}
 	TOYBOX_OUTPUT_BUSES=${TOYBOX_OUTPUT_BUSES}
 	JUCE_STANDALONE_APPLICATION=1)
 target_link_libraries(vgm_mixer_test PRIVATE
