@@ -15,12 +15,15 @@
 	Run: <build dir>/plugin/vgm_core_test
 */
 
+#include <atomic>
 #include <cmath>
 #include <cstdio>
+#include <thread>
 #include <vector>
 
 #include <juce_audio_basics/juce_audio_basics.h>
 
+#include "backends/fake/FakeBackend.h"
 #include "playback/BackendRegistry.h"
 #include "playback/PlaybackEngine.h"
 #include "playback/StartupSong.h"
@@ -416,6 +419,128 @@ int main (int /*argc*/, char* /*argv*/[])
 	spacedSong.deleteFile();
 	otherSong.deleteFile();
 	notASong.deleteFile();
+
+	// ------------------------------------------- [6] a load must not starve the audio thread
+	// The point of splitting a load into buildSong() (outside the lock) and installSong() (inside
+	// it): while a song is unpacked and its sound cores start, the audio thread must keep getting
+	// the lock. The fake backend is told to take its time - standing in for a .vgz and a dozen
+	// chips - and a renderer paces itself like a 1 ms audio callback and counts the blocks it was
+	// refused. Measured, not assumed: this is the check that would have caught H-1.
+	std::printf ("[6] loading while the audio thread renders\n");
+
+	{
+		toybox::backends::fake::setLoadDelayMilliseconds (120);
+
+		toybox::PlaybackEngine engine;
+		engine.prepare (sampleRate, blockSize);
+
+		const auto firstSong = juce::File::getSpecialLocation (juce::File::tempDirectory)
+								   .getChildFile ("toybox starvation test.fake");
+		const auto secondSong = juce::File::getSpecialLocation (juce::File::tempDirectory)
+									.getChildFile ("toybox starvation test 2.fake");
+		firstSong.replaceWithText ("fake song");
+		secondSong.replaceWithText ("fake song");
+
+		juce::String error;
+		check (engine.loadFile (firstSong, error), "a slow song loads to begin with");
+
+		std::atomic<bool> stop { false };
+		std::atomic<int> rendered { 0 };
+		std::thread renderer ([&engine, &stop, &rendered, blockSize]
+		{
+			std::vector<float> left ((size_t) blockSize), right ((size_t) blockSize);
+			toybox::playback::OutputBusBuffers buses[1] = { { left.data(), right.data() } };
+
+			while (! stop.load())
+			{
+				engine.render (buses, 1, blockSize);
+				rendered.fetch_add (1);
+				juce::Thread::sleep (1);	// the shape of a real block: one call per millisecond
+			}
+		});
+
+		juce::Thread::sleep (40);	// let the renderer get going
+
+		const int starvedBefore = engine.getStarvedBlocks();
+		const int renderedBefore = rendered.load();
+
+		check (engine.loadFile (secondSong, error), "a second song loads while the first is playing");
+
+		const int refused = engine.getStarvedBlocks() - starvedBefore;
+		const int renderedDuring = rendered.load() - renderedBefore;
+
+		stop = true;
+		renderer.join();
+
+		std::printf ("    during the load: %d blocks rendered, %d refused the lock\n",
+					 renderedDuring, refused);
+		check (renderedDuring >= 50, "the audio thread kept rendering through the load");
+		check (refused <= 2, "and was almost never refused the lock - the load builds outside it");
+
+		toybox::backends::fake::setLoadDelayMilliseconds (0);
+		firstSong.deleteFile();
+		secondSong.deleteFile();
+	}
+
+	// A negative control for the check above: "nothing was refused" only means something if the
+	// counter can move at all. Hammering a locking command from this thread while the renderer
+	// spins must make it fire - it is the same mechanism a load used to trigger for its whole
+	// duration.
+	std::printf ("[6b] the starvation counter can actually fire\n");
+
+	{
+		toybox::PlaybackEngine engine;
+		engine.prepare (sampleRate, blockSize);
+
+		const auto controlSong = juce::File::getSpecialLocation (juce::File::tempDirectory)
+									 .getChildFile ("toybox starvation control.fake");
+		controlSong.replaceWithText ("fake song");
+
+		juce::String error;
+		check (engine.loadFile (controlSong, error), "a song loads for the control");
+
+		std::atomic<bool> stop { false };
+		std::atomic<int> attempts { 0 };
+		std::thread renderer ([&engine, &stop, &attempts, blockSize]
+		{
+			std::vector<float> left ((size_t) blockSize), right ((size_t) blockSize);
+			toybox::playback::OutputBusBuffers buses[1] = { { left.data(), right.data() } };
+
+			while (! stop.load())
+			{
+				engine.render (buses, 1, blockSize);
+				attempts.fetch_add (1);
+				juce::Thread::sleep (1);
+			}
+		});
+
+		juce::Thread::sleep (40);
+
+		// Each call holds the lock for a moment, so the renderer's try-lock has to lose the race
+		// sooner or later. Hammering until it does - with a deadline - rather than guessing an
+		// iteration count: Windows' sleep granularity means the renderer may only wake a few times.
+		const int refusedBefore = engine.getStarvedBlocks();
+		const int attemptsBefore = attempts.load();
+		const auto deadline = juce::Time::getMillisecondCounter() + 500;
+
+		while (engine.getStarvedBlocks() == refusedBefore
+			   && juce::Time::getMillisecondCounter() < deadline)
+		{
+			engine.setChipMuted (0, false);
+		}
+
+		const int refused = engine.getStarvedBlocks() - refusedBefore;
+		const int attemptsMade = attempts.load() - attemptsBefore;
+
+		stop = true;
+		renderer.join();
+
+		std::printf ("    %d render attempts during the hammering, %d refused\n", attemptsMade, refused);
+		check (attemptsMade > 0, "the renderer really did try while the lock was hammered");
+		check (refused > 0, "the counter moves when a command really does hold the lock");
+
+		controlSong.deleteFile();
+	}
 
 	file.deleteFile();
 

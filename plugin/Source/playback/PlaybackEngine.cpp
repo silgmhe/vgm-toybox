@@ -22,31 +22,38 @@ PlaybackEngine::~PlaybackEngine (void)
 
 void PlaybackEngine::prepare (double newSampleRate, int maxBlock)
 {
-	const juce::ScopedLock sl (lock);
+	bool needsRebuild = false;
 
-	const double newRate = (newSampleRate > 0.0) ? newSampleRate : 44100.0;
-	const int newBlockSize = juce::jmax (1, maxBlock);
-	const bool settingsChanged = (newRate != sampleRate) || (newBlockSize != maxBlockSize);
+	{
+		const juce::ScopedLock sl (lock);
 
-	sampleRate = newRate;
-	maxBlockSize = newBlockSize;
+		const double newRate = (newSampleRate > 0.0) ? newSampleRate : 44100.0;
+		const int newBlockSize = juce::jmax (1, maxBlock);
+		const bool settingsChanged = (newRate != sampleRate) || (newBlockSize != maxBlockSize);
 
-	// the scratch the mix renders each track into (allocated here, never on the audio thread)
-	mixLeft.assign ((size_t) maxBlockSize, 0.0f);
-	mixRight.assign ((size_t) maxBlockSize, 0.0f);
-	// the internal master bus: tracks routed to `Master` accumulate here before it is handed to
-	// the master's own target bus
-	masterLeft.assign ((size_t) maxBlockSize, 0.0f);
-	masterRight.assign ((size_t) maxBlockSize, 0.0f);
+		sampleRate = newRate;
+		maxBlockSize = newBlockSize;
 
-	if (! loaded.load() || ! settingsChanged)
+		// the scratch the mix renders each track into (allocated here, never on the audio thread)
+		mixLeft.assign ((size_t) maxBlockSize, 0.0f);
+		mixRight.assign ((size_t) maxBlockSize, 0.0f);
+		// the internal master bus: tracks routed to `Master` accumulate here before it is handed to
+		// the master's own target bus
+		masterLeft.assign ((size_t) maxBlockSize, 0.0f);
+		masterRight.assign ((size_t) maxBlockSize, 0.0f);
+
+		needsRebuild = loaded.load() && settingsChanged;
+	}
+
+	if (! needsRebuild)
 	{
 		return;
 	}
 
-	// The sound cores are created at the output sample rate, so a loaded song has to be
-	// re-created when it changes - otherwise the emulation would keep running at the old rate
-	// (wrong pitch and playback speed).
+	// The sound cores are created at the output sample rate, so a loaded song has to be re-created
+	// when it changes - otherwise the emulation would keep running at the old rate (wrong pitch and
+	// playback speed). rebuildPlayers() builds outside the lock and only installs under it, so a
+	// sample-rate change does not silence the audio thread for the whole rebuild.
 	juce::String errorMessage;
 	rebuildPlayers (errorMessage);
 	if (! errorMessage.isEmpty())
@@ -66,7 +73,17 @@ bool PlaybackEngine::loadFile (const juce::File& file, juce::String& errorMessag
 	juce::MemoryBlock data;
 	const bool readable = exists && file.loadFileAsData (data) && data.getSize() > 0;
 
-	// Phase 2, under the lock: everything that touches engine state.
+	// Phase 2, still outside the lock: unpacking and starting the sound cores, into a song of its
+	// own. The current song keeps playing while this happens - a failed load still stops playback
+	// below, exactly as it always has. (`chips` is message-thread data, like everything else read
+	// here; render() never touches it.)
+	LoadedSong built;
+	if (readable)
+	{
+		built = buildSong (data, file, chips, errorMessage);
+	}
+
+	// Phase 3, under the lock: the swap, and nothing else.
 	const juce::ScopedLock sl (lock);
 
 	resetState();	// stop playback and release the previous file first
@@ -77,18 +94,18 @@ bool PlaybackEngine::loadFile (const juce::File& file, juce::String& errorMessag
 		return false;
 	}
 
+	if (built.song == nullptr)
+	{
+		return false;	// errorMessage was filled in by the backend
+	}
+
 	// the backend unpacks a compressed container (.vgz) itself - the image stays as it was read
 	fileData.swapWith (data);
 	currentFile = file;
 
-	if (! createPlayers (errorMessage))
-	{
-		resetState();
-		return false;
-	}
+	installSong (std::move (built));
 
 	positionSeconds = 0.0;
-	loaded = true;
 	finished = false;
 	playing = true;
 
@@ -103,19 +120,23 @@ void PlaybackEngine::unloadFile (void)
 
 void PlaybackEngine::setMixerEnabled (bool shouldBeEnabled)
 {
-	const juce::ScopedLock sl (lock);
-	if (shouldBeEnabled == mixerEnabled)
 	{
-		return;
+		const juce::ScopedLock sl (lock);
+		if (shouldBeEnabled == mixerEnabled)
+		{
+			return;
+		}
+
+		mixerEnabled = shouldBeEnabled;
+		if (! loaded.load())
+		{
+			return;
+		}
 	}
 
-	mixerEnabled = shouldBeEnabled;
-	if (! loaded.load())
-	{
-		return;
-	}
-
-	// rebuild the players for the new mode; the track settings stay, they belong to the layout
+	// rebuild the players for the new mode; the track settings stay, they belong to the layout, and
+	// rebuildPlayers() carries them over. The lock is not held across the rebuild - only the install
+	// needs it - so switching the mixer does not stall the audio thread.
 	juce::String errorMessage;
 	rebuildPlayers (errorMessage);
 	if (! errorMessage.isEmpty())
@@ -354,9 +375,14 @@ void PlaybackEngine::refreshCachedTimes (void)
 		return;
 	}
 
-	const playback::SongInfo& info = song->getInfo();
-	cachedDurationSeconds = info.durationSeconds;
-	cachedLoopPointSeconds = info.loopPointSeconds;
+	applyTimesTo (song->getInfo(), cachedDurationSeconds, cachedLoopPointSeconds, loopsForever);
+}
+
+void PlaybackEngine::applyTimesTo (const playback::SongInfo& info, double& durationSeconds,
+								   double& loopPointSeconds, bool& loopsForever)
+{
+	durationSeconds = info.durationSeconds;
+	loopPointSeconds = info.loopPointSeconds;
 	loopsForever = info.loopsForever;
 }
 
@@ -372,49 +398,6 @@ juce::String PlaybackEngine::getTag (const juce::String& tagName) const
 	// fail every now and then, dropping a whole block to silence
 	auto it = tags.find (tagName);
 	return (it == tags.end()) ? juce::String() : it->second;
-}
-
-void PlaybackEngine::enumerateTags (void)
-{
-	tags.clear();
-
-	if (song != nullptr)
-	{
-		tags = song->getInfo().tags;
-	}
-}
-
-void PlaybackEngine::enumerateChips (void)
-{
-	// keep the mute toggles when the same song is rebuilt (sample-rate change, mode switch)
-	std::map<playback::DeviceId, bool> previousMutes;
-	for (const auto& chip : chips)
-	{
-		previousMutes[chip.deviceId] = chip.muted;
-	}
-
-	chips.clear();
-
-	if (song == nullptr)
-	{
-		return;
-	}
-
-	for (const auto& chipInfo : song->getInfo().chips)
-	{
-		ChipEntry chip;
-		chip.name = chipInfo.name;
-		chip.core = chipInfo.core;
-		chip.deviceId = chipInfo.deviceId;
-
-		const auto it = previousMutes.find (chip.deviceId);
-		if (it != previousMutes.end())
-		{
-			chip.muted = it->second;
-		}
-
-		chips.push_back (std::move (chip));
-	}
 }
 
 //==============================================================================
@@ -434,7 +417,13 @@ void PlaybackEngine::updatePlayerTimeline (void)
 
 void PlaybackEngine::applyChipMutes (void)
 {
-	for (auto& player : trackPlayers)
+	applyChipMutesTo (chips, trackPlayers);
+}
+
+void PlaybackEngine::applyChipMutesTo (const std::vector<ChipEntry>& chips,
+									   const std::vector<std::unique_ptr<playback::ITrackPlayer>>& players)
+{
+	for (const auto& player : players)
 	{
 		for (const auto& chip : chips)
 		{
@@ -445,114 +434,168 @@ void PlaybackEngine::applyChipMutes (void)
 
 void PlaybackEngine::applyDefaultRouting (void)
 {
+	applyRoutingTo (defaultRouting, tracks);
+}
+
+void PlaybackEngine::applyRoutingTo (playback::DefaultRouting routing,
+									 std::vector<std::unique_ptr<TrackState>>& tracks)
+{
 	// Track n goes to bus n under `spreadAcrossBuses`, everything to the master otherwise. The
-	// scheme survives loading another song: createPlayers() applies it to the fresh track states.
+	// scheme survives loading another song: buildSong() applies it to the fresh track states.
 	for (size_t i = 0; i < tracks.size(); ++i)
 	{
-		tracks[i]->output.store (playback::defaultTargetForTrack (defaultRouting, (int) i));
+		tracks[i]->output.store (playback::defaultTargetForTrack (routing, (int) i));
 	}
 }
 
-void PlaybackEngine::applyTrackIsolation (void)
+void PlaybackEngine::applyTrackIsolationTo (bool mixerEnabled,
+											const std::vector<playback::TrackInfo>& layout,
+											std::vector<std::unique_ptr<playback::ITrackPlayer>>& players)
 {
 	if (! mixerEnabled)
 	{
 		return;
 	}
 
-	for (size_t t = 0; t < trackPlayers.size(); ++t)
+	for (size_t t = 0; t < players.size(); ++t)
 	{
-		if (t < trackLayout.size())
+		if (t < layout.size())
 		{
-			trackPlayers[t]->setTrackAudible (trackLayout[t].id, true);
+			players[t]->setTrackAudible (layout[t].id, true);
 		}
 	}
 }
 
-bool PlaybackEngine::createPlayers (juce::String& errorMessage)
+PlaybackEngine::LoadedSong PlaybackEngine::buildSong (const juce::MemoryBlock& image, const juce::File& file,
+													 const std::vector<ChipEntry>& previousChips,
+													 juce::String& errorMessage) const
 {
-	destroyPlayers();
+	// Read-only on purpose: this runs while the engine is still playing the previous song, so it
+	// may look at the configuration (sample rate, block size, mixer mode, loop/fade, routing) and
+	// at the caller's copy of the chip list, but it must not touch a single member that render()
+	// can see. Everything it produces goes into the returned struct.
+	LoadedSong pending;
 
-	playback::SongMemory image;
-	image.data = fileData.getData();
-	image.size = fileData.getSize();
-	image.file = currentFile;
+	playback::SongMemory memory;
+	memory.data = image.getData();
+	memory.size = image.getSize();
+	memory.file = file;
 
 	// Compile-time registration (idempotent): the plugin ships its backends inside the same
 	// binary, so there is nothing to load at runtime (ADR-008).
 	playback::registerBuiltInBackends();
-	auto* backend = playback::BackendRegistry::getInstance().findFor (image);
+	auto* backend = playback::BackendRegistry::getInstance().findFor (memory);
 	if (backend == nullptr)
 	{
 		errorMessage = "Unsupported file format.";
-		return false;
+		return pending;
 	}
 
-	song = backend->open (image, errorMessage);
-	if (song == nullptr)
+	pending.song = backend->open (memory, errorMessage);
+	if (pending.song == nullptr)
 	{
-		return false;
+		return pending;
 	}
 
-	if (! song->prepare (sampleRate, maxBlockSize, errorMessage))
+	// the slow part of a real load: unpacking a .vgz and starting every sound core
+	if (! pending.song->prepare (sampleRate, maxBlockSize, errorMessage))
 	{
-		song.reset();
-		return false;
+		pending.song.reset();
+		return pending;
 	}
 
-	song->setTimeline (loopCount, fadeSeconds);
+	pending.song->setTimeline (loopCount, fadeSeconds);
 
-	enumerateTags();
-	enumerateChips();
-	refreshCachedTimes();
+	// song facts
+	pending.tags = pending.song->getInfo().tags;
+	applyTimesTo (pending.song->getInfo(), pending.durationSeconds, pending.loopPointSeconds,
+				  pending.loopsForever);
 
-	if (trackLayout.empty())
+	// chips, keeping the mute toggles when the same song is rebuilt (sample-rate change, mode
+	// switch) - the caller passes the list the engine currently shows
+	std::map<playback::DeviceId, bool> previousMutes;
+	for (const auto& chip : previousChips)
 	{
-		// a new song: build the track list and one control state per track (a mode switch
-		// keeps both - the layout of a song never changes)
-		trackLayout = song->getTracks();
+		previousMutes[chip.deviceId] = chip.muted;
+	}
 
-		tracks.clear();
-		soloCount = 0;
-		for (size_t i = 0; i < trackLayout.size(); ++i)
+	for (const auto& chipInfo : pending.song->getInfo().chips)
+	{
+		ChipEntry chip;
+		chip.name = chipInfo.name;
+		chip.core = chipInfo.core;
+		chip.deviceId = chipInfo.deviceId;
+
+		if (const auto it = previousMutes.find (chip.deviceId); it != previousMutes.end())
 		{
-			tracks.push_back (std::make_unique<TrackState>());
+			chip.muted = it->second;
 		}
 
-		// A new song inherits the routing scheme the user picked with the mixer card's shortcut
-		// buttons - untouched, that is "everything to the master bus", the classic behaviour.
-		applyDefaultRouting();
+		pending.chips.push_back (std::move (chip));
 	}
 
-	// One player per track when the backend can isolate them, a single un-isolated one
-	// otherwise (plain player mode always uses a single player).
-	const playback::BackendCapabilities caps = song->getCapabilities();
+	// the track list and one control state per track
+	pending.layout = pending.song->getTracks();
+	for (size_t i = 0; i < pending.layout.size(); ++i)
+	{
+		pending.tracks.push_back (std::make_unique<TrackState>());
+	}
+
+	// A new song inherits the routing scheme the user picked with the mixer card's shortcut
+	// buttons - untouched, that is "everything to the master bus", the classic behaviour.
+	applyRoutingTo (defaultRouting, pending.tracks);
+
+	// One player per track when the backend can isolate them, a single un-isolated one otherwise
+	// (plain player mode always uses a single player).
+	const playback::BackendCapabilities caps = pending.song->getCapabilities();
 	const bool perTrack = mixerEnabled
 						   && caps.isolation == playback::IsolationMode::multiInstance
-						   && ! trackLayout.empty();
-	const size_t playersWanted = perTrack ? trackLayout.size() : 1;
+						   && ! pending.layout.empty();
+	const size_t playersWanted = perTrack ? pending.layout.size() : 1;
 
 	for (size_t i = 0; i < playersWanted; ++i)
 	{
-		auto player = song->createPlayer (errorMessage);
+		auto player = pending.song->createPlayer (errorMessage);
 		if (player == nullptr)
 		{
-			destroyPlayers();
-			song.reset();
-			return false;
+			pending.players.clear();
+			pending.song.reset();
+			return pending;
 		}
 
 		player->start();
-		trackPlayers.push_back (std::move (player));
+		pending.players.push_back (std::move (player));
 	}
 
 	if (perTrack)
 	{
-		applyTrackIsolation();
+		applyTrackIsolationTo (mixerEnabled, pending.layout, pending.players);
 	}
-	applyChipMutes();
+	applyChipMutesTo (pending.chips, pending.players);
 
-	return true;
+	return pending;
+}
+
+void PlaybackEngine::installSong (LoadedSong&& built)
+{
+	// the only part of a load that has to be serialised against render(): pointer moves, the cached
+	// facts and a handful of flags. The players of the outgoing song are destroyed here, with
+	// everything else that goes out of scope - bounded work, unlike building them.
+	song = std::move (built.song);
+	trackPlayers = std::move (built.players);
+	trackLayout = std::move (built.layout);
+	tracks = std::move (built.tracks);
+	soloCount = built.soloCount;
+	chips = std::move (built.chips);
+	tags = std::move (built.tags);
+
+	cachedDurationSeconds = built.durationSeconds;
+	cachedLoopPointSeconds = built.loopPointSeconds;
+	loopsForever = built.loopsForever;
+
+	positionSeconds = 0.0;
+	finished = false;
+	loaded = true;
 }
 
 void PlaybackEngine::destroyPlayers (void)
@@ -564,21 +607,50 @@ void PlaybackEngine::rebuildPlayers (juce::String& errorMessage)
 {
 	const bool wasPlaying = playing.load();
 	const double position = getPositionSeconds();
+	const std::vector<ChipEntry> previousChips = chips;		// message-thread data
 
-	destroyPlayers();
-	if (! createPlayers (errorMessage))
+	auto built = buildSong (fileData, currentFile, previousChips, errorMessage);
+	if (built.song == nullptr)
 	{
+		const juce::ScopedLock sl (lock);
 		resetState();
 		return;
 	}
 
-	positionSeconds = 0.0;
-	finished = false;
-	playing = true;
+	{
+		const juce::ScopedLock sl (lock);
+
+		// A rebuild is the *same* song, so the mixer values the user set belong to its tracks and
+		// have to survive it. The player objects are new (the old ones stay with the audio thread
+		// until this swap), so the values are copied rather than the objects shared. The old code
+		// got the same effect by keeping the track-state list across a rebuild.
+		for (size_t i = 0; i < built.tracks.size() && i < tracks.size(); ++i)
+		{
+			built.tracks[i]->gain.store (tracks[i]->gain.load());
+			built.tracks[i]->pan.store (tracks[i]->pan.load());
+			built.tracks[i]->mute.store (tracks[i]->mute.load());
+			built.tracks[i]->solo.store (tracks[i]->solo.load());
+			built.tracks[i]->output.store (tracks[i]->output.load());
+		}
+
+		built.soloCount = 0;
+		for (const auto& track : built.tracks)
+		{
+			if (track->solo.load())
+			{
+				++built.soloCount;
+			}
+		}
+
+		applyTrackIsolationTo (mixerEnabled, built.layout, built.players);
+		applyChipMutesTo (built.chips, built.players);
+
+		installSong (std::move (built));
+	}
+
 	if (position > 0.0)
 	{
-		// the lock is already held here - calling the public version would have worked only
-		// because CriticalSection happens to be recursive (M-5)
+		const juce::ScopedLock sl (lock);
 		setPositionSecondsLocked (position);
 	}
 	if (! wasPlaying)
@@ -708,6 +780,12 @@ void PlaybackEngine::render (const playback::OutputBusBuffers* buses, int numBus
 	const juce::ScopedTryLock stl (lock);
 	if (! stl.isLocked() || trackPlayers.empty())
 	{
+		if (! stl.isLocked())
+		{
+			// A command held the lock across this block: we go silent instead of glitching, and this
+			// counter is the only trace of it - the core test asserts a load does not cause it.
+			starvedBlocks.fetch_add (1);
+		}
 		return;
 	}
 

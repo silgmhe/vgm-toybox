@@ -118,6 +118,11 @@ public:
 	/** Position of one track's player - used to verify that the tracks stay in sync. */
 	double getTrackPositionSeconds (size_t trackIndex) const;
 
+	/** Blocks the audio thread had to skip because a command held the lock. Diagnostics: the core
+		test uses it to tell "a load never blocked the audio thread" from "it did", which is otherwise
+		invisible - render() just returns silence and nobody notices (review H-1). */
+	int getStarvedBlocks (void) const { return starvedBlocks.load(); }
+
 	// --- output routing ---
 	/** The routing scheme **newly loaded songs** start with - the mixer card's two shortcut
 		buttons set it. Applying it also re-routes the song that is loaded right now. */
@@ -167,16 +172,61 @@ private:
 		convention is visible instead of relying on the lock being recursive. */
 	void setPositionSecondsLocked (double seconds);		// caller must hold the lock
 	void updatePlayerTimeline (void);					// caller must hold the lock
-	void enumerateTags (void);
-	void enumerateChips (void);
-	void applyTrackIsolation (void);					// caller must hold the lock
 	void applyChipMutes (void);							// caller must hold the lock
 	/** Sets every track (and a new song's tracks) to the current routing scheme. */
 	void applyDefaultRouting (void);					// caller must hold the lock
-	bool createPlayers (juce::String& errorMessage);	// caller must hold the lock
 	void destroyPlayers (void);
-	void rebuildPlayers (juce::String& errorMessage);	// caller must hold the lock
 	void resetState (void);
+
+	/** Everything a load produces, built outside the lock and moved into the engine under it.
+
+		The members mirror the engine's own state one for one; buildSong() fills this instead of
+		touching the engine, which is what lets the slow part of a load - unpacking a .vgz, starting
+		the sound cores - run while the audio thread keeps rendering the song that is still current
+		(review H-1). */
+	struct LoadedSong
+	{
+		std::unique_ptr<playback::ISongInstance> song;
+		std::vector<std::unique_ptr<playback::ITrackPlayer>> players;
+		std::vector<playback::TrackInfo> layout;
+		std::vector<std::unique_ptr<TrackState>> tracks;
+		int soloCount = 0;
+		std::vector<ChipEntry> chips;
+		std::map<juce::String, juce::String> tags;
+		double durationSeconds = 0.0;
+		double loopPointSeconds = -1.0;
+		bool loopsForever = false;
+	};
+
+	/** Builds a song from an image **without touching engine state**, so it needs no lock: it reads
+		the configuration (sample rate, block size, mixer mode, loop/fade, routing scheme) and the
+		previous chip list, and returns everything a load produces. `song` is null on failure. */
+	LoadedSong buildSong (const juce::MemoryBlock& image, const juce::File& file,
+						  const std::vector<ChipEntry>& previousChips,
+						  juce::String& errorMessage) const;
+
+	/** Moves a built song into the engine and publishes its state - the only part of a load that has
+		to happen under the lock. Leaves the position at zero; the callers decide what happens to the
+		transport. */
+	void installSong (LoadedSong&& built);				// caller must hold the lock
+
+	/** Rebuilds the players from the file that is already loaded, keeping the position, the
+		transport state and the mixer values the user set. Takes the lock only to install, so a
+		mode switch or a sample-rate change does not stall the audio thread either. */
+	void rebuildPlayers (juce::String& errorMessage);
+
+	/** The shared bodies: used both by buildSong() (on a song that is not installed yet) and by the
+		member functions below (on the installed one), which is why they take their state as
+		parameters instead of reading members. */
+	static void applyTrackIsolationTo (bool mixerEnabled,
+									   const std::vector<playback::TrackInfo>& layout,
+									   std::vector<std::unique_ptr<playback::ITrackPlayer>>& players);
+	static void applyChipMutesTo (const std::vector<ChipEntry>& chips,
+								  const std::vector<std::unique_ptr<playback::ITrackPlayer>>& players);
+	static void applyRoutingTo (playback::DefaultRouting routing,
+								std::vector<std::unique_ptr<TrackState>>& tracks);
+	static void applyTimesTo (const playback::SongInfo& info, double& durationSeconds,
+							  double& loopPointSeconds, bool& loopsForever);
 
 	mutable juce::CriticalSection lock;
 	std::unique_ptr<playback::ISongInstance> song;		// the open song (backend object)
@@ -217,6 +267,7 @@ private:
 	std::atomic<double> positionSeconds { 0.0 };	// published by render(), read by the UI
 	std::atomic<float> outputPeakL { 0.0f };		// master meter, published by render()
 	std::atomic<float> outputPeakR { 0.0f };
+	std::atomic<int> starvedBlocks { 0 };			// diagnostics - see getStarvedBlocks()
 
 	// Output routing: the master bus target/mute and the connectivity the host showed us in the
 	// last block (bit i = bus i was connected; bus 0 counts as connected until told otherwise).

@@ -1,5 +1,6 @@
 #include "FakeBackend.h"
 
+#include <atomic>
 #include <cmath>
 
 #include "playback/BackendRegistry.h"
@@ -9,6 +10,9 @@ namespace toybox::backends::fake
 
 namespace
 {
+	/** See setLoadDelayMilliseconds() - zero unless a test asks for otherwise. */
+	std::atomic<int> loadDelayMs { 0 };
+
 	constexpr double kSongSeconds = 1.0;		// the fake song is exactly one second long
 	constexpr double kLoopPointSeconds = 0.5;
 	constexpr float kAmplitude = 0.25f;			// full scale of one fake track
@@ -192,9 +196,24 @@ bool FakeBackend::canOpen (const playback::SongMemory& memory) const
 	return memory.file.getFileExtension().equalsIgnoreCase (".fake");
 }
 
+void setLoadDelayMilliseconds (int milliseconds)
+{
+	loadDelayMs.store (juce::jmax (0, milliseconds));
+}
+
+int getLoadDelayMilliseconds (void)
+{
+	return loadDelayMs.load();
+}
+
 std::unique_ptr<playback::ISongInstance> FakeBackend::open (const playback::SongMemory& /*memory*/,
 															juce::String& /*errorMessage*/)
 {
+	if (const int delay = loadDelayMs.load(); delay > 0)
+	{
+		juce::Thread::sleep (delay);
+	}
+
 	return std::make_unique<FakeSongInstance>();
 }
 

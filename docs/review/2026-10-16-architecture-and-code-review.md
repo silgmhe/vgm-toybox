@@ -376,17 +376,30 @@ Get-ChildItem -Recurse -File -Include *.md,*.h,*.cpp -Path README.md,CODEBUDDY.m
 - **怎么验证**：构建 ✓ + `vgm_ui_test` / `vgm_core_test` ✓ + 冒烟 ✓。
 - **还差什么**：没有 ✓。
 
-### F-5 加载：把无上界的 I/O 移出锁（**H-1 ⚠️ 只做了一半**）
+### F-5 加载全程持锁（**H-1 ✅ 完成**，分两步做完）
 
-- **改了什么**：`PlaybackEngine::loadFile()` 现在两阶段 ✓ ——
-  1. **锁外**：`existsAsFile()` + `loadFileAsData()`（读文件 ✓）；
-  2. **锁内**：`resetState()` → 换入镜像 → `createPlayers()`（解压 + 声音核心初始化 ✓）→ 设 `loaded / playing / position` ✓。
-  `resetState()` 的顺序与错误分支**逐条保持不变** ✓（读取失败仍先停播放并清空 ✓，错误文案一字未改 ✓）。
-- **为什么只做一半**：这是唯一**延迟无上界**的部分 ✓（30 MB 的 VGM、冷缓存、文件被别的进程占着 ✓）；解压与初始化是**有界的小毫秒级** ✓。把**整段**移出锁需要把"构建新会话"与"换入"彻底分开 ✓（即 M-1 的 `SongSession` ✓）—— 代价与风险高一个量级 ✓，留作独立一步 ✓。
-- **怎么验证**：`vgm_mixer_test` **−1000.00 dB 不变** ✓（混音与 seek 未受影响 ✓）；`vgm_core_test` 全绿 ✓（路由 / 音量 / seek / 曲终 ✓）；`vgm_app_test` ✓；**命令行加载歌曲冒烟成功** ✓（成功启动不写日志 ✓）。
-- **还差什么**（明确记下 ✓）：
-  1. **解压 + 初始化仍在锁内** ✓ → 播放中切歌仍可能有 **1–2 个静音块** ✓（轻微 tick ✓）；
-  2. **没有回归测试** ✗ —— 要证明"加载期间音频线程不被饿死"，需要一个**故意慢的加载**（让 fake 后端在 `prepare` 里 sleep ✓）加一个渲染线程统计 try-lock 失败次数 ✓；本轮改动（I/O）本身**难以确定性测试** ✗（读文件耗时依赖机器 ✓）→ 该测试应与剩下的会话抽取**一起做** ✓。
+**第一步（I/O 出锁）**：`loadFile()` 先改为两阶段 ✓ —— 锁外 `existsAsFile()` + `loadFileAsData()`（读文件 ✓），锁内 `resetState()` + 换入 + 构建 ✓。`resetState()` 顺序与错误分支逐条未变 ✓。
+
+**第二步（会话抽取，本轮）**：把"构建"与"换入"彻底分开 ✓ ——
+- `buildSong()` ✓：**只读**引擎配置（采样率 / 块大小 / mixer 模式 / loop / fade / 路由方案 ✓）+ 调用方给的旧芯片表 ✓ → 在锁外把整首歌建好并**返回** `LoadedSong`（backend 实例 ✓、解压与 `prepare` ✓、每个声音核心的 `start()` ✓、标签 / 芯片 / 轨道 / 路由 / 播放器 ✓）；
+- `installSong()` ✓：**唯一的持锁部分** ✓ —— 指针移动 + 缓存事实 + 几个标志（微秒级 ✓）；
+- 因此 `prepare()`（采样率变化 ✓）、`setMixerEnabled()`（模式切换 ✓）、`rebuildPlayers()` **都不再跨重建持锁** ✓；`rebuildPlayers()` 改为"锁外构建 → 锁内换入" ✓，并把用户设的 `gain / pan / mute / solo / output` **按值搬运**到新的轨道状态 ✓（旧代码靠"复用状态对象"达到同样效果 ✓ —— 这是本次重构最容易出错的一点 ✓）；
+- 三个共享逻辑抽成静态助手（`applyChipMutesTo` / `applyRoutingTo` / `applyTrackIsolationTo` / `applyTimesTo` ✓），构建路径与已安装路径**用同一份实现** ✓。
+
+**怎么验证**：
+- **饿死测试（新增 `[6]`）** ✓ —— fake 后端加"慢加载"钩子（`setLoadDelayMilliseconds` ✓，模拟解压 + 启动声音核心 ✓），渲染线程按 1 ms 节奏调 `render()` ✓，引擎新增 `getStarvedBlocks()` 诊断计数 ✓：
+  ```
+  during the load: 96 blocks rendered, 0 refused the lock
+  ```
+  → **120 ms 的加载期间，音频线程一次都没有被拒** ✓✓（改造前它会被拒满整段 ✗）。
+- **反向对照（新增 `[6b]`）** ✓ —— 一个"永远不会失败"的测试等于没测 ✓：从主线程持续锤一个持锁命令 ✓，直到计数动为止 ✓：
+  ```
+  3 render attempts during the hammering, 1 refused
+  ```
+  → 计数器**确实会动** ✓✓，所以上面的 0 有意义 ✓。
+- **逐样本门禁** ✓：`vgm_mixer_test` **−1000.00 dB 不变** ✓（"seek 后重渲染" −32.3 dB 也未变 ✓）；`vgm_core_test` 全绿 ✓（路由 / 音量 / seek / 曲终 / 模式切换 ✓）；`vgm_app_test` ✓；命令行加载冒烟 ✓。
+- 过程中踩到两个小坑并记下 ✓：`installSong` 的形参一度叫 `loaded` **遮蔽**了同名成员 ✗（编译错误 ✓）；lambda 未捕获 `constexpr` 局部变量 ✗。
+- **还差什么**：没有 ✓（H-1 完成 ✓）。剩下与它相邻的是 **M-1 的另一半** ✓（`render()` 的 214 行与 `RoutingPlan` ✓）—— 那属于可读性重构 ✓，不是实时安全问题 ✓。
 
 ### F-6 锁契约显式化（**M-5 ✅ 完成**）
 
@@ -404,6 +417,6 @@ Get-ChildItem -Recurse -File -Include *.md,*.h,*.cpp -Path README.md,CODEBUDDY.m
 | M-2 刷新分层 | M（**已重定义** ✓） | ✅ 完成（F-4 ✓） |
 | M-3 卡片头套路 ×3 | M | ✅ 完成（F-3 ✓） |
 | M-5 锁契约 | M | ✅ 完成（F-6 ✓） |
-| **H-1 加载全程持锁** | **H** | ⚠️ **一半**（F-5 ✓：I/O 已移出 ✓；解压+初始化仍在锁内 ✓，回归测试待做 ✓） |
-| M-1 `PlaybackEngine` 四职责 | M | ⏳ 未动 ✓（H-1 的另一半与它同一件事 ✓） |
+| **H-1 加载全程持锁** | **H** | ✅ **完成**（F-5 ✓：I/O 与会话构建都已出锁 ✓；`[6]` 饿死测试 + `[6b]` 反向对照 ✓） |
+| M-1 `PlaybackEngine` 四职责 | M | ⚠️ **一半**：加载已抽成 `LoadedSong`/`buildSong`/`installSong` ✓；`render()`（214 行）与 `RoutingPlan` 仍未动 ✓ |
 | M-4 / M-6 / M-7 / L-1..L-5 | M/L | ⏳ 未动 ✓（M-4 与 L 系列随手可做 ✓；M-6/M-7 只要一句决策 ✓） |
