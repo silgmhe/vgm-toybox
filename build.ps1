@@ -119,7 +119,19 @@ function Write-Step([string]$Message) {
 
 function Invoke-Native([string]$FilePath, [string[]]$Arguments) {
 	Write-Host ("+ {0} {1}" -f $FilePath, ($Arguments -join ' ')) -ForegroundColor DarkGray
-	& $FilePath @Arguments
+
+	# Native tools write progress and diagnostics to stderr - git's "Cloning into ...", MSVC's
+	# banners - and with $ErrorActionPreference = 'Stop' PowerShell turns any of that into a
+	# terminating error, which is how a perfectly healthy dependency clone aborted this script.
+	# The exit code below is the real answer, so stderr must not be treated as one.
+	$previousPreference = $ErrorActionPreference
+	$ErrorActionPreference = 'Continue'
+	try {
+		& $FilePath @Arguments
+	} finally {
+		$ErrorActionPreference = $previousPreference
+	}
+
 	if ($LASTEXITCODE -ne 0) {
 		throw "'$FilePath' failed with exit code $LASTEXITCODE"
 	}
