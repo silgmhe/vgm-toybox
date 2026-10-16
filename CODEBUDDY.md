@@ -3,7 +3,7 @@ This file provides guidance to CodeBuddy when working with code in this reposito
 
 ## Overview
 
-This repository plays video game music log formats: `.vgm`/`.vgz` (Video Game Music), `.s98`, `.dro` (DOSBox RAW OPL), `.gym` (Genecyst), plus `.m3u` playlists. Both front-ends are C++ around the **libvgm** library, which lives here as a git submodule (`libs/libvgm/`, https://github.com/ValleyBell/libvgm.git). `libs/inih` and `libs/wingetopt` are also submodules. The command-line player's version is in `version.h` (`APP_NAME`, `VGMPLAY_VER_STR`, `VGM_VER_STR`); changelog is in `Updates.txt`; `VGMPlay.txt` is its user readme.
+This repository plays video game music log formats: `.vgm`/`.vgz` (Video Game Music), `.s98`, `.dro` (DOSBox RAW OPL), `.gym` (Genecyst), plus `.m3u` playlists. Both front-ends are C++ around the **libvgm** library, which is **vendored as source** at `libs/libvgm/` (upstream https://github.com/ValleyBell/libvgm.git); `libs/inih` and `libs/wingetopt` are vendored the same way. There are **no git submodules** in this repository, so those libraries can be patched in place - their provenance, revisions and licences are listed in `README.md`. The command-line player's version is in `version.h` (`APP_NAME`, `VGMPLAY_VER_STR`, `VGM_VER_STR`); changelog is in `Updates.txt`; `VGMPlay.txt` is its user readme.
 
 The fork's own product is **VGMToybox** (`vgm-toybox`) — the two names are deliberately distinct: everything the plugin builds is "VGMToybox", while the command-line player keeps the upstream "VGMPlay" identity, so the upstream tool and this fork's plugin never get mixed up.
 
@@ -16,13 +16,9 @@ The authoritative docs are `README.md` (what the product is, attribution, build)
 
 ## Build commands
 
-Fetch the submodules first — `libvgm`, `libs/inih` and `libs/wingetopt` are pinned git submodules:
+Nothing to fetch — `libs/libvgm`, `libs/inih` and `libs/wingetopt` are vendored source, part of this repository.
 
-```bash
-git submodule update --init --recursive
-```
-
-Everything is built in **one CMake tree**: the root project adds the libvgm submodule with `add_subdirectory(libvgm)` (static libraries `vgm-utils`, `vgm-audio`, `vgm-emu`, `vgm-player`), and libvgm fetches + adds zlib itself (`libs/libvgm/cmake/CPM.cmake`, used in `libs/libvgm/utils/CMakeLists.txt`). `find_package(libvgm)` is only a fallback for when the submodule is not checked out. `.github/workflows/GHA.yml` still builds an installed libvgm first, which the app now simply ignores.
+Everything is built in **one CMake tree**: the root project adds the vendored libvgm with `add_subdirectory(libs/libvgm)` (static libraries `vgm-utils`, `vgm-audio`, `vgm-emu`, `vgm-player`), and libvgm fetches + adds zlib itself (`libs/libvgm/cmake/CPM.cmake`, used in `libs/libvgm/utils/CMakeLists.txt`). `find_package(libvgm)` is only a fallback for when the in-tree copy is missing. `.github/workflows/GHA.yml` builds the command-line player only (`-DTOYBOX_BUILD_PLUGIN=OFF`), because the GUI plugin is a Windows target.
 
 ```bash
 # Windows: MSVC + Ninja + static runtime, output in .\dist (+ clangd database)
@@ -92,7 +88,7 @@ cmake --build build --target vgm_core_test
 build/plugin/vgm_core_test
 ```
 
-Linux build dependencies: `libinih-dev` (otherwise the bundled `libs/inih` submodule is used), `zlib1g-dev`, and for the audio drivers `libasound2-dev` / `libpulse-dev` / `libao-dev`; `libdbus-1-dev` for MPRIS media controls. MSVC needs no extra packages (`libs/wingetopt` supplies `getopt_long` on MSVC; MinGW/Linux use the system implementation).
+Linux build dependencies: `libinih-dev` (otherwise the vendored `libs/inih` is used), `zlib1g-dev`, and for the audio drivers `libasound2-dev` / `libpulse-dev` / `libao-dev`; `libdbus-1-dev` for MPRIS media controls. MSVC needs no extra packages (`libs/wingetopt` supplies `getopt_long` on MSVC; MinGW/Linux use the system implementation).
 
 ## Architecture
 
@@ -100,13 +96,13 @@ Linux build dependencies: `libinih-dev` (otherwise the bundled `libs/inih` submo
 
 The repository is not one program but a library + application pair:
 
-1. **`libs/libvgm/` (submodule)** — four libraries: `vgm-utils` (data loaders with zlib/`.vgz` support, OS thread/mutex abstraction, charset conversion), `vgm-audio` (audio output drivers + `AudioStream` abstraction), `vgm-emu` (sound chip emulation cores + resampling), `vgm-player` (format playback engines). It also still ships a CMake package config (`libvgm::` namespace) and pkg-config files for out-of-tree consumers.
+1. **`libs/libvgm/`** (vendored upstream source) — four libraries: `vgm-utils` (data loaders with zlib/`.vgz` support, OS thread/mutex abstraction, charset conversion), `vgm-audio` (audio output drivers + `AudioStream` abstraction), `vgm-emu` (sound chip emulation cores + resampling), `vgm-player` (format playback engines). It also still ships a CMake package config (`libvgm::` namespace) and pkg-config files for out-of-tree consumers.
 2. **`vgmplayer/`** — the VGMPlay CLI application (`main.cpp`, `playctrl.cpp`, `playcfg.cpp`, `config.cpp`, `mediainfo.cpp`, `m3uargparse.cpp`, `utils.cpp`, `mediactrl*.cpp`), its `VGMPlay.ini` template and its two text documents. Moved out of the repository root so that the two front-ends sit beside each other; the target, name and install rules are unchanged. The root `CMakeLists.txt` only assembles the project (`add_subdirectory(vgmplayer)`, `add_subdirectory(plugin)`) and owns the libvgm setup the two share.
 
 The root project builds libvgm in-tree: `add_subdirectory(libvgm)` creates the four static targets (`vgm-utils`, `vgm-audio`, `vgm-emu`, `vgm-player`) in the same build tree and links them directly, so one configure + build produces the executable. Two constraints inside `libs/libvgm/` exist because of this and must be kept in mind:
 
 - `libs/libvgm/utils/CMakeLists.txt` fetches zlib with CPM and adds it via `add_subdirectory`, then links it as `$<BUILD_INTERFACE:$<TARGET_FILE:zlibstatic>> $<INSTALL_INTERFACE:ZLIB::ZLIB>`. Referring to the zlib target by name would make libvgm's `export()`/`install(EXPORT)` rules fail ("target … is not in any export set"), because the zlib target is not part of libvgm's export set; the same reason applies to the `$<BUILD_INTERFACE:…>` wrapping of zlib's include directories. Only zlib symbols may be taken from that target — do not "simplify" this back to `find_package(ZLIB)`.
-- The submodule is a pinned upstream commit: committing libvgm changes means committing inside the submodule and recording the new revision in the parent repository (that is how the zlib/CPM change is stored). The MSVC builds of the whole tree must share one runtime: the root sets `CMAKE_MSVC_RUNTIME_LIBRARY=/MT`, which the libvgm and zlib sub-projects inherit.
+- libvgm (and `libs/inih`, `libs/wingetopt`) is vendored source, so a change to it is an ordinary commit in this repository - that is how the zlib/CPM patch is stored, and why raising the upstream revision is a plain merge of the upstream files rather than a submodule bump. `README.md` records where each library came from, at which revision, and under which licence. The MSVC builds of the whole tree must share one runtime: the root sets `CMAKE_MSVC_RUNTIME_LIBRARY=/MT`, which the libvgm and zlib sub-projects inherit.
 
 ### Root application data flow
 

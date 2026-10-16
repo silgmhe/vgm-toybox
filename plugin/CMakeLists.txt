@@ -13,7 +13,8 @@ if(NOT TARGET juce_audio_processors)
 	# resolve it without knowing the layout of the build tree
 	set(_cpm_module "${CMAKE_CURRENT_SOURCE_DIR}/../libs/libvgm/cmake/CPM.cmake")
 	if(NOT EXISTS "${_cpm_module}")
-		message(FATAL_ERROR "VGM Toybox: '${_cpm_module}' not found - run 'git submodule update --init --recursive'")
+		message(FATAL_ERROR "VGM Toybox: '${_cpm_module}' not found - "
+			"libvgm is vendored in libs/libvgm/, so this checkout is incomplete")
 	endif()
 
 	# pick the first reachable repository (GitHub is not accessible from everywhere)

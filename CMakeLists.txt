@@ -34,8 +34,9 @@ if(MSVC)
 endif()
 
 # --- libvgm ---
-# Build the libvgm submodule as part of this project (one-shot build, static libraries).
-# If the submodule is not checked out, fall back to an installed libvgm package.
+# Build the in-tree libvgm copy as part of this project (one-shot build, static libraries).
+# The libraries under libs/ are vendored source, not submodules, so they can be patched in place -
+# and if the copy is missing altogether, fall back to an installed libvgm package.
 if(EXISTS "${PROJECT_SOURCE_DIR}/libs/libvgm/CMakeLists.txt")
 	# defaults for the in-tree libvgm build
 	set(LIBRARY_TYPE "STATIC" CACHE STRING "libvgm: library build type (STATIC/SHARED)")

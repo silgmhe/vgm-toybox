@@ -7,7 +7,7 @@
     The script performs a complete one-shot build:
       1. sets up the MSVC environment (vswhere + vcvars64/vcvars32)
       2. configures the project with CMake/Ninja:
-           - libvgm is built from the in-tree submodule (static libraries)
+           - libvgm is built from the vendored source in libs/ (static libraries)
            - zlib is fetched with CPM.cmake and built from source (no zlib DLL)
            - static MSVC runtime (/MT)  -> no VC++ Redistributable required
            - CMAKE_EXPORT_COMPILE_COMMANDS -> compile_commands.json for clangd
@@ -19,7 +19,7 @@
     Required tools (must be in PATH or installed):
       - Visual Studio with the "Desktop development with C++" workload
       - CMake and Ninja (the Ninja shipped with CMake is found automatically)
-      - git (only to initialize the libvgm submodule)
+      - git (CPM fetches the zlib source with it)
 
     The zlib source is downloaded on the first configure. The download repository can be
     chosen with -DLIBVGM_ZLIB_REPOSITORY=<url> (the CMake build probes GitHub and the
@@ -206,9 +206,13 @@ Initialize-MsvcEnvironment -TargetArch $Arch
 Write-Step 'Setting up dependency downloads'
 Initialize-NetworkProxy -ProxyUrl $Proxy -Disabled:$NoProxy
 
-Write-Step 'Checking git submodules'
-if (-not (Test-Path -LiteralPath (Join-Path $RepoRoot 'libs\libvgm\CMakeLists.txt'))) {
-	Invoke-Native 'git' @('-C', $RepoRoot, 'submodule', 'update', '--init', '--recursive')
+Write-Step 'Checking the vendored libraries'
+# libvgm, inih and wingetopt are source in this repository (no submodules), so a missing one means
+# an incomplete checkout - there is nothing to fetch.
+foreach ($library in @('libs\libvgm', 'libs\inih', 'libs\wingetopt')) {
+	if (-not (Test-Path -LiteralPath (Join-Path $RepoRoot $library))) {
+		throw "The vendored library '$library' is missing - it is part of this repository."
+	}
 }
 
 Write-Step "Configuring ($Arch, $Config, static runtime $RuntimeLib)"

@@ -26,8 +26,10 @@ A chiptune music player as a **VST3 plugin** (plus a standalone application), bu
 
 ## Building (Windows, MSVC)
 
+Everything the build needs is in the repository: the third-party libraries are vendored as source
+under `libs/` (see "Licence and attribution"), so there are no submodules to fetch.
+
 ```powershell
-git submodule update --init --recursive
 .\build.ps1
 ```
 
@@ -71,18 +73,24 @@ are deliberately unchanged, so a host would see the two bundles as the same plug
 
 ## Licence and attribution
 
-This project stands on other people's work and keeps the notices visible:
+This project stands on other people's work and keeps the notices visible. The libraries are
+**vendored as source under `libs/`** rather than pulled in as git submodules, so they can be
+patched in place:
 
-- **libvgm** - the emulation and playback library the plugin links against (git submodule,
-  https://github.com/ValleyBell/libvgm.git), by Valley Bell and contributors.
-- **VGMPlay** - the command-line player whose sources sit in `vgmplayer/`; its name, files and
-  documentation are untouched.
-- The emulator cores under `libs/libvgm/emu/cores/` carry their own licence headers; they are the reason
-  this tree is not simply "one author's code".
+| Vendored | What it is | Licence |
+|---|---|---|
+| `libs/libvgm/` | the emulation and playback library the plugin links against - upstream `ValleyBell/libvgm`, master `915e928` plus the in-tree build/zlib patch | no licence file ships with it (see the note below); the emulator cores under `libs/libvgm/emu/cores/` carry their own headers |
+| `libs/inih/` | the INI reader the command-line player uses - upstream `benhoyt/inih`, `4e618f7` | New BSD (BSD-3-Clause), © 2009 Ben Hoyt; `libs/inih/LICENSE.txt` is kept |
+| `libs/wingetopt/` | `getopt_long` for MSVC - upstream `alex85k/wingetopt`, `e8531ed` | permissive ISC-style terms (Todd C. Miller / The NetBSD Foundation); `libs/wingetopt/LICENSE` is kept |
 
-The plugin links libvgm statically, so it is distributed under the same GNU General Public License
-terms as the library and the player it comes from - see the licence headers in the sources for the
-exact wording. Keep those notices when you redistribute.
+**VGMPlay**, the command-line player in `vgmplayer/`, comes from upstream
+`ValleyBell/vgmplay-libvgm`; its name, files and documentation are untouched.
+
+One note before redistributing widely: **neither Valley Bell project ships a licence file** - not
+in the vendored trees, and not on GitHub - so the exact terms are worth confirming with the author.
+Meanwhile the sources' own headers are the authority: the plugin links libvgm statically, and
+`libs/libvgm/emu/cores/` mixes emulator cores that each carry their own (mostly permissive)
+notice. Keep every one of them intact.
 
 ## Documentation
 
