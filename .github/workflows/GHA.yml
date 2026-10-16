@@ -25,8 +25,11 @@ jobs:
           - { os: windows-latest, build_type: Debug, shell: bash, compiler: msvc, extra_settings: '-A Win32' }
           #- { os: windows-latest, build_type: Release, shell: bash, compiler: msvc, extra_settings: '-A x64' }
           #- { os: windows-latest, build_type: Debug, shell: bash, compiler: msvc, extra_settings: '-A x64' }
-          - { os: windows-latest, build_type: Release, shell: "msys2 {0}", compiler: mingw, extra_settings: '-G "MSYS Makefiles"' }
-          - { os: windows-latest, build_type: Debug, shell: "msys2 {0}", compiler: mingw, extra_settings: '-G "MSYS Makefiles"' }
+          # No MinGW/MSYS2 rows on purpose, and they should not come back without a reason: JUCE supports
+          # MSVC (or Clang) on Windows, not MinGW, so such a row could only ever build the command-line
+          # player - and the two that used to be here never built anything, because nothing in this
+          # workflow installs or registers the `msys2 {0}` shell they name: every run failed at Configure,
+          # in upstream's copy of this file as well.
           - { os: macos-latest, build_type: Release, shell: bash }
           - { os: macos-latest, build_type: Debug, shell: bash }
           - { os: ubuntu-latest, build_type: Release, shell: bash }
@@ -46,8 +49,8 @@ jobs:
       run: |
         # The dependencies are vendored source in this repository (libs/libvgm, libs/inih,
         # libs/wingetopt - no submodules to fetch), and zlib is fetched and built by libvgm's own
-        # CMake. The GUI plugin is a Windows target, so it stays off here: the CI covers the
-        # command-line player across the compilers.
+        # CMake. This matrix builds the command-line player on every platform the project ships
+        # for; the plugin, its tests and the window scripts have their own job below.
         CMAKE_OPTS="$CMAKE_OPTS -DTOYBOX_BUILD_PLUGIN=OFF"
 
         cmake ${{ matrix.config.extra_settings }} \
@@ -69,10 +72,9 @@ jobs:
           --install ${GITHUB_WORKSPACE}/build \
           --config ${{ matrix.config.build_type }}
 
-  # The matrix above builds the command-line player across compilers with the plugin switched off,
-  # which meant the 7k lines that contain the whole UI were never compiled anywhere but on the
-  # machine of whoever was editing them. This job builds the plugin and its console tests on all
-  # three platforms and runs them.
+  # The matrix above builds only the command-line player, which meant the 7k lines that contain the
+  # whole UI were never compiled anywhere but on the machine of whoever was editing them. This job
+  # builds the plugin and its console tests on all three platforms and runs them.
   #
   # It is deliberately on every push rather than only on a tag: the plugin had never been built on
   # macOS or Linux at all, so a platform that cannot build it has to be found while there is still

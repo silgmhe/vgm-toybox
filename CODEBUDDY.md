@@ -60,7 +60,7 @@ Runtime keys (from `VGMPlay.txt`): Space/P pause, ESC/Q quit, Left/Right seek 5 
 
 ## Tests and validation
 
-There is no automated test suite and no linter setup in this repository. CI (`.github/workflows/GHA.yml`) only builds the CMake flow above on Windows (MSVC Win32, MSYS2/MinGW), macOS and Ubuntu, in Release and Debug.
+There are **four console test binaries and the window scripts** below, and no linter setup. CI (`.github/workflows/GHA.yml`) builds the command-line player on Windows (MSVC), macOS and Ubuntu in Release and Debug, and a second job builds the plugin and runs the console tests and the window scripts on all three platforms - see "Tests and validation" for what each one covers. There are no MinGW/MSYS2 rows: JUCE supports MSVC (or Clang) on Windows, not MinGW.
 
 libvgm ships manual test programs behind `-DBUILD_TESTS=ON` (`audiotest`, `emutest`, `audemutest`, `vgmtest`). The closest thing to a smoke test is the VGM renderer test, which takes a **gz-compressed** VGM only (it also exercises the in-tree zlib):
 
