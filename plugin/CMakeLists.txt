@@ -79,6 +79,12 @@ juce_add_plugin(VGMToybox
 	# the format list is the backend registry's job (it drives the file dialogs and hints), this
 	# is just the one-line blurb a host shows
 	DESCRIPTION "Chiptune player (VGM, VGZ, S98, DRO, GYM)"
+	# juceaide turns these two into the .ico the executable carries (16/32/48/256) and picks the
+	# best source per size, so the small one is the artwork drawn for 16 px rather than a
+	# downscale of the big one. Both must be ordinary images - an .ico input fails the configure
+	# step. assets/icon/make_icon.py is the source of truth for all of them.
+	ICON_BIG "${CMAKE_CURRENT_SOURCE_DIR}/assets/icon/vgmtoybox-1024.png"
+	ICON_SMALL "${CMAKE_CURRENT_SOURCE_DIR}/assets/icon/vgmtoybox-16.png"
 	FORMATS VST3 Standalone
 	IS_SYNTH TRUE
 	NEEDS_MIDI_INPUT FALSE

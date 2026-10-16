@@ -1,5 +1,7 @@
 # VGMToybox
 
+<img src="plugin/assets/icon/vgmtoybox-256.png" width="96" alt="The VGMToybox icon">
+
 A chiptune music player as a **VST3 plugin** (plus a standalone application), built on
 [libvgm](https://github.com/ValleyBell/libvgm.git). Load a `.vgm`/`.vgz` (or `.s98`, `.dro`,
 `.gym`) file, play it on a DAW track and mix it like any other instrument.
