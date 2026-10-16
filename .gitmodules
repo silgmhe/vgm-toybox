@@ -5,5 +5,5 @@
 	path = libs/wingetopt
 	url = https://github.com/alex85k/wingetopt.git
 [submodule "libvgm"]
-	path = libvgm
+	path = libs/libvgm
 	url = https://github.com/ValleyBell/libvgm.git
