@@ -130,15 +130,13 @@ juce::String fieldOf (juce::Component& component, const juce::String& field)
 	}
 	if (field == "checked")
 	{
-		// Only a button that toggles itself answers this honestly. The transport and mixer header
-		// buttons are lit by their panel's refresh() - which the harness does not run (no message
-		// loop, see settle()) - so reading getToggleState() there would report a value that has
-		// nothing to do with what the user sees. Saying so is better than a plausible number.
+		// The button's own state. For a button that toggles itself that is its value; for the
+		// transport and mixer header buttons it is what their panel last *put* there - so run
+		// `tick` (refreshUi()) first when asserting on those, or the value is from before the
+		// action. That is why `tick` exists as a command.
 		if (auto* button = dynamic_cast<juce::Button*> (&component))
 		{
-			return button->getClickingTogglesState()
-					   ? (button->getToggleState() ? "true" : "false")
-					   : "n/a (not a toggle button)";
+			return button->getToggleState() ? "true" : "false";
 		}
 		return "n/a";
 	}
@@ -302,6 +300,8 @@ private:
 		else if (command == "set") { commandSet (tokens); }
 		else if (command == "dump") { commandDump (tokens); }
 		else if (command == "assert") { commandAssert (tokens); }
+		else if (command == "menu") { commandMenu (tokens); }
+		else if (command == "tick") { commandTick (); }
 		else if (command == "sleep") { commandSleep (tokens); }
 		else if (command == "help") { printHelp(); }
 		else { report (false, "unknown command '" + tokens[0] + "'"); }
@@ -452,11 +452,74 @@ private:
 		report (true, "dump");
 	}
 
+	/** The window's menu model, reached through the real component tree: the menu bar is a
+		component with an ID and it knows its model, so no test-only accessor is needed. */
+	toybox::ui::MainMenu* findMenu (void) const
+	{
+		auto* bar = dynamic_cast<juce::MenuBarComponent*> (findByID (editor, "editor.menubar"));
+		return (bar != nullptr) ? dynamic_cast<toybox::ui::MainMenu*> (bar->getModel()) : nullptr;
+	}
+
+	void commandMenu (const juce::StringArray& tokens)
+	{
+		auto* menu = findMenu();
+		if (menu == nullptr)
+		{
+			report (false, "menu: the window has no menu model");
+			return;
+		}
+
+		// `menu invoke file.close` is how a script does what the menu does without it opening
+		if (tokens.size() >= 3 && tokens[1].equalsIgnoreCase ("invoke"))
+		{
+			const bool found = menu->invoke (tokens[2]);
+			settle (80);
+			report (found, "menu invoke " + tokens[2]);
+			return;
+		}
+
+		std::printf ("%s", menu->describe().toRawUTF8());
+		report (true, "menu");
+	}
+
+	void commandTick (void)
+	{
+		// one frame of the window's own refresh, without a message loop - see the note in
+		// ToyboxAudioProcessorEditor::refreshUi()
+		editor.refreshUi();
+		report (true, "tick");
+	}
+
 	void commandAssert (const juce::StringArray& tokens)
 	{
 		if (tokens.size() < 5)
 		{
 			report (false, "assert needs: <id> <field> <op> <value>");
+			return;
+		}
+
+		// `assert menu.<entry> <field> <op> <value>` reads the menu, which is data rather than a
+		// component - that is what makes "the tick follows the page" a text assertion
+		if (tokens[1].startsWith ("menu."))
+		{
+			auto* menu = findMenu();
+			const toybox::ui::MenuEntry* entry = (menu != nullptr) ? menu->findEntry (tokens[1].substring (5))
+																   : nullptr;
+			if (entry == nullptr)
+			{
+				report (false, "assert: no menu entry '" + tokens[1] + "'");
+				return;
+			}
+
+			juce::String actual;
+			if (tokens[2] == "checked") { actual = entry->checked ? "true" : "false"; }
+			else if (tokens[2] == "enabled") { actual = entry->enabled ? "true" : "false"; }
+			else if (tokens[2] == "label") { actual = entry->label; }
+			else { report (false, "assert: menu fields are checked, enabled and label"); return; }
+
+			report (fieldMatches (actual, tokens[3], tokens[4]),
+					tokens[1] + "." + tokens[2] + " " + tokens[3] + " '" + tokens[4]
+						+ "'   (was: " + actual + ")");
 			return;
 		}
 
@@ -484,8 +547,11 @@ private:
 	static void printHelp (void)
 	{
 		std::printf ("    load <path> | press <key> | click <id> | toggle <id> | set <id> <value>\n");
+		std::printf ("    menu | menu invoke <entryId> | tick\n");
 		std::printf ("    dump [<id>] | assert <id> <field> <op> <value> | sleep <ms>\n");
-		std::printf ("    fields: visible enabled checked text; ops: == != contains\n");
+		std::printf ("    fields: visible enabled checked text (components)\n");
+		std::printf ("            checked enabled label    (menu entries, as menu.<entryId>)\n");
+		std::printf ("    ops: == != contains\n");
 	}
 
 	juce::String skipped;		// set when a load could not run; the rest of the script is skipped

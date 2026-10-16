@@ -367,6 +367,11 @@ void ToyboxAudioProcessorEditor::timerCallback (void)
 		startTimerHz (refreshHz);
 	}
 
+	refreshUi();
+}
+
+void ToyboxAudioProcessorEditor::refreshUi (void)
+{
 	viewStack.refresh();
 	updateStatusLine();
 }

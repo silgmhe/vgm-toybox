@@ -35,6 +35,13 @@ public:
 	void resized (void) override;
 	bool keyPressed (const juce::KeyPress& key) override;
 
+	/** One frame of the window's own work: refresh the page and the status line.
+
+		The timer calls it - and so can the console harness, which is how state that only a refresh
+		produces (a lit transport button, a meter) became assertable without running a message loop
+		(docs/desgin/testing-architecture.md §7, risk 2). */
+	void refreshUi (void);
+
 private:
 	void timerCallback (void) override;
 	bool isInterestedInFileDrag (const juce::StringArray& files) override;
