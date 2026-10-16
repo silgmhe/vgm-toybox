@@ -21,25 +21,23 @@ jobs:
     strategy:
       matrix:
         config:
-          - { os: windows-latest, build_type: Release, shell: bash, compiler: msvc, extra_settings: '-A Win32' }
-          - { os: windows-latest, build_type: Debug, shell: bash, compiler: msvc, extra_settings: '-A Win32' }
-          #- { os: windows-latest, build_type: Release, shell: bash, compiler: msvc, extra_settings: '-A x64' }
-          #- { os: windows-latest, build_type: Debug, shell: bash, compiler: msvc, extra_settings: '-A x64' }
-          # No MinGW/MSYS2 rows on purpose, and they should not come back without a reason: JUCE supports
-          # MSVC (or Clang) on Windows, not MinGW, so such a row could only ever build the command-line
-          # player - and the two that used to be here never built anything, because nothing in this
-          # workflow installs or registers the `msys2 {0}` shell they name: every run failed at Configure,
-          # in upstream's copy of this file as well.
-          - { os: macos-latest, build_type: Release, shell: bash }
-          - { os: macos-latest, build_type: Debug, shell: bash }
-          - { os: ubuntu-latest, build_type: Release, shell: bash }
-          - { os: ubuntu-latest, build_type: Debug, shell: bash }
+          # Release, 64-bit, and MSVC only - every one of those is a decision rather than an
+          # oversight, and the rows that were removed for each are worth knowing about before one
+          # comes back:
+          #   * Debug: a local `build.ps1 -Config Debug` shows the same problems sooner and with a
+          #     debugger attached; jassert fires there, not in a CI log.
+          #   * 32-bit: not a target this project ships for - the plugin, the dist folder and every
+          #     other platform here are 64-bit.
+          #   * MinGW/MSYS2: JUCE supports MSVC (or Clang) on Windows, not MinGW, so such a row could
+          #     only ever build the command-line player - and the two that were here never built
+          #     anything at all, because nothing in this workflow installs or registers the
+          #     `msys2 {0}` shell they name (upstream's copy fails the same way).
+          - { os: windows-latest, build_type: Release, extra_settings: '-A x64' }
+          - { os: macos-latest, build_type: Release }
+          - { os: ubuntu-latest, build_type: Release }
       fail-fast: false
 
     runs-on: ${{ matrix.config.os }}
-    defaults:
-      run:
-        shell: ${{ matrix.config.shell }}
 
     steps:
     - name: Checkout
