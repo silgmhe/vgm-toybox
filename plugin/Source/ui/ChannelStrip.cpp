@@ -15,7 +15,9 @@ namespace
 	// shadow room each button reserves (ButtonPaint.h).
 	constexpr int kButtonHeight = 28;
 	constexpr int kButtonGap = 6;
-	constexpr int kOutputHeight = 22;	// the output selector sits at the very bottom
+	// the output selector sits at the very bottom (26 = its 22 px face plus the shadow room the
+	// combo box reserves, ButtonPaint.h)
+	constexpr int kOutputHeight = 26;
 	constexpr int kOutputGap = 6;
 	constexpr int kColumnGap = 3;
 	constexpr int kMeterWidth = 15;		// two 6 px bars with a 3 px gap

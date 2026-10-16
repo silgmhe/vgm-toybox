@@ -153,7 +153,8 @@ void TransportPanel::resized (void)
 	positionSlider.setBounds (inner.removeFromTop (22));
 	inner.removeFromTop (theme::rowGap);
 
-	auto settingsRow = inner.removeFromTop (26);
+	// 30 = the 26 px face the combo boxes had before they got a shadow + the room they reserve
+	auto settingsRow = inner.removeFromTop (30);
 	loopBox.setBounds (settingsRow.removeFromLeft (108));
 	settingsRow.removeFromLeft (8);
 	fadeBox.setBounds (settingsRow.removeFromLeft (118));

@@ -177,8 +177,9 @@ inline float buttonRadiusFor (float height) { return juce::jmin (height * 0.2f, 
 | 走带按钮 | 40 / **36**（`kButtonSize`） | `TransportPanel.cpp` |
 | 卡片头部图标按钮 | 26 / **22**（`kHeaderHeight`） | `MixerPanel.cpp` |
 | 混音 M/S | 28 / **24**（`kButtonHeight`） | `ChannelStrip.cpp` |
-| 顶行主操作 | 32（`theme::topRowHeight`，M-UI.3 处理） | `PluginEditor.cpp` |
-| 输出/loop/fade 下拉 | 22 / 26（M-UI.3 处理） | `ChannelStrip.cpp` / `TransportPanel.cpp` |
+| 顶行主操作（Open） | 36 / **32**（`theme::topRowHeight`） | `PluginEditor.cpp` |
+| 输出下拉 | 26 / **22**（`kOutputHeight`） | `ChannelStrip.cpp` |
+| loop / fade 下拉（与音量同排） | 30 / **26**（设置行高） | `TransportPanel.cpp` |
 
 > **占位 = 可见面 + 4**（`2 × buttonShadowInset`）：阴影空间由按钮自己保留，所以布局尺寸里要把它算进去 —— 第一版漏了这一步，头部按钮就从 22px 被挤成 14px。改按钮尺寸时请照此推算。
 
@@ -221,8 +222,8 @@ inline float buttonRadiusFor (float height) { return juce::jmin (height * 0.2f, 
 | M-UI.1 Token + `ButtonPaint.h` | ✅ | `Theme.h` 新增按钮 token（单层投影、平涂材质、聚焦环、`buttonRadiusFor`）；新文件 `ui/ButtonPaint.h` |
 | M-UI.2 `IconButton` 接入 | ✅ | 走带 5 个 + 卡片头部 3 个统一走 `drawButtonFace()`；新增聚焦环（`focusGained/Lost` 触发重绘） |
 | M-UI.4 收敛 glow | ✅ | `TransportPanel` / `MixerPanel` 改用 `drawButtonGlow()` + `buttonGlowBounds()`；**补上扇出/汇入一直缺失的 on 态发光** |
-| M-UI.3 `LightLookAndFeel` 接入 | ⏳ | M/S、Open、ComboBox：材质 + 单层投影 + 圆角统一 |
-| M-UI.5 文档与视觉验收 | ⏳ | CODEBUDDY 更新、宿主内六态走查 |
+| M-UI.3 `LightLookAndFeel` 接入 | ✅ | `drawButtonBackground`（混音 M/S、Open）与 `drawComboBox`（输出/loop/fade）都改走 `drawButtonFace()`：填充色亮 → 中性材质、有色（accent/红/琥珀）→ 填充型；三份圆角规则合并为 `buttonRadiusFor()`；禁用态下拉的箭头也按规范衰减；布局同步补 4px（顶行 32→36、输出行 22→26、设置行 26→30、走带卡片 142、通道条 204、混音最小高 178） |
+| M-UI.5 文档与视觉验收 | ⏳ | CODEBUDDY 更新、宿主内六态走查、可选的 `vgm_ui_test` 像素不变量 |
 
 ---
 
