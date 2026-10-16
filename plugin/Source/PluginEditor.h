@@ -4,23 +4,24 @@
 
 #include "PluginProcessor.h"
 #include "ui/AboutOverlay.h"
-#include "ui/ChipPanel.h"
 #include "ui/DropHintOverlay.h"
 #include "ui/LightLookAndFeel.h"
 #include "ui/MainMenu.h"
-#include "ui/MixerPanel.h"
-#include "ui/SongInfoPanel.h"
-#include "ui/TransportPanel.h"
+#include "ui/PlayView.h"
+#include "ui/ViewStack.h"
+#include "ui/VisualiserView.h"
 
 /**
-	The plugin window: a top row (open button + status line) and the cards from the ui/
-	module (song info, chip mutes, mixer, transport).
+	The plugin window: the menu bar, a top row (open button + status line), and then one page.
 
-	The editor only assembles the panels, turns keyboard shortcuts and file drops into calls
-	on the panels/engine and runs the 20 Hz refresh timer. Every panel lays itself out, paints
-	itself and pulls its own state from the engine (see the refresh() methods), so there is no
-	shared layout state that could go stale - the failure mode the old paint()/resized() pair
-	used to have.
+	Everything below the top row belongs to a View (ui/View.h): the playback page with the song
+	info, chip mutes, mixer and transport cards, or the visualisation page that is being built.
+	The window keeps only what is genuinely global to it - the menus, the open button, the status
+	line, the file drops and the refresh timer - and hands the rest to the stack, so adding a page
+	means writing a View and adding it there (the View menu is built from the stack).
+
+	No shared layout state: the window lays out its own three pieces, and each page lays out the
+	controls it owns.
 */
 class ToyboxAudioProcessorEditor : public juce::AudioProcessorEditor,
 									private juce::Timer,
@@ -54,7 +55,6 @@ private:
 		may still be coming up while the editor is built, so the first timer ticks call this again
 		until the engine has it. */
 	void openStartupSong (void);
-	void rebuildChipButtons (void);
 	void updateStatusLine (void);
 
 	ToyboxAudioProcessor& processor;
@@ -68,10 +68,7 @@ private:
 
 	juce::TextButton openButton { "Open file..." };
 	juce::Label statusLabel;
-	toybox::ui::SongInfoPanel songInfoPanel;
-	toybox::ui::TransportPanel transportPanel;
-	toybox::ui::ChipPanel chipPanel;
-	toybox::ui::MixerPanel mixerPanel;
+	toybox::ui::ViewStack viewStack;	// holds the pages; exactly one of them is visible
 	toybox::ui::DropHintOverlay dropHint;
 	toybox::ui::AboutOverlay aboutOverlay;	// in-window, so it can never block the application
 

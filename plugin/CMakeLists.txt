@@ -136,8 +136,10 @@ target_sources(VGMToybox PRIVATE
 	Source/ui/Icons.cpp
 	Source/ui/LightLookAndFeel.cpp
 	Source/ui/MixerPanel.cpp
+	Source/ui/PlayView.cpp
 	Source/ui/SongInfoPanel.cpp
 	Source/ui/TransportPanel.cpp
+	Source/ui/VisualiserView.cpp
 )
 
 target_include_directories(VGMToybox PRIVATE Source)
