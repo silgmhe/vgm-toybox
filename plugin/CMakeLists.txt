@@ -87,6 +87,36 @@ else()
 	set(TOYBOX_AU_FORMAT "")
 endif()
 
+# --- AAX (Pro Tools; Windows and macOS) -------------------------------------------------------------
+# JUCE 8 carries the AAX SDK inside the module itself (juce_audio_plugin_client/AAX/SDK, and the
+# LICENSE.txt next to it offers that code under the GPL v3 as well as under Avid's own terms), so
+# nothing has to be downloaded or licensed first to *build* this format. On Linux there is nothing
+# to guard either: that SDK path function returns early there and the target's active format list
+# drops AAX instead of failing, which is why - unlike VST - this needs no sdk_set call to stay
+# valid in a list that every platform configures.
+#
+# What it cannot do for us is the part that decides whether Pro Tools will load the result: retail
+# and beta Pro Tools only load a plugin whose binary PACE has signed (the process starts with an
+# Avid approval, PACE supplies the tools and the certificate lives on an iLok). An unsigned
+# .aaxplugin loads in Pro Tools *developer* builds and nowhere else, so this stays a developer
+# artefact until someone takes that route - which is why the release workflow does not ship it.
+#
+# 32-bit Windows is a hard error inside JUCE ("Unsupported target architecture for AAX"), so the
+# option switches itself off there rather than letting build.ps1 -Arch x86 stop at a JUCE check
+# that has nothing to do with the build being asked for.
+option(TOYBOX_BUILD_AAX "Build the Pro Tools AAX format (Windows/macOS 64-bit; loads in Pro Tools developer builds, retail needs PACE signing)" ON)
+
+if(TOYBOX_BUILD_AAX)
+	if(CMAKE_SIZEOF_VOID_P EQUAL 8)
+		set(TOYBOX_AAX_FORMAT AAX)
+	else()
+		message(STATUS "TOYBOX_BUILD_AAX is on, but a 32-bit build cannot carry AAX - leaving it out")
+		set(TOYBOX_AAX_FORMAT "")
+	endif()
+else()
+	set(TOYBOX_AAX_FORMAT "")
+endif()
+
 # --- plugin target ---
 juce_add_plugin(VGMToybox
 	# --- identity ---------------------------------------------------------------------------
@@ -118,7 +148,7 @@ juce_add_plugin(VGMToybox
 	# step. assets/icon/make_icon.py is the source of truth for all of them.
 	ICON_BIG "${CMAKE_CURRENT_SOURCE_DIR}/assets/icon/vgmtoybox-1024.png"
 	ICON_SMALL "${CMAKE_CURRENT_SOURCE_DIR}/assets/icon/vgmtoybox-16.png"
-	FORMATS VST3 Standalone ${TOYBOX_AU_FORMAT}
+	FORMATS VST3 Standalone ${TOYBOX_AU_FORMAT} ${TOYBOX_AAX_FORMAT}
 	IS_SYNTH TRUE
 	NEEDS_MIDI_INPUT FALSE
 	NEEDS_MIDI_OUTPUT FALSE

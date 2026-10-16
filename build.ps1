@@ -328,6 +328,7 @@ foreach ($file in @('VGMPlay.ini', 'Updates.txt', 'VGMPlay.txt')) {
 $artefactsDir = Join-Path $BuildDir 'plugin\VGMToybox_artefacts'
 $vst3Bundle = $null
 $standaloneApp = $null
+$aaxBundle = $null
 if (Test-Path -LiteralPath $artefactsDir) {
 	$vst3Bundle = Get-ChildItem -LiteralPath $artefactsDir -Filter 'VGMToybox.vst3' -Directory -Recurse |
 		Select-Object -First 1
@@ -353,6 +354,18 @@ if (Test-Path -LiteralPath $artefactsDir) {
 					"Close it and run the script again. ({1})" -f $standaloneTarget, $_.Exception.Message)
 		}
 	}
+	$aaxBundle = Get-ChildItem -LiteralPath $artefactsDir -Filter 'VGMToybox.aaxplugin' -Directory -Recurse |
+		Select-Object -First 1
+	if ($aaxBundle) {
+		$aaxTarget = Join-Path $DistDir 'AAX'
+		New-Item -ItemType Directory -Force -Path $aaxTarget | Out-Null
+		try {
+			Copy-Item -LiteralPath $aaxBundle.FullName -Destination $aaxTarget -Recurse -Force -ErrorAction Stop
+		} catch {
+			throw ("Could not copy the AAX bundle to '{0}' - Pro Tools is probably still using it. " +
+					"Close it and run the script again. ({1})" -f $aaxTarget, $_.Exception.Message)
+		}
+	}
 }
 
 Write-Step 'Updating compile_commands.json'
@@ -372,6 +385,9 @@ if ($vst3Bundle) {
 }
 if ($standaloneApp) {
 	Write-Host ("standalone : {0}" -f (Join-Path $DistDir 'Standalone\VGMToybox.exe'))
+}
+if ($aaxBundle) {
+	Write-Host ("AAX        : {0}" -f (Join-Path $DistDir 'AAX\VGMToybox.aaxplugin'))
 }
 Write-Host ("dist folder: {0}" -f $DistDir)
 Write-Host ''

@@ -41,6 +41,7 @@ The script locates Visual Studio, configures with CMake + Ninja and copies every
 |---|---|
 | `dist\VST3\VGMToybox.vst3` | the plugin |
 | `dist\Standalone\VGMToybox.exe` | the same engine as a standalone application |
+| `dist\AAX\VGMToybox.aaxplugin` | the Pro Tools format - unsigned, so it loads in developer builds only (see "Pro Tools") |
 | `dist\VGMPlay64.exe` + `VGMPlay.ini`, `VGMPlay.txt` | the **upstream command-line player**, built from `vgmplayer/` |
 
 Options: `-NoPlugin` (command-line player only), `-Proxy <url>` / `-NoProxy`. For a lighter build
@@ -73,6 +74,17 @@ Copy `VGMToybox.vst3` into your VST3 folder and rescan. To use the separate outp
 extra buses for the plugin instance in the host (that step is the host's, not the plugin's).
 If an older `VGMPlay.vst3` from this project is installed, **delete it first**: the plugin codes
 are deliberately unchanged, so a host would see the two bundles as the same plugin.
+
+### Pro Tools (AAX)
+
+The build also writes an **AAX** bundle, because JUCE carries the AAX SDK inside its own module -
+the `LICENSE.txt` next to that SDK offers the code under the GPL v3 as well as under Avid's terms -
+so no download or licence comes first. The signature does. Retail and beta Pro Tools load only a
+plugin binary that PACE has signed, and that route starts with an Avid approval and ends with a
+certificate that lives on an iLok. Until somebody walks it, the `.aaxplugin` this build writes
+loads in **Pro Tools developer builds only**, so it is not in the release archives; copy it into
+the AAX Plug-Ins folder yourself if you have one of those. To leave the format out entirely,
+configure with `-DTOYBOX_BUILD_AAX=OFF`.
 
 ## Recording stems into a DAW
 
