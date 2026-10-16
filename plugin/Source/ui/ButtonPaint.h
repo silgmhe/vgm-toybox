@@ -106,9 +106,14 @@ inline void drawButtonFace (juce::Graphics& g, juce::Rectangle<float> bounds, co
 	own inset, so the button cannot paint it itself. Pass the colour the button is filled with
 	(`theme::muteGlow()` for mute, `theme::soloGlow()` for solo, the default for the accent ones).
 	The container must also repaint that area when the toggle state changes; `buttonGlowBounds()`
-	gives the rectangle to pass to repaint(). */
+	gives the rectangle to pass to repaint().
+
+	Pass a tighter `blur` (`theme::compactGlowBlur`) when the glow has to fade out inside a narrow
+	container - otherwise its outer glow is clipped by that container and the button looks like it
+	sits in a glowing rectangle. */
 inline void drawButtonGlow (juce::Graphics& g, juce::Rectangle<int> buttonBounds,
-							juce::Colour colour = theme::accentGlow())
+							juce::Colour colour = theme::accentGlow(),
+							int blur = theme::accentGlowBlur)
 {
 	const auto shape = buttonFaceShape (buttonBounds.toFloat());
 	if (shape.getWidth() <= 1.0f || shape.getHeight() <= 1.0f)
@@ -117,13 +122,15 @@ inline void drawButtonGlow (juce::Graphics& g, juce::Rectangle<int> buttonBounds
 	}
 
 	drawSoftShadow (g, shape, theme::buttonRadiusFor (shape.getHeight()), colour,
-					theme::accentGlowBlur, { 0, theme::accentGlowOffsetY });
+					blur, { 0, theme::accentGlowOffsetY });
 }
 
-/** The area a button's glow can touch - repaint this when the toggle state flips. */
-inline juce::Rectangle<int> buttonGlowBounds (juce::Rectangle<int> buttonBounds)
+/** The area a button's glow can touch - repaint this when the toggle state flips. Pass the same
+	blur that `drawButtonGlow()` was given. */
+inline juce::Rectangle<int> buttonGlowBounds (juce::Rectangle<int> buttonBounds,
+											  int blur = theme::accentGlowBlur)
 {
-	const int reach = theme::accentGlowBlur + theme::accentGlowOffsetY + 2;
+	const int reach = blur + theme::accentGlowOffsetY + 2;
 	return buttonBounds.expanded (reach);
 }
 

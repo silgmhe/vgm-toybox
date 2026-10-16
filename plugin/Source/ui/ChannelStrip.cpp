@@ -135,11 +135,11 @@ void ChannelStrip::setValues (float gain, float pan, bool muted, bool soloed,
 
 	if (muteFlipped)
 	{
-		repaint (buttonGlowBounds (muteButton.getBounds()));
+		repaint (buttonGlowBounds (muteButton.getBounds(), theme::compactGlowBlur));
 	}
 	if (soloFlipped)
 	{
-		repaint (buttonGlowBounds (soloButton.getBounds()));
+		repaint (buttonGlowBounds (soloButton.getBounds(), theme::compactGlowBlur));
 	}
 
 	peakL = peakLValue;
@@ -264,15 +264,16 @@ void ChannelStrip::paint (juce::Graphics& g)
 
 	// A toggled M/S button is a prominent (L2) control: its coloured glow is painted by the
 	// container, because the blur reaches further than the 2 px a button keeps for its own shadow
-	// (docs/ui-button-design.md §4.3). The strip's bounds clip it, so a glowing mute button never
-	// bleeds into the neighbouring lane.
+	// (docs/ui-button-design.md §4.3). It is the tighter glow: the buttons sit six pixels from the
+	// strip's edge, so a 12 px one would be cut off there and read as a rectangle around the
+	// button instead of a halo.
 	if (muteButton.getToggleState())
 	{
-		drawButtonGlow (g, muteButton.getBounds(), theme::muteGlow());
+		drawButtonGlow (g, muteButton.getBounds(), theme::muteGlow(), theme::compactGlowBlur);
 	}
 	if (soloButton.getToggleState())
 	{
-		drawButtonGlow (g, soloButton.getBounds(), theme::soloGlow());
+		drawButtonGlow (g, soloButton.getBounds(), theme::soloGlow(), theme::compactGlowBlur);
 	}
 
 	g.setFont (juce::Font (juce::FontOptions (10.5f, juce::Font::bold)));

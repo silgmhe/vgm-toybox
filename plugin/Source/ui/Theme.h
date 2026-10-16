@@ -67,6 +67,11 @@ inline constexpr int accentGlowOffsetY = 3;
 inline juce::Colour muteGlow (void)			{ return mute().withAlpha (0.42f); }
 inline juce::Colour soloGlow (void)			{ return solo().withAlpha (0.42f); }
 
+// A glow that has to fade out inside a narrow container. The mixer's M/S buttons sit six pixels
+// from their strip's edge, so a 12 px blur is cut off there and reads as a rectangle around the
+// button; 5 px reaches zero inside the lane and still reads as a halo.
+inline constexpr int compactGlowBlur = 5;
+
 // slider thumbs and ticked checkboxes (their shadow fits inside their own bounds)
 inline juce::Colour controlShadow (void)		{ return juce::Colour (0x38000000); }
 inline constexpr int controlShadowBlur = 5;

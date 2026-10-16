@@ -164,6 +164,39 @@ namespace
 			   "and the area the card is told to repaint covers it");
 	}
 
+	void checkTheCompactGlow (void)
+	{
+		std::printf ("[3b] the compact glow of a narrow lane\n");
+
+		// The mixer's M/S buttons sit 6 px from their strip's edge. Render both blur sizes into a
+		// lane of exactly that size and look at the pixel just inside its edge: the glow has to be
+		// gone there, or the strip's bounds cut it into a glowing rectangle around the button -
+		// which is what a 12 px blur did before the compact one existed.
+		const auto lane = controlBounds().toNearestInt().expanded (6);
+		const float white = theme::card().getPerceivedBrightness();
+
+		// The pixels are read *after* the Graphics has been destroyed: while it is alive the
+		// renderer has not flushed yet and every sample comes back transparent black.
+		const auto brightnessAtLaneEdge = [&lane] (int blur)
+		{
+			juce::Image image (juce::Image::ARGB, lane.getWidth(), lane.getHeight(), true);
+			{
+				juce::Graphics g (image);
+				g.fillAll (theme::card());
+				drawButtonGlow (g, controlBounds().toNearestInt().translated (-lane.getX(), -lane.getY()),
+								theme::muteGlow(), blur);
+			}
+			return image.getPixelAt (lane.getWidth() / 2, lane.getHeight() - 1).getPerceivedBrightness();
+		};
+
+		const float compactEdge = brightnessAtLaneEdge (theme::compactGlowBlur);
+		const float wideEdge = brightnessAtLaneEdge (theme::accentGlowBlur);
+		std::printf ("    at the lane's edge: compact %.4f, wide %.4f (the white card is %.4f)\n",
+					 compactEdge, wideEdge, white);
+		check ((white - compactEdge) < 0.4f * (white - wideEdge),
+			   "the compact glow has faded out by the lane's edge (the wide one has not)");
+	}
+
 	void checkTheWidget (void)
 	{
 		std::printf ("[4] a real IconButton\n");
@@ -193,6 +226,7 @@ int main()
 	checkTheFace();
 	checkTheOtherStates();
 	checkTheGlow();
+	checkTheCompactGlow();
 	checkTheWidget();
 
 	std::printf ("Result    : %s\n", (failures == 0) ? "all checks passed" : "FAILURES");
