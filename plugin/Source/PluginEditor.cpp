@@ -29,6 +29,25 @@ ToyboxAudioProcessorEditor::ToyboxAudioProcessorEditor (ToyboxAudioProcessor& p)
 {
 	setLookAndFeel (&lookAndFeel);
 
+	// --- the application menu ---
+	// Close and Exit belong to the standalone build only: inside a host this window is not the
+	// application, and quitting would take the DAW down with it (see ui/MainMenu.h).
+	menu.standalone = (processor.wrapperType == juce::AudioProcessor::wrapperType_Standalone);
+	menu.onOpenSong = [this] { openFileChooser(); };
+	menu.onCloseSong = [this] { closeSong(); };
+	menu.onQuit = [] { juce::JUCEApplicationBase::quit(); };
+	menu.onAbout = [this] { showAbout(); };
+
+	// The bar and its popups both take their colours from the LookAndFeel's PopupMenu ids - that is
+	// what drawMenuBarBackground()/drawMenuBarItem() look up - so this is the one place to style
+	// the whole menu.
+	lookAndFeel.setColour (juce::PopupMenu::backgroundColourId, theme::card());
+	lookAndFeel.setColour (juce::PopupMenu::textColourId, theme::primaryText());
+	lookAndFeel.setColour (juce::PopupMenu::headerTextColourId, theme::secondaryText());
+	lookAndFeel.setColour (juce::PopupMenu::highlightedBackgroundColourId, theme::accent());
+	lookAndFeel.setColour (juce::PopupMenu::highlightedTextColourId, juce::Colours::white);
+	addAndMakeVisible (menuBar);
+
 	// --- open button (primary action) + status line ---
 	openButton.onClick = [this] { openFileChooser(); };
 	openButton.setColour (juce::TextButton::buttonColourId, theme::accent());
@@ -122,7 +141,9 @@ void ToyboxAudioProcessorEditor::paint (juce::Graphics& g)
 
 void ToyboxAudioProcessorEditor::resized (void)
 {
-	auto area = getLocalBounds().reduced (theme::margin);
+	auto area = getLocalBounds();
+	menuBar.setBounds (area.removeFromTop (theme::menuBarHeight));
+	area = area.reduced (theme::margin);
 
 	// top row: open button + status
 	auto topRow = area.removeFromTop (theme::topRowHeight);
@@ -186,6 +207,14 @@ void ToyboxAudioProcessorEditor::resized (void)
 
 bool ToyboxAudioProcessorEditor::keyPressed (const juce::KeyPress& key)
 {
+	// the accelerator File > Open Song shows; the menu itself only describes it
+	const auto code = key.getKeyCode();
+	if ((code == 'o' || code == 'O') && key.getModifiers().isCommandDown())
+	{
+		openFileChooser();
+		return true;
+	}
+
 	if (key == juce::KeyPress::spaceKey)
 	{
 		transportPanel.togglePlayStop();
@@ -292,6 +321,39 @@ void ToyboxAudioProcessorEditor::loadFile (const juce::File& file)
 	songInfoPanel.refresh();
 	updateStatusLine();
 	resized();					// the mixer card may have appeared or disappeared
+}
+
+void ToyboxAudioProcessorEditor::closeSong (void)
+{
+	engine.unloadFile();
+
+	// the same refresh the other way round: the cards that only exist with a song loaded hide
+	// themselves, the chips go away and the status line says what is open now (nothing)
+	rebuildChipButtons();
+	mixerPanel.refresh();
+	transportPanel.refresh();
+	songInfoPanel.refresh();
+	updateStatusLine();
+	resized();
+}
+
+void ToyboxAudioProcessorEditor::showAbout (void)
+{
+	const auto formats = playback::BackendRegistry::getInstance().getExtensionListText();
+
+	// The returned handle owns the window: dropping it would close the dialog again, so it is kept
+	// as a member (the same pattern JUCE's own standalone wrapper uses).
+	aboutBox = juce::AlertWindow::showScopedAsync (
+		juce::MessageBoxOptions::makeOptionsOk (juce::AlertWindow::InfoIcon,
+											   "About VGMToybox",
+											   "VGMToybox " + juce::String (JucePlugin_VersionString) + juce::newLine
+												   + "A chiptune player for " + formats + " songs." + juce::newLine
+												   + juce::newLine
+												   + "by silgmhe - built on VGMPlay and libvgm by Valley Bell and "
+													 "contributors." + juce::newLine
+												   + "https://github.com/silgmhe/vgm-toybox")
+			.withAssociatedComponent (this),
+		nullptr);
 }
 
 void ToyboxAudioProcessorEditor::openStartupSong (void)

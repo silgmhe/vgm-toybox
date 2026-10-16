@@ -37,6 +37,7 @@ inline juce::Colour meterHigh (void)	{ return juce::Colour (0xffff3b30); }
 inline constexpr int margin = 14;			// window border
 inline constexpr int cardGap = 10;			// gap between two cards (or a card and the top row)
 inline constexpr int cardPadding = 12;		// padding inside a card
+inline constexpr int menuBarHeight = 24;	// the application menu above everything else
 inline constexpr int topRowHeight = 36;		// open button + status line (button face = 32)
 inline constexpr int rowGap = 8;
 

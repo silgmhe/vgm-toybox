@@ -6,6 +6,7 @@
 #include "ui/ChipPanel.h"
 #include "ui/DropHintOverlay.h"
 #include "ui/LightLookAndFeel.h"
+#include "ui/MainMenu.h"
 #include "ui/MixerPanel.h"
 #include "ui/SongInfoPanel.h"
 #include "ui/TransportPanel.h"
@@ -42,6 +43,12 @@ private:
 	void openFileChooser (void);
 	void loadFile (const juce::File& file);
 
+	/** Unloads the song: chips, mixer and transport go back to their "nothing loaded" state. */
+	void closeSong (void);
+
+	/** The Help > About box: what this is, which version, and who built it on whose work. */
+	void showAbout (void);
+
 	/** Opens the song the application was started with (see getStartupFile()). The audio device
 		may still be coming up while the editor is built, so the first timer ticks call this again
 		until the engine has it. */
@@ -54,6 +61,10 @@ private:
 
 	toybox::ui::LightLookAndFeel lookAndFeel;
 
+	// menu before menuBar: the bar holds a reference to the model, so it has to go first
+	toybox::ui::MainMenu menu;
+	juce::MenuBarComponent menuBar { &menu };
+
 	juce::TextButton openButton { "Open file..." };
 	juce::Label statusLabel;
 	toybox::ui::SongInfoPanel songInfoPanel;
@@ -65,6 +76,7 @@ private:
 	juce::TooltipWindow tooltipWindow { this, 650 };	// declared last: destroyed first
 
 	std::unique_ptr<juce::FileChooser> fileChooser;
+	juce::ScopedMessageBox aboutBox;	// keeps the Help > About window alive while it is open
 	juce::String lastError;
 	int refreshHz = 0;	// the rate the refresh timer currently runs at (see timerCallback())
 
