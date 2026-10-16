@@ -7,6 +7,10 @@ on:
     branches: [ master, 'feature/**' ]
   pull_request:
     branches: [ master ]
+  # So the run can be asked for by hand - `gh workflow run "Build Tests"` - without inventing a
+  # commit to push. (The release workflow deliberately has no manual trigger: it needs a tag, and
+  # there is nothing sensible to publish without one.)
+  workflow_dispatch:
 
 defaults:
   run:
