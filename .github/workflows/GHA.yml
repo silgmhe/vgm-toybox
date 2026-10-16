@@ -119,8 +119,11 @@ jobs:
     - name: Build the plugin (macOS)
       if: matrix.os == 'macos-latest'
       # The same steps in plain CMake: build.ps1 is a PowerShell script with MSVC assumptions.
+      # Universal on purpose: macos-latest is Apple Silicon, and a plugin carrying only an arm64
+      # slice cannot be loaded on an Intel Mac. Both slices are 64-bit; local builds stay native,
+      # this is about what is built for other people.
       run: |
-        cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
+        cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_OSX_ARCHITECTURES="x86_64;arm64"
         cmake --build build --parallel 3
         cmake --build build --target vgm_core_test vgm_ui_test vgm_app_test --parallel 3
 

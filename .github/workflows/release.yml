@@ -64,8 +64,9 @@ jobs:
 
     - name: Build and package (macOS)
       if: matrix.os == 'macos-latest'
+      # Universal: the runner is Apple Silicon, but an Intel Mac cannot load an arm64-only plugin.
       run: |
-        cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
+        cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_OSX_ARCHITECTURES="x86_64;arm64"
         cmake --build build --parallel 3
         cmake --build build --target vgm_core_test vgm_ui_test vgm_app_test --parallel 3
         ./build/plugin/vgm_core_test
@@ -135,7 +136,8 @@ jobs:
 
         **Installing**
         - Windows: put \`VGMToybox.vst3\` in \`C:\\Program Files\\Common Files\\VST3\`, or run \`VGMToybox.exe\`.
-        - macOS: \`VGMToybox.vst3\` goes to \`/Library/Audio/Plug-Ins/VST3\`, \`VGMToybox.component\` to
+        - macOS (universal - Apple Silicon and Intel): \`VGMToybox.vst3\` goes to
+          \`/Library/Audio/Plug-Ins/VST3\`, \`VGMToybox.component\` to
           \`/Library/Audio/Plug-Ins/Components\`, and \`VGMToybox.app\` runs on its own.
         - Linux: \`VGMToybox.vst3\` goes to \`~/.vst3\`, and the standalone binary runs on its own.
 

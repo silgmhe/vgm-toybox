@@ -38,6 +38,18 @@ if(MSVC)
 		"MSVC runtime library to use (MultiThreaded = static, MultiThreadedDLL = dynamic)")
 endif()
 
+# --- position independent code ---
+# Everything built in this tree can end up inside the plugin, which is a shared object on macOS and
+# Linux - and libvgm's zlib was the one archive that was not built for that. Linking it in gave, on
+# the first Linux plugin build in CI:
+#   /usr/bin/ld: libz.a(zutil.c.o): relocation R_X86_64_PC32 against symbol `z_errmsg' can not be
+#                 used when making a shared object; recompile with -fPIC
+# libvgm's own four libraries set this property for themselves; zlib does not, and libvgm fetches it
+# with CPM and adds it as a sub-project of this tree, so the variable set here reaches it. On Windows
+# and macOS this is what the platform does anyway or asks for, so the setting only costs the
+# position-independent code generation on Linux - which the shared plugin needs regardless.
+set(CMAKE_POSITION_INDEPENDENT_CODE ON)
+
 # --- libvgm ---
 # Build the in-tree libvgm copy as part of this project (one-shot build, static libraries).
 # The libraries under libs/ are vendored source, not submodules, so they can be patched in place -

@@ -429,7 +429,9 @@ int main (int /*argc*/, char* /*argv*/[])
 	std::printf ("[6] loading while the audio thread renders\n");
 
 	{
-		toybox::backends::fake::setLoadDelayMilliseconds (120);
+		// The load and the undisturbed window measured below are the same length of time.
+		constexpr int kLoadDelayMs = 120;
+		toybox::backends::fake::setLoadDelayMilliseconds (kLoadDelayMs);
 
 		toybox::PlaybackEngine engine;
 		engine.prepare (sampleRate, blockSize);
@@ -461,6 +463,16 @@ int main (int /*argc*/, char* /*argv*/[])
 
 		juce::Thread::sleep (40);	// let the renderer get going
 
+		// How many blocks this machine renders in the load's own window while nothing is happening.
+		// The bar is that baseline rather than a fixed number, because a fixed number only encodes
+		// the speed of the machine the check was written on: ">= 50" held on Windows (92-96 blocks in
+		// 120 ms) and failed on a macOS runner (20), which said nothing about the engine.
+		const int starvedBeforeBaseline = engine.getStarvedBlocks();
+		const int renderedBeforeBaseline = rendered.load();
+		juce::Thread::sleep (kLoadDelayMs);
+		const int baselineBlocks = rendered.load() - renderedBeforeBaseline;
+		const int baselineRefused = engine.getStarvedBlocks() - starvedBeforeBaseline;
+
 		const int starvedBefore = engine.getStarvedBlocks();
 		const int renderedBefore = rendered.load();
 
@@ -472,9 +484,15 @@ int main (int /*argc*/, char* /*argv*/[])
 		stop = true;
 		renderer.join();
 
-		std::printf ("    during the load: %d blocks rendered, %d refused the lock\n",
-					 renderedDuring, refused);
-		check (renderedDuring >= 50, "the audio thread kept rendering through the load");
+		std::printf ("    undisturbed: %d blocks in %d ms, %d refused | during the load: %d blocks, %d refused\n",
+					 baselineBlocks, kLoadDelayMs, baselineRefused, renderedDuring, refused);
+
+		// the renderer runs, and this window is long enough to mean something
+		check (baselineBlocks >= 5, "the renderer runs while nothing else is happening");
+		check (baselineRefused == 0, "and nothing is refused while it runs undisturbed");
+		// a load does not take the lock out from under it: on a machine this slow the bar is half of
+		// what it manages on its own, which a lock held for the whole load cannot reach
+		check (renderedDuring >= baselineBlocks / 2, "the audio thread kept rendering through the load");
 		check (refused <= 2, "and was almost never refused the lock - the load builds outside it");
 
 		toybox::backends::fake::setLoadDelayMilliseconds (0);
