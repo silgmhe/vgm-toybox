@@ -60,7 +60,7 @@ All three are console targets, built on demand and safe to run anywhere:
 |---|---|
 | `vgm_mixer_test <file> [seconds]` | the libvgm path end to end: per-track isolation, the mixer parameters, the two volume stages, output routing - and the sample-exact gate "the unity-gain mixer mix equals the plain mix" (`-1000.00 dB`). |
 | `vgm_core_test` | the playback core through the fake backend. It deliberately links **no libvgm code**, so a core that still depended on the format engine would not link. |
-| `vgm_ui_test` | the button faces, rendered into images: the shadow under a face, the rounded corner where the hairline stops, the tighter shadow while pressed, the accent ring on focus and the glow a container paints behind a toggled button (see `docs/ui-button-design.md`). |
+| `vgm_ui_test` | the button faces, rendered into images: the shadow under a face, the rounded corner where the hairline stops, the tighter shadow while pressed, the accent ring on focus and the glow a container paints behind a toggled button (see `docs/desgin/ui-button-design.md`). |
 
 ```bash
 cmake --build build --target vgm_core_test   # or vgm_mixer_test / vgm_ui_test

@@ -264,7 +264,7 @@ void ChannelStrip::paint (juce::Graphics& g)
 
 	// A toggled M/S button is a prominent (L2) control: its coloured glow is painted by the
 	// container, because the blur reaches further than the 2 px a button keeps for its own shadow
-	// (docs/ui-button-design.md §4.3). It is the tighter glow: the buttons sit six pixels from the
+	// (docs/desgin/ui-button-design.md §4.3). It is the tighter glow: the buttons sit six pixels from the
 	// strip's edge, so a 12 px one would be cut off there and read as a rectangle around the
 	// button instead of a halo.
 	if (muteButton.getToggleState())

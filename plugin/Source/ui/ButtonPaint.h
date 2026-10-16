@@ -8,7 +8,7 @@
 namespace toybox::ui
 {
 
-/** Where a button sits in the hierarchy (docs/ui-button-design.md §6).
+/** Where a button sits in the hierarchy (docs/desgin/ui-button-design.md §6).
 
 	`material` is the default: the neutral white face with a hairline and a soft shadow.
 	`filled` is the prominent one (accent, mute red, solo amber): the caller supplies the colour,

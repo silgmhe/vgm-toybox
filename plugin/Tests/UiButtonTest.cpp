@@ -1,6 +1,6 @@
 /*
 	The button paint test - it renders button faces into images and checks the invariants
-	docs/ui-button-design.md promises.
+	docs/desgin/ui-button-design.md promises.
 
 	The light theme draws white faces on white cards, so "does this button float?" cannot be
 	answered by asking an API for a colour: the answer only exists in the pixels (the shadow, the

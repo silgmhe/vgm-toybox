@@ -10,7 +10,7 @@ namespace
 {
 	// The header row is as tall as the buttons in it. Each button carries its own shadow room, so
 	// this is the face (22, as before they were given a shadow) plus 2 * buttonShadowInset - see
-	// docs/ui-button-design.md §8.
+	// docs/desgin/ui-button-design.md §8.
 	constexpr int kHeaderButtonSize = 26;
 	constexpr int kGroupHeaderHeight = 16;		// painted above each row of strips
 	constexpr int kStripWidth = 88;				// meter + graduations + fader, see ChannelStrip
@@ -156,7 +156,7 @@ void MixerPanel::refreshValues (void)
 
 	// They behave like a radio pair for the current *default*: the active scheme lights up, so
 	// a glance tells which routing a newly loaded song will start with. Both get the same glow
-	// as the mixer toggle - it used to be missing here (docs/ui-button-design.md §2).
+	// as the mixer toggle - it used to be missing here (docs/desgin/ui-button-design.md §2).
 	const bool spreadDefault = (engine.getDefaultRouting() == playback::DefaultRouting::spreadAcrossBuses);
 	if (spreadOutputsButton.getToggleState() != spreadDefault)
 	{

@@ -54,7 +54,7 @@ ToyboxAudioProcessorEditor::ToyboxAudioProcessorEditor (ToyboxAudioProcessor& p)
 	openButton.onClick = [this] { openFileChooser(); };
 	openButton.setColour (juce::TextButton::buttonColourId, theme::accent());
 	openButton.setColour (juce::TextButton::textColourOffId, juce::Colours::white);
-	openButton.setTooltip ("Open a " + playback::BackendRegistry::getInstance().getExtensionListText() + " file");
+	openButton.setTooltip (formatOpenPrompt());
 	addAndMakeVisible (openButton);
 
 	statusLabel.setFont (juce::Font (juce::FontOptions (12.5f)));
@@ -254,7 +254,7 @@ void ToyboxAudioProcessorEditor::openFileChooser (void)
 																: juce::File::getSpecialLocation (juce::File::userMusicDirectory);
 	// the caption and the filter come from the registry: adding a backend adds it to the dialog
 	const auto& registry = playback::BackendRegistry::getInstance();
-	fileChooser = std::make_unique<juce::FileChooser> ("Open a " + registry.getExtensionListText() + " file",
+	fileChooser = std::make_unique<juce::FileChooser> (formatOpenPrompt(),
 													   startDir,
 													   registry.getFileWildcard());
 	fileChooser->launchAsync (juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectFiles,

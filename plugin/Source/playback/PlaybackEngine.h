@@ -228,6 +228,20 @@ private:
 	static void applyTimesTo (const playback::SongInfo& info, double& durationSeconds,
 							  double& loopPointSeconds, bool& loopsForever);
 
+	// --- the steps render() is made of ------------------------------------------------------
+	// render() used to be one 220-line function: the block's timeline, the connectivity the host
+	// reported, the two modes, the master bus stages, the output volume and the position/end
+	// bookkeeping, all in one place. The steps below are that code, moved - same order, same
+	// arithmetic, no allocation anywhere (review M-1).
+	void publishBusConnectivity (const playback::OutputBusBuffers* buses, int busCount);
+	static void clearBusBuffers (const playback::OutputBusBuffers* buses, int busCount, int numSamples);
+	void reportSilenceWhenIdle (void);					// audio thread, lock-free
+	void mixTracks (const playback::OutputBusBuffers* buses, int busCount, int usable);
+	void renderPlainPlayer (int usable);
+	void finaliseMasterBus (const playback::OutputBusBuffers* buses, int busCount, int usable);
+	void applyOutputVolume (const playback::OutputBusBuffers* buses, int busCount, int numSamples);
+	void publishPositionAndEnd (void);
+
 	mutable juce::CriticalSection lock;
 	std::unique_ptr<playback::ISongInstance> song;		// the open song (backend object)
 	std::vector<std::unique_ptr<playback::ITrackPlayer>> trackPlayers;

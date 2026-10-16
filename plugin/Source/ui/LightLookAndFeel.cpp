@@ -60,7 +60,7 @@ LightLookAndFeel::LightLookAndFeel (void)
 void LightLookAndFeel::drawButtonBackground (juce::Graphics& g, juce::Button& button,
 	const juce::Colour& backgroundColour, bool shouldDrawButtonAsHighlighted, bool shouldDrawButtonAsDown)
 {
-	// Same face as every other button (docs/ui-button-design.md): the neutral material when the
+	// Same face as every other button (docs/desgin/ui-button-design.md): the neutral material when the
 	// caller's colour is a light one (the mixer's M/S buttons are white while they are off), the
 	// filled variant when it carries a colour of its own (accent, mute red, solo amber). Which one
 	// also decides the hairline and the shadow - both live in the painter.

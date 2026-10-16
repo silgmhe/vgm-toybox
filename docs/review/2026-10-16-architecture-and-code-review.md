@@ -418,8 +418,15 @@ Get-ChildItem -Recurse -File -Include *.md,*.h,*.cpp -Path README.md,CODEBUDDY.m
 | M-3 卡片头套路 ×3 | M | ✅ 完成（F-3 ✓） |
 | M-5 锁契约 | M | ✅ 完成（F-6 ✓） |
 | **H-1 加载全程持锁** | **H** | ✅ **完成**（F-5 ✓：I/O 与会话构建都已出锁 ✓；`[6]` 饿死测试 + `[6b]` 反向对照 ✓） |
-| M-1 `PlaybackEngine` 四职责 | M | ⚠️ **一半**：加载已抽成 `LoadedSong`/`buildSong`/`installSong` ✓；`render()`（214 行）与 `RoutingPlan` 仍未动 ✓ |
-| M-4 / M-6 / M-7 / L-1..L-5 | M/L | ⏳ 未动 ✓（M-4 与 L 系列随手可做 ✓；M-6/M-7 只要一句决策 ✓） |
+| M-1 `PlaybackEngine` 四职责 | M | ✅ **完成**：加载抽成 `LoadedSong`/`buildSong`/`installSong` ✓；`render()`（原 220 行）拆成 8 个步骤函数 ✓（2026-10-17 ✓）；**`RoutingPlan` 判定为无需抽** ✓ —— 路由已经是纯计算（`playback::defaultTargetForTrack()` ✓）+ 每轨一个原子目标 ✓，再包一层只会多一层间接 ✓ |
+| M-4 文案派生 | M | ✅ **完成**：三个助手进 `ui/Format.h` ✓（`formatOpenPrompt`/`formatDropPrompt`/`formatLoadHint` ✓），4 个调用点改用它 ✓（审计时数成 5 处 ✓ —— 其中一处是注释 ✓，见审计节更正 ✓） |
+| M-6 两套前端 | M | ✅ **决策已写**：`docs/desgin/maintenance-policy.md` §1 ✓（冻结为遗留前端 + 单向收敛 ✓） |
+| M-7 libvgm 策略 | M | ✅ **决策已写**：同上 §2 ✓（季度评估 + 四门禁 + 单独提交 ✓；目前无本地补丁 ✓） |
+| L-1 失效引用 | L | ✅ **完成**：9 个文件共 11 处替换 ✓，复查**剩余 0** ✓ |
+| L-2 工程配置 | L | ✅ `.editorconfig` 已加 ✓；**`.clang-format` 有意不加** ✓（理由写在 policy §3 ✓） |
+| L-3 测试样板重复 | L | ⚠️ **有意不还** ✓：三个测试各自约 30 行 `check()`/`Result` 样板 ✓，抽公共头要动三个**已通过**的测试 ✓ —— 收益只是整洁度 ✓，风险与收益不成比例 ✓（要做随时可做 ✓） |
+| L-4 头内实现的判据 | L | ✅ 已写进 `CODEBUDDY.md` ✓（约 120 行 / 单目标链接 ✓） |
+| L-5 债务标记约定 | L | ✅ 已写进 `CODEBUDDY.md` ✓（`// DEBT:` 可 grep ✓ + `docs/review/` 是登记册 ✓） |
 
 ### 审计（2026-10-17，HEAD `142ec5e`）
 

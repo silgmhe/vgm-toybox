@@ -9,7 +9,7 @@ namespace toybox::ui
 
 void IconButton::paintButton (juce::Graphics& g, bool isMouseOverButton, bool isButtonDown)
 {
-	// The face comes from the shared painter (docs/ui-button-design.md): a neutral material or the
+	// The face comes from the shared painter (docs/desgin/ui-button-design.md): a neutral material or the
 	// accent/semantic fill, with the soft shadow inside the button's own bounds.
 	const bool toggled = getToggleState();
 	const bool enabled = isEnabled();

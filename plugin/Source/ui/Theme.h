@@ -77,7 +77,7 @@ inline constexpr int compactGlowBlur = 5;
 inline juce::Colour controlShadow (void)		{ return juce::Colour (0x38000000); }
 inline constexpr int controlShadowBlur = 5;
 
-// --- buttons (docs/ui-button-design.md) -----------------------------------------------
+// --- buttons (docs/desgin/ui-button-design.md) -----------------------------------------------
 // One language for every button: a neutral white face with a hairline, or a filled accent /
 // semantic colour, and **one** soft shadow that makes it read as floating above the card.
 // The shadow is painted inside the button's own bounds - the visible face is inset by
