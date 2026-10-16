@@ -76,16 +76,11 @@ ToyboxAudioProcessorEditor::ToyboxAudioProcessorEditor (ToyboxAudioProcessor& p)
 	// Launched with a song - Explorer's "Open with", a command line, a desktop shortcut? Load it
 	// and start playing, which is the whole point of handing a file to this build (and, with the
 	// registration script that ships in dist/, of associating the formats with it).
-	if (const juce::File startupSong = processor.getStartupFile(); startupSong.existsAsFile())
-	{
-		loadFile (startupSong);
-
-		if (engine.isLoaded())
-		{
-			engine.play();
-			transportPanel.refresh();
-		}
-	}
+	// Launched with a song - Explorer's "Open with", a command line, a desktop shortcut? Load it
+	// and start playing: that is the point of handing a file to this build (and, with the
+	// registration script that ships in dist/, of associating the formats with it).
+	startupSong = processor.getStartupFile();
+	openStartupSong();
 
 	refreshHz = kIdleRefreshHz;
 	startTimerHz (refreshHz);
@@ -299,6 +294,38 @@ void ToyboxAudioProcessorEditor::loadFile (const juce::File& file)
 	resized();					// the mixer card may have appeared or disappeared
 }
 
+void ToyboxAudioProcessorEditor::openStartupSong (void)
+{
+	if (startupHandled)
+	{
+		return;
+	}
+
+	if (! startupSong.existsAsFile())
+	{
+		startupHandled = true;		// nothing was handed to us, or it was not a song
+		return;
+	}
+
+	loadFile (startupSong);
+
+	// The audio device may not be ready yet: leave the file pending and let the timer come back.
+	if (! engine.isLoaded())
+	{
+		return;
+	}
+
+	engine.play();
+	transportPanel.refresh();
+	startupHandled = true;
+
+	// Success leaves a line as well: with the file types registered, "I opened a song and nothing
+	// played" is the one question that has to be answerable from outside the application.
+	juce::File::getSpecialLocation (juce::File::tempDirectory)
+		.getChildFile ("vgmtoybox-startup.log")
+		.replaceWithText ("Opened " + startupSong.getFullPathName() + juce::newLine);
+}
+
 void ToyboxAudioProcessorEditor::rebuildChipButtons (void)
 {
 	chipPanel.rebuild (engine.getChips(), [this] (size_t chipIndex, bool shouldBeMuted)
@@ -313,6 +340,13 @@ void ToyboxAudioProcessorEditor::rebuildChipButtons (void)
 
 void ToyboxAudioProcessorEditor::timerCallback (void)
 {
+	// Still opening the song the application was started with? The audio device may only have
+	// come up in the meantime - keep trying for about a second, then let it go.
+	if (! startupHandled && startupAttempts++ < 12)
+	{
+		openStartupSong();
+	}
+
 	// only a running transport animates the meters and the seek bar - that is when the higher
 	// rate is worth anything
 	const int wantedHz = engine.isPlaying() ? kPlayingRefreshHz : kIdleRefreshHz;

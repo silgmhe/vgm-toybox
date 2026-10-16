@@ -115,6 +115,10 @@ Or the plain Windows way: right-click a song, **Open with** -> **Choose another 
 `VGMToybox.exe`, tick *Always use this app*. Either way the writes go to
 `HKCU\Software\Classes` only, so uninstalling stays "delete the folder".
 
+If a double-click then does nothing, `%TEMP%\vgmtoybox-startup.log` says what the application was
+started with and what it made of it - the quickest way to tell a song that could not be loaded from
+an association that never fired. A launch without arguments writes nothing at all.
+
 ## Licence and attribution
 
 This project stands on other people's work and keeps the notices visible. The libraries are

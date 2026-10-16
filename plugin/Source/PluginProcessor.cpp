@@ -16,26 +16,40 @@ ToyboxAudioProcessor::ToyboxAudioProcessor()
 
 juce::File ToyboxAudioProcessor::getStartupFile (void) const
 {
-	// (juce::AudioProcessor exposes the wrapper as the public `wrapperType` member - there is no
-	// getWrapperType() here, which the compiler is happy to point out.)
 	if (wrapperType != wrapperType_Standalone)
 	{
 		return {};
 	}
 
-	// The shell passes the file path as an argument - quoted when it contains spaces - possibly
-	// after options of the standalone's own. Only something that exists *and* is a format we play
-	// counts, so a stray argument can never make the plugin try to open something random.
+	// The arguments come from the application **already split**. The raw command line string is
+	// re-quoted for display and cannot be split reliably by hand: on Windows a path with spaces
+	// turns up there with backslashes in front of the quotes, which is not something a quote-aware
+	// tokeniser is expected to undo (it made every "18 Some Song.vgz" silently fail).
+	const auto arguments = juce::JUCEApplicationBase::getCommandLineParameterArray();
+	if (arguments.isEmpty())
+	{
+		return {};
+	}
+
+	// Only something that exists *and* is a format we play counts, so an option of the
+	// standalone's own - or anything else in the line - cannot make it open something random.
 	const auto& registry = playback::BackendRegistry::getInstance();
 
-	for (const auto& token : juce::StringArray::fromTokens (juce::JUCEApplicationBase::getCommandLineParameters(), false))
+	for (const auto& argument : arguments)
 	{
-		const juce::File candidate (token);
+		const juce::File candidate (argument);
 		if (candidate.existsAsFile() && registry.isSupportedFile (candidate))
 		{
 			return candidate;
 		}
 	}
+
+	// Nothing usable: leave a breadcrumb. "I double-clicked a song and nothing happened" is
+	// otherwise impossible to diagnose from the outside.
+	juce::File::getSpecialLocation (juce::File::tempDirectory)
+		.getChildFile ("vgmtoybox-startup.log")
+		.replaceWithText ("Started with: " + arguments.joinIntoString (" ") + juce::newLine
+						  + "No argument was a supported song file." + juce::newLine);
 
 	return {};
 }

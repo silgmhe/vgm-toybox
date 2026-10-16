@@ -41,6 +41,11 @@ private:
 
 	void openFileChooser (void);
 	void loadFile (const juce::File& file);
+
+	/** Opens the song the application was started with (see getStartupFile()). The audio device
+		may still be coming up while the editor is built, so the first timer ticks call this again
+		until the engine has it. */
+	void openStartupSong (void);
 	void rebuildChipButtons (void);
 	void updateStatusLine (void);
 
@@ -62,6 +67,10 @@ private:
 	std::unique_ptr<juce::FileChooser> fileChooser;
 	juce::String lastError;
 	int refreshHz = 0;	// the rate the refresh timer currently runs at (see timerCallback())
+
+	juce::File startupSong;			// what the application was launched with, if anything
+	int startupAttempts = 0;
+	bool startupHandled = false;
 
 	JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (ToyboxAudioProcessorEditor)
 };
