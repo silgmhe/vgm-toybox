@@ -417,6 +417,26 @@ if ($Test) {
 		}
 	}
 
+	# The window scripts, one harness process each: they drive the real editor and print their own
+	# ok/FAIL lines. window-basics needs nothing but a built binary, so CI covers real UI behaviour
+	# with it; load-and-play wants a song and skips that part (staying green) without -TestSong.
+	$scriptsDir = Join-Path $RepoRoot 'plugin\Tests\scripts'
+	$appTestExe = Join-Path $testDir 'vgm_app_test.exe'
+	if ((Test-Path -LiteralPath $scriptsDir) -and (Test-Path -LiteralPath $appTestExe)) {
+		if ($TestSong) {
+			$env:VGM_TEST_SONG = (Resolve-Path -LiteralPath $TestSong).Path
+		}
+
+		foreach ($script in Get-ChildItem -LiteralPath $scriptsDir -Filter '*.txt' | Sort-Object Name) {
+			Write-Host ('+ ' + $appTestExe + ' ' + $script.Name) -ForegroundColor DarkGray
+			& $appTestExe $script.FullName
+			if ($LASTEXITCODE -ne 0) {
+				throw ("the window script '{0}' failed with exit code {1}" -f $script.Name, $LASTEXITCODE)
+			}
+			$passed++
+		}
+	}
+
 	if ($passed -eq 0) {
 		throw 'No test executable was found - build them first, e.g. -Target vgm_core_test,vgm_ui_test,vgm_app_test'
 	}
