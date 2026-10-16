@@ -167,6 +167,25 @@ target_link_libraries(vgm_core_test PRIVATE
 	juce::juce_recommended_config_flags
 )
 
+# --- console test for the button faces (not built by default) ---
+# Renders ui/ButtonPaint.h into images and checks the invariants docs/ui-button-design.md
+# promises: the shadow below a face, the rounded corner, the weaker shadow while pressed, the
+# accent ring on focus, the card-painted glow of a toggled button. It needs the ui/ painting code
+# and nothing else - no engine, no libvgm.
+#   cmake --build <build dir> --target vgm_ui_test
+#   <build dir>/plugin/vgm_ui_test
+add_executable(vgm_ui_test EXCLUDE_FROM_ALL
+	Tests/UiButtonTest.cpp
+	Source/ui/IconButton.cpp
+	Source/ui/Icons.cpp
+)
+target_include_directories(vgm_ui_test PRIVATE Source)
+target_compile_definitions(vgm_ui_test PRIVATE JUCE_STANDALONE_APPLICATION=1)
+target_link_libraries(vgm_ui_test PRIVATE
+	juce::juce_gui_basics
+	juce::juce_recommended_config_flags
+)
+
 target_include_directories(vgm_mixer_test PRIVATE Source)
 target_compile_definitions(vgm_mixer_test PRIVATE
 	TOYBOX_OUTPUT_BUSES=${TOYBOX_OUTPUT_BUSES}

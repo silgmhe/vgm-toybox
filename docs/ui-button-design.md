@@ -223,7 +223,7 @@ inline float buttonRadiusFor (float height) { return juce::jmin (height * 0.2f, 
 | M-UI.2 `IconButton` 接入 | ✅ | 走带 5 个 + 卡片头部 3 个统一走 `drawButtonFace()`；新增聚焦环（`focusGained/Lost` 触发重绘） |
 | M-UI.4 收敛 glow | ✅ | `TransportPanel` / `MixerPanel` 改用 `drawButtonGlow()` + `buttonGlowBounds()`；**补上扇出/汇入一直缺失的 on 态发光** |
 | M-UI.3 `LightLookAndFeel` 接入 | ✅ | `drawButtonBackground`（混音 M/S、Open）与 `drawComboBox`（输出/loop/fade）都改走 `drawButtonFace()`：填充色亮 → 中性材质、有色（accent/红/琥珀）→ 填充型；三份圆角规则合并为 `buttonRadiusFor()`；禁用态下拉的箭头也按规范衰减；布局同步补 4px（顶行 32→36、输出行 22→26、设置行 26→30、走带卡片 142、通道条 204、混音最小高 178） |
-| M-UI.5 文档与视觉验收 | ⏳ | CODEBUDDY 更新、宿主内六态走查、可选的 `vgm_ui_test` 像素不变量 |
+| M-UI.5 文档与验收 | ✅ 文档与测试 | CODEBUDDY 补按钮体系与新测试；`vgm_ui_test` 上线（12 项像素不变量断言）；宿主内六态走查待你确认 |
 
 ---
 
