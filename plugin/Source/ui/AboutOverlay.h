@@ -20,18 +20,27 @@ class AboutOverlay : public juce::Component
 public:
 	AboutOverlay (void)
 	{
+		closeButton.setComponentID ("about.close");
 		closeButton.setColour (juce::TextButton::buttonColourId, theme::accent());
 		closeButton.setColour (juce::TextButton::textColourOffId, juce::Colours::white);
 		closeButton.onClick = [this] { dismiss(); };
 		addAndMakeVisible (closeButton);
 
-		// the two places this project lives, clickable - a hyperlink only opens the browser when
-		// the user clicks it, so nothing here talks to the network on its own
+		// The two places this project lives, clickable - a hyperlink only opens the browser when the
+		// user clicks it, so nothing here talks to the network on its own.
+		//
+		// Left-justified like the text above them: a HyperlinkButton centres its text by default,
+		// which made these two sit in the middle of a panel whose every other line starts at its
+		// left edge. They also name themselves for the console harness.
 		for (auto* link : { &repositoryLink, &bilibiliLink })
 		{
 			link->setColour (juce::HyperlinkButton::textColourId, theme::accent());
+			link->setJustificationType (juce::Justification::centredLeft);
 			addAndMakeVisible (*link);
 		}
+
+		repositoryLink.setComponentID ("about.github");
+		bilibiliLink.setComponentID ("about.bilibili");
 	}
 
 	/** Called when the box is dismissed - the window hides the overlay. */
@@ -122,9 +131,9 @@ private:
 		}
 	}
 
-	juce::HyperlinkButton repositoryLink { "github.com/silgmhe/vgm-toybox",
+	juce::HyperlinkButton repositoryLink { "GitHub: github.com/silgmhe/vgm-toybox",
 										   juce::URL ("https://github.com/silgmhe/vgm-toybox") };
-	juce::HyperlinkButton bilibiliLink { "space.bilibili.com/249486555",
+	juce::HyperlinkButton bilibiliLink { "BiliBili: space.bilibili.com/249486555",
 										 juce::URL ("https://space.bilibili.com/249486555") };
 	juce::TextButton closeButton { "Close" };
 
