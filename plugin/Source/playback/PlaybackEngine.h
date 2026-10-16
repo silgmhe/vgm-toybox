@@ -162,6 +162,10 @@ private:
 
 	double getPlayLengthSeconds (void) const;			// caller must hold the lock
 	void refreshCachedTimes (void);						// caller must hold the lock
+	/** The seek itself, without the lock: the public entry point takes it and calls this, and so
+		does rebuildPlayers() - which runs with the lock already held. Named this way so the
+		convention is visible instead of relying on the lock being recursive. */
+	void setPositionSecondsLocked (double seconds);		// caller must hold the lock
 	void updatePlayerTimeline (void);					// caller must hold the lock
 	void enumerateTags (void);
 	void enumerateChips (void);

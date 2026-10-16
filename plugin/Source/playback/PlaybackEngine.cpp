@@ -57,22 +57,23 @@ void PlaybackEngine::prepare (double newSampleRate, int maxBlock)
 
 bool PlaybackEngine::loadFile (const juce::File& file, juce::String& errorMessage)
 {
-	// The lock is held for the whole operation: the audio thread will output silence
-	// (it uses a try-lock) while a file is being loaded.
+	// Phase 1, **outside the lock**: reading the file. This is the one part of a load whose cost is
+	// unbounded - a 30 MB VGM from a cold cache, or a file something else is still writing - and it
+	// touches nothing this engine owns, so the audio thread keeps rendering through it instead of
+	// falling silent for as long as the disk takes (the review's H-1; the rest of the load is
+	// bounded work that still happens under the lock, see the note there).
+	const bool exists = file.existsAsFile();
+	juce::MemoryBlock data;
+	const bool readable = exists && file.loadFileAsData (data) && data.getSize() > 0;
+
+	// Phase 2, under the lock: everything that touches engine state.
 	const juce::ScopedLock sl (lock);
 
 	resetState();	// stop playback and release the previous file first
 
-	if (! file.existsAsFile())
+	if (! readable)
 	{
-		errorMessage = "The file does not exist.";
-		return false;
-	}
-
-	juce::MemoryBlock data;
-	if (! file.loadFileAsData (data) || data.getSize() == 0)
-	{
-		errorMessage = "Could not read the file.";
+		errorMessage = exists ? "Could not read the file." : "The file does not exist.";
 		return false;
 	}
 
@@ -157,6 +158,11 @@ void PlaybackEngine::stop (void)
 void PlaybackEngine::setPositionSeconds (double seconds)
 {
 	const juce::ScopedLock sl (lock);
+	setPositionSecondsLocked (seconds);
+}
+
+void PlaybackEngine::setPositionSecondsLocked (double seconds)
+{
 	if (trackPlayers.empty())
 	{
 		return;
@@ -571,7 +577,9 @@ void PlaybackEngine::rebuildPlayers (juce::String& errorMessage)
 	playing = true;
 	if (position > 0.0)
 	{
-		setPositionSeconds (position);
+		// the lock is already held here - calling the public version would have worked only
+		// because CriticalSection happens to be recursive (M-5)
+		setPositionSecondsLocked (position);
 	}
 	if (! wasPlaying)
 	{
