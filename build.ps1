@@ -12,8 +12,8 @@
            - static MSVC runtime (/MT)  -> no VC++ Redistributable required
            - CMAKE_EXPORT_COMPILE_COMMANDS -> compile_commands.json for clangd
       3. builds the VGMPlay executable
-      4. copies VGMPlay*.exe + VGMPlay.ini + the docs, the VST3 bundle, the standalone
-        application and the file type helper to .\dist
+      4. copies VGMPlay*.exe + VGMPlay.ini + the docs, the VST3 bundle and the standalone
+        application to .\dist
          and writes compile_commands.json to the repository root
       5. prints the DLL dependencies of the executable
 
@@ -303,15 +303,6 @@ if (Test-Path -LiteralPath $artefactsDir) {
 		} catch {
 			throw ("Could not copy the standalone application to '{0}' - VGMToybox.exe is probably still running. " +
 					"Close it and run the script again. ({1})" -f $standaloneTarget, $_.Exception.Message)
-		}
-	}
-
-	# the file type registration helper, so the dist folder can be moved anywhere and still know
-	# where the executable it registers for is
-	foreach ($helper in @('register-file-types.ps1', 'RegisterFileTypes.cmd')) {
-		$src = Join-Path $RepoRoot ('tools\' + $helper)
-		if (Test-Path -LiteralPath $src) {
-			Copy-Item -LiteralPath $src -Destination $DistDir -Force
 		}
 	}
 }

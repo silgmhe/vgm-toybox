@@ -101,39 +101,27 @@ a command line, a shortcut, Explorer - loads it and starts the transport:
 .\dist\Standalone\VGMToybox.exe "C:\music\Some Song.vgm"
 ```
 
-To do that from Explorer, register the application as a handler for the formats it plays. It is per
-user, needs no administrator, and is reversible:
+To make Explorer do that, associate the formats with the application once, using Windows' own
+dialog. **The program itself never touches the registry** - no installer, no shell extension, no
+helper script - so the association is entirely yours to create, change and undo:
 
-```powershell
-cd dist
-.\RegisterFileTypes.cmd              # adds VGMToybox to the "Open with" list
-.\RegisterFileTypes.cmd /default     # also makes it the default for .vgm .vgz .s98 .dro .gym
-.\RegisterFileTypes.cmd /unregister  # undoes it, leaving other handlers alone
-```
+1. right-click a song and choose **Open with** -> **Choose another app**;
+2. pick `VGMToybox.exe` (*More apps* -> *Look for another app on this PC* finds it the first time);
+3. tick **Always use this app**. Repeat for `.vgz`, `.s98`, `.dro` and `.gym` if you want those too.
 
-Or the plain Windows way: right-click a song, **Open with** -> **Choose another app** ->
-`VGMToybox.exe`, tick *Always use this app*. Either way the writes go to
-`HKCU\Software\Classes` only, so uninstalling stays "delete the folder".
+Windows keeps that choice per user, and *Settings* -> *Apps* -> *Default apps* is where it is
+edited - so nothing this project ships has to be uninstalled or cleaned up afterwards: deleting the
+folder removes all of it.
 
-If a double-click then does nothing, two things tell you why:
+Two things worth knowing:
 
-- `%TEMP%\vgmtoybox-startup.log` says what the application was started with and what it made of it,
-  so a song that could not be loaded is distinguishable from an association that never fired. A
-  launch without arguments writes nothing at all.
-- `RegisterFileTypes.cmd /status` (or `-Status`) prints which executable Windows would actually
-  hand each format to, and their timestamps - which is how a stale copy of the application in
-  another folder shows up.
-
-The trap behind most "I changed the association and nothing happened": when an application is
-picked in the Open-with dialog, Windows records the choice per user in `FileExts\.<ext>\UserChoice`,
-and **that entry overrides every other association**. It is protected against tampering - a script
-cannot write it, and Windows refuses to delete it either - so the only way to change it is through
-that dialog: pick the application and tick *Always use this app*.
-
-One consequence worth taking seriously: if that recorded choice points at a copy of the executable
-that has since been moved or deleted, a double click can do nothing at all while the very same
-program started from a command line works perfectly. Keep one copy of the application, replace the
-file in place when upgrading, and the association keeps working.
+- A recorded association stores a path. If the copy you associated is later moved or deleted, a
+  double click can do nothing at all while the very same program started from a command line works
+  perfectly. Keep one copy of the application and replace that file when upgrading.
+- If a launch cannot use the song it was handed - a typo in the command line, or a file the
+  backends do not play - the application writes one line about it to
+  `%TEMP%\vgmtoybox-startup.log`. A launch that works writes nothing anywhere, and the plugin
+  writes nothing at all.
 
 ## Licence and attribution
 

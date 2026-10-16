@@ -318,12 +318,8 @@ void ToyboxAudioProcessorEditor::openStartupSong (void)
 	engine.play();
 	transportPanel.refresh();
 	startupHandled = true;
-
-	// Success leaves a line as well: with the file types registered, "I opened a song and nothing
-	// played" is the one question that has to be answerable from outside the application.
-	juce::File::getSpecialLocation (juce::File::tempDirectory)
-		.getChildFile ("vgmtoybox-startup.log")
-		.replaceWithText ("Opened " + startupSong.getFullPathName() + juce::newLine);
+	// Nothing is written on success: opening a song is the normal case, and the application leaves
+	// no trace anywhere unless something went wrong (see the breadcrumb in timerCallback()).
 }
 
 void ToyboxAudioProcessorEditor::rebuildChipButtons (void)
@@ -340,11 +336,25 @@ void ToyboxAudioProcessorEditor::rebuildChipButtons (void)
 
 void ToyboxAudioProcessorEditor::timerCallback (void)
 {
-	// Still opening the song the application was started with? The audio device may only have
-	// come up in the meantime - keep trying for about a second, then let it go.
-	if (! startupHandled && startupAttempts++ < 12)
+	// Still opening the song the application was started with? The audio device may only have come
+	// up in the meantime, so keep trying for about a second - and then say so once, because a song
+	// that never appears is otherwise impossible to explain from the outside.
+	if (! startupHandled)
 	{
-		openStartupSong();
+		if (startupAttempts++ < 12)
+		{
+			openStartupSong();
+		}
+		else
+		{
+			startupHandled = true;
+
+			juce::File::getSpecialLocation (juce::File::tempDirectory)
+				.getChildFile ("vgmtoybox-startup.log")
+				.replaceWithText ("Could not open the song the application was started with:"
+								  + juce::newLine + startupSong.getFullPathName()
+								  + juce::newLine + lastError + juce::newLine);
+		}
 	}
 
 	// only a running transport animates the meters and the seek bar - that is when the higher
