@@ -53,3 +53,35 @@
 **给 CPM 引入第三方格式包装器的两个坑（都踩过了 ✓）**：
 1. 第三方包装器目标**不继承**插件目标的属性 ✗ → C++ 标准必须靠 **`CMAKE_CXX_STANDARD` 这类目录作用域设置**传下去 ✓，否则 JUCE 会以 `#error JUCE requires C++17 or later` 停下 ✗；
 2. `build.ps1` 的 `Invoke-Native` 曾把原生命令写到 **stderr** 的进度输出当成致命错误 ✗（git 克隆时必现 ✓，与格式无关 ✓）→ **已修** ✓。
+
+## 6. 版本号与发布
+
+**决定**：**语义化版本 `MAJOR.MINOR.PATCH`**（semver ✓），当前从 **`0.0.1`** 起 ✓（0.x 表示接口仍在收敛 ✓ —— 对插件而言"接口"= 宿主可见的东西：插件码、参数布局、保存的状态 ✓）。
+
+**唯一来源** ✓：顶层 `CMakeLists.txt` 的 `project(vgmtoybox VERSION …)` ✓。**其它地方一律派生，不许再写一遍** ✓：
+
+| 派生到哪 | 怎么来的 |
+|---|---|
+| `Help > About` 显示的版本 ✓ | JUCE 把 `PROJECT_VERSION` 变成 `JucePlugin_VersionString` ✓（`JUCEUtils.cmake:1558` ✓，无需在 `juce_add_plugin` 里再写 `VERSION` ✓） |
+| VST3 的 `moduleinfo.json` ✓ | 同上 ✓（构建产物里可直接核对 ✓） |
+| Windows 文件属性的 `FileVersion` ✓ | 同上 ✓ —— **注意**：改版本后要删一次生成的 `.rc` ✗（`build/plugin/VGMToybox_artefacts/JuceLibraryCode/VGMToybox_resources.rc` ✓），否则 exe 里还是旧值 ✗ |
+| 发布流程的 tag 校验 ✓ | `release.yml` 从同一行解析 ✓，**tag 不匹配就拒绝发布** ✓✓ |
+
+**发版流程** ✓：
+
+```bash
+# 1) 在 CMakeLists.txt 里把 VERSION 改成新版本（唯一一处 ✓）
+# 2) 提交并推送 master（会跑三平台构建与测试 ✓）
+git tag v0.0.2          # tag 必须等于 VERSION，前缀 v ✓
+git push origin v0.0.2  # → 三平台构建 + 测试 + 打包 + 自动发布 Release ✓
+```
+
+**什么时候升哪一位** ✓（对插件来说，"不兼容"主要是宿主侧的 ✓）：
+
+| 位 | 何时升 |
+|---|---|
+| **MAJOR** | 宿主可见的不兼容改动 ✓：改 `PLUGIN_CODE`/`PLUGIN_MANUFACTURER_CODE` ✓、参数集合或保存状态的格式破坏性变化 ✓（会让已有工程里的实例失效或参数错位 ✓） |
+| **MINOR** | 新功能 ✓、新格式 ✓、新 UI 页面 ✓（旧工程照常打开 ✓） |
+| **PATCH** | 修 bug ✓、文档 ✓、不影响宿主的内部重构 ✓ |
+
+**纪律** ✓：`0.0.1` 之前若已有对外产物，**不要**回填版本号 ✗ —— 直接从 `0.0.1` 起 ✓，并在 release 说明里注明它与之前那些临时构建无对应关系 ✓（版本号一旦对外就是承诺 ✓）。

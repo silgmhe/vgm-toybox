@@ -14,7 +14,12 @@ if(POLICY CMP0048)
 endif()
 # The project is the umbrella for both front-ends, so it carries the product name. The player
 # subdirectory still names its own target "VGMPlay64" - the upstream identity lives there.
-project(vgmtoybox VERSION 0.5 LANGUAGES C CXX)
+#
+# The version here is the **only** place a version lives - semantic versioning, MAJOR.MINOR.PATCH
+# (docs/desgin/maintenance-policy.md section 6). Everything downstream reads it from here: JUCE
+# turns it into JucePlugin_VersionString (Help > About), the VST3 module info and the Windows file
+# version, and the release workflow refuses a tag that does not match it.
+project(vgmtoybox VERSION 0.0.1 LANGUAGES C CXX)
 
 #set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${PROJECT_BINARY_DIR}/bin)
 #set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${PROJECT_BINARY_DIR}/bin)
