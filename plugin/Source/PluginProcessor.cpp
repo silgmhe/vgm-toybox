@@ -14,6 +14,32 @@ ToyboxAudioProcessor::ToyboxAudioProcessor()
 	toybox::playback::registerBuiltInBackends();
 }
 
+juce::File ToyboxAudioProcessor::getStartupFile (void) const
+{
+	// (juce::AudioProcessor exposes the wrapper as the public `wrapperType` member - there is no
+	// getWrapperType() here, which the compiler is happy to point out.)
+	if (wrapperType != wrapperType_Standalone)
+	{
+		return {};
+	}
+
+	// The shell passes the file path as an argument - quoted when it contains spaces - possibly
+	// after options of the standalone's own. Only something that exists *and* is a format we play
+	// counts, so a stray argument can never make the plugin try to open something random.
+	const auto& registry = playback::BackendRegistry::getInstance();
+
+	for (const auto& token : juce::StringArray::fromTokens (juce::JUCEApplicationBase::getCommandLineParameters(), false))
+	{
+		const juce::File candidate (token);
+		if (candidate.existsAsFile() && registry.isSupportedFile (candidate))
+		{
+			return candidate;
+		}
+	}
+
+	return {};
+}
+
 void ToyboxAudioProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
 {
 	engine.prepare (sampleRate, samplesPerBlock);

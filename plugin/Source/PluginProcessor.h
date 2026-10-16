@@ -42,6 +42,15 @@ public:
 
 	toybox::PlaybackEngine& getEngine (void) { return engine; }
 
+	/** Standalone only: the song the application was launched with - Explorer's "Open with", a
+		command line, a desktop shortcut - so that double-clicking a file starts playing it.
+
+		A plugin never gets one. It has no command line of its own (the host has one, and a file in
+		it belongs to the host's startup), which is what the wrapper type tells apart. The first
+		argument that is an existing file of a supported format wins; options and anything else in
+		the line are ignored. */
+	juce::File getStartupFile (void) const;
+
 private:
 	/** "Out 1/2" (the main bus, activated) plus the additional buses, which start **inactive**:
 		a host only allocates the ones the user enables (docs/multitrack-output-design.md, ADR-2),

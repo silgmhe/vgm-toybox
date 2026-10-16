@@ -92,6 +92,29 @@ pass instead of soloing chips one by one.
 Every strip is a separately rendered libvgm instance, so the stems add up to exactly the mix you
 would have heard - `vgm_mixer_test` proves that sum is sample-exact.
 
+## Opening songs from Explorer
+
+The standalone application plays the song it is started with, so anything that hands it a file -
+a command line, a shortcut, Explorer - loads it and starts the transport:
+
+```powershell
+.\dist\Standalone\VGMToybox.exe "C:\music\Some Song.vgm"
+```
+
+To do that from Explorer, register the application as a handler for the formats it plays. It is per
+user, needs no administrator, and is reversible:
+
+```powershell
+cd dist
+.\RegisterFileTypes.cmd              # adds VGMToybox to the "Open with" list
+.\RegisterFileTypes.cmd /default     # also makes it the default for .vgm .vgz .s98 .dro .gym
+.\RegisterFileTypes.cmd /unregister  # undoes it, leaving other handlers alone
+```
+
+Or the plain Windows way: right-click a song, **Open with** -> **Choose another app** ->
+`VGMToybox.exe`, tick *Always use this app*. Either way the writes go to
+`HKCU\Software\Classes` only, so uninstalling stays "delete the folder".
+
 ## Licence and attribution
 
 This project stands on other people's work and keeps the notices visible. The libraries are

@@ -73,6 +73,20 @@ ToyboxAudioProcessorEditor::ToyboxAudioProcessorEditor (ToyboxAudioProcessor& p)
 		}
 	}
 
+	// Launched with a song - Explorer's "Open with", a command line, a desktop shortcut? Load it
+	// and start playing, which is the whole point of handing a file to this build (and, with the
+	// registration script that ships in dist/, of associating the formats with it).
+	if (const juce::File startupSong = processor.getStartupFile(); startupSong.existsAsFile())
+	{
+		loadFile (startupSong);
+
+		if (engine.isLoaded())
+		{
+			engine.play();
+			transportPanel.refresh();
+		}
+	}
+
 	refreshHz = kIdleRefreshHz;
 	startTimerHz (refreshHz);
 }
