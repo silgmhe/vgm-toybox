@@ -420,3 +420,15 @@ Get-ChildItem -Recurse -File -Include *.md,*.h,*.cpp -Path README.md,CODEBUDDY.m
 | **H-1 加载全程持锁** | **H** | ✅ **完成**（F-5 ✓：I/O 与会话构建都已出锁 ✓；`[6]` 饿死测试 + `[6b]` 反向对照 ✓） |
 | M-1 `PlaybackEngine` 四职责 | M | ⚠️ **一半**：加载已抽成 `LoadedSong`/`buildSong`/`installSong` ✓；`render()`（214 行）与 `RoutingPlan` 仍未动 ✓ |
 | M-4 / M-6 / M-7 / L-1..L-5 | M/L | ⏳ 未动 ✓（M-4 与 L 系列随手可做 ✓；M-6/M-7 只要一句决策 ✓） |
+
+### 审计（2026-10-17，HEAD `142ec5e`）
+
+上表不是回忆 ✓，是**在 `142ec5e` 上逐条实测**出来的 ✓（脚本：读文件 + 数出现次数 + 重跑四个门禁 ✓）。
+
+- **H-1** ✓：`buildSong`（`PlaybackEngine.cpp:469`）内 **`ScopedLock` 出现 0 次** ✓ —— 这是"构建不碰引擎状态"的机械证明 ✓；`installSong` 在 `:579` ✓；`[6]` 今天仍报 **"93 blocks rendered, 0 refused the lock"** ✓✓。
+- **H-2** ✓：`playback/StartupSong.h` 存在 ✓；`vgm_core_test` 的 `[5]`(`:376`)、`[6]`(`:429`)、`[6b]`(`:489`) 三节都在且全绿 ✓。
+- **H-3** ✓ / ⚠️：workflow 里 job `plugin-tests`(`GHA.yml:71`)、`runs-on: windows-latest`、`shell: powershell`、命令 `.\build.ps1 -Target vgm_core_test,vgm_ui_test,vgm_app_test -Test`、触发分支 `feature/**` 全在 ✓ —— **但首次真实运行本次仍无法从本机确认** ✗（GitHub API 限流 ✓）→ 按"**代码完成、运行待观察**"记 ✓。
+- **M-2/M-3/M-5** ✓：`syncStructure`/`refreshValues` 在 `MixerPanel.cpp:116/123/126/138` ✓；`CardComponent.h:42/47/50` 三个助手 ✓ 且**两个面板里 `kHeaderHeight` 已 0 处** ✓；`setPositionSecondsLocked` 4 处 ✓；`createPlayers`/`enumerateTags`/`enumerateChips` **残留 0 处** ✓（死代码已清 ✓）。
+- **M-1** ⚠️ **一半**：加载路径已抽离 ✓，但 `render()` **≈220 行** ✗（`PlaybackEngine.cpp:731` 到文件末 952 行 ✓ —— 它正好是文件最后一个函数 ✓，所以这次是量出来的而不是估的 ✓）。
+- **未动项（实测）**：**L-1 = 11 处**旧路径引用 ✗、**M-4 = 5 处**重复文案 ✗、L-2 无 `.editorconfig`/`.clang-format` ✗、L-3 无 `Tests/TestSupport.h` ✗、M-6/M-7 仍无决策记录 ✗。
+- **门禁（今天重跑，不是引用旧输出 ✓）**：`vgm_core_test` ✓、`vgm_ui_test` ✓、`vgm_app_test`（window-basics 脚本 ✓）、`vgm_mixer_test` **−1000.00 dB** ✓（seek 后重渲染 −32.3 dB ✓）。
