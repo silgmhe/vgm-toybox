@@ -16,14 +16,21 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # One row per platform, Release and 64-bit only - the same policy the push-time CI follows,
-        # and GHA.yml's matrix says what each removed row was for. The Windows step below asks for
-        # both out loud rather than leaning on build.ps1's defaults, so a release cannot quietly
-        # become a debug or a 32-bit one.
+        # One row per platform and architecture, Release and 64-bit only - the same policy the
+        # push-time CI follows, and GHA.yml's matrix says what each removed row was for. The Windows
+        # step below asks for Release and for the architecture out loud rather than leaning on
+        # build.ps1's defaults, so a release cannot quietly become a debug or an emulated x64 one.
+        #
+        # macOS rides in one universal bundle (both slices, below) rather than one package per
+        # architecture, which is what Mac users expect. The two arm64 rows are there because a
+        # Raspberry Pi or an ARM server cannot run the x64 package - and note what the Windows arm64
+        # package holds: the VST3 and the standalone only, because JUCE drops AAX on Windows arm64.
         include:
-          - { os: windows-latest, shell: powershell, package: VGMToybox-windows-x64.zip }
-          - { os: macos-latest,   shell: bash,       package: VGMToybox-macos.zip }
-          - { os: ubuntu-latest,  shell: bash,       package: VGMToybox-linux-x64.tar.gz }
+          - { os: windows-latest,   arch: x64,   shell: powershell, package: VGMToybox-windows-x64.zip }
+          - { os: windows-11-arm,   arch: arm64, shell: powershell, package: VGMToybox-windows-arm64.zip }
+          - { os: macos-latest,                  shell: bash,       package: VGMToybox-macos.zip }
+          - { os: ubuntu-latest,    arch: x64,   shell: bash,       package: VGMToybox-linux-x64.tar.gz }
+          - { os: ubuntu-24.04-arm, arch: arm64, shell: bash,       package: VGMToybox-linux-arm64.tar.gz }
     runs-on: ${{ matrix.os }}
     defaults:
       run:
@@ -45,16 +52,16 @@ jobs:
           echo "::error::tag v$tag does not match project VERSION $version"; exit 1; }
 
     - name: Install Linux dependencies
-      if: matrix.os == 'ubuntu-latest'
+      if: startsWith(matrix.os, 'ubuntu')
       run: |
         sudo apt-get update
         sudo apt-get install -y ninja-build libasound2-dev libx11-dev libxext-dev libxinerama-dev \
           libxrandr-dev libxcursor-dev libfreetype6-dev libfontconfig1-dev libgl1-mesa-dev xvfb
 
     - name: Build, test and package (Windows)
-      if: matrix.os == 'windows-latest'
+      if: startsWith(matrix.os, 'windows')
       run: |
-        .\build.ps1 -Config Release -Arch x64 -Target vgm_core_test,vgm_ui_test,vgm_app_test -Test
+        .\build.ps1 -Config Release -Arch ${{ matrix.arch }} -Target vgm_core_test,vgm_ui_test,vgm_app_test -Test
 
         New-Item -ItemType Directory -Force dist\release | Out-Null
         Copy-Item -Recurse -Force dist\VST3\VGMToybox.vst3 dist\release\
@@ -88,7 +95,7 @@ jobs:
         (cd dist/release && zip -ry "../../${{ matrix.package }}" .)
 
     - name: Build and package (Linux)
-      if: matrix.os == 'ubuntu-latest'
+      if: startsWith(matrix.os, 'ubuntu')
       run: |
         cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
         cmake --build build --parallel 3
@@ -132,14 +139,17 @@ jobs:
       # an unsigned macOS build needs its workaround said out loud rather than discovered.
       run: |
         cat > notes.md <<EOF
-        VST3, Audio Unit (macOS only) and standalone builds for Windows, macOS and Linux.
+        VST3, Audio Unit (macOS only) and standalone builds for Windows, macOS and Linux - x64 and
+        arm64 on Windows and Linux, and one universal bundle for macOS.
 
         **Installing**
         - Windows: put \`VGMToybox.vst3\` in \`C:\\Program Files\\Common Files\\VST3\`, or run \`VGMToybox.exe\`.
+          The \`arm64\` package is for Windows on ARM; there the \`x64\` one only runs under emulation.
         - macOS (universal - Apple Silicon and Intel): \`VGMToybox.vst3\` goes to
           \`/Library/Audio/Plug-Ins/VST3\`, \`VGMToybox.component\` to
           \`/Library/Audio/Plug-Ins/Components\`, and \`VGMToybox.app\` runs on its own.
-        - Linux: \`VGMToybox.vst3\` goes to \`~/.vst3\`, and the standalone binary runs on its own.
+        - Linux: \`VGMToybox.vst3\` goes to \`~/.vst3\`, and the standalone binary runs on its own. Both
+          packages install the same way - take the \`x64\` or the \`arm64\` one to match the machine.
 
         **macOS: unsigned and un-notarised.** These bundles have no Apple Developer signature behind
         them, so macOS refuses them at first launch. Either right-click and choose *Open*, or clear

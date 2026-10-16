@@ -27,7 +27,8 @@
     Gitee mirror automatically) and its source is cached in $env:CPM_SOURCE_CACHE.
 
 .PARAMETER Arch
-    Target architecture: x64 (default) or x86.
+    Target architecture: x64 (default), x86 or arm64. arm64 needs the ARM64 build tools - either
+    installed on an arm64 host, or crossed from an x64 host through vcvarsall x64_arm64.
 
 .PARAMETER Config
     CMake build configuration: Release (default), Debug, RelWithDebInfo or MinSizeRel.
@@ -75,7 +76,7 @@
 #>
 [CmdletBinding()]
 param(
-	[ValidateSet('x64', 'x86')]
+	[ValidateSet('x64', 'x86', 'arm64')]
 	[string]$Arch = 'x64',
 
 	[ValidateSet('Release', 'Debug', 'RelWithDebInfo', 'MinSizeRel')]
@@ -152,20 +153,36 @@ function Initialize-MsvcEnvironment {
 		throw "No Visual Studio installation with C++ tools found."
 	}
 
-	if ($TargetArch -eq 'x86') { $vcvarsName = 'vcvars32.bat' } else { $vcvarsName = 'vcvars64.bat' }
+	# arm64 comes in two shapes: the ARM64 build tools running natively on an arm64 host, or the
+	# x64_arm64 cross tools that vcvarsall sets up on an x64 host. vcvars64/vcvars32 cover the rest.
+	if ($TargetArch -eq 'x86') {
+		$vcvarsName = 'vcvars32.bat'
+		$vcvarsArgs = ''
+	} elseif ($TargetArch -eq 'arm64') {
+		if ($env:PROCESSOR_ARCHITECTURE -eq 'ARM64' -or $env:PROCESSOR_ARCHITEW6432 -eq 'ARM64') {
+			$vcvarsName = 'vcvarsarm64.bat'
+			$vcvarsArgs = ''
+		} else {
+			$vcvarsName = 'vcvarsall.bat'
+			$vcvarsArgs = ' x64_arm64'
+		}
+	} else {
+		$vcvarsName = 'vcvars64.bat'
+		$vcvarsArgs = ''
+	}
 	$vcvars = Join-Path $vsPath ("VC\Auxiliary\Build\{0}" -f $vcvarsName)
 	if (-not (Test-Path -LiteralPath $vcvars)) {
-		throw "'$vcvars' not found - is the C++ workload installed?"
+		throw "'$vcvars' not found - is the C++ workload (and, for -Arch arm64, the ARM64 build tools) installed?"
 	}
 	Write-Host "Visual Studio: $vsPath" -ForegroundColor DarkGray
-	Write-Host "vcvars       : $vcvars" -ForegroundColor DarkGray
+	Write-Host "vcvars       : $vcvars$vcvarsArgs" -ForegroundColor DarkGray
 
 	# vcvars*.bat can only be used by cmd.exe - dump its environment and import it.
 	New-Item -ItemType Directory -Force -Path $BuildDir | Out-Null
 	$envBat = Join-Path $BuildDir '_msvc_env.bat'
 	@(
 		'@echo off'
-		"call `"$vcvars`" >nul"
+		"call `"$vcvars`"$vcvarsArgs >nul"
 		'if errorlevel 1 exit /b 1'
 		'set'
 	) | Set-Content -LiteralPath $envBat -Encoding ASCII

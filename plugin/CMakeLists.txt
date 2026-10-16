@@ -101,20 +101,22 @@ endif()
 # .aaxplugin loads in Pro Tools *developer* builds and nowhere else, so this stays a developer
 # artefact until someone takes that route - which is why the release workflow does not ship it.
 #
-# 32-bit Windows is a hard error inside JUCE ("Unsupported target architecture for AAX"), so the
-# option switches itself off there rather than letting build.ps1 -Arch x86 stop at a JUCE check
-# that has nothing to do with the build being asked for.
-option(TOYBOX_BUILD_AAX "Build the Pro Tools AAX format (Windows/macOS 64-bit; loads in Pro Tools developer builds, retail needs PACE signing)" ON)
+# AAX is what Pro Tools loads, and JUCE keeps that format only on macOS (any architecture) and on
+# Windows x86_64: its own platform filter drops AAX on i386 and on arm64 without a word, so such a
+# build simply comes out without it. Asking for it only where it survives lets FORMATS keep naming
+# it, while the architectures that cannot carry it get a line in the configure log instead of
+# looking like a build that has AAX because nothing was printed.
+option(TOYBOX_BUILD_AAX "Build the Pro Tools AAX format (macOS, and Windows x64; loads in Pro Tools developer builds, retail needs PACE signing)" ON)
 
+set(TOYBOX_AAX_FORMAT "")
 if(TOYBOX_BUILD_AAX)
-	if(CMAKE_SIZEOF_VOID_P EQUAL 8)
-		set(TOYBOX_AAX_FORMAT AAX)
-	else()
+	if(NOT CMAKE_SIZEOF_VOID_P EQUAL 8)
 		message(STATUS "TOYBOX_BUILD_AAX is on, but a 32-bit build cannot carry AAX - leaving it out")
-		set(TOYBOX_AAX_FORMAT "")
+	elseif(WIN32 AND (MSVC_CXX_ARCHITECTURE_ID MATCHES "ARM" OR CMAKE_CXX_COMPILER_ARCHITECTURE_ID MATCHES "ARM"))
+		message(STATUS "TOYBOX_BUILD_AAX is on, but Windows arm64 is not an AAX host - leaving it out")
+	else()
+		set(TOYBOX_AAX_FORMAT AAX)
 	endif()
-else()
-	set(TOYBOX_AAX_FORMAT "")
 endif()
 
 # --- plugin target ---
