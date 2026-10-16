@@ -45,6 +45,20 @@
 .PARAMETER NoPlugin
     Only build the command-line player and skip the JUCE plugin (much faster).
 
+.PARAMETER Target
+    Extra CMake targets to build after the default ones. The console tests are EXCLUDE_FROM_ALL -
+    they exist only when asked for by name - so this is how CI and local runs build them without
+    repeating the CMake invocation.
+
+.PARAMETER Test
+    Run the console test executables the build produced, skipping the ones that are not there, and
+    fail the script when one of them fails.
+
+.PARAMETER TestSong
+    The .vgm/.vgz given to vgm_mixer_test. Its sample-exact gate compares the plain render with the
+    mixer render of a real file, and this repository ships no song, so without this the test is
+    skipped (and CI does not run it).
+
 .EXAMPLE
     .\build.ps1
     Builds a release build for x64 (command-line player + JUCE plugin).
@@ -52,6 +66,12 @@
 .EXAMPLE
     .\build.ps1 -Config Debug -Clean -NoPlugin
     Rebuilds everything from scratch with debug settings, without the plugin.
+
+.EXAMPLE
+    .\build.ps1 -Target vgm_core_test,vgm_ui_test,vgm_app_test -Test
+    The command CI runs: build the plugin, build the console tests, run them. None of the three
+    needs a window, a song or a sound device. (PowerShell takes the targets as one comma-separated
+    list - repeating -Target is an error.)
 #>
 [CmdletBinding()]
 param(
@@ -67,7 +87,18 @@ param(
 
 	[switch]$NoProxy,
 
-	[switch]$NoPlugin
+	[switch]$NoPlugin,
+
+	# Extra CMake targets to build after the default ones (the console tests are EXCLUDE_FROM_ALL).
+	# One comma-separated list: PowerShell refuses a parameter that is given twice.
+	#     .\build.ps1 -Target vgm_core_test,vgm_ui_test,vgm_app_test -Test
+	[string[]]$Target = @(),
+
+	# Run the console tests the build produced; fail the script when one of them fails.
+	[switch]$Test,
+
+	# Song for vgm_mixer_test - its gate renders a real file twice and none is shipped here.
+	[string]$TestSong = ''
 )
 
 $ErrorActionPreference = 'Stop'
@@ -254,6 +285,11 @@ Invoke-Native 'cmake' (@(
 Write-Step 'Building'
 Invoke-Native 'cmake' @('--build', $buildDir)
 
+if ($Target.Count -gt 0) {
+	Write-Step ("Building extra targets: {0}" -f ($Target -join ', '))
+	Invoke-Native 'cmake' (@('--build', $buildDir, '--target') + $Target)
+}
+
 Write-Step 'Creating the distribution folder'
 New-Item -ItemType Directory -Force -Path $DistDir | Out-Null
 # The player is a subdirectory project (vgmplayer/), so its executable sits one level down in the
@@ -342,4 +378,47 @@ if ($dumpbin) {
 	} else {
 		Write-Host 'no VC++ runtime / zlib / iconv dependency - only Windows system DLLs' -ForegroundColor Green
 	}
+}
+
+# --- the console tests -------------------------------------------------------------------------
+# Ordinary programs: text in, ok/FAIL out, exit code for CI. None of the three needs a window - the
+# harness constructs the real editor headless (docs/desgin/testing-architecture.md) - so they run on
+# a build agent as they do here.
+if ($Test) {
+	Write-Step 'Running the console tests'
+	$testDir = Join-Path $BuildDir 'plugin'
+	$passed = 0
+
+	foreach ($name in @('vgm_core_test', 'vgm_ui_test', 'vgm_app_test')) {
+		$testExe = Join-Path $testDir ("$name.exe")
+		if (-not (Test-Path -LiteralPath $testExe)) {
+			Write-Host ("  skipping {0} (not built - add '-Target {0}')" -f $name) -ForegroundColor DarkGray
+			continue
+		}
+		Write-Host ('+ ' + $testExe) -ForegroundColor DarkGray
+		& $testExe
+		if ($LASTEXITCODE -ne 0) {
+			throw "$name failed with exit code $LASTEXITCODE"
+		}
+		$passed++
+	}
+
+	$mixerExe = Join-Path $testDir 'vgm_mixer_test.exe'
+	if (Test-Path -LiteralPath $mixerExe) {
+		if ($TestSong) {
+			Write-Host ('+ ' + $mixerExe + ' "' + $TestSong + '" 3') -ForegroundColor DarkGray
+			& $mixerExe $TestSong 3
+			if ($LASTEXITCODE -ne 0) {
+				throw "vgm_mixer_test failed with exit code $LASTEXITCODE"
+			}
+			$passed++
+		} else {
+			Write-Host '  skipping vgm_mixer_test (needs -TestSong <file>: its gate renders a real song twice)' -ForegroundColor DarkGray
+		}
+	}
+
+	if ($passed -eq 0) {
+		throw 'No test executable was found - build them first, e.g. -Target vgm_core_test,vgm_ui_test,vgm_app_test'
+	}
+	Write-Host ("  {0} test target(s) passed" -f $passed) -ForegroundColor Green
 }
