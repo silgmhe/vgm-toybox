@@ -22,6 +22,7 @@ void ChipPanel::rebuild (const std::vector<toybox::ChipEntry>& chips, MuteCallba
 	for (size_t i = 0; i < chips.size(); ++i)
 	{
 		auto* button = new juce::ToggleButton (chips[i].name);
+		button->setComponentID ("chip." + juce::String ((int) i));	// for the console harness
 		button->setToggleState (! chips[i].muted, juce::dontSendNotification);	// ticked = audible
 		button->setColour (juce::ToggleButton::textColourId, theme::primaryText());
 		button->setTooltip (chips[i].core.isNotEmpty()

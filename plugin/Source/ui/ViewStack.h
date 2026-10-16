@@ -32,6 +32,13 @@ public:
 		views.add (view);
 		addChildComponent (view);		// hidden until it is the current one
 
+		// A page names itself after its title, so a script can ask which one is on screen without
+		// knowing how the class is spelled in C++.
+		if (view->getComponentID().isEmpty())
+		{
+			view->setComponentID ("view." + view->getViewName().toLowerCase());
+		}
+
 		if (current < 0)
 		{
 			setCurrentView (0);

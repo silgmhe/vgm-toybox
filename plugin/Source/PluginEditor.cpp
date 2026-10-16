@@ -46,6 +46,11 @@ ToyboxAudioProcessorEditor::ToyboxAudioProcessorEditor (ToyboxAudioProcessor& p)
 	addAndMakeVisible (menuBar);
 
 	// --- open button (primary action) + status line ---
+	// IDs for the harness: it addresses controls by name instead of guessing at bounds
+	// (docs/desgin/testing-architecture.md §3.1).
+	menuBar.setComponentID ("editor.menubar");
+	openButton.setComponentID ("editor.open");
+	statusLabel.setComponentID ("editor.status");
 	openButton.onClick = [this] { openFileChooser(); };
 	openButton.setColour (juce::TextButton::buttonColourId, theme::accent());
 	openButton.setColour (juce::TextButton::textColourOffId, juce::Colours::white);

@@ -1,0 +1,34 @@
+# A song dropped on the window - the same path the drag & drop takes.
+#
+# Set VGM_TEST_SONG to any .vgm/.vgz/.s98/.dro/.gym file. Without it the load is skipped (and said
+# so) rather than failed, which is what lets this script live in the repository, where no song does.
+#
+# Run:  set VGM_TEST_SONG=C:\music\song.vgz
+#       build\plugin\vgm_app_test plugin\Tests\scripts\load-and-play.txt
+
+load $VGM_TEST_SONG
+
+# it plays, and the page that owns the cards is the one on screen
+assert editor.status text contains "Playing"
+assert view.play visible == true
+
+# the chip card appeared, with one checkbox per chip (the song decides how many)
+assert chip.0 visible == true
+
+# A chip checkbox is a real toggle, so its state is worth asserting: ticked means the chip is
+# audible. (The transport and mixer header buttons are NOT click-toggles - their panels light them
+# in refresh(), which this runner does not drive, so `checked` reads "n/a" for them on purpose.)
+assert chip.0 checked == true
+click chip.0
+assert chip.0 checked == false
+click chip.0
+assert chip.0 checked == true
+
+# the transport answers the keys the transport card documents; "handled" is all this runner can say
+# about them without a message loop
+press enter
+press enter
+press space
+
+# the window still fits its contents after all of that
+dump view.play
