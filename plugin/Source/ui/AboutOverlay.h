@@ -24,6 +24,14 @@ public:
 		closeButton.setColour (juce::TextButton::textColourOffId, juce::Colours::white);
 		closeButton.onClick = [this] { dismiss(); };
 		addAndMakeVisible (closeButton);
+
+		// the two places this project lives, clickable - a hyperlink only opens the browser when
+		// the user clicks it, so nothing here talks to the network on its own
+		for (auto* link : { &repositoryLink, &bilibiliLink })
+		{
+			link->setColour (juce::HyperlinkButton::textColourId, theme::accent());
+			addAndMakeVisible (*link);
+		}
 	}
 
 	/** Called when the box is dismissed - the window hides the overlay. */
@@ -42,7 +50,7 @@ public:
 		g.drawRoundedRectangle (panel.toFloat().reduced (0.5f), theme::buttonRadius, 1.0f);
 
 		auto inner = panel.reduced (22, 20);
-		inner.removeFromBottom (44);		// the button row
+		inner.removeFromBottom (kFooterHeight);		// the links and the Close button
 
 		g.setColour (theme::primaryText());
 		g.setFont (juce::Font (juce::FontOptions (20.0f, juce::Font::bold)));
@@ -51,8 +59,8 @@ public:
 
 		g.setColour (theme::secondaryText());
 		g.setFont (juce::Font (juce::FontOptions (13.0f)));
-		g.drawText ("Version " + juce::String (JucePlugin_VersionString), inner.removeFromTop (18),
-					juce::Justification::centredLeft, false);
+		g.drawText ("Version " + juce::String (JucePlugin_VersionString) + "   -   commit " + TOYBOX_GIT_COMMIT,
+					inner.removeFromTop (18), juce::Justification::centredLeft, false);
 		inner.removeFromTop (10);
 
 		g.setColour (theme::primaryText());
@@ -63,14 +71,19 @@ public:
 
 		g.setColour (theme::secondaryText());
 		g.setFont (juce::Font (juce::FontOptions (12.5f)));
-		g.drawFittedText ("by silgmhe\nbuilt on VGMPlay and libvgm by Valley Bell and contributors\n"
-						  "https://github.com/silgmhe/vgm-toybox",
-						  inner, juce::Justification::topLeft, 4);
+		g.drawFittedText ("by silgmhe - built on VGMPlay and libvgm by Valley Bell and contributors.",
+						  inner.removeFromTop (18), juce::Justification::centredLeft, 2);
 	}
 
 	void resized (void) override
 	{
 		auto panel = panelBounds();
+		auto footer = panel.reduced (22, 20).removeFromBottom (kFooterHeight);
+
+		repositoryLink.setBounds (footer.removeFromTop (20));
+		footer.removeFromTop (2);
+		bilibiliLink.setBounds (footer.removeFromTop (20));
+
 		closeButton.setBounds (panel.getRight() - 22 - 88, panel.getBottom() - 20 - 28, 88, 28);
 	}
 
@@ -96,9 +109,9 @@ public:
 private:
 	juce::Rectangle<int> panelBounds (void) const
 	{
-		const int width = juce::jmin (460, getWidth() - 60);
-		const int height = juce::jmin (250, getHeight() - 60);
-		return getLocalBounds().withSizeKeepingCentre (juce::jmax (280, width), juce::jmax (190, height));
+		const int width = juce::jmin (470, getWidth() - 60);
+		const int height = juce::jmin (262, getHeight() - 60);
+		return getLocalBounds().withSizeKeepingCentre (juce::jmax (300, width), juce::jmax (238, height));
 	}
 
 	void dismiss (void)
@@ -109,7 +122,14 @@ private:
 		}
 	}
 
+	juce::HyperlinkButton repositoryLink { "github.com/silgmhe/vgm-toybox",
+										   juce::URL ("https://github.com/silgmhe/vgm-toybox") };
+	juce::HyperlinkButton bilibiliLink { "space.bilibili.com/249486555",
+										 juce::URL ("https://space.bilibili.com/249486555") };
 	juce::TextButton closeButton { "Close" };
+
+	/** The panel's bottom strip: the links above the Close button. */
+	static constexpr int kFooterHeight = 78;
 
 	JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (AboutOverlay)
 };

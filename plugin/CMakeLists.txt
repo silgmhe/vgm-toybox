@@ -54,6 +54,29 @@ endif()
 set(TOYBOX_OUTPUT_BUSES "64" CACHE STRING
 	"Number of stereo output buses the plugin declares (bus 0 = \"Out 1/2\" = the main bus)")
 
+# --- the build's identity, shown in Help > About -------------------------------------------------
+# Captured when the project is configured; build.ps1 configures on every run, so a rebuild picks up
+# a new commit. A source tree without git (a tarball, say) simply says "unknown", and uncommitted
+# changes are marked - an About box naming the wrong build is worse than one that admits it.
+set(TOYBOX_GIT_COMMIT "unknown")
+find_package(Git QUIET)
+if(GIT_FOUND)
+	execute_process(COMMAND "${GIT_EXECUTABLE}" rev-parse --short=8 HEAD
+		WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+		OUTPUT_VARIABLE _toybox_commit OUTPUT_STRIP_TRAILING_WHITESPACE ERROR_QUIET)
+	execute_process(COMMAND "${GIT_EXECUTABLE}" status --porcelain
+		WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+		OUTPUT_VARIABLE _toybox_dirty OUTPUT_STRIP_TRAILING_WHITESPACE ERROR_QUIET)
+
+	if(_toybox_commit)
+		set(TOYBOX_GIT_COMMIT "${_toybox_commit}")
+		if(_toybox_dirty)
+			set(TOYBOX_GIT_COMMIT "${_toybox_commit}-dirty")
+		endif()
+	endif()
+endif()
+message(STATUS "VGMToybox build commit: ${TOYBOX_GIT_COMMIT}")
+
 # --- plugin target ---
 juce_add_plugin(VGMToybox
 	# --- identity ---------------------------------------------------------------------------
@@ -126,6 +149,7 @@ target_compile_definitions(VGMToybox PUBLIC
 	JUCE_VST3_CAN_REPLACE_VST2=0
 	JUCE_DISPLAY_SPLASH_SCREEN=0
 	JUCE_STRICT_REFCOUNTEDPOINTER=1
+	TOYBOX_GIT_COMMIT="${TOYBOX_GIT_COMMIT}"
 )
 
 target_link_libraries(VGMToybox PRIVATE
