@@ -16,6 +16,10 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
+        # One row per platform, Release and 64-bit only - the same policy the push-time CI follows,
+        # and GHA.yml's matrix says what each removed row was for. The Windows step below asks for
+        # both out loud rather than leaning on build.ps1's defaults, so a release cannot quietly
+        # become a debug or a 32-bit one.
         include:
           - { os: windows-latest, shell: powershell, package: VGMToybox-windows-x64.zip }
           - { os: macos-latest,   shell: bash,       package: VGMToybox-macos.zip }
@@ -50,7 +54,7 @@ jobs:
     - name: Build, test and package (Windows)
       if: matrix.os == 'windows-latest'
       run: |
-        .\build.ps1 -Target vgm_core_test,vgm_ui_test,vgm_app_test -Test
+        .\build.ps1 -Config Release -Arch x64 -Target vgm_core_test,vgm_ui_test,vgm_app_test -Test
 
         New-Item -ItemType Directory -Force dist\release | Out-Null
         Copy-Item -Recurse -Force dist\VST3\VGMToybox.vst3 dist\release\
