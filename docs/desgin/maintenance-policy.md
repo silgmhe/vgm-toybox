@@ -20,7 +20,8 @@
 - 评估什么 ✓：上游 release notes 里是否有**崩溃 / 越界 / 格式兼容**类修复 ✓ —— 这几类直接等于"某些歌能不能打开" ✓；
 - 每次同步必须过**四个门禁** ✓：`vgm_mixer_test`（**−1000.00 dB 逐样本** ✓）、`vgm_core_test` ✓、`vgm_ui_test` ✓、`vgm_app_test` 的脚本 ✓，外加 standalone 冒烟 ✓；
 - **本地补丁**必须记录在 `libs/libvgm/PATCHES.md` ✓（**目前：无本地补丁** ✓ —— 一旦新增，同一提交里补上这个文件 ✓）；
-- 同步**单独成一个提交** ✓（不与功能混合 ✓），提交信息写明上游版本与门禁结果 ✓。
+- 同步**单独成一个提交** ✓（不与功能混合 ✓），提交信息写明上游版本与门禁结果 ✓；
+- **本地改动记录** ✓（2026-10-17 ✓）：vendored 树**只保留 CMake** 这一套构建系统 ✓ —— 移除了上游的 `*.vcxproj`（含 `.filters` ✓）、`libVgmTest.sln` ✓、`Makefile` ✓、`Dockerfile` ✓、`Compiling.txt` ✓，以及**嵌套的 `.github/`**（workflow + action ✓ —— GitHub 只执行**仓库根目录**的 workflow ✗，子目录里的永不运行 ✓），和它们专用的预编译 zlib 库 `libs/libvgm/libs/lib/` ✓（MSVC 6 / 2010 时代的产物 ✗，`zlib.txt` 里自己写着 ✓，而 CMake **零引用** ✓ —— 我们的 zlib 由 CPM 从源码构建 ✓）。**保留的**都有引用 ✓：`libs/libvgm/libs/iconv/`（Windows 构建要用 ✓，`audio/CMakeLists.txt:167-176` 引用 ✓）、`include_mingw` / `include_vc` / `include_vc6` ✓、`cmake_modules/` ✓。**同步上游时这些文件会被带回来** ✓ → 按同样原则**再删一次** ✓，并确认 iconv 与那几个 include 目录仍在 ✓。
 
 **为什么**：`libs/` 是 vendored 源码（无 submodule ✓）✓ —— "什么时候同步、怎么验证"不写下来，每次都要临场决定 ✓；而 libvgm 是**唯一解析外部输入**的地方 ✓，它的正确性直接就是"能不能放歌" ✓。
 
@@ -33,7 +34,7 @@
 
 **决定**：本项目（`plugin/`，即 VST3 + standalone）以 **AGPL-3.0-or-later** 发布 ✓ —— `LICENSE` 放 GNU 原文（**逐字未改** ✓），README 写明适用范围、以及"为什么不是 MIT" ✓。
 
-- **为什么**：**JUCE 是"AGPLv3 或商业授权"二选一** ✓（`juce/d6e0/LICENSE.md:7` ✓）→ 不买授权就等于选定 AGPLv3 ✓；其余依赖都与 AGPLv3 兼容 ✓：inih 是 BSD-3-Clause ✓、wingetopt 是 ISC 风格 ✓、`libs/libvgm/emu/cores/` 的模拟核心逐文件声明 BSD-3-Clause ✓。
+- **为什么**：**JUCE 是"AGPLv3 或商业授权"二选一** ✓（`juce/d6e0/LICENSE.md:7` ✓）→ 不买授权就等于选定 AGPLv3 ✓；其余依赖都与 AGPLv3 兼容 ✓：inih 是 BSD-3-Clause ✓、wingetopt 是 ISC 风格 ✓、**zlib 是 Zlib 许可** ✓（从源码构建并随二进制分发 ✓，README 归属表已列 ✓）、`libs/libvgm/emu/cores/` 的模拟核心逐文件声明 BSD-3-Clause ✓。
 - **什么会改变它**：购买 JUCE 商业/个人授权 ✓ —— 那时才可以把本项目换成宽松协议（MIT / Apache-2.0 ✓）。**在没有 JUCE 授权的情况下不要改协议** ✗。
 - **libvgm**：**不附带许可证文件** ✓；作者于 **2026-10-17 在论坛答复"保持开源即可"** ✓ —— 该答复记录在 README ✓。**每次同步上游前先确认它仍然有效** ✓，并在有机会时**请作者补一个许可证文件** ✓（文件比论坛答复更稳固 ✓）。
 - **不可重新授权的部分**：`vgmplayer/` 是 Valley Bell 的 VGMPlay 的衍生 ✓ → 保持上游条款 ✓，我们不为它加或换协议 ✓。

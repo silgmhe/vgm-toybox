@@ -142,11 +142,12 @@ This project stands on other people's work and keeps the notices visible. The li
 **vendored as source under `libs/`** rather than pulled in as git submodules, so they can be
 patched in place:
 
-| Vendored | What it is | Licence |
+| Dependency | What it is | Licence |
 |---|---|---|
 | `libs/libvgm/` | the emulation and playback library the plugin links against - upstream `ValleyBell/libvgm`, master `915e928` plus the in-tree build/zlib patch | no licence file ships with it (see the note below); the emulator cores under `libs/libvgm/emu/cores/` carry their own headers |
 | `libs/inih/` | the INI reader the command-line player uses - upstream `benhoyt/inih`, `4e618f7` | New BSD (BSD-3-Clause), © 2009 Ben Hoyt; `libs/inih/LICENSE.txt` is kept |
 | `libs/wingetopt/` | `getopt_long` for MSVC - upstream `alex85k/wingetopt`, `e8531ed` | permissive ISC-style terms (Todd C. Miller / The NetBSD Foundation); `libs/wingetopt/LICENSE` is kept |
+| zlib (fetched at build time, not vendored) | the compressor behind the `.vgz` format - upstream `madler/zlib` **v1.3.1**, fetched by libvgm's CMake with CPM and built from source with the same compiler as everything else (`LIBVGM_ZLIB_FROM_SOURCE=ON` is the default; `OFF` uses a system zlib instead) | Zlib licence (permissive) |
 
 **VGMPlay**, the command-line player in `vgmplayer/`, comes from upstream
 `ValleyBell/vgmplay-libvgm`; its name, files and documentation are untouched.
