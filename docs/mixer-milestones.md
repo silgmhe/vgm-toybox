@@ -43,10 +43,10 @@
 
 | 能力 | 结论 | 依据（源码位置） |
 |---|---|---|
-| 通道级静音 | ✅ 支持 | `PLR_MUTE_OPTS::chnMute[2]`（每设备 64 通道位掩码，`libvgm/player/playerbase.hpp:77`）→ `VGMPlayer::SetDeviceMuting` → `RefreshMuting` → `devDef->SetMuteMask`（`libvgm/player/vgmplayer.cpp:712-725`） |
+| 通道级静音 | ✅ 支持 | `PLR_MUTE_OPTS::chnMute[2]`（每设备 64 通道位掩码，`libs/libvgm/player/playerbase.hpp:77`）→ `VGMPlayer::SetDeviceMuting` → `RefreshMuting` → `devDef->SetMuteMask`（`libs/libvgm/player/vgmplayer.cpp:712-725`） |
 | 核不支持时的保护 | ✅ 有 | `RefreshMuting` 对 `SetMuteMask == NULL` 做了检查（同上 `:720`） |
-| 通道数 / 通道名 | ✅ 可直接获取 | `DEV_DECL::channelCount` / `channelNames`（`libvgm/emu/EmuStructs.h:126-127`），经 `PLR_DEV_INFO::devDecl` + `devCfg` 调用 |
-| 通道静音按核映射 | ⚠️ 需按核处理 | 例：NES NSFPlay 核把掩码拆为 APU(2) + DMC(3) + FDS(1)（`libvgm/emu/cores/nesintf.c:650-662`） |
+| 通道数 / 通道名 | ✅ 可直接获取 | `DEV_DECL::channelCount` / `channelNames`（`libs/libvgm/emu/EmuStructs.h:126-127`），经 `PLR_DEV_INFO::devDecl` + `devCfg` 调用 |
+| 通道静音按核映射 | ⚠️ 需按核处理 | 例：NES NSFPlay 核把掩码拆为 APU(2) + DMC(3) + FDS(1)（`libs/libvgm/emu/cores/nesintf.c:650-662`） |
 | 设备挂起省 CPU | ✅ 真省（跳过仿真与重采样） | `vgmplayer.cpp:2022-2033`：`muteOpts.disable` 命中时跳过 `Resmpl_Execute` |
 | 通道级声像 | 存在但不用 | `PLR_PAN_OPTS` / `RWF_CHN_PAN`；我们统一在混音级实现，行为可预期、RT 更简单 |
 | 设备/通道枚举 | ✅ 已有基础 | 现有 `VgmEngine::enumerateChips()`（含 linked device、T6W28 去重逻辑） |
@@ -184,7 +184,7 @@ struct MixerTrack
 
 ### M2.5 — 播放后端解耦（插入里程碑，**设计待评审**）
 - **背景**：下一步除 VGM/VGZ 外要支持其它格式（首个目标：SNES `.spc`，因硬件机制无法转成 VGM），因此需要把播放引擎核心与 libvgm 解耦，定义中间层标准。
-- **设计**：`docs/playback-backend-design.md`（端口-适配器 + 注册表；`ISongBackend`/`ISongInstance`/`ITrackPlayer` 三个端口；能力位与隔离模式；8 条 ADR；风险与迁移计划）。核心文件将迁入 `Source/playback/`，libvgm 代码整体搬进 `Source/backends/libvgm/`，并加"核心不得 include libvgm"的构建守卫。
+- **设计**：`docs/playback-backend-design.md`（端口-适配器 + 注册表；`ISongBackend`/`ISongInstance`/`ITrackPlayer` 三个端口；能力位与隔离模式；8 条 ADR；风险与迁移计划）。核心文件将迁入 `Source/playback/`，libvgm 代码整体搬进 `Source/backends/libs/libvgm/`，并加"核心不得 include libvgm"的构建守卫。
 - **验收**：现有 `vgm_mixer_test` 保持全绿且 `−1000 dB` 逐样本数值不变；新增 `FakeBackend` 全链路测试（无 libvgm 的情况下验证混音与时间线）；UI 调用点不变；源码守卫可演示失败。
 - **注意**：本里程碑不做新格式实现、不改 UI/混音行为、不做多轨输出（那是紧随其后的下一个功能）；重采样器只定接口，实现延后到 SPC 里程碑。
 

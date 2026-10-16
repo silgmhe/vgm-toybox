@@ -207,7 +207,7 @@ Write-Step 'Setting up dependency downloads'
 Initialize-NetworkProxy -ProxyUrl $Proxy -Disabled:$NoProxy
 
 Write-Step 'Checking git submodules'
-if (-not (Test-Path -LiteralPath (Join-Path $RepoRoot 'libvgm\CMakeLists.txt'))) {
+if (-not (Test-Path -LiteralPath (Join-Path $RepoRoot 'libs\libvgm\CMakeLists.txt'))) {
 	Invoke-Native 'git' @('-C', $RepoRoot, 'submodule', 'update', '--init', '--recursive')
 }
 

@@ -77,7 +77,7 @@ This project stands on other people's work and keeps the notices visible:
   https://github.com/ValleyBell/libvgm.git), by Valley Bell and contributors.
 - **VGMPlay** - the command-line player whose sources sit in `vgmplayer/`; its name, files and
   documentation are untouched.
-- The emulator cores under `libvgm/emu/cores/` carry their own licence headers; they are the reason
+- The emulator cores under `libs/libvgm/emu/cores/` carry their own licence headers; they are the reason
   this tree is not simply "one author's code".
 
 The plugin links libvgm statically, so it is distributed under the same GNU General Public License

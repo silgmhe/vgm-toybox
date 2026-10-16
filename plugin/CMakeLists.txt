@@ -11,7 +11,7 @@ set(JUCE_REPOSITORY "" CACHE STRING "git repository to fetch JUCE from (empty: p
 if(NOT TARGET juce_audio_processors)
 	# CPM lives next to libvgm; keep the path relative to this directory, so that IDEs can
 	# resolve it without knowing the layout of the build tree
-	set(_cpm_module "${CMAKE_CURRENT_SOURCE_DIR}/../libvgm/cmake/CPM.cmake")
+	set(_cpm_module "${CMAKE_CURRENT_SOURCE_DIR}/../libs/libvgm/cmake/CPM.cmake")
 	if(NOT EXISTS "${_cpm_module}")
 		message(FATAL_ERROR "VGM Toybox: '${_cpm_module}' not found - run 'git submodule update --init --recursive'")
 	endif()

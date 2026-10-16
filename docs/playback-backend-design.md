@@ -247,7 +247,7 @@ Source/
 │   ├── MixerEngine.{h,cpp}        门面（今天的类，改用端口；公共 API 不变）
 │   └── Resampler.{h,cpp}          预留（P4）
 ├── backends/
-│   ├── libvgm/                    ← 唯一允许 include libvgm 的地方
+│   ├── libs/libvgm/                    ← 唯一允许 include libvgm 的地方
 │   │   ├── LibvgmBackend.{h,cpp}          识别 .vgm/.vgz/.s98/.dro/.gym + 打开
 │   │   ├── LibvgmSongInstance.{h,cpp}     SongInfo/TrackInfo 枚举 + createPlayer
 │   │   ├── LibvgmTrackPlayer.{h,cpp}      今 TrackPlayer（PlayerA/DataLoader/WAVE_32BS/int32→float）
@@ -347,7 +347,7 @@ Source/
 | 步 | 内容 | 验收 |
 |---|---|---|
 | **P0** | 本文档 + ADR 评审通过 | 用户确认（含 §10 的待定项） |
-| **P1** | 落 `playback/SongBackend.h` 端口 + `BackendRegistry` + `FakeBackend`；把 libvgm 代码整体搬进 `backends/libvgm/`（**只搬家不改逻辑**），`MixerEngine` 改为通过端口驱动 | `vgm_mixer_test` 全绿且 `−1000 dB` 数值不变；`FakeBackend` 单测通过；app 冒烟 |
+| **P1** | 落 `playback/SongBackend.h` 端口 + `BackendRegistry` + `FakeBackend`；把 libvgm 代码整体搬进 `backends/libs/libvgm/`（**只搬家不改逻辑**），`MixerEngine` 改为通过端口驱动 | `vgm_mixer_test` 全绿且 `−1000 dB` 数值不变；`FakeBackend` 单测通过；app 冒烟 |
 | **P2** | 类型净化：`DeviceId`/`TrackId`、去掉公共头的 `stdtype.h`、修 `ui/MixerPanel.cpp` 的 `UINT32`、`devID`→`deviceId` | 编译通过；`read_lints` 干净；UI 无 libvgm 相关标识符 |
 | **P3** | 数据驱动扩展名：`FileChooser`/拖放过滤/提示文案全部来自 `BackendRegistry::getAllExtensions()` | 新增一个后端"只注册、不改 UI"即可出现在过滤与拖放里（用 FakeBackend 演示） |
 | **P4（延后）** | `Resampler` 实现 + 采样率协商落地 | 留到 SPC 里程碑 |
@@ -367,7 +367,7 @@ Source/
 | 项 | 结果 |
 |---|---|
 | 端口 + 注册表 | `Source/playback/SongBackend.h`（三端口 + 边界类型 + 能力位 + 隔离模式）、`BackendRegistry.{h,cpp}`（编译期注册 + 扩展名查询） |
-| libvgm 适配器 | `Source/backends/libvgm/`：`LibvgmBackend`（识别 + 打开）、`LibvgmSongInstance`（探针玩家：标签/设备/轨道/时间线）、`LibvgmTrackPlayer`（原 `TrackPlayer` + 端口）、`LibvgmMuteIsolation.h`（mute 位序/挂起映射）、`LibvgmVgz`（解包） |
+| libvgm 适配器 | `Source/backends/libs/libvgm/`：`LibvgmBackend`（识别 + 打开）、`LibvgmSongInstance`（探针玩家：标签/设备/轨道/时间线）、`LibvgmTrackPlayer`（原 `TrackPlayer` + 端口）、`LibvgmMuteIsolation.h`（mute 位序/挂起映射）、`LibvgmVgz`（解包） |
 | 核心 | `MixerEngine` 迁至 `Source/playback/`，**零 libvgm include**；旧的 `Source/vgm/*` 已删除 |
 | 测试（硬门禁） | `vgm_mixer_test` 全部通过，`plain vs mixer` 仍为 **−1000.00 dB（逐样本一致）**，其余电平检查数值与重构前完全相同 |
 | 测试（解耦证明） | 新增 `vgm_core_test`：核心 + `FakeBackend`（三音合成后端），**不链接任何 libvgm 代码**——仍依赖 libvgm 的核心会直接链接失败；含 20 项解析式校验（三音求和 0.306186、单音 0.176777、增益/声像/静音/独奏/两级音量/seek/结束/关闭混音）全部通过 |

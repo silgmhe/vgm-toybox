@@ -36,7 +36,7 @@ endif()
 # --- libvgm ---
 # Build the libvgm submodule as part of this project (one-shot build, static libraries).
 # If the submodule is not checked out, fall back to an installed libvgm package.
-if(EXISTS "${PROJECT_SOURCE_DIR}/libvgm/CMakeLists.txt")
+if(EXISTS "${PROJECT_SOURCE_DIR}/libs/libvgm/CMakeLists.txt")
 	# defaults for the in-tree libvgm build
 	set(LIBRARY_TYPE "STATIC" CACHE STRING "libvgm: library build type (STATIC/SHARED)")
 	set(BUILD_TESTS OFF CACHE BOOL "libvgm: build test programs")
@@ -48,7 +48,7 @@ if(EXISTS "${PROJECT_SOURCE_DIR}/libvgm/CMakeLists.txt")
 		set(UTIL_CHARCNV_ICONV OFF CACHE BOOL "libvgm: charset conversion via iconv")
 		set(UTIL_CHARCNV_WINAPI ON CACHE BOOL "libvgm: charset conversion via the WinAPI")
 	endif()
-	add_subdirectory(libvgm)
+	add_subdirectory(libs/libvgm)
 	set(LIBVGM_TARGETS vgm-utils vgm-audio vgm-emu vgm-player)
 else()
 	find_package(libvgm REQUIRED)

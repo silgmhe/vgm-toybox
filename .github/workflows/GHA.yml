@@ -39,10 +39,10 @@ jobs:
         submodules: recursive
 
     - name: Build libvgm
-      uses: ./libvgm/.github/workflows/action-build-libvgm
+      uses: ./libs/libvgm/.github/workflows/action-build-libvgm
       with:
-        checkout_path: ${{ github.workspace }}/libvgm
-        install_path: ${{ github.workspace }}/libvgm/install
+        checkout_path: ${{ github.workspace }}/libs/libvgm
+        install_path: ${{ github.workspace }}/libs/libvgm/install
         build_type: ${{ matrix.config.build_type }}
         with_msvc: ${{ matrix.config.compiler == 'msvc' }}
         extra_settings: ${{ matrix.config.extra_settings }}
@@ -55,11 +55,11 @@ jobs:
 
     - name: Configure
       run: |
-        export CMAKE_MODULE_PATH="${GITHUB_WORKSPACE}/libvgm/install/lib/cmake"${CMAKE_MODULE_PATH:+':'}$CMAKE_MODULE_PATH
+        export CMAKE_MODULE_PATH="${GITHUB_WORKSPACE}/libs/libvgm/install/lib/cmake"${CMAKE_MODULE_PATH:+':'}$CMAKE_MODULE_PATH
 
         # FIXME: This should prolly be addressed in libvgm's action.yml instead
         if [ "${{ matrix.config.compiler}}" == "msvc" ]; then
-          CMAKE_OPTS="$CMAKE_OPTS -DZLIB_INCLUDE_DIR=${GITHUB_WORKSPACE}/libvgm/libs/include"
+          CMAKE_OPTS="$CMAKE_OPTS -DZLIB_INCLUDE_DIR=${GITHUB_WORKSPACE}/libs/libvgm/libs/include"
         fi
 
         cmake ${{ matrix.config.extra_settings }} \
