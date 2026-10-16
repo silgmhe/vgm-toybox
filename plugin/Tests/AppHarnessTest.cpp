@@ -302,6 +302,7 @@ private:
 		else if (command == "assert") { commandAssert (tokens); }
 		else if (command == "menu") { commandMenu (tokens); }
 		else if (command == "tick") { commandTick (); }
+		else if (command == "shot") { commandShot (tokens); }
 		else if (command == "sleep") { commandSleep (tokens); }
 		else if (command == "help") { printHelp(); }
 		else { report (false, "unknown command '" + tokens[0] + "'"); }
@@ -490,6 +491,36 @@ private:
 		report (true, "tick");
 	}
 
+	void commandShot (const juce::StringArray& tokens)
+	{
+		if (tokens.size() < 2)
+		{
+			report (false, "shot needs a file path");
+			return;
+		}
+
+		// The window's own pixels, rendered offscreen. This is the deterministic form of a
+		// screenshot: no desktop, no window manager, no DPI scaling to argue with - and it includes
+		// whatever the commands before it changed, overlays included, because it re-renders the
+		// component tree. It exists for the questions text cannot answer ("is this text left
+		// aligned?"), which is the one job the pixel path keeps.
+		const auto image = editor.createComponentSnapshot (editor.getLocalBounds(), true, 1.0f);
+		const juce::File file (tokens[1]);
+		file.deleteFile();
+
+		auto stream = std::unique_ptr<juce::FileOutputStream> (file.createOutputStream());
+		if (stream == nullptr)
+		{
+			report (false, "shot: cannot write " + file.getFullPathName());
+			return;
+		}
+
+		juce::PNGImageFormat png;
+		const bool written = png.writeImageToStream (image, *stream);
+		report (written, "shot " + file.getFullPathName() + "  (" + juce::String (image.getWidth())
+						   + "x" + juce::String (image.getHeight()) + ")");
+	}
+
 	void commandAssert (const juce::StringArray& tokens)
 	{
 		if (tokens.size() < 5)
@@ -546,7 +577,7 @@ private:
 	static void printHelp (void)
 	{
 		std::printf ("    load <path> | press <key> | click <id> | toggle <id> | set <id> <value>\n");
-		std::printf ("    menu | menu invoke <entryId> | tick\n");
+		std::printf ("    menu | menu invoke <entryId> | tick | shot <path.png>\n");
 		std::printf ("    dump [<id>] | assert <id> <field> <op> <value> | sleep <ms>\n");
 		std::printf ("    fields: visible enabled checked text (components)\n");
 		std::printf ("            checked enabled label    (menu entries, as menu.<entryId>)\n");
