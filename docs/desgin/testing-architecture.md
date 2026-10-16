@@ -272,3 +272,18 @@ Result: all checks passed
 1. **批准本方案** → 我做 P0 探针（1 小时，结果只有两种：可行 → 继续 P1；不可行 → 按 §7 风险 1 退到面板级 ✓）；
 2. 或者**先调整方案**（期次顺序、脚本语法、ID 命名、是否引入事件日志——都还没冻结 ✓）；
 3. 或者**先做 review 的 P0-B（CI）**：它与 P3 高度重合，先落地能让后面每一期都在门禁保护下进行 ✓。
+
+---
+
+## 10. 实施记录
+
+| 期 | 状态 | 说明 |
+|---|---|---|
+| **P0 探针** | ✅ **GO**（2026-10-16，`3c7c36a`） | `plugin/Tests/AppHarnessTest.cpp` + 目标 `vgm_app_test`：控制台里构造**真实**的 `ToyboxAudioProcessor` + `ToyboxAudioProcessorEditor`，`setSize (820, 650)` 完成布局，打印出 **53 个组件**的树（bounds / visible / enabled / text ✓）。两个关键事实：`ScopedJuceInitialiser_GUI` 让 GUI 对象无需桌面 ✓；`AudioProcessor::setTypeOfNextNewPlugin()`（`juce_AudioProcessor.h:1370`）是 JUCE **自己给包装器用的**钩子 ✓（`wrapperType` 是 const ✓，这不是测试后门 ✓，§7 风险 1 **未发生** ✓）。目标链接插件的 **STATIC 共享代码**（`juce_add_plugin` 创建的那个 ✓），所以驱动的是**同一个 editor** ✓。转储器 `ui/UiSnapshot.h` 报告组件**自己的 visible 标志**而非 `isShowing()`（无窗口时后者恒为 false，什么也说明不了 ✓）。探针同时报告"**有 ID 的组件：0 / 53**" → P1 的第一件事 ✓。 |
+| **P1 组件 ID + 命令语言** | ⏳ 进行中 | `vgm_app_test` 目前只做 P0 的事（报表 + 退出码 ✓）；控件 ID 与命令语言（load / click / menu / view / assert ✓）是下一步 ✓。 |
+| **P2 装配层（H-2）** | ✅ **完成**（2026-10-16，`d9587f8`） | "参数 → 歌曲"抽成纯函数 `playback/StartupSong.h` ✓（arguments 进、`File` 出 ✓、"能否播放"由调用方以谓词注入 ✓）；`vgm_core_test` 新增 `[5] startup arguments` **7 项断言**：曾失败的**路径含空格** ✓、前置选项 ✓、首个可用者胜出 ✓、存在但后端打不开 ✓、路径不存在 ✓、无参数 ✓。面包屑行为不变 ✓（无参数仍不写日志 ✓）。 |
+| P3 CI 门禁（H-3） | ⏳ 待做 | 前置：把 `build.ps1` 的步骤拆成可复用函数 ✓（review 复核记录 C-1 ✓）。 |
+| P4 铺路（M-2 / M-3） | ⏳ 待做 | 刷新分层 + 卡片头上提 ✓，然后才开可视化面板 ✓。 |
+| P5 热路径（H-1 / M-5） | ⏳ 待做 | 需要独立的安静窗口 ✓。 |
+
+**P0 的额外收获**：探针输出已经能直接回答过去需要截图才能回答的问题 ✓ —— "未加载时 seek 滑杆 `enabled:false`" ✓、"`ChipPanel` / `MixerPanel` 在无歌曲时 `visible:false`" ✓、"走带按钮的文本是 Play / Pause / Stop / Loop / Playback start" ✓、"菜单栏有三个 48/57/56 px 的项（File / View / Help）" ✓。这正是 §3.7 那类断言的雏形 ✓。
