@@ -3,7 +3,7 @@
 #include "Icons.h"
 #include "Theme.h"
 
-namespace vgmplay::ui
+namespace toybox::ui
 {
 
 void IconButton::paintButton (juce::Graphics& g, bool isMouseOverButton, bool isButtonDown)
@@ -66,10 +66,22 @@ void IconButton::paintButton (juce::Graphics& g, bool isMouseOverButton, bool is
 	{
 		drawPlayStartGlyph (g, iconArea, iconColour);
 	}
+	else if (icon == Icon::sliders)
+	{
+		drawSlidersGlyph (g, iconArea, iconColour);
+	}
+	else if (icon == Icon::spreadOutputs)
+	{
+		drawSpreadOutputsGlyph (g, iconArea, iconColour);
+	}
+	else if (icon == Icon::mergeToMaster)
+	{
+		drawMergeToMasterGlyph (g, iconArea, iconColour);
+	}
 	else
 	{
 		drawRepeatGlyph (g, iconArea, iconColour);
 	}
 }
 
-} // namespace vgmplay::ui
+} // namespace toybox::ui

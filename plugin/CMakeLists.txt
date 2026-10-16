@@ -1,5 +1,5 @@
-#### VGMPlay JUCE plugin (VST3 + Standalone) ####
-# Builds the GUI/plugin front-end of VGMPlay. The audio rendering is done by the same libvgm
+#### VGMToybox JUCE plugin (VST3 + Standalone) ####
+# Builds the GUI/plugin front-end of VGMToybox. The audio rendering is done by the same libvgm
 # libraries that the command-line player uses (vgm-player/vgm-emu/vgm-utils, no audio drivers).
 
 # --- JUCE (fetched with CPM) ---
@@ -11,15 +11,16 @@ set(JUCE_REPOSITORY "" CACHE STRING "git repository to fetch JUCE from (empty: p
 if(NOT TARGET juce_audio_processors)
 	# CPM lives next to libvgm; keep the path relative to this directory, so that IDEs can
 	# resolve it without knowing the layout of the build tree
-	set(_cpm_module "${CMAKE_CURRENT_SOURCE_DIR}/../libvgm/cmake/CPM.cmake")
+	set(_cpm_module "${CMAKE_CURRENT_SOURCE_DIR}/../libs/libvgm/cmake/CPM.cmake")
 	if(NOT EXISTS "${_cpm_module}")
-		message(FATAL_ERROR "vgmplay: '${_cpm_module}' not found - run 'git submodule update --init --recursive'")
+		message(FATAL_ERROR "VGM Toybox: '${_cpm_module}' not found - "
+			"libvgm is vendored in libs/libvgm/, so this checkout is incomplete")
 	endif()
 
 	# pick the first reachable repository (GitHub is not accessible from everywhere)
 	if(NOT JUCE_REPOSITORY)
 		foreach(_juce_repo IN LISTS JUCE_MIRRORS)
-			message(STATUS "vgmplay: probing JUCE repository ${_juce_repo} ...")
+			message(STATUS "VGM Toybox: probing JUCE repository ${_juce_repo} ...")
 			file(DOWNLOAD "${_juce_repo}/info/refs?service=git-upload-pack"
 				"${CMAKE_CURRENT_BINARY_DIR}/juce_repo_probe.txt" TIMEOUT 6 STATUS _juce_probe_status)
 			list(GET _juce_probe_status 0 _juce_probe_code)
@@ -31,7 +32,7 @@ if(NOT TARGET juce_audio_processors)
 		file(REMOVE "${CMAKE_CURRENT_BINARY_DIR}/juce_repo_probe.txt")
 	endif()
 	if(NOT JUCE_REPOSITORY)
-		message(FATAL_ERROR "vgmplay: no reachable JUCE repository - "
+		message(FATAL_ERROR "VGM Toybox: no reachable JUCE repository - "
 			"set JUCE_REPOSITORY=<url> or put the JUCE sources into CPM_SOURCE_CACHE")
 	endif()
 
@@ -44,13 +45,33 @@ if(NOT TARGET juce_audio_processors)
 	)
 endif()
 
+# --- output buses ---------------------------------------------------------------------------
+# A VST3 host fixes the bus layout when it loads the plugin, so the number of stereo output
+# buses is a build-time constant (Source/playback/OutputRouting.h). Bus 0 is "Out 1/2" - the
+# main bus, activated by default - the other buses are inactive until the user enables them in
+# the host (the usual multi-output instrument model). Lower it for a lighter plugin:
+#   cmake -S . -B build -DTOYBOX_OUTPUT_BUSES=16
+set(TOYBOX_OUTPUT_BUSES "64" CACHE STRING
+	"Number of stereo output buses the plugin declares (bus 0 = \"Out 1/2\" = the main bus)")
+
 # --- plugin target ---
-juce_add_plugin(VGMPlay
-	COMPANY_NAME "VGMPlay"
+juce_add_plugin(VGMToybox
+	# no spaces anywhere in the product name: it lands in file names, window titles and command
+	# lines, and a space is a liability in every one of those places
+	COMPANY_NAME "VGMToybox"
+	# The plugin codes are the identity a host keeps for the plugin, so they are deliberately
+	# left alone: changing them makes every DAW project that references this plugin lose it (a
+	# rename would also let the new build sit next to an installed older one).
 	PLUGIN_MANUFACTURER_CODE Vgmp
 	PLUGIN_CODE Vgm1
-	PRODUCT_NAME "VGMPlay"
-	DESCRIPTION "VGM/VGZ player"
+	PRODUCT_NAME "VGMToybox"
+	# Spelled out rather than derived from "com.<COMPANY_NAME>.<target>": the id stays a stable
+	# lowercase slug, and it never picks up a space if the names above ever gain one (JUCE warns
+	# about those, and build.ps1 treats a cmake warning as a failure).
+	BUNDLE_ID "com.vgmtoybox.VGMToybox"
+	# the format list is the backend registry's job (it drives the file dialogs and hints), this
+	# is just the one-line blurb a host shows
+	DESCRIPTION "Chiptune player (VGM, VGZ, S98, DRO, GYM)"
 	FORMATS VST3 Standalone
 	IS_SYNTH TRUE
 	NEEDS_MIDI_INPUT FALSE
@@ -61,23 +82,32 @@ juce_add_plugin(VGMPlay
 	VST3_CATEGORIES "Instrument"
 )
 
-target_sources(VGMPlay PRIVATE
+target_sources(VGMToybox PRIVATE
 	Source/PluginProcessor.cpp
 	Source/PluginEditor.cpp
+	Source/playback/BackendRegistry.cpp
+	Source/playback/PlaybackEngine.cpp
+	Source/backends/BuiltInBackends.cpp
+	Source/backends/libvgm/LibvgmBackend.cpp
+	Source/backends/libvgm/LibvgmSongInstance.cpp
+	Source/backends/libvgm/LibvgmTrackPlayer.cpp
+	Source/backends/libvgm/LibvgmVgz.cpp
 	Source/ui/CardComponent.cpp
+	Source/ui/ChannelStrip.cpp
 	Source/ui/ChipPanel.cpp
 	Source/ui/DropHintOverlay.cpp
 	Source/ui/IconButton.cpp
 	Source/ui/Icons.cpp
 	Source/ui/LightLookAndFeel.cpp
+	Source/ui/MixerPanel.cpp
 	Source/ui/SongInfoPanel.cpp
 	Source/ui/TransportPanel.cpp
-	Source/vgm/VgmEngine.cpp
 )
 
-target_include_directories(VGMPlay PRIVATE Source)
+target_include_directories(VGMToybox PRIVATE Source)
 
-target_compile_definitions(VGMPlay PUBLIC
+target_compile_definitions(VGMToybox PUBLIC
+	TOYBOX_OUTPUT_BUSES=${TOYBOX_OUTPUT_BUSES}
 	JUCE_WEB_BROWSER=0
 	JUCE_USE_CURL=0
 	JUCE_VST3_CAN_REPLACE_VST2=0
@@ -85,7 +115,7 @@ target_compile_definitions(VGMPlay PUBLIC
 	JUCE_STRICT_REFCOUNTEDPOINTER=1
 )
 
-target_link_libraries(VGMPlay PRIVATE
+target_link_libraries(VGMToybox PRIVATE
 	# libvgm (built by the parent project, see the root CMakeLists.txt)
 	${LIBVGM_TARGETS}
 	juce::juce_audio_processors
@@ -94,17 +124,47 @@ target_link_libraries(VGMPlay PRIVATE
 	juce::juce_recommended_lto_flags
 )
 
-# --- console test for the playback engine (not built by default) ---
-# Renders a VGM/VGZ file offline into a WAV file, e.g.:
-#   cmake --build <build dir> --target vgm_engine_test
-#   <build dir>/plugin/vgm_engine_test test.vgz 5
-add_executable(vgm_engine_test EXCLUDE_FROM_ALL
-	Tests/VgmEngineTest.cpp
-	Source/vgm/VgmEngine.cpp
+# --- console test for the mixer engine (not built by default) ---
+# Renders a VGM/VGZ file offline (plain player and per-channel mixer), writes the plain render
+# to a WAV and checks the mixer acceptance criteria, e.g.:
+#   cmake --build <build dir> --target vgm_mixer_test
+#   <build dir>/plugin/vgm_mixer_test test.vgz 5
+add_executable(vgm_mixer_test EXCLUDE_FROM_ALL
+	Tests/PlaybackEngineTest.cpp
+	Source/playback/BackendRegistry.cpp
+	Source/playback/PlaybackEngine.cpp
+	Source/backends/BuiltInBackends.cpp
+	Source/backends/libvgm/LibvgmBackend.cpp
+	Source/backends/libvgm/LibvgmSongInstance.cpp
+	Source/backends/libvgm/LibvgmTrackPlayer.cpp
+	Source/backends/libvgm/LibvgmVgz.cpp
 )
-target_include_directories(vgm_engine_test PRIVATE Source)
-target_compile_definitions(vgm_engine_test PRIVATE JUCE_STANDALONE_APPLICATION=1)
-target_link_libraries(vgm_engine_test PRIVATE
+# --- console test for the playback core (not built by default) ---
+# Drives PlaybackEngine through the fake tone backend. Deliberately links **no libvgm code**: if
+# the core still depended on the format engine, this target would not link.
+#   cmake --build <build dir> --target vgm_core_test
+#   <build dir>/plugin/vgm_core_test
+add_executable(vgm_core_test EXCLUDE_FROM_ALL
+	Tests/PlaybackCoreTest.cpp
+	Source/playback/BackendRegistry.cpp
+	Source/playback/PlaybackEngine.cpp
+	Source/backends/fake/FakeBackend.cpp
+)
+target_include_directories(vgm_core_test PRIVATE Source)
+target_compile_definitions(vgm_core_test PRIVATE
+	TOYBOX_OUTPUT_BUSES=${TOYBOX_OUTPUT_BUSES}
+	JUCE_STANDALONE_APPLICATION=1)
+target_link_libraries(vgm_core_test PRIVATE
+	juce::juce_core
+	juce::juce_audio_basics
+	juce::juce_recommended_config_flags
+)
+
+target_include_directories(vgm_mixer_test PRIVATE Source)
+target_compile_definitions(vgm_mixer_test PRIVATE
+	TOYBOX_OUTPUT_BUSES=${TOYBOX_OUTPUT_BUSES}
+	JUCE_STANDALONE_APPLICATION=1)
+target_link_libraries(vgm_mixer_test PRIVATE
 	${LIBVGM_TARGETS}
 	juce::juce_core
 	juce::juce_audio_basics

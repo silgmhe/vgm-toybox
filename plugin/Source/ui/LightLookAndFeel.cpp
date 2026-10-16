@@ -3,7 +3,7 @@
 #include "SoftShadow.h"
 #include "Theme.h"
 
-namespace vgmplay::ui
+namespace toybox::ui
 {
 
 LightLookAndFeel::LightLookAndFeel (void)
@@ -32,13 +32,24 @@ LightLookAndFeel::LightLookAndFeel (void)
 	setColour (juce::Slider::trackColourId,						theme::accent());
 	setColour (juce::Slider::thumbColourId,						juce::Colours::white);
 	setColour (juce::Slider::textBoxTextColourId,				theme::primaryText());
-	setColour (juce::Slider::textBoxBackgroundColourId,			juce::Colours::transparentBlack);
+	// Not transparentBlack: createSliderTextBox() feeds this colour to the editing TextEditor
+	// with alpha forced to 1, so a transparent background would become an opaque black box.
+	setColour (juce::Slider::textBoxBackgroundColourId,			theme::card());
 	setColour (juce::Slider::textBoxOutlineColourId,			juce::Colours::transparentBlack);
 	setColour (juce::Slider::textBoxHighlightColourId,			theme::accent().withAlpha (0.25f));
 
 	setColour (juce::ToggleButton::textColourId,				theme::primaryText());
 	setColour (juce::ToggleButton::tickColourId,				theme::accent());
 	setColour (juce::ToggleButton::tickDisabledColourId,		theme::border());
+
+	// text editors (the slider text boxes when they are being typed into) - the light scheme
+	// would be readable by itself, these just keep them on the app's palette
+	setColour (juce::TextEditor::backgroundColourId,			theme::card());
+	setColour (juce::TextEditor::textColourId,					theme::primaryText());
+	setColour (juce::TextEditor::outlineColourId,				theme::border());
+	setColour (juce::TextEditor::focusedOutlineColourId,		theme::accent());
+	setColour (juce::TextEditor::highlightColourId,				theme::accent().withAlpha (0.25f));
+	setColour (juce::TextEditor::highlightedTextColourId,		juce::Colours::white);
 
 	setColour (juce::TooltipWindow::backgroundColourId,			juce::Colour (0xf7ffffff));
 	setColour (juce::TooltipWindow::textColourId,				theme::primaryText());
@@ -60,26 +71,35 @@ void LightLookAndFeel::drawButtonBackground (juce::Graphics& g, juce::Button& bu
 		fill = fill.darker (0.05f);
 	}
 
+	// small square buttons (the mixer's M/S) only get a slight corner rounding - the radius
+	// never exceeds a fifth of the button height
+	const float radius = (bounds.getHeight() < 28.0f) ? bounds.getHeight() * 0.2f : theme::buttonRadius;
+
 	g.setColour (fill);
-	g.fillRoundedRectangle (bounds, theme::buttonRadius);
+	g.fillRoundedRectangle (bounds, radius);
 
 	// a hairline keeps light buttons readable; a filled accent button does not need one
 	if (fill.getPerceivedBrightness() > 0.6f && ! button.getToggleState())
 	{
 		g.setColour (theme::border());
-		g.drawRoundedRectangle (bounds.reduced (0.5f), theme::buttonRadius, 1.0f);
+		g.drawRoundedRectangle (bounds.reduced (0.5f), radius, 1.0f);
 	}
 }
 
 void LightLookAndFeel::drawButtonText (juce::Graphics& g, juce::TextButton& button,
 	bool /*shouldDrawButtonAsHighlighted*/, bool /*shouldDrawButtonAsDown*/)
 {
-	g.setFont (juce::Font (juce::FontOptions (13.5f, juce::Font::bold)));
+	const auto area = button.getLocalBounds();
+
+	// short buttons (the mixer's M/S) get a proportionally smaller label, so even a narrow
+	// button never elides its text
+	const float fontSize = juce::jlimit (10.0f, 13.5f, (float) area.getHeight() * 0.62f);
+	g.setFont (juce::Font (juce::FontOptions (fontSize, juce::Font::bold)));
 	g.setColour (button.findColour (button.getToggleState() ? juce::TextButton::textColourOnId
 															: juce::TextButton::textColourOffId)
 					 .withMultipliedAlpha (button.isEnabled() ? 1.0f : 0.5f));
-	g.drawFittedText (button.getButtonText(), button.getLocalBounds().reduced (6, 0),
-					  juce::Justification::centred, 1, 0.9f);
+	g.drawFittedText (button.getButtonText(), area.reduced (4, 0),
+					  juce::Justification::centred, 1, 0.7f);
 }
 
 void LightLookAndFeel::drawTickBox (juce::Graphics& g, juce::Component& component,
@@ -135,6 +155,12 @@ void LightLookAndFeel::drawToggleButton (juce::Graphics& g, juce::ToggleButton& 
 void LightLookAndFeel::drawLinearSlider (juce::Graphics& g, int x, int y, int width, int height,
 	float sliderPos, float minSliderPos, float maxSliderPos, juce::Slider::SliderStyle style, juce::Slider& slider)
 {
+	if (style == juce::Slider::LinearVertical)
+	{
+		drawVerticalSlider (g, x, y, width, height, sliderPos, slider);
+		return;
+	}
+
 	if (style != juce::Slider::LinearHorizontal)
 	{
 		juce::LookAndFeel_V4::drawLinearSlider (g, x, y, width, height, sliderPos, minSliderPos, maxSliderPos, style, slider);
@@ -169,6 +195,94 @@ void LightLookAndFeel::drawLinearSlider (juce::Graphics& g, int x, int y, int wi
 	g.drawEllipse (thumb, 1.0f);
 }
 
+void LightLookAndFeel::drawVerticalSlider (juce::Graphics& g, int x, int y, int width, int height,
+										   float sliderPos, juce::Slider& slider)
+{
+	const bool enabled = slider.isEnabled();
+	const float centreX = (float) x + (float) width * 0.5f;
+	constexpr float trackWidth = 4.0f;
+
+	const juce::Rectangle<float> track (centreX - trackWidth * 0.5f, (float) y, trackWidth, (float) height);
+	g.setColour (slider.findColour (juce::Slider::backgroundColourId).withMultipliedAlpha (enabled ? 1.0f : 0.6f));
+	g.fillRoundedRectangle (track, trackWidth * 0.5f);
+
+	// getSliderLayout() has already inset the slider bounds, so sliderPos maps directly onto
+	// the track (the filled part grows upwards from the bottom)
+	const float thumbY = juce::jlimit (track.getY(), track.getBottom(), sliderPos);
+
+	if (enabled && thumbY < track.getBottom() - 1.0f)
+	{
+		g.setColour (slider.findColour (juce::Slider::trackColourId));
+		g.fillRoundedRectangle (track.withTop (thumbY), trackWidth * 0.5f);
+	}
+
+	// A fader cap instead of the round thumb of the horizontal sliders: the small square knob
+	// of a real console fader, with a slight bevel and the groove a finger grips it by.
+	constexpr float capRadius = 3.5f;
+	const float capSize = juce::jmin (juce::jmin ((float) width, (float) height) * 0.45f, 15.0f);
+	const auto cap = juce::Rectangle<float> (capSize, capSize).withCentre ({ centreX, thumbY });
+
+	drawSoftShadow (g, cap, capRadius, theme::controlShadow().withMultipliedAlpha (enabled ? 1.0f : 0.45f),
+					theme::controlShadowBlur, { 0, 1 });
+	g.setGradientFill (juce::ColourGradient (juce::Colours::white, cap.getCentreX(), cap.getY(),
+											 juce::Colour (0xffe6e6ec), cap.getCentreX(), cap.getBottom(), false));
+	g.fillRoundedRectangle (cap, capRadius);
+	g.setColour (juce::Colour (0xffc5c5cb));
+	g.drawRoundedRectangle (cap.reduced (0.5f), capRadius, 1.0f);
+
+	const float grooveInset = capRadius + 1.0f;
+	g.setColour (juce::Colour (0xff8e8e96));
+	g.fillRect (cap.getX() + grooveInset, cap.getCentreY() - 1.0f,
+				cap.getWidth() - 2.0f * grooveInset, 2.0f);
+	g.setColour (juce::Colours::white.withAlpha (0.85f));
+	g.fillRect (cap.getX() + grooveInset, cap.getCentreY() + 1.0f,
+				cap.getWidth() - 2.0f * grooveInset, 1.0f);
+}
+
+void LightLookAndFeel::drawRotarySlider (juce::Graphics& g, int x, int y, int width, int height,
+	float sliderPosProportional, float rotaryStartAngle, float rotaryEndAngle, juce::Slider& slider)
+{
+	const bool enabled = slider.isEnabled();
+	const float diameter = (float) juce::jmin (width, height);
+	const auto bounds = juce::Rectangle<float> (diameter, diameter)
+							.withCentre ({ (float) x + (float) width * 0.5f,
+										   (float) y + (float) height * 0.5f });
+	const auto knob = bounds.reduced (2.0f);
+	const float radius = knob.getWidth() * 0.5f;
+	const float angle = rotaryStartAngle + sliderPosProportional * (rotaryEndAngle - rotaryStartAngle);
+
+	// a tick above the knob marks the centre position (the pan knob is symmetric)
+	g.setColour (theme::secondaryText().withMultipliedAlpha (enabled ? 0.7f : 0.3f));
+	g.fillRoundedRectangle (knob.getCentreX() - 0.5f, bounds.getY(), 1.0f, 3.0f, 0.5f);
+
+	drawSoftShadow (g, knob, radius, theme::controlShadow().withMultipliedAlpha (enabled ? 1.0f : 0.45f),
+					theme::controlShadowBlur, { 0, 1 });
+	g.setColour (juce::Colours::white);
+	g.fillEllipse (knob);
+
+	// the accent arc fills up as the knob turns
+	const float arcThickness = juce::jmax (2.0f, radius * 0.24f);
+	juce::Path arc;
+	arc.addCentredArc (knob.getCentreX(), knob.getCentreY(), radius - arcThickness * 0.5f - 0.5f,
+					   radius - arcThickness * 0.5f - 0.5f, 0.0f, rotaryStartAngle, angle, true);
+	g.setColour (slider.findColour (juce::Slider::trackColourId).withMultipliedAlpha (enabled ? 1.0f : 0.5f));
+	g.strokePath (arc, juce::PathStrokeType (arcThickness, juce::PathStrokeType::curved,
+											 juce::PathStrokeType::rounded));
+
+	// the pointer
+	juce::Path pointer;
+	const float pointerThickness = juce::jmax (1.6f, radius * 0.13f);
+	pointer.addRoundedRectangle (pointerThickness * -0.5f, -radius + 2.5f,
+								 pointerThickness, radius * 0.55f, pointerThickness * 0.5f);
+	pointer.applyTransform (juce::AffineTransform::rotation (angle)
+								.translated (knob.getCentreX(), knob.getCentreY()));
+	g.setColour (theme::primaryText());
+	g.fillPath (pointer);
+
+	g.setColour (juce::Colour (0xffc5c5cb));
+	g.drawEllipse (knob.reduced (0.5f), 1.0f);
+}
+
 void LightLookAndFeel::drawComboBox (juce::Graphics& g, int width, int height,
 	bool /*isButtonDown*/, int /*buttonX*/, int /*buttonY*/, int /*buttonW*/, int /*buttonH*/, juce::ComboBox& box)
 {
@@ -201,4 +315,4 @@ void LightLookAndFeel::positionComboBoxText (juce::ComboBox& box, juce::Label& l
 	label.setJustificationType (juce::Justification::centredLeft);
 }
 
-} // namespace vgmplay::ui
+} // namespace toybox::ui

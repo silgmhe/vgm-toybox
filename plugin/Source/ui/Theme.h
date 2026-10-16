@@ -8,7 +8,7 @@
 	have exactly one definition. The light look is macOS-flavoured: white cards on a light grey
 	window, hairline borders, a blue accent for anything that is "on".
 */
-namespace vgmplay::ui::theme
+namespace toybox::ui::theme
 {
 
 // --- palette ------------------------------------------------------------------------
@@ -23,6 +23,15 @@ inline juce::Colour border (void)		{ return juce::Colour (0xffd7d7dd); }
 inline juce::Colour cardBorder (void)	{ return juce::Colour (0xffe6e6ec); }
 inline juce::Colour track (void)		{ return juce::Colour (0xffdcdce2); }
 inline juce::Colour error (void)		{ return juce::Colour (0xffd70015); }
+
+// the mixer's mute (red) and solo (amber) buttons follow the DAW convention
+inline juce::Colour mute (void)			{ return juce::Colour (0xffe5484d); }
+inline juce::Colour solo (void)			{ return juce::Colour (0xfff5c518); }
+
+// the meter gradient: quiet is green, loud turns amber, 0 dB and above are red
+inline juce::Colour meterLow (void)		{ return juce::Colour (0xff34c759); }
+inline juce::Colour meterMid (void)		{ return juce::Colour (0xffffcc00); }
+inline juce::Colour meterHigh (void)	{ return juce::Colour (0xffff3b30); }
 
 // --- metrics ------------------------------------------------------------------------
 inline constexpr int margin = 14;			// window border
@@ -57,4 +66,4 @@ inline constexpr int accentGlowOffsetY = 3;
 inline juce::Colour controlShadow (void)		{ return juce::Colour (0x38000000); }
 inline constexpr int controlShadowBlur = 5;
 
-} // namespace vgmplay::ui::theme
+} // namespace toybox::ui::theme

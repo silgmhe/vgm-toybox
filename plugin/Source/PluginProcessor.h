@@ -2,19 +2,19 @@
 
 #include <juce_audio_processors/juce_audio_processors.h>
 
-#include "vgm/VgmEngine.h"
+#include "playback/PlaybackEngine.h"
 
 /**
-	Audio processor of the VGMPlay plugin.
+	Audio processor of the VGMToybox plugin.
 
 	The plugin renders VGM/VGZ files (which are loaded through the GUI) with libvgm and has its
 	own transport: it does not need MIDI or the host transport to produce sound.
 */
-class VGMPlayAudioProcessor : public juce::AudioProcessor
+class ToyboxAudioProcessor : public juce::AudioProcessor
 {
 public:
-	VGMPlayAudioProcessor();
-	~VGMPlayAudioProcessor() override = default;
+	ToyboxAudioProcessor();
+	~ToyboxAudioProcessor() override = default;
 
 	// --- AudioProcessor ---
 	void prepareToPlay (double sampleRate, int samplesPerBlock) override;
@@ -25,7 +25,7 @@ public:
 	juce::AudioProcessorEditor* createEditor() override;
 	bool hasEditor() const override { return true; }
 
-	const juce::String getName() const override { return "VGMPlay"; }
+	const juce::String getName() const override { return "VGMToybox"; }
 	bool acceptsMidi() const override { return false; }
 	bool producesMidi() const override { return false; }
 	bool isMidiEffect() const override { return false; }
@@ -40,10 +40,29 @@ public:
 	void getStateInformation (juce::MemoryBlock& destData) override;
 	void setStateInformation (const void* data, int sizeInBytes) override;
 
-	vgmplay::VgmEngine& getEngine (void) { return engine; }
+	toybox::PlaybackEngine& getEngine (void) { return engine; }
 
 private:
-	vgmplay::VgmEngine engine;
+	/** "Out 1/2" (the main bus, activated) plus the additional buses, which start **inactive**:
+		a host only allocates the ones the user enables (docs/multitrack-output-design.md, ADR-2),
+		so out of the box the plugin behaves exactly as it did before. Defined here because
+		`BusesProperties` is a protected nested type of `AudioProcessor`. */
+	static BusesProperties buildBusesProperties (void)
+	{
+		BusesProperties properties;
+		properties = properties.withOutput (toybox::playback::outputBusName (0),
+											juce::AudioChannelSet::stereo(), true);
 
-	JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (VGMPlayAudioProcessor)
+		for (int bus = 1; bus < toybox::playback::kOutputBusCount; ++bus)
+		{
+			properties = properties.withOutput (toybox::playback::outputBusName (bus),
+												juce::AudioChannelSet::stereo(), false);
+		}
+
+		return properties;
+	}
+
+	toybox::PlaybackEngine engine;
+
+	JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (ToyboxAudioProcessor)
 };

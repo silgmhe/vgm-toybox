@@ -2,14 +2,14 @@
 
 #include <juce_gui_basics/juce_gui_basics.h>
 
-namespace vgmplay::ui
+namespace toybox::ui
 {
 
-/** Small button that draws a play/pause/stop/loop/playStart icon instead of a text label. */
+/** Small button that draws one of the Icons glyphs instead of a text label. */
 class IconButton : public juce::Button
 {
 public:
-	enum class Icon { play, pause, stop, loop, playStart };
+	enum class Icon { play, pause, stop, loop, playStart, sliders, spreadOutputs, mergeToMaster };
 
 	IconButton (const juce::String& buttonName, Icon iconToDraw)
 		: juce::Button (buttonName), icon (iconToDraw)
@@ -24,4 +24,4 @@ private:
 	JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (IconButton)
 };
 
-} // namespace vgmplay::ui
+} // namespace toybox::ui

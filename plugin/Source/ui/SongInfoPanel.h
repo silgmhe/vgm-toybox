@@ -2,9 +2,9 @@
 
 #include "CardComponent.h"
 
-namespace vgmplay { class VgmEngine; }
+namespace toybox { class PlaybackEngine; }
 
-namespace vgmplay::ui
+namespace toybox::ui
 {
 
 /**
@@ -18,7 +18,7 @@ public:
 	static constexpr int preferredHeight = 96;
 	static constexpr int minHeight = 70;
 
-	explicit SongInfoPanel (const vgmplay::VgmEngine& engineToUse);
+	explicit SongInfoPanel (const toybox::PlaybackEngine& engineToUse);
 
 	/** Updates title, tags and the file/position line. */
 	void refresh (void);
@@ -26,7 +26,7 @@ public:
 private:
 	void resized (void) override;
 
-	const vgmplay::VgmEngine& engine;
+	const toybox::PlaybackEngine& engine;
 
 	juce::Label titleLabel;
 	juce::Label detailsLabel;
@@ -35,4 +35,4 @@ private:
 	JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (SongInfoPanel)
 };
 
-} // namespace vgmplay::ui
+} // namespace toybox::ui

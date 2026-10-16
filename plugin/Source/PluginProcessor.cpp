@@ -1,63 +1,90 @@
 #include "PluginProcessor.h"
 
+#include "playback/BackendRegistry.h"
+
 #include "PluginEditor.h"
 
-using namespace vgmplay;
+using namespace toybox;
 
-VGMPlayAudioProcessor::VGMPlayAudioProcessor()
-	: AudioProcessor (BusesProperties().withOutput ("Output", juce::AudioChannelSet::stereo(), true))
+ToyboxAudioProcessor::ToyboxAudioProcessor()
+	: AudioProcessor (buildBusesProperties())
 {
+	// The composition root: registering the backends here means every UI text, tooltip and file
+	// filter that asks the registry (built while this object exists) sees the real format list.
+	toybox::playback::registerBuiltInBackends();
 }
 
-void VGMPlayAudioProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
+void ToyboxAudioProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
 {
 	engine.prepare (sampleRate, samplesPerBlock);
 }
 
-void VGMPlayAudioProcessor::releaseResources (void)
+void ToyboxAudioProcessor::releaseResources (void)
 {
 }
 
-bool VGMPlayAudioProcessor::isBusesLayoutSupported (const BusesLayout& layouts) const
+bool ToyboxAudioProcessor::isBusesLayoutSupported (const BusesLayout& layouts) const
 {
-	return layouts.getMainOutputChannelSet() == juce::AudioChannelSet::stereo();
+	// Every bus is either stereo or switched off (ADR-7 - no mono paths anywhere), and the main
+	// bus may be off as long as at least one other bus is on: a host that routes all tracks to
+	// extra outputs is a normal way to use a multi-output instrument.
+	bool anyEnabled = false;
+	for (int bus = 0; bus < layouts.outputBuses.size(); ++bus)
+	{
+		const auto& set = layouts.outputBuses.getReference (bus);
+		if (set.isDisabled())
+		{
+			continue;
+		}
+
+		if (set != juce::AudioChannelSet::stereo())
+		{
+			return false;
+		}
+
+		anyEnabled = true;
+	}
+
+	return anyEnabled;
 }
 
-void VGMPlayAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midiMessages)
+void ToyboxAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midiMessages)
 {
 	juce::ignoreUnused (midiMessages);
 	juce::ScopedNoDenormals noDenormals;
 
 	const int numSamples = buffer.getNumSamples();
-	const int numChannels = buffer.getNumChannels();
 
-	// libvgm renders stereo only - silence any additional channels of the output bus
-	for (int ch = 2; ch < numChannels; ++ch)
+	// Every enabled bus (a disabled one has no channels, which reads as "not connected"): the
+	// engine clears each one before it renders, so nothing has to be silenced here - and a bus
+	// the host has not enabled is simply not in the buffer.
+	playback::OutputBusBuffers buses[playback::kOutputBusCount];
+	for (int bus = 0; bus < playback::kOutputBusCount; ++bus)
 	{
-		buffer.clear (ch, 0, numSamples);
+		// getBusBuffer() hands out a view *by value* (it just points into `buffer`), so it is
+		// taken by value here - binding a non-const reference to it is a construction MSVC
+		// happens to accept but the standard does not.
+		auto busBuffer = getBusBuffer (buffer, false, bus);
+		if (busBuffer.getNumChannels() >= 2)
+		{
+			buses[bus].left = busBuffer.getWritePointer (0);
+			buses[bus].right = busBuffer.getWritePointer (1);
+		}
 	}
 
-	if (numChannels >= 2 && numSamples > 0)
-	{
-		float* outputs[2] = { buffer.getWritePointer (0), buffer.getWritePointer (1) };
-		engine.render (outputs, numSamples);
-	}
-	else
-	{
-		buffer.clear();
-	}
+	engine.render (buses, playback::kOutputBusCount, numSamples);
 }
 
-juce::AudioProcessorEditor* VGMPlayAudioProcessor::createEditor (void)
+juce::AudioProcessorEditor* ToyboxAudioProcessor::createEditor (void)
 {
-	return new VGMPlayAudioProcessorEditor (*this);
+	return new ToyboxAudioProcessorEditor (*this);
 }
 
-void VGMPlayAudioProcessor::getStateInformation (juce::MemoryBlock& destData)
+void ToyboxAudioProcessor::getStateInformation (juce::MemoryBlock& destData)
 {
-	VgmEngine& eng = engine;
+	PlaybackEngine& eng = engine;
 
-	juce::XmlElement state ("VGMPlayState");
+	juce::XmlElement state ("VGMToyboxState");
 	state.setAttribute ("file", eng.getFile().getFullPathName());
 	state.setAttribute ("loopCount", eng.getLoopCount());
 	state.setAttribute ("fadeSeconds", eng.getFadeSeconds());
@@ -66,7 +93,7 @@ void VGMPlayAudioProcessor::getStateInformation (juce::MemoryBlock& destData)
 	copyXmlToBinary (state, destData);
 }
 
-void VGMPlayAudioProcessor::setStateInformation (const void* data, int sizeInBytes)
+void ToyboxAudioProcessor::setStateInformation (const void* data, int sizeInBytes)
 {
 	// The standalone application always starts with a clean state: no file from the previous
 	// session and no auto-play. Only plugin instances inside a host restore their session.
@@ -76,12 +103,15 @@ void VGMPlayAudioProcessor::setStateInformation (const void* data, int sizeInByt
 	}
 
 	std::unique_ptr<juce::XmlElement> state (getXmlFromBinary (data, sizeInBytes));
-	if (state == nullptr || ! state->hasTagName ("VGMPlayState"))
+	// the old tag is still accepted: renaming the product must not throw away the state a host
+	// saved for a project (the plugin codes are unchanged, so hosts do load this build into them)
+	if (state == nullptr || ! (state->hasTagName ("VGMToyboxState")
+							   || state->hasTagName ("VGMPlayState")))
 	{
 		return;
 	}
 
-	VgmEngine& eng = engine;
+	PlaybackEngine& eng = engine;
 	eng.setLoopCount (state->getIntAttribute ("loopCount", 1));
 	eng.setFadeSeconds (state->getDoubleAttribute ("fadeSeconds", 3.0));
 	eng.setMasterVolume ((float) state->getDoubleAttribute ("volume", 1.0));
@@ -98,5 +128,5 @@ void VGMPlayAudioProcessor::setStateInformation (const void* data, int sizeInByt
 // entry point used by the JUCE plugin wrappers (VST3, standalone, ...)
 juce::AudioProcessor* JUCE_CALLTYPE createPluginFilter (void)
 {
-	return new VGMPlayAudioProcessor();
+	return new ToyboxAudioProcessor();
 }

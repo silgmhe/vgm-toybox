@@ -4,15 +4,28 @@
 #include "ui/SoftShadow.h"
 #include "ui/Theme.h"
 
-using namespace vgmplay;
-using namespace vgmplay::ui;
+using namespace toybox;
+using namespace toybox::ui;
 
-VGMPlayAudioProcessorEditor::VGMPlayAudioProcessorEditor (VGMPlayAudioProcessor& p)
+#include "playback/BackendRegistry.h"
+
+namespace
+{
+	// The UI repaints on demand, so the refresh rate is exactly what the GPU pays for: on
+	// Windows every repaint makes the desktop compositor touch the window area again. 15 Hz
+	// while a song plays (meters and the seek bar move) is smooth enough, and when nothing
+	// moves the timer only refreshes state at a low rate - there is nothing to repaint then.
+	constexpr int kPlayingRefreshHz = 15;
+	constexpr int kIdleRefreshHz = 10;
+}
+
+ToyboxAudioProcessorEditor::ToyboxAudioProcessorEditor (ToyboxAudioProcessor& p)
 	: AudioProcessorEditor (&p),
 	  processor (p),
 	  engine (p.getEngine()),
 	  songInfoPanel (engine),
-	  transportPanel (engine)
+	  transportPanel (engine),
+	  mixerPanel (engine)
 {
 	setLookAndFeel (&lookAndFeel);
 
@@ -20,7 +33,7 @@ VGMPlayAudioProcessorEditor::VGMPlayAudioProcessorEditor (VGMPlayAudioProcessor&
 	openButton.onClick = [this] { openFileChooser(); };
 	openButton.setColour (juce::TextButton::buttonColourId, theme::accent());
 	openButton.setColour (juce::TextButton::textColourOffId, juce::Colours::white);
-	openButton.setTooltip ("Open a .vgm / .vgz file");
+	openButton.setTooltip ("Open a " + playback::BackendRegistry::getInstance().getExtensionListText() + " file");
 	addAndMakeVisible (openButton);
 
 	statusLabel.setFont (juce::Font (juce::FontOptions (12.5f)));
@@ -33,6 +46,8 @@ VGMPlayAudioProcessorEditor::VGMPlayAudioProcessorEditor (VGMPlayAudioProcessor&
 	addAndMakeVisible (transportPanel);
 	// hidden until a file with sound chips is loaded (ChipPanel::rebuild sets the visibility)
 	addChildComponent (chipPanel);
+	// hidden while no song with tracks is loaded (MixerPanel::refresh sets the visibility)
+	addChildComponent (mixerPanel);
 	// full-size overlay, hidden until a file is dragged over the editor
 	addChildComponent (dropHint);
 
@@ -40,12 +55,29 @@ VGMPlayAudioProcessorEditor::VGMPlayAudioProcessorEditor (VGMPlayAudioProcessor&
 	updateStatusLine();
 
 	setResizable (true, true);
-	setResizeLimits (640, 420, 1400, 900);
-	setSize (780, 470);
-	startTimerHz (20);
+	// only a minimum size: the layout stretches, so the window can be resized freely and even
+	// be maximised - the mixer card takes whatever the middle has to offer
+	setResizeLimits (660, 520, 32768, 32768);
+	setSize (820, 650);		// room for the cards down to the mixer without scrolling the window
+
+	// The standalone window only offers minimise/close; add the maximise button so it can fill
+	// the screen. Hosts manage their own windows, so this happens for the standalone wrapper
+	// only (the editor copes with any size either way).
+	if (processor.wrapperType == juce::AudioProcessor::wrapperType_Standalone)
+	{
+		if (auto* window = dynamic_cast<juce::DocumentWindow*> (getTopLevelComponent()))
+		{
+			window->setTitleBarButtonsRequired (juce::DocumentWindow::minimiseButton
+												| juce::DocumentWindow::maximiseButton
+												| juce::DocumentWindow::closeButton, false);
+		}
+	}
+
+	refreshHz = kIdleRefreshHz;
+	startTimerHz (refreshHz);
 }
 
-VGMPlayAudioProcessorEditor::~VGMPlayAudioProcessorEditor()
+ToyboxAudioProcessorEditor::~ToyboxAudioProcessorEditor()
 {
 	stopTimer();
 	setLookAndFeel (nullptr);
@@ -54,7 +86,7 @@ VGMPlayAudioProcessorEditor::~VGMPlayAudioProcessorEditor()
 //==============================================================================
 // painting / layout
 
-void VGMPlayAudioProcessorEditor::paint (juce::Graphics& g)
+void ToyboxAudioProcessorEditor::paint (juce::Graphics& g)
 {
 	// a faint vertical gradient gives the window some depth
 	g.setGradientFill (juce::ColourGradient (theme::windowTop(), 0.0f, 0.0f,
@@ -71,11 +103,15 @@ void VGMPlayAudioProcessorEditor::paint (juce::Graphics& g)
 	{
 		drawCardShadow (g, chipPanel.getBounds().toFloat());
 	}
+	if (mixerPanel.isVisible() && ! mixerPanel.getBounds().isEmpty())
+	{
+		drawCardShadow (g, mixerPanel.getBounds().toFloat());
+	}
 	drawSoftShadow (g, openButton.getBounds().toFloat(), theme::buttonRadius,
 					theme::accentGlow(), theme::accentGlowBlur, { 0, theme::accentGlowOffsetY });
 }
 
-void VGMPlayAudioProcessorEditor::resized (void)
+void ToyboxAudioProcessorEditor::resized (void)
 {
 	auto area = getLocalBounds().reduced (theme::margin);
 
@@ -97,14 +133,36 @@ void VGMPlayAudioProcessorEditor::resized (void)
 	songInfoPanel.setBounds (area.removeFromTop (infoHeight));
 	area.removeFromTop (theme::cardGap);
 
-	// chip mute card (+ section header) - it does not take any space while it is hidden
+	// chip mute card (+ section header) - it takes no space while it is hidden and never eats
+	// into the mixer's minimum height
 	if (chipPanel.hasChips())
 	{
-		const int chipsHeight = juce::jmin (chipPanel.getPreferredHeight (area.getWidth()), area.getHeight());
+		const int chipsHeight = juce::jmin (chipPanel.getPreferredHeight (area.getWidth()),
+											juce::jmax (0, area.getHeight() - MixerPanel::minimumHeight));
 		if (chipsHeight > 0)
 		{
 			chipPanel.setBounds (area.removeFromTop (chipsHeight));
+			area.removeFromTop (theme::cardGap);
 		}
+		else
+		{
+			chipPanel.setBounds ({});
+		}
+	}
+	else
+	{
+		chipPanel.setBounds ({});
+	}
+
+	// The mixer card owns the whole area between the chips card and the transport card - it
+	// simply follows the window height (its strips scroll inside).
+	if (mixerPanel.isVisible())
+	{
+		mixerPanel.setBounds (area);
+	}
+	else
+	{
+		mixerPanel.setBounds ({});
 	}
 
 	dropHint.setBounds (getLocalBounds());
@@ -117,7 +175,7 @@ void VGMPlayAudioProcessorEditor::resized (void)
 //==============================================================================
 // keyboard / drag & drop
 
-bool VGMPlayAudioProcessorEditor::keyPressed (const juce::KeyPress& key)
+bool ToyboxAudioProcessorEditor::keyPressed (const juce::KeyPress& key)
 {
 	if (key == juce::KeyPress::spaceKey)
 	{
@@ -147,11 +205,11 @@ bool VGMPlayAudioProcessorEditor::keyPressed (const juce::KeyPress& key)
 	return false;
 }
 
-bool VGMPlayAudioProcessorEditor::isInterestedInFileDrag (const juce::StringArray& files)
+bool ToyboxAudioProcessorEditor::isInterestedInFileDrag (const juce::StringArray& files)
 {
 	for (const auto& path : files)
 	{
-		if (path.endsWithIgnoreCase (".vgm") || path.endsWithIgnoreCase (".vgz"))
+		if (playback::BackendRegistry::getInstance().isSupportedFile (juce::File (path)))
 		{
 			return true;
 		}
@@ -159,24 +217,24 @@ bool VGMPlayAudioProcessorEditor::isInterestedInFileDrag (const juce::StringArra
 	return false;
 }
 
-void VGMPlayAudioProcessorEditor::fileDragEnter (const juce::StringArray&, int, int)
+void ToyboxAudioProcessorEditor::fileDragEnter (const juce::StringArray&, int, int)
 {
 	dropHint.setVisible (true);
 	dropHint.toFront (false);
 }
 
-void VGMPlayAudioProcessorEditor::fileDragExit (const juce::StringArray&)
+void ToyboxAudioProcessorEditor::fileDragExit (const juce::StringArray&)
 {
 	dropHint.setVisible (false);
 }
 
-void VGMPlayAudioProcessorEditor::filesDropped (const juce::StringArray& files, int, int)
+void ToyboxAudioProcessorEditor::filesDropped (const juce::StringArray& files, int, int)
 {
 	dropHint.setVisible (false);
 
 	for (const auto& path : files)
 	{
-		if (path.endsWithIgnoreCase (".vgm") || path.endsWithIgnoreCase (".vgz"))
+		if (playback::BackendRegistry::getInstance().isSupportedFile (juce::File (path)))
 		{
 			loadFile (juce::File (path));
 			break;
@@ -187,11 +245,15 @@ void VGMPlayAudioProcessorEditor::filesDropped (const juce::StringArray& files, 
 //==============================================================================
 // file loading
 
-void VGMPlayAudioProcessorEditor::openFileChooser (void)
+void ToyboxAudioProcessorEditor::openFileChooser (void)
 {
 	const juce::File startDir = engine.getFile().existsAsFile() ? engine.getFile().getParentDirectory()
 																: juce::File::getSpecialLocation (juce::File::userMusicDirectory);
-	fileChooser = std::make_unique<juce::FileChooser> ("Open a VGM file", startDir, "*.vgm;*.vgz");
+	// the caption and the filter come from the registry: adding a backend adds it to the dialog
+	const auto& registry = playback::BackendRegistry::getInstance();
+	fileChooser = std::make_unique<juce::FileChooser> ("Open a " + registry.getExtensionListText() + " file",
+													   startDir,
+													   registry.getFileWildcard());
 	fileChooser->launchAsync (juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectFiles,
 							  [this] (const juce::FileChooser& chooser)
 							  {
@@ -203,7 +265,7 @@ void VGMPlayAudioProcessorEditor::openFileChooser (void)
 							  });
 }
 
-void VGMPlayAudioProcessorEditor::loadFile (const juce::File& file)
+void ToyboxAudioProcessorEditor::loadFile (const juce::File& file)
 {
 	juce::String errorMessage;
 	if (! engine.loadFile (file, errorMessage))
@@ -216,12 +278,14 @@ void VGMPlayAudioProcessorEditor::loadFile (const juce::File& file)
 	}
 
 	rebuildChipButtons();
+	mixerPanel.refresh();		// the track list belongs to the new song (may show/hide the card)
 	transportPanel.refresh();
 	songInfoPanel.refresh();
 	updateStatusLine();
+	resized();					// the mixer card may have appeared or disappeared
 }
 
-void VGMPlayAudioProcessorEditor::rebuildChipButtons (void)
+void ToyboxAudioProcessorEditor::rebuildChipButtons (void)
 {
 	chipPanel.rebuild (engine.getChips(), [this] (size_t chipIndex, bool shouldBeMuted)
 										   {
@@ -233,14 +297,24 @@ void VGMPlayAudioProcessorEditor::rebuildChipButtons (void)
 //==============================================================================
 // periodic refresh
 
-void VGMPlayAudioProcessorEditor::timerCallback (void)
+void ToyboxAudioProcessorEditor::timerCallback (void)
 {
+	// only a running transport animates the meters and the seek bar - that is when the higher
+	// rate is worth anything
+	const int wantedHz = engine.isPlaying() ? kPlayingRefreshHz : kIdleRefreshHz;
+	if (wantedHz != refreshHz)
+	{
+		refreshHz = wantedHz;
+		startTimerHz (refreshHz);
+	}
+
 	transportPanel.refresh();
 	songInfoPanel.refresh();
+	mixerPanel.refresh();
 	updateStatusLine();
 }
 
-void VGMPlayAudioProcessorEditor::updateStatusLine (void)
+void ToyboxAudioProcessorEditor::updateStatusLine (void)
 {
 	juce::String status;
 	if (lastError.isNotEmpty())

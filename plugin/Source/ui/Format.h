@@ -4,7 +4,7 @@
 
 #include <juce_core/juce_core.h>
 
-namespace vgmplay::ui
+namespace toybox::ui
 {
 
 /** "m:ss.cc" - shared by the song info card and the status line. */
@@ -22,4 +22,4 @@ inline juce::String formatTime (double seconds)
 	return juce::String::formatted ("%d:%02d.%02d", minutes, secs, cents);
 }
 
-} // namespace vgmplay::ui
+} // namespace toybox::ui

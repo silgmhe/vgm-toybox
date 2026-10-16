@@ -7,7 +7,7 @@
     The script performs a complete one-shot build:
       1. sets up the MSVC environment (vswhere + vcvars64/vcvars32)
       2. configures the project with CMake/Ninja:
-           - libvgm is built from the in-tree submodule (static libraries)
+           - libvgm is built from the vendored source in libs/ (static libraries)
            - zlib is fetched with CPM.cmake and built from source (no zlib DLL)
            - static MSVC runtime (/MT)  -> no VC++ Redistributable required
            - CMAKE_EXPORT_COMPILE_COMMANDS -> compile_commands.json for clangd
@@ -19,7 +19,7 @@
     Required tools (must be in PATH or installed):
       - Visual Studio with the "Desktop development with C++" workload
       - CMake and Ninja (the Ninja shipped with CMake is found automatically)
-      - git (only to initialize the libvgm submodule)
+      - git (CPM fetches the zlib source with it)
 
     The zlib source is downloaded on the first configure. The download repository can be
     chosen with -DLIBVGM_ZLIB_REPOSITORY=<url> (the CMake build probes GitHub and the
@@ -206,9 +206,13 @@ Initialize-MsvcEnvironment -TargetArch $Arch
 Write-Step 'Setting up dependency downloads'
 Initialize-NetworkProxy -ProxyUrl $Proxy -Disabled:$NoProxy
 
-Write-Step 'Checking git submodules'
-if (-not (Test-Path -LiteralPath (Join-Path $RepoRoot 'libvgm\CMakeLists.txt'))) {
-	Invoke-Native 'git' @('-C', $RepoRoot, 'submodule', 'update', '--init', '--recursive')
+Write-Step 'Checking the vendored libraries'
+# libvgm, inih and wingetopt are source in this repository (no submodules), so a missing one means
+# an incomplete checkout - there is nothing to fetch.
+foreach ($library in @('libs\libvgm', 'libs\inih', 'libs\wingetopt')) {
+	if (-not (Test-Path -LiteralPath (Join-Path $RepoRoot $library))) {
+		throw "The vendored library '$library' is missing - it is part of this repository."
+	}
 }
 
 Write-Step "Configuring ($Arch, $Config, static runtime $RuntimeLib)"
@@ -222,9 +226,24 @@ $cmakeOptions = @(
 	'-DCMAKE_EXPORT_COMPILE_COMMANDS=ON'
 )
 if ($NoPlugin) {
-	$cmakeOptions += '-DVGMPLAY_BUILD_PLUGIN=OFF'
+	$cmakeOptions += '-DTOYBOX_BUILD_PLUGIN=OFF'
 	Write-Host 'plugin build disabled by -NoPlugin' -ForegroundColor DarkGray
 }
+# --- the playback core must stay free of format engine headers -------------------------------
+# The whole point of the playback port (docs/playback-backend-design.md) is that everything
+# outside Source/backends/ is format agnostic - a stray include would silently put libvgm back
+# into the UI, so it fails the build instead.
+Write-Step 'Checking the backend isolation'
+$isolationOffenders = Get-ChildItem -Path (Join-Path $SourceDir 'plugin\Source') -Recurse -File -Include '*.h', '*.cpp' |
+	Where-Object { $_.FullName -notmatch '\\backends\\' } |
+	Select-String -Pattern '#include\s+"(stdtype\.h|player/|emu/|utils/|vgm/)'
+if ($isolationOffenders) {
+	$isolationOffenders | ForEach-Object {
+		Write-Host ('  {0}:{1}: {2}' -f $_.Path, $_.LineNumber, $_.Line.Trim()) -ForegroundColor Red
+	}
+	throw 'A file outside plugin/Source/backends/ includes a format engine header.'
+}
+
 Invoke-Native 'cmake' (@(
 	'-S', $sourceDir,
 	'-B', $buildDir,
@@ -236,29 +255,32 @@ Invoke-Native 'cmake' @('--build', $buildDir)
 
 Write-Step 'Creating the distribution folder'
 New-Item -ItemType Directory -Force -Path $DistDir | Out-Null
-$exe = Get-ChildItem -LiteralPath $BuildDir -Filter 'VGMPlay*.exe' -File |
+# The player is a subdirectory project (vgmplayer/), so its executable sits one level down in the
+# build tree - search recursively so this keeps working wherever the target lands.
+$exe = Get-ChildItem -LiteralPath $BuildDir -Filter 'VGMPlay*.exe' -File -Recurse |
 	Sort-Object LastWriteTime -Descending | Select-Object -First 1
 if (-not $exe) {
-	$exe = Get-ChildItem -LiteralPath $BuildDir -Filter 'vgmplay*' -File |
+	$exe = Get-ChildItem -LiteralPath $BuildDir -Filter 'vgmplay*' -File -Recurse |
 		Sort-Object LastWriteTime -Descending | Select-Object -First 1
 }
 if (-not $exe) {
 	throw "No VGMPlay executable found in '$BuildDir'."
 }
 Copy-Item -LiteralPath $exe.FullName -Destination $DistDir -Force
+# the player's INI template and its two text documents live next to its sources now
 foreach ($file in @('VGMPlay.ini', 'Updates.txt', 'VGMPlay.txt')) {
-	$src = Join-Path $RepoRoot $file
+	$src = Join-Path $RepoRoot ('vgmplayer\' + $file)
 	if (Test-Path -LiteralPath $src) {
 		Copy-Item -LiteralPath $src -Destination $DistDir -Force
 	}
 }
 
 # the JUCE plugin artefacts (VST3 bundle + standalone application)
-$artefactsDir = Join-Path $BuildDir 'plugin\VGMPlay_artefacts'
+$artefactsDir = Join-Path $BuildDir 'plugin\VGMToybox_artefacts'
 $vst3Bundle = $null
 $standaloneApp = $null
 if (Test-Path -LiteralPath $artefactsDir) {
-	$vst3Bundle = Get-ChildItem -LiteralPath $artefactsDir -Filter 'VGMPlay.vst3' -Directory -Recurse |
+	$vst3Bundle = Get-ChildItem -LiteralPath $artefactsDir -Filter 'VGMToybox.vst3' -Directory -Recurse |
 		Select-Object -First 1
 	if ($vst3Bundle) {
 		$vst3Target = Join-Path $DistDir 'VST3'
@@ -270,7 +292,7 @@ if (Test-Path -LiteralPath $artefactsDir) {
 					"Close it and run the script again. ({1})" -f $vst3Target, $_.Exception.Message)
 		}
 	}
-	$standaloneApp = Get-ChildItem -LiteralPath $artefactsDir -Filter 'VGMPlay.exe' -File -Recurse |
+	$standaloneApp = Get-ChildItem -LiteralPath $artefactsDir -Filter 'VGMToybox.exe' -File -Recurse |
 		Where-Object { $_.DirectoryName -notlike '*VST3*' } | Select-Object -First 1
 	if ($standaloneApp) {
 		$standaloneTarget = Join-Path $DistDir 'Standalone'
@@ -278,7 +300,7 @@ if (Test-Path -LiteralPath $artefactsDir) {
 		try {
 			Copy-Item -LiteralPath $standaloneApp.FullName -Destination $standaloneTarget -Force -ErrorAction Stop
 		} catch {
-			throw ("Could not copy the standalone application to '{0}' - VGMPlay.exe is probably still running. " +
+			throw ("Could not copy the standalone application to '{0}' - VGMToybox.exe is probably still running. " +
 					"Close it and run the script again. ({1})" -f $standaloneTarget, $_.Exception.Message)
 		}
 	}
@@ -288,7 +310,7 @@ Write-Step 'Updating compile_commands.json'
 $generatedDb = Join-Path $BuildDir 'compile_commands.json'
 if (Test-Path -LiteralPath $generatedDb) {
 	Copy-Item -LiteralPath $generatedDb -Destination $CompileDb -Force
-	Write-Host "wrote $CompileDb (all libvgm + VGMPlay sources, for clangd)"
+	Write-Host "wrote $CompileDb (all sources: vgmplayer, plugin, libvgm, for clangd)"
 } else {
 	Write-Warning "'$generatedDb' not found - clangd will not have a compilation database."
 }
@@ -297,10 +319,10 @@ Write-Step 'Result'
 $exePath = Join-Path $DistDir $exe.Name
 Write-Host ("executable : {0} ({1:N0} bytes)" -f $exePath, (Get-Item -LiteralPath $exePath).Length)
 if ($vst3Bundle) {
-	Write-Host ("VST3       : {0}" -f (Join-Path $DistDir 'VST3\VGMPlay.vst3'))
+	Write-Host ("VST3       : {0}" -f (Join-Path $DistDir 'VST3\VGMToybox.vst3'))
 }
 if ($standaloneApp) {
-	Write-Host ("standalone : {0}" -f (Join-Path $DistDir 'Standalone\VGMPlay.exe'))
+	Write-Host ("standalone : {0}" -f (Join-Path $DistDir 'Standalone\VGMToybox.exe'))
 }
 Write-Host ("dist folder: {0}" -f $DistDir)
 Write-Host ''

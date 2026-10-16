@@ -2,7 +2,7 @@
 
 #include "Theme.h"
 
-namespace vgmplay::ui
+namespace toybox::ui
 {
 
 void CardComponent::paint (juce::Graphics& g)
@@ -21,4 +21,4 @@ void CardComponent::paint (juce::Graphics& g)
 	paintCardContent (g);
 }
 
-} // namespace vgmplay::ui
+} // namespace toybox::ui

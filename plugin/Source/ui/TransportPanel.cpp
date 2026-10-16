@@ -1,12 +1,13 @@
 #include "TransportPanel.h"
 
 #include "Icons.h"
+#include "MeterScale.h"
 #include "SoftShadow.h"
 #include "Theme.h"
 
-#include "vgm/VgmEngine.h"
+#include "playback/PlaybackEngine.h"
 
-namespace vgmplay::ui
+namespace toybox::ui
 {
 namespace
 {
@@ -30,7 +31,7 @@ namespace
 	}
 }
 
-TransportPanel::TransportPanel (vgmplay::VgmEngine& engineToUse)
+TransportPanel::TransportPanel (toybox::PlaybackEngine& engineToUse)
 	: engine (engineToUse)
 {
 	// --- transport buttons ---
@@ -79,19 +80,23 @@ TransportPanel::TransportPanel (vgmplay::VgmEngine& engineToUse)
 	// this slider has no parent yet, so the lookup would fall back to the default (dark)
 	// LookAndFeel - the number would stay white for the lifetime of that label.
 	volumeSlider.setColour (juce::Slider::textBoxTextColourId, theme::primaryText());
-	volumeSlider.setColour (juce::Slider::textBoxBackgroundColourId, juce::Colours::transparentBlack);
+	// Must be opaque: JUCE's createSliderTextBox() copies this colour into the *editor* that
+	// appears while typing and forces alpha to 1, so a transparent black would turn into an
+	// opaque black box with dark text in it.
+	volumeSlider.setColour (juce::Slider::textBoxBackgroundColourId, theme::card());
 	volumeSlider.setColour (juce::Slider::textBoxOutlineColourId, theme::border());
 	volumeSlider.setColour (juce::Slider::textBoxHighlightColourId, theme::accent().withAlpha (0.25f));
 	// the text formatting has to be in place before the text box is created as well, otherwise
 	// the box keeps showing the default formatting of the initial value
-	volumeSlider.setRange (0.0, 2.0, 0.01);
+	// the travel follows the same dB scale as the mixer meters (the value stays a linear gain)
+	volumeSlider.setNormalisableRange (meter::gainRange());
 	volumeSlider.setTextValueSuffix (" %");
 	volumeSlider.textFromValueFunction = [] (double value) { return juce::String (juce::roundToInt (value * 100.0)); };
 	volumeSlider.valueFromTextFunction = [] (const juce::String& text) { return text.getDoubleValue() / 100.0; };
 	volumeSlider.setTextBoxStyle (juce::Slider::TextBoxRight, false, 52, 22);
 	volumeSlider.setValue (engine.getMasterVolume(), juce::dontSendNotification);
 	volumeSlider.updateText();
-	volumeSlider.setTooltip ("Master volume");
+	volumeSlider.setTooltip ("Output volume - the last stage of the engine, after the mixer master");
 	volumeSlider.onValueChange = [this] { engine.setMasterVolume ((float) volumeSlider.getValue()); };
 	addAndMakeVisible (volumeSlider);
 
@@ -288,7 +293,7 @@ void TransportPanel::startPlayback (void)
 {
 	paused = false;
 
-	// a finished song starts over at the playback start cursor (VgmEngine::play() would
+	// a finished song starts over at the playback start cursor (PlaybackEngine::play() would
 	// restart it from the very beginning - which is what happens with the cursor off)
 	if (startCursorEnabled && engine.isFinished())
 	{
@@ -400,7 +405,15 @@ void TransportPanel::refresh (void)
 	{
 		const double position = engine.getPositionSeconds();
 		const double sliderValue = (duration > 0.0) ? juce::jlimit (0.0, 1.0, position / duration) : 0.0;
-		positionSlider.setValue (sliderValue, juce::dontSendNotification);
+
+		// A value change repaints the whole seek bar, so movements that would not even shift the
+		// thumb by half a pixel are dropped - on a long song that is a window-area present for
+		// nothing.
+		const double width = (double) juce::jmax (1, positionSlider.getWidth());
+		if (std::abs (sliderValue - positionSlider.getValue()) * width >= 0.5)
+		{
+			positionSlider.setValue (sliderValue, juce::dontSendNotification);
+		}
 	}
 }
 
@@ -446,4 +459,4 @@ void TransportPanel::setLoopForever (bool shouldLoopForever)
 	refresh();
 }
 
-} // namespace vgmplay::ui
+} // namespace toybox::ui

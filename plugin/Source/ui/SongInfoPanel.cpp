@@ -3,12 +3,13 @@
 #include "Format.h"
 #include "Theme.h"
 
-#include "vgm/VgmEngine.h"
+#include "playback/BackendRegistry.h"
+#include "playback/PlaybackEngine.h"
 
-namespace vgmplay::ui
+namespace toybox::ui
 {
 
-SongInfoPanel::SongInfoPanel (const vgmplay::VgmEngine& engineToUse)
+SongInfoPanel::SongInfoPanel (const toybox::PlaybackEngine& engineToUse)
 	: engine (engineToUse)
 {
 	titleLabel.setFont (juce::Font (juce::FontOptions (18.0f, juce::Font::bold)));
@@ -43,7 +44,8 @@ void SongInfoPanel::refresh (void)
 	{
 		titleLabel.setText ("No file loaded", juce::dontSendNotification);
 		detailsLabel.setText ({}, juce::dontSendNotification);
-		fileLabel.setText ("Load a .vgm / .vgz file with the button above or drop one onto this window.",
+		fileLabel.setText ("Load a " + playback::BackendRegistry::getInstance().getExtensionListText()
+						   + " file with the button above or drop one onto this window.",
 						   juce::dontSendNotification);
 		return;
 	}
@@ -75,4 +77,4 @@ void SongInfoPanel::refresh (void)
 					   juce::dontSendNotification);
 }
 
-} // namespace vgmplay::ui
+} // namespace toybox::ui

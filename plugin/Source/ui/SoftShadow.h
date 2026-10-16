@@ -4,7 +4,7 @@
 
 #include "Theme.h"
 
-namespace vgmplay::ui
+namespace toybox::ui
 {
 /** Draws a soft, gaussian-ish shadow behind a rounded rectangle.
 
@@ -48,4 +48,4 @@ inline void drawCardShadow (juce::Graphics& g, juce::Rectangle<float> area)
 	drawSoftShadow (g, area, theme::cardRadius, theme::cardKeyShadow(), theme::cardKeyBlur, { 0, theme::cardKeyOffsetY });
 }
 
-} // namespace vgmplay::ui
+} // namespace toybox::ui
