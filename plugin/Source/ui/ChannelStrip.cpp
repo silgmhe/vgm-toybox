@@ -2,6 +2,7 @@
 
 #include <cmath>
 
+#include "ButtonPaint.h"
 #include "MeterScale.h"
 #include "Theme.h"
 
@@ -124,8 +125,22 @@ void ChannelStrip::setValues (float gain, float pan, bool muted, bool soloed,
 {
 	gainSlider.setValue (gain, juce::dontSendNotification);
 	panKnob.setValue (pan, juce::dontSendNotification);
+
+	// A flip of M or S changes the glow the strip paints behind that button (see paint()), so it
+	// has to repaint that area - and only then, the regular refresh must stay cheap.
+	const bool muteFlipped = (muteButton.getToggleState() != muted);
+	const bool soloFlipped = (soloButton.getToggleState() != soloed);
 	muteButton.setToggleState (muted, juce::dontSendNotification);
 	soloButton.setToggleState (soloed, juce::dontSendNotification);
+
+	if (muteFlipped)
+	{
+		repaint (buttonGlowBounds (muteButton.getBounds()));
+	}
+	if (soloFlipped)
+	{
+		repaint (buttonGlowBounds (soloButton.getBounds()));
+	}
 
 	peakL = peakLValue;
 	peakR = peakRValue;
@@ -246,6 +261,19 @@ void ChannelStrip::paint (juce::Graphics& g)
 	g.fillRoundedRectangle (area, theme::buttonRadius);
 	g.setColour (theme::cardBorder());
 	g.drawRoundedRectangle (area.reduced (0.5f), theme::buttonRadius, 1.0f);
+
+	// A toggled M/S button is a prominent (L2) control: its coloured glow is painted by the
+	// container, because the blur reaches further than the 2 px a button keeps for its own shadow
+	// (docs/ui-button-design.md §4.3). The strip's bounds clip it, so a glowing mute button never
+	// bleeds into the neighbouring lane.
+	if (muteButton.getToggleState())
+	{
+		drawButtonGlow (g, muteButton.getBounds(), theme::muteGlow());
+	}
+	if (soloButton.getToggleState())
+	{
+		drawButtonGlow (g, soloButton.getBounds(), theme::soloGlow());
+	}
 
 	g.setFont (juce::Font (juce::FontOptions (10.5f, juce::Font::bold)));
 	g.setColour (theme::primaryText());

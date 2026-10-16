@@ -62,6 +62,11 @@ inline juce::Colour accentGlow (void)			{ return juce::Colour (0x4d0a84ff); }
 inline constexpr int accentGlowBlur = 12;
 inline constexpr int accentGlowOffsetY = 3;
 
+// The same glow in a semantic colour: a toggled mute or solo button glows red or amber instead of
+// accent blue, so its state reads before the fill is even looked at.
+inline juce::Colour muteGlow (void)			{ return mute().withAlpha (0.42f); }
+inline juce::Colour soloGlow (void)			{ return solo().withAlpha (0.42f); }
+
 // slider thumbs and ticked checkboxes (their shadow fits inside their own bounds)
 inline juce::Colour controlShadow (void)		{ return juce::Colour (0x38000000); }
 inline constexpr int controlShadowBlur = 5;

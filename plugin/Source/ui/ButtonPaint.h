@@ -101,11 +101,14 @@ inline void drawButtonFace (juce::Graphics& g, juce::Rectangle<float> bounds, co
 
 /** Paints the coloured glow of a toggled prominent button.
 
-	The surrounding **card** calls this from its paintCardContent(): the glow's blur reaches
-	considerably further than the button's own inset, so the button cannot paint it itself. The
-	card must also repaint that area when the toggle state changes; `buttonGlowBounds()` gives the
-	rectangle to pass to repaint(). */
-inline void drawButtonGlow (juce::Graphics& g, juce::Rectangle<int> buttonBounds)
+	The surrounding **container** calls this - the card from its paintCardContent(), the mixer
+	strip from its paint() - because the glow's blur reaches considerably further than the button's
+	own inset, so the button cannot paint it itself. Pass the colour the button is filled with
+	(`theme::muteGlow()` for mute, `theme::soloGlow()` for solo, the default for the accent ones).
+	The container must also repaint that area when the toggle state changes; `buttonGlowBounds()`
+	gives the rectangle to pass to repaint(). */
+inline void drawButtonGlow (juce::Graphics& g, juce::Rectangle<int> buttonBounds,
+							juce::Colour colour = theme::accentGlow())
 {
 	const auto shape = buttonFaceShape (buttonBounds.toFloat());
 	if (shape.getWidth() <= 1.0f || shape.getHeight() <= 1.0f)
@@ -113,7 +116,7 @@ inline void drawButtonGlow (juce::Graphics& g, juce::Rectangle<int> buttonBounds
 		return;
 	}
 
-	drawSoftShadow (g, shape, theme::buttonRadiusFor (shape.getHeight()), theme::accentGlow(),
+	drawSoftShadow (g, shape, theme::buttonRadiusFor (shape.getHeight()), colour,
 					theme::accentGlowBlur, { 0, theme::accentGlowOffsetY });
 }
 

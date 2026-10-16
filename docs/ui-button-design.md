@@ -222,6 +222,7 @@ inline float buttonRadiusFor (float height) { return juce::jmin (height * 0.2f, 
 | M-UI.1 Token + `ButtonPaint.h` | ✅ | `Theme.h` 新增按钮 token（单层投影、平涂材质、聚焦环、`buttonRadiusFor`）；新文件 `ui/ButtonPaint.h` |
 | M-UI.2 `IconButton` 接入 | ✅ | 走带 5 个 + 卡片头部 3 个统一走 `drawButtonFace()`；新增聚焦环（`focusGained/Lost` 触发重绘） |
 | M-UI.4 收敛 glow | ✅ | `TransportPanel` / `MixerPanel` 改用 `drawButtonGlow()` + `buttonGlowBounds()`；**补上扇出/汇入一直缺失的 on 态发光** |
+| M-UI.4b 通道条的 M/S 发光 | ✅ | `drawButtonGlow()` 增加颜色参数（accent / `muteGlow()` 红 / `soloGlow()` 琥珀）；`ChannelStrip::paint()` 为 toggled 的 M/S 绘制发光（条内裁剪，不会串到邻轨），`setValues()` 只在状态翻转时重绘 `buttonGlowBounds()` |
 | M-UI.3 `LightLookAndFeel` 接入 | ✅ | `drawButtonBackground`（混音 M/S、Open）与 `drawComboBox`（输出/loop/fade）都改走 `drawButtonFace()`：填充色亮 → 中性材质、有色（accent/红/琥珀）→ 填充型；三份圆角规则合并为 `buttonRadiusFor()`；禁用态下拉的箭头也按规范衰减；布局同步补 4px（顶行 32→36、输出行 22→26、设置行 26→30、走带卡片 142、通道条 204、混音最小高 178） |
 | M-UI.5 文档与验收 | ✅ 文档与测试 | CODEBUDDY 补按钮体系与新测试；`vgm_ui_test` 上线（12 项像素不变量断言）；宿主内六态走查待你确认 |
 
