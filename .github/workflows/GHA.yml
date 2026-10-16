@@ -67,18 +67,38 @@ jobs:
 
   # The matrix above builds the command-line player across compilers with the plugin switched off,
   # which meant the 7k lines that contain the whole UI were never compiled anywhere but on the
-  # machine of whoever was editing them. This job builds the plugin and its tests and runs them.
+  # machine of whoever was editing them. This job builds the plugin and its console tests on all
+  # three platforms and runs them.
+  #
+  # It is deliberately on every push rather than only on a tag: the plugin had never been built on
+  # macOS or Linux at all, so a platform that cannot build it has to be found while there is still
+  # time to fix it - a tag is the wrong moment to discover it. The release workflow builds the same
+  # three platforms again from the tagged commit.
   plugin-tests:
-    name: Plugin and console tests (Windows)
-    runs-on: windows-latest
+    name: Plugin and console tests (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ windows-latest, macos-latest, ubuntu-latest ]
+    runs-on: ${{ matrix.os }}
     defaults:
       run:
-        shell: powershell
+        shell: ${{ matrix.os == 'windows-latest' && 'powershell' || 'bash' }}
+
     steps:
     - name: Checkout
       uses: actions/checkout@v4
 
-    - name: Build the plugin and run the console tests
+    - name: Install Linux dependencies
+      if: matrix.os == 'ubuntu-latest'
+      # JUCE needs these to build on Linux at all, and xvfb-run gives the two GUI tests a display to
+      # start against - a headless runner has none, and ScopedJuceInitialiser_GUI wants one.
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y ninja-build libasound2-dev libx11-dev libxext-dev libxinerama-dev \
+          libxrandr-dev libxcursor-dev libfreetype6-dev libfontconfig1-dev libgl1-mesa-dev xvfb
+
+    - name: Build the plugin and run the console tests (Windows)
       # The same command a developer runs locally. The test targets are EXCLUDE_FROM_ALL, so they
       # are named; -Test then runs the ones that were built and fails the job when one fails.
       #
@@ -89,4 +109,34 @@ jobs:
       #
       # vgm_mixer_test is deliberately absent: its sample-exact gate renders a real song twice and
       # this repository ships no song, so it stays a local gate (-Test -TestSong <file>).
+      if: matrix.os == 'windows-latest'
       run: .\build.ps1 -Target vgm_core_test,vgm_ui_test,vgm_app_test -Test
+
+    - name: Build the plugin (macOS)
+      if: matrix.os == 'macos-latest'
+      # The same steps in plain CMake: build.ps1 is a PowerShell script with MSVC assumptions.
+      run: |
+        cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
+        cmake --build build --parallel 3
+        cmake --build build --target vgm_core_test vgm_ui_test vgm_app_test --parallel 3
+
+    - name: Run the console tests (macOS)
+      if: matrix.os == 'macos-latest'
+      run: |
+        ./build/plugin/vgm_core_test
+        ./build/plugin/vgm_ui_test
+        ./build/plugin/vgm_app_test plugin/Tests/scripts/window-basics.txt
+
+    - name: Build the plugin (Linux)
+      if: matrix.os == 'ubuntu-latest'
+      run: |
+        cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
+        cmake --build build --parallel 3
+        cmake --build build --target vgm_core_test vgm_ui_test vgm_app_test --parallel 3
+
+    - name: Run the console tests (Linux)
+      if: matrix.os == 'ubuntu-latest'
+      run: |
+        ./build/plugin/vgm_core_test
+        xvfb-run -a ./build/plugin/vgm_ui_test
+        xvfb-run -a ./build/plugin/vgm_app_test plugin/Tests/scripts/window-basics.txt

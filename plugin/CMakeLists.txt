@@ -77,6 +77,16 @@ if(GIT_FOUND)
 endif()
 message(STATUS "VGMToybox build commit: ${TOYBOX_GIT_COMMIT}")
 
+# --- Audio Unit (macOS only) -----------------------------------------------------------------------
+# JUCE skips formats that do not apply to the platform, but saying it here is clearer than relying on
+# that - and the release workflow builds this on macOS alone. No AU_MAIN_TYPE is needed: IS_SYNTH
+# below already makes it an instrument.
+if(APPLE)
+	set(TOYBOX_AU_FORMAT AU)
+else()
+	set(TOYBOX_AU_FORMAT "")
+endif()
+
 # --- plugin target ---
 juce_add_plugin(VGMToybox
 	# --- identity ---------------------------------------------------------------------------
@@ -108,7 +118,7 @@ juce_add_plugin(VGMToybox
 	# step. assets/icon/make_icon.py is the source of truth for all of them.
 	ICON_BIG "${CMAKE_CURRENT_SOURCE_DIR}/assets/icon/vgmtoybox-1024.png"
 	ICON_SMALL "${CMAKE_CURRENT_SOURCE_DIR}/assets/icon/vgmtoybox-16.png"
-	FORMATS VST3 Standalone
+	FORMATS VST3 Standalone ${TOYBOX_AU_FORMAT}
 	IS_SYNTH TRUE
 	NEEDS_MIDI_INPUT FALSE
 	NEEDS_MIDI_OUTPUT FALSE

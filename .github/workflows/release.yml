@@ -1,0 +1,157 @@
+name: Release
+
+# Only a tag publishes. Everything a release depends on - does the plugin build on all three
+# platforms, do the console tests pass - is checked by GHA.yml on every push, so the only new
+# question on the day of a tag is whether the packaging and the upload work.
+on:
+  push:
+    tags: [ 'v*' ]
+
+permissions:
+  contents: write		# gh release create writes to this repository
+
+jobs:
+  package:
+    name: Build and package (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: windows-latest, shell: powershell, package: VGMToybox-windows-x64.zip }
+          - { os: macos-latest,   shell: bash,       package: VGMToybox-macos.zip }
+          - { os: ubuntu-latest,  shell: bash,       package: VGMToybox-linux-x64.tar.gz }
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: ${{ matrix.shell }}
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+
+    - name: Check the tag against the project version
+      # A release called v0.6 whose plugin reports 0.5 is worse than a failed release: the version
+      # comes from project(... VERSION ...), which every format reads at compile time.
+      shell: bash
+      run: |
+        tag="${GITHUB_REF_NAME#v}"
+        version="$(sed -n 's/^project(vgmtoybox VERSION \([0-9][0-9.]*\).*/\1/p' CMakeLists.txt)"
+        echo "tag: $tag   project: $version"
+        test "$tag" = "$version" || {
+          echo "::error::tag v$tag does not match project VERSION $version"; exit 1; }
+
+    - name: Install Linux dependencies
+      if: matrix.os == 'ubuntu-latest'
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y ninja-build libasound2-dev libx11-dev libxext-dev libxinerama-dev \
+          libxrandr-dev libxcursor-dev libfreetype6-dev libfontconfig1-dev libgl1-mesa-dev xvfb
+
+    - name: Build, test and package (Windows)
+      if: matrix.os == 'windows-latest'
+      run: |
+        .\build.ps1 -Target vgm_core_test,vgm_ui_test,vgm_app_test -Test
+
+        New-Item -ItemType Directory -Force dist\release | Out-Null
+        Copy-Item -Recurse -Force dist\VST3\VGMToybox.vst3 dist\release\
+        Copy-Item -Force dist\Standalone\VGMToybox.exe dist\release\
+        Copy-Item -Force LICENSE dist\release\
+        Compress-Archive -Path dist\release\* -DestinationPath "${{ matrix.package }}" -Force
+
+    - name: Build and package (macOS)
+      if: matrix.os == 'macos-latest'
+      run: |
+        cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
+        cmake --build build --parallel 3
+        cmake --build build --target vgm_core_test vgm_ui_test vgm_app_test --parallel 3
+        ./build/plugin/vgm_core_test
+        ./build/plugin/vgm_ui_test
+        ./build/plugin/vgm_app_test plugin/Tests/scripts/window-basics.txt
+
+        # Find the bundles rather than guessing the path: JUCE's artefact layout is
+        # <target>_artefacts/<config>/<format>/, and the format names are its business, not ours.
+        vst3="$(find build -name 'VGMToybox.vst3' -type d | head -1)"
+        au="$(find build -name 'VGMToybox.component' -type d | head -1)"
+        app="$(find build -name 'VGMToybox.app' -type d | head -1)"
+        if [ -z "$vst3" ] || [ -z "$au" ] || [ -z "$app" ]; then
+          echo "::error::the build did not produce all three macOS bundles"
+          find build -name 'VGMToybox*' | head -20
+          exit 1
+        fi
+        mkdir -p dist/release
+        cp -R "$vst3" "$au" "$app" LICENSE dist/release/
+        (cd dist/release && zip -ry "../../${{ matrix.package }}" .)
+
+    - name: Build and package (Linux)
+      if: matrix.os == 'ubuntu-latest'
+      run: |
+        cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
+        cmake --build build --parallel 3
+        cmake --build build --target vgm_core_test vgm_ui_test vgm_app_test --parallel 3
+        ./build/plugin/vgm_core_test
+        xvfb-run -a ./build/plugin/vgm_ui_test
+        xvfb-run -a ./build/plugin/vgm_app_test plugin/Tests/scripts/window-basics.txt
+
+        vst3="$(find build -name 'VGMToybox.vst3' -type d | head -1)"
+        standalone="$(find build -name 'VGMToybox' -type f -executable | head -1)"
+        if [ -z "$vst3" ] || [ -z "$standalone" ]; then
+          echo "::error::the build did not produce the Linux plugin and standalone"
+          find build -name 'VGMToybox*' | head -20
+          exit 1
+        fi
+        mkdir -p dist/release
+        cp -R "$vst3" dist/release/
+        cp "$standalone" dist/release/
+        cp LICENSE dist/release/
+        tar -czf "${{ matrix.package }}" -C dist/release .
+
+    - name: Upload the package
+      uses: actions/upload-artifact@v4
+      with:
+        name: ${{ matrix.package }}
+        path: ${{ matrix.package }}
+
+  release:
+    name: Publish the release
+    needs: package
+    runs-on: ubuntu-latest
+    steps:
+    - name: Download the packages
+      uses: actions/download-artifact@v4
+      with:
+        path: packages
+        merge-multiple: true
+
+    - name: Write the release notes
+      # The AGPL asks for the source to travel with the binaries, so the notes say where it is; and
+      # an unsigned macOS build needs its workaround said out loud rather than discovered.
+      run: |
+        cat > notes.md <<EOF
+        VST3, Audio Unit (macOS only) and standalone builds for Windows, macOS and Linux.
+
+        **Installing**
+        - Windows: put \`VGMToybox.vst3\` in \`C:\\Program Files\\Common Files\\VST3\`, or run \`VGMToybox.exe\`.
+        - macOS: \`VGMToybox.vst3\` goes to \`/Library/Audio/Plug-Ins/VST3\`, \`VGMToybox.component\` to
+          \`/Library/Audio/Plug-Ins/Components\`, and \`VGMToybox.app\` runs on its own.
+        - Linux: \`VGMToybox.vst3\` goes to \`~/.vst3\`, and the standalone binary runs on its own.
+
+        **macOS: unsigned and un-notarised.** These bundles have no Apple Developer signature behind
+        them, so macOS refuses them at first launch. Either right-click and choose *Open*, or clear
+        the quarantine flag:
+
+            xattr -dr com.apple.quarantine VGMToybox.vst3
+            xattr -dr com.apple.quarantine VGMToybox.component
+            xattr -dr com.apple.quarantine VGMToybox.app
+
+        **Licence.** VGMToybox is AGPL-3.0-or-later, and the complete source for these binaries is
+        this repository at this tag:
+        https://github.com/${GITHUB_REPOSITORY}/tree/${GITHUB_REF_NAME}
+        EOF
+
+    - name: Create the release
+      env:
+        GH_TOKEN: ${{ github.token }}
+      run: |
+        gh release create "$GITHUB_REF_NAME" packages/* \
+          --title "VGMToybox $GITHUB_REF_NAME" \
+          --notes-file notes.md
