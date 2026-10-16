@@ -340,4 +340,70 @@ Get-ChildItem -Recurse -File -Include *.md,*.h,*.cpp -Path README.md,CODEBUDDY.m
 | **H-3** CI 不编译插件、不跑测试 | **完成** ✓ | `build.ps1` 增加 `-Target`/`-Test`/`-TestSong` ✓ + job `plugin-tests`（`windows-latest` ✓）+ 触发分支扩到 `feature/**` ✓（`3e2778e` ✓；CI 首次真实运行待观察 ✓） |
 | **M-2** 刷新分层 | **已重定义并完成** ✓ | 见 R-2 ✓ |
 | **M-3** 卡片头套路 ×3 | **完成** ✓ | `CardComponent::{getCardHeaderArea, getCardInnerArea, paintCardHeaderRow}` ✓；`MixerPanel` / `ChipPanel` 不再各写一份 ✓；视觉零回归（截图核对 ✓） |
-| **H-1** 加载事务化 / **M-5** 锁契约 | 未动 ✓ | 计划见 `docs/desgin/testing-architecture.md` §4 的 P5 ✓ |
+| **H-1** 加载事务化 / **M-5** 锁契约 | **一半 / 完成** ✓ | 见下方 §修复记录 F-5、F-6 ✓ |
+
+---
+
+## 附：修复记录（2026-10-16）
+
+只记**已经改掉**的 ✓（计划与剩余项在 `docs/desgin/testing-architecture.md` ✓）。每条写四件事：改了什么 / 为什么这么改 / 怎么验证的 / **还差什么** ✓。
+
+### F-1 启动参数规则可测（**H-2 ✅ 完成**）
+
+- **改了什么**：把"参数 → 歌曲"抽成纯函数 `playback/StartupSong.h::chooseStartupSong (arguments, canOpen)` ✓（arguments 进、`File` 出、"能否播放"由调用方以谓词注入 ✓）；`getStartupFile()` 调用它 ✓，面包屑行为逐条不变 ✓。
+- **为什么**：那个"带空格路径打不开"的缺陷就在这一条规则里 ✓，而它藏在类内部，**没有测试够得着** ✓。
+- **怎么验证**：`vgm_core_test` 的 `[5] startup arguments` **7 项断言** ✓ —— 含当年的回归"**路径含空格**" ✓、前置选项 ✓、首个可用者胜出 ✓、存在但后端打不开 ✓、不存在 ✓、无参数 ✓。
+- **还差什么**：没有 ✓。
+
+### F-2 CI 真的编译插件并跑测试（**H-3 ✅ 完成**）
+
+- **改了什么**：`build.ps1` 增加 `-Target a,b,c`（测试是 `EXCLUDE_FROM_ALL`，必须点名 ✓）、`-Test`（跑已构建的测试，失败即让脚本失败 ✓）、`-TestSong`（喂 `vgm_mixer_test` ✓）；**默认调用不变** ✓。新增 job `plugin-tests`（`windows-latest` / `shell: powershell` ✓）执行 `.\build.ps1 -Target vgm_core_test,vgm_ui_test,vgm_app_test -Test` ✓；触发分支扩到 `feature/**` ✓。
+- **为什么**：原矩阵九个配置**全部** `-DTOYBOX_BUILD_PLUGIN=OFF` ✓ → 含全部 UI 的 7k 行**没有任何机器编译过** ✗，三个测试也从未自动跑过 ✗。
+- **怎么验证**：本地跑**同一条命令** ✓ → `3 test target(s) passed` ✓；带 `-TestSong` 时 `4 test target(s) passed`（含 −1000.00 dB ✓）。验证还抓到一个真错：`-Target` **不能重复** ✓（PowerShell 限制 ✓），已改为逗号列表并修正帮助文本与 workflow ✓。
+- **还差什么**：**workflow 文件本身无法本地执行** ✓ → 首次真实运行就是带着它的那次推送 ✓。
+
+### F-3 卡片表头只有一个出处（**M-3 ✅ 完成**）
+
+- **改了什么**：`CardComponent` 新增 `getCardHeaderArea()` / `getCardInnerArea()` / `paintCardHeaderRow()` ✓；`MixerPanel`、`ChipPanel` 不再各写一份"缩进 + 切表头 + 加粗小字 + 左右对齐" ✓。
+- **为什么**：即将到来的可视化页会成为**第三份**副本 ✓。
+- **怎么验证**：加载歌曲后**截图核对** ✓ —— `SOUND CHIPS / UNCHECK TO MUTE` 与 `MIXER / MUTE / SOLO / GAIN / PAN` 的位置字号对齐与重构前一致 ✓。
+- **还差什么**：没有 ✓。
+
+### F-4 刷新契约写明（**M-2 ✅ 完成，且已重定义**）
+
+- **改了什么**：`MixerPanel::refresh()` 拆为 `syncStructure()`（结构 ✓）+ `refreshValues()`（值 ✓），两处都写明"每帧路径只做值更新"的理由 ✓。
+- **为什么**：**不是**性能修复 ✗ —— 见 R-2：它本来就只在文件/轨道数变化时重建结构 ✓，review 的描述夸大了 ✗。这项的价值是把契约**写明** ✓（可视化面板照抄这个形状 ✓）。
+- **怎么验证**：构建 ✓ + `vgm_ui_test` / `vgm_core_test` ✓ + 冒烟 ✓。
+- **还差什么**：没有 ✓。
+
+### F-5 加载：把无上界的 I/O 移出锁（**H-1 ⚠️ 只做了一半**）
+
+- **改了什么**：`PlaybackEngine::loadFile()` 现在两阶段 ✓ ——
+  1. **锁外**：`existsAsFile()` + `loadFileAsData()`（读文件 ✓）；
+  2. **锁内**：`resetState()` → 换入镜像 → `createPlayers()`（解压 + 声音核心初始化 ✓）→ 设 `loaded / playing / position` ✓。
+  `resetState()` 的顺序与错误分支**逐条保持不变** ✓（读取失败仍先停播放并清空 ✓，错误文案一字未改 ✓）。
+- **为什么只做一半**：这是唯一**延迟无上界**的部分 ✓（30 MB 的 VGM、冷缓存、文件被别的进程占着 ✓）；解压与初始化是**有界的小毫秒级** ✓。把**整段**移出锁需要把"构建新会话"与"换入"彻底分开 ✓（即 M-1 的 `SongSession` ✓）—— 代价与风险高一个量级 ✓，留作独立一步 ✓。
+- **怎么验证**：`vgm_mixer_test` **−1000.00 dB 不变** ✓（混音与 seek 未受影响 ✓）；`vgm_core_test` 全绿 ✓（路由 / 音量 / seek / 曲终 ✓）；`vgm_app_test` ✓；**命令行加载歌曲冒烟成功** ✓（成功启动不写日志 ✓）。
+- **还差什么**（明确记下 ✓）：
+  1. **解压 + 初始化仍在锁内** ✓ → 播放中切歌仍可能有 **1–2 个静音块** ✓（轻微 tick ✓）；
+  2. **没有回归测试** ✗ —— 要证明"加载期间音频线程不被饿死"，需要一个**故意慢的加载**（让 fake 后端在 `prepare` 里 sleep ✓）加一个渲染线程统计 try-lock 失败次数 ✓；本轮改动（I/O）本身**难以确定性测试** ✗（读文件耗时依赖机器 ✓）→ 该测试应与剩下的会话抽取**一起做** ✓。
+
+### F-6 锁契约显式化（**M-5 ✅ 完成**）
+
+- **改了什么**：抽出 `setPositionSecondsLocked()` ✓（无锁版 ✓）；公开的 `setPositionSeconds()` 取锁后调用它 ✓，`rebuildPlayers()` 改调无锁版 ✓（它本就在持锁状态运行 ✓）。
+- **为什么**：原来依赖 `juce::CriticalSection` **可重入**这一隐式事实 ✓ —— 换锁实现或改锁序会立刻死锁 ✗。
+- **怎么验证**：`vgm_mixer_test` 的 seek 断言 ✓（−1000.00 dB ✓、"seek 后重渲染" −32.3 dB 未变 ✓）+ `vgm_core_test` 的 seek ✓。
+- **还差什么**：其余"持锁调用"的助手（`applyTrackIsolation` 等 ✓）已有 `// caller must hold the lock` 注释 ✓，保持不变即可 ✓。
+
+### 修复记录小结
+
+| 条目 | 级别 | 状态 |
+|---|---|---|
+| H-2 装配层无测试 | H | ✅ 完成（F-1 ✓） |
+| H-3 CI 不编译插件 / 不跑测试 | H | ✅ 完成（F-2 ✓，首跑待观察 ✓） |
+| M-2 刷新分层 | M（**已重定义** ✓） | ✅ 完成（F-4 ✓） |
+| M-3 卡片头套路 ×3 | M | ✅ 完成（F-3 ✓） |
+| M-5 锁契约 | M | ✅ 完成（F-6 ✓） |
+| **H-1 加载全程持锁** | **H** | ⚠️ **一半**（F-5 ✓：I/O 已移出 ✓；解压+初始化仍在锁内 ✓，回归测试待做 ✓） |
+| M-1 `PlaybackEngine` 四职责 | M | ⏳ 未动 ✓（H-1 的另一半与它同一件事 ✓） |
+| M-4 / M-6 / M-7 / L-1..L-5 | M/L | ⏳ 未动 ✓（M-4 与 L 系列随手可做 ✓；M-6/M-7 只要一句决策 ✓） |
