@@ -20,7 +20,15 @@ param(
     # variable exists, and comes out empty - it is resolved below instead
     [string] $ExePath = '',
     [switch] $SetDefault,
-    [switch] $Unregister
+    [switch] $Unregister,
+    # read-only: report who Windows would actually hand each format to, and which executable that
+    # is - the quickest way to tell "the association never fired" from "it fired a stale copy"
+    [switch] $Status,
+    # drop Explorer's per-user "UserChoice" for these formats so the Classes default applies
+    # again. Windows writes that entry when someone picks an application in the Open-with dialog,
+    # it overrides everything else - including -SetDefault - and a stale one is the usual reason a
+    # double click appears to do nothing at all.
+    [switch] $ClearUserChoice
 )
 
 $ErrorActionPreference = 'Stop'
@@ -56,6 +64,61 @@ function Get-DefaultValue([string] $Path)
     return (Get-ItemProperty -LiteralPath $Path -ErrorAction SilentlyContinue).'(default)'
 }
 
+if ($Status)
+{
+    # Nothing here writes anything: it reports the effective handler per extension. The one Windows
+    # actually uses is the Explorer "UserChoice" when there is one - that entry overrides every
+    # Classes default and cannot be written by a script, which is why changing the registry alone
+    # sometimes appears to do nothing.
+    Write-Host ''
+    Write-Host "Effective handlers (this script would register: $ExePath)"
+    Write-Host ''
+
+    foreach ($ext in $Extensions)
+    {
+        $choiceKey = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\FileExts\.$ext\UserChoice"
+        $choice = if (Test-Path -LiteralPath $choiceKey)
+                  { (Get-ItemProperty -LiteralPath $choiceKey -Name 'ProgId' -ErrorAction SilentlyContinue).ProgId }
+                  else { '' }
+
+        $effective = if ($choice) { $choice } else { Get-DefaultValue "$Classes\.$ext" }
+        if (-not $effective) { $effective = Get-DefaultValue "HKLM:\Software\Classes\.$ext" }
+
+        if ($effective)
+        {
+            # (no inline if in an argument list - that is PowerShell 7 syntax, and this runs on 5.1)
+            $note = if ($choice) { '   (by UserChoice - it overrides the Classes defaults)' } else { '' }
+            Write-Host ("  .{0,-5} -> {1}{2}" -f $ext, $effective, $note)
+        }
+        else
+        {
+            Write-Host ("  .{0,-5} -> (nothing - Windows asks which application to use)" -f $ext)
+        }
+
+        if ($effective)
+        {
+            $command = Get-DefaultValue "$Classes\$effective\shell\open\command"
+            if (-not $command) { $command = Get-DefaultValue "HKLM:\Software\Classes\$effective\shell\open\command" }
+
+            if ($command)
+            {
+                $exe = ($command -replace '^"([^"]+)".*', '$1')
+                $exists = Test-Path -LiteralPath $exe
+                $stamp = if ($exists) { (Get-Item -LiteralPath $exe).LastWriteTime } else { 'MISSING' }
+                Write-Host ("          runs: {0}" -f $command)
+                Write-Host ("          file: {0}  [{1}]" -f $stamp, $exe)
+            }
+            else
+            {
+                Write-Host '          runs: (no command registered for that ProgId)'
+            }
+        }
+    }
+
+    Write-Host ''
+    exit 0
+}
+
 if ($Unregister)
 {
     Remove-Key $AppKey
@@ -86,6 +149,21 @@ if (-not (Test-Path -LiteralPath $ExePath))
 
 $ExePath = (Resolve-Path -LiteralPath $ExePath).Path
 $Command = '"' + $ExePath + '" "%1"'
+
+# Only now, with a valid executable in hand: dropping Explorer's user choice while the application
+# to fall back to cannot be found would leave the formats unassociated altogether.
+if ($ClearUserChoice)
+{
+    foreach ($ext in $Extensions)
+    {
+        $key = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\FileExts\.$ext\UserChoice"
+        if (Test-Path -LiteralPath $key)
+        {
+            Remove-Key $key
+            Write-Host "cleared Explorer's user choice for .$ext"
+        }
+    }
+}
 
 # --- Explorer's "Open with" list -----------------------------------------------------------------
 Set-KeyValue "$AppKey\shell\open\command" '(default)' $Command

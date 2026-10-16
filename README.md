@@ -115,9 +115,22 @@ Or the plain Windows way: right-click a song, **Open with** -> **Choose another 
 `VGMToybox.exe`, tick *Always use this app*. Either way the writes go to
 `HKCU\Software\Classes` only, so uninstalling stays "delete the folder".
 
-If a double-click then does nothing, `%TEMP%\vgmtoybox-startup.log` says what the application was
-started with and what it made of it - the quickest way to tell a song that could not be loaded from
-an association that never fired. A launch without arguments writes nothing at all.
+If a double-click then does nothing, two things tell you why:
+
+- `%TEMP%\vgmtoybox-startup.log` says what the application was started with and what it made of it,
+  so a song that could not be loaded is distinguishable from an association that never fired. A
+  launch without arguments writes nothing at all.
+- `RegisterFileTypes.cmd /status` (or `-Status`) prints which executable Windows would actually
+  hand each format to, and their timestamps - which is how a stale copy of the application in
+  another folder shows up.
+
+The trap behind most "I changed the association and nothing happened": when an application is
+picked in the Open-with dialog, Windows records the choice per user in `FileExts\.vgm\UserChoice`,
+and **that entry overrides every other association** - it cannot be written by a script, and if it
+points at a copy that has since moved or been replaced, a double-click can do nothing at all. Pick
+the application in that dialog with *Always use this app*, or run
+`RegisterFileTypes.cmd /clearuserchoice /default` to drop the stale choice and fall back to these
+keys.
 
 ## Licence and attribution
 
