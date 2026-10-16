@@ -1,5 +1,6 @@
 #include "LightLookAndFeel.h"
 
+#include "ButtonPaint.h"
 #include "SoftShadow.h"
 #include "Theme.h"
 
@@ -59,31 +60,22 @@ LightLookAndFeel::LightLookAndFeel (void)
 void LightLookAndFeel::drawButtonBackground (juce::Graphics& g, juce::Button& button,
 	const juce::Colour& backgroundColour, bool shouldDrawButtonAsHighlighted, bool shouldDrawButtonAsDown)
 {
-	const auto bounds = button.getLocalBounds().toFloat().reduced (0.5f);
-	auto fill = backgroundColour.withMultipliedAlpha (button.isEnabled() ? 1.0f : 0.5f);
+	// Same face as every other button (docs/desgin/ui-button-design.md): the neutral material when the
+	// caller's colour is a light one (the mixer's M/S buttons are white while they are off), the
+	// filled variant when it carries a colour of its own (accent, mute red, solo amber). Which one
+	// also decides the hairline and the shadow - both live in the painter.
+	const bool filled = (backgroundColour.getPerceivedBrightness() < 0.9f);
 
-	if (shouldDrawButtonAsDown)
-	{
-		fill = fill.darker (0.10f);
-	}
-	else if (shouldDrawButtonAsHighlighted)
-	{
-		fill = fill.darker (0.05f);
-	}
+	ButtonFace face;
+	face.level = filled ? ButtonLevel::filled : ButtonLevel::material;
+	face.toggled = button.getToggleState();
+	face.enabled = button.isEnabled();
+	face.hovered = shouldDrawButtonAsHighlighted;
+	face.pressed = shouldDrawButtonAsDown;
+	face.hasFocus = button.hasKeyboardFocus (false);
+	face.fill = backgroundColour;
 
-	// small square buttons (the mixer's M/S) only get a slight corner rounding - the radius
-	// never exceeds a fifth of the button height
-	const float radius = (bounds.getHeight() < 28.0f) ? bounds.getHeight() * 0.2f : theme::buttonRadius;
-
-	g.setColour (fill);
-	g.fillRoundedRectangle (bounds, radius);
-
-	// a hairline keeps light buttons readable; a filled accent button does not need one
-	if (fill.getPerceivedBrightness() > 0.6f && ! button.getToggleState())
-	{
-		g.setColour (theme::border());
-		g.drawRoundedRectangle (bounds.reduced (0.5f), radius, 1.0f);
-	}
+	drawButtonFace (g, button.getLocalBounds().toFloat(), face);
 }
 
 void LightLookAndFeel::drawButtonText (juce::Graphics& g, juce::TextButton& button,
@@ -284,14 +276,19 @@ void LightLookAndFeel::drawRotarySlider (juce::Graphics& g, int x, int y, int wi
 }
 
 void LightLookAndFeel::drawComboBox (juce::Graphics& g, int width, int height,
-	bool /*isButtonDown*/, int /*buttonX*/, int /*buttonY*/, int /*buttonW*/, int /*buttonH*/, juce::ComboBox& box)
+	bool isButtonDown, int /*buttonX*/, int /*buttonY*/, int /*buttonW*/, int /*buttonH*/, juce::ComboBox& box)
 {
-	const auto bounds = juce::Rectangle<float> (0.0f, 0.0f, (float) width, (float) height).reduced (0.5f);
+	// A combo box is a button with a chevron on it: same material, same shadow, same radius rule
+	// (the hard-coded 6.0f this used to have was one of the three radius rules the design doc set
+	// out to remove).
+	ButtonFace face;
+	face.level = ButtonLevel::material;
+	face.enabled = box.isEnabled();
+	face.pressed = isButtonDown;
+	face.hasFocus = box.hasKeyboardFocus (false);
+	face.fill = theme::card();
 
-	g.setColour (theme::card().withMultipliedAlpha (box.isEnabled() ? 1.0f : 0.5f));
-	g.fillRoundedRectangle (bounds, 6.0f);
-	g.setColour (theme::border());
-	g.drawRoundedRectangle (bounds.reduced (0.5f), 6.0f, 1.0f);
+	drawButtonFace (g, juce::Rectangle<float> (0.0f, 0.0f, (float) width, (float) height), face);
 
 	juce::Path chevron;
 	const float centreX = (float) width - 14.0f;
@@ -299,7 +296,7 @@ void LightLookAndFeel::drawComboBox (juce::Graphics& g, int width, int height,
 	chevron.startNewSubPath (centreX - 4.0f, centreY - 2.0f);
 	chevron.lineTo (centreX, centreY + 2.5f);
 	chevron.lineTo (centreX + 4.0f, centreY - 2.0f);
-	g.setColour (theme::secondaryText());
+	g.setColour (theme::secondaryText().withMultipliedAlpha (box.isEnabled() ? 1.0f : theme::buttonDisabledIconAlpha));
 	g.strokePath (chevron, juce::PathStrokeType (1.6f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
 }
 

@@ -3,6 +3,7 @@
 #include "playback/BackendRegistry.h"
 
 #include "PluginEditor.h"
+#include "playback/StartupSong.h"
 
 using namespace toybox;
 
@@ -12,6 +13,42 @@ ToyboxAudioProcessor::ToyboxAudioProcessor()
 	// The composition root: registering the backends here means every UI text, tooltip and file
 	// filter that asks the registry (built while this object exists) sees the real format list.
 	toybox::playback::registerBuiltInBackends();
+}
+
+juce::File ToyboxAudioProcessor::getStartupFile (void) const
+{
+	if (wrapperType != wrapperType_Standalone)
+	{
+		return {};
+	}
+
+	// Which argument is a song is a rule of its own, with the arguments already split and "can this
+	// be played" supplied by the registry - see playback/StartupSong.h, where vgm_core_test can
+	// reach it (it could not from here, which is how a path with a space in it stayed broken).
+	const auto arguments = juce::JUCEApplicationBase::getCommandLineParameterArray();
+	const auto& registry = playback::BackendRegistry::getInstance();
+
+	const auto song = playback::chooseStartupSong (arguments, [&registry] (const juce::File& file)
+																{
+																	return registry.isSupportedFile (file);
+																});
+	if (song.existsAsFile())
+	{
+		return song;
+	}
+
+	// Nothing usable: leave a breadcrumb, because "I double-clicked a song and nothing happened" is
+	// otherwise impossible to diagnose from the outside. A launch with no arguments stays silent -
+	// there was nothing to fail at.
+	if (! arguments.isEmpty())
+	{
+		juce::File::getSpecialLocation (juce::File::tempDirectory)
+			.getChildFile ("vgmtoybox-startup.log")
+			.replaceWithText ("Started with: " + arguments.joinIntoString (" ") + juce::newLine
+							  + "No argument was a supported song file." + juce::newLine);
+	}
+
+	return {};
 }
 
 void ToyboxAudioProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)

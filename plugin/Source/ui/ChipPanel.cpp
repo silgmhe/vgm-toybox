@@ -10,8 +10,6 @@ namespace toybox::ui
 {
 namespace
 {
-	constexpr int kHeaderHeight = 20;
-	constexpr int kHeaderBlockHeight = 28;	// card top padding (8) + header height
 	constexpr int kRowHeight = 30;			// checkbox (26) + row gap (4)
 	constexpr int kButtonWidth = 118;		// minimum width of one checkbox (incl. gap)
 }
@@ -24,6 +22,7 @@ void ChipPanel::rebuild (const std::vector<toybox::ChipEntry>& chips, MuteCallba
 	for (size_t i = 0; i < chips.size(); ++i)
 	{
 		auto* button = new juce::ToggleButton (chips[i].name);
+		button->setComponentID ("chip." + juce::String ((int) i));	// for the console harness
 		button->setToggleState (! chips[i].muted, juce::dontSendNotification);	// ticked = audible
 		button->setColour (juce::ToggleButton::textColourId, theme::primaryText());
 		button->setTooltip (chips[i].core.isNotEmpty()
@@ -60,13 +59,13 @@ int ChipPanel::getPreferredHeight (int availableWidth) const
 
 	const int perRow = juce::jmax (1, (availableWidth - 2 * theme::cardPadding) / kButtonWidth);
 	const int rows = ((int) chipButtons.size() + perRow - 1) / perRow;
-	return kHeaderBlockHeight + rows * kRowHeight;
+	return contentInsetY + textHeaderHeight + rows * kRowHeight;
 }
 
 void ChipPanel::resized (void)
 {
-	auto inner = getLocalBounds().reduced (theme::cardPadding, 8);
-	headerBounds = inner.removeFromTop (kHeaderHeight);
+	headerBounds = getCardHeaderArea (textHeaderHeight);
+	auto inner = getCardInnerArea (textHeaderHeight);
 
 	juce::FlexBox flex;
 	flex.flexWrap = juce::FlexBox::Wrap::wrap;
@@ -82,15 +81,7 @@ void ChipPanel::resized (void)
 
 void ChipPanel::paintCardContent (juce::Graphics& g)
 {
-	if (headerBounds.isEmpty())
-	{
-		return;
-	}
-
-	g.setFont (juce::Font (juce::FontOptions (10.5f, juce::Font::bold)));
-	g.setColour (theme::secondaryText());
-	g.drawText ("SOUND CHIPS", headerBounds, juce::Justification::centredLeft);
-	g.drawText ("UNCHECK TO MUTE", headerBounds, juce::Justification::centredRight);
+	paintCardHeaderRow (g, headerBounds, "SOUND CHIPS", "UNCHECK TO MUTE");
 }
 
 } // namespace toybox::ui

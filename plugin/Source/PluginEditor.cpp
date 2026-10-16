@@ -22,18 +22,39 @@ namespace
 ToyboxAudioProcessorEditor::ToyboxAudioProcessorEditor (ToyboxAudioProcessor& p)
 	: AudioProcessorEditor (&p),
 	  processor (p),
-	  engine (p.getEngine()),
-	  songInfoPanel (engine),
-	  transportPanel (engine),
-	  mixerPanel (engine)
+	  engine (p.getEngine())
 {
 	setLookAndFeel (&lookAndFeel);
 
+	// --- the application menu ---
+	// Close and Exit belong to the standalone build only: inside a host this window is not the
+	// application, and quitting would take the DAW down with it (see ui/MainMenu.h).
+	menu.standalone = (processor.wrapperType == juce::AudioProcessor::wrapperType_Standalone);
+	menu.onOpenSong = [this] { openFileChooser(); };
+	menu.onCloseSong = [this] { closeSong(); };
+	menu.onQuit = [] { juce::JUCEApplicationBase::quit(); };
+	menu.onAbout = [this] { showAbout(); };
+
+	// The bar and its popups both take their colours from the LookAndFeel's PopupMenu ids - that is
+	// what drawMenuBarBackground()/drawMenuBarItem() look up - so this is the one place to style
+	// the whole menu.
+	lookAndFeel.setColour (juce::PopupMenu::backgroundColourId, theme::card());
+	lookAndFeel.setColour (juce::PopupMenu::textColourId, theme::primaryText());
+	lookAndFeel.setColour (juce::PopupMenu::headerTextColourId, theme::secondaryText());
+	lookAndFeel.setColour (juce::PopupMenu::highlightedBackgroundColourId, theme::accent());
+	lookAndFeel.setColour (juce::PopupMenu::highlightedTextColourId, juce::Colours::white);
+	addAndMakeVisible (menuBar);
+
 	// --- open button (primary action) + status line ---
+	// IDs for the harness: it addresses controls by name instead of guessing at bounds
+	// (docs/desgin/testing-architecture.md §3.1).
+	menuBar.setComponentID ("editor.menubar");
+	openButton.setComponentID ("editor.open");
+	statusLabel.setComponentID ("editor.status");
 	openButton.onClick = [this] { openFileChooser(); };
 	openButton.setColour (juce::TextButton::buttonColourId, theme::accent());
 	openButton.setColour (juce::TextButton::textColourOffId, juce::Colours::white);
-	openButton.setTooltip ("Open a " + playback::BackendRegistry::getInstance().getExtensionListText() + " file");
+	openButton.setTooltip (formatOpenPrompt());
 	addAndMakeVisible (openButton);
 
 	statusLabel.setFont (juce::Font (juce::FontOptions (12.5f)));
@@ -41,17 +62,33 @@ ToyboxAudioProcessorEditor::ToyboxAudioProcessorEditor (ToyboxAudioProcessor& p)
 	statusLabel.setJustificationType (juce::Justification::centredRight);
 	addAndMakeVisible (statusLabel);
 
-	// --- cards ---
-	addAndMakeVisible (songInfoPanel);
-	addAndMakeVisible (transportPanel);
-	// hidden until a file with sound chips is loaded (ChipPanel::rebuild sets the visibility)
-	addChildComponent (chipPanel);
-	// hidden while no song with tracks is loaded (MixerPanel::refresh sets the visibility)
-	addChildComponent (mixerPanel);
+	// --- the pages ---
+	// The window owns no cards any more: ui/PlayView.h is the playback page and
+	// ui/VisualiserView.h the visualisation one, and everything below the top row belongs to
+	// whichever of them is on screen. The View menu is built from the stack, so a new page shows
+	// up there without a line of menu code.
+	viewStack.addView (new PlayView (engine));
+	viewStack.addView (new VisualiserView());
+	addAndMakeVisible (viewStack);
+
+	menu.viewNames = viewStack.getViewNames();
+	// The menu asks the stack which page is on screen every time it builds the View menu, so the
+	// tick follows any switch - this menu, Ctrl+1..9, or a page changed from code.
+	menu.getCurrentView = [this] { return viewStack.getCurrentViewIndex(); };
+	menu.onSelectView = [this] (int index) { viewStack.setCurrentView (index); };
+
+	// The pages are told what the engine holds right now: an editor can be created while a song is
+	// already loaded (a host reopening its window), and the chip card belongs to that song.
+	viewStack.songChanged();
+
 	// full-size overlay, hidden until a file is dragged over the editor
 	addChildComponent (dropHint);
 
-	rebuildChipButtons();
+	// Help > About, drawn inside the window on purpose - ui/AboutOverlay.h has the story of what
+	// a dialog of its own did to this application
+	addChildComponent (aboutOverlay);
+	aboutOverlay.onClose = [this] { aboutOverlay.setVisible (false); };
+
 	updateStatusLine();
 
 	setResizable (true, true);
@@ -73,6 +110,12 @@ ToyboxAudioProcessorEditor::ToyboxAudioProcessorEditor (ToyboxAudioProcessor& p)
 		}
 	}
 
+	// Launched with a song - Explorer's "Open with", a command line, a desktop shortcut? Load it
+	// and start playing: that is the point of handing a file to this build (and, with the
+	// registration script that ships in dist/, of associating the formats with it).
+	startupSong = processor.getStartupFile();
+	openStartupSong();
+
 	refreshHz = kIdleRefreshHz;
 	startTimerHz (refreshHz);
 }
@@ -93,27 +136,18 @@ void ToyboxAudioProcessorEditor::paint (juce::Graphics& g)
 											 theme::windowBottom(), 0.0f, (float) getHeight(), false));
 	g.fillRect (getLocalBounds());
 
-	// The cards and the open button are clipped to their own bounds, so the soft shadows
-	// they cast onto the window have to be painted here, before them. drawSoftShadow()
-	// skips the blur whenever the repaint is entirely inside a shape (a moving slider
-	// thumb, a label that changed its text), so ordinary refresh repaints stay cheap.
-	drawCardShadow (g, songInfoPanel.getBounds().toFloat());
-	drawCardShadow (g, transportPanel.getBounds().toFloat());
-	if (chipPanel.isVisible() && ! chipPanel.getBounds().isEmpty())
-	{
-		drawCardShadow (g, chipPanel.getBounds().toFloat());
-	}
-	if (mixerPanel.isVisible() && ! mixerPanel.getBounds().isEmpty())
-	{
-		drawCardShadow (g, mixerPanel.getBounds().toFloat());
-	}
+	// What belongs to a page - its cards and the shadows around them - is painted by that page
+	// (see ui/PlayView.h), since only it knows what it put where. What is left here is the
+	// window's own chrome: the open button and the accent glow that reaches past its bounds.
 	drawSoftShadow (g, openButton.getBounds().toFloat(), theme::buttonRadius,
 					theme::accentGlow(), theme::accentGlowBlur, { 0, theme::accentGlowOffsetY });
 }
 
 void ToyboxAudioProcessorEditor::resized (void)
 {
-	auto area = getLocalBounds().reduced (theme::margin);
+	auto area = getLocalBounds();
+	menuBar.setBounds (area.removeFromTop (theme::menuBarHeight));
+	area = area.reduced (theme::margin);
 
 	// top row: open button + status
 	auto topRow = area.removeFromTop (theme::topRowHeight);
@@ -122,50 +156,15 @@ void ToyboxAudioProcessorEditor::resized (void)
 	statusLabel.setBounds (topRow);
 	area.removeFromTop (theme::cardGap);
 
-	// transport card (always at the bottom)
-	const int transportHeight = juce::jmin (TransportPanel::preferredHeight, juce::jmax (90, area.getHeight() - 110));
-	transportPanel.setBounds (area.removeFromBottom (transportHeight));
-	area.removeFromBottom (theme::cardGap);
-
-	// song info card
-	const int infoHeight = juce::jmin (SongInfoPanel::preferredHeight,
-									   juce::jmax (SongInfoPanel::minHeight, area.getHeight() - 80));
-	songInfoPanel.setBounds (area.removeFromTop (infoHeight));
-	area.removeFromTop (theme::cardGap);
-
-	// chip mute card (+ section header) - it takes no space while it is hidden and never eats
-	// into the mixer's minimum height
-	if (chipPanel.hasChips())
-	{
-		const int chipsHeight = juce::jmin (chipPanel.getPreferredHeight (area.getWidth()),
-											juce::jmax (0, area.getHeight() - MixerPanel::minimumHeight));
-		if (chipsHeight > 0)
-		{
-			chipPanel.setBounds (area.removeFromTop (chipsHeight));
-			area.removeFromTop (theme::cardGap);
-		}
-		else
-		{
-			chipPanel.setBounds ({});
-		}
-	}
-	else
-	{
-		chipPanel.setBounds ({});
-	}
-
-	// The mixer card owns the whole area between the chips card and the transport card - it
-	// simply follows the window height (its strips scroll inside).
-	if (mixerPanel.isVisible())
-	{
-		mixerPanel.setBounds (area);
-	}
-	else
-	{
-		mixerPanel.setBounds ({});
-	}
+	// everything below the top row belongs to the current page, which lays itself out in there
+	viewStack.setBounds (area);
 
 	dropHint.setBounds (getLocalBounds());
+
+	if (aboutOverlay.isVisible())
+	{
+		aboutOverlay.setBounds (getLocalBounds());
+	}
 
 	// The card shadows are painted by paint(), outside the card bounds - a relayout has
 	// to clear the ring around a card that moved, appeared or changed size.
@@ -177,32 +176,36 @@ void ToyboxAudioProcessorEditor::resized (void)
 
 bool ToyboxAudioProcessorEditor::keyPressed (const juce::KeyPress& key)
 {
-	if (key == juce::KeyPress::spaceKey)
+	// the accelerators the menus show; the menus themselves only describe them
+	const auto code = key.getKeyCode();
+	if ((code == 'o' || code == 'O') && key.getModifiers().isCommandDown())
 	{
-		transportPanel.togglePlayStop();
+		openFileChooser();
 		return true;
 	}
-	if (key == juce::KeyPress::returnKey)
+
+	// Ctrl+1..9 picks a page, in the order the View menu lists them
+	if (key.getModifiers().isCommandDown() && code >= '1' && code <= '9')
 	{
-		transportPanel.togglePlayPause();
+		const int wanted = code - '1';
+		if (wanted < viewStack.getNumViews() && wanted != viewStack.getCurrentViewIndex())
+		{
+			viewStack.setCurrentView (wanted);
+			return true;
+		}
+	}
+
+	// escape dismisses the About box, like any other dialog
+	if (key == juce::KeyPress::escapeKey && aboutOverlay.isVisible())
+	{
+		aboutOverlay.setVisible (false);
 		return true;
 	}
-	if (key == juce::KeyPress::homeKey)
-	{
-		transportPanel.seekToSeconds (0.0);
-		return true;
-	}
-	if (key == juce::KeyPress::leftKey)
-	{
-		transportPanel.seekRelative (-5.0);
-		return true;
-	}
-	if (key == juce::KeyPress::rightKey)
-	{
-		transportPanel.seekRelative (5.0);
-		return true;
-	}
-	return false;
+
+	// The transport keys belong to the playback page and any keys of its own to another page: a key
+	// reaches the window only when the focused control did not want it, so this forwards instead
+	// of duplicating what a page already knows how to do.
+	return viewStack.handleKey (key);
 }
 
 bool ToyboxAudioProcessorEditor::isInterestedInFileDrag (const juce::StringArray& files)
@@ -251,7 +254,7 @@ void ToyboxAudioProcessorEditor::openFileChooser (void)
 																: juce::File::getSpecialLocation (juce::File::userMusicDirectory);
 	// the caption and the filter come from the registry: adding a backend adds it to the dialog
 	const auto& registry = playback::BackendRegistry::getInstance();
-	fileChooser = std::make_unique<juce::FileChooser> ("Open a " + registry.getExtensionListText() + " file",
+	fileChooser = std::make_unique<juce::FileChooser> (formatOpenPrompt(),
 													   startDir,
 													   registry.getFileWildcard());
 	fileChooser->launchAsync (juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectFiles,
@@ -277,21 +280,56 @@ void ToyboxAudioProcessorEditor::loadFile (const juce::File& file)
 		lastError.clear();
 	}
 
-	rebuildChipButtons();
-	mixerPanel.refresh();		// the track list belongs to the new song (may show/hide the card)
-	transportPanel.refresh();
-	songInfoPanel.refresh();
+	viewStack.songChanged();	// every page rebuilds whatever it shows about the song
 	updateStatusLine();
-	resized();					// the mixer card may have appeared or disappeared
+	resized();					// a page may have changed height (cards can appear)
 }
 
-void ToyboxAudioProcessorEditor::rebuildChipButtons (void)
+void ToyboxAudioProcessorEditor::closeSong (void)
 {
-	chipPanel.rebuild (engine.getChips(), [this] (size_t chipIndex, bool shouldBeMuted)
-										   {
-											   engine.setChipMuted (chipIndex, shouldBeMuted);
-										   });
-	resized();	// the card may appear/disappear or change its height
+	engine.unloadFile();
+
+	// the same the other way round: the cards that only exist with a song loaded hide themselves,
+	// the chips go away and the status line says what is open now (nothing)
+	viewStack.songChanged();
+	updateStatusLine();
+	resized();
+}
+
+void ToyboxAudioProcessorEditor::showAbout (void)
+{
+	aboutOverlay.setBounds (getLocalBounds());
+	aboutOverlay.setVisible (true);
+	aboutOverlay.toFront (false);
+	aboutOverlay.grabKeyboardFocus();	// so escape works without clicking first
+}
+
+void ToyboxAudioProcessorEditor::openStartupSong (void)
+{
+	if (startupHandled)
+	{
+		return;
+	}
+
+	if (! startupSong.existsAsFile())
+	{
+		startupHandled = true;		// nothing was handed to us, or it was not a song
+		return;
+	}
+
+	loadFile (startupSong);
+
+	// The audio device may not be ready yet: leave the file pending and let the timer come back.
+	if (! engine.isLoaded())
+	{
+		return;
+	}
+
+	engine.play();
+	viewStack.refresh();
+	startupHandled = true;
+	// Nothing is written on success: opening a song is the normal case, and the application leaves
+	// no trace anywhere unless something went wrong (see the breadcrumb in timerCallback()).
 }
 
 //==============================================================================
@@ -299,6 +337,27 @@ void ToyboxAudioProcessorEditor::rebuildChipButtons (void)
 
 void ToyboxAudioProcessorEditor::timerCallback (void)
 {
+	// Still opening the song the application was started with? The audio device may only have come
+	// up in the meantime, so keep trying for about a second - and then say so once, because a song
+	// that never appears is otherwise impossible to explain from the outside.
+	if (! startupHandled)
+	{
+		if (startupAttempts++ < 12)
+		{
+			openStartupSong();
+		}
+		else
+		{
+			startupHandled = true;
+
+			juce::File::getSpecialLocation (juce::File::tempDirectory)
+				.getChildFile ("vgmtoybox-startup.log")
+				.replaceWithText ("Could not open the song the application was started with:"
+								  + juce::newLine + startupSong.getFullPathName()
+								  + juce::newLine + lastError + juce::newLine);
+		}
+	}
+
 	// only a running transport animates the meters and the seek bar - that is when the higher
 	// rate is worth anything
 	const int wantedHz = engine.isPlaying() ? kPlayingRefreshHz : kIdleRefreshHz;
@@ -308,9 +367,12 @@ void ToyboxAudioProcessorEditor::timerCallback (void)
 		startTimerHz (refreshHz);
 	}
 
-	transportPanel.refresh();
-	songInfoPanel.refresh();
-	mixerPanel.refresh();
+	refreshUi();
+}
+
+void ToyboxAudioProcessorEditor::refreshUi (void)
+{
+	viewStack.refresh();
 	updateStatusLine();
 }
 

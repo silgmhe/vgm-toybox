@@ -2,6 +2,7 @@
 
 #include <cmath>
 
+#include "ButtonPaint.h"
 #include "MeterScale.h"
 #include "Theme.h"
 
@@ -11,9 +12,13 @@ namespace
 {
 	constexpr int kNameHeight = 13;
 	constexpr int kKnobHeight = 30;
-	constexpr int kButtonHeight = 24;	// the M/S buttons share the full strip width
+	// The M/S buttons share the full strip width; the height is the face (24, as before) plus the
+	// shadow room each button reserves (ButtonPaint.h).
+	constexpr int kButtonHeight = 28;
 	constexpr int kButtonGap = 6;
-	constexpr int kOutputHeight = 22;	// the output selector sits at the very bottom
+	// the output selector sits at the very bottom (26 = its 22 px face plus the shadow room the
+	// combo box reserves, ButtonPaint.h)
+	constexpr int kOutputHeight = 26;
 	constexpr int kOutputGap = 6;
 	constexpr int kColumnGap = 3;
 	constexpr int kMeterWidth = 15;		// two 6 px bars with a 3 px gap
@@ -120,8 +125,22 @@ void ChannelStrip::setValues (float gain, float pan, bool muted, bool soloed,
 {
 	gainSlider.setValue (gain, juce::dontSendNotification);
 	panKnob.setValue (pan, juce::dontSendNotification);
+
+	// A flip of M or S changes the glow the strip paints behind that button (see paint()), so it
+	// has to repaint that area - and only then, the regular refresh must stay cheap.
+	const bool muteFlipped = (muteButton.getToggleState() != muted);
+	const bool soloFlipped = (soloButton.getToggleState() != soloed);
 	muteButton.setToggleState (muted, juce::dontSendNotification);
 	soloButton.setToggleState (soloed, juce::dontSendNotification);
+
+	if (muteFlipped)
+	{
+		repaint (buttonGlowBounds (muteButton.getBounds(), theme::compactGlowBlur));
+	}
+	if (soloFlipped)
+	{
+		repaint (buttonGlowBounds (soloButton.getBounds(), theme::compactGlowBlur));
+	}
 
 	peakL = peakLValue;
 	peakR = peakRValue;
@@ -242,6 +261,20 @@ void ChannelStrip::paint (juce::Graphics& g)
 	g.fillRoundedRectangle (area, theme::buttonRadius);
 	g.setColour (theme::cardBorder());
 	g.drawRoundedRectangle (area.reduced (0.5f), theme::buttonRadius, 1.0f);
+
+	// A toggled M/S button is a prominent (L2) control: its coloured glow is painted by the
+	// container, because the blur reaches further than the 2 px a button keeps for its own shadow
+	// (docs/desgin/ui-button-design.md §4.3). It is the tighter glow: the buttons sit six pixels from the
+	// strip's edge, so a 12 px one would be cut off there and read as a rectangle around the
+	// button instead of a halo.
+	if (muteButton.getToggleState())
+	{
+		drawButtonGlow (g, muteButton.getBounds(), theme::muteGlow(), theme::compactGlowBlur);
+	}
+	if (soloButton.getToggleState())
+	{
+		drawButtonGlow (g, soloButton.getBounds(), theme::soloGlow(), theme::compactGlowBlur);
+	}
 
 	g.setFont (juce::Font (juce::FontOptions (10.5f, juce::Font::bold)));
 	g.setColour (theme::primaryText());

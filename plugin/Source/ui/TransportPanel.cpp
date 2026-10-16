@@ -1,5 +1,6 @@
 #include "TransportPanel.h"
 
+#include "ButtonPaint.h"
 #include "Icons.h"
 #include "MeterScale.h"
 #include "SoftShadow.h"
@@ -11,7 +12,10 @@ namespace toybox::ui
 {
 namespace
 {
-	constexpr int kButtonSize = 34;
+	// The buttons reserve their own shadow room inside this (ButtonPaint.h), so the size here is
+	// the face plus 2 * buttonShadowInset - a 40 px box paints a 36 px face, slightly larger than
+	// the 34 px the buttons used to be before they had a shadow.
+	constexpr int kButtonSize = 40;
 	constexpr int kLoopMarkerHeight = 12;
 
 	int loopBoxIdForCount (int loops)
@@ -149,7 +153,8 @@ void TransportPanel::resized (void)
 	positionSlider.setBounds (inner.removeFromTop (22));
 	inner.removeFromTop (theme::rowGap);
 
-	auto settingsRow = inner.removeFromTop (26);
+	// 30 = the 26 px face the combo boxes had before they got a shadow + the room they reserve
+	auto settingsRow = inner.removeFromTop (30);
 	loopBox.setBounds (settingsRow.removeFromLeft (108));
 	settingsRow.removeFromLeft (8);
 	fadeBox.setBounds (settingsRow.removeFromLeft (118));
@@ -163,14 +168,13 @@ void TransportPanel::paintCardContent (juce::Graphics& g)
 	paintPlaybackStartCursor (g);
 
 	// The loop and the cursor toggle glow in the accent colour while they are on. The card
-	// paints them (and therefore behind the buttons): a component cannot draw outside its
-	// own bounds.
+	// paints them (and therefore behind the buttons): the glow reaches further than the shadow
+	// room a button keeps inside its own bounds (ButtonPaint.h).
 	for (auto* button : { &loopButton, &cursorButton })
 	{
 		if (button->getToggleState())
 		{
-			drawSoftShadow (g, button->getBounds().toFloat(), theme::buttonRadius,
-							theme::accentGlow(), theme::accentGlowBlur, { 0, theme::accentGlowOffsetY });
+			drawButtonGlow (g, button->getBounds());
 		}
 	}
 
@@ -362,9 +366,9 @@ void TransportPanel::refresh (void)
 	if (loopButton.getToggleState() != loopForever)
 	{
 		loopButton.setToggleState (loopForever, juce::dontSendNotification);
-		// repaint a ring around the button as well - the accent glow (see
-		// paintCardContent()) reaches past the button bounds
-		repaint (loopButton.getBounds().expanded (theme::accentGlowBlur + theme::accentGlowOffsetY + 2));
+		// repaint a ring around the button as well - the accent glow (see paintCardContent())
+		// reaches past the button bounds
+		repaint (buttonGlowBounds (loopButton.getBounds()));
 	}
 	if (loopBox.getSelectedId() != loopId)
 	{

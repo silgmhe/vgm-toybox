@@ -54,17 +54,47 @@ endif()
 set(TOYBOX_OUTPUT_BUSES "64" CACHE STRING
 	"Number of stereo output buses the plugin declares (bus 0 = \"Out 1/2\" = the main bus)")
 
+# --- the build's identity, shown in Help > About -------------------------------------------------
+# Captured when the project is configured; build.ps1 configures on every run, so a rebuild picks up
+# a new commit. A source tree without git (a tarball, say) simply says "unknown", and uncommitted
+# changes are marked - an About box naming the wrong build is worse than one that admits it.
+set(TOYBOX_GIT_COMMIT "unknown")
+find_package(Git QUIET)
+if(GIT_FOUND)
+	execute_process(COMMAND "${GIT_EXECUTABLE}" rev-parse --short=8 HEAD
+		WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+		OUTPUT_VARIABLE _toybox_commit OUTPUT_STRIP_TRAILING_WHITESPACE ERROR_QUIET)
+	execute_process(COMMAND "${GIT_EXECUTABLE}" status --porcelain
+		WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+		OUTPUT_VARIABLE _toybox_dirty OUTPUT_STRIP_TRAILING_WHITESPACE ERROR_QUIET)
+
+	if(_toybox_commit)
+		set(TOYBOX_GIT_COMMIT "${_toybox_commit}")
+		if(_toybox_dirty)
+			set(TOYBOX_GIT_COMMIT "${_toybox_commit}-dirty")
+		endif()
+	endif()
+endif()
+message(STATUS "VGMToybox build commit: ${TOYBOX_GIT_COMMIT}")
+
 # --- plugin target ---
 juce_add_plugin(VGMToybox
-	# no spaces anywhere in the product name: it lands in file names, window titles and command
-	# lines, and a space is a liability in every one of those places
-	COMPANY_NAME "VGMToybox"
+	# --- identity ---------------------------------------------------------------------------
+	# The product is VGMToybox - no spaces anywhere, because the name lands in file names, window
+	# titles and command lines. The vendor and author fields are the GitHub account this fork
+	# lives under, so a host shows who built the plugin next to the product name (JUCE turns them
+	# into JucePlugin_Manufacturer / _ManufacturerWebsite / _ManufacturerEmail and shows the
+	# copyright in the platform metadata).
+	PRODUCT_NAME "VGMToybox"
+	COMPANY_NAME "silgmhe"
+	COMPANY_WEBSITE "https://github.com/silgmhe/vgm-toybox"
+	COMPANY_EMAIL "silgmhe@gmail.com"
+	COMPANY_COPYRIGHT "Copyright (c) 2026 silgmhe - AGPL-3.0-or-later - based on VGMPlay and libvgm by Valley Bell and contributors"
 	# The plugin codes are the identity a host keeps for the plugin, so they are deliberately
 	# left alone: changing them makes every DAW project that references this plugin lose it (a
 	# rename would also let the new build sit next to an installed older one).
 	PLUGIN_MANUFACTURER_CODE Vgmp
 	PLUGIN_CODE Vgm1
-	PRODUCT_NAME "VGMToybox"
 	# Spelled out rather than derived from "com.<COMPANY_NAME>.<target>": the id stays a stable
 	# lowercase slug, and it never picks up a space if the names above ever gain one (JUCE warns
 	# about those, and build.ps1 treats a cmake warning as a failure).
@@ -72,6 +102,12 @@ juce_add_plugin(VGMToybox
 	# the format list is the backend registry's job (it drives the file dialogs and hints), this
 	# is just the one-line blurb a host shows
 	DESCRIPTION "Chiptune player (VGM, VGZ, S98, DRO, GYM)"
+	# juceaide turns these two into the .ico the executable carries (16/32/48/256) and picks the
+	# best source per size, so the small one is the artwork drawn for 16 px rather than a
+	# downscale of the big one. Both must be ordinary images - an .ico input fails the configure
+	# step. assets/icon/make_icon.py is the source of truth for all of them.
+	ICON_BIG "${CMAKE_CURRENT_SOURCE_DIR}/assets/icon/vgmtoybox-1024.png"
+	ICON_SMALL "${CMAKE_CURRENT_SOURCE_DIR}/assets/icon/vgmtoybox-16.png"
 	FORMATS VST3 Standalone
 	IS_SYNTH TRUE
 	NEEDS_MIDI_INPUT FALSE
@@ -100,8 +136,10 @@ target_sources(VGMToybox PRIVATE
 	Source/ui/Icons.cpp
 	Source/ui/LightLookAndFeel.cpp
 	Source/ui/MixerPanel.cpp
+	Source/ui/PlayView.cpp
 	Source/ui/SongInfoPanel.cpp
 	Source/ui/TransportPanel.cpp
+	Source/ui/VisualiserView.cpp
 )
 
 target_include_directories(VGMToybox PRIVATE Source)
@@ -113,6 +151,7 @@ target_compile_definitions(VGMToybox PUBLIC
 	JUCE_VST3_CAN_REPLACE_VST2=0
 	JUCE_DISPLAY_SPLASH_SCREEN=0
 	JUCE_STRICT_REFCOUNTEDPOINTER=1
+	TOYBOX_GIT_COMMIT="${TOYBOX_GIT_COMMIT}"
 )
 
 target_link_libraries(VGMToybox PRIVATE
@@ -157,6 +196,43 @@ target_compile_definitions(vgm_core_test PRIVATE
 target_link_libraries(vgm_core_test PRIVATE
 	juce::juce_core
 	juce::juce_audio_basics
+	juce::juce_recommended_config_flags
+)
+
+# --- console test for the button faces (not built by default) ---
+# Renders ui/ButtonPaint.h into images and checks the invariants docs/ui-button-design.md
+# promises: the shadow below a face, the rounded corner, the weaker shadow while pressed, the
+# accent ring on focus, the card-painted glow of a toggled button. It needs the ui/ painting code
+# and nothing else - no engine, no libvgm.
+#   cmake --build <build dir> --target vgm_ui_test
+#   <build dir>/plugin/vgm_ui_test
+add_executable(vgm_ui_test EXCLUDE_FROM_ALL
+	Tests/UiButtonTest.cpp
+	Source/ui/IconButton.cpp
+	Source/ui/Icons.cpp
+)
+target_include_directories(vgm_ui_test PRIVATE Source)
+target_compile_definitions(vgm_ui_test PRIVATE JUCE_STANDALONE_APPLICATION=1)
+target_link_libraries(vgm_ui_test PRIVATE
+	juce::juce_gui_basics
+	juce::juce_recommended_config_flags
+)
+
+# --- console harness for the window (not built by default) --------------------------------------
+# Phase 0 of docs/desgin/testing-architecture.md: can the editor be built and laid out without a
+# window, and can its structure be read as text? It links the plugin's shared code - the STATIC
+# target juce_add_plugin creates - so it drives the same PluginEditor the application uses, and the
+# command and assertion language grows on top of what is here.
+#   cmake --build <build dir> --target vgm_app_test
+#   <build dir>/plugin/vgm_app_test
+add_executable(vgm_app_test EXCLUDE_FROM_ALL
+	Tests/AppHarnessTest.cpp
+)
+target_include_directories(vgm_app_test PRIVATE Source)
+target_link_libraries(vgm_app_test PRIVATE
+	VGMToybox
+	juce::juce_audio_processors
+	juce::juce_audio_utils
 	juce::juce_recommended_config_flags
 )
 

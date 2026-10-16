@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+  <defs>
+    <linearGradient id="tile" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#4daaff"/>
+      <stop offset="1" stop-color="#0867d6"/>
+    </linearGradient>
+  </defs>
+
+  <rect x="0.0" y="0.0" width="1024.0" height="1024.0"
+        rx="229.1" fill="url(#tile)"/>
+    <rect x="199.7" y="368.6" width="624.6" height="71.7" rx="35.8" fill="#ffffff" fill-opacity="0.925"/>
+    <rect x="199.7" y="476.2" width="624.6" height="71.7" rx="35.8" fill="#ffffff" fill-opacity="0.925"/>
+    <rect x="199.7" y="583.7" width="624.6" height="71.7" rx="35.8" fill="#ffffff" fill-opacity="0.925"/>
+
+  <rect x="256.0" y="297.0" width="512.0" height="430.1" rx="68.8" fill="#ffffff"/>
+    <rect x="322.6" y="535.8" width="70.6" height="124.7" rx="35.3" fill="#0a84ff"/>
+    <rect x="425.3" y="428.9" width="70.6" height="231.6" rx="35.3" fill="#0a84ff"/>
+    <rect x="528.1" y="494.2" width="70.6" height="166.3" rx="35.3" fill="#0a84ff"/>
+    <rect x="630.9" y="387.3" width="70.6" height="273.2" rx="35.3" fill="#0a84ff"/>
+</svg>

@@ -2,7 +2,9 @@ name: Build Tests
 
 on:
   push:
-    branches: [ master ]
+    # feature branches too: this workflow now covers the plugin, and a plugin that only compiles on
+    # master is a plugin that breaks on every branch that has not been merged yet
+    branches: [ master, 'feature/**' ]
   pull_request:
     branches: [ master ]
 
@@ -62,3 +64,29 @@ jobs:
         cmake \
           --install ${GITHUB_WORKSPACE}/build \
           --config ${{ matrix.config.build_type }}
+
+  # The matrix above builds the command-line player across compilers with the plugin switched off,
+  # which meant the 7k lines that contain the whole UI were never compiled anywhere but on the
+  # machine of whoever was editing them. This job builds the plugin and its tests and runs them.
+  plugin-tests:
+    name: Plugin and console tests (Windows)
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: powershell
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+
+    - name: Build the plugin and run the console tests
+      # The same command a developer runs locally. The test targets are EXCLUDE_FROM_ALL, so they
+      # are named; -Test then runs the ones that were built and fails the job when one fails.
+      #
+      #   vgm_core_test   the mixer maths against analytically known levels, the two volume stages,
+      #                   seek/end, the output routing, and the startup-argument rule
+      #   vgm_ui_test     the button pixels (shadow, hairline, focus ring, glow, press)
+      #   vgm_app_test    the window itself: constructed headless, laid out, dumped as text
+      #
+      # vgm_mixer_test is deliberately absent: its sample-exact gate renders a real song twice and
+      # this repository ships no song, so it stays a local gate (-Test -TestSong <file>).
+      run: .\build.ps1 -Target vgm_core_test,vgm_ui_test,vgm_app_test -Test

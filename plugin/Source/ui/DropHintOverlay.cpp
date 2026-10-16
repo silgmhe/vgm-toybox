@@ -1,5 +1,6 @@
 #include "DropHintOverlay.h"
 
+#include "Format.h"
 #include "playback/BackendRegistry.h"
 
 #include "Theme.h"
@@ -17,7 +18,7 @@ DropHintOverlay::DropHintOverlay (void)
 	label.setJustificationType (juce::Justification::centred);
 	// the format list comes from the backend registry - a build with more backends advertises
 	// them without touching this file
-	label.setText ("Drop a " + playback::BackendRegistry::getInstance().getExtensionListText() + " file here",
+	label.setText (formatDropPrompt(),
 				   juce::dontSendNotification);
 	label.setInterceptsMouseClicks (false, false);
 	addAndMakeVisible (label);

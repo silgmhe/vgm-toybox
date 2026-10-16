@@ -1,0 +1,21 @@
+# The style this repository is written in.
+#
+# Nothing enforces it yet - there is deliberately no formatter wired up (see
+# docs/desgin/maintenance-policy.md, section 3) - but every editor reads this, and it is the place
+# to point at when a pull request argues about whitespace.
+root = true
+
+[*]
+charset = utf-8
+insert_final_newline = true
+trim_trailing_whitespace = true
+indent_style = tab
+indent_size = 4
+
+[*.{md,yml,yaml}]
+indent_style = space
+indent_size = 2
+
+[*.{json,ps1,psm1,cmd,bat}]
+indent_style = space
+indent_size = 2

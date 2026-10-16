@@ -14,9 +14,17 @@ public:
 	IconButton (const juce::String& buttonName, Icon iconToDraw)
 		: juce::Button (buttonName), icon (iconToDraw)
 	{
+		// The console harness finds controls by ID (docs/desgin/testing-architecture.md §3.1), so an
+		// icon button names itself after the label it shows: "Play" -> "btn.play". One place, and
+		// the transport and the mixer header all have an ID without their panels doing anything.
+		setComponentID ("btn." + buttonName.toLowerCase().replaceCharacter (' ', '-'));
 	}
 
 	void paintButton (juce::Graphics& g, bool isMouseOverButton, bool isButtonDown) override;
+
+	// the focus ring (ButtonPaint.h) is only correct if focus changes repaint the button
+	void focusGained (juce::Component::FocusChangeType) override { repaint(); }
+	void focusLost (juce::Component::FocusChangeType) override { repaint(); }
 
 private:
 	Icon icon;

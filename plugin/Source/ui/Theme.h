@@ -37,7 +37,8 @@ inline juce::Colour meterHigh (void)	{ return juce::Colour (0xffff3b30); }
 inline constexpr int margin = 14;			// window border
 inline constexpr int cardGap = 10;			// gap between two cards (or a card and the top row)
 inline constexpr int cardPadding = 12;		// padding inside a card
-inline constexpr int topRowHeight = 32;		// open button + status line
+inline constexpr int menuBarHeight = 24;	// the application menu above everything else
+inline constexpr int topRowHeight = 36;		// open button + status line (button face = 32)
 inline constexpr int rowGap = 8;
 
 inline constexpr float cardRadius = 10.0f;
@@ -62,8 +63,50 @@ inline juce::Colour accentGlow (void)			{ return juce::Colour (0x4d0a84ff); }
 inline constexpr int accentGlowBlur = 12;
 inline constexpr int accentGlowOffsetY = 3;
 
+// The same glow in a semantic colour: a toggled mute or solo button glows red or amber instead of
+// accent blue, so its state reads before the fill is even looked at.
+inline juce::Colour muteGlow (void)			{ return mute().withAlpha (0.42f); }
+inline juce::Colour soloGlow (void)			{ return solo().withAlpha (0.42f); }
+
+// A glow that has to fade out inside a narrow container. The mixer's M/S buttons sit six pixels
+// from their strip's edge, so a 12 px blur is cut off there and reads as a rectangle around the
+// button; 5 px reaches zero inside the lane and still reads as a halo.
+inline constexpr int compactGlowBlur = 5;
+
 // slider thumbs and ticked checkboxes (their shadow fits inside their own bounds)
 inline juce::Colour controlShadow (void)		{ return juce::Colour (0x38000000); }
 inline constexpr int controlShadowBlur = 5;
+
+// --- buttons (docs/desgin/ui-button-design.md) -----------------------------------------------
+// One language for every button: a neutral white face with a hairline, or a filled accent /
+// semantic colour, and **one** soft shadow that makes it read as floating above the card.
+// The shadow is painted inside the button's own bounds - the visible face is inset by
+// `buttonShadowInset` (see ButtonPaint.h) - so no parent has to know about it. One layer, flat
+// material, no gradient on purpose: a juce::DropShadow blurs an image per call, so every extra
+// layer costs the GPU again.
+inline juce::Colour buttonMaterial (void)	{ return juce::Colour (0xffffffff); }
+inline juce::Colour buttonHairline (void)	{ return juce::Colour (0xffd0d0d8); }
+inline juce::Colour buttonShadow (void)		{ return juce::Colour (0x26000000); }
+inline constexpr int buttonShadowBlur = 2;		// tight: the face can only spare a little room
+inline constexpr int buttonShadowOffsetY = 1;
+// The room the face reserves for its shadow. Kept to 2 px: the shadow is small, and every pixel
+// spent here comes off the button (the layouts hand out `face + 2 * inset`, see docs §8).
+inline constexpr int buttonShadowInset = 2;
+
+inline constexpr float buttonHoverDarken = 0.04f;
+inline constexpr float buttonPressedDarken = 0.08f;
+inline constexpr int buttonPressedBlurShift = -2;	// pressing shrinks the shadow (physical cue)
+inline constexpr int buttonPressedOffsetShift = -1;
+inline constexpr float buttonDisabledAlpha = 0.45f;
+inline constexpr float buttonDisabledIconAlpha = 0.40f;
+
+inline juce::Colour focusRing (void)		{ return juce::Colour (0x660a84ff); }
+inline constexpr float focusRingThickness = 2.0f;
+
+inline constexpr float iconInsetRatio = 0.28f;	// glyph area = face inset by this much
+
+/** Corner radius of a button of the given height - smaller controls are less rounded. This is
+	the one radius rule; ComboBox, TextButton and IconButton all go through it. */
+inline float buttonRadiusFor (float height)	{ return juce::jmin (height * 0.2f, buttonRadius); }
 
 } // namespace toybox::ui::theme

@@ -3,22 +3,25 @@
 #include <juce_audio_processors/juce_audio_processors.h>
 
 #include "PluginProcessor.h"
-#include "ui/ChipPanel.h"
+#include "ui/AboutOverlay.h"
 #include "ui/DropHintOverlay.h"
 #include "ui/LightLookAndFeel.h"
-#include "ui/MixerPanel.h"
-#include "ui/SongInfoPanel.h"
-#include "ui/TransportPanel.h"
+#include "ui/MainMenu.h"
+#include "ui/PlayView.h"
+#include "ui/ViewStack.h"
+#include "ui/VisualiserView.h"
 
 /**
-	The plugin window: a top row (open button + status line) and the cards from the ui/
-	module (song info, chip mutes, mixer, transport).
+	The plugin window: the menu bar, a top row (open button + status line), and then one page.
 
-	The editor only assembles the panels, turns keyboard shortcuts and file drops into calls
-	on the panels/engine and runs the 20 Hz refresh timer. Every panel lays itself out, paints
-	itself and pulls its own state from the engine (see the refresh() methods), so there is no
-	shared layout state that could go stale - the failure mode the old paint()/resized() pair
-	used to have.
+	Everything below the top row belongs to a View (ui/View.h): the playback page with the song
+	info, chip mutes, mixer and transport cards, or the visualisation page that is being built.
+	The window keeps only what is genuinely global to it - the menus, the open button, the status
+	line, the file drops and the refresh timer - and hands the rest to the stack, so adding a page
+	means writing a View and adding it there (the View menu is built from the stack).
+
+	No shared layout state: the window lays out its own three pieces, and each page lays out the
+	controls it owns.
 */
 class ToyboxAudioProcessorEditor : public juce::AudioProcessorEditor,
 									private juce::Timer,
@@ -32,6 +35,13 @@ public:
 	void resized (void) override;
 	bool keyPressed (const juce::KeyPress& key) override;
 
+	/** One frame of the window's own work: refresh the page and the status line.
+
+		The timer calls it - and so can the console harness, which is how state that only a refresh
+		produces (a lit transport button, a meter) became assertable without running a message loop
+		(docs/desgin/testing-architecture.md §7, risk 2). */
+	void refreshUi (void);
+
 private:
 	void timerCallback (void) override;
 	bool isInterestedInFileDrag (const juce::StringArray& files) override;
@@ -41,7 +51,17 @@ private:
 
 	void openFileChooser (void);
 	void loadFile (const juce::File& file);
-	void rebuildChipButtons (void);
+
+	/** Unloads the song: chips, mixer and transport go back to their "nothing loaded" state. */
+	void closeSong (void);
+
+	/** The Help > About box: what this is, which version, and who built it on whose work. */
+	void showAbout (void);
+
+	/** Opens the song the application was started with (see getStartupFile()). The audio device
+		may still be coming up while the editor is built, so the first timer ticks call this again
+		until the engine has it. */
+	void openStartupSong (void);
 	void updateStatusLine (void);
 
 	ToyboxAudioProcessor& processor;
@@ -49,19 +69,25 @@ private:
 
 	toybox::ui::LightLookAndFeel lookAndFeel;
 
+	// menu before menuBar: the bar holds a reference to the model, so it has to go first
+	toybox::ui::MainMenu menu;
+	juce::MenuBarComponent menuBar { &menu };
+
 	juce::TextButton openButton { "Open file..." };
 	juce::Label statusLabel;
-	toybox::ui::SongInfoPanel songInfoPanel;
-	toybox::ui::TransportPanel transportPanel;
-	toybox::ui::ChipPanel chipPanel;
-	toybox::ui::MixerPanel mixerPanel;
+	toybox::ui::ViewStack viewStack;	// holds the pages; exactly one of them is visible
 	toybox::ui::DropHintOverlay dropHint;
+	toybox::ui::AboutOverlay aboutOverlay;	// in-window, so it can never block the application
 
 	juce::TooltipWindow tooltipWindow { this, 650 };	// declared last: destroyed first
 
 	std::unique_ptr<juce::FileChooser> fileChooser;
 	juce::String lastError;
 	int refreshHz = 0;	// the rate the refresh timer currently runs at (see timerCallback())
+
+	juce::File startupSong;			// what the application was launched with, if anything
+	int startupAttempts = 0;
+	bool startupHandled = false;
 
 	JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (ToyboxAudioProcessorEditor)
 };
