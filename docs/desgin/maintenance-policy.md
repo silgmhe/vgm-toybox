@@ -39,3 +39,17 @@
 - **不可重新授权的部分**：`vgmplayer/` 是 Valley Bell 的 VGMPlay 的衍生 ✓ → 保持上游条款 ✓，我们不为它加或换协议 ✓。
 - **纪律**：**新依赖没有许可证文件就不引入** ✓（若上游确实没有 ✓，与作者确认后把结论写进 README 表 ✓，而不是留白 ✓）；`LICENSE` 与各依赖自带的许可文件**永不修改** ✓ —— 我们只写自己的文件 ✓。
 - **SPDX 头**：可选 ✓ —— 新文件可以带一行 `// SPDX-License-Identifier: AGPL-3.0-or-later` ✓；旧文件不必为它专门返工 ✓（碰到再补 ✓）。
+
+## 5. 插件格式（导出哪些、为什么）
+
+**当前发布**：**VST3** 与 **Standalone** ✓（`juce_add_plugin(... FORMATS VST3 Standalone)` ✓）。
+
+| 格式 | 状态 | 依据（2026-10-17 实测 ✓） |
+|---|---|---|
+| VST3 / Standalone | ✅ 随构建产出 ✓ | 现有配置 ✓ |
+| **VST2** | ❌ **不做** ✓ | JUCE 支持它 ✓，但格式名是 **`VST`** ✗，且**必须有 VST2 SDK** —— `JUCEUtils.cmake:1510` 明写：没有 `juce_set_vst2_sdk_path()` 就 `FATAL_ERROR` ✓；Steinberg 已停止分发且不允许再分发 ✗。净室重写版 [`Xaymar/vst2sdk`](https://github.com/Xaymar/vst2sdk)（**BSD-3** ✓，"干净室"反工程 ✓）**不能直接用于 JUCE** ✗：JUCE 的包装器硬编码 `#include "pluginterfaces/vst2.x/aeffect.h"`（`juce_audio_plugin_client_VST2.cpp:98` ✓），而它只提供单头 `include/vst.h`（97 KB ✓）+ `vst.hpp` + `cvst` ✗ → 要用就得**我们自写一层经典名字的映射垫片** ✗（为一个正在被淘汰的格式 ✓ ✗） |
+| **CLAP** | ⏸ **暂缓**（2026-10-17 ✓） | JUCE **无** CLAP 格式 ✗（`FORMATS` 只认 `AAX AU AUv3 LV2 Standalone Unity VST3` + 条件性的 `VST` ✓），只能靠 [`clap-juce-extensions`](https://github.com/free-audio/clap-juce-extensions) ✓（**MIT** ✓，CPM 可引入 ✓，需连同子模块 `clap-libs/clap` + `clap-libs/clap-helpers` 一起取 ✓）。**但当前不兼容 JUCE 8.0.9** ✗：`0.26.0` 与 `main` **都**仍实现已被 JUCE 8 移除的 `AudioPlayHead::getCurrentPosition()` ✗（`error C3668` + 抽象类无法实例化 ✗）。**上游已有修复** ✓：`645ed2f` *"Compatibility with JUCE 8.0.11" (#169)* ✓，位于 `next` / `juce-develop` 分支 ✓。**要重启时**：把 `CLAP_JUCE_EXTENSIONS_TAG` 固定到**含该修复的提交**（✗ 不要钉分支名 ✓）→ 先只用 `cmake` 配置 + `--target VGMToybox_CLAP` 验证能编译 ✓ → 再把 `clap-validator` 加进 CI ✓（纯文本 + 退出码 ✓，正合我们的测试方式 ✓）。 |
+
+**给 CPM 引入第三方格式包装器的两个坑（都踩过了 ✓）**：
+1. 第三方包装器目标**不继承**插件目标的属性 ✗ → C++ 标准必须靠 **`CMAKE_CXX_STANDARD` 这类目录作用域设置**传下去 ✓，否则 JUCE 会以 `#error JUCE requires C++17 or later` 停下 ✗；
+2. `build.ps1` 的 `Invoke-Native` 曾把原生命令写到 **stderr** 的进度输出当成致命错误 ✗（git 克隆时必现 ✓，与格式无关 ✓）→ **已修** ✓。
