@@ -26,21 +26,37 @@ public:
 		closeButton.onClick = [this] { dismiss(); };
 		addAndMakeVisible (closeButton);
 
-		// The two places this project lives, clickable - a hyperlink only opens the browser when the
-		// user clicks it, so nothing here talks to the network on its own.
+		// The two places this project lives. Each row is a plain label and a link: the name in
+		// front of the address is just text - only the address is clickable, and only it opens the
+		// browser when the user clicks it, so nothing here talks to the network on its own. (Both
+		// used to be one HyperlinkButton whose text carried the name, which made "GitHub:" clickable
+		// too.)
 		//
 		// Left-justified like the text above them: a HyperlinkButton centres its text by default,
-		// which made these two sit in the middle of a panel whose every other line starts at its
-		// left edge. They also name themselves for the console harness.
-		for (auto* link : { &repositoryLink, &bilibiliLink })
+		// which made these rows the only lines in the panel not starting at its left edge. The
+		// labels and links also name themselves for the console harness.
+		const auto setUpRow = [this] (juce::Label& name, const juce::String& nameText, const juce::String& nameId,
+									  juce::HyperlinkButton& link, const juce::String& address,
+									  const juce::String& linkId)
 		{
-			link->setColour (juce::HyperlinkButton::textColourId, theme::accent());
-			link->setJustificationType (juce::Justification::centredLeft);
-			addAndMakeVisible (*link);
-		}
+			name.setText (nameText, juce::dontSendNotification);
+			name.setComponentID (nameId);
+			name.setFont (juce::Font (juce::FontOptions (13.0f)));
+			name.setColour (juce::Label::textColourId, theme::primaryText());
+			addAndMakeVisible (name);
 
-		repositoryLink.setComponentID ("about.github");
-		bilibiliLink.setComponentID ("about.bilibili");
+			link.setButtonText (address);
+			link.setURL (juce::URL (address));
+			link.setComponentID (linkId);
+			link.setFont (juce::Font (juce::FontOptions (13.0f)), juce::Justification::centredLeft);
+			link.setColour (juce::HyperlinkButton::textColourId, theme::accent());
+			addAndMakeVisible (link);
+		};
+
+		setUpRow (githubLabel, "GitHub: ", "about.github.label",
+				  repositoryLink, "https://github.com/silgmhe/vgm-toybox", "about.github");
+		setUpRow (bilibiliLabel, "BiliBili: ", "about.bilibili.label",
+				  bilibiliLink, "https://space.bilibili.com/249486555", "about.bilibili");
 	}
 
 	/** Called when the box is dismissed - the window hides the overlay. */
@@ -89,9 +105,19 @@ public:
 		auto panel = panelBounds();
 		auto footer = panel.reduced (22, 20).removeFromBottom (kFooterHeight);
 
-		repositoryLink.setBounds (footer.removeFromTop (20));
+		// the name column is wide enough for the longer of the two ("BiliBili: "), so the addresses
+		// start on one line with each other - and the rows start where the text above them does
+		constexpr int kNameWidth = 64;
+
+		const auto githubRow = footer.removeFromTop (20);
+		githubLabel.setBounds (githubRow.withWidth (kNameWidth));
+		repositoryLink.setBounds (githubRow.withTrimmedLeft (kNameWidth));
+
 		footer.removeFromTop (2);
-		bilibiliLink.setBounds (footer.removeFromTop (20));
+
+		const auto bilibiliRow = footer.removeFromTop (20);
+		bilibiliLabel.setBounds (bilibiliRow.withWidth (kNameWidth));
+		bilibiliLink.setBounds (bilibiliRow.withTrimmedLeft (kNameWidth));
 
 		closeButton.setBounds (panel.getRight() - 22 - 88, panel.getBottom() - 20 - 28, 88, 28);
 	}
@@ -131,10 +157,11 @@ private:
 		}
 	}
 
-	juce::HyperlinkButton repositoryLink { "GitHub: github.com/silgmhe/vgm-toybox",
-										   juce::URL ("https://github.com/silgmhe/vgm-toybox") };
-	juce::HyperlinkButton bilibiliLink { "BiliBili: space.bilibili.com/249486555",
-										 juce::URL ("https://space.bilibili.com/249486555") };
+	// each row is two things: the name is plain text, only the address is a link
+	juce::Label githubLabel;
+	juce::HyperlinkButton repositoryLink;
+	juce::Label bilibiliLabel;
+	juce::HyperlinkButton bilibiliLink;
 	juce::TextButton closeButton { "Close" };
 
 	/** The panel's bottom strip: the links above the Close button. */
