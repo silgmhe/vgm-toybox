@@ -111,14 +111,16 @@ public:
 	static constexpr double kMaxKnobRangeMs = 2000.0;
 
 	// --- the cue ---
-	bool hasCue() const noexcept { return cueSet.load (std::memory_order_relaxed); }
+	/** Where the song's zero sits on the host's timeline. It always exists: 0 - the DAW's start -
+		is the default, and the menu's "reset" writes that value back rather than clearing anything.
+		There is deliberately no "is a cue set" flag: Sync is the only switch, and a cue that is
+		always there is arithmetic that always has an answer. */
 	double getCueSeconds() const noexcept { return cueSeconds.load (std::memory_order_relaxed); }
-	/** Sets the cue explicitly (used by the editor and by state restore); ignores non-finite and
-		negative values. */
+	/** Sets the cue explicitly (used by Cue, by the menu's reset and by state restore); ignores
+		non-finite and negative values. */
 	void setCueSeconds (double seconds) noexcept;
 	/** Reads the cue off the last published host clock. False when the host is not usable. */
 	bool setCueFromHost() noexcept;
-	void clearCue() noexcept;
 
 	// --- the offset knob ---
 	double getCueOffsetMs() const noexcept { return cueOffsetMs.load (std::memory_order_relaxed); }
@@ -146,10 +148,12 @@ public:
 	bool isHostUsable() const noexcept { return hostUsable.load (std::memory_order_relaxed); }
 	bool isHostPlaying() const noexcept { return hostPlaying.load (std::memory_order_relaxed); }
 
-	/** Everything needed to take over: enabled, a cue set, and a host that reports time. */
+	/** Everything needed to take over: the switch is on and the host reports time. No cue test -
+		the cue always exists (see getCueSeconds()), so "on but not driving anything" is not a state
+		the plugin can be in. */
 	bool isActive() const noexcept
 	{
-		return isEnabled() && hasCue() && isHostUsable();
+		return isEnabled() && isHostUsable();
 	}
 
 	SyncDecision decide (const SongTimeline& timeline, double enginePosition,
@@ -161,8 +165,7 @@ public:
 
 private:
 	std::atomic<bool> enabled { false };
-	std::atomic<bool> cueSet { false };
-	std::atomic<double> cueSeconds { 0.0 };
+	std::atomic<double> cueSeconds { 0.0 };	// 0 = the DAW's start, and the default
 	std::atomic<double> cueOffsetMs { 0.0 };
 	std::atomic<double> knobRangeMs { 10.0 };
 

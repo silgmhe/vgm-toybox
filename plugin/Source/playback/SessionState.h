@@ -44,9 +44,10 @@ struct SessionState
 	float volume = 1.0f;			// the output volume (the engine's last gain stage)
 
 	// DAW sync (one-way, see DawSync.h). The cue is a position on the host's timeline, so it is
-	// still meaningful when the project is reopened; a negative value means "no cue set".
+	// still meaningful when the project is reopened; 0 is the DAW's start and the default, and
+	// there is no "no cue" value to store - the enable flag is the only switch.
 	bool syncEnabled = false;
-	double syncCueSeconds = -1.0;
+	double syncCueSeconds = 0.0;
 	double syncCueOffsetMs = 0.0;
 	double syncKnobRangeMs = 10.0;
 

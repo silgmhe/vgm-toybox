@@ -250,7 +250,7 @@ void PlaybackEngine::writeState (juce::MemoryBlock& destData) const
 		state.fadeSeconds = fadeSeconds;
 		state.volume = masterVolume.load();
 		state.syncEnabled = dawSync.isEnabled();
-		state.syncCueSeconds = dawSync.hasCue() ? dawSync.getCueSeconds() : -1.0;
+		state.syncCueSeconds = dawSync.getCueSeconds();
 		state.syncCueOffsetMs = dawSync.getCueOffsetMs();
 		state.syncKnobRangeMs = dawSync.getKnobRangeMs();
 		state.mixerEnabled = mixerEnabled;
@@ -293,18 +293,14 @@ bool PlaybackEngine::readState (const void* data, int sizeInBytes, juce::String&
 
 	// The cue is a position on the *host's* timeline, so it survives a save/reopen unchanged.
 	// The range goes in before the offset, otherwise a remembered offset would be clamped against
-	// the default range first.
+	// the default range first. A project written while the cue could be cleared stored -1 there;
+	// clamping it to 0 - the DAW's start - is exactly what that state meant, and doing it here
+	// rather than relying on setCueSeconds() ignoring the value keeps a previously loaded cue from
+	// surviving the load.
 	dawSync.setEnabled (state.syncEnabled);
 	dawSync.setKnobRangeMs (state.syncKnobRangeMs);
 	dawSync.setCueOffsetMs (state.syncCueOffsetMs);
-	if (state.syncCueSeconds >= 0.0)
-	{
-		dawSync.setCueSeconds (state.syncCueSeconds);
-	}
-	else
-	{
-		dawSync.clearCue();
-	}
+	dawSync.setCueSeconds (juce::jmax (0.0, state.syncCueSeconds));
 
 	if (hasSong)
 	{

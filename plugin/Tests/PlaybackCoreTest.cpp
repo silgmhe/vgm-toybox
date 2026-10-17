@@ -933,7 +933,9 @@ int main (int /*argc*/, char* /*argv*/[])
 		using namespace toybox::playback;
 
 		DawSync sync;
-		check (! sync.isActive(), "sync is off until it is enabled and has a cue");
+		check (! sync.isActive(), "sync is off until it is enabled");
+		check (near (sync.getCueSeconds(), 0.0, 1.0e-9),
+			   "the cue starts at the DAW's zero, so one always exists");
 
 		HostClock clock;
 		clock.usable = true;
@@ -943,9 +945,10 @@ int main (int /*argc*/, char* /*argv*/[])
 		check (sync.isHostUsable(), "a playing host makes its clock usable");
 
 		sync.setEnabled (true);
+		check (sync.isActive(), "enabled with a usable host: sync is active, no cue needed");
 		check (sync.setCueFromHost(), "the cue can be taken from the host");
 		check (near (sync.getCueSeconds(), 42.5, 1.0e-9), "the cue is the host position");
-		check (sync.isActive(), "enabled, cued and a usable host: sync is active");
+		check (sync.isActive(), "taking a cue does not change that");
 
 		sync.setKnobRangeMs (10.0);
 		sync.setCueOffsetMs (50.0);
@@ -966,8 +969,11 @@ int main (int /*argc*/, char* /*argv*/[])
 			   "a host that stops reporting keeps the last known time");
 		check (! sync.isHostPlaying(), "but reads as stopped");
 
-		sync.clearCue();
-		check (! sync.isActive(), "clearing the cue takes sync out without touching the enable");
+		// The cue is never cleared - "reset" moves it back to the DAW's start, which is a cue like
+		// any other, so sync keeps running instead of quietly dropping out while still lit.
+		sync.setCueSeconds (0.0);
+		check (sync.isActive(), "putting the cue back to zero leaves sync active");
+		check (near (sync.getCueSeconds(), 0.0, 1.0e-9), "and the cue is the DAW's start");
 	}
 
 	std::printf ("Result    : %s\n", (failures == 0) ? "all checks passed" : "FAILURES");

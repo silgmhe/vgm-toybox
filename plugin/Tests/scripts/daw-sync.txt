@@ -3,21 +3,20 @@
 assert btn.sync visible == true
 assert btn.cue  visible == true
 
-# No host clock yet: there is nothing to take a cue from, and nothing for the knob to trim. The
-# knob's number says so instead of showing a zero that is not there.
+# No host clock yet: there is nothing to take a cue from. The knob is live anyway - the cue always
+# exists (0 is the DAW's start), so there is no "waiting for a cue" state to show.
 assert btn.cue enabled == false
 assert btn.cue checked == false
-assert knob.cue-offset enabled == false
-assert knob.cue-offset text == "no cue"
+assert knob.cue-offset enabled == true
+assert knob.cue-offset text == "0.0 ms"
 assert btn.play enabled == true
 
-# The host reports a play head - what a DAW wrapper does. A cue can be taken now, the knob cannot
-# trim yet.
+# The host reports a play head - what a DAW wrapper does. A cue can be taken now.
 host 12.5 playing
 tick
 assert btn.cue enabled == true
-assert knob.cue-offset enabled == false
-assert knob.cue-offset text == "no cue"
+assert knob.cue-offset enabled == true
+assert knob.cue-offset text == "0.0 ms"
 
 # Taking the cue stores it and unlocks the knob, whose number is the offset itself. The button is
 # never lit - a lit face means "this switch is on", and Cue is an action; the knob is the display.
@@ -28,9 +27,9 @@ assert btn.cue checked == false
 assert knob.cue-offset enabled == true
 assert knob.cue-offset text == "0.0 ms"
 
-# Cue is not a toggle: clicking it again re-anchors the cue where the host is now instead of
-# clearing it. (Clearing is on the knob's menu, which a script cannot open - a context menu is
-# modal.) The offset survives the re-take: it is a trim on the cue, not part of it.
+# Cue is not a toggle: clicking it again re-anchors the cue where the host is now. (The right-click
+# menu on the box can move it back to 0 s, which a script cannot reach - a context menu is modal.)
+# The offset survives the re-take: it is a trim on the cue, not part of it.
 click btn.cue
 sleep 100
 tick
@@ -42,8 +41,8 @@ assert knob.cue-offset enabled == true
 set knob.cue-offset 2.5
 assert knob.cue-offset text == "+2.5 ms"
 
-# Sync on: enabled + cue + a usable host means the host drives the position, so the local transport
-# is disabled - a button the next audio block would overwrite reads as broken. Only Sync lights up:
+# Sync on: enabled + a usable host means the host drives the position, so the local transport is
+# disabled - a button the next audio block would overwrite reads as broken. Only Sync lights up:
 # Cue stays dark, it was the action that set the anchor, not a switch.
 click btn.sync
 sleep 100
@@ -56,8 +55,8 @@ assert btn.playback-start enabled == false
 # the loop count, the fade and the volume are part of the mapping, so they stay live
 assert btn.loop enabled == true
 
-# Sync off: the local transport comes back, and the cue is still stored - it is an anchor, not a
-# mode - but it is no longer live, so its light goes out and only the knob still shows it.
+# Sync off: the local transport comes back, and the anchor is still there (it always is) - it is
+# just not being followed, so the light goes out and only the knob still shows the trim.
 click btn.sync
 sleep 100
 tick

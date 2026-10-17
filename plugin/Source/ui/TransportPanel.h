@@ -31,13 +31,13 @@ namespace toybox::ui
 	"host position - cue", nothing else - the Cue button takes the host's position as the point
 	where the song's zero plays, and the knob beside it trims that cue by a few milliseconds.
 
-	The cue is a stored anchor, not a mode: clicking Cue only ever takes it (again) and its button
-	is never lit - a lit face in this editor means "this switch is on", and Cue is an action. What
-	the cue is doing is the knob's business: it is enabled and shows the offset only while a cue
-	exists, and "no cue" otherwise, and clearing is on its menu. The knob is dragged, its number
-	beside it is the exact offset field (same box as the volume's "100 %"), and a double click on
-	the face puts the offset back to zero. All of it is one-way: the song follows the host and
-	never drives it.
+	The cue is a stored anchor that always exists - 0 (the DAW's start) is its default, and the
+	frame's right-click menu can put it back there. There is no "has a cue" state: Sync is the only
+	switch, and when it is on with a usable host the mapping is live. Clicking Cue only ever takes
+	the anchor (again) and its button is never lit - a lit face in this editor means "this switch is
+	on", and Cue is an action. The knob is dragged, its number beside it is the exact offset field
+	(the same box as the volume's "100 %"), and a double click on the face puts the offset back to
+	zero. All of it is one-way: the song follows the host and never drives it.
 */
 class TransportPanel : public CardComponent
 {
@@ -67,24 +67,20 @@ public:
 	void seekToSeconds (double seconds);
 
 private:
-	/** The cue-offset knob: a rotary slider whose right click opens the panel's menu, whose number
-		(the Slider's own text box, to the right of the face) is the exact-value field - the way
-		the volume's "100 %" box is - and whose double click snaps the offset back to zero, which is
-		the only value the drag cannot be relied on to hit. */
+	/** The cue-offset knob: a rotary slider whose number (the Slider's own text box, to the right of
+		the face) is the exact-value field - the way the volume's "100 %" box is - and whose double
+		click snaps the offset back to zero, which is the only value the drag cannot be relied on to
+		hit. A right click is the group's, not the knob's: the panel's listener opens the menu for
+		the whole DAW SYNC frame. */
 	class OffsetKnob : public juce::Slider
 	{
 	public:
-		std::function<void()> onContextMenu;
-
 		void mouseDown (const juce::MouseEvent& event) override
 		{
+			// The menu belongs to the group (the panel's listener opens it), so a right click here
+			// must not reach the slider's own popup menu.
 			if (event.mods.isPopupMenu())
 			{
-				if (onContextMenu != nullptr)
-				{
-					onContextMenu();
-				}
-
 				return;
 			}
 
@@ -100,6 +96,22 @@ private:
 			// sync state (the panel's onValueChange), exactly like a drag.
 			setValue (0.0, juce::sendNotificationSync);
 		}
+	};
+
+	/** Right clicks inside the DAW SYNC frame. A listener rather than the panel's own mouseDown:
+		only part of the frame is bare panel, because the two buttons and the knob sit on top of
+		it, and a right click on any of those has to reach the same menu. */
+	class SyncGroupMouseListener : public juce::MouseListener
+	{
+	public:
+		explicit SyncGroupMouseListener (TransportPanel& ownerToUse) : owner (ownerToUse) {}
+
+		void mouseDown (const juce::MouseEvent& event) override { owner.syncGroupMouseDown (event); }
+
+	private:
+		TransportPanel& owner;
+
+		JUCE_DECLARE_NON_COPYABLE (SyncGroupMouseListener)
 	};
 
 	/** The number entry the knob opens (the offset, or the knob's range). An overlay inside the
@@ -138,11 +150,15 @@ private:
 	void setStartCursorEnabled (bool shouldBeEnabled);
 
 	/** The Cue button: takes the host's position as the cue. Always takes - re-taking is the
-		normal gesture (the DAW moved, or the song changed), clearing is on the knob's menu. */
+		normal gesture (the DAW moved, or the song changed), resetting is on the frame's menu. */
 	void takeCue (void);
-	/** The knob's right-click menu: the exact offset (which opens the number field) and how far
-		the knob travels. */
-	void showOffsetMenu (void);
+	/** The DAW SYNC frame's right-click menu: the exact offset (which opens the number field), how
+		far the knob travels and resetting the cue to 0 s. Opened from anywhere inside the frame,
+		so it is the group's menu rather than the knob's. */
+	void showOffsetMenu (juce::Point<int> screenPosition);
+	/** The panel's half of SyncGroupMouseListener: opens the menu for a right click anywhere in
+		the frame, including on its controls. */
+	void syncGroupMouseDown (const juce::MouseEvent& event);
 	/** The number entry the menu opens for the knob's range. */
 	void showRangeEntry (void);
 	/** Opens the value entry over the card and hands the typed number to `onAccept`. */
@@ -174,6 +190,7 @@ private:
 	juce::ComboBox fadeBox;
 
 	StartMarkerDragArea startMarkerDragArea { *this };
+	SyncGroupMouseListener syncGroupMouseListener { *this };	// registered in the constructor
 
 	std::unique_ptr<ValueEntryOverlay> entryOverlay;	// created in the constructor, hidden
 

@@ -63,15 +63,10 @@ namespace
 							: "Play once - click to loop forever";
 	}
 
-	/** The offset as the knob's number shows it: "no cue" while there is nothing to trim (the
-		field is disabled then, so that is also what it reads while it waits for one). */
-	juce::String offsetText (double ms, bool hasCue)
+	/** The offset as the knob's number shows it. It is the offset and nothing else: the cue always
+		exists, so the field has no "no cue" case to fall back to. */
+	juce::String offsetText (double ms)
 	{
-		if (! hasCue)
-		{
-			return "no cue";
-		}
-
 		const double shown = (std::abs (ms) < 0.05) ? 0.0 : ms;	// never "-0.0"
 		return (shown > 0.0 ? "+" : "") + juce::String (shown, 1) + " ms";
 	}
@@ -352,13 +347,13 @@ TransportPanel::TransportPanel (toybox::PlaybackEngine& engineToUse, bool syncAv
 
 	// Taking the cue is an action, not a toggle and not a state light: the DAW moves, so taking it
 	// again is the normal gesture. The button is therefore never lit - a lit face in this editor
-	// means "this switch is on", and Cue is not a switch. Whether a cue exists is shown by the knob
-	// beside it (usable, and its number reads the offset instead of "no cue"); clearing is on the
-	// knob's menu, which is the control that trims it.
+	// means "this switch is on", and Cue is not a switch. There is no "has a cue" state to show
+	// either: the cue always exists (0 is the DAW's start), and the frame's menu can put it back
+	// there.
 	cueButton.setCaption ("CUE");
 	cueButton.setTooltip ("Take the host's position as the cue point - the place on the DAW timeline "
-						  "where the song's beginning plays. The knob beside it shows whether one is "
-						  "set; right-click the knob to clear it");
+						  "where the song's beginning plays. Right-click this box to put the cue "
+						  "back to 0 s");
 	cueButton.onClick = [this] { takeCue(); };
 
 	// The trim knob: a rotary whose number is its own text box - the same edit box the volume
@@ -370,11 +365,11 @@ TransportPanel::TransportPanel (toybox::PlaybackEngine& engineToUse, bool syncAv
 	offsetKnob.setRange (-lastKnobRangeMs, lastKnobRangeMs, 0.0);
 	offsetKnob.setValue (0.0, juce::dontSendNotification);
 	offsetKnob.setTooltip ("Cue offset - drag to trim the cue point by a few milliseconds, or type the "
-						   "number beside it. Double-click to put it back to zero, right-click for the "
-						   "knob's range and Clear cue");
-	// What the number shows comes from the state, not from the slider alone: without a cue there
-	// is nothing to trim and the field says so.
-	offsetKnob.textFromValueFunction = [this] (double ms) { return offsetText (ms, sync.hasCue()); };
+						   "number beside it. Double-click to put it back to zero, right-click anywhere "
+						   "in the box for the knob's range and to reset the cue");
+	// The number is the offset, always: the cue is never absent, so this field has no second thing
+	// to say.
+	offsetKnob.textFromValueFunction = [] (double ms) { return offsetText (ms); };
 	offsetKnob.valueFromTextFunction = [] (const juce::String& text) { return text.getDoubleValue(); };
 	offsetKnob.onValueChange = [this]
 	{
@@ -385,7 +380,6 @@ TransportPanel::TransportPanel (toybox::PlaybackEngine& engineToUse, bool syncAv
 
 		sync.setCueOffsetMs (offsetKnob.getValue());
 	};
-	offsetKnob.onContextMenu = [this] { showOffsetMenu(); };
 
 	// A standalone has no play head, so there is nothing to sync to: the two buttons and the trim
 	// knob are not created at all there (docs/desgin/daw-sync-cue-design.md, §8).
@@ -401,6 +395,12 @@ TransportPanel::TransportPanel (toybox::PlaybackEngine& engineToUse, bool syncAv
 		// a session saved with sync on must not come back locked.
 		sync.setEnabled (false);
 	}
+
+	// The frame is the menu's owner, not just the knob: the panel listens to its own children so
+	// that a right click on either button or on the knob reaches the same place. A left click is
+	// untouched (a Button ignores a right click already, and the knob swallows it), and in the
+	// standalone the frame has no bounds, so the listener finds nothing to do.
+	addMouseListener (&syncGroupMouseListener, true);
 
 	// The number entry is a child of the card, created once and only shown on demand.
 	entryOverlay = std::make_unique<ValueEntryOverlay>();
@@ -476,7 +476,12 @@ TransportPanel::TransportPanel (toybox::PlaybackEngine& engineToUse, bool syncAv
 // The destructor lives here because the value entry it owns is only defined in this file (the
 // header only knows that they exist - a std::unique_ptr to an incomplete type needs the
 // definition wherever the pointer is destroyed).
-TransportPanel::~TransportPanel (void) = default;
+TransportPanel::~TransportPanel (void)
+{
+	// The listener is a member, so it dies before the base class does: unregister it while both
+	// are still alive.
+	removeMouseListener (&syncGroupMouseListener);
+}
 
 void TransportPanel::lookAndFeelChanged (void)
 {
@@ -936,21 +941,54 @@ void TransportPanel::setLoopForever (bool shouldLoopForever)
 void TransportPanel::takeCue (void)
 {
 	// Always takes: the cue is where the song starts on the DAW timeline, and every click re-anchors
-	// it there. The button's light is the state of the cue, not a toggle - clearing it is on the
-	// knob's menu, the knob being the thing that trims it.
+	// it there. It is never cleared - the frame's menu can put it back to 0 s (the DAW's start),
+	// which is a cue like any other.
 	// setCueFromHost() returns false when the host has no time to give; the button is disabled then,
 	// so that is only a race with a host that just stopped reporting.
 	sync.setCueFromHost();
 	updateSyncControls();
 }
 
-void TransportPanel::showOffsetMenu (void)
+void TransportPanel::syncGroupMouseDown (const juce::MouseEvent& event)
+{
+	if (! syncAvailable || ! event.mods.isPopupMenu())
+	{
+		return;
+	}
+
+	// While the number entry is up it covers the card, and that is its own moment: offering the
+	// group's menu over it would be a second way to do the thing already on screen.
+	if (entryOverlay != nullptr && entryOverlay->isVisible())
+	{
+		return;
+	}
+
+	// The knob's number field is a TextEditor while it is open, and a right click there is the
+	// editor's own (cut / copy / paste). It is a temporary child of the knob, inside the frame.
+	auto* const source = event.eventComponent;
+	if (source != nullptr
+		&& (dynamic_cast<juce::TextEditor*> (source) != nullptr
+			|| source->findParentComponentOfClass<juce::TextEditor>() != nullptr))
+	{
+		return;
+	}
+
+	if (! syncGroupBounds.contains (event.getEventRelativeTo (this).getPosition()))
+	{
+		return;
+	}
+
+	// At the click, not at the knob: any point in the frame could have asked for this.
+	showOffsetMenu (event.getScreenPosition());
+}
+
+void TransportPanel::showOffsetMenu (juce::Point<int> screenPosition)
 {
 	juce::PopupMenu menu;
 	menu.addItem (1, "Exact offset...");
 	menu.addItem (2, "Knob range...");
 	menu.addSeparator();
-	menu.addItem (3, "Clear cue", sync.hasCue());
+	menu.addItem (3, "Reset cue to 0 s");
 
 	// "Exact offset" opens the number field itself (Slider::showTextBox) rather than an overlay:
 	// the field is the same edit box the volume uses, so there is one way to type a number, and
@@ -967,7 +1005,14 @@ void TransportPanel::showOffsetMenu (void)
 	// rather than captured, because closing the editor destroys it.
 	const juce::Component::SafePointer<TransportPanel> safe (this);
 
-	menu.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (&offsetKnob),
+	// The target component is not where the menu appears - the area below overrides that - but it
+	// is what JUCE scales the menu by (`shouldPopupMenuScaleWithTargetComponent`): without it the
+	// menu is drawn at the desktop's scale factor rather than the editor's, which on a HiDPI
+	// display makes it noticeably smaller than the window it belongs to.
+	menu.showMenuAsync (juce::PopupMenu::Options()
+							.withTargetComponent (&offsetKnob)
+							.withTargetScreenArea (juce::Rectangle<int> (screenPosition.x,
+																		 screenPosition.y, 1, 1)),
 						[safe] (int result)
 						{
 							if (safe == nullptr)
@@ -985,7 +1030,10 @@ void TransportPanel::showOffsetMenu (void)
 							}
 							else if (result == 3)
 							{
-								safe->sync.clearCue();
+								// 0 is a cue like any other (the song's beginning on the DAW's
+								// beginning), so this is a move, not a clear: nothing downstream
+								// has a "no cue" state to fall into.
+								safe->sync.setCueSeconds (0.0);
 								safe->updateSyncControls();
 							}
 						});
@@ -1024,7 +1072,6 @@ void TransportPanel::updateSyncControls (void)
 	}
 
 	const bool enabled = sync.isEnabled();
-	const bool hasCue = sync.hasCue();
 	const double rangeMs = sync.getKnobRangeMs();
 	const double offsetMs = sync.getCueOffsetMs();
 
@@ -1038,14 +1085,11 @@ void TransportPanel::updateSyncControls (void)
 	}
 
 	// The Cue button is deliberately never lit: a lit face in this editor means "this switch is on",
-	// and Cue is an action (take the host's position as the anchor), not a switch. Whether a cue
-	// exists is the knob's job - it is enabled and its number reads the offset instead of "no cue".
+	// and Cue is an action (take the host's position as the anchor), not a switch.
 
-	// Cue only ever takes the host's position now, so a usable host is the one thing it needs -
-	// clearing is on the knob's menu, which stays reachable while there is a cue to clear. The
-	// knob trims a cue, so it stays inert until there is one.
+	// Cue needs a host that reports time, and nothing else. The knob trims a cue that always
+	// exists, so it is never disabled here - it has nothing to wait for.
 	cueButton.setEnabled (sync.isHostUsable());
-	offsetKnob.setEnabled (hasCue);
 
 	const bool rangeChanged = ! juce::approximatelyEqual (rangeMs, lastKnobRangeMs);
 
@@ -1066,8 +1110,8 @@ void TransportPanel::updateSyncControls (void)
 		updatingOffsetKnob = false;
 	}
 
-	// Another cue state means another text: "no cue" before one exists, the offset itself after.
-	// (A no-op when the string did not change - updateText() compares before it writes.)
+	// The number is the value, so a re-clamp above is all that can make it stale (a no-op when the
+	// string did not change - updateText() compares before it writes).
 	offsetKnob.updateText();
 }
 

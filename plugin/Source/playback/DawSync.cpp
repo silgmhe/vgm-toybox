@@ -131,7 +131,6 @@ void DawSync::setCueSeconds (double seconds) noexcept
 	}
 
 	cueSeconds.store (seconds, std::memory_order_relaxed);
-	cueSet.store (true, std::memory_order_relaxed);
 }
 
 bool DawSync::setCueFromHost() noexcept
@@ -144,12 +143,6 @@ bool DawSync::setCueFromHost() noexcept
 
 	setCueSeconds (clock.seconds);
 	return true;
-}
-
-void DawSync::clearCue() noexcept
-{
-	cueSet.store (false, std::memory_order_relaxed);
-	cueSeconds.store (0.0, std::memory_order_relaxed);
 }
 
 void DawSync::setCueOffsetMs (double ms) noexcept
