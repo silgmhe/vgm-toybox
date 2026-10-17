@@ -343,5 +343,8 @@ HostClock readHostClock (const juce::AudioPlayHead::PositionInfo&, double localS
 | L-2 | 本条 | ✅ | 删除零调用者的 `getSongTimeline()`，并在 `getDawSync()` 的注释里写明"歌曲事实不公开，是因为它只在锁内被读" |
 | M-4 | 本条 | ✅ | `readHostClock` 搬进 `playback/HostClockSource.{h,cpp}`，签名改成 `(const juce::AudioPlayHead*, double)`，`processBlock` 只剩一行；`vgm_core_test` 的 `[11]` 用假 `AudioPlayHead` 覆盖 9 类输入（含"全零 context"与"NaN 时间"）。**验证**：7 个测试目标全绿，`[11]` 9 条断言全 OK |
 | L-4 | 本条 | ✅ | 采样数回退在 `HostClockSource.cpp` 里写清了性质：宿主采样率 ≠ 插件采样率，所以 samples 只做回退，seconds 才是一等公民 |
-| M-3 | — | ⬜ | 计划：抽 `SyncGroup`（可延后） |
-| L-1/3/5/6 | — | ⬜ | 计划：一致性收尾 |
+| L-1 | 本条 | ✅ | `design.md` §7.1 的 API 表按代码重写（`hasCue/clearCue` 已删、`isActive = enabled && hostUsable`、`kSyncToleranceSeconds` 进命名空间）；§7.2 的"无锁返回副本"改成"只在锁内读"；§7.3 的 `readHostClock` 签名与出处更新；§10 补第 10 条（空格交给宿主）；§12 补 `[11]` 与新脚本 |
+| L-3 | 本条 | ✅ | `HostClock::sampleRate` 与 `DawSync::hostSampleRate` 删除；换算率降为 `readHostClock` 的局部变量 |
+| L-5 | 本条 | ✅ | `kSyncToleranceSeconds` 提到命名空间，`evaluateSync()` 增加带默认值的 `toleranceSeconds`；`DawSync::kToleranceSeconds` 删除 |
+| L-6 | 本条 | ✅ | `refresh()`/`togglePlayStop`/`togglePlayPause`/`seekToSeconds`/`stopTransport` 统一走 `isHostDriving()`，并在它的注释里写明"这是唯一的谓词" |
+| M-3 | — | ⬜ | 未做：抽 `SyncGroup`（200 行搬动，纯结构改动）。**建议**：等真的要在同步框里加控件时再抽，`daw-sync.txt` + `daw-sync-follow.txt` 是现成的安全网 |

@@ -68,13 +68,13 @@ SongTimeline makeSongTimeline (double durationSeconds, double singlePassSeconds,
 
 /** What the host said in the last block. `usable` is not the same as "the host sent a context":
 	JUCE hands out an all-zero PositionInfo when there is none, so the caller has to decide - see
-	the note on `publishHostClock()`. */
+	the note on `publishHostClock()`. Seconds are the only unit here: the host's sample rate is a
+	fact about the conversion the adapter does, not about the clock the mapping compares. */
 struct HostClock
 {
 	bool usable = false;
 	bool playing = false;
 	double seconds = 0.0;
-	double sampleRate = 48000.0;
 };
 
 struct SyncDecision
@@ -85,6 +85,13 @@ struct SyncDecision
 	bool play = false;
 };
 
+/** How far the engine may drift before it is repositioned. A block at 48 kHz is 1-10 ms, so 30 ms
+	is always larger than the natural error and smaller than anything audible.
+
+	A parameter rather than a number buried in the function: how much drift is inaudible depends on
+	the host's block size, and a test should be able to ask what happens at 0 ms. */
+inline constexpr double kSyncToleranceSeconds = 0.030;
+
 /** The pure part: where the song should be at the host's current time.
 
 	`cueSeconds` is the host time at which the song's zero plays. Negative x means "the DAW has
@@ -93,7 +100,8 @@ struct SyncDecision
 	The result is in the engine's own coordinate system, so that N >= 2 loops (where the engine
 	counts across loops) and infinite loops (where it jumps back) both compare correctly. */
 SyncDecision evaluateSync (const SongTimeline& timeline, const HostClock& host, double cueSeconds,
-						   double enginePosition, bool enginePlaying);
+						   double enginePosition, bool enginePlaying,
+						   double toleranceSeconds = kSyncToleranceSeconds);
 
 /** The live state shared by the audio thread and the UI.
 
@@ -103,10 +111,6 @@ SyncDecision evaluateSync (const SongTimeline& timeline, const HostClock& host, 
 class DawSync
 {
 public:
-	/** How far the engine may drift before it is repositioned. A block at 48 kHz is 1-10 ms, so
-		30 ms is always larger than the natural error and smaller than anything audible. */
-	static constexpr double kToleranceSeconds = 0.030;
-
 	static constexpr double kMinKnobRangeMs = 1.0;
 	static constexpr double kMaxKnobRangeMs = 2000.0;
 
@@ -172,7 +176,6 @@ private:
 	std::atomic<bool> hostUsable { false };
 	std::atomic<bool> hostPlaying { false };
 	std::atomic<double> hostSeconds { 0.0 };
-	std::atomic<double> hostSampleRate { 48000.0 };
 	std::atomic<bool> seenHostPlaying { false };
 };
 

@@ -7,8 +7,9 @@ namespace toybox::playback
 
 HostClock readHostClock (const juce::AudioPlayHead* head, double localSampleRate)
 {
+	const double rate = (localSampleRate > 0.0) ? localSampleRate : 48000.0;
+
 	HostClock clock;
-	clock.sampleRate = (localSampleRate > 0.0) ? localSampleRate : 48000.0;
 
 	if (head == nullptr)
 	{
@@ -46,7 +47,7 @@ HostClock readHostClock (const juce::AudioPlayHead* head, double localSampleRate
 	}
 	else if (timeSamples.hasValue())
 	{
-		clock.seconds = (double) *timeSamples / clock.sampleRate;
+		clock.seconds = (double) *timeSamples / rate;
 	}
 
 	// A nonsense time is not a time: without this the mapping would seek to it (the published

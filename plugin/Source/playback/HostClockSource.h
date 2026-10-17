@@ -19,8 +19,8 @@ namespace toybox::playback
 	turns into "before the cue, stay silent" - so a clock only counts as usable when it shows some
 	sign of a real transport: playing, a non-zero time, a tempo or a position in quarter notes.
 
-	`head` may be null. `localSampleRate` is this plugin's rate, used for the samples fallback and
-	stored in the clock (see the .cpp for why that is only a fallback). */
+	`head` may be null. `localSampleRate` is this plugin's rate, needed only for the samples
+	fallback (see the .cpp for why that is a fallback and not the main path). */
 HostClock readHostClock (const juce::AudioPlayHead* head, double localSampleRate);
 
 } // namespace toybox::playback

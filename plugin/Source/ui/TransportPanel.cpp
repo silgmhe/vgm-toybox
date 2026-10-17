@@ -718,7 +718,7 @@ void TransportPanel::setPlaybackStart (double seconds)
 
 void TransportPanel::seekToSeconds (double seconds)
 {
-	if (sync.isActive())
+	if (isHostDriving())
 	{
 		return;
 	}
@@ -752,7 +752,7 @@ void TransportPanel::startPlayback (void)
 
 void TransportPanel::stopTransport (void)
 {
-	if (sync.isActive())
+	if (isHostDriving())
 	{
 		return;
 	}
@@ -796,7 +796,7 @@ void TransportPanel::refresh (void)
 	playButton.setToggleState (loaded && playing, juce::dontSendNotification);
 	pauseButton.setToggleState (loaded && ! playing && paused, juce::dontSendNotification);
 	stopButton.setToggleState (loaded && ! playing && ! paused, juce::dontSendNotification);
-	positionSlider.setEnabled (loaded && ! sync.isActive());
+	positionSlider.setEnabled (loaded && ! isHostDriving());
 
 	// The loop button and the loop combo box show the same engine setting. Compare them against
 	// the controls themselves instead of a cached value and repaint them explicitly: both
@@ -810,7 +810,7 @@ void TransportPanel::refresh (void)
 	// While the host drives the transport, a local play/pause/stop/seek would be overwritten by
 	// the next block - a button that does nothing reads as broken, so it is disabled instead.
 	// The loop count, the fade and the volume stay live: they are part of the mapping.
-	const bool hostDrives = sync.isActive();
+	const bool hostDrives = isHostDriving();
 
 	if (playButton.isEnabled() == hostDrives)
 	{
@@ -886,8 +886,10 @@ void TransportPanel::refresh (void)
 
 bool TransportPanel::isHostDriving (void) const
 {
-	// syncAvailable first: the standalone has no host to give a key back to, even if a project was
-	// saved with sync on (the group is not even drawn there - see the constructor).
+	// The one predicate for "the host owns the transport": the buttons, the seek bar, the key
+	// handlers and the space bar all ask this, so those answers cannot drift apart.
+	// syncAvailable comes first because the standalone has no host to give a key back to, even if
+	// a project was saved with sync on (the group is not even drawn there - see the constructor).
 	return syncAvailable && sync.isActive();
 }
 
@@ -895,7 +897,7 @@ void TransportPanel::togglePlayStop (void)
 {
 	// the host owns the transport while sync is on - the buttons are disabled too, but the
 	// keyboard shortcut does not go through them
-	if (sync.isActive())
+	if (isHostDriving())
 	{
 		return;
 	}
@@ -919,7 +921,7 @@ void TransportPanel::togglePlayStop (void)
 
 void TransportPanel::togglePlayPause (void)
 {
-	if (sync.isActive())
+	if (isHostDriving())
 	{
 		return;
 	}

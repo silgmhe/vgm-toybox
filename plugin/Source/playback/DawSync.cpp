@@ -57,7 +57,7 @@ SongTimeline makeSongTimeline (double durationSeconds, double singlePassSeconds,
 }
 
 SyncDecision evaluateSync (const SongTimeline& timeline, const HostClock& host, double cueSeconds,
-						   double enginePosition, bool enginePlaying)
+						   double enginePosition, bool enginePlaying, double toleranceSeconds)
 {
 	SyncDecision decision;
 
@@ -118,7 +118,7 @@ SyncDecision evaluateSync (const SongTimeline& timeline, const HostClock& host, 
 	decision.position = clampedPosition;
 	decision.play = play;
 	decision.reposition = (play != enginePlaying)
-						  || (std::abs (clampedPosition - clampedActual) > DawSync::kToleranceSeconds);
+						  || (std::abs (clampedPosition - clampedActual) > toleranceSeconds);
 
 	return decision;
 }
@@ -183,8 +183,6 @@ void DawSync::publishHostClock (const HostClock& clock) noexcept
 	if (usable)
 	{
 		hostSeconds.store (clock.seconds, std::memory_order_relaxed);
-		hostSampleRate.store (clock.sampleRate > 0.0 ? clock.sampleRate : 48000.0,
-							  std::memory_order_relaxed);
 	}
 
 	hostPlaying.store (clock.playing, std::memory_order_relaxed);
@@ -198,7 +196,6 @@ HostClock DawSync::getHostClock() const noexcept
 	clock.usable = hostUsable.load (std::memory_order_relaxed);
 	clock.playing = hostPlaying.load (std::memory_order_relaxed);
 	clock.seconds = hostSeconds.load (std::memory_order_relaxed);
-	clock.sampleRate = hostSampleRate.load (std::memory_order_relaxed);
 	return clock;
 }
 

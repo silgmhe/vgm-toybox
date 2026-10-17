@@ -151,27 +151,32 @@ struct SongTimeline              // L / C / N / F 以及由它们推出的 total
 SongTimeline makeSongTimeline (double duration, double singlePass, double loopLength,
                                int loopCount, double fade, bool loopsForever);
 
-struct HostClock  { bool usable, playing; double seconds, sampleRate; };
+struct HostClock  { bool usable, playing; double seconds; };
 struct SyncDecision { bool reposition, play; double position; };
 
+inline constexpr double kSyncToleranceSeconds = 0.030;
+
 SyncDecision evaluateSync (const SongTimeline&, const HostClock&, double cueSeconds,
-                           double enginePosition, bool enginePlaying);
+                           double enginePosition, bool enginePlaying,
+                           double toleranceSeconds = kSyncToleranceSeconds);
 
 class DawSync                   // 全原子快照，音频线程与 UI 之间不加锁
 {
-    static constexpr double kToleranceSeconds = 0.030;
     static constexpr double kMinKnobRangeMs = 1.0, kMaxKnobRangeMs = 2000.0;
 
     void publishHostClock (const HostClock&);   // 音频线程，每块一次
     HostClock getHostClock() const;
     bool isEnabled/setEnabled;  bool isHostUsable/isHostPlaying;
-    bool isActive;                              // enabled && hasCue && hostUsable
-    bool hasCue/setCueFromHost/setCueSeconds/clearCue;
+    bool isActive;                              // enabled && hostUsable（CUE 恒存在，没有第三个条件）
+    bool setCueFromHost/setCueSeconds;          // 没有「清除」：0 s 就是 DAW 的开头
     double getCueSeconds, getCueOffsetMs/setCueOffsetMs, getKnobRangeMs/setKnobRangeMs;
     double getEffectiveCueSeconds;              // cue + offset
     SyncDecision decide (const SongTimeline&, double enginePosition, bool enginePlaying) const;
 };
 ```
+
+`kToleranceSeconds` 后来从类里提到命名空间（`kSyncToleranceSeconds`），并成为 `evaluateSync()` 的
+带默认值参数：容差该多大取决于宿主的块大小，把它做成参数，测试才能问"0 ms 时会怎样"。
 
 `makeSongTimeline` 负责后端可能没报的事实：`L` 缺失时按 `duration − (N−1)·C` 反推，`C > L` 时钳到 `L`。
 `getLoopPointSeconds()` 改为使用 `loopStartSeconds()`，N≥2 时进度条上的 loop 标记顺带变正确。
@@ -186,7 +191,7 @@ class DawSync                   // 全原子快照，音频线程与 UI 之间�
 
 | 改动 | 说明 |
 |---|---|
-| 缓存 `SongTimeline`（取代 `cachedDurationSeconds` / `cachedLoopPointSeconds` / `loopsForever` 三个字段） | 每次换歌、改 loop、改 fade 时重算；`getSongTimeline()` 无锁返回副本 |
+| 缓存 `SongTimeline`（取代 `cachedDurationSeconds` / `cachedLoopPointSeconds` / `loopsForever` 三个字段） | 每次换歌、改 loop、改 fade 时重算；**只在锁内被读**（`followDawTransport()` 自己读成员，不再有公开 getter——一个"无锁返回副本"的接口正是错的那一个） |
 | 持有 `DawSync` | 「被跟随的东西」放在引擎里，`render()` 才能跟；它也因此成为工程状态的一部分 |
 | `render()` 顶部调 `followDawTransport()` | 决策是纯原子运算，**不需要锁，不要纠正就直接返回**；要纠正时才 `ScopedTryLock`，抢不到下一块再试 |
 | `setPositionSeconds()` | 不变（阻塞锁，只给消息线程用） |
@@ -200,12 +205,13 @@ class DawSync                   // 全原子快照，音频线程与 UI 之间�
 void processBlock (AudioBuffer<float>& buffer, MidiBuffer&)
 {
     // 只发布，不决策：跟随即在 engine.render() 内部发生
-    engine.getDawSync().publishHostClock (readHostClock (*this, getSampleRate()));
+    engine.getDawSync().publishHostClock (playback::readHostClock (getPlayHead(), getSampleRate()));
     engine.render (buses, playback::kOutputBusCount, numSamples);
 }
 ```
 
-`readHostClock()` 的可用性判据（不能只看 `hasValue()`）：
+`readHostClock()` 在 `playback/HostClockSource.{h,cpp}`（它原本是 `PluginProcessor.cpp` 里的匿名
+函数，测试够不着；见 `docs/review/2026-10-17-...` M-4）。它的可用性判据（不能只看 `hasValue()`）：
 
 ```
 usable = bpm > 0 || ppq 有效 || timeInSeconds != 0 || timeInSamples != 0 || isPlaying
@@ -366,6 +372,9 @@ syncKnobRangeMs  double  默认 10.0
 7. **无 loop 点的歌**：循环次数设置无效，退化为播放一次。
 8. **fade**：单次播放会照常淡出；淡出期间位置数值会超过 `duration`，进度条按现有逻辑钳位。
 9. **采样率变化**：CUE 以秒存储，仍成立。插件延迟报告为 0，其它轨道的延迟由宿主补偿。
+10. **键盘**：同步生效时**空格交给宿主**（`PlayView::handleKey` 返回 false，事件离开编辑器，
+    Windows 上 JUCE 把 `WM_KEYDOWN` 转投父窗口），DAW 自己的播放/暂停快捷键照常工作；Enter /
+    Home / 方向键仍被窗口吃掉（它们在同步生效时本就早退），因为没有一个把它们对应到「宿主走带」上。
 
 ## 11. 实施计划
 
@@ -390,7 +399,9 @@ syncKnobRangeMs  double  默认 10.0
 |---|---|
 | `vgm_core_test` / `DawSyncTest` | §4.3 全表；N=1 含 fade；N=2；无限循环；无 loop 点；x<0；x=0 恰好；x=end；宿主不可用；`seenPlaying` 锁存；量程钳制偏移 |
 | `vgm_core_test` / `SongTimeline` | N=1/2/0 下 L、C、loopStart 的换算；fade 尾音是否计入；后端少报单遍长度时的反推 |
-| `vgm_app_test` / `daw-sync.txt` | 用 `# wrapper vst3` 声明宿主版，`host 12.5 playing` 注入假 `AudioPlayHead` 并跑一个 `processBlock`；断言 `Cue` 的可用性（旋钮从一开始就可用，数字恒为偏移量：`0.0 ms` → `+2.5 ms`）、Cue 再点仍是取点（不是切换）、`CUE` 的 `checked` 在三种状态下始终为 false（不发光）、同步生效后走带被禁用、关闭同步后恢复且锚点还在 |
+| `vgm_core_test` / `[11] the host's clock` | 适配器（`HostClockSource`）的九类输入：无 play head、有 head 无 position、全零 context、只有 samples、seconds 优先、只有 bpm、只有 ppq、playing@0、NaN |
+| `vgm_app_test` / `daw-sync.txt` | 用 `# wrapper vst3` 声明宿主版，`host 12.5 playing` 注入假 `AudioPlayHead` 并跑一个 `processBlock`；断言 `Cue` 的可用性（旋钮从一开始就可用，数字恒为偏移量：`0.0 ms` → `+2.5 ms`）、Cue 再点仍是取点（不是切换）、`CUE` 的 `checked` 在三种状态下始终为 false（不发光）、同步生效后走带被禁用、关闭同步后恢复且锚点还在、空格交给宿主（`press space unhandled`） |
+| `vgm_app_test` / `daw-sync-follow.txt` | 端到端：CUE=2 s，宿主停在 2 s → 位置 0；宿主从 3 s 播放 → `assert engine position ~= 1.0`（这一条就是 H-1 的回归测试）；宿主退到 1 s → 回到 0；宿主停在 5 s → 位置 3.0 且不走带。需要素材（`VGM_TEST_SONG`），没有则整脚本跳过 |
 | 手工 | REAPER / Ableton Live / FL Studio / Cubase 各验一次——**未做**，需要真实宿主 |
 
 harness 的两条新语法（`# wrapper` 与 `host`）见 `docs/desgin/testing-architecture.md`：
