@@ -86,6 +86,13 @@ inline juce::String line (juce::Component& component)
 		out << ",\"checked\":" << (button->getToggleState() ? "true" : "false");
 	}
 
+	// The number behind a slider: a seek bar shows its position only here (it has no text box),
+	// and `text` on a slider is the *formatted* value, which is not what an assertion wants.
+	if (auto* slider = dynamic_cast<juce::Slider*> (&component))
+	{
+		out << ",\"value\":" << juce::String (slider->getValue(), 6);
+	}
+
 	out << ",\"text\":" << quoted (textOf (component)) << "}";
 
 	return out;

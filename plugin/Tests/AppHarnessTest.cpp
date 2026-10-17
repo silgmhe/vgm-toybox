@@ -145,6 +145,16 @@ juce::String fieldOf (juce::Component& component, const juce::String& field)
 		}
 		return "n/a";
 	}
+	if (field == "value")
+	{
+		// The number a slider holds. `text` is the formatted version of it, which for the seek bar
+		// is nothing at all (no text box) - the position only exists as this number.
+		if (auto* slider = dynamic_cast<juce::Slider*> (&component))
+		{
+			return juce::String (slider->getValue(), 6);
+		}
+		return "n/a";
+	}
 	if (field == "text")
 	{
 		return toybox::ui::snapshot::textOf (component);
@@ -166,6 +176,14 @@ bool fieldMatches (const juce::String& actual, const juce::String& op, const juc
 	if (op == "contains")
 	{
 		return actual.containsIgnoreCase (wanted);
+	}
+	if (op == "~=")
+	{
+		// Numbers, with the slack of one audio block: a value the engine publishes after a block
+		// has already advanced by that block (512 @ 48 kHz = 10.7 ms), so an exact == would be
+		// asserting the block size rather than the mapping. 50 ms is far below anything the sync
+		// mapping can be wrong by (a wrong side of the cue is seconds).
+		return std::abs (actual.getDoubleValue() - wanted.getDoubleValue()) <= 0.05;
 	}
 
 	return false;
@@ -572,6 +590,18 @@ private:
 			return;
 		}
 
+		// `assert engine position <op> <value>` is the transport's own answer, in seconds. A slider
+		// only shows the position normalised (and the window scripts cannot read the engine at
+		// all), which is how a seek/start ordering bug in the DAW sync survived: the code ran on
+		// every block, but nothing could see where the song actually was.
+		if (tokens[1] == "engine" && tokens[2] == "position")
+		{
+			const auto actual = juce::String (processor.getEngine().getPositionSeconds(), 6);
+			report (fieldMatches (actual, tokens[3], tokens[4]),
+					"engine.position " + tokens[3] + " '" + tokens[4] + "'   (was: " + actual + ")");
+			return;
+		}
+
 		// `assert menu.<entry> <field> <op> <value>` reads the menu, which is data rather than a
 		// component - that is what makes "the tick follows the page" a text assertion
 		if (tokens[1].startsWith ("menu."))
@@ -632,9 +662,10 @@ private:
 		std::printf ("    menu | menu invoke <entryId> | tick | shot <path.png>\n");
 		std::printf ("    host <seconds> [playing|stopped]   one process block with that host clock\n");
 		std::printf ("    dump [<id>] | assert <id> <field> <op> <value> | sleep <ms>\n");
-		std::printf ("    fields: visible enabled checked text (components)\n");
-		std::printf ("            checked enabled label    (menu entries, as menu.<entryId>)\n");
-		std::printf ("    ops: == != contains\n");
+		std::printf ("    fields: visible enabled checked text value (components)\n");
+		std::printf ("            checked enabled label             (menu entries, as menu.<entryId>)\n");
+		std::printf ("    assert engine position <op> <value>   the transport, in seconds\n");
+		std::printf ("    ops: == != contains ~= (~= is numeric, within 0.05 = one block of slack)\n");
 	}
 
 	/** The clock the `host` command reports - what a wrapper does with setPlayHead(). */

@@ -80,7 +80,7 @@ UI          TransportPanel（Sync/Cue/旋钮 + 虚线框 + 菜单）   PlayView�
 | UI 状态（可用性、不发光、禁用规则） | ✓ | `scripts/daw-sync.txt` 28 条 `assert` + 2 次按键 |
 | 空格让位 | ✓ | `press space unhandled` + 关闭后 `press space` |
 | **`readHostClock`（JUCE → `HostClock`）** | **✗** | 匿名命名空间，core test 链接不到；只有 app harness 经过它，但不看结果 |
-| **`followDawTransport`（seek/start/pause 的顺序）** | **✗** | 假后端的 `start/pause` 是空实现（`FakeBackend.cpp:38-39`），app harness 又不观察位置 → **H-1 正好落在这个盲区里** |
+| **`followDawTransport`（seek/start/pause 的顺序）** | **原先 ✗ → 现 ✓** | 假后端的 `start/pause` 是空实现（`FakeBackend.cpp:38-39`），app harness 原来也不观察位置 → **H-1 正好落在这个盲区里**；`daw-sync-follow.txt` 把它补上了（§8） |
 | 状态往返（4 个 sync 属性、`-1 → 0` 迁移） | ✗ | `SessionState` 往返测试存在，但没断言这几个字段 |
 
 > 判读：**纯逻辑测得比多数项目都好，中间那层却完全空着**。这不是"少写了几个测试"，而是"能注入输入、不能观察输出"的工具缺口（§4 M-2）。
@@ -147,7 +147,14 @@ UI          TransportPanel（Sync/Cue/旋钮 + 虚线框 + 菜单）   PlayView�
 
 **验证**：按 M-2 加的位置断言，`daw-sync-follow.txt` 里"宿主从 cue+30 s 开始 → 位置等于 30 s"就会红→绿。**这条不需要真实宿主**，但需要一首素材（harness 加载的是真实后端 libvgm，不是假后端）—— 而仓库里目前一首都没有（`Get-ChildItem -Recurse -Include *.vgm,*.vgz` 为空），这也是 `-TestSong` 一直没进 CI 的原因。
 
-**待确认**：本仓的宿主手工测试尚未做（`design.md` §12），以上是从 libvgm 源码推出来的；用 M-2 的脚本复现一次就能从"读代码判断"变成"红灯"。若真机听不出问题，说明我读错了 `start()` 的语义，这一条降级为 L。
+**已复现（不是"读代码推测"）**：修好之后把这段顺序回退到修复前、跑同一个脚本（M-2），同一处断言读到：
+
+```
+旧序（seek → start）  FAIL  engine.position ~= '1.0'   (was: 0.011610)
+新序（start → seek）  OK    engine.position ~= '1.0'   (was: 1.011610)
+```
+
+`0.0116` 正是"先复位到 0、再渲染一个 512 样本的块"，`1.0116` 是"1 s + 一个块"。数字与上一节推的时序完全一致。宿主手工测试仍待做（`design.md` §12），但那只是"在真 DAW 里听一遍"，机制本身已经落地为断言。
 
 ---
 
@@ -198,24 +205,24 @@ void PlaybackEngine::followDawTransport (void)
 **建议**（一次投入，长期收益）：
 
 1. `assert` 增加字段 `value`（对 `juce::Slider` 取 `getValue()`），`snapshot::line()` 一并输出 —— 这是通用能力，任何滑杆都能断言；
-2. 给本 feature 再加一条更直接的：`assert engine position ~= <秒>`（harness 手里有 `processor`，读引擎的 `getPositionSeconds()` 即可），这样断言不必反推歌曲长度；
-3. 新脚本 `scripts/daw-sync-follow.txt`（首行 `# wrapper vst3`）：
+2. 给本 feature 再加一条更直接的：`assert engine position ~= <秒>`（harness 手里有 `processor`，读引擎的 `getPositionSeconds()` 即可），这样断言不必反推歌曲长度。`~=` 的容差取 **0.05 s**：一个块就有 10.7 ms，断言的是映射不是块大小；
+3. 新脚本 `scripts/daw-sync-follow.txt`（首行 `# wrapper vst3`，形态与 `load-and-play.txt` 一致）：
 
 ```
-load $VGM_TEST_SONG          # 无素材时自动 skip，和 load-and-play 一样
-host 10 playing
+load $VGM_TEST_SONG          # 无素材时自动 skip
+host 2 playing
 tick
-click btn.cue                # CUE = 10 s
+click btn.cue                # CUE = 2 s
 click btn.sync
-host 12.5 playing            # 宿主往前走了 2.5 s
-tick
-assert engine position ~= 2.5
-host 9.0 playing             # CUE 之前：应停在 0
+host 2 stopped               # 停在 CUE 上：歌停在 0，静音
 tick
 assert engine position ~= 0
+host 3 playing               # 1 s 后：歌应在 1 s（H-1 的复现点）
+tick
+assert engine position ~= 1.0
 ```
 
-**为什么值得**：第二条断言会把 H-1（第一块从 0 播）变成红灯 —— 有 bug 时这里是 0.01 而不是 2.5；也能挡住"改了映射忘了改引擎"这类回归。目前 `daw-sync.txt` 只断言 UI 使能状态，**UI 对了不代表声音对了**。
+**为什么值得**：第二条断言会把 H-1（第一块从 0 播）变成红灯 —— 有 bug 时这里是 `0.0116` 而不是 `1.0116`；也能挡住"改了映射忘了改引擎"这类回归。目前 `daw-sync.txt` 只断言 UI 使能状态，**UI 对了不代表声音对了**。
 
 **工作量**：harness ~30 行 + 脚本 ~10 行。脚本无素材时自动 skip（和 `load-and-play.txt` 一样），所以 CI 要跑它就得先给它一首极小的曲子（`-TestSong`）—— 这正是上次评审 H-3 留下的那条尾巴，这次有了第二个理由。
 
@@ -323,3 +330,16 @@ HostClock readHostClock (const juce::AudioPlayHead::PositionInfo&, double localS
 2. **M-1 的修法**：接受"同步生效期间每块一次 try-lock"（简单、统一纪律），还是做快照/双缓冲（省锁、多一层状态）？
 3. **M-3 的时机**：现在就抽 `SyncGroup`，还是等真的出现第 4 个控件再抽（届时 `daw-sync.txt` 是现成的安全网）？
 4. **下一步功能**：上一轮讨论的"把 CUE 坐标复制给宿主打 marker"/"吸附到小节"，一旦要做，`HostClock` 就得带上 `ppq`/`bpm` —— 要不要现在就按"未来会有音乐时基"来设计，还是维持 §10 第 4 条的"秒"不变？
+
+---
+
+## 8. 处理记录（`review/daw-sync` 分支）
+
+| # | 提交 | 状态 | 做了什么 / 怎么验证的 |
+|---|---|---|---|
+| H-1 | `eed9e1d` | ✅ | 把 transport 状态变更移到 seek 之前，位置由 seek 收尾；`decision.play` 直接写 `playing`，不再回读。**验证**：回退这段顺序后跑 M-2 的脚本，同一断言读到 `0.011610`，修复后是 `1.011610` |
+| M-2 | 本提交 | ✅ | `snapshot::line()` 与 `assert` 增加 `value`（滑杆数值）；新增 `assert engine position`（读 `getPositionSeconds()`）；`~=` 数值比较，容差 0.05 s（一个块的余量，断言的是映射不是块大小）；新脚本 `scripts/daw-sync-follow.txt`。**验证**：本地用一首 3 s 的极小 VGM 跑通，无 `VGM_TEST_SONG` 时整脚本跳过（与 `load-and-play.txt` 同形） |
+| M-1 | — | ⬜ | 计划：决策挪进 `ScopedTryLock`；顺带处理 L-2 |
+| M-4 | — | ⬜ | 计划：抽 `playback/HostClockSource`，补 `readHostClock` 的四类输入单测（含 L-4 的采样率口径） |
+| M-3 | — | ⬜ | 计划：抽 `SyncGroup`（可延后） |
+| L-1/3/5/6 | — | ⬜ | 计划：一致性收尾 |
