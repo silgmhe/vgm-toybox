@@ -170,6 +170,7 @@ target_sources(VGMToybox PRIVATE
 	Source/backends/libvgm/LibvgmSongInstance.cpp
 	Source/backends/libvgm/LibvgmTrackPlayer.cpp
 	Source/backends/libvgm/LibvgmVgz.cpp
+	Source/settings/SettingsStore.cpp
 	Source/ui/CardComponent.cpp
 	Source/ui/ChannelStrip.cpp
 	Source/ui/ChipPanel.cpp
@@ -234,8 +235,9 @@ add_executable(vgm_mixer_test EXCLUDE_FROM_ALL
 	Source/backends/libvgm/LibvgmVgz.cpp
 )
 # --- console test for the playback core (not built by default) ---
-# Drives PlaybackEngine through the fake tone backend. Deliberately links **no libvgm code**: if
-# the core still depended on the format engine, this target would not link.
+# Drives PlaybackEngine through the fake tone backend, and the settings store through a temporary
+# directory. Deliberately links **no libvgm code**: if the core still depended on the format
+# engine, this target would not link.
 #   cmake --build <build dir> --target vgm_core_test
 #   <build dir>/plugin/vgm_core_test
 add_executable(vgm_core_test EXCLUDE_FROM_ALL
@@ -243,6 +245,7 @@ add_executable(vgm_core_test EXCLUDE_FROM_ALL
 	Source/playback/BackendRegistry.cpp
 	Source/playback/PlaybackEngine.cpp
 	Source/backends/fake/FakeBackend.cpp
+	Source/settings/SettingsStore.cpp
 )
 target_include_directories(vgm_core_test PRIVATE Source)
 target_compile_definitions(vgm_core_test PRIVATE
@@ -252,6 +255,8 @@ target_compile_definitions(vgm_core_test PRIVATE
 target_link_libraries(vgm_core_test PRIVATE
 	juce::juce_core
 	juce::juce_audio_basics
+	# for juce::PropertiesFile, the file the settings live in (Source/settings)
+	juce::juce_data_structures
 	juce::juce_recommended_config_flags
 )
 

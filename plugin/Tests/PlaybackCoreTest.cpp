@@ -12,12 +12,17 @@
 	and 0.25/sqrt(2)*sqrt(3) is all three. That is a much tighter criterion than comparing two
 	emulations, and it keeps working when the libvgm backend changes.
 
+	The settings store (settings/) is checked here too: it is the same kind of code - a plain
+	class, no engine, no window - and the checks that matter about it are about a file, so they
+	want a temporary directory rather than a running application.
+
 	Run: <build dir>/plugin/vgm_core_test
 */
 
 #include <atomic>
 #include <cmath>
 #include <cstdio>
+#include <cstdlib>
 #include <thread>
 #include <vector>
 
@@ -27,6 +32,7 @@
 #include "playback/BackendRegistry.h"
 #include "playback/PlaybackEngine.h"
 #include "playback/StartupSong.h"
+#include "settings/SettingsStore.h"
 
 namespace
 {
@@ -561,6 +567,66 @@ int main (int /*argc*/, char* /*argv*/[])
 	}
 
 	file.deleteFile();
+
+	// ----------------------------------------------- [7] the settings store (settings/)
+	// Read once at startup, written when a value changes, into a folder of its own under the
+	// platform's application data directory. The store is pointed at a temporary directory here,
+	// before its first use, so a test run cannot touch a developer's real preferences.
+	std::printf ("[7] the settings store\n");
+
+	const auto settingsDir = juce::File::getSpecialLocation (juce::File::tempDirectory)
+								 .getChildFile ("vgmtoybox-settings-test");
+	settingsDir.deleteRecursively();
+
+	check (! settingsDir.isDirectory(), "the test starts out without a settings folder");
+
+   #if JUCE_WINDOWS
+	_putenv_s ("VGMTOYBOX_SETTINGS_DIR", settingsDir.getFullPathName().toRawUTF8());
+   #else
+	setenv ("VGMTOYBOX_SETTINGS_DIR", settingsDir.getFullPathName().toRawUTF8(), 1);
+   #endif
+
+	check (toybox::settings::SettingsStore::settingsDirectory() == settingsDir,
+		   "the settings folder is the one the environment names");
+	check (toybox::settings::SettingsStore::settingsFile().getFileName() == "settings.xml",
+		   "and the file inside it is settings.xml");
+
+	auto& settings = toybox::settings::SettingsStore::getInstance();
+
+	check (toybox::settings::SettingsStore::settingsDirectory().isDirectory(),
+		   "first use makes the folder (Linux does not always have it yet)");
+	check (settings.getThemeMode() == toybox::settings::SettingsStore::ThemeMode::light,
+		   "a store without a file reads the defaults");
+	check (settings.lastError().isEmpty(),
+		   "and a file that is not there yet is not an error");
+
+	settings.setThemeMode (toybox::settings::SettingsStore::ThemeMode::dark);
+	check (settings.getThemeMode() == toybox::settings::SettingsStore::ThemeMode::dark,
+		   "a theme choice is remembered");
+	check (settings.lastError().isEmpty(), "and written on the spot, without complaint");
+	check (toybox::settings::SettingsStore::settingsFile().loadFileAsString().contains ("dark"),
+		   "the file on disk holds the choice");
+
+	check (toybox::settings::SettingsStore::themeModeFromString ("DARK")
+			   == toybox::settings::SettingsStore::ThemeMode::dark,
+		   "the spelling in the file is case-insensitive");
+	check (toybox::settings::SettingsStore::themeModeFromString ("something else")
+			   == toybox::settings::SettingsStore::ThemeMode::light,
+		   "and an unknown value reads back as the default");
+
+	// A file someone broke by hand: it must be reported rather than thrown, and the store must
+	// come through it still usable. Reading once is the contract, so reading again is the only
+	// way to reach this from a running process - which is what reload() is there for.
+	check (toybox::settings::SettingsStore::settingsFile().replaceWithText ("this is not xml <<<"),
+		   "a broken file can be put there for the check");
+	check (! settings.reload(), "a corrupt file fails to load");
+	check (settings.lastError().isNotEmpty(), "and the failure is reported, not swallowed");
+
+	check (settings.resetToDefaults(), "restoring the defaults rewrites the file");
+	check (settings.getThemeMode() == toybox::settings::SettingsStore::ThemeMode::light,
+		   "and puts the theme back");
+
+	settingsDir.deleteRecursively();
 
 	std::printf ("Result    : %s\n", (failures == 0) ? "all checks passed" : "FAILURES");
 	return (failures == 0) ? 0 : 1;
