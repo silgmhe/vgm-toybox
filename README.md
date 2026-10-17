@@ -100,17 +100,34 @@ song - it is not part of the default run for that reason.
 
 ## Using it
 
-**Standalone.** `VGMToybox` plays the file it is started with, so anything that hands it one - a command
-line, a shortcut, Explorer - loads it and starts the transport:
+### The standalone
+
+`VGMToybox` plays the file it is started with, so anything that hands it one - a command line, a
+shortcut, Explorer - loads it and starts the transport:
 
 ```powershell
 .\dist\Standalone\VGMToybox.exe "C:\music\Some Song.vgm"
 ```
 
-Windows association is `Open with` → `Always use this app`; the program never touches the registry, so
-deleting the folder removes every trace of it.
+### Opening songs from Explorer
 
-**In a DAW.** Copy the bundle into the plugin folder and rescan:
+Associate the formats with the application once, through Windows' own dialog. **The program never
+touches the registry** - no installer, no shell extension, no helper script - so the association is
+yours to create, change and undo:
+
+1. right-click a song and choose **Open with** → **Choose another app**;
+2. pick `VGMToybox.exe` (*More apps* → *Look for another app on this PC* finds it the first time);
+3. tick **Always use this app**, and repeat for `.vgz`, `.s98`, `.dro` and `.gym` if you want those too.
+
+Windows keeps the choice per user, and *Settings* → *Apps* → *Default apps* is where it is edited -
+deleting the folder removes all of it. Two things worth knowing: a recorded association stores a
+path, so moving or replacing the executable breaks the double click (keep one copy and replace that
+file when upgrading); and a launch that cannot use the song it was handed writes one line to
+`%TEMP%\vgmtoybox-startup.log` - a launch that works writes nothing.
+
+### In a DAW
+
+Copy the bundle into the plugin folder and rescan:
 
 | | Plugin folder |
 |---|---|
@@ -121,12 +138,27 @@ deleting the folder removes every trace of it.
 If an older `VGMPlay.vst3` from this project is installed, delete it first: the plugin codes are
 deliberately unchanged, so a host would see the two bundles as the same plugin.
 
-**Separate outputs.** The plugin declares 64 stereo buses and only `Out 1/2` is active - enable the
-others for the instance in the host, exactly like Kontakt. Then click *spread outputs* in the mixer
-header (track 1 → `Out 1/2`, track 2 → `Out 3/4`, …) or set the target per strip. Every strip is its own
-libvgm instance, so the stems add up to exactly the mix you would have heard.
+### Recording stems into a DAW
 
-**Mixer off** runs libvgm's plain mix; its unity-gain sum is bit-identical to the mixer's.
+The multi-output routing exists for one workflow: record every chip on its own track in a single pass
+instead of soloing chips one by one.
+
+![Recording the output buses of VGMToybox into a DAW](docs/assets/multitrack-recording-in-daw.png)
+
+1. **Enable the extra buses** for the plugin instance in the host. The plugin declares 64 stereo buses
+   and only `Out 1/2` is active until you do - the same step Kontakt users know.
+2. **Route the strips**: click *spread outputs* in the mixer header (track 1 → `Out 1/2`, track 2 →
+   `Out 3/4`, …), then fix individual strips in their output selector where that does not fit - or
+   send everything to the master bus and leave the routing alone.
+3. **Arm one host track per bus and record.** Each chip channel lands on its own track, and the routing
+   is remembered as the default for the next song you load.
+
+Every strip is a separately rendered libvgm instance, so the stems add up to exactly the mix you would
+have heard - `vgm_mixer_test` proves that sum is sample-exact.
+
+### Mixer off
+
+Runs libvgm's plain mix; its unity-gain sum is bit-identical to the mixer's.
 
 ## Subscribe
 
