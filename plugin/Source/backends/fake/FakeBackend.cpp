@@ -115,6 +115,8 @@ namespace
 		{
 			info.formatName = "Fake tones";
 			info.durationSeconds = kSongSeconds;
+			info.singlePassSeconds = kSongSeconds;
+			info.loopLengthSeconds = kSongSeconds - kLoopPointSeconds;
 			info.loopPointSeconds = kLoopPointSeconds;
 			info.loopsForever = false;
 			info.tags["Title"] = "Fake Song";

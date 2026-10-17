@@ -22,7 +22,9 @@ namespace toybox::ui
 class PlayView : public View
 {
 public:
-	explicit PlayView (toybox::PlaybackEngine& engine);
+	/** `syncAvailable` is forwarded to the transport card: only a hosted build has a play head to
+		follow (see TransportPanel). */
+	explicit PlayView (toybox::PlaybackEngine& engine, bool syncAvailable = true);
 
 	juce::String getViewName (void) const override { return "Play"; }
 

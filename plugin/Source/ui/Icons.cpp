@@ -141,4 +141,47 @@ void drawSlidersGlyph (juce::Graphics& g, juce::Rectangle<float> iconArea, juce:
 	}
 }
 
+void drawSyncGlyph (juce::Graphics& g, juce::Rectangle<float> iconArea, juce::Colour colour)
+{
+	// Two interlocking links, drawn as two pills overlapping in the middle: a real chain is drawn
+	// on the diagonal, which at 16 px turns into an unreadable blob - two pills still read as
+	// "linked" at this size.
+	g.setColour (colour);
+
+	const float thickness = juce::jmax (1.1f, iconArea.getWidth() * 0.12f);
+	const float pillWidth = iconArea.getWidth() * 0.60f;
+	const float pillHeight = iconArea.getHeight() * 0.48f;
+	const float top = iconArea.getCentreY() - pillHeight * 0.5f;
+
+	const auto left = juce::Rectangle<float> (iconArea.getX(), top, pillWidth, pillHeight)
+						  .reduced (thickness * 0.5f);
+	const auto right = juce::Rectangle<float> (iconArea.getRight() - pillWidth, top, pillWidth, pillHeight)
+						   .reduced (thickness * 0.5f);
+
+	g.drawRoundedRectangle (left, left.getHeight() * 0.5f, thickness);
+	g.drawRoundedRectangle (right, right.getHeight() * 0.5f, thickness);
+}
+
+void drawCueGlyph (juce::Graphics& g, juce::Rectangle<float> iconArea, juce::Colour colour)
+{
+	// A flag on a pole - the marker a DAW puts on the timeline. Only two shapes, so it stays
+	// sharp at 16 px, and it cannot be confused with the loop glyph next to it.
+	g.setColour (colour);
+
+	const float thickness = juce::jmax (1.2f, iconArea.getWidth() * 0.12f);
+	const float poleX = iconArea.getX() + thickness * 0.5f;
+
+	g.fillRoundedRectangle (poleX - thickness * 0.5f, iconArea.getY(), thickness, iconArea.getHeight(),
+							thickness * 0.5f);
+
+	const float pennantTop = iconArea.getY() + iconArea.getHeight() * 0.06f;
+	const float pennantBottom = iconArea.getY() + iconArea.getHeight() * 0.46f;
+
+	juce::Path pennant;
+	pennant.addTriangle (poleX + thickness * 0.5f, pennantTop,
+						 iconArea.getRight(), (pennantTop + pennantBottom) * 0.5f,
+						 poleX + thickness * 0.5f, pennantBottom);
+	g.fillPath (pennant);
+}
+
 } // namespace toybox::ui

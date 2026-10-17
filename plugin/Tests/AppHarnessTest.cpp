@@ -29,6 +29,7 @@
 	and structure survives headless, in CI, at any DPI.
 */
 
+#include <cmath>
 #include <cstdio>
 #include <cstring>
 #include <functional>
@@ -42,6 +43,10 @@
 
 namespace
 {
+
+// what the `host` command processes with - the usual small block of a DAW session
+constexpr double kSampleRate = 48000.0;
+constexpr int kBlockSize = 512;
 
 int failures = 0;
 bool dumpAfterScript = false;
@@ -299,6 +304,7 @@ private:
 		else if (command == "dump") { commandDump (tokens); }
 		else if (command == "assert") { commandAssert (tokens); }
 		else if (command == "menu") { commandMenu (tokens); }
+		else if (command == "host") { commandHost (tokens); }
 		else if (command == "tick") { commandTick (); }
 		else if (command == "shot") { commandShot (tokens); }
 		else if (command == "sleep") { commandSleep (tokens); }
@@ -489,6 +495,40 @@ private:
 		report (true, "tick");
 	}
 
+	/** The DAW's side of the clock: one process block with the position the script asks for.
+
+		The plugin reads the host clock in processBlock() only (a play head cannot be kept), so a
+		script that wants to see anything host-driven - a cue, the transport lock - has to make the
+		plugin process a block. That is exactly what a wrapper does, with setPlayHead() being JUCE's
+		own hook for standing in for one.
+	*/
+	void commandHost (const juce::StringArray& tokens)
+	{
+		if (tokens.size() < 2)
+		{
+			report (false, "host needs a position in seconds");
+			return;
+		}
+
+		const double seconds = tokens[1].getDoubleValue();
+		const bool playing = (tokens.size() < 3) || (tokens[2].toLowerCase() != "stopped");
+
+		if (! prepared)
+		{
+			processor.setPlayHead (&playHead);
+			processor.prepareToPlay (48000.0, kBlockSize);
+			prepared = true;
+		}
+
+		playHead.set (seconds, playing);
+
+		juce::AudioBuffer<float> buffer (juce::jmax (2, processor.getTotalNumOutputChannels()), kBlockSize);
+		juce::MidiBuffer midi;
+		processor.processBlock (processor.getBusBuffer (buffer, false, 0), midi);
+
+		report (true, "host " + juce::String (seconds, 3) + (playing ? " playing" : " stopped"));
+	}
+
 	void commandShot (const juce::StringArray& tokens)
 	{
 		if (tokens.size() < 2)
@@ -584,11 +624,39 @@ private:
 	{
 		std::printf ("    load <path> | press <key> | click <id> | toggle <id> | set <id> <value>\n");
 		std::printf ("    menu | menu invoke <entryId> | tick | shot <path.png>\n");
+		std::printf ("    host <seconds> [playing|stopped]   one process block with that host clock\n");
 		std::printf ("    dump [<id>] | assert <id> <field> <op> <value> | sleep <ms>\n");
 		std::printf ("    fields: visible enabled checked text (components)\n");
 		std::printf ("            checked enabled label    (menu entries, as menu.<entryId>)\n");
 		std::printf ("    ops: == != contains\n");
 	}
+
+	/** The clock the `host` command reports - what a wrapper does with setPlayHead(). */
+	class FakePlayHead : public juce::AudioPlayHead
+	{
+	public:
+		void set (double secondsToUse, bool playingToUse)
+		{
+			seconds = secondsToUse;
+			playing = playingToUse;
+		}
+
+		juce::Optional<PositionInfo> getPosition (void) const override
+		{
+			PositionInfo info;
+			info.setTimeSignature (TimeSignature { 4, 4 });
+			info.setBpm (120.0);
+			info.setPpqPosition (0.0);
+			info.setIsPlaying (playing);
+			info.setTimeInSeconds (seconds);
+			info.setTimeInSamples ((juce::int64) std::llround (seconds * kSampleRate));
+			return info;
+		}
+
+	private:
+		double seconds = 0.0;
+		bool playing = false;
+	};
 
 	juce::String skipped;		// set when a load could not run; the rest of the script is skipped
 	int skippedCommands = 0;
@@ -596,8 +664,44 @@ private:
 	ToyboxAudioProcessorEditor& editor;
 	ToyboxAudioProcessor& processor;
 
+	FakePlayHead playHead;		// declared after processor: it must outlive it
+	bool prepared = false;
+
 	JUCE_DECLARE_NON_COPYABLE (Runner)
 };
+
+/** The build a script speaks for, declared on its own first line - `# wrapper vst3`.
+
+	The wrapper type is fixed when the processor is constructed, so it cannot be a command: the
+	script has to say it up front. Only the standalone and a hosted build differ in a way the tests
+	care about (the File menu, and the DAW-sync controls, which a standalone does not create).
+*/
+juce::AudioProcessor::WrapperType wrapperTypeFromScript (const juce::File& script)
+{
+	for (const auto& line : juce::StringArray::fromLines (script.loadFileAsString()))
+	{
+		const auto trimmed = line.trim();
+		if (! trimmed.startsWith ("# wrapper "))
+		{
+			continue;
+		}
+
+		const auto name = trimmed.substring (10).trim().toLowerCase();
+
+		if (name == "vst3")
+		{
+			return juce::AudioProcessor::wrapperType_VST3;
+		}
+		if (name == "au")
+		{
+			return juce::AudioProcessor::wrapperType_AudioUnit;
+		}
+
+		return juce::AudioProcessor::wrapperType_Standalone;
+	}
+
+	return juce::AudioProcessor::wrapperType_Standalone;
+}
 
 } // namespace
 
@@ -605,15 +709,6 @@ int main (int argc, char* argv[])
 {
 	// GUI objects without a window: this is what makes a console harness possible at all
 	juce::ScopedJuceInitialiser_GUI juceInitialiser;
-
-	// The harness speaks for the standalone build, because that is where the window is ours (Close
-	// and Exit exist there, and a song can arrive on the command line). `wrapperType` is const by
-	// design, so this is JUCE's own hook for exactly this situation.
-	juce::AudioProcessor::setTypeOfNextNewPlugin (juce::AudioProcessor::wrapperType_Standalone);
-
-	ToyboxAudioProcessor processor;
-	ToyboxAudioProcessorEditor editor (processor);
-	editor.setSize (820, 650);		// lays the tree out; never added to the desktop
 
 	juce::StringArray arguments;
 	for (int i = 1; i < argc; ++i)
@@ -627,6 +722,20 @@ int main (int argc, char* argv[])
 		arguments.removeString ("--dump");
 	}
 
+	// The harness speaks for the standalone build by default, because that is where the window is
+	// ours (Close and Exit exist there, and a song can arrive on the command line). A script that
+	// needs a hosted build says so on its first line - `# wrapper vst3` - and that has to be
+	// decided before the processor exists, which is why the file is read here. `wrapperType` is
+	// const by design, so setTypeOfNextNewPlugin() is JUCE's own hook for exactly this situation.
+	const juce::File script (arguments.isEmpty() ? juce::String() : arguments[0]);
+	const auto wrapper = script.existsAsFile() ? wrapperTypeFromScript (script)
+											   : juce::AudioProcessor::wrapperType_Standalone;
+	juce::AudioProcessor::setTypeOfNextNewPlugin (wrapper);
+
+	ToyboxAudioProcessor processor;
+	ToyboxAudioProcessorEditor editor (processor);
+	editor.setSize (820, 650);		// lays the tree out; never added to the desktop
+
 	if (arguments.isEmpty())
 	{
 		const int count = toybox::ui::countComponents (editor);
@@ -636,7 +745,6 @@ int main (int argc, char* argv[])
 		return count > 0 ? 0 : 1;
 	}
 
-	const juce::File script (arguments[0]);
 	if (! script.existsAsFile())
 	{
 		std::printf ("script not found: %s\n", script.getFullPathName().toRawUTF8());

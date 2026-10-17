@@ -82,6 +82,10 @@ struct SongInfo
 	juce::String formatName;					// the engine that opened the file ("VGMPlayer")
 	/** Play length with the current loop setting; `loopsForever` songs report one pass. */
 	double durationSeconds = 0.0;
+	/** One playthrough, independent of the loop setting (excludes the fade tail). */
+	double singlePassSeconds = 0.0;
+	/** Length of the loop, or 0 when the song has no loop point. */
+	double loopLengthSeconds = 0.0;
 	/** Position the seek bar jumps back to, or < 0 when the song has no loop point. */
 	double loopPointSeconds = -1.0;
 	/** The song only ends when the user stops it (the backend reports an infinite runtime). */

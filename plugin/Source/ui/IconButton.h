@@ -9,7 +9,7 @@ namespace toybox::ui
 class IconButton : public juce::Button
 {
 public:
-	enum class Icon { play, pause, stop, loop, playStart, sliders, spreadOutputs, mergeToMaster };
+	enum class Icon { play, pause, stop, loop, playStart, sliders, spreadOutputs, mergeToMaster, sync, cue };
 
 	IconButton (const juce::String& buttonName, Icon iconToDraw)
 		: juce::Button (buttonName), icon (iconToDraw)
@@ -20,6 +20,15 @@ public:
 		setComponentID ("btn." + buttonName.toLowerCase().replaceCharacter (' ', '-'));
 	}
 
+	/** A word drawn under the glyph, inside the face ("SYNC", "CUE"). An empty caption leaves the
+		glyph the whole face, which is what every other icon button in the editor wants; the two
+		DAW-sync buttons take one because their glyphs alone do not say what they do. */
+	void setCaption (const juce::String& text)
+	{
+		caption = text;
+		repaint();
+	}
+
 	void paintButton (juce::Graphics& g, bool isMouseOverButton, bool isButtonDown) override;
 
 	// the focus ring (ButtonPaint.h) is only correct if focus changes repaint the button
@@ -28,6 +37,7 @@ public:
 
 private:
 	Icon icon;
+	juce::String caption;
 
 	JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (IconButton)
 };

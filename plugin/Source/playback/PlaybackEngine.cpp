@@ -249,6 +249,10 @@ void PlaybackEngine::writeState (juce::MemoryBlock& destData) const
 		state.loopCount = loopCount;
 		state.fadeSeconds = fadeSeconds;
 		state.volume = masterVolume.load();
+		state.syncEnabled = dawSync.isEnabled();
+		state.syncCueSeconds = dawSync.hasCue() ? dawSync.getCueSeconds() : -1.0;
+		state.syncCueOffsetMs = dawSync.getCueOffsetMs();
+		state.syncKnobRangeMs = dawSync.getKnobRangeMs();
 		state.mixerEnabled = mixerEnabled;
 		state.mixerMasterGain = mixerMasterGain.load();
 		state.masterMuted = masterMuted.load();
@@ -286,6 +290,21 @@ bool PlaybackEngine::readState (const void* data, int sizeInBytes, juce::String&
 	}
 
 	const bool hasSong = state.songImage.getSize() > 0;
+
+	// The cue is a position on the *host's* timeline, so it survives a save/reopen unchanged.
+	// The range goes in before the offset, otherwise a remembered offset would be clamped against
+	// the default range first.
+	dawSync.setEnabled (state.syncEnabled);
+	dawSync.setKnobRangeMs (state.syncKnobRangeMs);
+	dawSync.setCueOffsetMs (state.syncCueOffsetMs);
+	if (state.syncCueSeconds >= 0.0)
+	{
+		dawSync.setCueSeconds (state.syncCueSeconds);
+	}
+	else
+	{
+		dawSync.clearCue();
+	}
 
 	if (hasSong)
 	{
@@ -432,6 +451,57 @@ void PlaybackEngine::setPositionSeconds (double seconds)
 {
 	const juce::ScopedLock sl (lock);
 	setPositionSecondsLocked (seconds);
+}
+
+void PlaybackEngine::followDawTransport (void)
+{
+	if (! dawSync.isActive() || ! loaded.load() || trackPlayers.empty())
+	{
+		return;
+	}
+
+	// The decision is pure arithmetic on atomics, so it is taken *before* the lock: a block that
+	// is not a correction never touches it. Only when the transport really has to move does the
+	// audio thread try to take it - and if the message thread owns it, the next block retries.
+	// (The mapping is absolute, so a missed block costs nothing but one block of drift.)
+	const auto decision = dawSync.decide (cachedTimeline, positionSeconds.load(), playing.load());
+	if (! decision.reposition)
+	{
+		return;
+	}
+
+	const juce::ScopedTryLock syncTry (lock);
+	if (! syncTry.isLocked())
+	{
+		return;
+	}
+
+	// A seek is the expensive part, which is why the mapping only asks for one when the engine is
+	// more than 30 ms off, or when the transport state has to change at all.
+	setPositionSecondsLocked (decision.position);
+
+	if (decision.play)
+	{
+		if (! playing.load())
+		{
+			for (auto& player : trackPlayers)
+			{
+				player->start();
+			}
+		}
+
+		playing = true;
+		finished = false;
+	}
+	else
+	{
+		for (auto& player : trackPlayers)
+		{
+			player->pause();
+		}
+
+		playing = false;
+	}
 }
 
 void PlaybackEngine::setPositionSecondsLocked (double seconds)
@@ -621,21 +691,22 @@ void PlaybackEngine::refreshCachedTimes (void)
 {
 	if (song == nullptr)
 	{
-		cachedDurationSeconds = 0.0;
-		cachedLoopPointSeconds = -1.0;
-		loopsForever = false;
+		cachedTimeline = {};
 		return;
 	}
 
-	applyTimesTo (song->getInfo(), cachedDurationSeconds, cachedLoopPointSeconds, loopsForever);
+	applyTimesTo (song->getInfo(), cachedTimeline, loopCount, fadeSeconds);
 }
 
-void PlaybackEngine::applyTimesTo (const playback::SongInfo& info, double& durationSeconds,
-								   double& loopPointSeconds, bool& loopsForever)
+void PlaybackEngine::applyTimesTo (const playback::SongInfo& info,
+								   playback::SongTimeline& timeline, int loops, double fade)
 {
-	durationSeconds = info.durationSeconds;
-	loopPointSeconds = info.loopPointSeconds;
-	loopsForever = info.loopsForever;
+	// `loopCount` and `fadeSeconds` are passed in instead of read from `info`: the backend only
+	// knows the song's own loop point, while how often the loop repeats and how long the fade is
+	// are the engine's settings, and the mapping needs both sides.
+	timeline = playback::makeSongTimeline (info.durationSeconds, info.singlePassSeconds,
+										   info.loopLengthSeconds, loops, fade,
+										   info.loopsForever);
 }
 
 double PlaybackEngine::getPlayLengthSeconds (void) const
@@ -761,8 +832,8 @@ PlaybackEngine::LoadedSong PlaybackEngine::buildSong (const BuildConfig& config,
 
 	// song facts
 	pending.tags = pending.song->getInfo().tags;
-	applyTimesTo (pending.song->getInfo(), pending.durationSeconds, pending.loopPointSeconds,
-				  pending.loopsForever);
+	applyTimesTo (pending.song->getInfo(), pending.timeline, config.loopCount,
+				  config.fadeSeconds);
 
 	// chips, keeping the mute toggles when the same song is rebuilt (sample-rate change, mode
 	// switch) - the caller passes the list the engine currently shows
@@ -842,9 +913,7 @@ void PlaybackEngine::installSong (LoadedSong&& built)
 	chips = std::move (built.chips);
 	tags = std::move (built.tags);
 
-	cachedDurationSeconds = built.durationSeconds;
-	cachedLoopPointSeconds = built.loopPointSeconds;
-	loopsForever = built.loopsForever;
+	cachedTimeline = built.timeline;
 
 	positionSeconds = 0.0;
 	finished = false;
@@ -933,9 +1002,7 @@ void PlaybackEngine::resetState (void)
 	tags.clear();
 
 	positionSeconds = 0.0;
-	cachedDurationSeconds = 0.0;
-	cachedLoopPointSeconds = -1.0;
-	loopsForever = false;
+	cachedTimeline = {};
 }
 
 //==============================================================================
@@ -993,6 +1060,10 @@ void PlaybackEngine::render (const playback::OutputBusBuffers* buses, int numBus
 
 	publishBusConnectivity (buses, busCount);
 	clearBusBuffers (buses, busCount, numSamples);
+
+	// The DAW sync is looked at *before* the "is it playing" test below: following the host can be
+	// what starts (or stops) the transport, and the early-out would never see a start.
+	followDawTransport();
 
 	// check the cheap atomics first: while paused or idle the audio thread must not touch
 	// the lock at all (a failed try-lock costs a whole silent block)

@@ -7,6 +7,57 @@
 
 using namespace toybox;
 
+namespace
+{
+	/** What the wrapper's play head said this block, in the engine's terms.
+
+		Two traps: JUCE hands out *no* PositionInfo when the host has none (standalone has no play
+		head at all), and a host with a transport that is not running may still send a context full
+		of zeros. An all-zero clock would read as "the DAW is at 0 s", which the mapping would turn
+		into "before the cue, stay silent" - so a clock only counts as usable when it shows some
+		sign of a real transport: playing, a non-zero time, a tempo or a position in quarter notes. */
+	playback::HostClock readHostClock (juce::AudioProcessor& processor, double fallbackRate)
+	{
+		playback::HostClock clock;
+		clock.sampleRate = (fallbackRate > 0.0) ? fallbackRate : 48000.0;
+
+		auto* head = processor.getPlayHead();
+		if (head == nullptr)
+		{
+			return clock;
+		}
+
+		const auto position = head->getPosition();
+		if (! position.hasValue())
+		{
+			return clock;
+		}
+
+		const auto timeSeconds = position->getTimeInSeconds();
+		const auto timeSamples = position->getTimeInSamples();
+		const auto bpm = position->getBpm();
+		const auto ppq = position->getPpqPosition();
+
+		clock.playing = position->getIsPlaying();
+		clock.usable = clock.playing || (timeSeconds.hasValue() && *timeSeconds != 0.0)
+					   || (timeSamples.hasValue() && *timeSamples != 0)
+					   || (bpm.hasValue() && *bpm > 0.0) || ppq.hasValue();
+
+		// seconds are the safe unit: the samples are counted at the host's rate, which is not
+		// necessarily ours (a host may run the plugin through a sample-rate converter)
+		if (timeSeconds.hasValue())
+		{
+			clock.seconds = *timeSeconds;
+		}
+		else if (timeSamples.hasValue())
+		{
+			clock.seconds = (double) *timeSamples / clock.sampleRate;
+		}
+
+		return clock;
+	}
+}
+
 ToyboxAudioProcessor::ToyboxAudioProcessor()
 	: AudioProcessor (buildBusesProperties())
 {
@@ -113,6 +164,10 @@ void ToyboxAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce:
 			buses[bus].right = busBuffer.getWritePointer (1);
 		}
 	}
+
+	// DAW sync: publish what the host said. The engine follows it inside render() - the decision
+	// is lock-free, and only an actual correction takes the lock, so nothing blocks this thread.
+	engine.getDawSync().publishHostClock (readHostClock (*this, getSampleRate()));
 
 	engine.render (buses, playback::kOutputBusCount, numSamples);
 }

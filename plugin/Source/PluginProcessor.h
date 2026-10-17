@@ -49,6 +49,14 @@ public:
 
 	toybox::PlaybackEngine& getEngine (void) { return engine; }
 
+	/** The DAW-sync state: enable, cue and the offset knob (playback/DawSync.h).
+
+		One-way on purpose - the host clock is the master and the song position is a pure function
+		of it, so the plugin never drives the host. The editor writes the cue/offset, processBlock()
+		publishes the host clock once per block and the engine follows it. It lives in the engine
+		so that render() can follow it and so that it is part of the project state. */
+	toybox::playback::DawSync& getDawSync (void) { return engine.getDawSync(); }
+
 	/** What restoring a project had to say - an incompatible state, a song left out of it - for
 		the editor's status line. Sticky on purpose: it is the only hint the user gets when a host
 		opens a project that did not come back, and the editor may not exist yet when the host

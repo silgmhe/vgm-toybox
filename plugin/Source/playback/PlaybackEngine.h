@@ -8,6 +8,7 @@
 
 #include <juce_core/juce_core.h>
 
+#include "playback/DawSync.h"
 #include "playback/OutputRouting.h"
 #include "playback/SongBackend.h"
 
@@ -100,12 +101,24 @@ public:
 	double getPositionSeconds (void) const { return positionSeconds.load(); }
 	/** Song length, cached while the lock is held when the file, the loop count, the fade time
 		or the sample rate changes - read without the lock. */
-	double getDurationSeconds (void) const { return cachedDurationSeconds; }
+	double getDurationSeconds (void) const { return cachedTimeline.durationSeconds; }
 	/** Position of the loop point inside a single playthrough, or a negative value if the song
 		has no loop point (or nothing is loaded). */
-	double getLoopPointSeconds (void) const { return cachedLoopPointSeconds; }
+	double getLoopPointSeconds (void) const
+	{
+		return cachedTimeline.hasLoop() ? cachedTimeline.loopStartSeconds() : -1.0;
+	}
 	int getLoopCount (void) const { return loopCount; }
 	double getFadeSeconds (void) const { return fadeSeconds; }
+
+	// --- DAW sync (one-way: the host's clock is the master - playback/DawSync.h) ---
+	/** The song facts the sync mapping needs (single pass, loop length, fade, loop count).
+		Lock-free, like the cached duration/loop point above. */
+	playback::SongTimeline getSongTimeline (void) const { return cachedTimeline; }
+
+	/** The sync state the processor publishes the host clock into and the editor edits; it lives
+		here because render() is what follows it, and because it belongs in the project state. */
+	playback::DawSync& getDawSync (void) { return dawSync; }
 	float getMasterVolume (void) const { return masterVolume.load(); }
 	float getMixerMasterGain (void) const { return mixerMasterGain.load(); }
 	const juce::File& getFile (void) const { return currentFile; }
@@ -235,9 +248,7 @@ private:
 		int soloCount = 0;
 		std::vector<ChipEntry> chips;
 		std::map<juce::String, juce::String> tags;
-		double durationSeconds = 0.0;
-		double loopPointSeconds = -1.0;
-		bool loopsForever = false;
+		playback::SongTimeline timeline;
 	};
 
 	/** Everything buildSong() reads, copied from the engine on the message thread so that a build
@@ -303,8 +314,11 @@ private:
 								  const std::vector<std::unique_ptr<playback::ITrackPlayer>>& players);
 	static void applyRoutingTo (playback::DefaultRouting routing,
 								std::vector<std::unique_ptr<TrackState>>& tracks);
-	static void applyTimesTo (const playback::SongInfo& info, double& durationSeconds,
-							  double& loopPointSeconds, bool& loopsForever);
+	/** Copies the song's length facts into a timeline, repairing what a backend may not report
+		(see playback::makeSongTimeline()). The loop marker is derived from the *single* pass, so
+		it stays correct for N >= 2 as well. */
+	static void applyTimesTo (const playback::SongInfo& info, playback::SongTimeline& timeline,
+							  int loopCount, double fadeSeconds);
 
 	// --- the steps render() is made of ------------------------------------------------------
 	// render() used to be one 220-line function: the block's timeline, the connectivity the host
@@ -319,6 +333,9 @@ private:
 	void finaliseMasterBus (const playback::OutputBusBuffers* buses, int busCount, int usable);
 	void applyOutputVolume (const playback::OutputBusBuffers* buses, int busCount, int numSamples);
 	void publishPositionAndEnd (void);
+	/** Follows the host clock at the top of a block, if the DAW sync is active and the mapping
+		says the transport is off. Audio thread; takes the lock only when a correction is due. */
+	void followDawTransport (void);
 
 	// --- asynchronous loading (review M-1) ---
 	// The worker only reads its own copied config and image, so it never needs the lock; the
@@ -359,9 +376,9 @@ private:
 
 	// song facts for the lock-free getters - written on the message thread while the lock is
 	// held (load / loop / fade / sample-rate changes), read without the lock
-	double cachedDurationSeconds = 0.0;
-	double cachedLoopPointSeconds = -1.0;
-	bool loopsForever = false;
+	playback::SongTimeline cachedTimeline;
+
+	playback::DawSync dawSync;
 
 	std::atomic<bool> loaded { false };
 	std::atomic<bool> playing { false };

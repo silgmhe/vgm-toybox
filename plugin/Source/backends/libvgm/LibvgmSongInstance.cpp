@@ -110,6 +110,8 @@ void LibvgmSongInstance::refreshTimelineFacts (void)
 	if (probe == nullptr || probe->player().GetPlayer() == NULL)
 	{
 		info.durationSeconds = 0.0;
+		info.singlePassSeconds = 0.0;
+		info.loopLengthSeconds = 0.0;
 		info.loopPointSeconds = -1.0;
 		info.loopsForever = false;
 		return;
@@ -121,15 +123,18 @@ void LibvgmSongInstance::refreshTimelineFacts (void)
 	// bar unwritable (the position would be clamped to 0 on every refresh) - measure one
 	// playthrough instead and let the position jump back at every repetition
 	const double total = player.GetTotalTime (PLAYTIME_LOOP_INCL | PLAYTIME_TIME_PBK);
+	const double singlePass = juce::jmax (0.0, player.GetTotalTime (PLAYTIME_TIME_PBK));
 	info.loopsForever = (total < 0.0);
-	info.durationSeconds = info.loopsForever ? juce::jmax (0.0, player.GetTotalTime (PLAYTIME_TIME_PBK))
-											 : total;
+	info.singlePassSeconds = singlePass;
+	info.durationSeconds = info.loopsForever ? singlePass : total;
 
 	// GetLoopTime() is the *length* of the loop, so the loop point is the length of a single
-	// playthrough minus that length - the position the seek bar jumps back to
-	const double loopLength = player.GetLoopTime();
-	info.loopPointSeconds = (loopLength > 0.0) ? juce::jmax (0.0, info.durationSeconds - loopLength)
-											   : -1.0;
+	// playthrough minus that length - the position the seek bar jumps back to. It has to be
+	// derived from the *single* pass, not from `duration`: with two loops `duration` already
+	// contains one repeat, and the marker would sit a whole loop too late.
+	const double loopLength = juce::jmax (0.0, player.GetLoopTime());
+	info.loopLengthSeconds = loopLength;
+	info.loopPointSeconds = (loopLength > 0.0) ? juce::jmax (0.0, singlePass - loopLength) : -1.0;
 }
 
 void LibvgmSongInstance::enumerate (void)

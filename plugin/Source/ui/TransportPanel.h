@@ -3,7 +3,12 @@
 #include "CardComponent.h"
 #include "IconButton.h"
 
+#include <functional>
+#include <memory>
+
 namespace toybox { class PlaybackEngine; }
+
+namespace toybox::playback { class DawSync; }
 
 namespace toybox::ui
 {
@@ -20,14 +25,32 @@ namespace toybox::ui
 	cursor toggle next to the loop button switches the whole feature off, which leaves a
 	plain player: no marker, Stop returns to the beginning of the song and space falls back
 	to toggling play/pause.
+
+	DAW sync (playback/DawSync.h) sits in one framed group at the right end of the button row,
+	labelled DAW SYNC: the Sync toggle makes the song follow the host's clock - the position is
+	"host position - cue", nothing else - the Cue button takes the host's position as the point
+	where the song's zero plays, and the knob beside it trims that cue by a few milliseconds.
+
+	The cue is a stored anchor, not a mode: clicking Cue only ever takes it (again) and its button
+	is never lit - a lit face in this editor means "this switch is on", and Cue is an action. What
+	the cue is doing is the knob's business: it is enabled and shows the offset only while a cue
+	exists, and "no cue" otherwise, and clearing is on its menu. The knob is dragged, its number
+	beside it is the exact offset field (same box as the volume's "100 %"), and a double click on
+	the face puts the offset back to zero. All of it is one-way: the song follows the host and
+	never drives it.
 */
 class TransportPanel : public CardComponent
 {
 public:
-	/** 40 (buttons) + 5 + 12 (marker strip) + 1 + 22 (slider) + 8 + 30 (settings) + 2 * 12 (padding). */
-	static constexpr int preferredHeight = 142;
+	/** 52 (DAW-sync frame) + 3 + 12 (marker strip) + 1 + 22 (slider) + 8 + 30 (settings)
+		+ 2 * 12 (padding), see the kFrame* constants in the .cpp. The nameplate straddles the
+		frame's top edge, so it needs no room of its own. */
+	static constexpr int preferredHeight = 152;
 
-	explicit TransportPanel (toybox::PlaybackEngine& engineToUse);
+	/** `syncAvailableToUse` is false in the standalone, which has no play head to follow - there
+		the two sync buttons and the trim knob are not created at all. */
+	explicit TransportPanel (toybox::PlaybackEngine& engineToUse, bool syncAvailableToUse = true);
+	~TransportPanel (void) override;
 
 	/** Pulls the transport state, the loop/fade setting and the position from the engine. */
 	void refresh (void);
@@ -44,6 +67,47 @@ public:
 	void seekToSeconds (double seconds);
 
 private:
+	/** The cue-offset knob: a rotary slider whose right click opens the panel's menu, whose number
+		(the Slider's own text box, to the right of the face) is the exact-value field - the way
+		the volume's "100 %" box is - and whose double click snaps the offset back to zero, which is
+		the only value the drag cannot be relied on to hit. */
+	class OffsetKnob : public juce::Slider
+	{
+	public:
+		std::function<void()> onContextMenu;
+
+		void mouseDown (const juce::MouseEvent& event) override
+		{
+			if (event.mods.isPopupMenu())
+			{
+				if (onContextMenu != nullptr)
+				{
+					onContextMenu();
+				}
+
+				return;
+			}
+
+			juce::Slider::mouseDown (event);
+		}
+
+		void mouseDoubleClick (const juce::MouseEvent& event) override
+		{
+			juce::ignoreUnused (event);
+
+			// Reset - by hand a knob that small cannot be dragged to an exact 0.0, and "put it back"
+			// is the one gesture a trim control needs. The notification is what carries it into the
+			// sync state (the panel's onValueChange), exactly like a drag.
+			setValue (0.0, juce::sendNotificationSync);
+		}
+	};
+
+	/** The number entry the knob opens (the offset, or the knob's range). An overlay inside the
+		card rather than a dialog window: a plugin editor must not open one (AboutOverlay.h says
+		what happened the one time this project did), and the card is big enough to hold three
+		rows. Defined in the .cpp. */
+	class ValueEntryOverlay;
+
 	/** Transparent strip above the seek bar; dragging it moves the playback start cursor. */
 	class StartMarkerDragArea : public juce::Component,
 								public juce::SettableTooltipClient
@@ -73,18 +137,37 @@ private:
 	void setLoopForever (bool shouldLoopForever);
 	void setStartCursorEnabled (bool shouldBeEnabled);
 
+	/** The Cue button: takes the host's position as the cue. Always takes - re-taking is the
+		normal gesture (the DAW moved, or the song changed), clearing is on the knob's menu. */
+	void takeCue (void);
+	/** The knob's right-click menu: the exact offset (which opens the number field) and how far
+		the knob travels. */
+	void showOffsetMenu (void);
+	/** The number entry the menu opens for the knob's range. */
+	void showRangeEntry (void);
+	/** Opens the value entry over the card and hands the typed number to `onAccept`. */
+	void openValueEntry (const juce::String& title, double initialValue,
+						 std::function<void (double)> onAccept);
+	/** Pulls the cue/offset/range state into the buttons, the knob's number and the group frame. */
+	void updateSyncControls (void);
+
 	void paintPlaybackStartCursor (juce::Graphics& g) const;
 	void movePlaybackStartToBandX (int bandX);
 	void setPlaybackStart (double seconds);
 	juce::Rectangle<int> playbackStartRepaintArea (double seconds) const;
 
 	toybox::PlaybackEngine& engine;
+	toybox::playback::DawSync& sync;
+	const bool syncAvailable;
 
 	IconButton playButton { "Play", IconButton::Icon::play };
 	IconButton pauseButton { "Pause", IconButton::Icon::pause };
 	IconButton stopButton { "Stop", IconButton::Icon::stop };
 	IconButton loopButton { "Loop", IconButton::Icon::loop };
 	IconButton cursorButton { "Playback start", IconButton::Icon::playStart };
+	IconButton syncButton { "Sync", IconButton::Icon::sync };
+	IconButton cueButton { "Cue", IconButton::Icon::cue };
+	OffsetKnob offsetKnob;
 	juce::Slider positionSlider;
 	juce::Slider volumeSlider;
 	juce::ComboBox loopBox;
@@ -92,12 +175,17 @@ private:
 
 	StartMarkerDragArea startMarkerDragArea { *this };
 
+	std::unique_ptr<ValueEntryOverlay> entryOverlay;	// created in the constructor, hidden
+
 	juce::Rectangle<int> markerBandBounds;	// strip above the position slider (both markers)
+	juce::Rectangle<int> syncGroupBounds;	// the DAW SYNC frame, painted by paintCardContent()
 	double loopMarkerNormalised = -1.0;		// < 0 = the song has no loop point to show
 	juce::File lastFile;					// to reset the start cursor when another file loads
 	double playbackStartSeconds = 0.0;		// where stop (and a finished song) returns to
+	double lastKnobRangeMs = 10.0;			// to rewrite the knob's range only when it changed
 	int lastLoopCount = -1;					// for the loop tooltip
 	bool userIsDragging = false;
+	bool updatingOffsetKnob = false;		// the refresh writes the knob - do not echo it back
 	bool paused = false;			// the last stop-like action was "pause" (not "stop") - drives the button lights
 	bool startCursorEnabled = true;	// off = plain player: no marker, Stop returns to the beginning
 

@@ -54,6 +54,12 @@ struct Palette
 	// dark card reads as a hole rather than as something standing up.
 	juce::Colour controlFaceTop, controlFaceBottom, controlEdge, controlGroove;
 
+	// A group's dashed frame: the quietest line that still closes a group (TransportPanel's
+	// DAW-sync cluster). It has no depth role - it is not a surface, not a border of anything
+	// raised or sunk - so it needs its own two values rather than borrowing `border` (dark in
+	// both palettes) or `cardBorder` (invisible on a white card).
+	juce::Colour groupFrame;
+
 	// Tooltips float over everything, so they are not card-coloured in either palette.
 	juce::Colour tooltipBackground;
 };
@@ -176,6 +182,10 @@ inline juce::Colour controlGroove (void)		{ return palette().controlGroove; }
 
 /** The light line under the groove of a fader cap, so the groove reads as cut into the cap. */
 inline juce::Colour controlGrooveHighlight (void)	{ return controlFaceTop().withAlpha (0.85f); }
+
+/** The dashed frame around a group of controls. Not derivable from the card colour in the same
+	way for both palettes, which is why the two values are stated instead of being derived. */
+inline juce::Colour groupFrame (void)		{ return palette().groupFrame; }
 
 inline juce::Colour tooltipBackground (void)	{ return palette().tooltipBackground; }
 

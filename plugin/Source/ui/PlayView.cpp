@@ -8,10 +8,10 @@
 using namespace toybox;
 using namespace toybox::ui;
 
-PlayView::PlayView (toybox::PlaybackEngine& playback)
+PlayView::PlayView (toybox::PlaybackEngine& playback, bool syncAvailable)
 	: engine (playback),
 	  songInfoPanel (playback),
-	  transportPanel (playback),
+	  transportPanel (playback, syncAvailable),
 	  mixerPanel (playback)
 {
 	addAndMakeVisible (songInfoPanel);

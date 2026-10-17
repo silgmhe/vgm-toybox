@@ -43,6 +43,13 @@ struct SessionState
 	double fadeSeconds = 3.0;
 	float volume = 1.0f;			// the output volume (the engine's last gain stage)
 
+	// DAW sync (one-way, see DawSync.h). The cue is a position on the host's timeline, so it is
+	// still meaningful when the project is reopened; a negative value means "no cue set".
+	bool syncEnabled = false;
+	double syncCueSeconds = -1.0;
+	double syncCueOffsetMs = 0.0;
+	double syncKnobRangeMs = 10.0;
+
 	bool mixerEnabled = true;
 	float mixerMasterGain = 1.0f;
 	bool masterMuted = false;

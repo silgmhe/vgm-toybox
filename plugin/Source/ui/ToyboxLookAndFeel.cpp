@@ -192,9 +192,16 @@ void ToyboxLookAndFeel::drawLinearSlider (juce::Graphics& g, int x, int y, int w
 	// maps directly onto the track (insetting it again would shift the thumb against the mouse)
 	const float thumbX = juce::jlimit (track.getX(), track.getRight(), sliderPos);
 
-	if (enabled && thumbX > track.getX() + 1.0f)
+	// The filled part is the slider's *value*, not its state. The seek bar is disabled while the
+	// host drives the transport (TransportPanel::refresh()), and a disabled seek bar that drops
+	// its fill stops saying where playback is - which is the one thing it is still there for. It
+	// is dimmed to the same degree as the track under it instead of being removed, so the bar
+	// still reads as inert without going blank.
+	const float fillAlpha = enabled ? 1.0f : 0.6f;
+
+	if (thumbX > track.getX() + 1.0f)
 	{
-		g.setColour (slider.findColour (juce::Slider::trackColourId));
+		g.setColour (slider.findColour (juce::Slider::trackColourId).withMultipliedAlpha (fillAlpha));
 		g.fillRoundedRectangle (track.withRight (thumbX), trackHeight * 0.5f);
 	}
 

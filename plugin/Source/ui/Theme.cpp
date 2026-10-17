@@ -39,6 +39,7 @@ static const Palette kLight
 	/* controlFaceBottom */ juce::Colour (0xffe6e6ec),
 	/* controlEdge       */ juce::Colour (0xffc5c5cb),
 	/* controlGroove     */ juce::Colour (0xff8e8e96),
+	/* groupFrame        */ juce::Colour (0xffc9c9d2),
 	/* tooltipBackground */ juce::Colour (0xf7ffffff)
 };
 
@@ -90,6 +91,7 @@ static const Palette kDark
 	/* controlFaceBottom */ juce::Colour (0xff373d47),
 	/* controlEdge       */ juce::Colour (0xff20242b),
 	/* controlGroove     */ juce::Colour (0xff20242b),
+	/* groupFrame        */ juce::Colour (0xff454b57),
 	/* tooltipBackground */ juce::Colour (0xf72c313a)
 };
 

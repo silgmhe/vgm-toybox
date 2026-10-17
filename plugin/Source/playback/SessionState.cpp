@@ -39,6 +39,11 @@ void writeSessionState (const SessionState& state, juce::XmlElement& xml)
 	xml.setAttribute ("loopCount", state.loopCount);
 	xml.setAttribute ("fadeSeconds", state.fadeSeconds);
 	xml.setAttribute ("volume", (double) state.volume);
+	// optional on read, so an older build ignores them instead of refusing the file
+	xml.setAttribute ("syncEnabled", state.syncEnabled ? 1 : 0);
+	xml.setAttribute ("syncCue", state.syncCueSeconds);
+	xml.setAttribute ("syncCueOffsetMs", state.syncCueOffsetMs);
+	xml.setAttribute ("syncKnobRangeMs", state.syncKnobRangeMs);
 
 	// Nothing loaded: no <song> at all, so reading an empty state stays trivially correct.
 	const size_t imageSize = state.songImage.getSize();
@@ -100,6 +105,10 @@ bool readSessionState (const juce::XmlElement& xml, SessionState& state, juce::S
 	state.loopCount = xml.getIntAttribute ("loopCount", state.loopCount);
 	state.fadeSeconds = xml.getDoubleAttribute ("fadeSeconds", state.fadeSeconds);
 	state.volume = (float) xml.getDoubleAttribute ("volume", (double) state.volume);
+	state.syncEnabled = xml.getBoolAttribute ("syncEnabled", state.syncEnabled);
+	state.syncCueSeconds = xml.getDoubleAttribute ("syncCue", state.syncCueSeconds);
+	state.syncCueOffsetMs = xml.getDoubleAttribute ("syncCueOffsetMs", state.syncCueOffsetMs);
+	state.syncKnobRangeMs = xml.getDoubleAttribute ("syncKnobRangeMs", state.syncKnobRangeMs);
 
 	if (const juce::XmlElement* const song = xml.getChildByName ("song"))
 	{

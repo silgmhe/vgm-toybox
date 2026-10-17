@@ -1,0 +1,69 @@
+# wrapper vst3
+# The DAW-sync controls only exist in a hosted build (docs/desgin/daw-sync-cue-design.md, §7.4).
+assert btn.sync visible == true
+assert btn.cue  visible == true
+
+# No host clock yet: there is nothing to take a cue from, and nothing for the knob to trim. The
+# knob's number says so instead of showing a zero that is not there.
+assert btn.cue enabled == false
+assert btn.cue checked == false
+assert knob.cue-offset enabled == false
+assert knob.cue-offset text == "no cue"
+assert btn.play enabled == true
+
+# The host reports a play head - what a DAW wrapper does. A cue can be taken now, the knob cannot
+# trim yet.
+host 12.5 playing
+tick
+assert btn.cue enabled == true
+assert knob.cue-offset enabled == false
+assert knob.cue-offset text == "no cue"
+
+# Taking the cue stores it and unlocks the knob, whose number is the offset itself. The button is
+# never lit - a lit face means "this switch is on", and Cue is an action; the knob is the display.
+click btn.cue
+sleep 100
+tick
+assert btn.cue checked == false
+assert knob.cue-offset enabled == true
+assert knob.cue-offset text == "0.0 ms"
+
+# Cue is not a toggle: clicking it again re-anchors the cue where the host is now instead of
+# clearing it. (Clearing is on the knob's menu, which a script cannot open - a context menu is
+# modal.) The offset survives the re-take: it is a trim on the cue, not part of it.
+click btn.cue
+sleep 100
+tick
+assert btn.cue checked == false
+assert knob.cue-offset enabled == true
+
+# The number beside the knob is the exact-value field - the same edit box the volume's "100 %" is,
+# so this is also what typing into it does.
+set knob.cue-offset 2.5
+assert knob.cue-offset text == "+2.5 ms"
+
+# Sync on: enabled + cue + a usable host means the host drives the position, so the local transport
+# is disabled - a button the next audio block would overwrite reads as broken. Only Sync lights up:
+# Cue stays dark, it was the action that set the anchor, not a switch.
+click btn.sync
+sleep 100
+tick
+assert btn.sync checked == true
+assert btn.cue checked == false
+assert btn.play enabled == false
+assert btn.stop enabled == false
+assert btn.playback-start enabled == false
+# the loop count, the fade and the volume are part of the mapping, so they stay live
+assert btn.loop enabled == true
+
+# Sync off: the local transport comes back, and the cue is still stored - it is an anchor, not a
+# mode - but it is no longer live, so its light goes out and only the knob still shows it.
+click btn.sync
+sleep 100
+tick
+assert btn.sync checked == false
+assert btn.play enabled == true
+assert btn.stop enabled == true
+assert btn.cue checked == false
+assert knob.cue-offset enabled == true
+assert knob.cue-offset text == "+2.5 ms"

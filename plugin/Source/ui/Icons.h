@@ -25,4 +25,10 @@ void drawSpreadOutputsGlyph (juce::Graphics& g, juce::Rectangle<float> iconArea,
 /** The "send to master" glyph: several tracks on the left converging into one bus on the right. */
 void drawMergeToMasterGlyph (juce::Graphics& g, juce::Rectangle<float> iconArea, juce::Colour colour);
 
+/** The "linked to the host" glyph: two interlocking chain links, of the DAW sync toggle. */
+void drawSyncGlyph (juce::Graphics& g, juce::Rectangle<float> iconArea, juce::Colour colour);
+
+/** The "cue marker" glyph: a flag on a pole - the cue point the song starts at. */
+void drawCueGlyph (juce::Graphics& g, juce::Rectangle<float> iconArea, juce::Colour colour);
+
 } // namespace toybox::ui

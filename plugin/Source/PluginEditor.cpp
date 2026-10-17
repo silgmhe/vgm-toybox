@@ -102,7 +102,7 @@ ToyboxAudioProcessorEditor::ToyboxAudioProcessorEditor (ToyboxAudioProcessor& p)
 	// ui/VisualiserView.h the visualisation one, and everything below the top row belongs to
 	// whichever of them is on screen. The View menu is built from the stack, so a new page shows
 	// up there without a line of menu code.
-	viewStack.addView (new PlayView (engine));
+	viewStack.addView (new PlayView (engine, processor.wrapperType != juce::AudioProcessor::wrapperType_Standalone));
 	viewStack.addView (new VisualiserView());
 	addAndMakeVisible (viewStack);
 

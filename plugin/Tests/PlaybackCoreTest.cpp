@@ -808,6 +808,168 @@ int main (int /*argc*/, char* /*argv*/[])
 
 	settingsDir.deleteRecursively();
 
+	// ------------------------------------------------- [10] the DAW sync mapping
+	std::printf ("\n[10] DAW sync: the cue mapping\n");
+	{
+		using namespace toybox::playback;
+
+		// the song from the design doc: 60 s long, loop point at 3 s, looping forever
+		const SongTimeline endless = makeSongTimeline (60.0, 60.0, 57.0, 0, 0.0, true);
+		check (near (endless.loopStartSeconds(), 3.0, 1.0e-9),
+			   "the loop point comes from the single pass, not from the length");
+		check (near (endless.totalSeconds(), 60.0, 1.0e-9),
+			   "an endless song reports one pass as its length");
+
+		constexpr double cue = 10.0;
+		HostClock host;
+		host.usable = true;
+		host.playing = true;
+
+		auto at = [&] (double hostSeconds)
+		{
+			host.seconds = hostSeconds;
+			return evaluateSync (endless, host, cue, 0.0, false);
+		};
+
+		auto decision = at (5.0);
+		check (! decision.play && near (decision.position, 0.0, 1.0e-9),
+			   "before the cue the song waits at zero");
+
+		decision = at (10.0);
+		check (decision.play && near (decision.position, 0.0, 1.0e-9),
+			   "at the cue the song starts from the top");
+
+		decision = at (25.0);
+		check (decision.play && near (decision.position, 15.0, 1.0e-9),
+			   "15 s after the cue the song is at 15 s");
+
+		decision = at (70.0);
+		check (decision.play && near (decision.position, 3.0, 1.0e-9),
+			   "the host's 70 s is the loop point");
+
+		decision = at (75.0);
+		check (decision.play && near (decision.position, 8.0, 1.0e-9),
+			   "and 75 s is 8 s into the loop");
+
+		decision = at (127.0);
+		check (decision.play && near (decision.position, 3.0, 1.0e-9),
+			   "every further pass wraps the same way");
+
+		// a backend that does not report the single pass: it is derived from the length
+		const SongTimeline derived = makeSongTimeline (117.0, 0.0, 57.0, 2, 0.0, false);
+		check (near (derived.singlePassSeconds, 60.0, 1.0e-9),
+			   "a missing single-pass length is derived from the loop count");
+	}
+
+	{
+		using namespace toybox::playback;
+
+		// two passes of the same song with a 3 s fade: 117 s of song, ending at 120 s
+		const SongTimeline twice = makeSongTimeline (117.0, 60.0, 57.0, 2, 3.0, false);
+		check (near (twice.totalSeconds(), 117.0, 1.0e-9), "two passes are 60 s plus 57 s");
+		check (near (twice.endSeconds(), 120.0, 1.0e-9), "and the fade is part of the end");
+
+		HostClock host;
+		host.usable = true;
+		host.playing = true;
+
+		auto at = [&] (double hostSeconds, double engineSeconds, bool enginePlaying)
+		{
+			host.seconds = hostSeconds;
+			return evaluateSync (twice, host, 10.0, engineSeconds, enginePlaying);
+		};
+
+		auto decision = at (90.0, 0.0, false);
+		check (decision.play && near (decision.position, 80.0, 1.0e-9),
+			   "the second pass keeps counting past 60 s");
+
+		// inside the fade the engine is already past the seekable length: it plays on, and the
+		// mapping must not "correct" it back to the end of the last pass every block
+		decision = at (128.0, 118.0, true);
+		check (decision.play && ! decision.reposition,
+			   "the fade tail plays on without being repositioned");
+
+		decision = at (131.0, 117.0, false);
+		check (! decision.play && near (decision.position, 117.0, 1.0e-9),
+			   "after the fade the song stops at the end");
+		check (! decision.reposition, "and an engine already sitting there is not moved");
+
+		decision = at (2.0, 80.0, true);
+		check (! decision.play && near (decision.position, 0.0, 1.0e-9) && decision.reposition,
+			   "the host jumping back before the cue parks the song at zero");
+	}
+
+	{
+		using namespace toybox::playback;
+
+		const SongTimeline once = makeSongTimeline (60.0, 60.0, 0.0, 1, 3.0, false);
+		check (! once.hasLoop() && near (once.endSeconds(), 60.0, 1.0e-9),
+			   "without a loop point the fade does not extend the length");
+
+		HostClock host;
+		host.usable = true;
+		host.playing = true;
+		host.seconds = 200.0;
+
+		const auto ended = evaluateSync (once, host, 10.0, 60.0, false);
+		check (! ended.play && near (ended.position, 60.0, 1.0e-9),
+			   "past the end the song waits at the end");
+		check (! ended.reposition, "a stopped engine at the end is not moved");
+
+		// the correction threshold: a block's worth of drift is normal, a jump is not
+		host.seconds = 20.0;
+		check (! evaluateSync (once, host, 10.0, 10.020, true).reposition,
+			   "20 ms of drift is left alone");
+		check (evaluateSync (once, host, 10.0, 10.100, true).reposition,
+			   "100 ms of drift is corrected");
+
+		// an unusable clock must leave the engine alone instead of parking it at zero
+		HostClock unusable;
+		check (! evaluateSync (once, unusable, 10.0, 30.0, true).reposition,
+			   "without a host clock the engine is left alone");
+	}
+
+	{
+		using namespace toybox::playback;
+
+		DawSync sync;
+		check (! sync.isActive(), "sync is off until it is enabled and has a cue");
+
+		HostClock clock;
+		clock.usable = true;
+		clock.playing = true;
+		clock.seconds = 42.5;
+		sync.publishHostClock (clock);
+		check (sync.isHostUsable(), "a playing host makes its clock usable");
+
+		sync.setEnabled (true);
+		check (sync.setCueFromHost(), "the cue can be taken from the host");
+		check (near (sync.getCueSeconds(), 42.5, 1.0e-9), "the cue is the host position");
+		check (sync.isActive(), "enabled, cued and a usable host: sync is active");
+
+		sync.setKnobRangeMs (10.0);
+		sync.setCueOffsetMs (50.0);
+		check (near (sync.getCueOffsetMs(), 10.0, 1.0e-9), "the offset is clamped to the knob range");
+		check (near (sync.getEffectiveCueSeconds(), 42.51, 1.0e-9), "and the cue follows it");
+
+		sync.setKnobRangeMs (0.5);
+		check (near (sync.getKnobRangeMs(), DawSync::kMinKnobRangeMs, 1.0e-9),
+			   "a range below the minimum is clamped");
+		check (near (sync.getCueOffsetMs(), DawSync::kMinKnobRangeMs, 1.0e-9),
+			   "and the offset is re-clamped with it");
+
+		// a host that stops sending a clock keeps its last time instead of jumping to zero
+		HostClock empty;
+		empty.usable = false;
+		sync.publishHostClock (empty);
+		check (near (sync.getHostClock().seconds, 42.5, 1.0e-9),
+			   "a host that stops reporting keeps the last known time");
+		check (! sync.isHostPlaying(), "but reads as stopped");
+
+		sync.clearCue();
+		check (! sync.isActive(), "clearing the cue takes sync out without touching the enable");
+	}
+
 	std::printf ("Result    : %s\n", (failures == 0) ? "all checks passed" : "FAILURES");
 	return (failures == 0) ? 0 : 1;
 }
