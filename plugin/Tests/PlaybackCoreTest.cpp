@@ -508,8 +508,8 @@ int main (int /*argc*/, char* /*argv*/[])
 
 	// A negative control for the check above: "nothing was refused" only means something if the
 	// counter can move at all. Hammering a locking command from this thread while the renderer
-	// spins must make it fire - it is the same mechanism a load used to trigger for its whole
-	// duration.
+	// keeps rendering must make it fire - it is the same mechanism a load used to trigger for its
+	// whole duration.
 	std::printf ("[6b] the starvation counter can actually fire\n");
 
 	{
@@ -532,17 +532,30 @@ int main (int /*argc*/, char* /*argv*/[])
 
 			while (! stop.load())
 			{
+				// Keep the fake song alive. It is exactly one second long, and this renderer outruns
+				// it: 256 samples per millisecond is five times real time, and the window below is
+				// half a second - the head start alone is enough to run it dry on a loaded runner.
+				// Once the song ends, playing goes false and render() short-circuits *before* the
+				// lock, so no amount of hammering could move the counter: the control would prove
+				// nothing, silently. (That is what the arm64 runner showed - 471 attempts and not one
+				// refusal is only possible if those attempts never reached the lock at all.)
+				if (! engine.isPlaying())
+				{
+					engine.play();		// a finished song restarts from the top
+				}
+
 				engine.render (buses, 1, blockSize);
 				attempts.fetch_add (1);
-				juce::Thread::sleep (1);
+				juce::Thread::sleep (1);	// the shape of a real block: one call per millisecond
 			}
 		});
 
 		juce::Thread::sleep (40);
 
-		// Each call holds the lock for a moment, so the renderer's try-lock has to lose the race
-		// sooner or later. Hammering until it does - with a deadline - rather than guessing an
-		// iteration count: Windows' sleep granularity means the renderer may only wake a few times.
+		// Each call holds the lock for a moment, and this thread spends the rest of the window
+		// hammering a command that takes it, so the renderer's try-lock has to lose the race - on
+		// x64 it lost on its first attempt. The deadline is the way out if it somehow does not:
+		// it is not there to guess an iteration count.
 		const int refusedBefore = engine.getStarvedBlocks();
 		const int attemptsBefore = attempts.load();
 		const auto deadline = juce::Time::getMillisecondCounter() + 500;
