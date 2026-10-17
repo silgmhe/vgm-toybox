@@ -50,6 +50,20 @@ endif()
 # position-independent code generation on Linux - which the shared plugin needs regardless.
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
+# --- the Linux C++ runtime, linked in ---
+# The Linux packages are built inside an Ubuntu 22.04 container (see release.yml), so they ask for no
+# more than that glibc - and glibc is backwards compatible, which is the point of building there. The
+# C++ runtime is a different matter: libstdc++ carries its own symbol versions (GLIBCXX_3.4.x) tied to
+# the compiler that produced it, so a machine can meet the glibc requirement and still fail on
+# libstdc++. Linking it in removes that variable, at about two megabytes per bundle.
+#
+# glibc itself stays shared, on purpose: it is what dlopen, ALSA's plugins and the X11 drivers resolve
+# against, and a static glibc inside a shared object is not something that works. That is also why a
+# fully static build is not an option here - the plugin is a .so the host loads.
+if(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+	add_link_options(-static-libstdc++ -static-libgcc)
+endif()
+
 # --- libvgm ---
 # Build the in-tree libvgm copy as part of this project (one-shot build, static libraries).
 # The libraries under libs/ are vendored source, not submodules, so they can be patched in place -

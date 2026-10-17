@@ -6,13 +6,37 @@ name: Release
 on:
   push:
     tags: [ 'v*' ]
+  # A manual run builds and uploads the same packages without publishing, so a change to the
+  # packaging - a different build container, a new link flag - can be checked against real artefacts
+  # before a tag is spent on it. The publish job below only runs for a tag.
+  workflow_dispatch:
 
 permissions:
-  contents: write		# gh release create writes to this repository
+  contents: write    # gh release create writes to this repository
 
 jobs:
-  package:
+  check-tag:
+    name: Check the tag against the project version
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+
+    - name: Check the tag against the project version
+      # A release called v0.6 whose plugin reports 0.5 is worse than a failed release: the version
+      # comes from project(... VERSION ...), which every format reads at compile time. A manual run
+      # has no tag to compare against, so it skips this.
+      if: startsWith(github.ref, 'refs/tags/')
+      run: |
+        tag="${GITHUB_REF_NAME#v}"
+        version="$(sed -n 's/^project(vgmtoybox VERSION \([0-9][0-9.]*\).*/\1/p' CMakeLists.txt)"
+        echo "tag: $tag   project: $version"
+        test "$tag" = "$version" || {
+          echo "::error::tag v$tag does not match project VERSION $version"; exit 1; }
+
+  package-desktop:
     name: Build and package (${{ matrix.os }})
+    needs: check-tag
     strategy:
       fail-fast: false
       matrix:
@@ -22,15 +46,13 @@ jobs:
         # build.ps1's defaults, so a release cannot quietly become a debug or an emulated x64 one.
         #
         # macOS rides in one universal bundle (both slices, below) rather than one package per
-        # architecture, which is what Mac users expect. The two arm64 rows are there because a
-        # Raspberry Pi or an ARM server cannot run the x64 package - and note what the Windows arm64
-        # package holds: the VST3 and the standalone only, because JUCE drops AAX on Windows arm64.
+        # architecture, which is what Mac users expect. The arm64 rows are there because a Raspberry
+        # Pi or an ARM server cannot run the x64 package - and note what the Windows arm64 package
+        # holds: the VST3 and the standalone only, because JUCE drops AAX on Windows arm64.
         include:
           - { os: windows-latest,   arch: x64,   shell: powershell, package: VGMToybox-windows-x64.zip }
           - { os: windows-11-arm,   arch: arm64, shell: powershell, package: VGMToybox-windows-arm64.zip }
           - { os: macos-latest,                  shell: bash,       package: VGMToybox-macos.zip }
-          - { os: ubuntu-latest,    arch: x64,   shell: bash,       package: VGMToybox-linux-x64.tar.gz }
-          - { os: ubuntu-24.04-arm, arch: arm64, shell: bash,       package: VGMToybox-linux-arm64.tar.gz }
     runs-on: ${{ matrix.os }}
     defaults:
       run:
@@ -39,24 +61,6 @@ jobs:
     steps:
     - name: Checkout
       uses: actions/checkout@v4
-
-    - name: Check the tag against the project version
-      # A release called v0.6 whose plugin reports 0.5 is worse than a failed release: the version
-      # comes from project(... VERSION ...), which every format reads at compile time.
-      shell: bash
-      run: |
-        tag="${GITHUB_REF_NAME#v}"
-        version="$(sed -n 's/^project(vgmtoybox VERSION \([0-9][0-9.]*\).*/\1/p' CMakeLists.txt)"
-        echo "tag: $tag   project: $version"
-        test "$tag" = "$version" || {
-          echo "::error::tag v$tag does not match project VERSION $version"; exit 1; }
-
-    - name: Install Linux dependencies
-      if: startsWith(matrix.os, 'ubuntu')
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y ninja-build libasound2-dev libx11-dev libxext-dev libxinerama-dev \
-          libxrandr-dev libxcursor-dev libfreetype6-dev libfontconfig1-dev libgl1-mesa-dev xvfb
 
     - name: Build, test and package (Windows)
       if: startsWith(matrix.os, 'windows')
@@ -94,9 +98,61 @@ jobs:
         cp -R "$vst3" "$au" "$app" LICENSE dist/release/
         (cd dist/release && zip -ry "../../${{ matrix.package }}" .)
 
-    - name: Build and package (Linux)
-      if: startsWith(matrix.os, 'ubuntu')
+    - name: Upload the package
+      uses: actions/upload-artifact@v4
+      with:
+        name: ${{ matrix.package }}
+        path: ${{ matrix.package }}
+
+  package-linux:
+    name: Build and package (${{ matrix.os }}, glibc 2.35)
+    needs: check-tag
+    strategy:
+      fail-fast: false
+      matrix:
+        # The image is chosen for the glibc it carries, not for the runner. Building on the runner
+        # itself (ubuntu-24.04 today) makes the package ask for glibc 2.39, which locks out every
+        # distribution older than the CI image - Ubuntu 22.04 among them, and 22.04 is a supported
+        # LTS. glibc is backwards compatible, so a binary built against 2.35 runs on 2.35 and on
+        # everything newer; building here is what sets that floor.
+        #
+        # Only the glibc floor comes from the container. ALSA and the X11 libraries stay shared and
+        # come from the machine that runs the plugin, which is why the packages cannot be static
+        # any further than this: the plugin is a .so the host loads.
+        include:
+          - { os: ubuntu-latest,    arch: x64,   image: ubuntu:22.04, package: VGMToybox-linux-x64.tar.gz }
+          - { os: ubuntu-24.04-arm, arch: arm64, image: ubuntu:22.04, package: VGMToybox-linux-arm64.tar.gz }
+    runs-on: ${{ matrix.os }}
+    container:
+      image: ${{ matrix.image }}
+    defaults:
+      run:
+        shell: bash
+
+    steps:
+    - name: Install git
+      # The image is a bare root filesystem without git, and actions/checkout needs it - which is why
+      # this step has to come before the checkout.
       run: |
+        apt-get update
+        apt-get install -y --no-install-recommends git ca-certificates
+
+    - name: Checkout
+      uses: actions/checkout@v4
+
+    - name: Install the build dependencies
+      # Everything runs as root in the container, so there is no sudo here.
+      run: |
+        apt-get install -y --no-install-recommends build-essential cmake ninja-build pkg-config \
+          libasound2-dev libx11-dev libxext-dev libxinerama-dev libxrandr-dev libxcursor-dev \
+          libfreetype6-dev libfontconfig1-dev libgl1-mesa-dev libcurl4-openssl-dev xvfb
+
+    - name: Build, test and package (Linux)
+      run: |
+        # Show what the package will actually demand of the machine that installs it, in the log of
+        # the run that produced it rather than in a support thread afterwards.
+        ldd --version | head -1
+
         cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
         cmake --build build --parallel 3
         cmake --build build --target vgm_core_test vgm_ui_test vgm_app_test --parallel 3
@@ -111,6 +167,15 @@ jobs:
           find build -name 'VGMToybox*' | head -20
           exit 1
         fi
+
+        # The two numbers that decide which distributions can install this. Anything above 2.35 or
+        # any GLIBCXX at all would mean the container or the link flags stopped doing their job.
+        echo "--- what the standalone asks for ---"
+        grep -ao 'GLIBC_[0-9.]*' "$standalone" | sort -Vu | tail -3
+        if grep -aq 'GLIBCXX_' "$standalone"; then
+          echo "::warning::the Linux standalone still names a GLIBCXX symbol"
+        fi
+
         mkdir -p dist/release
         cp -R "$vst3" dist/release/
         cp "$standalone" dist/release/
@@ -125,7 +190,9 @@ jobs:
 
   release:
     name: Publish the release
-    needs: package
+    needs: [ package-desktop, package-linux ]
+    # A manual run stops after the packages: there is no tag, so there is nothing to publish under.
+    if: startsWith(github.ref, 'refs/tags/')
     runs-on: ubuntu-latest
     steps:
     - name: Download the packages
@@ -150,6 +217,17 @@ jobs:
           \`/Library/Audio/Plug-Ins/Components\`, and \`VGMToybox.app\` runs on its own.
         - Linux: \`VGMToybox.vst3\` goes to \`~/.vst3\`, and the standalone binary runs on its own. Both
           packages install the same way - take the \`x64\` or the \`arm64\` one to match the machine.
+
+        **Linux: Ubuntu 22.04 or newer.** The Linux packages are built inside an Ubuntu 22.04
+        container, so they ask for glibc 2.35 and no more than that - glibc is backwards compatible,
+        which is what makes one package cover 22.04, 24.04, Debian 12 and later, Fedora 35 and later,
+        and current Arch. The C++ runtime is linked in, so nothing here depends on the libstdc++ a
+        machine happens to carry. An older machine reports \`GLIBC_2.35 not found\` and has to build
+        from source. ALSA has to be installed either way (\`libasound2\` or \`libasound2t64\`), and
+
+            ldd VGMToybox | grep "not found"
+
+        names exactly what is missing.
 
         **macOS: unsigned and un-notarised.** These bundles have no Apple Developer signature behind
         them, so macOS refuses them at first launch. Either right-click and choose *Open*, or clear
