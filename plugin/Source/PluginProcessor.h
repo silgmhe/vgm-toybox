@@ -67,7 +67,7 @@ public:
 
 private:
 	/** "Out 1/2" (the main bus, activated) plus the additional buses, which start **inactive**:
-		a host only allocates the ones the user enables (docs/multitrack-output-design.md, ADR-2),
+		a host only allocates the ones the user enables (docs/desgin/multitrack-output-design.md, ADR-2),
 		so out of the box the plugin behaves exactly as it did before. Defined here because
 		`BusesProperties` is a protected nested type of `AudioProcessor`. */
 	static BusesProperties buildBusesProperties (void)
@@ -84,6 +84,11 @@ private:
 
 		return properties;
 	}
+
+	/** The body of setStateInformation(): decodes and installs one state, message thread, and
+		reports what the status line should say (empty on success). Split out so the public call
+		can hop threads first - a host may call it from anywhere (review M-2). */
+	juce::String restoreState (const void* data, int sizeInBytes);
 
 	toybox::PlaybackEngine engine;
 

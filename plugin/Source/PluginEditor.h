@@ -78,9 +78,10 @@ private:
 		About box, with the theme choices and the place the settings file lives. */
 	void showSettings (void);
 
-	/** Opens the song the application was started with (see getStartupFile()). The audio device
-		may still be coming up while the editor is built, so the first timer ticks call this again
-		until the engine has it. */
+	/** Opens the song the application was started with (see getStartupFile()). It goes through
+		loadFile(), so the load itself happens on the engine's worker (review M-1) - the window is
+		up and drawing while the song is built, and a load that fails says so in the status line
+		instead of leaving the application silent with no explanation. */
 	void openStartupSong (void);
 	void updateStatusLine (void);
 
@@ -114,8 +115,16 @@ private:
 	int refreshHz = 0;	// the rate the refresh timer currently runs at (see timerCallback())
 
 	juce::File startupSong;			// what the application was launched with, if anything
-	int startupAttempts = 0;
 	bool startupHandled = false;
+
+	/** A load is being built on the engine's worker right now: the status line shows which file,
+		and a second request simply replaces this one (the older callback is never called). */
+	bool loadInFlight = false;
+	juce::String loadingName;
+
+	/** The last starvedBlocks count this window reported (review L-4): only a move is worth a
+		log line, or every tick would repeat it. */
+	int reportedStarvedBlocks = 0;
 
 	JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (ToyboxAudioProcessorEditor)
 };

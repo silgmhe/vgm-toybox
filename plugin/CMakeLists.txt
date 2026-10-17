@@ -270,6 +270,10 @@ target_link_libraries(vgm_core_test PRIVATE
 	juce::juce_audio_basics
 	# for juce::PropertiesFile, the file the settings live in (Source/settings)
 	juce::juce_data_structures
+	# for juce::MessageManager, which PlaybackEngine.cpp compiles against for the message-thread
+	# half of an asynchronous load (review M-1). The tests never call that path - it needs a
+	# running message loop - but the module has to be on the include path to compile the file.
+	juce::juce_events
 	juce::juce_recommended_config_flags
 )
 
@@ -331,5 +335,7 @@ target_link_libraries(vgm_mixer_test PRIVATE
 	${LIBVGM_TARGETS}
 	juce::juce_core
 	juce::juce_audio_basics
+	# PlaybackEngine.cpp compiles the MessageManager call for asynchronous loads (review M-1)
+	juce::juce_events
 	juce::juce_recommended_config_flags
 )

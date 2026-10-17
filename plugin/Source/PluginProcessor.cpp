@@ -151,20 +151,13 @@ void ToyboxAudioProcessor::getStateInformation (juce::MemoryBlock& destData)
 	engine.writeState (destData);
 }
 
-void ToyboxAudioProcessor::setStateInformation (const void* data, int sizeInBytes)
+juce::String ToyboxAudioProcessor::restoreState (const void* data, int sizeInBytes)
 {
-	// The standalone application always starts with a clean state: no file from the previous
-	// session and no auto-play. Only plugin instances inside a host restore their session.
-	if (wrapperType == juce::AudioProcessor::wrapperType_Standalone)
-	{
-		return;
-	}
-
 	juce::String errorMessage;
 	if (engine.readState (data, sizeInBytes, errorMessage))
 	{
 		clearStateMessage();
-		return;
+		return {};
 	}
 
 	// Everything that is not a state this build wrote - the old path-only format included - is
@@ -174,6 +167,43 @@ void ToyboxAudioProcessor::setStateInformation (const void* data, int sizeInByte
 		const juce::ScopedLock sl (stateMessageLock);
 		stateMessage = errorMessage;
 	}
+
+	return errorMessage;
+}
+
+void ToyboxAudioProcessor::setStateInformation (const void* data, int sizeInBytes)
+{
+	// The standalone application always starts with a clean state: no file from the previous
+	// session and no auto-play. Only plugin instances inside a host restore their session.
+	if (wrapperType == juce::AudioProcessor::wrapperType_Standalone)
+	{
+		return;
+	}
+
+	// VST3 does not promise which thread calls this (review M-2), and the whole restore - the
+	// engine, the chip list, the current file - is message-thread data by contract. Hop to the
+	// message thread and wait for it: the host is opening a project and cannot use the plugin
+	// until this returns, so waiting is what makes the instance consistent when the call ends.
+	// (The wait is on the host's thread, not on the audio thread: render() only sees the lock.)
+	if (juce::MessageManager::getInstance()->isThisTheMessageThread())
+	{
+		restoreState (data, sizeInBytes);
+		return;
+	}
+
+	// The blob belongs to the caller and may be gone after we return, so copy it before crossing.
+	const juce::MemoryBlock blob (data, (size_t) sizeInBytes);
+	juce::WaitableEvent done;
+
+	juce::MessageManager::callAsync ([this, &blob, &done]
+	{
+		restoreState (blob.getData(), (int) blob.getSize());
+		done.signal();
+	});
+
+	// A timeout rather than an infinite wait: if the host's message loop is already shutting down
+	// the state cannot be restored, and hanging the host is worse than an empty plugin.
+	done.wait (30000);
 }
 
 //==============================================================================

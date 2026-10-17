@@ -1,6 +1,7 @@
 #pragma once
 
 #include <atomic>
+#include <functional>
 #include <map>
 #include <memory>
 #include <vector>
@@ -33,7 +34,7 @@ struct ChipEntry
 	No format engine is ever touched directly - `playback::BackendRegistry` picks a backend for
 	the loaded image and everything below that goes through `ISongInstance` / `ITrackPlayer`
 	(Source/playback/SongBackend.h). Swapping or adding a format engine therefore never touches
-	this class, the UI or the host integration: see docs/playback-backend-design.md.
+	this class, the UI or the host integration: see docs/desgin/playback-backend-design.md.
 
 	Plain player mode renders through a single, un-isolated player - the classic behaviour.
 	Mixer mode renders one isolated player per track of the song and sums them with per-track
@@ -59,6 +60,21 @@ public:
 	/** Loads a song file and starts playback. Returns false and fills errorMessage on failure. */
 	bool loadFile (const juce::File& file, juce::String& errorMessage);
 	void unloadFile (void);
+
+	/** Called on the message thread when an asynchronous load finishes. */
+	using LoadCallback = std::function<void (bool ok, const juce::String& errorMessage)>;
+
+	/** Loads `file` without doing the work on the calling thread (review M-1).
+
+		The read, the unpacking and the build run on a worker owned by the engine; the finished
+		song is installed on the message thread, where every other mutator lives. The window keeps
+		drawing, and the song that is still current keeps playing, until the swap.
+
+		`onDone` is called on the message thread exactly once - or not at all when a newer load
+		(or unloadFile()) supersedes this one, in which case that request is the one that reports.
+		The callback must not be called from the worker: the UI it touches is message-thread data.
+	*/
+	void loadFileAsync (const juce::File& file, LoadCallback onDone);
 	/** Sets the output sample rate / maximum block size (host sample rate). */
 	void prepare (double newSampleRate, int maxBlockSize);
 
@@ -224,12 +240,39 @@ private:
 		bool loopsForever = false;
 	};
 
-	/** Builds a song from an image **without touching engine state**, so it needs no lock: it reads
-		the configuration (sample rate, block size, mixer mode, loop/fade, routing scheme) and the
-		previous chip list, and returns everything a load produces. `song` is null on failure. */
-	LoadedSong buildSong (const juce::MemoryBlock& image, const juce::File& file,
-						  const std::vector<ChipEntry>& previousChips,
-						  juce::String& errorMessage) const;
+	/** Everything buildSong() reads, copied from the engine on the message thread so that a build
+		running on a worker never touches a member render() can see. */
+	struct BuildConfig
+	{
+		double sampleRate = 44100.0;
+		int maxBlockSize = 512;
+		int loopCount = 1;
+		double fadeSeconds = 3.0;
+		bool mixerEnabled = true;
+		playback::DefaultRouting defaultRouting = playback::DefaultRouting::master;
+		std::vector<ChipEntry> chips;
+	};
+
+	/** Copies the live configuration into a BuildConfig. Message thread. */
+	BuildConfig makeBuildConfig (void) const;
+
+	/** Builds a song from an image **without touching engine state**, so it needs no lock and can
+		run anywhere: it reads the passed configuration only and returns everything a load
+		produces. `song` is null on failure. */
+	static LoadedSong buildSong (const BuildConfig& config, const juce::MemoryBlock& image,
+								 const juce::File& file, juce::String& errorMessage);
+
+	/** Swaps a built song into the engine: the only part of a load that has to run under the
+		lock. The image is moved in (the engine keeps it for the session), the position goes back
+		to zero and `startPlaying` is installed with the swap, not set afterwards. */
+	bool installLoaded (LoadedSong&& built, juce::MemoryBlock&& image, const juce::File& file,
+						bool startPlaying);
+
+	/** The message-thread half of loadFileAsync(): drops the result when a newer load has taken
+		over in the meantime, otherwise installs it and reports. */
+	void finishLoad (int generation, LoadedSong&& built, juce::MemoryBlock&& image,
+					 const juce::File& file, bool ok, const juce::String& errorMessage,
+					 const LoadCallback& onDone);
 
 	/** Moves a built song into the engine and publishes its state - the only part of a load that has
 		to happen under the lock. Leaves the position at zero; the callers decide what happens to the
@@ -276,6 +319,16 @@ private:
 	void finaliseMasterBus (const playback::OutputBusBuffers* buses, int busCount, int usable);
 	void applyOutputVolume (const playback::OutputBusBuffers* buses, int busCount, int numSamples);
 	void publishPositionAndEnd (void);
+
+	// --- asynchronous loading (review M-1) ---
+	// The worker only reads its own copied config and image, so it never needs the lock; the
+	// install comes back to the message thread. `alive` is shared with the pending callbacks: the
+	// destructor drops it before it stops the pool, so a result that arrives after the engine is
+	// gone is dropped instead of writing into freed state.
+	juce::ThreadPool loadPool { juce::ThreadPool::Options{}.withThreadName ("VGMToybox load")
+									.withNumberOfThreads (1) };
+	std::atomic<int> loadGeneration { 0 };
+	std::shared_ptr<std::atomic<bool>> alive = std::make_shared<std::atomic<bool>> (true);
 
 	mutable juce::CriticalSection lock;
 	std::unique_ptr<playback::ISongInstance> song;		// the open song (backend object)

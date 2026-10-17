@@ -52,7 +52,7 @@
 
 ### 2.3 线程与数据通路
 
-全仓只有两个线程参与：**音频线程**（`render()`）和**消息线程**（其余一切）。没有后台线程——搜 `juce::Thread|ThreadPool|callAsync|AsyncUpdater` 命中 0，这是理解三个问题的起点。
+全仓只有两个线程参与：**音频线程**（`render()`）和**消息线程**（其余一切）。没有后台线程——搜 `juce::Thread|ThreadPool|callAsync|AsyncUpdater` 命中 0，这是理解三个问题的起点。（M-1 落地后多了加载 worker 一个后台线程，它只碰自己的拷贝、结论回消息线程，见 §6 M-1。）
 
 | 数据 | 谁写 | 谁读 | 机制 |
 |---|---|---|---|
@@ -288,7 +288,7 @@ private:
 | 主题模式，以及以后可能有的界面偏好 | 用户 | **`settings.xml`**（AppData，插件与 Standalone 共用，已是现状） |
 | 启动曲 | 仅 Standalone | 命令行参数，不持久化 |
 
-三条附则：**播放位置不进状态**（`loadFile` 把位置归零、加载即播放，`PlaybackEngine.cpp:108-110`，这是产品行为，保持）；**主题绝不能进 VST 状态**——否则打开一个别人的旧工程会把用户当前主题改掉；**路由也不要挪进 `settings.xml`**——64 路总线怎么摆是宿主工程的事，换一台机器/换一个工程就该不同。
+三条附则：**播放位置不进状态**——用户打开一首歌就从头播（`loadFile` 把位置归零后立即播放，这是产品行为，保持），而**恢复工程是停在开头的**，打开工程不会自己出声；`installLoaded()` 把"从哪开始"和交换放在一起，所以没有"先装好再设一次"的中间态可被音频线程看见（见 §10 第 1 条）；**主题绝不能进 VST 状态**——否则打开一个别人的旧工程会把用户当前主题改掉；**路由也不要挪进 `settings.xml`**——64 路总线怎么摆是宿主工程的事，换一台机器/换一个工程就该不同。
 
 **为什么歌曲必须是数据而不是路径**：工程要能发给别人、在另一台机器上打开，对方没有那份文件，路径只是本机的一张便条；一个工程里还可能同时有多个 VGMToybox 实例，各放各的曲子，路径方案会让"换机器"变成"逐个找文件拷过去"。VST 没有跨实例共享 chunk 的机制，所以每个实例各存一份是唯一能保证可移植的做法——同一首曲子被两个实例加载就存两份，这个代价要接受（见下面第 8、9 条）。
 
@@ -335,24 +335,28 @@ private:
 - **影响**：大文件或慢盘上窗口白屏、按钮无响应；构造期加载还会推迟首帧。宿主恢复工程时同理（见 M-2）。
 - **修法**：§5.3 的 worker + `callAsync`，带 generation 取消与 `SafePointer`。
 - **为什么是 M 不是 H**：VGM 通常不到 1 MB，主要成本是每个芯片一个播放器的初始化；在实测到秒级卡顿之前不升级。测量方法见 §9。
+- **落地（已完成）**：`PlaybackEngine::loadFileAsync()`（`PlaybackEngine.{h,cpp}`）用一个 `juce::ThreadPool`（1 线程）读字节并构建，`MessageManager::callAsync` 回到消息线程安装。引擎侧拆出两半：`BuildConfig makeBuildConfig()` 在消息线程快照配置（音质、块大小、loop/淡出、混音模式、默认路由、芯片列表），`static buildSong(config, …)` 只读这份拷贝，`installLoaded()` 在锁内做交换；同步的 `loadFile()`/`rebuild()` 走同一条 `buildSong + installLoaded` 路径，所以只有一条构建路径。取消用 `loadGeneration`：`loadFileAsync`、同步加载、`unloadFile` 都会 `++`，完成时对不上就丢弃且**不回调**（更新的请求才是要报告的那个）。析构先置 `alive=false` 再 `removeAllJobs(true, 3000)`，迟到的结果不会写进已释放的对象。编辑器侧 `loadFile()` 改成发起请求 + `SafePointer` 回调，状态行在构建期间显示 `Loading <name>...`；启动曲不再定时重试（`startupAttempts` 删掉），因为结果本来就是回调。核心测试不链窗口模块，但 `PlaybackEngine.cpp` 现在要编 `MessageManager`，所以 `vgm_core_test`/`vgm_mixer_test` 链接了 `juce::juce_events`（测试不走异步路径，那条路径需要一个跑着的消息循环）。
 
 ### M-2 `setStateInformation` 的线程假设 + 错误静默
 
 - **证据**：`PluginProcessor.cpp:133-161`；`eng.loadFile (file, errorMessage)`（`:160`）的返回值没有检查，`errorMessage` 出了作用域就丢了。
 - **影响**：① 宿主若在非消息线程调用，加载会写 `chips`、`tags`、`currentFile` 这些**按"只有消息线程碰"约定**维护的字段（`PlaybackEngine.cpp:76-79`、`:396-398` 的注释就是这条约定），与 UI 轮询构成数据竞争；② 加载失败时工程"看起来打开了但没有歌"，没有任何提示。
 - **修法**：不在消息线程就 `callAsync` 一次；错误通过状态栏或 `ChangeBroadcaster` 暴露。与 M-1 同一笔提交。
+- **落地（已完成）**：`ToyboxAudioProcessor::setStateInformation()` 先判断线程，不在消息线程就 `callAsync` 并 **`WaitableEvent` 等到它做完**（30 s 上限）。与 §5.3 原来写的"晚一拍完成、宿主不必等"不同：`setState` 返回后宿主马上就会用这个实例，异步完成等于让状态在未知时刻出现，而"恢复晚一拍"本身没有收益；等待发生在宿主的调用线程上，不是音频线程（`render()` 只碰锁），代价只是打开工程时多等一次构建。错误文本改由 `restoreState()` 返回，`setStateInformation` 用它填状态行——原来的 `readState` 返回值没人检查、`errorMessage` 出了作用域就丢，这条一起修了。
 
 ### M-3 快捷键两份真值
 
 - **证据**：`MainMenu.h:18` 的 `shortcut` 是给人看的字符串（`"Ctrl+O"`），`keyPressed()`（`PluginEditor.cpp:256-306`）又独立写了一遍 `KeyPress` 匹配。
 - **影响**：新增命令要改两处；改一处就会出现"菜单写着 Ctrl+O、按下去没反应"，而这类错误编译器和测试都抓不到。
 - **修法**：`MenuEntry` 存 `juce::KeyPress`，文本由 `getTextDescriptionWithIcons()` 生成；`keyPressed()` 遍历菜单表匹配。约 40 行。
+- **落地（已完成）**：新增 `Source/ui/EditorCommands.h`，一张 `id → KeyPress + std::function` 的表：`getKey()` 给菜单画，`handleKey()` 给窗口匹配，`perform()` 给菜单项执行（菜单回调也改成走 `perform()`，避免第二条动作路径），`describe()` 统一文本。`MenuEntry::shortcut` 换成 `juce::KeyPress key`，`MainMenu` 通过 `const EditorCommands*` 取键；`Ctrl+1..9` 由 `EditorCommands::pageKey(i)` / `pageForKey(key)` 提供，菜单与 `keyPressed()` 都调它，所以页号也不再是两处硬编码。
 
 ### M-4 `PluginEditor` 兼五职
 
 - **证据**：448 行里塞了窗口与视图切换（`:48-100` 构造函数里接线）、菜单回调、快捷键（`:256`）、加载（`:368`）、启动曲（`:423`）、定时刷新节流（`:477-486`）、拖放。
 - **影响**：异步加载（M-1）、命令表（M-3）都要改这个文件，冲突面大、评审难读。
 - **修法**：先做一次**纯搬移**——抽出 `EditorCommands`（菜单表 + `keyPressed` + 动作触发），约 100 行；再做 M-1。
+- **落地（已完成）**：命令表与快捷键搬进 `Source/ui/EditorCommands.h`，动作仍留在 `PluginEditor`（它们碰 `viewStack`、`processor` 和对话框，搬走只会把编辑器再拆一半）；加载相关的新成员（`loadInFlight`/`loadingName`/`reportedStarvedBlocks`）集中放在头文件的一组注释下面，`keyPressed()` 现在只剩 Esc、命令表、页号三段，每段都指向它依赖的那张表。没有为拆而拆出新的中间层。
 
 ### L-1 文档路径回归
 
@@ -365,9 +369,13 @@ private:
 
 实际路径都在 `docs/desgin/` 下。修法是改字符串；更值得做的是把"源码里的 `docs/` 路径必须存在"写成 CI 里的一行检查（§9 的那段脚本可以直接搬）。
 
+**落地（已完成）**：六处都改成了 `docs/desgin/…`；CI 检查这一条**没有**加——§9 那段脚本在 Windows 上依赖 `Get-ChildItem`，跨平台要重写，而这类回归靠人工评审发现一次就够了，不值得为它加一条只在一个平台跑得起来的检查。留在登记册里，等哪天真成了反复回归再说。
+
 ### L-2 目录名 `desgin`
 
 `docs/desgin/` 是 `design` 的拼写错误，被 **29 处**引用写死。改名一次可做（`git mv` + 全量替换），但会让旧文档里的路径引用与原仓库历史对不上，收益低于成本。**建议保持原名**，在 `CODEBUDDY.md` 里注明"目录名是历史拼写，勿改"，免得每轮评审都重新发现一次。
+
+**落地（已完成）**：保持原名；`CODEBUDDY.md` 的文档段落里写明了这条约定（"`docs/desgin/` keeps its spelling"），并说明新链接照写 `desgin`、不要"修正"。
 
 ### L-3 零 `// DEBT:` 标记
 
@@ -377,21 +385,23 @@ private:
 
 `getStarvedBlocks()` 只有测试在读（`PlaybackCoreTest.cpp:486` 起），运行时既不记录也不显示。这个计数器是"音频线程被锁饿死"的唯一证据来源，建议在编辑器析构或诊断页打一行日志，5 行成本。
 
+**落地（已完成）**：`PluginEditor::refreshUi()` 里比较上次报告的值，只有**增加**时才写一行 `VGMToybox: N block(s) starved so far …` 到 `juce::Logger`（不是每帧刷屏）。随定时器走而不是只在析构打，是因为窗口关掉后引擎可能还活着，析构那行会晚于真正发生卡顿的时刻。
+
 ---
 
 ## 7. 债务登记册
 
-| 编号 | 问题 | 严重度 | 建议时机 | 预估 |
-|---|---|---|---|---|
-| H-1 | 混音状态与歌曲数据都未进 VST 状态 | H | 本轮（M-1 之后） | 130 行 + 测试 |
-| M-1 | 加载同步占消息线程 | M | 本轮（M-4 之后） | 150 行 |
-| M-2 | `setStateInformation` 线程与错误 | M | 与 M-1 同笔 | 30 行 |
-| M-3 | 快捷键两份真值 | M | 本轮 | 40 行 |
-| M-4 | `PluginEditor` 拆命令表 | M | 先于 M-1 | ~100 行纯搬移 |
-| L-1 | 6 处文档路径失效 | L | 本轮 | 6 行 |
-| L-2 | `desgin` 目录名 | L | 只做记录 | 0 |
-| L-3 | 无 `// DEBT:` 标记 | L | 持续 | 0 |
-| L-4 | `starvedBlocks` 无消费者 | L | 顺手 | 5 行 |
+| 编号 | 问题 | 严重度 | 建议时机 | 预估 | 状态 |
+|---|---|---|---|---|---|
+| H-1 | 混音状态与歌曲数据都未进 VST 状态 | H | 本轮（M-1 之后） | 130 行 + 测试 | 已清（`934f59f`） |
+| M-1 | 加载同步占消息线程 | M | 本轮（M-4 之后） | 150 行 | 已清 |
+| M-2 | `setStateInformation` 线程与错误 | M | 与 M-1 同笔 | 30 行 | 已清 |
+| M-3 | 快捷键两份真值 | M | 本轮 | 40 行 | 已清 |
+| M-4 | `PluginEditor` 拆命令表 | M | 先于 M-1 | ~100 行纯搬移 | 已清（只搬命令表，见 §6 M-4） |
+| L-1 | 6 处文档路径失效 | L | 本轮 | 6 行 | 已清（CI 检查未加，见 §6 L-1） |
+| L-2 | `desgin` 目录名 | L | 只做记录 | 0 | 已定（保持原名，已写进 CODEBUDDY.md） |
+| L-3 | 无 `// DEBT:` 标记 | L | 持续 | 0 | 持续 |
+| L-4 | `starvedBlocks` 无消费者 | L | 顺手 | 5 行 | 已清 |
 
 ---
 
@@ -399,13 +409,15 @@ private:
 
 按 policy §7"重构与功能不混进同一个提交"，建议五笔：
 
-1. `docs: fix the six stale references, and say why the directory keeps its spelling`（L-1 / L-2）
+1. `docs: point the design references at docs/desgin, and keep the spelling`（L-1 / L-2）
 2. `refactor: take the command table out of the editor`（M-4 + M-3）
-3. `feat!: carry the song data and the mixer in the project`（H-1，**breaking**：状态格式不再兼容旧工程；`VERSION` 0.0.5 → 0.1.0，release notes 写明）——**已完成**（本文 §10 记了与方案的一处出入）
-4. `refactor: load songs on a worker thread`（M-1 + M-2）
+3. `feat!: carry the song data and the mixer in the project`（H-1，**breaking**：状态格式不再兼容旧工程；`VERSION` 0.0.5 → 0.1.0，release notes 写明）——**已完成**（`934f59f`；本文 §10 记了与方案的一处出入）
+4. `refactor: load songs on a worker thread`（M-1 + M-2 + L-4）
 5. `docs: record the 2026-10 review`（本文）
 
 第 2 笔是纯搬移，应当**零行为变化**（测试全绿、界面不变），这样才能在事后放心地把它和后面的功能改动分开。
+
+实际切分与上面略有出入：第 2、4 笔各自都要碰 `PluginEditor.{h,cpp}`（命令表与加载状态行在同一批成员里），按"文件级"分不出两笔互不重叠的提交，所以第 2、4 笔的边界按**行为**划——命令表那笔不改加载，加载那笔不改快捷键。L-1 的两处（`PlaybackEngine.h`、`PluginProcessor.h`）同这些文件一起走，第 1 笔只覆盖另外四个文件。
 
 ---
 
@@ -416,7 +428,9 @@ private:
 Get-ChildItem plugin\Source -Recurse -File -Include *.cpp,*.h | ForEach-Object {
     (Get-Content $_.FullName | Measure-Object -Line).Lines } | Measure-Object -Sum
 
-# 后台线程：0 命中
+# 后台线程：本轮之前 0 命中；现在只剩加载 worker 与它的 callAsync（M-1 落地后应有
+# PlaybackEngine.h 的 ThreadPool、PlaybackEngine.cpp 的 loadFileAsync、PluginProcessor.cpp 的
+# callAsync；再出现别的就是新线程，值得停下来看）
 Select-String -Path plugin\Source\**\*.cpp,plugin\Source\**\*.h -Pattern `
     'juce::Thread|ThreadPool|callAsync|AsyncUpdater'
 
@@ -440,15 +454,16 @@ Measure-Command { .\dist\Standalone\VGMToybox.exe "C:\music\Some Song.vgz" }
 
 ---
 
-## 10. 待拍板的事（H-1 已落地）
+## 10. 待拍板的事（H-1、M-1 已落地）
 
 1. **H-1（已实现）**：① 状态 v2 = XML + `<song>` base64 + 整体 gzip；**不兼容旧 blob 与旧 tag**，读不出来就不加载、状态行提示，不按 `file` 回退；② 歌曲字节随工程走，只存文件名不存绝对路径，不写临时文件、不落 AppData；③ 主题等用户偏好继续留在 `settings.xml`；④ 单曲上限 **16 MB**，超出只存文件名、大小与 `embedded="0"`；⑤ 版本 `0.0.5` → **`0.1.0`**，release notes 写明 breaking change。
    - 代码：`plugin/Source/playback/SessionState.{h,cpp}`（schema + 编解码）、`PlaybackEngine::writeState/readState`、`PluginProcessor` 两侧。
    - 走带状态**不进状态**：保存时是否正在播放取决于宿主何时自动保存，纯属偶然；恢复一律**停止、回到开头**，打开工程不会自己出声。
    - 与方案的一处出入：**保存**时超出上限不再弹提示（`getStateInformation` 可能被宿主自动保存反复调用，每次弹会盖掉真正的错误），改由**读取**侧提示"歌曲过大，未随工程保存"；上限本身写进 README。
-2. **M-1**：本轮就做异步加载，还是先只做 M-4 的搬移、把异步留到下一轮？
-3. **可视化页**：是否排进下一个功能？如果是，§3.4 的 `ScopeTap` 可以随该功能一起进，不必单独一轮。
-4. **`desgin`**：保持原名（建议）还是改名？
+   - 第二处出入（已拍板）：方案第 4 条建议**缓存最终 blob**，实现**不缓存**——`getStateInformation` 每调一次就重跑 base64 + gzip，16 MB 的极端文件约半秒，常规曲子可以忽略。缓存要额外的 `stateRevision` 与失效判断，收益只在"宿主反复自动保存大文件"这一个场景；先按不缓存走，若真有人抱怨再补。
+2. **M-1（已实现，本轮做）**：见 §6 M-1 的"落地"。一处与 §5.3 的出入：`setStateInformation` 选择"跳到消息线程并**等待**"而不是"晚一拍完成"，理由在 §6 M-2。
+3. **`desgin`（已定）**：保持原名，约定写进 `CODEBUDDY.md`。
+4. **可视化页**：是否排进下一个功能？如果是，§3.4 的 `ScopeTap` 可以随该功能一起进，不必单独一轮。
 5. **混音推子**：将来是否要暴露成宿主参数（可自动化、可被宿主撤销）？这个答案会决定 Q2 里 `ValueTree` 与 APVTS 的取舍。
 
 
