@@ -55,6 +55,11 @@ assert btn.playback-start enabled == false
 # the loop count, the fade and the volume are part of the mapping, so they stay live
 assert btn.loop enabled == true
 
+# And the space bar is the host's: "unhandled" is the window letting the key out instead of
+# swallowing it, which is what hands it to the DAW's own transport shortcut. Consuming it here
+# could only make it do nothing - the local transport is disabled above.
+press space unhandled
+
 # Sync off: the local transport comes back, and the anchor is still there (it always is) - it is
 # just not being followed, so the light goes out and only the knob still shows the trim.
 click btn.sync
@@ -66,3 +71,7 @@ assert btn.stop enabled == true
 assert btn.cue checked == false
 assert knob.cue-offset enabled == true
 assert knob.cue-offset text == "+2.5 ms"
+
+# Nothing had to be re-bound: with the host no longer driving, the space bar is the local
+# transport again - the same check that let it out says it is ours now.
+press space

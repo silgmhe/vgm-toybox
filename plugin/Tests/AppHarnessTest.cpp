@@ -359,9 +359,14 @@ private:
 			return;
 		}
 
+		// `press <key>` is a key the editor has to handle; `press <key> unhandled` is a key it has to
+		// let out - that is how a shortcut reaches the host, and the only way to see it from a
+		// script (daw-sync.txt: the space bar belongs to the DAW while it drives the song).
+		const bool wantsHandled = tokens.size() < 3 || tokens[2].toLowerCase() != "unhandled";
+
 		const bool handled = editor.keyPressed (key);
 		settle (60);
-		report (handled, "press " + tokens[1]);
+		report (handled == wantsHandled, "press " + tokens[1] + (wantsHandled ? "" : " (unhandled)"));
 	}
 
 	void commandClick (const juce::StringArray& tokens, bool expectToggle)
@@ -622,7 +627,8 @@ private:
 
 	static void printHelp (void)
 	{
-		std::printf ("    load <path> | press <key> | click <id> | toggle <id> | set <id> <value>\n");
+		std::printf ("    load <path> | press <key> [unhandled] | click <id> | toggle <id> | set <id> <value>\n");
+		std::printf ("    unhandled: the key must leave the editor (it is the host's)\n");
 		std::printf ("    menu | menu invoke <entryId> | tick | shot <path.png>\n");
 		std::printf ("    host <seconds> [playing|stopped]   one process block with that host clock\n");
 		std::printf ("    dump [<id>] | assert <id> <field> <op> <value> | sleep <ms>\n");

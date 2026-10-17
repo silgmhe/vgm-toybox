@@ -113,6 +113,19 @@ bool PlayView::handleKey (const juce::KeyPress& key)
 {
 	if (key == juce::KeyPress::spaceKey)
 	{
+		// While the host drives the song the space bar is the host's. The local transport is
+		// disabled then, so swallowing the key could only make it do nothing - the DAW's own
+		// transport shortcut is what the user is after. Saying "not handled" is what lets it out:
+		// the event leaves the editor and the wrapper passes it on (on Windows JUCE reposts an
+		// unused WM_KEYDOWN to the parent window - juce_Windowing_windows.cpp), so the host runs
+		// its play/pause. Nothing is unbound when sync goes off: this is a check, not a binding,
+		// so the space bar is the local transport again the moment the host stops driving (see
+		// TransportPanel::isHostDriving).
+		if (transportPanel.isHostDriving())
+		{
+			return false;
+		}
+
 		transportPanel.togglePlayStop();
 		return true;
 	}

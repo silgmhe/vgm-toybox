@@ -66,6 +66,11 @@ public:
 	/** Seeks the transport; while it is not running, the playback start cursor follows. */
 	void seekToSeconds (double seconds);
 
+	/** True while the host drives the transport - sync is on and the host reports time. The local
+		transport is disabled then, and so is the space bar: the window stops consuming it and lets
+		it out to the host, whose own transport shortcut runs instead (see ui/PlayView.cpp). */
+	bool isHostDriving (void) const;
+
 private:
 	/** The cue-offset knob: a rotary slider whose number (the Slider's own text box, to the right of
 		the face) is the exact-value field - the way the volume's "100 %" box is - and whose double

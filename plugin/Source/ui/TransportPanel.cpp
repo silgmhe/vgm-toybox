@@ -884,6 +884,13 @@ void TransportPanel::refresh (void)
 	}
 }
 
+bool TransportPanel::isHostDriving (void) const
+{
+	// syncAvailable first: the standalone has no host to give a key back to, even if a project was
+	// saved with sync on (the group is not even drawn there - see the constructor).
+	return syncAvailable && sync.isActive();
+}
+
 void TransportPanel::togglePlayStop (void)
 {
 	// the host owns the transport while sync is on - the buttons are disabled too, but the
