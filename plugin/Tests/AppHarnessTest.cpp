@@ -547,7 +547,12 @@ private:
 
 		juce::AudioBuffer<float> buffer (juce::jmax (2, processor.getTotalNumOutputChannels()), kBlockSize);
 		juce::MidiBuffer midi;
-		processor.processBlock (processor.getBusBuffer (buffer, false, 0), midi);
+
+		// getBusBuffer() returns a view *by value* (it points into `buffer`), and processBlock()
+		// takes a non-const reference - binding the temporary directly is an MSVC extension that
+		// every other compiler rejects. Hold the view first (the same note as in PluginProcessor).
+		auto busBuffer = processor.getBusBuffer (buffer, false, 0);
+		processor.processBlock (busBuffer, midi);
 
 		report (true, "host " + juce::String (seconds, 3) + (playing ? " playing" : " stopped"));
 	}
