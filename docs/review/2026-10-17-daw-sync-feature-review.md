@@ -338,13 +338,33 @@ HostClock readHostClock (const juce::AudioPlayHead::PositionInfo&, double localS
 | # | 提交 | 状态 | 做了什么 / 怎么验证的 |
 |---|---|---|---|
 | H-1 | `eed9e1d` | ✅ | 把 transport 状态变更移到 seek 之前，位置由 seek 收尾；`decision.play` 直接写 `playing`，不再回读。**验证**：回退这段顺序后跑 M-2 的脚本，同一断言读到 `0.011610`，修复后是 `1.011610` |
-| M-2 | 本提交 | ✅ | `snapshot::line()` 与 `assert` 增加 `value`（滑杆数值）；新增 `assert engine position`（读 `getPositionSeconds()`）；`~=` 数值比较，容差 0.05 s（一个块的余量，断言的是映射不是块大小）；新脚本 `scripts/daw-sync-follow.txt`。**验证**：本地用一首 3 s 的极小 VGM 跑通，无 `VGM_TEST_SONG` 时整脚本跳过（与 `load-and-play.txt` 同形） |
-| M-1 | 本条 | ✅ | `followDawTransport()` 先 `ScopedTryLock`，再读 `trackPlayers`/`cachedTimeline` 并决策；`render()` 上面那条"抢不到就整块静音"的规则从此对它也成立。**验证**：7 个测试目标全绿 + 素材脚本（`daw-sync-follow.txt`）仍读到 `1.011610` |
-| L-2 | 本条 | ✅ | 删除零调用者的 `getSongTimeline()`，并在 `getDawSync()` 的注释里写明"歌曲事实不公开，是因为它只在锁内被读" |
-| M-4 | 本条 | ✅ | `readHostClock` 搬进 `playback/HostClockSource.{h,cpp}`，签名改成 `(const juce::AudioPlayHead*, double)`，`processBlock` 只剩一行；`vgm_core_test` 的 `[11]` 用假 `AudioPlayHead` 覆盖 9 类输入（含"全零 context"与"NaN 时间"）。**验证**：7 个测试目标全绿，`[11]` 9 条断言全 OK |
-| L-4 | 本条 | ✅ | 采样数回退在 `HostClockSource.cpp` 里写清了性质：宿主采样率 ≠ 插件采样率，所以 samples 只做回退，seconds 才是一等公民 |
-| L-1 | 本条 | ✅ | `design.md` §7.1 的 API 表按代码重写（`hasCue/clearCue` 已删、`isActive = enabled && hostUsable`、`kSyncToleranceSeconds` 进命名空间）；§7.2 的"无锁返回副本"改成"只在锁内读"；§7.3 的 `readHostClock` 签名与出处更新；§10 补第 10 条（空格交给宿主）；§12 补 `[11]` 与新脚本 |
-| L-3 | 本条 | ✅ | `HostClock::sampleRate` 与 `DawSync::hostSampleRate` 删除；换算率降为 `readHostClock` 的局部变量 |
-| L-5 | 本条 | ✅ | `kSyncToleranceSeconds` 提到命名空间，`evaluateSync()` 增加带默认值的 `toleranceSeconds`；`DawSync::kToleranceSeconds` 删除 |
-| L-6 | 本条 | ✅ | `refresh()`/`togglePlayStop`/`togglePlayPause`/`seekToSeconds`/`stopTransport` 统一走 `isHostDriving()`，并在它的注释里写明"这是唯一的谓词" |
-| M-3 | 本条 | ✅ | 抽出 `ui/SyncGroup : Component`：两个按钮、旋钮、虚线框、名牌、裁剪后的辉光、右键菜单与 `isHostDriving()` 全归它；面板只剩 `preferredWidth()`/`frameHeight()`/`nameplateOverhang()` 三个静态数字和两个回调（`onStateChanged`、`onRequestValueEntry`）。卡片的数值覆盖层留在 `TransportPanel`（它是卡片大小，比这个组大）。`TransportPanel.cpp` 1125 → 783 行，`SyncGroup.cpp` 453 行 —— **总行数反而多了约 110**（新头文件 + 搬到新文件的注释），收益在结构不在行数。**验证**：`daw-sync.txt` 新增 `assert group.sync visible`，`dump` 里 `btn.sync` / `btn.play` 的绝对 y 都是 21（同一基线），两张截图与重构前一致，全部脚本照旧通过 |
+| M-2 | `02cf2f1` | ✅ | `snapshot::line()` 与 `assert` 增加 `value`（滑杆数值）；新增 `assert engine position`（读 `getPositionSeconds()`）；`~=` 数值比较，容差 0.05 s（一个块的余量，断言的是映射不是块大小）；新脚本 `scripts/daw-sync-follow.txt`。**验证**：本地用一首 3 s 的极小 VGM 跑通，无 `VGM_TEST_SONG` 时整脚本跳过（与 `load-and-play.txt` 同形） |
+| M-1 | `766bf2d` | ✅ | `followDawTransport()` 先 `ScopedTryLock`，再读 `trackPlayers`/`cachedTimeline` 并决策；`render()` 上面那条"抢不到就整块静音"的规则从此对它也成立。**验证**：7 个测试目标全绿 + 素材脚本（`daw-sync-follow.txt`）仍读到 `1.011610`。取舍见 §8.1 |
+| L-2 | `766bf2d` | ✅ | 删除零调用者的 `getSongTimeline()`，并在 `getDawSync()` 的注释里写明"歌曲事实不公开，是因为它只在锁内被读" |
+| M-4 | `e6995bb` | ✅ | `readHostClock` 搬进 `playback/HostClockSource.{h,cpp}`，签名改成 `(const juce::AudioPlayHead*, double)`，`processBlock` 只剩一行；`vgm_core_test` 的 `[11]` 用假 `AudioPlayHead` 覆盖 9 类输入（含"全零 context"与"NaN 时间"）。**验证**：7 个测试目标全绿，`[11]` 9 条断言全 OK |
+| L-4 | `e6995bb` | ✅ | 采样数回退在 `HostClockSource.cpp` 里写清了性质：宿主采样率 ≠ 插件采样率，所以 samples 只做回退，seconds 才是一等公民 |
+| L-1 | `8553784` | ✅ | `design.md` §7.1 的 API 表按代码重写（`hasCue/clearCue` 已删、`isActive = enabled && hostUsable`、`kSyncToleranceSeconds` 进命名空间）；§7.2 的"无锁返回副本"改成"只在锁内读"；§7.3 的 `readHostClock` 签名与出处更新；§10 补第 10 条（空格交给宿主）；§12 补 `[11]` 与新脚本 |
+| L-3 | `8553784` | ✅ | `HostClock::sampleRate` 与 `DawSync::hostSampleRate` 删除；换算率降为 `readHostClock` 的局部变量 |
+| L-5 | `8553784` | ✅ | `kSyncToleranceSeconds` 提到命名空间，`evaluateSync()` 增加带默认值的 `toleranceSeconds`；`DawSync::kToleranceSeconds` 删除 |
+| L-6 | `8553784` | ✅ | `refresh()`/`togglePlayStop`/`togglePlayPause`/`seekToSeconds`/`stopTransport` 统一走 `isHostDriving()`，并在它的注释里写明"这是唯一的谓词" |
+| M-3 | `9f99020` | ✅ | 抽出 `ui/SyncGroup : Component`：两个按钮、旋钮、虚线框、名牌、裁剪后的辉光、右键菜单与 `isHostDriving()` 全归它；面板只剩 `preferredWidth()`/`frameHeight()`/`nameplateOverhang()` 三个静态数字和两个回调（`onStateChanged`、`onRequestValueEntry`）。卡片的数值覆盖层留在 `TransportPanel`（它是卡片大小，比这个组大）。`TransportPanel.cpp` 1125 → 783 行，`SyncGroup.cpp` 453 行 —— **总行数反而多了约 110**（新头文件 + 搬到新文件的注释），收益在结构不在行数。**验证**：`daw-sync.txt` 新增 `assert group.sync visible`，`dump` 里 `btn.sync` / `btn.play` 的绝对 y 都是 21（同一基线），截图与重构前一致，全部脚本照旧通过 |
+
+### 8.1 一次有意的取舍：跟随路径的 try-lock（M-1）
+
+M-1 之后，只要同步开着且有歌，`followDawTransport()` 每块都会做一次
+`juce::ScopedTryLock`。它**不是无锁算法**，但仍然是实时安全的：
+
+- **不阻塞**：`ScopedTryLock` 只做一次 `tryEnter()`（Windows 上是 `TryEnterCriticalSection`，
+  `juce_Threads_windows.cpp:63`），拿不到就返回 false，不等待、也不会有优先级反转。
+- **有界**：未争用时是一次互锁操作（几十纳秒），最坏是跨核争用一条缓存行（百纳秒量级）；
+  相对于 512 样本块 ≈ 10.7 ms 可以忽略。
+- **代价的另一面**：同步开启且引擎空闲时，这个块也会碰一次锁 —— `render()` 原来那句
+  "while paused or idle ... must not touch the lock at all" 因此不再字面成立，注释已改成
+  "跟随是唯一可能在上面取过锁的东西"。
+- **纠正路径本来就必须持锁**：`setPositionSecondsLocked()` 要给所有 player 做 seek，
+  "完全无锁的跟随"从一开始就不存在。
+
+**没有做的备选**（留着，等真需要严格无锁时再做）：把 `SongTimeline` 的四个基础事实也用原子量
+发布（照 `DawSync` 自己的形状），音频线程每块自己 `makeSongTimeline()`，于是**决策零锁**，
+只有纠正时才 try-lock。代价是"换歌时算出半新半旧的时间线"要在发布侧解决（约 60–80 行 +
+一条测试），而现在这条撕裂路径已经不存在了。

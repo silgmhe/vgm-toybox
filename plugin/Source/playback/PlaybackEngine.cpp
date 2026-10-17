@@ -1071,7 +1071,9 @@ void PlaybackEngine::render (const playback::OutputBusBuffers* buses, int numBus
 	followDawTransport();
 
 	// check the cheap atomics first: while paused or idle the audio thread must not touch
-	// the lock at all (a failed try-lock costs a whole silent block)
+	// the lock at all (a failed try-lock costs a whole silent block). Following the host is the one
+	// thing above that can have taken it already - and only while sync is on with a loaded song,
+	// which is what followDawTransport() costs per block (review M-1).
 	if (! playing.load() || ! loaded.load())
 	{
 		reportSilenceWhenIdle();
