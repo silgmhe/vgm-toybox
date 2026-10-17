@@ -464,6 +464,6 @@ Measure-Command { .\dist\Standalone\VGMToybox.exe "C:\music\Some Song.vgz" }
 2. **M-1（已实现，本轮做）**：见 §6 M-1 的"落地"。一处与 §5.3 的出入：`setStateInformation` 选择"跳到消息线程并**等待**"而不是"晚一拍完成"，理由在 §6 M-2。
 3. **`desgin`（已定）**：保持原名，约定写进 `CODEBUDDY.md`。
 4. **可视化页**：是否排进下一个功能？如果是，§3.4 的 `ScopeTap` 可以随该功能一起进，不必单独一轮。
-5. **混音推子**：将来是否要暴露成宿主参数（可自动化、可被宿主撤销）？这个答案会决定 Q2 里 `ValueTree` 与 APVTS 的取舍。
+5. **混音推子**：将来是否要暴露成宿主参数（可自动化、可被宿主撤销）？这个答案会决定 Q2 里 `ValueTree` 与 APVTS 的取舍。**尚未拍板**，评估材料单独记在 [`docs/memo/2026-10-17-mixer-faders-as-host-parameters.md`](../memo/2026-10-17-mixer-faders-as-host-parameters.md)：现状、四条路径、成本与"何时重开"的条件都在那里；在它被决策之前，按 §4.3 的现状（不引入 APVTS）走。
 
 
