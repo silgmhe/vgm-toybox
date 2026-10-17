@@ -663,6 +663,13 @@ int main (int /*argc*/, char* /*argv*/[])
 		check (near (renderSeconds (restored, 0.1, sampleRate, blockSize).rms, 0.0, 1e-9),
 			   "and renders silence until Play is pressed");
 
+		// The state spread the tracks across real output buses, and this helper renders the master
+		// bus alone. The audible track is the soloed one, and the spread put it on a bus this
+		// render never provides - silent by design (mixTracks() silences a target bus that is not
+		// connected). Put it back on the master, so the check measures whether Play started the
+		// transport rather than where the restored routing sent the sound.
+		restored.setTrackOutput (1, toybox::playback::kMasterOutput);
+
 		restored.setMasterMuted (false);	// the state had the master muted
 		restored.play();
 		check (restored.isPlaying() && renderSeconds (restored, 0.1, sampleRate, blockSize).rms > 0.0,
