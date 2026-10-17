@@ -64,6 +64,16 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
 	add_link_options(-static-libstdc++ -static-libgcc)
 endif()
 
+# --- the macOS deployment target, stated rather than inherited ---
+# Left unset, CMake passes no -mmacosx-version-min and clang falls back to the version of the SDK it
+# is told to use, so the binaries run on nothing older than the build machine. The v0.0.4 bundles
+# came off a macOS 26 runner with minos 26.0 for both slices - fine if every user is on the newest
+# release, useless otherwise. 10.15 is the oldest macOS JUCE 8 supports; the arm64 slice cannot go
+# below 11.0, and clang raises it there on its own.
+if(APPLE AND NOT CMAKE_OSX_DEPLOYMENT_TARGET)
+	set(CMAKE_OSX_DEPLOYMENT_TARGET "10.15" CACHE STRING "minimum macOS version to build for")
+endif()
+
 # --- libvgm ---
 # Build the in-tree libvgm copy as part of this project (one-shot build, static libraries).
 # The libraries under libs/ are vendored source, not submodules, so they can be patched in place -

@@ -91,6 +91,12 @@ ldd VGMToybox | grep "not found"
 
 names anything else that is missing.
 
+### macOS
+
+Needs **macOS 10.15 or newer** - 11.0 on Apple Silicon, where the arm64 half of the universal bundle
+starts. `CMAKE_OSX_DEPLOYMENT_TARGET` in `CMakeLists.txt` sets that floor; left unset, it follows the
+SDK of whatever machine ran the build, which is how a release once required the newest macOS.
+
 ### Pro Tools (AAX)
 
 The build also writes an **AAX** bundle, because JUCE carries the AAX SDK inside its own module -

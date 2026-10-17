@@ -40,9 +40,13 @@ jobs:
           #     only ever build the command-line player - and the two that were here never built
           #     anything at all, because nothing in this workflow installs or registers the
           #     `msys2 {0}` shell they name (upstream's copy fails the same way).
-          - { os: windows-latest, build_type: Release, extra_settings: '-A x64' }
-          - { os: macos-latest, build_type: Release }
-          - { os: ubuntu-latest, build_type: Release }
+          #
+          # Pinned images, not `-latest`: the label decides what the build machine can target, and
+          # it moves without a commit. The macOS deployment target is stated in CMakeLists.txt so
+          # that a newer image cannot raise the minimum system version of a release quietly.
+          - { os: windows-2022, build_type: Release, extra_settings: '-A x64' }
+          - { os: macos-15, build_type: Release }
+          - { os: ubuntu-24.04, build_type: Release }
       fail-fast: false
 
     runs-on: ${{ matrix.config.os }}
@@ -100,10 +104,10 @@ jobs:
         # Windows arm64 is native here (the runner is an arm64 host with the ARM64 build tools), so
         # `-Arch arm64` builds with the ARM64 toolchain rather than crossing from x64.
         include:
-          - { os: windows-latest,   arch: x64 }
+          - { os: windows-2022,     arch: x64 }
           - { os: windows-11-arm,   arch: arm64 }
-          - { os: macos-latest }
-          - { os: ubuntu-latest,    arch: x64 }
+          - { os: macos-15 }
+          - { os: ubuntu-24.04,     arch: x64 }
           - { os: ubuntu-24.04-arm, arch: arm64 }
     runs-on: ${{ matrix.os }}
     defaults:
@@ -140,9 +144,9 @@ jobs:
       run: .\build.ps1 -Arch ${{ matrix.arch }} -Target vgm_core_test,vgm_ui_test,vgm_app_test -Test
 
     - name: Build the plugin (macOS)
-      if: matrix.os == 'macos-latest'
+      if: matrix.os == 'macos-15'
       # The same steps in plain CMake: build.ps1 is a PowerShell script with MSVC assumptions.
-      # Universal on purpose: macos-latest is Apple Silicon, and a plugin carrying only an arm64
+      # Universal on purpose: the runner is Apple Silicon, and a plugin carrying only an arm64
       # slice cannot be loaded on an Intel Mac. Both slices are 64-bit; local builds stay native,
       # this is about what is built for other people.
       run: |
@@ -151,7 +155,7 @@ jobs:
         cmake --build build --target vgm_core_test vgm_ui_test vgm_app_test --parallel 3
 
     - name: Run the console tests (macOS)
-      if: matrix.os == 'macos-latest'
+      if: matrix.os == 'macos-15'
       run: |
         ./build/plugin/vgm_core_test
         ./build/plugin/vgm_ui_test
