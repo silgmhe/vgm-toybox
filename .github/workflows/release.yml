@@ -173,13 +173,47 @@ jobs:
           exit 1
         fi
 
-        # The two numbers that decide which distributions can install this. Anything above 2.35 or
-        # any GLIBCXX at all would mean the container or the link flags stopped doing their job.
-        echo "--- what the standalone asks for ---"
-        grep -ao 'GLIBC_[0-9.]*' "$standalone" | sort -Vu | tail -3
-        if grep -aq 'GLIBCXX_' "$standalone"; then
-          echo "::warning::the Linux standalone still names a GLIBCXX symbol"
-        fi
+        # What the packages actually demand of the machine that installs them, printed in the log of
+        # the run that produced them rather than discovered in a support thread. Every line here is
+        # also a gate: this is the job that decides whether the container and the link flags still
+        # do theirs, and a package that quietly lost them is exactly what nobody checks for.
+        plugin="$(find "$vst3" -name '*.so' -print -quit)"
+
+        check_binary () {
+          echo "--- $1 ---"
+
+          # Both lists go into files rather than into `grep -q`: grep exits as soon as it matches,
+          # the producer dies of SIGPIPE, and with pipefail the pipeline then reports 141 - which
+          # an `if` reads as "no match". The gate would pass exactly when it found something.
+          grep -ao 'GLIBC_[0-9.]*' "$1" > /tmp/glibc-symbols.txt
+          readelf -d "$1" > /tmp/needed.txt
+
+          echo "glibc symbols:"
+          sort -Vu /tmp/glibc-symbols.txt | tail -3
+          echo "shared libraries:"
+          sed -n 's/.*(NEEDED).*\[\(.*\)\]/\1/p' /tmp/needed.txt | sort
+
+          # Built in ubuntu:22.04, so 2.35 is the highest symbol any binary may name. A GLIBC_2.36
+          # or newer means the build escaped the container - the runner's own glibc is 2.39.
+          if grep -qE 'GLIBC_2\.(3[6-9]|[4-9][0-9])' /tmp/glibc-symbols.txt; then
+            echo "::error::$1 asks for a glibc newer than 2.35 - was it built outside the container?"
+            exit 1
+          fi
+
+          # -static-libstdc++ -static-libgcc (CMakeLists.txt) link the C++ runtime in. If either
+          # shows up again, in a symbol or in the NEEDED list, the flags stopped taking effect.
+          if grep -aq 'GLIBCXX_' "$1"; then
+            echo "::error::$1 still names a GLIBCXX symbol - the C++ runtime is not linked in"
+            exit 1
+          fi
+          if grep -q 'NEEDED.*lib\(stdc++\|c++\|gcc_s\)\.so' /tmp/needed.txt; then
+            echo "::error::$1 still loads the C++ runtime as a shared library"
+            exit 1
+          fi
+        }
+
+        check_binary "$standalone"
+        check_binary "$plugin"
 
         mkdir -p dist/release
         cp -R "$vst3" dist/release/
@@ -226,8 +260,10 @@ jobs:
         **Linux: Ubuntu 22.04 or newer.** The Linux packages are built inside an Ubuntu 22.04
         container, so they ask for glibc 2.35 and no more than that - glibc is backwards compatible,
         which is what makes one package cover 22.04, 24.04, Debian 12 and later, Fedora 35 and later,
-        and current Arch. The C++ runtime is linked in, so nothing here depends on the libstdc++ a
-        machine happens to carry. An older machine reports \`GLIBC_2.35 not found\` and has to build
+        and current Arch. The C++ runtime is linked statically into both the plugin and the
+        standalone, so no \`GLIBCXX_*\` version is asked of the machine. glibc itself stays shared,
+        because it is what ALSA, X11 and the host process already use. An older machine reports
+        \`GLIBC_2.35 not found\` and has to build
         from source. ALSA has to be installed either way (\`libasound2\` or \`libasound2t64\`), and
 
             ldd VGMToybox | grep "not found"

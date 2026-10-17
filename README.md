@@ -75,6 +75,22 @@ extra buses for the plugin instance in the host (that step is the host's, not th
 If an older `VGMPlay.vst3` from this project is installed, **delete it first**: the plugin codes
 are deliberately unchanged, so a host would see the two bundles as the same plugin.
 
+### Linux
+
+The Linux builds need **glibc 2.35 or newer**: Ubuntu 22.04, Debian 12, RHEL 9, Fedora 35 and later,
+or a current Arch. `release.yml` builds them inside an `ubuntu:22.04` container for exactly that
+reason - glibc is backwards compatible, so the version it is built against is the oldest
+distribution it runs on. The C++ runtime (`libstdc++`, `libgcc`) is linked statically into both the
+plugin and the standalone, so the machine's own `libstdc++` never enters into it; glibc stays shared,
+because ALSA, X11 and the host process already use it. ALSA is the one runtime library to install
+(`libasound2`, or `libasound2t64` where the package has been renamed), and
+
+```bash
+ldd VGMToybox | grep "not found"
+```
+
+names anything else that is missing.
+
 ### Pro Tools (AAX)
 
 The build also writes an **AAX** bundle, because JUCE carries the AAX SDK inside its own module -
