@@ -23,6 +23,7 @@
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
+#include <limits>
 #include <thread>
 #include <vector>
 
@@ -30,6 +31,7 @@
 
 #include "backends/fake/FakeBackend.h"
 #include "playback/BackendRegistry.h"
+#include "playback/HostClockSource.h"
 #include "playback/PlaybackEngine.h"
 #include "playback/SessionState.h"
 #include "playback/StartupSong.h"
@@ -974,6 +976,82 @@ int main (int /*argc*/, char* /*argv*/[])
 		sync.setCueSeconds (0.0);
 		check (sync.isActive(), "putting the cue back to zero leaves sync active");
 		check (near (sync.getCueSeconds(), 0.0, 1.0e-9), "and the cue is the DAW's start");
+	}
+
+	// ------------------------------------------------- [11] the host's clock
+	// The adapter between JUCE's PositionInfo and the clock the sync follows. Every host fills that
+	// structure in differently, and the question it has to answer - "did the host report a time at
+	// all" - is the one that decides whether the cue can be taken.
+	std::printf ("\n[11] the host's clock\n");
+	{
+		using namespace toybox::playback;
+		using PositionInfo = juce::AudioPlayHead::PositionInfo;
+
+		// stands in for a wrapper: the test puts in whatever position block it wants
+		struct FakeHead : juce::AudioPlayHead
+		{
+			juce::Optional<PositionInfo> getPosition (void) const override { return position; }
+			juce::Optional<PositionInfo> position;
+		};
+
+		FakeHead head;
+
+		// the standalone, and any host that offers no play head
+		auto clock = readHostClock (nullptr, 48000.0);
+		check (! clock.usable && ! clock.playing && clock.seconds == 0.0,
+			   "no play head: nothing to follow, and nothing invented");
+
+		// a play head that has no position this block
+		clock = readHostClock (&head, 48000.0);
+		check (! clock.usable, "a play head without a position is not usable either");
+
+		// the all-zero object JUCE hands out when there is no context
+		head.position = PositionInfo();
+		clock = readHostClock (&head, 48000.0);
+		check (! clock.usable, "an all-zero position means 'nothing said', not 'parked at 0 s'");
+
+		// a stopped host that does report its play head: usable, and the time comes through
+		PositionInfo parked;
+		parked.setTimeInSamples (96000);
+		head.position = parked;
+		clock = readHostClock (&head, 48000.0);
+		check (clock.usable && ! clock.playing && near (clock.seconds, 2.0, 1.0e-9),
+			   "samples alone are converted at the rate the plugin runs at");
+
+		// seconds win over samples - they survive the host's rate being another one
+		PositionInfo both;
+		both.setTimeInSamples (96000);
+		both.setTimeInSeconds (2.5);
+		head.position = both;
+		clock = readHostClock (&head, 48000.0);
+		check (near (clock.seconds, 2.5, 1.0e-9), "seconds are preferred over samples");
+
+		// a tempo with no time at all still means "a host with a transport is here"
+		PositionInfo tempoOnly;
+		tempoOnly.setBpm (120.0);
+		head.position = tempoOnly;
+		clock = readHostClock (&head, 48000.0);
+		check (clock.usable && clock.seconds == 0.0, "a tempo alone makes the cue takeable");
+
+		// ... and so does a position in quarter notes
+		PositionInfo ppqOnly;
+		ppqOnly.setPpqPosition (4.0);
+		head.position = ppqOnly;
+		check (readHostClock (&head, 48000.0).usable, "as does a position in quarter notes");
+
+		// a playing transport counts even at its zero, which is where most playbacks start
+		PositionInfo fromZero;
+		fromZero.setIsPlaying (true);
+		head.position = fromZero;
+		clock = readHostClock (&head, 48000.0);
+		check (clock.usable && clock.playing, "a playing transport is usable at 0 s too");
+
+		// a nonsense time is not a time: it must never become the cue
+		PositionInfo broken;
+		broken.setTimeInSeconds (std::numeric_limits<double>::quiet_NaN());
+		head.position = broken;
+		clock = readHostClock (&head, 48000.0);
+		check (! clock.usable && clock.seconds == 0.0, "a non-finite time is refused");
 	}
 
 	std::printf ("Result    : %s\n", (failures == 0) ? "all checks passed" : "FAILURES");

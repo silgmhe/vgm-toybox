@@ -174,6 +174,7 @@ target_sources(VGMToybox PRIVATE
 	Source/playback/BackendRegistry.cpp
 	Source/playback/PlaybackEngine.cpp
 	Source/playback/DawSync.cpp
+	Source/playback/HostClockSource.cpp
 	Source/playback/SessionState.cpp
 	Source/backends/BuiltInBackends.cpp
 	Source/backends/libvgm/LibvgmBackend.cpp
@@ -259,6 +260,7 @@ add_executable(vgm_core_test EXCLUDE_FROM_ALL
 	Source/playback/BackendRegistry.cpp
 	Source/playback/PlaybackEngine.cpp
 	Source/playback/DawSync.cpp
+	Source/playback/HostClockSource.cpp
 	Source/playback/SessionState.cpp
 	Source/backends/fake/FakeBackend.cpp
 	Source/settings/SettingsStore.cpp

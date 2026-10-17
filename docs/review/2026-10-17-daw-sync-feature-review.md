@@ -47,7 +47,7 @@
 UI          TransportPanel（Sync/Cue/旋钮 + 虚线框 + 菜单）   PlayView（空格让位）
              │ 读写 DawSync（消息线程）
              ▼
-适配        PluginProcessor::readHostClock()  JUCE PositionInfo → HostClock（音频线程，每块一次）
+适配        playback::readHostClock()（HostClockSource.{h,cpp}）  JUCE PositionInfo → HostClock（音频线程，每块一次）
              │
              ▼
 策略        PlaybackEngine::followDawTransport()   decide() → seek/play/pause
@@ -57,7 +57,7 @@ UI          TransportPanel（Sync/Cue/旋钮 + 虚线框 + 菜单）   PlayView�
 ```
 
 - `playback/DawSync.{h,cpp}`：179 + 205 行，**不 include 任何 JUCE 头**，`decide()` 是 `const`，全部状态是原子量。
-- `PlaybackEngine` 持有 `DawSync`（`PlaybackEngine.h:121`）；处理器只**发布**时钟（`PluginProcessor.cpp:170`），不决策 —— 决策点在 `render()` 内部（`PlaybackEngine.cpp:1062`）。
+- `PlaybackEngine` 持有 `DawSync`（`PlaybackEngine.h:121`）；处理器只**发布**时钟（`PluginProcessor.cpp:121`，一行），不决策 —— 决策点在 `render()` 内部（`PlaybackEngine.cpp:1062`）。
 - Standalone 不创建那三个控件，并把 `enabled` 清掉（`TransportPanel.cpp:386-397`），避免「没按钮能解开的锁」✓。
 - 状态是**增量可选**属性、不升版本（`SessionState.h:46-52`、`SessionState.cpp:43-46,108-111`），读档顺序（量程 → 偏移 → CUE）写在了 `PlaybackEngine.cpp:295-303` ✓。
 
@@ -79,7 +79,7 @@ UI          TransportPanel（Sync/Cue/旋钮 + 虚线框 + 菜单）   PlayView�
 | `DawSync` 状态机（latch、量程钳制、负值忽略） | ✓ | 同文件 `:935-976` |
 | UI 状态（可用性、不发光、禁用规则） | ✓ | `scripts/daw-sync.txt` 28 条 `assert` + 2 次按键 |
 | 空格让位 | ✓ | `press space unhandled` + 关闭后 `press space` |
-| **`readHostClock`（JUCE → `HostClock`）** | **✗** | 匿名命名空间，core test 链接不到；只有 app harness 经过它，但不看结果 |
+| **`readHostClock`（JUCE → `HostClock`）** | **原先 ✗ → 现 ✓** | 原先在匿名命名空间里，core test 链接不到；抽到 `playback/HostClockSource` 后 `[11]` 覆盖 9 类输入（无 play head、无 position、全零 context、只有 samples、seconds 优先、只有 bpm / 只有 ppq、playing@0、NaN） |
 | **`followDawTransport`（seek/start/pause 的顺序）** | **原先 ✗ → 现 ✓** | 假后端的 `start/pause` 是空实现（`FakeBackend.cpp:38-39`），app harness 原来也不观察位置 → **H-1 正好落在这个盲区里**；`daw-sync-follow.txt` 把它补上了（§8） |
 | 状态往返（4 个 sync 属性、`-1 → 0` 迁移） | ✗ | `SessionState` 往返测试存在，但没断言这几个字段 |
 
@@ -341,6 +341,7 @@ HostClock readHostClock (const juce::AudioPlayHead::PositionInfo&, double localS
 | M-2 | 本提交 | ✅ | `snapshot::line()` 与 `assert` 增加 `value`（滑杆数值）；新增 `assert engine position`（读 `getPositionSeconds()`）；`~=` 数值比较，容差 0.05 s（一个块的余量，断言的是映射不是块大小）；新脚本 `scripts/daw-sync-follow.txt`。**验证**：本地用一首 3 s 的极小 VGM 跑通，无 `VGM_TEST_SONG` 时整脚本跳过（与 `load-and-play.txt` 同形） |
 | M-1 | 本条 | ✅ | `followDawTransport()` 先 `ScopedTryLock`，再读 `trackPlayers`/`cachedTimeline` 并决策；`render()` 上面那条"抢不到就整块静音"的规则从此对它也成立。**验证**：7 个测试目标全绿 + 素材脚本（`daw-sync-follow.txt`）仍读到 `1.011610` |
 | L-2 | 本条 | ✅ | 删除零调用者的 `getSongTimeline()`，并在 `getDawSync()` 的注释里写明"歌曲事实不公开，是因为它只在锁内被读" |
-| M-4 | — | ⬜ | 计划：抽 `playback/HostClockSource`，补 `readHostClock` 的四类输入单测（含 L-4 的采样率口径） |
+| M-4 | 本条 | ✅ | `readHostClock` 搬进 `playback/HostClockSource.{h,cpp}`，签名改成 `(const juce::AudioPlayHead*, double)`，`processBlock` 只剩一行；`vgm_core_test` 的 `[11]` 用假 `AudioPlayHead` 覆盖 9 类输入（含"全零 context"与"NaN 时间"）。**验证**：7 个测试目标全绿，`[11]` 9 条断言全 OK |
+| L-4 | 本条 | ✅ | 采样数回退在 `HostClockSource.cpp` 里写清了性质：宿主采样率 ≠ 插件采样率，所以 samples 只做回退，seconds 才是一等公民 |
 | M-3 | — | ⬜ | 计划：抽 `SyncGroup`（可延后） |
 | L-1/3/5/6 | — | ⬜ | 计划：一致性收尾 |
