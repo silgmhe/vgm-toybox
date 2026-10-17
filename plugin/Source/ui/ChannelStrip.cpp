@@ -179,7 +179,7 @@ void ChannelStrip::setOutputOptions (const std::vector<OutputOption>& options, p
 		const int itemId = (int) i + 1;
 
 		// a bus the host has not connected is still selectable - the track routed to it is
-		// silent, and the label says why (docs/multitrack-output-design.md, R6/E)
+		// silent, and the label says why (docs/desgin/multitrack-output-design.md, R6/E)
 		outputBox.addItem (option.connected ? option.name : option.name + " (not connected)", itemId);
 
 		if (option.target == selected)

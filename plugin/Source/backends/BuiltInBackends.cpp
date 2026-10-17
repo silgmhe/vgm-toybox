@@ -9,7 +9,7 @@ namespace toybox::playback
 	Fills the registry with the backends this build was compiled with.
 
 	The product is a VST3 plugin, so every backend ships inside the same signed binary - there
-	is deliberately no runtime loading (ADR-008 in docs/playback-backend-design.md). A backend
+	is deliberately no runtime loading (ADR-008 in docs/desgin/playback-backend-design.md). A backend
 	that cannot be shipped unconditionally (license, size) registers under its own compile-time
 	switch and simply is not there when the switch is off.
 */

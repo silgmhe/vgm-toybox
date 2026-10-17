@@ -5,7 +5,7 @@
 	    add_executable(vgm_core_test ... Source/playback/*.cpp Source/backends/fake/FakeBackend.cpp)
 
 	A core that still depended on libvgm would not link here, which is exactly the point: this
-	target is the mechanical proof of the decoupling (see docs/playback-backend-design.md).
+	target is the mechanical proof of the decoupling (see docs/desgin/playback-backend-design.md).
 
 	On top of that it checks the mixer against signals whose levels are known analytically - the
 	fake backend plays three sine tones of amplitude 0.25, so an rms of 0.25/sqrt(2) is one tone
