@@ -103,6 +103,10 @@ private:
 
 	std::unique_ptr<juce::FileChooser> fileChooser;
 	juce::String lastError;
+	/** What the engine said about the song on the previous refresh: a host can hand a project to
+		an instance whose window is already open, and the pages that only exist with a song are
+		rebuilt on the transition (see refreshUi()). */
+	bool songLoadedAtLastRefresh = false;
 	int refreshHz = 0;	// the rate the refresh timer currently runs at (see timerCallback())
 
 	juce::File startupSong;			// what the application was launched with, if anything

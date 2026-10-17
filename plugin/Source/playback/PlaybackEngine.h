@@ -10,6 +10,11 @@
 #include "playback/OutputRouting.h"
 #include "playback/SongBackend.h"
 
+namespace toybox::playback
+{
+struct SessionState;	// playback/SessionState.h: the project state, as plain values
+}
+
 namespace toybox
 {
 
@@ -90,6 +95,27 @@ public:
 	const juce::File& getFile (void) const { return currentFile; }
 	juce::String getTag (const juce::String& tagName) const;
 	const std::vector<ChipEntry>& getChips (void) const { return chips; }
+
+	// --- project state (the host's session) ---
+	/** Writes everything a project has to keep - the song bytes and every mixer value - into one
+		gzip-compressed XML blob. The snapshot is taken under the lock (a 16 MB copy at worst); the
+		encoding, which is the slow part, happens outside it. */
+	void writeState (juce::MemoryBlock& destData) const;
+
+	/** Restores a blob written by writeState(). An older format, a different version or a
+		truncated file returns false with errorMessage filled in and leaves the engine untouched.
+		A state that decodes but whose song cannot be started behaves like a failed load: playback
+		stops, the settings that came with it stay applied. The song comes back **stopped, at the
+		top** - a host opening a project must not make sound on its own. Message thread, like every
+		other mutator here (a host calling this from its own thread is M-2 in the review).
+
+		The order is not obvious: the mixer mode and the routing scheme have to be in place
+		*before* the song is built (they decide how many players exist and where the tracks go),
+		the per-track values only *after* it (the load replaces the track list). */
+	bool readState (const void* data, int sizeInBytes, juce::String& errorMessage);
+
+	/** The loaded image as it was read - a .vgz stays packed. Empty when nothing is loaded. */
+	juce::MemoryBlock getSongImage (void) const;
 
 	// --- mixer ---
 	/** Mixer mode renders one isolated track per channel; off means the plain single player. */
@@ -214,6 +240,15 @@ private:
 		transport state and the mixer values the user set. Takes the lock only to install, so a
 		mode switch or a sample-rate change does not stall the audio thread either. */
 	void rebuildPlayers (juce::String& errorMessage);
+
+	/** The body of both loadFile() and readState(): builds outside the lock, swaps under it. The
+		image is taken by value because the engine keeps its own copy for the rest of the session
+		(the backend gets a view of it only while building). `file` supplies the name - the
+		extension is what picks the backend - and is never read from disk. `startPlaying` is
+		installed with the swap rather than set afterwards, so a restored project cannot leak one
+		render block of sound before the transport is stopped again. */
+	bool loadImage (juce::MemoryBlock image, const juce::File& file, bool startPlaying,
+					juce::String& errorMessage);
 
 	/** The shared bodies: used both by buildSong() (on a song that is not installed yet) and by the
 		member functions below (on the installed one), which is why they take their state as

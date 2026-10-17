@@ -152,8 +152,16 @@ juce_add_plugin(VGMToybox
 	ICON_SMALL "${CMAKE_CURRENT_SOURCE_DIR}/assets/icon/vgmtoybox-16.png"
 	FORMATS VST3 Standalone ${TOYBOX_AU_FORMAT} ${TOYBOX_AAX_FORMAT}
 	IS_SYNTH TRUE
-	NEEDS_MIDI_INPUT FALSE
-	NEEDS_MIDI_OUTPUT FALSE
+	# MIDI input is declared although nothing reads it: JUCE registers the VST3 event input bus
+	# from this flag at compile time, and an *instrument* class without one is a shape some hosts
+	# refuse to load (Ableton Live does not load such a plugin at all). The events are accepted
+	# and dropped in processBlock() - the song drives playback, not notes.
+	NEEDS_MIDI_INPUT TRUE
+	# An event output bus is declared although nothing is emitted yet: it is reserved for a future
+	# MIDI-out feature, and having the class advertise it now keeps the routing a host sees stable.
+	# processBlock() clears the MIDI buffer, which is also what stops the input events from being
+	# echoed back out now that the VST3 wrapper would forward whatever is left in it.
+	NEEDS_MIDI_OUTPUT TRUE
 	IS_MIDI_EFFECT FALSE
 	EDITOR_WANTS_KEYBOARD_FOCUS TRUE
 	COPY_PLUGIN_AFTER_BUILD FALSE
@@ -165,6 +173,7 @@ target_sources(VGMToybox PRIVATE
 	Source/PluginEditor.cpp
 	Source/playback/BackendRegistry.cpp
 	Source/playback/PlaybackEngine.cpp
+	Source/playback/SessionState.cpp
 	Source/backends/BuiltInBackends.cpp
 	Source/backends/libvgm/LibvgmBackend.cpp
 	Source/backends/libvgm/LibvgmSongInstance.cpp
@@ -230,6 +239,7 @@ add_executable(vgm_mixer_test EXCLUDE_FROM_ALL
 	Tests/PlaybackEngineTest.cpp
 	Source/playback/BackendRegistry.cpp
 	Source/playback/PlaybackEngine.cpp
+	Source/playback/SessionState.cpp
 	Source/backends/BuiltInBackends.cpp
 	Source/backends/libvgm/LibvgmBackend.cpp
 	Source/backends/libvgm/LibvgmSongInstance.cpp
@@ -246,6 +256,7 @@ add_executable(vgm_core_test EXCLUDE_FROM_ALL
 	Tests/PlaybackCoreTest.cpp
 	Source/playback/BackendRegistry.cpp
 	Source/playback/PlaybackEngine.cpp
+	Source/playback/SessionState.cpp
 	Source/backends/fake/FakeBackend.cpp
 	Source/settings/SettingsStore.cpp
 )

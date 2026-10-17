@@ -102,6 +102,7 @@ ToyboxAudioProcessorEditor::ToyboxAudioProcessorEditor (ToyboxAudioProcessor& p)
 	// The pages are told what the engine holds right now: an editor can be created while a song is
 	// already loaded (a host reopening its window), and the chip card belongs to that song.
 	viewStack.songChanged();
+	songLoadedAtLastRefresh = engine.isLoaded();
 
 	// full-size overlay, hidden until a file is dragged over the editor
 	addChildComponent (dropHint);
@@ -375,6 +376,10 @@ void ToyboxAudioProcessorEditor::loadFile (const juce::File& file)
 	else
 	{
 		lastError.clear();
+		// a project that did not restore has just been superseded by this song - its message is
+		// about a state that is no longer there
+		processor.clearStateMessage();
+		songLoadedAtLastRefresh = true;
 	}
 
 	viewStack.songChanged();	// every page rebuilds whatever it shows about the song
@@ -388,6 +393,7 @@ void ToyboxAudioProcessorEditor::closeSong (void)
 
 	// the same the other way round: the cards that only exist with a song loaded hide themselves,
 	// the chips go away and the status line says what is open now (nothing)
+	songLoadedAtLastRefresh = false;
 	viewStack.songChanged();
 	updateStatusLine();
 	resized();
@@ -488,16 +494,36 @@ void ToyboxAudioProcessorEditor::timerCallback (void)
 
 void ToyboxAudioProcessorEditor::refreshUi (void)
 {
+	// A song can appear (or go away) without anything in this window being clicked: the host
+	// restores a project into an instance whose editor is already open. The pages that only
+	// exist with a song have to be rebuilt for that, not just refreshed.
+	const bool loaded = engine.isLoaded();
+	if (loaded != songLoadedAtLastRefresh)
+	{
+		songLoadedAtLastRefresh = loaded;
+		viewStack.songChanged();
+		resized();
+	}
+
 	viewStack.refresh();
 	updateStatusLine();
 }
 
 void ToyboxAudioProcessorEditor::updateStatusLine (void)
 {
+	// The processor's message comes first among the non-error states: it is what a project that
+	// did not restore left behind, and the only clue the user has (review §6 H-1).
+	const juce::String stateMessage = processor.getStateMessage();
+	const bool hasProblem = lastError.isNotEmpty() || stateMessage.isNotEmpty();
+
 	juce::String status;
 	if (lastError.isNotEmpty())
 	{
 		status = lastError;
+	}
+	else if (stateMessage.isNotEmpty())
+	{
+		status = stateMessage;
 	}
 	else if (! engine.isLoaded())
 	{
@@ -522,6 +548,6 @@ void ToyboxAudioProcessorEditor::updateStatusLine (void)
 			   << " / " << formatTime (engine.getDurationSeconds());
 	}
 
-	statusLabel.setColour (juce::Label::textColourId, lastError.isNotEmpty() ? theme::error() : theme::secondaryText());
+	statusLabel.setColour (juce::Label::textColourId, hasProblem ? theme::error() : theme::secondaryText());
 	statusLabel.setText (status, juce::dontSendNotification);
 }

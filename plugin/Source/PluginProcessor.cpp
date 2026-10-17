@@ -87,7 +87,12 @@ bool ToyboxAudioProcessor::isBusesLayoutSupported (const BusesLayout& layouts) c
 
 void ToyboxAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midiMessages)
 {
-	juce::ignoreUnused (midiMessages);
+	// Both MIDI buses are declared (NEEDS_MIDI_INPUT/OUTPUT): the input one is what Ableton Live
+	// requires of an instrument, the output one is reserved for a future MIDI-out feature.
+	// Nothing is turned into sound and nothing is emitted - so the buffer is *cleared*, not just
+	// ignored: the wrapper reads it back as the output events now that a MIDI out bus exists, and
+	// leaving the input events in it would echo them straight back to the host.
+	midiMessages.clear();
 	juce::ScopedNoDenormals noDenormals;
 
 	const int numSamples = buffer.getNumSamples();
@@ -117,17 +122,33 @@ juce::AudioProcessorEditor* ToyboxAudioProcessor::createEditor (void)
 	return new ToyboxAudioProcessorEditor (*this);
 }
 
+juce::String ToyboxAudioProcessor::getStateMessage (void) const
+{
+	const juce::ScopedLock sl (stateMessageLock);
+	return stateMessage;
+}
+
+void ToyboxAudioProcessor::clearStateMessage (void)
+{
+	const juce::ScopedLock sl (stateMessageLock);
+	stateMessage.clear();
+}
+
 void ToyboxAudioProcessor::getStateInformation (juce::MemoryBlock& destData)
 {
-	PlaybackEngine& eng = engine;
+	// The standalone has no project around it: it starts from the command line and never reads
+	// this back (setStateInformation() returns below), so writing a blob would only be work for
+	// the properties file to carry. Both sides early-return for the same reason.
+	if (wrapperType == juce::AudioProcessor::wrapperType_Standalone)
+	{
+		destData.reset();
+		return;
+	}
 
-	juce::XmlElement state ("VGMToyboxState");
-	state.setAttribute ("file", eng.getFile().getFullPathName());
-	state.setAttribute ("loopCount", eng.getLoopCount());
-	state.setAttribute ("fadeSeconds", eng.getFadeSeconds());
-	state.setAttribute ("volume", (double) eng.getMasterVolume());
-
-	copyXmlToBinary (state, destData);
+	// The whole session - song bytes and mixer - is the engine's state now (playback/SessionState.h
+	// says why the song travels as data). It is deliberately not cached: a typical VGM is tens of
+	// kilobytes, and a stale blob is a bug that only shows up after an autosave.
+	engine.writeState (destData);
 }
 
 void ToyboxAudioProcessor::setStateInformation (const void* data, int sizeInBytes)
@@ -139,25 +160,19 @@ void ToyboxAudioProcessor::setStateInformation (const void* data, int sizeInByte
 		return;
 	}
 
-	std::unique_ptr<juce::XmlElement> state (getXmlFromBinary (data, sizeInBytes));
-	// the old tag is still accepted: renaming the product must not throw away the state a host
-	// saved for a project (the plugin codes are unchanged, so hosts do load this build into them)
-	if (state == nullptr || ! (state->hasTagName ("VGMToyboxState")
-							   || state->hasTagName ("VGMPlayState")))
+	juce::String errorMessage;
+	if (engine.readState (data, sizeInBytes, errorMessage))
 	{
+		clearStateMessage();
 		return;
 	}
 
-	PlaybackEngine& eng = engine;
-	eng.setLoopCount (state->getIntAttribute ("loopCount", 1));
-	eng.setFadeSeconds (state->getDoubleAttribute ("fadeSeconds", 3.0));
-	eng.setMasterVolume ((float) state->getDoubleAttribute ("volume", 1.0));
-
-	const juce::File file (state->getStringAttribute ("file"));
-	if (file.existsAsFile())
+	// Everything that is not a state this build wrote - the old path-only format included - is
+	// refused rather than guessed at, and the status line says so (review §6 H-1).
+	if (errorMessage.isNotEmpty())
 	{
-		juce::String errorMessage;
-		eng.loadFile (file, errorMessage);
+		const juce::ScopedLock sl (stateMessageLock);
+		stateMessage = errorMessage;
 	}
 }
 
