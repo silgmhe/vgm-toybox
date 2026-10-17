@@ -472,22 +472,22 @@ void PlaybackEngine::followDawTransport (void)
 		return;
 	}
 
-	// A seek is the expensive part, which is why the mapping only asks for one when the engine is
-	// more than 30 ms off, or when the transport state has to change at all.
-	setPositionSecondsLocked (decision.position);
+	// The transport state changes *before* the seek, because a backend's start() may mean "begin at
+	// the beginning" rather than "resume" - libvgm's does (VGMPlayer::Start() calls Reset()), so
+	// starting after the seek would undo it. Seeking last is what makes the position the final
+	// word. The other order was audible: the first block after the host started played from the top
+	// of the song, and the next block seeked again to where it should have been.
+	const bool engineWasPlaying = playing.load();
 
 	if (decision.play)
 	{
-		if (! playing.load())
+		if (! engineWasPlaying)
 		{
 			for (auto& player : trackPlayers)
 			{
 				player->start();
 			}
 		}
-
-		playing = true;
-		finished = false;
 	}
 	else
 	{
@@ -495,9 +495,14 @@ void PlaybackEngine::followDawTransport (void)
 		{
 			player->pause();
 		}
-
-		playing = false;
 	}
+
+	// A seek is the expensive part, which is why the mapping only asks for one when the engine is
+	// more than 30 ms off, or when the transport state has to change at all.
+	setPositionSecondsLocked (decision.position);
+
+	playing = decision.play;
+	finished = false;
 }
 
 void PlaybackEngine::setPositionSecondsLocked (double seconds)
