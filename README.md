@@ -21,6 +21,10 @@ The only thing the build downloads is zlib, which CMake fetches and compiles onc
 Visual Studio 2019/2022/2026 with the **Desktop development with C++** workload, CMake and Ninja
 (the copy bundled with CMake is found automatically).
 
+**MinGW will not work.** JUCE 8 and later support MSVC on Windows and nothing else, so this project
+cannot be built with a MinGW toolchain either - the errors start inside JUCE's own sources, before the
+compiler ever reaches ours.
+
 ```powershell
 .\build.ps1
 ```

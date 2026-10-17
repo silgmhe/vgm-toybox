@@ -16,6 +16,8 @@
 
 需要 Visual Studio 2019/2022/2026，安装 **使用 C++ 的桌面开发** 工作负载，另需 CMake 与 Ninja（CMake 自带的 Ninja 会被自动找到）。
 
+**MinGW 编译不了。** JUCE 8 及以后的版本在 Windows 上只支持 MSVC，所以本项目同样不能用 MinGW 工具链编译 —— 报错出现在 JUCE 自己的源码里，还没走到我们的代码。
+
 ```powershell
 .\build.ps1
 ```
