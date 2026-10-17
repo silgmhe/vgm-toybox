@@ -223,10 +223,15 @@ usable = bpm > 0 || ppq 有效 || timeInSeconds != 0 || timeInSamples != 0 || is
 
 ### 7.4 UI
 
-`TransportPanel` 增加 `syncAvailable` 构造参数，`PlayView` 透传，`PluginEditor` 传
-`processor.wrapperType != wrapperType_Standalone`。
+`PlayView` 把 `processor.wrapperType != wrapperType_Standalone` 作为 `syncAvailable` 传给
+`TransportPanel`，后者据此决定要不要创建 `ui/SyncGroup`（判断在 `PluginEditor`，透传在 `PlayView`）。
 
-Standalone 里这三个控件**不创建**（不是隐藏）：没有宿主就没有可跟随的走带，留下的只会是死控件。
+`SyncGroup` 是一整个组件，不是面板上的三个控件：框（和它裁剪的辉光）、名牌、右键菜单、
+以及"这一行要给它留多宽"是同一件事。面板只问它两个问题——`refresh()` 和
+`isHostDriving()`——而它的菜单要把数值输入交给面板（那个覆盖层是**卡片**大小，比这个组大）。
+理由与现状见 `docs/review/2026-10-17-...` M-3。
+
+Standalone 里这个组**不创建**（不是隐藏）：没有宿主就没有可跟随的走带，留下的只会是死控件。
 另外 standalone 会把 `DawSync` 的 enabled 强制清零——否则一个在 DAW 里存成「同步开」的工程，
 在 standalone 打开后会锁住走带而没有任何按钮能解开。
 

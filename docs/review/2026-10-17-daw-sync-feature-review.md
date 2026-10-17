@@ -347,4 +347,4 @@ HostClock readHostClock (const juce::AudioPlayHead::PositionInfo&, double localS
 | L-3 | 本条 | ✅ | `HostClock::sampleRate` 与 `DawSync::hostSampleRate` 删除；换算率降为 `readHostClock` 的局部变量 |
 | L-5 | 本条 | ✅ | `kSyncToleranceSeconds` 提到命名空间，`evaluateSync()` 增加带默认值的 `toleranceSeconds`；`DawSync::kToleranceSeconds` 删除 |
 | L-6 | 本条 | ✅ | `refresh()`/`togglePlayStop`/`togglePlayPause`/`seekToSeconds`/`stopTransport` 统一走 `isHostDriving()`，并在它的注释里写明"这是唯一的谓词" |
-| M-3 | — | ⬜ | 未做：抽 `SyncGroup`（200 行搬动，纯结构改动）。**建议**：等真的要在同步框里加控件时再抽，`daw-sync.txt` + `daw-sync-follow.txt` 是现成的安全网 |
+| M-3 | 本条 | ✅ | 抽出 `ui/SyncGroup : Component`：两个按钮、旋钮、虚线框、名牌、裁剪后的辉光、右键菜单与 `isHostDriving()` 全归它；面板只剩 `preferredWidth()`/`frameHeight()`/`nameplateOverhang()` 三个静态数字和两个回调（`onStateChanged`、`onRequestValueEntry`）。卡片的数值覆盖层留在 `TransportPanel`（它是卡片大小，比这个组大）。`TransportPanel.cpp` 1125 → 783 行，`SyncGroup.cpp` 453 行 —— **总行数反而多了约 110**（新头文件 + 搬到新文件的注释），收益在结构不在行数。**验证**：`daw-sync.txt` 新增 `assert group.sync visible`，`dump` 里 `btn.sync` / `btn.play` 的绝对 y 都是 21（同一基线），两张截图与重构前一致，全部脚本照旧通过 |

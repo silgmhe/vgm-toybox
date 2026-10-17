@@ -4,6 +4,7 @@
 #include "Icons.h"
 #include "MeterScale.h"
 #include "SoftShadow.h"
+#include "SyncGroup.h"
 #include "Theme.h"
 
 #include "playback/DawSync.h"
@@ -21,31 +22,12 @@ namespace
 	constexpr int kButtonSize = 40;
 	constexpr int kLoopMarkerHeight = 12;
 
-	// The cue trim: a rotary that fits the button row, and the number field beside it (the
-	// Slider's own text box - the same box the volume shows its percentage in).
-	constexpr int kOffsetKnobSize = 40;		// the rotary area; JUCE lays the text box out beside it
-	constexpr int kOffsetValueWidth = 62;
-	constexpr int kSyncGroupGap = 14;		// between the Cue button and the knob
+	// From the top of the button row down to the buttons: the same 9 the sync group's frame uses,
+	// so the transport buttons and the group's controls share one baseline (see SyncGroup).
+	constexpr int kRowTopPadding = 9;
 
-	// The DAW-sync group is a dashed frame drawn on the card: the controls are one cluster, and a
-	// dashed outline says that without pretending to be a surface. The padding is generous on
-	// purpose - a frame the controls touch reads as a selection rectangle drawn around them. The
-	// nameplate straddles the top edge, so only its lower half has to clear the controls.
-	constexpr int kFramePadding = 8;		// left and right, inside the frame
-	constexpr int kFrameTopPadding = 9;		// from the frame's top edge down to the controls
-	constexpr int kFrameBottomPadding = 3;
-	constexpr int kFrameGapBelow = 3;		// between the frame and the loop marker band
-
-	constexpr int kFrameHeight = kFrameTopPadding + kButtonSize + kFrameBottomPadding;
-
-	// 3 px dashes, 3 off: fine enough to read as a guide rather than as a border
-	constexpr float kFrameDash = 3.0f;
-	constexpr float kFrameGap = 3.0f;
-
-	// the nameplate: 8 px caps, tracked out, sitting on the frame's top edge
-	constexpr float kNameplateTracking = 0.5f;	// extra pixels between the glyphs
-	constexpr int kNameplatePadding = 6;		// left and right of the text, inside the gap
-	constexpr int kNameplateHeight = 10;		// the gap cut into the dashes behind the text
+	// Between the button row and the loop marker band.
+	constexpr int kGapBelowRow = 3;
 
 	int loopBoxIdForCount (int loops)
 	{
@@ -63,88 +45,6 @@ namespace
 							: "Play once - click to loop forever";
 	}
 
-	/** The offset as the knob's number shows it. It is the offset and nothing else: the cue always
-		exists, so the field has no "no cue" case to fall back to. */
-	juce::String offsetText (double ms)
-	{
-		const double shown = (std::abs (ms) < 0.05) ? 0.0 : ms;	// never "-0.0"
-		return (shown > 0.0 ? "+" : "") + juce::String (shown, 1) + " ms";
-	}
-
-	/** The dashed frame around the DAW-sync group: 1 px dashes along a rounded rectangle, and
-		nothing else - no fill, no inner shadow, no bevelled edge. A recess has to argue that it is
-		structure and not a selection rectangle, and at this size that argument cannot be won; a
-		dashed line only ever means "these belong together", so it does not have to make it.
-
-		The dashes come from createDashedStroke() on the whole outline rather than from one
-		drawDashedLine() per side: only the stroked version dashes *around* the corners, and a
-		frame whose corners are solid reads as a rounded rectangle with dashed sides. */
-	void drawGroupFrame (juce::Graphics& g, juce::Rectangle<float> area, float radius,
-						 juce::Colour colour)
-	{
-		if (area.isEmpty())
-		{
-			return;
-		}
-
-		juce::Path outline;
-		outline.addRoundedRectangle (area.reduced (0.5f), radius);	// the 1 px stroke lands on the grid
-
-		const float dashes[] = { kFrameDash, kFrameGap };
-		juce::Path stroked;
-		juce::PathStrokeType (1.0f).createDashedStroke (stroked, outline, dashes, 2);
-
-		g.setColour (colour);
-		g.fillPath (stroked);
-	}
-
-	/** The nameplate of the DAW-sync group: 8 px bold caps, tracked out letter by letter, sitting
-		*on* the frame's top edge with the dashes erased behind it - the legend of a fieldset, and
-		how a frame that carries a name is drawn everywhere else.
-
-		The eraser is the card's own colour, not a plate: the dashes are the only thing up there,
-		and a raised plate would be a second surface inside a frame that deliberately has none.
-
-		The tracking is applied per glyph (JUCE has no letter-spacing option) and the whole line is
-		filled as one path, so it costs one fill and no text layout. */
-	void drawGroupNameplate (juce::Graphics& g, const juce::String& text, juce::Rectangle<int> frame,
-							 juce::Colour colour)
-	{
-		if (frame.isEmpty())
-		{
-			return;
-		}
-
-		const juce::Font font { juce::FontOptions (8.0f, juce::Font::bold) };
-
-		juce::GlyphArrangement glyphs;
-		glyphs.addLineOfText (font, text, 0.0f, 0.0f);	// baseline at y = 0
-		for (int i = 0; i < glyphs.getNumGlyphs(); ++i)
-		{
-			glyphs.getGlyph (i).moveBy (kNameplateTracking * (float) i, 0.0f);
-		}
-
-		juce::Path path;
-		glyphs.createPath (path);
-		const auto glyphBounds = path.getBounds();
-
-		// the gap in the dashes, centred on the frame
-		const int gapWidth = juce::jmin (frame.getWidth() - 2 * kFramePadding,
-										 (int) std::ceil (glyphBounds.getWidth()) + 2 * kNameplatePadding);
-		const juce::Rectangle<float> gap ((float) frame.getCentreX() - (float) gapWidth * 0.5f,
-										  (float) frame.getY() - (float) kNameplateHeight * 0.5f,
-										  (float) gapWidth, (float) kNameplateHeight);
-
-		g.setColour (theme::card());
-		g.fillRoundedRectangle (gap, 2.0f);
-
-		// Both axes centre the glyph box, not the baseline: "DAW SYNC" is all caps, so the box is
-		// the visible ink and centring it is what looks centred.
-		const auto shift = gap.getCentre() - glyphBounds.getCentre();
-
-		g.setColour (colour);
-		g.fillPath (path, juce::AffineTransform::translation (shift.x, shift.y));
-	}
 }
 
 /**
@@ -311,8 +211,7 @@ private:
 
 TransportPanel::TransportPanel (toybox::PlaybackEngine& engineToUse, bool syncAvailableToUse)
 	: engine (engineToUse),
-	  sync (engineToUse.getDawSync()),
-	  syncAvailable (syncAvailableToUse)
+	  sync (engineToUse.getDawSync())
 {
 	// --- transport buttons ---
 	playButton.onClick = [this] { startPlayback(); };
@@ -332,75 +231,30 @@ TransportPanel::TransportPanel (toybox::PlaybackEngine& engineToUse, bool syncAv
 	}
 	cursorButton.setToggleState (startCursorEnabled, juce::dontSendNotification);
 
-	// --- DAW sync (playback/DawSync.h) ---
-	// The toggle reads the sync state in refresh() and turns over what it shows, so the button
-	// itself stays the one place the state is shown. Both glyphs carry their word: a chain link
-	// or a flag alone does not say "this follows your DAW".
-	syncButton.setCaption ("SYNC");
-	syncButton.setTooltip ("Follow the host's clock - the song position becomes \"host position - cue\". "
-						   "Click again to play on its own");
-	syncButton.onClick = [this]
+	// --- DAW sync (ui/SyncGroup.h, state in playback/DawSync.h) ---
+	// A standalone has no play head, so there is nothing to follow: the group is not created at
+	// all there (docs/desgin/daw-sync-cue-design.md, §7.4). Either way the sync flag is cleared
+	// for a standalone - its transport lock has no button to unlock it, so a session saved with
+	// sync on must not come back locked.
+	if (syncAvailableToUse)
 	{
-		sync.setEnabled (! sync.isEnabled());
-		updateSyncControls();
-	};
+		syncGroup = std::make_unique<SyncGroup> (engineToUse);
 
-	// Taking the cue is an action, not a toggle and not a state light: the DAW moves, so taking it
-	// again is the normal gesture. The button is therefore never lit - a lit face in this editor
-	// means "this switch is on", and Cue is not a switch. There is no "has a cue" state to show
-	// either: the cue always exists (0 is the DAW's start), and the frame's menu can put it back
-	// there.
-	cueButton.setCaption ("CUE");
-	cueButton.setTooltip ("Take the host's position as the cue point - the place on the DAW timeline "
-						  "where the song's beginning plays. Right-click this box to put the cue "
-						  "back to 0 s");
-	cueButton.onClick = [this] { takeCue(); };
-
-	// The trim knob: a rotary whose number is its own text box - the same edit box the volume
-	// slider shows "100 %" in, so an exact offset is typed where it is read. A corner of the row
-	// is a small place, and a knob with a hidden value would need a dialog to show it.
-	offsetKnob.setSliderStyle (juce::Slider::RotaryHorizontalVerticalDrag);
-	offsetKnob.setTextBoxStyle (juce::Slider::TextBoxRight, false, kOffsetValueWidth, 22);
-	offsetKnob.setComponentID ("knob.cue-offset");	// for the window scripts (AppHarnessTest)
-	offsetKnob.setRange (-lastKnobRangeMs, lastKnobRangeMs, 0.0);
-	offsetKnob.setValue (0.0, juce::dontSendNotification);
-	offsetKnob.setTooltip ("Cue offset - drag to trim the cue point by a few milliseconds, or type the "
-						   "number beside it. Double-click to put it back to zero, right-click anywhere "
-						   "in the box for the knob's range and to reset the cue");
-	// The number is the offset, always: the cue is never absent, so this field has no second thing
-	// to say.
-	offsetKnob.textFromValueFunction = [] (double ms) { return offsetText (ms); };
-	offsetKnob.valueFromTextFunction = [] (const juce::String& text) { return text.getDoubleValue(); };
-	offsetKnob.onValueChange = [this]
-	{
-		if (updatingOffsetKnob)
+		// The card's transport is gated by the group's switch, and the number entry the group's
+		// menu opens covers the whole card - so both are the card's to answer.
+		syncGroup->onStateChanged = [this] { refresh(); };
+		syncGroup->onRequestValueEntry = [this] (const juce::String& entryTitle, double initialValue,
+												 std::function<void (double)> onAccept)
 		{
-			return;
-		}
+			openValueEntry (entryTitle, initialValue, std::move (onAccept));
+		};
 
-		sync.setCueOffsetMs (offsetKnob.getValue());
-	};
-
-	// A standalone has no play head, so there is nothing to sync to: the two buttons and the trim
-	// knob are not created at all there (docs/desgin/daw-sync-cue-design.md, §8).
-	if (syncAvailable)
-	{
-		addAndMakeVisible (syncButton);
-		addAndMakeVisible (cueButton);
-		addAndMakeVisible (offsetKnob);
+		addAndMakeVisible (*syncGroup);
 	}
 	else
 	{
-		// A standalone has no host to follow, and its transport lock has no button to unlock it:
-		// a session saved with sync on must not come back locked.
 		sync.setEnabled (false);
 	}
-
-	// The frame is the menu's owner, not just the knob: the panel listens to its own children so
-	// that a right click on either button or on the knob reaches the same place. A left click is
-	// untouched (a Button ignores a right click already, and the knob swallows it), and in the
-	// standalone the frame has no bounds, so the listener finds nothing to do.
-	addMouseListener (&syncGroupMouseListener, true);
 
 	// The number entry is a child of the card, created once and only shown on demand.
 	entryOverlay = std::make_unique<ValueEntryOverlay>();
@@ -473,24 +327,20 @@ TransportPanel::TransportPanel (toybox::PlaybackEngine& engineToUse, bool syncAv
 	refresh();
 }
 
-// The destructor lives here because the value entry it owns is only defined in this file (the
+// The destructor lives here because the two things it owns are only defined in this file (the
 // header only knows that they exist - a std::unique_ptr to an incomplete type needs the
 // definition wherever the pointer is destroyed).
-TransportPanel::~TransportPanel (void)
-{
-	// The listener is a member, so it dies before the base class does: unregister it while both
-	// are still alive.
-	removeMouseListener (&syncGroupMouseListener);
-}
+TransportPanel::~TransportPanel (void) = default;
 
 void TransportPanel::lookAndFeelChanged (void)
 {
-	// The two sliders that show a number in a text box (the volume's percentage and the cue
-	// offset): their colours have to be set on the slider itself, because that is where the box's
-	// label copies them from when it is created - and the box is recreated whenever the LookAndFeel
-	// changes (Slider::colourChanged() forwards to Slider::lookAndFeelChanged()), so re-applying
-	// them here is what keeps the number readable after a theme switch.
-	juce::Slider* const numberFields[] = { &volumeSlider, &offsetKnob };
+	// The slider that shows a number in a text box (the volume's percentage): its colours have to
+	// be set on the slider itself, because that is where the box's label copies them from when it
+	// is created - and the box is recreated whenever the LookAndFeel changes
+	// (Slider::colourChanged() forwards to Slider::lookAndFeelChanged()), so re-applying them here
+	// is what keeps the number readable after a theme switch. (The sync group's knob does the same
+	// for its own box - see SyncGroup::lookAndFeelChanged.)
+	juce::Slider* const numberFields[] = { &volumeSlider };
 
 	for (auto* slider : numberFields)
 	{
@@ -508,30 +358,29 @@ void TransportPanel::resized (void)
 {
 	auto inner = getLocalBounds().reduced (theme::cardPadding);
 
-	// The DAW-sync group is one cluster at the right end of the *top row* - Sync, Cue, then the
-	// trim knob and its number - so the transport buttons keep their fixed sizes on the left no
-	// matter how narrow the card gets. It is taken out of that row rather than out of the panel:
-	// the seek bar and the settings row below own the full width of the card, and a group that
-	// stole their width would leave both of them stopping in mid-air.
-	auto topRow = inner.removeFromTop (kFrameHeight);
-	const int groupWidth = 2 * kFramePadding + kButtonSize + 6 + kButtonSize + kSyncGroupGap
-						 + kOffsetKnobSize + kOffsetValueWidth;
-	syncGroupBounds = topRow.removeFromRight (juce::jmin (groupWidth, topRow.getWidth()));
+	// The DAW-sync group is one cluster at the right end of the *top row* - it is one component, so
+	// the row only has to leave its width free; the transport buttons keep their fixed sizes on the
+	// left no matter how narrow the card gets. It is taken out of that row rather than out of the
+	// panel: the seek bar and the settings row below own the full width of the card, and a group
+	// that stole their width would leave both of them stopping in mid-air.
+	//
+	// The row is the height of the group's frame even in the standalone, where there is no group -
+	// otherwise the transport would sit a few pixels apart in the two builds.
+	auto topRow = inner.removeFromTop (SyncGroup::frameHeight());
 
-	auto syncGroup = syncGroupBounds.withTrimmedLeft (kFramePadding)
-									.withTrimmedRight (kFramePadding)
-									.withTrimmedTop (kFrameTopPadding)
-									.withTrimmedBottom (kFrameBottomPadding);
-	syncButton.setBounds (syncGroup.removeFromLeft (kButtonSize));
-	syncGroup.removeFromLeft (6);
-	cueButton.setBounds (syncGroup.removeFromLeft (kButtonSize));
-	syncGroup.removeFromLeft (kSyncGroupGap);
-	offsetKnob.setBounds (syncGroup);	// the rotary, and its number field, to the right of it
+	if (syncGroup != nullptr)
+	{
+		auto groupArea = topRow.removeFromRight (juce::jmin (SyncGroup::preferredWidth(), topRow.getWidth()));
+
+		// The nameplate straddles the frame's top edge, so the component is taller than the frame
+		// and starts above the row.
+		syncGroup->setBounds (groupArea.withTop (groupArea.getY() - SyncGroup::nameplateOverhang()));
+	}
 
 	// The transport buttons line up with the controls *inside* the frame, not with its top edge:
 	// one baseline across the card is what makes the group read as part of the panel instead of as
 	// a box bolted onto a row that happens to be next to it.
-	auto row = topRow.withTrimmedTop (kFrameTopPadding).withHeight (kButtonSize);
+	auto row = topRow.withTrimmedTop (kRowTopPadding).withHeight (kButtonSize);
 	playButton.setBounds (row.removeFromLeft (kButtonSize));
 	row.removeFromLeft (6);
 	pauseButton.setBounds (row.removeFromLeft (kButtonSize));
@@ -542,8 +391,8 @@ void TransportPanel::resized (void)
 	row.removeFromLeft (6);
 	cursorButton.setBounds (row.removeFromLeft (kButtonSize));
 
-	// the gap between the frame's bottom edge and the loop marker band
-	inner.removeFromTop (kFrameGapBelow);
+	// the gap between the button row and the loop marker band
+	inner.removeFromTop (kGapBelowRow);
 	markerBandBounds = inner.removeFromTop (kLoopMarkerHeight);
 	startMarkerDragArea.setBounds (markerBandBounds.withTop (markerBandBounds.getY() - 3));
 	inner.removeFromTop (1);
@@ -570,49 +419,16 @@ void TransportPanel::paintCardContent (juce::Graphics& g)
 	// playback start cursor (the strip above the seek bar drags it - see StartMarkerDragArea)
 	paintPlaybackStartCursor (g);
 
-	// The DAW-sync group: a dashed frame with the nameplate on its top edge and the three controls
-	// inside (both drawn at the end, over the glow). The frame never changes colour - the version
-	// of this that lit the whole outline read as a selection rectangle drawn around the group.
-	// Whether the group is live is said by the switch inside it (accent face and glow) and by the
-	// nameplate: the thing is lit, not boxed.
-	const bool syncFrameVisible = syncAvailable && ! syncGroupBounds.isEmpty();
-	const float frameRadius = theme::cardRadius - 2.0f;
-	const bool live = syncFrameVisible && sync.isEnabled();
-
-	// The loop and cursor toggles glow in the accent colour while they are on (Cue is not in the
-	// list: it is an action, never lit; sync has its own pass below, clipped to its frame). The
-	// card paints them - and therefore behind the buttons: the glow reaches further than the
-	// shadow room a button keeps inside its own bounds (ButtonPaint.h).
+	// The loop and cursor toggles glow in the accent colour while they are on. The card paints them
+	// - and therefore behind the buttons: the glow reaches further than the shadow room a button
+	// keeps inside its own bounds (ButtonPaint.h). The sync group's switch paints its own glow,
+	// clipped to its frame - that is SyncGroup's business, not the card's.
 	for (auto* button : { &loopButton, &cursorButton })
 	{
 		if (button->getToggleState())
 		{
 			drawButtonGlow (g, button->getBounds());
 		}
-	}
-
-	// The sync button's glow is clipped to the group's frame: the frame is the box the light is
-	// in, and an unclipped halo would wash over the dashes and onto the card around them.
-	if (syncButton.getToggleState())
-	{
-		juce::Graphics::ScopedSaveState save (g);
-		if (syncFrameVisible)
-		{
-			juce::Path frame;
-			frame.addRoundedRectangle (syncGroupBounds.toFloat(), frameRadius);
-			g.reduceClipRegion (frame);
-		}
-		drawButtonGlow (g, syncButton.getBounds());
-	}
-
-	if (syncFrameVisible)
-	{
-		// After the glow: the frame closes around the light instead of being tinted by it
-		drawGroupFrame (g, syncGroupBounds.toFloat(), frameRadius, theme::groupFrame());
-
-		// the nameplate is the one thing in the group that does carry the state
-		drawGroupNameplate (g, "DAW SYNC", syncGroupBounds,
-							live ? theme::accent() : theme::secondaryText());
 	}
 
 	// loop point marker above the position slider (only for songs that have a loop point)
@@ -805,7 +621,11 @@ void TransportPanel::refresh (void)
 	const int loops = engine.getLoopCount();
 	const bool loopForever = (loops == 0);
 	const int loopId = loopBoxIdForCount (loops);
-	updateSyncControls();
+
+	if (syncGroup != nullptr)
+	{
+		syncGroup->refresh();
+	}
 
 	// While the host drives the transport, a local play/pause/stop/seek would be overwritten by
 	// the next block - a button that does nothing reads as broken, so it is disabled instead.
@@ -888,9 +708,9 @@ bool TransportPanel::isHostDriving (void) const
 {
 	// The one predicate for "the host owns the transport": the buttons, the seek bar, the key
 	// handlers and the space bar all ask this, so those answers cannot drift apart.
-	// syncAvailable comes first because the standalone has no host to give a key back to, even if
-	// a project was saved with sync on (the group is not even drawn there - see the constructor).
-	return syncAvailable && sync.isActive();
+	// No group means the standalone, which has no host to give a key back to - even if a project
+	// was saved with sync on (the group is not created there, see the constructor).
+	return syncGroup != nullptr && syncGroup->isHostDriving();
 }
 
 void TransportPanel::togglePlayStop (void)
@@ -947,119 +767,6 @@ void TransportPanel::setLoopForever (bool shouldLoopForever)
 	refresh();
 }
 
-void TransportPanel::takeCue (void)
-{
-	// Always takes: the cue is where the song starts on the DAW timeline, and every click re-anchors
-	// it there. It is never cleared - the frame's menu can put it back to 0 s (the DAW's start),
-	// which is a cue like any other.
-	// setCueFromHost() returns false when the host has no time to give; the button is disabled then,
-	// so that is only a race with a host that just stopped reporting.
-	sync.setCueFromHost();
-	updateSyncControls();
-}
-
-void TransportPanel::syncGroupMouseDown (const juce::MouseEvent& event)
-{
-	if (! syncAvailable || ! event.mods.isPopupMenu())
-	{
-		return;
-	}
-
-	// While the number entry is up it covers the card, and that is its own moment: offering the
-	// group's menu over it would be a second way to do the thing already on screen.
-	if (entryOverlay != nullptr && entryOverlay->isVisible())
-	{
-		return;
-	}
-
-	// The knob's number field is a TextEditor while it is open, and a right click there is the
-	// editor's own (cut / copy / paste). It is a temporary child of the knob, inside the frame.
-	auto* const source = event.eventComponent;
-	if (source != nullptr
-		&& (dynamic_cast<juce::TextEditor*> (source) != nullptr
-			|| source->findParentComponentOfClass<juce::TextEditor>() != nullptr))
-	{
-		return;
-	}
-
-	if (! syncGroupBounds.contains (event.getEventRelativeTo (this).getPosition()))
-	{
-		return;
-	}
-
-	// At the click, not at the knob: any point in the frame could have asked for this.
-	showOffsetMenu (event.getScreenPosition());
-}
-
-void TransportPanel::showOffsetMenu (juce::Point<int> screenPosition)
-{
-	juce::PopupMenu menu;
-	menu.addItem (1, "Exact offset...");
-	menu.addItem (2, "Knob range...");
-	menu.addSeparator();
-	menu.addItem (3, "Reset cue to 0 s");
-
-	// "Exact offset" opens the number field itself (Slider::showTextBox) rather than an overlay:
-	// the field is the same edit box the volume uses, so there is one way to type a number, and
-	// the menu item is only the discoverable path to it.
-
-	// The menu has to be told this LookAndFeel: PopupMenu only looks at its *own* pointer
-	// (menu.lookAndFeel, PopupMenu::setLookAndFeel), never at the target component's, so without
-	// this line the menu is drawn by whatever the platform's default LookAndFeel is - the default
-	// dark V4 palette over a light card, which is what "the colours do not follow the theme" was.
-	// The editor owns the object for the whole time the menu can live.
-	menu.setLookAndFeel (&getLookAndFeel());
-
-	// The menu outlives the click that opened it and so does its callback: the panel is tracked
-	// rather than captured, because closing the editor destroys it.
-	const juce::Component::SafePointer<TransportPanel> safe (this);
-
-	// The target component is not where the menu appears - the area below overrides that - but it
-	// is what JUCE scales the menu by (`shouldPopupMenuScaleWithTargetComponent`): without it the
-	// menu is drawn at the desktop's scale factor rather than the editor's, which on a HiDPI
-	// display makes it noticeably smaller than the window it belongs to.
-	menu.showMenuAsync (juce::PopupMenu::Options()
-							.withTargetComponent (&offsetKnob)
-							.withTargetScreenArea (juce::Rectangle<int> (screenPosition.x,
-																		 screenPosition.y, 1, 1)),
-						[safe] (int result)
-						{
-							if (safe == nullptr)
-							{
-								return;
-							}
-
-							if (result == 1)
-							{
-								safe->offsetKnob.showTextBox();
-							}
-							else if (result == 2)
-							{
-								safe->showRangeEntry();
-							}
-							else if (result == 3)
-							{
-								// 0 is a cue like any other (the song's beginning on the DAW's
-								// beginning), so this is a move, not a clear: nothing downstream
-								// has a "no cue" state to fall into.
-								safe->sync.setCueSeconds (0.0);
-								safe->updateSyncControls();
-							}
-						});
-}
-
-void TransportPanel::showRangeEntry (void)
-{
-	openValueEntry ("Knob range (+/- ms)", sync.getKnobRangeMs(),
-					[this] (double ms)
-					{
-						// setKnobRangeMs() re-clamps the offset, so the knob can never show a
-						// value it cannot reach - updateSyncControls() picks that up
-						sync.setKnobRangeMs (ms);
-						updateSyncControls();
-					});
-}
-
 void TransportPanel::openValueEntry (const juce::String& title, double initialValue,
 									 std::function<void (double)> onAccept)
 {
@@ -1071,57 +778,6 @@ void TransportPanel::openValueEntry (const juce::String& title, double initialVa
 	// the overlay may have been laid out before the card had its size
 	entryOverlay->setBounds (getLocalBounds());
 	entryOverlay->open (title, initialValue, std::move (onAccept));
-}
-
-void TransportPanel::updateSyncControls (void)
-{
-	if (! syncAvailable)
-	{
-		return;
-	}
-
-	const bool enabled = sync.isEnabled();
-	const double rangeMs = sync.getKnobRangeMs();
-	const double offsetMs = sync.getCueOffsetMs();
-
-	if (syncButton.getToggleState() != enabled)
-	{
-		syncButton.setToggleState (enabled, juce::dontSendNotification);
-		// the accent glow reaches past the button bounds, and the nameplate on the frame changes
-		// colour with it (see paintCardContent)
-		repaint (buttonGlowBounds (syncButton.getBounds()));
-		repaint (syncGroupBounds.expanded (kNameplateHeight / 2 + 2));
-	}
-
-	// The Cue button is deliberately never lit: a lit face in this editor means "this switch is on",
-	// and Cue is an action (take the host's position as the anchor), not a switch.
-
-	// Cue needs a host that reports time, and nothing else. The knob trims a cue that always
-	// exists, so it is never disabled here - it has nothing to wait for.
-	cueButton.setEnabled (sync.isHostUsable());
-
-	const bool rangeChanged = ! juce::approximatelyEqual (rangeMs, lastKnobRangeMs);
-
-	if (rangeChanged || ! juce::approximatelyEqual (offsetKnob.getValue(), offsetMs))
-	{
-		lastKnobRangeMs = rangeMs;
-
-		// setRange() re-clamps the slider's value *and* notifies, which would echo the clamped
-		// number back into the sync state through onValueChange
-		updatingOffsetKnob = true;
-
-		if (rangeChanged)
-		{
-			offsetKnob.setRange (-rangeMs, rangeMs, 0.0);
-		}
-
-		offsetKnob.setValue (offsetMs, juce::dontSendNotification);
-		updatingOffsetKnob = false;
-	}
-
-	// The number is the value, so a re-clamp above is all that can make it stale (a no-op when the
-	// string did not change - updateText() compares before it writes).
-	offsetKnob.updateText();
 }
 
 } // namespace toybox::ui

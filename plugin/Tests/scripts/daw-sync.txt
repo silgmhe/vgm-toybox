@@ -1,5 +1,7 @@
 # wrapper vst3
 # The DAW-sync controls only exist in a hosted build (docs/desgin/daw-sync-cue-design.md, §7.4).
+# They are one component (ui/SyncGroup), so the frame itself is in the tree as well.
+assert group.sync visible == true
 assert btn.sync visible == true
 assert btn.cue  visible == true
 
