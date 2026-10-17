@@ -5,7 +5,7 @@
 	    add_executable(vgm_core_test ... Source/playback/*.cpp Source/backends/fake/FakeBackend.cpp)
 
 	A core that still depended on libvgm would not link here, which is exactly the point: this
-	target is the mechanical proof of the decoupling (see docs/playback-backend-design.md).
+	target is the mechanical proof of the decoupling (see docs/desgin/playback-backend-design.md).
 
 	On top of that it checks the mixer against signals whose levels are known analytically - the
 	fake backend plays three sine tones of amplitude 0.25, so an rms of 0.25/sqrt(2) is one tone
@@ -31,6 +31,7 @@
 #include "backends/fake/FakeBackend.h"
 #include "playback/BackendRegistry.h"
 #include "playback/PlaybackEngine.h"
+#include "playback/SessionState.h"
 #include "playback/StartupSong.h"
 #include "settings/SettingsStore.h"
 
@@ -598,13 +599,153 @@ int main (int /*argc*/, char* /*argv*/[])
 		controlSong.deleteFile();
 	}
 
+	// ------------------------------------------------------- [7] the project state
+	// What a host saves and restores. The song is part of the state as *data*, so the test's own
+	// file is deleted before the restore: a project has to open on a machine that never had it.
+	std::printf ("[7] the project state\n");
+	{
+		toybox::PlaybackEngine source;
+		source.prepare (sampleRate, blockSize);
+
+		juce::String stateError;
+		check (source.loadFile (file, stateError), "the state test starts from a loaded song");
+		const size_t imageSize = source.getSongImage().getSize();
+
+		source.setLoopCount (3);
+		source.setFadeSeconds (2.5);
+		source.setMasterVolume (0.6f);
+		source.setMixerMasterGain (0.7f);
+		source.setMasterMuted (true);
+		source.setDefaultRouting (toybox::playback::DefaultRouting::spreadAcrossBuses);
+		source.setTrackGain (0, 0.5f);
+		source.setTrackPan (1, -0.25f);
+		source.setTrackMute (2, true);
+		source.setTrackSolo (1, true);
+		source.setTrackOutput (0, (toybox::playback::OutputTarget) 2);
+
+		juce::MemoryBlock blob;
+		source.writeState (blob);
+		const auto* const head = static_cast<const unsigned char*> (blob.getData());
+		check (blob.getSize() > 2 && head[0] == 0x1f && head[1] == 0x8b,
+			   "the state is a gzip stream, not the old binary XML");
+
+		file.deleteFile();
+		check (! file.existsAsFile(), "the song file is gone before the restore");
+
+		toybox::PlaybackEngine restored;
+		restored.prepare (sampleRate, blockSize);
+		check (restored.readState (blob.getData(), (int) blob.getSize(), stateError),
+			   "the state restores into an engine that never saw the file");
+		check (restored.isLoaded(), "the song came back from the bytes in the state");
+		check (restored.getSongImage().getSize() == imageSize, "the image is byte for byte the same");
+		check (restored.getFile().getFileName() == file.getFileName(), "the name came back too");
+		check (restored.getTracks().size() == 3, "the track list came back from the song");
+
+		check (restored.getLoopCount() == 3, "the loop count survives");
+		check (near (restored.getFadeSeconds(), 2.5, 1e-9), "the fade survives");
+		check (near (restored.getMasterVolume(), 0.6, 1e-6), "the output volume survives");
+		check (near (restored.getMixerMasterGain(), 0.7, 1e-6), "the mixer master gain survives");
+		check (restored.isMasterMuted(), "master mute survives");
+		check (restored.getDefaultRouting() == toybox::playback::DefaultRouting::spreadAcrossBuses,
+			   "the default routing survives");
+
+		check (near (restored.getTrackGain (0), 0.5, 1e-6), "a track's gain survives");
+		check (near (restored.getTrackPan (1), -0.25, 1e-6), "a track's pan survives");
+		check (restored.isTrackMuted (2), "a track's mute survives");
+		check (restored.isTrackSoloed (1), "a track's solo survives");
+		check (restored.getTrackOutput (0) == (toybox::playback::OutputTarget) 2,
+			   "a track's output survives");
+
+		// A project opens silent: whether the song was playing at save time is an accident of when
+		// the host autosaved, so the restored transport is always stopped, at the top.
+		check (! restored.isPlaying(), "the project opens stopped, it does not make sound on its own");
+		check (near (restored.getPositionSeconds(), 0.0, 1e-9), "with the position at the top");
+		check (near (renderSeconds (restored, 0.1, sampleRate, blockSize).rms, 0.0, 1e-9),
+			   "and renders silence until Play is pressed");
+
+		restored.setMasterMuted (false);	// the state had the master muted
+		restored.play();
+		check (restored.isPlaying() && renderSeconds (restored, 0.1, sampleRate, blockSize).rms > 0.0,
+			   "Play after a restore still starts the song");
+
+		// A state with no song is valid (a project can save an empty instance): the settings come
+		// back and nothing is loaded.
+		toybox::PlaybackEngine empty;
+		empty.prepare (sampleRate, blockSize);
+		empty.setLoopCount (2);
+		empty.setMixerMasterGain (0.4f);
+		juce::MemoryBlock emptyBlob;
+		empty.writeState (emptyBlob);
+
+		toybox::PlaybackEngine emptyRestored;
+		emptyRestored.prepare (sampleRate, blockSize);
+		check (emptyRestored.readState (emptyBlob.getData(), (int) emptyBlob.getSize(), stateError),
+			   "an empty state restores");
+		check (! emptyRestored.isLoaded() && near (emptyRestored.getMixerMasterGain(), 0.4, 1e-6),
+			   "and brings back the settings without inventing a song");
+	}
+
+	// ------------------------------------------- [8] what the state refuses to load
+	// The old format is not migrated (review §6 H-1): a version 1 XML and the old binary XML are
+	// both turned away, and the engine keeps its state rather than guessing.
+	std::printf ("[8] what the state refuses\n");
+	{
+		toybox::PlaybackEngine engineRefusing;
+		engineRefusing.prepare (sampleRate, blockSize);
+
+		const char oldFormat[] = "V C 2 !";	// the magic copyXmlToBinary() wrote
+		juce::String refusal;
+		check (! engineRefusing.readState (oldFormat, (int) sizeof (oldFormat), refusal),
+			   "the old binary XML is refused");
+		check (refusal.containsIgnoreCase ("incompatible"),
+			   "and the message says why, for the status line");
+
+		juce::MemoryBlock versionOneBlob;
+		{
+			juce::XmlElement versionOne ("VGMToyboxState");
+			versionOne.setAttribute ("version", 1);
+			versionOne.setAttribute ("file", "/somewhere/else/song.vgm");
+
+			juce::MemoryOutputStream compressed;
+			{
+				juce::GZIPCompressorOutputStream gzip (compressed, 6, 15 | 16);
+				versionOne.writeTo (gzip, juce::XmlElement::TextFormat().singleLine());
+				gzip.flush();
+			}
+			versionOneBlob = compressed.getMemoryBlock();
+		}
+
+		juce::String versionRefusal;
+		check (! engineRefusing.readState (versionOneBlob.getData(),
+										   (int) versionOneBlob.getSize(), versionRefusal),
+			   "a well-formed gzip state from version 1 is refused too");
+		check (! engineRefusing.isLoaded() && engineRefusing.getTracks().empty(),
+			   "and nothing was loaded on the way out");
+
+		// Over the embedding limit the codec leaves the song out rather than writing a state no
+		// project file should carry; the name and size stay so the reader can say what happened.
+		toybox::playback::SessionState tooBig;
+		tooBig.songName = "huge.vgz";
+		tooBig.songImage.setSize ((size_t) toybox::playback::kMaxEmbeddedSongBytes + 1, true);
+
+		const juce::MemoryBlock bigBlob = toybox::playback::encodeSessionState (tooBig);
+		toybox::playback::SessionState readBack;
+		juce::String codecError;
+		check (toybox::playback::decodeSessionState (bigBlob.getData(), (int) bigBlob.getSize(),
+													 readBack, codecError),
+			   "a song over the limit still produces a readable state");
+		check (! readBack.songEmbedded && readBack.songImage.getSize() == 0
+				   && readBack.songSize == toybox::playback::kMaxEmbeddedSongBytes + 1,
+			   "but the song itself is left out, with its name and size kept");
+	}
+
 	file.deleteFile();
 
-	// ----------------------------------------------- [7] the settings store (settings/)
+	// ----------------------------------------------- [9] the settings store (settings/)
 	// Read once at startup, written when a value changes, into a folder of its own under the
 	// platform's application data directory. The store is pointed at a temporary directory here,
 	// before its first use, so a test run cannot touch a developer's real preferences.
-	std::printf ("[7] the settings store\n");
+	std::printf ("[9] the settings store\n");
 
 	const auto settingsDir = juce::File::getSpecialLocation (juce::File::tempDirectory)
 								 .getChildFile ("vgmtoybox-settings-test");

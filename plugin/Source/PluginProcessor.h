@@ -26,8 +26,15 @@ public:
 	bool hasEditor() const override { return true; }
 
 	const juce::String getName() const override { return "VGMToybox"; }
-	bool acceptsMidi() const override { return false; }
-	bool producesMidi() const override { return false; }
+	/** True although the processor never reads a note: an instrument that offers no MIDI input is
+		refused by some hosts (Ableton Live among them), so the bus is declared and the events are
+		dropped (processBlock()). Keep this in step with NEEDS_MIDI_INPUT in CMakeLists.txt - that
+		flag is what actually creates the VST3 bus. */
+	bool acceptsMidi() const override { return true; }
+	/** The mirror of acceptsMidi(): the MIDI-out bus is declared for the feature that will come,
+		although nothing is emitted today (processBlock() clears the buffer, which is also what
+		keeps the announced output silent). Keep in step with NEEDS_MIDI_OUTPUT. */
+	bool producesMidi() const override { return true; }
 	bool isMidiEffect() const override { return false; }
 	double getTailLengthSeconds() const override { return 0.0; }
 
@@ -42,6 +49,13 @@ public:
 
 	toybox::PlaybackEngine& getEngine (void) { return engine; }
 
+	/** What restoring a project had to say - an incompatible state, a song left out of it - for
+		the editor's status line. Sticky on purpose: it is the only hint the user gets when a host
+		opens a project that did not come back, and the editor may not exist yet when the host
+		calls setStateInformation(). Thread-safe: the host may not use the message thread. */
+	juce::String getStateMessage (void) const;
+	void clearStateMessage (void);
+
 	/** Standalone only: the song the application was launched with - Explorer's "Open with", a
 		command line, a desktop shortcut - so that double-clicking a file starts playing it.
 
@@ -53,7 +67,7 @@ public:
 
 private:
 	/** "Out 1/2" (the main bus, activated) plus the additional buses, which start **inactive**:
-		a host only allocates the ones the user enables (docs/multitrack-output-design.md, ADR-2),
+		a host only allocates the ones the user enables (docs/desgin/multitrack-output-design.md, ADR-2),
 		so out of the box the plugin behaves exactly as it did before. Defined here because
 		`BusesProperties` is a protected nested type of `AudioProcessor`. */
 	static BusesProperties buildBusesProperties (void)
@@ -71,7 +85,15 @@ private:
 		return properties;
 	}
 
+	/** The body of setStateInformation(): decodes and installs one state, message thread, and
+		reports what the status line should say (empty on success). Split out so the public call
+		can hop threads first - a host may call it from anywhere (review M-2). */
+	juce::String restoreState (const void* data, int sizeInBytes);
+
 	toybox::PlaybackEngine engine;
+
+	juce::CriticalSection stateMessageLock;
+	juce::String stateMessage;
 
 	JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (ToyboxAudioProcessor)
 };

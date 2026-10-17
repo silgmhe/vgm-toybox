@@ -13,7 +13,7 @@ namespace toybox::playback
 
 	Backends are registered at compile time (the product is a VST3 plugin, so everything ships
 	inside one signed binary - there is deliberately no runtime loading, see ADR-008 in
-	docs/playback-backend-design.md). Optional backends register under a compile-time switch,
+	docs/desgin/playback-backend-design.md). Optional backends register under a compile-time switch,
 	so a build without them simply has one fewer entry here.
 
 	The registry is filled once (from the plugin constructor) and read by the loader and by the

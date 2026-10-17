@@ -55,11 +55,24 @@ ToyboxAudioProcessorEditor::ToyboxAudioProcessorEditor (ToyboxAudioProcessor& p)
 	// Close and Exit belong to the standalone build only: inside a host this window is not the
 	// application, and quitting would take the DAW down with it (see ui/MainMenu.h).
 	menu.standalone = (processor.wrapperType == juce::AudioProcessor::wrapperType_Standalone);
-	menu.onOpenSong = [this] { openFileChooser(); };
+
+	// The window's commands own both halves of an accelerator: the key and what it runs
+	// (ui/EditorCommands.h). The menu asks this table for the key it draws and renders it with
+	// describe(); keyPressed() asks the same table which command claims the key - so an
+	// accelerator cannot be shown but dead, or work but be shown wrong (review M-3/M-4).
+	commands.add ("file.open", juce::KeyPress ('o', juce::ModifierKeys::commandModifier, 0),
+				  [this] { openFileChooser(); });
+	commands.add ("options.settings", juce::KeyPress (',', juce::ModifierKeys::commandModifier, 0),
+				  [this] { showSettings(); });
+	menu.commands = &commands;
+
+	// The menu entries route through the same table rather than carrying a second body: one
+	// command, one action, however it is reached.
+	menu.onOpenSong = [this] { commands.perform ("file.open"); };
 	menu.onCloseSong = [this] { closeSong(); };
 	menu.onQuit = [] { juce::JUCEApplicationBase::quit(); };
 	menu.onAbout = [this] { showAbout(); };
-	menu.onSettings = [this] { showSettings(); };
+	menu.onSettings = [this] { commands.perform ("options.settings"); };
 
 	// The menu's colours are the LookAndFeel's own (PopupMenu ids, see ToyboxLookAndFeel::refresh()):
 	// its paint routines look them up there, so there is nothing to set here.
@@ -102,6 +115,7 @@ ToyboxAudioProcessorEditor::ToyboxAudioProcessorEditor (ToyboxAudioProcessor& p)
 	// The pages are told what the engine holds right now: an editor can be created while a song is
 	// already loaded (a host reopening its window), and the chip card belongs to that song.
 	viewStack.songChanged();
+	songLoadedAtLastRefresh = engine.isLoaded();
 
 	// full-size overlay, hidden until a file is dragged over the editor
 	addChildComponent (dropHint);
@@ -255,35 +269,9 @@ void ToyboxAudioProcessorEditor::resized (void)
 
 bool ToyboxAudioProcessorEditor::keyPressed (const juce::KeyPress& key)
 {
-	// the accelerators the menus show; the menus themselves only describe them
-	const auto code = key.getKeyCode();
-	if ((code == 'o' || code == 'O') && key.getModifiers().isCommandDown())
-	{
-		openFileChooser();
-		return true;
-	}
-
-	// Ctrl+1..9 picks a page, in the order the View menu lists them
-	if (key.getModifiers().isCommandDown() && code >= '1' && code <= '9')
-	{
-		const int wanted = code - '1';
-		if (wanted < viewStack.getNumViews() && wanted != viewStack.getCurrentViewIndex())
-		{
-			viewStack.setCurrentView (wanted);
-			return true;
-		}
-	}
-
-	// Ctrl+, opens the settings window, the accelerator the Options menu describes. The pages the
-	// digits reach are not involved: this is an overlay over all of them.
-	if (code == ',' && key.getModifiers().isCommandDown())
-	{
-		showSettings();
-		return true;
-	}
-
 	// escape dismisses whichever overlay is up, like any other dialog - the settings window first,
-	// since it is the one that can be over the About box and not the other way round
+	// since it is the one that can be over the About box and not the other way round. It comes
+	// before the commands: a key pressed over an overlay belongs to the overlay.
 	if (key == juce::KeyPress::escapeKey)
 	{
 		if (settingsOverlay.isVisible())
@@ -297,6 +285,26 @@ bool ToyboxAudioProcessorEditor::keyPressed (const juce::KeyPress& key)
 			aboutOverlay.setVisible (false);
 			return true;
 		}
+	}
+
+	// The commands own the accelerators the menus show (ui/EditorCommands.h): the menu renders
+	// the key from this table, so what is shown and what is matched here cannot drift apart.
+	if (commands.handleKey (key))
+	{
+		return true;
+	}
+
+	// Ctrl+1..9 picks a page, in the order the View menu lists them. The key comes from pageKey(),
+	// the same call the menu describes it with.
+	if (const int wanted = ui::EditorCommands::pageForKey (key); wanted >= 0)
+	{
+		if (wanted < viewStack.getNumViews() && wanted != viewStack.getCurrentViewIndex())
+		{
+			viewStack.setCurrentView (wanted);
+			return true;
+		}
+
+		return false;
 	}
 
 	// The transport keys belong to the playback page and any keys of its own to another page: a key
@@ -367,27 +375,59 @@ void ToyboxAudioProcessorEditor::openFileChooser (void)
 
 void ToyboxAudioProcessorEditor::loadFile (const juce::File& file)
 {
-	juce::String errorMessage;
-	if (! engine.loadFile (file, errorMessage))
-	{
-		lastError = errorMessage;
-	}
-	else
-	{
-		lastError.clear();
-	}
-
-	viewStack.songChanged();	// every page rebuilds whatever it shows about the song
+	// The read and the build run on the engine's worker (review M-1): this window keeps drawing,
+	// and the song that is playing keeps playing, until the new one is ready to be swapped in.
+	// The status line says "Loading <name>" while that happens.
+	startupHandled = true;		// this load is the startup one, or a manual one that replaces it
+	loadInFlight = true;
+	loadingName = file.getFileName();
+	lastError.clear();			// a new attempt clears the old failure, or it would hide "Loading"
 	updateStatusLine();
-	resized();					// a page may have changed height (cards can appear)
+
+	// The callback comes back on the message thread, but the window may be gone by then: a
+	// SafePointer stops a closed editor from being touched (the song still loads).
+	juce::Component::SafePointer<ToyboxAudioProcessorEditor> safe (this);
+	engine.loadFileAsync (file, [safe, path = loadingName] (bool ok, const juce::String& error)
+	{
+		if (safe == nullptr)
+		{
+			return;
+		}
+
+		safe->loadInFlight = false;
+		safe->loadingName.clear();
+
+		if (ok)
+		{
+			safe->lastError.clear();
+			// a project that did not restore has just been superseded by this song - its message
+			// is about a state that is no longer there
+			safe->processor.clearStateMessage();
+			safe->songLoadedAtLastRefresh = true;
+		}
+		else
+		{
+			safe->lastError = path.isNotEmpty() ? (path + ": " + error) : error;
+		}
+
+		safe->viewStack.songChanged();	// every page rebuilds whatever it shows about the song
+		safe->updateStatusLine();
+		safe->resized();				// a page may have changed height (cards can appear)
+	});
 }
 
 void ToyboxAudioProcessorEditor::closeSong (void)
 {
+	// A load that is still building must not install itself into the song that is being closed:
+	// unloadFile() bumps the engine's generation, so the pending result is dropped without a
+	// callback, and the "loading" state ends here.
+	loadInFlight = false;
+	loadingName.clear();
 	engine.unloadFile();
 
 	// the same the other way round: the cards that only exist with a song loaded hide themselves,
 	// the chips go away and the status line says what is open now (nothing)
+	songLoadedAtLastRefresh = false;
 	viewStack.songChanged();
 	updateStatusLine();
 	resized();
@@ -433,19 +473,11 @@ void ToyboxAudioProcessorEditor::openStartupSong (void)
 		return;
 	}
 
-	loadFile (startupSong);
-
-	// The audio device may not be ready yet: leave the file pending and let the timer come back.
-	if (! engine.isLoaded())
-	{
-		return;
-	}
-
-	engine.play();
-	viewStack.refresh();
-	startupHandled = true;
+	// loadFile() starts the worker and sets startupHandled; the audio device may still be coming
+	// up while that runs, and prepare() rebuilds the players at the device's rate when it does.
 	// Nothing is written on success: opening a song is the normal case, and the application leaves
-	// no trace anywhere unless something went wrong (see the breadcrumb in timerCallback()).
+	// no trace anywhere unless something went wrong (the status line says so now).
+	loadFile (startupSong);
 }
 
 //==============================================================================
@@ -453,25 +485,11 @@ void ToyboxAudioProcessorEditor::openStartupSong (void)
 
 void ToyboxAudioProcessorEditor::timerCallback (void)
 {
-	// Still opening the song the application was started with? The audio device may only have come
-	// up in the meantime, so keep trying for about a second - and then say so once, because a song
-	// that never appears is otherwise impossible to explain from the outside.
+	// Still opening the song the application was started with? openStartupSong() only starts the
+	// worker (review M-1); the result arrives as a callback, so there is nothing to retry here.
 	if (! startupHandled)
 	{
-		if (startupAttempts++ < 12)
-		{
-			openStartupSong();
-		}
-		else
-		{
-			startupHandled = true;
-
-			juce::File::getSpecialLocation (juce::File::tempDirectory)
-				.getChildFile ("vgmtoybox-startup.log")
-				.replaceWithText ("Could not open the song the application was started with:"
-								  + juce::newLine + startupSong.getFullPathName()
-								  + juce::newLine + lastError + juce::newLine);
-		}
+		openStartupSong();
 	}
 
 	// only a running transport animates the meters and the seek bar - that is when the higher
@@ -488,16 +506,58 @@ void ToyboxAudioProcessorEditor::timerCallback (void)
 
 void ToyboxAudioProcessorEditor::refreshUi (void)
 {
+	// A song can appear (or go away) without anything in this window being clicked: the host
+	// restores a project into an instance whose editor is already open. The pages that only
+	// exist with a song have to be rebuilt for that, not just refreshed.
+	const bool loaded = engine.isLoaded();
+	if (loaded != songLoadedAtLastRefresh)
+	{
+		songLoadedAtLastRefresh = loaded;
+		viewStack.songChanged();
+		resized();
+	}
+
+	// The engine counts blocks that had to render short because the lock was held too long (a
+	// state save, a load install). A stutter caused that way is invisible from the outside, so
+	// say it once per window when the count moves - a log line is what makes it diagnosable
+	// (review L-4).
+	const int starved = engine.getStarvedBlocks();
+	if (starved > reportedStarvedBlocks)
+	{
+		reportedStarvedBlocks = starved;
+		juce::Logger::writeToLog ("VGMToybox: " + juce::String (starved)
+								  + " block(s) starved so far - the engine lock was held too long");
+	}
+
 	viewStack.refresh();
 	updateStatusLine();
 }
 
 void ToyboxAudioProcessorEditor::updateStatusLine (void)
 {
+	// A load is being built on the worker (review M-1): that is the only thing the line has to
+	// say until it finishes. loadFile() cleared the previous failure, so an old error cannot
+	// hide it - and on success or failure the callback comes back through here.
+	if (loadInFlight)
+	{
+		statusLabel.setColour (juce::Label::textColourId, theme::secondaryText());
+		statusLabel.setText ("Loading " + loadingName + "...", juce::dontSendNotification);
+		return;
+	}
+
+	// The processor's message comes first among the non-error states: it is what a project that
+	// did not restore left behind, and the only clue the user has (review §6 H-1).
+	const juce::String stateMessage = processor.getStateMessage();
+	const bool hasProblem = lastError.isNotEmpty() || stateMessage.isNotEmpty();
+
 	juce::String status;
 	if (lastError.isNotEmpty())
 	{
 		status = lastError;
+	}
+	else if (stateMessage.isNotEmpty())
+	{
+		status = stateMessage;
 	}
 	else if (! engine.isLoaded())
 	{
@@ -522,6 +582,6 @@ void ToyboxAudioProcessorEditor::updateStatusLine (void)
 			   << " / " << formatTime (engine.getDurationSeconds());
 	}
 
-	statusLabel.setColour (juce::Label::textColourId, lastError.isNotEmpty() ? theme::error() : theme::secondaryText());
+	statusLabel.setColour (juce::Label::textColourId, hasProblem ? theme::error() : theme::secondaryText());
 	statusLabel.setText (status, juce::dontSendNotification);
 }

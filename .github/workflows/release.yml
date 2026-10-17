@@ -275,6 +275,16 @@ jobs:
         VST3, Audio Unit (macOS only) and standalone builds for Windows, macOS and Linux - x64 and
         arm64 on Windows and Linux, and one universal bundle for macOS.
 
+        **Upgrading: the project state format changed (breaking).** A project saved with 0.0.5 or
+        older carries the song as a file path in the old state format. This version refuses that
+        format instead of guessing at it: the instance comes up empty and the status line says the
+        state is incompatible - load the song again. From 0.1.0 on the song travels *inside* the
+        project as data, so a project opens on a machine that never saw the file, and the mixer
+        settings come back with it. A restored project always comes up **stopped at the top** of
+        the song - it never starts playing by itself when the host opens it. A song over 16 MB is
+        not embedded (it would not fit a project file sanely); everything else is restored and the
+        song can be reloaded.
+
         **Installing**
         - Windows: put \`VGMToybox.vst3\` in \`C:\\Program Files\\Common Files\\VST3\`, or run \`VGMToybox.exe\`.
           The \`arm64\` package is for Windows on ARM; there the \`x64\` one only runs under emulation.

@@ -142,6 +142,20 @@ Copy the bundle into the plugin folder and rescan:
 If an older `VGMPlay.vst3` from this project is installed, delete it first: the plugin codes are
 deliberately unchanged, so a host would see the two bundles as the same plugin.
 
+### What a project keeps
+
+Since 0.1.0 the plugin's state carries the song **as data**, not as a path: the file is embedded in
+the project (compressed), so the project opens on a machine that never saw it, together with the
+mixer settings, the per-track values and the routing. The transport is not part of it: a project
+always opens **stopped at the top of the song**, so opening one never makes sound on its own. Two
+limits are worth knowing:
+
+- a song over 16 MB is not embedded - the project still restores every setting and the status line
+  says the song has to be loaded again;
+- projects saved with 0.0.5 or older used a different format (a path, no snapshot). This version
+  refuses that format rather than guessing: the instance comes up empty and says so in the status
+  line, and the song is loaded once more by hand.
+
 ### Recording stems into a DAW
 
 The multi-output routing exists for one workflow: record every chip on its own track in a single pass

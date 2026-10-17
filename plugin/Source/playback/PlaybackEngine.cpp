@@ -1,8 +1,13 @@
 #include "PlaybackEngine.h"
 
 #include <juce_audio_basics/juce_audio_basics.h>
+// for MessageManager::callAsync(): the install half of an asynchronous load has to run on the
+// message thread (review M-1). juce_events is a dependency of every target that compiles this
+// file, including the headless core tests, which never call the async path.
+#include <juce_events/juce_events.h>
 
 #include "playback/BackendRegistry.h"
+#include "playback/SessionState.h"
 
 namespace toybox
 {
@@ -13,6 +18,13 @@ PlaybackEngine::PlaybackEngine (void)
 
 PlaybackEngine::~PlaybackEngine (void)
 {
+	// A result that is already queued on the message loop must see this before it touches the
+	// engine, and the worker has to be gone before the lock (and the object) does: the pool is
+	// stopped here, and the job itself only touches its own copies, so interrupting it is safe.
+	// The timeout keeps a pathological build from hanging the host on teardown.
+	alive->store (false);
+	loadPool.removeAllJobs (true, 3000);
+
 	const juce::ScopedLock sl (lock);
 	resetState();
 }
@@ -64,35 +76,49 @@ void PlaybackEngine::prepare (double newSampleRate, int maxBlock)
 
 bool PlaybackEngine::loadFile (const juce::File& file, juce::String& errorMessage)
 {
-	// Phase 1, **outside the lock**: reading the file. This is the one part of a load whose cost is
-	// unbounded - a 30 MB VGM from a cold cache, or a file something else is still writing - and it
-	// touches nothing this engine owns, so the audio thread keeps rendering through it instead of
-	// falling silent for as long as the disk takes (the review's H-1; the rest of the load is
-	// bounded work that still happens under the lock, see the note there).
+	// Reading the file is the one part of a load whose cost is unbounded - a 30 MB VGM from a cold
+	// cache, or a file something else is still writing - and it touches nothing this engine owns,
+	// so the audio thread keeps rendering through it instead of falling silent for as long as the
+	// disk takes (the review's H-1).
 	const bool exists = file.existsAsFile();
 	juce::MemoryBlock data;
 	const bool readable = exists && file.loadFileAsData (data) && data.getSize() > 0;
 
-	// Phase 2, still outside the lock: unpacking and starting the sound cores, into a song of its
-	// own. The current song keeps playing while this happens - a failed load still stops playback
-	// below, exactly as it always has. (`chips` is message-thread data, like everything else read
-	// here; render() never touches it.)
-	LoadedSong built;
-	if (readable)
-	{
-		built = buildSong (data, file, chips, errorMessage);
-	}
-
-	// Phase 3, under the lock: the swap, and nothing else.
-	const juce::ScopedLock sl (lock);
-
-	resetState();	// stop playback and release the previous file first
-
 	if (! readable)
 	{
+		const juce::ScopedLock sl (lock);
+		resetState();	// stop playback and release the previous file first
 		errorMessage = exists ? "Could not read the file." : "The file does not exist.";
 		return false;
 	}
+
+	return loadImage (std::move (data), file, true, errorMessage);
+}
+
+bool PlaybackEngine::loadImage (juce::MemoryBlock image, const juce::File& file, bool startPlaying,
+								juce::String& errorMessage)
+{
+	// This is a request of its own: a load that is still building on the worker must not install
+	// itself over it.
+	++loadGeneration;
+
+	// Outside the lock: unpacking and starting the sound cores, into a song of its own. The
+	// current song keeps playing while this happens - a failed load still stops playback in
+	// installLoaded(), exactly as it always has. The configuration is copied first so the build
+	// never reads a member render() can see - the same copy loadFileAsync() hands to its worker.
+	const BuildConfig config = makeBuildConfig();
+	LoadedSong built = buildSong (config, image, file, errorMessage);
+
+	return installLoaded (std::move (built), std::move (image), file, startPlaying);
+}
+
+bool PlaybackEngine::installLoaded (LoadedSong&& built, juce::MemoryBlock&& image,
+									const juce::File& file, bool startPlaying)
+{
+	// Under the lock: the swap, and nothing else.
+	const juce::ScopedLock sl (lock);
+
+	resetState();
 
 	if (built.song == nullptr)
 	{
@@ -100,20 +126,246 @@ bool PlaybackEngine::loadFile (const juce::File& file, juce::String& errorMessag
 	}
 
 	// the backend unpacks a compressed container (.vgz) itself - the image stays as it was read
-	fileData.swapWith (data);
+	fileData = std::move (image);
 	currentFile = file;
 
 	installSong (std::move (built));
 
 	positionSeconds = 0.0;
 	finished = false;
-	playing = true;
+	playing = startPlaying;
 
 	return true;
 }
 
+void PlaybackEngine::loadFileAsync (const juce::File& file, LoadCallback onDone)
+{
+	// Snapshot on the message thread: from here on the job only touches its own copies, so a
+	// sample-rate change, a mode switch or a close on the message thread cannot race the build.
+	const BuildConfig config = makeBuildConfig();
+	const int generation = ++loadGeneration;
+	auto* const engine = this;
+	const auto lifetime = alive;
+
+	loadPool.addJob ([engine, lifetime, config, file, generation, onDone = std::move (onDone)] () mutable
+	{
+		juce::MemoryBlock data;
+		juce::String error;
+		bool ok = file.existsAsFile();
+
+		if (! ok)
+		{
+			error = "The file does not exist.";
+		}
+		else if (! file.loadFileAsData (data) || data.getSize() == 0)
+		{
+			ok = false;
+			error = "Could not read the file.";
+		}
+
+		LoadedSong built;
+		if (ok)
+		{
+			built = buildSong (config, data, file, error);
+			ok = built.song != nullptr;
+		}
+
+		// Back to the message thread for the swap, where every other mutator lives and where the
+		// callback that touches the window has to run.
+		juce::MessageManager::getInstance()->callAsync (
+			[engine, lifetime, generation, built = std::move (built), data = std::move (data),
+			 file, ok, error, onDone = std::move (onDone)] () mutable
+			{
+				if (! lifetime->load())
+				{
+					return;		// the engine is gone; the result is dropped
+				}
+
+				engine->finishLoad (generation, std::move (built), std::move (data), file, ok, error,
+									onDone);
+			});
+	});
+}
+
+void PlaybackEngine::finishLoad (int generation, LoadedSong&& built, juce::MemoryBlock&& image,
+								 const juce::File& file, bool ok, const juce::String& errorMessage,
+								 const LoadCallback& onDone)
+{
+	// A newer request (or unloadFile()) bumped the generation while this one was building: it owns
+	// the engine now, and this result is dropped without reporting - a stale failure must not
+	// paint an error over a song that loaded fine, and a stale success must not replace it.
+	if (generation != loadGeneration.load())
+	{
+		return;
+	}
+
+	bool installed = false;
+
+	if (ok)
+	{
+		installed = installLoaded (std::move (built), std::move (image), file, true);
+	}
+	else
+	{
+		const juce::ScopedLock sl (lock);
+		resetState();	// a failed load stops playback and releases the previous song, as always
+	}
+
+	if (onDone != nullptr)
+	{
+		onDone (installed, errorMessage);
+	}
+}
+
+PlaybackEngine::BuildConfig PlaybackEngine::makeBuildConfig (void) const
+{
+	BuildConfig config;
+	config.sampleRate = sampleRate;
+	config.maxBlockSize = maxBlockSize;
+	config.loopCount = loopCount;
+	config.fadeSeconds = fadeSeconds;
+	config.mixerEnabled = mixerEnabled;
+	config.defaultRouting = defaultRouting;
+	config.chips = chips;
+	return config;
+}
+
+//==============================================================================
+// project state
+
+void PlaybackEngine::writeState (juce::MemoryBlock& destData) const
+{
+	// Everything is copied out under the lock and encoded after it: the snapshot is bounded work
+	// (worst case a 16 MB image), the base64 plus gzip pass is not, and a host autosaving used to
+	// be the reason this must not hold the lock for half a second.
+	//
+	// The transport is not in here on purpose: whether the song was playing when the project was
+	// saved is an accident of when the host autosaved, so a project always opens stopped (and
+	// readState() installs that state with the song instead of starting it).
+	playback::SessionState state;
+	{
+		const juce::ScopedLock sl (lock);
+
+		state.loopCount = loopCount;
+		state.fadeSeconds = fadeSeconds;
+		state.volume = masterVolume.load();
+		state.mixerEnabled = mixerEnabled;
+		state.mixerMasterGain = mixerMasterGain.load();
+		state.masterMuted = masterMuted.load();
+		state.masterOutput = masterOutput.load();
+		state.defaultRouting = defaultRouting;
+
+		// The name, not the path: a project has to open where the file never existed, and the
+		// extension is the one part of the name that still does something (it picks the backend).
+		state.songName = currentFile.getFileName();
+		state.songImage = fileData;
+
+		state.tracks.reserve (tracks.size());
+		for (size_t i = 0; i < tracks.size(); ++i)
+		{
+			playback::SessionTrackState track;
+			track.index = i;
+			track.gain = tracks[i]->gain.load();
+			track.pan = tracks[i]->pan.load();
+			track.mute = tracks[i]->mute.load();
+			track.solo = tracks[i]->solo.load();
+			track.output = tracks[i]->output.load();
+			state.tracks.push_back (track);
+		}
+	}
+
+	destData = playback::encodeSessionState (state);
+}
+
+bool PlaybackEngine::readState (const void* data, int sizeInBytes, juce::String& errorMessage)
+{
+	playback::SessionState state;
+	if (! playback::decodeSessionState (data, sizeInBytes, state, errorMessage))
+	{
+		return false;
+	}
+
+	const bool hasSong = state.songImage.getSize() > 0;
+
+	if (hasSong)
+	{
+		// The values buildSong() consults have to be in place *before* the load: the mixer mode
+		// decides whether one player per track is created, the routing scheme where the new
+		// tracks go. They are set on the fields rather than through the public setters because
+		// those would rebuild the song that is being replaced.
+		{
+			const juce::ScopedLock sl (lock);
+			loopCount = state.loopCount;
+			fadeSeconds = state.fadeSeconds;
+			mixerEnabled = state.mixerEnabled;
+			defaultRouting = state.defaultRouting;
+		}
+
+		setMixerMasterGain (state.mixerMasterGain);
+		setMasterVolume (state.volume);
+		setMasterMuted (state.masterMuted);
+		setMasterOutput ((playback::OutputTarget) state.masterOutput);
+
+		// Restored stopped, deliberately: a host opening a project must not make sound on its own
+		// (the transport is not part of the state either - see writeState()).
+		if (! loadImage (state.songImage, juce::File (state.songName), false, errorMessage))
+		{
+			return false;
+		}
+	}
+	else
+	{
+		// No song rides along (nothing was loaded when this was saved, or it was over the
+		// embedding limit). The rest of the state still restores, and a song that happens to be
+		// loaded stays consistent with it.
+		setLoopCount (state.loopCount);
+		setFadeSeconds (state.fadeSeconds);
+		setMixerEnabled (state.mixerEnabled);
+		setDefaultRouting (state.defaultRouting);
+		setMixerMasterGain (state.mixerMasterGain);
+		setMasterVolume (state.volume);
+		setMasterMuted (state.masterMuted);
+		setMasterOutput ((playback::OutputTarget) state.masterOutput);
+	}
+
+	// Only now: installSong() replaced the track list, and how many tracks there are is a fact of
+	// the song that was just built. Values for tracks it does not have are dropped - the project
+	// may have been saved with a different song loaded.
+	const size_t trackCount = getTracks().size();
+	for (const auto& track : state.tracks)
+	{
+		if (track.index >= trackCount)
+		{
+			continue;
+		}
+
+		setTrackGain (track.index, track.gain);
+		setTrackPan (track.index, track.pan);
+		setTrackMute (track.index, track.mute);
+		setTrackSolo (track.index, track.solo);
+		setTrackOutput (track.index, track.output);
+	}
+
+	if (! hasSong && state.songName.isNotEmpty() && ! state.songEmbedded)
+	{
+		errorMessage = "The song is too large to save with the project - load it again.";
+		return false;
+	}
+
+	return true;
+}
+
+juce::MemoryBlock PlaybackEngine::getSongImage (void) const
+{
+	const juce::ScopedLock sl (lock);
+	return fileData;
+}
+
 void PlaybackEngine::unloadFile (void)
 {
+	// A load that is still building must not install itself into the file that is being closed.
+	++loadGeneration;
+
 	const juce::ScopedLock sl (lock);
 	resetState();
 }
@@ -466,14 +718,15 @@ void PlaybackEngine::applyTrackIsolationTo (bool mixerEnabled,
 	}
 }
 
-PlaybackEngine::LoadedSong PlaybackEngine::buildSong (const juce::MemoryBlock& image, const juce::File& file,
-													 const std::vector<ChipEntry>& previousChips,
-													 juce::String& errorMessage) const
+PlaybackEngine::LoadedSong PlaybackEngine::buildSong (const BuildConfig& config,
+													  const juce::MemoryBlock& image,
+													  const juce::File& file,
+													  juce::String& errorMessage)
 {
-	// Read-only on purpose: this runs while the engine is still playing the previous song, so it
-	// may look at the configuration (sample rate, block size, mixer mode, loop/fade, routing) and
-	// at the caller's copy of the chip list, but it must not touch a single member that render()
-	// can see. Everything it produces goes into the returned struct.
+	// Static and self-contained on purpose: this runs while the engine is still playing the
+	// previous song - and now also on a worker thread (review M-1) - so it may only look at the
+	// configuration it was handed and the caller's copy of the chip list. It must not touch a
+	// single member that render() can see. Everything it produces goes into the returned struct.
 	LoadedSong pending;
 
 	playback::SongMemory memory;
@@ -498,13 +751,13 @@ PlaybackEngine::LoadedSong PlaybackEngine::buildSong (const juce::MemoryBlock& i
 	}
 
 	// the slow part of a real load: unpacking a .vgz and starting every sound core
-	if (! pending.song->prepare (sampleRate, maxBlockSize, errorMessage))
+	if (! pending.song->prepare (config.sampleRate, config.maxBlockSize, errorMessage))
 	{
 		pending.song.reset();
 		return pending;
 	}
 
-	pending.song->setTimeline (loopCount, fadeSeconds);
+	pending.song->setTimeline (config.loopCount, config.fadeSeconds);
 
 	// song facts
 	pending.tags = pending.song->getInfo().tags;
@@ -514,7 +767,7 @@ PlaybackEngine::LoadedSong PlaybackEngine::buildSong (const juce::MemoryBlock& i
 	// chips, keeping the mute toggles when the same song is rebuilt (sample-rate change, mode
 	// switch) - the caller passes the list the engine currently shows
 	std::map<playback::DeviceId, bool> previousMutes;
-	for (const auto& chip : previousChips)
+	for (const auto& chip : config.chips)
 	{
 		previousMutes[chip.deviceId] = chip.muted;
 	}
@@ -543,12 +796,12 @@ PlaybackEngine::LoadedSong PlaybackEngine::buildSong (const juce::MemoryBlock& i
 
 	// A new song inherits the routing scheme the user picked with the mixer card's shortcut
 	// buttons - untouched, that is "everything to the master bus", the classic behaviour.
-	applyRoutingTo (defaultRouting, pending.tracks);
+	applyRoutingTo (config.defaultRouting, pending.tracks);
 
 	// One player per track when the backend can isolate them, a single un-isolated one otherwise
 	// (plain player mode always uses a single player).
 	const playback::BackendCapabilities caps = pending.song->getCapabilities();
-	const bool perTrack = mixerEnabled
+	const bool perTrack = config.mixerEnabled
 						   && caps.isolation == playback::IsolationMode::multiInstance
 						   && ! pending.layout.empty();
 	const size_t playersWanted = perTrack ? pending.layout.size() : 1;
@@ -569,7 +822,7 @@ PlaybackEngine::LoadedSong PlaybackEngine::buildSong (const juce::MemoryBlock& i
 
 	if (perTrack)
 	{
-		applyTrackIsolationTo (mixerEnabled, pending.layout, pending.players);
+		applyTrackIsolationTo (config.mixerEnabled, pending.layout, pending.players);
 	}
 	applyChipMutesTo (pending.chips, pending.players);
 
@@ -607,9 +860,12 @@ void PlaybackEngine::rebuildPlayers (juce::String& errorMessage)
 {
 	const bool wasPlaying = playing.load();
 	const double position = getPositionSeconds();
-	const std::vector<ChipEntry> previousChips = chips;		// message-thread data
 
-	auto built = buildSong (fileData, currentFile, previousChips, errorMessage);
+	// Snapshot first: the build must not read a member the audio thread or the UI can change
+	// while it runs (review M-1). `chips` is the list on screen, so its mute toggles carry over.
+	const BuildConfig config = makeBuildConfig();
+
+	auto built = buildSong (config, fileData, currentFile, errorMessage);
 	if (built.song == nullptr)
 	{
 		const juce::ScopedLock sl (lock);
