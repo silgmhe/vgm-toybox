@@ -544,8 +544,13 @@ int main (int /*argc*/, char* /*argv*/[])
 					engine.play();		// a finished song restarts from the top
 				}
 
-				engine.render (buses, 1, blockSize);
+				// Counted before the call, not after it: a refused try-lock bumps the engine's
+				// counter from inside render(), and this thread leaves the hammering loop as soon
+				// as it sees that - so an attempt counted afterwards can miss the window and read
+				// as zero. On the macOS runner it read exactly that, refusal already in hand.
 				attempts.fetch_add (1);
+
+				engine.render (buses, 1, blockSize);
 				juce::Thread::sleep (1);	// the shape of a real block: one call per millisecond
 			}
 		});
