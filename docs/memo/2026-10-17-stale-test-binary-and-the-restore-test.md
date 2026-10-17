@@ -1,7 +1,7 @@
 # 备忘录：一次被旧二进制骗过的本地验证（v0.1.0 发布事故）
 
-- **状态**：已修复（`a13da3b`），流程建议待落地
-- **日期**：2026-10-17
+- **状态**：已修复（`a13da3b`），流程建议待落地；2026-10-18 又出现同族的另一种形态（§8，已修 `0803bb8`）
+- **日期**：2026-10-17（§8 追加于 2026-10-18）
 - **来源**：v0.1.0 发布时 CI 在 5 个平台全部失败；本地却报过"all checks passed"
 - **一句话**：`build.ps1 -Test` 只**运行已经存在的**测试二进制、缺的就跳过，不负责重新构建；旧二进制让本地的"全绿"早于被测代码，而真正的新代码在 CI 的干净构建里一跑就露馅。
 
@@ -81,9 +81,76 @@ CI 每次都从干净检出完整构建，因此它才是唯一可靠的那一�
 | 日期 | 结论 |
 |---|---|
 | 2026-10-17 | 修测试（`a13da3b`）；发布顺序改为"master CI 绿 → 打 tag"；脚本护栏待评估，不随本次发布改 |
+| 2026-10-18 | 合并前先在分支上要一次 CI（`gh workflow run "Build Tests" --ref …`），否则 master 的第一次运行就是测试；见 §8 |
 
 ## 7. 什么时候重开这份备忘录
 
 - 再次出现"本地绿、CI 红"时；
 - 要给 `build.ps1` 加 `-Test` 自动构建或时间戳检查时；
 - 给发布流程加自动化（例如 tag 前检查 master 的 Build Tests 结论）时。
+
+## 8. 0.2.0：同族的另一种形态（分支不跑 CI）
+
+- **日期**：2026-10-18
+- **来源**：v0.2.0 发布（DAW 同步 + 评审修复合并进 master 之后）
+- **一句话**：本地 MSVC 全绿、分支上也没人编译过，合并进 master 的**第一次 CI** 就红了 —— macOS 与 Linux arm64 都编译不过。
+
+### 8.1 发生了什么
+
+| 时间 | 事件 |
+|---|---|
+| — | `feature/daw-sync` 与 `review/daw-sync` 上所有提交都只在本地 MSVC 上验证过（`vgm_core_test` / `vgm_ui_test` / `vgm_app_test` 全绿） |
+| 16:43 | 评审分支合并进 master 并推送（`86d6049`） |
+| 16:52 | master 的 `Build Tests` 启动，`Plugin and console tests (macos-15)` 与 `(ubuntu-24.04-arm)` 在**构建插件**这一步失败 |
+| 17:00 | 报错只有一行：`AppHarnessTest.cpp:550:27: error: non-const lvalue reference to type 'AudioBuffer<...>' cannot bind to a temporary` |
+| 17:09 | 修好并推送（`0803bb8`），13 分钟后 7 个作业全绿 |
+| 17:23 | 打 `v0.2.0`、推 tag，发布流水线 10 分钟全绿 |
+
+### 8.2 为什么只有非 MSVC 报错
+
+CI 指到的就是这一行（修复前的写法；现在是先 `auto busBuffer = …` 再传）：
+
+```550:550:plugin/Tests/AppHarnessTest.cpp
+processor.processBlock (processor.getBusBuffer (buffer, false, 0), midi);
+```
+
+`AudioProcessor::getBusBuffer()` **按值**返回一个视图，`processBlock()` 要**非 const 引用**，把前者直接喂给后者是 MSVC 的扩展；Clang 与 GCC 一律拒绝。`PluginProcessor.cpp:107-110` 里早就有这条注释（"binding a non-const reference to it is a construction MSVC happens to accept but the standard does not"），测试脚本里这一行是同一错误的第二份，只是没有编译器替我们指出来。
+
+### 8.3 为什么会漏到 master
+
+`GHA.yml` **只在 master 的 push 上触发**（这是有意的：每个分支都跑会把真正要看的那次埋掉），而推送 feature/review 分支时没有人手动要过一次运行。于是：
+
+- 本地：MSVC，绿；
+- 分支 CI：不存在；
+- master CI：**第一次真正编译这段测试代码**。
+
+这跟 §1 是同一类问题的两面：v0.1.0 是"本地跑的是旧二进制"，0.2.0 是"本地只有一个编译器"。共同点都是**本地那一票不代表代码能过**。
+
+### 8.4 怎么避免
+
+1. **合并前在分支上要一次 CI**（工作流本来就有 `workflow_dispatch`）：
+
+   ```
+   gh workflow run "Build Tests" --ref feature/whatever
+   gh run watch "$(gh run list --branch feature/whatever --limit 1 --json databaseId -q '.[0].databaseId')"
+   ```
+
+2. **改到"非 MSVC 才看得见"的东西时，明确记一笔**：接口的非 const 引用、结构化绑定、`std::optional` 的隐式转换、`#pragma`、`__declspec`、`long` 的宽度 —— 这些在 Windows 上永远不会报。
+3. **发布前把"CI 绿"当作生产物的一部分**（§4 第 3 条已经这么写），0.2.0 就是照这条走的：红 → 修 → 绿 → 才打 tag。
+
+### 8.5 同一轮发布里发现的另一件小事：产物里的版本号
+
+`dist\Standalone\VGMToybox.exe` 与 VST3 的**文件版本**一度报 `0.0.2`，而 `project()` 已经是 `0.2.0`。原因：JUCE 用 `add_custom_command(OUTPUT ...)` 生成 `VGMToybox_resources.rc`，**只在文件缺失时才生成**（`JUCEUtils.cmake:832-838`），所以一个从 0.0.2 时代留下来的 build 目录会一直沿用旧版本号，改 `project()` 不会让它重生成。
+
+- 影响：**只在本地**。发布包由 CI 的干净构建产出，`Info.txt` 里带 `VERSION 0.2.0`，资源脚本随之正确；
+- 本地核对版本号时：删掉 `build/plugin/VGMToybox_artefacts/JuceLibraryCode/VGMToybox_resources.rc` 再构建，然后
+
+  ```powershell
+  (Get-Item dist\Standalone\VGMToybox.exe).VersionInfo.FileVersion   # 0.2.0
+  ```
+
+### 8.6 决策记录
+
+| 日期 | 结论 |
+|---|---|
+| 2026-10-18 | 合并前在分支上手动要一次 CI；`build.ps1` 不做改动（与 §5 的护栏一起评估）；本地核对版本号时先删旧的 `*_resources.rc` |
