@@ -151,7 +151,11 @@ jobs:
       run: |
         # Show what the package will actually demand of the machine that installs it, in the log of
         # the run that produced it rather than in a support thread afterwards.
-        ldd --version | head -1
+        #
+        # Not `ldd --version | head -1`: the step runs with pipefail, ldd exits with SIGPIPE once
+        # head has its line, and the step fails with exit code 141 after printing the line it wanted.
+        ldd --version > /tmp/glibc.txt
+        head -1 /tmp/glibc.txt
 
         cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
         cmake --build build --parallel 3
@@ -160,8 +164,9 @@ jobs:
         xvfb-run -a ./build/plugin/vgm_ui_test
         xvfb-run -a ./build/plugin/vgm_app_test plugin/Tests/scripts/window-basics.txt
 
-        vst3="$(find build -name 'VGMToybox.vst3' -type d | head -1)"
-        standalone="$(find build -name 'VGMToybox' -type f -executable | head -1)"
+        # -print -quit rather than piping through head: the same pipefail coin-flip.
+        vst3="$(find build -name 'VGMToybox.vst3' -type d -print -quit)"
+        standalone="$(find build -name 'VGMToybox' -type f -executable -print -quit)"
         if [ -z "$vst3" ] || [ -z "$standalone" ]; then
           echo "::error::the build did not produce the Linux plugin and standalone"
           find build -name 'VGMToybox*' | head -20
