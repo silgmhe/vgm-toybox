@@ -48,12 +48,10 @@ TransportPanel::TransportPanel (toybox::PlaybackEngine& engineToUse)
 	pauseButton.setTooltip ("Pause (enter)");
 	stopButton.setTooltip ("Stop - return to the playback start marker");
 	cursorButton.setTooltip ("Playback start cursor - when off, Stop goes back to the beginning of the song");
+	// The buttons take the LookAndFeel's own colours (card face, accent while on) - there is
+	// nothing to set on them, so a palette change reaches them by itself.
 	for (auto* button : { &playButton, &pauseButton, &stopButton, &loopButton, &cursorButton })
 	{
-		button->setColour (juce::TextButton::buttonColourId, theme::card());
-		button->setColour (juce::TextButton::buttonOnColourId, theme::accent());
-		button->setColour (juce::TextButton::textColourOffId, theme::primaryText());
-		button->setColour (juce::TextButton::textColourOnId, juce::Colours::white);
 		addAndMakeVisible (*button);
 	}
 	cursorButton.setToggleState (startCursorEnabled, juce::dontSendNotification);
@@ -79,17 +77,10 @@ TransportPanel::TransportPanel (toybox::PlaybackEngine& engineToUse)
 
 	// --- volume ---
 	volumeSlider.setSliderStyle (juce::Slider::LinearHorizontal);
-	// These colours have to be set on the slider itself and *before* the text box is created:
-	// the LookAndFeel copies them into the text box label when it creates it, and at that moment
-	// this slider has no parent yet, so the lookup would fall back to the default (dark)
-	// LookAndFeel - the number would stay white for the lifetime of that label.
-	volumeSlider.setColour (juce::Slider::textBoxTextColourId, theme::primaryText());
-	// Must be opaque: JUCE's createSliderTextBox() copies this colour into the *editor* that
-	// appears while typing and forces alpha to 1, so a transparent black would turn into an
-	// opaque black box with dark text in it.
-	volumeSlider.setColour (juce::Slider::textBoxBackgroundColourId, theme::card());
-	volumeSlider.setColour (juce::Slider::textBoxOutlineColourId, theme::border());
-	volumeSlider.setColour (juce::Slider::textBoxHighlightColourId, theme::accent().withAlpha (0.25f));
+	// The slider's text box colours are applied by lookAndFeelChanged(), and they have to be in
+	// place *before* the box is created below - which is why it is called here rather than at the
+	// end of the constructor.
+	lookAndFeelChanged();
 	// the text formatting has to be in place before the text box is created as well, otherwise
 	// the box keeps showing the default formatting of the initial value
 	// the travel follows the same dB scale as the mixer meters (the value stays a linear gain)
@@ -129,6 +120,22 @@ TransportPanel::TransportPanel (toybox::PlaybackEngine& engineToUse)
 	fadeBox.setSelectedId (fadeBoxIdForSeconds (engine.getFadeSeconds()), juce::dontSendNotification);
 
 	refresh();
+}
+
+void TransportPanel::lookAndFeelChanged (void)
+{
+	// The volume slider's text box: its colours have to be set on the slider itself, because that
+	// is where the box's label copies them from when it is created - and the box is recreated
+	// whenever the LookAndFeel changes (Slider::colourChanged() forwards to
+	// Slider::lookAndFeelChanged()), so re-applying them here is what keeps the number readable
+	// after a theme switch.
+	volumeSlider.setColour (juce::Slider::textBoxTextColourId, theme::primaryText());
+	// Must be opaque: JUCE's createSliderTextBox() copies this colour into the *editor* that
+	// appears while typing and forces alpha to 1, so a transparent black would turn into an
+	// opaque black box with dark text in it.
+	volumeSlider.setColour (juce::Slider::textBoxBackgroundColourId, theme::card());
+	volumeSlider.setColour (juce::Slider::textBoxOutlineColourId, theme::border());
+	volumeSlider.setColour (juce::Slider::textBoxHighlightColourId, theme::accent().withAlpha (0.25f));
 }
 
 void TransportPanel::resized (void)

@@ -21,8 +21,6 @@ public:
 	AboutOverlay (void)
 	{
 		closeButton.setComponentID ("about.close");
-		closeButton.setColour (juce::TextButton::buttonColourId, theme::accent());
-		closeButton.setColour (juce::TextButton::textColourOffId, juce::Colours::white);
 		closeButton.onClick = [this] { dismiss(); };
 		addAndMakeVisible (closeButton);
 
@@ -42,7 +40,7 @@ public:
 			name.setText (nameText, juce::dontSendNotification);
 			name.setComponentID (nameId);
 			name.setFont (juce::Font (juce::FontOptions (13.0f)));
-			name.setColour (juce::Label::textColourId, theme::primaryText());
+			// the label keeps the LookAndFeel's text colour, so a theme change reaches it
 			addAndMakeVisible (name);
 
 			link.setButtonText (address);
@@ -53,7 +51,8 @@ public:
 			// on the third parameter's default, which is centred. That is exactly what happened
 			// here: the links looked centred because the justification was never set.
 			link.setFont (juce::Font (juce::FontOptions (13.0f)), false, juce::Justification::centredLeft);
-			link.setColour (juce::HyperlinkButton::textColourId, theme::accent());
+			// the accent is applied by lookAndFeelChanged() below - a HyperlinkButton has no
+			// palette default of its own, so it does have to be set explicitly
 			addAndMakeVisible (link);
 		};
 
@@ -61,10 +60,23 @@ public:
 				  repositoryLink, "https://github.com/silgmhe/vgm-toybox", "about.github");
 		setUpRow (bilibiliLabel, "BiliBili: ", "about.bilibili.label",
 				  bilibiliLink, "https://space.bilibili.com/249486555", "about.bilibili");
+
+		lookAndFeelChanged();
 	}
 
 	/** Called when the box is dismissed - the window hides the overlay. */
 	std::function<void()> onClose;
+
+	/** Re-applies the colours of the controls this overlay owns (see
+		PluginEditor::lookAndFeelChanged for why that is needed at all). Everything else in the box
+		is painted with theme:: colours, so it follows the palette by itself. */
+	void lookAndFeelChanged (void) override
+	{
+		closeButton.setColour (juce::TextButton::buttonColourId, theme::accent());
+		closeButton.setColour (juce::TextButton::textColourOffId, theme::onAccent());
+		repositoryLink.setColour (juce::HyperlinkButton::textColourId, theme::accent());
+		bilibiliLink.setColour (juce::HyperlinkButton::textColourId, theme::accent());
+	}
 
 	void paint (juce::Graphics& g) override
 	{

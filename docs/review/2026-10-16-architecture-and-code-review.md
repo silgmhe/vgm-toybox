@@ -202,7 +202,7 @@
 
 ### L-1 文档搬家后引用失效（11 处）
 
-- **位置**：`README.md:63`、`CODEBUDDY.md:84,163`、`ui/ButtonPaint.h:11`、`ui/ChannelStrip.cpp:267`、`ui/IconButton.cpp:12`、`ui/LightLookAndFeel.cpp:63`、`ui/MixerPanel.cpp:12,144`、`ui/Theme.h:80`、`Tests/UiButtonTest.cpp:3` —— 全部仍指向 `docs/ui-button-design.md`（已移动到 `docs/desgin/`）。
+- **位置**：`README.md:63`、`CODEBUDDY.md:84,163`、`ui/ButtonPaint.h:11`、`ui/ChannelStrip.cpp:267`、`ui/IconButton.cpp:12`、`ui/ToyboxLookAndFeel.cpp:63`、`ui/MixerPanel.cpp:12,144`、`ui/Theme.h:80`、`Tests/UiButtonTest.cpp:3` —— 全部仍指向 `docs/ui-button-design.md`（已移动到 `docs/desgin/`）。
 - **建议**：机械替换为 `docs/desgin/ui-button-design.md`（§8 给了命令）。
 - **工作量**：trivial。
 

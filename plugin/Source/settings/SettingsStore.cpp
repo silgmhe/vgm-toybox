@@ -115,7 +115,16 @@ void SettingsStore::setThemeMode (ThemeMode mode)
 	// moment the user picked it cannot be lost by a host that kills us without saying goodbye.
 	lastErrorMessage = file->saveIfNeeded() ? juce::String() : writeErrorFor (settingsFile());
 
-	sendChangeMessage();
+	broadcastChange();
+}
+
+void SettingsStore::broadcastChange (void)
+{
+	// Not sendChangeMessage(): the listeners have to have run by the time the caller returns, so
+	// that what a click changed is already in force when the next line of the application runs.
+	// The window scripts have no message loop at all, and deferring would put the change somewhere
+	// they can never reach it. The long version is in SettingsStore.h.
+	sendSynchronousChangeMessage();
 }
 
 juce::String SettingsStore::lastError (void) const
@@ -128,7 +137,7 @@ bool SettingsStore::reload (void)
 	const bool loaded = file->reload();
 	lastErrorMessage = loaded ? juce::String() : "could not read " + settingsFile().getFullPathName();
 
-	sendChangeMessage();
+	broadcastChange();
 	return loaded;
 }
 
@@ -143,7 +152,7 @@ bool SettingsStore::resetToDefaults (void)
 	const bool saved = file->save();
 	lastErrorMessage = saved ? juce::String() : writeErrorFor (settingsFile());
 
-	sendChangeMessage();
+	broadcastChange();
 	return saved;
 }
 

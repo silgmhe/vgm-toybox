@@ -5,9 +5,10 @@
 #include "PluginProcessor.h"
 #include "ui/AboutOverlay.h"
 #include "ui/DropHintOverlay.h"
-#include "ui/LightLookAndFeel.h"
 #include "ui/MainMenu.h"
 #include "ui/PlayView.h"
+#include "ui/SettingsOverlay.h"
+#include "ui/ToyboxLookAndFeel.h"
 #include "ui/ViewStack.h"
 #include "ui/VisualiserView.h"
 
@@ -25,6 +26,7 @@
 */
 class ToyboxAudioProcessorEditor : public juce::AudioProcessorEditor,
 									private juce::Timer,
+									private juce::ChangeListener,
 									public juce::FileDragAndDropTarget
 {
 public:
@@ -44,6 +46,19 @@ public:
 
 private:
 	void timerCallback (void) override;
+	void changeListenerCallback (juce::ChangeBroadcaster* source) override;
+
+	/** Re-reads the palette into the controls that carry a colour of their own.
+		setColour() stores a copy, so a theme change does not reach them by itself - this is the
+		hook JUCE calls for exactly that, both when the LookAndFeel is set and when it is
+		broadcast (sendLookAndFeelChange() walks the whole tree). */
+	void lookAndFeelChanged (void) override;
+
+	/** Puts the stored theme (resolving "follow system" against the desktop) into force and
+		refreshes the LookAndFeel's copies of it. Called from the constructor, before anything is
+		coloured, and again whenever the settings broadcast arrives. */
+	void applyPalette (void);
+
 	bool isInterestedInFileDrag (const juce::StringArray& files) override;
 	void fileDragEnter (const juce::StringArray& files, int x, int y) override;
 	void fileDragExit (const juce::StringArray& files) override;
@@ -58,6 +73,10 @@ private:
 	/** The Help > About box: what this is, which version, and who built it on whose work. */
 	void showAbout (void);
 
+	/** Options > Settings (or Ctrl+,): the settings window - the same in-window overlay as the
+		About box, with the theme choices and the place the settings file lives. */
+	void showSettings (void);
+
 	/** Opens the song the application was started with (see getStartupFile()). The audio device
 		may still be coming up while the editor is built, so the first timer ticks call this again
 		until the engine has it. */
@@ -67,7 +86,7 @@ private:
 	ToyboxAudioProcessor& processor;
 	toybox::PlaybackEngine& engine;
 
-	toybox::ui::LightLookAndFeel lookAndFeel;
+	toybox::ui::ToyboxLookAndFeel lookAndFeel;
 
 	// menu before menuBar: the bar holds a reference to the model, so it has to go first
 	toybox::ui::MainMenu menu;
@@ -77,7 +96,8 @@ private:
 	juce::Label statusLabel;
 	toybox::ui::ViewStack viewStack;	// holds the pages; exactly one of them is visible
 	toybox::ui::DropHintOverlay dropHint;
-	toybox::ui::AboutOverlay aboutOverlay;	// in-window, so it can never block the application
+	toybox::ui::AboutOverlay aboutOverlay;		// in-window, so it can never block the application
+	toybox::ui::SettingsOverlay settingsOverlay;	// the same, for Options > Settings
 
 	juce::TooltipWindow tooltipWindow { this, 650 };	// declared last: destroyed first
 

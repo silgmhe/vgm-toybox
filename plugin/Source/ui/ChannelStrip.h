@@ -62,6 +62,10 @@ public:
 	void paint (juce::Graphics& g) override;
 	void resized (void) override;
 
+	/** Re-applies the muted/solo colours (see PluginEditor::lookAndFeelChanged for why this is
+		needed at all). */
+	void lookAndFeelChanged (void) override;
+
 private:
 	void drawMeter (juce::Graphics& g) const;
 	void drawScale (juce::Graphics& g) const;

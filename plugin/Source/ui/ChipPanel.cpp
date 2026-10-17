@@ -24,7 +24,9 @@ void ChipPanel::rebuild (const std::vector<toybox::ChipEntry>& chips, MuteCallba
 		auto* button = new juce::ToggleButton (chips[i].name);
 		button->setComponentID ("chip." + juce::String ((int) i));	// for the console harness
 		button->setToggleState (! chips[i].muted, juce::dontSendNotification);	// ticked = audible
-		button->setColour (juce::ToggleButton::textColourId, theme::primaryText());
+		// no colour of its own: the LookAndFeel's ToggleButton colour is already the palette's
+		// primary text, and taking it from there is what lets a theme change reach these buttons
+		// (they are built once, when the card is filled)
 		button->setTooltip (chips[i].core.isNotEmpty()
 								? chips[i].name + " (" + chips[i].core + ") - uncheck to mute"
 								: chips[i].name + " - uncheck to mute");

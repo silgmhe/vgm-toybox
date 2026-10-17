@@ -1,4 +1,4 @@
-#include "LightLookAndFeel.h"
+#include "ToyboxLookAndFeel.h"
 
 #include "ButtonPaint.h"
 #include "SoftShadow.h"
@@ -7,9 +7,18 @@
 namespace toybox::ui
 {
 
-LightLookAndFeel::LightLookAndFeel (void)
+ToyboxLookAndFeel::ToyboxLookAndFeel (void)
 {
-	setColourScheme (juce::LookAndFeel_V4::getLightColourScheme());
+	refresh();
+}
+
+void ToyboxLookAndFeel::refresh (void)
+{
+	// the scheme supplies defaults for everything the UI does not colour itself, so it has to be
+	// chosen here: a LookAndFeel_V4 starts out light, which would show through in dark mode
+	setColourScheme (theme::current() == theme::Id::dark
+						 ? juce::LookAndFeel_V4::getDarkColourScheme()
+						 : juce::LookAndFeel_V4::getLightColourScheme());
 
 	setColour (juce::ResizableWindow::backgroundColourId,		theme::window());
 	setColour (juce::Label::textColourId,						theme::primaryText());
@@ -17,7 +26,7 @@ LightLookAndFeel::LightLookAndFeel (void)
 	setColour (juce::TextButton::buttonColourId,				theme::card());
 	setColour (juce::TextButton::buttonOnColourId,				theme::accent());
 	setColour (juce::TextButton::textColourOffId,				theme::primaryText());
-	setColour (juce::TextButton::textColourOnId,				juce::Colours::white);
+	setColour (juce::TextButton::textColourOnId,				theme::onAccent());
 
 	setColour (juce::ComboBox::backgroundColourId,				theme::card());
 	setColour (juce::ComboBox::textColourId,					theme::primaryText());
@@ -27,11 +36,11 @@ LightLookAndFeel::LightLookAndFeel (void)
 	setColour (juce::PopupMenu::backgroundColourId,				theme::card());
 	setColour (juce::PopupMenu::textColourId,					theme::primaryText());
 	setColour (juce::PopupMenu::highlightedBackgroundColourId,	theme::accent());
-	setColour (juce::PopupMenu::highlightedTextColourId,		juce::Colours::white);
+	setColour (juce::PopupMenu::highlightedTextColourId,		theme::onAccent());
 
 	setColour (juce::Slider::backgroundColourId,				theme::track());
 	setColour (juce::Slider::trackColourId,						theme::accent());
-	setColour (juce::Slider::thumbColourId,						juce::Colours::white);
+	setColour (juce::Slider::thumbColourId,						theme::controlFaceTop());
 	setColour (juce::Slider::textBoxTextColourId,				theme::primaryText());
 	// Not transparentBlack: createSliderTextBox() feeds this colour to the editing TextEditor
 	// with alpha forced to 1, so a transparent background would become an opaque black box.
@@ -50,21 +59,32 @@ LightLookAndFeel::LightLookAndFeel (void)
 	setColour (juce::TextEditor::outlineColourId,				theme::border());
 	setColour (juce::TextEditor::focusedOutlineColourId,		theme::accent());
 	setColour (juce::TextEditor::highlightColourId,				theme::accent().withAlpha (0.25f));
-	setColour (juce::TextEditor::highlightedTextColourId,		juce::Colours::white);
+	setColour (juce::TextEditor::highlightedTextColourId,		theme::onAccent());
 
-	setColour (juce::TooltipWindow::backgroundColourId,			juce::Colour (0xf7ffffff));
+	setColour (juce::TooltipWindow::backgroundColourId,			theme::tooltipBackground());
 	setColour (juce::TooltipWindow::textColourId,				theme::primaryText());
 	setColour (juce::TooltipWindow::outlineColourId,			theme::border());
+
+	// The menu bar and its popups take both their background and their text from these PopupMenu
+	// ids - that is what drawMenuBarBackground()/drawMenuBarItem() look up - so styling them here
+	// is what keeps the whole menu on the palette (they used to be set by the editor, which meant
+	// they were only ever set once).
+	setColour (juce::PopupMenu::headerTextColourId,				theme::secondaryText());
 }
 
-void LightLookAndFeel::drawButtonBackground (juce::Graphics& g, juce::Button& button,
+void ToyboxLookAndFeel::drawButtonBackground (juce::Graphics& g, juce::Button& button,
 	const juce::Colour& backgroundColour, bool shouldDrawButtonAsHighlighted, bool shouldDrawButtonAsDown)
 {
-	// Same face as every other button (docs/desgin/ui-button-design.md): the neutral material when the
-	// caller's colour is a light one (the mixer's M/S buttons are white while they are off), the
-	// filled variant when it carries a colour of its own (accent, mute red, solo amber). Which one
-	// also decides the hairline and the shadow - both live in the painter.
-	const bool filled = (backgroundColour.getPerceivedBrightness() < 0.9f);
+	// Same face as every other button (docs/desgin/ui-button-design.md): the neutral material when
+	// the caller's colour is the theme's neutral one (the mixer's M/S buttons keep it while they
+	// are off), the filled variant when the button carries a colour of its own (accent, mute red,
+	// solo amber). Which one also decides the hairline and the shadow - both live in the painter.
+	//
+	// "Neutral" is a comparison against the theme's own neutrals, not a brightness test. Brightness
+	// happened to work while there was only a light palette (white face = bright, accent = dark),
+	// but the dark palette's neutral is #2c313a - darker than its #61afef accent - so brightness
+	// would call every neutral button "filled" and paint it in the card colour, i.e. invisible.
+	const bool filled = (backgroundColour != theme::card() && backgroundColour != theme::buttonMaterial());
 
 	ButtonFace face;
 	face.level = filled ? ButtonLevel::filled : ButtonLevel::material;
@@ -78,7 +98,7 @@ void LightLookAndFeel::drawButtonBackground (juce::Graphics& g, juce::Button& bu
 	drawButtonFace (g, button.getLocalBounds().toFloat(), face);
 }
 
-void LightLookAndFeel::drawButtonText (juce::Graphics& g, juce::TextButton& button,
+void ToyboxLookAndFeel::drawButtonText (juce::Graphics& g, juce::TextButton& button,
 	bool /*shouldDrawButtonAsHighlighted*/, bool /*shouldDrawButtonAsDown*/)
 {
 	const auto area = button.getLocalBounds();
@@ -94,7 +114,7 @@ void LightLookAndFeel::drawButtonText (juce::Graphics& g, juce::TextButton& butt
 					  juce::Justification::centred, 1, 0.7f);
 }
 
-void LightLookAndFeel::drawTickBox (juce::Graphics& g, juce::Component& component,
+void ToyboxLookAndFeel::drawTickBox (juce::Graphics& g, juce::Component& component,
 	float x, float y, float w, float h, bool ticked, bool isEnabled,
 	bool shouldDrawButtonAsHighlighted, bool /*shouldDrawButtonAsDown*/)
 {
@@ -115,19 +135,19 @@ void LightLookAndFeel::drawTickBox (juce::Graphics& g, juce::Component& componen
 		tick.startNewSubPath (box.getX() + size * 0.24f, box.getY() + size * 0.52f);
 		tick.lineTo (box.getX() + size * 0.43f, box.getY() + size * 0.71f);
 		tick.lineTo (box.getX() + size * 0.78f, box.getY() + size * 0.29f);
-		g.setColour (juce::Colours::white);
+		g.setColour (theme::onAccent());
 		g.strokePath (tick, juce::PathStrokeType (1.8f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
 	}
 	else
 	{
-		g.setColour (juce::Colours::white);
+		g.setColour (theme::controlFaceTop());
 		g.fillRoundedRectangle (box, radius);
-		g.setColour (shouldDrawButtonAsHighlighted ? theme::secondaryText().withAlpha (0.6f) : juce::Colour (0xffc5c5cb));
+		g.setColour (shouldDrawButtonAsHighlighted ? theme::secondaryText().withAlpha (0.6f) : theme::controlEdge());
 		g.drawRoundedRectangle (box.reduced (0.5f), radius, 1.0f);
 	}
 }
 
-void LightLookAndFeel::drawToggleButton (juce::Graphics& g, juce::ToggleButton& button,
+void ToyboxLookAndFeel::drawToggleButton (juce::Graphics& g, juce::ToggleButton& button,
 	bool shouldDrawButtonAsHighlighted, bool shouldDrawButtonAsDown)
 {
 	const auto area = button.getLocalBounds().toFloat();
@@ -144,7 +164,7 @@ void LightLookAndFeel::drawToggleButton (juce::Graphics& g, juce::ToggleButton& 
 					  juce::Justification::centredLeft, 1, 0.85f);
 }
 
-void LightLookAndFeel::drawLinearSlider (juce::Graphics& g, int x, int y, int width, int height,
+void ToyboxLookAndFeel::drawLinearSlider (juce::Graphics& g, int x, int y, int width, int height,
 	float sliderPos, float minSliderPos, float maxSliderPos, juce::Slider::SliderStyle style, juce::Slider& slider)
 {
 	if (style == juce::Slider::LinearVertical)
@@ -183,11 +203,11 @@ void LightLookAndFeel::drawLinearSlider (juce::Graphics& g, int x, int y, int wi
 					theme::controlShadowBlur, { 0, 1 });
 	g.setColour (slider.findColour (juce::Slider::thumbColourId));
 	g.fillEllipse (thumb);
-	g.setColour (juce::Colour (0xffc5c5cb));
+	g.setColour (theme::controlEdge());
 	g.drawEllipse (thumb, 1.0f);
 }
 
-void LightLookAndFeel::drawVerticalSlider (juce::Graphics& g, int x, int y, int width, int height,
+void ToyboxLookAndFeel::drawVerticalSlider (juce::Graphics& g, int x, int y, int width, int height,
 										   float sliderPos, juce::Slider& slider)
 {
 	const bool enabled = slider.isEnabled();
@@ -216,22 +236,22 @@ void LightLookAndFeel::drawVerticalSlider (juce::Graphics& g, int x, int y, int 
 
 	drawSoftShadow (g, cap, capRadius, theme::controlShadow().withMultipliedAlpha (enabled ? 1.0f : 0.45f),
 					theme::controlShadowBlur, { 0, 1 });
-	g.setGradientFill (juce::ColourGradient (juce::Colours::white, cap.getCentreX(), cap.getY(),
-											 juce::Colour (0xffe6e6ec), cap.getCentreX(), cap.getBottom(), false));
+	g.setGradientFill (juce::ColourGradient (theme::controlFaceTop(), cap.getCentreX(), cap.getY(),
+											 theme::controlFaceBottom(), cap.getCentreX(), cap.getBottom(), false));
 	g.fillRoundedRectangle (cap, capRadius);
-	g.setColour (juce::Colour (0xffc5c5cb));
+	g.setColour (theme::controlEdge());
 	g.drawRoundedRectangle (cap.reduced (0.5f), capRadius, 1.0f);
 
 	const float grooveInset = capRadius + 1.0f;
-	g.setColour (juce::Colour (0xff8e8e96));
+	g.setColour (theme::controlGroove());
 	g.fillRect (cap.getX() + grooveInset, cap.getCentreY() - 1.0f,
 				cap.getWidth() - 2.0f * grooveInset, 2.0f);
-	g.setColour (juce::Colours::white.withAlpha (0.85f));
+	g.setColour (theme::controlGrooveHighlight());
 	g.fillRect (cap.getX() + grooveInset, cap.getCentreY() + 1.0f,
 				cap.getWidth() - 2.0f * grooveInset, 1.0f);
 }
 
-void LightLookAndFeel::drawRotarySlider (juce::Graphics& g, int x, int y, int width, int height,
+void ToyboxLookAndFeel::drawRotarySlider (juce::Graphics& g, int x, int y, int width, int height,
 	float sliderPosProportional, float rotaryStartAngle, float rotaryEndAngle, juce::Slider& slider)
 {
 	const bool enabled = slider.isEnabled();
@@ -249,7 +269,7 @@ void LightLookAndFeel::drawRotarySlider (juce::Graphics& g, int x, int y, int wi
 
 	drawSoftShadow (g, knob, radius, theme::controlShadow().withMultipliedAlpha (enabled ? 1.0f : 0.45f),
 					theme::controlShadowBlur, { 0, 1 });
-	g.setColour (juce::Colours::white);
+	g.setColour (theme::controlFaceTop());
 	g.fillEllipse (knob);
 
 	// the accent arc fills up as the knob turns
@@ -271,11 +291,11 @@ void LightLookAndFeel::drawRotarySlider (juce::Graphics& g, int x, int y, int wi
 	g.setColour (theme::primaryText());
 	g.fillPath (pointer);
 
-	g.setColour (juce::Colour (0xffc5c5cb));
+	g.setColour (theme::controlEdge());
 	g.drawEllipse (knob.reduced (0.5f), 1.0f);
 }
 
-void LightLookAndFeel::drawComboBox (juce::Graphics& g, int width, int height,
+void ToyboxLookAndFeel::drawComboBox (juce::Graphics& g, int width, int height,
 	bool isButtonDown, int /*buttonX*/, int /*buttonY*/, int /*buttonW*/, int /*buttonH*/, juce::ComboBox& box)
 {
 	// A combo box is a button with a chevron on it: same material, same shadow, same radius rule
@@ -300,12 +320,12 @@ void LightLookAndFeel::drawComboBox (juce::Graphics& g, int width, int height,
 	g.strokePath (chevron, juce::PathStrokeType (1.6f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
 }
 
-juce::Font LightLookAndFeel::getComboBoxFont (juce::ComboBox&)
+juce::Font ToyboxLookAndFeel::getComboBoxFont (juce::ComboBox&)
 {
 	return juce::Font (juce::FontOptions (12.5f));
 }
 
-void LightLookAndFeel::positionComboBoxText (juce::ComboBox& box, juce::Label& label)
+void ToyboxLookAndFeel::positionComboBoxText (juce::ComboBox& box, juce::Label& label)
 {
 	label.setBounds (10, 1, box.getWidth() - 28, box.getHeight() - 2);
 	label.setFont (getComboBoxFont (box));

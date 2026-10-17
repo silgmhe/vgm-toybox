@@ -63,6 +63,10 @@ private:
 	void resized (void) override;
 	void paintCardContent (juce::Graphics& g) override;
 
+	/** Re-applies the colours the panel sets on its own controls (setColour stores a copy, so a
+		theme change does not reach them by itself - see PluginEditor::lookAndFeelChanged). */
+	void lookAndFeelChanged (void) override;
+
 	void startPlayback (void);
 	void stopTransport (void);
 	void pausePlayback (void);

@@ -177,10 +177,12 @@ target_sources(VGMToybox PRIVATE
 	Source/ui/DropHintOverlay.cpp
 	Source/ui/IconButton.cpp
 	Source/ui/Icons.cpp
-	Source/ui/LightLookAndFeel.cpp
 	Source/ui/MixerPanel.cpp
 	Source/ui/PlayView.cpp
+	Source/ui/SettingsOverlay.cpp
 	Source/ui/SongInfoPanel.cpp
+	Source/ui/Theme.cpp
+	Source/ui/ToyboxLookAndFeel.cpp
 	Source/ui/TransportPanel.cpp
 	Source/ui/VisualiserView.cpp
 )
@@ -264,13 +266,16 @@ target_link_libraries(vgm_core_test PRIVATE
 # Renders ui/ButtonPaint.h into images and checks the invariants docs/ui-button-design.md
 # promises: the shadow below a face, the rounded corner, the weaker shadow while pressed, the
 # accent ring on focus, the card-painted glow of a toggled button. It needs the ui/ painting code
-# and nothing else - no engine, no libvgm.
+# and nothing else - no engine, no libvgm. ui/Theme.cpp comes with it: the palette stopped being
+# inline constants in the header when the theme became switchable, so the colours are defined in a
+# translation unit now and a test that checks pixels has to compile it.
 #   cmake --build <build dir> --target vgm_ui_test
 #   <build dir>/plugin/vgm_ui_test
 add_executable(vgm_ui_test EXCLUDE_FROM_ALL
 	Tests/UiButtonTest.cpp
 	Source/ui/IconButton.cpp
 	Source/ui/Icons.cpp
+	Source/ui/Theme.cpp
 )
 target_include_directories(vgm_ui_test PRIVATE Source)
 target_compile_definitions(vgm_ui_test PRIVATE
@@ -292,6 +297,13 @@ add_executable(vgm_app_test EXCLUDE_FROM_ALL
 	Tests/AppHarnessTest.cpp
 )
 target_include_directories(vgm_app_test PRIVATE Source)
+# The only difference from the plugin it drives: the message loop. JUCE gates
+# MessageManager::runDispatchLoopUntil() on this macro, and without it a script can see nothing but
+# what a command sets up synchronously - the layout an AsyncUpdater does (a TreeView recalculating
+# its rows), an async change broadcast, Button::triggerClick() - which is a lot of the user
+# interface. The macro only adds that one declaration to MessageManager (no data members, no
+# virtuals), so it cannot disagree with the plugin's copy of the headers about anything else.
+target_compile_definitions(vgm_app_test PRIVATE JUCE_MODAL_LOOPS_PERMITTED=1)
 target_link_libraries(vgm_app_test PRIVATE
 	VGMToybox
 	juce::juce_audio_processors

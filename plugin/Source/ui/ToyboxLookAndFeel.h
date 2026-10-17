@@ -6,14 +6,23 @@ namespace toybox::ui
 {
 
 /**
-	macOS-flavoured light theme: white cards on a light grey window, hairline borders, blue
-	accent for anything that is "on". One instance per editor (never a global default), so
-	several plugin instances in one host do not fight over the process-wide LookAndFeel.
+	The plugin's look, drawn from the palette in Theme.h: cards, buttons, sliders and the mixer's
+	fader caps all ask the theme, so one instance draws either the light or the dark look - the
+	class is named after neither (it was LightLookAndFeel while there was only one). One instance
+	per editor (never a global default), so several plugin instances in one host do not fight over
+	the process-wide LookAndFeel.
+
+	Constructor and refresh() are the only places that read the palette.
 */
-class LightLookAndFeel : public juce::LookAndFeel_V4
+class ToyboxLookAndFeel : public juce::LookAndFeel_V4
 {
 public:
-	LightLookAndFeel (void);
+	ToyboxLookAndFeel (void);
+
+	/** Re-reads every colour from the palette. A LookAndFeel holds copies, so after
+		theme::setTheme() this has to be called again (and the editor repainted) before the new
+		palette shows. */
+	void refresh (void);
 
 	void drawButtonBackground (juce::Graphics&, juce::Button&, const juce::Colour& backgroundColour,
 							   bool shouldDrawButtonAsHighlighted, bool shouldDrawButtonAsDown) override;
@@ -40,7 +49,7 @@ private:
 	void drawVerticalSlider (juce::Graphics&, int x, int y, int width, int height,
 							 float sliderPos, juce::Slider&);
 
-	JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (LightLookAndFeel)
+	JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (ToyboxLookAndFeel)
 };
 
 } // namespace toybox::ui

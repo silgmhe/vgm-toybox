@@ -53,7 +53,11 @@ public:
 
 	/** Stores the mode, writes it, and tells every listener (each open editor) to repaint.
 		Storing the value the user already has is a no-op, so nothing is written for a click that
-		changed nothing. */
+		changed nothing.
+
+		The listeners are told **before this returns** (see broadcastChange), so the palette is in
+		force by the time the click that asked for it has been handled - and the window scripts,
+		which have no message loop to defer anything to, see it too. */
 	void setThemeMode (ThemeMode mode);
 
 	/** Empty when all is well, otherwise one line for the General page: what could not be done
@@ -86,6 +90,19 @@ public:
 private:
 	SettingsStore (void);
 	~SettingsStore (void) override;
+
+	/** Tells every listener that a stored value changed, synchronously.
+
+		juce::ChangeBroadcaster normally posts the notification and sends it on the next message
+		loop callback. That is the right default for a value that changes on its own, and the wrong
+		one here: a setting changes because someone clicked something, and everything that follows
+		from it - the palette, the repaint, and whatever the settings window shows - has to be true
+		by the time that click has been handled. A host that saves state or screenshots the window
+		in the same breath would otherwise catch the old value, and the window scripts (run with no
+		message loop at all, see Tests/AppHarnessTest.cpp) would never see the new one.
+
+		Every listener here only reads the store, so none of them can re-enter a write. */
+	void broadcastChange (void);
 
 	std::unique_ptr<juce::PropertiesFile> file;
 	juce::String lastErrorMessage;

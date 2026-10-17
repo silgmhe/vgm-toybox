@@ -209,7 +209,7 @@ inline float buttonRadiusFor (float height) { return juce::jmin (height * 0.2f, 
 |---|---|---|
 | **M-UI.1** | Token 增量（§5）+ 新 `ui/ButtonPaint.h`（`drawButtonFace(g, shape, level, state)`、`drawFloatingGlow(g, bounds, on)`）。**不改任何现有外观** | 编译通过、界面与之前逐像素一致（只加不换） |
 | **M-UI.2** | `IconButton` 接入 painter（走带 5 个 + 卡片头部 3 个）→ **本次要解决的观感问题** | standalone 截图对照；hover/pressed/on/disabled/focus 六态肉眼确认 |
-| **M-UI.3** | `LightLookAndFeel` 接入（`drawButtonBackground`、`drawComboBox`），圆角统一 | 同上 |
+| **M-UI.3** | `ToyboxLookAndFeel` 接入（`drawButtonBackground`、`drawComboBox`），圆角统一 | 同上 |
 | **M-UI.4** | 收敛 ad-hoc glow 到 helper，修掉扇出/汇入缺 glow | 同上 |
 | **M-UI.5** | 更新 `CODEBUDDY.md`、本文档补"实施记录" | 文档一致 |
 
@@ -224,7 +224,7 @@ inline float buttonRadiusFor (float height) { return juce::jmin (height * 0.2f, 
 | M-UI.4 收敛 glow | ✅ | `TransportPanel` / `MixerPanel` 改用 `drawButtonGlow()` + `buttonGlowBounds()`；**补上扇出/汇入一直缺失的 on 态发光** |
 | M-UI.4b 通道条的 M/S 发光 | ✅ | `drawButtonGlow()` 增加颜色参数（accent / `muteGlow()` 红 / `soloGlow()` 琥珀）；`ChannelStrip::paint()` 为 toggled 的 M/S 绘制发光，`setValues()` 只在状态翻转时重绘 `buttonGlowBounds()` |
 | M-UI.4c 发光半径可配 | ✅ | 第一版 M/S 直接用了 12px 半径 → 只有 6px 边距的通道条把它**硬裁成矩形**（用户反馈"按钮周围有个正方形的发光截断"）。`drawButtonGlow()`/`buttonGlowBounds()` 现在接受 blur 参数，M/S 用 `theme::compactGlowBlur = 5`（在 6px 内衰减到 0）；卡片头部与走带仍用 12px（它们有 12px 卡片内边距） |
-| M-UI.3 `LightLookAndFeel` 接入 | ✅ | `drawButtonBackground`（混音 M/S、Open）与 `drawComboBox`（输出/loop/fade）都改走 `drawButtonFace()`：填充色亮 → 中性材质、有色（accent/红/琥珀）→ 填充型；三份圆角规则合并为 `buttonRadiusFor()`；禁用态下拉的箭头也按规范衰减；布局同步补 4px（顶行 32→36、输出行 22→26、设置行 26→30、走带卡片 142、通道条 204、混音最小高 178） |
+| M-UI.3 `ToyboxLookAndFeel` 接入 | ✅ | `drawButtonBackground`（混音 M/S、Open）与 `drawComboBox`（输出/loop/fade）都改走 `drawButtonFace()`：填充色亮 → 中性材质、有色（accent/红/琥珀）→ 填充型；三份圆角规则合并为 `buttonRadiusFor()`；禁用态下拉的箭头也按规范衰减；布局同步补 4px（顶行 32→36、输出行 22→26、设置行 26→30、走带卡片 142、通道条 204、混音最小高 178） |
 | M-UI.5 文档与验收 | ✅ 文档与测试 | CODEBUDDY 补按钮体系与新测试；`vgm_ui_test` 上线（12 项像素不变量断言）；宿主内六态走查待你确认 |
 
 ---
@@ -258,4 +258,4 @@ inline float buttonRadiusFor (float height) { return juce::jmin (height * 0.2f, 
 ## 13. 参考
 
 - macOS Human Interface Guidelines — <https://developer.apple.com/design/human-interface-guidelines>（Buttons、Materials、Color、Layout 章节，概念参考）
-- 本项目既有实现：`plugin/Source/ui/Theme.h`、`SoftShadow.h`、`Icons.cpp`、`LightLookAndFeel.cpp`
+- 本项目既有实现：`plugin/Source/ui/Theme.h`、`SoftShadow.h`、`Icons.cpp`、`ToyboxLookAndFeel.cpp`

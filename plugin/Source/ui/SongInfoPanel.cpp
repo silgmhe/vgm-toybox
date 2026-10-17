@@ -14,21 +14,29 @@ SongInfoPanel::SongInfoPanel (const toybox::PlaybackEngine& engineToUse)
 	: engine (engineToUse)
 {
 	titleLabel.setFont (juce::Font (juce::FontOptions (18.0f, juce::Font::bold)));
-	titleLabel.setColour (juce::Label::textColourId, theme::primaryText());
 	titleLabel.setJustificationType (juce::Justification::centredLeft);
 	addAndMakeVisible (titleLabel);
 
 	detailsLabel.setFont (juce::Font (juce::FontOptions (12.5f)));
-	detailsLabel.setColour (juce::Label::textColourId, theme::secondaryText());
 	detailsLabel.setJustificationType (juce::Justification::centredLeft);
 	addAndMakeVisible (detailsLabel);
 
 	fileLabel.setFont (juce::Font (juce::FontOptions (12.0f)));
-	fileLabel.setColour (juce::Label::textColourId, theme::secondaryText());
+	// all three labels exist by now: apply their colours, and re-apply them on a theme change
+	lookAndFeelChanged();
 	fileLabel.setJustificationType (juce::Justification::centredLeft);
 	addAndMakeVisible (fileLabel);
 
 	refresh();
+}
+
+void SongInfoPanel::lookAndFeelChanged (void)
+{
+	// the song title is the loudest text in the card, the details and the file name are the quiet
+	// ones
+	titleLabel.setColour (juce::Label::textColourId, theme::primaryText());
+	detailsLabel.setColour (juce::Label::textColourId, theme::secondaryText());
+	fileLabel.setColour (juce::Label::textColourId, theme::secondaryText());
 }
 
 void SongInfoPanel::resized (void)

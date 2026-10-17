@@ -13,7 +13,7 @@
 	Commands (one per line, `#` starts a comment, arguments may be quoted):
 
 	    load <path>              a file dropped on the window - the same path the drag & drop uses
-	    press <key>              space enter home left right ctrl+o ctrl+1 .. ctrl+9
+	    press <key>              escape space enter home left right ctrl+o ctrl+1 .. ctrl+9
 	    click <componentId>      trigger a button (and report its new state)
 	    toggle <componentId>     the same, for the controls that toggle
 	    set <componentId> <v>    set a slider or a combo box, with the notification the UI sends
@@ -173,6 +173,7 @@ bool keyFromName (const juce::String& name, juce::KeyPress& out)
 
 	if (lower == "space") { out = juce::KeyPress (juce::KeyPress::spaceKey); return true; }
 	if (lower == "enter") { out = juce::KeyPress (juce::KeyPress::returnKey); return true; }
+	if (lower == "escape") { out = juce::KeyPress (juce::KeyPress::escapeKey); return true; }
 	if (lower == "home") { out = juce::KeyPress (juce::KeyPress::homeKey); return true; }
 	if (lower == "left") { out = juce::KeyPress (juce::KeyPress::leftKey); return true; }
 	if (lower == "right") { out = juce::KeyPress (juce::KeyPress::rightKey); return true; }
@@ -225,19 +226,16 @@ public:
 
 private:
 	/**
-		Pauses between commands.
+		Pauses between commands, without running the message loop.
 
-		Deliberately not a message loop: `MessageManager::runDispatchLoopUntil()` only exists when
-		JUCE_MODAL_LOOPS_PERMITTED is on, and turning that on for the harness means turning it on for
-		the plugin and the VST3 build too - not a trade worth making for a test tool.
+		Waiting is what almost every command wants, because what they assert is set **synchronously**
+		by the command itself: a load calls songChanged() (which rebuilds the chip card and refreshes
+		the panels) and updateStatusLine(), and a key press calls straight into the transport.
 
-		It costs nothing here, because everything the commands assert is set **synchronously** by the
-		command itself: a load calls songChanged() (which rebuilds the chip card and refreshes the
-		panels) and updateStatusLine(), and a key press calls straight into the transport. What this
-		form cannot see is anything that only the 10-15 Hz timer would do - meters moving, a level
-		fading - and that is worth knowing when writing a script: those belong to the engine and pixel
-		tests, or to the controller extraction that the plan still owes (docs/desgin/testing-architecture.md
-		§7 risk 2).
+		A script that needs the next callback - a TreeView re-laying out its rows, a posted click, a
+		timer - asks for it with the sleep command, the only one that runs the loop (see
+		commandSleep). That loop is available to this target alone: see the
+		JUCE_MODAL_LOOPS_PERMITTED definition in plugin/CMakeLists.txt.
 	*/
 	static void settle (int milliseconds)
 	{
@@ -567,10 +565,18 @@ private:
 				   + "'   (was: " + actual + ")");
 	}
 
+	/** The one command that runs the message loop, where settle() only waits.
+
+		What that buys a script: everything the application does on its next callback - a TreeView
+		recalculating its row widths after being resized (an AsyncUpdater), Button::triggerClick()
+		(a posted command message), a change broadcast that is not one of the settings store's.
+		Values a command sets synchronously do not need it. */
 	void commandSleep (const juce::StringArray& tokens)
 	{
-		const int milliseconds = (tokens.size() >= 2) ? tokens[1].getIntValue() : 100;
-		settle (juce::jlimit (1, 5000, milliseconds));
+		const int milliseconds = juce::jlimit (1, 5000, (tokens.size() >= 2) ? tokens[1].getIntValue() : 100);
+
+		juce::MessageManager::getInstance()->runDispatchLoopUntil (milliseconds);
+
 		report (true, "sleep " + juce::String (milliseconds) + " ms");
 	}
 

@@ -1,5 +1,6 @@
 #include "PluginEditor.h"
 
+#include "settings/SettingsStore.h"
 #include "ui/Format.h"
 #include "ui/SoftShadow.h"
 #include "ui/Theme.h"
@@ -17,6 +18,25 @@ namespace
 	// moves the timer only refreshes state at a low rate - there is nothing to repaint then.
 	constexpr int kPlayingRefreshHz = 15;
 	constexpr int kIdleRefreshHz = 10;
+
+	// What the stored mode means as a palette. "Follow system" is asked at the moment it is needed,
+	// so it keeps meaning "whichever the desktop is on now" (ui/Theme.h) - and the mapping lives
+	// here rather than in Theme because the stored mode is a settings type, which the theme must
+	// not have to know about.
+	theme::Id paletteFor (toybox::settings::SettingsStore::ThemeMode mode)
+	{
+		switch (mode)
+		{
+		case toybox::settings::SettingsStore::ThemeMode::light:
+			return theme::Id::light;
+		case toybox::settings::SettingsStore::ThemeMode::dark:
+			return theme::Id::dark;
+		case toybox::settings::SettingsStore::ThemeMode::followSystem:
+			break;
+		}
+
+		return theme::systemTheme();
+	}
 }
 
 ToyboxAudioProcessorEditor::ToyboxAudioProcessorEditor (ToyboxAudioProcessor& p)
@@ -24,6 +44,11 @@ ToyboxAudioProcessorEditor::ToyboxAudioProcessorEditor (ToyboxAudioProcessor& p)
 	  processor (p),
 	  engine (p.getEngine())
 {
+	// Before anything below: a control that colours itself while it is being constructed (a label,
+	// a button, a whole page) reads theme:: there and then, so the stored palette has to be in
+	// force first or that control would keep the light one for its lifetime.
+	applyPalette();
+
 	setLookAndFeel (&lookAndFeel);
 
 	// --- the application menu ---
@@ -34,15 +59,10 @@ ToyboxAudioProcessorEditor::ToyboxAudioProcessorEditor (ToyboxAudioProcessor& p)
 	menu.onCloseSong = [this] { closeSong(); };
 	menu.onQuit = [] { juce::JUCEApplicationBase::quit(); };
 	menu.onAbout = [this] { showAbout(); };
+	menu.onSettings = [this] { showSettings(); };
 
-	// The bar and its popups both take their colours from the LookAndFeel's PopupMenu ids - that is
-	// what drawMenuBarBackground()/drawMenuBarItem() look up - so this is the one place to style
-	// the whole menu.
-	lookAndFeel.setColour (juce::PopupMenu::backgroundColourId, theme::card());
-	lookAndFeel.setColour (juce::PopupMenu::textColourId, theme::primaryText());
-	lookAndFeel.setColour (juce::PopupMenu::headerTextColourId, theme::secondaryText());
-	lookAndFeel.setColour (juce::PopupMenu::highlightedBackgroundColourId, theme::accent());
-	lookAndFeel.setColour (juce::PopupMenu::highlightedTextColourId, juce::Colours::white);
+	// The menu's colours are the LookAndFeel's own (PopupMenu ids, see ToyboxLookAndFeel::refresh()):
+	// its paint routines look them up there, so there is nothing to set here.
 	addAndMakeVisible (menuBar);
 
 	// --- open button (primary action) + status line ---
@@ -52,13 +72,15 @@ ToyboxAudioProcessorEditor::ToyboxAudioProcessorEditor (ToyboxAudioProcessor& p)
 	openButton.setComponentID ("editor.open");
 	statusLabel.setComponentID ("editor.status");
 	openButton.onClick = [this] { openFileChooser(); };
-	openButton.setColour (juce::TextButton::buttonColourId, theme::accent());
-	openButton.setColour (juce::TextButton::textColourOffId, juce::Colours::white);
+	// its accent colours are applied by lookAndFeelChanged(): they are copies, so they have to be
+	// re-applied whenever the palette changes
 	openButton.setTooltip (formatOpenPrompt());
 	addAndMakeVisible (openButton);
 
 	statusLabel.setFont (juce::Font (juce::FontOptions (12.5f)));
-	statusLabel.setColour (juce::Label::textColourId, theme::secondaryText());
+	// its colour is applied by lookAndFeelChanged(), and updateStatusLine() overrides it when the
+	// line reports a failure - so it must not be set here (it would be the last word until the
+	// first timer tick otherwise)
 	statusLabel.setJustificationType (juce::Justification::centredRight);
 	addAndMakeVisible (statusLabel);
 
@@ -89,6 +111,12 @@ ToyboxAudioProcessorEditor::ToyboxAudioProcessorEditor (ToyboxAudioProcessor& p)
 	addChildComponent (aboutOverlay);
 	aboutOverlay.onClose = [this] { aboutOverlay.setVisible (false); };
 
+	// Options > Settings, the same shape as the About box and for the same reason. The two are
+	// never up together (showSettings/showAbout hide the other one), so the order they are added
+	// in only decides which one an editor with both visible - which cannot happen - would be under.
+	addChildComponent (settingsOverlay);
+	settingsOverlay.onClose = [this] { settingsOverlay.setVisible (false); };
+
 	updateStatusLine();
 
 	setResizable (true, true);
@@ -118,12 +146,58 @@ ToyboxAudioProcessorEditor::ToyboxAudioProcessorEditor (ToyboxAudioProcessor& p)
 
 	refreshHz = kIdleRefreshHz;
 	startTimerHz (refreshHz);
+
+	// How a theme change reaches this window, whoever made it: whichever control changes the
+	// stored value, the store broadcasts, and changeListenerCallback() puts the palette into force
+	// again. Nothing else can reach into this editor.
+	toybox::settings::SettingsStore::getInstance().addChangeListener (this);
 }
 
 ToyboxAudioProcessorEditor::~ToyboxAudioProcessorEditor()
 {
+	// the store outlives the editor (it is a singleton), so the listener has to go
+	toybox::settings::SettingsStore::getInstance().removeChangeListener (this);
+
 	stopTimer();
 	setLookAndFeel (nullptr);
+}
+
+//==============================================================================
+// theme
+
+void ToyboxAudioProcessorEditor::applyPalette (void)
+{
+	theme::setTheme (paletteFor (toybox::settings::SettingsStore::getInstance().getThemeMode()));
+	lookAndFeel.refresh();
+}
+
+void ToyboxAudioProcessorEditor::changeListenerCallback (juce::ChangeBroadcaster* source)
+{
+	if (source != &toybox::settings::SettingsStore::getInstance())
+	{
+		return;
+	}
+
+	applyPalette();
+
+	// Both halves are needed and neither implies the other: the broadcast re-reads every colour
+	// that was set through setColour() - JUCE walks the whole component tree for us, and every
+	// control that colours itself does it in its own lookAndFeelChanged() - while the repaint
+	// covers what is looked up while painting. The status line is re-lettered by the next timer
+	// tick as well, which puts its error/secondary colour back.
+	sendLookAndFeelChange();
+	updateStatusLine();
+	repaint();
+}
+
+void ToyboxAudioProcessorEditor::lookAndFeelChanged (void)
+{
+	// Everything this window colours itself, and nothing else: setColour() stores a copy, so it
+	// has to be applied again whenever the palette changes. This is the hook JUCE calls for it,
+	// both when the LookAndFeel is set (the constructor does that) and when it is broadcast.
+	openButton.setColour (juce::TextButton::buttonColourId, theme::accent());
+	openButton.setColour (juce::TextButton::textColourOffId, theme::onAccent());
+	statusLabel.setColour (juce::Label::textColourId, theme::secondaryText());
 }
 
 //==============================================================================
@@ -166,6 +240,11 @@ void ToyboxAudioProcessorEditor::resized (void)
 		aboutOverlay.setBounds (getLocalBounds());
 	}
 
+	if (settingsOverlay.isVisible())
+	{
+		settingsOverlay.setBounds (getLocalBounds());
+	}
+
 	// The card shadows are painted by paint(), outside the card bounds - a relayout has
 	// to clear the ring around a card that moved, appeared or changed size.
 	repaint();
@@ -195,11 +274,29 @@ bool ToyboxAudioProcessorEditor::keyPressed (const juce::KeyPress& key)
 		}
 	}
 
-	// escape dismisses the About box, like any other dialog
-	if (key == juce::KeyPress::escapeKey && aboutOverlay.isVisible())
+	// Ctrl+, opens the settings window, the accelerator the Options menu describes. The pages the
+	// digits reach are not involved: this is an overlay over all of them.
+	if (code == ',' && key.getModifiers().isCommandDown())
 	{
-		aboutOverlay.setVisible (false);
+		showSettings();
 		return true;
+	}
+
+	// escape dismisses whichever overlay is up, like any other dialog - the settings window first,
+	// since it is the one that can be over the About box and not the other way round
+	if (key == juce::KeyPress::escapeKey)
+	{
+		if (settingsOverlay.isVisible())
+		{
+			settingsOverlay.setVisible (false);
+			return true;
+		}
+
+		if (aboutOverlay.isVisible())
+		{
+			aboutOverlay.setVisible (false);
+			return true;
+		}
 	}
 
 	// The transport keys belong to the playback page and any keys of its own to another page: a key
@@ -298,10 +395,29 @@ void ToyboxAudioProcessorEditor::closeSong (void)
 
 void ToyboxAudioProcessorEditor::showAbout (void)
 {
+	// one overlay at a time: they cover the same area, and stacking them would only hide this one
+	settingsOverlay.setVisible (false);
+
 	aboutOverlay.setBounds (getLocalBounds());
 	aboutOverlay.setVisible (true);
 	aboutOverlay.toFront (false);
 	aboutOverlay.grabKeyboardFocus();	// so escape works without clicking first
+}
+
+void ToyboxAudioProcessorEditor::showSettings (void)
+{
+	// The stored values can have changed while this was hidden - that is what the Theme menu does
+	// - and the pages only ever show what is stored, so the panel is put right before it comes up.
+	// The store broadcasts to every window, and this is the one that has to catch up: it is the
+	// only one that was not drawn while the menu was being used.
+	settingsOverlay.refreshFromStore();
+
+	aboutOverlay.setVisible (false);
+
+	settingsOverlay.setBounds (getLocalBounds());
+	settingsOverlay.setVisible (true);
+	settingsOverlay.toFront (false);
+	settingsOverlay.grabKeyboardFocus();	// so escape works without clicking first
 }
 
 void ToyboxAudioProcessorEditor::openStartupSong (void)

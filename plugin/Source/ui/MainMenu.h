@@ -5,6 +5,8 @@
 
 #include <juce_gui_basics/juce_gui_basics.h>
 
+#include "settings/SettingsStore.h"
+
 namespace toybox::ui
 {
 
@@ -28,8 +30,14 @@ struct MenuGroup
 };
 
 /**
-	The application menu: File (open a song, close it, exit), View (which page the window shows)
-	and Help (about) - held as **data**, which is the point of this class.
+	The application menu: File (open a song, close it, exit), View (which page the window shows),
+	Options (the settings window), Theme (which palette the whole application draws with) and Help
+	(about) - held as **data**, which is the point of this class.
+
+	Everything in it is the window's state except the Theme items: those belong to the settings
+	store, which is asked for the tick on every build and receives the choice - so the palette
+	changes for every open window at once, and this menu and the settings window are two views of
+	one value rather than two copies of it (docs/desgin/settings-and-theme-design.md section 7).
 
 	JUCE cannot enumerate a PopupMenu, so nothing could ask what the menu says or which item is
 	ticked; the only way to check "does the tick follow the page" was a screenshot. `buildGroups()`
@@ -51,6 +59,9 @@ public:
 	std::function<void()> onCloseSong;
 	std::function<void()> onQuit;
 	std::function<void()> onAbout;
+
+	/** Options > Settings. The window shows the overlay; nothing here knows what is in it. */
+	std::function<void()> onSettings;
 
 	/** Called with the index of the page the user picked (into `viewNames`). */
 	std::function<void (int)> onSelectView;
@@ -126,6 +137,51 @@ public:
 		}
 
 		groups.push_back (std::move (view));
+
+		MenuGroup options { "Options", {} };
+		MenuEntry settings;
+		settings.id = "options.settings";
+		settings.label = "Settings...";
+		settings.shortcut = "Ctrl+,";
+		settings.action = onSettings;
+		options.entries.push_back (std::move (settings));
+		groups.push_back (std::move (options));
+
+		// The palette: one ticked item out of three, and the tick is asked for on every build -
+		// the lesson the View menu already learned above. The items write to the store and nothing
+		// else: the store broadcasts, and every window (this one included) puts the palette it
+		// reads into force. A menu that also told the window would be a second source of truth.
+		using Mode = toybox::settings::SettingsStore::ThemeMode;
+
+		struct ThemeChoice
+		{
+			Mode mode;
+			const char* id;
+			const char* label;
+		};
+
+		const ThemeChoice choices[] = {
+			{ Mode::light,		"theme.light",			"Light" },
+			{ Mode::dark,		"theme.dark",			"Dark" },
+			{ Mode::followSystem, "theme.followSystem",	"Follow system" },
+		};
+
+		const auto stored = toybox::settings::SettingsStore::getInstance().getThemeMode();
+
+		MenuGroup theme { "Theme", {} };
+		for (const auto& choice : choices)
+		{
+			MenuEntry entry;
+			entry.id = choice.id;
+			entry.label = choice.label;
+			entry.checked = (stored == choice.mode);
+
+			const Mode mode = choice.mode;
+			entry.action = [mode] { toybox::settings::SettingsStore::getInstance().setThemeMode (mode); };
+			theme.entries.push_back (std::move (entry));
+		}
+
+		groups.push_back (std::move (theme));
 
 		MenuGroup help { "Help", {} };
 		MenuEntry about;
@@ -220,9 +276,11 @@ public:
 		return true;
 	}
 
+	/** These names are positional: `getMenuForIndex()` indexes `buildGroups()` with the index it is
+		handed, so the order here is the order there, and neither may be sorted on its own. */
 	juce::StringArray getMenuBarNames (void) override
 	{
-		return { "File", "View", "Help" };
+		return { "File", "View", "Options", "Theme", "Help" };
 	}
 
 	juce::PopupMenu getMenuForIndex (int index, const juce::String&) override

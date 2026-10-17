@@ -14,8 +14,9 @@ DropHintOverlay::DropHintOverlay (void)
 	setInterceptsMouseClicks (false, false);
 
 	label.setFont (juce::Font (juce::FontOptions (22.0f, juce::Font::bold)));
-	label.setColour (juce::Label::textColourId, theme::accent());
 	label.setJustificationType (juce::Justification::centred);
+
+	lookAndFeelChanged();
 	// the format list comes from the backend registry - a build with more backends advertises
 	// them without touching this file
 	label.setText (formatDropPrompt(),
@@ -34,6 +35,11 @@ void DropHintOverlay::paint (juce::Graphics& g)
 	juce::PathStrokeType (2.0f).createDashedStroke (dashed, outline, dashes, 2);
 	g.setColour (theme::accent().withAlpha (0.75f));
 	g.fillPath (dashed);
+}
+
+void DropHintOverlay::lookAndFeelChanged (void)
+{
+	label.setColour (juce::Label::textColourId, theme::accent());
 }
 
 void DropHintOverlay::resized (void)

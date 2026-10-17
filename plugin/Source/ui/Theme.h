@@ -5,33 +5,94 @@
 /** Shared colours and metrics of the plugin GUI.
 
 	Everything the UI draws is derived from these, so the palette and the card/button metrics
-	have exactly one definition. The light look is macOS-flavoured: white cards on a light grey
-	window, hairline borders, a blue accent for anything that is "on".
+	have exactly one definition. The light palette is macOS-flavoured: white cards on a light grey
+	window, hairline borders, a blue accent for anything that is "on". The dark one follows One
+	Dark, and there the cards are the *lighter* surface - a raised card reads as raised only
+	because it is brighter than what is behind it, so dark has to turn that relationship around
+	instead of dimming it (docs/desgin/settings-and-theme-design.md §5).
+
+	Every getter reports the palette that is in force, so no call site has to know which theme is
+	on: switching is `setTheme()`, and whatever repaints itself afterwards draws in the new
+	colours without being touched.
 */
 namespace toybox::ui::theme
 {
 
 // --- palette ------------------------------------------------------------------------
-inline juce::Colour window (void)		{ return juce::Colour (0xfff2f2f7); }
-inline juce::Colour windowTop (void)	{ return juce::Colour (0xfff9f9fc); }
-inline juce::Colour windowBottom (void)	{ return juce::Colour (0xffecedf2); }
-inline juce::Colour card (void)			{ return juce::Colour (0xffffffff); }
-inline juce::Colour accent (void)		{ return juce::Colour (0xff0a84ff); }
-inline juce::Colour primaryText (void)	{ return juce::Colour (0xff1d1d1f); }
-inline juce::Colour secondaryText (void){ return juce::Colour (0xff74747a); }
-inline juce::Colour border (void)		{ return juce::Colour (0xffd7d7dd); }
-inline juce::Colour cardBorder (void)	{ return juce::Colour (0xffe6e6ec); }
-inline juce::Colour track (void)		{ return juce::Colour (0xffdcdce2); }
-inline juce::Colour error (void)		{ return juce::Colour (0xffd70015); }
 
-// the mixer's mute (red) and solo (amber) buttons follow the DAW convention
-inline juce::Colour mute (void)			{ return juce::Colour (0xffe5484d); }
-inline juce::Colour solo (void)			{ return juce::Colour (0xfff5c518); }
+enum class Id { light, dark };
 
-// the meter gradient: quiet is green, loud turns amber, 0 dB and above are red
-inline juce::Colour meterLow (void)		{ return juce::Colour (0xff34c759); }
-inline juce::Colour meterMid (void)		{ return juce::Colour (0xffffcc00); }
-inline juce::Colour meterHigh (void)	{ return juce::Colour (0xffff3b30); }
+/** One colour per role the UI draws in; the two palettes below fill it in.
+
+	The roles are named after what they are painted on rather than after how they look, because
+	that is the part the two palettes agree on: a "window" is the back surface, a "card" floats
+	above it, a "track" is the groove a slider runs in.
+*/
+struct Palette
+{
+	// chrome
+	juce::Colour window, windowTop, windowBottom, card;	// top/bottom are the gradient's ends
+	juce::Colour accent;								// anything that is "on"
+	juce::Colour onAccent;								// text and glyphs sitting on an accent fill
+	juce::Colour primaryText, secondaryText;
+	juce::Colour border, cardBorder, track, error;
+
+	// the mixer's mute (red) and solo (amber) buttons follow the DAW convention in both palettes
+	juce::Colour mute, solo;
+
+	// the meter gradient: quiet is green, loud turns amber, 0 dB and above are red
+	juce::Colour meterLow, meterMid, meterHigh;
+
+	// elevation
+	juce::Colour cardAmbientShadow, cardKeyShadow, accentGlow, controlShadow;
+
+	// buttons (docs/desgin/ui-button-design.md)
+	juce::Colour buttonMaterial, buttonHairline, buttonShadow, focusRing;
+
+	// The "metal" controls: slider thumbs, the mixer's fader caps, the rotary knob and tick boxes.
+	// Light draws them white with a grey edge; dark needs a grey cap, because a white one on a
+	// dark card reads as a hole rather than as something standing up.
+	juce::Colour controlFaceTop, controlFaceBottom, controlEdge, controlGroove;
+
+	// Tooltips float over everything, so they are not card-coloured in either palette.
+	juce::Colour tooltipBackground;
+};
+
+/** The palette in force. Both are static, so this only ever picks one. */
+const Palette& palette (void);
+
+/** Which one that is - the settings store decides, see settings/SettingsStore.h. */
+Id current (void);
+
+/** Picks the palette. Message thread only, and it deliberately tells nobody: a theme change is
+	broadcast by the settings store, which is what the UI listens to. */
+void setTheme (Id id);
+
+/** What "follow system" means right now: the desktop's own light/dark preference. It lives here
+	and not in the settings store because it is a desktop question rather than a stored value -
+	the store knows the three-way choice, the UI layer knows how to ask the system about it. */
+Id systemTheme (void);
+
+// One function per role, so a call site says `theme::card()` and never asks which theme is on.
+inline juce::Colour window (void)			{ return palette().window; }
+inline juce::Colour windowTop (void)		{ return palette().windowTop; }
+inline juce::Colour windowBottom (void)		{ return palette().windowBottom; }
+inline juce::Colour card (void)				{ return palette().card; }
+inline juce::Colour accent (void)			{ return palette().accent; }
+inline juce::Colour onAccent (void)			{ return palette().onAccent; }
+inline juce::Colour primaryText (void)		{ return palette().primaryText; }
+inline juce::Colour secondaryText (void)	{ return palette().secondaryText; }
+inline juce::Colour border (void)			{ return palette().border; }
+inline juce::Colour cardBorder (void)		{ return palette().cardBorder; }
+inline juce::Colour track (void)			{ return palette().track; }
+inline juce::Colour error (void)			{ return palette().error; }
+
+inline juce::Colour mute (void)				{ return palette().mute; }
+inline juce::Colour solo (void)				{ return palette().solo; }
+
+inline juce::Colour meterLow (void)			{ return palette().meterLow; }
+inline juce::Colour meterMid (void)			{ return palette().meterMid; }
+inline juce::Colour meterHigh (void)		{ return palette().meterHigh; }
 
 // --- metrics ------------------------------------------------------------------------
 inline constexpr int margin = 14;			// window border
@@ -44,7 +105,7 @@ inline constexpr int rowGap = 8;
 inline constexpr float cardRadius = 10.0f;
 inline constexpr float buttonRadius = 8.0f;
 
-/** Radius of the position slider thumb. LightLookAndFeel draws the thumb, TransportPanel
+/** Radius of the position slider thumb. ToyboxLookAndFeel draws the thumb, TransportPanel
 	draws the loop point marker on top of the track - both have to use the same value. */
 inline constexpr float sliderThumbRadius = 6.5f;
 
@@ -52,14 +113,15 @@ inline constexpr float sliderThumbRadius = 6.5f;
 // Everything that floats above the window casts a soft, blurred shadow: the cards a
 // two-layer one (a wide "key" light below the shape plus a tight "ambient" contact
 // shadow), filled accent controls a coloured glow. All of them are just a few percent
-// opaque, so the depth stays subtle.
-inline juce::Colour cardAmbientShadow (void)	{ return juce::Colour (0x14000000); }
-inline juce::Colour cardKeyShadow (void)		{ return juce::Colour (0x11000000); }
+// opaque, so the depth stays subtle - and all of them are darker than the surface they fall
+// on, which is why the dark palette needs more alpha for the same effect.
+inline juce::Colour cardAmbientShadow (void)	{ return palette().cardAmbientShadow; }
+inline juce::Colour cardKeyShadow (void)		{ return palette().cardKeyShadow; }
 inline constexpr int cardAmbientBlur = 3;
 inline constexpr int cardKeyBlur = 16;
 inline constexpr int cardKeyOffsetY = 5;
 
-inline juce::Colour accentGlow (void)			{ return juce::Colour (0x4d0a84ff); }
+inline juce::Colour accentGlow (void)			{ return palette().accentGlow; }
 inline constexpr int accentGlowBlur = 12;
 inline constexpr int accentGlowOffsetY = 3;
 
@@ -74,19 +136,19 @@ inline juce::Colour soloGlow (void)			{ return solo().withAlpha (0.42f); }
 inline constexpr int compactGlowBlur = 5;
 
 // slider thumbs and ticked checkboxes (their shadow fits inside their own bounds)
-inline juce::Colour controlShadow (void)		{ return juce::Colour (0x38000000); }
+inline juce::Colour controlShadow (void)		{ return palette().controlShadow; }
 inline constexpr int controlShadowBlur = 5;
 
 // --- buttons (docs/desgin/ui-button-design.md) -----------------------------------------------
-// One language for every button: a neutral white face with a hairline, or a filled accent /
+// One language for every button: a neutral face with a hairline, or a filled accent /
 // semantic colour, and **one** soft shadow that makes it read as floating above the card.
 // The shadow is painted inside the button's own bounds - the visible face is inset by
 // `buttonShadowInset` (see ButtonPaint.h) - so no parent has to know about it. One layer, flat
 // material, no gradient on purpose: a juce::DropShadow blurs an image per call, so every extra
 // layer costs the GPU again.
-inline juce::Colour buttonMaterial (void)	{ return juce::Colour (0xffffffff); }
-inline juce::Colour buttonHairline (void)	{ return juce::Colour (0xffd0d0d8); }
-inline juce::Colour buttonShadow (void)		{ return juce::Colour (0x26000000); }
+inline juce::Colour buttonMaterial (void)	{ return palette().buttonMaterial; }
+inline juce::Colour buttonHairline (void)	{ return palette().buttonHairline; }
+inline juce::Colour buttonShadow (void)		{ return palette().buttonShadow; }
 inline constexpr int buttonShadowBlur = 2;		// tight: the face can only spare a little room
 inline constexpr int buttonShadowOffsetY = 1;
 // The room the face reserves for its shadow. Kept to 2 px: the shadow is small, and every pixel
@@ -100,10 +162,22 @@ inline constexpr int buttonPressedOffsetShift = -1;
 inline constexpr float buttonDisabledAlpha = 0.45f;
 inline constexpr float buttonDisabledIconAlpha = 0.40f;
 
-inline juce::Colour focusRing (void)		{ return juce::Colour (0x660a84ff); }
+inline juce::Colour focusRing (void)		{ return palette().focusRing; }
 inline constexpr float focusRingThickness = 2.0f;
 
 inline constexpr float iconInsetRatio = 0.28f;	// glyph area = face inset by this much
+
+// --- metal controls and hints -------------------------------------------------------
+// The thumbs, caps and boxes the palette describes under controlFace*/controlEdge/controlGroove.
+inline juce::Colour controlFaceTop (void)		{ return palette().controlFaceTop; }
+inline juce::Colour controlFaceBottom (void)	{ return palette().controlFaceBottom; }
+inline juce::Colour controlEdge (void)			{ return palette().controlEdge; }
+inline juce::Colour controlGroove (void)		{ return palette().controlGroove; }
+
+/** The light line under the groove of a fader cap, so the groove reads as cut into the cap. */
+inline juce::Colour controlGrooveHighlight (void)	{ return controlFaceTop().withAlpha (0.85f); }
+
+inline juce::Colour tooltipBackground (void)	{ return palette().tooltipBackground; }
 
 /** Corner radius of a button of the given height - smaller controls are less rounded. This is
 	the one radius rule; ComboBox, TextButton and IconButton all go through it. */

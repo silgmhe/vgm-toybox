@@ -23,6 +23,10 @@ public:
 	/** Updates title, tags and the file/position line. */
 	void refresh (void);
 
+	/** Re-applies the label colours (see PluginEditor::lookAndFeelChanged for why this is
+		needed at all). */
+	void lookAndFeelChanged (void) override;
+
 private:
 	void resized (void) override;
 

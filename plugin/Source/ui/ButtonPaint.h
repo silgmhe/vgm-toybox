@@ -28,7 +28,11 @@ struct ButtonFace
 	bool hovered = false;
 	bool pressed = false;
 	bool hasFocus = false;
-	juce::Colour fill { theme::card() };// only used by ButtonLevel::filled
+	// Only used by ButtonLevel::filled, and the caller has to fill it in there. No default value
+	// on purpose: a member initialiser runs once, when the face is constructed, so a colour taken
+	// from the theme in it would keep whatever the theme was at that moment (and a face is often
+	// built in a constructor, long before the first paint).
+	juce::Colour fill;
 };
 
 /** How much of the button's own bounds the shadow needs (see buttonFaceShape()). Kept small for

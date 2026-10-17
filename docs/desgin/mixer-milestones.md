@@ -120,7 +120,7 @@ struct MixerTrack
 - **通道条**（宽约 76 px，自上而下）：通道名 → mini 示波器 → mini 频谱 → Pan 旋钮 → 推子 + 峰值表 → `M`/`S` 按钮。
 - **分组**：每个芯片一个分组头（芯片名/实例号/通道数），组内横排通道条。
 - **Master 条**：最右固定列（总推子 + 总峰值表）。
-- 复用现有 `Theme` / `CardComponent` / `SoftShadow` / `LightLookAndFeel` 视觉体系。
+- 复用现有 `Theme` / `CardComponent` / `SoftShadow` / `ToyboxLookAndFeel` 视觉体系。
 
 ### 3.6 计划新增文件
 
@@ -171,7 +171,7 @@ struct MixerTrack
 - **已知遗留**：T6W28 的第二半在混音器里**保留为独立轨道**（与 Sound Chips 卡片不同 —— 卡片隐藏它是出于显示考虑，混音器隐藏它会丢音频）；核没有 `SetMuteMask` 时该设备的通道无法单独隔离（会退化为设备级 1 轨），遇到实际文件再处理。
 
 ### M2 — 混音核心 + 通道条 UI ✅ 已完成（2026-10-15）
-- **交付**：`ui/ChannelStrip.{h,cpp}`（**标准 DAW 通道条布局**：名称 → Pan 旋钮 → 垂直电平表 + 垂直增益推子 → 方形 M/S 按钮；静音=红色、独奏=琥珀色，Master 条复用同类）、`ui/MixerPanel.{h,cpp}`（Sound Chip 卡片下方的新卡片：每芯片一行、分组头、`Viewport` 双向滚动条、右侧常驻 Master 条、卡片头部的混音开关与光晕）、`LightLookAndFeel` 新增垂直推子与旋钮绘制、`Icons`/`IconButton` 增加混音器图标；引擎侧新增总输出峰值表与「核心不支持通道静音时退化为设备级单轨」的兜底；**混音模式默认开启**（与单实例逐样本一致，开关作为省 CPU 的退出选项）。
+- **交付**：`ui/ChannelStrip.{h,cpp}`（**标准 DAW 通道条布局**：名称 → Pan 旋钮 → 垂直电平表 + 垂直增益推子 → 方形 M/S 按钮；静音=红色、独奏=琥珀色，Master 条复用同类）、`ui/MixerPanel.{h,cpp}`（Sound Chip 卡片下方的新卡片：每芯片一行、分组头、`Viewport` 双向滚动条、右侧常驻 Master 条、卡片头部的混音开关与光晕）、`ToyboxLookAndFeel` 新增垂直推子与旋钮绘制、`Icons`/`IconButton` 增加混音器图标；引擎侧新增总输出峰值表与「核心不支持通道静音时退化为设备级单轨」的兜底；**混音模式默认开启**（与单实例逐样本一致，开关作为省 CPU 的退出选项）。
 - **验收结果**（`vgm_mixer_test`，全部通过）：
   1. ✅ Solo 与「静音其他轨」电平一致（差异 0.0054 %）；
   2. ✅ 硬左声像时右声道完全静音（balance 法则）、左声道正常；

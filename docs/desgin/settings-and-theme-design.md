@@ -1,6 +1,6 @@
 # 设置窗口与主题（Settings & Theme）设计
 
-状态：**已决策**（2026-10-17，见 §11 决策记录）；实施中：M1 存储已完成（§13）　分支：`feature/theme`　版本位：**MINOR**（`0.0.2` → `0.1.0`，依据 `docs/desgin/maintenance-policy.md:85`：新 UI 页面 = MINOR）
+状态：**已决策**（2026-10-17，见 §11 决策记录）；实施中：**M1–M4 已完成**（§13），M5 系统实时跟随、M6 暗色像素组与版本待做　分支：`feature/theme`　版本位：**MINOR**（`0.0.2` → `0.1.0`，依据 `docs/desgin/maintenance-policy.md:85`：新 UI 页面 = MINOR）
 
 凡本文档给出的结论都带 `文件:行`；未验证的写"待实现时确认"。
 
@@ -51,7 +51,7 @@
 | **音频线程绝不碰文件** | `SettingsStore` 只在 message thread 读写；`setThemeMode()` 只改变量 + 发广播 |
 | **快速连点导致写盘风暴** | 用 `PropertiesFile` 的延时保存（`millisecondsBeforeSaving`，默认 3000 ms） |
 | **目录可能不存在**（尤其 Linux） | JUCE 自己提醒过要先建（`juce_File.h:909-911`）→ 显式 `createDirectory()` |
-| **主题是进程级，LookAndFeel 是每实例** | `LightLookAndFeel.h:10-11` 规定每编辑器一个实例、绝不用全局默认 → 广播后**每个编辑器自己**刷新 LookAndFeel 与 `setColour` |
+| **主题是进程级，LookAndFeel 是每实例** | `ui/ToyboxLookAndFeel.h:11-13` 规定每编辑器一个实例、绝不用全局默认 → 广播后**每个编辑器自己**刷新 LookAndFeel 与 `setColour` |
 | **同宿主开多个实例** | 广播同步一致 |
 | **Linux 跟随时可能读不到**（Wayland／无 gsettings） | 判定为**浅色**，不报错（§8） |
 | **Windows 有前提** | 需 Win10 build ≥ 17763 且非高对比度（`juce_Windowing_windows.cpp:776-788`） |
@@ -89,7 +89,7 @@ macOS 的 `Application Support` 由我们补：JUCE 只给到 `~/Library`，Appl
 | `ui/Theme.h:11-102` | `toybox::ui::theme`：16 个颜色 + 指标 + 阴影，全是 header-only `inline`（**编译期**，所以必须先变成运行时状态） |
 | `theme::` 调用点 | **16 文件、约 170 处** |
 | 颜色缓存 | 仅 `ui/ButtonPaint.h:31` |
-| `ui/LightLookAndFeel.h:13-44` | `LookAndFeel_V4` 子类，重写 8 个绘制函数 |
+| `ui/ToyboxLookAndFeel.h:17-53` | `LookAndFeel_V4` 子类，重写 8 个绘制函数（M2 由 `LightLookAndFeel` 改名而来） |
 | `ui/MainMenu.h` | `MenuEntry{id,label,shortcut,checked,enabled,separatorBefore,action}`（:12-21）；`buildGroups()` 是**唯一**菜单定义（:68）；`getMenuBarNames()` 返回 `{File,View,Help}`（:225）；`item.isTicked = entry.checked`（:247）；`invoke(id)` 专供控制台测试（:210） |
 | `ui/AboutOverlay.h` | 窗口内浮层（"no peer, no modal state"，:15-16）；关闭按钮 `componentID = "about.close"`（:23） |
 | `PluginEditor.cpp` | `addChildComponent(aboutOverlay)`（:89）；`resized` 里铺满（:164-167）；ESC 关闭（:199-203）；`showAbout()`（:299-305）；`menu.standalone` 判据（:32） |
@@ -263,7 +263,7 @@ Theme   │ Light               (互斥勾选)
 | ADR-3 | 设置窗口做成**窗口内浮层**，不是独立窗口 | `AboutOverlay.h:15-16` 已有一段血泪：独立窗口在宿主里会挡住整个应用；且浮层能跟随编辑器缩放、能被控制台脚本驱动 |
 | ADR-4 | 主题互斥用 `isTicked`，不用 `addRadioItem` | 与 View 菜单同一套视觉与代码路径（`MainMenu.h:247`） |
 | ADR-5 | 暗色配色**必须**进像素测试 | 浅色主题的"按钮是否浮起"只存在于像素里（`vgm_ui_test` 的存在理由）；换一套底色的全部风险也只在像素里 |
-| ADR-6 | 主题状态放在 `theme::` 的进程级变量，而不是每个编辑器各存一份 | 设置本来就是用户级全局；LookAndFeel 仍保持**每编辑器一个实例**（`LightLookAndFeel.h:10-11` 的约束不破），两者靠广播衔接 |
+| ADR-6 | 主题状态放在 `theme::` 的进程级变量，而不是每个编辑器各存一份 | 设置本来就是用户级全局；LookAndFeel 仍保持**每编辑器一个实例**（`ui/ToyboxLookAndFeel.h:11-13` 的约束不破），两者靠广播衔接 |
 | ADR-7 | 即时生效，无 OK/Cancel/Apply | 主题只有"当场看到"才好选；设置项少且都可回退（General 页有 Restore defaults） |
 
 ## 11. 决策记录（2026-10-17 已定）
@@ -275,7 +275,7 @@ Theme   │ Light               (互斥勾选)
 | 3 | 设置窗口是否即时生效 | 即时生效，无 OK/Cancel/Apply（ADR-7） |
 | 4 | General 页首版内容 | 设置文件路径（**只读**文本，作用是"出问题时能找到它、备份/删掉它"，不是让用户改路径）+ `Open folder` + `Restore defaults` + 保存失败时的警示行 |
 | 5 | 暗色下 M/S 与电平表配色 | 保持 DAW 约定（红 / 琥珀 / 绿黄红），只按 One Dark 降低饱和（§5 表） |
-| 6 | `LightLookAndFeel` 改名 | 改成 `ToyboxLookAndFeel`（M2 一起做，连带更新旧文档引用 `docs/review/2026-10-16-….md:205` 的 L-1） |
+| 6 | `LightLookAndFeel` 改名 | 改成 `ToyboxLookAndFeel`（M2 一起做，连带更新旧文档引用 `docs/review/2026-10-16-….md:205` 的 L-1）。**M2 已做**，文档引用已同步 |
 | 7 | 版本号 | 功能完成、合并前改 `CMakeLists.txt:22` → `0.1.0`（新 UI 页面 = MINOR，`maintenance-policy.md:85`）；中途不改，否则中途构建都会自称 0.1.0 |
 | 8 | 跨进程同步 | 接受不实时：**启动读一次 → 读完释放文件 → 只在改设置时写入**（这正是 `PropertiesFile` 的语义）。两个进程互相覆盖时后写者胜，重启后一致 |
 
@@ -299,5 +299,79 @@ Theme   │ Light               (互斥勾选)
   3. 测试用 `VGMTOYBOX_SETTINGS_DIR` 覆盖目录，不碰开发机真实 `%APPDATA%`；
 - 跑过：`build.ps1 -Target vgm_core_test -Test` → **5 个测试目标全绿**（三个控制台二进制 + 两个窗口脚本 `load-and-play.txt`、`window-basics.txt`；`vgm_mixer_test` 按既定门槛跳过，它需要 `-TestSong`）；
 - 未碰 UI：`theme::`、菜单、编辑器一行未改（M2 才动）；
-- 提交：与本文档同批。
+- 提交：`7a196cc`（"add the settings store, the file a theme choice will live in"，与本文档同批）。
+
+### M2 调色板化（2026-10-17）
+
+**改了什么**
+
+- 新增 `plugin/Source/ui/Theme.cpp`（两套调色板 + 当前主题 + `systemTheme()`）；`ui/Theme.h` 改成调色板模型，**getter 名、签名、返回类型全部不变** → 调用点一行未改（这是 §3 定下的验收条件）。`Theme.cpp` 登记进 `plugin/CMakeLists.txt` 的插件目标与 `vgm_ui_test`；
+- `ui/LightLookAndFeel.{h,cpp}` → `ui/ToyboxLookAndFeel.{h,cpp}`（决策 6）：构造函数拆出无参 `refresh()`，"读调色板"只在这两个地方发生，此后该文件里再无硬编码颜色（`Colours::white` 与几个 `0xff…` 字面量，如提示框的 `0xf7ffffff`、"未勾选方框"的 `#c5c5cb`、手柄渐变的 `#e6e6ec`，全部换成色键）；
+- `ui/ButtonPaint.h` 去掉 `ButtonFace::fill` 的默认初始化器（§5 点出的那处；理由同 §5：成员初始化器只在构造时跑一次，而 Face 常在构造函数里就建好了）；
+- "自己 `setColour` 出来的颜色"收进各自的 `lookAndFeelChanged()`：编辑器（Open 按钮、状态行）、`TransportPanel`（音量文本框 4 个色键）、`ChannelStrip`（M/S）、`SongInfoPanel`（3 个标签）、`AboutOverlay`（关闭键 + 两条链接）、`DropHintOverlay`（提示文字）；`ChipPanel` 的那行**删掉**即可，LookAndFeel 的 `ToggleButton` 颜色本来就是 `primaryText`。
+
+**机制**（§5 只写了"广播由 `SettingsStore` 负责"，具体链条在这里定死）
+
+`SettingsStore::setThemeMode()` → `ChangeBroadcaster` → 编辑器 `changeListenerCallback()` → `applyPalette()`（存储模式 → `paletteFor()` → `theme::setTheme()` + `lookAndFeel.refresh()`）→ `sendLookAndFeelChange()` + `updateStatusLine()` + `repaint()`。
+
+两条路缺一不可，因为颜色有两种存放方式：`setColour()` 存的是**副本**（`sendLookAndFeelChange()` 会递归走整棵树，`juce_Component.cpp:1929-1951`，每个控件在自己的重载里重取），而画时**查**的色不在任何控件里（只有 `repaint()` 能救）。`sendLookAndFeelChange()` 先自己后子，所以面板重取色一定早于子控件。`Slider` 更特殊：`colourChanged()` → `lookAndFeelChanged()` 会 `valueBox.reset(new)` **销毁重建**文本框（`juce_Slider.cpp:593-607`），重建时读的正是滑块自己刚被重设的那几个 `textBox*` 色，所以音量数字换主题后立刻跟着变（写 `TransportPanel` 时验证过这一点）。
+
+**与设计的三处偏离**
+
+1. **`shouldUseDarkPalette()` 没有放进 `SettingsStore`**（§6 的草案）：`vgm_core_test` 只链 `juce_core`/`juce_audio_basics`/`juce_data_structures`，而 `juce::Desktop` 属于 `juce_gui_basics` —— 放进去那个测试**链接不过**，而"核心测试不链格式引擎与 gui"正是这个仓库刻意维持的机械证明。解析因此留在 UI 层：`theme::systemTheme()`（`Theme.cpp`）+ 编辑器里的 `paletteFor()`；§8 的回退规则不变（拿不到系统值就是浅色），设置页要显示"当前：Dark"时复用 `theme::systemTheme()`（M3）。
+2. **`Palette` 比 §5 草案多 6 个色键**：`onAccent`、`tooltipBackground`、`controlFaceTop`、`controlFaceBottom`、`controlEdge`、`controlGroove`。这些角色原本是 `ToyboxLookAndFeel.cpp` 里的字面量，不进调色板就切不了主题。
+3. **两个颜色值偏离 §5 表**：`windowTop` `2c313a` → `262a32`、`windowBottom` `1b1f26` → `1a1e24`。§5 自己那条规则是"卡片必须比窗口亮"，而 §5 给的 `windowTop` **等于** `card`（都是 `2c313a`）—— 卡片在窗口上半部会化进背景，于是顶端往下压、底端跟着重算。其余色键与 §5 表逐项相同。
+
+**另修一个只有暗色才暴露的 bug**
+
+`drawButtonBackground()` 原来用"感知亮度 < 0.9"判断"中性面还是填充面"：浅色下成立（白面亮、强调色暗），但暗色的中性面 `#2c313a` 比它的强调色 `#61afef` **更暗** —— 每个中性按钮都会被判成填充型、涂成卡片色，等于隐形。改成与主题自己的中性色比较（`backgroundColour != theme::card() && != theme::buttonMaterial()`）。
+
+**测试**
+
+- `build.ps1`（全量）→ 通过；
+- `build.ps1 -Target vgm_core_test,vgm_ui_test,vgm_app_test -Test` → **5 个测试目标全绿**（三个控制台二进制 + 两个窗口脚本）；
+- **`vgm_ui_test` 必须补 `Source/ui/Theme.cpp`**：调色板以前是头文件里的 `inline` 常量，现在定义在翻译单元里，而那个测试只编 painter 相关源码（`UiButtonTest.cpp` + `IconButton.cpp` + `Icons.cpp`）→ 先**链接失败**（`unresolved external symbol theme::palette`），补上源码即绿。这条改动本身就是"调色板真的离开头文件了"的证据；
+- 遗留：§8 的 `Desktop::DarkModeSettingListener`（系统实时切换）**未接**，它只需调同一条 `applyPalette()` + 广播路径；暗色像素组按 ADR-5 归 M6。
+
+### M3 设置窗（2026-10-17）
+
+**改了什么**
+
+- 新增 `plugin/Source/ui/SettingsOverlay.{h,cpp}`：`SettingsOverlay`（遮罩 + 居中面板 + 侧栏 `TreeView` + `ViewStack` 两页 + Close）、`ThemeSettingsPage`、`GeneralSettingsPage`；两个页面都是 `ui::View` 子类，所以进 `ViewStack` 与其它页面同路。文件登记进 `plugin/CMakeLists.txt`；
+- 组件 ID 与 §6 表逐项一致（`settings`、`settings.tree`、`settings.page.theme|general`、`settings.theme.light|dark|followSystem`、`settings.theme.current`、`settings.general.path|pathCaption|openFolder|reset|error`、`settings.close`），脚本可直接断言；
+- 编辑器接线（`PluginEditor.{h,cpp}`）：成员 `settingsOverlay` + `addChildComponent` + `onClose`、`showSettings()`、`resized()` 同步尺寸、`keyPressed()` 里 `Ctrl+,` 打开、ESC 先关它再关 About；两个浮层互斥（各自的 `show*()` 把对方 `setVisible(false)`）。
+
+**两处细化**（不改结论）
+
+1. 侧栏树三项设置：`setRootItemVisible(false)`（不显示 root 那一行）、每个 `CategoryItem::canBeSelected() == false`（§6 要的"根不可选"）、`setOpenCloseButtonsVisible(false)`。第三项让 `getIndentX()` 变成 −1，而行宽按 `viewport.getViewWidth() - indentX` 算（`juce_TreeView.cpp:1854-1880`、`:1938-1960`），正好把那 1 像素补回来 —— 行仍从树的左边缘起；
+2. 每次打开都 `refreshFromStore()`：页面只显示存储里的值（§6"菜单和页面是同一状态的两个视图"），所以打开时重读一次即可；页面自身不监听存储，关闭期间的菜单改动在下次打开时显示出来。
+
+**一处偏离：广播改成同步**（`SettingsStore::broadcastChange()`）
+
+`juce::ChangeBroadcaster::sendChangeMessage()` 是**异步**的 —— 要等下一次消息循环回调才通知，而 §9.2 的测试计划正是"`menu invoke theme.dark` 之后看窗口（乃至像素）"。没有消息循环时那条链永远走不到。改成 `sendSynchronousChangeMessage()`：写入返回前监听器已跑完，主题在**当次调用内**生效（宿主里也更好推理：这次点击处理完，调色板就已经换了）。所有监听器只读存储，不会重入写入。
+
+### M4 菜单（2026-10-17）
+
+- `ui/MainMenu.h` 多两组：`Options > Settings...`（`Ctrl+,`，转发到新的 `onSettings`）与 `Theme > Light/Dark/Follow system`；`getMenuBarNames()` 变成 `File, View, Options, Theme, Help` —— 顺序即 `buildGroups()` 的顺序，`getMenuForIndex()` 用它索引，注释里写明两者不能各自排序；
+- Theme 三项**每次构建都现问 `SettingsStore`** 拿勾选（沿用 View 菜单的教训），动作只写存储、不通知任何人：广播由存储负责，菜单不做第二个真相来源。
+
+**测试与验证（M3 + M4）**
+
+- `build.ps1 -Target vgm_core_test,vgm_ui_test,vgm_app_test -Test` → **5 个测试目标全绿**；
+- 另用一个临时窗口脚本（`build.ps1 -Target vgm_app_test` 构建后手工跑；环境变量 `VGMTOYBOX_SETTINGS_DIR` 指向临时目录，不碰真实配置）走 44 条断言：菜单勾选、窗口内容与真实设置文件路径、ESC 关闭、`Ctrl+,` 打开、菜单改主题后窗口显示新值、`Follow system` 的 "now: Light"，并留三张截图（浅 / 深 / 跟随）。深色那张同时证明"写入→广播→生效"整条链走通（不是只有存储里的值对）；
+- 浅色与深色截图逐像素看过：深色下整个面板（侧栏、选中行、按钮、标签、遮罩）都换了色，无残留白块。
+
+**harness 的三处补强**（都为跑上面那个脚本，都在 `plugin/Tests/AppHarnessTest.cpp`）
+
+1. `press escape`：`keyFromName()` 补 `escape`（浮层的 ESC 关闭此前无法脚本化）；
+2. `sleep <ms>` 现在**真的跑消息循环**（`commandSleep()` 调 `MessageManager::runDispatchLoopUntil()`）。此前它只是 `Sleep()`，而帮助文字写的是 "let the message loop run" —— 文字与实现不符；`settle()` 的注释也据此重写（默认只等 ✓ 需要下一个回调的东西用 `sleep` ✓）；
+3. 前提：给 `vgm_app_test` 单开 `JUCE_MODAL_LOOPS_PERMITTED=1`（`plugin/CMakeLists.txt`）。它只给 `MessageManager` 多加一个成员函数**声明**（无数据成员、无虚函数），所以不会与插件那份头文件产生布局分歧。
+
+**第 2 条是必需的，值得单独记**：`TreeView` 的行宽由 `AsyncUpdater` 在下一个回调里算（`juce_TreeView.cpp:794-802` 给内容组件 `setSize()`，`:400` 再按内容宽度给每行设 `setBounds`）。没有消息循环时，脚本里打开的设置窗侧栏行**永远是窄的**（截图上是 "Th…"/"Ge…"，只有 40 来像素宽），而真实程序一帧内自愈 —— 这是"脚本看不见异步布局"，不是产品缺陷。`click` 的语义**没有动**：`load-and-play.txt` 依赖它现在的行为（只翻状态不跑处理器），需要处理器真跑的脚本在 `click` 后面跟一条 `sleep` 即可。
+
+**遗留**
+
+- `settings.theme.*` 按钮与 `settings.general.reset/openFolder` 的**点击路径**要靠 `sleep` 才能跑到（`click` 只投递消息）→ 归 M6 的脚本（§9.2）；
+- `Follow system` 的系统实时切换（§8）仍归 M5；
+- 未提交：按计划随 M6 收尾一起提交。
 

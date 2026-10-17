@@ -28,7 +28,7 @@ namespace
 
 ChannelStrip::ChannelStrip (void)
 {
-	// the slider colours come from LightLookAndFeel (accent track, white handle)
+	// the slider colours come from the theme (accent track, light handle)
 	gainSlider.setNormalisableRange (meter::gainRange());	// dB-linear travel, linear gain value
 	gainSlider.setDoubleClickReturnValue (true, 1.0);
 	gainSlider.setTooltip ("Gain (double-click: 100%)");
@@ -55,8 +55,6 @@ ChannelStrip::ChannelStrip (void)
 
 	// DAW convention: mute is red, solo is amber
 	muteButton.setClickingTogglesState (true);
-	muteButton.setColour (juce::TextButton::buttonOnColourId, theme::mute());
-	muteButton.setColour (juce::TextButton::textColourOnId, juce::Colours::white);
 	muteButton.setTooltip ("Mute this track");
 	muteButton.onClick = [this]
 	{
@@ -67,9 +65,11 @@ ChannelStrip::ChannelStrip (void)
 	};
 
 	soloButton.setClickingTogglesState (true);
-	soloButton.setColour (juce::TextButton::buttonOnColourId, theme::solo());
-	soloButton.setColour (juce::TextButton::textColourOnId, theme::primaryText());
 	soloButton.setTooltip ("Solo this track (silences every track that is not soloed)");
+
+	// both buttons exist now, so their colours can be applied - and re-applied whenever the
+	// palette changes
+	lookAndFeelChanged();
 	soloButton.onClick = [this]
 	{
 		if (onSoloChanged != nullptr)
@@ -252,6 +252,18 @@ void ChannelStrip::resized (void)
 	scaleBounds = inner.removeFromLeft (kScaleWidth);
 	inner.removeFromLeft (kColumnGap);
 	gainSlider.setBounds (inner);
+}
+
+void ChannelStrip::lookAndFeelChanged (void)
+{
+	// DAW convention: mute is red, solo is amber - the container paints the same colours as a glow
+	// around a toggled button (theme::muteGlow()/soloGlow() in paint()).
+	muteButton.setColour (juce::TextButton::buttonOnColourId, theme::mute());
+	muteButton.setColour (juce::TextButton::textColourOnId, theme::onAccent());
+	// solo amber is light in both palettes, so its "on" text stays the primary text colour instead
+	// of flipping to onAccent (white in the light palette, near-black in the dark one)
+	soloButton.setColour (juce::TextButton::buttonOnColourId, theme::solo());
+	soloButton.setColour (juce::TextButton::textColourOnId, theme::primaryText());
 }
 
 void ChannelStrip::paint (juce::Graphics& g)

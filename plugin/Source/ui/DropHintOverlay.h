@@ -19,6 +19,9 @@ public:
 
 	void paint (juce::Graphics& g) override;
 
+	/** Re-applies the label's accent colour (see PluginEditor::lookAndFeelChanged). */
+	void lookAndFeelChanged (void) override;
+
 private:
 	void resized (void) override;
 

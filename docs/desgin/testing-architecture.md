@@ -165,7 +165,7 @@ toybox::EventLog::dump();     // 文本
 ```
 # 注释
 load <path>              close
-press space|enter|home|left|right|ctrl+o|ctrl+1..9
+press space|enter|escape|home|left|right|ctrl+o|ctrl+1..9
 seek <seconds>
 click <componentId>            # Button::triggerClick()（juce_Button.h:236 ✓）
 toggle <componentId>           # 仅 toggle 控件
@@ -179,7 +179,7 @@ events                         # EventLog 转储
 ```
 **输出**：`ok …` / `FAIL …`（含期望与实测 ✓）；退出码 0/1 ✓。
 
-**时钟推进**：用 `MessageManager::runDispatchLoopUntil()`（`juce_MessageManager.h:105` ✓）推进刷新与异步回调 —— **不要 sleep** ✗（Phase 0 确认它在控制台下的实际行为，见 §7 风险 2）。
+**时钟推进**（2026-10-17 定型 ✓）：`sleep <ms>` 用 `MessageManager::runDispatchLoopUntil()`（`juce_MessageManager.h:105` ✓）**真的跑消息循环** ✓ —— 它是**唯一**这么做的命令 ✓（`tick` 是"同步一帧" ✓，其余命令引起的状态都是同步设置的 ✓）。前提：只有 `vgm_app_test` 编了 `JUCE_MODAL_LOOPS_PERMITTED=1`（`plugin/CMakeLists.txt` ✓；它只给 `MessageManager` 多一个成员函数声明，插件与 VST3 不受影响 ✓）。P1 时期"运行器不跑消息循环"的限制由此解除 ✓：`TreeView` 行宽这类 `AsyncUpdater` 布局在脚本里可见 ✓（M3 设置窗的截图印证 ✓）。§7 风险 2 的结论见下表。
 
 **交互注入规则（纪律）**：只通过组件自身 API（`triggerClick()` ✓ / `setValue()` / `editor.keyPressed()` ✓）或控制器 ✓；**禁止**直连引擎内部实现来"造状态" ✗。
 
@@ -251,7 +251,7 @@ Result: all checks passed
 | # | 风险 | 触发信号 | 替代方案 |
 |---|---|---|---|
 | 1 | 无窗口构造 `editor` 失败（某些包装要求 peer） | P0 探针报错/断言 | 退到**面板级**（只构造 + 布局各面板 ✓），仍覆盖大部分行为；editor 级留给"隐藏窗口 + 消息循环" |
-| 2 | `runDispatchLoopUntil()` 在控制台下的行为不符合预期（异步/定时器） | P0/P1 中刷新不推进 | 手动推进：把"每帧要做的事"抽到控制器的一个 `tick()` ✓（**这正是 P2 的顺带收益** ✓），测试直接调它 |
+| 2 | ~~`runDispatchLoopUntil()` 在控制台下的行为不符合预期（异步/定时器）~~ **已解除**（2026-10-17，M3） | 未发生 ✓：它在控制台下**正常工作** | 落地为 `sleep <ms>`（`commandSleep()` ✓）+ 仅给 `vgm_app_test` 开 `JUCE_MODAL_LOOPS_PERMITTED=1` ✓（`plugin/CMakeLists.txt` ✓）；脚本按需在"同步一帧（`tick`）"与"真跑一圈（`sleep`）"之间选 ✓。备选方案里"抽控制器 `tick()`"**未走** ✓（`refreshUi()` 已够用 ✓），保留在案 ✓。 |
 | 3 | 无障碍树对自绘控件覆盖不足 | `dump` 缺节点 | 双轨：以 ID + 子组件遍历为主 ✓，无障碍为辅 ✓（别绑死在无障碍上） |
 | 4 | UI 测试逐渐变成"第二套实现"（与真实路径分叉） | 测试里出现"直接改引擎/绕过按钮" | 纪律：断言可以宽、**路径必须真** ✓；评审时把这条当硬性要求 ✓ |
 | 5 | 断言过密导致每次调整布局都要改测试 | 改 padding 就红一片 | 断"关系"而非"像素"：可见性/顺序/勾选/文本 ✓，具体坐标只在关键处（例如"卡片不重叠"）✓ |
@@ -286,6 +286,6 @@ Result: all checks passed
 | **P3 CI 门禁（H-3）** | ✅ **完成**（2026-10-16） | `build.ps1` 增加 `-Target a,b,c` / `-Test` / `-TestSong` ✓（**默认调用不变** ✓；`-Test` 运行已构建的测试，失败即让脚本失败 ✓）→ **CI 与本地跑同一条命令** ✓。新增 job `plugin-tests`（`windows-latest`、`shell: powershell` ✓，用 `actions/checkout@v4` ✓）：`.\build.ps1 -Target vgm_core_test,vgm_ui_test,vgm_app_test -Test` ✓ = **编译插件 + 三个测试并运行** ✓。`vgm_mixer_test` 因需要真实歌曲而**留在本地门禁** ✓（原因写在 job 注释里 ✓）。触发分支同时扩到 `feature/**` ✓ —— 否则这个 job 在合并前形同虚设 ✓。**本地已按同一条命令验证**：`3 test target(s) passed` ✓；带 `-TestSong` 时 `4 test target(s) passed`（含 −1000.00 dB ✓）。**CI 上的首次真实运行需推送后观察** ✓（GitHub Actions 无法在本地执行 ✗）。 |
 | **P4 铺路（M-2 / M-3）** | ✅ **完成**（2026-10-16） | **M-3**：`CardComponent` 现在提供 `getCardHeaderArea()` / `getCardInnerArea()` / `paintCardHeaderRow()` ✓ —— 两个面板不再各写一份"表头行 + 缩进 + 加粗小字 + 左右对齐"✓（删掉两处局部常数 ✓）；`MixerPanel` 的 `kHeaderHeight` 改名 `kHeaderButtonSize`（它本来就是**按钮尺寸** ✓，表头行只是与它同高 ✓）。**视觉零回归**：加载歌曲后截图核对 ✓，两张卡片的表头位置/字号/对齐与重构前一致 ✓。**M-2**：`MixerPanel::refresh()` 拆为 `syncStructure()` + `refreshValues()` ✓ —— 并**如实修正**：它本来就只在"文件或轨道数变化"时重建结构 ✓（review 的 M-2 描述夸大了 ✗，见 review 文档"复核记录"R-2 ✓），所以这一项的价值是**把"每帧只做值更新"这条契约写明** ✓，而不是性能修复 ✓。 |
 | **P5 热路径（H-1 / M-5）** | ✅ **完成**（2026-10-16） | **M-5 ✅**：抽出 `setPositionSecondsLocked()` ✓，`rebuildPlayers()` 改调它 ✓ —— 不再依赖 `CriticalSection` 可重入 ✓。**H-1 ✅**：加载拆成 **`buildSong()`（锁外 ✓，读配置 + 建 backend/解压/启动声音核心 ✓）+ `installSong()`（锁内 ✓，只有指针移动与缓存事实 ✓）**；`prepare()` / `setMixerEnabled()` / `rebuildPlayers()` 也都不再跨重建持锁 ✓，并**按值搬运**用户的 `gain/pan/mute/solo/output` ✓。**证据（新增测试 ✓）**：`vgm_core_test` 的 `[6]` —— fake 后端慢加载 120 ms 期间 **"96 blocks rendered, 0 refused the lock"** ✓✓；`[6b]` 反向对照证明该计数器**会动**（锤锁时 1 次被拒 ✓）→ 0 才有意义 ✓。门禁：`vgm_mixer_test` **−1000.00 dB 不变** ✓ + 其余三个测试 ✓ + 命令行加载冒烟 ✓。详见 review 文档 §修复记录 F-5 ✓。 |
-| P5 热路径（H-1 / M-5） | ⏳ 待做 | 需要独立的安静窗口 ✓。 |
+| **M3 运行器补强** | ✅ **完成**（2026-10-17） | 为驱动设置窗与主题（`docs/desgin/settings-and-theme-design.md` 的 M3/M4）做了三件事 ✓：(1) `press` 补 `escape` ✓ —— 浮层的 ESC 关闭此前无法脚本化 ✗；(2) **`sleep` 真的跑消息循环** ✓（`MessageManager::runDispatchLoopUntil()` ✓，§3.6"时钟推进" ✓；只有 `vgm_app_test` 带 `JUCE_MODAL_LOOPS_PERMITTED=1` ✓）—— P1 记下的那条限制由此解除 ✓；(3) 一条**实测结论** ✓：`TreeView` 的行宽由 `AsyncUpdater` 在下一个回调里算（`juce_TreeView.cpp:794-802` ✓）→ 没有消息循环时设置窗侧栏行**永远是窄的** ✗（"脚本看不见异步布局" ✓，不是产品缺陷 ✓ —— 真实程序一帧内自愈 ✓）。留痕用法 ✓：脚本在 `menu invoke options.settings` 后跟一条 `sleep 60` ✓，随后 **44 条断言全绿** ✓ 且截图里行宽与深浅配色都正确 ✓。`click` 的语义**未改** ✓（它只投递 ✗，需要处理器真跑就在后面再跟一条 `sleep` ✓；仓库里的 `load-and-play.txt` 因此不受影响 ✓）。 |
 
 **P0 的额外收获**：探针输出已经能直接回答过去需要截图才能回答的问题 ✓ —— "未加载时 seek 滑杆 `enabled:false`" ✓、"`ChipPanel` / `MixerPanel` 在无歌曲时 `visible:false`" ✓、"走带按钮的文本是 Play / Pause / Stop / Loop / Playback start" ✓、"菜单栏有三个 48/57/56 px 的项（File / View / Help）" ✓。这正是 §3.7 那类断言的雏形 ✓。
