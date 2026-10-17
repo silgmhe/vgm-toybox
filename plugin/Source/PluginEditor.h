@@ -5,6 +5,7 @@
 #include "PluginProcessor.h"
 #include "ui/AboutOverlay.h"
 #include "ui/DropHintOverlay.h"
+#include "ui/EditorCommands.h"
 #include "ui/MainMenu.h"
 #include "ui/PlayView.h"
 #include "ui/SettingsOverlay.h"
@@ -87,6 +88,9 @@ private:
 	toybox::PlaybackEngine& engine;
 
 	toybox::ui::ToyboxLookAndFeel lookAndFeel;
+
+	// commands before menu: the menu holds a pointer to the table and reads its accelerators
+	toybox::ui::EditorCommands commands;
 
 	// menu before menuBar: the bar holds a reference to the model, so it has to go first
 	toybox::ui::MainMenu menu;

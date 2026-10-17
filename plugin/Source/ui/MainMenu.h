@@ -6,6 +6,7 @@
 #include <juce_gui_basics/juce_gui_basics.h>
 
 #include "settings/SettingsStore.h"
+#include "ui/EditorCommands.h"
 
 namespace toybox::ui
 {
@@ -15,7 +16,7 @@ struct MenuEntry
 {
 	juce::String id;			// "file.open", "view.play" - what a script invokes
 	juce::String label;
-	juce::String shortcut;		// a description; the window binds the key itself
+	juce::KeyPress key;			// the accelerator itself, shared with the window (EditorCommands)
 	bool checked = false;
 	bool enabled = true;
 	bool separatorBefore = false;
@@ -49,8 +50,12 @@ struct MenuGroup
 	The window owns one and hands it the actions. Close and Exit are meaningful only where this
 	plugin owns the application, i.e. the standalone build: inside a host the window belongs to the
 	DAW and quitting would take the host down with it, so those items are left out entirely rather
-	than shown greyed out. The shortcuts are descriptions too - the editor handles the keys itself
-	(see ToyboxAudioProcessorEditor::keyPressed).
+	than shown greyed out.
+
+	The accelerators are not descriptions: `commands` (ui/EditorCommands.h) owns them, and every
+	entry that has one asks that table for the KeyPress and renders describe() of it - the window's
+	keyPressed() matches the same object, so an accelerator cannot be shown but dead, or work but
+	be shown wrong (review M-3).
 */
 class MainMenu : public juce::MenuBarModel
 {
@@ -75,6 +80,10 @@ public:
 	/** True in the standalone build - see the class comment. */
 	bool standalone = false;
 
+	/** The window's commands: the accelerators and the actions behind them (ui/EditorCommands.h).
+		Null is legal - a menu built before the window has its commands shows no accelerators. */
+	const EditorCommands* commands = nullptr;
+
 	/** The menu as data, in menu order - the one place the items are defined. */
 	std::vector<MenuGroup> buildGroups (void) const
 	{
@@ -85,7 +94,7 @@ public:
 		MenuEntry open;
 		open.id = "file.open";
 		open.label = "Open Song...";
-		open.shortcut = "Ctrl+O";
+		open.key = keyFor ("file.open");
 		open.action = onOpenSong;
 		file.entries.push_back (std::move (open));
 
@@ -107,8 +116,8 @@ public:
 
 		groups.push_back (std::move (file));
 
-		// One item per page, ticked on the one on screen. The accelerators are descriptions like
-		// every other one here - the window handles Ctrl+1..9 in keyPressed.
+		// One item per page, ticked on the one on screen. Ctrl+1..9 comes from pageKey(), the same
+		// call the window matches a key against, so the two cannot drift apart.
 		MenuGroup view { "View", {} };
 		for (int i = 0; i < viewNames.size(); ++i)
 		{
@@ -118,7 +127,7 @@ public:
 			page.checked = (i == currentViewIndex());
 			if (i < 9)
 			{
-				page.shortcut = "Ctrl+" + juce::String (i + 1);
+				page.key = EditorCommands::pageKey (i);
 			}
 
 			const int index = i;
@@ -142,7 +151,7 @@ public:
 		MenuEntry settings;
 		settings.id = "options.settings";
 		settings.label = "Settings...";
-		settings.shortcut = "Ctrl+,";
+		settings.key = keyFor ("options.settings");
 		settings.action = onSettings;
 		options.entries.push_back (std::move (settings));
 		groups.push_back (std::move (options));
@@ -211,9 +220,11 @@ public:
 				text << "  " << entry.id.paddedRight (' ', 24)
 					 << entry.label.paddedRight (' ', 22);
 
-				if (entry.shortcut.isNotEmpty())
+				const auto shortcut = EditorCommands::describe (entry.key);
+
+		if (shortcut.isNotEmpty())
 				{
-					text << entry.shortcut.paddedRight (' ', 10);
+					text << shortcut.paddedRight (' ', 10);
 				}
 				else
 				{
@@ -304,7 +315,7 @@ public:
 			juce::PopupMenu::Item item { entry.label };
 			item.isTicked = entry.checked;
 			item.isEnabled = entry.enabled;
-			item.shortcutKeyDescription = entry.shortcut;
+			item.shortcutKeyDescription = EditorCommands::describe (entry.key);
 			item.action = [action] { if (action != nullptr) action(); };
 			menu.addItem (item);
 		}
@@ -315,6 +326,12 @@ public:
 	void menuItemSelected (int, int) override {}	// every item carries its own action
 
 private:
+	/** The accelerator of the command with this id; empty when there is none (or no table). */
+	juce::KeyPress keyFor (const juce::String& id) const
+	{
+		return commands != nullptr ? commands->getKey (id) : juce::KeyPress();
+	}
+
 	/** The page on screen, as the window reports it at this moment. */
 	int currentViewIndex (void) const
 	{

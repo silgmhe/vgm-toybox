@@ -55,11 +55,24 @@ ToyboxAudioProcessorEditor::ToyboxAudioProcessorEditor (ToyboxAudioProcessor& p)
 	// Close and Exit belong to the standalone build only: inside a host this window is not the
 	// application, and quitting would take the DAW down with it (see ui/MainMenu.h).
 	menu.standalone = (processor.wrapperType == juce::AudioProcessor::wrapperType_Standalone);
-	menu.onOpenSong = [this] { openFileChooser(); };
+
+	// The window's commands own both halves of an accelerator: the key and what it runs
+	// (ui/EditorCommands.h). The menu asks this table for the key it draws and renders it with
+	// describe(); keyPressed() asks the same table which command claims the key - so an
+	// accelerator cannot be shown but dead, or work but be shown wrong (review M-3/M-4).
+	commands.add ("file.open", juce::KeyPress ('o', juce::ModifierKeys::commandModifier, 0),
+				  [this] { openFileChooser(); });
+	commands.add ("options.settings", juce::KeyPress (',', juce::ModifierKeys::commandModifier, 0),
+				  [this] { showSettings(); });
+	menu.commands = &commands;
+
+	// The menu entries route through the same table rather than carrying a second body: one
+	// command, one action, however it is reached.
+	menu.onOpenSong = [this] { commands.perform ("file.open"); };
 	menu.onCloseSong = [this] { closeSong(); };
 	menu.onQuit = [] { juce::JUCEApplicationBase::quit(); };
 	menu.onAbout = [this] { showAbout(); };
-	menu.onSettings = [this] { showSettings(); };
+	menu.onSettings = [this] { commands.perform ("options.settings"); };
 
 	// The menu's colours are the LookAndFeel's own (PopupMenu ids, see ToyboxLookAndFeel::refresh()):
 	// its paint routines look them up there, so there is nothing to set here.
@@ -256,35 +269,9 @@ void ToyboxAudioProcessorEditor::resized (void)
 
 bool ToyboxAudioProcessorEditor::keyPressed (const juce::KeyPress& key)
 {
-	// the accelerators the menus show; the menus themselves only describe them
-	const auto code = key.getKeyCode();
-	if ((code == 'o' || code == 'O') && key.getModifiers().isCommandDown())
-	{
-		openFileChooser();
-		return true;
-	}
-
-	// Ctrl+1..9 picks a page, in the order the View menu lists them
-	if (key.getModifiers().isCommandDown() && code >= '1' && code <= '9')
-	{
-		const int wanted = code - '1';
-		if (wanted < viewStack.getNumViews() && wanted != viewStack.getCurrentViewIndex())
-		{
-			viewStack.setCurrentView (wanted);
-			return true;
-		}
-	}
-
-	// Ctrl+, opens the settings window, the accelerator the Options menu describes. The pages the
-	// digits reach are not involved: this is an overlay over all of them.
-	if (code == ',' && key.getModifiers().isCommandDown())
-	{
-		showSettings();
-		return true;
-	}
-
 	// escape dismisses whichever overlay is up, like any other dialog - the settings window first,
-	// since it is the one that can be over the About box and not the other way round
+	// since it is the one that can be over the About box and not the other way round. It comes
+	// before the commands: a key pressed over an overlay belongs to the overlay.
 	if (key == juce::KeyPress::escapeKey)
 	{
 		if (settingsOverlay.isVisible())
@@ -298,6 +285,26 @@ bool ToyboxAudioProcessorEditor::keyPressed (const juce::KeyPress& key)
 			aboutOverlay.setVisible (false);
 			return true;
 		}
+	}
+
+	// The commands own the accelerators the menus show (ui/EditorCommands.h): the menu renders
+	// the key from this table, so what is shown and what is matched here cannot drift apart.
+	if (commands.handleKey (key))
+	{
+		return true;
+	}
+
+	// Ctrl+1..9 picks a page, in the order the View menu lists them. The key comes from pageKey(),
+	// the same call the menu describes it with.
+	if (const int wanted = ui::EditorCommands::pageForKey (key); wanted >= 0)
+	{
+		if (wanted < viewStack.getNumViews() && wanted != viewStack.getCurrentViewIndex())
+		{
+			viewStack.setCurrentView (wanted);
+			return true;
+		}
+
+		return false;
 	}
 
 	// The transport keys belong to the playback page and any keys of its own to another page: a key
