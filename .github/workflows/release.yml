@@ -1,8 +1,8 @@
 name: Release
 
 # Only a tag publishes. Everything a release depends on - does the plugin build on all three
-# platforms, do the console tests pass - is checked by GHA.yml on every push, so the only new
-# question on the day of a tag is whether the packaging and the upload work.
+# platforms, do the console tests pass - is checked by GHA.yml on every push to master, so the only
+# new question on the day of a tag is whether the packaging and the upload work.
 on:
   push:
     tags: [ 'v*' ]

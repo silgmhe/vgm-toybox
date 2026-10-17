@@ -1,12 +1,20 @@
 name: Build Tests
 
 on:
+  # master only. Each push used to start all eight jobs - three of the player, five of the plugin,
+  # two of them on arm64 - so a day of work on a feature branch left a wall of runs, and the runs
+  # that mattered were buried under pushes that were already superseded.
+  #
+  # The old argument for every branch - a plugin that only compiles on master breaks on every
+  # branch that has not been merged yet - is answered by asking for a run before a merge instead of
+  # starting one on every push:
+  #
+  #     gh workflow run "Build Tests" --ref feature/whatever
   push:
-    # feature branches too: this workflow now covers the plugin, and a plugin that only compiles on
-    # master is a plugin that breaks on every branch that has not been merged yet
-    branches: [ master, 'feature/**' ]
-  pull_request:
     branches: [ master ]
+  # No pull_request trigger either: a PR from a feature branch runs that branch's code, so keeping
+  # it would keep exactly the runs this change is meant to remove.
+  #
   # So the run can be asked for by hand - `gh workflow run "Build Tests"` - without inventing a
   # commit to push. (The release workflow deliberately has no manual trigger: it needs a tag, and
   # there is nothing sensible to publish without one.)
@@ -74,10 +82,10 @@ jobs:
   # whole UI were never compiled anywhere but on the machine of whoever was editing them. This job
   # builds the plugin and its console tests on all three platforms and runs them.
   #
-  # It is deliberately on every push rather than only on a tag: the plugin had never been built on
-  # macOS or Linux at all, so a platform that cannot build it has to be found while there is still
-  # time to fix it - a tag is the wrong moment to discover it. The release workflow builds the same
-  # three platforms again from the tagged commit.
+  # It is deliberately on every push to master, not only on a tag: the plugin had never been built
+  # on macOS or Linux at all, so a platform that cannot build it has to be found while there is
+  # still time to fix it - a tag is the wrong moment to discover it. The release workflow builds the
+  # same three platforms again from the tagged commit.
   plugin-tests:
     name: Plugin and console tests (${{ matrix.os }})
     strategy:
