@@ -71,7 +71,10 @@ endif()
 # release, useless otherwise. 10.15 is the oldest macOS JUCE 8 supports; the arm64 slice cannot go
 # below 11.0, and clang raises it there on its own.
 if(APPLE AND NOT CMAKE_OSX_DEPLOYMENT_TARGET)
-	set(CMAKE_OSX_DEPLOYMENT_TARGET "10.15" CACHE STRING "minimum macOS version to build for")
+	# FORCE matters: project() has already created this as an empty cache entry, and without it the
+	# set() would be a no-op that looks like it worked - which is how the first attempt at this
+	# passed configure and still shipped whatever the SDK defaulted to.
+	set(CMAKE_OSX_DEPLOYMENT_TARGET "10.15" CACHE STRING "minimum macOS version to build for" FORCE)
 endif()
 
 # --- libvgm ---

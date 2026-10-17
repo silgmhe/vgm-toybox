@@ -115,7 +115,7 @@ jobs:
           echo "--- $binary ---"
           vtool -show-build "$binary" > /tmp/vtool.txt
           awk '/minos/ {print "minos " $2}' /tmp/vtool.txt
-          over="$(awk '/minos/ {split($2, v, "."); if (v[1] > 11) print $2}' /tmp/vtool.txt)"
+          over="$(awk '/minos/ {split($2, v, "."); if (v[1] > 11) print $2}' /tmp/vtool.txt | sort -u | tr '\n' ' ')"
           if [ -n "$over" ]; then
             echo "::error::$binary wants macOS $over - is CMAKE_OSX_DEPLOYMENT_TARGET set?"
             exit 1
