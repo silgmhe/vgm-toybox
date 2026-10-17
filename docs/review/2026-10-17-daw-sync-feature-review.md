@@ -339,7 +339,8 @@ HostClock readHostClock (const juce::AudioPlayHead::PositionInfo&, double localS
 |---|---|---|---|
 | H-1 | `eed9e1d` | ✅ | 把 transport 状态变更移到 seek 之前，位置由 seek 收尾；`decision.play` 直接写 `playing`，不再回读。**验证**：回退这段顺序后跑 M-2 的脚本，同一断言读到 `0.011610`，修复后是 `1.011610` |
 | M-2 | 本提交 | ✅ | `snapshot::line()` 与 `assert` 增加 `value`（滑杆数值）；新增 `assert engine position`（读 `getPositionSeconds()`）；`~=` 数值比较，容差 0.05 s（一个块的余量，断言的是映射不是块大小）；新脚本 `scripts/daw-sync-follow.txt`。**验证**：本地用一首 3 s 的极小 VGM 跑通，无 `VGM_TEST_SONG` 时整脚本跳过（与 `load-and-play.txt` 同形） |
-| M-1 | — | ⬜ | 计划：决策挪进 `ScopedTryLock`；顺带处理 L-2 |
+| M-1 | 本条 | ✅ | `followDawTransport()` 先 `ScopedTryLock`，再读 `trackPlayers`/`cachedTimeline` 并决策；`render()` 上面那条"抢不到就整块静音"的规则从此对它也成立。**验证**：7 个测试目标全绿 + 素材脚本（`daw-sync-follow.txt`）仍读到 `1.011610` |
+| L-2 | 本条 | ✅ | 删除零调用者的 `getSongTimeline()`，并在 `getDawSync()` 的注释里写明"歌曲事实不公开，是因为它只在锁内被读" |
 | M-4 | — | ⬜ | 计划：抽 `playback/HostClockSource`，补 `readHostClock` 的四类输入单测（含 L-4 的采样率口径） |
 | M-3 | — | ⬜ | 计划：抽 `SyncGroup`（可延后） |
 | L-1/3/5/6 | — | ⬜ | 计划：一致性收尾 |

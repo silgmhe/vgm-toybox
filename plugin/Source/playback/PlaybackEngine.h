@@ -112,12 +112,10 @@ public:
 	double getFadeSeconds (void) const { return fadeSeconds; }
 
 	// --- DAW sync (one-way: the host's clock is the master - playback/DawSync.h) ---
-	/** The song facts the sync mapping needs (single pass, loop length, fade, loop count).
-		Lock-free, like the cached duration/loop point above. */
-	playback::SongTimeline getSongTimeline (void) const { return cachedTimeline; }
-
 	/** The sync state the processor publishes the host clock into and the editor edits; it lives
-		here because render() is what follows it, and because it belongs in the project state. */
+		here because render() is what follows it, and because it belongs in the project state.
+		(The song facts the mapping needs stay private: they are read by followDawTransport() under
+		the same lock that writes them, and a public copy would invite reading them without it.) */
 	playback::DawSync& getDawSync (void) { return dawSync; }
 	float getMasterVolume (void) const { return masterVolume.load(); }
 	float getMixerMasterGain (void) const { return mixerMasterGain.load(); }

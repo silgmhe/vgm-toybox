@@ -451,23 +451,27 @@ void PlaybackEngine::setPositionSeconds (double seconds)
 
 void PlaybackEngine::followDawTransport (void)
 {
-	if (! dawSync.isActive() || ! loaded.load() || trackPlayers.empty())
-	{
-		return;
-	}
-
-	// The decision is pure arithmetic on atomics, so it is taken *before* the lock: a block that
-	// is not a correction never touches it. Only when the transport really has to move does the
-	// audio thread try to take it - and if the message thread owns it, the next block retries.
-	// (The mapping is absolute, so a missed block costs nothing but one block of drift.)
-	const auto decision = dawSync.decide (cachedTimeline, positionSeconds.load(), playing.load());
-	if (! decision.reposition)
+	// The sync switch and the loaded flag are atomics, so a block that does not follow costs
+	// nothing. Everything past this point - the players, the cached timeline - belongs to the
+	// lock, which is the rule render() follows below: the message thread swaps the song and
+	// rewrites the timeline, and the timeline is a handful of doubles that have to come from one
+	// song rather than from two. The price is one try-lock per block while the host drives (~20 ns
+	// against 10 ms of audio); a block that loses it is simply retried, since the mapping is
+	// absolute.
+	if (! dawSync.isActive() || ! loaded.load())
 	{
 		return;
 	}
 
 	const juce::ScopedTryLock syncTry (lock);
-	if (! syncTry.isLocked())
+	if (! syncTry.isLocked() || trackPlayers.empty())
+	{
+		return;
+	}
+
+	// The decision itself is pure arithmetic over atomics and the snapshot taken above.
+	const auto decision = dawSync.decide (cachedTimeline, positionSeconds.load(), playing.load());
+	if (! decision.reposition)
 	{
 		return;
 	}
