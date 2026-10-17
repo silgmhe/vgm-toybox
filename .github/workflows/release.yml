@@ -275,15 +275,22 @@ jobs:
         VST3, Audio Unit (macOS only) and standalone builds for Windows, macOS and Linux - x64 and
         arm64 on Windows and Linux, and one universal bundle for macOS.
 
-        **Upgrading: the project state format changed (breaking).** A project saved with 0.0.5 or
-        older carries the song as a file path in the old state format. This version refuses that
-        format instead of guessing at it: the instance comes up empty and the status line says the
-        state is incompatible - load the song again. From 0.1.0 on the song travels *inside* the
-        project as data, so a project opens on a machine that never saw the file, and the mixer
-        settings come back with it. A restored project always comes up **stopped at the top** of
-        the song - it never starts playing by itself when the host opens it. A song over 16 MB is
-        not embedded (it would not fit a project file sanely); everything else is restored and the
-        song can be reloaded.
+        **New: DAW sync.** The transport card has a \`DAW SYNC\` group. \`SYNC\` makes the song follow
+        the host's clock - the position becomes "host position minus cue" - and \`CUE\` takes the
+        host's current position as the point where the song's beginning plays. The knob beside it
+        trims that cue by a few milliseconds, and the number next to the knob is an exact-value
+        field. While the host drives, the local transport belongs to the DAW, and so does the space
+        bar: pressing it in the plugin editor reaches the host's own play/pause. It is one-way - the
+        song follows the host and never drives it. The cue always exists (0 is the DAW's start, and
+        the group's right-click menu puts it back there), and a host that reports no transport does
+        not get the group at all - the standalone hides it.
+
+        **Upgrading:** a project saved with 0.1.0 opens unchanged - the sync settings are optional
+        attributes in the same state format. A project saved with 0.0.5 or older still needs the
+        song loaded again, as 0.1.0 said: since then the song travels *inside* the project as data,
+        so a project opens on a machine that never saw the file, and a restored project always comes
+        up **stopped at the top** of the song. A song over 16 MB is not embedded (it would not fit a
+        project file sanely); everything else is restored and the song can be reloaded.
 
         **Installing**
         - Windows: put \`VGMToybox.vst3\` in \`C:\\Program Files\\Common Files\\VST3\`, or run \`VGMToybox.exe\`.
