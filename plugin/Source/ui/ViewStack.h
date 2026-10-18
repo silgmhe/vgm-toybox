@@ -79,6 +79,10 @@ public:
 		view->setBounds (getLocalBounds());
 		view->setVisible (true);
 		view->refresh();
+
+		// the card shadows are the window's to paint (View::paintCardShadows), and the ones of the
+		// page that just went away are still on screen until it does
+		repaint();
 	}
 
 	void refresh (void)

@@ -37,6 +37,14 @@ public:
 	/** A key no focused control wanted. Returning true consumes it - that is how the transport
 		keys keep working from any page while a slider or a button happens to have focus. */
 	virtual bool handleKey (const juce::KeyPress&) { return false; }
+
+	/** Draws the shadows of the cards this page put down, in the page's own coordinates.
+
+		The page decides where they are; the window paints them, because a shadow reaches outside
+		the card it belongs to and this component's bounds end where the cards do (SoftShadow.h has
+		the general rule). Painting them here would cut every shadow off along the cards' edges -
+		a straight line, most visible at the bottom corners. */
+	virtual void paintCardShadows (juce::Graphics&) const {}
 };
 
 } // namespace toybox::ui

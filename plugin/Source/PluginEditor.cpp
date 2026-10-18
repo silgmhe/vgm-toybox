@@ -224,9 +224,21 @@ void ToyboxAudioProcessorEditor::paint (juce::Graphics& g)
 											 theme::windowBottom(), 0.0f, (float) getHeight(), false));
 	g.fillRect (getLocalBounds());
 
-	// What belongs to a page - its cards and the shadows around them - is painted by that page
-	// (see ui/PlayView.h), since only it knows what it put where. What is left here is the
-	// window's own chrome: the open button and the accent glow that reaches past its bounds.
+	// The page's card shadows are painted here, not by the page: a shadow reaches outside the card
+	// it belongs to, and a page's bounds end where its cards do - painted there, every shadow was
+	// cut off along the cards' edges, a straight line that showed most at the bottom corners. The
+	// page still says where its shadows go (View::paintCardShadows); the window has the room.
+	if (auto* page = viewStack.getCurrentView())
+	{
+		juce::Graphics::ScopedSaveState save (g);
+		g.addTransform (juce::AffineTransform::translation ((float) (viewStack.getX() + page->getX()),
+															(float) (viewStack.getY() + page->getY())));
+
+		page->paintCardShadows (g);
+	}
+
+	// What is left here is the window's own chrome: the open button and the accent glow that
+	// reaches past its bounds.
 	drawSoftShadow (g, openButton.getBounds().toFloat(), theme::buttonRadius,
 					theme::accentGlow(), theme::accentGlowBlur, { 0, theme::accentGlowOffsetY });
 }

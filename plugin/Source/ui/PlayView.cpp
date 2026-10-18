@@ -22,12 +22,12 @@ PlayView::PlayView (toybox::PlaybackEngine& playback, bool syncAvailable)
 	addChildComponent (mixerPanel);
 }
 
-void PlayView::paint (juce::Graphics& g)
+void PlayView::paintCardShadows (juce::Graphics& g) const
 {
-	// The cards are clipped to their own bounds, so the soft shadows they cast onto the page have
-	// to be painted here, before them. drawSoftShadow() skips the blur whenever the repaint is
-	// entirely inside a shape (a moving slider thumb, a label that changed its text), so the
-	// refresh repaints stay cheap.
+	// The window paints these (see View::paintCardShadows): a shadow reaches outside its card, and
+	// this page's own bounds end where the cards do. drawSoftShadow() skips the blur whenever the
+	// repaint is entirely inside a shape (a moving slider thumb, a label that changed its text), so
+	// the refresh repaints stay cheap.
 	drawCardShadow (g, songInfoPanel.getBounds().toFloat());
 	drawCardShadow (g, transportPanel.getBounds().toFloat());
 

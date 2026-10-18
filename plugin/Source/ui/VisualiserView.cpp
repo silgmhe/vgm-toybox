@@ -29,12 +29,17 @@ juce::Rectangle<int> VisualiserView::cardBounds (void) const
 	return getLocalBounds().removeFromTop (juce::jmin (getHeight(), wanted));
 }
 
+void VisualiserView::paintCardShadows (juce::Graphics& g) const
+{
+	drawCardShadow (g, cardBounds().toFloat());
+}
+
 void VisualiserView::paint (juce::Graphics& g)
 {
 	const auto card = cardBounds();
 
-	// the same card the rest of the window uses, shadow included
-	drawCardShadow (g, card.toFloat());
+	// the same card the rest of the window uses; its shadow is painted by the window
+	// (View::paintCardShadows), because it reaches outside this page's bounds
 	g.setColour (theme::card());
 	g.fillRoundedRectangle (card.toFloat(), theme::cardRadius);
 	g.setColour (theme::cardBorder());

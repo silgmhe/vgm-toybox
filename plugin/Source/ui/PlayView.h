@@ -28,7 +28,7 @@ public:
 
 	juce::String getViewName (void) const override { return "Play"; }
 
-	void paint (juce::Graphics& g) override;
+	void paintCardShadows (juce::Graphics& g) const override;
 	void resized (void) override;
 	void refresh (void) override;
 	void songChanged (void) override;

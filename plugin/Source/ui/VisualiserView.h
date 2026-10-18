@@ -26,6 +26,7 @@ public:
 	juce::String getViewName (void) const override { return "Visualiser"; }
 
 	void paint (juce::Graphics& g) override;
+	void paintCardShadows (juce::Graphics& g) const override;
 
 private:
 	juce::Rectangle<int> cardBounds (void) const;
