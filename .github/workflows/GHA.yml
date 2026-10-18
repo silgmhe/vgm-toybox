@@ -160,7 +160,7 @@ jobs:
       # ctest owns the list (plugin/CMakeLists.txt): the three programs, the mixer gate and one
       # test per window script - the same set Windows runs.
       run: |
-        ctest --test-dir build --output-on-failure --output-junit build/test-results.xml
+        ctest --test-dir build --output-on-failure --output-junit test-results.xml
 
     - name: Build the plugin (Linux)
       if: startsWith(matrix.os, 'ubuntu')
@@ -172,9 +172,11 @@ jobs:
     - name: Run the console tests (Linux)
       if: startsWith(matrix.os, 'ubuntu')
       run: |
-        xvfb-run -a ctest --test-dir build --output-on-failure --output-junit build/test-results.xml
+        xvfb-run -a ctest --test-dir build --output-on-failure --output-junit test-results.xml
 
     - name: Upload the test report
+      # ctest resolves --output-junit against --test-dir, so the macOS/Linux steps pass a bare file
+      # name and it lands in build/ - the path this step reads. (build.ps1 passes it absolutely.)
       if: always()
       uses: actions/upload-artifact@v4
       with:
