@@ -9,8 +9,10 @@
 
 #include "playback/DawSync.h"
 #include "playback/PlaybackEngine.h"
+#include "playback/TransportPresets.h"
 
 #include <cmath>
+#include <cstddef>
 
 namespace toybox::ui
 {
@@ -28,16 +30,6 @@ namespace
 
 	// Between the button row and the loop marker band.
 	constexpr int kGapBelowRow = 3;
-
-	int loopBoxIdForCount (int loops)
-	{
-		return (loops == 1) ? 1 : (loops == 2) ? 2 : (loops == 3) ? 3 : 4;
-	}
-
-	int fadeBoxIdForSeconds (double seconds)
-	{
-		return (seconds < 0.5) ? 1 : (seconds < 2.0) ? 2 : (seconds < 4.0) ? 3 : (seconds < 8.0) ? 4 : 5;
-	}
 
 	juce::String loopTooltip (int loops)
 	{
@@ -301,28 +293,43 @@ TransportPanel::TransportPanel (toybox::PlaybackEngine& engineToUse, bool syncAv
 	addAndMakeVisible (volumeSlider);
 
 	// --- loop / fade settings ---
-	loopBox.addItemList ({ "1x", "2x", "3x", "Loop forever" }, 1);
+	juce::StringArray loopLabels;
+
+	for (const auto& preset : transport::loopPresets)
+	{
+		loopLabels.add (preset.label);
+	}
+
+	loopBox.addItemList (loopLabels, 1);
 	loopBox.setTooltip ("How often the song loops before it stops");
 	loopBox.onChange = [this]
 	{
-		static const int loopCounts[] = { 1, 2, 3, 0 };
-		const int index = juce::jlimit (0, 3, loopBox.getSelectedId() - 1);
-		engine.setLoopCount (loopCounts[index]);
+		const int index = juce::jlimit (0, (int) transport::loopPresets.size() - 1,
+									   loopBox.getSelectedId() - 1);
+		engine.setLoopCount (transport::loopPresets[(std::size_t) index].count);
 		refresh();
 	};
 	addAndMakeVisible (loopBox);
 
-	fadeBox.addItemList ({ "No fade", "1 s fade", "3 s fade", "5 s fade", "10 s fade" }, 1);
+	juce::StringArray fadeLabels;
+
+	for (const auto& preset : transport::fadePresets)
+	{
+		fadeLabels.add (preset.label);
+	}
+
+	fadeBox.addItemList (fadeLabels, 1);
 	fadeBox.setTooltip ("Fade out time at the end of the last loop");
 	fadeBox.onChange = [this]
 	{
-		static const double fadeTimes[] = { 0.0, 1.0, 3.0, 5.0, 10.0 };
-		const int index = juce::jlimit (0, 4, fadeBox.getSelectedId() - 1);
-		engine.setFadeSeconds (fadeTimes[index]);
+		const int index = juce::jlimit (0, (int) transport::fadePresets.size() - 1,
+									   fadeBox.getSelectedId() - 1);
+		engine.setFadeSeconds (transport::fadePresets[(std::size_t) index].seconds);
 	};
 	addAndMakeVisible (fadeBox);
 
-	fadeBox.setSelectedId (fadeBoxIdForSeconds (engine.getFadeSeconds()), juce::dontSendNotification);
+	fadeBox.setSelectedId (transport::fadePresetIndex (engine.getFadeSeconds()) + 1,
+						   juce::dontSendNotification);
 
 	refresh();
 }
@@ -553,8 +560,6 @@ void TransportPanel::seekToSeconds (double seconds)
 
 void TransportPanel::startPlayback (void)
 {
-	paused = false;
-
 	// a finished song starts over at the playback start cursor (PlaybackEngine::play() would
 	// restart it from the very beginning - which is what happens with the cursor off)
 	if (startCursorEnabled && engine.isFinished())
@@ -573,7 +578,6 @@ void TransportPanel::stopTransport (void)
 		return;
 	}
 
-	paused = false;
 	engine.stop();
 
 	// with the cursor switched off the transport behaves like a player: Stop goes back to
@@ -596,7 +600,6 @@ void TransportPanel::setStartCursorEnabled (bool shouldBeEnabled)
 
 void TransportPanel::pausePlayback (void)
 {
-	paused = true;
 	engine.pause();
 	refresh();
 }
@@ -605,10 +608,12 @@ void TransportPanel::refresh (void)
 {
 	const bool loaded = engine.isLoaded();
 	const bool playing = engine.isPlaying();
+	const bool paused = engine.isPaused();
 	const double duration = engine.getDurationSeconds();
 
 	// the button lights follow the transport: playing lights Play, the last stop-like action
-	// lights Pause or Stop ("stop" also covers a song that finished)
+	// lights Pause or Stop ("stop" also covers a song that finished). The state lives in the
+	// engine so a pause from the tray menu lights Pause here as well.
 	playButton.setToggleState (loaded && playing, juce::dontSendNotification);
 	pauseButton.setToggleState (loaded && ! playing && paused, juce::dontSendNotification);
 	stopButton.setToggleState (loaded && ! playing && ! paused, juce::dontSendNotification);
@@ -620,7 +625,7 @@ void TransportPanel::refresh (void)
 	// changed, which left the button looking "on" while the combo box said "1x".
 	const int loops = engine.getLoopCount();
 	const bool loopForever = (loops == 0);
-	const int loopId = loopBoxIdForCount (loops);
+	const int loopId = transport::loopPresetIndex (loops) + 1;
 
 	if (syncGroup != nullptr)
 	{
@@ -660,7 +665,7 @@ void TransportPanel::refresh (void)
 	}
 
 	// fade box: the setting can also change from the outside (the host restores a session)
-	const int fadeId = fadeBoxIdForSeconds (engine.getFadeSeconds());
+	const int fadeId = transport::fadePresetIndex (engine.getFadeSeconds()) + 1;
 	if (fadeBox.getSelectedId() != fadeId)
 	{
 		fadeBox.setSelectedId (fadeId, juce::dontSendNotification);

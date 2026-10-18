@@ -99,6 +99,10 @@ public:
 
 	bool isLoaded (void) const { return loaded; }
 	bool isPlaying (void) const { return playing.load(); }
+	/** Whether the last local transport action was pause rather than stop or load. The button
+		lights read this instead of keeping a copy: a pause that came from the tray menu and one
+		that came from the Pause button are the same state. Play, stop and a load clear it. */
+	bool isPaused (void) const { return paused.load(); }
 	bool isFinished (void) const { return finished.load(); }
 	/** Lock-free snapshot of the playback position: render() publishes it once per block and
 		every seek updates it, so the UI polling never contends for the render lock. */
@@ -384,6 +388,7 @@ private:
 
 	std::atomic<bool> loaded { false };
 	std::atomic<bool> playing { false };
+	std::atomic<bool> paused { false };
 	std::atomic<bool> finished { false };
 	std::atomic<double> positionSeconds { 0.0 };	// published by render(), read by the UI
 	std::atomic<float> outputPeakL { 0.0f };		// master meter, published by render()

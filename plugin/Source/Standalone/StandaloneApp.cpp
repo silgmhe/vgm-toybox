@@ -1,6 +1,8 @@
 // The same includes JUCE's own standalone client opens with (juce_audio_plugin_client_Standalone.cpp):
 // the window and holder it defines need the device, gui_extra and audio_utils modules to exist
 // before the header can declare them.
+#include <functional>
+
 #include <juce_core/system/juce_TargetPlatform.h>
 #include <juce_audio_plugin_client/detail/juce_IncludeModuleHeaders.h>
 
@@ -12,6 +14,8 @@
 
 #include "PluginProcessor.h"
 #include "Standalone/StandaloneHooks.h"
+#include "Standalone/TrayController.h"
+#include "Standalone/TrayIcon.h"
 #include "playback/BackendRegistry.h"
 #include "playback/StartupSong.h"
 #include "settings/SettingsStore.h"
@@ -76,6 +80,21 @@ public:
 		}
 
 		return flags;
+	}
+
+	/** Asked before the base answers with save-state-and-quit. True swallows the close: the
+		application is still running in the tray. The callback is installed by the application
+		once the tray controller exists; a window built without one behaves as it always did. */
+	std::function<bool()> closeRequested;
+
+	void closeButtonPressed (void) override
+	{
+		if (closeRequested != nullptr && closeRequested())
+		{
+			return;
+		}
+
+		juce::StandaloneFilterWindow::closeButtonPressed();
 	}
 };
 
@@ -144,6 +163,7 @@ public:
 
 		if (mainWindow != nullptr)
 		{
+			createTray();
 			mainWindow->setVisible (true);
 
 			if (pendingSong.existsAsFile())
@@ -165,6 +185,9 @@ public:
 
 	void shutdown (void) override
 	{
+		// The icon first: it calls back into this object, and its destructor is what takes it
+		// off the notification area while the window and the settings are still here.
+		trayController = nullptr;
 		pluginHolder = nullptr;
 		mainWindow = nullptr;
 
@@ -243,6 +266,55 @@ private:
 		return window;
 	}
 
+	/** Builds the tray policy and connects it to this window.
+
+		Nothing is put on the notification area yet: the controller creates the icon the first
+		time a close is swallowed, because with the setting off no icon should ever appear. The
+		window is handed the question, rather than the controller being handed a pointer to it,
+		so the window keeps owning its own lifetime. */
+	void createTray (void)
+	{
+		auto* processor = dynamic_cast<ToyboxAudioProcessor*> (mainWindow->getAudioProcessor());
+
+		if (processor == nullptr)
+		{
+			return;
+		}
+
+		trayController = std::make_unique<standalone::TrayController> (
+			processor->getEngine(),
+			settings::SettingsStore::getInstance(),
+			[this]
+			{
+				if (mainWindow != nullptr)
+				{
+					mainWindow->setVisible (false);
+				}
+			},
+			[this]
+			{
+				if (mainWindow != nullptr)
+				{
+					mainWindow->setVisible (true);
+					mainWindow->toFront (true);
+				}
+			},
+			// The same path a system quit takes: save the plugin state, close any modal panel,
+			// then quit. Calling quit() directly would skip all three.
+			[this] { systemRequestedQuit(); },
+			[] { return std::make_unique<standalone::TrayIcon>(); });
+
+		auto* window = dynamic_cast<ToyboxFilterWindow*> (mainWindow.get());
+
+		if (window != nullptr)
+		{
+			window->closeRequested = [this]
+			{
+				return trayController != nullptr && trayController->closeRequested();
+			};
+		}
+	}
+
 	/** Fills in what only this build can answer (Standalone/StandaloneHooks.h). Must run before
 		the window exists: the editor created by its constructor reads the table. */
 	void installHooks (juce::StandalonePluginHolder& holder)
@@ -305,6 +377,9 @@ private:
 		{
 			processor->openSongFromAnotherInstance (file);
 
+			// toFront alone leaves a hidden window hidden - a window that is in the tray is
+			// exactly the state a double-clicked song has to pull back out.
+			mainWindow->setVisible (true);
 			mainWindow->toFront (true);
 
 			writeBreadcrumb (file.getFullPathName(), "Handed to the running window.");
@@ -329,6 +404,7 @@ private:
 
 	juce::ApplicationProperties appProperties;
 	std::unique_ptr<juce::StandaloneFilterWindow> mainWindow;
+	std::unique_ptr<standalone::TrayController> trayController;
 	std::unique_ptr<juce::StandalonePluginHolder> pluginHolder;	// only when no window could be made
 	juce::File pendingSong;	// a document that arrived before the window did
 };

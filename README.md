@@ -151,6 +151,20 @@ window of its own - which is what you want when two songs are meant to be compar
 - A hand-over that could not be used leaves one line in `%TEMP%\vgmtoybox-second-instance.log`, in
   the same spirit as the startup log above.
 
+### Closing to the system tray
+
+*Settings* → *General* → **Keep running in the system tray** changes what the window's close
+button does: the window disappears, the song keeps playing, and a VGMToybox icon stays in the
+notification area. Left-click the icon to bring the window back; right-click it for Show Window,
+Play/Pause, Stop, Loop, Fade and Quit. The context menu is the system menu on
+Windows (Win32) and macOS (NSMenu); Linux falls back to JUCE's menu because its tray protocol has
+no native menu to attach. Quit is the real exit and saves state through the same path a close
+used to take. The option is off by default, so nothing changes
+until you ask for it; the icon itself appears on the first close that the setting swallows.
+
+On Linux a desktop without a notification area cannot show the icon, and JUCE's X11 backend
+reports no failure to detect - the switch says so in red, and the feature is best-effort there.
+
 ### In a DAW
 
 Copy the bundle into the plugin folder and rescan:

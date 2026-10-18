@@ -136,7 +136,6 @@ private:
 	double playbackStartSeconds = 0.0;		// where stop (and a finished song) returns to
 	int lastLoopCount = -1;					// for the loop tooltip
 	bool userIsDragging = false;
-	bool paused = false;			// the last stop-like action was "pause" (not "stop") - drives the button lights
 	bool startCursorEnabled = true;	// off = plain player: no marker, Stop returns to the beginning
 
 	JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (TransportPanel)

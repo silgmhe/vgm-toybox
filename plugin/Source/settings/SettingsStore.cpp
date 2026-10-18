@@ -22,6 +22,7 @@ namespace
 	constexpr const char* kThemeModeKey = "theme.mode";
 	constexpr const char* kReuseWindowKey = "standalone.reuseWindow";
 	constexpr const char* kRestoreLastSongKey = "standalone.restoreLastSong";
+	constexpr const char* kCloseToTrayKey = "standalone.closeToTray";
 	constexpr const char* kLastSongKey = "standalone.lastSong";
 
 	juce::String writeErrorFor (const juce::File& file)
@@ -164,6 +165,26 @@ void SettingsStore::setRestoreLastSong (bool shouldRestore)
 	broadcastChange();
 }
 
+bool SettingsStore::getCloseToTray (void) const
+{
+	// Absent - a fresh install, or a file from before this switch existed - means off: a process
+	// that outlives its window must be the user's request, not something a close quietly did.
+	return file->getBoolValue (kCloseToTrayKey, false);
+}
+
+void SettingsStore::setCloseToTray (bool shouldCloseToTray)
+{
+	if (shouldCloseToTray == getCloseToTray())
+	{
+		return;
+	}
+
+	file->setValue (kCloseToTrayKey, shouldCloseToTray);
+	lastErrorMessage = file->saveIfNeeded() ? juce::String() : writeErrorFor (settingsFile());
+
+	broadcastChange();
+}
+
 juce::File SettingsStore::getLastSong (void) const
 {
 	const auto path = file->getValue (kLastSongKey);
@@ -228,6 +249,7 @@ bool SettingsStore::resetToDefaults (void)
 	file->setValue (kThemeModeKey, toString (ThemeMode::light));
 	file->setValue (kReuseWindowKey, true);
 	file->setValue (kRestoreLastSongKey, true);
+	file->setValue (kCloseToTrayKey, false);
 
 	const bool saved = file->save();
 	lastErrorMessage = saved ? juce::String() : writeErrorFor (settingsFile());

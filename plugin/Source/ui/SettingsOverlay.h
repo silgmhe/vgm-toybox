@@ -92,6 +92,13 @@ private:
 	juce::ToggleButton restoreLastSongButton { "Reopen the last song at startup" };
 	juce::Label restoreLastSongHint;
 
+	// "Keep running in the system tray": also standalone-only - a plugin has no window whose
+	// close button it could intercept. The warning is Linux-only, because only Linux desktops
+	// may have no notification area at all to put the icon in.
+	juce::ToggleButton closeToTrayButton { "Keep running in the system tray" };
+	juce::Label closeToTrayHint;
+	juce::Label closeToTrayWarning;
+
 	juce::Label fileCaption;	// "Settings file"
 	juce::Label pathLabel;		// the path itself, read-only
 	juce::TextButton openFolderButton { "Open folder" };

@@ -424,16 +424,19 @@ void PlaybackEngine::play (void)
 		setPositionSeconds (0.0);	// restart a finished song
 	}
 	playing = true;
+	paused = false;
 }
 
 void PlaybackEngine::pause (void)
 {
 	playing = false;
+	paused = true;
 }
 
 void PlaybackEngine::stop (void)
 {
 	playing = false;
+	paused = false;
 	finished = false;
 
 	const juce::ScopedLock sl (lock);
@@ -507,6 +510,7 @@ void PlaybackEngine::followDawTransport (void)
 	setPositionSecondsLocked (decision.position);
 
 	playing = decision.play;
+	paused = false;	// the host owns the transport; the local pause light must not survive it
 	finished = false;
 }
 
@@ -986,13 +990,14 @@ void PlaybackEngine::rebuildPlayers (juce::String& errorMessage)
 	}
 	if (! wasPlaying)
 	{
-		playing = false;	// stay paused where we were
+		playing = false;	// stay where we were, paused or stopped
 	}
 }
 
 void PlaybackEngine::resetState (void)
 {
 	playing = false;
+	paused = false;
 	finished = false;
 	loaded = false;
 
@@ -1321,6 +1326,7 @@ void PlaybackEngine::publishPositionAndEnd (void)
 	{
 		finished = true;
 		playing = false;	// the song is over -> silence
+		paused = false;
 	}
 }
 
