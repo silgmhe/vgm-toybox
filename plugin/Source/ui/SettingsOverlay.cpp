@@ -1,5 +1,7 @@
 #include "SettingsOverlay.h"
 
+#include "Standalone/StandaloneHooks.h"
+
 namespace toybox::ui
 {
 
@@ -355,6 +357,103 @@ void GeneralSettingsPage::lookAndFeelChanged (void)
 }
 
 //==============================================================================
+// Audio
+
+AudioSettingsPage::AudioSettingsPage (void)
+{
+	deviceLabel.setComponentID ("settings.audio.device");
+	deviceLabel.setFont (juce::Font (juce::FontOptions (13.0f)));
+	deviceLabel.setJustificationType (juce::Justification::centredLeft);
+	// A driver names a device as long as it likes ("Speakers (Realtek(R) Audio)"), and this is the
+	// one line on the page worth reading, so it shrinks rather than being cut off.
+	deviceLabel.setMinimumHorizontalScale (0.7f);
+
+	settingsButton.setComponentID ("settings.audio.open");
+	settingsButton.onClick = []
+	{
+		if (auto& table = toybox::standalone::hooks(); table.showAudioSettings != nullptr)
+		{
+			table.showAudioSettings();
+		}
+	};
+
+	hintLabel.setComponentID ("settings.audio.hint");
+	hintLabel.setFont (juce::Font (juce::FontOptions (12.0f)));
+	hintLabel.setJustificationType (juce::Justification::topLeft);
+	hintLabel.setMinimumHorizontalScale (0.75f);
+	hintLabel.setText ("The same dialog JUCE's own window used to offer: device, sample rate, "
+					   "buffer size and MIDI input. A change takes effect at once.",
+					   juce::dontSendNotification);
+
+	addAndMakeVisible (deviceLabel);
+	addAndMakeVisible (settingsButton);
+	addAndMakeVisible (hintLabel);
+
+	refresh();
+	lookAndFeelChanged();
+
+	// The dialog is modal and says nothing when it closes, so the line is re-read while this page
+	// exists: that is how the new device shows up, and headphones plugged in are noticed too. Two
+	// string comparisons a second, and only while the panel is on screen.
+	startTimer (500);
+}
+
+void AudioSettingsPage::refresh (void)
+{
+	juce::String line;
+
+	if (auto& table = toybox::standalone::hooks(); table.describeAudioDevice != nullptr)
+	{
+		line = table.describeAudioDevice();
+	}
+
+	if (line.isEmpty())
+	{
+		line = "No audio device is open.";
+	}
+
+	if (line == shownLine)
+	{
+		return;
+	}
+
+	shownLine = line;
+	deviceLabel.setText (line, juce::dontSendNotification);
+}
+
+void AudioSettingsPage::timerCallback (void)
+{
+	if (isShowing())
+	{
+		refresh();
+	}
+}
+
+void AudioSettingsPage::paint (juce::Graphics& g)
+{
+	paintHeading (g, "Audio", "Which device the standalone plays through, and what it asks of it.",
+				  getLocalBounds());
+}
+
+void AudioSettingsPage::resized (void)
+{
+	auto area = pageContent (getLocalBounds());
+
+	deviceLabel.setBounds (area.removeFromTop (22));
+	area.removeFromTop (theme::cardGap + 6);
+	settingsButton.setBounds (area.removeFromTop (kFooterHeight).removeFromLeft (196));
+	area.removeFromTop (theme::cardGap + 6);
+	hintLabel.setBounds (area.removeFromTop (44));
+}
+
+void AudioSettingsPage::lookAndFeelChanged (void)
+{
+	// The device line is a read value like the settings path on the General page, so it takes the
+	// LookAndFeel's primary text colour; the hint is the explanation.
+	hintLabel.setColour (juce::Label::textColourId, theme::secondaryText());
+}
+
+//==============================================================================
 // The overlay
 
 SettingsOverlay::SettingsOverlay (void)
@@ -373,6 +472,17 @@ SettingsOverlay::SettingsOverlay (void)
 	rootItem = std::make_unique<CategoryItem> ("Settings", -1, nullptr);
 	rootItem->addSubItem (new CategoryItem ("Theme", 0, [this] (int page) { pages.setCurrentView (page); }));
 	rootItem->addSubItem (new CategoryItem ("General", 1, [this] (int page) { pages.setCurrentView (page); }));
+
+	// Audio only where there is an audio device to choose between: the standalone application says
+	// so through Source/Standalone/StandaloneHooks.h, and in a plugin the host owns the device. The
+	// row goes in with the page, so the sidebar cannot offer a page that was never created.
+	const bool hasAudio = toybox::standalone::available();
+
+	if (hasAudio)
+	{
+		rootItem->addSubItem (new CategoryItem ("Audio", 2, [this] (int page) { pages.setCurrentView (page); }));
+	}
+
 	tree.setRootItem (rootItem.get());
 	addAndMakeVisible (tree);
 
@@ -384,6 +494,14 @@ SettingsOverlay::SettingsOverlay (void)
 	generalPage->setComponentID ("settings.page.general");
 	pages.addView (themePage);
 	pages.addView (generalPage);
+
+	if (hasAudio)
+	{
+		audioPage = new AudioSettingsPage();
+		audioPage->setComponentID ("settings.page.audio");
+		pages.addView (audioPage);
+	}
+
 	addAndMakeVisible (pages);
 
 	closeButton.setComponentID ("settings.close");
@@ -400,6 +518,11 @@ void SettingsOverlay::refreshFromStore (void)
 {
 	themePage->refresh();
 	generalPage->refresh();
+
+	if (audioPage != nullptr)
+	{
+		audioPage->refresh();
+	}
 
 	// The sidebar shows which page is up. Set here rather than only from a click in the tree,
 	// because the pages stay where they were left - and an overlay that comes up with nothing

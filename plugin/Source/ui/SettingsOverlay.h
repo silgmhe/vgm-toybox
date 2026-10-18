@@ -99,6 +99,48 @@ private:
 //==============================================================================
 
 /**
+	The Audio page: the device the standalone is playing through, and the dialog that changes it.
+
+	Only the standalone application has an audio device of its own - a plugin is handed the host's -
+	so `toybox::standalone::available()` decides whether this page exists at all
+	(Source/Standalone/StandaloneHooks.h). In a VST3 or AAX build the overlay never creates it and
+	the sidebar has no Audio row.
+
+	The dialog behind the button is JUCE's own - the item the Options menu of JUCE's title bar
+	carried before the window became the system's (StandaloneApp.cpp). The other three items on that
+	menu save and load the plugin's state, which this application deliberately leaves empty, so
+	they are not here: a button that writes an empty file is worse than no button.
+*/
+class AudioSettingsPage : public View,
+						  private juce::Timer
+{
+public:
+	AudioSettingsPage (void);
+
+	juce::String getViewName (void) const override { return "Audio"; }
+
+	/** Re-reads the device line. */
+	void refresh (void) override;
+
+	void paint (juce::Graphics& g) override;
+	void resized (void) override;
+	void lookAndFeelChanged (void) override;
+
+private:
+	void timerCallback (void) override;
+
+	juce::Label deviceLabel;	// one line: the device, its rate, buffer and output count
+	juce::TextButton settingsButton { "Audio/MIDI settings..." };
+	juce::Label hintLabel;
+
+	juce::String shownLine;		// what deviceLabel already says, so most ticks do nothing
+
+	JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (AudioSettingsPage)
+};
+
+//==============================================================================
+
+/**
 	The settings window.
 
 	Drawn inside the window rather than in one of its own, like the About box - ui/AboutOverlay.h
@@ -106,10 +148,13 @@ private:
 	over everything, a centred panel, a click outside it or escape dismisses it, and no editor
 	class of its own.
 
-	The sidebar is a TreeView with the root hidden: the two pages are its children, so a future
-	settings page is one `addSubItem` (section 6). The pages are the window's own page container
+	The sidebar is a TreeView with the root hidden: the pages are its children, so a future settings
+	page is one `addSubItem` (section 6). The pages are the window's own page container
 	(ui/ViewStack.h) - the same object the play/mixer/visualiser pages use, so a page here is
 	written exactly like a page there.
+
+	Audio is the one page that is not always there: it needs an audio device of its own, which only
+	the standalone application has (AudioSettingsPage above).
 */
 class SettingsOverlay : public juce::Component
 {
@@ -120,7 +165,7 @@ public:
 	/** Called when the panel is dismissed - the window hides the overlay. */
 	std::function<void()> onClose;
 
-	/** Brings both pages in step with the store and marks the page that is up in the sidebar. The
+	/** Brings every page in step with the store and marks the page that is up in the sidebar. The
 		window calls this every time the overlay comes up, because the stored values can have been
 		changed by the Theme menu while this was hidden. */
 	void refreshFromStore (void);
@@ -160,6 +205,7 @@ private:
 	ViewStack pages;
 	ThemeSettingsPage* themePage = nullptr;		// owned by `pages`
 	GeneralSettingsPage* generalPage = nullptr;	// owned by `pages`
+	AudioSettingsPage* audioPage = nullptr;		// owned by `pages`; null in a plugin build
 
 	juce::TextButton closeButton { "Close" };
 
