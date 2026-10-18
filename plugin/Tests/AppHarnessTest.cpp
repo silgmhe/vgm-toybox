@@ -357,9 +357,32 @@ private:
 		// FileDragAndDropTarget; going through the base is what makes that reachable from here.)
 		juce::FileDragAndDropTarget& dropTarget = editor;
 		dropTarget.filesDropped ({ file.getFullPathName() }, 0, 0);
-		settle (200);		// the editor's timer refreshes what the load changed
 
-		report (true, "load " + file.getFileName());
+		// The load is asynchronous - the engine scans the song for its length before the transport
+		// can play it - so wait for the status line to leave "Loading" instead of guessing how long
+		// that takes. The scripts assert what it says next, so this is the real barrier.
+		const double deadline = juce::Time::getMillisecondCounterHiRes() + 10000.0;
+		juce::String status;
+
+		while (juce::Time::getMillisecondCounterHiRes() < deadline)
+		{
+			// Pump, like the `sleep` command does: the load finishes by posting a message, and
+			// settle() is a plain Thread::sleep, which would leave that message unprocessed.
+			juce::MessageManager::getInstance()->runDispatchLoopUntil (25);
+
+			if (auto* label = findByID (editor, "editor.status"))
+			{
+				status = toybox::ui::snapshot::textOf (*label);
+			}
+
+			if (! status.startsWith ("Loading"))
+			{
+				break;
+			}
+		}
+
+		report (! status.startsWith ("Loading"), "load " + file.getFileName()
+					+ "   (" + juce::String (status.isEmpty() ? "no status line" : status) + ")");
 	}
 
 	void commandPress (const juce::StringArray& tokens)

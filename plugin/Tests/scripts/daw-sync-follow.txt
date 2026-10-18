@@ -5,7 +5,8 @@
 # assertion of the feature - the one that would have caught a seek and a transport start being
 # applied in the wrong order (docs/review/2026-10-17-..., H-1).
 #
-# Needs a song: without VGM_TEST_SONG the load is skipped, and so is everything below it.
+# Needs a song: build.ps1 -Test hands over plugin/Tests/assets/minimal.vgm (6 s, enough for the
+# positions below). Without VGM_TEST_SONG the load is skipped, and so is everything below it.
 #   set VGM_TEST_SONG=C:\music\song.vgz
 #   build\plugin\vgm_app_test plugin\Tests\scripts\daw-sync-follow.txt
 

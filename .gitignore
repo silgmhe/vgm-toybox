@@ -103,3 +103,11 @@ $RECYCLE.BIN/
 dist/
 compile_commands.json
 
+#############
+## Test output
+#############
+
+# vgm_mixer_test writes what it rendered next to the song it was given; the song is in the
+# repository (plugin/Tests/assets), the render is not.
+*.rendered.wav
+

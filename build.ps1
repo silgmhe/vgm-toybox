@@ -48,17 +48,18 @@
 
 .PARAMETER Target
     Extra CMake targets to build after the default ones. The console tests are EXCLUDE_FROM_ALL -
-    they exist only when asked for by name - so this is how CI and local runs build them without
-    repeating the CMake invocation.
+    they exist only when asked for by name - so this is how a local run builds a single test
+    without repeating the CMake invocation. -Test adds them by itself.
 
 .PARAMETER Test
-    Run the console test executables the build produced, skipping the ones that are not there, and
-    fail the script when one of them fails.
+    Build the console tests and run them: the three that need nothing (core, ui, app) and the
+    mixer gate, which gets the song below. Fails the script when one of them fails. The tests are
+    added to the build, so a run cannot test yesterday's binary.
 
 .PARAMETER TestSong
-    The .vgm/.vgz given to vgm_mixer_test. Its sample-exact gate compares the plain render with the
-    mixer render of a real file, and this repository ships no song, so without this the test is
-    skipped (and CI does not run it).
+    The .vgm/.vgz the mixer test and the window scripts load. Defaults to
+    plugin/Tests/assets/minimal.vgm (431 bytes of generated SN76489 tone, six seconds long) - pass
+    a real song to exercise the backends with something bigger.
 
 .EXAMPLE
     .\build.ps1
@@ -69,10 +70,9 @@
     Rebuilds everything from scratch with debug settings, without the plugin.
 
 .EXAMPLE
-    .\build.ps1 -Target vgm_core_test,vgm_ui_test,vgm_app_test -Test
-    The command CI runs: build the plugin, build the console tests, run them. None of the three
-    needs a window, a song or a sound device. (PowerShell takes the targets as one comma-separated
-    list - repeating -Target is an error.)
+    .\build.ps1 -Test
+    The command CI runs: build everything (the console tests included), then run them. None of them
+    needs a window or a sound device, and the song they load is the one in the repository.
 #>
 [CmdletBinding()]
 param(
@@ -92,13 +92,16 @@ param(
 
 	# Extra CMake targets to build after the default ones (the console tests are EXCLUDE_FROM_ALL).
 	# One comma-separated list: PowerShell refuses a parameter that is given twice.
-	#     .\build.ps1 -Target vgm_core_test,vgm_ui_test,vgm_app_test -Test
+	#     .\build.ps1 -Target vgm_app_test
 	[string[]]$Target = @(),
 
-	# Run the console tests the build produced; fail the script when one of them fails.
+	# Build and run the console tests, and fail the script when one of them fails. This adds the
+	# test targets to the build: without them, -Test would run whatever binary happens to be in
+	# build/plugin - and a stale one is how v0.1.0 went out on a local "all checks passed"
+	# (docs/memo/2026-10-17-stale-test-binary-and-the-restore-test.md).
 	[switch]$Test,
 
-	# Song for vgm_mixer_test - its gate renders a real file twice and none is shipped here.
+	# Song for the mixer test and the window scripts; empty means the one in the repository.
 	[string]$TestSong = ''
 )
 
@@ -314,6 +317,14 @@ Invoke-Native 'cmake' (@(
 Write-Step 'Building'
 Invoke-Native 'cmake' @('--build', $buildDir)
 
+# -Test means "test what is in the tree", so the console tests are built here rather than assumed:
+# they are EXCLUDE_FROM_ALL, and a -Test that runs a binary nobody just built is exactly the trap
+# v0.1.0 fell into (docs/memo/2026-10-17-stale-test-binary-and-the-restore-test.md).
+if ($Test) {
+	$Target = @($Target + @('vgm_core_test', 'vgm_ui_test', 'vgm_app_test', 'vgm_mixer_test') |
+		Select-Object -Unique)
+}
+
 if ($Target.Count -gt 0) {
 	Write-Step ("Building extra targets: {0}" -f ($Target -join ', '))
 	Invoke-Native 'cmake' (@('--build', $buildDir, '--target') + $Target)
@@ -426,18 +437,29 @@ if ($dumpbin) {
 }
 
 # --- the console tests -------------------------------------------------------------------------
-# Ordinary programs: text in, ok/FAIL out, exit code for CI. None of the three needs a window - the
-# harness constructs the real editor headless (docs/desgin/testing-architecture.md) - so they run on
-# a build agent as they do here.
+# Ordinary programs: text in, ok/FAIL out, exit code for CI. None of them needs a window - the
+# harness constructs the real editor headless (docs/desgin/testing-architecture.md) - and the song
+# the ones that want one load is in the repository, so they run on a build agent as they do here.
 if ($Test) {
 	Write-Step 'Running the console tests'
 	$testDir = Join-Path $BuildDir 'plugin'
 	$passed = 0
 
+	# The song the mixer gate and the window scripts load. The repository carries one (431 bytes,
+	# generated for this: six seconds of SN76489 tone), so a checkout can exercise a real
+	# load/render/mix path without a download; -TestSong replaces it with something bigger.
+	if (-not $TestSong) {
+		$TestSong = Join-Path $RepoRoot 'plugin\Tests\assets\minimal.vgm'
+	}
+	if (-not (Test-Path -LiteralPath $TestSong)) {
+		Write-Warning ("no test song at '{0}' - the tests that need one will skip" -f $TestSong)
+		$TestSong = ''
+	}
+
 	foreach ($name in @('vgm_core_test', 'vgm_ui_test', 'vgm_app_test')) {
 		$testExe = Join-Path $testDir ("$name.exe")
 		if (-not (Test-Path -LiteralPath $testExe)) {
-			Write-Host ("  skipping {0} (not built - add '-Target {0}')" -f $name) -ForegroundColor DarkGray
+			Write-Host (("  skipping {0} (not built - -Test should have built it)") -f $name)
 			continue
 		}
 		Write-Host ('+ ' + $testExe) -ForegroundColor DarkGray
@@ -463,8 +485,7 @@ if ($Test) {
 	}
 
 	# The window scripts, one harness process each: they drive the real editor and print their own
-	# ok/FAIL lines. window-basics needs nothing but a built binary, so CI covers real UI behaviour
-	# with it; load-and-play wants a song and skips that part (staying green) without -TestSong.
+	# ok/FAIL lines. window-basics needs nothing but a built binary; the others load the song above.
 	$scriptsDir = Join-Path $RepoRoot 'plugin\Tests\scripts'
 	$appTestExe = Join-Path $testDir 'vgm_app_test.exe'
 	if ((Test-Path -LiteralPath $scriptsDir) -and (Test-Path -LiteralPath $appTestExe)) {

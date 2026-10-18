@@ -1,7 +1,8 @@
 # A song dropped on the window - the same path the drag & drop takes.
 #
-# Set VGM_TEST_SONG to any .vgm/.vgz/.s98/.dro/.gym file. Without it the load is skipped (and said
-# so) rather than failed, which is what lets this script live in the repository, where no song does.
+# The song is plugin/Tests/assets/minimal.vgm (generated, 431 bytes), which build.ps1 hands over as
+# VGM_TEST_SONG; set that variable to any .vgm/.vgz/.s98/.dro/.gym file to run against something
+# real. Without it the load is skipped and said so, rather than failed.
 #
 # Run:  set VGM_TEST_SONG=C:\music\song.vgz
 #       build\plugin\vgm_app_test plugin\Tests\scripts\load-and-play.txt

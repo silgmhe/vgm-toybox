@@ -128,20 +128,21 @@ jobs:
           libxrandr-dev libxcursor-dev libfreetype6-dev libfontconfig1-dev libgl1-mesa-dev xvfb
 
     - name: Build the plugin and run the console tests (Windows)
-      # The same command a developer runs locally. The test targets are EXCLUDE_FROM_ALL, so they
-      # are named; -Test then runs the ones that were built and fails the job when one fails.
+      # The same command a developer runs locally: -Test builds the console tests (they are
+      # EXCLUDE_FROM_ALL, so naming them was the caller's job until it became the trap that shipped
+      # v0.1.0 on a stale binary) and then runs every one of them:
       #
       #   vgm_core_test   the mixer maths against analytically known levels, the two volume stages,
       #                   seek/end, the output routing, and the startup-argument rule
       #   vgm_ui_test     the button pixels (shadow, hairline, focus ring, glow, press)
       #   vgm_app_test    the window itself: constructed headless, laid out, dumped as text
+      #   vgm_mixer_test  the sample-exact render/mix gate, on the song the repository ships
       #
-      # vgm_mixer_test is deliberately absent: its sample-exact gate renders a real song twice and
-      # this repository ships no song, so it stays a local gate (-Test -TestSong <file>).
+      # ... and the window scripts, which load that same song.
       if: startsWith(matrix.os, 'windows')
       # -Arch is named out loud so the arm64 row cannot quietly build x64 under emulation and report
       # a pass for an architecture it never touched.
-      run: .\build.ps1 -Arch ${{ matrix.arch }} -Target vgm_core_test,vgm_ui_test,vgm_app_test -Test
+      run: .\build.ps1 -Arch ${{ matrix.arch }} -Test
 
     - name: Build the plugin (macOS)
       if: matrix.os == 'macos-15'

@@ -71,7 +71,7 @@ jobs:
     - name: Build, test and package (Windows)
       if: startsWith(matrix.os, 'windows')
       run: |
-        .\build.ps1 -Config Release -Arch ${{ matrix.arch }} -Target vgm_core_test,vgm_ui_test,vgm_app_test -Test
+        .\build.ps1 -Config Release -Arch ${{ matrix.arch }} -Test
 
         New-Item -ItemType Directory -Force dist\release | Out-Null
         Copy-Item -Recurse -Force dist\VST3\VGMToybox.vst3 dist\release\
