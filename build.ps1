@@ -61,6 +61,12 @@
     plugin/Tests/assets/minimal.vgm (431 bytes of generated SN76489 tone, six seconds long) - pass
     a real song to exercise the backends with something bigger.
 
+.PARAMETER Clang
+    After building, re-check the plugin sources with clang-cl (/Zs: syntax and type check only, no
+    object files, no binaries). A second opinion on code MSVC accepts - see Invoke-ClangCheck. Needs
+    the compile_commands.json this script writes, so it runs as part of a normal build. When
+    clang-cl is not installed the check is skipped and the build result is unchanged.
+
 .EXAMPLE
     .\build.ps1
     Builds a release build for x64 (command-line player + JUCE plugin).
@@ -73,6 +79,11 @@
     .\build.ps1 -Test
     The command CI runs: build everything (the console tests included), then run them. None of them
     needs a window or a sound device, and the song they load is the one in the repository.
+
+.EXAMPLE
+    .\build.ps1 -Clang
+    The same build, and then the plugin sources through clang as well - what the macOS build sees,
+    available here before pushing.
 #>
 [CmdletBinding()]
 param(
@@ -102,7 +113,11 @@ param(
 	[switch]$Test,
 
 	# Song for the mixer test and the window scripts; empty means the one in the repository.
-	[string]$TestSong = ''
+	[string]$TestSong = '',
+
+	# Re-check the plugin sources with clang-cl after building (no output produced). Optional, and
+	# skipped without an error when clang is not installed.
+	[switch]$Clang
 )
 
 $ErrorActionPreference = 'Stop'
@@ -248,6 +263,108 @@ function Initialize-NetworkProxy {
 			[System.Environment]::SetEnvironmentVariable($name, $ProxyUrl, 'Process')
 		}
 	}
+}
+
+function Invoke-ClangUnit([string]$Compiler, [string]$CommandLine, [string]$WorkingDirectory) {
+	# One complete command line, handed over through ProcessStartInfo so that it reaches the compiler
+	# exactly as CMake wrote it. Passing the arguments as a PowerShell array instead loses the quotes
+	# around defines such as
+	#     -DJucePlugin_Desc="Chiptune player (VGM, VGZ, S98, DRO, GYM)"
+	# - the C runtime eats them on the way - which turns one argument into four files that do not
+	# exist, and the check then fails for reasons that have nothing to do with the code.
+	$startInfo = New-Object System.Diagnostics.ProcessStartInfo
+	# FileName and Arguments are joined into one string before the process is started, so a compiler
+	# inside "Program Files" has to carry its quotes here.
+	$startInfo.FileName = if ($Compiler -match '\s') { '"' + $Compiler + '"' } else { $Compiler }
+	$startInfo.Arguments = $CommandLine
+	$startInfo.WorkingDirectory = $WorkingDirectory
+	$startInfo.UseShellExecute = $false
+	$startInfo.CreateNoWindow = $true
+	$startInfo.RedirectStandardOutput = $true
+	$startInfo.RedirectStandardError = $true
+
+	$process = [System.Diagnostics.Process]::Start($startInfo)
+	$diagnostics = $process.StandardError.ReadToEnd() + $process.StandardOutput.ReadToEnd()
+	$process.WaitForExit()
+
+	return [pscustomobject]@{ ExitCode = $process.ExitCode; Diagnostics = $diagnostics }
+}
+
+function Invoke-ClangCheck {
+	# A second opinion on the C++ the MSVC build just accepted. clang is stricter in places MSVC is
+	# not - an empty braced-init-list against juce::File's copy and move assignment is the case that
+	# went through a green Windows build and would have stopped the macOS one - so each translation
+	# unit's own compile command is replayed through clang-cl with /Zs: parse and type check only,
+	# no object files, nothing written to the build tree.
+	#
+	# clang is optional. This runs after the build, so not having it changes nothing; it is an extra
+	# pair of eyes, not a requirement.
+	$clang = Get-Command 'clang-cl.exe' -ErrorAction SilentlyContinue
+	if (-not $clang) {
+		Write-Host 'clang-cl not found - skipping the clang check' -ForegroundColor DarkGray
+		return
+	}
+	if (-not (Test-Path -LiteralPath $CompileDb)) {
+		Write-Warning 'no compile_commands.json - skipping the clang check'
+		return
+	}
+
+	# One entry per file: the same source appears once per target that compiles it, and the flags
+	# differ only by target-specific defines.
+	$database = Get-Content -LiteralPath $CompileDb -Raw | ConvertFrom-Json
+	$units = @{}
+	foreach ($entry in $database) {
+		if ($entry.file -match '[\\/]plugin[\\/](Source|Tests)[\\/]' -and
+			-not $units.ContainsKey($entry.file.ToLowerInvariant())) {
+			$units[$entry.file.ToLowerInvariant()] = $entry
+		}
+	}
+	if ($units.Count -eq 0) {
+		Write-Warning 'compile_commands.json lists no plugin sources - skipping the clang check'
+		return
+	}
+
+	$rootPrefix = $RepoRoot.Replace('\', '/') + '/'
+	Write-Host ("checking {0} translation unit(s), nothing written" -f $units.Count) -ForegroundColor DarkGray
+	$failed = @()
+
+	foreach ($entry in ($units.Values | Sort-Object -Property @{ Expression = { $_.file } })) {
+		if (-not $entry.PSObject.Properties['command'] -or -not $entry.command) {
+			Write-Warning ("no compile command for '{0}' - skipped" -f $entry.file)
+			continue
+		}
+
+		# The build's own command line, minus the compiler (Invoke-ClangUnit starts clang itself) and
+		# minus the outputs; the quoting is left exactly as CMake wrote it (that function says why).
+		$unitCommand = $entry.command -replace '^\s*\S+', ''
+		$unitCommand = $unitCommand -replace '\s+/Fo\S+', ''
+		$unitCommand = $unitCommand -replace '\s+/Fd\S+', ''
+		$unitCommand = $unitCommand -replace '\s+-c(?=\s|$)', ''
+		$unitCommand += ' /Zs'
+
+		$relative = $entry.file
+		if ($relative.StartsWith($rootPrefix)) { $relative = $relative.Substring($rootPrefix.Length) }
+		Write-Host ('  ' + $relative) -ForegroundColor DarkGray
+
+		$result = Invoke-ClangUnit -Compiler $clang.Source -CommandLine $unitCommand -WorkingDirectory $entry.directory
+
+		if ($result.ExitCode -ne 0) {
+			$errors = @($result.Diagnostics -split "`r?`n" | Where-Object { $_ -match ': error' } | Select-Object -First 4)
+			if ($errors.Count -eq 0) { $errors = @("clang-cl exited with $($result.ExitCode)") }
+			$failed += [pscustomobject]@{ File = $relative; Errors = $errors }
+		}
+	}
+
+	if ($failed.Count -gt 0) {
+		foreach ($failure in $failed) {
+			Write-Host ('  ' + $failure.File) -ForegroundColor Red
+			foreach ($error in $failure.Errors) {
+				Write-Host ('    ' + $error) -ForegroundColor Red
+			}
+		}
+		throw ("clang rejects {0} file(s) that MSVC accepted - the macOS build would fail here" -f $failed.Count)
+	}
+	Write-Host ("  {0} file(s) accepted by clang" -f $units.Count) -ForegroundColor Green
 }
 
 if ($Clean) {
@@ -403,6 +520,11 @@ if (Test-Path -LiteralPath $generatedDb) {
 	Write-Host "wrote $CompileDb (all sources: vgmplayer, plugin, libvgm, for clangd)"
 } else {
 	Write-Warning "'$generatedDb' not found - clangd will not have a compilation database."
+}
+
+if ($Clang) {
+	Write-Step 'Checking with clang'
+	Invoke-ClangCheck
 }
 
 Write-Step 'Result'

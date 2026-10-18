@@ -39,8 +39,13 @@ The script sets up the MSVC environment, configures with CMake + Ninja and copie
 | `dist\VGMPlay64.exe` + `VGMPlay.ini` | the upstream command-line player |
 
 `-NoPlugin` builds only the command-line player; `-Proxy <url>` / `-NoProxy` control how CPM reaches
-GitHub. The AAX bundle and the bus count are build-time constants, so they are set in the cache once,
-before the first build:
+GitHub. `-Clang` is a check instead of a build: when clang-cl is installed, every plugin source is run
+through it with `/Zs` (syntax and type check only, no object files) on the same command line the MSVC
+build used. It is there for the writing MSVC accepts and clang does not - a green Windows build and a
+red macOS one is the failure it exists to catch - and without clang it prints one line and carries on.
+
+The AAX bundle and the bus count are build-time constants, so they are set in the cache once, before
+the first build:
 
 ```powershell
 cmake -S . -B build -DTOYBOX_BUILD_AAX=OFF -DTOYBOX_OUTPUT_BUSES=16
