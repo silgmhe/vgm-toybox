@@ -1,6 +1,8 @@
 #include "TrayMenu.h"
 
-#include <cmath>
+#include "playback/TransportPresets.h"
+
+#include <cstddef>
 #include <utility>
 
 namespace toybox::standalone
@@ -22,6 +24,57 @@ namespace
 	}
 }
 
+TrayMenuGroup TrayMenuGroup::topLevel (std::vector<TrayMenuEntry> entries)
+{
+	TrayMenuGroup group;
+	group.entries = std::move (entries);
+	return group;
+}
+
+TrayMenuGroup TrayMenuGroup::submenu (juce::String title, TrayMenuIcon icon,
+									  std::vector<TrayMenuEntry> entries)
+{
+	TrayMenuGroup group;
+	group.title = std::move (title);
+	group.icon = icon;
+	group.entries = std::move (entries);
+	return group;
+}
+
+void renderTrayMenu (const TrayMenuModel& model, TrayMenuRenderer& renderer)
+{
+	bool hasEntries = false;
+
+	for (const auto& group : model)
+	{
+		if (group.isSubmenu())
+		{
+			if (hasEntries)
+			{
+				renderer.addSeparator();
+			}
+
+			renderer.beginSubmenu (group);
+		}
+
+		for (const auto& entry : group.entries)
+		{
+			if (entry.separatorBefore)
+			{
+				renderer.addSeparator();
+			}
+
+			renderer.addItem (entry);
+			hasEntries = true;
+		}
+
+		if (group.isSubmenu())
+		{
+			renderer.endSubmenu();
+		}
+	}
+}
+
 TrayMenu::TrayMenu (PlaybackEngine& engineToUse,
 					std::function<void()> showWindowCallback,
 					std::function<void()> quitCallback)
@@ -33,22 +86,30 @@ TrayMenu::TrayMenu (PlaybackEngine& engineToUse,
 
 TrayMenuModel TrayMenu::build (void) const
 {
-	const auto loaded = engine.isLoaded();
+	const bool loaded = engine.isLoaded();
+
+	// Take one snapshot for the label, the glyph and the action. Reading the engine again inside
+	// the action would let a song that ended while the menu was open turn a click on "Pause" into
+	// a play.
+	const bool playing = engine.isPlaying();
 
 	TrayMenuModel menu;
 
-	menu.push_back ({ {}, TrayMenuIcon::none,
-					  { makeEntry ("tray.show", "Show Window", TrayMenuIcon::showWindow,
-								   false, true, showWindow) } });
+	menu.push_back (TrayMenuGroup::topLevel (
+		{ makeEntry ("tray.show", "Show Window", TrayMenuIcon::showWindow,
+					 false, true, showWindow) }));
 
 	// The transport rows. Play and pause share one row, because the menu says what the click
-	// will do; with no song there is nothing to do, so the row is greyed.
+	// will do; with no song there is nothing to do, so the row is greyed. The id names the
+	// action, not the widget: if playback changes while the menu is open, the stale id is no
+	// longer in the rebuilt model and the click is refused rather than doing the opposite.
 	std::vector<TrayMenuEntry> transport;
-	transport.push_back (makeEntry ("tray.playPause", engine.isPlaying() ? "Pause" : "Play",
-									engine.isPlaying() ? TrayMenuIcon::pause : TrayMenuIcon::play,
-									false, loaded, [this]
+	transport.push_back (makeEntry (playing ? "tray.pause" : "tray.play",
+									playing ? "Pause" : "Play",
+									playing ? TrayMenuIcon::pause : TrayMenuIcon::play,
+									false, loaded, [this, playing]
 									{
-										if (engine.isPlaying())
+										if (playing)
 										{
 											engine.pause();
 										}
@@ -60,47 +121,50 @@ TrayMenuModel TrayMenu::build (void) const
 	transport.back().separatorBefore = true;
 	transport.push_back (makeEntry ("tray.stop", "Stop", TrayMenuIcon::stop,
 									false, loaded, [this] { engine.stop(); }));
-	menu.push_back ({ {}, TrayMenuIcon::none, std::move (transport) });
+	menu.push_back (TrayMenuGroup::topLevel (std::move (transport)));
 
 	// Loop count, not loop points: the points come from the song and are not editable anywhere.
-	const auto loopCount = engine.getLoopCount();
-	const int loopCounts[] = { 1, 2, 3, 0 };
-	const char* loopLabels[] = { "1x", "2x", "3x", "Loop forever" };
+	// The tick uses the same row-selection rule as the transport panel, so an out-of-range count
+	// restored from an old session still marks one row instead of none.
+	const int loopIndex = transport::loopPresetIndex (engine.getLoopCount());
 	std::vector<TrayMenuEntry> loops;
-	for (int i = 0; i < 4; ++i)
+
+	for (std::size_t i = 0; i < transport::loopPresets.size(); ++i)
 	{
-		const auto count = loopCounts[i];
-		const auto id = count == 0 ? juce::String ("tray.loop.forever")
-								   : juce::String ("tray.loop.") + juce::String (count);
+		const auto& preset = transport::loopPresets[i];
+		const auto id = preset.count == 0
+			? juce::String ("tray.loop.forever")
+			: juce::String ("tray.loop.") + juce::String (preset.count);
 
 		// Submenu rows keep the system check mark; only the parent group carries a glyph.
-		loops.push_back (makeEntry (id, loopLabels[i], TrayMenuIcon::none,
-									loopCount == count, true,
-									[this, count] { engine.setLoopCount (count); }));
+		loops.push_back (makeEntry (id, preset.label, TrayMenuIcon::none,
+									loopIndex == (int) i, true,
+									[this, count = preset.count] { engine.setLoopCount (count); }));
 	}
-	menu.push_back ({ "Loop", TrayMenuIcon::loop, std::move (loops) });
+
+	menu.push_back (TrayMenuGroup::submenu ("Loop", TrayMenuIcon::loop, std::move (loops)));
 
 	// Fade is the song's ending fade, the same five choices as the transport panel.
-	const auto fadeSeconds = engine.getFadeSeconds();
-	const double fades[] = { 0.0, 1.0, 3.0, 5.0, 10.0 };
-	const char* fadeLabels[] = { "No fade", "1 s fade", "3 s fade", "5 s fade", "10 s fade" };
-
+	const int fadeIndex = transport::fadePresetIndex (engine.getFadeSeconds());
 	std::vector<TrayMenuEntry> fadeEntries;
-	for (int i = 0; i < 5; ++i)
+
+	for (std::size_t i = 0; i < transport::fadePresets.size(); ++i)
 	{
-		const auto seconds = fades[i];
-		const auto id = juce::String ("tray.fade.") + juce::String ((int) seconds);
+		const auto& preset = transport::fadePresets[i];
+		const auto id = juce::String ("tray.fade.") + juce::String ((int) preset.seconds);
 
 		// Submenu rows keep the system check mark; only the parent group carries a glyph.
-		fadeEntries.push_back (makeEntry (id, fadeLabels[i], TrayMenuIcon::none,
-										  std::abs (fadeSeconds - seconds) < 0.001,
-										  true, [this, seconds] { engine.setFadeSeconds (seconds); }));
+		fadeEntries.push_back (makeEntry (id, preset.label, TrayMenuIcon::none,
+										  fadeIndex == (int) i, true,
+										  [this, seconds = preset.seconds]
+										  { engine.setFadeSeconds (seconds); }));
 	}
-	menu.push_back ({ "Fade", TrayMenuIcon::fade, std::move (fadeEntries) });
+
+	menu.push_back (TrayMenuGroup::submenu ("Fade", TrayMenuIcon::fade, std::move (fadeEntries)));
 
 	auto quitEntry = makeEntry ("tray.quit", "Quit", TrayMenuIcon::quit, false, true, quit);
 	quitEntry.separatorBefore = true;
-	menu.push_back ({ {}, TrayMenuIcon::none, { std::move (quitEntry) } });
+	menu.push_back (TrayMenuGroup::topLevel ({ std::move (quitEntry) }));
 
 	return menu;
 }

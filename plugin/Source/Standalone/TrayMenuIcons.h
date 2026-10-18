@@ -2,7 +2,7 @@
 
 #include <juce_gui_basics/juce_gui_basics.h>
 
-#include "TrayMenu.h"
+#include "TrayMenuModel.h"
 
 namespace toybox::standalone
 {
@@ -13,14 +13,12 @@ namespace toybox::standalone
 	and dark menus. There is deliberately no background plate: the menu's own background (or
 	accent highlight) shows through every pixel that is not part of the glyph.
 
-	When @p ticked is true, a small filled check badge is included because JUCE replaces the
-	native tick with the item image. The check itself is cut out of the badge, so it also stays
-	correct over an accent-coloured highlight.
+	Ticks are left to the platform's native menu item state; this function never draws a check
+	badge, so a row can never show both an icon and a JUCE-drawn tick.
 
 	@pixelSize is the raster size in physical pixels; the glyph is designed on a 16 x 16 grid. */
 juce::Image makeTrayMenuIcon (TrayMenuIcon icon,
 							  int pixelSize,
-							  bool ticked,
 							  juce::Colour core,
 							  float opacity = 1.0f);
 

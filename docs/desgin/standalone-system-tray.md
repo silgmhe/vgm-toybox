@@ -61,9 +61,10 @@
 
 | 层 | 文件 | 职责 |
 |---|---|---|
-| 菜单模型 | `Standalone/TrayMenu.*` | 把引擎状态变成 `TrayMenuModel`（纯数据），`invoke(id)` 执行动作；不依赖 GUI |
+| 菜单模型 | `Standalone/TrayMenuModel.h` | `TrayMenuEntry` / `TrayMenuGroup` / `TrayMenuRenderer`：纯数据和一次深度优先遍历，不依赖播放引擎或 GUI |
+| 菜单行为 | `Standalone/TrayMenu.*` | 把引擎状态变成 `TrayMenuModel`，`invoke(id)` 执行动作；不依赖 GUI |
 | 关闭策略 | `Standalone/TrayController.*` | 读设置、决定关闭是否被吞、创建/销毁图标、把左键接到显示窗口；通过 `TrayIconPresenter` 接口隔离真实桌面 |
-| 桌面适配 | `Standalone/TrayIcon.*` | 唯一包含 `juce_gui_extra` 的一层：`juce::SystemTrayIconComponent`；Windows 调 Win32 菜单，macOS 调 NSMenu，Linux 用 JUCE 菜单 |
+| 桌面适配 | `Standalone/TrayIcon.*` | 唯一包含 `juce_gui_extra` 的一层：`juce::SystemTrayIconComponent`；Windows 调 Win32 菜单，macOS 调 NSMenu，Linux 用 JUCE 菜单。平台文件只依赖 `TrayIconPresenter.h`，不再带入 `PlaybackEngine` / `SettingsStore` |
 
 `TrayMenu` / `TrayController` 因此被编进 `vgm_core_test`，可以在没有桌面的机器上测试关闭策略和
 菜单内容（`plugin/Tests/PlaybackCoreTest.cpp` 的 `[9b]`）。`TrayIcon.cpp`、平台菜单文件和被选中的
@@ -108,32 +109,43 @@ Linux 是这条规则的例外：JUCE 的 X11 托盘实现只是向 `_NET_SYSTEM
 | 分组 | 条目 | 启用条件 / 勾选 |
 |---|---|---|
 | 顶层 | **Show Window** | 始终可用 |
-| 顶层 | **Play / Pause**（同一行，标签随 `isPlaying()` 变） | 已加载歌曲 |
+| 顶层 | **Play / Pause**（同一行，标签和 glyph 随 `isPlaying()` 变；内部 id 分别是 `tray.play` / `tray.pause`） | 已加载歌曲 |
 | 顶层 | **Stop** | 已加载歌曲 |
-| Loop 子菜单 | `1x` / `2x` / `3x` / `Loop forever` | 勾选当前 `getLoopCount()`；0 表示无限 |
-| Fade 子菜单 | `No fade` / `1 s` / `3 s` / `5 s` / `10 s` | 勾选当前 `getFadeSeconds()`（±0.001 s） |
+| Loop 子菜单 | `1x` / `2x` / `3x` / `Loop forever` | 用 `transport::loopPresetIndex()` 选中当前 `getLoopCount()`；0 表示无限，非预设值也总能选中一行 |
+| Fade 子菜单 | `No fade` / `1 s` / `3 s` / `5 s` / `10 s` | 用 `transport::fadePresetIndex()` 选中最近档；非预设值不再出现“一行都没勾” |
 | 顶层 | **Quit** | 始终可用；先取图标，再 `systemRequestedQuit()` |
 
 没有歌曲时 Play、Stop 都灰掉，`invoke()` 对灰掉的条目返回 false —— 菜单点击和测试调用走的是
-同一套判断。5 秒跳转不放进托盘菜单：在那里操作没有实际意义，走带面板仍然是它的入口。
+同一套判断。Play/Pause 的 id 描述动作而不是控件：菜单打开期间播放状态若改变，菜单关闭后交回的
+旧 id 已不在重建的模型里，点击被拒绝，不会执行与标签相反的动作。5 秒跳转不放进托盘菜单：在那里
+操作没有实际意义，走带面板仍然是它的入口。
 
-Loop 只给次数，不给循环点：循环点由歌曲自己决定，程序里没有编辑入口。Fade 的五档和走带面板
-一致（`0/1/3/5/10` 秒），不是另一套值。
+Loop 只给次数，不给循环点：循环点由歌曲自己决定，程序里没有编辑入口。Loop 和 Fade 的数值、标签
+都来自 `playback/TransportPresets.h`，与走带面板共用同一张表，不再各写一份；Fade 的五档仍然是
+`0/1/3/5/10` 秒。
 
-`TrayIcon::showMenu()` 把模型翻译成平台菜单。Windows 上是真正的 Win32 菜单：
+`renderTrayMenu()` 对模型做**一次**深度优先遍历，输出 `addSeparator / addItem / beginSubmenu /
+endSubmenu` 事件；三个平台适配器只把这些事件翻译成 Win32、NSMenu 或 JUCE 调用，不再各自实现
+“空 title 是顶层”“子菜单前自动加分隔符”和 `id` 映射。生产路径也不再直接执行 `entry.action`：
+适配器记录选中项的稳定 `id`，菜单关闭后回调 `TrayController`，由 `TrayMenu::invoke(id)` 统一做
+enabled 判断和分发。这样加一个菜单项只需改模型一处，测试覆盖的也是生产实际走的分发路径。
+
+Windows 上是真正的 Win32 菜单：
 
 ```cpp
 CreatePopupMenu / AppendMenuW
 TrackPopupMenuEx (menu, TPM_RETURNCMD | TPM_RIGHTBUTTON, ...)
 ```
 
-`TPM_RETURNCMD` 让选择结果直接返回，不会走 `WM_COMMAND`；先 `DestroyMenu()` 再执行对应的
-`std::function`，所以 Quit 执行时菜单已经消失，销毁图标不会把菜单从点击下面抽走。系统负责字体、
-阴影、暗色模式和 DPI 缩放，代码里没有任何自绘。
+`TPM_RETURNCMD` 让选择结果直接返回，不会走 `WM_COMMAND`；命令 id 只索引模型 id，先
+`DestroyMenu()` 再调用 `invoke(id)`，所以 Quit 执行时菜单已经消失，销毁图标不会把菜单从点击下面
+抽走。默认项按 `tray.show` 的 id 查找，不再硬编码“第一项”。系统负责菜单外壳的字体、阴影、暗色
+模式和 DPI 缩放；item 的 glyph 仍由 `TrayMenuIcons.cpp` 自绘，勾选角标已移除，勾选交给平台原生
+状态，菜单行不会同时出现 glyph 和原生勾选。
 
 macOS 走同一条"选择后再执行"的顺序，只是菜单换成 `NSStatusItem` 的 `NSMenu`：`NSMenuItem` 的
-target/action 只记录选中的 tag，`popUpStatusItemMenu:` 返回后才执行 `TrayMenuModel` 里的动作，
-所以 Quit 也不会在菜单还开着时销毁图标。Linux 没有可直接挂接的系统菜单 API，仍走
+target/action 只记录选中的 tag，`popUpStatusItemMenu:` 返回后才按 tag 找到稳定 id 并调用
+`invoke(id)`，所以 Quit 也不会在菜单还开着时销毁图标。Linux 没有可直接挂接的系统菜单 API，仍走
 `juce::PopupMenu`（见 §6）。
 
 ### 4.4 左键、右键与平台
@@ -168,8 +180,8 @@ General 页新增（仅 `toybox::standalone::available()` 时创建；插件没�
 ### 4.6 与单实例/文件交接的关系
 
 双击一首歌交给已运行的实例时（`handOver()`），窗口会被 `setVisible(true)` + `toFront(true)`：
-隐藏到托盘的窗口也需要被这个动作拉回来。这条路径在托盘功能之前就存在，本次只确认它覆盖了
-"窗口隐藏"这一新状态，没有新增分支。
+隐藏到托盘的窗口也需要被这个动作拉回来。`toFront(true)` 本身不会让隐藏窗口出现，所以本次在
+`StandaloneApp.cpp` 的交接路径里新增了 `setVisible(true)`；这是行为变更，不只是复用旧分支。
 
 托盘 Quit 与系统退出共用 `systemRequestedQuit()`：保存插件状态 → `cancelAllModalComponents()`
 →（100 ms 后）`quit()`。直接调用 `quit()` 会跳过保存和模态清理，所以没有这么做。
@@ -201,17 +213,22 @@ General 页新增（仅 `toybox::standalone::available()` 时创建；插件没�
 
 | 断言 | 证明 |
 |---|---|
-| 开关开 → `closeRequested()` true，`show()` 被调用，窗口回调执行一次 | 关闭被吞、窗口被藏、图标就位 |
-| 第二次关闭仍返回 true，图标仍然可见 | 关闭可以重复，图标不会因再次关闭而消失 |
+| 开关关 → `closeRequested()` false，不隐藏窗口，`show()` 零次 | 关闭开关时完全回到旧行为 |
+| 开关开 → `closeRequested()` true，`show()` 被调用一次，窗口回调执行一次 | 关闭被吞、窗口被藏、图标就位 |
+| 第二次关闭仍返回 true，图标仍然可见，`showCalls == 1` | 关闭可以重复，且不会重复创建图标 |
 | 调 `activate` 回调 → 显示窗口回调执行，图标仍可见 | 左键能把窗口叫回来，图标不消失 |
 | 菜单第一行是 Show Window；Play 的标签随播放状态变 Pause | 菜单按当前状态重建 |
-| Loop 2x / Fade 3 s 的勾选跟随引擎 | 勾选不是另一份副本 |
-| `invoke("tray.playPause")` 让引擎播放；`tray.loop.1` / `tray.fade.0` 到达引擎 | 菜单动作不是空壳 |
+| `invoke("tray.show")` 到达与左键相同的回调 | 菜单第一行不是空壳 |
+| Loop 2x / Fade 3 s 的勾选跟随引擎；非预设 2.5 s 仍只勾最近一行 | 勾选与面板共用 `TransportPresets`，且不会没有勾选 |
+| `renderTrayMenu()` 的事件序列完全匹配 | 三平台共用一次遍历，分隔符/子菜单顺序不漂移 |
+| 顶层命令有 glyph、子菜单行没有；`ticked && icon` 不出现 | 原生勾选和 glyph 不会双重标记 |
+| `invoke("tray.play")` 让引擎播放；`tray.loop.1` / `tray.fade.0` 到达引擎 | 菜单动作不是空壳 |
+| 播放中打开菜单、暂停后调用旧的 `tray.pause` 返回 false，且不会开始播放 | 菜单打开期间状态变化时，陈旧 id 被拒绝而不是执行相反动作 |
 | 菜单中没有 `tray.back` / `tray.forward` | 5 秒跳转不会被重新加回托盘 |
-| 空引擎：Play 灰掉，`invoke` 返回 false | 没有歌曲时不会假装能播 |
+| 空引擎：Play/Stop 灰掉，`invoke` 返回 false；Loop/Fade 仍可选 | 没有歌曲时不会假装能播，但保留下一首的默认值 |
 | `invoke("tray.quit")` 执行退出回调，图标被取走 | Quit 真的走退出路径 |
 | `engine.pause()` 后 `isPaused()` true，菜单 Play 后 false，Stop 后 false | 暂停状态归引擎所有，不归某个窗口 |
-| `show()` 返回 false → `closeRequested()` false，窗口不隐藏，不声称图标可见 | 能检测到的失败不会藏窗口（Linux 的不可检测失败见 §6） |
+| `show()` 返回 false → `closeRequested()` false，窗口不隐藏，fake 的 `visible` 也为 false | 能检测到的失败不会藏窗口，替身状态与契约一致（Linux 的不可检测失败见 §6） |
 
 ### 5.2 窗口/设置测试（`vgm_app_test`，`settings-pages.txt`）
 
@@ -230,8 +247,8 @@ General 页新增（仅 `toybox::standalone::available()` 时创建；插件没�
    托盘窗口；
 2. 向托盘窗口投递 `WM_TRAYNOTIFY (WM_USER+100)`，`lParam = WM_LBUTTONDOWN` → 主窗口重新可见；
 3. 再次 `WM_CLOSE` → 又隐藏；
-4. 右键消息 → 出现窗口类为 `#32768` 的可见窗口，`MN_GETHMENU` 取到 12 个顶层项，第一项文字
-   为 "Show Window"；按 Esc 关闭后进程仍在。
+4. 右键消息 → 出现窗口类为 `#32768` 的可见窗口，`MN_GETHMENU` 取到 10 个顶层项（6 条命令/
+   子菜单 + 4 个分隔符），第一项文字为 "Show Window"；按 Esc 关闭后进程仍在。
 
 第 4 步的 `#32768` 是 Win32 菜单窗口的固定类名；旧的 JUCE 菜单不会产生这个窗口。这条路径不在
 ctest 里（需要真实桌面），但它验证了 `TrackPopupMenuEx` 的菜单确实上屏、模型顺序与顶层分隔符

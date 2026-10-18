@@ -5,35 +5,13 @@
 
 #include <juce_core/juce_core.h>
 
+#include "Standalone/TrayIconPresenter.h"
 #include "Standalone/TrayMenu.h"
 #include "playback/PlaybackEngine.h"
 #include "settings/SettingsStore.h"
 
 namespace toybox::standalone
 {
-
-/**
-	The thing that actually owns the notification-area icon.
-
-	Kept behind an interface so the close-to-tray policy can be tested without a desktop: the
-	console test supplies a fake that records which window callback ran and hands the menu back
-	to the test. The application supplies TrayIcon.cpp, which puts a juce::SystemTrayIconComponent
-	on the real notification area.
-*/
-class TrayIconPresenter
-{
-public:
-	virtual ~TrayIconPresenter() = default;
-
-	/** Puts the icon on the notification area. False when this build cannot show one; the
-		window is then left open and the close goes on to quit as it always did. */
-	virtual bool show (const juce::String& tooltip,
-					   std::function<void()> onActivate,
-					   std::function<TrayMenuModel()> buildMenu) = 0;
-
-	/** Takes the icon away. Safe to call when it is not showing. */
-	virtual void hide (void) = 0;
-};
 
 /**
 	Decides what a window close means, and what the tray icon does.
@@ -73,7 +51,10 @@ public:
 	void activate (void);
 
 	bool isIconVisible (void) const;
-	TrayMenu& getMenu (void);
+
+	/** Read-only view for tests. Production reaches the menu through the callbacks passed to the
+		presenter, so nothing outside needs a mutable model. */
+	const TrayMenu& getMenu (void) const;
 
 private:
 	bool showIcon (void);

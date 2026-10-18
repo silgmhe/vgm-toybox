@@ -9,13 +9,12 @@
 
 namespace toybox::standalone
 {
-/** The action list is owned by showNativeMenu() for the duration of the modal menu. Menu items
-	only record their tag here; the function runs the action after AppKit has dismissed the menu,
-	so a Quit cannot tear down the icon while the menu is still tracking.
+/** The selection state is owned by showNativeMenu() for the duration of the modal menu. Menu
+	items only record their tag here; the function invokes the stable id after AppKit has
+	dismissed the menu, so a Quit cannot tear down the icon while the menu is still tracking.
 */
-struct TrayNativeMenuActions
+struct TrayNativeMenuState
 {
-	std::vector<std::function<void()>> entries;
 	NSInteger selectedIndex = -1;
 };
 } // namespace toybox::standalone
@@ -23,7 +22,7 @@ struct TrayNativeMenuActions
 @interface VGMToyboxTrayMenuTarget : NSObject
 {
 @public
-	toybox::standalone::TrayNativeMenuActions* actions;
+	toybox::standalone::TrayNativeMenuState* state;
 }
 
 - (void)invoke:(NSMenuItem*)item;
@@ -32,9 +31,9 @@ struct TrayNativeMenuActions
 @implementation VGMToyboxTrayMenuTarget
 - (void)invoke:(NSMenuItem*)item
 {
-	if (actions != nullptr)
+	if (state != nullptr)
 	{
-		actions->selectedIndex = item.tag;
+		state->selectedIndex = item.tag;
 	}
 }
 @end
@@ -91,82 +90,107 @@ void setItemImage (NSMenuItem* item, TrayMenuIcon icon)
 	}
 }
 
-void addEntries (NSMenu* menu,
-				 const TrayMenuGroup& group,
-				 VGMToyboxTrayMenuTarget* target,
-				 TrayNativeMenuActions& actions)
+class MacMenuRenderer final : public TrayMenuRenderer
 {
-	for (const auto& entry : group.entries)
+public:
+	MacMenuRenderer (NSMenu* rootMenu, VGMToyboxTrayMenuTarget* menuTarget)
+		: root (rootMenu), target (menuTarget)
 	{
-		if (entry.separatorBefore)
+	}
+
+	void addSeparator (void) override
+	{
+		if (auto* into = current())
 		{
-			[menu addItem: [NSMenuItem separatorItem]];
+			[into addItem: [NSMenuItem separatorItem]];
+		}
+	}
+
+	void addItem (const TrayMenuEntry& entry) override
+	{
+		auto* into = current();
+
+		if (into == nil)
+		{
+			return;
 		}
 
 		NSMenuItem* item = [[NSMenuItem alloc] initWithTitle: toNSString (entry.label)
 													  action: @selector(invoke:)
 											   keyEquivalent: @""];
 		item.target = target;
-		item.tag = static_cast<NSInteger> (actions.entries.size());
+		item.tag = static_cast<NSInteger> (ids.size());
 		[item setEnabled: entry.enabled ? YES : NO];
 		[item setState: entry.ticked ? NSControlStateValueOn : NSControlStateValueOff];
 		setItemImage (item, entry.icon);
-		[menu addItem: item];
+		[into addItem: item];
 		[item release];
 
-		actions.entries.push_back (entry.enabled ? entry.action : std::function<void()>());
+		ids.push_back (entry.id);
 	}
-}
 
-void addGroup (NSMenu* menu,
-			   const TrayMenuGroup& group,
-			   VGMToyboxTrayMenuTarget* target,
-			   TrayNativeMenuActions& actions,
-			   bool& hasEntries)
-{
-	if (group.title.isEmpty())
+	void beginSubmenu (const TrayMenuGroup& group) override
 	{
-		addEntries (menu, group, target, actions);
-		hasEntries = hasEntries || ! group.entries.empty();
-		return;
+		NSMenu* submenu = [[NSMenu alloc] initWithTitle: toNSString (group.title)];
+		[submenu setAutoenablesItems: NO];
+		stack.push_back (submenu);
+		groups.push_back (&group);
 	}
 
-	NSMenu* submenu = [[NSMenu alloc] initWithTitle: toNSString (group.title)];
-	[submenu setAutoenablesItems: NO];
-	addEntries (submenu, group, target, actions);
-
-	if (hasEntries)
+	void endSubmenu (void) override
 	{
-		[menu addItem: [NSMenuItem separatorItem]];
+		NSMenu* submenu = stack.back();
+		stack.pop_back();
+
+		const auto* group = groups.back();
+		groups.pop_back();
+
+		auto* parent = current();
+
+		if (submenu == nil || parent == nil)
+		{
+			[submenu release];
+			return;
+		}
+
+		NSMenuItem* item = [[NSMenuItem alloc] initWithTitle: toNSString (group->title)
+													  action: nil
+											   keyEquivalent: @""];
+		[item setSubmenu: submenu];
+		setItemImage (item, group->icon);
+		[parent addItem: item];
+		[item release];
+		[submenu release];
 	}
 
-	NSMenuItem* item = [[NSMenuItem alloc] initWithTitle: toNSString (group.title)
-												  action: nil
-										   keyEquivalent: @""];
-	[item setSubmenu: submenu];
-	setItemImage (item, group.icon);
-	[menu addItem: item];
-	[item release];
-	[submenu release];
-	hasEntries = true;
-}
+	std::vector<juce::String> ids;
+
+private:
+	NSMenu* current (void) const
+	{
+		return stack.empty() ? root : stack.back();
+	}
+
+	NSMenu* root;
+	VGMToyboxTrayMenuTarget* target;
+	std::vector<NSMenu*> stack;
+	std::vector<const TrayMenuGroup*> groups;
+};
 
 void showNativeMenu (NSStatusItem* statusItem,
 					 const TrayMenuModel& model,
+					 const TrayMenuInvoker& invoke,
 					 const std::function<void()>& onMenuClosed)
 {
-	TrayNativeMenuActions actions;
+	TrayNativeMenuState state;
 	VGMToyboxTrayMenuTarget* target = [[VGMToyboxTrayMenuTarget alloc] init];
-	target->actions = &actions;
+	target->state = &state;
 
 	NSMenu* menu = [[NSMenu alloc] initWithTitle: @"VGMToybox"];
 	[menu setAutoenablesItems: NO];
 
-	bool hasEntries = false;
-	for (const auto& group : model)
-	{
-		addGroup (menu, group, target, actions, hasEntries);
-	}
+	MacMenuRenderer renderer (menu, target);
+	renderTrayMenu (model, renderer);
 
 	if ([menu numberOfItems] > 0)
 	{
@@ -175,7 +199,7 @@ void showNativeMenu (NSStatusItem* statusItem,
 		JUCE_END_IGNORE_WARNINGS_GCC_LIKE
 	}
 
-	const NSInteger selected = actions.selectedIndex;
+	const NSInteger selected = state.selectedIndex;
 	[menu release];
 	[target release];
 
@@ -185,30 +209,30 @@ void showNativeMenu (NSStatusItem* statusItem,
 		onMenuClosed();
 	}
 
-	if (selected >= 0 && selected < static_cast<NSInteger> (actions.entries.size()))
+	if (selected >= 0 && selected < static_cast<NSInteger> (renderer.ids.size()))
 	{
-		if (auto action = actions.entries[static_cast<std::size_t> (selected)])
+		if (invoke != nullptr)
 		{
-			action();
+			invoke (renderer.ids[static_cast<std::size_t> (selected)]);
 		}
 	}
 }
 } // namespace
 
-void TrayIcon::showPlatformMenu (const TrayMenuModel& model)
+void TrayIcon::showPlatformMenu (const TrayMenuModel& model, const TrayMenuInvoker& invoke)
 {
 	if (auto* statusItem = static_cast<NSStatusItem*> (getNativeHandle()))
 	{
 		// popUpStatusItemMenu: highlights the item for the duration of the menu. Clear it before
 		// the selected action runs, because Quit may destroy this component.
 		setHighlighted (true);
-		showNativeMenu (statusItem, model, [this] { setHighlighted (false); });
+		showNativeMenu (statusItem, model, invoke, [this] { setHighlighted (false); });
 		return;
 	}
 
 	// The status item should exist after show(), but a missing native handle must not leave the
 	// user with a right-click that does nothing.
-	showJuceMenu (model);
+	showJuceMenu (model, invoke);
 }
 
 } // namespace toybox::standalone

@@ -1,10 +1,8 @@
 #pragma once
 
 #include <functional>
-#include <vector>
 
-#include <juce_core/juce_core.h>
-
+#include "Standalone/TrayMenuModel.h"
 #include "playback/PlaybackEngine.h"
 
 namespace toybox::standalone
@@ -22,47 +20,6 @@ namespace toybox::standalone
 	The menu is rebuilt every time it is shown, so "Play" becomes "Pause", and the loop and fade
 	ticks follow the engine rather than a copy that could drift from it.
 */
-/** The glyphs the menu adapters draw beside a row. The enum lives here, outside the GUI, so the
-	console test can assert that every row has one without linking a UI toolkit. */
-enum class TrayMenuIcon
-{
-	none,
-	showWindow,
-	play,
-	pause,
-	stop,
-	back,
-	forward,
-	loop,
-	loop1,
-	loop2,
-	loop3,
-	loopForever,
-	fade,
-	fadeOff,
-	quit
-};
-
-struct TrayMenuEntry
-{
-	juce::String id;			// stable name, e.g. "tray.playPause" - what tests invoke
-	juce::String label;
-	TrayMenuIcon icon = TrayMenuIcon::none;
-	bool ticked = false;
-	bool enabled = true;
-	bool separatorBefore = false;
-	std::function<void()> action;
-};
-
-struct TrayMenuGroup
-{
-	juce::String title;			// empty: an item of the top level; otherwise a submenu
-	TrayMenuIcon icon = TrayMenuIcon::none;	// the submenu's own row; unused for a top-level group
-	std::vector<TrayMenuEntry> entries;
-};
-
-using TrayMenuModel = std::vector<TrayMenuGroup>;
-
 class TrayMenu
 {
 public:

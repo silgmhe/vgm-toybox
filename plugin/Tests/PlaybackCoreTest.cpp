@@ -37,6 +37,7 @@
 #include "playback/PlaybackEngine.h"
 #include "playback/SessionState.h"
 #include "playback/StartupSong.h"
+#include "playback/TransportPresets.h"
 #include "settings/SettingsStore.h"
 
 #include "TestSupport.h"
@@ -116,11 +117,12 @@ namespace
 	public:
 		bool show (const juce::String&,
 				   std::function<void()> onActivate,
-				   std::function<toybox::standalone::TrayMenuModel()> menuBuilder) override
+				   toybox::standalone::TrayMenuCallbacks menu) override
 		{
-			visible = true;
+			++showCalls;
+			visible = showResult;
 			activate = std::move (onActivate);
-			buildMenu = std::move (menuBuilder);
+			menuCallbacks = std::move (menu);
 			return showResult;
 		}
 
@@ -131,8 +133,37 @@ namespace
 
 		bool visible = false;
 		bool showResult = true;
+		int showCalls = 0;
 		std::function<void()> activate;
-		std::function<toybox::standalone::TrayMenuModel()> buildMenu;
+		toybox::standalone::TrayMenuCallbacks menuCallbacks;
+	};
+
+	/** Records the one traversal TrayMenu performs. The platform adapters only translate these
+		events, so this is the place to prove order, separators and nesting. */
+	class RecordingTrayMenuRenderer final : public toybox::standalone::TrayMenuRenderer
+	{
+	public:
+		void addSeparator (void) override
+		{
+			events.push_back ("sep");
+		}
+
+		void addItem (const toybox::standalone::TrayMenuEntry& entry) override
+		{
+			events.push_back ("item:" + entry.id);
+		}
+
+		void beginSubmenu (const toybox::standalone::TrayMenuGroup& group) override
+		{
+			events.push_back ("begin:" + group.title);
+		}
+
+		void endSubmenu (void) override
+		{
+			events.push_back ("end");
+		}
+
+		std::vector<juce::String> events;
 	};
 
 	const toybox::standalone::TrayMenuEntry* findTrayEntry (
@@ -923,6 +954,28 @@ int main (int /*argc*/, char* /*argv*/[])
 	// icon always come with a way back? Driven against a fake icon, so it runs on any machine.
 	std::printf ("\n[9b] the tray and what a close does\n");
 
+	settings.setCloseToTray (false);
+
+	// With the switch off, a close must behave exactly as it did before the tray existed: no
+	// hidden window and no icon left behind.
+	{
+		auto offIcon = std::make_unique<FakeTrayIcon>();
+		auto* off = offIcon.get();
+		int offHides = 0;
+
+		toybox::standalone::TrayController offTray (
+			engine,
+			settings,
+			[&] { ++offHides; },
+			[] {},
+			[] {},
+			[&] { return std::unique_ptr<toybox::standalone::TrayIconPresenter> (std::move (offIcon)); });
+
+		check (! offTray.closeRequested(), "switch off lets the close quit");
+		check (offHides == 0, "without hiding the window");
+		check (off->showCalls == 0 && ! off->visible, "and without creating an icon");
+	}
+
 	settings.setCloseToTray (true);
 
 	auto fakeIcon = std::make_unique<FakeTrayIcon>();
@@ -945,6 +998,7 @@ int main (int /*argc*/, char* /*argv*/[])
 
 	check (tray.closeRequested() && hides == 2, "a second close stays in the tray");
 	check (tray.isIconVisible(), "without putting a second icon up");
+	check (icon->showCalls == 1, "and without asking the presenter to show it again");
 
 	check (icon->activate != nullptr, "the icon was given a way to bring the window back");
 	icon->activate();
@@ -956,15 +1010,18 @@ int main (int /*argc*/, char* /*argv*/[])
 	engine.setLoopCount (2);
 	engine.setFadeSeconds (3.0);
 	engine.pause();
-	engine.setPositionSeconds (0.25);
 	check (engine.isPaused(), "pause is a state of the engine, not of one window");
 
-	auto& menu = tray.getMenu();
-	auto model = menu.build();
+	const auto& menu = tray.getMenu();
+	check (icon->menuCallbacks.build != nullptr && icon->menuCallbacks.invoke != nullptr,
+		   "the controller handed the presenter its menu callbacks");
 
-	const auto* playPause = findTrayEntry (model, "tray.playPause");
+	// Build through the presenter callback, not getMenu(): this is the path a right-click takes.
+	auto model = icon->menuCallbacks.build();
+
+	const auto* play = findTrayEntry (model, "tray.play");
 	const auto* stop = findTrayEntry (model, "tray.stop");
-	check (playPause != nullptr && playPause->label == "Play", "a stopped engine shows Play");
+	check (play != nullptr && play->label == "Play", "a paused engine shows Play");
 	check (stop != nullptr && stop->enabled, "Stop is enabled for a loaded song");
 	check (findTrayEntry (model, "tray.loop.2") != nullptr
 			   && findTrayEntry (model, "tray.loop.2")->ticked,
@@ -973,12 +1030,90 @@ int main (int /*argc*/, char* /*argv*/[])
 			   && findTrayEntry (model, "tray.fade.3")->ticked,
 		   "and the fade menu ticks the duration in force");
 
-	check (menu.invoke ("tray.playPause"), "Play runs");
+	check (toybox::transport::loopPresetIndex (0) == 3, "loop forever has its own row");
+	check (toybox::transport::fadePresetIndex (7.9) == 4,
+		   "a fade between presets picks the nearest row, not a threshold table");
+
+	check (icon->menuCallbacks.invoke ("tray.show"), "Show Window runs from the menu");
+	check (shows == 2, "and reaches the same callback as a left click");
+
+	// The single renderer pass must replace the three hand-written traversals: order, automatic
+	// submenu separators and per-entry separators all come from here.
+	{
+		RecordingTrayMenuRenderer renderer;
+		toybox::standalone::renderTrayMenu (model, renderer);
+
+		const std::vector<juce::String> expected
+		{
+			"item:tray.show", "sep", "item:tray.play", "item:tray.stop", "sep",
+			"begin:Loop", "item:tray.loop.1", "item:tray.loop.2", "item:tray.loop.3",
+			"item:tray.loop.forever", "end",
+			"sep", "begin:Fade", "item:tray.fade.0", "item:tray.fade.1", "item:tray.fade.3",
+			"item:tray.fade.5", "item:tray.fade.10", "end",
+			"sep", "item:tray.quit"
+		};
+
+		check (renderer.events == expected, "one traversal emits the expected menu");
+	}
+
+	// A non-preset fade restored from an old session used to leave the tray menu with no tick;
+	// the nearest row now matches what the transport panel shows.
+	engine.setFadeSeconds (2.5);
+	model = menu.build();
+	check (findTrayEntry (model, "tray.fade.3") != nullptr
+			   && findTrayEntry (model, "tray.fade.3")->ticked,
+		   "a non-preset fade ticks the nearest row");
+	check (findTrayEntry (model, "tray.fade.1") != nullptr
+			   && ! findTrayEntry (model, "tray.fade.1")->ticked,
+		   "and only one fade row is ticked");
+
+	engine.setLoopCount (5);
+	model = menu.build();
+	check (findTrayEntry (model, "tray.loop.3") != nullptr
+			   && findTrayEntry (model, "tray.loop.3")->ticked,
+		   "an out-of-range loop count still ticks one row");
+
+	engine.setLoopCount (2);
+	engine.setFadeSeconds (3.0);
+	model = menu.build();
+
+	// The icon/tick split is a model invariant, not something each platform adapter happens to
+	// get right: command rows carry a glyph, submenu rows use the native check mark.
+	for (const auto& group : model)
+	{
+		for (const auto& entry : group.entries)
+		{
+			check (! (entry.ticked && entry.icon != toybox::standalone::TrayMenuIcon::none),
+				   "a row never has a glyph and a native tick");
+
+			if (group.isSubmenu())
+			{
+				check (entry.icon == toybox::standalone::TrayMenuIcon::none,
+					   "a submenu row uses the native tick, not a glyph");
+			}
+			else
+			{
+				check (entry.icon != toybox::standalone::TrayMenuIcon::none,
+					   "a top-level command row carries a glyph");
+			}
+		}
+	}
+
+	check (menu.invoke ("tray.play"), "Play runs");
 	check (engine.isPlaying(), "and starts the song");
 	check (! engine.isPaused(), "resuming clears the pause state");
 	check (menu.build() [0].entries[0].label == "Show Window", "the first row is still Show Window");
-	check (findTrayEntry (menu.build(), "tray.playPause")->label == "Pause",
+	check (findTrayEntry (menu.build(), "tray.pause")->label == "Pause",
 		   "the rebuilt menu now offers Pause");
+
+	// A menu that was opened while playing hands back "tray.pause". If playback stopped in the
+	// meantime, the rebuilt model no longer contains that id: the click is refused instead of
+	// being turned into a play.
+	engine.pause();
+	check (! menu.invoke ("tray.pause"),
+		   "a stale Pause click is refused once playback has stopped");
+	check (! engine.isPlaying(), "and does not start the song instead");
+	engine.play();
 
 	check (menu.invoke ("tray.loop.1"), "a loop count can be chosen from the menu");
 	check (engine.getLoopCount() == 1, "and reaches the engine");
@@ -998,10 +1133,19 @@ int main (int /*argc*/, char* /*argv*/[])
 		toybox::PlaybackEngine emptyEngine;
 		toybox::standalone::TrayMenu emptyMenu (emptyEngine, [] {}, [] {});
 		const auto emptyModel = emptyMenu.build();
-		check (findTrayEntry (emptyModel, "tray.playPause") != nullptr
-				   && ! findTrayEntry (emptyModel, "tray.playPause")->enabled,
+		check (findTrayEntry (emptyModel, "tray.play") != nullptr
+				   && ! findTrayEntry (emptyModel, "tray.play")->enabled,
 			   "no song greys out Play");
-		check (! emptyMenu.invoke ("tray.playPause"), "a greyed row cannot be invoked");
+		check (findTrayEntry (emptyModel, "tray.stop") != nullptr
+				   && ! findTrayEntry (emptyModel, "tray.stop")->enabled,
+			   "and Stop");
+		check (findTrayEntry (emptyModel, "tray.loop.1") != nullptr
+				   && findTrayEntry (emptyModel, "tray.loop.1")->enabled,
+			   "Loop stays available as a default for the next song");
+		check (findTrayEntry (emptyModel, "tray.fade.0") != nullptr
+				   && findTrayEntry (emptyModel, "tray.fade.0")->enabled,
+			   "so does Fade");
+		check (! emptyMenu.invoke ("tray.play"), "a greyed row cannot be invoked");
 	}
 
 	check (menu.invoke ("tray.quit"), "Quit is on the menu");
@@ -1027,6 +1171,16 @@ int main (int /*argc*/, char* /*argv*/[])
 		check (! failingTray.closeRequested(), "an icon that cannot be shown lets the close quit");
 		check (failingHides == 0, "so the window is never hidden");
 		check (! failingTray.isIconVisible(), "and no icon is claimed");
+	}
+
+	// The presenter itself must not claim to be visible when show() failed, even though the
+	// controller no longer owns it after the failure.
+	{
+		FakeTrayIcon failedPresenter;
+		failedPresenter.showResult = false;
+		check (! failedPresenter.show ("", [] {}, {}), "the fake reports show failure");
+		check (! failedPresenter.visible && failedPresenter.showCalls == 1,
+			   "and its visible flag follows the result");
 	}
 
 	settingsDir.deleteRecursively();

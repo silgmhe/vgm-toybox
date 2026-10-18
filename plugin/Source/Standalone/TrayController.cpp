@@ -20,9 +20,10 @@ TrayController::TrayController (PlaybackEngine& engine,
 			[this] { activate(); },
 			[this]
 			{
-				// The menu has already closed by the time this runs (TrayIcon.cpp invokes the
-				// chosen entry from showMenuAsync's result callback), so removing the icon now
-				// cannot pull the menu out from under the click that chose Quit.
+				// Every adapter invokes the chosen entry after its menu has closed: Win32 after
+				// TrackPopupMenuEx returns, macOS after popUpStatusItemMenu: returns, JUCE from
+				// showMenuAsync's result callback. Removing the icon here therefore cannot pull
+				// the menu out from under the click that chose Quit.
 				hideIcon();
 
 				if (quitApplication != nullptr)
@@ -73,7 +74,7 @@ bool TrayController::isIconVisible (void) const
 	return iconVisible;
 }
 
-TrayMenu& TrayController::getMenu (void)
+const TrayMenu& TrayController::getMenu (void) const
 {
 	return menu;
 }
@@ -102,7 +103,11 @@ bool TrayController::showIcon (void)
 
 	iconVisible = icon->show ("VGMToybox",
 							  [this] { activate(); },
-							  [this] { return menu.build(); });
+							  { [this] { return menu.build(); },
+								[this] (const juce::String& id)
+								{
+									return menu.invoke (id);
+								} });
 
 	if (! iconVisible)
 	{

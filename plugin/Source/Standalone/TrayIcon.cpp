@@ -14,12 +14,96 @@
 namespace toybox::standalone
 {
 
+namespace
+{
+	class JuceMenuRenderer final : public TrayMenuRenderer
+	{
+	public:
+		explicit JuceMenuRenderer (juce::Colour colour) : coreColour (colour) {}
+
+		void addSeparator (void) override
+		{
+			current().addSeparator();
+		}
+
+		void addItem (const TrayMenuEntry& entry) override
+		{
+			juce::PopupMenu::Item item;
+			item.itemID = (int) ids.size() + 1;
+			item.text = entry.label;
+			item.isEnabled = entry.enabled;
+			item.isTicked = entry.ticked;
+			item.image = makeIcon (entry.icon, entry.enabled);
+			current().addItem (std::move (item));
+			ids.push_back (entry.id);
+		}
+
+		void beginSubmenu (const TrayMenuGroup& group) override
+		{
+			stack.emplace_back();
+			groups.push_back (&group);
+		}
+
+		void endSubmenu (void) override
+		{
+			auto submenu = std::move (stack.back());
+			stack.pop_back();
+
+			const auto* group = groups.back();
+			groups.pop_back();
+
+			auto icon = makeIcon (group->icon, true);
+
+			if (icon != nullptr)
+			{
+				current().addSubMenu (group->title, submenu, true, std::move (icon));
+			}
+			else
+			{
+				current().addSubMenu (group->title, submenu);
+			}
+		}
+
+		juce::PopupMenu menu;
+		std::vector<juce::String> ids;
+
+	private:
+		juce::PopupMenu& current (void)
+		{
+			return stack.empty() ? menu : stack.back();
+		}
+
+		std::unique_ptr<juce::Drawable> makeIcon (TrayMenuIcon icon, bool enabled) const
+		{
+			if (icon == TrayMenuIcon::none)
+			{
+				return {};
+			}
+
+			const auto image = makeTrayMenuIcon (icon, 64, coreColour, enabled ? 1.0f : 0.5f);
+
+			if (! image.isValid())
+			{
+				return {};
+			}
+
+			auto drawable = std::make_unique<juce::DrawableImage>();
+			drawable->setImage (image);
+			return std::unique_ptr<juce::Drawable> (std::move (drawable));
+		}
+
+		juce::Colour coreColour;
+		std::vector<juce::PopupMenu> stack;
+		std::vector<const TrayMenuGroup*> groups;
+	};
+}
+
 bool TrayIcon::show (const juce::String& tooltip,
 					 std::function<void()> onActivate,
-					 std::function<TrayMenuModel()> menuBuilder)
+					 TrayMenuCallbacks menu)
 {
 	activate = std::move (onActivate);
-	buildMenu = std::move (menuBuilder);
+	menuCallbacks = std::move (menu);
 
 	const auto icon = makeAppIcon();
 	if (! icon.isValid())
@@ -54,112 +138,39 @@ void TrayIcon::mouseDown (const juce::MouseEvent& event)
 
 void TrayIcon::showMenu (void)
 {
-	if (buildMenu == nullptr)
+	if (menuCallbacks.build == nullptr)
 	{
 		return;
 	}
 
-	showPlatformMenu (buildMenu());
+	showPlatformMenu (menuCallbacks.build(), menuCallbacks.invoke);
 }
 
-void TrayIcon::showJuceMenu (const TrayMenuModel& model)
+void TrayIcon::showJuceMenu (const TrayMenuModel& model, const TrayMenuInvoker& invoke)
 {
-	juce::PopupMenu menu;
-	std::vector<std::function<void()>> actions;
-	int nextId = 1;
-	bool hasEntries = false;
+	JuceMenuRenderer renderer (findColour (juce::PopupMenu::textColourId));
+	renderTrayMenu (model, renderer);
 
-	const auto coreColour = findColour (juce::PopupMenu::textColourId);
-
-	auto makeIcon = [coreColour] (TrayMenuIcon icon, bool ticked, bool enabled)
+	if (renderer.ids.empty())
 	{
-		if (icon == TrayMenuIcon::none)
-		{
-			return std::unique_ptr<juce::Drawable>();
-		}
-
-		const auto image = makeTrayMenuIcon (icon, 64, ticked, coreColour,
-											 enabled ? 1.0f : 0.5f);
-
-		if (! image.isValid())
-		{
-			return std::unique_ptr<juce::Drawable>();
-		}
-
-		auto drawable = std::make_unique<juce::DrawableImage>();
-		drawable->setImage (image);
-		return std::unique_ptr<juce::Drawable> (std::move (drawable));
-	};
-
-	// Item ids index actions directly (id - 1), which works because both counters advance
-	// together and submenu items are appended in the order the model lists them.
-	auto addEntries = [&] (juce::PopupMenu& into, const TrayMenuGroup& group)
-	{
-		for (const auto& entry : group.entries)
-		{
-			if (entry.separatorBefore)
-			{
-				into.addSeparator();
-			}
-
-			juce::PopupMenu::Item item;
-			item.itemID = nextId++;
-			item.text = entry.label;
-			item.isEnabled = entry.enabled;
-			item.isTicked = entry.ticked;
-			item.image = makeIcon (entry.icon, entry.ticked, entry.enabled);
-			into.addItem (std::move (item));
-
-			actions.push_back (entry.enabled ? entry.action : std::function<void()>());
-		}
-	};
-
-	for (const auto& group : model)
-	{
-		if (group.title.isEmpty())
-		{
-			addEntries (menu, group);
-			hasEntries = hasEntries || ! group.entries.empty();
-			continue;
-		}
-
-		juce::PopupMenu submenu;
-		addEntries (submenu, group);
-
-		if (hasEntries)
-		{
-			menu.addSeparator();
-		}
-
-		auto submenuIcon = makeIcon (group.icon, false, true);
-
-		if (submenuIcon != nullptr)
-		{
-			menu.addSubMenu (group.title, submenu, true, std::move (submenuIcon));
-		}
-		else
-		{
-			menu.addSubMenu (group.title, submenu);
-		}
-
-		hasEntries = true;
+		return;
 	}
 
 	// Linux is the only platform that reaches this in normal operation. macOS calls it only if
 	// the status item has no native handle, and Windows only if its popup menu cannot be created.
-	menu.showMenuAsync (juce::PopupMenu::Options().withMousePosition(),
-						[actions = std::move (actions)] (int result)
-						{
-							if (result <= 0 || (size_t) result > actions.size())
-							{
-								return;
-							}
+	renderer.menu.showMenuAsync (juce::PopupMenu::Options().withMousePosition(),
+								 [ids = std::move (renderer.ids), invoke] (int result)
+								 {
+									 if (result <= 0 || (size_t) result > ids.size())
+									 {
+										 return;
+									 }
 
-							if (auto& action = actions[(size_t) result - 1])
-							{
-								action();
-							}
-						});
+									 if (invoke != nullptr)
+									 {
+										 invoke (ids[(size_t) result - 1]);
+									 }
+								 });
 }
 
 juce::Image TrayIcon::makeAppIcon (void)

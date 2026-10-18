@@ -59,8 +59,14 @@ HBITMAP createMenuBitmap (const juce::Image& image)
 	void* pixels = nullptr;
 	HBITMAP bitmap = CreateDIBSection (nullptr, &header, DIB_RGB_COLORS, &pixels, nullptr, 0);
 
-	if (bitmap == nullptr || pixels == nullptr)
+	if (bitmap == nullptr)
 	{
+		return nullptr;
+	}
+
+	if (pixels == nullptr)
+	{
+		DeleteObject (bitmap);
 		return nullptr;
 	}
 
@@ -90,35 +96,138 @@ HBITMAP createMenuBitmap (const juce::Image& image)
 /** A real Win32 popup menu.
 
 	`TPM_RETURNCMD` makes TrackPopupMenuEx return the chosen command instead of posting
-	WM_COMMAND, so the model's std::function still runs after the menu has been destroyed. The menu
-	uses the system font, shadow, dark-mode colours and DPI scaling; none of that is JUCE-drawn.
+	WM_COMMAND. Command ids index stable model ids directly, and the controller invokes the
+	selected id after the menu has been destroyed. The menu uses the system font, shadow,
+	dark-mode colours and DPI scaling; none of that is JUCE-drawn.
 */
-bool showWindowsMenu (HWND owner, const TrayMenuModel& model)
+class WindowsMenuRenderer final : public TrayMenuRenderer
 {
-	HMENU menu = CreatePopupMenu();
-
-	if (menu == nullptr)
+public:
+	WindowsMenuRenderer (HMENU rootMenu, juce::Colour colour, int pixelSize)
+		: root (rootMenu), coreColour (colour), iconPixelSize (pixelSize)
 	{
-		return false;
 	}
 
-	std::vector<std::function<void()>> actions;
-	std::vector<HBITMAP> bitmaps;
-	bool hasEntries = false;
+	~WindowsMenuRenderer (void) override
+	{
+		clearBitmaps();
+	}
 
-	// Derive the ink from the menu background rather than assuming a light menu: Windows can
-	// hand us a dark popup in dark mode, where black glyphs would disappear.
-	const auto coreColour = windowsColour (COLOR_MENU).contrasting();
-	const auto iconPixelSize = menuIconPixelSize (owner);
+	void addSeparator (void) override
+	{
+		if (auto* into = current())
+		{
+			AppendMenuW (into, MF_SEPARATOR, 0, nullptr);
+		}
+	}
 
-	auto attachIcon = [&] (HMENU into, int index, TrayMenuIcon icon, bool ticked, bool enabled)
+	void addItem (const TrayMenuEntry& entry) override
+	{
+		auto* into = current();
+
+		if (into == nullptr)
+		{
+			return;
+		}
+
+		UINT flags = MF_STRING;
+
+		if (! entry.enabled)
+		{
+			flags |= MF_GRAYED;
+		}
+
+		if (entry.ticked)
+		{
+			flags |= MF_CHECKED;
+		}
+
+		const UINT id = static_cast<UINT> (ids.size() + 1);
+
+		if (AppendMenuW (into, flags, id, entry.label.toWideCharPointer()))
+		{
+			ids.push_back (entry.id);
+			attachIcon (into, GetMenuItemCount (into) - 1, entry.icon, entry.enabled);
+		}
+	}
+
+	void beginSubmenu (const TrayMenuGroup& group) override
+	{
+		stack.push_back (CreatePopupMenu());
+		groups.push_back (&group);
+	}
+
+	void endSubmenu (void) override
+	{
+		HMENU submenu = stack.back();
+		stack.pop_back();
+
+		const auto* group = groups.back();
+		groups.pop_back();
+
+		auto* parent = current();
+
+		if (submenu == nullptr || parent == nullptr)
+		{
+			if (submenu != nullptr)
+			{
+				DestroyMenu (submenu);
+			}
+
+			return;
+		}
+
+		if (AppendMenuW (parent, MF_POPUP | MF_STRING,
+						 reinterpret_cast<UINT_PTR> (submenu),
+						 group->title.toWideCharPointer()))
+		{
+			attachIcon (parent, GetMenuItemCount (parent) - 1, group->icon, true);
+		}
+		else
+		{
+			DestroyMenu (submenu);
+		}
+	}
+
+	UINT defaultItemId (void) const
+	{
+		for (std::size_t i = 0; i < ids.size(); ++i)
+		{
+			if (ids[i] == "tray.show")
+			{
+				return static_cast<UINT> (i + 1);
+			}
+		}
+
+		return 0;
+	}
+
+	void clearBitmaps (void)
+	{
+		for (auto bitmap : bitmaps)
+		{
+			DeleteObject (bitmap);
+		}
+
+		bitmaps.clear();
+	}
+
+	std::vector<juce::String> ids;
+
+private:
+	HMENU current (void) const
+	{
+		return stack.empty() ? root : stack.back();
+	}
+
+	void attachIcon (HMENU into, int index, TrayMenuIcon icon, bool enabled)
 	{
 		if (icon == TrayMenuIcon::none || index < 0)
 		{
 			return;
 		}
 
-		const auto image = makeTrayMenuIcon (icon, iconPixelSize, ticked, coreColour,
+		const auto image = makeTrayMenuIcon (icon, iconPixelSize, coreColour,
 											 enabled ? 1.0f : 0.42f);
 		HBITMAP bitmap = createMenuBitmap (image);
 
@@ -140,73 +249,38 @@ bool showWindowsMenu (HWND owner, const TrayMenuModel& model)
 		{
 			DeleteObject (bitmap);
 		}
-	};
-
-	// Command ids index actions directly (id - 1): both counters advance together, and a
-	// separator advances neither.
-	auto addEntries = [&] (HMENU into, const TrayMenuGroup& group)
-	{
-		for (const auto& entry : group.entries)
-		{
-			if (entry.separatorBefore)
-			{
-				AppendMenuW (into, MF_SEPARATOR, 0, nullptr);
-			}
-
-			UINT flags = MF_STRING;
-			if (! entry.enabled)
-			{
-				flags |= MF_GRAYED;
-			}
-			if (entry.ticked)
-			{
-				flags |= MF_CHECKED;
-			}
-
-			const UINT id = static_cast<UINT> (actions.size() + 1);
-			actions.push_back (entry.enabled ? entry.action : std::function<void()>());
-
-			if (AppendMenuW (into, flags, id, entry.label.toWideCharPointer()))
-			{
-				attachIcon (into, GetMenuItemCount (into) - 1, entry.icon, entry.ticked,
-							entry.enabled);
-			}
-		}
-	};
-
-	for (const auto& group : model)
-	{
-		if (group.title.isEmpty())
-		{
-			addEntries (menu, group);
-			hasEntries = hasEntries || ! group.entries.empty();
-			continue;
-		}
-
-		HMENU submenu = CreatePopupMenu();
-		if (submenu == nullptr)
-		{
-			continue;
-		}
-
-		addEntries (submenu, group);
-
-		if (hasEntries)
-		{
-			AppendMenuW (menu, MF_SEPARATOR, 0, nullptr);
-		}
-
-		if (AppendMenuW (menu, MF_POPUP | MF_STRING,
-						 reinterpret_cast<UINT_PTR> (submenu), group.title.toWideCharPointer()))
-		{
-			attachIcon (menu, GetMenuItemCount (menu) - 1, group.icon, false, true);
-		}
-
-		hasEntries = true;
 	}
 
-	// Enter on the menu shows the window, the least destructive action.
-	SetMenuDefaultItem (menu, 1, FALSE);
+	HMENU root;
+	juce::Colour coreColour;
+	int iconPixelSize;
+	std::vector<HMENU> stack;
+	std::vector<const TrayMenuGroup*> groups;
+	std::vector<HBITMAP> bitmaps;
+};
+
+bool showWindowsMenu (HWND owner, const TrayMenuModel& model, const TrayMenuInvoker& invoke)
+{
+	HMENU menu = CreatePopupMenu();
+
+	if (menu == nullptr)
+	{
+		return false;
+	}
+
+	WindowsMenuRenderer renderer (menu,
+								  windowsColour (COLOR_MENU).contrasting(),
+								  menuIconPixelSize (owner));
+	renderTrayMenu (model, renderer);
+
+	// Enter on the menu shows the window, the least destructive action. Resolve it by id rather
+	// than by position: a new group before Show must not silently change the default row.
+	const UINT defaultId = renderer.defaultItemId();
+
+	if (defaultId != 0)
+	{
+		SetMenuDefaultItem (menu, defaultId, FALSE);
+	}
 
 	POINT position {};
 	GetCursorPos (&position);
@@ -217,21 +291,17 @@ bool showWindowsMenu (HWND owner, const TrayMenuModel& model)
 										 position.x, position.y,
 										 owner, nullptr);
 
+	const juce::String selectedId = command > 0 && command <= renderer.ids.size()
+		? renderer.ids[command - 1]
+		: juce::String();
+
 	DestroyMenu (menu);
-
-	for (auto bitmap : bitmaps)
-	{
-		DeleteObject (bitmap);
-	}
-
+	renderer.clearBitmaps();
 	PostMessage (owner, WM_NULL, 0, 0);	// lets the menu close if focus moved elsewhere
 
-	if (command > 0 && command <= static_cast<UINT> (actions.size()))
+	if (! selectedId.isEmpty() && invoke != nullptr)
 	{
-		if (auto& action = actions[command - 1])
-		{
-			action();
-		}
+		invoke (selectedId);
 	}
 
 	return true;
@@ -239,19 +309,19 @@ bool showWindowsMenu (HWND owner, const TrayMenuModel& model)
 } // namespace
 #endif
 
-void TrayIcon::showPlatformMenu (const TrayMenuModel& model)
+void TrayIcon::showPlatformMenu (const TrayMenuModel& model, const TrayMenuInvoker& invoke)
 {
    #if JUCE_WINDOWS
 	if (auto* owner = reinterpret_cast<HWND> (getWindowHandle()))
 	{
-		if (showWindowsMenu (owner, model))
+		if (showWindowsMenu (owner, model, invoke))
 		{
 			return;
 		}
 	}
    #endif
 
-	showJuceMenu (model);
+	showJuceMenu (model, invoke);
 }
 
 } // namespace toybox::standalone

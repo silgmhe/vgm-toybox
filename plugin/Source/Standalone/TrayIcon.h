@@ -4,7 +4,7 @@
 
 #include <juce_gui_extra/juce_gui_extra.h>
 
-#include "Standalone/TrayController.h"
+#include "Standalone/TrayIconPresenter.h"
 
 namespace toybox::standalone
 {
@@ -15,8 +15,8 @@ namespace toybox::standalone
 	This is the only file in the tray feature that knows what a desktop is; everything above it
 	(TrayController, TrayMenu) is compiled into the console test as well. A left click calls the
 	controller's show-window callback; a right click turns the current menu model into a menu and
-	runs it, and the chosen row is handed back to the model, so the policy stays testable and this
-	class stays a thin adapter.
+	runs it. The adapter only maps native command ids back to the model's stable ids; the controller
+	invokes the action, so enabled checks and dispatch stay testable and this class stays thin.
 
 	On Windows the menu is a real Win32 popup menu (system font, dark mode, DPI scaling); on macOS
 	it is an NSMenu attached to the NSStatusItem's button. Linux keeps JUCE's menu because a native
@@ -33,7 +33,7 @@ public:
 
 	bool show (const juce::String& tooltip,
 			   std::function<void()> onActivate,
-			   std::function<TrayMenuModel()> buildMenu) override;
+			   TrayMenuCallbacks menu) override;
 
 	void hide (void) override;
 
@@ -43,16 +43,16 @@ private:
 
 	/** The platform menu adapter. Defined once per platform in TrayIcon_windows.cpp,
 		TrayIcon_mac.mm or TrayIcon_linux.cpp. */
-	void showPlatformMenu (const TrayMenuModel& model);
+	void showPlatformMenu (const TrayMenuModel& model, const TrayMenuInvoker& invoke);
 
 	/** The toolkit menu used by Linux, and as a fallback if the native handle is missing. */
-	void showJuceMenu (const TrayMenuModel& model);
+	void showJuceMenu (const TrayMenuModel& model, const TrayMenuInvoker& invoke);
 
 	static juce::Image makeAppIcon (void);
 	static juce::Image makeTemplateImage (const juce::Image& colourIcon);
 
 	std::function<void()> activate;
-	std::function<TrayMenuModel()> buildMenu;
+	TrayMenuCallbacks menuCallbacks;
 };
 
 } // namespace toybox::standalone
