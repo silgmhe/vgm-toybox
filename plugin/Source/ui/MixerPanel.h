@@ -38,6 +38,9 @@ public:
 	/** What the timer calls: a structure check plus the value updates - see the split below. */
 	void refresh (void);
 
+	/** Re-applies the card header, tooltips, "(not connected)" and the master name. */
+	void refreshLanguage (void);
+
 private:
 	/** Rebuilds the strips when another song is loaded. Called from refresh(), which is why the
 		per-tick path does nothing but compare a file name and a track count. */
@@ -107,11 +110,11 @@ private:
 	void sendTrackOutputsToMaster (void);
 
 	toybox::PlaybackEngine& engine;
-	IconButton mixerToggle { "Mixer", IconButton::Icon::sliders };
+	IconButton mixerToggle { "mixer", "Mixer", IconButton::Icon::sliders };
 	// the two routing shortcuts in the card header: spread every track over the output buses,
 	// or send all of them back to the master bus
-	IconButton spreadOutputsButton { "Spread outputs", IconButton::Icon::spreadOutputs };
-	IconButton mergeToMasterButton { "Send to master", IconButton::Icon::mergeToMaster };
+	IconButton spreadOutputsButton { "spread-outputs", "Spread outputs", IconButton::Icon::spreadOutputs };
+	IconButton mergeToMasterButton { "send-to-master", "Send to master", IconButton::Icon::mergeToMaster };
 	StripViewport viewport { *this };
 	StripHolder holder;
 	juce::OwnedArray<ChannelStrip> strips;

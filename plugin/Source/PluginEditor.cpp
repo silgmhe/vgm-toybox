@@ -1,5 +1,6 @@
 #include "PluginEditor.h"
 
+#include "i18n/LanguageManager.h"
 #include "settings/SettingsStore.h"
 #include "ui/Format.h"
 #include "ui/SoftShadow.h"
@@ -47,6 +48,7 @@ ToyboxAudioProcessorEditor::ToyboxAudioProcessorEditor (ToyboxAudioProcessor& p)
 	// Before anything below: a control that colours itself while it is being constructed (a label,
 	// a button, a whole page) reads theme:: there and then, so the stored palette has to be in
 	// force first or that control would keep the light one for its lifetime.
+	i18n::LanguageManager::getInstance().initialise();
 	applyPalette();
 
 	setLookAndFeel (&lookAndFeel);
@@ -85,6 +87,7 @@ ToyboxAudioProcessorEditor::ToyboxAudioProcessorEditor (ToyboxAudioProcessor& p)
 	openButton.setComponentID ("editor.open");
 	statusLabel.setComponentID ("editor.status");
 	openButton.onClick = [this] { openFileChooser(); };
+	openButton.setButtonText (i18n::tr ("editor.open"));
 	// its accent colours are applied by lookAndFeelChanged(): they are copies, so they have to be
 	// re-applied whenever the palette changes
 	openButton.setTooltip (formatOpenPrompt());
@@ -107,6 +110,7 @@ ToyboxAudioProcessorEditor::ToyboxAudioProcessorEditor (ToyboxAudioProcessor& p)
 	addAndMakeVisible (viewStack);
 
 	menu.viewNames = viewStack.getViewNames();
+	menu.viewIds = viewStack.getViewIds();
 	// The menu asks the stack which page is on screen every time it builds the View menu, so the
 	// tick follows any switch - this menu, Ctrl+1..9, or a page changed from code.
 	menu.getCurrentView = [this] { return viewStack.getCurrentViewIndex(); };
@@ -193,6 +197,22 @@ void ToyboxAudioProcessorEditor::changeListenerCallback (juce::ChangeBroadcaster
 	}
 
 	applyPalette();
+
+	// The same broadcast carries a language change: re-read the stored selection (a no-op when
+	// the theme was what changed) and let every control that owns text re-apply it.
+	i18n::LanguageManager::getInstance().applyStoredSelection();
+
+	openButton.setButtonText (i18n::tr ("editor.open"));
+	openButton.setTooltip (formatOpenPrompt());
+
+	menu.viewNames = viewStack.getViewNames();
+	menu.viewIds = viewStack.getViewIds();
+	menu.menuItemsChanged();
+
+	viewStack.refreshLanguage();
+	dropHint.refreshLanguage();
+	aboutOverlay.refreshLanguage();
+	settingsOverlay.refreshLanguage();
 
 	// Both halves are needed and neither implies the other: the broadcast re-reads every colour
 	// that was set through setColour() - JUCE walks the whole component tree for us, and every
@@ -626,7 +646,7 @@ void ToyboxAudioProcessorEditor::updateStatusLine (void)
 	if (loadInFlight)
 	{
 		statusLabel.setColour (juce::Label::textColourId, theme::secondaryText());
-		statusLabel.setText ("Loading " + loadingName + "...", juce::dontSendNotification);
+		statusLabel.setText (i18n::tr ("status.loading", loadingName), juce::dontSendNotification);
 		return;
 	}
 
@@ -646,19 +666,19 @@ void ToyboxAudioProcessorEditor::updateStatusLine (void)
 	}
 	else if (! engine.isLoaded())
 	{
-		status = "No file";
+		status = i18n::tr ("status.noFile");
 	}
 	else if (engine.isFinished())
 	{
-		status = "Finished";
+		status = i18n::tr ("status.finished");
 	}
 	else if (engine.isPlaying())
 	{
-		status = "Playing";
+		status = i18n::tr ("status.playing");
 	}
 	else
 	{
-		status = "Paused";
+		status = i18n::tr ("status.paused");
 	}
 
 	if (engine.isLoaded())

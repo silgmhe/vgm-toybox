@@ -98,23 +98,99 @@ public:
 	}
 };
 
-class ToyboxStandaloneApp final : public juce::JUCEApplication
+/** The standalone's own state, kept separately from settings/SettingsStore's settings.xml.
+
+	These are not preferences: juce::StandalonePluginHolder uses this PropertySet for the audio
+	device, the window position and the last plugin state. Keeping it next to settings.xml, with
+	a name that says what it is, makes the two files' jobs obvious at a glance.
+
+	It used to be juce::ApplicationProperties named after the application, which put
+	VGMToybox.settings in the folder on Windows but one level above it on macOS and Linux. The
+	first run of this version moves the old file here; the code below is the only thing that
+	knows that old path.
+*/
+namespace
 {
-public:
-	ToyboxStandaloneApp (void)
+	constexpr const char* kStandaloneStateFileName = "standalone-state.xml";
+
+	/** Where the old juce::ApplicationProperties file lived. Built with the same Options the
+		application used, so getDefaultFile() reproduces the old platform-specific path. */
+	juce::File legacyStandaloneStateFile (void)
 	{
 		juce::PropertiesFile::Options options;
 		options.applicationName = JucePlugin_Name;
 		options.filenameSuffix = ".settings";
 		options.osxLibrarySubFolder = "Application Support";
+
 	   #if JUCE_LINUX || JUCE_BSD
 		options.folderName = "~/.config";
 	   #else
 		options.folderName = "";
 	   #endif
 
-		appProperties.setStorageParameters (options);
+		return options.getDefaultFile();
 	}
+
+	/** The new file is named explicitly, like SettingsStore's settings.xml (ADR-1), so the
+		options below only describe the same path for anyone who later asks getDefaultFile(). */
+	juce::PropertiesFile::Options standaloneStateOptions (void)
+	{
+		juce::PropertiesFile::Options options;
+		options.applicationName = "standalone-state";
+		options.filenameSuffix = ".xml";
+	   #if JUCE_LINUX || JUCE_BSD
+		options.folderName = "~/.config/VGMToybox";
+	   #else
+		options.folderName = "VGMToybox";
+	   #endif
+		options.osxLibrarySubFolder = "Application Support";
+		options.commonToAllUsers = false;
+		options.storageFormat = juce::PropertiesFile::storeAsXML;
+		return options;
+	}
+
+	/** Picks standalone-state.xml, moving the one old file into place on the first run. */
+	juce::File prepareStandaloneStateFile (void)
+	{
+		const auto directory = settings::SettingsStore::settingsDirectory();
+		const auto target = directory.getChildFile (kStandaloneStateFileName);
+
+		// On macOS and Linux the old file sits one level above this folder, so the folder may not
+		// exist yet when the migration runs. save() would create it later; the move needs it now.
+		directory.createDirectory();
+
+		// The console test points the settings folder at a temporary directory. The old file can
+		// still exist in the developer's real AppData; never move that into a test run.
+		if (settings::SettingsStore::settingsDirectoryIsOverridden())
+		{
+			return target;
+		}
+
+		const auto legacy = legacyStandaloneStateFile();
+
+		// An empty target is what a crash between creating and filling the new file leaves. It
+		// holds nothing worth keeping, so the old file still gets its one migration.
+		const bool targetIsEmpty = ! target.existsAsFile() || target.getSize() == 0;
+
+		if (legacy != target && legacy.existsAsFile() && targetIsEmpty)
+		{
+			target.deleteFile();
+
+			if (! legacy.moveFileTo (target) && legacy.copyFileTo (target))
+			{
+				// The copy is in place; a failed delete only leaves a harmless duplicate behind.
+				legacy.deleteFile();
+			}
+		}
+
+		return target;
+	}
+}
+
+class ToyboxStandaloneApp final : public juce::JUCEApplication
+{
+public:
+	ToyboxStandaloneApp (void) = default;
 
 	const juce::String getApplicationName (void) override { return JucePlugin_Name; }
 	const juce::String getApplicationVersion (void) override { return JucePlugin_VersionString; }
@@ -159,6 +235,12 @@ public:
 
 	void initialise (const juce::String&) override
 	{
+		// Only the instance that is actually starting touches the state file. In particular a
+		// second launch that just hands its song to the running window must not migrate the old
+		// file while the first instance still owns it.
+		standaloneState = std::make_unique<juce::PropertiesFile> (prepareStandaloneStateFile(),
+																  standaloneStateOptions());
+
 		mainWindow = juce::rawToUniquePtr (createWindow());
 
 		if (mainWindow != nullptr)
@@ -195,7 +277,10 @@ public:
 		// fields so that a hook added later cannot be forgotten here.
 		standalone::hooks().clear();
 
-		appProperties.saveIfNeeded();
+		if (standaloneState != nullptr)
+		{
+			standaloneState->saveIfNeeded();
+		}
 	}
 
 	void systemRequestedQuit (void) override
@@ -342,7 +427,9 @@ private:
 
 	std::unique_ptr<juce::StandalonePluginHolder> createPluginHolder (void)
 	{
-		return std::make_unique<juce::StandalonePluginHolder> (appProperties.getUserSettings(),
+		jassert (standaloneState != nullptr);
+
+		return std::make_unique<juce::StandalonePluginHolder> (standaloneState.get(),
 															   false,
 															   juce::String(),
 															   nullptr,
@@ -402,7 +489,7 @@ private:
 							  + "settings error: " + store.lastError() + juce::newLine);
 	}
 
-	juce::ApplicationProperties appProperties;
+	std::unique_ptr<juce::PropertiesFile> standaloneState;
 	std::unique_ptr<juce::StandaloneFilterWindow> mainWindow;
 	std::unique_ptr<standalone::TrayController> trayController;
 	std::unique_ptr<juce::StandalonePluginHolder> pluginHolder;	// only when no window could be made

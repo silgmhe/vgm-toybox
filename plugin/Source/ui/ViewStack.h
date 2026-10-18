@@ -32,11 +32,11 @@ public:
 		views.add (view);
 		addChildComponent (view);		// hidden until it is the current one
 
-		// A page names itself after its title, so a script can ask which one is on screen without
-		// knowing how the class is spelled in C++.
+		// A page's component ID comes from its stable id, not its translated title. A script can
+		// ask which page is on screen without depending on the language the window is showing.
 		if (view->getComponentID().isEmpty())
 		{
-			view->setComponentID ("view." + view->getViewName().toLowerCase());
+			view->setComponentID ("view." + view->getViewId());
 		}
 
 		if (current < 0)
@@ -59,6 +59,25 @@ public:
 			names.add (view->getViewName());
 		}
 		return names;
+	}
+
+	/** Stable ids in the same order as getViewNames(). */
+	juce::StringArray getViewIds (void) const
+	{
+		juce::StringArray ids;
+		for (const auto* view : views)
+		{
+			ids.add (view->getViewId());
+		}
+		return ids;
+	}
+
+	void refreshLanguage (void)
+	{
+		for (auto* view : views)
+		{
+			view->refreshLanguage();
+		}
 	}
 
 	void setCurrentView (int index)

@@ -4,6 +4,7 @@
 #include "Icons.h"
 #include "Theme.h"
 
+#include "i18n/LanguageManager.h"
 #include "playback/DawSync.h"
 #include "playback/PlaybackEngine.h"
 
@@ -135,9 +136,6 @@ SyncGroup::SyncGroup (toybox::PlaybackEngine& engineToUse)
 	// The toggle reads the sync state in refresh() and turns over what it shows, so the button
 	// itself stays the one place the state is shown. Both glyphs carry their word: a chain link
 	// or a flag alone does not say "this follows your DAW".
-	syncButton.setCaption ("SYNC");
-	syncButton.setTooltip ("Follow the host's clock - the song position becomes \"host position - cue\". "
-						   "Click again to play on its own");
 	syncButton.onClick = [this]
 	{
 		sync.setEnabled (! sync.isEnabled());
@@ -156,10 +154,6 @@ SyncGroup::SyncGroup (toybox::PlaybackEngine& engineToUse)
 	// again is the normal gesture. The button is therefore never lit - a lit face in this editor
 	// means "this switch is on", and Cue is not a switch. There is no "has a cue" state to show
 	// either: the cue always exists (0 is the DAW's start), and the menu can put it back there.
-	cueButton.setCaption ("CUE");
-	cueButton.setTooltip ("Take the host's position as the cue point - the place on the DAW timeline "
-						  "where the song's beginning plays. Right-click this box to put the cue "
-						  "back to 0 s");
 	cueButton.onClick = [this] { takeCue(); };
 	addAndMakeVisible (cueButton);
 
@@ -168,9 +162,6 @@ SyncGroup::SyncGroup (toybox::PlaybackEngine& engineToUse)
 	offsetKnob.setComponentID ("knob.cue-offset");	// for the window scripts (AppHarnessTest)
 	offsetKnob.setRange (-lastKnobRangeMs, lastKnobRangeMs, 0.0);
 	offsetKnob.setValue (0.0, juce::dontSendNotification);
-	offsetKnob.setTooltip ("Cue offset - drag to trim the cue point by a few milliseconds, or type the "
-						   "number beside it. Double-click to put it back to zero, right-click anywhere "
-						   "in the box for the knob's range and to reset the cue");
 	// The number is the offset, always: the cue is never absent, so this field has no second thing
 	// to say.
 	offsetKnob.textFromValueFunction = [] (double ms) { return offsetText (ms); };
@@ -191,6 +182,19 @@ SyncGroup::SyncGroup (toybox::PlaybackEngine& engineToUse)
 	addMouseListener (&childRightClick, true);
 
 	lookAndFeelChanged();
+	refreshLanguage();
+}
+
+void SyncGroup::refreshLanguage (void)
+{
+	syncButton.setName (i18n::tr ("sync.name"));
+	syncButton.setCaption (i18n::tr ("sync.caption"));
+	syncButton.setTooltip (i18n::tr ("sync.tooltip"));
+	cueButton.setName (i18n::tr ("sync.cueName"));
+	cueButton.setCaption (i18n::tr ("sync.cueCaption"));
+	cueButton.setTooltip (i18n::tr ("sync.cueTooltip"));
+	offsetKnob.setTooltip (i18n::tr ("sync.offsetTooltip"));
+	repaint();
 }
 
 SyncGroup::~SyncGroup (void)
@@ -261,7 +265,7 @@ void SyncGroup::paint (juce::Graphics& g)
 	drawGroupFrame (g, frame.toFloat(), frameRadius, theme::groupFrame());
 
 	// the nameplate is the one thing in the group that does carry the state
-	drawGroupNameplate (g, "DAW SYNC", frame,
+	drawGroupNameplate (g, i18n::tr ("sync.nameplate"), frame,
 						sync.isEnabled() ? theme::accent() : theme::secondaryText());
 }
 
@@ -372,10 +376,10 @@ void SyncGroup::openMenuFor (const juce::MouseEvent& event)
 void SyncGroup::showMenu (juce::Point<int> screenPosition)
 {
 	juce::PopupMenu menu;
-	menu.addItem (1, "Exact offset...");
-	menu.addItem (2, "Knob range...");
+	menu.addItem (1, i18n::tr ("sync.menu.exactOffset"));
+	menu.addItem (2, i18n::tr ("sync.menu.knobRange"));
 	menu.addSeparator();
-	menu.addItem (3, "Reset cue to 0 s");
+	menu.addItem (3, i18n::tr ("sync.menu.resetCue"));
 
 	// "Exact offset" opens the number field itself (Slider::showTextBox) rather than an overlay:
 	// the field is the same edit box the volume uses, so there is one way to type a number, and
@@ -435,7 +439,7 @@ void SyncGroup::showRangeEntry (void)
 
 	const juce::Component::SafePointer<SyncGroup> safe (this);
 
-	onRequestValueEntry ("Knob range (+/- ms)", sync.getKnobRangeMs(),
+	onRequestValueEntry (i18n::tr ("sync.knobRangeTitle"), sync.getKnobRangeMs(),
 						 [safe] (double ms)
 						 {
 							 if (safe == nullptr)

@@ -101,6 +101,11 @@ ctest --test-dir build --output-on-failure
 .\dist\Standalone\VGMToybox.exe "C:\music\Some Song.vgm"
 ```
 
+它的文件位于 `%APPDATA%\VGMToybox`（macOS 上是 `~/Library/Application Support/VGMToybox`，
+Linux 上是 `~/.config/VGMToybox`）：`settings.xml` 存放与插件共用的偏好，
+`standalone-state.xml` 存放只有独立程序才有的音频设备、窗口位置和最后一次插件状态。
+旧版本留下的 `VGMToybox.settings` 会在首次启动时迁移为这个新文件名。
+
 ### 从资源管理器打开
 
 用 Windows 自己的对话框把格式关联到这个程序一次即可。**程序从不写注册表** —— 没有安装器、没有 shell 扩展、没有辅助脚本 —— 关联完全由你自己建立、修改和撤销：
@@ -122,6 +127,27 @@ Windows 按用户保存这个选择，改在 *设置* → *应用* → *默认�
 *设置* → *常规* → **关闭窗口后留在系统托盘** 改变窗口 × 的行为：窗口消失、曲子继续播放，通知区域里留下一个 VGMToybox 图标。左键点图标把窗口叫回来；右键菜单提供 Show Window、Play/Pause、Stop、Loop、Fade 和 Quit。右键菜单在 Windows 上是 Win32 系统菜单、macOS 上是 NSMenu；Linux 的托盘协议没有可挂接的原生菜单，因此仍用 JUCE 菜单。Quit 才是真正退出，保存状态的路径与原来点 × 相同。该开关默认关闭，升级不会改变现有行为；图标本身在打开开关后第一次点 × 时才出现。
 
 Linux 上没有通知区域的桌面无法显示图标，而且 JUCE 的 X11 后端不会报告这种失败；设置页会用红色文字说明这一点，这个开关在 Linux 上属于尽力而为。
+
+### 更改界面语言
+
+*设置* → *语言* 在窗口和工具提示上切换内置的英文与简体中文，并列出放进
+`%APPDATA%\VGMToybox\i18n` 的每个翻译文件（macOS 上是
+`~/Library/Application Support/VGMToybox/i18n`，Linux 上是 `~/.config/VGMToybox/i18n`）。
+**打开文件夹** 会创建并打开它；**重新扫描** 会读取窗口打开期间新增或修改的文件。
+`id:` 与内置语言相同的文件会和内置语言并排出现，作为独立选项；它没有翻译的条目会先回退到
+对应语言的内置包，再回退到英文 —— 所以一份翻译可以只从几行开始。
+
+文件是 UTF-8，以两行元数据开头；键名与英文包相同（*设置* → *语言* 会显示还缺多少个）：
+
+```text
+language: 简体中文
+id: zh-Hans
+
+"menu.file.open" = "打开歌曲...";
+"transport.play"  = "播放";
+```
+
+插件版与独立版共用同一个文件夹和同一个已选语言。
 
 ### 在 DAW 里
 

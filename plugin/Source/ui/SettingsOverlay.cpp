@@ -2,6 +2,8 @@
 
 #include "Standalone/StandaloneHooks.h"
 
+#include <algorithm>
+
 namespace toybox::ui
 {
 
@@ -59,15 +61,23 @@ namespace
 	class CategoryItem : public juce::TreeViewItem
 	{
 	public:
-		CategoryItem (const juce::String& nameToShow, int pageIndex, std::function<void (int)> onPicked)
-			: name (nameToShow), page (pageIndex), picked (std::move (onPicked))
+		CategoryItem (const juce::String& itemId, const juce::String& nameToShow, int pageIndex,
+					  std::function<void (int)> onPicked)
+			: id (itemId), name (nameToShow), page (pageIndex), picked (std::move (onPicked))
 		{
 		}
 
 		bool canBeSelected (void) const override { return page >= 0; }
 		bool mightContainSubItems (void) override { return page < 0; }
 		int getItemHeight (void) const override { return 26; }
-		juce::String getUniqueName (void) const override { return "settings.category." + name; }
+		juce::String getUniqueName (void) const override { return "settings.category." + id; }
+		int getPageIndex (void) const { return page; }
+
+		void setLabel (const juce::String& newName)
+		{
+			name = newName;
+			repaintItem();
+		}
 
 		void paintItem (juce::Graphics& g, int width, int height) override
 		{
@@ -92,6 +102,7 @@ namespace
 		}
 
 	private:
+		juce::String id;
 		juce::String name;
 		int page;
 		std::function<void (int)> picked;
@@ -108,7 +119,8 @@ namespace
 	{
 		themePageIndex = 0,
 		generalPageIndex = 1,
-		audioPageIndex = 2
+		languagePageIndex = 2,
+		audioPageIndex = 3
 	};
 }
 
@@ -152,8 +164,17 @@ ThemeSettingsPage::ThemeSettingsPage (void)
 	addAndMakeVisible (followButton);
 	addAndMakeVisible (currentLabel);
 
-	refresh();
+	refreshLanguage();
 	lookAndFeelChanged();
+}
+
+void ThemeSettingsPage::refreshLanguage (void)
+{
+	lightButton.setButtonText (i18n::tr ("settings.theme.light"));
+	darkButton.setButtonText (i18n::tr ("settings.theme.dark"));
+	followButton.setButtonText (i18n::tr ("settings.theme.followSystem"));
+	refresh();
+	repaint();
 }
 
 void ThemeSettingsPage::select (toybox::settings::SettingsStore::ThemeMode mode)
@@ -188,13 +209,16 @@ void ThemeSettingsPage::refresh (void)
 
 juce::String ThemeSettingsPage::describeFollowSystem (void) const
 {
-	const juce::String effective (theme::systemTheme() == theme::Id::dark ? "Dark" : "Light");
-	return "Follow system (now: " + effective + ")";
+	const auto effective = theme::systemTheme() == theme::Id::dark
+		? i18n::tr ("settings.theme.dark")
+		: i18n::tr ("settings.theme.light");
+	return i18n::tr ("settings.theme.following", effective);
 }
 
 void ThemeSettingsPage::paint (juce::Graphics& g)
 {
-	paintHeading (g, "Theme", "Which colours the window draws with. A change applies at once.", getLocalBounds());
+	paintHeading (g, i18n::tr ("settings.theme"),
+				  i18n::tr ("settings.theme.explanation"), getLocalBounds());
 }
 
 void ThemeSettingsPage::resized (void)
@@ -235,8 +259,6 @@ GeneralSettingsPage::GeneralSettingsPage (void)
 	// fact on macOS, and a script asking "is the reuse row here?" should not have to know which.
    #if JUCE_WINDOWS
 	reuseWindowButton.setComponentID ("settings.general.reuseWindow");
-	reuseWindowButton.setTooltip ("A song opened from the file manager loads into the window that is "
-								  "already running");
 	reuseWindowButton.onClick = [this]
 	{
 		toybox::settings::SettingsStore::getInstance().setReuseWindow (reuseWindowButton.getToggleState());
@@ -245,7 +267,6 @@ GeneralSettingsPage::GeneralSettingsPage (void)
 	addAndMakeVisible (reuseWindowButton);
    #elif JUCE_MAC
 	reuseWindowNote.setComponentID ("settings.general.reuseWindow");
-	reuseWindowNote.setText ("Reuse the running window: always", juce::dontSendNotification);
 	reuseWindowNote.setFont (juce::Font (juce::FontOptions (13.0f)));
 	addAndMakeVisible (reuseWindowNote);
    #endif
@@ -254,16 +275,6 @@ GeneralSettingsPage::GeneralSettingsPage (void)
 	reuseWindowHint.setComponentID ("settings.general.reuseWindowHint");
 	reuseWindowHint.setFont (juce::Font (juce::FontOptions (12.0f)));
 	reuseWindowHint.setJustificationType (juce::Justification::topLeft);
-	reuseWindowHint.setText (
-	   #if JUCE_WINDOWS
-		"A song opened from Explorer goes into the window that is already open. Turn this off to "
-		"give every song a window of its own (two songs side by side, for instance).",
-	   #else
-		"macOS opens a song in the running window instead of starting a second copy - that is the "
-		"system's rule, not a setting. Use File > Open here for another song once this one is "
-		"playing.",
-	   #endif
-		juce::dontSendNotification);
 	reuseWindowHint.setMinimumHorizontalScale (0.75f);
 	addAndMakeVisible (reuseWindowHint);
    #endif
@@ -274,8 +285,6 @@ GeneralSettingsPage::GeneralSettingsPage (void)
 	if (toybox::standalone::available())
 	{
 		restoreLastSongButton.setComponentID ("settings.general.restoreLastSong");
-		restoreLastSongButton.setTooltip ("Open the song that was loaded when the application last "
-										  "quit, without starting playback");
 		restoreLastSongButton.onClick = [this]
 		{
 			toybox::settings::SettingsStore::getInstance().setRestoreLastSong (
@@ -287,15 +296,10 @@ GeneralSettingsPage::GeneralSettingsPage (void)
 		restoreLastSongHint.setComponentID ("settings.general.restoreLastSongHint");
 		restoreLastSongHint.setFont (juce::Font (juce::FontOptions (12.0f)));
 		restoreLastSongHint.setJustificationType (juce::Justification::topLeft);
-		restoreLastSongHint.setText ("Launching the application loads the song it last had open, "
-									 "paused at the start. File > Close Song forgets it.",
-									 juce::dontSendNotification);
 		restoreLastSongHint.setMinimumHorizontalScale (0.75f);
 		addAndMakeVisible (restoreLastSongHint);
 
 		closeToTrayButton.setComponentID ("settings.general.closeToTray");
-		closeToTrayButton.setTooltip ("The close button keeps the song playing in the notification "
-									  "area instead of quitting");
 		closeToTrayButton.onClick = [this]
 		{
 			toybox::settings::SettingsStore::getInstance().setCloseToTray (
@@ -307,9 +311,6 @@ GeneralSettingsPage::GeneralSettingsPage (void)
 		closeToTrayHint.setComponentID ("settings.general.closeToTrayHint");
 		closeToTrayHint.setFont (juce::Font (juce::FontOptions (12.0f)));
 		closeToTrayHint.setJustificationType (juce::Justification::topLeft);
-		closeToTrayHint.setText ("The close button hides the window instead of quitting. Use the "
-								 "tray icon to reopen it, or Quit in its menu to exit.",
-								 juce::dontSendNotification);
 		closeToTrayHint.setMinimumHorizontalScale (0.75f);
 		addAndMakeVisible (closeToTrayHint);
 
@@ -320,16 +321,12 @@ GeneralSettingsPage::GeneralSettingsPage (void)
 		closeToTrayWarning.setComponentID ("settings.general.closeToTrayWarning");
 		closeToTrayWarning.setFont (juce::Font (juce::FontOptions (12.0f, juce::Font::bold)));
 		closeToTrayWarning.setJustificationType (juce::Justification::topLeft);
-		closeToTrayWarning.setText ("! Desktop without a system tray? No icon will appear, and a "
-									"closed window can only be recovered by quitting the process.",
-									juce::dontSendNotification);
 		closeToTrayWarning.setMinimumHorizontalScale (0.75f);
 		addAndMakeVisible (closeToTrayWarning);
 	   #endif
 	}
 
 	fileCaption.setComponentID ("settings.general.pathCaption");
-	fileCaption.setText ("Settings file", juce::dontSendNotification);
 	fileCaption.setFont (juce::Font (juce::FontOptions (12.5f)));
 
 	pathLabel.setComponentID ("settings.general.path");
@@ -368,8 +365,47 @@ GeneralSettingsPage::GeneralSettingsPage (void)
 	addAndMakeVisible (resetButton);
 	addAndMakeVisible (errorLabel);
 
-	refresh();
+	refreshLanguage();
 	lookAndFeelChanged();
+}
+
+void GeneralSettingsPage::refreshLanguage (void)
+{
+   #if JUCE_WINDOWS
+	reuseWindowButton.setButtonText (i18n::tr ("settings.general.reuseWindow"));
+	reuseWindowButton.setTooltip (i18n::tr ("settings.general.reuseWindowTooltip"));
+	reuseWindowHint.setText (i18n::tr ("settings.general.reuseWindowHint"), juce::dontSendNotification);
+   #elif JUCE_MAC
+	reuseWindowNote.setText (i18n::tr ("settings.general.reuseWindowAlways"),
+							 juce::dontSendNotification);
+	reuseWindowHint.setText (i18n::tr ("settings.general.reuseWindowMacHint"),
+							 juce::dontSendNotification);
+   #endif
+
+	if (toybox::standalone::available())
+	{
+		restoreLastSongButton.setButtonText (i18n::tr ("settings.general.restoreLastSong"));
+		restoreLastSongButton.setTooltip (i18n::tr ("settings.general.restoreLastSongTooltip"));
+		restoreLastSongHint.setText (i18n::tr ("settings.general.restoreLastSongHint"),
+									 juce::dontSendNotification);
+
+		closeToTrayButton.setButtonText (i18n::tr ("settings.general.closeToTray"));
+		closeToTrayButton.setTooltip (i18n::tr ("settings.general.closeToTrayTooltip"));
+		closeToTrayHint.setText (i18n::tr ("settings.general.closeToTrayHint"),
+								 juce::dontSendNotification);
+
+	   #if JUCE_LINUX
+		closeToTrayWarning.setText (i18n::tr ("settings.general.closeToTrayWarning"),
+									juce::dontSendNotification);
+	   #endif
+	}
+
+	fileCaption.setText (i18n::tr ("settings.general.settingsFile"), juce::dontSendNotification);
+	openFolderButton.setButtonText (i18n::tr ("settings.general.openFolder"));
+	resetButton.setButtonText (i18n::tr ("settings.general.restoreDefaults"));
+
+	refresh();
+	repaint();
 }
 
 void GeneralSettingsPage::refresh (void)
@@ -402,8 +438,8 @@ void GeneralSettingsPage::refresh (void)
 
 void GeneralSettingsPage::paint (juce::Graphics& g)
 {
-	paintHeading (g, "General", "How the application starts, and where these settings live.",
-				  getLocalBounds());
+	paintHeading (g, i18n::tr ("settings.general"),
+				  i18n::tr ("settings.general.explanation"), getLocalBounds());
 }
 
 void GeneralSettingsPage::resized (void)
@@ -490,15 +526,12 @@ AudioSettingsPage::AudioSettingsPage (void)
 	hintLabel.setFont (juce::Font (juce::FontOptions (12.0f)));
 	hintLabel.setJustificationType (juce::Justification::topLeft);
 	hintLabel.setMinimumHorizontalScale (0.75f);
-	hintLabel.setText ("The same dialog JUCE's own window used to offer: device, sample rate, "
-					   "buffer size and MIDI input. A change takes effect at once.",
-					   juce::dontSendNotification);
 
 	addAndMakeVisible (deviceLabel);
 	addAndMakeVisible (settingsButton);
 	addAndMakeVisible (hintLabel);
 
-	refresh();
+	refreshLanguage();
 	lookAndFeelChanged();
 
 	// The dialog is modal and says nothing when it closes, so the line is re-read while this page
@@ -518,7 +551,7 @@ void AudioSettingsPage::refresh (void)
 
 	if (line.isEmpty())
 	{
-		line = "No audio device is open.";
+		line = i18n::tr ("settings.audio.noDevice");
 	}
 
 	if (line == shownLine)
@@ -538,10 +571,19 @@ void AudioSettingsPage::timerCallback (void)
 	}
 }
 
+void AudioSettingsPage::refreshLanguage (void)
+{
+	settingsButton.setButtonText (i18n::tr ("settings.audio.open"));
+	hintLabel.setText (i18n::tr ("settings.audio.hint"), juce::dontSendNotification);
+	shownLine.clear();		// force refresh() to re-apply the placeholder if it is showing
+	refresh();
+	repaint();
+}
+
 void AudioSettingsPage::paint (juce::Graphics& g)
 {
-	paintHeading (g, "Audio", "Which device the standalone plays through, and what it asks of it.",
-				  getLocalBounds());
+	paintHeading (g, i18n::tr ("settings.audio"),
+				  i18n::tr ("settings.audio.explanation"), getLocalBounds());
 }
 
 void AudioSettingsPage::resized (void)
@@ -563,6 +605,185 @@ void AudioSettingsPage::lookAndFeelChanged (void)
 }
 
 //==============================================================================
+// Language
+
+LanguageSettingsPage::LanguageSettingsPage (void)
+{
+	languageBox.setComponentID ("settings.language.select");
+	languageBox.setTooltip (i18n::tr ("settings.language.selectTooltip"));
+	languageBox.onChange = [this]
+	{
+		const int index = languageBox.getSelectedId() - 1;
+
+		if (index < 0 || index >= (int) shownLanguages.size())
+		{
+			return;
+		}
+
+		if (! i18n::LanguageManager::getInstance().selectById (shownLanguages[(std::size_t) index].id))
+		{
+			refresh();
+		}
+	};
+	addAndMakeVisible (languageBox);
+
+	sourceLabel.setComponentID ("settings.language.source");
+	sourceLabel.setFont (juce::Font (juce::FontOptions (13.0f)));
+	sourceLabel.setJustificationType (juce::Justification::centredLeft);
+	sourceLabel.setMinimumHorizontalScale (0.7f);
+	addAndMakeVisible (sourceLabel);
+
+	detailLabel.setComponentID ("settings.language.detail");
+	detailLabel.setFont (juce::Font (juce::FontOptions (12.0f)));
+	detailLabel.setJustificationType (juce::Justification::centredLeft);
+	detailLabel.setMinimumHorizontalScale (0.75f);
+	addAndMakeVisible (detailLabel);
+
+	warningsLabel.setComponentID ("settings.language.warnings");
+	warningsLabel.setFont (juce::Font (juce::FontOptions (12.0f)));
+	warningsLabel.setJustificationType (juce::Justification::topLeft);
+	warningsLabel.setMinimumHorizontalScale (0.75f);
+	addAndMakeVisible (warningsLabel);
+
+	openFolderButton.setComponentID ("settings.language.openFolder");
+	openFolderButton.onClick = [this] { openFolder(); };
+	addAndMakeVisible (openFolderButton);
+
+	rescanButton.setComponentID ("settings.language.rescan");
+	rescanButton.onClick = [this] { rescan(); };
+	addAndMakeVisible (rescanButton);
+
+	refreshLanguage();
+	lookAndFeelChanged();
+}
+
+void LanguageSettingsPage::refreshLanguage (void)
+{
+	openFolderButton.setButtonText (i18n::tr ("settings.language.openFolder"));
+	rescanButton.setButtonText (i18n::tr ("settings.language.rescan"));
+	languageBox.setTooltip (i18n::tr ("settings.language.selectTooltip"));
+
+	refresh();
+	repaint();
+}
+
+void LanguageSettingsPage::refresh (void)
+{
+	rebuildList();
+
+	auto& manager = i18n::LanguageManager::getInstance();
+	const auto currentId = manager.getCurrentId();
+	const auto current = std::find_if (shownLanguages.begin(), shownLanguages.end(),
+									   [&currentId] (const i18n::LanguageInfo& info)
+									   {
+										   return info.id == currentId;
+									   });
+
+	if (current != shownLanguages.end() && ! current->builtIn)
+	{
+		sourceLabel.setText (i18n::tr ("settings.language.sourceFile",
+									   current->file.getFullPathName()),
+							 juce::dontSendNotification);
+	}
+	else
+	{
+		sourceLabel.setText (i18n::tr ("settings.language.sourceBuiltin", manager.getCurrentName()),
+							 juce::dontSendNotification);
+	}
+
+	detailLabel.setText (i18n::tr ("settings.language.detail", manager.getCurrentLanguageTag(),
+								   juce::String (manager.getCurrentMissingKeyCount())),
+						 juce::dontSendNotification);
+
+	juce::StringArray lines;
+
+	if (manager.getSelectionWarning().isNotEmpty())
+	{
+		lines.add (manager.getSelectionWarning());
+	}
+
+	lines.addArray (manager.getWarnings());
+	warningsLabel.setText (lines.joinIntoString ("\n"), juce::dontSendNotification);
+}
+
+void LanguageSettingsPage::rebuildList (void)
+{
+	auto& manager = i18n::LanguageManager::getInstance();
+	shownLanguages = manager.getAvailable();
+
+	const auto currentId = manager.getCurrentId();
+	languageBox.clear (juce::dontSendNotification);
+
+	int selected = 0;
+
+	for (std::size_t i = 0; i < shownLanguages.size(); ++i)
+	{
+		const auto& info = shownLanguages[i];
+		languageBox.addItem (manager.getDisplayName (info), (int) i + 1);
+
+		if (info.id == currentId)
+		{
+			selected = (int) i + 1;
+		}
+	}
+
+	languageBox.setSelectedId (selected, juce::dontSendNotification);
+}
+
+void LanguageSettingsPage::rescan (void)
+{
+	i18n::LanguageManager::getInstance().rescan();
+	refresh();
+
+	// A file that was just added or fixed is not necessarily the selected one, but the pack in
+	// force may still have changed; the store's broadcast is what re-reads every open window.
+	toybox::settings::SettingsStore::getInstance().notifyChanged();
+}
+
+void LanguageSettingsPage::openFolder (void)
+{
+	// Creating it here is the point: a user who never made a translation should not have to
+	// guess the folder's name before the button works.
+	const auto directory = i18n::LanguageManager::externalDirectory();
+
+	if (directory.createDirectory())
+	{
+		directory.revealToUser();
+	}
+}
+
+void LanguageSettingsPage::paint (juce::Graphics& g)
+{
+	paintHeading (g, i18n::tr ("settings.language"),
+				  i18n::tr ("settings.language.explanation"), getLocalBounds());
+}
+
+void LanguageSettingsPage::resized (void)
+{
+	auto area = pageContent (getLocalBounds());
+
+	languageBox.setBounds (area.removeFromTop (28).removeFromLeft (300));
+	area.removeFromTop (theme::cardGap + 2);
+	sourceLabel.setBounds (area.removeFromTop (20));
+	detailLabel.setBounds (area.removeFromTop (20));
+	area.removeFromTop (4);
+	warningsLabel.setBounds (area.removeFromTop (52));
+
+	area.removeFromTop (theme::cardGap);
+	auto buttons = area.removeFromTop (kFooterHeight);
+	openFolderButton.setBounds (buttons.removeFromLeft (130));
+	buttons.removeFromLeft (8);
+	rescanButton.setBounds (buttons.removeFromLeft (104));
+}
+
+void LanguageSettingsPage::lookAndFeelChanged (void)
+{
+	sourceLabel.setColour (juce::Label::textColourId, theme::primaryText());
+	detailLabel.setColour (juce::Label::textColourId, theme::secondaryText());
+	warningsLabel.setColour (juce::Label::textColourId, theme::secondaryText());
+}
+
+//==============================================================================
 // The overlay
 
 SettingsOverlay::SettingsOverlay (void)
@@ -578,9 +799,13 @@ SettingsOverlay::SettingsOverlay (void)
 	// list of a few pages wants
 	tree.setOpenCloseButtonsVisible (false);
 
-	rootItem = std::make_unique<CategoryItem> ("Settings", -1, nullptr);
-	rootItem->addSubItem (new CategoryItem ("Theme", themePageIndex, [this] (int page) { pages.setCurrentView (page); }));
-	rootItem->addSubItem (new CategoryItem ("General", generalPageIndex, [this] (int page) { pages.setCurrentView (page); }));
+	rootItem = std::make_unique<CategoryItem> ("root", i18n::tr ("settings"), -1, nullptr);
+	rootItem->addSubItem (new CategoryItem ("theme", i18n::tr ("settings.theme"), themePageIndex,
+										   [this] (int page) { pages.setCurrentView (page); }));
+	rootItem->addSubItem (new CategoryItem ("general", i18n::tr ("settings.general"), generalPageIndex,
+										   [this] (int page) { pages.setCurrentView (page); }));
+	rootItem->addSubItem (new CategoryItem ("language", i18n::tr ("settings.language"), languagePageIndex,
+										   [this] (int page) { pages.setCurrentView (page); }));
 
 	// Audio only where there is an audio device to choose between: the standalone application says
 	// so through Source/Standalone/StandaloneHooks.h, and in a plugin the host owns the device. The
@@ -589,7 +814,8 @@ SettingsOverlay::SettingsOverlay (void)
 
 	if (hasAudio)
 	{
-		rootItem->addSubItem (new CategoryItem ("Audio", audioPageIndex, [this] (int page) { pages.setCurrentView (page); }));
+		rootItem->addSubItem (new CategoryItem ("audio", i18n::tr ("settings.audio"), audioPageIndex,
+											   [this] (int page) { pages.setCurrentView (page); }));
 	}
 
 	tree.setRootItem (rootItem.get());
@@ -599,10 +825,13 @@ SettingsOverlay::SettingsOverlay (void)
 	// the play or the mixer page.
 	themePage = new ThemeSettingsPage();
 	generalPage = new GeneralSettingsPage();
+	languagePage = new LanguageSettingsPage();
 	themePage->setComponentID ("settings.page.theme");
 	generalPage->setComponentID ("settings.page.general");
+	languagePage->setComponentID ("settings.page.language");
 	pages.addView (themePage);
 	pages.addView (generalPage);
+	pages.addView (languagePage);
 
 	if (hasAudio)
 	{
@@ -613,7 +842,7 @@ SettingsOverlay::SettingsOverlay (void)
 
 	// The indices the rows carry and the order the stack holds are two lists that have to agree;
 	// a page inserted between two others would otherwise open its neighbour, silently.
-	jassert (pages.getNumViews() == (hasAudio ? audioPageIndex : generalPageIndex) + 1);
+	jassert (pages.getNumViews() == (hasAudio ? audioPageIndex : languagePageIndex) + 1);
 
 	addAndMakeVisible (pages);
 
@@ -623,14 +852,48 @@ SettingsOverlay::SettingsOverlay (void)
 
 	// the store, not the constructor argument: the pages read their own values, and only show
 	// what a `setThemeMode()` would have written
+	refreshLanguage();
 	refreshFromStore();
 	lookAndFeelChanged();
+}
+
+void SettingsOverlay::refreshLanguage (void)
+{
+	closeButton.setButtonText (i18n::tr ("common.close"));
+
+	if (auto* root = dynamic_cast<CategoryItem*> (rootItem.get()))
+	{
+		root->setLabel (i18n::tr ("settings"));
+	}
+
+	for (int i = 0; i < rootItem->getNumSubItems(); ++i)
+	{
+		auto* row = dynamic_cast<CategoryItem*> (rootItem->getSubItem (i));
+
+		if (row == nullptr)
+		{
+			continue;
+		}
+
+		switch (row->getPageIndex())
+		{
+			case themePageIndex:	row->setLabel (i18n::tr ("settings.theme")); break;
+			case generalPageIndex:	row->setLabel (i18n::tr ("settings.general")); break;
+			case languagePageIndex:	row->setLabel (i18n::tr ("settings.language")); break;
+			case audioPageIndex:	row->setLabel (i18n::tr ("settings.audio")); break;
+			default: break;
+		}
+	}
+
+	pages.refreshLanguage();
+	repaint();
 }
 
 void SettingsOverlay::refreshFromStore (void)
 {
 	themePage->refresh();
 	generalPage->refresh();
+	languagePage->refresh();
 
 	if (audioPage != nullptr)
 	{
@@ -702,7 +965,7 @@ void SettingsOverlay::paint (juce::Graphics& g)
 	auto title = inner.removeFromTop (kTitleHeight);
 	g.setColour (theme::primaryText());
 	g.setFont (juce::Font (juce::FontOptions (15.0f, juce::Font::bold)));
-	g.drawText ("Settings", title, juce::Justification::centredLeft, false);
+	g.drawText (i18n::tr ("settings"), title, juce::Justification::centredLeft, false);
 
 	// The sidebar is a card of its own, and the one inside the panel is recessed rather than
 	// raised: it is the window colour, which is the surface *below* a card in both palettes.

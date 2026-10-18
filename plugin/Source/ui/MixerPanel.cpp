@@ -4,6 +4,8 @@
 #include "SoftShadow.h"
 #include "Theme.h"
 
+#include "i18n/LanguageManager.h"
+
 namespace toybox::ui
 {
 namespace
@@ -49,10 +51,9 @@ MixerPanel::MixerPanel (toybox::PlaybackEngine& engineToUse)
 		engine.setMixerEnabled (! mixerToggle.getToggleState());
 		refresh();
 	};
-	mixerToggle.setTooltip ("Mixer on: one render track per chip channel - off: the plain mix without per-channel tracks (saves CPU)");
 	addAndMakeVisible (mixerToggle);
 
-	masterStrip.setup ("MASTER", true);
+	masterStrip.setup (i18n::tr ("mixer.master"), true);
 	// the master fader is the mixer's own master gain - a stage of its own, in front of the
 	// transport card's output volume (neither control drives the other)
 	masterStrip.onGainChanged = [this] (float gain) { engine.setMixerMasterGain (gain); };
@@ -68,12 +69,9 @@ MixerPanel::MixerPanel (toybox::PlaybackEngine& engineToUse)
 	masterClip.addAndMakeVisible (masterStrip);
 
 	// the two routing shortcuts in the card header
-	spreadOutputsButton.setTooltip ("Send every track to its own output bus "
-									"(track 1 -> Out 1/2, track 2 -> Out 3/4, ...)");
 	spreadOutputsButton.onClick = [this] { spreadTrackOutputs(); };
 	addAndMakeVisible (spreadOutputsButton);
 
-	mergeToMasterButton.setTooltip ("Send every track back to the master bus");
 	mergeToMasterButton.onClick = [this] { sendTrackOutputsToMaster(); };
 	addAndMakeVisible (mergeToMasterButton);
 
@@ -88,7 +86,28 @@ MixerPanel::MixerPanel (toybox::PlaybackEngine& engineToUse)
 	verticalBar.addListener (this);
 	addAndMakeVisible (verticalBar);
 
+	refreshLanguage();
 	refresh();	// hides the card while nothing is loaded
+}
+
+void MixerPanel::refreshLanguage (void)
+{
+	mixerToggle.setName (i18n::tr ("mixer.toggleName"));
+	mixerToggle.setTooltip (i18n::tr ("mixer.toggleTooltip"));
+	spreadOutputsButton.setName (i18n::tr ("mixer.spreadName"));
+	spreadOutputsButton.setTooltip (i18n::tr ("mixer.spreadTooltip"));
+	mergeToMasterButton.setName (i18n::tr ("mixer.mergeName"));
+	mergeToMasterButton.setTooltip (i18n::tr ("mixer.mergeTooltip"));
+
+	masterStrip.setStripName (i18n::tr ("mixer.master"));
+	masterStrip.refreshLanguage();
+
+	for (auto* strip : strips)
+	{
+		strip->refreshLanguage();
+	}
+
+	repaint();
 }
 
 void MixerPanel::rebuildStrips (void)
@@ -221,7 +240,7 @@ void MixerPanel::refreshValues (void)
 	{
 		ChannelStrip::OutputOption masterOption;
 		masterOption.target = playback::kMasterOutput;
-		masterOption.name = "Master";
+		masterOption.name = i18n::tr ("mixer.masterBus");
 		trackOutputs.push_back (masterOption);		// a track may send to the master bus …
 
 		for (int bus = 0; bus < playback::kOutputBusCount; ++bus)
@@ -448,7 +467,7 @@ void MixerPanel::paintCardContent (juce::Graphics& g)
 		}
 	}
 
-	paintCardHeaderRow (g, headerBounds, "MIXER", "MUTE / SOLO / GAIN / PAN");
+	paintCardHeaderRow (g, headerBounds, i18n::tr ("mixer.title"), i18n::tr ("mixer.hint"));
 }
 
 void MixerPanel::StripHolder::paint (juce::Graphics& g)

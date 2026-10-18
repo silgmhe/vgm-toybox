@@ -7,6 +7,7 @@
 #include "SyncGroup.h"
 #include "Theme.h"
 
+#include "i18n/LanguageManager.h"
 #include "playback/DawSync.h"
 #include "playback/PlaybackEngine.h"
 #include "playback/TransportPresets.h"
@@ -33,8 +34,8 @@ namespace
 
 	juce::String loopTooltip (int loops)
 	{
-		return (loops == 0) ? "Looping forever - click to play once"
-							: "Play once - click to loop forever";
+		return (loops == 0) ? i18n::tr ("transport.loopForeverTooltip")
+							: i18n::tr ("transport.playOnceTooltip");
 	}
 
 }
@@ -73,6 +74,13 @@ public:
 		addAndMakeVisible (cancelButton);
 
 		lookAndFeelChanged();
+		refreshLanguage();
+	}
+
+	void refreshLanguage (void)
+	{
+		okButton.setButtonText (i18n::tr ("common.ok"));
+		cancelButton.setButtonText (i18n::tr ("common.cancel"));
 	}
 
 	/** The typed number. Called once, on OK or Return. */
@@ -195,8 +203,8 @@ private:
 
 	juce::Label title;
 	juce::TextEditor editor;
-	juce::TextButton okButton { "OK" };
-	juce::TextButton cancelButton { "Cancel" };
+	juce::TextButton okButton;
+	juce::TextButton cancelButton;
 
 	JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (ValueEntryOverlay)
 };
@@ -211,10 +219,7 @@ TransportPanel::TransportPanel (toybox::PlaybackEngine& engineToUse, bool syncAv
 	stopButton.onClick = [this] { stopTransport(); };
 	loopButton.onClick = [this] { setLoopForever (! loopButton.getToggleState()); };
 	cursorButton.onClick = [this] { setStartCursorEnabled (! cursorButton.getToggleState()); };
-	playButton.setTooltip ("Play (space)");
-	pauseButton.setTooltip ("Pause (enter)");
-	stopButton.setTooltip ("Stop - return to the playback start marker");
-	cursorButton.setTooltip ("Playback start cursor - when off, Stop goes back to the beginning of the song");
+
 	// The buttons take the LookAndFeel's own colours (card face, accent while on) - there is
 	// nothing to set on them, so a palette change reaches them by itself.
 	for (auto* button : { &playButton, &pauseButton, &stopButton, &loopButton, &cursorButton })
@@ -254,7 +259,6 @@ TransportPanel::TransportPanel (toybox::PlaybackEngine& engineToUse, bool syncAv
 
 	// --- playback start cursor (the drag strip above the seek bar) ---
 	startMarkerDragArea.setMouseCursor (juce::MouseCursor::LeftRightResizeCursor);
-	startMarkerDragArea.setTooltip ("Playback start - drag to set where playback begins and Stop returns to");
 	addAndMakeVisible (startMarkerDragArea);
 
 	// --- seek bar ---
@@ -263,7 +267,6 @@ TransportPanel::TransportPanel (toybox::PlaybackEngine& engineToUse, bool syncAv
 	positionSlider.setRange (0.0, 1.0, 0.0);
 	positionSlider.setComponentID ("slider.position");	// for the window scripts (AppHarnessTest)
 	positionSlider.setEnabled (false);
-	positionSlider.setTooltip ("Playback position");
 	positionSlider.onDragStart = [this] { userIsDragging = true; };
 	positionSlider.onDragEnd = [this]
 	{
@@ -288,20 +291,10 @@ TransportPanel::TransportPanel (toybox::PlaybackEngine& engineToUse, bool syncAv
 	volumeSlider.setTextBoxStyle (juce::Slider::TextBoxRight, false, 52, 22);
 	volumeSlider.setValue (engine.getMasterVolume(), juce::dontSendNotification);
 	volumeSlider.updateText();
-	volumeSlider.setTooltip ("Output volume - the last stage of the engine, after the mixer master");
 	volumeSlider.onValueChange = [this] { engine.setMasterVolume ((float) volumeSlider.getValue()); };
 	addAndMakeVisible (volumeSlider);
 
 	// --- loop / fade settings ---
-	juce::StringArray loopLabels;
-
-	for (const auto& preset : transport::loopPresets)
-	{
-		loopLabels.add (preset.label);
-	}
-
-	loopBox.addItemList (loopLabels, 1);
-	loopBox.setTooltip ("How often the song loops before it stops");
 	loopBox.onChange = [this]
 	{
 		const int index = juce::jlimit (0, (int) transport::loopPresets.size() - 1,
@@ -311,15 +304,6 @@ TransportPanel::TransportPanel (toybox::PlaybackEngine& engineToUse, bool syncAv
 	};
 	addAndMakeVisible (loopBox);
 
-	juce::StringArray fadeLabels;
-
-	for (const auto& preset : transport::fadePresets)
-	{
-		fadeLabels.add (preset.label);
-	}
-
-	fadeBox.addItemList (fadeLabels, 1);
-	fadeBox.setTooltip ("Fade out time at the end of the last loop");
 	fadeBox.onChange = [this]
 	{
 		const int index = juce::jlimit (0, (int) transport::fadePresets.size() - 1,
@@ -330,6 +314,63 @@ TransportPanel::TransportPanel (toybox::PlaybackEngine& engineToUse, bool syncAv
 
 	fadeBox.setSelectedId (transport::fadePresetIndex (engine.getFadeSeconds()) + 1,
 						   juce::dontSendNotification);
+
+	refreshLanguage();
+}
+
+void TransportPanel::refreshLanguage (void)
+{
+	playButton.setButtonText (i18n::tr ("transport.play"));
+	pauseButton.setButtonText (i18n::tr ("transport.pause"));
+	stopButton.setButtonText (i18n::tr ("transport.stop"));
+	loopButton.setButtonText (i18n::tr ("transport.loop"));
+	cursorButton.setButtonText (i18n::tr ("transport.playbackStart"));
+
+	playButton.setTooltip (i18n::tr ("transport.playTooltip"));
+	pauseButton.setTooltip (i18n::tr ("transport.pauseTooltip"));
+	stopButton.setTooltip (i18n::tr ("transport.stopTooltip"));
+	cursorButton.setTooltip (i18n::tr ("transport.cursorTooltip"));
+	startMarkerDragArea.setTooltip (i18n::tr ("transport.startMarkerTooltip"));
+	positionSlider.setTooltip (i18n::tr ("transport.positionTooltip"));
+	volumeSlider.setTooltip (i18n::tr ("transport.volumeTooltip"));
+	loopBox.setTooltip (i18n::tr ("transport.loopTooltip"));
+	fadeBox.setTooltip (i18n::tr ("transport.fadeTooltip"));
+
+	const int selectedLoop = loopBox.getSelectedId();
+	loopBox.clear (juce::dontSendNotification);
+
+	for (std::size_t i = 0; i < transport::loopPresets.size(); ++i)
+	{
+		loopBox.addItem (i18n::tr (transport::loopPresets[i].labelKey), (int) i + 1);
+	}
+
+	if (selectedLoop > 0)
+	{
+		loopBox.setSelectedId (selectedLoop, juce::dontSendNotification);
+	}
+
+	const int selectedFade = fadeBox.getSelectedId();
+	fadeBox.clear (juce::dontSendNotification);
+
+	for (std::size_t i = 0; i < transport::fadePresets.size(); ++i)
+	{
+		fadeBox.addItem (i18n::tr (transport::fadePresets[i].labelKey), (int) i + 1);
+	}
+
+	if (selectedFade > 0)
+	{
+		fadeBox.setSelectedId (selectedFade, juce::dontSendNotification);
+	}
+
+	if (syncGroup != nullptr)
+	{
+		syncGroup->refreshLanguage();
+	}
+
+	if (entryOverlay != nullptr)
+	{
+		entryOverlay->refreshLanguage();
+	}
 
 	refresh();
 }

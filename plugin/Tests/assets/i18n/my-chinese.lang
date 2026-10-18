@@ -1,0 +1,6 @@
+id: zh-Hans
+language: 简体中文
+
+# Only two keys on purpose: the rest of the window has to fall back to the built-in Chinese pack.
+"editor.open" = "EXT打开";
+"menu.file.open" = "EXT打开文件";

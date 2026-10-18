@@ -28,6 +28,7 @@
 
 	    # settings lastSong <path>          the song the previous session left in settings.xml
 	    # settings restoreLastSong on|off   the General page's "reopen the last song" switch
+	    # settings languageDir <path>       copy the *.lang files there into the run's i18n folder
 
 	Why this exists rather than screenshots: the failures that actually happened here (a modal window
 	that never appeared, a tick that never moved, a song that never loaded) are structure and state,
@@ -46,6 +47,7 @@
 #include "PluginEditor.h"
 #include "PluginProcessor.h"
 #include "Standalone/StandaloneHooks.h"
+#include "i18n/LanguageManager.h"
 #include "settings/SettingsStore.h"
 #include "ui/UiSnapshot.h"
 
@@ -895,6 +897,28 @@ bool applyScriptSettings (const juce::File& script)
 		{
 			store.setRestoreLastSong (directive.endsWithIgnoreCase (" on"));
 		}
+		else if (directive.startsWith ("languageDir "))
+		{
+			// The language manager scans <settings>/i18n when the editor is built. Copying the
+			// script's translation files in here keeps the run self-contained: the real user
+			// folder is never read or written.
+			const auto path = directive.fromFirstOccurrenceOf ("languageDir ", false, false).trim();
+			const juce::File source (path);
+
+			if (! source.isDirectory())
+			{
+				std::printf ("# settings languageDir: not a directory: %s\n", path.toRawUTF8());
+				continue;
+			}
+
+			const auto target = toybox::i18n::LanguageManager::externalDirectory();
+			target.createDirectory();
+
+			for (const auto& file : source.findChildFiles (juce::File::findFiles, false, "*.lang"))
+			{
+				file.copyFileTo (target.getChildFile (file.getFileName()));
+			}
+		}
 		else
 		{
 			std::printf ("unknown # settings directive: %s\n", directive.toRawUTF8());
@@ -967,6 +991,11 @@ int main (int argc, char* argv[])
 	if (script.existsAsFile())
 	{
 		settingsForThisRun = std::make_unique<TemporarySettingsDirectory>();
+
+		// The scripts assert English strings, so the machine's system language must not decide
+		// what they open with. A script that is about the Language page switches from here like
+		// a user does (Tests/scripts/language.txt).
+		toybox::settings::SettingsStore::getInstance().setLanguageSelection ("builtin:en", "en");
 
 		if (! applyScriptSettings (script))
 		{

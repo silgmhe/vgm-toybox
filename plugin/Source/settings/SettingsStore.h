@@ -32,6 +32,11 @@ namespace toybox::settings
 	host there is no application name to ask, and "the settings of VGMToybox" must not depend on
 	who loaded us.
 
+	The standalone has one more file in the same folder, standalone-state.xml. It is not a
+	preference: JUCE's StandalonePluginHolder owns it for the audio device, window position and
+	last plugin state (see Standalone/StandaloneApp.cpp). Keeping it separate from this file
+	means a language or theme change cannot overwrite a large saved plugin state.
+
 	Not a juce::DeletedAtShutdown: the only thing the destructor has to do is flush a value that
 	was already written when it changed, and a plain function-local static (the pattern
 	playback/BackendRegistry uses) is destroyed at the right time for that.
@@ -59,6 +64,23 @@ public:
 		force by the time the click that asked for it has been handled - and the window scripts,
 		which have no message loop to defer anything to, see it too. */
 	void setThemeMode (ThemeMode mode);
+
+	/** The selected language pack: `builtin:zh-Hans`, `external:my-file.lang`, or empty on first
+		run (the language manager then follows the system language without writing a choice). */
+	juce::String getLanguageId (void) const;
+
+	/** The language tag stored with `getLanguageId()` - `zh-Hans`, `en`, ... It lets a selection
+		whose file has disappeared fall back to the built-in pack for the same language instead
+		of jumping straight to English. */
+	juce::String getLanguageTag (void) const;
+
+	/** Stores a language selection and tells every open editor. */
+	void setLanguageSelection (const juce::String& id, const juce::String& tag);
+
+	/** Tells listeners that something outside the store changed what they should read - today
+		the Language page after a rescan replaced the pack behind the unchanged selection. Does
+		not write the file; unlike the setters, it is not a request to persist a new value. */
+	void notifyChanged (void);
 
 	/** Whether a song opened from the file manager goes into the window that is already running.
 
@@ -132,6 +154,10 @@ public:
 		The environment variable VGMTOYBOX_SETTINGS_DIR overrides it (read once, at startup) -
 		that is how the console test keeps its hands off a developer's real preferences. */
 	static juce::File settingsDirectory (void);
+
+	/** True when VGMTOYBOX_SETTINGS_DIR is in force. The standalone uses this to avoid
+		migrating a developer's real state file into a test's temporary folder. */
+	static bool settingsDirectoryIsOverridden (void);
 
 	/** The file itself: settingsDirectory()/settings.xml. */
 	static juce::File settingsFile (void);

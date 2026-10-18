@@ -100,6 +100,15 @@ void PlayView::refresh (void)
 	mixerPanel.refresh();
 }
 
+void PlayView::refreshLanguage (void)
+{
+	transportPanel.refreshLanguage();
+	songInfoPanel.refreshLanguage();
+	chipPanel.refreshLanguage();
+	mixerPanel.refreshLanguage();
+	repaint();
+}
+
 void PlayView::songChanged (void)
 {
 	rebuildChipButtons();		// relayouts as well: the chips card may appear or change height

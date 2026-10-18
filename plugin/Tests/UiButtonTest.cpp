@@ -192,7 +192,7 @@ namespace
 	{
 		std::printf ("[4] a real IconButton\n");
 
-		IconButton button { "Play", IconButton::Icon::play };
+		IconButton button { "play", "Play", IconButton::Icon::play };
 		button.setBounds (0, 0, kControlSize, kControlSize);
 
 		juce::Image image (juce::Image::ARGB, kControlSize, kControlSize, true);

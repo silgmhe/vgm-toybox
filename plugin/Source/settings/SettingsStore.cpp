@@ -20,6 +20,8 @@ namespace
 	constexpr const char* kDirectoryOverrideVar = "VGMTOYBOX_SETTINGS_DIR";
 
 	constexpr const char* kThemeModeKey = "theme.mode";
+	constexpr const char* kLanguageIdKey = "ui.language";
+	constexpr const char* kLanguageTagKey = "ui.languageTag";
 	constexpr const char* kReuseWindowKey = "standalone.reuseWindow";
 	constexpr const char* kRestoreLastSongKey = "standalone.restoreLastSong";
 	constexpr const char* kCloseToTrayKey = "standalone.closeToTray";
@@ -31,12 +33,16 @@ namespace
 	}
 }
 
+bool SettingsStore::settingsDirectoryIsOverridden (void)
+{
+	return juce::SystemStats::getEnvironmentVariable (kDirectoryOverrideVar, {}).isNotEmpty();
+}
+
 juce::File SettingsStore::settingsDirectory (void)
 {
-	const auto override = juce::SystemStats::getEnvironmentVariable (kDirectoryOverrideVar, {});
-	if (override.isNotEmpty())
+	if (settingsDirectoryIsOverridden())
 	{
-		return juce::File (override);
+		return juce::File (juce::SystemStats::getEnvironmentVariable (kDirectoryOverrideVar, {}));
 	}
 
 	auto root = juce::File::getSpecialLocation (juce::File::userApplicationDataDirectory);
@@ -119,6 +125,46 @@ void SettingsStore::setThemeMode (ThemeMode mode)
 	// moment the user picked it cannot be lost by a host that kills us without saying goodbye.
 	lastErrorMessage = file->saveIfNeeded() ? juce::String() : writeErrorFor (settingsFile());
 
+	broadcastChange();
+}
+
+juce::String SettingsStore::getLanguageId (void) const
+{
+	return file->getValue (kLanguageIdKey);
+}
+
+juce::String SettingsStore::getLanguageTag (void) const
+{
+	return file->getValue (kLanguageTagKey);
+}
+
+void SettingsStore::setLanguageSelection (const juce::String& id, const juce::String& tag)
+{
+	const bool unchanged = id == file->getValue (kLanguageIdKey)
+						   && tag == file->getValue (kLanguageTagKey);
+
+	if (unchanged)
+	{
+		return;
+	}
+
+	if (id.isEmpty())
+	{
+		file->removeValue (kLanguageIdKey);
+		file->removeValue (kLanguageTagKey);
+	}
+	else
+	{
+		file->setValue (kLanguageIdKey, id);
+		file->setValue (kLanguageTagKey, tag);
+	}
+
+	lastErrorMessage = file->saveIfNeeded() ? juce::String() : writeErrorFor (settingsFile());
+	broadcastChange();
+}
+
+void SettingsStore::notifyChanged (void)
+{
 	broadcastChange();
 }
 

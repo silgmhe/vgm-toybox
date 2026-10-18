@@ -8,13 +8,14 @@ using namespace toybox::ui;
 namespace
 {
 	// What this page is for, in the order a player meets it. The list is a signpost, not a
-	// feature: every line of it disappears as the panel behind it arrives.
-	const char* const kPlannedPanels[] =
+	// feature: every line of it disappears as the panel behind it arrives. The keys are stable;
+	// the text is looked up when the page paints, so a language switch needs only a repaint.
+	const char* const kPlannedPanelKeys[] =
 	{
-		"the waveform of what you are hearing",
-		"a spectrum analyser of the mix",
-		"the song's MIDI activity - piano roll and keyboard",
-		"inside a chip: FM operators, algorithms and their parameters",
+		"visualiser.item.waveform",
+		"visualiser.item.spectrum",
+		"visualiser.item.midi",
+		"visualiser.item.chip",
 	};
 
 	constexpr int kHeaderHeight = 62;
@@ -25,7 +26,7 @@ namespace
 
 juce::Rectangle<int> VisualiserView::cardBounds (void) const
 {
-	const int wanted = kHeaderHeight + kLineHeight * (int) juce::numElementsInArray (kPlannedPanels) + kFooterHeight;
+	const int wanted = kHeaderHeight + kLineHeight * (int) juce::numElementsInArray (kPlannedPanelKeys) + kFooterHeight;
 	return getLocalBounds().removeFromTop (juce::jmin (getHeight(), wanted));
 }
 
@@ -50,16 +51,17 @@ void VisualiserView::paint (juce::Graphics& g)
 
 	g.setColour (theme::primaryText());
 	g.setFont (juce::Font (juce::FontOptions (15.0f, juce::Font::bold)));
-	g.drawText ("Visualiser", text.removeFromTop (22), juce::Justification::centredLeft, false);
+	g.drawText (toybox::i18n::tr ("visualiser.title"), text.removeFromTop (22),
+				juce::Justification::centredLeft, false);
 
 	g.setColour (theme::secondaryText());
 	g.setFont (juce::Font (juce::FontOptions (12.5f)));
-	g.drawText ("Not built yet - this page is where these will live:",
+	g.drawText (toybox::i18n::tr ("visualiser.subtitle"),
 				text.removeFromTop (20), juce::Justification::centredLeft, false);
 
 	g.setFont (juce::Font (juce::FontOptions (12.5f)));
 
-	for (const auto* line : kPlannedPanels)
+	for (const auto* key : kPlannedPanelKeys)
 	{
 		auto row = text.removeFromTop (kLineHeight);
 
@@ -70,11 +72,11 @@ void VisualiserView::paint (juce::Graphics& g)
 		row.removeFromLeft (16);
 
 		g.setColour (theme::primaryText());
-		g.drawText (line, row, juce::Justification::centredLeft, false);
+		g.drawText (toybox::i18n::tr (key), row, juce::Justification::centredLeft, false);
 	}
 
 	g.setColour (theme::secondaryText());
 	g.setFont (juce::Font (juce::FontOptions (12.0f)));
-	g.drawText ("View > Play takes you back to the player.",
+	g.drawText (toybox::i18n::tr ("visualiser.footer"),
 				text.removeFromTop (kFooterHeight), juce::Justification::centredLeft, false);
 }

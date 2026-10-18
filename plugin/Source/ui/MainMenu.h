@@ -5,6 +5,7 @@
 
 #include <juce_gui_basics/juce_gui_basics.h>
 
+#include "i18n/LanguageManager.h"
 #include "settings/SettingsStore.h"
 #include "ui/EditorCommands.h"
 
@@ -74,6 +75,10 @@ public:
 	/** The pages, in menu order - filled from the window's ViewStack. */
 	juce::StringArray viewNames;
 
+	/** Stable page ids in the same order. The menu ids and the Ctrl+1..9 mapping use these, not
+		the translated names, so a script's `menu.view.play` survives a language switch. */
+	juce::StringArray viewIds;
+
 	/** Asks the window which page is on screen, and is read every time the menu is built. */
 	std::function<int (void)> getCurrentView;
 
@@ -89,11 +94,11 @@ public:
 	{
 		std::vector<MenuGroup> groups;
 
-		MenuGroup file { "File", {} };
+		MenuGroup file { i18n::tr ("menu.file"), {} };
 
 		MenuEntry open;
 		open.id = "file.open";
-		open.label = "Open Song...";
+		open.label = i18n::tr ("menu.file.open");
 		open.key = keyFor ("file.open");
 		open.action = onOpenSong;
 		file.entries.push_back (std::move (open));
@@ -102,13 +107,13 @@ public:
 		{
 			MenuEntry close;
 			close.id = "file.close";
-			close.label = "Close Song";
+			close.label = i18n::tr ("menu.file.close");
 			close.action = onCloseSong;
 			file.entries.push_back (std::move (close));
 
 			MenuEntry exit;
 			exit.id = "file.exit";
-			exit.label = "Exit";
+			exit.label = i18n::tr ("menu.file.exit");
 			exit.separatorBefore = true;
 			exit.action = onQuit;
 			file.entries.push_back (std::move (exit));
@@ -118,11 +123,13 @@ public:
 
 		// One item per page, ticked on the one on screen. Ctrl+1..9 comes from pageKey(), the same
 		// call the window matches a key against, so the two cannot drift apart.
-		MenuGroup view { "View", {} };
+		MenuGroup view { i18n::tr ("menu.view"), {} };
 		for (int i = 0; i < viewNames.size(); ++i)
 		{
+			const auto id = i < viewIds.size() ? viewIds[i] : viewNames[i].toLowerCase();
+
 			MenuEntry page;
-			page.id = "view." + viewNames[i].toLowerCase();
+			page.id = "view." + id;
 			page.label = viewNames[i];
 			page.checked = (i == currentViewIndex());
 			if (i < 9)
@@ -140,17 +147,17 @@ public:
 			// a menu can be opened before the window has filled the list in
 			MenuEntry none;
 			none.id = "view.none";
-			none.label = "No pages yet";
+			none.label = i18n::tr ("menu.view.none");
 			none.enabled = false;
 			view.entries.push_back (std::move (none));
 		}
 
 		groups.push_back (std::move (view));
 
-		MenuGroup options { "Options", {} };
+		MenuGroup options { i18n::tr ("menu.options"), {} };
 		MenuEntry settings;
 		settings.id = "options.settings";
-		settings.label = "Settings...";
+		settings.label = i18n::tr ("menu.options.settings");
 		settings.key = keyFor ("options.settings");
 		settings.action = onSettings;
 		options.entries.push_back (std::move (settings));
@@ -166,23 +173,23 @@ public:
 		{
 			Mode mode;
 			const char* id;
-			const char* label;
+			const char* labelKey;
 		};
 
 		const ThemeChoice choices[] = {
-			{ Mode::light,		"theme.light",			"Light" },
-			{ Mode::dark,		"theme.dark",			"Dark" },
-			{ Mode::followSystem, "theme.followSystem",	"Follow system" },
+			{ Mode::light,		"theme.light",			"menu.theme.light" },
+			{ Mode::dark,		"theme.dark",			"menu.theme.dark" },
+			{ Mode::followSystem, "theme.followSystem",	"menu.theme.followSystem" },
 		};
 
 		const auto stored = toybox::settings::SettingsStore::getInstance().getThemeMode();
 
-		MenuGroup theme { "Theme", {} };
+		MenuGroup theme { i18n::tr ("menu.theme"), {} };
 		for (const auto& choice : choices)
 		{
 			MenuEntry entry;
 			entry.id = choice.id;
-			entry.label = choice.label;
+			entry.label = i18n::tr (choice.labelKey);
 			entry.checked = (stored == choice.mode);
 
 			const Mode mode = choice.mode;
@@ -192,10 +199,10 @@ public:
 
 		groups.push_back (std::move (theme));
 
-		MenuGroup help { "Help", {} };
+		MenuGroup help { i18n::tr ("menu.help"), {} };
 		MenuEntry about;
 		about.id = "help.about";
-		about.label = "About VGMToybox...";
+		about.label = i18n::tr ("menu.help.about");
 		about.action = onAbout;
 		help.entries.push_back (std::move (about));
 		groups.push_back (std::move (help));
@@ -291,7 +298,8 @@ public:
 		handed, so the order here is the order there, and neither may be sorted on its own. */
 	juce::StringArray getMenuBarNames (void) override
 	{
-		return { "File", "View", "Options", "Theme", "Help" };
+		return { i18n::tr ("menu.file"), i18n::tr ("menu.view"), i18n::tr ("menu.options"),
+				 i18n::tr ("menu.theme"), i18n::tr ("menu.help") };
 	}
 
 	juce::PopupMenu getMenuForIndex (int index, const juce::String&) override

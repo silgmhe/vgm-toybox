@@ -31,12 +31,17 @@ public:
 	/** Height the card needs to show every checkbox at this width (0 while empty). */
 	int getPreferredHeight (int availableWidth) const;
 
+	/** Re-applies the header and the tooltips; chip and core names themselves are not translated. */
+	void refreshLanguage (void);
+
 private:
 	void resized (void) override;
 	void paintCardContent (juce::Graphics& g) override;
 
 	MuteCallback muteCallback;
 	juce::OwnedArray<juce::ToggleButton> chipButtons;
+	juce::StringArray chipNames;
+	juce::StringArray chipCores;
 	juce::Rectangle<int> headerBounds;
 
 	JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (ChipPanel)

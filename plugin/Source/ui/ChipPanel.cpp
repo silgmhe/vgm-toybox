@@ -2,6 +2,7 @@
 
 #include "Theme.h"
 
+#include "i18n/LanguageManager.h"
 #include "playback/PlaybackEngine.h"
 
 #include <utility>
@@ -18,6 +19,8 @@ void ChipPanel::rebuild (const std::vector<toybox::ChipEntry>& chips, MuteCallba
 {
 	muteCallback = std::move (onMuteChanged);
 	chipButtons.clear();
+	chipNames.clear();
+	chipCores.clear();
 
 	for (size_t i = 0; i < chips.size(); ++i)
 	{
@@ -27,9 +30,8 @@ void ChipPanel::rebuild (const std::vector<toybox::ChipEntry>& chips, MuteCallba
 		// no colour of its own: the LookAndFeel's ToggleButton colour is already the palette's
 		// primary text, and taking it from there is what lets a theme change reach these buttons
 		// (they are built once, when the card is filled)
-		button->setTooltip (chips[i].core.isNotEmpty()
-								? chips[i].name + " (" + chips[i].core + ") - uncheck to mute"
-								: chips[i].name + " - uncheck to mute");
+		chipNames.add (chips[i].name);
+		chipCores.add (chips[i].core);
 		const size_t index = i;
 		button->onClick = [this, index, button]
 		{
@@ -42,6 +44,7 @@ void ChipPanel::rebuild (const std::vector<toybox::ChipEntry>& chips, MuteCallba
 		addAndMakeVisible (button);
 	}
 
+	refreshLanguage();
 	setVisible (hasChips());
 
 	// Lay the new checkboxes out immediately: the editor only calls setBounds(), and
@@ -81,9 +84,23 @@ void ChipPanel::resized (void)
 	flex.performLayout (inner);
 }
 
+void ChipPanel::refreshLanguage (void)
+{
+	for (int i = 0; i < chipButtons.size(); ++i)
+	{
+		const auto& name = chipNames[i];
+		const auto& core = chipCores[i];
+		chipButtons[i]->setTooltip (core.isNotEmpty()
+									? i18n::tr ("chip.tooltipWithCore", name, core)
+									: i18n::tr ("chip.tooltip", name));
+	}
+
+	repaint();
+}
+
 void ChipPanel::paintCardContent (juce::Graphics& g)
 {
-	paintCardHeaderRow (g, headerBounds, "SOUND CHIPS", "UNCHECK TO MUTE");
+	paintCardHeaderRow (g, headerBounds, i18n::tr ("chip.title"), i18n::tr ("chip.hint"));
 }
 
 } // namespace toybox::ui

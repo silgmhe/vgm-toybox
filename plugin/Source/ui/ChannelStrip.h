@@ -50,6 +50,12 @@ public:
 	/** Greys out the selector while the mixer is off (the routing is inactive then). */
 	void setMixerActive (bool active);
 
+	/** Re-applies tooltips and the "(not connected)" suffix after a language change. */
+	void refreshLanguage (void);
+
+	/** The name painted at the top - used to translate the master strip in place. */
+	void setStripName (const juce::String& name);
+
 	/** The target the selector currently shows - the panel uses it to avoid needless rebuilds. */
 	playback::OutputTarget getShownOutput (void) const { return shownOutput; }
 

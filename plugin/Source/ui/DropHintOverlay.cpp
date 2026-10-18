@@ -17,14 +17,18 @@ DropHintOverlay::DropHintOverlay (void)
 	label.setJustificationType (juce::Justification::centred);
 
 	lookAndFeelChanged();
-	// the format list comes from the backend registry - a build with more backends advertises
-	// them without touching this file
-	label.setText (formatDropPrompt(),
-				   juce::dontSendNotification);
 	label.setInterceptsMouseClicks (false, false);
 	addAndMakeVisible (label);
+	refreshLanguage();
 
 	setVisible (false);
+}
+
+void DropHintOverlay::refreshLanguage (void)
+{
+	// the format list comes from the backend registry - a build with more backends advertises
+	// them without touching this file
+	label.setText (formatDropPrompt(), juce::dontSendNotification);
 }
 
 void DropHintOverlay::paint (juce::Graphics& g)

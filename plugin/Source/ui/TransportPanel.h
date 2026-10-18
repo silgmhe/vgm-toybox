@@ -50,6 +50,9 @@ public:
 	/** Pulls the transport state, the loop/fade setting and the position from the engine. */
 	void refresh (void);
 
+	/** Re-applies every translated tooltip, accessible name and preset label. */
+	void refreshLanguage (void);
+
 	/** Space key: with the start cursor on, stops (back to the cursor) while playing and
 		plays otherwise; with it off, toggles play/pause like a media player. */
 	void togglePlayStop (void);
@@ -116,11 +119,11 @@ private:
 	toybox::playback::DawSync& sync;
 	std::unique_ptr<SyncGroup> syncGroup;	// null in the standalone: nothing to follow
 
-	IconButton playButton { "Play", IconButton::Icon::play };
-	IconButton pauseButton { "Pause", IconButton::Icon::pause };
-	IconButton stopButton { "Stop", IconButton::Icon::stop };
-	IconButton loopButton { "Loop", IconButton::Icon::loop };
-	IconButton cursorButton { "Playback start", IconButton::Icon::playStart };
+	IconButton playButton { "play", "Play", IconButton::Icon::play };
+	IconButton pauseButton { "pause", "Pause", IconButton::Icon::pause };
+	IconButton stopButton { "stop", "Stop", IconButton::Icon::stop };
+	IconButton loopButton { "loop", "Loop", IconButton::Icon::loop };
+	IconButton cursorButton { "playback-start", "Playback start", IconButton::Icon::playStart };
 	juce::Slider positionSlider;
 	juce::Slider volumeSlider;
 	juce::ComboBox loopBox;

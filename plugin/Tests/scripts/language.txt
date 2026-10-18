@@ -1,0 +1,46 @@
+#
+# The Language page: the two built-in packs, an external file that declares the same language
+# tag, and the fallback for the keys that file does not translate.
+#
+# Run:  build\plugin\vgm_app_test plugin\Tests\scripts\language.txt
+#
+# The file is copied into this run's settings folder before the editor exists, so selecting it
+# goes through exactly the same scan a user's own file does. The id at the end of the list is
+# the file name without its extension.
+# settings languageDir plugin/Tests/assets/i18n
+
+load "plugin/Tests/assets/minimal.vgm"
+
+# 0 = English (built-in). The combo is zero-based here because `set` is JUCE's item index.
+set settings.language.select 0
+sleep 60
+assert editor.open text contains Open
+assert menu.file.open label contains Open
+assert settings.language.source text contains Built-in
+
+# 1 = 简体中文 (built-in)
+set settings.language.select 1
+sleep 60
+assert editor.open text contains 打开
+assert menu.file.open label contains 打开
+assert settings.language.source text contains 内置翻译
+assert settings.language.rescan text contains 重新扫描
+
+# 2 = 简体中文 (my-chinese) - the external file wins for the keys it has ...
+set settings.language.select 2
+sleep 60
+assert editor.open text == EXT打开
+assert menu.file.open label == EXT打开文件
+assert settings.language.source text contains my-chinese
+assert settings.language.select text contains my-chinese
+
+# ... and the keys it does not have still come from the built-in Chinese pack, not from English.
+assert settings.language.rescan text contains 重新扫描
+assert settings.language.detail text contains 缺少
+
+# Back to English: the window, its menu and the page all follow.
+set settings.language.select 0
+sleep 60
+assert editor.open text contains Open
+assert menu.file.open label contains Open
+assert settings.language.source text contains Built-in

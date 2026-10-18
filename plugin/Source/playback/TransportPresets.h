@@ -12,29 +12,29 @@ namespace toybox::transport
 struct LoopPreset
 {
 	int count;
-	const char* label;
+	const char* labelKey;
 };
 
 inline constexpr std::array<LoopPreset, 4> loopPresets {{
-	{ 1, "1x" },
-	{ 2, "2x" },
-	{ 3, "3x" },
-	{ 0, "Loop forever" },
+	{ 1, "transport.loop.once" },
+	{ 2, "transport.loop.twice" },
+	{ 3, "transport.loop.thrice" },
+	{ 0, "transport.loop.forever" },
 }};
 
 /** The ending-fade times the transport panel and the tray menu offer, in display order. */
 struct FadePreset
 {
 	double seconds;
-	const char* label;
+	const char* labelKey;
 };
 
 inline constexpr std::array<FadePreset, 5> fadePresets {{
-	{ 0.0, "No fade" },
-	{ 1.0, "1 s fade" },
-	{ 3.0, "3 s fade" },
-	{ 5.0, "5 s fade" },
-	{ 10.0, "10 s fade" },
+	{ 0.0, "transport.fade.none" },
+	{ 1.0, "transport.fade.1s" },
+	{ 3.0, "transport.fade.3s" },
+	{ 5.0, "transport.fade.5s" },
+	{ 10.0, "transport.fade.10s" },
 }};
 
 /** The row that represents @p count. Every value maps to exactly one row: an out-of-range

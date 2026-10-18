@@ -1,7 +1,7 @@
 # hooks audio
 #
 # The settings sidebar's pages, including the Audio page that only an application has.
-# Without the line above this is the plugin's two-page panel, and the two Audio assertions fail.
+# Without the line above this is the plugin's three-page panel, and the two Audio assertions fail.
 #
 # Run:  build\plugin\vgm_app_test plugin\Tests\scripts\settings-pages.txt
 #

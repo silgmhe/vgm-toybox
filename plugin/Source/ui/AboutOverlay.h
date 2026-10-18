@@ -2,6 +2,8 @@
 
 #include "Theme.h"
 
+#include "i18n/LanguageManager.h"
+
 namespace toybox::ui
 {
 
@@ -56,12 +58,21 @@ public:
 			addAndMakeVisible (link);
 		};
 
-		setUpRow (githubLabel, "GitHub: ", "about.github.label",
+		setUpRow (githubLabel, i18n::tr ("about.github"), "about.github.label",
 				  repositoryLink, "https://github.com/silgmhe/vgm-toybox", "about.github");
-		setUpRow (bilibiliLabel, "BiliBili: ", "about.bilibili.label",
+		setUpRow (bilibiliLabel, i18n::tr ("about.bilibili"), "about.bilibili.label",
 				  bilibiliLink, "https://space.bilibili.com/249486555", "about.bilibili");
 
+		refreshLanguage();
 		lookAndFeelChanged();
+	}
+
+	void refreshLanguage (void)
+	{
+		closeButton.setButtonText (i18n::tr ("common.close"));
+		githubLabel.setText (i18n::tr ("about.github"), juce::dontSendNotification);
+		bilibiliLabel.setText (i18n::tr ("about.bilibili"), juce::dontSendNotification);
+		repaint();
 	}
 
 	/** Called when the box is dismissed - the window hides the overlay. */
@@ -100,25 +111,26 @@ public:
 
 		g.setColour (theme::secondaryText());
 		g.setFont (juce::Font (juce::FontOptions (13.0f)));
-		g.drawText ("Version " + juce::String (JucePlugin_VersionString) + "   -   commit " + TOYBOX_GIT_COMMIT,
+		g.drawText (i18n::tr ("about.version", juce::String (JucePlugin_VersionString),
+							  juce::String (TOYBOX_GIT_COMMIT)),
 					inner.removeFromTop (18), juce::Justification::centredLeft, false);
 		inner.removeFromTop (10);
 
 		g.setColour (theme::primaryText());
 		g.setFont (juce::Font (juce::FontOptions (13.0f)));
-		g.drawFittedText ("A chiptune player for VGM, VGZ, S98, DRO and GYM songs.",
+		g.drawFittedText (i18n::tr ("about.description"),
 						  inner.removeFromTop (18), juce::Justification::centredLeft, 1);
 		inner.removeFromTop (10);
 
 		g.setColour (theme::secondaryText());
 		g.setFont (juce::Font (juce::FontOptions (12.5f)));
-		g.drawFittedText ("by silgmhe - built on VGMPlay and libvgm by Valley Bell and contributors.",
+		g.drawFittedText (i18n::tr ("about.credit"),
 						  inner.removeFromTop (18), juce::Justification::centredLeft, 2);
 		inner.removeFromTop (10);
 
 		g.setColour (theme::secondaryText());
 		g.setFont (juce::Font (juce::FontOptions (12.5f)));
-		g.drawText ("Licensed under the AGPL-3.0-or-later.", inner.removeFromTop (18),
+		g.drawText (i18n::tr ("about.license"), inner.removeFromTop (18),
 					juce::Justification::centredLeft, false);
 	}
 
@@ -184,7 +196,7 @@ private:
 	juce::HyperlinkButton repositoryLink;
 	juce::Label bilibiliLabel;
 	juce::HyperlinkButton bilibiliLink;
-	juce::TextButton closeButton { "Close" };
+	juce::TextButton closeButton;
 
 	/** The panel's bottom strip: the links above the Close button. */
 	static constexpr int kFooterHeight = 78;

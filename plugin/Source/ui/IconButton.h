@@ -11,13 +11,14 @@ class IconButton : public juce::Button
 public:
 	enum class Icon { play, pause, stop, loop, playStart, sliders, spreadOutputs, mergeToMaster, sync, cue };
 
-	IconButton (const juce::String& buttonName, Icon iconToDraw)
+	/** `buttonId` is stable and independent of the language ("play", "spread-outputs"). The
+		accessible name is translated by the owner and can change at runtime; deriving the ID from
+		it would rename every button the first time the user switched to Chinese. */
+	IconButton (const juce::String& buttonId, const juce::String& buttonName, Icon iconToDraw)
 		: juce::Button (buttonName), icon (iconToDraw)
 	{
-		// The console harness finds controls by ID (docs/desgin/testing-architecture.md §3.1), so an
-		// icon button names itself after the label it shows: "Play" -> "btn.play". One place, and
-		// the transport and the mixer header all have an ID without their panels doing anything.
-		setComponentID ("btn." + buttonName.toLowerCase().replaceCharacter (' ', '-'));
+		// The console harness finds controls by ID (docs/desgin/testing-architecture.md §3.1).
+		setComponentID ("btn." + buttonId.toLowerCase().replaceCharacter (' ', '-'));
 	}
 
 	/** A word drawn under the glyph, inside the face ("SYNC", "CUE"). An empty caption leaves the

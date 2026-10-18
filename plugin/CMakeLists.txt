@@ -192,6 +192,8 @@ target_sources(VGMToybox PRIVATE
 	Source/backends/libvgm/LibvgmSongInstance.cpp
 	Source/backends/libvgm/LibvgmTrackPlayer.cpp
 	Source/backends/libvgm/LibvgmVgz.cpp
+	Source/i18n/LanguageManager.cpp
+	Source/i18n/LanguagePack.cpp
 	Source/settings/SettingsStore.cpp
 	Source/ui/CardComponent.cpp
 	Source/ui/ChannelStrip.cpp
@@ -248,6 +250,17 @@ juce_add_binary_data(VGMToyboxTrayIcons
 		assets/icon/vgmtoybox-16.png
 		assets/icon/vgmtoybox-256.png)
 target_link_libraries(VGMToybox_Standalone PRIVATE VGMToyboxTrayIcons)
+
+# The built-in translations are compiled into the shared plugin code, not installed next to a
+# bundle: the VST3 and the standalone load the same packs, and a plugin host may copy a bundle
+# without its neighbours. User translations are found at runtime in the settings directory.
+juce_add_binary_data(VGMToyboxI18n
+	HEADER_NAME I18nData.h
+	NAMESPACE I18nData
+	SOURCES
+		assets/i18n/en.lang
+		assets/i18n/zh-Hans.lang)
+target_link_libraries(VGMToybox PUBLIC VGMToyboxI18n)
 
 # The JUCE configuration *every* target in this project compiles with.
 #
@@ -312,6 +325,8 @@ add_executable(vgm_core_test EXCLUDE_FROM_ALL
 	Source/playback/HostClockSource.cpp
 	Source/playback/SessionState.cpp
 	Source/backends/fake/FakeBackend.cpp
+	Source/i18n/LanguageManager.cpp
+	Source/i18n/LanguagePack.cpp
 	Source/settings/SettingsStore.cpp
 	Source/Standalone/TrayController.cpp
 	Source/Standalone/TrayMenu.cpp
@@ -331,6 +346,8 @@ target_link_libraries(vgm_core_test PRIVATE
 	# running message loop - but the module has to be on the include path to compile the file.
 	juce::juce_events
 	juce::juce_recommended_config_flags
+	# the tray menu it drives is translated; the packs are compiled into the plugin code
+	VGMToyboxI18n
 )
 
 # --- console test for the button faces (not built by default) ---
@@ -431,12 +448,19 @@ foreach(_script_file IN LISTS _toybox_scripts)
 
 	add_test(NAME "app.${_script_name}" COMMAND vgm_app_test "${_script_file}")
 
+	# The scripts name the assets they use from the repository root (`plugin/Tests/...`), and
+	# the settings directives do the same. CTest's default is the build directory, so pin the
+	# working directory to the root the scripts (and their docs) already assume.
 	if(_toybox_test_env)
 		set_tests_properties("app.${_script_name}" PROPERTIES
 			LABELS app
 			TIMEOUT 120
-			ENVIRONMENT "${_toybox_test_env}")
+			ENVIRONMENT "${_toybox_test_env}"
+			WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/..")
 	else()
-		set_tests_properties("app.${_script_name}" PROPERTIES LABELS app TIMEOUT 120)
+		set_tests_properties("app.${_script_name}" PROPERTIES
+			LABELS app
+			TIMEOUT 120
+			WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/..")
 	endif()
 endforeach()

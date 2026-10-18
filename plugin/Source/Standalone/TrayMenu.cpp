@@ -1,5 +1,6 @@
 #include "TrayMenu.h"
 
+#include "i18n/LanguageManager.h"
 #include "playback/TransportPresets.h"
 
 #include <cstddef>
@@ -96,7 +97,7 @@ TrayMenuModel TrayMenu::build (void) const
 	TrayMenuModel menu;
 
 	menu.push_back (TrayMenuGroup::topLevel (
-		{ makeEntry ("tray.show", "Show Window", TrayMenuIcon::showWindow,
+		{ makeEntry ("tray.show", i18n::tr ("tray.show"), TrayMenuIcon::showWindow,
 					 false, true, showWindow) }));
 
 	// The transport rows. Play and pause share one row, because the menu says what the click
@@ -105,7 +106,7 @@ TrayMenuModel TrayMenu::build (void) const
 	// longer in the rebuilt model and the click is refused rather than doing the opposite.
 	std::vector<TrayMenuEntry> transport;
 	transport.push_back (makeEntry (playing ? "tray.pause" : "tray.play",
-									playing ? "Pause" : "Play",
+									playing ? i18n::tr ("tray.pause") : i18n::tr ("tray.play"),
 									playing ? TrayMenuIcon::pause : TrayMenuIcon::play,
 									false, loaded, [this, playing]
 									{
@@ -119,7 +120,7 @@ TrayMenuModel TrayMenu::build (void) const
 										}
 									}));
 	transport.back().separatorBefore = true;
-	transport.push_back (makeEntry ("tray.stop", "Stop", TrayMenuIcon::stop,
+	transport.push_back (makeEntry ("tray.stop", i18n::tr ("tray.stop"), TrayMenuIcon::stop,
 									false, loaded, [this] { engine.stop(); }));
 	menu.push_back (TrayMenuGroup::topLevel (std::move (transport)));
 
@@ -137,12 +138,13 @@ TrayMenuModel TrayMenu::build (void) const
 			: juce::String ("tray.loop.") + juce::String (preset.count);
 
 		// Submenu rows keep the system check mark; only the parent group carries a glyph.
-		loops.push_back (makeEntry (id, preset.label, TrayMenuIcon::none,
+		loops.push_back (makeEntry (id, i18n::tr (preset.labelKey), TrayMenuIcon::none,
 									loopIndex == (int) i, true,
 									[this, count = preset.count] { engine.setLoopCount (count); }));
 	}
 
-	menu.push_back (TrayMenuGroup::submenu ("Loop", TrayMenuIcon::loop, std::move (loops)));
+	menu.push_back (TrayMenuGroup::submenu (i18n::tr ("tray.loop"), TrayMenuIcon::loop,
+										   std::move (loops)));
 
 	// Fade is the song's ending fade, the same five choices as the transport panel.
 	const int fadeIndex = transport::fadePresetIndex (engine.getFadeSeconds());
@@ -154,15 +156,17 @@ TrayMenuModel TrayMenu::build (void) const
 		const auto id = juce::String ("tray.fade.") + juce::String ((int) preset.seconds);
 
 		// Submenu rows keep the system check mark; only the parent group carries a glyph.
-		fadeEntries.push_back (makeEntry (id, preset.label, TrayMenuIcon::none,
+		fadeEntries.push_back (makeEntry (id, i18n::tr (preset.labelKey), TrayMenuIcon::none,
 										  fadeIndex == (int) i, true,
 										  [this, seconds = preset.seconds]
 										  { engine.setFadeSeconds (seconds); }));
 	}
 
-	menu.push_back (TrayMenuGroup::submenu ("Fade", TrayMenuIcon::fade, std::move (fadeEntries)));
+	menu.push_back (TrayMenuGroup::submenu (i18n::tr ("tray.fade"), TrayMenuIcon::fade,
+										   std::move (fadeEntries)));
 
-	auto quitEntry = makeEntry ("tray.quit", "Quit", TrayMenuIcon::quit, false, true, quit);
+	auto quitEntry = makeEntry ("tray.quit", i18n::tr ("tray.quit"), TrayMenuIcon::quit,
+								false, true, quit);
 	quitEntry.separatorBefore = true;
 	menu.push_back (TrayMenuGroup::topLevel ({ std::move (quitEntry) }));
 

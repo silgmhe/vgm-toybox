@@ -3,7 +3,7 @@
 #include "Format.h"
 #include "Theme.h"
 
-#include "Format.h"
+#include "i18n/LanguageManager.h"
 #include "playback/BackendRegistry.h"
 #include "playback/PlaybackEngine.h"
 
@@ -39,6 +39,11 @@ void SongInfoPanel::lookAndFeelChanged (void)
 	fileLabel.setColour (juce::Label::textColourId, theme::secondaryText());
 }
 
+void SongInfoPanel::refreshLanguage (void)
+{
+	refresh();
+}
+
 void SongInfoPanel::resized (void)
 {
 	auto inner = getLocalBounds().reduced (theme::cardPadding, 10);
@@ -51,7 +56,7 @@ void SongInfoPanel::refresh (void)
 {
 	if (! engine.isLoaded())
 	{
-		titleLabel.setText ("No file loaded", juce::dontSendNotification);
+		titleLabel.setText (i18n::tr ("song.noFile"), juce::dontSendNotification);
 		detailsLabel.setText ({}, juce::dontSendNotification);
 		fileLabel.setText (formatLoadHint(),
 						   juce::dontSendNotification);
@@ -74,10 +79,10 @@ void SongInfoPanel::refresh (void)
 			details << name << ": " << value << "    ";
 		}
 	};
-	appendTag ("Game", engine.getTag ("GAME"));
-	appendTag ("System", engine.getTag ("SYSTEM"));
-	appendTag ("Artist", engine.getTag ("ARTIST"));
-	appendTag ("Date", engine.getTag ("DATE"));
+	appendTag (i18n::tr ("tag.game"), engine.getTag ("GAME"));
+	appendTag (i18n::tr ("tag.system"), engine.getTag ("SYSTEM"));
+	appendTag (i18n::tr ("tag.artist"), engine.getTag ("ARTIST"));
+	appendTag (i18n::tr ("tag.date"), engine.getTag ("DATE"));
 	detailsLabel.setText (details.trim(), juce::dontSendNotification);
 
 	fileLabel.setText (file.getFileName() + "   -   " + formatTime (engine.getPositionSeconds())

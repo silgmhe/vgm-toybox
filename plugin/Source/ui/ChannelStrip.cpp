@@ -6,6 +6,8 @@
 #include "MeterScale.h"
 #include "Theme.h"
 
+#include "i18n/LanguageManager.h"
+
 namespace toybox::ui
 {
 namespace
@@ -31,7 +33,6 @@ ChannelStrip::ChannelStrip (void)
 	// the slider colours come from the theme (accent track, light handle)
 	gainSlider.setNormalisableRange (meter::gainRange());	// dB-linear travel, linear gain value
 	gainSlider.setDoubleClickReturnValue (true, 1.0);
-	gainSlider.setTooltip ("Gain (double-click: 100%)");
 	gainSlider.onValueChange = [this]
 	{
 		if (onGainChanged != nullptr)
@@ -44,7 +45,6 @@ ChannelStrip::ChannelStrip (void)
 	panKnob.setDoubleClickReturnValue (true, 0.0);
 	panKnob.setRotaryParameters (juce::MathConstants<float>::pi * 1.25f,
 								 juce::MathConstants<float>::pi * 2.75f, true);
-	panKnob.setTooltip ("Pan (double-click: centre)");
 	panKnob.onValueChange = [this]
 	{
 		if (onPanChanged != nullptr)
@@ -55,7 +55,6 @@ ChannelStrip::ChannelStrip (void)
 
 	// DAW convention: mute is red, solo is amber
 	muteButton.setClickingTogglesState (true);
-	muteButton.setTooltip ("Mute this track");
 	muteButton.onClick = [this]
 	{
 		if (onMuteChanged != nullptr)
@@ -65,7 +64,6 @@ ChannelStrip::ChannelStrip (void)
 	};
 
 	soloButton.setClickingTogglesState (true);
-	soloButton.setTooltip ("Solo this track (silences every track that is not soloed)");
 
 	// both buttons exist now, so their colours can be applied - and re-applied whenever the
 	// palette changes
@@ -80,7 +78,6 @@ ChannelStrip::ChannelStrip (void)
 
 	// the output selector: single choice (Master = send to the internal master bus, or a real
 	// output bus = direct out), filled by MixerPanel through setOutputOptions()
-	outputBox.setTooltip ("Output bus");
 	outputBox.onChange = [this]
 	{
 		const int index = outputBox.getSelectedId() - 1;
@@ -108,16 +105,46 @@ void ChannelStrip::setup (const juce::String& name, bool isMasterStrip)
 	// the master strip has no solo, but its mute silences what the master bus contributes to
 	// its own target bus (tracks sent to real buses keep playing - see setMasterMuted)
 	muteButton.setVisible (true);
-	muteButton.setTooltip (master ? "Mute the master bus output"
-								  : "Mute this track");
-	outputBox.setTooltip (master ? "Output bus - where the master mix goes"
-								 : "Output bus - where this track goes");
-	gainSlider.setTooltip (master ? "Mixer master gain - the output volume sits behind it "
-									"(double-click: 100%)"
-								  : "Gain (double-click: 100%)");
+	refreshLanguage();
 
 	resized();
 	repaint();
+}
+
+void ChannelStrip::setStripName (const juce::String& name)
+{
+	stripName = name;
+	repaint (nameBounds);
+}
+
+void ChannelStrip::refreshLanguage (void)
+{
+	muteButton.setTooltip (master ? i18n::tr ("mixer.masterMuteTooltip")
+								  : i18n::tr ("mixer.muteTooltip"));
+	soloButton.setTooltip (i18n::tr ("mixer.soloTooltip"));
+	outputBox.setTooltip (master ? i18n::tr ("mixer.masterOutputTooltip")
+								 : i18n::tr ("mixer.outputTooltip"));
+	gainSlider.setTooltip (master ? i18n::tr ("mixer.masterGainTooltip")
+								  : i18n::tr ("mixer.gainTooltip"));
+	panKnob.setTooltip (i18n::tr ("mixer.panTooltip"));
+
+	// Re-add the entries so "(not connected)" changes language too. The displayed target is kept:
+	// a language switch must not reroute a track.
+	const auto selected = shownOutput;
+	outputBox.clear (juce::dontSendNotification);
+
+	for (std::size_t i = 0; i < outputOptions.size(); ++i)
+	{
+		const auto& option = outputOptions[i];
+		outputBox.addItem (option.connected ? option.name
+											: i18n::tr ("mixer.notConnected", option.name),
+						   (int) i + 1);
+
+		if (option.target == selected)
+		{
+			outputBox.setSelectedId ((int) i + 1, juce::dontSendNotification);
+		}
+	}
 }
 
 void ChannelStrip::setValues (float gain, float pan, bool muted, bool soloed,
@@ -180,7 +207,9 @@ void ChannelStrip::setOutputOptions (const std::vector<OutputOption>& options, p
 
 		// a bus the host has not connected is still selectable - the track routed to it is
 		// silent, and the label says why (docs/desgin/multitrack-output-design.md, R6/E)
-		outputBox.addItem (option.connected ? option.name : option.name + " (not connected)", itemId);
+		outputBox.addItem (option.connected ? option.name
+											: i18n::tr ("mixer.notConnected", option.name),
+						   itemId);
 
 		if (option.target == selected)
 		{

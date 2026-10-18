@@ -2,6 +2,8 @@
 
 #include "View.h"
 
+#include "i18n/LanguageManager.h"
+
 namespace toybox::ui
 {
 
@@ -23,7 +25,8 @@ public:
 	// the copy macro below suppresses the implicit default constructor
 	VisualiserView (void) = default;
 
-	juce::String getViewName (void) const override { return "Visualiser"; }
+	juce::String getViewId (void) const override { return "visualiser"; }
+	juce::String getViewName (void) const override { return toybox::i18n::tr ("view.visualiser"); }
 
 	void paint (juce::Graphics& g) override;
 	void paintCardShadows (juce::Graphics& g) const override;

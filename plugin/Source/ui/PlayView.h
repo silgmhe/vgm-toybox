@@ -6,6 +6,8 @@
 #include "TransportPanel.h"
 #include "View.h"
 
+#include "i18n/LanguageManager.h"
+
 namespace toybox { class PlaybackEngine; }
 
 namespace toybox::ui
@@ -26,11 +28,13 @@ public:
 		follow (see TransportPanel). */
 	explicit PlayView (toybox::PlaybackEngine& engine, bool syncAvailable = true);
 
-	juce::String getViewName (void) const override { return "Play"; }
+	juce::String getViewId (void) const override { return "play"; }
+	juce::String getViewName (void) const override { return toybox::i18n::tr ("view.play"); }
 
 	void paintCardShadows (juce::Graphics& g) const override;
 	void resized (void) override;
 	void refresh (void) override;
+	void refreshLanguage (void) override;
 	void songChanged (void) override;
 	bool handleKey (const juce::KeyPress& key) override;
 

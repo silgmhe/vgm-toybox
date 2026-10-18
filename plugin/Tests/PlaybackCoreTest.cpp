@@ -32,6 +32,7 @@
 #include "Standalone/TrayController.h"
 #include "Standalone/TrayMenu.h"
 #include "backends/fake/FakeBackend.h"
+#include "i18n/LanguageManager.h"
 #include "playback/BackendRegistry.h"
 #include "playback/HostClockSource.h"
 #include "playback/PlaybackEngine.h"
@@ -953,6 +954,11 @@ int main (int /*argc*/, char* /*argv*/[])
 	// The part of the feature that can strand a user: does a close hide the window, and does the
 	// icon always come with a way back? Driven against a fake icon, so it runs on any machine.
 	std::printf ("\n[9b] the tray and what a close does\n");
+
+	// The tray labels go through the language manager, whose default is the system language.
+	// Pin it to English so the expected labels below do not depend on the test machine - the
+	// settings folder is already the temporary one, so this writes nothing outside it.
+	toybox::i18n::LanguageManager::getInstance().selectById ("builtin:en");
 
 	settings.setCloseToTray (false);
 

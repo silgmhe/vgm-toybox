@@ -4,6 +4,7 @@
 
 #include <juce_core/juce_core.h>
 
+#include "i18n/LanguageManager.h"
 #include "playback/BackendRegistry.h"
 
 namespace toybox::ui
@@ -39,20 +40,19 @@ inline juce::String formatExtensionListForHumans (void)
 /** The file chooser's caption and the open button's tooltip. */
 inline juce::String formatOpenPrompt (void)
 {
-	return "Open a " + formatExtensionListForHumans() + " file";
+	return i18n::tr ("format.openPrompt", formatExtensionListForHumans());
 }
 
 /** What the drop overlay says while a file is dragged over the window. */
 inline juce::String formatDropPrompt (void)
 {
-	return "Drop a " + formatExtensionListForHumans() + " file here";
+	return i18n::tr ("format.dropPrompt", formatExtensionListForHumans());
 }
 
 /** The empty song card's hint: how to get a file in. */
 inline juce::String formatLoadHint (void)
 {
-	return "Load a " + formatExtensionListForHumans()
-		   + " file with the button above or drop one onto this window.";
+	return i18n::tr ("format.loadHint", formatExtensionListForHumans());
 }
 
 } // namespace toybox::ui

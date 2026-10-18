@@ -43,6 +43,9 @@ public:
 	/** Pulls the cue, the offset and the knob's range into the controls. */
 	void refresh (void);
 
+	/** Re-applies captions, tooltips, the nameplate and the right-click menu's wording. */
+	void refreshLanguage (void);
+
 	/** True while the host drives the transport - sync is on and the host reports time. The card
 		asks this to disable its own transport and to let the space bar out to the host. */
 	bool isHostDriving (void) const;
@@ -123,8 +126,8 @@ private:
 	toybox::PlaybackEngine& engine;
 	toybox::playback::DawSync& sync;
 
-	IconButton syncButton { "Sync", IconButton::Icon::sync };
-	IconButton cueButton { "Cue", IconButton::Icon::cue };
+	IconButton syncButton { "sync", "Sync", IconButton::Icon::sync };
+	IconButton cueButton { "cue", "Cue", IconButton::Icon::cue };
 	OffsetKnob offsetKnob;
 
 	ChildRightClick childRightClick { *this };	// registered in the constructor

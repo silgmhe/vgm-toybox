@@ -121,6 +121,11 @@ shortcut, Explorer - loads it and starts the transport:
 .\dist\Standalone\VGMToybox.exe "C:\music\Some Song.vgm"
 ```
 
+Its files live under `%APPDATA%\VGMToybox` (`~/Library/Application Support/VGMToybox` on macOS,
+`~/.config/VGMToybox` on Linux): `settings.xml` holds the preferences shared with the plugin, and
+`standalone-state.xml` holds the audio device, window position and last plugin state that only a
+standalone has. An older `VGMToybox.settings` is moved to that name on first launch.
+
 ### Opening songs from Explorer
 
 Associate the formats with the application once, through Windows' own dialog. **The program never
@@ -164,6 +169,29 @@ until you ask for it; the icon itself appears on the first close that the settin
 
 On Linux a desktop without a notification area cannot show the icon, and JUCE's X11 backend
 reports no failure to detect - the switch says so in red, and the feature is best-effort there.
+
+### Changing the language
+
+*Settings* → *Language* switches the window and its tooltips between the built-in English and
+Simplified Chinese packs, and lists every translation file in `%APPDATA%\VGMToybox\i18n`
+(`~/Library/Application Support/VGMToybox/i18n` on macOS, `~/.config/VGMToybox/i18n` on Linux).
+**Open Folder** creates and reveals that folder; **Rescan** picks up files added or edited while
+the window is open. A file whose `id:` matches a built-in language is offered as a separate choice
+beside it, and the strings it leaves out fall back to that built-in pack and then to English - so a
+translation can start with a handful of lines.
+
+A file is UTF-8 and begins with two metadata lines; the keys are the ones the English pack uses
+(the Language page says how many are still missing):
+
+```text
+language: 简体中文
+id: zh-Hans
+
+"menu.file.open" = "打开歌曲...";
+"transport.play"  = "播放";
+```
+
+The plugin and the standalone share the folder and the stored choice.
 
 ### In a DAW
 

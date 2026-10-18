@@ -1,0 +1,176 @@
+id: en
+language: English
+
+// The reference pack: every key the application looks up lives here. A user translation may
+// leave keys out - the manager falls back to English for those, and the Language page counts
+// them. Comments and blank lines are ignored by the parser.
+
+"about.bilibili" = "BiliBili: ";
+"about.credit" = "by silgmhe - built on VGMPlay and libvgm by Valley Bell and contributors.";
+"about.description" = "A chiptune player for VGM, VGZ, S98, DRO and GYM songs.";
+"about.github" = "GitHub: ";
+"about.license" = "Licensed under the AGPL-3.0-or-later.";
+"about.version" = "Version {0}   -   commit {1}";
+
+"chip.hint" = "UNCHECK TO MUTE";
+"chip.title" = "SOUND CHIPS";
+"chip.tooltip" = "{0} - uncheck to mute";
+"chip.tooltipWithCore" = "{0} ({1}) - uncheck to mute";
+
+"common.cancel" = "Cancel";
+"common.close" = "Close";
+"common.ok" = "OK";
+
+"editor.open" = "Open file...";
+
+"format.dropPrompt" = "Drop a {0} file here";
+"format.loadHint" = "Load a {0} file with the button above or drop one onto this window.";
+"format.openPrompt" = "Open a {0} file";
+
+"language.builtinSuffix" = "built-in";
+"language.displayName" = "{0} ({1})";
+"language.missingFile" = "The saved language \"{0}\" was not found; using a fallback.";
+
+"menu.file" = "File";
+"menu.file.close" = "Close Song";
+"menu.file.exit" = "Exit";
+"menu.file.open" = "Open Song...";
+"menu.help" = "Help";
+"menu.help.about" = "About VGMToybox...";
+"menu.options" = "Options";
+"menu.options.settings" = "Settings...";
+"menu.theme" = "Theme";
+"menu.theme.dark" = "Dark";
+"menu.theme.followSystem" = "Follow system";
+"menu.theme.light" = "Light";
+"menu.view" = "View";
+"menu.view.none" = "No pages yet";
+
+"mixer.gainTooltip" = "Gain (double-click: 100%)";
+"mixer.hint" = "MUTE / SOLO / GAIN / PAN";
+"mixer.master" = "MASTER";
+"mixer.masterBus" = "Master";
+"mixer.masterGainTooltip" = "Mixer master gain - the output volume sits behind it (double-click: 100%)";
+"mixer.masterMuteTooltip" = "Mute the master bus output";
+"mixer.masterOutputTooltip" = "Output bus - where the master mix goes";
+"mixer.mergeName" = "Merge to master";
+"mixer.mergeTooltip" = "Send every track back to the master bus";
+"mixer.muteTooltip" = "Mute this track";
+"mixer.notConnected" = "{0} (not connected)";
+"mixer.outputTooltip" = "Output bus - where this track goes";
+"mixer.panTooltip" = "Pan (double-click: centre)";
+"mixer.soloTooltip" = "Solo this track (silences every track that is not soloed)";
+"mixer.spreadName" = "Spread outputs";
+"mixer.spreadTooltip" = "Send every track to its own output bus (track 1 -> Out 1/2, track 2 -> Out 3/4, ...)";
+"mixer.title" = "MIXER";
+"mixer.toggleName" = "Mixer";
+"mixer.toggleTooltip" = "Mixer on: one render track per chip channel - off: the plain mix without per-channel tracks (saves CPU)";
+
+"settings" = "Settings";
+"settings.audio" = "Audio";
+"settings.audio.explanation" = "Which device the standalone plays through, and what it asks of it.";
+"settings.audio.hint" = "The same dialog JUCE's own window used to offer: device, sample rate, buffer size and MIDI input. A change takes effect at once.";
+"settings.audio.noDevice" = "No audio device is open.";
+"settings.audio.open" = "Audio/MIDI settings...";
+"settings.general" = "General";
+"settings.general.closeToTray" = "Keep running in the system tray";
+"settings.general.closeToTrayHint" = "The close button hides the window instead of quitting. Use the tray icon to reopen it, or Quit in its menu to exit.";
+"settings.general.closeToTrayTooltip" = "The close button keeps the song playing in the notification area instead of quitting";
+"settings.general.closeToTrayWarning" = "! Desktop without a system tray? No icon will appear, and a closed window can only be recovered by quitting the process.";
+"settings.general.explanation" = "How the application starts, and where these settings live.";
+"settings.general.openFolder" = "Open folder";
+"settings.general.restoreDefaults" = "Restore defaults";
+"settings.general.restoreLastSong" = "Reopen the last song at startup";
+"settings.general.restoreLastSongHint" = "Launching the application loads the song it last had open, paused at the start. File > Close Song forgets it.";
+"settings.general.restoreLastSongTooltip" = "Open the song that was loaded when the application last quit, without starting playback";
+"settings.general.reuseWindow" = "Reuse the running window";
+"settings.general.reuseWindowAlways" = "Reuse the running window: always";
+"settings.general.reuseWindowHint" = "A song opened from Explorer goes into the window that is already open. Turn this off to give every song a window of its own (two songs side by side, for instance).";
+"settings.general.reuseWindowMacHint" = "macOS opens a song in the running window instead of starting a second copy - that is the system's rule, not a setting. Use File > Open here for another song once this one is playing.";
+"settings.general.reuseWindowTooltip" = "A song opened from the file manager loads into the window that is already running";
+"settings.general.settingsFile" = "Settings file";
+"settings.language" = "Language";
+"settings.language.detail" = "Language tag: {0}   -   missing keys: {1}";
+"settings.language.explanation" = "Which language the window and its tooltips are shown in. Put your own .lang files in the i18n folder - each one appears here as an extra choice.";
+"settings.language.openFolder" = "Open Folder";
+"settings.language.rescan" = "Rescan";
+"settings.language.selectTooltip" = "Which language the window and its tooltips are shown in";
+"settings.language.sourceBuiltin" = "Built-in translation: {0}";
+"settings.language.sourceFile" = "{0}";
+"settings.theme" = "Theme";
+"settings.theme.dark" = "Dark";
+"settings.theme.explanation" = "Which colours the window draws with. A change applies at once.";
+"settings.theme.following" = "Follow system (now: {0})";
+"settings.theme.followSystem" = "Follow system";
+"settings.theme.light" = "Light";
+
+"song.noFile" = "No file loaded";
+
+"status.finished" = "Finished";
+"status.loading" = "Loading {0}...";
+"status.noFile" = "No file";
+"status.paused" = "Paused";
+"status.playing" = "Playing";
+
+"sync.caption" = "SYNC";
+"sync.cueCaption" = "CUE";
+"sync.cueTooltip" = "Take the host's position as the cue point - the place on the DAW timeline where the song's beginning plays. Right-click this box to put the cue back to 0 s";
+"sync.knobRangeTitle" = "Knob range (+/- ms)";
+"sync.menu.exactOffset" = "Exact offset...";
+"sync.menu.knobRange" = "Knob range...";
+"sync.cueName" = "Cue";
+"sync.menu.resetCue" = "Reset cue to 0 s";
+"sync.name" = "Sync";
+"sync.nameplate" = "DAW SYNC";
+"sync.offsetTooltip" = "Cue offset - drag to trim the cue point by a few milliseconds, or type the number beside it. Double-click to put it back to zero, right-click anywhere in the box for the knob's range and to reset the cue";
+"sync.tooltip" = "Follow the host's clock - the song position becomes \"host position - cue\". Click again to play on its own";
+
+"tray.fade" = "Fade";
+"tray.loop" = "Loop";
+"tray.pause" = "Pause";
+"tray.play" = "Play";
+"tray.quit" = "Quit";
+"tray.show" = "Show Window";
+"tray.stop" = "Stop";
+
+"tag.artist" = "Artist";
+"tag.date" = "Date";
+"tag.game" = "Game";
+"tag.system" = "System";
+
+"transport.cursorTooltip" = "Playback start cursor - when off, Stop goes back to the beginning of the song";
+"transport.fade.1s" = "1 s fade";
+"transport.fade.3s" = "3 s fade";
+"transport.fade.5s" = "5 s fade";
+"transport.fade.10s" = "10 s fade";
+"transport.fade.none" = "No fade";
+"transport.fadeTooltip" = "Fade out time at the end of the last loop";
+"transport.loop" = "Loop";
+"transport.loop.forever" = "Loop forever";
+"transport.loop.once" = "1x";
+"transport.loop.thrice" = "3x";
+"transport.loop.twice" = "2x";
+"transport.loopForeverTooltip" = "Looping forever - click to play once";
+"transport.loopTooltip" = "How often the song loops before it stops";
+"transport.pause" = "Pause";
+"transport.pauseTooltip" = "Pause (enter)";
+"transport.play" = "Play";
+"transport.playbackStart" = "Playback start";
+"transport.playOnceTooltip" = "Play once - click to loop forever";
+"transport.playTooltip" = "Play (space)";
+"transport.positionTooltip" = "Playback position";
+"transport.startMarkerTooltip" = "Playback start - drag to set where playback begins and Stop returns to";
+"transport.stop" = "Stop";
+"transport.stopTooltip" = "Stop - return to the playback start marker";
+"transport.volumeTooltip" = "Output volume - the last stage of the engine, after the mixer master";
+
+"view.play" = "Play";
+"view.visualiser" = "Visualiser";
+
+"visualiser.footer" = "View > Play takes you back to the player.";
+"visualiser.item.chip" = "inside a chip: FM operators, algorithms and their parameters";
+"visualiser.item.midi" = "the song's MIDI activity - piano roll and keyboard";
+"visualiser.item.spectrum" = "a spectrum analyser of the mix";
+"visualiser.item.waveform" = "the waveform of what you are hearing";
+"visualiser.subtitle" = "Not built yet - this page is where these will live:";
+"visualiser.title" = "Visualiser";

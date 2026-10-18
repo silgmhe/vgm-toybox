@@ -1,0 +1,172 @@
+id: zh-Hans
+language: 简体中文
+
+"about.bilibili" = "BiliBili：";
+"about.credit" = "作者 silgmhe - 基于 Valley Bell 与贡献者的 VGMPlay 和 libvgm 构建。";
+"about.description" = "支持 VGM、VGZ、S98、DRO 和 GYM 的芯片音乐播放器。";
+"about.github" = "GitHub：";
+"about.license" = "依据 AGPL-3.0-or-later 许可发布。";
+"about.version" = "版本 {0}   -   提交 {1}";
+
+"chip.hint" = "取消勾选即静音";
+"chip.title" = "声音芯片";
+"chip.tooltip" = "{0} - 取消勾选即静音";
+"chip.tooltipWithCore" = "{0}（{1}）- 取消勾选即静音";
+
+"common.cancel" = "取消";
+"common.close" = "关闭";
+"common.ok" = "确定";
+
+"editor.open" = "打开文件...";
+
+"format.dropPrompt" = "将 {0} 文件拖放到这里";
+"format.loadHint" = "用上方按钮载入 {0} 文件，或把文件拖到此窗口。";
+"format.openPrompt" = "打开 {0} 文件";
+
+"language.builtinSuffix" = "内置";
+"language.displayName" = "{0}（{1}）";
+"language.missingFile" = "找不到保存的语言“{0}”，已改用回退语言。";
+
+"menu.file" = "文件";
+"menu.file.close" = "关闭歌曲";
+"menu.file.exit" = "退出";
+"menu.file.open" = "打开歌曲...";
+"menu.help" = "帮助";
+"menu.help.about" = "关于 VGMToybox...";
+"menu.options" = "选项";
+"menu.options.settings" = "设置...";
+"menu.theme" = "主题";
+"menu.theme.dark" = "深色";
+"menu.theme.followSystem" = "跟随系统";
+"menu.theme.light" = "浅色";
+"menu.view" = "视图";
+"menu.view.none" = "暂无页面";
+
+"mixer.gainTooltip" = "增益（双击恢复 100%）";
+"mixer.hint" = "静音 / 独奏 / 增益 / 声像";
+"mixer.master" = "主控";
+"mixer.masterBus" = "主总线";
+"mixer.masterGainTooltip" = "混音器主增益 - 输出音量在其之后（双击恢复 100%）";
+"mixer.masterMuteTooltip" = "静音主总线输出";
+"mixer.masterOutputTooltip" = "输出总线 - 主混音的去向";
+"mixer.mergeName" = "合并到主输出";
+"mixer.mergeTooltip" = "把所有轨道送回主总线";
+"mixer.muteTooltip" = "静音此轨道";
+"mixer.notConnected" = "{0}（未连接）";
+"mixer.outputTooltip" = "输出总线 - 此轨道的去向";
+"mixer.panTooltip" = "声像（双击居中）";
+"mixer.soloTooltip" = "独奏此轨道（未独奏的轨道全部静音）";
+"mixer.spreadName" = "分配到各输出";
+"mixer.spreadTooltip" = "让每条轨道使用各自的输出总线（轨道 1 -> 输出 1/2，轨道 2 -> 输出 3/4，依此类推）";
+"mixer.title" = "混音器";
+"mixer.toggleName" = "混音器";
+"mixer.toggleTooltip" = "开启混音器：每个芯片声道各占一条渲染轨道 - 关闭：不拆分轨道的普通混音（节省 CPU）";
+
+"settings" = "设置";
+"settings.audio" = "音频";
+"settings.audio.explanation" = "独立版使用哪个设备播放，以及向设备提出什么要求。";
+"settings.audio.hint" = "就是 JUCE 窗口原先提供的同一个对话框：设备、采样率、缓冲区大小和 MIDI 输入。更改立即生效。";
+"settings.audio.noDevice" = "未打开任何音频设备。";
+"settings.audio.open" = "音频/MIDI 设置...";
+"settings.general" = "常规";
+"settings.general.closeToTray" = "继续在系统托盘中运行";
+"settings.general.closeToTrayHint" = "关闭按钮会隐藏窗口而不是退出。用托盘图标重新打开，或在托盘菜单中选择“退出”来结束程序。";
+"settings.general.closeToTrayTooltip" = "关闭按钮让歌曲继续在通知区域播放，而不是退出";
+"settings.general.closeToTrayWarning" = "！桌面没有系统托盘？不会出现图标，关闭窗口后只能通过结束进程来恢复。";
+"settings.general.explanation" = "程序如何启动，以及这些设置存放在哪里。";
+"settings.general.openFolder" = "打开文件夹";
+"settings.general.restoreDefaults" = "恢复默认值";
+"settings.general.restoreLastSong" = "启动时重新打开上次的歌曲";
+"settings.general.restoreLastSongHint" = "启动程序时载入上次打开的歌曲，并暂停在开头。使用“文件 > 关闭歌曲”可清除记录。";
+"settings.general.restoreLastSongTooltip" = "打开上次退出时载入的歌曲，但不开始播放";
+"settings.general.reuseWindow" = "复用已运行的窗口";
+"settings.general.reuseWindowAlways" = "复用已运行的窗口：始终";
+"settings.general.reuseWindowHint" = "从资源管理器打开的歌曲会进入已经打开的窗口。关闭此项可让每首歌拥有独立窗口（例如并排显示两首歌）。";
+"settings.general.reuseWindowMacHint" = "macOS 会把歌曲打开到正在运行的窗口中，而不是启动第二个副本 - 这是系统规则，不是设置项。当前歌曲播放时，可在此使用“文件 > 打开”载入另一首。";
+"settings.general.reuseWindowTooltip" = "从文件管理器打开的歌曲会载入已经运行的窗口";
+"settings.general.settingsFile" = "设置文件";
+"settings.language" = "语言";
+"settings.language.detail" = "语言标记：{0}   -   缺少 {1} 个键";
+"settings.language.explanation" = "窗口和工具提示使用哪种语言。把自己的 .lang 文件放进 i18n 文件夹，每个文件都会在这里成为一个额外选项。";
+"settings.language.openFolder" = "打开文件夹";
+"settings.language.rescan" = "重新扫描";
+"settings.language.selectTooltip" = "窗口和工具提示使用哪种语言";
+"settings.language.sourceBuiltin" = "内置翻译：{0}";
+"settings.language.sourceFile" = "{0}";
+"settings.theme" = "主题";
+"settings.theme.dark" = "深色";
+"settings.theme.explanation" = "窗口绘制使用的配色。更改立即生效。";
+"settings.theme.following" = "跟随系统（当前：{0}）";
+"settings.theme.followSystem" = "跟随系统";
+"settings.theme.light" = "浅色";
+
+"song.noFile" = "未载入文件";
+
+"status.finished" = "已结束";
+"status.loading" = "正在载入 {0}...";
+"status.noFile" = "无文件";
+"status.paused" = "已暂停";
+"status.playing" = "播放中";
+
+"sync.caption" = "同步";
+"sync.cueCaption" = "提示点";
+"sync.cueName" = "提示点";
+"sync.cueTooltip" = "把宿主位置当作提示点 - 即 DAW 时间线上歌曲开头播放的位置。右键单击此框可将提示点归零";
+"sync.knobRangeTitle" = "旋钮范围（+/- 毫秒）";
+"sync.menu.exactOffset" = "精确偏移...";
+"sync.menu.knobRange" = "旋钮范围...";
+"sync.menu.resetCue" = "把提示点归零";
+"sync.name" = "同步";
+"sync.nameplate" = "DAW 同步";
+"sync.offsetTooltip" = "提示点偏移 - 拖动可按毫秒微调提示点，也可输入旁边的数字。双击归零，右键单击框内任意位置可设置旋钮范围或重置提示点";
+"sync.tooltip" = "跟随宿主时钟 - 歌曲位置变为“宿主位置 - 偏移量”。再次单击可独立播放";
+
+"tray.fade" = "淡出";
+"tray.loop" = "循环";
+"tray.pause" = "暂停";
+"tray.play" = "播放";
+"tray.quit" = "退出";
+"tray.show" = "显示窗口";
+"tray.stop" = "停止";
+
+"tag.artist" = "艺术家";
+"tag.date" = "日期";
+"tag.game" = "游戏";
+"tag.system" = "系统";
+
+"transport.cursorTooltip" = "播放起点光标 - 关闭时，停止会回到歌曲开头";
+"transport.fade.1s" = "1 秒淡出";
+"transport.fade.3s" = "3 秒淡出";
+"transport.fade.5s" = "5 秒淡出";
+"transport.fade.10s" = "10 秒淡出";
+"transport.fade.none" = "不淡出";
+"transport.fadeTooltip" = "最后一轮循环结束时的淡出时长";
+"transport.loop" = "循环";
+"transport.loop.forever" = "无限循环";
+"transport.loop.once" = "1 次";
+"transport.loop.thrice" = "3 次";
+"transport.loop.twice" = "2 次";
+"transport.loopForeverTooltip" = "无限循环中 - 单击改为只播放一遍";
+"transport.loopTooltip" = "歌曲停止前循环多少次";
+"transport.pause" = "暂停";
+"transport.pauseTooltip" = "暂停（回车）";
+"transport.play" = "播放";
+"transport.playbackStart" = "播放起点";
+"transport.playOnceTooltip" = "只播放一遍 - 单击改为无限循环";
+"transport.playTooltip" = "播放（空格）";
+"transport.positionTooltip" = "播放位置";
+"transport.startMarkerTooltip" = "播放起点 - 拖动以设置从何处开始播放，以及停止后回到何处";
+"transport.stop" = "停止";
+"transport.stopTooltip" = "停止 - 回到播放起点标记";
+"transport.volumeTooltip" = "输出音量 - 引擎的最后一级，位于混音器主输出之后";
+
+"view.play" = "播放";
+"view.visualiser" = "可视化";
+
+"visualiser.footer" = "通过“视图 > 播放”返回播放器页。";
+"visualiser.item.chip" = "芯片内部：FM 算子、算法及其参数";
+"visualiser.item.midi" = "歌曲的 MIDI 活动 - 钢琴卷帘与键盘";
+"visualiser.item.spectrum" = "混音的频谱分析";
+"visualiser.item.waveform" = "你正在听到的声音的波形";
+"visualiser.subtitle" = "尚未构建 - 这些内容将来会出现在此页：";
+"visualiser.title" = "可视化";

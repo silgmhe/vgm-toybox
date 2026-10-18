@@ -23,8 +23,17 @@ class View : public juce::Component
 public:
 	~View (void) override = default;
 
-	/** The name the View menu shows for this page. */
+	/** The stable id used by component IDs, the View menu and the window scripts. It must not
+		change when the page's visible name is translated: scripts ask for `view.play`, not for
+		whatever the current language calls the playback page. */
+	virtual juce::String getViewId (void) const = 0;
+
+	/** The name the View menu shows for this page, in the current language. */
 	virtual juce::String getViewName (void) const = 0;
+
+	/** Re-applies translated text after the language changed. Views that paint their text only
+		need a repaint; ones with child controls update those and then call refresh(). */
+	virtual void refreshLanguage (void) { repaint(); }
 
 	/** Called by the window's refresh timer while this view is the visible one. Keep it cheap: it
 		runs 10-15 times a second, and the controls inside decide what actually repaints. */

@@ -24,7 +24,7 @@
 | R12 | `Help` **前**加 `Theme` 菜单，选项互斥 | 复用现有 `MenuEntry.checked` ✓ |
 | R13 | 现主题定名 **Light**，新增 **Dark**（One Dark 风格） | `ui/Theme.h` 调色板化，§5 |
 
-**非目标**：不引入宿主参数 / 工程状态 ✗；不做 UI 缩放、字体、语言 ✗；不做跨进程实时同步 ✗；**指标（`Theme.h:36-49` 的 `margin`/`cardRadius` 等 `constexpr`）全部不动** ✓。
+**非目标**：不引入宿主参数 / 工程状态 ✗；不做 UI 缩放、字体 ✗（语言由 `i18n-design.md` 单独设计，`Language` 已作为第三个页面加入）；不做跨进程实时同步 ✗；**指标（`Theme.h:36-49` 的 `margin`/`cardRadius` 等 `constexpr`）全部不动** ✓。
 
 ---
 
@@ -146,6 +146,15 @@ public:
 - **读取语义（决策 8）**：启动读一次进内存、读完不持有文件句柄，只在改设置的那一刻写一次 —— `PropertiesFile` 的默认行为正好如此（读走 `parseXML`，写完即关）；
 - `reload()`：给"读一次"留一个**再次读取**的入口（否则"进程外把文件改坏了"在运行中的进程里无法观察），测试与手工修复用，应用自身不调用；
 - **测试覆盖目录**：环境变量 `VGMTOYBOX_SETTINGS_DIR` 非空时覆盖目录（只给测试用；未设置一律走平台默认路径，应用从不设置它）。
+
+**补充（2026-10-18）：Standalone 状态文件**
+
+JUCE 的 `StandalonePluginHolder` 还需要一个自己的 `PropertySet` 来保存音频设备、窗口位置和最后一次插件状态。这些东西不是用户偏好，而且 `filterState` 可能很大，所以没有并进 `settings.xml`：
+
+- 新路径：`…/VGMToybox/standalone-state.xml`（三平台与 `settings.xml` 同目录）；
+- 旧文件：JUCE 原来用 `ApplicationProperties` 生成 `VGMToybox.settings`，Windows 在 `%APPDATA%\VGMToybox\` 内，macOS / Linux 在 `VGMToybox` 文件夹的上一级；
+- 首次启动时把旧文件移到新路径；`VGMTOYBOX_SETTINGS_DIR` 覆盖生效时跳过迁移，避免测试把开发机的真实状态搬进临时目录；
+- 两个文件职责固定：`SettingsStore` 只写偏好，`StandaloneApp.cpp` 只写 Standalone 状态；这样语言/主题的即时保存不会覆盖大块插件状态。
 
 ## 5. 主题模型：`theme::` 从函数变成调色板
 
