@@ -412,25 +412,24 @@ void MixerPanel::layoutStrips (void)
 
 	holder.setSize (juce::jmax (contentWidth, visibleWidth), juce::jmax (y, visibleHeight));
 
+	// y counts the gap that follows the last row, which is not content
+	contentHeight = juce::jmax (0, y - kGroupGap);
 	layoutMaster();
 	syncScrollBar (holder.getHeight());
 }
 
 void MixerPanel::layoutMaster (void)
 {
-	// The master behaves like one of the strips: it grows with the card, and when the card cannot
-	// give it the height a strip needs it keeps that minimum and scrolls with the rows (the clip is
-	// what makes the rest unreachable until then).
-	//
-	// It is measured against the *card*, not against the rows: the rows grow with every chip, and a
-	// master that spanned them would be two or three times as tall as the strips it stands beside,
-	// and would keep growing with the song. A console's master is one column high - when there is
-	// more room than a strip needs, it takes it.
+	// The master is measured against the rows, not against the card: its bottom edge has to land on
+	// the last row's bottom edge, or it hangs below the console like a piece that was left over.
+	// What it must never do is shrink below a strip's height - then it keeps that and scrolls with
+	// the rows, which is what the clip is for.
+	const int contentTop = kGroupHeaderHeight + 2;	// level with the first row's strips
 	const int available = masterClip.getHeight();
-	const int height = juce::jmax (ChannelStrip::preferredHeight, available);
+	const int height = juce::jmax (ChannelStrip::preferredHeight, contentHeight - contentTop);
 
-	// Scroll only when the minimum does not fit: a master that exactly fills its column must not
-	// move with the rows, or scrolling would tear a gap open underneath it.
+	// Scroll only when it does not fit: a master that ends inside the clip must sit still while the
+	// rows scroll under it, or its bottom edge would drift away from theirs.
 	const int scroll = (height > available) ? viewport.getViewPositionY() : 0;
 
 	masterStrip.setBounds (0, -scroll, masterClip.getWidth(), height);

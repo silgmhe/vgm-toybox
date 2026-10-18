@@ -123,6 +123,7 @@ private:
 	juce::String loadedFile;			// detects "another song was loaded" for the rebuild
 	int loadedTrackCount = -1;
 	juce::Rectangle<int> masterColumn;	// set by resized(), the strip itself is placed by layoutMaster()
+	int contentHeight = 0;				// the rows' extent (no trailing gap), set by layoutStrips()
 	std::uint64_t lastOutputConnectivity = 0;	// rebuilds the selectors when the host's layout changes
 	std::vector<float> meterLeft, meterRight;	// decayed peaks, one per track
 	float masterPeakL = 0.0f;
