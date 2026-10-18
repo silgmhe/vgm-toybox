@@ -87,6 +87,17 @@ public:
 	/** Stores the switch, writes it, and tells every listener, like the other preferences. */
 	void setRestoreLastSong (bool shouldRestore);
 
+	/** Whether the standalone keeps running in the system tray when its window is closed.
+
+		Default false: closing the window has always quit, and a process that survives a close
+		must be something the user asked for. Read when the window is closed, not when this
+		object is built, so flipping the switch in the General page applies to the very next
+		close. A plugin never reads the key - it has no window of its own to close. */
+	bool getCloseToTray (void) const;
+
+	/** Stores the switch, writes it, and tells every listener, like the other preferences. */
+	void setCloseToTray (bool shouldCloseToTray);
+
 	/** The song the standalone loaded last, or an empty File when there is none: a fresh
 		install, or the user closed the song before quitting (closeSong() clears it).
 

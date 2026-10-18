@@ -36,6 +36,17 @@ press space
 tick
 assert editor.status text contains "Paused"
 
+# The tray menu acts on the engine, not on the panel's buttons. The panel must still show Pause,
+# not fall through to Stop, because the engine is the one owner of the pause state.
+press space
+tick
+assert btn.play checked == true
+engine pause
+tick
+assert editor.status text contains "Paused"
+assert btn.pause checked == true
+assert btn.stop checked == false
+
 # The menu does what the window does: this is the File > Close Song item, invoked by its id, with
 # no menu ever opening. The song goes, the status line says so, and the page stays.
 menu invoke file.close

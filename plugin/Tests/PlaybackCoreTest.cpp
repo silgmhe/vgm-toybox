@@ -29,6 +29,8 @@
 
 #include <juce_audio_basics/juce_audio_basics.h>
 
+#include "Standalone/TrayController.h"
+#include "Standalone/TrayMenu.h"
 #include "backends/fake/FakeBackend.h"
 #include "playback/BackendRegistry.h"
 #include "playback/HostClockSource.h"
@@ -102,6 +104,52 @@ namespace
 	bool near (double value, double expected, double tolerance)
 	{
 		return std::abs (value - expected) <= tolerance;
+	}
+
+	/**
+		The tray icon, without a desktop. Records what the controller asked for and gives the
+		test the callbacks the real icon would have fired, so the close policy and the menu can be
+		driven without a notification area.
+	*/
+	class FakeTrayIcon final : public toybox::standalone::TrayIconPresenter
+	{
+	public:
+		bool show (const juce::String&,
+				   std::function<void()> onActivate,
+				   std::function<toybox::standalone::TrayMenuModel()> menuBuilder) override
+		{
+			visible = true;
+			activate = std::move (onActivate);
+			buildMenu = std::move (menuBuilder);
+			return showResult;
+		}
+
+		void hide (void) override
+		{
+			visible = false;
+		}
+
+		bool visible = false;
+		bool showResult = true;
+		std::function<void()> activate;
+		std::function<toybox::standalone::TrayMenuModel()> buildMenu;
+	};
+
+	const toybox::standalone::TrayMenuEntry* findTrayEntry (
+		const toybox::standalone::TrayMenuModel& model, const juce::String& id)
+	{
+		for (const auto& group : model)
+		{
+			for (const auto& entry : group.entries)
+			{
+				if (entry.id == id)
+				{
+					return &entry;
+				}
+			}
+		}
+
+		return nullptr;
 	}
 }
 
@@ -859,6 +907,127 @@ int main (int /*argc*/, char* /*argv*/[])
 	check (settings.getRestoreLastSong(), "and turns the startup restore back on");
 	check (settings.getLastSong().getFullPathName().isEmpty(),
 		   "and forgets the remembered song, like every other stored value");
+
+	// The tray switch: off by default, because hiding the window is a behaviour the user has
+	// to ask for - and written under a key of its own the moment it changes.
+	check (! settings.getCloseToTray(), "the tray switch is off by default");
+	settings.setCloseToTray (true);
+	check (settings.getCloseToTray(), "turning it on is remembered");
+	check (toybox::settings::SettingsStore::settingsFile().loadFileAsString().contains ("closeToTray"),
+		   "and reaches the file, not just memory");
+	check (settings.resetToDefaults(), "restoring the defaults rewrites the file again");
+	check (! settings.getCloseToTray(), "and puts the tray switch back off");
+
+	// ------------------------------------------------- [9b] the tray close policy
+	// The part of the feature that can strand a user: does a close hide the window, and does the
+	// icon always come with a way back? Driven against a fake icon, so it runs on any machine.
+	std::printf ("\n[9b] the tray and what a close does\n");
+
+	settings.setCloseToTray (true);
+
+	auto fakeIcon = std::make_unique<FakeTrayIcon>();
+	auto* icon = fakeIcon.get();
+	int hides = 0;
+	int shows = 0;
+	int quits = 0;
+
+	toybox::standalone::TrayController tray (
+		engine,
+		settings,
+		[&] { ++hides; },
+		[&] { ++shows; },
+		[&] { ++quits; },
+		[&] { return std::unique_ptr<toybox::standalone::TrayIconPresenter> (std::move (fakeIcon)); });
+
+	check (tray.closeRequested(), "with the switch on, a close is swallowed");
+	check (tray.isIconVisible() && icon->visible, "and the icon is put up");
+	check (hides == 1, "while the window is hidden, not closed");
+
+	check (tray.closeRequested() && hides == 2, "a second close stays in the tray");
+	check (tray.isIconVisible(), "without putting a second icon up");
+
+	check (icon->activate != nullptr, "the icon was given a way to bring the window back");
+	icon->activate();
+	check (shows == 1, "and a left click runs it");
+	check (tray.isIconVisible(), "the icon stays: the application is still running");
+
+	// The menu. Transport rows follow the engine; the ticks follow the two settings that have
+	// more than one possible value.
+	engine.setLoopCount (2);
+	engine.setFadeSeconds (3.0);
+	engine.pause();
+	engine.setPositionSeconds (0.25);
+	check (engine.isPaused(), "pause is a state of the engine, not of one window");
+
+	auto& menu = tray.getMenu();
+	auto model = menu.build();
+
+	const auto* playPause = findTrayEntry (model, "tray.playPause");
+	const auto* stop = findTrayEntry (model, "tray.stop");
+	check (playPause != nullptr && playPause->label == "Play", "a stopped engine shows Play");
+	check (stop != nullptr && stop->enabled, "Stop is enabled for a loaded song");
+	check (findTrayEntry (model, "tray.loop.2") != nullptr
+			   && findTrayEntry (model, "tray.loop.2")->ticked,
+		   "the loop menu ticks the count in force");
+	check (findTrayEntry (model, "tray.fade.3") != nullptr
+			   && findTrayEntry (model, "tray.fade.3")->ticked,
+		   "and the fade menu ticks the duration in force");
+
+	check (menu.invoke ("tray.playPause"), "Play runs");
+	check (engine.isPlaying(), "and starts the song");
+	check (! engine.isPaused(), "resuming clears the pause state");
+	check (menu.build() [0].entries[0].label == "Show Window", "the first row is still Show Window");
+	check (findTrayEntry (menu.build(), "tray.playPause")->label == "Pause",
+		   "the rebuilt menu now offers Pause");
+
+	check (menu.invoke ("tray.loop.1"), "a loop count can be chosen from the menu");
+	check (engine.getLoopCount() == 1, "and reaches the engine");
+	check (menu.invoke ("tray.fade.0"), "so can a fade");
+	check (near (engine.getFadeSeconds(), 0.0, 1.0e-9), "and it reaches the engine too");
+
+	check (findTrayEntry (menu.build(), "tray.back") == nullptr, "Back 5 s is gone");
+	check (findTrayEntry (menu.build(), "tray.forward") == nullptr, "Forward 5 s is gone");
+
+	engine.pause();
+	check (menu.invoke ("tray.stop"), "Stop runs");
+	check (! engine.isPaused(), "and clears the pause state so Stop keeps the light");
+
+	// An empty engine: the transport rows have nothing to act on, and invoking one is refused
+	// rather than silently starting an empty song.
+	{
+		toybox::PlaybackEngine emptyEngine;
+		toybox::standalone::TrayMenu emptyMenu (emptyEngine, [] {}, [] {});
+		const auto emptyModel = emptyMenu.build();
+		check (findTrayEntry (emptyModel, "tray.playPause") != nullptr
+				   && ! findTrayEntry (emptyModel, "tray.playPause")->enabled,
+			   "no song greys out Play");
+		check (! emptyMenu.invoke ("tray.playPause"), "a greyed row cannot be invoked");
+	}
+
+	check (menu.invoke ("tray.quit"), "Quit is on the menu");
+	check (quits == 1, "and runs the application's quit path");
+	check (! tray.isIconVisible() && ! icon->visible, "taking the icon down as it goes");
+
+	// A presenter that cannot show the icon (a build without a tray backend) must leave the
+	// close alone rather than hide a window with no way back.
+	{
+		settings.setCloseToTray (true);
+		auto failingIcon = std::make_unique<FakeTrayIcon>();
+		failingIcon->showResult = false;
+		int failingHides = 0;
+
+		toybox::standalone::TrayController failingTray (
+			engine,
+			settings,
+			[&] { ++failingHides; },
+			[] {},
+			[] {},
+			[&] { return std::unique_ptr<toybox::standalone::TrayIconPresenter> (std::move (failingIcon)); });
+
+		check (! failingTray.closeRequested(), "an icon that cannot be shown lets the close quit");
+		check (failingHides == 0, "so the window is never hidden");
+		check (! failingTray.isIconVisible(), "and no icon is claimed");
+	}
 
 	settingsDir.deleteRecursively();
 

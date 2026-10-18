@@ -553,8 +553,6 @@ void TransportPanel::seekToSeconds (double seconds)
 
 void TransportPanel::startPlayback (void)
 {
-	paused = false;
-
 	// a finished song starts over at the playback start cursor (PlaybackEngine::play() would
 	// restart it from the very beginning - which is what happens with the cursor off)
 	if (startCursorEnabled && engine.isFinished())
@@ -573,7 +571,6 @@ void TransportPanel::stopTransport (void)
 		return;
 	}
 
-	paused = false;
 	engine.stop();
 
 	// with the cursor switched off the transport behaves like a player: Stop goes back to
@@ -596,7 +593,6 @@ void TransportPanel::setStartCursorEnabled (bool shouldBeEnabled)
 
 void TransportPanel::pausePlayback (void)
 {
-	paused = true;
 	engine.pause();
 	refresh();
 }
@@ -605,10 +601,12 @@ void TransportPanel::refresh (void)
 {
 	const bool loaded = engine.isLoaded();
 	const bool playing = engine.isPlaying();
+	const bool paused = engine.isPaused();
 	const double duration = engine.getDurationSeconds();
 
 	// the button lights follow the transport: playing lights Play, the last stop-like action
-	// lights Pause or Stop ("stop" also covers a song that finished)
+	// lights Pause or Stop ("stop" also covers a song that finished). The state lives in the
+	// engine so a pause from the tray menu lights Pause here as well.
 	playButton.setToggleState (loaded && playing, juce::dontSendNotification);
 	pauseButton.setToggleState (loaded && ! playing && paused, juce::dontSendNotification);
 	stopButton.setToggleState (loaded && ! playing && ! paused, juce::dontSendNotification);

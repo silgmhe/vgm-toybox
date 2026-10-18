@@ -27,3 +27,11 @@ assert settings.audio.device text contains "Fake device"
 assert settings.general.restoreLastSong     enabled == true
 assert settings.general.restoreLastSong     checked == true
 assert settings.general.restoreLastSongHint text contains "Close Song"
+
+# The tray switch sits under it, and is off by default: a close must keep quitting until the user
+# asks the window to stay alive. The hint says what the close button will then do.
+assert settings.general.closeToTray         enabled == true
+assert settings.general.closeToTray         checked == false
+assert settings.general.closeToTrayHint     text contains "tray"
+toggle settings.general.closeToTray
+assert settings.general.closeToTray         checked == true

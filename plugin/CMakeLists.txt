@@ -45,6 +45,13 @@ if(NOT TARGET juce_audio_processors)
 	)
 endif()
 
+# The tray menu has a Cocoa implementation on macOS. CMake's default project languages do not
+# include Objective-C++; JUCE's modules contain .mm files, but enabling the language here makes
+# our own TrayIcon_mac.mm explicit and keeps the source selection below valid.
+if(APPLE)
+	enable_language(OBJCXX)
+endif()
+
 # --- output buses ---------------------------------------------------------------------------
 # A VST3 host fixes the bus layout when it loads the plugin, so the number of stereo output
 # buses is a build-time constant (Source/playback/OutputRouting.h). Bus 0 is "Out 1/2" - the
@@ -209,9 +216,38 @@ target_include_directories(VGMToybox PRIVATE Source)
 # with an application class of its own: JUCE's default one always allows a second instance and
 # ignores the command line it was started with (Source/Standalone/StandaloneApp.cpp says why).
 # Defining the switch removes JUCE's class and asks that file for juce_CreateApplication() instead.
-target_sources(VGMToybox_Standalone PRIVATE Source/Standalone/StandaloneApp.cpp)
+target_sources(VGMToybox_Standalone PRIVATE
+	Source/Standalone/StandaloneApp.cpp
+	Source/Standalone/TrayController.cpp
+	Source/Standalone/TrayMenu.cpp
+	Source/Standalone/TrayIcon.cpp)
+
+# TrayIcon.cpp owns the icon, clicks and the JUCE fallback; the context menu itself is the one
+# platform-specific piece. Windows uses Win32, macOS uses the NSStatusItem's native NSMenu, and
+# Linux keeps the JUCE menu because its tray protocol has no native menu to attach.
+target_sources(VGMToybox_Standalone PRIVATE Source/Standalone/TrayMenuIcons.cpp)
+
+if(APPLE)
+	target_sources(VGMToybox_Standalone PRIVATE Source/Standalone/TrayIcon_mac.mm)
+elseif(WIN32)
+	target_sources(VGMToybox_Standalone PRIVATE Source/Standalone/TrayIcon_windows.cpp)
+else()
+	target_sources(VGMToybox_Standalone PRIVATE Source/Standalone/TrayIcon_linux.cpp)
+endif()
+
 target_compile_definitions(VGMToybox_Standalone PRIVATE JUCE_USE_CUSTOM_PLUGIN_STANDALONE_APP=1)
 target_include_directories(VGMToybox_Standalone PRIVATE Source)
+
+# The tray icon is the application icon, not a second drawing. Embed the same PNGs the .ico and
+# the macOS bundle are made from; the 16 px file is used when Windows asks for a 16 px tray image,
+# so the notification area does not have to downscale the 256 px source.
+juce_add_binary_data(VGMToyboxTrayIcons
+	HEADER_NAME TrayIconData.h
+	NAMESPACE TrayIconData
+	SOURCES
+		assets/icon/vgmtoybox-16.png
+		assets/icon/vgmtoybox-256.png)
+target_link_libraries(VGMToybox_Standalone PRIVATE VGMToyboxTrayIcons)
 
 # The JUCE configuration *every* target in this project compiles with.
 #
@@ -277,6 +313,8 @@ add_executable(vgm_core_test EXCLUDE_FROM_ALL
 	Source/playback/SessionState.cpp
 	Source/backends/fake/FakeBackend.cpp
 	Source/settings/SettingsStore.cpp
+	Source/Standalone/TrayController.cpp
+	Source/Standalone/TrayMenu.cpp
 )
 target_include_directories(vgm_core_test PRIVATE Source)
 target_compile_definitions(vgm_core_test PRIVATE

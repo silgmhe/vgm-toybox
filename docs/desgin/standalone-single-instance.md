@@ -38,7 +38,9 @@ void anotherInstanceStarted (const String&) override {}               // 收到�
 | `settings/SettingsStore` | `standalone.reuseWindow`，缺省 **true**；随改随写（下一次启动在任何窗口存在之前就要读它） |
 | `ui/SettingsOverlay` | 常规页那一行：Windows 是开关，macOS 是陈述，Linux 不显示 |
 
-第二实例把歌交出去后，`mainWindow->toFront(true)` 把窗口提到前面——Windows 上没人会替你抬窗口。
+第二实例把歌交出去后，`mainWindow->setVisible(true)` + `toFront(true)` 把窗口提到前面——Windows
+上没人会替你抬窗口，而 `toFront()` 单独用不会把**隐藏到系统托盘**的窗口显示出来（见
+`standalone-system-tray.md`）。
 
 ## 4. 平台差异（这是本功能唯一需要解释的地方）
 

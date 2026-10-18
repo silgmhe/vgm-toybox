@@ -9,8 +9,11 @@ namespace
 {
 	// The panel, and how it divides: a title strip, a sidebar next to the pages, a footer with the
 	// one way out that is always in the same place.
+	// The height is a floor rather than a fixed size: the panel shrinks with the window (see
+	// panelBounds), and the General page needs the fifth row - the tray switch - to fit at the
+	// window's own minimum height.
 	constexpr int kPanelWidth = 640;
-	constexpr int kPanelHeight = 430;
+	constexpr int kPanelHeight = 500;
 	constexpr int kPanelPadding = 18;
 	constexpr int kTitleHeight = 22;
 	constexpr int kTitleGap = 12;
@@ -289,6 +292,40 @@ GeneralSettingsPage::GeneralSettingsPage (void)
 									 juce::dontSendNotification);
 		restoreLastSongHint.setMinimumHorizontalScale (0.75f);
 		addAndMakeVisible (restoreLastSongHint);
+
+		closeToTrayButton.setComponentID ("settings.general.closeToTray");
+		closeToTrayButton.setTooltip ("The close button keeps the song playing in the notification "
+									  "area instead of quitting");
+		closeToTrayButton.onClick = [this]
+		{
+			toybox::settings::SettingsStore::getInstance().setCloseToTray (
+				closeToTrayButton.getToggleState());
+			refresh();
+		};
+		addAndMakeVisible (closeToTrayButton);
+
+		closeToTrayHint.setComponentID ("settings.general.closeToTrayHint");
+		closeToTrayHint.setFont (juce::Font (juce::FontOptions (12.0f)));
+		closeToTrayHint.setJustificationType (juce::Justification::topLeft);
+		closeToTrayHint.setText ("The close button hides the window instead of quitting. Use the "
+								 "tray icon to reopen it, or Quit in its menu to exit.",
+								 juce::dontSendNotification);
+		closeToTrayHint.setMinimumHorizontalScale (0.75f);
+		addAndMakeVisible (closeToTrayHint);
+
+	   #if JUCE_LINUX
+		// The one platform where the icon is not part of the desktop: a session without a
+		// notification area accepts the call and shows nothing. Red and bold because that is a
+		// way to lose the window, not a preference.
+		closeToTrayWarning.setComponentID ("settings.general.closeToTrayWarning");
+		closeToTrayWarning.setFont (juce::Font (juce::FontOptions (12.0f, juce::Font::bold)));
+		closeToTrayWarning.setJustificationType (juce::Justification::topLeft);
+		closeToTrayWarning.setText ("! Desktop without a system tray? No icon will appear, and a "
+									"closed window can only be recovered by quitting the process.",
+									juce::dontSendNotification);
+		closeToTrayWarning.setMinimumHorizontalScale (0.75f);
+		addAndMakeVisible (closeToTrayWarning);
+	   #endif
 	}
 
 	fileCaption.setComponentID ("settings.general.pathCaption");
@@ -349,6 +386,7 @@ void GeneralSettingsPage::refresh (void)
 	{
 		restoreLastSongButton.setToggleState (store.getRestoreLastSong(),
 											  juce::dontSendNotification);
+		closeToTrayButton.setToggleState (store.getCloseToTray(), juce::dontSendNotification);
 	}
 
 	pathLabel.setText (toybox::settings::SettingsStore::settingsFile().getFullPathName(),
@@ -375,30 +413,41 @@ void GeneralSettingsPage::resized (void)
    #if JUCE_WINDOWS
 	reuseWindowButton.setBounds (area.removeFromTop (24));
 	reuseWindowHint.setBounds (area.removeFromTop (34));
-	area.removeFromTop (theme::cardGap + 2);
+	area.removeFromTop (theme::cardGap);
    #elif JUCE_MAC
 	reuseWindowNote.setBounds (area.removeFromTop (20));
 	reuseWindowHint.setBounds (area.removeFromTop (34));
-	area.removeFromTop (theme::cardGap + 2);
+	area.removeFromTop (theme::cardGap);
    #endif
 
 	if (toybox::standalone::available())
 	{
 		restoreLastSongButton.setBounds (area.removeFromTop (24));
 		restoreLastSongHint.setBounds (area.removeFromTop (34));
-		area.removeFromTop (theme::cardGap + 2);
+		area.removeFromTop (theme::cardGap);
+
+		closeToTrayButton.setBounds (area.removeFromTop (24));
+		closeToTrayHint.setBounds (area.removeFromTop (34));
+		area.removeFromTop (theme::cardGap);
+
+	   #if JUCE_LINUX
+		closeToTrayWarning.setBounds (area.removeFromTop (34));
+		area.removeFromTop (theme::cardGap);
+	   #endif
 	}
 
 	fileCaption.setBounds (area.removeFromTop (16));
 	pathLabel.setBounds (area.removeFromTop (20));
 
-	area.removeFromTop (theme::cardGap + 6);
+	// Tighter than the gaps above: the switch rows need the height, and the path and its
+	// buttons still read as one block at this distance.
+	area.removeFromTop (theme::cardGap);
 	auto buttons = area.removeFromTop (kFooterHeight);
 	openFolderButton.setBounds (buttons.removeFromLeft (112));
 	buttons.removeFromLeft (theme::rowGap);
 	resetButton.setBounds (buttons.removeFromLeft (146));
 
-	area.removeFromTop (theme::cardGap + 6);
+	area.removeFromTop (theme::cardGap);
 	errorLabel.setBounds (area.removeFromTop (18));
 }
 
@@ -411,6 +460,8 @@ void GeneralSettingsPage::lookAndFeelChanged (void)
 	reuseWindowHint.setColour (juce::Label::textColourId, theme::secondaryText());
 	reuseWindowNote.setColour (juce::Label::textColourId, theme::primaryText());
 	restoreLastSongHint.setColour (juce::Label::textColourId, theme::secondaryText());
+	closeToTrayHint.setColour (juce::Label::textColourId, theme::secondaryText());
+	closeToTrayWarning.setColour (juce::Label::textColourId, theme::error());
 	errorLabel.setColour (juce::Label::textColourId, theme::error());
 }
 

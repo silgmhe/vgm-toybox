@@ -333,6 +333,7 @@ private:
 		else if (command == "assert") { commandAssert (tokens); }
 		else if (command == "menu") { commandMenu (tokens); }
 		else if (command == "host") { commandHost (tokens); }
+		else if (command == "engine") { commandEngine (tokens); }
 		else if (command == "tick") { commandTick (); }
 		else if (command == "shot") { commandShot (tokens); }
 		else if (command == "size") { commandSize (tokens); }
@@ -591,6 +592,29 @@ private:
 		report (true, "host " + juce::String (seconds, 3) + (playing ? " playing" : " stopped"));
 	}
 
+	/** A transport command from outside the window, like the tray menu's: it must reach the same
+		state the buttons read, not a copy that only the button handlers update. */
+	void commandEngine (const juce::StringArray& tokens)
+	{
+		if (tokens.size() < 2)
+		{
+			report (false, "engine needs play, pause or stop");
+			return;
+		}
+
+		const auto action = tokens[1].toLowerCase();
+		if (action == "play") { processor.getEngine().play(); }
+		else if (action == "pause") { processor.getEngine().pause(); }
+		else if (action == "stop") { processor.getEngine().stop(); }
+		else
+		{
+			report (false, "engine: unknown action '" + tokens[1] + "'");
+			return;
+		}
+
+		report (true, "engine " + action);
+	}
+
 	void commandShot (const juce::StringArray& tokens)
 	{
 		if (tokens.size() < 2)
@@ -726,6 +750,7 @@ private:
 		std::printf ("    unhandled: the key must leave the editor (it is the host's)\n");
 		std::printf ("    menu | menu invoke <entryId> | tick | shot <path.png> | size <w> <h>\n");
 		std::printf ("    host <seconds> [playing|stopped]   one process block with that host clock\n");
+		std::printf ("    engine <play|pause|stop>          a transport command from outside the buttons\n");
 		std::printf ("    dump [<id>] | assert <id> <field> <op> <value> | sleep <ms>\n");
 		std::printf ("    fields: visible enabled checked text value (components)\n");
 		std::printf ("            checked enabled label             (menu entries, as menu.<entryId>)\n");
