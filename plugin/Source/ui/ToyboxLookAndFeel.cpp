@@ -6,6 +6,23 @@
 
 namespace toybox::ui
 {
+namespace
+{
+	/** The mixer's closed output selector is 48 px wide, so "Out 11/12" cannot be drawn at full
+		size there. Removing the prefix keeps every bus readable; the popup and the tooltip keep
+		the full name. */
+	juce::String compactComboText (const juce::String& text)
+	{
+		return text.startsWith ("Out ") ? text.substring (4) : text;
+	}
+
+	bool wantsCompactComboText (const juce::Label& label)
+	{
+		const auto* box = dynamic_cast<const juce::ComboBox*> (label.getParentComponent());
+		return box != nullptr
+			&& static_cast<bool> (box->getProperties()[ToyboxLookAndFeel::compactComboTextProperty]);
+	}
+}
 
 ToyboxLookAndFeel::ToyboxLookAndFeel (void)
 {
@@ -337,6 +354,37 @@ void ToyboxLookAndFeel::positionComboBoxText (juce::ComboBox& box, juce::Label& 
 	label.setBounds (10, 1, box.getWidth() - 28, box.getHeight() - 2);
 	label.setFont (getComboBoxFont (box));
 	label.setJustificationType (juce::Justification::centredLeft);
+
+	// JUCE's default lets drawFittedText squeeze to 70 % before ellipsizing, which visibly
+	// deforms glyphs in the narrow mixer strips. At 100 % a long item gets an ellipsis instead;
+	// the mixer's output selector additionally switches to its compact form (drawLabel below).
+	label.setMinimumHorizontalScale (1.0f);
+}
+
+void ToyboxLookAndFeel::drawLabel (juce::Graphics& g, juce::Label& label)
+{
+	if (! wantsCompactComboText (label) || label.isBeingEdited())
+	{
+		juce::LookAndFeel_V2::drawLabel (g, label);
+		return;
+	}
+
+	// The same drawing as LookAndFeel_V2::drawLabel, but with the compact text and no horizontal
+	// squeezing. It is kept local so every other Label still takes JUCE's implementation.
+	g.fillAll (label.findColour (juce::Label::backgroundColourId));
+
+	const float alpha = label.isEnabled() ? 1.0f : 0.5f;
+	const juce::Font font (getLabelFont (label));
+	g.setColour (label.findColour (juce::Label::textColourId).withMultipliedAlpha (alpha));
+	g.setFont (font);
+
+	const auto textArea = getLabelBorderSize (label).subtractedFrom (label.getLocalBounds());
+	g.drawFittedText (compactComboText (label.getText()), textArea, label.getJustificationType(),
+					  juce::jmax (1, (int) ((float) textArea.getHeight() / font.getHeight())),
+					  1.0f);
+
+	g.setColour (label.findColour (juce::Label::outlineColourId).withMultipliedAlpha (alpha));
+	g.drawRect (label.getLocalBounds());
 }
 
 } // namespace toybox::ui

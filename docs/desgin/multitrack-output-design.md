@@ -188,6 +188,7 @@ for (int bus = 1; bus < playback::kOutputBusCount; ++bus)
 	```
 - Master 条：下拉**不含** `Master` 项（R3），并**启用 M 按钮**（静音 Master 总线，R4/B；S 仍隐藏）。
 - 下拉项文案：已连接 `Out 3/4`；未连接 `Out 3/4（未连接）`；关闭混音器时整行 `setEnabled(false)` 置灰保留（R8）。
+- 通道条只有 88 px 宽，关闭状态的下拉标签放不下 `Out 11/12`：标签改用紧凑写法 `11/12`，**不横向压缩字形**；展开菜单和 tooltip 仍显示完整名称（未连接时 tooltip 也带标注）。
 - 目标未连接的轨道：下拉显示该项（带标注）+ 该轨静音（引擎保证）。
 
 ### 6.2 `MixerPanel`

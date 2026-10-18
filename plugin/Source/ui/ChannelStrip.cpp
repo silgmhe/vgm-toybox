@@ -5,6 +5,7 @@
 #include "ButtonPaint.h"
 #include "MeterScale.h"
 #include "Theme.h"
+#include "ToyboxLookAndFeel.h"
 
 #include "i18n/LanguageManager.h"
 
@@ -80,12 +81,18 @@ ChannelStrip::ChannelStrip (void)
 	// output bus = direct out), filled by MixerPanel through setOutputOptions()
 	outputBox.onChange = [this]
 	{
+		updateOutputTooltip();
+
 		const int index = outputBox.getSelectedId() - 1;
 		if (index >= 0 && index < (int) outputOptions.size() && onOutputChanged != nullptr)
 		{
 			onOutputChanged (outputOptions[(size_t) index].target);
 		}
 	};
+
+	// The closed selector is very narrow: "Out 11/12" cannot be drawn full size in it, so it
+	// shows "11/12". The popup and the tooltip keep the full name (see ToyboxLookAndFeel).
+	outputBox.getProperties().set (ToyboxLookAndFeel::compactComboTextProperty, true);
 	addAndMakeVisible (outputBox);
 
 	addAndMakeVisible (gainSlider);
@@ -98,6 +105,10 @@ void ChannelStrip::setup (const juce::String& name, bool isMasterStrip)
 {
 	stripName = name;
 	master = isMasterStrip;
+
+	// The window scripts drive the selector through this ID; the master has its own so a test can
+	// reach either kind of strip without relying on tree order.
+	outputBox.setComponentID (master ? "mixer.master.output" : "mixer.output");
 
 	panKnob.setVisible (! master);
 	soloButton.setVisible (! master);
@@ -122,8 +133,6 @@ void ChannelStrip::refreshLanguage (void)
 	muteButton.setTooltip (master ? i18n::tr ("mixer.masterMuteTooltip")
 								  : i18n::tr ("mixer.muteTooltip"));
 	soloButton.setTooltip (i18n::tr ("mixer.soloTooltip"));
-	outputBox.setTooltip (master ? i18n::tr ("mixer.masterOutputTooltip")
-								 : i18n::tr ("mixer.outputTooltip"));
 	gainSlider.setTooltip (master ? i18n::tr ("mixer.masterGainTooltip")
 								  : i18n::tr ("mixer.gainTooltip"));
 	panKnob.setTooltip (i18n::tr ("mixer.panTooltip"));
@@ -145,6 +154,8 @@ void ChannelStrip::refreshLanguage (void)
 			outputBox.setSelectedId ((int) i + 1, juce::dontSendNotification);
 		}
 	}
+
+	updateOutputTooltip();
 }
 
 void ChannelStrip::setValues (float gain, float pan, bool muted, bool soloed,
@@ -222,6 +233,24 @@ void ChannelStrip::setOutputOptions (const std::vector<OutputOption>& options, p
 	{
 		outputBox.setSelectedId (1, juce::dontSendNotification);
 	}
+
+	updateOutputTooltip();
+}
+
+void ChannelStrip::updateOutputTooltip (void)
+{
+	auto tooltip = master ? i18n::tr ("mixer.masterOutputTooltip")
+						  : i18n::tr ("mixer.outputTooltip");
+
+	// The closed selector shows the compact form; the tooltip is where the full name stays
+	// readable. getText() is the full item text, not what drawLabel paints.
+	const auto selected = outputBox.getText();
+	if (selected.isNotEmpty())
+	{
+		tooltip << "\n" << selected;
+	}
+
+	outputBox.setTooltip (tooltip);
 }
 
 void ChannelStrip::setMixerActive (bool active)

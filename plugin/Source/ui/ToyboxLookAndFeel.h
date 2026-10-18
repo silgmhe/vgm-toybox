@@ -17,6 +17,10 @@ namespace toybox::ui
 class ToyboxLookAndFeel : public juce::LookAndFeel_V4
 {
 public:
+	/** Component property that switches a ComboBox's closed label to a compact form: the text is
+		drawn without a leading "Out " (the popup and the tooltip keep the full item name). */
+	static constexpr const char* compactComboTextProperty = "toybox.compactComboText";
+
 	ToyboxLookAndFeel (void);
 
 	/** Re-reads every colour from the palette. A LookAndFeel holds copies, so after
@@ -43,6 +47,7 @@ public:
 					   int buttonX, int buttonY, int buttonW, int buttonH, juce::ComboBox&) override;
 	juce::Font getComboBoxFont (juce::ComboBox&) override;
 	void positionComboBoxText (juce::ComboBox&, juce::Label&) override;
+	void drawLabel (juce::Graphics&, juce::Label&) override;
 
 private:
 	/** The vertical fader of the mixer strips (the horizontal one keeps the round thumb). */

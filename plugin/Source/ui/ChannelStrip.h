@@ -75,6 +75,7 @@ public:
 private:
 	void drawMeter (juce::Graphics& g) const;
 	void drawScale (juce::Graphics& g) const;
+	void updateOutputTooltip (void);
 
 	juce::TextButton muteButton { "M" };
 	juce::TextButton soloButton { "S" };
