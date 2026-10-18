@@ -21,6 +21,8 @@ namespace
 
 	constexpr const char* kThemeModeKey = "theme.mode";
 	constexpr const char* kReuseWindowKey = "standalone.reuseWindow";
+	constexpr const char* kRestoreLastSongKey = "standalone.restoreLastSong";
+	constexpr const char* kLastSongKey = "standalone.lastSong";
 
 	juce::String writeErrorFor (const juce::File& file)
 	{
@@ -142,6 +144,58 @@ void SettingsStore::setReuseWindow (bool shouldReuse)
 	broadcastChange();
 }
 
+bool SettingsStore::getRestoreLastSong (void) const
+{
+	// Absent - a file from before this switch existed, or a fresh install - means on: carrying on
+	// where the last session stopped is what launching the application should do.
+	return file->getBoolValue (kRestoreLastSongKey, true);
+}
+
+void SettingsStore::setRestoreLastSong (bool shouldRestore)
+{
+	if (shouldRestore == getRestoreLastSong())
+	{
+		return;
+	}
+
+	file->setValue (kRestoreLastSongKey, shouldRestore);
+	lastErrorMessage = file->saveIfNeeded() ? juce::String() : writeErrorFor (settingsFile());
+
+	broadcastChange();
+}
+
+juce::File SettingsStore::getLastSong (void) const
+{
+	const auto path = file->getValue (kLastSongKey);
+	return path.isNotEmpty() ? juce::File (path) : juce::File();
+}
+
+void SettingsStore::setLastSong (const juce::File& song)
+{
+	const auto path = song.getFullPathName();
+	if (path.isEmpty() || path == file->getValue (kLastSongKey))
+	{
+		return;
+	}
+
+	file->setValue (kLastSongKey, path);
+	lastErrorMessage = file->saveIfNeeded() ? juce::String() : writeErrorFor (settingsFile());
+
+	// Deliberately no broadcastChange(): this is state, not a preference. The load that produced
+	// it already refreshes the window, and telling every listener here would repaint over it.
+}
+
+void SettingsStore::clearLastSong (void)
+{
+	if (file->getValue (kLastSongKey).isEmpty())
+	{
+		return;
+	}
+
+	file->removeValue (kLastSongKey);
+	lastErrorMessage = file->saveIfNeeded() ? juce::String() : writeErrorFor (settingsFile());
+}
+
 void SettingsStore::broadcastChange (void)
 {
 	// Not sendChangeMessage(): the listeners have to have run by the time the caller returns, so
@@ -173,6 +227,7 @@ bool SettingsStore::resetToDefaults (void)
 	// change, and an empty file reads the same way to anyone looking at it.
 	file->setValue (kThemeModeKey, toString (ThemeMode::light));
 	file->setValue (kReuseWindowKey, true);
+	file->setValue (kRestoreLastSongKey, true);
 
 	const bool saved = file->save();
 	lastErrorMessage = saved ? juce::String() : writeErrorFor (settingsFile());

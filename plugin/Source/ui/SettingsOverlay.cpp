@@ -265,6 +265,32 @@ GeneralSettingsPage::GeneralSettingsPage (void)
 	addAndMakeVisible (reuseWindowHint);
    #endif
 
+	// The standalone reopens the song it had loaded when it last quit (restoreLastSongIfNeeded()
+	// in Source/PluginEditor.cpp; the value lives in SettingsStore). A plugin takes its song from
+	// the host's project, so it never gets this row: there is no "last time the app was open".
+	if (toybox::standalone::available())
+	{
+		restoreLastSongButton.setComponentID ("settings.general.restoreLastSong");
+		restoreLastSongButton.setTooltip ("Open the song that was loaded when the application last "
+										  "quit, without starting playback");
+		restoreLastSongButton.onClick = [this]
+		{
+			toybox::settings::SettingsStore::getInstance().setRestoreLastSong (
+				restoreLastSongButton.getToggleState());
+			refresh();
+		};
+		addAndMakeVisible (restoreLastSongButton);
+
+		restoreLastSongHint.setComponentID ("settings.general.restoreLastSongHint");
+		restoreLastSongHint.setFont (juce::Font (juce::FontOptions (12.0f)));
+		restoreLastSongHint.setJustificationType (juce::Justification::topLeft);
+		restoreLastSongHint.setText ("Launching the application loads the song it last had open, "
+									 "paused at the start. File > Close Song forgets it.",
+									 juce::dontSendNotification);
+		restoreLastSongHint.setMinimumHorizontalScale (0.75f);
+		addAndMakeVisible (restoreLastSongHint);
+	}
+
 	fileCaption.setComponentID ("settings.general.pathCaption");
 	fileCaption.setText ("Settings file", juce::dontSendNotification);
 	fileCaption.setFont (juce::Font (juce::FontOptions (12.5f)));
@@ -319,6 +345,12 @@ void GeneralSettingsPage::refresh (void)
 	reuseWindowButton.setToggleState (store.getReuseWindow(), juce::dontSendNotification);
    #endif
 
+	if (toybox::standalone::available())
+	{
+		restoreLastSongButton.setToggleState (store.getRestoreLastSong(),
+											  juce::dontSendNotification);
+	}
+
 	pathLabel.setText (toybox::settings::SettingsStore::settingsFile().getFullPathName(),
 					   juce::dontSendNotification);
 
@@ -332,7 +364,8 @@ void GeneralSettingsPage::refresh (void)
 
 void GeneralSettingsPage::paint (juce::Graphics& g)
 {
-	paintHeading (g, "General", "Where these settings live, and how to put them back.", getLocalBounds());
+	paintHeading (g, "General", "How the application starts, and where these settings live.",
+				  getLocalBounds());
 }
 
 void GeneralSettingsPage::resized (void)
@@ -348,6 +381,13 @@ void GeneralSettingsPage::resized (void)
 	reuseWindowHint.setBounds (area.removeFromTop (34));
 	area.removeFromTop (theme::cardGap + 2);
    #endif
+
+	if (toybox::standalone::available())
+	{
+		restoreLastSongButton.setBounds (area.removeFromTop (24));
+		restoreLastSongHint.setBounds (area.removeFromTop (34));
+		area.removeFromTop (theme::cardGap + 2);
+	}
 
 	fileCaption.setBounds (area.removeFromTop (16));
 	pathLabel.setBounds (area.removeFromTop (20));
@@ -370,6 +410,7 @@ void GeneralSettingsPage::lookAndFeelChanged (void)
 	fileCaption.setColour (juce::Label::textColourId, theme::secondaryText());
 	reuseWindowHint.setColour (juce::Label::textColourId, theme::secondaryText());
 	reuseWindowNote.setColour (juce::Label::textColourId, theme::primaryText());
+	restoreLastSongHint.setColour (juce::Label::textColourId, theme::secondaryText());
 	errorLabel.setColour (juce::Label::textColourId, theme::error());
 }
 

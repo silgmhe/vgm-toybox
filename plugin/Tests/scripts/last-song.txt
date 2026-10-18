@@ -1,0 +1,17 @@
+# settings lastSong $VGM_TEST_SONG
+# settings restoreLastSong on
+#
+# The feature this script exists for: launching the standalone with no song opens the one the
+# previous session had loaded - paused at the start, not playing. The `# settings` lines are read
+# before the window is constructed; they write the state a previous session would have left.
+#
+# Run:  build\plugin\vgm_app_test plugin\Tests\scripts\last-song.txt
+
+# The first timer tick is where the restore happens (it waits until a song handed over by another
+# instance has had its chance), and the load itself is asynchronous: sleep lets both run.
+sleep 500
+
+assert editor.status text contains "Paused"
+# The length of minimal.vgm, so this is the remembered song and not merely something paused
+assert editor.status text contains "0:06"
+assert engine position ~= 0

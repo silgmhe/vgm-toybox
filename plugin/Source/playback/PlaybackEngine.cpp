@@ -138,7 +138,7 @@ bool PlaybackEngine::installLoaded (LoadedSong&& built, juce::MemoryBlock&& imag
 	return true;
 }
 
-void PlaybackEngine::loadFileAsync (const juce::File& file, LoadCallback onDone)
+void PlaybackEngine::loadFileAsync (const juce::File& file, LoadCallback onDone, bool startPlaying)
 {
 	// Snapshot on the message thread: from here on the job only touches its own copies, so a
 	// sample-rate change, a mode switch or a close on the message thread cannot race the build.
@@ -147,7 +147,8 @@ void PlaybackEngine::loadFileAsync (const juce::File& file, LoadCallback onDone)
 	auto* const engine = this;
 	const auto lifetime = alive;
 
-	loadPool.addJob ([engine, lifetime, config, file, generation, onDone = std::move (onDone)] () mutable
+	loadPool.addJob ([engine, lifetime, config, file, generation, startPlaying,
+					  onDone = std::move (onDone)] () mutable
 	{
 		juce::MemoryBlock data;
 		juce::String error;
@@ -174,7 +175,7 @@ void PlaybackEngine::loadFileAsync (const juce::File& file, LoadCallback onDone)
 		// callback that touches the window has to run.
 		juce::MessageManager::getInstance()->callAsync (
 			[engine, lifetime, generation, built = std::move (built), data = std::move (data),
-			 file, ok, error, onDone = std::move (onDone)] () mutable
+			 file, ok, error, startPlaying, onDone = std::move (onDone)] () mutable
 			{
 				if (! lifetime->load())
 				{
@@ -182,14 +183,14 @@ void PlaybackEngine::loadFileAsync (const juce::File& file, LoadCallback onDone)
 				}
 
 				engine->finishLoad (generation, std::move (built), std::move (data), file, ok, error,
-									onDone);
+									startPlaying, onDone);
 			});
 	});
 }
 
 void PlaybackEngine::finishLoad (int generation, LoadedSong&& built, juce::MemoryBlock&& image,
 								 const juce::File& file, bool ok, const juce::String& errorMessage,
-								 const LoadCallback& onDone)
+								 bool startPlaying, const LoadCallback& onDone)
 {
 	// A newer request (or unloadFile()) bumped the generation while this one was building: it owns
 	// the engine now, and this result is dropped without reporting - a stale failure must not
@@ -203,7 +204,7 @@ void PlaybackEngine::finishLoad (int generation, LoadedSong&& built, juce::Memor
 
 	if (ok)
 	{
-		installed = installLoaded (std::move (built), std::move (image), file, true);
+		installed = installLoaded (std::move (built), std::move (image), file, startPlaying);
 	}
 	else
 	{

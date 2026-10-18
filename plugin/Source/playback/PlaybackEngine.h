@@ -74,8 +74,12 @@ public:
 		`onDone` is called on the message thread exactly once - or not at all when a newer load
 		(or unloadFile()) supersedes this one, in which case that request is the one that reports.
 		The callback must not be called from the worker: the UI it touches is message-thread data.
+
+		`startPlaying` installs the transport with the swap (the default, and what opening a file
+		means). A restore passes false: the song is there to carry on with, but the application
+		did not ask for sound the moment its window appeared.
 	*/
-	void loadFileAsync (const juce::File& file, LoadCallback onDone);
+	void loadFileAsync (const juce::File& file, LoadCallback onDone, bool startPlaying = true);
 	/** Sets the output sample rate / maximum block size (host sample rate). */
 	void prepare (double newSampleRate, int maxBlockSize);
 
@@ -281,7 +285,7 @@ private:
 		over in the meantime, otherwise installs it and reports. */
 	void finishLoad (int generation, LoadedSong&& built, juce::MemoryBlock&& image,
 					 const juce::File& file, bool ok, const juce::String& errorMessage,
-					 const LoadCallback& onDone);
+					 bool startPlaying, const LoadCallback& onDone);
 
 	/** Moves a built song into the engine and publishes its state - the only part of a load that has
 		to happen under the lock. Leaves the position at zero; the callers decide what happens to the

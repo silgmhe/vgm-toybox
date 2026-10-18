@@ -24,6 +24,11 @@
 	    sleep <ms>               let the message loop run - timers, async callbacks
 	    help                     the command list
 
+	Directives (read before the window exists, because they decide what it opens):
+
+	    # settings lastSong <path>          the song the previous session left in settings.xml
+	    # settings restoreLastSong on|off   the General page's "reopen the last song" switch
+
 	Why this exists rather than screenshots: the failures that actually happened here (a modal window
 	that never appeared, a tick that never moved, a song that never loaded) are structure and state,
 	and structure survives headless, in CI, at any DPI.
@@ -33,6 +38,7 @@
 #include <cstdio>
 #include <cstring>
 #include <functional>
+#include <memory>
 #include <vector>
 
 #include <juce_audio_processors/juce_audio_processors.h>
@@ -40,6 +46,7 @@
 #include "PluginEditor.h"
 #include "PluginProcessor.h"
 #include "Standalone/StandaloneHooks.h"
+#include "settings/SettingsStore.h"
 #include "ui/UiSnapshot.h"
 
 namespace
@@ -211,6 +218,54 @@ bool keyFromName (const juce::String& name, juce::KeyPress& out)
 	return false;
 }
 
+/** Replaces $NAME with the environment variable of that name.
+
+	Scripts live in the repository, so they cannot hard-code the path of a song - the one thing
+	they need that is not in the repository. `load $VGM_TEST_SONG` keeps the script portable and
+	lets a machine without a song skip it instead of failing (see commandLoad). The directives
+	that have to run before the editor exists (`# settings lastSong`) are expanded in main(), so
+	this is a free function rather than a Runner method. */
+juce::String expandVariables (const juce::String& line)
+{
+	juce::String out;
+	for (int i = 0; i < line.length(); ++i)
+	{
+		if (line[i] != '$')
+		{
+			out << line[i];
+			continue;
+		}
+
+		int end = i + 1;
+		while (end < line.length() && (juce::CharacterFunctions::isLetterOrDigit (line[end])
+									   || line[end] == '_'))
+		{
+			++end;
+		}
+
+		const auto name = line.substring (i + 1, end);
+		if (name.isEmpty())
+		{
+			out << '$';
+			continue;
+		}
+
+		const auto* value = std::getenv (name.toRawUTF8());
+		if (value == nullptr)
+		{
+			out << "$" << name;		// left as it is - commandLoad() recognises and skips it
+		}
+		else
+		{
+			out << value;
+		}
+
+		i = end - 1;
+	}
+
+	return out;
+}
+
 class Runner
 {
 public:
@@ -264,52 +319,6 @@ private:
 	static void settle (int milliseconds)
 	{
 		juce::Thread::sleep (juce::jmax (1, milliseconds));
-	}
-
-	/** Replaces $NAME with the environment variable of that name.
-
-		Scripts live in the repository, so they cannot hard-code the path of a song - the one thing
-		they need that is not in the repository. `load $VGM_TEST_SONG` keeps the script portable and
-		lets a machine without a song skip it instead of failing (see commandLoad). */
-	static juce::String expandVariables (const juce::String& line)
-	{
-		juce::String out;
-		for (int i = 0; i < line.length(); ++i)
-		{
-			if (line[i] != '$')
-			{
-				out << line[i];
-				continue;
-			}
-
-			int end = i + 1;
-			while (end < line.length() && (juce::CharacterFunctions::isLetterOrDigit (line[end])
-										   || line[end] == '_'))
-			{
-				++end;
-			}
-
-			const auto name = line.substring (i + 1, end);
-			if (name.isEmpty())
-			{
-				out << '$';
-				continue;
-			}
-
-			const auto* value = std::getenv (name.toRawUTF8());
-			if (value == nullptr)
-			{
-				out << "$" << name;		// left as it is - commandLoad() recognises and skips it
-			}
-			else
-			{
-				out << value;
-			}
-
-			i = end - 1;
-		}
-
-		return out;
 	}
 
 	void execute (const juce::StringArray& tokens)
@@ -796,6 +805,80 @@ juce::AudioProcessor::WrapperType wrapperTypeFromScript (const juce::File& scrip
 	return juce::AudioProcessor::wrapperType_Standalone;
 }
 
+/** A settings folder for one run, and its removal.
+
+	The settings page writes as soon as a switch is clicked, and the restore scripts need a
+	remembered song; neither may touch the real preferences of the machine the tests run on. The
+	folder is created before the processor, because the store reads its location on first use. */
+struct TemporarySettingsDirectory
+{
+	juce::File directory;
+
+	TemporarySettingsDirectory()
+		: directory (juce::File::getSpecialLocation (juce::File::tempDirectory)
+						 .getNonexistentChildFile ("vgmtoybox-app-test-", {}, false))
+	{
+		directory.createDirectory();
+
+	   #if JUCE_WINDOWS
+		_putenv_s ("VGMTOYBOX_SETTINGS_DIR", directory.getFullPathName().toRawUTF8());
+	   #else
+		setenv ("VGMTOYBOX_SETTINGS_DIR", directory.getFullPathName().toRawUTF8(), 1);
+	   #endif
+	}
+
+	~TemporarySettingsDirectory()
+	{
+		directory.deleteRecursively();
+	}
+};
+
+/** The startup state a script can ask for before the editor exists.
+
+	`# settings lastSong <path>` writes the remembered song into the run's settings file - what a
+	previous session would have left there - and `# settings restoreLastSong on|off` sets the
+	switch. These are directives rather than commands because the window decides what to open in
+	its constructor and its first timer tick, and the first command runs after both.
+
+	False means the script asked for a song that is not on this machine (VGM_TEST_SONG unset);
+	main() then reports the run as skipped, the same way commandLoad() does.
+*/
+bool applyScriptSettings (const juce::File& script)
+{
+	auto& store = toybox::settings::SettingsStore::getInstance();
+
+	for (const auto& raw : juce::StringArray::fromLines (script.loadFileAsString()))
+	{
+		const auto line = expandVariables (raw.trim());
+		if (! line.startsWith ("# settings "))
+		{
+			continue;
+		}
+
+		const auto directive = line.fromFirstOccurrenceOf ("# settings ", false, false).trim();
+		if (directive.startsWith ("lastSong "))
+		{
+			const auto path = directive.fromFirstOccurrenceOf ("lastSong ", false, false).trim();
+			if (path.startsWithChar ('$'))
+			{
+				return false;
+			}
+
+			store.setLastSong (juce::File (path));
+		}
+		else if (directive.startsWith ("restoreLastSong "))
+		{
+			store.setRestoreLastSong (directive.endsWithIgnoreCase (" on"));
+		}
+		else
+		{
+			std::printf ("unknown # settings directive: %s\n", directive.toRawUTF8());
+		}
+	}
+
+	return true;
+}
+
 /** Whether a script speaks for an application that has an audio device of its own - `# hooks audio`.
 
 	The settings panel decides whether it has an Audio page when it is constructed, from
@@ -851,6 +934,20 @@ int main (int argc, char* argv[])
 		auto& hooks = toybox::standalone::hooks();
 		hooks.describeAudioDevice = [] { return juce::String ("Fake device"); };
 		hooks.showAudioSettings = [] {};
+	}
+
+	// Every script gets its own settings folder, and the directives that decide what the window
+	// restores are applied before it exists: by the first timer tick the decision is already made.
+	std::unique_ptr<TemporarySettingsDirectory> settingsForThisRun;
+	if (script.existsAsFile())
+	{
+		settingsForThisRun = std::make_unique<TemporarySettingsDirectory>();
+
+		if (! applyScriptSettings (script))
+		{
+			std::printf ("skipped: # settings lastSong (VGM_TEST_SONG is not set)\n");
+			return 0;
+		}
 	}
 
 	ToyboxAudioProcessor processor;

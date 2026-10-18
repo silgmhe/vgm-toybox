@@ -21,3 +21,9 @@ assert settings.page.audio visible == false
 
 # The page reads the same table: the device line is the harness's fake, not a real device
 assert settings.audio.device text contains "Fake device"
+
+# The General page has the startup restore switch - the standalone's "last time" - and it is on by
+# default. A plugin's panel does not build it, because a host project is what restores a plugin.
+assert settings.general.restoreLastSong     enabled == true
+assert settings.general.restoreLastSong     checked == true
+assert settings.general.restoreLastSongHint text contains "Close Song"

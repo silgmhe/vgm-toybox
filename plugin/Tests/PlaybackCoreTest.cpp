@@ -797,6 +797,32 @@ int main (int /*argc*/, char* /*argv*/[])
 	settings.setReuseWindow (true);
 	check (settings.getReuseWindow(), "and back on again");
 
+	// The standalone's startup restore: the switch defaults on, and the remembered song is one
+	// path in the same file - written when a load succeeds, cleared when the song is closed.
+	check (settings.getRestoreLastSong(), "reopening the last song is the default");
+	check (settings.getLastSong().getFullPathName().isEmpty(),
+		   "and a fresh store remembers no song");
+
+	const auto remembered = settingsDir.getChildFile ("remembered song.vgm");
+	settings.setLastSong (remembered);
+	check (settings.getLastSong() == remembered,
+		   "the remembered song comes back as the file that was stored");
+	check (toybox::settings::SettingsStore::settingsFile().loadFileAsString()
+			   .contains ("remembered song.vgm"),
+		   "with the path in the file, spaces and all");
+	check (! settings.getLastSong().existsAsFile(),
+		   "a path is kept even while the file is away (a drive may come back)");
+
+	settings.setRestoreLastSong (false);
+	check (! settings.getRestoreLastSong(), "the startup switch can be turned off");
+	check (settings.lastError().isEmpty(), "and is written without complaint");
+
+	settings.clearLastSong();
+	check (settings.getLastSong().getFullPathName().isEmpty(), "closing the song forgets it");
+	check (! toybox::settings::SettingsStore::settingsFile().loadFileAsString()
+				.contains ("remembered song.vgm"),
+		   "and the path leaves the file");
+
 	// A file written by hand - or by an older build - is read as it is, not as what the process
 	// happens to hold: "0" is off. The shape matters: JUCE's PropertiesFile reads <VALUE> children,
 	// not attributes on the root, and a file it cannot understand is not an error - it simply
@@ -805,11 +831,17 @@ int main (int /*argc*/, char* /*argv*/[])
 			   "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n"
 			   "<PROPERTIES>\n"
 			   "  <VALUE name=\"standalone.reuseWindow\" val=\"0\"/>\n"
+			   "  <VALUE name=\"standalone.restoreLastSong\" val=\"0\"/>\n"
+			   "  <VALUE name=\"standalone.lastSong\" val=\"/music/hand written.vgm\"/>\n"
 			   "  <VALUE name=\"theme.mode\" val=\"dark\"/>\n"
 			   "</PROPERTIES>\n"),
 		   "a hand-written file can be put there");
 	check (settings.reload(), "and it loads");
 	check (! settings.getReuseWindow(), "the file that says 0 turns the switch off");
+	check (! settings.getRestoreLastSong(), "the startup switch beside it is read too");
+	check (settings.getLastSong().getFullPathName()
+			   == juce::File ("/music/hand written.vgm").getFullPathName(),
+		   "and so is the remembered song");
 	check (settings.getThemeMode() == toybox::settings::SettingsStore::ThemeMode::dark,
 		   "and the theme beside it is read too");
 
@@ -824,6 +856,9 @@ int main (int /*argc*/, char* /*argv*/[])
 	check (settings.resetToDefaults(), "restoring the defaults rewrites the file");
 	check (settings.getThemeMode() == toybox::settings::SettingsStore::ThemeMode::light,
 		   "and puts the theme back");
+	check (settings.getRestoreLastSong(), "and turns the startup restore back on");
+	check (settings.getLastSong().getFullPathName().isEmpty(),
+		   "and forgets the remembered song, like every other stored value");
 
 	settingsDir.deleteRecursively();
 
