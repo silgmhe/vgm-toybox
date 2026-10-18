@@ -23,6 +23,8 @@
 
 #include "playback/PlaybackEngine.h"
 
+#include "TestSupport.h"
+
 namespace
 {
 	void writeWavFile (const juce::File& file, const std::vector<float>& left, const std::vector<float>& right, int sampleRate)
@@ -164,16 +166,6 @@ int main (int argc, char* argv[])
 		std::printf ("File not found: %s\n", inputFile.getFullPathName().toRawUTF8());
 		return 1;
 	}
-
-	int failures = 0;
-	const auto check = [&failures] (bool condition, const juce::String& what)
-	{
-		std::printf ("    %s %s\n", condition ? "OK  " : "FAIL", what.toRawUTF8());
-		if (! condition)
-		{
-			++failures;
-		}
-	};
 
 	// --- [1] load ---------------------------------------------------------------------------
 	std::printf ("[1] creating engine (sample rate %d, block size %d)\n", sampleRate, blockSize);
@@ -481,9 +473,9 @@ int main (int argc, char* argv[])
 	std::printf ("Peak      : %.4f\n", plain.peak);
 	std::printf ("RMS       : %.4f\n", plain.rms);
 	std::printf ("WAV       : %s\n", outputFile.getFullPathName().toRawUTF8());
-	std::printf ("Result    : %s\n", (failures == 0) ? "all checks passed" : "FAILURES");
+	std::printf ("Result    : %s\n", (toybox::test::failures() == 0) ? "all checks passed" : "FAILURES");
 
-	if (failures > 0)
+	if (toybox::test::failures() > 0)
 	{
 		return 3;
 	}

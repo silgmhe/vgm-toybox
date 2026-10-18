@@ -37,19 +37,10 @@
 #include "playback/StartupSong.h"
 #include "settings/SettingsStore.h"
 
+#include "TestSupport.h"
+
 namespace
 {
-	int failures = 0;
-
-	void check (bool ok, const char* what)
-	{
-		std::printf ("    %s %s\n", ok ? " OK " : "FAIL", what);
-		if (! ok)
-		{
-			++failures;
-		}
-	}
-
 	/**
 		Something worth reading in the log that cannot be a gate, because it measures the machine
 		rather than the engine - how a virtual machine schedules two threads, how fast it renders.
@@ -1154,6 +1145,6 @@ int main (int /*argc*/, char* /*argv*/[])
 		file.deleteFile();
 	}
 
-	std::printf ("Result    : %s\n", (failures == 0) ? "all checks passed" : "FAILURES");
-	return (failures == 0) ? 0 : 1;
+	std::printf ("Result    : %s\n", (toybox::test::failures() == 0) ? "all checks passed" : "FAILURES");
+	return (toybox::test::failures() == 0) ? 0 : 1;
 }

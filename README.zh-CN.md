@@ -78,15 +78,18 @@ cmake --build build --parallel
 
 ### 测试
 
-控制台测试是 `EXCLUDE_FROM_ALL`，要按名字请求：
+控制台测试是 `EXCLUDE_FROM_ALL`，要按名字请求，运行器是 `ctest`：
 
 ```bash
-cmake --build build --target vgm_core_test vgm_ui_test
-./build/plugin/vgm_core_test
-./build/plugin/vgm_ui_test
+cmake --build build --target vgm_core_test vgm_ui_test vgm_app_test vgm_mixer_test
+ctest --test-dir build --output-on-failure
 ```
 
-`vgm_mixer_test <file> [seconds]` 是做逐样本校验的那个：它会把一首真实的曲子渲染两遍，所以要给它一首曲子 —— 默认不跑也是这个原因。
+`plugin/CMakeLists.txt` 为每个程序和每个窗口脚本（`app.<脚本名>`，来自 `plugin/Tests/scripts/`）
+各注册一项，带标签与超时，所以 `ctest -R app.` 只重跑窗口脚本。`vgm_mixer_test` 是做逐样本校验的
+那个：它把一首真实的曲子渲染两遍，所以只有存在歌曲时才注册 —— 仓库自带
+`plugin/Tests/assets/minimal.vgm`，`-DTOYBOX_TEST_SONG=<file>` 可换成更大的曲子。Windows 上
+`.\build.ps1 -Test` 会先构建这四个程序，再跑同一份列表。
 
 ## 使用方法
 

@@ -96,16 +96,19 @@ exactly that reason.
 
 ### Tests
 
-The console tests are `EXCLUDE_FROM_ALL`, so they are asked for by name:
+The console tests are `EXCLUDE_FROM_ALL`, so they are asked for by name, and `ctest` is the runner:
 
 ```bash
-cmake --build build --target vgm_core_test vgm_ui_test
-./build/plugin/vgm_core_test
-./build/plugin/vgm_ui_test
+cmake --build build --target vgm_core_test vgm_ui_test vgm_app_test vgm_mixer_test
+ctest --test-dir build --output-on-failure
 ```
 
-`vgm_mixer_test <file> [seconds]` is the sample-exact one: it renders a real song twice, so it needs a
-song - it is not part of the default run for that reason.
+`plugin/CMakeLists.txt` registers one test per program and one per window script (`app.<script>`,
+from `plugin/Tests/scripts/`), with labels and timeouts, so `ctest -R app.` reruns just the window
+scripts. `vgm_mixer_test` is the sample-exact one: it renders a real song twice, so its test only
+exists when a song does - the repository ships `plugin/Tests/assets/minimal.vgm`, and
+`-DTOYBOX_TEST_SONG=<file>` points it at a bigger one. On Windows `.\build.ps1 -Test` builds all
+four programs and then runs exactly that list.
 
 ## Using it
 

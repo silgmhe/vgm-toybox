@@ -26,20 +26,11 @@
 #include "ui/IconButton.h"
 #include "ui/Theme.h"
 
+#include "TestSupport.h"
+
 namespace
 {
 	using namespace toybox::ui;
-
-	int failures = 0;
-
-	void check (bool ok, const char* what)
-	{
-		std::printf ("    %s %s\n", ok ? " OK " : "FAIL", what);
-		if (! ok)
-		{
-			++failures;
-		}
-	}
 
 	// --- the test image: a card with room around the control for its shadow and focus ring ------
 
@@ -229,6 +220,6 @@ int main()
 	checkTheCompactGlow();
 	checkTheWidget();
 
-	std::printf ("Result    : %s\n", (failures == 0) ? "all checks passed" : "FAILURES");
-	return (failures == 0) ? 0 : 1;
+	std::printf ("Result    : %s\n", (toybox::test::failures() == 0) ? "all checks passed" : "FAILURES");
+	return (toybox::test::failures() == 0) ? 0 : 1;
 }

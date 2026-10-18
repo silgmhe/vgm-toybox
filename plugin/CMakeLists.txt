@@ -357,3 +357,48 @@ target_link_libraries(vgm_mixer_test PRIVATE
 	juce::juce_events
 	juce::juce_recommended_config_flags
 )
+
+# --- CTest -------------------------------------------------------------------------------------
+# One test per console program and one per window script. build.ps1 -Test already ran the same
+# list by hand; registering it here means a failure names the script, `ctest -R app.` reruns only
+# those, and CI can upload a JUnit file instead of parsing our own output.
+#
+# CTest does not build anything: the test targets are EXCLUDE_FROM_ALL, so build them first
+# (build.ps1 -Test does). build.ps1 -TestSong writes TOYBOX_TEST_SONG here, which keeps the song
+# the scripts load in one place; the repository carries one, so plain `ctest` works too.
+set(TOYBOX_TEST_SONG "${CMAKE_CURRENT_SOURCE_DIR}/Tests/assets/minimal.vgm" CACHE FILEPATH
+	"Song loaded by the console tests (build.ps1 -TestSong overrides it)")
+
+if(EXISTS "${TOYBOX_TEST_SONG}")
+	get_filename_component(_toybox_test_song "${TOYBOX_TEST_SONG}" ABSOLUTE)
+	set(_toybox_test_env "VGM_TEST_SONG=${_toybox_test_song}")
+endif()
+
+add_test(NAME core COMMAND vgm_core_test)
+add_test(NAME ui   COMMAND vgm_ui_test)
+set_tests_properties(core ui PROPERTIES LABELS "unit" TIMEOUT 120)
+
+if(_toybox_test_env)
+	add_test(NAME engine COMMAND vgm_mixer_test "${_toybox_test_song}" 3)
+	set_tests_properties(engine PROPERTIES LABELS "integration" TIMEOUT 300)
+endif()
+
+# One test per script in Tests/scripts, discovered rather than listed: adding a script must not mean
+# editing this file (and a stale hard-coded list would silently stop running a script).
+file(GLOB _toybox_scripts CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/Tests/scripts/*.txt")
+list(SORT _toybox_scripts)
+
+foreach(_script_file IN LISTS _toybox_scripts)
+	get_filename_component(_script_name "${_script_file}" NAME_WE)
+
+	add_test(NAME "app.${_script_name}" COMMAND vgm_app_test "${_script_file}")
+
+	if(_toybox_test_env)
+		set_tests_properties("app.${_script_name}" PROPERTIES
+			LABELS app
+			TIMEOUT 120
+			ENVIRONMENT "${_toybox_test_env}")
+	else()
+		set_tests_properties("app.${_script_name}" PROPERTIES LABELS app TIMEOUT 120)
+	endif()
+endforeach()

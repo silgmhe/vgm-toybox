@@ -425,6 +425,22 @@ if ($isolationOffenders) {
 	throw 'A file outside plugin/Source/backends/ includes a format engine header.'
 }
 
+# The song the console tests load. The repository carries one (431 bytes, generated for this: six
+# seconds of SN76489 tone), so a checkout can exercise a real load/render/mix path without a
+# download; -TestSong replaces it with something bigger. It goes in as a cache entry so the CTest
+# properties and the mixer gate use the same file.
+if (-not $TestSong) {
+	$TestSong = Join-Path $RepoRoot 'plugin\Tests\assets\minimal.vgm'
+}
+if (Test-Path -LiteralPath $TestSong) {
+	$cmakeOptions += ("-DTOYBOX_TEST_SONG=" + (Resolve-Path -LiteralPath $TestSong).Path.Replace('\', '/'))
+} else {
+	# Clear the cached value as well: leaving the previous song in the cache would make the tests
+	# keep loading a file this run never found.
+	$cmakeOptions += '-DTOYBOX_TEST_SONG='
+	Write-Warning ("no test song at '{0}' - the tests that need one will skip" -f $TestSong)
+}
+
 Invoke-Native 'cmake' (@(
 	'-S', $sourceDir,
 	'-B', $buildDir,
@@ -564,69 +580,27 @@ if ($dumpbin) {
 # the ones that want one load is in the repository, so they run on a build agent as they do here.
 if ($Test) {
 	Write-Step 'Running the console tests'
-	$testDir = Join-Path $BuildDir 'plugin'
-	$passed = 0
 
-	# The song the mixer gate and the window scripts load. The repository carries one (431 bytes,
-	# generated for this: six seconds of SN76489 tone), so a checkout can exercise a real
-	# load/render/mix path without a download; -TestSong replaces it with something bigger.
-	if (-not $TestSong) {
-		$TestSong = Join-Path $RepoRoot 'plugin\Tests\assets\minimal.vgm'
-	}
-	if (-not (Test-Path -LiteralPath $TestSong)) {
-		Write-Warning ("no test song at '{0}' - the tests that need one will skip" -f $TestSong)
-		$TestSong = ''
+	# The list lives in plugin/CMakeLists.txt: core, ui, engine and one test per window script.
+	# This used to be a hand-written loop here (and a second copy in each CI job); ctest now owns
+	# the list, the per-test timeout and the JUnit report.
+	$ctest = Get-Command 'ctest' -ErrorAction SilentlyContinue
+	if (-not $ctest) {
+		throw 'ctest was not found - it ships with CMake, which the build already needs'
 	}
 
-	foreach ($name in @('vgm_core_test', 'vgm_ui_test', 'vgm_app_test')) {
-		$testExe = Join-Path $testDir ("$name.exe")
-		if (-not (Test-Path -LiteralPath $testExe)) {
-			Write-Host (("  skipping {0} (not built - -Test should have built it)") -f $name)
-			continue
-		}
-		Write-Host ('+ ' + $testExe) -ForegroundColor DarkGray
-		& $testExe
-		if ($LASTEXITCODE -ne 0) {
-			throw "$name failed with exit code $LASTEXITCODE"
-		}
-		$passed++
-	}
-
-	$mixerExe = Join-Path $testDir 'vgm_mixer_test.exe'
-	if (Test-Path -LiteralPath $mixerExe) {
-		if ($TestSong) {
-			Write-Host ('+ ' + $mixerExe + ' "' + $TestSong + '" 3') -ForegroundColor DarkGray
-			& $mixerExe $TestSong 3
-			if ($LASTEXITCODE -ne 0) {
-				throw "vgm_mixer_test failed with exit code $LASTEXITCODE"
-			}
-			$passed++
-		} else {
-			Write-Host '  skipping vgm_mixer_test (needs -TestSong <file>: its gate renders a real song twice)' -ForegroundColor DarkGray
+	$ctestArgs = @('--test-dir', $BuildDir, '--output-on-failure')
+	$ctestVersion = ((& ctest --version | Select-Object -First 1) -replace '^[^0-9]*', '')
+	if ($ctestVersion -match '^\d+\.\d+') {
+		# --output-junit arrived in CMake 3.21; older ctests still run, just without the report.
+		if ([version]$Matches[0] -ge [version]'3.21') {
+			$ctestArgs += @('--output-junit', (Join-Path $BuildDir 'test-results.xml'))
 		}
 	}
 
-	# The window scripts, one harness process each: they drive the real editor and print their own
-	# ok/FAIL lines. window-basics needs nothing but a built binary; the others load the song above.
-	$scriptsDir = Join-Path $RepoRoot 'plugin\Tests\scripts'
-	$appTestExe = Join-Path $testDir 'vgm_app_test.exe'
-	if ((Test-Path -LiteralPath $scriptsDir) -and (Test-Path -LiteralPath $appTestExe)) {
-		if ($TestSong) {
-			$env:VGM_TEST_SONG = (Resolve-Path -LiteralPath $TestSong).Path
-		}
+	# Invoke-Native keeps ctest's stderr from becoming a terminating error and turns its exit code
+	# into the script's; --output-on-failure has already printed which test failed.
+	Invoke-Native 'ctest' $ctestArgs
 
-		foreach ($script in Get-ChildItem -LiteralPath $scriptsDir -Filter '*.txt' | Sort-Object Name) {
-			Write-Host ('+ ' + $appTestExe + ' ' + $script.Name) -ForegroundColor DarkGray
-			& $appTestExe $script.FullName
-			if ($LASTEXITCODE -ne 0) {
-				throw ("the window script '{0}' failed with exit code {1}" -f $script.Name, $LASTEXITCODE)
-			}
-			$passed++
-		}
-	}
-
-	if ($passed -eq 0) {
-		throw 'No test executable was found - build them first, e.g. -Target vgm_core_test,vgm_ui_test,vgm_app_test'
-	}
-	Write-Host ("  {0} test target(s) passed" -f $passed) -ForegroundColor Green
+	Write-Host '  all registered tests passed' -ForegroundColor Green
 }

@@ -21,6 +21,11 @@ endif()
 # version, and the release workflow refuses a tag that does not match it.
 project(vgmtoybox VERSION 0.3.0 LANGUAGES C CXX)
 
+# CTest is the runner for the console tests (plugin/Tests); their add_test() calls sit next to the
+# targets in plugin/CMakeLists.txt. It does not mean the tests are built: they are EXCLUDE_FROM_ALL,
+# so build.ps1 -Test builds them first and then runs `ctest`.
+enable_testing()
+
 #set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${PROJECT_BINARY_DIR}/bin)
 #set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${PROJECT_BINARY_DIR}/bin)
 #set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${PROJECT_BINARY_DIR}/bin)

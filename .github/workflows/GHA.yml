@@ -120,7 +120,7 @@ jobs:
 
     - name: Install Linux dependencies
       if: startsWith(matrix.os, 'ubuntu')
-      # JUCE needs these to build on Linux at all, and xvfb-run gives the two GUI tests a display to
+      # JUCE needs these to build on Linux at all, and xvfb-run gives the GUI tests a display to
       # start against - a headless runner has none, and ScopedJuceInitialiser_GUI wants one.
       run: |
         sudo apt-get update
@@ -130,7 +130,7 @@ jobs:
     - name: Build the plugin and run the console tests (Windows)
       # The same command a developer runs locally: -Test builds the console tests (they are
       # EXCLUDE_FROM_ALL, so naming them was the caller's job until it became the trap that shipped
-      # v0.1.0 on a stale binary) and then runs every one of them:
+      # v0.1.0 on a stale binary) and then runs ctest over the list plugin/CMakeLists.txt registers:
       #
       #   vgm_core_test   the mixer maths against analytically known levels, the two volume stages,
       #                   seek/end, the output routing, and the startup-argument rule
@@ -153,25 +153,32 @@ jobs:
       run: |
         cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_OSX_ARCHITECTURES="x86_64;arm64"
         cmake --build build --parallel 3
-        cmake --build build --target vgm_core_test vgm_ui_test vgm_app_test --parallel 3
+        cmake --build build --target vgm_core_test vgm_ui_test vgm_app_test vgm_mixer_test --parallel 3
 
     - name: Run the console tests (macOS)
       if: matrix.os == 'macos-15'
+      # ctest owns the list (plugin/CMakeLists.txt): the three programs, the mixer gate and one
+      # test per window script - the same set Windows runs.
       run: |
-        ./build/plugin/vgm_core_test
-        ./build/plugin/vgm_ui_test
-        ./build/plugin/vgm_app_test plugin/Tests/scripts/window-basics.txt
+        ctest --test-dir build --output-on-failure --output-junit build/test-results.xml
 
     - name: Build the plugin (Linux)
       if: startsWith(matrix.os, 'ubuntu')
       run: |
         cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
         cmake --build build --parallel 3
-        cmake --build build --target vgm_core_test vgm_ui_test vgm_app_test --parallel 3
+        cmake --build build --target vgm_core_test vgm_ui_test vgm_app_test vgm_mixer_test --parallel 3
 
     - name: Run the console tests (Linux)
       if: startsWith(matrix.os, 'ubuntu')
       run: |
-        ./build/plugin/vgm_core_test
-        xvfb-run -a ./build/plugin/vgm_ui_test
-        xvfb-run -a ./build/plugin/vgm_app_test plugin/Tests/scripts/window-basics.txt
+        xvfb-run -a ctest --test-dir build --output-on-failure --output-junit build/test-results.xml
+
+    - name: Upload the test report
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: test-results-${{ matrix.os }}
+        path: build/test-results.xml
+        if-no-files-found: ignore
+        retention-days: 7
