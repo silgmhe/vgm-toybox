@@ -193,6 +193,15 @@ id: zh-Hans
 
 The plugin and the standalone share the folder and the stored choice.
 
+### Changing the interface font
+
+*Settings* → *Appearance* → **Font** shows the family the window is drawn with. **Choose...**
+opens a picker that lists the installed system fonts and keeps **System UI** as the first row;
+the search box filters the list and the two sample lines follow the highlighted row. The choice
+is saved, and the page notes that the window has to be reopened (restart the standalone) because
+JUCE has already laid out the current labels with the old face. If the saved family is no longer
+installed, the window falls back to the system UI font and the row names the missing family.
+
 ### In a DAW
 
 Copy the bundle into the plugin folder and rescan:

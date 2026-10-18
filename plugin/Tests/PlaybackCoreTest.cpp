@@ -867,6 +867,37 @@ int main (int /*argc*/, char* /*argv*/[])
 			   == toybox::settings::SettingsStore::ThemeMode::light,
 		   "and an unknown value reads back as the default");
 
+	// The font choice is part of the appearance page. System UI is the default, a custom family
+	// is stored alongside its mode, and turning custom off removes the family rather than
+	// leaving a value that a later build might accidentally resurrect.
+	check (settings.getFontMode() == toybox::settings::SettingsStore::FontMode::systemUI,
+		   "the UI font follows the system by default");
+	check (settings.getFontFamily().isEmpty(), "and a fresh store names no custom family");
+	check (toybox::settings::SettingsStore::fontModeFromString ("CUSTOM")
+			   == toybox::settings::SettingsStore::FontMode::custom,
+		   "the font mode spelling is case-insensitive");
+	check (toybox::settings::SettingsStore::fontModeFromString ("something else")
+			   == toybox::settings::SettingsStore::FontMode::systemUI,
+		   "and an unknown font mode reads back as the default");
+
+	settings.setFontSelection (toybox::settings::SettingsStore::FontMode::custom, "  Arial  ");
+	check (settings.getFontMode() == toybox::settings::SettingsStore::FontMode::custom,
+		   "a custom font choice is remembered");
+	check (settings.getFontFamily() == "Arial", "with its family trimmed");
+	check (toybox::settings::SettingsStore::settingsFile().loadFileAsString().contains ("Arial"),
+		   "and the family reaches the file");
+	check (settings.lastError().isEmpty(), "the font write reports no error");
+
+	settings.setFontSelection (toybox::settings::SettingsStore::FontMode::systemUI, {});
+	check (settings.getFontMode() == toybox::settings::SettingsStore::FontMode::systemUI,
+		   "switching back to System UI is remembered");
+	check (settings.getFontFamily().isEmpty(), "and clears the custom family");
+	check (! toybox::settings::SettingsStore::settingsFile().loadFileAsString()
+				.contains ("appearance.font.family"),
+		   "the family key leaves the file too");
+
+	settings.setFontSelection (toybox::settings::SettingsStore::FontMode::systemUI, {});
+
 	// The standalone's "reuse the running window" switch: default on, and on disk the moment it
 	// changes - the next launch reads it before there is a window or a settings page to ask.
 	check (settings.getReuseWindow(), "reusing the running window is the default");
@@ -914,6 +945,8 @@ int main (int /*argc*/, char* /*argv*/[])
 			   "  <VALUE name=\"standalone.restoreLastSong\" val=\"0\"/>\n"
 			   "  <VALUE name=\"standalone.lastSong\" val=\"/music/hand written.vgm\"/>\n"
 			   "  <VALUE name=\"theme.mode\" val=\"dark\"/>\n"
+			   "  <VALUE name=\"appearance.font.mode\" val=\"custom\"/>\n"
+			   "  <VALUE name=\"appearance.font.family\" val=\"Courier New\"/>\n"
 			   "</PROPERTIES>\n"),
 		   "a hand-written file can be put there");
 	check (settings.reload(), "and it loads");
@@ -924,6 +957,9 @@ int main (int /*argc*/, char* /*argv*/[])
 		   "and so is the remembered song");
 	check (settings.getThemeMode() == toybox::settings::SettingsStore::ThemeMode::dark,
 		   "and the theme beside it is read too");
+	check (settings.getFontMode() == toybox::settings::SettingsStore::FontMode::custom,
+		   "and the custom font mode is read too");
+	check (settings.getFontFamily() == "Courier New", "with the family it names");
 
 	// A file someone broke by hand: it must be reported rather than thrown, and the store must
 	// come through it still usable. Reading once is the contract, so reading again is the only
@@ -936,6 +972,9 @@ int main (int /*argc*/, char* /*argv*/[])
 	check (settings.resetToDefaults(), "restoring the defaults rewrites the file");
 	check (settings.getThemeMode() == toybox::settings::SettingsStore::ThemeMode::light,
 		   "and puts the theme back");
+	check (settings.getFontMode() == toybox::settings::SettingsStore::FontMode::systemUI,
+		   "and puts the font back to System UI");
+	check (settings.getFontFamily().isEmpty(), "and forgets the custom family");
 	check (settings.getRestoreLastSong(), "and turns the startup restore back on");
 	check (settings.getLastSong().getFullPathName().isEmpty(),
 		   "and forgets the remembered song, like every other stored value");

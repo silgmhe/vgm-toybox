@@ -20,6 +20,8 @@ namespace
 	constexpr const char* kDirectoryOverrideVar = "VGMTOYBOX_SETTINGS_DIR";
 
 	constexpr const char* kThemeModeKey = "theme.mode";
+	constexpr const char* kFontModeKey = "appearance.font.mode";
+	constexpr const char* kFontFamilyKey = "appearance.font.family";
 	constexpr const char* kLanguageIdKey = "ui.language";
 	constexpr const char* kLanguageTagKey = "ui.languageTag";
 	constexpr const char* kReuseWindowKey = "standalone.reuseWindow";
@@ -125,6 +127,46 @@ void SettingsStore::setThemeMode (ThemeMode mode)
 	// moment the user picked it cannot be lost by a host that kills us without saying goodbye.
 	lastErrorMessage = file->saveIfNeeded() ? juce::String() : writeErrorFor (settingsFile());
 
+	broadcastChange();
+}
+
+SettingsStore::FontMode SettingsStore::getFontMode (void) const
+{
+	const auto mode = fontModeFromString (file->getValue (kFontModeKey));
+
+	// A custom mode without a family is not a usable choice - treat it like a fresh install.
+	return mode == FontMode::custom && getFontFamily().isEmpty() ? FontMode::systemUI : mode;
+}
+
+juce::String SettingsStore::getFontFamily (void) const
+{
+	return file->getValue (kFontFamilyKey).trim();
+}
+
+void SettingsStore::setFontSelection (FontMode mode, const juce::String& family)
+{
+	const auto trimmed = family.trim();
+	const bool useCustom = mode == FontMode::custom && trimmed.isNotEmpty();
+	const auto normalizedMode = useCustom ? FontMode::custom : FontMode::systemUI;
+	const auto normalizedFamily = useCustom ? trimmed : juce::String();
+
+	if (normalizedMode == getFontMode() && normalizedFamily == getFontFamily())
+	{
+		return;
+	}
+
+	file->setValue (kFontModeKey, toString (normalizedMode));
+
+	if (useCustom)
+	{
+		file->setValue (kFontFamilyKey, normalizedFamily);
+	}
+	else
+	{
+		file->removeValue (kFontFamilyKey);
+	}
+
+	lastErrorMessage = file->saveIfNeeded() ? juce::String() : writeErrorFor (settingsFile());
 	broadcastChange();
 }
 
@@ -293,6 +335,7 @@ bool SettingsStore::resetToDefaults (void)
 	// Store the defaults rather than deleting the file: it would only be recreated by the next
 	// change, and an empty file reads the same way to anyone looking at it.
 	file->setValue (kThemeModeKey, toString (ThemeMode::light));
+	file->setValue (kFontModeKey, toString (FontMode::systemUI));
 	file->setValue (kReuseWindowKey, true);
 	file->setValue (kRestoreLastSongKey, true);
 	file->setValue (kCloseToTrayKey, false);
@@ -330,6 +373,22 @@ SettingsStore::ThemeMode SettingsStore::themeModeFromString (const juce::String&
 
 	// "light", an empty value (no file yet) and anything a hand-edit left behind all land here.
 	return ThemeMode::light;
+}
+
+juce::String SettingsStore::toString (FontMode mode)
+{
+	return mode == FontMode::custom ? "custom" : "systemUI";
+}
+
+SettingsStore::FontMode SettingsStore::fontModeFromString (const juce::String& text)
+{
+	if (text.equalsIgnoreCase ("custom"))
+	{
+		return FontMode::custom;
+	}
+
+	// "systemUI", an empty value and anything unknown all mean the safe default.
+	return FontMode::systemUI;
 }
 
 } // namespace toybox::settings

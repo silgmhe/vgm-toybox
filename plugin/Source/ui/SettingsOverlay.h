@@ -1,6 +1,5 @@
 #pragma once
 
-#include "Theme.h"
 #include "View.h"
 #include "ViewStack.h"
 #include "i18n/LanguageManager.h"
@@ -12,7 +11,7 @@ namespace toybox::ui
 {
 
 /**
-	The Theme page: which palette the whole application draws with.
+	The Appearance page: the palette and the typeface the whole application draws with.
 
 	Light and Dark are two views of one stored value, and the store is the value - so this page,
 	the Theme menu and the palette actually in force cannot disagree: all three ask
@@ -24,18 +23,23 @@ namespace toybox::ui
 	While the checkbox is on, the line under it says which palette that *is* at the moment: a
 	platform that cannot answer then shows "Light" instead of a switch that looks broken
 	(section 8).
+
+	The font row stores a family for the next editor. JUCE caches the typeface inside each Font
+	when it is first used, so changing the default in place would leave every existing label on
+	the old face; the page therefore asks for the window to be reopened instead of pretending the
+	change is live.
 */
-class ThemeSettingsPage : public View
+class AppearanceSettingsPage : public View
 {
 public:
-	ThemeSettingsPage (void);
+	AppearanceSettingsPage (void);
 
-	juce::String getViewId (void) const override { return "settings-theme"; }
-	juce::String getViewName (void) const override { return i18n::tr ("settings.theme"); }
+	juce::String getViewId (void) const override { return "settings-appearance"; }
+	juce::String getViewName (void) const override { return i18n::tr ("settings.appearance"); }
 
-	/** Re-reads the stored mode into the controls. Named like `View::refresh()` because that is
-		what it is - only the frequency differs: no window timer drives this stack, so the page is
-		refreshed when it comes up and after every click here. */
+	/** Re-reads the stored mode and font into the controls. No window timer drives this stack,
+		so this runs when the page comes up, after every click here and after the font picker
+		accepts a family. */
 	void refresh (void) override;
 
 	void paint (juce::Graphics& g) override;
@@ -50,15 +54,24 @@ private:
 		broadcasts nothing, and the page has to be right anyway. */
 	void select (toybox::settings::SettingsStore::ThemeMode mode);
 
+	/** Opens the system-font list; the chosen family is stored for the next editor. */
+	void chooseFont (void);
+
 	/** What "follow system" resolves to at this moment, e.g. "Follow system (now: Dark)". */
 	juce::String describeFollowSystem (void) const;
 
+	juce::Label themeSectionLabel;
+	juce::Label fontSectionLabel;
 	juce::TextButton lightButton;
 	juce::TextButton darkButton;
 	juce::ToggleButton followButton;
 	juce::Label currentLabel;	// the line under the checkbox, only while it is on
+	juce::Label fontValue;
+	juce::TextButton chooseFontButton;
+	juce::Label fontHint;
+	juce::Label restartLabel;
 
-	JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (ThemeSettingsPage)
+	JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (AppearanceSettingsPage)
 };
 
 //==============================================================================
@@ -274,7 +287,7 @@ private:
 	juce::TreeView tree;	// after the items: the tree has to go first (it does not own them)
 
 	ViewStack pages;
-	ThemeSettingsPage* themePage = nullptr;			// owned by `pages`
+	AppearanceSettingsPage* appearancePage = nullptr;	// owned by `pages`
 	GeneralSettingsPage* generalPage = nullptr;		// owned by `pages`
 	LanguageSettingsPage* languagePage = nullptr;	// owned by `pages`
 	AudioSettingsPage* audioPage = nullptr;			// owned by `pages`; null in a plugin build

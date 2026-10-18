@@ -53,6 +53,14 @@ ToyboxAudioProcessorEditor::ToyboxAudioProcessorEditor (ToyboxAudioProcessor& p)
 
 	setLookAndFeel (&lookAndFeel);
 
+	// TooltipWindow makes itself opaque, but a tooltip only paints a rounded card. The square
+	// corner pixels were therefore left black: always in the plugin and sometimes in standalone.
+	// The custom tooltip LookAndFeel needs those pixels transparent for the soft shadow. Its
+	// transparent margin must also ignore the mouse, or a tooltip opened below the cursor would
+	// cover the control that asked for it.
+	tooltipWindow.setOpaque (false);
+	tooltipWindow.setInterceptsMouseClicks (false, false);
+
 	// --- the application menu ---
 	// Close and Exit belong to the standalone build only: inside a host this window is not the
 	// application, and quitting would take the DAW down with it (see ui/MainMenu.h).

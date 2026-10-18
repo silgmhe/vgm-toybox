@@ -174,7 +174,7 @@ menu File|View|Help
 view <name>
 state                          # AppController::getState() 一行文本
 dump [componentId]             # 组件子树
-assert <componentId> <field> <op> <value>   # field: visible/enabled/text/checked/bounds
+assert <componentId> <field> <op> <value>   # field: visible/enabled/text/checked/typeface/bounds
 events                         # EventLog 转储
 ```
 `press <key> unhandled` 断言的是相反的一面：这次按键**没被窗口消费**（`keyPressed` 返回 false），也就是

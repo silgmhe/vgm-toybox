@@ -1,6 +1,6 @@
 # 设置窗口与主题（Settings & Theme）设计
 
-状态：**已决策**（2026-10-17，见 §11 决策记录）；实施中：**M1–M4 已完成**（§13），M5 系统实时跟随、M6 暗色像素组与版本待做　分支：`feature/theme`　版本位：**MINOR**（`0.0.2` → `0.1.0`，依据 `docs/desgin/maintenance-policy.md:85`：新 UI 页面 = MINOR）
+状态：**已决策**（2026-10-17，见 §11 决策记录）；实施中：**M1–M4 已完成**（§13），**字体设置已增补**（2026-10-18，§13 M7），M5 系统实时跟随、M6 暗色像素组与版本待做　分支：`feature/theme`　版本位：**MINOR**（`0.0.2` → `0.1.0`，依据 `docs/desgin/maintenance-policy.md:85`：新 UI 页面 = MINOR）
 
 凡本文档给出的结论都带 `文件:行`；未验证的写"待实现时确认"。
 
@@ -24,7 +24,7 @@
 | R12 | `Help` **前**加 `Theme` 菜单，选项互斥 | 复用现有 `MenuEntry.checked` ✓ |
 | R13 | 现主题定名 **Light**，新增 **Dark**（One Dark 风格） | `ui/Theme.h` 调色板化，§5 |
 
-**非目标**：不引入宿主参数 / 工程状态 ✗；不做 UI 缩放、字体 ✗（语言由 `i18n-design.md` 单独设计，`Language` 已作为第三个页面加入）；不做跨进程实时同步 ✗；**指标（`Theme.h:36-49` 的 `margin`/`cardRadius` 等 `constexpr`）全部不动** ✓。
+**非目标**：不引入宿主参数 / 工程状态 ✗；不做 UI 缩放 ✗；**字体**原先列在非目标里，已于 2026-10-18 增补（§13 M7），语言仍由 `i18n-design.md` 单独设计（`Language` 已作为独立页面加入）；不做跨进程实时同步 ✗；**指标（`Theme.h:36-49` 的 `margin`/`cardRadius` 等 `constexpr`）全部不动** ✓。
 
 ---
 
@@ -140,7 +140,7 @@ public:
 
 - 常量**全部写死**，不用 `getApplicationName()`（ADR-2）：`folderName = "VGMToybox"`、`applicationName = "settings"`、`filenameSuffix = ".xml"` —— 后两个凑起来正好是 `Options::getDefaultFile()` 会给出的同名文件（`juce_PropertiesFile.cpp:117-119`），所以哪天改用那个 API 路径也不会变；
 - 读：`PropertiesFile::Options{ folderName, osxLibrarySubFolder = "Application Support", commonToAllUsers = false, storageFormat = storeAsXML }` + 显式 File 构造（§2.5）。macOS 上 `osxLibrarySubFolder` **必须**设，否则断言；
-- 写：先 `settingsDirectory().createDirectory()`，失败/保存失败只记 `lastError()`；键名用扁平 `theme.mode`（`light|dark|followSystem`），未识别值一律回退 `light`；
+- 写：先 `settingsDirectory().createDirectory()`，失败/保存失败只记 `lastError()`；键名用扁平 `theme.mode`（`light|dark|followSystem`），未识别值一律回退 `light`；字体偏好用 `appearance.font.mode`（`systemUI|custom`）+ `appearance.font.family`，见 §13 M7；
 - 未知键**保留**：以后加设置项时旧文件不会被清掉（`PropertiesFile` 是键值表，天然满足）；
 - 进程间锁留 `nullptr` → 两个 DAW 同时开着时互相覆盖是**已知限制**（§11 决策 8）；
 - **读取语义（决策 8）**：启动读一次进内存、读完不持有文件句柄，只在改设置的那一刻写一次 —— `PropertiesFile` 的默认行为正好如此（读走 `parseXML`，写完即关）；
@@ -229,6 +229,8 @@ M/S 与表头**保持 DAW 约定**（红/琥珀/绿黄红），只按 One Dark �
 - **即时生效**：改动立刻写入 `SettingsStore` 并广播（主题当场变），底部只有 `Close`；ESC 关闭（`PluginEditor.cpp:199-203` 的同一分支里加一条）；
 - Theme 页：`Light` / `Dark` 单选 + `Follow system` 开关，**开关打开时单选仍可点**（点了就等于关掉开关，与菜单一致 ✓），并显示**当前实际生效**的颜色（"跟随系统（当前：Dark）"，§8）。**菜单与页面是同一份状态的两个视图**：菜单里选 Dark 会关掉开关 ✓ 反之亦然 ✓（都经由 `SettingsStore` 广播回来重画）；
 - General 页（首版就放这些，决策 4）：设置文件完整路径（只读文本）+ `Open folder` 按钮 + `Restore defaults` 按钮 + `lastError()` 非空时的一行警示。
+
+> 实现演进：Theme 页已扩为 **Appearance**（主题 + 字体，见 §13 M7），`settings.page.theme` 相应改为 `settings.page.appearance`；上面"首版两个类别"的描述保留为当时的决策记录。
 
 ## 7. 菜单：`Options` 与 `Theme`
 
@@ -383,4 +385,13 @@ Theme   │ Light               (互斥勾选)
 - `settings.theme.*` 按钮与 `settings.general.reset/openFolder` 的**点击路径**要靠 `sleep` 才能跑到（`click` 只投递消息）→ 归 M6 的脚本（§9.2）；
 - `Follow system` 的系统实时切换（§8）仍归 M5；
 - 未提交：按计划随 M6 收尾一起提交。
+
+### M7 字体设置（2026-10-18 增补）
+
+**需求变化**：用户要求 Appearance 页提供字体设置，点击后打开字体选择器。原 §1 R9/R10 只规划 Theme + General；实现把 Theme 页扩为 **Appearance**（Theme 段 + Font 段），`settings.page.theme` → `settings.page.appearance`，其余页面不动。
+
+- **存储**（`Source/settings/SettingsStore.*`）：`appearance.font.mode`（`systemUI` / `custom`）+ `appearance.font.family`。`getFontMode()` 在 custom 但 family 为空/纯空白时按 systemUI 处理，避免坏文件把窗口锁在没有字体的状态。读写/重置由 `vgm_core_test` 的字体验证覆盖。
+- **解析**（`Source/ui/UiFont.*`）：`systemUiFamily()` 取 `Typeface::findSystemTypeface()->getName()`；`resolvedFamily()` 在 custom 字体未安装时回退到它。**关键点**：JUCE 的默认 `Font` 通过 `LookAndFeel::getDefaultLookAndFeel()` 解析 typeface，而不是组件继承到的 `ToyboxLookAndFeel`。只在 `ToyboxLookAndFeel` 上 `setDefaultSansSerifTypefaceName()` 时，截图确认窗口仍用默认字体；`applyStoredSelection()` 改为写**默认 LNF** 后才真正生效。`Font` 在首次使用时缓存 typeface，所以已存在的标签不能原地换字体，页面明确提示重开窗口；没有用"重建所有控件"的假实时。
+- **选择器**（`Source/ui/FontChooserDialog.*`）：JUCE 8.0.9 没有原生字体对话框，因此做了组件式选择器：搜索框 + `Font::findAllTypefaceNames()` 列表（第一行 System UI，排除 `<...>` 占位名）+ 大/小两行预览（含中文）+ OK/Cancel；双击和 Enter 接受，Esc 取消。custom 字体缺失时，设置页显示 `settings.appearance.font.missing` 并说明回退到 System UI。
+- **测试**：`plugin/Tests/scripts/settings-pages.txt` 断言 `settings.appearance.font.value` 的 `typeface == @systemUI`。harness 新增 `typeface` 断言字段和 `@systemUI` 运行时解析（`plugin/Tests/AppHarnessTest.cpp`），这条断言在只设置 `ToyboxLookAndFeel` 的旧实现下会失败；`# settings font <family>|systemUI` 指令可在编辑器和窗口存在之前写入字体，便于脚本观察。`FontChooserDialog` 自身仍通过手工打开验证（harness 不驱动独立 `DialogWindow`）。
 

@@ -240,7 +240,7 @@ English (built-in)
 
 ## 5. 语言设置页
 
-设置窗口的页面顺序是 `Theme`、`General`、`Language`、`Audio`（`Audio` 只有 Standalone 有）。`Language` 页包含：
+设置窗口的页面顺序是 `Appearance`、`General`、`Language`、`Audio`（`Audio` 只有 Standalone 有）。`Language` 页包含：
 
 | 控件 | 行为 |
 |---|---|
@@ -252,6 +252,8 @@ English (built-in)
 | **Rescan** | 重建外部列表、清掉旧的外部警告、重新应用保存的选择，然后广播刷新 |
 
 页面不提供“删除语言”或“导入文件”：用户直接管理文件夹，路径由按钮打开，避免再造一套文件生命周期。
+
+标题区的说明句按最长的翻译排版：`Language` 页为它预留两行（`SettingsOverlay.cpp` 的 `kTwoLineHeadingHeight`），其他页仍是一行。`drawFittedText` 的最低横向缩放设为 0.85，宁可裁掉尾部也不要把字形压扁；改文案后应截图检查，而不是只看是否编译通过。
 
 ---
 

@@ -1,8 +1,12 @@
 #include "SettingsOverlay.h"
 
+#include "FontChooserDialog.h"
+#include "Theme.h"
 #include "Standalone/StandaloneHooks.h"
+#include "UiFont.h"
 
 #include <algorithm>
+#include <memory>
 
 namespace toybox::ui
 {
@@ -24,13 +28,18 @@ namespace
 	constexpr int kFooterGap = 12;
 	constexpr int kFooterHeight = 32;		// a button face is 28: the bounds are face + 2*inset
 	constexpr int kHeadingHeight = 46;
+	// The Language explanation is a full translated sentence and does not fit on one line at
+	// the page width. Its heading reserves a second line instead of letting JUCE squash the
+	// glyphs horizontally; the page has the room, the General page does not.
+	constexpr int kTwoLineHeadingHeight = 64;
 	constexpr int kThemeChoiceGroup = 1;	// one radio group per page, so any number will do
 
 	/** The heading both pages start with: what the page is, then what it does. */
 	void paintHeading (juce::Graphics& g, const juce::String& title, const juce::String& explanation,
-					   juce::Rectangle<int> bounds)
+					   juce::Rectangle<int> bounds, int headingHeight = kHeadingHeight,
+					   int maximumLines = 1)
 	{
-		auto area = bounds.reduced (kPanelPadding, 0).removeFromTop (kHeadingHeight);
+		auto area = bounds.reduced (kPanelPadding, 0).removeFromTop (headingHeight);
 		auto titleArea = area.removeFromTop (24);
 
 		g.setColour (theme::primaryText());
@@ -39,14 +48,16 @@ namespace
 
 		g.setColour (theme::secondaryText());
 		g.setFont (juce::Font (juce::FontOptions (12.5f)));
-		g.drawFittedText (explanation, area, juce::Justification::centredLeft, 1);
+		// A fitted text with a floor: if a translation ever outgrows even the reserved lines,
+		// it is clipped rather than compressed into unreadable glyphs.
+		g.drawFittedText (explanation, area, juce::Justification::centredLeft, maximumLines, 0.85f);
 	}
 
 	/** Where the controls go: under the heading, both pages starting at the same place. */
-	juce::Rectangle<int> pageContent (juce::Rectangle<int> bounds)
+	juce::Rectangle<int> pageContent (juce::Rectangle<int> bounds, int headingHeight = kHeadingHeight)
 	{
 		auto area = bounds.reduced (kPanelPadding, 0);
-		area.removeFromTop (kHeadingHeight);
+		area.removeFromTop (headingHeight);
 		return area;
 	}
 
@@ -117,7 +128,7 @@ namespace
 	*/
 	enum PageIndex
 	{
-		themePageIndex = 0,
+		appearancePageIndex = 0,
 		generalPageIndex = 1,
 		languagePageIndex = 2,
 		audioPageIndex = 3
@@ -125,14 +136,20 @@ namespace
 }
 
 //==============================================================================
-// Theme
+// Appearance
 
-ThemeSettingsPage::ThemeSettingsPage (void)
+AppearanceSettingsPage::AppearanceSettingsPage (void)
 {
+	themeSectionLabel.setComponentID ("settings.appearance.theme");
+	fontSectionLabel.setComponentID ("settings.appearance.font");
 	lightButton.setComponentID ("settings.theme.light");
 	darkButton.setComponentID ("settings.theme.dark");
 	followButton.setComponentID ("settings.theme.followSystem");
 	currentLabel.setComponentID ("settings.theme.current");
+	fontValue.setComponentID ("settings.appearance.font.value");
+	chooseFontButton.setComponentID ("settings.appearance.font.choose");
+	fontHint.setComponentID ("settings.appearance.font.hint");
+	restartLabel.setComponentID ("settings.appearance.font.restart");
 
 	// Light and Dark are radio buttons: JUCE keeps a group exclusive by itself, and clicking the
 	// one that is already on does nothing - which is what the store does with that click too, so
@@ -156,28 +173,56 @@ ThemeSettingsPage::ThemeSettingsPage (void)
 																						 : Mode::light));
 	};
 
+	themeSectionLabel.setFont (juce::Font (juce::FontOptions (12.5f, juce::Font::bold)));
+	fontSectionLabel.setFont (juce::Font (juce::FontOptions (12.5f, juce::Font::bold)));
+	themeSectionLabel.setJustificationType (juce::Justification::centredLeft);
+	fontSectionLabel.setJustificationType (juce::Justification::centredLeft);
+
 	currentLabel.setFont (juce::Font (juce::FontOptions (12.5f)));
 	currentLabel.setJustificationType (juce::Justification::centredLeft);
 
+	fontValue.setFont (juce::Font (juce::FontOptions (13.0f)));
+	fontValue.setJustificationType (juce::Justification::centredLeft);
+
+	fontHint.setFont (juce::Font (juce::FontOptions (12.5f)));
+	fontHint.setJustificationType (juce::Justification::topLeft);
+	fontHint.setMinimumHorizontalScale (0.8f);
+
+	restartLabel.setFont (juce::Font (juce::FontOptions (12.0f)));
+	restartLabel.setJustificationType (juce::Justification::centredLeft);
+
+	chooseFontButton.onClick = [this] { chooseFont(); };
+
+	addAndMakeVisible (themeSectionLabel);
+	addAndMakeVisible (fontSectionLabel);
 	addAndMakeVisible (lightButton);
 	addAndMakeVisible (darkButton);
 	addAndMakeVisible (followButton);
 	addAndMakeVisible (currentLabel);
+	addAndMakeVisible (fontValue);
+	addAndMakeVisible (chooseFontButton);
+	addAndMakeVisible (fontHint);
+	addAndMakeVisible (restartLabel);
 
 	refreshLanguage();
 	lookAndFeelChanged();
 }
 
-void ThemeSettingsPage::refreshLanguage (void)
+void AppearanceSettingsPage::refreshLanguage (void)
 {
+	themeSectionLabel.setText (i18n::tr ("settings.theme"), juce::dontSendNotification);
+	fontSectionLabel.setText (i18n::tr ("settings.appearance.font"), juce::dontSendNotification);
 	lightButton.setButtonText (i18n::tr ("settings.theme.light"));
 	darkButton.setButtonText (i18n::tr ("settings.theme.dark"));
 	followButton.setButtonText (i18n::tr ("settings.theme.followSystem"));
+	chooseFontButton.setButtonText (i18n::tr ("settings.appearance.font.choose"));
+	fontHint.setText (i18n::tr ("settings.appearance.font.hint"), juce::dontSendNotification);
+	restartLabel.setText (i18n::tr ("settings.appearance.font.restart"), juce::dontSendNotification);
 	refresh();
 	repaint();
 }
 
-void ThemeSettingsPage::select (toybox::settings::SettingsStore::ThemeMode mode)
+void AppearanceSettingsPage::select (toybox::settings::SettingsStore::ThemeMode mode)
 {
 	toybox::settings::SettingsStore::getInstance().setThemeMode (mode);
 
@@ -187,9 +232,41 @@ void ThemeSettingsPage::select (toybox::settings::SettingsStore::ThemeMode mode)
 	refresh();
 }
 
-void ThemeSettingsPage::refresh (void)
+void AppearanceSettingsPage::chooseFont (void)
 {
-	const auto mode = toybox::settings::SettingsStore::getInstance().getThemeMode();
+	auto& store = toybox::settings::SettingsStore::getInstance();
+
+	auto dialog = std::make_unique<FontChooserDialog> (store.getFontMode(), store.getFontFamily());
+
+	juce::Component::SafePointer<AppearanceSettingsPage> safeThis (this);
+
+	dialog->onAccept = [safeThis] (toybox::settings::SettingsStore::FontMode mode,
+								   const juce::String& family)
+	{
+		if (safeThis == nullptr)
+		{
+			return;
+		}
+
+		toybox::settings::SettingsStore::getInstance().setFontSelection (mode, family);
+		safeThis->refresh();
+	};
+
+	juce::DialogWindow::LaunchOptions options;
+	options.content.setOwned (dialog.release());
+	options.dialogTitle = i18n::tr ("settings.appearance.font.dialogTitle");
+	options.dialogBackgroundColour = theme::card();
+	options.componentToCentreAround = this;
+	options.escapeKeyTriggersCloseButton = true;
+	options.useNativeTitleBar = true;
+	options.resizable = false;
+	options.launchAsync();
+}
+
+void AppearanceSettingsPage::refresh (void)
+{
+	auto& store = toybox::settings::SettingsStore::getInstance();
+	const auto mode = store.getThemeMode();
 
 	lightButton.setToggleState (mode == toybox::settings::SettingsStore::ThemeMode::light,
 								juce::dontSendNotification);
@@ -205,9 +282,31 @@ void ThemeSettingsPage::refresh (void)
 	const bool following = mode == toybox::settings::SettingsStore::ThemeMode::followSystem;
 	currentLabel.setText (describeFollowSystem(), juce::dontSendNotification);
 	currentLabel.setVisible (following);
+
+	const auto fontMode = store.getFontMode();
+	const auto family = store.getFontFamily();
+	const auto resolved = fonts::resolvedFamily (fontMode, family);
+	const bool customMissing = fontMode == toybox::settings::SettingsStore::FontMode::custom
+		&& family.isNotEmpty()
+		&& ! fonts::isInstalled (family);
+
+	if (customMissing)
+	{
+		fontValue.setText (i18n::tr ("settings.appearance.font.missing", family),
+						   juce::dontSendNotification);
+	}
+	else if (fontMode == toybox::settings::SettingsStore::FontMode::custom)
+	{
+		fontValue.setText (resolved, juce::dontSendNotification);
+	}
+	else
+	{
+		fontValue.setText (i18n::tr ("settings.appearance.font.systemValue"),
+						   juce::dontSendNotification);
+	}
 }
 
-juce::String ThemeSettingsPage::describeFollowSystem (void) const
+juce::String AppearanceSettingsPage::describeFollowSystem (void) const
 {
 	const auto effective = theme::systemTheme() == theme::Id::dark
 		? i18n::tr ("settings.theme.dark")
@@ -215,34 +314,57 @@ juce::String ThemeSettingsPage::describeFollowSystem (void) const
 	return i18n::tr ("settings.theme.following", effective);
 }
 
-void ThemeSettingsPage::paint (juce::Graphics& g)
+void AppearanceSettingsPage::paint (juce::Graphics& g)
 {
-	paintHeading (g, i18n::tr ("settings.theme"),
-				  i18n::tr ("settings.theme.explanation"), getLocalBounds());
+	paintHeading (g, i18n::tr ("settings.appearance"),
+				  i18n::tr ("settings.appearance.explanation"), getLocalBounds());
 }
 
-void ThemeSettingsPage::resized (void)
+void AppearanceSettingsPage::resized (void)
 {
 	auto area = pageContent (getLocalBounds());
+
+	themeSectionLabel.setBounds (area.removeFromTop (18));
+	area.removeFromTop (4);
 
 	auto choices = area.removeFromTop (kFooterHeight);
 	lightButton.setBounds (choices.removeFromLeft (96));
 	choices.removeFromLeft (theme::rowGap);
 	darkButton.setBounds (choices.removeFromLeft (96));
 
-	area.removeFromTop (theme::cardGap + 4);
+	area.removeFromTop (theme::cardGap + 2);
 	followButton.setBounds (area.removeFromTop (24).removeFromLeft (220));
 
 	area.removeFromTop (4);
 	currentLabel.setBounds (area.removeFromTop (18));
+
+	area.removeFromTop (theme::cardGap + 6);
+
+	fontSectionLabel.setBounds (area.removeFromTop (18));
+	area.removeFromTop (4);
+
+	auto fontRow = area.removeFromTop (kFooterHeight);
+	chooseFontButton.setBounds (fontRow.removeFromRight (104));
+	fontRow.removeFromRight (8);
+	fontValue.setBounds (fontRow);
+
+	area.removeFromTop (6);
+	fontHint.setBounds (area.removeFromTop (34));
+	area.removeFromTop (4);
+	restartLabel.setBounds (area.removeFromTop (18));
 }
 
-void ThemeSettingsPage::lookAndFeelChanged (void)
+void AppearanceSettingsPage::lookAndFeelChanged (void)
 {
 	// The one colour this page sets on a control it owns: the options and the checkbox take the
 	// LookAndFeel's own (card face, accent while on, primary text), which is the point of them
 	// being LNF-coloured at all - see PluginEditor::lookAndFeelChanged.
+	themeSectionLabel.setColour (juce::Label::textColourId, theme::secondaryText());
+	fontSectionLabel.setColour (juce::Label::textColourId, theme::secondaryText());
 	currentLabel.setColour (juce::Label::textColourId, theme::secondaryText());
+	fontValue.setColour (juce::Label::textColourId, theme::primaryText());
+	fontHint.setColour (juce::Label::textColourId, theme::secondaryText());
+	restartLabel.setColour (juce::Label::textColourId, theme::secondaryText());
 }
 
 //==============================================================================
@@ -755,12 +877,13 @@ void LanguageSettingsPage::openFolder (void)
 void LanguageSettingsPage::paint (juce::Graphics& g)
 {
 	paintHeading (g, i18n::tr ("settings.language"),
-				  i18n::tr ("settings.language.explanation"), getLocalBounds());
+				  i18n::tr ("settings.language.explanation"), getLocalBounds(),
+				  kTwoLineHeadingHeight, 2);
 }
 
 void LanguageSettingsPage::resized (void)
 {
-	auto area = pageContent (getLocalBounds());
+	auto area = pageContent (getLocalBounds(), kTwoLineHeadingHeight);
 
 	languageBox.setBounds (area.removeFromTop (28).removeFromLeft (300));
 	area.removeFromTop (theme::cardGap + 2);
@@ -800,7 +923,8 @@ SettingsOverlay::SettingsOverlay (void)
 	tree.setOpenCloseButtonsVisible (false);
 
 	rootItem = std::make_unique<CategoryItem> ("root", i18n::tr ("settings"), -1, nullptr);
-	rootItem->addSubItem (new CategoryItem ("theme", i18n::tr ("settings.theme"), themePageIndex,
+	rootItem->addSubItem (new CategoryItem ("appearance", i18n::tr ("settings.appearance"),
+										   appearancePageIndex,
 										   [this] (int page) { pages.setCurrentView (page); }));
 	rootItem->addSubItem (new CategoryItem ("general", i18n::tr ("settings.general"), generalPageIndex,
 										   [this] (int page) { pages.setCurrentView (page); }));
@@ -823,13 +947,13 @@ SettingsOverlay::SettingsOverlay (void)
 
 	// The pages are the window's own page container, so a settings page is written exactly like
 	// the play or the mixer page.
-	themePage = new ThemeSettingsPage();
+	appearancePage = new AppearanceSettingsPage();
 	generalPage = new GeneralSettingsPage();
 	languagePage = new LanguageSettingsPage();
-	themePage->setComponentID ("settings.page.theme");
+	appearancePage->setComponentID ("settings.page.appearance");
 	generalPage->setComponentID ("settings.page.general");
 	languagePage->setComponentID ("settings.page.language");
-	pages.addView (themePage);
+	pages.addView (appearancePage);
 	pages.addView (generalPage);
 	pages.addView (languagePage);
 
@@ -877,7 +1001,9 @@ void SettingsOverlay::refreshLanguage (void)
 
 		switch (row->getPageIndex())
 		{
-			case themePageIndex:	row->setLabel (i18n::tr ("settings.theme")); break;
+			case appearancePageIndex:
+				row->setLabel (i18n::tr ("settings.appearance"));
+				break;
 			case generalPageIndex:	row->setLabel (i18n::tr ("settings.general")); break;
 			case languagePageIndex:	row->setLabel (i18n::tr ("settings.language")); break;
 			case audioPageIndex:	row->setLabel (i18n::tr ("settings.audio")); break;
@@ -891,7 +1017,7 @@ void SettingsOverlay::refreshLanguage (void)
 
 void SettingsOverlay::refreshFromStore (void)
 {
-	themePage->refresh();
+	appearancePage->refresh();
 	generalPage->refresh();
 	languagePage->refresh();
 

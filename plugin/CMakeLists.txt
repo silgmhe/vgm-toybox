@@ -199,6 +199,7 @@ target_sources(VGMToybox PRIVATE
 	Source/ui/ChannelStrip.cpp
 	Source/ui/ChipPanel.cpp
 	Source/ui/DropHintOverlay.cpp
+	Source/ui/FontChooserDialog.cpp
 	Source/ui/IconButton.cpp
 	Source/ui/Icons.cpp
 	Source/ui/MixerPanel.cpp
@@ -207,6 +208,7 @@ target_sources(VGMToybox PRIVATE
 	Source/ui/SongInfoPanel.cpp
 	Source/ui/Theme.cpp
 	Source/ui/ToyboxLookAndFeel.cpp
+	Source/ui/UiFont.cpp
 	Source/ui/SyncGroup.cpp
 	Source/ui/TransportPanel.cpp
 	Source/ui/VisualiserView.cpp

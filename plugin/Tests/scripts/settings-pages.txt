@@ -11,8 +11,13 @@
 
 # the panel opens on the first page, and the chrome is there
 menu invoke options.settings
-assert settings.close      visible == true
-assert settings.page.theme visible == true
+assert settings.close             visible == true
+assert settings.page.appearance   visible == true
+assert settings.appearance.font.value text contains "System UI"
+# The face, not just the label: a default Font resolves through the default LookAndFeel, so this
+# fails if the choice was applied only to the editor's own ToyboxLookAndFeel.
+assert settings.appearance.font.value typeface == @systemUI
+assert settings.appearance.font.choose enabled == true
 
 # The Audio page was built and is not the page on screen. Existence is the point: the row and the
 # page only exist where something filled in the hooks table before the panel was built.
@@ -35,3 +40,9 @@ assert settings.general.closeToTray         checked == false
 assert settings.general.closeToTrayHint     text contains "tray"
 toggle settings.general.closeToTray
 assert settings.general.closeToTray         checked == true
+
+# Switching through the real tree, not by setting a test-only page index: row 2 is Language in
+# both the plugin and the application (rows are Appearance, General, Language, then Audio).
+select settings.tree 2
+assert settings.page.language     visible == true
+assert settings.page.appearance   visible == false
