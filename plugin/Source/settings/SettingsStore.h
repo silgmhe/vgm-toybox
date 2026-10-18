@@ -50,6 +50,12 @@ public:
 		needed, so it keeps meaning "whichever the system is set to now" - see ui/Theme.h. */
 	enum class ThemeMode { light, dark, followSystem };
 
+	/** Which typeface the window draws with.
+		`systemUI` follows the operating system's UI font (Segoe UI on Windows, SF on macOS, the
+		desktop's UI font on Linux); `custom` names one installed font family. A custom family
+		that has disappeared since it was stored falls back to `systemUI` when it is applied. */
+	enum class FontMode { systemUI, custom };
+
 	/** The one instance. Built on first use, so a build that never opens a settings window
 		(and the console tests) never touches the file at all. */
 	static SettingsStore& getInstance (void);
@@ -64,6 +70,19 @@ public:
 		force by the time the click that asked for it has been handled - and the window scripts,
 		which have no message loop to defer anything to, see it too. */
 	void setThemeMode (ThemeMode mode);
+
+	/** The UI typeface choice. `systemUI` is the default and follows the operating system; a
+		`custom` choice is the family named by getFontFamily(). */
+	FontMode getFontMode (void) const;
+
+	/** The installed font family for a `custom` choice, or an empty string for `systemUI`.
+		The value is stored even if the font later disappears, so reinstalling it brings it back. */
+	juce::String getFontFamily (void) const;
+
+	/** Stores the typeface choice and tells every listener. The font itself is applied when the
+		next editor is built - JUCE fonts already in components cannot be re-resolved in place,
+		which is why the Appearance page asks for a reopen rather than pretending it is live. */
+	void setFontSelection (FontMode mode, const juce::String& family);
 
 	/** The selected language pack: `builtin:zh-Hans`, `external:my-file.lang`, or empty on first
 		run (the language manager then follows the system language without writing a choice). */
@@ -166,6 +185,11 @@ public:
 		"followSystem"; anything else reads back as light). */
 	static juce::String toString (ThemeMode mode);
 	static ThemeMode themeModeFromString (const juce::String& text);
+
+	/** The spelling for the typeface choice ("systemUI", "custom"; anything else reads back as
+		systemUI). */
+	static juce::String toString (FontMode mode);
+	static FontMode fontModeFromString (const juce::String& text);
 
 private:
 	SettingsStore (void);

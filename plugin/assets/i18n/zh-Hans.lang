@@ -63,6 +63,21 @@ language: 简体中文
 "mixer.toggleTooltip" = "开启混音器：每个芯片声道各占一条渲染轨道 - 关闭：不拆分轨道的普通混音（节省 CPU）";
 
 "settings" = "设置";
+"settings.appearance" = "外观";
+"settings.appearance.explanation" = "窗口使用的配色和字体。";
+"settings.appearance.font" = "字体";
+"settings.appearance.font.cancel" = "取消";
+"settings.appearance.font.choose" = "选择...";
+"settings.appearance.font.dialogTitle" = "选择字体";
+"settings.appearance.font.hint" = "选择系统已安装的字体，或保留“系统 UI”以跟随操作系统。";
+"settings.appearance.font.missing" = "字体不可用（{0}），将使用系统 UI。";
+"settings.appearance.font.ok" = "确定";
+"settings.appearance.font.previewLarge" = "字体预览 Aa 0123456789";
+"settings.appearance.font.previewSmall" = "永和九年，岁在癸丑，暮春之初。";
+"settings.appearance.font.restart" = "重新打开窗口后，新字体才会生效。";
+"settings.appearance.font.search" = "搜索字体";
+"settings.appearance.font.systemOption" = "系统 UI（跟随操作系统）";
+"settings.appearance.font.systemValue" = "系统 UI";
 "settings.audio" = "音频";
 "settings.audio.explanation" = "独立版使用哪个设备播放，以及向设备提出什么要求。";
 "settings.audio.hint" = "就是 JUCE 窗口原先提供的同一个对话框：设备、采样率、缓冲区大小和 MIDI 输入。更改立即生效。";

@@ -67,6 +67,21 @@ language: English
 "mixer.toggleTooltip" = "Mixer on: one render track per chip channel - off: the plain mix without per-channel tracks (saves CPU)";
 
 "settings" = "Settings";
+"settings.appearance" = "Appearance";
+"settings.appearance.explanation" = "The palette and the typeface the window draws with.";
+"settings.appearance.font" = "Font";
+"settings.appearance.font.cancel" = "Cancel";
+"settings.appearance.font.choose" = "Choose...";
+"settings.appearance.font.dialogTitle" = "Choose Font";
+"settings.appearance.font.hint" = "Pick an installed system font, or keep System UI to follow the operating system.";
+"settings.appearance.font.missing" = "Font unavailable ({0}); System UI will be used.";
+"settings.appearance.font.ok" = "OK";
+"settings.appearance.font.previewLarge" = "Aa Bb Cc 0123456789";
+"settings.appearance.font.previewSmall" = "The quick brown fox jumps over the lazy dog.";
+"settings.appearance.font.restart" = "Reopen the window to apply the new font.";
+"settings.appearance.font.search" = "Search fonts";
+"settings.appearance.font.systemOption" = "System UI (follows the operating system)";
+"settings.appearance.font.systemValue" = "System UI";
 "settings.audio" = "Audio";
 "settings.audio.explanation" = "Which device the standalone plays through, and what it asks of it.";
 "settings.audio.hint" = "The same dialog JUCE's own window used to offer: device, sample rate, buffer size and MIDI input. A change takes effect at once.";

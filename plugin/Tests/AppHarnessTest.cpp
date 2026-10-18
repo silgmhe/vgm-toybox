@@ -17,9 +17,12 @@
 	    click <componentId>      trigger a button (and report its new state)
 	    toggle <componentId>     the same, for the controls that toggle
 	    set <componentId> <v>    set a slider or a combo box, with the notification the UI sends
+	    select <treeId> <row>    select a tree row, e.g. a settings page in the sidebar
 	    dump [<componentId>]     the component tree, or one component, as JSON
 	    assert <id> <field> <op> <value>
-	                             field: visible enabled checked text
+	                             field: visible enabled checked text typeface
+	                             typeface names what a Label or TextEditor draws with; @systemUI
+	                             is the platform's UI family (the value is resolved at run time)
 	                             op:    == != contains
 	    sleep <ms>               let the message loop run - timers, async callbacks
 	    help                     the command list
@@ -28,6 +31,7 @@
 
 	    # settings lastSong <path>          the song the previous session left in settings.xml
 	    # settings restoreLastSong on|off   the General page's "reopen the last song" switch
+	    # settings font <family>|systemUI   the Appearance page's typeface, before the editor exists
 	    # settings languageDir <path>       copy the *.lang files there into the run's i18n folder
 
 	Why this exists rather than screenshots: the failures that actually happened here (a modal window
@@ -49,6 +53,7 @@
 #include "Standalone/StandaloneHooks.h"
 #include "i18n/LanguageManager.h"
 #include "settings/SettingsStore.h"
+#include "ui/UiFont.h"
 #include "ui/UiSnapshot.h"
 
 namespace
@@ -168,6 +173,33 @@ juce::String fieldOf (juce::Component& component, const juce::String& field)
 	if (field == "text")
 	{
 		return toybox::ui::snapshot::textOf (component);
+	}
+	if (field == "typeface")
+	{
+		// What the platform actually resolved, not the placeholder name a Font carries. A default
+		// Font asks the *default* LookAndFeel for this, which is why the assertion can catch a
+		// change that only reached the editor's own LookAndFeel.
+		juce::Font font;
+
+		if (auto* label = dynamic_cast<juce::Label*> (&component))
+		{
+			font = label->getFont();
+		}
+		else if (auto* textEditor = dynamic_cast<juce::TextEditor*> (&component))
+		{
+			font = textEditor->getFont();
+		}
+		else
+		{
+			return "n/a";
+		}
+
+		if (auto typeface = font.getTypefacePtr())
+		{
+			return typeface->getName();
+		}
+
+		return {};
 	}
 
 	return "?";
@@ -331,6 +363,7 @@ private:
 		else if (command == "press") { commandPress (tokens); }
 		else if (command == "click" || command == "toggle") { commandClick (tokens, command == "toggle"); }
 		else if (command == "set") { commandSet (tokens); }
+		else if (command == "select") { commandSelect (tokens); }
 		else if (command == "dump") { commandDump (tokens); }
 		else if (command == "assert") { commandAssert (tokens); }
 		else if (command == "menu") { commandMenu (tokens); }
@@ -495,6 +528,36 @@ private:
 		}
 
 		report (false, "set: '" + tokens[1] + "' is not a slider or a combo box");
+	}
+
+	/** Selects a row of a TreeView, which is how the settings sidebar changes pages. A click
+		cannot reach a TreeViewItem: only the tree is a Component, so this is the honest way to
+		drive the same callback the user's click drives. */
+	void commandSelect (const juce::StringArray& tokens)
+	{
+		if (tokens.size() < 3)
+		{
+			report (false, "select needs a tree component id and a row");
+			return;
+		}
+
+		auto* tree = dynamic_cast<juce::TreeView*> (findByID (editor, tokens[1]));
+		if (tree == nullptr || tree->getRootItem() == nullptr)
+		{
+			report (false, "select: no tree with the id '" + tokens[1] + "'");
+			return;
+		}
+
+		auto* item = tree->getRootItem()->getSubItem (tokens[2].getIntValue());
+		if (item == nullptr)
+		{
+			report (false, "select: no row " + tokens[2]);
+			return;
+		}
+
+		item->setSelected (true, true, juce::sendNotificationSync);
+		settle (60);
+		report (true, "select " + tokens[1] + " row " + tokens[2]);
 	}
 
 	void commandDump (const juce::StringArray& tokens)
@@ -725,9 +788,13 @@ private:
 		}
 
 		const juce::String actual = fieldOf (*component, tokens[2]);
-		const bool ok = fieldMatches (actual, tokens[3], tokens[4]);
 
-		report (ok, tokens[1] + "." + tokens[2] + " " + tokens[3] + " '" + tokens[4]
+		// The typeface check has to name a family the platform chose, not a fixed one: the point
+		// is that the default Font resolves to the system UI face, and that spelling differs.
+		const auto wanted = tokens[4] == "@systemUI" ? toybox::ui::fonts::systemUiFamily() : tokens[4];
+		const bool ok = fieldMatches (actual, tokens[3], wanted);
+
+		report (ok, tokens[1] + "." + tokens[2] + " " + tokens[3] + " '" + wanted
 				   + "'   (was: " + actual + ")");
 	}
 
@@ -753,8 +820,9 @@ private:
 		std::printf ("    menu | menu invoke <entryId> | tick | shot <path.png> | size <w> <h>\n");
 		std::printf ("    host <seconds> [playing|stopped]   one process block with that host clock\n");
 		std::printf ("    engine <play|pause|stop>          a transport command from outside the buttons\n");
-		std::printf ("    dump [<id>] | assert <id> <field> <op> <value> | sleep <ms>\n");
-		std::printf ("    fields: visible enabled checked text value (components)\n");
+		std::printf ("    select <treeId> <row> | dump [<id>] | assert <id> <field> <op> <value> | sleep <ms>\n");
+		std::printf ("    fields: visible enabled checked text value typeface (components)\n");
+		std::printf ("            typeface is a Label/TextEditor; @systemUI resolves to the platform face\n");
 		std::printf ("            checked enabled label             (menu entries, as menu.<entryId>)\n");
 		std::printf ("    assert engine position <op> <value>   the transport, in seconds\n");
 		std::printf ("    ops: == != contains ~= (~= is numeric, within 0.05 = one block of slack)\n");
@@ -863,9 +931,11 @@ struct TemporarySettingsDirectory
 /** The startup state a script can ask for before the editor exists.
 
 	`# settings lastSong <path>` writes the remembered song into the run's settings file - what a
-	previous session would have left there - and `# settings restoreLastSong on|off` sets the
-	switch. These are directives rather than commands because the window decides what to open in
-	its constructor and its first timer tick, and the first command runs after both.
+	previous session would have left there - `# settings restoreLastSong on|off` sets the switch,
+	and `# settings font <family>|systemUI` sets the typeface. These are directives rather than
+	commands because the window decides what to open in its constructor and its first timer tick,
+	and the first command runs after both; the font is likewise applied before the first label
+	exists.
 
 	False means the script asked for a song that is not on this machine (VGM_TEST_SONG unset);
 	main() then reports the run as skipped, the same way commandLoad() does.
@@ -896,6 +966,21 @@ bool applyScriptSettings (const juce::File& script)
 		else if (directive.startsWith ("restoreLastSong "))
 		{
 			store.setRestoreLastSong (directive.endsWithIgnoreCase (" on"));
+		}
+		else if (directive.startsWith ("font "))
+		{
+			// The typeface is applied when the editor's LookAndFeel is built, so a script that
+			// wants to see it has to write the choice before the window exists.
+			const auto family = directive.fromFirstOccurrenceOf ("font ", false, false).trim();
+
+			if (family.equalsIgnoreCase ("systemUI") || family.equalsIgnoreCase ("system"))
+			{
+				store.setFontSelection (toybox::settings::SettingsStore::FontMode::systemUI, {});
+			}
+			else
+			{
+				store.setFontSelection (toybox::settings::SettingsStore::FontMode::custom, family);
+			}
 		}
 		else if (directive.startsWith ("languageDir "))
 		{

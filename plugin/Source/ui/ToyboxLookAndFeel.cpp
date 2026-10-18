@@ -1,16 +1,19 @@
 #include "ToyboxLookAndFeel.h"
 
+#include <cmath>
+
 #include "ButtonPaint.h"
 #include "SoftShadow.h"
 #include "Theme.h"
+#include "UiFont.h"
 
 namespace toybox::ui
 {
 namespace
 {
-	/** The mixer's closed output selector is 48 px wide, so "Out 11/12" cannot be drawn at full
-		size there. Removing the prefix keeps every bus readable; the popup and the tooltip keep
-		the full name. */
+	/** The mixer's closed output selector is only wide enough for the value itself, so
+		"Out 11/12" cannot be drawn at full size there. Removing the prefix keeps every bus
+		readable; the popup and the tooltip keep the full name. */
 	juce::String compactComboText (const juce::String& text)
 	{
 		return text.startsWith ("Out ") ? text.substring (4) : text;
@@ -22,10 +25,35 @@ namespace
 		return box != nullptr
 			&& static_cast<bool> (box->getProperties()[ToyboxLookAndFeel::compactComboTextProperty]);
 	}
+
+	constexpr int kTooltipShadowMargin = 16;
+	constexpr int kTooltipShadowBlur = 10;
+	constexpr int kTooltipShadowOffsetY = 3;
+	constexpr float kTooltipCornerRadius = 7.0f;
+
+	/** The same text layout JUCE's default tooltip uses (13 px bold, centred, wrapped by char and
+		capped at 400 px), so getTooltipBounds() and drawTooltip() agree on the card size. */
+	juce::TextLayout makeTooltipLayout (juce::TypefaceMetricsKind metrics, const juce::String& text,
+										juce::Colour colour)
+	{
+		juce::AttributedString attributed;
+		attributed.setWordWrap (juce::AttributedString::WordWrap::byChar);
+		attributed.setJustification (juce::Justification::centred);
+		attributed.append (text, juce::FontOptions (13.0f, juce::Font::bold).withMetricsKind (metrics),
+						   colour);
+
+		juce::TextLayout layout;
+		layout.createLayoutWithBalancedLineLengths (attributed, 400.0f);
+		return layout;
+	}
 }
 
 ToyboxLookAndFeel::ToyboxLookAndFeel (void)
 {
+	// This is the first thing an editor builds, and every component below it takes its default
+	// Font from JUCE's default sans-serif typeface. Applying the stored choice here - rather
+	// than after the editor is assembled - is what makes a custom font reach every label.
+	fonts::applyStoredSelection();
 	refresh();
 }
 
@@ -351,9 +379,19 @@ juce::Font ToyboxLookAndFeel::getComboBoxFont (juce::ComboBox&)
 
 void ToyboxLookAndFeel::positionComboBoxText (juce::ComboBox& box, juce::Label& label)
 {
-	label.setBounds (10, 1, box.getWidth() - 28, box.getHeight() - 2);
+	const bool compact = static_cast<bool> (box.getProperties()[compactComboTextProperty]);
+
+	// A normal combo is a list field, so its text starts at the left edge. The mixer's output
+	// selector shows a single value instead: centre it in the space between the left edge and
+	// the chevron (which starts at width - 18), not in the whole button, so the value and the
+	// arrow read as one control. Its 5 px internal side border keeps the text off both edges.
+	const int labelX = compact ? 0 : 10;
+	const int labelWidth = box.getWidth() - (compact ? 18 : 28);
+	label.setBounds (labelX, 1, labelWidth, box.getHeight() - 2);
+	label.setJustificationType (compact ? juce::Justification::centred
+										: juce::Justification::centredLeft);
+
 	label.setFont (getComboBoxFont (box));
-	label.setJustificationType (juce::Justification::centredLeft);
 
 	// JUCE's default lets drawFittedText squeeze to 70 % before ellipsizing, which visibly
 	// deforms glyphs in the narrow mixer strips. At 100 % a long item gets an ellipsis instead;
@@ -385,6 +423,52 @@ void ToyboxLookAndFeel::drawLabel (juce::Graphics& g, juce::Label& label)
 
 	g.setColour (label.findColour (juce::Label::outlineColourId).withMultipliedAlpha (alpha));
 	g.drawRect (label.getLocalBounds());
+}
+
+juce::Rectangle<int> ToyboxLookAndFeel::getTooltipBounds (const juce::String& tipText,
+														  juce::Point<int> screenPos,
+														  juce::Rectangle<int> parentArea)
+{
+	const auto layout = makeTooltipLayout (getDefaultMetricsKind(), tipText, juce::Colours::black);
+	const int cardWidth = (int) std::ceil (layout.getWidth()) + 14;
+	const int cardHeight = (int) std::ceil (layout.getHeight()) + 6;
+
+	// Keep JUCE's placement (right/below, or left/above near an edge) for the visible card, then
+	// grow the window outwards so the shadow has transparent pixels to live in.
+	const int cardX = screenPos.x > parentArea.getCentreX() ? screenPos.x - (cardWidth + 12)
+															: screenPos.x + 24;
+	const int cardY = screenPos.y > parentArea.getCentreY() ? screenPos.y - (cardHeight + 6)
+															: screenPos.y + 6;
+
+	return juce::Rectangle<int> (cardX - kTooltipShadowMargin,
+								 cardY - kTooltipShadowMargin,
+								 cardWidth + 2 * kTooltipShadowMargin,
+								 cardHeight + 2 * kTooltipShadowMargin)
+		.constrainedWithin (parentArea);
+}
+
+void ToyboxLookAndFeel::drawTooltip (juce::Graphics& g, const juce::String& text, int width,
+									 int height)
+{
+	const auto card = juce::Rectangle<float> ((float) width, (float) height)
+						  .reduced ((float) kTooltipShadowMargin);
+
+	// A tight contact shadow plus a wider, softer one: enough to lift the card off the editor
+	// without turning the tooltip into a heavy popup.
+	drawSoftShadow (g, card, kTooltipCornerRadius, theme::cardAmbientShadow(), 3, { 0, 1 });
+	drawSoftShadow (g, card, kTooltipCornerRadius,
+					theme::controlShadow().withMultipliedAlpha (0.75f),
+					kTooltipShadowBlur, { 0, kTooltipShadowOffsetY });
+
+	g.setColour (findColour (juce::TooltipWindow::backgroundColourId));
+	g.fillRoundedRectangle (card, kTooltipCornerRadius);
+
+	g.setColour (findColour (juce::TooltipWindow::outlineColourId));
+	g.drawRoundedRectangle (card.reduced (0.5f), kTooltipCornerRadius, 1.0f);
+
+	makeTooltipLayout (getDefaultMetricsKind(), text,
+					   findColour (juce::TooltipWindow::textColourId))
+		.draw (g, card);
 }
 
 } // namespace toybox::ui
