@@ -129,6 +129,20 @@ path, so moving or replacing the executable breaks the double click (keep one co
 file when upgrading); and a launch that cannot use the song it was handed writes one line to
 `%TEMP%\vgmtoybox-startup.log` - a launch that works writes nothing.
 
+By default the song goes into the window that is already open: the running window replaces what it
+is playing and comes to the front, and the second process exits without drawing anything. *Settings*
+→ *General* → **Reuse the running window** turns that off, and then every double-click starts a
+window of its own - which is what you want when two songs are meant to be compared.
+
+- **macOS** never starts a second copy of a running application: the Finder hands the document to
+  the one that is open, so there is nothing to switch and the page states the behaviour instead. The
+  `.app` declares the five formats, so *Open With* offers it (unsigned, so the first launch needs
+  *Open* from the context menu).
+- **Linux** is not wired up - JUCE's cross-process hand-over has no implementation there - so the
+  setting is not shown and every launch is its own process.
+- A hand-over that could not be used leaves one line in `%TEMP%\vgmtoybox-second-instance.log`, in
+  the same spirit as the startup log above.
+
 ### In a DAW
 
 Copy the bundle into the plugin folder and rescan:

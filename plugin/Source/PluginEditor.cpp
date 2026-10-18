@@ -497,6 +497,15 @@ void ToyboxAudioProcessorEditor::openStartupSong (void)
 
 void ToyboxAudioProcessorEditor::timerCallback (void)
 {
+	// A song handed over by a second launch of the application (or, on macOS, by the Finder opening
+	// a document in the running window). It goes through loadFile() like a drop does, so the two
+	// paths cannot drift apart; the processor held it because the message can arrive before this
+	// window exists (a document event can come in during launch).
+	if (const auto handedOver = processor.takeSongFromAnotherInstance(); handedOver.existsAsFile())
+	{
+		loadFile (handedOver);
+	}
+
 	// Still opening the song the application was started with? openStartupSong() only starts the
 	// worker (review M-1); the result arrives as a callback, so there is nothing to retry here.
 	if (! startupHandled)

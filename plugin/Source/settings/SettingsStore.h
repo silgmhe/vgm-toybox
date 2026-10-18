@@ -60,6 +60,21 @@ public:
 		which have no message loop to defer anything to, see it too. */
 	void setThemeMode (ThemeMode mode);
 
+	/** Whether a song opened from the file manager goes into the window that is already running.
+
+		Read once, before the message loop: the standalone asks it to decide whether a second copy
+		of the application may start at all (Source/Standalone/StandaloneApp.cpp), which happens
+		before any window or settings page exists. Default true - "double-click a song and it
+		plays" is what most people mean.
+
+		Windows and macOS are the platforms where a song can be handed over; Linux has no such
+		path (JUCE's cross-process broadcast is a no-op there), so the value is ignored and the
+		setting is not shown. */
+	bool getReuseWindow (void) const;
+
+	/** Stores the switch, writes it, and tells every listener. */
+	void setReuseWindow (bool shouldReuse);
+
 	/** Empty when all is well, otherwise one line for the General page: what could not be done
 		and to which path. Never a reason to stop. */
 	juce::String lastError (void) const;

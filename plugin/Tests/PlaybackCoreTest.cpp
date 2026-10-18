@@ -796,6 +796,32 @@ int main (int /*argc*/, char* /*argv*/[])
 			   == toybox::settings::SettingsStore::ThemeMode::light,
 		   "and an unknown value reads back as the default");
 
+	// The standalone's "reuse the running window" switch: default on, and on disk the moment it
+	// changes - the next launch reads it before there is a window or a settings page to ask.
+	check (settings.getReuseWindow(), "reusing the running window is the default");
+	settings.setReuseWindow (false);
+	check (! settings.getReuseWindow(), "turning it off is remembered");
+	check (toybox::settings::SettingsStore::settingsFile().loadFileAsString().contains ("reuseWindow"),
+		   "and it reaches the file, not just memory");
+	settings.setReuseWindow (true);
+	check (settings.getReuseWindow(), "and back on again");
+
+	// A file written by hand - or by an older build - is read as it is, not as what the process
+	// happens to hold: "0" is off. The shape matters: JUCE's PropertiesFile reads <VALUE> children,
+	// not attributes on the root, and a file it cannot understand is not an error - it simply
+	// reads as the defaults, which is exactly how a hand-edited switch would look broken.
+	check (toybox::settings::SettingsStore::settingsFile().replaceWithText (
+			   "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n"
+			   "<PROPERTIES>\n"
+			   "  <VALUE name=\"standalone.reuseWindow\" val=\"0\"/>\n"
+			   "  <VALUE name=\"theme.mode\" val=\"dark\"/>\n"
+			   "</PROPERTIES>\n"),
+		   "a hand-written file can be put there");
+	check (settings.reload(), "and it loads");
+	check (! settings.getReuseWindow(), "the file that says 0 turns the switch off");
+	check (settings.getThemeMode() == toybox::settings::SettingsStore::ThemeMode::dark,
+		   "and the theme beside it is read too");
+
 	// A file someone broke by hand: it must be reported rather than thrown, and the store must
 	// come through it still usable. Reading once is the contract, so reading again is the only
 	// way to reach this from a running process - which is what reload() is there for.
@@ -1052,6 +1078,53 @@ int main (int /*argc*/, char* /*argv*/[])
 		head.position = broken;
 		clock = readHostClock (&head, 48000.0);
 		check (! clock.usable && clock.seconds == 0.0, "a non-finite time is refused");
+	}
+
+	// ------------------------------------------------- [12] a second instance's command line
+	// "Double-click a song while the window is open": the running instance is handed the second
+	// process's command line as one string, and the thing that must not break is a song in a
+	// folder with a space in its name - the defect the startup rule was extracted for.
+	std::printf ("\n[12] the command line of a second instance\n");
+	{
+		using namespace toybox::playback;
+
+		// one plain argument
+		auto arguments = parseCommandLine ("C:\\music\\song.vgm");
+		check (arguments.size() == 1 && arguments[0] == "C:\\music\\song.vgm",
+			   "a bare path is one argument");
+
+		// the same path quoted, the way Explorer hands it over
+		arguments = parseCommandLine ("\"C:\\my music\\song.vgz\"");
+		check (arguments.size() == 1, "a quoted path is still one argument");
+		check (arguments[0] == "C:\\my music\\song.vgz",
+			   "and the quotes are delimiters, not part of the path");
+
+		// options in front of it are separate arguments, and the rule ignores them later
+		arguments = parseCommandLine ("--wait \"C:\\a b\\x.vgm\"");
+		check (arguments.size() == 2 && arguments[1] == "C:\\a b\\x.vgm",
+			   "whitespace inside quotes does not split");
+
+		// macOS: JUCE joins several quoted paths with spaces
+		arguments = parseCommandLine ("\"a b.vgm\" \"c d.vgz\"");
+		check (arguments.size() == 2 && arguments[0] == "a b.vgm" && arguments[1] == "c d.vgz",
+			   "two documents opened at once stay two arguments");
+
+		check (parseCommandLine ({}).isEmpty(), "an empty line has no arguments");
+
+		// and end to end: a real file whose name has a space is found, with or without an option
+		auto file = juce::File::getSpecialLocation (juce::File::tempDirectory)
+						.getChildFile ("second instance.vgm");
+		file.replaceWithText ("not a song, but it exists");
+		const auto accepts = [] (const juce::File&) { return true; };
+
+		check (chooseSongFromInstance ("\"" + file.getFullPathName() + "\"", accepts) == file,
+			   "the quoted song is the one that gets loaded");
+		check (chooseSongFromInstance ("--song \"" + file.getFullPathName() + "\"", accepts) == file,
+			   "an option in front of it changes nothing");
+		check (! chooseSongFromInstance ("\"C:\\nope\\missing.vgm\"", accepts).existsAsFile(),
+			   "a path that is not there is not a song");
+
+		file.deleteFile();
 	}
 
 	std::printf ("Result    : %s\n", (failures == 0) ? "all checks passed" : "FAILURES");

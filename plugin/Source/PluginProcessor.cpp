@@ -52,6 +52,25 @@ juce::File ToyboxAudioProcessor::getStartupFile (void) const
 	return {};
 }
 
+void ToyboxAudioProcessor::openSongFromAnotherInstance (const juce::File& file)
+{
+	// The application class has already asked the registry whether this file can be played (the
+	// same predicate the startup line uses), so this only has to keep it until the window looks.
+	if (wrapperType != wrapperType_Standalone || ! file.existsAsFile())
+	{
+		return;
+	}
+
+	instanceSong = file;
+}
+
+juce::File ToyboxAudioProcessor::takeSongFromAnotherInstance (void)
+{
+	const auto file = instanceSong;
+	instanceSong = {};
+	return file;
+}
+
 void ToyboxAudioProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
 {
 	engine.prepare (sampleRate, samplesPerBlock);

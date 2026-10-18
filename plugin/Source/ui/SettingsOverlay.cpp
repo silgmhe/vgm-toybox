@@ -207,6 +207,45 @@ void ThemeSettingsPage::lookAndFeelChanged (void)
 
 GeneralSettingsPage::GeneralSettingsPage (void)
 {
+	// The standalone's "double-click a song" behaviour (Source/Standalone/StandaloneApp.cpp). On
+	// Windows it is a real choice, so it is a switch; on macOS the Finder hands the document to the
+	// running application whatever this says, so the row states the fact instead of pretending to
+	// offer a second option; on Linux there is no hand-over to configure at all.
+   #if JUCE_WINDOWS
+	reuseWindowButton.setComponentID ("settings.general.reuseWindow");
+	reuseWindowButton.setTooltip ("A song opened from the file manager loads into the window that is "
+								  "already running");
+	reuseWindowButton.onClick = [this]
+	{
+		toybox::settings::SettingsStore::getInstance().setReuseWindow (reuseWindowButton.getToggleState());
+		refresh();
+	};
+	addAndMakeVisible (reuseWindowButton);
+   #elif JUCE_MAC
+	reuseWindowNote.setComponentID ("settings.general.reuseWindow");
+	reuseWindowNote.setText ("Reuse the running window: always", juce::dontSendNotification);
+	reuseWindowNote.setFont (juce::Font (juce::FontOptions (13.0f)));
+	addAndMakeVisible (reuseWindowNote);
+   #endif
+
+   #if JUCE_WINDOWS || JUCE_MAC
+	reuseWindowHint.setComponentID ("settings.general.reuseWindowHint");
+	reuseWindowHint.setFont (juce::Font (juce::FontOptions (12.0f)));
+	reuseWindowHint.setJustificationType (juce::Justification::topLeft);
+	reuseWindowHint.setText (
+	   #if JUCE_WINDOWS
+		"A song opened from Explorer goes into the window that is already open. Turn this off to "
+		"give every song a window of its own (two songs side by side, for instance).",
+	   #else
+		"macOS opens a song in the running window instead of starting a second copy - that is the "
+		"system's rule, not a setting. Use File > Open here for another song once this one is "
+		"playing.",
+	   #endif
+		juce::dontSendNotification);
+	reuseWindowHint.setMinimumHorizontalScale (0.75f);
+	addAndMakeVisible (reuseWindowHint);
+   #endif
+
 	fileCaption.setComponentID ("settings.general.pathCaption");
 	fileCaption.setText ("Settings file", juce::dontSendNotification);
 	fileCaption.setFont (juce::Font (juce::FontOptions (12.5f)));
@@ -255,6 +294,12 @@ void GeneralSettingsPage::refresh (void)
 {
 	auto& store = toybox::settings::SettingsStore::getInstance();
 
+   #if JUCE_WINDOWS
+	// Stored, not read back from anything else: a second launch reads the file before any window
+	// exists, so the file is the only authority (SettingsStore.h says why).
+	reuseWindowButton.setToggleState (store.getReuseWindow(), juce::dontSendNotification);
+   #endif
+
 	pathLabel.setText (toybox::settings::SettingsStore::settingsFile().getFullPathName(),
 					   juce::dontSendNotification);
 
@@ -275,6 +320,16 @@ void GeneralSettingsPage::resized (void)
 {
 	auto area = pageContent (getLocalBounds());
 
+   #if JUCE_WINDOWS
+	reuseWindowButton.setBounds (area.removeFromTop (24));
+	reuseWindowHint.setBounds (area.removeFromTop (34));
+	area.removeFromTop (theme::cardGap + 2);
+   #elif JUCE_MAC
+	reuseWindowNote.setBounds (area.removeFromTop (20));
+	reuseWindowHint.setBounds (area.removeFromTop (34));
+	area.removeFromTop (theme::cardGap + 2);
+   #endif
+
 	fileCaption.setBounds (area.removeFromTop (16));
 	pathLabel.setBounds (area.removeFromTop (20));
 
@@ -291,8 +346,11 @@ void GeneralSettingsPage::resized (void)
 void GeneralSettingsPage::lookAndFeelChanged (void)
 {
 	// The caption is an explanation and the error line is a warning; the path itself is read, so
-	// it takes the LookAndFeel's primary text colour and needs nothing said about it here.
+	// it takes the LookAndFeel's primary text colour and needs nothing said about it here. The
+	// reuse note is a read value like the path; its hint is the explanation.
 	fileCaption.setColour (juce::Label::textColourId, theme::secondaryText());
+	reuseWindowHint.setColour (juce::Label::textColourId, theme::secondaryText());
+	reuseWindowNote.setColour (juce::Label::textColourId, theme::primaryText());
 	errorLabel.setColour (juce::Label::textColourId, theme::error());
 }
 

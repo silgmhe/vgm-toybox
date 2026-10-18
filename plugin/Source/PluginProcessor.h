@@ -64,6 +64,18 @@ public:
 	juce::String getStateMessage (void) const;
 	void clearStateMessage (void);
 
+	/** Standalone only: another copy of the application was started with a song and this window is
+		the one that should open it (Source/Standalone/StandaloneApp.cpp), or macOS handed this
+		running application a document.
+
+		Message thread, and stored rather than acted on: the editor may not exist yet when the
+		message arrives (a document event can come in during launch), so the window picks it up on
+		its next timer tick - the same shape as getStartupFile(). */
+	void openSongFromAnotherInstance (const juce::File& file);
+
+	/** Reads and clears that file; empty when there was none. Message thread. */
+	juce::File takeSongFromAnotherInstance (void);
+
 	/** Standalone only: the song the application was launched with - Explorer's "Open with", a
 		command line, a desktop shortcut - so that double-clicking a file starts playing it.
 
@@ -99,6 +111,10 @@ private:
 	juce::String restoreState (const void* data, int sizeInBytes);
 
 	toybox::PlaybackEngine engine;
+
+	/** The song a second launch handed over; see openSongFromAnotherInstance(). Message thread
+		only, like the two calls that touch it - the audio thread never reads it. */
+	juce::File instanceSong;
 
 	juce::CriticalSection stateMessageLock;
 	juce::String stateMessage;

@@ -79,6 +79,14 @@ public:
 	void lookAndFeelChanged (void) override;
 
 private:
+	// "Reuse the running window": a switch on Windows, a statement on macOS (the system opens a
+	// document in the running application, so there is nothing to switch), and neither on Linux
+	// (no hand-over exists there - see Source/Standalone/StandaloneApp.cpp). All three are
+	// declared; only the one this platform can offer is added to the page.
+	juce::ToggleButton reuseWindowButton { "Reuse the running window" };
+	juce::Label reuseWindowNote;
+	juce::Label reuseWindowHint;
+
 	juce::Label fileCaption;	// "Settings file"
 	juce::Label pathLabel;		// the path itself, read-only
 	juce::TextButton openFolderButton { "Open folder" };

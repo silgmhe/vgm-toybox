@@ -40,4 +40,60 @@ inline juce::File chooseStartupSong (const juce::StringArray& arguments,
 	return {};
 }
 
+/**
+	Splits a command line into arguments, honouring double quotes.
+
+	`JUCEApplication::anotherInstanceStarted()` hands over the *command line string* rather than
+	the array above: on Windows it is the raw tail of the second process's command line (a path
+	with spaces keeps the quotes Explorer put around it), on macOS JUCE joins one or more quoted
+	paths with spaces. Splitting on whitespace alone would break exactly the songs this file
+	exists for - the ones with a space in their name - so the rule lives here, where it can be
+	tested, instead of in the application class.
+
+	A quote is a delimiter, never part of a value. An unterminated quote simply runs to the end,
+	which is what every platform's own parser does with a malformed line.
+*/
+inline juce::StringArray parseCommandLine (const juce::String& commandLine)
+{
+	juce::StringArray arguments;
+	juce::String current;
+	bool inQuotes = false;
+
+	for (const auto character : commandLine)
+	{
+		if (character == '"')
+		{
+			inQuotes = ! inQuotes;
+			continue;
+		}
+
+		if (! inQuotes && juce::CharacterFunctions::isWhitespace (character))
+		{
+			if (current.isNotEmpty())
+			{
+				arguments.add (current);
+				current.clear();
+			}
+
+			continue;
+		}
+
+		current += character;
+	}
+
+	if (current.isNotEmpty())
+	{
+		arguments.add (current);
+	}
+
+	return arguments;
+}
+
+/** The song a second instance asked for: the startup rule, applied to a command line string. */
+inline juce::File chooseSongFromInstance (const juce::String& commandLine,
+										  const std::function<bool (const juce::File&)>& canOpen)
+{
+	return chooseStartupSong (parseCommandLine (commandLine), canOpen);
+}
+
 } // namespace toybox::playback

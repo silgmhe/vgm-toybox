@@ -166,6 +166,10 @@ juce_add_plugin(VGMToybox
 	EDITOR_WANTS_KEYBOARD_FOCUS TRUE
 	COPY_PLUGIN_AFTER_BUILD FALSE
 	VST3_CATEGORIES "Instrument"
+	# macOS: lets the Finder offer this .app under "Open With" (Source/Standalone/Info.plist says
+	# why that matters here). It is merged into every bundle format, since the argument is
+	# per-plugin; only the standalone is launched by the Finder, so the others never see it used.
+	PLIST_TO_MERGE "${CMAKE_CURRENT_SOURCE_DIR}/Source/Standalone/Info.plist"
 )
 
 target_sources(VGMToybox PRIVATE
@@ -200,6 +204,14 @@ target_sources(VGMToybox PRIVATE
 )
 
 target_include_directories(VGMToybox PRIVATE Source)
+
+# The standalone is the only wrapper that can meet another copy of itself, so it is the only one
+# with an application class of its own: JUCE's default one always allows a second instance and
+# ignores the command line it was started with (Source/Standalone/StandaloneApp.cpp says why).
+# Defining the switch removes JUCE's class and asks that file for juce_CreateApplication() instead.
+target_sources(VGMToybox_Standalone PRIVATE Source/Standalone/StandaloneApp.cpp)
+target_compile_definitions(VGMToybox_Standalone PRIVATE JUCE_USE_CUSTOM_PLUGIN_STANDALONE_APP=1)
+target_include_directories(VGMToybox_Standalone PRIVATE Source)
 
 # The JUCE configuration *every* target in this project compiles with.
 #

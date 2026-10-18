@@ -20,6 +20,7 @@ namespace
 	constexpr const char* kDirectoryOverrideVar = "VGMTOYBOX_SETTINGS_DIR";
 
 	constexpr const char* kThemeModeKey = "theme.mode";
+	constexpr const char* kReuseWindowKey = "standalone.reuseWindow";
 
 	juce::String writeErrorFor (const juce::File& file)
 	{
@@ -118,6 +119,29 @@ void SettingsStore::setThemeMode (ThemeMode mode)
 	broadcastChange();
 }
 
+bool SettingsStore::getReuseWindow (void) const
+{
+	// An absent value - a file from 0.2.x, or a fresh install - means on: the window that is
+	// already running is the one a double-clicked song should go to.
+	return file->getBoolValue (kReuseWindowKey, true);
+}
+
+void SettingsStore::setReuseWindow (bool shouldReuse)
+{
+	if (shouldReuse == getReuseWindow())
+	{
+		return;
+	}
+
+	file->setValue (kReuseWindowKey, shouldReuse);
+
+	// Written with the change, like the theme: the standalone reads this before it has a window,
+	// so a value that only lived in memory until exit would be one launch late.
+	lastErrorMessage = file->saveIfNeeded() ? juce::String() : writeErrorFor (settingsFile());
+
+	broadcastChange();
+}
+
 void SettingsStore::broadcastChange (void)
 {
 	// Not sendChangeMessage(): the listeners have to have run by the time the caller returns, so
@@ -148,6 +172,7 @@ bool SettingsStore::resetToDefaults (void)
 	// Store the defaults rather than deleting the file: it would only be recreated by the next
 	// change, and an empty file reads the same way to anyone looking at it.
 	file->setValue (kThemeModeKey, toString (ThemeMode::light));
+	file->setValue (kReuseWindowKey, true);
 
 	const bool saved = file->save();
 	lastErrorMessage = saved ? juce::String() : writeErrorFor (settingsFile());

@@ -1,0 +1,129 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+
+	Merged into the generated Info.plist (juce_add_plugin(... PLIST_TO_MERGE ...)).
+
+	Only the standalone needs this: on macOS a double-clicked song reaches the running application
+	as an "open document" Apple event, and LaunchServices only sends that to the applications it
+	knows can open the file. Without the declarations below the .app never appears under
+	"Open With" - which is how Windows gets away with a README line and macOS does not.
+
+	The five formats get their own exported type declarations rather than borrowing a system UTI:
+	none of them has one, and inventing an identifier here is what "this application opens it"
+	means to the Finder. LSHandlerRank Alternate keeps the application from claiming the
+	association for every user - it is offered, not taken.
+
+-->
+<plist version="1.0">
+<dict>
+	<key>CFBundleDocumentTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleTypeName</key>
+			<string>Chiptune song</string>
+			<key>CFBundleTypeRole</key>
+			<string>Viewer</string>
+			<key>LSHandlerRank</key>
+			<string>Alternate</string>
+			<key>LSItemContentTypes</key>
+			<array>
+				<string>com.vgmtoybox.vgm</string>
+				<string>com.vgmtoybox.vgz</string>
+				<string>com.vgmtoybox.s98</string>
+				<string>com.vgmtoybox.dro</string>
+				<string>com.vgmtoybox.gym</string>
+			</array>
+		</dict>
+	</array>
+	<key>UTExportedTypeDeclarations</key>
+	<array>
+		<dict>
+			<key>UTTypeIdentifier</key>
+			<string>com.vgmtoybox.vgm</string>
+			<key>UTTypeDescription</key>
+			<string>Video Game Music log</string>
+			<key>UTTypeConformsTo</key>
+			<array>
+				<string>public.data</string>
+			</array>
+			<key>UTTypeTagSpecification</key>
+			<dict>
+				<key>public.filename-extension</key>
+				<array>
+					<string>vgm</string>
+				</array>
+			</dict>
+		</dict>
+		<dict>
+			<key>UTTypeIdentifier</key>
+			<string>com.vgmtoybox.vgz</string>
+			<key>UTTypeDescription</key>
+			<string>Video Game Music log (compressed)</string>
+			<key>UTTypeConformsTo</key>
+			<array>
+				<string>public.data</string>
+				<string>public.archive</string>
+			</array>
+			<key>UTTypeTagSpecification</key>
+			<dict>
+				<key>public.filename-extension</key>
+				<array>
+					<string>vgz</string>
+				</array>
+			</dict>
+		</dict>
+		<dict>
+			<key>UTTypeIdentifier</key>
+			<string>com.vgmtoybox.s98</string>
+			<key>UTTypeDescription</key>
+			<string>S98 chiptune log</string>
+			<key>UTTypeConformsTo</key>
+			<array>
+				<string>public.data</string>
+			</array>
+			<key>UTTypeTagSpecification</key>
+			<dict>
+				<key>public.filename-extension</key>
+				<array>
+					<string>s98</string>
+				</array>
+			</dict>
+		</dict>
+		<dict>
+			<key>UTTypeIdentifier</key>
+			<string>com.vgmtoybox.dro</string>
+			<key>UTTypeDescription</key>
+			<string>DOSBox raw OPL capture</string>
+			<key>UTTypeConformsTo</key>
+			<array>
+				<string>public.data</string>
+			</array>
+			<key>UTTypeTagSpecification</key>
+			<dict>
+				<key>public.filename-extension</key>
+				<array>
+					<string>dro</string>
+				</array>
+			</dict>
+		</dict>
+		<dict>
+			<key>UTTypeIdentifier</key>
+			<string>com.vgmtoybox.gym</string>
+			<key>UTTypeDescription</key>
+			<string>Genesis YM2612 log</string>
+			<key>UTTypeConformsTo</key>
+			<array>
+				<string>public.data</string>
+			</array>
+			<key>UTTypeTagSpecification</key>
+			<dict>
+				<key>public.filename-extension</key>
+				<array>
+					<string>gym</string>
+				</array>
+			</dict>
+		</dict>
+	</array>
+</dict>
+</plist>
