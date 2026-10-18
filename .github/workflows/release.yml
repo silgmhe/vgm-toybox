@@ -275,39 +275,37 @@ jobs:
         VST3, Audio Unit (macOS only) and standalone builds for Windows, macOS and Linux - x64 and
         arm64 on Windows and Linux, and one universal bundle for macOS.
 
-        **New: the standalone window is a system window.** It used to open in the frame JUCE draws
-        itself, which brings none of what the desktop does for its own windows: no Alt+Space menu,
-        no snapping to half a screen, no Win+arrow tiling, no shadow, no caption animation. Two
-        flags before the window goes on the desktop hand the frame to the OS, so each platform
-        draws its own. On X11 the same change is what makes an edge draggable and the maximise
-        button do something - openbox read the old window as "fixed size".
+        **New: closing the standalone can leave it running in the system tray.** A new switch in
+        Settings > General, off by default, makes the window's close button hide the window
+        instead of quitting. The first hidden close puts a VGMToybox icon in the notification area
+        (the menu bar on macOS); left-click it to bring the window back, and use Quit in its menu
+        for the real exit, which saves state through the same path a close used to take. With the
+        switch off, close still quits exactly as before and no icon is created - a process that
+        outlives its window is never something the user did not ask for.
 
-        **New: an Audio page in Settings.** A system frame has no Options button, so the Audio/MIDI
-        dialog that lived there is now a third page in Settings: the device in use spelled out,
-        and one button that opens the same dialog JUCE offered - device, sample rate, buffer size
-        and MIDI input. A plug-in does not get this page; an application does.
+        **New: the tray menu drives the transport.** Right-clicking the icon offers Show Window,
+        Play/Pause, Stop, Loop and Fade submenus, and Quit. The menu is rebuilt from the engine
+        every time it opens, so its label, enabled state and check marks follow what is actually
+        playing; Play and Pause are separate actions, so a click made against a stale menu cannot
+        do the opposite of what its label said. Windows uses its own Win32 menu, macOS uses NSMenu,
+        and Linux keeps the JUCE popup because its tray protocol has no native menu to attach. On
+        Linux, Settings warns when the desktop has no notification area: JUCE cannot tell that its
+        dock request was ignored, so a hidden window can be unreachable there - the one failure the
+        icon check cannot catch.
 
-        **New: a double-clicked song goes to the running window.** Opening a song while the
-        standalone was up used to start a second process. With the switch in Settings > General,
-        on by default, Windows now hands the song to the window that is already there and the
-        second launch exits; turn it off for two windows side by side. macOS always behaves this
-        way - Finder never gives a running app a second copy, so the row states it rather than
-        offering a checkbox - and Linux has no hand-over at all, so the row is not there. The song
-        takes the same path a drag-and-drop does: it loads asynchronously and the old one keeps
-        playing until it has.
+        **Also here:** the tray work got its review, and the close policy and menu model are
+        covered by console tests, including the path where the icon cannot be created. Loop and
+        Fade now read one preset table shared with the transport panel, so the tray and the panel
+        cannot drift apart. The icon itself appears only on the first close that the setting
+        swallows, and stays until the process exits.
 
-        **Also here:** \`build.ps1 -Clang\` replays every plugin source through clang-cl, so what
-        MSVC accepts and the macOS build refuses is caught before it is pushed; the window scripts
-        can fake the standalone hooks (\`# hooks audio\`), which is how the three-page settings
-        panel is covered by a test at all; and the standalone work got the review it was owed -
-        ten findings, eight fixed, one deferred.
-
-        **Upgrading:** nothing changes for a saved project - 0.2.x and 0.1.0 projects open
-        unchanged. Projects from 0.0.5 or older still need the song loaded again, as 0.1.0 said:
-        since then the song travels *inside* the project as data, so a project opens on a machine
-        that never saw the file, and a restored project always comes up **stopped at the top** of
-        the song. A song over 16 MB is not embedded (it would not fit a project file sanely);
-        everything else is restored and the song can be reloaded.
+        **Upgrading:** nothing changes for a saved project - 0.3.0, 0.2.x and 0.1.0 projects open
+        unchanged. The only new setting is \`standalone.closeToTray\`, default off, so the first run
+        after upgrading behaves exactly like 0.3.0. Projects from 0.0.5 or older still need the
+        song loaded again, as 0.1.0 said: since then the song travels *inside* the project as data,
+        so a project opens on a machine that never saw the file, and a restored project always
+        comes up **stopped at the top** of the song. A song over 16 MB is not embedded (it would
+        not fit a project file sanely); everything else is restored and the song can be reloaded.
 
         **Installing**
         - Windows: put \`VGMToybox.vst3\` in \`C:\\Program Files\\Common Files\\VST3\`, or run \`VGMToybox.exe\`.
