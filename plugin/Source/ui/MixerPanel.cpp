@@ -370,24 +370,27 @@ void MixerPanel::layoutStrips (void)
 
 	holder.setSize (juce::jmax (contentWidth, visibleWidth), juce::jmax (y, visibleHeight));
 
-	// y counts the gap that follows the last row, which is not content
-	contentHeight = juce::jmax (0, y - kGroupGap);
 	layoutMaster();
 }
 
 void MixerPanel::layoutMaster (void)
 {
-	// The master is pinned to the right of the scrolling rows, but it is not one of them: it is as
-	// tall as all the rows together (a console's master fader spans the desk) and scrolls with
-	// them. Both halves of that were wrong when the rows first got a viewport - the height was
-	// clamped to whatever the card had left, so a short card squashed the master fader to a stub
-	// while the track strips kept theirs and scrolled, and it was one row tall, so a song with two
-	// chips left a block of empty card below it.
-	const int contentTop = kGroupHeaderHeight + 2;	// level with the first row's strips
-	const int height = juce::jmax (ChannelStrip::preferredHeight, contentHeight - contentTop);
+	// The master behaves like one of the strips: it grows with the card, and when the card cannot
+	// give it the height a strip needs it keeps that minimum and scrolls with the rows (the clip is
+	// what makes the rest unreachable until then).
+	//
+	// It is measured against the *card*, not against the rows: the rows grow with every chip, and a
+	// master that spanned them would be two or three times as tall as the strips it stands beside,
+	// and would keep growing with the song. A console's master is one column high - when there is
+	// more room than a strip needs, it takes it.
+	const int available = masterClip.getHeight();
+	const int height = juce::jmax (ChannelStrip::preferredHeight, available);
 
-	// The clip begins at contentTop, so the scroll offset is all that is left to subtract.
-	masterStrip.setBounds (0, -viewport.getViewPositionY(), masterClip.getWidth(), height);
+	// Scroll only when the minimum does not fit: a master that exactly fills its column must not
+	// move with the rows, or scrolling would tear a gap open underneath it.
+	const int scroll = (height > available) ? viewport.getViewPositionY() : 0;
+
+	masterStrip.setBounds (0, -scroll, masterClip.getWidth(), height);
 }
 
 void MixerPanel::paintCardContent (juce::Graphics& g)

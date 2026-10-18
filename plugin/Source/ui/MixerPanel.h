@@ -14,9 +14,9 @@ namespace toybox::ui
 
 /**
 	The mixer card below the chips card: one strip per chip channel, grouped by chip. The strips
-	live in a Viewport (with horizontal and vertical scrollbars), the master strip stays pinned
-	at the right - pinned horizontally, that is: it is as tall as every row together and scrolls
-	with them vertically, so a short card scrolls the master instead of squashing it.
+	live in a Viewport (with horizontal and vertical scrollbars); the master strip is pinned at
+	the right of them and behaves like one of them: it grows with the card, keeps a strip's
+	minimum height, and scrolls with the rows when the card cannot give it that much.
 
 	Mixing happens in PlaybackEngine - the panel only forwards the user's changes and polls the
 	lock-free values in refresh(), so the audio thread never reads anything from here.
@@ -112,7 +112,6 @@ private:
 	juce::String loadedFile;			// detects "another song was loaded" for the rebuild
 	int loadedTrackCount = -1;
 	juce::Rectangle<int> masterColumn;	// set by resized(), the strip itself is placed by layoutMaster()
-	int contentHeight = 0;				// height of all rows together, set by layoutStrips()
 	std::uint64_t lastOutputConnectivity = 0;	// rebuilds the selectors when the host's layout changes
 	std::vector<float> meterLeft, meterRight;	// decayed peaks, one per track
 	float masterPeakL = 0.0f;

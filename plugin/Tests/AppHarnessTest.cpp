@@ -325,6 +325,7 @@ private:
 		else if (command == "host") { commandHost (tokens); }
 		else if (command == "tick") { commandTick (); }
 		else if (command == "shot") { commandShot (tokens); }
+		else if (command == "size") { commandSize (tokens); }
 		else if (command == "sleep") { commandSleep (tokens); }
 		else if (command == "help") { printHelp(); }
 		else { report (false, "unknown command '" + tokens[0] + "'"); }
@@ -610,6 +611,32 @@ private:
 						   + "x" + juce::String (image.getHeight()) + ")");
 	}
 
+	/** The window's own size. The editor is resizable in the product (660x520 minimum), and every
+		card is laid out from it - the mixer's rows and its master column are the case that made this
+		command worth having: their heights come from the space the card is given. */
+	void commandSize (const juce::StringArray& tokens)
+	{
+		if (tokens.size() < 3)
+		{
+			report (false, "size needs a width and a height");
+			return;
+		}
+
+		const int width = tokens[1].getIntValue();
+		const int height = tokens[2].getIntValue();
+
+		if (width < 660 || height < 520 || width > 4000 || height > 4000)
+		{
+			report (false, "size: " + juce::String (width) + "x" + juce::String (height)
+							   + " is outside the editor's limits (660x520 or larger)");
+			return;
+		}
+
+		editor.setSize (width, height);
+		juce::MessageManager::getInstance()->runDispatchLoopUntil (40);	// the cards re-lay out
+		report (true, "size " + juce::String (width) + "x" + juce::String (height));
+	}
+
 	void commandAssert (const juce::StringArray& tokens)
 	{
 		if (tokens.size() < 5)
@@ -687,7 +714,7 @@ private:
 	{
 		std::printf ("    load <path> | press <key> [unhandled] | click <id> | toggle <id> | set <id> <value>\n");
 		std::printf ("    unhandled: the key must leave the editor (it is the host's)\n");
-		std::printf ("    menu | menu invoke <entryId> | tick | shot <path.png>\n");
+		std::printf ("    menu | menu invoke <entryId> | tick | shot <path.png> | size <w> <h>\n");
 		std::printf ("    host <seconds> [playing|stopped]   one process block with that host clock\n");
 		std::printf ("    dump [<id>] | assert <id> <field> <op> <value> | sleep <ms>\n");
 		std::printf ("    fields: visible enabled checked text value (components)\n");
