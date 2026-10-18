@@ -14,14 +14,19 @@ namespace toybox::ui
 
 /**
 	The mixer card below the chips card: one strip per chip channel, grouped by chip. The strips
-	live in a Viewport (with horizontal and vertical scrollbars); the master strip is pinned at
-	the right of them and behaves like one of them: it grows with the card, keeps a strip's
-	minimum height, and scrolls with the rows when the card cannot give it that much.
+	live in a Viewport; the master strip is pinned at the right of them and behaves like one of
+	them: it grows with the card, keeps a strip's minimum height, and scrolls with the rows when
+	the card cannot give it that much.
+
+	The vertical scrollbar is the card's, not the strip column's - it sits at the far right of the
+	card, outside the master, and scrolls the rows and the master together. (The viewport's own
+	bar would land between the two columns, which reads as "this scrolls the strips".)
 
 	Mixing happens in PlaybackEngine - the panel only forwards the user's changes and polls the
 	lock-free values in refresh(), so the audio thread never reads anything from here.
 */
-class MixerPanel : public CardComponent
+class MixerPanel : public CardComponent,
+				   private juce::ScrollBar::Listener
 {
 public:
 	/** Smallest height that still shows the header and a part of the first strip row - the
@@ -92,6 +97,10 @@ private:
 	/** Places the master strip inside its clip: level with the first row, as tall as all of them,
 		and offset by the viewport's scroll position. Called by layoutStrips() and by every scroll. */
 	void layoutMaster (void);
+	/** Points the card's scrollbar at the viewport's state - shown only when the rows need more
+		room than the card has, and following every scroll that does not come from the bar itself. */
+	void syncScrollBar (int contentHeight);
+	void scrollBarMoved (juce::ScrollBar* scrollBarThatHasMoved, double newRangeStart) override;
 	/** Track n goes to bus n ("track 1 -> Out 1/2", "track 2 -> Out 3/4", ...). */
 	void spreadTrackOutputs (void);
 	/** Every track goes back to the internal master bus. */
@@ -108,6 +117,8 @@ private:
 	juce::OwnedArray<ChannelStrip> strips;
 	MasterClip masterClip { viewport };	// clips the master strip; its bounds exclude the header row
 	ChannelStrip masterStrip;
+	juce::ScrollBar verticalBar { true };	// the card's own scrollbar, at the far right
+	bool updatingScrollBar = false;			// the bar follows the viewport - do not feed it back
 
 	juce::String loadedFile;			// detects "another song was loaded" for the rebuild
 	int loadedTrackCount = -1;

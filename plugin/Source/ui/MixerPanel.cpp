@@ -16,6 +16,7 @@ namespace
 	constexpr int kStripWidth = 88;				// meter + graduations + fader, see ChannelStrip
 	constexpr int kStripGap = 6;
 	constexpr int kGroupGap = 10;
+	constexpr int kScrollBarWidth = 12;			// the card's own, at the far right of the mixer
 	constexpr float kMeterDecay = 0.82f;		// per refresh tick while playing (~0.3 s falloff)
 	constexpr float kMeterStopDecay = 0.55f;	// while the transport is stopped they drop fast
 
@@ -78,7 +79,14 @@ MixerPanel::MixerPanel (toybox::PlaybackEngine& engineToUse)
 
 	addAndMakeVisible (viewport);
 	viewport.setViewedComponent (&holder, false);
-	viewport.setScrollBarsShown (true, true);
+
+	// The vertical scrollbar is the card's own, not the viewport's: the viewport's would sit
+	// between the strips and the master, which reads as "this scrolls the strips" while it also
+	// drags the master along. This one is placed at the far right of the card and drives both.
+	viewport.setScrollBarsShown (false, true, true, true);
+	verticalBar.setAutoHide (false);
+	verticalBar.addListener (this);
+	addAndMakeVisible (verticalBar);
 
 	refresh();	// hides the card while nothing is loaded
 }
@@ -293,9 +301,15 @@ void MixerPanel::resized (void)
 	headerBounds.removeFromRight (6);
 	mergeToMasterButton.setBounds (headerBounds.removeFromRight (kHeaderButtonSize));
 
+	// From the right: the card's scrollbar, then the master, then the scrolling rows. The bar is
+	// outside everything it scrolls - one bar for the whole mixer, at the card's edge.
+	verticalBar.setBounds (inner.removeFromRight (kScrollBarWidth)
+								.withTrimmedTop (kGroupHeaderHeight + 2));
+
 	// the master strip is pinned at the right of the scrollable rows - layoutMaster() places the
 	// strip, because it follows the content height and the scroll position. The clip starts level
 	// with the first row's strips (a row header sits above them in the scrolling column).
+	inner.removeFromRight (4);
 	masterColumn = inner.removeFromRight (kStripWidth);
 	masterClip.setBounds (masterColumn.withTrimmedTop (kGroupHeaderHeight + 2));
 
@@ -305,10 +319,38 @@ void MixerPanel::resized (void)
 	layoutStrips();
 }
 
+void MixerPanel::scrollBarMoved (juce::ScrollBar*, double newRangeStart)
+{
+	if (updatingScrollBar)
+	{
+		return;
+	}
+
+	// the rows move; the master follows in visibleAreaChanged()
+	viewport.setViewPosition (viewport.getViewPositionX(),
+							  juce::jmax (0, juce::roundToInt (newRangeStart)));
+}
+
+void MixerPanel::syncScrollBar (int contentHeight)
+{
+	// the viewport's own scrollbars are not part of what the content can be seen through
+	const int visible = juce::jmax (1, viewport.getMaximumVisibleHeight());
+	verticalBar.setVisible (contentHeight > visible);
+
+	// Writing the range back into the bar notifies this panel, which would push the viewport again
+	// from inside its own scroll - the guard is what keeps the two from chasing each other.
+	const juce::ScopedValueSetter<bool> guard (updatingScrollBar, true);
+
+	verticalBar.setRangeLimits (0.0, juce::jmax (1, contentHeight));
+	verticalBar.setCurrentRange (viewport.getViewPositionY(), juce::jmax (1, visible));
+}
+
 void MixerPanel::StripViewport::visibleAreaChanged (const juce::Rectangle<int>&)
 {
-	// the master is not inside the viewport, so scrolling the rows has to drag it along
+	// the master is not inside the viewport, so scrolling the rows has to drag it along - and the
+	// card's scrollbar is not either, so it has to be told where the rows went
 	owner.layoutMaster();
+	owner.syncScrollBar (owner.holder.getHeight());
 }
 
 void MixerPanel::MasterClip::mouseWheelMove (const juce::MouseEvent& event,
@@ -371,6 +413,7 @@ void MixerPanel::layoutStrips (void)
 	holder.setSize (juce::jmax (contentWidth, visibleWidth), juce::jmax (y, visibleHeight));
 
 	layoutMaster();
+	syncScrollBar (holder.getHeight());
 }
 
 void MixerPanel::layoutMaster (void)
