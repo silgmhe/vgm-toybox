@@ -59,7 +59,12 @@ MixerPanel::MixerPanel (toybox::PlaybackEngine& engineToUse)
 	// its selector picks the bus the master mix goes to - never the master itself
 	masterStrip.onMuteChanged = [this] (bool muted) { engine.setMasterMuted (muted); };
 	masterStrip.onOutputChanged = [this] (playback::OutputTarget target) { engine.setMasterOutput (target); };
-	addAndMakeVisible (masterStrip);
+
+	// The master sits in a clip of its own: it is pinned to the right of the scrolling rows, but it
+	// scrolls with them, so something has to cut it off at the card's edge.
+	masterStrip.setComponentID ("mixer.master");	// for the window scripts (AppHarnessTest)
+	addAndMakeVisible (masterClip);
+	masterClip.addAndMakeVisible (masterStrip);
 
 	// the two routing shortcuts in the card header
 	spreadOutputsButton.setTooltip ("Send every track to its own output bus "
@@ -288,14 +293,28 @@ void MixerPanel::resized (void)
 	headerBounds.removeFromRight (6);
 	mergeToMasterButton.setBounds (headerBounds.removeFromRight (kHeaderButtonSize));
 
-	// the master strip is pinned at the right of the scrollable rows - layoutStrips() places
-	// it, because it follows the height of the strip rows
+	// the master strip is pinned at the right of the scrollable rows - layoutMaster() places the
+	// strip, because it follows the content height and the scroll position. The clip starts level
+	// with the first row's strips (a row header sits above them in the scrolling column).
 	masterColumn = inner.removeFromRight (kStripWidth);
+	masterClip.setBounds (masterColumn.withTrimmedTop (kGroupHeaderHeight + 2));
 
 	inner.removeFromRight (8);
 	viewport.setBounds (inner);
 
 	layoutStrips();
+}
+
+void MixerPanel::StripViewport::visibleAreaChanged (const juce::Rectangle<int>&)
+{
+	// the master is not inside the viewport, so scrolling the rows has to drag it along
+	owner.layoutMaster();
+}
+
+void MixerPanel::MasterClip::mouseWheelMove (const juce::MouseEvent& event,
+											 const juce::MouseWheelDetails& wheel)
+{
+	viewport.mouseWheelMove (event.getEventRelativeTo (&viewport), wheel);
 }
 
 void MixerPanel::layoutStrips (void)
@@ -351,11 +370,24 @@ void MixerPanel::layoutStrips (void)
 
 	holder.setSize (juce::jmax (contentWidth, visibleWidth), juce::jmax (y, visibleHeight));
 
-	// the master strip rides along with the strips (aligned with the first row, clamped to the
-	// card so a small mixer card never lets it overflow)
-	const int masterTop = masterColumn.getY() + kGroupHeaderHeight + 2;
-	const int masterHeight = juce::jlimit (0, juce::jmax (0, masterColumn.getBottom() - masterTop), stripHeight);
-	masterStrip.setBounds (masterColumn.getX(), masterTop, masterColumn.getWidth(), masterHeight);
+	// y counts the gap that follows the last row, which is not content
+	contentHeight = juce::jmax (0, y - kGroupGap);
+	layoutMaster();
+}
+
+void MixerPanel::layoutMaster (void)
+{
+	// The master is pinned to the right of the scrolling rows, but it is not one of them: it is as
+	// tall as all the rows together (a console's master fader spans the desk) and scrolls with
+	// them. Both halves of that were wrong when the rows first got a viewport - the height was
+	// clamped to whatever the card had left, so a short card squashed the master fader to a stub
+	// while the track strips kept theirs and scrolled, and it was one row tall, so a song with two
+	// chips left a block of empty card below it.
+	const int contentTop = kGroupHeaderHeight + 2;	// level with the first row's strips
+	const int height = juce::jmax (ChannelStrip::preferredHeight, contentHeight - contentTop);
+
+	// The clip begins at contentTop, so the scroll offset is all that is left to subtract.
+	masterStrip.setBounds (0, -viewport.getViewPositionY(), masterClip.getWidth(), height);
 }
 
 void MixerPanel::paintCardContent (juce::Graphics& g)
