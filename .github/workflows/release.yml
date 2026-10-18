@@ -275,22 +275,31 @@ jobs:
         VST3, Audio Unit (macOS only) and standalone builds for Windows, macOS and Linux - x64 and
         arm64 on Windows and Linux, and one universal bundle for macOS.
 
-        **New: DAW sync.** The transport card has a \`DAW SYNC\` group. \`SYNC\` makes the song follow
-        the host's clock - the position becomes "host position minus cue" - and \`CUE\` takes the
-        host's current position as the point where the song's beginning plays. The knob beside it
-        trims that cue by a few milliseconds, and the number next to the knob is an exact-value
-        field. While the host drives, the local transport belongs to the DAW, and so does the space
-        bar: pressing it in the plugin editor reaches the host's own play/pause. It is one-way - the
-        song follows the host and never drives it. The cue always exists (0 is the DAW's start, and
-        the group's right-click menu puts it back there), and a host that reports no transport does
-        not get the group at all - the standalone hides it.
+        **Fixed: the master strip.** It is one column now, the way a console's master is. Before,
+        it was squeezed into whatever the card had left under its header - a fader, a mute and an
+        output selector compressed into a thumbnail while the channel strips beside it kept their
+        height and scrolled. It now spans the rows it belongs to (its bottom edge lands on the last
+        row's), never gets shorter than a channel strip, and scrolls with them when the card cannot
+        give it that much. The vertical scrollbar moved to the far right of the card and scrolls
+        the strips and the master together, instead of sitting between them.
 
-        **Upgrading:** a project saved with 0.1.0 opens unchanged - the sync settings are optional
-        attributes in the same state format. A project saved with 0.0.5 or older still needs the
-        song loaded again, as 0.1.0 said: since then the song travels *inside* the project as data,
-        so a project opens on a machine that never saw the file, and a restored project always comes
-        up **stopped at the top** of the song. A song over 16 MB is not embedded (it would not fit a
-        project file sanely); everything else is restored and the song can be reloaded.
+        **Fixed: the shadows under the cards.** Each card's soft shadow was cut off along the
+        card's rectangle - a straight line where the blur stopped, most visible at the bottom
+        corners, because the page that painted it ended exactly where the cards did. The window
+        paints them now, where there is room for the blur to fade.
+
+        **Also here:** \`build.ps1 -Test\` builds the tests before running them (a local "all checks
+        passed" can no longer come from a binary nobody built - that is how 0.1.0 went out), the
+        test suite carries a generated six-second song so the load / render / mix paths run
+        everywhere, and the window scripts gained a \`size\` command so a layout can be checked at
+        more than one window size.
+
+        **Upgrading:** nothing changes for a saved project - 0.2.0 and 0.1.0 projects open
+        unchanged. Projects from 0.0.5 or older still need the song loaded again, as 0.1.0 said:
+        since then the song travels *inside* the project as data, so a project opens on a machine
+        that never saw the file, and a restored project always comes up **stopped at the top** of
+        the song. A song over 16 MB is not embedded (it would not fit a project file sanely);
+        everything else is restored and the song can be reloaded.
 
         **Installing**
         - Windows: put \`VGMToybox.vst3\` in \`C:\\Program Files\\Common Files\\VST3\`, or run \`VGMToybox.exe\`.
