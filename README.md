@@ -14,7 +14,8 @@ Up to 64 stereo output buses let a song be recorded as stems in one pass.
 ## Building
 
 The third-party libraries are vendored as source under `libs/`, so there are no submodules to fetch.
-The only thing the build downloads is zlib, which CMake fetches and compiles once for `.vgz`.
+JUCE and zlib are fetched by CPM and pinned in `plugin/CMakeLists.txt`; zlib is compiled once for
+`.vgz`.
 
 ### Windows
 
@@ -250,6 +251,33 @@ have heard - `vgm_mixer_test` proves that sum is sample-exact.
 ### Mixer off
 
 Runs libvgm's plain mix; its unity-gain sum is bit-identical to the mixer's.
+
+## Licence
+
+VGMToybox is distributed under the **GNU Affero General Public License v3.0 or later**
+(AGPL-3.0-or-later); the full text is in [LICENSE](LICENSE).
+
+The decisive reason is JUCE's dual-licensing policy. JUCE is available under the AGPLv3 or a
+commercial JUCE licence; this project uses the AGPLv3 option, so the plugin and the standalone are
+distributed under the AGPL as a combined work. A JUCE commercial licence would be needed for a
+distribution under different terms.
+
+### Upstream projects
+
+VGMToybox builds on the following upstream projects. Their own licences apply to their code; this
+table is an overview, not a replacement for the licence text in each source tree.
+
+| Upstream | What it provides | Licence |
+|---|---|---|
+| [libvgm](https://github.com/ValleyBell/libvgm) | VGM/VGZ/S98/DRO/GYM decoding, chip emulation and playback | Per-file: BSD-3-Clause, GPL-2.0 / GPL-2.0-or-later, LGPL-2.1-or-later, MIT; see the file headers |
+| [JUCE](https://github.com/juce-framework/JUCE) 8.0.9 | VST3/AU/AAX and standalone framework, UI and host integration | AGPLv3 or commercial; this project uses the AGPLv3 option |
+| [inih](https://github.com/benhoyt/inih) | INI parser for configuration | BSD-3-Clause |
+| [wingetopt](https://github.com/alex85k/wingetopt) | getopt for the MSVC command-line build | ISC, with a BSD-3-Clause part |
+| [zlib](https://zlib.net/) 1.3.1 | DEFLATE for `.vgz` | zlib |
+| [CPM.cmake](https://github.com/cpm-cmake/CPM.cmake) | build-only dependency manager; not shipped | MIT |
+
+libvgm, inih and wingetopt are vendored under `libs/`; JUCE and zlib are fetched by CPM at configure
+time. The pinned JUCE version is `JUCE_TAG` in `plugin/CMakeLists.txt`.
 
 ## Subscribe
 

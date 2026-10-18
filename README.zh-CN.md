@@ -10,7 +10,7 @@
 
 ## 构建
 
-第三方库以源码形式随仓库提供，放在 `libs/` 下，没有子模块需要拉取。构建时唯一要下载的是 zlib，由 CMake 拉取并编译一次，用于 `.vgz` 解压。
+第三方库以源码形式随仓库提供，放在 `libs/` 下，没有子模块需要拉取。JUCE 与 zlib 由 CPM 拉取，版本固定在 `plugin/CMakeLists.txt`；zlib 编译一次，用于 `.vgz` 解压。
 
 ### Windows
 
@@ -183,6 +183,27 @@ id: zh-Hans
 ### 关闭 mixer
 
 走的是 libvgm 原本的混音，其单位增益求和与 mixer 的逐样本一致。
+
+## 许可证
+
+VGMToybox 以 **GNU Affero 通用公共许可证 v3.0 或更高版本**（AGPL-3.0-or-later）发布，完整条款见 [LICENSE](LICENSE)。
+
+选择 AGPL 的决定性原因是 JUCE 的双许可政策：JUCE 同时提供 AGPLv3 和商业许可证，本项目使用 AGPLv3 这一路径，因此插件与独立程序作为组合作品按 AGPL 分发。若取得 JUCE 商业许可证，才可以在其他许可证下分发。
+
+### 上游项目
+
+VGMToybox 建立在以下上游项目之上。它们各自的许可证适用于其代码；下表只是概览，不能替代各源码树中的许可证原文。
+
+| 上游项目 | 提供什么 | 许可证 |
+|---|---|---|
+| [libvgm](https://github.com/ValleyBell/libvgm) | VGM/VGZ/S98/DRO/GYM 解码、芯片仿真与播放 | 按文件：BSD-3-Clause、GPL-2.0 / GPL-2.0-or-later、LGPL-2.1-or-later、MIT；见各文件头 |
+| [JUCE](https://github.com/juce-framework/JUCE) 8.0.9 | VST3/AU/AAX 与独立程序框架、UI 和宿主集成 | AGPLv3 或商业；本项目使用 AGPLv3 |
+| [inih](https://github.com/benhoyt/inih) | 配置文件 INI 解析 | BSD-3-Clause |
+| [wingetopt](https://github.com/alex85k/wingetopt) | MSVC 命令行构建使用的 getopt | ISC，含 BSD-3-Clause 部分 |
+| [zlib](https://zlib.net/) 1.3.1 | `.vgz` 使用的 DEFLATE | zlib |
+| [CPM.cmake](https://github.com/cpm-cmake/CPM.cmake) | 仅构建期依赖管理，不随二进制分发 | MIT |
+
+libvgm、inih 和 wingetopt 以源码形式放在 `libs/` 下；JUCE 与 zlib 由 CPM 在配置阶段拉取。JUCE 的固定版本是 `plugin/CMakeLists.txt` 中的 `JUCE_TAG`。
 
 ## 关于作者
 
