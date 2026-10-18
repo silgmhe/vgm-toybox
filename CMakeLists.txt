@@ -19,7 +19,7 @@ endif()
 # (docs/desgin/maintenance-policy.md section 6). Everything downstream reads it from here: JUCE
 # turns it into JucePlugin_VersionString (Help > About), the VST3 module info and the Windows file
 # version, and the release workflow refuses a tag that does not match it.
-project(vgmtoybox VERSION 0.2.1 LANGUAGES C CXX)
+project(vgmtoybox VERSION 0.3.0 LANGUAGES C CXX)
 
 #set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${PROJECT_BINARY_DIR}/bin)
 #set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${PROJECT_BINARY_DIR}/bin)

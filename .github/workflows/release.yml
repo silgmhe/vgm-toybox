@@ -275,26 +275,34 @@ jobs:
         VST3, Audio Unit (macOS only) and standalone builds for Windows, macOS and Linux - x64 and
         arm64 on Windows and Linux, and one universal bundle for macOS.
 
-        **Fixed: the master strip.** It is one column now, the way a console's master is. Before,
-        it was squeezed into whatever the card had left under its header - a fader, a mute and an
-        output selector compressed into a thumbnail while the channel strips beside it kept their
-        height and scrolled. It now spans the rows it belongs to (its bottom edge lands on the last
-        row's), never gets shorter than a channel strip, and scrolls with them when the card cannot
-        give it that much. The vertical scrollbar moved to the far right of the card and scrolls
-        the strips and the master together, instead of sitting between them.
+        **New: the standalone window is a system window.** It used to open in the frame JUCE draws
+        itself, which brings none of what the desktop does for its own windows: no Alt+Space menu,
+        no snapping to half a screen, no Win+arrow tiling, no shadow, no caption animation. Two
+        flags before the window goes on the desktop hand the frame to the OS, so each platform
+        draws its own. On X11 the same change is what makes an edge draggable and the maximise
+        button do something - openbox read the old window as "fixed size".
 
-        **Fixed: the shadows under the cards.** Each card's soft shadow was cut off along the
-        card's rectangle - a straight line where the blur stopped, most visible at the bottom
-        corners, because the page that painted it ended exactly where the cards did. The window
-        paints them now, where there is room for the blur to fade.
+        **New: an Audio page in Settings.** A system frame has no Options button, so the Audio/MIDI
+        dialog that lived there is now a third page in Settings: the device in use spelled out,
+        and one button that opens the same dialog JUCE offered - device, sample rate, buffer size
+        and MIDI input. A plug-in does not get this page; an application does.
 
-        **Also here:** \`build.ps1 -Test\` builds the tests before running them (a local "all checks
-        passed" can no longer come from a binary nobody built - that is how 0.1.0 went out), the
-        test suite carries a generated six-second song so the load / render / mix paths run
-        everywhere, and the window scripts gained a \`size\` command so a layout can be checked at
-        more than one window size.
+        **New: a double-clicked song goes to the running window.** Opening a song while the
+        standalone was up used to start a second process. With the switch in Settings > General,
+        on by default, Windows now hands the song to the window that is already there and the
+        second launch exits; turn it off for two windows side by side. macOS always behaves this
+        way - Finder never gives a running app a second copy, so the row states it rather than
+        offering a checkbox - and Linux has no hand-over at all, so the row is not there. The song
+        takes the same path a drag-and-drop does: it loads asynchronously and the old one keeps
+        playing until it has.
 
-        **Upgrading:** nothing changes for a saved project - 0.2.0 and 0.1.0 projects open
+        **Also here:** \`build.ps1 -Clang\` replays every plugin source through clang-cl, so what
+        MSVC accepts and the macOS build refuses is caught before it is pushed; the window scripts
+        can fake the standalone hooks (\`# hooks audio\`), which is how the three-page settings
+        panel is covered by a test at all; and the standalone work got the review it was owed -
+        ten findings, eight fixed, one deferred.
+
+        **Upgrading:** nothing changes for a saved project - 0.2.x and 0.1.0 projects open
         unchanged. Projects from 0.0.5 or older still need the song loaded again, as 0.1.0 said:
         since then the song travels *inside* the project as data, so a project opens on a machine
         that never saw the file, and a restored project always comes up **stopped at the top** of
