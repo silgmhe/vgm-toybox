@@ -75,11 +75,39 @@ public:
 	/** Stores the switch, writes it, and tells every listener. */
 	void setReuseWindow (bool shouldReuse);
 
+	/** Whether the standalone reopens, at startup, the song it had loaded when it last quit.
+
+		Default true: launching the application without a song is the case this exists for, and
+		the window that comes up should be the one the user left. Only the standalone reads it -
+		a plugin takes its song from the host's project, not from this file - and only the
+		standalone writes lastSong() below, so a plugin session can never overwrite what the
+		application opens next. */
+	bool getRestoreLastSong (void) const;
+
+	/** Stores the switch, writes it, and tells every listener, like the other preferences. */
+	void setRestoreLastSong (bool shouldRestore);
+
+	/** The song the standalone loaded last, or an empty File when there is none: a fresh
+		install, or the user closed the song before quitting (closeSong() clears it).
+
+		The path is recorded the moment a load succeeds, not at exit, so a crash still leaves the
+		song to reopen. A path whose file has gone is kept until the next successful load or
+		close: a drive that is not mounted today may be there tomorrow, and dropping the value
+		would be the one failure the user cannot see coming. */
+	juce::File getLastSong (void) const;
+
+	/** Records `song` as the one to reopen. Nothing is written when it is already the value. */
+	void setLastSong (const juce::File& song);
+
+	/** Forgets the remembered song - File > Close Song is the user saying "not this one". */
+	void clearLastSong (void);
+
 	/** Empty when all is well, otherwise one line for the General page: what could not be done
 		and to which path. Never a reason to stop. */
 	juce::String lastError (void) const;
 
-	/** Deletes every stored value and puts the defaults back. True when the file was rewritten. */
+	/** Deletes every stored value - including the remembered song - and puts the defaults back.
+		True when the file was rewritten. */
 	bool resetToDefaults (void);
 
 	/** Reads the file again and tells listeners about it. Nothing in the application needs this -

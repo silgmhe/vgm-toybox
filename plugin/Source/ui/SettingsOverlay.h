@@ -59,10 +59,10 @@ private:
 //==============================================================================
 
 /**
-	The General page: where the settings live, and how to put them back.
+	The General page: how the standalone starts, where the settings live, and how to put them back.
 
-	Both are answers the store already has - the path it read at startup, and the error of the last
-	write it attempted - so this page owns no state of its own (section 6).
+	The path and the error are answers the store already has - the one it read at startup, and the
+	error of the last write it attempted - so this page owns no state of its own (section 6).
 */
 class GeneralSettingsPage : public View
 {
@@ -86,6 +86,11 @@ private:
 	juce::ToggleButton reuseWindowButton { "Reuse the running window" };
 	juce::Label reuseWindowNote;
 	juce::Label reuseWindowHint;
+
+	// "Reopen the last song at startup": the standalone has a last session, a plugin does not, so
+	// the pair is only added when toybox::standalone::available() is true (see the constructor).
+	juce::ToggleButton restoreLastSongButton { "Reopen the last song at startup" };
+	juce::Label restoreLastSongHint;
 
 	juce::Label fileCaption;	// "Settings file"
 	juce::Label pathLabel;		// the path itself, read-only

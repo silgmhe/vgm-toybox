@@ -385,7 +385,7 @@ void ToyboxAudioProcessorEditor::openFileChooser (void)
 							  });
 }
 
-void ToyboxAudioProcessorEditor::loadFile (const juce::File& file)
+void ToyboxAudioProcessorEditor::loadFile (const juce::File& file, bool startPlaying)
 {
 	// The read and the build run on the engine's worker (review M-1): this window keeps drawing,
 	// and the song that is playing keeps playing, until the new one is ready to be swapped in.
@@ -399,7 +399,8 @@ void ToyboxAudioProcessorEditor::loadFile (const juce::File& file)
 	// The callback comes back on the message thread, but the window may be gone by then: a
 	// SafePointer stops a closed editor from being touched (the song still loads).
 	juce::Component::SafePointer<ToyboxAudioProcessorEditor> safe (this);
-	engine.loadFileAsync (file, [safe, path = loadingName] (bool ok, const juce::String& error)
+	engine.loadFileAsync (file, [safe, file, path = loadingName]
+		(bool ok, const juce::String& error)
 	{
 		if (safe == nullptr)
 		{
@@ -416,6 +417,14 @@ void ToyboxAudioProcessorEditor::loadFile (const juce::File& file)
 			// is about a state that is no longer there
 			safe->processor.clearStateMessage();
 			safe->songLoadedAtLastRefresh = true;
+
+			// The remembered song is written here, at the moment the load succeeds, and not at
+			// shutdown: a crash or a killed process still leaves something to reopen. A plugin
+			// session must never overwrite what the standalone would open next.
+			if (safe->processor.wrapperType == juce::AudioProcessor::wrapperType_Standalone)
+			{
+				toybox::settings::SettingsStore::getInstance().setLastSong (file);
+			}
 		}
 		else
 		{
@@ -425,7 +434,7 @@ void ToyboxAudioProcessorEditor::loadFile (const juce::File& file)
 		safe->viewStack.songChanged();	// every page rebuilds whatever it shows about the song
 		safe->updateStatusLine();
 		safe->resized();				// a page may have changed height (cards can appear)
-	});
+	}, startPlaying);
 }
 
 void ToyboxAudioProcessorEditor::closeSong (void)
@@ -443,6 +452,13 @@ void ToyboxAudioProcessorEditor::closeSong (void)
 	viewStack.songChanged();
 	updateStatusLine();
 	resized();
+
+	// Closing is the user saying "not this one": the next launch starts empty instead of opening
+	// the song that was just dismissed. Only the standalone remembers anything to forget.
+	if (processor.wrapperType == juce::AudioProcessor::wrapperType_Standalone)
+	{
+		toybox::settings::SettingsStore::getInstance().clearLastSong();
+	}
 }
 
 void ToyboxAudioProcessorEditor::showAbout (void)
@@ -487,9 +503,52 @@ void ToyboxAudioProcessorEditor::openStartupSong (void)
 
 	// loadFile() starts the worker and sets startupHandled; the audio device may still be coming
 	// up while that runs, and prepare() rebuilds the players at the device's rate when it does.
-	// Nothing is written on success: opening a song is the normal case, and the application leaves
-	// no trace anywhere unless something went wrong (the status line says so now).
+	// A successful load becomes the song the next launch reopens (loadFile() does that), which is
+	// why this call is not different from a manual one.
 	loadFile (startupSong);
+}
+
+void ToyboxAudioProcessorEditor::restoreLastSongIfNeeded (void)
+{
+	if (restoreAttempted)
+	{
+		return;
+	}
+
+	restoreAttempted = true;
+
+	// "The last time the application was open" exists only in the standalone: a plugin's song
+	// belongs to the host's project, and opening a file behind the host's back would be a bug.
+	if (processor.wrapperType != juce::AudioProcessor::wrapperType_Standalone)
+	{
+		return;
+	}
+
+	// Something already asked for a song: the command line (the call above), a second instance
+	// handing one over, a drop that beat the first tick, or a host that re-created the window with
+	// a song still loaded. An explicit request wins; the restore is only the fallback.
+	if (startupSong.existsAsFile() || loadInFlight || engine.isLoaded())
+	{
+		return;
+	}
+
+	auto& store = toybox::settings::SettingsStore::getInstance();
+	if (! store.getRestoreLastSong())
+	{
+		return;
+	}
+
+	const auto remembered = store.getLastSong();
+	if (! remembered.existsAsFile())
+	{
+		// Silent: the switch can be on while the file has been deleted, renamed, or left on a drive
+		// that is not mounted. Nothing was asked for explicitly, so there is nothing to report.
+		return;
+	}
+
+	// No autoplay: the window came back, not the playback. The fraction of a second it would take
+	// to start and stop again would be the loudest thing about a feature meant to be invisible.
+	loadFile (remembered, false);
 }
 
 //==============================================================================
@@ -512,6 +571,11 @@ void ToyboxAudioProcessorEditor::timerCallback (void)
 	{
 		openStartupSong();
 	}
+
+	// After the hand-over above, never before it: on macOS the document a double-click opened is
+	// delivered after this window exists, and restoring first would play the last song for a frame
+	// and then replace it.
+	restoreLastSongIfNeeded();
 
 	// only a running transport animates the meters and the seek bar - that is when the higher
 	// rate is worth anything

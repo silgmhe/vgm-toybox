@@ -66,7 +66,10 @@ private:
 	void filesDropped (const juce::StringArray& files, int x, int y) override;
 
 	void openFileChooser (void);
-	void loadFile (const juce::File& file);
+
+	/** Loads `file`, and on success makes it the song the next launch reopens. `startPlaying` is
+		false only for the restore below. */
+	void loadFile (const juce::File& file, bool startPlaying = true);
 
 	/** Unloads the song: chips, mixer and transport go back to their "nothing loaded" state. */
 	void closeSong (void);
@@ -83,6 +86,12 @@ private:
 		up and drawing while the song is built, and a load that fails says so in the status line
 		instead of leaving the application silent with no explanation. */
 	void openStartupSong (void);
+
+	/** Brings back the song the standalone had loaded when it last quit, once, and only when
+		nothing else asked for one (see the implementation for why it runs on the first tick
+		rather than in the constructor). */
+	void restoreLastSongIfNeeded (void);
+
 	void updateStatusLine (void);
 
 	ToyboxAudioProcessor& processor;
@@ -116,6 +125,10 @@ private:
 
 	juce::File startupSong;			// what the application was launched with, if anything
 	bool startupHandled = false;
+
+	/** The restore is a startup decision: it is tried once, after the first tick has had the
+		chance to see a song handed over by another instance (macOS Finder documents). */
+	bool restoreAttempted = false;
 
 	/** A load is being built on the engine's worker right now: the status line shows which file,
 		and a second request simply replaces this one (the older callback is never called). */

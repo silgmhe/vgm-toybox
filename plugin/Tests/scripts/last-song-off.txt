@@ -1,0 +1,12 @@
+# settings lastSong $VGM_TEST_SONG
+# settings restoreLastSong off
+#
+# The other half of last-song.txt: the same remembered song, with the General page's switch off,
+# must leave the window empty. Without this, a bug that ignored the switch would pass the other
+# script - the song is there either way.
+#
+# Run:  build\plugin\vgm_app_test plugin\Tests\scripts\last-song-off.txt
+
+sleep 500
+
+assert editor.status text contains "No file"
