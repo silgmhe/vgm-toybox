@@ -29,6 +29,20 @@ struct Hooks
 	/** JUCE's Audio/MIDI settings dialog - the item the standalone window's own Options menu
 		carried before the window became the system's (see createWindow in StandaloneApp.cpp). */
 	std::function<void (void)> showAudioSettings;
+
+	/** Puts the table back to "nobody filled it in", for when the holder the hooks point into is
+		gone. Lives next to the fields on purpose: a third hook added later is added here too,
+		where the clear is impossible to miss - a field left pointing into a destroyed holder
+		passes every null check and crashes on the first call.
+
+		The assignments are typed because `= {}` on a std::function is ambiguous to clang (copy
+		and move assignment both fit an empty braced list) - see commit 7b63a52.
+	*/
+	void clear (void) noexcept
+	{
+		describeAudioDevice = std::function<juce::String (void)>();
+		showAudioSettings = std::function<void (void)>();
+	}
 };
 
 /** The table above. One per binary: the static library is linked into the application and into

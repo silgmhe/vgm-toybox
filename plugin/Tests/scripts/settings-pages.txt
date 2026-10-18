@@ -1,0 +1,23 @@
+# hooks audio
+#
+# The settings sidebar's pages, including the Audio page that only an application has.
+# Without the line above this is the plugin's two-page panel, and the two Audio assertions fail.
+#
+# Run:  build\plugin\vgm_app_test plugin\Tests\scripts\settings-pages.txt
+#
+# The first line is read before the editor is constructed, because the panel decides whether it
+# has an Audio page at that moment (see scriptAsksForAudioHooks in the harness). The hooks it
+# installs are fakes: the device itself is not what this script is about.
+
+# the panel opens on the first page, and the chrome is there
+menu invoke options.settings
+assert settings.close      visible == true
+assert settings.page.theme visible == true
+
+# The Audio page was built and is not the page on screen. Existence is the point: the row and the
+# page only exist where something filled in the hooks table before the panel was built.
+assert settings.page.audio enabled == true
+assert settings.page.audio visible == false
+
+# The page reads the same table: the device line is the harness's fake, not a real device
+assert settings.audio.device text contains "Fake device"

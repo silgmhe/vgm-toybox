@@ -337,7 +337,7 @@ Theme   │ Light               (互斥勾选)
 
 **改了什么**
 
-- 新增 `plugin/Source/ui/SettingsOverlay.{h,cpp}`：`SettingsOverlay`（遮罩 + 居中面板 + 侧栏 `TreeView` + `ViewStack` 两页 + Close）、`ThemeSettingsPage`、`GeneralSettingsPage`；两个页面都是 `ui::View` 子类，所以进 `ViewStack` 与其它页面同路。文件登记进 `plugin/CMakeLists.txt`；
+- 新增 `plugin/Source/ui/SettingsOverlay.{h,cpp}`：`SettingsOverlay`（遮罩 + 居中面板 + 侧栏 `TreeView` + `ViewStack` 两页 + Close）、`ThemeSettingsPage`、`GeneralSettingsPage`；两个页面都是 `ui::View` 子类，所以进 `ViewStack` 与其它页面同路。文件登记进 `plugin/CMakeLists.txt`；（2026-10-18：standalone 里多出第三页 Audio，见 `native-window-and-audio-settings.md` §2.4；下面的两页描述是当时的状态）
 - 组件 ID 与 §6 表逐项一致（`settings`、`settings.tree`、`settings.page.theme|general`、`settings.theme.light|dark|followSystem`、`settings.theme.current`、`settings.general.path|pathCaption|openFolder|reset|error`、`settings.close`），脚本可直接断言；
 - 编辑器接线（`PluginEditor.{h,cpp}`）：成员 `settingsOverlay` + `addChildComponent` + `onClose`、`showSettings()`、`resized()` 同步尺寸、`keyPressed()` 里 `Ctrl+,` 打开、ESC 先关它再关 About；两个浮层互斥（各自的 `show*()` 把对方 `setVisible(false)`）。
 
