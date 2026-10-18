@@ -178,7 +178,7 @@ class DawSync                   // 全原子快照，音频线程与 UI 之间�
 `kToleranceSeconds` 后来从类里提到命名空间（`kSyncToleranceSeconds`），并成为 `evaluateSync()` 的
 带默认值参数：容差该多大取决于宿主的块大小，把它做成参数，测试才能问"0 ms 时会怎样"。
 
-`makeSongTimeline` 负责后端可能没报的事实：`L` 缺失时按 `duration − (N−1)·C` 反推，`C > L` 时钳到 `L`。
+`makeSongTimeline` 负责后端可能没报的事实：`L` 缺失时按 `duration − (N−1)·C` 反推（只在 `C > 0`、不是无限循环、`N > 1` 时扣）；`C > L` 时把 `C` 当成 0，**视为没有 loop 点**——钳到 `L` 会让整首歌按 loop 重播，不是这里要的行为。
 `getLoopPointSeconds()` 改为使用 `loopStartSeconds()`，N≥2 时进度条上的 loop 标记顺带变正确。
 
 `evaluateSync` 与 §4 的公式一致，另外补了一条实现细节：**比较**目标位置与引擎位置时，
@@ -191,13 +191,13 @@ class DawSync                   // 全原子快照，音频线程与 UI 之间�
 
 | 改动 | 说明 |
 |---|---|
-| 缓存 `SongTimeline`（取代 `cachedDurationSeconds` / `cachedLoopPointSeconds` / `loopsForever` 三个字段） | 每次换歌、改 loop、改 fade 时重算；**只在锁内被读**（`followDawTransport()` 自己读成员，不再有公开 getter——一个"无锁返回副本"的接口正是错的那一个） |
+| 缓存 `SongTimeline`（取代 `cachedDurationSeconds` / `cachedLoopPointSeconds` / `loopsForever` 三个字段） | 每次换歌、改 loop、改 fade 时在锁内重算；`followDawTransport()` 拿到锁后才读它做决策。**没有返回整份快照的 getter**（那会拿到两首歌的字段拼成的一份）；只留 `getDurationSeconds()` / `getLoopPointSeconds()` 两个标量 getter 无锁读（界面显示与读回检查用），跨歌瞬间可能混一帧 |
 | 持有 `DawSync` | 「被跟随的东西」放在引擎里，`render()` 才能跟；它也因此成为工程状态的一部分 |
-| `render()` 顶部调 `followDawTransport()` | 决策是纯原子运算，**不需要锁，不要纠正就直接返回**；要纠正时才 `ScopedTryLock`，抢不到下一块再试 |
+| `render()` 顶部调 `followDawTransport()` | 先 `ScopedTryLock`（只在 `isActive()` 且已加载时试），拿到锁才读 `cachedTimeline` 做决策；不要纠正就直接返回，抢不到锁就跳过这一块，下一块再试 |
 | `setPositionSeconds()` | 不变（阻塞锁，只给消息线程用） |
 
-为什么不在 `processBlock()` 里判断再投递命令：投递一个命令需要一个无锁信箱，而跟随本身不需要锁，
-只需要「要纠正时才抢锁」。抢不到就跳过这一块——映射是绝对的，代价只有一块的偏移。
+为什么不在 `processBlock()` 里判断再投递命令：投递一个命令需要一个无锁信箱，而跟随只需要一次
+try-lock——抢不到就跳过这一块，映射是绝对的，代价只有一块的偏移。
 
 ### 7.3 `PluginProcessor`
 
@@ -245,7 +245,7 @@ Standalone 里这个组**不创建**（不是隐藏）：没有宿主就没有�
                               ╰┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈╯
 ```
 
-- 框由 `TransportPanel::paintCardContent()` 画（`syncGroupBounds`）：`drawGroupFrame()` 描一条
+- 框由 `SyncGroup::paint()` 自己画（整个组就是一个组件，见 §7.4）：`drawGroupFrame()` 描一条
   1 px、3 on 3 off 的虚线圆角矩形，`PathStrokeType::createDashedStroke()` 一次描整条路径，所以
   虚线是绕着圆角走的。**没有填充、没有内阴影、没有铣边**——这组控件试过两版拟物的凹陷（描边、
   以及完整的槽底 + 双层铣边），在 40 px 的按钮旁边都读成「被选中的一块」，加上居中的铭牌更乱。
@@ -257,7 +257,7 @@ Standalone 里这个组**不创建**（不是隐藏）：没有宿主就没有�
 - **框不承载状态**：整圈染成强调色（哪怕 1 px）读起来仍是「这块被选中了」，所以框永远是
   `theme::groupFrame()`。同步是否生效由框**里面**的东西说：`SYNC` 按钮的强调色面与光晕，加上
   铭牌的字色。一处发光 = 一处开关，框本身不发光。
-- 框里的控件和左边的走带按钮**共用一条基线**：`resized()` 里让出 `kFrameTopPadding`（9 px），否则
+- 框里的控件和左边的走带按钮**共用一条基线**：`SyncGroup::resized()` 里让出 `kFrameTopPadding`（9 px），否则
   走带按钮会比框内的按钮高一截，整个顶行看起来是歪的。铭牌的下半截只伸进框里 5 px，不会压到按钮。
 - **框只占顶行，不缩短下面两行**：宽度要从「顶行」这块矩形上 `removeFromRight`，不能从贯穿整张卡片的
   `inner` 上取。从 `inner` 上拿走的宽度会让进度条和设置行一起变短——第一版就是这样，进度条停在卡片
@@ -402,7 +402,7 @@ syncKnobRangeMs  double  默认 10.0
 
 | 层级 | 覆盖 |
 |---|---|
-| `vgm_core_test` / `DawSyncTest` | §4.3 全表；N=1 含 fade；N=2；无限循环；无 loop 点；x<0；x=0 恰好；x=end；宿主不可用；`seenPlaying` 锁存；量程钳制偏移 |
+| `vgm_core_test` / `DawSyncTest` | §4.3 的六种情况（x<0、x=0、循环内、loop 点、循环后、远超 end）；N=1 有 loop 点时 fade 计入 end；N=2（total / end、尾音里不重定位、越过 end 停住、x=end 恰好、宿主跳回 CUE 前）；无限循环；无 loop 点（fade 不延长）；容差 20 ms / 100 ms；宿主不可用；宿主停止后保留最后时间、`seenPlaying` 锁存后仍 usable 且同步仍 active；量程与偏移的钳制；CUE 归零后仍 active |
 | `vgm_core_test` / `SongTimeline` | N=1/2/0 下 L、C、loopStart 的换算；fade 尾音是否计入；后端少报单遍长度时的反推 |
 | `vgm_core_test` / `[11] the host's clock` | 适配器（`HostClockSource`）的九类输入：无 play head、有 head 无 position、全零 context、只有 samples、seconds 优先、只有 bpm、只有 ppq、playing@0、NaN |
 | `vgm_app_test` / `daw-sync.txt` | 用 `# wrapper vst3` 声明宿主版，`host 12.5 playing` 注入假 `AudioPlayHead` 并跑一个 `processBlock`；断言 `Cue` 的可用性（旋钮从一开始就可用，数字恒为偏移量：`0.0 ms` → `+2.5 ms`）、Cue 再点仍是取点（不是切换）、`CUE` 的 `checked` 在三种状态下始终为 false（不发光）、同步生效后走带被禁用、关闭同步后恢复且锚点还在、空格交给宿主（`press space unhandled`） |
@@ -417,7 +417,7 @@ harness 的两条新语法（`# wrapper` 与 `host`）见 `docs/desgin/testing-a
 
 | # | 问题 | 建议 | 结果 |
 |---|---|---|---|
-| 1 | 同步开启时的本地走带 | 全部禁用；关闭同步时保持播放状态继续 | ✅ 已实现，但门槛是 `isActive()`（同步开 + 有 CUE + 宿主可信），不是「同步开」 |
+| 1 | 同步开启时的本地走带 | 全部禁用；关闭同步时保持播放状态继续 | ✅ 已实现，但门槛是 `isActive()`（同步开 + 宿主可信；CUE 恒存在，不是条件），不是「同步开」 |
 | 2 | CUE 语义 | 歌曲 0 秒 ↔ DAW 播放头，不做歌曲内偏移 | ✅ 已实现 |
 | 3 | 单次播放的淡出 | 保留淡出，进度停在终点 | ✅ 已实现（映射里 `tail` 只对有 loop 点的歌存在） |
 | 4 | 换歌 | 不自动重对齐；`Cue` 就是重新锚定的手势，换歌后让 Cue 按钮脉冲提示 | 部分：不自动重对齐已实现，脉冲提示未做 |

@@ -922,6 +922,12 @@ int main (int /*argc*/, char* /*argv*/[])
 			   "after the fade the song stops at the end");
 		check (! decision.reposition, "and an engine already sitting there is not moved");
 
+		// x == end exactly: the pass is over at that instant, not one block later
+		decision = at (130.0, 117.0, false);
+		check (! decision.play && near (decision.position, 117.0, 1.0e-9),
+			   "reaching the end exactly stops there");
+		check (! decision.reposition, "and an engine at the end is not moved");
+
 		decision = at (2.0, 80.0, true);
 		check (! decision.play && near (decision.position, 0.0, 1.0e-9) && decision.reposition,
 			   "the host jumping back before the cue parks the song at zero");
@@ -943,6 +949,24 @@ int main (int /*argc*/, char* /*argv*/[])
 		check (! ended.play && near (ended.position, 60.0, 1.0e-9),
 			   "past the end the song waits at the end");
 		check (! ended.reposition, "a stopped engine at the end is not moved");
+
+		// the same single pass WITH a loop point: N = 1 still honours the fade, it just does not
+		// loop; treating it like "no loop point" would cut the tail off
+		const SongTimeline onceWithLoop = makeSongTimeline (60.0, 60.0, 57.0, 1, 3.0, false);
+		check (onceWithLoop.hasLoop() && near (onceWithLoop.totalSeconds(), 60.0, 1.0e-9),
+			   "one pass with a loop point is still one pass long");
+		check (near (onceWithLoop.endSeconds(), 63.0, 1.0e-9),
+			   "and its fade is part of the end");
+
+		host.seconds = 71.0;
+		const auto tail = evaluateSync (onceWithLoop, host, 10.0, 60.0, true);
+		check (tail.play && near (tail.position, 60.0, 1.0e-9) && ! tail.reposition,
+			   "the fade tail of a single pass plays on past the pass's length");
+
+		host.seconds = 73.0;
+		const auto tailEnd = evaluateSync (onceWithLoop, host, 10.0, 60.0, true);
+		check (! tailEnd.play && near (tailEnd.position, 60.0, 1.0e-9),
+			   "and stops when the fade is over");
 
 		// the correction threshold: a block's worth of drift is normal, a jump is not
 		host.seconds = 20.0;
@@ -996,6 +1020,9 @@ int main (int /*argc*/, char* /*argv*/[])
 		check (near (sync.getHostClock().seconds, 42.5, 1.0e-9),
 			   "a host that stops reporting keeps the last known time");
 		check (! sync.isHostPlaying(), "but reads as stopped");
+		check (sync.isHostUsable(),
+			   "and stays usable: the play head was seen while the transport ran");
+		check (sync.isActive(), "so sync stays active after the host goes quiet");
 
 		// The cue is never cleared - "reset" moves it back to the DAW's start, which is a cue like
 		// any other, so sync keeps running instead of quietly dropping out while still lit.
