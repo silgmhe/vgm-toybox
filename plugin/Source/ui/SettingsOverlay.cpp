@@ -50,8 +50,8 @@ namespace
 
 		`page` is the page it shows, and -1 for the root: the root is a heading rather than a choice,
 		and `TreeViewItem::canBeSelected()` is the switch that says so. It is never drawn at all
-		(see `setRootItemVisible` below) - it exists to hold the rows, so a third settings page is
-		one `addSubItem` and nothing else.
+		(see `setRootItemVisible` below) - it exists to hold the rows; adding a page is one row
+		here, one `addSubItem`, one `pages.addView` and one PageIndex entry.
 	*/
 	class CategoryItem : public juce::TreeViewItem
 	{
@@ -92,6 +92,20 @@ namespace
 		juce::String name;
 		int page;
 		std::function<void (int)> picked;
+	};
+
+	/**
+		The sidebar's pages, in the order the stack holds them.
+
+		Written once and used by both the row and `addView`: with the numbers typed twice they can
+		drift, and a page inserted between two others would open its neighbour with nothing to show
+		for it. The constructor asserts the two lists ended up the same length.
+	*/
+	enum PageIndex
+	{
+		themePageIndex = 0,
+		generalPageIndex = 1,
+		audioPageIndex = 2
 	};
 }
 
@@ -213,6 +227,9 @@ GeneralSettingsPage::GeneralSettingsPage (void)
 	// Windows it is a real choice, so it is a switch; on macOS the Finder hands the document to the
 	// running application whatever this says, so the row states the fact instead of pretending to
 	// offer a second option; on Linux there is no hand-over to configure at all.
+	//
+	// Both shapes carry the same ID on purpose: the row is a choice on Windows and a statement of
+	// fact on macOS, and a script asking "is the reuse row here?" should not have to know which.
    #if JUCE_WINDOWS
 	reuseWindowButton.setComponentID ("settings.general.reuseWindow");
 	reuseWindowButton.setTooltip ("A song opened from the file manager loads into the window that is "
@@ -466,12 +483,12 @@ SettingsOverlay::SettingsOverlay (void)
 	tree.setComponentID ("settings.tree");
 	tree.setRootItemVisible (false);
 	// and no markers either: without them the rows lose their indent as well, which is what a flat
-	// list of two pages wants
+	// list of a few pages wants
 	tree.setOpenCloseButtonsVisible (false);
 
 	rootItem = std::make_unique<CategoryItem> ("Settings", -1, nullptr);
-	rootItem->addSubItem (new CategoryItem ("Theme", 0, [this] (int page) { pages.setCurrentView (page); }));
-	rootItem->addSubItem (new CategoryItem ("General", 1, [this] (int page) { pages.setCurrentView (page); }));
+	rootItem->addSubItem (new CategoryItem ("Theme", themePageIndex, [this] (int page) { pages.setCurrentView (page); }));
+	rootItem->addSubItem (new CategoryItem ("General", generalPageIndex, [this] (int page) { pages.setCurrentView (page); }));
 
 	// Audio only where there is an audio device to choose between: the standalone application says
 	// so through Source/Standalone/StandaloneHooks.h, and in a plugin the host owns the device. The
@@ -480,7 +497,7 @@ SettingsOverlay::SettingsOverlay (void)
 
 	if (hasAudio)
 	{
-		rootItem->addSubItem (new CategoryItem ("Audio", 2, [this] (int page) { pages.setCurrentView (page); }));
+		rootItem->addSubItem (new CategoryItem ("Audio", audioPageIndex, [this] (int page) { pages.setCurrentView (page); }));
 	}
 
 	tree.setRootItem (rootItem.get());
@@ -501,6 +518,10 @@ SettingsOverlay::SettingsOverlay (void)
 		audioPage->setComponentID ("settings.page.audio");
 		pages.addView (audioPage);
 	}
+
+	// The indices the rows carry and the order the stack holds are two lists that have to agree;
+	// a page inserted between two others would otherwise open its neighbour, silently.
+	jassert (pages.getNumViews() == (hasAudio ? audioPageIndex : generalPageIndex) + 1);
 
 	addAndMakeVisible (pages);
 

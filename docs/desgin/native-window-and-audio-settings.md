@@ -183,9 +183,10 @@ Wayland 会话下应用走 XWayland，装饰仍由合成器/XWM 提供。
 3. **窗口在最大化状态下关闭**：JUCE 只保存 `windowX/windowY`（`juce_StandaloneFilterWindow.h:752`），
    最大化时 `getX()/getY()` 是屏幕左上角，于是下次启动窗口出现在那个角、用正常尺寸。窗口尺寸本来
    就不持久化，所以只是观感问题，不是这次引入的 bug，但以前没有最大化按钮，这个状态是新的。
-4. **设置覆盖层在两个 wrapper 里不一样**（standalone 三行，插件两行）。窗口脚本跑在控制台里、
-   没有 hooks，只覆盖两行的那种；Audio 页没有自动化测试，理由同上：控制台进程没有音频设备，对话框
-   还是 app-modal。它是手工验证的。
+4. **设置覆盖层在两个 wrapper 里不一样**（standalone 三行，插件两行）。装配这一半现在有自动化覆盖：
+   `plugin/Tests/scripts/settings-pages.txt` 用首行的 `# hooks audio` 让 harness 在构造编辑器之前给
+   hooks 表填两个假实现，于是三页侧栏、Audio 页的存在与设备行都能被断言（见 testing-architecture.md
+   "运行器补强 5"）。剩下仍然手工的是控制台里做不了的部分：真实设备枚举、app-modal 的对话框本身。
 5. **设备行是轮询**（500 ms），不是监听：`AudioDeviceManager` 的 change listener 也能做到，但
    那要求页面注册进一个生命周期更长的管理器；2 Hz 只在面板可见时跑，代价可以忽略。
 6. **Linux 的可缩放靠 2.5 那一位，而且只在一个窗口管理器上试过。** openbox 认 `_MOTIF_WM_HINTS`，
@@ -197,7 +198,7 @@ Wayland 会话下应用走 XWayland，装饰仍由合成器/XWM 提供。
 ## 5. 验证记录
 
 ```
-.\build.ps1 -Clang -Test        # 构建 + clang 检查 + 8 个测试全部通过
+.\build.ps1 -Clang -Test        # 构建 + clang 检查 + 9 个测试全部通过
 dist\Standalone\VGMToybox.exe   # 真实窗口
 ```
 

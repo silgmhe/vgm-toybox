@@ -148,8 +148,10 @@ private:
 	over everything, a centred panel, a click outside it or escape dismisses it, and no editor
 	class of its own.
 
-	The sidebar is a TreeView with the root hidden: the pages are its children, so a future settings
-	page is one `addSubItem` (section 6). The pages are the window's own page container
+	The sidebar is a TreeView with the root hidden: the pages are its children, so a new settings
+	page is a page class, one `addSubItem`, one `pages.addView` and one entry in PageIndex - the
+	index the item carries and the order the stack holds have to agree, and the constructor asserts
+	that they do (section 6). The pages are the window's own page container
 	(ui/ViewStack.h) - the same object the play/mixer/visualiser pages use, so a page here is
 	written exactly like a page there.
 
@@ -195,9 +197,10 @@ private:
 
 	void dismiss (void);
 
-	/** The sidebar's items. The root is a heading, not a page, so it cannot be selected; the two
-		sub-items are the pages and own nothing - see ui/AboutOverlay.h for the same reasoning
-		about a Component subclass that is deliberately tiny. */
+	/** The sidebar's items. The root is a heading, not a page, so it cannot be selected; the
+		sub-items are the pages (two, or three when the Audio page exists) and own nothing - see
+		ui/AboutOverlay.h for the same reasoning about a Component subclass that is deliberately
+		tiny. */
 	std::unique_ptr<juce::TreeViewItem> rootItem;
 
 	juce::TreeView tree;	// after the items: the tree has to go first (it does not own them)

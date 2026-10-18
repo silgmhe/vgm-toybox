@@ -168,12 +168,9 @@ public:
 		pluginHolder = nullptr;
 		mainWindow = nullptr;
 
-		// The hooks hold onto the holder, which has just gone. Cleared field by field: `= {}` on a
-		// pair of std::functions is the same ambiguity clang reports for juce::File (copy and move
-		// assignment both fit an empty braced list).
-		auto& table = standalone::hooks();
-		table.describeAudioDevice = std::function<juce::String (void)>();
-		table.showAudioSettings = std::function<void (void)>();
+		// The hooks hold onto the holder, which has just gone; Hooks::clear() sits next to the
+		// fields so that a hook added later cannot be forgotten here.
+		standalone::hooks().clear();
 
 		appProperties.saveIfNeeded();
 	}
@@ -296,14 +293,22 @@ private:
 		song, and on Windows nothing else would raise the window. */
 	void handOver (const juce::File& file)
 	{
-		// A standalone window of this application holds this processor and no other, so the cast
-		// is the same one juce_StandaloneFilterWindow makes in its own editor code.
-		static_cast<ToyboxAudioProcessor*> (mainWindow->getAudioProcessor())
-			->openSongFromAnotherInstance (file);
+		// This application's own window holds this application's own processor, but the contract
+		// is checked rather than asserted down: a window that is gone, or one that is not ours,
+		// should lose the song, not the process.
+		if (mainWindow == nullptr)
+		{
+			return;
+		}
 
-		mainWindow->toFront (true);
+		if (auto* processor = dynamic_cast<ToyboxAudioProcessor*> (mainWindow->getAudioProcessor()))
+		{
+			processor->openSongFromAnotherInstance (file);
 
-		writeBreadcrumb (file.getFullPathName(), "Handed to the running window.");
+			mainWindow->toFront (true);
+
+			writeBreadcrumb (file.getFullPathName(), "Handed to the running window.");
+		}
 	}
 
 	/** One line in the temp folder for every hand-over, and for every one that could not happen:

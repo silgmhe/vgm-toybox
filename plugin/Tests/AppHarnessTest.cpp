@@ -39,6 +39,7 @@
 
 #include "PluginEditor.h"
 #include "PluginProcessor.h"
+#include "Standalone/StandaloneHooks.h"
 #include "ui/UiSnapshot.h"
 
 namespace
@@ -795,6 +796,27 @@ juce::AudioProcessor::WrapperType wrapperTypeFromScript (const juce::File& scrip
 	return juce::AudioProcessor::wrapperType_Standalone;
 }
 
+/** Whether a script speaks for an application that has an audio device of its own - `# hooks audio`.
+
+	The settings panel decides whether it has an Audio page when it is constructed, from
+	standalone::available(), which reads the hook table. So a script that wants the three-page shape
+	has to say so before the editor exists - the same reason, and the same place, as `# wrapper`.
+	The two hooks are fakes: the real device is not what such a script is about, the row and the
+	page are.
+*/
+bool scriptAsksForAudioHooks (const juce::File& script)
+{
+	for (const auto& line : juce::StringArray::fromLines (script.loadFileAsString()))
+	{
+		if (line.trim() == "# hooks audio")
+		{
+			return true;
+		}
+	}
+
+	return false;
+}
+
 } // namespace
 
 int main (int argc, char* argv[])
@@ -823,6 +845,13 @@ int main (int argc, char* argv[])
 	const auto wrapper = script.existsAsFile() ? wrapperTypeFromScript (script)
 											   : juce::AudioProcessor::wrapperType_Standalone;
 	juce::AudioProcessor::setTypeOfNextNewPlugin (wrapper);
+
+	if (script.existsAsFile() && scriptAsksForAudioHooks (script))
+	{
+		auto& hooks = toybox::standalone::hooks();
+		hooks.describeAudioDevice = [] { return juce::String ("Fake device"); };
+		hooks.showAudioSettings = [] {};
+	}
 
 	ToyboxAudioProcessor processor;
 	ToyboxAudioProcessorEditor editor (processor);
