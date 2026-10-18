@@ -67,7 +67,9 @@ void ToyboxAudioProcessor::openSongFromAnotherInstance (const juce::File& file)
 juce::File ToyboxAudioProcessor::takeSongFromAnotherInstance (void)
 {
 	const auto file = instanceSong;
-	instanceSong = {};
+	// Not "= {}": File's copy and move assignment make that ambiguous to clang. An empty File is
+	// what is meant.
+	instanceSong = juce::File();
 	return file;
 }
 

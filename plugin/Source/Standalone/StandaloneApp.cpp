@@ -114,7 +114,9 @@ public:
 			if (pendingSong.existsAsFile())
 			{
 				handOver (pendingSong);
-				pendingSong = {};
+				// juce::File(), not {}: File has both copy and move assignment, and clang reads
+				// the empty braces as a tie between them. MSVC takes one, so only clang builds failed.
+				pendingSong = juce::File();
 			}
 		}
 		else
