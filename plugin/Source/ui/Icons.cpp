@@ -141,6 +141,27 @@ void drawSlidersGlyph (juce::Graphics& g, juce::Rectangle<float> iconArea, juce:
 	}
 }
 
+void drawOneShotGlyph (juce::Graphics& g, juce::Rectangle<float> iconArea, juce::Colour colour)
+{
+	g.setColour (colour);
+
+	const float lineWidth = juce::jmax (1.0f, iconArea.getWidth() * 0.11f);
+	const float centreY = iconArea.getCentreY();
+	const float left = iconArea.getX();
+	const float right = iconArea.getRight();
+	const float spikeX = iconArea.getCentreX();
+
+	// A flat line with one triangular spike: the shape reads as "one event", not a waveform.
+	juce::Path pulse;
+	pulse.startNewSubPath (left, centreY);
+	pulse.lineTo (juce::jmax (left, spikeX - iconArea.getWidth() * 0.22f), centreY);
+	pulse.lineTo (spikeX, iconArea.getY() + iconArea.getHeight() * 0.12f);
+	pulse.lineTo (juce::jmin (right, spikeX + iconArea.getWidth() * 0.22f), centreY);
+	pulse.lineTo (right, centreY);
+	g.strokePath (pulse, juce::PathStrokeType (lineWidth, juce::PathStrokeType::curved,
+											   juce::PathStrokeType::rounded));
+}
+
 void drawSyncGlyph (juce::Graphics& g, juce::Rectangle<float> iconArea, juce::Colour colour)
 {
 	// Two interlocking links, drawn as two pills overlapping in the middle: a real chain is drawn

@@ -1,0 +1,653 @@
+# 设计：混音器每轨 MIDI 输出
+
+- **状态**：基础版已实现（工作区）；引擎侧与窗口侧均已自动化覆盖（`vgm_mixer_test` `[10]`、`app.midi`），待 REAPER 实测；MIDI-BUS 暂不做
+- **日期**：2026-10-19
+- **分支**：`feature/midi-output`
+- **来源**：`docs/research/2026-10-19-midi-output-and-visualisation.md`
+- **一句话**：在每个混音通道条的音频输出下拉框下方增加一个 MIDI 通道下拉框，把该轨的演奏事件实时送到插件 MIDI 输出总线；能产生音高的芯片通道发 note + pitch bend，只能 one-shot 的通道发固定 trigger，并用图标提示。
+
+---
+
+## 1. 需求与范围
+
+### 1.1 用户可见行为
+
+- 混音器里每个**芯片通道轨道**的底部，在现有音频输出下拉框下方，增加一个 MIDI 输出通道下拉框；
+- 下拉框内容：`Off`、`1` … `16`；**默认全部为 `Off`**；
+- 选择 `Off` 表示该轨不输出 MIDI；选择 `1–16` 表示该轨的事件发送到对应 MIDI 通道；
+- 对只能 one-shot 的通道（ADPCM-A、ADPCM-B、DAC、noise、部分采样通道），在 MIDI 下拉框旁显示一个**one-shot 图标**，tooltip 说明“只发触发音符，不跟踪音高”；
+- 对该芯片暂不支持 MIDI 的通道，下拉框禁用并显示 `Not available`；
+- **MIDI 跟随音频可听状态**：轨道被 mute，或处于“其它轨 solo、自己未被 solo”的状态时，该轨 MIDI 输出停止并发送 all-notes-off；重新可听后从当前位置继续。要单纯禁止 MIDI，请把该轨的 MIDI 下拉框设为 `Off`，而不是用 mute/solo；
+- **Master 轨道也有 MIDI 下拉框**，默认 `Off`；它输出的是所有音频可听且 MIDI 已启用的轨道合并后的 MIDI 总输出；
+- **混音器总开关关闭时不输出任何 MIDI**；轨道/Master 的 MIDI 下拉框保留数值但灰显；
+- MIDI 输出是**实时**的：不做 MIDI 文件导出，不做离线渲染；
+- **优先 VST3**：插件在支持插件 MIDI 输出的 VST3 宿主中，把 MIDI 输出路由到一条 MIDI 轨并内录；
+- 后续可视化直接复用同一套事件序列，不需要再解析一次 VGM。
+
+### 1.2 不在本 feature 内
+
+- MIDI 文件导出；
+- MIDI 输入/外部键盘演奏；
+- 自动识别采样根音、自动鼓映射编辑；
+- 为所有 libvgm 芯片实现 MIDI；
+- **linked SSG 独立轨**（YM2610/YM2608/YM2203 的 3 个 SSG 当前没有独立 mixer track）——第一版不做，方案记在附录 A；
+- **每轨 MIDI Bus/端口**：VST3 插件只有一个 MIDI 输出事件总线，插件内部不能枚举/选择宿主端口；每轨一个 bus 下拉框需要多个 VST3 事件输出总线，JUCE wrapper 当前不支持，第一版不做；
+- 插件端虚拟 MIDI 端口（只在宿主不支持插件 MIDI 输出时作为后备方案另行评估）。
+
+### 1.3 关键约束
+
+- **不能影响音频线程**：MIDI 事件不能加锁、分配、打日志；不能因为 MIDI 输出失败而静音或卡住音频；
+- **不能改变现有混音行为**：MIDI 通道设置不改变 gain/pan/输出路由；mute/solo 会按音频可听状态同时影响 MIDI（见 §3.2），这是唯一联动；
+- **插件已经声明 MIDI 输出总线**：`NEEDS_MIDI_OUTPUT TRUE`、`producesMidi()` 已经为 true，`processBlock()` 目前清空 MIDI buffer；本 feature 只是把生成的事件放进去，不需要改 CMake 的 MIDI 能力开关。
+
+---
+
+## 2. 可行性结论
+
+**可行，而且插件的 MIDI 输出基础已经在了。**
+
+现有代码：
+
+- `plugin/CMakeLists.txt:166-171` 已设置 `NEEDS_MIDI_INPUT TRUE` 和 `NEEDS_MIDI_OUTPUT TRUE`；
+- `PluginProcessor.h:33-37` 的 `acceptsMidi()` / `producesMidi()` 都为 true；
+- `PluginProcessor.cpp:110-117` 每个 block 先 `midiMessages.clear()`，注释明确说输出总线是为未来的 MIDI-out 预留的，并防止输入事件回显；
+- JUCE 的 VST3 wrapper 在 `JucePlugin_ProducesMidiOutput` 打开时会把 `processBlock` 留下的 MIDI buffer 转成 VST3 `outputEvents`（`juce_audio_plugin_client_VST3.cpp:3733-3735`）；AU/AUv3 wrapper 也支持 `MIDIOutputCallback`（`juce_audio_plugin_client_AU_1.mm:729-744`、`juce_audio_plugin_client_AUv3.mm:1647`）。
+
+因此：
+- **不需要**再改 `NEEDS_MIDI_OUTPUT`；
+- **不需要**为了 MIDI 输出修改 libvgm 的音频路径；
+- 需要做的是：在 `processBlock` 里把事件按 sample offset 填进 `midiMessages`，以及把事件序列、轨道通道映射和 UI 做出来。
+
+**真正的风险不在“能不能发 MIDI”，而在：**
+1. 宿主是否支持把插件的 MIDI 输出路由到轨道（VST3/AU 标准支持，但不同 DAW 的暴露方式不同）；
+2. 每轨事件提取是否足够准确（尤其 one-shot 采样）；
+3. 16 个 MIDI 通道是否够用（YM2610B 正好用满 16 个）；
+4. 循环/seek/停止时不能挂音。
+
+---
+
+## 3. 用户交互设计
+
+### 3.1 通道条布局
+
+当前 `ChannelStrip` 的底部顺序是：
+
+```
+[名称]
+[pan]
+[音量推子 / 电平表 / 刻度]
+[M] [S]
+[音频输出下拉框]   ← 现有
+```
+
+新增后：
+
+```
+[名称]
+[pan]
+[音量推子 / 电平表 / 刻度]
+[M] [S]
+[音频输出下拉框]   ← 现有
+[MIDI 通道下拉框] [one-shot 图标]   ← 新增，位于最底部
+```
+
+- `ChannelStrip::preferredHeight` 目前是 `204`（`ChannelStrip.h:29`）；新增一行 26 px + 间距 4 px，建议改为 **234**；
+- 通道条宽度仍是 88 px，内部宽度 76 px；MIDI 行建议 `ComboBox` 约 60–62 px，右侧留 10–12 px 给 one-shot 图标；
+- Master strip 同样增加这一行，但没有 one-shot 图标；它的 MIDI 行同样位于音频输出下拉框下方；
+- 图标和下拉框都使用现有的 `ToyboxLookAndFeel` 风格；MIDI 行不新增卡片，只增加一个控件行；
+- 这条改动会让混音卡片的最小内容高度增加约 30 px；小窗口下多出的高度由现有 viewport 滚动承担（`MixerPanel::layoutStrips()` 已经按 `preferredHeight` 计算）。
+
+### 3.2 下拉框行为
+
+- 条目：`Off`（id 1）、`1` … `16`（id 2–17）；`selectedId - 1` 映射为 0–16，0 = Off，1–16 = MIDI 通道；
+- **初始值全部为 `Off`**；用户显式选择通道后才输出 MIDI；
+- 选择后立即写入 `PlaybackEngine`，不需要“应用”按钮；
+- 选择 `Off` 时，若该轨有正在发声的 MIDI note，先发 note-off/all-notes-off，再停止；
+- **MIDI 跟随音频可听状态**：轨道 mute，或 solo 状态下自己未被 solo 时，该轨直出 MIDI 停止并发送 all-notes-off，同时从 Master 合并中排除；恢复可听后从当前播放位置继续，不补发不可听期间的音符；
+- 用户若要禁止某轨 MIDI，应把该轨 MIDI 设为 `Off`；mute/solo 是“音频可听状态”，`Off` 是“MIDI 不输出”，两者语义不同；
+- **Solo 跟随音频**：有 solo 时，只有 solo 轨的 MIDI 直出和 Master 合并保留；取消 solo 后恢复。solo 状态变化会触发一次 all-notes-off + 重新同步；
+- 两个轨道选同一个 MIDI 通道时**允许合并**（MIDI 本身就是多源合并的）；tooltip 可以提示“与其它轨共用通道”，不做硬性阻止；
+- 音频输出选择 `Master` / `Out n` 不影响 MIDI 通道；MIDI 始终走插件的 MIDI 输出总线；
+- **混音器总开关关闭时不输出任何 MIDI**：直出和 Master 都停，先发送 all-notes-off；MIDI 下拉框保留数值但灰显，重新打开混音器后恢复。
+
+### 3.3 Master MIDI
+
+- Master strip 的底部也增加同样的 MIDI 下拉框（`mixer.master.midi`），默认 `Off`；
+- Master 的 MIDI 是**所有音频可听、且自身 MIDI 已启用的轨道**的合并信号；
+- Master 把合并信号重新发送到 Master 选择的 MIDI 通道；各轨自身的 MIDI 通道仍然保留直出；
+- 因此，若某轨既启用了直出、又启用了 Master，同一音符会在两个通道上出现一次（直出一次、Master 合并一次）。这允许用户自由选择“分轨直出”“单轨总谱”或两者都要；Master 默认 `Off`，不想要 Master 时设为 `Off` 即可；
+- Master 的 `M`（master mute）同时静音音频和 Master MIDI 合并；轨道 mute 只影响该轨的直出和它在 Master 合并中的贡献；
+- Master MIDI 不做 one-shot 图标（它只是一个合并出口，不改变源轨的能力）。
+
+### 3.4 MIDI Channel / MIDI Bus / MIDI Port
+
+先把三个词分开：
+
+| 词 | 含义 | 本设计 |
+|---|---|---|
+| **MIDI Channel** | 1–16，事件里的通道号 | 每轨一个下拉框；已经有 |
+| **MIDI Port / Device** | 操作系统里的 MIDI 输出设备（loopMIDI、IAC、硬件端口） | 全局设置；standalone 可选设备；VST3 由宿主路由 |
+| **VST3 MIDI Bus** | 插件暴露给宿主的事件输出总线 | 本插件只有一条；宿主把它路由到一个端口/轨道 |
+
+- **VST3 下没有“每轨 MIDI Bus”下拉框**：插件只有一个 MIDI 输出事件总线（JUCE 的 `NEEDS_MIDI_OUTPUT` 创建的就是它）。这个总线由宿主路由，插件内部无法枚举或选择宿主端口；
+- 一个插件实例要同时指向多个宿主端口，需要多个 VST3 事件输出总线；JUCE 的 VST3 wrapper 目前只处理 index 0 的输入/输出事件总线，不支持多 bus。自己改 wrapper 会引出跨宿主兼容问题，第一版不做；
+- **推荐做法**：每轨选 MIDI Channel；VST3 的端口选择交给 REAPER 的插件 MIDI 输出路由。若要同时去多个端口，加载多个 VST3 实例，或在 REAPER 里对 MIDI 轨做路由；
+- **standalone** 才需要全局的 MIDI 设备/端口下拉框（`juce::MidiOutput` 的设备列表），放在 Settings → MIDI 输出子面板，而不是每个通道条；
+- 因此，用户提出的“在通道条下再加一个 MIDI-BUS 下拉框”**第一版不实现**；如果以后要做，优先做全局设备选择，不做每轨 bus。
+- 如果你说的“MIDI Bus”其实是 **MIDI 通道组**，那每轨的 MIDI 下拉框已经覆盖。
+
+### 3.5 one-shot 图标
+
+- 仅当 `TrackInfo::midiCapability == oneShot` 时显示；
+- 建议用 `Icons` 里新增的 `drawOneShotGlyph()`：一个小的“单次脉冲/鼓点”图形，10–12 px，颜色用 `theme::secondaryText()` 或琥珀色；
+- 图标不可点击，只提供 tooltip：
+  - EN: “One-shot channel: MIDI note C4 is a trigger; pitch is not tracked.”
+  - ZH: “一次性通道：以 C4 作为触发音符，不跟踪音高。”
+- 组件 ID `mixer.midi.<index>.oneshot`（带轨道索引，理由同 §3.6），方便 AppHarness 断言；
+- 若通道不支持 MIDI，不显示图标，下拉框禁用并显示 `Not available`。
+
+### 3.6 可访问性/测试 ID
+
+- 每轨 MIDI 下拉框：`mixer.midi.<index>`（如 `mixer.midi.0`、`mixer.midi.3`）；
+- 每轨 one-shot 图标：`mixer.midi.<index>.oneshot`；
+- Master MIDI 下拉框：`mixer.master.midi`；Master 不显示 one-shot 图标（其徽标 ID 为 `mixer.master.oneshot`，始终不可见）；
+- **索引是必需的**：组件 ID 必须唯一，否则 `findByID` 只返回树里的第一个匹配（`AppHarnessTest.cpp:114-138`），脚本就只能断言轨 0，无法验证“噪声轨（one-shot）显示徽标”这类每轨差异。音频输出框沿用旧的 `mixer.output`，没有索引（现无脚本按轨断言它）；
+- AppHarness 的 `set <componentId> <index>` 已经能驱动 ComboBox（`plugin/Tests/AppHarnessTest.cpp:514-527`），可以直接写脚本验证通道切换。
+
+---
+
+## 4. 数据模型
+
+### 4.1 `TrackInfo` 增加能力位
+
+`plugin/Source/playback/SongBackend.h:67-77` 目前有 `TrackInfo`。建议增加：
+
+```cpp
+enum class MidiCapability
+{
+    unavailable,   // 该芯片/通道暂不支持 MIDI
+    melodic,       // 能给出音高：FM / PSG / 方波等
+    oneShot        // 只能触发：ADPCM-A/B、DAC、noise、采样通道
+};
+
+struct TrackInfo
+{
+    // ... existing fields ...
+    MidiCapability midiCapability = MidiCapability::unavailable;
+};
+```
+
+`TrackInfo` 是格式无关的，后端负责填。这样 UI 不需要知道 `DEVID_*`，将来 SPC 后端也能用同一套能力位。
+
+### 4.2 事件序列
+
+在 `plugin/Source/playback/` 增加不依赖 libvgm 的类型：
+
+```cpp
+enum class MidiEventType { noteOn, noteOff, pitchBend, controlChange };
+
+struct MidiEvent
+{
+    double timeSeconds;
+    MidiEventType type;
+    std::uint8_t data1;
+    std::uint8_t data2;
+    std::uint32_t sourceTrack;   // TrackInfo::id
+};
+
+struct MidiSequence
+{
+    std::vector<MidiEvent> events;   // 按 timeSeconds 排序
+    // 可选：每轨的默认 one-shot note、名称等
+};
+```
+
+`ISongInstance` 增加可选访问：
+
+```cpp
+virtual const MidiSequence* getMidiSequence() const { return nullptr; }
+```
+
+默认返回 nullptr，不破坏现有后端；`LibvgmSongInstance` 覆盖它。引擎在 `song` 存活期间持有这个指针，序列在加载时构建，之后只读。
+
+### 4.3 每轨 MIDI 通道
+
+`PlaybackEngine::TrackState`（`PlaybackEngine.h:213-223`）增加：
+
+```cpp
+std::atomic<int> midiChannel { 0 };   // 0 = Off, 1..16
+```
+
+`PlaybackEngine` 增加：
+
+```cpp
+void setTrackMidiChannel (size_t trackIndex, int channel);   // clamp 0..16
+int getTrackMidiChannel (size_t trackIndex) const;
+
+void setMasterMidiChannel (int channel);                     // clamp 0..16
+int getMasterMidiChannel (void) const;
+```
+
+通道值是 UI 和音频线程共享的原子量；事件调度读它，不需要锁。
+
+Master 的 MIDI 通道单独存一个 `std::atomic<int> masterMidiChannel { 0 }`，不占 `TrackState` 的数组位置。
+
+### 4.4 持久化
+
+`SessionTrackState`（`SessionState.h:15-23`）增加：
+
+```cpp
+int midiChannel = 0;   // 0 = Off, 1..16
+```
+
+`SessionState` 增加：
+
+```cpp
+int masterMidiChannel = 0;   // 0 = Off, 1..16
+```
+
+`writeSessionState()` 在 `<track>` 上写可选的 `midiChannel` 属性，在 `<mixer>` 上写可选的 `masterMidiChannel`；`readSessionState()` 缺省读 0。**不提升 `currentVersion`**：这是可选的加法字段，旧版本会忽略它，新版本读旧工程得到 Off。若以后改变语义，再升版本。
+
+`PlaybackEngine::readState()` 在恢复每轨 gain/pan/mute/solo/output 的同一处恢复 `midiChannel`，并在恢复 master 设置时恢复 `masterMidiChannel`；新歌加载时默认 Off。
+
+---
+
+## 5. 事件提取
+
+### 5.1 为什么放在后端，而不是改 libvgm
+
+推荐第一版在 `LibvgmSongInstance` 里基于 `playerMemory` 构建序列，不改 `libs/libvgm`：
+
+- 序列在加载时构建，不在音频线程；
+- 可视化、MIDI 调度、以后的 MIDI 文件导出共享同一份数据；
+- 不依赖 libvgm 的私有 `CHIP_DEVICE`/写函数；
+- 对 `.vgz` 已经解压好的 `playerMemory` 直接解析，和实际播放的字节一致。
+
+如果以后要覆盖 S98/DRO/GYM，再考虑在 libvgm 的 `PlayerBase` 增加一个“寄存器写 tap”，而不是为每种格式各写一套解析器。第一版不做这个上游改动，因为：
+
+- VGM/VGZ 是项目的主格式；
+- 事件序列必须在播放前完整可用（可视化/seek），实时写 tap 只能拿到“已经播过的”事件；
+- 上游改动会扩大维护面，且不能解决 one-shot 语义。
+
+### 5.2 解析器职责
+
+建议新增：
+
+```
+plugin/Source/backends/libvgm/MidiSequenceBuilder.{h,cpp}
+```
+
+职责：
+
+- 读 VGM header：data offset、loop offset、chip clock；
+- 遍历命令流：`0x50–0x5F`、`0xA0–0xAF`、`0xB?`（第二芯片）、`0x61/0x62/0x63/0x7n` 等待、`0x67` 数据块（跳过 payload）、`0x66` 结束；
+- 维护每种芯片的影子寄存器；
+- 对支持的芯片调用对应的 `ChipMidiDecoder`；
+- 输出 `MidiEvent`，`sourceTrack` 用已经建立的 `TrackInfo::id`；
+- 时间统一为秒：`sampleCount / 44100.0`；VGM 的 tick 是 44.1 kHz 采样，不需要 tempo map。
+
+### 5.3 每芯片解码器
+
+第一版只做研究文档里的 A 档，以及明确标记的 one-shot：
+
+| 芯片 | 处理 |
+|---|---|
+| YM2610 / YM2610B | FM：key on/off + FNUM/BLOCK + TL/pan；ADPCM-A/B：one-shot trigger |
+| YM2612 | 6 FM；DAC 为 one-shot |
+| YM2608 | 6 FM；ADPCM-A/B one-shot（SSG 见 §6.3） |
+| YM2203 | 3 FM（SSG 见 §6.3） |
+| YM2151 | 8 FM |
+| YM2413/YM3526/YM3812/YMF262 | FM；rhythm 通道 one-shot |
+| AY8910 / SN76489 | tone 为 melodic；noise 为 one-shot |
+| NES APU / GB DMG | pulse/triangle/wave melodic；noise/DMC one-shot |
+| 其他 | 暂不产生事件，`midiCapability = unavailable` |
+
+### 5.4 FM 的 note 生成
+
+以 YM2610 为例：
+
+- `0x28` 的 bit 4–7 是 operator key on/off，低 2 位选通道，bit 2 选高/低三通道组；
+- `0xA0–0xA6` + `0xA4–0xA6` 给 FNUM/BLOCK；
+- 用芯片时钟、FNUM、BLOCK 算频率，再转成“最近 MIDI note + pitch bend”；
+- 频率公式要按芯片的 prescaler 校准，**不要直接复用参考项目的 `/72`**（见研究文档 §3.2）；
+- 一个通道从 key-off 到 key-on 发 note-on；key-on 期间 FNUM 变化只更新 pitch bend；note 变化超过 pitch bend 范围时先 note-off 再 note-on；
+- 力度用载波 TL/通道音量近似；pan 用 `0xB4` 的 L/R 位发 CC10；
+- 同一个通道重复 key-on（没有先 key-off）不应重复发 note-on；用 `keyMask` 记录 operator 位。
+
+### 5.5 one-shot 的 note：不做 GM 鼓映射
+
+第一版**不做 GM 鼓映射**，也不做采样根音分析。所有能确定音高的通道（FM、PSG tone）都输出**原始音高**；one-shot 通道没有可靠音高，统一发送 **C4（MIDI note 60）** 作为触发标识：
+
+| 来源 | note |
+|---|---:|
+| ADPCM-A 1–6 | 60 |
+| ADPCM-B | 60 |
+| YM2612 DAC | 60 |
+| noise | 60 |
+| rhythm（OPLL/OPL） | 60 |
+
+- 这些 note **只是触发标识**，不代表采样本身的真实音高；不要把 60 当成鼓映射，也不要声称它还原了采样音高；
+- 用户如果需要在 DAW 里做鼓映射，可以自行加 MIDI 效果器；插件不内置 drum map；
+- ADPCM-B v1 按 one-shot 处理；后续在 Settings → MIDI 输出里提供根音/采样率覆盖或 melodic 模式；
+- 用户只选 MIDI 通道，不选 note；
+- note-off 来源：key-off、采样结束/停止位，或一个默认 gate（例如 80 ms）；三者取先到者；
+- 图标和 tooltip 提示用户“这是 one-shot，C4 只是 trigger，不跟踪音高”。
+
+### 5.6 循环与 seek
+
+- 序列只保存**一遍**，并记录 `loopStartSeconds`/`loopEndSeconds`（来自 `SongInfo`）；
+- 循环时，播放位置回到 loop start，MIDI 游标重置，先发 all-notes-off，再重新发事件；
+- seek/load/stop 时把 `midiResetGeneration` 加一；音频线程看到新 generation 后先发 all-notes-off，再把游标定位到新位置；
+- 这样可以避免“循环后旧 note 还按着”和“seek 后挂音”。
+
+---
+
+## 6. 实时 MIDI 调度
+
+### 6.1 插件：走宿主 MIDI 输出总线
+
+这是本 feature 的主路径：
+
+1. `ToyboxAudioProcessor::processBlock()` 开头 `midiMessages.clear()`（现有）；
+2. `engine.render(...)` 同时接收一个可选的 `MidiBlockSink*`；
+3. 引擎在渲染音频时，按 block 起始位置和 sample rate 扫描 `MidiSequence`，把事件转成 `(sampleOffset, status, data1, data2)` 交给 sink；
+4. sink 把事件加到 `midiMessages`；
+5. JUCE 的 VST3/AU wrapper 把它们转成宿主可见的 MIDI 输出事件。
+
+伪代码：
+
+```cpp
+void ToyboxAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer,
+                                         juce::MidiBuffer& midiMessages)
+{
+    midiMessages.clear();   // drop incoming events; output bus is ours
+    playback::MidiBufferSink sink (midiMessages);
+    engine.render (buses, playback::kOutputBusCount, numSamples, &sink);
+}
+```
+
+- sample offset 用 `round((event.timeSeconds - blockStartSeconds) * sampleRate)`；
+- `blockStartSeconds` 必须是本次 `render()` 真正使用的起点（DAW sync 修正后的起点），不能在外面先读一个旧位置；
+- 引擎在 `render()` 的 try-lock 成功后、渲染音频之前扫描事件，保证和音频同一时间基准；
+- `MidiBufferSink` 不分配内存：在 `prepareToPlay()` 里预留最大事件数，`processBlock` 只写；如果宿主 buffer 容量未知，使用成员 `juce::MidiBuffer` + `swapWith`，或至少保证 `ensureSize` 在非音频线程完成；
+- 如果 `try-lock` 失败（输出静音），本 block 不发 MIDI；下一个成功 block 通过 generation 重新同步，不补发已错过的 note（避免时间错位）。
+
+### 6.2 Standalone
+
+- standalone 没有宿主 MIDI 输出总线，需要 `juce::MidiOutput` 打开一个设备；
+- 第一版可以**不做** standalone 实时输出，只做插件；如果做，建议用独立的高优先级 MIDI 线程，从 lock-free 队列取事件，调用 `sendMessageNow`，不要在音频线程直接打开/查找设备；
+- 设备选择放在 Settings 的 Audio/MIDI 页，属于后续工作。
+
+### 6.3 宿主兼容性
+
+- **VST3 是主路径**：JUCE wrapper 支持 output event bus；宿主必须启用/路由它；
+- **首选实测宿主是 REAPER（VST3）**；用户自行验证内录流程；
+- AU/AUv3 是次要路径：JUCE wrapper 支持 `MIDIOutputCallback`，但 Logic/GarageBand 等宿主是否把 MIDI 输出暴露成可录制的路由，需要实测；
+- AAX：当前 JUCE AAX wrapper 没有对应的 `ProducesMidiOutput` 路径，**不承诺**；
+- 需要准备一张“宿主 × 格式”测试表（REAPER 优先，其次 Cubase/Nuendo、Bitwig、Studio One、Ableton Live、Logic）；
+- 如果宿主不支持，后备方案是 standalone/虚拟 MIDI 端口，但不在本 feature 的第一版。
+
+### 6.4 通道映射与 Master 合并
+
+- 事件序列里存 `sourceTrack`，不预先写死 MIDI 通道；
+- 调度时读 `TrackState.midiChannel`：
+  - 0 -> 该轨的直出丢弃；
+  - 1..16 -> 写到对应通道；
+- **Master 合并**：再读 `masterMidiChannel`：
+  - 0 -> 不产生 Master 合并输出；
+  - 1..16 -> 把所有“音频可听（未 mute，且 solo 状态下自己 solo）且自身 midiChannel != Off”的轨道的同一批事件，复制到 Master 通道；
+- 直出和 Master 是两条并行输出：同一轨若两者都启用，会发两次（一次直出、一次 Master 合并）。这是用户自由度的一部分；Master 默认 Off，不想要就关掉；
+- 如果轨道通道或 Master 通道在发声过程中被改：先对旧通道发 all-notes-off，再用新通道重新开始；第一版建议立即 all-notes-off，避免挂音；
+- 多个轨道共用同一个 MIDI 通道时，事件合并；如果两个轨道同时发同一个 note，note-off 可能互相截断，这是 MIDI 合并的固有问题，UI 可提示。
+
+---
+
+## 7. 每芯片能力与 one-shot 标记
+
+### 7.1 后端如何填 `midiCapability`
+
+在 `LibvgmSongInstance::enumerate()` 里，拿到 `PLR_DEV_INFO` 和 `channelNames` 后，按 `device.type` 和 `channelIndex` 填：
+
+- `DEVID_YM2610`：
+  - 0–5 FM：`melodic`（非 B 的 0/3 可标 `unavailable`，因为核心不输出）；
+  - 6–11 ADPCM-A：`oneShot`；
+  - 12 ADPCM-B：`oneShot`；
+- `DEVID_YM2612`：0–5 melodic；6 DAC oneShot；
+- `DEVID_YM2608`：0–5 melodic；6–11 oneShot；12 oneShot；
+- `DEVID_YM2203`：0–2 melodic；SSG 是 linked，不在 track 列表（见 §7.2）；
+- `DEVID_YM2151`：0–7 melodic；
+- `DEVID_AY8910`：0–2 melodic（noise 没有独立 track）；
+- `DEVID_SN76496`：0–2 melodic；3 noise oneShot；
+- `DEVID_NES_APU`：0–2 melodic；3 noise/4 DMC oneShot；
+- `DEVID_GB_DMG`：0–2 melodic；3 noise oneShot；
+- 其他：`unavailable`。
+
+### 7.2 linked SSG：第一版不做
+
+- libvgm 把 OPN 的 SSG 作为 **linked AY8910**（`opnintf.c:48-52`）；
+- `LibvgmSongInstance` 的 `isTrackDevice()` 只保留 `parentIdx == (UINT32)-1` 的设备（`LibvgmSongInstance.cpp:31-36`），所以 YM2610/YM2608/YM2203 的 SSG **没有自己的 mixer track**；
+- 当前 YM2610 的 13 个 track 是 6 FM + 6 ADPCM-A + 1 ADPCM-B，SSG 不在其中；
+- **第一版接受这个缺口**：不给 linked SSG 做独立 MIDI 通道，也不在 UI 上伪造轨道；
+- 后续可选方案（MIDI-only lane、真正可隔离 track）见 **附录 A**，作为备忘。
+
+### 7.3 非 B 的 FM 静默通道
+
+- YM2610 非 B 实际只输出 `CH[1], CH[2], CH[4], CH[5]`（`fmopn.c:3621-3624`）；
+- mixer 仍显示 FM 1–6；其中 FM 1/4 可能是静默的；
+- 建议 `midiCapability = unavailable` 给非 B 的 0/3 号 FM（按 libvgm 的 channel index），避免用户选了通道却没有事件；
+- YM2610B 全部 6 个 melodic；
+- 具体索引以 `TrackInfo::channelIndex` 为准，后端负责映射。
+
+---
+
+## 8. 视觉与布局
+
+### 8.1 尺寸
+
+- `ChannelStrip::preferredHeight`: 204 -> **234**（新增 26 px 行 + 4 px 间距）；
+- `kMidiHeight = 26`，`kMidiGap = 4`；
+- `resized()` 中从底部依次 `removeFromBottom`：MIDI 行、音频输出行、M/S 行；
+- 音频输出行仍然在最上面；MIDI 行在最底部，符合“音频输出下拉框下方”；
+- 小窗口下由 MixerPanel 的 viewport 滚动，不压缩推子；`layoutStrips()` 已按 `preferredHeight` 计算最小高度。
+
+### 8.2 控件
+
+- `juce::ComboBox midiBox`，条目 `Off` + `1..16`；轨道的 ID 是 `mixer.midi.<index>`，Master 的 ID 是 `mixer.master.midi`；
+- 轨道右侧 `OneShotBadge`（`juce::Component` 子类，`paint` 调 `drawOneShotGlyph`，`setTooltip`）；Master 不显示这个 badge；
+- 宽度分配：轨道内部 76 px；combo 62 px，gap 2 px，badge 12 px；Master 没有 badge，combo 可以用满 76 px；
+- `midiBox` 使用 `ToyboxLookAndFeel` 的 compact combo 属性（和现有输出框一致）；
+- 禁用态：`setEnabled(false)`，显示 `Not available`，badge 隐藏；
+- 语言切换时只重建 item 文本，保持当前选择；`refreshLanguage()` 里加 MIDI 相关 tooltip；
+- `setMixerActive(false)` 时 MIDI 下拉框灰显（值保留）；`setMixerActive(true)` 时恢复。混音器关闭期间不产生任何 MIDI 事件；
+
+### 8.3 i18n key
+
+- `mixer.midiTooltip`
+- `mixer.midiOff`
+- `mixer.midiUnavailable`
+- `mixer.midiOneShotTooltip`
+- `mixer.midiChannelName`（如果需要 “MIDI 1”）
+
+中英文语言包都要加；`plugin/Tests/scripts/language.txt` 的完整性检查会覆盖。
+
+---
+
+## 9. 引擎接口与线程
+
+### 9.1 `PlaybackEngine`
+
+新增：
+
+```cpp
+void setTrackMidiChannel (size_t trackIndex, int channel);
+int getTrackMidiChannel (size_t trackIndex) const;
+playback::MidiCapability getTrackMidiCapability (size_t trackIndex) const;
+
+void setMasterMidiChannel (int channel);
+int getMasterMidiChannel (void) const;
+
+/** Optional sink; render() calls it with sample offsets while it holds the render lock. */
+void render (const playback::OutputBusBuffers* buses, int numBuses, int numSamples,
+             playback::MidiBlockSink* midiSink = nullptr);
+```
+
+`TrackState` 增加 `std::atomic<int> midiChannel`；引擎另有 `std::atomic<int> masterMidiChannel`；`LoadedSong` 增加 `const playback::MidiSequence* midiSequence` 和 MIDI 游标状态。
+
+### 9.2 线程规则
+
+- `MidiSequence` 在加载时构建，之后只读；不修改；
+- `midiChannel` 是原子量，UI 写、音频线程读；
+- `midiResetGeneration` 是原子量，seek/loop/stop、mute/solo 变化、通道变更时递增；音频线程看到变化后发 all-notes-off；
+- 音频线程只读序列、读原子量、调 sink；不分配、不加锁、不写日志；
+- 事件游标只属于音频线程；消息线程不碰它；
+- 如果 `render()` 的 try-lock 失败，本 block 不推进 MIDI 游标；下一成功 block 按 generation/位置重新同步。
+
+### 9.3 all-notes-off
+
+在以下时点发：
+
+- stop / pause；
+- 轨道 mute/unmute（只发该轨使用的通道）；
+- 轨道 solo 状态变化（全局 all-notes-off + 重新同步）；
+- 混音器总开关关闭（停掉全部 MIDI 并 all-notes-off）；
+- seek；
+- loop 回跳；
+- 轨道 MIDI 通道从 A 改到 B；
+- Master MIDI 通道变化；
+- 歌曲卸载；
+- 宿主 transport 跳转（DawSync 的 cue/loop）。
+
+发送内容建议：CC123（All Notes Off）+ CC120（All Sound Off）+ pitch bend center，覆盖该实例用到的通道；不要发到全部 16 通道以外。
+
+---
+
+## 10. 测试计划
+
+### 10.1 单元测试
+
+**已实现**：`PlaybackEngineTest`（`vgm_mixer_test`）`[10] MIDI output`，用真实歌曲走 `MidiSequenceBuilder` + 引擎 + sink，断言的是宿主实际会收到的消息：
+
+- 全 `Off` 时不产生任何 note；
+- 第一次渲染先发 CC123 + CC120 × 16 通道（清掉上一段播放的挂音）；
+- 轨 0 → 通道 1：只有通道 1 有事件，SN76489 的 440 Hz 解出 MIDI 69（A4）；
+- mute 后事件停止（通道值仍保留）；其它轨 solo 时本轨事件同样停止；
+- Master 通道复制同样的音符序列；Master 与轨道同通道时不重复发送；Master 静音只停合并那份；
+- 混音器总开关关闭时没有任何 note；
+- seek 之后重新发 CC123 × 16；
+- 一个 block 内的事件按 sampleOffset 单调。
+
+**尚未自动化**（需要每颗芯片一份合成 VGM，成本较高，暂靠 REAPER 手工验证）：YM2610 的 key-on/off、FNUM/BLOCK、pan、ADPCM-A trigger，非 B FM 通道映射（1/2/4/5）与 B 的 6 通道，one-shot 的 C4 trigger 与 gate，时钟换算（各芯片 master clock / 分频）。
+
+### 10.2 窗口脚本
+
+`plugin/Tests/scripts/midi.txt`（CMake 自动注册为 `app.midi`，测试曲目同 `load-and-play.txt`）：
+
+- `dump mixer.midi.0` / `dump mixer.master.midi` 能打印这两个控件；
+- `set mixer.midi.0 0` -> `Off`；`set mixer.midi.0 1` -> 通道 1；`set mixer.midi.0 16` -> 通道 16；
+- `set mixer.master.midi 3` -> Master 通道 3；
+- `minimal.vgm` 是单颗 SN76489：轨 0–2 可旋律化，轨 3 是噪声（one-shot）——`mixer.midi.3.oneshot visible == true`，`mixer.midi.0.oneshot visible == false`，Master 没有徽标；
+- 不支持轨的 combo disabled（测试曲目里没有这种轨，用 `VGM_TEST_SONG` 指向含 S98/DRO 的文件时才会出现；代码路径见 `LibvgmSongInstance.cpp` 的 `midiCapabilityFor`）；
+- mute/solo 不改下拉框的选择值（值归引擎所有，条子只显示）——脚本只能驱动有 componentID 的控件，条子里的 M/S 按钮没有 ID，因此这一条由 `PlaybackEngineTest` `[10]` 覆盖；
+- `click mixer.enable` 关掉混音器后 `mixer.midi.0 enabled == false`、`mixer.master.midi enabled == false`（Master 的输出选择框仍为 true——它的路由在两种模式下都有效），值保留；再点开恢复；
+- **`click` 之后必须跟 `sleep`**：`Button::triggerClick()` 是投递的，`settle()` 只睡不泵消息循环，脚本会看不出任何变化（本轮就踩到了：断言拿到 `enabled == true`）。自翻转按钮由 harness 直接改状态，所以 `chip.0` 那些脚本不需要 `sleep`；
+- 语言切换后 item 文本更新，选择不变（key 的完整性由 i18n 检查覆盖；harness 没有切换语言的命令，这一条靠手工/`language` 相关脚本，选择值本身存在引擎里，切语言只重建条目文本）；
+- 状态保存/恢复后 `midiChannel` / `masterMidiChannel` 一致（`vgm_core_test` 已覆盖，见 `PlaybackCoreTest.cpp`）。
+
+### 10.3 宿主集成
+
+- 在 REAPER 中加载 VST3，启用插件 MIDI 输出，路由到 MIDI 轨，录音（用户实测）；
+- 验证 4 个 FM 通道、ADPCM-A trigger、ADPCM-B trigger 的时间/通道；
+- 验证 mute、solo、Master 合并和 Master Off；
+- stop/seek/loop 后无挂音；
+- 如果宿主不支持插件 MIDI 输出，记录到兼容性表，暂不实现虚拟端口。
+
+### 10.4 回归
+
+- `ctest` 全绿；
+- 音频输出路由、mute/solo、混音器布局截图无回归；
+- `preferredHeight` 增加后，小窗口滚动正常。
+
+---
+
+## 11. 实施阶段
+
+| 阶段 | 内容 |
+|---|---|
+| P1 | `MidiCapability`/`MidiSequence`/`TrackInfo` 扩展；`PlaybackEngine` 每轨 + Master MIDI 通道原子量与持久化 |
+| P2 | `MidiSequenceBuilder` + YM2610/YM2612/YM2151/AY/SN 解码器；单元测试 |
+| P3 | `render()` 的 MIDI sink；`processBlock` 填充 `midiMessages`；VST3 宿主内录验证 |
+| P4 | `ChannelStrip` 轨道/Master MIDI combo + one-shot badge + i18n + AppHarness 脚本 |
+| P5 | 更多芯片、ADPCM-B 根音、standalone/virtual port、可视化复用；Settings → MIDI 输出子面板 |
+
+第一版不做：S98/DRO/GYM、linked SSG 独立轨、MIDI 文件、虚拟端口、自动鼓映射。
+
+### 11.1 后续：Settings → MIDI 输出子面板
+
+后续在设置面板增加一个 **MIDI 输出** 子页，集中放可配置项，不把这些控件塞进通道条：
+
+- one-shot 通道的 trigger note 映射（ADPCM-A/B、DAC、noise；默认 C4，允许改 note）；
+- ADPCM-B 的根音/采样率覆盖，或切换为 melodic；
+- 每轨默认 MIDI 通道 / 自动分配策略；
+- standalone / 虚拟端口的 MIDI 设备选择（VST3 不需要）；
+- Master 合并的默认开关/默认通道；
+- 可能还有“MIDI 输出通道冲突”提示样式。
+
+第一版只做通道下拉和固定 C4 trigger（不做 GM 鼓映射）；这些设置项属于 P5 之后，不阻塞实时 MIDI 输出。
+
+---
+
+## 12. 评审结论
+
+基础版范围已经确认，没有阻塞问题：
+
+- **MIDI-BUS 第一版不做**：VST3 只有一个输出事件总线，由 REAPER 路由到端口/轨道；standalone 的 MIDI 设备选择放到后续 Settings → MIDI 输出子面板；
+- one-shot 图标 + tooltip；
+- 允许共用 MIDI 通道；
+- 混音器总开关关闭时不输出任何 MIDI；
+- 设置子面板放到后续阶段。
+
+---
+
+## 13. 决策记录
+
+| 日期 | 结论 |
+|---|---|
+| 2026-10-19 | 优先 VST3，首选实测宿主 REAPER；使用插件原生 MIDI 输出事件总线，`NEEDS_MIDI_OUTPUT` 已经存在，不新增 CMake 开关 |
+| 2026-10-19 | VST3 不提供插件侧的“MIDI Bus”选择；宿主负责把唯一输出总线路由到端口/轨道；第一版不加每轨 MIDI-BUS 下拉框；standalone 设备选择以后再做 |
+| 2026-10-19 | 第一版不改 libvgm；在 `LibvgmSongInstance` 用 VGM/VGZ 解析构建只读 `MidiSequence` |
+| 2026-10-19 | 每轨一个 `Off` + 1–16 下拉框，默认全部 Off；Master 也有一个，默认 Off |
+| 2026-10-19 | MIDI 跟随音频可听状态：mute 或“其它轨 solo、自己未 solo”时停止并 all-notes-off；要单独禁 MIDI 用 `Off` |
+| 2026-10-19 | Master 输出所有音频可听且 MIDI 已启用的轨道合并；直出和 Master 可同时存在，允许重复，默认 Off，用户自行选择 |
+| 2026-10-19 | 不做 GM 鼓映射；能确定音高的通道输出原始音高，one-shot 统一 C4（60）作为 trigger，不声称真实音高；用户可在 DAW 里自行加 MIDI 映射；ADPCM-B v1 按 one-shot |
+| 2026-10-19 | 两个轨选择同一 MIDI 通道时允许合并 |
+| 2026-10-19 | 混音器总开关关闭时不输出任何 MIDI（直出 + Master 都停），下拉框灰显但保留数值 |
+| 2026-10-19 | linked SSG 独立轨第一版不做，方案记入附录 A；S98/DRO/GYM、MIDI 文件、虚拟端口也不做 |
+| 2026-10-19 | 后续增加 Settings → MIDI 输出子面板：one-shot note 映射、ADPCM-B 根音/melodic、standalone 设备、默认通道等 |
+| 2026-10-19 | MIDI-BUS 第一版不做，先实现“每轨 MIDI 通道 + Master 合并 + VST3 输出”的基础版 |
+
+## 附录 A：linked SSG 的后续方案（第一版不做）
+
+背景：libvgm 把 OPN 的 SSG 作为 linked AY8910（`opnintf.c:48-52`）；`LibvgmSongInstance::isTrackDevice()` 只保留 `parentIdx == (UINT32)-1` 的设备（`LibvgmSongInstance.cpp:31-36`），所以 YM2610/YM2608/YM2203 的 3 个 SSG 当前没有独立 mixer track。
+
+后续如果要做，有三条路：
+
+- **A. 维持现状**：SSG 不提供独立 MIDI 通道；这是第一版的选择。
+- **B. MIDI-only lane**：在 mixer 中为 linked SSG 增加 3 条只有 MIDI、没有音频推子的轨道；它们不参与音频输出路由，只负责事件和通道选择。UI 需要明确区分“仅 MIDI”，避免用户误以为推子会改变声音。
+- **C. 提升为真正可隔离的 track**：修改 `isTrackDevice`/mute 隔离/轨道枚举，把 linked SSG 变成和主设备一样的音频 track；需要验证不会重复出声、不会把主设备的 SSG 静音，风险最高，但它能同时解决音频和 MIDI 的通道级控制。
+
+建议：如果将来确实需要 SSG 的 MIDI，先做 B（不改音频架构），C 只在需要 SSG 独立音频轨时再做。
+
+## 14. 参考位置
+
+- MIDI 能力已有：`plugin/CMakeLists.txt:166-171`、`PluginProcessor.h:33-37`
+- `processBlock` 清空输入：`PluginProcessor.cpp:110-117`
+- 通道条布局/高度：`ChannelStrip.h:29`、`ChannelStrip.cpp:16-25`、`:263-313`
+- 混音器重建/刷新：`MixerPanel.cpp:113-141`、`:209-275`
+- 轨道信息/后端接口：`playback/SongBackend.h:67-77`、`:152-176`
+- 轨道状态/持久化：`PlaybackEngine.h:213-223`、`SessionState.h:15-23`、`SessionState.cpp:76-85`
+- linked SSG：`libs/libvgm/emu/cores/opnintf.c:48-52`、`LibvgmSongInstance.cpp:31-36`
+- YM2610 通道/写寄存器：`libs/libvgm/emu/cores/opnintf.c:235-251`、`fmopn.c:4104-4205`
+- YM2610 非 B FM 通道：`fmopn.c:3621-3624`；B：`:3798-3803`
+- JUCE VST3 MIDI 输出：`juce_audio_plugin_client_VST3.cpp:3733-3735`
+- JUCE AU MIDI 输出：`juce_audio_plugin_client_AU_1.mm:729-744`、`AUv3.mm:1647`
+- 参考项目钢琴/FM 算法：`reference/imgui-vgmplayer-v0.44/examples/example_vgm_player/main.cpp:258-397`、`:483-637`

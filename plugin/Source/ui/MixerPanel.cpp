@@ -51,6 +51,7 @@ MixerPanel::MixerPanel (toybox::PlaybackEngine& engineToUse)
 		engine.setMixerEnabled (! mixerToggle.getToggleState());
 		refresh();
 	};
+	mixerToggle.setComponentID ("mixer.enable");
 	addAndMakeVisible (mixerToggle);
 
 	masterStrip.setup (i18n::tr ("mixer.master"), true);
@@ -61,6 +62,8 @@ MixerPanel::MixerPanel (toybox::PlaybackEngine& engineToUse)
 	// its selector picks the bus the master mix goes to - never the master itself
 	masterStrip.onMuteChanged = [this] (bool muted) { engine.setMasterMuted (muted); };
 	masterStrip.onOutputChanged = [this] (playback::OutputTarget target) { engine.setMasterOutput (target); };
+	masterStrip.onMidiChannelChanged = [this] (int channel) { engine.setMasterMidiChannel (channel); };
+	masterStrip.setMidiState (engine.getMasterMidiChannel(), playback::MidiCapability::melodic);
 
 	// The master sits in a clip of its own: it is pinned to the right of the scrolling rows, but it
 	// scrolls with them, so something has to cut it off at the card's edge.
@@ -119,7 +122,7 @@ void MixerPanel::rebuildStrips (void)
 	for (size_t i = 0; i < tracks.size(); ++i)
 	{
 		auto* strip = new ChannelStrip();
-		strip->setup (tracks[i].name, false);
+		strip->setup (tracks[i].name, false, (int) i);
 
 		const size_t index = i;
 		strip->onGainChanged = [this, index] (float gain) { engine.setTrackGain (index, gain); };
@@ -127,6 +130,8 @@ void MixerPanel::rebuildStrips (void)
 		strip->onMuteChanged = [this, index] (bool muted) { engine.setTrackMute (index, muted); };
 		strip->onSoloChanged = [this, index] (bool soloed) { engine.setTrackSolo (index, soloed); };
 		strip->onOutputChanged = [this, index] (playback::OutputTarget target) { engine.setTrackOutput (index, target); };
+		strip->onMidiChannelChanged = [this, index] (int channel) { engine.setTrackMidiChannel (index, channel); };
+		strip->setMidiState (engine.getTrackMidiChannel (i), tracks[i].midiCapability);
 
 		strips.add (strip);
 		holder.addAndMakeVisible (strip);
@@ -267,6 +272,7 @@ void MixerPanel::refreshValues (void)
 									engine.isTrackMuted (i), engine.isTrackSoloed (i),
 									meterLeft[i], meterRight[i],
 									deviceIsMuted (chips, tracks[i].deviceId) ? 0.45f : 1.0f);
+		strips[(int) i]->setMidiState (engine.getTrackMidiChannel (i), tracks[i].midiCapability);
 
 		if (routesChanged || strips[(int) i]->getShownOutput() != engine.getTrackOutput (i))
 		{
@@ -281,12 +287,17 @@ void MixerPanel::refreshValues (void)
 	// selector works with the mixer on and off (switched off it is the only path)
 	masterStrip.setValues (engine.getMixerMasterGain(), 0.0f, engine.isMasterMuted(), false,
 						   masterPeakL, masterPeakR, 1.0f);
+	masterStrip.setMidiState (engine.getMasterMidiChannel(), playback::MidiCapability::melodic);
 
 	if (routesChanged || masterStrip.getShownOutput() != engine.getMasterOutput())
 	{
 		masterStrip.setOutputOptions (masterOutputs, engine.getMasterOutput());
 	}
 	masterStrip.setMixerActive (true);
+	// ... but its MIDI row is not: with the mixer off no track is rendered separately, and the
+	// engine sends no MIDI at all in that mode (PlaybackEngine::emitMidiForBlock), so a live
+	// selector there would promise something that does not happen
+	masterStrip.setMidiActive (mixerActive);
 }
 
 void MixerPanel::spreadTrackOutputs (void)

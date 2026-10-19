@@ -695,6 +695,8 @@ int main (int /*argc*/, char* /*argv*/[])
 		source.setTrackMute (2, true);
 		source.setTrackSolo (1, true);
 		source.setTrackOutput (0, (toybox::playback::OutputTarget) 2);
+		source.setTrackMidiChannel (0, 5);
+		source.setMasterMidiChannel (9);
 
 		juce::MemoryBlock blob;
 		source.writeState (blob);
@@ -728,6 +730,8 @@ int main (int /*argc*/, char* /*argv*/[])
 		check (restored.isTrackSoloed (1), "a track's solo survives");
 		check (restored.getTrackOutput (0) == (toybox::playback::OutputTarget) 2,
 			   "a track's output survives");
+		check (restored.getTrackMidiChannel (0) == 5, "a track's MIDI channel survives");
+		check (restored.getMasterMidiChannel() == 9, "the master MIDI channel survives");
 
 		// A project opens silent: whether the song was playing at save time is an accident of when
 		// the host autosaved, so the restored transport is always stopped, at the top.

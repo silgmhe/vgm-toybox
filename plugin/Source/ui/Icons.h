@@ -31,4 +31,8 @@ void drawSyncGlyph (juce::Graphics& g, juce::Rectangle<float> iconArea, juce::Co
 /** The "cue marker" glyph: a flag on a pole - the cue point the song starts at. */
 void drawCueGlyph (juce::Graphics& g, juce::Rectangle<float> iconArea, juce::Colour colour);
 
+/** The one-shot trigger glyph: a single pulse - used next to MIDI channels that only send a
+	fixed trigger note (ADPCM, DAC, noise). */
+void drawOneShotGlyph (juce::Graphics& g, juce::Rectangle<float> iconArea, juce::Colour colour);
+
 } // namespace toybox::ui

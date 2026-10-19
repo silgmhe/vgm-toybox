@@ -3,6 +3,7 @@
 #include <cmath>
 
 #include "ButtonPaint.h"
+#include "Icons.h"
 #include "MeterScale.h"
 #include "Theme.h"
 #include "ToyboxLookAndFeel.h"
@@ -23,10 +24,26 @@ namespace
 	// combo box reserves, ButtonPaint.h)
 	constexpr int kOutputHeight = 26;
 	constexpr int kOutputGap = 6;
+	constexpr int kMidiHeight = 26;
+	constexpr int kMidiGap = 4;
+	constexpr int kMidiBadgeWidth = 12;
+	constexpr int kMidiBadgeGap = 2;
 	constexpr int kColumnGap = 3;
 	constexpr int kMeterWidth = 15;		// two 6 px bars with a 3 px gap
 	constexpr int kMeterGap = 3;
 	constexpr int kScaleWidth = 16;		// graduation line + its tiny label
+}
+
+MidiOneShotBadge::MidiOneShotBadge (void)
+{
+	// The ID is per strip (mixer.midi.<index>.oneshot, see ChannelStrip::setup): a badge that all
+	// strips shared would only ever be reachable as the first strip's one.
+	setInterceptsMouseClicks (true, false);
+}
+
+void MidiOneShotBadge::paint (juce::Graphics& g)
+{
+	drawOneShotGlyph (g, getLocalBounds().toFloat().reduced (1.0f), theme::secondaryText());
 }
 
 ChannelStrip::ChannelStrip (void)
@@ -95,20 +112,44 @@ ChannelStrip::ChannelStrip (void)
 	outputBox.getProperties().set (ToyboxLookAndFeel::compactComboTextProperty, true);
 	addAndMakeVisible (outputBox);
 
+	// MIDI channel: Off + 1..16, below the audio output selector. The panel fills the selected
+	// value and the capability; the strip only reports the user's choice.
+	midiBox.onChange = [this]
+	{
+		updateMidiTooltip();
+		const int channel = midiBox.getSelectedId() - 1;
+		if (channel >= 0 && onMidiChannelChanged != nullptr)
+		{
+			onMidiChannelChanged (channel);
+		}
+	};
+	midiBox.getProperties().set (ToyboxLookAndFeel::compactComboTextProperty, true);
+	addAndMakeVisible (midiBox);
+
+	addChildComponent (oneShotBadge);
+
 	addAndMakeVisible (gainSlider);
 	addAndMakeVisible (panKnob);
 	addAndMakeVisible (muteButton);
 	addAndMakeVisible (soloButton);
 }
 
-void ChannelStrip::setup (const juce::String& name, bool isMasterStrip)
+void ChannelStrip::setup (const juce::String& name, bool isMasterStrip, int trackIndexToUse)
 {
 	stripName = name;
 	master = isMasterStrip;
+	trackIndex = trackIndexToUse;
 
 	// The window scripts drive the selector through this ID; the master has its own so a test can
 	// reach either kind of strip without relying on tree order.
 	outputBox.setComponentID (master ? "mixer.master.output" : "mixer.output");
+
+	// The MIDI selector is per track, so its ID carries the track index: a script has to be able
+	// to assert on the one-shot channel (a noise track, say) and not only on the first strip.
+	const juce::String midiID = master ? "mixer.master.midi"
+									   : "mixer.midi." + juce::String (trackIndex);
+	midiBox.setComponentID (midiID);
+	oneShotBadge.setComponentID (master ? "mixer.master.oneshot" : midiID + ".oneshot");
 
 	panKnob.setVisible (! master);
 	soloButton.setVisible (! master);
@@ -136,6 +177,7 @@ void ChannelStrip::refreshLanguage (void)
 	gainSlider.setTooltip (master ? i18n::tr ("mixer.masterGainTooltip")
 								  : i18n::tr ("mixer.gainTooltip"));
 	panKnob.setTooltip (i18n::tr ("mixer.panTooltip"));
+	rebuildMidiItems();
 
 	// Re-add the entries so "(not connected)" changes language too. The displayed target is kept:
 	// a language switch must not reroute a track.
@@ -253,11 +295,91 @@ void ChannelStrip::updateOutputTooltip (void)
 	outputBox.setTooltip (tooltip);
 }
 
+void ChannelStrip::rebuildMidiItems (void)
+{
+	const int selected = juce::jlimit (0, 16, shownMidiChannel);
+	midiBox.clear (juce::dontSendNotification);
+
+	if (midiCapability == playback::MidiCapability::unavailable)
+	{
+		midiBox.addItem (i18n::tr ("mixer.midiUnavailable"), 1);
+		midiBox.setSelectedId (1, juce::dontSendNotification);
+	}
+	else
+	{
+		midiBox.addItem (i18n::tr ("mixer.midiOff"), 1);
+		for (int channel = 1; channel <= 16; ++channel)
+		{
+			midiBox.addItem (juce::String (channel), channel + 1);
+		}
+
+		midiBox.setSelectedId (selected + 1, juce::dontSendNotification);
+	}
+
+	updateMidiTooltip();
+}
+
+void ChannelStrip::updateMidiTooltip (void)
+{
+	auto tooltip = master ? i18n::tr ("mixer.masterMidiTooltip")
+						  : i18n::tr ("mixer.midiTooltip");
+
+	if (midiCapability == playback::MidiCapability::unavailable)
+	{
+		tooltip = i18n::tr ("mixer.midiUnavailableTooltip");
+	}
+	else if (midiCapability == playback::MidiCapability::oneShot)
+	{
+		tooltip << "\n" << i18n::tr ("mixer.midiOneShotTooltip");
+	}
+
+	const auto selected = midiBox.getText();
+	if (selected.isNotEmpty() && midiCapability != playback::MidiCapability::unavailable)
+	{
+		tooltip << "\n" << selected;
+	}
+
+	midiBox.setTooltip (tooltip);
+	oneShotBadge.setTooltip (i18n::tr ("mixer.midiOneShotTooltip"));
+}
+
+void ChannelStrip::setMidiState (int channel, playback::MidiCapability capability)
+{
+	const int selected = juce::jlimit (0, 16, channel);
+	const bool rebuild = (capability != midiCapability);
+	midiCapability = capability;
+	shownMidiChannel = selected;
+
+	if (rebuild)
+	{
+		rebuildMidiItems();
+	}
+	else if (midiCapability != playback::MidiCapability::unavailable
+			 && midiBox.getSelectedId() != selected + 1)
+	{
+		midiBox.setSelectedId (selected + 1, juce::dontSendNotification);
+		updateMidiTooltip();
+	}
+
+	midiBox.setEnabled (midiActive && midiCapability != playback::MidiCapability::unavailable);
+	oneShotBadge.setVisible (! master && midiCapability == playback::MidiCapability::oneShot);
+	oneShotBadge.setAlpha (midiActive ? 1.0f : 0.45f);
+}
+
 void ChannelStrip::setMixerActive (bool active)
 {
-	// the routing is inactive while the mixer is off: the selector stays visible (the values are
+	// the routing is inactive while the mixer is off: the selectors stay visible (the values are
 	// kept) but greyed out
+	mixerActive = active;
 	outputBox.setEnabled (active);
+	setMidiActive (active);
+}
+
+void ChannelStrip::setMidiActive (bool active)
+{
+	midiActive = active;
+	midiBox.setEnabled (active && midiCapability != playback::MidiCapability::unavailable);
+	oneShotBadge.setAlpha (active ? 1.0f : 0.45f);
 }
 
 void ChannelStrip::resized (void)
@@ -266,8 +388,23 @@ void ChannelStrip::resized (void)
 	nameBounds = inner.removeFromTop (kNameHeight);
 	inner.removeFromTop (3);
 
-	// the output selector takes the bottom row; the M/S row (or the master's reserved space
-	// for it) sits directly above, so the fader and graduations stay aligned between strips
+	// The MIDI selector is the bottom row; the audio output selector sits directly above it, then
+	// the M/S row (or the master's reserved space for it), so the fader and graduations stay
+	// aligned between strips.
+	auto midiRow = inner.removeFromBottom (kMidiHeight);
+	if (master)
+	{
+		midiBox.setBounds (midiRow);
+		oneShotBadge.setBounds ({});
+	}
+	else
+	{
+		oneShotBadge.setBounds (midiRow.removeFromRight (kMidiBadgeWidth));
+		midiRow.removeFromRight (kMidiBadgeGap);
+		midiBox.setBounds (midiRow);
+	}
+	inner.removeFromBottom (kMidiGap);
+
 	outputBox.setBounds (inner.removeFromBottom (kOutputHeight));
 	inner.removeFromBottom (kOutputGap);
 

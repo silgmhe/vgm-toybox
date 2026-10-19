@@ -8,6 +8,8 @@
 
 #include <juce_core/juce_core.h>
 
+#include "playback/MidiSequence.h"
+
 /**
 	The playback backend port - the standard every format engine (libvgm today, an SNES/SPC
 	engine tomorrow) is plugged into.
@@ -64,6 +66,14 @@ struct ChipInfo
 	DeviceId deviceId {};
 };
 
+/** What MIDI output can be derived from a mixer track. */
+enum class MidiCapability
+{
+	unavailable,	// no MIDI decoder for this chip/channel yet
+	melodic,		// the channel has a note and pitch (FM, PSG, square, ...)
+	oneShot			// the channel can only trigger a fixed note (ADPCM, DAC, noise, ...)
+};
+
 /** One mixer track: a channel of a device, or the whole device when it cannot be split. */
 struct TrackInfo
 {
@@ -74,6 +84,7 @@ struct TrackInfo
 	bool isolatable = true;			// false: the backend cannot render this device channel by channel
 	juce::String name;				// "Pulse 1" / "Ch 3" / "All"
 	juce::String groupName;			// the group header above the strip row (device name, "#2" ...)
+	MidiCapability midiCapability = MidiCapability::unavailable;
 };
 
 /** Metadata and timeline facts of an open song, in seconds. */
@@ -157,6 +168,8 @@ public:
 
 	/** Metadata and timeline facts - refreshed by setTimeline(), so read it after calling it. */
 	virtual const SongInfo& getInfo (void) const = 0;
+	/** Optional MIDI event stream for this song; null when the backend has no decoder. */
+	virtual const MidiSequence* getMidiSequence (void) const { return nullptr; }
 	/** One entry per mixer track; empty when the song has no devices at all. */
 	virtual const std::vector<TrackInfo>& getTracks (void) const = 0;
 	virtual BackendCapabilities getCapabilities (void) const = 0;

@@ -9,6 +9,7 @@
 #include <juce_core/juce_core.h>
 
 #include "playback/DawSync.h"
+#include "playback/MidiSink.h"
 #include "playback/OutputRouting.h"
 #include "playback/SongBackend.h"
 
@@ -199,16 +200,35 @@ public:
 	void setMasterOutput (playback::OutputTarget busIndex);
 	playback::OutputTarget getMasterOutput (void) const { return masterOutput.load(); }
 
+	// --- MIDI routing (the event generation lives in the backend; the engine only carries the
+	// routing state and the per-block sink that turns it into MIDI messages) -------------------
+	/** MIDI channel of one track: 0 = Off, 1..16. Lock-free (one atomic). */
+	void setTrackMidiChannel (size_t trackIndex, int channel);
+	int getTrackMidiChannel (size_t trackIndex) const;
+	/** Master MIDI channel: 0 = Off, 1..16. */
+	void setMasterMidiChannel (int channel)
+	{
+		masterMidiChannel.store (juce::jlimit (0, 16, channel));
+		midiResetGeneration.fetch_add (1);
+	}
+	int getMasterMidiChannel (void) const { return masterMidiChannel.load(); }
+
 	/** Mutes what the master bus contributes to its target bus (direct outputs keep playing). */
-	void setMasterMuted (bool shouldBeMuted) { masterMuted.store (shouldBeMuted); }
+	void setMasterMuted (bool shouldBeMuted)
+	{
+		masterMuted.store (shouldBeMuted);
+		midiResetGeneration.fetch_add (1);
+	}
 	bool isMasterMuted (void) const { return masterMuted.load(); }
 
 	/** Which buses the host connected in the last block (published by render(), read lock-free). */
 	bool isOutputBusConnected (int busIndex) const;
 
 	// --- audio thread ---
-	/** Renders into the host's bus buffers (`numBuses` must be `kOutputBusCount`). */
-	void render (const playback::OutputBusBuffers* buses, int numBuses, int numSamples);
+	/** Renders into the host's bus buffers (`numBuses` must be `kOutputBusCount`). The optional
+		sink receives this block's MIDI events; it is called on the audio thread. */
+	void render (const playback::OutputBusBuffers* buses, int numBuses, int numSamples,
+				 playback::MidiBlockSink* midiSink = nullptr);
 
 private:
 	struct TrackState
@@ -220,6 +240,7 @@ private:
 		std::atomic<float> peakL { 0.0f };
 		std::atomic<float> peakR { 0.0f };
 		std::atomic<playback::OutputTarget> output { playback::kMasterOutput };
+		std::atomic<int> midiChannel { 0 };		// 0 = Off, 1..16
 	};
 
 	/** Audio thread, lock-free: report silence on the meters (see render()). */
@@ -233,6 +254,8 @@ private:
 		convention is visible instead of relying on the lock being recursive. */
 	void setPositionSecondsLocked (double seconds);		// caller must hold the lock
 	void updatePlayerTimeline (void);					// caller must hold the lock
+	void emitMidiForBlock (double blockStartSeconds, int numSamples, double sampleRate,
+						   playback::MidiBlockSink* sink);	// caller must hold the lock
 	void applyChipMutes (void);							// caller must hold the lock
 	/** Sets every track (and a new song's tracks) to the current routing scheme. */
 	void applyDefaultRouting (void);					// caller must hold the lock
@@ -255,6 +278,7 @@ private:
 		std::vector<ChipEntry> chips;
 		std::map<juce::String, juce::String> tags;
 		playback::SongTimeline timeline;
+		const playback::MidiSequence* midiSequence = nullptr;
 	};
 
 	/** Everything buildSong() reads, copied from the engine on the message thread so that a build
@@ -361,6 +385,13 @@ private:
 	std::vector<std::unique_ptr<TrackState>> tracks;	// one per layout entry (UI state)
 	std::vector<playback::TrackInfo> trackLayout;
 	std::atomic<int> soloCount { 0 };
+	std::atomic<int> masterMidiChannel { 0 };	// 0 = Off, 1..16
+	std::atomic<int> midiResetGeneration { 0 };
+	const playback::MidiSequence* midiSequence = nullptr;
+	std::size_t midiCursor = 0;
+	int midiSeenGeneration = 0;
+	bool midiWasEnabled = false;
+	double midiLastBlockStart = -1.0;
 	bool mixerEnabled = true;	// the mixer card is always there - off is the CPU-saving opt-out
 	// the routing scheme new songs start with (message thread only - the audio thread reads the
 	// per-track targets, never this)

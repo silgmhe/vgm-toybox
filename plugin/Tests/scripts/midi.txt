@@ -1,0 +1,83 @@
+# The per-track MIDI selectors in the mixer.
+#
+# minimal.vgm (the generated SN76489 song load-and-play.txt uses) has four channels: three tones
+# and one noise channel, which the MIDI side plays as a one-shot trigger. So the card has four
+# strips whose selectors are addressed by index - mixer.midi.0 ... mixer.midi.3 - plus the
+# master's mixer.master.midi. The index is what makes a per-track assertion possible at all: a
+# single shared ID would always resolve to the first strip, and "does the noise channel show the
+# trigger mark" could not be asked.
+#
+# What this script cannot see is the messages that leave the plugin - the harness discards the
+# MIDI buffer. The routing itself (channels, mute/solo, the master's copy, the all-notes-off after
+# a seek) is checked against the sink in PlaybackEngineTest.cpp, which needs no window.
+#
+# Run:  build\plugin\vgm_app_test plugin\Tests\scripts\midi.txt
+
+load $VGM_TEST_SONG
+tick
+
+# A track starts unrouted and can be routed: the item index is what the items mean (0 = Off,
+# 1..16 = channel 1..16), and the strip then shows the engine's answer, not what was clicked.
+assert mixer.midi.0 visible == true
+assert mixer.midi.0 enabled == true
+assert mixer.midi.0 text == "Off"
+
+set mixer.midi.0 1
+tick
+assert mixer.midi.0 text == "1"
+
+set mixer.midi.0 16
+tick
+assert mixer.midi.0 text == "16"
+
+set mixer.midi.0 0
+tick
+assert mixer.midi.0 text == "Off"
+
+# The noise channel is a trigger, not a note: the strip marks it so the user knows the note is the
+# trigger's, not the noise's pitch. The mark belongs to that strip, not to the melodic ones.
+assert mixer.midi.3 enabled == true
+assert mixer.midi.3.oneshot visible == true
+assert mixer.midi.0.oneshot visible == false
+
+# The master is the merged copy of every routed track. It is a note, never a trigger - no badge.
+assert mixer.master.midi visible == true
+assert mixer.master.midi text == "Off"
+assert mixer.master.oneshot visible == false
+
+set mixer.master.midi 3
+tick
+assert mixer.master.midi text == "3"
+
+# The mixer switch owns "is there routing at all": off greys the selectors and keeps their values,
+# so switching it back does not lose the routing the user set up. The master's MIDI row goes grey
+# too (no MIDI exists in that mode), while the rest of the master strip stays live.
+#
+# The sleep is required: triggerClick() posts its click, and only `sleep` runs the message loop
+# that delivers it (a real mouse click arrives through the peer and runs at once).
+click mixer.enable
+sleep 60
+tick
+assert mixer.midi.0 enabled == false
+assert mixer.master.midi enabled == false
+assert mixer.midi.0 text == "Off"
+assert mixer.master.midi text == "3"
+assert mixer.master.output enabled == true
+
+click mixer.enable
+sleep 60
+tick
+assert mixer.midi.0 enabled == true
+assert mixer.master.midi enabled == true
+assert mixer.master.midi text == "3"
+
+# A route survives a seek and a stop: the value belongs to the engine, the strip only displays it.
+set mixer.midi.0 2
+tick
+engine play
+engine stop
+tick
+assert mixer.midi.0 text == "2"
+
+dump mixer.midi.0
+dump mixer.master.midi

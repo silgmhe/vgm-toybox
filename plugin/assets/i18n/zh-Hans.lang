@@ -47,8 +47,14 @@ language: 简体中文
 "mixer.master" = "主控";
 "mixer.masterBus" = "主总线";
 "mixer.masterGainTooltip" = "混音器主增益 - 输出音量在其之后（双击恢复 100%）";
+"mixer.masterMidiTooltip" = "MIDI 输出 - 所有可听且启用 MIDI 的轨道合并后的信号";
 "mixer.masterMuteTooltip" = "静音主总线输出";
 "mixer.masterOutputTooltip" = "输出总线 - 主混音的去向";
+"mixer.midiOff" = "关闭";
+"mixer.midiOneShotTooltip" = "一次性通道：以 C4 作为触发音符，不跟踪音高";
+"mixer.midiTooltip" = "MIDI 输出通道";
+"mixer.midiUnavailable" = "不可用";
+"mixer.midiUnavailableTooltip" = "该芯片通道暂未实现 MIDI 输出";
 "mixer.mergeName" = "合并到主输出";
 "mixer.mergeTooltip" = "把所有轨道送回主总线";
 "mixer.muteTooltip" = "静音此轨道";

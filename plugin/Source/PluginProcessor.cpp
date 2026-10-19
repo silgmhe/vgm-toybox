@@ -107,13 +107,30 @@ bool ToyboxAudioProcessor::isBusesLayoutSupported (const BusesLayout& layouts) c
 	return anyEnabled;
 }
 
+namespace
+{
+	/** Turns the engine's sample-offset events into the buffer the VST3/AU wrapper reads back. */
+	class HostMidiSink final : public toybox::playback::MidiBlockSink
+	{
+	public:
+		explicit HostMidiSink (juce::MidiBuffer& target) : buffer (target) {}
+
+		void send (const toybox::playback::MidiBlockEvent& event) override
+		{
+			buffer.addEvent (juce::MidiMessage (event.status, event.data1, event.data2),
+							 event.sampleOffset);
+		}
+
+	private:
+		juce::MidiBuffer& buffer;
+	};
+}
+
 void ToyboxAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midiMessages)
 {
 	// Both MIDI buses are declared (NEEDS_MIDI_INPUT/OUTPUT): the input one is what Ableton Live
-	// requires of an instrument, the output one is reserved for a future MIDI-out feature.
-	// Nothing is turned into sound and nothing is emitted - so the buffer is *cleared*, not just
-	// ignored: the wrapper reads it back as the output events now that a MIDI out bus exists, and
-	// leaving the input events in it would echo them straight back to the host.
+	// requires of an instrument, the output one carries the generated MIDI. The buffer is
+	// *cleared* first: leaving the host's input events in it would echo them straight back.
 	midiMessages.clear();
 	juce::ScopedNoDenormals noDenormals;
 
@@ -141,7 +158,19 @@ void ToyboxAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce:
 	// engine's lock (a try-lock - a block that loses it is retried, nothing blocks here).
 	engine.getDawSync().publishHostClock (playback::readHostClock (getPlayHead(), getSampleRate()));
 
-	engine.render (buses, playback::kOutputBusCount, numSamples);
+	const bool playing = engine.isPlaying();
+	if (wasPlaying && ! playing)
+	{
+		for (int channel = 0; channel < 16; ++channel)
+		{
+			midiMessages.addEvent (juce::MidiMessage::allNotesOff (channel + 1), 0);
+			midiMessages.addEvent (juce::MidiMessage::allSoundOff (channel + 1), 0);
+		}
+	}
+	wasPlaying = playing;
+
+	HostMidiSink midiSink (midiMessages);
+	engine.render (buses, playback::kOutputBusCount, numSamples, &midiSink);
 }
 
 juce::AudioProcessorEditor* ToyboxAudioProcessor::createEditor (void)

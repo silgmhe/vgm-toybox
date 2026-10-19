@@ -71,6 +71,7 @@ void writeSessionState (const SessionState& state, juce::XmlElement& xml)
 	mixer->setAttribute ("masterGain", (double) state.mixerMasterGain);
 	mixer->setAttribute ("masterMuted", state.masterMuted ? 1 : 0);
 	mixer->setAttribute ("masterOutput", state.masterOutput);
+	mixer->setAttribute ("masterMidiChannel", state.masterMidiChannel);
 	mixer->setAttribute ("defaultRouting", routingToName (state.defaultRouting));
 
 	for (const auto& track : state.tracks)
@@ -82,6 +83,7 @@ void writeSessionState (const SessionState& state, juce::XmlElement& xml)
 		element->setAttribute ("mute", track.mute ? 1 : 0);
 		element->setAttribute ("solo", track.solo ? 1 : 0);
 		element->setAttribute ("output", track.output);
+		element->setAttribute ("midiChannel", track.midiChannel);
 	}
 }
 
@@ -153,6 +155,8 @@ bool readSessionState (const juce::XmlElement& xml, SessionState& state, juce::S
 																  (double) state.mixerMasterGain);
 		state.masterMuted = mixer->getBoolAttribute ("masterMuted", state.masterMuted);
 		state.masterOutput = mixer->getIntAttribute ("masterOutput", state.masterOutput);
+		state.masterMidiChannel = juce::jlimit (0, 16,
+												mixer->getIntAttribute ("masterMidiChannel", state.masterMidiChannel));
 		state.defaultRouting = routingFromName (mixer->getStringAttribute ("defaultRouting"),
 												state.defaultRouting);
 
@@ -171,6 +175,8 @@ bool readSessionState (const juce::XmlElement& xml, SessionState& state, juce::S
 			track.mute = element->getBoolAttribute ("mute", false);
 			track.solo = element->getBoolAttribute ("solo", false);
 			track.output = element->getIntAttribute ("output", kMasterOutput);
+			track.midiChannel = juce::jlimit (0, 16,
+											  element->getIntAttribute ("midiChannel", 0));
 			state.tracks.push_back (track);
 		}
 	}

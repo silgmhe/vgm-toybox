@@ -258,6 +258,7 @@ void PlaybackEngine::writeState (juce::MemoryBlock& destData) const
 		state.mixerMasterGain = mixerMasterGain.load();
 		state.masterMuted = masterMuted.load();
 		state.masterOutput = masterOutput.load();
+		state.masterMidiChannel = masterMidiChannel.load();
 		state.defaultRouting = defaultRouting;
 
 		// The name, not the path: a project has to open where the file never existed, and the
@@ -275,6 +276,7 @@ void PlaybackEngine::writeState (juce::MemoryBlock& destData) const
 			track.mute = tracks[i]->mute.load();
 			track.solo = tracks[i]->solo.load();
 			track.output = tracks[i]->output.load();
+			track.midiChannel = tracks[i]->midiChannel.load();
 			state.tracks.push_back (track);
 		}
 	}
@@ -321,6 +323,7 @@ bool PlaybackEngine::readState (const void* data, int sizeInBytes, juce::String&
 		setMasterVolume (state.volume);
 		setMasterMuted (state.masterMuted);
 		setMasterOutput ((playback::OutputTarget) state.masterOutput);
+		setMasterMidiChannel (state.masterMidiChannel);
 
 		// Restored stopped, deliberately: a host opening a project must not make sound on its own
 		// (the transport is not part of the state either - see writeState()).
@@ -342,6 +345,7 @@ bool PlaybackEngine::readState (const void* data, int sizeInBytes, juce::String&
 		setMasterVolume (state.volume);
 		setMasterMuted (state.masterMuted);
 		setMasterOutput ((playback::OutputTarget) state.masterOutput);
+		setMasterMidiChannel (state.masterMidiChannel);
 	}
 
 	// Only now: installSong() replaced the track list, and how many tracks there are is a fact of
@@ -360,6 +364,7 @@ bool PlaybackEngine::readState (const void* data, int sizeInBytes, juce::String&
 		setTrackMute (track.index, track.mute);
 		setTrackSolo (track.index, track.solo);
 		setTrackOutput (track.index, track.output);
+		setTrackMidiChannel (track.index, track.midiChannel);
 	}
 
 	if (! hasSong && state.songName.isNotEmpty() && ! state.songEmbedded)
@@ -396,6 +401,7 @@ void PlaybackEngine::setMixerEnabled (bool shouldBeEnabled)
 		}
 
 		mixerEnabled = shouldBeEnabled;
+		midiResetGeneration.fetch_add (1);
 		if (! loaded.load())
 		{
 			return;
@@ -425,12 +431,14 @@ void PlaybackEngine::play (void)
 	}
 	playing = true;
 	paused = false;
+	midiResetGeneration.fetch_add (1);
 }
 
 void PlaybackEngine::pause (void)
 {
 	playing = false;
 	paused = true;
+	midiResetGeneration.fetch_add (1);
 }
 
 void PlaybackEngine::stop (void)
@@ -438,6 +446,7 @@ void PlaybackEngine::stop (void)
 	playing = false;
 	paused = false;
 	finished = false;
+	midiResetGeneration.fetch_add (1);
 
 	const juce::ScopedLock sl (lock);
 	for (auto& player : trackPlayers)
@@ -532,6 +541,7 @@ void PlaybackEngine::setPositionSecondsLocked (double seconds)
 
 	positionSeconds = target;
 	finished = false;
+	midiResetGeneration.fetch_add (1);
 }
 
 void PlaybackEngine::setLoopCount (int loops)
@@ -618,6 +628,7 @@ void PlaybackEngine::setTrackMute (size_t trackIndex, bool shouldBeMuted)
 	if (trackIndex < tracks.size())
 	{
 		tracks[trackIndex]->mute.store (shouldBeMuted);
+		midiResetGeneration.fetch_add (1);
 	}
 }
 
@@ -641,6 +652,7 @@ void PlaybackEngine::setTrackSolo (size_t trackIndex, bool shouldBeSoloed)
 
 	state.solo.store (shouldBeSoloed);
 	soloCount.fetch_add (shouldBeSoloed ? 1 : -1);
+	midiResetGeneration.fetch_add (1);
 }
 
 bool PlaybackEngine::isTrackSoloed (size_t trackIndex) const
@@ -839,6 +851,7 @@ PlaybackEngine::LoadedSong PlaybackEngine::buildSong (const BuildConfig& config,
 	}
 
 	pending.song->setTimeline (config.loopCount, config.fadeSeconds);
+	pending.midiSequence = pending.song->getMidiSequence();
 
 	// song facts
 	pending.tags = pending.song->getInfo().tags;
@@ -922,6 +935,14 @@ void PlaybackEngine::installSong (LoadedSong&& built)
 	soloCount = built.soloCount;
 	chips = std::move (built.chips);
 	tags = std::move (built.tags);
+	midiSequence = built.midiSequence;
+	midiCursor = 0;
+	// Force one all-notes-off on the first block: a song swap must not leave notes from the
+	// previous song hanging in the host.
+	midiResetGeneration.fetch_add (1);
+	midiSeenGeneration = midiResetGeneration.load() - 1;
+	midiWasEnabled = false;
+	midiLastBlockStart = -1.0;
 
 	cachedTimeline = built.timeline;
 
@@ -966,6 +987,7 @@ void PlaybackEngine::rebuildPlayers (juce::String& errorMessage)
 			built.tracks[i]->mute.store (tracks[i]->mute.load());
 			built.tracks[i]->solo.store (tracks[i]->solo.load());
 			built.tracks[i]->output.store (tracks[i]->output.load());
+			built.tracks[i]->midiChannel.store (tracks[i]->midiChannel.load());
 		}
 
 		built.soloCount = 0;
@@ -1006,6 +1028,10 @@ void PlaybackEngine::resetState (void)
 	trackLayout.clear();
 	tracks.clear();
 	soloCount = 0;
+	midiSequence = nullptr;
+	midiCursor = 0;
+	midiWasEnabled = false;
+	midiLastBlockStart = -1.0;
 
 	fileData.reset();
 	currentFile = juce::File();
@@ -1035,6 +1061,20 @@ playback::OutputTarget PlaybackEngine::getTrackOutput (size_t trackIndex) const
 	return (trackIndex < tracks.size()) ? tracks[trackIndex]->output.load() : playback::kMasterOutput;
 }
 
+void PlaybackEngine::setTrackMidiChannel (size_t trackIndex, int channel)
+{
+	if (trackIndex < tracks.size())
+	{
+		tracks[trackIndex]->midiChannel.store (juce::jlimit (0, 16, channel));
+		midiResetGeneration.fetch_add (1);
+	}
+}
+
+int PlaybackEngine::getTrackMidiChannel (size_t trackIndex) const
+{
+	return (trackIndex < tracks.size()) ? tracks[trackIndex]->midiChannel.load() : 0;
+}
+
 void PlaybackEngine::setMasterOutput (playback::OutputTarget busIndex)
 {
 	// the master bus cannot target itself: anything invalid becomes bus 0 ("Out 1/2")
@@ -1062,7 +1102,8 @@ bool PlaybackEngine::isOutputBusConnected (int busIndex) const
 //==============================================================================
 // audio thread
 
-void PlaybackEngine::render (const playback::OutputBusBuffers* buses, int numBuses, int numSamples)
+void PlaybackEngine::render (const playback::OutputBusBuffers* buses, int numBuses, int numSamples,
+							 playback::MidiBlockSink* midiSink)
 {
 	// The block's timeline, in the order it has to happen - each step is a function of its own
 	// below. None of them allocates; only the mixing steps touch the players (review M-1: this
@@ -1112,6 +1153,16 @@ void PlaybackEngine::render (const playback::OutputBusBuffers* buses, int numBus
 	juce::FloatVectorOperations::clear (masterLeft.data(), usable);
 	juce::FloatVectorOperations::clear (masterRight.data(), usable);
 
+	// MIDI is generated from the same block start as the audio, before the players advance.
+	if (midiSink != nullptr && ! trackPlayers.empty())
+	{
+		const double blockStart = trackPlayers[0]->positionSeconds();
+		if (blockStart >= 0.0)
+		{
+			emitMidiForBlock (blockStart, usable, sampleRate, midiSink);
+		}
+	}
+
 	if (mixerEnabled)
 	{
 		mixTracks (buses, busCount, usable);
@@ -1124,6 +1175,118 @@ void PlaybackEngine::render (const playback::OutputBusBuffers* buses, int numBus
 	finaliseMasterBus (buses, busCount, usable);
 	applyOutputVolume (buses, busCount, numSamples);
 	publishPositionAndEnd();
+}
+
+void PlaybackEngine::emitMidiForBlock (double blockStartSeconds, int numSamples, double hostSampleRate,
+									   playback::MidiBlockSink* sink)
+{
+	const auto sendAllNotesOff = [this, sink] (int sampleOffset)
+	{
+		for (int channel = 0; channel < 16; ++channel)
+		{
+			sink->send ({ sampleOffset, (std::uint8_t) (0xB0 | channel), 123, 0 });
+			sink->send ({ sampleOffset, (std::uint8_t) (0xB0 | channel), 120, 0 });
+		}
+	};
+
+	if (! mixerEnabled)
+	{
+		if (midiWasEnabled)
+		{
+			sendAllNotesOff (0);
+			midiWasEnabled = false;
+		}
+		return;
+	}
+
+	if (midiSequence == nullptr)
+	{
+		return;
+	}
+
+	const int generation = midiResetGeneration.load();
+	if (generation != midiSeenGeneration
+		|| (midiLastBlockStart >= 0.0 && blockStartSeconds + 0.001 < midiLastBlockStart))
+	{
+		sendAllNotesOff (0);
+		midiSeenGeneration = generation;
+		midiCursor = (std::size_t) (std::lower_bound (midiSequence->events.begin(),
+													   midiSequence->events.end(),
+													   blockStartSeconds,
+													   [] (const playback::MidiEvent& event, double time)
+													   {
+														   return event.timeSeconds < time;
+													   })
+									 - midiSequence->events.begin());
+	}
+
+	midiLastBlockStart = blockStartSeconds;
+	midiWasEnabled = true;
+
+	const double blockEnd = blockStartSeconds + (double) numSamples / hostSampleRate;
+	const int masterChannel = masterMidiChannel.load();
+	const bool anySolo = soloCount.load() > 0;
+
+	while (midiCursor < midiSequence->events.size())
+	{
+		const playback::MidiEvent& event = midiSequence->events[midiCursor];
+		if (event.timeSeconds >= blockEnd)
+		{
+			break;
+		}
+
+		++midiCursor;
+		if (event.timeSeconds < blockStartSeconds - 0.001)
+		{
+			continue;
+		}
+
+		if (event.sourceTrack >= tracks.size())
+		{
+			continue;
+		}
+
+		const TrackState& track = *tracks[event.sourceTrack];
+		const bool audible = ! track.mute.load() && (! anySolo || track.solo.load());
+		if (! audible)
+		{
+			continue;
+		}
+
+		const int channel = track.midiChannel.load();
+		const int sampleOffset = juce::jlimit (0, juce::jmax (0, numSamples - 1),
+											  (int) std::lround ((event.timeSeconds - blockStartSeconds)
+																 * hostSampleRate));
+
+		std::uint8_t status = 0;
+		switch (event.type)
+		{
+		case playback::MidiEventType::noteOn:  status = 0x90; break;
+		case playback::MidiEventType::noteOff: status = 0x80; break;
+		case playback::MidiEventType::pitchBend: status = 0xE0; break;
+		case playback::MidiEventType::controlChange: status = 0xB0; break;
+		}
+
+		if (status == 0)
+		{
+			continue;
+		}
+
+		if (channel > 0)
+		{
+			sink->send ({ sampleOffset, (std::uint8_t) (status | (channel - 1)),
+						  event.data1, event.data2 });
+		}
+
+		// The master is an extra merged copy. Master mute silences that copy; if the direct
+		// channel is the master channel, sending it twice would make the second note-off cut
+		// the first note short.
+		if (masterChannel > 0 && channel > 0 && masterChannel != channel && ! masterMuted.load())
+		{
+			sink->send ({ sampleOffset, (std::uint8_t) (status | (masterChannel - 1)),
+						  event.data1, event.data2 });
+		}
+	}
 }
 
 void PlaybackEngine::publishBusConnectivity (const playback::OutputBusBuffers* buses, int busCount)

@@ -6,7 +6,9 @@
 	  * one track per channel of every chip, each with a group and a name,
 	  * the unity-gain sum of all tracks equals the plain mix (levels and phase),
 	  * all tracks stay in sync through seek, loop and the end of the song,
-	  * suspending the devices a track does not need really saves render time.
+	  * suspending the devices a track does not need really saves render time,
+	  * the MIDI sink: per-track channels, mute/solo, the master's merged copy, no notes while the
+	    mixer is off, and all-notes-off after a seek.
 
 	Usage: vgm_mixer_test <file.vgm|file.vgz> [seconds] [sampleRate]
 	Build: cmake --build <build dir> --target vgm_mixer_test
@@ -137,12 +139,99 @@ namespace
 			sum += diff * diff;
 		}
 
-		const double diffRms = std::sqrt (sum / (double) count);
+		const 	double diffRms = std::sqrt (sum / (double) count);
 		if (diffRms <= 0.0)
 		{
 			return -1000.0;		// bit-identical
 		}
 		return 20.0 * std::log10 (diffRms / reference.rms);
+	}
+
+	/** What the host would receive: the same sink the plugin hands to render(). */
+	struct MidiRecorder final : public toybox::playback::MidiBlockSink
+	{
+		void send (const toybox::playback::MidiBlockEvent& event) override
+		{
+			events.push_back (event);
+		}
+
+		/** Messages of one kind: 0x90 note-on, 0x80 note-off, 0xB0 control change. */
+		int count (std::uint8_t statusHighNibble) const
+		{
+			int result = 0;
+			for (const auto& event : events)
+			{
+				if ((event.status & 0xF0) == statusHighNibble)
+				{
+					++result;
+				}
+			}
+			return result;
+		}
+
+		/** The same, restricted to one channel (1..16). */
+		int count (std::uint8_t statusHighNibble, int channel) const
+		{
+			int result = 0;
+			for (const auto& event : events)
+			{
+				if ((event.status & 0xF0) == statusHighNibble && (event.status & 0x0F) == channel - 1)
+				{
+					++result;
+				}
+			}
+			return result;
+		}
+
+		int countController (int controller) const
+		{
+			int result = 0;
+			for (const auto& event : events)
+			{
+				if ((event.status & 0xF0) == 0xB0 && event.data1 == (std::uint8_t) controller)
+				{
+					++result;
+				}
+			}
+			return result;
+		}
+
+		/** The notes a channel was told to play, in the order they were sent. */
+		std::vector<int> notesOn (int channel) const
+		{
+			std::vector<int> result;
+			for (const auto& event : events)
+			{
+				if ((event.status & 0xF0) == 0x90 && (event.status & 0x0F) == channel - 1)
+				{
+					result.push_back (event.data1);
+				}
+			}
+			return result;
+		}
+
+		std::vector<toybox::playback::MidiBlockEvent> events;
+	};
+
+	/** Renders `seconds` with the MIDI sink attached; the audio is rendered and discarded. */
+	MidiRecorder recordMidi (toybox::PlaybackEngine& engine, double seconds, int sampleRate, int blockSize)
+	{
+		MidiRecorder recorder;
+		const int totalSamples = (int) (seconds * sampleRate);
+		int rendered = 0;
+
+		std::vector<float> blockL ((size_t) blockSize), blockR ((size_t) blockSize);
+		toybox::playback::OutputBusBuffers buses[1] = { { blockL.data(), blockR.data() } };
+
+		while (rendered < totalSamples && ! engine.isFinished())
+		{
+			std::fill (blockL.begin(), blockL.end(), 0.0f);
+			std::fill (blockR.begin(), blockR.end(), 0.0f);
+			engine.render (buses, 1, blockSize, &recorder);
+			rendered += blockSize;
+		}
+
+		return recorder;
 	}
 }
 
@@ -465,6 +554,121 @@ int main (int argc, char* argv[])
 
 	engine.setMasterVolume (1.0f);
 	engine.setMixerMasterGain (1.0f);
+
+	// --- [10] MIDI output ---------------------------------------------------------------------
+	// The host only ever sees the sink render() fills: every check below looks at the messages a
+	// VST3 wrapper would put into the output event buffer, so no DAW is needed to prove the
+	// routing. The song is the same one the window scripts load.
+	std::printf ("[10] MIDI output\n");
+
+	engine.setMixerEnabled (true);
+	engine.setLoopCount (1);
+	for (size_t i = 0; i < tracks.size(); ++i)
+	{
+		engine.setTrackMute (i, false);
+		engine.setTrackSolo (i, false);
+		engine.setTrackMidiChannel (i, 0);
+	}
+	engine.setMasterMidiChannel (0);
+
+	// every channel Off: the routing state is kept, but nothing is generated
+	engine.setPositionSeconds (0.0);
+	engine.play();
+	const auto everythingOff = recordMidi (engine, 0.5, sampleRate, blockSize);
+	std::printf ("    all channels off: %d note-on, %d all-notes-off\n",
+				 everythingOff.count (0x90), everythingOff.countController (123));
+	check (everythingOff.count (0x90) == 0, "every channel Off sends no notes");
+
+	// the reset that starts a render is what keeps a host from holding a note from before the
+	// seek/stop - it goes to all 16 channels because any of them may still hold one
+	check (everythingOff.countController (123) == 16, "the first block sends all-notes-off on every channel");
+	check (everythingOff.countController (120) == 16, "and all-sound-off with it");
+
+	// one track on channel 1: its notes, and only they
+	engine.setTrackMidiChannel (0, 1);
+	engine.setPositionSeconds (0.0);
+	engine.play();
+	const auto routed = recordMidi (engine, 1.0, sampleRate, blockSize);
+	const auto routedNotes = routed.notesOn (1);
+	std::printf ("    track 0 -> channel 1: %d note-on (first note %d), %d note-off\n",
+				 (int) routedNotes.size(), routedNotes.empty() ? -1 : routedNotes.front(),
+				 routed.count (0x80));
+	check (! routedNotes.empty(), "a track with a channel sends its notes");
+	check (routed.count (0x90) == routed.count (0x90, 1), "nothing leaks onto a channel nobody routed to");
+	// 3579545 / (32 * 254) = 440.4 Hz: the SN76489's first tone channel is A4 on the MIDI side
+	check (! routedNotes.empty() && routedNotes.front() == 69, "440 Hz decodes to MIDI note 69 (A4)");
+
+	// mute: the channel stays set (the strip still shows it), the events stop
+	engine.setTrackMute (0, true);
+	engine.setPositionSeconds (0.0);
+	engine.play();
+	const auto muted = recordMidi (engine, 1.0, sampleRate, blockSize);
+	check (muted.count (0x90) == 0, "a muted track sends no MIDI even though its channel is still set");
+	engine.setTrackMute (0, false);
+
+	// solo: a soloed track silences the others' MIDI as well (this song's track 1 never plays,
+	// so soloing it leaves nothing at all)
+	engine.setTrackSolo (1, true);
+	engine.setPositionSeconds (0.0);
+	engine.play();
+	const auto soloedMidi = recordMidi (engine, 1.0, sampleRate, blockSize);
+	check (soloedMidi.count (0x90) == 0, "soloing another track silences this one's MIDI too");
+	engine.setTrackSolo (1, false);
+
+	// master: an extra merged copy on its own channel, same notes, same order
+	engine.setMasterMidiChannel (10);
+	engine.setPositionSeconds (0.0);
+	engine.play();
+	const auto merged = recordMidi (engine, 1.0, sampleRate, blockSize);
+	std::printf ("    master channel 10: %d note-on direct, %d merged\n",
+				 merged.count (0x90, 1), merged.count (0x90, 10));
+	check (merged.notesOn (1) == routedNotes, "the track's own channel still gets its notes");
+	check (merged.notesOn (10) == routedNotes, "the master channel gets a copy of every note");
+
+	// master on the same channel as the track: one message, not two (a doubled note-off would cut
+	// the note the first one started)
+	engine.setMasterMidiChannel (1);
+	engine.setPositionSeconds (0.0);
+	engine.play();
+	const auto sameChannel = recordMidi (engine, 1.0, sampleRate, blockSize);
+	check (sameChannel.notesOn (1) == routedNotes, "the master does not double a track on the same channel");
+
+	// the master strip's mute silences the merged copy only - the track's own channel keeps playing
+	engine.setMasterMidiChannel (10);
+	engine.setMasterMuted (true);
+	engine.setPositionSeconds (0.0);
+	engine.play();
+	const auto masterMuted = recordMidi (engine, 1.0, sampleRate, blockSize);
+	check (masterMuted.count (0x90, 10) == 0, "muting the master drops its copy");
+	check (masterMuted.notesOn (1) == routedNotes, "the direct channel keeps playing while the master is muted");
+	engine.setMasterMuted (false);
+
+	// the mixer switch is the opt-out: off means the per-channel routing does not exist
+	engine.setMixerEnabled (false);
+	engine.setPositionSeconds (0.0);
+	engine.play();
+	const auto plainPlayer = recordMidi (engine, 1.0, sampleRate, blockSize);
+	check (plainPlayer.count (0x90) == 0, "with the mixer switched off no MIDI is generated");
+	engine.setMixerEnabled (true);
+
+	// a seek mid-song: the new position's events resume, the previous notes are closed first
+	engine.setMasterMidiChannel (0);
+	engine.setPositionSeconds (0.0);
+	engine.play();
+	engine.setPositionSeconds (2.0);
+	const auto afterSeek = recordMidi (engine, 0.2, sampleRate, blockSize);
+	check (afterSeek.countController (123) == 16, "a seek sends all-notes-off on every channel");
+
+	// chronological order inside a block: the sink's offsets are what the host schedules
+	bool chronological = true;
+	for (size_t i = 1; i < routed.events.size(); ++i)
+	{
+		chronological = chronological && routed.events[i - 1].sampleOffset <= routed.events[i].sampleOffset;
+	}
+	check (chronological, "the block's events arrive in chronological order");
+
+	engine.setMasterMidiChannel (0);
+	engine.setTrackMidiChannel (0, 0);
 
 	const juce::File outputFile = inputFile.withFileExtension (".rendered.wav");
 	writeWavFile (outputFile, plain.left, plain.right, sampleRate);

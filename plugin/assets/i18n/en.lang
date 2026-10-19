@@ -51,8 +51,14 @@ language: English
 "mixer.master" = "MASTER";
 "mixer.masterBus" = "Master";
 "mixer.masterGainTooltip" = "Mixer master gain - the output volume sits behind it (double-click: 100%)";
+"mixer.masterMidiTooltip" = "MIDI output - merged MIDI from every audible, MIDI-enabled track";
 "mixer.masterMuteTooltip" = "Mute the master bus output";
 "mixer.masterOutputTooltip" = "Output bus - where the master mix goes";
+"mixer.midiOff" = "Off";
+"mixer.midiOneShotTooltip" = "One-shot channel: MIDI note C4 is a trigger; pitch is not tracked";
+"mixer.midiTooltip" = "MIDI output channel";
+"mixer.midiUnavailable" = "Not available";
+"mixer.midiUnavailableTooltip" = "MIDI output is not implemented for this chip channel yet";
 "mixer.mergeName" = "Merge to master";
 "mixer.mergeTooltip" = "Send every track back to the master bus";
 "mixer.muteTooltip" = "Mute this track";

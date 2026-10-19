@@ -34,6 +34,7 @@ public:
 	// --- playback::ISongInstance ----------------------------------------------------
 	bool prepare (double hostSampleRate, int maxBlockSize, juce::String& errorMessage) override;
 	const playback::SongInfo& getInfo (void) const override { return info; }
+	const playback::MidiSequence* getMidiSequence (void) const override { return midiSequence.get(); }
 	const std::vector<playback::TrackInfo>& getTracks (void) const override { return tracks; }
 	playback::BackendCapabilities getCapabilities (void) const override;
 	void setTimeline (int loopCount, double fadeSeconds) override;
@@ -56,6 +57,8 @@ private:
 
 	playback::SongInfo info;
 	std::vector<playback::TrackInfo> tracks;
+	std::vector<PLR_DEV_INFO> deviceInfo;
+	std::unique_ptr<playback::MidiSequence> midiSequence;
 
 	JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (LibvgmSongInstance)
 };

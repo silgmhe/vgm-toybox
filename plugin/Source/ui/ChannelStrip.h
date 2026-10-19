@@ -6,9 +6,19 @@
 #include <juce_gui_basics/juce_gui_basics.h>
 
 #include "playback/OutputRouting.h"
+#include "playback/SongBackend.h"
 
 namespace toybox::ui
 {
+
+/** The small badge next to a one-shot MIDI channel; the tooltip is the whole message. */
+class MidiOneShotBadge final : public juce::Component,
+							   public juce::SettableTooltipClient
+{
+public:
+	MidiOneShotBadge (void);
+	void paint (juce::Graphics& g) override;
+};
 
 /**
 	One mixer channel strip in the usual DAW layout: the track name on top, the pan knob below
@@ -26,7 +36,7 @@ class ChannelStrip : public juce::Component
 {
 public:
 	/** Height the strip lays itself out for (MixerPanel uses it for its own layout). */
-	static constexpr int preferredHeight = 204;
+	static constexpr int preferredHeight = 234;
 
 	/** One entry of the output selector: the internal master bus or a real output bus. */
 	struct OutputOption
@@ -38,8 +48,13 @@ public:
 
 	ChannelStrip (void);
 
-	/** Names the strip and picks the layout (track strip or master strip). */
-	void setup (const juce::String& stripName, bool isMasterStrip);
+	/** Names the strip and picks the layout (track strip or master strip).
+
+		`trackIndex` only feeds the component IDs the window scripts address: one selector per
+		strip means the ID has to carry the index, or a script could only ever reach the first
+		track (the master keeps `mixer.master.midi`, it exists once).
+	*/
+	void setup (const juce::String& stripName, bool isMasterStrip, int trackIndex = -1);
 
 	/** Updates every control without firing the callbacks; the meters are already decayed. */
 	void setValues (float gain, float pan, bool muted, bool soloed, float peakL, float peakR, float dim);
@@ -47,8 +62,18 @@ public:
 	/** Fills the output selector - the panel builds the list, the strip only shows it. */
 	void setOutputOptions (const std::vector<OutputOption>& options, playback::OutputTarget selected);
 
-	/** Greys out the selector while the mixer is off (the routing is inactive then). */
+	/** Greys out the routing selectors while the mixer is off (the routing is inactive then). */
 	void setMixerActive (bool active);
+
+	/** Greys out the MIDI selector alone.
+
+		The master needs this: its gain and its output selector stay live with the mixer switched
+		off (the master path is then the only path), but no MIDI is generated at all in that mode.
+	*/
+	void setMidiActive (bool active);
+
+	/** Sets the MIDI channel and the capability that decides whether the row is usable. */
+	void setMidiState (int channel, playback::MidiCapability capability);
 
 	/** Re-applies tooltips and the "(not connected)" suffix after a language change. */
 	void refreshLanguage (void);
@@ -64,6 +89,7 @@ public:
 	std::function<void (bool)> onMuteChanged;
 	std::function<void (bool)> onSoloChanged;
 	std::function<void (playback::OutputTarget)> onOutputChanged;
+	std::function<void (int)> onMidiChannelChanged;
 
 	void paint (juce::Graphics& g) override;
 	void resized (void) override;
@@ -76,10 +102,14 @@ private:
 	void drawMeter (juce::Graphics& g) const;
 	void drawScale (juce::Graphics& g) const;
 	void updateOutputTooltip (void);
+	void rebuildMidiItems (void);
+	void updateMidiTooltip (void);
 
 	juce::TextButton muteButton { "M" };
 	juce::TextButton soloButton { "S" };
 	juce::ComboBox outputBox;		// Master / Out 1/2 / Out 3/4 ... at the bottom of the strip
+	juce::ComboBox midiBox;			// Off / MIDI channel 1-16, below the output selector
+	MidiOneShotBadge oneShotBadge;
 	juce::Slider gainSlider { juce::Slider::LinearVertical, juce::Slider::NoTextBox };
 	juce::Slider panKnob { juce::Slider::RotaryHorizontalVerticalDrag, juce::Slider::NoTextBox };
 
@@ -87,7 +117,12 @@ private:
 	// -2 is never a valid target (the engine clamps everything else to the master bus), so it
 	// tells "the selector has not been filled yet" apart from "it shows the master bus"
 	playback::OutputTarget shownOutput = -2;
+	playback::MidiCapability midiCapability = playback::MidiCapability::unavailable;
+	int shownMidiChannel = 0;
+	bool mixerActive = true;
+	bool midiActive = true;		// usually mixerActive - the master keeps the two apart (see setMidiActive)
 	juce::String stripName;
+	int trackIndex = -1;	// only used to build the component IDs (see setup())
 	juce::Rectangle<int> nameBounds;
 	juce::Rectangle<int> meterBounds;
 	juce::Rectangle<int> scaleBounds;

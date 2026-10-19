@@ -6,6 +6,7 @@
 #include "emu/SoundEmu.h"
 
 #include "LibvgmVgz.h"
+#include "MidiSequenceBuilder.h"
 
 namespace toybox::backends::libvgm
 {
@@ -33,6 +34,93 @@ namespace
 	bool isTrackDevice (const PLR_DEV_INFO& info)
 	{
 		return info.parentIdx == (UINT32) -1;
+	}
+
+	/** What the MIDI decoder will be able to do for one channel of a device. This is deliberately
+		kept here, next to the device enumeration: the UI and the engine see only the capability. */
+	playback::MidiCapability midiCapabilityFor (const PLR_DEV_INFO& device, int channelIndex)
+	{
+		const auto type = device.type;
+		const auto fmChannel = [channelIndex] (int count)
+		{
+			return channelIndex >= 0 && channelIndex < count ? playback::MidiCapability::melodic
+															 : playback::MidiCapability::unavailable;
+		};
+
+		switch (type)
+		{
+		case DEVID_YM2610:
+			if (channelIndex < 0)
+			{
+				return playback::MidiCapability::unavailable;
+			}
+			if (channelIndex < 6)
+			{
+				// The non-B variant only emits CH[1], CH[2], CH[4], CH[5].
+				const bool isB = device.devCfg != nullptr && (device.devCfg->flags & 0x01) != 0;
+				return (isB || (channelIndex != 0 && channelIndex != 3))
+						   ? playback::MidiCapability::melodic
+						   : playback::MidiCapability::unavailable;
+			}
+			return (channelIndex <= 12) ? playback::MidiCapability::oneShot
+										: playback::MidiCapability::unavailable;
+		case DEVID_YM2608:
+			if (channelIndex < 6)
+			{
+				return playback::MidiCapability::melodic;
+			}
+			return (channelIndex <= 12) ? playback::MidiCapability::oneShot
+										: playback::MidiCapability::unavailable;
+		case DEVID_YM2612:
+			return (channelIndex == 6) ? playback::MidiCapability::oneShot : fmChannel (6);
+		case DEVID_YM2203:
+			return fmChannel (3);
+		case DEVID_YM2151:
+			return fmChannel (8);
+		case DEVID_YM2413:
+			return (channelIndex >= 0 && channelIndex < 9) ? playback::MidiCapability::melodic
+														   : (channelIndex < 14
+																  ? playback::MidiCapability::oneShot
+																  : playback::MidiCapability::unavailable);
+		case DEVID_YM3526:
+		case DEVID_YM3812:
+			return (channelIndex >= 0 && channelIndex < 9) ? playback::MidiCapability::melodic
+														   : (channelIndex < 14
+																  ? playback::MidiCapability::oneShot
+																  : playback::MidiCapability::unavailable);
+		case DEVID_Y8950:	// 9 melodic, 5 rhythm, and the Delta-T ADPCM channel on top
+			return (channelIndex >= 0 && channelIndex < 9) ? playback::MidiCapability::melodic
+														   : (channelIndex < 15
+																  ? playback::MidiCapability::oneShot
+																  : playback::MidiCapability::unavailable);
+		case DEVID_YMF262:
+			return (channelIndex >= 0 && channelIndex < 18) ? playback::MidiCapability::melodic
+															: (channelIndex < 23
+																   ? playback::MidiCapability::oneShot
+																   : playback::MidiCapability::unavailable);
+		case DEVID_AY8910:
+			return fmChannel (3);
+		case DEVID_SN76496:
+			return (channelIndex >= 0 && channelIndex < 3) ? playback::MidiCapability::melodic
+														   : (channelIndex == 3
+																  ? playback::MidiCapability::oneShot
+																  : playback::MidiCapability::unavailable);
+		case DEVID_RF5C68:	// also RF5C164 / RF5C105
+			return (channelIndex >= 0 && channelIndex < 8) ? playback::MidiCapability::oneShot
+														   : playback::MidiCapability::unavailable;
+		case DEVID_NES_APU:
+			return (channelIndex >= 0 && channelIndex < 3) ? playback::MidiCapability::melodic
+														   : (channelIndex < 5
+																  ? playback::MidiCapability::oneShot
+																  : playback::MidiCapability::unavailable);
+		case DEVID_GB_DMG:
+			return (channelIndex >= 0 && channelIndex < 3) ? playback::MidiCapability::melodic
+														   : (channelIndex == 3
+																  ? playback::MidiCapability::oneShot
+																  : playback::MidiCapability::unavailable);
+		default:
+			return playback::MidiCapability::unavailable;
+		}
 	}
 }
 
@@ -80,6 +168,16 @@ bool LibvgmSongInstance::prepare (double hostSampleRate, int newMaxBlockSize, ju
 	probe->start();
 
 	enumerate();
+	midiSequence = buildMidiSequence (playerMemory.data, playerMemory.size, deviceInfo, tracks);
+	if (midiSequence == nullptr)
+	{
+		// The builder only understands VGM today; do not offer a MIDI channel that can never
+		// produce an event for S98/DRO/GYM.
+		for (auto& track : tracks)
+		{
+			track.midiCapability = playback::MidiCapability::unavailable;
+		}
+	}
 	probe->setTrackList (&tracks);	// setTrackAudible() resolves the track through this list
 	refreshTimelineFacts();
 	return true;
@@ -186,6 +284,7 @@ void LibvgmSongInstance::enumerate (void)
 	// --- devices and their channels ---------------------------------------------------
 	std::vector<PLR_DEV_INFO> devices;
 	pBase->GetSongDeviceInfo (devices);
+	deviceInfo = devices;
 
 	std::map<UINT32, int> instancesByType;
 	for (const auto& device : devices)
@@ -270,6 +369,7 @@ void LibvgmSongInstance::enumerate (void)
 			track.isolatable = trackIsolatable;
 			track.name = name;
 			track.groupName = groupName;
+			track.midiCapability = midiCapabilityFor (device, channelIndex);
 			tracks.push_back (std::move (track));
 		};
 

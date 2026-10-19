@@ -20,6 +20,7 @@ struct SessionTrackState
 	bool mute = false;
 	bool solo = false;
 	OutputTarget output = kMasterOutput;
+	int midiChannel = 0;			// 0 = Off, 1..16
 };
 
 /**
@@ -55,6 +56,7 @@ struct SessionState
 	float mixerMasterGain = 1.0f;
 	bool masterMuted = false;
 	OutputTarget masterOutput = 0;
+	int masterMidiChannel = 0;		// 0 = Off, 1..16
 	DefaultRouting defaultRouting = DefaultRouting::master;
 
 	juce::String songName;			// file name only - the extension is what matters

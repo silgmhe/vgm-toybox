@@ -111,6 +111,7 @@ private:
 	juce::String restoreState (const void* data, int sizeInBytes);
 
 	toybox::PlaybackEngine engine;
+	bool wasPlaying = false;		// audio thread only: sends all-notes-off on stop/pause
 
 	/** The song a second launch handed over; see openSongFromAnotherInstance(). Message thread
 		only, like the two calls that touch it - the audio thread never reads it. */
