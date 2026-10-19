@@ -247,3 +247,22 @@ YM2610 的 SSG 寄存器布局与 YM2149 一致，`Ym2610Decoder` 与未来的 `
 | 测试与调音（每芯片 1-2 首曲子） | 3-5 |
 
 合计约 15-22 人日；若只做 MD + NES，约 10-13 人日。
+
+## 13. 进度
+
+| 步骤 | 状态 | 落地内容 |
+|---|---|---|
+| 1. `VgmCommandReader` | 已完成 | `backends/libvgm/VgmCommandReader.{h,cpp}`；`MidiSequenceBuilder` 只看 `VgmCommand` |
+| 2. `MidiEncoder` | 未开始 | 仍在 `MidiSequenceBuilder` 内 |
+| 3. `NoteExtractor` + `NoteTable` | 已完成（2A03 先行） | `chips/NoteExtractor.{h,cpp}`、`chips/ChipTypes.h` |
+| 4. `Ym2612Decoder` | 未开始 | — |
+| 5. `NesApuDecoder` | 已完成首版 | `chips/NesApuDecoder.{h,cpp}`，帧序列器、长度/线性计数器、包络、扫频、噪声、DMC |
+| 6. `Ym2610Decoder` | 未开始 | — |
+| 7. 收缩旧 `Builder` | 部分 | 旧 `writeNes` / `NesState` 已删除（`MidiSequenceBuilder.cpp` 1467 → 1389 行） |
+
+2A03 的验收方式是新的 `vgm_chip_test`（`plugin/Tests/ChipDecoderTest.cpp`）：只链接 `Source/chips`，不链接 libvgm，用寄存器写断言音符与起止采样。期间修正了两处旧实现不可能有、新实现必须有的细节：
+
+- 帧序列器步长要按采样率换算（`7457 * sampleRate / cpuClock`），而不是直接用 CPU 周期数；
+- 长度计数器寄存器存的是索引，要查 `kLengthTable`；`$4015` 写 0 才是真正的键控关闭（写 `$4003` 只会重新装载长度）。
+
+后续接 YM2612 / YM2610 时，`NoteExtractor` 与 `NesApuDecoder` 都是模板：新的 decoder 只需回答 `channelState()` 与 `noteTable()`。

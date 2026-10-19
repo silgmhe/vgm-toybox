@@ -2,8 +2,12 @@
 
 #include <algorithm>
 #include <cmath>
-#include <cstring>
 #include <map>
+
+#include "VgmCommandReader.h"
+
+#include "chips/NesApuDecoder.h"
+#include "chips/NoteExtractor.h"
 
 #include "emu/SoundDevs.h"
 
@@ -12,88 +16,6 @@ namespace toybox::backends::libvgm
 namespace
 {
 	constexpr double kVgmRate = 44100.0;
-
-	UINT16 readLe16 (const UINT8* p)
-	{
-		return (UINT16) ((UINT16) p[0] | ((UINT16) p[1] << 8));
-	}
-
-	UINT32 readLe32 (const UINT8* p)
-	{
-		return (UINT32) p[0] | ((UINT32) p[1] << 8) | ((UINT32) p[2] << 16)
-			   | ((UINT32) p[3] << 24);
-	}
-
-	/** The VGM command set is large; the builder only needs to know how long the commands it
-		does not interpret are, so the stream stays aligned. */
-	/** Command lengths taken from libvgm's VGM command table.  A wrong length desynchronises
-		the whole stream, so the rarely used register writes are listed too. */
-	int commandLength (UINT8 cmd, const UINT8* data, std::size_t remaining)
-	{
-		switch (cmd)
-		{
-		case 0x30: case 0x31: case 0x32: case 0x33: case 0x34: case 0x35:
-		case 0x36: case 0x37: case 0x38: case 0x39: case 0x3A: case 0x3B:
-		case 0x3C: case 0x3D: case 0x3E: case 0x3F:
-		case 0x4F:
-		case 0x50:
-			return 2;
-		case 0x40: case 0x41: case 0x42: case 0x43: case 0x44: case 0x45:
-		case 0x46: case 0x47: case 0x48: case 0x49: case 0x4A: case 0x4B:
-		case 0x4C: case 0x4D: case 0x4E:
-		case 0x51: case 0x52: case 0x53: case 0x54: case 0x55:
-		case 0x56: case 0x57: case 0x58: case 0x59:
-		case 0x5A: case 0x5B: case 0x5C: case 0x5D: case 0x5E: case 0x5F:
-		case 0xA0: case 0xA1: case 0xA2: case 0xA3: case 0xA4: case 0xA5:
-		case 0xA6: case 0xA7: case 0xA8: case 0xA9: case 0xAA: case 0xAB:
-		case 0xAC: case 0xAD: case 0xAE: case 0xAF:
-		case 0xB0: case 0xB1: case 0xB2: case 0xB3: case 0xB4: case 0xB5:
-		case 0xB6: case 0xB7: case 0xB8: case 0xB9: case 0xBA: case 0xBB:
-		case 0xBC: case 0xBD: case 0xBE: case 0xBF:
-			return 3;
-		case 0x61:
-			return 3;
-		case 0x62: case 0x63:
-		case 0x66:
-		case 0x70: case 0x71: case 0x72: case 0x73:
-		case 0x74: case 0x75: case 0x76: case 0x77:
-		case 0x78: case 0x79: case 0x7A: case 0x7B:
-		case 0x7C: case 0x7D: case 0x7E: case 0x7F:
-			return 1;
-		case 0x67:
-			// bit 31 marks a ROM data block; the length itself is the low 31 bits
-			return remaining >= 7 ? 7 + (int) (readLe32 (data + 3) & 0x7FFFFFFFu)
-								  : (int) remaining;
-		case 0x68:
-			return 12;
-		case 0x80: case 0x81: case 0x82: case 0x83: case 0x84: case 0x85:
-		case 0x86: case 0x87: case 0x88: case 0x89: case 0x8A: case 0x8B:
-		case 0x8C: case 0x8D: case 0x8E: case 0x8F:
-			return 1;
-		case 0xC0: case 0xC1: case 0xC2: case 0xC3: case 0xC4: case 0xC5:
-		case 0xC6: case 0xC7: case 0xC8: case 0xC9: case 0xCA: case 0xCB:
-		case 0xCC: case 0xCD: case 0xCE: case 0xCF:
-		case 0xD0: case 0xD1: case 0xD2: case 0xD3: case 0xD4: case 0xD5:
-		case 0xD6: case 0xD7: case 0xD8: case 0xD9: case 0xDA: case 0xDB:
-		case 0xDC: case 0xDD: case 0xDE: case 0xDF:
-			return 4;
-		case 0x90: case 0x91:
-		case 0x95:
-		case 0xE0: case 0xE1:
-			return 5;
-		case 0x92:
-			return 6;
-		case 0x93:
-			return 11;
-		case 0x94:
-			return 2;
-		case 0x96: case 0x97: case 0x98: case 0x99: case 0x9A: case 0x9B:
-		case 0x9C: case 0x9D: case 0x9E: case 0x9F:
-			return 1;
-		default:
-			return cmd >= 0xE2 ? 5 : 1;
-		}
-	}
 
 	// One-shot channels have no reliable pitch.  C4 is only a trigger marker, not a
 	// transcription of the sample; users can map it with a MIDI effect in the DAW.
@@ -184,16 +106,6 @@ namespace
 		bool activeB = false;
 	};
 
-	struct NesState
-	{
-		UINT8 regs[0x18] = {};
-		int note[5] = { -1, -1, -1, -1, -1 };
-		bool active[5] = { false, false, false, false, false };
-		bool enabled[5] = { false, false, false, false, false };	// $4015 bits 0..4
-		bool pending[3] = { false, false, false };				// length reload seen, waiting for volume
-		bool lowAfterHigh[3] = { false, false, false };			// timer low written after timer high
-	};
-
 	struct GbState
 	{
 		UINT8 regs[0x30] = {};
@@ -259,190 +171,139 @@ namespace
 			}
 		}
 
-		std::unique_ptr<playback::MidiSequence> parse (const UINT8* data, std::size_t size)
+		std::unique_ptr<playback::MidiSequence> parse (const void* data, std::size_t size)
 		{
-			if (size < 0x40 || std::memcmp (data, "Vgm ", 4) != 0)
+			VgmCommandReader reader (data, size);
+			if (! reader.isValid())
 			{
 				return nullptr;
 			}
 
-			std::uint32_t dataOffset = 0x40;
-			const std::uint32_t relativeData = readLe32 (data + 0x34);
-			if (relativeData != 0)
+			VgmCommand command;
+			std::uint32_t lastSampleTime = 0;
+			while (reader.next (command))
 			{
-				dataOffset = 0x34 + relativeData;
-			}
+				const double time = (double) command.sampleTime / kVgmRate;
+				lastSampleTime = command.sampleTime;
 
-			std::uint32_t end = readLe32 (data + 0x04);
-			end = (end == 0) ? (std::uint32_t) size : (0x04 + end);
-			if (end > size)
-			{
-				end = (std::uint32_t) size;
-			}
-
-			// like libvgm: the GD3 tag sits between the command stream and the EOF offset,
-			// so the command stream ends there (parsing the tag as commands would desync)
-			const std::uint32_t relativeGd3 = readLe32 (data + 0x14);
-			if (relativeGd3 != 0)
-			{
-				const std::uint32_t gd3Offset = 0x14 + relativeGd3;
-				if (gd3Offset >= dataOffset && gd3Offset < end)
-				{
-					end = gd3Offset;
-				}
-			}
-
-			if (dataOffset < 0x40 || dataOffset >= end)
-			{
-				return nullptr;
-			}
-
-			double sampleTime = 0.0;
-			std::size_t pos = dataOffset;
-
-			while (pos < end)
-			{
-				const UINT8 cmd = data[pos];
-				const int length = commandLength (cmd, data + pos, end - pos);
-				if (length <= 0 || pos + (std::size_t) length > end)
-				{
-					break;
-				}
-
-				const double time = sampleTime / kVgmRate;
-
-				switch (cmd)
+				switch (command.command)
 				{
 				case 0x50:
-					writeSn (deviceFor (DEVID_SN76496, 0), data[pos + 1], time);
+					writeSn (deviceFor (DEVID_SN76496, 0), command.addr, time);
 					break;
 				case 0x51:
-					writeOpl (deviceFor (DEVID_YM2413, 0), false, data[pos + 1], data[pos + 2],
+					writeOpl (deviceFor (DEVID_YM2413, 0), false, command.addr, command.data,
 							  time, OplKind::opll);
 					break;
 				case 0x52:
 				case 0x53:
-					writeFm (deviceFor (DEVID_YM2612, 0), cmd == 0x53, data[pos + 1],
-							 data[pos + 2], time, false, 6);
+					writeFm (deviceFor (DEVID_YM2612, 0), command.command == 0x53, command.addr,
+							 command.data, time, false, 6);
 					break;
 				case 0x54:
-					writeOpm (deviceFor (DEVID_YM2151, 0), data[pos + 1], data[pos + 2], time);
+					writeOpm (deviceFor (DEVID_YM2151, 0), command.addr, command.data, time);
 					break;
 				case 0x55:
-					writeFm (deviceFor (DEVID_YM2203, 0), false, data[pos + 1], data[pos + 2],
+					writeFm (deviceFor (DEVID_YM2203, 0), false, command.addr, command.data,
 							 time, false, 3);
 					break;
 				case 0x56:
 				case 0x57:
-					writeYm2608 (deviceFor (DEVID_YM2608, 0), cmd == 0x57, data[pos + 1],
-								 data[pos + 2], time);
+					writeYm2608 (deviceFor (DEVID_YM2608, 0), command.command == 0x57, command.addr,
+								 command.data, time);
 					break;
 				case 0x58:
 				case 0x59:
-					writeYm2610 (deviceFor (DEVID_YM2610, 0), cmd == 0x59, data[pos + 1],
-								 data[pos + 2], time);
+					writeYm2610 (deviceFor (DEVID_YM2610, 0), command.command == 0x59, command.addr,
+								 command.data, time);
 					break;
 				case 0x5A:
-					writeOpl (deviceFor (DEVID_YM3812, 0), false, data[pos + 1], data[pos + 2],
+					writeOpl (deviceFor (DEVID_YM3812, 0), false, command.addr, command.data,
 							  time, OplKind::opl2);
 					break;
 				case 0x5B:
-					writeOpl (deviceFor (DEVID_YM3526, 0), false, data[pos + 1], data[pos + 2],
+					writeOpl (deviceFor (DEVID_YM3526, 0), false, command.addr, command.data,
 							  time, OplKind::opl2);
 					break;
 				case 0x5C:
-					writeOpl (deviceFor (DEVID_Y8950, 0), false, data[pos + 1], data[pos + 2],
+					writeOpl (deviceFor (DEVID_Y8950, 0), false, command.addr, command.data,
 							  time, OplKind::opl2);
 					break;
 				case 0x5E:
 				case 0x5F:
-					writeOpl (deviceFor (DEVID_YMF262, 0), cmd == 0x5F, data[pos + 1],
-							  data[pos + 2], time, OplKind::opl3);
+					writeOpl (deviceFor (DEVID_YMF262, 0), command.command == 0x5F, command.addr,
+							  command.data, time, OplKind::opl3);
 					break;
 				case 0xA0:
-					writeAy (deviceFor (DEVID_AY8910, 0), data[pos + 1], data[pos + 2], time);
+					writeAy (deviceFor (DEVID_AY8910, 0), command.addr, command.data, time);
 					break;
 				case 0xA1:
-					writeOpl (deviceFor (DEVID_YM2413, 1), false, data[pos + 1], data[pos + 2],
+					writeOpl (deviceFor (DEVID_YM2413, 1), false, command.addr, command.data,
 							  time, OplKind::opll);
 					break;
 				case 0xA4:
-					writeOpm (deviceFor (DEVID_YM2151, 1), data[pos + 1], data[pos + 2], time);
+					writeOpm (deviceFor (DEVID_YM2151, 1), command.addr, command.data, time);
 					break;
 				case 0xA5:
-					writeFm (deviceFor (DEVID_YM2203, 1), false, data[pos + 1], data[pos + 2],
+					writeFm (deviceFor (DEVID_YM2203, 1), false, command.addr, command.data,
 							 time, false, 3);
 					break;
 				case 0xA6:
 				case 0xA7:
-					writeYm2608 (deviceFor (DEVID_YM2608, 1), cmd == 0xA7, data[pos + 1],
-								 data[pos + 2], time);
+					writeYm2608 (deviceFor (DEVID_YM2608, 1), command.command == 0xA7, command.addr,
+								 command.data, time);
 					break;
 				case 0xAA:
-					writeOpl (deviceFor (DEVID_YM3812, 1), false, data[pos + 1], data[pos + 2],
+					writeOpl (deviceFor (DEVID_YM3812, 1), false, command.addr, command.data,
 							  time, OplKind::opl2);
 					break;
 				case 0xAB:
-					writeOpl (deviceFor (DEVID_YM3526, 1), false, data[pos + 1], data[pos + 2],
+					writeOpl (deviceFor (DEVID_YM3526, 1), false, command.addr, command.data,
 							  time, OplKind::opl2);
 					break;
 				case 0xAC:
-					writeOpl (deviceFor (DEVID_Y8950, 1), false, data[pos + 1], data[pos + 2],
+					writeOpl (deviceFor (DEVID_Y8950, 1), false, command.addr, command.data,
 							  time, OplKind::opl2);
 					break;
 				case 0xAE:
 				case 0xAF:
-					writeOpl (deviceFor (DEVID_YMF262, 1), cmd == 0xAF, data[pos + 1],
-							  data[pos + 2], time, OplKind::opl3);
+					writeOpl (deviceFor (DEVID_YMF262, 1), command.command == 0xAF, command.addr,
+							  command.data, time, OplKind::opl3);
 					break;
 				case 0xB0:	// RF5C68
-					writeRf5c (rf5cDeviceFor (false, (data[pos + 1] >> 7) & 1),
-							   data[pos + 1] & 0x7F, data[pos + 2], time);
+					writeRf5c (rf5cDeviceFor (false, command.port),
+							   command.addr, command.data, time);
 					break;
 				case 0xB1:	// RF5C164
-					writeRf5c (rf5cDeviceFor (true, (data[pos + 1] >> 7) & 1),
-							   data[pos + 1] & 0x7F, data[pos + 2], time);
+					writeRf5c (rf5cDeviceFor (true, command.port),
+							   command.addr, command.data, time);
 					break;
 				case 0xB3:
-					writeGb (deviceFor (DEVID_GB_DMG, (data[pos + 1] >> 7) & 1),
-							 data[pos + 1] & 0x7F, data[pos + 2], time);
+					writeGb (deviceFor (DEVID_GB_DMG, command.port),
+							 command.addr, command.data, time);
 					break;
 				case 0xB4:
-					writeNes (deviceFor (DEVID_NES_APU, (data[pos + 1] >> 7) & 1),
-							  data[pos + 1] & 0x7F, data[pos + 2], time);
+					queueNesWrite (deviceFor (DEVID_NES_APU, command.port),
+								   command.addr, command.data, command.sampleTime);
 					break;
 				case 0xA2:
 				case 0xA3:
-					writeFm (deviceFor (DEVID_YM2612, 1), cmd == 0xA3, data[pos + 1],
-							 data[pos + 2], time, false, 6);
+					writeFm (deviceFor (DEVID_YM2612, 1), command.command == 0xA3, command.addr,
+							 command.data, time, false, 6);
 					break;
 				case 0xA8:
 				case 0xA9:
-					writeYm2610 (deviceFor (DEVID_YM2610, 1), cmd == 0xA9, data[pos + 1],
-								 data[pos + 2], time);
+					writeYm2610 (deviceFor (DEVID_YM2610, 1), command.command == 0xA9, command.addr,
+								 command.data, time);
 					break;
-				case 0x61:
-					sampleTime += readLe16 (data + pos + 1);
-					break;
-				case 0x62:
-					sampleTime += 735.0;
-					break;
-				case 0x63:
-					sampleTime += 882.0;
-					break;
-				case 0x66:
-					pos = end;
-					continue;
 				default:
-					if (cmd >= 0x70 && cmd <= 0x7F)
-					{
-						sampleTime += (cmd & 0x0F) + 1;
-					}
-					break;
+					break;	// waits and stream end are handled by the reader
 				}
-
-				pos += (std::size_t) length;
 			}
+
+			// chips with a real state machine are decoded in one pass after the stream is read:
+			// their note boundaries come from the chip's own counters, not from a register write
+			flushNes (lastSampleTime);
 
 			if (events.empty())
 			{
@@ -461,6 +322,64 @@ namespace
 		}
 
 	private:
+		/** Buffers one 2A03 register write. The chip's notes cannot be read off a single write:
+			they end when the length counter or the envelope says so, which only the decoder's own
+			frame sequencer knows. */
+		void queueNesWrite (const PLR_DEV_INFO* device, std::uint8_t reg, std::uint8_t value,
+							std::uint32_t sampleTime)
+		{
+			if (device == nullptr)
+			{
+				return;
+			}
+
+			chips::RegisterWrite write;
+			write.deviceId = device->id;
+			write.reg = reg;
+			write.value = value;
+			write.sampleTime = sampleTime;
+			nesWrites[device->id].push_back (write);
+			nesDevices[device->id] = device;
+		}
+
+		void flushNes (std::uint32_t totalSamples)
+		{
+			for (auto& entry : nesWrites)
+			{
+				const auto device = nesDevices.find (entry.first);
+				if (device == nesDevices.end() || device->second == nullptr)
+				{
+					continue;
+				}
+
+				const std::uint32_t clock = (device->second->devCfg != nullptr
+											 && device->second->devCfg->clock > 0)
+												? device->second->devCfg->clock
+												: 1789773u;
+
+				chips::NesApuDecoder decoder;
+				decoder.reset (clock, (double) kVgmRate);
+
+				const auto notes = chips::extractNotes (decoder, entry.second, totalSamples);
+				for (const auto& note : notes)
+				{
+					const int track = trackFor (device->second, note.logicalChannel);
+					if (track < 0)
+					{
+						continue;
+					}
+
+					const double start = (double) note.startSample / kVgmRate;
+					const double end = (double) note.endSample / kVgmRate;
+					noteOn (track, start, note.note, note.velocity);
+					noteOff (track, end, note.note);
+				}
+			}
+
+			nesWrites.clear();
+			nesDevices.clear();
+		}
+
 		const PLR_DEV_INFO* deviceFor (DEV_ID type, int instance) const
 		{
 			const auto exact = deviceByType.find (typeInstanceKey (type, instance));
@@ -725,173 +644,6 @@ namespace
 				const int track = trackFor (device, channel);
 				updateMelodicPitch (track, time, state.note[channel], state.active[channel], pitch,
 									juce::jlimit (1, 127, amplitude * 4));
-			}
-		}
-
-		void writeNes (const PLR_DEV_INFO* device, UINT8 addr, UINT8 data, double time)
-		{
-			if (device == nullptr || addr >= 0x18)
-			{
-				return;
-			}
-
-			NesState& state = nesStates[device->id];
-			const UINT8 old = state.regs[addr];
-			state.regs[addr] = data;
-
-			const double clock = (device->devCfg != nullptr && device->devCfg->clock > 0)
-									 ? (double) device->devCfg->clock
-									 : 1789773.0;
-
-			const auto melodic = [&] (int channel, UINT8 base, bool triangle)
-			{
-				const int track = trackFor (device, channel);
-				const int timer = state.regs[base + 2]
-								  | ((state.regs[base + 3] & 0x07) << 8);
-				const double frequency = timer > 0
-											 ? clock / ((triangle ? 32.0 : 16.0) * (timer + 1))
-											 : 0.0;
-
-				const UINT8 control = state.regs[base];
-				const bool constantVolume = (control & 0x10) != 0;
-				const int velocity = juce::jlimit (1, 127, (control & 0x0F) * 8);
-
-				bool audible = true;
-				if (triangle)
-				{
-					// A zero linear-counter reload mutes the channel; clearing the control flag
-					// only stops the counter from decrementing, it does not silence it at once.
-					audible = (control & 0x7F) != 0;
-				}
-				else if (constantVolume)
-				{
-					audible = (control & 0x0F) != 0;
-				}
-
-				// $4003/$4007/$400B load the length counter with bits 7..3.  Several VGM drivers
-				// never set bit 7 (it only halts the counter), so the reload itself is the note
-				// boundary - testing bit 7 would silently drop every note of those rips.
-				const bool lengthLoad = addr == base + 3 && ((data >> 3) & 0x1F) != 0;
-				if (lengthLoad)
-				{
-					if (state.active[channel])
-					{
-						noteOff (track, time, state.note[channel]);
-						state.active[channel] = false;
-					}
-
-					state.pending[channel] = true;
-					state.lowAfterHigh[channel] = false;
-					if ((data & 0x80) != 0)
-					{
-						// The halt flag is conventionally set when the high byte is written last.
-						state.lowAfterHigh[channel] = true;
-					}
-				}
-				else if (addr == base + 2)
-				{
-					state.lowAfterHigh[channel] = true;
-				}
-
-				if (! state.active[channel])
-				{
-					if (! state.pending[channel] || ! state.enabled[channel] || ! audible
-						|| timer <= 0 || ! state.lowAfterHigh[channel])
-					{
-						return;
-					}
-
-					const int note = noteFromFrequency (frequency);
-					if (note >= 0)
-					{
-						startMelodicNote (track, time, note, velocity);
-						state.note[channel] = note;
-						state.active[channel] = true;
-						state.pending[channel] = false;
-					}
-					return;
-				}
-
-				if (! audible)
-				{
-					noteOff (track, time, state.note[channel]);
-					state.active[channel] = false;
-					return;
-				}
-
-				if (addr == base + 2 || (addr == base + 3 && ! lengthLoad))
-				{
-					updateMelodicPitch (track, time, state.note[channel], state.active[channel],
-										noteFromFrequencyF (frequency), velocity);
-				}
-			};
-
-			if (addr <= 0x03)
-			{
-				melodic (0, 0x00, false);
-			}
-			else if (addr <= 0x07)
-			{
-				melodic (1, 0x04, false);
-			}
-			else if (addr <= 0x0B)
-			{
-				melodic (2, 0x08, true);
-			}
-			else if (addr <= 0x0F)
-			{
-				// The noise channel has no pitch.  $400F also loads the length counter; in VGM
-				// rips its bit 7 is frequently clear, so trigger on the reload like the others.
-				const UINT8 control = state.regs[0x0C];
-				const bool audible = (control & 0x10) == 0 || (control & 0x0F) != 0;
-				if (addr == 0x0F && ((data >> 3) & 0x1F) != 0 && state.enabled[3] && audible)
-				{
-					triggerOneShot (trackFor (device, 3), time);
-				}
-			}
-			else if (addr == 0x15)
-			{
-				const bool dmcEnabled = (data & 0x10) != 0;
-				const bool dmcWasEnabled = (old & 0x10) != 0;
-				// 0x4012 == 0 is a valid sample address (0xC000), so only the length counter
-				// tells a real sample start from the init write; 0x4011 is just the direct load.
-				if (dmcEnabled && ! dmcWasEnabled && state.regs[0x13] != 0)
-				{
-					triggerOneShot (trackFor (device, 4), time, 0.10);
-				}
-
-				for (int channel = 0; channel < 4; ++channel)
-				{
-					state.enabled[channel] = (data & (1u << channel)) != 0;
-					if (state.enabled[channel] || channel >= 3)
-					{
-						continue;
-					}
-
-					state.pending[channel] = false;
-					state.lowAfterHigh[channel] = false;
-					if (state.active[channel])
-					{
-						noteOff (trackFor (device, channel), time, state.note[channel]);
-						state.active[channel] = false;
-					}
-				}
-				state.enabled[4] = dmcEnabled;
-
-				// Enabling a channel can be the last step of a note start: some drivers write the
-				// tone registers before they turn the APU channels on.
-				if (state.enabled[0])
-				{
-					melodic (0, 0x00, false);
-				}
-				if (state.enabled[1])
-				{
-					melodic (1, 0x04, false);
-				}
-				if (state.enabled[2])
-				{
-					melodic (2, 0x08, true);
-				}
 			}
 		}
 
@@ -1604,6 +1356,10 @@ namespace
 		const std::vector<playback::TrackInfo>& tracks;
 		std::map<std::uint64_t, const PLR_DEV_INFO*> deviceByType;
 		std::map<std::uint64_t, int> trackByDeviceChannel;
+
+		// 2A03 writes, kept until the stream ends so the decoder can run its frame sequencer
+		std::map<std::uint32_t, std::vector<chips::RegisterWrite>> nesWrites;
+		std::map<std::uint32_t, const PLR_DEV_INFO*> nesDevices;
 		std::map<std::uint32_t, SnState> snStates;
 		std::map<std::uint32_t, AyState> ayStates;
 		std::map<std::uint32_t, FmState> fmStates;
@@ -1611,7 +1367,6 @@ namespace
 		std::map<std::uint32_t, OplState> oplStates;
 		std::map<std::uint32_t, DacState> dacStates;
 		std::map<std::uint32_t, AdpcmState> adpcmStates;
-		std::map<std::uint32_t, NesState> nesStates;
 		std::map<std::uint32_t, GbState> gbStates;
 		std::map<std::uint32_t, Rf5cState> rf5cStates;
 		std::map<int, PendingOneShot> oneShotPending;

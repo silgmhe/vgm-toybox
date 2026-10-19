@@ -454,7 +454,7 @@ Invoke-Native 'cmake' @('--build', $buildDir)
 # they are EXCLUDE_FROM_ALL, and a -Test that runs a binary nobody just built is exactly the trap
 # v0.1.0 fell into (docs/memo/2026-10-17-stale-test-binary-and-the-restore-test.md).
 if ($Test) {
-	$Target = @($Target + @('vgm_core_test', 'vgm_ui_test', 'vgm_app_test', 'vgm_mixer_test') |
+	$Target = @($Target + @('vgm_chip_test', 'vgm_core_test', 'vgm_ui_test', 'vgm_app_test', 'vgm_mixer_test') |
 		Select-Object -Unique)
 }
 

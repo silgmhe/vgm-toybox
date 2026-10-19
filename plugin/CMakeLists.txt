@@ -187,9 +187,12 @@ target_sources(VGMToybox PRIVATE
 	Source/playback/DawSync.cpp
 	Source/playback/HostClockSource.cpp
 	Source/playback/SessionState.cpp
+	Source/chips/NesApuDecoder.cpp
+	Source/chips/NoteExtractor.cpp
 	Source/backends/BuiltInBackends.cpp
 	Source/backends/libvgm/LibvgmBackend.cpp
 	Source/backends/libvgm/MidiSequenceBuilder.cpp
+	Source/backends/libvgm/VgmCommandReader.cpp
 	Source/backends/libvgm/LibvgmSongInstance.cpp
 	Source/backends/libvgm/LibvgmTrackPlayer.cpp
 	Source/backends/libvgm/LibvgmVgz.cpp
@@ -308,13 +311,30 @@ add_executable(vgm_mixer_test EXCLUDE_FROM_ALL
 	Source/playback/PlaybackEngine.cpp
 	Source/playback/DawSync.cpp
 	Source/playback/SessionState.cpp
+	Source/chips/NesApuDecoder.cpp
+	Source/chips/NoteExtractor.cpp
 	Source/backends/BuiltInBackends.cpp
 	Source/backends/libvgm/LibvgmBackend.cpp
 	Source/backends/libvgm/MidiSequenceBuilder.cpp
+	Source/backends/libvgm/VgmCommandReader.cpp
 	Source/backends/libvgm/LibvgmSongInstance.cpp
 	Source/backends/libvgm/LibvgmTrackPlayer.cpp
 	Source/backends/libvgm/LibvgmVgz.cpp
 )
+# --- console test for the chip decoders (not built by default) ---
+# Register writes in, notes out. Links Source/chips and nothing else - no libvgm, no JUCE.
+#   cmake --build <build dir> --target vgm_chip_test
+#   <build dir>/plugin/vgm_chip_test
+add_executable(vgm_chip_test EXCLUDE_FROM_ALL
+	Tests/ChipDecoderTest.cpp
+	Source/chips/NesApuDecoder.cpp
+	Source/chips/NoteExtractor.cpp
+)
+target_include_directories(vgm_chip_test PRIVATE Source)
+# the chips sources are C++17 (nested namespaces, std::clamp); the plugin target gets the same
+# standard from JUCE's own flags, this target has no JUCE
+target_compile_features(vgm_chip_test PRIVATE cxx_std_17)
+
 # --- console test for the playback core (not built by default) ---
 # Drives PlaybackEngine through the fake tone backend, and the settings store through a temporary
 # directory. Deliberately links **no libvgm code**: if the core still depended on the format
@@ -433,6 +453,7 @@ if(EXISTS "${TOYBOX_TEST_SONG}")
 	set(_toybox_test_env "VGM_TEST_SONG=${_toybox_test_song}")
 endif()
 
+add_test(NAME chip COMMAND vgm_chip_test)
 add_test(NAME core COMMAND vgm_core_test)
 add_test(NAME ui   COMMAND vgm_ui_test)
 set_tests_properties(core ui PROPERTIES LABELS "unit" TIMEOUT 120)
