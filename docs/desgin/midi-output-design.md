@@ -598,7 +598,7 @@ void render (const playback::OutputBusBuffers* buses, int numBuses, int numSampl
 | P2 | `MidiSequenceBuilder` + YM2610/YM2612/YM2151/AY/SN 解码器；单元测试 |
 | P3 | `render()` 的 MIDI sink；`processBlock` 填充 `midiMessages`；VST3 宿主内录验证 |
 | P4 | `ChannelStrip` 轨道/Master MIDI combo + one-shot badge + i18n + AppHarness 脚本 |
-| P5 | 更多芯片、ADPCM-B 根音、standalone/virtual port、可视化复用；Settings → MIDI 输出子面板 |
+| P5 | 更多芯片（覆盖面目标与清单见 §11.2）、ADPCM-B 根音、standalone/virtual port、可视化复用；Settings → MIDI 输出子面板 |
 
 第一版不做：S98/DRO/GYM、linked SSG 独立轨、MIDI 文件、虚拟端口、自动鼓映射。
 
@@ -614,6 +614,97 @@ void render (const playback::OutputBusBuffers* buses, int numBuses, int numSampl
 - 可能还有“MIDI 输出通道冲突”提示样式。
 
 第一版只做通道下拉和固定 C4 trigger（不做 GM 鼓映射）；这些设置项属于 P5 之后，不阻塞实时 MIDI 输出。
+
+### 11.2 芯片覆盖：现状与目标
+
+**目标**：MIDI 输出的芯片覆盖面最终不低于参考项目 MDPlayer-stable 的 `EnmChip` 主表——**54 项**（`reference/MDPlayer-stable/MDPlayer/MDPlayerx64/common.cs`；`S_*` 是同一芯片的第二实例，不单列）。
+
+判据是「能出 MIDI 事件」而不是「音频能出声」：每一项要么旋律化（note-on + 弯音），要么 one-shot（C4 触发 + note-off）。只有音频、没有事件的通道不计入。
+
+**现状（2026-10）**
+
+| 口径 | 数量 |
+|---|---:|
+| 音频核心（libvgm `DEVID_*`，全部可播） | 49 |
+| MIDI 设备类型（`midiCapabilityFor`，`LibvgmSongInstance.cpp`） | 15 |
+| 上表对应的 MDPlayer 主表条目 | 18 |
+| 有音频核心、缺解码器 | 21 |
+| 连音频核心都没有 | 15 |
+| libvgm 有、MDPlayer 没有（不在对齐范围内） | 13 |
+
+**54 项明细**（「MIDI 现状」见 §7.1；「—」= 有核心没解码器，「✗」= 无核心）
+
+| # | MDPlayer `EnmChip` | libvgm 核心 | MIDI 现状 | 说明 / 下一步 |
+|---:|---|---|---|---|
+| 1 | SN76489 | SN76496 | 旋律 1–3 + 噪声触发 | |
+| 2 | YM2612 | YM2612 | 旋律 1–6 + Ch6 DAC 触发 | |
+| 3 | YM2612Ch6 | （同 2，通道） | 触发 | 不是独立核心 |
+| 4 | RF5C164 | RF5C68 | 触发 ×8 | 16 位变体，同一核心 |
+| 5 | PWM | 32X_PWM | — | 只是 DAC 数据流，没有音高寄存器，天生只能 one-shot |
+| 6 | C140 | C140 | — | 采样播放器，有音高 |
+| 7 | OKIM6258 | MSM6258 | — | ADPCM，音高只有采样率档位，无连续音高 |
+| 8 | OKIM6295 | MSM6295 | — | 采样播放器，有音高 |
+| 9 | SEGAPCM | SEGAPCM | — | 采样播放器，有音高 |
+| 10 | YM2151 | YM2151 | 旋律 1–8 | |
+| 11 | YM2608 | YM2608 | 旋律 1–6 + ADPCM 触发 | |
+| 12 | YM2203 | YM2203 | 旋律 1–3 | SSG 未接（§7.2） |
+| 13 | YM2610 | YM2610 | 旋律（B：1–6）+ ADPCM 触发 | 非 B 只有 CH1/2/4/5 |
+| 14 | AY8910 | AY8910 | 旋律 1–3 | |
+| 15 | HuC6280 | C6280 | — | 波形 PSG，周期→音高可直接用 `chips/Pitch.h` |
+| 16 | YM2413 | YM2413 | 旋律 1–9 + 5 鼓触发 | |
+| 17 | NES | NES_APU | 旋律 1–3 + 噪声/DMC 触发 | |
+| 18 | DMC | （同 17，通道） | 触发 | 不是独立核心 |
+| 19 | FDS | ✗ | — | libvgm 无核心 |
+| 20 | MMC5 | ✗ | — | libvgm 无核心 |
+| 21 | YMF262 | YMF262 | 旋律 1–18 + 5 鼓触发 | |
+| 22 | YMF278B | YMF278B | — | FM 部分复用 OPL3 解码器；PCM 部分只能 one-shot |
+| 23 | VRC7 | ✗ | — | OPLL 变体，有核心后可复用 YM2413 解码器 |
+| 24 | C352 | C352 | — | 采样播放器，有音高 |
+| 25 | YM3526 | YM3526 | 旋律 1–9 + 5 鼓触发 | |
+| 26 | Y8950 | Y8950 | 旋律 1–9 + 5 鼓/Delta-T 触发 | |
+| 27 | YM3812 | YM3812 | 旋律 1–9 + 5 鼓触发 | |
+| 28 | K051649 | K051649 | — | SCC 波形，处理方式同 15 |
+| 29 | N163 | ✗ | — | libvgm 无核心 |
+| 30 | VRC6 | ✗ | — | 有核心后脉冲部分可复用 NES 解码器 |
+| 31 | FME7 | ✗ | — | AY 同构，有核心后可直接复用 AY 解码器 |
+| 32 | RF5C68 | RF5C68 | 触发 ×8 | |
+| 33 | MultiPCM | ✗ | — | libvgm 无核心 |
+| 34 | uPD7759 | uPD7759 | — | 语音合成器，无音高，只能 one-shot |
+| 35 | YMF271 | YMF271 | — | 4 算子 FM，需算法表 |
+| 36 | YMZ280B | YMZ280B | — | 采样播放器，有音高 |
+| 37 | QSound | QSOUND | — | 采样播放器，有音高 |
+| 38 | GA20 | GA20 | — | 采样播放器，有音高 |
+| 39 | K053260 | K053260 | — | 采样播放器，有音高 |
+| 40 | K054539 | K054539 | — | 采样播放器，有音高 |
+| 41 | DMG | GB_DMG | 旋律 1–3 + 噪声触发 | |
+| 42 | SAA1099 | SAA1099 | — | 与 AY 同型，但寄存器独立 |
+| 43 | X1_010 | X1_010 | — | 采样/波形混合，有音高 |
+| 44 | PPZ8 | ✗ | — | 软件 PCM 驱动，不是芯片；支持它等于实现一个驱动 |
+| 45 | PPSDRV | ✗ | — | 同上 |
+| 46 | SID | ✗ | — | libvgm 无核心 |
+| 47 | P86 | ✗ | — | PC-98 声卡（YM2203 + ADPCM），可由现有核心组合 |
+| 48 | POKEY | POKEY | — | 方波 + 4 声道，周期→音高 |
+| 49 | WSwan | WSWAN | — | 波形 PSG，处理方式同 15 |
+| 50 | YM2609 | ✗ | — | MDSound 有核心（ZGM 驱动用），libvgm 没有 |
+| 51 | ES5503 | ES5503 | — | 采样播放器，有音高 |
+| 52 | PCM8 | ✗ | — | 软件 PCM 驱动 |
+| 53 | MPCMX68k | ✗ | — | X68000 板载 PCM |
+| 54 | CS4231 | ✗ | — | PC 声卡 |
+
+**三批工作**
+
+- **A. 有核心、缺解码器（21 项）**：只动 `plugin/Source/chips/` + `midiCapabilityFor` + 测试，不需要改 libvgm，也不需要新格式。其中 19 项可旋律化；PWM 与 uPD7759 天生只能 one-shot，OKIM6258 介于两者之间（只有采样率档位）。
+- **B. 无音频核心（15 项）**：9 个真芯片（FDS、MMC5、VRC7、N163、VRC6、FME7、SID、MultiPCM、YM2609）+ 6 个驱动/板卡（PPZ8、PPSDRV、PCM8、MPCMX68k、CS4231、P86）。它们主要出现在本插件目前不读的格式（NSF/NSFE、SPC、HES、KSS…）或驱动级回放里，所以 B 批实际是「新格式 + 新核心」的工程，不是 MIDI 输出的延伸。有核心之后 MIDI 侧很便宜：FME7 复用 AY、VRC7 复用 YM2413、VRC6 脉冲复用 NES。
+- **C. 已超出（13 项）**：SCSP、ES5506、C219、MIKEY、K007232、K005289、MSM5205、MSM5232、BSMT2000、ICS2115、VBOY_VSU、YMW258、YM2414。不计入对齐，但每项同样要一个解码器才能出 MIDI，机制与 A 批相同。
+
+**优先级**
+
+1. 方波/波形 PSG：HuC6280、K051649、SAA1099、POKEY、X1_010、WSwan——都是「周期→音高」，`chips/Pitch.h` 的曲线直接可用，单个解码器约 100–200 行，测试全在 `vgm_chip_test` 里。
+2. FM：YMF271、YMF278B、YMZ280B——YMF278B 的 FM 部分与 OPL3 同构，可复用现有 OPL 解码器。
+3. 带音高的采样播放器：C140、C352、K053260、K054539、QSound、GA20、ES5503——音高来自步进/采样率，需要「步进→音分 + 根音」的换算，与 ADPCM-B 的根音问题同型（§11.1）。
+4. 无音高的：PWM、uPD7759、OKIM6258——收益最小，最后做。
+
+**验收**：新增一个芯片要一并给出 ①`ChipDecoderTest.cpp` 的周期→音高、静音判定与包络/长度用例；②`midiCapabilityFor` 的通道数；③至少一首真实曲目的 `vgm_mixer_test` 输出（note-on 数非零）；④本节与 §7.1 表格同步。
 
 ---
 
