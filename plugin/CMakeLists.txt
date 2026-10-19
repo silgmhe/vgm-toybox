@@ -188,8 +188,12 @@ target_sources(VGMToybox PRIVATE
 	Source/playback/HostClockSource.cpp
 	Source/playback/SessionState.cpp
 	Source/chips/GbcApuDecoder.cpp
+	Source/chips/HuC6280Decoder.cpp
+	Source/chips/K051649Decoder.cpp
 	Source/chips/NesApuDecoder.cpp
 	Source/chips/NoteExtractor.cpp
+	Source/chips/PokeyDecoder.cpp
+	Source/chips/Saa1099Decoder.cpp
 	Source/chips/Ym2612Decoder.cpp
 	Source/backends/BuiltInBackends.cpp
 	Source/backends/libvgm/LibvgmBackend.cpp
@@ -314,8 +318,12 @@ add_executable(vgm_mixer_test EXCLUDE_FROM_ALL
 	Source/playback/DawSync.cpp
 	Source/playback/SessionState.cpp
 	Source/chips/GbcApuDecoder.cpp
+	Source/chips/HuC6280Decoder.cpp
+	Source/chips/K051649Decoder.cpp
 	Source/chips/NesApuDecoder.cpp
 	Source/chips/NoteExtractor.cpp
+	Source/chips/PokeyDecoder.cpp
+	Source/chips/Saa1099Decoder.cpp
 	Source/chips/Ym2612Decoder.cpp
 	Source/backends/BuiltInBackends.cpp
 	Source/backends/libvgm/LibvgmBackend.cpp
@@ -332,8 +340,12 @@ add_executable(vgm_mixer_test EXCLUDE_FROM_ALL
 add_executable(vgm_chip_test EXCLUDE_FROM_ALL
 	Tests/ChipDecoderTest.cpp
 	Source/chips/GbcApuDecoder.cpp
+	Source/chips/HuC6280Decoder.cpp
+	Source/chips/K051649Decoder.cpp
 	Source/chips/NesApuDecoder.cpp
 	Source/chips/NoteExtractor.cpp
+	Source/chips/PokeyDecoder.cpp
+	Source/chips/Saa1099Decoder.cpp
 	Source/chips/Ym2612Decoder.cpp
 )
 target_include_directories(vgm_chip_test PRIVATE Source)

@@ -287,6 +287,50 @@ namespace
 
 		return recorder;
 	}
+
+	/** One line per mixer track: the notes its chip channel produces. This is the end-to-end view
+		of a decoder on a real song - the notes arrive through the same MIDI path a host sees, so a
+		pitch that is wrong for the song shows up here, while vgm_chip_test answers the same
+		question on synthetic register writes. */
+	void dumpTrackNotes (toybox::PlaybackEngine& engine, int sampleRate, int blockSize)
+	{
+		engine.setMixerEnabled (true);
+		engine.setLoopCount (1);
+
+		const auto tracks = engine.getTracks();
+		for (size_t i = 0; i < tracks.size(); ++i)
+		{
+			for (size_t j = 0; j < tracks.size(); ++j)
+			{
+				engine.setTrackMidiChannel (j, 0);		// one track at a time, so the notes are its own
+			}
+
+			engine.setTrackMidiChannel (i, 1);
+			engine.setPositionSeconds (0.0);
+			engine.play();
+
+			const auto recorder = recordMidi (engine, 2.0, sampleRate, blockSize);
+			std::printf ("%3d  %-16s %-22s %4d notes:", (int) i, tracks[i].groupName.toRawUTF8(),
+						 tracks[i].name.toRawUTF8(), (int) recorder.notesOn (1).size());
+
+			int shown = 0;
+			for (size_t e = 0; e < recorder.events.size() && shown < 10; ++e)
+			{
+				const auto& event = recorder.events[e];
+				if ((event.status & 0xF0) != 0x90 || (event.status & 0x0F) != 0)
+				{
+					continue;
+				}
+
+				const double at = (double) (recorder.blockStarts[e] + event.sampleOffset)
+								  / (double) sampleRate;
+				std::printf (" %.2f:%d/%d", at, (int) event.data1, (int) event.data2);
+				++shown;
+			}
+
+			std::printf ("\n");
+		}
+	}
 }
 
 int main (int argc, char* argv[])
@@ -295,8 +339,14 @@ int main (int argc, char* argv[])
 
 	if (argc < 2)
 	{
-		std::printf ("Usage: %s <file.vgm|file.vgz> [seconds] [sampleRate]\n", argv[0]);
+		std::printf ("Usage: %s <file.vgm|file.vgz> [seconds] [sampleRate] [--notes]\n", argv[0]);
 		return 1;
+	}
+
+	bool notesOnly = false;
+	for (int i = 2; i < argc; ++i)
+	{
+		notesOnly = notesOnly || (juce::String (argv[i]) == "--notes");
 	}
 
 	const juce::File inputFile { juce::String (argv[1]) };
@@ -332,6 +382,12 @@ int main (int argc, char* argv[])
 		std::printf ("%s (%s)  ", chip.name.toRawUTF8(), chip.core.toRawUTF8());
 	}
 	std::printf ("\n");
+
+	if (notesOnly)
+	{
+		dumpTrackNotes (engine, sampleRate, blockSize);
+		return 0;
+	}
 
 	const double songLength = engine.getDurationSeconds();
 	const double renderLength = (songLength > 0.0) ? juce::jmin (seconds, songLength * 0.9) : seconds;

@@ -17,6 +17,8 @@ struct VgmCommand
 	enum class Kind
 	{
 		registerWrite,	// addr/data carry the payload, port the second-chip flag
+		registerWritePair,	// K051649: addr is the even offset, data its value, data2 the byte
+							// the chip receives at addr | 1 (the VGM command carries both)
 		wait,			// sampleTime is the command's own time; the clock has been advanced
 						// (0x61-0x63, 0x70-0x7F, and 0x80-0x8F - the YM2612 DAC stream's waits)
 		end,			// 0x66 - the caller should stop
@@ -28,6 +30,7 @@ struct VgmCommand
 	std::uint8_t port = 0;			// 0 / 1 - the second chip of a pair (bit 7 of the address byte)
 	std::uint8_t addr = 0;			// register / index byte
 	std::uint8_t data = 0;			// value byte
+	std::uint8_t data2 = 0;			// second value byte of a pair write
 	std::uint32_t sampleTime = 0;	// absolute position of the command, in 44100 Hz samples
 };
 

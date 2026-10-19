@@ -114,3 +114,7 @@ compile_commands.json
 # Local reference songs (game rips) used while checking the MIDI mapping against a DAW; not part
 # of the repository.
 reference/
+
+# Downloaded game rips (vgmrips.net) used to check the chip decoders against real register
+# streams; not part of the repository.
+test_file/

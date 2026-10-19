@@ -89,7 +89,8 @@ namespace
 	/** Commands whose address byte carries the second-chip flag in bit 7. */
 	bool splitsAddressByte (std::uint8_t cmd)
 	{
-		return cmd == 0xB0 || cmd == 0xB1 || cmd == 0xB3 || cmd == 0xB4;
+		return cmd == 0xB0 || cmd == 0xB1 || cmd == 0xB3 || cmd == 0xB4
+			   || cmd == 0xB9 || cmd == 0xBB || cmd == 0xBD;
 	}
 }
 
@@ -203,6 +204,18 @@ bool VgmCommandReader::next (VgmCommand& command)
 			command.kind = VgmCommand::Kind::registerWrite;
 			command.addr = data[position + 1];
 			command.data = data[position + 1];
+		}
+		else if (cmd == 0xD2)
+		{
+			// K051649 (SCC): the command carries both bytes of one SCC access, and libvgm hands
+			// the chip two writes - the latch at register "a" and the value at "a + 1". Mirroring
+			// that here keeps the decoded notes aligned with what the audio engine plays.
+			const std::uint8_t addrByte = data[position + 1];
+			command.kind = VgmCommand::Kind::registerWritePair;
+			command.port = (std::uint8_t) (addrByte >> 7);
+			command.addr = (std::uint8_t) ((addrByte & 0x7F) << 1);
+			command.data = data[position + 2];
+			command.data2 = data[position + 3];
 		}
 		else if (length == 3 && ((cmd >= 0x50 && cmd <= 0x5F) || (cmd >= 0xA0 && cmd <= 0xBF)))
 		{

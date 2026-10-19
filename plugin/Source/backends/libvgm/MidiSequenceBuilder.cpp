@@ -7,8 +7,12 @@
 #include "VgmCommandReader.h"
 
 #include "chips/GbcApuDecoder.h"
+#include "chips/HuC6280Decoder.h"
+#include "chips/K051649Decoder.h"
 #include "chips/NesApuDecoder.h"
 #include "chips/NoteExtractor.h"
+#include "chips/PokeyDecoder.h"
+#include "chips/Saa1099Decoder.h"
 #include "chips/Ym2612Decoder.h"
 
 #include "emu/SoundDevs.h"
@@ -280,6 +284,25 @@ namespace
 					queueNesWrite (deviceFor (DEVID_NES_APU, command.port),
 								   command.addr, command.data, command.sampleTime);
 					break;
+				case 0xB9:	// HuC6280
+					c6280.queue (deviceFor (DEVID_C6280, command.port), command.addr,
+								 command.data, command.sampleTime);
+					break;
+				case 0xBB:	// POKEY
+					pokey.queue (deviceFor (DEVID_POKEY, command.port), command.addr,
+								 command.data, command.sampleTime);
+					break;
+				case 0xBD:	// SAA1099
+					saa.queue (deviceFor (DEVID_SAA1099, command.port), command.addr,
+							   command.data, command.sampleTime);
+					break;
+				case 0xD2:	// K051649 (SCC): one command, two chip writes
+					if (command.kind == VgmCommand::Kind::registerWritePair)
+					{
+						scc.queuePair (deviceFor (DEVID_K051649, command.port), command.addr,
+									   command.data, command.data2, command.sampleTime, command.port);
+					}
+					break;
 				case 0xA2:
 				case 0xA3:
 					writeYm2612 (deviceFor (DEVID_YM2612, 1), command.command == 0xA3,
@@ -300,6 +323,10 @@ namespace
 			flushNes (lastSampleTime);
 			flushYm2612 (lastSampleTime);
 			flushGb (lastSampleTime);
+			flushDecoded (c6280, 3579545u, lastSampleTime);
+			flushDecoded (scc, 3579545u, lastSampleTime);
+			flushDecoded (saa, 8000000u, lastSampleTime);
+			flushDecoded (pokey, 1789772u, lastSampleTime);
 
 			if (events.empty())
 			{
@@ -448,6 +475,76 @@ namespace
 			ymDevices.clear();
 		}
 
+		/** Register writes of one chip, kept per device until the stream ends.
+
+			The four PSG decoders below (HuC6280, SCC, SAA1099, POKEY) all need the finished
+			stream: which note is playing at a given moment follows from the chip's own state - a
+			divider that was set earlier, a key mask that was switched on - and not from the write
+			that happens to arrive. */
+		template <typename Decoder>
+		struct ChipBuffer
+		{
+			void queue (const PLR_DEV_INFO* device, std::uint8_t reg, std::uint8_t value,
+						std::uint32_t sampleTime, std::uint8_t port = 0)
+			{
+				if (device == nullptr)
+				{
+					return;
+				}
+
+				chips::RegisterWrite write;
+				write.deviceId = device->id;
+				write.reg = reg;
+				write.value = value;
+				write.port = port;
+				write.sampleTime = sampleTime;
+				writes[device->id].push_back (write);
+				devices[device->id] = device;
+			}
+
+			/** The SCC command carries a latch and the value that follows it: the chip sees two
+				writes, and so does the decoder. */
+			void queuePair (const PLR_DEV_INFO* device, std::uint8_t reg, std::uint8_t latch,
+							std::uint8_t value, std::uint32_t sampleTime, std::uint8_t port)
+			{
+				queue (device, reg, latch, sampleTime, port);
+				queue (device, (std::uint8_t) (reg | 1), value, sampleTime, port);
+			}
+
+			std::map<std::uint32_t, std::vector<chips::RegisterWrite>> writes;
+			std::map<std::uint32_t, const PLR_DEV_INFO*> devices;
+		};
+
+		template <typename Decoder>
+		void flushDecoded (ChipBuffer<Decoder>& buffer, std::uint32_t fallbackClock,
+						   std::uint32_t totalSamples)
+		{
+			for (auto& entry : buffer.writes)
+			{
+				const auto device = buffer.devices.find (entry.first);
+				if (device == buffer.devices.end() || device->second == nullptr)
+				{
+					continue;
+				}
+
+				// the clock decides the pitch of every note on the chip, so a missing one is not
+				// something to guess per write: the header's value, or the chip's usual clock
+				const std::uint32_t clock = (device->second->devCfg != nullptr
+											 && device->second->devCfg->clock > 0)
+												? device->second->devCfg->clock
+												: fallbackClock;
+
+				Decoder decoder;
+				decoder.reset (clock, (double) kVgmRate);
+
+				emitDecodedNotes (device->second,
+								  chips::extractPerformance (decoder, entry.second, totalSamples));
+			}
+
+			buffer.writes.clear();
+			buffer.devices.clear();
+		}
+
 		const PLR_DEV_INFO* deviceFor (DEV_ID type, int instance) const
 		{
 			const auto exact = deviceByType.find (typeInstanceKey (type, instance));
@@ -568,7 +665,12 @@ namespace
 				return;
 			}
 
-			const int nearest = juce::jlimit (1, 127, (int) std::lround (pitch));
+			// Compare against the pitch MIDI can actually carry: a frequency outside the
+			// 1..127 range would otherwise differ from the clamped note by more than the
+			// retrigger threshold on every register write, which turns e.g. a driver's
+			// initialisation writes into a burst of identical note-ons.
+			const double boundedPitch = juce::jlimit (1.0, 127.0, pitch);
+			const int nearest = juce::jlimit (1, 127, (int) std::lround (boundedPitch));
 			if (! active)
 			{
 				note = nearest;
@@ -577,7 +679,7 @@ namespace
 				return;
 			}
 
-			const double delta = pitch - (double) note;
+			const double delta = boundedPitch - (double) note;
 			if (std::abs (delta) <= 2.0)
 			{
 				pitchBend (track, time, delta);
@@ -587,7 +689,7 @@ namespace
 			noteOff (track, time, note);
 			note = nearest;
 			startMelodicNote (track, time, note, velocity);
-			pitchBend (track, time, pitch - (double) note);
+			pitchBend (track, time, boundedPitch - (double) note);
 			active = true;
 		}
 
@@ -1321,6 +1423,11 @@ namespace
 		// DMG writes: same reason as the 2A03, its frame sequencer owns the note ends
 		std::map<std::uint32_t, std::vector<chips::RegisterWrite>> gbWrites;
 		std::map<std::uint32_t, const PLR_DEV_INFO*> gbDevices;
+		// the PSGs whose registers describe the whole voice: a write only matters in context
+		ChipBuffer<chips::HuC6280Decoder> c6280;
+		ChipBuffer<chips::K051649Decoder> scc;
+		ChipBuffer<chips::Saa1099Decoder> saa;
+		ChipBuffer<chips::PokeyDecoder> pokey;
 		std::map<std::uint32_t, Rf5cState> rf5cStates;
 		std::map<int, PendingOneShot> oneShotPending;
 		std::vector<playback::MidiEvent> events;

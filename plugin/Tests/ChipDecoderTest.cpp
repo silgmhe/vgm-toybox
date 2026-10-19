@@ -12,8 +12,12 @@
 #include <vector>
 
 #include "chips/GbcApuDecoder.h"
+#include "chips/HuC6280Decoder.h"
+#include "chips/K051649Decoder.h"
 #include "chips/NesApuDecoder.h"
 #include "chips/NoteExtractor.h"
+#include "chips/PokeyDecoder.h"
+#include "chips/Saa1099Decoder.h"
 #include "chips/Ym2612Decoder.h"
 
 namespace
@@ -524,6 +528,391 @@ namespace
 
 		check (runGb (stream, 22050).empty(), "an APU that was never powered on makes no notes");
 	}
+
+	// ---- HuC6280 (PC Engine) ----
+
+	std::vector<NoteEvent> runC6280 (const Stream& stream, std::uint32_t totalSamples)
+	{
+		toybox::chips::HuC6280Decoder decoder;
+		decoder.reset (3579545, 44100.0);
+		return toybox::chips::extractNotes (decoder, stream.writes, totalSamples);
+	}
+
+	/** Register 0x00 selects the channel, 0x02/0x03 hold its 12-bit divider, 0x04 enables it. */
+	void startC6280Note (Stream& stream, std::uint32_t time, std::uint8_t channel, int frequency)
+	{
+		stream.at (time, 0x00, channel);
+		stream.at (time, 0x02, (std::uint8_t) (frequency & 0xFF));
+		stream.at (time, 0x03, (std::uint8_t) ((frequency >> 8) & 0x0F));
+		stream.at (time, 0x04, 0x9F);		// enable, volume 31
+	}
+
+	void testC6280WaveNote (void)
+	{
+		Stream stream;
+		startC6280Note (stream, 0, 0, 254);		// 3579545 / (32 * 254) = 440.4 Hz
+
+		const auto notes = runC6280 (stream, 22050);
+
+		check (notes.size() == 1, "one wave note");
+		if (notes.empty())
+		{
+			return;
+		}
+
+		check (notes[0].note == 69, "divider 254 decodes to A4");
+		check (notes[0].logicalChannel == 0, "the selected channel is channel 0");
+		check (notes[0].family == toybox::chips::Family::c6280Wave, "the note carries the wave family");
+		check (notes[0].velocity == 127, "volume 31 is full velocity");
+		check (! notes[0].isDrum, "a wave channel is melodic");
+	}
+
+	void testC6280SelectsOneChannel (void)
+	{
+		Stream stream;
+		startC6280Note (stream, 0, 0, 254);		// A4
+		startC6280Note (stream, 0, 2, 508);		// 3579545 / (32 * 508) = 220.2 Hz, A3
+
+		const auto notes = runC6280 (stream, 22050);
+
+		check (notes.size() == 2, "two selected channels play two notes");
+		if (notes.size() != 2)
+		{
+			return;
+		}
+
+		check (notes[0].note == 69 && notes[0].logicalChannel == 0,
+			   "the first note keeps its own channel");
+		check (notes[1].note == 57 && notes[1].logicalChannel == 2,
+			   "the high nibble of the divider reaches channel 2");
+	}
+
+	void testC6280NoiseIsADrum (void)
+	{
+		// channel 4 with noise on; the rate field counts down, so 0x1F is the fastest
+		Stream fast;
+		fast.at (0, 0x00, 0x04);
+		fast.at (0, 0x04, 0x9F);
+		fast.at (0, 0x07, 0x9F);
+
+		Stream slow;
+		slow.at (0, 0x00, 0x04);
+		slow.at (0, 0x04, 0x9F);
+		slow.at (0, 0x07, 0x80);
+
+		const auto fastNotes = runC6280 (fast, 22050);
+		const auto slowNotes = runC6280 (slow, 22050);
+
+		check (fastNotes.size() == 1 && slowNotes.size() == 1, "one noise hit each");
+		if (fastNotes.empty() || slowNotes.empty())
+		{
+			return;
+		}
+
+		check (fastNotes[0].isDrum, "the noise channel is a drum track");
+		check (fastNotes[0].logicalChannel == 4, "the noise is channel 4");
+		check (fastNotes[0].note == 38, "the fastest noise lands on the first drum key");
+		check (slowNotes[0].note > fastNotes[0].note, "a slower rate lands on a higher drum key");
+	}
+
+	void testC6280NoiseOnlyOnTheLastTwoChannels (void)
+	{
+		// the same register on channel 0: the core ignores it there, so the divider still decides
+		Stream stream;
+		startC6280Note (stream, 0, 0, 254);
+		stream.at (0, 0x07, 0x9F);
+
+		const auto notes = runC6280 (stream, 22050);
+
+		check (notes.size() == 1, "channel 0 stays a tone channel");
+		if (notes.empty())
+		{
+			return;
+		}
+
+		check (notes[0].note == 69 && ! notes[0].isDrum, "the noise bit does nothing on channel 0");
+	}
+
+	// ---- K051649 / SCC ----
+
+	std::vector<NoteEvent> runScc (const Stream& stream, std::uint32_t totalSamples)
+	{
+		toybox::chips::K051649Decoder decoder;
+		decoder.reset (3579545, 44100.0);
+		return toybox::chips::extractNotes (decoder, stream.writes, totalSamples);
+	}
+
+	/** Every SCC access is a latch (even offset) and then a value (the offset after it). */
+	void setSccRegister (Stream& stream, std::uint32_t time, std::uint8_t group, std::uint8_t latch,
+						 std::uint8_t value)
+	{
+		stream.at (time, (std::uint8_t) (group * 2), latch);
+		stream.at (time, (std::uint8_t) (group * 2 + 1), value);
+	}
+
+	void testSccWaveNote (void)
+	{
+		Stream stream;
+		setSccRegister (stream, 0, 0x02, 0x00, 0x0F);		// volume 15 on channel 0
+		setSccRegister (stream, 0, 0x01, 0x00, 0xFC);		// divider low: 0xFC = 252
+		setSccRegister (stream, 0, 0x01, 0x01, 0x01);		// divider high: 0x1FC = 508
+		setSccRegister (stream, 0, 0x03, 0x00, 0x01);		// key on channel 0
+
+		const auto notes = runScc (stream, 22050);
+
+		check (notes.size() == 1, "the key mask starts one note");
+		if (notes.empty())
+		{
+			return;
+		}
+
+		// 3579545 / (16 * 509) = 439.5 Hz
+		check (notes[0].note == 69, "divider 508 is A4");
+		check (notes[0].logicalChannel == 0, "the latch selected channel 0");
+		check (notes[0].family == toybox::chips::Family::sccWave, "the note carries the wave family");
+		check (notes[0].velocity == 127, "volume 15 is full velocity");
+	}
+
+	void testSccKeyMaskEndsTheNote (void)
+	{
+		Stream stream;
+		setSccRegister (stream, 0, 0x02, 0x00, 0x0F);
+		setSccRegister (stream, 0, 0x01, 0x00, 0xFC);
+		setSccRegister (stream, 0, 0x01, 0x01, 0x01);
+		setSccRegister (stream, 0, 0x03, 0x00, 0x01);
+		setSccRegister (stream, 22050, 0x03, 0x00, 0x00);	// key off
+
+		const auto notes = runScc (stream, 44100);
+
+		check (notes.size() == 1, "the key mask, not a timer, ends the note");
+		if (notes.empty())
+		{
+			return;
+		}
+
+		check (distance (notes[0].endSample, 22050) <= 128, "the note ends with the key off");
+	}
+
+	void testSccLatchPicksTheChannel (void)
+	{
+		Stream stream;
+		setSccRegister (stream, 0, 0x02, 0x01, 0x0F);		// volume 15 on channel 1
+		setSccRegister (stream, 0, 0x01, 0x02, 0xFE);		// channel 1, low byte 254
+		setSccRegister (stream, 0, 0x01, 0x03, 0x00);		// channel 1, high nibble 0
+		setSccRegister (stream, 0, 0x03, 0x00, 0x02);		// key on channel 1
+
+		const auto notes = runScc (stream, 22050);
+
+		check (notes.size() == 1, "one note from the other channel");
+		if (notes.empty())
+		{
+			return;
+		}
+
+		// 3579545 / (16 * 255) = 877.3 Hz
+		check (notes[0].note == 81, "divider 254 is A5");
+		check (notes[0].logicalChannel == 1, "the frequency latch selected channel 1");
+	}
+
+	void testSccSilentWithoutVolume (void)
+	{
+		Stream stream;
+		setSccRegister (stream, 0, 0x01, 0x00, 0xFC);
+		setSccRegister (stream, 0, 0x01, 0x01, 0x01);
+		setSccRegister (stream, 0, 0x03, 0x00, 0x01);		// key on, volume still 0
+
+		check (runScc (stream, 22050).empty(), "a keyed channel at volume 0 makes no note");
+	}
+
+	// ---- SAA1099 ----
+
+	std::vector<NoteEvent> runSaa (const Stream& stream, std::uint32_t totalSamples)
+	{
+		toybox::chips::Saa1099Decoder decoder;
+		decoder.reset (8000000, 44100.0);
+		return toybox::chips::extractNotes (decoder, stream.writes, totalSamples);
+	}
+
+	void testSaaSquareNote (void)
+	{
+		Stream stream;
+		stream.at (0, 0x00, 0xFF);			// amplitude: both sides 15
+		stream.at (0, 0x08, 227);			// frequency 227 at octave 3
+		stream.at (0, 0x10, 0x33);			// octave 3 for both channels of the pair
+		stream.at (0, 0x14, 0x01);			// tone on channel 0
+		stream.at (0, 0x1C, 0x01);			// the chip-wide enable
+
+		const auto notes = runSaa (stream, 22050);
+
+		check (notes.size() == 1, "one square note");
+		if (notes.empty())
+		{
+			return;
+		}
+
+		// 8000000 * 8 / (512 * (511 - 227)) = 440.1 Hz
+		check (notes[0].note == 69, "octave 3 and frequency 227 are A4");
+		check (notes[0].logicalChannel == 0, "the note is on channel 0");
+		check (notes[0].family == toybox::chips::Family::saaSquare, "the note carries the SAA family");
+		check (notes[0].velocity == 127, "amplitude 15 is full velocity");
+		check (! notes[0].isDrum, "a tone channel is melodic");
+	}
+
+	void testSaaOctaveIsAnOctave (void)
+	{
+		Stream low;
+		low.at (0, 0x00, 0xFF);
+		low.at (0, 0x08, 227);
+		low.at (0, 0x10, 0x33);
+		low.at (0, 0x14, 0x01);
+		low.at (0, 0x1C, 0x01);
+
+		Stream high = low;
+		high.writes[2].value = 0x44;		// octave 4
+
+		const auto lowNotes = runSaa (low, 22050);
+		const auto highNotes = runSaa (high, 22050);
+
+		check (lowNotes.size() == 1 && highNotes.size() == 1, "one note each");
+		if (lowNotes.empty() || highNotes.empty())
+		{
+			return;
+		}
+
+		check (highNotes[0].note == lowNotes[0].note + 12, "one octave up doubles the pitch");
+	}
+
+	void testSaaNeedsTheChipEnable (void)
+	{
+		Stream stream;
+		stream.at (0, 0x00, 0xFF);
+		stream.at (0, 0x08, 227);
+		stream.at (0, 0x10, 0x33);
+		stream.at (0, 0x14, 0x01);			// everything but register 0x1C
+
+		check (runSaa (stream, 22050).empty(), "a disabled chip is silent");
+	}
+
+	void testSaaNoiseOnlyChannelIsADrum (void)
+	{
+		Stream stream;
+		stream.at (0, 0x00, 0xFF);
+		stream.at (0, 0x15, 0x01);			// noise on channel 0
+		stream.at (0, 0x16, 0x00);			// both noise generators on their fastest rate
+		stream.at (0, 0x1C, 0x01);
+
+		const auto notes = runSaa (stream, 22050);
+
+		check (notes.size() == 1, "noise alone still carries a note");
+		if (notes.empty())
+		{
+			return;
+		}
+
+		check (notes[0].isDrum, "a noise-only channel is a drum track");
+		check (notes[0].note == 38, "the fastest noise generator lands on the first drum key");
+	}
+
+	void testSaaNoiseRatePicksTheDrumKey (void)
+	{
+		Stream slow;
+		slow.at (0, 0x00, 0xFF);
+		slow.at (0, 0x15, 0x01);
+		slow.at (0, 0x16, 0x02);			// generator 0 at its slowest rate
+		slow.at (0, 0x1C, 0x01);
+
+		const auto notes = runSaa (slow, 22050);
+
+		check (notes.size() == 1, "one drum hit");
+		if (notes.empty())
+		{
+			return;
+		}
+
+		check (notes[0].note == 42, "a slower generator lands on a higher drum key");
+	}
+
+	// ---- POKEY ----
+
+	std::vector<NoteEvent> runPokey (const Stream& stream, std::uint32_t totalSamples)
+	{
+		toybox::chips::PokeyDecoder decoder;
+		decoder.reset (1789772, 44100.0);
+		return toybox::chips::extractNotes (decoder, stream.writes, totalSamples);
+	}
+
+	void testPokeySquareNote (void)
+	{
+		Stream stream;
+		stream.at (0, 0x00, 72);			// AUDF1: divider 73
+		stream.at (0, 0x01, 0x0F);			// AUDC1: distortion 0, volume 15
+
+		const auto notes = runPokey (stream, 22050);
+
+		check (notes.size() == 1, "one divider note");
+		if (notes.empty())
+		{
+			return;
+		}
+
+		// (1789772 / 28) / (2 * 73) = 437.8 Hz
+		check (notes[0].note == 69, "divider 72 in the 64 kHz mode is A4");
+		check (notes[0].logicalChannel == 0, "the note is on channel 0");
+		check (notes[0].family == toybox::chips::Family::pokeySquare, "the note carries the POKEY family");
+		check (notes[0].velocity == 127, "volume 15 is full velocity");
+	}
+
+	void testPokeyClockModeChangesThePitch (void)
+	{
+		Stream fast;
+		fast.at (0, 0x00, 72);
+		fast.at (0, 0x01, 0x0F);
+
+		Stream slow = fast;
+		slow.at (0, 0x08, 0x01);			// AUDCTL: 15 kHz base clock
+
+		const auto fastNotes = runPokey (fast, 22050);
+		const auto slowNotes = runPokey (slow, 22050);
+
+		check (fastNotes.size() == 1 && slowNotes.size() == 1, "one note each");
+		if (fastNotes.empty() || slowNotes.empty())
+		{
+			return;
+		}
+
+		// 114 / 28 is two octaves and a bit: the same divider lands far lower
+		check (slowNotes[0].note < fastNotes[0].note - 12, "the 15 kHz clock lowers the pitch");
+	}
+
+	void testPokeyJoinedPairIsOneVoice (void)
+	{
+		Stream stream;
+		stream.at (0, 0x00, 0x00);			// AUDF1 low byte 0
+		stream.at (0, 0x01, 0x0F);			// AUDC1 volume 15
+		stream.at (0, 0x02, 0x01);			// AUDF2 high byte 1
+		stream.at (0, 0x08, 0x10);			// AUDCTL: join channels 1 and 2
+
+		const auto notes = runPokey (stream, 22050);
+
+		check (notes.size() == 1, "a joined pair is one voice");
+		if (notes.empty())
+		{
+			return;
+		}
+
+		// 16-bit divider 0x100 + 1; 63920 / (2 * 257) = 124.4 Hz
+		check (notes[0].logicalChannel == 0, "the pair reports on its low channel");
+		check (notes[0].note == 47, "the 16-bit divider is B2");
+	}
+
+	void testPokeyVolumeOnlyIsSilent (void)
+	{
+		Stream stream;
+		stream.at (0, 0x00, 72);
+		stream.at (0, 0x01, 0x1F);			// AUDC1 bit 4: a DC level, not a tone
+
+		check (runPokey (stream, 22050).empty(), "volume-only mode makes no note");
+	}
 }
 
 int main (void)
@@ -553,6 +942,27 @@ int main (void)
 	testGbWaveChannel();
 	testGbNoiseIsADrum();
 	testGbSilenceWithoutPower();
+
+	testC6280WaveNote();
+	testC6280SelectsOneChannel();
+	testC6280NoiseIsADrum();
+	testC6280NoiseOnlyOnTheLastTwoChannels();
+
+	testSccWaveNote();
+	testSccKeyMaskEndsTheNote();
+	testSccLatchPicksTheChannel();
+	testSccSilentWithoutVolume();
+
+	testSaaSquareNote();
+	testSaaOctaveIsAnOctave();
+	testSaaNeedsTheChipEnable();
+	testSaaNoiseOnlyChannelIsADrum();
+	testSaaNoiseRatePicksTheDrumKey();
+
+	testPokeySquareNote();
+	testPokeyClockModeChangesThePitch();
+	testPokeyJoinedPairIsOneVoice();
+	testPokeyVolumeOnlyIsSilent();
 
 	std::printf ("Result    : %s\n", failures == 0 ? "PASS" : "FAILURES");
 	return failures == 0 ? 0 : 1;

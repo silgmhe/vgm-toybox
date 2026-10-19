@@ -118,6 +118,14 @@ namespace
 														   : (channelIndex == 3
 																  ? playback::MidiCapability::oneShot
 																  : playback::MidiCapability::unavailable);
+		case DEVID_C6280:		// six wavetable channels, the noise generator shared with the last two
+			return fmChannel (6);
+		case DEVID_K051649:		// SCC1 / SCC+: five wavetable channels, no noise
+			return fmChannel (5);
+		case DEVID_SAA1099:		// six square channels; the noise and envelope generators feed them
+			return fmChannel (6);
+		case DEVID_POKEY:		// four dividers; a joined pair is one voice, handled by the decoder
+			return fmChannel (4);
 		default:
 			return playback::MidiCapability::unavailable;
 		}
