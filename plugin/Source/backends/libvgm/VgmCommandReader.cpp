@@ -90,7 +90,13 @@ namespace
 	bool splitsAddressByte (std::uint8_t cmd)
 	{
 		return cmd == 0xB0 || cmd == 0xB1 || cmd == 0xB3 || cmd == 0xB4
-			   || cmd == 0xB9 || cmd == 0xBB || cmd == 0xBD;
+			   || cmd == 0xB9 || cmd == 0xBB || cmd == 0xBC || cmd == 0xBD;
+	}
+
+	/** The WonderSwan keeps its sound registers at 0x80..: the command stores them from 0x00. */
+	std::uint8_t registerAddress (std::uint8_t cmd, std::uint8_t offset)
+	{
+		return (cmd == 0xBC) ? (std::uint8_t) (0x80 + offset) : offset;
 	}
 }
 
@@ -205,6 +211,15 @@ bool VgmCommandReader::next (VgmCommand& command)
 			command.addr = data[position + 1];
 			command.data = data[position + 1];
 		}
+		else if (cmd == 0xD0)
+		{
+			// YMF278B (OPL4): the address byte carries the chip in bit 7 and the port in the
+			// low seven bits. Ports 0 and 1 are the two OPL3 banks, 2..5 the wavetable half.
+			command.kind = VgmCommand::Kind::registerWrite;
+			command.port = data[position + 1];
+			command.addr = data[position + 2];
+			command.data = data[position + 3];
+		}
 		else if (cmd == 0xD2)
 		{
 			// K051649 (SCC): the command carries both bytes of one SCC access, and libvgm hands
@@ -225,7 +240,7 @@ bool VgmCommandReader::next (VgmCommand& command)
 			if (splitsAddressByte (cmd))
 			{
 				command.port = (std::uint8_t) (addrByte >> 7);
-				command.addr = (std::uint8_t) (addrByte & 0x7F);
+				command.addr = registerAddress (cmd, (std::uint8_t) (addrByte & 0x7F));
 			}
 			else
 			{

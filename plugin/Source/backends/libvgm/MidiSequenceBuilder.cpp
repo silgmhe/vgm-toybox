@@ -6,14 +6,20 @@
 
 #include "VgmCommandReader.h"
 
+#include "chips/Ay8910Decoder.h"
 #include "chips/GbcApuDecoder.h"
 #include "chips/HuC6280Decoder.h"
 #include "chips/K051649Decoder.h"
 #include "chips/NesApuDecoder.h"
 #include "chips/NoteExtractor.h"
+#include "chips/OplDecoder.h"
+#include "chips/OpmDecoder.h"
+#include "chips/OpnDecoder.h"
 #include "chips/PokeyDecoder.h"
+#include "chips/Rf5c68Decoder.h"
 #include "chips/Saa1099Decoder.h"
-#include "chips/Ym2612Decoder.h"
+#include "chips/Sn76489Decoder.h"
+#include "chips/WswanDecoder.h"
 
 #include "emu/SoundDevs.h"
 
@@ -22,112 +28,6 @@ namespace toybox::backends::libvgm
 namespace
 {
 	constexpr double kVgmRate = 44100.0;
-
-	// One-shot channels have no reliable pitch.  C4 is only a trigger marker, not a
-	// transcription of the sample; users can map it with a MIDI effect in the DAW.
-	constexpr int kOneShotNote = 60;
-
-	struct SnState
-	{
-		int period[3] = { 0, 0, 0 };
-		int periodLow[3] = { 0, 0, 0 };
-		int volume[4] = { 15, 15, 15, 15 };
-		int note[4] = { -1, -1, -1, -1 };
-		bool active[4] = { false, false, false, false };
-		int latch = 0;
-		bool latchIsVolume = false;
-	};
-
-	struct AyState
-	{
-		UINT8 regs[16] = {};
-		int note[3] = { -1, -1, -1 };
-		bool active[3] = { false, false, false };
-	};
-
-	struct FmChannel
-	{
-		int fnum = 0;
-		int block = 0;
-		int note = -1;
-		bool active = false;
-		bool keyHeld = false;
-	};
-
-	struct FmState
-	{
-		FmChannel channels[6];
-	};
-
-	/** YM2151 has no F-Number: KC (block + note) and KF (fraction) are the pitch source. */
-	struct OpmChannel
-	{
-		int kc = 0;
-		int kf = 0;
-		int note = -1;
-		bool active = false;
-		bool keyHeld = false;
-		bool havePitch = false;
-	};
-
-	struct OpmState
-	{
-		OpmChannel channels[8];
-	};
-
-	enum class OplKind
-	{
-		opll,	// YM2413: 9 melodic channels, rhythm on 0x0E
-		opl2,	// YM3526/YM3812/Y8950: 9 melodic, rhythm on 0xBD
-		opl3	// YMF262: two 9-channel banks, rhythm on 0xBD
-	};
-
-	struct OplChannel
-	{
-		int fnum = 0;
-		int block = 0;
-		int note = -1;
-		bool active = false;
-		bool keyHeld = false;
-	};
-
-	struct OplState
-	{
-		OplChannel channels[18];
-		UINT8 rhythmBits = 0;
-		bool rhythmEnabled = false;
-		bool adpcmHeld = false;		// Y8950 Delta-T start bit
-	};
-
-	/** The YM2612 DAC is a stream of sample bytes, not notes; rate-limit it to drum markers. */
-	struct DacState
-	{
-		bool enabled = false;
-		double lastTrigger = -100.0;
-	};
-
-	struct AdpcmState
-	{
-		bool activeA[6] = { false, false, false, false, false, false };
-		bool activeB = false;
-	};
-
-	struct Rf5cState
-	{
-		bool active[8] = {};
-		bool master = true;			// 0x07 bit 7: sound output enable
-		UINT8 channelMask = 0xFF;	// 0x08, a cleared bit enables the channel
-	};
-
-	/** A one-shot note is closed by a timer, but a retrigger before that timer expires must not
-		be cut off by the previous note's scheduled note-off.  The pending event is moved to the
-		retrigger instant instead. */
-	struct PendingOneShot
-	{
-		std::size_t eventIndex = 0;
-		double time = -1.0;
-		bool valid = false;
-	};
 
 	std::uint64_t deviceChannelKey (playback::DeviceId device, int channel)
 	{
@@ -187,94 +87,98 @@ namespace
 				switch (command.command)
 				{
 				case 0x50:
-					writeSn (deviceFor (DEVID_SN76496, 0), command.addr, time);
+					sn.queue (deviceFor (DEVID_SN76496, command.port), command.addr,
+							  command.data, command.sampleTime);
 					break;
 				case 0x51:
-					writeOpl (deviceFor (DEVID_YM2413, 0), false, command.addr, command.data,
-							  time, OplKind::opll);
+					opl.queue (deviceFor (DEVID_YM2413, 0), command.addr, command.data,
+							   command.sampleTime);
 					break;
 				case 0x52:
 				case 0x53:
-					writeYm2612 (deviceFor (DEVID_YM2612, 0), command.command == 0x53,
-								 command.addr, command.data, time, command.sampleTime);
+					opn.queue (deviceFor (DEVID_YM2612, 0), command.addr, command.data,
+							   command.sampleTime, command.command == 0x53 ? 1 : 0);
 					break;
 				case 0x54:
-					writeOpm (deviceFor (DEVID_YM2151, 0), command.addr, command.data, time);
+					opm.queue (deviceFor (DEVID_YM2151, 0), command.addr, command.data,
+							   command.sampleTime);
 					break;
 				case 0x55:
-					writeFm (deviceFor (DEVID_YM2203, 0), false, command.addr, command.data,
-							 time, false, 3);
+					opn.queue (deviceFor (DEVID_YM2203, 0), command.addr, command.data,
+							   command.sampleTime);
 					break;
 				case 0x56:
 				case 0x57:
-					writeYm2608 (deviceFor (DEVID_YM2608, 0), command.command == 0x57, command.addr,
-								 command.data, time);
+					opn.queue (deviceFor (DEVID_YM2608, 0), command.addr, command.data,
+							   command.sampleTime, command.command == 0x57 ? 1 : 0);
 					break;
 				case 0x58:
 				case 0x59:
-					writeYm2610 (deviceFor (DEVID_YM2610, 0), command.command == 0x59, command.addr,
-								 command.data, time);
+					opn.queue (deviceFor (DEVID_YM2610, 0), command.addr, command.data,
+							   command.sampleTime, command.command == 0x59 ? 1 : 0);
 					break;
 				case 0x5A:
-					writeOpl (deviceFor (DEVID_YM3812, 0), false, command.addr, command.data,
-							  time, OplKind::opl2);
+					opl.queue (deviceFor (DEVID_YM3812, 0), command.addr, command.data,
+							   command.sampleTime);
 					break;
 				case 0x5B:
-					writeOpl (deviceFor (DEVID_YM3526, 0), false, command.addr, command.data,
-							  time, OplKind::opl2);
+					opl.queue (deviceFor (DEVID_YM3526, 0), command.addr, command.data,
+							   command.sampleTime);
 					break;
 				case 0x5C:
-					writeOpl (deviceFor (DEVID_Y8950, 0), false, command.addr, command.data,
-							  time, OplKind::opl2);
+					opl.queue (deviceFor (DEVID_Y8950, 0), command.addr, command.data,
+							   command.sampleTime);
 					break;
 				case 0x5E:
 				case 0x5F:
-					writeOpl (deviceFor (DEVID_YMF262, 0), command.command == 0x5F, command.addr,
-							  command.data, time, OplKind::opl3);
+					opl.queue (deviceFor (DEVID_YMF262, 0), command.addr, command.data,
+							   command.sampleTime, command.command == 0x5F ? 1 : 0);
 					break;
 				case 0xA0:
-					writeAy (deviceFor (DEVID_AY8910, 0), command.addr, command.data, time);
+					ay.queue (deviceFor (DEVID_AY8910, command.port), command.addr, command.data,
+							  command.sampleTime);
 					break;
 				case 0xA1:
-					writeOpl (deviceFor (DEVID_YM2413, 1), false, command.addr, command.data,
-							  time, OplKind::opll);
+					opl.queue (deviceFor (DEVID_YM2413, 1), command.addr, command.data,
+							   command.sampleTime);
 					break;
 				case 0xA4:
-					writeOpm (deviceFor (DEVID_YM2151, 1), command.addr, command.data, time);
+					opm.queue (deviceFor (DEVID_YM2151, 1), command.addr, command.data,
+							   command.sampleTime);
 					break;
 				case 0xA5:
-					writeFm (deviceFor (DEVID_YM2203, 1), false, command.addr, command.data,
-							 time, false, 3);
+					opn.queue (deviceFor (DEVID_YM2203, 1), command.addr, command.data,
+							   command.sampleTime);
 					break;
 				case 0xA6:
 				case 0xA7:
-					writeYm2608 (deviceFor (DEVID_YM2608, 1), command.command == 0xA7, command.addr,
-								 command.data, time);
+					opn.queue (deviceFor (DEVID_YM2608, 1), command.addr, command.data,
+							   command.sampleTime, command.command == 0xA7 ? 1 : 0);
 					break;
 				case 0xAA:
-					writeOpl (deviceFor (DEVID_YM3812, 1), false, command.addr, command.data,
-							  time, OplKind::opl2);
+					opl.queue (deviceFor (DEVID_YM3812, 1), command.addr, command.data,
+							   command.sampleTime);
 					break;
 				case 0xAB:
-					writeOpl (deviceFor (DEVID_YM3526, 1), false, command.addr, command.data,
-							  time, OplKind::opl2);
+					opl.queue (deviceFor (DEVID_YM3526, 1), command.addr, command.data,
+							   command.sampleTime);
 					break;
 				case 0xAC:
-					writeOpl (deviceFor (DEVID_Y8950, 1), false, command.addr, command.data,
-							  time, OplKind::opl2);
+					opl.queue (deviceFor (DEVID_Y8950, 1), command.addr, command.data,
+							   command.sampleTime);
 					break;
 				case 0xAE:
 				case 0xAF:
-					writeOpl (deviceFor (DEVID_YMF262, 1), command.command == 0xAF, command.addr,
-							  command.data, time, OplKind::opl3);
+					opl.queue (deviceFor (DEVID_YMF262, 1), command.addr, command.data,
+							   command.sampleTime, command.command == 0xAF ? 1 : 0);
 					break;
 				case 0xB0:	// RF5C68
-					writeRf5c (rf5cDeviceFor (false, command.port),
-							   command.addr, command.data, time);
+					rf5c.queue (rf5cDeviceFor (false, command.port), command.addr, command.data,
+								command.sampleTime);
 					break;
 				case 0xB1:	// RF5C164
-					writeRf5c (rf5cDeviceFor (true, command.port),
-							   command.addr, command.data, time);
+					rf5c.queue (rf5cDeviceFor (true, command.port), command.addr, command.data,
+								command.sampleTime);
 					break;
 				case 0xB3:
 					queueGbWrite (deviceFor (DEVID_GB_DMG, command.port),
@@ -292,9 +196,22 @@ namespace
 					pokey.queue (deviceFor (DEVID_POKEY, command.port), command.addr,
 								 command.data, command.sampleTime);
 					break;
+				case 0xBC:	// WonderSwan
+					wswan.queue (deviceFor (DEVID_WSWAN, command.port), command.addr,
+								 command.data, command.sampleTime);
+					break;
 				case 0xBD:	// SAA1099
 					saa.queue (deviceFor (DEVID_SAA1099, command.port), command.addr,
 							   command.data, command.sampleTime);
+					break;
+				case 0xD0:	// YMF278B (OPL4): ports 0/1 are the OPL3 banks, ports 2..5 the
+							// wavetable half, which has no decoder yet; bit 7 selects the chip
+					if ((command.port & 0x7F) < 2)
+					{
+						opl.queue (deviceFor (DEVID_YMF278B, (command.port & 0x80) != 0 ? 1 : 0),
+								   command.addr, command.data, command.sampleTime,
+								   (std::uint8_t) (command.port & 0x7F));
+					}
 					break;
 				case 0xD2:	// K051649 (SCC): one command, two chip writes
 					if (command.kind == VgmCommand::Kind::registerWritePair)
@@ -305,13 +222,13 @@ namespace
 					break;
 				case 0xA2:
 				case 0xA3:
-					writeYm2612 (deviceFor (DEVID_YM2612, 1), command.command == 0xA3,
-								 command.addr, command.data, time, command.sampleTime);
+					opn.queue (deviceFor (DEVID_YM2612, 1), command.addr, command.data,
+							   command.sampleTime, command.command == 0xA3 ? 1 : 0);
 					break;
 				case 0xA8:
 				case 0xA9:
-					writeYm2610 (deviceFor (DEVID_YM2610, 1), command.command == 0xA9, command.addr,
-								 command.data, time);
+					opn.queue (deviceFor (DEVID_YM2610, 1), command.addr, command.data,
+							   command.sampleTime, command.command == 0xA9 ? 1 : 0);
 					break;
 				default:
 					break;	// waits and stream end are handled by the reader
@@ -321,12 +238,18 @@ namespace
 			// chips with a real state machine are decoded in one pass after the stream is read:
 			// their note boundaries come from the chip's own counters, not from a register write
 			flushNes (lastSampleTime);
-			flushYm2612 (lastSampleTime);
+			flushOpn (lastSampleTime);
 			flushGb (lastSampleTime);
+			flushOpl (lastSampleTime);
+			flushDecoded (opm, 3579545u, lastSampleTime);
 			flushDecoded (c6280, 3579545u, lastSampleTime);
 			flushDecoded (scc, 3579545u, lastSampleTime);
 			flushDecoded (saa, 8000000u, lastSampleTime);
 			flushDecoded (pokey, 1789772u, lastSampleTime);
+			flushDecoded (wswan, 3072000u, lastSampleTime);
+			flushDecoded (sn, 3579545u, lastSampleTime);
+			flushDecoded (ay, 1789773u, lastSampleTime);
+			flushDecoded (rf5c, 12500000u, lastSampleTime);
 
 			if (events.empty())
 			{
@@ -424,63 +347,141 @@ namespace
 			nesDevices.clear();
 		}
 
-		/** Buffers one YM2612 register write. The DAC keeps writing its own marker track; the
-			decoder needs register 0x2B only to know that channel 6 stopped being an FM channel. */
-		void writeYm2612 (const PLR_DEV_INFO* device, bool port1, std::uint8_t reg,
-						  std::uint8_t data, double time, std::uint32_t sampleTime)
+		/** Which OPN the device is: the register map differs, and so does the channel layout the
+			notes are reported on. A YM2610 with config flag bit 0 set is the B variant, which has
+			all six FM channels - the same bit order the chip capability table uses. */
+		static chips::OpnDecoder::Variant opnVariantFor (const PLR_DEV_INFO& device)
 		{
-			if (device == nullptr)
+			switch (device.type)
 			{
-				return;
-			}
+			case DEVID_YM2203:
+				return chips::OpnDecoder::Variant::ym2203;
 
-			if (! port1 && (reg == 0x2A || reg == 0x2B))
-			{
-				writeDac (device, reg, data, time);
-			}
+			case DEVID_YM2608:
+				return chips::OpnDecoder::Variant::ym2608;
 
-			chips::RegisterWrite write;
-			write.deviceId = device->id;
-			write.reg = reg;
-			write.value = data;
-			write.port = port1 ? 1 : 0;
-			write.sampleTime = sampleTime;
-			ymWrites[device->id].push_back (write);
-			ymDevices[device->id] = device;
+			case DEVID_YM2610:
+				return (device.devCfg != nullptr && (device.devCfg->flags & 0x01) != 0)
+						   ? chips::OpnDecoder::Variant::ym2610b
+						   : chips::OpnDecoder::Variant::ym2610;
+
+			case DEVID_YM2612:
+			default:
+				return chips::OpnDecoder::Variant::ym2612;
+			}
 		}
 
-		void flushYm2612 (std::uint32_t totalSamples)
+		/** Decodes every OPN write once the stream is read. One pass per device, because the
+			decoder needs the whole register history: algorithm changes, a total level written
+			before the key-on, ADPCM start bits and the DAC's 0x2A stream. */
+		void flushOpn (std::uint32_t totalSamples)
 		{
-			for (auto& entry : ymWrites)
+			for (auto& entry : opn.writes)
 			{
-				const auto device = ymDevices.find (entry.first);
-				if (device == ymDevices.end() || device->second == nullptr)
+				const auto device = opn.devices.find (entry.first);
+				if (device == opn.devices.end() || device->second == nullptr)
 				{
 					continue;
 				}
 
-				const std::uint32_t clock = (device->second->devCfg != nullptr
-											 && device->second->devCfg->clock > 0)
-												? device->second->devCfg->clock
-												: 7670453u;
+				const PLR_DEV_INFO& info = *device->second;
+				std::uint32_t fallbackClock = 7670453u;
+				switch (info.type)
+				{
+				case DEVID_YM2203:
+					fallbackClock = 3993600u;
+					break;
+				case DEVID_YM2608:
+					fallbackClock = 7987200u;
+					break;
+				case DEVID_YM2610:
+					fallbackClock = 8000000u;
+					break;
+				default:
+					break;
+				}
 
-				chips::Ym2612Decoder decoder;
+				const std::uint32_t clock = (info.devCfg != nullptr && info.devCfg->clock > 0)
+												? info.devCfg->clock
+												: fallbackClock;
+
+				chips::OpnDecoder decoder (opnVariantFor (info));
 				decoder.reset (clock, (double) kVgmRate);
 
-				emitDecodedNotes (device->second,
+				emitDecodedNotes (&info,
 								  chips::extractPerformance (decoder, entry.second, totalSamples));
 			}
 
-			ymWrites.clear();
-			ymDevices.clear();
+			opn.writes.clear();
+			opn.devices.clear();
+		}
+
+		/** Which OPL the device is. Only the Y8950 carries Delta-T, an OPL2 with a sample
+			player on its own channel. */
+		static chips::OplDecoder::Variant oplVariantFor (const PLR_DEV_INFO& device, bool& adpcm)
+		{
+			adpcm = device.type == DEVID_Y8950;
+			switch (device.type)
+			{
+			case DEVID_YM2413:
+				return chips::OplDecoder::Variant::opll;
+
+			case DEVID_YMF262:
+			case DEVID_YMF278B:	// the OPL4's FM half is register-compatible with an OPL3
+				return chips::OplDecoder::Variant::opl3;
+
+			default:
+				return chips::OplDecoder::Variant::opl2;
+			}
+		}
+
+		/** One pass per OPL device: OPLL and OPL2 have different pitch registers, and the
+			rhythm mode borrows channels as it is entered, so the whole stream is needed. */
+		void flushOpl (std::uint32_t totalSamples)
+		{
+			for (auto& entry : opl.writes)
+			{
+				const auto device = opl.devices.find (entry.first);
+				if (device == opl.devices.end() || device->second == nullptr)
+				{
+					continue;
+				}
+
+				const PLR_DEV_INFO& info = *device->second;
+				bool adpcm = false;
+				const chips::OplDecoder::Variant variant = oplVariantFor (info, adpcm);
+
+				const std::uint32_t fallbackClock = variant == chips::OplDecoder::Variant::opl3
+														? 14318180u
+														: 3579545u;
+				std::uint32_t clock = (info.devCfg != nullptr && info.devCfg->clock > 0)
+										  ? info.devCfg->clock
+										  : fallbackClock;
+
+				// the OPL4 clocks its linked OPL3 at 8/19 of its own clock (libvgm's
+				// init_opl3_devinfo does the same), so the pitch table needs that clock
+				if (info.type == DEVID_YMF278B)
+				{
+					clock = clock * 8u / 19u;
+				}
+
+				chips::OplDecoder decoder (variant, adpcm);
+				decoder.reset (clock, (double) kVgmRate);
+
+				emitDecodedNotes (&info,
+								  chips::extractPerformance (decoder, entry.second, totalSamples));
+			}
+
+			opl.writes.clear();
+			opl.devices.clear();
 		}
 
 		/** Register writes of one chip, kept per device until the stream ends.
 
-			The four PSG decoders below (HuC6280, SCC, SAA1099, POKEY) all need the finished
-			stream: which note is playing at a given moment follows from the chip's own state - a
-			divider that was set earlier, a key mask that was switched on - and not from the write
-			that happens to arrive. */
+			The PSG decoders below (HuC6280, SCC, SAA1099, POKEY, WonderSwan) all need the
+			finished stream: which note is playing at a given moment follows from the chip's own
+			state - a divider that was set earlier, a key mask that was switched on, a sweep that
+			has been running - and not from the write that happens to arrive. */
 		template <typename Decoder>
 		struct ChipBuffer
 		{
@@ -642,175 +643,6 @@ namespace
 			events.push_back (event);
 		}
 
-		/** Starts a melodic note at its exact pitch and resets any bend left by the previous note. */
-		void startMelodicNote (int track, double time, int note, int velocity)
-		{
-			pitchBend (track, time, 0.0);
-			noteOn (track, time, note, velocity);
-		}
-
-		/** Follows a continuously changing pitch. Small changes become pitch bend; only a
-			change outside the +/- 2 semitone MIDI range retriggers the note. */
-		void updateMelodicPitch (int track, double time, int& note, bool& active,
-								 double pitch, int velocity)
-		{
-			if (pitch < 0.0 || ! std::isfinite (pitch))
-			{
-				if (active)
-				{
-					noteOff (track, time, note);
-					active = false;
-					note = -1;
-				}
-				return;
-			}
-
-			// Compare against the pitch MIDI can actually carry: a frequency outside the
-			// 1..127 range would otherwise differ from the clamped note by more than the
-			// retrigger threshold on every register write, which turns e.g. a driver's
-			// initialisation writes into a burst of identical note-ons.
-			const double boundedPitch = juce::jlimit (1.0, 127.0, pitch);
-			const int nearest = juce::jlimit (1, 127, (int) std::lround (boundedPitch));
-			if (! active)
-			{
-				note = nearest;
-				startMelodicNote (track, time, nearest, velocity);
-				active = true;
-				return;
-			}
-
-			const double delta = boundedPitch - (double) note;
-			if (std::abs (delta) <= 2.0)
-			{
-				pitchBend (track, time, delta);
-				return;
-			}
-
-			noteOff (track, time, note);
-			note = nearest;
-			startMelodicNote (track, time, note, velocity);
-			pitchBend (track, time, boundedPitch - (double) note);
-			active = true;
-		}
-
-		/** Emits a C4 trigger marker for a channel that has no usable pitch.  The note is closed
-			after a short default gate, or earlier if the same track retriggers. */
-		void triggerOneShot (int track, double time, double gate = 0.08)
-		{
-			if (track < 0)
-			{
-				return;
-			}
-
-			PendingOneShot& pending = oneShotPending[track];
-			if (pending.valid && pending.eventIndex < events.size()
-				&& events[pending.eventIndex].timeSeconds > time)
-			{
-				events[pending.eventIndex].timeSeconds = time;
-			}
-
-			noteOn (track, time, kOneShotNote, 100);
-			noteOff (track, time + gate, kOneShotNote);
-			pending.eventIndex = events.size() - 1;
-			pending.time = time + gate;
-			pending.valid = true;
-		}
-
-		static double noteFromFrequencyF (double frequency)
-		{
-			if (! (frequency > 0.0) || ! std::isfinite (frequency))
-			{
-				return -1.0;
-			}
-
-			return 69.0 + 12.0 * std::log2 (frequency / 440.0);
-		}
-
-		void writeSn (const PLR_DEV_INFO* device, UINT8 data, double time)
-		{
-			if (device == nullptr)
-			{
-				return;
-			}
-
-			SnState& state = snStates[device->id];
-			if (data & 0x80)
-			{
-				state.latch = (data >> 5) & 0x03;
-				state.latchIsVolume = (data & 0x10) != 0;
-				if (state.latchIsVolume)
-				{
-					state.volume[state.latch] = data & 0x0F;
-				}
-				else
-				{
-					state.periodLow[state.latch] = data & 0x0F;
-				}
-			}
-			else if (! state.latchIsVolume && state.latch < 3)
-			{
-				state.period[state.latch] = state.periodLow[state.latch] | ((data & 0x3F) << 4);
-			}
-
-			refreshSnChannel (device, state, state.latch, time);
-		}
-
-		void refreshSnChannel (const PLR_DEV_INFO* device, SnState& state, int channel, double time)
-		{
-			if (channel < 0 || channel > 3)
-			{
-				return;
-			}
-
-			const int track = trackFor (device, channel);
-			const bool audible = state.volume[channel] < 15;
-			if (channel == 3)
-			{
-				if (audible && ! state.active[channel])
-				{
-					state.note[channel] = kOneShotNote;
-					noteOn (track, time, kOneShotNote, 100);
-					state.active[channel] = true;
-				}
-				else if (! audible && state.active[channel])
-				{
-					noteOff (track, time, state.note[channel]);
-					state.active[channel] = false;
-				}
-				return;
-			}
-
-			const int period = state.period[channel];
-			const double clock = device->devCfg != nullptr ? (double) device->devCfg->clock : 0.0;
-			const double frequency = (period > 0) ? clock / (32.0 * period) : 0.0;
-			const double pitch = audible ? noteFromFrequencyF (frequency) : -1.0;
-			updateMelodicPitch (track, time, state.note[channel], state.active[channel], pitch, 100);
-		}
-
-		void writeAy (const PLR_DEV_INFO* device, UINT8 addr, UINT8 data, double time)
-		{
-			if (device == nullptr || addr >= 16)
-			{
-				return;
-			}
-
-			AyState& state = ayStates[device->id];
-			state.regs[addr] = data;
-			for (int channel = 0; channel < 3; ++channel)
-			{
-				const int period = state.regs[channel * 2]
-								   | ((state.regs[channel * 2 + 1] & 0x0F) << 8);
-				const int amplitude = state.regs[0x08 + channel] & 0x1F;
-				const bool toneEnabled = (state.regs[0x07] & (1 << channel)) == 0;
-				const double clock = device->devCfg != nullptr ? (double) device->devCfg->clock : 0.0;
-				const double frequency = (period > 0) ? clock / (16.0 * period) : 0.0;
-				const double pitch = (amplitude > 0 && toneEnabled) ? noteFromFrequencyF (frequency) : -1.0;
-				const int track = trackFor (device, channel);
-				updateMelodicPitch (track, time, state.note[channel], state.active[channel], pitch,
-									juce::jlimit (1, 127, amplitude * 4));
-			}
-		}
-
 		/** Buffers one DMG APU register write. A Game Boy note is not a register write either: the
 			length counters, the envelopes and the sweep run off the chip's frame sequencer, which
 			only the decoder models, so the stream is decoded once it has been read. */
@@ -857,551 +689,8 @@ namespace
 			gbDevices.clear();
 		}
 
-		void writeRf5c (const PLR_DEV_INFO* device, UINT8 addr, UINT8 data, double time)
-		{
-			if (device == nullptr || addr > 0x08)
-			{
-				return;
-			}
-
-			Rf5cState& state = rf5cStates[device->id];
-
-			// Bit i cleared enables channel i; the sample runs until the driver disables it.
-			// The fixed gate only closes the MIDI note so a lone sample cannot hold forever.
-			const auto applyChannelMask = [&] (void)
-			{
-				if (! state.master)
-				{
-					return;
-				}
-
-				for (int channel = 0; channel < 8; ++channel)
-				{
-					const bool on = ((state.channelMask >> channel) & 1) == 0;
-					if (on && ! state.active[channel])
-					{
-						triggerOneShot (trackFor (device, channel), time);
-					}
-					state.active[channel] = on;
-				}
-			};
-
-			if (addr == 0x07)
-			{
-				const bool master = (data & 0x80) != 0;
-				if (master && ! state.master)
-				{
-					// The core resumes from the channel's current address; retriggering the
-					// one-shot marker is the closest MIDI approximation.
-					for (bool& active : state.active)
-					{
-						active = false;
-					}
-					state.master = true;
-					applyChannelMask();
-				}
-				else if (! master)
-				{
-					for (bool& active : state.active)
-					{
-						active = false;
-					}
-					state.master = false;
-				}
-				return;
-			}
-
-			if (addr == 0x08)
-			{
-				state.channelMask = data;
-				applyChannelMask();
-			}
-		}
-
-		void writeYm2610 (const PLR_DEV_INFO* device, bool port1, UINT8 addr, UINT8 data, double time)
-		{
-			if (device == nullptr)
-			{
-				return;
-			}
-
-			if (port1 && addr < 0x30)
-			{
-				if (addr == 0x00)
-				{
-					// ADPCM-A control: bit 7 stops every channel, bits 0..5 start one each.
-					AdpcmState& state = adpcmStates[device->id];
-					const bool keyOffAll = (data & 0x80) != 0;
-					for (int channel = 0; channel < 6; ++channel)
-					{
-						const bool on = ! keyOffAll && (data & (1u << channel)) != 0;
-						if (on && ! state.activeA[channel])
-						{
-							triggerOneShot (trackFor (device, 6 + channel), time);
-						}
-						state.activeA[channel] = on;
-					}
-				}
-				return;
-			}
-
-			if (! port1 && addr >= 0x10 && addr < 0x20)
-			{
-				if (addr == 0x10)
-				{
-					// Delta-T (ADPCM-B) control: bit 7 starts, bit 0 resets.
-					AdpcmState& state = adpcmStates[device->id];
-					const bool start = (data & 0x80) != 0;
-					if (start && ! state.activeB)
-					{
-						triggerOneShot (trackFor (device, 12), time, 0.10);
-						state.activeB = true;
-					}
-					else if ((data & 0x01) != 0)
-					{
-						state.activeB = false;
-					}
-				}
-				return;
-			}
-
-			writeFm (device, port1, addr, data, time, true, 6);
-		}
-
-		void writeFm (const PLR_DEV_INFO* device, bool port1, UINT8 addr, UINT8 data,
-					  double time, bool isYm2610, int channelCount)
-		{
-			if (device == nullptr)
-			{
-				return;
-			}
-
-			FmState& state = fmStates[device->id];
-			const bool isB = device->devCfg != nullptr && (device->devCfg->flags & 0x01) != 0;
-			const bool fourChannel = isYm2610 && ! isB;
-
-			// Key on/off lives in port 0 only; port 1 register 0x28 is not an OPN key register.
-			if (addr == 0x28 && ! port1)
-			{
-				int channel = data & 0x03;
-				if (channel == 3)
-				{
-					return;
-				}
-				if ((data & 0x04) != 0)
-				{
-					channel += 3;
-				}
-				if (channel >= channelCount || (fourChannel && (channel == 0 || channel == 3)))
-				{
-					return;
-				}
-
-				FmChannel& voice = state.channels[channel];
-				const bool keyOn = (data & 0xF0) != 0;
-				const int track = trackFor (device, channel);
-				if (! keyOn)
-				{
-					voice.keyHeld = false;
-					if (voice.active)
-					{
-						noteOff (track, time, voice.note);
-						voice.active = false;
-					}
-					return;
-				}
-
-				voice.keyHeld = true;
-				const double pitch = fmPitch (device, voice);
-				updateMelodicPitch (track, time, voice.note, voice.active, pitch, 100);
-				return;
-			}
-
-			// 0xA0-0xA6 (and port 1's 0xA0-0xA6) hold FNUM/BLOCK; 0xA8-0xAE are the
-			// 3-slot/CSM registers of a single-port OPN and carry no channel pitch.
-			if ((addr & 0xF0) != 0xA0 || (addr & 0x08) != 0)
-			{
-				return;
-			}
-
-			const int channel = (addr & 0x03) + (port1 ? 3 : 0);
-			if (channel >= channelCount || (fourChannel && (channel == 0 || channel == 3)))
-			{
-				return;
-			}
-
-			FmChannel& voice = state.channels[channel];
-			if ((addr & 0x04) == 0)
-			{
-				voice.fnum = (voice.fnum & 0x700) | data;
-			}
-			else
-			{
-				voice.fnum = (voice.fnum & 0x0FF) | ((data & 0x07) << 8);
-				voice.block = (data >> 3) & 0x07;
-			}
-
-			if (! voice.keyHeld)
-			{
-				return;
-			}
-
-			const int track = trackFor (device, channel);
-			const double pitch = fmPitch (device, voice);
-			updateMelodicPitch (track, time, voice.note, voice.active, pitch, 100);
-		}
-
-		static double fmPitch (const PLR_DEV_INFO* device, const FmChannel& voice)
-		{
-			if (device == nullptr || device->devCfg == nullptr || voice.fnum <= 0
-				|| voice.block < 0 || voice.block > 7)
-			{
-				return -1.0;
-			}
-
-			// OPN FNUM/BLOCK to frequency: the hardware relation is
-			// FNUM = 144 * f * 2^20 / (clock * 2^(block-1)), so
-			// f = FNUM * clock / (144 * 2^(21-block)).  144 is the FM sample-clock divisor
-			// shared by the OPN family; the exact value is calibrated by the VGM's chip clock.
-			const double clock = (double) device->devCfg->clock;
-			const double frequency = clock / 144.0 * (double) voice.fnum
-									 / (double) (1u << (21 - voice.block));
-			return noteFromFrequencyF (frequency);
-		}
-
-		/** YM2151 pitch: KC holds block (bits 6..4) and note (bits 3..0), KF adds 1/64 of a
-			semitone.  The note codes 3/7/11/15 are unused and repeat the previous semitone, so
-			code - (code >> 2) is the semitone step inside the octave.  Code 0 is C#, which makes
-			KC 0x4A (block 4) A4 = 440 Hz - the pitch the codes were laid out for at 3.579545 MHz. */
-		static double opmPitch (const PLR_DEV_INFO* device, const OpmChannel& voice)
-		{
-			if (! voice.havePitch || device == nullptr || device->devCfg == nullptr)
-			{
-				return -1.0;
-			}
-
-			const int block = (voice.kc >> 4) & 0x07;
-			const int noteCode = voice.kc & 0x0F;
-			double semitone = 13.0 + 12.0 * block + (double) (noteCode - (noteCode >> 2))
-							  + (double) voice.kf / 64.0;
-
-			// The output frequency follows the chip clock, so an overclocked OPM plays sharp.
-			const double clock = (double) device->devCfg->clock;
-			if (clock > 0.0)
-			{
-				semitone += 12.0 * std::log2 (clock / 3579545.0);
-			}
-
-			return semitone;
-		}
-
-		void writeOpm (const PLR_DEV_INFO* device, UINT8 addr, UINT8 data, double time)
-		{
-			if (device == nullptr)
-			{
-				return;
-			}
-
-			OpmState& state = opmStates[device->id];
-			if (addr == 0x08)
-			{
-				// Bits 2..0 select the channel, bits 6..3 are the operator key mask
-				// (M1 = 0x08, C1 = 0x10, M2 = 0x20, C2 = 0x40), so 0x78 is "all four".
-				const int channel = data & 0x07;
-				OpmChannel& voice = state.channels[channel];
-				const bool keyOn = (data & 0x78) != 0;
-				const int track = trackFor (device, channel);
-				if (! keyOn)
-				{
-					voice.keyHeld = false;
-					if (voice.active)
-					{
-						noteOff (track, time, voice.note);
-						voice.active = false;
-					}
-					return;
-				}
-
-				voice.keyHeld = true;
-				updateMelodicPitch (track, time, voice.note, voice.active,
-									opmPitch (device, voice), 100);
-				return;
-			}
-
-			if (addr >= 0x28 && addr < 0x30)
-			{
-				OpmChannel& voice = state.channels[addr & 0x07];
-				voice.kc = data & 0x7F;
-				voice.havePitch = true;
-				if (voice.keyHeld)
-				{
-					updateMelodicPitch (trackFor (device, addr & 0x07), time, voice.note,
-										voice.active, opmPitch (device, voice), 100);
-				}
-				return;
-			}
-
-			if (addr >= 0x30 && addr < 0x38)
-			{
-				OpmChannel& voice = state.channels[addr & 0x07];
-				voice.kf = (data >> 2) & 0x3F;
-				if (voice.keyHeld)
-				{
-					updateMelodicPitch (trackFor (device, addr & 0x07), time, voice.note,
-										voice.active, opmPitch (device, voice), 100);
-				}
-			}
-		}
-
-		/** OPL/OPLL/OPL3 pitch: FNUM * (clock / divisor) * 2^(block - reference).
-			The OPL3 divisor is four times the OPL2 one because its clock is four times higher. */
-		static double oplPitch (const PLR_DEV_INFO* device, const OplChannel& voice,
-								OplKind kind)
-		{
-			if (device == nullptr || device->devCfg == nullptr || voice.fnum <= 0)
-			{
-				return -1.0;
-			}
-
-			const double clock = (double) device->devCfg->clock;
-			if (! (clock > 0.0))
-			{
-				return -1.0;
-			}
-
-			const double divisor = kind == OplKind::opl3 ? 288.0 : 72.0;
-			const int reference = kind == OplKind::opll ? 19 : 20;
-			const double frequency = (double) voice.fnum * (clock / divisor)
-									 * std::pow (2.0, (double) (voice.block - reference));
-			return noteFromFrequencyF (frequency);
-		}
-
-		void applyOplKey (const PLR_DEV_INFO* device, OplChannel& voice, int channel,
-						  bool keyOn, double time, OplKind kind)
-		{
-			const int track = trackFor (device, channel);
-			if (! keyOn)
-			{
-				voice.keyHeld = false;
-				if (voice.active)
-				{
-					noteOff (track, time, voice.note);
-					voice.active = false;
-				}
-				return;
-			}
-
-			voice.keyHeld = true;
-			updateMelodicPitch (track, time, voice.note, voice.active,
-								oplPitch (device, voice, kind), 100);
-		}
-
-		/** Rhythm instruments are level-triggered; only the rising edge is a hit. */
-		void applyOplRhythm (const PLR_DEV_INFO* device, OplState& state, UINT8 data,
-							 bool enabled, int firstTrack, int bank, OplKind kind, double time)
-		{
-			if (! enabled)
-			{
-				state.rhythmBits = 0;
-				state.rhythmEnabled = false;
-				return;
-			}
-
-			if (! state.rhythmEnabled)
-			{
-				// Rhythm mode borrows channels 6..8 of the first bank, so a melodic note still
-				// held there is dropped by the chip - and its key-ons stop being melodic.
-				state.rhythmEnabled = true;
-				state.rhythmBits = 0;
-				for (int channel = 6; channel < 9; ++channel)
-				{
-					applyOplKey (device, state.channels[bank + channel], bank + channel,
-								 false, time, kind);
-				}
-			}
-
-			const UINT8 bits = data & 0x1F;
-			const UINT8 rising = bits & (UINT8) ~state.rhythmBits;
-			for (int i = 0; i < 5; ++i)
-			{
-				if ((rising & (0x10u >> i)) != 0)
-				{
-					triggerOneShot (trackFor (device, firstTrack + i), time);
-				}
-			}
-			state.rhythmBits = bits;
-		}
-
-		void writeOpl (const PLR_DEV_INFO* device, bool port1, UINT8 addr, UINT8 data,
-					   double time, OplKind kind)
-		{
-			if (device == nullptr)
-			{
-				return;
-			}
-
-			OplState& state = oplStates[device->id];
-			const int bank = (kind == OplKind::opl3 && port1) ? 9 : 0;
-
-			// The Y8950's Delta-T unit is the same idea as the YM2608 one: bit 7 of the
-			// control register starts a sample, so only its rising edge is a hit.
-			if (device->type == DEVID_Y8950 && addr == 0x07)
-			{
-				const bool start = (data & 0x80) != 0;
-				if (start && ! state.adpcmHeld)
-				{
-					triggerOneShot (trackFor (device, 14), time, 0.12);
-				}
-				state.adpcmHeld = start;
-				return;
-			}
-
-			if (kind == OplKind::opll)
-			{
-				if (addr >= 0x10 && addr < 0x19)
-				{
-					OplChannel& voice = state.channels[addr - 0x10];
-					voice.fnum = (voice.fnum & 0x100) | data;
-					if (voice.keyHeld)
-					{
-						updateMelodicPitch (trackFor (device, addr - 0x10), time, voice.note,
-											voice.active, oplPitch (device, voice, kind), 100);
-					}
-					return;
-				}
-
-				if (addr >= 0x20 && addr < 0x29)
-				{
-					const int channel = addr - 0x20;
-					OplChannel& voice = state.channels[channel];
-					voice.fnum = (voice.fnum & 0x0FF) | ((data & 0x01) << 8);
-					voice.block = (data >> 1) & 0x07;
-					if (state.rhythmEnabled && channel >= 6)
-					{
-						return;		// borrowed by the rhythm instruments
-					}
-					applyOplKey (device, voice, channel, (data & 0x10) != 0, time, kind);
-					return;
-				}
-
-				if (addr == 0x0E)
-				{
-					applyOplRhythm (device, state, data, (data & 0x20) != 0, 9, 0, kind, time);
-				}
-				return;
-			}
-
-			if (addr >= 0xA0 && addr < 0xA9)
-			{
-				const int channel = bank + (addr - 0xA0);
-				OplChannel& voice = state.channels[channel];
-				voice.fnum = (voice.fnum & 0x300) | data;
-				if (voice.keyHeld)
-				{
-					updateMelodicPitch (trackFor (device, channel), time, voice.note,
-										voice.active, oplPitch (device, voice, kind), 100);
-				}
-				return;
-			}
-
-			if (addr >= 0xB0 && addr < 0xB9)
-			{
-				const int channel = bank + (addr - 0xB0);
-				OplChannel& voice = state.channels[channel];
-				voice.fnum = (voice.fnum & 0x0FF) | ((data & 0x03) << 8);
-				voice.block = (data >> 2) & 0x07;
-				if (state.rhythmEnabled && bank == 0 && channel >= 6 && channel < 9)
-				{
-					return;		// borrowed by the rhythm instruments
-				}
-				applyOplKey (device, voice, channel, (data & 0x20) != 0, time, kind);
-				return;
-			}
-
-			if (addr == 0xBD && ! port1)
-			{
-				applyOplRhythm (device, state, data, (data & 0x20) != 0,
-								kind == OplKind::opl3 ? 18 : 9, 0, kind, time);
-			}
-		}
-
 		/** YM2608: ADPCM-A on port 0 registers 0x10..0x1F, ADPCM-B on port 1 0x00..0x0F,
 			everything else is the normal OPN FM register file. */
-		void writeYm2608 (const PLR_DEV_INFO* device, bool port1, UINT8 addr, UINT8 data,
-						  double time)
-		{
-			if (device == nullptr)
-			{
-				return;
-			}
-
-			AdpcmState& state = adpcmStates[device->id];
-			if (! port1 && addr >= 0x10 && addr < 0x20)
-			{
-				if (addr == 0x10)
-				{
-					// Bit 7 is "key off all"; bits 0..5 start one channel each.
-					const bool keyOffAll = (data & 0x80) != 0;
-					for (int channel = 0; channel < 6; ++channel)
-					{
-						const bool on = ! keyOffAll && (data & (1u << channel)) != 0;
-						if (on && ! state.activeA[channel])
-						{
-							triggerOneShot (trackFor (device, 6 + channel), time);
-						}
-						state.activeA[channel] = on;
-					}
-				}
-				return;
-			}
-
-			if (port1 && addr < 0x10)
-			{
-				if (addr == 0x00)
-				{
-					const bool start = (data & 0x80) != 0;
-					const bool reset = (data & 0x01) != 0;
-					if (start && ! state.activeB)
-					{
-						triggerOneShot (trackFor (device, 12), time);
-						state.activeB = true;
-					}
-					else if (reset)
-					{
-						state.activeB = false;
-					}
-				}
-				return;
-			}
-
-			writeFm (device, port1, addr, data, time, false, 6);
-		}
-
-		/** The YM2612 DAC is written one sample byte at a time; a marker per byte would be
-			thousands of notes, so only a drum-rate pulse is kept. */
-		void writeDac (const PLR_DEV_INFO* device, UINT8 addr, UINT8 data, double time)
-		{
-			DacState& state = dacStates[device->id];
-			if (addr == 0x2B)
-			{
-				state.enabled = (data & 0x80) != 0;
-				return;
-			}
-
-			if (addr != 0x2A || ! state.enabled || data == 0x80)
-			{
-				return;
-			}
-
-			if (time - state.lastTrigger < 0.05)
-			{
-				return;
-			}
-
-			state.lastTrigger = time;
-			triggerOneShot (trackFor (device, 6), time, 0.05);
-		}
-
 		const std::vector<PLR_DEV_INFO>& devices;
 		const std::vector<playback::TrackInfo>& tracks;
 		std::map<std::uint64_t, const PLR_DEV_INFO*> deviceByType;
@@ -1410,26 +699,23 @@ namespace
 		// 2A03 writes, kept until the stream ends so the decoder can run its frame sequencer
 		std::map<std::uint32_t, std::vector<chips::RegisterWrite>> nesWrites;
 		std::map<std::uint32_t, const PLR_DEV_INFO*> nesDevices;
-		// YM2612 writes: a key-on alone cannot say whether the patch lets sound through
-		std::map<std::uint32_t, std::vector<chips::RegisterWrite>> ymWrites;
-		std::map<std::uint32_t, const PLR_DEV_INFO*> ymDevices;
-		std::map<std::uint32_t, SnState> snStates;
-		std::map<std::uint32_t, AyState> ayStates;
-		std::map<std::uint32_t, FmState> fmStates;
-		std::map<std::uint32_t, OpmState> opmStates;
-		std::map<std::uint32_t, OplState> oplStates;
-		std::map<std::uint32_t, DacState> dacStates;
-		std::map<std::uint32_t, AdpcmState> adpcmStates;
 		// DMG writes: same reason as the 2A03, its frame sequencer owns the note ends
 		std::map<std::uint32_t, std::vector<chips::RegisterWrite>> gbWrites;
 		std::map<std::uint32_t, const PLR_DEV_INFO*> gbDevices;
+		// the OPN family: algorithm and total level decide whether a key-on is a note, and the
+		// ADPCM/DAC channels are one-shots the chip itself ends, so the whole stream is needed
+		ChipBuffer<chips::OpnDecoder> opn;
+		ChipBuffer<chips::OpmDecoder> opm;
+		ChipBuffer<chips::OplDecoder> opl;
 		// the PSGs whose registers describe the whole voice: a write only matters in context
 		ChipBuffer<chips::HuC6280Decoder> c6280;
 		ChipBuffer<chips::K051649Decoder> scc;
 		ChipBuffer<chips::Saa1099Decoder> saa;
 		ChipBuffer<chips::PokeyDecoder> pokey;
-		std::map<std::uint32_t, Rf5cState> rf5cStates;
-		std::map<int, PendingOneShot> oneShotPending;
+		ChipBuffer<chips::WswanDecoder> wswan;
+		ChipBuffer<chips::Sn76489Decoder> sn;
+		ChipBuffer<chips::Ay8910Decoder> ay;
+		ChipBuffer<chips::Rf5c68Decoder> rf5c;
 		std::vector<playback::MidiEvent> events;
 	};
 }

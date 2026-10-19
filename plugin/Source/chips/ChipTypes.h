@@ -33,6 +33,8 @@ enum class Family
 	sccWave,		// K051649/SCC: the same idea at 16 clocks per sample
 	saaSquare,
 	pokeySquare,	// distortion and clock mode change the timbre, not the note
+	wsWave,			// WonderSwan: a 32-step waveform stepped at clock / (32 * (2048 - frequency))
+	wsNoise,		// WonderSwan: the LFSR generator channel 3 can switch to
 	fm,
 	fmDrum,
 	adpcmDrum,

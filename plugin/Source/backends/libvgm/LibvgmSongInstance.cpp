@@ -94,6 +94,7 @@ namespace
 																  ? playback::MidiCapability::oneShot
 																  : playback::MidiCapability::unavailable);
 		case DEVID_YMF262:
+		case DEVID_YMF278B:	// its FM half is an OPL3; the wavetable half is not decoded
 			return (channelIndex >= 0 && channelIndex < 18) ? playback::MidiCapability::melodic
 															: (channelIndex < 23
 																   ? playback::MidiCapability::oneShot
@@ -125,6 +126,8 @@ namespace
 		case DEVID_SAA1099:		// six square channels; the noise and envelope generators feed them
 			return fmChannel (6);
 		case DEVID_POKEY:		// four dividers; a joined pair is one voice, handled by the decoder
+			return fmChannel (4);
+		case DEVID_WSWAN:		// four waveform channels; noise and the voice stream ride on them
 			return fmChannel (4);
 		default:
 			return playback::MidiCapability::unavailable;

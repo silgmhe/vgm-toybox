@@ -32,25 +32,27 @@ inline PLR_MUTE_OPTS wholeDeviceMuteOptions (void)
 }
 
 /** Keeps exactly one channel of the device audible; `channelIndex < 0` (or a device whose core
-	cannot mute single channels) leaves the whole device audible. */
+	cannot mute single channels) leaves the whole device audible.
+
+	Both halves carry that same mask: libvgm applies `chnMute[1]` to the *linked* device
+	(VGMPlayer::RefreshMuting), and a linked device describes the same channels as its parent -
+	an OPL4's FM half is an OPL3 whose channel n is the parent's channel n. Filling the second
+	half with "everything else muted" - the natural reading of a two-word mask - used to mute
+	exactly the channel the track was about, which is why an OPL4 had no audio on its tracks
+	while the plain player played it. */
 inline PLR_MUTE_OPTS singleChannelMuteOptions (int channelIndex, bool isolatable)
 {
 	PLR_MUTE_OPTS opts = {};
 	opts.disable = 0x00;
 
-	for (int half = 0; half < 2; ++half)
+	UINT32 mask = 0x00;
+	if (isolatable && channelIndex >= 0)
 	{
-		UINT32 mask = 0x00;
-		if (isolatable && channelIndex >= 0)
-		{
-			mask = 0xFFFFFFFF;
-			if (channelMuteHalf (channelIndex) == half)
-			{
-				mask &= ~channelMuteBit (channelIndex);
-			}
-		}
-		opts.chnMute[half] = mask;
+		mask = 0xFFFFFFFF & ~channelMuteBit (channelIndex);
 	}
+
+	opts.chnMute[0] = mask;
+	opts.chnMute[1] = mask;
 
 	return opts;
 }

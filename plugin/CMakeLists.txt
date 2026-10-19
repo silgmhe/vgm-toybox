@@ -194,7 +194,13 @@ target_sources(VGMToybox PRIVATE
 	Source/chips/NoteExtractor.cpp
 	Source/chips/PokeyDecoder.cpp
 	Source/chips/Saa1099Decoder.cpp
-	Source/chips/Ym2612Decoder.cpp
+	Source/chips/WswanDecoder.cpp
+	Source/chips/OplDecoder.cpp
+	Source/chips/Ay8910Decoder.cpp
+	Source/chips/Rf5c68Decoder.cpp
+	Source/chips/Sn76489Decoder.cpp
+	Source/chips/OpmDecoder.cpp
+	Source/chips/OpnDecoder.cpp
 	Source/backends/BuiltInBackends.cpp
 	Source/backends/libvgm/LibvgmBackend.cpp
 	Source/backends/libvgm/MidiSequenceBuilder.cpp
@@ -324,7 +330,13 @@ add_executable(vgm_mixer_test EXCLUDE_FROM_ALL
 	Source/chips/NoteExtractor.cpp
 	Source/chips/PokeyDecoder.cpp
 	Source/chips/Saa1099Decoder.cpp
-	Source/chips/Ym2612Decoder.cpp
+	Source/chips/WswanDecoder.cpp
+	Source/chips/OplDecoder.cpp
+	Source/chips/Ay8910Decoder.cpp
+	Source/chips/Rf5c68Decoder.cpp
+	Source/chips/Sn76489Decoder.cpp
+	Source/chips/OpmDecoder.cpp
+	Source/chips/OpnDecoder.cpp
 	Source/backends/BuiltInBackends.cpp
 	Source/backends/libvgm/LibvgmBackend.cpp
 	Source/backends/libvgm/MidiSequenceBuilder.cpp
@@ -346,7 +358,13 @@ add_executable(vgm_chip_test EXCLUDE_FROM_ALL
 	Source/chips/NoteExtractor.cpp
 	Source/chips/PokeyDecoder.cpp
 	Source/chips/Saa1099Decoder.cpp
-	Source/chips/Ym2612Decoder.cpp
+	Source/chips/WswanDecoder.cpp
+	Source/chips/OplDecoder.cpp
+	Source/chips/Ay8910Decoder.cpp
+	Source/chips/Rf5c68Decoder.cpp
+	Source/chips/Sn76489Decoder.cpp
+	Source/chips/OpmDecoder.cpp
+	Source/chips/OpnDecoder.cpp
 )
 target_include_directories(vgm_chip_test PRIVATE Source)
 # the chips sources are C++17 (nested namespaces, std::clamp); the plugin target gets the same
@@ -479,6 +497,15 @@ set_tests_properties(core ui PROPERTIES LABELS "unit" TIMEOUT 120)
 if(_toybox_test_env)
 	add_test(NAME engine COMMAND vgm_mixer_test "${_toybox_test_song}" 3)
 	set_tests_properties(engine PROPERTIES LABELS "integration" TIMEOUT 300)
+endif()
+
+# The WonderSwan decoder has no song in test_file/ (that folder is Neo Geo, NES, Sega CD and Mega
+# Drive), so its end-to-end path runs on the generated asset: the register parsing, the note table
+# and the per-channel tracks would otherwise only ever be exercised by the hand-run mixer test.
+set(_toybox_wswan_song "${CMAKE_CURRENT_SOURCE_DIR}/Tests/assets/wswan.vgm")
+if(EXISTS "${_toybox_wswan_song}")
+	add_test(NAME engine.wswan COMMAND vgm_mixer_test "${_toybox_wswan_song}" 2)
+	set_tests_properties(engine.wswan PROPERTIES LABELS "integration" TIMEOUT 120)
 endif()
 
 # One test per script in Tests/scripts, discovered rather than listed: adding a script must not mean

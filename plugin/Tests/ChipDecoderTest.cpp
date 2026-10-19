@@ -11,14 +11,20 @@
 #include <cstdio>
 #include <vector>
 
+#include "chips/Ay8910Decoder.h"
 #include "chips/GbcApuDecoder.h"
 #include "chips/HuC6280Decoder.h"
 #include "chips/K051649Decoder.h"
 #include "chips/NesApuDecoder.h"
 #include "chips/NoteExtractor.h"
 #include "chips/PokeyDecoder.h"
+#include "chips/Rf5c68Decoder.h"
 #include "chips/Saa1099Decoder.h"
-#include "chips/Ym2612Decoder.h"
+#include "chips/Sn76489Decoder.h"
+#include "chips/WswanDecoder.h"
+#include "chips/OplDecoder.h"
+#include "chips/OpmDecoder.h"
+#include "chips/OpnDecoder.h"
 
 namespace
 {
@@ -257,8 +263,8 @@ namespace
 	void startFmNote (Stream& stream, std::uint32_t time, std::uint8_t algorithm,
 					  std::uint8_t op1Level, std::uint8_t op4Level)
 	{
-		stream.at (time, 0x40, op1Level);		// operator 1 total level
-		stream.at (time, 0x4C, op4Level);		// operator 4 total level
+		stream.at (time, 0x40, op1Level);		// channel 0, operator 1 total level
+		stream.at (time, 0x43, op4Level);		// channel 0, operator 4 total level
 		stream.at (time, 0xA0, 0x1D);
 		stream.at (time, 0xA4, 0x22);			// block 4, fnum high 2
 		stream.at (time, 0xB0, algorithm);
@@ -271,7 +277,7 @@ namespace
 		startFmNote (stream, 0, 0x00, 0x7F, 0x00);
 		stream.at (44100, 0x28, 0x00);			// key off channel 1
 
-		const auto notes = runChip<toybox::chips::Ym2612Decoder> (stream, 88200, kYmClock);
+		const auto notes = runChip<toybox::chips::OpnDecoder> (stream, 88200, kYmClock);
 
 		check (notes.size() == 1, "one FM key-on is one note");
 		if (notes.empty())
@@ -291,7 +297,7 @@ namespace
 		Stream stream;
 		startFmNote (stream, 0, 0x00, 0x00, 0x7F);	// the only carrier is silenced
 
-		const auto notes = runChip<toybox::chips::Ym2612Decoder> (stream, 44100, kYmClock);
+		const auto notes = runChip<toybox::chips::OpnDecoder> (stream, 44100, kYmClock);
 
 		check (notes.empty(), "a patch whose carrier is at maximum attenuation is not a note");
 	}
@@ -305,9 +311,9 @@ namespace
 		Stream audible;
 		startFmNote (audible, 0, 0x07, 0x00, 0x7F);
 
-		check (runChip<toybox::chips::Ym2612Decoder> (silent, 44100, kYmClock).empty(),
+		check (runChip<toybox::chips::OpnDecoder> (silent, 44100, kYmClock).empty(),
 			   "algorithm 0 ignores the silent operator 4");
-		check (runChip<toybox::chips::Ym2612Decoder> (audible, 44100, kYmClock).size() == 1,
+		check (runChip<toybox::chips::OpnDecoder> (audible, 44100, kYmClock).size() == 1,
 			   "algorithm 7 outputs operator 1");
 	}
 
@@ -317,7 +323,7 @@ namespace
 		startFmNote (stream, 0, 0x00, 0x7F, 0x00);
 		stream.at (22050, 0xA4, 0x2A);			// block 5, same f-number
 
-		const auto notes = runChip<toybox::chips::Ym2612Decoder> (stream, 44100, kYmClock);
+		const auto notes = runChip<toybox::chips::OpnDecoder> (stream, 44100, kYmClock);
 
 		check (notes.size() == 2, "a block change starts a second note");
 		if (notes.size() == 2)
@@ -334,7 +340,7 @@ namespace
 		stream.at (22050, 0xA0, 0x20);			// fnum 0x21D -> 0x220, about 10 cents up
 		stream.at (44100, 0x28, 0x00);
 
-		toybox::chips::Ym2612Decoder decoder;
+		toybox::chips::OpnDecoder decoder;
 		decoder.reset (kYmClock, 44100.0);
 		const auto performance = toybox::chips::extractPerformance (decoder, stream.writes, 66150);
 
@@ -353,13 +359,13 @@ namespace
 	{
 		Stream stream;
 		startFmNote (stream, 0, 0x00, 0x7F, 0x00);	// channel 1
-		stream.at (0, 1, 0x4C, 0x00);				// channel 4, operator 4
+		stream.at (0, 1, 0x43, 0x00);				// channel 4, operator 4
 		stream.at (0, 1, 0xA0, 0x1D);
 		stream.at (0, 1, 0xA4, 0x22);
 		stream.at (0, 1, 0xB0, 0x00);
 		stream.at (0, 0x28, 0xF4);					// key on channel 4, port select bit
 
-		const auto notes = runChip<toybox::chips::Ym2612Decoder> (stream, 22050, kYmClock);
+		const auto notes = runChip<toybox::chips::OpnDecoder> (stream, 22050, kYmClock);
 
 		check (notes.size() == 2, "both ports sound at once");
 		check (notes.size() == 2 && notes[0].logicalChannel == 0 && notes[1].logicalChannel == 3,
@@ -369,20 +375,226 @@ namespace
 	void testFmDacTakesOverChannelSix (void)
 	{
 		Stream stream;
-		stream.at (0, 1, 0x4E, 0x00);				// channel 6, operator 4 total level
+		stream.at (0, 1, 0x4B, 0x00);				// channel 6, operator 4 total level
 		stream.at (0, 1, 0xA2, 0x1D);
 		stream.at (0, 1, 0xA6, 0x22);
 		stream.at (0, 1, 0xB2, 0x00);
 		stream.at (0, 0x28, 0xF6);					// key on channel 6
 
-		const auto withoutDac = runChip<toybox::chips::Ym2612Decoder> (stream, 22050, kYmClock);
+		const auto withoutDac = runChip<toybox::chips::OpnDecoder> (stream, 22050, kYmClock);
 
 		stream.at (0, 0x2B, 0x80);					// DAC enable
-		const auto withDac = runChip<toybox::chips::Ym2612Decoder> (stream, 22050, kYmClock);
+		const auto withDac = runChip<toybox::chips::OpnDecoder> (stream, 22050, kYmClock);
 
 		check (withoutDac.size() == 1 && withoutDac[0].logicalChannel == 5,
 			   "channel 6 is an FM channel while the DAC is off");
 		check (withDac.empty(), "the DAC replaces channel 6 instead of adding notes");
+	}
+
+	/** A three-channel OPN (YM2203) has no second port: register 0x28 with the port-select bit
+		set addresses channel 3 of a six-channel OPN, which this chip does not have, while the
+		low two bits still select one of its three. */
+	void testOpnThreeChannels (void)
+	{
+		Stream stream;
+		stream.at (0, 0x48, 0x00);					// channel 3 (index 2), operator 1
+		stream.at (0, 0x4B, 0x00);					// channel 3 (index 2), operator 4
+		stream.at (0, 0xA2, 0x1D);
+		stream.at (0, 0xA6, 0x22);
+		stream.at (0, 0xB2, 0x00);
+		stream.at (0, 0x28, 0xF6);					// local channel 2, port bit set
+
+		toybox::chips::OpnDecoder decoder (toybox::chips::OpnDecoder::Variant::ym2203);
+		decoder.reset (kYmClock, 44100.0);
+		const auto notes = toybox::chips::extractNotes (decoder, stream.writes, 22050);
+
+		check (notes.size() == 1 && notes[0].logicalChannel == 2,
+			   "a YM2203 key-on stays inside its three channels");
+		check (notes.size() == 1 && notes[0].note == 69,
+			   "the YM2203 shares the OPN f-number relation");
+	}
+
+	/** ADPCM-A and ADPCM-B are one-shots: the control bit starts them, the chip ends them. The
+		decoder reports a pulse on the drum channel, not a held note. */
+	void testOpnaAdpcmOneShots (void)
+	{
+		Stream stream;
+		stream.at (0, 0, 0x10, 0x04);				// ADPCM-A channel 2 start (bit 2)
+		stream.at (22050, 0, 0x10, 0x00);			// key off every ADPCM-A channel
+		stream.at (22050, 1, 0x00, 0x80);			// ADPCM-B start
+
+		toybox::chips::OpnDecoder decoder (toybox::chips::OpnDecoder::Variant::ym2608);
+		decoder.reset (7987200, 44100.0);
+		const auto notes = toybox::chips::extractNotes (decoder, stream.writes, 44100);
+
+		std::size_t adpcmA = 0;
+		std::size_t adpcmB = 0;
+		for (const auto& note : notes)
+		{
+			if (note.logicalChannel == 8)
+			{
+				++adpcmA;
+			}
+			if (note.logicalChannel == 12)
+			{
+				++adpcmB;
+			}
+		}
+
+		check (adpcmA == 1, "an ADPCM-A start bit is one note on channels 6..11");
+		check (adpcmB == 1, "an ADPCM-B start bit is one note on channel 12");
+	}
+
+	/** The non-B YM2610 has only channels 1, 2, 4 and 5 wired up; the B revision has all six.
+		The same register stream must therefore sound one note on the first and two on the second. */
+	void testOpnbFourChannelVariant (void)
+	{
+		Stream stream;
+		for (int pair = 0; pair < 2; ++pair)
+		{
+			const std::uint8_t base = (std::uint8_t) (pair == 0 ? 0x40 : 0x41);
+			const std::uint8_t op4 = (std::uint8_t) (pair == 0 ? 0x43 : 0x47);
+			const std::uint8_t low = (std::uint8_t) (pair == 0 ? 0xA0 : 0xA1);
+			const std::uint8_t high = (std::uint8_t) (pair == 0 ? 0xA4 : 0xA5);
+			const std::uint8_t algorithm = (std::uint8_t) (pair == 0 ? 0xB0 : 0xB1);
+			stream.at (0, base, 0x00);
+			stream.at (0, op4, 0x00);
+			stream.at (0, low, 0x1D);
+			stream.at (0, high, 0x22);
+			stream.at (0, algorithm, 0x00);
+		}
+		stream.at (0, 0x28, 0xF0);					// channel 1
+		stream.at (0, 0x28, 0xF1);					// channel 2
+
+		toybox::chips::OpnDecoder fourChannel (toybox::chips::OpnDecoder::Variant::ym2610);
+		fourChannel.reset (8000000, 44100.0);
+		const auto four = toybox::chips::extractNotes (fourChannel, stream.writes, 22050);
+
+		toybox::chips::OpnDecoder sixChannel (toybox::chips::OpnDecoder::Variant::ym2610b);
+		sixChannel.reset (8000000, 44100.0);
+		const auto six = toybox::chips::extractNotes (sixChannel, stream.writes, 22050);
+
+		check (four.size() == 1 && four[0].logicalChannel == 1,
+			   "the four-channel OPNB drops channel 0");
+		check (six.size() == 2, "the B revision keys both channels");
+	}
+
+	/** OPM pitch is KC, not an f-number: block 4 with note code 10 is A4 at the reference
+		clock, and a zero operator mask in 0x08 is the key-off. */
+	void testOpmPitchAndKey (void)
+	{
+		Stream stream;
+		stream.at (0, 0x28, 0x4A);			// block 4, note code 10
+		stream.at (0, 0x08, 0x78);			// all four operators of channel 0
+		stream.at (22050, 0x08, 0x00);		// key off
+
+		toybox::chips::OpmDecoder decoder;
+		decoder.reset (3579545, 44100.0);
+		const auto notes = toybox::chips::extractNotes (decoder, stream.writes, 44100);
+
+		check (notes.size() == 1, "one OPM key-on in, one note out");
+		if (notes.empty())
+		{
+			return;
+		}
+
+		check (notes[0].note == 69, "KC 0x4A decodes to A4 at the reference clock");
+		check (notes[0].logicalChannel == 0, "OPM channel 0 is its own track");
+		check (distance (notes[0].endSample, 22050) <= 64, "a zero operator mask ends the note");
+	}
+
+	/** The KC pitch is laid out for 3.579545 MHz; a chip running at twice that plays an octave
+		higher for the same register value. */
+	void testOpmClockScaling (void)
+	{
+		Stream stream;
+		stream.at (0, 0x28, 0x4A);
+		stream.at (0, 0x08, 0x78);
+
+		toybox::chips::OpmDecoder decoder;
+		decoder.reset (7159090, 44100.0);
+		const auto notes = toybox::chips::extractNotes (decoder, stream.writes, 22050);
+
+		check (notes.size() == 1 && notes[0].note == 81,
+			   "a doubled OPM clock lifts the same KC by an octave");
+	}
+
+	/** OPL2: FNUM 0x244 with block 4 is A4 at 3.58 MHz, and bit 5 of B0 is the key. */
+	void testOpl2PitchAndKey (void)
+	{
+		Stream stream;
+		stream.at (0, 0xA0, 0x44);			// FNUM low (0x244)
+		stream.at (0, 0xB0, 0x32);			// FNUM bit 9, block 4, key on
+		stream.at (22050, 0xB0, 0x12);		// same pitch, key off
+
+		toybox::chips::OplDecoder decoder (toybox::chips::OplDecoder::Variant::opl2);
+		decoder.reset (3579545, 44100.0);
+		const auto notes = toybox::chips::extractNotes (decoder, stream.writes, 44100);
+
+		check (notes.size() == 1, "one OPL2 key-on in, one note out");
+		if (notes.empty())
+		{
+			return;
+		}
+
+		check (notes[0].note == 69, "OPL2 FNUM 0x244 block 4 decodes to A4");
+		check (notes[0].logicalChannel == 0, "OPL2 channel 0 is its own track");
+		check (distance (notes[0].endSample, 22050) <= 64, "clearing B0 bit 5 ends the note");
+	}
+
+	/** OPLL puts FNUM bit 8 and the block in 0x20..0x28 and its reference octave is one lower,
+		so the same A4 needs FNUM 0x122 there. */
+	void testOpllPitch (void)
+	{
+		Stream stream;
+		stream.at (0, 0x10, 0x22);			// FNUM low (0x122)
+		stream.at (0, 0x20, 0x19);			// FNUM bit 8, block 4, key on
+		stream.at (11025, 0x30, 0x20);		// key off
+
+		toybox::chips::OplDecoder decoder (toybox::chips::OplDecoder::Variant::opll);
+		decoder.reset (3579545, 44100.0);
+		const auto notes = toybox::chips::extractNotes (decoder, stream.writes, 44100);
+
+		check (notes.size() == 1 && notes[0].note == 69,
+			   "OPLL FNUM 0x122 block 4 decodes to A4");
+		check (notes.size() == 1 && distance (notes[0].endSample, 11025) <= 64,
+			   "0x30 bit 5 is the OPLL key-off");
+	}
+
+	/** An OPL3's second register port addresses the second nine-channel bank, which is the
+		ninth track after the first one. */
+	void testOpl3SecondBank (void)
+	{
+		Stream stream;
+		stream.at (0, 1, 0xA0, 0x44);		// bank 1, channel 0
+		stream.at (0, 1, 0xB0, 0x32);		// key on
+		stream.at (11025, 1, 0xB0, 0x12);	// key off
+
+		toybox::chips::OplDecoder decoder (toybox::chips::OplDecoder::Variant::opl3);
+		decoder.reset (14318180, 44100.0);
+		const auto notes = toybox::chips::extractNotes (decoder, stream.writes, 44100);
+
+		check (notes.size() == 1 && notes[0].logicalChannel == 9,
+			   "the OPL3 second port plays channel 9");
+		check (notes.size() == 1 && notes[0].note == 69,
+			   "the OPL3 clock is compensated by its divisor");
+	}
+
+	/** Rhythm bits are level-triggered: setting bit 4 of 0xBD once is one bass-drum hit on the
+		first rhythm track, which is channel 9 of an OPL2. */
+	void testOplRhythm (void)
+	{
+		Stream stream;
+		stream.at (0, 0xBD, 0x30);			// rhythm enable + bass drum
+		stream.at (22050, 0xBD, 0x20);		// drum bit cleared
+
+		toybox::chips::OplDecoder decoder (toybox::chips::OplDecoder::Variant::opl2);
+		decoder.reset (3579545, 44100.0);
+		const auto notes = toybox::chips::extractNotes (decoder, stream.writes, 44100);
+
+		check (notes.size() == 1 && notes[0].logicalChannel == 9,
+			   "an OPL2 rhythm bit is one hit on channel 9");
+		check (notes.size() == 1 && notes[0].isDrum, "the rhythm track is a drum track");
 	}
 
 	// --- Game Boy DMG -------------------------------------------------------------------------
@@ -912,8 +1124,366 @@ namespace
 		stream.at (0, 0x01, 0x1F);			// AUDC1 bit 4: a DC level, not a tone
 
 		check (runPokey (stream, 22050).empty(), "volume-only mode makes no note");
-	}
-}
+		}
+
+		// ---- WonderSwan ----
+
+		std::vector<NoteEvent> runWswan (const Stream& stream, std::uint32_t totalSamples,
+										 std::uint32_t clock = 3072000)
+		{
+			toybox::chips::WswanDecoder decoder;
+			decoder.reset (clock, 44100.0);
+			return toybox::chips::extractNotes (decoder, stream.writes, totalSamples);
+		}
+
+		void testWswanWaveNote (void)
+		{
+			Stream stream;
+			stream.at (0, 0x80, 0x26);			// channel 0 divider 1830
+			stream.at (0, 0x81, 0x07);
+			stream.at (0, 0x88, 0xFF);			// full volume on both sides
+			stream.at (0, 0x90, 0x01);			// channel 0 on
+
+			const auto notes = runWswan (stream, 22050);
+
+			check (notes.size() == 1, "one WonderSwan wave note");
+			if (notes.empty())
+			{
+				return;
+			}
+
+			// 3072000 / (32 * (2048 - 1830)) = 440.4 Hz
+			check (notes[0].note == 69, "divider 1830 is A4");
+			check (notes[0].logicalChannel == 0, "the note is on channel 0");
+			check (notes[0].family == toybox::chips::Family::wsWave,
+				   "the note carries the WonderSwan family");
+			check (notes[0].velocity == 127, "volume 15 is full velocity");
+
+			const auto fallback = runWswan (stream, 22050, 0);
+			check (fallback.size() == 1 && fallback[0].note == 69,
+				   "a header without a clock falls back to 3.072 MHz");
+		}
+
+		void testWswanEnableBitEndsTheNote (void)
+		{
+			Stream stream;
+			stream.at (0, 0x80, 0x26);
+			stream.at (0, 0x81, 0x07);
+			stream.at (0, 0x88, 0xFF);
+			stream.at (0, 0x90, 0x01);
+			stream.at (11025, 0x90, 0x00);		// clear the enable bit: no key-off register exists
+
+			const auto notes = runWswan (stream, 22050);
+
+			check (notes.size() == 1, "clearing the enable bit ends the note");
+			if (notes.empty())
+			{
+				return;
+			}
+
+			// the extractor polls every 64 samples, so the end lands on the next poll
+			check (notes[0].endSample >= 11025 && notes[0].endSample <= 11089,
+				   "the note ends where the bit was cleared");
+		}
+
+		void testWswanSilentWithoutVolume (void)
+		{
+			Stream stream;
+			stream.at (0, 0x80, 0x26);
+			stream.at (0, 0x81, 0x07);
+			stream.at (0, 0x88, 0x00);			// volume 0
+			stream.at (0, 0x90, 0x01);
+
+			check (runWswan (stream, 22050).empty(), "volume 0 makes no note");
+		}
+
+		void testWswanNoiseIsADrum (void)
+		{
+			Stream stream;
+			stream.at (0, 0x86, 0x00);			// channel 3 divider 0: the slowest noise rate
+			stream.at (0, 0x87, 0x00);
+			stream.at (0, 0x8B, 0xFF);
+			stream.at (0, 0x90, 0x88);			// channel 3 on, noise on
+
+			const auto notes = runWswan (stream, 22050);
+
+			check (notes.size() == 1, "the noise generator makes one drum note");
+			if (notes.empty())
+			{
+				return;
+			}
+
+			check (notes[0].note == 38, "the slowest noise rate is the base drum key");
+			check (notes[0].isDrum, "the noise channel is a drum");
+			check (notes[0].family == toybox::chips::Family::wsNoise,
+				   "the note carries the noise family");
+
+			Stream stopped;
+			stopped.at (0, 0x86, 0xFF);			// 0xFFFF: the core stops the LFSR too
+			stopped.at (0, 0x87, 0xFF);
+			stopped.at (0, 0x8B, 0xFF);
+			stopped.at (0, 0x90, 0x88);
+
+			check (runWswan (stopped, 22050).empty(), "a stopped noise divider is silent");
+		}
+
+		void testWswanNoiseRatePicksTheDrumKey (void)
+		{
+			Stream slow;
+			slow.at (0, 0x86, 0x00);
+			slow.at (0, 0x87, 0x00);
+			slow.at (0, 0x8B, 0xFF);
+			slow.at (0, 0x90, 0x88);
+
+			Stream fast = slow;
+			fast.at (0, 0x86, 0xFF);			// channel 3 divider 2047: the fastest rate
+			fast.at (0, 0x87, 0x07);
+
+			const auto slowNotes = runWswan (slow, 22050);
+			const auto fastNotes = runWswan (fast, 22050);
+
+			check (slowNotes.size() == 1 && fastNotes.size() == 1, "one drum note each");
+			if (slowNotes.empty() || fastNotes.empty())
+			{
+				return;
+			}
+
+			check (fastNotes[0].note > slowNotes[0].note + 12, "a faster generator lands on a higher key");
+		}
+
+		void testWswanSweepMovesThePitch (void)
+		{
+			Stream stream;
+			stream.at (0, 0x84, 0x26);			// channel 2 divider 1830 = A4
+			stream.at (0, 0x85, 0x07);
+			stream.at (0, 0x8A, 0xFF);
+			stream.at (0, 0x8C, 0xFF);			// sweep step -1
+			stream.at (0, 0x8D, 0x00);			// one step every 8192 clocks (~118 samples)
+			stream.at (0, 0x90, 0x44);			// channel 2 on, sweep on
+
+			const auto notes = runWswan (stream, 22050);
+
+			check (notes.size() > 2, "a running sweep walks the pitch down through several notes");
+			if (notes.size() < 2)
+			{
+				return;
+			}
+
+			check (notes.back().note < notes.front().note - 6, "a negative step lowers the pitch");
+		}
+
+		void testWswanVoiceIsAOneShot (void)
+		{
+			Stream stream;
+			stream.at (0, 0x94, 0xFF);			// PCM volume 12/12
+			stream.at (0, 0x90, 0x22);			// channel 1 on, voice mode
+			stream.at (441, 0x89, 0x80);		// a sound DMA byte
+
+			const auto notes = runWswan (stream, 22050);
+
+			check (notes.size() == 1, "the DMA stream is one trigger, not one note per byte");
+			if (notes.empty())
+			{
+				return;
+			}
+
+			check (notes[0].note == 60, "the voice is a C4 marker");
+			check (notes[0].endSample <= 4480, "the marker lasts about 100 ms");
+			check (notes[0].family == toybox::chips::Family::adpcmDrum, "the voice is a sample");
+		}
+
+		// ---- SN76489 ----
+
+		std::vector<NoteEvent> runSn (const Stream& stream, std::uint32_t totalSamples,
+									  std::uint32_t clock = 3579545)
+		{
+			toybox::chips::Sn76489Decoder decoder;
+			decoder.reset (clock, 44100.0);
+			return toybox::chips::extractNotes (decoder, stream.writes, totalSamples);
+		}
+
+		/** Channel 0, divider 254: 3579545 / (32 * 254) = 440 Hz. */
+		void testSnToneNote (void)
+		{
+			Stream stream;
+			stream.at (0, 0x8E, 0x00);			// latch: channel 0, tone, low nibble 0xE
+			stream.at (0, 0x0F, 0x00);			// high six bits: divider 0x0FE
+			stream.at (0, 0x90, 0x00);			// channel 0, volume: attenuation 0
+			stream.at (22050, 0x9F, 0x00);		// attenuation 15 ends the note
+
+			const auto notes = runSn (stream, 44100);
+
+			check (notes.size() == 1, "one SN76489 tone in, one note out");
+			if (notes.empty())
+			{
+				return;
+			}
+
+			check (notes[0].note == 69, "SN76489 divider 254 decodes to A4");
+			check (notes[0].logicalChannel == 0, "SN76489 channel 0 is its own track");
+			check (distance (notes[0].endSample, 22050) <= 64, "attenuation 15 ends the note");
+		}
+
+		/** The divider is written in two bytes; a lone latch byte must not be read as a whole
+			divider, or the second write would shorten the note by an octave instead. */
+		void testSnDividerNeedsBothBytes (void)
+		{
+			Stream stream;
+			stream.at (0, 0xAE, 0x00);			// channel 1, tone, low nibble 0xE
+			stream.at (0, 0x0F, 0x00);			// high six bits: divider 0x0FE
+			stream.at (0, 0xB0, 0x00);			// channel 1 volume
+
+			const auto notes = runSn (stream, 22050);
+
+			check (notes.size() == 1 && notes[0].note == 69,
+				   "the high divider byte belongs to the latch channel");
+			check (notes.size() == 1 && notes[0].logicalChannel == 1,
+				   "SN76489 channel 1 is its own track");
+		}
+
+		/** The noise generator has no pitch: its mode picks a GM drum key. */
+		void testSnNoiseIsADrum (void)
+		{
+			Stream stream;
+			stream.at (0, 0xE4, 0x00);			// channel 3: noise, white, rate 0
+			stream.at (0, 0xF0, 0x00);			// channel 3 volume
+
+			const auto notes = runSn (stream, 22050);
+
+			check (notes.size() == 1, "one SN76489 noise mode in, one drum note out");
+			if (notes.empty())
+			{
+				return;
+			}
+
+			check (notes[0].note >= 35 && notes[0].note <= 81, "the noise mode lands on a drum key");
+			check (notes[0].isDrum, "SN76489 channel 3 is a drum track");
+			check (notes[0].family == toybox::chips::Family::sn76489Noise, "the noise has its own family");
+		}
+
+		/** Sega parts stop at divider 0 instead of folding it to 0x400, so it must be silence. */
+		void testSnZeroDividerIsSilent (void)
+		{
+			Stream stream;
+			stream.at (0, 0x80, 0x00);			// divider low nibble 0
+			stream.at (0, 0x00, 0x00);			// divider high bits 0
+			stream.at (0, 0x90, 0x00);			// volume
+
+			check (runSn (stream, 22050).empty(), "SN76489 divider 0 is silent");
+		}
+
+		// ---- AY-3-8910 ----
+
+		std::vector<NoteEvent> runAy (const Stream& stream, std::uint32_t totalSamples,
+									  std::uint32_t clock = 1789773)
+		{
+			toybox::chips::Ay8910Decoder decoder;
+			decoder.reset (clock, 44100.0);
+			return toybox::chips::extractNotes (decoder, stream.writes, totalSamples);
+		}
+
+		/** Channel A, divider 254: 1789773 / (16 * 254) = 440 Hz. */
+		void testAyToneNote (void)
+		{
+			Stream stream;
+			stream.at (0, 0x00, 0xFE);			// tone period low
+			stream.at (0, 0x01, 0x00);			// tone period high, 12 bits
+			stream.at (0, 0x07, 0x3E);			// tone A on, everything else off
+			stream.at (0, 0x08, 0x0F);			// channel A amplitude 15
+
+			const auto notes = runAy (stream, 22050);
+
+			check (notes.size() == 1, "one AY tone in, one note out");
+			if (notes.empty())
+			{
+				return;
+			}
+
+			check (notes[0].note == 69, "AY divider 254 decodes to A4");
+			check (notes[0].logicalChannel == 0, "AY channel A is its own track");
+			check (notes[0].family == toybox::chips::Family::aySquare, "the AY square has its own family");
+		}
+
+		/** A set mixer bit disables the tone: the register is an enable mask, not a volume. */
+		void testAyMixerBitEndsTheNote (void)
+		{
+			Stream stream;
+			stream.at (0, 0x00, 0xFE);
+			stream.at (0, 0x01, 0x00);
+			stream.at (0, 0x07, 0x3E);
+			stream.at (0, 0x08, 0x0F);
+			stream.at (11025, 0x07, 0x3F);		// disable tone A
+
+			const auto notes = runAy (stream, 22050);
+
+			check (notes.size() == 1 && distance (notes[0].endSample, 11025) <= 64,
+				   "setting the mixer bit ends the note");
+		}
+
+		void testAySilentAmplitude (void)
+		{
+			Stream stream;
+			stream.at (0, 0x00, 0xFE);
+			stream.at (0, 0x01, 0x00);
+			stream.at (0, 0x07, 0x3E);
+			stream.at (0, 0x08, 0x00);			// amplitude 0
+
+			check (runAy (stream, 22050).empty(), "AY amplitude 0 is silent");
+		}
+
+		// ---- RF5C68 ----
+
+		std::vector<NoteEvent> runRf5c (const Stream& stream, std::uint32_t totalSamples)
+		{
+			toybox::chips::Rf5c68Decoder decoder;
+			decoder.reset (12500000, 44100.0);
+			return toybox::chips::extractNotes (decoder, stream.writes, totalSamples);
+		}
+
+		/** Bit 0 of the channel mask cleared enables channel 0; the sample has no pitch, so the
+			note is a C4 marker closed by the decoder's own gate. */
+		void testRf5cChannelIsAOneShot (void)
+		{
+			Stream stream;
+			stream.at (0, 0x08, 0xFE);			// channel 0 enabled
+
+			const auto notes = runRf5c (stream, 44100);
+
+			check (notes.size() == 1, "one RF5C68 channel enable is one sample note");
+			if (notes.empty())
+			{
+				return;
+			}
+
+			check (notes[0].note == 60, "the sample is a C4 marker");
+			check (notes[0].logicalChannel == 0, "RF5C68 channel 0 is its own track");
+			check (notes[0].isDrum, "the sample is a drum track");
+			check (distance (notes[0].endSample, 3528) <= 64, "a driver that never disables still ends");
+		}
+
+		void testRf5cMaskSelectsTheChannel (void)
+		{
+			Stream stream;
+			stream.at (0, 0x08, 0xFD);			// channel 1 only
+
+			const auto notes = runRf5c (stream, 22050);
+
+			check (notes.size() == 1 && notes[0].logicalChannel == 1,
+				   "only the unmasked channel plays");
+		}
+
+		void testRf5cMasterSwitchEndsTheNote (void)
+		{
+			Stream stream;
+			stream.at (0, 0x08, 0xFE);			// channel 0 enabled
+			stream.at (1323, 0x07, 0x00);		// sound output off before the gate expires
+
+			const auto notes = runRf5c (stream, 22050);
+
+			check (notes.size() == 1 && distance (notes[0].endSample, 1323) <= 64,
+				   "the master switch ends a sounding channel");
+		}
+		}
 
 int main (void)
 {
@@ -935,6 +1505,17 @@ int main (void)
 	testFmPitchBendFollowsTheFnumber();
 	testFmSecondPortIsASeparateChannel();
 	testFmDacTakesOverChannelSix();
+	testOpnThreeChannels();
+	testOpnaAdpcmOneShots();
+	testOpnbFourChannelVariant();
+
+	testOpmPitchAndKey();
+	testOpmClockScaling();
+
+	testOpl2PitchAndKey();
+	testOpllPitch();
+	testOpl3SecondBank();
+	testOplRhythm();
 
 	testGbPulseNote();
 	testGbLengthCounterEndsTheNote();
@@ -963,6 +1544,27 @@ int main (void)
 	testPokeyClockModeChangesThePitch();
 	testPokeyJoinedPairIsOneVoice();
 	testPokeyVolumeOnlyIsSilent();
+
+	testWswanWaveNote();
+	testWswanEnableBitEndsTheNote();
+	testWswanSilentWithoutVolume();
+	testWswanNoiseIsADrum();
+	testWswanNoiseRatePicksTheDrumKey();
+	testWswanSweepMovesThePitch();
+	testWswanVoiceIsAOneShot();
+
+	testSnToneNote();
+	testSnDividerNeedsBothBytes();
+	testSnNoiseIsADrum();
+	testSnZeroDividerIsSilent();
+
+	testAyToneNote();
+	testAyMixerBitEndsTheNote();
+	testAySilentAmplitude();
+
+	testRf5cChannelIsAOneShot();
+	testRf5cMaskSelectsTheChannel();
+	testRf5cMasterSwitchEndsTheNote();
 
 	std::printf ("Result    : %s\n", failures == 0 ? "PASS" : "FAILURES");
 	return failures == 0 ? 0 : 1;
