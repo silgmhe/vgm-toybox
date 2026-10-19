@@ -255,14 +255,23 @@ YM2610 的 SSG 寄存器布局与 YM2149 一致，`Ym2610Decoder` 与未来的 `
 | 1. `VgmCommandReader` | 已完成 | `backends/libvgm/VgmCommandReader.{h,cpp}`；`MidiSequenceBuilder` 只看 `VgmCommand` |
 | 2. `MidiEncoder` | 未开始 | 仍在 `MidiSequenceBuilder` 内 |
 | 3. `NoteExtractor` + `NoteTable` | 已完成（2A03 先行） | `chips/NoteExtractor.{h,cpp}`、`chips/ChipTypes.h` |
-| 4. `Ym2612Decoder` | 未开始 | — |
+| 4. `Ym2612Decoder` | 已完成首版 | `chips/Ym2612Decoder.{h,cpp}`：算法→载波表、总电平（TL）→力度、DAC 接管通道 6 |
 | 5. `NesApuDecoder` | 已完成首版 | `chips/NesApuDecoder.{h,cpp}`，帧序列器、长度/线性计数器、包络、扫频、噪声、DMC |
 | 6. `Ym2610Decoder` | 未开始 | — |
-| 7. 收缩旧 `Builder` | 部分 | 旧 `writeNes` / `NesState` 已删除（`MidiSequenceBuilder.cpp` 1467 → 1389 行） |
+| 7. 收缩旧 `Builder` | 部分 | 旧 `writeNes` / `NesState`、YM2612 的 `writeFm` 分支已删除（`MidiSequenceBuilder.cpp` 1467 → 1295 行） |
 
 2A03 的验收方式是新的 `vgm_chip_test`（`plugin/Tests/ChipDecoderTest.cpp`）：只链接 `Source/chips`，不链接 libvgm，用寄存器写断言音符与起止采样。期间修正了两处旧实现不可能有、新实现必须有的细节：
 
 - 帧序列器步长要按采样率换算（`7457 * sampleRate / cpuClock`），而不是直接用 CPU 周期数；
 - 长度计数器寄存器存的是索引，要查 `kLengthTable`；`$4015` 写 0 才是真正的键控关闭（写 `$4003` 只会重新装载长度）。
 
-后续接 YM2612 / YM2610 时，`NoteExtractor` 与 `NesApuDecoder` 都是模板：新的 decoder 只需回答 `channelState()` 与 `noteTable()`。
+YM2612 的验收同样走 `vgm_chip_test`，并补回了旧实现有、两段式重构时差点丢掉的音高曲线：
+
+- 音高来自 `fnum × clock / (144 × 2^(20-block))`，时钟取自 VGM 头，超频曲目不会跑调；
+- 是否成音符由算法决定：算法 0-3 只有算子 4 是载波，4 有 2 个，5/6 有 3 个，7 是 4 个之和；取载波里最小的 TL，`0x7F` 视为静音（不发声的音色不再产生空音符）；
+- `0x2B` 置 DAC 后通道 6 不再是 FM 通道，避免与 `writeDac` 的鼓标记重复计音符；
+- `0x28` 的第二端口位映射到通道 4-6，与通道 1-3 一样独立成轨。
+
+`NoteExtractor` 现在同时返回 `PitchEvent`：同一音符内音高变化（颤音、滑音）不再重新触发，而是写成弯音；起始音符带自己的音分偏移，顺带清掉上一个音符留下的弯音。老实现在每次 `0xA0-0xA6` 写入时都发一次弯音，新实现按 4 音分的死区过滤，事件量从每秒数百条降到实际音高变化的次数。
+
+后续接 YM2610 时，`NoteExtractor` 与 `NesApuDecoder` 都是模板：新的 decoder 只需回答 `channelState()` 与 `noteTable()`。

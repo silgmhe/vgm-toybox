@@ -8,6 +8,7 @@
 
 #include "chips/NesApuDecoder.h"
 #include "chips/NoteExtractor.h"
+#include "chips/Ym2612Decoder.h"
 
 #include "emu/SoundDevs.h"
 
@@ -197,8 +198,8 @@ namespace
 					break;
 				case 0x52:
 				case 0x53:
-					writeFm (deviceFor (DEVID_YM2612, 0), command.command == 0x53, command.addr,
-							 command.data, time, false, 6);
+					writeYm2612 (deviceFor (DEVID_YM2612, 0), command.command == 0x53,
+								 command.addr, command.data, time, command.sampleTime);
 					break;
 				case 0x54:
 					writeOpm (deviceFor (DEVID_YM2151, 0), command.addr, command.data, time);
@@ -288,8 +289,8 @@ namespace
 					break;
 				case 0xA2:
 				case 0xA3:
-					writeFm (deviceFor (DEVID_YM2612, 1), command.command == 0xA3, command.addr,
-							 command.data, time, false, 6);
+					writeYm2612 (deviceFor (DEVID_YM2612, 1), command.command == 0xA3,
+								 command.addr, command.data, time, command.sampleTime);
 					break;
 				case 0xA8:
 				case 0xA9:
@@ -304,6 +305,7 @@ namespace
 			// chips with a real state machine are decoded in one pass after the stream is read:
 			// their note boundaries come from the chip's own counters, not from a register write
 			flushNes (lastSampleTime);
+			flushYm2612 (lastSampleTime);
 
 			if (events.empty())
 			{
@@ -342,6 +344,39 @@ namespace
 			nesDevices[device->id] = device;
 		}
 
+		/** Emits the notes a decoder produced, through the track each chip channel maps to.
+
+			The bends go in after the notes so that, at equal timestamps, the stable sort keeps
+			every note-on ahead of the bend that belongs to it. */
+		void emitDecodedNotes (const PLR_DEV_INFO* device,
+							   const chips::ExtractedPerformance& performance)
+		{
+			for (const auto& note : performance.notes)
+			{
+				const int track = trackFor (device, note.logicalChannel);
+				if (track < 0)
+				{
+					continue;
+				}
+
+				const double start = (double) note.startSample / kVgmRate;
+				const double end = (double) note.endSample / kVgmRate;
+				noteOn (track, start, note.note, note.velocity);
+				noteOff (track, end, note.note);
+			}
+
+			for (const auto& bend : performance.bends)
+			{
+				const int track = trackFor (device, bend.logicalChannel);
+				if (track < 0)
+				{
+					continue;
+				}
+
+				pitchBend (track, (double) bend.sampleTime / kVgmRate, (double) bend.cents / 100.0);
+			}
+		}
+
 		void flushNes (std::uint32_t totalSamples)
 		{
 			for (auto& entry : nesWrites)
@@ -360,24 +395,63 @@ namespace
 				chips::NesApuDecoder decoder;
 				decoder.reset (clock, (double) kVgmRate);
 
-				const auto notes = chips::extractNotes (decoder, entry.second, totalSamples);
-				for (const auto& note : notes)
-				{
-					const int track = trackFor (device->second, note.logicalChannel);
-					if (track < 0)
-					{
-						continue;
-					}
-
-					const double start = (double) note.startSample / kVgmRate;
-					const double end = (double) note.endSample / kVgmRate;
-					noteOn (track, start, note.note, note.velocity);
-					noteOff (track, end, note.note);
-				}
+				emitDecodedNotes (device->second,
+								  chips::extractPerformance (decoder, entry.second, totalSamples));
 			}
 
 			nesWrites.clear();
 			nesDevices.clear();
+		}
+
+		/** Buffers one YM2612 register write. The DAC keeps writing its own marker track; the
+			decoder needs register 0x2B only to know that channel 6 stopped being an FM channel. */
+		void writeYm2612 (const PLR_DEV_INFO* device, bool port1, std::uint8_t reg,
+						  std::uint8_t data, double time, std::uint32_t sampleTime)
+		{
+			if (device == nullptr)
+			{
+				return;
+			}
+
+			if (! port1 && (reg == 0x2A || reg == 0x2B))
+			{
+				writeDac (device, reg, data, time);
+			}
+
+			chips::RegisterWrite write;
+			write.deviceId = device->id;
+			write.reg = reg;
+			write.value = data;
+			write.port = port1 ? 1 : 0;
+			write.sampleTime = sampleTime;
+			ymWrites[device->id].push_back (write);
+			ymDevices[device->id] = device;
+		}
+
+		void flushYm2612 (std::uint32_t totalSamples)
+		{
+			for (auto& entry : ymWrites)
+			{
+				const auto device = ymDevices.find (entry.first);
+				if (device == ymDevices.end() || device->second == nullptr)
+				{
+					continue;
+				}
+
+				const std::uint32_t clock = (device->second->devCfg != nullptr
+											 && device->second->devCfg->clock > 0)
+												? device->second->devCfg->clock
+												: 7670453u;
+
+				chips::Ym2612Decoder decoder;
+				decoder.reset (clock, (double) kVgmRate);
+
+				emitDecodedNotes (device->second,
+								  chips::extractPerformance (decoder, entry.second, totalSamples));
+			}
+
+			ymWrites.clear();
+			ymDevices.clear();
 		}
 
 		const PLR_DEV_INFO* deviceFor (DEV_ID type, int instance) const
@@ -918,14 +992,6 @@ namespace
 				return;
 			}
 
-			// The YM2612 DAC is written through port 0 registers 0x2A/0x2B. It is a sample
-			// stream rather than an FM operator, so it has its own marker track.
-			if (device->type == DEVID_YM2612 && ! port1 && (addr == 0x2A || addr == 0x2B))
-			{
-				writeDac (device, addr, data, time);
-				return;
-			}
-
 			FmState& state = fmStates[device->id];
 			const bool isB = device->devCfg != nullptr && (device->devCfg->flags & 0x01) != 0;
 			const bool fourChannel = isYm2610 && ! isB;
@@ -1360,6 +1426,9 @@ namespace
 		// 2A03 writes, kept until the stream ends so the decoder can run its frame sequencer
 		std::map<std::uint32_t, std::vector<chips::RegisterWrite>> nesWrites;
 		std::map<std::uint32_t, const PLR_DEV_INFO*> nesDevices;
+		// YM2612 writes: a key-on alone cannot say whether the patch lets sound through
+		std::map<std::uint32_t, std::vector<chips::RegisterWrite>> ymWrites;
+		std::map<std::uint32_t, const PLR_DEV_INFO*> ymDevices;
 		std::map<std::uint32_t, SnState> snStates;
 		std::map<std::uint32_t, AyState> ayStates;
 		std::map<std::uint32_t, FmState> fmStates;

@@ -82,4 +82,13 @@ struct NoteEvent
 	bool isDrum = false;
 };
 
+/** A pitch inside a note, in cents from its nearest MIDI note. Vibrato and slides write the
+	pitch registers every frame, so a note's pitch is a curve the note itself cannot carry. */
+struct PitchEvent
+{
+	std::uint32_t sampleTime = 0;
+	int logicalChannel = 0;
+	std::int16_t cents = 0;
+};
+
 } // namespace toybox::chips

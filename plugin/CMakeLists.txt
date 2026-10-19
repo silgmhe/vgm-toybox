@@ -189,6 +189,7 @@ target_sources(VGMToybox PRIVATE
 	Source/playback/SessionState.cpp
 	Source/chips/NesApuDecoder.cpp
 	Source/chips/NoteExtractor.cpp
+	Source/chips/Ym2612Decoder.cpp
 	Source/backends/BuiltInBackends.cpp
 	Source/backends/libvgm/LibvgmBackend.cpp
 	Source/backends/libvgm/MidiSequenceBuilder.cpp
@@ -313,6 +314,7 @@ add_executable(vgm_mixer_test EXCLUDE_FROM_ALL
 	Source/playback/SessionState.cpp
 	Source/chips/NesApuDecoder.cpp
 	Source/chips/NoteExtractor.cpp
+	Source/chips/Ym2612Decoder.cpp
 	Source/backends/BuiltInBackends.cpp
 	Source/backends/libvgm/LibvgmBackend.cpp
 	Source/backends/libvgm/MidiSequenceBuilder.cpp
@@ -329,6 +331,7 @@ add_executable(vgm_chip_test EXCLUDE_FROM_ALL
 	Tests/ChipDecoderTest.cpp
 	Source/chips/NesApuDecoder.cpp
 	Source/chips/NoteExtractor.cpp
+	Source/chips/Ym2612Decoder.cpp
 )
 target_include_directories(vgm_chip_test PRIVATE Source)
 # the chips sources are C++17 (nested namespaces, std::clamp); the plugin target gets the same
