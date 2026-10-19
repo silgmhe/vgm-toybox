@@ -137,6 +137,9 @@ jobs:
       #   vgm_ui_test     the button pixels (shadow, hairline, focus ring, glow, press)
       #   vgm_app_test    the window itself: constructed headless, laid out, dumped as text
       #   vgm_mixer_test  the sample-exact render/mix gate, on the song the repository ships
+      #   vgm_chip_test   the chip decoders: register writes in, notes out
+      #   vgm_opn_test    the YM2612 decoder against libvgm's own YM2612 core (expectations from
+      #                   the chip rather than from our reading of its register map)
       #
       # ... and the window scripts, which load that same song.
       if: startsWith(matrix.os, 'windows')
@@ -153,7 +156,7 @@ jobs:
       run: |
         cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_OSX_ARCHITECTURES="x86_64;arm64"
         cmake --build build --parallel 3
-        cmake --build build --target vgm_core_test vgm_ui_test vgm_app_test vgm_mixer_test --parallel 3
+        cmake --build build --target vgm_chip_test vgm_opn_test vgm_core_test vgm_ui_test vgm_app_test vgm_mixer_test --parallel 3
 
     - name: Run the console tests (macOS)
       if: matrix.os == 'macos-15'
@@ -167,7 +170,7 @@ jobs:
       run: |
         cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
         cmake --build build --parallel 3
-        cmake --build build --target vgm_core_test vgm_ui_test vgm_app_test vgm_mixer_test --parallel 3
+        cmake --build build --target vgm_chip_test vgm_opn_test vgm_core_test vgm_ui_test vgm_app_test vgm_mixer_test --parallel 3
 
     - name: Run the console tests (Linux)
       if: startsWith(matrix.os, 'ubuntu')

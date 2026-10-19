@@ -556,7 +556,19 @@ void render (const playback::OutputBusBuffers* buses, int numBuses, int numSampl
 
 **尚未自动化**（需要每颗芯片一份合成 VGM，成本较高，暂靠 REAPER 手工验证）：YM2610 的 key-on/off、FNUM/BLOCK、pan、ADPCM-A trigger，非 B FM 通道映射（1/2/4/5）与 B 的 6 通道，one-shot 的 C4 trigger 与 gate，时钟换算（各芯片 master clock / 分频）。
 
-### 10.2 窗口脚本
+这些用例只回答“解码器是否和自己写下的常量一致”；常量本身对不对，由 §10.2 回答。
+
+### 10.2 期望值来自芯片（`vgm_opn_test`）
+
+`vgm_chip_test` 里的 FM 用例把寄存器含义写成常量——这正是 `0x40-0x4F` 那处 bug 能活下来的原因：用例和解码器出自同一个错误读法（`0x43` 当“通道 0 的算子 4”），两边互相印证，一起和硬件不符。`plugin/Tests/OpnCoreOracleTest.cpp`（`vgm_opn_test`）把期望值换成硬件：libvgm 自己的 YM2612 核播放同一串寄存器写，用核的静音掩码一次只放一个通道并测 RMS，解码器的 `gate` 必须和“这个通道有没有声音”一致。
+
+- 两个地址被直接点名。写 `0x43`：芯片不出声，解码器也不许出声（旧写法会把它记成通道 0 的算子 4，凭空多一个音）。写 `0x4C`：芯片出声，解码器必须承认（旧写法把它记到通道 3，真正的载波停在 `0x7F`——FM5 有音频没音符的那个 bug）。
+- 8 种算法 × 4 个“只开一个算子” × 6 个通道 = 192 次比较，端口 1 的偏移在每一次里都被走过；再叠 32 个随机 patch（同一次里各通道算法/音量都不同，写错通道才会暴露），共 384 次，其中约 220 次真的有声。
+- 只比 `gate`，不比音符：gate 是解码器对“有没有声音”的断言，音符提取器只决定这个断言活多久；gate 错了，音符一定错。
+- 它已被验证抓得住这个 bug：把 `totalLevel` 的位序改回旧写法，`vgm_opn_test` 立刻变红（`0x43` 幽灵音 + 每个“算子 4 是载波”的用例都报“芯片 rms 5778.5，解码器 gate off”），改回来即绿。
+- 它链接 libvgm（不是“只测 chips”的目标），运行 0.2 s，所以默认不构建、但进 CTest：`ctest -R opn`。
+
+### 10.3 窗口脚本
 
 `plugin/Tests/scripts/midi.txt`（CMake 自动注册为 `app.midi`，测试曲目同 `load-and-play.txt`）：
 
@@ -575,7 +587,7 @@ void render (const playback::OutputBusBuffers* buses, int numBuses, int numSampl
 
 `AppHarnessTest` 的 `click`/`toggle` 命令在修复前只 `triggerClick()` 再 `settle()`：`triggerClick()` 只是投递，自翻转按钮在投递的处理器里改状态并直接返回、不调 `onClick`，所以开关看起来按下了、值从未写进 store（实测：`settings.midi.bend` 一直是 true）。现在命令投递后跑 `runDispatchLoopUntil()`，脚本里的开关才真的生效。
 
-### 10.3 宿主集成
+### 10.4 宿主集成
 
 - 在 REAPER 中加载 VST3，启用插件 MIDI 输出，路由到 MIDI 轨，录音（用户实测）；
 - 验证 4 个 FM 通道、ADPCM-A trigger、ADPCM-B trigger 的时间/通道；
@@ -739,6 +751,8 @@ void render (const playback::OutputBusBuffers* buses, int numBuses, int numSampl
 | 2026-10-19 | MIDI-BUS 第一版不做，先实现“每轨 MIDI 通道 + Master 合并 + VST3 输出”的基础版 |
 | 2026-10-20 | WonderSwan 的声音 DMA（`0x89`）按“一串字节 = 一次触发”处理：报一个 C4 one-shot，和 ADPCM 的 one-shot 同型，不按字节重触发 |
 | 2026-10-20 | `singleChannelMuteOptions` 的两个 `chnMute` 半字都填同一个通道掩码。libvgm 把 `chnMute[1]` 给 linked 子设备（`VGMPlayer::RefreshMuting`），而子设备与父设备的通道编号一一对应（OPL4 的 FM 半就是一个 OPL3），原来把第二个半字填成“其余全静音”正好静掉了本条轨道要的那个通道——OPL4 在混音器里整轨无声、纯播放器却有声，就是这个原因 |
+| 2026-10-20 | `0x40-0x4F` 的通道位与算子位写反了：低两位是端口内的通道、bit 2-3 才是算子。反过来之后每个算子的音量都记到别的通道上，真正的载波一直停在静音默认值 `0x7F`——FM5 有音频却一条 MIDI 事件都没有（`06 Star Light Zone.vgz` 的 FM5，FM2 同样中招），就是这里。`vgm_chip_test` 的 `startFmNote` 也按错位写过算子 4（`0x43`），修好解码器后这些用例才暴露出来，已改成真实的 `0x4C`（端口 1 的 FM4/FM6 分别是 `0x4C`/`0x4E`） |
+| 2026-10-20 | 新增 `vgm_opn_test`（§10.2）：期望值不再由我们写死，而由 libvgm 的 YM2612 核测出来。旧 bug 在这个测试下复现为 `0x43` 幽灵音 + 384 次比较里每个“算子 4 是载波”的用例都红，修好后全绿——单测与解码器同源的问题从这里开始不再靠自觉 |
 
 ## 附录 A：linked SSG 的后续方案（第一版不做）
 
@@ -756,12 +770,14 @@ void render (const playback::OutputBusBuffers* buses, int numBuses, int numSampl
 
 设计文档写完并不等于目标记得住——§11 的 P1–P5 只是“一次交付”的阶段划分，真正耗时的是 §11.2 那 54 项芯片覆盖。这里把它排成可验收的里程碑：**每做完一项，先回来改这里的「状态」和 §11.2 的现状表，再提交**。状态只有三种：完成 / 进行中 / 未开始。
 
-**当前基线（2026-10-20）**：P1–P4 完成，P5 进行中；MIDI 设备类型 21 / 54；`vgm_core_test`、`vgm_chip_test`、`vgm_mixer_test psg.vgm`、`opl4.vgm` 全绿。
+**当前基线（2026-10-20）**：P1–P4 完成，P5 进行中；MIDI 设备类型 21 / 54；`vgm_core_test`、`vgm_chip_test`、`vgm_opn_test` 通过，`vgm_mixer_test` 的 psg / opl4 / minimal / wswan / ym2610 五个资产全部 `all checks passed`。
 
 | 里程碑 | 内容 | 验收 | 状态 |
 |---|---|---|---|
 | M1 | 基础版：`MidiCapability`/事件序列/每轨 MIDI 通道/Master 合并/VST3 输出/通道条 UI（P1–P4） | `PlaybackEngineTest` `[10]`–`[12]` 全绿；`vgm_mixer_test --notes` 覆盖 YM2610/YM2612/YM2151/AY/SN | 完成 |
-| M1.1 | 收尾既有红灯：`ym2610.vgm` 的 4 条混音器检查（solo 电平、左声道、gain 0.5、RPN 0）；`[12]` 循环用例缺一首带循环点的资产 | 四个资产（psg/opl4/ym2610/循环）全部 `all checks passed` | 进行中 |
+| M1.1 | 收尾既有红灯：`ym2610.vgm` 的 4 条混音器检查已修（`[8]` 改成先用 MIDI 侧找出真正有声的轨，RPN 检查改从该轨开始，不再把唯一一次 RPN 花在静音轨上）；剩 `[12]` 循环用例缺一首带循环点的资产 | 五个资产（psg/opl4/minimal/wswan/ym2610）全绿、`[12]` 不再 skipped | 进行中 |
+| M1.2 | YM2612 DAC 流的 MIDI：`0x8n` 只带等待值（1 字节），样本字节在 ROM 数据块里，`VgmCommandReader` 目前只跳过数据块，所以 DAC 轨永远没有触发。需要读 0x67 数据块并按 `0x2A` 送字节 | 一首真实 Mega Drive 曲的 DAC 轨在 `--notes` 下出现一次性触发；`vgm_chip_test` 覆盖数据块路径 | 未开始 |
+| M1.3 | 期望值交给芯片（§10.2）：`vgm_opn_test` 用 libvgm 的 YM2612 核测每个通道是否出声，解码器的 `gate` 必须一致；`PlaybackEngineTest` `[13]` 再加一条“有声的轨必须有音符”的端到端不变量 | `ctest -R "chip\|opn"` 全绿；把 `totalLevel` 位序改回旧写法后 `vgm_opn_test` 必须变红；`vgm_mixer_test` 五个资产 + `fm_alg0.vgm` 的 `[13]` 全绿 | 完成 |
 | M2 | A 批波形 PSG：X1_010（周期→音高，复用 `chips/Pitch.h`） | 按 §11.2「验收」四条；24 → 25 / 54 | 未开始 |
 | M3 | A 批 FM：YMF271、YMZ280B | 同上；25 → 27 / 54 | 未开始 |
 | M4 | 采样播放器音高体系：C140、C352、K053260、K054539、QSound、GA20、ES5503、OKIM6295、SEGAPCM，并把 ADPCM-B 根音（§11.1）一起纳入 | 「步进/采样率→音分 + 根音」是一个共用工具而非九份私有换算；27 → 36 / 54 | 未开始 |

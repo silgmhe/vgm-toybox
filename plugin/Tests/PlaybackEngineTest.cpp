@@ -10,7 +10,9 @@
 	  * the MIDI sink: per-track channels, mute/solo, the master's merged copy, no notes while the
 	    mixer is off, and all-notes-off after a seek,
 	  * the command clock behind those notes: it ends on the VGM header's length, and a second loop
-	    pass still sends notes (the sequence covers one pass, the engine plays many).
+	    pass still sends notes (the sequence covers one pass, the engine plays many),
+	  * every track that makes sound produces notes: the audio and the MIDI are two readings of the
+	    same register writes, and a decoder that misreads an address goes quiet while the chip plays.
 
 	  Usage: vgm_mixer_test <file.vgm|file.vgz> [seconds] [sampleRate]
 	  Build: cmake --build <build dir> --target vgm_mixer_test
@@ -264,9 +266,15 @@ namespace
 		std::vector<toybox::playback::MidiBlockEvent> events;
 		std::vector<std::int64_t> blockStarts;		// where each event's block began, in samples
 		std::int64_t blockStartSample = 0;			// set by the render loop below
+		double rms = 0.0;							// the audio of the same render (both channels)
 	};
 
-	/** Renders `seconds` with the MIDI sink attached; the audio is rendered and discarded. */
+	/** Renders `seconds` with the MIDI sink attached and measures the audio in the same pass.
+
+		The notes and the sound are two views of one render: a track that plays but says nothing is
+		exactly the shape of the YM2612 total-level bug (the volume landed on another channel, so
+		FM2/FM5 had audio and no notes). Asking both questions of one render keeps that comparison
+		cheap enough to run on every track. */
 	MidiRecorder recordMidi (toybox::PlaybackEngine& engine, double seconds, int sampleRate, int blockSize)
 	{
 		MidiRecorder recorder;
@@ -276,16 +284,39 @@ namespace
 		std::vector<float> blockL ((size_t) blockSize), blockR ((size_t) blockSize);
 		toybox::playback::OutputBusBuffers buses[1] = { { blockL.data(), blockR.data() } };
 
+		double sumOfSquares = 0.0;
+		std::int64_t sampleCount = 0;
+
 		while (rendered < totalSamples && ! engine.isFinished())
 		{
 			std::fill (blockL.begin(), blockL.end(), 0.0f);
 			std::fill (blockR.begin(), blockR.end(), 0.0f);
 			recorder.blockStartSample = rendered;
 			engine.render (buses, 1, blockSize, &recorder);
+
+			for (int i = 0; i < blockSize; ++i)
+			{
+				sumOfSquares += (double) blockL[(size_t) i] * (double) blockL[(size_t) i]
+								+ (double) blockR[(size_t) i] * (double) blockR[(size_t) i];
+				++sampleCount;
+			}
+
 			rendered += blockSize;
 		}
 
+		recorder.rms = (sampleCount > 0) ? std::sqrt (sumOfSquares / (double) (2 * sampleCount)) : 0.0;
 		return recorder;
+	}
+
+	/** Tracks the MIDI path cannot describe *yet*, named rather than inferred from "it has no notes".
+
+		The YM2612's seventh mute channel is the DAC: 0x8n only carries the wait, while the sample
+		bytes live in a 0x67 ROM data block that VgmCommandReader skips - the chip plays a stream
+		nothing can be said about (M1.2 in docs/desgin/midi-output-design.md). Everything else that
+		makes sound and no notes is a decoder bug, which is the whole point of section [13]. */
+	bool isAudioOnlyTrack (const toybox::playback::TrackInfo& track)
+	{
+		return track.groupName.startsWith ("YM2612") && track.channelIndex >= 6;
 	}
 
 	/** One line per mixer track: the notes its chip channel produces. This is the end-to-end view
@@ -528,7 +559,10 @@ int main (int argc, char* argv[])
 	engine.setMixerEnabled (false);
 	engine.setPositionSeconds (0.0);
 	engine.play();
-	const auto sanity = renderSeconds (engine, 0.1, sampleRate, blockSize);
+	// Half a second, not a tenth: a song is allowed to start with silence while its driver sets
+	// itself up, and fm_alg0.vgm keys its first note at 0.25 s. This check is about the rebuilds
+	// above leaving a working player behind, so it has to render past any lead-in to say anything.
+	const auto sanity = renderSeconds (engine, 0.5, sampleRate, blockSize);
 	std::printf ("    peak %.4f\n", sanity.peak);
 	check (sanity.peak > 0.001, "the plain player still produces audio");
 
@@ -557,14 +591,45 @@ int main (int argc, char* argv[])
 	engine.setMixerEnabled (true);
 	engine.setLoopCount (1);
 
-	// soloing track 0 must sound like muting every other track
-	engine.setTrackSolo (0, true);
+	// Which track carries the checks below is the song's business, not the harness's: a chip song
+	// may leave its first channel silent (ym2610.vgm keys FM2/FM3/FM5 and never FM1, because the
+	// non-B variant has no FM1), and solo/gain/pan on a silent track only ever measure silence.
+	// The MIDI side knows which tracks play without rendering the audio thirteen times.
+	int fixtureTrack = 0;
+	{
+		const std::size_t surveyChannels = juce::jmin (tracks.size(), (std::size_t) 16);
+		for (std::size_t i = 0; i < surveyChannels; ++i)
+		{
+			engine.setTrackMidiChannel (i, (int) i + 1);
+		}
+		engine.setPositionSeconds (0.0);
+		engine.play();
+		const auto survey = recordMidi (engine, 1.0, sampleRate, blockSize);
+		for (std::size_t i = 0; i < surveyChannels; ++i)
+		{
+			if (! survey.notesOn ((int) i + 1).empty())
+			{
+				fixtureTrack = (int) i;
+				break;
+			}
+		}
+		for (std::size_t i = 0; i < tracks.size(); ++i)
+		{
+			engine.setTrackMidiChannel (i, 0);
+		}
+	}
+	std::printf ("    the mixer checks use track %d (%s)\n", fixtureTrack,
+				 fixtureTrack < (int) tracks.size() ? tracks[(size_t) fixtureTrack].name.toRawUTF8()
+													: "out of range");
+
+	// soloing that track must sound like muting every other track
+	engine.setTrackSolo (fixtureTrack, true);
 	const auto soloed = renderFromStart();
 
-	engine.setTrackSolo (0, false);
+	engine.setTrackSolo (fixtureTrack, false);
 	for (size_t i = 0; i < tracks.size(); ++i)
 	{
-		engine.setTrackMute (i, i != 0);
+		engine.setTrackMute (i, (int) i != fixtureTrack);
 	}
 	const auto onlyFirst = renderFromStart();
 
@@ -576,15 +641,15 @@ int main (int argc, char* argv[])
 
 	{
 		// the very same solo state rendered once more: what is left is the seek warm-up
-		engine.setTrackSolo (0, true);
+		engine.setTrackSolo (fixtureTrack, true);
 		const auto soloAgain = renderFromStart();
-		engine.setTrackSolo (0, false);
+		engine.setTrackSolo (fixtureTrack, false);
 		std::printf ("    the same solo state re-rendered after a seek differs by %.1f dB\n",
 					 differenceDb (soloed, soloAgain));
 	}
 
 	// panning the remaining track hard left silences the right channel
-	engine.setTrackPan (0, -1.0f);
+	engine.setTrackPan (fixtureTrack, -1.0f);
 	const auto panned = renderFromStart();
 	double rightSum = 0.0;
 	for (float value : panned.right)
@@ -597,15 +662,15 @@ int main (int argc, char* argv[])
 	check (panned.peak > 0.001, "the left channel keeps playing");
 
 	// gain 0.5 halves the level
-	engine.setTrackPan (0, 0.0f);
-	engine.setTrackGain (0, 0.5f);
+	engine.setTrackPan (fixtureTrack, 0.0f);
+	engine.setTrackGain (fixtureTrack, 0.5f);
 	const auto halved = renderFromStart();
 	const double gainRatio = (onlyFirst.rms > 0.0) ? halved.rms / onlyFirst.rms : 0.0;
 	std::printf ("    gain 0.5 -> rms ratio %.3f\n", gainRatio);
 	check (std::abs (gainRatio - 0.5) < 0.02, "gain 0.5 halves the level");
 
 	// muting every track silences the mixer, and the plain player ignores the strip settings
-	engine.setTrackGain (0, 1.0f);
+	engine.setTrackGain (fixtureTrack, 1.0f);
 	for (size_t i = 0; i < tracks.size(); ++i)
 	{
 		engine.setTrackMute (i, true);
@@ -698,21 +763,37 @@ int main (int argc, char* argv[])
 	// second is the song's business - a real Mega Drive song may leave its first channel silent
 	// until the melody starts - so the track is looked for here instead of assumed. The routing
 	// is what this checks; hard-coding track 0 made every real song fail on its arrangement.
+	// The track section [8] already found goes first: the RPN below is sent when a channel
+	// comes into use, and a failed first attempt (silent track 0) would spend that one send on a
+	// channel the recording then throws away - the engine is right to stay quiet, the recording
+	// just never saw the message.
 	int routedTrack = -1;
 	MidiRecorder routed;
-	for (size_t i = 0; i < tracks.size() && routedTrack < 0; ++i)
+	const auto tryRouting = [&] (size_t index)
 	{
-		engine.setTrackMidiChannel (i, 1);
+		engine.setTrackMidiChannel (index, 1);
 		engine.setPositionSeconds (0.0);
 		engine.play();
 		routed = recordMidi (engine, 1.0, sampleRate, blockSize);
 		if (! routed.notesOn (1).empty())
 		{
-			routedTrack = (int) i;
+			routedTrack = (int) index;
+			return true;
 		}
-		else
+
+		engine.setTrackMidiChannel (index, 0);
+		return false;
+	};
+
+	if (fixtureTrack >= 0 && fixtureTrack < (int) tracks.size())
+	{
+		tryRouting ((size_t) fixtureTrack);
+	}
+	for (size_t i = 0; i < tracks.size() && routedTrack < 0; ++i)
+	{
+		if ((int) i != fixtureTrack)
 		{
-			engine.setTrackMidiChannel (i, 0);
+			tryRouting (i);
 		}
 	}
 
@@ -950,6 +1031,125 @@ int main (int argc, char* argv[])
 	else
 	{
 		std::printf ("    no loop point in this song - loop check skipped\n");
+	}
+
+	// --- [13] audio and notes describe the same tracks -------------------------------------------
+	// The sound comes from libvgm's emulation, the notes from our decoder reading the same register
+	// writes. A decoder that misreads an address goes quiet while the chip keeps playing, and that is
+	// exactly what the YM2612 total-level bug looked like: the carrier's volume landed on a
+	// different channel, so FM2/FM5 had audio and not one note. One render per track asks both
+	// questions of one pass - solo it, then take the level and the notes out of the same render.
+	std::printf ("[13] audio and MIDI agree on every track\n");
+
+	struct TrackProbe
+	{
+		bool audible = false;
+		int notes = 0;
+	};
+
+	std::vector<TrackProbe> probes (tracks.size());
+	{
+		engine.setMixerEnabled (true);
+		engine.setLoopCount (1);
+		engine.setMasterMidiChannel (0);
+		engine.setMasterMuted (false);
+		for (size_t i = 0; i < tracks.size(); ++i)
+		{
+			engine.setTrackMute (i, false);
+			engine.setTrackSolo (i, false);
+			engine.setTrackMidiChannel (i, 0);
+		}
+
+		// The song's opening, on the harness's own render length. A track that has not started
+		// within the probe is silent and cannot fire the check - that is the price of not rendering
+		// the whole song once per track, and it only ever hides a bug, never invents one.
+		const double probeSeconds = juce::jmin (3.0, juce::jmax (1.0, renderLength));
+		const double audibleFloor = 1.0e-4;		// -80 dBFS: quieter than that is not "it plays"
+
+		int audibleTracks = 0;
+		int missingNotes = 0;
+		int knownGaps = 0;
+		for (size_t i = 0; i < tracks.size(); ++i)
+		{
+			if (! tracks[i].isolatable)
+			{
+				std::printf ("      [%2d] %-14s %-18s the whole device, nothing to solo\n",
+							 (int) i, tracks[i].groupName.toRawUTF8(), tracks[i].name.toRawUTF8());
+				continue;
+			}
+
+			engine.setTrackSolo ((int) i, true);
+			engine.setTrackMidiChannel (i, 1);
+			engine.setPositionSeconds (0.0);
+			engine.play();
+			const auto probe = recordMidi (engine, probeSeconds, sampleRate, blockSize);
+			engine.setTrackSolo ((int) i, false);
+			engine.setTrackMidiChannel (i, 0);
+
+			probes[i].audible = probe.rms > audibleFloor;
+			probes[i].notes = (int) probe.notesOn (1).size();
+			if (probes[i].audible)
+			{
+				++audibleTracks;
+			}
+
+			// A track the backend marks `unavailable` makes no promise: its chip part has no MIDI
+			// decoder yet, so sound without notes is the documented state, not a regression. The
+			// two that do promise - melodic and oneShot - have to speak up when they play.
+			const bool promisesNotes = tracks[i].midiCapability != toybox::playback::MidiCapability::unavailable;
+			const char* mark = "";
+			if (probes[i].audible && probes[i].notes == 0)
+			{
+				if (! promisesNotes)
+				{
+					++knownGaps;
+					mark = "  <- no MIDI decoder for this channel yet";
+				}
+				else if (isAudioOnlyTrack (tracks[i]))
+				{
+					++knownGaps;
+					mark = "  <- the DAC stream, no note to send (M1.2)";
+				}
+				else
+				{
+					++missingNotes;
+					mark = "  <- AUDIBLE BUT SILENT IN MIDI";
+				}
+			}
+
+			std::printf ("      [%2d] %-14s %-18s rms %8.6f  %3d note(s)%s\n",
+						 (int) i, tracks[i].groupName.toRawUTF8(), tracks[i].name.toRawUTF8(),
+						 probe.rms, probes[i].notes, mark);
+		}
+
+		std::printf ("    %d of %d tracks are audible; %d of them describe themselves\n",
+					 audibleTracks, (int) tracks.size(), audibleTracks - knownGaps);
+		check (audibleTracks > 0, "the song's opening has audible tracks to compare against");
+		check (missingNotes == 0, "every track that makes sound also produces MIDI notes");
+
+		// The generated algorithm-0 asset exists for this one sentence: its only carrier is
+		// operator 4, whose total level is the register the decoder used to misread. Silence in MIDI
+		// there is the bug, sound in the core is the proof - so each of the three keyed channels
+		// must come out as exactly one note.
+		if (inputFile.getFileName() == "fm_alg0.vgm")
+		{
+			const char* const carriers[] = { "FM 1", "FM 2", "FM 4" };
+			for (const char* carrier : carriers)
+			{
+				int notes = -1;
+				for (size_t i = 0; i < tracks.size(); ++i)
+				{
+					if (tracks[i].name == carrier)
+					{
+						notes = probes[i].notes;
+					}
+				}
+
+				juce::String message;
+				message << "fm_alg0.vgm: " << carrier << " has operator 4 as its only carrier and sends one note";
+				check (notes == 1, message);
+			}
+		}
 	}
 
 	const juce::File outputFile = inputFile.withFileExtension (".rendered.wav");

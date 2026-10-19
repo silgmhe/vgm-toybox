@@ -263,8 +263,12 @@ namespace
 	void startFmNote (Stream& stream, std::uint32_t time, std::uint8_t algorithm,
 					  std::uint8_t op1Level, std::uint8_t op4Level)
 	{
+		// In 0x40-0x4F the low two bits pick the channel and bits 2-3 the operator, so
+		// channel 0's operators sit at 0x40 (op 1) and 0x4C (op 4); 0x43 is channel 3's
+		// special-mode slot and the chip ignores it - writing operator 4 there left the
+		// carrier at the silent default and the note vanished.
 		stream.at (time, 0x40, op1Level);		// channel 0, operator 1 total level
-		stream.at (time, 0x43, op4Level);		// channel 0, operator 4 total level
+		stream.at (time, 0x4C, op4Level);		// channel 0, operator 4 total level
 		stream.at (time, 0xA0, 0x1D);
 		stream.at (time, 0xA4, 0x22);			// block 4, fnum high 2
 		stream.at (time, 0xB0, algorithm);
@@ -359,7 +363,7 @@ namespace
 	{
 		Stream stream;
 		startFmNote (stream, 0, 0x00, 0x7F, 0x00);	// channel 1
-		stream.at (0, 1, 0x43, 0x00);				// channel 4, operator 4
+		stream.at (0, 1, 0x4C, 0x00);				// channel 4, operator 4
 		stream.at (0, 1, 0xA0, 0x1D);
 		stream.at (0, 1, 0xA4, 0x22);
 		stream.at (0, 1, 0xB0, 0x00);
@@ -375,7 +379,7 @@ namespace
 	void testFmDacTakesOverChannelSix (void)
 	{
 		Stream stream;
-		stream.at (0, 1, 0x4B, 0x00);				// channel 6, operator 4 total level
+		stream.at (0, 1, 0x4E, 0x00);				// channel 6, operator 4 total level
 		stream.at (0, 1, 0xA2, 0x1D);
 		stream.at (0, 1, 0xA6, 0x22);
 		stream.at (0, 1, 0xB2, 0x00);
@@ -397,8 +401,8 @@ namespace
 	void testOpnThreeChannels (void)
 	{
 		Stream stream;
-		stream.at (0, 0x48, 0x00);					// channel 3 (index 2), operator 1
-		stream.at (0, 0x4B, 0x00);					// channel 3 (index 2), operator 4
+		stream.at (0, 0x42, 0x00);					// channel 3 (index 2), operator 1
+		stream.at (0, 0x4E, 0x00);					// channel 3 (index 2), operator 4
 		stream.at (0, 0xA2, 0x1D);
 		stream.at (0, 0xA6, 0x22);
 		stream.at (0, 0xB2, 0x00);
@@ -453,7 +457,7 @@ namespace
 		for (int pair = 0; pair < 2; ++pair)
 		{
 			const std::uint8_t base = (std::uint8_t) (pair == 0 ? 0x40 : 0x41);
-			const std::uint8_t op4 = (std::uint8_t) (pair == 0 ? 0x43 : 0x47);
+			const std::uint8_t op4 = (std::uint8_t) (pair == 0 ? 0x4C : 0x4D);
 			const std::uint8_t low = (std::uint8_t) (pair == 0 ? 0xA0 : 0xA1);
 			const std::uint8_t high = (std::uint8_t) (pair == 0 ? 0xA4 : 0xA5);
 			const std::uint8_t algorithm = (std::uint8_t) (pair == 0 ? 0xB0 : 0xB1);

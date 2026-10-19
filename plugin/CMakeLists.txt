@@ -371,6 +371,21 @@ target_include_directories(vgm_chip_test PRIVATE Source)
 # standard from JUCE's own flags, this target has no JUCE
 target_compile_features(vgm_chip_test PRIVATE cxx_std_17)
 
+# --- the OPN decoder against libvgm's own YM2612 core (not built by default) ---
+# The unit test above states its expectations from memory of the register map; this one asks the
+# chip. libvgm's core plays the same register stream with all channels muted but one, so "this
+# channel sounds" is a measurement, and the decoder has to answer the same question from the same
+# writes. It links libvgm, which is why it is a target of its own.
+#   cmake --build <build dir> --target vgm_opn_test
+#   <build dir>/plugin/vgm_opn_test
+add_executable(vgm_opn_test EXCLUDE_FROM_ALL
+	Tests/OpnCoreOracleTest.cpp
+	Source/chips/OpnDecoder.cpp
+)
+target_include_directories(vgm_opn_test PRIVATE Source)
+target_compile_features(vgm_opn_test PRIVATE cxx_std_17)
+target_link_libraries(vgm_opn_test PRIVATE ${LIBVGM_TARGETS})
+
 # --- console test for the playback core (not built by default) ---
 # Drives PlaybackEngine through the fake tone backend, and the settings store through a temporary
 # directory. Deliberately links **no libvgm code**: if the core still depended on the format
@@ -492,7 +507,9 @@ endif()
 add_test(NAME chip COMMAND vgm_chip_test)
 add_test(NAME core COMMAND vgm_core_test)
 add_test(NAME ui   COMMAND vgm_ui_test)
+add_test(NAME opn  COMMAND vgm_opn_test)
 set_tests_properties(core ui PROPERTIES LABELS "unit" TIMEOUT 120)
+set_tests_properties(opn PROPERTIES LABELS "unit" TIMEOUT 300)
 
 if(_toybox_test_env)
 	add_test(NAME engine COMMAND vgm_mixer_test "${_toybox_test_song}" 3)

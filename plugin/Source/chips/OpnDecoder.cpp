@@ -307,17 +307,25 @@ void OpnDecoder::write (const RegisterWrite& write)
 		}
 	}
 
-	// Total level, one per operator: the only volume an FM channel has. 0x40-0x4F holds four
-	// operators each for channels 0..2 of a port; the "channel 3" slot is not wired up.
+	// Total level, one per operator: the only volume an FM channel has. In 0x40-0x4F the low
+	// two bits select the channel inside the port's bank and bits 2-3 the operator, not the
+	// other way round - swapping them sends each operator's level to a stranger's channel and
+	// leaves the real carrier at the silent default (FM5 of a YM2612 song then played but had
+	// no note: the channel's carriers still read 0x7F).
 	if ((reg & 0xF0) == 0x40)
 	{
-		const int channel = (int) ((reg >> 2) & 0x03) + port * 3;
+		if ((reg & 0x03) == 3)
+		{
+			return;		// 0xX3/0xX7/0xXB/0xXF: channel 3's special-mode slots, not a channel
+		}
+
+		const int channel = (int) (reg & 0x03) + port * 3;
 		if (channel >= impl->fmCount)
 		{
 			return;
 		}
 
-		impl->channels[channel].totalLevel[reg & 0x03] = write.value & 0x7F;
+		impl->channels[channel].totalLevel[(reg >> 2) & 0x03] = write.value & 0x7F;
 		return;
 	}
 
