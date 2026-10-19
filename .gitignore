@@ -111,3 +111,6 @@ compile_commands.json
 # repository (plugin/Tests/assets), the render is not.
 *.rendered.wav
 
+# Local reference songs (game rips) used while checking the MIDI mapping against a DAW; not part
+# of the repository.
+reference/
