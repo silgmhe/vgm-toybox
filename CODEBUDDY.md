@@ -209,3 +209,16 @@ Roadmap for the DAW multi-out feature: each chip can already be muted/disabled f
 - Style is C++98-era by design (the codebase still contains MSVC6 compatibility paths): use `std::string`/`std::vector`/`std::map`, the `UINT8/UINT16/UINT32/INT32` typedefs from `stdtype.h`, tabs for indentation, and keep new libvgm code C++98/C90-clean (`REALLY_NEED_CXX14` exists as an opt-in). Avoid C++11+ features in libvgm; the root app is also written without them in active code.
 - Error convention is `UINT8`/`UINT32` return codes where the high bit (`& 0x80`) means failure and `0x00`/`AERR_OK` means success; libvgm uses `0xF0`-style codes. Log output goes through `PlayerLogCallback` (`playctrl.cpp`) honoring `General.LogLevelFile`/`LogLevelEmu`.
 - Code that must run on old MSVC uses `stricmp`/`strnicmp`/`snprintf` shims defined at the top of the affected `.cpp` files — follow the existing `#ifdef _MSC_VER` pattern rather than introducing new portability helpers.
+
+## Reference projects (`reference/`)
+
+`reference/` is a local, git-ignored collection of open-source projects. It is there to be **read** when a question cannot be answered from this repository or from the libvgm sources: what registers a chip exposes, how another player models a channel, how a real VGM→MIDI conversion decides note-on/off. They are references, **not dependencies and not targets** — nothing under `reference/` is built, vendored or linked, none of them is a spec this project has to match, and a table or formula copied from one is only a hint until it is checked against the actual sound core or a real song. Being a fresh clone, `reference/` will not exist there.
+
+| Project | What it is | What it is worth reading for |
+|---|---|---|
+| `MDPlayer-stable/` | C# player for VGM/NSF/SPC/…, with the MDSound emulation cores and the `EnmChip` list | the chip coverage target (docs/desgin/midi-output-design.md §11.2), how each chip's channels are exposed, how a register write becomes a track |
+| `vgm2midi/` | VB6 tool that turns VGM into MIDI, one module per chip (`Modules/YM2612.bas`, `NESAPU`, `GameBoy`, `AY8910`, `SN76489`, `YM2151`, `YM2413`, `YM3812`, `YMF278`, `PCM`) | the closest existing precedent for `plugin/Source/chips/`: how note-on/off, velocity, duration and PCM triggering are decided from registers |
+| `FamiStudio/` | C# NES tracker + NSF player, including the expansion channels (`ChannelStateVrc6Saw/Square`, VRC7, FDS, MMC5, N163, EPSM) | NES APU and expansion-chip envelope/length/sweep semantics — i.e. the chips of §11.2 batch B that libvgm has no core for |
+| `imgui-vgmplayer-v0.44/` | imgui front-end built on libvgm (`libvgm-player/`) | another libvgm front-end: the FM piano-roll drawing in `examples/example_vgm_player/main.cpp` |
+
+When a reference and the emulator disagree, **the emulator wins**: the MIDI has to describe what the chips actually do, and a model copied from another project without checking is a bug with a citation.
