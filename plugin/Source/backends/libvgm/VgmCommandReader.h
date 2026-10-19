@@ -17,7 +17,8 @@ struct VgmCommand
 	enum class Kind
 	{
 		registerWrite,	// addr/data carry the payload, port the second-chip flag
-		wait,			// sampleTime has already been advanced
+		wait,			// sampleTime is the command's own time; the clock has been advanced
+						// (0x61-0x63, 0x70-0x7F, and 0x80-0x8F - the YM2612 DAC stream's waits)
 		end,			// 0x66 - the caller should stop
 		ignored			// data block, seek, or an unknown command
 	};
@@ -42,6 +43,11 @@ public:
 
 	/** Advances past one command. Returns false at the end of the stream. */
 	bool next (VgmCommand& command);
+
+	/** The clock after everything read so far, in 44100 Hz samples. A whole stream read through
+		ends on the header's total, which is the length the engine plays - so a difference here is
+		a difference between MIDI time and audio time. */
+	std::uint32_t timeSamples (void) const { return sampleTime; }
 
 private:
 	bool readHeader (void);

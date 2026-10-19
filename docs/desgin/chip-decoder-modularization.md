@@ -75,7 +75,7 @@ plugin/Source/chips/
     Ym2612Decoder.cpp/.h        // OPN2 + DAC；OPN/OPNA/OPNB 复用同一个 FM 核心
     Ym2610Decoder.cpp/.h        // OPNB：FM + SSG + ADPCM-A/B
     Sn76489Decoder.cpp/.h       // PSG（MD 的第二颗芯片）
-    GbApuDecoder.cpp/.h         // 后续
+    GbcApuDecoder.cpp/.h        // 已完成首版（DMG）
     OplDecoder.cpp/.h           // 后续（YM3812/3526/2413）
   notes/
     NoteTable.cpp/.h            // 每芯片族一张表，按 clock/PAL/tuning 生成
@@ -257,8 +257,9 @@ YM2610 的 SSG 寄存器布局与 YM2149 一致，`Ym2610Decoder` 与未来的 `
 | 3. `NoteExtractor` + `NoteTable` | 已完成（2A03 先行） | `chips/NoteExtractor.{h,cpp}`、`chips/ChipTypes.h` |
 | 4. `Ym2612Decoder` | 已完成首版 | `chips/Ym2612Decoder.{h,cpp}`：算法→载波表、总电平（TL）→力度、DAC 接管通道 6 |
 | 5. `NesApuDecoder` | 已完成首版 | `chips/NesApuDecoder.{h,cpp}`，帧序列器、长度/线性计数器、包络、扫频、噪声、DMC |
+| 5b. `GbcApuDecoder` | 已完成首版 | `chips/GbcApuDecoder.{h,cpp}`，帧序列器、长度计数器、包络、扫频、wave、噪声（计划外的补课，见下） |
 | 6. `Ym2610Decoder` | 未开始 | — |
-| 7. 收缩旧 `Builder` | 部分 | 旧 `writeNes` / `NesState`、YM2612 的 `writeFm` 分支已删除（`MidiSequenceBuilder.cpp` 1467 → 1295 行） |
+| 7. 收缩旧 `Builder` | 部分 | 旧的 `writeNes` / `NesState`、`writeGb` / `GbState`、YM2612 的 `writeFm` 分支已删除（`MidiSequenceBuilder.cpp` 1467 → 1343 行，加上三颗芯片的写入队列与 flush） |
 
 2A03 的验收方式是新的 `vgm_chip_test`（`plugin/Tests/ChipDecoderTest.cpp`）：只链接 `Source/chips`，不链接 libvgm，用寄存器写断言音符与起止采样。期间修正了两处旧实现不可能有、新实现必须有的细节：
 
@@ -273,5 +274,15 @@ YM2612 的验收同样走 `vgm_chip_test`，并补回了旧实现有、两段式
 - `0x28` 的第二端口位映射到通道 4-6，与通道 1-3 一样独立成轨。
 
 `NoteExtractor` 现在同时返回 `PitchEvent`：同一音符内音高变化（颤音、滑音）不再重新触发，而是写成弯音；起始音符带自己的音分偏移，顺带清掉上一个音符留下的弯音。老实现在每次 `0xA0-0xA6` 写入时都发一次弯音，新实现按 4 音分的死区过滤，事件量从每秒数百条降到实际音高变化的次数。
+
+`GbcApuDecoder` 是计划外补的一颗：旧实现把每次 GB 触发都当成 C4 one-shot，旋律全丢。首版同样进 `vgm_chip_test`，覆盖：
+
+- 帧序列器按 512 Hz 步进（`8192` 个 CPU 周期一步），第 0/2/4/6 步时钟长度计数器（256 Hz）、第 2/6 步扫频（128 Hz）、第 7 步包络（64 Hz）——长度计数器为偶数步这一点和 MAME 核 `gb_mame.c` 对过；
+- 脉冲/波形音高都是 `clock / (32 或 64 × (2048 - freq))`，wave 的分频器是脉冲的两倍，因此同样的寄存器值低一个八度；wave 的 `NR30`/`NR32` 决定是否发声与音量；
+- 包络（初始音量、增减、64 Hz 周期）与长度计数器都能独立结束音符，不需要驱动写"关"；
+- 噪声没有音高，按 `shift/divisor` 的频率对数映射到 GM 鼓键（38 起步），与 2A03 的处理一致；
+- `NR52` 的 bit 7 是总开关，默认关闭（与硬件一致），power off 会清零所有音量并复位帧序列器。
+
+与 2A03 一样，GB 写入也是先入队、读完再交给解码器：`MidiSequenceBuilder` 只保留 `queueGbWrite` / `flushGb`（和 NES/YM2612 同构），旧的 `GbState` 影子状态随之删除。
 
 后续接 YM2610 时，`NoteExtractor` 与 `NesApuDecoder` 都是模板：新的 decoder 只需回答 `channelState()` 与 `noteTable()`。

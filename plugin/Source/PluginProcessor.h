@@ -10,11 +10,12 @@
 	The plugin renders VGM/VGZ files (which are loaded through the GUI) with libvgm and has its
 	own transport: it does not need MIDI or the host transport to produce sound.
 */
-class ToyboxAudioProcessor : public juce::AudioProcessor
+class ToyboxAudioProcessor : public juce::AudioProcessor,
+							 private juce::ChangeListener
 {
 public:
 	ToyboxAudioProcessor();
-	~ToyboxAudioProcessor() override = default;
+	~ToyboxAudioProcessor() override;
 
 	// --- AudioProcessor ---
 	void prepareToPlay (double sampleRate, int samplesPerBlock) override;
@@ -86,6 +87,13 @@ public:
 	juce::File getStartupFile (void) const;
 
 private:
+	/** Keeps the engine's pitch-bend settings in step with the preferences (settings/SettingsStore).
+		The range is a property of the user's instrument rather than of one project, so it lives in
+		the shared settings file and every instance follows it; the setters are atomics, which is
+		why a change made on the message thread is safe to hand straight to the audio thread. */
+	void changeListenerCallback (juce::ChangeBroadcaster* source) override;
+	void applyMidiSettings (void);
+
 	/** "Out 1/2" (the main bus, activated) plus the additional buses, which start **inactive**:
 		a host only allocates the ones the user enables (docs/desgin/multitrack-output-design.md, ADR-2),
 		so out of the box the plugin behaves exactly as it did before. Defined here because

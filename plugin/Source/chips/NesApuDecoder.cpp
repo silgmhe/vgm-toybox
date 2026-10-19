@@ -3,38 +3,12 @@
 #include <algorithm>
 #include <cmath>
 
+#include "Pitch.h"
+
 namespace toybox::chips
 {
 namespace
 {
-	/** Turns a frequency into the nearest MIDI note plus the distance in cents. */
-	int quantise (double hz, int* finePitch)
-	{
-		if (finePitch != nullptr)
-		{
-			*finePitch = 0;
-		}
-
-		if (hz <= 0.0)
-		{
-			return -1;
-		}
-
-		const double exact = 69.0 + 12.0 * std::log2 (hz / 440.0);
-		const int rounded = (int) std::lround (exact);
-		if (rounded < 0 || rounded > 127)
-		{
-			return -1;
-		}
-
-		if (finePitch != nullptr)
-		{
-			*finePitch = (std::int16_t) std::lround ((exact - (double) rounded) * 100.0);
-		}
-
-		return rounded;
-	}
-
 	/** Pulse and triangle: frequency = cpu / (divider * (period + 1)). */
 	class NesPeriodTable final : public NoteTable
 	{
@@ -43,7 +17,7 @@ namespace
 
 		int noteFor (std::uint32_t period, int, int* finePitch) const override
 		{
-			return quantise (cpuClock / (divider * ((double) period + 1.0)), finePitch);
+			return quantiseFrequency (cpuClock / (divider * ((double) period + 1.0)), finePitch);
 		}
 
 	private:

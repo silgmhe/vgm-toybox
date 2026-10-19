@@ -131,6 +131,47 @@ private:
 //==============================================================================
 
 /**
+	The MIDI page: what the plugin sends to the instrument, and what the instrument must be set to.
+
+	Pitch bend is the one part of the MIDI output whose meaning is not in the message itself: the
+	14-bit value spans whatever range the receiver uses, and neither the host nor the file says what
+	that is. So the range is a preference here - default +/- 12 semitones, the wide range most
+	software synths ship with - and the engine both encodes with it and declares it as RPN 0 when
+	playback starts, so an instrument that honours RPN follows the page.
+
+	Turning bends off is the escape hatch: every note then keeps the nearest semitone and no bend
+	message goes out at all. That is what an instrument that ignores RPN and cannot be matched to a
+	range needs, and it is also the honest setting for a MIDI monitor that should show plain notes.
+*/
+class MidiSettingsPage : public View
+{
+public:
+	MidiSettingsPage (void);
+
+	juce::String getViewId (void) const override { return "settings-midi"; }
+	juce::String getViewName (void) const override { return i18n::tr ("settings.midi"); }
+
+	/** Re-reads the two stored values into the controls. */
+	void refresh (void) override;
+
+	void paint (juce::Graphics& g) override;
+	void resized (void) override;
+	void lookAndFeelChanged (void) override;
+	void refreshLanguage (void) override;
+
+private:
+	juce::ToggleButton bendButton;
+	juce::Label bendHint;
+	juce::Label rangeCaption;
+	juce::Slider rangeSlider;
+	juce::Label rangeHint;
+
+	JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (MidiSettingsPage)
+};
+
+//==============================================================================
+
+/**
 	The Audio page: the device the standalone is playing through, and the dialog that changes it.
 
 	Only the standalone application has an audio device of its own - a plugin is handed the host's -
@@ -288,9 +329,10 @@ private:
 
 	ViewStack pages;
 	AppearanceSettingsPage* appearancePage = nullptr;	// owned by `pages`
-	GeneralSettingsPage* generalPage = nullptr;		// owned by `pages`
-	LanguageSettingsPage* languagePage = nullptr;	// owned by `pages`
-	AudioSettingsPage* audioPage = nullptr;			// owned by `pages`; null in a plugin build
+	GeneralSettingsPage* generalPage = nullptr;			// owned by `pages`
+	LanguageSettingsPage* languagePage = nullptr;		// owned by `pages`
+	MidiSettingsPage* midiPage = nullptr;				// owned by `pages`
+	AudioSettingsPage* audioPage = nullptr;				// owned by `pages`; null in a plugin build
 
 	juce::TextButton closeButton;
 

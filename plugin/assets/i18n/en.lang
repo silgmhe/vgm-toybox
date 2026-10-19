@@ -118,6 +118,13 @@ language: English
 "settings.language.selectTooltip" = "Which language the window and its tooltips are shown in";
 "settings.language.sourceBuiltin" = "Built-in translation: {0}";
 "settings.language.sourceFile" = "{0}";
+"settings.midi" = "MIDI";
+"settings.midi.bend" = "Send pitch bend";
+"settings.midi.bendHint" = "Off: every note keeps its nearest semitone and no bend is sent. On: the chips' fine pitch (detune, vibrato, slides) reaches the instrument as bend.";
+"settings.midi.explanation" = "Bends mean nothing without the receiving instrument's range, and MIDI never reports it: say what this instrument uses.";
+"settings.midi.range" = "Pitch bend range";
+"settings.midi.rangeHint" = "Semitones each way. It has to match the receiving instrument: a 50 cent bend encoded for +/- 2 semitones plays as 3 semitones on a +/- 12 one. The range is declared with RPN 0 when playback starts, so a synth that honours RPN follows this value.";
+"settings.midi.semitones" = "st";
 "settings.theme" = "Theme";
 "settings.theme.dark" = "Dark";
 "settings.theme.explanation" = "Which colours the window draws with. A change applies at once.";

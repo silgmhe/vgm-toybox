@@ -203,6 +203,20 @@ is saved, and the page notes that the window has to be reopened (restart the sta
 JUCE has already laid out the current labels with the old face. If the saved family is no longer
 installed, the window falls back to the system UI font and the row names the missing family.
 
+### Pitch bend
+
+Every fine pitch a chip produces - vibrato, slides, the detuning between channels - becomes MIDI pitch
+bend, and a bend value only means something relative to the receiving instrument's bend range. MIDI has
+no way to ask a synth for that range, so *Settings* → *MIDI* states it: 1 to 24 semitones each way, 12
+by default. The engine declares it as RPN 0 on every channel it plays (the message a General MIDI synth
+reads) and scales each bend by it.
+
+**Send pitch bend** off drops bends altogether: notes land on their nearest semitone and no `0xE0` goes
+out at all, for an instrument that ignores or misreads the wheel. The range row greys out but keeps its
+value, so turning the switch back on restores what was there. Turning it off mid-song sends one centring
+message to a channel this engine left off-centre, so the mode does not inherit the last vibrato as a
+permanent detune.
+
 ### In a DAW
 
 Copy the bundle into the plugin folder and rescan:

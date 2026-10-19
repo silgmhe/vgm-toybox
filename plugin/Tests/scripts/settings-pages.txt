@@ -42,7 +42,39 @@ toggle settings.general.closeToTray
 assert settings.general.closeToTray         checked == true
 
 # Switching through the real tree, not by setting a test-only page index: row 2 is Language in
-# both the plugin and the application (rows are Appearance, General, Language, then Audio).
+# both the plugin and the application (rows are Appearance, General, Language, MIDI, then Audio).
 select settings.tree 2
 assert settings.page.language     visible == true
 assert settings.page.appearance   visible == false
+
+# Row 3 is the MIDI page. The bend range starts at the default 12 semitones each way, and bends
+# are on: the switch is what turns the chips' fine pitch into 0xE0 at all.
+select settings.tree 3
+assert settings.page.midi         visible == true
+assert settings.page.language     visible == false
+assert settings.midi.bend         checked == true
+assert settings.midi.range        value   ~= 12
+assert settings.midi.range        enabled == true
+
+# The engine holds both values, not just the page: the switch writes the shared settings file,
+# the store broadcasts synchronously and the processor's change listener carries it to the audio
+# side. Asserting on the page alone would not notice a listener that was never added.
+assert engine bend                == true
+assert engine bendRange           == 12
+set settings.midi.range 7
+assert settings.midi.range        value   ~= 7
+assert engine bendRange           == 7
+set settings.midi.range 12
+assert engine bendRange           == 12
+
+# Turning bends off greys the range but keeps the number: the row does not disappear, and the
+# value is still what it was when the switch goes back on.
+toggle settings.midi.bend
+assert settings.midi.bend         checked == false
+assert settings.midi.range        enabled == false
+assert settings.midi.range        value   ~= 12
+assert engine bend                == false
+toggle settings.midi.bend
+assert settings.midi.bend         checked == true
+assert settings.midi.range        enabled == true
+assert engine bend                == true

@@ -2,6 +2,7 @@
 
 #include "playback/BackendRegistry.h"
 #include "playback/HostClockSource.h"
+#include "settings/SettingsStore.h"
 
 #include "PluginEditor.h"
 #include "playback/StartupSong.h"
@@ -14,6 +15,32 @@ ToyboxAudioProcessor::ToyboxAudioProcessor()
 	// The composition root: registering the backends here means every UI text, tooltip and file
 	// filter that asks the registry (built while this object exists) sees the real format list.
 	toybox::playback::registerBuiltInBackends();
+
+	// The pitch-bend preferences live in the shared settings file, not in the project: they
+	// describe the instrument the MIDI goes to, and the editor is not the only thing that needs
+	// them - a host that opens a project and plays without ever showing the window does too.
+	auto& settings = settings::SettingsStore::getInstance();
+	settings.addChangeListener (this);
+	applyMidiSettings();
+}
+
+ToyboxAudioProcessor::~ToyboxAudioProcessor()
+{
+	settings::SettingsStore::getInstance().removeChangeListener (this);
+}
+
+void ToyboxAudioProcessor::applyMidiSettings (void)
+{
+	const auto& settings = settings::SettingsStore::getInstance();
+	engine.setMidiPitchBendRange (settings.getMidiPitchBendRange());
+	engine.setMidiPitchBendEnabled (settings.getMidiPitchBendEnabled());
+}
+
+void ToyboxAudioProcessor::changeListenerCallback (juce::ChangeBroadcaster*)
+{
+	// Theme and language changes come through here as well; applying two atomics is cheap enough
+	// that telling the values apart would only add a failure mode.
+	applyMidiSettings();
 }
 
 juce::File ToyboxAudioProcessor::getStartupFile (void) const

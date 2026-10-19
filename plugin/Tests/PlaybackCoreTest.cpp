@@ -325,6 +325,58 @@ int main (int /*argc*/, char* /*argv*/[])
 	check (engine.getOutputPeak (0) == 0.0f, "stopping clears the master meter");
 	check (engine.getTrackPeak (0, 0) == 0.0f, "stopping clears the track meters");
 
+	// ---------------------------------- [3b] where a looped playthrough sits in MIDI time
+	// The MIDI sequence is built from one pass of the command stream, the engine playing N loops
+	// counts across the repeats - so the cursor's coordinate has to be folded back into that
+	// pass, or the notes stop when the first one ends while the audio plays on. The fake backend
+	// has no loop point, so this is checked as the pure arithmetic it is.
+	{
+		const auto timeline = toybox::playback::makeSongTimeline (52.0, 30.0, 20.0, 2, 3.0, false);
+		check (near (timeline.loopStartSeconds(), 10.0, 1.0e-9), "the test's loop starts at 10 s");
+		check (near (toybox::playback::songTimeWithinPass (timeline, 12.0), 12.0, 1.0e-9),
+			   "first pass: the song time is the position");
+		check (near (toybox::playback::songTimeWithinPass (timeline, 30.0), 30.0, 1.0e-9),
+			   "the end of the first pass still maps to itself");
+		check (near (toybox::playback::songTimeWithinPass (timeline, 42.0), 22.0, 1.0e-9),
+			   "a second pass folds back into the loop region");
+		check (near (toybox::playback::songTimeWithinPass (timeline, 52.0), 12.0, 1.0e-9),
+			   "and the fade tail is one more pass of the loop");
+
+		// an infinite loop reports single-pass coordinates already: the fold must leave them
+		// alone (the jump back is what restarts the notes there)
+		const auto forever = toybox::playback::makeSongTimeline (0.0, 30.0, 20.0, 0, 0.0, true);
+		check (near (toybox::playback::songTimeWithinPass (forever, 28.0), 28.0, 1.0e-9),
+			   "an infinite loop's own coordinate is not folded");
+
+		// no loop point: a position has no other pass to belong to
+		const auto once = toybox::playback::makeSongTimeline (10.0, 10.0, 0.0, 1, 0.0, false);
+		check (near (toybox::playback::songTimeWithinPass (once, 25.0), 25.0, 1.0e-9),
+			   "a song without a loop is passed through");
+	}
+
+	// ------------------------------------------- [3c] the pitch-bend scale
+	// A 14-bit bend spans whatever range the receiving instrument uses, and nothing in MIDI says
+	// which: the same 50 cents is 341 units on a +/- 12 instrument and 2048 on a +/- 2 one. The
+	// sequence stores the bend as pitch, and this is the one place that turns it into bytes - so
+	// the scale is checked here as the pure function it is, including the "bends off" answer,
+	// which is not "centred" but "no message at all".
+	{
+		using toybox::playback::encodePitchBend;
+		check (encodePitchBend (0, 12, true) == 8192, "no bend is the centre value");
+		check (encodePitchBend (50, 12, true) == 8192 + 341,
+			   "50 cents on a +/- 12 instrument is 341 units");
+		check (encodePitchBend (-50, 12, true) == 8192 - 341, "and the same the other way");
+		check (encodePitchBend (50, 2, true) == 8192 + 2048,
+			   "the same 50 cents on a +/- 2 instrument is six times as many units");
+		check (encodePitchBend (1200, 12, true) == 16383, "a full-scale bend saturates, it does not wrap");
+		check (encodePitchBend (-1200, 12, true) == 0, "and so does the other end");
+		check (encodePitchBend (25, 0, true) == encodePitchBend (25, 1, true),
+			   "a range below the encoder's is read as the narrowest");
+		check (encodePitchBend (25, 99, true) == encodePitchBend (25, 24, true),
+			   "and above it as the widest");
+		check (encodePitchBend (50, 12, false) < 0, "with bends off no message is produced at all");
+	}
+
 	// ------------------------------------------------- [5] output routing (multi-out)
 	std::printf ("[5] output routing\n");
 
@@ -932,6 +984,34 @@ int main (int /*argc*/, char* /*argv*/[])
 	check (! settings.getRestoreLastSong(), "the startup switch can be turned off");
 	check (settings.lastError().isEmpty(), "and is written without complaint");
 
+	// The MIDI page's two values. The range is the one thing about pitch bend MIDI cannot report,
+	// so it is a preference rather than something read from the file; 12 is the default the page
+	// recommends. Both ends of the accepted range are the encoder's, not the file's: a hand-edited
+	// value outside them must read back clamped, or playback would bend by a different amount than
+	// the encoder computed.
+	check (settings.getMidiPitchBendRange() == toybox::playback::defaultPitchBendRange,
+		   "the bend range defaults to the wide 12 semitones");
+	check (settings.getMidiPitchBendEnabled(), "and bends are sent unless told otherwise");
+	settings.setMidiPitchBendRange (7);
+	check (settings.getMidiPitchBendRange() == 7, "a range is remembered");
+	check (toybox::settings::SettingsStore::settingsFile().loadFileAsString()
+			   .contains ("midi.pitchBendRange"),
+		   "and it reaches the file");
+	settings.setMidiPitchBendRange (0);
+	check (settings.getMidiPitchBendRange() == toybox::playback::minPitchBendRange,
+		   "a range below the encoder's reads back clamped");
+	settings.setMidiPitchBendRange (99);
+	check (settings.getMidiPitchBendRange() == toybox::playback::maxPitchBendRange,
+		   "and so does one above");
+	settings.setMidiPitchBendRange (toybox::playback::defaultPitchBendRange);
+
+	settings.setMidiPitchBendEnabled (false);
+	check (! settings.getMidiPitchBendEnabled(), "bends can be turned off");
+	check (toybox::settings::SettingsStore::settingsFile().loadFileAsString()
+			   .contains ("midi.pitchBendEnabled"),
+		   "and the switch reaches the file");
+	settings.setMidiPitchBendEnabled (true);
+
 	settings.clearLastSong();
 	check (settings.getLastSong().getFullPathName().isEmpty(), "closing the song forgets it");
 	check (! toybox::settings::SettingsStore::settingsFile().loadFileAsString()
@@ -980,6 +1060,9 @@ int main (int /*argc*/, char* /*argv*/[])
 		   "and puts the font back to System UI");
 	check (settings.getFontFamily().isEmpty(), "and forgets the custom family");
 	check (settings.getRestoreLastSong(), "and turns the startup restore back on");
+	check (settings.getMidiPitchBendRange() == toybox::playback::defaultPitchBendRange,
+		   "and puts the bend range back to 12");
+	check (settings.getMidiPitchBendEnabled(), "and bends back on");
 	check (settings.getLastSong().getFullPathName().isEmpty(),
 		   "and forgets the remembered song, like every other stored value");
 

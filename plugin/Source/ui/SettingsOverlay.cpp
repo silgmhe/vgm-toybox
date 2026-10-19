@@ -4,8 +4,10 @@
 #include "Theme.h"
 #include "Standalone/StandaloneHooks.h"
 #include "UiFont.h"
+#include "playback/MidiSequence.h"
 
 #include <algorithm>
+#include <cmath>
 #include <memory>
 
 namespace toybox::ui
@@ -131,7 +133,8 @@ namespace
 		appearancePageIndex = 0,
 		generalPageIndex = 1,
 		languagePageIndex = 2,
-		audioPageIndex = 3
+		midiPageIndex = 3,
+		audioPageIndex = 4
 	};
 }
 
@@ -907,6 +910,120 @@ void LanguageSettingsPage::lookAndFeelChanged (void)
 }
 
 //==============================================================================
+// The MIDI page
+
+MidiSettingsPage::MidiSettingsPage (void)
+{
+	bendButton.setComponentID ("settings.midi.bend");
+	bendButton.onClick = [this]
+	{
+		toybox::settings::SettingsStore::getInstance()
+			.setMidiPitchBendEnabled (bendButton.getToggleState());
+		refresh();
+	};
+	addAndMakeVisible (bendButton);
+
+	bendHint.setFont (juce::Font (juce::FontOptions (12.5f)));
+	bendHint.setJustificationType (juce::Justification::topLeft);
+	bendHint.setMinimumHorizontalScale (0.8f);
+	addAndMakeVisible (bendHint);
+
+	rangeCaption.setFont (juce::Font (juce::FontOptions (12.5f)));
+	rangeCaption.setJustificationType (juce::Justification::centredLeft);
+	addAndMakeVisible (rangeCaption);
+
+	rangeSlider.setComponentID ("settings.midi.range");
+	rangeSlider.setSliderStyle (juce::Slider::LinearHorizontal);
+	rangeSlider.setTextBoxStyle (juce::Slider::TextBoxRight, false, 68, 22);
+	rangeSlider.setRange ((double) playback::minPitchBendRange,
+						  (double) playback::maxPitchBendRange, 1.0);
+	rangeSlider.onValueChange = [this]
+	{
+		toybox::settings::SettingsStore::getInstance()
+			.setMidiPitchBendRange ((int) std::lround (rangeSlider.getValue()));
+		refresh();
+	};
+	addAndMakeVisible (rangeSlider);
+
+	rangeHint.setFont (juce::Font (juce::FontOptions (12.5f)));
+	rangeHint.setJustificationType (juce::Justification::topLeft);
+	rangeHint.setMinimumHorizontalScale (0.8f);
+	addAndMakeVisible (rangeHint);
+
+	refreshLanguage();
+	lookAndFeelChanged();
+}
+
+void MidiSettingsPage::refreshLanguage (void)
+{
+	bendButton.setButtonText (i18n::tr ("settings.midi.bend"));
+	bendHint.setText (i18n::tr ("settings.midi.bendHint"), juce::dontSendNotification);
+	rangeCaption.setText (i18n::tr ("settings.midi.range"), juce::dontSendNotification);
+	rangeSlider.setTextValueSuffix (" " + i18n::tr ("settings.midi.semitones"));
+	rangeHint.setText (i18n::tr ("settings.midi.rangeHint"), juce::dontSendNotification);
+	refresh();
+	repaint();
+}
+
+void MidiSettingsPage::refresh (void)
+{
+	auto& store = toybox::settings::SettingsStore::getInstance();
+	const bool enabled = store.getMidiPitchBendEnabled();
+
+	bendButton.setToggleState (enabled, juce::dontSendNotification);
+	rangeSlider.setValue ((double) store.getMidiPitchBendRange(), juce::dontSendNotification);
+
+	// With bends off the range is not used by anything, so it is shown greyed rather than hidden:
+	// the row keeps its place, and the value is still there when the switch goes back on.
+	rangeSlider.setEnabled (enabled);
+	rangeCaption.setAlpha (enabled ? 1.0f : 0.5f);
+	rangeHint.setAlpha (enabled ? 1.0f : 0.5f);
+}
+
+void MidiSettingsPage::paint (juce::Graphics& g)
+{
+	paintHeading (g, i18n::tr ("settings.midi"),
+				  i18n::tr ("settings.midi.explanation"), getLocalBounds(), kTwoLineHeadingHeight, 2);
+}
+
+void MidiSettingsPage::resized (void)
+{
+	auto area = pageContent (getLocalBounds(), kTwoLineHeadingHeight);
+
+	bendButton.setBounds (area.removeFromTop (24).removeFromLeft (300));
+	area.removeFromTop (4);
+	bendHint.setBounds (area.removeFromTop (34));
+
+	area.removeFromTop (theme::cardGap + 4);
+
+	rangeCaption.setBounds (area.removeFromTop (18));
+	area.removeFromTop (4);
+
+	auto rangeRow = area.removeFromTop (kFooterHeight);
+	rangeSlider.setBounds (rangeRow.removeFromLeft (juce::jmin (300, rangeRow.getWidth())));
+
+	area.removeFromTop (6);
+	rangeHint.setBounds (area.removeFromTop (52));
+}
+
+void MidiSettingsPage::lookAndFeelChanged (void)
+{
+	bendHint.setColour (juce::Label::textColourId, theme::secondaryText());
+	rangeCaption.setColour (juce::Label::textColourId, theme::secondaryText());
+	rangeHint.setColour (juce::Label::textColourId, theme::secondaryText());
+
+	// The number field's colours have to be set on the slider itself: the box's label copies them
+	// when it is created, and the box is recreated whenever the LookAndFeel changes - so a page
+	// that only relied on the LookAndFeel's own defaults drew an empty box here (measured).
+	rangeSlider.setColour (juce::Slider::textBoxTextColourId, theme::primaryText());
+	// Opaque on purpose: createSliderTextBox() copies this into the editor shown while typing and
+	// forces the alpha to 1, so a transparent black would become a black box with dark text.
+	rangeSlider.setColour (juce::Slider::textBoxBackgroundColourId, theme::card());
+	rangeSlider.setColour (juce::Slider::textBoxOutlineColourId, theme::border());
+	rangeSlider.setColour (juce::Slider::textBoxHighlightColourId, theme::accent().withAlpha (0.25f));
+}
+
+//==============================================================================
 // The overlay
 
 SettingsOverlay::SettingsOverlay (void)
@@ -930,6 +1047,10 @@ SettingsOverlay::SettingsOverlay (void)
 										   [this] (int page) { pages.setCurrentView (page); }));
 	rootItem->addSubItem (new CategoryItem ("language", i18n::tr ("settings.language"), languagePageIndex,
 										   [this] (int page) { pages.setCurrentView (page); }));
+	// The MIDI page sits with the other pages rather than in the mixer: the bend range describes
+	// the instrument the MIDI goes to, which is not something a per-song strip can own.
+	rootItem->addSubItem (new CategoryItem ("midi", i18n::tr ("settings.midi"), midiPageIndex,
+										   [this] (int page) { pages.setCurrentView (page); }));
 
 	// Audio only where there is an audio device to choose between: the standalone application says
 	// so through Source/Standalone/StandaloneHooks.h, and in a plugin the host owns the device. The
@@ -950,12 +1071,15 @@ SettingsOverlay::SettingsOverlay (void)
 	appearancePage = new AppearanceSettingsPage();
 	generalPage = new GeneralSettingsPage();
 	languagePage = new LanguageSettingsPage();
+	midiPage = new MidiSettingsPage();
 	appearancePage->setComponentID ("settings.page.appearance");
 	generalPage->setComponentID ("settings.page.general");
 	languagePage->setComponentID ("settings.page.language");
+	midiPage->setComponentID ("settings.page.midi");
 	pages.addView (appearancePage);
 	pages.addView (generalPage);
 	pages.addView (languagePage);
+	pages.addView (midiPage);
 
 	if (hasAudio)
 	{
@@ -966,7 +1090,7 @@ SettingsOverlay::SettingsOverlay (void)
 
 	// The indices the rows carry and the order the stack holds are two lists that have to agree;
 	// a page inserted between two others would otherwise open its neighbour, silently.
-	jassert (pages.getNumViews() == (hasAudio ? audioPageIndex : languagePageIndex) + 1);
+	jassert (pages.getNumViews() == (hasAudio ? audioPageIndex : midiPageIndex) + 1);
 
 	addAndMakeVisible (pages);
 
@@ -1006,6 +1130,7 @@ void SettingsOverlay::refreshLanguage (void)
 				break;
 			case generalPageIndex:	row->setLabel (i18n::tr ("settings.general")); break;
 			case languagePageIndex:	row->setLabel (i18n::tr ("settings.language")); break;
+			case midiPageIndex:		row->setLabel (i18n::tr ("settings.midi")); break;
 			case audioPageIndex:	row->setLabel (i18n::tr ("settings.audio")); break;
 			default: break;
 		}
@@ -1020,6 +1145,7 @@ void SettingsOverlay::refreshFromStore (void)
 	appearancePage->refresh();
 	generalPage->refresh();
 	languagePage->refresh();
+	midiPage->refresh();
 
 	if (audioPage != nullptr)
 	{

@@ -4,37 +4,12 @@
 #include <cmath>
 #include <cstdint>
 
+#include "Pitch.h"
+
 namespace toybox::chips
 {
 namespace
 {
-	int quantise (double hz, int* finePitch)
-	{
-		if (finePitch != nullptr)
-		{
-			*finePitch = 0;
-		}
-
-		if (hz <= 0.0)
-		{
-			return -1;
-		}
-
-		const double exact = 69.0 + 12.0 * std::log2 (hz / 440.0);
-		const int rounded = (int) std::lround (exact);
-		if (rounded < 0 || rounded > 127)
-		{
-			return -1;
-		}
-
-		if (finePitch != nullptr)
-		{
-			*finePitch = (std::int16_t) std::lround ((exact - (double) rounded) * 100.0);
-		}
-
-		return rounded;
-	}
-
 	/** One bit per operator that reaches the output, in register order (0x30, 0x34, 0x38, 0x3C).
 		Taken from the core's own per-algorithm early-out: algorithms 0-3 have a single carrier,
 		4 has two, 5 and 6 have three, and 7 sums all four. */
@@ -56,7 +31,7 @@ namespace
 		{
 			const int octave = std::clamp (block, 0, 7);
 			const double hz = (double) fnum * clock / (144.0 * std::exp2 (20.0 - (double) octave));
-			return quantise (hz, finePitch);
+			return quantiseFrequency (hz, finePitch);
 		}
 
 	private:

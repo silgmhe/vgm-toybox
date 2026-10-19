@@ -139,6 +139,29 @@ public:
 	/** Stores the switch, writes it, and tells every listener, like the other preferences. */
 	void setCloseToTray (bool shouldCloseToTray);
 
+	/** How far the receiving instrument bends, in semitones each way: 1..24, default 12.
+
+		This is the one fact about pitch bend that MIDI does not report - it lives in the
+		instrument, the host does not pass it on, and a wrong value bends by the wrong interval
+		(50 cents sent as if the range were 2 plays as 3 semitones at 12). The engine scales every
+		bend by it and sends it as RPN 0 when playback starts, so an instrument that honours RPN
+		follows this preference; one that does not has to be set to the same value by hand.
+
+		Shared by every instance through this file, like the theme: it describes the user's
+		instrument, not one project's routing. */
+	int getMidiPitchBendRange (void) const;
+
+	/** Stores the range (clamped to what the engine can encode) and tells every listener. */
+	void setMidiPitchBendRange (int semitones);
+
+	/** Whether the chips' fine pitch becomes pitch bend at all. Off: notes keep their nearest
+		semitone and no bend message is sent - for an instrument that ignores RPN and cannot be
+		matched, or for a MIDI monitor that should show plain notes. Default on. */
+	bool getMidiPitchBendEnabled (void) const;
+
+	/** Stores the switch, writes it, and tells every listener, like the other preferences. */
+	void setMidiPitchBendEnabled (bool shouldSendBends);
+
 	/** The song the standalone loaded last, or an empty File when there is none: a fresh
 		install, or the user closed the song before quitting (closeSong() clears it).
 

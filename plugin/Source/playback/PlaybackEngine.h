@@ -213,6 +213,26 @@ public:
 	}
 	int getMasterMidiChannel (void) const { return masterMidiChannel.load(); }
 
+	/** How far the receiving instrument bends, in semitones each way (1..24, default 12).
+
+		The range is the instrument's setting, not ours: nothing in MIDI reports it, so the engine
+		scales every bend by this value and declares it as RPN 0 when playback (re)starts or a
+		channel comes into use. Changing it while playing re-declares it on the next block; notes
+		already sounding keep the bend value sent under the old range until the next bend on their
+		channel, because cutting them on every step of a slider drag would be worse than the
+		momentary mismatch. */
+	void setMidiPitchBendRange (int semitones)
+	{
+		midiPitchBendRange.store (juce::jlimit (playback::minPitchBendRange, playback::maxPitchBendRange,
+												semitones));
+	}
+	int getMidiPitchBendRange (void) const { return midiPitchBendRange.load(); }
+
+	/** Whether the chips' fine pitch becomes pitch bend at all. Off: every note keeps its nearest
+		semitone and no bend message is sent (the sequence's bends are dropped, not centred). */
+	void setMidiPitchBendEnabled (bool shouldSendBends) { midiPitchBendEnabled.store (shouldSendBends); }
+	bool isMidiPitchBendEnabled (void) const { return midiPitchBendEnabled.load(); }
+
 	/** Mutes what the master bus contributes to its target bus (direct outputs keep playing). */
 	void setMasterMuted (bool shouldBeMuted)
 	{
@@ -387,11 +407,19 @@ private:
 	std::atomic<int> soloCount { 0 };
 	std::atomic<int> masterMidiChannel { 0 };	// 0 = Off, 1..16
 	std::atomic<int> midiResetGeneration { 0 };
+	std::atomic<int> midiPitchBendRange { playback::defaultPitchBendRange };
+	std::atomic<bool> midiPitchBendEnabled { true };
 	const playback::MidiSequence* midiSequence = nullptr;
 	std::size_t midiCursor = 0;
 	int midiSeenGeneration = 0;
+	int midiSeenBendRange = playback::defaultPitchBendRange;	// audio-side copy of the two settings:
+	bool midiSeenBendEnabled = true;							// a change re-sends the RPN
+	std::uint32_t midiSeenChannels = 0;							// channels the RPN was last sent to
+	bool midiBendSent = false;									// a 0xE0 went out since the last
+																// reset: turning bends off must
+																// centre it once
 	bool midiWasEnabled = false;
-	double midiLastBlockStart = -1.0;
+	double midiLastSongTime = -1.0;	// in the sequence's own (single pass) coordinate system
 	bool mixerEnabled = true;	// the mixer card is always there - off is the CPU-saving opt-out
 	// the routing scheme new songs start with (message thread only - the audio thread reads the
 	// per-track targets, never this)

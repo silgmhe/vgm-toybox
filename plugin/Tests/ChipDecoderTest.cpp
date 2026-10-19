@@ -11,6 +11,7 @@
 #include <cstdio>
 #include <vector>
 
+#include "chips/GbcApuDecoder.h"
 #include "chips/NesApuDecoder.h"
 #include "chips/NoteExtractor.h"
 #include "chips/Ym2612Decoder.h"
@@ -379,6 +380,150 @@ namespace
 			   "channel 6 is an FM channel while the DAC is off");
 		check (withDac.empty(), "the DAC replaces channel 6 instead of adding notes");
 	}
+
+	// --- Game Boy DMG -------------------------------------------------------------------------
+
+	constexpr std::uint32_t kGbClock = 4194304;		// the DMG's CPU clock
+
+	std::vector<NoteEvent> runGb (const Stream& stream, std::uint32_t totalSamples)
+	{
+		return runChip<toybox::chips::GbcApuDecoder> (stream, totalSamples, kGbClock);
+	}
+
+	/** Pulse 1 at A4: 131072 / (2048 - 1750) = 439.8 Hz. The envelope holds at 15, so only the
+		power switch or the length counter can end the note. */
+	void startGbA4 (Stream& stream, std::uint32_t time, std::uint8_t envelope = 0xF0,
+					bool lengthEnable = false, std::uint8_t lengthLoad = 0)
+	{
+		// the trigger seeds the counter from the length load, so that write goes first
+		stream.at (time, 0x01, (std::uint8_t) (0x80 | (lengthLoad & 0x3F)));	// duty 2
+		stream.at (time, 0x02, envelope);	// NR12
+		stream.at (time, 0x03, 0xD6);		// frequency 1750 low
+		stream.at (time, 0x04, (std::uint8_t) (0x86 | (lengthEnable ? 0x40 : 0)));
+	}
+
+	void testGbPulseNote (void)
+	{
+		Stream stream;
+		stream.at (0, 0x16, 0x80);			// NR52: sound on
+		startGbA4 (stream, 0);
+		stream.at (44100, 0x16, 0x00);		// power off
+
+		const auto notes = runGb (stream, 88200);
+
+		check (notes.size() == 1, "one Game Boy pulse note in, one note out");
+		if (notes.empty())
+		{
+			return;
+		}
+
+		check (notes[0].note == 69, "frequency 1750 decodes to A4");
+		check (notes[0].startSample == 0, "the note starts with the trigger");
+		check (distance (notes[0].endSample, 44100) <= 128, "the power switch ends the note");
+		check (notes[0].velocity == 127, "envelope volume 15 is full velocity");
+		check (notes[0].logicalChannel == 0, "pulse 1 is channel 0");
+		check (notes[0].family == toybox::chips::Family::gbPulse, "the note carries the GB family");
+	}
+
+	void testGbLengthCounterEndsTheNote (void)
+	{
+		Stream stream;
+		stream.at (0, 0x16, 0x80);
+		startGbA4 (stream, 0, 0xF0, true, 48);	// length load 48: the counter starts at 16
+
+		const auto notes = runGb (stream, 44100);
+
+		check (notes.size() == 1, "nothing but the length counter ends the note");
+		if (notes.empty())
+		{
+			return;
+		}
+
+		// 16 length clocks at 256 Hz, the first one 86 samples in: 86 + 15 * 172.3 = 2670
+		check (distance (notes[0].endSample, 2670) <= 200,
+			   "the length counter ends the note by itself");
+	}
+
+	void testGbEnvelopeDecaysTheNoteAway (void)
+	{
+		Stream stream;
+		stream.at (0, 0x16, 0x80);
+		startGbA4 (stream, 0, 0x81);		// initial volume 8, decrease, period 1
+
+		const auto notes = runGb (stream, 44100);
+
+		check (notes.size() == 1, "the envelope, not the driver, ends this note");
+		if (notes.empty())
+		{
+			return;
+		}
+
+		// 8 volume steps, two 64 Hz clocks each, first envelope clock 689 samples in
+		check (distance (notes[0].endSample, 11024) <= 300,
+			   "the envelope runs down at 64 Hz and silences the channel");
+		check (notes[0].velocity == 68, "the note keeps the volume it was triggered at");
+	}
+
+	void testGbWaveChannel (void)
+	{
+		Stream stream;
+		stream.at (0, 0x16, 0x80);
+		stream.at (0, 0x0A, 0x80);			// NR30: wave DAC on
+		stream.at (0, 0x0C, 0x20);			// NR32: full volume
+		stream.at (0, 0x0D, 0x6B);			// 65536 / (2048 - 1899) = 439.8 Hz
+		stream.at (0, 0x0E, 0x87);			// trigger, frequency high 7
+
+		const auto notes = runGb (stream, 22050);
+
+		check (notes.size() == 1, "the wave channel is a tone channel");
+		if (notes.empty())
+		{
+			return;
+		}
+
+		check (notes[0].note == 69, "the wave channel divides the clock by 64, so 1899 is A4");
+		check (notes[0].logicalChannel == 2, "the wave channel is channel 2");
+		check (notes[0].family == toybox::chips::Family::gbWave, "the note carries the wave family");
+		check (notes[0].isDrum == false, "the wave channel is melodic");
+	}
+
+	void testGbNoiseIsADrum (void)
+	{
+		Stream fast;
+		fast.at (0, 0x16, 0x80);
+		fast.at (0, 0x11, 0xF0);			// NR42: volume 15
+		fast.at (0, 0x12, 0x00);			// NR43: shift 0, divisor 8 - the highest frequency
+		fast.at (0, 0x13, 0x80);			// trigger
+
+		Stream slow;
+		slow.at (0, 0x16, 0x80);
+		slow.at (0, 0x11, 0xF0);
+		slow.at (0, 0x12, 0x80);			// shift 8: 256 times lower
+		slow.at (0, 0x13, 0x80);
+
+		const auto fastNotes = runGb (fast, 22050);
+		const auto slowNotes = runGb (slow, 22050);
+
+		check (fastNotes.size() == 1 && slowNotes.size() == 1, "one noise hit each");
+		if (fastNotes.empty() || slowNotes.empty())
+		{
+			return;
+		}
+
+		check (fastNotes[0].isDrum, "the noise channel is a drum track");
+		check (fastNotes[0].logicalChannel == 3, "the noise is channel 3");
+		check (fastNotes[0].family == toybox::chips::Family::gbNoise, "the note carries the noise family");
+		check (fastNotes[0].note == 38, "the fastest noise lands on the first drum key");
+		check (slowNotes[0].note > fastNotes[0].note, "a slower noise lands on a higher drum key");
+	}
+
+	void testGbSilenceWithoutPower (void)
+	{
+		Stream stream;
+		startGbA4 (stream, 0);				// never turns NR52 on
+
+		check (runGb (stream, 22050).empty(), "an APU that was never powered on makes no notes");
+	}
 }
 
 int main (void)
@@ -401,6 +546,13 @@ int main (void)
 	testFmPitchBendFollowsTheFnumber();
 	testFmSecondPortIsASeparateChannel();
 	testFmDacTakesOverChannelSix();
+
+	testGbPulseNote();
+	testGbLengthCounterEndsTheNote();
+	testGbEnvelopeDecaysTheNoteAway();
+	testGbWaveChannel();
+	testGbNoiseIsADrum();
+	testGbSilenceWithoutPower();
 
 	std::printf ("Result    : %s\n", failures == 0 ? "PASS" : "FAILURES");
 	return failures == 0 ? 0 : 1;

@@ -56,6 +56,17 @@ SongTimeline makeSongTimeline (double durationSeconds, double singlePassSeconds,
 	return timeline;
 }
 
+double songTimeWithinPass (const SongTimeline& timeline, double seconds) noexcept
+{
+	if (! timeline.hasLoop() || ! std::isfinite (seconds) || seconds <= timeline.singlePassSeconds)
+	{
+		return seconds;
+	}
+
+	const double intoLoop = std::fmod (seconds - timeline.singlePassSeconds, timeline.loopLengthSeconds);
+	return timeline.loopStartSeconds() + intoLoop;
+}
+
 SyncDecision evaluateSync (const SongTimeline& timeline, const HostClock& host, double cueSeconds,
 						   double enginePosition, bool enginePlaying, double toleranceSeconds)
 {

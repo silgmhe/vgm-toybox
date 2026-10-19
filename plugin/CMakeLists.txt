@@ -187,6 +187,7 @@ target_sources(VGMToybox PRIVATE
 	Source/playback/DawSync.cpp
 	Source/playback/HostClockSource.cpp
 	Source/playback/SessionState.cpp
+	Source/chips/GbcApuDecoder.cpp
 	Source/chips/NesApuDecoder.cpp
 	Source/chips/NoteExtractor.cpp
 	Source/chips/Ym2612Decoder.cpp
@@ -312,6 +313,7 @@ add_executable(vgm_mixer_test EXCLUDE_FROM_ALL
 	Source/playback/PlaybackEngine.cpp
 	Source/playback/DawSync.cpp
 	Source/playback/SessionState.cpp
+	Source/chips/GbcApuDecoder.cpp
 	Source/chips/NesApuDecoder.cpp
 	Source/chips/NoteExtractor.cpp
 	Source/chips/Ym2612Decoder.cpp
@@ -329,6 +331,7 @@ add_executable(vgm_mixer_test EXCLUDE_FROM_ALL
 #   <build dir>/plugin/vgm_chip_test
 add_executable(vgm_chip_test EXCLUDE_FROM_ALL
 	Tests/ChipDecoderTest.cpp
+	Source/chips/GbcApuDecoder.cpp
 	Source/chips/NesApuDecoder.cpp
 	Source/chips/NoteExtractor.cpp
 	Source/chips/Ym2612Decoder.cpp

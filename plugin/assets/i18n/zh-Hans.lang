@@ -114,6 +114,13 @@ language: 简体中文
 "settings.language.selectTooltip" = "窗口和工具提示使用哪种语言";
 "settings.language.sourceBuiltin" = "内置翻译：{0}";
 "settings.language.sourceFile" = "{0}";
+"settings.midi" = "MIDI";
+"settings.midi.bend" = "发送弯音";
+"settings.midi.bendHint" = "关闭：每个音符只保留最近的半音，不发送弯音；开启：芯片的细微音高（失谐、颤音、滑音）以弯音送到乐器。";
+"settings.midi.explanation" = "弯音的含义取决于接收乐器的范围，而 MIDI 从不报告它：这里指定乐器使用的是哪一种。";
+"settings.midi.range" = "弯音范围";
+"settings.midi.rangeHint" = "向两侧各多少半音，必须与接收乐器一致：50 音分的弯音若按 ±2 半音编码，在 ±12 的音源上会奏成 3 个半音。播放开始时用 RPN 0 声明该范围，支持 RPN 的音源会跟随这里的设置。";
+"settings.midi.semitones" = "半音";
 "settings.theme" = "主题";
 "settings.theme.dark" = "深色";
 "settings.theme.explanation" = "窗口绘制使用的配色。更改立即生效。";

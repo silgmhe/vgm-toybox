@@ -66,6 +66,19 @@ SongTimeline makeSongTimeline (double durationSeconds, double singlePassSeconds,
 							   double loopLengthSeconds, int loopCount, double fadeSeconds,
 							   bool loopsForever);
 
+/** Maps an absolute engine position onto the one playthrough an event list covers.
+
+	The MIDI sequence is built once, from the whole command stream, so it is as long as a single
+	pass. The engine, however, reports what it actually plays: with N >= 2 loops the position
+	keeps counting across repeats (past the end of that pass), and with infinite loops it jumps
+	back to the loop point. Folding the second case back into the pass is missing here, the cursor
+	would simply run off the end of the sequence after the first pass - notes stop while the audio
+	plays on, and a loop never sounds twice.
+
+	The fold is the same arithmetic `evaluateSync()` uses for its own coordinate system: the fade
+	tail counts as another pass, which is what the engine renders there. */
+double songTimeWithinPass (const SongTimeline& timeline, double seconds) noexcept;
+
 /** What the host said in the last block. `usable` is not the same as "the host sent a context":
 	JUCE hands out an all-zero PositionInfo when there is none, so the caller has to decide - see
 	the note on `publishHostClock()`. Seconds are the only unit here: the host's sample rate is a

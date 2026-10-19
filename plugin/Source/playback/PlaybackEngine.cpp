@@ -942,7 +942,7 @@ void PlaybackEngine::installSong (LoadedSong&& built)
 	midiResetGeneration.fetch_add (1);
 	midiSeenGeneration = midiResetGeneration.load() - 1;
 	midiWasEnabled = false;
-	midiLastBlockStart = -1.0;
+	midiLastSongTime = -1.0;
 
 	cachedTimeline = built.timeline;
 
@@ -1031,7 +1031,7 @@ void PlaybackEngine::resetState (void)
 	midiSequence = nullptr;
 	midiCursor = 0;
 	midiWasEnabled = false;
-	midiLastBlockStart = -1.0;
+	midiLastSongTime = -1.0;
 
 	fileData.reset();
 	currentFile = juce::File();
@@ -1182,10 +1182,21 @@ void PlaybackEngine::emitMidiForBlock (double blockStartSeconds, int numSamples,
 {
 	const auto sendAllNotesOff = [this, sink] (int sampleOffset)
 	{
+		// With bends off the output carries no 0xE0 at all - a MIDI monitor should show notes and
+		// nothing else - so the centring message is only worth sending when bends are in use.
+		const bool centreBend = midiPitchBendEnabled.load();
+
 		for (int channel = 0; channel < 16; ++channel)
 		{
 			sink->send ({ sampleOffset, (std::uint8_t) (0xB0 | channel), 123, 0 });
 			sink->send ({ sampleOffset, (std::uint8_t) (0xB0 | channel), 120, 0 });
+
+			// A bend left by the passage just cut would sit on the channel until the next bend
+			// arrives; centring it makes the silence that follows actually neutral.
+			if (centreBend)
+			{
+				sink->send ({ sampleOffset, (std::uint8_t) (0xE0 | channel), 0, 64 });
+			}
 		}
 	};
 
@@ -1204,15 +1215,91 @@ void PlaybackEngine::emitMidiForBlock (double blockStartSeconds, int numSamples,
 		return;
 	}
 
+	// The sequence covers one playthrough, the engine reports what it actually plays (a second
+	// loop pass is a position past the song end, an infinite loop jumps back to the loop point).
+	// Mapping makes both look like the pass the sequence was built for; the jump back is then the
+	// same "the position went backwards" test a seek uses, so a loop sends all-notes-off and
+	// resumes at the loop point exactly like a seek to it would.
+	// Which channels are routed (0-based bit set). The bend-range RPN is a channel setting, so it
+	// goes only to channels something actually plays on.
+	std::uint32_t usedChannels = 0;
+	for (const auto& track : tracks)
+	{
+		const int channel = track->midiChannel.load();
+		if (channel >= 1 && channel <= 16)
+		{
+			usedChannels |= 1u << (channel - 1);
+		}
+	}
+
+	const int masterChannel = masterMidiChannel.load();
+	if (masterChannel >= 1 && masterChannel <= 16)
+	{
+		usedChannels |= 1u << (masterChannel - 1);
+	}
+
+	const int bendRange = midiPitchBendRange.load();
+	const bool bendEnabled = midiPitchBendEnabled.load();
+
+	// The receiving instrument's bend range is the one thing about pitch bend MIDI cannot tell
+	// us, so the engine declares it: RPN 0 (pitch bend sensitivity) whenever the setting changes
+	// or a channel comes into use. An instrument that honours RPN follows it; one that does not
+	// has to be set by hand, which is what the setting in the window is for. A seek is not a
+	// reason to repeat it - the value stays until something changes it.
+	if (bendRange != midiSeenBendRange || bendEnabled != midiSeenBendEnabled
+		|| usedChannels != midiSeenChannels)
+	{
+		if (bendEnabled)
+		{
+			for (int channel = 0; channel < 16; ++channel)
+			{
+				if ((usedChannels & (1u << channel)) == 0)
+				{
+					continue;
+				}
+
+				const std::uint8_t status = (std::uint8_t) (0xB0 | channel);
+				sink->send ({ 0, status, 101, 0 });			// RPN 0, parameter 0
+				sink->send ({ 0, status, 100, 0 });			// = pitch bend sensitivity
+				sink->send ({ 0, status, 6, (std::uint8_t) juce::jlimit (0, 127, bendRange) });
+				sink->send ({ 0, status, 38, 0 });			// cents part: whole semitones only
+				sink->send ({ 0, status, 101, 127 });		// deselect the parameter, so the
+				sink->send ({ 0, status, 100, 127 });		// next data entry is not swallowed
+			}
+		}
+		else if (midiBendSent)
+		{
+			// Bends are off now, but a bend this engine sent may still be holding a channel
+			// off-centre - and in this mode nothing will ever move it back. One centred message
+			// per channel retires exactly the state the mode created; with no bend sent there is
+			// nothing to retire, so a session that never bent sends no 0xE0 at all.
+			for (int channel = 0; channel < 16; ++channel)
+			{
+				if ((usedChannels & (1u << channel)) != 0)
+				{
+					sink->send ({ 0, (std::uint8_t) (0xE0 | channel), 0, 64 });
+				}
+			}
+
+			midiBendSent = false;
+		}
+
+		midiSeenBendRange = bendRange;
+		midiSeenBendEnabled = bendEnabled;
+		midiSeenChannels = usedChannels;
+	}
+
 	const int generation = midiResetGeneration.load();
+	const double songTime = playback::songTimeWithinPass (cachedTimeline, blockStartSeconds);
 	if (generation != midiSeenGeneration
-		|| (midiLastBlockStart >= 0.0 && blockStartSeconds + 0.001 < midiLastBlockStart))
+		|| (midiLastSongTime >= 0.0 && songTime + 0.001 < midiLastSongTime))
 	{
 		sendAllNotesOff (0);
+		midiBendSent = false;	// the centre messages above already put every channel back
 		midiSeenGeneration = generation;
 		midiCursor = (std::size_t) (std::lower_bound (midiSequence->events.begin(),
 													   midiSequence->events.end(),
-													   blockStartSeconds,
+													   songTime,
 													   [] (const playback::MidiEvent& event, double time)
 													   {
 														   return event.timeSeconds < time;
@@ -1220,11 +1307,10 @@ void PlaybackEngine::emitMidiForBlock (double blockStartSeconds, int numSamples,
 									 - midiSequence->events.begin());
 	}
 
-	midiLastBlockStart = blockStartSeconds;
+	midiLastSongTime = songTime;
 	midiWasEnabled = true;
 
-	const double blockEnd = blockStartSeconds + (double) numSamples / hostSampleRate;
-	const int masterChannel = masterMidiChannel.load();
+	const double blockEnd = songTime + (double) numSamples / hostSampleRate;
 	const bool anySolo = soloCount.load() > 0;
 
 	while (midiCursor < midiSequence->events.size())
@@ -1236,7 +1322,7 @@ void PlaybackEngine::emitMidiForBlock (double blockStartSeconds, int numSamples,
 		}
 
 		++midiCursor;
-		if (event.timeSeconds < blockStartSeconds - 0.001)
+		if (event.timeSeconds < songTime - 0.001)
 		{
 			continue;
 		}
@@ -1255,16 +1341,36 @@ void PlaybackEngine::emitMidiForBlock (double blockStartSeconds, int numSamples,
 
 		const int channel = track.midiChannel.load();
 		const int sampleOffset = juce::jlimit (0, juce::jmax (0, numSamples - 1),
-											  (int) std::lround ((event.timeSeconds - blockStartSeconds)
+											  (int) std::lround ((event.timeSeconds - songTime)
 																 * hostSampleRate));
 
 		std::uint8_t status = 0;
+		std::uint8_t data1 = event.data1;
+		std::uint8_t data2 = event.data2;
 		switch (event.type)
 		{
 		case playback::MidiEventType::noteOn:  status = 0x90; break;
 		case playback::MidiEventType::noteOff: status = 0x80; break;
-		case playback::MidiEventType::pitchBend: status = 0xE0; break;
 		case playback::MidiEventType::controlChange: status = 0xB0; break;
+		case playback::MidiEventType::pitchBend:
+			{
+				// The 14-bit value depends on the receiver's range, so it is built here rather
+				// than in the sequence. Off: no message at all - the note keeps its semitone.
+				const int value = playback::encodePitchBend (event.bendCents, bendRange, bendEnabled);
+				if (value < 0)
+				{
+					continue;
+				}
+
+				status = 0xE0;
+				data1 = (std::uint8_t) (value & 0x7F);
+				data2 = (std::uint8_t) ((value >> 7) & 0x7F);
+
+				// Remembered so that turning the switch off later knows a channel may be left
+				// off-centre by this engine, and clears it once.
+				midiBendSent = true;
+			}
+			break;
 		}
 
 		if (status == 0)
@@ -1274,8 +1380,7 @@ void PlaybackEngine::emitMidiForBlock (double blockStartSeconds, int numSamples,
 
 		if (channel > 0)
 		{
-			sink->send ({ sampleOffset, (std::uint8_t) (status | (channel - 1)),
-						  event.data1, event.data2 });
+			sink->send ({ sampleOffset, (std::uint8_t) (status | (channel - 1)), data1, data2 });
 		}
 
 		// The master is an extra merged copy. Master mute silences that copy; if the direct
@@ -1283,8 +1388,7 @@ void PlaybackEngine::emitMidiForBlock (double blockStartSeconds, int numSamples,
 		// the first note short.
 		if (masterChannel > 0 && channel > 0 && masterChannel != channel && ! masterMuted.load())
 		{
-			sink->send ({ sampleOffset, (std::uint8_t) (status | (masterChannel - 1)),
-						  event.data1, event.data2 });
+			sink->send ({ sampleOffset, (std::uint8_t) (status | (masterChannel - 1)), data1, data2 });
 		}
 	}
 }

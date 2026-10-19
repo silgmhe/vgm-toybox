@@ -473,17 +473,15 @@ private:
 			return;
 		}
 
-		// A real click on a button that toggles itself flips the state *before* the click handler
-		// runs, so that is what this does - triggerClick() alone only fires the handler (measured:
-		// a ToggleButton kept its state). A button that does not toggle itself is lit by its
+		// triggerClick() only *posts* the click, and a toggling button flips its state inside that
+		// handler and returns without calling onClick() when the state still had to change
+		// (juce_Button.cpp, internalClickCallback). So the loop has to run before either happens:
+		// flipping the state here instead made the queued handler flip it back and never reach
+		// onClick, which is a switch that only looks thrown - the store kept its old value and the
+		// next refresh put the button back. A button that does not toggle itself is lit by its
 		// panel's refresh() instead, and this reports that rather than a meaningless boolean.
-		if (button->getClickingTogglesState())
-		{
-			button->setToggleState (! button->getToggleState(), juce::dontSendNotification);
-		}
-
 		button->triggerClick();
-		settle (60);
+		juce::MessageManager::getInstance()->runDispatchLoopUntil (60);
 
 		report (true, juce::String (expectToggle ? "toggle " : "click ") + tokens[1]
 					   + (button->getClickingTogglesState()
@@ -753,6 +751,26 @@ private:
 			const auto actual = juce::String (processor.getEngine().getPositionSeconds(), 6);
 			report (fieldMatches (actual, tokens[3], tokens[4]),
 					"engine.position " + tokens[3] + " '" + tokens[4] + "'   (was: " + actual + ")");
+			return;
+		}
+
+		// The pitch-bend preferences live in the shared settings file, not in the engine: the page
+		// writes the file, the store broadcasts synchronously, and the processor's change listener
+		// hands the values to the audio side. Asserting on the store would stop before that last
+		// step - a listener that was never added leaves the page looking right and the MIDI wrong.
+		if (tokens[1] == "engine" && tokens[2] == "bend")
+		{
+			const auto actual = processor.getEngine().isMidiPitchBendEnabled() ? "true" : "false";
+			report (fieldMatches (actual, tokens[3], tokens[4]),
+					"engine.bend " + tokens[3] + " '" + tokens[4] + "'   (was: " + actual + ")");
+			return;
+		}
+
+		if (tokens[1] == "engine" && tokens[2] == "bendRange")
+		{
+			const auto actual = juce::String (processor.getEngine().getMidiPitchBendRange());
+			report (fieldMatches (actual, tokens[3], tokens[4]),
+					"engine.bendRange " + tokens[3] + " '" + tokens[4] + "'   (was: " + actual + ")");
 			return;
 		}
 

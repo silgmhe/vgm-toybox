@@ -280,7 +280,8 @@ plugin/Source/backends/libvgm/MidiSequenceBuilder.{h,cpp}
 职责：
 
 - 读 VGM header：data offset、loop offset、chip clock；
-- 遍历命令流：`0x50–0x5F`、`0xA0–0xAF`、`0xB?`（第二芯片）、`0x61/0x62/0x63/0x7n` 等待、`0x67` 数据块（跳过 payload）、`0x66` 结束；
+- 遍历命令流：`0x50–0x5F`、`0xA0–0xAF`、`0xB?`（第二芯片）、`0x61/0x62/0x63/0x7n` 等待、`0x80–0x8F`（YM2612 DAC 流，**低 4 位是等待采样数**）、`0x67` 数据块（跳过 payload）、`0x66` 结束；
+- **凡是带等待的命令都必须推进时钟**，包括不产生寄存器写的那几条。`0x8n` 只在 DAC 流里出现，容易在“这是寄存器写”的思路下被跳过：它不推进，MD 曲目的 MIDI 时间就会短一大截（Green Hill Zone 52.9 s → 21.4 s），音符越跑越快、序列提前结束。命令时钟读完之后应当正好等于 header 的 `total_samples`（`VgmCommandReader::timeSamples()`，`vgm_mixer_test` 的 `[11]` 直接比对这两个数）；
 - 维护每种芯片的影子寄存器；
 - 对支持的芯片调用对应的 `ChipMidiDecoder`；
 - 输出 `MidiEvent`，`sourceTrack` 用已经建立的 `TrackInfo::id`；
@@ -336,8 +337,10 @@ plugin/Source/backends/libvgm/MidiSequenceBuilder.{h,cpp}
 ### 5.6 循环与 seek
 
 - 序列只保存**一遍**，并记录 `loopStartSeconds`/`loopEndSeconds`（来自 `SongInfo`）；
-- 循环时，播放位置回到 loop start，MIDI 游标重置，先发 all-notes-off，再重新发事件；
+- 引擎报的位置是它**真正播放**的位置，和这份序列不是同一个坐标系：N ≥ 2 次循环时位置会一路数过第一遍的结尾，无限循环时位置直接跳回 loop start。两者都要用 `playback::songTimeWithinPass()` 折回“这一遍”里（与 `evaluateSync()` 用的折法一致，fade 尾巴算多一遍）；
+- 折回之后，“位置往回跳”与 seek 是同一件事：游标用 `lower_bound` 重新定位、先发 all-notes-off，然后照常发事件。所以循环不需要单独的代码路径，`midiResetGeneration` 也不必为它递增；
 - seek/load/stop 时把 `midiResetGeneration` 加一；音频线程看到新 generation 后先发 all-notes-off，再把游标定位到新位置；
+- 不折回的后果是：第一遍结束之后游标越过序列末尾，音符全部停止而音频继续播放——循环听不见第二遍。`vgm_mixer_test` 的 `[12]` 在带 loop 点的曲目上数“第一遍之后是否还有 note-on”；
 - 这样可以避免“循环后旧 note 还按着”和“seek 后挂音”。
 
 ---
@@ -366,8 +369,8 @@ void ToyboxAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer,
 }
 ```
 
-- sample offset 用 `round((event.timeSeconds - blockStartSeconds) * sampleRate)`；
-- `blockStartSeconds` 必须是本次 `render()` 真正使用的起点（DAW sync 修正后的起点），不能在外面先读一个旧位置；
+- sample offset 用 `round((event.timeSeconds - songTime) * sampleRate)`；
+- `blockStartSeconds` 必须是本次 `render()` 真正使用的起点（DAW sync 修正后的起点），不能在外面先读一个旧位置；`songTime = songTimeWithinPass(timeline, blockStartSeconds)` 是同一个起点折回序列那一遍之后的坐标（见 §5.6），扫事件、比时间、算 offset 都用它；
 - 引擎在 `render()` 的 try-lock 成功后、渲染音频之前扫描事件，保证和音频同一时间基准；
 - `MidiBufferSink` 不分配内存：在 `prepareToPlay()` 里预留最大事件数，`processBlock` 只写；如果宿主 buffer 容量未知，使用成员 `juce::MidiBuffer` + `swapWith`，或至少保证 `ensureSize` 在非音频线程完成；
 - 如果 `try-lock` 失败（输出静音），本 block 不发 MIDI；下一个成功 block 通过 generation 重新同步，不补发已错过的 note（避免时间错位）。
@@ -519,6 +522,18 @@ void render (const playback::OutputBusBuffers* buses, int numBuses, int numSampl
 
 发送内容建议：CC123（All Notes Off）+ CC120（All Sound Off）+ pitch bend center，覆盖该实例用到的通道；不要发到全部 16 通道以外。
 
+**已实现的两处偏离**：center 只在开启弯音时发（关闭时输出里不该有 `0xE0`）；关闭弯音的那一刻，如果引擎发过 `0xE0`，给用到的通道补一次 center，否则上一条颤音会作为永久失谐留着。
+
+### 9.4 pitch bend 范围
+
+14 位弯音值只有配合接收乐器的灵敏度才有意义，而 MIDI 没有查询它的消息。因此：
+
+- 引擎把“每侧半音数”当作输入（1..24，默认 12），用它换算每个弯音值；
+- 演奏前（以及通道新投入使用、范围被改动时）向用到的通道发 **RPN 0**（CC101/100=0，CC6=半音数，CC38=0，随后 CC101/100=127 取消选择）——这是 General MIDI 音源读取的消息，支持 RPN 的音源会跟随；不认识 RPN 的音源按自己的固定范围解释，此时唯一能对齐的办法是让用户把两边都设成同一个值；
+- 关闭弯音后序列里的 pitch bend 事件被丢弃，音符落在最近的半音上，`0xE0` 一条都不发；
+- 设置存 `SettingsStore`（`settings.midi.*`），不进工程状态：它描述的是外部乐器，换工程不该改变它；`ToyboxAudioProcessor` 在构造时和 store 广播时把它交给引擎，这样宿主不打开窗口也能拿到正确的值；
+- 播放中修改范围只重发 RPN，不切音：滑块的每一步都切音比短暂的偏差更糟；已经在响的音在各自通道下一次弯音前保持旧值。
+
 ---
 
 ## 10. 测试计划
@@ -534,6 +549,8 @@ void render (const playback::OutputBusBuffers* buses, int numBuses, int numSampl
 - Master 通道复制同样的音符序列；Master 与轨道同通道时不重复发送；Master 静音只停合并那份；
 - 混音器总开关关闭时没有任何 note；
 - seek 之后重新发 CC123 × 16；
+- 第一个音符之前先发 RPN 0（CC101/100=0、CC6=12、CC38=0）；
+- 关掉弯音后没有任何真实弯音：`0xE0` 只允许是“关闭那一刻补发”的 center，且最多每通道一条；
 - 一个 block 内的事件按 sampleOffset 单调。
 
 **尚未自动化**（需要每颗芯片一份合成 VGM，成本较高，暂靠 REAPER 手工验证）：YM2610 的 key-on/off、FNUM/BLOCK、pan、ADPCM-A trigger，非 B FM 通道映射（1/2/4/5）与 B 的 6 通道，one-shot 的 C4 trigger 与 gate，时钟换算（各芯片 master clock / 分频）。
@@ -552,6 +569,10 @@ void render (const playback::OutputBusBuffers* buses, int numBuses, int numSampl
 - **`click` 之后必须跟 `sleep`**：`Button::triggerClick()` 是投递的，`settle()` 只睡不泵消息循环，脚本会看不出任何变化（本轮就踩到了：断言拿到 `enabled == true`）。自翻转按钮由 harness 直接改状态，所以 `chip.0` 那些脚本不需要 `sleep`；
 - 语言切换后 item 文本更新，选择不变（key 的完整性由 i18n 检查覆盖；harness 没有切换语言的命令，这一条靠手工/`language` 相关脚本，选择值本身存在引擎里，切语言只重建条目文本）；
 - 状态保存/恢复后 `midiChannel` / `masterMidiChannel` 一致（`vgm_core_test` 已覆盖，见 `PlaybackCoreTest.cpp`）。
+
+`plugin/Tests/scripts/settings-pages.txt` 覆盖设置页 *Settings* → *MIDI*：树第 4 行是它、开关和滑块的初始值、关掉弯音后范围变灰但保留数值，以及 **`assert engine bend*`**——页面只写设置文件，真正的值要经过 store 广播到处理器的监听器再进引擎，断在页面上会漏掉“监听器没接上”这种错误。
+
+`AppHarnessTest` 的 `click`/`toggle` 命令在修复前只 `triggerClick()` 再 `settle()`：`triggerClick()` 只是投递，自翻转按钮在投递的处理器里改状态并直接返回、不调 `onClick`，所以开关看起来按下了、值从未写进 store（实测：`settings.midi.bend` 一直是 true）。现在命令投递后跑 `runDispatchLoopUntil()`，脚本里的开关才真的生效。
 
 ### 10.3 宿主集成
 

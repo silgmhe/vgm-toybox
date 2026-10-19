@@ -187,6 +187,16 @@ bool VgmCommandReader::next (VgmCommand& command)
 			sampleTime += (std::uint32_t) (cmd & 0x0F) + 1;
 			command.kind = VgmCommand::Kind::wait;
 		}
+		else if (cmd >= 0x80 && cmd <= 0x8F)
+		{
+			// YM2612 DAC stream: the sample byte comes out of a data bank, so there is no register
+			// write to report - but the wait is part of the song's time. It is the *only* thing
+			// carrying time in a DAC stream, and it used to be dropped here, which shortened every
+			// Mega Drive song by all of it (Green Hill Zone: 31.5 s of 52.9 s) and made the MIDI
+			// run ahead of the audio until the sequence ended.
+			sampleTime += (std::uint32_t) (cmd & 0x0F);
+			command.kind = VgmCommand::Kind::wait;
+		}
 		else if (cmd == 0x50)
 		{
 			// SN76489 takes a single byte: the latch bit and the payload share it

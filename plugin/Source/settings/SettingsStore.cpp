@@ -1,5 +1,7 @@
 #include "SettingsStore.h"
 
+#include "playback/MidiSequence.h"	// the bend range limits the engine and the page share
+
 namespace toybox::settings
 {
 
@@ -28,6 +30,8 @@ namespace
 	constexpr const char* kRestoreLastSongKey = "standalone.restoreLastSong";
 	constexpr const char* kCloseToTrayKey = "standalone.closeToTray";
 	constexpr const char* kLastSongKey = "standalone.lastSong";
+	constexpr const char* kMidiBendRangeKey = "midi.pitchBendRange";
+	constexpr const char* kMidiBendEnabledKey = "midi.pitchBendEnabled";
 
 	juce::String writeErrorFor (const juce::File& file)
 	{
@@ -273,6 +277,49 @@ void SettingsStore::setCloseToTray (bool shouldCloseToTray)
 	broadcastChange();
 }
 
+int SettingsStore::getMidiPitchBendRange (void) const
+{
+	// Absent - a fresh install, or a file from before this setting existed - means 12: the wide
+	// range most software synths ship with, and the one the MIDI page recommends. Values outside
+	// what the engine can encode read back clamped, so a hand-edited file cannot break playback.
+	return juce::jlimit (playback::minPitchBendRange, playback::maxPitchBendRange,
+						 file->getIntValue (kMidiBendRangeKey, playback::defaultPitchBendRange));
+}
+
+void SettingsStore::setMidiPitchBendRange (int semitones)
+{
+	const int clamped = juce::jlimit (playback::minPitchBendRange, playback::maxPitchBendRange, semitones);
+	if (clamped == getMidiPitchBendRange())
+	{
+		return;
+	}
+
+	file->setValue (kMidiBendRangeKey, clamped);
+	lastErrorMessage = file->saveIfNeeded() ? juce::String() : writeErrorFor (settingsFile());
+
+	broadcastChange();
+}
+
+bool SettingsStore::getMidiPitchBendEnabled (void) const
+{
+	// On by default: a chip with fine pitch (detune, vibrato, portamento) only reaches the
+	// instrument through the bend wheel, and leaving it off silently quantises every song.
+	return file->getBoolValue (kMidiBendEnabledKey, true);
+}
+
+void SettingsStore::setMidiPitchBendEnabled (bool shouldSendBends)
+{
+	if (shouldSendBends == getMidiPitchBendEnabled())
+	{
+		return;
+	}
+
+	file->setValue (kMidiBendEnabledKey, shouldSendBends);
+	lastErrorMessage = file->saveIfNeeded() ? juce::String() : writeErrorFor (settingsFile());
+
+	broadcastChange();
+}
+
 juce::File SettingsStore::getLastSong (void) const
 {
 	const auto path = file->getValue (kLastSongKey);
@@ -339,6 +386,8 @@ bool SettingsStore::resetToDefaults (void)
 	file->setValue (kReuseWindowKey, true);
 	file->setValue (kRestoreLastSongKey, true);
 	file->setValue (kCloseToTrayKey, false);
+	file->setValue (kMidiBendRangeKey, playback::defaultPitchBendRange);
+	file->setValue (kMidiBendEnabledKey, true);
 
 	const bool saved = file->save();
 	lastErrorMessage = saved ? juce::String() : writeErrorFor (settingsFile());

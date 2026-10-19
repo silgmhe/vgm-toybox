@@ -6,6 +6,7 @@
 
 #include "VgmCommandReader.h"
 
+#include "chips/GbcApuDecoder.h"
 #include "chips/NesApuDecoder.h"
 #include "chips/NoteExtractor.h"
 #include "chips/Ym2612Decoder.h"
@@ -105,14 +106,6 @@ namespace
 	{
 		bool activeA[6] = { false, false, false, false, false, false };
 		bool activeB = false;
-	};
-
-	struct GbState
-	{
-		UINT8 regs[0x30] = {};
-		int note[4] = { -1, -1, -1, -1 };
-		bool active[4] = { false, false, false, false };
-		bool powered = true;
 	};
 
 	struct Rf5cState
@@ -280,8 +273,8 @@ namespace
 							   command.addr, command.data, time);
 					break;
 				case 0xB3:
-					writeGb (deviceFor (DEVID_GB_DMG, command.port),
-							 command.addr, command.data, time);
+					queueGbWrite (deviceFor (DEVID_GB_DMG, command.port),
+								  command.addr, command.data, command.sampleTime);
 					break;
 				case 0xB4:
 					queueNesWrite (deviceFor (DEVID_NES_APU, command.port),
@@ -306,6 +299,7 @@ namespace
 			// their note boundaries come from the chip's own counters, not from a register write
 			flushNes (lastSampleTime);
 			flushYm2612 (lastSampleTime);
+			flushGb (lastSampleTime);
 
 			if (events.empty())
 			{
@@ -530,8 +524,10 @@ namespace
 			events.push_back (event);
 		}
 
-		/** Pitch bend with the MIDI default range of +/- 2 semitones. The value is clamped so a
-			large slide cannot wrap around; the caller retriggers instead of exceeding the range. */
+		/** Pitch bend, stored as cents rather than as MIDI bytes: the 14-bit scale depends on the
+			receiving instrument's range, which is a preference the engine applies when it sends
+			(playback/MidiSequence.h). Clamped to the widest range the setting offers, so a broken
+			chip value cannot wrap around. */
 		void pitchBend (int track, double time, double semitones)
 		{
 			if (track < 0 || track >= (int) tracks.size())
@@ -539,14 +535,12 @@ namespace
 				return;
 			}
 
-			const int value = (int) std::lround (juce::jlimit (-2.0, 2.0, semitones) * 4096.0);
-			const int biased = juce::jlimit (0, 16383, value + 8192);
-
 			playback::MidiEvent event;
 			event.timeSeconds = time;
 			event.type = playback::MidiEventType::pitchBend;
-			event.data1 = (std::uint8_t) (biased & 0x7F);
-			event.data2 = (std::uint8_t) ((biased >> 7) & 0x7F);
+			event.bendCents = (std::int16_t) std::lround (
+				juce::jlimit (-(double) playback::maxPitchBendRange, (double) playback::maxPitchBendRange,
+							  semitones) * 100.0);
 			event.sourceTrack = tracks[(std::size_t) track].id;
 			events.push_back (event);
 		}
@@ -628,12 +622,6 @@ namespace
 			}
 
 			return 69.0 + 12.0 * std::log2 (frequency / 440.0);
-		}
-
-		static int noteFromFrequency (double frequency)
-		{
-			const double note = noteFromFrequencyF (frequency);
-			return note < 0.0 ? -1 : juce::jlimit (1, 127, (int) std::lround (note));
 		}
 
 		void writeSn (const PLR_DEV_INFO* device, UINT8 data, double time)
@@ -721,156 +709,50 @@ namespace
 			}
 		}
 
-		void writeGb (const PLR_DEV_INFO* device, UINT8 addr, UINT8 data, double time)
+		/** Buffers one DMG APU register write. A Game Boy note is not a register write either: the
+			length counters, the envelopes and the sweep run off the chip's frame sequencer, which
+			only the decoder models, so the stream is decoded once it has been read. */
+		void queueGbWrite (const PLR_DEV_INFO* device, std::uint8_t reg, std::uint8_t value,
+						   std::uint32_t sampleTime)
 		{
-			if (device == nullptr || addr >= 0x30)
+			if (device == nullptr)
 			{
 				return;
 			}
 
-			GbState& state = gbStates[device->id];
-			state.regs[addr] = data;
+			chips::RegisterWrite write;
+			write.deviceId = device->id;
+			write.reg = reg;
+			write.value = value;
+			write.sampleTime = sampleTime;
+			gbWrites[device->id].push_back (write);
+			gbDevices[device->id] = device;
+		}
 
-			if (addr == 0x16)	// NR52
+		void flushGb (std::uint32_t totalSamples)
+		{
+			for (auto& entry : gbWrites)
 			{
-				if ((data & 0x80) == 0)
+				const auto device = gbDevices.find (entry.first);
+				if (device == gbDevices.end() || device->second == nullptr)
 				{
-					for (int channel = 0; channel < 4; ++channel)
-					{
-						if (state.active[channel])
-						{
-							noteOff (trackFor (device, channel), time, state.note[channel]);
-							state.active[channel] = false;
-						}
-					}
+					continue;
 				}
-				state.powered = (data & 0x80) != 0;
-				return;
+
+				const std::uint32_t clock = (device->second->devCfg != nullptr
+											 && device->second->devCfg->clock > 0)
+												? device->second->devCfg->clock
+												: 4194304u;
+
+				chips::GbcApuDecoder decoder;
+				decoder.reset (clock, (double) kVgmRate);
+
+				emitDecodedNotes (device->second,
+								  chips::extractPerformance (decoder, entry.second, totalSamples));
 			}
 
-			if (addr == 0x14 || addr == 0x15)	// NR50 / NR51
-			{
-				return;
-			}
-
-			int channel = -1;
-			UINT8 base = 0;
-			// `base` is the register of the channel's first tone register minus four, so that
-			// base + 2/3/4 are the volume, frequency low and frequency high registers.  Pulse 1
-			// starts at NR10 (sweep), pulse 2 at 0x06 with no sweep - for it base stays 0x05.
-			if (addr <= 0x04)						{ channel = 0; base = 0x00; }
-			else if (addr >= 0x06 && addr <= 0x09)	{ channel = 1; base = 0x05; }
-			else if (addr >= 0x0A && addr <= 0x0E)	{ channel = 2; base = 0x0A; }
-			else if (addr >= 0x10 && addr <= 0x13)	{ channel = 3; base = 0x10; }
-			else
-			{
-				return;	// wave RAM
-			}
-
-			const double clock = (device->devCfg != nullptr && device->devCfg->clock > 0)
-									 ? (double) device->devCfg->clock
-									 : 4194304.0;
-
-			const auto frequencyReg = [&] (void)
-			{
-				switch (channel)
-				{
-				case 2:		return (int) state.regs[0x0D] | (((int) state.regs[0x0E] & 0x07) << 8);
-				case 3:		return (int) state.regs[0x12] | (((int) state.regs[0x13] & 0x07) << 8);
-				default:	return (int) state.regs[base + 3] | (((int) state.regs[base + 4] & 0x07) << 8);
-				}
-			};
-
-			const auto audible = [&] (void)
-			{
-				switch (channel)
-				{
-				case 2:
-					return (state.regs[0x0A] & 0x80) != 0 && ((state.regs[0x0C] >> 5) & 0x03) != 0;
-				case 3:
-					return (state.regs[0x11] & 0xF8) != 0;
-				default:
-					return (state.regs[base + 2] & 0xF8) != 0;
-				}
-			};
-
-			const auto velocity = [&] (void)
-			{
-				switch (channel)
-				{
-				case 2:		return 100;
-				case 3:		return juce::jlimit (1, 127, (int) (state.regs[0x11] >> 4) * 8);
-				default:	return juce::jlimit (1, 127, (int) (state.regs[base + 2] >> 4) * 8);
-				}
-			};
-
-			const int track = trackFor (device, channel);
-			const bool triggerAddr = (channel == 2 && addr == 0x0E)
-									 || (channel == 3 && addr == 0x13)
-									 || ((channel == 0 || channel == 1) && addr == base + 4);
-
-			if (triggerAddr && (data & 0x80) != 0)
-			{
-				if (state.active[channel])
-				{
-					noteOff (track, time, state.note[channel]);
-					state.active[channel] = false;
-				}
-
-				if (! state.powered || ! audible())
-				{
-					return;
-				}
-
-				if (channel == 3)
-				{
-					triggerOneShot (track, time);
-					return;
-				}
-
-				const int f = frequencyReg();
-				if (f >= 2048)
-				{
-					return;
-				}
-
-				const double frequency = (channel == 2 ? clock / 64.0 : clock / 32.0)
-										 / (double) (2048 - f);
-				const int note = noteFromFrequency (frequency);
-				if (note >= 0)
-				{
-					startMelodicNote (track, time, note, velocity());
-					state.note[channel] = note;
-					state.active[channel] = true;
-				}
-				return;
-			}
-
-			if (! state.active[channel])
-			{
-				return;
-			}
-
-			if (! audible())
-			{
-				noteOff (track, time, state.note[channel]);
-				state.active[channel] = false;
-				return;
-			}
-
-			const bool frequencyWrite = (channel == 2 && (addr == 0x0D || addr == 0x0E))
-										|| (channel == 0 || channel == 1) && (addr == base + 3 || addr == base + 4)
-										|| (channel == 0 && addr == 0x00);	// sweep
-			if (frequencyWrite)
-			{
-				const int f = frequencyReg();
-				const double frequency = f < 2048
-											 ? (channel == 2 ? clock / 64.0 : clock / 32.0)
-												   / (double) (2048 - f)
-											 : 0.0;
-				updateMelodicPitch (track, time, state.note[channel], state.active[channel],
-									noteFromFrequencyF (frequency), velocity());
-			}
+			gbWrites.clear();
+			gbDevices.clear();
 		}
 
 		void writeRf5c (const PLR_DEV_INFO* device, UINT8 addr, UINT8 data, double time)
@@ -1436,7 +1318,9 @@ namespace
 		std::map<std::uint32_t, OplState> oplStates;
 		std::map<std::uint32_t, DacState> dacStates;
 		std::map<std::uint32_t, AdpcmState> adpcmStates;
-		std::map<std::uint32_t, GbState> gbStates;
+		// DMG writes: same reason as the 2A03, its frame sequencer owns the note ends
+		std::map<std::uint32_t, std::vector<chips::RegisterWrite>> gbWrites;
+		std::map<std::uint32_t, const PLR_DEV_INFO*> gbDevices;
 		std::map<std::uint32_t, Rf5cState> rf5cStates;
 		std::map<int, PendingOneShot> oneShotPending;
 		std::vector<playback::MidiEvent> events;
