@@ -117,7 +117,13 @@ param(
 
 	# Re-check the plugin sources with clang-cl after building (no output produced). Optional, and
 	# skipped without an error when clang is not installed.
-	[switch]$Clang
+	[switch]$Clang,
+
+	# Build only: leave dist\ as it is. A running VGMToybox.exe locks its own file, so copying the
+	# fresh build over it fails - which is exactly the moment one wants to build (the app is open
+	# because the change under test is on screen). The VST3/standalone/AAX artefacts are skipped;
+	# the command-line player and its docs are still copied.
+	[switch]$NoDeploy
 )
 
 $ErrorActionPreference = 'Stop'
@@ -486,7 +492,10 @@ foreach ($file in @('VGMPlay.ini', 'Updates.txt', 'VGMPlay.txt')) {
 }
 
 # the JUCE plugin artefacts (VST3 bundle + standalone application)
-$artefactsDir = Join-Path $BuildDir 'plugin\VGMToybox_artefacts'
+# -NoDeploy points this at a path that does not exist, so the whole copy block below is skipped:
+# the standalone cannot be overwritten while it is running, and that is when a build is wanted.
+$artefactsDir = if ($NoDeploy) { Join-Path $BuildDir 'no-deploy' }
+				else { Join-Path $BuildDir 'plugin\VGMToybox_artefacts' }
 $vst3Bundle = $null
 $standaloneApp = $null
 $aaxBundle = $null
@@ -556,6 +565,9 @@ if ($aaxBundle) {
 	Write-Host ("AAX        : {0}" -f (Join-Path $DistDir 'AAX\VGMToybox.aaxplugin'))
 }
 Write-Host ("dist folder: {0}" -f $DistDir)
+if ($NoDeploy) {
+	Write-Host ("artefacts  : not copied to dist (-NoDeploy; build\plugin\VGMToybox_artefacts has the fresh build)")
+}
 Write-Host ''
 
 $dumpbin = Get-Command 'dumpbin.exe' -ErrorAction SilentlyContinue
