@@ -17,6 +17,7 @@
 #include "chips/OpnDecoder.h"
 #include "chips/PokeyDecoder.h"
 #include "chips/Rf5c68Decoder.h"
+#include "chips/X1_010Decoder.h"
 #include "chips/Saa1099Decoder.h"
 #include "chips/Sn76489Decoder.h"
 #include "chips/WswanDecoder.h"
@@ -121,6 +122,14 @@ namespace
 					opl.queue (deviceFor (DEVID_YM3812, 0), command.addr, command.data,
 							   command.sampleTime);
 					break;
+				case 0xC8:
+					// X1-010: the 16-bit offset arrived split across addr (low) and port (high).
+					x1.queue (deviceFor (DEVID_X1_010, 0), command.addr, command.data,
+							  command.sampleTime, command.port);
+					break;
+
+
+
 				case 0x5B:
 					opl.queue (deviceFor (DEVID_YM3526, 0), command.addr, command.data,
 							   command.sampleTime);
@@ -250,6 +259,7 @@ namespace
 			flushDecoded (sn, 3579545u, lastSampleTime);
 			flushDecoded (ay, 1789773u, lastSampleTime);
 			flushDecoded (rf5c, 12500000u, lastSampleTime);
+			flushDecoded (x1, 16000000u, lastSampleTime);
 
 			if (events.empty())
 			{
@@ -716,6 +726,7 @@ namespace
 		ChipBuffer<chips::Sn76489Decoder> sn;
 		ChipBuffer<chips::Ay8910Decoder> ay;
 		ChipBuffer<chips::Rf5c68Decoder> rf5c;
+		ChipBuffer<chips::X1_010Decoder> x1;
 		std::vector<playback::MidiEvent> events;
 	};
 }

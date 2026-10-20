@@ -273,6 +273,18 @@ bool VgmCommandReader::next (VgmCommand& command)
 			command.addr = data[position + 1];
 			command.data = data[position + 1];
 		}
+		else if (cmd == 0xC8)
+		{
+			// X1-010: the register offset is 16-bit and big-endian (libvgm's Cmd_Ofs16_Data8), so
+			// the high byte travels in `port` - the only free byte on the command - and the decoder
+			// puts the address back together. Offsets above 0x7F are envelope and wavetable data.
+			const std::uint16_t offset = (std::uint16_t) (((std::uint16_t) data[position + 1] << 8)
+														  | (std::uint16_t) data[position + 2]);
+			command.kind = VgmCommand::Kind::registerWrite;
+			command.port = (std::uint8_t) ((offset >> 8) & 0x7F);
+			command.addr = (std::uint8_t) (offset & 0xFF);
+			command.data = data[position + 3];
+		}
 		else if (cmd == 0xD0)
 		{
 			// YMF278B (OPL4): the address byte carries the chip in bit 7 and the port in the

@@ -19,6 +19,7 @@
 #include "chips/NoteExtractor.h"
 #include "chips/PokeyDecoder.h"
 #include "chips/Rf5c68Decoder.h"
+#include "chips/X1_010Decoder.h"
 #include "chips/Saa1099Decoder.h"
 #include "chips/Sn76489Decoder.h"
 #include "chips/WswanDecoder.h"
@@ -1487,6 +1488,89 @@ namespace
 			check (notes.size() == 1 && distance (notes[0].endSample, 1323) <= 64,
 				   "the master switch ends a sounding channel");
 		}
+
+		// --- X1-010: one channel, two instruments ---------------------------------------------
+
+		std::vector<NoteEvent> runX1 (const Stream& stream, std::uint32_t totalSamples)
+		{
+			toybox::chips::X1_010Decoder decoder;
+			decoder.reset (16000000, 44100.0);
+			return toybox::chips::extractNotes (decoder, stream.writes, totalSamples);
+		}
+
+		/** Waveform mode: pitch is a 6.10 value over a 128-byte table, so one cycle is
+			clock * pitch / 2^26 Hz. 0x0735 = 1845 at 16 MHz is 439.9 Hz - A4. */
+		void testX1WaveNote (void)
+		{
+			Stream stream;
+			stream.at (0, 0x02, 0x35);			// pitch lo
+			stream.at (0, 0x03, 0x07);			// pitch hi
+			stream.at (10, 0x00, 0x03);			// waveform mode + key on
+			stream.at (8000, 0x00, 0x02);		// key off
+
+			const auto notes = runX1 (stream, 12000);
+
+			check (notes.size() == 1, "an X1-010 waveform key-on is one note");
+			if (notes.empty())
+			{
+				return;
+			}
+
+			check (notes[0].note == 69, "0x0735 of 6.10 pitch at 16 MHz is A4");
+			check (notes[0].logicalChannel == 0, "X1-010 channel 0 is its own track");
+			check (! notes[0].isDrum, "a wavetable voice is a melodic track");
+			check (distance (notes[0].endSample, 8000) <= 2, "the key-off ends the note");
+		}
+
+		/** Status bit 7 halves the pitch (the "divider flag" the hardware notes call out). */
+		void testX1DividerHalvesTheFrequency (void)
+		{
+			Stream stream;
+			stream.at (0, 0x02, 0x35);
+			stream.at (0, 0x03, 0x07);
+			stream.at (10, 0x00, 0x83);			// divider + waveform + key on
+			stream.at (8000, 0x00, 0x82);		// key off
+
+			const auto notes = runX1 (stream, 12000);
+
+			check (notes.size() == 1 && notes[0].note == 57, "the divider flag drops the note an octave");
+		}
+
+		/** PCM mode: the same channel plays a sample, and the note is a C4 marker the decoder's
+			own 80 ms gate closes - a driver that never keys off still gets one hit. */
+		void testX1PcmIsAOneShot (void)
+		{
+			Stream stream;
+			stream.at (0, 0x01, 0x77);			// PCM volume, both sides
+			stream.at (10, 0x00, 0x01);			// PCM mode + key on
+			stream.at (9000, 0x06, 0x00);		// a reserved write, only to move the clock on
+
+			const auto notes = runX1 (stream, 12000);
+
+			check (notes.size() == 1, "one PCM key-on is one sample note");
+			if (notes.empty())
+			{
+				return;
+			}
+
+			check (notes[0].note == 60, "the sample is a C4 marker");
+			check (notes[0].isDrum, "a PCM channel is a drum track");
+			check (distance (notes[0].endSample, 3528) <= 64, "the 80 ms gate ends the sample");
+		}
+
+		/** Offsets from 0x80 up are envelope and wavetable data: uploading a waveform must not
+			look like a key-on on channel 0. */
+		void testX1EnvelopeWritesDoNotKey (void)
+		{
+			Stream stream;
+			stream.at (0, 0x01, 0x00);			// high byte of the offset
+			stream.at (0, 0x00, 0x03);			// offset 0x0100: wavetable data
+			stream.at (10, 0x01, 0x00, 0x0F);
+
+			const auto notes = runX1 (stream, 2000);
+
+			check (notes.empty(), "waveform data does not key a channel on");
+		}
 		}
 
 int main (void)
@@ -1569,6 +1653,11 @@ int main (void)
 	testRf5cChannelIsAOneShot();
 	testRf5cMaskSelectsTheChannel();
 	testRf5cMasterSwitchEndsTheNote();
+
+	testX1WaveNote();
+	testX1DividerHalvesTheFrequency();
+	testX1PcmIsAOneShot();
+	testX1EnvelopeWritesDoNotKey();
 
 	std::printf ("Result    : %s\n", failures == 0 ? "PASS" : "FAILURES");
 	return failures == 0 ? 0 : 1;

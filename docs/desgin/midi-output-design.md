@@ -702,7 +702,7 @@ void render (const playback::OutputBusBuffers* buses, int numBuses, int numSampl
 | 40 | K054539 | K054539 | — | 采样播放器，有音高 |
 | 41 | DMG | GB_DMG | 旋律 1–3 + 噪声触发 | |
 | 42 | SAA1099 | SAA1099 | 旋律 1–6 + 噪声触发 | 与 AY 同型，但寄存器独立 |
-| 43 | X1_010 | X1_010 | — | 采样/波形混合，有音高 |
+| 43 | X1_010 | X1_010 | 旋律 ×16（波形）；PCM 模式为触发 | 采样/波形混合，有音高。波形模式按 `clock * pitch / 2^26` 出音高、状态位 7 对半；PCM 模式是 80 ms 门限的 one-shot。VGM 命令是 `0xC8`（16 位大端偏移），读取器把高字节放在 `port` 里传下来；`x1.vgm` 用同一命令上传波表/包络并带 `0x91` ROM 块（核心没有 ROM 会直接静音），`[13]` 实测 Ch1 有声且 4 个音符 |
 | 44 | PPZ8 | ✗ | — | 软件 PCM 驱动，不是芯片；支持它等于实现一个驱动 |
 | 45 | PPSDRV | ✗ | — | 同上 |
 | 46 | SID | ✗ | — | libvgm 无核心 |
@@ -769,6 +769,8 @@ void render (const playback::OutputBusBuffers* buses, int numBuses, int numSampl
 
 | 2026-10-20 | 新增 `loop.vgm`（`make_loop_song.ps1`）：VGM 1.61 的 0x100 字节头部，`0x1C` 写循环偏移、`0x20` 写循环长度、`0x7E` 的 loop base 显式为 0，循环体是 20 个音符 × 2 s。此前仓库里没有任何资产声明循环点，`[12]` 每次都在 `loop check skipped` 上空转；现在它真的跑起来（`20 / 19`），把 `PlaybackEngine` 里 `songTimeWithinPass()` 的折回去掉会立刻变成 `20 / 0` 并报红。`[12]` 另外对 `loop.vgm` 强制要求循环点存在——拿不到就报错而不是跳过，免得改坏头部又静默失效 |
 
+| 2026-10-20 | X1-010 解码器（M2 第一颗）：波形模式的音高是 `clock * pitch / 2^26`（core 的 `step = base_clock/524288*freq` 走过 128 字节表），状态位 7 把 pitch 右移一位即降八度；PCM 模式没有音高、也没有能读出长度的结束寄存器，所以用 80 ms 门限做 one-shot。VGM 用 `0xC8`（16 位大端偏移），读取器把高字节塞进 `port`、低字节塞进 `addr` 传下去，`0x80` 以上的偏移（包络/波形数据）解码器直接忽略——否则上传波形会被当成按键。`vgm_chip_test` 新增四条，X1-010 在能力表里是 16 个旋律通道。端到端资产 `x1.vgm` 也补上了：波表和包络可以用同一条 `0xC8` 写上传（波表 `n` 在 `0x1000 + 128n`、包络 `n` 在 `128n`），但核心在 ROM 未分配时直接返回静音，所以还要一个 `0x67` type `0x91` 的 ROM 块（libvgm `_VGM_ROM_CHIPS`）；`[13]` 实测 Ch1 rms 0.0306、4 个 A4 音符，`ctest -R engine.x1` 全绿 |
+
 ## 附录 A：linked SSG 的后续方案（第一版不做）
 
 背景：libvgm 把 OPN 的 SSG 作为 linked AY8910（`opnintf.c:48-52`）；`LibvgmSongInstance::isTrackDevice()` 只保留 `parentIdx == (UINT32)-1` 的设备（`LibvgmSongInstance.cpp:31-36`），所以 YM2610/YM2608/YM2203 的 3 个 SSG 当前没有独立 mixer track。
@@ -785,7 +787,7 @@ void render (const playback::OutputBusBuffers* buses, int numBuses, int numSampl
 
 设计文档写完并不等于目标记得住——§11 的 P1–P5 只是“一次交付”的阶段划分，真正耗时的是 §11.2 那 54 项芯片覆盖。这里把它排成可验收的里程碑：**每做完一项，先回来改这里的「状态」和 §11.2 的现状表，再提交**。状态只有三种：完成 / 进行中 / 未开始。
 
-**当前基线（2026-10-20）**：P1–P4 完成，P5 进行中；MIDI 设备类型 21 / 54；`vgm_core_test`、`vgm_chip_test`、`vgm_opn_test` 通过，`ctest` 17/17 通过，`vgm_mixer_test` 的 psg / opl4 / minimal / wswan / ym2610 / fm_alg0 / dac / loop 八个资产全部 `all checks passed`。
+**当前基线（2026-10-20）**：P1–P4 完成，P5 进行中（M2 完成，MIDI 设备类型 22 / 54）；`vgm_core_test`、`vgm_chip_test`、`vgm_opn_test` 通过，`ctest` 18/18 通过，`vgm_mixer_test` 的 psg / opl4 / minimal / wswan / ym2610 / fm_alg0 / dac / loop / x1 九个资产全部 `all checks passed`。
 
 | 里程碑 | 内容 | 验收 | 状态 |
 |---|---|---|---|
@@ -793,7 +795,7 @@ void render (const playback::OutputBusBuffers* buses, int numBuses, int numSampl
 | M1.1 | 收尾既有红灯：`ym2610.vgm` 的 4 条混音器检查已修（`[8]` 改成先用 MIDI 侧找出真正有声的轨，RPN 检查改从该轨开始，不再把唯一一次 RPN 花在静音轨上）；`[12]` 缺的循环资产补上了（`loop.vgm`：50 ms 前导 + 20 个音符 × 2 s 循环体，header 0x1C/0x20 声明循环点，0x7E 的 loop base 显式为 0） | `ctest -R engine.loop` 全绿并打印 `loop at 0.05 s of 2.05 s: 20 note-on in the first pass, 19 after it`；把 `songTimeWithinPass()` 的折回去掉后 `[12]` 立刻变红（`20 / 0`）；`loop.vgm` 的 loop 点被清零时 `[12]` 报 `DID NOT RUN` 而不是跳过 | 完成 |
 | M1.2 | YM2612 DAC 流的 MIDI：`0x8n` 只带等待值（1 字节），样本字节在 type `0x00` 的 `0x67` 数据块里。`VgmCommandReader` 现在保留该 bank（含 `0xE0` 寻址），`0x8n` 取下一字节写成 `0x2A` 寄存器写 + 自带等待 | 真实曲目 `06 Star Light Zone.vgz` 的 DAC 轨从 0 → 3 个音符；`dac.vgm`（爆发/静音交替）在 `[13]` 下 ≥10 个音符（实测 19）；`[11]` 逐字节比对 bank 内容与时刻；`ctest -R engine.dac` 全绿 | 完成 |
 | M1.3 | 期望值交给芯片（§10.2）：`vgm_opn_test` 用 libvgm 的 YM2612 核测每个通道是否出声，解码器的 `gate` 必须一致；`PlaybackEngineTest` `[13]` 再加一条“有声的轨必须有音符”的端到端不变量 | `ctest -R "chip\|opn"` 全绿；把 `totalLevel` 位序改回旧写法后 `vgm_opn_test` 必须变红；`vgm_mixer_test` 五个资产 + `fm_alg0.vgm` 的 `[13]` 全绿 | 完成 |
-| M2 | A 批波形 PSG：X1_010（周期→音高，复用 `chips/Pitch.h`） | 按 §11.2「验收」四条；24 → 25 / 54 | 未开始 |
+| M2 | A 批波形 PSG：X1_010（周期→音高，复用 `chips/Pitch.h`） | 按 §11.2「验收」四条；24 → 25 / 54。`vgm_chip_test` 四条（A4 的 6.10 值、分频位、PCM one-shot、0x80 以上偏移不按键）；`x1.vgm` 在 `[13]` 下 Ch1 有声（rms 0.0306）且报 4 个 A4 音符，`ctest -R engine.x1` 全绿 | 完成 |
 | M3 | A 批 FM：YMF271、YMZ280B | 同上；25 → 27 / 54 | 未开始 |
 | M4 | 采样播放器音高体系：C140、C352、K053260、K054539、QSound、GA20、ES5503、OKIM6295、SEGAPCM，并把 ADPCM-B 根音（§11.1）一起纳入 | 「步进/采样率→音分 + 根音」是一个共用工具而非九份私有换算；27 → 36 / 54 | 未开始 |
 | M5 | 无音高 one-shot：PWM、uPD7759、OKIM6258 | A 批清零；36 → 39 / 54 | 未开始 |

@@ -109,6 +109,12 @@ namespace
 		case DEVID_RF5C68:	// also RF5C164 / RF5C105
 			return (channelIndex >= 0 && channelIndex < 8) ? playback::MidiCapability::oneShot
 														   : playback::MidiCapability::unavailable;
+		case DEVID_X1_010:
+			// Sixteen channels, and the same channel is either a wavetable voice or a PCM player
+			// depending on one status bit. The capability is static, so it states what the channel
+			// can be at its best - a wavetable voice with a real pitch. A PCM hit still reports a
+			// note (the decoder gives it the one-shot marker), so the promise holds in both modes.
+			return fmChannel (16);
 		case DEVID_NES_APU:
 			return (channelIndex >= 0 && channelIndex < 3) ? playback::MidiCapability::melodic
 														   : (channelIndex < 5

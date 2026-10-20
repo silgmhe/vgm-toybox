@@ -198,6 +198,7 @@ target_sources(VGMToybox PRIVATE
 	Source/chips/OplDecoder.cpp
 	Source/chips/Ay8910Decoder.cpp
 	Source/chips/Rf5c68Decoder.cpp
+	Source/chips/X1_010Decoder.cpp
 	Source/chips/Sn76489Decoder.cpp
 	Source/chips/OpmDecoder.cpp
 	Source/chips/OpnDecoder.cpp
@@ -334,6 +335,7 @@ add_executable(vgm_mixer_test EXCLUDE_FROM_ALL
 	Source/chips/OplDecoder.cpp
 	Source/chips/Ay8910Decoder.cpp
 	Source/chips/Rf5c68Decoder.cpp
+	Source/chips/X1_010Decoder.cpp
 	Source/chips/Sn76489Decoder.cpp
 	Source/chips/OpmDecoder.cpp
 	Source/chips/OpnDecoder.cpp
@@ -362,6 +364,7 @@ add_executable(vgm_chip_test EXCLUDE_FROM_ALL
 	Source/chips/OplDecoder.cpp
 	Source/chips/Ay8910Decoder.cpp
 	Source/chips/Rf5c68Decoder.cpp
+	Source/chips/X1_010Decoder.cpp
 	Source/chips/Sn76489Decoder.cpp
 	Source/chips/OpmDecoder.cpp
 	Source/chips/OpnDecoder.cpp
@@ -542,6 +545,16 @@ set(_toybox_loop_song "${CMAKE_CURRENT_SOURCE_DIR}/Tests/assets/loop.vgm")
 if(EXISTS "${_toybox_loop_song}")
 	add_test(NAME engine.loop COMMAND vgm_mixer_test "${_toybox_loop_song}" 2)
 	set_tests_properties(engine.loop PROPERTIES LABELS "integration" TIMEOUT 120)
+endif()
+
+# The X1-010 (M2): a chip whose sample data lives in ROM, so the core stays silent until a ROM data
+# block allocates it - a register-only asset would prove the decoder but not that its notes land on
+# an audible track. x1.vgm uploads a wavetable and an envelope through 0xC8 writes, the same command
+# the notes travel on.
+set(_toybox_x1_song "${CMAKE_CURRENT_SOURCE_DIR}/Tests/assets/x1.vgm")
+if(EXISTS "${_toybox_x1_song}")
+	add_test(NAME engine.x1 COMMAND vgm_mixer_test "${_toybox_x1_song}" 2)
+	set_tests_properties(engine.x1 PROPERTIES LABELS "integration" TIMEOUT 120)
 endif()
 
 # One test per script in Tests/scripts, discovered rather than listed: adding a script must not mean

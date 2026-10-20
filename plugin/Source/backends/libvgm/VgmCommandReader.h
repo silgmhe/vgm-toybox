@@ -33,7 +33,8 @@ struct VgmCommand
 
 	Kind kind = Kind::ignored;
 	std::uint8_t command = 0;		// the raw VGM command byte
-	std::uint8_t port = 0;			// 0 / 1 - the second chip of a pair (bit 7 of the address byte)
+	std::uint8_t port = 0;			// 0 / 1 - the second chip of a pair (bit 7 of the address byte);
+									// for 0xC8 (X1-010) it carries the high byte of the 16-bit offset
 	std::uint8_t addr = 0;			// register / index byte
 	std::uint8_t data = 0;			// value byte
 	std::uint8_t data2 = 0;			// second value byte of a pair write
