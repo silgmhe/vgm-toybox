@@ -294,6 +294,17 @@ bool VgmCommandReader::next (VgmCommand& command)
 			command.addr = data[position + 2];
 			command.data = data[position + 3];
 		}
+		else if (cmd == 0xD1)
+		{
+			// YMF271 (OPX): the port byte carries the chip in bit 7 and the bank in the low seven
+			// bits - 0-3 are the FM banks, 4 the PCM registers, 6 the timer/sync registers. The
+			// decoder needs the bank, because a write to bank 0 is what copies the synced
+			// registers into the other banks of a four-operator group.
+			command.kind = VgmCommand::Kind::registerWrite;
+			command.port = data[position + 1];
+			command.addr = data[position + 2];
+			command.data = data[position + 3];
+		}
 		else if (cmd == 0xD2)
 		{
 			// K051649 (SCC): the command carries both bytes of one SCC access, and libvgm hands

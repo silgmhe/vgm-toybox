@@ -20,6 +20,7 @@
 #include "chips/PokeyDecoder.h"
 #include "chips/Rf5c68Decoder.h"
 #include "chips/X1_010Decoder.h"
+#include "chips/Ymf271Decoder.h"
 #include "chips/Ymz280bDecoder.h"
 #include "chips/Saa1099Decoder.h"
 #include "chips/Sn76489Decoder.h"
@@ -1634,7 +1635,196 @@ namespace
 
 			check (notes.empty(), "a voice at level 0 does not key a note");
 		}
+
+		// --- YMF271 / OPX: twelve groups, four sync modes ----------------------------------
+
+		std::vector<NoteEvent> runOpx (const Stream& stream, std::uint32_t totalSamples)
+		{
+			toybox::chips::Ymf271Decoder decoder;
+			decoder.reset (16934400, 44100.0);
+			return toybox::chips::extractNotes (decoder, stream.writes, totalSamples);
 		}
+
+		/** One FM register write: the address byte is register << 4 | group. */
+		void writeOpx (Stream& stream, std::uint32_t time, std::uint8_t port, std::uint8_t reg,
+					   std::uint8_t group, std::uint8_t value)
+		{
+			stream.at (time, port, (std::uint8_t) ((reg << 4) | group), value);
+		}
+
+		/** A four-operator group at block 4, fns 0x51C, multiple 1: 440 Hz, A4. The pitch and the
+			algorithm go to bank 0, where the group copies them to the other operators. */
+		void startOpxFm (Stream& stream, std::uint8_t group, std::uint8_t algorithm)
+		{
+			for (std::uint8_t port = 0; port < 4; ++port)
+			{
+				writeOpx (stream, 0, port, 0x3, group, 0x01);		// multiple 1 on every operator
+			}
+			writeOpx (stream, 0, 0, 0xA, group, 0x45);				// block 4, fns high nibble 5
+			writeOpx (stream, 0, 0, 0x9, group, 0x1C);				// fns low byte
+			writeOpx (stream, 0, 0, 0xC, group, algorithm);			// copies to the group
+		}
+
+		void testOpxFmNote (void)
+		{
+			Stream stream;
+			startOpxFm (stream, 0, 0x08);						// algorithm 8: S1 and S4 carry
+			writeOpx (stream, 100, 0, 0x0, 0, 0x01);			// key on
+			writeOpx (stream, 8000, 0, 0x0, 0, 0x00);			// key off
+
+			const auto notes = runOpx (stream, 12000);
+
+			check (notes.size() == 1, "one OPX key-on is one note");
+			if (notes.empty())
+			{
+				return;
+			}
+
+			check (notes[0].note == 69, "block 4, fns 0x51C, multiple 1 is A4");
+			check (notes[0].logicalChannel == 0, "group 0 is its own track");
+			check (notes[0].family == toybox::chips::Family::fm, "the note carries the FM family");
+			check (! notes[0].isDrum, "a four-operator group is melodic");
+			check (notes[0].velocity == 127, "total level 0 is full velocity");
+			check (distance (notes[0].endSample, 8000) <= 64, "the key-off ends the note");
+		}
+
+		/** The algorithm, not the bank order, decides what reaches the output: under algorithm 5
+			only S4 (bank 3) carries, so silencing it leaves the group silent; algorithm 8 brings
+			S1 (bank 0) in and the same silenced S4 no longer matters. */
+		void testOpxAlgorithmDecidesTheCarrier (void)
+		{
+			Stream silent;
+			startOpxFm (silent, 0, 0x05);
+			writeOpx (silent, 0, 3, 0x4, 0, 0x7F);				// S4 at maximum attenuation
+			writeOpx (silent, 100, 0, 0x0, 0, 0x01);			// key on
+
+			Stream audible;
+			startOpxFm (audible, 0, 0x08);
+			writeOpx (audible, 0, 3, 0x4, 0, 0x7F);				// the same silenced S4
+			writeOpx (audible, 100, 0, 0x0, 0, 0x01);
+
+			check (runOpx (silent, 8000).empty(),
+				   "algorithm 5 with a silenced carrier makes no note");
+			check (runOpx (audible, 8000).size() == 1,
+				   "algorithm 8 adds S1 beside the silenced S4");
+		}
+
+		/** Register 0xD is the group's two output levels: 13 and up are -96 dB in the core, so a
+			muted group must not look like a sounding one. */
+		void testOpxGroupLevelMutes (void)
+		{
+			Stream loud;
+			startOpxFm (loud, 0, 0x08);
+			writeOpx (loud, 0, 0, 0xD, 0, 0x00);				// both outputs at 0 dB
+			writeOpx (loud, 100, 0, 0x0, 0, 0x01);
+
+			Stream muted;
+			startOpxFm (muted, 0, 0x08);
+			writeOpx (muted, 0, 0, 0xD, 0, 0xDD);				// both outputs at -96 dB
+			writeOpx (muted, 100, 0, 0x0, 0, 0x01);
+
+			check (runOpx (loud, 4000).size() == 1, "a group at 0 dB sounds");
+			check (runOpx (muted, 4000).empty(), "a group at -96 dB is not a note");
+		}
+
+		void testOpxBlockIsAnOctave (void)
+		{
+			Stream low;
+			startOpxFm (low, 0, 0x08);
+			writeOpx (low, 100, 0, 0x0, 0, 0x01);
+
+			// 0xA only latches the high byte: the core recomputes fns and block on the next 0x9
+			Stream high;
+			startOpxFm (high, 0, 0x08);
+			writeOpx (high, 0, 0, 0xA, 0, 0x55);				// block 5: same fns, one octave up
+			writeOpx (high, 0, 0, 0x9, 0, 0x1C);
+			writeOpx (high, 100, 0, 0x0, 0, 0x01);
+
+			const auto lowNotes = runOpx (low, 4000);
+			const auto highNotes = runOpx (high, 4000);
+
+			check (! lowNotes.empty() && ! highNotes.empty(), "both octaves sound");
+			if (lowNotes.empty() || highNotes.empty())
+			{
+				return;
+			}
+
+			check (highNotes[0].note == lowNotes[0].note + 12, "one block is one octave");
+		}
+
+		/** Sync mode 1 splits the group into banks 0/2 and 1/3. Under algorithm 0 the carrier is
+			bank 2, which is never written directly - only the bank-0 key-on can ever sound it. */
+		void testOpxSyncOneCopiesToThePair (void)
+		{
+			Stream stream;
+			stream.at (0, 6, 0x00, 0x01);						// group 0: two 2-operator voices
+			writeOpx (stream, 0, 0, 0x3, 0, 0x01);				// multiple 1, pair A slot 1
+			writeOpx (stream, 0, 2, 0x3, 0, 0x01);				// multiple 1, pair A slot 2
+			writeOpx (stream, 0, 0, 0xA, 0, 0x45);				// pitch, copied to bank 2
+			writeOpx (stream, 0, 0, 0x9, 0, 0x1C);
+			writeOpx (stream, 0, 0, 0xC, 0, 0x00);				// algorithm 0: S3 (bank 2) carries
+			writeOpx (stream, 100, 0, 0x0, 0, 0x01);			// key on pair A
+
+			const auto notes = runOpx (stream, 4000);
+
+			check (notes.size() == 1, "a pair A key-on copies into bank 2");
+			if (notes.empty())
+			{
+				return;
+			}
+
+			check (notes[0].note == 69, "the pair's carrier plays A4");
+			check (notes[0].logicalChannel == 0, "the pair reports on the group's channel");
+		}
+
+		/** Sync mode 3 makes the four banks four PCM slots. A sample has no pitch and no readable
+			end, so it is a C4 marker closed by the decoder's own 80 ms gate - and the driver's key
+			off arriving later changes nothing. */
+		void testOpxPcmIsAOneShot (void)
+		{
+			Stream stream;
+			stream.at (0, 6, 0x00, 0x03);						// group 0: four PCM slots
+			writeOpx (stream, 100, 0, 0x0, 0, 0x01);			// key on bank 0
+			writeOpx (stream, 5000, 0, 0x0, 0, 0x00);			// key off after the gate has closed
+
+			const auto notes = runOpx (stream, 12000);
+
+			check (notes.size() == 1, "a PCM key-on is one sample note");
+			if (notes.empty())
+			{
+				return;
+			}
+
+			check (notes[0].note == 60, "the sample is a C4 marker");
+			check (notes[0].isDrum, "a PCM group is a drum track");
+			check (notes[0].family == toybox::chips::Family::adpcmDrum,
+				   "the note carries the ADPCM family");
+			check (distance (notes[0].startSample, 100) <= 64, "the note starts at the key-on");
+			check (distance (notes[0].endSample, 3628) <= 64, "the 80 ms gate ends the sample");
+		}
+
+		/** In PCM mode the port is the bank and the address's low nibble the group - and the
+			nibbles 3, 7, 11 and 15 have no group behind them. */
+		void testOpxPcmBanksAreIndependent (void)
+		{
+			Stream stream;
+			stream.at (0, 6, 0x00, 0x03);						// group 0: PCM
+			stream.at (0, 6, 0x04, 0x03);						// nibble 4 is group 3: PCM as well
+			writeOpx (stream, 100, 1, 0x0, 0x00, 0x01);			// bank 1, group 0
+			writeOpx (stream, 200, 2, 0x0, 0x04, 0x01);			// bank 2, group 3
+
+			const auto notes = runOpx (stream, 8000);
+
+			check (notes.size() == 2, "two PCM slots key two notes");
+			if (notes.size() != 2)
+			{
+				return;
+			}
+
+			check (notes[0].logicalChannel == 0 && notes[1].logicalChannel == 3,
+				   "the port picks the bank, the low nibble the group, and 3/7/11/15 are holes");
+		}
+	}
 
 int main (void)
 {
@@ -1725,6 +1915,14 @@ int main (void)
 	testYmzChannelIsAOneShot();
 	testYmzLatchSelectsTheVoice();
 	testYmzSilentLevelIsNoNote();
+
+	testOpxFmNote();
+	testOpxAlgorithmDecidesTheCarrier();
+	testOpxGroupLevelMutes();
+	testOpxBlockIsAnOctave();
+	testOpxSyncOneCopiesToThePair();
+	testOpxPcmIsAOneShot();
+	testOpxPcmBanksAreIndependent();
 
 	std::printf ("Result    : %s\n", failures == 0 ? "PASS" : "FAILURES");
 	return failures == 0 ? 0 : 1;

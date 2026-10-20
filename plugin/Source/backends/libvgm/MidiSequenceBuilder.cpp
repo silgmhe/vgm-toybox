@@ -18,6 +18,7 @@
 #include "chips/PokeyDecoder.h"
 #include "chips/Rf5c68Decoder.h"
 #include "chips/X1_010Decoder.h"
+#include "chips/Ymf271Decoder.h"
 #include "chips/Ymz280bDecoder.h"
 #include "chips/Saa1099Decoder.h"
 #include "chips/Sn76489Decoder.h"
@@ -131,6 +132,13 @@ namespace
 					// X1-010: the 16-bit offset arrived split across addr (low) and port (high).
 					x1.queue (deviceFor (DEVID_X1_010, 0), command.addr, command.data,
 							  command.sampleTime, command.port);
+					break;
+				case 0xD1:
+					// YMF271: bit 7 of the port byte is the chip instance, the rest is the bank the
+					// write goes to - a bank-0 write is what copies a group's synced registers.
+					opx.queue (deviceFor (DEVID_YMF271, (command.port >> 7) & 1), command.addr,
+							   command.data, command.sampleTime,
+							   (std::uint8_t) (command.port & 0x7F));
 					break;
 
 
@@ -265,6 +273,7 @@ namespace
 			flushDecoded (ay, 1789773u, lastSampleTime);
 			flushDecoded (rf5c, 12500000u, lastSampleTime);
 			flushDecoded (x1, 16000000u, lastSampleTime);
+			flushDecoded (opx, 16934400u, lastSampleTime);
 			flushDecoded (ymz, 16934400u, lastSampleTime);
 
 			if (events.empty())
@@ -733,6 +742,7 @@ namespace
 		ChipBuffer<chips::Ay8910Decoder> ay;
 		ChipBuffer<chips::Rf5c68Decoder> rf5c;
 		ChipBuffer<chips::X1_010Decoder> x1;
+		ChipBuffer<chips::Ymf271Decoder> opx;
 		ChipBuffer<chips::Ymz280bDecoder> ymz;
 		std::vector<playback::MidiEvent> events;
 	};

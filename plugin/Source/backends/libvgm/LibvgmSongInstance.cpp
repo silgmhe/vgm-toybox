@@ -77,6 +77,11 @@ namespace
 			return fmChannel (3);
 		case DEVID_YM2151:
 			return fmChannel (8);
+		case DEVID_YMF271:
+			// twelve groups, and a group is FM or PCM depending on the sync mode the song writes.
+			// The mode is runtime state, so the strip keeps the default: the PCM groups then just
+			// report their one-shot notes on a channel the UI calls melodic.
+			return fmChannel (12);
 		case DEVID_YM2413:
 			return (channelIndex >= 0 && channelIndex < 9) ? playback::MidiCapability::melodic
 														   : (channelIndex < 14

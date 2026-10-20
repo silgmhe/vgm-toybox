@@ -433,6 +433,7 @@ void ToyboxAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer,
 | YM3526 / YM3812 | 0–8 | 9–13 | |
 | Y8950 | 0–8 | 9–14 | 14 是 Delta-T |
 | YMF262 / YMF278B | 0–17 | 18–22 | YMF278B 只接 FM 半（§11.2 行 22） |
+| YMF271 | 0–11 | — | 12 个 group；某组是 FM 还是 PCM 由歌曲写的 sync 模式决定，能力位是静态的，所以按 FM 报，PCM 组由解码器自己发 one-shot 标记 |
 | AY8910 | 0–2 | — | noise 没有独立 track |
 | SN76496 | 0–2 | 3 | |
 | RF5C68 | — | 0–7 | 也覆盖 RF5C164 |
@@ -662,9 +663,9 @@ void render (const playback::OutputBusBuffers* buses, int numBuses, int numSampl
 | 口径 | 数量 |
 |---|---:|
 | 音频核心（libvgm `DEVID_*`，全部可播） | 49 |
-| MIDI 设备类型（`midiCapabilityFor` 的 `case` 数，含已搁置的 YMZ280B） | 23 |
-| 上表对应的 MDPlayer 主表条目 | 25 / 54 |
-| 有音频核心、缺解码器 | 13（另有 YMZ280B：解码器已写但搁置） |
+| MIDI 设备类型（`midiCapabilityFor` 的 `case` 数，含已搁置的 YMZ280B） | 24 |
+| 上表对应的 MDPlayer 主表条目 | 26 / 54 |
+| 有音频核心、缺解码器 | 12（另有 YMZ280B：解码器已写但搁置） |
 | 连音频核心都没有 | 15 |
 | libvgm 有、MDPlayer 没有（不在对齐范围内） | 13 |
 
@@ -708,7 +709,7 @@ void render (const playback::OutputBusBuffers* buses, int numBuses, int numSampl
 | 32 | RF5C68 | RF5C68 | 触发 ×8 | |
 | 33 | MultiPCM | ✗ | — | libvgm 无核心 |
 | 34 | uPD7759 | uPD7759 | — | 语音合成器，无音高，只能 one-shot |
-| 35 | YMF271 | YMF271 | — | 4 算子 FM，需算法表 |
+| 35 | YMF271 | YMF271 | 旋律 ×12 | 4 算子 FM，12 个 group × 4 个 bank，4 种 sync 模式（0 = 四算子一组，写 bank 0 即复制到其余三个；1 = 两两成对；3 = 四路独立 PCM）。VGM 命令是 `0xD1`（端口字节 bit 7 是芯片实例、低 7 位是 bank），读取器把 bank 留在 `port` 里传下来——忽略它就会漏掉「只有 bank 0 的写会传播」这条。地址低四位是 group，3/7/11/15 是空洞。核心在 ROM 未分配时连 FM 组也不发声，所以资产要带 `0x67` type `0x85` 的 ROM 块；`opx.vgm` 用 group 0/1 各出 A4/A5，`[13]` 实测 Ch1/Ch2 各 4 个音符、rms 0.318 |
 | 36 | YMZ280B | YMZ280B | 触发 ×8（**搁置**） | 采样播放器。解码器已写但**不计入覆盖、不进 ctest**：vgmrips 上这颗芯片的成套录音实际是“一条长样本、一路发声”，没有可断言的每声部音符。见 `docs/memo/2026-10-20-ymz280b-shelved.md` |
 | 37 | QSound | QSOUND | — | 采样播放器，有音高 |
 | 38 | GA20 | GA20 | — | 采样播放器，有音高 |
@@ -731,14 +732,14 @@ void render (const playback::OutputBusBuffers* buses, int numBuses, int numSampl
 
 **三批工作**
 
-- **A. 有核心、缺解码器（14 项）**：只动 `plugin/Source/chips/` + `midiCapabilityFor` + 测试，不需要改 libvgm，也不需要新格式。其中 13 项真缺解码器：10 项可旋律化，PWM 与 uPD7759 天生只能 one-shot，OKIM6258 只有采样率档位；另 1 项 YMZ280B 的解码器已写但**搁置**（memo 见 §11.2 行 36），不计入覆盖。
+- **A. 有核心、缺解码器（13 项）**：只动 `plugin/Source/chips/` + `midiCapabilityFor` + 测试，不需要改 libvgm，也不需要新格式。其中 12 项真缺解码器：9 项可旋律化，PWM 与 uPD7759 天生只能 one-shot，OKIM6258 只有采样率档位；另 1 项 YMZ280B 的解码器已写但**搁置**（memo 见 §11.2 行 36），不计入覆盖。
 - **B. 无音频核心（15 项）**：9 个真芯片（FDS、MMC5、VRC7、N163、VRC6、FME7、SID、MultiPCM、YM2609）+ 6 个驱动/板卡（PPZ8、PPSDRV、PCM8、MPCMX68k、CS4231、P86）。它们主要出现在本插件目前不读的格式（NSF/NSFE、SPC、HES、KSS…）或驱动级回放里，所以 B 批实际是「新格式 + 新核心」的工程，不是 MIDI 输出的延伸。有核心之后 MIDI 侧很便宜：FME7 复用 AY、VRC7 复用 YM2413、VRC6 脉冲复用 NES。
 - **C. 已超出（13 项）**：SCSP、ES5506、C219、MIKEY、K007232、K005289、MSM5205、MSM5232、BSMT2000、ICS2115、VBOY_VSU、YMW258、YM2414。不计入对齐，但每项同样要一个解码器才能出 MIDI，机制与 A 批相同。
 
 **优先级**
 
 1. 方波/波形 PSG：X1_010——都是「周期→音高」，`chips/Pitch.h` 的曲线直接可用，单个解码器约 100–200 行，测试全在 `vgm_chip_test` 里。（HuC6280、K051649、SAA1099、POKEY、WSwan 已按此路径完成。）
-2. FM：YMF271——4 算子需要算法表。（YMF278B 的 FM 半已按此路径完成，见 §11.2 表行 22。YMZ280B 原属这一批，已**搁置**：vgmrips 的成套录音是“一条长样本、一路发声”，验收条件③“真实曲目的 note-on 数非零”只能得到 1 个音符，见 `docs/memo/2026-10-20-ymz280b-shelved.md`。）
+2. FM：YMF271——已完成（见 §11.2 表行 35）。（YMF278B 的 FM 半已按此路径完成，见 §11.2 表行 22。YMZ280B 原属这一批，已**搁置**：vgmrips 的成套录音是“一条长样本、一路发声”，验收条件③“真实曲目的 note-on 数非零”只能得到 1 个音符，见 `docs/memo/2026-10-20-ymz280b-shelved.md`。）
 3. 带音高的采样播放器：C140、C352、K053260、K054539、QSound、GA20、ES5503——音高来自步进/采样率，需要「步进→音分 + 根音」的换算，与 ADPCM-B 的根音问题同型（§11.1）。
 4. 无音高的：PWM、uPD7759、OKIM6258——收益最小，最后做。
 
@@ -785,6 +786,8 @@ void render (const playback::OutputBusBuffers* buses, int numBuses, int numSampl
 
 | 2026-10-20 | X1-010 解码器（M2 第一颗）：波形模式的音高是 `clock * pitch / 2^26`（core 的 `step = base_clock/524288*freq` 走过 128 字节表），状态位 7 把 pitch 右移一位即降八度；PCM 模式没有音高、也没有能读出长度的结束寄存器，所以用 80 ms 门限做 one-shot。VGM 用 `0xC8`（16 位大端偏移），读取器把高字节塞进 `port`、低字节塞进 `addr` 传下去，`0x80` 以上的偏移（包络/波形数据）解码器直接忽略——否则上传波形会被当成按键。`vgm_chip_test` 新增四条，X1-010 在能力表里是 16 个旋律通道。端到端资产 `x1.vgm` 也补上了：波表和包络可以用同一条 `0xC8` 写上传（波表 `n` 在 `0x1000 + 128n`、包络 `n` 在 `128n`），但核心在 ROM 未分配时直接返回静音，所以还要一个 `0x67` type `0x91` 的 ROM 块（libvgm `_VGM_ROM_CHIPS`）；`[13]` 实测 Ch1 rms 0.0306、4 个 A4 音符，`ctest -R engine.x1` 全绿 |
 
+| 2026-10-20 | YMF271 解码器（M3）：12 个 group × 4 个 bank，4 算子。算法 0–7 的载体是 bank 3，8–15 才把 bank 0 拉进来，所以「哪个算子出声」必须按算法表选，不能按 bank 顺序取。**三处踩坑**：① 地址低四位是 group 而 3/7/11/15 是空洞，第一版资产把「group 3」写成 `0x33`，核心照 fm_tab 直接丢掉——要用 group 1（`0x31`）才真有第二路；② 核心在 `mem_base == NULL` 时对 FM 组也直接返回静音，所以只测 FM 的资产也得带 `0x67` type `0x85` 的 ROM 块；③ AR=0 时包络永远停在 -60 dB，核心收下了 key-on 但没声音，AR=31 + RR=15 才既有声又能在 key-off 后收尾。`vgm_mixer_test --notes` 实测 group 0 = 4 个 A4（69）、group 1 = 4 个 A5（81），`[13]` 两轨 rms 0.318 且 `every track that makes sound also produces MIDI notes` 通过；`ctest -R engine.opx` 全绿 |
+
 | 2026-10-20 | `psg` / `opl4` / `ym2610` / `fm_alg0` 四个资产从“手工跑”变成 ctest 用例（`engine.*`），并为它们写**逐音符断言**：组名 + 轨名 + 第几个音符 + 时刻 + 音高，容差 20 ms。此前它们只是把 `[13]` 跑一遍，而 `[13]` 只问“有声的轨有没有音符”——音高错一个八度、音符落错轨、时间偏半秒都照样绿。为拿到音高与时刻，`TrackProbe` 额外记录 note-on 序列（`probes[i].ons`）。变异验证：把 AY 分频从 16 改成 32 → 只有 `psg.vgm: AY-3-8910 / Ch 1 is 57, expected 69` 变红；把 OPL4 的 bank 压成 0 → 只有 `opl4.vgm: Ch 10` 变红。同一轮修了 `make_ym2610_song.ps1` 的音高公式（`2^(21-block)` 应为 `2^(20-block)`）：三个 FM 音符一直比注释高一个八度（A5/C6/E6 冒充 A4/C5/E5），重新生成后是 69/72/76 |
 
 背景：libvgm 把 OPN 的 SSG 作为 linked AY8910（`opnintf.c:48-52`）；`LibvgmSongInstance::isTrackDevice()` 只保留 `parentIdx == (UINT32)-1` 的设备（`LibvgmSongInstance.cpp:31-36`），所以 YM2610/YM2608/YM2203 的 3 个 SSG 当前没有独立 mixer track。
@@ -801,7 +804,7 @@ void render (const playback::OutputBusBuffers* buses, int numBuses, int numSampl
 
 设计文档写完并不等于目标记得住——§11 的 P1–P5 只是“一次交付”的阶段划分，真正耗时的是 §11.2 那 54 项芯片覆盖。这里把它排成可验收的里程碑：**每做完一项，先回来改这里的「状态」和 §11.2 的现状表，再提交**。状态只有三种：完成 / 进行中 / 未开始。
 
-**当前基线（2026-10-20）**：P1–P4 完成，P5 进行中（M2 完成，M3 只剩 YMF271；MIDI 设备类型 23、覆盖 25 / 54，YMZ280B 已搁置不计，口径见 §11.2）；`vgm_core_test`、`vgm_chip_test`、`vgm_opn_test` 通过，`ctest` 22/22 通过，`vgm_mixer_test` 的 psg / opl4 / minimal / wswan / ym2610 / fm_alg0 / dac / loop / x1 **九个资产全部进了 ctest**（`engine`、`engine.wswan`、`engine.dac`、`engine.loop`、`engine.x1`、`engine.psg`、`engine.opl4`、`engine.ym2610`、`engine.fm_alg0`）。`ymz280b.vgm` 不在其中：它的解码器能出声也能报 4 个音符，但真实 rips 只有一路，进 ctest 会让“一套资产各自证明什么”变得含糊（见 §11.2 行 36）。
+**当前基线（2026-10-20）**：P1–P4 完成，P5 进行中（M2、M3 完成，M4 未开始；MIDI 设备类型 24、覆盖 26 / 54，YMZ280B 已搁置不计，口径见 §11.2）；`vgm_core_test`、`vgm_chip_test`、`vgm_opn_test` 通过，`ctest` 23/23 通过，`vgm_mixer_test` 的 psg / opl4 / minimal / wswan / ym2610 / fm_alg0 / dac / loop / x1 / opx **十个资产全部进了 ctest**（`engine`、`engine.wswan`、`engine.dac`、`engine.loop`、`engine.x1`、`engine.opx`、`engine.psg`、`engine.opl4`、`engine.ym2610`、`engine.fm_alg0`）。`ymz280b.vgm` 不在其中：它的解码器能出声也能报 4 个音符，但真实 rips 只有一路，进 ctest 会让“一套资产各自证明什么”变得含糊（见 §11.2 行 36）。
 
 | 里程碑 | 内容 | 验收 | 状态 |
 |---|---|---|---|
@@ -810,7 +813,7 @@ void render (const playback::OutputBusBuffers* buses, int numBuses, int numSampl
 | M1.2 | YM2612 DAC 流的 MIDI：`0x8n` 只带等待值（1 字节），样本字节在 type `0x00` 的 `0x67` 数据块里。`VgmCommandReader` 现在保留该 bank（含 `0xE0` 寻址），`0x8n` 取下一字节写成 `0x2A` 寄存器写 + 自带等待 | 真实曲目 `06 Star Light Zone.vgz` 的 DAC 轨从 0 → 3 个音符；`dac.vgm`（爆发/静音交替）在 `[13]` 下 ≥10 个音符（实测 19）；`[11]` 逐字节比对 bank 内容与时刻；`ctest -R engine.dac` 全绿 | 完成 |
 | M1.3 | 期望值交给芯片（§10.2）：`vgm_opn_test` 用 libvgm 的 YM2612 核测每个通道是否出声，解码器的 `gate` 必须一致；`PlaybackEngineTest` `[13]` 再加一条“有声的轨必须有音符”的端到端不变量 | `ctest -R "chip\|opn"` 全绿；把 `totalLevel` 位序改回旧写法后 `vgm_opn_test` 必须变红；`vgm_mixer_test` 五个资产 + `fm_alg0.vgm` 的 `[13]` 全绿 | 完成 |
 | M2 | A 批波形 PSG：X1_010（周期→音高，复用 `chips/Pitch.h`） | 按 §11.2「验收」四条；24 → 25 / 54。`vgm_chip_test` 四条（A4 的 6.10 值、分频位、PCM one-shot、0x80 以上偏移不按键）；`x1.vgm` 在 `[13]` 下 Ch1 有声（rms 0.0306）且报 4 个 A4 音符，`ctest -R engine.x1` 全绿 | 完成 |
-| M3 | A 批 FM：YMF271；**YMZ280B 搁置** | 同上；25 → 26 / 54（不含 YMZ280B）。YMZ280B 的解码器/单测已写但**不计入覆盖、不进 ctest**：vgmrips 上这颗芯片的成套录音实际是“一条长样本、一路发声”，没有可断言的每声部音符。详见 `docs/memo/2026-10-20-ymz280b-shelved.md`（含重启条件） | 未开始 |
+| M3 | A 批 FM：YMF271；**YMZ280B 搁置** | 同上；25 → 26 / 54（不含 YMZ280B）。`vgm_chip_test` 的七条 OPX 用例覆盖音高、算法决定载体、组电平静音、block→八度、sync 1 成对复制、PCM one-shot 与 PCM 四路独立；`opx.vgm` 在 `[13]` 下 group 0/1 各报 4 个音符（A4/A5）、rms 0.318，`ctest -R engine.opx` 全绿。YMZ280B 的解码器/单测已写但**不计入覆盖、不进 ctest**：vgmrips 上这颗芯片的成套录音实际是“一条长样本、一路发声”，没有可断言的每声部音符。详见 `docs/memo/2026-10-20-ymz280b-shelved.md`（含重启条件） | 完成 |
 | M4 | 采样播放器音高体系：C140、C352、K053260、K054539、QSound、GA20、ES5503、OKIM6295、SEGAPCM，并把 ADPCM-B 根音（§11.1）一起纳入 | 「步进/采样率→音分 + 根音」是一个共用工具而非九份私有换算；26 → 35 / 54 | 未开始 |
 | M5 | 无音高 one-shot：PWM、uPD7759、OKIM6258 | A 批只剩搁置的 YMZ280B；35 → 38 / 54 | 未开始 |
 | M6 | C 批 13 项（SCSP、ES5506、C219、MIKEY、K007232、K005289、MSM5205、MSM5232、BSMT2000、ICS2115、VBOY_VSU、YMW258、YM2414）——不在 54 内，但机制与 A 批相同 | 每项一个解码器 + `vgm_chip_test` 用例 | 未开始 |

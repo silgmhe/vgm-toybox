@@ -199,6 +199,7 @@ target_sources(VGMToybox PRIVATE
 	Source/chips/Ay8910Decoder.cpp
 	Source/chips/Rf5c68Decoder.cpp
 	Source/chips/X1_010Decoder.cpp
+	Source/chips/Ymf271Decoder.cpp
 	Source/chips/Ymz280bDecoder.cpp
 	Source/chips/Sn76489Decoder.cpp
 	Source/chips/OpmDecoder.cpp
@@ -337,6 +338,7 @@ add_executable(vgm_mixer_test EXCLUDE_FROM_ALL
 	Source/chips/Ay8910Decoder.cpp
 	Source/chips/Rf5c68Decoder.cpp
 	Source/chips/X1_010Decoder.cpp
+	Source/chips/Ymf271Decoder.cpp
 	Source/chips/Ymz280bDecoder.cpp
 	Source/chips/Sn76489Decoder.cpp
 	Source/chips/OpmDecoder.cpp
@@ -367,6 +369,7 @@ add_executable(vgm_chip_test EXCLUDE_FROM_ALL
 	Source/chips/Ay8910Decoder.cpp
 	Source/chips/Rf5c68Decoder.cpp
 	Source/chips/X1_010Decoder.cpp
+	Source/chips/Ymf271Decoder.cpp
 	Source/chips/Ymz280bDecoder.cpp
 	Source/chips/Sn76489Decoder.cpp
 	Source/chips/OpmDecoder.cpp
@@ -571,6 +574,16 @@ set(_toybox_x1_song "${CMAKE_CURRENT_SOURCE_DIR}/Tests/assets/x1.vgm")
 if(EXISTS "${_toybox_x1_song}")
 	add_test(NAME engine.x1 COMMAND vgm_mixer_test "${_toybox_x1_song}" 2)
 	set_tests_properties(engine.x1 PROPERTIES LABELS "integration" TIMEOUT 120)
+endif()
+
+# The YMF271 (M3): 0xD1 carries the chip in bit 7 of the port byte and the register bank in the low
+# seven bits, and under sync mode 0 only a bank-0 write reaches the other three operators. A decoder
+# that ignored the bank would still pass its own unit test, so opx.vgm goes through the file path:
+# two four-operator groups, one an octave above the other, whose notes have to land on two tracks.
+set(_toybox_opx_song "${CMAKE_CURRENT_SOURCE_DIR}/Tests/assets/opx.vgm")
+if(EXISTS "${_toybox_opx_song}")
+	add_test(NAME engine.opx COMMAND vgm_mixer_test "${_toybox_opx_song}" 2)
+	set_tests_properties(engine.opx PROPERTIES LABELS "integration" TIMEOUT 120)
 endif()
 
 # One test per script in Tests/scripts, discovered rather than listed: adding a script must not mean
