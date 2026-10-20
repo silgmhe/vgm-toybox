@@ -88,18 +88,19 @@
 [音量推子 / 电平表 / 刻度]
 [M] [S]
 [音频输出下拉框]   ← 现有
-[MIDI 通道下拉框] [one-shot 图标]   ← 新增，位于最底部
+[MIDI 通道下拉框] [能力徽标]   ← 新增，位于最底部
 ```
 
 - `ChannelStrip::preferredHeight` 目前是 `204`（`ChannelStrip.h:29`）；新增一行 26 px + 间距 4 px，建议改为 **234**；
-- 通道条宽度仍是 88 px，内部宽度 76 px；MIDI 行建议 `ComboBox` 约 60–62 px，右侧留 10–12 px 给 one-shot 图标；
-- Master strip 同样增加这一行，但没有 one-shot 图标；它的 MIDI 行同样位于音频输出下拉框下方；
+- 通道条宽度仍是 88 px，内部宽度 76 px；MIDI 行里 `ComboBox` 约 44 px，右侧 17 px 给能力徽标（1 px 间距）；
+- Master strip 同样增加这一行，但没有能力徽标；它的 MIDI 行同样位于音频输出下拉框下方；
 - 图标和下拉框都使用现有的 `ToyboxLookAndFeel` 风格；MIDI 行不新增卡片，只增加一个控件行；
 - 这条改动会让混音卡片的最小内容高度增加约 30 px；小窗口下多出的高度由现有 viewport 滚动承担（`MixerPanel::layoutStrips()` 已经按 `preferredHeight` 计算）。
 
 ### 3.2 下拉框行为
 
-- 条目：`Off`（id 1）、`1` … `16`（id 2–17）；`selectedId - 1` 映射为 0–16，0 = Off，1–16 = MIDI 通道；
+- 条目：`Off`（id 1）、`Ch.1` … `Ch.16`（id 2–17）；`selectedId - 1` 映射为 0–16，0 = Off，1–16 = MIDI 通道。**文字前缀 `Ch.` 不是装饰**：混音器里一个裸数字 `3` 既可能是音频通道也可能是音色号，加了前缀用户才知道这是 MIDI 通道（键 `mixer.midiChannel`，`Ch.{0}`）；
+- 弹窗里每个通道条目左侧画一枚 **MIDI 标志**（环 + 五个触点 + 底部缺口，`drawMidiGlyph`），`Off` 不带——它背后没有 MIDI 通道。`juce::ComboBox::addItem` 只能存文字，所以 `MidiChannelBox` 覆写 `showPopup()`，用 `makeMidiChannelMenu()`（`Source/ui/MidiMenu.h`）自己建菜单，`PopupMenu` 的 `Drawable` 图标接口负责把标志缩放到条目高度；
 - **初始值全部为 `Off`**；用户显式选择通道后才输出 MIDI；
 - 选择后立即写入 `PlaybackEngine`，不需要“应用”按钮；
 - 选择 `Off` 时，若该轨有正在发声的 MIDI note，先发 note-off/all-notes-off，再停止；
@@ -117,7 +118,7 @@
 - Master 把合并信号重新发送到 Master 选择的 MIDI 通道；各轨自身的 MIDI 通道仍然保留直出；
 - 因此，若某轨既启用了直出、又启用了 Master，同一音符会在两个通道上出现一次（直出一次、Master 合并一次）。这允许用户自由选择“分轨直出”“单轨总谱”或两者都要；Master 默认 `Off`，不想要 Master 时设为 `Off` 即可；
 - Master 的 `M`（master mute）同时静音音频和 Master MIDI 合并；轨道 mute 只影响该轨的直出和它在 Master 合并中的贡献；
-- Master MIDI 不做 one-shot 图标（它只是一个合并出口，不改变源轨的能力）。
+- Master MIDI 不做能力徽标（它只是一个合并出口，不改变源轨的能力，也不是“旋律”或“触发”）。
 
 ### 3.4 MIDI Channel / MIDI Bus / MIDI Port
 
@@ -136,21 +137,28 @@
 - 因此，用户提出的“在通道条下再加一个 MIDI-BUS 下拉框”**第一版不实现**；如果以后要做，优先做全局设备选择，不做每轨 bus。
 - 如果你说的“MIDI Bus”其实是 **MIDI 通道组**，那每轨的 MIDI 下拉框已经覆盖。
 
-### 3.5 one-shot 图标
+### 3.5 能力徽标（键盘 / 采样波形）
 
-- 仅当 `TrackInfo::midiCapability == oneShot` 时显示；
-- 建议用 `Icons` 里新增的 `drawOneShotGlyph()`：一个小的“单次脉冲/鼓点”图形，10–12 px，颜色用 `theme::secondaryText()` 或琥珀色；
+- 徽标说的是“这条通道输出的是哪种 MIDI”，不是“有没有 MIDI”：
+  - `midiCapability == melodic` → **钢琴键盘**（`drawMelodyGlyph`）：三白键两黑键，音符带真实音高；
+  - `midiCapability == oneShot` → **采样波形**（`drawSampleGlyph`）：一个满幅起音 + 向右衰减的脉冲串，音符只是触发；
+- 两者都是 `juce::Path` 矢量绘制（`Source/ui/Icons.cpp`），颜色 `theme::secondaryText()`，在徽标的 17×26 区域里按正方形居中——键盘一旦被拉成长方形就像栅格，而不像键盘；
+- 尺寸经验（都按 1× 真实像素截图定过）：15 px 见方时用**三个白键 + 两枚黑键**。四条约束都是踩出来的：
+  - 分隔线**贯穿键盘整个高度**（`top`→`bottom`），黑键后画、把它覆盖住：可见部分正好从黑键的底边开始，中间不留空白段——真实键盘上两者本来就共线，只画下半段会留下“中间空了一块”的观感（第一版就是这样被指出来的）；
+  - 分隔线要用**与外框同粗细**的笔并**对齐到像素列**（`std::floor (x) + 0.5f`）；1 px 线落在两列之间会被摊成两个半亮灰像素，在 15 px 下等于没有线（最初连“有没有线”都要放大 20 倍才看清）；
+  - 黑键要明显比分隔线宽（宽度比 0.20 : 0.06），否则上半段只是“粗一点的线”，整枚图标变成条形码；四个白键三个黑键在 15 px 放不下这个比例，所以只画三个白键；
+  - 波形在同样大小下要把振幅拉到 0.5、放慢衰减，否则只剩一条折线；
 - 图标不可点击，只提供 tooltip：
-  - EN: “One-shot channel: MIDI note C4 is a trigger; pitch is not tracked.”
-  - ZH: “一次性通道：以 C4 作为触发音符，不跟踪音高。”
-- 组件 ID `mixer.midi.<index>.oneshot`（带轨道索引，理由同 §3.6），方便 AppHarness 断言；
-- 若通道不支持 MIDI，不显示图标，下拉框禁用并显示 `Not available`。
+  - melodic：EN “Melodic channel: every note carries the pitch the chip plays.” / ZH “旋律通道：每个音符都带芯片实际播放的音高。”
+  - oneShot：EN “One-shot channel: MIDI note C4 is a trigger; pitch is not tracked.” / ZH “一次性通道：以 C4 作为触发音符，不跟踪音高。”
+- 组件 ID `mixer.midi.<index>.badge`（带轨道索引，理由同 §3.6），方便 AppHarness 断言；
+- 若通道不支持 MIDI，不显示徽标（下拉框已显示 `Not available`，再画一个标记只是重复），下拉框禁用。
 
 ### 3.6 可访问性/测试 ID
 
 - 每轨 MIDI 下拉框：`mixer.midi.<index>`（如 `mixer.midi.0`、`mixer.midi.3`）；
-- 每轨 one-shot 图标：`mixer.midi.<index>.oneshot`；
-- Master MIDI 下拉框：`mixer.master.midi`；Master 不显示 one-shot 图标（其徽标 ID 为 `mixer.master.oneshot`，始终不可见）；
+- 每轨能力徽标：`mixer.midi.<index>.badge`；
+- Master MIDI 下拉框：`mixer.master.midi`；Master 不显示能力徽标（其徽标 ID 为 `mixer.master.badge`，始终不可见）；
 - **索引是必需的**：组件 ID 必须唯一，否则 `findByID` 只返回树里的第一个匹配（`AppHarnessTest.cpp:114-138`），脚本就只能断言轨 0，无法验证“噪声轨（one-shot）显示徽标”这类每轨差异。音频输出框沿用旧的 `mixer.output`，没有索引（现无脚本按轨断言它）；
 - AppHarness 的 `set <componentId> <index>` 已经能驱动 ComboBox（`plugin/Tests/AppHarnessTest.cpp:514-527`），可以直接写脚本验证通道切换。
 
@@ -280,7 +288,8 @@ plugin/Source/backends/libvgm/MidiSequenceBuilder.{h,cpp}
 职责：
 
 - 读 VGM header：data offset、loop offset、chip clock；
-- 遍历命令流：`0x50–0x5F`、`0xA0–0xAF`、`0xB?`（第二芯片）、`0x61/0x62/0x63/0x7n` 等待、`0x80–0x8F`（YM2612 DAC 流，**低 4 位是等待采样数**）、`0x67` 数据块（跳过 payload）、`0x66` 结束；
+- 遍历命令流：`0x50–0x5F`、`0xA0–0xAF`、`0xB?`（第二芯片）、`0x61/0x62/0x63/0x7n` 等待、`0x80–0x8F`（YM2612 DAC 流，**低 4 位是等待采样数**，字节从 PCM bank 取）、`0x67` 数据块、`0xE0`（PCM bank 寻址）、`0x66` 结束；
+- `0x67` 数据块里 type 为 `0x00` 的是 YM2612 的 PCM bank，`0x8n` 按顺序从中取字节写到 `0x2A`——不保留这些 payload，DAC 轨就永远只有音频、没有 MIDI。上层看到的是一条 `0x52`（`0x2A` = 字节）加上它自带的等待两条命令；
 - **凡是带等待的命令都必须推进时钟**，包括不产生寄存器写的那几条。`0x8n` 只在 DAC 流里出现，容易在“这是寄存器写”的思路下被跳过：它不推进，MD 曲目的 MIDI 时间就会短一大截（Green Hill Zone 52.9 s → 21.4 s），音符越跑越快、序列提前结束。命令时钟读完之后应当正好等于 header 的 `total_samples`（`VgmCommandReader::timeSamples()`，`vgm_mixer_test` 的 `[11]` 直接比对这两个数）；
 - 维护每种芯片的影子寄存器；
 - 对支持的芯片调用对应的 `ChipMidiDecoder`；
@@ -457,8 +466,8 @@ void ToyboxAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer,
 ### 8.2 控件
 
 - `juce::ComboBox midiBox`，条目 `Off` + `1..16`；轨道的 ID 是 `mixer.midi.<index>`，Master 的 ID 是 `mixer.master.midi`；
-- 轨道右侧 `OneShotBadge`（`juce::Component` 子类，`paint` 调 `drawOneShotGlyph`，`setTooltip`）；Master 不显示这个 badge；
-- 宽度分配：轨道内部 76 px；combo 62 px，gap 2 px，badge 12 px；Master 没有 badge，combo 可以用满 76 px；
+- 轨道右侧 `MidiCapabilityBadge`（`juce::Component` 子类，按 `setCapability()` 调 `drawMelodyGlyph` 或 `drawSampleGlyph`，`setTooltip`）；Master 不显示这个 badge；
+- 宽度分配：轨道内部约 62 px；combo 44 px，gap 1 px，badge 17 px；Master 没有 badge，combo 用满整行；
 - `midiBox` 使用 `ToyboxLookAndFeel` 的 compact combo 属性（和现有输出框一致）；
 - 禁用态：`setEnabled(false)`，显示 `Not available`，badge 隐藏；
 - 语言切换时只重建 item 文本，保持当前选择；`refreshLanguage()` 里加 MIDI 相关 tooltip；
@@ -470,7 +479,8 @@ void ToyboxAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer,
 - `mixer.midiOff`
 - `mixer.midiUnavailable`
 - `mixer.midiOneShotTooltip`
-- `mixer.midiChannelName`（如果需要 “MIDI 1”）
+- `mixer.midiMelodyTooltip`
+- `mixer.midiChannel`（`Ch.{0}`）
 
 中英文语言包都要加；`plugin/Tests/scripts/language.txt` 的完整性检查会覆盖。
 
@@ -573,9 +583,9 @@ void render (const playback::OutputBusBuffers* buses, int numBuses, int numSampl
 `plugin/Tests/scripts/midi.txt`（CMake 自动注册为 `app.midi`，测试曲目同 `load-and-play.txt`）：
 
 - `dump mixer.midi.0` / `dump mixer.master.midi` 能打印这两个控件；
-- `set mixer.midi.0 0` -> `Off`；`set mixer.midi.0 1` -> 通道 1；`set mixer.midi.0 16` -> 通道 16；
-- `set mixer.master.midi 3` -> Master 通道 3；
-- `minimal.vgm` 是单颗 SN76489：轨 0–2 可旋律化，轨 3 是噪声（one-shot）——`mixer.midi.3.oneshot visible == true`，`mixer.midi.0.oneshot visible == false`，Master 没有徽标；
+- `set mixer.midi.0 0` -> `Off`；`set mixer.midi.0 1` -> `Ch.1`；`set mixer.midi.0 16` -> `Ch.16`；
+- `set mixer.master.midi 3` -> Master `Ch.3`；
+- `minimal.vgm` 是单颗 SN76489：轨 0–2 可旋律化，轨 3 是噪声（one-shot）——`mixer.midi.3.badge visible == true`、`mixer.midi.0.badge visible == true`（键盘与波形都显示，只是形状不同），Master 没有徽标（`mixer.master.badge visible == false`）；
 - 不支持轨的 combo disabled（测试曲目里没有这种轨，用 `VGM_TEST_SONG` 指向含 S98/DRO 的文件时才会出现；代码路径见 `LibvgmSongInstance.cpp` 的 `midiCapabilityFor`）；
 - mute/solo 不改下拉框的选择值（值归引擎所有，条子只显示）——脚本只能驱动有 componentID 的控件，条子里的 M/S 按钮没有 ID，因此这一条由 `PlaybackEngineTest` `[10]` 覆盖；
 - `click mixer.enable` 关掉混音器后 `mixer.midi.0 enabled == false`、`mixer.master.midi enabled == false`（Master 的输出选择框仍为 true——它的路由在两种模式下都有效），值保留；再点开恢复；
@@ -726,7 +736,7 @@ void render (const playback::OutputBusBuffers* buses, int numBuses, int numSampl
 基础版范围已经确认，没有阻塞问题：
 
 - **MIDI-BUS 第一版不做**：VST3 只有一个输出事件总线，由 REAPER 路由到端口/轨道；standalone 的 MIDI 设备选择放到后续 Settings → MIDI 输出子面板；
-- one-shot 图标 + tooltip；
+- 能力徽标（旋律 = 键盘，触发 = 采样波形）+ tooltip；
 - 允许共用 MIDI 通道；
 - 混音器总开关关闭时不输出任何 MIDI；
 - 设置子面板放到后续阶段。
@@ -753,6 +763,8 @@ void render (const playback::OutputBusBuffers* buses, int numBuses, int numSampl
 | 2026-10-20 | `singleChannelMuteOptions` 的两个 `chnMute` 半字都填同一个通道掩码。libvgm 把 `chnMute[1]` 给 linked 子设备（`VGMPlayer::RefreshMuting`），而子设备与父设备的通道编号一一对应（OPL4 的 FM 半就是一个 OPL3），原来把第二个半字填成“其余全静音”正好静掉了本条轨道要的那个通道——OPL4 在混音器里整轨无声、纯播放器却有声，就是这个原因 |
 | 2026-10-20 | `0x40-0x4F` 的通道位与算子位写反了：低两位是端口内的通道、bit 2-3 才是算子。反过来之后每个算子的音量都记到别的通道上，真正的载波一直停在静音默认值 `0x7F`——FM5 有音频却一条 MIDI 事件都没有（`06 Star Light Zone.vgz` 的 FM5，FM2 同样中招），就是这里。`vgm_chip_test` 的 `startFmNote` 也按错位写过算子 4（`0x43`），修好解码器后这些用例才暴露出来，已改成真实的 `0x4C`（端口 1 的 FM4/FM6 分别是 `0x4C`/`0x4E`） |
 | 2026-10-20 | 新增 `vgm_opn_test`（§10.2）：期望值不再由我们写死，而由 libvgm 的 YM2612 核测出来。旧 bug 在这个测试下复现为 `0x43` 幽灵音 + 384 次比较里每个“算子 4 是载波”的用例都红，修好后全绿——单测与解码器同源的问题从这里开始不再靠自觉 |
+| 2026-10-20 | `VgmCommandReader` 开始保留 `0x67` 数据块（type `0x00` 的 YM2612 PCM bank），`0x8n` 从中按序取字节写成一条 `0x52`/`0x2A` 写、再跟它自带的等待（`0xE0` 的 bank 寻址一并支持）。此前 `0x8n` 只推进时钟，DAC 轨因此永远没有 MIDI。`06 Star Light Zone.vgz` 的 DAC 轨从 0 个音符变成 3 个，`[13]` 的“DAC 轨豁免”随之删除——那条豁免就是 M1.2 的占位 |
+| 2026-10-20 | 混音器 MIDI 行改版：原来的 one-shot 单脉冲徽标换成**能力徽标**（旋律 = 钢琴键盘，触发 = 采样波形，都不可点击、只给 tooltip）；下拉条目改成 `Ch.1`–`Ch.16`，弹窗每条通道前加 MIDI 标志。三枚图标都是 `juce::Path` 矢量（`Icons.cpp`），在真实 15 px 下比对过：键盘三白键两黑键、分隔线贯穿整个高度并被黑键盖住上半段，波形要加大振幅才不糊。`ComboBox` 存不了图标，所以 `MidiChannelBox` 覆写 `showPopup()`、用 `MidiMenu.h` 的 `makeMidiChannelMenu()` 建菜单；`vgm_ui_test` 新增 `[5]`（三枚图标互不相同 / 不越界 / 键盘上重下轻 / 波形左重右轻 / MIDI 是环不是实心块）与 `[6]`（弹窗 17 条、通道条目带图标、选中项打勾） |
 
 ## 附录 A：linked SSG 的后续方案（第一版不做）
 
@@ -770,13 +782,13 @@ void render (const playback::OutputBusBuffers* buses, int numBuses, int numSampl
 
 设计文档写完并不等于目标记得住——§11 的 P1–P5 只是“一次交付”的阶段划分，真正耗时的是 §11.2 那 54 项芯片覆盖。这里把它排成可验收的里程碑：**每做完一项，先回来改这里的「状态」和 §11.2 的现状表，再提交**。状态只有三种：完成 / 进行中 / 未开始。
 
-**当前基线（2026-10-20）**：P1–P4 完成，P5 进行中；MIDI 设备类型 21 / 54；`vgm_core_test`、`vgm_chip_test`、`vgm_opn_test` 通过，`vgm_mixer_test` 的 psg / opl4 / minimal / wswan / ym2610 五个资产全部 `all checks passed`。
+**当前基线（2026-10-20）**：P1–P4 完成，P5 进行中；MIDI 设备类型 21 / 54；`vgm_core_test`、`vgm_chip_test`、`vgm_opn_test` 通过，`ctest` 16/16 通过，`vgm_mixer_test` 的 psg / opl4 / minimal / wswan / ym2610 / fm_alg0 / dac 七个资产全部 `all checks passed`。
 
 | 里程碑 | 内容 | 验收 | 状态 |
 |---|---|---|---|
 | M1 | 基础版：`MidiCapability`/事件序列/每轨 MIDI 通道/Master 合并/VST3 输出/通道条 UI（P1–P4） | `PlaybackEngineTest` `[10]`–`[12]` 全绿；`vgm_mixer_test --notes` 覆盖 YM2610/YM2612/YM2151/AY/SN | 完成 |
 | M1.1 | 收尾既有红灯：`ym2610.vgm` 的 4 条混音器检查已修（`[8]` 改成先用 MIDI 侧找出真正有声的轨，RPN 检查改从该轨开始，不再把唯一一次 RPN 花在静音轨上）；剩 `[12]` 循环用例缺一首带循环点的资产 | 五个资产（psg/opl4/minimal/wswan/ym2610）全绿、`[12]` 不再 skipped | 进行中 |
-| M1.2 | YM2612 DAC 流的 MIDI：`0x8n` 只带等待值（1 字节），样本字节在 ROM 数据块里，`VgmCommandReader` 目前只跳过数据块，所以 DAC 轨永远没有触发。需要读 0x67 数据块并按 `0x2A` 送字节 | 一首真实 Mega Drive 曲的 DAC 轨在 `--notes` 下出现一次性触发；`vgm_chip_test` 覆盖数据块路径 | 未开始 |
+| M1.2 | YM2612 DAC 流的 MIDI：`0x8n` 只带等待值（1 字节），样本字节在 type `0x00` 的 `0x67` 数据块里。`VgmCommandReader` 现在保留该 bank（含 `0xE0` 寻址），`0x8n` 取下一字节写成 `0x2A` 寄存器写 + 自带等待 | 真实曲目 `06 Star Light Zone.vgz` 的 DAC 轨从 0 → 3 个音符；`dac.vgm`（爆发/静音交替）在 `[13]` 下 ≥10 个音符（实测 19）；`[11]` 逐字节比对 bank 内容与时刻；`ctest -R engine.dac` 全绿 | 完成 |
 | M1.3 | 期望值交给芯片（§10.2）：`vgm_opn_test` 用 libvgm 的 YM2612 核测每个通道是否出声，解码器的 `gate` 必须一致；`PlaybackEngineTest` `[13]` 再加一条“有声的轨必须有音符”的端到端不变量 | `ctest -R "chip\|opn"` 全绿；把 `totalLevel` 位序改回旧写法后 `vgm_opn_test` 必须变红；`vgm_mixer_test` 五个资产 + `fm_alg0.vgm` 的 `[13]` 全绿 | 完成 |
 | M2 | A 批波形 PSG：X1_010（周期→音高，复用 `chips/Pitch.h`） | 按 §11.2「验收」四条；24 → 25 / 54 | 未开始 |
 | M3 | A 批 FM：YMF271、YMZ280B | 同上；25 → 27 / 54 | 未开始 |
