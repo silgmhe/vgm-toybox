@@ -50,6 +50,8 @@ language: 简体中文
 "mixer.masterMidiTooltip" = "MIDI 输出 - 所有可听且启用 MIDI 的轨道合并后的信号";
 "mixer.masterMuteTooltip" = "静音主总线输出";
 "mixer.masterOutputTooltip" = "输出总线 - 主混音的去向";
+"mixer.midiChannel" = "Ch.{0}";
+"mixer.midiMelodyTooltip" = "旋律通道：每个音符都带芯片实际播放的音高";
 "mixer.midiOff" = "关闭";
 "mixer.midiOneShotTooltip" = "一次性通道：以 C4 作为触发音符，不跟踪音高";
 "mixer.midiTooltip" = "MIDI 输出通道";

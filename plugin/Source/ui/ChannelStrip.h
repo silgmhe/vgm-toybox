@@ -11,13 +11,33 @@
 namespace toybox::ui
 {
 
-/** The small badge next to a one-shot MIDI channel; the tooltip is the whole message. */
-class MidiOneShotBadge final : public juce::Component,
-							   public juce::SettableTooltipClient
+/** The badge next to the MIDI selector: what kind of MIDI this channel speaks.
+
+	A keyboard for a melodic channel (its notes carry the chip's pitch), a sample waveform for a
+	one-shot channel (the note is a trigger), nothing at all for a channel that cannot send MIDI -
+	the selector says "not available" there, and a second mark would only repeat it. The tooltip
+	is the whole message. */
+class MidiCapabilityBadge final : public juce::Component,
+								  public juce::SettableTooltipClient
 {
 public:
-	MidiOneShotBadge (void);
+	void setCapability (playback::MidiCapability newCapability);
 	void paint (juce::Graphics& g) override;
+
+private:
+	playback::MidiCapability capability = playback::MidiCapability::unavailable;
+};
+
+/** The MIDI channel selector.
+
+	A plain ComboBox, except for its popup: every channel entry carries the MIDI mark in front of
+	"Ch.n", which `ComboBox::addItem` has no way to express (it stores text only). The menu is
+	rebuilt from the box's own items, so the item ids, the tick on the current channel and the
+	`set ...` path the window scripts use all stay the ComboBox's. */
+class MidiChannelBox final : public juce::ComboBox
+{
+public:
+	void showPopup (void) override;
 };
 
 /**
@@ -108,8 +128,8 @@ private:
 	juce::TextButton muteButton { "M" };
 	juce::TextButton soloButton { "S" };
 	juce::ComboBox outputBox;		// Master / Out 1/2 / Out 3/4 ... at the bottom of the strip
-	juce::ComboBox midiBox;			// Off / MIDI channel 1-16, below the output selector
-	MidiOneShotBadge oneShotBadge;
+	MidiChannelBox midiBox;			// Off / Ch.1-Ch.16, below the output selector
+	MidiCapabilityBadge capabilityBadge;
 	juce::Slider gainSlider { juce::Slider::LinearVertical, juce::Slider::NoTextBox };
 	juce::Slider panKnob { juce::Slider::RotaryHorizontalVerticalDrag, juce::Slider::NoTextBox };
 

@@ -54,6 +54,8 @@ language: English
 "mixer.masterMidiTooltip" = "MIDI output - merged MIDI from every audible, MIDI-enabled track";
 "mixer.masterMuteTooltip" = "Mute the master bus output";
 "mixer.masterOutputTooltip" = "Output bus - where the master mix goes";
+"mixer.midiChannel" = "Ch.{0}";
+"mixer.midiMelodyTooltip" = "Melodic channel: every note carries the pitch the chip plays";
 "mixer.midiOff" = "Off";
 "mixer.midiOneShotTooltip" = "One-shot channel: MIDI note C4 is a trigger; pitch is not tracked";
 "mixer.midiTooltip" = "MIDI output channel";

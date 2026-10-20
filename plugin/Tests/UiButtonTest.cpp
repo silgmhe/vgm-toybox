@@ -13,17 +13,27 @@
 	button gets the card-painted glow (and that the repaint area the card is told to use covers
 	it), and that a real IconButton paints its own shadow inside its own bounds.
 
+	It also covers the mixer's MIDI marks, which are the one place in this UI where a wrong shape
+	is invisible in the build log and obvious to the user: the three glyphs have to be distinct,
+	they have to stay inside the area they are given, the keyboard has to be top-heavy (its black
+	keys) and the sample left-heavy (its attack) - and the selector's popup has to carry the MIDI
+	mark on every channel entry, not just on the first.
+
 	It links ui/ButtonPaint.h, ui/IconButton.cpp and ui/Icons.cpp - no engine, no libvgm.
 
 	Run: <build dir>/plugin/vgm_ui_test
 */
 
+#include <cmath>
 #include <cstdio>
+#include <vector>
 
 #include <juce_gui_basics/juce_gui_basics.h>
 
 #include "ui/ButtonPaint.h"
 #include "ui/IconButton.h"
+#include "ui/Icons.h"
+#include "ui/MidiMenu.h"
 #include "ui/Theme.h"
 
 #include "TestSupport.h"
@@ -207,6 +217,206 @@ namespace
 		std::printf ("    IconButton: top-left %.4f, bottom row %.4f\n", topLeft, bottomRow);
 		check (bottomRow < topLeft - 0.01f, "an IconButton paints its own shadow inside its bounds");
 	}
+
+	// --- the mixer's MIDI marks ---------------------------------------------------------------
+
+	using Glyph = void (*) (juce::Graphics&, juce::Rectangle<float>, juce::Colour);
+
+	constexpr int kGlyphImage = 32;
+	constexpr int kGlyphInset = 8;		// a 16x16 mark in the middle of a white page
+	constexpr int kGlyphSize = 16;
+	// Anything darker than this counts as ink. Not 0.5: a one-pixel line at badge size is often
+	// drawn half on one pixel and half on the next, and both halves have to count.
+	constexpr float kInkedBrightness = 0.75f;
+
+	juce::Image renderGlyph (Glyph glyph)
+	{
+		juce::Image image (juce::Image::ARGB, kGlyphImage, kGlyphImage, true);
+		{
+			juce::Graphics g (image);
+			g.fillAll (juce::Colours::white);
+			glyph (g, juce::Rectangle<float> ((float) kGlyphInset, (float) kGlyphInset,
+											  (float) kGlyphSize, (float) kGlyphSize),
+				   juce::Colours::black);
+		}
+		return image;
+	}
+
+	int inkIn (const juce::Image& image, juce::Rectangle<int> area)
+	{
+		int ink = 0;
+		for (int y = area.getY(); y < area.getBottom(); ++y)
+		{
+			for (int x = area.getX(); x < area.getRight(); ++x)
+			{
+				if (image.getPixelAt (x, y).getPerceivedBrightness() < kInkedBrightness)
+				{
+					++ink;
+				}
+			}
+		}
+		return ink;
+	}
+
+	/** The number of separate ink runs along one row: a keyboard row crosses its frame and its
+		white-key separators, and a glyph without separators simply has fewer. */
+	int inkRuns (const juce::Image& image, int y, juce::Rectangle<int> area)
+	{
+		int runs = 0;
+		bool inRun = false;
+		for (int x = area.getX(); x < area.getRight(); ++x)
+		{
+			const bool ink = image.getPixelAt (x, y).getPerceivedBrightness() < kInkedBrightness;
+			if (ink && ! inRun)
+			{
+				++runs;
+			}
+			inRun = ink;
+		}
+		return runs;
+	}
+
+	juce::Rectangle<int> inkBounds (const juce::Image& image)
+	{
+		int left = image.getWidth();
+		int top = image.getHeight();
+		int right = -1;
+		int bottom = -1;
+		for (int y = 0; y < image.getHeight(); ++y)
+		{
+			for (int x = 0; x < image.getWidth(); ++x)
+			{
+				if (image.getPixelAt (x, y).getPerceivedBrightness() < kInkedBrightness)
+				{
+					left = juce::jmin (left, x);
+					top = juce::jmin (top, y);
+					right = juce::jmax (right, x);
+					bottom = juce::jmax (bottom, y);
+				}
+			}
+		}
+		return juce::Rectangle<int>::leftTopRightBottom (left, top, right + 1, bottom + 1);
+	}
+
+	void checkTheMidiGlyphs (void)
+	{
+		std::printf ("[5] the MIDI marks\n");
+
+		const auto melody = renderGlyph (drawMelodyGlyph);
+		const auto sample = renderGlyph (drawSampleGlyph);
+		const auto midi = renderGlyph (drawMidiGlyph);
+
+		const auto area = juce::Rectangle<int> (kGlyphInset, kGlyphInset, kGlyphSize, kGlyphSize);
+		const int melodyInk = inkIn (melody, area);
+		const int sampleInk = inkIn (sample, area);
+		const int midiInk = inkIn (midi, area);
+		std::printf ("    ink: keyboard %d, sample %d, MIDI %d\n", melodyInk, sampleInk, midiInk);
+
+		check (melodyInk > 15 && sampleInk > 15 && midiInk > 15, "every mark paints something");
+		check (melodyInk != sampleInk && sampleInk != midiInk && melodyInk != midiInk,
+			   "the three marks are three different drawings");
+
+		const auto drawn = area.expanded (1);
+		check (drawn.contains (inkBounds (melody)) && drawn.contains (inkBounds (sample))
+				   && drawn.contains (inkBounds (midi)),
+			   "and none of them paints outside the area it was given");
+
+		// A keyboard is heavier at the top: the black keys hang from the top edge. A sample is
+		// heavier on the left: the attack and the loudest part of the burst. If either glyph were
+		// replaced by "some lines", these are the two checks that would notice.
+		const auto melodyTop = area.withHeight (kGlyphSize / 2);
+		const auto melodyBottom = area.withTop (area.getY() + kGlyphSize / 2);
+		const int melodyTopInk = inkIn (melody, melodyTop);
+		const int melodyBottomInk = inkIn (melody, melodyBottom);
+
+		const auto sampleLeft = area.withWidth (kGlyphSize / 2);
+		const auto sampleRight = area.withLeft (area.getX() + kGlyphSize / 2);
+		const int sampleLeftInk = inkIn (sample, sampleLeft);
+		const int sampleRightInk = inkIn (sample, sampleRight);
+
+		std::printf ("    keyboard top %d / bottom %d, sample left %d / right %d\n",
+					 melodyTopInk, melodyBottomInk, sampleLeftInk, sampleRightInk);
+		check (melodyTopInk > melodyBottomInk, "the keyboard puts its black keys on top");
+		check (sampleLeftInk > sampleRightInk, "the sample decays to the right");
+
+		// The white keys have to be separated, not just framed: a row across the lower half of the
+		// keyboard crosses the two frame edges and the separators between the white keys. Without
+		// them the mark reads as a frame with two tabs, which is what the first version looked like.
+		// 0.70 of the height: inside the keyboard body, below the black keys (they end at 0.46) and
+		// above the bottom frame edge (0.86) - a row on the frame would be one long run.
+		const int bodyRow = area.getY() + (int) std::lround ((float) kGlyphSize * 0.70f);
+		const int runs = inkRuns (melody, bodyRow, area);
+		const auto lowerMiddle = juce::Rectangle<int> (area.getX() + 2, bodyRow, kGlyphSize - 4, 3);
+		std::printf ("    keyboard row %d: %d ink runs, %d inked pixels between the frame edges\n",
+					 bodyRow, runs, inkIn (melody, lowerMiddle));
+		check (runs >= 4, "the keyboard separates its white keys");
+		check (inkIn (melody, lowerMiddle) > 0, "and the separators are inside the frame, not at the edge");
+
+		// The MIDI mark is a ring with contacts, not a disc: the middle stays empty.
+		const auto centre = juce::Rectangle<int> (area.getCentreX() - 2, area.getCentreY() - 2, 4, 4);
+		check (inkIn (midi, centre) < 4, "the MIDI mark is a connector ring, not a filled blob");
+	}
+
+	void checkTheMidiMenu (void)
+	{
+		std::printf ("[6] the MIDI selector popup\n");
+
+		const auto icon = midiGlyphImage (56, juce::Colours::black);
+		check (icon.isValid() && icon.getWidth() == 56 && icon.getHeight() == 56,
+			   "the popup icon rasterises at the size it is asked for");
+
+		juce::StringArray channels;
+		for (int channel = 1; channel <= 16; ++channel)
+		{
+			channels.add ("Ch." + juce::String (channel));
+		}
+
+		const auto menu = makeMidiChannelMenu ("Off", channels, 3, icon);
+
+		struct Entry
+		{
+			int id = 0;
+			juce::String text;
+			bool hasIcon = false;
+			bool ticked = false;
+		};
+
+		std::vector<Entry> entries;
+		for (juce::PopupMenu::MenuItemIterator iterator (menu); iterator.next();)
+		{
+			const auto& item = iterator.getItem();
+			// Item::image is a Drawable (an Image passed to addItem is wrapped in one), so the
+			// question is "does this entry carry an icon at all", not "is the image valid".
+			entries.push_back (Entry { item.itemID, item.text, item.image != nullptr, item.isTicked });
+		}
+
+		std::printf ("    %d entries: \"%s\" ... \"%s\"\n", (int) entries.size(),
+					 entries.empty() ? "" : entries.front().text.toRawUTF8(),
+					 entries.empty() ? "" : entries.back().text.toRawUTF8());
+
+		check (entries.size() == 17, "Off plus sixteen channels");
+		if (entries.size() != 17)
+		{
+			return;
+		}
+
+		check (entries.front().id == 1 && entries.front().text == "Off" && ! entries.front().hasIcon,
+			   "Off is a plain entry: there is no MIDI channel behind it");
+		check (entries[1].id == 2 && entries[1].text == "Ch.1", "then Ch.1");
+		check (entries[16].id == 17 && entries[16].text == "Ch.16",
+			   "through Ch.16, with the ids rising one per entry");
+
+		int withIcon = 0;
+		int ticked = 0;
+		for (const auto& entry : entries)
+		{
+			withIcon += entry.hasIcon ? 1 : 0;
+			ticked += entry.ticked ? 1 : 0;
+		}
+
+		check (withIcon == 16, "every channel entry carries the MIDI mark");
+		check (ticked == 1 && entries[2].ticked, "and only the selected channel is ticked");
+	}
 }
 
 int main()
@@ -219,6 +429,8 @@ int main()
 	checkTheGlow();
 	checkTheCompactGlow();
 	checkTheWidget();
+	checkTheMidiGlyphs();
+	checkTheMidiMenu();
 
 	std::printf ("Result    : %s\n", (toybox::test::failures() == 0) ? "all checks passed" : "FAILURES");
 	return (toybox::test::failures() == 0) ? 0 : 1;

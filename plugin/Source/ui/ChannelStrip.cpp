@@ -5,6 +5,7 @@
 #include "ButtonPaint.h"
 #include "Icons.h"
 #include "MeterScale.h"
+#include "MidiMenu.h"
 #include "Theme.h"
 #include "ToyboxLookAndFeel.h"
 
@@ -26,24 +27,88 @@ namespace
 	constexpr int kOutputGap = 6;
 	constexpr int kMidiHeight = 26;
 	constexpr int kMidiGap = 4;
-	constexpr int kMidiBadgeWidth = 12;
-	constexpr int kMidiBadgeGap = 2;
+	constexpr int kMidiBadgeWidth = 17;		// a keyboard needs the width, a pulse did not
+	constexpr int kMidiBadgeGap = 1;
 	constexpr int kColumnGap = 3;
 	constexpr int kMeterWidth = 15;		// two 6 px bars with a 3 px gap
 	constexpr int kMeterGap = 3;
 	constexpr int kScaleWidth = 16;		// graduation line + its tiny label
 }
 
-MidiOneShotBadge::MidiOneShotBadge (void)
+void MidiCapabilityBadge::setCapability (playback::MidiCapability newCapability)
 {
-	// The ID is per strip (mixer.midi.<index>.oneshot, see ChannelStrip::setup): a badge that all
-	// strips shared would only ever be reachable as the first strip's one.
-	setInterceptsMouseClicks (true, false);
+	if (capability == newCapability)
+	{
+		return;
+	}
+
+	capability = newCapability;
+	repaint();
 }
 
-void MidiOneShotBadge::paint (juce::Graphics& g)
+void MidiCapabilityBadge::paint (juce::Graphics& g)
 {
-	drawOneShotGlyph (g, getLocalBounds().toFloat().reduced (1.0f), theme::secondaryText());
+	// The ID is per strip (mixer.midi.<index>.badge, see ChannelStrip::setup): a badge that all
+	// strips shared would only ever be reachable as the first strip's one. The glyph is drawn in a
+	// square inside the badge: the row is taller than the badge is wide, and a stretched keyboard
+	// reads as a grid rather than as a keyboard.
+	const auto bounds = getLocalBounds().toFloat().reduced (1.0f);
+	const float side = juce::jmin (bounds.getWidth(), bounds.getHeight());
+	const auto area = bounds.withSizeKeepingCentre (side, side);
+	switch (capability)
+	{
+	case playback::MidiCapability::melodic:
+		drawMelodyGlyph (g, area, theme::secondaryText());
+		break;
+	case playback::MidiCapability::oneShot:
+		drawSampleGlyph (g, area, theme::secondaryText());
+		break;
+	case playback::MidiCapability::unavailable:
+	default:
+		break;
+	}
+}
+
+void MidiChannelBox::showPopup (void)
+{
+	// Built here rather than by ComboBox::showPopup, for the one thing ComboBox cannot do: put an
+	// image in front of every item. Everything else stays the base class's - the item ids, the
+	// tick on the selected entry and the notification on a pick.
+	if (! isEnabled() || getNumItems() <= 0)
+	{
+		hidePopup();		// hand back the "a menu is open" state ComboBox set before calling us
+		return;
+	}
+
+	juce::StringArray channels;
+	for (int index = 1; index < getNumItems(); ++index)
+	{
+		channels.add (getItemText (index));
+	}
+
+	auto menu = makeMidiChannelMenu (getItemText (0), channels, getSelectedId(),
+									 midiGlyphImage (56, findColour (juce::PopupMenu::textColourId)));
+	menu.setLookAndFeel (&getLookAndFeel());
+
+	menu.showMenuAsync (juce::PopupMenu::Options()
+							.withTargetComponent (this)
+							.withMinimumWidth (getWidth())
+							.withStandardItemHeight (juce::jmax (18, getHeight() - 6)),
+						[safe = juce::Component::SafePointer<MidiChannelBox> (this)] (int result)
+						{
+							if (safe == nullptr)
+							{
+								return;
+							}
+
+							// the base class does this too: closing the menu has to release the
+							// "a menu is open" state, or the box stops opening its popup
+							safe->hidePopup();
+							if (result != 0)
+							{
+								safe->setSelectedId (result);
+							}
+						});
 }
 
 ChannelStrip::ChannelStrip (void)
@@ -126,7 +191,7 @@ ChannelStrip::ChannelStrip (void)
 	midiBox.getProperties().set (ToyboxLookAndFeel::compactComboTextProperty, true);
 	addAndMakeVisible (midiBox);
 
-	addChildComponent (oneShotBadge);
+	addChildComponent (capabilityBadge);
 
 	addAndMakeVisible (gainSlider);
 	addAndMakeVisible (panKnob);
@@ -149,7 +214,7 @@ void ChannelStrip::setup (const juce::String& name, bool isMasterStrip, int trac
 	const juce::String midiID = master ? "mixer.master.midi"
 									   : "mixer.midi." + juce::String (trackIndex);
 	midiBox.setComponentID (midiID);
-	oneShotBadge.setComponentID (master ? "mixer.master.oneshot" : midiID + ".oneshot");
+	capabilityBadge.setComponentID (master ? "mixer.master.badge" : midiID + ".badge");
 
 	panKnob.setVisible (! master);
 	soloButton.setVisible (! master);
@@ -310,7 +375,9 @@ void ChannelStrip::rebuildMidiItems (void)
 		midiBox.addItem (i18n::tr ("mixer.midiOff"), 1);
 		for (int channel = 1; channel <= 16; ++channel)
 		{
-			midiBox.addItem (juce::String (channel), channel + 1);
+			// "Ch.4", not "4": a bare number in a mixer could be an audio channel or a program
+			// change just as well.
+			midiBox.addItem (i18n::tr ("mixer.midiChannel", juce::String (channel)), channel + 1);
 		}
 
 		midiBox.setSelectedId (selected + 1, juce::dontSendNotification);
@@ -340,7 +407,12 @@ void ChannelStrip::updateMidiTooltip (void)
 	}
 
 	midiBox.setTooltip (tooltip);
-	oneShotBadge.setTooltip (i18n::tr ("mixer.midiOneShotTooltip"));
+
+	// The badge repeats the selector's second line on its own, so hovering it is enough - which is
+	// the only way to learn that a keyboard means "the pitch is real" and a waveform "it is not".
+	capabilityBadge.setTooltip (midiCapability == playback::MidiCapability::oneShot
+									? i18n::tr ("mixer.midiOneShotTooltip")
+									: i18n::tr ("mixer.midiMelodyTooltip"));
 }
 
 void ChannelStrip::setMidiState (int channel, playback::MidiCapability capability)
@@ -362,8 +434,9 @@ void ChannelStrip::setMidiState (int channel, playback::MidiCapability capabilit
 	}
 
 	midiBox.setEnabled (midiActive && midiCapability != playback::MidiCapability::unavailable);
-	oneShotBadge.setVisible (! master && midiCapability == playback::MidiCapability::oneShot);
-	oneShotBadge.setAlpha (midiActive ? 1.0f : 0.45f);
+	capabilityBadge.setCapability (midiCapability);
+	capabilityBadge.setVisible (! master && midiCapability != playback::MidiCapability::unavailable);
+	capabilityBadge.setAlpha (midiActive ? 1.0f : 0.45f);
 }
 
 void ChannelStrip::setMixerActive (bool active)
@@ -379,7 +452,7 @@ void ChannelStrip::setMidiActive (bool active)
 {
 	midiActive = active;
 	midiBox.setEnabled (active && midiCapability != playback::MidiCapability::unavailable);
-	oneShotBadge.setAlpha (active ? 1.0f : 0.45f);
+	capabilityBadge.setAlpha (active ? 1.0f : 0.45f);
 }
 
 void ChannelStrip::resized (void)
@@ -395,11 +468,11 @@ void ChannelStrip::resized (void)
 	if (master)
 	{
 		midiBox.setBounds (midiRow);
-		oneShotBadge.setBounds ({});
+		capabilityBadge.setBounds ({});
 	}
 	else
 	{
-		oneShotBadge.setBounds (midiRow.removeFromRight (kMidiBadgeWidth));
+		capabilityBadge.setBounds (midiRow.removeFromRight (kMidiBadgeWidth));
 		midiRow.removeFromRight (kMidiBadgeGap);
 		midiBox.setBounds (midiRow);
 	}

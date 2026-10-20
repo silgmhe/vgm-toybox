@@ -1,6 +1,7 @@
 #include "Icons.h"
 
 #include <array>
+#include <cmath>
 
 namespace toybox::ui
 {
@@ -141,25 +142,129 @@ void drawSlidersGlyph (juce::Graphics& g, juce::Rectangle<float> iconArea, juce:
 	}
 }
 
-void drawOneShotGlyph (juce::Graphics& g, juce::Rectangle<float> iconArea, juce::Colour colour)
+void drawMelodyGlyph (juce::Graphics& g, juce::Rectangle<float> iconArea, juce::Colour colour)
 {
 	g.setColour (colour);
 
-	const float lineWidth = juce::jmax (1.0f, iconArea.getWidth() * 0.11f);
-	const float centreY = iconArea.getCentreY();
-	const float left = iconArea.getX();
-	const float right = iconArea.getRight();
-	const float spikeX = iconArea.getCentreX();
+	// Three white keys with two black ones: the fewest that still reads as a keyboard at 15 px.
+	// Four white keys would need the black keys narrower than the gaps between them, and a key that
+	// is barely wider than a separator turns the whole mark into a barcode.
+	const float width = iconArea.getWidth();
+	const float height = iconArea.getHeight();
+	const float lineWidth = juce::jmax (1.0f, width * 0.075f);
+	const float left = iconArea.getX() + width * 0.03f;
+	const float right = iconArea.getRight() - width * 0.03f;
+	const float top = iconArea.getY() + height * 0.14f;
+	const float bottom = iconArea.getY() + height * 0.86f;
+	const int whiteKeys = 3;
 
-	// A flat line with one triangular spike: the shape reads as "one event", not a waveform.
-	juce::Path pulse;
-	pulse.startNewSubPath (left, centreY);
-	pulse.lineTo (juce::jmax (left, spikeX - iconArea.getWidth() * 0.22f), centreY);
-	pulse.lineTo (spikeX, iconArea.getY() + iconArea.getHeight() * 0.12f);
-	pulse.lineTo (juce::jmin (right, spikeX + iconArea.getWidth() * 0.22f), centreY);
-	pulse.lineTo (right, centreY);
-	g.strokePath (pulse, juce::PathStrokeType (lineWidth, juce::PathStrokeType::curved,
-											   juce::PathStrokeType::rounded));
+	juce::Path body;
+	body.addRoundedRectangle (left, top, right - left, bottom - top, width * 0.10f);
+	g.strokePath (body, juce::PathStrokeType (lineWidth, juce::PathStrokeType::curved,
+											  juce::PathStrokeType::rounded));
+
+	// The white-key separators run the full height of the body and the black keys are painted over
+	// them: their visible part then starts exactly where a black key ends, with no gap in between,
+	// which is how a keyboard seen from above looks. Two smaller things the size forces:
+	//   - the separator is snapped to a pixel column (`floor (x) + 0.5f`) and drawn with the frame's
+	//     pen; a one-pixel line that lands across two columns comes out as two half-lit greys, which
+	//     at 15 px is no line at all;
+	//   - the key is wider than the line, so it hides the line completely along its own height
+	//     instead of letting a lighter stripe show through.
+	const float separatorWidth = lineWidth;
+	const float blackWidth = width * 0.20f;
+	const float blackHeight = (bottom - top) * 0.44f;
+	for (int gap = 1; gap < whiteKeys; ++gap)
+	{
+		const float rawX = left + (right - left) * (float) gap / (float) whiteKeys;
+		const float x = std::floor (rawX) + 0.5f;
+		g.drawLine (x, top, x, bottom, separatorWidth);
+		g.fillRect (x - blackWidth * 0.5f, top, blackWidth, blackHeight);
+	}
+}
+
+void drawSampleGlyph (juce::Graphics& g, juce::Rectangle<float> iconArea, juce::Colour colour)
+{
+	g.setColour (colour);
+
+	// A sample, not a note: one full-height attack and the burst that follows it, decaying. A
+	// symmetric wave would read as "audio"; the flat tail is what says "one sample fired".
+	const float width = iconArea.getWidth();
+	const float height = iconArea.getHeight();
+	const float lineWidth = juce::jmax (1.1f, width * 0.085f);
+	const float centreY = iconArea.getCentreY();
+	const float attackX = iconArea.getX() + width * 0.16f;
+	const float right = iconArea.getRight() - width * 0.03f;
+
+	g.drawLine (attackX, iconArea.getY() + height * 0.06f, attackX,
+				iconArea.getBottom() - height * 0.06f, lineWidth);
+
+	juce::Path wave;
+	const int steps = 48;
+	for (int step = 0; step <= steps; ++step)
+	{
+		const float t = (float) step / (float) steps;
+		const float x = attackX + (right - attackX) * t;
+		const float amplitude = height * 0.50f * std::exp (-2.0f * t) + height * 0.02f;
+		const float y = centreY - amplitude * std::sin (t * juce::MathConstants<float>::pi * 3.0f);
+		if (step == 0)
+		{
+			wave.startNewSubPath (x, y);
+		}
+		else
+		{
+			wave.lineTo (x, y);
+		}
+	}
+
+	g.strokePath (wave, juce::PathStrokeType (lineWidth, juce::PathStrokeType::curved,
+											  juce::PathStrokeType::rounded));
+}
+
+void drawMidiGlyph (juce::Graphics& g, juce::Rectangle<float> iconArea, juce::Colour colour)
+{
+	g.setColour (colour);
+
+	// The DIN connector the mark stands for: the ring, five contacts across the top half and the
+	// alignment notch at the bottom. Two shapes, both filled - at menu size the dots are the part
+	// that makes it read as MIDI rather than as a plain circle.
+	const float width = iconArea.getWidth();
+	const float height = iconArea.getHeight();
+	const float lineWidth = juce::jmax (1.0f, width * 0.075f);
+	const float radius = juce::jmin (width, height) * 0.42f;
+	const float centreX = iconArea.getCentreX();
+	const float centreY = iconArea.getCentreY();
+
+	juce::Path ring;
+	ring.addEllipse (centreX - radius, centreY - radius, radius * 2.0f, radius * 2.0f);
+	g.strokePath (ring, juce::PathStrokeType (lineWidth, juce::PathStrokeType::curved,
+											  juce::PathStrokeType::rounded));
+
+	// 180, 135, 90, 45, 0 degrees: the five contacts, left to right across the top half.
+	const float contactAngles[] = { 180.0f, 135.0f, 90.0f, 45.0f, 0.0f };
+	const float contactRadius = juce::jmax (1.0f, radius * 0.19f);
+	juce::Path contacts;
+	for (const float degrees : contactAngles)
+	{
+		const float radians = juce::degreesToRadians (degrees);
+		const float x = centreX + std::cos (radians) * radius * 0.58f;
+		const float y = centreY - std::sin (radians) * radius * 0.58f;
+		contacts.addEllipse (x - contactRadius, y - contactRadius, contactRadius * 2.0f,
+							 contactRadius * 2.0f);
+	}
+	g.fillPath (contacts);
+
+	g.fillRect (centreX - radius * 0.32f, centreY + radius * 0.70f, radius * 0.64f,
+				radius * 0.22f);
+}
+
+juce::Image midiGlyphImage (int pixels, juce::Colour colour)
+{
+	juce::Image image (juce::Image::ARGB, juce::jmax (8, pixels), juce::jmax (8, pixels), true);
+	juce::Graphics g (image);
+	drawMidiGlyph (g, juce::Rectangle<float> ((float) image.getWidth(), (float) image.getHeight()),
+				   colour);
+	return image;
 }
 
 void drawSyncGlyph (juce::Graphics& g, juce::Rectangle<float> iconArea, juce::Colour colour)
