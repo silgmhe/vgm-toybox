@@ -521,12 +521,25 @@ endif()
 
 # The WonderSwan decoder has no song in test_file/ (that folder is Neo Geo, NES, Sega CD and Mega
 # Drive), so its end-to-end path runs on the generated asset: the register parsing, the note table
-# and the per-channel tracks would otherwise only ever be exercised by the hand-run mixer test.
+# and the per-channel tracks would otherwise only ever be exercised by the hand-run mixer test. Three
+# seconds, not two: the sweep on Ch 3 runs to 1.88 s and the check names its last step.
 set(_toybox_wswan_song "${CMAKE_CURRENT_SOURCE_DIR}/Tests/assets/wswan.vgm")
 if(EXISTS "${_toybox_wswan_song}")
-	add_test(NAME engine.wswan COMMAND vgm_mixer_test "${_toybox_wswan_song}" 2)
+	add_test(NAME engine.wswan COMMAND vgm_mixer_test "${_toybox_wswan_song}" 3)
 	set_tests_properties(engine.wswan PROPERTIES LABELS "integration" TIMEOUT 120)
 endif()
+
+# The three generated assets below were hand-run only until the per-note expectations existed in
+# PlaybackEngineTest: a build could break the AY mixer mask, the OPL4 second bank or the YM2610 ADPCM
+# trigger and every ctest entry stayed green, because no test ever loaded those files. Each one now
+# asserts the notes its generator writes down, so they belong in the suite.
+foreach(_toybox_asset psg opl4 ym2610 fm_alg0)
+	set(_toybox_asset_song "${CMAKE_CURRENT_SOURCE_DIR}/Tests/assets/${_toybox_asset}.vgm")
+	if(EXISTS "${_toybox_asset_song}")
+		add_test(NAME "engine.${_toybox_asset}" COMMAND vgm_mixer_test "${_toybox_asset_song}" 3)
+		set_tests_properties("engine.${_toybox_asset}" PROPERTIES LABELS "integration" TIMEOUT 120)
+	endif()
+endforeach()
 
 # The YM2612's DAC channel needs a 0x67 PCM data block before it can say anything, which no song in
 # test_file/ guarantees: the generated asset alternates 50 ms of samples with 50 ms of silence, so

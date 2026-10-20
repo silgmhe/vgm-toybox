@@ -99,7 +99,10 @@ function Add-FmPatch([int]$ch, [bool]$port1) {
 	& $write ([byte](0xB4 + $ch)) 0xC0   # L + R
 }
 
-# f = clock / 144 * fnum / 2^(21 - block), so fnum = f * 2^(21 - block) * 144 / clock.
+# f = fnum * clock / (144 * 2^(20 - block)), so fnum = f * 144 * 2^(20 - block) / clock.
+# The exponent is 20 - block, not 21: the first version of this script had it one too high and the
+# three FM notes came out an octave sharp (A5/C6/E6) while the comments said A4/C5/E5 - the chip was
+# right and the expectation was wrong.
 function Add-FmPitch([int]$ch, [bool]$port1, [int]$fnum, [int]$block) {
 	$write = if ($port1) { ${function:Add-Port1} } else { ${function:Add-Port0} }
 	& $write ([byte](0xA0 + $ch)) ([byte]($fnum -band 0xFF))
@@ -109,17 +112,17 @@ function Add-FmPitch([int]$ch, [bool]$port1, [int]$fnum, [int]$block) {
 $half = $rate / 2
 $beat = $rate / 10
 
-# FM channel 2 (track 1): A4 = 440 Hz, fnum 0x40E at block 4
+# FM channel 2 (track 1): A4 = 440 Hz, fnum 0x207 at block 4
 Add-FmPatch 1 $false
-Add-FmPitch 1 $false 0x40E 4
+Add-FmPitch 1 $false 0x207 4
 Add-Port0 0x28 0xF1                   # all four operators on, channel 2
 
 Add-Wait $half
 
 Add-Port0 0x28 0x01                   # key off channel 2
-# FM channel 3 (track 2): C5 = 523.3 Hz, fnum 0x4D2 at block 4
+# FM channel 3 (track 2): C5 = 523.3 Hz, fnum 0x269 at block 4
 Add-FmPatch 2 $false
-Add-FmPitch 2 $false 0x4D2 4
+Add-FmPitch 2 $false 0x269 4
 Add-Port0 0x28 0xF2
 
 Add-Wait $half
@@ -134,9 +137,9 @@ Add-Port0 0x10 0x80                   # Delta-T: start (track 12)
 
 Add-Wait $beat
 
-# FM channel 5 (track 4) lives in the second register bank: E5 = 659.3 Hz, fnum 0x614 at block 4
+# FM channel 5 (track 4) lives in the second register bank: E5 = 659.3 Hz, fnum 0x30A at block 4
 Add-FmPatch 1 $true
-Add-FmPitch 1 $true 0x614 4
+Add-FmPitch 1 $true 0x30A 4
 Add-Port0 0x28 0xF5                   # channel bits 1, group bit 2 -> FM channel 5
 
 Add-Wait ($beat * 3)

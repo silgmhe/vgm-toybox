@@ -1059,10 +1059,17 @@ int main (int argc, char* argv[])
 	// questions of one pass - solo it, then take the level and the notes out of the same render.
 	std::printf ("[13] audio and MIDI agree on every track\n");
 
+	struct TrackOn
+	{
+		double time = 0.0;
+		int note = 0;
+	};
+
 	struct TrackProbe
 	{
 		bool audible = false;
 		int notes = 0;
+		std::vector<TrackOn> ons;		// note-on times and pitches, in the order they were sent
 	};
 
 	std::vector<TrackProbe> probes (tracks.size());
@@ -1106,6 +1113,14 @@ int main (int argc, char* argv[])
 
 			probes[i].audible = probe.rms > audibleFloor;
 			probes[i].notes = (int) probe.notesOn (1).size();
+			for (size_t e = 0; e < probe.events.size() && e < probe.blockStarts.size(); ++e)
+			{
+				const auto& event = probe.events[e];
+				if ((event.status & 0xF0) == 0x90 && (event.status & 0x0F) == 0 && event.data2 > 0)
+				{
+					probes[i].ons.push_back ({ (double) probe.blockStarts[e] / sampleRate, event.data1 });
+				}
+			}
 			if (probes[i].audible)
 			{
 				++audibleTracks;
@@ -1185,6 +1200,106 @@ int main (int argc, char* argv[])
 			std::printf ("    dac.vgm: %d DAC notes over %.1f s (one per burst of samples)\n",
 						 notes, probeSeconds);
 			check (notes >= 10, "dac.vgm: the DAC track follows the PCM bank from start to end");
+		}
+
+		// Four more assets exist only to prove a path end to end, and each one's generator writes
+		// down what its tracks should play. "It has notes" would let a wrong pitch, a wrong track or
+		// a wrong time through - the three things that actually broke before - so these name all of
+		// them. The group is part of the match: "Ch 1" alone is the RF5C68 channel in psg.vgm and the
+		// AY channel in the same file.
+		struct ExpectedNote
+		{
+			const char* group;
+			const char* track;
+			int index;
+			double time;
+			int note;
+		};
+
+		const auto expectNote = [&] (const char* asset, const ExpectedNote& want)
+		{
+			const TrackProbe* probe = nullptr;
+			for (size_t i = 0; i < tracks.size(); ++i)
+			{
+				if (tracks[i].name == want.track && tracks[i].groupName == want.group)
+				{
+					probe = &probes[i];
+					break;
+				}
+			}
+
+			juce::String label;
+			label << asset << ": " << want.group << " / " << want.track << " note " << want.index;
+
+			if (probe == nullptr || (int) probe->ons.size() <= want.index)
+			{
+				check (false, label + " exists");
+				return;
+			}
+
+			const auto& on = probe->ons[(size_t) want.index];
+			juce::String detail;
+			detail << label << " is " << on.note << " at " << juce::String (on.time, 2)
+				   << " s, expected " << want.note << " at " << juce::String (want.time, 2) << " s";
+			check (on.note == want.note && std::abs (on.time - want.time) <= 0.02, detail);
+		};
+
+		const juce::String asset = inputFile.getFileName();
+
+		if (asset == "psg.vgm")
+		{
+			expectNote ("psg.vgm", { "AY-3-8910", "Ch 1", 0, 0.00, 69 });
+			expectNote ("psg.vgm", { "SEGA PSG", "1", 0, 0.50, 69 });
+			expectNote ("psg.vgm", { "SEGA PSG", "Noise", 0, 1.00, 38 });
+			expectNote ("psg.vgm", { "RF5C68", "Ch 1", 0, 1.00, 60 });
+		}
+		else if (asset == "opl4.vgm")
+		{
+			expectNote ("opl4.vgm", { "YMF278B", "Ch 1", 0, 0.00, 69 });
+			expectNote ("opl4.vgm", { "YMF278B", "Ch 10", 0, 1.00, 69 });
+		}
+		else if (asset == "ym2610.vgm")
+		{
+			expectNote ("ym2610.vgm", { "YM2610", "FM 2", 0, 0.00, 69 });
+			expectNote ("ym2610.vgm", { "YM2610", "FM 3", 0, 0.50, 72 });
+			expectNote ("ym2610.vgm", { "YM2610", "ADPCM-A 1", 0, 1.00, 60 });
+			expectNote ("ym2610.vgm", { "YM2610", "ADPCM-A 2", 0, 1.00, 60 });
+			expectNote ("ym2610.vgm", { "YM2610", "ADPCM-B", 0, 1.40, 60 });
+			expectNote ("ym2610.vgm", { "YM2610", "FM 5", 0, 1.50, 76 });
+		}
+		else if (asset == "wswan.vgm")
+		{
+			expectNote ("wswan.vgm", { "WonderSwan", "Ch 1", 0, 0.00, 69 });
+			expectNote ("wswan.vgm", { "WonderSwan", "Ch 2", 0, 0.50, 60 });
+			expectNote ("wswan.vgm", { "WonderSwan", "Ch 4", 0, 1.00, 38 });
+			expectNote ("wswan.vgm", { "WonderSwan", "Ch 3", 0, 1.50, 69 });
+
+			// The sweep runs into the fade tail, where the probe stops rendering (eight steps make it,
+			// the last two do not), so its final step cannot be named. Its direction can be: every
+			// step is lower than the one before it. That is the property the asset exists for - a
+			// decoder that dropped the sweep registers would send one long note and fail here.
+			const TrackProbe* sweep = nullptr;
+			for (size_t i = 0; i < tracks.size(); ++i)
+			{
+				if (tracks[i].name == "Ch 3" && tracks[i].groupName == "WonderSwan")
+				{
+					sweep = &probes[i];
+				}
+			}
+
+			bool descending = (sweep != nullptr && sweep->ons.size() >= 8);
+			if (descending)
+			{
+				for (size_t i = 1; i < sweep->ons.size(); ++i)
+				{
+					descending = descending && sweep->ons[i].note <= sweep->ons[i - 1].note;
+				}
+			}
+
+			juce::String sweepDetail;
+			sweepDetail << "wswan.vgm: Ch 3 sweeps down over at least eight steps ("
+						<< (int) (sweep == nullptr ? 0u : sweep->ons.size()) << " captured)";
+			check (descending, sweepDetail);
 		}
 	}
 

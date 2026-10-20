@@ -771,7 +771,7 @@ void render (const playback::OutputBusBuffers* buses, int numBuses, int numSampl
 
 | 2026-10-20 | X1-010 解码器（M2 第一颗）：波形模式的音高是 `clock * pitch / 2^26`（core 的 `step = base_clock/524288*freq` 走过 128 字节表），状态位 7 把 pitch 右移一位即降八度；PCM 模式没有音高、也没有能读出长度的结束寄存器，所以用 80 ms 门限做 one-shot。VGM 用 `0xC8`（16 位大端偏移），读取器把高字节塞进 `port`、低字节塞进 `addr` 传下去，`0x80` 以上的偏移（包络/波形数据）解码器直接忽略——否则上传波形会被当成按键。`vgm_chip_test` 新增四条，X1-010 在能力表里是 16 个旋律通道。端到端资产 `x1.vgm` 也补上了：波表和包络可以用同一条 `0xC8` 写上传（波表 `n` 在 `0x1000 + 128n`、包络 `n` 在 `128n`），但核心在 ROM 未分配时直接返回静音，所以还要一个 `0x67` type `0x91` 的 ROM 块（libvgm `_VGM_ROM_CHIPS`）；`[13]` 实测 Ch1 rms 0.0306、4 个 A4 音符，`ctest -R engine.x1` 全绿 |
 
-## 附录 A：linked SSG 的后续方案（第一版不做）
+| 2026-10-20 | `psg` / `opl4` / `ym2610` / `fm_alg0` 四个资产从“手工跑”变成 ctest 用例（`engine.*`），并为它们写**逐音符断言**：组名 + 轨名 + 第几个音符 + 时刻 + 音高，容差 20 ms。此前它们只是把 `[13]` 跑一遍，而 `[13]` 只问“有声的轨有没有音符”——音高错一个八度、音符落错轨、时间偏半秒都照样绿。为拿到音高与时刻，`TrackProbe` 额外记录 note-on 序列（`probes[i].ons`）。变异验证：把 AY 分频从 16 改成 32 → 只有 `psg.vgm: AY-3-8910 / Ch 1 is 57, expected 69` 变红；把 OPL4 的 bank 压成 0 → 只有 `opl4.vgm: Ch 10` 变红。同一轮修了 `make_ym2610_song.ps1` 的音高公式（`2^(21-block)` 应为 `2^(20-block)`）：三个 FM 音符一直比注释高一个八度（A5/C6/E6 冒充 A4/C5/E5），重新生成后是 69/72/76 |
 
 背景：libvgm 把 OPN 的 SSG 作为 linked AY8910（`opnintf.c:48-52`）；`LibvgmSongInstance::isTrackDevice()` 只保留 `parentIdx == (UINT32)-1` 的设备（`LibvgmSongInstance.cpp:31-36`），所以 YM2610/YM2608/YM2203 的 3 个 SSG 当前没有独立 mixer track。
 
@@ -787,7 +787,7 @@ void render (const playback::OutputBusBuffers* buses, int numBuses, int numSampl
 
 设计文档写完并不等于目标记得住——§11 的 P1–P5 只是“一次交付”的阶段划分，真正耗时的是 §11.2 那 54 项芯片覆盖。这里把它排成可验收的里程碑：**每做完一项，先回来改这里的「状态」和 §11.2 的现状表，再提交**。状态只有三种：完成 / 进行中 / 未开始。
 
-**当前基线（2026-10-20）**：P1–P4 完成，P5 进行中（M2 完成，MIDI 设备类型 22 / 54）；`vgm_core_test`、`vgm_chip_test`、`vgm_opn_test` 通过，`ctest` 18/18 通过，`vgm_mixer_test` 的 psg / opl4 / minimal / wswan / ym2610 / fm_alg0 / dac / loop / x1 九个资产全部 `all checks passed`。
+**当前基线（2026-10-20）**：P1–P4 完成，P5 进行中（M2 完成，MIDI 设备类型 22 / 54）；`vgm_core_test`、`vgm_chip_test`、`vgm_opn_test` 通过，`ctest` 22/22 通过，`vgm_mixer_test` 的 psg / opl4 / minimal / wswan / ym2610 / fm_alg0 / dac / loop / x1 **九个资产全部进了 ctest**（`engine`、`engine.wswan`、`engine.dac`、`engine.loop`、`engine.x1`、`engine.psg`、`engine.opl4`、`engine.ym2610`、`engine.fm_alg0`）。
 
 | 里程碑 | 内容 | 验收 | 状态 |
 |---|---|---|---|
