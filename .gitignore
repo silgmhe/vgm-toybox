@@ -118,3 +118,9 @@ reference/
 # Downloaded game rips (vgmrips.net) used to check the chip decoders against real register
 # streams; not part of the repository.
 test_file/
+
+# Tool state, not source. Serena keeps its cache, logs and project config here; CodeGraph keeps a
+# local index (SQLite database, WAL files, a daemon pid). Both are regenerated per machine, and a
+# committed index would be stale before the next clone finished.
+.serena/
+.codegraph/
