@@ -351,6 +351,7 @@ plugin/Source/backends/libvgm/MidiSequenceBuilder.{h,cpp}
 - 折回之后，“位置往回跳”与 seek 是同一件事：游标用 `lower_bound` 重新定位、先发 all-notes-off，然后照常发事件。所以循环不需要单独的代码路径，`midiResetGeneration` 也不必为它递增；
 - seek/load/stop 时把 `midiResetGeneration` 加一；音频线程看到新 generation 后先发 all-notes-off，再把游标定位到新位置；
 - 不折回的后果是：第一遍结束之后游标越过序列末尾，音符全部停止而音频继续播放——循环听不见第二遍。`vgm_mixer_test` 的 `[12]` 在带 loop 点的曲目上数“第一遍之后是否还有 note-on”；
+- 仓库里绝大多数资产没有循环点，`[12]` 会打印 `loop check skipped` 跳过——**只有 `loop.vgm` 例外**：它存在的唯一理由就是携带循环点，所以拿不到 loop 点时 `[12]` 必须报错（`loop check DID NOT RUN`），否则改坏资产头部又能让这条检查静默失效（它就是因此空转了一整年）；
 - 这样可以避免“循环后旧 note 还按着”和“seek 后挂音”。
 
 ---
@@ -766,6 +767,8 @@ void render (const playback::OutputBusBuffers* buses, int numBuses, int numSampl
 | 2026-10-20 | `VgmCommandReader` 开始保留 `0x67` 数据块（type `0x00` 的 YM2612 PCM bank），`0x8n` 从中按序取字节写成一条 `0x52`/`0x2A` 写、再跟它自带的等待（`0xE0` 的 bank 寻址一并支持）。此前 `0x8n` 只推进时钟，DAC 轨因此永远没有 MIDI。`06 Star Light Zone.vgz` 的 DAC 轨从 0 个音符变成 3 个，`[13]` 的“DAC 轨豁免”随之删除——那条豁免就是 M1.2 的占位 |
 | 2026-10-20 | 混音器 MIDI 行改版：原来的 one-shot 单脉冲徽标换成**能力徽标**（旋律 = 钢琴键盘，触发 = 采样波形，都不可点击、只给 tooltip）；下拉条目改成 `Ch.1`–`Ch.16`，弹窗每条通道前加 MIDI 标志。三枚图标都是 `juce::Path` 矢量（`Icons.cpp`），在真实 15 px 下比对过：键盘三白键两黑键、分隔线贯穿整个高度并被黑键盖住上半段，波形要加大振幅才不糊。`ComboBox` 存不了图标，所以 `MidiChannelBox` 覆写 `showPopup()`、用 `MidiMenu.h` 的 `makeMidiChannelMenu()` 建菜单；`vgm_ui_test` 新增 `[5]`（三枚图标互不相同 / 不越界 / 键盘上重下轻 / 波形左重右轻 / MIDI 是环不是实心块）与 `[6]`（弹窗 17 条、通道条目带图标、选中项打勾） |
 
+| 2026-10-20 | 新增 `loop.vgm`（`make_loop_song.ps1`）：VGM 1.61 的 0x100 字节头部，`0x1C` 写循环偏移、`0x20` 写循环长度、`0x7E` 的 loop base 显式为 0，循环体是 20 个音符 × 2 s。此前仓库里没有任何资产声明循环点，`[12]` 每次都在 `loop check skipped` 上空转；现在它真的跑起来（`20 / 19`），把 `PlaybackEngine` 里 `songTimeWithinPass()` 的折回去掉会立刻变成 `20 / 0` 并报红。`[12]` 另外对 `loop.vgm` 强制要求循环点存在——拿不到就报错而不是跳过，免得改坏头部又静默失效 |
+
 ## 附录 A：linked SSG 的后续方案（第一版不做）
 
 背景：libvgm 把 OPN 的 SSG 作为 linked AY8910（`opnintf.c:48-52`）；`LibvgmSongInstance::isTrackDevice()` 只保留 `parentIdx == (UINT32)-1` 的设备（`LibvgmSongInstance.cpp:31-36`），所以 YM2610/YM2608/YM2203 的 3 个 SSG 当前没有独立 mixer track。
@@ -782,12 +785,12 @@ void render (const playback::OutputBusBuffers* buses, int numBuses, int numSampl
 
 设计文档写完并不等于目标记得住——§11 的 P1–P5 只是“一次交付”的阶段划分，真正耗时的是 §11.2 那 54 项芯片覆盖。这里把它排成可验收的里程碑：**每做完一项，先回来改这里的「状态」和 §11.2 的现状表，再提交**。状态只有三种：完成 / 进行中 / 未开始。
 
-**当前基线（2026-10-20）**：P1–P4 完成，P5 进行中；MIDI 设备类型 21 / 54；`vgm_core_test`、`vgm_chip_test`、`vgm_opn_test` 通过，`ctest` 16/16 通过，`vgm_mixer_test` 的 psg / opl4 / minimal / wswan / ym2610 / fm_alg0 / dac 七个资产全部 `all checks passed`。
+**当前基线（2026-10-20）**：P1–P4 完成，P5 进行中；MIDI 设备类型 21 / 54；`vgm_core_test`、`vgm_chip_test`、`vgm_opn_test` 通过，`ctest` 17/17 通过，`vgm_mixer_test` 的 psg / opl4 / minimal / wswan / ym2610 / fm_alg0 / dac / loop 八个资产全部 `all checks passed`。
 
 | 里程碑 | 内容 | 验收 | 状态 |
 |---|---|---|---|
 | M1 | 基础版：`MidiCapability`/事件序列/每轨 MIDI 通道/Master 合并/VST3 输出/通道条 UI（P1–P4） | `PlaybackEngineTest` `[10]`–`[12]` 全绿；`vgm_mixer_test --notes` 覆盖 YM2610/YM2612/YM2151/AY/SN | 完成 |
-| M1.1 | 收尾既有红灯：`ym2610.vgm` 的 4 条混音器检查已修（`[8]` 改成先用 MIDI 侧找出真正有声的轨，RPN 检查改从该轨开始，不再把唯一一次 RPN 花在静音轨上）；剩 `[12]` 循环用例缺一首带循环点的资产 | 五个资产（psg/opl4/minimal/wswan/ym2610）全绿、`[12]` 不再 skipped | 进行中 |
+| M1.1 | 收尾既有红灯：`ym2610.vgm` 的 4 条混音器检查已修（`[8]` 改成先用 MIDI 侧找出真正有声的轨，RPN 检查改从该轨开始，不再把唯一一次 RPN 花在静音轨上）；`[12]` 缺的循环资产补上了（`loop.vgm`：50 ms 前导 + 20 个音符 × 2 s 循环体，header 0x1C/0x20 声明循环点，0x7E 的 loop base 显式为 0） | `ctest -R engine.loop` 全绿并打印 `loop at 0.05 s of 2.05 s: 20 note-on in the first pass, 19 after it`；把 `songTimeWithinPass()` 的折回去掉后 `[12]` 立刻变红（`20 / 0`）；`loop.vgm` 的 loop 点被清零时 `[12]` 报 `DID NOT RUN` 而不是跳过 | 完成 |
 | M1.2 | YM2612 DAC 流的 MIDI：`0x8n` 只带等待值（1 字节），样本字节在 type `0x00` 的 `0x67` 数据块里。`VgmCommandReader` 现在保留该 bank（含 `0xE0` 寻址），`0x8n` 取下一字节写成 `0x2A` 寄存器写 + 自带等待 | 真实曲目 `06 Star Light Zone.vgz` 的 DAC 轨从 0 → 3 个音符；`dac.vgm`（爆发/静音交替）在 `[13]` 下 ≥10 个音符（实测 19）；`[11]` 逐字节比对 bank 内容与时刻；`ctest -R engine.dac` 全绿 | 完成 |
 | M1.3 | 期望值交给芯片（§10.2）：`vgm_opn_test` 用 libvgm 的 YM2612 核测每个通道是否出声，解码器的 `gate` 必须一致；`PlaybackEngineTest` `[13]` 再加一条“有声的轨必须有音符”的端到端不变量 | `ctest -R "chip\|opn"` 全绿；把 `totalLevel` 位序改回旧写法后 `vgm_opn_test` 必须变红；`vgm_mixer_test` 五个资产 + `fm_alg0.vgm` 的 `[13]` 全绿 | 完成 |
 | M2 | A 批波形 PSG：X1_010（周期→音高，复用 `chips/Pitch.h`） | 按 §11.2「验收」四条；24 → 25 / 54 | 未开始 |

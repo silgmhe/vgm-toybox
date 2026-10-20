@@ -1039,7 +1039,16 @@ int main (int argc, char* argv[])
 	}
 	else
 	{
-		std::printf ("    no loop point in this song - loop check skipped\n");
+		// An asset that exists to carry a loop point must not quietly turn into "skipped": that is
+		// how this check spent its whole life before loop.vgm was added, and a header edit would put
+		// it straight back there with the suite still green.
+		const bool mustLoop = inputFile.getFileName() == "loop.vgm";
+		std::printf ("    no loop point in this song - loop check %s\n",
+					 mustLoop ? "DID NOT RUN (this asset exists to declare one)" : "skipped");
+		if (mustLoop)
+		{
+			check (false, "loop.vgm declares a loop point, so the loop check actually ran");
+		}
 	}
 
 	// --- [13] audio and notes describe the same tracks -------------------------------------------

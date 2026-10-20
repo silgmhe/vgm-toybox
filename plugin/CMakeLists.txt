@@ -534,6 +534,16 @@ if(EXISTS "${_toybox_dac_song}")
 	set_tests_properties(engine.dac PROPERTIES LABELS "integration" TIMEOUT 120)
 endif()
 
+# PlaybackEngineTest [12] needs a song with its own loop point, and no asset had one: the check
+# printed "loop check skipped" on every run since it was written. loop.vgm declares one in the
+# header (offset 0x1C, length 0x20) and plays twenty notes per pass, so a second pass that sends
+# no notes is a failure rather than a missing precondition.
+set(_toybox_loop_song "${CMAKE_CURRENT_SOURCE_DIR}/Tests/assets/loop.vgm")
+if(EXISTS "${_toybox_loop_song}")
+	add_test(NAME engine.loop COMMAND vgm_mixer_test "${_toybox_loop_song}" 2)
+	set_tests_properties(engine.loop PROPERTIES LABELS "integration" TIMEOUT 120)
+endif()
+
 # One test per script in Tests/scripts, discovered rather than listed: adding a script must not mean
 # editing this file (and a stale hard-coded list would silently stop running a script).
 file(GLOB _toybox_scripts CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/Tests/scripts/*.txt")
