@@ -308,17 +308,6 @@ namespace
 		return recorder;
 	}
 
-	/** Tracks the MIDI path cannot describe *yet*, named rather than inferred from "it has no notes".
-
-		The YM2612's seventh mute channel is the DAC: 0x8n only carries the wait, while the sample
-		bytes live in a 0x67 ROM data block that VgmCommandReader skips - the chip plays a stream
-		nothing can be said about (M1.2 in docs/desgin/midi-output-design.md). Everything else that
-		makes sound and no notes is a decoder bug, which is the whole point of section [13]. */
-	bool isAudioOnlyTrack (const toybox::playback::TrackInfo& track)
-	{
-		return track.groupName.startsWith ("YM2612") && track.channelIndex >= 6;
-	}
-
 	/** One line per mixer track: the notes its chip channel produces. This is the end-to-end view
 		of a decoder on a real song - the notes arrive through the same MIDI path a host sees, so a
 		pitch that is wrong for the song shows up here, while vgm_chip_test answers the same
@@ -920,11 +909,15 @@ int main (int argc, char* argv[])
 	// The note times come from VgmCommandReader, not from the emulator: every wait has to land in
 	// the clock or the whole sequence drifts. 0x80-0x8F (the YM2612 DAC stream) carries its wait
 	// in the low nibble and used to be skipped, which shortened Green Hill Zone from 52.9 s to
-	// 21.4 s of MIDI time - the notes ran ahead of the audio and the sequence ended early.
+	// 21.4 s of MIDI time - the notes ran ahead of the audio and the sequence ended early. The
+	// same command also writes one byte of the song's PCM bank to register 0x2A, and that byte is
+	// the only thing that can ever produce a note on the DAC channel: the bank itself lives in a
+	// 0x67 data block, which the reader has to keep instead of stepping over.
 	std::printf ("[11] the VGM command clock\n");
 	{
-		// 0x52 0x2B 0x80 (DAC on) | 0x8F (wait 15) | 0x61 0x10 0x00 (wait 16) | 0x66
-		std::vector<std::uint8_t> image (0x40 + 8, 0);
+		// 0x52 0x2B 0x80 (DAC on) | 0x67 0x66 type 0x00 length 3 data 40 80 C0 | 0x8F | 0x8F |
+		// 0x61 0x10 0x00 (wait 16) | 0x66
+		std::vector<std::uint8_t> image (0x53, 0);
 		const auto putU32 = [&image] (std::size_t offset, std::uint32_t value)
 		{
 			image[offset + 0] = (std::uint8_t) (value & 0xFF);
@@ -936,31 +929,47 @@ int main (int argc, char* argv[])
 		std::memcpy (image.data(), "Vgm ", 4);
 		putU32 (0x04, (std::uint32_t) (image.size() - 4));	// EOF offset: the stream ends with it
 		putU32 (0x08, 0x170);								// version 1.70
+		putU32 (0x18, 46);									// total samples: the length it plays to
 		image[0x40] = 0x52; image[0x41] = 0x2B; image[0x42] = 0x80;
-		image[0x43] = 0x8F;
-		image[0x44] = 0x61; image[0x45] = 0x10; image[0x46] = 0x00;
-		image[0x47] = 0x66;
+		image[0x43] = 0x67; image[0x44] = 0x66; image[0x45] = 0x00;	// YM2612 PCM data block
+		putU32 (0x46, 3);
+		image[0x4A] = 0x40; image[0x4B] = 0x80; image[0x4C] = 0xC0;	// the bank: two DAC bytes
+		image[0x4D] = 0x8F;
+		image[0x4E] = 0x8F;
+		image[0x4F] = 0x61; image[0x50] = 0x10; image[0x51] = 0x00;
+		image[0x52] = 0x66;
 
 		toybox::backends::libvgm::VgmCommandReader reader (image.data(), image.size());
 		toybox::backends::libvgm::VgmCommand command;
-		std::vector<std::uint32_t> times;
+		std::vector<std::uint8_t> dacBytes;
+		std::vector<std::uint32_t> dacTimes;
+		std::uint32_t lastTime = 0;
 		while (reader.next (command))
 		{
-			times.push_back (command.sampleTime);
+			const bool isDacWrite = command.kind == toybox::backends::libvgm::VgmCommand::Kind::registerWrite
+									&& command.addr == 0x2A;
+			if (isDacWrite)
+			{
+				dacBytes.push_back (command.data);
+				dacTimes.push_back (command.sampleTime);
+			}
+			lastTime = command.sampleTime;
 		}
 
-		std::printf ("    command times:");
-		for (const auto time : times)
+		std::printf ("    DAC writes:");
+		for (std::size_t i = 0; i < dacBytes.size(); ++i)
 		{
-			std::printf (" %u", (unsigned int) time);
+			std::printf (" %02X@%u", (unsigned) dacBytes[i], (unsigned) dacTimes[i]);
 		}
-		std::printf ("\n");
+		std::printf (", clock %u of 46\n", (unsigned) reader.timeSamples());
 
-		const bool walked = (times.size() == 4 && times[0] == 0 && times[1] == 0);
-		check (walked, "the reader walks the synthetic stream");
-		check (times.size() >= 3 && times[2] == 15, "0x8n advances the clock by its low nibble");
-		check (times.size() >= 4 && times[3] == 31, "and the stream ends on the header's length");
-		check (reader.timeSamples() == 31, "the reader's own clock agrees");
+		check (dacBytes.size() == 2, "0x8n writes one byte of the PCM bank per command");
+		check (dacBytes.size() >= 1 && dacBytes[0] == 0x40 && dacTimes[0] == 0,
+			   "and takes it from the data block, at the command's own time");
+		check (dacBytes.size() >= 2 && dacBytes[1] == 0x80 && dacTimes[1] == 15,
+			   "the second byte follows the first wait (0x80 is data here, not a marker)");
+		check (reader.timeSamples() == 46, "0x8n still advances the clock by its low nibble");
+		check (lastTime == 46, "and the stream ends on the header's length");
 	}
 
 	// The song under test, uncompressed: its header carries the length the engine plays, so the
@@ -1095,7 +1104,10 @@ int main (int argc, char* argv[])
 
 			// A track the backend marks `unavailable` makes no promise: its chip part has no MIDI
 			// decoder yet, so sound without notes is the documented state, not a regression. The
-			// two that do promise - melodic and oneShot - have to speak up when they play.
+			// two that do promise - melodic and oneShot - have to speak up when they play. That
+			// includes the YM2612's DAC channel: 0x8n carries a PCM byte out of the song's data
+			// block as well as its wait, and a reader that dropped the block left a track playing
+			// a stream MIDI knew nothing about (M1.2).
 			const bool promisesNotes = tracks[i].midiCapability != toybox::playback::MidiCapability::unavailable;
 			const char* mark = "";
 			if (probes[i].audible && probes[i].notes == 0)
@@ -1104,11 +1116,6 @@ int main (int argc, char* argv[])
 				{
 					++knownGaps;
 					mark = "  <- no MIDI decoder for this channel yet";
-				}
-				else if (isAudioOnlyTrack (tracks[i]))
-				{
-					++knownGaps;
-					mark = "  <- the DAC stream, no note to send (M1.2)";
 				}
 				else
 				{
@@ -1149,6 +1156,26 @@ int main (int argc, char* argv[])
 				message << "fm_alg0.vgm: " << carrier << " has operator 4 as its only carrier and sends one note";
 				check (notes == 1, message);
 			}
+		}
+
+		// The DAC asset answers the other half of the same question: its stream alternates 50 ms of
+		// samples with 50 ms of silence, so the bank has to be read byte by byte all the way through
+		// for the notes to keep coming. One note would also come out of a reader that only ever
+		// consumed the first byte; the twenty bursts need the whole bank.
+		if (inputFile.getFileName() == "dac.vgm")
+		{
+			int notes = -1;
+			for (size_t i = 0; i < tracks.size(); ++i)
+			{
+				if (tracks[i].name == "DAC")
+				{
+					notes = probes[i].notes;
+				}
+			}
+
+			std::printf ("    dac.vgm: %d DAC notes over %.1f s (one per burst of samples)\n",
+						 notes, probeSeconds);
+			check (notes >= 10, "dac.vgm: the DAC track follows the PCM bank from start to end");
 		}
 	}
 

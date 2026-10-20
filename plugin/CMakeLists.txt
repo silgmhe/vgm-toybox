@@ -525,6 +525,15 @@ if(EXISTS "${_toybox_wswan_song}")
 	set_tests_properties(engine.wswan PROPERTIES LABELS "integration" TIMEOUT 120)
 endif()
 
+# The YM2612's DAC channel needs a 0x67 PCM data block before it can say anything, which no song in
+# test_file/ guarantees: the generated asset alternates 50 ms of samples with 50 ms of silence, so
+# "the DAC track reports notes" means the bank was read from its first byte to its last.
+set(_toybox_dac_song "${CMAKE_CURRENT_SOURCE_DIR}/Tests/assets/dac.vgm")
+if(EXISTS "${_toybox_dac_song}")
+	add_test(NAME engine.dac COMMAND vgm_mixer_test "${_toybox_dac_song}" 2)
+	set_tests_properties(engine.dac PROPERTIES LABELS "integration" TIMEOUT 120)
+endif()
+
 # One test per script in Tests/scripts, discovered rather than listed: adding a script must not mean
 # editing this file (and a stale hard-coded list would silently stop running a script).
 file(GLOB _toybox_scripts CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/Tests/scripts/*.txt")

@@ -151,8 +151,33 @@ bool VgmCommandReader::readHeader (void)
 	return true;
 }
 
+bool VgmCommandReader::readBankByte (std::uint8_t& value)
+{
+	std::size_t offset = bankPosition;
+	for (const auto& segment : pcmBank)
+	{
+		if (offset < segment.size)
+		{
+			value = segment.data[offset];
+			++bankPosition;
+			return true;
+		}
+
+		offset -= segment.size;
+	}
+
+	return false;
+}
+
 bool VgmCommandReader::next (VgmCommand& command)
 {
+	if (hasResume)
+	{
+		command = resume;
+		hasResume = false;
+		return true;
+	}
+
 	if (! isValid())
 	{
 		return false;
@@ -188,6 +213,25 @@ bool VgmCommandReader::next (VgmCommand& command)
 		command.kind = VgmCommand::Kind::end;
 		position = end;
 		return true;
+	case 0x67:
+	{
+		// Data block. Only bank 0 is kept, the YM2612's PCM data: it is what 0x8n reads its sample
+		// bytes from. Bank 0 is type 0x00, and type 0x80 lands in the same bank in libvgm (the
+		// bit that differs only says the data came from a ROM). A compressed block (bit 6) would
+		// need the compression table, which no song in the tests uses - it is left out rather than
+		// half-read, so its bytes stay silent instead of turning into noise.
+		const std::uint8_t type = data[position + 2];
+		const std::uint32_t blockSize = readLe32 (data + position + 3) & 0x7FFFFFFFu;
+		if ((type & 0x7Fu) == 0x00)
+		{
+			pcmBank.push_back ({ data + position + 7, (std::size_t) blockSize });
+		}
+		break;
+	}
+	case 0xE0:
+		// "Set YM2612 PCM data offset": the stream skips to a position in the bank it built.
+		bankPosition = readLe32 (data + position + 1);
+		break;
 	default:
 		if (cmd >= 0x70 && cmd <= 0x7F)
 		{
@@ -196,13 +240,31 @@ bool VgmCommandReader::next (VgmCommand& command)
 		}
 		else if (cmd >= 0x80 && cmd <= 0x8F)
 		{
-			// YM2612 DAC stream: the sample byte comes out of a data bank, so there is no register
-			// write to report - but the wait is part of the song's time. It is the *only* thing
-			// carrying time in a DAC stream, and it used to be dropped here, which shortened every
-			// Mega Drive song by all of it (Green Hill Zone: 31.5 s of 52.9 s) and made the MIDI
-			// run ahead of the audio until the sequence ended.
-			sampleTime += (std::uint32_t) (cmd & 0x0F);
-			command.kind = VgmCommand::Kind::wait;
+			// YM2612 DAC stream: write the next byte of the PCM bank to port 0 register 0x2A, then
+			// wait the low nibble. The write is what the DAC channel's notes are made of, and the
+			// wait is the *only* thing carrying time in a DAC stream - it used to be dropped here,
+			// which shortened every Mega Drive song by all of it (Green Hill Zone: 31.5 s of 52.9 s)
+			// and made the MIDI run ahead of the audio until the sequence ended.
+			std::uint8_t sample = 0;
+			const std::uint32_t wait = (std::uint32_t) (cmd & 0x0F);
+			if (! readBankByte (sample))
+			{
+				sampleTime += wait;
+				command.kind = VgmCommand::Kind::wait;
+				break;
+			}
+
+			command.command = 0x52;		// the format's own command for a YM2612 port 0 write
+			command.kind = VgmCommand::Kind::registerWrite;
+			command.addr = 0x2A;		// the DAC sample register
+			command.data = sample;
+			sampleTime += wait;
+
+			resume = VgmCommand {};
+			resume.command = cmd;
+			resume.kind = VgmCommand::Kind::wait;
+			resume.sampleTime = sampleTime;
+			hasResume = true;
 		}
 		else if (cmd == 0x50)
 		{
