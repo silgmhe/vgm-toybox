@@ -109,6 +109,11 @@ namespace
 		case DEVID_RF5C68:	// also RF5C164 / RF5C105
 			return (channelIndex >= 0 && channelIndex < 8) ? playback::MidiCapability::oneShot
 														   : playback::MidiCapability::unavailable;
+		case DEVID_YMZ280B:
+			// Eight PCM voices. Their pitch register is a playback rate, not a note, so the decoder
+			// reports one-shot triggers; see chips/Ymz280bDecoder.h and M4 in the design doc.
+			return (channelIndex >= 0 && channelIndex < 8) ? playback::MidiCapability::oneShot
+														   : playback::MidiCapability::unavailable;
 		case DEVID_X1_010:
 			// Sixteen channels, and the same channel is either a wavetable voice or a PCM player
 			// depending on one status bit. The capability is static, so it states what the channel

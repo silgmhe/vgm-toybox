@@ -20,6 +20,7 @@
 #include "chips/PokeyDecoder.h"
 #include "chips/Rf5c68Decoder.h"
 #include "chips/X1_010Decoder.h"
+#include "chips/Ymz280bDecoder.h"
 #include "chips/Saa1099Decoder.h"
 #include "chips/Sn76489Decoder.h"
 #include "chips/WswanDecoder.h"
@@ -1571,6 +1572,68 @@ namespace
 
 			check (notes.empty(), "waveform data does not key a channel on");
 		}
+
+		// --- YMZ280B: a latch, then a key-on ------------------------------------------------
+
+		std::vector<NoteEvent> runYmz (const Stream& stream, std::uint32_t totalSamples)
+		{
+			toybox::chips::Ymz280bDecoder decoder;
+			decoder.reset (16934400, 44100.0);
+			return toybox::chips::extractNotes (decoder, stream.writes, totalSamples);
+		}
+
+		/** VGM's 0x5D carries the register number in `aa` and the value in `dd` - the shape a real
+			rip uses (0x5D 0x0D 0x20, 0x5D 0x6C 0xBD, ...), not a latch pair. */
+		void writeYmz (Stream& stream, std::uint32_t time, std::uint8_t reg, std::uint8_t value)
+		{
+			stream.at (time, reg, value);
+		}
+
+		/** Voice 0: level, then key on. The sample has no note of its own, so it is a C4 marker
+			closed by the decoder's own gate. */
+		void testYmzChannelIsAOneShot (void)
+		{
+			Stream stream;
+			writeYmz (stream, 0, 0x02, 0xFF);		// total level, full
+			writeYmz (stream, 10, 0x01, 0x80);		// key on
+
+			const auto notes = runYmz (stream, 12000);
+
+			check (notes.size() == 1, "one YMZ280B key-on is one sample note");
+			if (notes.empty())
+			{
+				return;
+			}
+
+			check (notes[0].note == 60, "the sample is a C4 marker");
+			check (notes[0].logicalChannel == 0, "voice 0 is its own track");
+			check (notes[0].isDrum, "a PCM voice is a drum track");
+			check (distance (notes[0].endSample, 3528 + 10) <= 64, "the 80 ms gate ends the sample");
+		}
+
+		/** Register 0x05 is the next voice up: (reg >> 2) & 7 picks the voice, so 0x04/0x05 are
+			voice 1. A latch that leaked across voices would put this note on voice 0. */
+		void testYmzLatchSelectsTheVoice (void)
+		{
+			Stream stream;
+			writeYmz (stream, 0, 0x06, 0xFF);		// voice 1 level
+			writeYmz (stream, 10, 0x05, 0x80);		// voice 1 key on
+
+			const auto notes = runYmz (stream, 4000);
+
+			check (notes.size() == 1 && notes[0].logicalChannel == 1, "register 0x05 keys voice 1");
+		}
+
+		/** A voice whose level is zero makes no sound, so it must not make a note either. */
+		void testYmzSilentLevelIsNoNote (void)
+		{
+			Stream stream;
+			writeYmz (stream, 10, 0x01, 0x80);		// key on with the level left at 0
+
+			const auto notes = runYmz (stream, 8000);
+
+			check (notes.empty(), "a voice at level 0 does not key a note");
+		}
 		}
 
 int main (void)
@@ -1658,6 +1721,10 @@ int main (void)
 	testX1DividerHalvesTheFrequency();
 	testX1PcmIsAOneShot();
 	testX1EnvelopeWritesDoNotKey();
+
+	testYmzChannelIsAOneShot();
+	testYmzLatchSelectsTheVoice();
+	testYmzSilentLevelIsNoNote();
 
 	std::printf ("Result    : %s\n", failures == 0 ? "PASS" : "FAILURES");
 	return failures == 0 ? 0 : 1;

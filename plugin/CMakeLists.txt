@@ -199,6 +199,7 @@ target_sources(VGMToybox PRIVATE
 	Source/chips/Ay8910Decoder.cpp
 	Source/chips/Rf5c68Decoder.cpp
 	Source/chips/X1_010Decoder.cpp
+	Source/chips/Ymz280bDecoder.cpp
 	Source/chips/Sn76489Decoder.cpp
 	Source/chips/OpmDecoder.cpp
 	Source/chips/OpnDecoder.cpp
@@ -336,6 +337,7 @@ add_executable(vgm_mixer_test EXCLUDE_FROM_ALL
 	Source/chips/Ay8910Decoder.cpp
 	Source/chips/Rf5c68Decoder.cpp
 	Source/chips/X1_010Decoder.cpp
+	Source/chips/Ymz280bDecoder.cpp
 	Source/chips/Sn76489Decoder.cpp
 	Source/chips/OpmDecoder.cpp
 	Source/chips/OpnDecoder.cpp
@@ -365,6 +367,7 @@ add_executable(vgm_chip_test EXCLUDE_FROM_ALL
 	Source/chips/Ay8910Decoder.cpp
 	Source/chips/Rf5c68Decoder.cpp
 	Source/chips/X1_010Decoder.cpp
+	Source/chips/Ymz280bDecoder.cpp
 	Source/chips/Sn76489Decoder.cpp
 	Source/chips/OpmDecoder.cpp
 	Source/chips/OpnDecoder.cpp

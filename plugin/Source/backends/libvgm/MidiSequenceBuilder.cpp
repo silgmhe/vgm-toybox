@@ -18,6 +18,7 @@
 #include "chips/PokeyDecoder.h"
 #include "chips/Rf5c68Decoder.h"
 #include "chips/X1_010Decoder.h"
+#include "chips/Ymz280bDecoder.h"
 #include "chips/Saa1099Decoder.h"
 #include "chips/Sn76489Decoder.h"
 #include "chips/WswanDecoder.h"
@@ -120,6 +121,10 @@ namespace
 					break;
 				case 0x5A:
 					opl.queue (deviceFor (DEVID_YM3812, 0), command.addr, command.data,
+							   command.sampleTime);
+					break;
+				case 0x5D:
+					ymz.queue (deviceFor (DEVID_YMZ280B, 0), command.addr, command.data,
 							   command.sampleTime);
 					break;
 				case 0xC8:
@@ -260,6 +265,7 @@ namespace
 			flushDecoded (ay, 1789773u, lastSampleTime);
 			flushDecoded (rf5c, 12500000u, lastSampleTime);
 			flushDecoded (x1, 16000000u, lastSampleTime);
+			flushDecoded (ymz, 16934400u, lastSampleTime);
 
 			if (events.empty())
 			{
@@ -727,6 +733,7 @@ namespace
 		ChipBuffer<chips::Ay8910Decoder> ay;
 		ChipBuffer<chips::Rf5c68Decoder> rf5c;
 		ChipBuffer<chips::X1_010Decoder> x1;
+		ChipBuffer<chips::Ymz280bDecoder> ymz;
 		std::vector<playback::MidiEvent> events;
 	};
 }
