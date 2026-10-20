@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstring>
 #include <map>
 
 #include "VgmCommandReader.h"
@@ -282,7 +283,25 @@ namespace
 			flushDecoded (ay, 1789773u, lastSampleTime);
 			flushDecoded (rf5c, 12500000u, lastSampleTime);
 			flushDecoded (x1, 16000000u, lastSampleTime);
-			flushDecoded (c140, 8000000u, lastSampleTime);
+
+			// The C140's note is the playback rate divided by the sample's own cycle length, and
+			// only the ROM holds that length: without it every voice is quantised against a fixed
+			// 8 kHz root and a song recorded at another rate comes out at the wrong octave (this
+			// is the bug that made "Submerged City" send 59/62 where the chip plays 32/56). The
+			// ROM is the song's 0x8D blocks, and the banking that folds a voice's bank into a ROM
+			// offset is the header's byte 0x96 - both are part of the same fact, so they travel
+			// together and the decoder cannot read one without the other.
+			const std::vector<std::uint8_t> c140Rom =
+				c140.writes.empty() ? std::vector<std::uint8_t>() : assembleRom (reader, 0x8D);
+			const auto c140Banking = chips::C140Decoder::bankingFromHeaderByte (reader.c140Banking());
+			flushDecoded (c140, 8000000u, lastSampleTime,
+						  [&c140Rom, c140Banking] (chips::C140Decoder& decoder)
+						  {
+							  if (! c140Rom.empty())
+							  {
+								  decoder.setRom (c140Rom, c140Banking);
+							  }
+						  });
 			flushDecoded (opx, 16934400u, lastSampleTime);
 			flushDecoded (ymz, 16934400u, lastSampleTime);
 
@@ -555,6 +574,15 @@ namespace
 		void flushDecoded (ChipBuffer<Decoder>& buffer, std::uint32_t fallbackClock,
 						   std::uint32_t totalSamples)
 		{
+			flushDecoded (buffer, fallbackClock, totalSamples, [] (Decoder&) {});
+		}
+
+		/** The same pass, with a hook that hands the decoder whatever the stream carried besides
+			register writes - a sampled chip needs its ROM before it can say what pitch a sample is. */
+		template <typename Decoder, typename Configure>
+		void flushDecoded (ChipBuffer<Decoder>& buffer, std::uint32_t fallbackClock,
+						   std::uint32_t totalSamples, Configure configure)
+		{
 			for (auto& entry : buffer.writes)
 			{
 				const auto device = buffer.devices.find (entry.first);
@@ -572,6 +600,7 @@ namespace
 
 				Decoder decoder;
 				decoder.reset (clock, (double) kVgmRate);
+				configure (decoder);
 
 				emitDecodedNotes (device->second,
 								  chips::extractPerformance (decoder, entry.second, totalSamples));
@@ -579,6 +608,56 @@ namespace
 
 			buffer.writes.clear();
 			buffer.devices.clear();
+		}
+
+		/** Assembles one ROM from the stream's blocks of `type` (0x8D is the C140's sample ROM).
+
+			A ROM block carries the size of the whole ROM and where its payload belongs in it, so
+			the image is the union of the blocks at their own offsets - a song can split a megabyte
+			over many blocks ("Submerged City" fills 0x100000 bytes from sixteen of them, with gaps
+			the ripper could not be bothered to upload; those stay zero, which reads as silence and
+			measures as "no period", so a voice on one of them keeps the root rate). The declared
+			size comes from the file, so it is clipped to what the chip can address instead of
+			trusted with an allocation.
+
+			The ROM is what makes the C140's notes mean something: the playback rate is a register,
+			but the sample's own cycle length - the number the rate has to be divided by - only
+			exists in these bytes. See chips/C140Decoder.h for the measurement and the reason it
+			cannot be skipped. */
+		static std::vector<std::uint8_t> assembleRom (const VgmCommandReader& reader,
+													  std::uint8_t type)
+		{
+			constexpr std::size_t kMaxRomBytes = 2 * 1024 * 1024;	// the C140 addresses 21 bits
+
+			std::size_t romSize = 0;
+			for (const auto& block : reader.dataBlocks())
+			{
+				if (block.type == type)
+				{
+					romSize = std::max (romSize, (std::size_t) block.romSize);
+				}
+			}
+
+			std::vector<std::uint8_t> rom;
+			romSize = std::min (romSize, kMaxRomBytes);
+			if (romSize == 0)
+			{
+				return rom;
+			}
+
+			rom.assign (romSize, 0);
+			for (const auto& block : reader.dataBlocks())
+			{
+				if (block.type != type || block.romOffset >= rom.size())
+				{
+					continue;
+				}
+
+				const std::size_t count = std::min (block.size, rom.size() - block.romOffset);
+				std::memcpy (rom.data() + block.romOffset, block.data, count);
+			}
+
+			return rom;
 		}
 
 		const PLR_DEV_INFO* deviceFor (DEV_ID type, int instance) const

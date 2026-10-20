@@ -147,6 +147,14 @@ bool VgmCommandReader::readHeader (void)
 		return false;
 	}
 
+	// the C140's banking is a header field, not a command: byte 0x96, added with the 1.61 header.
+	// A shorter header has a command there, so only read it when the field is really inside the
+	// header - libvgm does the same and otherwise leaves the default (System 2) in place.
+	if (dataOffset > 0x96 && size > 0x96)
+	{
+		c140BankingType = data[0x96];
+	}
+
 	position = dataOffset;
 	return true;
 }
@@ -215,16 +223,28 @@ bool VgmCommandReader::next (VgmCommand& command)
 		return true;
 	case 0x67:
 	{
-		// Data block. Only bank 0 is kept, the YM2612's PCM data: it is what 0x8n reads its sample
-		// bytes from. Bank 0 is type 0x00, and type 0x80 lands in the same bank in libvgm (the
-		// bit that differs only says the data came from a ROM). A compressed block (bit 6) would
-		// need the compression table, which no song in the tests uses - it is left out rather than
-		// half-read, so its bytes stay silent instead of turning into noise.
+		// Data block. Every block is remembered with its payload (a caller may need a chip's ROM);
+		// bank 0 is also kept as the YM2612's PCM bank, which is what 0x8n reads its sample bytes
+		// from. Bank 0 is type 0x00, and type 0x80 lands in the same bank in libvgm - the bit that
+		// differs only says the data came from a ROM, and such a block spends its first eight
+		// payload bytes on the ROM size and offset, so the samples start after them.
 		const std::uint8_t type = data[position + 2];
 		const std::uint32_t blockSize = readLe32 (data + position + 3) & 0x7FFFFFFFu;
+		const bool isRom = (type & 0x80) != 0;
+		const std::size_t headerSize = isRom ? 8 : 0;
+		const std::size_t payloadSize = (blockSize > headerSize) ? (std::size_t) (blockSize - headerSize) : 0;
+
+		VgmDataBlock block;
+		block.type = type;
+		block.romSize = isRom ? readLe32 (data + position + 7) : 0;
+		block.romOffset = isRom ? readLe32 (data + position + 11) : 0;
+		block.data = data + position + 7 + headerSize;
+		block.size = payloadSize;
+		blocks.push_back (block);
+
 		if ((type & 0x7Fu) == 0x00)
 		{
-			pcmBank.push_back ({ data + position + 7, (std::size_t) blockSize });
+			pcmBank.push_back ({ block.data, block.size });
 		}
 		break;
 	}

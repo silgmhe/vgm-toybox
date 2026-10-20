@@ -41,6 +41,22 @@ struct VgmCommand
 	std::uint32_t sampleTime = 0;	// absolute position of the command, in 44100 Hz samples
 };
 
+/** One 0x67 data block, still where it sits in the image.
+
+	The block's `type` byte decides what the bytes are: 0x00 is the YM2612's PCM bank, 0x8D the
+	C140's sample ROM, the bit 0x80 says the block came from a ROM image that is being uploaded,
+	and only those blocks carry the eight-byte ROM header (`romSize`, `romOffset`). A chip whose
+	samples are recorded rather than synthesised needs them: the note of a sample is its playback
+	rate divided by the sample's own cycle length, and that length is only in these bytes. */
+struct VgmDataBlock
+{
+	std::uint8_t type = 0;			// the block's type byte, the ROM flag (0x80) included
+	std::uint32_t romSize = 0;		// bytes of the ROM the block belongs to (ROM blocks only)
+	std::uint32_t romOffset = 0;	// where in that ROM the payload belongs (ROM blocks only)
+	const std::uint8_t* data = nullptr;
+	std::size_t size = 0;			// payload bytes, the eight-byte ROM header not counted
+};
+
 /** Walks one uncompressed VGM image. The stream ends at the EOF offset, the GD3 tag or the
 	0x66 command, whichever comes first - the same boundaries libvgm uses. */
 class VgmCommandReader
@@ -58,6 +74,19 @@ public:
 		ends on the header's total, which is the length the engine plays - so a difference here is
 		a difference between MIDI time and audio time. */
 	std::uint32_t timeSamples (void) const { return sampleTime; }
+
+	/** Every 0x67 block the stream read so far, in stream order. The bytes stay in the image, so
+		this is cheap; a caller that needs a chip's ROM assembles it from the blocks it recognises. */
+	const std::vector<VgmDataBlock>& dataBlocks (void) const { return blocks; }
+
+	/** The C140's ROM banking, from the header's byte 0x96 - the same field libvgm hands to the
+		core as `DEV_GEN_CFG::flags` (vgmplayer.cpp, `DEVID_C140`). It is not a register and not
+		a data block: it says how the board folds a voice's bank and address into a ROM offset, so
+		a decoder cannot read a sample without it. Header byte 0x96 only exists once the header
+		reaches that far (VGM 1.61 and later); an older file has a command there, so the answer
+		is the format's default, 0x00 (Namco System 2), rather than whatever byte happens to sit
+		at that offset. */
+	std::uint8_t c140Banking (void) const { return c140BankingType; }
 
 private:
 	/** One 0x67 data block that belongs to the YM2612 PCM bank. The bytes stay where they are in
@@ -81,6 +110,8 @@ private:
 
 	std::vector<BankSegment> pcmBank;
 	std::size_t bankPosition = 0;
+	std::vector<VgmDataBlock> blocks;
+	std::uint8_t c140BankingType = 0x00;		// System 2, the format's default
 
 	// 0x8n is one byte that stands for two commands; the second one waits here until the caller
 	// asks for it, so a stream that ends right after a 0x8n still reports its wait.

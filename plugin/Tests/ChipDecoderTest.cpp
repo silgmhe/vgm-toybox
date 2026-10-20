@@ -7,6 +7,7 @@
 //   cmake --build <build dir> --target vgm_chip_test
 //   <build dir>/plugin/vgm_chip_test
 
+#include <cmath>
 #include <cstdint>
 #include <cstdio>
 #include <vector>
@@ -1830,11 +1831,48 @@ namespace
 	// --- C140: a playback rate, an end address and a loop bit ---------------------------------
 
 	std::vector<NoteEvent> runC140 (const Stream& stream, std::uint32_t totalSamples,
-									std::uint32_t clock = 8000000)
+									std::uint32_t clock = 8000000,
+									const std::vector<std::uint8_t>& rom = {})
 	{
 		toybox::chips::C140Decoder decoder;
 		decoder.reset (clock, 44100.0);
+		if (! rom.empty())
+		{
+			decoder.setRom (rom);
+		}
+
 		return toybox::chips::extractNotes (decoder, stream.writes, totalSamples);
+	}
+
+	/** A ROM holding one sine wave of `period` bytes - sixteen cycles of it - at 0x1000. */
+	std::vector<std::uint8_t> makeC140SinRom (int period)
+	{
+		std::vector<std::uint8_t> rom (0x1100, 0);
+		for (int i = 0; i < 16 * period; ++i)
+		{
+			const double phase = 2.0 * 3.14159265358979323846 * (double) i / (double) period;
+			rom[0x1000 + (std::size_t) i] = (std::uint8_t) (128 + (int) std::lround (std::sin (phase) * 100.0));
+		}
+
+		return rom;
+	}
+
+	/** The voice the period tests key on: 256 bytes at 0x1000, looped back to the start, played at
+		19931 - 8448 bytes a second at 8 MHz. */
+	void setC140LoopedSample (Stream& stream)
+	{
+		stream.at (0, 0x00, 0x00, 0xFF);		// volume right
+		stream.at (0, 0x00, 0x01, 0xFF);		// volume left
+		stream.at (0, 0x00, 0x06, 0x10);		// start 0x1000
+		stream.at (0, 0x00, 0x07, 0x00);
+		stream.at (0, 0x00, 0x08, 0x11);		// end 0x1100: 256 bytes
+		stream.at (0, 0x00, 0x09, 0x00);
+		stream.at (0, 0x00, 0x0A, 0x10);		// loop back to the start
+		stream.at (0, 0x00, 0x0B, 0x00);
+		stream.at (0, 0x00, 0x02, 0x4D);		// frequency 19931
+		stream.at (0, 0x00, 0x03, 0xDB);
+		stream.at (10, 0x00, 0x05, 0x90);		// key on with loop
+		stream.at (8000, 0x00, 0x05, 0x10);		// the loop bit alone: the key-off
 	}
 
 	/** Volume, a sample at 0x1000 with 1344 bytes, and the frequency for 13440 bytes a second. */
@@ -1986,6 +2024,101 @@ namespace
 		check (notes[0].note == 81, "and it keeps its own frequency, an octave above voice 0's");
 	}
 
+	/** With the ROM, the note is the sample's own pitch: 8448 bytes a second over a sixteen-byte
+		cycle is 528 Hz, C5 - not the 276 Hz the 8 kHz root rate would claim. */
+	void testC140SamplePeriodIsTheNote (void)
+	{
+		Stream stream;
+		setC140LoopedSample (stream);
+
+		const auto notes = runC140 (stream, 20000, 8000000, makeC140SinRom (16));
+
+		check (notes.size() == 1, "one looped C140 voice is one note");
+		if (notes.empty())
+		{
+			return;
+		}
+
+		check (notes[0].note == 72, "16 bytes a cycle at 8448 a second is 528 Hz, C5");
+	}
+
+	/** Without a ROM nothing can be measured, so the root rate still decides - that is the C140's
+		behaviour before the data blocks reach the decoder, and it stays as the fallback. */
+	void testC140WithoutRomKeepsTheRootRate (void)
+	{
+		Stream stream;
+		setC140LoopedSample (stream);
+
+		const auto notes = runC140 (stream, 20000);
+
+		check (notes.size() == 1 && notes[0].note == 61,
+			   "8448 bytes a second against the 8 kHz root is C#4 without a ROM");
+	}
+
+	/** The bank register is folded into the ROM, not appended to it. A System 2 voice is bank 0x14
+		with address 0x95C0, which is ROM offset 0x495C0 - not 0x1495C0, which a one-megabyte ROM
+		does not have. Getting this wrong makes every sample unmeasurable and the song falls back
+		to the root rate, which is hard to tell from "the ROM is not wired up at all". */
+	void testC140System2BankIsFolded (void)
+	{
+		std::vector<std::uint8_t> rom (0x100000, 0);
+		const std::uint32_t offset = 0x495C0;		// (0x14 << 16 | 0x95C0) folded by System 2
+		for (int i = 0; i < 256; ++i)
+		{
+			const double phase = 2.0 * 3.14159265358979323846 * (double) i / 16.0;
+			rom[offset + (std::size_t) i] = (std::uint8_t) (128 + (int) std::lround (std::sin (phase) * 100.0));
+		}
+
+		Stream stream;
+		stream.at (0, 0x00, 0x00, 0xFF);
+		stream.at (0, 0x00, 0x01, 0xFF);
+		stream.at (0, 0x00, 0x04, 0x14);		// bank 0x14
+		stream.at (0, 0x00, 0x06, 0x95);		// start 0x95C0
+		stream.at (0, 0x00, 0x07, 0xC0);
+		stream.at (0, 0x00, 0x08, 0x96);		// end 0x96C0
+		stream.at (0, 0x00, 0x09, 0xC0);
+		stream.at (0, 0x00, 0x0A, 0x95);		// loop back to the start
+		stream.at (0, 0x00, 0x0B, 0xC0);
+		stream.at (0, 0x00, 0x02, 0x4D);		// the same 8448 bytes a second
+		stream.at (0, 0x00, 0x03, 0xDB);
+		stream.at (10, 0x00, 0x05, 0x90);
+		stream.at (8000, 0x00, 0x05, 0x10);
+
+		const auto folded = runC140 (stream, 20000, 8000000, rom);
+		check (folded.size() == 1 && folded[0].note == 72,
+			   "bank 0x14 address 0x95C0 is ROM offset 0x495C0, C5");
+
+		// the same registers with a linear ROM (the banking type the header may name instead)
+		// address 0x1495C0, which no one-megabyte image holds: the note goes back to the root rate
+		toybox::chips::C140Decoder decoder;
+		decoder.reset (8000000, 44100.0);
+		decoder.setRom (rom, toybox::chips::C140Decoder::Banking::linear);
+		const auto linear = toybox::chips::extractNotes (decoder, stream.writes, 20000);
+		check (linear.size() == 1 && linear[0].note == 61,
+			   "an unfolded address past the ROM keeps the root rate");
+	}
+
+	/** A sample that never repeats - a drum, noise - must not get an invented pitch: its bytes
+		correlate with nothing, so the root rate decides there too. */
+	void testC140NoisySampleFallsBackToTheRootRate (void)
+	{
+		std::vector<std::uint8_t> rom (0x1100, 0);
+		std::uint32_t seed = 12345u;
+		for (int i = 0; i < 256; ++i)
+		{
+			seed = seed * 1103515245u + 12345u;
+			rom[0x1000 + (std::size_t) i] = (std::uint8_t) (seed >> 16);
+		}
+
+		Stream stream;
+		setC140LoopedSample (stream);
+
+		const auto notes = runC140 (stream, 20000, 8000000, rom);
+
+		check (notes.size() == 1 && notes[0].note == 61,
+			   "a sample with no period keeps the root rate");
+	}
+
 int main (void)
 {
 	std::printf ("chip decoder test\n");
@@ -2091,6 +2224,10 @@ int main (void)
 	testC140ClockDoublesThePitch();
 	testC140SilentVoiceIsNoNote();
 	testC140HighVoiceNeedsTheHighOffsetByte();
+	testC140SamplePeriodIsTheNote();
+	testC140WithoutRomKeepsTheRootRate();
+	testC140NoisySampleFallsBackToTheRootRate();
+	testC140System2BankIsFolded();
 
 	std::printf ("Result    : %s\n", failures == 0 ? "PASS" : "FAILURES");
 	return failures == 0 ? 0 : 1;

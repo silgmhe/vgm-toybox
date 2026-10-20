@@ -2,6 +2,8 @@
 
 #include <algorithm>
 #include <cmath>
+#include <map>
+#include <vector>
 
 #include "Pitch.h"
 
@@ -18,26 +20,184 @@ namespace
 	constexpr double kClockDivisor = 18874368.0;
 
 	// The rate at which a C140 sample ROM is taken to play at its recorded pitch. The chip does not
-	// say, and the games' drivers disagree: 8-bit PCM at 8 kHz is the common case for the boards,
-	// and it is one constant so the root-note override of section 11.1 can replace it in one place.
+	// say, and the games' drivers disagree: 8-bit PCM at 8 kHz is the common case for the boards.
+	// It is only the fallback: a sample whose own cycle length can be measured is played at the
+	// pitch it was recorded at, and this constant covers the rest (drums, noise, mu-law, no ROM).
 	constexpr double kRootRate = 8000.0;
 
 	constexpr std::uint8_t kModeMulaw = 0x08;
 	constexpr std::uint8_t kModeLoop = 0x10;
 	constexpr std::uint8_t kModeKeyOn = 0x80;
 
+	// The period search: a window of two kilobytes of the loop region is several cycles of the
+	// lowest note a C140 sample is likely to hold, and one kilobyte of lag reaches a 8 Hz cycle.
+	constexpr std::size_t kPeriodWindowBytes = 2048;
+	constexpr int kMinLag = 8;
+	constexpr int kMaxLag = 1024;
+
+	/** The length of one cycle of a recorded sample, in bytes.
+
+		The chip never states it: a C140 sample is raw 8-bit PCM, and a note is the playback rate
+		divided by this length. The length is measured by autocorrelation over the loop region -
+		the part a sustained note repeats - so the result does not depend on where the sample
+		began or on an attack transient. The loop itself refines it: a driver loops a whole number
+		of cycles, so the estimate is snapped to `loopLength / round (loopLength / period)`, which
+		turns a period good to a fraction of a byte into one good to a fraction of a cent over the
+		whole loop.
+
+		Returns 0 for a sample whose period does not stand out (a drum, noise, a one-shot with no
+		loop), which the caller reads as "use the root rate". */
+	double estimateSamplePeriod (const std::uint8_t* sample, std::size_t size,
+								 std::size_t loopOffset, std::size_t loopLength)
+	{
+		if (sample == nullptr || size < 64)
+		{
+			return 0.0;
+		}
+
+		std::size_t begin = 0;
+		std::size_t length = size;
+		if (loopLength >= 128 && loopOffset + loopLength <= size)
+		{
+			begin = loopOffset;
+			length = loopLength;
+		}
+
+		length = std::min (length, kPeriodWindowBytes);
+		if (length < 4 * (std::size_t) kMinLag)
+		{
+			return 0.0;
+		}
+
+		const std::uint8_t* x = sample + begin;
+		double mean = 0.0;
+		for (std::size_t i = 0; i < length; ++i)
+		{
+			mean += (double) x[i];
+		}
+
+		mean /= (double) length;
+
+		const int maxLag = (int) std::min<std::size_t> (length / 2, (std::size_t) kMaxLag);
+		if (maxLag <= kMinLag)
+		{
+			return 0.0;
+		}
+
+		std::vector<double> correlation ((std::size_t) maxLag + 2, 0.0);
+		for (int lag = kMinLag; lag <= maxLag; ++lag)
+		{
+			double product = 0.0;
+			double energyA = 0.0;
+			double energyB = 0.0;
+			for (std::size_t i = 0; i + (std::size_t) lag < length; ++i)
+			{
+				const double a = (double) x[i] - mean;
+				const double b = (double) x[i + (std::size_t) lag] - mean;
+				product += a * b;
+				energyA += a * a;
+				energyB += b * b;
+			}
+
+			correlation[(std::size_t) lag] = (energyA > 0.0 && energyB > 0.0)
+												 ? product / std::sqrt (energyA * energyB)
+												 : 0.0;
+		}
+
+		// the strongest local maximum: a period is a lag the signal repeats at, and a maximum
+		// rather than a shoulder of one keeps a harmonic from winning by being next to it
+		double best = 0.0;
+		for (int lag = kMinLag; lag <= maxLag; ++lag)
+		{
+			const double value = correlation[(std::size_t) lag];
+			if (value > correlation[(std::size_t) (lag - 1)] && value >= correlation[(std::size_t) (lag + 1)])
+			{
+				best = std::max (best, value);
+			}
+		}
+
+		if (best < 0.80)
+		{
+			return 0.0;		// nothing repeats: a drum, noise, or a sample too short to hold a cycle
+		}
+
+		// the shortest lag that is as good as the best one: a signal that repeats every L bytes
+		// also repeats every 2 L, and the note is the fundamental, not the octave
+		int chosen = -1;
+		const double acceptable = best - 0.02;
+		for (int lag = kMinLag; lag <= maxLag; ++lag)
+		{
+			const double value = correlation[(std::size_t) lag];
+			if (value >= acceptable && value > correlation[(std::size_t) (lag - 1)]
+				&& value >= correlation[(std::size_t) (lag + 1)])
+			{
+				chosen = lag;
+				break;
+			}
+		}
+
+		if (chosen < 0)
+		{
+			return 0.0;
+		}
+
+		// parabolic interpolation: the true period rarely lands on a whole lag
+		double period = (double) chosen;
+		if (chosen > kMinLag && chosen < maxLag)
+		{
+			const double before = correlation[(std::size_t) (chosen - 1)];
+			const double here = correlation[(std::size_t) chosen];
+			const double after = correlation[(std::size_t) (chosen + 1)];
+			const double curvature = before - 2.0 * here + after;
+			if (curvature < 0.0)
+			{
+				period += std::max (-0.5, std::min (0.5, 0.5 * (before - after) / curvature));
+			}
+		}
+
+		if (period <= 0.0)
+		{
+			return 0.0;
+		}
+
+		// the loop is a whole number of cycles, and that constraint is far more precise than the
+		// correlation: a 6770-byte loop of 89 cycles states the period to a hundredth of a byte
+		if (loopLength >= 128)
+		{
+			const double cycles = (double) loopLength / period;
+			const double rounded = std::floor (cycles + 0.5);
+			if (rounded >= 1.0 && std::fabs (cycles - rounded) < 0.35)
+			{
+				period = (double) loopLength / rounded;
+			}
+		}
+
+		return period;
+	}
+
+	/** One note table per voice: the mapping now depends on the voice's sample as well as on the
+		clock, because a sample only sounds at its recorded pitch at the rate it was recorded at.
+		`samplePeriodBytes` points at the voice's cached estimate and is 0 until one is measured. */
 	class C140NoteTable final : public NoteTable
 	{
 	public:
-		explicit C140NoteTable (double clock) : bytesPerSecondPerStep (clock / kClockDivisor) {}
+		C140NoteTable (double clock, const double* samplePeriod)
+			: bytesPerSecondPerStep (clock / kClockDivisor), samplePeriodBytes (samplePeriod) {}
 
 		int noteFor (std::uint32_t period, int, int* finePitch) const override
 		{
-			return quantisePlaybackRate ((double) period * bytesPerSecondPerStep, kRootRate, finePitch);
+			const double rate = (double) period * bytesPerSecondPerStep;
+			if (samplePeriodBytes != nullptr && *samplePeriodBytes > 0.0)
+			{
+				return quantiseFrequency (rate / *samplePeriodBytes, finePitch);
+			}
+
+			return quantisePlaybackRate (rate, kRootRate, finePitch);
 		}
 
 	private:
 		double bytesPerSecondPerStep;
+		const double* samplePeriodBytes;
 	};
 }
 
@@ -61,13 +221,94 @@ struct C140Decoder::Impl
 		// latched at key-on, where the core copies start/end into the voice
 		bool keyed = false;
 		std::uint32_t gateEnd = 0;		// when a non-looping sample reaches its end
+		double samplePeriodBytes = 0.0;	// the latched sample's cycle length; 0 = use the root rate
 	};
 
 	Channel channels[numChannels];
 	std::uint32_t now = 0;
 	double clock = (double) kDefaultClock;
 	double streamRate = 44100.0;
-	std::unique_ptr<C140NoteTable> table;
+	std::vector<std::uint8_t> rom;					// the song's 0x8D blocks, one byte per address
+	Banking banking = Banking::system2;				// how a voice's bank/address reaches that ROM
+	std::map<std::uint64_t, double> periodCache;	// sample description -> cycle length
+	std::vector<std::unique_ptr<C140NoteTable>> tables;
+
+	std::uint32_t startOf (const Channel& channel) const
+	{
+		return ((std::uint32_t) channel.startHi << 8) | channel.startLo;
+	}
+
+	std::uint32_t endOf (const Channel& channel) const
+	{
+		return ((std::uint32_t) channel.endHi << 8) | channel.endLo;
+	}
+
+	std::uint32_t loopOf (const Channel& channel) const
+	{
+		return ((std::uint32_t) channel.loopHi << 8) | channel.loopLo;
+	}
+
+	/** The ROM offset a voice's bank and address point at - libvgm's `find_sample()` (c140.c),
+		which is where the board's wiring lives. The registers only carry eight bits of bank, so
+		on System 2 the address is folded into 19 bits: without that fold a one-megabyte ROM has
+		no bank 0x14 and every sample of the song comes out unmeasurable. */
+	std::uint32_t sampleOffset (std::uint32_t address, std::uint8_t bank) const
+	{
+		const std::uint32_t adrs = ((std::uint32_t) bank << 16) + address;
+		switch (banking)
+		{
+		case Banking::system21:
+			return ((adrs & 0x300000u) >> 1) + (adrs & 0x7FFFFu);
+
+		case Banking::linear:
+			return adrs;
+
+		case Banking::system2:
+		default:
+			return ((adrs & 0x200000u) >> 2) | (adrs & 0x7FFFFu);
+		}
+	}
+
+	/** The cycle length of the sample the voice is about to play, measured once per sample.
+
+		The registers name the sample: the bank and the start address pick where it begins, the
+		loop says which part repeats, and the mode says whether the bytes are linear PCM at all.
+		mu-law samples are not, so a correlation over their bytes means nothing - they keep the
+		root rate. A sample that begins outside the ROM, or one whose loop is shorter than the
+		correlation window needs, does the same. */
+	double samplePeriodFor (const Channel& channel)
+	{
+		const std::uint32_t start = startOf (channel);
+		const std::uint32_t end = endOf (channel);
+		const std::uint32_t loop = loopOf (channel);
+		if (rom.empty() || end <= start || (channel.mode & kModeMulaw) != 0)
+		{
+			return 0.0;
+		}
+
+		const std::uint64_t key = ((std::uint64_t) channel.bank << 48) | ((std::uint64_t) start << 32)
+								  | ((std::uint64_t) end << 16) | (std::uint64_t) loop;
+		const auto cached = periodCache.find (key);
+		if (cached != periodCache.end())
+		{
+			return cached->second;
+		}
+
+		const std::uint32_t address = sampleOffset (start, channel.bank);
+		double period = 0.0;
+		if (address < (std::uint64_t) rom.size())
+		{
+			const std::size_t size = std::min<std::size_t> ((std::size_t) (end - start),
+															rom.size() - (std::size_t) address);
+			const bool loops = (channel.mode & kModeLoop) != 0 && loop >= start && loop < end;
+			const std::size_t loopOffset = loops ? (std::size_t) (loop - start) : 0;
+			const std::size_t loopLength = loops ? size - loopOffset : 0;
+			period = estimateSamplePeriod (rom.data() + address, size, loopOffset, loopLength);
+		}
+
+		periodCache[key] = period;
+		return period;
+	}
 
 	static std::uint32_t frequencyOf (const Channel& channel)
 	{
@@ -82,8 +323,8 @@ struct C140Decoder::Impl
 		start trips the stop on the first sample: both are silence, not a note. */
 	std::uint32_t durationOf (const Channel& channel) const
 	{
-		const std::uint32_t start = ((std::uint32_t) channel.startHi << 8) | channel.startLo;
-		const std::uint32_t end = ((std::uint32_t) channel.endHi << 8) | channel.endLo;
+		const std::uint32_t start = startOf (channel);
+		const std::uint32_t end = endOf (channel);
 		const std::uint32_t frequency = frequencyOf (channel);
 		if (end <= start || frequency == 0)
 		{
@@ -109,9 +350,11 @@ struct C140Decoder::Impl
 			return;
 		}
 
-		// the key-on edge is where the core latches start/end/loop, so the length is fixed here
+		// the key-on edge is where the core latches start/end/loop, so the length and the sample's
+		// own pitch are fixed here as well
 		voice.keyed = true;
 		voice.gateEnd = sampleTime + durationOf (voice);
+		voice.samplePeriodBytes = samplePeriodFor (voice);
 	}
 
 	bool isSounding (int channel) const
@@ -147,10 +390,47 @@ C140Decoder::~C140Decoder() = default;
 
 void C140Decoder::reset (std::uint32_t clock, double sampleRate)
 {
+	// the ROM and its banking belong to the song, not to the clock: a reset only changes the rate
+	// the chip runs at, so both are carried over instead of being dropped with the voices
+	std::vector<std::uint8_t> rom = impl != nullptr ? std::move (impl->rom) : std::vector<std::uint8_t>();
+	const Banking banking = impl != nullptr ? impl->banking : Banking::system2;
+
 	impl = std::make_unique<Impl>();
 	impl->clock = (clock > 100000) ? (double) clock : (double) kDefaultClock;
 	impl->streamRate = (sampleRate > 0.0) ? sampleRate : 44100.0;
-	impl->table = std::make_unique<C140NoteTable> (impl->clock);
+	impl->rom = std::move (rom);
+	impl->banking = banking;
+	impl->tables.reserve ((std::size_t) numChannels);
+	for (auto& voice : impl->channels)
+	{
+		impl->tables.push_back (std::make_unique<C140NoteTable> (impl->clock, &voice.samplePeriodBytes));
+	}
+}
+
+C140Decoder::Banking C140Decoder::bankingFromHeaderByte (std::uint8_t headerByte)
+{
+	switch (headerByte)
+	{
+	case (std::uint8_t) Banking::system21:
+		return Banking::system21;
+
+	case (std::uint8_t) Banking::linear:
+		return Banking::linear;
+
+	default:
+		// 0x00 is System 2, and so is anything else: 0x02 is the ASIC 219, which libvgm plays
+		// through a different device, and a file too old to carry the field has no byte 0x96 at
+		// all. Guessing a fold that the board does not apply is worse than the default the
+		// player itself uses for an unknown value.
+		return Banking::system2;
+	}
+}
+
+void C140Decoder::setRom (std::vector<std::uint8_t> rom, Banking newBanking)
+{
+	impl->rom = std::move (rom);
+	impl->banking = newBanking;
+	impl->periodCache.clear();	// the samples describe a different ROM now
 }
 
 void C140Decoder::write (const RegisterWrite& w)
@@ -244,8 +524,10 @@ ChannelState C140Decoder::channelState (int channel) const
 
 const NoteTable& C140Decoder::noteTable (int channel) const
 {
-	(void) channel;		// one mapping for every voice: a playback rate and the root rate
-	return *impl->table;
+	// one table per voice: each voice's note is its rate divided by the cycle length of its own
+	// sample, and two voices can be playing samples recorded at completely different rates
+	const std::size_t index = (channel >= 0 && channel < channelCount_) ? (std::size_t) channel : 0;
+	return *impl->tables[index];
 }
 
 Family C140Decoder::family (int channel) const
