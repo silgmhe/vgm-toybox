@@ -33,6 +33,7 @@ enum class Family
 	sccWave,		// K051649/SCC: the same idea at 16 clocks per sample
 	x1Wave,			// X1-010: a 128-byte wavetable stepped at clock * pitch / 2^26
 	c140Pcm,		// C140: a 16-bit playback rate over recorded samples, root rate in Pitch.h
+	c352Pcm,		// C352: the same idea with a 16-bit rate and an explicit key-on/key-off register
 	saaSquare,
 	pokeySquare,	// distortion and clock mode change the timbre, not the note
 	wsWave,			// WonderSwan: a 32-step waveform stepped at clock / (32 * (2048 - frequency))
@@ -50,6 +51,10 @@ struct RegisterWrite
 	std::uint8_t reg = 0;
 	std::uint8_t value = 0;
 	std::uint8_t port = 0;			// second port / second chip of a pair
+	/** The low byte of a sixteen-bit data register (the C352 is the only chip whose registers
+		are written as whole words, and its VGM command carries both bytes). Zero everywhere else,
+		where `value` alone is the write. */
+	std::uint8_t value2 = 0;
 	std::uint32_t sampleTime = 0;
 };
 

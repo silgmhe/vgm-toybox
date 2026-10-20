@@ -200,6 +200,7 @@ target_sources(VGMToybox PRIVATE
 	Source/chips/Rf5c68Decoder.cpp
 	Source/chips/X1_010Decoder.cpp
 	Source/chips/C140Decoder.cpp
+	Source/chips/C352Decoder.cpp
 	Source/chips/Ymf271Decoder.cpp
 	Source/chips/Ymz280bDecoder.cpp
 	Source/chips/Sn76489Decoder.cpp
@@ -340,6 +341,7 @@ add_executable(vgm_mixer_test EXCLUDE_FROM_ALL
 	Source/chips/Rf5c68Decoder.cpp
 	Source/chips/X1_010Decoder.cpp
 	Source/chips/C140Decoder.cpp
+	Source/chips/C352Decoder.cpp
 	Source/chips/Ymf271Decoder.cpp
 	Source/chips/Ymz280bDecoder.cpp
 	Source/chips/Sn76489Decoder.cpp
@@ -372,6 +374,7 @@ add_executable(vgm_chip_test EXCLUDE_FROM_ALL
 	Source/chips/Rf5c68Decoder.cpp
 	Source/chips/X1_010Decoder.cpp
 	Source/chips/C140Decoder.cpp
+	Source/chips/C352Decoder.cpp
 	Source/chips/Ymf271Decoder.cpp
 	Source/chips/Ymz280bDecoder.cpp
 	Source/chips/Sn76489Decoder.cpp
@@ -598,6 +601,18 @@ set(_toybox_c140_song "${CMAKE_CURRENT_SOURCE_DIR}/Tests/assets/c140.vgm")
 if(EXISTS "${_toybox_c140_song}")
 	add_test(NAME engine.c140 COMMAND vgm_mixer_test "${_toybox_c140_song}" 2)
 	set_tests_properties(engine.c140 PROPERTIES LABELS "integration" TIMEOUT 120)
+endif()
+
+# The C352 (M4): a sampled player like the C140, but its key-on is a separate write (offset 0x202)
+# rather than the flag write, and its registers are whole 16-bit words delivered by one 0xE1
+# command. c352.vgm keys two voices on a single execute write - voice 0 non-looping, ended by its
+# end address, voice 16 looping, ended by the key-off - and puts the second voice in ROM bank 1,
+# where only `bank << 16 | start` finds it. Four audible notes per voice therefore needs the
+# execute write, both bytes of the offset and both halves of every value.
+set(_toybox_c352_song "${CMAKE_CURRENT_SOURCE_DIR}/Tests/assets/c352.vgm")
+if(EXISTS "${_toybox_c352_song}")
+	add_test(NAME engine.c352 COMMAND vgm_mixer_test "${_toybox_c352_song}" 2)
+	set_tests_properties(engine.c352 PROPERTIES LABELS "integration" TIMEOUT 120)
 endif()
 
 # One test per script in Tests/scripts, discovered rather than listed: adding a script must not mean

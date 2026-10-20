@@ -1373,6 +1373,17 @@ int main (int argc, char* argv[])
 						<< (int) (sweep == nullptr ? 0u : sweep->ons.size()) << " captured)";
 			check (descending, sweepDetail);
 		}
+		else if (asset == "c352.vgm")
+		{
+			// Both voices are keyed by one execute write and play 100 ms out of the ROM: voice 0
+			// ends at its end address, voice 1 at the key-off. The pitches are the samples' own
+			// cycles (64 and 32 bytes at 28160 bytes a second), so they only come out right when
+			// the 0x92 block reached the decoder and the bank was folded into the address.
+			expectNote ("c352.vgm", { "C352", "Ch 1", 0, 0.00, 69 });
+			expectNote ("c352.vgm", { "C352", "Ch 1", 3, 0.60, 69 });
+			expectNote ("c352.vgm", { "C352", "Ch 2", 0, 0.00, 81 });
+			expectNote ("c352.vgm", { "C352", "Ch 2", 3, 0.60, 81 });
+		}
 	}
 
 	const juce::File outputFile = inputFile.withFileExtension (".rendered.wav");

@@ -14,6 +14,7 @@
 
 #include "chips/Ay8910Decoder.h"
 #include "chips/C140Decoder.h"
+#include "chips/C352Decoder.h"
 #include "chips/GbcApuDecoder.h"
 #include "chips/HuC6280Decoder.h"
 #include "chips/K051649Decoder.h"
@@ -2119,7 +2120,305 @@ namespace
 			   "a sample with no period keeps the root rate");
 	}
 
-int main (void)
+	// --- C352: a playback rate behind an explicit key-on write -----------------------------------
+
+	constexpr std::uint16_t kC352KeyOn = 0x4000;
+	constexpr std::uint16_t kC352KeyOff = 0x2000;
+	constexpr std::uint16_t kC352Loop = 0x0002;
+
+	std::vector<NoteEvent> runC352 (const Stream& stream, std::uint32_t totalSamples,
+									std::uint32_t clock = 12288000,
+									const std::vector<std::uint8_t>& rom = {})
+	{
+		toybox::chips::C352Decoder decoder;
+		decoder.reset (clock, 44100.0);
+		if (! rom.empty())
+		{
+			decoder.setRom (rom);
+		}
+
+		return toybox::chips::extractNotes (decoder, stream.writes, totalSamples);
+	}
+
+	/** One C352 register write: the VGM's 0xE1 carries a 16-bit big-endian offset and a 16-bit
+		big-endian value, so the offset's high byte goes in `port` and the value's two halves in
+		`value` / `value2`. */
+	void c352Write (Stream& stream, std::uint32_t time, std::uint16_t offset, std::uint16_t value)
+	{
+		RegisterWrite write;
+		write.port = (std::uint8_t) ((offset >> 8) & 0x7F);
+		write.reg = (std::uint8_t) (offset & 0xFF);
+		write.value = (std::uint8_t) (value >> 8);
+		write.value2 = (std::uint8_t) (value & 0xFF);
+		write.sampleTime = time;
+		stream.writes.push_back (write);
+	}
+
+	/** Volume on all four outputs, a sample from `start` to `end`, the loop register, the frequency
+		and the flags - everything but the execute write, which is what actually keys the voice on. */
+	void setC352Voice (Stream& stream, int voice, std::uint16_t start, std::uint16_t end,
+					   std::uint16_t loop, std::uint16_t frequency, std::uint16_t flags)
+	{
+		const std::uint16_t base = (std::uint16_t) (voice * 8);
+		c352Write (stream, 0, (std::uint16_t) (base + 0), 0xFFFF);		// front left/right
+		c352Write (stream, 0, (std::uint16_t) (base + 1), 0xFFFF);		// rear left/right
+		c352Write (stream, 0, (std::uint16_t) (base + 2), frequency);
+		c352Write (stream, 0, (std::uint16_t) (base + 4), 0x0000);		// bank 0
+		c352Write (stream, 0, (std::uint16_t) (base + 5), start);
+		c352Write (stream, 0, (std::uint16_t) (base + 6), end);
+		c352Write (stream, 0, (std::uint16_t) (base + 7), loop);
+		c352Write (stream, 0, (std::uint16_t) (base + 3), flags);
+	}
+
+	/** The execute write at offset 0x202: it starts every voice whose flag register asks for it. */
+	void c352Execute (Stream& stream, std::uint32_t time)
+	{
+		c352Write (stream, time, 0x0202, 0x0000);
+	}
+
+	/** `bytes` of a two-level waveform at `offset`, one cycle every `period` bytes. */
+	void fillC352Square (std::vector<std::uint8_t>& rom, std::size_t offset, int period,
+						 std::size_t bytes)
+	{
+		for (std::size_t i = 0; i < bytes; ++i)
+		{
+			const bool high = (i % (std::size_t) period) < (std::size_t) period / 2;
+			rom[offset + i] = high ? 0x50 : 0xB0;		// +80 / -80 as signed 8-bit PCM
+		}
+	}
+
+	/** The frequency that plays 28160 bytes a second at 12.288 MHz: the rate a 64-byte cycle turns
+		into 440 Hz. It is the rate the root-rate tests use, so their notes land where the root
+		puts them rather than on a rounding step. */
+	constexpr std::uint16_t kC352Rate28160 = 43254;
+
+	/** At 12.288 MHz the frequency register is a rate of `frequency * 12288000 / 18874368` bytes a
+		second, and 0x8000 is exactly the chip's own rate (`clock / 576`) - middle C. The note also
+		needs both bytes of the register to arrive: a decoder that kept only the low byte would read
+		zero and stay silent, and one that read the execute write as offset 0x02 would clear it. */
+	void testC352Note (void)
+	{
+		Stream stream;
+		setC352Voice (stream, 0, 0x0000, 0x0F00, 0x0000, 0x8000, kC352KeyOn);
+		c352Execute (stream, 10);
+
+		const auto notes = runC352 (stream, 20000);
+
+		check (notes.size() == 1, "a C352 key-on is one note");
+		if (notes.empty())
+		{
+			return;
+		}
+
+		check (notes[0].note == 60, "0x8000 at 12.288 MHz is 21333 bytes a second, middle C");
+		check (notes[0].logicalChannel == 0, "C352 voice 0 is its own track");
+		check (! notes[0].isDrum, "a sampled voice is a melodic track");
+		check (distance (notes[0].startSample, 10) <= 64, "the note starts at the execute write");
+		check (distance (notes[0].endSample, 7948) <= 64,
+			   "3840 bytes at 21333 a second is 180 ms, with no key-off written");
+	}
+
+	/** The flag write is not the key-on: the core only starts a voice when offset 0x202 is written,
+		so a decoder that keyed on the flag would start every note a command early - and one that
+		ignored 0x202 would never start any. */
+	void testC352KeyOnIsTheExecuteWrite (void)
+	{
+		Stream stream;
+		setC352Voice (stream, 0, 0x0000, 0x0F00, 0x0000, 0x8000, kC352KeyOn);
+
+		check (runC352 (stream, 20000).empty(), "the key-on flag alone starts nothing");
+
+		c352Execute (stream, 1000);
+		const auto notes = runC352 (stream, 20000);
+
+		check (notes.size() == 1 && distance (notes[0].startSample, 1000) <= 64,
+			   "the execute write is where the note begins");
+	}
+
+	/** The length is the sample's own size: half the bytes, half the note. */
+	void testC352EndAddressSetsTheLength (void)
+	{
+		Stream stream;
+		setC352Voice (stream, 0, 0x0000, 0x0780, 0x0000, 0x8000, kC352KeyOn);
+		c352Execute (stream, 10);
+
+		const auto notes = runC352 (stream, 20000);
+
+		check (notes.size() == 1 && distance (notes[0].endSample, 3979) <= 64,
+			   "1920 bytes at 21333 a second is 90 ms");
+	}
+
+	/** With the loop bit the pointer jumps back to the loop address, so the end address never
+		arrives and only the driver's key-off - its flag plus the execute write - stops the voice. */
+	void testC352KeyOffEndsALoopingVoice (void)
+	{
+		Stream stream;
+		setC352Voice (stream, 0, 0x0000, 0x0400, 0x0000, 0x8000, (std::uint16_t) (kC352KeyOn | kC352Loop));
+		c352Execute (stream, 10);
+		c352Write (stream, 8000, 0x0003, (std::uint16_t) (kC352KeyOff | kC352Loop));
+		c352Execute (stream, 8000);
+
+		const auto notes = runC352 (stream, 20000);
+
+		check (notes.size() == 1 && distance (notes[0].endSample, 8000) <= 64,
+			   "a looping voice runs past its end and only a key-off stops it");
+	}
+
+	/** Silence is not a note: zero on all four outputs attenuates the voice to nothing, and a
+		frequency of zero never carries the counter over, so the core fetches no byte at all. */
+	void testC352SilentVoiceIsNoNote (void)
+	{
+		Stream stream;
+		c352Write (stream, 0, 0x0002, 0x8000);		// frequency, but the volumes stay 0
+		c352Write (stream, 0, 0x0006, 0x0F00);
+		c352Write (stream, 0, 0x0003, kC352KeyOn);
+		c352Execute (stream, 10);
+
+		check (runC352 (stream, 20000).empty(), "a voice at zero volume is not a note");
+
+		Stream noFrequency;
+		setC352Voice (noFrequency, 0, 0x0000, 0x0F00, 0x0000, 0x0000, kC352KeyOn);
+		c352Execute (noFrequency, 10);
+
+		check (runC352 (noFrequency, 20000).empty(), "a voice with no frequency is silent");
+	}
+
+	/** Every voice register is a whole word, and the two halves of one arrive in one command - so
+		the volume pair and the frequency are only right when both bytes are used. The keyed bit
+		here sits in the high half of the flag word, which a low-byte-only decoder would miss. */
+	void testC352RegistersAreSixteenBits (void)
+	{
+		Stream stream;
+		c352Write (stream, 0, 0x0000, 0xFF00);		// front left only: the high half of vol_f
+		c352Write (stream, 0, 0x0001, 0x00FF);		// rear right only: the low half of vol_r
+		c352Write (stream, 0, 0x0002, 0x8000);
+		c352Write (stream, 0, 0x0006, 0x0F00);
+		c352Write (stream, 0, 0x0003, kC352KeyOn);
+		c352Execute (stream, 10);
+
+		const auto notes = runC352 (stream, 20000);
+
+		check (notes.size() == 1 && notes[0].note == 60,
+			   "one output channel at full volume is a note, and the volume pairs are words");
+	}
+
+	/** With the ROM, the note is the sample's own pitch: 28160 bytes a second over a 64-byte cycle
+		is 440 Hz, A4 - not the 65 the root rate claims for the same rate. */
+	void testC352SamplePeriodIsTheNote (void)
+	{
+		std::vector<std::uint8_t> rom (0x2000, 0);
+		fillC352Square (rom, 0x0000, 64, 2816);
+
+		Stream stream;
+		setC352Voice (stream, 0, 0x0000, 2816, 0x0000, kC352Rate28160, kC352KeyOn);
+		c352Execute (stream, 10);
+
+		const auto notes = runC352 (stream, 20000, 12288000, rom);
+
+		check (notes.size() == 1, "one non-looping C352 voice is one note");
+		if (notes.empty())
+		{
+			return;
+		}
+
+		check (notes[0].note == 69, "64 bytes a cycle at 28160 a second is 440 Hz, A4");
+	}
+
+	/** Without a ROM nothing can be measured, so the root rate still decides: 28160 bytes a second
+		against the chip's own 21333 is a fourth up, MIDI 65. */
+	void testC352WithoutRomKeepsTheRootRate (void)
+	{
+		Stream stream;
+		setC352Voice (stream, 0, 0x0000, 2816, 0x0000, kC352Rate28160, kC352KeyOn);
+		c352Execute (stream, 10);
+
+		const auto notes = runC352 (stream, 20000);
+
+		check (notes.size() == 1 && notes[0].note == 65,
+			   "28160 bytes a second against the clock/576 root is F4 without a ROM");
+	}
+
+	/** A sample that never repeats - a drum, noise - must not get an invented pitch: its bytes
+		correlate with nothing, so the root rate decides there too. */
+	void testC352NoisySampleFallsBackToTheRootRate (void)
+	{
+		std::vector<std::uint8_t> rom (0x2000, 0);
+		std::uint32_t seed = 12345u;
+		for (int i = 0; i < 2816; ++i)
+		{
+			seed = seed * 1103515245u + 12345u;
+			rom[0x0000 + (std::size_t) i] = (std::uint8_t) (seed >> 16);
+		}
+
+		Stream stream;
+		setC352Voice (stream, 0, 0x0000, 2816, 0x0000, kC352Rate28160, kC352KeyOn);
+		c352Execute (stream, 10);
+
+		const auto notes = runC352 (stream, 20000, 12288000, rom);
+
+		check (notes.size() == 1 && notes[0].note == 65,
+			   "a sample with no period keeps the root rate");
+	}
+
+	/** A sample address is `(bank << 16) | start`, and the core masks it with the ROM's size - so
+		the same start offset in bank 1 is a different sample, 64 KB further in. A decoder that
+		dropped the bank would measure the wrong waveforms and send the same note twice. */
+	void testC352BankIsPartOfTheAddress (void)
+	{
+		std::vector<std::uint8_t> rom (0x20000, 0);
+		fillC352Square (rom, 0x0000, 64, 2816);			// bank 0: 440 Hz at this rate
+		fillC352Square (rom, 0x10000, 32, 2816);		// bank 1: an octave up
+
+		Stream low;
+		setC352Voice (low, 0, 0x0000, 2816, 0x0000, kC352Rate28160, kC352KeyOn);
+		c352Execute (low, 10);
+
+		Stream high;
+		c352Write (high, 0, 0x0000, 0xFFFF);
+		c352Write (high, 0, 0x0001, 0xFFFF);
+		c352Write (high, 0, 0x0002, kC352Rate28160);
+		c352Write (high, 0, 0x0004, 0x0001);			// bank 1
+		c352Write (high, 0, 0x0005, 0x0000);
+		c352Write (high, 0, 0x0006, 2816);
+		c352Write (high, 0, 0x0003, kC352KeyOn);
+		c352Execute (high, 10);
+
+		const auto lowNotes = runC352 (low, 20000, 12288000, rom);
+		const auto highNotes = runC352 (high, 20000, 12288000, rom);
+
+		check (lowNotes.size() == 1 && lowNotes[0].note == 69,
+			   "bank 0 start 0 is the 64-byte cycle, A4");
+		check (highNotes.size() == 1 && highNotes[0].note == 81,
+			   "bank 1 start 0 is 64 KB further in, and an octave up");
+	}
+
+	/** Thirty-two voices, and the voice number is the offset divided by eight - so the high voices
+		only exist when the whole 16-bit offset is reassembled. */
+	void testC352HighVoices (void)
+	{
+		toybox::chips::C352Decoder decoder;
+		check (decoder.channelCount() == 32, "the C352 has thirty-two voices");
+
+		Stream stream;
+		setC352Voice (stream, 16, 0x0000, 0x0F00, 0x0000, 0x8000, kC352KeyOn);
+		setC352Voice (stream, 31, 0x0000, 0x0F00, 0x0000, 0x4000, kC352KeyOn);
+		c352Execute (stream, 10);
+
+		const auto notes = runC352 (stream, 20000);
+
+		check (notes.size() == 2, "both high voices key on");
+		if (notes.size() != 2)
+		{
+			return;
+		}
+
+		check (notes[0].logicalChannel == 16 && notes[0].note == 60,
+			   "offset 0x080 is voice 16, at middle C");
+		check (notes[1].logicalChannel == 31 && notes[1].note == 48,
+			   "offset 0x0F8 is voice 31, an octave below");
+	}
+
+	int main (void)
 {
 	std::printf ("chip decoder test\n");
 
@@ -2228,6 +2527,18 @@ int main (void)
 	testC140WithoutRomKeepsTheRootRate();
 	testC140NoisySampleFallsBackToTheRootRate();
 	testC140System2BankIsFolded();
+
+	testC352Note();
+	testC352KeyOnIsTheExecuteWrite();
+	testC352EndAddressSetsTheLength();
+	testC352KeyOffEndsALoopingVoice();
+	testC352SilentVoiceIsNoNote();
+	testC352RegistersAreSixteenBits();
+	testC352SamplePeriodIsTheNote();
+	testC352WithoutRomKeepsTheRootRate();
+	testC352NoisySampleFallsBackToTheRootRate();
+	testC352BankIsPartOfTheAddress();
+	testC352HighVoices();
 
 	std::printf ("Result    : %s\n", failures == 0 ? "PASS" : "FAILURES");
 	return failures == 0 ? 0 : 1;

@@ -37,7 +37,8 @@ struct VgmCommand
 									// for 0xC8 (X1-010) it carries the high byte of the 16-bit offset
 	std::uint8_t addr = 0;			// register / index byte
 	std::uint8_t data = 0;			// value byte
-	std::uint8_t data2 = 0;			// second value byte of a pair write
+	std::uint8_t data2 = 0;			// second value byte of a pair write; for 0xE1 (C352) the
+									// low byte of the 16-bit value, `data` being the high one
 	std::uint32_t sampleTime = 0;	// absolute position of the command, in 44100 Hz samples
 };
 

@@ -125,6 +125,13 @@ namespace
 			// end address gives the voice a length, which is what makes it melodic and not a
 			// one-shot guess. A zero-volume voice reports nothing, the same way the chip is silent.
 			return fmChannel (24);
+		case DEVID_C352:
+			// Thirty-two sampled voices, the C140's closest relative: the frequency register is a
+			// playback rate, the note comes from that rate and the ROM sample's own cycle length,
+			// and the length comes from the end address or from a key-off. Its key-on is a write
+			// of its own (offset 0x202), which is why the decoder cannot report a note at the flag
+			// write - but the promise is the same one the C140 makes: melodic, not a trigger.
+			return fmChannel (32);
 		case DEVID_X1_010:
 			// Sixteen channels, and the same channel is either a wavetable voice or a PCM player
 			// depending on one status bit. The capability is static, so it states what the channel

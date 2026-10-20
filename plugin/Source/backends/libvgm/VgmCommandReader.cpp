@@ -326,6 +326,20 @@ bool VgmCommandReader::next (VgmCommand& command)
 			command.addr = (std::uint8_t) (offset & 0xFF);
 			command.data = data[position + 3];
 		}
+		else if (cmd == 0xE1)
+		{
+			// C352: a 16-bit big-endian offset and a 16-bit big-endian value - the only command
+			// where the register write is a whole word. Bit 15 of the offset picks the second chip
+			// and the rest is the offset, so the high byte travels in `port` as the C140's does;
+			// the value's two halves go in `data` (high) and `data2` (low).
+			const std::uint16_t offset = (std::uint16_t) (((std::uint16_t) data[position + 1] << 8)
+														  | (std::uint16_t) data[position + 2]);
+			command.kind = VgmCommand::Kind::registerWrite;
+			command.port = (std::uint8_t) ((offset >> 8) & 0xFF);
+			command.addr = (std::uint8_t) (offset & 0xFF);
+			command.data = data[position + 3];
+			command.data2 = data[position + 4];
+		}
 		else if (cmd == 0xD1)
 		{
 			// YMF271 (OPX): the port byte carries the chip in bit 7 and the bank in the low seven

@@ -29,150 +29,26 @@ namespace
 	constexpr std::uint8_t kModeLoop = 0x10;
 	constexpr std::uint8_t kModeKeyOn = 0x80;
 
-	// The period search: a window of two kilobytes of the loop region is several cycles of the
-	// lowest note a C140 sample is likely to hold, and one kilobyte of lag reaches a 8 Hz cycle.
-	constexpr std::size_t kPeriodWindowBytes = 2048;
-	constexpr int kMinLag = 8;
-	constexpr int kMaxLag = 1024;
-
 	/** The length of one cycle of a recorded sample, in bytes.
 
 		The chip never states it: a C140 sample is raw 8-bit PCM, and a note is the playback rate
-		divided by this length. The length is measured by autocorrelation over the loop region -
-		the part a sustained note repeats - so the result does not depend on where the sample
-		began or on an attack transient. The loop itself refines it: a driver loops a whole number
-		of cycles, so the estimate is snapped to `loopLength / round (loopLength / period)`, which
-		turns a period good to a fraction of a byte into one good to a fraction of a cent over the
-		whole loop.
+		divided by this length. The measurement itself is `chips::estimateCycleLength()` in
+		Pitch.h, shared with the other sampled players (the C352 is the second one) - it takes the
+		waveform as doubles so a sampled chip can hand over decoded mu-law bytes. This wrapper only
+		turns the sample's bytes into that waveform; the loop argument says which part repeats.
 
 		Returns 0 for a sample whose period does not stand out (a drum, noise, a one-shot with no
 		loop), which the caller reads as "use the root rate". */
 	double estimateSamplePeriod (const std::uint8_t* sample, std::size_t size,
 								 std::size_t loopOffset, std::size_t loopLength)
 	{
-		if (sample == nullptr || size < 64)
+		if (sample == nullptr)
 		{
 			return 0.0;
 		}
 
-		std::size_t begin = 0;
-		std::size_t length = size;
-		if (loopLength >= 128 && loopOffset + loopLength <= size)
-		{
-			begin = loopOffset;
-			length = loopLength;
-		}
-
-		length = std::min (length, kPeriodWindowBytes);
-		if (length < 4 * (std::size_t) kMinLag)
-		{
-			return 0.0;
-		}
-
-		const std::uint8_t* x = sample + begin;
-		double mean = 0.0;
-		for (std::size_t i = 0; i < length; ++i)
-		{
-			mean += (double) x[i];
-		}
-
-		mean /= (double) length;
-
-		const int maxLag = (int) std::min<std::size_t> (length / 2, (std::size_t) kMaxLag);
-		if (maxLag <= kMinLag)
-		{
-			return 0.0;
-		}
-
-		std::vector<double> correlation ((std::size_t) maxLag + 2, 0.0);
-		for (int lag = kMinLag; lag <= maxLag; ++lag)
-		{
-			double product = 0.0;
-			double energyA = 0.0;
-			double energyB = 0.0;
-			for (std::size_t i = 0; i + (std::size_t) lag < length; ++i)
-			{
-				const double a = (double) x[i] - mean;
-				const double b = (double) x[i + (std::size_t) lag] - mean;
-				product += a * b;
-				energyA += a * a;
-				energyB += b * b;
-			}
-
-			correlation[(std::size_t) lag] = (energyA > 0.0 && energyB > 0.0)
-												 ? product / std::sqrt (energyA * energyB)
-												 : 0.0;
-		}
-
-		// the strongest local maximum: a period is a lag the signal repeats at, and a maximum
-		// rather than a shoulder of one keeps a harmonic from winning by being next to it
-		double best = 0.0;
-		for (int lag = kMinLag; lag <= maxLag; ++lag)
-		{
-			const double value = correlation[(std::size_t) lag];
-			if (value > correlation[(std::size_t) (lag - 1)] && value >= correlation[(std::size_t) (lag + 1)])
-			{
-				best = std::max (best, value);
-			}
-		}
-
-		if (best < 0.80)
-		{
-			return 0.0;		// nothing repeats: a drum, noise, or a sample too short to hold a cycle
-		}
-
-		// the shortest lag that is as good as the best one: a signal that repeats every L bytes
-		// also repeats every 2 L, and the note is the fundamental, not the octave
-		int chosen = -1;
-		const double acceptable = best - 0.02;
-		for (int lag = kMinLag; lag <= maxLag; ++lag)
-		{
-			const double value = correlation[(std::size_t) lag];
-			if (value >= acceptable && value > correlation[(std::size_t) (lag - 1)]
-				&& value >= correlation[(std::size_t) (lag + 1)])
-			{
-				chosen = lag;
-				break;
-			}
-		}
-
-		if (chosen < 0)
-		{
-			return 0.0;
-		}
-
-		// parabolic interpolation: the true period rarely lands on a whole lag
-		double period = (double) chosen;
-		if (chosen > kMinLag && chosen < maxLag)
-		{
-			const double before = correlation[(std::size_t) (chosen - 1)];
-			const double here = correlation[(std::size_t) chosen];
-			const double after = correlation[(std::size_t) (chosen + 1)];
-			const double curvature = before - 2.0 * here + after;
-			if (curvature < 0.0)
-			{
-				period += std::max (-0.5, std::min (0.5, 0.5 * (before - after) / curvature));
-			}
-		}
-
-		if (period <= 0.0)
-		{
-			return 0.0;
-		}
-
-		// the loop is a whole number of cycles, and that constraint is far more precise than the
-		// correlation: a 6770-byte loop of 89 cycles states the period to a hundredth of a byte
-		if (loopLength >= 128)
-		{
-			const double cycles = (double) loopLength / period;
-			const double rounded = std::floor (cycles + 0.5);
-			if (rounded >= 1.0 && std::fabs (cycles - rounded) < 0.35)
-			{
-				period = (double) loopLength / rounded;
-			}
-		}
-
-		return period;
+		const std::vector<double> waveform (sample, sample + size);
+		return estimateCycleLength (waveform, loopOffset, loopLength);
 	}
 
 	/** One note table per voice: the mapping now depends on the voice's sample as well as on the

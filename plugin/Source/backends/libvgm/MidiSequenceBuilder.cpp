@@ -9,6 +9,7 @@
 
 #include "chips/Ay8910Decoder.h"
 #include "chips/C140Decoder.h"
+#include "chips/C352Decoder.h"
 #include "chips/GbcApuDecoder.h"
 #include "chips/HuC6280Decoder.h"
 #include "chips/K051649Decoder.h"
@@ -149,6 +150,14 @@ namespace
 					opx.queue (deviceFor (DEVID_YMF271, (command.port >> 7) & 1), command.addr,
 							   command.data, command.sampleTime,
 							   (std::uint8_t) (command.port & 0x7F));
+					break;
+				case 0xE1:
+					// C352: a 16-bit offset and a 16-bit value, so unlike every other chip the
+					// register write is a whole word - the reader split it across `data` (high) and
+					// `data2` (low), and bit 7 of the port byte picks the chip.
+					c352.queue (deviceFor (DEVID_C352, (command.port >> 7) & 1), command.addr,
+								command.data, command.sampleTime,
+								(std::uint8_t) (command.port & 0x7F), command.data2);
 					break;
 
 
@@ -292,7 +301,8 @@ namespace
 			// offset is the header's byte 0x96 - both are part of the same fact, so they travel
 			// together and the decoder cannot read one without the other.
 			const std::vector<std::uint8_t> c140Rom =
-				c140.writes.empty() ? std::vector<std::uint8_t>() : assembleRom (reader, 0x8D);
+				c140.writes.empty() ? std::vector<std::uint8_t>()
+									: assembleRom (reader, 0x8D, 2 * 1024 * 1024);
 			const auto c140Banking = chips::C140Decoder::bankingFromHeaderByte (reader.c140Banking());
 			flushDecoded (c140, 8000000u, lastSampleTime,
 						  [&c140Rom, c140Banking] (chips::C140Decoder& decoder)
@@ -300,6 +310,21 @@ namespace
 							  if (! c140Rom.empty())
 							  {
 								  decoder.setRom (c140Rom, c140Banking);
+							  }
+						  });
+
+			// The C352 needs its ROM for the same reason, from its own block type (0x92), and its
+			// sample address is `bank << 16 | start`, so the image is the whole ROM the song
+			// declares - the chip masks it to a power of two rather than clipping at 2 MB.
+			const std::vector<std::uint8_t> c352Rom =
+				c352.writes.empty() ? std::vector<std::uint8_t>()
+									: assembleRom (reader, 0x92, 32 * 1024 * 1024);
+			flushDecoded (c352, 12288000u, lastSampleTime,
+						  [&c352Rom] (chips::C352Decoder& decoder)
+						  {
+							  if (! c352Rom.empty())
+							  {
+								  decoder.setRom (c352Rom);
 							  }
 						  });
 			flushDecoded (opx, 16934400u, lastSampleTime);
@@ -540,7 +565,7 @@ namespace
 		struct ChipBuffer
 		{
 			void queue (const PLR_DEV_INFO* device, std::uint8_t reg, std::uint8_t value,
-						std::uint32_t sampleTime, std::uint8_t port = 0)
+						std::uint32_t sampleTime, std::uint8_t port = 0, std::uint8_t value2 = 0)
 			{
 				if (device == nullptr)
 				{
@@ -552,6 +577,7 @@ namespace
 				write.reg = reg;
 				write.value = value;
 				write.port = port;
+				write.value2 = value2;
 				write.sampleTime = sampleTime;
 				writes[device->id].push_back (write);
 				devices[device->id] = device;
@@ -610,7 +636,8 @@ namespace
 			buffer.devices.clear();
 		}
 
-		/** Assembles one ROM from the stream's blocks of `type` (0x8D is the C140's sample ROM).
+		/** Assembles one ROM from the stream's blocks of `type` (0x8D is the C140's sample ROM,
+			0x92 the C352's).
 
 			A ROM block carries the size of the whole ROM and where its payload belongs in it, so
 			the image is the union of the blocks at their own offsets - a song can split a megabyte
@@ -620,15 +647,14 @@ namespace
 			size comes from the file, so it is clipped to what the chip can address instead of
 			trusted with an allocation.
 
-			The ROM is what makes the C140's notes mean something: the playback rate is a register,
-			but the sample's own cycle length - the number the rate has to be divided by - only
-			exists in these bytes. See chips/C140Decoder.h for the measurement and the reason it
-			cannot be skipped. */
+			The ROM is what makes a sampled player's notes mean something: its playback rate is a
+			register, but the sample's own cycle length - the number the rate has to be divided by -
+			only exists in these bytes. See chips/C140Decoder.h and chips/C352Decoder.h for the
+			measurement (shared through chips/Pitch.h) and the reason it cannot be skipped. */
 		static std::vector<std::uint8_t> assembleRom (const VgmCommandReader& reader,
-													  std::uint8_t type)
+													  std::uint8_t type,
+													  std::size_t maxRomBytes)
 		{
-			constexpr std::size_t kMaxRomBytes = 2 * 1024 * 1024;	// the C140 addresses 21 bits
-
 			std::size_t romSize = 0;
 			for (const auto& block : reader.dataBlocks())
 			{
@@ -639,7 +665,7 @@ namespace
 			}
 
 			std::vector<std::uint8_t> rom;
-			romSize = std::min (romSize, kMaxRomBytes);
+			romSize = std::min (romSize, maxRomBytes);
 			if (romSize == 0)
 			{
 				return rom;
@@ -836,6 +862,9 @@ namespace
 		// the C140's note length comes from its end address, but only the whole stream says when
 		// a voice was keyed on, so its writes wait for the end as well
 		ChipBuffer<chips::C140Decoder> c140;
+		// the C352 is the same reader with an explicit key-on write, and its notes are measured
+		// from the ROM its 0x92 block carries
+		ChipBuffer<chips::C352Decoder> c352;
 		std::vector<playback::MidiEvent> events;
 	};
 }
