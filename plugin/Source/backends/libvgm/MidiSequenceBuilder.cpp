@@ -7,6 +7,7 @@
 #include "VgmCommandReader.h"
 
 #include "chips/Ay8910Decoder.h"
+#include "chips/C140Decoder.h"
 #include "chips/GbcApuDecoder.h"
 #include "chips/HuC6280Decoder.h"
 #include "chips/K051649Decoder.h"
@@ -132,6 +133,14 @@ namespace
 					// X1-010: the 16-bit offset arrived split across addr (low) and port (high).
 					x1.queue (deviceFor (DEVID_X1_010, 0), command.addr, command.data,
 							  command.sampleTime, command.port);
+					break;
+				case 0xD4:
+					// C140: bit 7 of the port byte is the chip instance, the rest is the high byte
+					// of the register offset - a voice's registers are sixteen apart, so the note
+					// registers only line up when both halves arrive.
+					c140.queue (deviceFor (DEVID_C140, (command.port >> 7) & 1), command.addr,
+								command.data, command.sampleTime,
+								(std::uint8_t) (command.port & 0x7F));
 					break;
 				case 0xD1:
 					// YMF271: bit 7 of the port byte is the chip instance, the rest is the bank the
@@ -273,6 +282,7 @@ namespace
 			flushDecoded (ay, 1789773u, lastSampleTime);
 			flushDecoded (rf5c, 12500000u, lastSampleTime);
 			flushDecoded (x1, 16000000u, lastSampleTime);
+			flushDecoded (c140, 8000000u, lastSampleTime);
 			flushDecoded (opx, 16934400u, lastSampleTime);
 			flushDecoded (ymz, 16934400u, lastSampleTime);
 
@@ -744,6 +754,9 @@ namespace
 		ChipBuffer<chips::X1_010Decoder> x1;
 		ChipBuffer<chips::Ymf271Decoder> opx;
 		ChipBuffer<chips::Ymz280bDecoder> ymz;
+		// the C140's note length comes from its end address, but only the whole stream says when
+		// a voice was keyed on, so its writes wait for the end as well
+		ChipBuffer<chips::C140Decoder> c140;
 		std::vector<playback::MidiEvent> events;
 	};
 }

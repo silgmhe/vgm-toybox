@@ -294,6 +294,18 @@ bool VgmCommandReader::next (VgmCommand& command)
 			command.addr = data[position + 2];
 			command.data = data[position + 3];
 		}
+		else if (cmd == 0xD4)
+		{
+			// C140: the same 16-bit big-endian offset as the X1-010, and the same split - bit 7 of
+			// the first byte picks the chip, the rest is the high byte of the address. The voices
+			// are the low 0x180 of it, so the decoder needs both halves.
+			const std::uint16_t offset = (std::uint16_t) (((std::uint16_t) data[position + 1] << 8)
+														  | (std::uint16_t) data[position + 2]);
+			command.kind = VgmCommand::Kind::registerWrite;
+			command.port = (std::uint8_t) ((offset >> 8) & 0xFF);
+			command.addr = (std::uint8_t) (offset & 0xFF);
+			command.data = data[position + 3];
+		}
 		else if (cmd == 0xD1)
 		{
 			// YMF271 (OPX): the port byte carries the chip in bit 7 and the bank in the low seven

@@ -38,4 +38,34 @@ inline int quantiseFrequency (double hz, int* finePitch)
 	return rounded;
 }
 
+/** Middle C: the pitch a sample player's ROM is taken to stand at when it plays back at its
+	recorded rate. */
+constexpr double kMiddleCHz = 261.6255653005986;
+
+/** Turns the playback rate of a recorded sample into a note.
+
+	A sampled voice carries no pitch in its registers, only the number of bytes a second the chip
+	advances the sample pointer at. The pitch it sounds is that rate divided by the rate the ROM
+	was recorded at - which is in no register either. So the mapping needs a reference: `rootRate`
+	is the rate at which the ROM plays back at its own pitch, and that playback is taken to be
+	middle C. Chips differ in how they derive the rate, and their drivers in what they call the
+	root, so the root is an argument rather than a constant; the MIDI output settings will make it a
+	preference (design doc section 11.1), which is why it is not baked into any one decoder.
+
+	Returns -1 for a zero rate, which the note extractor reads as "silent". */
+inline int quantisePlaybackRate (double rate, double rootRate, int* finePitch)
+{
+	if (finePitch != nullptr)
+	{
+		*finePitch = 0;
+	}
+
+	if (rate <= 0.0 || rootRate <= 0.0)
+	{
+		return -1;
+	}
+
+	return quantiseFrequency (kMiddleCHz * rate / rootRate, finePitch);
+}
+
 } // namespace toybox::chips

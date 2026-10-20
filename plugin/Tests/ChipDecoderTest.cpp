@@ -12,6 +12,7 @@
 #include <vector>
 
 #include "chips/Ay8910Decoder.h"
+#include "chips/C140Decoder.h"
 #include "chips/GbcApuDecoder.h"
 #include "chips/HuC6280Decoder.h"
 #include "chips/K051649Decoder.h"
@@ -1826,6 +1827,165 @@ namespace
 		}
 	}
 
+	// --- C140: a playback rate, an end address and a loop bit ---------------------------------
+
+	std::vector<NoteEvent> runC140 (const Stream& stream, std::uint32_t totalSamples,
+									std::uint32_t clock = 8000000)
+	{
+		toybox::chips::C140Decoder decoder;
+		decoder.reset (clock, 44100.0);
+		return toybox::chips::extractNotes (decoder, stream.writes, totalSamples);
+	}
+
+	/** Volume, a sample at 0x1000 with 1344 bytes, and the frequency for 13440 bytes a second. */
+	void setC140Voice (Stream& stream, std::uint8_t port, std::uint8_t base)
+	{
+		stream.at (0, port, base, 0xFF);			// volume right
+		stream.at (0, port, (std::uint8_t) (base + 1), 0xFF);	// volume left
+		stream.at (0, port, (std::uint8_t) (base + 6), 0x10);	// start 0x1000
+		stream.at (0, port, (std::uint8_t) (base + 7), 0x00);
+		stream.at (0, port, (std::uint8_t) (base + 8), 0x15);	// end 0x1540
+		stream.at (0, port, (std::uint8_t) (base + 9), 0x40);
+		stream.at (0, port, (std::uint8_t) (base + 2), 0x7B);	// frequency 31711
+		stream.at (0, port, (std::uint8_t) (base + 3), 0xDF);
+	}
+
+	/** The frequency register is a rate, not a note: at 8 MHz 31711 is 13440 bytes a second, and
+		against the 8 kHz root rate that is A4. The sample is 1344 bytes, so the note lasts 100 ms -
+		and no key-off is ever written, because the end address ends it. */
+	void testC140Note (void)
+	{
+		Stream stream;
+		setC140Voice (stream, 0x00, 0x00);
+		stream.at (10, 0x05, 0x80);			// key on, no loop
+
+		const auto notes = runC140 (stream, 20000);
+
+		check (notes.size() == 1, "a C140 key-on is one note");
+		if (notes.empty())
+		{
+			return;
+		}
+
+		check (notes[0].note == 69, "31711 at 8 MHz is 13440 bytes a second, A4");
+		check (notes[0].logicalChannel == 0, "C140 voice 0 is its own track");
+		check (! notes[0].isDrum, "a sampled voice is a melodic track");
+		check (distance (notes[0].endSample, 4420) <= 64, "the end address ends the note at 100 ms");
+	}
+
+	/** The length is the sample's own size, not a fixed window: half the bytes, half the note. */
+	void testC140EndAddressSetsTheLength (void)
+	{
+		Stream stream;
+		setC140Voice (stream, 0x00, 0x00);
+		stream.at (0, 0x08, 0x12);			// end 0x12A0: 672 bytes
+		stream.at (0, 0x09, 0xA0);
+		stream.at (10, 0x05, 0x80);
+
+		const auto notes = runC140 (stream, 20000);
+
+		check (notes.size() == 1 && distance (notes[0].endSample, 2215) <= 64,
+			   "672 bytes at 13440 a second is 50 ms");
+	}
+
+	/** start/end/loop are latched at key-on, where the core copies them into the voice: moving the
+		end mid-note changes the next note, not the one playing. */
+	void testC140EndAddressIsLatchedAtKeyOn (void)
+	{
+		Stream stream;
+		setC140Voice (stream, 0x00, 0x00);
+		stream.at (10, 0x05, 0x80);
+		stream.at (1000, 0x08, 0x10);		// end 0x1080 mid-note: 128 bytes
+		stream.at (1000, 0x09, 0x80);
+
+		const auto notes = runC140 (stream, 20000);
+
+		check (notes.size() == 1 && distance (notes[0].endSample, 4420) <= 64,
+			   "the end address only takes effect on the next key-on");
+	}
+
+	/** With the loop bit the pointer wraps, so the end address never arrives and only a mode write
+		without bit 7 - the driver's key-off - stops the voice. */
+	void testC140LoopRunsUntilKeyOff (void)
+	{
+		Stream stream;
+		setC140Voice (stream, 0x00, 0x00);
+		stream.at (0, 0x0A, 0x10);			// loop back to the start
+		stream.at (0, 0x0B, 0x00);
+		stream.at (10, 0x05, 0x90);			// key on with loop
+		stream.at (8000, 0x05, 0x10);		// loop bit only: the key-off
+
+		const auto notes = runC140 (stream, 20000);
+
+		check (notes.size() == 1 && distance (notes[0].endSample, 8000) <= 64,
+			   "a looping voice runs past its end and only a key-off stops it");
+	}
+
+	/** The rate is the frequency times the clock, so doubling the clock is an octave. */
+	void testC140ClockDoublesThePitch (void)
+	{
+		Stream stream;
+		setC140Voice (stream, 0x00, 0x00);
+		stream.at (10, 0x05, 0x80);
+
+		const auto notes = runC140 (stream, 20000, 16000000);
+
+		check (notes.size() == 1 && notes[0].note == 81, "double the clock is an octave up");
+	}
+
+	/** Silence is not a note: both volumes at zero attenuate the voice to nothing, and the core
+		skips a voice whose frequency is zero (`if (frequency == 0) continue;`). */
+	void testC140SilentVoiceIsNoNote (void)
+	{
+		Stream stream;
+		stream.at (0, 0x06, 0x10);
+		stream.at (0, 0x07, 0x00);
+		stream.at (0, 0x08, 0x15);
+		stream.at (0, 0x09, 0x40);
+		stream.at (0, 0x02, 0x7B);
+		stream.at (0, 0x03, 0xDF);
+		stream.at (10, 0x05, 0x80);			// keyed, but the volumes stay at 0
+
+		check (runC140 (stream, 20000).empty(), "a voice at zero volume is not a note");
+
+		Stream zeroFrequency;
+		zeroFrequency.at (0, 0x00, 0xFF);
+		zeroFrequency.at (0, 0x01, 0xFF);
+		zeroFrequency.at (0, 0x06, 0x10);
+		zeroFrequency.at (0, 0x07, 0x00);
+		zeroFrequency.at (0, 0x08, 0x15);
+		zeroFrequency.at (0, 0x09, 0x40);
+		zeroFrequency.at (10, 0x05, 0x80);	// no frequency written at all
+
+		check (runC140 (zeroFrequency, 20000).empty(), "the core skips a zero-frequency voice");
+	}
+
+	/** Voices 16 and up live at offsets of 0x100 and above, so 0xD4's high offset byte is the only
+		thing that says which voice a write belongs to; a decoder that dropped it would put every
+		note on a low voice and still look right. */
+	void testC140HighVoiceNeedsTheHighOffsetByte (void)
+	{
+		toybox::chips::C140Decoder decoder;
+		check (decoder.channelCount() == 24, "the C140 has twenty-four voices");
+
+		Stream stream;
+		setC140Voice (stream, 0x01, 0x00);		// port 1, register 0: voice 16
+		stream.at (0, 0x01, 0x02, 0xF7);		// frequency 63422, an octave above the helper's A4
+		stream.at (0, 0x01, 0x03, 0xBE);
+		stream.at (10, 0x01, 0x05, 0x80);
+
+		const auto notes = runC140 (stream, 20000);
+
+		check (notes.size() == 1, "a voice above 0xFF still keys on");
+		if (notes.empty())
+		{
+			return;
+		}
+
+		check (notes[0].logicalChannel == 16, "offset 0x105 is voice 16, not voice 0");
+		check (notes[0].note == 81, "and it keeps its own frequency, an octave above voice 0's");
+	}
+
 int main (void)
 {
 	std::printf ("chip decoder test\n");
@@ -1923,6 +2083,14 @@ int main (void)
 	testOpxSyncOneCopiesToThePair();
 	testOpxPcmIsAOneShot();
 	testOpxPcmBanksAreIndependent();
+
+	testC140Note();
+	testC140EndAddressSetsTheLength();
+	testC140EndAddressIsLatchedAtKeyOn();
+	testC140LoopRunsUntilKeyOff();
+	testC140ClockDoublesThePitch();
+	testC140SilentVoiceIsNoNote();
+	testC140HighVoiceNeedsTheHighOffsetByte();
 
 	std::printf ("Result    : %s\n", failures == 0 ? "PASS" : "FAILURES");
 	return failures == 0 ? 0 : 1;

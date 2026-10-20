@@ -199,6 +199,7 @@ target_sources(VGMToybox PRIVATE
 	Source/chips/Ay8910Decoder.cpp
 	Source/chips/Rf5c68Decoder.cpp
 	Source/chips/X1_010Decoder.cpp
+	Source/chips/C140Decoder.cpp
 	Source/chips/Ymf271Decoder.cpp
 	Source/chips/Ymz280bDecoder.cpp
 	Source/chips/Sn76489Decoder.cpp
@@ -338,6 +339,7 @@ add_executable(vgm_mixer_test EXCLUDE_FROM_ALL
 	Source/chips/Ay8910Decoder.cpp
 	Source/chips/Rf5c68Decoder.cpp
 	Source/chips/X1_010Decoder.cpp
+	Source/chips/C140Decoder.cpp
 	Source/chips/Ymf271Decoder.cpp
 	Source/chips/Ymz280bDecoder.cpp
 	Source/chips/Sn76489Decoder.cpp
@@ -369,6 +371,7 @@ add_executable(vgm_chip_test EXCLUDE_FROM_ALL
 	Source/chips/Ay8910Decoder.cpp
 	Source/chips/Rf5c68Decoder.cpp
 	Source/chips/X1_010Decoder.cpp
+	Source/chips/C140Decoder.cpp
 	Source/chips/Ymf271Decoder.cpp
 	Source/chips/Ymz280bDecoder.cpp
 	Source/chips/Sn76489Decoder.cpp
@@ -584,6 +587,17 @@ set(_toybox_opx_song "${CMAKE_CURRENT_SOURCE_DIR}/Tests/assets/opx.vgm")
 if(EXISTS "${_toybox_opx_song}")
 	add_test(NAME engine.opx COMMAND vgm_mixer_test "${_toybox_opx_song}" 2)
 	set_tests_properties(engine.opx PROPERTIES LABELS "integration" TIMEOUT 120)
+endif()
+
+# The C140 (M3): the first voice whose pitch is a playback rate rather than a note, and a chip that
+# returns silence until its ROM block is allocated. c140.vgm gives two voices an octave apart and
+# ends their notes in the two ways the chip offers - voice 0 by its end address, with no key-off
+# written at all, voice 1 by key-off under the loop bit - so four audible notes per voice means both
+# length rules survived the trip through the file.
+set(_toybox_c140_song "${CMAKE_CURRENT_SOURCE_DIR}/Tests/assets/c140.vgm")
+if(EXISTS "${_toybox_c140_song}")
+	add_test(NAME engine.c140 COMMAND vgm_mixer_test "${_toybox_c140_song}" 2)
+	set_tests_properties(engine.c140 PROPERTIES LABELS "integration" TIMEOUT 120)
 endif()
 
 # One test per script in Tests/scripts, discovered rather than listed: adding a script must not mean

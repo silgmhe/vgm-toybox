@@ -119,6 +119,12 @@ namespace
 			// reports one-shot triggers; see chips/Ymz280bDecoder.h and M4 in the design doc.
 			return (channelIndex >= 0 && channelIndex < 8) ? playback::MidiCapability::oneShot
 														   : playback::MidiCapability::unavailable;
+		case DEVID_C140:
+			// Twenty-four sampled voices. Their frequency register is a playback rate rather than a
+			// note, so the note comes from that rate and the ROM's root rate (chips/Pitch.h); the
+			// end address gives the voice a length, which is what makes it melodic and not a
+			// one-shot guess. A zero-volume voice reports nothing, the same way the chip is silent.
+			return fmChannel (24);
 		case DEVID_X1_010:
 			// Sixteen channels, and the same channel is either a wavetable voice or a PCM player
 			// depending on one status bit. The capability is static, so it states what the channel
