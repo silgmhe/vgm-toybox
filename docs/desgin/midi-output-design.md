@@ -349,7 +349,8 @@ plugin/Source/backends/libvgm/MidiSequenceBuilder.{h,cpp}
 - 序列只保存**一遍**，并记录 `loopStartSeconds`/`loopEndSeconds`（来自 `SongInfo`）；
 - 引擎报的位置是它**真正播放**的位置，和这份序列不是同一个坐标系：N ≥ 2 次循环时位置会一路数过第一遍的结尾，无限循环时位置直接跳回 loop start。两者都要用 `playback::songTimeWithinPass()` 折回“这一遍”里（与 `evaluateSync()` 用的折法一致，fade 尾巴算多一遍）；
 - 折回之后，“位置往回跳”与 seek 是同一件事：游标用 `lower_bound` 重新定位、先发 all-notes-off，然后照常发事件。所以循环不需要单独的代码路径，`midiResetGeneration` 也不必为它递增；
-- seek/load/stop 时把 `midiResetGeneration` 加一；音频线程看到新 generation 后先发 all-notes-off，再把游标定位到新位置；
+- seek/load/stop 时把 `midiResetGeneration` 加一；音频线程看到新 generation 后先结束仍在发声的 note，再把游标定位到新位置；
+- “结束”是逐个 note 发它自己的 note-off（引擎记着哪些 note 发过 note-on，见 §6.5），再对仍有 note 的通道补一条 All Notes Off（CC123）。不向 16 个通道广播：没路由过的通道不是本引擎改写的对象；也不发 All Sound Off（CC120），那会砍掉释放尾巴，和“结束音符”是两件事；
 - 不折回的后果是：第一遍结束之后游标越过序列末尾，音符全部停止而音频继续播放——循环听不见第二遍。`vgm_mixer_test` 的 `[12]` 在带 loop 点的曲目上数“第一遍之后是否还有 note-on”；
 - 仓库里绝大多数资产没有循环点，`[12]` 会打印 `loop check skipped` 跳过——**只有 `loop.vgm` 例外**：它存在的唯一理由就是携带循环点，所以拿不到 loop 点时 `[12]` 必须报错（`loop check DID NOT RUN`），否则改坏资产头部又能让这条检查静默失效（它就是因此空转了一整年）；
 - 这样可以避免“循环后旧 note 还按着”和“seek 后挂音”。
@@ -413,6 +414,14 @@ void ToyboxAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer,
 - 直出和 Master 是两条并行输出：同一轨若两者都启用，会发两次（一次直出、一次 Master 合并）。这是用户自由度的一部分；Master 默认 Off，不想要就关掉；
 - 如果轨道通道或 Master 通道在发声过程中被改：先对旧通道发 all-notes-off，再用新通道重新开始；第一版建议立即 all-notes-off，避免挂音；
 - 多个轨道共用同一个 MIDI 通道时，事件合并；如果两个轨道同时发同一个 note，note-off 可能互相截断，这是 MIDI 合并的固有问题，UI 可提示。
+
+### 6.5 停止、暂停与挂音
+
+- 引擎在发 note-on 时把 `(通道, note)` 记进一张 16 × 128 位的活动表（`midiActiveNotes`），发 note-off 时清除；Master 合并的那份拷贝是另一个通道上的另一个 note，同样记录。表只在音频线程读写（`emitMidiForBlock()` 写、`flushActiveNotesOff()` 清），不加锁；
+- 停止/暂停/播完/卸载时 `render()` 走空闲分支，先把表里剩下的 note 逐个发 note-off（发在它当初的通道上、用它自己的编号），再对有 note 的通道补一条 CC123；表随即清空，所以只有第一个空闲 block 说话，之后每个静音 block 什么都不发；
+- 为什么不能只发 CC123：All Notes Off 是“请求”，相当一部分接收端会忽略它——MIDI 监视器里停止后仍亮着的 note 就是这种情况；而对一个被明确告知要发声的 note，它自己的 note-off 是接收端必须执行的消息；
+- 为什么逐通道而不是 16 通道广播：note-off 只能落在真正发过 note-on 的通道上，没路由过的通道不是本引擎改写的对象。`PluginProcessor` 里“停止时广播 16 个通道的 CC123/CC120”因此被删掉——既多余，CC120 还会砍掉释放尾巴；
+- note-off 事件本身可能被过滤（轨道在 note 期间被 mute、通道被改），活动表是“该发而没发”的兜底：这些 note 会在停止时被正式结束，而不是一直挂在宿主里。
 
 ---
 

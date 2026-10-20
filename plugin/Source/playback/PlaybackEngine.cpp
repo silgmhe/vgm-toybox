@@ -937,8 +937,8 @@ void PlaybackEngine::installSong (LoadedSong&& built)
 	tags = std::move (built.tags);
 	midiSequence = built.midiSequence;
 	midiCursor = 0;
-	// Force one all-notes-off on the first block: a song swap must not leave notes from the
-	// previous song hanging in the host.
+	// Force one flush on the first block: a song swap must end the notes the previous song left
+	// sounding, not leave them hanging in the host.
 	midiResetGeneration.fetch_add (1);
 	midiSeenGeneration = midiResetGeneration.load() - 1;
 	midiWasEnabled = false;
@@ -1123,6 +1123,11 @@ void PlaybackEngine::render (const playback::OutputBusBuffers* buses, int numBus
 	// which is what followDawTransport() costs per block (review M-1).
 	if (! playing.load() || ! loaded.load())
 	{
+		// A stop, a pause, the end of the song or an unload: the notes the engine started are
+		// still sounding on the host side, and this idle block is the last place to end them.
+		// flushActiveNotesOff() sends one note-off each and empties the set, so only the first
+		// idle block says anything.
+		flushActiveNotesOff (midiSink, 0);
 		reportSilenceWhenIdle();
 		return;
 	}
@@ -1182,22 +1187,30 @@ void PlaybackEngine::emitMidiForBlock (double blockStartSeconds, int numSamples,
 {
 	const auto sendAllNotesOff = [this, sink] (int sampleOffset)
 	{
+		// The per-note offs are the part a receiver cannot ignore: it was told to start these
+		// notes, so it has to act on their off. All Notes Off follows on the same channels as a
+		// backstop, for a receiver that took the note-on and mishandled the off - but no
+		// all-sound-off, because cutting the release tail is a different (and harsher) thing
+		// than ending the note.
+		flushActiveNotesOff (sink, sampleOffset);
+
 		// With bends off the output carries no 0xE0 at all - a MIDI monitor should show notes and
 		// nothing else - so the centring message is only worth sending when bends are in use.
-		const bool centreBend = midiPitchBendEnabled.load();
-
-		for (int channel = 0; channel < 16; ++channel)
+		if (midiPitchBendEnabled.load())
 		{
-			sink->send ({ sampleOffset, (std::uint8_t) (0xB0 | channel), 123, 0 });
-			sink->send ({ sampleOffset, (std::uint8_t) (0xB0 | channel), 120, 0 });
-
-			// A bend left by the passage just cut would sit on the channel until the next bend
-			// arrives; centring it makes the silence that follows actually neutral.
-			if (centreBend)
+			for (int channel = 0; channel < 16; ++channel)
 			{
-				sink->send ({ sampleOffset, (std::uint8_t) (0xE0 | channel), 0, 64 });
+				// A bend left by the passage just cut would sit on the channel until the next
+				// bend arrives; centring it makes the silence that follows actually neutral.
+				// Only what this engine bent is its to put back.
+				if ((midiBentChannels & (1u << channel)) != 0)
+				{
+					sink->send ({ sampleOffset, (std::uint8_t) (0xE0 | channel), 0, 64 });
+				}
 			}
 		}
+
+		midiBentChannels = 0;
 	};
 
 	if (! mixerEnabled)
@@ -1218,8 +1231,8 @@ void PlaybackEngine::emitMidiForBlock (double blockStartSeconds, int numSamples,
 	// The sequence covers one playthrough, the engine reports what it actually plays (a second
 	// loop pass is a position past the song end, an infinite loop jumps back to the loop point).
 	// Mapping makes both look like the pass the sequence was built for; the jump back is then the
-	// same "the position went backwards" test a seek uses, so a loop sends all-notes-off and
-	// resumes at the loop point exactly like a seek to it would.
+	// same "the position went backwards" test a seek uses, so a loop ends the notes it started
+	// and resumes at the loop point exactly like a seek to it would.
 	// Which channels are routed (0-based bit set). The bend-range RPN is a channel setting, so it
 	// goes only to channels something actually plays on.
 	std::uint32_t usedChannels = 0;
@@ -1267,21 +1280,21 @@ void PlaybackEngine::emitMidiForBlock (double blockStartSeconds, int numSamples,
 				sink->send ({ 0, status, 100, 127 });		// next data entry is not swallowed
 			}
 		}
-		else if (midiBendSent)
+		else if (midiBentChannels != 0)
 		{
 			// Bends are off now, but a bend this engine sent may still be holding a channel
 			// off-centre - and in this mode nothing will ever move it back. One centred message
-			// per channel retires exactly the state the mode created; with no bend sent there is
-			// nothing to retire, so a session that never bent sends no 0xE0 at all.
+			// per bent channel retires exactly the state the mode created; with no bend sent
+			// there is nothing to retire, so a session that never bent sends no 0xE0 at all.
 			for (int channel = 0; channel < 16; ++channel)
 			{
-				if ((usedChannels & (1u << channel)) != 0)
+				if ((midiBentChannels & (1u << channel)) != 0)
 				{
 					sink->send ({ 0, (std::uint8_t) (0xE0 | channel), 0, 64 });
 				}
 			}
 
-			midiBendSent = false;
+			midiBentChannels = 0;
 		}
 
 		midiSeenBendRange = bendRange;
@@ -1294,8 +1307,7 @@ void PlaybackEngine::emitMidiForBlock (double blockStartSeconds, int numSamples,
 	if (generation != midiSeenGeneration
 		|| (midiLastSongTime >= 0.0 && songTime + 0.001 < midiLastSongTime))
 	{
-		sendAllNotesOff (0);
-		midiBendSent = false;	// the centre messages above already put every channel back
+		sendAllNotesOff (0);	// ends the notes and puts back the bends: both masks are drained there
 		midiSeenGeneration = generation;
 		midiCursor = (std::size_t) (std::lower_bound (midiSequence->events.begin(),
 													   midiSequence->events.end(),
@@ -1312,6 +1324,38 @@ void PlaybackEngine::emitMidiForBlock (double blockStartSeconds, int numSamples,
 
 	const double blockEnd = songTime + (double) numSamples / hostSampleRate;
 	const bool anySolo = soloCount.load() > 0;
+
+	// What the host is told and what a stop has to end are the same fact, so the note state is
+	// updated exactly where the message goes out - including the master's merged copy, which is
+	// a second note on a second channel.
+	const auto trackNote = [this] (int wireChannel, std::uint8_t noteStatus,
+								   std::uint8_t note, std::uint8_t velocity)
+	{
+		if (wireChannel < 0 || wireChannel >= 16 || note > 127)
+		{
+			return;
+		}
+
+		const std::uint64_t bit = (std::uint64_t) 1 << (note & 63);
+		if ((noteStatus & 0xF0) == 0x90 && velocity > 0)
+		{
+			midiActiveNotes[wireChannel][note >> 6] |= bit;
+		}
+		else if ((noteStatus & 0xF0) == 0x80 || (noteStatus & 0xF0) == 0x90)
+		{
+			midiActiveNotes[wireChannel][note >> 6] &= ~bit;
+		}
+	};
+
+	// A bend that actually went out is remembered per channel: it is the only state a stop or a
+	// seek has to put back, and only on the channel that received it.
+	const auto trackBend = [this] (int wireChannel, std::uint8_t noteStatus)
+	{
+		if (noteStatus == 0xE0 && wireChannel >= 0 && wireChannel < 16)
+		{
+			midiBentChannels |= 1u << wireChannel;
+		}
+	};
 
 	while (midiCursor < midiSequence->events.size())
 	{
@@ -1365,10 +1409,6 @@ void PlaybackEngine::emitMidiForBlock (double blockStartSeconds, int numSamples,
 				status = 0xE0;
 				data1 = (std::uint8_t) (value & 0x7F);
 				data2 = (std::uint8_t) ((value >> 7) & 0x7F);
-
-				// Remembered so that turning the switch off later knows a channel may be left
-				// off-centre by this engine, and clears it once.
-				midiBendSent = true;
 			}
 			break;
 		}
@@ -1380,7 +1420,10 @@ void PlaybackEngine::emitMidiForBlock (double blockStartSeconds, int numSamples,
 
 		if (channel > 0)
 		{
-			sink->send ({ sampleOffset, (std::uint8_t) (status | (channel - 1)), data1, data2 });
+			const int wireChannel = channel - 1;
+			sink->send ({ sampleOffset, (std::uint8_t) (status | wireChannel), data1, data2 });
+			trackNote (wireChannel, status, data1, data2);
+			trackBend (wireChannel, status);
 		}
 
 		// The master is an extra merged copy. Master mute silences that copy; if the direct
@@ -1388,7 +1431,59 @@ void PlaybackEngine::emitMidiForBlock (double blockStartSeconds, int numSamples,
 		// the first note short.
 		if (masterChannel > 0 && channel > 0 && masterChannel != channel && ! masterMuted.load())
 		{
-			sink->send ({ sampleOffset, (std::uint8_t) (status | (masterChannel - 1)), data1, data2 });
+			const int wireChannel = masterChannel - 1;
+			sink->send ({ sampleOffset, (std::uint8_t) (status | wireChannel), data1, data2 });
+			trackNote (wireChannel, status, data1, data2);
+			trackBend (wireChannel, status);
+		}
+	}
+}
+
+void PlaybackEngine::flushActiveNotesOff (playback::MidiBlockSink* sink, int sampleOffset)
+{
+	if (sink == nullptr)
+	{
+		return;
+	}
+
+	// The cheap test first: an idle block with nothing sounding (the normal case, every block
+	// while the transport is stopped) must not walk the whole 16 x 128 set.
+	std::uint64_t any = 0;
+	for (int channel = 0; channel < 16; ++channel)
+	{
+		any |= midiActiveNotes[channel][0] | midiActiveNotes[channel][1];
+	}
+	if (any == 0)
+	{
+		return;
+	}
+
+	std::uint32_t channels = 0;
+	for (int channel = 0; channel < 16; ++channel)
+	{
+		for (int note = 0; note < 128; ++note)
+		{
+			const std::uint64_t bit = (std::uint64_t) 1 << (note & 63);
+			if ((midiActiveNotes[channel][note >> 6] & bit) == 0)
+			{
+				continue;
+			}
+
+			sink->send ({ sampleOffset, (std::uint8_t) (0x80 | channel), (std::uint8_t) note, 0 });
+			midiActiveNotes[channel][note >> 6] &= ~bit;
+			channels |= 1u << channel;
+		}
+	}
+
+	// All Notes Off on the channels that had something to end: a backstop for a receiver that
+	// took the note-on and mishandled the off, and the only thing that ends a note whose off
+	// never appeared in the sequence (a mute during the note drops it). A channel nothing was
+	// playing on gets no message - its state is not this engine's to rewrite.
+	for (int channel = 0; channel < 16; ++channel)
+	{
+		if ((channels & (1u << channel)) != 0)
+		{
+			sink->send ({ sampleOffset, (std::uint8_t) (0xB0 | channel), 123, 0 });
 		}
 	}
 }

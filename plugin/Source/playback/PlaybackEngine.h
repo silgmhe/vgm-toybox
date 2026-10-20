@@ -276,6 +276,10 @@ private:
 	void updatePlayerTimeline (void);					// caller must hold the lock
 	void emitMidiForBlock (double blockStartSeconds, int numSamples, double sampleRate,
 						   playback::MidiBlockSink* sink);	// caller must hold the lock
+	/** Ends every note this engine has started and not yet ended: one note-off each, then All
+		Notes Off on the channels that had one. The set is cleared, so the messages go out once
+		and an idle block that follows sends nothing. Audio thread only, no lock needed. */
+	void flushActiveNotesOff (playback::MidiBlockSink* sink, int sampleOffset);
 	void applyChipMutes (void);							// caller must hold the lock
 	/** Sets every track (and a new song's tracks) to the current routing scheme. */
 	void applyDefaultRouting (void);					// caller must hold the lock
@@ -415,10 +419,18 @@ private:
 	int midiSeenBendRange = playback::defaultPitchBendRange;	// audio-side copy of the two settings:
 	bool midiSeenBendEnabled = true;							// a change re-sends the RPN
 	std::uint32_t midiSeenChannels = 0;							// channels the RPN was last sent to
-	bool midiBendSent = false;									// a 0xE0 went out since the last
-																// reset: turning bends off must
-																// centre it once
+	// Channels this engine has bent and not put back: a 0xE0 went out on them and nothing has
+	// centred them since. A seek, a song swap and the "bends off" switch each retire exactly
+	// these - the state this engine created, on the channels it created it on - never a channel
+	// that was never bent.
+	std::uint32_t midiBentChannels = 0;
 	bool midiWasEnabled = false;
+	// The notes this engine has sent a note-on for and not yet ended, per channel, 128 bits
+	// each. A stop cannot trust All Notes Off to be honoured - several receivers ignore it, and
+	// a MIDI monitor then keeps showing the note - while a note-off for a note the receiver was
+	// told to start is the one message it has to act on. Audio thread only: emitMidiForBlock()
+	// adds and removes, flushActiveNotesOff() (from the idle branch of render()) drains it.
+	std::uint64_t midiActiveNotes[16][2] = {};
 	double midiLastSongTime = -1.0;	// in the sequence's own (single pass) coordinate system
 	bool mixerEnabled = true;	// the mixer card is always there - off is the CPU-saving opt-out
 	// the routing scheme new songs start with (message thread only - the audio thread reads the

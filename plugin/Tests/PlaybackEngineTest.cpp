@@ -18,11 +18,13 @@
 	  Build: cmake --build <build dir> --target vgm_mixer_test
 	  */
 
+	  #include <algorithm>
 	  #include <cmath>
 	  #include <cstdint>
 	  #include <cstdio>
 	  #include <cstdlib>
 	  #include <set>
+	  #include <utility>
 	  #include <vector>
 
 #include <juce_audio_basics/juce_audio_basics.h>
@@ -261,6 +263,35 @@ namespace
 				}
 			}
 			return result;
+		}
+
+		/** The notes still sounding at the end of the recording, replayed as a receiver would:
+			a velocity-0 note-on ends a note, and so does a note-off. The answer says what a stop
+			has to end - the engine's own note-off count is the number this must match. */
+		std::vector<std::pair<int, int>> notesStillSoundingAtEnd (void) const
+		{
+			std::vector<std::pair<int, int>> active;
+			const auto endNote = [&active] (int channel, int note)
+			{
+				const auto match = std::make_pair (channel, note);
+				active.erase (std::remove (active.begin(), active.end(), match), active.end());
+			};
+
+			for (const auto& event : events)
+			{
+				const int channel = (event.status & 0x0F) + 1;
+				const int note = (int) event.data1;
+				if ((event.status & 0xF0) == 0x90 && event.data2 > 0)
+				{
+					active.emplace_back (channel, note);
+				}
+				else if ((event.status & 0xF0) == 0x80 || (event.status & 0xF0) == 0x90)
+				{
+					endNote (channel, note);
+				}
+			}
+
+			return active;
 		}
 
 		std::vector<toybox::playback::MidiBlockEvent> events;
@@ -735,6 +766,11 @@ int main (int argc, char* argv[])
 	}
 	engine.setMasterMidiChannel (0);
 
+	// Start from a clean note state: the section before may have left a note sounding, and the
+	// stop that ends it is a different case from "every channel Off".
+	engine.stop();
+	recordMidi (engine, 0.02, sampleRate, blockSize);
+
 	// every channel Off: the routing state is kept, but nothing is generated
 	engine.setPositionSeconds (0.0);
 	engine.play();
@@ -743,10 +779,10 @@ int main (int argc, char* argv[])
 				 everythingOff.count (0x90), everythingOff.countController (123));
 	check (everythingOff.count (0x90) == 0, "every channel Off sends no notes");
 
-	// the reset that starts a render is what keeps a host from holding a note from before the
-	// seek/stop - it goes to all 16 channels because any of them may still hold one
-	check (everythingOff.countController (123) == 16, "the first block sends all-notes-off on every channel");
-	check (everythingOff.countController (120) == 16, "and all-sound-off with it");
+	// nothing is routed, so there is no note to end and no channel to end it on: a stop that
+	// sprayed all-notes-off over all sixteen would rewrite state this plugin never set
+	check (everythingOff.countController (123) == 0, "and no all-notes-off on channels it never used");
+	check (everythingOff.countController (120) == 0, "and no all-sound-off either");
 
 	// one track on channel 1: its notes, and only they. *Which* track is audible in the opening
 	// second is the song's business - a real Mega Drive song may leave its first channel silent
@@ -799,6 +835,30 @@ int main (int argc, char* argv[])
 	{
 		check (! routedNotes.empty() && routedNotes.front() == 69, "440 Hz decodes to MIDI note 69 (A4)");
 	}
+
+	// A stop ends what the engine started, from the engine's own record of it. All Notes Off is
+	// a request several receivers ignore - a monitor still showing the note after the transport
+	// stops is exactly that - while the off for a note the receiver was given is the one
+	// message it has to act on. The set is drained by the first idle block, so a second block
+	// has nothing left to say.
+	const auto soundingAtStop = routed.notesStillSoundingAtEnd();
+	engine.stop();
+	const auto afterStop = recordMidi (engine, 0.05, sampleRate, blockSize);
+	std::printf ("    stop: %d note-off for %d sounding, %d all-notes-off\n",
+				 afterStop.count (0x80), (int) soundingAtStop.size(),
+				 afterStop.countController (123));
+	check (afterStop.count (0x90) == 0, "a stopped engine sends no more note-on");
+	check (afterStop.count (0x80) == (int) soundingAtStop.size(),
+		   "a stop sends one note-off for each note still sounding");
+	check (afterStop.count (0x80) == afterStop.count (0x80, 1),
+		   "on the channel that played them");
+	check (afterStop.countController (123) == (soundingAtStop.empty() ? 0 : 1),
+		   "and all-notes-off only on that channel, as the backstop");
+	check (afterStop.countController (120) == 0, "with no all-sound-off to cut the release");
+
+	const auto stillStopped = recordMidi (engine, 0.05, sampleRate, blockSize);
+	check (stillStopped.count (0x80) == 0 && stillStopped.countController (123) == 0,
+		   "the note-offs go out once, not on every idle block");
 
 	// Pitch bend: a 14-bit value means nothing without the receiver's range, and MIDI never
 	// reports it - so the engine declares the preference (RPN 0, pitch bend sensitivity) on the
@@ -881,13 +941,25 @@ int main (int argc, char* argv[])
 	check (plainPlayer.count (0x90) == 0, "with the mixer switched off no MIDI is generated");
 	engine.setMixerEnabled (true);
 
-	// a seek mid-song: the new position's events resume, the previous notes are closed first
+	// a seek mid-song: the new position's events resume, the previous notes are closed first.
+	// A note the receiver was told to start is ended by its own note-off; the all-notes-off
+	// that follows is the backstop, and only the channel that played gets either - the other
+	// fifteen were never given a note to end. Whether the routed track happens to be mid-note
+	// at the cut is the song's business (a real song's first note may be short), so the flush
+	// is checked against what the recording says was still sounding, not against a constant.
 	engine.setMasterMidiChannel (0);
 	engine.setPositionSeconds (0.0);
 	engine.play();
+	const auto beforeSeek = recordMidi (engine, 0.5, sampleRate, blockSize);
+	const int soundingAtCut = (int) beforeSeek.notesStillSoundingAtEnd().size();
 	engine.setPositionSeconds (2.0);
-	const auto afterSeek = recordMidi (engine, 0.2, sampleRate, blockSize);
-	check (afterSeek.countController (123) == 16, "a seek sends all-notes-off on every channel");
+	const auto afterSeek = recordMidi (engine, 0.05, sampleRate, blockSize);
+	std::printf ("    seek: %d note-off, %d all-notes-off (%d sounding at the cut)\n",
+				 afterSeek.count (0x80), afterSeek.countController (123), soundingAtCut);
+	check (afterSeek.count (0x80) >= soundingAtCut, "a seek ends every note left sounding");
+	check (afterSeek.countController (123) == (soundingAtCut > 0 ? 1 : 0),
+		   "and all-notes-off only on the channel that played, and only when it had a note");
+	check (afterSeek.countController (120) == 0, "and no all-sound-off to cut the release");
 
 	// chronological order inside a block: the sink's offsets are what the host schedules. The
 	// offsets are per block, so the block's start is added back - a recorder that spans a second

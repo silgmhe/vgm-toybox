@@ -185,17 +185,9 @@ void ToyboxAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce:
 	// engine's lock (a try-lock - a block that loses it is retried, nothing blocks here).
 	engine.getDawSync().publishHostClock (playback::readHostClock (getPlayHead(), getSampleRate()));
 
-	const bool playing = engine.isPlaying();
-	if (wasPlaying && ! playing)
-	{
-		for (int channel = 0; channel < 16; ++channel)
-		{
-			midiMessages.addEvent (juce::MidiMessage::allNotesOff (channel + 1), 0);
-			midiMessages.addEvent (juce::MidiMessage::allSoundOff (channel + 1), 0);
-		}
-	}
-	wasPlaying = playing;
-
+	// A stop does not need a branch here: the engine knows which notes it started and ends them
+	// itself, on the channels that played them. Its note-offs are the messages a receiver must
+	// act on; a broadcast all-notes-off only asks, and some receivers ignore the request.
 	HostMidiSink midiSink (midiMessages);
 	engine.render (buses, playback::kOutputBusCount, numSamples, &midiSink);
 }
