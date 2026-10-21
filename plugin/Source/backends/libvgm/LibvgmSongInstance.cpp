@@ -7,6 +7,7 @@
 
 #include "LibvgmVgz.h"
 #include "MidiSequenceBuilder.h"
+#include "settings/SettingsStore.h"
 
 namespace toybox::backends::libvgm
 {
@@ -246,7 +247,8 @@ bool LibvgmSongInstance::prepare (double hostSampleRate, int newMaxBlockSize, ju
 	probe->start();
 
 	enumerate();
-	midiSequence = buildMidiSequence (playerMemory.data, playerMemory.size, deviceInfo, tracks);
+	midiSequence = buildMidiSequence (playerMemory.data, playerMemory.size, deviceInfo, tracks,
+									  toybox::settings::SettingsStore::getInstance().getTransposeBySampleRoot());
 	if (midiSequence == nullptr)
 	{
 		// The builder only understands VGM today; do not offer a MIDI channel that can never

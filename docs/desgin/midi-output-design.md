@@ -944,6 +944,6 @@ A 类的 `refRate` 是文档常量，L1 即为绝对音高；B 类在默认模�
 | P0 | `Pitch.h` 加 L1 函数、`ChannelState`/`NoteEvent` 加字段、数据流贯通（**行为不变**） | `ctest` 全绿且 golden 输出逐字节不变 |
 | P1 | 7 颗 A 类芯片的音高改走 L1，移除音高路径上的周期测量 | **已完成 6 颗**（C140、C352、K053260、K054539、QSound、SegaPCM；ADPCM-B 判为 B 类，随 P2）。每颗的 `noteFor` 只剩 `quantisePlaybackRate(rate, refRate)`，`channelState` 用 `describeSamplePitch()` 填两层；单测改断言「L1 音符 + rootCents + 两者之和等于旧音高」（`absoluteNote()`），合成资产的期望值随之改成 L1 音符 |
 | P2 | GA20 / ES5503 / ADPCM-B 归位：GA20 与 ADPCM-B 用 8 kHz 折算的参照率走 L1（周期进 L2），ES5503 无 L1、整体来自实测周期 | **已完成**：`Ga20Decoder` 的 `noteFor` 只剩 `quantisePlaybackRate(rate, kSampleReferenceRate)`，ADPCM-B 同型（16,000 nibble/s），ES5503 保留 `quantiseFrequency(rate/cycle)` 并把来源标 `sampleInferred`；`ga20.vgm` 的期望由 67 改为 L1 的 58（`absoluteNote` 仍是 67）；ctest 31/31 |
-| P3 | 设置项 + UI 文案 + 持久化 | 开关两态导出，差值恒为 `rootCents` |
+| P3 | 设置项 + UI 文案 + 持久化 | **已完成**：`SettingsStore` 的 `pitch.useSampleRoot`（默认 false）→ `buildMidiSequence(..., transposeBySampleRoot)` → `emitDecodedNotes()` 在开时把 `note` 移到 `note + round(rootCents/100)`，余下的音分并进该音符自带的那个 bend（之后颤音不受影响）；UI 在 Settings → MIDI 页加开关与说明（计算方式、可能不准、三条 one-shot 规则、重新加载生效）。实测 `k053260.vgm`：关 48、开 69，差值正是该采样的根音 |
 | P4 | `vgm_mixer_test --pitch-report`（每采样 `rate/hz/移调/根音来源`）、跨 rate 一致性进 ctest | 报告能在真实曲目上标出不一致的采样 |
 | P5 | 文档与决策记录 | — |

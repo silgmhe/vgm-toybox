@@ -166,6 +166,12 @@ private:
 	juce::Slider rangeSlider;
 	juce::Label rangeHint;
 
+	/** The sample-root preference: whether a sampled note carries the root measured out of its
+		sample (design doc section 15). Default off, and it says what it costs either way. */
+	juce::ToggleButton rootButton;
+
+	juce::Label rootHint;
+
 	JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (MidiSettingsPage)
 };
 

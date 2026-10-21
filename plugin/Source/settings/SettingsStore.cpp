@@ -33,6 +33,11 @@ namespace
 	constexpr const char* kMidiBendRangeKey = "midi.pitchBendRange";
 	constexpr const char* kMidiBendEnabledKey = "midi.pitchBendEnabled";
 
+// The sample's own root, added to the transposition the registers ask for. Off by default: the
+// root is an inference from the sample's bytes, and a wrong one shifts a whole song by a constant
+// (design doc section 15).
+constexpr const char* kMidiSampleRootKey = "pitch.useSampleRoot";
+
 	juce::String writeErrorFor (const juce::File& file)
 	{
 		return "could not write " + file.getFullPathName();
@@ -315,6 +320,24 @@ void SettingsStore::setMidiPitchBendEnabled (bool shouldSendBends)
 	}
 
 	file->setValue (kMidiBendEnabledKey, shouldSendBends);
+	lastErrorMessage = file->saveIfNeeded() ? juce::String() : writeErrorFor (settingsFile());
+
+	broadcastChange();
+}
+
+bool SettingsStore::getTransposeBySampleRoot (void) const
+{
+	return file->getBoolValue (kMidiSampleRootKey, false);
+}
+
+void SettingsStore::setTransposeBySampleRoot (bool shouldUseRoot)
+{
+	if (shouldUseRoot == getTransposeBySampleRoot())
+	{
+		return;
+	}
+
+	file->setValue (kMidiSampleRootKey, shouldUseRoot);
 	lastErrorMessage = file->saveIfNeeded() ? juce::String() : writeErrorFor (settingsFile());
 
 	broadcastChange();

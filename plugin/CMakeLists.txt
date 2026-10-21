@@ -334,6 +334,7 @@ add_executable(vgm_mixer_test EXCLUDE_FROM_ALL
 	Source/playback/PlaybackEngine.cpp
 	Source/playback/DawSync.cpp
 	Source/playback/SessionState.cpp
+	Source/settings/SettingsStore.cpp
 	Source/chips/GbcApuDecoder.cpp
 	Source/chips/HuC6280Decoder.cpp
 	Source/chips/K051649Decoder.cpp
@@ -518,6 +519,9 @@ target_link_libraries(vgm_mixer_test PRIVATE
 	juce::juce_audio_basics
 	# PlaybackEngine.cpp compiles the MessageManager call for asynchronous loads (review M-1)
 	juce::juce_events
+	# settings/SettingsStore.cpp uses juce::PropertiesFile: the song loader reads the sample-root
+	# preference before it builds the MIDI sequence (design doc section 15)
+	juce::juce_data_structures
 	juce::juce_recommended_config_flags
 )
 

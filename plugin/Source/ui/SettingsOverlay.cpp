@@ -950,6 +950,20 @@ MidiSettingsPage::MidiSettingsPage (void)
 	rangeHint.setMinimumHorizontalScale (0.8f);
 	addAndMakeVisible (rangeHint);
 
+	rootButton.setComponentID ("settings.midi.sampleRoot");
+	rootButton.onClick = [this]
+	{
+		toybox::settings::SettingsStore::getInstance()
+			.setTransposeBySampleRoot (rootButton.getToggleState());
+		refresh();
+	};
+	addAndMakeVisible (rootButton);
+
+	rootHint.setFont (juce::Font (juce::FontOptions (12.5f)));
+	rootHint.setJustificationType (juce::Justification::topLeft);
+	rootHint.setMinimumHorizontalScale (0.8f);
+	addAndMakeVisible (rootHint);
+
 	refreshLanguage();
 	lookAndFeelChanged();
 }
@@ -961,6 +975,8 @@ void MidiSettingsPage::refreshLanguage (void)
 	rangeCaption.setText (i18n::tr ("settings.midi.range"), juce::dontSendNotification);
 	rangeSlider.setTextValueSuffix (" " + i18n::tr ("settings.midi.semitones"));
 	rangeHint.setText (i18n::tr ("settings.midi.rangeHint"), juce::dontSendNotification);
+	rootButton.setButtonText (i18n::tr ("settings.midi.sampleRoot"));
+	rootHint.setText (i18n::tr ("settings.midi.sampleRootHint"), juce::dontSendNotification);
 	refresh();
 	repaint();
 }
@@ -972,6 +988,7 @@ void MidiSettingsPage::refresh (void)
 
 	bendButton.setToggleState (enabled, juce::dontSendNotification);
 	rangeSlider.setValue ((double) store.getMidiPitchBendRange(), juce::dontSendNotification);
+	rootButton.setToggleState (store.getTransposeBySampleRoot(), juce::dontSendNotification);
 
 	// With bends off the range is not used by anything, so it is shown greyed rather than hidden:
 	// the row keeps its place, and the value is still there when the switch goes back on.
@@ -1004,6 +1021,12 @@ void MidiSettingsPage::resized (void)
 
 	area.removeFromTop (6);
 	rangeHint.setBounds (area.removeFromTop (52));
+
+	area.removeFromTop (theme::cardGap + 4);
+
+	rootButton.setBounds (area.removeFromTop (24).removeFromLeft (300));
+	area.removeFromTop (4);
+	rootHint.setBounds (area.removeFromTop (72));
 }
 
 void MidiSettingsPage::lookAndFeelChanged (void)

@@ -162,6 +162,20 @@ public:
 	/** Stores the switch, writes it, and tells every listener, like the other preferences. */
 	void setMidiPitchBendEnabled (bool shouldSendBends);
 
+	/** Whether a sampled voice's note also carries the sample's own root, or only the transposition
+		the registers ask for. Off by default (design doc section 15).
+
+		The transposition is `1200 * log2(rate / referenceRate)` - registers plus a documented
+		nominal rate - so it is always computable and its intervals are always right. The root is
+		`1200 * log2(referenceRate / cycle / middleC)`, measured out of the sample's own bytes: it
+		places the absolute octave, and it is the part that can be wrong. With this off, every sample
+		is taken to be recorded at middle C, which is stable across songs rather than per-sample
+		accurate. */
+	bool getTransposeBySampleRoot (void) const;
+
+	/** Stores the switch, writes it, and tells every listener, like the other preferences. */
+	void setTransposeBySampleRoot (bool shouldUseRoot);
+
 	/** The song the standalone loaded last, or an empty File when there is none: a fresh
 		install, or the user closed the song before quitting (closeSong() clears it).
 

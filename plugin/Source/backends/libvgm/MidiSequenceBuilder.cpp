@@ -55,8 +55,8 @@ namespace
 	{
 	public:
 		Builder (const std::vector<PLR_DEV_INFO>& deviceList,
-				 const std::vector<playback::TrackInfo>& trackList)
-			: devices (deviceList), tracks (trackList)
+				 const std::vector<playback::TrackInfo>& trackList, bool transposeBySampleRoot)
+			: devices (deviceList), tracks (trackList), useSampleRoot (transposeBySampleRoot)
 		{
 			for (const auto& device : devices)
 			{
@@ -498,6 +498,11 @@ namespace
 		void emitDecodedNotes (const PLR_DEV_INFO* device,
 							   const chips::ExtractedPerformance& performance)
 		{
+			// With the sample-root preference on, the note moves by whatever the sample's own root
+			// says (design doc section 15); the cents left over ride on the bend that already
+			// belongs to the note's own start, so vibrato after it is untouched.
+			std::map<std::pair<int, std::uint32_t>, int> rootRemainder;
+
 			for (const auto& note : performance.notes)
 			{
 				const int track = trackFor (device, note.logicalChannel);
@@ -506,10 +511,20 @@ namespace
 					continue;
 				}
 
+				int midiNote = note.note;
+				if (useSampleRoot && note.rootCents != 0)
+				{
+					const int total = note.note * 100 + note.rootCents;
+					midiNote = (int) std::lround ((double) total / 100.0);
+					rootRemainder[{ track, note.startSample }] = total - midiNote * 100;
+				}
+
+				midiNote = std::max (0, std::min (127, midiNote));
+
 				const double start = (double) note.startSample / kVgmRate;
 				const double end = (double) note.endSample / kVgmRate;
-				noteOn (track, start, note.note, note.velocity);
-				noteOff (track, end, note.note);
+				noteOn (track, start, midiNote, note.velocity);
+				noteOff (track, end, midiNote);
 			}
 
 			for (const auto& bend : performance.bends)
@@ -520,7 +535,14 @@ namespace
 					continue;
 				}
 
-				pitchBend (track, (double) bend.sampleTime / kVgmRate, (double) bend.cents / 100.0);
+				int cents = bend.cents;
+				const auto extra = rootRemainder.find ({ track, bend.sampleTime });
+				if (extra != rootRemainder.end())
+				{
+					cents += extra->second;
+				}
+
+				pitchBend (track, (double) bend.sampleTime / kVgmRate, (double) cents / 100.0);
 			}
 		}
 
@@ -1049,19 +1071,24 @@ namespace
 		// the frequency register - and its key is the falling edge of a halt bit
 		ChipBuffer<chips::Es5503Decoder> es5503;
 		std::vector<playback::MidiEvent> events;
+
+		/** The user's preference at load time: whether a sampled note also carries its sample's
+			own root (design doc section 15). A preference rather than a live control, because it
+			changes the note numbers themselves - switching it reloads the song. */
+		bool useSampleRoot = false;
 	};
 }
 
 std::unique_ptr<playback::MidiSequence> buildMidiSequence (
 	const void* data, std::size_t size, const std::vector<PLR_DEV_INFO>& devices,
-	const std::vector<playback::TrackInfo>& tracks)
+	const std::vector<playback::TrackInfo>& tracks, bool transposeBySampleRoot)
 {
 	if (data == nullptr || size < 0x40)
 	{
 		return nullptr;
 	}
 
-	Builder builder (devices, tracks);
+	Builder builder (devices, tracks, transposeBySampleRoot);
 	return builder.parse (static_cast<const UINT8*> (data), size);
 }
 
