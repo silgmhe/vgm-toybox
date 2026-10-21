@@ -1622,6 +1622,7 @@ namespace
 		void testRf5cChannelIsAOneShot (void)
 		{
 			Stream stream;
+			stream.at (0, 0x00, 0xFF);			// envelope: a zero here is silence, as on the chip
 			stream.at (0, 0x08, 0xFE);			// channel 0 enabled
 
 			const auto notes = runRf5c (stream, 44100);
@@ -1641,6 +1642,8 @@ namespace
 		void testRf5cMaskSelectsTheChannel (void)
 		{
 			Stream stream;
+			stream.at (0, 0x07, 0xC1);			// bit 7 output on, bit 6: the low registers are channel 1
+			stream.at (0, 0x00, 0xFF);			// envelope
 			stream.at (0, 0x08, 0xFD);			// channel 1 only
 
 			const auto notes = runRf5c (stream, 22050);
@@ -1652,6 +1655,7 @@ namespace
 		void testRf5cMasterSwitchEndsTheNote (void)
 		{
 			Stream stream;
+			stream.at (0, 0x00, 0xFF);			// envelope
 			stream.at (0, 0x08, 0xFE);			// channel 0 enabled
 			stream.at (1323, 0x07, 0x00);		// sound output off before the gate expires
 

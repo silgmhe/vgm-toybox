@@ -325,7 +325,20 @@ namespace
 			flushDecoded (wswan, 3072000u, lastSampleTime);
 			flushDecoded (sn, 3579545u, lastSampleTime);
 			flushDecoded (ay, 1789773u, lastSampleTime);
-			flushDecoded (rf5c, 12500000u, lastSampleTime);
+			// The RF5C164 keeps its samples in the chip's own RAM, which the stream uploads as a PCM
+			// bank (a 0x67 block of type 0x02, no ROM header) plus 0x68 writes. Without the image no
+			// cycle can be measured, so the decoder needs it before it can name a pitch.
+			const std::vector<std::uint8_t> rf5cRam =
+				rf5c.writes.empty() ? std::vector<std::uint8_t>()
+									: assemblePcmBank (reader, 0x02, 64 * 1024);
+			flushDecoded (rf5c, 12500000u, lastSampleTime,
+						  [&rf5cRam] (chips::Rf5c68Decoder& decoder)
+						  {
+							  if (! rf5cRam.empty())
+							  {
+								  decoder.setRam (rf5cRam);
+							  }
+						  });
 			flushDecoded (x1, 16000000u, lastSampleTime);
 
 			// The C140's note is the playback rate divided by the sample's own cycle length, and
@@ -848,6 +861,30 @@ namespace
 			}
 
 			return rom;
+		}
+
+		/** Assembles a PCM bank - a `0x67` block of type 0x00-0x3F, which carries its bytes outright
+			(no ROM header, no address: the blocks of one type concatenate in stream order).
+
+			The RF5C164's samples live there, as type 0x02; a bank larger than the chip's RAM is cut at
+			the chip's limit, because everything past it is unreachable anyway. */
+		static std::vector<std::uint8_t> assemblePcmBank (const VgmCommandReader& reader,
+														  std::uint8_t type,
+														  std::size_t maxBytes)
+		{
+			std::vector<std::uint8_t> bank;
+			for (const auto& block : reader.dataBlocks())
+			{
+				if (block.type != type || bank.size() >= maxBytes)
+				{
+					continue;
+				}
+
+				const std::size_t count = std::min (block.size, maxBytes - bank.size());
+				bank.insert (bank.end(), block.data, block.data + count);
+			}
+
+			return bank;
 		}
 
 		/** Assembles a chip's RAM image from the stream's RAM writes (0xE1 is the ES5503's).

@@ -89,6 +89,7 @@ Add-Wait $step
 # SN76489 noise (mode 4 = white, rate 0) plus RF5C68 channel 0
 Add-Sn 0xE4
 Add-Sn 0xF0                   # channel 3 volume
+Add-Rf 0x00 0xFF              # envelope: a zero here is silence, as on the chip
 Add-Rf 0x08 0xFE              # channel 0 enabled
 
 Add-Wait $step

@@ -113,8 +113,11 @@ namespace
 																  ? playback::MidiCapability::oneShot
 																  : playback::MidiCapability::unavailable);
 		case DEVID_RF5C68:	// also RF5C164 / RF5C105
-			return (channelIndex >= 0 && channelIndex < 8) ? playback::MidiCapability::oneShot
-														   : playback::MidiCapability::unavailable;
+			// Eight PCM voices with a step register and the sample in the chip's own RAM, so the note
+			// is the step against the chip's rate (one byte per sample) and its own octave comes from
+			// the measured cycle - section 14 of the design doc. A voice whose sample has no period
+			// still reports its C4 trigger, so the capability stays melodic.
+			return fmChannel (8);
 		case DEVID_YMZ280B:
 			// Eight PCM voices. Their pitch register is a playback rate, not a note, so the decoder
 			// reports one-shot triggers; see chips/Ymz280bDecoder.h and M4 in the design doc.
