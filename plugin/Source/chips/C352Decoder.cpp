@@ -120,15 +120,12 @@ namespace
 			, rootRate (clock / kRootRateDivisor)
 			, cycleLength (sampleCycle) {}
 
+		/** L1 only: the transposition the rate register asks for against the chip's reference rate.
+			The sample's own root is `rootCentsFromCycle()` beside it (design doc section 15), applied
+			by the user's setting rather than baked into the mapping. */
 		int noteFor (std::uint32_t period, int, int* finePitch) const override
 		{
-			const double rate = (double) period * bytesPerSecondPerStep;
-			if (cycleLength != nullptr && *cycleLength > 0.0)
-			{
-				return quantiseFrequency (rate / *cycleLength, finePitch);
-			}
-
-			return quantisePlaybackRate (rate, rootRate, finePitch);
+			return quantisePlaybackRate ((double) period * bytesPerSecondPerStep, rootRate, finePitch);
 		}
 
 	private:
@@ -438,6 +435,16 @@ ChannelState C352Decoder::channelState (int channel) const
 	state.keyOns = voice.keyOns;
 	state.period = voice.frequency;		// the note table turns the rate into a note
 	state.volume = impl->volumeOf (voice);
+
+	// the C352 has no drum convention of its own: every voice is a sample, and one whose period
+	// cannot be measured simply has no root to add
+	const SampledPitch pitch =
+		describeSamplePitch ((double) voice.frequency * impl->clock / kClockDivisor,
+							 impl->clock / kRootRateDivisor, voice.cycleLength, true);
+	state.hz = pitch.hz;
+	state.transposeCents = pitch.transposeCents;
+	state.rootCents = pitch.rootCents;
+	state.pitchSource = pitch.source;
 
 	return state;
 }

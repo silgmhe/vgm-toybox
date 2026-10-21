@@ -125,6 +125,59 @@ inline int quantisePlaybackRate (double rate, double rootRate, int* finePitch)
 	return quantiseFrequency (kMiddleCHz * rate / rootRate, finePitch);
 }
 
+/** L2 - the correction a sample's own root asks for, in cents.
+
+	`cycleLength` is the sample's period in samples and `referenceRate` the rate the chip plays a
+	sample at when its rate register holds the nominal figure. Their quotient is the pitch the sample
+	sounds at that nominal rate, and C4 is that pitch by convention - so the correction is how far the
+	recording actually sits from middle C. This is the *only* number the "transpose by the sample's
+	root" setting adds, and the only one that cannot be computed from registers: it is 0 when the
+	sample has no measurable root (a drum, an ambiguous multi-period sample, a sample with no ROM).
+
+	Note the arithmetic: `transpositionCents (rate / cycle, middleC)` equals
+	`transpositionCents (rate, refRate) + rootCentsFromCycle (cycle, refRate)`, which is what makes the
+	two layers interchangeable with the old single-step mapping. */
+inline int rootCentsFromCycle (double cycleLength, double referenceRate)
+{
+	if (cycleLength <= 0.0 || referenceRate <= 0.0)
+	{
+		return 0;
+	}
+
+	return transpositionCents (referenceRate / cycleLength, kMiddleCHz);
+}
+
+/** What a sampled voice's two pitch layers say, for a decoder's `channelState()`.
+
+	Every sampled chip has the same three facts - the rate its registers ask for, the rate its ROM is
+	taken to be recorded at, and (when it could be measured) the sample's own cycle - so the three
+	fields are filled in one place instead of seven. `melodic` is the chip's own verdict on whether
+	the sample has a pitch at all; a drum keeps its C4 trigger and reports no layers. */
+struct SampledPitch
+{
+	double hz = 0.0;
+	int transposeCents = 0;
+	int rootCents = 0;
+	PitchSource source = PitchSource::unpitched;
+};
+
+inline SampledPitch describeSamplePitch (double rate, double referenceRate, double cycleLength,
+										 bool melodic)
+{
+	SampledPitch pitch;
+	if (! melodic || rate <= 0.0)
+	{
+		return pitch;		// a drum: no layers, the caller reports the C4 trigger
+	}
+
+	pitch.hz = rate;
+	pitch.transposeCents = transpositionCents (rate, referenceRate);
+	pitch.rootCents = rootCentsFromCycle (cycleLength, referenceRate);
+	pitch.source = (pitch.rootCents != 0) ? PitchSource::sampleInferred
+										 : PitchSource::registerExact;
+	return pitch;
+}
+
 /** The length of one cycle of a recorded waveform, in samples (bytes for an 8-bit player).
 
 	None of the sampled players states this number: their registers hold a playback rate, and the

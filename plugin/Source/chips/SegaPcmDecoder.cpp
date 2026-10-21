@@ -38,8 +38,12 @@ namespace
 	class SegaPcmNoteTable final : public NoteTable
 	{
 	public:
+		/** `rootRate` is the rate the step register asks for at pitch 128, the midpoint every driver of
+			this chip uses for a sample at its recorded pitch: the chip names no recording rate of its
+			own, so the register's own midpoint is the reference the transposition is measured from. */
 		SegaPcmNoteTable (double chipClock, const double* sampleCycle, const bool* sampleMelodic)
 			: bytesPerSecondPerStep (chipClock > 0.0 ? chipClock / 32768.0 : 8000000.0 / 32768.0)
+			, rootRate (bytesPerSecondPerStep * 128.0)
 			, cycleLength (sampleCycle)
 			, melodic (sampleMelodic) {}
 
@@ -52,12 +56,13 @@ namespace
 				return 60;		// a drum: the C4 trigger
 			}
 
-			return quantiseFrequency ((double) pitch * bytesPerSecondPerStep / *cycleLength,
-									  finePitch);
+			// L1: the step register against the chip's nominal rate, never the sample's bytes
+			return quantisePlaybackRate ((double) pitch * bytesPerSecondPerStep, rootRate, finePitch);
 		}
 
 	private:
 		double bytesPerSecondPerStep;
+		double rootRate;
 		const double* cycleLength;
 		const bool* melodic;
 	};
@@ -110,6 +115,14 @@ struct SegaPcmDecoder::Impl
 	double bytesPerSecond (const Voice& voice) const
 	{
 		return (double) voice.pitch * clock / 32768.0;
+	}
+
+	/** The rate pitch 128 asks for - the midpoint every driver of this chip uses for a sample at its
+		recorded pitch. The chip names no recording rate of its own, so this is the reference the
+		transposition layer is measured from (design doc section 15.3). */
+	double referenceBytesPerSecond (void) const
+	{
+		return 128.0 * clock / 32768.0;
 	}
 
 	/** Where the voice starts, in bytes: the 24-bit position's low byte is the chip's own fraction,
@@ -330,6 +343,14 @@ ChannelState SegaPcmDecoder::channelState (int channel) const
 	state.keyOns = voice.keyOns;
 	state.period = voice.pitch;
 	state.volume = impl->volumeOf (voice);
+
+	const SampledPitch pitch = describeSamplePitch (impl->bytesPerSecond (voice),
+													impl->referenceBytesPerSecond(),
+													voice.cycleLength, voice.melodic);
+	state.hz = pitch.hz;
+	state.transposeCents = pitch.transposeCents;
+	state.rootCents = pitch.rootCents;
+	state.pitchSource = pitch.source;
 
 	return state;
 }

@@ -16,6 +16,12 @@ namespace
 	// A channel with no reliable pitch (DAC, ADPCM) still gets a MIDI note: C4 is a trigger
 	// marker, and the period carries a flag the note table recognises.
 	constexpr int kOneShotNote = 60;
+
+	// The DELTA-N value an ADPCM-B ROM is taken to be recorded at - 0x4000 is the figure the sets
+	// use for an untransposed sample, and the only reference the chip offers: DELTA-N itself is a
+	// playback rate, and no register names a root. It is therefore the reference of the
+	// transposition layer (L1), not a claim about the recording - see design doc section 15.3.
+	constexpr std::uint16_t kAdpcmBReferenceDelta = 0x4000;
 	constexpr std::uint32_t kOneShotPeriod = 0x80000000u;
 
 	/** One bit per operator that reaches the output, in register order (0x30, 0x34, 0x38, 0x3C).
@@ -682,6 +688,18 @@ ChannelState OpnDecoder::channelState (int channel) const
 	state.keyOns = voice.keyOns;
 	state.gate = voice.active && voice.level != 0
 				 && (voice.gateEnd == 0 || impl->now < voice.gateEnd);
+
+	// ADPCM-B is B class: DELTA-N gives a rate but the sets name no recording rate to measure it
+	// against, so there is no L1 anchor. It keeps its root-based note until the B-class pass
+	// (design doc section 15.3), and reports it as an inference.
+	// (the note itself already carries the absolute pitch, so there is no separate correction to add)
+	state.hz = (voice.cycleLength > 0.0)
+				   ? impl->adpcmBUnitsPerSecond (voice.delta) / voice.cycleLength
+				   : 0.0;
+	state.rootCents = 0;
+	state.transposeCents = 0;
+	state.pitchSource = voice.melodic ? PitchSource::sampleInferred : PitchSource::unpitched;
+
 	return state;
 }
 

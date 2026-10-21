@@ -897,13 +897,19 @@ void render (const playback::OutputBusBuffers* buses, int numBuses, int numSampl
 
 ### 15.3 每芯片归类与标称率
 
-| 芯片 | 寄存器 → 频率 | `refRate` | 类 |
-|---|---|---|---|
-| C140 / C352 / K053260 / K054539 / QSound / SegaPCM | 各自的 rate 寄存器 × 时钟系数 | 8 kHz（标称采样率） | A |
-| ADPCM-B（YM2610/2608） | `deltaN × (clock / pres) / 2^16` | `clock / pres`（Y8950 即 50 kHz） | A |
-| RF5C68 | `rate × clock / 384`（待核对） | 8 kHz（该芯片固定 8 位 PCM 率） | A |
-| GA20 | `clock/4 / (256-rate)`（字节率） | **无**——驱动任意写 rate | B |
-| ES5503（多周期表） | `freq × fs / 2^(9+res-size)` | **无**——表长不是音高 | B |
+| 芯片 | 寄存器 → 频率 | `refRate`（L1 的参照率） | 类 | 状态 |
+|---|---|---|---|---|
+| C140 | `rate × clock / 18874368` | 8 kHz（标称采样率） | A | **P1 已切** |
+| C352 | `rate × clock / 576` | `clock / 576`（一个字节每输出样本） | A | **P1 已切** |
+| K053260 | `pitch × clock / 262144` | `clock / 64` | A | **P1 已切** |
+| K054539 | `rate × clock / 缩放` | `clock / kOutputDivisor` | A | **P1 已切** |
+| QSound | `rate × clock / 10223616` | `clock / kOutputDivisor` | A | **P1 已切** |
+| SegaPCM | `pitch × clock / 32768` | `clock / 256`（pitch 128 的速率，驱动的「无移调」档） | A | **P1 已切** |
+| ADPCM-B | `deltaN × clock / 32768`（核内单位） | 无（各套 ROM 自定） | B | 暂保留按根音出音，P2 处理 |
+| GA20 | `clock/4 / (256-rate)`（字节率） | 无 | B | P2 |
+| ES5503（多周期表） | `freq × fs / 2^(9+res-size)` | 无 | B | P2 |
+
+**参考率决定默认视图的八度**，这是有意的：C140 用 8 kHz（文档化的录制率）、SegaPCM 用 pitch 128（驱动的无移调档）、K053260 用「一字节每输出样本」——三者对同一个采样给出不同八度，但**同一采样内部的音程完全一致**，绝对八度由根音层负责。也因此，「关掉根音」时默认视图的八度是可预期的、跨曲稳定的，而不是随测量漂移。
 
 A 类的 `refRate` 是文档常量，L1 即为绝对音高；B 类在默认模式下也输出 L1，但 `refRate` 只能取一个约定值（当前取「寄存器最慢档」的等效率），因此**八度不可信**，`pitchSource` 标 `sampleInferred`，UI 需要提示。
 
@@ -934,7 +940,7 @@ A 类的 `refRate` 是文档常量，L1 即为绝对音高；B 类在默认模�
 | 阶段 | 内容 | 验收 |
 |---|---|---|
 | P0 | `Pitch.h` 加 L1 函数、`ChannelState`/`NoteEvent` 加字段、数据流贯通（**行为不变**） | `ctest` 全绿且 golden 输出逐字节不变 |
-| P1 | 7 颗 A 类芯片的音高改走 L1，移除音高路径上的周期测量 | 每颗一条 (寄存器 → Hz → 音符) 单测；真实曲目新旧输出之差对整首是**常量平移** |
+| P1 | 7 颗 A 类芯片的音高改走 L1，移除音高路径上的周期测量 | **已完成 6 颗**（C140、C352、K053260、K054539、QSound、SegaPCM；ADPCM-B 判为 B 类，随 P2）。每颗的 `noteFor` 只剩 `quantisePlaybackRate(rate, refRate)`，`channelState` 用 `describeSamplePitch()` 填两层；单测改断言「L1 音符 + rootCents + 两者之和等于旧音高」（`absoluteNote()`），合成资产的期望值随之改成 L1 音符 |
 | P2 | GA20 / ES5503 的实测周期降为 L2，无根音即 one-shot | 两首真实曲目音程形状不变；无根音采样报 C4 |
 | P3 | 设置项 + UI 文案 + 持久化 | 开关两态导出，差值恒为 `rootCents` |
 | P4 | `vgm_mixer_test --pitch-report`（每采样 `rate/hz/移调/根音来源`）、跨 rate 一致性进 ctest | 报告能在真实曲目上标出不一致的采样 |

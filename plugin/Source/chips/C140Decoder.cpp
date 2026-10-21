@@ -19,10 +19,12 @@ namespace
 	// Dividing by 288 * 65536 turns the register and the clock into bytes a second.
 	constexpr double kClockDivisor = 18874368.0;
 
-	// The rate at which a C140 sample ROM is taken to play at its recorded pitch. The chip does not
-	// say, and the games' drivers disagree: 8-bit PCM at 8 kHz is the common case for the boards.
-	// It is only the fallback: a sample whose own cycle length can be measured is played at the
-	// pitch it was recorded at, and this constant covers the rest (drums, noise, mu-law, no ROM).
+	// The rate a C140 sample ROM is taken to be recorded at - the reference of the transposition
+	// layer (L1 in Pitch.h and section 15 of the design doc). The chip does not say and the games'
+	// drivers disagree, so 8 kHz is the documented convention for these boards; it places the note
+	// the registers ask for, and the sample's own measured root only ever moves it by the difference
+	// (see `rootCentsFromCycle`). Reading the note off the sample's cycle instead made every song
+	// depend on a measurement that a wrong window shifts by a constant.
 	constexpr double kRootRate = 8000.0;
 
 	constexpr std::uint8_t kModeMulaw = 0x08;
@@ -51,29 +53,23 @@ namespace
 		return estimateCycleLength (waveform, loopOffset, loopLength);
 	}
 
-	/** One note table per voice: the mapping now depends on the voice's sample as well as on the
-		clock, because a sample only sounds at its recorded pitch at the rate it was recorded at.
-		`samplePeriodBytes` points at the voice's cached estimate and is 0 until one is measured. */
+	/** The note is the transposition the rate register asks for, against the 8 kHz the ROM is taken
+		to be recorded at - registers and one documented constant, no sample bytes. That is L1, and it
+		is the same for every voice, so one table serves them all; the sample's own root travels beside
+		it as `rootCentsFromCycle()` and is applied only when the user asks for it. */
 	class C140NoteTable final : public NoteTable
 	{
 	public:
-		C140NoteTable (double clock, const double* samplePeriod)
-			: bytesPerSecondPerStep (clock / kClockDivisor), samplePeriodBytes (samplePeriod) {}
+		explicit C140NoteTable (double clock)
+			: bytesPerSecondPerStep (clock / kClockDivisor) {}
 
 		int noteFor (std::uint32_t period, int, int* finePitch) const override
 		{
-			const double rate = (double) period * bytesPerSecondPerStep;
-			if (samplePeriodBytes != nullptr && *samplePeriodBytes > 0.0)
-			{
-				return quantiseFrequency (rate / *samplePeriodBytes, finePitch);
-			}
-
-			return quantisePlaybackRate (rate, kRootRate, finePitch);
+			return quantisePlaybackRate ((double) period * bytesPerSecondPerStep, kRootRate, finePitch);
 		}
 
 	private:
 		double bytesPerSecondPerStep;
-		const double* samplePeriodBytes;
 	};
 }
 
@@ -279,9 +275,11 @@ void C140Decoder::reset (std::uint32_t clock, double sampleRate)
 	impl->rom = std::move (rom);
 	impl->banking = banking;
 	impl->tables.reserve ((std::size_t) numChannels);
-	for (auto& voice : impl->channels)
+	// one table serves every voice now: the note is L1 (rate + the 8 kHz reference), and the sample's
+	// own root rides beside it as a correction rather than inside the mapping
+	for (int i = 0; i < numChannels; ++i)
 	{
-		impl->tables.push_back (std::make_unique<C140NoteTable> (impl->clock, &voice.samplePeriodBytes));
+		impl->tables.push_back (std::make_unique<C140NoteTable> (impl->clock));
 	}
 }
 
@@ -392,11 +390,21 @@ ChannelState C140Decoder::channelState (int channel) const
 	}
 
 	const Impl::Channel& voice = impl->channels[channel];
+	const double rate = (double) Impl::frequencyOf (voice) * (impl->clock / kClockDivisor);
+
 	state.present = true;
 	state.gate = impl->isSounding (channel);
 	state.keyOns = voice.keyOns;
 	state.period = Impl::frequencyOf (voice);		// the note table turns the rate into a note
 	state.volume = impl->volumeOf (voice);
+
+	// L1 always; L2 only when the sample has a measurable root, and it is then an inference
+	const SampledPitch pitch =
+		describeSamplePitch (rate, kRootRate, voice.samplePeriodBytes, voice.samplePeriodBytes > 0.0);
+	state.hz = pitch.hz;
+	state.transposeCents = pitch.transposeCents;
+	state.rootCents = pitch.rootCents;
+	state.pitchSource = pitch.source;
 
 	return state;
 }

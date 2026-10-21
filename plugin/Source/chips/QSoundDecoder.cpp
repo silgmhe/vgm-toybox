@@ -65,7 +65,8 @@ namespace
 
 			if (melodic != nullptr && *melodic && cycleLength != nullptr && *cycleLength > 0.0)
 			{
-				return quantiseFrequency (rate / *cycleLength, finePitch);
+				// L1: the transposition the rate register asks for, never the sample's bytes
+				return quantisePlaybackRate (rate, rootRate, finePitch);
 			}
 
 			if (rom == nullptr || rom->empty())
@@ -633,6 +634,14 @@ ChannelState QSoundDecoder::channelState (int channel) const
 		state.period = voice.rate;
 		state.volume = impl->volumeOf (voice.volume);
 		state.keyOns = voice.keyOns;
+
+		const SampledPitch pitch = describeSamplePitch (impl->unitsPerSecond (voice),
+														impl->clock / kOutputDivisor, voice.cycleLength,
+														voice.melodic);
+		state.hz = pitch.hz;
+		state.transposeCents = pitch.transposeCents;
+		state.rootCents = pitch.rootCents;
+		state.pitchSource = pitch.source;
 	}
 	else
 	{
@@ -641,6 +650,16 @@ ChannelState QSoundDecoder::channelState (int channel) const
 		state.period = 1;		// its clock is fixed, the note table knows the rate
 		state.volume = impl->volumeOf (voice.volume);
 		state.keyOns = voice.keyOns;
+
+		// the ADPCM voices run at a fixed 8 kHz, so their transposition is against that and their
+		// root comes from the sample's own cycle like every other sampled voice
+		const SampledPitch pitch = describeSamplePitch (impl->adpcmUnitsPerSecond (),
+														impl->adpcmUnitsPerSecond (), voice.cycleLength,
+														voice.melodic);
+		state.hz = pitch.hz;
+		state.transposeCents = pitch.transposeCents;
+		state.rootCents = pitch.rootCents;
+		state.pitchSource = pitch.source;
 	}
 
 	return state;

@@ -54,6 +54,16 @@ namespace
 		}
 	}
 
+	/** The note the chip actually sounds: the transposition layer plus the sample's own root.
+
+		Before the two layers existed the decoder reported this sum directly, so the older
+		expectations ("64 bytes a cycle at 28160 a second is A4") still hold - as a statement about
+		the absolute pitch - while `note` alone is now the register-only answer. */
+	int absoluteNote (const NoteEvent& note)
+	{
+		return (int) std::lround ((double) (note.note * 100 + note.rootCents) / 100.0);
+	}
+
 	/** Keeps the notes easy to read: `stream.at (44100, 0x03, 0x00)` is a write at one second. */
 	struct Stream
 	{
@@ -119,7 +129,7 @@ namespace
 			return;
 		}
 
-		check (notes[0].note == 69, "442 Hz decodes to A4");
+		check (absoluteNote (notes[0]) == 69, "442 Hz decodes to A4");
 		check (notes[0].startSample == 0, "the note starts with the write that opened it");
 		check (distance (notes[0].endSample, 44100) <= 64, "the note ends where the length went to 0");
 		check (notes[0].velocity == 127, "constant volume 15 is full velocity");
@@ -142,7 +152,7 @@ namespace
 			return;
 		}
 
-		check (notes[0].note == 69 && notes[1].note == 57, "the second note is an octave lower");
+		check (absoluteNote (notes[0]) == 69 && absoluteNote (notes[1]) == 57, "the second note is an octave lower");
 		check (notes[0].endSample == notes[1].startSample, "the notes meet without a gap");
 		check (distance (notes[1].startSample, 22050) <= 64, "the second note starts at the write");
 	}
@@ -204,7 +214,7 @@ namespace
 		}
 
 		// 1789773 / (32 * 253) = 221 Hz
-		check (notes[0].note == 57, "the triangle plays A3");
+		check (absoluteNote (notes[0]) == 57, "the triangle plays A3");
 		check (notes[0].logicalChannel == 2, "the triangle is channel 2");
 		check (notes[0].isDrum == false, "the triangle is a melodic channel");
 	}
@@ -226,7 +236,7 @@ namespace
 		}
 
 		check (notes[0].isDrum, "the noise channel is a drum track");
-		check (notes[0].note == 40, "period index 4 maps to the snare key");
+		check (absoluteNote (notes[0]) == 40, "period index 4 maps to the snare key");
 		check (notes[0].logicalChannel == 3, "the noise is channel 3");
 	}
 
@@ -301,7 +311,7 @@ namespace
 			return;
 		}
 
-		check (notes[0].note == 69, "fnum 0x21D at block 4 decodes to A4");
+		check (absoluteNote (notes[0]) == 69, "fnum 0x21D at block 4 decodes to A4");
 		check (notes[0].startSample == 0, "the note starts with the key-on");
 		check (distance (notes[0].endSample, 44100) <= 64, "key off ends the note");
 		check (notes[0].logicalChannel == 0, "the first FM channel is channel 0");
@@ -344,7 +354,7 @@ namespace
 		check (notes.size() == 2, "a block change starts a second note");
 		if (notes.size() == 2)
 		{
-			check (notes[1].note == 81, "one block up is one octave up");
+			check (absoluteNote (notes[1]) == 81, "one block up is one octave up");
 		}
 	}
 
@@ -426,7 +436,7 @@ namespace
 
 		check (notes.size() == 1 && notes[0].logicalChannel == 2,
 			   "a YM2203 key-on stays inside its three channels");
-		check (notes.size() == 1 && notes[0].note == 69,
+		check (notes.size() == 1 && absoluteNote (notes[0]) == 69,
 			   "the YM2203 shares the OPN f-number relation");
 	}
 
@@ -503,7 +513,7 @@ namespace
 		}
 
 		check (notes[0].logicalChannel == 12, "ADPCM-B is channel 12");
-		check (notes[0].note == 69, "a 16-nibble cycle at 7080 nibbles a second is A4");
+		check (absoluteNote (notes[0]) == 69, "a 16-nibble cycle at 7080 nibbles a second is A4");
 		check (notes[0].family == toybox::chips::Family::opnAdpcmB,
 			   "and its family says the pitch is real");
 		check (! notes[0].isDrum, "so it is not a trigger");
@@ -528,7 +538,7 @@ namespace
 
 		const auto notes = toybox::chips::extractNotes (decoder, stream.writes, 44100);
 
-		check (notes.size() == 1 && notes[0].note == 81,
+		check (notes.size() == 1 && absoluteNote (notes[0]) == 81,
 			   "twice DELTA-N is an octave up: A5 from the same sample");
 	}
 
@@ -584,7 +594,7 @@ namespace
 
 		const auto notes = toybox::chips::extractNotes (decoder, stream.writes, 44100);
 
-		check (notes.size() == 1 && notes[0].note == 60 && notes[0].isDrum,
+		check (notes.size() == 1 && absoluteNote (notes[0]) == 60 && notes[0].isDrum,
 			   "an ADPCM-B sample with no period is the C4 drum trigger");
 	}
 
@@ -608,7 +618,7 @@ namespace
 
 		const auto notes = toybox::chips::extractNotes (decoder, stream.writes, 44100);
 
-		check (notes.size() == 1 && notes[0].note == 69,
+		check (notes.size() == 1 && absoluteNote (notes[0]) == 69,
 			   "the OPNA reaches the same sample 32 bytes at a time: still A4 at its clock");
 	}
 
@@ -665,7 +675,7 @@ namespace
 			return;
 		}
 
-		check (notes[0].note == 69, "KC 0x4A decodes to A4 at the reference clock");
+		check (absoluteNote (notes[0]) == 69, "KC 0x4A decodes to A4 at the reference clock");
 		check (notes[0].logicalChannel == 0, "OPM channel 0 is its own track");
 		check (distance (notes[0].endSample, 22050) <= 64, "a zero operator mask ends the note");
 	}
@@ -682,7 +692,7 @@ namespace
 		decoder.reset (7159090, 44100.0);
 		const auto notes = toybox::chips::extractNotes (decoder, stream.writes, 22050);
 
-		check (notes.size() == 1 && notes[0].note == 81,
+		check (notes.size() == 1 && absoluteNote (notes[0]) == 81,
 			   "a doubled OPM clock lifts the same KC by an octave");
 	}
 
@@ -704,7 +714,7 @@ namespace
 			return;
 		}
 
-		check (notes[0].note == 69, "OPL2 FNUM 0x244 block 4 decodes to A4");
+		check (absoluteNote (notes[0]) == 69, "OPL2 FNUM 0x244 block 4 decodes to A4");
 		check (notes[0].logicalChannel == 0, "OPL2 channel 0 is its own track");
 		check (distance (notes[0].endSample, 22050) <= 64, "clearing B0 bit 5 ends the note");
 	}
@@ -722,7 +732,7 @@ namespace
 		decoder.reset (3579545, 44100.0);
 		const auto notes = toybox::chips::extractNotes (decoder, stream.writes, 44100);
 
-		check (notes.size() == 1 && notes[0].note == 69,
+		check (notes.size() == 1 && absoluteNote (notes[0]) == 69,
 			   "OPLL FNUM 0x122 block 4 decodes to A4");
 		check (notes.size() == 1 && distance (notes[0].endSample, 11025) <= 64,
 			   "0x30 bit 5 is the OPLL key-off");
@@ -743,7 +753,7 @@ namespace
 
 		check (notes.size() == 1 && notes[0].logicalChannel == 9,
 			   "the OPL3 second port plays channel 9");
-		check (notes.size() == 1 && notes[0].note == 69,
+		check (notes.size() == 1 && absoluteNote (notes[0]) == 69,
 			   "the OPL3 clock is compensated by its divisor");
 	}
 
@@ -800,7 +810,7 @@ namespace
 			return;
 		}
 
-		check (notes[0].note == 69, "frequency 1750 decodes to A4");
+		check (absoluteNote (notes[0]) == 69, "frequency 1750 decodes to A4");
 		check (notes[0].startSample == 0, "the note starts with the trigger");
 		check (distance (notes[0].endSample, 44100) <= 128, "the power switch ends the note");
 		check (notes[0].velocity == 127, "envelope volume 15 is full velocity");
@@ -864,7 +874,7 @@ namespace
 			return;
 		}
 
-		check (notes[0].note == 69, "the wave channel divides the clock by 64, so 1899 is A4");
+		check (absoluteNote (notes[0]) == 69, "the wave channel divides the clock by 64, so 1899 is A4");
 		check (notes[0].logicalChannel == 2, "the wave channel is channel 2");
 		check (notes[0].family == toybox::chips::Family::gbWave, "the note carries the wave family");
 		check (notes[0].isDrum == false, "the wave channel is melodic");
@@ -896,7 +906,7 @@ namespace
 		check (fastNotes[0].isDrum, "the noise channel is a drum track");
 		check (fastNotes[0].logicalChannel == 3, "the noise is channel 3");
 		check (fastNotes[0].family == toybox::chips::Family::gbNoise, "the note carries the noise family");
-		check (fastNotes[0].note == 38, "the fastest noise lands on the first drum key");
+		check (absoluteNote (fastNotes[0]) == 38, "the fastest noise lands on the first drum key");
 		check (slowNotes[0].note > fastNotes[0].note, "a slower noise lands on a higher drum key");
 	}
 
@@ -939,7 +949,7 @@ namespace
 			return;
 		}
 
-		check (notes[0].note == 69, "divider 254 decodes to A4");
+		check (absoluteNote (notes[0]) == 69, "divider 254 decodes to A4");
 		check (notes[0].logicalChannel == 0, "the selected channel is channel 0");
 		check (notes[0].family == toybox::chips::Family::c6280Wave, "the note carries the wave family");
 		check (notes[0].velocity == 127, "volume 31 is full velocity");
@@ -960,9 +970,9 @@ namespace
 			return;
 		}
 
-		check (notes[0].note == 69 && notes[0].logicalChannel == 0,
+		check (absoluteNote (notes[0]) == 69 && notes[0].logicalChannel == 0,
 			   "the first note keeps its own channel");
-		check (notes[1].note == 57 && notes[1].logicalChannel == 2,
+		check (absoluteNote (notes[1]) == 57 && notes[1].logicalChannel == 2,
 			   "the high nibble of the divider reaches channel 2");
 	}
 
@@ -990,7 +1000,7 @@ namespace
 
 		check (fastNotes[0].isDrum, "the noise channel is a drum track");
 		check (fastNotes[0].logicalChannel == 4, "the noise is channel 4");
-		check (fastNotes[0].note == 38, "the fastest noise lands on the first drum key");
+		check (absoluteNote (fastNotes[0]) == 38, "the fastest noise lands on the first drum key");
 		check (slowNotes[0].note > fastNotes[0].note, "a slower rate lands on a higher drum key");
 	}
 
@@ -1009,7 +1019,7 @@ namespace
 			return;
 		}
 
-		check (notes[0].note == 69 && ! notes[0].isDrum, "the noise bit does nothing on channel 0");
+		check (absoluteNote (notes[0]) == 69 && ! notes[0].isDrum, "the noise bit does nothing on channel 0");
 	}
 
 	// ---- K051649 / SCC ----
@@ -1046,7 +1056,7 @@ namespace
 		}
 
 		// 3579545 / (16 * 509) = 439.5 Hz
-		check (notes[0].note == 69, "divider 508 is A4");
+		check (absoluteNote (notes[0]) == 69, "divider 508 is A4");
 		check (notes[0].logicalChannel == 0, "the latch selected channel 0");
 		check (notes[0].family == toybox::chips::Family::sccWave, "the note carries the wave family");
 		check (notes[0].velocity == 127, "volume 15 is full velocity");
@@ -1089,7 +1099,7 @@ namespace
 		}
 
 		// 3579545 / (16 * 255) = 877.3 Hz
-		check (notes[0].note == 81, "divider 254 is A5");
+		check (absoluteNote (notes[0]) == 81, "divider 254 is A5");
 		check (notes[0].logicalChannel == 1, "the frequency latch selected channel 1");
 	}
 
@@ -1130,7 +1140,7 @@ namespace
 		}
 
 		// 8000000 * 8 / (512 * (511 - 227)) = 440.1 Hz
-		check (notes[0].note == 69, "octave 3 and frequency 227 are A4");
+		check (absoluteNote (notes[0]) == 69, "octave 3 and frequency 227 are A4");
 		check (notes[0].logicalChannel == 0, "the note is on channel 0");
 		check (notes[0].family == toybox::chips::Family::saaSquare, "the note carries the SAA family");
 		check (notes[0].velocity == 127, "amplitude 15 is full velocity");
@@ -1189,7 +1199,7 @@ namespace
 		}
 
 		check (notes[0].isDrum, "a noise-only channel is a drum track");
-		check (notes[0].note == 38, "the fastest noise generator lands on the first drum key");
+		check (absoluteNote (notes[0]) == 38, "the fastest noise generator lands on the first drum key");
 	}
 
 	void testSaaNoiseRatePicksTheDrumKey (void)
@@ -1208,7 +1218,7 @@ namespace
 			return;
 		}
 
-		check (notes[0].note == 42, "a slower generator lands on a higher drum key");
+		check (absoluteNote (notes[0]) == 42, "a slower generator lands on a higher drum key");
 	}
 
 	// ---- POKEY ----
@@ -1235,7 +1245,7 @@ namespace
 		}
 
 		// (1789772 / 28) / (2 * 73) = 437.8 Hz
-		check (notes[0].note == 69, "divider 72 in the 64 kHz mode is A4");
+		check (absoluteNote (notes[0]) == 69, "divider 72 in the 64 kHz mode is A4");
 		check (notes[0].logicalChannel == 0, "the note is on channel 0");
 		check (notes[0].family == toybox::chips::Family::pokeySquare, "the note carries the POKEY family");
 		check (notes[0].velocity == 127, "volume 15 is full velocity");
@@ -1281,7 +1291,7 @@ namespace
 
 		// 16-bit divider 0x100 + 1; 63920 / (2 * 257) = 124.4 Hz
 		check (notes[0].logicalChannel == 0, "the pair reports on its low channel");
-		check (notes[0].note == 47, "the 16-bit divider is B2");
+		check (absoluteNote (notes[0]) == 47, "the 16-bit divider is B2");
 	}
 
 	void testPokeyVolumeOnlyIsSilent (void)
@@ -1320,14 +1330,14 @@ namespace
 			}
 
 			// 3072000 / (32 * (2048 - 1830)) = 440.4 Hz
-			check (notes[0].note == 69, "divider 1830 is A4");
+			check (absoluteNote (notes[0]) == 69, "divider 1830 is A4");
 			check (notes[0].logicalChannel == 0, "the note is on channel 0");
 			check (notes[0].family == toybox::chips::Family::wsWave,
 				   "the note carries the WonderSwan family");
 			check (notes[0].velocity == 127, "volume 15 is full velocity");
 
 			const auto fallback = runWswan (stream, 22050, 0);
-			check (fallback.size() == 1 && fallback[0].note == 69,
+			check (fallback.size() == 1 && absoluteNote (fallback[0]) == 69,
 				   "a header without a clock falls back to 3.072 MHz");
 		}
 
@@ -1380,7 +1390,7 @@ namespace
 				return;
 			}
 
-			check (notes[0].note == 38, "the slowest noise rate is the base drum key");
+			check (absoluteNote (notes[0]) == 38, "the slowest noise rate is the base drum key");
 			check (notes[0].isDrum, "the noise channel is a drum");
 			check (notes[0].family == toybox::chips::Family::wsNoise,
 				   "the note carries the noise family");
@@ -1454,7 +1464,7 @@ namespace
 				return;
 			}
 
-			check (notes[0].note == 60, "the voice is a C4 marker");
+			check (absoluteNote (notes[0]) == 60, "the voice is a C4 marker");
 			check (notes[0].endSample <= 4480, "the marker lasts about 100 ms");
 			check (notes[0].family == toybox::chips::Family::adpcmDrum, "the voice is a sample");
 		}
@@ -1486,7 +1496,7 @@ namespace
 				return;
 			}
 
-			check (notes[0].note == 69, "SN76489 divider 254 decodes to A4");
+			check (absoluteNote (notes[0]) == 69, "SN76489 divider 254 decodes to A4");
 			check (notes[0].logicalChannel == 0, "SN76489 channel 0 is its own track");
 			check (distance (notes[0].endSample, 22050) <= 64, "attenuation 15 ends the note");
 		}
@@ -1502,7 +1512,7 @@ namespace
 
 			const auto notes = runSn (stream, 22050);
 
-			check (notes.size() == 1 && notes[0].note == 69,
+			check (notes.size() == 1 && absoluteNote (notes[0]) == 69,
 				   "the high divider byte belongs to the latch channel");
 			check (notes.size() == 1 && notes[0].logicalChannel == 1,
 				   "SN76489 channel 1 is its own track");
@@ -1566,7 +1576,7 @@ namespace
 				return;
 			}
 
-			check (notes[0].note == 69, "AY divider 254 decodes to A4");
+			check (absoluteNote (notes[0]) == 69, "AY divider 254 decodes to A4");
 			check (notes[0].logicalChannel == 0, "AY channel A is its own track");
 			check (notes[0].family == toybox::chips::Family::aySquare, "the AY square has its own family");
 		}
@@ -1622,7 +1632,7 @@ namespace
 				return;
 			}
 
-			check (notes[0].note == 60, "the sample is a C4 marker");
+			check (absoluteNote (notes[0]) == 60, "the sample is a C4 marker");
 			check (notes[0].logicalChannel == 0, "RF5C68 channel 0 is its own track");
 			check (notes[0].isDrum, "the sample is a drum track");
 			check (distance (notes[0].endSample, 3528) <= 64, "a driver that never disables still ends");
@@ -1678,7 +1688,7 @@ namespace
 				return;
 			}
 
-			check (notes[0].note == 69, "0x0735 of 6.10 pitch at 16 MHz is A4");
+			check (absoluteNote (notes[0]) == 69, "0x0735 of 6.10 pitch at 16 MHz is A4");
 			check (notes[0].logicalChannel == 0, "X1-010 channel 0 is its own track");
 			check (! notes[0].isDrum, "a wavetable voice is a melodic track");
 			check (distance (notes[0].endSample, 8000) <= 2, "the key-off ends the note");
@@ -1695,7 +1705,7 @@ namespace
 
 			const auto notes = runX1 (stream, 12000);
 
-			check (notes.size() == 1 && notes[0].note == 57, "the divider flag drops the note an octave");
+			check (notes.size() == 1 && absoluteNote (notes[0]) == 57, "the divider flag drops the note an octave");
 		}
 
 		/** PCM mode: the same channel plays a sample, and the note is a C4 marker the decoder's
@@ -1715,7 +1725,7 @@ namespace
 				return;
 			}
 
-			check (notes[0].note == 60, "the sample is a C4 marker");
+			check (absoluteNote (notes[0]) == 60, "the sample is a C4 marker");
 			check (notes[0].isDrum, "a PCM channel is a drum track");
 			check (distance (notes[0].endSample, 3528) <= 64, "the 80 ms gate ends the sample");
 		}
@@ -1766,7 +1776,7 @@ namespace
 				return;
 			}
 
-			check (notes[0].note == 60, "the sample is a C4 marker");
+			check (absoluteNote (notes[0]) == 60, "the sample is a C4 marker");
 			check (notes[0].logicalChannel == 0, "voice 0 is its own track");
 			check (notes[0].isDrum, "a PCM voice is a drum track");
 			check (distance (notes[0].endSample, 3528 + 10) <= 64, "the 80 ms gate ends the sample");
@@ -1840,7 +1850,7 @@ namespace
 				return;
 			}
 
-			check (notes[0].note == 69, "block 4, fns 0x51C, multiple 1 is A4");
+			check (absoluteNote (notes[0]) == 69, "block 4, fns 0x51C, multiple 1 is A4");
 			check (notes[0].logicalChannel == 0, "group 0 is its own track");
 			check (notes[0].family == toybox::chips::Family::fm, "the note carries the FM family");
 			check (! notes[0].isDrum, "a four-operator group is melodic");
@@ -1933,7 +1943,7 @@ namespace
 				return;
 			}
 
-			check (notes[0].note == 69, "the pair's carrier plays A4");
+			check (absoluteNote (notes[0]) == 69, "the pair's carrier plays A4");
 			check (notes[0].logicalChannel == 0, "the pair reports on the group's channel");
 		}
 
@@ -1955,7 +1965,7 @@ namespace
 				return;
 			}
 
-			check (notes[0].note == 60, "the sample is a C4 marker");
+			check (absoluteNote (notes[0]) == 60, "the sample is a C4 marker");
 			check (notes[0].isDrum, "a PCM group is a drum track");
 			check (notes[0].family == toybox::chips::Family::adpcmDrum,
 				   "the note carries the ADPCM family");
@@ -2063,7 +2073,7 @@ namespace
 			return;
 		}
 
-		check (notes[0].note == 69, "31711 at 8 MHz is 13440 bytes a second, A4");
+		check (absoluteNote (notes[0]) == 69, "31711 at 8 MHz is 13440 bytes a second, A4");
 		check (notes[0].logicalChannel == 0, "C140 voice 0 is its own track");
 		check (! notes[0].isDrum, "a sampled voice is a melodic track");
 		check (distance (notes[0].endSample, 4420) <= 64, "the end address ends the note at 100 ms");
@@ -2126,7 +2136,7 @@ namespace
 
 		const auto notes = runC140 (stream, 20000, 16000000);
 
-		check (notes.size() == 1 && notes[0].note == 81, "double the clock is an octave up");
+		check (notes.size() == 1 && absoluteNote (notes[0]) == 81, "double the clock is an octave up");
 	}
 
 	/** Silence is not a note: both volumes at zero attenuate the voice to nothing, and the core
@@ -2179,12 +2189,15 @@ namespace
 		}
 
 		check (notes[0].logicalChannel == 16, "offset 0x105 is voice 16, not voice 0");
-		check (notes[0].note == 81, "and it keeps its own frequency, an octave above voice 0's");
+		check (absoluteNote (notes[0]) == 81, "and it keeps its own frequency, an octave above voice 0's");
 	}
 
-	/** With the ROM, the note is the sample's own pitch: 8448 bytes a second over a sixteen-byte
-		cycle is 528 Hz, C5 - not the 276 Hz the 8 kHz root rate would claim. */
-	void testC140SamplePeriodIsTheNote (void)
+	/** The pitch is two layers, and this is the case that shows both: the note is the transposition
+		the rate register asks for (8448 bytes a second against the 8 kHz reference is +94 cents, so
+		C#4), while the sample's own root - a sixteen-byte cycle, which at 8 kHz would be 500 Hz - is
+		a separate +1121 cents. Adding them puts the note back on C5, which is what the chip sounds,
+		and that sum is the invariant the refactor is built on. */
+	void testC140TranspositionAndRoot (void)
 	{
 		Stream stream;
 		setC140LoopedSample (stream);
@@ -2197,7 +2210,14 @@ namespace
 			return;
 		}
 
-		check (notes[0].note == 72, "16 bytes a cycle at 8448 a second is 528 Hz, C5");
+		check (notes[0].note == 61, "L1: 8448 bytes a second against 8 kHz is C#4");
+		check (distance (notes[0].transposeCents, 94) <= 2, "L1 is +94 cents");
+		check (distance (notes[0].rootCents, 1121) <= 3,
+			   "L2: a sixteen-byte cycle at 8 kHz is 500 Hz, +1121 cents from middle C");
+		check (notes[0].pitchSource == toybox::chips::PitchSource::sampleInferred,
+			   "a measured root says so");
+		check (distance (notes[0].note * 100 + notes[0].rootCents, 7200) <= 25,
+			   "L1 + L2 is the C5 the chip sounds: the two layers must add up to the old mapping");
 	}
 
 	/** Without a ROM nothing can be measured, so the root rate still decides - that is the C140's
@@ -2209,7 +2229,7 @@ namespace
 
 		const auto notes = runC140 (stream, 20000);
 
-		check (notes.size() == 1 && notes[0].note == 61,
+		check (notes.size() == 1 && absoluteNote (notes[0]) == 61,
 			   "8448 bytes a second against the 8 kHz root is C#4 without a ROM");
 	}
 
@@ -2242,18 +2262,22 @@ namespace
 		stream.at (10, 0x00, 0x05, 0x90);
 		stream.at (8000, 0x00, 0x05, 0x10);
 
+		// the note is L1 and does not depend on the ROM at all, so the folding shows up in the root:
+		// bank 0x14 address 0x95C0 is ROM offset 0x495C0, where the sixteen-byte cycle is measured
 		const auto folded = runC140 (stream, 20000, 8000000, rom);
-		check (folded.size() == 1 && folded[0].note == 72,
-			   "bank 0x14 address 0x95C0 is ROM offset 0x495C0, C5");
+		check (folded.size() == 1 && folded[0].note == 61,
+			   "the note is the transposition, C#4, whatever the ROM holds");
+		check (! folded.empty() && distance (folded[0].rootCents, 1121) <= 3,
+			   "bank 0x14 address 0x95C0 is ROM offset 0x495C0, where the root is measured");
 
 		// the same registers with a linear ROM (the banking type the header may name instead)
-		// address 0x1495C0, which no one-megabyte image holds: the note goes back to the root rate
+		// address 0x1495C0, which no one-megabyte image holds: no root is measured, so L2 is zero
 		toybox::chips::C140Decoder decoder;
 		decoder.reset (8000000, 44100.0);
 		decoder.setRom (rom, toybox::chips::C140Decoder::Banking::linear);
 		const auto linear = toybox::chips::extractNotes (decoder, stream.writes, 20000);
-		check (linear.size() == 1 && linear[0].note == 61,
-			   "an unfolded address past the ROM keeps the root rate");
+		check (linear.size() == 1 && absoluteNote (linear[0]) == 61 && linear[0].rootCents == 0,
+			   "an unfolded address past the ROM leaves no root, so only L1 remains");
 	}
 
 	/** A sample that never repeats - a drum, noise - must not get an invented pitch: its bytes
@@ -2273,7 +2297,7 @@ namespace
 
 		const auto notes = runC140 (stream, 20000, 8000000, rom);
 
-		check (notes.size() == 1 && notes[0].note == 61,
+		check (notes.size() == 1 && absoluteNote (notes[0]) == 61,
 			   "a sample with no period keeps the root rate");
 	}
 
@@ -2367,7 +2391,7 @@ namespace
 			return;
 		}
 
-		check (notes[0].note == 60, "0x8000 at 12.288 MHz is 21333 bytes a second, middle C");
+		check (absoluteNote (notes[0]) == 60, "0x8000 at 12.288 MHz is 21333 bytes a second, middle C");
 		check (notes[0].logicalChannel == 0, "C352 voice 0 is its own track");
 		check (! notes[0].isDrum, "a sampled voice is a melodic track");
 		check (distance (notes[0].startSample, 10) <= 64, "the note starts at the execute write");
@@ -2455,7 +2479,7 @@ namespace
 
 		const auto notes = runC352 (stream, 20000);
 
-		check (notes.size() == 1 && notes[0].note == 60,
+		check (notes.size() == 1 && absoluteNote (notes[0]) == 60,
 			   "one output channel at full volume is a note, and the volume pairs are words");
 	}
 
@@ -2478,7 +2502,11 @@ namespace
 			return;
 		}
 
-		check (notes[0].note == 69, "64 bytes a cycle at 28160 a second is 440 Hz, A4");
+		check (absoluteNote (notes[0]) == 69, "64 bytes a cycle at 28160 a second is 440 Hz, A4");
+		// 28160 against the chip's own 12288000/576 = 21333 is +481 cents, so F4 - the absolute
+		// A4 only appears once the sample's root (a 64-byte cycle, +420 cents) is added
+		check (notes[0].note == 65 && distance (notes[0].transposeCents, 481) <= 3,
+			   "L1 alone is F4 with +481 cents");
 	}
 
 	/** Without a ROM nothing can be measured, so the root rate still decides: 28160 bytes a second
@@ -2491,7 +2519,7 @@ namespace
 
 		const auto notes = runC352 (stream, 20000);
 
-		check (notes.size() == 1 && notes[0].note == 65,
+		check (notes.size() == 1 && absoluteNote (notes[0]) == 65,
 			   "28160 bytes a second against the clock/576 root is F4 without a ROM");
 	}
 
@@ -2513,7 +2541,7 @@ namespace
 
 		const auto notes = runC352 (stream, 20000, 12288000, rom);
 
-		check (notes.size() == 1 && notes[0].note == 65,
+		check (notes.size() == 1 && absoluteNote (notes[0]) == 65,
 			   "a sample with no period keeps the root rate");
 	}
 
@@ -2543,9 +2571,9 @@ namespace
 		const auto lowNotes = runC352 (low, 20000, 12288000, rom);
 		const auto highNotes = runC352 (high, 20000, 12288000, rom);
 
-		check (lowNotes.size() == 1 && lowNotes[0].note == 69,
+		check (lowNotes.size() == 1 && absoluteNote (lowNotes[0]) == 69,
 			   "bank 0 start 0 is the 64-byte cycle, A4");
-		check (highNotes.size() == 1 && highNotes[0].note == 81,
+		check (highNotes.size() == 1 && absoluteNote (highNotes[0]) == 81,
 			   "bank 1 start 0 is 64 KB further in, and an octave up");
 	}
 
@@ -2581,9 +2609,9 @@ namespace
 		const auto wholeNotes = runC352 (whole, 20000, 12288000, rom);
 		const auto shortNotes = runC352 (shortCycle, 20000, 12288000, rom);
 
-		check (wholeNotes.size() == 1 && wholeNotes[0].note == 69,
+		check (wholeNotes.size() == 1 && absoluteNote (wholeNotes[0]) == 69,
 			   "a one-cycle wavetable loop of sixteen bytes at 7040 a second is A4");
-		check (shortNotes.size() == 1 && shortNotes[0].note == 70,
+		check (shortNotes.size() == 1 && absoluteNote (shortNotes[0]) == 70,
 			   "the byte at the end address is part of the sample: fifteen bytes is a semitone up");
 	}
 
@@ -2607,9 +2635,9 @@ namespace
 			return;
 		}
 
-		check (notes[0].logicalChannel == 16 && notes[0].note == 60,
+		check (notes[0].logicalChannel == 16 && absoluteNote (notes[0]) == 60,
 			   "offset 0x080 is voice 16, at middle C");
-		check (notes[1].logicalChannel == 31 && notes[1].note == 48,
+		check (notes[1].logicalChannel == 31 && absoluteNote (notes[1]) == 48,
 			   "offset 0x0F8 is voice 31, an octave below");
 	}
 
@@ -2693,7 +2721,7 @@ namespace
 			return;
 		}
 
-		check (notes[0].note == 69, "a 64-byte cycle at 28156 bytes a second is A4");
+		check (absoluteNote (notes[0]) == 69, "a 64-byte cycle at 28156 bytes a second is A4");
 		check (notes[0].logicalChannel == 0, "K053260 voice 0 is its own track");
 		check (! notes[0].isDrum, "a sample with a period is melodic");
 		check (distance (notes[0].startSample, 10) <= 64, "the note starts at the key mask write");
@@ -2822,7 +2850,7 @@ namespace
 			return;
 		}
 
-		check (notes[0].note == 60, "a sample with no period is the C4 trigger, not a pitch");
+		check (absoluteNote (notes[0]) == 60, "a sample with no period is the C4 trigger, not a pitch");
 		check (notes[0].isDrum, "and it is marked as a drum");
 		check (notes[0].family == toybox::chips::Family::adpcmDrum,
 			   "its family says the pitch is not real");
@@ -2843,7 +2871,7 @@ namespace
 
 		const auto notes = runK053260 (fast, 20000, 3579545, rom);
 
-		check (notes.size() == 1 && notes[0].note == 60 && notes[0].isDrum,
+		check (notes.size() == 1 && absoluteNote (notes[0]) == 60 && notes[0].isDrum,
 			   "a period that lands above C8 is a drum hit, not a 5 kHz note");
 	}
 
@@ -2866,7 +2894,7 @@ namespace
 
 		const auto notes = runK053260 (stream, 20000, 3579545, rom);
 
-		check (notes.size() == 1 && notes[0].note == 69,
+		check (notes.size() == 1 && absoluteNote (notes[0]) == 69,
 			   "a decoded KADPCM triangle of sixteen nibbles at 7046 a second is A4");
 	}
 
@@ -2983,7 +3011,7 @@ namespace
 			return;
 		}
 
-		check (notes[0].note == 69, "a 128-byte cycle at 56320 units a second is A4");
+		check (absoluteNote (notes[0]) == 69, "a 128-byte cycle at 56320 units a second is A4");
 		check (notes[0].logicalChannel == 0, "K054539 voice 0 is its own track");
 		check (! notes[0].isDrum, "a sample with a period is melodic");
 		check (notes[0].velocity == 127, "a volume register of 0 is full scale");
@@ -3095,7 +3123,7 @@ namespace
 
 		const auto notes = runK054539 (stream, 20000, 18432000, rom);
 
-		check (notes.size() == 1 && notes[0].note == 69,
+		check (notes.size() == 1 && absoluteNote (notes[0]) == 69,
 			   "a 64-word cycle at 28160 words a second is A4");
 	}
 
@@ -3124,7 +3152,7 @@ namespace
 
 		const auto notes = runK054539 (stream, 20000, 18432000, rom);
 
-		check (notes.size() == 1 && notes[0].note == 69,
+		check (notes.size() == 1 && absoluteNote (notes[0]) == 69,
 			   "a decoded 32-nibble DPCM cycle at 14080 a second is A4");
 	}
 
@@ -3161,7 +3189,7 @@ namespace
 
 		const auto notes = runK054539 (stream, 20000, 18432000, rom);
 
-		check (notes.size() == 1 && notes[0].note == 60 && notes[0].isDrum,
+		check (notes.size() == 1 && absoluteNote (notes[0]) == 60 && notes[0].isDrum,
 			   "a smooth attack is a drum hit, not the 2.6 kHz its smoothness suggests");
 	}
 
@@ -3286,7 +3314,7 @@ namespace
 			return;
 		}
 
-		check (notes[0].note == 69, "a 55-byte cycle at 24038 bytes a second is A4");
+		check (absoluteNote (notes[0]) == 69, "a 55-byte cycle at 24038 bytes a second is A4");
 		check (notes[0].logicalChannel == 0, "QSound voice 0 is its own track");
 		check (! notes[0].isDrum, "a sample with a period is melodic");
 		check (notes[0].velocity == 127, "a full-scale volume register is full velocity");
@@ -3330,7 +3358,7 @@ namespace
 
 		const auto notes = runQSound (stream, 20000, 60000000, rom);
 
-		check (notes.size() == 1 && notes[0].note == 69,
+		check (notes.size() == 1 && absoluteNote (notes[0]) == 69,
 			   "a looping QSound voice keeps the note its loop measures");
 		check (notes.size() == 1 && distance (notes[0].endSample, 6000) <= 64,
 			   "and only the rate going to zero ends it");
@@ -3357,7 +3385,13 @@ namespace
 
 		const auto notes = runQSound (stream, 20000, 60000000, rom);
 
-		check (notes.size() == 1, "a rate written while sounding slides the note, it does not start one");
+		// The rate writes are a slide, not key-ons: the note starts at the key-on and any further
+		// entry is the *same* note split where the vibrato crosses a semitone boundary. Which
+		// boundary that is moved when the pitch became L1 (a constant offset), which is why this
+		// counts starts rather than notes - the property under test is that no key-on happens.
+		check (! notes.empty() && notes.front().startSample == 0,
+			   "a rate written while sounding slides the note, it does not start one");
+		check (notes.size() <= 2, "the vibrato can only split the note once, at a semitone boundary");
 	}
 
 	/** The chip addresses eight megabytes - a 15-bit bank of 64 KB pages - and the QSound Logo's
@@ -3374,7 +3408,7 @@ namespace
 
 		const auto notes = runQSound (stream, 20000, 60000000, rom);
 
-		check (notes.size() == 1 && notes[0].note == 69,
+		check (notes.size() == 1 && absoluteNote (notes[0]) == 69,
 			   "a sample at 0x480000 is reachable: the QSound addresses eight megabytes, not four");
 	}
 
@@ -3395,7 +3429,7 @@ namespace
 
 		const auto notes = runQSound (stream, 20000, 60000000, rom);
 
-		check (notes.size() == 1 && notes[0].note == 60 && notes[0].isDrum,
+		check (notes.size() == 1 && absoluteNote (notes[0]) == 60 && notes[0].isDrum,
 			   "a sample with no period is the C4 drum trigger");
 		check (notes.size() == 1 && notes[0].family == toybox::chips::Family::adpcmDrum,
 			   "and its family says the pitch is not real");
@@ -3421,7 +3455,7 @@ namespace
 
 		const auto notes = runQSound (stream, 20000, 60000000, rom);
 
-		check (notes.size() == 1 && notes[0].note == 69,
+		check (notes.size() == 1 && absoluteNote (notes[0]) == 69,
 			   "the bank register of voice 0 addresses voice 1, which is why this is A4");
 	}
 
@@ -3533,7 +3567,7 @@ namespace
 			return;
 		}
 
-		check (notes[0].note == 67, "an 18-byte cycle at 7159 bytes a second is G4");
+		check (absoluteNote (notes[0]) == 67, "an 18-byte cycle at 7159 bytes a second is G4");
 		check (notes[0].logicalChannel == 0, "GA20 voice 0 is its own track");
 		check (! notes[0].isDrum, "a sample with a period is melodic");
 		check (notes[0].family == toybox::chips::Family::ga20Pcm, "and its family says so");
@@ -3573,7 +3607,7 @@ namespace
 
 		const auto notes = runGa20 (stream, 20000, rom);
 
-		check (notes.size() == 1 && notes[0].note == 60 && notes[0].isDrum,
+		check (notes.size() == 1 && absoluteNote (notes[0]) == 60 && notes[0].isDrum,
 			   "a GA20 sample with no period is the C4 drum trigger");
 	}
 
@@ -3592,7 +3626,7 @@ namespace
 
 		const auto notes = runGa20 (right, 20000, ga20Square (0x10000, 0x4000, 18));
 
-		check (notes.size() == 1 && notes[0].note == 67,
+		check (notes.size() == 1 && absoluteNote (notes[0]) == 67,
 			   "start 0x4000 is register 0x0400: sixteen bytes a step");
 	}
 
@@ -3664,7 +3698,7 @@ namespace
 		}
 
 		check (notes[0].logicalChannel == 0, "ES5503 oscillator 0 is its own track");
-		check (notes[0].note == 67, "a 1024-byte table at 8,000 is G4");
+		check (absoluteNote (notes[0]) == 67, "a 1024-byte table at 8,000 is G4");
 		check (! notes[0].isDrum, "a table with a pitch is melodic");
 		check (notes[0].family == toybox::chips::Family::wavetableWave, "and its family says so");
 		check (notes[0].velocity == 127, "full-scale volume is full velocity");
@@ -3680,7 +3714,7 @@ namespace
 
 		const auto notes = runEs5503 (stream, 30000, es5503Ram (0x0000, 256, 1024));
 
-		check (notes.size() == 1 && notes[0].note == 67,
+		check (notes.size() == 1 && absoluteNote (notes[0]) == 67,
 			   "four 256-byte cycles in 1024 bytes are the same G4 at a quarter of the frequency");
 	}
 
@@ -3734,7 +3768,7 @@ namespace
 
 		const auto notes = runEs5503 (stream, 30000, ram);
 
-		check (notes.size() == 1 && notes[0].note == 60 && notes[0].isDrum,
+		check (notes.size() == 1 && absoluteNote (notes[0]) == 60 && notes[0].isDrum,
 			   "a one-shot ES5503 table with no period is the C4 drum trigger");
 	}
 
@@ -3761,8 +3795,8 @@ namespace
 
 		check (! slow.empty() && ! fast.empty() && slow[0].note != fast[0].note,
 			   "fewer oscillators enabled means a faster chip, so the same registers are a higher note");
-		check (! slow.empty() && slow[0].note == 19, "thirty-two oscillators at 500 is E0");
-		check (! fast.empty() && fast[0].note == 56, "two oscillators at 500 is G#3 (213 Hz)");
+		check (! slow.empty() && absoluteNote (slow[0]) == 19, "thirty-two oscillators at 500 is E0");
+		check (! fast.empty() && absoluteNote (fast[0]) == 56, "two oscillators at 500 is G#3 (213 Hz)");
 	}
 
 	// --- Sega PCM: sixteen voices, registers as playback state, an end address in 256-byte units --
@@ -3821,7 +3855,7 @@ namespace
 		}
 
 		check (notes[0].logicalChannel == 2, "Sega PCM voice 2 is its own track");
-		check (notes[0].note == 57, "a 16-byte cycle at 3563 bytes a second is A3");
+		check (absoluteNote (notes[0]) == 57, "a 16-byte cycle at 3563 bytes a second is A3");
 		check (! notes[0].isDrum, "a sample with a period is melodic");
 		check (notes[0].family == toybox::chips::Family::segaPcmPcm, "and its family says so");
 		check (notes[0].velocity == 127, "a full-scale volume register is full velocity");
@@ -3838,7 +3872,7 @@ namespace
 
 		const auto notes = runSegaPcm (stream, 60000, ga20Square (0x10000, 0x4000, 16, 2048));
 
-		check (notes.size() == 1 && notes[0].note == 69,
+		check (notes.size() == 1 && absoluteNote (notes[0]) == 69,
 			   "twice the pitch is an octave up: A4 from the same sample");
 	}
 
@@ -3872,7 +3906,7 @@ namespace
 
 		const auto notes = runSegaPcm (stream, 60000, rom);
 
-		check (notes.size() == 1 && notes[0].note == 60 && notes[0].isDrum,
+		check (notes.size() == 1 && absoluteNote (notes[0]) == 60 && notes[0].isDrum,
 			   "a Sega PCM sample with no period is the C4 drum trigger");
 	}
 
@@ -3986,7 +4020,7 @@ namespace
 	testC140ClockDoublesThePitch();
 	testC140SilentVoiceIsNoNote();
 	testC140HighVoiceNeedsTheHighOffsetByte();
-	testC140SamplePeriodIsTheNote();
+	testC140TranspositionAndRoot();
 	testC140WithoutRomKeepsTheRootRate();
 	testC140NoisySampleFallsBackToTheRootRate();
 	testC140System2BankIsFolded();

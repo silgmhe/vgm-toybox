@@ -75,7 +75,8 @@ namespace
 
 			if (melodic != nullptr && *melodic && cycleLength != nullptr && *cycleLength > 0.0)
 			{
-				return quantiseFrequency (rate / *cycleLength, finePitch);
+				// L1: the transposition the rate register asks for, never the sample's bytes
+				return quantisePlaybackRate (rate, rootRate, finePitch);
 			}
 
 			if (rom == nullptr || rom->empty())
@@ -564,6 +565,14 @@ ChannelState K054539Decoder::channelState (int channel) const
 	state.keyOns = voice.keyOns;
 	state.period = voice.pitch;
 	state.volume = impl->volumeOf (voice);
+
+	const SampledPitch pitch = describeSamplePitch (impl->unitsPerSecond (voice),
+													impl->clock / kOutputDivisor, voice.cycleLength,
+													voice.melodic);
+	state.hz = pitch.hz;
+	state.transposeCents = pitch.transposeCents;
+	state.rootCents = pitch.rootCents;
+	state.pitchSource = pitch.source;
 
 	return state;
 }
