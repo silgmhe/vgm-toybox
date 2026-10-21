@@ -45,6 +45,60 @@ inline int quantiseFrequency (double hz, int* finePitch)
 	recorded rate. */
 constexpr double kMiddleCHz = 261.6255653005986;
 
+/** Middle C's MIDI note. Every sampled voice's transposition is measured from here, which is what
+	makes the pitch a note the registers alone can name (see the L1/L2 model below). */
+constexpr int kMiddleCNote = 60;
+
+/** L1 - the transposition a playback rate asks for, in cents, against the rate the chip's samples
+	are taken to be recorded at.
+
+	This layer is the one thing about a sampled voice's pitch that is *always* computable: the rate
+	comes from registers and hardware constants, and the reference rate is a documented property of
+	the chip (a 8 kHz DAC, a delta-N scale, a sample-rate table). Nothing here looks at the sample's
+	bytes, so it cannot be wrong about what the driver asked for - only about the absolute octave,
+	which is the reference's job.
+
+	The reference is `MDPlayer`'s model, cited rather than invented: its ADPCM-B pitch is
+	`deltaN * 50kHz / 2^16` divided by 8000 and quantised (`form/KB/OPL/frmY8950.cs`,
+	`Common.searchSegaPCMNote`), its FM pitch is `fnum * clock / (24 * div * 2^21) * 2^(oct+2)`
+	(`PianoRoll/YM2610.cs`), and both end in a nearest-frequency lookup (`common.cs`). Frequency
+	first, note second - never the other way round, and never from the waveform. */
+inline int transpositionCents (double rate, double referenceRate)
+{
+	if (rate <= 0.0 || referenceRate <= 0.0)
+	{
+		return 0;
+	}
+
+	return (int) std::lround (1200.0 * std::log2 (rate / referenceRate));
+}
+
+/** L1 as a MIDI note: middle C plus the transposition, with the leftover cents in `finePitch`.
+
+	A transposition below middle C minus 60 semitones or above the top of the range is not a note
+	(returns -1) - the same "no note" the note extractor already reads from `quantiseFrequency`. */
+inline int quantiseTransposition (int cents, int* finePitch)
+{
+	if (finePitch != nullptr)
+	{
+		*finePitch = 0;
+	}
+
+	const int semitones = (int) std::lround ((double) cents / 100.0);
+	const int note = kMiddleCNote + semitones;
+	if (note < 0 || note > 127)
+	{
+		return -1;
+	}
+
+	if (finePitch != nullptr)
+	{
+		*finePitch = std::max (-99, std::min (99, cents - semitones * 100));
+	}
+
+	return note;
+}
+
 /** Turns the playback rate of a recorded sample into a note.
 
 	A sampled voice carries no pitch in its registers, only the number of bytes a second the chip

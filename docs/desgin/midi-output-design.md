@@ -868,3 +868,74 @@ void render (const playback::OutputBusBuffers* buses, int numBuses, int numSampl
 - JUCE VST3 MIDI 输出：`juce_audio_plugin_client_VST3.cpp:3733-3735`
 - JUCE AU MIDI 输出：`juce_audio_plugin_client_AU_1.mm:729-744`、`AUv3.mm:1647`
 - 参考项目钢琴/FM 算法：`reference/imgui-vgmplayer-v0.44/examples/example_vgm_player/main.cpp:258-397`、`:483-637`
+- MDPlayer 的音高做法（本次标准来源）：`reference/MDPlayer-stable/MDPlayer/MDPlayerx64/common.cs:453-469`（频率→音符取最近值）、`PianoRoll/YM2610.cs:162-166`（FM：`fnum × clock / (24·div·2^21) × 2^(oct+2)`）、`form/KB/OPL/frmY8950.cs:265-272`（ADPCM：`deltaN × 50kHz / 2^16`，再除以 8 kHz 取音符）
+
+## 15. 音高模型：移调量（L1）与根音（L2）
+
+### 15.1 判定标准：先频率，后音符，永不看波形
+
+采样声部的音高过去由「寄存器给出的播放率 ÷ 从 ROM 量出的采样周期」得出，这一步把**芯片说了什么**换成了**我们以为素材是什么**：周期测错的后果不是某个音错，而是整首歌恒定偏移，而且外观上与「素材本来就这样」无法区分。参考项目 MDPlayer 给的是另一条路，且已被验证可行：
+
+- 音高一律先在**物理单位**里算出（Hz），参与运算的只有寄存器与有文档的硬件常量；
+- 再由**唯一的**最近频率查找变成音符（`common.cs:453` 的 `searchYM2608Adpcm` / `searchSegaPCMNote`）；
+- 采样内容**完全缺席**：ADPCM-B 的 `fSample = deltaN × 50kHz / 2^16` 里没有 ROM，它的 ADPCM 音高可视化因此永远可算。
+
+本项目的口径对齐它，并把它拆成两层，因为「可算」与「正确」在采样芯片上不是同一件事。
+
+### 15.2 两层定义
+
+| 层 | 公式 | 来源 | 何时可用 |
+|---|---|---|---|
+| **L1 移调量** | `cents = 1200 · log2(rate / refRate)` | 寄存器 + 该芯片的**标称率** `refRate`（硬件常量：8 kHz DAC、`clock/pres` 的 delta-N 基准、采样率档位） | **永远**（只要 rate ≠ 0） |
+| **L2 根音** | `rootCents` = 该采样在 `refRate` 下实际发声相对 C4 的偏离 | A 类：0（假设「标称率播放 = C4」）；B 类：只能从 ROM/RAM 实测，标 `sampleInferred` | 仅在能测出稳定单一周期时 |
+
+- **默认输出 = L1**：`note = 60 + round(cents/100)`，余数进 pitch bend。等价于「所有采样都录在 C4」，与 MDPlayer 一致，永远不会因为测不出来而错音程。
+- **打开「按根音移调」= L1 + L2**：`note` 由两层之和决定。设置项默认关。
+- 两层都随 `NoteEvent` 一起带出（`transposeCents` / `rootCents` / `pitchSource`），所以切换开关是**渲染时**的决定，不需要重新解析歌曲。
+
+`ChannelState` 与 `NoteEvent` 因此各加 `transposeCents`、`rootCents`、`pitchSource`，`ChannelState` 另加 `hz` 供诊断输出；`chips/Pitch.h` 提供 `transpositionCents()` 与 `quantiseTransposition()`，`quantisePlaybackRate()` 就是 L1 的旧名字（`rootRate` 即 `refRate`），不再是任何芯片的主路径候选。
+
+### 15.3 每芯片归类与标称率
+
+| 芯片 | 寄存器 → 频率 | `refRate` | 类 |
+|---|---|---|---|
+| C140 / C352 / K053260 / K054539 / QSound / SegaPCM | 各自的 rate 寄存器 × 时钟系数 | 8 kHz（标称采样率） | A |
+| ADPCM-B（YM2610/2608） | `deltaN × (clock / pres) / 2^16` | `clock / pres`（Y8950 即 50 kHz） | A |
+| RF5C68 | `rate × clock / 384`（待核对） | 8 kHz（该芯片固定 8 位 PCM 率） | A |
+| GA20 | `clock/4 / (256-rate)`（字节率） | **无**——驱动任意写 rate | B |
+| ES5503（多周期表） | `freq × fs / 2^(9+res-size)` | **无**——表长不是音高 | B |
+
+A 类的 `refRate` 是文档常量，L1 即为绝对音高；B 类在默认模式下也输出 L1，但 `refRate` 只能取一个约定值（当前取「寄存器最慢档」的等效率），因此**八度不可信**，`pitchSource` 标 `sampleInferred`，UI 需要提示。
+
+### 15.4 什么时候会退化成 one-shot（C4 触发）
+
+三条，全部写进设置面板的说明文字：
+
+1. 频率 / rate 寄存器为 0，或门控关闭；
+2. 打开根音移调时，该采样的根音**测不出**，或测量出现**强度接近的多个竞争周期**（和弦/多复音采样）——此时不发明音高；
+3. 算出的音高落在 MIDI 范围外，或高于 C8（108）——那是噪声或测量伪影。
+
+### 15.5 设置项（P3 落地）
+
+- 键：`pitch.useSampleRoot`（bool，默认 **false**），存 `SettingsStore`。
+- 位置：Settings → MIDI 输出子面板（§11.1）。
+- 文案要点（中英各一份，i18n）：
+  - 标题：「按根音移调（可能不准确）」
+  - 说明：「默认只按寄存器算出的移调量排布音高，同一采样内的音程永远准确。打开后会再加上采样自身的根音，用来对齐绝对八度——根音从采样数据里推断，可能偏差。」
+  - 计算方式：「移调量 = 1200 × log2(播放率 / 标称率)；根音 = 采样在标称率下实际音高相对 C4 的偏离。」
+  - 降级说明：「根音测不出、存在多个竞争周期、或音高超出范围时，该声部会输出为 C4 触发的一次性音（one-shot）。」
+
+### 15.6 根音覆盖（暂不做，留接口）
+
+用户可能要手动指定某个采样/某首曲子的根音。预留在 `NoteEvent.rootCents` 这一个字段上：将来由 `SessionState` 的每曲覆盖表给出，覆盖 `rootCents` 即可，不需要动解码器。见 `docs/memo/2026-10-22-sample-root-override.md`。
+
+### 15.7 迁移阶段与验收
+
+| 阶段 | 内容 | 验收 |
+|---|---|---|
+| P0 | `Pitch.h` 加 L1 函数、`ChannelState`/`NoteEvent` 加字段、数据流贯通（**行为不变**） | `ctest` 全绿且 golden 输出逐字节不变 |
+| P1 | 7 颗 A 类芯片的音高改走 L1，移除音高路径上的周期测量 | 每颗一条 (寄存器 → Hz → 音符) 单测；真实曲目新旧输出之差对整首是**常量平移** |
+| P2 | GA20 / ES5503 的实测周期降为 L2，无根音即 one-shot | 两首真实曲目音程形状不变；无根音采样报 C4 |
+| P3 | 设置项 + UI 文案 + 持久化 | 开关两态导出，差值恒为 `rootCents` |
+| P4 | `vgm_mixer_test --pitch-report`（每采样 `rate/hz/移调/根音来源`）、跨 rate 一致性进 ctest | 报告能在真实曲目上标出不一致的采样 |
+| P5 | 文档与决策记录 | — |

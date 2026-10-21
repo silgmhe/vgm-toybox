@@ -32,6 +32,9 @@ ExtractedPerformance extractPerformance (IChipDecoder& decoder,
 		int fine = 0;
 		std::uint32_t start = 0;
 		int velocity = 100;
+		int transposeCents = 0;
+		int rootCents = 0;
+		PitchSource source = PitchSource::unpitched;
 	};
 
 	ExtractedPerformance result;
@@ -61,6 +64,9 @@ ExtractedPerformance extractPerformance (IChipDecoder& decoder,
 			event.logicalChannel = channel;
 			event.family = decoder.family (channel);
 			event.isDrum = decoder.isDrum (channel);
+			event.transposeCents = current.transposeCents;
+			event.rootCents = current.rootCents;
+			event.pitchSource = current.source;
 			result.notes.push_back (event);
 		}
 
@@ -68,7 +74,8 @@ ExtractedPerformance extractPerformance (IChipDecoder& decoder,
 	};
 
 	// a new note always starts on an exact bend, whatever the previous one left behind
-	auto openNote = [&] (int channel, std::uint32_t time, int note, int fine, int volume)
+	auto openNote = [&] (int channel, std::uint32_t time, int note, int fine, int volume,
+						 const ChannelState& state)
 	{
 		OpenNote& current = open[(std::size_t) channel];
 		current.active = true;
@@ -76,6 +83,9 @@ ExtractedPerformance extractPerformance (IChipDecoder& decoder,
 		current.fine = fine;
 		current.start = time;
 		current.velocity = velocityFor (volume);
+		current.transposeCents = state.transposeCents;
+		current.rootCents = state.rootCents;
+		current.source = state.pitchSource;
 
 		PitchEvent bend;
 		bend.sampleTime = time;
@@ -132,7 +142,7 @@ ExtractedPerformance extractPerformance (IChipDecoder& decoder,
 			}
 
 			closeNote (channel, time);
-			openNote (channel, time, note, finePitch, state.volume);
+			openNote (channel, time, note, finePitch, state.volume, state);
 		}
 	}
 

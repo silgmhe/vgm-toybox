@@ -65,6 +65,23 @@ struct RegisterWrite
 	std::uint32_t sampleTime = 0;
 };
 
+/** Where a note's pitch came from - the honesty label the pitch model is built around.
+
+	`registerExact` is a chip whose registers (plus documented hardware constants: a clock divider,
+	a DAC rate, a delta-N scale) fully determine the frequency. `registerWithRoot` is the same plus
+	a per-sample root correction - still from a documented constant in the end, but one that needed a
+	root to place the octave. `sampleInferred` means the pitch had to be measured out of the sample's
+	own bytes, which is the fallback for chips that give a rate but no reference (GA20, ES5503's
+	multi-cycle tables) and is the part that can be wrong about the absolute octave. `unpitched` is
+	no note at all: the C4 trigger a drum or an ambiguous sample reports. */
+enum class PitchSource
+{
+	registerExact,
+	registerWithRoot,
+	sampleInferred,
+	unpitched
+};
+
 /** The normalised description of one channel at one moment. A decoder produces this; the note
 	extractor turns a sequence of them into notes. Everything here is chip-agnostic on purpose:
 	period stays in chip units and is resolved through the channel's note table. */
@@ -78,6 +95,22 @@ struct ChannelState
 	int volume = 0;					// 0..15, envelope already applied
 	int patch = 0;					// duty / waveform / drum id
 	std::int16_t finePitch = 0;		// cents outside the note table
+
+	/** The pitch as the registers state it, in Hz. 0 when the channel has no pitch (a gate that is
+		closed, a drum, a rate register of zero). */
+
+	double hz = 0.0;
+
+	/** L1: the transposition the registers ask for, in cents from the rate the chip's samples are
+		taken to be recorded at. Always computable for a voiced channel, and the number the MIDI
+		output uses unless the user asks for root correction (design doc section 15). */
+	int transposeCents = 0;
+
+	/** L2: the per-sample root correction in cents - 0 when the chip's reference rate is a
+		documented constant (the default) or when the sample's root could not be measured. */
+	int rootCents = 0;
+
+	PitchSource pitchSource = PitchSource::unpitched;
 
 	/** Monotonic count of key-on events on this channel, for the chips that have one.
 
@@ -111,6 +144,13 @@ struct NoteEvent
 	Family family = Family::unknown;
 	int patch = 0;
 	bool isDrum = false;
+
+	/** Both pitch layers travel with the note, so the "transpose by the sample's root" setting can
+		be switched at render time instead of re-parsing the song (design doc section 15). `note` is
+		already the L1 result; adding `rootCents` moves it by the sample's root. */
+	int transposeCents = 0;
+	int rootCents = 0;
+	PitchSource pitchSource = PitchSource::unpitched;
 };
 
 /** A pitch inside a note, in cents from its nearest MIDI note. Vibrato and slides write the
