@@ -18,6 +18,7 @@
 #include "chips/GbcApuDecoder.h"
 #include "chips/HuC6280Decoder.h"
 #include "chips/K051649Decoder.h"
+#include "chips/K053260Decoder.h"
 #include "chips/NesApuDecoder.h"
 #include "chips/NoteExtractor.h"
 #include "chips/PokeyDecoder.h"
@@ -2456,6 +2457,282 @@ namespace
 			   "offset 0x0F8 is voice 31, an octave below");
 	}
 
+	// --- K053260: four voices keyed by a shared mask register ------------------------------------
+
+	std::vector<NoteEvent> runK053260 (const Stream& stream, std::uint32_t totalSamples,
+									   std::uint32_t clock = 3579545,
+									   const std::vector<std::uint8_t>& rom = {})
+	{
+		toybox::chips::K053260Decoder decoder;
+		decoder.reset (clock, 44100.0);
+		if (! rom.empty())
+		{
+			decoder.setRom (rom);
+		}
+
+		return toybox::chips::extractNotes (decoder, stream.writes, totalSamples);
+	}
+
+	void k053260Write (Stream& stream, std::uint32_t time, std::uint8_t offset, std::uint8_t value)
+	{
+		RegisterWrite write;
+		write.reg = offset;
+		write.value = value;
+		write.sampleTime = time;
+		stream.writes.push_back (write);
+	}
+
+	/** Sound output on, both pan registers at centre (4), then the voice's four registers. The
+		start address is the one the driver writes: the core's first fetch is `start + 1`. */
+	void setK053260Voice (Stream& stream, int voice, std::uint32_t start, std::uint16_t length,
+						  std::uint16_t pitch, std::uint8_t volume)
+	{
+		const std::uint8_t base = (std::uint8_t) (0x08 + voice * 8);
+		k053260Write (stream, 0, 0x2F, 0x06);		// control: sound output enabled
+		k053260Write (stream, 0, 0x2C, 0x24);		// pan voices 0/1: both centre
+		k053260Write (stream, 0, 0x2D, 0x24);		// pan voices 2/3: both centre
+		k053260Write (stream, 0, (std::uint8_t) (base + 0), (std::uint8_t) (pitch & 0xFF));
+		k053260Write (stream, 0, (std::uint8_t) (base + 1), (std::uint8_t) (pitch >> 8));
+		k053260Write (stream, 0, (std::uint8_t) (base + 2), (std::uint8_t) (length & 0xFF));
+		k053260Write (stream, 0, (std::uint8_t) (base + 3), (std::uint8_t) (length >> 8));
+		k053260Write (stream, 0, (std::uint8_t) (base + 4), (std::uint8_t) (start & 0xFF));
+		k053260Write (stream, 0, (std::uint8_t) (base + 5), (std::uint8_t) ((start >> 8) & 0xFF));
+		k053260Write (stream, 0, (std::uint8_t) (base + 6), (std::uint8_t) ((start >> 16) & 0x1F));
+		k053260Write (stream, 0, (std::uint8_t) (base + 7), volume);
+	}
+
+	/** The key mask: a rising bit starts that voice, a cleared bit stops it. */
+	void k053260Key (Stream& stream, std::uint32_t time, std::uint8_t mask)
+	{
+		k053260Write (stream, time, 0x28, mask);
+	}
+
+	void fillK053260Square (std::vector<std::uint8_t>& rom, std::size_t offset, int period,
+							std::size_t bytes)
+	{
+		for (std::size_t i = 0; i < bytes; ++i)
+		{
+			const bool high = (i % (std::size_t) period) < (std::size_t) period / 2;
+			rom[offset + i] = high ? 0x50 : 0xB0;
+		}
+	}
+
+	/** At 3.579545 MHz a voice advances by `pitch * clock / 262144` bytes a second, so pitch 2062
+		is 28156 bytes a second. A 64-byte cycle is 440 Hz - A4 - and the length register says the
+		note lasts 1024 bytes, which is 36 ms and needs no key-off. */
+	void testK053260Note (void)
+	{
+		std::vector<std::uint8_t> rom (0x2000, 0);
+		fillK053260Square (rom, 0x1000, 64, 1024);
+
+		Stream stream;
+		setK053260Voice (stream, 0, 0x0FFF, 1024, 2062, 0x7F);
+		k053260Key (stream, 10, 0x01);
+
+		const auto notes = runK053260 (stream, 20000, 3579545, rom);
+
+		check (notes.size() == 1, "a K053260 key-on is one note");
+		if (notes.empty())
+		{
+			return;
+		}
+
+		check (notes[0].note == 69, "a 64-byte cycle at 28156 bytes a second is A4");
+		check (notes[0].logicalChannel == 0, "K053260 voice 0 is its own track");
+		check (! notes[0].isDrum, "a sample with a period is melodic");
+		check (distance (notes[0].startSample, 10) <= 64, "the note starts at the key mask write");
+		check (distance (notes[0].endSample, 1614) <= 64,
+			   "the length register ends the note: 1024 bytes at 28156 a second");
+	}
+
+	/** The mask is a level with an edge: writing the same bit again starts nothing, clearing it
+		stops the voice, and raising it again is the next note. */
+	void testK053260KeyOnIsARisingEdge (void)
+	{
+		std::vector<std::uint8_t> rom (0x2000, 0);
+		fillK053260Square (rom, 0x1000, 64, 1024);
+
+		Stream stream;
+		setK053260Voice (stream, 0, 0x0FFF, 1024, 2062, 0x7F);
+		k053260Key (stream, 10, 0x01);
+		k053260Key (stream, 2000, 0x01);		// same level: not a new note
+		k053260Key (stream, 4000, 0x00);		// key off
+		k053260Key (stream, 6000, 0x01);		// and on again
+
+		const auto notes = runK053260 (stream, 20000, 3579545, rom);
+
+		check (notes.size() == 2, "a repeated key mask bit is not a second key-on");
+		if (notes.size() != 2)
+		{
+			return;
+		}
+
+		check (distance (notes[1].startSample, 6000) <= 64,
+			   "the note that follows a key-off starts at the next rising edge");
+	}
+
+	/** Half the length register, half the note - the length is the sample's own size, not a guess. */
+	void testK053260LengthSetsTheDuration (void)
+	{
+		std::vector<std::uint8_t> rom (0x2000, 0);
+		fillK053260Square (rom, 0x1000, 64, 1024);
+
+		Stream stream;
+		setK053260Voice (stream, 0, 0x0FFF, 512, 2062, 0x7F);
+		k053260Key (stream, 10, 0x01);
+
+		const auto notes = runK053260 (stream, 20000, 3579545, rom);
+
+		check (notes.size() == 1 && distance (notes[0].endSample, 812) <= 64,
+			   "512 bytes at 28156 a second is 18 ms");
+	}
+
+	/** With the loop bit the pointer wraps instead of stopping, so only a key-off ends it. */
+	void testK053260LoopRunsUntilKeyOff (void)
+	{
+		std::vector<std::uint8_t> rom (0x2000, 0);
+		fillK053260Square (rom, 0x1000, 64, 1024);
+
+		Stream stream;
+		setK053260Voice (stream, 0, 0x0FFF, 1024, 2062, 0x7F);
+		k053260Write (stream, 0, 0x2A, 0x01);		// loop voice 0
+		k053260Key (stream, 10, 0x01);
+		k053260Key (stream, 8000, 0x00);
+
+		const auto notes = runK053260 (stream, 20000, 3579545, rom);
+
+		check (notes.size() == 1 && distance (notes[0].endSample, 8000) <= 64,
+			   "a looping voice runs past its length and only a key-off stops it");
+	}
+
+	/** Silence is not a note: no volume, a pan of 0, a pitch of 0 and a length of 0 each leave the
+		voice with nothing to play, and the control register's sound bit gates the whole chip. */
+	void testK053260SilentVoiceIsNoNote (void)
+	{
+		std::vector<std::uint8_t> rom (0x2000, 0);
+		fillK053260Square (rom, 0x1000, 64, 1024);
+
+		Stream quiet;
+		setK053260Voice (quiet, 0, 0x0FFF, 1024, 2062, 0x00);
+		k053260Key (quiet, 10, 0x01);
+		check (runK053260 (quiet, 20000, 3579545, rom).empty(), "a voice at zero volume is not a note");
+
+		Stream unplugged;
+		setK053260Voice (unplugged, 0, 0x0FFF, 1024, 2062, 0x7F);
+		k053260Write (unplugged, 0, 0x2C, 0x20);		// voice 0 pan 0, voice 1 centre
+		k053260Key (unplugged, 10, 0x01);
+		check (runK053260 (unplugged, 20000, 3579545, rom).empty(), "a voice panned out is silent");
+
+		Stream noPitch;
+		setK053260Voice (noPitch, 0, 0x0FFF, 1024, 0x0000, 0x7F);
+		k053260Key (noPitch, 10, 0x01);
+		check (runK053260 (noPitch, 20000, 3579545, rom).empty(), "a pitch of 0 never fetches a byte");
+
+		Stream noLength;
+		setK053260Voice (noLength, 0, 0x0FFF, 0, 2062, 0x7F);
+		k053260Key (noLength, 10, 0x01);
+		check (runK053260 (noLength, 20000, 3579545, rom).empty(), "a length of 0 has no sample");
+
+		Stream noSound;
+		setK053260Voice (noSound, 0, 0x0FFF, 1024, 2062, 0x7F);
+		k053260Write (noSound, 0, 0x2F, 0x04);		// control: sound output off
+		k053260Key (noSound, 10, 0x01);
+		check (runK053260 (noSound, 20000, 3579545, rom).empty(),
+			   "the control register's sound bit gates the chip, as the core does");
+	}
+
+	/** A drum has no cycle to measure - a kick sweeps, a snare is noise - and reporting a pitch for
+		it would make a DAW play a tone. It comes out as the C4 trigger with the drum family, which
+		is what the four shared voices need on these boards. */
+	void testK053260PercussionIsATrigger (void)
+	{
+		std::vector<std::uint8_t> rom (0x2000, 0);
+		std::uint32_t seed = 987654321u;
+		for (int i = 0; i < 1024; ++i)
+		{
+			seed = seed * 1103515245u + 12345u;
+			rom[0x1000 + (std::size_t) i] = (std::uint8_t) (seed >> 16);
+		}
+
+		Stream stream;
+		setK053260Voice (stream, 0, 0x0FFF, 1024, 2062, 0x7F);
+		k053260Key (stream, 10, 0x01);
+
+		const auto notes = runK053260 (stream, 20000, 3579545, rom);
+
+		check (notes.size() == 1, "a percussion voice keyed on is one hit");
+		if (notes.empty())
+		{
+			return;
+		}
+
+		check (notes[0].note == 60, "a sample with no period is the C4 trigger, not a pitch");
+		check (notes[0].isDrum, "and it is marked as a drum");
+		check (notes[0].family == toybox::chips::Family::adpcmDrum,
+			   "its family says the pitch is not real");
+	}
+
+	/** A drum's bytes can repeat at a tiny lag - an alternating byte pair every two samples - and at
+		this chip's rates that "period" reads as several kilohertz. Nothing on these boards is written
+		up there, so a measured pitch above C8 (108) is a measurement artifact and the hit stays a
+		trigger; a real note below the ceiling is unaffected. */
+	void testK053260UnmusicalPeriodIsATrigger (void)
+	{
+		std::vector<std::uint8_t> rom (0x2000, 0);
+		fillK053260Square (rom, 0x1000, 8, 1024);
+
+		Stream fast;
+		setK053260Voice (fast, 0, 0x0FFF, 1024, 3000, 0x7F);		// 40965 bytes/s over 8 = 5.1 kHz
+		k053260Key (fast, 10, 0x01);
+
+		const auto notes = runK053260 (fast, 20000, 3579545, rom);
+
+		check (notes.size() == 1 && notes[0].note == 60 && notes[0].isDrum,
+			   "a period that lands above C8 is a drum hit, not a 5 kHz note");
+	}
+
+	/** KADPCM is a stream of deltas: the nibbles are integrated before the period is measured, and
+		low nibble first. Sixteen nibbles of +1 then -1 make a triangle, so 128 nibbles hold eight
+		cycles and a pitch of 516 (7046 nibbles a second) is A4 again. */
+	void testK053260KadpcmIsMeasured (void)
+	{
+		std::vector<std::uint8_t> rom (0x2000, 0);
+		const std::uint8_t pattern[8] = { 0x11, 0x11, 0x11, 0x11, 0xFF, 0xFF, 0xFF, 0xFF };
+		for (std::size_t i = 0; i < 64; ++i)
+		{
+			rom[0x1000 + i] = pattern[i % 8];
+		}
+
+		Stream stream;
+		setK053260Voice (stream, 0, 0x0FFF, 64, 516, 0x7F);
+		k053260Write (stream, 0, 0x2A, 0x10);		// voice 0: KADPCM
+		k053260Key (stream, 10, 0x01);
+
+		const auto notes = runK053260 (stream, 20000, 3579545, rom);
+
+		check (notes.size() == 1 && notes[0].note == 69,
+			   "a decoded KADPCM triangle of sixteen nibbles at 7046 a second is A4");
+	}
+
+	/** Four voices, and the last one lives at offset 0x20 with its pan in the second pan register. */
+	void testK053260Voices (void)
+	{
+		toybox::chips::K053260Decoder decoder;
+		check (decoder.channelCount() == 4, "the K053260 has four voices");
+
+		std::vector<std::uint8_t> rom (0x2000, 0);
+		fillK053260Square (rom, 0x1000, 64, 1024);
+
+		Stream stream;
+		setK053260Voice (stream, 3, 0x0FFF, 1024, 2062, 0x7F);
+		k053260Key (stream, 10, 0x08);
+
+		const auto notes = runK053260 (stream, 20000, 3579545, rom);
+
+		check (notes.size() == 1 && notes[0].logicalChannel == 3,
+			   "offset 0x20 with key mask bit 3 is voice 3, at A4");
+	}
+
 	int main (void)
 {
 	std::printf ("chip decoder test\n");
@@ -2578,6 +2855,16 @@ namespace
 	testC352BankIsPartOfTheAddress();
 	testC352WavetableCycle();
 	testC352HighVoices();
+
+	testK053260Note();
+	testK053260KeyOnIsARisingEdge();
+	testK053260LengthSetsTheDuration();
+	testK053260LoopRunsUntilKeyOff();
+	testK053260SilentVoiceIsNoNote();
+	testK053260PercussionIsATrigger();
+	testK053260UnmusicalPeriodIsATrigger();
+	testK053260KadpcmIsMeasured();
+	testK053260Voices();
 
 	std::printf ("Result    : %s\n", failures == 0 ? "PASS" : "FAILURES");
 	return failures == 0 ? 0 : 1;

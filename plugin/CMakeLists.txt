@@ -201,6 +201,7 @@ target_sources(VGMToybox PRIVATE
 	Source/chips/X1_010Decoder.cpp
 	Source/chips/C140Decoder.cpp
 	Source/chips/C352Decoder.cpp
+	Source/chips/K053260Decoder.cpp
 	Source/chips/Ymf271Decoder.cpp
 	Source/chips/Ymz280bDecoder.cpp
 	Source/chips/Sn76489Decoder.cpp
@@ -342,6 +343,7 @@ add_executable(vgm_mixer_test EXCLUDE_FROM_ALL
 	Source/chips/X1_010Decoder.cpp
 	Source/chips/C140Decoder.cpp
 	Source/chips/C352Decoder.cpp
+	Source/chips/K053260Decoder.cpp
 	Source/chips/Ymf271Decoder.cpp
 	Source/chips/Ymz280bDecoder.cpp
 	Source/chips/Sn76489Decoder.cpp
@@ -375,6 +377,7 @@ add_executable(vgm_chip_test EXCLUDE_FROM_ALL
 	Source/chips/X1_010Decoder.cpp
 	Source/chips/C140Decoder.cpp
 	Source/chips/C352Decoder.cpp
+	Source/chips/K053260Decoder.cpp
 	Source/chips/Ymf271Decoder.cpp
 	Source/chips/Ymz280bDecoder.cpp
 	Source/chips/Sn76489Decoder.cpp
@@ -613,6 +616,18 @@ set(_toybox_c352_song "${CMAKE_CURRENT_SOURCE_DIR}/Tests/assets/c352.vgm")
 if(EXISTS "${_toybox_c352_song}")
 	add_test(NAME engine.c352 COMMAND vgm_mixer_test "${_toybox_c352_song}" 2)
 	set_tests_properties(engine.c352 PROPERTIES LABELS "integration" TIMEOUT 120)
+endif()
+
+# The K053260 (M4): key-on is a rising edge in a shared mask register (offset 0x28), not a write to
+# the voice, and the chip's length register ends a note without any key-off. k053260.vgm keys two
+# voices four times each with that one mask write - voice 0 a periodic waveform that has to come out
+# as A4, voice 1 noise that has to come out as the C4 drum trigger. A decoder that keyed on a voice
+# write, ignored the mask's edges or invented a pitch for the noise would fail on the note count, the
+# timing or the pitch.
+set(_toybox_k053260_song "${CMAKE_CURRENT_SOURCE_DIR}/Tests/assets/k053260.vgm")
+if(EXISTS "${_toybox_k053260_song}")
+	add_test(NAME engine.k053260 COMMAND vgm_mixer_test "${_toybox_k053260_song}" 2)
+	set_tests_properties(engine.k053260 PROPERTIES LABELS "integration" TIMEOUT 120)
 endif()
 
 # One test per script in Tests/scripts, discovered rather than listed: adding a script must not mean

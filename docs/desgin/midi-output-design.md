@@ -457,6 +457,7 @@ void ToyboxAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer,
 | WSWAN | 0–3 | — | 噪声/语音走同一组通道 |
 | C140 | 0–23 | — | 采样播放器；音符 = 播放率 / 采样自身周期（§11.2 行 6） |
 | C352 | 0–31 | — | 采样播放器；键开是独立的 `0x202` 执行写（§11.2 行 24） |
+| K053260 | 0–3 | — | 采样播放器；键开是共享掩码 `0x28` 的上升沿，鼓（无周期采样）由解码器自己发 one-shot 标记（§11.2 行 39） |
 
 范围之外（`channelIndex` 超出上表，或设备类型不在表里）一律 `unavailable`。这张表只说“最多到哪一路”，实际出声与否由 `[13]`（有声轨必须报音符）把关。
 
@@ -674,9 +675,9 @@ void render (const playback::OutputBusBuffers* buses, int numBuses, int numSampl
 | 口径 | 数量 |
 |---|---:|
 | 音频核心（libvgm `DEVID_*`，全部可播） | 49 |
-| MIDI 设备类型（`midiCapabilityFor` 的 `case` 数，含已搁置的 YMZ280B） | 26 |
-| 上表对应的 MDPlayer 主表条目 | 28 / 54 |
-| 有音频核心、缺解码器 | 10（另有 YMZ280B：解码器已写但搁置） |
+| MIDI 设备类型（`midiCapabilityFor` 的 `case` 数，含已搁置的 YMZ280B） | 27 |
+| 上表对应的 MDPlayer 主表条目 | 29 / 54 |
+| 有音频核心、缺解码器 | 9（另有 YMZ280B：解码器已写但搁置） |
 | 连音频核心都没有 | 15 |
 | libvgm 有、MDPlayer 没有（不在对齐范围内） | 13 |
 
@@ -724,7 +725,7 @@ void render (const playback::OutputBusBuffers* buses, int numBuses, int numSampl
 | 36 | YMZ280B | YMZ280B | 触发 ×8（**搁置**） | 采样播放器。解码器已写但**不计入覆盖、不进 ctest**：vgmrips 上这颗芯片的成套录音实际是“一条长样本、一路发声”，没有可断言的每声部音符。见 `docs/memo/2026-10-20-ymz280b-shelved.md` |
 | 37 | QSound | QSOUND | — | 采样播放器，有音高 |
 | 38 | GA20 | GA20 | — | 采样播放器，有音高 |
-| 39 | K053260 | K053260 | — | 采样播放器，有音高 |
+| 39 | K053260 | K053260 | 旋律 ×4（鼓为触发） | 采样播放器，有音高，M4 第三颗。频率是 12 位 pitch，按 `pitch * clock / 262144` 出字节率（核心输出率 `clock / 64`，12 位累加器溢出一次取一个字节），音符同样由采样自身周期决定（`chips::estimateCycleLength()`）。三处与 Namco 两款不同：①**键开是共享寄存器 `0x28` 的上升沿**（bit *i* 起、清零停，高 4 位是 reverse），所以重复写同一个 bit 不是新音符，写声部寄存器也不是键开；②**长度是寄存器**：不循环的声部从 `start + 1` 播 `length` 个单元后自己结束（核心的先自增特性，注释点名 TMNT2 与 Vendetta），循环位（`0x2A` bit *i*）让它绕回、只有键关能停；③**两种采样格式**：PCM 是有符号 8 位，KADPCM 是 4 位增量流（低半字节在前，积分之后才测周期）。另外 `0x2F` bit 1 是整片输出使能，核心没有它就完全静音，解码器照此实现；音量 7 位、pan 3 位且 pan 0 为静音。**打击乐**：这些板子把鼓放在同四条声部上，而鼓采样没有可测周期（底鼓扫频、军鼓是噪声），退回根音会让每个鼓点变成一个旋律音；所以测不出周期、或测出的音高高于 C8（108——这个码率下 8 字节周期就是 6 kHz，只可能是伪相关）的声部一律报 C4 触发（`isDrum`、`Family::adpcmDrum`），C8 以下照常报真实音高（有音高的 tom 仍然是音符）。ROM 来自 `0x67` 的 `0x8E` 块（21 位地址、无 bank 寄存器），命令是 `0xBA`（8 位偏移 + 8 位数据）。`k053260.vgm` 用一次掩码写同时键开两个声部（voice 0 周期波形 = A4、voice 1 噪声 = C4 触发，各 4 个音符），`[13]` 实测两轨 rms 0.06。**真实曲目**：`test_file/K053260/01 The Declaration of War (Title Demo).vgz`（Vendetta，同一文件还带 YM2151）12 条轨全部有声且音符一致，其中 K053260 四条轨 9/3/7/2 个音符全是 C4 触发（鼓），YM2151 的 8 条轨不受影响 |
 | 40 | K054539 | K054539 | — | 采样播放器，有音高 |
 | 41 | DMG | GB_DMG | 旋律 1–3 + 噪声触发 | |
 | 42 | SAA1099 | SAA1099 | 旋律 1–6 + 噪声触发 | 与 AY 同型，但寄存器独立 |
@@ -743,7 +744,7 @@ void render (const playback::OutputBusBuffers* buses, int numBuses, int numSampl
 
 **三批工作**
 
-- **A. 有核心、缺解码器（11 项）**：只动 `plugin/Source/chips/` + `midiCapabilityFor` + 测试，不需要改 libvgm，也不需要新格式。其中 10 项真缺解码器：7 项可旋律化，PWM 与 uPD7759 天生只能 one-shot，OKIM6258 只有采样率档位；另 1 项 YMZ280B 的解码器已写但**搁置**（memo 见 §11.2 行 36），不计入覆盖。C140（表行 6）与 C352（表行 24）已从这一批划掉。
+- **A. 有核心、缺解码器（10 项）**：只动 `plugin/Source/chips/` + `midiCapabilityFor` + 测试，不需要改 libvgm，也不需要新格式。其中 9 项真缺解码器：6 项可旋律化，PWM 与 uPD7759 天生只能 one-shot，OKIM6258 只有采样率档位；另 1 项 YMZ280B 的解码器已写但**搁置**（memo 见 §11.2 行 36），不计入覆盖。C140（表行 6）、C352（表行 24）与 K053260（表行 39）已从这一批划掉。
 - **B. 无音频核心（15 项）**：9 个真芯片（FDS、MMC5、VRC7、N163、VRC6、FME7、SID、MultiPCM、YM2609）+ 6 个驱动/板卡（PPZ8、PPSDRV、PCM8、MPCMX68k、CS4231、P86）。它们主要出现在本插件目前不读的格式（NSF/NSFE、SPC、HES、KSS…）或驱动级回放里，所以 B 批实际是「新格式 + 新核心」的工程，不是 MIDI 输出的延伸。有核心之后 MIDI 侧很便宜：FME7 复用 AY、VRC7 复用 YM2413、VRC6 脉冲复用 NES。
 - **C. 已超出（13 项）**：SCSP、ES5506、C219、MIKEY、K007232、K005289、MSM5205、MSM5232、BSMT2000、ICS2115、VBOY_VSU、YMW258、YM2414。不计入对齐，但每项同样要一个解码器才能出 MIDI，机制与 A 批相同。
 
@@ -751,7 +752,7 @@ void render (const playback::OutputBusBuffers* buses, int numBuses, int numSampl
 
 1. 方波/波形 PSG：X1_010——都是「周期→音高」，`chips/Pitch.h` 的曲线直接可用，单个解码器约 100–200 行，测试全在 `vgm_chip_test` 里。（HuC6280、K051649、SAA1099、POKEY、WSwan 已按此路径完成。）
 2. FM：YMF271——已完成（见 §11.2 表行 35）。（YMF278B 的 FM 半已按此路径完成，见 §11.2 表行 22。YMZ280B 原属这一批，已**搁置**：vgmrips 的成套录音是“一条长样本、一路发声”，验收条件③“真实曲目的 note-on 数非零”只能得到 1 个音符，见 `docs/memo/2026-10-20-ymz280b-shelved.md`。）
-3. 带音高的采样播放器：C140（**已完成**，见 §11.2 表行 6）、C352（**已完成**，见 §11.2 表行 24）、K053260、K054539、QSound、GA20、ES5503——音高来自步进/采样率，需要「步进→音分 + 根音」的换算，与 ADPCM-B 的根音问题同型（§11.1）。C140 与 C352 已经把两件共用件放进 `chips/Pitch.h`：`chips::quantisePlaybackRate (rate, rootRate, finePitch)` 把根音做成参数而不是常量，`chips::estimateCycleLength (waveform, loopOffset, loopLength)` 从 ROM 里测出一个周期的长度（自相关取最强局部峰，再按 loop 是整数个周期吸附，识别不出的返回 0）——M4 余下的七项只提供自己的 rate、根音与采样波形即可，不要再各写一份换算或测周期。
+3. 带音高的采样播放器：C140（**已完成**，见 §11.2 表行 6）、C352（**已完成**，见 §11.2 表行 24）、K053260（**已完成**，见 §11.2 表行 39）、K054539、QSound、GA20、ES5503——音高来自步进/采样率，需要「步进→音分 + 根音」的换算，与 ADPCM-B 的根音问题同型（§11.1）。C140 与 C352 已经把两件共用件放进 `chips/Pitch.h`：`chips::quantisePlaybackRate (rate, rootRate, finePitch)` 把根音做成参数而不是常量，`chips::estimateCycleLength (waveform, loopOffset, loopLength)` 从 ROM 里测出一个周期的长度（自相关取最强局部峰，再按 loop 是整数个周期吸附，识别不出的返回 0）——M4 余下的七项只提供自己的 rate、根音与采样波形即可，不要再各写一份换算或测周期。
 4. 无音高的：PWM、uPD7759、OKIM6258——收益最小，最后做。
 
 **验收**：新增一个芯片要一并给出 ①`ChipDecoderTest.cpp` 的周期→音高、静音判定与包络/长度用例；②`midiCapabilityFor` 的通道数；③至少一首真实曲目的 `vgm_mixer_test` 输出（note-on 数非零）；④本节与 §7.1 表格同步。
@@ -803,6 +804,7 @@ void render (const playback::OutputBusBuffers* buses, int numBuses, int numSampl
 | 2026-10-20 | `psg` / `opl4` / `ym2610` / `fm_alg0` 四个资产从“手工跑”变成 ctest 用例（`engine.*`），并为它们写**逐音符断言**：组名 + 轨名 + 第几个音符 + 时刻 + 音高，容差 20 ms。此前它们只是把 `[13]` 跑一遍，而 `[13]` 只问“有声的轨有没有音符”——音高错一个八度、音符落错轨、时间偏半秒都照样绿。为拿到音高与时刻，`TrackProbe` 额外记录 note-on 序列（`probes[i].ons`）。变异验证：把 AY 分频从 16 改成 32 → 只有 `psg.vgm: AY-3-8910 / Ch 1 is 57, expected 69` 变红；把 OPL4 的 bank 压成 0 → 只有 `opl4.vgm: Ch 10` 变红。同一轮修了 `make_ym2610_song.ps1` 的音高公式（`2^(21-block)` 应为 `2^(20-block)`）：三个 FM 音符一直比注释高一个八度（A5/C6/E6 冒充 A4/C5/E5），重新生成后是 69/72/76 |
 | 2026-10-21 | **C140 的音符一直是错的，这次修好**：此前只把播放率按固定 8 kHz 根音量化，而采样实际录制速率是驱动自己定的，于是「Submerged City」的贝斯报 59、和弦报 62/76/79/84，而芯片实际发的是 32（G#1）与 56/60/63（G# 大三和弦）——寄存器读对了，换算错了。现在 `VgmCommandReader::dataBlocks()` 保留 `0x67` 块（含 ROM 头的 `romSize`/`romOffset`），`MidiSequenceBuilder::assembleRom()` 按各块自己的偏移拼出 `0x8D` 的 C140 ROM，`C140Decoder::setRom()` 在键开时于 loop 区做自相关测出采样周期（按「loop 是整数个周期」吸附），音符 = 播放率 ÷ 周期；测不出来的（鼓/噪声、μ-law、无 ROM）仍退回根音。**踩坑**：第一版没做 banking 折叠，System 2 的 `((adrs&0x200000)>>2)|(adrs&0x7ffff)` 漏掉后 bank 0x14 + 0x95C0 变成 0x1495C0，1 MB ROM 里没有这个地址，`samplePeriodFor()` 返回 0——所有音又回到根音，输出和修复前**一模一样**，看起来像“ROM 没接上”。ROM 与 banking（头字节 `0x96`，`c140Banking()`）必须一起传，`setRom()` 把两件事合成一个参数就是为此。`vgm_chip_test` 新增四条：16 字节周期 → C5（72）、无 ROM 回退 C#4（61）、噪声采样回退（61）、bank 0x14/0x95C0 折成 0x495C0 → C5 且 linear 寻址越界回退 61 |
 | 2026-10-21 | C352 解码器（表行 24，M4 第二项）：频率寄存器同样是播放率（`frequency * clock / 18874368`，与 C140 同一个除数），音符同样由采样自身周期决定，测量因此从 `C140Decoder.cpp` 提炼成 `chips::estimateCycleLength()`（`chips/Pitch.h`），C140 改为调用它、行为不变。四处与 C140 不同、也各有用例：①键开不是 flag 写，而是 offset `0x202` 的执行写（`0x4000` 只登记请求，执行后清位；`0x2000` 加执行写才是键关），`0x0202` 的高偏移字节不能被当成 voice 0 的寄存器；②寄存器是 16 位整字，`0xE1` 一次带 16 位大端 offset（bit 15 选第二片）与 16 位大端值，故 `RegisterWrite` 新增 `value2` 承接低字节；③采样地址 `(bank << 16) \| start` 按 ROM 容量取 2 的幂掩码，bank 1 是同一偏移再向里 64 KB；④结束地址结束不循环声部，loop 位（`0x0002`）后只由键关结束。μ-law 先按 `c352.c` 的表解码再测周期；测不出周期的退回 `quantisePlaybackRate()`，根音取芯片自身码率 `clock / 576`（0x8000 = 中央 C）。ROM 来自 `0x67` 的 `0x92` 块，头部时钟按 libvgm 的读法 `hdr[0xDC] * 72 / hdr[0xD6]`。`c352.vgm` 用一次执行写同时键开两个声部（voice 0 靠结束地址、voice 1 靠键关且在 bank 1），`[13]` 实测两轨各 4 个音符、A4/A5、rms 0.21。**真实曲目验证（2026-10-21 补）**：`test_file/c352` 的两首 Galaga 曲子发现并修掉了「单周期波表」缺口——整首曲子用一个 16 字节波形（`wave_end - wave_start + 1` = 16、loop 回 `wave_start`、ROM 块只有 16 字节载荷），比自相关窗口短，此前一律退回根音，整曲低 40 个半音。现在 `cycleFor()` 在测不出周期且 loop ≤ `kSingleCycleBytes`（256）时把 loop 长度当作周期；并按 `C352_fetch_sample` 的次序（先取样、后判断结束）把 `wave_end` 当闭区间，区域与 loop 都 +1 字节——16 与 15 字节差一个半音。修复后 Ch1/Ch2 是同一段下行三度旋律的 C 大调与 A 大调版本，`vgm_chip_test` 加了两条用例 |
+| 2026-10-21 | K053260 解码器（表行 39，M4 第三项）：频率是 12 位 pitch 除以 4096 的字节步进（输出率 `clock / 64`），所以 rate = `pitch * clock / 262144`，音符仍由 `chips::estimateCycleLength()` 从 ROM 周期算出。与 C140/C352 不同、各有用例的三处：①**键开是共享寄存器 `0x28` 的上升沿**——重复写同一个 bit 不是新音符，写声部寄存器也不是键开；②**长度是寄存器**（`length`），不循环的声部从 `start + 1` 播完就停（核心的先自增特性，注释点名 TMNT2/Vendetta），循环位让指针绕回、只有键关能停；③**PCM 与 KADPCM 两种格式**，KADPCM 是 4 位增量、要积分后再测周期。另按核心实现 `0x2F` bit 1 的整片输出使能、pan 0 静音、音量 7 位。**打击乐**：Vendetta 的标题曲把鼓放在同四条声部上（实测四条轨全是 C4 触发，共 9/3/7/2 个音符），鼓采样测不出周期；若像 C140/C352 那样退回根音，每个鼓点会变成旋律音。所以「测不出周期」或「测出的音高高于 C8」都报 C4 触发 + `Family::adpcmDrum`——后者是真实曲目抓到的：噪声在 8 字节周期上伪相关，按 28–53 kB/s 算就是 6 kHz，报成了 116。ROM 走 `0x67` 的 `0x8E` 块，命令是 `0xBA`。`k053260.vgm` 两轨各 4 个音符（A4 与 C4 触发），`engine.k053260` 与 Vendetta 真实曲目（12 轨全部有声且音符一致，YM2151 不受影响）都通过 |
 
 背景：libvgm 把 OPN 的 SSG 作为 linked AY8910（`opnintf.c:48-52`）；`LibvgmSongInstance::isTrackDevice()` 只保留 `parentIdx == (UINT32)-1` 的设备（`LibvgmSongInstance.cpp:31-36`），所以 YM2610/YM2608/YM2203 的 3 个 SSG 当前没有独立 mixer track。
 
@@ -818,7 +820,7 @@ void render (const playback::OutputBusBuffers* buses, int numBuses, int numSampl
 
 设计文档写完并不等于目标记得住——§11 的 P1–P5 只是“一次交付”的阶段划分，真正耗时的是 §11.2 那 54 项芯片覆盖。这里把它排成可验收的里程碑：**每做完一项，先回来改这里的「状态」和 §11.2 的现状表，再提交**。状态只有三种：完成 / 进行中 / 未开始。
 
-**当前基线（2026-10-21）**：P1–P4 完成，P5 进行中（M2、M3 完成，M4 进行中——C140、C352 已落地，其余七项未开始；MIDI 设备类型 26、覆盖 28 / 54，YMZ280B 已搁置不计，口径见 §11.2）；`vgm_core_test`、`vgm_chip_test`、`vgm_opn_test` 通过，`ctest` 25/25 通过，`vgm_mixer_test` 的 psg / opl4 / minimal / wswan / ym2610 / fm_alg0 / dac / loop / x1 / opx / c140 / c352 **十二个资产全部进了 ctest**（`engine`、`engine.wswan`、`engine.dac`、`engine.loop`、`engine.x1`、`engine.opx`、`engine.c140`、`engine.c352`、`engine.psg`、`engine.opl4`、`engine.ym2610`、`engine.fm_alg0`）。`ymz280b.vgm` 不在其中：它的解码器能出声也能报 4 个音符，但真实 rips 只有一路，进 ctest 会让“一套资产各自证明什么”变得含糊（见 §11.2 行 36）。另有两首真实 C352 曲目（`test_file/c352` 的 Galaga 两首）手动验证过：各 3 轨有声、21/20/12 个音符，音高是同一段下行三度旋律的 C 大调与 A 大调版本——它们不进 ctest，因为 `test_file/` 不入库。
+**当前基线（2026-10-21）**：P1–P4 完成，P5 进行中（M2、M3 完成，M4 进行中——C140、C352、K053260 已落地，其余六项未开始；MIDI 设备类型 27、覆盖 29 / 54，YMZ280B 已搁置不计，口径见 §11.2）；`vgm_core_test`、`vgm_chip_test`、`vgm_opn_test` 通过，`ctest` 26/26 通过，`vgm_mixer_test` 的 psg / opl4 / minimal / wswan / ym2610 / fm_alg0 / dac / loop / x1 / opx / c140 / c352 / k053260 **十三个资产全部进了 ctest**（`engine`、`engine.wswan`、`engine.dac`、`engine.loop`、`engine.x1`、`engine.opx`、`engine.c140`、`engine.c352`、`engine.k053260`、`engine.psg`、`engine.opl4`、`engine.ym2610`、`engine.fm_alg0`）。`ymz280b.vgm` 不在其中：它的解码器能出声也能报 4 个音符，但真实 rips 只有一路，进 ctest 会让“一套资产各自证明什么”变得含糊（见 §11.2 行 36）。另有两首真实 C352 曲目（`test_file/c352` 的 Galaga 两首）手动验证过：各 3 轨有声、21/20/12 个音符，音高是同一段下行三度旋律的 C 大调与 A 大调版本——它们不进 ctest，因为 `test_file/` 不入库。
 
 | 里程碑 | 内容 | 验收 | 状态 |
 |---|---|---|---|
@@ -828,7 +830,7 @@ void render (const playback::OutputBusBuffers* buses, int numBuses, int numSampl
 | M1.3 | 期望值交给芯片（§10.2）：`vgm_opn_test` 用 libvgm 的 YM2612 核测每个通道是否出声，解码器的 `gate` 必须一致；`PlaybackEngineTest` `[13]` 再加一条“有声的轨必须有音符”的端到端不变量 | `ctest -R "chip\|opn"` 全绿；把 `totalLevel` 位序改回旧写法后 `vgm_opn_test` 必须变红；`vgm_mixer_test` 五个资产 + `fm_alg0.vgm` 的 `[13]` 全绿 | 完成 |
 | M2 | A 批波形 PSG：X1_010（周期→音高，复用 `chips/Pitch.h`） | 按 §11.2「验收」四条；24 → 25 / 54。`vgm_chip_test` 四条（A4 的 6.10 值、分频位、PCM one-shot、0x80 以上偏移不按键）；`x1.vgm` 在 `[13]` 下 Ch1 有声（rms 0.0306）且报 4 个 A4 音符，`ctest -R engine.x1` 全绿 | 完成 |
 | M3 | A 批 FM：YMF271；**YMZ280B 搁置** | 同上；25 → 26 / 54（不含 YMZ280B）。`vgm_chip_test` 的七条 OPX 用例覆盖音高、算法决定载体、组电平静音、block→八度、sync 1 成对复制、PCM one-shot 与 PCM 四路独立；`opx.vgm` 在 `[13]` 下 group 0/1 各报 4 个音符（A4/A5）、rms 0.318，`ctest -R engine.opx` 全绿。YMZ280B 的解码器/单测已写但**不计入覆盖、不进 ctest**：vgmrips 上这颗芯片的成套录音实际是“一条长样本、一路发声”，没有可断言的每声部音符。详见 `docs/memo/2026-10-20-ymz280b-shelved.md`（含重启条件） | 完成 |
-| M4 | 采样播放器音高体系：C140、C352、K053260、K054539、QSound、GA20、ES5503、OKIM6295、SEGAPCM，并把 ADPCM-B 根音（§11.1）一起纳入 | 「步进/采样率→音分 + 根音」是一个共用工具而非九份私有换算；**进行中**：共用工具 `chips::quantisePlaybackRate()` 与 `chips::estimateCycleLength()` 已随 C140/C352 落地（根音是参数；采样周期从 ROM 测），C140、C352 完成、其余七项未开始；28 → 35 / 54 | 进行中 |
+| M4 | 采样播放器音高体系：C140、C352、K053260、K054539、QSound、GA20、ES5503、OKIM6295、SEGAPCM，并把 ADPCM-B 根音（§11.1）一起纳入 | 「步进/采样率→音分 + 根音」是一个共用工具而非九份私有换算；**进行中**：共用工具 `chips::quantisePlaybackRate()` 与 `chips::estimateCycleLength()` 已随 C140/C352/K053260 落地（根音是参数；采样周期从 ROM 测），C140、C352、K053260 完成、其余六项未开始；29 → 35 / 54 | 进行中 |
 | M5 | 无音高 one-shot：PWM、uPD7759、OKIM6258 | A 批只剩搁置的 YMZ280B；35 → 38 / 54 | 未开始 |
 | M6 | C 批 13 项（SCSP、ES5506、C219、MIKEY、K007232、K005289、MSM5205、MSM5232、BSMT2000、ICS2115、VBOY_VSU、YMW258、YM2414）——不在 54 内，但机制与 A 批相同 | 每项一个解码器 + `vgm_chip_test` 用例 | 未开始 |
 | M7 | B 批：新格式（NSF/NSFE、SPC、HES、KSS…）+ 9 个真芯片，FME7 复用 AY、VRC7 复用 YM2413、VRC6 脉冲复用 NES | 54 / 54 达成 §11.2 目标 | 未开始 |

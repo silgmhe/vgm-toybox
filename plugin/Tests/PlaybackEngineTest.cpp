@@ -1384,6 +1384,17 @@ int main (int argc, char* argv[])
 			expectNote ("c352.vgm", { "C352", "Ch 2", 0, 0.00, 81 });
 			expectNote ("c352.vgm", { "C352", "Ch 2", 3, 0.60, 81 });
 		}
+		else if (asset == "k053260.vgm")
+		{
+			// Both voices are started and stopped by the same mask register, and each one's length
+			// register ends its note without a key-off. Voice 0's sample is periodic and has to be
+			// A4; voice 1's is noise, which has no period, so it has to be the C4 drum trigger -
+			// the pitch a decoder would invent from a false correlation is the bug this checks.
+			expectNote ("k053260.vgm", { "K053260", "Ch 1", 0, 0.00, 69 });
+			expectNote ("k053260.vgm", { "K053260", "Ch 1", 3, 0.60, 69 });
+			expectNote ("k053260.vgm", { "K053260", "Ch 2", 0, 0.00, 60 });
+			expectNote ("k053260.vgm", { "K053260", "Ch 2", 3, 0.60, 60 });
+		}
 	}
 
 	const juce::File outputFile = inputFile.withFileExtension (".rendered.wav");

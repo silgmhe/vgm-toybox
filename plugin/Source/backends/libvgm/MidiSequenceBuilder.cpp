@@ -13,6 +13,7 @@
 #include "chips/GbcApuDecoder.h"
 #include "chips/HuC6280Decoder.h"
 #include "chips/K051649Decoder.h"
+#include "chips/K053260Decoder.h"
 #include "chips/NesApuDecoder.h"
 #include "chips/NoteExtractor.h"
 #include "chips/OplDecoder.h"
@@ -245,6 +246,10 @@ namespace
 					saa.queue (deviceFor (DEVID_SAA1099, command.port), command.addr,
 							   command.data, command.sampleTime);
 					break;
+				case 0xBA:	// K053260: one chip per instance, a 6-bit offset and one data byte
+					k053260.queue (deviceFor (DEVID_K053260, 0), command.addr, command.data,
+								   command.sampleTime);
+					break;
 				case 0xD0:	// YMF278B (OPL4): ports 0/1 are the OPL3 banks, ports 2..5 the
 							// wavetable half, which has no decoder yet; bit 7 selects the chip
 					if ((command.port & 0x7F) < 2)
@@ -325,6 +330,21 @@ namespace
 							  if (! c352Rom.empty())
 							  {
 								  decoder.setRom (c352Rom);
+							  }
+						  });
+
+			// The K053260 needs its ROM for the same reason, from its own block type (0x8E). Its
+			// start address is 21 bits with no bank register, so the image is the declared ROM and
+			// the chip masks it to a power of two.
+			const std::vector<std::uint8_t> k053260Rom =
+				k053260.writes.empty() ? std::vector<std::uint8_t>()
+									   : assembleRom (reader, 0x8E, 2 * 1024 * 1024);
+			flushDecoded (k053260, 3579545u, lastSampleTime,
+						  [&k053260Rom] (chips::K053260Decoder& decoder)
+						  {
+							  if (! k053260Rom.empty())
+							  {
+								  decoder.setRom (k053260Rom);
 							  }
 						  });
 			flushDecoded (opx, 16934400u, lastSampleTime);
@@ -865,6 +885,9 @@ namespace
 		// the C352 is the same reader with an explicit key-on write, and its notes are measured
 		// from the ROM its 0x92 block carries
 		ChipBuffer<chips::C352Decoder> c352;
+		// the K053260 keys from a shared bitmask register and takes a note's length from its own
+		// length register, so it too needs the whole stream before it can place a single note
+		ChipBuffer<chips::K053260Decoder> k053260;
 		std::vector<playback::MidiEvent> events;
 	};
 }

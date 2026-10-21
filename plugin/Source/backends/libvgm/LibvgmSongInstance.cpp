@@ -132,6 +132,13 @@ namespace
 			// of its own (offset 0x202), which is why the decoder cannot report a note at the flag
 			// write - but the promise is the same one the C140 makes: melodic, not a trigger.
 			return fmChannel (32);
+		case DEVID_K053260:
+			// Four sampled voices, and the first chip whose note length is a register: a
+			// non-looping voice lasts `length` bytes at its pitch, so a note needs no gate guess and
+			// no end address. The drums on these boards share the four voices with the music; the
+			// decoder marks an unmeasurable sample as a C4 trigger rather than inventing a pitch, so
+			// the capability stays melodic - a voice can be either.
+			return fmChannel (4);
 		case DEVID_X1_010:
 			// Sixteen channels, and the same channel is either a wavetable voice or a PCM player
 			// depending on one status bit. The capability is static, so it states what the channel
