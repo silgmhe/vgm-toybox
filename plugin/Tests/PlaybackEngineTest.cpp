@@ -1384,6 +1384,16 @@ int main (int argc, char* argv[])
 			expectNote ("c352.vgm", { "C352", "Ch 2", 0, 0.00, 81 });
 			expectNote ("c352.vgm", { "C352", "Ch 2", 3, 0.60, 81 });
 		}
+		else if (asset == "qsound.vgm")
+		{
+			// The rate register is the key: writing it starts the voice, writing it back to zero
+			// stops it, and nothing else would have produced four notes. Voice 0's sample is
+			// periodic and has to be A4; voice 1's is noise, so it has to be the C4 drum trigger.
+			expectNote ("qsound.vgm", { "QSound", "PCM 1", 0, 0.00, 69 });
+			expectNote ("qsound.vgm", { "QSound", "PCM 1", 3, 0.60, 69 });
+			expectNote ("qsound.vgm", { "QSound", "PCM 2", 0, 0.00, 60 });
+			expectNote ("qsound.vgm", { "QSound", "PCM 2", 3, 0.60, 60 });
+		}
 		else if (asset == "k054539.vgm")
 		{
 			// Key-on and key-off are bits in the masks at 0x214/0x215, and each voice stops on the

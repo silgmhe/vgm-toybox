@@ -132,6 +132,12 @@ namespace
 			// of its own (offset 0x202), which is why the decoder cannot report a note at the flag
 			// write - but the promise is the same one the C140 makes: melodic, not a trigger.
 			return fmChannel (32);
+		case DEVID_QSOUND:
+			// Sixteen sampled voices plus three ADPCM ones. There is no key bit: a voice sounds
+			// while its rate and volume are non-zero and the driver keys a note by writing the rate
+			// from zero, so the decoder keys on that edge and gates on the same condition. The
+			// drums share these voices, and an unmeasurable sample is the C4 trigger.
+			return fmChannel (19);
 		case DEVID_K054539:
 			// Eight sampled voices, 8-bit PCM / 16-bit PCM / 4-bit DPCM, with a 24-bit pitch and a
 			// volume register that attenuates. A sample ends on a marker byte, so a non-looping

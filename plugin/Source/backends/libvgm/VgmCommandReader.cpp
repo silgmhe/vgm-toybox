@@ -314,6 +314,16 @@ bool VgmCommandReader::next (VgmCommand& command)
 			command.addr = data[position + 2];
 			command.data = data[position + 3];
 		}
+		else if (cmd == 0xC4)
+		{
+			// QSound: a 16-bit value in big-endian order and an 8-bit register offset - the value
+			// comes first, unlike every other two-byte command here. The two halves go in `data`
+			// (high) and `data2` (low), as the C352's do.
+			command.kind = VgmCommand::Kind::registerWrite;
+			command.addr = data[position + 3];
+			command.data = data[position + 1];
+			command.data2 = data[position + 2];
+		}
 		else if (cmd == 0xD3)
 		{
 			// K054539: a 16-bit big-endian offset and one data byte (libvgm's Cmd_Ofs16_Data8).

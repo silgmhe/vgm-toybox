@@ -15,6 +15,7 @@
 #include "chips/K051649Decoder.h"
 #include "chips/K053260Decoder.h"
 #include "chips/K054539Decoder.h"
+#include "chips/QSoundDecoder.h"
 #include "chips/NesApuDecoder.h"
 #include "chips/NoteExtractor.h"
 #include "chips/OplDecoder.h"
@@ -255,6 +256,10 @@ namespace
 					k054539.queue (deviceFor (DEVID_K054539, 0), command.addr, command.data,
 								   command.sampleTime, command.port);
 					break;
+				case 0xC4:	// QSound: the value is 16 bits wide and comes before the offset
+					qsound.queue (deviceFor (DEVID_QSOUND, 0), command.addr, command.data,
+								  command.sampleTime, 0, command.data2);
+					break;
 				case 0xD0:	// YMF278B (OPL4): ports 0/1 are the OPL3 banks, ports 2..5 the
 							// wavetable half, which has no decoder yet; bit 7 selects the chip
 					if ((command.port & 0x7F) < 2)
@@ -364,6 +369,20 @@ namespace
 							  if (! k054539Rom.empty())
 							  {
 								  decoder.setRom (k054539Rom);
+							  }
+						  });
+
+			// QSound's samples are its 0x8F blocks: 16-bit addresses inside a 64 KB bank, so the
+			// image is the declared ROM and the chip masks it to a power of two.
+			const std::vector<std::uint8_t> qsoundRom =
+				qsound.writes.empty() ? std::vector<std::uint8_t>()
+									  : assembleRom (reader, 0x8F, 4 * 1024 * 1024);
+			flushDecoded (qsound, 60000000u, lastSampleTime,
+						  [&qsoundRom] (chips::QSoundDecoder& decoder)
+						  {
+							  if (! qsoundRom.empty())
+							  {
+								  decoder.setRom (qsoundRom);
 							  }
 						  });
 
@@ -911,6 +930,9 @@ namespace
 		// the K054539 ends a note on a marker inside the sample, so its length - and its pitch -
 		// come from the ROM its 0x8C block carries
 		ChipBuffer<chips::K054539Decoder> k054539;
+		// QSound has no key bit at all: a voice sounds while its rate and volume are non-zero, so
+		// its notes - and its sixteen voices - only make sense read from the whole stream too
+		ChipBuffer<chips::QSoundDecoder> qsound;
 		std::vector<playback::MidiEvent> events;
 	};
 }

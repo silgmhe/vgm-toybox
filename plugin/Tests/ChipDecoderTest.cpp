@@ -20,6 +20,7 @@
 #include "chips/K051649Decoder.h"
 #include "chips/K053260Decoder.h"
 #include "chips/K054539Decoder.h"
+#include "chips/QSoundDecoder.h"
 #include "chips/NesApuDecoder.h"
 #include "chips/NoteExtractor.h"
 #include "chips/PokeyDecoder.h"
@@ -3056,6 +3057,222 @@ namespace
 			   "offset 0xE0 with key bit 7 is voice 7, at A4");
 	}
 
+	// --- QSound: sixteen voices, no key bit, and a loop that is a length -------------------------
+
+	std::vector<NoteEvent> runQSound (const Stream& stream, std::uint32_t totalSamples,
+									  std::uint32_t clock = 60000000,
+									  const std::vector<std::uint8_t>& rom = {})
+	{
+		toybox::chips::QSoundDecoder decoder;
+		decoder.reset (clock, 44100.0);
+		if (! rom.empty())
+		{
+			decoder.setRom (rom);
+		}
+
+		return toybox::chips::extractNotes (decoder, stream.writes, totalSamples);
+	}
+
+	/** QSound writes are a 16-bit value first, then the offset (`0xC4 vh vl ofs`). */
+	void qsoundWrite (Stream& stream, std::uint32_t time, std::uint8_t offset, std::uint16_t value)
+	{
+		RegisterWrite write;
+		write.reg = offset;
+		write.value = (std::uint8_t) (value >> 8);
+		write.value2 = (std::uint8_t) (value & 0xFF);
+		write.sampleTime = time;
+		stream.writes.push_back (write);
+	}
+
+	/** One voice: pan centre, start, end, no loop, full volume - the driver's own order, with the
+		rate written last because that is what starts the voice. */
+	void setQSoundVoice (Stream& stream, int voice, std::uint32_t start, std::uint32_t end,
+						 std::uint16_t rate, std::uint16_t volume)
+	{
+		const std::uint8_t base = (std::uint8_t) (voice * 8);
+		qsoundWrite (stream, 0, (std::uint8_t) (0x80 + voice), 0x0120);		// pan centre
+		qsoundWrite (stream, 0, (std::uint8_t) (base + 1), (std::uint16_t) start);
+		qsoundWrite (stream, 0, (std::uint8_t) (base + 5), (std::uint16_t) end);
+		qsoundWrite (stream, 0, (std::uint8_t) (base + 4), 0x0000);			// no loop
+		qsoundWrite (stream, 0, (std::uint8_t) (base + 6), volume);
+		qsoundWrite (stream, 0, (std::uint8_t) (base + 2), rate);			// key on
+	}
+
+	void qsoundKeyOff (Stream& stream, std::uint32_t time, int voice)
+	{
+		qsoundWrite (stream, time, (std::uint8_t) (voice * 8 + 2), 0x0000);
+	}
+
+	void fillQSoundSquare (std::vector<std::uint8_t>& rom, std::size_t offset, int period,
+						   std::size_t bytes)
+	{
+		for (std::size_t i = 0; i < bytes; ++i)
+		{
+			const bool high = (i % (std::size_t) period) < (std::size_t) period / 2;
+			rom[offset + i] = high ? 0x50 : 0xB0;
+		}
+	}
+
+	/** At 60 MHz a voice advances `rate * 60e6 / 10223616` bytes a second, so rate 0x1000 plays a
+		byte per output sample (24038 a second) and a 55-byte cycle is 437 Hz - A4. The end address
+		ends it: 2048 bytes is 85 ms, with no key-off anywhere. */
+	void testQSoundNote (void)
+	{
+		std::vector<std::uint8_t> rom (0x8000, 0);
+		fillQSoundSquare (rom, 0x1000, 55, 2048);
+
+		Stream stream;
+		setQSoundVoice (stream, 0, 0x1000, 0x1800, 0x1000, 0x4000);
+
+		const auto notes = runQSound (stream, 20000, 60000000, rom);
+
+		check (notes.size() == 1, "a QSound voice that starts sounding is one note");
+		if (notes.empty())
+		{
+			return;
+		}
+
+		check (notes[0].note == 69, "a 55-byte cycle at 24038 bytes a second is A4");
+		check (notes[0].logicalChannel == 0, "QSound voice 0 is its own track");
+		check (! notes[0].isDrum, "a sample with a period is melodic");
+		check (notes[0].velocity == 127, "a full-scale volume register is full velocity");
+		check (distance (notes[0].endSample, 3757) <= 80,
+			   "the end address ends the note: 2048 bytes at 24038 a second");
+	}
+
+	/** There is no key bit: the rate going from zero to non-zero is the key-on, and back to zero is
+		the key-off - which is exactly what the core's mixer plays. */
+	void testQSoundRateIsTheKey (void)
+	{
+		std::vector<std::uint8_t> rom (0x8000, 0);
+		fillQSoundSquare (rom, 0x1000, 55, 4096);
+
+		Stream stream;
+		setQSoundVoice (stream, 0, 0x1000, 0x2000, 0x1000, 0x4000);
+		qsoundKeyOff (stream, 5000, 0);
+
+		const auto notes = runQSound (stream, 20000, 60000000, rom);
+
+		check (notes.size() == 1 && distance (notes[0].endSample, 5000) <= 64,
+			   "writing the rate back to zero ends the note");
+	}
+
+	/** The loop is a length: the voice wraps from `end` back `loop_len` bytes, so a sustained note
+		repeats that region and only the rate going to zero stops it. */
+	void testQSoundLoopIsALength (void)
+	{
+		std::vector<std::uint8_t> rom (0x8000, 0);
+		fillQSoundSquare (rom, 0x1000, 55, 4096);
+
+		Stream stream;
+		qsoundWrite (stream, 0, 0x80, 0x0120);
+		qsoundWrite (stream, 0, 0x01, 0x1000);		// start
+		qsoundWrite (stream, 0, 0x05, 0x1800);		// end
+		qsoundWrite (stream, 0, 0x04, 0x00DC);		// loop 220 bytes = four 55-byte cycles
+		qsoundWrite (stream, 0, 0x06, 0x4000);
+		qsoundWrite (stream, 0, 0x02, 0x1000);
+
+		qsoundKeyOff (stream, 6000, 0);
+
+		const auto notes = runQSound (stream, 20000, 60000000, rom);
+
+		check (notes.size() == 1 && notes[0].note == 69,
+			   "a looping QSound voice keeps the note its loop measures");
+		check (notes.size() == 1 && distance (notes[0].endSample, 6000) <= 64,
+			   "and only the rate going to zero ends it");
+	}
+
+	/** A drum has no cycle to measure: noise stays the C4 trigger, exactly as on the K053260 and
+		the K054539, because the Street Fighter II drum kit shares these sixteen voices. */
+	void testQSoundPercussion (void)
+	{
+		std::vector<std::uint8_t> rom (0x8000, 0);
+		std::uint32_t seed = 987654321u;
+		for (std::size_t i = 0; i < 2048; ++i)
+		{
+			seed = seed * 1103515245u + 12345u;
+			rom[0x2000 + i] = (std::uint8_t) (seed >> 16);
+		}
+
+		Stream stream;
+		setQSoundVoice (stream, 1, 0x2000, 0x2800, 0x1000, 0x4000);
+
+		const auto notes = runQSound (stream, 20000, 60000000, rom);
+
+		check (notes.size() == 1 && notes[0].note == 60 && notes[0].isDrum,
+			   "a sample with no period is the C4 drum trigger");
+		check (notes.size() == 1 && notes[0].family == toybox::chips::Family::adpcmDrum,
+			   "and its family says the pitch is not real");
+	}
+
+	/** A bank register belongs to the next voice (init_register_map in the core): writing offset 0
+		of voice 0 points voice 1 at another 64 KB bank. Voice 0's own sample is noise, so a decoder
+		that gave the bank to the wrong voice makes voice 1 a drum instead of the A4 in bank 1. */
+	void testQSoundBankBelongsToTheNextVoice (void)
+	{
+		std::vector<std::uint8_t> rom (0x20000, 0);
+		std::uint32_t seed = 12345u;
+		for (std::size_t i = 0; i < 2048; ++i)			// bank 0: noise
+		{
+			seed = seed * 1103515245u + 12345u;
+			rom[0x1000 + i] = (std::uint8_t) (seed >> 16);
+		}
+		fillQSoundSquare (rom, 0x11000, 55, 2048);		// bank 1: a periodic waveform
+
+		Stream stream;
+		qsoundWrite (stream, 0, 0x00, 0x8001);			// voice 0's bank register -> voice 1
+		setQSoundVoice (stream, 1, 0x1000, 0x1800, 0x1000, 0x4000);
+
+		const auto notes = runQSound (stream, 20000, 60000000, rom);
+
+		check (notes.size() == 1 && notes[0].note == 69,
+			   "the bank register of voice 0 addresses voice 1, which is why this is A4");
+	}
+
+	/** The volume is the only silence: a pan of 0 still sounds (it is hard left), but a zero
+		volume register is not a note. */
+	void testQSoundSilentVoiceIsNoNote (void)
+	{
+		std::vector<std::uint8_t> rom (0x8000, 0);
+		fillQSoundSquare (rom, 0x1000, 55, 2048);
+
+		Stream quiet;
+		qsoundWrite (quiet, 0, 0x80, 0x0000);			// pan 0: hard left, still audible
+		qsoundWrite (quiet, 0, 0x01, 0x1000);
+		qsoundWrite (quiet, 0, 0x05, 0x1800);
+		qsoundWrite (quiet, 0, 0x06, 0x0000);			// volume 0
+		qsoundWrite (quiet, 0, 0x02, 0x1000);
+
+		check (runQSound (quiet, 20000, 60000000, rom).empty(),
+			   "a voice at zero volume is not a note");
+	}
+
+	/** Nineteen channels: sixteen PCM and three ADPCM, and the ADPCM voices start from their own
+		flag register (`0xD6+n`) rather than from a rate. */
+	void testQSoundChannelsAndAdpcm (void)
+	{
+		toybox::chips::QSoundDecoder decoder;
+		check (decoder.channelCount() == 19, "QSound has sixteen PCM voices and three ADPCM ones");
+
+		std::vector<std::uint8_t> rom (0x8000, 0);
+		fillQSoundSquare (rom, 0x3000, 55, 2048);
+
+		Stream stream;
+		qsoundWrite (stream, 0, 0x90, 0x0120);			// ADPCM 1 pan centre
+		qsoundWrite (stream, 0, 0xCA, 0x3000);			// start
+		qsoundWrite (stream, 0, 0xCB, 0x3800);			// end
+		qsoundWrite (stream, 0, 0xCC, 0x8000);			// bank 0
+		qsoundWrite (stream, 0, 0xCD, 0x4000);			// volume
+		qsoundWrite (stream, 0, 0xD6, 0x0001);			// start playback
+
+		const auto notes = runQSound (stream, 30000, 60000000, rom);
+
+		check (notes.size() == 1 && notes[0].logicalChannel == 16,
+			   "an ADPCM flag write starts voice 17 of 19");
+		check (notes.size() == 1 && distance (notes[0].endSample, 22540) <= 80,
+			   "its end address ends it: 2048 bytes is 4096 nibbles at 8 kHz, half a second");
+	}
+
 	int main (void)
 {
 	std::printf ("chip decoder test\n");
@@ -3199,6 +3416,14 @@ namespace
 	testK054539SmoothAttackIsADrum();
 	testK054539RetriggerIsANewNote();
 	testK054539Voices();
+
+	testQSoundNote();
+	testQSoundRateIsTheKey();
+	testQSoundLoopIsALength();
+	testQSoundPercussion();
+	testQSoundBankBelongsToTheNextVoice();
+	testQSoundSilentVoiceIsNoNote();
+	testQSoundChannelsAndAdpcm();
 
 	std::printf ("Result    : %s\n", failures == 0 ? "PASS" : "FAILURES");
 	return failures == 0 ? 0 : 1;
