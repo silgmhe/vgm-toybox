@@ -340,7 +340,7 @@ struct Es5503Decoder::Impl
 			// reference rate to measure a transposition against - one entry per output sample is
 			// 25 Hz and ten times that is 250 Hz, all of it a property of the table, not of a
 			// sample. The measured table cycle is therefore the whole pitch, and the note reports
-			// it as an inference (design doc section 15.3, B class).
+			// it as an inference (design doc section 14.3, B class).
 			return quantiseFrequency (impl.entriesPerSecond (oscillator) / oscillator.cycleLength,
 									  finePitch);
 		}

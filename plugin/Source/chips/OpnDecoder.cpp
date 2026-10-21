@@ -20,7 +20,7 @@ namespace
 	// The DELTA-N value an ADPCM-B ROM is taken to be recorded at - 0x4000 is the figure the sets
 	// use for an untransposed sample, and the only reference the chip offers: DELTA-N itself is a
 	// playback rate, and no register names a root. It is therefore the reference of the
-	// transposition layer (L1), not a claim about the recording - see design doc section 15.3.
+	// transposition layer (L1), not a claim about the recording - see design doc section 14.3.
 	constexpr std::uint16_t kAdpcmBReferenceDelta = 0x4000;
 	constexpr std::uint32_t kOneShotPeriod = 0x80000000u;
 
@@ -694,7 +694,7 @@ ChannelState OpnDecoder::channelState (int channel) const
 
 	// L1 from DELTA-N against the 8 kHz reference, L2 from the sample's own cycle: the sets name no
 	// recording rate, so the transposition is the only register-only statement and the root is what
-	// places the octave (design doc section 15.3)
+	// places the octave (design doc section 14.3)
 	const SampledPitch pitch = describeSamplePitch (impl->adpcmBUnitsPerSecond (voice.delta),
 													kSampleReferenceRate * 2.0, voice.cycleLength,
 													voice.melodic);

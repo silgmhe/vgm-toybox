@@ -313,6 +313,8 @@ plugin/Source/backends/libvgm/MidiSequenceBuilder.{h,cpp}
 | C6280 / K051649 / SAA1099 / POKEY / WSWAN | 波形/方波 PSG：周期→音高；噪声按速率取鼓键；声音 DMA 与 16 位成对同样由解码器自己处理 |
 | 其他 | 暂不产生事件，`midiCapability = unavailable` |
 
+要按「寄存器流」判断的音高，一律走 §14 的两层模型：音符由寄存器算出的移调量决定，采样自身的根音是可选的第二层。**音频不作为音高的来源**，只用于事后核对（§10）。
+
 ### 5.4 FM 的 note 生成
 
 以 YM2610 为例：
@@ -658,6 +660,8 @@ void render (const playback::OutputBusBuffers* buses, int numBuses, int numSampl
 
 ### 11.1 后续：Settings → MIDI 输出子面板
 
+**已落地（P3，见 §14.5）**：MIDI 页上已有「按采样根音移调」开关（`pitch.useSampleRoot`，默认关）与其说明文字——那是音高模型的两层之间的开关，也是这一页的第一项。
+
 后续在设置面板增加一个 **MIDI 输出** 子页，集中放可配置项，不把这些控件塞进通道条：
 
 - one-shot 通道的 trigger note 映射（ADPCM-A/B、DAC、noise；默认 C4，允许改 note）；
@@ -781,6 +785,12 @@ void render (const playback::OutputBusBuffers* buses, int numBuses, int numSampl
 
 | 日期 | 结论 |
 |---|---|
+| 2026-10-22 | **采样芯片的音高只从寄存器来，音频只作事后核对（§14）**。原本的做法是“寄存器给出的播放率 ÷ 从 ROM 量出的采样周期”，这一步把「芯片说了什么」换成「我们以为素材是什么」：周期测错不会让某个音错，而是整首恒定偏移，外观上与“素材本来就这样”无法区分。参考项目 `reference/MDPlayer-stable` 给的是另一条路并且已被验证——先算 Hz（`deltaN × 50kHz / 2^16`、`fnum × clock / (24·div·2^21)`），再用唯一的最近频率查找变成音符，采样内容完全不参与（`common.cs:453`、`PianoRoll/YM2610.cs:162`、`form/KB/OPL/frmY8950.cs:265`）。定为本项目的标准：**先频率、后音符、永不读波形** |
+| 2026-10-22 | 音高拆成两层随音符一起带出：**L1 移调量** = `1200·log2(rate / refRate)`（寄存器 + 文档化参照率，永远可算）与 **L2 根音** = `1200·log2(refRate / cycle / middleC)`（只能从采样数据测，是推断）。默认只输出 L1；L2 由设置项 `pitch.useSampleRoot` 打开。两者相加恰好等于旧映射，这是重构能逐芯片落地、且能用测试钉住的等式（`testC140TranspositionAndRoot`、`absoluteNote()`） |
+| 2026-10-22 | 参照率 `refRate` 是**每芯片的文档常量**，不是测量：C140 用 8 kHz、SegaPCM 用 pitch 128（驱动的无移调档）、K053260/K054539/QSound/C352 用「一字节每输出样本」、GA20 与 ADPCM-B 用 8 kHz（后者折算成 16,000 nibble/s，与参考项目一致）。因此**默认视图的八度取决于参照率**——同一条采样内部的音程永远正确，绝对八度交给 L2，这正是开关存在的理由 |
+| 2026-10-22 | ES5503 是唯一没有 L1 的芯片：它的寄存器是**表内步进**（`freq = 512` 才一样本一条目，一条目 25 Hz），任何“参照率”都是关于表的数字而非关于录音。它的音高整体来自实测周期，标 `sampleInferred` |
+| 2026-10-22 | 「有没有音高」仍由内容判断，「是哪个音高」交给寄存器：测不出周期（鼓、噪声、多峰歧义）或频率为 0 的声部，一律输出 **C4 触发**，两种模式都一样。根音移调只是把八度放对，不会把鼓变成音符 |
+| 2026-10-22 | 根音覆盖（按采样手调）不做，只留接口与备忘录：`NoteEvent::rootCents` 就是那个接口，将来由每曲覆盖表替换，见 `docs/memo/2026-10-22-sample-root-override.md` |
 | 2026-10-19 | 优先 VST3，首选实测宿主 REAPER；使用插件原生 MIDI 输出事件总线，`NEEDS_MIDI_OUTPUT` 已经存在，不新增 CMake 开关 |
 | 2026-10-19 | VST3 不提供插件侧的“MIDI Bus”选择；宿主负责把唯一输出总线路由到端口/轨道；第一版不加每轨 MIDI-BUS 下拉框；standalone 设备选择以后再做 |
 | 2026-10-19 | 第一版不改 libvgm；在 `LibvgmSongInstance` 用 VGM/VGZ 解析构建只读 `MidiSequence` |
@@ -831,48 +841,9 @@ void render (const playback::OutputBusBuffers* buses, int numBuses, int numSampl
 
 建议：如果将来确实需要 SSG 的 MIDI，先做 B（不改音频架构），C 只在需要 SSG 独立音频轨时再做。
 
-## 附录 B：后续里程碑
+## 14. 音高模型：移调量（L1）与根音（L2）
 
-设计文档写完并不等于目标记得住——§11 的 P1–P5 只是“一次交付”的阶段划分，真正耗时的是 §11.2 那 54 项芯片覆盖。这里把它排成可验收的里程碑：**每做完一项，先回来改这里的「状态」和 §11.2 的现状表，再提交**。状态只有三种：完成 / 进行中 / 未开始。
-
-**当前基线（2026-10-21）**：P1–P4 完成，P5 进行中（M2、M3 完成，M4 进行中——C140、C352、K053260、K054539、QSound、GA20、SEGAPCM、ES5503 已落地，其余一项未开始；MIDI 设备类型 32、覆盖 34 / 54，YMZ280B 已搁置不计，口径见 §11.2）；`vgm_core_test`、`vgm_chip_test`、`vgm_opn_test` 通过，`ctest` 31/31 通过，`vgm_mixer_test` 的 psg / opl4 / minimal / wswan / ym2610 / fm_alg0 / dac / loop / x1 / opx / c140 / c352 / k053260 / k054539 / qsound / ga20 / segapcm / es5503 **十八个资产全部进了 ctest**（`engine`、`engine.wswan`、`engine.dac`、`engine.loop`、`engine.x1`、`engine.opx`、`engine.c140`、`engine.c352`、`engine.k053260`、`engine.k054539`、`engine.qsound`、`engine.ga20`、`engine.segapcm`、`engine.es5503`、`engine.psg`、`engine.opl4`、`engine.ym2610`、`engine.fm_alg0`）。`ymz280b.vgm` 不在其中：它的解码器能出声也能报 4 个音符，但真实 rips 只有一路，进 ctest 会让“一套资产各自证明什么”变得含糊（见 §11.2 行 36）。另有两首真实 C352 曲目（`test_file/c352` 的 Galaga 两首）手动验证过：各 3 轨有声、21/20/12 个音符，音高是同一段下行三度旋律的 C 大调与 A 大调版本——它们不进 ctest，因为 `test_file/` 不入库。另有一首 K054539 真实曲目（`test_file/K054539`，X-Men 的 Midway Demo，同时带 YM2151）验证过：K054539 六条有声轨里 Ch 1–3 是带循环的低音、Ch 4–6 是鼓组（C4 触发），并因此修掉了「平滑起音被当成 8 样本周期」的共用测算问题（`estimateCycleLength()` 现在要求峰前有相关性低谷）。
-
-| 里程碑 | 内容 | 验收 | 状态 |
-|---|---|---|---|
-| M1 | 基础版：`MidiCapability`/事件序列/每轨 MIDI 通道/Master 合并/VST3 输出/通道条 UI（P1–P4） | `PlaybackEngineTest` `[10]`–`[12]` 全绿；`vgm_mixer_test --notes` 覆盖 YM2610/YM2612/YM2151/AY/SN | 完成 |
-| M1.1 | 收尾既有红灯：`ym2610.vgm` 的 4 条混音器检查已修（`[8]` 改成先用 MIDI 侧找出真正有声的轨，RPN 检查改从该轨开始，不再把唯一一次 RPN 花在静音轨上）；`[12]` 缺的循环资产补上了（`loop.vgm`：50 ms 前导 + 20 个音符 × 2 s 循环体，header 0x1C/0x20 声明循环点，0x7E 的 loop base 显式为 0） | `ctest -R engine.loop` 全绿并打印 `loop at 0.05 s of 2.05 s: 20 note-on in the first pass, 19 after it`；把 `songTimeWithinPass()` 的折回去掉后 `[12]` 立刻变红（`20 / 0`）；`loop.vgm` 的 loop 点被清零时 `[12]` 报 `DID NOT RUN` 而不是跳过 | 完成 |
-| M1.2 | YM2612 DAC 流的 MIDI：`0x8n` 只带等待值（1 字节），样本字节在 type `0x00` 的 `0x67` 数据块里。`VgmCommandReader` 现在保留该 bank（含 `0xE0` 寻址），`0x8n` 取下一字节写成 `0x2A` 寄存器写 + 自带等待 | 真实曲目 `06 Star Light Zone.vgz` 的 DAC 轨从 0 → 3 个音符；`dac.vgm`（爆发/静音交替）在 `[13]` 下 ≥10 个音符（实测 19）；`[11]` 逐字节比对 bank 内容与时刻；`ctest -R engine.dac` 全绿 | 完成 |
-| M1.3 | 期望值交给芯片（§10.2）：`vgm_opn_test` 用 libvgm 的 YM2612 核测每个通道是否出声，解码器的 `gate` 必须一致；`PlaybackEngineTest` `[13]` 再加一条“有声的轨必须有音符”的端到端不变量 | `ctest -R "chip\|opn"` 全绿；把 `totalLevel` 位序改回旧写法后 `vgm_opn_test` 必须变红；`vgm_mixer_test` 五个资产 + `fm_alg0.vgm` 的 `[13]` 全绿 | 完成 |
-| M2 | A 批波形 PSG：X1_010（周期→音高，复用 `chips/Pitch.h`） | 按 §11.2「验收」四条；24 → 25 / 54。`vgm_chip_test` 四条（A4 的 6.10 值、分频位、PCM one-shot、0x80 以上偏移不按键）；`x1.vgm` 在 `[13]` 下 Ch1 有声（rms 0.0306）且报 4 个 A4 音符，`ctest -R engine.x1` 全绿 | 完成 |
-| M3 | A 批 FM：YMF271；**YMZ280B 搁置** | 同上；25 → 26 / 54（不含 YMZ280B）。`vgm_chip_test` 的七条 OPX 用例覆盖音高、算法决定载体、组电平静音、block→八度、sync 1 成对复制、PCM one-shot 与 PCM 四路独立；`opx.vgm` 在 `[13]` 下 group 0/1 各报 4 个音符（A4/A5）、rms 0.318，`ctest -R engine.opx` 全绿。YMZ280B 的解码器/单测已写但**不计入覆盖、不进 ctest**：vgmrips 上这颗芯片的成套录音实际是“一条长样本、一路发声”，没有可断言的每声部音符。详见 `docs/memo/2026-10-20-ymz280b-shelved.md`（含重启条件） | 完成 |
-| M4 | 采样播放器音高体系：C140、C352、K053260、K054539、QSound、GA20、ES5503、OKIM6295、SEGAPCM，并把 ADPCM-B 根音（§11.1）一起纳入 | 「步进/采样率→音分 + 根音」是一个共用工具而非九份私有换算；**进行中**：共用工具 `chips::quantisePlaybackRate()` 与 `chips::estimateCycleLength()` 已随 C140/C352/K053260 落地（根音是参数；采样周期从 ROM 测），C140、C352、K053260、K054539、QSound、GA20、SEGAPCM、ES5503 完成、其余一项（OKIM6295）未开始；ADPCM-B 根音已完成（见决策记录）；34 → 35 / 54 | 进行中 |
-| M5 | 无音高 one-shot：PWM、uPD7759、OKIM6258 | A 批只剩搁置的 YMZ280B；35 → 38 / 54 | 未开始 |
-| M6 | C 批 13 项（SCSP、ES5506、C219、MIKEY、K007232、K005289、MSM5205、MSM5232、BSMT2000、ICS2115、VBOY_VSU、YMW258、YM2414）——不在 54 内，但机制与 A 批相同 | 每项一个解码器 + `vgm_chip_test` 用例 | 未开始 |
-| M7 | B 批：新格式（NSF/NSFE、SPC、HES、KSS…）+ 9 个真芯片，FME7 复用 AY、VRC7 复用 YM2413、VRC6 脉冲复用 NES | 54 / 54 达成 §11.2 目标 | 未开始 |
-| M8（并行，不阻塞 M2–M7） | Settings → MIDI 输出子面板（§11.1）：one-shot note 映射、ADPCM-B 根音/melodic、standalone 设备、默认通道 | 设置项持久化 + `vgm_ui_test` 的布局断言 | 未开始 |
-| M9（按需） | linked SSG（附录 A 的 B 方案：只 MIDI、不带音频推子的 lane） | YM2610/2608/2203 的 3 个 SSG 有独立 MIDI 通道且不影响音频 | 未开始 |
-
-两条排期规则，避免重演“写完文档就忘了目标”：M2–M5 是纯加法，每项不超过一天的量，按 §11.2 优先级顺序推进，不要跳着做；M7 一旦开始就意味着要碰 `VgmCommandReader` 之外的新格式解析，先把格式读取与解码器分开落地（参照 `backends/libvgm` 的现状），否则 MIDI 侧会被格式工作拖住。
-
-## 14. 参考位置
-
-- MIDI 能力已有：`plugin/CMakeLists.txt:166-171`、`PluginProcessor.h:33-37`
-- `processBlock` 清空输入：`PluginProcessor.cpp:110-117`
-- 通道条布局/高度：`ChannelStrip.h:29`、`ChannelStrip.cpp:16-25`、`:263-313`
-- 混音器重建/刷新：`MixerPanel.cpp:113-141`、`:209-275`
-- 轨道信息/后端接口：`playback/SongBackend.h:67-77`、`:152-176`
-- 轨道状态/持久化：`PlaybackEngine.h:213-223`、`SessionState.h:15-23`、`SessionState.cpp:76-85`
-- linked SSG：`libs/libvgm/emu/cores/opnintf.c:48-52`、`LibvgmSongInstance.cpp:31-36`
-- YM2610 通道/写寄存器：`libs/libvgm/emu/cores/opnintf.c:235-251`、`fmopn.c:4104-4205`
-- YM2610 非 B FM 通道：`fmopn.c:3621-3624`；B：`:3798-3803`
-- JUCE VST3 MIDI 输出：`juce_audio_plugin_client_VST3.cpp:3733-3735`
-- JUCE AU MIDI 输出：`juce_audio_plugin_client_AU_1.mm:729-744`、`AUv3.mm:1647`
-- 参考项目钢琴/FM 算法：`reference/imgui-vgmplayer-v0.44/examples/example_vgm_player/main.cpp:258-397`、`:483-637`
-- MDPlayer 的音高做法（本次标准来源）：`reference/MDPlayer-stable/MDPlayer/MDPlayerx64/common.cs:453-469`（频率→音符取最近值）、`PianoRoll/YM2610.cs:162-166`（FM：`fnum × clock / (24·div·2^21) × 2^(oct+2)`）、`form/KB/OPL/frmY8950.cs:265-272`（ADPCM：`deltaN × 50kHz / 2^16`，再除以 8 kHz 取音符）
-
-## 15. 音高模型：移调量（L1）与根音（L2）
-
-### 15.1 判定标准：先频率，后音符，永不看波形
+### 14.1 判定标准：先频率，后音符，永不看波形
 
 采样声部的音高过去由「寄存器给出的播放率 ÷ 从 ROM 量出的采样周期」得出，这一步把**芯片说了什么**换成了**我们以为素材是什么**：周期测错的后果不是某个音错，而是整首歌恒定偏移，而且外观上与「素材本来就这样」无法区分。参考项目 MDPlayer 给的是另一条路，且已被验证可行：
 
@@ -882,7 +853,7 @@ void render (const playback::OutputBusBuffers* buses, int numBuses, int numSampl
 
 本项目的口径对齐它，并把它拆成两层，因为「可算」与「正确」在采样芯片上不是同一件事。
 
-### 15.2 两层定义
+### 14.2 两层定义
 
 | 层 | 公式 | 来源 | 何时可用 |
 |---|---|---|---|
@@ -895,7 +866,7 @@ void render (const playback::OutputBusBuffers* buses, int numBuses, int numSampl
 
 `ChannelState` 与 `NoteEvent` 因此各加 `transposeCents`、`rootCents`、`pitchSource`，`ChannelState` 另加 `hz` 供诊断输出；`chips/Pitch.h` 提供 `transpositionCents()` 与 `quantiseTransposition()`，`quantisePlaybackRate()` 就是 L1 的旧名字（`rootRate` 即 `refRate`），不再是任何芯片的主路径候选。
 
-### 15.3 每芯片归类与标称率
+### 14.3 每芯片归类与标称率
 
 | 芯片 | 寄存器 → 频率 | `refRate`（L1 的参照率） | 类 | 状态 |
 |---|---|---|---|---|
@@ -915,7 +886,7 @@ B 类的两种情形要分开看：GA20 与 ADPCM-B 的寄存器给出的是**�
 
 A 类的 `refRate` 是文档常量，L1 即为绝对音高；B 类在默认模式下也输出 L1，但 `refRate` 只能取一个约定值（当前取「寄存器最慢档」的等效率），因此**八度不可信**，`pitchSource` 标 `sampleInferred`，UI 需要提示。
 
-### 15.4 什么时候会退化成 one-shot（C4 触发）
+### 14.4 什么时候会退化成 one-shot（C4 触发）
 
 三条，全部写进设置面板的说明文字：
 
@@ -923,7 +894,7 @@ A 类的 `refRate` 是文档常量，L1 即为绝对音高；B 类在默认模�
 2. 打开根音移调时，该采样的根音**测不出**，或测量出现**强度接近的多个竞争周期**（和弦/多复音采样）——此时不发明音高；
 3. 算出的音高落在 MIDI 范围外，或高于 C8（108）——那是噪声或测量伪影。
 
-### 15.5 设置项（P3 落地）
+### 14.5 设置项（P3 落地）
 
 - 键：`pitch.useSampleRoot`（bool，默认 **false**），存 `SettingsStore`。
 - 位置：Settings → MIDI 输出子面板（§11.1）。
@@ -933,11 +904,11 @@ A 类的 `refRate` 是文档常量，L1 即为绝对音高；B 类在默认模�
   - 计算方式：「移调量 = 1200 × log2(播放率 / 标称率)；根音 = 采样在标称率下实际音高相对 C4 的偏离。」
   - 降级说明：「根音测不出、存在多个竞争周期、或音高超出范围时，该声部会输出为 C4 触发的一次性音（one-shot）。」
 
-### 15.6 根音覆盖（暂不做，留接口）
+### 14.6 根音覆盖（暂不做，留接口）
 
 用户可能要手动指定某个采样/某首曲子的根音。预留在 `NoteEvent.rootCents` 这一个字段上：将来由 `SessionState` 的每曲覆盖表给出，覆盖 `rootCents` 即可，不需要动解码器。见 `docs/memo/2026-10-22-sample-root-override.md`。
 
-### 15.7 迁移阶段与验收
+### 14.7 迁移阶段与验收
 
 | 阶段 | 内容 | 验收 |
 |---|---|---|
@@ -946,4 +917,50 @@ A 类的 `refRate` 是文档常量，L1 即为绝对音高；B 类在默认模�
 | P2 | GA20 / ES5503 / ADPCM-B 归位：GA20 与 ADPCM-B 用 8 kHz 折算的参照率走 L1（周期进 L2），ES5503 无 L1、整体来自实测周期 | **已完成**：`Ga20Decoder` 的 `noteFor` 只剩 `quantisePlaybackRate(rate, kSampleReferenceRate)`，ADPCM-B 同型（16,000 nibble/s），ES5503 保留 `quantiseFrequency(rate/cycle)` 并把来源标 `sampleInferred`；`ga20.vgm` 的期望由 67 改为 L1 的 58（`absoluteNote` 仍是 67）；ctest 31/31 |
 | P3 | 设置项 + UI 文案 + 持久化 | **已完成**：`SettingsStore` 的 `pitch.useSampleRoot`（默认 false）→ `buildMidiSequence(..., transposeBySampleRoot)` → `emitDecodedNotes()` 在开时把 `note` 移到 `note + round(rootCents/100)`，余下的音分并进该音符自带的那个 bend（之后颤音不受影响）；UI 在 Settings → MIDI 页加开关与说明（计算方式、可能不准、三条 one-shot 规则、重新加载生效）。实测 `k053260.vgm`：关 48、开 69，差值正是该采样的根音 |
 | P4 | `vgm_mixer_test --pitch-report`、跨 rate 一致性进 ctest | **已完成**：报告按轨列出 notes / 寄存器精确 / 带根音 / one-shot / 根音种类数（数据来自 `MidiEvent` 新带的 `transposeCents`、`rootCents`、`pitchSource`，由 `PlaybackEngine::getPitchSummary()` 聚合）；`pitch.k053260` / `pitch.es5503` / `pitch.ga20` 进 ctest。跨 rate 一致性由 `testC140RootIsStableAcrossRates` 钉住：同一采样两倍速率 → 根音完全相同、移调正好 +1200。报告里「一条轨出现多个根音」只提示不判失败——那通常是同一路播了多个采样 |
-| P5 | 文档与决策记录 | — |
+| P5 | 文档与决策记录 | **已完成**：§13 记下六条（寄存器优先、两层模型、参照率是每芯片常量、ES5503 无 L1、鼓仍 C4、根音覆盖留接口），§14 记录模型、每芯片表、三条 one-shot 规则与设置文案，CODEBUDDY.md 记下 `--pitch-report` 的用法 |
+
+### 14.8 已知限制
+
+1. **跨半音边界的颤音会把一个音拆成两个**。提取器按「音符号变化」切分（`NoteExtractor` 的 `current.note == note`），所以一条持续音在振动 ±50 音分以上穿过半音线时会拆开；L1 的整体偏移让某些曲子恰好落到边界上（`qsound.vgm` 的滑音用例因此按“不重新键开”断言）。改进方向是把 ±1 半音的连续变化并进 pitch bend，属于提取器的后续工作。
+2. **B 类的默认八度是约定**。GA20/ADPCM-B 的 8 kHz、ES5503 的「实测周期即全体」都不是测量出来的录制率，跨曲稳定但不保证与听感同八度；要绝对八度就开根音。
+3. **根音只和测量窗一样好**。GA20 的滑音采样取第一个测出周期的 512 字节窗，测量误差直接变成整首的常量偏移——这是开关默认关闭的原因。
+4. **一个键开一个音**。采样内部的和弦/多复音不会被拆开；测不出稳定单一周期时判为 unpitched（C4），不发明音高。
+
+## 15. 参考位置
+
+- MIDI 能力已有：`plugin/CMakeLists.txt:166-171`、`PluginProcessor.h:33-37`
+- `processBlock` 清空输入：`PluginProcessor.cpp:110-117`
+- 通道条布局/高度：`ChannelStrip.h:29`、`ChannelStrip.cpp:16-25`、`:263-313`
+- 混音器重建/刷新：`MixerPanel.cpp:113-141`、`:209-275`
+- 轨道信息/后端接口：`playback/SongBackend.h:67-77`、`:152-176`
+- 轨道状态/持久化：`PlaybackEngine.h:213-223`、`SessionState.h:15-23`、`SessionState.cpp:76-85`
+- linked SSG：`libs/libvgm/emu/cores/opnintf.c:48-52`、`LibvgmSongInstance.cpp:31-36`
+- YM2610 通道/写寄存器：`libs/libvgm/emu/cores/opnintf.c:235-251`、`fmopn.c:4104-4205`
+- YM2610 非 B FM 通道：`fmopn.c:3621-3624`；B：`:3798-3803`
+- JUCE VST3 MIDI 输出：`juce_audio_plugin_client_VST3.cpp:3733-3735`
+- JUCE AU MIDI 输出：`juce_audio_plugin_client_AU_1.mm:729-744`、`AUv3.mm:1647`
+- 参考项目钢琴/FM 算法：`reference/imgui-vgmplayer-v0.44/examples/example_vgm_player/main.cpp:258-397`、`:483-637`
+- MDPlayer 的音高做法（本次标准来源）：`reference/MDPlayer-stable/MDPlayer/MDPlayerx64/common.cs:453-469`（频率→音符取最近值）、`PianoRoll/YM2610.cs:162-166`（FM：`fnum × clock / (24·div·2^21) × 2^(oct+2)`）、`form/KB/OPL/frmY8950.cs:265-272`（ADPCM：`deltaN × 50kHz / 2^16`，再除以 8 kHz 取音符）
+
+## 附录 B：后续里程碑
+
+设计文档写完并不等于目标记得住——§11 的 P1–P5 只是“一次交付”的阶段划分，真正耗时的是 §11.2 那 54 项芯片覆盖。这里把它排成可验收的里程碑：**每做完一项，先回来改这里的「状态」和 §11.2 的现状表，再提交**。状态只有三种：完成 / 进行中 / 未开始。
+
+**当前基线（2026-10-21）**：P1–P4 完成，P5 进行中（M2、M3 完成，M4 进行中——C140、C352、K053260、K054539、QSound、GA20、SEGAPCM、ES5503 已落地，其余一项未开始；MIDI 设备类型 32、覆盖 34 / 54，YMZ280B 已搁置不计，口径见 §11.2）；`vgm_core_test`、`vgm_chip_test`、`vgm_opn_test` 通过，`ctest` **34/34** 通过（含 `pitch.k053260`/`pitch.es5503`/`pitch.ga20` 三个音高审计用例），`vgm_mixer_test` 的 psg / opl4 / minimal / wswan / ym2610 / fm_alg0 / dac / loop / x1 / opx / c140 / c352 / k053260 / k054539 / qsound / ga20 / segapcm / es5503 **十八个资产全部进了 ctest**（`engine`、`engine.wswan`、`engine.dac`、`engine.loop`、`engine.x1`、`engine.opx`、`engine.c140`、`engine.c352`、`engine.k053260`、`engine.k054539`、`engine.qsound`、`engine.ga20`、`engine.segapcm`、`engine.es5503`、`engine.psg`、`engine.opl4`、`engine.ym2610`、`engine.fm_alg0`）。`ymz280b.vgm` 不在其中：它的解码器能出声也能报 4 个音符，但真实 rips 只有一路，进 ctest 会让“一套资产各自证明什么”变得含糊（见 §11.2 行 36）。另有两首真实 C352 曲目（`test_file/c352` 的 Galaga 两首）手动验证过：各 3 轨有声、21/20/12 个音符，音高是同一段下行三度旋律的 C 大调与 A 大调版本——它们不进 ctest，因为 `test_file/` 不入库。另有一首 K054539 真实曲目（`test_file/K054539`，X-Men 的 Midway Demo，同时带 YM2151）验证过：K054539 六条有声轨里 Ch 1–3 是带循环的低音、Ch 4–6 是鼓组（C4 触发），并因此修掉了「平滑起音被当成 8 样本周期」的共用测算问题（`estimateCycleLength()` 现在要求峰前有相关性低谷）。
+
+| 里程碑 | 内容 | 验收 | 状态 |
+|---|---|---|---|
+| M1 | 基础版：`MidiCapability`/事件序列/每轨 MIDI 通道/Master 合并/VST3 输出/通道条 UI（P1–P4） | `PlaybackEngineTest` `[10]`–`[12]` 全绿；`vgm_mixer_test --notes` 覆盖 YM2610/YM2612/YM2151/AY/SN | 完成 |
+| M1.1 | 收尾既有红灯：`ym2610.vgm` 的 4 条混音器检查已修（`[8]` 改成先用 MIDI 侧找出真正有声的轨，RPN 检查改从该轨开始，不再把唯一一次 RPN 花在静音轨上）；`[12]` 缺的循环资产补上了（`loop.vgm`：50 ms 前导 + 20 个音符 × 2 s 循环体，header 0x1C/0x20 声明循环点，0x7E 的 loop base 显式为 0） | `ctest -R engine.loop` 全绿并打印 `loop at 0.05 s of 2.05 s: 20 note-on in the first pass, 19 after it`；把 `songTimeWithinPass()` 的折回去掉后 `[12]` 立刻变红（`20 / 0`）；`loop.vgm` 的 loop 点被清零时 `[12]` 报 `DID NOT RUN` 而不是跳过 | 完成 |
+| M1.2 | YM2612 DAC 流的 MIDI：`0x8n` 只带等待值（1 字节），样本字节在 type `0x00` 的 `0x67` 数据块里。`VgmCommandReader` 现在保留该 bank（含 `0xE0` 寻址），`0x8n` 取下一字节写成 `0x2A` 寄存器写 + 自带等待 | 真实曲目 `06 Star Light Zone.vgz` 的 DAC 轨从 0 → 3 个音符；`dac.vgm`（爆发/静音交替）在 `[13]` 下 ≥10 个音符（实测 19）；`[11]` 逐字节比对 bank 内容与时刻；`ctest -R engine.dac` 全绿 | 完成 |
+| M1.3 | 期望值交给芯片（§10.2）：`vgm_opn_test` 用 libvgm 的 YM2612 核测每个通道是否出声，解码器的 `gate` 必须一致；`PlaybackEngineTest` `[13]` 再加一条“有声的轨必须有音符”的端到端不变量 | `ctest -R "chip\|opn"` 全绿；把 `totalLevel` 位序改回旧写法后 `vgm_opn_test` 必须变红；`vgm_mixer_test` 五个资产 + `fm_alg0.vgm` 的 `[13]` 全绿 | 完成 |
+| M2 | A 批波形 PSG：X1_010（周期→音高，复用 `chips/Pitch.h`） | 按 §11.2「验收」四条；24 → 25 / 54。`vgm_chip_test` 四条（A4 的 6.10 值、分频位、PCM one-shot、0x80 以上偏移不按键）；`x1.vgm` 在 `[13]` 下 Ch1 有声（rms 0.0306）且报 4 个 A4 音符，`ctest -R engine.x1` 全绿 | 完成 |
+| M3 | A 批 FM：YMF271；**YMZ280B 搁置** | 同上；25 → 26 / 54（不含 YMZ280B）。`vgm_chip_test` 的七条 OPX 用例覆盖音高、算法决定载体、组电平静音、block→八度、sync 1 成对复制、PCM one-shot 与 PCM 四路独立；`opx.vgm` 在 `[13]` 下 group 0/1 各报 4 个音符（A4/A5）、rms 0.318，`ctest -R engine.opx` 全绿。YMZ280B 的解码器/单测已写但**不计入覆盖、不进 ctest**：vgmrips 上这颗芯片的成套录音实际是“一条长样本、一路发声”，没有可断言的每声部音符。详见 `docs/memo/2026-10-20-ymz280b-shelved.md`（含重启条件） | 完成 |
+| M4 | 采样播放器音高体系：C140、C352、K053260、K054539、QSound、GA20、ES5503、OKIM6295、SEGAPCM，并把 ADPCM-B 根音（§11.1）一起纳入 | 「步进/采样率→音分 + 根音」是一个共用工具而非九份私有换算；**进行中**：共用工具 `chips::quantisePlaybackRate()` 与 `chips::estimateCycleLength()` 已随 C140/C352/K053260 落地（根音是参数；采样周期从 ROM 测），C140、C352、K053260、K054539、QSound、GA20、SEGAPCM、ES5503 完成、其余一项（OKIM6295）未开始；ADPCM-B 根音已完成（见决策记录）；34 → 35 / 54 | 进行中 |
+| M5 | 无音高 one-shot：PWM、uPD7759、OKIM6258 | A 批只剩搁置的 YMZ280B；35 → 38 / 54 | 未开始 |
+| M6 | C 批 13 项（SCSP、ES5506、C219、MIKEY、K007232、K005289、MSM5205、MSM5232、BSMT2000、ICS2115、VBOY_VSU、YMW258、YM2414）——不在 54 内，但机制与 A 批相同 | 每项一个解码器 + `vgm_chip_test` 用例 | 未开始 |
+| M7 | B 批：新格式（NSF/NSFE、SPC、HES、KSS…）+ 9 个真芯片，FME7 复用 AY、VRC7 复用 YM2413、VRC6 脉冲复用 NES | 54 / 54 达成 §11.2 目标 | 未开始 |
+| M8（并行，不阻塞 M2–M7） | Settings → MIDI 输出子面板（§11.1）：one-shot note 映射、ADPCM-B 根音/melodic、standalone 设备、默认通道 | 设置项持久化 + `vgm_ui_test` 的布局断言 | 未开始 |
+| M9（按需） | linked SSG（附录 A 的 B 方案：只 MIDI、不带音频推子的 lane） | YM2610/2608/2203 的 3 个 SSG 有独立 MIDI 通道且不影响音频 | 未开始 |
+
+两条排期规则，避免重演“写完文档就忘了目标”：M2–M5 是纯加法，每项不超过一天的量，按 §11.2 优先级顺序推进，不要跳着做；M7 一旦开始就意味着要碰 `VgmCommandReader` 之外的新格式解析，先把格式读取与解码器分开落地（参照 `backends/libvgm` 的现状），否则 MIDI 侧会被格式工作拖住。

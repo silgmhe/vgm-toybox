@@ -119,7 +119,7 @@ struct SegaPcmDecoder::Impl
 
 	/** The rate pitch 128 asks for - the midpoint every driver of this chip uses for a sample at its
 		recorded pitch. The chip names no recording rate of its own, so this is the reference the
-		transposition layer is measured from (design doc section 15.3). */
+		transposition layer is measured from (design doc section 14.3). */
 	double referenceBytesPerSecond (void) const
 	{
 		return 128.0 * clock / 32768.0;

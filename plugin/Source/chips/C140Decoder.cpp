@@ -20,7 +20,7 @@ namespace
 	constexpr double kClockDivisor = 18874368.0;
 
 	// The rate a C140 sample ROM is taken to be recorded at - the reference of the transposition
-	// layer (L1 in Pitch.h and section 15 of the design doc). The chip does not say and the games'
+	// layer (L1 in Pitch.h and section 14 of the design doc). The chip does not say and the games'
 	// drivers disagree, so 8 kHz is the documented convention for these boards; it places the note
 	// the registers ask for, and the sample's own measured root only ever moves it by the difference
 	// (see `rootCentsFromCycle`). Reading the note off the sample's cycle instead made every song

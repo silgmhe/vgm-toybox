@@ -121,7 +121,7 @@ namespace
 			, cycleLength (sampleCycle) {}
 
 		/** L1 only: the transposition the rate register asks for against the chip's reference rate.
-			The sample's own root is `rootCentsFromCycle()` beside it (design doc section 15), applied
+			The sample's own root is `rootCentsFromCycle()` beside it (design doc section 14), applied
 			by the user's setting rather than baked into the mapping. */
 		int noteFor (std::uint32_t period, int, int* finePitch) const override
 		{

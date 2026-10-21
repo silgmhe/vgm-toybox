@@ -103,7 +103,7 @@ struct ChannelState
 
 	/** L1: the transposition the registers ask for, in cents from the rate the chip's samples are
 		taken to be recorded at. Always computable for a voiced channel, and the number the MIDI
-		output uses unless the user asks for root correction (design doc section 15). */
+		output uses unless the user asks for root correction (design doc section 14). */
 	int transposeCents = 0;
 
 	/** L2: the per-sample root correction in cents - 0 when the chip's reference rate is a
@@ -146,7 +146,7 @@ struct NoteEvent
 	bool isDrum = false;
 
 	/** Both pitch layers travel with the note, so the "transpose by the sample's root" setting can
-		be switched at render time instead of re-parsing the song (design doc section 15). `note` is
+		be switched at render time instead of re-parsing the song (design doc section 14). `note` is
 		already the L1 result; adding `rootCents` moves it by the sample's root. */
 	int transposeCents = 0;
 	int rootCents = 0;

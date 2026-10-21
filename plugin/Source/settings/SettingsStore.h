@@ -163,7 +163,7 @@ public:
 	void setMidiPitchBendEnabled (bool shouldSendBends);
 
 	/** Whether a sampled voice's note also carries the sample's own root, or only the transposition
-		the registers ask for. Off by default (design doc section 15).
+		the registers ask for. Off by default (design doc section 14).
 
 		The transposition is `1200 * log2(rate / referenceRate)` - registers plus a documented
 		nominal rate - so it is always computable and its intervals are always right. The root is

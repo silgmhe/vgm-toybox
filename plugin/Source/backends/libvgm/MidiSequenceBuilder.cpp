@@ -499,7 +499,7 @@ namespace
 							   const chips::ExtractedPerformance& performance)
 		{
 			// With the sample-root preference on, the note moves by whatever the sample's own root
-			// says (design doc section 15); the cents left over ride on the bend that already
+			// says (design doc section 14); the cents left over ride on the bend that already
 			// belongs to the note's own start, so vibrato after it is untouched.
 			std::map<std::pair<int, std::uint32_t>, int> rootRemainder;
 
@@ -1079,7 +1079,7 @@ namespace
 		std::vector<playback::MidiEvent> events;
 
 		/** The user's preference at load time: whether a sampled note also carries its sample's
-			own root (design doc section 15). A preference rather than a live control, because it
+			own root (design doc section 14). A preference rather than a live control, because it
 			changes the note numbers themselves - switching it reloads the song. */
 		bool useSampleRoot = false;
 	};
