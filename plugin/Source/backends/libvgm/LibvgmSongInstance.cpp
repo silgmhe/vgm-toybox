@@ -151,6 +151,12 @@ namespace
 			// decoder marks an unmeasurable sample as a C4 trigger rather than inventing a pitch, so
 			// the capability stays melodic - a voice can be either.
 			return fmChannel (4);
+		case DEVID_SEGAPCM:
+			// Sixteen voices playing 8-bit PCM. The registers are the playback state - current
+			// address, pitch, end address, volumes and one control bit - and the boards put drums
+			// and melody on the same voices, so the decoder decides per key-on and a drum still
+			// reports its C4 trigger.
+			return fmChannel (16);
 		case DEVID_GA20:
 			// Four voices playing 8-bit PCM, a rate divider and a sample that ends on a 0x00 byte.
 			// These boards (R-Type, Undercover Cops) put drums and melody on the same four voices,

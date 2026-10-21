@@ -1093,21 +1093,39 @@ int main (int argc, char* argv[])
 		const double loopLength = firstPass - loopStart;
 		const double wanted = firstPass + juce::jmin (6.0, loopLength);
 
-		engine.setTrackMidiChannel (playingTrack, 1);
+		// Every track on a channel of its own, wrapping at 16. Only the part of the event list
+		// behind the loop point is replayed, so a track whose single note sits at 0.02 s can never
+		// send a second note: picking tracks by "the first one with a note" made this a false
+		// failure on a song whose Ch 1 plays once before the loop (Galaxy Force II). The master
+		// copy cannot stand in - it only mirrors notes a track already has a channel for.
+		for (size_t i = 0; i < tracks.size(); ++i)
+		{
+			engine.setTrackMidiChannel ((int) i, (int) (i % 16) + 1);
+		}
 		engine.setLoopCount (2);
 		engine.setPositionSeconds (0.0);
 		engine.play();
 
 		const auto looped = recordMidi (engine, wanted, sampleRate, blockSize);
 		const auto passBoundary = (std::int64_t) (firstPass * sampleRate);
-		const int secondPassNotes = looped.countNoteOnsFrom (1, passBoundary);
+		int totalNotes = 0;
+		int secondPassNotes = 0;
+		for (int channel = 1; channel <= 16; ++channel)
+		{
+			totalNotes += looped.countNoteOnsFrom (channel, 0);
+			secondPassNotes += looped.countNoteOnsFrom (channel, passBoundary);
+		}
+
 		std::printf ("    loop at %.2f s of %.2f s: %d note-on in the first pass, %d after it\n",
-					 loopStart, firstPass,
-					 looped.countNoteOnsFrom (1, 0) - secondPassNotes, secondPassNotes);
+					 loopStart, firstPass, totalNotes - secondPassNotes, secondPassNotes);
+		check (totalNotes > secondPassNotes, "the first pass sends notes to send again");
 		check (secondPassNotes > 0, "the second loop pass sends notes again");
 
 		engine.setLoopCount (1);
-		engine.setTrackMidiChannel (playingTrack, 0);
+		for (size_t i = 0; i < tracks.size(); ++i)
+		{
+			engine.setTrackMidiChannel ((int) i, 0);
+		}
 	}
 	else
 	{
@@ -1403,6 +1421,16 @@ int main (int argc, char* argv[])
 			expectNote ("ga20.vgm", { "GA20", "Ch 1", 3, 0.60, 67 });
 			expectNote ("ga20.vgm", { "GA20", "Ch 2", 0, 0.00, 60 });
 			expectNote ("ga20.vgm", { "GA20", "Ch 2", 3, 0.60, 60 });
+		}
+		else if (asset == "segapcm.vgm")
+		{
+			// The control byte starts the voice and ends it, and the end register bounds the
+			// sample. Voice 0's 16-byte cycle at pitch 29 has to be A3; voice 1 is noise and has to
+			// be the C4 drum trigger.
+			expectNote ("segapcm.vgm", { "Sega PCM", "Ch 1", 0, 0.00, 57 });
+			expectNote ("segapcm.vgm", { "Sega PCM", "Ch 1", 3, 0.60, 57 });
+			expectNote ("segapcm.vgm", { "Sega PCM", "Ch 2", 0, 0.00, 60 });
+			expectNote ("segapcm.vgm", { "Sega PCM", "Ch 2", 3, 0.60, 60 });
 		}
 		else if (asset == "k054539.vgm")
 		{

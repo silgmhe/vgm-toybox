@@ -22,6 +22,7 @@
 #include "chips/K054539Decoder.h"
 #include "chips/QSoundDecoder.h"
 #include "chips/Ga20Decoder.h"
+#include "chips/SegaPcmDecoder.h"
 #include "chips/NesApuDecoder.h"
 #include "chips/NoteExtractor.h"
 #include "chips/PokeyDecoder.h"
@@ -3591,6 +3592,117 @@ namespace
 			   "start 0x4000 is register 0x0400: sixteen bytes a step");
 	}
 
+	// --- Sega PCM: sixteen voices, registers as playback state, an end address in 256-byte units --
+
+	std::vector<NoteEvent> runSegaPcm (const Stream& stream, std::uint32_t totalSamples,
+									   const std::vector<std::uint8_t>& rom,
+									   std::uint32_t clock = 4026987)
+	{
+		toybox::chips::SegaPcmDecoder decoder;
+		decoder.reset (clock, 44100.0);
+		decoder.setRom (rom);
+		return toybox::chips::extractNotes (decoder, stream.writes, totalSamples);
+	}
+
+	/** `0xC0 <offset low> <offset high> <value>`, a byte of the chip's register RAM. */
+	void segaWrite (Stream& stream, std::uint32_t time, std::uint16_t offset, std::uint8_t value)
+	{
+		RegisterWrite write;
+		write.reg = (std::uint8_t) (offset & 0xFF);
+		write.port = (std::uint8_t) (offset >> 8);
+		write.value = value;
+		write.sampleTime = time;
+		stream.writes.push_back (write);
+	}
+
+	/** Volume, end, pitch and the current address, then the control byte that starts the voice. */
+	void startSegaVoice (Stream& stream, std::uint32_t time, int channel, std::uint32_t start,
+						 std::uint8_t pitch, std::uint8_t endReg, std::uint8_t control = 0x02)
+	{
+		const std::uint16_t low = (std::uint16_t) (channel * 8);
+		const std::uint16_t high = (std::uint16_t) (0x80 + channel * 8);
+		segaWrite (stream, time, (std::uint16_t) (low + 2), 0x7F);		// volume left
+		segaWrite (stream, time, (std::uint16_t) (low + 3), 0x7F);		// volume right
+		segaWrite (stream, time, (std::uint16_t) (low + 6), endReg);
+		segaWrite (stream, time, (std::uint16_t) (low + 7), pitch);
+		// the 24-bit position's low byte is the chip's own fraction, so the byte address is
+		// `(high << 8) | mid`: a start of 0x4000 is mid 0x00 and high 0x40
+		segaWrite (stream, time, (std::uint16_t) (high + 4), (std::uint8_t) (start & 0xFF));
+		segaWrite (stream, time, (std::uint16_t) (high + 5), (std::uint8_t) ((start >> 8) & 0xFF));
+		segaWrite (stream, time, (std::uint16_t) (high + 6), control);
+	}
+
+	/** At 4.03 MHz a pitch of 29 advances 3563 bytes a second, so a 16-byte cycle is A3. The end
+		register counts 256-byte units: `0x47` ends the sample at `0x4800`, two kilobytes in. */
+	void testSegaPcmNote (void)
+	{
+		Stream stream;
+		startSegaVoice (stream, 0, 2, 0x4000, 29, 0x47);
+
+		const auto notes = runSegaPcm (stream, 60000, ga20Square (0x10000, 0x4000, 16, 2048));
+
+		check (notes.size() == 1, "a Sega PCM key-on with a periodic sample is one note");
+		if (notes.empty())
+		{
+			return;
+		}
+
+		check (notes[0].logicalChannel == 2, "Sega PCM voice 2 is its own track");
+		check (notes[0].note == 57, "a 16-byte cycle at 3563 bytes a second is A3");
+		check (! notes[0].isDrum, "a sample with a period is melodic");
+		check (notes[0].family == toybox::chips::Family::segaPcmPcm, "and its family says so");
+		check (notes[0].velocity == 127, "a full-scale volume register is full velocity");
+		check (distance (notes[0].endSample, 25350) <= 200,
+			   "the end register ends it: 2048 bytes at 3563 a second");
+	}
+
+	/** The pitch register is a step: doubling it is an octave, which is what makes the same ROM
+		sample a bass line instead of a single note. */
+	void testSegaPcmPitchIsAStep (void)
+	{
+		Stream stream;
+		startSegaVoice (stream, 0, 2, 0x4000, 58, 0x47);
+
+		const auto notes = runSegaPcm (stream, 60000, ga20Square (0x10000, 0x4000, 16, 2048));
+
+		check (notes.size() == 1 && notes[0].note == 69,
+			   "twice the pitch is an octave up: A4 from the same sample");
+	}
+
+	/** Control bit 0 is the key: clear plays, set stops. A looping voice has no end to wait for, so
+		that write is the only note-off there is. */
+	void testSegaPcmKeyOff (void)
+	{
+		Stream stream;
+		startSegaVoice (stream, 0, 2, 0x4000, 29, 0x47, 0x00);		// loops
+		segaWrite (stream, 1000, (std::uint16_t) (0x80 + 2 * 8 + 6), 0x01);	// off
+
+		const auto notes = runSegaPcm (stream, 60000, ga20Square (0x10000, 0x4000, 16, 2048));
+
+		check (notes.size() == 1 && distance (notes[0].endSample, 1000) <= 64,
+			   "setting the control bit ends a looping Sega PCM note");
+	}
+
+	/** Drums share these sixteen voices, so a sample with no period stays the C4 trigger. */
+	void testSegaPcmPercussion (void)
+	{
+		std::vector<std::uint8_t> rom (0x10000, 0);
+		std::uint32_t seed = 135792468u;
+		for (std::size_t i = 0; i < 2048; ++i)
+		{
+			seed = seed * 1103515245u + 12345u;
+			rom[0x5000 + i] = (std::uint8_t) (seed >> 16);
+		}
+
+		Stream stream;
+		startSegaVoice (stream, 0, 3, 0x5000, 29, 0x57);
+
+		const auto notes = runSegaPcm (stream, 60000, rom);
+
+		check (notes.size() == 1 && notes[0].note == 60 && notes[0].isDrum,
+			   "a Sega PCM sample with no period is the C4 drum trigger");
+	}
+
 	int main (void)
 {
 	std::printf ("chip decoder test\n");
@@ -3754,6 +3866,11 @@ namespace
 	testGa20KeyOff();
 	testGa20Percussion();
 	testGa20AddressUnit();
+
+	testSegaPcmNote();
+	testSegaPcmPitchIsAStep();
+	testSegaPcmKeyOff();
+	testSegaPcmPercussion();
 
 	std::printf ("Result    : %s\n", failures == 0 ? "PASS" : "FAILURES");
 	return failures == 0 ? 0 : 1;

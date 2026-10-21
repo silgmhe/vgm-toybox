@@ -205,6 +205,7 @@ target_sources(VGMToybox PRIVATE
 	Source/chips/K054539Decoder.cpp
 	Source/chips/QSoundDecoder.cpp
 	Source/chips/Ga20Decoder.cpp
+	Source/chips/SegaPcmDecoder.cpp
 	Source/chips/Ymf271Decoder.cpp
 	Source/chips/Ymz280bDecoder.cpp
 	Source/chips/Sn76489Decoder.cpp
@@ -350,6 +351,7 @@ add_executable(vgm_mixer_test EXCLUDE_FROM_ALL
 	Source/chips/K054539Decoder.cpp
 	Source/chips/QSoundDecoder.cpp
 	Source/chips/Ga20Decoder.cpp
+	Source/chips/SegaPcmDecoder.cpp
 	Source/chips/Ymf271Decoder.cpp
 	Source/chips/Ymz280bDecoder.cpp
 	Source/chips/Sn76489Decoder.cpp
@@ -387,6 +389,7 @@ add_executable(vgm_chip_test EXCLUDE_FROM_ALL
 	Source/chips/K054539Decoder.cpp
 	Source/chips/QSoundDecoder.cpp
 	Source/chips/Ga20Decoder.cpp
+	Source/chips/SegaPcmDecoder.cpp
 	Source/chips/Ymf271Decoder.cpp
 	Source/chips/Ymz280bDecoder.cpp
 	Source/chips/Sn76489Decoder.cpp
@@ -646,6 +649,17 @@ set(_toybox_ga20_song "${CMAKE_CURRENT_SOURCE_DIR}/Tests/assets/ga20.vgm")
 if(EXISTS "${_toybox_ga20_song}")
 	add_test(NAME engine.ga20 COMMAND vgm_mixer_test "${_toybox_ga20_song}" 2)
 	set_tests_properties(engine.ga20 PROPERTIES LABELS "integration" TIMEOUT 120)
+endif()
+
+# The Sega PCM (M4): the registers ARE the playback state - current address, pitch, end address and
+# one control bit - and the command writes one byte of them at a time (0xC0). segapcm.vgm keys two
+# voices four times each: voice 0 a 16-byte periodic waveform at pitch 29 that has to come out as A3,
+# voice 1 noise that has to come out as the C4 drum trigger. A decoder that reads the start address as
+# a byte address looks two hundred and fifty-six times too far into the ROM and plays nothing.
+set(_toybox_segapcm_song "${CMAKE_CURRENT_SOURCE_DIR}/Tests/assets/segapcm.vgm")
+if(EXISTS "${_toybox_segapcm_song}")
+	add_test(NAME engine.segapcm COMMAND vgm_mixer_test "${_toybox_segapcm_song}" 2)
+	set_tests_properties(engine.segapcm PROPERTIES LABELS "integration" TIMEOUT 120)
 endif()
 
 # The K054539 (M4): a sample ends on a marker byte (0x80), the key registers are sixteen-bit

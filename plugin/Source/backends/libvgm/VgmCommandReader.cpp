@@ -314,6 +314,17 @@ bool VgmCommandReader::next (VgmCommand& command)
 			command.addr = data[position + 2];
 			command.data = data[position + 3];
 		}
+		else if (cmd == 0xC0)
+		{
+			// Sega PCM: the chip's registers ARE its playback state, and the command writes one
+			// byte of them at a 15-bit offset (16 channels x 8 registers, then the current-address
+			// window at 0x80). The offset's two halves go in `reg` (low) and `port` (high), the
+			// way the K054539's 16-bit offset does.
+			command.kind = VgmCommand::Kind::registerWrite;
+			command.addr = data[position + 1];
+			command.port = data[position + 2];
+			command.data = data[position + 3];
+		}
 		else if (cmd == 0xC4)
 		{
 			// QSound: a 16-bit value in big-endian order and an 8-bit register offset - the value

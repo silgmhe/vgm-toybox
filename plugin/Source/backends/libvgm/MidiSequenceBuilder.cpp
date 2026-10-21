@@ -17,6 +17,7 @@
 #include "chips/K054539Decoder.h"
 #include "chips/QSoundDecoder.h"
 #include "chips/Ga20Decoder.h"
+#include "chips/SegaPcmDecoder.h"
 #include "chips/NesApuDecoder.h"
 #include "chips/NoteExtractor.h"
 #include "chips/OplDecoder.h"
@@ -257,6 +258,10 @@ namespace
 					ga20.queue (deviceFor (DEVID_GA20, 0), command.addr, command.data,
 								command.sampleTime);
 					break;
+				case 0xC0:	// Sega PCM: a byte of the register RAM at a 16-bit offset
+					segaPcm.queue (deviceFor (DEVID_SEGAPCM, 0), command.addr, command.data,
+								   command.sampleTime, command.port);
+					break;
 				case 0xD3:	// K054539: a 16-bit offset, so its high byte travels in `port`
 					k054539.queue (deviceFor (DEVID_K054539, 0), command.addr, command.data,
 								   command.sampleTime, command.port);
@@ -406,6 +411,19 @@ namespace
 							  if (! ga20Rom.empty())
 							  {
 								  decoder.setRom (ga20Rom);
+							  }
+						  });
+
+			// Sega PCM's samples are its 0x80 blocks, indexed by the 24-bit position's byte part.
+			const std::vector<std::uint8_t> segaPcmRom =
+				segaPcm.writes.empty() ? std::vector<std::uint8_t>()
+									   : assembleRom (reader, 0x80, 8 * 1024 * 1024);
+			flushDecoded (segaPcm, 8000000u, lastSampleTime,
+						  [&segaPcmRom] (chips::SegaPcmDecoder& decoder)
+						  {
+							  if (! segaPcmRom.empty())
+							  {
+								  decoder.setRom (segaPcmRom);
 							  }
 						  });
 
@@ -972,6 +990,10 @@ namespace
 		// The GA20 has a key bit but no length register the core reads: a sample ends where its
 		// ROM says 0x00, so the decoder needs the whole stream - and the ROM - to know the gate
 		ChipBuffer<chips::Ga20Decoder> ga20;
+
+		// The Sega PCM's registers are its playback state - address, pitch, end, volume and the
+		// control bit that starts it - so its notes only exist in the whole stream
+		ChipBuffer<chips::SegaPcmDecoder> segaPcm;
 		std::vector<playback::MidiEvent> events;
 	};
 }
