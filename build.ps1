@@ -37,8 +37,10 @@
     Delete the build/dist directories and compile_commands.json before configuring.
 
 .PARAMETER Proxy
-    Proxy URL used for the dependency downloads (e.g. http://127.0.0.1:7897). Defaults to the
-    Windows system proxy. Relevant because git/CPM do not read the Windows proxy settings.
+    Proxy URL used for the dependency downloads (e.g. http://127.0.0.1:8081). Defaults to the
+    Windows system proxy; a URL that nothing listens on is reported and skipped, so a stale
+    setting never fails a build whose dependencies are already cached. Relevant because git/CPM
+    do not read the Windows proxy settings.
 
 .PARAMETER NoProxy
     Do not use any proxy for the dependency downloads.
@@ -225,6 +227,38 @@ function Initialize-MsvcEnvironment {
 	}
 }
 
+# True when something accepts a TCP connection at the proxy's host and port.
+#
+# A proxy setting that outlives the proxy is worse than none: every download then fails with a
+# connection error that looks like the network's fault. This is a 500 ms connect on the endpoint,
+# which is all it takes to tell "the proxy is running" from "a stale registry entry".
+function Test-ProxyEndpoint {
+	param([string]$ProxyUrl)
+
+	try {
+		$uri = [System.Uri]$ProxyUrl
+		if (-not $uri.Host -or $uri.Port -le 0) {
+			return $false
+		}
+
+		$client = New-Object System.Net.Sockets.TcpClient
+		try {
+			$connect = $client.BeginConnect($uri.Host, $uri.Port, $null, $null)
+			if (-not $connect.AsyncWaitHandle.WaitOne(500)) {
+				return $false
+			}
+
+			$client.EndConnect($connect)
+			return $true
+		}
+		finally {
+			$client.Close()
+		}
+	} catch {
+		return $false
+	}
+}
+
 # Dependency downloads (zlib, JUCE) use git, which does not read the Windows proxy settings -
 # export them as environment variables for this process (and thus for CMake/CPM).
 function Initialize-NetworkProxy {
@@ -264,6 +298,13 @@ function Initialize-NetworkProxy {
 		}
 	}
 	if ($ProxyUrl) {
+		if (-not (Test-ProxyEndpoint -ProxyUrl $ProxyUrl)) {
+			# All dependencies are usually cached; a stale proxy must not turn a no-op build into a
+			# failure, and a real download will report its own error when it tries to go direct.
+			Write-Host "proxy $ProxyUrl is not listening - downloading directly" -ForegroundColor Yellow
+			return
+		}
+
 		Write-Host "using proxy $ProxyUrl for dependency downloads" -ForegroundColor DarkGray
 		foreach ($name in @('HTTP_PROXY', 'HTTPS_PROXY', 'http_proxy', 'https_proxy', 'ALL_PROXY', 'all_proxy')) {
 			[System.Environment]::SetEnvironmentVariable($name, $ProxyUrl, 'Process')
