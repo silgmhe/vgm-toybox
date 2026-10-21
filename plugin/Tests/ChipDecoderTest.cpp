@@ -2392,6 +2392,44 @@ namespace
 			   "bank 1 start 0 is 64 KB further in, and an octave up");
 	}
 
+	/** Some of Namco's own drivers play a whole song from one sixteen-byte waveform: the sample *is*
+		one cycle, it loops from its first byte, and the frequency register does the rest. Sixteen
+		bytes is shorter than any correlation window, so the loop length has to be the cycle -
+		without that the voice is quantised against the root rate and lands more than three octaves
+		low, which is exactly what the Galaga rips in `test_file/c352` did. The end address is
+		inclusive (the core fetches the byte at `wave_end` and only then checks for the end), so the
+		same waveform that stops one byte earlier is a semitone higher. */
+	void testC352WavetableCycle (void)
+	{
+		std::vector<std::uint8_t> rom (0x2000, 0);
+		for (int i = 0; i < 16; ++i)
+		{
+			const double value = std::sin ((double) i * 2.0 * 3.14159265358979 / 16.0) * 100.0;
+			rom[0x1000 + (std::size_t) i] = (std::uint8_t) (std::int8_t) std::lround (value);
+		}
+
+		// 7040 bytes a second over a sixteen-byte cycle is 440 Hz, A4
+		constexpr std::uint16_t kRate7040 = 10813;
+
+		Stream whole;
+		setC352Voice (whole, 0, 0x1000, 0x100F, 0x1000, kRate7040,
+					  (std::uint16_t) (kC352KeyOn | kC352Loop));
+		c352Execute (whole, 10);
+
+		Stream shortCycle;
+		setC352Voice (shortCycle, 0, 0x1000, 0x100E, 0x1000, kRate7040,
+					  (std::uint16_t) (kC352KeyOn | kC352Loop));
+		c352Execute (shortCycle, 10);
+
+		const auto wholeNotes = runC352 (whole, 20000, 12288000, rom);
+		const auto shortNotes = runC352 (shortCycle, 20000, 12288000, rom);
+
+		check (wholeNotes.size() == 1 && wholeNotes[0].note == 69,
+			   "a one-cycle wavetable loop of sixteen bytes at 7040 a second is A4");
+		check (shortNotes.size() == 1 && shortNotes[0].note == 70,
+			   "the byte at the end address is part of the sample: fifteen bytes is a semitone up");
+	}
+
 	/** Thirty-two voices, and the voice number is the offset divided by eight - so the high voices
 		only exist when the whole 16-bit offset is reassembled. */
 	void testC352HighVoices (void)
@@ -2538,6 +2576,7 @@ namespace
 	testC352WithoutRomKeepsTheRootRate();
 	testC352NoisySampleFallsBackToTheRootRate();
 	testC352BankIsPartOfTheAddress();
+	testC352WavetableCycle();
 	testC352HighVoices();
 
 	std::printf ("Result    : %s\n", failures == 0 ? "PASS" : "FAILURES");

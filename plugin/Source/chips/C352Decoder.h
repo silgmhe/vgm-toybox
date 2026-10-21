@@ -40,7 +40,18 @@ namespace toybox::chips
 	  that ignored 0x202 would not start any at all.
 	- **The end address ends the voice.** A non-looping voice stops when the pointer reaches
 	  `wave_end`, so its length is the sample's own size divided by the rate - no gate guess. With
-	  the loop bit set the pointer jumps back and only a key-off stops it.
+	  the loop bit set the pointer jumps back and only a key-off stops it. The byte at `wave_end`
+	  is played - the core fetches, then checks for the end - so the region and the loop run to it
+	  inclusively, which matters for the wavetable songs below: a sixteen-byte cycle is a semitone
+	  away from a fifteen-byte one.
+
+	Some of Namco's own drivers play entire songs from a **single sixteen-byte waveform**: the
+	Galaga rips in `test_file/c352` upload one cycle, point `wave_end` at its last byte and loop
+	from `wave_start`, and take every note from the frequency register alone. That cycle is shorter
+	than any correlation window, so `cycleFor()` falls back to "a loop this short is one cycle"
+	(`kSingleCycleBytes`) instead of the root rate - which would put the whole song more than three
+	octaves too low. The measurement is still preferred whenever it can see a cycle, and the loop
+	snapping still refines it.
 	- **The registers are 16-bit words written whole.** The VGM's 0xE1 command carries a 16-bit
 	  big-endian offset (bit 15 selects the second chip) and a 16-bit big-endian value, so both
 	  bytes of `frequency`, `wave_end` or the volume pair arrive in one command. The reader splits

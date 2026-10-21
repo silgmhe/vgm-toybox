@@ -40,6 +40,18 @@ namespace
 	// decides which part of the sample is analysed
 	constexpr std::uint16_t kMeasurementFlags = (std::uint16_t) (kFlagLoop | kFlagMuLaw | kFlagNoise);
 
+	/** The longest loop that is taken to be one cycle of a wavetable when the correlation finds no
+		period in it.
+
+		Namco's own drivers on this chip play whole songs from a single sixteen-byte waveform: the
+		Galaga rips in the repository upload exactly one cycle, point `wave_end` at its last byte and
+		loop from `wave_start`, and get their notes entirely from the frequency register. Sixteen
+		bytes is shorter than the analysis window, so the correlation has nothing to measure - but a
+		driver that loops a sample this short is not looping a drum, and the loop *is* the cycle. Two
+		hundred and fifty-six bytes is the widest that stays plausible: a longer loop that does not
+		correlate is a one-shot with noise in it, and the root rate is the honest answer there. */
+	constexpr std::size_t kSingleCycleBytes = 256;
+
 	/** The mask the core folds a sample address with (`pow2_mask` in EmuHelper.h): the ROM is
 		addressed as a power-of-two buffer, so an address past the end wraps instead of reading
 		elsewhere. Measured addresses are masked the same way, or a sample that wraps would be
@@ -193,8 +205,10 @@ struct C352Decoder::Impl
 			return 0;
 		}
 
+		// the core fetches the byte at `wave_end` and only then decides the sample is over
+		// (c352.c, C352_fetch_sample), so both ends of the region are part of it
 		const double bytesPerSecond = (double) voice.frequency * clock / kClockDivisor;
-		const double samples = (double) (voice.end - voice.start) / bytesPerSecond * streamRate;
+		const double samples = (double) (voice.end - voice.start + 1) / bytesPerSecond * streamRate;
 		return (std::uint32_t) std::llround (std::min (samples, 1.0e9));
 	}
 
@@ -204,7 +218,11 @@ struct C352Decoder::Impl
 		register says which part repeats, and the mode says whether the bytes are linear PCM or
 		mu-law (decoded first). A noise voice has no bytes at all, and a sample with no loop is
 		measured over its whole size - the attack may not repeat, which is what the correlation's
-		"nothing repeats" answer is for. */
+		"nothing repeats" answer is for.
+
+		A loop too short to hold one correlation window falls back to "the loop is one cycle"
+		(`kSingleCycleBytes`): the wavetable songs on this chip are a single sixteen-byte cycle, and
+		without that answer they would all be quantised against the root rate, three octaves off. */
 	double cycleFor (const Voice& voice)
 	{
 		if (rom.empty() || (voice.flags & kFlagNoise) != 0 || voice.end <= voice.start)
@@ -220,8 +238,11 @@ struct C352Decoder::Impl
 			return cached->second;
 		}
 
+		// `wave_end` is played - the core fetches the byte and only then checks for the end - so the
+		// region and the loop run to it inclusively. One byte matters: a sixteen-byte wavetable
+		// cycle is a semitone away from a fifteen-byte one.
 		const std::uint32_t address = ((std::uint32_t) voice.bank << 16) | voice.start;
-		const std::size_t size = (std::size_t) (voice.end - voice.start);
+		const std::size_t size = (std::size_t) (voice.end - voice.start) + 1;
 		std::vector<double> waveform (size);
 		for (std::size_t i = 0; i < size; ++i)
 		{
@@ -233,13 +254,18 @@ struct C352Decoder::Impl
 
 		std::size_t loopOffset = 0;
 		std::size_t loopLength = 0;
-		if (loops (voice) && voice.loop > voice.start && voice.loop < voice.end)
+		if (loops (voice) && voice.loop >= voice.start && voice.loop <= voice.end)
 		{
 			loopOffset = (std::size_t) (voice.loop - voice.start);
 			loopLength = size - loopOffset;
 		}
 
-		const double cycle = estimateCycleLength (waveform, loopOffset, loopLength);
+		double cycle = estimateCycleLength (waveform, loopOffset, loopLength);
+		if (cycle <= 0.0 && loopLength > 0 && loopLength <= kSingleCycleBytes)
+		{
+			cycle = (double) loopLength;		// a wavetable driver loops exactly one cycle
+		}
+
 		cycleCache[key] = cycle;
 		return cycle;
 	}
