@@ -3514,14 +3514,17 @@ namespace
 		return rom;
 	}
 
-	/** A 16-byte cycle at rate 249 is 44100/(256-249)/16 = 393.75 Hz - G4. The sample's 512 bytes
-		then hit the 0x00 terminator, which is the only end the core reads (there is no loop). */
+	/** An 18-byte cycle at rate 131: the core runs at clock/4 = 894,886 samples a second and one
+		byte lasts 256-131 = 125 of them, so the sample advances 7159 bytes a second and 7159/18 =
+		397.7 Hz is G4. A decoder that used the output rate (44,100/125 = 353 bytes a second) would
+		read 19.6 Hz here, which is not a note at all. The sample's 512 bytes then hit the 0x00
+		terminator, the only end the core reads (there is no loop). */
 	void testGa20Note (void)
 	{
 		Stream stream;
-		startGa20Voice (stream, 0, 0, 0x4000, 249, 0xFF);
+		startGa20Voice (stream, 0, 0, 0x4000, 131, 0xFF);
 
-		const auto notes = runGa20 (stream, 20000, ga20Square (0x10000, 0x4000, 16));
+		const auto notes = runGa20 (stream, 20000, ga20Square (0x10000, 0x4000, 18));
 
 		check (notes.size() == 1, "a GA20 key-on with a periodic sample is one note");
 		if (notes.empty())
@@ -3529,13 +3532,13 @@ namespace
 			return;
 		}
 
-		check (notes[0].note == 67, "a 16-byte cycle at 6300 bytes a second is G4");
+		check (notes[0].note == 67, "an 18-byte cycle at 7159 bytes a second is G4");
 		check (notes[0].logicalChannel == 0, "GA20 voice 0 is its own track");
 		check (! notes[0].isDrum, "a sample with a period is melodic");
 		check (notes[0].family == toybox::chips::Family::ga20Pcm, "and its family says so");
 		check (notes[0].velocity == 127, "full-scale volume is full velocity");
-		check (distance (notes[0].endSample, 3584) <= 80,
-			   "the 0x00 terminator ends the note: 512 bytes at 7 samples a byte");
+		check (distance (notes[0].endSample, 3153) <= 80,
+			   "the 0x00 terminator ends the note: 512 bytes at 125 samples of clock/4 each");
 	}
 
 	/** The control bit is the gate: writing 0 ends the note where the driver says, not where the
@@ -3543,10 +3546,10 @@ namespace
 	void testGa20KeyOff (void)
 	{
 		Stream stream;
-		startGa20Voice (stream, 0, 0, 0x4000, 249, 0xFF);
+		startGa20Voice (stream, 0, 0, 0x4000, 131, 0xFF);
 		ga20Write (stream, 1000, 0x06, 0x00);
 
-		const auto notes = runGa20 (stream, 20000, ga20Square (0x10000, 0x4000, 16));
+		const auto notes = runGa20 (stream, 20000, ga20Square (0x10000, 0x4000, 18));
 
 		check (notes.size() == 1 && distance (notes[0].endSample, 1000) <= 64,
 			   "writing the control bit back to zero ends the note");
@@ -3565,7 +3568,7 @@ namespace
 		}
 
 		Stream stream;
-		startGa20Voice (stream, 0, 1, 0x5000, 249, 0xFF);
+		startGa20Voice (stream, 0, 1, 0x5000, 131, 0xFF);
 
 		const auto notes = runGa20 (stream, 20000, rom);
 
@@ -3578,15 +3581,15 @@ namespace
 	void testGa20AddressUnit (void)
 	{
 		Stream wrong;
-		startGa20Voice (wrong, 0, 0, 0x0040, 249, 0xFF);		// 0x40 is silence in this ROM
+		startGa20Voice (wrong, 0, 0, 0x0040, 131, 0xFF);		// 0x40 is silence in this ROM
 
-		check (runGa20 (wrong, 20000, ga20Square (0x10000, 0x4000, 16)).empty(),
+		check (runGa20 (wrong, 20000, ga20Square (0x10000, 0x4000, 18)).empty(),
 			   "start 0x0040 reads the empty part of the ROM, so the address is not a byte address");
 
 		Stream right;
-		startGa20Voice (right, 0, 0, 0x4000, 249, 0xFF);
+		startGa20Voice (right, 0, 0, 0x4000, 131, 0xFF);
 
-		const auto notes = runGa20 (right, 20000, ga20Square (0x10000, 0x4000, 16));
+		const auto notes = runGa20 (right, 20000, ga20Square (0x10000, 0x4000, 18));
 
 		check (notes.size() == 1 && notes[0].note == 67,
 			   "start 0x4000 is register 0x0400: sixteen bytes a step");

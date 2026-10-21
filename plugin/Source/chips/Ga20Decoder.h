@@ -20,16 +20,21 @@ namespace toybox::chips
 	  `irem_ga20_w`), so the sample starts at `((reg1 << 8) | reg0) << 4`. The end registers exist
 	  but the core never reads them - what actually ends a sample is a **0x00 byte in the ROM**
 	  (`irem_ga20_cache_samples`: "check for sample end marker"). There is no loop.
-	- **The rate register is a divider, not a step.** `fracrate = 0x10000 / (0x100 - rate)` and the
-	  position counter reloads with `rate` on every overflow, so one byte is consumed every
-	  `256 - rate` output samples. The byte rate is therefore `streamRate / (256 - rate)` - the chip
-	  clock is not in it at all, which is why `setRom()` also has to know the render rate.
+	- **The rate register is a divider, not a step.** The position counter reloads with `rate` on
+	  every overflow of an 8-bit counter, so one byte is consumed every `256 - rate` samples of the
+	  core's *own* rate - and that rate is `clock / 4` (`iremga20.c`: `INIT_DEVINF(..., cfg->clock / 4,
+	  ...)`), which libvgm resamples down afterwards. The byte rate is therefore
+	  `clock / 4 / (256 - rate)`: the clock *is* in it. Reading the output rate here instead (44,100)
+	  made every measured pitch about twenty times too low, which put every note below MIDI note 0 -
+	  and that is not a note - so every voice in every song came out as the C4 trigger.
 
 	Everything else follows the family: a voice has a start address, a rate, a hyperbolic volume
 	(`data * 256 / (data + 10)`) and one control bit (offset 6, bit 1) that keys it on and off. The
-	note is the byte rate divided by the cycle the sample itself holds (`estimateCycleLength()`,
-	as on the C140, C352, K053260, K054539 and QSound), and the ROM it needs is the song's `0x93`
-	data blocks assembled at their own offsets.
+	note is the byte rate divided by the cycle the sample itself holds - measured by scanning
+	512-byte windows from the sample's start and keeping the first one with a period, because these
+	samples *slide* (the stage theme's bass runs from 175 bytes down to 251) and a single window
+	averages that away - and the ROM it needs is the song's `0x93` data blocks assembled at their
+	own offsets.
 
 	**Percussion.** These boards put drums on the same four voices as the music, and one voice can
 	play both within a song - which is fine here, because the drum/melody decision is made per
@@ -44,7 +49,7 @@ namespace toybox::chips
 	|---:|---|
 	| 0, 1 | start address, low then high |
 	| 2, 3 | end address - written, never read by the core |
-	| 4 | rate: one byte per `256 - rate` output samples |
+	| 4 | rate: one byte per `256 - rate` samples of clock/4 |
 	| 5 | volume: `data * 256 / (data + 10)` |
 	| 6 | control: bit 1 keys the voice on, clearing it keys it off |
 	| 7 | read-only status (bit 0 = playing) |

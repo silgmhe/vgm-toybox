@@ -16,7 +16,13 @@ namespace
 	// sampled players use, because a drum's bytes repeat every few samples.
 	constexpr int kHighestMelodicNote = 108;
 
-	constexpr std::uint32_t kMeasurementUnits = 1024;
+	// The window a period is measured in. 512 bytes keeps a slide local, which is what makes the
+	// period findable at all; the scan walks the sample in half-window steps and gives up after
+	// eight kilobytes, because a driver that has not keyed off by then is not playing one note.
+	constexpr std::uint32_t kMeasurementUnits = 512;
+	constexpr std::uint32_t kScanStep = kMeasurementUnits / 2;
+	constexpr std::uint32_t kScanBytes = 8 * 1024;
+	constexpr std::uint32_t kMinimumWindow = 128;
 
 	// A period is a lag where the waveform's correlation dips below this: a steady tone reaches
 	// about -1 at its half period, while noise stays near 0 at every lag.
@@ -49,13 +55,13 @@ namespace
 	}
 
 	/** One table per voice: the rate register is a divider and the sample each voice latched has
-		its own cycle, so the note is `streamRate / (256 - rate) / cycle`. A sample that does not
+		its own cycle, so the note is `byteClock / (256 - rate) / cycle`. A sample that does not
 		repeat, or repeats at a rate no note is written at, is the C4 trigger. */
 	class Ga20NoteTable final : public NoteTable
 	{
 	public:
-		Ga20NoteTable (double sampleRate, const double* sampleCycle, const bool* sampleMelodic)
-			: streamRate (sampleRate > 0.0 ? sampleRate : 44100.0)
+		Ga20NoteTable (double clock, const double* sampleCycle, const bool* sampleMelodic)
+			: byteClock (clock > 0.0 ? clock : 44100.0)
 			, cycleLength (sampleCycle)
 			, melodic (sampleMelodic) {}
 
@@ -68,12 +74,12 @@ namespace
 				return 60;		// a drum: the C4 trigger
 			}
 
-			const double bytesPerSecond = streamRate / (double) (0x100 - rate);
+			const double bytesPerSecond = byteClock / (double) (0x100 - rate);
 			return quantiseFrequency (bytesPerSecond / *cycleLength, finePitch);
 		}
 
 	private:
-		double streamRate;
+		double byteClock;
 		const double* cycleLength;
 		const bool* melodic;
 	};
@@ -98,7 +104,8 @@ struct Ga20Decoder::Impl
 	Voice voices[4];
 	std::vector<std::uint8_t> rom;
 	std::uint32_t romMask = 0;
-	double streamRate = 44100.0;
+	double byteClock = 44100.0;		// the chip's own rate: clock / 4
+	double outRate = 44100.0;		// the rate the note times and gates are in
 	std::map<std::uint32_t, std::uint32_t> lengthCache;
 	std::map<std::uint32_t, double> cycleCache;
 	std::unique_ptr<Ga20NoteTable> tables[4];
@@ -110,11 +117,14 @@ struct Ga20Decoder::Impl
 		return index < rom.size() ? rom[index] : 0;
 	}
 
-	/** The byte rate the core plays this voice at: one byte every `256 - rate` output samples, so
-		`streamRate / (256 - rate)` a second. The chip clock is not part of it. */
+	/** The byte rate the core plays this voice at: one byte every `256 - rate` samples of the
+		chip's own clock, which runs at `clock / 4` (iremga20.c hands `cfg->clock / 4` to
+		INIT_DEVINF, and libvgm resamples that down to the output rate afterwards). Using the
+		output rate here made every pitch about twenty times too low, and since a note below 0 is
+		not a note, every voice in every song became the C4 trigger. */
 	double bytesPerSecond (const Voice& voice) const
 	{
-		return streamRate / (double) (0x100 - voice.rate);
+		return byteClock / (double) (0x100 - voice.rate);
 	}
 
 	/** How many bytes the sample holds before its 0x00 terminator, measured once per address. */
@@ -173,6 +183,7 @@ struct Ga20Decoder::Impl
 		const std::size_t maxLag = std::min<std::size_t> (size / 2, 512);
 		std::vector<double> correlation (maxLag + 1, 0.0);
 		bool sawTrough = false;
+		std::size_t troughLag = 0;
 		double best = 0.0;
 
 		for (std::size_t lag = 2; lag <= maxLag; ++lag)
@@ -198,6 +209,7 @@ struct Ga20Decoder::Impl
 			if (! sawTrough)
 			{
 				sawTrough = correlation[lag] <= kPeriodTrough;
+				troughLag = lag;
 			}
 			else if (correlation[lag] > best)
 			{
@@ -210,7 +222,9 @@ struct Ga20Decoder::Impl
 			return 0.0;
 		}
 
-		for (std::size_t lag = 2; lag <= maxLag; ++lag)
+		// from the trough, not from the start: a smooth waveform correlates with itself at lag 2 or
+		// 3 by mere continuity, and returning that reported every voice as a two-byte cycle
+		for (std::size_t lag = troughLag; lag <= maxLag; ++lag)
 		{
 			if (correlation[lag] >= best * 0.9 && correlation[lag] >= kPeriodPeak)
 			{
@@ -223,13 +237,17 @@ struct Ga20Decoder::Impl
 
 	/** The sample's own cycle in bytes, measured once per start address.
 
-		Two differences from `estimateCycleLength()`, both forced by this chip. Its byte rates are
-		low - a rate of 131 plays 353 bytes a second - so a musical pitch is a *short* cycle of two
-		to ten bytes, which the shared helper's eight-byte minimum lag would never see. And with no
-		loop to measure inside, the sample's opening transient is the only window there is, so the
-		period has to be found twice and agree: a tone repeats the same lag in both halves, while a
-		drum sweeps (the stage theme's tom reads 87 bytes in one half and 103 in the other) and noise
-		does not dip at all. */
+		Two differences from `estimateCycleLength()`, both forced by this chip. Its samples are
+		*slides*: the bass at 0x63320 of the stage theme runs from a 175-byte cycle down to a
+		251-byte one, so one window over the whole sample averages the period away and finds
+		nothing. The scan therefore walks 512-byte windows from the start and keeps the first one
+		that has a period - the note the driver keyed, before the slide moved it. A window is 512
+		bytes so that a lag is local enough for a slide to still be periodic; that also caps the
+		measurable cycle at 256 bytes, which these byte rates never reach (a 163-byte cycle is
+		105 Hz). Anything the scan cannot measure - noise, a drum sweep - is 0, the C4 trigger.
+
+		The trough has to come before the peak because that is what tells a period from a
+		smoothness: a tone anti-correlates at half its cycle, while a drum's noise never dips. */
 	double cycleFor (std::uint32_t start, std::uint32_t length)
 	{
 		if (rom.empty() || length == 0)
@@ -243,22 +261,21 @@ struct Ga20Decoder::Impl
 			return cached->second;
 		}
 
-		const std::uint32_t window = std::min<std::uint32_t> (length, kMeasurementUnits);
-		const std::uint32_t half = std::min<std::uint32_t> (window / 2, 512);
-		std::vector<double> first (half);
-		std::vector<double> second (half);
-
-		for (std::uint32_t i = 0; i < half; ++i)
+		double cycle = 0.0;
+		const std::uint32_t limit = std::min<std::uint32_t> (length, kScanBytes);
+		for (std::uint32_t offset = 0; cycle <= 0.0 && offset + kMinimumWindow <= limit;
+			 offset += kScanStep)
 		{
-			first[i] = (double) ((int) byteAt (start + i) - 0x80);
-			second[i] = (double) ((int) byteAt (start + half + i) - 0x80);
-		}
+			const std::uint32_t window =
+				std::min<std::uint32_t> (limit - offset, kMeasurementUnits);
+			std::vector<double> waveform (window);
+			for (std::uint32_t i = 0; i < window; ++i)
+			{
+				waveform[i] = (double) ((int) byteAt (start + offset + i) - 0x80);
+			}
 
-		const double left = bestPeriod (first);
-		const double right = bestPeriod (second);
-		const double cycle = (left > 0.0 && right > 0.0 && std::abs (left - right) <= 1.0)
-								 ? (left + right) / 2.0
-								 : 0.0;
+			cycle = bestPeriod (waveform);
+		}
 
 		cycleCache[start] = cycle;
 		return cycle;
@@ -269,10 +286,12 @@ struct Ga20Decoder::Impl
 		voice.latchStart = (std::uint32_t) voice.start << 4;
 		++voice.keyOns;
 
+		// the gate is a count of the chip's own samples, and the note times are output samples
 		const std::uint32_t length = lengthOf (voice.latchStart);
-		const std::uint32_t bytes = 0x100 - voice.rate;
+		const std::uint32_t nativePerByte = 0x100 - voice.rate;
 		voice.gateEnd = (length > 0)
-							? time + (std::uint32_t) std::llround ((double) length * bytes)
+							? time + (std::uint32_t) std::llround ((double) length
+									* (double) nativePerByte * outRate / byteClock)
 							: 0;
 
 		voice.cycleLength = cycleFor (voice.latchStart, length);
@@ -333,7 +352,7 @@ Ga20Decoder::Ga20Decoder()
 
 Ga20Decoder::~Ga20Decoder() = default;
 
-void Ga20Decoder::reset (std::uint32_t, double sampleRate)
+void Ga20Decoder::reset (std::uint32_t clock, double sampleRate)
 {
 	// the ROM belongs to the song, not to the clock
 	std::vector<std::uint8_t> rom = std::move (impl->rom);
@@ -342,11 +361,18 @@ void Ga20Decoder::reset (std::uint32_t, double sampleRate)
 	*impl = Impl();
 	impl->rom = std::move (rom);
 	impl->romMask = mask;
-	impl->streamRate = sampleRate > 0.0 ? sampleRate : 44100.0;
+	impl->outRate = sampleRate > 0.0 ? sampleRate : 44100.0;
+
+	// The core's own sample rate is the chip clock divided by four (iremga20.c: INIT_DEVINF gets
+	// `cfg->clock / 4`), and libvgm resamples that down to the output rate. `256 - rate` counts
+	// *those* samples, so the byte rate has the clock in it - unlike the GA20 of an old VGM with
+	// no clock field, where libvgm starts no device at all and the fallback only matters to the
+	// decoder.
+	impl->byteClock = (clock > 0) ? (double) clock / 4.0 : impl->outRate;
 
 	for (int i = 0; i < (int) Ga20Decoder::numChannels; ++i)
 	{
-		impl->tables[i] = std::make_unique<Ga20NoteTable> (impl->streamRate,
+		impl->tables[i] = std::make_unique<Ga20NoteTable> (impl->byteClock,
 														   &impl->voices[i].cycleLength,
 														   &impl->voices[i].melodic);
 	}

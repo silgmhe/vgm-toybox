@@ -405,6 +405,9 @@ namespace
 			const std::vector<std::uint8_t> ga20Rom =
 				ga20.writes.empty() ? std::vector<std::uint8_t>()
 									: assembleRom (reader, 0x93, 1024 * 1024);
+			// the GA20's byte rate is `clock / 4 / (256 - rate)`: the decoder needs the clock the
+			// device was started with, which `flushDecoded` takes from the device config (the
+			// header's 0xE0); the constant is only the fallback when there is no device
 			flushDecoded (ga20, 3579545u, lastSampleTime,
 						  [&ga20Rom] (chips::Ga20Decoder& decoder)
 						  {

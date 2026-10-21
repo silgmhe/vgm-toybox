@@ -11,9 +11,13 @@
 #                        (iremga20_cache_samples calls it the sample end marker). The tone here is
 #                        512 bytes followed by the block's zeroes, so the note's length is the
 #                        sample's length, not a guessed gate.
-#   the rate             the rate register is a divider: one byte every 256-rate output samples, so
-#                        the byte rate is 44100/(256-rate) and rate 249 plays 6300 bytes a second.
-#                        A 16-byte cycle is therefore 393.75 Hz - G4.
+#   the rate             the rate register is a divider, but the counter runs at the core's own
+#                        rate, clock/4 (iremga20.c hands cfg->clock / 4 to INIT_DEVINF and libvgm
+#                        resamples that down). At the 3,579,545 Hz clock this header declares that is
+#                        894,886 samples a second, so rate 131 plays 894886/125 = 7159 bytes a
+#                        second and an 18-byte cycle is 397.7 Hz - G4. Reading the *output* rate
+#                        instead (44100/125 = 353 bytes a second) gives 19.6 Hz, which is not a note,
+#                        and that is how every GA20 voice in every song became a C4 trigger.
 #
 # Voice 0 plays the periodic waveform and must come out as G4. Voice 1 plays noise, which has no
 # period, so it must come out as the C4 drum trigger - the same convention the other sampled players
@@ -68,8 +72,8 @@ $noteSamples = [int]($rate / 10)
 $notes = 4
 $totalSamples = [uint32]($noteSamples * 2 * $notes)
 
-$speed = 249									# 44100 / (256-249) = 6300 bytes a second
-$cycle = 16										# 6300 / 16 = 393.75 Hz, G4
+$speed = 131									# 894886 / (256-131) = 7159 bytes a second
+$cycle = 18										# 7159 / 18 = 397.7 Hz, G4
 $length = 512
 $start0 = 0x4000
 $start1 = 0x5000
@@ -155,5 +159,5 @@ $bytes[7] = [byte](($eof -shr 24) -band 0xFF)
 $out = Join-Path $PSScriptRoot 'ga20.vgm'
 [System.IO.File]::WriteAllBytes($out, $bytes.ToArray())
 "wrote {0} ({1} bytes, {2} samples = {3:N1} s)" -f $out, $bytes.Count, $totalSamples, ($totalSamples / $rate)
-"  voice 0: G4, {0}-byte cycle at rate {1} -> {2:N0} bytes/s" -f $cycle, $speed, (44100.0 / (256 - $speed))
+"  voice 0: G4, {0}-byte cycle at rate {1} -> {2:N0} bytes/s" -f $cycle, $speed, (3579545.0 / 4.0 / (256 - $speed))
 "  voice 1: percussion, no period -> C4 trigger"
