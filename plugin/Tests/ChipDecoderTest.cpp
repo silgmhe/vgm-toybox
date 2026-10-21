@@ -2973,6 +2973,43 @@ namespace
 			   "a decoded 32-nibble DPCM cycle at 14080 a second is A4");
 	}
 
+	/** A drum's attack is smooth: the correlation stays high at every short lag, and the shortest
+		lag then wins by being smooth rather than by being a period. These are the first bytes of
+		the kick drum in test_file/K054539 (X-Men, "Please.. Rescue The Professor"): the measurement
+		used to call it "eight samples", i.e. 2.6 kHz at the pitch the driver uses, and every hit
+		became a melodic note an octave below C8. `estimateCycleLength()` now requires the
+		correlation to fall away before the peak it picks, which is what makes this a trigger. */
+	void testK054539SmoothAttackIsADrum (void)
+	{
+		const std::uint8_t drum[96] = {
+			0x06, 0x0A, 0x0A, 0x0D, 0x10, 0x13, 0x15, 0x18, 0x1C, 0x21, 0x26, 0x2C,
+			0x32, 0x38, 0x3E, 0x43, 0x4A, 0x52, 0x59, 0x60, 0x66, 0x6B, 0x6D, 0x6F,
+			0x6E, 0x6F, 0x73, 0x76, 0x78, 0x77, 0x76, 0x71, 0x6F, 0x6D, 0x67, 0x5F,
+			0x5C, 0x5D, 0x5F, 0x58, 0x4F, 0x4A, 0x4D, 0x51, 0x4E, 0x48, 0x41, 0x40,
+			0x43, 0x45, 0x3F, 0x36, 0x2E, 0x2A, 0x29, 0x26, 0x21, 0x1D, 0x1E, 0x1D,
+			0x18, 0x0E, 0x06, 0x01, 0x00, 0xFD, 0xF7, 0xEF, 0xE6, 0xDE, 0xDA, 0xDA,
+			0xD9, 0xD8, 0xD7, 0xD4, 0xCE, 0xC9, 0xC9, 0xC9, 0xC9, 0xC8, 0xBE, 0xB5,
+			0xBA, 0xC0, 0xBE, 0xBB, 0xB8, 0xBA, 0xBD, 0xBD, 0xB8, 0xB3, 0xB3, 0xB4
+		};
+
+		std::vector<std::uint8_t> rom (0x4000, 0);
+		for (std::size_t i = 0; i < sizeof (drum); ++i)
+		{
+			rom[0x1000 + i] = drum[i];
+		}
+		rom[0x1000 + sizeof (drum)] = 0x80;
+
+		Stream stream;
+		// the pitch the X-Men driver uses: 21096 units a second
+		setK054539Voice (stream, 0, 0x1000, k054539Type8, 28803, 0x00);
+		k054539Key (stream, 10, 0x214, 0x01);
+
+		const auto notes = runK054539 (stream, 20000, 18432000, rom);
+
+		check (notes.size() == 1 && notes[0].note == 60 && notes[0].isDrum,
+			   "a smooth attack is a drum hit, not the 2.6 kHz its smoothness suggests");
+	}
+
 	/** Eight voices: the last one's registers start at 0xE0 and its key bit is bit 7. */
 	void testK054539Voices (void)
 	{
@@ -3133,6 +3170,7 @@ namespace
 	testK054539SilentVoiceIsNoNote();
 	testK054539SixteenBitPcm();
 	testK054539FourBitDpcm();
+	testK054539SmoothAttackIsADrum();
 	testK054539Voices();
 
 	std::printf ("Result    : %s\n", failures == 0 ? "PASS" : "FAILURES");

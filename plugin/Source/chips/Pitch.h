@@ -134,7 +134,7 @@ inline double estimateCycleLength (const std::vector<double>& waveform, std::siz
 	}
 
 	std::vector<double> correlation ((std::size_t) maxLag + 2, 0.0);
-	for (int lag = kMinLag; lag <= maxLag; ++lag)
+	for (int lag = 1; lag <= maxLag; ++lag)
 	{
 		double product = 0.0;
 		double energyA = 0.0;
@@ -186,6 +186,22 @@ inline double estimateCycleLength (const std::vector<double>& waveform, std::siz
 	}
 
 	if (chosen < 0)
+	{
+		return 0.0;
+	}
+
+	// A period is a lag the signal *returns* to: the correlation has to fall away in between. A
+	// drum's attack is smooth, so its correlation stays high at every short lag and the shortest
+	// lag wins by being smooth rather than by being a period - the K054539 drum kit in
+	// test_file/K054539 came out as "eight samples", which is 2.6 kHz of nothing. A waveform with
+	// a real period decorrelates and then re-correlates, so the trough is the discriminating test.
+	double trough = 1.0;
+	for (int lag = 1; lag < chosen; ++lag)
+	{
+		trough = std::min (trough, correlation[(std::size_t) lag]);
+	}
+
+	if (trough > 0.5)
 	{
 		return 0.0;
 	}

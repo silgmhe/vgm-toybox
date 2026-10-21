@@ -51,6 +51,10 @@ namespace
 	constexpr std::size_t kMaxMarkerScan = 1 << 18;
 	constexpr std::size_t kMeasurementUnits = 8192;
 
+	// 80 ms at 44.1 kHz: the trigger window the OPN's ADPCM-A, the YMZ280B and the YMF271 use for a
+	// sample with no pitch.
+	constexpr std::uint32_t kDrumGate = 3528;
+
 	/** One note table per voice: the pitch register is a rate, and the sample each voice plays has
 		its own cycle length. `melodic` says whether the length turned into a pitch somebody wrote;
 		when it did not, the voice is a drum and the note is the C4 trigger. */
@@ -348,7 +352,6 @@ struct K054539Decoder::Impl
 		Voice& voice = voices[channel];
 		voice.keyed = true;
 		voice.latchStart = voice.start;
-		voice.gateEnd = sampleTime + durationOf (voice);
 		voice.cycleLength = cycleFor (voice);
 
 		voice.melodic = false;
@@ -359,6 +362,12 @@ struct K054539Decoder::Impl
 				quantiseFrequency (unitsPerSecond (voice) / voice.cycleLength, &fine)
 				<= kHighestMelodicNote;
 		}
+
+		// A drum is a trigger, not a note: its sample can be long (the K054539 drum samples in
+		// test_file/K054539 run to the end of their ROM block), and two hits of the same drum would
+		// then overlap into one long note. The 80 ms window is the convention the OPN's ADPCM-A,
+		// the YMZ280B and the YMF271 already use.
+		voice.gateEnd = sampleTime + (voice.melodic || rom.empty() ? durationOf (voice) : kDrumGate);
 	}
 
 	/** The volume register is an attenuation: 0 is full scale and 0x40 is -36 dB, so the level is
