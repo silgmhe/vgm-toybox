@@ -298,7 +298,7 @@ namespace
 			// ADPCM-B's pitch only exists in its DELTA-T ROM (block 0x82): the sample's period has
 			// to be measured, and DELTA-N turns it into the note the driver asked for
 			flushOpn (opn.writes.empty() ? std::vector<std::uint8_t>()
-										 : assembleRom (reader, 0x82, 16 * 1024 * 1024),
+										 : assembleRom (reader, 0x82, 16 * 1024 * 1024, true),
 					  lastSampleTime);
 			flushGb (lastSampleTime);
 			flushOpl (lastSampleTime);
@@ -721,15 +721,23 @@ namespace
 			measurement (shared through chips/Pitch.h) and the reason it cannot be skipped. */
 		static std::vector<std::uint8_t> assembleRom (const VgmCommandReader& reader,
 													  std::uint8_t type,
-													  std::size_t maxRomBytes)
+													  std::size_t maxRomBytes,
+													  bool clipToContent = false)
 		{
+			// The declared size is what the chip can address; the content is what a mask is built
+			// from. They differ on the Neo Geo: the header says 8 MB but only 2.8 MB of blocks are
+			// present, so libvgm masks the ADPCM-B address with 4 MB and the driver's 0x6B9000 is
+			// really 0x2B9000, inside its block. Clipping to the content reproduces that.
 			std::size_t romSize = 0;
 			for (const auto& block : reader.dataBlocks())
 			{
-				if (block.type == type)
+				if (block.type != type)
 				{
-					romSize = std::max (romSize, (std::size_t) block.romSize);
+					continue;
 				}
+
+				const std::size_t end = (std::size_t) block.romOffset + block.size;
+				romSize = std::max (romSize, clipToContent ? end : (std::size_t) block.romSize);
 			}
 
 			std::vector<std::uint8_t> rom;

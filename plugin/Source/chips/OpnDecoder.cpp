@@ -275,7 +275,7 @@ struct OpnDecoder::Impl
 			return cached->second;
 		}
 
-		constexpr std::size_t kBytes = 2048;
+		constexpr std::size_t kBytes = 4096;
 		std::vector<double> waveform;
 		waveform.reserve (kBytes * 2);
 
@@ -314,9 +314,12 @@ struct OpnDecoder::Impl
 		if (! adpcmBRom.empty() && voice.cycleLength > 0.0 && voice.delta != 0)
 		{
 			int fine = 0;
-			voice.melodic =
-				quantiseFrequency (adpcmBUnitsPerSecond (voice.delta) / voice.cycleLength, &fine)
-				<= kHighestMelodicNote;
+			const int note =
+				quantiseFrequency (adpcmBUnitsPerSecond (voice.delta) / voice.cycleLength, &fine);
+
+			// -1 is "out of range", not "lower than C8": a period the correlator found at a
+			// hundredth of a cycle is a formant, not a note (the Neo Geo sax reads 54 kHz).
+			voice.melodic = note >= 0 && note <= kHighestMelodicNote;
 		}
 
 		// The level register is what the driver actually closes the note with: the Neo Geo stage
@@ -324,6 +327,7 @@ struct OpnDecoder::Impl
 		// instead would be cut at a length the register cannot be trusted for. The end address
 		// stays in latchEnd so a driver that never silences still stops - see channelState().
 		voice.gateEnd = 0;
+
 	}
 
 	/** The ADPCM-B block, at the offsets of the core's ymdeltat: 0x00 control, 0x02/0x03 start,
