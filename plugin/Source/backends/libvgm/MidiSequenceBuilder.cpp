@@ -294,7 +294,12 @@ namespace
 			// chips with a real state machine are decoded in one pass after the stream is read:
 			// their note boundaries come from the chip's own counters, not from a register write
 			flushNes (lastSampleTime);
-			flushOpn (lastSampleTime);
+
+			// ADPCM-B's pitch only exists in its DELTA-T ROM (block 0x82): the sample's period has
+			// to be measured, and DELTA-N turns it into the note the driver asked for
+			flushOpn (opn.writes.empty() ? std::vector<std::uint8_t>()
+										 : assembleRom (reader, 0x82, 16 * 1024 * 1024),
+					  lastSampleTime);
 			flushGb (lastSampleTime);
 			flushOpl (lastSampleTime);
 			flushDecoded (opm, 3579545u, lastSampleTime);
@@ -512,7 +517,7 @@ namespace
 		/** Decodes every OPN write once the stream is read. One pass per device, because the
 			decoder needs the whole register history: algorithm changes, a total level written
 			before the key-on, ADPCM start bits and the DAC's 0x2A stream. */
-		void flushOpn (std::uint32_t totalSamples)
+		void flushOpn (const std::vector<std::uint8_t>& adpcmBRom, std::uint32_t totalSamples)
 		{
 			for (auto& entry : opn.writes)
 			{
@@ -545,6 +550,10 @@ namespace
 
 				chips::OpnDecoder decoder (opnVariantFor (info));
 				decoder.reset (clock, (double) kVgmRate);
+				if (! adpcmBRom.empty())
+				{
+					decoder.setAdpcmBRom (adpcmBRom);
+				}
 
 				emitDecodedNotes (&info,
 								  chips::extractPerformance (decoder, entry.second, totalSamples));

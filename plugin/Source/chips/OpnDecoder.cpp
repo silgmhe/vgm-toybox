@@ -3,6 +3,9 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
+#include <map>
+#include <memory>
+#include <vector>
 
 #include "Pitch.h"
 
@@ -20,6 +23,70 @@ namespace
 		4 has two, 5 and 6 have three, and 7 sums all four. */
 	constexpr std::uint8_t kCarriers[8] = { 0x08, 0x08, 0x08, 0x08,
 											0x0C, 0x0E, 0x0E, 0x0F };
+
+	// Above C8 a "period" is an artifact, as on every other sampled player here.
+	constexpr int kHighestMelodicNote = 108;
+
+	/** The ADPCM-B nibble decoder from the core's ymdeltat.c: a 4-bit delta picks a step from
+		table B1 scaled by the current step size, and table B2 scales the step size for the next
+		nibble. The measured period comes from the running sum, exactly as the DPCM voices of the
+		K054539 do. */
+	constexpr int kAdpcmBStepB1[16] = { 1, 3, 5, 7, 9, 11, 13, 15,
+										-1, -3, -5, -7, -9, -11, -13, -15 };
+	constexpr int kAdpcmBStepB2[16] = { 57, 57, 57, 57, 77, 102, 128, 153,
+										57, 57, 57, 57, 77, 102, 128, 153 };
+	constexpr int kAdpcmBStepMin = 127;
+	constexpr int kAdpcmBStepMax = 24576;
+
+	/** The chip masks its ROM address with the size rounded up to a power of two, the way the
+		QSound does - a ROM that is not a power of two therefore wraps rather than reads zero. */
+	std::uint32_t pow2Mask (std::size_t size)
+	{
+		if (size == 0)
+		{
+			return 0;
+		}
+
+		std::uint32_t mask = (std::uint32_t) (size - 1);
+		mask |= mask >> 1;
+		mask |= mask >> 2;
+		mask |= mask >> 4;
+		mask |= mask >> 8;
+		mask |= mask >> 16;
+		return mask;
+	}
+
+	/** ADPCM-B's pitch is DELTA-N, not a register a driver can ignore: the unit plays
+		`delta * clock / 65536` bytes a second (the core advances `delta * clock / rate / 65536`
+		bytes per output sample), and one byte is two nibbles. The sample's own cycle - measured
+		from the 0x82 ROM once per start address - turns that into a note, so this is the root the
+		doc calls the "ADPCM-B root". A sample with no period is a drum and stays a C4 trigger. */
+	class OpnAdpcmBNoteTable final : public NoteTable
+	{
+	public:
+		OpnAdpcmBNoteTable (double chipClock, const double* sampleCycle, const bool* sampleMelodic)
+			: unitsPerSecondPerStep (chipClock > 0.0 ? chipClock / 32768.0 : 8000000.0 / 32768.0)
+			, cycleLength (sampleCycle)
+			, melodic (sampleMelodic) {}
+
+		int noteFor (std::uint32_t delta, int, int* finePitch) const override
+		{
+			if (delta == 0 || melodic == nullptr || ! *melodic || cycleLength == nullptr
+				|| *cycleLength <= 0.0)
+			{
+				*finePitch = 0;
+				return kOneShotNote;
+			}
+
+			return quantiseFrequency ((double) delta * unitsPerSecondPerStep / *cycleLength,
+									  finePitch);
+		}
+
+	private:
+		double unitsPerSecondPerStep;
+		const double* cycleLength;
+		const bool* melodic;
+	};
 
 	/** An 11-bit f-number and a 3-bit block address a note through the OPN frequency relation.
 		The table is clock-dependent: the same register value plays a different pitch on an
@@ -51,7 +118,6 @@ namespace
 	};
 
 	constexpr std::uint32_t kAdpcmAGate = 3528;		// 80 ms at 44.1 kHz
-	constexpr std::uint32_t kAdpcmBGate = 4410;		// 100 ms
 	constexpr std::uint32_t kDacGate = 2205;			// 50 ms
 	constexpr std::uint32_t kDacInterval = 2205;		// one DAC marker per 50 ms at most
 }
@@ -76,15 +142,42 @@ struct OpnDecoder::Impl
 		bool active = false;
 	};
 
+	/** ADPCM-B: the one sampled voice with a real pitch register (DELTA-N), an end address and a
+		repeat bit. Everything the note needs is latched when the control register's start bit goes
+		up, because the driver rewrites start/end/delta for the next sample before the next start. */
+	struct AdpcmB
+	{
+		std::uint16_t startReg = 0;
+		std::uint16_t endReg = 0;
+		std::uint16_t delta = 0;
+		std::uint8_t control = 0;
+		std::uint8_t level = 0xFF;
+
+		std::uint32_t latchStart = 0;
+		std::uint32_t latchEnd = 0;
+		bool active = false;
+		bool repeat = false;
+		std::uint32_t gateEnd = 0;
+		double cycleLength = 0.0;
+		bool melodic = false;
+		std::uint32_t keyOns = 0;
+	};
+
 	Variant variant = Variant::ym2612;
 	Channel channels[6];
 	Pulse adpcmA[6];
-	Pulse adpcmB;
+	AdpcmB adpcmB;
 	Pulse dac;
 	std::uint32_t lastDacTrigger = 0;
 	bool dacTriggered = false;
 	bool dacEnabled = false;
 	std::uint32_t now = 0;
+	double clock = 8000000.0;
+	double streamRate = 44100.0;
+	std::vector<std::uint8_t> adpcmBRom;
+	std::uint32_t adpcmBMask = 0;
+	std::map<std::uint32_t, double> adpcmBCycleCache;
+	std::unique_ptr<OpnAdpcmBNoteTable> adpcmBTable;
 	OpnNoteTable table;
 
 	int fmCount = 6;
@@ -129,6 +222,147 @@ struct OpnDecoder::Impl
 			channels[0].present = false;
 			channels[3].present = false;
 		}
+
+		// the table holds pointers into this object, so it has to outlive a reset, not be reset
+		if (hasAdpcm())
+		{
+			adpcmBTable = std::make_unique<OpnAdpcmBNoteTable> (clock, &adpcmB.cycleLength,
+															   &adpcmB.melodic);
+		}
+		else
+		{
+			adpcmBTable.reset();
+		}
+	}
+
+	/** The core's ymdeltat portshift: the same 16-bit start/end register addresses 256-byte pages
+		on the YM2610 and 32-byte ones on the OPNA. */
+	int adpcmBShift (void) const
+	{
+		return (variant == Variant::ym2610 || variant == Variant::ym2610b) ? 8 : 5;
+	}
+
+	std::uint32_t adpcmBAddress (std::uint16_t reg) const
+	{
+		return (std::uint32_t) reg << adpcmBShift();
+	}
+
+	std::uint8_t adpcmBByte (std::uint32_t address) const
+	{
+		const std::uint32_t index = address & adpcmBMask;
+		return index < adpcmBRom.size() ? adpcmBRom[index] : 0;
+	}
+
+	/** Nibbles a second at this DELTA-N: the core advances `delta * clock / rate / 65536` bytes per
+		output sample, which is `delta * clock / 65536` bytes a second wherever the chip is run. */
+	double adpcmBUnitsPerSecond (std::uint16_t delta) const
+	{
+		return (double) delta * clock / 32768.0;
+	}
+
+	/** The sample's own cycle in nibbles, measured once per start address: the ADPCM-B ROM is
+		4-bit delta data, so it is decoded first - the period only exists in the running sum. */
+	double adpcmBCycleFor (std::uint32_t start)
+	{
+		if (adpcmBRom.empty())
+		{
+			return 0.0;
+		}
+
+		const auto cached = adpcmBCycleCache.find (start);
+		if (cached != adpcmBCycleCache.end())
+		{
+			return cached->second;
+		}
+
+		constexpr std::size_t kBytes = 2048;
+		std::vector<double> waveform;
+		waveform.reserve (kBytes * 2);
+
+		double accumulator = 0.0;
+		int step = kAdpcmBStepMin;
+		for (std::size_t i = 0; i < kBytes; ++i)
+		{
+			const int byte = adpcmBByte (start + (std::uint32_t) i);
+			for (int half = 0; half < 2; ++half)
+			{
+				const int nibble = (half == 0) ? ((byte >> 4) & 0x0F) : (byte & 0x0F);
+				accumulator += (double) (kAdpcmBStepB1[nibble] * step / 8);
+				accumulator = std::clamp (accumulator, -32768.0, 32767.0);
+				waveform.push_back (accumulator);
+				step = std::clamp (step * kAdpcmBStepB2[nibble] / 64, kAdpcmBStepMin,
+								   kAdpcmBStepMax);
+			}
+		}
+
+		const double cycle = estimateCycleLength (waveform, 0, 0);
+		adpcmBCycleCache[start] = cycle;
+		return cycle;
+	}
+
+	void startAdpcmB (void)
+	{
+		AdpcmB& voice = adpcmB;
+		voice.latchStart = adpcmBAddress (voice.startReg);
+		voice.latchEnd = adpcmBAddress (voice.endReg) + ((1u << adpcmBShift()) - 1u);
+		voice.repeat = (voice.control & 0x10) != 0;
+		voice.active = true;
+		++voice.keyOns;
+
+		voice.cycleLength = adpcmBCycleFor (voice.latchStart);
+		voice.melodic = false;
+		if (! adpcmBRom.empty() && voice.cycleLength > 0.0 && voice.delta != 0)
+		{
+			int fine = 0;
+			voice.melodic =
+				quantiseFrequency (adpcmBUnitsPerSecond (voice.delta) / voice.cycleLength, &fine)
+				<= kHighestMelodicNote;
+		}
+
+		// The level register is what the driver actually closes the note with: the Neo Geo stage
+		// theme writes level 0 before every new start, and a note that ran to its end address
+		// instead would be cut at a length the register cannot be trusted for. The end address
+		// stays in latchEnd so a driver that never silences still stops - see channelState().
+		voice.gateEnd = 0;
+	}
+
+	/** The ADPCM-B block, at the offsets of the core's ymdeltat: 0x00 control, 0x02/0x03 start,
+		0x04/0x05 end, 0x09/0x0A DELTA-N, 0x0B level. */
+	void writeAdpcmB (std::uint8_t offset, std::uint8_t value)
+	{
+		switch (offset)
+		{
+		case 0x00:
+			keyAdpcmB (value);
+			break;
+		case 0x02:
+			adpcmB.startReg = (std::uint16_t) ((adpcmB.startReg & 0xFF00) | value);
+			break;
+		case 0x03:
+			adpcmB.startReg = (std::uint16_t) ((adpcmB.startReg & 0x00FF) | (value << 8));
+			break;
+		case 0x04:
+			adpcmB.endReg = (std::uint16_t) ((adpcmB.endReg & 0xFF00) | value);
+			break;
+		case 0x05:
+			adpcmB.endReg = (std::uint16_t) ((adpcmB.endReg & 0x00FF) | (value << 8));
+			break;
+		case 0x09:
+			adpcmB.delta = (std::uint16_t) ((adpcmB.delta & 0xFF00) | value);
+			break;
+		case 0x0A:
+			adpcmB.delta = (std::uint16_t) ((adpcmB.delta & 0x00FF) | (value << 8));
+			break;
+		case 0x0B:
+			adpcmB.level = value;
+			if (value == 0)
+			{
+				adpcmB.active = false;		// level 0 is silence, and it is how drivers end a note
+			}
+			break;
+		default:
+			break;
+		}
 	}
 
 	void keyEvent (std::uint8_t data)
@@ -169,16 +403,14 @@ struct OpnDecoder::Impl
 		}
 	}
 
-	void keyAdpcmB (std::uint32_t time, std::uint8_t data)
+	void keyAdpcmB (std::uint8_t data)
 	{
-		// Bit 7 starts the sample, bit 0 resets the unit.
+		// Bit 7 starts the sample and reloads the address, so a write with it on is a key-on even
+		// when the voice was already sounding; bit 0 resets the unit.
+		adpcmB.control = data;
 		if ((data & 0x80) != 0)
 		{
-			if (! adpcmB.active)
-			{
-				adpcmB.end = time + kAdpcmBGate;
-			}
-			adpcmB.active = true;
+			startAdpcmB();
 		}
 		else if ((data & 0x01) != 0)
 		{
@@ -228,13 +460,29 @@ OpnDecoder::OpnDecoder (Variant variant) : impl (std::make_unique<Impl>())
 
 OpnDecoder::~OpnDecoder() = default;
 
-void OpnDecoder::reset (std::uint32_t clock, double)
+void OpnDecoder::reset (std::uint32_t clock, double sampleRate)
 {
 	const Variant variant = impl->variant;
+
+	// the ROM belongs to the song, not to the clock
+	std::vector<std::uint8_t> rom = std::move (impl->adpcmBRom);
+	const std::uint32_t mask = impl->adpcmBMask;
+
 	*impl = Impl();
 	impl->variant = variant;
+	impl->adpcmBRom = std::move (rom);
+	impl->adpcmBMask = mask;
+	impl->clock = clock > 0 ? (double) clock : 8000000.0;
+	impl->streamRate = sampleRate > 0.0 ? sampleRate : 44100.0;
 	impl->configure();
 	impl->table.setClock ((double) clock);
+}
+
+void OpnDecoder::setAdpcmBRom (std::vector<std::uint8_t> rom)
+{
+	impl->adpcmBMask = pow2Mask (rom.size());
+	impl->adpcmBRom = std::move (rom);
+	impl->adpcmBCycleCache.clear();
 }
 
 void OpnDecoder::write (const RegisterWrite& write)
@@ -279,10 +527,7 @@ void OpnDecoder::write (const RegisterWrite& write)
 
 		if (port == 1 && reg < 0x10)
 		{
-			if (reg == 0x00)
-			{
-				impl->keyAdpcmB (write.sampleTime, write.value);
-			}
+			impl->writeAdpcmB (reg, write.value);
 			return;
 		}
 	}
@@ -299,10 +544,8 @@ void OpnDecoder::write (const RegisterWrite& write)
 
 		if (port == 0 && reg >= 0x10 && reg < 0x20)
 		{
-			if (reg == 0x10)
-			{
-				impl->keyAdpcmB (write.sampleTime, write.value);
-			}
+			// the OPNB's ADPCM-B block sits at 0x10 where the OPNA's sits at 0x00
+			impl->writeAdpcmB ((std::uint8_t) (reg - 0x10), write.value);
 			return;
 		}
 	}
@@ -410,38 +653,63 @@ ChannelState OpnDecoder::channelState (int channel) const
 	}
 
 	state.present = true;
-	state.period = kOneShotPeriod;
-	state.volume = 12;		// a trigger marker, not a measured level
 
 	if (isDac)
 	{
+		state.period = kOneShotPeriod;
+		state.volume = 12;		// a trigger marker, not a measured level
 		state.gate = impl->now < impl->dac.end;
-	}
-	else if (channel < 12)
-	{
-		state.gate = impl->now < impl->adpcmA[channel - 6].end;
-	}
-	else
-	{
-		state.gate = impl->now < impl->adpcmB.end;
+		return state;
 	}
 
+	if (channel < impl->fmCount + 6)
+	{
+		state.period = kOneShotPeriod;
+		state.volume = 12;
+		state.gate = impl->now < impl->adpcmA[channel - impl->fmCount].end;
+		return state;
+	}
+
+	// ADPCM-B is the one sampled voice with a pitch register: DELTA-N is the note, the level
+	// register the volume, and the start bit the gate
+	const Impl::AdpcmB& voice = impl->adpcmB;
+	state.period = std::max<std::uint32_t> (voice.delta, 1u);
+	state.volume = (int) ((voice.level * 15u) / 255u);
+	state.keyOns = voice.keyOns;
+	state.gate = voice.active && voice.level != 0
+				 && (voice.gateEnd == 0 || impl->now < voice.gateEnd);
 	return state;
 }
 
-const NoteTable& OpnDecoder::noteTable (int) const
+const NoteTable& OpnDecoder::noteTable (int channel) const
 {
+	if (impl->adpcmBTable != nullptr && channel == impl->fmCount + 6)
+	{
+		return *impl->adpcmBTable;
+	}
+
 	return impl->table;
 }
 
 Family OpnDecoder::family (int channel) const
 {
-	return channel < impl->fmCount ? Family::fm : Family::adpcmDrum;
+	if (channel < impl->fmCount)
+	{
+		return Family::fm;
+	}
+
+	return isDrum (channel) ? Family::adpcmDrum : Family::opnAdpcmB;
 }
 
 bool OpnDecoder::isDrum (int channel) const
 {
-	return channel >= impl->fmCount;
+	if (channel < impl->fmCount)
+	{
+		return false;
+	}
+
+	// ADPCM-A is a trigger; ADPCM-B is melodic when its sample has a period
+	return ! (channel == impl->fmCount + 6 && impl->adpcmB.melodic);
 }
 
 } // namespace toybox::chips

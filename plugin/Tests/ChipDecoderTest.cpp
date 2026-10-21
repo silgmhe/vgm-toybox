@@ -458,6 +458,157 @@ namespace
 		check (adpcmB == 1, "an ADPCM-B start bit is one note on channel 12");
 	}
 
+	/** A tonal DELTA-T sample for the ADPCM-B tests: eight nibbles of +1 then eight of -1, which
+		the decoder integrates into a triangle whose period is exactly 16 nibbles. */
+	std::vector<std::uint8_t> makeAdpcmBTone (std::size_t size, std::size_t offset)
+	{
+		const std::uint8_t cycle[8] = { 0x00, 0x00, 0x00, 0x00, 0x88, 0x88, 0x88, 0x88 };
+
+		std::vector<std::uint8_t> rom (size, 0);
+		for (std::size_t i = 0; i + offset < size; ++i)
+		{
+			rom[offset + i] = cycle[i % 8];
+		}
+		return rom;
+	}
+
+	/** ADPCM-B is the one sampled voice on the OPN with a pitch register: DELTA-N. Its ROM holds
+		4-bit deltas, so the sample's cycle only exists after decoding - and then the note follows
+		DELTA-N, which is the "ADPCM-B root" the design doc asks for. */
+	void testOpnAdpcmBPitch (void)
+	{
+		Stream stream;
+		stream.at (0, 0, 0x12, 0x10);			// start 0x10 << 8 = 0x1000 (256-byte pages)
+		stream.at (0, 0, 0x13, 0x00);
+		stream.at (0, 0, 0x14, 0x11);			// end 0x11 << 8 | 0xFF = 0x11FF
+		stream.at (0, 0, 0x15, 0x00);
+		stream.at (0, 0, 0x19, 29);				// DELTA-N 29: 7080 nibbles a second
+		stream.at (0, 0, 0x1A, 0x00);
+		stream.at (0, 0, 0x1B, 0xFF);			// level, full scale
+		stream.at (0, 0, 0x10, 0x80);			// start, no repeat
+
+		toybox::chips::OpnDecoder decoder (toybox::chips::OpnDecoder::Variant::ym2610);
+		decoder.reset (8000000, 44100.0);
+		decoder.setAdpcmBRom (makeAdpcmBTone (0x4000, 0x1000));
+
+		const auto notes = toybox::chips::extractNotes (decoder, stream.writes, 44100);
+
+		check (notes.size() == 1, "an ADPCM-B start with a tonal sample is one note");
+		if (notes.empty())
+		{
+			return;
+		}
+
+		check (notes[0].logicalChannel == 12, "ADPCM-B is channel 12");
+		check (notes[0].note == 69, "a 16-nibble cycle at 7080 nibbles a second is A4");
+		check (notes[0].family == toybox::chips::Family::opnAdpcmB,
+			   "and its family says the pitch is real");
+		check (! notes[0].isDrum, "so it is not a trigger");
+	}
+
+	/** DELTA-N is the pitch: the same sample at twice the register is an octave up. */
+	void testOpnAdpcmBDeltaIsThePitch (void)
+	{
+		Stream stream;
+		stream.at (0, 0, 0x12, 0x10);
+		stream.at (0, 0, 0x13, 0x00);
+		stream.at (0, 0, 0x14, 0x11);
+		stream.at (0, 0, 0x15, 0x00);
+		stream.at (0, 0, 0x19, 58);				// twice the DELTA-N
+		stream.at (0, 0, 0x1A, 0x00);
+		stream.at (0, 0, 0x1B, 0xFF);
+		stream.at (0, 0, 0x10, 0x80);
+
+		toybox::chips::OpnDecoder decoder (toybox::chips::OpnDecoder::Variant::ym2610);
+		decoder.reset (8000000, 44100.0);
+		decoder.setAdpcmBRom (makeAdpcmBTone (0x4000, 0x1000));
+
+		const auto notes = toybox::chips::extractNotes (decoder, stream.writes, 44100);
+
+		check (notes.size() == 1 && notes[0].note == 81,
+			   "twice DELTA-N is an octave up: A5 from the same sample");
+	}
+
+	/** Level 0 is how the drivers end the voice (the Neo Geo stage theme writes it before every new
+		start), so it closes the note rather than leaving it hanging. */
+	void testOpnAdpcmBLevelEndsTheNote (void)
+	{
+		Stream stream;
+		stream.at (0, 0, 0x12, 0x10);
+		stream.at (0, 0, 0x13, 0x00);
+		stream.at (0, 0, 0x14, 0x11);
+		stream.at (0, 0, 0x15, 0x00);
+		stream.at (0, 0, 0x19, 29);
+		stream.at (0, 0, 0x1A, 0x00);
+		stream.at (0, 0, 0x1B, 0xFF);
+		stream.at (0, 0, 0x10, 0x80);
+		stream.at (20000, 0, 0x1B, 0x00);		// silence
+
+		toybox::chips::OpnDecoder decoder (toybox::chips::OpnDecoder::Variant::ym2610);
+		decoder.reset (8000000, 44100.0);
+		decoder.setAdpcmBRom (makeAdpcmBTone (0x4000, 0x1000));
+
+		const auto notes = toybox::chips::extractNotes (decoder, stream.writes, 44100);
+
+		check (notes.size() == 1 && distance (notes[0].endSample, 20000) <= 64,
+			   "level 0 ends the ADPCM-B note");
+	}
+
+	/** A sample with no period stays the C4 trigger: the drums share this voice. */
+	void testOpnAdpcmBPercussion (void)
+	{
+		std::vector<std::uint8_t> rom (0x4000, 0);
+		std::uint32_t seed = 24681357u;
+		for (std::size_t i = 0; i < 512; ++i)
+		{
+			seed = seed * 1103515245u + 12345u;
+			rom[0x1000 + i] = (std::uint8_t) (seed >> 16);
+		}
+
+		Stream stream;
+		stream.at (0, 0, 0x12, 0x10);
+		stream.at (0, 0, 0x13, 0x00);
+		stream.at (0, 0, 0x14, 0x11);
+		stream.at (0, 0, 0x15, 0x00);
+		stream.at (0, 0, 0x19, 29);
+		stream.at (0, 0, 0x1A, 0x00);
+		stream.at (0, 0, 0x1B, 0xFF);
+		stream.at (0, 0, 0x10, 0x80);
+
+		toybox::chips::OpnDecoder decoder (toybox::chips::OpnDecoder::Variant::ym2610);
+		decoder.reset (8000000, 44100.0);
+		decoder.setAdpcmBRom (rom);
+
+		const auto notes = toybox::chips::extractNotes (decoder, stream.writes, 44100);
+
+		check (notes.size() == 1 && notes[0].note == 60 && notes[0].isDrum,
+			   "an ADPCM-B sample with no period is the C4 drum trigger");
+	}
+
+	/** The OPNA addresses 32-byte pages where the OPNB uses 256: the same 0x1000 sample is start
+		register 0x80 on a YM2608 and 0x10 on a YM2610. */
+	void testOpnAdpcmBAddressShift (void)
+	{
+		Stream stream;
+		stream.at (0, 1, 0x02, 0x80);			// start 0x80 << 5 = 0x1000
+		stream.at (0, 1, 0x03, 0x00);
+		stream.at (0, 1, 0x04, 0x91);			// end
+		stream.at (0, 1, 0x05, 0x00);
+		stream.at (0, 1, 0x09, 29);
+		stream.at (0, 1, 0x0A, 0x00);
+		stream.at (0, 1, 0x0B, 0xFF);
+		stream.at (0, 1, 0x00, 0x80);
+
+		toybox::chips::OpnDecoder decoder (toybox::chips::OpnDecoder::Variant::ym2608);
+		decoder.reset (7987200, 44100.0);
+		decoder.setAdpcmBRom (makeAdpcmBTone (0x4000, 0x1000));
+
+		const auto notes = toybox::chips::extractNotes (decoder, stream.writes, 44100);
+
+		check (notes.size() == 1 && notes[0].note == 69,
+			   "the OPNA reaches the same sample 32 bytes at a time: still A4 at its clock");
+	}
+
 	/** The non-B YM2610 has only channels 1, 2, 4 and 5 wired up; the B revision has all six.
 		The same register stream must therefore sound one note on the first and two on the second. */
 	void testOpnbFourChannelVariant (void)
@@ -3337,6 +3488,11 @@ namespace
 	testFmDacTakesOverChannelSix();
 	testOpnThreeChannels();
 	testOpnaAdpcmOneShots();
+	testOpnAdpcmBPitch();
+	testOpnAdpcmBDeltaIsThePitch();
+	testOpnAdpcmBLevelEndsTheNote();
+	testOpnAdpcmBPercussion();
+	testOpnAdpcmBAddressShift();
 	testOpnbFourChannelVariant();
 
 	testOpmPitchAndKey();

@@ -2,6 +2,7 @@
 
 #include <cstdint>
 #include <memory>
+#include <vector>
 
 #include "IChipDecoder.h"
 
@@ -28,9 +29,11 @@ namespace toybox::chips
 	  - YM2203:  three FM channels, 0..2.
 	  - YM2612:  six FM channels, 0..5; channel 6 is the DAC, whose register 0x2A is a stream of
 	             sample bytes - rate-limited to one trigger per 50 ms so it reads as drum hits.
-	  - YM2608:  six FM, 0..5; ADPCM-A on 6..11 and ADPCM-B on 12. Both are one-shots: the
+	  - YM2608:  six FM, 0..5; ADPCM-A on 6..11 and ADPCM-B on 12. ADPCM-A is a one-shot: the
 	             control register starts a sample and the chip ends it itself, so all this decoder
-	             can report is a pulse wide enough for a MIDI note.
+	             can report is a pulse wide enough for a MIDI note. ADPCM-B has a real pitch
+	             register (DELTA-N), so with its 0x82 ROM in hand it reports the sample's own
+	             pitch; without the ROM, or for a sample that has no period, it stays a C4 trigger.
 	  - YM2610/2610B: the same 13-channel layout. The non-B variant has only channels 1, 2, 4
 	             and 5 wired up, so 0 and 3 report "not present". */
 class OpnDecoder final : public IChipDecoder
@@ -50,6 +53,10 @@ public:
 	~OpnDecoder() override;
 
 	void reset (std::uint32_t clock, double sampleRate) override;
+
+	/** The DELTA-T ROM (VGM block 0x82). Without it ADPCM-B has no sample to measure, and the
+		channel stays the C4 trigger it was before. */
+	void setAdpcmBRom (std::vector<std::uint8_t> rom);
 	void write (const RegisterWrite& write) override;
 	void advance (std::uint32_t sampleTime) override;
 
