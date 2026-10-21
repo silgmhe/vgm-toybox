@@ -73,6 +73,14 @@ struct ChannelState
 	int volume = 0;					// 0..15, envelope already applied
 	int patch = 0;					// duty / waveform / drum id
 	std::int16_t finePitch = 0;		// cents outside the note table
+
+	/** Monotonic count of key-on events on this channel, for the chips that have one.
+
+		A driver that retriggers a voice at the same pitch - a bass line repeating a note, a drum
+		hit on the same key - is starting a *new* note, but the sampled state alone cannot say so:
+		the gate never dropped and the pitch never moved. The counter is what lets the extractor cut
+		the previous note at the retrigger. Chips that do not fill it leave every note as it was. */
+	std::uint32_t keyOns = 0;
 };
 
 /** A period-to-note lookup. Built per chip family, clock and tuning, because a period means

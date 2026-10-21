@@ -3010,6 +3010,32 @@ namespace
 			   "a smooth attack is a drum hit, not the 2.6 kHz its smoothness suggests");
 	}
 
+	/** Retriggering a voice at the same pitch is a new note: the gate never dropped and the pitch
+		never moved, so only the key-on counter can say so. Without it a drum or bass line that
+		repeats a note collapses into one long note - the X-Men stage theme in test_file/K054539
+		came out as a single note per track over 82 seconds. */
+	void testK054539RetriggerIsANewNote (void)
+	{
+		std::vector<std::uint8_t> rom (0x4000, 0);
+		fillK054539Square (rom, 0x1000, 128, 2048);
+		rom[0x1000 + 2048] = 0x80;
+
+		Stream stream;
+		setK054539Voice (stream, 0, 0x1000, k054539Type8, kK054539PitchA4, 0x00);
+		k054539Key (stream, 10, 0x214, 0x01);
+		k054539Key (stream, 3000, 0x214, 0x01);		// same voice, same pitch, no key-off
+		k054539Key (stream, 6000, 0x215, 0x01);
+
+		const auto notes = runK054539 (stream, 20000, 18432000, rom);
+
+		check (notes.size() == 2, "a retrigger at the same pitch is a second note");
+		if (notes.size() == 2)
+		{
+			check (distance (notes[1].startSample, 3000) <= 64,
+				   "the second note starts at the second key-on");
+		}
+	}
+
 	/** Eight voices: the last one's registers start at 0xE0 and its key bit is bit 7. */
 	void testK054539Voices (void)
 	{
@@ -3171,6 +3197,7 @@ namespace
 	testK054539SixteenBitPcm();
 	testK054539FourBitDpcm();
 	testK054539SmoothAttackIsADrum();
+	testK054539RetriggerIsANewNote();
 	testK054539Voices();
 
 	std::printf ("Result    : %s\n", failures == 0 ? "PASS" : "FAILURES");

@@ -37,6 +37,10 @@ ExtractedPerformance extractPerformance (IChipDecoder& decoder,
 	ExtractedPerformance result;
 	std::vector<OpenNote> open ((std::size_t) std::max (decoder.channelCount(), 0));
 
+	// The key-on counter of each channel as it was at the last poll: a sampled voice that is
+	// retriggered at the same pitch is a new note even though nothing else changed.
+	std::vector<std::uint32_t> lastKeyOns ((std::size_t) std::max (decoder.channelCount(), 0), 0);
+
 	std::size_t nextWrite = 0;
 
 	auto closeNote = [&] (int channel, std::uint32_t end)
@@ -94,6 +98,9 @@ ExtractedPerformance extractPerformance (IChipDecoder& decoder,
 		for (int channel = 0; channel < decoder.channelCount(); ++channel)
 		{
 			const ChannelState state = decoder.channelState (channel);
+			const bool retriggered = state.keyOns != lastKeyOns[(std::size_t) channel];
+			lastKeyOns[(std::size_t) channel] = state.keyOns;
+
 			int finePitch = 0;
 			const int note = (state.present && state.gate)
 								 ? decoder.noteTable (channel).noteFor (state.period, state.block, &finePitch)
@@ -106,7 +113,7 @@ ExtractedPerformance extractPerformance (IChipDecoder& decoder,
 			}
 
 			OpenNote& current = open[(std::size_t) channel];
-			if (current.active && current.note == note)
+			if (current.active && current.note == note && ! retriggered)
 			{
 				// same pitch, still sounding: follow the envelope instead of re-triggering
 				current.velocity = std::max (current.velocity, velocityFor (state.volume));

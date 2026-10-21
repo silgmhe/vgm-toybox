@@ -96,6 +96,7 @@ struct C140Decoder::Impl
 
 		// latched at key-on, where the core copies start/end into the voice
 		bool keyed = false;
+		std::uint32_t keyOns = 0;		// monotonic: a retrigger at the same pitch is a new note
 		std::uint32_t gateEnd = 0;		// when a non-looping sample reaches its end
 		double samplePeriodBytes = 0.0;	// the latched sample's cycle length; 0 = use the root rate
 	};
@@ -229,6 +230,7 @@ struct C140Decoder::Impl
 		// the key-on edge is where the core latches start/end/loop, so the length and the sample's
 		// own pitch are fixed here as well
 		voice.keyed = true;
+		++voice.keyOns;
 		voice.gateEnd = sampleTime + durationOf (voice);
 		voice.samplePeriodBytes = samplePeriodFor (voice);
 	}
@@ -392,6 +394,7 @@ ChannelState C140Decoder::channelState (int channel) const
 	const Impl::Channel& voice = impl->channels[channel];
 	state.present = true;
 	state.gate = impl->isSounding (channel);
+	state.keyOns = voice.keyOns;
 	state.period = Impl::frequencyOf (voice);		// the note table turns the rate into a note
 	state.volume = impl->volumeOf (voice);
 

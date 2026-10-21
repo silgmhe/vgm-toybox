@@ -171,6 +171,7 @@ struct C352Decoder::Impl
 
 		// latched at the execute write, where the core copies the start address into the pointer
 		bool keyed = false;
+		std::uint32_t keyOns = 0;		// monotonic: a retrigger at the same pitch is a new note
 		std::uint32_t gateEnd = 0;		// when a non-looping sample reaches its end
 		double cycleLength = 0.0;		// the latched sample's own period; 0 = use the root rate
 	};
@@ -434,6 +435,7 @@ ChannelState C352Decoder::channelState (int channel) const
 	const Impl::Voice& voice = impl->voices[channel];
 	state.present = true;
 	state.gate = impl->isSounding (channel);
+	state.keyOns = voice.keyOns;
 	state.period = voice.frequency;		// the note table turns the rate into a note
 	state.volume = impl->volumeOf (voice);
 

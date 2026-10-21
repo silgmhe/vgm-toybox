@@ -149,6 +149,7 @@ struct K054539Decoder::Impl
 
 		// latched where the core latches its pointer and fraction
 		bool keyed = false;
+		std::uint32_t keyOns = 0;		// monotonic: a retrigger at the same pitch is a new note
 		std::uint32_t latchStart = 0;
 		std::uint32_t gateEnd = 0;
 		double cycleLength = 0.0;		// one cycle in units; 0 = no period (a drum)
@@ -560,6 +561,7 @@ ChannelState K054539Decoder::channelState (int channel) const
 	const Impl::Voice& voice = impl->voices[channel];
 	state.present = true;
 	state.gate = impl->isSounding (channel);
+	state.keyOns = voice.keyOns;
 	state.period = voice.pitch;
 	state.volume = impl->volumeOf (voice);
 
