@@ -21,6 +21,7 @@
 #include "chips/K053260Decoder.h"
 #include "chips/K054539Decoder.h"
 #include "chips/QSoundDecoder.h"
+#include "chips/Ga20Decoder.h"
 #include "chips/NesApuDecoder.h"
 #include "chips/NoteExtractor.h"
 #include "chips/PokeyDecoder.h"
@@ -3466,6 +3467,130 @@ namespace
 			   "its end address ends it: 2048 bytes is 4096 nibbles at 8 kHz, half a second");
 	}
 
+	// --- GA20: four voices, a 16-byte address unit and a sample that ends on 0x00 ------------------
+
+	std::vector<NoteEvent> runGa20 (const Stream& stream, std::uint32_t totalSamples,
+								   const std::vector<std::uint8_t>& rom)
+	{
+		toybox::chips::Ga20Decoder decoder;
+		decoder.reset (3579545, 44100.0);
+		decoder.setRom (rom);
+		return toybox::chips::extractNotes (decoder, stream.writes, totalSamples);
+	}
+
+	/** `0xBF <register> <value>`, register = channel * 8 + n. */
+	void ga20Write (Stream& stream, std::uint32_t time, std::uint8_t reg, std::uint8_t value)
+	{
+		RegisterWrite write;
+		write.reg = reg;
+		write.value = value;
+		write.sampleTime = time;
+		stream.writes.push_back (write);
+	}
+
+	/** Start, rate, volume - and the control bit that keys the voice on. */
+	void startGa20Voice (Stream& stream, std::uint32_t time, int channel, std::uint32_t start,
+						 std::uint8_t rate, std::uint8_t volume)
+	{
+		const std::uint8_t base = (std::uint8_t) (channel * 8);
+		ga20Write (stream, time, (std::uint8_t) (base + 0), (std::uint8_t) ((start >> 4) & 0xFF));
+		ga20Write (stream, time, (std::uint8_t) (base + 1), (std::uint8_t) ((start >> 12) & 0xFF));
+		ga20Write (stream, time, (std::uint8_t) (base + 4), rate);
+		ga20Write (stream, time, (std::uint8_t) (base + 5), volume);
+		ga20Write (stream, time, (std::uint8_t) (base + 6), 0x02);
+	}
+
+	/** A periodic sample of `length` bytes, then the ROM's zeroes - which are the sample's end
+		marker, the only thing that stops a GA20 note early. */
+	std::vector<std::uint8_t> ga20Square (std::size_t size, std::size_t offset, int cycle,
+										  std::size_t length = 512)
+	{
+		std::vector<std::uint8_t> rom (size, 0);
+		for (std::size_t i = 0; i < length && offset + i < size; ++i)
+		{
+			rom[offset + i] = ((i % (std::size_t) cycle) < (std::size_t) cycle / 2) ? 0x50 : 0xB0;
+		}
+		return rom;
+	}
+
+	/** A 16-byte cycle at rate 249 is 44100/(256-249)/16 = 393.75 Hz - G4. The sample's 512 bytes
+		then hit the 0x00 terminator, which is the only end the core reads (there is no loop). */
+	void testGa20Note (void)
+	{
+		Stream stream;
+		startGa20Voice (stream, 0, 0, 0x4000, 249, 0xFF);
+
+		const auto notes = runGa20 (stream, 20000, ga20Square (0x10000, 0x4000, 16));
+
+		check (notes.size() == 1, "a GA20 key-on with a periodic sample is one note");
+		if (notes.empty())
+		{
+			return;
+		}
+
+		check (notes[0].note == 67, "a 16-byte cycle at 6300 bytes a second is G4");
+		check (notes[0].logicalChannel == 0, "GA20 voice 0 is its own track");
+		check (! notes[0].isDrum, "a sample with a period is melodic");
+		check (notes[0].family == toybox::chips::Family::ga20Pcm, "and its family says so");
+		check (notes[0].velocity == 127, "full-scale volume is full velocity");
+		check (distance (notes[0].endSample, 3584) <= 80,
+			   "the 0x00 terminator ends the note: 512 bytes at 7 samples a byte");
+	}
+
+	/** The control bit is the gate: writing 0 ends the note where the driver says, not where the
+		sample would have ended. */
+	void testGa20KeyOff (void)
+	{
+		Stream stream;
+		startGa20Voice (stream, 0, 0, 0x4000, 249, 0xFF);
+		ga20Write (stream, 1000, 0x06, 0x00);
+
+		const auto notes = runGa20 (stream, 20000, ga20Square (0x10000, 0x4000, 16));
+
+		check (notes.size() == 1 && distance (notes[0].endSample, 1000) <= 64,
+			   "writing the control bit back to zero ends the note");
+	}
+
+	/** A drum has no period to measure, so it stays the C4 trigger - these boards put drums and
+		melody on the same four voices, and the decision is per key-on. */
+	void testGa20Percussion (void)
+	{
+		std::vector<std::uint8_t> rom (0x10000, 0);
+		std::uint32_t seed = 24681357u;
+		for (std::size_t i = 0; i < 512; ++i)
+		{
+			seed = seed * 1103515245u + 12345u;
+			rom[0x5000 + i] = (std::uint8_t) (seed >> 16);
+		}
+
+		Stream stream;
+		startGa20Voice (stream, 0, 1, 0x5000, 249, 0xFF);
+
+		const auto notes = runGa20 (stream, 20000, rom);
+
+		check (notes.size() == 1 && notes[0].note == 60 && notes[0].isDrum,
+			   "a GA20 sample with no period is the C4 drum trigger");
+	}
+
+	/** The start registers are in 16-byte units: register 0x0400 addresses byte 0x4000, so a decoder
+		that treats them as a byte address reads zeroes and plays nothing. */
+	void testGa20AddressUnit (void)
+	{
+		Stream wrong;
+		startGa20Voice (wrong, 0, 0, 0x0040, 249, 0xFF);		// 0x40 is silence in this ROM
+
+		check (runGa20 (wrong, 20000, ga20Square (0x10000, 0x4000, 16)).empty(),
+			   "start 0x0040 reads the empty part of the ROM, so the address is not a byte address");
+
+		Stream right;
+		startGa20Voice (right, 0, 0, 0x4000, 249, 0xFF);
+
+		const auto notes = runGa20 (right, 20000, ga20Square (0x10000, 0x4000, 16));
+
+		check (notes.size() == 1 && notes[0].note == 67,
+			   "start 0x4000 is register 0x0400: sixteen bytes a step");
+	}
+
 	int main (void)
 {
 	std::printf ("chip decoder test\n");
@@ -3624,6 +3749,11 @@ namespace
 	testQSoundBankBelongsToTheNextVoice();
 	testQSoundSilentVoiceIsNoNote();
 	testQSoundChannelsAndAdpcm();
+
+	testGa20Note();
+	testGa20KeyOff();
+	testGa20Percussion();
+	testGa20AddressUnit();
 
 	std::printf ("Result    : %s\n", failures == 0 ? "PASS" : "FAILURES");
 	return failures == 0 ? 0 : 1;

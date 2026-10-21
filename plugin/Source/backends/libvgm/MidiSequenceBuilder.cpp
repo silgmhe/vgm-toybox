@@ -16,6 +16,7 @@
 #include "chips/K053260Decoder.h"
 #include "chips/K054539Decoder.h"
 #include "chips/QSoundDecoder.h"
+#include "chips/Ga20Decoder.h"
 #include "chips/NesApuDecoder.h"
 #include "chips/NoteExtractor.h"
 #include "chips/OplDecoder.h"
@@ -252,6 +253,10 @@ namespace
 					k053260.queue (deviceFor (DEVID_K053260, 0), command.addr, command.data,
 								   command.sampleTime);
 					break;
+				case 0xBF:	// GA20: four voices, offset = channel * 8 + register
+					ga20.queue (deviceFor (DEVID_GA20, 0), command.addr, command.data,
+								command.sampleTime);
+					break;
 				case 0xD3:	// K054539: a 16-bit offset, so its high byte travels in `port`
 					k054539.queue (deviceFor (DEVID_K054539, 0), command.addr, command.data,
 								   command.sampleTime, command.port);
@@ -388,6 +393,19 @@ namespace
 							  if (! qsoundRom.empty())
 							  {
 								  decoder.setRom (qsoundRom);
+							  }
+						  });
+
+			// GA20's samples are its 0x93 blocks, addressed in 16-byte units inside 1 MB.
+			const std::vector<std::uint8_t> ga20Rom =
+				ga20.writes.empty() ? std::vector<std::uint8_t>()
+									: assembleRom (reader, 0x93, 1024 * 1024);
+			flushDecoded (ga20, 3579545u, lastSampleTime,
+						  [&ga20Rom] (chips::Ga20Decoder& decoder)
+						  {
+							  if (! ga20Rom.empty())
+							  {
+								  decoder.setRom (ga20Rom);
 							  }
 						  });
 
@@ -950,6 +968,10 @@ namespace
 		// QSound has no key bit at all: a voice sounds while its rate and volume are non-zero, so
 		// its notes - and its sixteen voices - only make sense read from the whole stream too
 		ChipBuffer<chips::QSoundDecoder> qsound;
+
+		// The GA20 has a key bit but no length register the core reads: a sample ends where its
+		// ROM says 0x00, so the decoder needs the whole stream - and the ROM - to know the gate
+		ChipBuffer<chips::Ga20Decoder> ga20;
 		std::vector<playback::MidiEvent> events;
 	};
 }

@@ -204,6 +204,7 @@ target_sources(VGMToybox PRIVATE
 	Source/chips/K053260Decoder.cpp
 	Source/chips/K054539Decoder.cpp
 	Source/chips/QSoundDecoder.cpp
+	Source/chips/Ga20Decoder.cpp
 	Source/chips/Ymf271Decoder.cpp
 	Source/chips/Ymz280bDecoder.cpp
 	Source/chips/Sn76489Decoder.cpp
@@ -348,6 +349,7 @@ add_executable(vgm_mixer_test EXCLUDE_FROM_ALL
 	Source/chips/K053260Decoder.cpp
 	Source/chips/K054539Decoder.cpp
 	Source/chips/QSoundDecoder.cpp
+	Source/chips/Ga20Decoder.cpp
 	Source/chips/Ymf271Decoder.cpp
 	Source/chips/Ymz280bDecoder.cpp
 	Source/chips/Sn76489Decoder.cpp
@@ -384,6 +386,7 @@ add_executable(vgm_chip_test EXCLUDE_FROM_ALL
 	Source/chips/K053260Decoder.cpp
 	Source/chips/K054539Decoder.cpp
 	Source/chips/QSoundDecoder.cpp
+	Source/chips/Ga20Decoder.cpp
 	Source/chips/Ymf271Decoder.cpp
 	Source/chips/Ymz280bDecoder.cpp
 	Source/chips/Sn76489Decoder.cpp
@@ -633,6 +636,16 @@ set(_toybox_qsound_song "${CMAKE_CURRENT_SOURCE_DIR}/Tests/assets/qsound.vgm")
 if(EXISTS "${_toybox_qsound_song}")
 	add_test(NAME engine.qsound COMMAND vgm_mixer_test "${_toybox_qsound_song}" 2)
 	set_tests_properties(engine.qsound PROPERTIES LABELS "integration" TIMEOUT 120)
+endif()
+
+# The GA20 (M4): four voices, a start address in 16-byte units, a rate that is a divider and a sample
+# that ends on a 0x00 byte. ga20.vgm keys two voices four times each: voice 0 a 16-byte periodic
+# waveform that has to come out as G4, voice 1 noise that has to come out as the C4 drum trigger. A
+# decoder treating the start registers as a byte address reads past the sample and plays nothing.
+set(_toybox_ga20_song "${CMAKE_CURRENT_SOURCE_DIR}/Tests/assets/ga20.vgm")
+if(EXISTS "${_toybox_ga20_song}")
+	add_test(NAME engine.ga20 COMMAND vgm_mixer_test "${_toybox_ga20_song}" 2)
+	set_tests_properties(engine.ga20 PROPERTIES LABELS "integration" TIMEOUT 120)
 endif()
 
 # The K054539 (M4): a sample ends on a marker byte (0x80), the key registers are sixteen-bit

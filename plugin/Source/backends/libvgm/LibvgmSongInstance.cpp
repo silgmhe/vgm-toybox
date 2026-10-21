@@ -151,6 +151,12 @@ namespace
 			// decoder marks an unmeasurable sample as a C4 trigger rather than inventing a pitch, so
 			// the capability stays melodic - a voice can be either.
 			return fmChannel (4);
+		case DEVID_GA20:
+			// Four voices playing 8-bit PCM, a rate divider and a sample that ends on a 0x00 byte.
+			// These boards (R-Type, Undercover Cops) put drums and melody on the same four voices,
+			// and one voice can play both inside one song - the decoder decides per key-on from the
+			// sample it latched, so the capability stays melodic and a drum still reports a note.
+			return fmChannel (4);
 		case DEVID_X1_010:
 			// Sixteen channels, and the same channel is either a wavetable voice or a PCM player
 			// depending on one status bit. The capability is static, so it states what the channel

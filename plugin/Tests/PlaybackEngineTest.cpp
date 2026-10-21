@@ -1394,6 +1394,16 @@ int main (int argc, char* argv[])
 			expectNote ("qsound.vgm", { "QSound", "PCM 2", 0, 0.00, 60 });
 			expectNote ("qsound.vgm", { "QSound", "PCM 2", 3, 0.60, 60 });
 		}
+		else if (asset == "ga20.vgm")
+		{
+			// The control bit keys the voice and the 0x00 byte ends the sample. Voice 0's waveform
+			// has a 16-byte cycle at 6300 bytes a second, so it has to be G4; voice 1 is noise and
+			// has to be the C4 drum trigger.
+			expectNote ("ga20.vgm", { "GA20", "Ch 1", 0, 0.00, 67 });
+			expectNote ("ga20.vgm", { "GA20", "Ch 1", 3, 0.60, 67 });
+			expectNote ("ga20.vgm", { "GA20", "Ch 2", 0, 0.00, 60 });
+			expectNote ("ga20.vgm", { "GA20", "Ch 2", 3, 0.60, 60 });
+		}
 		else if (asset == "k054539.vgm")
 		{
 			// Key-on and key-off are bits in the masks at 0x214/0x215, and each voice stops on the
