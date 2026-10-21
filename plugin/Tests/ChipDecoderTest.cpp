@@ -22,6 +22,7 @@
 #include "chips/K054539Decoder.h"
 #include "chips/QSoundDecoder.h"
 #include "chips/Es5503Decoder.h"
+#include "chips/Okim6295Decoder.h"
 #include "chips/Ga20Decoder.h"
 #include "chips/SegaPcmDecoder.h"
 #include "chips/NesApuDecoder.h"
@@ -3724,6 +3725,93 @@ namespace
 			   "start 0x4000 is register 0x0400: sixteen bytes a step");
 	}
 
+	// --- OKIM6295: a two-byte command port, no pitch register, the sample's cycle is the note ------
+
+	std::vector<NoteEvent> runOkim6295 (const Stream& stream,
+										const std::vector<std::uint8_t>& rom,
+										std::uint32_t totalSamples = 44100)
+	{
+		toybox::chips::Okim6295Decoder decoder;
+		decoder.reset (1000000, 44100.0);
+		decoder.setRom (rom);
+		return toybox::chips::extractNotes (decoder, stream.writes, totalSamples);
+	}
+
+	/** A 4 KB ROM whose sample 0 runs 0x0200..0x02FF, with `byte` in every position: the sample
+		table is three bytes of start and three of stop, big endian, at `sample * 8`. */
+	std::vector<std::uint8_t> okimRom (std::uint8_t byte)
+	{
+		std::vector<std::uint8_t> rom (4096, byte);
+		rom[0] = 0x00;			// start 0x000200
+		rom[1] = 0x02;
+		rom[2] = 0x00;
+		rom[3] = 0x00;			// stop 0x0002FF
+		rom[4] = 0x02;
+		rom[5] = 0xFF;
+		return rom;
+	}
+
+	/** The register interface is a command port: bit 7 of the first byte names the sample, the
+		second byte's bits 4-7 start voices and its low nibble is the volume (0 is the loudest).
+		The pitch is the sample's own cycle - nibbles of +2 then -2 walk a period of 16 - because
+		the chip has no pitch register at all. */
+	void testOkim6295Notes (void)
+	{
+		std::vector<std::uint8_t> rom = okimRom (0x00);
+		for (std::size_t i = 0x200; i <= 0x2FF; ++i)
+		{
+			rom[i] = ((i - 0x200) % 16 < 8) ? 0x02 : 0x0E;		// eight up, eight down: 16 nibbles
+		}
+
+		Stream stream;
+		stream.at (0, 0, 0x80);			// sample 0
+		stream.at (0, 0, 0x10);			// voice 0 starts, volume 0 (the loudest)
+		const auto notes = runOkim6295 (stream, rom);
+
+		check (notes.size() == 1, "an OKIM6295 start is one note");
+		if (notes.empty())
+		{
+			return;
+		}
+
+		check (notes[0].logicalChannel == 0, "the mask's bit 4 is voice 0");
+		check (! notes[0].isDrum, "a periodic sample is melodic even without a pitch register");
+		check (notes[0].velocity == 127, "volume 0 is full scale");
+		// the exact octave depends on how many nibbles of this triangle the correlator locks onto,
+		// which is the nature of a chip with no pitch register - what has to hold is that the note
+		// comes from the sample (not the 60 marker) and says so
+		check (notes[0].note != 60 && notes[0].pitchSource == toybox::chips::PitchSource::sampleInferred,
+			   "the note comes from the sample's measured cycle");
+	}
+
+	/** Bit 7 of the start byte is part of the voice mask when a sample is pending, which is the
+		only way voice 3 can start: reading it as "sample select" left that voice silent. */
+	void testOkim6295FourthVoice (void)
+	{
+		Stream stream;
+		stream.at (0, 0, 0x80);
+		stream.at (0, 0, 0x8F);			// bit 7 set *and* mask bit 7: voice 3, volume 15
+
+		const auto notes = runOkim6295 (stream, okimRom (0x00));
+
+		check (notes.size() == 1 && notes[0].logicalChannel == 3,
+			   "voice 3 starts through a byte that also has bit 7 set");
+		check (notes.size() == 1 && notes[0].velocity < 40, "volume 15 is the quietest step");
+	}
+
+	/** A sample with no period - the constant output of a zeroed ROM - is the C4 trigger. */
+	void testOkim6295Unpitched (void)
+	{
+		Stream stream;
+		stream.at (0, 0, 0x80);
+		stream.at (0, 0, 0x10);
+
+		const auto notes = runOkim6295 (stream, okimRom (0x00));
+
+		check (notes.size() == 1 && notes[0].isDrum && notes[0].note == 60,
+			   "an OKIM6295 sample with no period is the C4 drum trigger");
+	}
+
 	// --- ES5503: thirty-two wavetable oscillators, a halt bit as the key and a table's own cycle ----
 
 	std::vector<NoteEvent> runEs5503 (const Stream& stream, std::uint32_t totalSamples,
@@ -4169,6 +4257,10 @@ namespace
 	testGa20KeyOff();
 	testGa20Percussion();
 	testGa20AddressUnit();
+
+	testOkim6295Notes();
+	testOkim6295FourthVoice();
+	testOkim6295Unpitched();
 
 	testEs5503Note();
 	testEs5503TableCycle();
