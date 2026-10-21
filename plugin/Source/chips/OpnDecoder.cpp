@@ -70,8 +70,13 @@ namespace
 	class OpnAdpcmBNoteTable final : public NoteTable
 	{
 	public:
+		/** `nibblesPerDelta` is `(clock / 144) / 65536` - the DAC rate over the DELTA-N scale, the
+			same relation `adpcmBUnitsPerSecond()` in the state uses. The two used to disagree (this
+			one was `clock / 32768`, 288 times too fast), which put every real Neo Geo note past the
+			top of the MIDI range and left the channel silent. */
 		OpnAdpcmBNoteTable (double chipClock, const double* sampleCycle, const bool* sampleMelodic)
-			: unitsPerSecondPerStep (chipClock > 0.0 ? chipClock / 32768.0 : 8000000.0 / 32768.0)
+			: nibblesPerDelta (chipClock > 0.0 ? chipClock / (144.0 * 65536.0)
+											   : 8000000.0 / (144.0 * 65536.0))
 			, cycleLength (sampleCycle)
 			, melodic (sampleMelodic) {}
 
@@ -88,12 +93,12 @@ namespace
 				return kOneShotNote;		// DELTA-N 0 is silence, not a note
 			}
 
-			return quantisePlaybackRate ((double) delta * unitsPerSecondPerStep,
-										 kSampleReferenceRate * 2.0, finePitch);
+			return quantisePlaybackRate ((double) delta * nibblesPerDelta,
+										 kSampleReferenceRate, finePitch);
 		}
 
 	private:
-		double unitsPerSecondPerStep;
+		double nibblesPerDelta;
 		const double* cycleLength;
 		const bool* melodic;
 	};
@@ -263,11 +268,20 @@ struct OpnDecoder::Impl
 		return index < adpcmBRom.size() ? adpcmBRom[index] : 0;
 	}
 
-	/** Nibbles a second at this DELTA-N: the core advances `delta * clock / rate / 65536` bytes per
-		output sample, which is `delta * clock / 65536` bytes a second wherever the chip is run. */
+	/** ADPCM-B nibbles a second at this DELTA-N.
+
+		The chip's ADPCM-B DAC runs at `clock / 144` and DELTA-N is a 16-bit fraction of it, so a
+		sample advances `delta / 65536` of a nibble per DAC tick:
+
+			rate = delta * (clock / 144) / 65536
+
+		which is the same relation the reference implementation uses (`deltaN * 50kHz / 2^16`,
+		`form/KB/OPL/frmY8950.cs` - its 50 kHz is exactly `clock/144` on a 7.2 MHz part). This used
+		to be `delta * clock / 32768`, i.e. 288 times too fast: the gate then closed within a single
+		sample and every Neo Geo ADPCM-B track came out empty, and the note was out of range besides. */
 	double adpcmBUnitsPerSecond (std::uint16_t delta) const
 	{
-		return (double) delta * clock / 32768.0;
+		return (double) delta * clock / (144.0 * 65536.0);
 	}
 
 	/** The sample's own cycle in nibbles, measured once per start address: the ADPCM-B ROM is
@@ -707,7 +721,7 @@ ChannelState OpnDecoder::channelState (int channel) const
 	// recording rate, so the transposition is the only register-only statement and the root is what
 	// places the octave (design doc section 14.3)
 	const SampledPitch pitch = describeSamplePitch (impl->adpcmBUnitsPerSecond (voice.delta),
-													kSampleReferenceRate * 2.0, voice.cycleLength,
+													kSampleReferenceRate, voice.cycleLength,
 													voice.melodic);
 	state.hz = pitch.hz;
 	state.transposeCents = pitch.transposeCents;

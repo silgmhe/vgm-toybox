@@ -1417,9 +1417,9 @@ int main (int argc, char* argv[])
 			expectNote ("ym2610.vgm", { "YM2610", "FM 3", 0, 0.50, 72 });
 			expectNote ("ym2610.vgm", { "YM2610", "ADPCM-A 1", 0, 1.00, 60 });
 			expectNote ("ym2610.vgm", { "YM2610", "ADPCM-A 2", 0, 1.00, 60 });
-			// DELTA-N 29 against 8 kHz worth of nibbles is 46 - the register's pitch, not the C4
-			// trigger this used to be (the reference implementation maps the rate alone)
-			expectNote ("ym2610.vgm", { "YM2610", "ADPCM-B", 0, 1.40, 46 });
+			// DELTA-N 8341 against 8 kHz is -209 cents, so A#3: the register's pitch, not the C4
+			// trigger this used to be, and the scale the real Neo Geo sets use (design doc section 14)
+			expectNote ("ym2610.vgm", { "YM2610", "ADPCM-B", 0, 1.40, 58 });
 			expectNote ("ym2610.vgm", { "YM2610", "FM 5", 0, 1.50, 76 });
 		}
 		else if (asset == "wswan.vgm")

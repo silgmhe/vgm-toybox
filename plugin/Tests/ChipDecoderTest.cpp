@@ -448,8 +448,8 @@ namespace
 		stream.at (0, 0, 0x10, 0x04);				// ADPCM-A channel 2 start (bit 2)
 		stream.at (22050, 0, 0x10, 0x00);			// key off every ADPCM-A channel
 		// DELTA-N first: it is ADPCM-B's pitch register, and a start with it at zero is silence
-		stream.at (22050, 1, 0x09, 29);
-		stream.at (22050, 1, 0x0A, 0x00);
+		stream.at (22050, 1, 0x09, 0x95);			// DELTA-N 8341, the scale a real driver uses
+		stream.at (22050, 1, 0x0A, 0x20);
 		stream.at (22050, 1, 0x0B, 0xFF);			// level
 		stream.at (22050, 1, 0x00, 0x80);			// ADPCM-B start
 
@@ -499,8 +499,8 @@ namespace
 		stream.at (0, 0, 0x13, 0x00);
 		stream.at (0, 0, 0x14, 0x11);			// end 0x11 << 8 | 0xFF = 0x11FF
 		stream.at (0, 0, 0x15, 0x00);
-		stream.at (0, 0, 0x19, 29);				// DELTA-N 29: 7080 nibbles a second
-		stream.at (0, 0, 0x1A, 0x00);
+		stream.at (0, 0, 0x19, 0x95);			// DELTA-N 8341: (clock/144)/65536 x 8341
+		stream.at (0, 0, 0x1A, 0x20);			// = 7,073 nibbles a second, so A4 over 16 nibbles
 		stream.at (0, 0, 0x1B, 0xFF);			// level, full scale
 		stream.at (0, 0, 0x10, 0x80);			// start, no repeat
 
@@ -531,8 +531,8 @@ namespace
 		stream.at (0, 0, 0x13, 0x00);
 		stream.at (0, 0, 0x14, 0x11);
 		stream.at (0, 0, 0x15, 0x00);
-		stream.at (0, 0, 0x19, 58);				// twice the DELTA-N
-		stream.at (0, 0, 0x1A, 0x00);
+		stream.at (0, 0, 0x19, 0x2A);			// twice the DELTA-N: 16682
+		stream.at (0, 0, 0x1A, 0x41);
 		stream.at (0, 0, 0x1B, 0xFF);
 		stream.at (0, 0, 0x10, 0x80);
 
@@ -546,6 +546,43 @@ namespace
 			   "twice DELTA-N is an octave up: A5 from the same sample");
 	}
 
+	/** The scale a real Neo Geo set uses: DELTA-N in the tens of thousands, not the two digits the
+		first synthetic tests picked.
+
+		This is the regression that kept every ADPCM-B track silent on real songs. The rate is
+		`delta * (clock/144) / 65536`, so DELTA-N 38696 is 32,795 nibbles a second - but the note
+		table once computed `delta * clock / 32768`, 288 times faster, which put the note past the top
+		of the MIDI range. `noteFor` then returned -1 and the extractor dropped the channel, so the
+		audio played and MIDI showed nothing. A note at all - let alone 84 - is the assertion that
+		matters; without it the whole channel disappears. */
+	void testOpnAdpcmBRealDeltaScale (void)
+	{
+		Stream stream;
+		stream.at (0, 0, 0x12, 0x10);
+		stream.at (0, 0, 0x13, 0x00);
+		stream.at (0, 0, 0x14, 0x11);
+		stream.at (0, 0, 0x15, 0x00);
+		stream.at (0, 0, 0x19, 0x28);			// DELTA-N 38696, the figure Neo Geo drivers write
+		stream.at (0, 0, 0x1A, 0x97);
+		stream.at (0, 0, 0x1B, 0xFF);
+		stream.at (0, 0, 0x10, 0x80);
+
+		toybox::chips::OpnDecoder decoder (toybox::chips::OpnDecoder::Variant::ym2610);
+		decoder.reset (8000000, 44100.0);
+		decoder.setAdpcmBRom (makeAdpcmBTone (0x4000, 0x1000));
+
+		const auto notes = toybox::chips::extractNotes (decoder, stream.writes, 44100);
+
+		check (notes.size() == 1, "an ADPCM-B voice at a real DELTA-N still produces a note");
+		if (notes.empty())
+		{
+			return;
+		}
+
+		check (! notes[0].isDrum, "and it is melodic - DELTA-N is a pitch register");
+		check (notes[0].note == 84, "38696 is 32,795 nibbles a second: +2443 cents, so C6");
+	}
+
 	/** Level 0 is how the drivers end the voice (the Neo Geo stage theme writes it before every new
 		start), so it closes the note rather than leaving it hanging. */
 	void testOpnAdpcmBLevelEndsTheNote (void)
@@ -555,8 +592,8 @@ namespace
 		stream.at (0, 0, 0x13, 0x00);
 		stream.at (0, 0, 0x14, 0x11);
 		stream.at (0, 0, 0x15, 0x00);
-		stream.at (0, 0, 0x19, 29);
-		stream.at (0, 0, 0x1A, 0x00);
+		stream.at (0, 0, 0x19, 0x95);			// DELTA-N 8341, a real driver's scale
+		stream.at (0, 0, 0x1A, 0x20);
 		stream.at (0, 0, 0x1B, 0xFF);
 		stream.at (0, 0, 0x10, 0x80);
 		stream.at (20000, 0, 0x1B, 0x00);		// silence
@@ -587,8 +624,8 @@ namespace
 		stream.at (0, 0, 0x13, 0x00);
 		stream.at (0, 0, 0x14, 0x11);
 		stream.at (0, 0, 0x15, 0x00);
-		stream.at (0, 0, 0x19, 29);
-		stream.at (0, 0, 0x1A, 0x00);
+		stream.at (0, 0, 0x19, 0x95);			// DELTA-N 8341, a real driver's scale
+		stream.at (0, 0, 0x1A, 0x20);
 		stream.at (0, 0, 0x1B, 0xFF);
 		stream.at (0, 0, 0x10, 0x80);
 
@@ -603,8 +640,8 @@ namespace
 		// the rate alone, `searchYM2608Adpcm`). Treating it as a trigger was the old behaviour.
 		check (notes.size() == 1 && ! notes[0].isDrum && notes[0].rootCents == 0,
 			   "an ADPCM-B sample with no period keeps its DELTA-N pitch and loses only the root");
-		check (notes.size() == 1 && notes[0].note == 46,
-			   "and that pitch is the register's: DELTA-N 29 against 8 kHz worth of nibbles");
+		check (notes.size() == 1 && notes[0].note == 58,
+			   "and that pitch is the register's: DELTA-N 8341 is -208 cents, so A#3");
 	}
 
 	/** The OPNA addresses 32-byte pages where the OPNB uses 256: the same 0x1000 sample is start
@@ -616,8 +653,8 @@ namespace
 		stream.at (0, 1, 0x03, 0x00);
 		stream.at (0, 1, 0x04, 0x91);			// end
 		stream.at (0, 1, 0x05, 0x00);
-		stream.at (0, 1, 0x09, 29);
-		stream.at (0, 1, 0x0A, 0x00);
+		stream.at (0, 1, 0x09, 0xA2);			// DELTA-N 8354: the OPNA clock's own A4 scale
+		stream.at (0, 1, 0x0A, 0x20);
 		stream.at (0, 1, 0x0B, 0xFF);
 		stream.at (0, 1, 0x00, 0x80);
 
@@ -3991,6 +4028,7 @@ namespace
 	testOpnaAdpcmOneShots();
 	testOpnAdpcmBPitch();
 	testOpnAdpcmBDeltaIsThePitch();
+	testOpnAdpcmBRealDeltaScale();
 	testOpnAdpcmBLevelEndsTheNote();
 	testOpnAdpcmBPercussion();
 	testOpnAdpcmBAddressShift();

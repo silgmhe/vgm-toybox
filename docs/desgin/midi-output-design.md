@@ -785,6 +785,7 @@ void render (const playback::OutputBusBuffers* buses, int numBuses, int numSampl
 
 | 日期 | 结论 |
 |---|---|
+| 2026-10-22 | **ADPCM-B 的速率常数错了 288 倍（表行 12 的真实 bug，由用户「Neo Geo 的 ADPCM-B 一直是 one-shot」发现）**。核心的 DeltaT 每输出样本前进 `delta * freqbase`（`ymdeltat.c`），而 `freqbase = 1`（原生率），所以每秒 nibble 数是 `deltaN × (clock/144) / 65536`——`clock/144` 就是参考项目里的 50 kHz（7.2 MHz 器件）。我们写成 `delta × clock / 32768`，恰好大 288 倍：`channelState` 里算出的门长只有一个样本量级（音符被立刻关闭），音符表里算出的音高越过 MIDI 上限（`noteFor` 返回 -1，整条轨被丢弃）。两者同时表现为「有声、MIDI 全空」，而合成用例因为 DELTA-N 只写了两位数（29）刚好落在正确量级内，没能暴露。修正后两首 Neo Geo 真实曲目的 ADPCM-B 分别输出 16 / 24 个音符，`[12]` 恢复「有声轨必须有音符」。合成资产与单测的 DELTA-N 一并改成真实量级（8341 / 38696），并新增 `testOpnAdpcmBRealDeltaScale` 锁住「大 DELTA-N 必须出音符」 |
 | 2026-10-22 | **采样芯片的音高只从寄存器来，音频只作事后核对（§14）**。原本的做法是“寄存器给出的播放率 ÷ 从 ROM 量出的采样周期”，这一步把「芯片说了什么」换成「我们以为素材是什么」：周期测错不会让某个音错，而是整首恒定偏移，外观上与“素材本来就这样”无法区分。参考项目 `reference/MDPlayer-stable` 给的是另一条路并且已被验证——先算 Hz（`deltaN × 50kHz / 2^16`、`fnum × clock / (24·div·2^21)`），再用唯一的最近频率查找变成音符，采样内容完全不参与（`common.cs:453`、`PianoRoll/YM2610.cs:162`、`form/KB/OPL/frmY8950.cs:265`）。定为本项目的标准：**先频率、后音符、永不读波形** |
 | 2026-10-22 | 音高拆成两层随音符一起带出：**L1 移调量** = `1200·log2(rate / refRate)`（寄存器 + 文档化参照率，永远可算）与 **L2 根音** = `1200·log2(refRate / cycle / middleC)`（只能从采样数据测，是推断）。默认只输出 L1；L2 由设置项 `pitch.useSampleRoot` 打开。两者相加恰好等于旧映射，这是重构能逐芯片落地、且能用测试钉住的等式（`testC140TranspositionAndRoot`、`absoluteNote()`） |
 | 2026-10-22 | 参照率 `refRate` 是**每芯片的文档常量**，不是测量：C140 用 8 kHz、SegaPCM 用 pitch 128（驱动的无移调档）、K053260/K054539/QSound/C352 用「一字节每输出样本」、GA20 与 ADPCM-B 用 8 kHz（后者折算成 16,000 nibble/s，与参考项目一致）。因此**默认视图的八度取决于参照率**——同一条采样内部的音程永远正确，绝对八度交给 L2，这正是开关存在的理由 |
@@ -876,7 +877,7 @@ void render (const playback::OutputBusBuffers* buses, int numBuses, int numSampl
 | K054539 | `rate × clock / 缩放` | `clock / kOutputDivisor` | A | **P1 已切** |
 | QSound | `rate × clock / 10223616` | `clock / kOutputDivisor` | A | **P1 已切** |
 | SegaPCM | `pitch × clock / 32768` | `clock / 256`（pitch 128 的速率，驱动的「无移调」档） | A | **P1 已切** |
-| ADPCM-B | `deltaN × clock / 32768`（核内 nibble 率） | 8 kHz 折算成 nibble（16,000/s） | B | **P2 已切** |
+| ADPCM-B | `deltaN × (clock/144) / 65536`（nibble 率） | 8 kHz（8000/s，与参考项目的 `fSample/8000` 同口径） | B | **P2 已切，P2.1 修速率** |
 | GA20 | `clock/4 / (256-rate)`（字节率） | 8 kHz（`kSampleReferenceRate`） | B | **P2 已切** |
 | ES5503（多周期表） | `freq × fs / 2^(9+res-size)`（表步进） | **无**——寄存器走的是表，不是采样率 | B | **P2：不设 L1**，整首按实测周期出音，标 `sampleInferred` |
 
