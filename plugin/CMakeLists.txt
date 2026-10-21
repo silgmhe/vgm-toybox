@@ -204,6 +204,7 @@ target_sources(VGMToybox PRIVATE
 	Source/chips/K053260Decoder.cpp
 	Source/chips/K054539Decoder.cpp
 	Source/chips/QSoundDecoder.cpp
+	Source/chips/Es5503Decoder.cpp
 	Source/chips/Ga20Decoder.cpp
 	Source/chips/SegaPcmDecoder.cpp
 	Source/chips/Ymf271Decoder.cpp
@@ -350,6 +351,7 @@ add_executable(vgm_mixer_test EXCLUDE_FROM_ALL
 	Source/chips/K053260Decoder.cpp
 	Source/chips/K054539Decoder.cpp
 	Source/chips/QSoundDecoder.cpp
+	Source/chips/Es5503Decoder.cpp
 	Source/chips/Ga20Decoder.cpp
 	Source/chips/SegaPcmDecoder.cpp
 	Source/chips/Ymf271Decoder.cpp
@@ -388,6 +390,7 @@ add_executable(vgm_chip_test EXCLUDE_FROM_ALL
 	Source/chips/K053260Decoder.cpp
 	Source/chips/K054539Decoder.cpp
 	Source/chips/QSoundDecoder.cpp
+	Source/chips/Es5503Decoder.cpp
 	Source/chips/Ga20Decoder.cpp
 	Source/chips/SegaPcmDecoder.cpp
 	Source/chips/Ymf271Decoder.cpp
@@ -649,6 +652,18 @@ set(_toybox_ga20_song "${CMAKE_CURRENT_SOURCE_DIR}/Tests/assets/ga20.vgm")
 if(EXISTS "${_toybox_ga20_song}")
 	add_test(NAME engine.ga20 COMMAND vgm_mixer_test "${_toybox_ga20_song}" 2)
 	set_tests_properties(engine.ga20 PROPERTIES LABELS "integration" TIMEOUT 120)
+endif()
+
+# The ES5503 (M4): a wavetable chip - the note is the table's repeat rate, so a decoder that reads
+# the table size instead of its measured cycle is a few octaves out, and one that uses the output
+# rate as the chip's rate (`clock / 8 / (enabled + 2)`) is out by more. es5503.vgm keys two
+# oscillators four times each: a 1024-byte single-cycle square at frequency 8,000 has to come out as
+# G4, a one-shot noise table has to come out as the C4 drum trigger, and the halt bit has to end
+# each note.
+set(_toybox_es5503_song "${CMAKE_CURRENT_SOURCE_DIR}/Tests/assets/es5503.vgm")
+if(EXISTS "${_toybox_es5503_song}")
+	add_test(NAME engine.es5503 COMMAND vgm_mixer_test "${_toybox_es5503_song}" 2)
+	set_tests_properties(engine.es5503 PROPERTIES LABELS "integration" TIMEOUT 120)
 endif()
 
 # The Sega PCM (M4): the registers ARE the playback state - current address, pitch, end address and

@@ -163,6 +163,13 @@ namespace
 			// and one voice can play both inside one song - the decoder decides per key-on from the
 			// sample it latched, so the capability stays melodic and a drum still reports a note.
 			return fmChannel (4);
+		case DEVID_ES5503:
+			// Thirty-two wavetable oscillators (the Ensoniq DOC). Each one walks a table it points
+			// at, and its note is that table's repeat rate: the frequency register is a real pitch
+			// once it is divided by the table's own cycle length, which the decoder measures from
+			// the chip's RAM. A one-shot table with no period - a drum - still reports its C4
+			// trigger, so the capability stays melodic; a looping table always has a pitch.
+			return fmChannel (32);
 		case DEVID_X1_010:
 			// Sixteen channels, and the same channel is either a wavetable voice or a PCM player
 			// depending on one status bit. The capability is static, so it states what the channel

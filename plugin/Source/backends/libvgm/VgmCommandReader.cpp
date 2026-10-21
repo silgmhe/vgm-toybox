@@ -230,14 +230,27 @@ bool VgmCommandReader::next (VgmCommand& command)
 		// payload bytes on the ROM size and offset, so the samples start after them.
 		const std::uint8_t type = data[position + 2];
 		const std::uint32_t blockSize = readLe32 (data + position + 3) & 0x7FFFFFFFu;
-		const bool isRom = (type & 0x80) != 0;
-		const std::size_t headerSize = isRom ? 8 : 0;
+		// libvgm switches on `type & 0xC0`: 0x80-0xBF upload a ROM (with an eight-byte size and
+		// offset header), 0xC0-0xFF write a chip's own RAM (with the address instead). Bit 7 alone
+		// is not the ROM flag - every RAM type has it set too, and reading an 0xE1 block as a ROM
+		// spends the first eight payload bytes on a header that is really the address and wave data.
+		const bool isRom = (type & 0xC0) == 0x80;
+
+		// 0xC0-0xFF are writes into a chip's own RAM rather than ROM uploads: their payload starts
+		// with the address to write at - 16-bit below 0xE0, 32-bit from it (libvgm's
+		// `_VGM_RAM_CHIPS`, and the ES5503's 0xE1 is the one this project uses).
+		const bool isRam = ! isRom && (type & 0xC0) == 0xC0;
+		const std::size_t addressSize = isRam ? ((type & 0xE0) == 0xE0 ? 4u : 2u) : 0u;
+		const std::size_t headerSize = isRom ? 8u : addressSize;
 		const std::size_t payloadSize = (blockSize > headerSize) ? (std::size_t) (blockSize - headerSize) : 0;
 
 		VgmDataBlock block;
 		block.type = type;
 		block.romSize = isRom ? readLe32 (data + position + 7) : 0;
 		block.romOffset = isRom ? readLe32 (data + position + 11) : 0;
+		block.ramOffset = isRam ? ((addressSize == 4u) ? readLe32 (data + position + 7)
+													   : (std::uint32_t) readLe16 (data + position + 7))
+								: 0;
 		block.data = data + position + 7 + headerSize;
 		block.size = payloadSize;
 		blocks.push_back (block);
@@ -334,6 +347,16 @@ bool VgmCommandReader::next (VgmCommand& command)
 			command.addr = data[position + 3];
 			command.data = data[position + 1];
 			command.data2 = data[position + 2];
+		}
+		else if (cmd == 0xD5)
+		{
+			// ES5503: a port byte (the second chip of a pair), an 8-bit register and a value -
+			// libvgm's Cmd_Port_Ofs8_Data8. The register space is the chip's own: 0x00-0xDF for the
+			// thirty-two oscillators, 0xE0-0xE2 for the three global registers.
+			command.kind = VgmCommand::Kind::registerWrite;
+			command.port = (std::uint8_t) (data[position + 1] & 0x01);
+			command.addr = data[position + 2];
+			command.data = data[position + 3];
 		}
 		else if (cmd == 0xD3)
 		{

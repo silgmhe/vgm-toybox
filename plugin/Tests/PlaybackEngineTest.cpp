@@ -1423,6 +1423,17 @@ int main (int argc, char* argv[])
 			expectNote ("ga20.vgm", { "GA20", "Ch 2", 0, 0.00, 60 });
 			expectNote ("ga20.vgm", { "GA20", "Ch 2", 3, 0.60, 60 });
 		}
+		else if (asset == "es5503.vgm")
+		{
+			// A wavetable chip: voice 0 walks a single-cycle 1024-byte table at frequency 8,000, and
+			// with thirty-two oscillators enabled the chip runs at 7,159,090/8/34, so the note is
+			// 8000 * 26320 / 512 / 1024 = 401.6 Hz - G4. Voice 1's table is noise and one-shot, so it
+			// has no period and has to be the C4 drum trigger.
+			expectNote ("es5503.vgm", { "ES5503", "Ch 1", 0, 0.00, 67 });
+			expectNote ("es5503.vgm", { "ES5503", "Ch 1", 3, 0.60, 67 });
+			expectNote ("es5503.vgm", { "ES5503", "Ch 2", 0, 0.00, 60 });
+			expectNote ("es5503.vgm", { "ES5503", "Ch 2", 3, 0.60, 60 });
+		}
 		else if (asset == "segapcm.vgm")
 		{
 			// The control byte starts the voice and ends it, and the end register bounds the

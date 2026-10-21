@@ -16,6 +16,7 @@
 #include "chips/K053260Decoder.h"
 #include "chips/K054539Decoder.h"
 #include "chips/QSoundDecoder.h"
+#include "chips/Es5503Decoder.h"
 #include "chips/Ga20Decoder.h"
 #include "chips/SegaPcmDecoder.h"
 #include "chips/NesApuDecoder.h"
@@ -262,6 +263,10 @@ namespace
 					segaPcm.queue (deviceFor (DEVID_SEGAPCM, 0), command.addr, command.data,
 								   command.sampleTime, command.port);
 					break;
+				case 0xD5:	// ES5503: a port byte, an 8-bit register and a value
+					es5503.queue (deviceFor (DEVID_ES5503, command.port), command.addr, command.data,
+								  command.sampleTime);
+					break;
 				case 0xD3:	// K054539: a 16-bit offset, so its high byte travels in `port`
 					k054539.queue (deviceFor (DEVID_K054539, 0), command.addr, command.data,
 								   command.sampleTime, command.port);
@@ -427,6 +432,22 @@ namespace
 							  if (! segaPcmRom.empty())
 							  {
 								  decoder.setRom (segaPcmRom);
+							  }
+						  });
+
+			// The ES5503 walks a table it points at, so its note is the table's repeat rate: the
+			// frequency register gives the byte rate and the table's own cycle length - which only
+			// the RAM (0xE1 blocks, 128 KB) holds - divides it. Its clock runs at 7,159,090 Hz on
+			// the Apple IIgs, and the core divides it by eight and by the oscillator count.
+			const std::vector<std::uint8_t> es5503Ram =
+				es5503.writes.empty() ? std::vector<std::uint8_t>()
+									  : assembleRam (reader, 0xE1, 128 * 1024);
+			flushDecoded (es5503, 7159090u, lastSampleTime,
+						  [&es5503Ram] (chips::Es5503Decoder& decoder)
+						  {
+							  if (! es5503Ram.empty())
+							  {
+								  decoder.setRam (es5503Ram);
 							  }
 						  });
 
@@ -801,6 +822,31 @@ namespace
 			return rom;
 		}
 
+		/** Assembles a chip's RAM image from the stream's RAM writes (0xE1 is the ES5503's).
+
+			Unlike a ROM block, a RAM block carries no size for the whole memory - it names the
+			address to write at and nothing else - so the image is `maxRamBytes` of zeroes with every
+			block copied to its own address. A gap stays zero, which is also what the chip reads
+			there, and a table that lives in one measures as "no period". */
+		static std::vector<std::uint8_t> assembleRam (const VgmCommandReader& reader,
+													  std::uint8_t type,
+													  std::size_t maxRamBytes)
+		{
+			std::vector<std::uint8_t> ram (maxRamBytes, 0);
+			for (const auto& block : reader.dataBlocks())
+			{
+				if (block.type != type || block.ramOffset >= ram.size())
+				{
+					continue;
+				}
+
+				const std::size_t count = std::min (block.size, ram.size() - block.ramOffset);
+				std::memcpy (ram.data() + block.ramOffset, block.data, count);
+			}
+
+			return ram;
+		}
+
 		const PLR_DEV_INFO* deviceFor (DEV_ID type, int instance) const
 		{
 			const auto exact = deviceByType.find (typeInstanceKey (type, instance));
@@ -997,6 +1043,11 @@ namespace
 		// The Sega PCM's registers are its playback state - address, pitch, end, volume and the
 		// control bit that starts it - so its notes only exist in the whole stream
 		ChipBuffer<chips::SegaPcmDecoder> segaPcm;
+
+		// The ES5503 is a wavetable chip: a voice walks a table it points at, so the note depends on
+		// the table's own cycle length (measured from the RAM its 0xE1 blocks upload) as well as on
+		// the frequency register - and its key is the falling edge of a halt bit
+		ChipBuffer<chips::Es5503Decoder> es5503;
 		std::vector<playback::MidiEvent> events;
 	};
 }

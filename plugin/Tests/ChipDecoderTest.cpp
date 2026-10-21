@@ -21,6 +21,7 @@
 #include "chips/K053260Decoder.h"
 #include "chips/K054539Decoder.h"
 #include "chips/QSoundDecoder.h"
+#include "chips/Es5503Decoder.h"
 #include "chips/Ga20Decoder.h"
 #include "chips/SegaPcmDecoder.h"
 #include "chips/NesApuDecoder.h"
@@ -3595,6 +3596,175 @@ namespace
 			   "start 0x4000 is register 0x0400: sixteen bytes a step");
 	}
 
+	// --- ES5503: thirty-two wavetable oscillators, a halt bit as the key and a table's own cycle ----
+
+	std::vector<NoteEvent> runEs5503 (const Stream& stream, std::uint32_t totalSamples,
+									  const std::vector<std::uint8_t>& ram,
+									  std::uint32_t clock = 7159090)
+	{
+		toybox::chips::Es5503Decoder decoder;
+		decoder.reset (clock, 44100.0);
+		decoder.setRam (ram);
+		return toybox::chips::extractNotes (decoder, stream.writes, totalSamples);
+	}
+
+	/** `0xD5 <port> <register> <value>` - the register space is the chip's own. */
+	void es5503Write (Stream& stream, std::uint32_t time, std::uint8_t reg, std::uint8_t value)
+	{
+		RegisterWrite write;
+		write.reg = reg;
+		write.value = value;
+		write.sampleTime = time;
+		stream.writes.push_back (write);
+	}
+
+	/** Pointer, table size and resolution, frequency, full volume - then the control byte that
+		starts the oscillator (bit 0 is the halt bit, so clearing it is the key-on). */
+	void startEs5503Voice (Stream& stream, std::uint32_t time, int osc, std::uint16_t frequency,
+						   std::uint8_t pointerHigh, std::uint8_t sizeAndResolution,
+						   std::uint8_t control = 0x00)
+	{
+		const std::uint8_t base = (std::uint8_t) osc;
+		es5503Write (stream, time, 0xE1, 0x3E);			// thirty-two oscillators
+		es5503Write (stream, time, (std::uint8_t) (0x80 + base), pointerHigh);
+		es5503Write (stream, time, (std::uint8_t) (0xC0 + base), sizeAndResolution);
+		es5503Write (stream, time, (std::uint8_t) (0x00 + base), (std::uint8_t) (frequency & 0xFF));
+		es5503Write (stream, time, (std::uint8_t) (0x20 + base), (std::uint8_t) (frequency >> 8));
+		es5503Write (stream, time, (std::uint8_t) (0x40 + base), 0xFF);
+		es5503Write (stream, time, (std::uint8_t) (0xA0 + base), control);
+	}
+
+	/** A table of `cycle`-byte waves repeated over `length` bytes. */
+	std::vector<std::uint8_t> es5503Ram (std::size_t tableOffset, std::size_t cycle, std::size_t length,
+										 std::size_t ramSize = 128 * 1024)
+	{
+		std::vector<std::uint8_t> ram (ramSize, 0);
+		for (std::size_t i = 0; i < length && tableOffset + i < ramSize; ++i)
+		{
+			ram[tableOffset + i] = ((i % cycle) < cycle / 2) ? 0x50 : 0xB0;
+		}
+		return ram;
+	}
+
+	/** With thirty-two oscillators enabled the chip runs at (7159090/8)/34 = 26,320 samples a
+		second, and a 1024-byte table at frequency 8,000 is 8000 * 26320 / 512 / 1024 = 401.6 Hz -
+		G4. A decoder that read the table as ten times shorter, or that used the output rate as the
+		chip's, lands somewhere else entirely. */
+	void testEs5503Note (void)
+	{
+		Stream stream;
+		startEs5503Voice (stream, 0, 0, 8000, 0x00, 0x12);
+
+		const auto notes = runEs5503 (stream, 30000, es5503Ram (0x0000, 1024, 1024));
+
+		check (notes.size() == 1, "an ES5503 key-on with a table is one note");
+		if (notes.empty())
+		{
+			return;
+		}
+
+		check (notes[0].logicalChannel == 0, "ES5503 oscillator 0 is its own track");
+		check (notes[0].note == 67, "a 1024-byte table at 8,000 is G4");
+		check (! notes[0].isDrum, "a table with a pitch is melodic");
+		check (notes[0].family == toybox::chips::Family::wavetableWave, "and its family says so");
+		check (notes[0].velocity == 127, "full-scale volume is full velocity");
+	}
+
+	/** The same 1024 bytes holding four cycles of a 256-byte wave is the same note at a quarter of
+		the frequency register - the chip repeats the *wave*, not the table. A decoder that divided
+		by the table size would report G2 here. */
+	void testEs5503TableCycle (void)
+	{
+		Stream stream;
+		startEs5503Voice (stream, 0, 1, 2000, 0x00, 0x12);
+
+		const auto notes = runEs5503 (stream, 30000, es5503Ram (0x0000, 256, 1024));
+
+		check (notes.size() == 1 && notes[0].note == 67,
+			   "four 256-byte cycles in 1024 bytes are the same G4 at a quarter of the frequency");
+	}
+
+	/** Control bit 0 is the halt bit: setting it is the key-off. A free-running table has no end
+		of its own, so that write is the only end there is. */
+	void testEs5503KeyOff (void)
+	{
+		Stream stream;
+		startEs5503Voice (stream, 0, 2, 8000, 0x00, 0x12);
+		es5503Write (stream, 1000, (std::uint8_t) (0xA0 + 2), 0x01);
+
+		const auto notes = runEs5503 (stream, 30000, es5503Ram (0x0000, 1024, 1024));
+
+		check (notes.size() == 1 && distance (notes[0].endSample, 1000) <= 64,
+			   "setting the halt bit ends a free-running ES5503 note");
+	}
+
+	/** A one-shot table ends when it runs out, and that length is exact: 32,768 bytes at 8,000 is
+		411,253 bytes a second, so 79.7 ms - 3,515 samples. */
+	void testEs5503OneShot (void)
+	{
+		Stream stream;
+		startEs5503Voice (stream, 0, 3, 8000, 0x00, 0x3F, 0x02);		// size 7, one-shot
+
+		const auto notes = runEs5503 (stream, 60000, es5503Ram (0x0000, 1024, 32768));
+
+		check (notes.size() == 1, "a one-shot ES5503 voice is one note");
+		if (notes.empty())
+		{
+			return;
+		}
+
+		check (distance (notes[0].endSample, 3515) <= 120,
+			   "a one-shot ends at the table's length: 32768 entries at 411,253 a second");
+	}
+
+	/** A table with no period that does not loop is a drum - these boards put drums on the same
+		thirty-two oscillators as the music. */
+	void testEs5503Percussion (void)
+	{
+		std::vector<std::uint8_t> ram (128 * 1024, 0);
+		std::uint32_t seed = 24681357u;
+		for (std::size_t i = 0; i < 1024; ++i)
+		{
+			seed = seed * 1103515245u + 12345u;
+			ram[0x0000 + i] = (std::uint8_t) (seed >> 16);
+		}
+
+		Stream stream;
+		startEs5503Voice (stream, 0, 4, 8000, 0x00, 0x12, 0x02);
+
+		const auto notes = runEs5503 (stream, 30000, ram);
+
+		check (notes.size() == 1 && notes[0].note == 60 && notes[0].isDrum,
+			   "a one-shot ES5503 table with no period is the C4 drum trigger");
+	}
+
+	/** The oscillator count is part of the pitch: the core runs at `clock / 8 / (enabled + 2)`, so
+		the same registers on a chip with two oscillators enabled walk their tables four times
+		faster than on one with thirty-two. */
+	void testEs5503OscillatorCount (void)
+	{
+		Stream many;
+		startEs5503Voice (many, 0, 5, 500, 0x00, 0x12);		// 0xE1 = 0x3E, thirty-two
+
+		Stream few;
+		es5503Write (few, 0, 0xE1, 0x02);					// (0x02 >> 1) + 1 = two
+		es5503Write (few, 0, 0x85, 0x00);
+		es5503Write (few, 0, 0xC5, 0x12);
+		es5503Write (few, 0, 0x05, (std::uint8_t) (500 & 0xFF));
+		es5503Write (few, 0, 0x25, 0x01);
+		es5503Write (few, 0, 0x45, 0xFF);
+		es5503Write (few, 0, 0xA5, 0x00);
+
+		const auto ram = es5503Ram (0x0000, 1024, 1024);
+		const auto slow = runEs5503 (many, 30000, ram);
+		const auto fast = runEs5503 (few, 30000, ram);
+
+		check (! slow.empty() && ! fast.empty() && slow[0].note != fast[0].note,
+			   "fewer oscillators enabled means a faster chip, so the same registers are a higher note");
+		check (! slow.empty() && slow[0].note == 19, "thirty-two oscillators at 500 is E0");
+		check (! fast.empty() && fast[0].note == 56, "two oscillators at 500 is G#3 (213 Hz)");
+	}
+
 	// --- Sega PCM: sixteen voices, registers as playback state, an end address in 256-byte units --
 
 	std::vector<NoteEvent> runSegaPcm (const Stream& stream, std::uint32_t totalSamples,
@@ -3869,6 +4039,13 @@ namespace
 	testGa20KeyOff();
 	testGa20Percussion();
 	testGa20AddressUnit();
+
+	testEs5503Note();
+	testEs5503TableCycle();
+	testEs5503KeyOff();
+	testEs5503OneShot();
+	testEs5503Percussion();
+	testEs5503OscillatorCount();
 
 	testSegaPcmNote();
 	testSegaPcmPitchIsAStep();

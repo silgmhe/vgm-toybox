@@ -54,8 +54,11 @@ struct VgmDataBlock
 	std::uint8_t type = 0;			// the block's type byte, the ROM flag (0x80) included
 	std::uint32_t romSize = 0;		// bytes of the ROM the block belongs to (ROM blocks only)
 	std::uint32_t romOffset = 0;	// where in that ROM the payload belongs (ROM blocks only)
+	std::uint32_t ramOffset = 0;	// ...and where in the chip's RAM (0xC0-0xFF blocks, which
+									// libvgm's `_VGM_RAM_CHIPS` table names: 16-bit address below
+									// 0xE0, 32-bit from 0xE0)
 	const std::uint8_t* data = nullptr;
-	std::size_t size = 0;			// payload bytes, the eight-byte ROM header not counted
+	std::size_t size = 0;			// payload bytes, the ROM header and the RAM address not counted
 };
 
 /** Walks one uncompressed VGM image. The stream ends at the EOF offset, the GD3 tag or the

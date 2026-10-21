@@ -38,6 +38,7 @@ enum class Family
 	k054539Pcm,		// K054539: 8 voices, an attenuating volume and a sample that ends on a marker
 	qsoundPcm,		// QSound: 16 voices whose loop is a length and whose silence is rate 0
 	ga20Pcm,		// GA20: 4 voices, a rate divider and a sample that ends on a 0x00 byte
+	wavetableWave,	// ES5503: 32 oscillators walking tables at freq * (clock/8/(n+2)) / 2^(9+res-size)
 	segaPcmPcm,		// Sega PCM: 16 voices, a step in 1/256 bytes and an end address in 256-byte units
 	opnAdpcmB,		// YM2610/YM2608 ADPCM-B: a sampled voice with a real pitch register
 	saaSquare,
