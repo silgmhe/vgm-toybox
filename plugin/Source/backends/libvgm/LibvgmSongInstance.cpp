@@ -63,15 +63,22 @@ namespace
 						   ? playback::MidiCapability::melodic
 						   : playback::MidiCapability::unavailable;
 			}
-			return (channelIndex <= 12) ? playback::MidiCapability::oneShot
-										: playback::MidiCapability::unavailable;
+			// 6-11 are ADPCM-A (a trigger with no pitch of its own), 12 is ADPCM-B, whose DELTA-N
+			// is a pitch register - the same one the reference implementation turns into a note
+			// (`form/KB/OPN/frmYM2610.cs` -> `searchYM2608Adpcm`), so it is melodic without needing
+			// the sample to be measurable.
+			return (channelIndex == 12) ? playback::MidiCapability::melodic
+										: (channelIndex < 12 ? playback::MidiCapability::oneShot
+															 : playback::MidiCapability::unavailable);
 		case DEVID_YM2608:
 			if (channelIndex < 6)
 			{
 				return playback::MidiCapability::melodic;
 			}
-			return (channelIndex <= 12) ? playback::MidiCapability::oneShot
-										: playback::MidiCapability::unavailable;
+			// the same split as the YM2610: ADPCM-A triggers, ADPCM-B carries a pitch
+			return (channelIndex == 12) ? playback::MidiCapability::melodic
+										: (channelIndex < 12 ? playback::MidiCapability::oneShot
+															 : playback::MidiCapability::unavailable);
 		case DEVID_YM2612:
 			return (channelIndex == 6) ? playback::MidiCapability::oneShot : fmChannel (6);
 		case DEVID_YM2203:

@@ -1417,7 +1417,9 @@ int main (int argc, char* argv[])
 			expectNote ("ym2610.vgm", { "YM2610", "FM 3", 0, 0.50, 72 });
 			expectNote ("ym2610.vgm", { "YM2610", "ADPCM-A 1", 0, 1.00, 60 });
 			expectNote ("ym2610.vgm", { "YM2610", "ADPCM-A 2", 0, 1.00, 60 });
-			expectNote ("ym2610.vgm", { "YM2610", "ADPCM-B", 0, 1.40, 60 });
+			// DELTA-N 29 against 8 kHz worth of nibbles is 46 - the register's pitch, not the C4
+			// trigger this used to be (the reference implementation maps the rate alone)
+			expectNote ("ym2610.vgm", { "YM2610", "ADPCM-B", 0, 1.40, 46 });
 			expectNote ("ym2610.vgm", { "YM2610", "FM 5", 0, 1.50, 76 });
 		}
 		else if (asset == "wswan.vgm")
@@ -1481,8 +1483,8 @@ int main (int argc, char* argv[])
 			// has an 18-byte cycle at 7159 bytes a second - clock/4 divided by 256-131, the chip's
 			// own rate, not the output rate - so it has to be G4; voice 1 is noise and has to be the
 			// C4 drum trigger.
-			expectNote ("ga20.vgm", { "GA20", "Ch 1", 0, 0.00, 58 });
-			expectNote ("ga20.vgm", { "GA20", "Ch 1", 3, 0.60, 58 });
+			expectNote ("ga20.vgm", { "GA20", "Ch 1", 0, 0.00, 70 });
+			expectNote ("ga20.vgm", { "GA20", "Ch 1", 3, 0.60, 70 });
 			expectNote ("ga20.vgm", { "GA20", "Ch 2", 0, 0.00, 60 });
 			expectNote ("ga20.vgm", { "GA20", "Ch 2", 3, 0.60, 60 });
 		}
@@ -1502,8 +1504,8 @@ int main (int argc, char* argv[])
 			// The control byte starts the voice and ends it, and the end register bounds the
 			// sample. Voice 0's 16-byte cycle at pitch 29 has to be A3; voice 1 is noise and has to
 			// be the C4 drum trigger.
-			expectNote ("segapcm.vgm", { "Sega PCM", "Ch 1", 0, 0.00, 34 });
-			expectNote ("segapcm.vgm", { "Sega PCM", "Ch 1", 3, 0.60, 34 });
+			expectNote ("segapcm.vgm", { "Sega PCM", "Ch 1", 0, 0.00, 46 });
+			expectNote ("segapcm.vgm", { "Sega PCM", "Ch 1", 3, 0.60, 46 });
 			expectNote ("segapcm.vgm", { "Sega PCM", "Ch 2", 0, 0.00, 60 });
 			expectNote ("segapcm.vgm", { "Sega PCM", "Ch 2", 3, 0.60, 60 });
 		}

@@ -133,6 +133,11 @@ Add-Port1 0x00 0x03                   # ADPCM-A: start channels 1 and 2 (tracks 
 Add-Wait ($beat * 4)
 
 Add-Port1 0x00 0x80                   # ADPCM-A: stop everything
+# Delta-T: DELTA-N is the pitch register (29 is the set's own rate, A4 for the 16-nibble cycle),
+# 0x1B is the level - a start with either left at zero is silence
+Add-Port0 0x19 0x1D
+Add-Port0 0x1A 0x00
+Add-Port0 0x1B 0xFF
 Add-Port0 0x10 0x80                   # Delta-T: start (track 12)
 
 Add-Wait $beat

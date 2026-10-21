@@ -447,6 +447,10 @@ namespace
 		Stream stream;
 		stream.at (0, 0, 0x10, 0x04);				// ADPCM-A channel 2 start (bit 2)
 		stream.at (22050, 0, 0x10, 0x00);			// key off every ADPCM-A channel
+		// DELTA-N first: it is ADPCM-B's pitch register, and a start with it at zero is silence
+		stream.at (22050, 1, 0x09, 29);
+		stream.at (22050, 1, 0x0A, 0x00);
+		stream.at (22050, 1, 0x0B, 0xFF);			// level
 		stream.at (22050, 1, 0x00, 0x80);			// ADPCM-B start
 
 		toybox::chips::OpnDecoder decoder (toybox::chips::OpnDecoder::Variant::ym2608);
@@ -594,8 +598,13 @@ namespace
 
 		const auto notes = toybox::chips::extractNotes (decoder, stream.writes, 44100);
 
-		check (notes.size() == 1 && absoluteNote (notes[0]) == 60 && notes[0].isDrum,
-			   "an ADPCM-B sample with no period is the C4 drum trigger");
+		// DELTA-N is a pitch register, so a set with no measurable period still has a note - it only
+		// loses the root correction that would place the octave (the reference implementation maps
+		// the rate alone, `searchYM2608Adpcm`). Treating it as a trigger was the old behaviour.
+		check (notes.size() == 1 && ! notes[0].isDrum && notes[0].rootCents == 0,
+			   "an ADPCM-B sample with no period keeps its DELTA-N pitch and loses only the root");
+		check (notes.size() == 1 && notes[0].note == 46,
+			   "and that pitch is the register's: DELTA-N 29 against 8 kHz worth of nibbles");
 	}
 
 	/** The OPNA addresses 32-byte pages where the OPNB uses 256: the same 0x1000 sample is start

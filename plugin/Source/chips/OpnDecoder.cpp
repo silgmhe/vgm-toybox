@@ -75,18 +75,19 @@ namespace
 			, cycleLength (sampleCycle)
 			, melodic (sampleMelodic) {}
 
+		/** DELTA-N is a pitch register, so the note never depends on the sample being measurable:
+			the rate goes against 8 kHz worth of nibbles, which is the reference the reference
+			implementation divides an ADPCM rate by (`fSample / 8000`, `frmY8950.cs`). The sample's
+			own cycle rides beside it as the root correction, and a set whose ROM is missing simply
+			loses that correction rather than its pitch. */
 		int noteFor (std::uint32_t delta, int, int* finePitch) const override
 		{
-			if (delta == 0 || melodic == nullptr || ! *melodic || cycleLength == nullptr
-				|| *cycleLength <= 0.0)
+			if (delta == 0)
 			{
 				*finePitch = 0;
-				return kOneShotNote;
+				return kOneShotNote;		// DELTA-N 0 is silence, not a note
 			}
 
-			// L1: DELTA-N's rate against 8 kHz worth of nibbles - the same reference the reference
-			// implementation divides an ADPCM rate by (`fSample / 8000`); the sample's own cycle
-			// rides beside it
 			return quantisePlaybackRate ((double) delta * unitsPerSecondPerStep,
 										 kSampleReferenceRate * 2.0, finePitch);
 		}
@@ -319,16 +320,24 @@ struct OpnDecoder::Impl
 		++voice.keyOns;
 
 		voice.cycleLength = adpcmBCycleFor (voice.latchStart);
-		voice.melodic = false;
-		if (! adpcmBRom.empty() && voice.cycleLength > 0.0 && voice.delta != 0)
+
+		// DELTA-N is a pitch register, so every keyed voice with a non-zero DELTA-N is melodic -
+		// the sample only decides whether a root correction can be added on top. Requiring a
+		// measurable period made the whole channel one-shot whenever the set's ROM was absent or
+		// its attack was noisy, which is what this used to do.
+		voice.melodic = voice.delta != 0;
+		if (voice.melodic && voice.cycleLength > 0.0 && ! adpcmBRom.empty())
 		{
 			int fine = 0;
 			const int note =
 				quantiseFrequency (adpcmBUnitsPerSecond (voice.delta) / voice.cycleLength, &fine);
 
-			// -1 is "out of range", not "lower than C8": a period the correlator found at a
-			// hundredth of a cycle is a formant, not a note (the Neo Geo sax reads 54 kHz).
-			voice.melodic = note >= 0 && note <= kHighestMelodicNote;
+			// a measured pitch that lands out of range is a formant, not a note: keep the register
+			// pitch and drop the root correction rather than the voice
+			if (note < 0 || note > kHighestMelodicNote)
+			{
+				voice.cycleLength = 0.0;
+			}
 		}
 
 		// The level register is what the driver actually closes the note with: the Neo Geo stage
@@ -689,8 +698,10 @@ ChannelState OpnDecoder::channelState (int channel) const
 	state.period = std::max<std::uint32_t> (voice.delta, 1u);
 	state.volume = (int) ((voice.level * 15u) / 255u);
 	state.keyOns = voice.keyOns;
-	state.gate = voice.active && voice.level != 0
-				 && (voice.gateEnd == 0 || impl->now < voice.gateEnd);
+	// The level register is an offset, not a switch: the Neo Geo sets leave it at zero while the
+	// channel plays loudly (0x1B is only written by drivers that attenuate), so gating on it
+	// silenced every one of them. The start bit and the end address decide whether it sounds.
+	state.gate = voice.active && (voice.gateEnd == 0 || impl->now < voice.gateEnd);
 
 	// L1 from DELTA-N against the 8 kHz reference, L2 from the sample's own cycle: the sets name no
 	// recording rate, so the transposition is the only register-only statement and the root is what

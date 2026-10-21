@@ -13,6 +13,15 @@ namespace toybox::chips
 namespace
 {
 	constexpr int kHighestMelodicNote = 108;
+
+	/** The reference of the transposition layer: 8000 bytes a second.
+
+		The chip names no recording rate of its own, so this is a convention either way; 8000 is the
+		figure the reference implementation divides a rate by before quantising it
+		(`form/KB/PCM/frmSegaPCM.cs` -> `Common.searchSegaPCMNote`, whose argument is a multiple of
+		8 kHz). It decides only which octave the transposition lands in - the sample's own measured
+		root carries the absolute pitch, and `L1 + L2` does not depend on this constant. */
+	constexpr double kReferenceRate = 8000.0;
 	constexpr std::size_t kMeasurementUnits = 2048;
 
 	/** The mask the ROM is folded with: the chip addresses `bank | (addr >> 8)` into a power-of-two
@@ -43,7 +52,7 @@ namespace
 			own, so the register's own midpoint is the reference the transposition is measured from. */
 		SegaPcmNoteTable (double chipClock, const double* sampleCycle, const bool* sampleMelodic)
 			: bytesPerSecondPerStep (chipClock > 0.0 ? chipClock / 32768.0 : 8000000.0 / 32768.0)
-			, rootRate (bytesPerSecondPerStep * 128.0)
+			, rootRate (kReferenceRate)
 			, cycleLength (sampleCycle)
 			, melodic (sampleMelodic) {}
 
@@ -122,7 +131,7 @@ struct SegaPcmDecoder::Impl
 		transposition layer is measured from (design doc section 14.3). */
 	double referenceBytesPerSecond (void) const
 	{
-		return 128.0 * clock / 32768.0;
+		return kReferenceRate;
 	}
 
 	/** Where the voice starts, in bytes: the 24-bit position's low byte is the chip's own fraction,

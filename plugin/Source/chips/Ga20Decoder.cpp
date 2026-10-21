@@ -24,6 +24,16 @@ namespace
 	constexpr std::uint32_t kScanBytes = 8 * 1024;
 	constexpr std::uint32_t kMinimumWindow = 128;
 
+	/** The reference of the transposition layer: the byte rate a GA20 sample is taken to be recorded
+		at.
+
+		4000 is what the reference implementation's keyboard window quantises against
+		(`form/KB/PCM/frmGA20.cs`: `(clock/4) / (256 - rate)` compared with `4000 x multiplier`), and
+		real drivers' rates sit around it - the 8 kHz this used to share put every note an octave low,
+		which the sample's root then had to undo. It only decides the octave: `L1 + L2` is the same
+		absolute pitch whatever this constant is. */
+	constexpr double kReferenceRate = 4000.0;
+
 	// A period is a lag where the waveform's correlation dips below this: a steady tone reaches
 	// about -1 at its half period, while noise stays near 0 at every lag.
 	constexpr double kPeriodTrough = -0.5;
@@ -77,8 +87,7 @@ namespace
 				return 60;		// a drum: the C4 trigger
 			}
 
-			return quantisePlaybackRate (byteClock / (double) (0x100 - rate), kSampleReferenceRate,
-										 finePitch);
+			return quantisePlaybackRate (byteClock / (double) (0x100 - rate), kReferenceRate, finePitch);
 		}
 
 	private:
@@ -452,7 +461,7 @@ ChannelState Ga20Decoder::channelState (int channel) const
 	state.volume = impl->volumeOf (voice);
 
 	const SampledPitch pitch = describeSamplePitch (impl->bytesPerSecond (voice),
-													kSampleReferenceRate, voice.cycleLength,
+													kReferenceRate, voice.cycleLength,
 													voice.melodic);
 	state.hz = pitch.hz;
 	state.transposeCents = pitch.transposeCents;
