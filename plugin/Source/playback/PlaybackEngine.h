@@ -162,6 +162,25 @@ public:
 	/** One entry per track the backend reports - the list exists in both modes. */
 	const std::vector<playback::TrackInfo>& getTracks (void) const { return trackLayout; }
 
+	/** Where each track's notes got their pitch - the audit behind the "transpose by the sample's
+		root" setting (design doc section 15).
+
+		`rooted` counts the notes that carry a measured root; `distinctRoots` says how many different
+		values they took. More than one means the same track measured different roots for different
+		notes - the sample at two rates should measure the same root, so a track with several is the
+		sign that a measurement picked a different window per key-on and cannot be trusted. */
+	struct TrackPitchSummary
+	{
+		int notes = 0;
+		int registerExact = 0;
+		int sampleInferred = 0;
+		int unpitched = 0;
+		int distinctRoots = 0;
+	};
+
+	/** One entry per track, in `getTracks()` order. Empty until a song is loaded. */
+	std::vector<TrackPitchSummary> getPitchSummary (void) const;
+
 	/** Track parameters. They are stored in atomics, so the audio thread reads them without
 		ever contending for the engine lock. Note that in plain player mode the mix is not
 		applied (the single player renders the whole song) - the values simply persist. */

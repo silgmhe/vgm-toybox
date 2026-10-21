@@ -1,11 +1,14 @@
 #include "PlaybackEngine.h"
 
+#include <set>
+
 #include <juce_audio_basics/juce_audio_basics.h>
 // for MessageManager::callAsync(): the install half of an asynchronous load has to run on the
 // message thread (review M-1). juce_events is a dependency of every target that compiles this
 // file, including the headless core tests, which never call the async path.
 #include <juce_events/juce_events.h>
 
+#include "chips/ChipTypes.h"		// PitchSource: the pitch report names where a note came from
 #include "playback/BackendRegistry.h"
 #include "playback/SessionState.h"
 
@@ -1059,6 +1062,50 @@ void PlaybackEngine::setTrackOutput (size_t trackIndex, playback::OutputTarget t
 playback::OutputTarget PlaybackEngine::getTrackOutput (size_t trackIndex) const
 {
 	return (trackIndex < tracks.size()) ? tracks[trackIndex]->output.load() : playback::kMasterOutput;
+}
+
+std::vector<PlaybackEngine::TrackPitchSummary> PlaybackEngine::getPitchSummary (void) const
+{
+	std::vector<TrackPitchSummary> summary (trackLayout.size());
+
+	if (midiSequence == nullptr)
+	{
+		return summary;
+	}
+
+	// per track, the set of roots its notes measured: a sample played at two rates must report one
+	std::vector<std::set<int>> roots (trackLayout.size());
+
+	for (const auto& event : midiSequence->events)
+	{
+		if (event.type != playback::MidiEventType::noteOn || event.sourceTrack >= summary.size())
+		{
+			continue;
+		}
+
+		TrackPitchSummary& track = summary[event.sourceTrack];
+		++track.notes;
+
+		switch ((chips::PitchSource) event.pitchSource)
+		{
+		case chips::PitchSource::registerExact:  ++track.registerExact; break;
+		case chips::PitchSource::registerWithRoot:
+		case chips::PitchSource::sampleInferred: ++track.sampleInferred; break;
+		case chips::PitchSource::unpitched:      ++track.unpitched; break;
+		}
+
+		if (event.rootCents != 0)
+		{
+			roots[event.sourceTrack].insert ((int) event.rootCents);
+		}
+	}
+
+	for (std::size_t i = 0; i < summary.size(); ++i)
+	{
+		summary[i].distinctRoots = (int) roots[i].size();
+	}
+
+	return summary;
 }
 
 void PlaybackEngine::setTrackMidiChannel (size_t trackIndex, int channel)

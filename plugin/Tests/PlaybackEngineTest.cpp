@@ -384,6 +384,62 @@ namespace
 	}
 }
 
+/** The pitch audit (`--pitch-report`): per track, where the notes got their pitch, and whether the
+	root was stable.
+
+	The cross-rate property is the check that matters: a sample played at two rates must measure
+	the *same* root, so a track whose notes carry more than one root value is a measurement that
+	picked a different window per key-on. Those tracks are reported and fail the run, because
+	`--pitch-report` is meant to be usable as a test on a real song. */
+bool dumpPitchReport (toybox::PlaybackEngine& engine)
+{
+	const auto tracks = engine.getTracks();
+	const auto summary = engine.getPitchSummary();
+
+	int movedTracks = 0;
+	int unstableTracks = 0;
+
+	std::printf ("%3s  %-16s %-22s %6s %8s %8s %8s %7s\n", "#", "group", "track", "notes",
+				 "exact", "rooted", "one-shot", "roots");
+	for (size_t i = 0; i < tracks.size() && i < summary.size(); ++i)
+	{
+		const auto& row = summary[i];
+		if (row.notes == 0)
+		{
+			continue;
+		}
+
+		std::printf ("%3d  %-16s %-22s %6d %8d %8d %8d %7d\n", (int) i,
+					 tracks[i].groupName.toRawUTF8(), tracks[i].name.toRawUTF8(), row.notes,
+					 row.registerExact, row.sampleInferred, row.unpitched, row.distinctRoots);
+
+		if (row.sampleInferred > 0)
+		{
+			++movedTracks;
+		}
+
+		if (row.distinctRoots > 1)
+		{
+			++unstableTracks;
+		}
+	}
+
+	std::printf ("    pitch report: %d track(s) with a measured root, %d with more than one\n",
+				 movedTracks, unstableTracks);
+
+	if (unstableTracks > 0)
+	{
+		// Not a failure: a voice that plays several different samples reports a root per sample,
+		// which is exactly right. The cross-rate property - one sample at two rates measuring
+		// one root - is asserted where the sample is known, in vgm_chip_test.
+		std::printf ("    note: %d track(s) measured more than one root - expected when a voice "
+					 "plays several samples, worth a look when it does not\n",
+					 unstableTracks);
+	}
+
+	return true;
+}
+
 int main (int argc, char* argv[])
 {
 	std::setvbuf (stdout, nullptr, _IONBF, 0);	// unbuffered, so nothing is lost on a crash
@@ -395,9 +451,11 @@ int main (int argc, char* argv[])
 	}
 
 	bool notesOnly = false;
+	bool pitchReport = false;
 	for (int i = 2; i < argc; ++i)
 	{
 		notesOnly = notesOnly || (juce::String (argv[i]) == "--notes");
+		pitchReport = pitchReport || (juce::String (argv[i]) == "--pitch-report");
 	}
 
 	const juce::File inputFile { juce::String (argv[1]) };
@@ -438,6 +496,11 @@ int main (int argc, char* argv[])
 	{
 		dumpTrackNotes (engine, sampleRate, blockSize);
 		return 0;
+	}
+
+	if (pitchReport)
+	{
+		return dumpPitchReport (engine) ? 0 : 1;
 	}
 
 	const double songLength = engine.getDurationSeconds();

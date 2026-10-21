@@ -56,6 +56,14 @@ struct MidiEvent
 		sequence stores pitch, not MIDI bytes, because the 14-bit scale depends on a setting the
 		song does not know (the receiver's range - see encodePitchBend). */
 	std::int16_t bendCents = 0;
+
+	/** noteOn only: the two pitch layers the note came from, carried so the pitch report can say
+		which notes are register-exact and which needed a measured root (design doc section 15). They
+		are not sent anywhere - `data1` is already the played note. */
+	std::int16_t transposeCents = 0;
+	std::int16_t rootCents = 0;
+	std::uint8_t pitchSource = 0;	// chips::PitchSource
+
 	std::uint32_t sourceTrack = 0;
 };
 

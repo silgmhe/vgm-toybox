@@ -2027,6 +2027,22 @@ namespace
 
 	/** The voice the period tests key on: 256 bytes at 0x1000, looped back to the start, played at
 		19931 - 8448 bytes a second at 8 MHz. */
+	void setC140LoopedSampleAt (Stream& stream, std::uint16_t frequency)
+	{
+		stream.at (0, 0x00, 0x00, 0xFF);		// volume right
+		stream.at (0, 0x00, 0x01, 0xFF);		// volume left
+		stream.at (0, 0x00, 0x06, 0x10);		// start 0x1000
+		stream.at (0, 0x00, 0x07, 0x00);
+		stream.at (0, 0x00, 0x08, 0x11);		// end 0x1100: 256 bytes
+		stream.at (0, 0x00, 0x09, 0x00);
+		stream.at (0, 0x00, 0x0A, 0x10);		// loop back to the start
+		stream.at (0, 0x00, 0x0B, 0x00);
+		stream.at (0, 0x00, 0x02, (std::uint8_t) (frequency >> 8));		// the C140 holds it high first
+		stream.at (0, 0x00, 0x03, (std::uint8_t) (frequency & 0xFF));
+		stream.at (10, 0x00, 0x05, 0x90);		// key on with loop
+		stream.at (8000, 0x00, 0x05, 0x10);		// the loop bit alone: the key-off
+	}
+
 	void setC140LoopedSample (Stream& stream)
 	{
 		stream.at (0, 0x00, 0x00, 0xFF);		// volume right
@@ -2190,6 +2206,34 @@ namespace
 
 		check (notes[0].logicalChannel == 16, "offset 0x105 is voice 16, not voice 0");
 		check (absoluteNote (notes[0]) == 81, "and it keeps its own frequency, an octave above voice 0's");
+	}
+
+	/** The cross-rate property, which is what makes the measured root trustworthy: the *same* sample
+		at twice the rate must report the same root, and its transposition must move by exactly an
+		octave. A root that moved with the rate would be the measurement reading the window instead
+		of the sample. */
+	void testC140RootIsStableAcrossRates (void)
+	{
+		const auto rom = makeC140SinRom (16);
+
+		Stream octave;
+		setC140LoopedSampleAt (octave, 39862);		// twice 19931
+		const auto base = runC140 (octave, 20000, 8000000, rom);
+
+		Stream half;
+		setC140LoopedSampleAt (half, 19931);
+		const auto lower = runC140 (half, 20000, 8000000, rom);
+
+		check (base.size() == 1 && lower.size() == 1, "the same sample at two rates is two notes");
+		if (base.empty() || lower.empty())
+		{
+			return;
+		}
+
+		check (base[0].rootCents == lower[0].rootCents,
+			   "the same sample measures the same root at twice the rate");
+		check (distance (base[0].transposeCents - lower[0].transposeCents, 1200) <= 4,
+			   "and the transposition moves by exactly the octave the rate did");
 	}
 
 	/** The pitch is two layers, and this is the case that shows both: the note is the transposition
@@ -4021,6 +4065,7 @@ namespace
 	testC140SilentVoiceIsNoNote();
 	testC140HighVoiceNeedsTheHighOffsetByte();
 	testC140TranspositionAndRoot();
+	testC140RootIsStableAcrossRates();
 	testC140WithoutRomKeepsTheRootRate();
 	testC140NoisySampleFallsBackToTheRootRate();
 	testC140System2BankIsFolded();

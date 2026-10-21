@@ -524,6 +524,12 @@ namespace
 				const double start = (double) note.startSample / kVgmRate;
 				const double end = (double) note.endSample / kVgmRate;
 				noteOn (track, start, midiNote, note.velocity);
+
+				// the report needs to know where the pitch came from; `data1` already carries it
+				events.back().transposeCents = (std::int16_t) note.transposeCents;
+				events.back().rootCents = (std::int16_t) note.rootCents;
+				events.back().pitchSource = (std::uint8_t) note.pitchSource;
+
 				noteOff (track, end, midiNote);
 			}
 

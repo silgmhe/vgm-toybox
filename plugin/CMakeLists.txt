@@ -658,6 +658,19 @@ if(EXISTS "${_toybox_ga20_song}")
 	set_tests_properties(engine.ga20 PROPERTIES LABELS "integration" TIMEOUT 120)
 endif()
 
+# The pitch audit (P4 in section 15.7): per track, how many notes were register-exact, how many
+# needed a measured root and how many are one-shot triggers. It does not fail on a track with several
+# roots - a voice that plays several samples has one per sample - so it is a report, and the cross-rate
+# property is asserted in vgm_chip_test where the sample is known.
+foreach(_toybox_pitch_asset k053260 es5503 ga20)
+	set(_toybox_pitch_song "${CMAKE_CURRENT_SOURCE_DIR}/Tests/assets/${_toybox_pitch_asset}.vgm")
+	if(EXISTS "${_toybox_pitch_song}")
+		add_test(NAME pitch.${_toybox_pitch_asset}
+				 COMMAND vgm_mixer_test "${_toybox_pitch_song}" 2 --pitch-report)
+		set_tests_properties(pitch.${_toybox_pitch_asset} PROPERTIES LABELS "integration" TIMEOUT 120)
+	endif()
+endforeach()
+
 # The ES5503 (M4): a wavetable chip - the note is the table's repeat rate, so a decoder that reads
 # the table size instead of its measured cycle is a few octaves out, and one that uses the output
 # rate as the chip's rate (`clock / 8 / (enabled + 2)`) is out by more. es5503.vgm keys two
