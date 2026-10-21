@@ -336,8 +336,13 @@ struct Es5503Decoder::Impl
 				return 60;		// a drum (or a silent table): the C4 trigger
 			}
 
-			const double bytesPerSecond = impl.entriesPerSecond (oscillator);
-			return quantiseFrequency (bytesPerSecond / oscillator.cycleLength, finePitch);
+			// No L1: this register is a *step through a table*, not a playback rate, so there is no
+			// reference rate to measure a transposition against - one entry per output sample is
+			// 25 Hz and ten times that is 250 Hz, all of it a property of the table, not of a
+			// sample. The measured table cycle is therefore the whole pitch, and the note reports
+			// it as an inference (design doc section 15.3, B class).
+			return quantiseFrequency (impl.entriesPerSecond (oscillator) / oscillator.cycleLength,
+									  finePitch);
 		}
 
 	private:
@@ -474,6 +479,15 @@ ChannelState Es5503Decoder::channelState (int channel) const
 	state.keyOns = oscillator.keyOns;
 	state.period = oscillator.frequency;
 	state.volume = impl->volumeOf (oscillator);
+
+	// B class: the note already carries the whole pitch (the table's measured cycle), so there is
+	// no separate root correction to add - and no transposition either
+	state.hz = (oscillator.cycleLength > 0.0 && oscillator.melodic)
+				   ? impl->entriesPerSecond (oscillator) / oscillator.cycleLength
+				   : 0.0;
+	state.transposeCents = 0;
+	state.rootCents = 0;
+	state.pitchSource = oscillator.melodic ? PitchSource::sampleInferred : PitchSource::unpitched;
 
 	return state;
 }

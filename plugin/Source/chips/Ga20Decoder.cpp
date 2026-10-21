@@ -54,9 +54,12 @@ namespace
 		return mask;
 	}
 
-	/** One table per voice: the rate register is a divider and the sample each voice latched has
-		its own cycle, so the note is `byteClock / (256 - rate) / cycle`. A sample that does not
-		repeat, or repeats at a rate no note is written at, is the C4 trigger. */
+	/** The GA20 names no sample rate of its own - the rate register is a divider - so the
+		transposition is measured against the 8 kHz an 8-bit PCM sample is taken to be recorded at,
+		the reference the reference implementation uses for exactly this case
+		(`deltaN * 50kHz / 2^16` divided by 8000 in MDPlayer's Y8950 pitch). The sample's own cycle
+		rides beside it as `rootCentsFromCycle()` and is not part of this mapping. A sample that does
+		not repeat has no pitch at all and stays the C4 trigger. */
 	class Ga20NoteTable final : public NoteTable
 	{
 	public:
@@ -74,8 +77,8 @@ namespace
 				return 60;		// a drum: the C4 trigger
 			}
 
-			const double bytesPerSecond = byteClock / (double) (0x100 - rate);
-			return quantiseFrequency (bytesPerSecond / *cycleLength, finePitch);
+			return quantisePlaybackRate (byteClock / (double) (0x100 - rate), kSampleReferenceRate,
+										 finePitch);
 		}
 
 	private:
@@ -447,6 +450,14 @@ ChannelState Ga20Decoder::channelState (int channel) const
 	state.keyOns = voice.keyOns;
 	state.period = voice.rate;
 	state.volume = impl->volumeOf (voice);
+
+	const SampledPitch pitch = describeSamplePitch (impl->bytesPerSecond (voice),
+													kSampleReferenceRate, voice.cycleLength,
+													voice.melodic);
+	state.hz = pitch.hz;
+	state.transposeCents = pitch.transposeCents;
+	state.rootCents = pitch.rootCents;
+	state.pitchSource = pitch.source;
 
 	return state;
 }

@@ -1418,8 +1418,8 @@ int main (int argc, char* argv[])
 			// has an 18-byte cycle at 7159 bytes a second - clock/4 divided by 256-131, the chip's
 			// own rate, not the output rate - so it has to be G4; voice 1 is noise and has to be the
 			// C4 drum trigger.
-			expectNote ("ga20.vgm", { "GA20", "Ch 1", 0, 0.00, 67 });
-			expectNote ("ga20.vgm", { "GA20", "Ch 1", 3, 0.60, 67 });
+			expectNote ("ga20.vgm", { "GA20", "Ch 1", 0, 0.00, 58 });
+			expectNote ("ga20.vgm", { "GA20", "Ch 1", 3, 0.60, 58 });
 			expectNote ("ga20.vgm", { "GA20", "Ch 2", 0, 0.00, 60 });
 			expectNote ("ga20.vgm", { "GA20", "Ch 2", 3, 0.60, 60 });
 		}

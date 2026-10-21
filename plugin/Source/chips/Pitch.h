@@ -125,6 +125,13 @@ inline int quantisePlaybackRate (double rate, double rootRate, int* finePitch)
 	return quantiseFrequency (kMiddleCHz * rate / rootRate, finePitch);
 }
 
+/** The rate an 8-bit PCM sample is taken to be recorded at when its chip names none - the reference
+	the reference implementation divides a playback rate by before quantising it (`fSample / 8000`
+	in MDPlayer's ADPCM pitch, `searchSegaPCMNote`), and the one the chips with no documented rate of
+	their own use here. It is a convention, not a measurement: it only decides which octave the
+	transposition lands in, which is precisely the part the sample's own root corrects. */
+constexpr double kSampleReferenceRate = 8000.0;
+
 /** L2 - the correction a sample's own root asks for, in cents.
 
 	`cycleLength` is the sample's period in samples and `referenceRate` the rate the chip plays a

@@ -84,8 +84,11 @@ namespace
 				return kOneShotNote;
 			}
 
-			return quantiseFrequency ((double) delta * unitsPerSecondPerStep / *cycleLength,
-									  finePitch);
+			// L1: DELTA-N's rate against 8 kHz worth of nibbles - the same reference the reference
+			// implementation divides an ADPCM rate by (`fSample / 8000`); the sample's own cycle
+			// rides beside it
+			return quantisePlaybackRate ((double) delta * unitsPerSecondPerStep,
+										 kSampleReferenceRate * 2.0, finePitch);
 		}
 
 	private:
@@ -689,16 +692,16 @@ ChannelState OpnDecoder::channelState (int channel) const
 	state.gate = voice.active && voice.level != 0
 				 && (voice.gateEnd == 0 || impl->now < voice.gateEnd);
 
-	// ADPCM-B is B class: DELTA-N gives a rate but the sets name no recording rate to measure it
-	// against, so there is no L1 anchor. It keeps its root-based note until the B-class pass
-	// (design doc section 15.3), and reports it as an inference.
-	// (the note itself already carries the absolute pitch, so there is no separate correction to add)
-	state.hz = (voice.cycleLength > 0.0)
-				   ? impl->adpcmBUnitsPerSecond (voice.delta) / voice.cycleLength
-				   : 0.0;
-	state.rootCents = 0;
-	state.transposeCents = 0;
-	state.pitchSource = voice.melodic ? PitchSource::sampleInferred : PitchSource::unpitched;
+	// L1 from DELTA-N against the 8 kHz reference, L2 from the sample's own cycle: the sets name no
+	// recording rate, so the transposition is the only register-only statement and the root is what
+	// places the octave (design doc section 15.3)
+	const SampledPitch pitch = describeSamplePitch (impl->adpcmBUnitsPerSecond (voice.delta),
+													kSampleReferenceRate * 2.0, voice.cycleLength,
+													voice.melodic);
+	state.hz = pitch.hz;
+	state.transposeCents = pitch.transposeCents;
+	state.rootCents = pitch.rootCents;
+	state.pitchSource = pitch.source;
 
 	return state;
 }
