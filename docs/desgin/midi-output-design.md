@@ -659,6 +659,7 @@ void render (const playback::OutputBusBuffers* buses, int numBuses, int numSampl
 
 - one-shot 通道的 trigger note 映射（ADPCM-A/B、DAC、noise；默认 C4，允许改 note）；
 - ADPCM-B 的根音/采样率覆盖，或切换为 melodic；
+- **每个 mixer 通道的 MIDI 分析策略**：寄存器流（现状）或音频频谱（对“流式播放的采样/整曲一个 sample”这类寄存器流无音符的通道）——现在不做，方案与待定项见 `docs/memo/2026-10-21-per-channel-midi-analysis-strategy.md`；
 - 每轨默认 MIDI 通道 / 自动分配策略；
 - standalone / 虚拟端口的 MIDI 设备选择（VST3 不需要）；
 - Master 合并的默认开关/默认通道；
