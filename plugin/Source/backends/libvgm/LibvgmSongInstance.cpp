@@ -125,6 +125,11 @@ namespace
 			// the measured cycle - section 14 of the design doc. A voice whose sample has no period
 			// still reports its C4 trigger, so the capability stays melodic.
 			return fmChannel (8);
+		case DEVID_MSM6295:
+			// Four ADPCM voices at one fixed DAC rate (`clock / 165`): there is no pitch register,
+			// so a note can only come from the sample's own cycle - the ES5503's case, and likewise
+			// melodic, with a sample that has no period reporting its C4 trigger.
+			return fmChannel (4);
 		case DEVID_YMZ280B:
 			// Eight PCM voices. Their pitch register is a playback rate, not a note, so the decoder
 			// reports one-shot triggers; see chips/Ymz280bDecoder.h and M4 in the design doc.

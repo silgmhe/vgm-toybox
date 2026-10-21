@@ -2,7 +2,7 @@
 
 #include <algorithm>
 #include <cmath>
-#include <cstring>
+#include <cstdio>`r`n#include <cstdlib>`r`n#include <cstring>
 #include <map>
 
 #include "VgmCommandReader.h"
@@ -25,6 +25,7 @@
 #include "chips/OpmDecoder.h"
 #include "chips/OpnDecoder.h"
 #include "chips/PokeyDecoder.h"
+#include "chips/Okim6295Decoder.h"
 #include "chips/Rf5c68Decoder.h"
 #include "chips/X1_010Decoder.h"
 #include "chips/Ymf271Decoder.h"
@@ -227,6 +228,17 @@ namespace
 					rf5c.queue (rf5cDeviceFor (true, command.port), command.addr, command.data,
 								command.sampleTime);
 					break;
+				case 0xB8:	// OKIM6295
+					if (std::getenv ("TOYBOX_OKI_DEBUG") != nullptr)		// TEMPORARY
+					{
+						const PLR_DEV_INFO* probe = deviceFor (DEVID_MSM6295, command.port);
+						std::fprintf (stderr, "OKI queue port=%d dev=%p reg=%02X val=%02X\n",
+									  (int) command.port, (const void*) probe, command.addr,
+									  command.data);
+					}
+					okim.queue (deviceFor (DEVID_MSM6295, command.port), command.addr, command.data,
+								command.sampleTime);
+					break;
 				case 0xB3:
 					queueGbWrite (deviceFor (DEVID_GB_DMG, command.port),
 								  command.addr, command.data, command.sampleTime);
@@ -337,6 +349,19 @@ namespace
 							  if (! rf5cRam.empty())
 							  {
 								  decoder.setRam (rf5cRam);
+							  }
+						  });
+			// The OKIM6295 has no pitch register: every voice plays at `clock / 165` and the note is
+			// the sample's own cycle, so the 256 KB ROM (0x8B blocks) is the only source of a pitch.
+			const std::vector<std::uint8_t> okimRom =
+				okim.writes.empty() ? std::vector<std::uint8_t>()
+									: assembleRom (reader, 0x8B, 256 * 1024);
+			flushDecoded (okim, 1000000u, lastSampleTime,
+						  [&okimRom] (chips::Okim6295Decoder& decoder)
+						  {
+							  if (! okimRom.empty())
+							  {
+								  decoder.setRom (okimRom);
 							  }
 						  });
 			flushDecoded (x1, 16000000u, lastSampleTime);
@@ -1082,6 +1107,10 @@ namespace
 		ChipBuffer<chips::Sn76489Decoder> sn;
 		ChipBuffer<chips::Ay8910Decoder> ay;
 		ChipBuffer<chips::Rf5c68Decoder> rf5c;
+
+		// The OKIM6295 plays every voice at one fixed rate, so its note comes from the sample
+		// alone - the ROM (0x8B) is what the decoder measures
+		ChipBuffer<chips::Okim6295Decoder> okim;
 		ChipBuffer<chips::X1_010Decoder> x1;
 		ChipBuffer<chips::Ymf271Decoder> opx;
 		ChipBuffer<chips::Ymz280bDecoder> ymz;

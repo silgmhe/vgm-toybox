@@ -418,6 +418,15 @@ bool VgmCommandReader::next (VgmCommand& command)
 			command.data = data[position + 2];
 			command.data2 = data[position + 3];
 		}
+		else if (cmd == 0xB8)
+		{
+			// OKIM6295: bit 7 of the offset byte names the second chip of a pair (`Cmd_OKIM6295_Reg`,
+			// libvgm's `ofs = fData[1] & 0x7F`), so it travels in `port` like the OPN's second port.
+			command.kind = VgmCommand::Kind::registerWrite;
+			command.port = (std::uint8_t) (data[position + 1] >> 7);
+			command.addr = (std::uint8_t) (data[position + 1] & 0x7F);
+			command.data = data[position + 2];
+		}
 		else if (length == 3 && ((cmd >= 0x50 && cmd <= 0x5F) || (cmd >= 0xA0 && cmd <= 0xBF)))
 		{
 			const std::uint8_t addrByte = data[position + 1];
