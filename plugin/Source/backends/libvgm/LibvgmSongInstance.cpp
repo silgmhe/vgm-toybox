@@ -132,6 +132,12 @@ namespace
 			// of its own (offset 0x202), which is why the decoder cannot report a note at the flag
 			// write - but the promise is the same one the C140 makes: melodic, not a trigger.
 			return fmChannel (32);
+		case DEVID_K054539:
+			// Eight sampled voices, 8-bit PCM / 16-bit PCM / 4-bit DPCM, with a 24-bit pitch and a
+			// volume register that attenuates. A sample ends on a marker byte, so a non-looping
+			// note has an exact length and no gate guess; the drums share these eight voices with
+			// the music, and the decoder reports an unmeasurable sample as a C4 trigger.
+			return fmChannel (8);
 		case DEVID_K053260:
 			// Four sampled voices, and the first chip whose note length is a register: a
 			// non-looping voice lasts `length` bytes at its pitch, so a note needs no gate guess and

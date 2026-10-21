@@ -35,6 +35,7 @@ enum class Family
 	c140Pcm,		// C140: a 16-bit playback rate over recorded samples, root rate in Pitch.h
 	c352Pcm,		// C352: the same idea with a 16-bit rate and an explicit key-on/key-off register
 	k053260Pcm,		// K053260: a 12-bit pitch over a sample whose length is a register
+	k054539Pcm,		// K054539: 8 voices, an attenuating volume and a sample that ends on a marker
 	saaSquare,
 	pokeySquare,	// distortion and clock mode change the timbre, not the note
 	wsWave,			// WonderSwan: a 32-step waveform stepped at clock / (32 * (2048 - frequency))

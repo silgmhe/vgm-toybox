@@ -314,6 +314,17 @@ bool VgmCommandReader::next (VgmCommand& command)
 			command.addr = data[position + 2];
 			command.data = data[position + 3];
 		}
+		else if (cmd == 0xD3)
+		{
+			// K054539: a 16-bit big-endian offset and one data byte (libvgm's Cmd_Ofs16_Data8).
+			// The key-on and key-off registers live at 0x214 and 0x215, so unlike the C140 and the
+			// X1-010 the address is not a channel index and has to stay whole - the high byte goes
+			// in `port` for the decoder to put back.
+			command.kind = VgmCommand::Kind::registerWrite;
+			command.port = data[position + 1];
+			command.addr = data[position + 2];
+			command.data = data[position + 3];
+		}
 		else if (cmd == 0xD4)
 		{
 			// C140: the same 16-bit big-endian offset as the X1-010, and the same split - bit 7 of

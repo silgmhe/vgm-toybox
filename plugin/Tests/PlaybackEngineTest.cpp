@@ -1384,6 +1384,17 @@ int main (int argc, char* argv[])
 			expectNote ("c352.vgm", { "C352", "Ch 2", 0, 0.00, 81 });
 			expectNote ("c352.vgm", { "C352", "Ch 2", 3, 0.60, 81 });
 		}
+		else if (asset == "k054539.vgm")
+		{
+			// Key-on and key-off are bits in the masks at 0x214/0x215, and each voice stops on the
+			// 0x80 marker inside its own sample. Voice 0 is periodic and has to be A4; voice 1 is
+			// noise, which has no period, so it has to be the C4 drum trigger - a decoder that read
+			// its attenuation register as a level would send nothing at all.
+			expectNote ("k054539.vgm", { "K054539", "Ch 1", 0, 0.00, 69 });
+			expectNote ("k054539.vgm", { "K054539", "Ch 1", 3, 0.60, 69 });
+			expectNote ("k054539.vgm", { "K054539", "Ch 2", 0, 0.00, 60 });
+			expectNote ("k054539.vgm", { "K054539", "Ch 2", 3, 0.60, 60 });
+		}
 		else if (asset == "k053260.vgm")
 		{
 			// Both voices are started and stopped by the same mask register, and each one's length

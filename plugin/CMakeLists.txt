@@ -202,6 +202,7 @@ target_sources(VGMToybox PRIVATE
 	Source/chips/C140Decoder.cpp
 	Source/chips/C352Decoder.cpp
 	Source/chips/K053260Decoder.cpp
+	Source/chips/K054539Decoder.cpp
 	Source/chips/Ymf271Decoder.cpp
 	Source/chips/Ymz280bDecoder.cpp
 	Source/chips/Sn76489Decoder.cpp
@@ -344,6 +345,7 @@ add_executable(vgm_mixer_test EXCLUDE_FROM_ALL
 	Source/chips/C140Decoder.cpp
 	Source/chips/C352Decoder.cpp
 	Source/chips/K053260Decoder.cpp
+	Source/chips/K054539Decoder.cpp
 	Source/chips/Ymf271Decoder.cpp
 	Source/chips/Ymz280bDecoder.cpp
 	Source/chips/Sn76489Decoder.cpp
@@ -378,6 +380,7 @@ add_executable(vgm_chip_test EXCLUDE_FROM_ALL
 	Source/chips/C140Decoder.cpp
 	Source/chips/C352Decoder.cpp
 	Source/chips/K053260Decoder.cpp
+	Source/chips/K054539Decoder.cpp
 	Source/chips/Ymf271Decoder.cpp
 	Source/chips/Ymz280bDecoder.cpp
 	Source/chips/Sn76489Decoder.cpp
@@ -616,6 +619,18 @@ set(_toybox_c352_song "${CMAKE_CURRENT_SOURCE_DIR}/Tests/assets/c352.vgm")
 if(EXISTS "${_toybox_c352_song}")
 	add_test(NAME engine.c352 COMMAND vgm_mixer_test "${_toybox_c352_song}" 2)
 	set_tests_properties(engine.c352 PROPERTIES LABELS "integration" TIMEOUT 120)
+endif()
+
+# The K054539 (M4): a sample ends on a marker byte (0x80), the key registers are sixteen-bit
+# addresses (0x214/0x215 delivered by one 0xD3 command), and the volume register attenuates rather
+# than amplifies. k054539.vgm keys two voices four times each: voice 0 a periodic waveform that has
+# to come out as A4, voice 1 noise that has to come out as the C4 drum trigger, both ended by their
+# own 0x80 marker. A decoder that read the volume as a level, kept only the low half of the offset
+# or ignored the marker would fail on the pitch, the count or the timing.
+set(_toybox_k054539_song "${CMAKE_CURRENT_SOURCE_DIR}/Tests/assets/k054539.vgm")
+if(EXISTS "${_toybox_k054539_song}")
+	add_test(NAME engine.k054539 COMMAND vgm_mixer_test "${_toybox_k054539_song}" 2)
+	set_tests_properties(engine.k054539 PROPERTIES LABELS "integration" TIMEOUT 120)
 endif()
 
 # The K053260 (M4): key-on is a rising edge in a shared mask register (offset 0x28), not a write to

@@ -19,6 +19,7 @@
 #include "chips/HuC6280Decoder.h"
 #include "chips/K051649Decoder.h"
 #include "chips/K053260Decoder.h"
+#include "chips/K054539Decoder.h"
 #include "chips/NesApuDecoder.h"
 #include "chips/NoteExtractor.h"
 #include "chips/PokeyDecoder.h"
@@ -2733,6 +2734,265 @@ namespace
 			   "offset 0x20 with key mask bit 3 is voice 3, at A4");
 	}
 
+	// --- K054539: an attenuating volume and a sample that ends on a marker ------------------------
+
+	std::vector<NoteEvent> runK054539 (const Stream& stream, std::uint32_t totalSamples,
+									   std::uint32_t clock = 18432000,
+									   const std::vector<std::uint8_t>& rom = {})
+	{
+		toybox::chips::K054539Decoder decoder;
+		decoder.reset (clock, 44100.0);
+		if (! rom.empty())
+		{
+			decoder.setRom (rom);
+		}
+
+		return toybox::chips::extractNotes (decoder, stream.writes, totalSamples);
+	}
+
+	/** The chip is addressed with sixteen bits (0xD3), so the high byte of the offset travels in
+		the write's port - and its key-on/key-off registers (0x214/0x215) are not channel indices. */
+	void k054539Write (Stream& stream, std::uint32_t time, std::uint16_t offset, std::uint8_t value)
+	{
+		RegisterWrite write;
+		write.port = (std::uint8_t) ((offset >> 8) & 0xFF);
+		write.reg = (std::uint8_t) (offset & 0xFF);
+		write.value = value;
+		write.sampleTime = time;
+		stream.writes.push_back (write);
+	}
+
+	const std::uint8_t k054539Type8 = 0x00;
+	const std::uint8_t k054539Type16 = 0x04;
+	const std::uint8_t k054539Type4 = 0x08;
+
+	/** One voice: output on, format, no loop, pitch, volume, pan centre and the start address. */
+	void setK054539Voice (Stream& stream, int channel, std::uint32_t start, std::uint8_t type,
+						  std::uint32_t pitch, std::uint8_t volume)
+	{
+		const std::uint16_t base = (std::uint16_t) (channel * 0x20);
+		k054539Write (stream, 0, 0x22F, 0x01);		// control: PCM output enabled
+		k054539Write (stream, 0, (std::uint16_t) (0x200 + 2 * channel), type);
+		k054539Write (stream, 0, (std::uint16_t) (0x201 + 2 * channel), 0x00);		// no loop
+		k054539Write (stream, 0, (std::uint16_t) (base + 0x00), (std::uint8_t) (pitch & 0xFF));
+		k054539Write (stream, 0, (std::uint16_t) (base + 0x01), (std::uint8_t) ((pitch >> 8) & 0xFF));
+		k054539Write (stream, 0, (std::uint16_t) (base + 0x02), (std::uint8_t) ((pitch >> 16) & 0xFF));
+		k054539Write (stream, 0, (std::uint16_t) (base + 0x03), volume);
+		k054539Write (stream, 0, (std::uint16_t) (base + 0x05), 0x10);				// pan centre
+		k054539Write (stream, 0, (std::uint16_t) (base + 0x08), 0x00);
+		k054539Write (stream, 0, (std::uint16_t) (base + 0x09), 0x00);
+		k054539Write (stream, 0, (std::uint16_t) (base + 0x0A), 0x00);
+		k054539Write (stream, 0, (std::uint16_t) (base + 0x0C), (std::uint8_t) (start & 0xFF));
+		k054539Write (stream, 0, (std::uint16_t) (base + 0x0D), (std::uint8_t) ((start >> 8) & 0xFF));
+		k054539Write (stream, 0, (std::uint16_t) (base + 0x0E), (std::uint8_t) ((start >> 16) & 0xFF));
+	}
+
+	/** Key on (0x214) or off (0x215) by bit mask. */
+	void k054539Key (Stream& stream, std::uint32_t time, std::uint16_t offset, std::uint8_t mask)
+	{
+		k054539Write (stream, time, offset, mask);
+	}
+
+	/** `bytes` of a two-level 8-bit waveform at `offset`, one cycle every `period` bytes. */
+	void fillK054539Square (std::vector<std::uint8_t>& rom, std::size_t offset, int period,
+							std::size_t bytes)
+	{
+		for (std::size_t i = 0; i < bytes; ++i)
+		{
+			const bool high = (i % (std::size_t) period) < (std::size_t) period / 2;
+			rom[offset + i] = high ? 0x50 : 0xB0;
+		}
+	}
+
+	/** 440 Hz needs 56320 units a second over a 128-byte cycle; at 18.432 MHz the pitch for that
+		is 76896 (one unit per output sample is 0x10000). */
+	constexpr std::uint32_t kK054539PitchA4 = 76896;
+
+	/** A non-looping voice ends where the sample's marker byte sits, not at a length register: the
+		core keys off when it fetches 0x80. 2048 bytes at 56320 a second is 36 ms. */
+	void testK054539Note (void)
+	{
+		std::vector<std::uint8_t> rom (0x4000, 0);
+		fillK054539Square (rom, 0x1000, 128, 2048);
+		rom[0x1000 + 2048] = 0x80;		// the end marker
+
+		Stream stream;
+		setK054539Voice (stream, 0, 0x1000, k054539Type8, kK054539PitchA4, 0x00);
+		k054539Key (stream, 10, 0x214, 0x01);
+
+		const auto notes = runK054539 (stream, 20000, 18432000, rom);
+
+		check (notes.size() == 1, "a K054539 key-on is one note");
+		if (notes.empty())
+		{
+			return;
+		}
+
+		check (notes[0].note == 69, "a 128-byte cycle at 56320 units a second is A4");
+		check (notes[0].logicalChannel == 0, "K054539 voice 0 is its own track");
+		check (! notes[0].isDrum, "a sample with a period is melodic");
+		check (notes[0].velocity == 127, "a volume register of 0 is full scale");
+		check (distance (notes[0].endSample, 1614) <= 64,
+			   "2048 bytes at 56320 a second is 36 ms, ended by the marker alone");
+	}
+
+	/** Half the sample, half the note - and the marker has to be in the ROM for that to work. */
+	void testK054539MarkerSetsTheLength (void)
+	{
+		std::vector<std::uint8_t> rom (0x4000, 0);
+		fillK054539Square (rom, 0x1000, 128, 2048);
+		rom[0x1000 + 512] = 0x80;
+
+		Stream stream;
+		setK054539Voice (stream, 0, 0x1000, k054539Type8, kK054539PitchA4, 0x00);
+		k054539Key (stream, 10, 0x214, 0x01);
+
+		const auto notes = runK054539 (stream, 20000, 18432000, rom);
+
+		check (notes.size() == 1 && distance (notes[0].endSample, 411) <= 64,
+			   "512 bytes at 56320 a second is 9 ms");
+	}
+
+	/** The volume register attenuates: 0x40 is -36 dB, which the extractor hears as silence, and
+		0x20 is quiet rather than loud. A decoder that read it as a level would invert both. */
+	void testK054539VolumeAttenuates (void)
+	{
+		std::vector<std::uint8_t> rom (0x4000, 0);
+		fillK054539Square (rom, 0x1000, 128, 2048);
+		rom[0x1000 + 2048] = 0x80;
+
+		Stream quiet;
+		setK054539Voice (quiet, 0, 0x1000, k054539Type8, kK054539PitchA4, 0x20);
+		k054539Key (quiet, 10, 0x214, 0x01);
+
+		const auto quietNotes = runK054539 (quiet, 20000, 18432000, rom);
+		check (quietNotes.size() == 1 && quietNotes[0].velocity == 17,
+			   "-18 dB is a quiet note, not a loud one");
+
+		Stream silent;
+		setK054539Voice (silent, 0, 0x1000, k054539Type8, kK054539PitchA4, 0x40);
+		k054539Key (silent, 10, 0x214, 0x01);
+
+		check (runK054539 (silent, 20000, 18432000, rom).empty(),
+			   "-36 dB is silence for a note");
+	}
+
+	/** With the loop bit the marker jumps to the loop address instead of stopping, so only the
+		key-off register (0x215) ends the note. */
+	void testK054539LoopRunsUntilKeyOff (void)
+	{
+		std::vector<std::uint8_t> rom (0x4000, 0);
+		fillK054539Square (rom, 0x1000, 128, 2048);
+		rom[0x1000 + 2048] = 0x80;
+
+		Stream stream;
+		setK054539Voice (stream, 0, 0x1000, k054539Type8, kK054539PitchA4, 0x00);
+		k054539Write (stream, 0, 0x201, 0x01);		// loop voice 0
+		k054539Key (stream, 10, 0x214, 0x01);
+		k054539Key (stream, 8000, 0x215, 0x01);
+
+		const auto notes = runK054539 (stream, 20000, 18432000, rom);
+
+		check (notes.size() == 1 && distance (notes[0].endSample, 8000) <= 64,
+			   "a looping voice runs past its marker and only a key-off stops it");
+	}
+
+	/** The control register's PCM bit gates the chip, and a pitch of zero never steps. */
+	void testK054539SilentVoiceIsNoNote (void)
+	{
+		std::vector<std::uint8_t> rom (0x4000, 0);
+		fillK054539Square (rom, 0x1000, 128, 2048);
+		rom[0x1000 + 2048] = 0x80;
+
+		Stream noOutput;
+		setK054539Voice (noOutput, 0, 0x1000, k054539Type8, kK054539PitchA4, 0x00);
+		k054539Write (noOutput, 0, 0x22F, 0x00);		// PCM output off
+		k054539Key (noOutput, 10, 0x214, 0x01);
+		check (runK054539 (noOutput, 20000, 18432000, rom).empty(),
+			   "the control register's PCM bit gates the chip, as the core does");
+
+		Stream noPitch;
+		setK054539Voice (noPitch, 0, 0x1000, k054539Type8, 0, 0x00);
+		k054539Key (noPitch, 10, 0x214, 0x01);
+		check (runK054539 (noPitch, 20000, 18432000, rom).empty(),
+			   "a pitch of 0 never fetches a unit");
+	}
+
+	/** 16-bit PCM is little-endian pairs, and its marker is the word 0x8000 - a sample that stops
+		on a byte 0x80 inside a word would end in the wrong place. */
+	void testK054539SixteenBitPcm (void)
+	{
+		std::vector<std::uint8_t> rom (0x4000, 0);
+		for (int i = 0; i < 64 * 8; ++i)		// 8 cycles of 64 16-bit samples
+		{
+			const bool high = (i % 64) < 32;
+			const std::uint16_t value = high ? 0x5000 : 0xB000;
+			rom[0x1000 + (std::size_t) i * 2] = (std::uint8_t) (value & 0xFF);
+			rom[0x1000 + (std::size_t) i * 2 + 1] = (std::uint8_t) (value >> 8);
+		}
+		rom[0x1000 + 512 * 2] = 0x00;				// the marker 0x8000
+		rom[0x1000 + 512 * 2 + 1] = 0x80;
+
+		Stream stream;
+		// 440 Hz over 64 words is 28160 units a second: pitch 38448
+		setK054539Voice (stream, 0, 0x1000, k054539Type16, 38448, 0x00);
+		k054539Key (stream, 10, 0x214, 0x01);
+
+		const auto notes = runK054539 (stream, 20000, 18432000, rom);
+
+		check (notes.size() == 1 && notes[0].note == 69,
+			   "a 64-word cycle at 28160 words a second is A4");
+	}
+
+	/** 4-bit DPCM: the nibbles are deltas, so the cycle only appears after the running sum - and
+		the byte 0x88 is the marker, whatever its nibbles would mean. */
+	void testK054539FourBitDpcm (void)
+	{
+		std::vector<std::uint8_t> rom (0x4000, 0);
+		std::uint8_t triangle[16];
+		for (int i = 0; i < 8; ++i)
+		{
+			triangle[i] = 0x11;			// sixteen nibbles of +1
+			triangle[i + 8] = 0xFF;		// then sixteen of -1: one 32-nibble cycle
+		}
+
+		for (std::size_t i = 0; i < 128; ++i)
+		{
+			rom[0x1000 + i] = triangle[i % 16];		// four cycles
+		}
+		rom[0x1000 + 128] = 0x88;
+
+		Stream stream;
+		// 440 Hz over 32 nibbles is 14080 nibbles a second: pitch 19224
+		setK054539Voice (stream, 0, 0x1000, k054539Type4, 19224, 0x00);
+		k054539Key (stream, 10, 0x214, 0x01);
+
+		const auto notes = runK054539 (stream, 20000, 18432000, rom);
+
+		check (notes.size() == 1 && notes[0].note == 69,
+			   "a decoded 32-nibble DPCM cycle at 14080 a second is A4");
+	}
+
+	/** Eight voices: the last one's registers start at 0xE0 and its key bit is bit 7. */
+	void testK054539Voices (void)
+	{
+		toybox::chips::K054539Decoder decoder;
+		check (decoder.channelCount() == 8, "the K054539 has eight voices");
+
+		std::vector<std::uint8_t> rom (0x4000, 0);
+		fillK054539Square (rom, 0x1000, 128, 2048);
+		rom[0x1000 + 2048] = 0x80;
+
+		Stream stream;
+		setK054539Voice (stream, 7, 0x1000, k054539Type8, kK054539PitchA4, 0x00);
+		k054539Key (stream, 10, 0x214, 0x80);
+
+		const auto notes = runK054539 (stream, 20000, 18432000, rom);
+
+		check (notes.size() == 1 && notes[0].logicalChannel == 7,
+			   "offset 0xE0 with key bit 7 is voice 7, at A4");
+	}
+
 	int main (void)
 {
 	std::printf ("chip decoder test\n");
@@ -2865,6 +3125,15 @@ namespace
 	testK053260UnmusicalPeriodIsATrigger();
 	testK053260KadpcmIsMeasured();
 	testK053260Voices();
+
+	testK054539Note();
+	testK054539MarkerSetsTheLength();
+	testK054539VolumeAttenuates();
+	testK054539LoopRunsUntilKeyOff();
+	testK054539SilentVoiceIsNoNote();
+	testK054539SixteenBitPcm();
+	testK054539FourBitDpcm();
+	testK054539Voices();
 
 	std::printf ("Result    : %s\n", failures == 0 ? "PASS" : "FAILURES");
 	return failures == 0 ? 0 : 1;

@@ -14,6 +14,7 @@
 #include "chips/HuC6280Decoder.h"
 #include "chips/K051649Decoder.h"
 #include "chips/K053260Decoder.h"
+#include "chips/K054539Decoder.h"
 #include "chips/NesApuDecoder.h"
 #include "chips/NoteExtractor.h"
 #include "chips/OplDecoder.h"
@@ -250,6 +251,10 @@ namespace
 					k053260.queue (deviceFor (DEVID_K053260, 0), command.addr, command.data,
 								   command.sampleTime);
 					break;
+				case 0xD3:	// K054539: a 16-bit offset, so its high byte travels in `port`
+					k054539.queue (deviceFor (DEVID_K054539, 0), command.addr, command.data,
+								   command.sampleTime, command.port);
+					break;
 				case 0xD0:	// YMF278B (OPL4): ports 0/1 are the OPL3 banks, ports 2..5 the
 							// wavetable half, which has no decoder yet; bit 7 selects the chip
 					if ((command.port & 0x7F) < 2)
@@ -347,6 +352,21 @@ namespace
 								  decoder.setRom (k053260Rom);
 							  }
 						  });
+			// The K054539 needs its ROM to know where a sample ends - the marker byte is what
+			// keys the voice off in the core - and to measure the cycle between the start and that
+			// marker. Block type 0x8C, 24-bit addresses.
+			const std::vector<std::uint8_t> k054539Rom =
+				k054539.writes.empty() ? std::vector<std::uint8_t>()
+									   : assembleRom (reader, 0x8C, 16 * 1024 * 1024);
+			flushDecoded (k054539, 18432000u, lastSampleTime,
+						  [&k054539Rom] (chips::K054539Decoder& decoder)
+						  {
+							  if (! k054539Rom.empty())
+							  {
+								  decoder.setRom (k054539Rom);
+							  }
+						  });
+
 			flushDecoded (opx, 16934400u, lastSampleTime);
 			flushDecoded (ymz, 16934400u, lastSampleTime);
 
@@ -888,6 +908,9 @@ namespace
 		// the K053260 keys from a shared bitmask register and takes a note's length from its own
 		// length register, so it too needs the whole stream before it can place a single note
 		ChipBuffer<chips::K053260Decoder> k053260;
+		// the K054539 ends a note on a marker inside the sample, so its length - and its pitch -
+		// come from the ROM its 0x8C block carries
+		ChipBuffer<chips::K054539Decoder> k054539;
 		std::vector<playback::MidiEvent> events;
 	};
 }
