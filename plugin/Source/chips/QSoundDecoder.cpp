@@ -358,6 +358,7 @@ struct QSoundDecoder::Impl
 				quantiseFrequency (unitsPerSecond (voice) / voice.cycleLength, &fine)
 				<= kHighestMelodicNote;
 		}
+
 	}
 
 	void keyOnAdpcm (int channel, std::uint32_t sampleTime)
@@ -496,13 +497,17 @@ void QSoundDecoder::write (const RegisterWrite& w)
 			break;
 		case 0x02:
 			voice.rate = value;
-			if (value != 0 && voice.volume != 0)
-			{
-				impl->keyOnPcm (channel, w.sampleTime);
-			}
-			else if (value == 0)
+			// A rate written while the voice is already sounding is a slide or a vibrato, not a
+			// new note: the QSound Logo's voices rewrite the rate nine times inside one sustained
+			// note, and keying on every write turned one note into nine. Only the rising edge out
+			// of silence starts a note.
+			if (value == 0)
 			{
 				voice.keyed = false;
+			}
+			else if (voice.volume != 0 && ! impl->isPcmSounding (channel))
+			{
+				impl->keyOnPcm (channel, w.sampleTime);
 			}
 			break;
 		case 0x03:

@@ -376,7 +376,7 @@ namespace
 			// image is the declared ROM and the chip masks it to a power of two.
 			const std::vector<std::uint8_t> qsoundRom =
 				qsound.writes.empty() ? std::vector<std::uint8_t>()
-									  : assembleRom (reader, 0x8F, 4 * 1024 * 1024);
+									  : assembleRom (reader, 0x8F, 8 * 1024 * 1024);
 			flushDecoded (qsound, 60000000u, lastSampleTime,
 						  [&qsoundRom] (chips::QSoundDecoder& decoder)
 						  {

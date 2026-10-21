@@ -3182,6 +3182,48 @@ namespace
 			   "and only the rate going to zero ends it");
 	}
 
+	/** A rate written while a voice is already sounding is a slide, not a key-on. The QSound Logo
+		(`test_file/QSound/01 QSound Logo.vgz`) writes the rate nine times inside one sustained note,
+		and keying on every write turned the melody into a burst of triggers. */
+	void testQSoundRateSlideIsNotANewNote (void)
+	{
+		std::vector<std::uint8_t> rom (0x8000, 0);
+		fillQSoundSquare (rom, 0x1000, 55, 4096);
+
+		Stream stream;
+		qsoundWrite (stream, 0, 0x80, 0x0120);
+		qsoundWrite (stream, 0, 0x01, 0x1000);
+		qsoundWrite (stream, 0, 0x05, 0x1800);
+		qsoundWrite (stream, 0, 0x04, 0x00DC);		// loops, so only a zero rate ends it
+		qsoundWrite (stream, 0, 0x06, 0x4000);
+		qsoundWrite (stream, 0, 0x02, 0x1000);		// key on
+		qsoundWrite (stream, 1000, 0x02, 0x1040);	// vibrato: a third of a semitone, still A4
+		qsoundWrite (stream, 2000, 0x02, 0x1080);
+		qsoundKeyOff (stream, 6000, 0);
+
+		const auto notes = runQSound (stream, 20000, 60000000, rom);
+
+		check (notes.size() == 1, "a rate written while sounding slides the note, it does not start one");
+	}
+
+	/** The chip addresses eight megabytes - a 15-bit bank of 64 KB pages - and the QSound Logo's
+		samples sit at 0x520000 and 0x640000. A ROM image clipped to four megabytes reads zeroes
+		there, and every voice then measures no period and becomes a C4 trigger. */
+	void testQSoundRomBeyondFourMegabytes (void)
+	{
+		std::vector<std::uint8_t> rom (5 * 1024 * 1024, 0);
+		fillQSoundSquare (rom, 0x480000, 55, 2048);
+
+		Stream stream;
+		qsoundWrite (stream, 0, 0x00, 0x8048);		// voice 0's bank register -> voice 1, bank 0x48
+		setQSoundVoice (stream, 1, 0x0000, 0x0800, 0x1000, 0x4000);
+
+		const auto notes = runQSound (stream, 20000, 60000000, rom);
+
+		check (notes.size() == 1 && notes[0].note == 69,
+			   "a sample at 0x480000 is reachable: the QSound addresses eight megabytes, not four");
+	}
+
 	/** A drum has no cycle to measure: noise stays the C4 trigger, exactly as on the K053260 and
 		the K054539, because the Street Fighter II drum kit shares these sixteen voices. */
 	void testQSoundPercussion (void)
@@ -3420,6 +3462,8 @@ namespace
 	testQSoundNote();
 	testQSoundRateIsTheKey();
 	testQSoundLoopIsALength();
+	testQSoundRateSlideIsNotANewNote();
+	testQSoundRomBeyondFourMegabytes();
 	testQSoundPercussion();
 	testQSoundBankBelongsToTheNextVoice();
 	testQSoundSilentVoiceIsNoNote();
