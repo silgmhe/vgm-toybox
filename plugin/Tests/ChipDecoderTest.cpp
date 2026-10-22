@@ -23,6 +23,7 @@
 #include "chips/QSoundDecoder.h"
 #include "chips/Es5503Decoder.h"
 #include "chips/K005289Decoder.h"
+#include "chips/VsuDecoder.h"
 #include "chips/Okim6295Decoder.h"
 #include "chips/Ga20Decoder.h"
 #include "chips/SegaPcmDecoder.h"
@@ -3851,6 +3852,42 @@ namespace
 		// 4 MHz / (32 * 250) is 500 Hz, and 500 Hz is B4 (71) plus 21 cents
 		check (notes[0].note == 71, "the divider is arithmetic: 500 Hz is B4");
 	}
+	/** VSU: five wavetable voices whose pitch is `clock / (32 * (2048 - freq))`, keyed by bit 7 of
+		the voice's IntlControl byte, and a sixth voice that is noise. */
+
+	void testVsuNotes (void)
+	{
+		std::vector<toybox::chips::RegisterWrite> writes;
+		const auto add = [&writes] (std::uint8_t reg, std::uint8_t value, std::uint32_t time)
+		{
+			toybox::chips::RegisterWrite write;
+			write.reg = reg;
+			write.value = value;
+			write.sampleTime = time;
+			writes.push_back (write);
+		};
+
+		// voice 0: 2048 - 1667 = 381, and 5 370 000 / (32 * 381) is 440 Hz - A4
+		add (0x02, 0x83, 0);				// frequency, low byte
+		add (0x03, 0x06, 0);				// frequency, high three bits
+		add (0x00, 0x80, 0);				// IntlControl: bit 7 keys the voice
+
+		toybox::chips::VsuDecoder decoder;
+		decoder.reset (5370000, 44100.0);
+
+		const auto performance = toybox::chips::extractPerformance (decoder, writes, 44100);
+		const auto& notes = performance.notes;
+
+		check (notes.size() == 1, "a VSU key write is one note");
+		if (notes.empty())
+		{
+			return;
+		}
+
+		check (notes[0].logicalChannel == 0, "the first voice is channel 0");
+		check (notes[0].note == 69, "clock / (32 * (2048 - freq)) puts 381 on A4");
+	}
+
 	// --- ES5503: thirty-two wavetable oscillators, a halt bit as the key and a table's own cycle ----
 
 	std::vector<NoteEvent> runEs5503 (const Stream& stream, std::uint32_t totalSamples,
@@ -4300,6 +4337,8 @@ namespace
 	testGa20KeyOff();
 	testGa20Percussion();
 	testGa20AddressUnit();
+
+	testVsuNotes();
 
 	testK005289Notes();
 
