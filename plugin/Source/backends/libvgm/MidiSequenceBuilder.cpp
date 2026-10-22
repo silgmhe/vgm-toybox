@@ -147,7 +147,13 @@ namespace
 					// C140: bit 7 of the port byte is the chip instance, the rest is the high byte
 					// of the register offset - a voice's registers are sixteen apart, so the note
 					// registers only line up when both halves arrive.
-					c140.queue (deviceFor (DEVID_C140, (command.port >> 7) & 1), command.addr,
+					// C140 and the C219 share this command: libvgm maps both to the "0x1C" chip type
+					// (`vgmplayer.cpp`), and the 219 ASIC on NA-1/NA-2 is a cut-down C140 - sixteen
+					// voices of the same sixteen-byte layout, so the same decoder reads both (the
+					// eight extra voices a C219 does not have simply never get a write).
+					c140.queue (deviceFor (DEVID_C140, (command.port >> 7) & 1) != nullptr
+									? deviceFor (DEVID_C140, (command.port >> 7) & 1)
+									: deviceFor (DEVID_C219, 0), command.addr,
 								command.data, command.sampleTime,
 								(std::uint8_t) (command.port & 0x7F));
 					break;

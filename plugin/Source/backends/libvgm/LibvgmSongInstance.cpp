@@ -125,6 +125,10 @@ namespace
 			// the measured cycle - section 14 of the design doc. A voice whose sample has no period
 			// still reports its C4 trigger, so the capability stays melodic.
 			return fmChannel (8);
+		case DEVID_C219:
+			// Namco's 219 ASIC (NA-1/NA-2): a cut-down C140 with sixteen PCM voices rather than
+			// twenty-four. Same register layout, so `chips/C140Decoder` reports its notes.
+			return fmChannel (16);
 		case DEVID_MSM6295:
 			// Four ADPCM voices at one fixed DAC rate (`clock / 165`): there is no pitch register,
 			// so a note can only come from the sample's own cycle - the ES5503's case, and likewise
