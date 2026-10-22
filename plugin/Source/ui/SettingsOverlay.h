@@ -130,6 +130,29 @@ private:
 
 //==============================================================================
 
+/** A small round "?" that carries its explanation as a tooltip.
+
+	It sits right after the label it belongs to and reads as part of that label, so it draws nothing
+	but a hairline circle and the glyph - no button chrome, no focus ring. It is a `Button` rather
+	than a `TextButton` precisely because the LookAndFeel's button drawing would be the wrong shape:
+	this has to be a circle at every size.
+*/
+class CircleHelpButton final : public juce::Button
+{
+public:
+	CircleHelpButton()
+		: juce::Button ("?")
+	{
+		setMouseCursor (juce::MouseCursor::PointingHandCursor);
+		setWantsKeyboardFocus (false);
+	}
+
+	void paintButton (juce::Graphics& g, bool isMouseOver, bool isButtonDown) override;
+
+	/** The circle is 16 px across whatever height the row gives. */
+	int getPreferredSize (void) const { return 16; }
+};
+
 /**
 	The MIDI page: what the plugin sends to the instrument, and what the instrument must be set to.
 
@@ -167,13 +190,19 @@ private:
 	juce::Label rangeHint;
 
 	/** The sample-root preference: whether a sampled note carries the root measured out of its
-		sample (design doc section 15). Default off. Its explanation is a paragraph rather than a
-		line, so it lives in a tooltip behind the question mark beside the toggle - a visible
-		paragraph pushed the rest of the page down for a setting most users leave alone. */
+		sample (design doc section 15). Default off.
+
+		Two kinds of text, in two places: the *why* (a paragraph) lives in the tooltip behind the
+		circle, while *which chips it is for* stays visible as a line under the toggle. The
+		recommendation is what someone glancing at the page needs; the reasoning is what someone who
+		hesitates opens. */
 	juce::ToggleButton rootButton;
 
-	/** The "?" that carries `settings.midi.sampleRootHint`. */
-	juce::TextButton rootHelp;
+	/** The round "?" right after the toggle's text, carrying `settings.midi.sampleRootHint`. */
+	CircleHelpButton rootHelp;
+
+	/** The one visible line: which chips this setting is recommended for. */
+	juce::Label rootHint;
 
 	JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (MidiSettingsPage)
 };
