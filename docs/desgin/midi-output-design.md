@@ -766,7 +766,7 @@ void render (const playback::OutputBusBuffers* buses, int numBuses, int numSampl
   - **MSM5205**：核心存在（13.7 KB），但音高只有四档采样率选择器，按 M5 的先例不做；
   - 其余九颗（K005289、K007232、VSU、BSMT2000、MSM5232、MultiPCM、MIKEY、ICS2115、SCSP）核心属实，机制与 A 批相同。
 
-  因此 C 批**实际可做 10 项**（含已完成的 C219），不是 13。
+  因此 C 批**实际可做 10 项**，不是 13；其中**已完成 2 项**：C219（复用 `C140Decoder`，八首 NA-1 曲目通过）与 K005289（新增 `K005289Decoder`，音高 `clock / (32 × (freq + 1))`，`0x42` 命令，真实曲目已验证出音符）。
 
 **优先级**
 

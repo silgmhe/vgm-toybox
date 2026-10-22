@@ -22,6 +22,7 @@
 #include "chips/K054539Decoder.h"
 #include "chips/QSoundDecoder.h"
 #include "chips/Es5503Decoder.h"
+#include "chips/K005289Decoder.h"
 #include "chips/Okim6295Decoder.h"
 #include "chips/Ga20Decoder.h"
 #include "chips/SegaPcmDecoder.h"
@@ -3813,6 +3814,43 @@ namespace
 			   "an OKIM6295 sample with no period is the C4 drum trigger");
 	}
 
+	/** K005289: two wavetable voices whose pitch is arithmetic, not measured - `clock / (32 *
+		(freq + 1))` - the divider arriving inverted and the TG write acting as the key. */
+
+	void testK005289Notes (void)
+	{
+		std::vector<toybox::chips::RegisterWrite> writes;
+		const auto add = [&writes] (std::uint8_t reg, std::uint16_t data, std::uint32_t time)
+		{
+			toybox::chips::RegisterWrite write;
+			write.reg = reg;
+			write.value = (std::uint8_t) (data & 0xFF);
+			write.value2 = (std::uint8_t) ((data >> 8) & 0x0F);		// the command carries twelve bits
+			write.sampleTime = time;
+			writes.push_back (write);
+		};
+
+		add (0x00, 0x000F, 0);				// volume 15, waveform 0
+		add (0x02, 0x0FFF - 249, 0);		// LD: the driver's inverted divider, freq becomes 249
+		add (0x04, 0x0000, 0);				// TG: the trigger
+
+		toybox::chips::K005289Decoder decoder;
+		decoder.reset (4000000, 44100.0);
+
+		const auto performance = toybox::chips::extractPerformance (decoder, writes, 44100);
+		const auto& notes = performance.notes;
+
+		check (notes.size() == 1, "a K005289 TG write is one note");
+		if (notes.empty())
+		{
+			return;
+		}
+
+		check (notes[0].logicalChannel == 0, "address bit 0 selects the voice");
+		check (! notes[0].isDrum, "a wavetable voice is melodic");
+		// 4 MHz / (32 * 250) is 500 Hz, and 500 Hz is B4 (71) plus 21 cents
+		check (notes[0].note == 71, "the divider is arithmetic: 500 Hz is B4");
+	}
 	// --- ES5503: thirty-two wavetable oscillators, a halt bit as the key and a table's own cycle ----
 
 	std::vector<NoteEvent> runEs5503 (const Stream& stream, std::uint32_t totalSamples,
@@ -4262,6 +4300,8 @@ namespace
 	testGa20KeyOff();
 	testGa20Percussion();
 	testGa20AddressUnit();
+
+	testK005289Notes();
 
 	testOkim6295Notes();
 	testOkim6295FourthVoice();
