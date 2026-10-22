@@ -966,3 +966,27 @@ A 类的 `refRate` 是文档常量，L1 即为绝对音高；B 类在默认模�
 | M9（按需） | linked SSG（附录 A 的 B 方案：只 MIDI、不带音频推子的 lane） | YM2610/2608/2203 的 3 个 SSG 有独立 MIDI 通道且不影响音频 | 未开始 |
 
 两条排期规则，避免重演“写完文档就忘了目标”：M2–M5 是纯加法，每项不超过一天的量，按 §11.2 优先级顺序推进，不要跳着做；M7 一旦开始就意味着要碰 `VgmCommandReader` 之外的新格式解析，先把格式读取与解码器分开落地（参照 `backends/libvgm` 的现状），否则 MIDI 侧会被格式工作拖住。
+
+## 16. 装配层的重构计划（2026-10-22）
+
+**问题**：MidiSequenceBuilder.cpp 1167 行，25 个 `ChipBuffer<>` 成员、22 次 `flushDecoded`、10 处 `assembleRom`、52 个 `case 0xNN`。加一颗芯片要改五处：解码器、builder 接线、`LibvgmSongInstance` 能力表、`CMakeLists`、文档表行。M6 还要加 11 颗，照这个写法文件会超过 2000 行。
+
+**目标结构**：
+
+- `chips/ChipProfile.h`：每芯片一行——VGM 命令、默认时钟、ROM 块与大小、MIDI 能力、解码器工厂；
+- `chips/ChipSession.h`：类型擦除的缓冲区（`queue` / `flush` / `channelCount`），builder 不再为每颗芯片写一个具名成员；
+- builder 退化为“命令 → profile → 投递”，预计 ~400 行；`LibvgmSongInstance` 的能力 switch 并入 profile。
+
+**三个提交**：
+
+1. 引入 `ChipSession` / `ChipProfile` 与新表，先迁移 C140（A 类）、OKIM6295（无音高）、ES5503（无 L1）各一颗，要求 `--notes` 输出逐字节不变；
+2. 迁移其余 22 颗，删除具名缓冲区；
+3. 能力表并入 profile，删掉 `LibvgmSongInstance` 里的 switch。
+
+**验证**：`plugin/Tests/assets/*.vgm` 与 `test_file/` 样本的 `--notes` 前后 diff 必须为空；`ctest` 34/34。
+
+**注释约定**（新增解码器必须遵守）：
+
+- 每个 `case 0xNN` 上方写明该寄存器的硬件名称与位含义，禁止“寄存器 0”这类同义反复；
+- 同组寄存器共享一张表时（如 C140 的每声道 16 字节），在 switch 前给出整表，case 内只写差异；
+- 魔法常量必须带出处（`libvgm` 核心文件与行号，或数据手册页码）。

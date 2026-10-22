@@ -322,6 +322,14 @@ void C140Decoder::write (const RegisterWrite& w)
 	const int channel = reg >> 4;
 	Impl::Channel& voice = impl->channels[channel];
 
+	// The offset inside a voice's sixteen bytes - this is the case label's meaning, which the
+	// numbers alone do not say:
+	//
+	//   0x0  volume, right        0x6/0x7  sample start address, high byte first
+	//   0x1  volume, left         0x8/0x9  sample end address
+	//   0x2/0x3  playback rate    0xA/0xB  loop address
+	//   0x4  sample bank          0x5      key-on (bit 7 write starts, 0x00 stops the voice)
+	//   0xC..0xF  reserved; the interval timer sits above 0x180 and is not a voice register
 	switch (reg & 0x0F)
 	{
 	case 0x0:
