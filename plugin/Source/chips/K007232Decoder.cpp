@@ -46,7 +46,18 @@ struct K007232Decoder::Impl
 
 		int noteFor (std::uint32_t period, int, int* finePitch) const override
 		{
-			return quantiseFrequency (frequencyOf (clock, (std::uint16_t) period), finePitch);
+			const double hz = frequencyOf (clock, (std::uint16_t) period);
+			if (hz <= 0.0 || hz > 4186.0)		// past MIDI's ceiling: a drum, not a dropped channel
+			{
+				if (finePitch != nullptr)
+				{
+					*finePitch = 0;
+				}
+
+				return 60;
+			}
+
+			return quantiseFrequency (hz, finePitch);
 		}
 	};
 
