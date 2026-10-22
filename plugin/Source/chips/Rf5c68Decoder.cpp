@@ -389,6 +389,13 @@ void Rf5c68Decoder::write (const RegisterWrite& w)
 	Impl::Channel& voice = impl->channels[impl->bank & 0x07];
 	switch (offset)
 	{
+	// One voice's register block, by offset (the same layout the RF5C164 inherits):
+	//
+	//   0x00  envelope: 0 stops the voice, 0x7F is full scale
+	//   0x01  pan, one nibble per side
+	//   0x02/0x03  step, low byte then high - the playback rate, and the chip's only pitch
+	//   0x04/0x05  loop start address, low then high, in 256-byte units
+	//   0x06  start address, in 256-byte units; writing it starts the voice
 	case 0x00: voice.envelope = w.value; break;
 	case 0x01: voice.pan = w.value; break;
 	case 0x02: voice.step = (std::uint16_t) ((voice.step & 0xFF00) | w.value); break;

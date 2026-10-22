@@ -105,6 +105,15 @@ void HuC6280Decoder::write (const RegisterWrite& w)
 
 	switch (w.reg & 0x0F)
 	{
+	// The HuC6280's six registers, by offset:
+	//
+	//   0x00  channel select: bits 2-0 say which channel the next four writes address
+	//   0x01  global balance - panning only, which a MIDI note cannot carry
+	//   0x02/0x03  channel frequency, low byte then the four high bits
+	//   0x04  channel control: bit 7 enable, bit 6 DDA mode, bits 4-0 volume
+	//   0x05  channel balance - panning only, like 0x01
+	//   0x06  waveform data - the shape, not the note
+	//   0x07  noise control: bit 7 enable, bits 4-0 the noise frequency
 	case 0x00:
 		impl->select = (std::uint8_t) (w.value & 0x07);
 		break;

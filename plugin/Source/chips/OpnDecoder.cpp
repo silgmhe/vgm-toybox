@@ -368,6 +368,15 @@ struct OpnDecoder::Impl
 	{
 		switch (offset)
 		{
+		// ADPCM-B's own register block - the "Delta-T" voice the YM2608 and YM2610 share. The
+		// offsets inside it, which is all the numbers below mean:
+		//
+		//   0x00  control: bit 7 starts, bit 6 repeats, bit 0 resets; the key edge is here
+		//   0x02/0x03  start address in the sample ROM, low byte first
+		//   0x04/0x05  end address, which is what stops the voice
+		//   0x09/0x0A  DELTA-N, the playback rate - the chip's only pitch register
+		//   0x0B  output level (an attenuation; a zero write is how these sets end a voice)
+		//   0x0D  LFO, which modulates the pitch the rate already gave
 		case 0x00:
 			keyAdpcmB (value);
 			break;

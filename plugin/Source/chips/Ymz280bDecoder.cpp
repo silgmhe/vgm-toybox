@@ -49,6 +49,12 @@ struct Ymz280bDecoder::Impl
 
 		switch (reg & 0xE3)
 		{
+		// A voice's register block, by offset. The pitch is an fnum the way an OPN's is, so the low
+		// byte and the top bit arrive in two different registers:
+		//
+		//   0x00  fnum, low eight bits
+		//   0x01  control: key-on and loop bits, and the ninth bit of the fnum
+		//   0x02  level, an attenuation - large is quiet
 		case 0x00:
 			voice.fnum = (std::uint16_t) ((voice.fnum & 0x100) | value);
 			break;

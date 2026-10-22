@@ -484,6 +484,16 @@ void QSoundDecoder::write (const RegisterWrite& w)
 
 		switch (offset & 0x07)
 		{
+		// One voice's eight registers, by offset - QSound's map is a byte per field, not a bitfield:
+		//
+		//   0x00  sample bank, and it belongs to the *next* voice (init_register_map in the core)
+		//   0x01  start address in that bank
+		//   0x02  rate: 0 is silence, and the value is the playback rate this decoder turns into a note
+		//   0x03  phase, the fractional part of the rate
+		//   0x04  loop length, signed - negative means no loop
+		//   0x05  end address
+		//   0x06  volume
+		//   0x07  echo send
 		case 0x00:
 			// the bank register belongs to the NEXT voice (init_register_map in the core)
 			impl->pcm[(channel + 1) % (int) kPcmVoices].bank = value;

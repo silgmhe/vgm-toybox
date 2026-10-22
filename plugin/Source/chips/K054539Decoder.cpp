@@ -445,6 +445,14 @@ void K054539Decoder::write (const RegisterWrite& w)
 		const int channel = (int) (offset / 0x20);
 		Impl::Voice& voice = impl->voices[channel];
 
+		// A voice owns 0x20 bytes; the offsets inside them carry the fields, three bytes at a time
+		// where the field is wide:
+		//
+		//   0x00..0x02  pitch, low, middle, high - the playback rate and the chip's only pitch
+		//   0x03  volume            0x04  reverb send      0x05  pan
+		//   0x08..0x0A  loop address, low, middle, high
+		//   0x0C..0x0E  start address, same three-byte pattern
+		//   0x22        key-on and loop flags (outside the 0x1F block this switch masks)
 		switch (offset & 0x1F)
 		{
 		case 0x00:		// pitch, low byte

@@ -204,6 +204,20 @@ void NesApuDecoder::write (const RegisterWrite& w)
 
 	switch (reg)
 	{
+	// The APU registers this switch owns, by their 6502 address minus $4000 (the pulse channels'
+	// $4000..$4007 are handled above, and $4015/$4017 are the shared control registers):
+	//
+	//   0x08  $4008  triangle linear counter: bit 7 control, bits 6-0 the reload
+	//   0x0A/0x0B  $400A/$400B  triangle period, low byte then three high bits
+	//   0x0C  $400C  noise envelope: bit 5 loop, bit 4 constant volume, bits 3-0 volume/period
+	//   0x0E  $400E  noise mode (bit 7 picks the short LFSR) and period index in bits 3-0
+	//   0x0F  $400F  noise length load, bits 7-3
+	//   0x10  $4010  DPCM control: bit 6 loop, bit 0 IRQ enable, bits 3-0 rate index
+	//   0x11  $4011  DPCM direct load - the output level, not a note
+	//   0x12  $4012  DPCM sample address
+	//   0x13  $4013  DPCM sample length, in sixteen-byte units
+	//   0x15  $4015  status: writing it enables or disables each of the five channels
+	//   0x17  $4017  frame counter: bit 7 five-step sequence, bit 6 IRQ inhibit
 	case 0x08:
 		impl->tri.control = (value & 0x80) != 0;
 		impl->tri.linearReload = value & 0x7F;

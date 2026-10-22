@@ -277,6 +277,13 @@ void SegaPcmDecoder::write (const RegisterWrite& write)
 	{
 		switch (offset & 0x07)
 		{
+		// One voice's eight registers; the start address is not among them, because it comes from
+		// the command's address byte and is latched above. What the offsets mean:
+		//
+		//   0x02  volume, left        0x03  volume, right
+		//   0x04/0x05  loop address, low byte then high, in 256-byte units
+		//   0x06  end address, in 256-byte units - reaching it is what ends the voice
+		//   0x07  pitch, where 128 plays the sample at its own rate
 		case 0x02: voice.volumeLeft = write.value; break;
 		case 0x03: voice.volumeRight = write.value; break;
 		case 0x04: voice.loopLow = write.value; break;

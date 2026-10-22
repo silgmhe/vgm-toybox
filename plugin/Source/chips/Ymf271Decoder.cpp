@@ -160,6 +160,16 @@ void Ymf271Decoder::Impl::applySlot (int slotIndex, int reg, std::uint8_t value,
 		break;
 	}
 
+	// One slot's parameter block, by offset inside it:
+	//
+	//   0x0  key-on and the slot's control bits (the edge is what starts a note)
+	//   0x3  MULTIPLE, the operator's frequency multiplier
+	//   0x4  TL, total level - attenuation from the loudest, so a large value is quiet
+	//   0x9/0xA  FNS, the frequency number: low eight bits at 0x9, and the high byte at 0xA also
+	//            carries the block (octave), which is why both are latched together
+	//   0xB  waveform select
+	//   0xC  algorithm, which decides how many operators a note really uses
+	//   0xD  channel 0 and 1 levels, one nibble each
 	case 0x3:
 		slot.multiple = value & 0x0F;
 		break;
