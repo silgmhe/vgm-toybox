@@ -223,6 +223,7 @@ target_sources(VGMToybox PRIVATE
 	Source/backends/libvgm/LibvgmBackend.cpp
 	Source/backends/libvgm/MidiSequenceBuilder.cpp
 	Source/backends/libvgm/VgmCommandReader.cpp
+	Source/formats/vgm/VgmSongLoader.cpp
 	Source/backends/libvgm/LibvgmSongInstance.cpp
 	Source/backends/libvgm/LibvgmTrackPlayer.cpp
 	Source/backends/libvgm/LibvgmVgz.cpp
@@ -378,6 +379,7 @@ add_executable(vgm_mixer_test EXCLUDE_FROM_ALL
 	Source/backends/libvgm/LibvgmBackend.cpp
 	Source/backends/libvgm/MidiSequenceBuilder.cpp
 	Source/backends/libvgm/VgmCommandReader.cpp
+	Source/formats/vgm/VgmSongLoader.cpp
 	Source/backends/libvgm/LibvgmSongInstance.cpp
 	Source/backends/libvgm/LibvgmTrackPlayer.cpp
 	Source/backends/libvgm/LibvgmVgz.cpp

@@ -66,14 +66,24 @@ struct ChipSlot
 
 /** A ROM or RAM block the song carries.
 
-	`address` is the offset inside the target memory and `data` the payload. Decoders that measure a
-	sample's own cycle to place the octave take it from here, which is why this belongs to the IR
-	rather than to one format's reader. */
+	The fields mirror what a memory image needs and nothing else: a ROM block declares the size of
+	the whole ROM and where its payload belongs, a RAM block declares only the address it writes at.
+
+	`data` points into the file image the loader was handed - the IR does not own it. That is
+	deliberate: a VGM can carry 32 MB of ROM, and copying it here and again into the assembled image
+	would double the peak for no gain. The IR is built and consumed inside one call, so the view is
+	valid throughout; a caller that wants to keep it must copy. */
 struct RomBlock
 {
 	int memoryType = 0;			// the loader's numbering; each chip interprets its own
-	std::uint32_t address = 0;
-	std::vector<std::uint8_t> data;
+	std::uint32_t romSize = 0;	// bytes of the ROM this block belongs to (ROM blocks only)
+	std::uint32_t romOffset = 0;	// where in that ROM the payload belongs (ROM blocks only)
+	std::uint32_t ramOffset = 0;	// where in the chip's own RAM (RAM blocks only)
+	const std::uint8_t* data = nullptr;
+	std::size_t size = 0;
+
+	/** True when the block addresses the chip's RAM rather than a ROM image. */
+	bool isRam = false;
 };
 
 /** A song reduced to "which chips, which register writes, which memory" - no format left in it.
