@@ -125,6 +125,10 @@ namespace
 			// the measured cycle - section 14 of the design doc. A voice whose sample has no period
 			// still reports its C4 trigger, so the capability stays melodic.
 			return fmChannel (8);
+		case DEVID_VBOY_VSU:
+			// Five wavetable voices (clock / (32 * (2048 - freq))) plus one noise voice, which reports
+			// an unpitched trigger.
+			return fmChannel (6);
 		case DEVID_K007232:
 			// Two PCM voices with a step register: clock / (4 * (4096 - step)) is exact, so both are
 			// melodic without a root layer.

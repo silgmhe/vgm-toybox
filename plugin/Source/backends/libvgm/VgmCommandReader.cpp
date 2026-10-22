@@ -439,6 +439,18 @@ bool VgmCommandReader::next (VgmCommand& command)
 			command.addr = (std::uint8_t) (data[position + 1] & 0x7F);
 			command.data = data[position + 2];
 		}
+		else if (cmd == 0xC7)
+		{
+			// VSU: Ofs16_Data8, and the offset is *big endian* (ReadBE16 in vgmplayer_cmdhandler.cpp),
+			// with bit 15 selecting the second chip. Reading it little endian turned offset 0x0001 into 0x0100,
+			// which is why an earlier dump put every write on channel 0.
+			command.kind = VgmCommand::Kind::registerWrite;
+			const std::uint16_t offset = (std::uint16_t) (((std::uint16_t) data[position + 1] << 8) | data[position + 2]);
+			command.port = (std::uint8_t) (offset >> 15);
+			command.addr = (std::uint8_t) (offset & 0x7F);
+			command.addr = (std::uint8_t) (offset & 0xFF);
+			command.data = data[position + 3];
+		}
 		else if (cmd == 0x42)
 		{
 			// K005289: the command is `Ofs4_Data12` - the register number in the high nibble of the

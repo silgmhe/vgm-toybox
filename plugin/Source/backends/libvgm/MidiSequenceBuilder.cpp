@@ -26,6 +26,7 @@
 #include "chips/OpnDecoder.h"
 #include "chips/PokeyDecoder.h"
 #include "chips/K007232Decoder.h"
+#include "chips/VsuDecoder.h"
 #include "chips/K005289Decoder.h"
 #include "chips/Okim6295Decoder.h"
 #include "chips/Rf5c68Decoder.h"
@@ -236,6 +237,10 @@ namespace
 					rf5c.queue (rf5cDeviceFor (true, command.port), command.addr, command.data,
 								command.sampleTime);
 					break;
+				case 0xC7:	// VSU - Ofs16_Data8, big endian offset with bit 15 selecting the chip
+					vsu.queue (deviceFor (DEVID_VBOY_VSU, command.port), command.addr, command.data,
+									 command.sampleTime);
+					break;
 				case 0x41:	// K007232 - six registers per voice, the pitch is a twelve-bit step
 					k007232.queue (deviceFor (DEVID_K007232, command.port), command.addr, command.data,
 										 command.sampleTime);
@@ -373,6 +378,7 @@ namespace
 				okim.writes.empty() ? std::vector<std::uint8_t>()
 									: assembleRom (reader, 0x8B, 256 * 1024);
 			flushDecoded (k007232, 8000000u, lastSampleTime);
+			flushDecoded (vsu, 5370000u, lastSampleTime);
 			flushDecoded (k005289, 4000000u, lastSampleTime);
 			flushDecoded (okim, 1000000u, lastSampleTime,
 						  [&okimRom] (chips::Okim6295Decoder& decoder)
@@ -1136,6 +1142,9 @@ namespace
 
 		// Konami K007232: two PCM voices whose step register is a real pitch, clock / (4 * (4096 - step))
 		ChipBuffer<chips::K007232Decoder> k007232;
+
+		// Virtual Boy VSU: five wavetable voices plus noise, clock / (32 * (2048 - freq))
+		ChipBuffer<chips::VsuDecoder> vsu;
 		ChipBuffer<chips::X1_010Decoder> x1;
 		ChipBuffer<chips::Ymf271Decoder> opx;
 		ChipBuffer<chips::Ymz280bDecoder> ymz;
