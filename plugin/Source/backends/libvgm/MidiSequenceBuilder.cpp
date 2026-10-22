@@ -25,6 +25,7 @@
 #include "chips/OpmDecoder.h"
 #include "chips/OpnDecoder.h"
 #include "chips/PokeyDecoder.h"
+#include "chips/K005289Decoder.h"
 #include "chips/Okim6295Decoder.h"
 #include "chips/Rf5c68Decoder.h"
 #include "chips/X1_010Decoder.h"
@@ -234,7 +235,11 @@ namespace
 					rf5c.queue (rf5cDeviceFor (true, command.port), command.addr, command.data,
 								command.sampleTime);
 					break;
-				case 0xB8:	// OKIM6295
+				case 0x42:	// K005289 - Ofs4_Data12: register in the high nibble, twelve bits of data
+					k005289.queue (deviceFor (DEVID_K005289, 0), command.addr, command.data,
+										 command.sampleTime, 0, command.data2);
+					break;
+								case 0xB8:	// OKIM6295
 					if (std::getenv ("TOYBOX_OKI_DEBUG") != nullptr)		// TEMPORARY
 					{
 						const PLR_DEV_INFO* probe = deviceFor (DEVID_MSM6295, command.port);
@@ -362,6 +367,7 @@ namespace
 			const std::vector<std::uint8_t> okimRom =
 				okim.writes.empty() ? std::vector<std::uint8_t>()
 									: assembleRom (reader, 0x8B, 256 * 1024);
+			flushDecoded (k005289, 4000000u, lastSampleTime);
 			flushDecoded (okim, 1000000u, lastSampleTime,
 						  [&okimRom] (chips::Okim6295Decoder& decoder)
 						  {
@@ -1117,6 +1123,10 @@ namespace
 		// The OKIM6295 plays every voice at one fixed rate, so its note comes from the sample
 		// alone - the ROM (0x8B) is what the decoder measures
 		ChipBuffer<chips::Okim6295Decoder> okim;
+
+		// Konami K005289: two wavetable voices whose pitch is clock / (32 * (freq + 1)) - no pitch
+		// register to transpose and no ROM to measure, so nothing has to be handed to it
+		ChipBuffer<chips::K005289Decoder> k005289;
 		ChipBuffer<chips::X1_010Decoder> x1;
 		ChipBuffer<chips::Ymf271Decoder> opx;
 		ChipBuffer<chips::Ymz280bDecoder> ymz;

@@ -418,6 +418,18 @@ bool VgmCommandReader::next (VgmCommand& command)
 			command.data = data[position + 2];
 			command.data2 = data[position + 3];
 		}
+		else if (cmd == 0x42)
+		{
+			// K005289: the command is `Ofs4_Data12` - the register number in the high nibble of the
+			// first byte, the data's top four bits in the low nibble, and the rest in the second
+			// byte. That makes `data` twelve bits wide, which the register file here does not have,
+			// so the high nibble travels in `value2` the way the C352's word does.
+			command.kind = VgmCommand::Kind::registerWrite;
+			command.port = (std::uint8_t) (data[position + 1] >> 4);
+			command.addr = command.port;
+			command.data2 = (std::uint8_t) (data[position + 1] & 0x0F);
+			command.data = data[position + 2];
+		}
 		else if (cmd == 0xB8)
 		{
 			// OKIM6295: bit 7 of the offset byte names the second chip of a pair (`Cmd_OKIM6295_Reg`,

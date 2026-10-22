@@ -125,6 +125,10 @@ namespace
 			// the measured cycle - section 14 of the design doc. A voice whose sample has no period
 			// still reports its C4 trigger, so the capability stays melodic.
 			return fmChannel (8);
+		case DEVID_K005289:
+			// Two wavetable voices on a 32-step PROM: the pitch is clock / (32 * (freq + 1)), exact from
+			// the register, so both channels are melodic.
+			return fmChannel (2);
 		case DEVID_C219:
 			// Namco's 219 ASIC (NA-1/NA-2): a cut-down C140 with sixteen PCM voices rather than
 			// twenty-four. Same register layout, so `chips/C140Decoder` reports its notes.
