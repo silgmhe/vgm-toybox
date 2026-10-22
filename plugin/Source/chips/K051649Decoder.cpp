@@ -74,6 +74,15 @@ void K051649Decoder::write (const RegisterWrite& w)
 
 	const std::uint8_t value = w.value;
 
+	// The SCC's register halves, after the latch (the address is `reg >> 1`, which is why the
+	// labels below are 0x00..0x05 rather than byte offsets):
+	//
+	//   0x00  waveform RAM          0x04  the same RAM, addressed rotated in SCC+ mode
+	//   0x01  frequency: the latched address selects a channel and which half of the period
+	//         (bit 0 = high bits), so one register number carries two different writes
+	//   0x02  volume and channel enable, same latched selection
+	//   0x03  key mask: the data byte says which channels run, the address only latches
+	//   0x05  test register (waveform deformation), not a note
 	switch (w.reg >> 1)
 	{
 	case 0x00:		// waveform data
