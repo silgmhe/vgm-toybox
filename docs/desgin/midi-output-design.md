@@ -1,5 +1,5 @@
-#| 2026-10-22 | **M5 的三颗无音高芯片按设计不支持**（用户决定）：PWM、OKIM6258、uPD7759 不输出 MIDI。前两者是流式 DAC——VGM 记录的“寄存器写”就是音频本身，不存在音符事件；uPD7759 虽有 start 边沿与样本号，但整颗芯片没有音高，一个 C4 只会把语音当乐器。代码在 `LibvgmSongInstance` 里显式列出三者并返回 `unavailable`，使其在 `[13]` 中计为“已知缺口”而不是“有声却无声部”；覆盖维持 35 / 54 |
- 设计：混音器每轨 MIDI 输出
+# 设计：混音器每轨 MIDI 输出
+
 
 - **状态**：基础版已实现（工作区）；引擎侧与窗口侧均已自动化覆盖（`vgm_mixer_test` `[10]`、`app.midi`），待 REAPER 实测；MIDI-BUS 暂不做
 - **日期**：2026-10-19
@@ -757,7 +757,7 @@ void render (const playback::OutputBusBuffers* buses, int numBuses, int numSampl
 
 - **A. 有核心、缺解码器（5 项）**：只动 `plugin/Source/chips/` + `midiCapabilityFor` + 测试，不需要改 libvgm，也不需要新格式。其中 4 项真缺解码器：1 项可旋律化（OKIM6295），PWM 与 uPD7759 天生只能 one-shot，OKIM6258 只有采样率档位；另 1 项 YMZ280B 的解码器已写但**搁置**（memo 见 §11.2 行 36），不计入覆盖。C140（表行 6）、C352（表行 24）、K053260（表行 39）、K054539（表行 40）、QSound（表行 37）、GA20（表行 38）、SEGAPCM（表行 9）与 ES5503（表行 51）已从这一批划掉。
 - **B. 无音频核心（15 项）**：9 个真芯片（FDS、MMC5、VRC7、N163、VRC6、FME7、SID、MultiPCM、YM2609）+ 6 个驱动/板卡（PPZ8、PPSDRV、PCM8、MPCMX68k、CS4231、P86）。它们主要出现在本插件目前不读的格式（NSF/NSFE、SPC、HES、KSS…）或驱动级回放里，所以 B 批实际是「新格式 + 新核心」的工程，不是 MIDI 输出的延伸。有核心之后 MIDI 侧很便宜：FME7 复用 AY、VRC7 复用 YM2413、VRC6 脉冲复用 NES。
-- **C. 已超出（13 项）**：SCSP、ES5506、C219、MIKEY、K007232、K005289、MSM5205、MSM5232、BSMT2000、ICS2115、VBOY_VSU、YMW258、YM2414。不计入对齐，但每项同样要一个解码器才能出 MIDI，机制与 A 批相同。
+- **C. 已超出（13 项）**：SCSP、ES5506、C219、MIKEY、K007232、K005289、MSM5205、MSM5232、BSMT2000、ICS2115、VBOY_VSU、YMW258、YM2414。不计入对齐，但每项同样要一个解码器才能出 MIDI，机制与 A 批相同。其中 **C219 已实现（2026-10-22，M6）**：它复用 `C140Decoder`——219 ASIC 就是十六声道的 C140，寄存器布局与 `0xD4` 命令都相同，八首 NA-1 曲目（`test_file/C219`）全部通过 `[13]`。
 
 **优先级**
 
@@ -832,6 +832,8 @@ void render (const playback::OutputBusBuffers* buses, int numBuses, int numSampl
 | 2026-10-21 | QSound Logo 曲目补掉两处：①**ROM 上限**从 4 MB 改成 **8 MB**——芯片用 15 位 bank（`bank & 0x7FFF`）寻址 64 KB 页，最多 8 MB；这首曲子的采样在 `0x520000`/`0x640000`，被截断后每个声部都读到 0、测不出周期，整首曲子只剩 C4 触发。②**rate 写入的边沿**：驱动在一个持续音里反复改写 rate（颤音/滑音），旧代码「非零 rate 即键开」把 1 个音符炸成 5–36 个；现在只有「从静音到发声」的上升沿起音，播放中改 rate 视为滑音。两条各有单测（`a rate written while sounding slides the note`、`a sample at 0x480000 is reachable`）。修完同一采样的音符差与 rate 比例精确吻合（4576/4864/5440 → 74/75/77），SF2 曲目音符完全不变 |
 | 2026-10-21 | 音符在**重触发**处切开：X-Men 的 Stage 6（`test_file/K054539`，82 秒、405 KB、1.1 万条 K054539 写入）把同一个采样按不同音高反复键开，若两次键开的音高相同、gate 又没落（循环或长采样），抽取器只会看到「gate 一直为真、音高没变」，于是整首曲子每轨只剩一个音符。`ChannelState` 因此新增 `keyOns`（键开次数，单调），C140/C352/K053260/K054539 各自递增；抽取器发现计数变化就关掉上一个音符、从这次键开重新起一个——这比「音高变了才换音符」更接近事实，对所有采样播放器通用（不填这个字段的芯片行为不变）。单测 `a retrigger at the same pitch is a second note` 钉住 |
 | 2026-10-21 | **ADPCM-B 根音**（M4 遗留项）：YM2610/YM2608 的 ADPCM-B 从 one-shot 升级为可旋律。`DELTA-N` 是真正的音高寄存器，码率 = `delta * clock / 65536` 字节/秒（核心 ymdeltat 的 `step = delta * freqbase`，一字节两个 nibble）；`0x82` 块到手后按核心的解码表（B1/B2 步长）把 4-bit delta 积分成波形，再用 `estimateCycleLength()` 测周期，音符 = `delta * clock / 32768 / cycle`。键开在 `0x10`（OPNB）/`0x00`（OPNA port 1）的 bit7，地址按变体移位（OPNB 256 字节页、OPNA 32 字节页），`0x19/0x1A` = DELTA-N，`0x1B` = 电平——**电平写 0 就是收音符**（Neo Geo 的驱动每击前都这么写），所以 gate 由电平驱动，不再猜一个 80 ms 窗口。寄存器语义按 `fmopn.c` 与 `ymdeltat.c` 逐条核对。单测 5 条：A4（16 nibble 周期 + `DELTA-N` 29）、`DELTA-N` 加倍 = 八度、level 0 收音符、噪声仍是 C4 触发、OPNA/OPNB 地址移位。`test_file/neo_geo` 两首的 ADPCM-B 采样都测不出周期（打击乐/音效），因此仍按 C4 触发输出；有音高的曲目会自动变成真实音高。**Sax 段分析**（《KOF'98 Stage 1》1:39–2:09）：这一段是 ADPCM-B 的**流式播放**——30 秒内 1,898 次键开（约 63 次/秒），每次指向 `0x6A8D00`/`0x6B9000`/`0x6C9300`/`0x6D9600` 之一、长度恒为 66,303 字节，而 `DELTA-N` 每次不同（34,796…52,074，比值约 1–2 个半音）——**音高在 `DELTA-N` 里，采样只是被切片重放**。这解释了为什么「从 ROM 测周期」在这里失效：该速率下一个周期约两万个 nibble，而每次只有 16 ms 的片段，相关器永远看不到完整周期（它找到的是 54 kHz 的共振峰）。另外发现一个真 bug：`0x82` 块的地址掩码必须按**实际装入的数据量**（本案 2.8 MB → 4 MB）而不是头部声明的 8 MB 取 2 的幂，否则 `0x6B9000` 会读到 0（libvgm 的 `pow2_mask(memory_size)` 行为）；修好之后 Sax 采样才第一次测出周期。要真正给这种流式声部报音高，需要 §11.1 的「根音」模式：以某个参考 `DELTA-N` 为根、按 `12*log2(delta/deltaRef)` 出音，而不是逐次测周期 |
+| 2026-10-22 | **M5 的三颗无音高芯片按设计不支持**（用户决定）：PWM、OKIM6258、uPD7759 不输出 MIDI。前两者是流式 DAC——VGM 记录的“寄存器写”就是音频本身，不存在音符事件；uPD7759 虽有 start 边沿与样本号，但整颗芯片没有音高，一个 C4 只会把语音当乐器。代码在 `LibvgmSongInstance` 里显式列出三者并返回 `unavailable`，使其在 `[13]` 中计为“已知缺口”而不是“有声却无声部”；覆盖维持 35 / 54 |
+| 2026-10-22 | **C219 不写解码器，复用 C140**：`0xD4` 在 libvgm 里同时服务 C140 与 C219（chip type 同为 `0x1C`，`vgmplayer.cpp:1177`），而 219 的歌曲里**没有 C140 设备**——只找 `DEVID_C140` 会让每次写入落到空指针，音频照响、MIDI 全空。`MidiSequenceBuilder` 的 `case 0xD4` 因此先取 C140、再回退 C219；能力表把 `DEVID_C219` 记为 `fmChannel (16)`。这个三元表达式是 C219 能出音符的唯一原因，不要当成冗余清理掉 |
 
 背景：libvgm 把 OPN 的 SSG 作为 linked AY8910（`opnintf.c:48-52`）；`LibvgmSongInstance::isTrackDevice()` 只保留 `parentIdx == (UINT32)-1` 的设备（`LibvgmSongInstance.cpp:31-36`），所以 YM2610/YM2608/YM2203 的 3 个 SSG 当前没有独立 mixer track。
 
@@ -873,6 +875,7 @@ void render (const playback::OutputBusBuffers* buses, int numBuses, int numSampl
 | 芯片 | 寄存器 → 频率 | `refRate`（L1 的参照率） | 类 | 状态 |
 |---|---|---|---|---|
 | C140 | `rate × clock / 18874368` | 8 kHz（标称采样率） | A | **P1 已切** |
+| C219 | 与 C140 同一公式（同一核心的 `delta`） | 8 kHz（同上） | A | **M6 已切，复用 `C140Decoder`** |
 | C352 | `rate × clock / 576` | `clock / 576`（一个字节每输出样本） | A | **P1 已切** |
 | K053260 | `pitch × clock / 262144` | `clock / 64` | A | **P1 已切** |
 | K054539 | `rate × clock / 缩放` | `clock / kOutputDivisor` | A | **P1 已切** |
