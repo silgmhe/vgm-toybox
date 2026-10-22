@@ -972,6 +972,14 @@ MidiSettingsPage::MidiSettingsPage (void)
 		toybox::settings::SettingsStore::getInstance()
 			.setTransposeBySampleRoot (rootButton.getToggleState());
 		refresh();
+
+		// The stored value only decides the *next* build, and the note numbers are part of that
+		// build: the window reloads the song at the position it was at, which is the only way the
+		// switch can take effect without the user reopening anything.
+		if (onSampleRootChanged != nullptr)
+		{
+			onSampleRootChanged();
+		}
 	};
 	addAndMakeVisible (rootButton);
 
@@ -1132,6 +1140,15 @@ SettingsOverlay::SettingsOverlay (void)
 	generalPage = new GeneralSettingsPage();
 	languagePage = new LanguageSettingsPage();
 	midiPage = new MidiSettingsPage();
+	// Forwarded rather than handled here: only the window owns an engine, and reloading a song at
+	// the position it was at is what makes the switch take effect.
+	midiPage->onSampleRootChanged = [this]
+	{
+		if (onSampleRootChanged != nullptr)
+		{
+			onSampleRootChanged();
+		}
+	};
 	appearancePage->setComponentID ("settings.page.appearance");
 	generalPage->setComponentID ("settings.page.general");
 	languagePage->setComponentID ("settings.page.language");

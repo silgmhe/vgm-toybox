@@ -128,8 +128,8 @@ language: English
 "settings.midi.rangeHint" = "Semitones each way. It has to match the receiving instrument: a 50 cent bend encoded for +/- 2 semitones plays as 3 semitones on a +/- 12 one. The range is declared with RPN 0 when playback starts, so a synth that honours RPN follows this value.";
 "settings.midi.semitones" = "st";
 "settings.midi.sampleRoot" = "Transpose by the sample's root";
-"settings.midi.sampleRootHint" = "Off (default): a sampled voice is placed by the transposition the registers ask for - 1200 x log2(playback rate / the chip's reference rate) - so every interval inside one sample is exact and the absolute octave follows a documented constant. On: the root measured out of the sample's own bytes is added, which puts the octave right but can be wrong by a constant (the measurement is an inference). A voice whose root cannot be measured, or that has no pitch at all, stays a one-shot C4 trigger either way. Takes effect when a song is loaded.";
-"settings.midi.sampleRootRecommended" = "Recommended for PCM-based chips - Capcom QSound, C140, C352, K053260, K054539, SegaPCM, GA20, RF5C164, ES5503, OKIM6295. FM and PSG voices are unaffected.";
+"settings.midi.sampleRootHint" = "Off (default): a sampled voice is placed by the transposition the registers ask for - 1200 x log2(playback rate / the chip's reference rate) - so every interval inside one sample is exact and the absolute octave follows a documented constant. On: the root measured out of the sample's own bytes is added, which puts the octave right but can be wrong by a constant (the measurement is an inference). A voice whose root cannot be measured, or that has no pitch at all, stays a one-shot C4 trigger either way. Switching reloads the current song and keeps its position.";
+"settings.midi.sampleRootRecommended" = "Recommended for PCM-based chips - Capcom QSound, C140, C352, K053260, K054539, SegaPCM, GA20, RF5C164, ES5503, OKIM6295. FM and PSG voices are unaffected. Switching reloads the current song and keeps the position.";
 
 "settings.theme" = "Theme";
 "settings.theme.dark" = "Dark";

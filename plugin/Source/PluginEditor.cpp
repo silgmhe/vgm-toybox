@@ -142,6 +142,9 @@ ToyboxAudioProcessorEditor::ToyboxAudioProcessorEditor (ToyboxAudioProcessor& p)
 	// in only decides which one an editor with both visible - which cannot happen - would be under.
 	addChildComponent (settingsOverlay);
 	settingsOverlay.onClose = [this] { settingsOverlay.setVisible (false); };
+	// The sample-root switch changes the note numbers, so it needs the song loaded again; doing that
+	// here keeps the settings page free of any knowledge of the engine.
+	settingsOverlay.onSampleRootChanged = [this] { reloadForPitchChange(); };
 
 	updateStatusLine();
 
@@ -421,6 +424,7 @@ void ToyboxAudioProcessorEditor::loadFile (const juce::File& file, bool startPla
 	startupHandled = true;		// this load is the startup one, or a manual one that replaces it
 	loadInFlight = true;
 	loadingName = file.getFileName();
+	loadedFile = file;			// what `reloadForPitchChange()` loads again
 	lastError.clear();			// a new attempt clears the old failure, or it would hide "Loading"
 	updateStatusLine();
 
@@ -446,6 +450,20 @@ void ToyboxAudioProcessorEditor::loadFile (const juce::File& file, bool startPla
 			safe->processor.clearStateMessage();
 			safe->songLoadedAtLastRefresh = true;
 
+			// A reload for the pitch setting puts the transport back where it was. It is done
+			// here, and not before the load, because the new sequence only exists now.
+			if (safe->pendingSeekSeconds >= 0.0)
+			{
+				safe->engine.setPositionSeconds (safe->pendingSeekSeconds);
+				safe->pendingSeekSeconds = -1.0;
+
+				if (safe->pendingResume)
+				{
+					safe->engine.play();
+				}
+				safe->pendingResume = false;
+			}
+
 			// The remembered song is written here, at the moment the load succeeds, and not at
 			// shutdown: a crash or a killed process still leaves something to reopen. A plugin
 			// session must never overwrite what the standalone would open next.
@@ -463,6 +481,22 @@ void ToyboxAudioProcessorEditor::loadFile (const juce::File& file, bool startPla
 		safe->updateStatusLine();
 		safe->resized();				// a page may have changed height (cards can appear)
 	}, startPlaying);
+}
+
+void ToyboxAudioProcessorEditor::reloadForPitchChange (void)
+{
+	// The switch decides whether a sampled note carries its measured root, and that decision is
+	// baked into the note numbers when the sequence is built - there is nothing to re-send. Loading
+	// the song again is the same work the user used to do by hand, minus the manual step: the
+	// position is remembered here and restored by the load callback.
+	if (! engine.isLoaded() || ! loadedFile.existsAsFile())
+	{
+		return;
+	}
+
+	pendingSeekSeconds = engine.getPositionSeconds();
+	pendingResume = engine.isPlaying();
+	loadFile (loadedFile, false);
 }
 
 void ToyboxAudioProcessorEditor::closeSong (void)

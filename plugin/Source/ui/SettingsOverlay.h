@@ -171,6 +171,11 @@ class MidiSettingsPage : public View
 public:
 	MidiSettingsPage (void);
 
+	/** Called after the sample-root switch is stored. The note numbers themselves change with it, so
+		the window has to load the song again - the overlay forwards this to its own callback, which
+		the editor answers by reloading at the current position. */
+	std::function<void()> onSampleRootChanged;
+
 	juce::String getViewId (void) const override { return "settings-midi"; }
 	juce::String getViewName (void) const override { return i18n::tr ("settings.midi"); }
 
@@ -322,6 +327,11 @@ public:
 
 	/** Called when the panel is dismissed - the window hides the overlay. */
 	std::function<void()> onClose;
+
+	/** Called when the MIDI page's sample-root switch changes, because that setting changes the note
+		numbers and only a reload can apply it. The window reloads the current song at the position
+		it was at, so the switch takes effect without asking the user to reopen anything. */
+	std::function<void()> onSampleRootChanged;
 
 	/** Brings every page in step with the store and marks the page that is up in the sidebar. The
 		window calls this every time the overlay comes up, because the stored values can have been

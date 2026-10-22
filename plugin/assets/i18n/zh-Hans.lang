@@ -124,8 +124,8 @@ language: 简体中文
 "settings.midi.rangeHint" = "向两侧各多少半音，必须与接收乐器一致：50 音分的弯音若按 ±2 半音编码，在 ±12 的音源上会奏成 3 个半音。播放开始时用 RPN 0 声明该范围，支持 RPN 的音源会跟随这里的设置。";
 "settings.midi.semitones" = "半音";
 "settings.midi.sampleRoot" = "按采样根音移调";
-"settings.midi.sampleRootHint" = "关闭（默认）：采样声部按寄存器算出的移调量排布——1200 × log2(播放率 / 芯片参照率)——因此同一条采样内部的音程永远精确，绝对八度由文档化的常量决定。开启：再加上从采样数据里测出的根音，把绝对八度对齐，但测量是推断，可能整体偏差一个常量。根音测不出、或本来就没有音高的声部，两种模式下都会输出为 C4 触发的一次性音。重新加载歌曲后生效。";
-"settings.midi.sampleRootRecommended" = "推荐给以 PCM 采样为主的芯片使用，例如 Capcom QSound、C140、C352、K053260、K054539、SegaPCM、GA20、RF5C164、ES5503、OKIM6295；FM 与 PSG 声部不受影响。";
+"settings.midi.sampleRootHint" = "关闭（默认）：采样声部按寄存器算出的移调量排布——1200 × log2(播放率 / 芯片参照率)——因此同一条采样内部的音程永远精确，绝对八度由文档化的常量决定。开启：再加上从采样数据里测出的根音，把绝对八度对齐，但测量是推断，可能整体偏差一个常量。根音测不出、或本来就没有音高的声部，两种模式下都会输出为 C4 触发的一次性音。切换后会自动重新加载当前歌曲，播放位置保留。";
+"settings.midi.sampleRootRecommended" = "推荐给以 PCM 采样为主的芯片使用，例如 Capcom QSound、C140、C352、K053260、K054539、SegaPCM、GA20、RF5C164、ES5503、OKIM6295；FM 与 PSG 声部不受影响。切换后自动重载当前歌曲，播放位置保留。";
 
 "settings.theme" = "主题";
 "settings.theme.dark" = "深色";

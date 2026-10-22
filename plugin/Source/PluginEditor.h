@@ -71,6 +71,11 @@ private:
 		false only for the restore below. */
 	void loadFile (const juce::File& file, bool startPlaying = true);
 
+	/** Loads the current song again at the position it is at, because `pitch.useSampleRoot` changed
+		the note numbers themselves. Does nothing when there is nothing loaded - the switch then only
+		applies to the next song. */
+	void reloadForPitchChange (void);
+
 	/** Unloads the song: chips, mixer and transport go back to their "nothing loaded" state. */
 	void closeSong (void);
 
@@ -125,6 +130,15 @@ private:
 
 	juce::File startupSong;			// what the application was launched with, if anything
 	bool startupHandled = false;
+
+	/** The song the engine holds, kept so `reloadForPitchChange()` can load it again. */
+	juce::File loadedFile;
+
+	/** Where a reload has to put the transport back, and whether it was running: negative means no
+		reload is pending. Consumed by the load callback, which is the only place that knows the new
+		sequence is in place. */
+	double pendingSeekSeconds = -1.0;
+	bool pendingResume = false;
 
 	/** The restore is a startup decision: it is tried once, after the first tick has had the
 		chance to see a song handed over by another instance (macOS Finder documents). */
