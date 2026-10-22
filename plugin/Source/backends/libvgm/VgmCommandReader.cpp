@@ -451,6 +451,15 @@ bool VgmCommandReader::next (VgmCommand& command)
 			command.addr = (std::uint8_t) (offset & 0xFF);
 			command.data = data[position + 3];
 		}
+		else if (cmd == 0x43)
+		{
+			// MSM5232: one 8-bit register offset and one 8-bit value. Without a branch of its own the generic
+			// register write left both fields zero, so every note arrived as 'register 0, index 0' and the
+			// chip stayed silent in MIDI while it played.
+			command.kind = VgmCommand::Kind::registerWrite;
+			command.addr = data[position + 1];
+			command.data = data[position + 2];
+		}
 		else if (cmd == 0x42)
 		{
 			// K005289: the command is `Ofs4_Data12` - the register number in the high nibble of the

@@ -22,6 +22,7 @@
 #include "chips/K054539Decoder.h"
 #include "chips/QSoundDecoder.h"
 #include "chips/Es5503Decoder.h"
+#include "chips/Msm5232Decoder.h"
 #include "chips/K005289Decoder.h"
 #include "chips/VsuDecoder.h"
 #include "chips/Okim6295Decoder.h"
@@ -3855,6 +3856,33 @@ namespace
 	/** VSU: five wavetable voices whose pitch is `clock / (32 * (2048 - freq))`, keyed by bit 7 of
 		the voice's IntlControl byte, and a sixth voice that is noise. */
 
+	/** MSM5232: the register is not a divider but a key index into the chip's eighty-eight-entry
+		ROM, and eighty-eight entries is the span from A0, so the index is the note: 21 + index. */
+
+	void testMsm5232Notes (void)
+	{
+		std::vector<toybox::chips::RegisterWrite> writes;
+		toybox::chips::RegisterWrite write;
+		write.reg = 0x00;							// voice 0
+		write.value = (std::uint8_t) (0x80 | 48);	// gate, key A4
+		write.sampleTime = 0;
+		writes.push_back (write);
+
+		toybox::chips::Msm5232Decoder decoder;
+		decoder.reset (2119040, 44100.0);
+
+		const auto performance = toybox::chips::extractPerformance (decoder, writes, 44100);
+		const auto& notes = performance.notes;
+
+		check (notes.size() == 1, "an MSM5232 key write is one note");
+		if (notes.empty())
+		{
+			return;
+		}
+
+		check (notes[0].logicalChannel == 0, "register 0 is the first voice");
+		check (notes[0].note == 69, "index 48 is A4, because 21 + 48 = 69");
+	}
 	void testVsuNotes (void)
 	{
 		std::vector<toybox::chips::RegisterWrite> writes;
@@ -4337,6 +4365,8 @@ namespace
 	testGa20KeyOff();
 	testGa20Percussion();
 	testGa20AddressUnit();
+
+	testMsm5232Notes();
 
 	testVsuNotes();
 
