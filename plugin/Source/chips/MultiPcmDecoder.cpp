@@ -102,7 +102,18 @@ void MultiPcmDecoder::write (const RegisterWrite& write)
 	// Three ports, in the core's own terms: 1 selects the voice, 2 the register, 0 the data.
 	if (write.reg == 0x01)
 	{
-		impl->currentSlot = write.value & 0x1F;
+		// The selector is not the voice number. The core's VALUE_TO_CHANNEL is 0..6, -1, 7..13, -1,
+		// 14..20, -1, 21..27, -1 (multipcm.c:24-30): every eighth value is a spacer, so selector 8 is
+		// voice 7. Reading the selector as the voice shifted every voice from 7 upwards by one, which
+		// is why one channel looked audible with no notes while its neighbour took two.
+		const int selector = write.value & 0x1F;
+		if ((selector & 0x07) == 0x07)
+		{
+			impl->currentSlot = -1;
+			return;
+		}
+
+		impl->currentSlot = (selector >> 3) * 7 + (selector & 0x07);
 		return;
 	}
 
