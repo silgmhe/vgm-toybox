@@ -56,6 +56,19 @@ juce::File SettingsStore::settingsDirectory (void)
 		return juce::File (juce::SystemStats::getEnvironmentVariable (kDirectoryOverrideVar, {}));
 	}
 
+   #if defined (TOYBOX_TEST_BUILD)
+	// A test binary must never read or write the real preferences: the value of `pitch.useSampleRoot`
+	// changes the notes a test asserts, so running against the machine's file makes the suite depend
+	// on whoever runs it (that is how six engine tests went red on unchanged code). Every test main
+	// sets VGMTOYBOX_SETTINGS_DIR through Tests/TestSettings.h; reaching this line means one forgot,
+	// and a scratch folder plus a loud line is better than a run decided by a stranger's switch.
+	jassertfalse;
+	std::fprintf (stderr, "a test reached the real settings folder: isolate it with "
+						  "toybox::test::ScopedSettingsDirectory (Tests/TestSettings.h)\n");
+	return juce::File::getSpecialLocation (juce::File::tempDirectory)
+		.getChildFile (juce::String (kFolderName) + "-unset-test");
+   #endif
+
 	auto root = juce::File::getSpecialLocation (juce::File::userApplicationDataDirectory);
 
    #if JUCE_MAC
@@ -67,16 +80,6 @@ juce::File SettingsStore::settingsDirectory (void)
 
 juce::File SettingsStore::settingsFile (void)
 {
-	// A test or a portable build can point the store somewhere else: the pitch of a note depends on
-	// `pitch.useSampleRoot`, so an engine test that read the developer's own file would pass or fail
-	// on a preference that has nothing to do with the code under test (that is exactly what
-	// happened once - six engine tests went red because the switch was left on).
-	const juce::String override = juce::SystemStats::getEnvironmentVariable ("TOYBOX_SETTINGS_FILE", {});
-	if (override.isNotEmpty())
-	{
-		return juce::File (override);
-	}
-
 	return settingsDirectory().getChildFile (kFileName);
 }
 

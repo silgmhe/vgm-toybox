@@ -26,6 +26,7 @@
 #include "emu/SoundDevs.h"
 #include "emu/SoundEmu.h"
 
+#include "TestSettings.h"
 #include "chips/OpnDecoder.h"
 
 namespace
@@ -268,6 +269,9 @@ namespace
 int main()
 {
 	std::printf ("YM2612 decoder against libvgm's own core\n");
+
+	// Isolated settings - see TestSettings.h.
+	const toybox::test::ScopedSettingsDirectory settings;
 
 	{
 		Core probe;

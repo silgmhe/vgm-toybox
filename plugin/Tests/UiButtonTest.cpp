@@ -36,6 +36,7 @@
 #include "ui/MidiMenu.h"
 #include "ui/Theme.h"
 
+#include "TestSettings.h"
 #include "TestSupport.h"
 
 namespace
@@ -424,6 +425,9 @@ int main()
 	const juce::ScopedJuceInitialiser_GUI init;
 
 	std::printf ("VGMToybox button paint test\n");
+
+	// Isolated settings - see TestSettings.h.
+	const toybox::test::ScopedSettingsDirectory settings;
 	checkTheFace();
 	checkTheOtherStates();
 	checkTheGlow();

@@ -37,6 +37,7 @@
 #include "chips/WswanDecoder.h"
 #include "chips/OplDecoder.h"
 #include "chips/OpmDecoder.h"
+#include "TestSettings.h"
 #include "chips/OpnDecoder.h"
 
 namespace
@@ -4095,6 +4096,10 @@ namespace
 	int main (void)
 {
 	std::printf ("chip decoder test\n");
+
+	// Isolated settings: a decoder test reads none, but the store must never open this machine's
+	// own file from a test either (see TestSettings.h for the failure that taught us).
+	const toybox::test::ScopedSettingsDirectory settings;
 
 	testPulseNote();
 	testPitchChange();

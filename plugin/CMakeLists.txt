@@ -497,6 +497,15 @@ add_executable(vgm_app_test EXCLUDE_FROM_ALL
 	Tests/AppHarnessTest.cpp
 )
 target_include_directories(vgm_app_test PRIVATE Source)
+# Every test executable builds with TOYBOX_TEST_BUILD, which makes SettingsStore refuse to open the
+# machine's own settings file (see SettingsStore::settingsDirectory). A test main that forgets to
+# point the store at a throwaway folder then fails loudly instead of quietly reading - and being
+# decided by - the preferences of whoever runs it.
+foreach (toyboxTestTarget vgm_mixer_test vgm_chip_test vgm_opn_test vgm_core_test vgm_ui_test vgm_app_test)
+	if (TARGET ${toyboxTestTarget})
+		target_compile_definitions(${toyboxTestTarget} PRIVATE TOYBOX_TEST_BUILD=1)
+	endif()
+endforeach()
 # The only difference from the plugin it drives: the message loop. JUCE gates
 # MessageManager::runDispatchLoopUntil() on this macro, and without it a script can see nothing but
 # what a command sets up synchronously - the layout an AsyncUpdater does (a TreeView recalculating
