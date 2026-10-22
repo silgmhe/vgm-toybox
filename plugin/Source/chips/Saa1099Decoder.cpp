@@ -91,6 +91,16 @@ void Saa1099Decoder::write (const RegisterWrite& w)
 
 	switch (w.reg)
 	{
+	// The SAA1099 register map, by address (six tone channels in two groups of three):
+	//
+	//   0x00..0x05  amplitude, one byte per channel; the left and right nibbles are separate
+	//               outputs, and the louder nibble is the volume this decoder reports
+	//   0x08..0x0D  frequency, one byte per channel - the divider that gives the note
+	//   0x10..0x12  envelope control, one byte per *pair* of channels
+	//   0x14/0x15   per-channel enable and the envelope/sync side of the same block
+	//   0x16        the two noise generators' parameters, low nibble = generator 0
+	//   0x18/0x19   envelope waveform and resolution
+	//   0x1C        reset / sync
 	case 0x00:
 	case 0x01:
 	case 0x02:

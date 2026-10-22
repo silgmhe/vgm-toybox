@@ -354,6 +354,13 @@ void GbcApuDecoder::write (const RegisterWrite& w)
 	if (pulseChannel >= 0)
 	{
 		Impl::Pulse& pulse = impl->pulses[pulseChannel];
+		// The four bytes a pulse channel owns, named the way the hardware documentation names them
+		// (pulse 0 is NR11..NR14 at 0x01..0x04, pulse 1 is NR21..NR24 at 0x06..0x09):
+		//
+		//   0x1 / 0x6  NRx1  duty cycle in bits 7-6, length load in bits 5-0
+		//   0x2 / 0x7  NRx2  envelope: initial volume, direction, period
+		//   0x3 / 0x8  NRx3  frequency, low eight bits
+		//   0x4 / 0x9  NRx4  trigger in bit 7, length enable in bit 6, frequency high in bits 2-0
 		switch (reg & 0x0F)
 		{
 		case 0x01:
@@ -385,6 +392,18 @@ void GbcApuDecoder::write (const RegisterWrite& w)
 		return;
 	}
 
+	// Everything outside the pulse blocks, by absolute register name:
+	//
+	//   0x00  NR10  pulse 0 sweep: period in bits 6-4, negate in bit 3, shift in bits 2-0
+	//   0x0A  NR30  wave DAC enable (bit 7)
+	//   0x0B  NR31  wave length load
+	//   0x0C  NR32  wave volume code in bits 6-5
+	//   0x0D  NR33  wave frequency, low eight bits
+	//   0x0E  NR34  wave trigger (bit 7), length enable (bit 6), frequency high in bits 2-0
+	//   0x10..0x13  NR41..NR44  noise: length, envelope, polynomial clock, trigger
+	//   0x14/0x15   NR50/NR51   master volume and the routing of each channel to left/right
+	//   0x16  NR52  power switch; bits 0-3 mirror whether each channel is running
+	//   0x30..0x3F  wave RAM, thirty-two 4-bit samples
 	switch (reg)
 	{
 	case 0x00:

@@ -142,6 +142,20 @@ void WswanDecoder::write (const RegisterWrite& w)
 
 	switch (w.reg)
 	{
+	// The WonderSwan sound registers, by address - the numbers alone say nothing:
+	//
+	//   0x80/0x81 … 0x86/0x87  channel 0-3 frequency, low byte then high byte; channel 2 shares
+	//                          its registers with the sweep unit, which is why 0x84 latches the
+	//                          period as well
+	//   0x88..0x8B             channel 0-3 volume (4 bit)
+	//   0x89                   doubles as the PCM data port while voice mode streams, hence the
+	//                          separate case below
+	//   0x8C                   sweep step, signed
+	//   0x8D                   sweep time
+	//   0x8E                   noise LFSR tap - the noise's colour, not its pitch
+	//   0x8F                   waveform base address - the shape, not the pitch
+	//   0x90                   control: per-channel enable, channel 2 sweep, voice mode
+	//   0x94                   PCM volume for the voice stream
 	case 0x80:
 		channel0.frequency = (std::uint16_t) ((channel0.frequency & 0xFF00) | w.value);
 		break;
