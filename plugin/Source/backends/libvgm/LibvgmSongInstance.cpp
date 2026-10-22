@@ -130,6 +130,23 @@ namespace
 			// so a note can only come from the sample's own cycle - the ES5503's case, and likewise
 			// melodic, with a sample that has no period reporting its C4 trigger.
 			return fmChannel (4);
+		// Three chips are deliberately *not* represented, and they are named here so that the
+		// absence reads as a decision rather than an oversight (design doc section 13, 2026-10-22):
+		//
+		//   PWM (32X)  - a streaming DAC. What VGM logs as "register writes" is the audio itself
+		//                (`0xB2` to the left/right/mono output registers); the cycle register sets
+		//                the DAC's sample rate, not a pitch. There is no note event to report.
+		//   OKIM6258   - the same shape: `0x01` is a data port fed byte by byte, `0x0C` only
+		//                selects a sample-rate divider. No start address, no sample number.
+		//   uPD7759    - a speech synthesiser. A start edge plus a sample number is a real event,
+		//                but the chip has no pitch at all, so the best a MIDI note could say is
+		//                "a C4 happened" - which turns speech into an instrument.
+		//
+		// A MIDI note needs a pitch; these three have none, so the honest output is nothing.
+		case DEVID_32X_PWM:
+		case DEVID_MSM6258:
+		case DEVID_uPD7759:
+			return playback::MidiCapability::unavailable;
 		case DEVID_YMZ280B:
 			// Eight PCM voices. Their pitch register is a playback rate, not a note, so the decoder
 			// reports one-shot triggers; see chips/Ymz280bDecoder.h and M4 in the design doc.

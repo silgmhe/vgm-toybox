@@ -1297,7 +1297,7 @@ int main (int argc, char* argv[])
 				if (! promisesNotes)
 				{
 					++knownGaps;
-					mark = "  <- no MIDI decoder for this channel yet";
+					mark = "  <- no MIDI output for this channel (design doc 11.2)";
 				}
 				else
 				{
