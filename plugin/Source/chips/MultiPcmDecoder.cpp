@@ -76,6 +76,12 @@ struct MultiPcmDecoder::Impl
 
 	Table table;
 	Voice voices[kVoices];
+
+	/** The chip is programmed through three ports, not by addressing a voice directly (multipcm.c:1-30):
+		offset 1 selects the voice, offset 2 sets which of its eight registers the next data write
+		lands in, and offset 0 writes that register. Every write in the rips goes through this door. */
+	int currentSlot = -1;
+	int address = 0;
 };
 
 MultiPcmDecoder::MultiPcmDecoder() = default;
@@ -93,15 +99,28 @@ void MultiPcmDecoder::write (const RegisterWrite& write)
 		return;
 	}
 
-	const int voice = write.reg >> 3;
-	if (voice >= kVoices)
+	// Three ports, in the core's own terms: 1 selects the voice, 2 the register, 0 the data.
+	if (write.reg == 0x01)
 	{
+		impl->currentSlot = write.value & 0x1F;
 		return;
 	}
 
+	if (write.reg == 0x02)
+	{
+		impl->address = write.value > 7 ? 7 : write.value;
+		return;
+	}
+
+	if (write.reg != 0x00 || impl->currentSlot < 0 || impl->currentSlot >= kVoices)
+	{
+		return;		// 0x10..0x12 are the Sega banking registers, not a voice
+	}
+
+	const int voice = impl->currentSlot;
 	Impl::Voice& state = impl->voices[voice];
 
-	switch (write.reg & 0x07)
+	switch (impl->address)
 	{
 	case 0x1:		// sample index into the ROM metadata table
 		state.sampleIndex = write.value;
