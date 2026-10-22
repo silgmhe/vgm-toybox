@@ -647,12 +647,21 @@ int main (int argc, char* argv[])
 	engine.setMixerEnabled (false);
 	engine.setPositionSeconds (0.0);
 	engine.play();
-	// Half a second, not a tenth: a song is allowed to start with silence while its driver sets
-	// itself up, and fm_alg0.vgm keys its first note at 0.25 s. This check is about the rebuilds
-	// above leaving a working player behind, so it has to render past any lead-in to say anything.
-	const auto sanity = renderSeconds (engine, 0.5, sampleRate, blockSize);
-	std::printf ("    peak %.4f\n", sanity.peak);
-	check (sanity.peak > 0.001, "the plain player still produces audio");
+	// Two seconds, not a tenth: a song is allowed to start with silence while its driver sets itself up -
+	// fm_alg0.vgm keys its first note at 0.25 s and the Virtual Boy rips that failed here (04, 06, 07)
+	// stay silent past half a second. This check is about the rebuilds above leaving a working player
+	// behind, so it has to render past any lead-in to say anything at all.
+	double sanityPeak = 0.0;
+	for (int chunk = 0; chunk < 12 && sanityPeak <= 0.001; ++chunk)
+	{
+		// half a second at a time, up to six: most songs answer on the first chunk, and a song with a
+		// long lead-in only pays for the time it actually needs
+		const auto part = renderSeconds (engine, 0.5, sampleRate, blockSize);
+		sanityPeak = juce::jmax (sanityPeak, (double) part.peak);
+	}
+
+	std::printf ("    peak %.4f\n", sanityPeak);
+	check (sanityPeak > 0.001, "the plain player still produces audio");
 
 	// For reference: libvgm's backwards seek does not reproduce a fresh start sample-exactly -
 	// the plain player shows the very same difference, so it is the emulation's seek warm-up
@@ -789,6 +798,25 @@ int main (int argc, char* argv[])
 	// blocks of a finished song are silent
 	const double shortLength = renderLength * 0.5;
 
+	// A peak meter read once is one block's peak, and that number moves with the block boundary:
+	// at 0.1 s the same mix reads 0.1716 twice, at 0.2 s it reads 0.2418 and 0.2426. Comparing two
+	// single readings therefore compares two arbitrary instants, which is what made this check
+	// flaky. Take the peak over the whole pass instead - that is what a meter is meant to say.
+	auto meterAverageOver = [&] (double seconds)
+	{
+		double total = 0.0;
+		const int chunks = 20;
+		engine.setPositionSeconds (0.0);
+		engine.play();
+		for (int i = 0; i < chunks; ++i)
+		{
+			renderSeconds (engine, seconds / (double) chunks, sampleRate, blockSize);
+			total += (double) engine.getOutputPeak (0);
+		}
+
+		return (float) (total / (double) chunks);
+	};
+
 	engine.setPositionSeconds (0.0);
 	engine.play();
 	const auto unity = renderSeconds (engine, shortLength, sampleRate, blockSize);
@@ -797,7 +825,7 @@ int main (int argc, char* argv[])
 	engine.setPositionSeconds (0.0);
 	engine.play();
 	const auto masterHalf = renderSeconds (engine, shortLength, sampleRate, blockSize);
-	const float meterWithMaster = engine.getOutputPeak (0);
+	const float meterWithMaster = meterAverageOver (shortLength);
 	const double masterRatio = (unity.rms > 0.0) ? masterHalf.rms / unity.rms : 0.0;
 	std::printf ("    mixer master 0.5 -> rms ratio %.3f, master meter %.4f\n",
 				 masterRatio, meterWithMaster);
@@ -807,7 +835,7 @@ int main (int argc, char* argv[])
 	engine.setPositionSeconds (0.0);
 	engine.play();
 	const auto volumeHalf = renderSeconds (engine, shortLength, sampleRate, blockSize);
-	const float meterWithVolume = engine.getOutputPeak (0);
+	const float meterWithVolume = meterAverageOver (shortLength);
 	const double volumeRatio = (unity.rms > 0.0) ? volumeHalf.rms / unity.rms : 0.0;
 	std::printf ("    output volume 0.5 on top -> rms ratio %.3f, master meter %.4f\n",
 				 volumeRatio, meterWithVolume);
