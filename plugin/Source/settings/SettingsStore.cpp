@@ -67,6 +67,16 @@ juce::File SettingsStore::settingsDirectory (void)
 
 juce::File SettingsStore::settingsFile (void)
 {
+	// A test or a portable build can point the store somewhere else: the pitch of a note depends on
+	// `pitch.useSampleRoot`, so an engine test that read the developer's own file would pass or fail
+	// on a preference that has nothing to do with the code under test (that is exactly what
+	// happened once - six engine tests went red because the switch was left on).
+	const juce::String override = juce::SystemStats::getEnvironmentVariable ("TOYBOX_SETTINGS_FILE", {});
+	if (override.isNotEmpty())
+	{
+		return juce::File (override);
+	}
+
 	return settingsDirectory().getChildFile (kFileName);
 }
 

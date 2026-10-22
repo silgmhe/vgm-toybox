@@ -444,6 +444,20 @@ int main (int argc, char* argv[])
 {
 	std::setvbuf (stdout, nullptr, _IONBF, 0);	// unbuffered, so nothing is lost on a crash
 
+	// These runs pin absolute notes, and `pitch.useSampleRoot` moves them: point the settings store
+	// at a throwaway file so a developer's own preference cannot make the suite pass or fail. It has
+	// to happen before anything touches SettingsStore::getInstance().
+	{
+		const juce::File scratch = juce::File::getSpecialLocation (juce::File::tempDirectory)
+									   .getChildFile ("vgmtoybox-engine-test-settings.xml");
+		scratch.deleteFile();
+	  #if JUCE_WINDOWS
+		_putenv_s ("TOYBOX_SETTINGS_FILE", scratch.getFullPathName().toRawUTF8());
+	  #else
+		::setenv ("TOYBOX_SETTINGS_FILE", scratch.getFullPathName().toRawUTF8(), 1);
+	  #endif
+	}
+
 	if (argc < 2)
 	{
 		std::printf ("Usage: %s <file.vgm|file.vgz> [seconds] [sampleRate] [--notes]\n", argv[0]);

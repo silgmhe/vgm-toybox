@@ -167,10 +167,13 @@ private:
 	juce::Label rangeHint;
 
 	/** The sample-root preference: whether a sampled note carries the root measured out of its
-		sample (design doc section 15). Default off, and it says what it costs either way. */
+		sample (design doc section 15). Default off. Its explanation is a paragraph rather than a
+		line, so it lives in a tooltip behind the question mark beside the toggle - a visible
+		paragraph pushed the rest of the page down for a setting most users leave alone. */
 	juce::ToggleButton rootButton;
 
-	juce::Label rootHint;
+	/** The "?" that carries `settings.midi.sampleRootHint`. */
+	juce::TextButton rootHelp;
 
 	JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (MidiSettingsPage)
 };

@@ -959,10 +959,12 @@ MidiSettingsPage::MidiSettingsPage (void)
 	};
 	addAndMakeVisible (rootButton);
 
-	rootHint.setFont (juce::Font (juce::FontOptions (12.5f)));
-	rootHint.setJustificationType (juce::Justification::topLeft);
-	rootHint.setMinimumHorizontalScale (0.8f);
-	addAndMakeVisible (rootHint);
+	// The explanation is a paragraph, not a line: it goes in a tooltip behind this "?", so the
+	// page keeps its shape and the text is still one hover away.
+	rootHelp.setComponentID ("settings.midi.sampleRootHelp");
+	rootHelp.setButtonText ("?");
+	rootHelp.setMouseCursor (juce::MouseCursor::PointingHandCursor);
+	addAndMakeVisible (rootHelp);
 
 	refreshLanguage();
 	lookAndFeelChanged();
@@ -976,7 +978,12 @@ void MidiSettingsPage::refreshLanguage (void)
 	rangeSlider.setTextValueSuffix (" " + i18n::tr ("settings.midi.semitones"));
 	rangeHint.setText (i18n::tr ("settings.midi.rangeHint"), juce::dontSendNotification);
 	rootButton.setButtonText (i18n::tr ("settings.midi.sampleRoot"));
-	rootHint.setText (i18n::tr ("settings.midi.sampleRootHint"), juce::dontSendNotification);
+	// Three paragraphs in one tip: what the switch does, which chips it is meant for, and where it
+	// changes nothing. Joined here because the .lang files hold one line per key and do not
+	// unescape anything.
+	rootHelp.setTooltip (i18n::tr ("settings.midi.sampleRootHint")
+						 + juce::newLine + juce::newLine + i18n::tr ("settings.midi.sampleRootChips")
+						 + juce::newLine + juce::newLine + i18n::tr ("settings.midi.sampleRootUnaffected"));
 	refresh();
 	repaint();
 }
@@ -1024,9 +1031,10 @@ void MidiSettingsPage::resized (void)
 
 	area.removeFromTop (theme::cardGap + 4);
 
-	rootButton.setBounds (area.removeFromTop (24).removeFromLeft (300));
-	area.removeFromTop (4);
-	rootHint.setBounds (area.removeFromTop (72));
+	auto rootRow = area.removeFromTop (24);
+	rootButton.setBounds (rootRow.removeFromLeft (300));
+	rootRow.removeFromLeft (6);
+	rootHelp.setBounds (rootRow.removeFromLeft (22).withSizeKeepingCentre (22, 22));
 }
 
 void MidiSettingsPage::lookAndFeelChanged (void)
@@ -1044,7 +1052,14 @@ void MidiSettingsPage::lookAndFeelChanged (void)
 	rangeSlider.setColour (juce::Slider::textBoxBackgroundColourId, theme::card());
 	rangeSlider.setColour (juce::Slider::textBoxOutlineColourId, theme::border());
 	rangeSlider.setColour (juce::Slider::textBoxHighlightColourId, theme::accent().withAlpha (0.25f));
-}
+
+	// A bare glyph, not a button: the "?" should read as part of the label, so the chrome is
+	// transparent and only the text carries a colour of its own.
+	rootHelp.setColour (juce::TextButton::buttonColourId, juce::Colours::transparentBlack);
+	rootHelp.setColour (juce::TextButton::buttonOnColourId, juce::Colours::transparentBlack);
+	rootHelp.setColour (juce::TextButton::textColourOffId, theme::secondaryText());
+	rootHelp.setColour (juce::TextButton::textColourOnId, theme::accent());
+	}
 
 //==============================================================================
 // The overlay
