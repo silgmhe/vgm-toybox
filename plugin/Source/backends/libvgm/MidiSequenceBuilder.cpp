@@ -237,7 +237,7 @@ namespace
 								command.sampleTime);
 					break;
 				case 0x41:	// K007232 - six registers per voice, the pitch is a twelve-bit step
-					k007232.queue (deviceFor (DEVID_K007232, 0), command.addr, command.data,
+					k007232.queue (deviceFor (DEVID_K007232, command.port), command.addr, command.data,
 										 command.sampleTime);
 					break;
 				case 0x42:	// K005289 - Ofs4_Data12: register in the high nibble, twelve bits of data

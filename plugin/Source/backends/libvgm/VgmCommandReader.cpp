@@ -418,6 +418,16 @@ bool VgmCommandReader::next (VgmCommand& command)
 			command.data = data[position + 2];
 			command.data2 = data[position + 3];
 		}
+		else if (cmd == 0x41)
+		{
+			// K007232: bit 7 of the register byte selects the second chip, exactly as the AY's
+			// command does - and leaving it in `addr` made those writes look like register 0x80+,
+			// which the decoder drops because a voice owns only six registers.
+			command.kind = VgmCommand::Kind::registerWrite;
+			command.port = (std::uint8_t) (data[position + 1] >> 7);
+			command.addr = (std::uint8_t) (data[position + 1] & 0x7F);
+			command.data = data[position + 2];
+		}
 		else if (cmd == 0xA0)
 		{
 			// AY-3-8910: bit 7 of the register byte selects the second chip of a pair (libvgm's

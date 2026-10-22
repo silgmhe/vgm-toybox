@@ -98,7 +98,10 @@ void K007232Decoder::write (const RegisterWrite& write)
 		}
 		break;
 	}
-	case 0x05:		// key on/off: bit 0 is the key
+	case 0x04:		// writing the start address is what starts a voice here: not one of the six rips ever
+		voice.keyed = true;		// writes the key register 0x05, so keying on that left every channel silent
+		break;
+	case 0x05:		// key on/off: bit 0 is the key, for the drivers that do use it
 		voice.keyed = (write.value & 0x01) != 0;
 		break;
 	default:
