@@ -25,6 +25,7 @@
 #include "chips/OpmDecoder.h"
 #include "chips/OpnDecoder.h"
 #include "chips/PokeyDecoder.h"
+#include "chips/K007232Decoder.h"
 #include "chips/K005289Decoder.h"
 #include "chips/Okim6295Decoder.h"
 #include "chips/Rf5c68Decoder.h"
@@ -235,6 +236,10 @@ namespace
 					rf5c.queue (rf5cDeviceFor (true, command.port), command.addr, command.data,
 								command.sampleTime);
 					break;
+				case 0x41:	// K007232 - six registers per voice, the pitch is a twelve-bit step
+					k007232.queue (deviceFor (DEVID_K007232, 0), command.addr, command.data,
+										 command.sampleTime);
+					break;
 				case 0x42:	// K005289 - Ofs4_Data12: register in the high nibble, twelve bits of data
 					k005289.queue (deviceFor (DEVID_K005289, 0), command.addr, command.data,
 										 command.sampleTime, 0, command.data2);
@@ -367,6 +372,7 @@ namespace
 			const std::vector<std::uint8_t> okimRom =
 				okim.writes.empty() ? std::vector<std::uint8_t>()
 									: assembleRom (reader, 0x8B, 256 * 1024);
+			flushDecoded (k007232, 8000000u, lastSampleTime);
 			flushDecoded (k005289, 4000000u, lastSampleTime);
 			flushDecoded (okim, 1000000u, lastSampleTime,
 						  [&okimRom] (chips::Okim6295Decoder& decoder)
@@ -1127,6 +1133,9 @@ namespace
 		// Konami K005289: two wavetable voices whose pitch is clock / (32 * (freq + 1)) - no pitch
 		// register to transpose and no ROM to measure, so nothing has to be handed to it
 		ChipBuffer<chips::K005289Decoder> k005289;
+
+		// Konami K007232: two PCM voices whose step register is a real pitch, clock / (4 * (4096 - step))
+		ChipBuffer<chips::K007232Decoder> k007232;
 		ChipBuffer<chips::X1_010Decoder> x1;
 		ChipBuffer<chips::Ymf271Decoder> opx;
 		ChipBuffer<chips::Ymz280bDecoder> ymz;

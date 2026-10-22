@@ -206,6 +206,7 @@ target_sources(VGMToybox PRIVATE
 	Source/chips/QSoundDecoder.cpp
 	Source/chips/Es5503Decoder.cpp
 	Source/chips/K005289Decoder.cpp
+	Source/chips/K007232Decoder.cpp
 	Source/chips/Okim6295Decoder.cpp
 	Source/chips/Ga20Decoder.cpp
 	Source/chips/SegaPcmDecoder.cpp
@@ -356,6 +357,7 @@ add_executable(vgm_mixer_test EXCLUDE_FROM_ALL
 	Source/chips/QSoundDecoder.cpp
 	Source/chips/Es5503Decoder.cpp
 	Source/chips/K005289Decoder.cpp
+	Source/chips/K007232Decoder.cpp
 	Source/chips/Okim6295Decoder.cpp
 	Source/chips/Ga20Decoder.cpp
 	Source/chips/SegaPcmDecoder.cpp
@@ -397,6 +399,7 @@ add_executable(vgm_chip_test EXCLUDE_FROM_ALL
 	Source/chips/QSoundDecoder.cpp
 	Source/chips/Es5503Decoder.cpp
 	Source/chips/K005289Decoder.cpp
+	Source/chips/K007232Decoder.cpp
 	Source/chips/Okim6295Decoder.cpp
 	Source/chips/Ga20Decoder.cpp
 	Source/chips/SegaPcmDecoder.cpp
