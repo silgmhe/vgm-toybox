@@ -207,6 +207,7 @@ target_sources(VGMToybox PRIVATE
 	Source/chips/Es5503Decoder.cpp
 	Source/chips/K005289Decoder.cpp
 	Source/chips/Msm5232Decoder.cpp
+	Source/chips/MikeyDecoder.cpp
 	Source/chips/MultiPcmDecoder.cpp
 	Source/chips/K007232Decoder.cpp
 	Source/chips/VsuDecoder.cpp
@@ -361,6 +362,7 @@ add_executable(vgm_mixer_test EXCLUDE_FROM_ALL
 	Source/chips/Es5503Decoder.cpp
 	Source/chips/K005289Decoder.cpp
 	Source/chips/Msm5232Decoder.cpp
+	Source/chips/MikeyDecoder.cpp
 	Source/chips/MultiPcmDecoder.cpp
 	Source/chips/K007232Decoder.cpp
 	Source/chips/VsuDecoder.cpp
@@ -406,6 +408,7 @@ add_executable(vgm_chip_test EXCLUDE_FROM_ALL
 	Source/chips/Es5503Decoder.cpp
 	Source/chips/K005289Decoder.cpp
 	Source/chips/Msm5232Decoder.cpp
+	Source/chips/MikeyDecoder.cpp
 	Source/chips/MultiPcmDecoder.cpp
 	Source/chips/K007232Decoder.cpp
 	Source/chips/VsuDecoder.cpp

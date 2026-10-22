@@ -418,6 +418,14 @@ bool VgmCommandReader::next (VgmCommand& command)
 			command.data = data[position + 2];
 			command.data2 = data[position + 3];
 		}
+		else if (cmd == 0x40)
+		{
+			// Mikey (Atari Lynx): one 8-bit address and one 8-bit value. Its own branch for the same
+			// reason 0x43 and 0xB5 needed one - the generic path left both fields zero.
+			command.kind = VgmCommand::Kind::registerWrite;
+			command.addr = data[position + 1];
+			command.data = data[position + 2];
+		}
 		else if (cmd == 0x41)
 		{
 			// K007232: bit 7 of the register byte selects the second chip, exactly as the AY's

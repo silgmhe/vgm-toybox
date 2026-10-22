@@ -133,6 +133,10 @@ namespace
 			// Two PCM voices with a step register: clock / (4 * (4096 - step)) is exact, so both are
 			// melodic without a root layer.
 			return fmChannel (2);
+		case DEVID_MIKEY:
+			// Four timer-driven square waves: the reload value and the clock shift give the pitch
+			// exactly, so all four channels are melodic.
+			return fmChannel (4);
 		case DEVID_YMW258:
 			// Twenty-eight sampled voices. The register pair is a ratio against unity, so every channel is
 			// melodic with the usual caveat that the absolute octave comes from the sample's own rate.

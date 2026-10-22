@@ -22,6 +22,7 @@
 #include "chips/K054539Decoder.h"
 #include "chips/QSoundDecoder.h"
 #include "chips/Es5503Decoder.h"
+#include "chips/MikeyDecoder.h"
 #include "chips/Msm5232Decoder.h"
 #include "chips/K005289Decoder.h"
 #include "chips/VsuDecoder.h"
@@ -3859,6 +3860,40 @@ namespace
 	/** MSM5232: the register is not a divider but a key index into the chip's eighty-eight-entry
 		ROM, and eighty-eight entries is the span from A0, so the index is the note: 21 + index. */
 
+	/** MIKEY: four timer-driven squares at `clock / (2 * (backup + 1) * 2^(shift + 4))`. */
+
+	void testMikeyNotes (void)
+	{
+		std::vector<toybox::chips::RegisterWrite> writes;
+		const auto add = [&writes] (std::uint8_t reg, std::uint8_t value)
+		{
+			toybox::chips::RegisterWrite write;
+			write.reg = reg;
+			write.value = value;
+			write.sampleTime = 0;
+			writes.push_back (write);
+		};
+
+		add (0x20, 0x0F);		// channel 0 volume
+		add (0x24, 124);		// BACKUP: the reload value
+		add (0x25, 0x03);		// CONTROL A: clock shift 3
+
+		toybox::chips::MikeyDecoder decoder;
+		decoder.reset (16000000, 44100.0);
+
+		const auto performance = toybox::chips::extractPerformance (decoder, writes, 44100);
+		const auto& notes = performance.notes;
+
+		check (notes.size() == 1, "a Mikey backup write is one note");
+		if (notes.empty())
+		{
+			return;
+		}
+
+		check (notes[0].logicalChannel == 0, "0x20 is the first audio channel");
+		// 16 MHz / (2 * 125 * 128) is 500 Hz, and 500 Hz is B4
+		check (notes[0].note == 71, "the timer arithmetic puts 500 Hz on B4");
+	}
 	void testMsm5232Notes (void)
 	{
 		std::vector<toybox::chips::RegisterWrite> writes;
@@ -4365,6 +4400,8 @@ namespace
 	testGa20KeyOff();
 	testGa20Percussion();
 	testGa20AddressUnit();
+
+	testMikeyNotes();
 
 	testMsm5232Notes();
 
