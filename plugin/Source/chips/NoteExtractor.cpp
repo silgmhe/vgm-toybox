@@ -1,6 +1,7 @@
 #include "NoteExtractor.h"
 
 #include <algorithm>
+#include <cassert>
 #include <cmath>
 
 namespace toybox::chips
@@ -108,6 +109,10 @@ ExtractedPerformance extractPerformance (IChipDecoder& decoder,
 		for (int channel = 0; channel < decoder.channelCount(); ++channel)
 		{
 			const ChannelState state = decoder.channelState (channel);
+
+	// A decoder that forgot to fill either pitch camp produces a silent channel rather than an
+	// error, so the contract is checked where the state is consumed (debug builds only).
+	assert (isPitchStateSane (state));
 			const bool retriggered = state.keyOns != lastKeyOns[(std::size_t) channel];
 			lastKeyOns[(std::size_t) channel] = state.keyOns;
 

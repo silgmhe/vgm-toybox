@@ -132,6 +132,59 @@ struct ChannelState
 	std::uint32_t keyOns = 0;
 };
 
+/** Which set of pitch fields a decoder filled - derived from the state, never stored, so a
+	decoder cannot forget to set it.
+
+	`ChannelState` has two camps and always had: an FM channel describes a note as a period
+	(f-number) plus a block, while a sampled or wavetable chip describes it as a frequency in Hz
+	plus the two pitch layers. A decoder must fill exactly one camp:
+
+	| camp | fields | who fills it |
+	|---|---|---|
+	| period | `period`, `block`, `finePitch` | OPN/OPM/OPL FM, SN76489, AY, NES, Game Boy, SAA1099, POKEY, WonderSwan, HuC6280, SCC, X1-010 |
+	| frequency | `hz`, `transposeCents`, `rootCents`, `pitchSource` | sample players and ADPCM |
+
+	Filling neither leaves the channel silent in MIDI; filling both is allowed but means the two
+	must agree. `isPitchStateSane()` is what the tests and the debug build check, which is the
+	first half of the review's M-1 - the type split is deferred until a decoder actually needs it. */
+enum class PitchFields { none, period, frequency, both };
+
+inline PitchFields pitchFieldsOf (const ChannelState& state)
+{
+	const bool period = state.period != 0 || state.block != 0;
+	const bool frequency = state.hz > 0.0;
+
+	if (period && frequency)
+	{
+		return PitchFields::both;
+	}
+
+	return period ? PitchFields::period : (frequency ? PitchFields::frequency : PitchFields::none);
+}
+
+/** The contract in one place: a voiced, pitched channel must say something about its pitch, and
+	`finePitch` stays inside one semitone. Drums and one-shot triggers are exempt - they are
+	unpitched by definition and report a C4 trigger. */
+inline bool isPitchStateSane (const ChannelState& state)
+{
+	if (! state.present || ! state.gate)
+	{
+		return true;		// silence has no pitch to describe
+	}
+
+	if (state.pitchSource == PitchSource::unpitched)
+	{
+		return true;
+	}
+
+	if (pitchFieldsOf (state) == PitchFields::none)
+	{
+		return false;
+	}
+
+	return state.finePitch > -100 && state.finePitch <= 100;
+}
+
 /** A period-to-note lookup. Built per chip family, clock and tuning, because a period means
 	different pitches on a 1.79 MHz CPU divider and on an FM chip. */
 class NoteTable

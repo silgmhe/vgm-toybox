@@ -3857,6 +3857,52 @@ namespace
 	/** MSM5232: the register is not a divider but a key index into the chip's eighty-eight-entry
 		ROM, and eighty-eight entries is the span from A0, so the index is the note: 21 + index. */
 
+	/** M-1: the two pitch camps. A decoder must fill one of them; a channel that fills neither is
+		silent in MIDI with nothing to show for it, which is the failure this contract exists to catch. */
+
+	void testPitchFieldsContract (void)
+	{
+		using toybox::chips::ChannelState;
+		using toybox::chips::PitchFields;
+		using toybox::chips::PitchSource;
+
+		const ChannelState fresh;
+		check (toybox::chips::pitchFieldsOf (fresh) == PitchFields::none,
+			   "a fresh channel says nothing about pitch");
+
+		ChannelState period;
+		period.present = true;
+		period.gate = true;
+		period.period = 0x2A4;
+		period.block = 4;
+		period.pitchSource = PitchSource::registerExact;
+		check (toybox::chips::pitchFieldsOf (period) == PitchFields::period,
+			   "an FM state is the period camp");
+		check (toybox::chips::isPitchStateSane (period), "the period camp passes the check");
+
+		ChannelState frequency;
+		frequency.present = true;
+		frequency.gate = true;
+		frequency.hz = 440.0;
+		frequency.pitchSource = PitchSource::registerExact;
+		check (toybox::chips::pitchFieldsOf (frequency) == PitchFields::frequency,
+			   "a rate state is the frequency camp");
+		check (toybox::chips::isPitchStateSane (frequency), "the frequency camp passes the check");
+
+		ChannelState broken;
+		broken.present = true;
+		broken.gate = true;
+		broken.pitchSource = PitchSource::registerExact;
+		check (! toybox::chips::isPitchStateSane (broken),
+			   "a voiced channel with neither camp is rejected");
+
+		ChannelState drum;
+		drum.present = true;
+		drum.gate = true;
+		drum.pitchSource = PitchSource::unpitched;
+		check (toybox::chips::isPitchStateSane (drum), "a drum is exempt, it reports a C4 trigger");
+	}
+
 	/** The VGM loader is the seam between format and assembly, so it is tested on its own: a
 		synthetic stream must come out as chip kinds and instances, a sixteen-bit value already packed,
 		and the data block as a view rather than a copy. */
@@ -4478,6 +4524,8 @@ namespace
 	testGa20KeyOff();
 	testGa20Percussion();
 	testGa20AddressUnit();
+
+	testPitchFieldsContract();
 
 	testVgmLoaderIr();
 
