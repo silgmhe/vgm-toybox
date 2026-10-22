@@ -133,6 +133,10 @@ namespace
 			// Two PCM voices with a step register: clock / (4 * (4096 - step)) is exact, so both are
 			// melodic without a root layer.
 			return fmChannel (2);
+		case DEVID_YMW258:
+			// Twenty-eight sampled voices. The register pair is a ratio against unity, so every channel is
+			// melodic with the usual caveat that the absolute octave comes from the sample's own rate.
+			return fmChannel (28);
 		case DEVID_MSM5232:
 			// Eight tone generators whose register is a key index into an 88-entry ROM: the note is the
 			// index itself, so all eight are melodic (a value of 0xD8 or more is the noise mode).

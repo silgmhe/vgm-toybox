@@ -451,6 +451,14 @@ bool VgmCommandReader::next (VgmCommand& command)
 			command.addr = (std::uint8_t) (offset & 0xFF);
 			command.data = data[position + 3];
 		}
+		else if (cmd == 0xB5)
+		{
+			// MultiPCM (YMW-258): one 8-bit register offset and one 8-bit value. Given its own branch for
+			// the same reason 0x43 needed one: the generic path left both fields zero.
+			command.kind = VgmCommand::Kind::registerWrite;
+			command.addr = data[position + 1];
+			command.data = data[position + 2];
+		}
 		else if (cmd == 0x43)
 		{
 			// MSM5232: one 8-bit register offset and one 8-bit value. Without a branch of its own the generic

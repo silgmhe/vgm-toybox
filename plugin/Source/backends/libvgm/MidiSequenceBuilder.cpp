@@ -29,6 +29,7 @@
 #include "chips/VsuDecoder.h"
 #include "chips/K005289Decoder.h"
 #include "chips/Msm5232Decoder.h"
+#include "chips/MultiPcmDecoder.h"
 #include "chips/Okim6295Decoder.h"
 #include "chips/Rf5c68Decoder.h"
 #include "chips/X1_010Decoder.h"
@@ -246,6 +247,10 @@ namespace
 					k007232.queue (deviceFor (DEVID_K007232, command.port), command.addr, command.data,
 										 command.sampleTime);
 					break;
+				case 0xB5:	// MultiPCM - eight registers per voice, key on is bit 7 of register 4
+					multipcm.queue (deviceFor (DEVID_YMW258, 0), command.addr, command.data,
+											 command.sampleTime);
+					break;
 				case 0x43:	// MSM5232 - eight voices, the register is a key index, not a divider
 					msm5232.queue (deviceFor (DEVID_MSM5232, 0), command.addr, command.data,
 										 command.sampleTime);
@@ -386,6 +391,7 @@ namespace
 			flushDecoded (vsu, 5370000u, lastSampleTime);
 			flushDecoded (k005289, 4000000u, lastSampleTime);
 			flushDecoded (msm5232, 2119040u, lastSampleTime);
+			flushDecoded (multipcm, 8000000u, lastSampleTime);
 			flushDecoded (okim, 1000000u, lastSampleTime,
 						  [&okimRom] (chips::Okim6295Decoder& decoder)
 						  {
@@ -1148,6 +1154,9 @@ namespace
 
 		// OKI MSM5232: eight voices whose register is a key index into an 88-entry ROM (note = 21 + index)
 		ChipBuffer<chips::Msm5232Decoder> msm5232;
+
+		// Yamaha YMW-258: 28 sampled voices, ratio = (1024 + pitch) / 1024 * 2^octave
+		ChipBuffer<chips::MultiPcmDecoder> multipcm;
 
 		// Konami K007232: two PCM voices whose step register is a real pitch, clock / (4 * (4096 - step))
 		ChipBuffer<chips::K007232Decoder> k007232;
