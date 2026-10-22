@@ -18,37 +18,54 @@ namespace toybox::midi
 enum class ChipKind
 {
 	unknown,
-	ay8910,			// AY-3-8910 / YM2149, three squares plus noise and envelope
-	c140,			// C140 and the 219 ASIC, sixteen sample voices
-	c352,			// C352, 32 sample voices with word-wide registers
-	es5503,			// ES5503, 32 oscillators walking wavetables
-	ga20,			// GA20 / Y8950's ADPCM half
-	gameBoy,		// DMG APU: two pulses, a wave channel and noise
-	huc6280,		// PC Engine: six wavetable channels
-	k005289,		// Konami: two wavetable voices
-	k007232,		// Konami: two PCM voices
-	k051649,		// SCC: five wavetable channels
-	k053260,		// Konami PCM with KADPCM
-	k054539,		// Konami 8-voice PCM
-	mikey,			// Atari Lynx: four timer-driven squares
-	msm5232,		// OKI: eight voices, the register is a key index
-	multiPcm,		// YMW258 / MultiPCM, 28 voices behind a three-port interface
-	nesApu,			// 2A03: two pulses, triangle, noise and DMC
-	okim6295,		// OKI ADPCM, four voices at one DAC rate
-	opl,			// YM2413, YM3812, YMF262 and Y8950's FM half
-	opm,			// YM2151
-	opn,			// YM2612, YM2203, YM2608, YM2610 - FM plus their SSG/ADPCM channels
-	pokey,			// Atari POKEY
-	qsound,			// Capcom QSound, 16 voices
-	rf5c68,			// RF5C68 / RF5C164
-	saa1099,		// Philips SAA1099
-	segapcm,		// Sega PCM, 16 voices
+
+	// --- square-wave PSGs and their noise channels ---------------------------------------
+	ay8910,			// AY-3-8910 / YM2149: three squares, noise and envelope
 	sn76489,		// SN76489 / SN76496
-	vsu,			// Virtual Boy, five wavetables plus noise
-	wonderswan,		// WonderSwan, four wavetable channels
-	x1_010,			// Seta X1-010, 16 wavetable channels
-	ymf271,			// Yamaha OPX
-	ymz280b,		// Yamaha YMZ280B
+	saa1099,		// Philips SAA1099
+	pokey,			// Atari POKEY
+
+	// --- Yamaha FM, one value per device so the assembly layer can find the right one -----
+	ym2413,			// OPLL
+	ym3812,			// OPL2
+	ym3526,			// OPL
+	y8950,			// OPL + ADPCM (the FM half; the ADPCM half is an independent decoder)
+	ymf262,			// OPL3
+	ymf278b,		// OPL4's OPL3 half
+	ym2612,			// OPN2
+	ym2203,			// OPN
+	ym2608,			// OPNA
+	ym2610,			// OPNB
+	ym2151,			// OPM
+	ymf271,			// OPX
+	ymz280b,		// a sample player with a real pitch register
+
+	// --- sample players ----------------------------------------------------------------
+	c140,			// C140 and the 219 ASIC, sixteen voices
+	c352,			// C352, 32 voices, word-wide registers
+	es5503,			// ES5503, 32 oscillators over wavetables
+	ga20,			// GA20 / Y8950's ADPCM half
+	k053260,		// Konami PCM with KADPCM
+	k054539,		// Konami eight-voice PCM
+	multiPcm,		// YMW258 / MultiPCM, 28 voices behind three ports
+	okim6295,		// OKI ADPCM, four voices at one DAC rate
+	qsound,			// Capcom QSound, 16 voices
+	rf5c68,			// RF5C68
+	rf5c164,			// RF5C164 (same device id, different memory model)
+	segapcm,			// Sega PCM, 16 voices
+
+	// --- wavetable and other ------------------------------------------------------------
+	gameBoy,		// DMG APU
+	huc6280,		// PC Engine
+	k005289,		// Konami, two wavetable voices
+	k007232,		// Konami, two PCM voices
+	k051649,		// SCC
+	mikey,			// Atari Lynx
+	msm5232,		// OKI, the register is a key index
+	nesApu,			// 2A03
+	vsu,			// Virtual Boy
+	wonderswan,
+	x1_010,			// Seta X1-010
 };
 
 /** One chip in the song, as the loader found it.

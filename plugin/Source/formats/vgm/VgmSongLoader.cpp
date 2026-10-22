@@ -79,42 +79,42 @@ bool VgmSongLoader::load (const void* data, std::size_t size, midi::SongIr& out,
 		{
 		// --- PSG and FM, first chip ---------------------------------------------------------
 		case 0x50:	emit (ChipKind::sn76489, port, 0, reg, value, time); break;
-		case 0x51:	emit (ChipKind::opl, 0, 0, reg, value, time); break;
-		case 0x52:	emit (ChipKind::opn, 0, 0, reg, value, time); break;
-		case 0x53:	emit (ChipKind::opn, 0, 1, reg, value, time); break;		// port 1 of the pair
-		case 0x54:	emit (ChipKind::opm, 0, 0, reg, value, time); break;
-		case 0x55:	emit (ChipKind::opn, 0, 0, reg, value, time); break;
-		case 0x56:	emit (ChipKind::opn, 0, 0, reg, value, time); break;
-		case 0x57:	emit (ChipKind::opn, 0, 1, reg, value, time); break;
-		case 0x58:	emit (ChipKind::opn, 0, 0, reg, value, time); break;
-		case 0x59:	emit (ChipKind::opn, 0, 1, reg, value, time); break;
-		case 0x5A:	emit (ChipKind::opl, 0, 0, reg, value, time); break;		// YM3812
-		case 0x5B:	emit (ChipKind::opl, 0, 0, reg, value, time); break;		// YM3526
-		case 0x5C:	emit (ChipKind::opl, 0, 0, reg, value, time); break;		// Y8950 FM half
+		case 0x51:	emit (ChipKind::ym2413, 0, 0, reg, value, time); break;
+		case 0x52:	emit (ChipKind::ym2612, 0, 0, reg, value, time); break;
+		case 0x53:	emit (ChipKind::ym2612, 0, 1, reg, value, time); break;		// port 1 of the pair
+		case 0x54:	emit (ChipKind::ym2151, 0, 0, reg, value, time); break;
+		case 0x55:	emit (ChipKind::ym2203, 0, 0, reg, value, time); break;
+		case 0x56:	emit (ChipKind::ym2608, 0, 0, reg, value, time); break;
+		case 0x57:	emit (ChipKind::ym2608, 0, 1, reg, value, time); break;
+		case 0x58:	emit (ChipKind::ym2610, 0, 0, reg, value, time); break;
+		case 0x59:	emit (ChipKind::ym2610, 0, 1, reg, value, time); break;
+		case 0x5A:	emit (ChipKind::ym3812, 0, 0, reg, value, time); break;		// YM3812
+		case 0x5B:	emit (ChipKind::ym3526, 0, 0, reg, value, time); break;		// YM3526
+		case 0x5C:	emit (ChipKind::y8950, 0, 0, reg, value, time); break;		// Y8950 FM half
 		case 0x5D:	emit (ChipKind::ymz280b, 0, 0, reg, value, time); break;
-		case 0x5E:	emit (ChipKind::opl, 0, 0, reg, value, time); break;		// YMF262
-		case 0x5F:	emit (ChipKind::opl, 0, 1, reg, value, time); break;
+		case 0x5E:	emit (ChipKind::ymf262, 0, 0, reg, value, time); break;		// YMF262
+		case 0x5F:	emit (ChipKind::ymf262, 0, 1, reg, value, time); break;
 
 		// --- the same chips, second instance ------------------------------------------------
 		case 0xA0:	emit (ChipKind::ay8910, port, 0, reg, value, time); break;
-		case 0xA1:	emit (ChipKind::opl, 1, 0, reg, value, time); break;
-		case 0xA2:	emit (ChipKind::opn, 1, 0, reg, value, time); break;
-		case 0xA3:	emit (ChipKind::opn, 1, 1, reg, value, time); break;
-		case 0xA4:	emit (ChipKind::opm, 1, 0, reg, value, time); break;
-		case 0xA5:	emit (ChipKind::opn, 1, 0, reg, value, time); break;
-		case 0xA6:	emit (ChipKind::opn, 1, 0, reg, value, time); break;
-		case 0xA7:	emit (ChipKind::opn, 1, 1, reg, value, time); break;
-		case 0xA8:	emit (ChipKind::opn, 1, 0, reg, value, time); break;
-		case 0xA9:	emit (ChipKind::opn, 1, 1, reg, value, time); break;
-		case 0xAA:	emit (ChipKind::opl, 1, 0, reg, value, time); break;
-		case 0xAB:	emit (ChipKind::opl, 1, 0, reg, value, time); break;
-		case 0xAC:	emit (ChipKind::opl, 1, 0, reg, value, time); break;
-		case 0xAE:	emit (ChipKind::opl, 1, 0, reg, value, time); break;
-		case 0xAF:	emit (ChipKind::opl, 1, 1, reg, value, time); break;
+		case 0xA1:	emit (ChipKind::ym2413, 1, 0, reg, value, time); break;
+		case 0xA2:	emit (ChipKind::ym2612, 1, 0, reg, value, time); break;
+		case 0xA3:	emit (ChipKind::ym2612, 1, 1, reg, value, time); break;
+		case 0xA4:	emit (ChipKind::ym2151, 1, 0, reg, value, time); break;
+		case 0xA5:	emit (ChipKind::ym2203, 1, 0, reg, value, time); break;
+		case 0xA6:	emit (ChipKind::ym2608, 1, 0, reg, value, time); break;
+		case 0xA7:	emit (ChipKind::ym2608, 1, 1, reg, value, time); break;
+		case 0xA8:	emit (ChipKind::ym2610, 1, 0, reg, value, time); break;
+		case 0xA9:	emit (ChipKind::ym2610, 1, 1, reg, value, time); break;
+		case 0xAA:	emit (ChipKind::ym3812, 1, 0, reg, value, time); break;
+		case 0xAB:	emit (ChipKind::ym3526, 1, 0, reg, value, time); break;
+		case 0xAC:	emit (ChipKind::y8950, 1, 0, reg, value, time); break;
+		case 0xAE:	emit (ChipKind::ymf262, 1, 0, reg, value, time); break;
+		case 0xAF:	emit (ChipKind::ymf262, 1, 1, reg, value, time); break;
 
 		// --- samplers and wavetables --------------------------------------------------------
-		case 0xB0:	emit (ChipKind::rf5c68, port, 0, reg, value, time, 0); break;	// RF5C68
-		case 0xB1:	emit (ChipKind::rf5c68, port, 0, reg, value, time, 1); break;	// RF5C164
+		case 0xB0:	emit (ChipKind::rf5c68, port, 0, reg, value, time); break;	// RF5C68
+		case 0xB1:	emit (ChipKind::rf5c164, port, 0, reg, value, time); break;	// RF5C164
 		case 0xB3:	emit (ChipKind::gameBoy, port, 0, reg, value, time); break;
 		case 0xB4:	emit (ChipKind::nesApu, port, 0, reg, value, time); break;
 		case 0xB5:	emit (ChipKind::multiPcm, 0, 0, reg, value, time); break;
@@ -157,7 +157,7 @@ bool VgmSongLoader::load (const void* data, std::size_t size, midi::SongIr& out,
 					// (ports 2..5) has none, so those writes are dropped here rather than later
 			if ((port & 0x7F) < 2)
 			{
-				emit (ChipKind::opl, (port & 0x80) != 0 ? 1 : 0, port & 0x7F, reg, value, time);
+				emit (ChipKind::ymf278b, (port & 0x80) != 0 ? 1 : 0, port & 0x7F, reg, value, time);
 			}
 			break;
 		case 0xD1:	// YMF271: bit 7 picks the chip, the rest is the bank
