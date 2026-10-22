@@ -50,7 +50,6 @@ namespace toybox::backends::libvgm
 {
 namespace
 {
-	constexpr double kVgmRate = 44100.0;
 
 	std::uint64_t deviceChannelKey (playback::DeviceId device, int channel)
 	{
@@ -174,6 +173,9 @@ namespace
 			{
 				return nullptr;
 			}
+
+			// the song declares its own time base; everything below converts once, here
+			tickRate = ir.tickRate > 0.0 ? ir.tickRate : 44100.0;
 
 			for (const auto& write : ir.writes)
 			{
@@ -577,8 +579,8 @@ namespace
 
 				midiNote = std::max (0, std::min (127, midiNote));
 
-				const double start = (double) note.startSample / kVgmRate;
-				const double end = (double) note.endSample / kVgmRate;
+				const double start = (double) note.startSample / tickRate;
+				const double end = (double) note.endSample / tickRate;
 				noteOn (track, start, midiNote, note.velocity);
 
 				// the report needs to know where the pitch came from; `data1` already carries it
@@ -604,7 +606,7 @@ namespace
 					cents += extra->second;
 				}
 
-				pitchBend (track, (double) bend.sampleTime / kVgmRate, (double) cents / 100.0);
+				pitchBend (track, (double) bend.sampleTime / tickRate, (double) cents / 100.0);
 			}
 		}
 
@@ -624,7 +626,7 @@ namespace
 												: 1789773u;
 
 				chips::NesApuDecoder decoder;
-				decoder.reset (chips::ChipConfig { clock, kVgmRate });
+				decoder.reset (chips::ChipConfig { clock, tickRate });
 
 				emitDecodedNotes (device->second,
 								  chips::extractPerformance (decoder, entry.second, totalSamples));
@@ -693,7 +695,7 @@ namespace
 												: fallbackClock;
 
 				chips::OpnDecoder decoder (opnVariantFor (info));
-				decoder.reset (chips::ChipConfig { clock, kVgmRate });
+				decoder.reset (chips::ChipConfig { clock, tickRate });
 				if (! adpcmBRom.empty())
 				{
 					decoder.setAdpcmBRom (adpcmBRom);
@@ -757,7 +759,7 @@ namespace
 				}
 
 				chips::OplDecoder decoder (variant, adpcm);
-				decoder.reset (chips::ChipConfig { clock, kVgmRate });
+				decoder.reset (chips::ChipConfig { clock, tickRate });
 
 				emitDecodedNotes (&info,
 								  chips::extractPerformance (decoder, entry.second, totalSamples));
@@ -802,7 +804,7 @@ namespace
 												: fallbackClock;
 
 				Decoder decoder;
-				decoder.reset (chips::ChipConfig { clock, kVgmRate });
+				decoder.reset (chips::ChipConfig { clock, tickRate });
 				configure (decoder);
 
 				emitDecodedNotes (device->second,
@@ -1067,7 +1069,7 @@ namespace
 												: 4194304u;
 
 				chips::GbcApuDecoder decoder;
-				decoder.reset (chips::ChipConfig { clock, kVgmRate });
+				decoder.reset (chips::ChipConfig { clock, tickRate });
 
 				emitDecodedNotes (device->second,
 								  chips::extractPerformance (decoder, entry.second, totalSamples));
@@ -1131,6 +1133,11 @@ namespace
 		// the frequency register - and its key is the falling edge of a halt bit
 		// every decoder this song needs, created the first time a write names one
 		DecoderRegistry decoders;
+
+		/** The unit of RegisterWrite::sampleTime and of every note time below, as the
+			loader declared it. VGM says 44100; a CPU-rate format would say 1.79 MHz and
+			the conversion happens here, once. */
+		double tickRate = 44100.0;
 
 		std::vector<playback::MidiEvent> events;
 
