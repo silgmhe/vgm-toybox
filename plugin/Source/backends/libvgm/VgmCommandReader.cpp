@@ -418,6 +418,17 @@ bool VgmCommandReader::next (VgmCommand& command)
 			command.data = data[position + 2];
 			command.data2 = data[position + 3];
 		}
+		else if (cmd == 0xA0)
+		{
+			// AY-3-8910: bit 7 of the register byte selects the second chip of a pair (libvgm's
+			// `Cmd_AY8910` masks it off before the write). Leaving it in `addr` made every write of
+			// a two-chip song look like register 0x84, which the decoder drops - the chip was
+			// audible and produced no notes at all.
+			command.kind = VgmCommand::Kind::registerWrite;
+			command.port = (std::uint8_t) (data[position + 1] >> 7);
+			command.addr = (std::uint8_t) (data[position + 1] & 0x7F);
+			command.data = data[position + 2];
+		}
 		else if (cmd == 0x42)
 		{
 			// K005289: the command is `Ofs4_Data12` - the register number in the high nibble of the
