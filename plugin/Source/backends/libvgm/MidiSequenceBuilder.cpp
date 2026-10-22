@@ -266,13 +266,6 @@ namespace
 						command.sampleTime);
 					break;
 								case 0xB8:	// OKIM6295
-					if (std::getenv ("TOYBOX_OKI_DEBUG") != nullptr)		// TEMPORARY
-					{
-						const PLR_DEV_INFO* probe = deviceFor (DEVID_MSM6295, command.port);
-						std::fprintf (stderr, "OKI queue port=%d dev=%p reg=%02X val=%02X\n",
-									  (int) command.port, (const void*) probe, command.addr,
-									  command.data);
-					}
 					okim.queue (deviceFor (DEVID_MSM6295, command.port), command.addr, command.data,
 								command.sampleTime);
 					break;
