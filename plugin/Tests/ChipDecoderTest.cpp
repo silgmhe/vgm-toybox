@@ -23,6 +23,7 @@
 #include "chips/QSoundDecoder.h"
 #include "chips/Es5503Decoder.h"
 #include "chips/MikeyDecoder.h"
+#include "formats/vgm/VgmSongLoader.h"
 #include "chips/Msm5232Decoder.h"
 #include "chips/K005289Decoder.h"
 #include "chips/VsuDecoder.h"
@@ -3856,6 +3857,87 @@ namespace
 	/** MSM5232: the register is not a divider but a key index into the chip's eighty-eight-entry
 		ROM, and eighty-eight entries is the span from A0, so the index is the note: 21 + index. */
 
+	/** The VGM loader is the seam between format and assembly, so it is tested on its own: a
+		synthetic stream must come out as chip kinds and instances, a sixteen-bit value already packed,
+		and the data block as a view rather than a copy. */
+
+	void testVgmLoaderIr (void)
+	{
+		std::vector<std::uint8_t> image (0x100, 0);
+		image[0] = 'V'; image[1] = 'g'; image[2] = 'm'; image[3] = ' ';
+
+		const auto put32 = [&image] (std::size_t at, std::uint32_t value)
+		{
+			for (int i = 0; i < 4; ++i)
+			{
+				image[at + (std::size_t) i] = (std::uint8_t) ((value >> (8 * i)) & 0xFF);
+			}
+		};
+
+		put32 (0x08, 0x150);					// version 1.50
+		put32 (0x34, 0x100 - 0x34);				// data starts right after the header block
+
+		std::vector<std::uint8_t> data;
+		const auto emit = [&data] (std::initializer_list<std::uint8_t> bytes)
+		{
+			data.insert (data.end(), bytes.begin(), bytes.end());
+		};
+
+		emit ({ 0x50, 0x90 });			// SN76489: register 0, value 0x90
+		emit ({ 0x52, 0x28, 0xF0 });			// OPN2 port 0
+		emit ({ 0x53, 0x2A, 0x11 });			// OPN2 port 1
+		emit ({ 0xE1, 0x00, 0x80, 0x12, 0x34 });	// C352: offset 0x0080, value 0x1234
+
+		// one ROM block: type 0x8D, romSize 0x100, placed at 0, sixteen payload bytes
+		std::vector<std::uint8_t> payload (16, 0xAB);
+		emit ({ 0x67, 0x66, 0x8D });
+		const std::uint32_t blockSize = 8 + (std::uint32_t) payload.size();
+		emit ({ (std::uint8_t) (blockSize & 0xFF), (std::uint8_t) ((blockSize >> 8) & 0xFF),
+				(std::uint8_t) ((blockSize >> 16) & 0xFF), (std::uint8_t) ((blockSize >> 24) & 0xFF) });
+		emit ({ 0x00, 0x01, 0x00, 0x00 });		// romSize 0x100
+		emit ({ 0x00, 0x00, 0x00, 0x00 });		// romOffset 0
+		data.insert (data.end(), payload.begin(), payload.end());
+		emit ({ 0x66 });
+
+		image.insert (image.end(), data.begin(), data.end());
+		put32 (0x04, (std::uint32_t) image.size());
+
+		toybox::midi::SongIr ir;
+		std::string error;
+		toybox::formats::vgm::VgmSongLoader loader;
+		check (loader.load (image.data(), image.size(), ir, error), "the synthetic VGM loads");
+
+		check (ir.tickRate == 44100.0, "the loader declares VGM's 44100 Hz grid");
+		check (ir.chips.size() == 3, "three chips appear in first-write order");
+		check (ir.writes.size() == 4, "one write per command, the pair counted once each");
+
+		if (ir.chips.size() != 3 || ir.writes.size() != 4)
+		{
+			return;
+		}
+
+		check (ir.chips[0].kind == toybox::midi::ChipKind::sn76489, "0x50 is the SN76489");
+		check (ir.chips[1].kind == toybox::midi::ChipKind::ym2612, "0x52 is an OPN2, not a family");
+		check (ir.chips[2].kind == toybox::midi::ChipKind::c352, "0xE1 is the C352");
+		check (ir.chips[2].instance == 0, "0xE1's bit 7 is the instance and it is clear here");
+
+		check (ir.writes[0].reg == 0x90 && ir.writes[0].value == 0x90, "the SN76489 write survives");
+		check (ir.writes[1].port == 0, "0x52 lands on OPN port 0");
+		check (ir.writes[2].port == 1, "0x53 lands on OPN port 1");
+		check (ir.writes[3].value == 0x1234, "the C352's two big-endian bytes are one word");
+
+		check (ir.roms.size() == 1, "the data block travels as one view");
+		if (ir.roms.size() == 1)
+		{
+			check (ir.roms[0].memoryType == 0x8D, "the block keeps its type");
+			check (ir.roms[0].romSize == 0x100, "the block keeps the ROM size it declares");
+			check (ir.roms[0].size == 16, "the block keeps its payload length");
+			check (! ir.roms[0].isRam, "a 0x8D block is a ROM, not RAM");
+		}
+
+		check (ir.totalTicks == 0, "no wait commands means the stream ends at tick zero");
+	}
+
 	/** MIKEY: four timer-driven squares at `clock / (2 * (backup + 1) * 2^(shift + 4))`. */
 
 	void testMikeyNotes (void)
@@ -4396,6 +4478,8 @@ namespace
 	testGa20KeyOff();
 	testGa20Percussion();
 	testGa20AddressUnit();
+
+	testVgmLoaderIr();
 
 	testMikeyNotes();
 

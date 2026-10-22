@@ -2,10 +2,14 @@
 
 #include <algorithm>
 #include <cmath>
-#include <cstdio>`r`n#include <cstdlib>`r`n#include <cstring>
+#include <cstdio>
+#include <cstdlib>
+#include <cstring>
 #include <map>
 
 #include "VgmCommandReader.h"
+#include "formats/vgm/VgmSongLoader.h"
+#include "midi/SongIr.h"
 
 #include "chips/Ay8910Decoder.h"
 #include "chips/C140Decoder.h"
@@ -90,264 +94,22 @@ namespace
 
 		std::unique_ptr<playback::MidiSequence> parse (const void* data, std::size_t size)
 		{
-			VgmCommandReader reader (data, size);
-			if (! reader.isValid())
+			// The stream is read by the format's loader; everything below is assembly. This function
+			// no longer knows a single VGM command number, which is what lets a second format reuse it.
+			midi::SongIr ir;
+			std::string error;
+			formats::vgm::VgmSongLoader loader;
+			if (! loader.load (data, size, ir, error))
 			{
 				return nullptr;
 			}
 
-			VgmCommand command;
-			std::uint32_t lastSampleTime = 0;
-			while (reader.next (command))
+			for (const auto& write : ir.writes)
 			{
-				const double time = (double) command.sampleTime / kVgmRate;
-				lastSampleTime = command.sampleTime;
-
-				switch (command.command)
-				{
-				case 0x50:
-					sn.queue (deviceFor (DEVID_SN76496, command.port), command.addr,
-							  command.data, command.sampleTime);
-					break;
-				case 0x51:
-					opl.queue (deviceFor (DEVID_YM2413, 0), command.addr, command.data,
-							   command.sampleTime);
-					break;
-				case 0x52:
-				case 0x53:
-					opn.queue (deviceFor (DEVID_YM2612, 0), command.addr, command.data,
-							   command.sampleTime, command.command == 0x53 ? 1 : 0);
-					break;
-				case 0x54:
-					opm.queue (deviceFor (DEVID_YM2151, 0), command.addr, command.data,
-							   command.sampleTime);
-					break;
-				case 0x55:
-					opn.queue (deviceFor (DEVID_YM2203, 0), command.addr, command.data,
-							   command.sampleTime);
-					break;
-				case 0x56:
-				case 0x57:
-					opn.queue (deviceFor (DEVID_YM2608, 0), command.addr, command.data,
-							   command.sampleTime, command.command == 0x57 ? 1 : 0);
-					break;
-				case 0x58:
-				case 0x59:
-					opn.queue (deviceFor (DEVID_YM2610, 0), command.addr, command.data,
-							   command.sampleTime, command.command == 0x59 ? 1 : 0);
-					break;
-				case 0x5A:
-					opl.queue (deviceFor (DEVID_YM3812, 0), command.addr, command.data,
-							   command.sampleTime);
-					break;
-				case 0x5D:
-					ymz.queue (deviceFor (DEVID_YMZ280B, 0), command.addr, command.data,
-							   command.sampleTime);
-					break;
-				case 0xC8:
-					// X1-010: the 16-bit offset arrived split across addr (low) and port (high).
-					x1.queue (deviceFor (DEVID_X1_010, 0), command.addr, command.data,
-							  command.sampleTime, command.port);
-					break;
-				case 0xD4:
-					// C140: bit 7 of the port byte is the chip instance, the rest is the high byte
-					// of the register offset - a voice's registers are sixteen apart, so the note
-					// registers only line up when both halves arrive.
-					// C140 and the C219 share this command: libvgm maps both to the "0x1C" chip type
-					// (`vgmplayer.cpp`), and the 219 ASIC on NA-1/NA-2 is a cut-down C140 - sixteen
-					// voices of the same sixteen-byte layout, so the same decoder reads both (the
-					// eight extra voices a C219 does not have simply never get a write).
-					c140.queue (deviceFor (DEVID_C140, (command.port >> 7) & 1) != nullptr
-									? deviceFor (DEVID_C140, (command.port >> 7) & 1)
-									: deviceFor (DEVID_C219, 0), command.addr,
-								command.data, command.sampleTime,
-								(std::uint8_t) (command.port & 0x7F));
-					break;
-				case 0xD1:
-					// YMF271: bit 7 of the port byte is the chip instance, the rest is the bank the
-					// write goes to - a bank-0 write is what copies a group's synced registers.
-					opx.queue (deviceFor (DEVID_YMF271, (command.port >> 7) & 1), command.addr,
-							   command.data, command.sampleTime,
-							   (std::uint8_t) (command.port & 0x7F));
-					break;
-				case 0xE1:
-					// C352: a 16-bit offset and a 16-bit value, so unlike every other chip the
-					// register write is a whole word - the reader split it across `data` (high) and
-					// `data2` (low), and bit 7 of the port byte picks the chip.
-					c352.queue (deviceFor (DEVID_C352, (command.port >> 7) & 1), command.addr,
-								(std::uint16_t) (((std::uint16_t) command.data << 8) | command.data2), command.sampleTime,
-						(std::uint8_t) (command.port & 0x7F));
-					break;
-
-
-
-				case 0x5B:
-					opl.queue (deviceFor (DEVID_YM3526, 0), command.addr, command.data,
-							   command.sampleTime);
-					break;
-				case 0x5C:
-					opl.queue (deviceFor (DEVID_Y8950, 0), command.addr, command.data,
-							   command.sampleTime);
-					break;
-				case 0x5E:
-				case 0x5F:
-					opl.queue (deviceFor (DEVID_YMF262, 0), command.addr, command.data,
-							   command.sampleTime, command.command == 0x5F ? 1 : 0);
-					break;
-				case 0xA0:
-					ay.queue (deviceFor (DEVID_AY8910, command.port), command.addr, command.data,
-							  command.sampleTime);
-					break;
-				case 0xA1:
-					opl.queue (deviceFor (DEVID_YM2413, 1), command.addr, command.data,
-							   command.sampleTime);
-					break;
-				case 0xA4:
-					opm.queue (deviceFor (DEVID_YM2151, 1), command.addr, command.data,
-							   command.sampleTime);
-					break;
-				case 0xA5:
-					opn.queue (deviceFor (DEVID_YM2203, 1), command.addr, command.data,
-							   command.sampleTime);
-					break;
-				case 0xA6:
-				case 0xA7:
-					opn.queue (deviceFor (DEVID_YM2608, 1), command.addr, command.data,
-							   command.sampleTime, command.command == 0xA7 ? 1 : 0);
-					break;
-				case 0xAA:
-					opl.queue (deviceFor (DEVID_YM3812, 1), command.addr, command.data,
-							   command.sampleTime);
-					break;
-				case 0xAB:
-					opl.queue (deviceFor (DEVID_YM3526, 1), command.addr, command.data,
-							   command.sampleTime);
-					break;
-				case 0xAC:
-					opl.queue (deviceFor (DEVID_Y8950, 1), command.addr, command.data,
-							   command.sampleTime);
-					break;
-				case 0xAE:
-				case 0xAF:
-					opl.queue (deviceFor (DEVID_YMF262, 1), command.addr, command.data,
-							   command.sampleTime, command.command == 0xAF ? 1 : 0);
-					break;
-				case 0xB0:	// RF5C68
-					rf5c.queue (rf5cDeviceFor (false, command.port), command.addr, command.data,
-								command.sampleTime);
-					break;
-				case 0xB1:	// RF5C164
-					rf5c.queue (rf5cDeviceFor (true, command.port), command.addr, command.data,
-								command.sampleTime);
-					break;
-				case 0xC7:	// VSU - Ofs16_Data8, big endian offset with bit 15 selecting the chip
-					vsu.queue (deviceFor (DEVID_VBOY_VSU, command.port), command.addr, command.data,
-									 command.sampleTime);
-					break;
-				case 0x41:	// K007232 - six registers per voice, the pitch is a twelve-bit step
-					k007232.queue (deviceFor (DEVID_K007232, command.port), command.addr, command.data,
-										 command.sampleTime);
-					break;
-				case 0x40:	// Mikey - eight registers per voice, timer backup at 0x4 and clock shift at 0x5
-					mikey.queue (deviceFor (DEVID_MIKEY, 0), command.addr, command.data,
-									 command.sampleTime);
-					break;
-				case 0xB5:	// MultiPCM - eight registers per voice, key on is bit 7 of register 4
-					multipcm.queue (deviceFor (DEVID_YMW258, 0), command.addr, command.data,
-											 command.sampleTime);
-					break;
-				case 0x43:	// MSM5232 - eight voices, the register is a key index, not a divider
-					msm5232.queue (deviceFor (DEVID_MSM5232, 0), command.addr, command.data,
-										 command.sampleTime);
-					break;
-				case 0x42:	// K005289 - Ofs4_Data12: register in the high nibble, twelve bits of data
-					k005289.queue (deviceFor (DEVID_K005289, 0), command.addr,
-						(std::uint16_t) ((((std::uint16_t) command.data2 & 0x0F) << 8) | command.data),
-						command.sampleTime);
-					break;
-								case 0xB8:	// OKIM6295
-					okim.queue (deviceFor (DEVID_MSM6295, command.port), command.addr, command.data,
-								command.sampleTime);
-					break;
-				case 0xB3:
-					queueGbWrite (deviceFor (DEVID_GB_DMG, command.port),
-								  command.addr, command.data, command.sampleTime);
-					break;
-				case 0xB4:
-					queueNesWrite (deviceFor (DEVID_NES_APU, command.port),
-								   command.addr, command.data, command.sampleTime);
-					break;
-				case 0xB9:	// HuC6280
-					c6280.queue (deviceFor (DEVID_C6280, command.port), command.addr,
-								 command.data, command.sampleTime);
-					break;
-				case 0xBB:	// POKEY
-					pokey.queue (deviceFor (DEVID_POKEY, command.port), command.addr,
-								 command.data, command.sampleTime);
-					break;
-				case 0xBC:	// WonderSwan
-					wswan.queue (deviceFor (DEVID_WSWAN, command.port), command.addr,
-								 command.data, command.sampleTime);
-					break;
-				case 0xBD:	// SAA1099
-					saa.queue (deviceFor (DEVID_SAA1099, command.port), command.addr,
-							   command.data, command.sampleTime);
-					break;
-				case 0xBA:	// K053260: one chip per instance, a 6-bit offset and one data byte
-					k053260.queue (deviceFor (DEVID_K053260, 0), command.addr, command.data,
-								   command.sampleTime);
-					break;
-				case 0xBF:	// GA20: four voices, offset = channel * 8 + register
-					ga20.queue (deviceFor (DEVID_GA20, 0), command.addr, command.data,
-								command.sampleTime);
-					break;
-				case 0xC0:	// Sega PCM: a byte of the register RAM at a 16-bit offset
-					segaPcm.queue (deviceFor (DEVID_SEGAPCM, 0), command.addr, command.data,
-								   command.sampleTime, command.port);
-					break;
-				case 0xD5:	// ES5503: a port byte, an 8-bit register and a value
-					es5503.queue (deviceFor (DEVID_ES5503, command.port), command.addr, command.data,
-								  command.sampleTime);
-					break;
-				case 0xD3:	// K054539: a 16-bit offset, so its high byte travels in `port`
-					k054539.queue (deviceFor (DEVID_K054539, 0), command.addr, command.data,
-								   command.sampleTime, command.port);
-					break;
-				case 0xC4:	// QSound: the value is 16 bits wide and comes before the offset
-					qsound.queue (deviceFor (DEVID_QSOUND, 0), command.addr,
-						(std::uint16_t) (((std::uint16_t) command.data << 8) | command.data2),
-						command.sampleTime);
-					break;
-				case 0xD0:	// YMF278B (OPL4): ports 0/1 are the OPL3 banks, ports 2..5 the
-							// wavetable half, which has no decoder yet; bit 7 selects the chip
-					if ((command.port & 0x7F) < 2)
-					{
-						opl.queue (deviceFor (DEVID_YMF278B, (command.port & 0x80) != 0 ? 1 : 0),
-								   command.addr, command.data, command.sampleTime,
-								   (std::uint8_t) (command.port & 0x7F));
-					}
-					break;
-				case 0xD2:	// K051649 (SCC): one command, two chip writes
-					if (command.kind == VgmCommand::Kind::registerWritePair)
-					{
-						scc.queuePair (deviceFor (DEVID_K051649, command.port), command.addr,
-									   command.data, command.data2, command.sampleTime, command.port);
-					}
-					break;
-				case 0xA2:
-				case 0xA3:
-					opn.queue (deviceFor (DEVID_YM2612, 1), command.addr, command.data,
-							   command.sampleTime, command.command == 0xA3 ? 1 : 0);
-					break;
-				case 0xA8:
-				case 0xA9:
-					opn.queue (deviceFor (DEVID_YM2610, 1), command.addr, command.data,
-							   command.sampleTime, command.command == 0xA9 ? 1 : 0);
-					break;
-				default:
-					break;	// waits and stream end are handled by the reader
-				}
+				dispatch (ir, write);
 			}
+
+			const std::uint32_t lastSampleTime = ir.totalTicks;
 
 			// chips with a real state machine are decoded in one pass after the stream is read:
 			// their note boundaries come from the chip's own counters, not from a register write
@@ -356,7 +118,7 @@ namespace
 			// ADPCM-B's pitch only exists in its DELTA-T ROM (block 0x82): the sample's period has
 			// to be measured, and DELTA-N turns it into the note the driver asked for
 			flushOpn (opn.writes.empty() ? std::vector<std::uint8_t>()
-										 : assembleRom (reader, 0x82, 16 * 1024 * 1024, true),
+										 : assembleRom (ir, 0x82, 16 * 1024 * 1024, true),
 					  lastSampleTime);
 			flushGb (lastSampleTime);
 			flushOpl (lastSampleTime);
@@ -373,7 +135,7 @@ namespace
 			// cycle can be measured, so the decoder needs it before it can name a pitch.
 			const std::vector<std::uint8_t> rf5cRam =
 				rf5c.writes.empty() ? std::vector<std::uint8_t>()
-									: assemblePcmBank (reader, 0x02, 64 * 1024);
+									: assemblePcmBank (ir, 0x02, 64 * 1024);
 			flushDecoded (rf5c, 12500000u, lastSampleTime,
 						  [&rf5cRam] (chips::Rf5c68Decoder& decoder)
 						  {
@@ -386,7 +148,7 @@ namespace
 			// the sample's own cycle, so the 256 KB ROM (0x8B blocks) is the only source of a pitch.
 			const std::vector<std::uint8_t> okimRom =
 				okim.writes.empty() ? std::vector<std::uint8_t>()
-									: assembleRom (reader, 0x8B, 256 * 1024);
+									: assembleRom (ir, 0x8B, 256 * 1024);
 			flushDecoded (k007232, 8000000u, lastSampleTime);
 			flushDecoded (vsu, 5370000u, lastSampleTime);
 			flushDecoded (k005289, 4000000u, lastSampleTime);
@@ -412,8 +174,8 @@ namespace
 			// together and the decoder cannot read one without the other.
 			const std::vector<std::uint8_t> c140Rom =
 				c140.writes.empty() ? std::vector<std::uint8_t>()
-									: assembleRom (reader, 0x8D, 2 * 1024 * 1024);
-			const auto c140Banking = chips::C140Decoder::bankingFromHeaderByte (reader.c140Banking());
+									: assembleRom (ir, 0x8D, 2 * 1024 * 1024);
+			const auto c140Banking = chips::C140Decoder::bankingFromHeaderByte (c140BankingOf (ir));
 			flushDecoded (c140, 8000000u, lastSampleTime,
 						  [&c140Rom, c140Banking] (chips::C140Decoder& decoder)
 						  {
@@ -428,7 +190,7 @@ namespace
 			// declares - the chip masks it to a power of two rather than clipping at 2 MB.
 			const std::vector<std::uint8_t> c352Rom =
 				c352.writes.empty() ? std::vector<std::uint8_t>()
-									: assembleRom (reader, 0x92, 32 * 1024 * 1024);
+									: assembleRom (ir, 0x92, 32 * 1024 * 1024);
 			flushDecoded (c352, 12288000u, lastSampleTime,
 						  [&c352Rom] (chips::C352Decoder& decoder)
 						  {
@@ -443,7 +205,7 @@ namespace
 			// the chip masks it to a power of two.
 			const std::vector<std::uint8_t> k053260Rom =
 				k053260.writes.empty() ? std::vector<std::uint8_t>()
-									   : assembleRom (reader, 0x8E, 2 * 1024 * 1024);
+									   : assembleRom (ir, 0x8E, 2 * 1024 * 1024);
 			flushDecoded (k053260, 3579545u, lastSampleTime,
 						  [&k053260Rom] (chips::K053260Decoder& decoder)
 						  {
@@ -457,7 +219,7 @@ namespace
 			// marker. Block type 0x8C, 24-bit addresses.
 			const std::vector<std::uint8_t> k054539Rom =
 				k054539.writes.empty() ? std::vector<std::uint8_t>()
-									   : assembleRom (reader, 0x8C, 16 * 1024 * 1024);
+									   : assembleRom (ir, 0x8C, 16 * 1024 * 1024);
 			flushDecoded (k054539, 18432000u, lastSampleTime,
 						  [&k054539Rom] (chips::K054539Decoder& decoder)
 						  {
@@ -471,7 +233,7 @@ namespace
 			// image is the declared ROM and the chip masks it to a power of two.
 			const std::vector<std::uint8_t> qsoundRom =
 				qsound.writes.empty() ? std::vector<std::uint8_t>()
-									  : assembleRom (reader, 0x8F, 8 * 1024 * 1024);
+									  : assembleRom (ir, 0x8F, 8 * 1024 * 1024);
 			flushDecoded (qsound, 60000000u, lastSampleTime,
 						  [&qsoundRom] (chips::QSoundDecoder& decoder)
 						  {
@@ -484,7 +246,7 @@ namespace
 			// GA20's samples are its 0x93 blocks, addressed in 16-byte units inside 1 MB.
 			const std::vector<std::uint8_t> ga20Rom =
 				ga20.writes.empty() ? std::vector<std::uint8_t>()
-									: assembleRom (reader, 0x93, 1024 * 1024);
+									: assembleRom (ir, 0x93, 1024 * 1024);
 			// the GA20's byte rate is `clock / 4 / (256 - rate)`: the decoder needs the clock the
 			// device was started with, which `flushDecoded` takes from the device config (the
 			// header's 0xE0); the constant is only the fallback when there is no device
@@ -500,7 +262,7 @@ namespace
 			// Sega PCM's samples are its 0x80 blocks, indexed by the 24-bit position's byte part.
 			const std::vector<std::uint8_t> segaPcmRom =
 				segaPcm.writes.empty() ? std::vector<std::uint8_t>()
-									   : assembleRom (reader, 0x80, 8 * 1024 * 1024);
+									   : assembleRom (ir, 0x80, 8 * 1024 * 1024);
 			flushDecoded (segaPcm, 8000000u, lastSampleTime,
 						  [&segaPcmRom] (chips::SegaPcmDecoder& decoder)
 						  {
@@ -516,7 +278,7 @@ namespace
 			// the Apple IIgs, and the core divides it by eight and by the oscillator count.
 			const std::vector<std::uint8_t> es5503Ram =
 				es5503.writes.empty() ? std::vector<std::uint8_t>()
-									  : assembleRam (reader, 0xE1, 128 * 1024);
+									  : assembleRam (ir, 0xE1, 128 * 1024);
 			flushDecoded (es5503, 7159090u, lastSampleTime,
 						  [&es5503Ram] (chips::Es5503Decoder& decoder)
 						  {
@@ -546,6 +308,154 @@ namespace
 		}
 
 	private:
+		/** Routes one IR write to the decoder that owns its kind.
+
+			The chip's own protocol is applied here rather than in the loader: the Gb/Nes helpers split
+			a write into the several the chip needs, the C140 falls back to the 219 ASIC when the running
+			device is the cut-down one, and the two RF5C variants share a libvgm id. Those are facts
+			about the devices this runtime started, which is exactly what this layer knows and the
+			format layer does not. */
+		void dispatch (const midi::SongIr& ir, const chips::RegisterWrite& w)
+		{
+			const auto& slot = ir.chips[w.deviceId];
+			const int instance = slot.instance;
+			const auto port = (std::uint8_t) w.port;
+			const auto reg = w.reg;
+			const auto value = w.value;
+			const auto time = w.sampleTime;
+
+			switch (slot.kind)
+			{
+			case midi::ChipKind::sn76489:
+				sn.queue (deviceFor (DEVID_SN76496, instance), reg, value, time);
+				break;
+			case midi::ChipKind::ym2413:
+				opl.queue (deviceFor (DEVID_YM2413, instance), reg, value, time);
+				break;
+			case midi::ChipKind::ym3812:
+				opl.queue (deviceFor (DEVID_YM3812, instance), reg, value, time);
+				break;
+			case midi::ChipKind::ym3526:
+				opl.queue (deviceFor (DEVID_YM3526, instance), reg, value, time);
+				break;
+			case midi::ChipKind::y8950:
+				opl.queue (deviceFor (DEVID_Y8950, instance), reg, value, time);
+				break;
+			case midi::ChipKind::ymf262:
+				opl.queue (deviceFor (DEVID_YMF262, instance), reg, value, time, port);
+				break;
+			case midi::ChipKind::ymf278b:
+				opl.queue (deviceFor (DEVID_YMF278B, instance), reg, value, time, port);
+				break;
+			case midi::ChipKind::ym2612:
+				opn.queue (deviceFor (DEVID_YM2612, instance), reg, value, time, port);
+				break;
+			case midi::ChipKind::ym2203:
+				opn.queue (deviceFor (DEVID_YM2203, instance), reg, value, time, port);
+				break;
+			case midi::ChipKind::ym2608:
+				opn.queue (deviceFor (DEVID_YM2608, instance), reg, value, time, port);
+				break;
+			case midi::ChipKind::ym2610:
+				opn.queue (deviceFor (DEVID_YM2610, instance), reg, value, time, port);
+				break;
+			case midi::ChipKind::ym2151:
+				opm.queue (deviceFor (DEVID_YM2151, instance), reg, value, time);
+				break;
+			case midi::ChipKind::ymf271:
+				opx.queue (deviceFor (DEVID_YMF271, instance), reg, value, time, port);
+				break;
+			case midi::ChipKind::ymz280b:
+				ymz.queue (deviceFor (DEVID_YMZ280B, instance), reg, value, time);
+				break;
+			case midi::ChipKind::ay8910:
+				ay.queue (deviceFor (DEVID_AY8910, instance), reg, value, time);
+				break;
+			case midi::ChipKind::gameBoy:
+				queueGbWrite (deviceFor (DEVID_GB_DMG, instance), reg, value, time);
+				break;
+			case midi::ChipKind::nesApu:
+				queueNesWrite (deviceFor (DEVID_NES_APU, instance), reg, value, time);
+				break;
+			case midi::ChipKind::huc6280:
+				c6280.queue (deviceFor (DEVID_C6280, instance), reg, value, time);
+				break;
+			case midi::ChipKind::k051649:
+				scc.queue (deviceFor (DEVID_K051649, instance), reg, value, time, port);
+				break;
+			case midi::ChipKind::k053260:
+				k053260.queue (deviceFor (DEVID_K053260, instance), reg, value, time);
+				break;
+			case midi::ChipKind::k054539:
+				k054539.queue (deviceFor (DEVID_K054539, instance), reg, value, time, port);
+				break;
+			case midi::ChipKind::c140:
+			{
+				// the 219 ASIC answers the same command; the runtime may only have started that one
+				const PLR_DEV_INFO* device = deviceFor (DEVID_C140, instance);
+				c140.queue (device != nullptr ? device : deviceFor (DEVID_C219, 0),
+							reg, value, time, port);
+				break;
+			}
+			case midi::ChipKind::c352:
+				c352.queue (deviceFor (DEVID_C352, instance), reg, value, time, port);
+				break;
+			case midi::ChipKind::qsound:
+				qsound.queue (deviceFor (DEVID_QSOUND, instance), reg, value, time);
+				break;
+			case midi::ChipKind::ga20:
+				ga20.queue (deviceFor (DEVID_GA20, instance), reg, value, time);
+				break;
+			case midi::ChipKind::es5503:
+				es5503.queue (deviceFor (DEVID_ES5503, instance), reg, value, time);
+				break;
+			case midi::ChipKind::rf5c68:
+				rf5c.queue (rf5cDeviceFor (false, instance), reg, value, time);
+				break;
+			case midi::ChipKind::rf5c164:
+				rf5c.queue (rf5cDeviceFor (true, instance), reg, value, time);
+				break;
+			case midi::ChipKind::segapcm:
+				segaPcm.queue (deviceFor (DEVID_SEGAPCM, instance), reg, value, time, port);
+				break;
+			case midi::ChipKind::okim6295:
+				okim.queue (deviceFor (DEVID_MSM6295, instance), reg, value, time);
+				break;
+			case midi::ChipKind::saa1099:
+				saa.queue (deviceFor (DEVID_SAA1099, instance), reg, value, time);
+				break;
+			case midi::ChipKind::pokey:
+				pokey.queue (deviceFor (DEVID_POKEY, instance), reg, value, time);
+				break;
+			case midi::ChipKind::x1_010:
+				x1.queue (deviceFor (DEVID_X1_010, instance), reg, value, time, port);
+				break;
+			case midi::ChipKind::wonderswan:
+				wswan.queue (deviceFor (DEVID_WSWAN, instance), reg, value, time);
+				break;
+			case midi::ChipKind::multiPcm:
+				multipcm.queue (deviceFor (DEVID_YMW258, instance), reg, value, time);
+				break;
+			case midi::ChipKind::mikey:
+				mikey.queue (deviceFor (DEVID_MIKEY, instance), reg, value, time);
+				break;
+			case midi::ChipKind::k005289:
+				k005289.queue (deviceFor (DEVID_K005289, instance), reg, value, time);
+				break;
+			case midi::ChipKind::k007232:
+				k007232.queue (deviceFor (DEVID_K007232, instance), reg, value, time);
+				break;
+			case midi::ChipKind::msm5232:
+				msm5232.queue (deviceFor (DEVID_MSM5232, instance), reg, value, time);
+				break;
+			case midi::ChipKind::vsu:
+				vsu.queue (deviceFor (DEVID_VBOY_VSU, instance), reg, value, time);
+				break;
+			default:
+				break;
+			}
+		}
+
 		/** Buffers one 2A03 register write. The chip's notes cannot be read off a single write:
 			they end when the length counter or the envelope says so, which only the decoder's own
 			frame sequencer knows. */
@@ -881,7 +791,21 @@ namespace
 			register, but the sample's own cycle length - the number the rate has to be divided by -
 			only exists in these bytes. See chips/C140Decoder.h and chips/C352Decoder.h for the
 			measurement (shared through chips/Pitch.h) and the reason it cannot be skipped. */
-		static std::vector<std::uint8_t> assembleRom (const VgmCommandReader& reader,
+		/** The C140's ROM banking travels in the slot's flags, the way the header byte did before. */
+		static std::uint8_t c140BankingOf (const midi::SongIr& ir)
+		{
+			for (const auto& slot : ir.chips)
+			{
+				if (slot.kind == midi::ChipKind::c140)
+				{
+					return (std::uint8_t) slot.flags;
+				}
+			}
+
+			return 0;
+		}
+
+		static std::vector<std::uint8_t> assembleRom (const midi::SongIr& ir,
 													  std::uint8_t type,
 													  std::size_t maxRomBytes,
 													  bool clipToContent = false)
@@ -891,9 +815,9 @@ namespace
 			// present, so libvgm masks the ADPCM-B address with 4 MB and the driver's 0x6B9000 is
 			// really 0x2B9000, inside its block. Clipping to the content reproduces that.
 			std::size_t romSize = 0;
-			for (const auto& block : reader.dataBlocks())
+			for (const auto& block : ir.roms)
 			{
-				if (block.type != type)
+				if (block.memoryType != type)
 				{
 					continue;
 				}
@@ -910,9 +834,9 @@ namespace
 			}
 
 			rom.assign (romSize, 0);
-			for (const auto& block : reader.dataBlocks())
+			for (const auto& block : ir.roms)
 			{
-				if (block.type != type || block.romOffset >= rom.size())
+				if (block.memoryType != type || block.romOffset >= rom.size())
 				{
 					continue;
 				}
@@ -929,14 +853,14 @@ namespace
 
 			The RF5C164's samples live there, as type 0x02; a bank larger than the chip's RAM is cut at
 			the chip's limit, because everything past it is unreachable anyway. */
-		static std::vector<std::uint8_t> assemblePcmBank (const VgmCommandReader& reader,
+		static std::vector<std::uint8_t> assemblePcmBank (const midi::SongIr& ir,
 														  std::uint8_t type,
 														  std::size_t maxBytes)
 		{
 			std::vector<std::uint8_t> bank;
-			for (const auto& block : reader.dataBlocks())
+			for (const auto& block : ir.roms)
 			{
-				if (block.type != type || bank.size() >= maxBytes)
+				if (block.memoryType != type || bank.size() >= maxBytes)
 				{
 					continue;
 				}
@@ -954,14 +878,14 @@ namespace
 			address to write at and nothing else - so the image is `maxRamBytes` of zeroes with every
 			block copied to its own address. A gap stays zero, which is also what the chip reads
 			there, and a table that lives in one measures as "no period". */
-		static std::vector<std::uint8_t> assembleRam (const VgmCommandReader& reader,
+		static std::vector<std::uint8_t> assembleRam (const midi::SongIr& ir,
 													  std::uint8_t type,
 													  std::size_t maxRamBytes)
 		{
 			std::vector<std::uint8_t> ram (maxRamBytes, 0);
-			for (const auto& block : reader.dataBlocks())
+			for (const auto& block : ir.roms)
 			{
-				if (block.type != type || block.ramOffset >= ram.size())
+				if (block.memoryType != type || block.ramOffset >= ram.size())
 				{
 					continue;
 				}
