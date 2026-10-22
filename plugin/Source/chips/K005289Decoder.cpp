@@ -68,9 +68,8 @@ void K005289Decoder::write (const RegisterWrite& write)
 	const int channel = write.reg & 1;
 	Impl::Voice& voice = impl->voices[channel];
 
-	// the command carries twelve bits: the low byte in `value`, the high nibble in `value2`
-	const std::uint16_t data = (std::uint16_t) ((((std::uint16_t) write.value2 & 0x0F) << 8)
-												| (std::uint16_t) write.value);
+	// the reader packs the command's twelve bits into one word (ChipTypes.h)
+	const std::uint16_t data = (std::uint16_t) (write.value & 0x0FFF);
 
 	switch (write.reg & 0x06)
 	{

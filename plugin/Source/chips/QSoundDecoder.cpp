@@ -475,8 +475,8 @@ void QSoundDecoder::setRom (std::vector<std::uint8_t> rom)
 
 void QSoundDecoder::write (const RegisterWrite& w)
 {
-	// the command's two bytes arrive high-then-low, so `value` holds the high half (`data`)
-	const std::uint16_t value = (std::uint16_t) (((std::uint16_t) w.value << 8) | w.value2);
+	// the reader packs the command's two bytes into one word, high half first (ChipTypes.h)
+	const std::uint16_t value = w.value;
 	const std::uint8_t offset = w.reg;
 
 	if (offset < 0x80)

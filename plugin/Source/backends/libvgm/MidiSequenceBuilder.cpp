@@ -175,8 +175,8 @@ namespace
 					// register write is a whole word - the reader split it across `data` (high) and
 					// `data2` (low), and bit 7 of the port byte picks the chip.
 					c352.queue (deviceFor (DEVID_C352, (command.port >> 7) & 1), command.addr,
-								command.data, command.sampleTime,
-								(std::uint8_t) (command.port & 0x7F), command.data2);
+								(std::uint16_t) (((std::uint16_t) command.data << 8) | command.data2), command.sampleTime,
+						(std::uint8_t) (command.port & 0x7F));
 					break;
 
 
@@ -261,8 +261,9 @@ namespace
 										 command.sampleTime);
 					break;
 				case 0x42:	// K005289 - Ofs4_Data12: register in the high nibble, twelve bits of data
-					k005289.queue (deviceFor (DEVID_K005289, 0), command.addr, command.data,
-										 command.sampleTime, 0, command.data2);
+					k005289.queue (deviceFor (DEVID_K005289, 0), command.addr,
+						(std::uint16_t) ((((std::uint16_t) command.data2 & 0x0F) << 8) | command.data),
+						command.sampleTime);
 					break;
 								case 0xB8:	// OKIM6295
 					if (std::getenv ("TOYBOX_OKI_DEBUG") != nullptr)		// TEMPORARY
@@ -320,8 +321,9 @@ namespace
 								   command.sampleTime, command.port);
 					break;
 				case 0xC4:	// QSound: the value is 16 bits wide and comes before the offset
-					qsound.queue (deviceFor (DEVID_QSOUND, 0), command.addr, command.data,
-								  command.sampleTime, 0, command.data2);
+					qsound.queue (deviceFor (DEVID_QSOUND, 0), command.addr,
+						(std::uint16_t) (((std::uint16_t) command.data << 8) | command.data2),
+						command.sampleTime);
 					break;
 				case 0xD0:	// YMF278B (OPL4): ports 0/1 are the OPL3 banks, ports 2..5 the
 							// wavetable half, which has no decoder yet; bit 7 selects the chip
@@ -800,8 +802,8 @@ namespace
 		template <typename Decoder>
 		struct ChipBuffer
 		{
-			void queue (const PLR_DEV_INFO* device, std::uint8_t reg, std::uint8_t value,
-						std::uint32_t sampleTime, std::uint8_t port = 0, std::uint8_t value2 = 0)
+			void queue (const PLR_DEV_INFO* device, std::uint8_t reg, std::uint16_t value,
+						std::uint32_t sampleTime, std::uint8_t port = 0)
 			{
 				if (device == nullptr)
 				{
@@ -813,7 +815,6 @@ namespace
 				write.reg = reg;
 				write.value = value;
 				write.port = port;
-				write.value2 = value2;
 				write.sampleTime = sampleTime;
 				writes[device->id].push_back (write);
 				devices[device->id] = device;

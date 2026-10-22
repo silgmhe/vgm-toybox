@@ -2422,15 +2422,13 @@ namespace
 	}
 
 	/** One C352 register write: the VGM's 0xE1 carries a 16-bit big-endian offset and a 16-bit
-		big-endian value, so the offset's high byte goes in `port` and the value's two halves in
-		`value` / `value2`. */
+		big-endian value, so the offset's high byte goes in `port` and the value is one 16-bit word. */
 	void c352Write (Stream& stream, std::uint32_t time, std::uint16_t offset, std::uint16_t value)
 	{
 		RegisterWrite write;
 		write.port = (std::uint8_t) ((offset >> 8) & 0x7F);
 		write.reg = (std::uint8_t) (offset & 0xFF);
-		write.value = (std::uint8_t) (value >> 8);
-		write.value2 = (std::uint8_t) (value & 0xFF);
+		write.value = value;
 		write.sampleTime = time;
 		stream.writes.push_back (write);
 	}
@@ -3360,8 +3358,7 @@ namespace
 	{
 		RegisterWrite write;
 		write.reg = offset;
-		write.value = (std::uint8_t) (value >> 8);
-		write.value2 = (std::uint8_t) (value & 0xFF);
+		write.value = value;
 		write.sampleTime = time;
 		stream.writes.push_back (write);
 	}
@@ -3827,8 +3824,7 @@ namespace
 		{
 			toybox::chips::RegisterWrite write;
 			write.reg = reg;
-			write.value = (std::uint8_t) (data & 0xFF);
-			write.value2 = (std::uint8_t) ((data >> 8) & 0x0F);		// the command carries twelve bits
+			write.value = data;
 			write.sampleTime = time;
 			writes.push_back (write);
 		};

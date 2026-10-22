@@ -58,12 +58,8 @@ struct RegisterWrite
 {
 	std::uint32_t deviceId = 0;		// libvgm instance id; routing only, never interpreted
 	std::uint8_t reg = 0;
-	std::uint8_t value = 0;
+	std::uint16_t value = 0;		// the whole register word; byte-wide chips use the low byte
 	std::uint8_t port = 0;			// second port / second chip of a pair
-	/** The low byte of a sixteen-bit data register (the C352 is the only chip whose registers
-		are written as whole words, and its VGM command carries both bytes). Zero everywhere else,
-		where `value` alone is the write. */
-	std::uint8_t value2 = 0;
 	std::uint32_t sampleTime = 0;
 };
 

@@ -358,9 +358,9 @@ void C352Decoder::setRom (std::vector<std::uint8_t> rom)
 void C352Decoder::write (const RegisterWrite& w)
 {
 	// the VGM command carries a 16-bit offset and a 16-bit value, both big-endian; the reader puts
-	// the offset's high byte in `port` and the value's low byte in `value2`
+	// the reader packs the value's two big-endian halves into one word (ChipTypes.h)
 	const std::uint16_t offset = (std::uint16_t) (((std::uint16_t) (w.port & 0x7F) << 8) | w.reg);
-	const std::uint16_t value = (std::uint16_t) (((std::uint16_t) w.value << 8) | w.value2);
+	const std::uint16_t value = w.value;
 
 	if (offset >= 0x100)
 	{
