@@ -7,7 +7,7 @@
 | 范围 | `plugin/Source/chips/`（31 个解码器）、`plugin/Source/backends/libvgm/`（装配层）、`plugin/Source/playback/`（引擎接口）；不评审 UI 细节与 libvgm 本身 |
 | 方法 | 静态阅读接口与实现、统计规模与重复度、核对文档声明、以真实曲目运行验证现行行为 |
 | 结论 | **功能正确、芯片层已解耦；装配层仍与 VGM 强耦合**。新增芯片很便宜，新增**格式**很贵。3 个结构性阻断项、4 个高优先级、3 个中、1 个低 |
-| 状态 | 评审已完成；**R0、R1 已实施**（`ac66325`、`b11927b`，见 §11） |
+| 状态 | 评审已完成；**R0、R1、R2 已实施**（`ac66325`、`b11927b`、`467067a`，见 §11） |
 
 ## 1. 总体结论
 
@@ -46,7 +46,7 @@
 | ID | 级别 | 问题 |
 |---|---|---|
 | ~~C-1~~ | ~~阻断~~ **已解决（R1）** | `Builder::parse` 把「VGM 命令解析」与「MIDI 装配」放在同一函数（462 行 / 57 个 case） |
-| C-2 | 阻断 | 设备路由靠 31 个 `ChipBuffer<T>` 成员 + `deviceFor(DEVID_*)`，无法跨格式复用 |
+| ~~C-2~~ | ~~阻断~~ **已解决（R2）** | 设备路由靠 31 个 `ChipBuffer<T>` 成员 + `deviceFor(DEVID_*)`，无法跨格式复用 |
 | ~~C-3~~ | ~~阻断~~ **已解决（R0a）** | `IChipDecoder::reset(clock, sampleRate)` 的契约写着「来自 VGM 头部」，芯片层泄漏格式概念 |
 | ~~H-1~~ | ~~高~~ **已解决（R0b）** | `RegisterWrite.value2` 为 C352 单颗芯片而加，格式细节进入共享 IR |
 | H-2 | 高 | `kVgmRate = 44100.0` 是全局常量，时间栅格无处传递 |
@@ -216,7 +216,7 @@ Source/
 | R0a `ChipConfig` / `IChipDecoder::reset` | **已完成** | `ac66325` | `ctest` 34/34；VSU 03 = 81、MIKEY 01 = 36、YMW258 02 = 77，与改动前一致 |
 | R0b `RegisterWrite::value` → `uint16_t`，删 `value2` | **已完成** | 本次提交 | `ctest` 34/34；QSound 01 = 49、K005289 01 = 16、c352 09/10 = 77/77 全部 PASS |
 | R1 `SongIr` + `ISongLoader`（解决 C-1） | **已完成** | `53c0691`、`e7b356c`、`b11927b` | 95 首逐首**完全一致**；新增 `testVgmLoaderIr` |
-| R2 `DecoderRegistry`（解决 C-2） | 待做 | — | `--pitch-report` 不变 |
+| R2 `DecoderRegistry`（解决 C-2） | **已完成** | `467067a` | 95 首逐首**完全一致**；31 个成员 → 1 个 `map<type_index, ...>` |
 | R3 合并 30 个 `NoteTable` | 待做 | — | 单测断言不变 |
 | R4 拆 `LibvgmSongInstance` | 随 NSF | — | 轨枚举快照不变 |
 | R5 NSF 适配 | 单独立项 | — | 需新 CPU 核心 |
