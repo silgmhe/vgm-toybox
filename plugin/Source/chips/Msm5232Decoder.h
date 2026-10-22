@@ -33,7 +33,7 @@ public:
 	Msm5232Decoder (const Msm5232Decoder&) = delete;
 	Msm5232Decoder& operator= (const Msm5232Decoder&) = delete;
 
-	void reset (std::uint32_t clock, double sampleRate) override;
+	void reset (const ChipConfig& config) override;
 	void write (const RegisterWrite& write) override;
 	void advance (std::uint32_t sampleTime) override;
 

@@ -313,13 +313,15 @@ struct Rf5c68Decoder::Impl
 
 Rf5c68Decoder::Rf5c68Decoder() : impl (std::make_unique<Impl>())
 {
-	reset (kDefaultClock, 44100.0);
+	reset (ChipConfig { kDefaultClock, 44100.0 });
 }
 
 Rf5c68Decoder::~Rf5c68Decoder() = default;
 
-void Rf5c68Decoder::reset (std::uint32_t clock, double sampleRate)
+void Rf5c68Decoder::reset (const ChipConfig& config)
 {
+	[[maybe_unused]] const std::uint32_t clock = config.clockHz;
+	[[maybe_unused]] const double sampleRate = config.timeBaseHz;
 	// the RAM belongs to the song, not to the run
 	std::vector<std::uint8_t> ram = std::move (impl->ram);
 

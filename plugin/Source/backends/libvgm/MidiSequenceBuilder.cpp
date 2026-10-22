@@ -648,7 +648,7 @@ namespace
 												: 1789773u;
 
 				chips::NesApuDecoder decoder;
-				decoder.reset (clock, (double) kVgmRate);
+				decoder.reset (chips::ChipConfig { clock, kVgmRate });
 
 				emitDecodedNotes (device->second,
 								  chips::extractPerformance (decoder, entry.second, totalSamples));
@@ -717,7 +717,7 @@ namespace
 												: fallbackClock;
 
 				chips::OpnDecoder decoder (opnVariantFor (info));
-				decoder.reset (clock, (double) kVgmRate);
+				decoder.reset (chips::ChipConfig { clock, kVgmRate });
 				if (! adpcmBRom.empty())
 				{
 					decoder.setAdpcmBRom (adpcmBRom);
@@ -781,7 +781,7 @@ namespace
 				}
 
 				chips::OplDecoder decoder (variant, adpcm);
-				decoder.reset (clock, (double) kVgmRate);
+				decoder.reset (chips::ChipConfig { clock, kVgmRate });
 
 				emitDecodedNotes (&info,
 								  chips::extractPerformance (decoder, entry.second, totalSamples));
@@ -861,7 +861,7 @@ namespace
 												: fallbackClock;
 
 				Decoder decoder;
-				decoder.reset (clock, (double) kVgmRate);
+				decoder.reset (chips::ChipConfig { clock, kVgmRate });
 				configure (decoder);
 
 				emitDecodedNotes (device->second,
@@ -1112,7 +1112,7 @@ namespace
 												: 4194304u;
 
 				chips::GbcApuDecoder decoder;
-				decoder.reset (clock, (double) kVgmRate);
+				decoder.reset (chips::ChipConfig { clock, kVgmRate });
 
 				emitDecodedNotes (device->second,
 								  chips::extractPerformance (decoder, entry.second, totalSamples));

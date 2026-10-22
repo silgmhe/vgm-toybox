@@ -64,8 +64,10 @@ OpmDecoder::OpmDecoder() : impl (std::make_unique<Impl>())
 
 OpmDecoder::~OpmDecoder() = default;
 
-void OpmDecoder::reset (std::uint32_t clock, double)
+void OpmDecoder::reset (const ChipConfig& config)
 {
+	[[maybe_unused]] const std::uint32_t clock = config.clockHz;
+	[[maybe_unused]] const double sampleRate = config.timeBaseHz;
 	*impl = Impl();
 	impl->table.setClock ((double) clock);
 }

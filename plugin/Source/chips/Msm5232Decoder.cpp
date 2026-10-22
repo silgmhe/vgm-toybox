@@ -46,8 +46,10 @@ struct Msm5232Decoder::Impl
 Msm5232Decoder::Msm5232Decoder() = default;
 Msm5232Decoder::~Msm5232Decoder() = default;
 
-void Msm5232Decoder::reset (std::uint32_t, double)
+void Msm5232Decoder::reset (const ChipConfig& config)
 {
+	[[maybe_unused]] const std::uint32_t clock = config.clockHz;
+	[[maybe_unused]] const double sampleRate = config.timeBaseHz;
 	impl = std::make_unique<Impl>();
 }
 

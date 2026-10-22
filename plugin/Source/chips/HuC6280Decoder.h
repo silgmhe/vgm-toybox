@@ -39,7 +39,7 @@ public:
 	HuC6280Decoder();
 	~HuC6280Decoder() override;
 
-	void reset (std::uint32_t clock, double sampleRate) override;
+	void reset (const ChipConfig& config) override;
 	void write (const RegisterWrite& write) override;
 	void advance (std::uint32_t sampleTime) override;
 

@@ -52,7 +52,7 @@ public:
 	explicit OpnDecoder (Variant variant = Variant::ym2612);
 	~OpnDecoder() override;
 
-	void reset (std::uint32_t clock, double sampleRate) override;
+	void reset (const ChipConfig& config) override;
 
 	/** The DELTA-T ROM (VGM block 0x82). Without it ADPCM-B has no sample to measure, and the
 		channel stays the C4 trigger it was before. */

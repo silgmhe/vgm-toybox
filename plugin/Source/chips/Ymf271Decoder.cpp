@@ -208,13 +208,15 @@ void Ymf271Decoder::Impl::applySlot (int slotIndex, int reg, std::uint8_t value,
 
 Ymf271Decoder::Ymf271Decoder() : impl (std::make_unique<Impl>())
 {
-	reset (kDefaultClock, 44100.0);
+	reset (ChipConfig { kDefaultClock, 44100.0 });
 }
 
 Ymf271Decoder::~Ymf271Decoder() = default;
 
-void Ymf271Decoder::reset (std::uint32_t clock, double sampleRate)
+void Ymf271Decoder::reset (const ChipConfig& config)
 {
+	[[maybe_unused]] const std::uint32_t clock = config.clockHz;
+	[[maybe_unused]] const double sampleRate = config.timeBaseHz;
 	(void) sampleRate;		// the one-shot window is counted in 44.1 kHz samples, the chip has no other time base
 
 	impl = std::make_unique<Impl>();

@@ -164,7 +164,7 @@ namespace
 	{
 		Core core;
 		OpnDecoder decoder (OpnDecoder::Variant::ym2612);
-		decoder.reset (kClock, (double) kRate);
+		decoder.reset (toybox::chips::ChipConfig { kClock, kRate });
 
 		auto write = [&] (int port, std::uint8_t reg, std::uint8_t value)
 		{

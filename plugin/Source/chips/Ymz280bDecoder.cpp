@@ -87,13 +87,15 @@ struct Ymz280bDecoder::Impl
 
 Ymz280bDecoder::Ymz280bDecoder() : impl (std::make_unique<Impl>())
 {
-	reset (16934400, 44100.0);
+	reset (ChipConfig { 16934400, 44100.0 });
 }
 
 Ymz280bDecoder::~Ymz280bDecoder() = default;
 
-void Ymz280bDecoder::reset (std::uint32_t clock, double sampleRate)
+void Ymz280bDecoder::reset (const ChipConfig& config)
 {
+	[[maybe_unused]] const std::uint32_t clock = config.clockHz;
+	[[maybe_unused]] const double sampleRate = config.timeBaseHz;
 	(void) clock;			// the trigger does not depend on the clock; M4's rate mapping will
 	(void) sampleRate;
 	impl = std::make_unique<Impl>();

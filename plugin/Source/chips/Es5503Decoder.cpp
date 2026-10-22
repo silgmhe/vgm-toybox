@@ -360,8 +360,10 @@ Es5503Decoder::Es5503Decoder()
 
 Es5503Decoder::~Es5503Decoder() = default;
 
-void Es5503Decoder::reset (std::uint32_t clock, double sampleRate)
+void Es5503Decoder::reset (const ChipConfig& config)
 {
+	[[maybe_unused]] const std::uint32_t clock = config.clockHz;
+	[[maybe_unused]] const double sampleRate = config.timeBaseHz;
 	// the RAM belongs to the song, not to the run
 	std::vector<std::uint8_t> ram = std::move (impl->ram);
 	const std::uint32_t mask = impl->ramMask;

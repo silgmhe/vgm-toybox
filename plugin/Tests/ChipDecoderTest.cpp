@@ -98,7 +98,7 @@ namespace
 	std::vector<NoteEvent> run (const Stream& stream, std::uint32_t totalSamples)
 	{
 		toybox::chips::NesApuDecoder decoder;
-		decoder.reset (1789773, 44100.0);
+		decoder.reset (toybox::chips::ChipConfig { 1789773, 44100.0 });
 		return toybox::chips::extractNotes (decoder, stream.writes, totalSamples);
 	}
 
@@ -171,7 +171,7 @@ namespace
 		stream.at (22050, 0x02, 0xFB);		// period 251: ~8 cents sharp
 
 		toybox::chips::NesApuDecoder decoder;
-		decoder.reset (1789773, 44100.0);
+		decoder.reset (toybox::chips::ChipConfig { 1789773, 44100.0 });
 		const auto performance = toybox::chips::extractPerformance (decoder, stream.writes, 33075);
 
 		check (performance.notes.size() == 1, "a vibrato does not re-trigger the note");
@@ -283,7 +283,7 @@ namespace
 									std::uint32_t clock)
 	{
 		Decoder decoder;
-		decoder.reset (clock, 44100.0);
+		decoder.reset (toybox::chips::ChipConfig { clock, 44100.0 });
 		return toybox::chips::extractNotes (decoder, stream.writes, totalSamples);
 	}
 
@@ -373,7 +373,7 @@ namespace
 		stream.at (44100, 0x28, 0x00);
 
 		toybox::chips::OpnDecoder decoder;
-		decoder.reset (kYmClock, 44100.0);
+		decoder.reset (toybox::chips::ChipConfig { kYmClock, 44100.0 });
 		const auto performance = toybox::chips::extractPerformance (decoder, stream.writes, 66150);
 
 		check (performance.notes.size() == 1, "a small f-number change does not re-trigger the note");
@@ -437,7 +437,7 @@ namespace
 		stream.at (0, 0x28, 0xF6);					// local channel 2, port bit set
 
 		toybox::chips::OpnDecoder decoder (toybox::chips::OpnDecoder::Variant::ym2203);
-		decoder.reset (kYmClock, 44100.0);
+		decoder.reset (toybox::chips::ChipConfig { kYmClock, 44100.0 });
 		const auto notes = toybox::chips::extractNotes (decoder, stream.writes, 22050);
 
 		check (notes.size() == 1 && notes[0].logicalChannel == 2,
@@ -460,7 +460,7 @@ namespace
 		stream.at (22050, 1, 0x00, 0x80);			// ADPCM-B start
 
 		toybox::chips::OpnDecoder decoder (toybox::chips::OpnDecoder::Variant::ym2608);
-		decoder.reset (7987200, 44100.0);
+		decoder.reset (toybox::chips::ChipConfig { 7987200, 44100.0 });
 		const auto notes = toybox::chips::extractNotes (decoder, stream.writes, 44100);
 
 		std::size_t adpcmA = 0;
@@ -511,7 +511,7 @@ namespace
 		stream.at (0, 0, 0x10, 0x80);			// start, no repeat
 
 		toybox::chips::OpnDecoder decoder (toybox::chips::OpnDecoder::Variant::ym2610);
-		decoder.reset (8000000, 44100.0);
+		decoder.reset (toybox::chips::ChipConfig { 8000000, 44100.0 });
 		decoder.setAdpcmBRom (makeAdpcmBTone (0x4000, 0x1000));
 
 		const auto notes = toybox::chips::extractNotes (decoder, stream.writes, 44100);
@@ -543,7 +543,7 @@ namespace
 		stream.at (0, 0, 0x10, 0x80);
 
 		toybox::chips::OpnDecoder decoder (toybox::chips::OpnDecoder::Variant::ym2610);
-		decoder.reset (8000000, 44100.0);
+		decoder.reset (toybox::chips::ChipConfig { 8000000, 44100.0 });
 		decoder.setAdpcmBRom (makeAdpcmBTone (0x4000, 0x1000));
 
 		const auto notes = toybox::chips::extractNotes (decoder, stream.writes, 44100);
@@ -574,7 +574,7 @@ namespace
 		stream.at (0, 0, 0x10, 0x80);
 
 		toybox::chips::OpnDecoder decoder (toybox::chips::OpnDecoder::Variant::ym2610);
-		decoder.reset (8000000, 44100.0);
+		decoder.reset (toybox::chips::ChipConfig { 8000000, 44100.0 });
 		decoder.setAdpcmBRom (makeAdpcmBTone (0x4000, 0x1000));
 
 		const auto notes = toybox::chips::extractNotes (decoder, stream.writes, 44100);
@@ -605,7 +605,7 @@ namespace
 		stream.at (20000, 0, 0x1B, 0x00);		// silence
 
 		toybox::chips::OpnDecoder decoder (toybox::chips::OpnDecoder::Variant::ym2610);
-		decoder.reset (8000000, 44100.0);
+		decoder.reset (toybox::chips::ChipConfig { 8000000, 44100.0 });
 		decoder.setAdpcmBRom (makeAdpcmBTone (0x4000, 0x1000));
 
 		const auto notes = toybox::chips::extractNotes (decoder, stream.writes, 44100);
@@ -636,7 +636,7 @@ namespace
 		stream.at (0, 0, 0x10, 0x80);
 
 		toybox::chips::OpnDecoder decoder (toybox::chips::OpnDecoder::Variant::ym2610);
-		decoder.reset (8000000, 44100.0);
+		decoder.reset (toybox::chips::ChipConfig { 8000000, 44100.0 });
 		decoder.setAdpcmBRom (rom);
 
 		const auto notes = toybox::chips::extractNotes (decoder, stream.writes, 44100);
@@ -665,7 +665,7 @@ namespace
 		stream.at (0, 1, 0x00, 0x80);
 
 		toybox::chips::OpnDecoder decoder (toybox::chips::OpnDecoder::Variant::ym2608);
-		decoder.reset (7987200, 44100.0);
+		decoder.reset (toybox::chips::ChipConfig { 7987200, 44100.0 });
 		decoder.setAdpcmBRom (makeAdpcmBTone (0x4000, 0x1000));
 
 		const auto notes = toybox::chips::extractNotes (decoder, stream.writes, 44100);
@@ -696,11 +696,11 @@ namespace
 		stream.at (0, 0x28, 0xF1);					// channel 2
 
 		toybox::chips::OpnDecoder fourChannel (toybox::chips::OpnDecoder::Variant::ym2610);
-		fourChannel.reset (8000000, 44100.0);
+		fourChannel.reset (toybox::chips::ChipConfig { 8000000, 44100.0 });
 		const auto four = toybox::chips::extractNotes (fourChannel, stream.writes, 22050);
 
 		toybox::chips::OpnDecoder sixChannel (toybox::chips::OpnDecoder::Variant::ym2610b);
-		sixChannel.reset (8000000, 44100.0);
+		sixChannel.reset (toybox::chips::ChipConfig { 8000000, 44100.0 });
 		const auto six = toybox::chips::extractNotes (sixChannel, stream.writes, 22050);
 
 		check (four.size() == 1 && four[0].logicalChannel == 1,
@@ -718,7 +718,7 @@ namespace
 		stream.at (22050, 0x08, 0x00);		// key off
 
 		toybox::chips::OpmDecoder decoder;
-		decoder.reset (3579545, 44100.0);
+		decoder.reset (toybox::chips::ChipConfig { 3579545, 44100.0 });
 		const auto notes = toybox::chips::extractNotes (decoder, stream.writes, 44100);
 
 		check (notes.size() == 1, "one OPM key-on in, one note out");
@@ -741,7 +741,7 @@ namespace
 		stream.at (0, 0x08, 0x78);
 
 		toybox::chips::OpmDecoder decoder;
-		decoder.reset (7159090, 44100.0);
+		decoder.reset (toybox::chips::ChipConfig { 7159090, 44100.0 });
 		const auto notes = toybox::chips::extractNotes (decoder, stream.writes, 22050);
 
 		check (notes.size() == 1 && absoluteNote (notes[0]) == 81,
@@ -757,7 +757,7 @@ namespace
 		stream.at (22050, 0xB0, 0x12);		// same pitch, key off
 
 		toybox::chips::OplDecoder decoder (toybox::chips::OplDecoder::Variant::opl2);
-		decoder.reset (3579545, 44100.0);
+		decoder.reset (toybox::chips::ChipConfig { 3579545, 44100.0 });
 		const auto notes = toybox::chips::extractNotes (decoder, stream.writes, 44100);
 
 		check (notes.size() == 1, "one OPL2 key-on in, one note out");
@@ -781,7 +781,7 @@ namespace
 		stream.at (11025, 0x30, 0x20);		// key off
 
 		toybox::chips::OplDecoder decoder (toybox::chips::OplDecoder::Variant::opll);
-		decoder.reset (3579545, 44100.0);
+		decoder.reset (toybox::chips::ChipConfig { 3579545, 44100.0 });
 		const auto notes = toybox::chips::extractNotes (decoder, stream.writes, 44100);
 
 		check (notes.size() == 1 && absoluteNote (notes[0]) == 69,
@@ -800,7 +800,7 @@ namespace
 		stream.at (11025, 1, 0xB0, 0x12);	// key off
 
 		toybox::chips::OplDecoder decoder (toybox::chips::OplDecoder::Variant::opl3);
-		decoder.reset (14318180, 44100.0);
+		decoder.reset (toybox::chips::ChipConfig { 14318180, 44100.0 });
 		const auto notes = toybox::chips::extractNotes (decoder, stream.writes, 44100);
 
 		check (notes.size() == 1 && notes[0].logicalChannel == 9,
@@ -818,7 +818,7 @@ namespace
 		stream.at (22050, 0xBD, 0x20);		// drum bit cleared
 
 		toybox::chips::OplDecoder decoder (toybox::chips::OplDecoder::Variant::opl2);
-		decoder.reset (3579545, 44100.0);
+		decoder.reset (toybox::chips::ChipConfig { 3579545, 44100.0 });
 		const auto notes = toybox::chips::extractNotes (decoder, stream.writes, 44100);
 
 		check (notes.size() == 1 && notes[0].logicalChannel == 9,
@@ -975,7 +975,7 @@ namespace
 	std::vector<NoteEvent> runC6280 (const Stream& stream, std::uint32_t totalSamples)
 	{
 		toybox::chips::HuC6280Decoder decoder;
-		decoder.reset (3579545, 44100.0);
+		decoder.reset (toybox::chips::ChipConfig { 3579545, 44100.0 });
 		return toybox::chips::extractNotes (decoder, stream.writes, totalSamples);
 	}
 
@@ -1079,7 +1079,7 @@ namespace
 	std::vector<NoteEvent> runScc (const Stream& stream, std::uint32_t totalSamples)
 	{
 		toybox::chips::K051649Decoder decoder;
-		decoder.reset (3579545, 44100.0);
+		decoder.reset (toybox::chips::ChipConfig { 3579545, 44100.0 });
 		return toybox::chips::extractNotes (decoder, stream.writes, totalSamples);
 	}
 
@@ -1170,7 +1170,7 @@ namespace
 	std::vector<NoteEvent> runSaa (const Stream& stream, std::uint32_t totalSamples)
 	{
 		toybox::chips::Saa1099Decoder decoder;
-		decoder.reset (8000000, 44100.0);
+		decoder.reset (toybox::chips::ChipConfig { 8000000, 44100.0 });
 		return toybox::chips::extractNotes (decoder, stream.writes, totalSamples);
 	}
 
@@ -1278,7 +1278,7 @@ namespace
 	std::vector<NoteEvent> runPokey (const Stream& stream, std::uint32_t totalSamples)
 	{
 		toybox::chips::PokeyDecoder decoder;
-		decoder.reset (1789772, 44100.0);
+		decoder.reset (toybox::chips::ChipConfig { 1789772, 44100.0 });
 		return toybox::chips::extractNotes (decoder, stream.writes, totalSamples);
 	}
 
@@ -1361,7 +1361,7 @@ namespace
 										 std::uint32_t clock = 3072000)
 		{
 			toybox::chips::WswanDecoder decoder;
-			decoder.reset (clock, 44100.0);
+			decoder.reset (toybox::chips::ChipConfig { clock, 44100.0 });
 			return toybox::chips::extractNotes (decoder, stream.writes, totalSamples);
 		}
 
@@ -1527,7 +1527,7 @@ namespace
 									  std::uint32_t clock = 3579545)
 		{
 			toybox::chips::Sn76489Decoder decoder;
-			decoder.reset (clock, 44100.0);
+			decoder.reset (toybox::chips::ChipConfig { clock, 44100.0 });
 			return toybox::chips::extractNotes (decoder, stream.writes, totalSamples);
 		}
 
@@ -1607,7 +1607,7 @@ namespace
 									  std::uint32_t clock = 1789773)
 		{
 			toybox::chips::Ay8910Decoder decoder;
-			decoder.reset (clock, 44100.0);
+			decoder.reset (toybox::chips::ChipConfig { clock, 44100.0 });
 			return toybox::chips::extractNotes (decoder, stream.writes, totalSamples);
 		}
 
@@ -1665,7 +1665,7 @@ namespace
 		std::vector<NoteEvent> runRf5c (const Stream& stream, std::uint32_t totalSamples)
 		{
 			toybox::chips::Rf5c68Decoder decoder;
-			decoder.reset (12500000, 44100.0);
+			decoder.reset (toybox::chips::ChipConfig { 12500000, 44100.0 });
 			return toybox::chips::extractNotes (decoder, stream.writes, totalSamples);
 		}
 
@@ -1722,7 +1722,7 @@ namespace
 		std::vector<NoteEvent> runX1 (const Stream& stream, std::uint32_t totalSamples)
 		{
 			toybox::chips::X1_010Decoder decoder;
-			decoder.reset (16000000, 44100.0);
+			decoder.reset (toybox::chips::ChipConfig { 16000000, 44100.0 });
 			return toybox::chips::extractNotes (decoder, stream.writes, totalSamples);
 		}
 
@@ -1805,7 +1805,7 @@ namespace
 		std::vector<NoteEvent> runYmz (const Stream& stream, std::uint32_t totalSamples)
 		{
 			toybox::chips::Ymz280bDecoder decoder;
-			decoder.reset (16934400, 44100.0);
+			decoder.reset (toybox::chips::ChipConfig { 16934400, 44100.0 });
 			return toybox::chips::extractNotes (decoder, stream.writes, totalSamples);
 		}
 
@@ -1867,7 +1867,7 @@ namespace
 		std::vector<NoteEvent> runOpx (const Stream& stream, std::uint32_t totalSamples)
 		{
 			toybox::chips::Ymf271Decoder decoder;
-			decoder.reset (16934400, 44100.0);
+			decoder.reset (toybox::chips::ChipConfig { 16934400, 44100.0 });
 			return toybox::chips::extractNotes (decoder, stream.writes, totalSamples);
 		}
 
@@ -2059,7 +2059,7 @@ namespace
 									const std::vector<std::uint8_t>& rom = {})
 	{
 		toybox::chips::C140Decoder decoder;
-		decoder.reset (clock, 44100.0);
+		decoder.reset (toybox::chips::ChipConfig { clock, 44100.0 });
 		if (! rom.empty())
 		{
 			decoder.setRom (rom);
@@ -2373,7 +2373,7 @@ namespace
 		// the same registers with a linear ROM (the banking type the header may name instead)
 		// address 0x1495C0, which no one-megabyte image holds: no root is measured, so L2 is zero
 		toybox::chips::C140Decoder decoder;
-		decoder.reset (8000000, 44100.0);
+		decoder.reset (toybox::chips::ChipConfig { 8000000, 44100.0 });
 		decoder.setRom (rom, toybox::chips::C140Decoder::Banking::linear);
 		const auto linear = toybox::chips::extractNotes (decoder, stream.writes, 20000);
 		check (linear.size() == 1 && absoluteNote (linear[0]) == 61 && linear[0].rootCents == 0,
@@ -2412,7 +2412,7 @@ namespace
 									const std::vector<std::uint8_t>& rom = {})
 	{
 		toybox::chips::C352Decoder decoder;
-		decoder.reset (clock, 44100.0);
+		decoder.reset (toybox::chips::ChipConfig { clock, 44100.0 });
 		if (! rom.empty())
 		{
 			decoder.setRom (rom);
@@ -2748,7 +2748,7 @@ namespace
 									   const std::vector<std::uint8_t>& rom = {})
 	{
 		toybox::chips::K053260Decoder decoder;
-		decoder.reset (clock, 44100.0);
+		decoder.reset (toybox::chips::ChipConfig { clock, 44100.0 });
 		if (! rom.empty())
 		{
 			decoder.setRom (rom);
@@ -3024,7 +3024,7 @@ namespace
 									   const std::vector<std::uint8_t>& rom = {})
 	{
 		toybox::chips::K054539Decoder decoder;
-		decoder.reset (clock, 44100.0);
+		decoder.reset (toybox::chips::ChipConfig { clock, 44100.0 });
 		if (! rom.empty())
 		{
 			decoder.setRom (rom);
@@ -3346,7 +3346,7 @@ namespace
 									  const std::vector<std::uint8_t>& rom = {})
 	{
 		toybox::chips::QSoundDecoder decoder;
-		decoder.reset (clock, 44100.0);
+		decoder.reset (toybox::chips::ChipConfig { clock, 44100.0 });
 		if (! rom.empty())
 		{
 			decoder.setRom (rom);
@@ -3609,7 +3609,7 @@ namespace
 								   const std::vector<std::uint8_t>& rom)
 	{
 		toybox::chips::Ga20Decoder decoder;
-		decoder.reset (3579545, 44100.0);
+		decoder.reset (toybox::chips::ChipConfig { 3579545, 44100.0 });
 		decoder.setRom (rom);
 		return toybox::chips::extractNotes (decoder, stream.writes, totalSamples);
 	}
@@ -3737,7 +3737,7 @@ namespace
 										std::uint32_t totalSamples = 44100)
 	{
 		toybox::chips::Okim6295Decoder decoder;
-		decoder.reset (1000000, 44100.0);
+		decoder.reset (toybox::chips::ChipConfig { 1000000, 44100.0 });
 		decoder.setRom (rom);
 		return toybox::chips::extractNotes (decoder, stream.writes, totalSamples);
 	}
@@ -3838,7 +3838,7 @@ namespace
 		add (0x04, 0x0000, 0);				// TG: the trigger
 
 		toybox::chips::K005289Decoder decoder;
-		decoder.reset (4000000, 44100.0);
+		decoder.reset (toybox::chips::ChipConfig { 4000000, 44100.0 });
 
 		const auto performance = toybox::chips::extractPerformance (decoder, writes, 44100);
 		const auto& notes = performance.notes;
@@ -3879,7 +3879,7 @@ namespace
 		add (0x25, 0x03);		// CONTROL A: clock shift 3
 
 		toybox::chips::MikeyDecoder decoder;
-		decoder.reset (16000000, 44100.0);
+		decoder.reset (toybox::chips::ChipConfig { 16000000, 44100.0 });
 
 		const auto performance = toybox::chips::extractPerformance (decoder, writes, 44100);
 		const auto& notes = performance.notes;
@@ -3904,7 +3904,7 @@ namespace
 		writes.push_back (write);
 
 		toybox::chips::Msm5232Decoder decoder;
-		decoder.reset (2119040, 44100.0);
+		decoder.reset (toybox::chips::ChipConfig { 2119040, 44100.0 });
 
 		const auto performance = toybox::chips::extractPerformance (decoder, writes, 44100);
 		const auto& notes = performance.notes;
@@ -3936,7 +3936,7 @@ namespace
 		add (0x00, 0x80, 0);				// IntlControl: bit 7 keys the voice
 
 		toybox::chips::VsuDecoder decoder;
-		decoder.reset (5370000, 44100.0);
+		decoder.reset (toybox::chips::ChipConfig { 5370000, 44100.0 });
 
 		const auto performance = toybox::chips::extractPerformance (decoder, writes, 44100);
 		const auto& notes = performance.notes;
@@ -3958,7 +3958,7 @@ namespace
 									  std::uint32_t clock = 7159090)
 	{
 		toybox::chips::Es5503Decoder decoder;
-		decoder.reset (clock, 44100.0);
+		decoder.reset (toybox::chips::ChipConfig { clock, 44100.0 });
 		decoder.setRam (ram);
 		return toybox::chips::extractNotes (decoder, stream.writes, totalSamples);
 	}
@@ -4127,7 +4127,7 @@ namespace
 									   std::uint32_t clock = 4026987)
 	{
 		toybox::chips::SegaPcmDecoder decoder;
-		decoder.reset (clock, 44100.0);
+		decoder.reset (toybox::chips::ChipConfig { clock, 44100.0 });
 		decoder.setRom (rom);
 		return toybox::chips::extractNotes (decoder, stream.writes, totalSamples);
 	}

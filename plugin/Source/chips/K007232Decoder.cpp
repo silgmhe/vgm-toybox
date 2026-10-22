@@ -68,8 +68,10 @@ struct K007232Decoder::Impl
 K007232Decoder::K007232Decoder() = default;
 K007232Decoder::~K007232Decoder() = default;
 
-void K007232Decoder::reset (std::uint32_t clock, double sampleRate)
+void K007232Decoder::reset (const ChipConfig& config)
 {
+	[[maybe_unused]] const std::uint32_t clock = config.clockHz;
+	[[maybe_unused]] const double sampleRate = config.timeBaseHz;
 	(void) sampleRate;
 	impl = std::make_unique<Impl>();
 	impl->table.clock = clock > 0 ? clock : kDefaultClock;

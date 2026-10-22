@@ -132,13 +132,15 @@ struct NesApuDecoder::Impl
 
 NesApuDecoder::NesApuDecoder() : impl (std::make_unique<Impl>())
 {
-	reset (1789773, 44100.0);
+	reset (ChipConfig { 1789773, 44100.0 });
 }
 
 NesApuDecoder::~NesApuDecoder() = default;
 
-void NesApuDecoder::reset (std::uint32_t clock, double sampleRate)
+void NesApuDecoder::reset (const ChipConfig& config)
 {
+	[[maybe_unused]] const std::uint32_t clock = config.clockHz;
+	[[maybe_unused]] const double sampleRate = config.timeBaseHz;
 	impl = std::make_unique<Impl>();
 
 	// a missing clock in the header is common: fall back to the NTSC CPU rate

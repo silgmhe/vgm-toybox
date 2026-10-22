@@ -48,13 +48,15 @@ struct K051649Decoder::Impl
 
 K051649Decoder::K051649Decoder() : impl (std::make_unique<Impl>())
 {
-	reset (kDefaultClock, 44100.0);
+	reset (ChipConfig { kDefaultClock, 44100.0 });
 }
 
 K051649Decoder::~K051649Decoder() = default;
 
-void K051649Decoder::reset (std::uint32_t clock, double sampleRate)
+void K051649Decoder::reset (const ChipConfig& config)
 {
+	[[maybe_unused]] const std::uint32_t clock = config.clockHz;
+	[[maybe_unused]] const double sampleRate = config.timeBaseHz;
 	(void) sampleRate;		// no timers: the key mask is the gate
 
 	impl = std::make_unique<Impl>();

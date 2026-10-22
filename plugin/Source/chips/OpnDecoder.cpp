@@ -505,8 +505,10 @@ OpnDecoder::OpnDecoder (Variant variant) : impl (std::make_unique<Impl>())
 
 OpnDecoder::~OpnDecoder() = default;
 
-void OpnDecoder::reset (std::uint32_t clock, double sampleRate)
+void OpnDecoder::reset (const ChipConfig& config)
 {
+	[[maybe_unused]] const std::uint32_t clock = config.clockHz;
+	[[maybe_unused]] const double sampleRate = config.timeBaseHz;
 	const Variant variant = impl->variant;
 
 	// the ROM belongs to the song, not to the clock

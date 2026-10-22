@@ -290,8 +290,10 @@ namespace toybox::chips
 	Okim6295Decoder::Okim6295Decoder() = default;
 	Okim6295Decoder::~Okim6295Decoder() = default;
 
-	void Okim6295Decoder::reset (std::uint32_t clock, double sampleRate)
-	{
+	void Okim6295Decoder::reset (const ChipConfig& config)
+{
+	[[maybe_unused]] const std::uint32_t clock = config.clockHz;
+	[[maybe_unused]] const double sampleRate = config.timeBaseHz;
 		impl = std::make_unique<Impl>();
 		impl->clock = clock > 0 ? clock : 1000000;
 		impl->outRate = sampleRate > 0.0 ? sampleRate : 44100.0;

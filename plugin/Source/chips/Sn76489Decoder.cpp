@@ -66,13 +66,15 @@ struct Sn76489Decoder::Impl
 
 Sn76489Decoder::Sn76489Decoder() : impl (std::make_unique<Impl>())
 {
-	reset (kDefaultClock, 44100.0);
+	reset (ChipConfig { kDefaultClock, 44100.0 });
 }
 
 Sn76489Decoder::~Sn76489Decoder() = default;
 
-void Sn76489Decoder::reset (std::uint32_t clock, double sampleRate)
+void Sn76489Decoder::reset (const ChipConfig& config)
 {
+	[[maybe_unused]] const std::uint32_t clock = config.clockHz;
+	[[maybe_unused]] const double sampleRate = config.timeBaseHz;
 	(void) sampleRate;		// no timers: the latch and the registers are the whole state
 
 	impl = std::make_unique<Impl>();

@@ -161,8 +161,10 @@ OplDecoder::OplDecoder (Variant variant, bool adpcm) : impl (std::make_unique<Im
 
 OplDecoder::~OplDecoder() = default;
 
-void OplDecoder::reset (std::uint32_t clock, double)
+void OplDecoder::reset (const ChipConfig& config)
 {
+	[[maybe_unused]] const std::uint32_t clock = config.clockHz;
+	[[maybe_unused]] const double sampleRate = config.timeBaseHz;
 	const Variant variant = impl->variant;
 	const bool adpcm = impl->adpcm;
 	*impl = Impl();

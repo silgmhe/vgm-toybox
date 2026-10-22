@@ -67,7 +67,20 @@ struct RegisterWrite
 	std::uint32_t sampleTime = 0;
 };
 
-/** Where a note's pitch came from - the honesty label the pitch model is built around.
+/** What a decoder needs to know to start: the chip's clock, and the unit of the timestamps it will be told.
+
+	This is the cure for the leak the review found in IChipDecoder::reset: the signature used to be
+	(clock, sampleRate), with a comment saying the clock came "from the VGM header" - a file format
+	inside the chip layer. A decoder needs a clock and a time base; where they came from is the loader's
+	business. flags carries the board variants a chip needs (C140's banking). */
+	struct ChipConfig
+	{
+		std::uint32_t clockHz = 0;			// 0 = unknown: the decoder falls back to its default
+		double timeBaseHz = 44100.0;	// the unit of RegisterWrite::sampleTime
+		std::uint32_t flags = 0;		// board / variant selection
+	};
+
+	/** Where a note's pitch came from - the honesty label the pitch model is built around.
 
 	`registerExact` is a chip whose registers (plus documented hardware constants: a clock divider,
 	a DAC rate, a delta-N scale) fully determine the frequency. `registerWithRoot` is the same plus

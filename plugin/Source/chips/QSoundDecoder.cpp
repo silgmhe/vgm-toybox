@@ -418,13 +418,15 @@ struct QSoundDecoder::Impl
 
 QSoundDecoder::QSoundDecoder() : impl (std::make_unique<Impl>())
 {
-	reset (kDefaultClock, 44100.0);
+	reset (ChipConfig { kDefaultClock, 44100.0 });
 }
 
 QSoundDecoder::~QSoundDecoder() = default;
 
-void QSoundDecoder::reset (std::uint32_t clock, double sampleRate)
+void QSoundDecoder::reset (const ChipConfig& config)
 {
+	[[maybe_unused]] const std::uint32_t clock = config.clockHz;
+	[[maybe_unused]] const double sampleRate = config.timeBaseHz;
 	// the ROM belongs to the song, not to the clock
 	std::vector<std::uint8_t> rom = impl != nullptr ? std::move (impl->rom) : std::vector<std::uint8_t>();
 	const std::uint32_t romMask = impl != nullptr ? impl->romMask : 0u;

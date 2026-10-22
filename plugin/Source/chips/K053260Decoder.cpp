@@ -296,13 +296,15 @@ struct K053260Decoder::Impl
 
 K053260Decoder::K053260Decoder() : impl (std::make_unique<Impl>())
 {
-	reset (kDefaultClock, 44100.0);
+	reset (ChipConfig { kDefaultClock, 44100.0 });
 }
 
 K053260Decoder::~K053260Decoder() = default;
 
-void K053260Decoder::reset (std::uint32_t clock, double sampleRate)
+void K053260Decoder::reset (const ChipConfig& config)
 {
+	[[maybe_unused]] const std::uint32_t clock = config.clockHz;
+	[[maybe_unused]] const double sampleRate = config.timeBaseHz;
 	// the ROM belongs to the song, not to the clock: a reset only changes the rate the chip runs at
 	std::vector<std::uint8_t> rom = impl != nullptr ? std::move (impl->rom) : std::vector<std::uint8_t>();
 	const std::uint32_t romMask = impl != nullptr ? impl->romMask : 0u;

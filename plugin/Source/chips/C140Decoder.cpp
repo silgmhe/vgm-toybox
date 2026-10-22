@@ -257,13 +257,15 @@ struct C140Decoder::Impl
 
 C140Decoder::C140Decoder() : impl (std::make_unique<Impl>())
 {
-	reset (kDefaultClock, 44100.0);
+	reset (ChipConfig { kDefaultClock, 44100.0 });
 }
 
 C140Decoder::~C140Decoder() = default;
 
-void C140Decoder::reset (std::uint32_t clock, double sampleRate)
+void C140Decoder::reset (const ChipConfig& config)
 {
+	[[maybe_unused]] const std::uint32_t clock = config.clockHz;
+	[[maybe_unused]] const double sampleRate = config.timeBaseHz;
 	// the ROM and its banking belong to the song, not to the clock: a reset only changes the rate
 	// the chip runs at, so both are carried over instead of being dropped with the voices
 	std::vector<std::uint8_t> rom = impl != nullptr ? std::move (impl->rom) : std::vector<std::uint8_t>();

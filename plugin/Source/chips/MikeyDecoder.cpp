@@ -68,8 +68,10 @@ struct MikeyDecoder::Impl
 MikeyDecoder::MikeyDecoder() = default;
 MikeyDecoder::~MikeyDecoder() = default;
 
-void MikeyDecoder::reset (std::uint32_t clock, double)
+void MikeyDecoder::reset (const ChipConfig& config)
 {
+	[[maybe_unused]] const std::uint32_t clock = config.clockHz;
+	[[maybe_unused]] const double sampleRate = config.timeBaseHz;
 	impl = std::make_unique<Impl>();
 	impl->table.clock = clock > 0 ? clock : kDefaultClock;
 }

@@ -21,9 +21,9 @@ class IChipDecoder
 public:
 	virtual ~IChipDecoder() = default;
 
-	/** @param clock master clock from the VGM header (Hz), 0 when unknown
-		@param sampleRate the rate the stream is expressed in (normally 44100) */
-	virtual void reset (std::uint32_t clock, double sampleRate) = 0;
+	/** @param config the chip's clock and the unit its write timestamps are expressed in. A missing
+		clock (0) is common and must fall back to a default rather than fail. */
+	virtual void reset (const ChipConfig& config) = 0;
 
 	/** One register write, positioned at an absolute sample time. Decoders may apply it
 		immediately or queue it for the next advance(), depending on the chip. */

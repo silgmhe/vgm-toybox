@@ -105,13 +105,15 @@ struct PokeyDecoder::Impl
 
 PokeyDecoder::PokeyDecoder() : impl (std::make_unique<Impl>())
 {
-	reset (kDefaultClock, 44100.0);
+	reset (ChipConfig { kDefaultClock, 44100.0 });
 }
 
 PokeyDecoder::~PokeyDecoder() = default;
 
-void PokeyDecoder::reset (std::uint32_t clock, double sampleRate)
+void PokeyDecoder::reset (const ChipConfig& config)
 {
+	[[maybe_unused]] const std::uint32_t clock = config.clockHz;
+	[[maybe_unused]] const double sampleRate = config.timeBaseHz;
 	(void) sampleRate;		// no timers: the registers are the whole state
 
 	impl = std::make_unique<Impl>();

@@ -70,13 +70,15 @@ struct Saa1099Decoder::Impl
 
 Saa1099Decoder::Saa1099Decoder() : impl (std::make_unique<Impl>())
 {
-	reset (kDefaultClock, 44100.0);
+	reset (ChipConfig { kDefaultClock, 44100.0 });
 }
 
 Saa1099Decoder::~Saa1099Decoder() = default;
 
-void Saa1099Decoder::reset (std::uint32_t clock, double sampleRate)
+void Saa1099Decoder::reset (const ChipConfig& config)
 {
+	[[maybe_unused]] const std::uint32_t clock = config.clockHz;
+	[[maybe_unused]] const double sampleRate = config.timeBaseHz;
 	(void) sampleRate;		// the chip has no timers; the registers are the whole state
 
 	impl = std::make_unique<Impl>();

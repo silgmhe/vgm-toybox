@@ -83,13 +83,15 @@ struct HuC6280Decoder::Impl
 
 HuC6280Decoder::HuC6280Decoder() : impl (std::make_unique<Impl>())
 {
-	reset (kDefaultClock, 44100.0);
+	reset (ChipConfig { kDefaultClock, 44100.0 });
 }
 
 HuC6280Decoder::~HuC6280Decoder() = default;
 
-void HuC6280Decoder::reset (std::uint32_t clock, double sampleRate)
+void HuC6280Decoder::reset (const ChipConfig& config)
 {
+	[[maybe_unused]] const std::uint32_t clock = config.clockHz;
+	[[maybe_unused]] const double sampleRate = config.timeBaseHz;
 	(void) sampleRate;		// the chip has no time base of its own; nothing here needs the rate
 
 	impl = std::make_unique<Impl>();

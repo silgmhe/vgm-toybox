@@ -39,13 +39,15 @@ struct Ay8910Decoder::Impl
 
 Ay8910Decoder::Ay8910Decoder() : impl (std::make_unique<Impl>())
 {
-	reset (kDefaultClock, 44100.0);
+	reset (ChipConfig { kDefaultClock, 44100.0 });
 }
 
 Ay8910Decoder::~Ay8910Decoder() = default;
 
-void Ay8910Decoder::reset (std::uint32_t clock, double sampleRate)
+void Ay8910Decoder::reset (const ChipConfig& config)
 {
+	[[maybe_unused]] const std::uint32_t clock = config.clockHz;
+	[[maybe_unused]] const double sampleRate = config.timeBaseHz;
 	(void) sampleRate;		// no timers: the registers are the whole state
 
 	impl = std::make_unique<Impl>();

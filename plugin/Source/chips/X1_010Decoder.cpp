@@ -83,13 +83,15 @@ struct X1_010Decoder::Impl
 
 X1_010Decoder::X1_010Decoder() : impl (std::make_unique<Impl>())
 {
-	reset (kDefaultClock, 44100.0);
+	reset (ChipConfig { kDefaultClock, 44100.0 });
 }
 
 X1_010Decoder::~X1_010Decoder() = default;
 
-void X1_010Decoder::reset (std::uint32_t clock, double sampleRate)
+void X1_010Decoder::reset (const ChipConfig& config)
 {
+	[[maybe_unused]] const std::uint32_t clock = config.clockHz;
+	[[maybe_unused]] const double sampleRate = config.timeBaseHz;
 	(void) sampleRate;		// the gate is counted in 44.1 kHz samples, the chip has no other time base
 
 	impl = std::make_unique<Impl>();

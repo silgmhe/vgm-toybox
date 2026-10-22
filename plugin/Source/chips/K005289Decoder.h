@@ -37,7 +37,7 @@ public:
 	K005289Decoder (const K005289Decoder&) = delete;
 	K005289Decoder& operator= (const K005289Decoder&) = delete;
 
-	void reset (std::uint32_t clock, double sampleRate) override;
+	void reset (const ChipConfig& config) override;
 	void write (const RegisterWrite& write) override;
 	void advance (std::uint32_t sampleTime) override;
 

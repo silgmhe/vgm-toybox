@@ -364,8 +364,10 @@ Ga20Decoder::Ga20Decoder()
 
 Ga20Decoder::~Ga20Decoder() = default;
 
-void Ga20Decoder::reset (std::uint32_t clock, double sampleRate)
+void Ga20Decoder::reset (const ChipConfig& config)
 {
+	[[maybe_unused]] const std::uint32_t clock = config.clockHz;
+	[[maybe_unused]] const double sampleRate = config.timeBaseHz;
 	// the ROM belongs to the song, not to the clock
 	std::vector<std::uint8_t> rom = std::move (impl->rom);
 	const std::uint32_t mask = impl->romMask;

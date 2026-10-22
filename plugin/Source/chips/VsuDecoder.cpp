@@ -72,8 +72,10 @@ struct VsuDecoder::Impl
 VsuDecoder::VsuDecoder() = default;
 VsuDecoder::~VsuDecoder() = default;
 
-void VsuDecoder::reset (std::uint32_t clock, double sampleRate)
+void VsuDecoder::reset (const ChipConfig& config)
 {
+	[[maybe_unused]] const std::uint32_t clock = config.clockHz;
+	[[maybe_unused]] const double sampleRate = config.timeBaseHz;
 	(void) sampleRate;
 	impl = std::make_unique<Impl>();
 	impl->table.clock = clock > 0 ? clock : kDefaultClock;

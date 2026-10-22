@@ -49,8 +49,10 @@ struct K005289Decoder::Impl
 K005289Decoder::K005289Decoder() = default;
 K005289Decoder::~K005289Decoder() = default;
 
-void K005289Decoder::reset (std::uint32_t clock, double sampleRate)
+void K005289Decoder::reset (const ChipConfig& config)
 {
+	[[maybe_unused]] const std::uint32_t clock = config.clockHz;
+	[[maybe_unused]] const double sampleRate = config.timeBaseHz;
 	(void) sampleRate;
 	impl = std::make_unique<Impl>();
 	impl->table.clock = clock > 0 ? clock : kDefaultClock;
