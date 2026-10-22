@@ -62,6 +62,77 @@ namespace
 		return ((std::uint64_t) type << 16) | (std::uint64_t) (instance & 0xFFFF);
 	}
 
+	/** One decoder's queued writes, type-erased so the builder can hold them by decoder type.
+
+		The key is the decoder class rather than the chip kind on purpose: six OPL devices share
+		`OplDecoder` and four OPN devices share `OpnDecoder`, so a kind-keyed table would run two
+		decoders where the chip is one - fewer notes, no error, the hardest kind of bug to see. */
+	struct DecoderBufferBase
+	{
+		virtual ~DecoderBufferBase() = default;
+	};
+
+	template <typename Decoder>
+	struct ChipBuffer final : DecoderBufferBase
+	{
+		void queue (const PLR_DEV_INFO* device, std::uint8_t reg, std::uint16_t value,
+					std::uint32_t sampleTime, std::uint8_t port = 0)
+		{
+			if (device == nullptr)
+			{
+				return;
+			}
+
+			chips::RegisterWrite write;
+			write.deviceId = device->id;
+			write.reg = reg;
+			write.value = value;
+			write.port = port;
+			write.sampleTime = sampleTime;
+			writes[device->id].push_back (write);
+			devices[device->id] = device;
+		}
+
+		/** The SCC command carries a latch and the value that follows it: the chip sees two writes,
+			and so does the decoder. */
+		void queuePair (const PLR_DEV_INFO* device, std::uint8_t reg, std::uint8_t latch,
+						std::uint8_t value, std::uint32_t sampleTime, std::uint8_t port)
+		{
+			queue (device, reg, latch, sampleTime, port);
+			queue (device, (std::uint8_t) (reg | 1), value, sampleTime, port);
+		}
+
+		std::map<std::uint32_t, std::vector<chips::RegisterWrite>> writes;
+		std::map<std::uint32_t, const PLR_DEV_INFO*> devices;
+	};
+
+	/** The decoders this build can run, created on first use and owned for the song's lifetime.
+
+		Adding a chip is a value in `ChipKind`, a `case` in `Builder::dispatch` and a decoder in
+		`chips/` - nothing here has to be extended, which is the point of the registry. */
+	class DecoderRegistry
+	{
+	public:
+		template <typename Decoder>
+		ChipBuffer<Decoder>& decoder (void)
+		{
+			const auto key = std::type_index (typeid (Decoder));
+			const auto found = buffers.find (key);
+			if (found != buffers.end())
+			{
+				return static_cast<ChipBuffer<Decoder>&> (*found->second);
+			}
+
+			auto created = std::make_unique<ChipBuffer<Decoder>>();
+			auto* raw = created.get();
+			buffers.emplace (key, std::move (created));
+			return *raw;
+		}
+
+	private:
+		std::map<std::type_index, std::unique_ptr<DecoderBufferBase>> buffers;
+	};
+
 	class Builder
 	{
 	public:
@@ -117,26 +188,26 @@ namespace
 
 			// ADPCM-B's pitch only exists in its DELTA-T ROM (block 0x82): the sample's period has
 			// to be measured, and DELTA-N turns it into the note the driver asked for
-			flushOpn (opn.writes.empty() ? std::vector<std::uint8_t>()
+			flushOpn (decoders.decoder<chips::OpnDecoder> ().writes.empty() ? std::vector<std::uint8_t>()
 										 : assembleRom (ir, 0x82, 16 * 1024 * 1024, true),
 					  lastSampleTime);
 			flushGb (lastSampleTime);
 			flushOpl (lastSampleTime);
-			flushDecoded (opm, 3579545u, lastSampleTime);
-			flushDecoded (c6280, 3579545u, lastSampleTime);
-			flushDecoded (scc, 3579545u, lastSampleTime);
-			flushDecoded (saa, 8000000u, lastSampleTime);
-			flushDecoded (pokey, 1789772u, lastSampleTime);
-			flushDecoded (wswan, 3072000u, lastSampleTime);
-			flushDecoded (sn, 3579545u, lastSampleTime);
-			flushDecoded (ay, 1789773u, lastSampleTime);
+			flushDecoded (decoders.decoder<chips::OpmDecoder> (), 3579545u, lastSampleTime);
+			flushDecoded (decoders.decoder<chips::HuC6280Decoder> (), 3579545u, lastSampleTime);
+			flushDecoded (decoders.decoder<chips::K051649Decoder> (), 3579545u, lastSampleTime);
+			flushDecoded (decoders.decoder<chips::Saa1099Decoder> (), 8000000u, lastSampleTime);
+			flushDecoded (decoders.decoder<chips::PokeyDecoder> (), 1789772u, lastSampleTime);
+			flushDecoded (decoders.decoder<chips::WswanDecoder> (), 3072000u, lastSampleTime);
+			flushDecoded (decoders.decoder<chips::Sn76489Decoder> (), 3579545u, lastSampleTime);
+			flushDecoded (decoders.decoder<chips::Ay8910Decoder> (), 1789773u, lastSampleTime);
 			// The RF5C164 keeps its samples in the chip's own RAM, which the stream uploads as a PCM
 			// bank (a 0x67 block of type 0x02, no ROM header) plus 0x68 writes. Without the image no
 			// cycle can be measured, so the decoder needs it before it can name a pitch.
 			const std::vector<std::uint8_t> rf5cRam =
-				rf5c.writes.empty() ? std::vector<std::uint8_t>()
+				decoders.decoder<chips::Rf5c68Decoder> ().writes.empty() ? std::vector<std::uint8_t>()
 									: assemblePcmBank (ir, 0x02, 64 * 1024);
-			flushDecoded (rf5c, 12500000u, lastSampleTime,
+			flushDecoded (decoders.decoder<chips::Rf5c68Decoder> (), 12500000u, lastSampleTime,
 						  [&rf5cRam] (chips::Rf5c68Decoder& decoder)
 						  {
 							  if (! rf5cRam.empty())
@@ -147,15 +218,15 @@ namespace
 			// The OKIM6295 has no pitch register: every voice plays at `clock / 165` and the note is
 			// the sample's own cycle, so the 256 KB ROM (0x8B blocks) is the only source of a pitch.
 			const std::vector<std::uint8_t> okimRom =
-				okim.writes.empty() ? std::vector<std::uint8_t>()
+				decoders.decoder<chips::Okim6295Decoder> ().writes.empty() ? std::vector<std::uint8_t>()
 									: assembleRom (ir, 0x8B, 256 * 1024);
-			flushDecoded (k007232, 8000000u, lastSampleTime);
-			flushDecoded (vsu, 5370000u, lastSampleTime);
-			flushDecoded (k005289, 4000000u, lastSampleTime);
-			flushDecoded (msm5232, 2119040u, lastSampleTime);
-			flushDecoded (multipcm, 8000000u, lastSampleTime);
-			flushDecoded (mikey, 16000000u, lastSampleTime);
-			flushDecoded (okim, 1000000u, lastSampleTime,
+			flushDecoded (decoders.decoder<chips::K007232Decoder> (), 8000000u, lastSampleTime);
+			flushDecoded (decoders.decoder<chips::VsuDecoder> (), 5370000u, lastSampleTime);
+			flushDecoded (decoders.decoder<chips::K005289Decoder> (), 4000000u, lastSampleTime);
+			flushDecoded (decoders.decoder<chips::Msm5232Decoder> (), 2119040u, lastSampleTime);
+			flushDecoded (decoders.decoder<chips::MultiPcmDecoder> (), 8000000u, lastSampleTime);
+			flushDecoded (decoders.decoder<chips::MikeyDecoder> (), 16000000u, lastSampleTime);
+			flushDecoded (decoders.decoder<chips::Okim6295Decoder> (), 1000000u, lastSampleTime,
 						  [&okimRom] (chips::Okim6295Decoder& decoder)
 						  {
 							  if (! okimRom.empty())
@@ -163,7 +234,7 @@ namespace
 								  decoder.setRom (okimRom);
 							  }
 						  });
-			flushDecoded (x1, 16000000u, lastSampleTime);
+			flushDecoded (decoders.decoder<chips::X1_010Decoder> (), 16000000u, lastSampleTime);
 
 			// The C140's note is the playback rate divided by the sample's own cycle length, and
 			// only the ROM holds that length: without it every voice is quantised against a fixed
@@ -173,10 +244,10 @@ namespace
 			// offset is the header's byte 0x96 - both are part of the same fact, so they travel
 			// together and the decoder cannot read one without the other.
 			const std::vector<std::uint8_t> c140Rom =
-				c140.writes.empty() ? std::vector<std::uint8_t>()
+				decoders.decoder<chips::C140Decoder> ().writes.empty() ? std::vector<std::uint8_t>()
 									: assembleRom (ir, 0x8D, 2 * 1024 * 1024);
 			const auto c140Banking = chips::C140Decoder::bankingFromHeaderByte (c140BankingOf (ir));
-			flushDecoded (c140, 8000000u, lastSampleTime,
+			flushDecoded (decoders.decoder<chips::C140Decoder> (), 8000000u, lastSampleTime,
 						  [&c140Rom, c140Banking] (chips::C140Decoder& decoder)
 						  {
 							  if (! c140Rom.empty())
@@ -189,9 +260,9 @@ namespace
 			// sample address is `bank << 16 | start`, so the image is the whole ROM the song
 			// declares - the chip masks it to a power of two rather than clipping at 2 MB.
 			const std::vector<std::uint8_t> c352Rom =
-				c352.writes.empty() ? std::vector<std::uint8_t>()
+				decoders.decoder<chips::C352Decoder> ().writes.empty() ? std::vector<std::uint8_t>()
 									: assembleRom (ir, 0x92, 32 * 1024 * 1024);
-			flushDecoded (c352, 12288000u, lastSampleTime,
+			flushDecoded (decoders.decoder<chips::C352Decoder> (), 12288000u, lastSampleTime,
 						  [&c352Rom] (chips::C352Decoder& decoder)
 						  {
 							  if (! c352Rom.empty())
@@ -204,9 +275,9 @@ namespace
 			// start address is 21 bits with no bank register, so the image is the declared ROM and
 			// the chip masks it to a power of two.
 			const std::vector<std::uint8_t> k053260Rom =
-				k053260.writes.empty() ? std::vector<std::uint8_t>()
+				decoders.decoder<chips::K053260Decoder> ().writes.empty() ? std::vector<std::uint8_t>()
 									   : assembleRom (ir, 0x8E, 2 * 1024 * 1024);
-			flushDecoded (k053260, 3579545u, lastSampleTime,
+			flushDecoded (decoders.decoder<chips::K053260Decoder> (), 3579545u, lastSampleTime,
 						  [&k053260Rom] (chips::K053260Decoder& decoder)
 						  {
 							  if (! k053260Rom.empty())
@@ -218,9 +289,9 @@ namespace
 			// keys the voice off in the core - and to measure the cycle between the start and that
 			// marker. Block type 0x8C, 24-bit addresses.
 			const std::vector<std::uint8_t> k054539Rom =
-				k054539.writes.empty() ? std::vector<std::uint8_t>()
+				decoders.decoder<chips::K054539Decoder> ().writes.empty() ? std::vector<std::uint8_t>()
 									   : assembleRom (ir, 0x8C, 16 * 1024 * 1024);
-			flushDecoded (k054539, 18432000u, lastSampleTime,
+			flushDecoded (decoders.decoder<chips::K054539Decoder> (), 18432000u, lastSampleTime,
 						  [&k054539Rom] (chips::K054539Decoder& decoder)
 						  {
 							  if (! k054539Rom.empty())
@@ -232,9 +303,9 @@ namespace
 			// QSound's samples are its 0x8F blocks: 16-bit addresses inside a 64 KB bank, so the
 			// image is the declared ROM and the chip masks it to a power of two.
 			const std::vector<std::uint8_t> qsoundRom =
-				qsound.writes.empty() ? std::vector<std::uint8_t>()
+				decoders.decoder<chips::QSoundDecoder> ().writes.empty() ? std::vector<std::uint8_t>()
 									  : assembleRom (ir, 0x8F, 8 * 1024 * 1024);
-			flushDecoded (qsound, 60000000u, lastSampleTime,
+			flushDecoded (decoders.decoder<chips::QSoundDecoder> (), 60000000u, lastSampleTime,
 						  [&qsoundRom] (chips::QSoundDecoder& decoder)
 						  {
 							  if (! qsoundRom.empty())
@@ -245,12 +316,12 @@ namespace
 
 			// GA20's samples are its 0x93 blocks, addressed in 16-byte units inside 1 MB.
 			const std::vector<std::uint8_t> ga20Rom =
-				ga20.writes.empty() ? std::vector<std::uint8_t>()
+				decoders.decoder<chips::Ga20Decoder> ().writes.empty() ? std::vector<std::uint8_t>()
 									: assembleRom (ir, 0x93, 1024 * 1024);
 			// the GA20's byte rate is `clock / 4 / (256 - rate)`: the decoder needs the clock the
 			// device was started with, which `flushDecoded` takes from the device config (the
 			// header's 0xE0); the constant is only the fallback when there is no device
-			flushDecoded (ga20, 3579545u, lastSampleTime,
+			flushDecoded (decoders.decoder<chips::Ga20Decoder> (), 3579545u, lastSampleTime,
 						  [&ga20Rom] (chips::Ga20Decoder& decoder)
 						  {
 							  if (! ga20Rom.empty())
@@ -261,9 +332,9 @@ namespace
 
 			// Sega PCM's samples are its 0x80 blocks, indexed by the 24-bit position's byte part.
 			const std::vector<std::uint8_t> segaPcmRom =
-				segaPcm.writes.empty() ? std::vector<std::uint8_t>()
+				decoders.decoder<chips::SegaPcmDecoder> ().writes.empty() ? std::vector<std::uint8_t>()
 									   : assembleRom (ir, 0x80, 8 * 1024 * 1024);
-			flushDecoded (segaPcm, 8000000u, lastSampleTime,
+			flushDecoded (decoders.decoder<chips::SegaPcmDecoder> (), 8000000u, lastSampleTime,
 						  [&segaPcmRom] (chips::SegaPcmDecoder& decoder)
 						  {
 							  if (! segaPcmRom.empty())
@@ -277,9 +348,9 @@ namespace
 			// the RAM (0xE1 blocks, 128 KB) holds - divides it. Its clock runs at 7,159,090 Hz on
 			// the Apple IIgs, and the core divides it by eight and by the oscillator count.
 			const std::vector<std::uint8_t> es5503Ram =
-				es5503.writes.empty() ? std::vector<std::uint8_t>()
+				decoders.decoder<chips::Es5503Decoder> ().writes.empty() ? std::vector<std::uint8_t>()
 									  : assembleRam (ir, 0xE1, 128 * 1024);
-			flushDecoded (es5503, 7159090u, lastSampleTime,
+			flushDecoded (decoders.decoder<chips::Es5503Decoder> (), 7159090u, lastSampleTime,
 						  [&es5503Ram] (chips::Es5503Decoder& decoder)
 						  {
 							  if (! es5503Ram.empty())
@@ -288,8 +359,8 @@ namespace
 							  }
 						  });
 
-			flushDecoded (opx, 16934400u, lastSampleTime);
-			flushDecoded (ymz, 16934400u, lastSampleTime);
+			flushDecoded (decoders.decoder<chips::Ymf271Decoder> (), 16934400u, lastSampleTime);
+			flushDecoded (decoders.decoder<chips::Ymz280bDecoder> (), 16934400u, lastSampleTime);
 
 			if (events.empty())
 			{
@@ -327,49 +398,49 @@ namespace
 			switch (slot.kind)
 			{
 			case midi::ChipKind::sn76489:
-				sn.queue (deviceFor (DEVID_SN76496, instance), reg, value, time);
+				decoders.decoder<chips::Sn76489Decoder> ().queue (deviceFor (DEVID_SN76496, instance), reg, value, time);
 				break;
 			case midi::ChipKind::ym2413:
-				opl.queue (deviceFor (DEVID_YM2413, instance), reg, value, time);
+				decoders.decoder<chips::OplDecoder> ().queue (deviceFor (DEVID_YM2413, instance), reg, value, time);
 				break;
 			case midi::ChipKind::ym3812:
-				opl.queue (deviceFor (DEVID_YM3812, instance), reg, value, time);
+				decoders.decoder<chips::OplDecoder> ().queue (deviceFor (DEVID_YM3812, instance), reg, value, time);
 				break;
 			case midi::ChipKind::ym3526:
-				opl.queue (deviceFor (DEVID_YM3526, instance), reg, value, time);
+				decoders.decoder<chips::OplDecoder> ().queue (deviceFor (DEVID_YM3526, instance), reg, value, time);
 				break;
 			case midi::ChipKind::y8950:
-				opl.queue (deviceFor (DEVID_Y8950, instance), reg, value, time);
+				decoders.decoder<chips::OplDecoder> ().queue (deviceFor (DEVID_Y8950, instance), reg, value, time);
 				break;
 			case midi::ChipKind::ymf262:
-				opl.queue (deviceFor (DEVID_YMF262, instance), reg, value, time, port);
+				decoders.decoder<chips::OplDecoder> ().queue (deviceFor (DEVID_YMF262, instance), reg, value, time, port);
 				break;
 			case midi::ChipKind::ymf278b:
-				opl.queue (deviceFor (DEVID_YMF278B, instance), reg, value, time, port);
+				decoders.decoder<chips::OplDecoder> ().queue (deviceFor (DEVID_YMF278B, instance), reg, value, time, port);
 				break;
 			case midi::ChipKind::ym2612:
-				opn.queue (deviceFor (DEVID_YM2612, instance), reg, value, time, port);
+				decoders.decoder<chips::OpnDecoder> ().queue (deviceFor (DEVID_YM2612, instance), reg, value, time, port);
 				break;
 			case midi::ChipKind::ym2203:
-				opn.queue (deviceFor (DEVID_YM2203, instance), reg, value, time, port);
+				decoders.decoder<chips::OpnDecoder> ().queue (deviceFor (DEVID_YM2203, instance), reg, value, time, port);
 				break;
 			case midi::ChipKind::ym2608:
-				opn.queue (deviceFor (DEVID_YM2608, instance), reg, value, time, port);
+				decoders.decoder<chips::OpnDecoder> ().queue (deviceFor (DEVID_YM2608, instance), reg, value, time, port);
 				break;
 			case midi::ChipKind::ym2610:
-				opn.queue (deviceFor (DEVID_YM2610, instance), reg, value, time, port);
+				decoders.decoder<chips::OpnDecoder> ().queue (deviceFor (DEVID_YM2610, instance), reg, value, time, port);
 				break;
 			case midi::ChipKind::ym2151:
-				opm.queue (deviceFor (DEVID_YM2151, instance), reg, value, time);
+				decoders.decoder<chips::OpmDecoder> ().queue (deviceFor (DEVID_YM2151, instance), reg, value, time);
 				break;
 			case midi::ChipKind::ymf271:
-				opx.queue (deviceFor (DEVID_YMF271, instance), reg, value, time, port);
+				decoders.decoder<chips::Ymf271Decoder> ().queue (deviceFor (DEVID_YMF271, instance), reg, value, time, port);
 				break;
 			case midi::ChipKind::ymz280b:
-				ymz.queue (deviceFor (DEVID_YMZ280B, instance), reg, value, time);
+				decoders.decoder<chips::Ymz280bDecoder> ().queue (deviceFor (DEVID_YMZ280B, instance), reg, value, time);
 				break;
 			case midi::ChipKind::ay8910:
-				ay.queue (deviceFor (DEVID_AY8910, instance), reg, value, time);
+				decoders.decoder<chips::Ay8910Decoder> ().queue (deviceFor (DEVID_AY8910, instance), reg, value, time);
 				break;
 			case midi::ChipKind::gameBoy:
 				queueGbWrite (deviceFor (DEVID_GB_DMG, instance), reg, value, time);
@@ -378,78 +449,78 @@ namespace
 				queueNesWrite (deviceFor (DEVID_NES_APU, instance), reg, value, time);
 				break;
 			case midi::ChipKind::huc6280:
-				c6280.queue (deviceFor (DEVID_C6280, instance), reg, value, time);
+				decoders.decoder<chips::HuC6280Decoder> ().queue (deviceFor (DEVID_C6280, instance), reg, value, time);
 				break;
 			case midi::ChipKind::k051649:
-				scc.queue (deviceFor (DEVID_K051649, instance), reg, value, time, port);
+				decoders.decoder<chips::K051649Decoder> ().queue (deviceFor (DEVID_K051649, instance), reg, value, time, port);
 				break;
 			case midi::ChipKind::k053260:
-				k053260.queue (deviceFor (DEVID_K053260, instance), reg, value, time);
+				decoders.decoder<chips::K053260Decoder> ().queue (deviceFor (DEVID_K053260, instance), reg, value, time);
 				break;
 			case midi::ChipKind::k054539:
-				k054539.queue (deviceFor (DEVID_K054539, instance), reg, value, time, port);
+				decoders.decoder<chips::K054539Decoder> ().queue (deviceFor (DEVID_K054539, instance), reg, value, time, port);
 				break;
 			case midi::ChipKind::c140:
 			{
 				// the 219 ASIC answers the same command; the runtime may only have started that one
 				const PLR_DEV_INFO* device = deviceFor (DEVID_C140, instance);
-				c140.queue (device != nullptr ? device : deviceFor (DEVID_C219, 0),
+				decoders.decoder<chips::C140Decoder> ().queue (device != nullptr ? device : deviceFor (DEVID_C219, 0),
 							reg, value, time, port);
 				break;
 			}
 			case midi::ChipKind::c352:
-				c352.queue (deviceFor (DEVID_C352, instance), reg, value, time, port);
+				decoders.decoder<chips::C352Decoder> ().queue (deviceFor (DEVID_C352, instance), reg, value, time, port);
 				break;
 			case midi::ChipKind::qsound:
-				qsound.queue (deviceFor (DEVID_QSOUND, instance), reg, value, time);
+				decoders.decoder<chips::QSoundDecoder> ().queue (deviceFor (DEVID_QSOUND, instance), reg, value, time);
 				break;
 			case midi::ChipKind::ga20:
-				ga20.queue (deviceFor (DEVID_GA20, instance), reg, value, time);
+				decoders.decoder<chips::Ga20Decoder> ().queue (deviceFor (DEVID_GA20, instance), reg, value, time);
 				break;
 			case midi::ChipKind::es5503:
-				es5503.queue (deviceFor (DEVID_ES5503, instance), reg, value, time);
+				decoders.decoder<chips::Es5503Decoder> ().queue (deviceFor (DEVID_ES5503, instance), reg, value, time);
 				break;
 			case midi::ChipKind::rf5c68:
-				rf5c.queue (rf5cDeviceFor (false, instance), reg, value, time);
+				decoders.decoder<chips::Rf5c68Decoder> ().queue (rf5cDeviceFor (false, instance), reg, value, time);
 				break;
 			case midi::ChipKind::rf5c164:
-				rf5c.queue (rf5cDeviceFor (true, instance), reg, value, time);
+				decoders.decoder<chips::Rf5c68Decoder> ().queue (rf5cDeviceFor (true, instance), reg, value, time);
 				break;
 			case midi::ChipKind::segapcm:
-				segaPcm.queue (deviceFor (DEVID_SEGAPCM, instance), reg, value, time, port);
+				decoders.decoder<chips::SegaPcmDecoder> ().queue (deviceFor (DEVID_SEGAPCM, instance), reg, value, time, port);
 				break;
 			case midi::ChipKind::okim6295:
-				okim.queue (deviceFor (DEVID_MSM6295, instance), reg, value, time);
+				decoders.decoder<chips::Okim6295Decoder> ().queue (deviceFor (DEVID_MSM6295, instance), reg, value, time);
 				break;
 			case midi::ChipKind::saa1099:
-				saa.queue (deviceFor (DEVID_SAA1099, instance), reg, value, time);
+				decoders.decoder<chips::Saa1099Decoder> ().queue (deviceFor (DEVID_SAA1099, instance), reg, value, time);
 				break;
 			case midi::ChipKind::pokey:
-				pokey.queue (deviceFor (DEVID_POKEY, instance), reg, value, time);
+				decoders.decoder<chips::PokeyDecoder> ().queue (deviceFor (DEVID_POKEY, instance), reg, value, time);
 				break;
 			case midi::ChipKind::x1_010:
-				x1.queue (deviceFor (DEVID_X1_010, instance), reg, value, time, port);
+				decoders.decoder<chips::X1_010Decoder> ().queue (deviceFor (DEVID_X1_010, instance), reg, value, time, port);
 				break;
 			case midi::ChipKind::wonderswan:
-				wswan.queue (deviceFor (DEVID_WSWAN, instance), reg, value, time);
+				decoders.decoder<chips::WswanDecoder> ().queue (deviceFor (DEVID_WSWAN, instance), reg, value, time);
 				break;
 			case midi::ChipKind::multiPcm:
-				multipcm.queue (deviceFor (DEVID_YMW258, instance), reg, value, time);
+				decoders.decoder<chips::MultiPcmDecoder> ().queue (deviceFor (DEVID_YMW258, instance), reg, value, time);
 				break;
 			case midi::ChipKind::mikey:
-				mikey.queue (deviceFor (DEVID_MIKEY, instance), reg, value, time);
+				decoders.decoder<chips::MikeyDecoder> ().queue (deviceFor (DEVID_MIKEY, instance), reg, value, time);
 				break;
 			case midi::ChipKind::k005289:
-				k005289.queue (deviceFor (DEVID_K005289, instance), reg, value, time);
+				decoders.decoder<chips::K005289Decoder> ().queue (deviceFor (DEVID_K005289, instance), reg, value, time);
 				break;
 			case midi::ChipKind::k007232:
-				k007232.queue (deviceFor (DEVID_K007232, instance), reg, value, time);
+				decoders.decoder<chips::K007232Decoder> ().queue (deviceFor (DEVID_K007232, instance), reg, value, time);
 				break;
 			case midi::ChipKind::msm5232:
-				msm5232.queue (deviceFor (DEVID_MSM5232, instance), reg, value, time);
+				decoders.decoder<chips::Msm5232Decoder> ().queue (deviceFor (DEVID_MSM5232, instance), reg, value, time);
 				break;
 			case midi::ChipKind::vsu:
-				vsu.queue (deviceFor (DEVID_VBOY_VSU, instance), reg, value, time);
+				decoders.decoder<chips::VsuDecoder> ().queue (deviceFor (DEVID_VBOY_VSU, instance), reg, value, time);
 				break;
 			default:
 				break;
@@ -592,10 +663,10 @@ namespace
 			before the key-on, ADPCM start bits and the DAC's 0x2A stream. */
 		void flushOpn (const std::vector<std::uint8_t>& adpcmBRom, std::uint32_t totalSamples)
 		{
-			for (auto& entry : opn.writes)
+			for (auto& entry : decoders.decoder<chips::OpnDecoder> ().writes)
 			{
-				const auto device = opn.devices.find (entry.first);
-				if (device == opn.devices.end() || device->second == nullptr)
+				const auto device = decoders.decoder<chips::OpnDecoder> ().devices.find (entry.first);
+				if (device == decoders.decoder<chips::OpnDecoder> ().devices.end() || device->second == nullptr)
 				{
 					continue;
 				}
@@ -632,8 +703,8 @@ namespace
 								  chips::extractPerformance (decoder, entry.second, totalSamples));
 			}
 
-			opn.writes.clear();
-			opn.devices.clear();
+			decoders.decoder<chips::OpnDecoder> ().writes.clear();
+			decoders.decoder<chips::OpnDecoder> ().devices.clear();
 		}
 
 		/** Which OPL the device is. Only the Y8950 carries Delta-T, an OPL2 with a sample
@@ -659,10 +730,10 @@ namespace
 			rhythm mode borrows channels as it is entered, so the whole stream is needed. */
 		void flushOpl (std::uint32_t totalSamples)
 		{
-			for (auto& entry : opl.writes)
+			for (auto& entry : decoders.decoder<chips::OplDecoder> ().writes)
 			{
-				const auto device = opl.devices.find (entry.first);
-				if (device == opl.devices.end() || device->second == nullptr)
+				const auto device = decoders.decoder<chips::OplDecoder> ().devices.find (entry.first);
+				if (device == decoders.decoder<chips::OplDecoder> ().devices.end() || device->second == nullptr)
 				{
 					continue;
 				}
@@ -692,8 +763,8 @@ namespace
 								  chips::extractPerformance (decoder, entry.second, totalSamples));
 			}
 
-			opl.writes.clear();
-			opl.devices.clear();
+			decoders.decoder<chips::OplDecoder> ().writes.clear();
+			decoders.decoder<chips::OplDecoder> ().devices.clear();
 		}
 
 		/** Register writes of one chip, kept per device until the stream ends.
@@ -702,40 +773,6 @@ namespace
 			finished stream: which note is playing at a given moment follows from the chip's own
 			state - a divider that was set earlier, a key mask that was switched on, a sweep that
 			has been running - and not from the write that happens to arrive. */
-		template <typename Decoder>
-		struct ChipBuffer
-		{
-			void queue (const PLR_DEV_INFO* device, std::uint8_t reg, std::uint16_t value,
-						std::uint32_t sampleTime, std::uint8_t port = 0)
-			{
-				if (device == nullptr)
-				{
-					return;
-				}
-
-				chips::RegisterWrite write;
-				write.deviceId = device->id;
-				write.reg = reg;
-				write.value = value;
-				write.port = port;
-				write.sampleTime = sampleTime;
-				writes[device->id].push_back (write);
-				devices[device->id] = device;
-			}
-
-			/** The SCC command carries a latch and the value that follows it: the chip sees two
-				writes, and so does the decoder. */
-			void queuePair (const PLR_DEV_INFO* device, std::uint8_t reg, std::uint8_t latch,
-							std::uint8_t value, std::uint32_t sampleTime, std::uint8_t port)
-			{
-				queue (device, reg, latch, sampleTime, port);
-				queue (device, (std::uint8_t) (reg | 1), value, sampleTime, port);
-			}
-
-			std::map<std::uint32_t, std::vector<chips::RegisterWrite>> writes;
-			std::map<std::uint32_t, const PLR_DEV_INFO*> devices;
-		};
-
 		template <typename Decoder>
 		void flushDecoded (ChipBuffer<Decoder>& buffer, std::uint32_t fallbackClock,
 						   std::uint32_t totalSamples)
@@ -1055,72 +1092,46 @@ namespace
 		std::map<std::uint32_t, const PLR_DEV_INFO*> gbDevices;
 		// the OPN family: algorithm and total level decide whether a key-on is a note, and the
 		// ADPCM/DAC channels are one-shots the chip itself ends, so the whole stream is needed
-		ChipBuffer<chips::OpnDecoder> opn;
-		ChipBuffer<chips::OpmDecoder> opm;
-		ChipBuffer<chips::OplDecoder> opl;
 		// the PSGs whose registers describe the whole voice: a write only matters in context
-		ChipBuffer<chips::HuC6280Decoder> c6280;
-		ChipBuffer<chips::K051649Decoder> scc;
-		ChipBuffer<chips::Saa1099Decoder> saa;
-		ChipBuffer<chips::PokeyDecoder> pokey;
-		ChipBuffer<chips::WswanDecoder> wswan;
-		ChipBuffer<chips::Sn76489Decoder> sn;
-		ChipBuffer<chips::Ay8910Decoder> ay;
-		ChipBuffer<chips::Rf5c68Decoder> rf5c;
 
 		// The OKIM6295 plays every voice at one fixed rate, so its note comes from the sample
 		// alone - the ROM (0x8B) is what the decoder measures
-		ChipBuffer<chips::Okim6295Decoder> okim;
 
 		// Konami K005289: two wavetable voices whose pitch is clock / (32 * (freq + 1)) - no pitch
 		// register to transpose and no ROM to measure, so nothing has to be handed to it
-		ChipBuffer<chips::K005289Decoder> k005289;
 
 		// OKI MSM5232: eight voices whose register is a key index into an 88-entry ROM (note = 21 + index)
-		ChipBuffer<chips::Msm5232Decoder> msm5232;
 
 		// Yamaha YMW-258: 28 sampled voices, ratio = (1024 + pitch) / 1024 * 2^octave
-		ChipBuffer<chips::MultiPcmDecoder> multipcm;
 
 		// Atari Lynx MIKEY: four timer-driven squares, clock / (2 * (backup + 1) * 2^(shift + 4))
-		ChipBuffer<chips::MikeyDecoder> mikey;
 
 		// Konami K007232: two PCM voices whose step register is a real pitch, clock / (4 * (4096 - step))
-		ChipBuffer<chips::K007232Decoder> k007232;
 
 		// Virtual Boy VSU: five wavetable voices plus noise, clock / (32 * (2048 - freq))
-		ChipBuffer<chips::VsuDecoder> vsu;
-		ChipBuffer<chips::X1_010Decoder> x1;
-		ChipBuffer<chips::Ymf271Decoder> opx;
-		ChipBuffer<chips::Ymz280bDecoder> ymz;
 		// the C140's note length comes from its end address, but only the whole stream says when
 		// a voice was keyed on, so its writes wait for the end as well
-		ChipBuffer<chips::C140Decoder> c140;
 		// the C352 is the same reader with an explicit key-on write, and its notes are measured
 		// from the ROM its 0x92 block carries
-		ChipBuffer<chips::C352Decoder> c352;
 		// the K053260 keys from a shared bitmask register and takes a note's length from its own
 		// length register, so it too needs the whole stream before it can place a single note
-		ChipBuffer<chips::K053260Decoder> k053260;
 		// the K054539 ends a note on a marker inside the sample, so its length - and its pitch -
 		// come from the ROM its 0x8C block carries
-		ChipBuffer<chips::K054539Decoder> k054539;
 		// QSound has no key bit at all: a voice sounds while its rate and volume are non-zero, so
 		// its notes - and its sixteen voices - only make sense read from the whole stream too
-		ChipBuffer<chips::QSoundDecoder> qsound;
 
 		// The GA20 has a key bit but no length register the core reads: a sample ends where its
 		// ROM says 0x00, so the decoder needs the whole stream - and the ROM - to know the gate
-		ChipBuffer<chips::Ga20Decoder> ga20;
 
 		// The Sega PCM's registers are its playback state - address, pitch, end, volume and the
 		// control bit that starts it - so its notes only exist in the whole stream
-		ChipBuffer<chips::SegaPcmDecoder> segaPcm;
 
 		// The ES5503 is a wavetable chip: a voice walks a table it points at, so the note depends on
 		// the table's own cycle length (measured from the RAM its 0xE1 blocks upload) as well as on
 		// the frequency register - and its key is the falling edge of a halt bit
-		ChipBuffer<chips::Es5503Decoder> es5503;
+		// every decoder this song needs, created the first time a write names one
+		DecoderRegistry decoders;
+
 		std::vector<playback::MidiEvent> events;
 
 		/** The user's preference at load time: whether a sampled note also carries its sample's
