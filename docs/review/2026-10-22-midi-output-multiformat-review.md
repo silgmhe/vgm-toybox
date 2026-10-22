@@ -7,7 +7,7 @@
 | 范围 | `plugin/Source/chips/`（31 个解码器）、`plugin/Source/backends/libvgm/`（装配层）、`plugin/Source/playback/`（引擎接口）；不评审 UI 细节与 libvgm 本身 |
 | 方法 | 静态阅读接口与实现、统计规模与重复度、核对文档声明、以真实曲目运行验证现行行为 |
 | 结论 | **功能正确、芯片层已解耦；装配层仍与 VGM 强耦合**。新增芯片很便宜，新增**格式**很贵。3 个结构性阻断项、4 个高优先级、3 个中、1 个低 |
-| 状态 | 仅评审，未修改代码 |
+| 状态 | 评审已完成；**R0 已实施**（`ac66325`、R0b 见 §11） |
 
 ## 1. 总体结论
 
@@ -47,8 +47,8 @@
 |---|---|---|
 | C-1 | 阻断 | `Builder::parse` 把「VGM 命令解析」与「MIDI 装配」放在同一函数（462 行 / 57 个 case） |
 | C-2 | 阻断 | 设备路由靠 31 个 `ChipBuffer<T>` 成员 + `deviceFor(DEVID_*)`，无法跨格式复用 |
-| C-3 | 阻断 | `IChipDecoder::reset(clock, sampleRate)` 的契约写着「来自 VGM 头部」，芯片层泄漏格式概念 |
-| H-1 | 高 | `RegisterWrite.value2` 为 C352 单颗芯片而加，格式细节进入共享 IR |
+| ~~C-3~~ | ~~阻断~~ **已解决（R0a）** | `IChipDecoder::reset(clock, sampleRate)` 的契约写着「来自 VGM 头部」，芯片层泄漏格式概念 |
+| ~~H-1~~ | ~~高~~ **已解决（R0b）** | `RegisterWrite.value2` 为 C352 单颗芯片而加，格式细节进入共享 IR |
 | H-2 | 高 | `kVgmRate = 44100.0` 是全局常量，时间栅格无处传递 |
 | H-3 | 高 | 30 个 `NoteTable` 各写一遍 `noteFor`，仅 13 处复用 `quantisePlaybackRate` |
 | H-4 | 高 | `LibvgmSongInstance` 同时做容器解包、libvgm 生命周期、轨枚举、能力表、序列构建 |
@@ -208,3 +208,32 @@ Source/
 | NSF/NSFE | libvgm 不支持，需要 6502 核心 | R1 + R5；`NesApuDecoder` 已存在，缺的只是「谁来写 `$4000`」 |
 | FMT / PC-98 OPNA | libvgm 支持 YM2608 | 只差 loader 与设备表，属 R1 收益最直接的一类 |
 | SPC / HES / KSS | libvgm 不支持 | 各自需要 CPU 核心，原则同上 |
+
+## 11. 实施进度
+
+| 阶段 | 状态 | 提交 | 验收 |
+|---|---|---|---|
+| R0a `ChipConfig` / `IChipDecoder::reset` | **已完成** | `ac66325` | `ctest` 34/34；VSU 03 = 81、MIKEY 01 = 36、YMW258 02 = 77，与改动前一致 |
+| R0b `RegisterWrite::value` → `uint16_t`，删 `value2` | **已完成** | 本次提交 | `ctest` 34/34；QSound 01 = 49、K005289 01 = 16、c352 09/10 = 77/77 全部 PASS |
+| R1 `SongIr` + `ISongLoader`（解决 C-1） | 待做 | — | 95 首逐首一致 |
+| R2 `DecoderRegistry`（解决 C-2） | 待做 | — | `--pitch-report` 不变 |
+| R3 合并 30 个 `NoteTable` | 待做 | — | 单测断言不变 |
+| R4 拆 `LibvgmSongInstance` | 随 NSF | — | 轨枚举快照不变 |
+| R5 NSF 适配 | 单独立项 | — | 需新 CPU 核心 |
+
+### R0 的两处实现说明
+
+1. **解码器函数体一行未改**。31 个 `reset` 改为 `(const ChipConfig&)` 后，开头把两个旧名字从 config 映射过来并标 `[[maybe_unused]]`（Mikey/Opl/Opm 不用 `sampleTime`，MSM5232/MultiPCM 两个都不用）。这是 R0 的阶段目标——**只换接口，不换行为**。
+2. **16 位打包上移到读取器**。C352、QSound、K005289 三颗的宽寄存器不再各拿一个 `value2` 字段，而是由 `ChipBuffer::queue` 接收一个 `uint16_t`：
+
+   | 芯片 | 打包方式 |
+   |---|---|
+   | C352 | `(data << 8) | data2`（两个大端字节） |
+   | QSound | 同上，高字节在前 |
+   | K005289 | `((data2 & 0x0F) << 8) | data`（十二位） |
+
+   这让 `RegisterWrite` 回到「一个寄存器值」的语义，芯片层不再有单颗芯片专用的字段（H-1 关闭）。
+
+### 一个可复用的经验
+
+`Okim6295Decoder::reset` 的签名与 `{` 之间有一个空行，导致 30/31 的批量正则漏掉它——`replace_in_files` 的 `expected_count` 守卫当场报错，位置立刻可见。**批量重构一定要带数量断言**，否则这种遗漏会以三处编译错误的形式散落在后面。
