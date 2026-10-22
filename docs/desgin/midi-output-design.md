@@ -759,6 +759,15 @@ void render (const playback::OutputBusBuffers* buses, int numBuses, int numSampl
 - **B. 无音频核心（15 项）**：9 个真芯片（FDS、MMC5、VRC7、N163、VRC6、FME7、SID、MultiPCM、YM2609）+ 6 个驱动/板卡（PPZ8、PPSDRV、PCM8、MPCMX68k、CS4231、P86）。它们主要出现在本插件目前不读的格式（NSF/NSFE、SPC、HES、KSS…）或驱动级回放里，所以 B 批实际是「新格式 + 新核心」的工程，不是 MIDI 输出的延伸。有核心之后 MIDI 侧很便宜：FME7 复用 AY、VRC7 复用 YM2413、VRC6 脉冲复用 NES。
 - **C. 已超出（13 项）**：SCSP、ES5506、C219、MIKEY、K007232、K005289、MSM5205、MSM5232、BSMT2000、ICS2115、VBOY_VSU、YMW258、YM2414。不计入对齐，但每项同样要一个解码器才能出 MIDI，机制与 A 批相同。其中 **C219 已实现（2026-10-22，M6）**：它复用 `C140Decoder`——219 ASIC 就是十六声道的 C140，寄存器布局与 `0xD4` 命令都相同，八首 NA-1 曲目（`test_file/C219`）全部通过 `[13]`。
 
+  **这十三项的真实前置条件**（2026-10-22 逐项核对核心文件）：
+
+  - **ES5506**：`libs/libvgm/emu/cores/es5506.c` 只有 619 字节，`DeviceName` 返回 `NULL`、`DeviceChannels` 返回 `0`——是**占位桩，没有核心**，连发声都做不到，MIDI 无从谈起；
+  - **YM2414（OPZ）**：`emu/cores` 里根本没有对应文件，同样无法播放；
+  - **MSM5205**：核心存在（13.7 KB），但音高只有四档采样率选择器，按 M5 的先例不做；
+  - 其余九颗（K005289、K007232、VSU、BSMT2000、MSM5232、MultiPCM、MIKEY、ICS2115、SCSP）核心属实，机制与 A 批相同。
+
+  因此 C 批**实际可做 10 项**（含已完成的 C219），不是 13。
+
 **优先级**
 
 1. 方波/波形 PSG：X1_010——都是「周期→音高」，`chips/Pitch.h` 的曲线直接可用，单个解码器约 100–200 行，测试全在 `vgm_chip_test` 里。（HuC6280、K051649、SAA1099、POKEY、WSwan 已按此路径完成。）
