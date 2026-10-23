@@ -20,6 +20,18 @@ inline constexpr int defaultPitchBendRange = 12;
 inline constexpr int minPitchBendRange = 1;
 inline constexpr int maxPitchBendRange = 24;
 
+/** True when `cents` is wider than the configured range, so encoding it would clip.
+
+	The clamp below is silent by design - a bend that wide is a producer's problem, not the
+	encoder's - but silence is how a wrong magnitude hides: FamiTracker's portamento reached
+	twenty-three semitones under a twelve-semitone default and nothing said so. Anything that
+	produces bends can ask this and count the answer. */
+inline bool pitchBendClips (int cents, int rangeSemitones)
+{
+	const int range = std::clamp (rangeSemitones, minPitchBendRange, maxPitchBendRange);
+	return std::abs (cents) > range * 100;
+}
+
 /** The 14-bit pitch-bend value (0..16383, 8192 = centred) for `cents` of bend at
 	`rangeSemitones` each way. Returns -1 when no message should go out (`enabled == false`): the
 	notes keep their nearest semitone and the fine pitch is dropped. */

@@ -11,6 +11,7 @@
 #include "formats/ftm/FtmSongLoader.h"
 #include "formats/vgm/VgmSongLoader.h"
 #include "midi/NoteStream.h"
+#include "playback/MidiSequence.h"
 
 namespace toybox::test
 {
@@ -772,6 +773,19 @@ void testFtmArpeggioMacro (void)
 	}
 }
 
+
+/** A bend wider than the configured range is silently clipped, and silence is how a wrong `
+magnitude hides: the FamiTracker portamento reached twenty-three semitones under a twelve-`
+semitone default. This predicate is what a producer asks instead of finding out later. */
+
+void testPitchBendRange (void)
+{
+	check (! toybox::playback::pitchBendClips (1200, 12), "a twelve-semitone bend fits a twelve-semitone range");
+	check (toybox::playback::pitchBendClips (1201, 12), "one cent past it does not");
+	check (toybox::playback::pitchBendClips (-2350, 12), "and the portamento that started this does not either");
+	check (! toybox::playback::pitchBendClips (2400, 24) && toybox::playback::pitchBendClips (2401, 24), "twenty-four semitones is the widest range, and it clips past it");
+}
+
 void runFormatTests (void)
 {
 	testVgmLoaderIr();
@@ -781,6 +795,7 @@ void runFormatTests (void)
 	testFtmPortamento();
 	testFtmVolumeEnvelope();
 	testFtmArpeggioMacro();
+	testPitchBendRange();
 }
 
 } // namespace toybox::test

@@ -779,6 +779,13 @@ bool loadNoteStream (const void* data, std::size_t size, midi::NoteStream& out, 
 						// are not a constant number of cents; one unit is taken as 1/16 semitone here
 						// so the shape is right and the magnitude is an approximation, stated rather
 						// than hidden.
+						//
+						// That approximation is probably too fast, and the settings gave the evidence:
+						// the MIDI path's default pitch-bend range is twelve semitones, and eight units
+						// per frame over half a second reaches twenty-three - a normal effect should not
+						// be clipped by a normal setting. The honest scale is period arithmetic
+						// (period = clock / (16 * frequency) - 1, then cents from the ratio), which is
+						// per-note rather than per-unit, and wants the chip's clock, so it waits.
 						const int sign = (effect.first == 16) ? 1 : -1;
 						const double step = (double) (effect.second & 0xFF) * 6.25;
 						std::size_t index = 1;
