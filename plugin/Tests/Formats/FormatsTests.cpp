@@ -11,6 +11,7 @@
 #include "chips/ChipTypes.h"
 #include "formats/ftm/FtmSongIr.h"
 #include "formats/nsf/NsfFile.h"
+#include "formats/nsf/NsfMemory.h"
 #include "formats/ftm/FtmSongLoader.h"
 #include "formats/ftm/compiler/Chunk.h"
 #include "formats/ftm/compiler/DriverData2A03.h"
@@ -1248,6 +1249,70 @@ void testNsfHeader (void)
 		   "so is one without the magic");
 }
 
+
+/** The address space the driver runs in. Two things here decide whether anything plays at all: the
+	sound registers must leave the memory map rather than being stored, and a banked program has to
+	show the right window when the driver switches. */
+
+void testNsfMemory (void)
+{
+	toybox::formats::nsf::NsfFile file;
+	file.loadAddress = 0x8000;
+	file.initAddress = 0x8000;
+	file.playAddress = 0x8003;
+	file.rom = { 0x4C, 0x00, 0x80, 0x4C, 0x00, 0x80 };
+
+	toybox::formats::nsf::NsfMemory memory;
+
+	std::vector<std::pair<std::uint16_t, std::uint8_t>> sound;
+	memory.onSoundWrite = [&sound] (std::uint16_t address, std::uint8_t value)
+	{
+		sound.emplace_back (address, value);
+	};
+
+	memory.load (file);
+
+	check (memory.initAddress() == 0x8000 && memory.playAddress() == 0x8003,
+		   "the entry points come from the header");
+
+	// RAM is two kilobytes mirrored through $1FFF.
+	memory.write (0x0010, 0x5A);
+	check (memory.read (0x0010) == 0x5A && memory.read (0x0810) == 0x5A
+			   && memory.read (0x1810) == 0x5A,
+		   "RAM mirrors every two kilobytes");
+
+	// The program is readable where it was loaded, and a write to it does nothing.
+	check (memory.read (0x8000) == 0x4C && memory.read (0x8003) == 0x4C,
+		   "the program is at its load address");
+	memory.write (0x8000, 0x00);
+	check (memory.read (0x8000) == 0x4C, "and writing to ROM changes nothing");
+
+	// Sound registers are captured, not stored.
+	memory.write (0x4015, 0x0F);
+	memory.write (0x4000, 0xB1);
+	check (sound.size() == 2 && sound[0].first == 0x4015 && sound[1].second == 0xB1,
+		   "writes in $4000-$4017 reach the player instead of RAM");
+	check (memory.read (0x4015) == 0x00, "and are not readable back");
+
+	// A banked program shows the window the driver selects.
+	toybox::formats::nsf::NsfFile big;
+	big.loadAddress = 0x8000;
+	big.initAddress = 0x8000;
+	big.rom.assign (0x10000, 0x00);
+	big.rom[0x0000] = 0x11;			// bank 0
+	big.rom[0x2000] = 0x22;			// bank 1
+	big.rom[0x8000] = 0x99;			// bank 4
+
+	toybox::formats::nsf::NsfMemory windowed;
+	windowed.load (big);
+	check (windowed.banked(), "a program larger than the address space is banked");
+	check (windowed.read (0x8000) == 0x11 && windowed.read (0xA000) == 0x22,
+		   "each window shows its own bank to start with");
+
+	windowed.write (0x5FF8, 4);
+	check (windowed.read (0x8000) == 0x99, "and a write to $5FF8 switches the first window");
+}
+
 void runFormatTests (void)
 {
 	testVgmLoaderIr();
@@ -1259,6 +1324,7 @@ void runFormatTests (void)
 	testFtmApuWrites();
 	testFtmVgmImage();
 	testNsfHeader();
+	testNsfMemory();
 	testFtmArpeggioMacro();
 	testPitchBendRange();
 	testFtmTonePortamento();
