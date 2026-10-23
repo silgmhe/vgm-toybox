@@ -1,6 +1,7 @@
 #include "FtmSongLoader.h"
 
 #include <algorithm>
+#include <cmath>
 #include <cstring>
 #include <map>
 
@@ -457,22 +458,42 @@ bool loadNoteStream (const void* data, std::size_t size, midi::NoteStream& out, 
 				// the closest a note-per-row transcription gets without splitting a note into ticks.
 				for (const auto& effect : note.effects)
 				{
-					if (effect.first != 10)
+					if (effect.first == 10)
 					{
-						continue;
+						const int steps[3] = { 0, (effect.second >> 4) & 0x0F, effect.second & 0x0F };
+						std::size_t step = 1;
+
+						for (std::uint32_t row = event.startSample + 1; row < event.endSample; ++row)
+						{
+							chips::PitchEvent bend;
+							bend.sampleTime = row;
+							bend.logicalChannel = channel;
+							bend.cents = (std::int16_t) (steps[step % 3] * 100);
+							out.bends.push_back ({ track, bend });
+							++step;
+						}
 					}
-
-					const int steps[3] = { 0, (effect.second >> 4) & 0x0F, effect.second & 0x0F };
-					std::size_t step = 1;
-
-					for (std::uint32_t row = event.startSample + 1; row < event.endSample; ++row)
+					else if (effect.first == 11)
 					{
-						chips::PitchEvent bend;
-						bend.sampleTime = row;
-						bend.logicalChannel = channel;
-						bend.cents = (std::int16_t) (steps[step % 3] * 100);
-						out.bends.push_back ({ track, bend });
-						++step;
+						// 4xy vibrato: x is the speed in table steps, y the depth. FamiTracker walks a
+						// 64-step sine and scales it by y/16 semitone. One step per row here, because a
+						// row is the finest thing this transcription has - the same approximation the
+						// arpeggio above states.
+						const double depth = (effect.second & 0x0F) / 16.0;
+						const int speed = (effect.second >> 4) & 0x0F;
+						int phase = speed;
+
+						for (std::uint32_t row = event.startSample + 1; row < event.endSample; ++row)
+						{
+							const double sine = std::sin (2.0 * 3.14159265358979323846
+														  * (double) (phase % 64) / 64.0);
+							chips::PitchEvent bend;
+							bend.sampleTime = row;
+							bend.logicalChannel = channel;
+							bend.cents = (std::int16_t) std::lround (100.0 * depth * sine);
+							out.bends.push_back ({ track, bend });
+							phase += speed;
+						}
 					}
 				}
 			}

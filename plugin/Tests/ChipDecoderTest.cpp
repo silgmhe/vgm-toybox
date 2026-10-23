@@ -3967,8 +3967,8 @@ namespace
 			payload.push_back (4);
 			payload.push_back (1);
 			payload.push_back (12);
-			payload.push_back (0);
-			payload.push_back (0);
+			payload.push_back (11);		// effect 11 = vibrato, 0x43 = speed 4, depth 3/16 semitone
+			payload.push_back (0x43);
 			block ("PATTERNS", 3, payload);
 		}
 
@@ -4001,13 +4001,40 @@ namespace
 			   "the track is the module channel, named");
 
 		// 0x47 steps the first note +4 and +7 semitones: rows 1..15 of a 16-row note
-		check (stream.bends.size() == 15, "arpeggio bends once per row inside the note");
-		if (stream.bends.size() == 15)
+		int arpeggioBends = 0;
+		for (const auto& entry : stream.bends)
+		{
+			if (entry.bend.sampleTime < 16)
+			{
+				++arpeggioBends;
+			}
+		}
+
+		check (arpeggioBends == 15, "arpeggio bends once per row inside the note");
+		if (arpeggioBends == 15)
 		{
 			check (stream.bends[0].bend.cents == 400, "+4 semitones on the first step");
 			check (stream.bends[1].bend.cents == 700, "+7 on the second");
 			check (stream.bends[2].bend.cents == 0, "and back to the note on the third");
 		}
+
+		int vibratoBends = 0;
+		int vibratoPeak = 0;
+		int signs = 0;
+		for (const auto& entry : stream.bends)
+		{
+			if (entry.bend.sampleTime <= 16)
+			{
+				continue;
+			}
+			++vibratoBends;
+			vibratoPeak = std::max (vibratoPeak, std::abs ((int) entry.bend.cents));
+			signs = signs | (entry.bend.cents > 0 ? 1 : (entry.bend.cents < 0 ? 2 : 0));
+		}
+
+		check (vibratoBends == 47, "vibrato bends once per row across the second note");
+		check (vibratoPeak <= 19, "depth 3/16 stays under a fifth of a semitone");
+		check (signs == 3, "the vibrato swings both ways");
 	}
 
 	/** The order list is walked, not played straight through. A `Dxx` on the first frame must skip
