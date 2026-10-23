@@ -181,3 +181,43 @@ reader.skip ((std::size_t) (octaves * 12 * bytesPerAssignment));
 - **音频**：需要编译器，与 `NoteStream` 无关。
 
 也就是说 FTM 可以先"导出 MIDI（已可用）"，后"播放音频（本路线）"。
+
+## 8. 播放已实现（2A03），扩展芯片受限于引擎
+
+路线在 M3-3 前改道：移植 FT 编译器是为了导出 NSF，而本仓库没有 NSF 播放器（`SongIr` 是寄存器流，后端只有 libvgm）。播放需要的不是驱动，而是驱动做的事——每帧算出各通道的周期、音量、占空比并写 APU 寄存器。于是 `formats/ftm/FtmSongIr.cpp` 直接产出 `SongIr`，`buildVgm()` 再把它包成内存 VGM，交给现有播放器。
+
+**验证方式不是断言，而是真实引擎**：`vgm_mixer_test` 打开生成的镜像，报告
+
+```
+Chips   : NES APU (PFSN)      Duration: 227.73 s
+Rendered: peak 0.3481, rms 0.2139
+Tracks  : Square 1 / Square 2 / Triangle / Noise / DPCM
+```
+
+七首全部如此。语料实测（`fod_pancake`）：镜像含 1,553 字节 DPCM 采样块、487 组地址/长度写。
+
+### 已实现
+
+| 项 | 说明 |
+|---|---|
+| 音符 / 时长 / 轨道 | 帧级时钟（tempo/2.5，PAL 另有系数） |
+| 音量 | 音量列或乐器音量宏，逐帧步进 |
+| 占空比 | 乐器占空比宏，逐帧步进 |
+| 行效果 | `0xy` 琶音、`4xy` 颤音、`1xx`/`2xx` 滑音（改周期而非半音）、`3xx` 音调滑音、`Sxx` 切断 |
+| 释放 | note 13 = 写音量 0（2A03 无 release 阶段） |
+| `$4015` | **累加掩码**（它是锁存器，逐通道写会互相关闭） |
+| DPCM | 采样按 64 字节对齐排放、0x08 数据块、`$4010`–`$4013` + 状态位 |
+| PAL | 1,662,607 Hz 时钟 + 帧长系数 |
+
+### 明确的上限：libvgm 没有扩展芯片核心
+
+`libs/libvgm/emu/cores` 里的 NES 扩展只有 `np_nes_fds.c`。**VRC6 / N163 / MMC5 / S5B 不存在**（VRC7 只有 OPL 音色表，不是核心）。语料对照：
+
+| 模块 | 扩展 | 可完整播放 |
+|---|---|---|
+| `fod_pancake` | 无 | ✅ |
+| `Sunrise…` / `snowburnb` / `Vietnamese…` | VRC6 | ⚠️ 仅 2A03 |
+| `fod_hopeless` / `TMNT…` | N163 | ⚠️ 仅 2A03 |
+| `15_coffeezoneb` | VRC7 | ⚠️ 仅 2A03 |
+
+要让扩展声部发声，需要自带核心（B）或换播放内核（C），都是另一个量级的决定。
