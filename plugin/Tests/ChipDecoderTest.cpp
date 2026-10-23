@@ -4001,6 +4001,109 @@ namespace
 			   "the track is the module channel, named");
 	}
 
+	/** The order list is walked, not played straight through. A `Dxx` on the first frame must skip
+		the second one, so its note never appears - which the real files could only hint at. */
+
+	void testFtmSkipEffect (void)
+	{
+		std::vector<std::uint8_t> image;
+		const auto put32 = [&image] (std::uint32_t v)
+		{
+			for (int i = 0; i < 4; ++i)
+			{
+				image.push_back ((std::uint8_t) ((v >> (8 * i)) & 0xFF));
+			}
+		};
+		const auto putText = [&image] (const char* text)
+		{
+			for (const char* c = text; *c != '\0'; ++c)
+			{
+				image.push_back ((std::uint8_t) *c);
+			}
+		};
+		const auto block = [&image, &put32] (const char* id, std::uint32_t version,
+											  const std::vector<std::uint8_t>& payload)
+		{
+			char padded[16] = {};
+			for (int i = 0; i < 16 && id[i] != '\0'; ++i)
+			{
+				padded[i] = id[i];
+			}
+			image.insert (image.end(), padded, padded + 16);
+			put32 (version);
+			put32 ((std::uint32_t) payload.size());
+			image.insert (image.end(), payload.begin(), payload.end());
+		};
+
+		putText ("FamiTracker Module");
+		put32 (0x0420);
+		block ("PARAMS", 3, { 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 });
+		block ("HEADER", 3, { 0x00, 'T', 0x00, 0x00, 0x00 });
+
+		{	// two frames, channel 0 plays pattern 0 and then pattern 1
+			std::vector<std::uint8_t> payload;
+			const auto word = [&payload] (std::uint32_t v)
+			{
+				for (int i = 0; i < 4; ++i)
+				{
+					payload.push_back ((std::uint8_t) ((v >> (8 * i)) & 0xFF));
+				}
+			};
+			word (2);			// frames
+			word (6);			// speed
+			word (150);			// tempo
+			word (64);			// pattern length
+			payload.push_back (0);
+			payload.push_back (1);
+			block ("FRAMES", 3, payload);
+		}
+
+		{	// pattern 0: C-4 at row 0 with Dxx 01 (skip one frame); pattern 1: D-4 at row 0
+			std::vector<std::uint8_t> body;
+			const auto word = [&body] (std::uint32_t v)
+			{
+				for (int i = 0; i < 4; ++i)
+				{
+					body.push_back ((std::uint8_t) ((v >> (8 * i)) & 0xFF));
+				}
+			};
+
+			word (0); word (0); word (0); word (1);		// track, channel, pattern 0, one item
+			word (0);									// row 0
+			body.push_back (1);		// C
+			body.push_back (4);		// octave
+			body.push_back (1);		// instrument
+			body.push_back (15);	// volume
+			body.push_back (3);		// effect 3 = skip
+			body.push_back (1);		// skip one frame
+
+			word (0); word (0); word (1); word (1);		// pattern 1, one item
+			word (0);
+			body.push_back (3);		// D
+			body.push_back (4);
+			body.push_back (1);
+			body.push_back (15);
+			body.push_back (0);
+			body.push_back (0);
+
+			block ("PATTERNS", 3, body);
+		}
+
+		putText ("END");
+
+		toybox::midi::NoteStream stream;
+		std::string error;
+		check (toybox::formats::ftm::loadNoteStream (image.data(), image.size(), stream, error),
+			   "the module with a skip loads");
+
+		check (stream.notes.size() == 1, "Dxx skipped the second frame, so its note is gone");
+		if (stream.notes.size() == 1)
+		{
+			check (stream.notes[0].note.note == 60, "the surviving note is the C-4 of frame 0");
+			check (stream.notes[0].note.endSample == 64, "it runs to the end of the frame");
+		}
+	}
+
 	/** H-3: the two shapes the sampled decoders kept writing by hand. The point of the helpers is
 		that "not melodic" and "silence" are different answers - a drum is a C4 trigger, a stopped
 		voice is no note at all - so both are pinned here. */
@@ -4719,6 +4822,8 @@ namespace
 	testGa20AddressUnit();
 
 	testFtmAuthoredStream();
+
+	testFtmSkipEffect();
 
 	testSampledNoteHelpers();
 
