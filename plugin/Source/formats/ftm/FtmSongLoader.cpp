@@ -649,7 +649,13 @@ bool loadNoteStream (const void* data, std::size_t size, midi::NoteStream& out, 
 				// A row past the pattern length is what a truncated or hand-edited module looks
 				// like. Indexing the offset table with it reads past the end - the independent
 				// reader crashed on exactly this file, which is how the missing guard was found.
-				if (row.hasNote() && row.row >= 0 && row.row < module.patternLength)
+				//
+				// The byte above NOTE_B is not a pitch: 13 is "release" and 14 is "cut", which end a
+				// note rather than start one. Treating them as notes produced 429 extra events
+				// across the seven modules, all of them at the clamped top of the MIDI range - which
+				// FamiTracker's own text export made visible by printing them as `===` and `---`.
+				if (row.hasNote() && row.note >= 1 && row.note <= 12
+					&& row.row >= 0 && row.row < module.patternLength)
 				{
 					notes.push_back (&row);
 				}
