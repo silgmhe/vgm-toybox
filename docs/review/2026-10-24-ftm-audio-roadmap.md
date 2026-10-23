@@ -118,6 +118,41 @@ void StoreReference (CStringA refName);
 **开工顺序**：读 `Chunk.h` 剩余 ~50 行 + `Chunk.cpp` → 复制进 `formats/ftm/compiler/` →
 `CStringA` 换 `std::string` → 单元测试（写入、读取、写入引用、应用重定位）→ 与 FT 同输入对比字节。
 
+## 6.2 交接：DPCM 的两个格式（已确认，未实现）
+
+`CInstrument2A03::Compile` 还需要采样数据，而 loader 目前有两处缺口。
+
+**① `DPCM SAMPLES` 块**（`WriteBlock_DSamples`）：
+
+```
+u8   count
+per sample:
+  u8   索引
+  i32  名称长度 + 名称字节
+  i32  数据长度 + 数据字节
+```
+
+**② 乐器里的 DPCM 分配表**——现在是**跳过**的：
+
+```cpp
+const int bytesPerAssignment = (block.version > 5) ? 3 : 2;
+reader.skip ((std::size_t) (octaves * 12 * bytesPerAssignment));
+```
+
+它其实是 `8 八度 × 12 音 × {sample, pitch, delta}`，正是 `GetSampleIndex` / `GetSamplePitch` /
+`GetSampleDeltaValue` 的数据源。
+
+**实现顺序**：
+
+| 步骤 | 内容 | 验证 | 风险 |
+|---|---|---|---|
+| 1 | `Module::DpcmSample { name, data }` + `parseDpcmSamples` | 合成模块解析出 1 个采样 | 低（新增块） |
+| 2 | 把上面那个 `skip` 换成**读进** `Instrument::dpcm[8][12]` | 断言某 (oct, note) 的 sample/pitch/delta | **低**（纯加法，不影响转谱） |
+| 3 | `Seq2A03Instrument::GetSample*` 改为查表 | 单元断言 | 低 |
+| 4 | `CInstrument2A03::Compile` 追加 DPCM 表 | 与 FT 输出逐字节对比 | 中 |
+
+第 2 步做完后，现有的 4/7 转谱结果不应有任何变化——这是它的验收条件。
+
 ## 7. 与 MIDI 工作的关系
 
 两条线互不影响：
