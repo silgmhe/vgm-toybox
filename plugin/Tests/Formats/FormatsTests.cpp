@@ -967,6 +967,51 @@ void testFtmChunk (void)
 		   "the chunk keeps its identity");
 }
 
+/** What an instrument looks like to the driver: a chip byte, a mask of which sequences exist, and
+	one reference per present sequence. The mask is the part worth pinning - it is what tells the
+	driver which tables to apply. */
+
+void testFtmInstrumentCompile (void)
+{
+	toybox::formats::ftm::Module module;
+	module.instruments.resize (3);
+	module.instruments[1].name = "with volume";
+	module.instruments[1].volume = 0;
+	module.instruments[2].name = "bare";
+
+	module.volumeSequences.resize (2);
+	module.volumeSequences[0] = { 15, 10, 5 };
+
+	toybox::formats::ftm::compiler::ModuleSongSource source (module);
+
+	auto* withVolume = source.GetInstrument (1);
+	auto* bare = source.GetInstrument (2);
+	check (withVolume != nullptr && bare != nullptr, "both instruments exist");
+
+	if (withVolume != nullptr)
+	{
+		toybox::formats::ftm::compiler::Chunk chunk (
+			toybox::formats::ftm::compiler::ChunkType::instrument, "inst_1");
+
+		const int stored = withVolume->Compile (chunk, 1);
+
+		check (stored == 4, "two header bytes and one reference");
+		check (chunk.GetLength() == 3, "which is three items");
+		check (chunk.GetData (0) == 0, "the chip byte says 2A03");
+		check (chunk.GetData (1) == 1, "the mask says volume only");
+		check (chunk.GetDataRefName (2) == "ft_seq_2a03_0", "and the reference names the sequence");
+	}
+
+	if (bare != nullptr)
+	{
+		toybox::formats::ftm::compiler::Chunk chunk (
+			toybox::formats::ftm::compiler::ChunkType::instrument, "inst_2");
+		const int stored = bare->Compile (chunk, 2);
+
+		check (stored == 2 && chunk.GetData (1) == 0,
+			   "an instrument with no sequences writes the header and no references");
+	}
+}
 void runFormatTests (void)
 {
 	testVgmLoaderIr();
@@ -981,6 +1026,7 @@ void runFormatTests (void)
 	testFtmCompilerSource();
 	testFtmDriverData();
 	testFtmChunk();
+	testFtmInstrumentCompile();
 }
 
 } // namespace toybox::test

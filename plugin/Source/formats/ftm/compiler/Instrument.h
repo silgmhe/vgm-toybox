@@ -14,7 +14,10 @@
 #include <cstdint>
 #include <vector>
 
+#include <string>
+
 #include "formats/ftm/FtmSongLoader.h"
+#include "formats/ftm/compiler/Chunk.h"
 
 namespace toybox::formats::ftm::compiler
 {
@@ -38,6 +41,12 @@ public:
 
 	virtual bool IsWaveEqual (const CInstrument*) const { return false; }
 	virtual void StoreWave (std::vector<std::uint8_t>&) const {}
+
+	/** Writes this instrument into the driver and returns the bytes it wrote.
+
+		Two bytes of header - the chip type and a bitmask of which sequences are present - then one
+		16-bit reference per present sequence, pointing at where that sequence will be laid out. */
+	virtual int Compile (Chunk& chunk, int index) = 0;
 };
 
 /** A 2A03 instrument as this project models it.
@@ -78,6 +87,39 @@ public:
 
 		const auto& items = (*table)[(std::size_t) sequence];
 		return items.empty() ? nullptr : &items;
+	}
+
+	int Compile (Chunk& chunk, int) override
+	{
+		// The chip type, then which sequences this instrument actually has. FamiTracker writes the
+		// same two bytes and then one reference per present sequence, in SEQ_ order.
+		chunk.StoreByte (0);					// the driver's code for INST_2A03
+
+		unsigned mask = 0;
+		for (int type = 0; type < 5; ++type)
+		{
+			if (GetSeqEnable (type) && GetSequence (type) != nullptr)
+			{
+				mask |= 1u << type;
+			}
+		}
+
+		chunk.StoreByte ((std::uint8_t) mask);
+
+		int stored = 2;
+		for (int type = 0; type < 5; ++type)
+		{
+			if ((mask & (1u << type)) == 0)
+			{
+				continue;
+			}
+
+			chunk.StoreReference ("ft_seq_2a03_"
+								  + std::to_string (GetSeqIndex (type) * 5 + type));
+			stored += 2;
+		}
+
+		return stored;
 	}
 
 private:
