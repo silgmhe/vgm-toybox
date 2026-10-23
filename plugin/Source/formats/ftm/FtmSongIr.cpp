@@ -48,11 +48,32 @@ namespace
 		return (int) std::lround (std::clamp (period, 2.0, 2047.0));
 	}
 
-	int noiseIndex (int note)
+	/** The nearest of the sixteen noise periods to the note's frequency.
+
+		The table is not evenly spaced in pitch - the low end is nearly an octave per step and the
+		high end is a few semitones - so index = (note - k) / m produces a mapping that is wrong at
+		one end whatever k and m are chosen. Comparing log frequencies is what the ear does, and it
+		costs sixteen iterations on the frames that change a drum's pitch. */
+	int noiseIndex (int note, std::uint32_t clock)
 	{
-		// Every four semitones is one noise period: a whole tone per two steps would run out of
-		// table at the bottom of the range, which is where percussion mostly sits.
-		return std::clamp ((note - 24) / 4, 0, 15);
+		const double frequency = 440.0 * std::pow (2.0, (note - 69) / 12.0);
+
+		int best = 0;
+		double bestDistance = 1e9;
+
+		for (int i = 0; i < 16; ++i)
+		{
+			const double noiseFrequency = (double) clock / (16.0 * (double) kNoisePeriods[i]);
+			const double distance = std::abs (std::log2 (noiseFrequency / frequency));
+
+			if (distance < bestDistance)
+			{
+				bestDistance = distance;
+				best = i;
+			}
+		}
+
+		return best;
 	}
 
 	/** The write emitter, with the one behaviour the driver has: a register written with the value
@@ -470,7 +491,7 @@ bool loadSongIr (const void* data, std::size_t size, midi::SongIr& out, std::str
 					{
 						emitter.write (0, kNoiseControl,
 									   0x30 | ((state.silenced ? 0 : level) & 0x0F), when);
-						emitter.write (0, kNoisePeriod, noiseIndex (pitch), when);
+						emitter.write (0, kNoisePeriod, noiseIndex (pitch, apuClock), when);
 						statusMask |= 1 << 3;
 						emitter.write (0, kStatus, statusMask, when);
 					}
