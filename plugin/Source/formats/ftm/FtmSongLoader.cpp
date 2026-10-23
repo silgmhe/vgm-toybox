@@ -376,34 +376,51 @@ bool loadNoteStream (const void* data, std::size_t size, midi::NoteStream& out, 
 		lookup[{ pattern.channel, pattern.index }] = &pattern;
 	}
 
+	// One track per channel that appears in the order list.
+	std::vector<int> channels;
+	std::vector<int> trackOf ((std::size_t) module.channels, -1);
+
 	for (int channel = 0; channel < module.channels; ++channel)
 	{
-		const auto& order = module.order[(std::size_t) channel];
-		const int channelType = module.channelTypes[(std::size_t) channel];
-		const auto kind = kindForChannel (channelType);
-
-		if (order.empty())
+		if (module.order[(std::size_t) channel].empty())
 		{
 			continue;
 		}
 
-		const int track = (int) out.tracks.size();
+		const int channelType = module.channelTypes[(std::size_t) channel];
 		midi::StreamTrack described;
 		described.name = nameForChannel (channelType);
-		described.kind = kind;
+		described.kind = kindForChannel (channelType);
 		described.isDrum = (channelType == 3 || channelType == 4);
-		out.tracks.push_back (described);
 
-		for (std::size_t frame = 0; frame < order.size(); ++frame)
+		trackOf[(std::size_t) channel] = (int) out.tracks.size();
+		channels.push_back (channel);
+		out.tracks.push_back (described);
+	}
+
+	// Frames are walked, not played straight through: Bxx and Dxx are the song's structure, and
+	// ignoring them transcribes the file as if it had no repeats and no skips. A module can loop
+	// forever; a transcription cannot, so the walk stops after four passes' worth of frames.
+	const int maxSteps = module.frameCount * 4 + 64;
+	int frame = 0;
+	std::uint32_t base = 0;
+
+	for (int step = 0; frame >= 0 && frame < module.frameCount && step < maxSteps; ++step)
+	{
+		int nextFrame = frame + 1;
+
+		for (const int channel : channels)
 		{
-			const auto found = lookup.find ({ channel, order[frame] });
+			const auto found = lookup.find ({ channel, module.order[(std::size_t) channel][(std::size_t) frame] });
 			if (found == lookup.end())
 			{
 				continue;
 			}
 
 			const ModulePattern& pattern = *found->second;
-			const std::uint32_t base = (std::uint32_t) frame * (std::uint32_t) module.patternLength;
+			const int track = trackOf[(std::size_t) channel];
+			const int channelType = module.channelTypes[(std::size_t) channel];
+			const auto kind = kindForChannel (channelType);
 
 			std::vector<const ModuleRow*> notes;
 			for (const auto& row : pattern.rows)
@@ -435,7 +452,32 @@ bool loadNoteStream (const void* data, std::size_t size, midi::NoteStream& out, 
 
 				out.notes.push_back ({ track, event });
 			}
+
+			// Structure effects (0.5.0 numbering): 2 = jump, 3 = skip, 4 = halt.
+			for (const auto& row : pattern.rows)
+			{
+				for (const auto& effect : row.effects)
+				{
+					switch (effect.first)
+					{
+					case 2:		nextFrame = effect.second; break;
+					case 3:		nextFrame = frame + 1 + effect.second; break;
+					case 4:		nextFrame = -1; break;
+					default:	break;
+					}
+				}
+			}
 		}
+
+		// A jump that goes backwards is the song's loop; one pass is what a transcription wants,
+		// so the walk stops there instead of repeating the material four times.
+		if (nextFrame <= frame)
+		{
+			nextFrame = -1;
+		}
+
+		base += (std::uint32_t) module.patternLength;
+		frame = nextFrame;
 	}
 
 	return ! out.notes.empty();
