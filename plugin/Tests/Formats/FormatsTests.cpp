@@ -1082,6 +1082,64 @@ void testFtmApuWrites (void)
 	check (low == 0xAB && high == 0x01, "the period is the chip's own arithmetic, not a note number");
 }
 
+/** The serialised form: a VGM is a header and a list of register writes with waits, which is what
+	the audio path already produces - so an FTM can reach the speakers through the player that is
+	already here instead of a second one. */
+
+void testFtmVgmImage (void)
+{
+	std::vector<std::uint8_t> image;
+	putText (image, "FamiTracker Module");
+	put32 (image, 0x0420);
+	putBlock (image, "PARAMS", 3, { 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 });
+	putBlock (image, "HEADER", 3, { 0x00, 'T', 0x00, 0x00, 0x00 });
+
+	{
+		std::vector<std::uint8_t> payload;
+		put32 (payload, 1);
+		put32 (payload, 6);
+		put32 (payload, 150);
+		put32 (payload, 16);
+		payload.push_back (0);
+		putBlock (image, "FRAMES", 3, payload);
+	}
+
+	{
+		std::vector<std::uint8_t> body;
+		put32 (body, 0); put32 (body, 0); put32 (body, 0); put32 (body, 1);
+		put32 (body, 0);
+		body.push_back (1);
+		body.push_back (4);
+		body.push_back (0);
+		body.push_back (15);
+		body.push_back (0);
+		body.push_back (0);
+		putBlock (image, "PATTERNS", 3, body);
+	}
+
+	putText (image, "END");
+
+	std::vector<std::uint8_t> vgm;
+	std::string error;
+	check (toybox::formats::ftm::buildVgm (image.data(), image.size(), vgm, error),
+		   "the module serialises to a VGM image");
+
+	check (vgm.size() > 0x100 && vgm[0] == 'V' && vgm[1] == 'g' && vgm[2] == 'm',
+		   "with the format's own signature");
+
+	bool sawStatusWrite = false;
+	for (std::size_t i = 0x100; i + 2 < vgm.size(); ++i)
+	{
+		if (vgm[i] == 0xB4 && vgm[i + 1] == 0x15 && vgm[i + 2] == 0x01)
+		{
+			sawStatusWrite = true;
+		}
+	}
+
+	check (sawStatusWrite, "and the pulse 1 enable travels as an APU write");
+	check (vgm.back() == 0x66, "ending with the end-of-stream marker");
+}
+
 void runFormatTests (void)
 {
 	testVgmLoaderIr();
@@ -1091,6 +1149,7 @@ void runFormatTests (void)
 	testFtmPortamento();
 	testFtmVolumeEnvelope();
 	testFtmApuWrites();
+	testFtmVgmImage();
 	testFtmArpeggioMacro();
 	testPitchBendRange();
 	testFtmTonePortamento();

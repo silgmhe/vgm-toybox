@@ -430,4 +430,61 @@ bool loadSongIr (const void* data, std::size_t size, midi::SongIr& out, std::str
 	return true;
 }
 
+bool buildVgm (const void* data, std::size_t size, std::vector<std::uint8_t>& out, std::string& error)
+{
+	midi::SongIr song;
+	if (! loadSongIr (data, size, song, error))
+	{
+		return false;
+	}
+
+	out.assign (0x100, 0);
+	out[0] = 'V';
+	out[1] = 'g';
+	out[2] = 'm';
+	out[3] = ' ';
+
+	const auto put32 = [&out] (std::size_t at, std::uint32_t value)
+	{
+		for (int i = 0; i < 4; ++i)
+		{
+			out[at + (std::size_t) i] = (std::uint8_t) ((value >> (8 * i)) & 0xFF);
+		}
+	};
+
+	put32 (0x08, 0x00000151);					// version 1.51, which has the NES clock field
+	put32 (0x18, song.totalTicks);				// total samples
+	put32 (0x34, 0x00000100);					// data starts at 0x100
+	put32 (0x84, nesApuClockHz);				// NES APU clock
+
+	// Writes are already ordered by time; a wait is only emitted when the clock actually moves,
+	// because zero-wait commands are what the format is designed around.
+	std::uint32_t clock = 0;
+	for (const auto& write : song.writes)
+	{
+		if (write.sampleTime > clock)
+		{
+			std::uint32_t gap = write.sampleTime - clock;
+			while (gap > 0)
+			{
+				const std::uint32_t chunk = std::min<std::uint32_t> (gap, 65535);
+				out.push_back (0x61);
+				out.push_back ((std::uint8_t) (chunk & 0xFF));
+				out.push_back ((std::uint8_t) ((chunk >> 8) & 0xFF));
+				gap -= chunk;
+				clock += chunk;
+			}
+		}
+
+		out.push_back (0xB4);
+		out.push_back (write.reg);
+		out.push_back ((std::uint8_t) (write.value & 0xFF));
+	}
+
+	out.push_back (0x66);						// end of stream
+
+	put32 (0x04, (std::uint32_t) out.size() - 4);	// EOF offset, relative to 0x04
+	return true;
+}
+
 } // namespace toybox::formats::ftm

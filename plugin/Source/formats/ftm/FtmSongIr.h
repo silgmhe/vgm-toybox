@@ -68,6 +68,18 @@ struct ApuChannelState
 	same way FTM's MIDI path is. */
 bool loadSongIr (const void* data, std::size_t size, midi::SongIr& out, std::string& error);
 
+/** The same writes, wrapped in a VGM image.
+
+	This is how an FTM reaches the speakers without a second player: libvgm already plays VGM, and a
+	VGM is a header plus a list of register writes with waits - which is exactly what `loadSongIr`
+	produces. Serialising is a hundred lines against a new backend, and it keeps one playback path
+	instead of two.
+
+	The header declares version 1.51, the NES APU clock at 0x84, and a 0x100-byte data offset; the
+	commands are 0x61 waits and 0xB4 APU writes, whose register byte is already an offset from
+	$4000 - the numbering the emitter used. */
+bool buildVgm (const void* data, std::size_t size, std::vector<std::uint8_t>& out, std::string& error);
+
 /** The same, behind the loader interface the assembly layer uses. */
 class FtmSongIrLoader final : public midi::ISongLoader
 {
