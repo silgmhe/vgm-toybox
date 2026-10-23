@@ -47,6 +47,7 @@
 #include "chips/WswanDecoder.h"
 #include "chips/OplDecoder.h"
 #include "chips/OpmDecoder.h"
+#include "Support/TestSupport.h"
 #include "TestSettings.h"
 #include "chips/OpnDecoder.h"
 
@@ -55,16 +56,7 @@ namespace
 	using toybox::chips::NoteEvent;
 	using toybox::chips::RegisterWrite;
 
-	int failures = 0;
-
-	void check (bool ok, const char* what)
-	{
-		std::printf (" %s  %s\n", ok ? "OK  " : "FAIL", what);
-		if (! ok)
-		{
-			++failures;
-		}
-	}
+	using toybox::test::check;
 
 	/** The note the chip actually sounds: the transposition layer plus the sample's own root.
 
@@ -4994,6 +4986,5 @@ namespace
 	testSegaPcmKeyOff();
 	testSegaPcmPercussion();
 
-	std::printf ("Result    : %s\n", failures == 0 ? "PASS" : "FAILURES");
-	return failures == 0 ? 0 : 1;
+	return toybox::test::report();
 }
