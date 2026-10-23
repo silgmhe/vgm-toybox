@@ -52,6 +52,13 @@ public:
 	Nsf_Emu();
 	~Nsf_Emu();
 	Nes_Apu* apu_() { return &apu; }
+
+	// Added for VGMToybox: the expansion chips are private in upstream libgme, and without
+	// these the only oscillator that can be addressed is the 2A03's. Each returns null when
+	// the loaded image does not ask for that chip.
+	class Nes_Vrc6_Apu*  vrc6_()  { return vrc6;  }
+	class Nes_Namco_Apu* namco_() { return namco; }
+	class Nes_Fme7_Apu*  fme7_()  { return fme7;  }
 protected:
 	blargg_err_t track_info_( track_info_t*, int track ) const;
 	blargg_err_t load_( Data_Reader& );

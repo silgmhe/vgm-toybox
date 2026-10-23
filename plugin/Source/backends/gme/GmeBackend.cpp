@@ -4,6 +4,9 @@
 #include <cstring>
 #include <vector>
 
+#include "Nes_Fme7_Apu.h"
+#include "Nes_Namco_Apu.h"
+#include "Nes_Vrc6_Apu.h"
 #include "Nsf_Emu.h"
 
 namespace toybox::backends::gme
@@ -110,18 +113,46 @@ public:
 		one player per track, which is what IsolationMode::multiInstance means here. */
 	void isolateTo (int index)
 	{
-		if (emu == nullptr || soloIndex >= 0 || index < 0 || index >= oscCount)
+		if (emu == nullptr || soloIndex >= 0 || index < 0)
 		{
 			return;
 		}
 
 		soloIndex = index;
 
+		// The enumeration order has to match the track list built in prepare(): the five 2A03
+		// oscillators first, then the expansion chip's, in the order VRC6, N163, S5B.
+		int position = 0;
+
 		for (int i = 0; i < oscCount; ++i)
 		{
-			if (i != index)
+			if (position++ != index)
 			{
 				emu->apu_()->osc_output (i, nullptr);
+			}
+		}
+
+		if (auto* chip = emu->vrc6_())
+		{
+			for (int i = 0; i < 3; ++i)
+			{
+				if (position++ != index) { chip->osc_output (i, nullptr); }
+			}
+		}
+
+		if (auto* chip = emu->namco_())
+		{
+			for (int i = 0; i < 8; ++i)
+			{
+				if (position++ != index) { chip->osc_output (i, nullptr); }
+			}
+		}
+
+		if (auto* chip = emu->fme7_())
+		{
+			for (int i = 0; i < 3; ++i)
+			{
+				if (position++ != index) { chip->osc_output (i, nullptr); }
 			}
 		}
 	}
@@ -274,13 +305,40 @@ public:
 		// whole basis of isolating them; the core provides the gain and pan.
 		static const char* const names[] = { "Pulse 1", "Pulse 2", "Triangle", "Noise", "DMC" };
 
+		playback::TrackId nextId = 1;
+
 		for (int i = 0; i < 5; ++i)
 		{
-			tracks_.push_back (playback::TrackInfo { (playback::TrackId) (i + 1), 0, 0, i, true,
-													 names[i], "2A03",
+			tracks_.push_back (playback::TrackInfo { nextId++, 0, 0, i, true, names[i], "2A03",
 													 i < 2 ? playback::MidiCapability::melodic
 														   : playback::MidiCapability::unavailable });
 		}
+
+		// The expansion oscillators are addressable too, in the same way as the 2A03's, so they
+		// become tracks rather than being folded into the mix unannounced.
+		auto addExpansion = [this, &nextId] (bool present, int count, const char* chip,
+											 const char* prefix, int device)
+		{
+			if (! present)
+			{
+				return;
+			}
+
+			for (int i = 0; i < count; ++i)
+			{
+				tracks_.push_back (playback::TrackInfo {
+					nextId++, (playback::DeviceId) device, 0, i, true,
+					juce::String (prefix) + " " + juce::String (i + 1), chip,
+					playback::MidiCapability::unavailable });
+			}
+		};
+
+		// Driven by the header flags rather than by the emulator's pointers: the flags are what the
+		// chips list is built from, and the two must agree or the mixer would show tracks for a
+		// chip it never named.
+		if (chips.has (0x01)) { addExpansion (true, 3, "VRC6", "VRC6", 1); }
+		if (chips.has (0x10)) { addExpansion (true, 8, "N163", "N163", 1); }
+		if (chips.has (0x20)) { addExpansion (true, 3, "S5B", "S5B", 1); }
 
 		return true;
 	}
