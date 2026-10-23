@@ -31,6 +31,7 @@ namespace
 	constexpr const char* kCloseToTrayKey = "standalone.closeToTray";
 	constexpr const char* kLastSongKey = "standalone.lastSong";
 	constexpr const char* kMidiBendRangeKey = "midi.pitchBendRange";
+constexpr const char* kNsfDurationKey = "nsf.durationSeconds";
 	constexpr const char* kMidiBendEnabledKey = "midi.pitchBendEnabled";
 
 // The sample's own root, added to the transposition the registers ask for. Off by default: the
@@ -293,6 +294,34 @@ void SettingsStore::setCloseToTray (bool shouldCloseToTray)
 	lastErrorMessage = file->saveIfNeeded() ? juce::String() : writeErrorFor (settingsFile());
 
 	broadcastChange();
+}
+
+namespace
+{
+	constexpr int kDefaultNsfSeconds = 120;
+	constexpr int kMinNsfSeconds = 10;
+	constexpr int kMaxNsfSeconds = 3600;
+}
+
+int SettingsStore::getNsfDurationSeconds (void) const
+{
+	// Absent means a fresh install, or a file written before this setting existed: two minutes is
+	// long enough for most NES tracks to have said something and short enough not to waste a pass.
+	return juce::jlimit (kMinNsfSeconds, kMaxNsfSeconds,
+						 file->getIntValue (kNsfDurationKey, kDefaultNsfSeconds));
+}
+
+void SettingsStore::setNsfDurationSeconds (int seconds)
+{
+	const int clamped = juce::jlimit (kMinNsfSeconds, kMaxNsfSeconds, seconds);
+
+	if (clamped == getNsfDurationSeconds())
+	{
+		return;
+	}
+
+	file->setValue (kNsfDurationKey, clamped);
+	lastErrorMessage = file->saveIfNeeded() ? juce::String() : writeErrorFor (settingsFile());
 }
 
 int SettingsStore::getMidiPitchBendRange (void) const

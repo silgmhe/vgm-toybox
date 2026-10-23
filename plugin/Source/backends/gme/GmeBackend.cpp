@@ -11,6 +11,8 @@
 #include "Nes_Vrc6_Apu.h"
 #include "Nsf_Emu.h"
 
+#include "settings/SettingsStore.h"
+
 namespace toybox::backends::gme
 {
 
@@ -427,6 +429,14 @@ public:
 			info_.loopPointSeconds = loop.introSeconds;
 			info_.loopLengthSeconds = loop.loopSeconds;
 			info_.loopsForever = false;
+		}
+
+		// The file has no length and the driver never ends, so the timeline comes from the setting:
+		// a plain number of seconds the user chose, applied to every NSF that does not say otherwise.
+		if (info_.durationSeconds <= 0.0)
+		{
+			info_.durationSeconds = (double) settings::SettingsStore::getInstance().getNsfDurationSeconds();
+			info_.singlePassSeconds = info_.durationSeconds;
 		}
 
 		info_.formatName = "libgme";

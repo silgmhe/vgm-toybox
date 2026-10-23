@@ -151,6 +151,12 @@ public:
 		instrument, not one project's routing. */
 	int getMidiPitchBendRange (void) const;
 
+	/** How long an NSF is taken to be when the file itself says nothing, in seconds.
+		A plain NSF header carries no length and the driver never ends, so without this the
+		song has no timeline at all. */
+	int getNsfDurationSeconds (void) const;
+	void setNsfDurationSeconds (int seconds);
+
 	/** Stores the range (clamped to what the engine can encode) and tells every listener. */
 	void setMidiPitchBendRange (int semitones);
 
