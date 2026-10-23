@@ -39,6 +39,27 @@ class NsfPlayer::Bus final : public xgm::NES_MEM
 public:
 	explicit Bus (NsfPlayer& ownerPlayer) : owner (ownerPlayer) {}
 
+	/**
+		A banked program is not in the image the base class holds: the player keeps the whole file
+		and the banks decide which 8 KB window of it the CPU sees. Reads therefore have to come from
+		the file, not from the 64 KB image, or every switch would read the same bytes.
+	*/
+	bool Read (UINT32 address, UINT32& value, UINT32 id) override
+	{
+		const auto adr = (std::uint16_t) address;
+
+		if (owner.banked && adr >= 0x8000)
+		{
+			const int window = (adr >> 13) & 0x03;		// $8000, $A000, $C000, $E000
+			const std::uint32_t offset = ((std::uint32_t) owner.banks[window] << 13) + (adr & 0x1FFF);
+
+			value = offset < owner.file.rom.size() ? owner.file.rom[offset] : 0;
+			return true;
+		}
+
+		return xgm::NES_MEM::Read (address, value, id);
+	}
+
 	bool Write (UINT32 address, UINT32 value, UINT32 id) override
 	{
 		const auto adr = (std::uint16_t) address;
@@ -51,6 +72,14 @@ public:
 
 		if (owner.writeExpansion (adr, (std::uint8_t) value))
 		{
+			return true;
+		}
+
+		// The eight registers at $5FF8 select which bank each window shows. The file has to be
+		// larger than the address space for them to mean anything, which is what `banked` says.
+		if (owner.banked && adr >= 0x5FF8 && adr <= 0x5FFB)
+		{
+			owner.banks[adr - 0x5FF8] = (std::uint8_t) value;
 			return true;
 		}
 
@@ -82,6 +111,13 @@ bool NsfPlayer::load (const void* data, std::size_t size, std::string& error)
 
 	bus = std::make_unique<Bus> (*this);
 	bus->Reset();
+
+	banked = file.rom.size() > 0x8000;
+
+	for (int i = 0; i < 4; ++i)
+	{
+		banks[i] = (std::uint8_t) i;
+	}
 
 	if (! bus->SetImage (file.rom.data(), file.loadAddress, (UINT32) file.rom.size()))
 	{
@@ -145,6 +181,7 @@ bool NsfPlayer::load (const void* data, std::size_t size, std::string& error)
 				toybox::formats::nsf::framesPerSecond (file),
 				file.startSong > 0 ? file.startSong - 1 : 0, pal ? 1 : 0, 0, false, nullptr);
 
+
 	accumulator = 0.0;
 	seconds = 0.0;
 	running = true;
@@ -200,6 +237,11 @@ void NsfPlayer::tickChips (std::uint32_t clocks)
 {
 	apu->Tick (clocks);
 	dmc->Tick (clocks);
+
+	// The frame sequencer is what advances the envelopes and the length counters. Tick() does not
+	// call it, so without this every note keeps whatever level it was given and the song becomes a
+	// drone - audible, correct in pitch, and wrong in every articulation.
+	dmc->TickFrameSequence (clocks);
 
 	if (vrc6 != nullptr) { vrc6->Tick (clocks); }
 	if (vrc7 != nullptr) { vrc7->Tick (clocks); }

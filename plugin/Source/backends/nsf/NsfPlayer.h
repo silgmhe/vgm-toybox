@@ -83,6 +83,10 @@ private:
 	bool pal = false;
 	bool running = false;
 	bool finished = false;
+	/** True when the program is larger than the address space and banks are in use. */
+	bool banked = false;
+	/** One selected bank per 8 KB window, in address order from $8000. */
+	std::uint8_t banks[4] = { 0, 1, 2, 3 };
 	std::uint64_t writes = 0;
 };
 
