@@ -384,6 +384,40 @@ add_executable(vgm_mixer_test EXCLUDE_FROM_ALL
 	Source/backends/libvgm/LibvgmTrackPlayer.cpp
 	Source/backends/libvgm/LibvgmVgz.cpp
 )
+# --- libgme, used for the NES formats (NSF/NSFE) ---
+# LGPL 2.1, vendored under Source/backends/gme/third_party/libgme with its licence.
+# Only the NSF emulator and the framework it needs are compiled; the other formats in the
+# directory are left out because libvgm already covers them.
+set(GME_DIR "${CMAKE_CURRENT_SOURCE_DIR}/Source/backends/gme/third_party/libgme/gme")
+add_library(gme_nsf STATIC
+	"${GME_DIR}/Nsf_Emu.cpp"
+	"${GME_DIR}/Nes_Cpu.cpp"
+	"${GME_DIR}/Nes_Apu.cpp"
+	"${GME_DIR}/Nes_Oscs.cpp"
+	"${GME_DIR}/Nes_Vrc6_Apu.cpp"
+	"${GME_DIR}/Nes_Namco_Apu.cpp"
+	"${GME_DIR}/Nes_Fme7_Apu.cpp"
+	"${GME_DIR}/Music_Emu.cpp"
+	"${GME_DIR}/Classic_Emu.cpp"
+	"${GME_DIR}/Blip_Buffer.cpp"
+	"${GME_DIR}/Data_Reader.cpp"
+	"${GME_DIR}/Gme_File.cpp"
+	"${GME_DIR}/Effects_Buffer.cpp"
+	"${GME_DIR}/Multi_Buffer.cpp"
+)
+target_include_directories(gme_nsf PUBLIC "${GME_DIR}")
+target_compile_features(gme_nsf PRIVATE cxx_std_14)
+
+# --- console probe for libgme's NSF player (not built by default) ---
+#   cmake --build <build dir> --target vgm_gme_probe
+#   <build dir>/plugin/vgm_gme_probe <file.nsf> <seconds> [out.wav]
+add_executable(vgm_gme_probe EXCLUDE_FROM_ALL
+	Tests/GmeProbe.cpp
+)
+target_link_libraries(vgm_gme_probe PRIVATE gme_nsf)
+target_include_directories(vgm_gme_probe PRIVATE Source)
+target_compile_features(vgm_gme_probe PRIVATE cxx_std_17)
+
 # --- console test for the chip decoders (not built by default) ---
 # Register writes in, notes out. Links Source/chips and nothing else - no libvgm, no JUCE.
 #   cmake --build <build dir> --target vgm_chip_test
