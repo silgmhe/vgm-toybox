@@ -23,11 +23,7 @@
 #include "chips/QSoundDecoder.h"
 #include "chips/Es5503Decoder.h"
 #include "chips/MikeyDecoder.h"
-#include <fstream>
-#include <iterator>
-#include <string>
 #include "chips/Pitch.h"
-#include "formats/ftm/FtmSongLoader.h"
 #include "formats/vgm/VgmSongLoader.h"
 #include "chips/Msm5232Decoder.h"
 #include "chips/K005289Decoder.h"
@@ -3862,145 +3858,6 @@ namespace
 	/** MSM5232: the register is not a divider but a key index into the chip's eighty-eight-entry
 		ROM, and eighty-eight entries is the span from A0, so the index is the note: 21 + index. */
 
-	/** FTM is the first format whose notes are not inferred.
-
-		The module states note, octave and row, so the stream comes out authored: no decoder runs and
-		the encoder sees the same `NoteStream` it has always seen. The synthetic module below pins
-		three things the real files cannot state on their own - the container framing, the row layout,
-		and the time model (tempo 150 with speed 6 is ten rows a second). */
-
-	void testFtmAuthoredStream (void)
-	{
-		std::vector<std::uint8_t> image;
-		const auto put8 = [&image] (int v) { image.push_back ((std::uint8_t) v); };
-		const auto put32 = [&image] (std::uint32_t v)
-		{
-			for (int i = 0; i < 4; ++i)
-			{
-				image.push_back ((std::uint8_t) ((v >> (8 * i)) & 0xFF));
-			}
-		};
-		const auto putText = [&image] (const char* text)
-		{
-			for (const char* c = text; *c != '\0'; ++c)
-			{
-				image.push_back ((std::uint8_t) *c);
-			}
-		};
-		const auto block = [&image] (const char* id, std::uint32_t version,
-									 const std::vector<std::uint8_t>& payload)
-		{
-			char padded[16] = {};
-			for (int i = 0; i < 16 && id[i] != '\0'; ++i)
-			{
-				padded[i] = id[i];
-			}
-
-			for (int i = 0; i < 16; ++i)
-			{
-				image.push_back ((std::uint8_t) padded[i]);
-			}
-			const auto putV = [&image] (std::uint32_t v)
-			{
-				for (int i = 0; i < 4; ++i)
-				{
-					image.push_back ((std::uint8_t) ((v >> (8 * i)) & 0xFF));
-				}
-			};
-			putV (version);
-			putV ((std::uint32_t) payload.size());
-			image.insert (image.end(), payload.begin(), payload.end());
-		};
-
-		putText ("FamiTracker Module");
-		put32 (0x0420);
-
-		{	// PARAMS v3: expansion, channels, machine
-			const std::vector<std::uint8_t> payload { 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 };
-			block ("PARAMS", 3, payload);
-		}
-
-		{	// HEADER v3: one track named "T", one channel: pulse 1 with no effect columns
-			const std::vector<std::uint8_t> payload { 0x00, 'T', 0x00, 0x00, 0x00 };
-			block ("HEADER", 3, payload);
-		}
-
-		{	// FRAMES v3: one frame, speed 6, tempo 150, length 64, pattern 0 on channel 0
-			std::vector<std::uint8_t> payload;
-			const auto frame32 = [&payload] (std::uint32_t v)
-			{
-				for (int i = 0; i < 4; ++i)
-				{
-					payload.push_back ((std::uint8_t) ((v >> (8 * i)) & 0xFF));
-				}
-			};
-			frame32 (1);		// frames
-			frame32 (6);		// speed
-			frame32 (150);		// tempo
-			frame32 (64);		// pattern length
-			payload.push_back (0x00);
-			block ("FRAMES", 3, payload);
-		}
-
-		{	// PATTERNS v3: channel 0, pattern 0, two rows - C-4 at row 0, B-4 at row 16
-			std::vector<std::uint8_t> payload;
-			const auto row32 = [&payload] (std::uint32_t v)
-			{
-				for (int i = 0; i < 4; ++i)
-				{
-					payload.push_back ((std::uint8_t) ((v >> (8 * i)) & 0xFF));
-				}
-			};
-			row32 (0);			// track
-			row32 (0);			// channel
-			row32 (0);			// pattern
-			row32 (2);			// items
-			row32 (0);			// row 0
-			payload.push_back (1);		// C
-			payload.push_back (4);		// octave 4
-			payload.push_back (1);		// instrument
-			payload.push_back (15);		// volume
-			payload.push_back (0);		// effect number
-			payload.push_back (0);		// effect parameter
-			row32 (16);			// row 16
-			payload.push_back (12);		// B
-			payload.push_back (4);
-			payload.push_back (1);
-			payload.push_back (12);
-			payload.push_back (0);
-			payload.push_back (0);
-			block ("PATTERNS", 3, payload);
-		}
-
-		putText ("END");
-
-		toybox::midi::NoteStream stream;
-		std::string error;
-		check (toybox::formats::ftm::loadNoteStream (image.data(), image.size(), stream, error),
-			   "the synthetic module loads");
-
-		check (stream.notes.size() == 2, "two rows carry a note");
-		check (stream.tracks.size() == 1, "one channel is one track");
-		check (std::abs (stream.tickRate - 10.0) < 1e-9, "150 tempo at speed 6 is ten rows a second");
-
-		if (stream.notes.size() != 2 || stream.tracks.size() != 1)
-		{
-			return;
-		}
-
-		const auto& first = stream.notes[0];
-		const auto& second = stream.notes[1];
-		check (first.note.note == 60, "row 0 octave 4 note C is middle C");
-		check (first.note.startSample == 0 && first.note.endSample == 16,
-			   "the note lasts until the next row with a note");
-		check (second.note.note == 71, "row 16 octave 4 note B is B4");
-		check (second.note.endSample == 64, "the last note ends with the pattern");
-		check (first.note.pitchSource == toybox::chips::PitchSource::registerExact,
-			   "an authored note is not an inference");
-		check (first.track == 0 && stream.tracks[0].name == "Pulse 1",
-			   "the track is the module channel, named");
-	}
-
 	/** H-3: the two shapes the sampled decoders kept writing by hand. The point of the helpers is
 		that "not melodic" and "silence" are different answers - a drum is a C4 trigger, a stopped
 		voice is no note at all - so both are pinned here. */
@@ -4531,25 +4388,8 @@ namespace
 			   "a Sega PCM sample with no period is the C4 drum trigger");
 	}
 
-	int main (int argc, char** argv)
+	int main (void)
 {
-	// `--ftm <file>` parses a real module and prints what came out. The unit test can only build a
-	// synthetic module, so this is how the seven files in test_file/ftm get checked.
-	if (argc >= 3 && std::string (argv[1]) == "--ftm")
-	{
-		std::ifstream file (argv[2], std::ios::binary);
-		const std::vector<char> bytes ((std::istreambuf_iterator<char> (file)),
-									   std::istreambuf_iterator<char>());
-
-		toybox::midi::NoteStream stream;
-		std::string error;
-		const bool ok = toybox::formats::ftm::loadNoteStream (bytes.data(), bytes.size(), stream, error);
-		std::printf ("ftm %s ok=%d notes=%d tracks=%d rows/s=%.2f %s\n", argv[2], (int) ok,
-					 (int) stream.notes.size(), (int) stream.tracks.size(), stream.tickRate,
-					 ok ? "" : error.c_str());
-		return ok ? 0 : 1;
-	}
-
 	std::printf ("chip decoder test\n");
 
 	// Isolated settings: a decoder test reads none, but the store must never open this machine's
@@ -4717,8 +4557,6 @@ namespace
 	testGa20KeyOff();
 	testGa20Percussion();
 	testGa20AddressUnit();
-
-	testFtmAuthoredStream();
 
 	testSampledNoteHelpers();
 

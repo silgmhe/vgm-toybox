@@ -1,7 +1,6 @@
 #pragma once
 
 #include <cstdint>
-#include <string>
 #include <vector>
 
 #include "chips/ChipTypes.h"
@@ -32,22 +31,10 @@ struct StreamBend
 	chips::PitchEvent bend;
 };
 
-/** One track as the notes see it - a name and what kind of channel it was.
-
-	Deliberately not `playback::TrackInfo`: that type carries a device id, an isolation flag and juce
-	strings, all of which belong to the playback layer. A module knows only "channel 3, Triangle". */
-struct StreamTrack
-{
-	std::string name;
-	chips::ChannelKind kind = chips::ChannelKind::unknown;
-	bool isDrum = false;
-};
-
 struct NoteStream
 {
 	std::vector<StreamNote> notes;
 	std::vector<StreamBend> bends;
-	std::vector<StreamTrack> tracks;
 
 	/** The unit every sampleTime in the events is expressed in. Carried rather than assumed, for
 		the same reason SongIr declares its own: a CPU-cycle format is not 44.1 kHz. */
