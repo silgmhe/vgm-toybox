@@ -873,8 +873,17 @@ void testFtmCompilerSource (void)
 	check (source.GetSongSpeed() == 6 && source.GetSongTempo() == 150, "speed and tempo come through");
 	check (source.IsInstrumentUsed (2) && ! source.IsInstrumentUsed (1),
 		   "an instrument with no name is not used");
-	check (source.GetInstrument (1) == nullptr,
-		   "the instrument object is a port-time question, so it stays null for now");
+	check (source.GetInstrument (0) == nullptr && source.GetInstrument (9) == nullptr,
+		   "an empty or out-of-range instrument slot is null, not a fabricated object");
+
+	const auto* instrument = source.GetInstrument (2);
+	check (instrument != nullptr && instrument->GetType() == 1,
+		   "a used instrument comes back as a 2A03");
+	if (instrument != nullptr)
+	{
+		check (! instrument->GetSeqEnable (0), "and reports no sequence when the module names none");
+		check (instrument->GetSequence (0) == nullptr, "with no data behind the missing index");
+	}
 
 	// The compiler indexes patterns by row, so the adapter expands the sparse rows into a dense
 	// array once; empty rows keep FamiTracker's sentinels rather than zeros.

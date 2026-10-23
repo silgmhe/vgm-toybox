@@ -10,11 +10,13 @@
 // makes the next step (moving Compiler.cpp over and substituting its calls) mechanical.
 
 #include <map>
+#include <memory>
 #include <string>
 #include <utility>
 #include <vector>
 
 #include "formats/ftm/FtmSongLoader.h"
+#include "formats/ftm/compiler/Instrument.h"
 #include "formats/ftm/compiler/SongSource.h"
 
 namespace toybox::formats::ftm::compiler
@@ -98,7 +100,24 @@ public:
 	int GetVibratoStyle() const override { return 0; }
 
 	// --- instruments ------------------------------------------------------------------------
-	CInstrument* GetInstrument (int) const override { return nullptr; }
+	CInstrument* GetInstrument (int index) const override
+	{
+		if (index <= 0 || index >= (int) song.instruments.size())
+		{
+			return nullptr;
+		}
+
+		const auto found = instruments.find (index);
+		if (found != instruments.end())
+		{
+			return found->second.get();
+		}
+
+		auto created = std::make_unique<Seq2A03Instrument> (song, index);
+		CInstrument* raw = created.get();
+		instruments[index] = std::move (created);
+		return raw;
+	}
 	int GetInstrumentType (int) const override { return 0; }
 	bool IsInstrumentUsed (int index) const override
 	{
@@ -171,6 +190,7 @@ private:
 
 	const Module& song;
 	std::map<std::pair<int, int>, std::vector<stChanNote>> cells;
+	mutable std::map<int, std::unique_ptr<CInstrument>> instruments;
 };
 
 } // namespace toybox::formats::ftm::compiler
