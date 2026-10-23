@@ -471,11 +471,28 @@ namespace
 			{
 				const auto& slide = entry.slide;
 				const int frames = (int) (slide.endSample - slide.startSample);
+				const int targetCents = (slide.targetNote > 0)
+										  ? (slide.targetNote - slide.fromNote) * 100 : 0;
 
 				for (int frame = 1; frame <= frames; ++frame)
 				{
-					const int cents = chips::centsForPortamento (slide.channelKind, slide.fromNote,
-																 slide.unitsPerFrame, frame);
+					int cents = chips::centsForPortamento (slide.channelKind, slide.fromNote,
+														   slide.unitsPerFrame, frame);
+
+					if (targetCents != 0)
+					{
+						// 3xx: stop at the note it was aimed at instead of overshooting it.
+						const bool arrived = (targetCents > 0) ? (cents >= targetCents)
+																: (cents <= targetCents);
+						if (arrived)
+						{
+							pitchBend (entry.track,
+									   (double) (slide.startSample + (std::uint32_t) frame) / tickRate,
+									   (double) targetCents / 100.0);
+							break;
+						}
+					}
+
 					if (cents == 0)
 					{
 						continue;		// an unmodelled divider, or a slide past the bottom of the range

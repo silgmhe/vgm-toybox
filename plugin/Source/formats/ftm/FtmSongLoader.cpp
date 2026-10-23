@@ -585,6 +585,9 @@ bool loadNoteStream (const void* data, std::size_t size, midi::NoteStream& out, 
 	// Frames per row, which Fxx may change at any row and which then carries into later frames.
 	std::uint32_t rowFrames = (std::uint32_t) module.speed;
 
+	// The note each channel is sounding, which 3xx needs: it slides from here to the note it carries.
+	std::vector<int> sounding ((std::size_t) module.channels, -1);
+
 	for (int step = 0; frame >= 0 && frame < module.frameCount && step < maxSteps; ++step)
 	{
 		int nextFrame = frame + 1;
@@ -652,6 +655,8 @@ bool loadNoteStream (const void* data, std::size_t size, midi::NoteStream& out, 
 			for (std::size_t i = 0; i < notes.size(); ++i)
 			{
 				const ModuleRow& note = *notes[i];
+				// read before this note updates it: 3xx slides from whatever was sounding
+				const int previousNote = sounding[(std::size_t) channel];
 
 				chips::NoteEvent event;
 				event.startSample = base + offsets[(std::size_t) note.row];
@@ -751,6 +756,7 @@ bool loadNoteStream (const void* data, std::size_t size, midi::NoteStream& out, 
 				}
 
 				out.notes.push_back ({ track, event });
+				sounding[(std::size_t) channel] = (int) event.note;
 
 				// 0xy arpeggio: the pitch steps through +0, +x, +y semitones, one step per row.
 				// A row is `speed` frames on the chip, so this is coarser than the hardware - it is
@@ -785,6 +791,25 @@ bool loadNoteStream (const void* data, std::size_t size, midi::NoteStream& out, 
 						slide.logicalChannel = channel;
 						slide.channelKind = kind;
 						out.slides.push_back ({ track, slide });
+					}
+					else if (effect.first == 6)
+					{
+						// 3xx tone portamento: walk from the sounding note to this one. The row still
+						// produces its own note - MIDI has no "arrive without retriggering" - so the
+						// bend is what carries the ear across, and the note-on marks the arrival point.
+						const int previous = previousNote;
+						if (previous > 0 && previous != (int) event.note)
+						{
+							chips::SlideEvent slide;
+							slide.startSample = event.startSample;
+							slide.endSample = event.endSample;
+							slide.fromNote = previous;
+							slide.targetNote = (int) event.note;
+							slide.unitsPerFrame = (event.note > previous ? 1 : -1) * (effect.second & 0xFF);
+							slide.logicalChannel = channel;
+							slide.channelKind = kind;
+							out.slides.push_back ({ track, slide });
+						}
 					}
 					else if (effect.first == 11)
 					{

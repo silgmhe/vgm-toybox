@@ -782,6 +782,65 @@ void testPitchBendRange (void)
 	check (! toybox::playback::pitchBendClips (2400, 24) && toybox::playback::pitchBendClips (2401, 24), "twenty-four semitones is the widest range, and it clips past it");
 }
 
+/** 3xx slides to the note instead of jumping to it: the row still produces its note, and the slide
+	starts from whatever the channel was sounding and aims at the new pitch. */
+
+void testFtmTonePortamento (void)
+{
+	std::vector<std::uint8_t> image;
+	putText (image, "FamiTracker Module");
+	put32 (image, 0x0420);
+	putBlock (image, "PARAMS", 3, { 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 });
+	putBlock (image, "HEADER", 3, { 0x00, 'T', 0x00, 0x00, 0x00 });
+
+	{
+		std::vector<std::uint8_t> payload;
+		put32 (payload, 1);
+		put32 (payload, 6);
+		put32 (payload, 150);
+		put32 (payload, 16);
+		payload.push_back (0);
+		putBlock (image, "FRAMES", 3, payload);
+	}
+
+	{	// C-4 at row 0, then E-4 at row 8 carrying 3xx 04
+		std::vector<std::uint8_t> body;
+		put32 (body, 0); put32 (body, 0); put32 (body, 0); put32 (body, 2);
+		put32 (body, 0);
+		body.push_back (1);		// C
+		body.push_back (4);
+		body.push_back (0);
+		body.push_back (0);
+		body.push_back (0);
+		body.push_back (0);
+		put32 (body, 8);
+		body.push_back (5);		// E: FamiTracker counts semitones, so C=1, C#=2, D=3, D#=4, E=5
+		body.push_back (4);
+		body.push_back (0);
+		body.push_back (0);
+		body.push_back (6);		// effect 6 = tone portamento
+		body.push_back (4);		// four units a frame
+		putBlock (image, "PATTERNS", 3, body);
+	}
+
+	putText (image, "END");
+
+	toybox::midi::NoteStream stream;
+	std::string error;
+	check (toybox::formats::ftm::loadNoteStream (image.data(), image.size(), stream, error),
+		   "the module with a tone portamento loads");
+
+	check (stream.notes.size() == 2 && stream.slides.size() == 1,
+		   "the slide is its own event, and both notes still sound");
+
+	if (stream.slides.size() == 1)
+	{
+		const auto& slide = stream.slides.front().slide;
+		check (slide.fromNote == 60, "it starts from the note the channel was sounding");
+		check (slide.targetNote == 64, "and aims at the one written on the row");
+		check (slide.unitsPerFrame == 4, "at the speed 3xx names");
+	}
+}
 void runFormatTests (void)
 {
 	testVgmLoaderIr();
@@ -792,6 +851,7 @@ void runFormatTests (void)
 	testFtmVolumeEnvelope();
 	testFtmArpeggioMacro();
 	testPitchBendRange();
+	testFtmTonePortamento();
 }
 
 } // namespace toybox::test

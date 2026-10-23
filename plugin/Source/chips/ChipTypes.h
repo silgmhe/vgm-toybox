@@ -214,7 +214,8 @@ struct SlideEvent
 	std::uint32_t startSample = 0;
 	std::uint32_t endSample = 0;
 	int fromNote = 60;					// the MIDI note the slide starts from
-	int unitsPerFrame = 0;				// signed: positive slides up
+	int unitsPerFrame = 0;
+		int targetNote = -1;				// 3xx slides *to* this note; -1 means 'slide with no end'				// signed: positive slides up
 	int logicalChannel = 0;
 	ChannelKind channelKind = ChannelKind::unknown;
 };
