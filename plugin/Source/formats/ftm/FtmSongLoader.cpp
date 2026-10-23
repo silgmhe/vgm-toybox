@@ -455,6 +455,35 @@ bool loadNoteStream (const void* data, std::size_t size, midi::NoteStream& out, 
 				event.isDrum = (channelType == 3 || channelType == 4);
 				event.pitchSource = chips::PitchSource::registerExact;	// named, not inferred
 
+				// Sxx (effect 23) cuts the note: the row it sits on ends the sound, `xx` frames later.
+				// Without it a note that the tracker silences early keeps ringing in the MIDI.
+				for (const auto& row : pattern.rows)
+				{
+					if (row.row < note.row || row.hasNote())
+					{
+						continue;
+					}
+
+					for (const auto& effect : row.effects)
+					{
+						if (effect.first == 23)
+						{
+							const std::uint32_t cut = base
+													+ (std::uint32_t) row.row * (std::uint32_t) module.speed
+													+ (std::uint32_t) (effect.second & 0x0F);
+							if (cut < event.endSample)
+							{
+								event.endSample = cut;
+							}
+						}
+					}
+				}
+
+				if (event.endSample <= event.startSample)
+				{
+					continue;		// cut before it began: nothing to hear
+				}
+
 				out.notes.push_back ({ track, event });
 
 				// 0xy arpeggio: the pitch steps through +0, +x, +y semitones, one step per row.
