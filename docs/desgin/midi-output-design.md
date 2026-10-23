@@ -1015,3 +1015,164 @@ A 类的 `refRate` 是文档常量，L1 即为绝对音高；B 类在默认模�
 - 每个 `case 0xNN` 上方写明该寄存器的硬件名称与位含义，禁止“寄存器 0”这类同义反复；
 - 同组寄存器共享一张表时（如 C140 的每声道 16 字节），在 switch 前给出整表，case 内只写差异；
 - 魔法常量必须带出处（`libvgm` 核心文件与行号，或数据手册页码）。
+
+## 17. 多格式接入：两级 IR 与歌曲实例的能力拆分（2026-10-23）
+
+这一节回答一个先于代码的问题：**「寄存器流」与「工程文件」不是同一种输入**，而当前 IR 只描述了前者。
+
+### 17.1 两类格式
+
+| | 寄存器流 | 工程文件 |
+|---|---|---|
+| 代表 | VGM/VGZ、NSF/NSFE、HES、KSS、SPC | FMT（FamiTracker）、FUR（Furnace）、IT/XM/MOD |
+| 文件里有什么 | 芯片寄存器写入 + 等待，或 CPU 周期上的写入 | 轨道、模式、音符、乐器、效果命令 |
+| 音符是否已知 | **否**，靠解码器推断 | **是**，音高与时刻由作者写下 |
+| 音色 | 寄存器值 | 乐器定义（包络、宏、波表） |
+| 精确性 | 根音、周期、八度都可能推断错 | 无推断误差 |
+| 要发声需要 | 直接喂芯片 | 先编译成寄存器流（Furnace 导出 VGM 即此） |
+
+现在 `SongIr` 只有 `writes`，即**假设音符永远从寄存器流推断**。这对 VGM/NSF 成立，对 FMT/FUR 不成立。
+
+### 17.2 两级 IR
+
+```cpp
+struct SongIr
+{
+    // 级别 A：芯片看到的东西。音频播放从这里来；寄存器格式的音符推断也从这里来。
+    std::vector<chips::RegisterWrite> writes;
+
+    // 级别 B：作者写下的东西。工程文件才有，且是权威来源。
+    std::optional<AuthoredSong> authored;
+
+    std::vector<ChipSlot> chips;
+    std::vector<RomBlock> roms;
+    double tickRate = 44100.0;
+};
+
+struct AuthoredNote
+{
+    std::uint32_t tick = 0;      // 以 tickRate 为单位，与 writes 同一时间基
+    std::uint32_t duration = 0;  // tick；0 表示由下一个事件结束
+    std::int32_t midiNote = 60;  // 精确音高，不需要推断
+    std::int32_t channel = 0;    // 作者视角的轨道号
+    std::int32_t instrument = 0;
+    std::int32_t volume = 100;
+    double cents = 0.0;          // 效果（滑音、颤音）编译后的残余音分
+};
+
+struct AuthoredSong
+{
+    std::vector<AuthoredNote> notes;
+    std::vector<std::string> channelNames;   // 工程文件里有真实轨道名
+};
+```
+
+三种来源，一套装配：
+
+| 情况 | `writes` | `authored` | MIDI 音符来源 |
+|---|---|---|---|
+| VGM / NSF | 有 | 无 | 解码器推断（现状，不变） |
+| FMT / FUR | 可选（编译所得） | **有** | 直接采用，不经解码器 |
+| 纯导出用途 | 无 | 有 | 直接采用 |
+
+`PitchSource` 增加一个值 `authored`：`--pitch-report` 里它表示“不是推断出来的”，与 `registerExact`（寄存器精确但仍经解码器）区分开。
+
+### 17.3 装配层的两条路径
+
+```cpp
+std::unique_ptr<MidiSequence> build (const SongIr& ir, const Tables& tables)
+{
+    if (ir.authored)
+        return buildFromAuthored (*ir.authored, tables);   // 精确路径
+    return buildFromWrites (ir, tables);                    // 推断路径（现有 31 个解码器）
+}
+```
+
+两条路径共用后半段：轨道分配、patch 选择、pitch bend 生成、velocity 映射。差别只在“音符从哪里来”，不在“音符怎么变成 MIDI 事件”。
+
+### 17.4 歌曲实例按能力拆分（H-4 的正确拆法）
+
+`LibvgmSongInstance`（517 行）现在同时做五件事。若按它的现状拆，拆出来的四个部件都带 libvgm 的形状（解包 vgz、probe player、`PLR_DEV_INFO` 枚举、libvgm 循环点），工程文件一个都用不上。按**能力**拆，才能复用：
+
+```cpp
+class ISongInstance            // 已存在，保持不变（门面）
+{
+    const SongInfo& getInfo();
+    const std::vector<TrackInfo>& getTracks();
+    BackendCapabilities getCapabilities();
+    std::unique_ptr<ITrackPlayer> createPlayer (juce::String&);   // 无渲染器时返回 nullptr
+    const MidiSequence* getMidiSequence();                        // 无 MIDI 时返回 nullptr（已是默认）
+};
+```
+
+内部四个部件，每个都可以缺席：
+
+| 部件 | 职责 | libvgm 实现 | 工程文件实现 |
+|---|---|---|---|
+| `Container` | 字节 → 引擎可直接加载的内存 | vgz/gz/裸流解包 | 解析模块文件 |
+| `Probe` | 标签、设备表、轨道、循环点 | libvgm 设备表 | 模式表本身 |
+| `Renderer` | 音频 | libvgm 播放器 | 编译成 VGM 后复用 libvgm，或自写驱动 |
+| `MidiSource` | MIDI 序列 | 从 `writes` 推断 | 从 `authored` 直接生成 |
+
+`BackendCapabilities` 补两个字段，让“部分能力”成为显式状态：
+
+```cpp
+bool hasMidi = false;      // getMidiSequence() 非空
+bool hasAudio = false;     // createPlayer() 非空
+```
+
+### 17.5 NSF 的接入路线（参考实现：`reference/nsfplay`）
+
+NSF 属于寄存器流，接入方式与 VGM 同形，只是时间基与来源不同：
+
+| 项 | 值 / 做法 | 参考实现中的位置 |
+|---|---|---|
+| CPU | 6502（NSF 里 `$8000-$FFFF` 由 bank 映射） | `libemuwa2/` 的 CPU 核心 |
+| Bank 切换 | 写 `$5FF6`–`$5FFF` | `nsfplug_ui/nes_bank.cpp:107-172` |
+| 播放例程 | 每帧调用一次播放地址，`A`=曲号、`X`=制式 | NSF 头 `0x06/0x07/0x08` |
+| APU 写入 | `$4000-$4013`、`$4015`、`$4017` | 直接映射到 `NesApuDecoder`（已存在） |
+| 扩展芯片 | VRC6/VRC7/FDS/MMC5/N163/5B | 同上，各自解码器已有或可加 |
+| 时间基 | **CPU 周期**，`tickRate = 1.789773 MHz`（NTSC） | 写入时间戳按周期累计 |
+
+也就是说：`NsfSongLoader` 产出 `writes`（`deviceId` 指向 `nesApu` / `vrc6` 等 `ChipSlot`），`Builder` 走现有推断路径，`NesApuDecoder` 不需要改。唯一的检查项是解码器内部把“帧序列器步进”从 `timeBaseHz` 换算，而不是假设 44100（R0 之后 `ChipConfig::timeBaseHz` 已经能传进去，需要在 1.79 MHz 栅格下补一个单测）。
+
+这条路线不需要 `authored`：NSF 的音符本来就是推断出来的。
+
+### 17.6 工程文件的接入路线（FMT / FUR）
+
+| 步骤 | 内容 | 归属 |
+|---|---|---|
+| 1 | 解析模块：轨道、模式、行、乐器、效果 | `formats/fmt`、`formats/fur` |
+| 2 | 效果编译：滑音/颤音/琶音 → 音符或 `cents` | 同上（**不能留给解码器猜**） |
+| 3 | 产出 `authored`（精确音符）+ 可选 `writes` | 同上 |
+| 4 | MIDI：`buildFromAuthored` | `midi/`，无需新代码 |
+| 5 | 音频（可选）：`writes` 由“模块 → 寄存器”编译产生，或整首编译成 VGM 后交给 `LibvgmRenderer` | `formats/*` |
+
+关键取舍：**音频可以推迟，MIDI 不必等音频**。`authored` 一到位，`getMidiSequence()` 就能返回精确结果，`hasAudio` 先报 `false`。
+
+### 17.7 能力矩阵
+
+| 格式 | `writes` | `authored` | 需要 CPU 核心 | 需要芯片驱动 | MIDI 精度 |
+|---|---|---|---|---|---|
+| VGM/VGZ | ✅ | — | — | — | 推断 |
+| NSF/NSFE | ✅ | — | ✅ 6502 | — | 推断 |
+| FMT | 可选 | ✅ | — | 可选 | **精确** |
+| FUR | 可选 | ✅ | — | 可选（支持芯片多） | **精确** |
+
+### 17.8 现在做什么、不做什么
+
+| 项 | 现在 | 理由 |
+|---|---|---|
+| `SongIr::authored` 字段 + `AuthoredSong` 定义 | **做**（可暂时无生产者） | 接口一旦定型，后补成本高 |
+| `PitchSource::authored` | **做** | 与报告、编码器、UI 的语义对齐 |
+| `MidiSequenceBuilder` 增加分支点（`authored` 为空时走原路径） | **做** | 装配层从此不再假设“音符只能推断” |
+| H-4 按 §17.4 拆分 | **做** | 拆错方向的代价比拆晚更大 |
+| FMT/FUR 解析器 | 不做 | 等有真实文件与需求 |
+| 6502 核心 | 不做 | 随 NSF 单独立项（评审 R5） |
+
+### 17.9 验收
+
+1. `authored` 为空的今天，117 首黄金基线必须逐行不变（分支点不影响现有路径）；
+2. `ISongInstance` 拆分后，轨枚举与能力表快照不变；
+3. 未来 `NsfSongLoader` 落地时，唯一新增的依赖是 6502 核心，`midi/` 与 `chips/` 不改；
+4. 未来 FMT 落地时，唯一新增的是 `formats/fmt` 里的解析与效果编译，`midi/` 不改。
