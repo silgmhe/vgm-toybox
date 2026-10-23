@@ -408,11 +408,49 @@ bool loadNoteStream (const void* data, std::size_t size, midi::NoteStream& out, 
 	// forever; a transcription cannot, so the walk stops after four passes' worth of frames.
 	const int maxSteps = module.frameCount * 4 + 64;
 	int frame = 0;
-	std::uint32_t base = 0;
+	std::uint32_t frameBase = 0;
+
+	// Frames per row, which Fxx may change at any row and which then carries into later frames.
+	std::uint32_t rowFrames = (std::uint32_t) module.speed;
 
 	for (int step = 0; frame >= 0 && frame < module.frameCount && step < maxSteps; ++step)
 	{
 		int nextFrame = frame + 1;
+
+		std::map<int, std::uint32_t> speedAtRow;
+		for (const int channel : channels)
+		{
+			const auto found = lookup.find ({ channel, module.order[(std::size_t) channel][(std::size_t) frame] });
+			if (found == lookup.end())
+			{
+				continue;
+			}
+
+			for (const auto& row : found->second->rows)
+			{
+				for (const auto& effect : row.effects)
+				{
+					if (effect.first == 1 && effect.second > 0)
+					{
+						speedAtRow[row.row] = (std::uint32_t) effect.second;
+					}
+				}
+			}
+		}
+
+		std::vector<std::uint32_t> offsets ((std::size_t) module.patternLength + 1, 0);
+		std::uint32_t clock = rowFrames;
+		for (int row = 0; row < module.patternLength; ++row)
+		{
+			offsets[(std::size_t) row + 1] = offsets[(std::size_t) row] + clock;
+
+			const auto found = speedAtRow.find (row);
+			if (found != speedAtRow.end())
+			{
+				clock = found->second;
+			}
+		}
+		rowFrames = clock;
 
 		for (const int channel : channels)
 		{
@@ -423,6 +461,7 @@ bool loadNoteStream (const void* data, std::size_t size, midi::NoteStream& out, 
 			}
 
 			const ModulePattern& pattern = *found->second;
+			const std::uint32_t base = frameBase;
 			const int track = trackOf[(std::size_t) channel];
 			const int channelType = module.channelTypes[(std::size_t) channel];
 			const auto kind = kindForChannel (channelType);
@@ -441,10 +480,10 @@ bool loadNoteStream (const void* data, std::size_t size, midi::NoteStream& out, 
 				const ModuleRow& note = *notes[i];
 
 				chips::NoteEvent event;
-				event.startSample = base + (std::uint32_t) note.row * (std::uint32_t) module.speed;
+				event.startSample = base + offsets[(std::size_t) note.row];
 				event.endSample = (i + 1 < notes.size())
-									  ? base + (std::uint32_t) notes[i + 1]->row * (std::uint32_t) module.speed
-									  : base + (std::uint32_t) module.patternLength * (std::uint32_t) module.speed;
+									  ? base + offsets[(std::size_t) notes[i + 1]->row]
+									  : base + offsets[(std::size_t) module.patternLength];
 
 				const int midiNote = 12 + note.octave * 12 + (note.note - 1);
 				event.note = (std::uint8_t) std::max (0, std::min (127, midiNote));
@@ -469,7 +508,7 @@ bool loadNoteStream (const void* data, std::size_t size, midi::NoteStream& out, 
 						if (effect.first == 23)
 						{
 							const std::uint32_t cut = base
-													+ (std::uint32_t) row.row * (std::uint32_t) module.speed
+													+ offsets[(std::size_t) row.row]
 													+ (std::uint32_t) (effect.second & 0x0F);
 							if (cut < event.endSample)
 							{
@@ -575,7 +614,7 @@ bool loadNoteStream (const void* data, std::size_t size, midi::NoteStream& out, 
 			nextFrame = -1;
 		}
 
-		base += (std::uint32_t) module.patternLength * (std::uint32_t) module.speed;
+		frameBase += offsets[(std::size_t) module.patternLength];
 		frame = nextFrame;
 	}
 
