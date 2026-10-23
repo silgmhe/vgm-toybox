@@ -34,7 +34,7 @@
 | H-1 | 高 | `RegisterWrite.value2` 为单颗芯片而加 | **已解决（R0b）** |
 | H-2 | 高 | `kVgmRate = 44100.0` 是全局常量，时间栅格无处传递 | **已解决** `bf30b28` |
 | H-3 | 高 | 30 个 `NoteTable` 各写一遍 `noteFor` | **已解决**：采样族收为一个守则；FM/噪声/one-shot 保留（各有公式） |
-| H-4 | 高 | `LibvgmSongInstance` 同时做解包、libvgm 生命周期、轨枚举、能力表、序列构建 | 待办 |
+| H-4 | 高 | `LibvgmSongInstance` 同时做解包、libvgm 生命周期、轨枚举、能力表、序列构建 | **大部分已消解**（见 §4）：解包在 `LibvgmVgz`、序列在 `buildMidiSequence`、播放在 `LibvgmTrackPlayer`；`enumerate` 已抽成 `describeSong`（`53d79da`） |
 | M-1 | 中 | `ChannelState` 同时带查表派与速率派两组字段，新芯片作者需自行判断 | **已解决（诊断版）** `b8335bb` |
 | M-2 | 中 | `Family` 混装芯片族与声道种类 | **已解决** `9297260`（改名 `ChannelKind`；未新增 `ChipFamily`，因为无消费者） |
 | M-3 | 中 | 跨格式的时间基契约未文档化 | **已解决** `cb7113d`（`SongIr.h` 三步契约） |
@@ -143,7 +143,7 @@ Source/
 | R1 | `SongIr` + `ISongLoader`（C-1） | **已完成** | `53c0691`、`e7b356c`、`b11927b` | **95 首逐行一致**；新增 `testVgmLoaderIr` |
 | R2 | `DecoderRegistry`（C-2） | **已完成** | `467067a` | **95 首逐行一致**；31 成员 → 1 注册表 |
 | R3 | 合并可复用 `NoteTable`（H-3） | 待做（先分类） | — | 每颗单测断言不变 |
-| R4 | 拆 `LibvgmSongInstance`（H-4） | 待做 | — | 轨枚举快照不变 |
+| R4 | 拆 `LibvgmSongInstance`（H-4） | **主体已完成** | `53d79da` | 轨数不变（MIKEY 01 = 3/4、VSU 03 = 6/6、YMW258 02 = 28/28、C219 02 = 9/16） |
 | R5 | NSF 适配 | 单独立项 | — | 需新 CPU 核心 |
 
 **收尾回归（2026-10-23，`9188ad8`）**：与 `plugin/Tests/golden/rip_notes.txt` 的 **117 首逐行一致** —— 12758 个音符、115 首 `all checks passed`。仅有的 2 首失败是 K007232 04/07，即已知缺陷 **D1**（循环回跳），与本次重构无关。`ctest` 34/34。
@@ -174,3 +174,5 @@ Source/
 - **类型宽度按硬件最大值定义**。`RegisterWrite.value` 取 16 位而不是 32 位：当前最宽寄存器是 16 位，多出的位只会让“这个值有多宽”变模糊。
 - **注册表按实现类型索引，不按领域概念**。按 `ChipKind` 建表会把共享解码器的六个 OPL 设备拆成六个实例，音符变少且不报错。
 - **IR 描述硬件，loader 声明时间基**。时钟来自运行时，时间基来自格式；两者混在一起就会把格式知识带回装配层。
+
+**分支收尾回归（2026-10-23，`53d79da`，`feature/multiformat-core`）**：117 首**逐行一致**（12758 音符、115 PASS，2 首失败为已知缺陷 D1）。覆盖四次结构改动：NoteStream 拆分、解码器自述需求、装配层去表、`describeSong` 抽取。`ctest` 34/34。
