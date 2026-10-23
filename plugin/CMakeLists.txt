@@ -393,6 +393,7 @@ add_executable(vgm_chip_test EXCLUDE_FROM_ALL
 	Source/formats/vgm/VgmSongLoader.cpp
 	Source/formats/ftm/FtmSongLoader.cpp
 	Tests/Support/TestSupport.cpp
+	Tests/Formats/FormatsTests.cpp
 	Tests/ChipDecoderTest.cpp
 	Source/chips/GbcApuDecoder.cpp
 	Source/chips/HuC6280Decoder.cpp
