@@ -578,6 +578,7 @@ bool loadNoteStream (const void* data, std::size_t size, midi::NoteStream& out, 
 		described.name = nameForChannel (channelType);
 		described.kind = kindForChannel (channelType);
 		described.isDrum = (channelType == 3 || channelType == 4);
+		described.channelIndex = channel;
 
 		trackOf[(std::size_t) channel] = (int) out.tracks.size();
 		channels.push_back (channel);

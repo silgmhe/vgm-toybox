@@ -4337,11 +4337,23 @@ namespace
 			}
 
 			std::printf ("module %s\n", argv[2]);
+
+			toybox::formats::ftm::Module parsed;
+			std::string problem;
+			const bool haveChannels = toybox::formats::ftm::parseModule (bytes.data(), bytes.size(),
+																		parsed, problem);
+			const std::vector<int>& channelTypes = parsed.channelTypes;
+			(void) haveChannels;
+
 			for (const auto& note : stream.notes)
 			{
-				std::printf ("note track=%d pitch=%d start=%u end=%u velocity=%d\n", note.track,
-							 (int) note.note.note, note.note.startSample, note.note.endSample,
-							 (int) note.note.velocity);
+				const int channel = (note.track < (int) stream.tracks.size())
+									  ? stream.tracks[(std::size_t) note.track].channelIndex : -1;
+				const int type = (channel >= 0 && channel < (int) channelTypes.size())
+								   ? channelTypes[(std::size_t) channel] : -1;
+				std::printf ("note track=%d channel=%d type=%d pitch=%d start=%u end=%u velocity=%d\n",
+							 note.track, channel, type, (int) note.note.note,
+							 note.note.startSample, note.note.endSample, (int) note.note.velocity);
 			}
 
 			for (const auto& bend : stream.bends)

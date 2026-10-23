@@ -55,7 +55,7 @@ import re
 def load(path):
     out = []
     for line in open(path, encoding='utf-8'):
-        m = re.match(r'note track=(\d+) pitch=(\d+) start=(\d+) end=(\d+)', line)
+        m = re.match(r'note track=(\d+)(?: channel=-?\d+ type=-?\d+)? pitch=(\d+) start=(\d+) end=(\d+)', line)
         if m: out.append(tuple(int(x) for x in m.groups()))
     return sorted(out)
 a = load('build/ftm_ref.txt'); b = load('build/ftm_ours.txt')

@@ -41,6 +41,10 @@ struct StreamTrack
 	std::string name;
 	chips::ChannelKind kind = chips::ChannelKind::unknown;
 	bool isDrum = false;
+	/** The module's own channel number, which is what a comparison against the tracker needs:
+		its text export prints channels in that order, so a mismatch can be read as "wrong channel"
+		rather than "wrong note". */
+	int channelIndex = -1;
 };
 
 struct StreamSlide
