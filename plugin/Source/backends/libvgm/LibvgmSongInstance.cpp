@@ -375,24 +375,39 @@ void LibvgmSongInstance::refreshTimelineFacts (void)
 	info.loopPointSeconds = (loopLength > 0.0) ? juce::jmax (0.0, singlePass - loopLength) : -1.0;
 }
 
-void LibvgmSongInstance::enumerate (void)
+/** What the probe knows about a song, in this project's vocabulary.
+
+	libvgm answers in its own: a device list of DEVID/core/config triples, channel counts obtained by
+	calling into the core declaration, names from SndEmu_GetDevName. This is where that becomes
+	ChipInfo/TrackInfo, which the engine, the mixer and the MIDI side all speak. */
+struct SongDescription
 {
-	info.tags.clear();
-	info.chips.clear();
-	tracks.clear();
+	playback::SongInfo info;
+	std::vector<playback::TrackInfo> tracks;
+	std::vector<PLR_DEV_INFO> devices;
+};
+
+SongDescription describeSong (LibvgmTrackPlayer* probe)
+{
+	SongDescription result;
 
 	if (probe == nullptr)
 	{
-		return;
+		return result;
+	}
+
+	if (probe == nullptr)
+	{
+		return result;
 	}
 
 	PlayerBase* pBase = probe->player().GetPlayer();
 	if (pBase == NULL)
 	{
-		return;
+		return result;
 	}
 
-	info.formatName = juce::String (pBase->GetPlayerName());
+	result.info.formatName = juce::String (pBase->GetPlayerName());
 
 	// --- tags: the flat tag/value list the player offers ------------------------------
 	const char* const* tagList = pBase->GetTags();
@@ -404,15 +419,15 @@ void LibvgmSongInstance::enumerate (void)
 			{
 				continue;
 			}
-			info.tags[juce::String (tag[0])] = juce::String::fromUTF8 (tag[1]);
+			result.info.tags[juce::String (tag[0])] = juce::String::fromUTF8 (tag[1]);
 		}
 
 		// prefer the untranslated tags over the Japanese ones
-		for (auto it = info.tags.begin(); it != info.tags.end();)
+		for (auto it = result.info.tags.begin(); it != result.info.tags.end();)
 		{
-			if (it->first.endsWith ("-JPN") && info.tags.count (it->first.dropLastCharacters (4)) > 0)
+			if (it->first.endsWith ("-JPN") && result.info.tags.count (it->first.dropLastCharacters (4)) > 0)
 			{
-				it = info.tags.erase (it);
+				it = result.info.tags.erase (it);
 			}
 			else
 			{
@@ -424,7 +439,7 @@ void LibvgmSongInstance::enumerate (void)
 	// --- devices and their channels ---------------------------------------------------
 	std::vector<PLR_DEV_INFO> devices;
 	pBase->GetSongDeviceInfo (devices);
-	deviceInfo = devices;
+	result.devices = devices;
 
 	std::map<UINT32, int> instancesByType;
 	for (const auto& device : devices)
@@ -453,7 +468,7 @@ void LibvgmSongInstance::enumerate (void)
 		chip.name = juce::String (chipName != NULL ? chipName : "?");
 		chip.core = fccToString (device.core);
 		chip.deviceId = device.id;
-		info.chips.push_back (chip);
+		result.info.chips.push_back (chip);
 	}
 
 	// the mixer tracks: one per channel, or one for the whole device when the core the song
@@ -497,12 +512,12 @@ void LibvgmSongInstance::enumerate (void)
 			}
 		}
 
-		const auto addTrack = [this, &device, deviceIndex, &groupName] (int channelIndex,
+		const auto addTrack = [&result, &device, deviceIndex, &groupName] (int channelIndex,
 																		const juce::String& name,
 																		bool trackIsolatable)
 		{
 			playback::TrackInfo track;
-			track.id = (playback::TrackId) tracks.size();	// the handle the core passes back
+			track.id = (playback::TrackId) result.tracks.size();	// the handle the core passes back
 			track.deviceId = device.id;
 			track.deviceIndex = deviceIndex;
 			track.channelIndex = channelIndex;
@@ -510,7 +525,7 @@ void LibvgmSongInstance::enumerate (void)
 			track.name = name;
 			track.groupName = groupName;
 			track.midiCapability = midiCapabilityFor (device, channelIndex);
-			tracks.push_back (std::move (track));
+			result.tracks.push_back (std::move (track));
 		};
 
 		if (! isolatable)
@@ -530,6 +545,15 @@ void LibvgmSongInstance::enumerate (void)
 
 		++deviceIndex;
 	}
+	return result;
+}
+void LibvgmSongInstance::enumerate (void)
+{
+	const SongDescription described = describeSong (probe.get());
+
+	info = described.info;
+	tracks = described.tracks;
+	deviceInfo = described.devices;
 }
 
 playback::BackendCapabilities LibvgmSongInstance::getCapabilities (void) const
