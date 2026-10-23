@@ -226,6 +226,7 @@ target_sources(VGMToybox PRIVATE
 	Source/formats/vgm/VgmSongLoader.cpp
 	Source/formats/ftm/FtmSongLoader.cpp
 	Source/formats/ftm/FtmSongIr.cpp
+	Source/formats/nsf/NsfFile.cpp
 	Source/backends/libvgm/LibvgmSongInstance.cpp
 	Source/backends/libvgm/LibvgmTrackPlayer.cpp
 	Source/backends/libvgm/LibvgmVgz.cpp
@@ -427,6 +428,7 @@ add_executable(vgm_chip_test EXCLUDE_FROM_ALL
 	Source/formats/vgm/VgmSongLoader.cpp
 	Source/formats/ftm/FtmSongLoader.cpp
 	Source/formats/ftm/FtmSongIr.cpp
+	Source/formats/nsf/NsfFile.cpp
 	Source/formats/ftm/compiler/Chunk.cpp
 	Tests/Support/TestSupport.cpp
 	Tests/Formats/FormatsTests.cpp

@@ -2,6 +2,7 @@
 
 #include <cmath>
 #include <cstdint>
+#include <cstring>
 #include <cstdio>
 #include <string>
 #include <vector>
@@ -9,6 +10,7 @@
 #include "../Support/TestSupport.h"
 #include "chips/ChipTypes.h"
 #include "formats/ftm/FtmSongIr.h"
+#include "formats/nsf/NsfFile.h"
 #include "formats/ftm/FtmSongLoader.h"
 #include "formats/ftm/compiler/Chunk.h"
 #include "formats/ftm/compiler/DriverData2A03.h"
@@ -1170,6 +1172,82 @@ void testFtmVgmImage (void)
 	check (! roundTrip.writes.empty(), "with its register writes intact");
 }
 
+
+/** An NSF is a header and a 6502 program, not a register stream - which is why it belongs behind a
+	player of ours rather than a converter. The header is small and every field has a trap: the load
+	address is missing in version 1 images, the speed's lowest bit is a PAL flag, and the song count
+	is one-based. */
+
+void testNsfHeader (void)
+{
+	std::vector<std::uint8_t> image (0x80, 0);
+
+	image[0] = 'N';
+	image[1] = 'E';
+	image[2] = 'S';
+	image[3] = 'M';
+	image[4] = 0x1A;
+	image[5] = 1;					// version
+	image[6] = 3;					// songs
+	image[7] = 2;					// starting song
+
+	// 0x08 is the load address in version 1 images - a size, not an address.
+	image[0x08] = 0x00;
+	image[0x09] = 0x80;
+	image[0x0A] = 0x00;				// init $8000
+	image[0x0B] = 0x80;
+	image[0x0C] = 0x03;				// play $8003
+	image[0x0D] = 0x80;
+
+	const std::string title = "Test Song";
+	std::memcpy (image.data() + 0x0E, title.data(), title.size());
+	const std::string artist = "Someone";
+	std::memcpy (image.data() + 0x2E, artist.data(), artist.size());
+
+	// 16639 us with the PAL flag clear, and chip flags asking for VRC6.
+	image[0x6E] = (std::uint8_t) (16639 & 0xFF);
+	image[0x6F] = (std::uint8_t) (16639 >> 8);
+	image[0x7A] = 0x01;
+
+	image.push_back (0x4C);			// the program itself
+	image.push_back (0x00);
+	image.push_back (0x80);
+
+	toybox::formats::nsf::NsfFile file;
+	std::string error;
+
+	check (toybox::formats::nsf::parseNsf (image.data(), image.size(), file, error),
+		   "the NSF header is read");
+	check (file.totalSongs == 3 && file.startSong == 2, "with its one-based song count");
+	check (file.loadAddress == 0x8000 && file.initAddress == 0x8000 && file.playAddress == 0x8003,
+		   "and its three addresses");
+	check (file.title == title && file.artist == artist, "and its names");
+	check (file.chip == toybox::formats::nsf::NsfChip::vrc6, "and which chip the driver expects");
+	check (file.rom.size() == 3 && file.rom[0] == 0x4C, "and the program after the header");
+
+	const double rate = toybox::formats::nsf::framesPerSecond (file);
+	check (rate > 59.9 && rate < 60.2, "16639 microseconds is 60.1 frames per second");
+
+	// The lowest bit of the speed is the PAL flag.
+	image[0x6E] = (std::uint8_t) ((16639 & ~1) & 0xFF);
+	image[0x6E] |= 0x01;
+
+	toybox::formats::nsf::NsfFile palFile;
+	check (toybox::formats::nsf::parseNsf (image.data(), image.size(), palFile, error),
+		   "a PAL image parses too");
+	check (toybox::formats::nsf::framesPerSecond (palFile) < 60.5,
+		   "and its speed comes from the same field");
+
+	// Failures that must not be mistaken for a valid song.
+	toybox::formats::nsf::NsfFile rejected;
+	check (! toybox::formats::nsf::parseNsf (image.data(), 16, rejected, error),
+		   "an image shorter than a header is refused");
+
+	image[0] = 'V';
+	check (! toybox::formats::nsf::parseNsf (image.data(), image.size(), rejected, error),
+		   "so is one without the magic");
+}
+
 void runFormatTests (void)
 {
 	testVgmLoaderIr();
@@ -1180,6 +1258,7 @@ void runFormatTests (void)
 	testFtmVolumeEnvelope();
 	testFtmApuWrites();
 	testFtmVgmImage();
+	testNsfHeader();
 	testFtmArpeggioMacro();
 	testPitchBendRange();
 	testFtmTonePortamento();
