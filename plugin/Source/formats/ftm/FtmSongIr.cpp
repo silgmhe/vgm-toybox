@@ -34,17 +34,17 @@ namespace
 	constexpr std::uint16_t kNoisePeriods[16] = { 4, 8, 16, 32, 64, 96, 128, 160,
 												  202, 254, 380, 508, 762, 1016, 2034, 4068 };
 
-	int pulsePeriod (int note)
+	int pulsePeriod (int note, std::uint32_t clock)
 	{
 		const double frequency = 440.0 * std::pow (2.0, (note - 69) / 12.0);
-		const double period = (double) nesApuClockHz / (16.0 * frequency) - 1.0;
+		const double period = (double) clock / (16.0 * frequency) - 1.0;
 		return (int) std::lround (std::clamp (period, 8.0, 2047.0));
 	}
 
-	int trianglePeriod (int note)
+	int trianglePeriod (int note, std::uint32_t clock)
 	{
 		const double frequency = 440.0 * std::pow (2.0, (note - 69) / 12.0);
-		const double period = (double) nesApuClockHz / (32.0 * frequency) - 1.0;
+		const double period = (double) clock / (32.0 * frequency) - 1.0;
 		return (int) std::lround (std::clamp (period, 2.0, 2047.0));
 	}
 
@@ -89,6 +89,11 @@ namespace
 	};
 }
 
+std::uint32_t clockForMachine (int machine)
+{
+	return (machine == 1) ? 1662607u : nesApuClockHz;
+}
+
 bool loadSongIr (const void* data, std::size_t size, midi::SongIr& out, std::string& error)
 {
 	Module module;
@@ -108,9 +113,13 @@ bool loadSongIr (const void* data, std::size_t size, midi::SongIr& out, std::str
 	out.roms.clear();
 	out.tickRate = (double) kAudioRate;
 
+	// PAL runs at 1,662,607 Hz: the same note table is about 7% flatter and the frame lasts
+	// 20% longer, so both the period arithmetic and the sample clock follow the machine.
+	const std::uint32_t apuClock = clockForMachine (module.machine);
+
 	midi::ChipSlot slot;
 	slot.kind = midi::ChipKind::nesApu;
-	slot.clockHz = nesApuClockHz;
+	slot.clockHz = apuClock;
 	out.chips.push_back (slot);
 
 	Emitter emitter (out);
@@ -133,7 +142,8 @@ bool loadSongIr (const void* data, std::size_t size, midi::SongIr& out, std::str
 	}
 
 	std::vector<ApuChannelState> states ((std::size_t) module.channels);
-	const double framesPerSecond = module.framesPerSecond();
+	const double machineRate = (module.machine == 1) ? 50.0069789082 : 60.0988141404;
+	const double framesPerSecond = module.framesPerSecond() * (machineRate / 60.0988141404);
 	const double samplesPerFrame = (double) kAudioRate / (framesPerSecond > 0.0 ? framesPerSecond : 60.0);
 
 	std::uint32_t clock = (std::uint32_t) std::max (1, module.speed);
@@ -216,6 +226,7 @@ bool loadSongIr (const void* data, std::size_t size, midi::SongIr& out, std::str
 									state.macroStep = 0;
 									state.effectFrame = 0;
 									state.periodOffset = 0.0;
+									state.silenced = false;
 									state.level = entry.volume > 0 ? entry.volume : 15;
 									state.enabled = true;
 									sounding[0] = channel;
@@ -258,15 +269,17 @@ bool loadSongIr (const void* data, std::size_t size, midi::SongIr& out, std::str
 										if (entry.hasNote() && state.lastPeriod > 0)
 										{
 											const int target = 12 + entry.octave * 12 + (entry.note - 1);
-											const int goal = triangle ? trianglePeriod (target)
-																	  : pulsePeriod (target);
+											const int goal = triangle ? trianglePeriod (target, apuClock)
+																	  : pulsePeriod (target, apuClock);
 											state.periodOffset = (double) (state.lastPeriod - goal);
 										}
 										break;
 
 									case 23:		// Sxx cut: silence now, not a note-off to schedule
-										state.note = -1;
-										state.enabled = false;
+										// Silenced rather than disabled: a channel that stops being
+										// written keeps its last period and volume, so the cut has to
+										// reach the register as level 0.
+										state.silenced = true;
 										break;
 
 									default:
@@ -359,11 +372,11 @@ bool loadSongIr (const void* data, std::size_t size, midi::SongIr& out, std::str
 					if (pulse)
 					{
 						const int index = (type == 0) ? 0 : 1;
-						const double base = (double) pulsePeriod (pitch) + state.periodOffset;
+						const double base = (double) pulsePeriod (pitch, apuClock) + state.periodOffset;
 						const int period = (int) std::lround (std::clamp (
 							base * std::pow (2.0, -vibratoCents / 1200.0), 8.0, 2047.0));
 						emitter.write (0, kPulseControl[index],
-									   (duty << 6) | 0x30 | (level & 0x0F), when);
+									   (duty << 6) | 0x30 | ((state.silenced ? 0 : level) & 0x0F), when);
 						emitter.write (0, kPulsePeriodLow[index], period & 0xFF, when);
 						emitter.write (0, kPulsePeriodHigh[index], (period >> 8) & 0x07, when);
 						emitter.write (0, kStatus, 1 << index, when);
@@ -371,10 +384,10 @@ bool loadSongIr (const void* data, std::size_t size, midi::SongIr& out, std::str
 					}
 					else if (triangle)
 					{
-						const double base = (double) trianglePeriod (pitch) + state.periodOffset;
+						const double base = (double) trianglePeriod (pitch, apuClock) + state.periodOffset;
 						const int period = (int) std::lround (std::clamp (
 							base * std::pow (2.0, -vibratoCents / 1200.0), 2.0, 2047.0));
-						emitter.write (0, kTriangleLinear, 0x7F, when);
+						emitter.write (0, kTriangleLinear, state.silenced ? 0x00 : 0x7F, when);
 						emitter.write (0, kTrianglePeriodLow, period & 0xFF, when);
 						emitter.write (0, kTrianglePeriodHigh, (period >> 8) & 0x07, when);
 						emitter.write (0, kStatus, 1 << 2, when);
@@ -382,7 +395,8 @@ bool loadSongIr (const void* data, std::size_t size, midi::SongIr& out, std::str
 					}
 					else if (noise)
 					{
-						emitter.write (0, kNoiseControl, 0x30 | (level & 0x0F), when);
+						emitter.write (0, kNoiseControl,
+									   0x30 | ((state.silenced ? 0 : level) & 0x0F), when);
 						emitter.write (0, kNoisePeriod, noiseIndex (pitch), when);
 						emitter.write (0, kStatus, 1 << 3, when);
 					}
@@ -458,7 +472,7 @@ bool buildVgm (const void* data, std::size_t size, std::vector<std::uint8_t>& ou
 	// compute 0x34 + field, so writing 0x100 here would put the command stream at 0x134 - past the
 	// end of a small image, which the reader rejects as "not a VGM stream".
 	put32 (0x34, 0x00000100 - 0x34);
-	put32 (0x84, nesApuClockHz);				// NES APU clock
+	put32 (0x84, song.chips.empty() ? nesApuClockHz : song.chips[0].clockHz);				// NES APU clock
 
 	// Writes are already ordered by time; a wait is only emitted when the clock actually moves,
 	// because zero-wait commands are what the format is designed around.

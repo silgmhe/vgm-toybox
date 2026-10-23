@@ -562,6 +562,24 @@ void testFtmNoteCut (void)
 	{
 		check (stream.notes[0].note.endSample == 18, "S00 at row 4 ends it at frame 18: rows 0-1 at six frames, row 2 on at three");
 	}
+
+	// The same cut has to reach the chip: a channel that simply stops being written keeps its last
+	// period and volume, so a note the tracker silences would ring on to the end of the module.
+	toybox::midi::SongIr song;
+	std::string songError;
+	check (toybox::formats::ftm::loadSongIr (image.data(), image.size(), song, songError),
+		   "and the module compiles for playback");
+
+	bool sawSilence = false;
+	for (const auto& write : song.writes)
+	{
+		if (write.reg == 0x00 && (write.value & 0x0F) == 0)
+		{
+			sawSilence = true;
+		}
+	}
+
+	check (sawSilence, "the cut reaches the volume register as level zero");
 }
 
 namespace

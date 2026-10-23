@@ -58,7 +58,12 @@ struct ApuChannelState
 	int effectFrame = 0;			// frames since the note started
 	double periodOffset = 0.0;		// accumulated by the portamentos, in period units
 	int lastPeriod = 0;				// the period the channel was sounding, for 3xx to start from
+	bool silenced = false;			// an Sxx cut: the channel stays enabled but plays level 0
 };
+
+/** The 2A03 clock for the module's machine. A PAL module runs 7% slower and, with the same note
+	table, about 7% flatter - so the clock is not a detail: it is the pitch. */
+std::uint32_t clockForMachine (int machine);
 
 /** Emits the register writes a FamiTracker module would produce, frame by frame.
 
