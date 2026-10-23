@@ -61,6 +61,19 @@ namespace
 			return text;
 		}
 
+		/** A string the module length-prefixed. Unlike `cstring` this reads exactly what it was
+			told: an instrument name carries no terminator, so stopping at the first zero byte would
+			eat into the next record's index and misalign everything after it. */
+		std::string fixedString (std::size_t count)
+		{
+			std::string text;
+			for (std::size_t i = 0; i < count && position < length; ++i)
+			{
+				text.push_back ((char) bytes[position++]);
+			}
+			return text;
+		}
+
 		void skip (std::size_t count)
 		{
 			if (position + count > length)
@@ -176,6 +189,101 @@ namespace
 		}
 	}
 
+
+	void parseInstruments (const Block& block, Module& module)
+	{
+		Reader reader (block.payload, block.size);
+		const int count = reader.i32();
+
+		for (int i = 0; i < count && reader.ok(); ++i)
+		{
+			const int index = reader.i32();
+			const int type = reader.u8();
+
+			// Only the 2A03 instrument's layout is known, and a record carries no length prefix, so
+			// an unknown type cannot be skipped - stop rather than read the rest as noise.
+			if (type != 1)				// INST_2A03
+			{
+				break;
+			}
+
+			(void) reader.i32();		// sequence count, which the reference then forces to SEQ_COUNT
+
+			int volumeSequence = -1;
+			for (int sequenceType = 0; sequenceType < 5; ++sequenceType)
+			{
+				const int enabled = reader.u8();
+				const int sequence = reader.u8();
+
+				if (sequenceType == 0 && enabled != 0)		// SEQ_VOLUME
+				{
+					volumeSequence = sequence;
+				}
+			}
+
+			// CInstrument2A03::Load: sample assignment per octave and note. Version 5 and below
+			// stores two bytes per assignment, later versions a third; version 7 turns the dense
+			// table into a counted list.
+			const int bytesPerAssignment = (block.version > 5) ? 3 : 2;
+
+			if (block.version >= 7)
+			{
+				const int assigned = reader.i32();
+				reader.skip ((std::size_t) (assigned * bytesPerAssignment));
+			}
+			else
+			{
+				const int octaves = (block.version == 1) ? 6 : 8;
+				reader.skip ((std::size_t) (octaves * 12 * bytesPerAssignment));
+			}
+
+			const std::size_t nameLength = reader.u32();
+			const std::string name = reader.fixedString (nameLength);
+
+			if (index >= 0 && index < 256)
+			{
+				if ((int) module.instrumentVolume.size() <= index)
+				{
+					module.instrumentVolume.resize ((std::size_t) index + 1, -1);
+					module.instrumentNames.resize ((std::size_t) index + 1);
+				}
+
+				module.instrumentVolume[(std::size_t) index] = volumeSequence;
+				module.instrumentNames[(std::size_t) index] = name;
+			}
+		}
+	}
+
+	void parseSequences (const Block& block, Module& module)
+	{
+		Reader reader (block.payload, block.size);
+		const int count = reader.i32();
+
+		for (int i = 0; i < count && reader.ok(); ++i)
+		{
+			const int index = reader.i32();
+			const int type = reader.i32();
+			const int items = reader.u8();
+			(void) reader.i32();		// loop point
+
+			std::vector<std::uint8_t> values;
+			for (int k = 0; k < items && reader.ok(); ++k)
+			{
+				values.push_back (reader.u8());
+			}
+
+			if (type == 0)				// SEQ_VOLUME
+			{
+				if ((int) module.volumeSequences.size() <= index)
+				{
+					module.volumeSequences.resize ((std::size_t) index + 1);
+				}
+
+				module.volumeSequences[(std::size_t) index] = std::move (values);
+			}
+		}
+	}
+
 	void parsePatterns (const Block& block, Module& module)
 	{
 		Reader reader (block.payload, block.size);
@@ -264,6 +372,8 @@ bool parseModule (const void* data, std::size_t size, Module& out, std::string& 
 	Block header;
 	Block frames;
 	Block patterns;
+	Block instruments;
+	Block sequences;
 	bool sawEnd = false;
 
 	while (position + 24 <= size)
@@ -293,6 +403,8 @@ bool parseModule (const void* data, std::size_t size, Module& out, std::string& 
 		else if (block.id == "HEADER")	header = block;
 		else if (block.id == "FRAMES")	frames = block;
 		else if (block.id == "PATTERNS") patterns = block;
+		else if (block.id == "INSTRUMENTS") instruments = block;
+		else if (block.id == "SEQUENCES") sequences = block;
 	}
 
 	// The reference writes a bare "END" after the last block rather than another block record.
@@ -317,6 +429,16 @@ bool parseModule (const void* data, std::size_t size, Module& out, std::string& 
 	parseHeader (header, out);
 	parseFrames (frames, out);
 	parsePatterns (patterns, out);
+
+	if (instruments.payload != nullptr)
+	{
+		parseInstruments (instruments, out);
+	}
+
+	if (sequences.payload != nullptr)
+	{
+		parseSequences (sequences, out);
+	}
 
 	if (out.channels <= 0 || out.channelTypes.empty())
 	{
@@ -489,7 +611,32 @@ bool loadNoteStream (const void* data, std::size_t size, midi::NoteStream& out, 
 
 				const int midiNote = 12 + note.octave * 12 + (note.note - 1);
 				event.note = (std::uint8_t) std::max (0, std::min (127, midiNote));
-				event.velocity = (std::uint8_t) std::max (0, std::min (127, note.volume));
+				// FamiTracker writes a level in 0..15 in two places: the volume column, and the first
+				// item of an instrument's volume envelope. MIDI wants 0..127. Neither being present
+				// is not silence - the note plays, the tracker just had nothing to say about how
+				// loud - so it gets the conventional default rather than a velocity of zero.
+				int level = note.volume;
+				bool stated = level > 0;
+
+				if (! stated && note.instrument > 0
+					&& note.instrument < (int) module.instrumentVolume.size())
+				{
+					const int sequence = module.instrumentVolume[(std::size_t) note.instrument];
+
+					if (sequence >= 0 && sequence < (int) module.volumeSequences.size())
+					{
+						const auto& items = module.volumeSequences[(std::size_t) sequence];
+						if (! items.empty())
+						{
+							level = items.front();
+							stated = true;
+						}
+					}
+				}
+
+				const int velocity = stated ? ((level * 127 + 7) / 15) : 100;
+
+				event.velocity = (std::uint8_t) std::max (0, std::min (127, velocity));
 				event.logicalChannel = channel;
 				event.channelKind = kind;
 				event.patch = note.instrument;

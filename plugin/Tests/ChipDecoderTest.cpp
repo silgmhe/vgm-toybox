@@ -4311,6 +4311,30 @@ namespace
 		std::printf ("ftm %s ok=%d notes=%d tracks=%d frames/s=%.2f %s\n", argv[2], (int) ok,
 					 (int) stream.notes.size(), (int) stream.tracks.size(), stream.tickRate,
 					 ok ? "" : error.c_str());
+		// The instrument names prove the block was walked correctly: they are ASCII, so an offset
+		// error of one byte turns them into noise.
+		int lowVelocity = 127;
+		int highVelocity = 0;
+		for (const auto& note : stream.notes)
+		{
+			lowVelocity = std::min (lowVelocity, (int) note.note.velocity);
+			highVelocity = std::max (highVelocity, (int) note.note.velocity);
+		}
+		std::printf ("    velocity=%d..%d\n", lowVelocity, highVelocity);
+
+		toybox::formats::ftm::Module module;
+		std::string ignored;
+		if (ok && toybox::formats::ftm::parseModule (bytes.data(), bytes.size(), module, ignored))
+		{
+			std::printf ("    instruments=%d", (int) module.instrumentNames.size());
+			for (std::size_t i = 0; i < module.instrumentNames.size() && i < 4; ++i)
+			{
+				std::printf (" [%d] %s vol=%d", (int) i, module.instrumentNames[i].c_str(),
+							 module.instrumentVolume[i]);
+			}
+			std::printf ("\n");
+		}
+
 		return ok ? 0 : 1;
 	}
 

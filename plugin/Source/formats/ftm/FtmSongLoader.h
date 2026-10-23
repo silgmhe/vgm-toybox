@@ -56,6 +56,13 @@ struct Module
 	std::vector<std::vector<int>> order;			// [channel][frame] -> pattern index
 	std::vector<ModulePattern> patterns;
 
+	/** Per instrument: the sequence index its volume envelope uses, or -1 when it has none. */
+	std::vector<int> instrumentVolume;
+	/** SEQ_VOLUME sequences, indexed the way the instrument table refers to them. */
+	std::vector<std::vector<std::uint8_t>> volumeSequences;
+	/** Kept so a probe can prove the block was aligned: names are readable or they are not. */
+	std::vector<std::string> instrumentNames;
+
 	/** Rows per second: FamiTracker's tempo is 2.5 frames per unit, and `speed` rows pass per
 		frame. At the defaults (150, 6) that is 10 rows a second. */
 	double framesPerSecond (void) const;
