@@ -4329,8 +4329,10 @@ namespace
 			std::printf ("    instruments=%d", (int) module.instruments.size());
 			for (std::size_t i = 0; i < module.instruments.size() && i < 4; ++i)
 			{
-				std::printf (" [%d] %s vol=%d arp=%d", (int) i, module.instruments[i].name.c_str(),
-							 module.instruments[i].volume, module.instruments[i].arpeggio);
+				std::printf (" [%d] %s vol=%d arp=%d pitch=%d duty=%d", (int) i,
+							 module.instruments[i].name.c_str(), module.instruments[i].volume,
+							 module.instruments[i].arpeggio, module.instruments[i].pitch,
+							 module.instruments[i].duty);
 			}
 			std::printf ("\n");
 		}

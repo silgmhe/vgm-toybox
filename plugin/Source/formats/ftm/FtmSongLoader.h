@@ -63,6 +63,8 @@ struct Module
 		std::string name;
 		int volume = -1;		// SEQ_VOLUME: the level the note starts at
 		int arpeggio = -1;		// SEQ_ARPEGGIO: semitone offsets, stepped one per frame
+		int pitch = -1;			// SEQ_PITCH: fine detune, kept but not applied (see the .cpp)
+		int duty = -1;			// SEQ_DUTYCYCLE: no MIDI equivalent, kept for a future audio path
 	};
 
 	std::vector<Instrument> instruments;
@@ -70,6 +72,9 @@ struct Module
 	std::vector<std::vector<std::uint8_t>> volumeSequences;
 	/** SEQ_ARPEGGIO sequences, in the same index space. */
 	std::vector<std::vector<std::uint8_t>> arpeggioSequences;
+	/** SEQ_PITCH and SEQ_DUTYCYCLE: parsed so the instrument table is complete, not yet applied. */
+	std::vector<std::vector<std::uint8_t>> pitchSequences;
+	std::vector<std::vector<std::uint8_t>> dutySequences;
 
 	/** Rows per second: FamiTracker's tempo is 2.5 frames per unit, and `speed` rows pass per
 		frame. At the defaults (150, 6) that is 10 rows a second. */

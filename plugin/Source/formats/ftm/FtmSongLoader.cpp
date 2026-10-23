@@ -211,6 +211,8 @@ namespace
 
 			int volumeSequence = -1;
 			int arpeggioSequence = -1;
+			int pitchSequence = -1;
+			int dutySequence = -1;
 
 			for (int sequenceType = 0; sequenceType < 5; ++sequenceType)
 			{
@@ -229,6 +231,14 @@ namespace
 				else if (sequenceType == 1)		// SEQ_ARPEGGIO
 				{
 					arpeggioSequence = sequence;
+				}
+				else if (sequenceType == 2)		// SEQ_PITCH
+				{
+					pitchSequence = sequence;
+				}
+				else if (sequenceType == 4)		// SEQ_DUTYCYCLE
+				{
+					dutySequence = sequence;
 				}
 			}
 
@@ -261,6 +271,8 @@ namespace
 				module.instruments[(std::size_t) index].name = name;
 				module.instruments[(std::size_t) index].volume = volumeSequence;
 				module.instruments[(std::size_t) index].arpeggio = arpeggioSequence;
+				module.instruments[(std::size_t) index].pitch = pitchSequence;
+				module.instruments[(std::size_t) index].duty = dutySequence;
 			}
 		}
 	}
@@ -300,6 +312,24 @@ namespace
 				}
 
 				module.arpeggioSequences[(std::size_t) index] = std::move (values);
+			}
+			else if (type == 2)			// SEQ_PITCH
+			{
+				if ((int) module.pitchSequences.size() <= index)
+				{
+					module.pitchSequences.resize ((std::size_t) index + 1);
+				}
+
+				module.pitchSequences[(std::size_t) index] = std::move (values);
+			}
+			else if (type == 4)			// SEQ_DUTYCYCLE
+			{
+				if ((int) module.dutySequences.size() <= index)
+				{
+					module.dutySequences.resize ((std::size_t) index + 1);
+				}
+
+				module.dutySequences[(std::size_t) index] = std::move (values);
 			}
 		}
 	}
