@@ -124,3 +124,4 @@ test_file/
 # committed index would be stale before the next clone finished.
 .serena/
 .codegraph/
+__pycache__/
