@@ -97,7 +97,7 @@
 ### M-4 单层 IR 无法表达工程文件的精确音符
 
 - **现象**：`SongIr` 只有 `writes`，`MidiSequenceBuilder` 只能从寄存器流**推断**音符。VGM/NSF 如此没问题；FMT/FUR 这类工程文件本身带有精确的轨道、音符、乐器与效果，强迫它们先编译成寄存器流再推断一遍，等于把已知信息丢掉再猜回来。
-- **方案**：`SongIr` 增加第二级 `std::optional<AuthoredSong>`（音符、轨道名、乐器、效果编译后的残余音分），`PitchSource` 增加 `authored`，装配层按“有 `authored` 走精确路径、否则走推断路径”分派。两级可共存：同一首歌用 `writes` 发声、用 `authored` 出 MIDI。详见设计文档 **§17**。
+- **方案（2026-10-23 修订）**：不把两级塞进一个结构体，而是**两个独立类型**——`SongIr` 只描述寄存器（A 级），`NoteStream` 只描述音符（B 级，带 `PitchOrigin::inferred / authored`）；`MidiSequenceBuilder` 拆成 `inferNotes`（A→B，唯一推断入口）与 `encode`（B→MIDI，唯一出口）。一首歌可以同时有 A（发声）与 B（MIDI），两者互不覆盖。详见设计文档 **§18**（§17.2 的 `optional` 方案已作废）。
 - **代价**：现在约 1 小时的加法（字段、枚举值、分支点），生产者等到第一个工程文件格式落地再写。
 - **验收**：`authored` 为空的今天，117 首黄金基线逐行不变。
 

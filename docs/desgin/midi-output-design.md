@@ -1035,6 +1035,8 @@ A 类的 `refRate` 是文档常量，L1 即为绝对音高；B 类在默认模�
 
 ### 17.2 两级 IR
 
+> **已被 §18 取代。** 本节把两级塞进同一个 `SongIr`（`optional<AuthoredSong>`），权衡后放弃：优先级规则会散落、装配层会分叉成两个 builder、格式类概念进了共享 IR。§18 改为两个独立类型（`SongIr` 与 `NoteStream`）。本节其余内容保留，作为当时的推导记录。
+
 ```cpp
 struct SongIr
 {
@@ -1176,3 +1178,132 @@ NSF 属于寄存器流，接入方式与 VGM 同形，只是时间基与来源�
 2. `ISongInstance` 拆分后，轨枚举与能力表快照不变；
 3. 未来 `NsfSongLoader` 落地时，唯一新增的依赖是 6502 核心，`midi/` 与 `chips/` 不改；
 4. 未来 FMT 落地时，唯一新增的是 `formats/fmt` 里的解析与效果编译，`midi/` 不改。
+
+## 18. 决策：两个 IR，一条单向流水线（2026-10-23）
+
+> 本节取代 §17.2 的 `SongIr::authored` 方案。§17 的其他部分（能力拆分、NSF 路线、能力矩阵）仍然有效。
+
+### 18.1 背景：三类真实素材
+
+| 素材 | 内容 | 说明 |
+|---|---|---|
+| `test_file/nsf`（3 个） | `1983.nsf`、`Entry080.nsf`、`fod_snowburnb.nsf` | 寄存器流，音符靠推断 |
+| `test_file/ftm`（7 个，957 KB） | `fod_hopeless.ftm`、`snowburnb.ftm`、`VietnameseMuskrats.ftm` 等 | 工程文件，音符是作者写下的 |
+| `reference/Dn-FamiTracker` | `PatternNote.h` 的行结构、`PatternData.h` 的模式表、`Compiler.h` 的 `ExportNSF/NSFE/NSF2` | 参考实现自己就是「模块 → 寄存器流」的编译器 |
+
+FamiTracker 的行是显式的：
+
+```cpp
+// reference/Dn-FamiTracker/Source/PatternNote.h:32
+struct stChanNote
+{
+    unsigned char Note;        // NONE 或 0..11（C..B）
+    unsigned char Octave;      // 0..7
+    unsigned char Vol;         // 直接是音量
+    unsigned char Instrument;
+    stEffect Effect[MAX_EFFECTS];
+};
+```
+
+也就是说：对 `.ftm` 而言，「音高、轨道、乐器、音量」是**现成的**，强迫它先编译成寄存器流再推断，是把已知信息丢掉再猜回来。
+
+### 18.2 决策
+
+**D1. 两个 IR，职责不重叠。**
+
+```cpp
+// A 级：芯片被写入了什么。只有寄存器流格式（VGM/NSF）才产生。
+struct SongIr { std::vector<chips::RegisterWrite> writes; std::vector<ChipSlot> chips; ... };
+
+// B 级：音符是什么。MIDI 编码器只接受它。
+struct NoteStream
+{
+    std::vector<NoteEvent> notes;
+    std::vector<TrackInfo> tracks;
+    double tickRate = 44100.0;
+};
+
+// A -> B：唯一的推断入口（现有 31 个解码器 + NoteExtractor）
+NoteStream inferNotes (const SongIr& ir, const DeviceTables& tables);
+
+// B -> MIDI：唯一的出口，不认识寄存器，也不认识格式
+std::unique_ptr<MidiSequence> encode (const NoteStream& stream, const EncodeOptions& options);
+```
+
+**D2. 可信度写在音符上，不写在结构体的可选字段上。**
+
+```cpp
+enum class PitchOrigin { inferred, authored };
+// NoteEvent::origin；PitchSource 保留细节（registerExact / sampleInfed / unpitched...）
+```
+
+**D3. A 与 B 是并行产物，不是二选一。**
+
+`.ftm` 将来若要把「能播放」也做起来，路径是**用参考实现的思路编译成 NSF/VGM**（`Compiler.h` 已经证明可行），再走 `NsfSongLoader → SongIr → inferNotes`。因此一首歌可以同时拥有 A（用于发声）与 B（用于 MIDI），而**两者互不覆盖**——这正是 `optional` 方案做不到、而两个独立对象能做到的。
+
+**D4. 装配层不再手工列出「哪些芯片怎么 flush」。**
+
+`flushOpn/flushOpl/flushNes/flushGb` 目前把「哪些芯片需要整条流、哪些需要 ROM、哪些要拆分写入」写死在装配层。这些是**解码器的属性**，应改为自述：
+
+```cpp
+class IChipDecoder
+{
+    virtual bool needsWholeStream (void) const { return false; }
+    virtual std::vector<std::uint8_t> romTypes (void) const { return {}; }
+    virtual bool splitsWrites (void) const { return false; }
+};
+```
+
+第二个寄存器流格式（NSF）接入时，装配层零改动。
+
+### 18.3 为什么不是 `SongIr` 加一个 `optional`
+
+| 方案 | 短期成本 | 长期成本 |
+|---|---|---|
+| `SongIr::authored`（§17.2） | 1 小时 | 优先级规则散落；装配层分叉成两个 builder；格式类概念进入共享 IR |
+| **两个 IR（本节）** | 1–2 天 | 推断成为显式阶段；编码器单出口；工程文件无需伪造寄存器 |
+
+「长痛不如短痛」在这里的具体含义：**现在多花一天把 A→B 的边界画出来，换掉的是「每接一种格式就在装配层加一个分支」的永久成本。**
+
+### 18.4 FTM 的映射（B 级来源）
+
+| FTM 里的东西 | 去 NoteStream 的哪里 | 备注 |
+|---|---|---|
+| `Note` + `Octave` | `NoteEvent::note` | 直接是 MIDI 音高，`origin = authored` |
+| 行持续时间（`Speed`/`Groove`） | `NoteEvent::duration`，`tickRate` 由曲速换算 | 与 VGM 同一时间基契约 |
+| `Instrument` | `NoteEvent::instrument` → patch | 2A03 乐器有音量/琶音/音高宏 |
+| `Vol` | `NoteEvent::velocity` | 直接映射 |
+| 效果（21 种） | `cents` 或多次音符 | 滑音/颤音编译成音分；跳转/速度改变在 loader 里展开 |
+| 模式顺序（Order） | 轨道顺序 | 展开成线性时间线，`NoteStream` 不含跳转 |
+
+**关键取舍**：效果在 **loader** 里编译成「音符 + 音分」，绝不留给 MIDI 编码器猜——编码器只认识音符、音分、力度。
+
+### 18.5 NSF 的映射（A 级来源）
+
+| NSF 里的东西 | 去处 |
+|---|---|
+| 6502 执行 + bank 切换（`$5FF6-$5FFF`） | loader 内部，不进入 IR |
+| `$4000-$4017` 写入 | `SongIr::writes`（`tickRate` = 1.789773 MHz） |
+| 扩展芯片写入 | 同上，`ChipSlot::kind` 区分 |
+| 音符 | **不由 loader 产生**，走 `inferNotes` |
+
+### 18.6 迁移步骤
+
+| 步 | 内容 | 验收 |
+|---|---|---|
+| 1 | 抽 `NoteStream` / `PitchOrigin`；`MidiSequenceBuilder` 拆成 `inferNotes` 与 `encode` 两段（行为不变） | 117 首基线逐行一致；`ctest` 34/34 |
+| 2 | 解码器自述需求（D4），删除装配层的手工 flush 清单 | 同上 |
+| 3 | H-4 按能力拆（§17.4） | 轨枚举快照不变 |
+| 4 | 第一个格式接入：`NsfSongLoader`（需 6502 核心）或 `FtmSongLoader`（纯解析，无新依赖） | 各自 3–7 个真实文件 |
+
+**建议第 4 步先做 FTM**：它不依赖 6502 核心，素材已就位（7 个 `.ftm`），且能立刻验证「authored 路径」是否成立。NSF 的 6502 核心是独立风险，放在其后。
+
+### 18.7 不做的事
+
+- 不把寄存器效果（宏、包络）建模进 IR：它们属于解码器或 loader，编码器不需要；
+- 不做通用 DAW 事件模型：`NoteStream` 只承载 MIDI 能表达的东西（音高、音分、力度、时长、轨道）；
+- 不在 `SongIr` 里放任何「音符」概念，也不在 `NoteStream` 里放任何「寄存器」概念。
+
+### 18.8 一句话
+
+**寄存器是硬件看到的世界，音符是音乐看到的世界；把两者分开建模，让推断成为它们之间唯一的一条边。**
