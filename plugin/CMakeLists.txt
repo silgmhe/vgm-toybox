@@ -391,6 +391,7 @@ add_executable(vgm_mixer_test EXCLUDE_FROM_ALL
 add_executable(vgm_chip_test EXCLUDE_FROM_ALL
 	Source/backends/libvgm/VgmCommandReader.cpp
 	Source/formats/vgm/VgmSongLoader.cpp
+	Source/formats/ftm/FtmSongLoader.cpp
 	Tests/ChipDecoderTest.cpp
 	Source/chips/GbcApuDecoder.cpp
 	Source/chips/HuC6280Decoder.cpp
