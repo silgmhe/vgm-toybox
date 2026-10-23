@@ -89,6 +89,14 @@ struct Module
 
 		/** The per-note sample assignment, octave-major: `dpcm[octave][note]`. */
 		std::array<std::array<DpcmAssignment, 12>, 8> dpcm {};
+
+		/** FamiTracker's inst_type_t: 1 = 2A03, 2 = VRC6, 3 = VRC7, 4 = FDS, 5 = N163, 6 = S5B. */
+		int type = 0;
+
+		/** VRC7 only: the patch. The chip is an OPLL, so a patch is either a preset number or, when
+			the module says so, eight register bytes written before the note. */
+		int vrc7Patch = 0;
+		std::array<std::uint8_t, 8> vrc7Regs {};
 	};
 
 	/** The module's DPCM samples, indexed the way the instrument assignments refer to them. */

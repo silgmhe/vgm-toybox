@@ -4581,12 +4581,17 @@ namespace
 		{
 			std::printf ("    instruments=%d samples=%d", (int) module.instruments.size(),
 							 (int) module.samples.size());
-			for (std::size_t i = 0; i < module.instruments.size() && i < 4; ++i)
+			for (std::size_t i = 0; i < module.instruments.size() && i < 6; ++i)
 			{
-				std::printf (" [%d] %s vol=%d arp=%d pitch=%d duty=%d", (int) i,
-							 module.instruments[i].name.c_str(), module.instruments[i].volume,
-							 module.instruments[i].arpeggio, module.instruments[i].pitch,
-							 module.instruments[i].duty);
+				std::printf (" [%d] %s type=%d vol=%d arp=%d pitch=%d duty=%d patch=%d regs=%02X%02X%02X%02X%02X%02X%02X%02X",
+							 (int) i, module.instruments[i].name.c_str(), module.instruments[i].type,
+							 module.instruments[i].volume, module.instruments[i].arpeggio,
+							 module.instruments[i].pitch, module.instruments[i].duty,
+							 module.instruments[i].vrc7Patch,
+							 module.instruments[i].vrc7Regs[0], module.instruments[i].vrc7Regs[1],
+							 module.instruments[i].vrc7Regs[2], module.instruments[i].vrc7Regs[3],
+							 module.instruments[i].vrc7Regs[4], module.instruments[i].vrc7Regs[5],
+							 module.instruments[i].vrc7Regs[6], module.instruments[i].vrc7Regs[7]);
 			}
 			std::printf ("\n");
 		}

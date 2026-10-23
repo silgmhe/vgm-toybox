@@ -200,9 +200,43 @@ namespace
 			const int index = reader.i32();
 			const int type = reader.u8();
 
+			// CInstrumentVRC7::Store writes a patch number and eight OPLL registers, then the name.
+			// That record is handled here and skipped past the sequence reader below.
+			if (type == 3)				// INST_VRC7
+			{
+				const int patch = reader.i32();
+				std::array<std::uint8_t, 8> regs {};
+
+				for (std::size_t reg = 0; reg < regs.size(); ++reg)
+				{
+					regs[reg] = (std::uint8_t) reader.u8();
+				}
+
+				const std::size_t vrc7NameLength = reader.u32();
+				const std::string vrc7Name = reader.fixedString (vrc7NameLength);
+
+				if (index >= 0 && index < 256)
+				{
+					if ((int) module.instruments.size() <= index)
+					{
+						module.instruments.resize ((std::size_t) index + 1);
+					}
+
+					auto& instrument = module.instruments[(std::size_t) index];
+					instrument.name = vrc7Name;
+					instrument.type = 3;
+					instrument.vrc7Patch = patch;
+					instrument.vrc7Regs = regs;
+				}
+
+				continue;
+			}
+
 			// Only the 2A03 instrument's layout is known, and a record carries no length prefix, so
 			// an unknown type cannot be skipped - stop rather than read the rest as noise.
-			if (type != 1)				// INST_2A03
+			// CInstrumentVRC6 and CInstrumentS5B are sequence instruments like the 2A03's, minus the
+			// DPCM table; only the 2A03 carries that, so the read below is gated on the type.
+			if (type != 1 && type != 2 && type != 6)	// 2A03, VRC6, S5B
 			{
 				break;
 			}
@@ -245,13 +279,15 @@ namespace
 			// CInstrument2A03::Load: sample assignment per octave and note. Version 5 and below
 			// stores two bytes per assignment, later versions a third; version 7 turns the dense
 			// table into a counted list.
+			std::array<std::array<Module::DpcmAssignment, 12>, 8> dpcm {};
+
+			if (type == 1)				// only the 2A03 instrument stores a DPCM table
+			{
 			const int bytesPerAssignment = (block.version > 5) ? 3 : 2;
 
 			// Read rather than skipped: the audio path needs to know which sample a note triggers,
 			// and the table is the only place that says so. The order is octave-major, twelve
 			// notes each, which is the layout 192 bytes of a version 2 instrument accounts for.
-			std::array<std::array<Module::DpcmAssignment, 12>, 8> dpcm {};
-
 			const auto readAssignment = [&reader, bytesPerAssignment, &dpcm] (int octave, int note)
 			{
 				const int sample = reader.u8();
@@ -289,6 +325,8 @@ namespace
 				}
 			}
 
+			}
+
 			const std::size_t nameLength = reader.u32();
 			const std::string name = reader.fixedString (nameLength);
 
@@ -305,6 +343,7 @@ namespace
 				module.instruments[(std::size_t) index].pitch = pitchSequence;
 				module.instruments[(std::size_t) index].duty = dutySequence;
 				module.instruments[(std::size_t) index].dpcm = dpcm;
+				module.instruments[(std::size_t) index].type = type;
 			}
 		}
 	}
