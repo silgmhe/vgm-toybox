@@ -239,7 +239,10 @@ bool loadSongIr (const void* data, std::size_t size, midi::SongIr& out, std::str
 								}
 								else if (entry.note == 13)	// release
 								{
-									state.note = -1;
+									// The 2A03 has no release: the driver silences the channel, which is
+									// a write of level zero. Clearing the state instead left the chip
+									// holding its last volume, so every released note rang on.
+									state.silenced = true;
 								}
 
 								for (const auto& effect : entry.effects)
