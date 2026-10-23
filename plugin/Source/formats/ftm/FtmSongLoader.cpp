@@ -345,10 +345,16 @@ namespace
 			const int index = reader.i32();
 			const int items = reader.i32();
 
-			if (! reader.ok() || channel < 0 || channel >= module.channels || track != 0)
+			if (! reader.ok() || channel < 0 || channel >= module.channels)
 			{
 				break;
 			}
+
+			// Dn-FamiTracker stores an arrangement's tracks one after another, and a module can have
+			// several. The first track is the song; the others are still read so the stream stays
+			// aligned, and then dropped - breaking out here discarded every pattern after them,
+			// which is why a multi-track module came out with half its notes.
+			const bool keep = (track == 0);
 
 			ModulePattern pattern;
 			pattern.channel = channel;
@@ -382,7 +388,10 @@ namespace
 				}
 			}
 
-			module.patterns.push_back (std::move (pattern));
+			if (keep)
+			{
+				module.patterns.push_back (std::move (pattern));
+			}
 		}
 	}
 } // namespace
