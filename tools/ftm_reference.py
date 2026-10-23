@@ -157,7 +157,7 @@ def walk(module):
             if not rows:
                 continue
 
-            notes = [entry for entry in rows if entry[1] != 0]
+            notes = [entry for entry in rows if 1 <= entry[1] <= 12]   # 13 is release, 14 is cut
             for i, (row, note, octave, instrument, volume, effects) in enumerate(notes):
                 row = max(0, min(row, length - 1))   # a row past the pattern is not a position
                 start = base + offsets[row]
