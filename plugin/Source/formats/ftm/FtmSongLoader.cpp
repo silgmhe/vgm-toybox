@@ -646,7 +646,10 @@ bool loadNoteStream (const void* data, std::size_t size, midi::NoteStream& out, 
 			std::vector<const ModuleRow*> notes;
 			for (const auto& row : pattern.rows)
 			{
-				if (row.hasNote())
+				// A row past the pattern length is what a truncated or hand-edited module looks
+				// like. Indexing the offset table with it reads past the end - the independent
+				// reader crashed on exactly this file, which is how the missing guard was found.
+				if (row.hasNote() && row.row >= 0 && row.row < module.patternLength)
 				{
 					notes.push_back (&row);
 				}
