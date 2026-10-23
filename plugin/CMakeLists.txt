@@ -220,6 +220,7 @@ target_sources(VGMToybox PRIVATE
 	Source/chips/OpmDecoder.cpp
 	Source/chips/OpnDecoder.cpp
 	Source/backends/BuiltInBackends.cpp
+	Source/backends/gme/GmeBackend.cpp
 	Source/backends/libvgm/LibvgmBackend.cpp
 	Source/backends/libvgm/MidiSequenceBuilder.cpp
 	Source/backends/libvgm/VgmCommandReader.cpp
@@ -325,6 +326,7 @@ target_compile_definitions(VGMToybox PUBLIC
 target_link_libraries(VGMToybox PRIVATE
 	# libvgm (built by the parent project, see the root CMakeLists.txt)
 	${LIBVGM_TARGETS}
+	gme_nsf
 	juce::juce_audio_processors
 	juce::juce_audio_utils
 	juce::juce_recommended_config_flags
@@ -337,6 +339,7 @@ target_link_libraries(VGMToybox PRIVATE
 #   cmake --build <build dir> --target vgm_mixer_test
 #   <build dir>/plugin/vgm_mixer_test test.vgz 5
 add_executable(vgm_mixer_test EXCLUDE_FROM_ALL
+	Source/backends/gme/GmeBackend.cpp
 	Tests/PlaybackEngineTest.cpp
 	Source/playback/BackendRegistry.cpp
 	Source/playback/PlaybackEngine.cpp
@@ -376,6 +379,7 @@ add_executable(vgm_mixer_test EXCLUDE_FROM_ALL
 	Source/chips/OpmDecoder.cpp
 	Source/chips/OpnDecoder.cpp
 	Source/backends/BuiltInBackends.cpp
+	Source/backends/gme/GmeBackend.cpp
 	Source/backends/libvgm/LibvgmBackend.cpp
 	Source/backends/libvgm/MidiSequenceBuilder.cpp
 	Source/backends/libvgm/VgmCommandReader.cpp
@@ -385,10 +389,9 @@ add_executable(vgm_mixer_test EXCLUDE_FROM_ALL
 	Source/backends/libvgm/LibvgmVgz.cpp
 )
 # --- libgme, used for the NES formats (NSF/NSFE) ---
-# LGPL 2.1, vendored under Source/backends/gme/third_party/libgme with its licence.
-# Only the NSF emulator and the framework it needs are compiled; the other formats in the
-# directory are left out because libvgm already covers them.
-set(GME_DIR "${CMAKE_CURRENT_SOURCE_DIR}/Source/backends/gme/third_party/libgme/gme")
+# Vendored in libs/libgme (LGPL 2.1, its licence ships with it). Only the NSF emulator and the
+# framework it needs are compiled: libvgm already owns every other format in that directory.
+set(GME_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../libs/libgme/gme")
 add_library(gme_nsf STATIC
 	"${GME_DIR}/Nsf_Emu.cpp"
 	"${GME_DIR}/Nes_Cpu.cpp"
@@ -399,24 +402,15 @@ add_library(gme_nsf STATIC
 	"${GME_DIR}/Nes_Fme7_Apu.cpp"
 	"${GME_DIR}/Music_Emu.cpp"
 	"${GME_DIR}/Classic_Emu.cpp"
-	"${GME_DIR}/Blip_Buffer.cpp"
-	"${GME_DIR}/Data_Reader.cpp"
 	"${GME_DIR}/Gme_File.cpp"
-	"${GME_DIR}/Effects_Buffer.cpp"
+	"${GME_DIR}/Blip_Buffer.cpp"
 	"${GME_DIR}/Multi_Buffer.cpp"
+	"${GME_DIR}/Effects_Buffer.cpp"
+	"${GME_DIR}/Data_Reader.cpp"
 )
 target_include_directories(gme_nsf PUBLIC "${GME_DIR}")
 target_compile_features(gme_nsf PRIVATE cxx_std_14)
 
-# --- console probe for libgme's NSF player (not built by default) ---
-#   cmake --build <build dir> --target vgm_gme_probe
-#   <build dir>/plugin/vgm_gme_probe <file.nsf> <seconds> [out.wav]
-add_executable(vgm_gme_probe EXCLUDE_FROM_ALL
-	Tests/GmeProbe.cpp
-)
-target_link_libraries(vgm_gme_probe PRIVATE gme_nsf)
-target_include_directories(vgm_gme_probe PRIVATE Source)
-target_compile_features(vgm_gme_probe PRIVATE cxx_std_17)
 
 # --- console test for the chip decoders (not built by default) ---
 # Register writes in, notes out. Links Source/chips and nothing else - no libvgm, no JUCE.
@@ -583,6 +577,7 @@ target_compile_definitions(vgm_mixer_test PRIVATE
 	JUCE_STANDALONE_APPLICATION=1)
 target_link_libraries(vgm_mixer_test PRIVATE
 	${LIBVGM_TARGETS}
+	gme_nsf
 	juce::juce_core
 	juce::juce_audio_basics
 	# PlaybackEngine.cpp compiles the MessageManager call for asynchronous loads (review M-1)
