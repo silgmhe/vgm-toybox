@@ -563,6 +563,127 @@ void testFtmNoteCut (void)
 	}
 }
 
+namespace
+{
+	/** The container's writers, shared by the module tests so a new case does not carry its own
+		copy of them. The older cases still have theirs inline; they are not worth rewriting. */
+	void put32 (std::vector<std::uint8_t>& out, std::uint32_t value)
+	{
+		for (int i = 0; i < 4; ++i)
+		{
+			out.push_back ((std::uint8_t) ((value >> (8 * i)) & 0xFF));
+		}
+	}
+
+	void putText (std::vector<std::uint8_t>& out, const char* text)
+	{
+		for (const char* c = text; *c != '\0'; ++c)
+		{
+			out.push_back ((std::uint8_t) *c);
+		}
+	}
+
+	void putBlock (std::vector<std::uint8_t>& out, const char* id, std::uint32_t version,
+				   const std::vector<std::uint8_t>& payload)
+	{
+		char padded[16] = {};
+		for (int i = 0; i < 16 && id[i] != '\0'; ++i)
+		{
+			padded[i] = id[i];
+		}
+
+		out.insert (out.end(), padded, padded + 16);
+		put32 (out, version);
+		put32 (out, (std::uint32_t) payload.size());
+		out.insert (out.end(), payload.begin(), payload.end());
+	}
+}
+
+/** The volume envelope is the part of an instrument MIDI can hear.
+
+	FamiTracker stores a level as 0..15, twice: in the volume column and as the first item of the
+	instrument's volume sequence. Neither is a MIDI velocity, and copying one through unchanged made
+	every note in all seven real modules play at velocity 0..15 - audible evidence of nothing, which
+	is why this test asserts the scaled number and not merely that a note exists. */
+
+void testFtmVolumeEnvelope (void)
+{
+	std::vector<std::uint8_t> image;
+	putText (image, "FamiTracker Module");
+	put32 (image, 0x0420);
+	putBlock (image, "PARAMS", 3, { 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 });
+	putBlock (image, "HEADER", 3, { 0x00, 'T', 0x00, 0x00, 0x00 });
+
+	{	// one frame of sixteen rows
+		std::vector<std::uint8_t> payload;
+		put32 (payload, 1);
+		put32 (payload, 6);
+		put32 (payload, 150);
+		put32 (payload, 16);
+		payload.push_back (0);
+		putBlock (image, "FRAMES", 3, payload);
+	}
+
+	{	// instrument 1: a 2A03 whose volume sequence is enabled and points at sequence 0
+		std::vector<std::uint8_t> payload;
+		put32 (payload, 1);			// instrument count
+		put32 (payload, 1);			// index: 0 means "no instrument", so a real one starts at 1
+		payload.push_back (1);		// INST_2A03
+		put32 (payload, 5);			// sequence count, which the reader then forces to five
+
+		for (int type = 0; type < 5; ++type)
+		{
+			payload.push_back (type == 0 ? 1 : 0);		// only the volume sequence is enabled
+			payload.push_back (0);						// and it is sequence 0
+		}
+
+		// the DPCM table: dense below version 7, eight octaves of twelve notes, two bytes each
+		payload.resize (payload.size() + (std::size_t) (8 * 12 * 2), 0);
+
+		put32 (payload, 6);
+		putText (payload, "Level8");
+		putBlock (image, "INSTRUMENTS", 2, payload);
+	}
+
+	{	// one volume sequence holding one item: level 8
+		std::vector<std::uint8_t> payload;
+		put32 (payload, 1);			// sequence count
+		put32 (payload, 0);			// sequence index
+		put32 (payload, 0);			// SEQ_VOLUME
+		payload.push_back (1);		// one item
+		put32 (payload, 0);			// loop point
+		payload.push_back (8);
+		putBlock (image, "SEQUENCES", 5, payload);
+	}
+
+	{	// C-4 at row 0 on instrument 1, with no volume column
+		std::vector<std::uint8_t> body;
+		put32 (body, 0); put32 (body, 0); put32 (body, 0); put32 (body, 1);
+		put32 (body, 0);
+		body.push_back (1);			// C
+		body.push_back (4);			// octave 4
+		body.push_back (1);			// instrument
+		body.push_back (0);			// volume column empty
+		body.push_back (0);
+		body.push_back (0);
+		putBlock (image, "PATTERNS", 3, body);
+	}
+
+	putText (image, "END");
+
+	toybox::midi::NoteStream stream;
+	std::string error;
+	check (toybox::formats::ftm::loadNoteStream (image.data(), image.size(), stream, error),
+		   "the module with an instrument loads");
+
+	check (stream.notes.size() == 1, "the instrumented row produces one note");
+	if (stream.notes.size() == 1)
+	{
+		check (stream.notes[0].note.velocity == 68,
+			   "level 8 of 15 becomes velocity 68, not velocity 8");
+	}
+}
+
 void runFormatTests (void)
 {
 	testVgmLoaderIr();
@@ -570,6 +691,7 @@ void runFormatTests (void)
 	testFtmSkipEffect();
 	testFtmNoteCut();
 	testFtmPortamento();
+	testFtmVolumeEnvelope();
 }
 
 } // namespace toybox::test
