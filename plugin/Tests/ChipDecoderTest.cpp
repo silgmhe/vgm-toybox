@@ -32,6 +32,7 @@
 #include "formats/ftm/FtmSongIr.h"
 #include "backends/nes/NsfApuChip.h"
 #include "backends/nes/NsfVrc6Chip.h"
+#include "backends/nes/NsfVrc7Chip.h"
 #include "formats/ftm/FtmSongLoader.h"
 #include "formats/vgm/VgmSongLoader.h"
 #include "chips/Msm5232Decoder.h"
@@ -4384,12 +4385,17 @@ namespace
 			// sound, the backend plan holds and the expansion chips are only a mapping away.
 			toybox::backends::nes::NsfApuChip apu (44100.0);
 			std::unique_ptr<toybox::backends::nes::NsfVrc6Chip> vrc6;
+			std::unique_ptr<toybox::backends::nes::NsfVrc7Chip> vrc7;
 
 			for (const auto& chip : song.chips)
 			{
 				if (chip.kind == toybox::midi::ChipKind::nesVrc6)
 				{
 					vrc6.reset (new toybox::backends::nes::NsfVrc6Chip (44100.0));
+				}
+				else if (chip.kind == toybox::midi::ChipKind::nesVrc7)
+				{
+					vrc7.reset (new toybox::backends::nes::NsfVrc7Chip (44100.0));
 				}
 			}
 
@@ -4402,6 +4408,7 @@ namespace
 
 			std::size_t next = 0;
 			int vrc6Writes = 0;
+			int vrc7Writes = 0;
 			double peak = 0.0;
 			double sumSquares = 0.0;
 			std::int64_t counted = 0;
@@ -4423,6 +4430,11 @@ namespace
 						vrc6->write (((int) write.port << 8) | write.reg, write.value & 0xFF);
 						++vrc6Writes;
 					}
+					else if (vrc7 != nullptr)
+					{
+						vrc7->write (((int) write.port << 8) | write.reg, write.value & 0xFF);
+						++vrc7Writes;
+					}
 
 					++next;
 				}
@@ -4434,6 +4446,11 @@ namespace
 				if (vrc6 != nullptr)
 				{
 					vrc6->render (left.data(), right.data(), blockSize);
+				}
+
+				if (vrc7 != nullptr)
+				{
+					vrc7->render (left.data(), right.data(), blockSize);
 				}
 
 				for (int i = 0; i < blockSize; ++i)
@@ -4452,9 +4469,13 @@ namespace
 			double soloPeak = 0.0;
 			double soloRms = 0.0;
 
-			if (vrc6 != nullptr)
+			if (vrc6 != nullptr || vrc7 != nullptr)
 			{
-				toybox::backends::nes::NsfVrc6Chip solo (44100.0);
+				// The solo pass drives a fresh copy of the expansion chip so the mix cannot hide a
+				// silent part behind a healthy total.
+				toybox::backends::nes::NsfVrc6Chip soloVrc6 (44100.0);
+				toybox::backends::nes::NsfVrc7Chip soloVrc7 (44100.0);
+				const bool useVrc7 = (vrc7 != nullptr);
 				std::vector<float> soloLeft ((std::size_t) blockSize, 0.0f);
 				std::vector<float> soloRight ((std::size_t) blockSize, 0.0f);
 
@@ -4472,7 +4493,16 @@ namespace
 
 						if (write.deviceId == 1)
 						{
-							solo.write (((int) write.port << 8) | write.reg, write.value & 0xFF);
+							const int address = ((int) write.port << 8) | write.reg;
+
+							if (useVrc7)
+							{
+								soloVrc7.write (address, write.value & 0xFF);
+							}
+							else
+							{
+								soloVrc6.write (address, write.value & 0xFF);
+							}
 						}
 
 						++index;
@@ -4480,7 +4510,14 @@ namespace
 
 					std::fill (soloLeft.begin(), soloLeft.end(), 0.0f);
 					std::fill (soloRight.begin(), soloRight.end(), 0.0f);
-					solo.render (soloLeft.data(), soloRight.data(), blockSize);
+					if (useVrc7)
+					{
+						soloVrc7.render (soloLeft.data(), soloRight.data(), blockSize);
+					}
+					else
+					{
+						soloVrc6.render (soloLeft.data(), soloRight.data(), blockSize);
+					}
 
 					for (int i = 0; i < blockSize; ++i)
 					{
@@ -4494,9 +4531,9 @@ namespace
 				soloRms = frames > 0 ? std::sqrt (squares / (double) frames) : 0.0;
 			}
 
-			std::printf ("ftm-nsf %s chips=%d writes=%d vrc6writes=%d peak=%.4f rms=%.4f vrc6peak=%.4f vrc6rms=%.4f\n",
-						 argv[2], (int) song.chips.size(), (int) song.writes.size(), vrc6Writes, peak,
-						 rms, soloPeak, soloRms);
+			std::printf ("ftm-nsf %s chips=%d writes=%d expwrites=%d peak=%.4f rms=%.4f exppeak=%.4f exprms=%.4f\n",
+						 argv[2], (int) song.chips.size(), (int) song.writes.size(),
+						 vrc6Writes + vrc7Writes, peak, rms, soloPeak, soloRms);
 			return 0;
 		}
 

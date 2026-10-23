@@ -442,9 +442,12 @@ set(NSFPLAY_DIR "${CMAKE_CURRENT_SOURCE_DIR}/Source/backends/nes/third_party/nsf
 target_sources(vgm_chip_test PRIVATE
 	Source/backends/nes/NsfApuChip.cpp
 	Source/backends/nes/NsfVrc6Chip.cpp
+	Source/backends/nes/NsfVrc7Chip.cpp
 	Source/backends/nes/NsfPlayStubs.cpp
 	"${NSFPLAY_DIR}/xgm/devices/Sound/nes_apu.cpp"
 	"${NSFPLAY_DIR}/xgm/devices/Sound/nes_vrc6.cpp"
+	"${NSFPLAY_DIR}/xgm/devices/Sound/nes_vrc7.cpp"
+	"${NSFPLAY_DIR}/xgm/devices/Sound/legacy/emu2413.c"
 	"${NSFPLAY_DIR}/xgm/devices/Sound/nes_dmc.cpp"
 	"${NSFPLAY_DIR}/xgm/devices/CPU/nes_cpu.cpp"
 )

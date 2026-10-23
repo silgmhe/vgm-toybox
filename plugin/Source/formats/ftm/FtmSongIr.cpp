@@ -85,6 +85,21 @@ namespace
 	public:
 		explicit Emitter (midi::SongIr& song) : ir (song) {}
 
+		/** Writes without the unchanged-value check. The VRC7 is addressed through a select port: the
+			register byte 0x30 means "select 0x30" in one write and "data for 0x30" in the next, so
+			comparing values by address would suppress real writes. */
+		void writeAlways (int device, std::uint8_t reg, int value, std::uint32_t time, int port = 0)
+		{
+			chips::RegisterWrite entry;
+			entry.deviceId = (std::uint32_t) device;
+			entry.reg = reg;
+			entry.port = (std::uint8_t) port;
+			entry.value = (std::uint16_t) (value & 0xFF);
+			entry.sampleTime = time;
+			ir.writes.push_back (entry);
+			ir.totalTicks = std::max (ir.totalTicks, time);
+		}
+
 		void write (int device, std::uint8_t reg, int value, std::uint32_t time, int port = 0)
 		{
 			const auto key = std::make_tuple (device, port, reg);
@@ -150,10 +165,24 @@ bool loadSongIr (const void* data, std::size_t size, midi::SongIr& out, std::str
 	const bool hasVrc6 = std::find_if (module.channelTypes.begin(), module.channelTypes.end(),
                                        [] (int type) { return type >= 5 && type <= 7; })
                          != module.channelTypes.end();
+	const bool hasVrc7 = std::find_if (module.channelTypes.begin(), module.channelTypes.end(),
+                                       [] (int type) { return type >= 20 && type <= 25; })
+                         != module.channelTypes.end();
+
 	if (hasVrc6)
 	{
 		midi::ChipSlot expansion;
 		expansion.kind = midi::ChipKind::nesVrc6;
+		expansion.clockHz = apuClock;
+		out.chips.push_back (expansion);
+	}
+	else if (hasVrc7)
+	{
+		// An OPLL: the FM clock the core is given is the CPU clock, and the pitch register is
+		// nine bits of f-number plus three of block, which is why the period arithmetic below
+		// works in steps of two-to-the-block rather than in CPU cycles.
+		midi::ChipSlot expansion;
+		expansion.kind = midi::ChipKind::nesVrc7;
 		expansion.clockHz = apuClock;
 		out.chips.push_back (expansion);
 	}
@@ -165,6 +194,10 @@ bool loadSongIr (const void* data, std::size_t size, midi::SongIr& out, std::str
 	// status byte is therefore kept here and written whole, or a four-channel module would end up
 	// with whichever channel wrote last and nothing else.
 	std::uint8_t statusMask = 0;
+
+	// Which instrument's custom OPLL registers are loaded on each VRC7 voice, so they are written
+	// when the patch changes rather than on every frame.
+	int customPatchChannel[6] = { -1, -1, -1, -1, -1, -1 };
 
 	// DPCM samples have to be laid out before they can be addressed, and $4012 counts 64-byte units
 	// from $8000 - the base a VGM data block is loaded at. Each sample therefore starts on a
@@ -536,6 +569,71 @@ bool loadSongIr (const void* data, std::size_t size, midi::SongIr& out, std::str
 						emitter.write (1, (std::uint8_t) ((base + 2) & 0xFF),
 									   0x80 | ((period >> 8) & 0x0F), when,
 									   (int) ((base + 2) >> 8));
+					}
+
+					else if (type >= 20 && type <= 25)
+					{
+						// VRC7: six OPLL voices. The f-number is chosen by block, so the loop below
+						// walks the blocks until the number fits in nine bits - the same relation the
+						// core inverts when it reads the register back.
+						const int voice = type - 20;
+						const double frequency = 440.0 * std::pow (2.0, (pitch - 69) / 12.0);
+
+						int block = 0;
+						int fnum = 0;
+						for (; block < 7; ++block)
+						{
+							const double candidate = frequency * 524288.0
+													 / ((double) apuClock * (double) (1 << block));
+							fnum = (int) std::lround (candidate);
+							if (fnum <= 511)
+							{
+								break;
+							}
+						}
+
+						const int patch = (state.instrument > 0
+										   && state.instrument < (int) module.instruments.size())
+											  ? module.instruments[(std::size_t) state.instrument].vrc7Patch
+											  : 0;
+
+						// A custom patch is eight registers written once per channel; a preset is the
+						// high nibble of 0x30 and needs no registers at all.
+						if (patch == 0 && state.instrument > 0
+							&& state.instrument < (int) module.instruments.size())
+						{
+							const auto& regs =
+								module.instruments[(std::size_t) state.instrument].vrc7Regs;
+
+							bool anyCustom = false;
+							for (const auto value : regs)
+							{
+								anyCustom = anyCustom || (value != 0);
+							}
+
+							if (anyCustom && customPatchChannel[voice] != state.instrument)
+							{
+								for (int reg = 0; reg < 8; ++reg)
+								{
+									emitter.writeAlways (1, 0x10, reg, when, 0x90);
+									emitter.writeAlways (1, 0x30, regs[(std::size_t) reg], when, 0x90);
+								}
+
+								customPatchChannel[voice] = state.instrument;
+							}
+						}
+
+						const int voiceLevel = state.silenced ? 15 : (15 - (level & 0x0F));
+						const int key = state.silenced ? 0x00 : 0x30;		// note on | sustain
+
+						emitter.writeAlways (1, 0x10, 0x10 + voice, when, 0x90);
+						emitter.writeAlways (1, 0x30, fnum & 0xFF, when, 0x90);
+
+						emitter.writeAlways (1, 0x10, 0x30 + voice, when, 0x90);
+						emitter.writeAlways (1, 0x30, ((patch & 0x0F) << 4) | voiceLevel, when, 0x90);
+
+						emitter.writeAlways (1, 0x10, 0x20 + voice, when, 0x90);
+						emitter.writeAlways (1, 0x30, ((fnum >> 8) & 1) | (block << 1) | key, when, 0x90);
 					}
 
 					++state.macroStep;
