@@ -58,15 +58,10 @@ namespace
 
 		int noteFor (std::uint32_t pitch, int, int* finePitch) const override
 		{
-			if (pitch == 0 || melodic == nullptr || ! *melodic || cycleLength == nullptr
-				|| *cycleLength <= 0.0)
-			{
-				*finePitch = 0;
-				return 60;		// a drum: the C4 trigger
-			}
-
-			// L1: the step register against the chip's nominal rate, never the sample's bytes
-			return quantisePlaybackRate ((double) pitch * bytesPerSecondPerStep, rootRate, finePitch);
+			const bool measured = pitch != 0 && melodic != nullptr && *melodic
+						&& cycleLength != nullptr && *cycleLength > 0.0;
+			return noteFromPlaybackRate ((double) pitch * bytesPerSecondPerStep, rootRate, measured, 60,
+									 finePitch);
 		}
 
 	private:

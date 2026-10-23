@@ -125,6 +125,57 @@ inline int quantisePlaybackRate (double rate, double rootRate, int* finePitch)
 	return quantiseFrequency (kMiddleCHz * rate / rootRate, finePitch);
 }
 
+/** The note for a sample that carries its own pitch: the cycle is the only thing that defines it.
+
+	Two chips are in this family - OKIM6295 has one fixed DAC rate and the ES5503 walks a table - and
+	neither has a transposition to report: what the chip plays is whatever the sample's own period
+	says. `oneShotNote` is returned when there is nothing to measure, because "no period" is a drum,
+	not a silent channel.
+
+	The guard is the point of this function: a decoder that forgets `melodic` turns a drum into a
+	wrong note, and only that chip would show it. */
+inline int noteFromSampleCycle (double rate, double cycleLength, bool melodic, int oneShotNote,
+								int* finePitch)
+{
+	if (finePitch != nullptr)
+	{
+		*finePitch = 0;
+	}
+
+	// a rate of zero is silence, not a drum: quantiseFrequency turns it into -1
+	if (! melodic || cycleLength <= 0.0)
+	{
+		return oneShotNote;
+	}
+
+	return quantiseFrequency (rate / cycleLength, finePitch);
+}
+
+/** The note for a recorded sample: the transposition its rate register asks for (L1).
+
+	Six chips describe a voice this way - the rate is the register, the reference is the chip's
+	nominal sample rate, and the sample's own period rides beside it as the root correction rather
+	than dividing it here. `measured` is the decoder's verdict on whether the sample is melodic at
+	all; when it is false the voice is a drum and reports `oneShotNote`.
+
+	This and `noteFromSampleCycle` are the two shapes the sampled decoders had been writing by hand. */
+inline int noteFromPlaybackRate (double rate, double referenceRate, bool measured, int oneShotNote,
+								 int* finePitch)
+{
+	if (finePitch != nullptr)
+	{
+		*finePitch = 0;
+	}
+
+	// a rate of zero stays silence: quantisePlaybackRate returns -1 for it
+	if (! measured)
+	{
+		return oneShotNote;
+	}
+
+	return quantisePlaybackRate (rate, referenceRate, finePitch);
+}
+
 /** The rate an 8-bit PCM sample is taken to be recorded at when its chip names none - the reference
 	the reference implementation divides a playback rate by before quantising it (`fSample / 8000`
 	in MDPlayer's ADPCM pitch, `searchSegaPCMNote`), and the one the chips with no documented rate of

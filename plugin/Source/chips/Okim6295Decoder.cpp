@@ -62,17 +62,7 @@ namespace toybox::chips
 			int noteFor (std::uint32_t, int, int* finePitch) const override
 			{
 				const Voice& state = impl->voices[voice];
-				if (! state.melodic || state.cycleLength <= 0.0)
-				{
-					if (finePitch != nullptr)
-					{
-						*finePitch = 0;
-					}
-
-					return kOneShotNote;
-				}
-
-				return quantiseFrequency (rate / state.cycleLength, finePitch);
+			return noteFromSampleCycle (rate, state.cycleLength, state.melodic, kOneShotNote, finePitch);
 			}
 
 		private:

@@ -80,14 +80,10 @@ namespace
 
 		int noteFor (std::uint32_t rate, int, int* finePitch) const override
 		{
-			if (rate >= 0x100 || melodic == nullptr || ! *melodic || cycleLength == nullptr
-				|| *cycleLength <= 0.0)
-			{
-				*finePitch = 0;
-				return 60;		// a drum: the C4 trigger
-			}
-
-			return quantisePlaybackRate (byteClock / (double) (0x100 - rate), kReferenceRate, finePitch);
+			const bool measured = rate < 0x100 && melodic != nullptr && *melodic
+						&& cycleLength != nullptr && *cycleLength > 0.0;
+			return noteFromPlaybackRate (byteClock / (double) (0x100 - rate), kReferenceRate, measured, 60,
+									 finePitch);
 		}
 
 	private:

@@ -23,6 +23,7 @@
 #include "chips/QSoundDecoder.h"
 #include "chips/Es5503Decoder.h"
 #include "chips/MikeyDecoder.h"
+#include "chips/Pitch.h"
 #include "formats/vgm/VgmSongLoader.h"
 #include "chips/Msm5232Decoder.h"
 #include "chips/K005289Decoder.h"
@@ -3857,6 +3858,38 @@ namespace
 	/** MSM5232: the register is not a divider but a key index into the chip's eighty-eight-entry
 		ROM, and eighty-eight entries is the span from A0, so the index is the note: 21 + index. */
 
+	/** H-3: the two shapes the sampled decoders kept writing by hand. The point of the helpers is
+		that "not melodic" and "silence" are different answers - a drum is a C4 trigger, a stopped
+		voice is no note at all - so both are pinned here. */
+
+	void testSampledNoteHelpers (void)
+	{
+		int fine = 0;
+
+		// 1000 bytes a second over a two-byte cycle is 500 Hz: B4
+		check (toybox::chips::noteFromSampleCycle (1000.0, 2.0, true, 60, &fine) == 71,
+			   "a measured cycle is the whole pitch");
+
+		check (toybox::chips::noteFromSampleCycle (1000.0, 2.0, false, 60, &fine) == 60,
+			   "an unmelodic sample is the one-shot trigger, not a note");
+
+		check (toybox::chips::noteFromSampleCycle (0.0, 2.0, true, 60, &fine) == -1,
+			   "a stopped voice is silent, not a drum");
+
+		// the register's own rate against the chip's reference: unity is middle C
+		check (toybox::chips::noteFromPlaybackRate (8000.0, 8000.0, true, 60, &fine) == 60,
+			   "unity playback rate is middle C");
+
+		check (toybox::chips::noteFromPlaybackRate (16000.0, 8000.0, true, 60, &fine) == 72,
+			   "twice the reference rate is an octave up");
+
+		check (toybox::chips::noteFromPlaybackRate (8000.0, 8000.0, false, 60, &fine) == 60,
+			   "an unmelodic sample reports the trigger");
+
+		check (toybox::chips::noteFromPlaybackRate (0.0, 8000.0, true, 60, &fine) == -1,
+			   "a zero rate stays silent");
+	}
+
 	/** M-1: the two pitch camps. A decoder must fill one of them; a channel that fills neither is
 		silent in MIDI with nothing to show for it, which is the failure this contract exists to catch. */
 
@@ -4524,6 +4557,8 @@ namespace
 	testGa20KeyOff();
 	testGa20Percussion();
 	testGa20AddressUnit();
+
+	testSampledNoteHelpers();
 
 	testPitchFieldsContract();
 

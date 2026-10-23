@@ -73,25 +73,9 @@ namespace
 		{
 			const double rate = (double) period * unitsPerSecondPerStep;
 
-			if (melodic != nullptr && *melodic && cycleLength != nullptr && *cycleLength > 0.0)
-			{
-				// L1: the transposition the rate register asks for, never the sample's bytes
-				return quantisePlaybackRate (rate, rootRate, finePitch);
-			}
-
-			if (rom == nullptr || rom->empty())
-			{
-				// no ROM: the register against the chip's own rate, the top of the register being
-				// one unit per output sample - middle C
-				return quantisePlaybackRate (rate, rootRate, finePitch);
-			}
-
-			if (finePitch != nullptr)
-			{
-				*finePitch = 0;
-			}
-
-			return 60;		// a drum: the one-shot trigger, not a pitch
+const bool measured = (rom == nullptr || rom->empty())
+						|| (melodic != nullptr && *melodic && cycleLength != nullptr && *cycleLength > 0.0);
+			return noteFromPlaybackRate (rate, rootRate, measured, 60, finePitch);
 		}
 
 	private:

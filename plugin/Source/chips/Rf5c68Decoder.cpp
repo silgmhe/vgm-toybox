@@ -294,13 +294,9 @@ struct Rf5c68Decoder::Impl
 			*finePitch = 0;
 
 			const Channel& voice = impl.channels[channel];
-			if (step == 0 || ! voice.melodic || voice.cycleLength <= 0.0)
-			{
-				return 60;		// a drum (or silence): the C4 trigger
-			}
-
-			// L1: the step against one byte per sample, the register's own unity
-			return quantisePlaybackRate (impl.bytesPerSecond (voice), impl.chipRate(), finePitch);
+			const bool measured = step != 0 && voice.melodic && voice.cycleLength > 0.0;
+			return noteFromPlaybackRate (impl.bytesPerSecond (voice), impl.chipRate(), measured, 60,
+									 finePitch);
 		}
 
 	private:
