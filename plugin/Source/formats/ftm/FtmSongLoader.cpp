@@ -451,6 +451,30 @@ bool loadNoteStream (const void* data, std::size_t size, midi::NoteStream& out, 
 				event.pitchSource = chips::PitchSource::registerExact;	// named, not inferred
 
 				out.notes.push_back ({ track, event });
+
+				// 0xy arpeggio: the pitch steps through +0, +x, +y semitones, one step per row.
+				// A row is `speed` frames on the chip, so this is coarser than the hardware - it is
+				// the closest a note-per-row transcription gets without splitting a note into ticks.
+				for (const auto& effect : note.effects)
+				{
+					if (effect.first != 10)
+					{
+						continue;
+					}
+
+					const int steps[3] = { 0, (effect.second >> 4) & 0x0F, effect.second & 0x0F };
+					std::size_t step = 1;
+
+					for (std::uint32_t row = event.startSample + 1; row < event.endSample; ++row)
+					{
+						chips::PitchEvent bend;
+						bend.sampleTime = row;
+						bend.logicalChannel = channel;
+						bend.cents = (std::int16_t) (steps[step % 3] * 100);
+						out.bends.push_back ({ track, bend });
+						++step;
+					}
+				}
 			}
 
 			// Structure effects (0.5.0 numbering): 2 = jump, 3 = skip, 4 = halt.

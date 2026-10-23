@@ -3960,8 +3960,8 @@ namespace
 			payload.push_back (4);		// octave 4
 			payload.push_back (1);		// instrument
 			payload.push_back (15);		// volume
-			payload.push_back (0);		// effect number
-			payload.push_back (0);		// effect parameter
+			payload.push_back (10);		// effect 10 = arpeggio, 0x47 = +4 and +7 semitones
+			payload.push_back (0x47);
 			row32 (16);			// row 16
 			payload.push_back (12);		// B
 			payload.push_back (4);
@@ -3999,6 +3999,15 @@ namespace
 			   "an authored note is not an inference");
 		check (first.track == 0 && stream.tracks[0].name == "Pulse 1",
 			   "the track is the module channel, named");
+
+		// 0x47 steps the first note +4 and +7 semitones: rows 1..15 of a 16-row note
+		check (stream.bends.size() == 15, "arpeggio bends once per row inside the note");
+		if (stream.bends.size() == 15)
+		{
+			check (stream.bends[0].bend.cents == 400, "+4 semitones on the first step");
+			check (stream.bends[1].bend.cents == 700, "+7 on the second");
+			check (stream.bends[2].bend.cents == 0, "and back to the note on the third");
+		}
 	}
 
 	/** The order list is walked, not played straight through. A `Dxx` on the first frame must skip
