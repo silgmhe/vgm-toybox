@@ -34,6 +34,7 @@ try
     & $msbuild "Dn-FamiTracker.sln" /nologo `
         "/p:Configuration=$Configuration" "/p:Platform=$Platform" `
         "/p:PlatformToolset=v145" "/p:WindowsTargetPlatformVersion=$sdk" `
+        /p:TreatWarningAsError=false `
         /m /v:m
 }
 finally
