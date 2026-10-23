@@ -53,6 +53,30 @@ public:
 
 	bool isReady (void) const { return emu != nullptr; }
 
+	/** The five oscillators a 2A03 has, in libgme's order: two squares, triangle, noise, DMC. */
+	static constexpr int oscCount = 5;
+
+	/** libgme gives each oscillator its own output, and NULL mutes it. Muting is one-way through
+		that call, so a player is built for a single track and never restored: the core asks for
+		one player per track, which is what IsolationMode::multiInstance means here. */
+	void isolateTo (int index)
+	{
+		if (emu == nullptr || soloIndex >= 0 || index < 0 || index >= oscCount)
+		{
+			return;
+		}
+
+		soloIndex = index;
+
+		for (int i = 0; i < oscCount; ++i)
+		{
+			if (i != index)
+			{
+				emu->apu_()->osc_output (i, nullptr);
+			}
+		}
+	}
+
 	void start (void) override
 	{
 		if (emu != nullptr)
@@ -84,8 +108,15 @@ public:
 		return true;
 	}
 	void setTimeline (int, double) override {}
-	void setTrackAudible (playback::TrackId, bool) override {}
 	void setChipAudible (playback::DeviceId, bool) override {}
+
+	void setTrackAudible (playback::TrackId track, bool audible) override
+	{
+		if (audible && track >= 1 && track <= (playback::TrackId) oscCount)
+		{
+			isolateTo ((int) track - 1);
+		}
+	}
 
 	int render (float* left, float* right, int numSamples) override
 	{
@@ -137,6 +168,7 @@ private:
 	std::vector<short> scratch;
 	double seconds = 0.0;
 	std::atomic<bool> finished { false };
+	int soloIndex = -1;
 };
 
 class GmeSongInstance final : public playback::ISongInstance
@@ -181,8 +213,19 @@ public:
 		info_.chips.push_back (playback::ChipInfo { "2A03", "libgme", 0 });
 
 		tracks_.clear();
-		tracks_.push_back (playback::TrackInfo { kSingleTrack, 0, 0, -1, false, "All", "2A03",
-												 playback::MidiCapability::unavailable });
+
+		// One track per oscillator. libgme can point each of them at its own output, which is the
+		// whole basis of isolating them; the core provides the gain and pan.
+		static const char* const names[] = { "Pulse 1", "Pulse 2", "Triangle", "Noise", "DMC" };
+
+		for (int i = 0; i < 5; ++i)
+		{
+			tracks_.push_back (playback::TrackInfo { (playback::TrackId) (i + 1), 0, 0, i, true,
+													 names[i], "2A03",
+													 i < 2 ? playback::MidiCapability::melodic
+														   : playback::MidiCapability::unavailable });
+		}
+
 		return true;
 	}
 
@@ -197,7 +240,7 @@ public:
 		caps.canFade = false;
 		caps.hasLoopPoint = false;
 		caps.canMuteChips = false;
-		caps.isolation = playback::IsolationMode::none;
+		caps.isolation = playback::IsolationMode::multiInstance;
 		caps.rendersAtHostRate = true;
 		caps.nativeSampleRate = 0.0;
 		return caps;
