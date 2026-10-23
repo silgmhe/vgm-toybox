@@ -64,6 +64,12 @@ public:
 	// driver makes. Two moments with the same hash are, as far as the music is concerned,
 	// the same moment - which is how a loop point is found for a program that never ends.
 	unsigned long reg_hash_() const { return regHash; }
+
+	// Added for VGMToybox: some NSF files use an expansion chip without declaring it
+	// in the header. The host detects the writes and forces the flag before loading.
+	void force_chip_flags_ (int flags) { forced_flags = flags; }
+	// Writes seen in the VRC6 range, whether or not the chip was created.
+	int vrc6_writes_() const { return vrc6Writes; }
 protected:
 	blargg_err_t track_info_( track_info_t*, int track ) const;
 	blargg_err_t load_( Data_Reader& );
@@ -110,6 +116,8 @@ private:
 	
 	header_t header_;
 	unsigned long regHash = 0;
+	int forced_flags = -1;
+	int vrc6Writes = 0;
 	
 	enum { sram_addr = 0x6000 };
 	byte sram [0x2000];

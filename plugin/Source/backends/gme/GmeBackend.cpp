@@ -161,9 +161,14 @@ juce::String unsupportedChipName (const NsfChips& chips)
 constexpr playback::TrackId kSingleTrack = 1;
 
 std::unique_ptr<Nsf_Emu> makeEmulator (const void* data, std::size_t size, long sampleRate,
-									   juce::String& errorMessage)
+									   juce::String& errorMessage, int forceFlags = -1)
 {
 	auto emulator = std::make_unique<Nsf_Emu>();
+
+	if (forceFlags >= 0)
+	{
+		emulator->force_chip_flags_ (forceFlags);
+	}
 
 	if (emulator->set_sample_rate (sampleRate) != nullptr)
 	{
@@ -365,6 +370,37 @@ public:
 			return false;
 		}
 
+		int flags = (int) readNsfChips (bytes).flags;
+
+		// Some files use the VRC6 without declaring it: fod_snowburnb.nsf writes - with
+		// chip_flags 0x00, and libgme - which trusts the header - never creates the chip and drops
+		// every one of those writes. Two seconds of the driver settles whether it is used.
+		if ((flags & 0x01) == 0)
+		{
+			std::vector<short> probe ((std::size_t) 735 * 2, 0);
+			emulator->start_track (0);
+
+			for (int frame = 0; frame < 120; ++frame)
+			{
+				if (emulator->play (735 * 2, probe.data()) != nullptr)
+				{
+					break;
+				}
+			}
+
+			if (emulator->vrc6_writes_() > 0)
+			{
+				flags |= 0x01;
+
+				auto forced = makeEmulator (bytes.data(), bytes.size(), (long) rate, errorMessage, 0x01);
+
+				if (forced != nullptr)
+				{
+					emulator = std::move (forced);
+				}
+			}
+		}
+
 		// One pass through the song to find where it repeats: the only way to get a length out of
 		// an NSF, whose header has none and whose driver never reports an end.
 		const LoopPoint loop = kDetectLoop ? findLoop (*emulator, rate) : LoopPoint {};
@@ -398,7 +434,8 @@ public:
 		info_.chips.push_back (playback::ChipInfo { "2A03", "libgme", 0 });
 
 		// The header says which expansion the driver expects; libgme emulates three of them.
-		const auto chips = readNsfChips (bytes);
+		NsfChips chips = readNsfChips (bytes);
+		chips.flags = (unsigned char) flags;
 
 		if (chips.has (0x01)) { info_.chips.push_back (playback::ChipInfo { "VRC6", "libgme", 1 }); }
 		if (chips.has (0x10)) { info_.chips.push_back (playback::ChipInfo { "N163", "libgme", 1 }); }

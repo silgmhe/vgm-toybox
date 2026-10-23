@@ -159,6 +159,9 @@ void Nsf_Emu::set_tempo_( double t )
 
 blargg_err_t Nsf_Emu::init_sound()
 {
+	if ( forced_flags >= 0 )
+		header_.chip_flags = forced_flags;
+
 	if ( header_.chip_flags & ~(namco_flag | vrc6_flag | fme7_flag) )
 		set_warning( "Uses unsupported audio expansion hardware" );
 	
@@ -386,6 +389,9 @@ void Nsf_Emu::set_voice( int i, Blip_Buffer* buf, Blip_Buffer*, Blip_Buffer* )
 
 void Nsf_Emu::cpu_write_misc( nes_addr_t addr, int data )
 {
+	if ( addr >= 0x9000 && addr <= 0xB002 )
+		++vrc6Writes;
+
 	#if !NSF_EMU_APU_ONLY
 	{
 		if ( namco )
