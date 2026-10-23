@@ -15,6 +15,79 @@ namespace toybox::backends::gme
 namespace
 {
 
+/** One frame of the driver's output, hashed. Two frames with the same hash are the same musical
+	moment, which is what makes a loop point findable in a program that never ends. */
+struct LoopPoint
+{
+	bool found = false;
+	double introSeconds = 0.0;
+	double loopSeconds = 0.0;
+};
+
+LoopPoint findLoop (Nsf_Emu& emu, double rate)
+{
+	LoopPoint result;
+
+	// 735 samples is one NTSC frame at 44.1 kHz; a frame is the driver's natural unit.
+	const int frameSamples = 735;
+	const int maxFrames = 60 * 180;
+
+	std::vector<short> buffer ((std::size_t) frameSamples * 2, 0);
+	std::vector<unsigned long> hashes;
+	hashes.reserve (maxFrames);
+
+	emu.start_track (0);
+
+	for (int frame = 0; frame < maxFrames && ! emu.track_ended(); ++frame)
+	{
+		if (emu.play (frameSamples * 2, buffer.data()) != nullptr)
+		{
+			break;
+		}
+
+		hashes.push_back (emu.reg_hash_());
+	}
+
+	// A single matching frame proves nothing - silence and sustained notes repeat constantly - so
+	// eight consecutive matches are required before a repeat is believed.
+	constexpr int confirm = 8;
+
+	std::map<unsigned long, int> lastSeen;
+
+	for (int k = 0; k < (int) hashes.size(); ++k)
+	{
+		auto it = lastSeen.find (hashes[(std::size_t) k]);
+
+		if (it != lastSeen.end())
+		{
+			const int j = it->second;
+
+			if (k - j > confirm && k + confirm < (int) hashes.size())
+			{
+				bool same = true;
+
+				for (int n = 0; n < confirm && same; ++n)
+				{
+					same = hashes[(std::size_t) (j + n)] == hashes[(std::size_t) (k + n)];
+				}
+
+				if (same)
+				{
+					const double framesPerSecond = rate / (double) frameSamples;
+					result.found = true;
+					result.introSeconds = (double) j / framesPerSecond;
+					result.loopSeconds = (double) (k - j) / framesPerSecond;
+					return result;
+				}
+			}
+		}
+
+		lastSeen[hashes[(std::size_t) k]] = k;
+	}
+
+	return result;
+}
+
 /** The chip flags an NSF header carries. libgme emulates three of the six expansions and refuses
 	any image that asks for one it does not have, so the flags are read here to say which chip is
 	missing rather than leaving "could not read the image" as the only message. */
@@ -273,6 +346,10 @@ public:
 			return false;
 		}
 
+		// One pass through the song to find where it repeats: the only way to get a length out of
+		// an NSF, whose header has none and whose driver never reports an end.
+		const auto loop = findLoop (*emulator, rate);
+
 		track_info_t info {};
 		if (emulator->track_info (&info, 0) == nullptr)
 		{
@@ -286,6 +363,15 @@ public:
 				info_.durationSeconds = (double) info.length / 1000.0;
 				info_.singlePassSeconds = info_.durationSeconds;
 			}
+		}
+
+		if (loop.found)
+		{
+			info_.singlePassSeconds = loop.introSeconds + loop.loopSeconds;
+			info_.durationSeconds = info_.singlePassSeconds;
+			info_.loopPointSeconds = loop.introSeconds;
+			info_.loopLengthSeconds = loop.loopSeconds;
+			info_.loopsForever = false;
 		}
 
 		info_.formatName = "libgme";
@@ -350,9 +436,9 @@ public:
 	{
 		playback::BackendCapabilities caps;
 		caps.canSeek = true;
+		caps.hasLoopPoint = true;
 		caps.canLoop = false;
 		caps.canFade = false;
-		caps.hasLoopPoint = false;
 		caps.canMuteChips = false;
 		caps.isolation = playback::IsolationMode::multiInstance;
 		caps.rendersAtHostRate = true;

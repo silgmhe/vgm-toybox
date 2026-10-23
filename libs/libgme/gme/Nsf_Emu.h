@@ -59,6 +59,11 @@ public:
 	class Nes_Vrc6_Apu*  vrc6_()  { return vrc6;  }
 	class Nes_Namco_Apu* namco_() { return namco; }
 	class Nes_Fme7_Apu*  fme7_()  { return fme7;  }
+
+	// Added for VGMToybox: a running hash of the register writes and bank switches the
+	// driver makes. Two moments with the same hash are, as far as the music is concerned,
+	// the same moment - which is how a loop point is found for a program that never ends.
+	unsigned long reg_hash_() const { return regHash; }
 protected:
 	blargg_err_t track_info_( track_info_t*, int track ) const;
 	blargg_err_t load_( Data_Reader& );
@@ -104,6 +109,7 @@ private:
 	blargg_err_t init_sound();
 	
 	header_t header_;
+	unsigned long regHash = 0;
 	
 	enum { sram_addr = 0x6000 };
 	byte sram [0x2000];
