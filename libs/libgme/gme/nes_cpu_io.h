@@ -62,7 +62,7 @@ void Nsf_Emu::cpu_write( nes_addr_t addr, int data )
 	if ( unsigned (addr - Nes_Apu::start_addr) <= Nes_Apu::end_addr - Nes_Apu::start_addr )
 	{
 		GME_APU_HOOK( this, addr - Nes_Apu::start_addr, data );
-		regHash = regHash * 31u + ( (unsigned long) addr << 8 ^ (unsigned long) data );
+		regHash = regHash * 31u + ( (unsigned long) addr & 0xFFFFu );
 		apu.write_register( cpu::time(), addr, data );
 		return;
 	}
@@ -73,7 +73,7 @@ void Nsf_Emu::cpu_write( nes_addr_t addr, int data )
 		blargg_long offset = rom.mask_addr( data * (blargg_long) bank_size );
 		if ( offset >= rom.size() )
 			set_warning( "Invalid bank" );
-		regHash = regHash * 31u + ( (unsigned long) addr << 8 ^ (unsigned long) data );
+		regHash = regHash * 31u + ( (unsigned long) addr & 0xFFFFu );
 		cpu::map_code( (bank + 8) * bank_size, bank_size, rom.at_addr( offset ) );
 		return;
 	}

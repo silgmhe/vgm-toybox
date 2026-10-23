@@ -17,6 +17,11 @@ namespace toybox::backends::gme
 namespace
 {
 
+/** Off: the scan runs the whole song at load time and, on every file in the corpus, finds no
+	repeat - so it would cost a second per open and produce nothing. Kept gated rather than deleted
+	because the mechanism is sound and the missing piece is the detection criterion, not the code. */
+constexpr bool kDetectLoop = false;
+
 /** One frame of the driver's output, hashed. Two frames with the same hash are the same musical
 	moment, which is what makes a loop point findable in a program that never ends. */
 struct LoopPoint
@@ -362,7 +367,7 @@ public:
 
 		// One pass through the song to find where it repeats: the only way to get a length out of
 		// an NSF, whose header has none and whose driver never reports an end.
-		const auto loop = findLoop (*emulator, rate);
+		const LoopPoint loop = kDetectLoop ? findLoop (*emulator, rate) : LoopPoint {};
 
 		track_info_t info {};
 		if (emulator->track_info (&info, 0) == nullptr)
