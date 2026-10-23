@@ -12,9 +12,10 @@
 	DPCM and the expansion chips, and handles bank switching - which is why this backend is a thin
 	adapter rather than an emulator of our own.
 
-	What that costs us: libgme renders the song as a whole, with no way to ask for one channel, so
-	this backend reports `IsolationMode::none` and offers a single track. The mixer degrades to a
-	mono strip rather than pretending it can isolate.
+	Isolation: libgme can point each 2A03 oscillator at its own output, and NULL mutes
+	one, so the backend offers a track per oscillator and reports multiInstance. Muting
+	is one-way through that call, so a player is built for exactly one track and never
+	restored - the core creates one player per track, five emulations in all.
 */
 namespace toybox::backends::gme
 {
