@@ -4316,7 +4316,7 @@ namespace
 {
 	// `--ftm <file>` parses a real module and prints what came out. The unit test can only build a
 	// synthetic module, so this is how the seven files in test_file/ftm get checked.
-	if (argc >= 3 && std::string (argv[1]) == "--ftm")
+	if (argc >= 3 && (std::string (argv[1]) == "--ftm" || std::string (argv[1]) == "--ftm-dump"))
 	{
 		std::ifstream file (argv[2], std::ios::binary);
 		const std::vector<char> bytes ((std::istreambuf_iterator<char> (file)),
@@ -4325,6 +4325,40 @@ namespace
 		toybox::midi::NoteStream stream;
 		std::string error;
 		const bool ok = toybox::formats::ftm::loadNoteStream (bytes.data(), bytes.size(), stream, error);
+
+		// `--ftm-dump` prints what the loader decided, one event per line, so two runs can be diffed
+		// and - once FamiTracker's own export is available - so can the two implementations.
+		if (std::string (argv[1]) == "--ftm-dump")
+		{
+			if (! ok)
+			{
+				std::printf ("error %s\n", error.c_str());
+				return 1;
+			}
+
+			std::printf ("module %s\n", argv[2]);
+			for (const auto& note : stream.notes)
+			{
+				std::printf ("note track=%d pitch=%d start=%u end=%u velocity=%d\n", note.track,
+							 (int) note.note.note, note.note.startSample, note.note.endSample,
+							 (int) note.note.velocity);
+			}
+
+			for (const auto& bend : stream.bends)
+			{
+				std::printf ("bend track=%d at=%u cents=%d\n", bend.track, bend.bend.sampleTime,
+							 (int) bend.bend.cents);
+			}
+
+			for (const auto& slide : stream.slides)
+			{
+				std::printf ("slide track=%d from=%d to=%d units=%d start=%u end=%u\n", slide.track,
+							 slide.slide.fromNote, slide.slide.targetNote, slide.slide.unitsPerFrame,
+							 slide.slide.startSample, slide.slide.endSample);
+			}
+
+			return 0;
+		}
 		std::printf ("ftm %s ok=%d notes=%d tracks=%d frames/s=%.2f %s\n", argv[2], (int) ok,
 					 (int) stream.notes.size(), (int) stream.tracks.size(), stream.tickRate,
 					 ok ? "" : error.c_str());

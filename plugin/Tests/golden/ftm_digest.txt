@@ -1,0 +1,7 @@
+﻿15_coffeezoneb.ftm notes=2980 bends=1160 slides=69 hash=4c92c619f7b7b43f
+fod_hopeless.ftm notes=7284 bends=11915 slides=301 hash=4054ca649d881484
+fod_pancake.ftm notes=6638 bends=8827 slides=410 hash=d10e8579fba5a6a9
+snowburnb.ftm notes=7268 bends=9087 slides=309 hash=e5c3f45da464ec57
+Sunrise_to_Sunset_(Jayster).ftm notes=9336 bends=4806 slides=866 hash=dd96a0862acdc438
+TMNT_Tournament_Fighters_Scrapyard_Swing_(Jayster).ftm notes=4666 bends=1223 slides=237 hash=871b94e04e8063d8
+VietnameseMuskrats.ftm notes=3386 bends=1025 slides=213 hash=e21d3d81cf2c3756
