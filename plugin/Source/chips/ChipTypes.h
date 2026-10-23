@@ -203,6 +203,22 @@ inline bool isPitchStateSane (const ChannelState& state)
 	return state.finePitch > -100 && state.finePitch <= 100;
 }
 
+/** A pitch slide a format asked for and a chip has to price.
+
+	The loader knows the row it starts on, the direction and the rate in the tracker's own units; it
+	does not know what a unit is worth, because that is the chip's divider. Keeping the event
+	symbolic is what lets one loader serve a 2A03 and a VRC6 without either of them appearing in the
+	format layer. */
+struct SlideEvent
+{
+	std::uint32_t startSample = 0;
+	std::uint32_t endSample = 0;
+	int fromNote = 60;					// the MIDI note the slide starts from
+	int unitsPerFrame = 0;				// signed: positive slides up
+	int logicalChannel = 0;
+	ChannelKind channelKind = ChannelKind::unknown;
+};
+
 /** How far a tracker's portamento moves the pitch, in cents.
 
 	FamiTracker writes `1xx` as "slide the channel's *period* by xx per frame", and a period is

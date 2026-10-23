@@ -465,6 +465,28 @@ namespace
 				pitchBend (track, (double) bend.sampleTime / tickRate, (double) cents / 100.0);
 			}
 
+			// A slide is priced here because only the chip knows its divider: the format said
+			// "eight units a frame from this note", and what that is worth is the encoder's question.
+			for (const auto& entry : in.slides)
+			{
+				const auto& slide = entry.slide;
+				const int frames = (int) (slide.endSample - slide.startSample);
+
+				for (int frame = 1; frame <= frames; ++frame)
+				{
+					const int cents = chips::centsForPortamento (slide.channelKind, slide.fromNote,
+																 slide.unitsPerFrame, frame);
+					if (cents == 0)
+					{
+						continue;		// an unmodelled divider, or a slide past the bottom of the range
+					}
+
+					pitchBend (entry.track,
+							   (double) (slide.startSample + (std::uint32_t) frame) / tickRate,
+							   (double) cents / 100.0);
+				}
+			}
+
 			if (events.empty())
 			{
 				return nullptr;

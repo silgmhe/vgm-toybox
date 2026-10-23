@@ -445,22 +445,18 @@ using toybox::test::check;
 		check (toybox::formats::ftm::loadNoteStream (image.data(), image.size(), stream, error),
 			   "the module with portamento loads");
 
-		check (stream.notes.size() == 1 && stream.bends.size() == 47,
-			   "forty-seven frames after the first step once each");
+		check (stream.notes.size() == 1 && stream.slides.size() == 1,
+			   "one note and one slide, not forty-seven pre-computed bends");
 
-		if (stream.bends.size() == 47)
+		if (stream.slides.size() == 1)
 		{
-			check (stream.bends.front().bend.cents == 50, "eight units of 1/16 semitone is 50 cents");
-			check (stream.bends.back().bend.cents == 2350, "and it keeps climbing, one step per frame");
-
-			bool monotonic = true;
-			for (std::size_t i = 1; i < stream.bends.size(); ++i)
-			{
-				monotonic = monotonic && stream.bends[i].bend.cents > stream.bends[i - 1].bend.cents;
-			}
-			check (monotonic, "porta up never steps back down");
+			const auto& slide = stream.slides.front().slide;
+			check (slide.fromNote == 60, "the slide starts from the note that carries it");
+			check (slide.unitsPerFrame == 8, "1xx 08 is eight units a frame, upwards");
+			check (slide.endSample - slide.startSample == 48, "and it lasts the note it is on: eight rows of six frames");
 		}
 	}
+
 /** Sxx ends a note where the tracker ends it. Built as its own module because none of the other
 	three carry a cut, which is why the behaviour was first evidenced only by a real file changing. */
 void testFtmNoteCut (void)

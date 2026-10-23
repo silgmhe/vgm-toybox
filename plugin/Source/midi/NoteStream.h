@@ -43,10 +43,18 @@ struct StreamTrack
 	bool isDrum = false;
 };
 
+struct StreamSlide
+{
+	int track = 0;
+	chips::SlideEvent slide;
+};
+
 struct NoteStream
 {
 	std::vector<StreamNote> notes;
 	std::vector<StreamBend> bends;
+	/** Slides the encoder resolves into bends: the cents depend on the chip, not on the format. */
+	std::vector<StreamSlide> slides;
 	std::vector<StreamTrack> tracks;
 
 	/** The unit every sampleTime in the events is expressed in. Carried rather than assumed, for

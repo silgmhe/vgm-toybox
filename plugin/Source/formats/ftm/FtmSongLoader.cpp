@@ -774,31 +774,17 @@ bool loadNoteStream (const void* data, std::size_t size, midi::NoteStream& out, 
 					}
 					else if (effect.first == 16 || effect.first == 17)
 					{
-						// 1xx porta up / 2xx porta down: the pitch walks away from the note, one step
-						// per frame, by `xx` units. FamiTracker measures those in period units, which
-						// are not a constant number of cents; one unit is taken as 1/16 semitone here
-						// so the shape is right and the magnitude is an approximation, stated rather
-						// than hidden.
-						//
-						// That approximation is probably too fast, and the settings gave the evidence:
-						// the MIDI path's default pitch-bend range is twelve semitones, and eight units
-						// per frame over half a second reaches twenty-three - a normal effect should not
-						// be clipped by a normal setting. The honest scale is period arithmetic
-						// (period = clock / (16 * frequency) - 1, then cents from the ratio), which is
-						// per-note rather than per-unit, and wants the chip's clock, so it waits.
-						const int sign = (effect.first == 16) ? 1 : -1;
-						const double step = (double) (effect.second & 0xFF) * 6.25;
-						std::size_t index = 1;
-
-						for (std::uint32_t row = event.startSample + 1; row < event.endSample; ++row)
-						{
-							chips::PitchEvent bend;
-							bend.sampleTime = row;
-							bend.logicalChannel = channel;
-							bend.cents = (std::int16_t) std::lround (sign * step * (double) index);
-							out.bends.push_back ({ track, bend });
-							++index;
-						}
+						// 1xx porta up / 2xx porta down, kept symbolic: the tracker slides the
+						// channel's period by `xx` per frame, and what that is worth in cents depends
+						// on the chip's divider and on the note it starts from. The encoder prices it.
+						chips::SlideEvent slide;
+						slide.startSample = event.startSample;
+						slide.endSample = event.endSample;
+						slide.fromNote = (int) event.note;
+						slide.unitsPerFrame = (effect.first == 16 ? 1 : -1) * (effect.second & 0xFF);
+						slide.logicalChannel = channel;
+						slide.channelKind = kind;
+						out.slides.push_back ({ track, slide });
 					}
 					else if (effect.first == 11)
 					{
