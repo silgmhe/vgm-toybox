@@ -58,7 +58,7 @@ struct Module
 
 	/** Rows per second: FamiTracker's tempo is 2.5 frames per unit, and `speed` rows pass per
 		frame. At the defaults (150, 6) that is 10 rows a second. */
-	double rowsPerSecond (void) const;
+	double framesPerSecond (void) const;
 };
 
 /** Reads the container and the four blocks a note transcription needs.
@@ -69,7 +69,7 @@ bool parseModule (const void* data, std::size_t size, Module& out, std::string& 
 
 /** The authored path: a module becomes a `NoteStream` with no decoder involved.
 
-	Tracks are the module's channels; times are in rows (see `Module::rowsPerSecond`). */
+	Tracks are the module's channels; times are in frames (see `Module::framesPerSecond`), which is\n\tthe grid FamiTracker's own effects step on. */
 bool loadNoteStream (const void* data, std::size_t size, midi::NoteStream& out, std::string& error);
 
 } // namespace toybox::formats::ftm

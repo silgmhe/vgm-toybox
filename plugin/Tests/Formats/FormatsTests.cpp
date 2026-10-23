@@ -206,7 +206,7 @@ using toybox::test::check;
 
 		check (stream.notes.size() == 2, "two rows carry a note");
 		check (stream.tracks.size() == 1, "one channel is one track");
-		check (std::abs (stream.tickRate - 10.0) < 1e-9, "150 tempo at speed 6 is ten rows a second");
+		check (std::abs (stream.tickRate - 60.0) < 1e-9, "150 tempo is sixty frames a second");
 
 		if (stream.notes.size() != 2 || stream.tracks.size() != 1)
 		{
@@ -216,10 +216,10 @@ using toybox::test::check;
 		const auto& first = stream.notes[0];
 		const auto& second = stream.notes[1];
 		check (first.note.note == 60, "row 0 octave 4 note C is middle C");
-		check (first.note.startSample == 0 && first.note.endSample == 16,
-			   "the note lasts until the next row with a note");
+		check (first.note.startSample == 0 && first.note.endSample == 96,
+			   "the note lasts until the next row, six frames per row");
 		check (second.note.note == 71, "row 16 octave 4 note B is B4");
-		check (second.note.endSample == 64, "the last note ends with the pattern");
+		check (second.note.endSample == 384, "the last note ends with the pattern");
 		check (first.note.pitchSource == toybox::chips::PitchSource::registerExact,
 			   "an authored note is not an inference");
 		check (first.track == 0 && stream.tracks[0].name == "Pulse 1",
@@ -229,14 +229,14 @@ using toybox::test::check;
 		int arpeggioBends = 0;
 		for (const auto& entry : stream.bends)
 		{
-			if (entry.bend.sampleTime < 16)
+			if (entry.bend.sampleTime < 96)
 			{
 				++arpeggioBends;
 			}
 		}
 
-		check (arpeggioBends == 15, "arpeggio bends once per row inside the note");
-		if (arpeggioBends == 15)
+		check (arpeggioBends == 95, "arpeggio steps once per frame inside the note");
+		if (arpeggioBends == 95)
 		{
 			check (stream.bends[0].bend.cents == 400, "+4 semitones on the first step");
 			check (stream.bends[1].bend.cents == 700, "+7 on the second");
@@ -248,7 +248,7 @@ using toybox::test::check;
 		int signs = 0;
 		for (const auto& entry : stream.bends)
 		{
-			if (entry.bend.sampleTime <= 16)
+			if (entry.bend.sampleTime < 96)
 			{
 				continue;
 			}
@@ -257,7 +257,7 @@ using toybox::test::check;
 			signs = signs | (entry.bend.cents > 0 ? 1 : (entry.bend.cents < 0 ? 2 : 0));
 		}
 
-		check (vibratoBends == 47, "vibrato bends once per row across the second note");
+		check (vibratoBends == 287, "vibrato steps once per frame across the second note");
 		check (vibratoPeak <= 19, "depth 3/16 stays under a fifth of a semitone");
 		check (signs == 3, "the vibrato swings both ways");
 	}
@@ -359,7 +359,7 @@ using toybox::test::check;
 		if (stream.notes.size() == 1)
 		{
 			check (stream.notes[0].note.note == 60, "the surviving note is the C-4 of frame 0");
-			check (stream.notes[0].note.endSample == 64, "it runs to the end of the frame");
+			check (stream.notes[0].note.endSample == 384, "it runs to the end of the frame, six rows of six frames");
 		}
 	}
 
@@ -444,13 +444,13 @@ using toybox::test::check;
 		check (toybox::formats::ftm::loadNoteStream (image.data(), image.size(), stream, error),
 			   "the module with portamento loads");
 
-		check (stream.notes.size() == 1 && stream.bends.size() == 7,
-			   "seven rows after the first step once each");
+		check (stream.notes.size() == 1 && stream.bends.size() == 47,
+			   "forty-seven frames after the first step once each");
 
-		if (stream.bends.size() == 7)
+		if (stream.bends.size() == 47)
 		{
 			check (stream.bends.front().bend.cents == 50, "eight units of 1/16 semitone is 50 cents");
-			check (stream.bends.back().bend.cents == 350, "and it keeps climbing, one step per row");
+			check (stream.bends.back().bend.cents == 2350, "and it keeps climbing, one step per frame");
 
 			bool monotonic = true;
 			for (std::size_t i = 1; i < stream.bends.size(); ++i)

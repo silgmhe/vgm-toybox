@@ -229,10 +229,11 @@ namespace
 	}
 } // namespace
 
-double Module::rowsPerSecond (void) const
+double Module::framesPerSecond (void) const
 {
-	const double framesPerSecond = (double) tempo / 2.5;
-	return framesPerSecond / (double) (speed > 0 ? speed : 6);
+	// FamiTracker's tempo is 2.5 frames per unit: 150 is 60 Hz, which is the NTSC frame rate, and
+	// speed is how many of those frames a row lasts.
+	return (double) tempo / 2.5;
 }
 
 bool parseModule (const void* data, std::size_t size, Module& out, std::string& error)
@@ -369,7 +370,10 @@ bool loadNoteStream (const void* data, std::size_t size, midi::NoteStream& out, 
 	}
 
 	out = midi::NoteStream {};
-	out.tickRate = module.rowsPerSecond();
+	// The time base is the chip's own frame rate, not the row: FamiTracker's speed says how many
+	// frames a row lasts, and its effects step per frame. Measuring in frames is what lets a bend
+	// land where the tracker puts it.
+	out.tickRate = module.framesPerSecond();
 
 	std::map<std::pair<int, int>, const ModulePattern*> lookup;
 	for (const auto& pattern : module.patterns)
@@ -437,10 +441,10 @@ bool loadNoteStream (const void* data, std::size_t size, midi::NoteStream& out, 
 				const ModuleRow& note = *notes[i];
 
 				chips::NoteEvent event;
-				event.startSample = base + (std::uint32_t) note.row;
+				event.startSample = base + (std::uint32_t) note.row * (std::uint32_t) module.speed;
 				event.endSample = (i + 1 < notes.size())
-									  ? base + (std::uint32_t) notes[i + 1]->row
-									  : base + (std::uint32_t) module.patternLength;
+									  ? base + (std::uint32_t) notes[i + 1]->row * (std::uint32_t) module.speed
+									  : base + (std::uint32_t) module.patternLength * (std::uint32_t) module.speed;
 
 				const int midiNote = 12 + note.octave * 12 + (note.note - 1);
 				event.note = (std::uint8_t) std::max (0, std::min (127, midiNote));
@@ -542,7 +546,7 @@ bool loadNoteStream (const void* data, std::size_t size, midi::NoteStream& out, 
 			nextFrame = -1;
 		}
 
-		base += (std::uint32_t) module.patternLength;
+		base += (std::uint32_t) module.patternLength * (std::uint32_t) module.speed;
 		frame = nextFrame;
 	}
 
