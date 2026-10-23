@@ -45,6 +45,19 @@ struct ApuChannelState
 	int level = 0;					// 0..15, what $4000/$400C will carry
 	int duty = 2;					// 0..3, only pulse channels
 	int macroStep = 0;				// position in the instrument's volume sequence
+
+	// Row effects are state here, not events: they move the pitch every frame, and a note carries
+	// them for as long as it sounds. The MIDI path turns them into bend events because that is what
+	// MIDI has; this path keeps them as the numbers the chip needs each frame.
+	int arpeggioX = 0;				// 0xy
+	int arpeggioY = 0;
+	int vibratoSpeed = 0;			// 4xy
+	int vibratoDepth = 0;
+	int portaUnits = 0;				// 1xx / 2xx, signed, in period units per frame
+	int tonePortaUnits = 0;			// 3xx
+	int effectFrame = 0;			// frames since the note started
+	double periodOffset = 0.0;		// accumulated by the portamentos, in period units
+	int lastPeriod = 0;				// the period the channel was sounding, for 3xx to start from
 };
 
 /** Emits the register writes a FamiTracker module would produce, frame by frame.

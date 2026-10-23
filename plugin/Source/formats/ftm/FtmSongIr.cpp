@@ -214,6 +214,8 @@ bool loadSongIr (const void* data, std::size_t size, midi::SongIr& out, std::str
 									state.note = 12 + entry.octave * 12 + (entry.note - 1);
 									state.instrument = entry.instrument;
 									state.macroStep = 0;
+									state.effectFrame = 0;
+									state.periodOffset = 0.0;
 									state.level = entry.volume > 0 ? entry.volume : 15;
 									state.enabled = true;
 									sounding[0] = channel;
@@ -227,6 +229,49 @@ bool loadSongIr (const void* data, std::size_t size, midi::SongIr& out, std::str
 								else if (entry.note == 13)	// release
 								{
 									state.note = -1;
+								}
+
+								for (const auto& effect : entry.effects)
+								{
+									switch (effect.first)
+									{
+									case 10:		// 0xy arpeggio: three steps, one per frame
+										state.arpeggioX = (effect.second >> 4) & 0x0F;
+										state.arpeggioY = effect.second & 0x0F;
+										break;
+
+									case 11:		// 4xy vibrato
+										state.vibratoSpeed = (effect.second >> 4) & 0x0F;
+										state.vibratoDepth = effect.second & 0x0F;
+										break;
+
+									case 16:		// 1xx porta up: the period shrinks
+										state.portaUnits = effect.second & 0xFF;
+										break;
+
+									case 17:		// 2xx porta down
+										state.portaUnits = -(effect.second & 0xFF);
+										break;
+
+									case 6:			// 3xx tone portamento
+										state.tonePortaUnits = effect.second & 0xFF;
+										if (entry.hasNote() && state.lastPeriod > 0)
+										{
+											const int target = 12 + entry.octave * 12 + (entry.note - 1);
+											const int goal = triangle ? trianglePeriod (target)
+																	  : pulsePeriod (target);
+											state.periodOffset = (double) (state.lastPeriod - goal);
+										}
+										break;
+
+									case 23:		// Sxx cut: silence now, not a note-off to schedule
+										state.note = -1;
+										state.enabled = false;
+										break;
+
+									default:
+										break;
+									}
 								}
 							}
 						}
@@ -275,25 +320,65 @@ bool loadSongIr (const void* data, std::size_t size, midi::SongIr& out, std::str
 						continue;
 					}
 
-					const int pitch = std::clamp (state.note + bend, 0, 127);
+					// The row effects move the pitch every frame, which is exactly why the MIDI side
+					// turns them into bend events: here they are just numbers to add.
+					const int arpSteps[3] = { 0, state.arpeggioX, state.arpeggioY };
+					const int arp = arpSteps[(std::size_t) (state.effectFrame % 3)];
+
+					double vibratoCents = 0.0;
+					if (state.vibratoSpeed > 0 && state.vibratoDepth > 0)
+					{
+						const double phase = (double) ((state.effectFrame * state.vibratoSpeed) % 64);
+						vibratoCents = 100.0 * ((double) state.vibratoDepth / 16.0)
+									   * std::sin (6.283185307179586 * phase / 64.0);
+					}
+
+					if (state.portaUnits != 0)
+					{
+						state.periodOffset += (double) state.portaUnits;
+					}
+
+					if (state.tonePortaUnits > 0)
+					{
+						// 3xx walks the period towards the note's own, and stops on arrival rather
+						// than stepping past it.
+						if (std::abs (state.periodOffset) <= (double) state.tonePortaUnits)
+						{
+							state.periodOffset = 0.0;
+						}
+						else
+						{
+							state.periodOffset += (state.periodOffset > 0.0)
+													  ? -(double) state.tonePortaUnits
+													  : (double) state.tonePortaUnits;
+						}
+					}
+
+					const int pitch = std::clamp (state.note + bend + arp, 0, 127);
 
 					if (pulse)
 					{
 						const int index = (type == 0) ? 0 : 1;
-						const int period = pulsePeriod (pitch);
+						const double base = (double) pulsePeriod (pitch) + state.periodOffset;
+						const int period = (int) std::lround (std::clamp (
+							base * std::pow (2.0, -vibratoCents / 1200.0), 8.0, 2047.0));
 						emitter.write (0, kPulseControl[index],
 									   (duty << 6) | 0x30 | (level & 0x0F), when);
 						emitter.write (0, kPulsePeriodLow[index], period & 0xFF, when);
 						emitter.write (0, kPulsePeriodHigh[index], (period >> 8) & 0x07, when);
 						emitter.write (0, kStatus, 1 << index, when);
+						state.lastPeriod = period;
 					}
 					else if (triangle)
 					{
-						const int period = trianglePeriod (pitch);
+						const double base = (double) trianglePeriod (pitch) + state.periodOffset;
+						const int period = (int) std::lround (std::clamp (
+							base * std::pow (2.0, -vibratoCents / 1200.0), 2.0, 2047.0));
 						emitter.write (0, kTriangleLinear, 0x7F, when);
 						emitter.write (0, kTrianglePeriodLow, period & 0xFF, when);
 						emitter.write (0, kTrianglePeriodHigh, (period >> 8) & 0x07, when);
 						emitter.write (0, kStatus, 1 << 2, when);
+						state.lastPeriod = period;
 					}
 					else if (noise)
 					{
@@ -303,6 +388,7 @@ bool loadSongIr (const void* data, std::size_t size, midi::SongIr& out, std::str
 					}
 
 					++state.macroStep;
+					++state.effectFrame;
 				}
 			}
 		}
