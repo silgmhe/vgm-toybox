@@ -197,9 +197,9 @@ const NoteTable& X1_010Decoder::noteTable (int channel) const
 	return *impl->table;
 }
 
-Family X1_010Decoder::family (int channel) const
+ChannelKind X1_010Decoder::channelKind (int channel) const
 {
-	return impl->isWaveform (channel) ? Family::x1Wave : Family::adpcmDrum;
+	return impl->isWaveform (channel) ? ChannelKind::x1Wave : ChannelKind::adpcmDrum;
 }
 
 bool X1_010Decoder::isDrum (int channel) const

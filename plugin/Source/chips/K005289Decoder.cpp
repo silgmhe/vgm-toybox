@@ -119,9 +119,9 @@ const NoteTable& K005289Decoder::noteTable (int) const
 	return impl != nullptr ? impl->table : fallback;
 }
 
-Family K005289Decoder::family (int) const
+ChannelKind K005289Decoder::channelKind (int) const
 {
-	return Family::wavetableWave;
+	return ChannelKind::wavetableWave;
 }
 
 } // namespace toybox::chips

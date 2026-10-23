@@ -186,10 +186,10 @@ const NoteTable& HuC6280Decoder::noteTable (int channel) const
 	return *impl->table;
 }
 
-Family HuC6280Decoder::family (int channel) const
+ChannelKind HuC6280Decoder::channelKind (int channel) const
 {
 	(void) channel;
-	return Family::c6280Wave;
+	return ChannelKind::c6280Wave;
 }
 
 bool HuC6280Decoder::isDrum (int channel) const

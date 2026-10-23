@@ -129,9 +129,9 @@ const NoteTable& OpmDecoder::noteTable (int) const
 	return impl->table;
 }
 
-Family OpmDecoder::family (int) const
+ChannelKind OpmDecoder::channelKind (int) const
 {
-	return Family::fm;
+	return ChannelKind::fm;
 }
 
 } // namespace toybox::chips

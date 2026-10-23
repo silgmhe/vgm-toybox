@@ -442,9 +442,9 @@ const NoteTable& Rf5c68Decoder::noteTable (int channel) const
 	return *impl->tables[index];
 }
 
-Family Rf5c68Decoder::family (int channel) const
+ChannelKind Rf5c68Decoder::channelKind (int channel) const
 {
-	return isDrum (channel) ? Family::adpcmDrum : Family::rf5cPcm;
+	return isDrum (channel) ? ChannelKind::adpcmDrum : ChannelKind::rf5cPcm;
 }
 
 bool Rf5c68Decoder::isDrum (int channel) const

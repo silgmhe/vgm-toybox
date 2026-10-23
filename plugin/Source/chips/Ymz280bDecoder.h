@@ -49,7 +49,7 @@ public:
 	int channelCount() const override { return channelCount_; }
 	ChannelState channelState (int channel) const override;
 	const NoteTable& noteTable (int channel) const override;
-	Family family (int channel) const override;
+	ChannelKind channelKind (int channel) const override;
 	bool isDrum (int channel) const override { return true; }
 
 private:

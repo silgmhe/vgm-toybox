@@ -476,9 +476,9 @@ const NoteTable& Ga20Decoder::noteTable (int channel) const
 	return *impl->tables[index];
 }
 
-Family Ga20Decoder::family (int channel) const
+ChannelKind Ga20Decoder::channelKind (int channel) const
 {
-	return isDrum (channel) ? Family::adpcmDrum : Family::ga20Pcm;
+	return isDrum (channel) ? ChannelKind::adpcmDrum : ChannelKind::ga20Pcm;
 }
 
 bool Ga20Decoder::isDrum (int channel) const

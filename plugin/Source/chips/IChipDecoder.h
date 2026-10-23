@@ -41,7 +41,7 @@ public:
 		tone channels do not share a pitch mapping. */
 	virtual const NoteTable& noteTable (int channel) const = 0;
 
-	virtual Family family (int channel) const = 0;
+	virtual ChannelKind channelKind (int channel) const = 0;
 
 	/** True when the channel should be treated as a drum track (GM drum key mapping). */
 	virtual bool isDrum (int channel) const { return false; }

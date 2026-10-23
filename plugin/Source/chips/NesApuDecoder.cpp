@@ -509,21 +509,21 @@ const NoteTable& NesApuDecoder::noteTable (int channel) const
 	}
 }
 
-Family NesApuDecoder::family (int channel) const
+ChannelKind NesApuDecoder::channelKind (int channel) const
 {
 	switch (channel)
 	{
 	case pulse1:
 	case pulse2:
-		return Family::nesPulse;
+		return ChannelKind::nesPulse;
 	case triangle:
-		return Family::nesTriangle;
+		return ChannelKind::nesTriangle;
 	case noise:
-		return Family::nesNoise;
+		return ChannelKind::nesNoise;
 	case dmc:
-		return Family::nesDmc;
+		return ChannelKind::nesDmc;
 	default:
-		return Family::unknown;
+		return ChannelKind::unknown;
 	}
 }
 

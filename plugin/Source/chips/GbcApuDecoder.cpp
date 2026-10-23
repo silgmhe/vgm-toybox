@@ -550,19 +550,19 @@ const NoteTable& GbcApuDecoder::noteTable (int channel) const
 	}
 }
 
-Family GbcApuDecoder::family (int channel) const
+ChannelKind GbcApuDecoder::channelKind (int channel) const
 {
 	switch (channel)
 	{
 	case pulse1:
 	case pulse2:
-		return Family::gbPulse;
+		return ChannelKind::gbPulse;
 	case wave:
-		return Family::gbWave;
+		return ChannelKind::gbWave;
 	case noise:
-		return Family::gbNoise;
+		return ChannelKind::gbNoise;
 	default:
-		return Family::unknown;
+		return ChannelKind::unknown;
 	}
 }
 

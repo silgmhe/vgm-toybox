@@ -415,11 +415,11 @@ const NoteTable& Ymf271Decoder::noteTable (int channel) const
 	return *impl->table;
 }
 
-Family Ymf271Decoder::family (int channel) const
+ChannelKind Ymf271Decoder::channelKind (int channel) const
 {
 	const bool pcm = channel >= 0 && channel < channelCount_
 					 && impl->groups[channel].sync == 3;
-	return pcm ? Family::adpcmDrum : Family::fm;
+	return pcm ? ChannelKind::adpcmDrum : ChannelKind::fm;
 }
 
 bool Ymf271Decoder::isDrum (int channel) const

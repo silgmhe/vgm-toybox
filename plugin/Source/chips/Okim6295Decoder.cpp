@@ -404,9 +404,9 @@ namespace toybox::chips
 		return *impl->tables[(std::size_t) channel];
 	}
 
-	Family Okim6295Decoder::family (int) const
+	ChannelKind Okim6295Decoder::channelKind (int) const
 	{
-		return Family::okimAdpcm;
+		return ChannelKind::okimAdpcm;
 	}
 
 	bool Okim6295Decoder::isDrum (int channel) const

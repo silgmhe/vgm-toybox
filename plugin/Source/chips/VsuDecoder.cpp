@@ -164,9 +164,9 @@ const NoteTable& VsuDecoder::noteTable (int) const
 	return impl != nullptr ? impl->table : fallback;
 }
 
-Family VsuDecoder::family (int channel) const
+ChannelKind VsuDecoder::channelKind (int channel) const
 {
-	return channel == kNoiseChannel ? Family::ayNoise : Family::wavetableWave;
+	return channel == kNoiseChannel ? ChannelKind::ayNoise : ChannelKind::wavetableWave;
 }
 
 } // namespace toybox::chips

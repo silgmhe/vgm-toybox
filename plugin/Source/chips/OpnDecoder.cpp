@@ -752,14 +752,14 @@ const NoteTable& OpnDecoder::noteTable (int channel) const
 	return impl->table;
 }
 
-Family OpnDecoder::family (int channel) const
+ChannelKind OpnDecoder::channelKind (int channel) const
 {
 	if (channel < impl->fmCount)
 	{
-		return Family::fm;
+		return ChannelKind::fm;
 	}
 
-	return isDrum (channel) ? Family::adpcmDrum : Family::opnAdpcmB;
+	return isDrum (channel) ? ChannelKind::adpcmDrum : ChannelKind::opnAdpcmB;
 }
 
 bool OpnDecoder::isDrum (int channel) const

@@ -192,9 +192,9 @@ const NoteTable& MultiPcmDecoder::noteTable (int) const
 	return impl != nullptr ? impl->table : fallback;
 }
 
-Family MultiPcmDecoder::family (int) const
+ChannelKind MultiPcmDecoder::channelKind (int) const
 {
-	return Family::c140Pcm;		// a sampled voice with a rate the registers scale
+	return ChannelKind::c140Pcm;		// a sampled voice with a rate the registers scale
 }
 
 } // namespace toybox::chips

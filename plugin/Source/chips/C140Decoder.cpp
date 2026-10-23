@@ -427,10 +427,10 @@ const NoteTable& C140Decoder::noteTable (int channel) const
 	return *impl->tables[index];
 }
 
-Family C140Decoder::family (int channel) const
+ChannelKind C140Decoder::channelKind (int channel) const
 {
 	(void) channel;
-	return Family::c140Pcm;
+	return ChannelKind::c140Pcm;
 }
 
 } // namespace toybox::chips

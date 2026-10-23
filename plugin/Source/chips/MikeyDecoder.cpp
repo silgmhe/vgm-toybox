@@ -145,9 +145,9 @@ const NoteTable& MikeyDecoder::noteTable (int) const
 	return impl != nullptr ? impl->table : fallback;
 }
 
-Family MikeyDecoder::family (int) const
+ChannelKind MikeyDecoder::channelKind (int) const
 {
-	return Family::sn76489Square;		// a timer-driven square wave
+	return ChannelKind::sn76489Square;		// a timer-driven square wave
 }
 
 } // namespace toybox::chips

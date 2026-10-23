@@ -328,20 +328,20 @@ const NoteTable& OplDecoder::noteTable (int) const
 	return impl->table;
 }
 
-Family OplDecoder::family (int channel) const
+ChannelKind OplDecoder::channelKind (int channel) const
 {
 	const int melodic = impl->twoBanks ? 18 : 9;
 	if (channel < melodic)
 	{
-		return Family::fm;
+		return ChannelKind::fm;
 	}
 
 	if (channel >= impl->rhythmBase && channel < impl->rhythmBase + 5)
 	{
-		return Family::fmDrum;
+		return ChannelKind::fmDrum;
 	}
 
-	return impl->adpcm && channel == 14 ? Family::adpcmDrum : Family::unknown;
+	return impl->adpcm && channel == 14 ? ChannelKind::adpcmDrum : ChannelKind::unknown;
 }
 
 bool OplDecoder::isDrum (int channel) const

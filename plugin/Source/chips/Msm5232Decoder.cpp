@@ -118,9 +118,9 @@ const NoteTable& Msm5232Decoder::noteTable (int) const
 	return impl != nullptr ? impl->table : fallback;
 }
 
-Family Msm5232Decoder::family (int channel) const
+ChannelKind Msm5232Decoder::channelKind (int channel) const
 {
-	return impl != nullptr && impl->voices[channel].noise ? Family::ayNoise : Family::sn76489Square;
+	return impl != nullptr && impl->voices[channel].noise ? ChannelKind::ayNoise : ChannelKind::sn76489Square;
 }
 
 } // namespace toybox::chips

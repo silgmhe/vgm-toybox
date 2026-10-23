@@ -206,10 +206,10 @@ const NoteTable& PokeyDecoder::noteTable (int channel) const
 	return *impl->table;
 }
 
-Family PokeyDecoder::family (int channel) const
+ChannelKind PokeyDecoder::channelKind (int channel) const
 {
 	(void) channel;
-	return Family::pokeySquare;
+	return ChannelKind::pokeySquare;
 }
 
 } // namespace toybox::chips

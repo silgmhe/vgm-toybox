@@ -452,9 +452,9 @@ const NoteTable& K053260Decoder::noteTable (int channel) const
 	return *impl->tables[index];
 }
 
-Family K053260Decoder::family (int channel) const
+ChannelKind K053260Decoder::channelKind (int channel) const
 {
-	return isDrum (channel) ? Family::adpcmDrum : Family::k053260Pcm;
+	return isDrum (channel) ? ChannelKind::adpcmDrum : ChannelKind::k053260Pcm;
 }
 
 bool K053260Decoder::isDrum (int channel) const

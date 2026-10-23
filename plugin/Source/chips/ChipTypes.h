@@ -6,10 +6,18 @@
 namespace toybox::chips
 {
 
-/** Which sound source a channel belongs to - the vocabulary shared by every decoder, the note
-	extractor and the encoder. Deliberately free of libvgm's DEVID_* values: the factory in
-	backends/libvgm is the only place that knows the mapping. */
-enum class Family
+/** What kind of channel produced a note - timbre, not identity.
+
+	This answers "what is this channel" (a square, an FM voice, a drum), never "which chip is it";
+	`midi::ChipKind` answers the latter. The two were one enum until R1 introduced ChipKind, which is
+	why `fm` and `aySquare` could sit side by side: one names a synthesis method shared by four
+	chips, the other a chip's channel. Splitting them was the review's M-2; renaming was the cheap
+	half of it, and the expensive half (a separate ChipFamily enum) has no consumer - nothing above
+	the decoders branches on which chip a note came from.
+
+	Deliberately free of libvgm's DEVID_* values: the factory in backends/libvgm is the only place
+	that knows the mapping. */
+enum class ChannelKind
 {
 	nesPulse,
 	nesTriangle,
@@ -214,7 +222,7 @@ struct NoteEvent
 	std::uint8_t note = 60;
 	std::uint8_t velocity = 100;
 	int logicalChannel = 0;			// track / chip channel index inside the song
-	Family family = Family::unknown;
+	ChannelKind channelKind = ChannelKind::unknown;
 	int patch = 0;
 	bool isDrum = false;
 

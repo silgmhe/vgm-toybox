@@ -317,19 +317,19 @@ const NoteTable& WswanDecoder::noteTable (int channel) const
 	return *impl->table;
 }
 
-Family WswanDecoder::family (int channel) const
+ChannelKind WswanDecoder::channelKind (int channel) const
 {
 	if (channel == WswanDecoder::channel1 && impl->voiceRunning())
 	{
-		return Family::adpcmDrum;
+		return ChannelKind::adpcmDrum;
 	}
 
 	if (channel == WswanDecoder::channel3 && impl->noiseRunning())
 	{
-		return Family::wsNoise;
+		return ChannelKind::wsNoise;
 	}
 
-	return Family::wsWave;
+	return ChannelKind::wsWave;
 }
 
 bool WswanDecoder::isDrum (int channel) const

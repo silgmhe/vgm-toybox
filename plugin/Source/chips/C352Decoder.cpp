@@ -459,10 +459,10 @@ const NoteTable& C352Decoder::noteTable (int channel) const
 	return *impl->tables[index];
 }
 
-Family C352Decoder::family (int channel) const
+ChannelKind C352Decoder::channelKind (int channel) const
 {
 	(void) channel;
-	return Family::c352Pcm;
+	return ChannelKind::c352Pcm;
 }
 
 } // namespace toybox::chips

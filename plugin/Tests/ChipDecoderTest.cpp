@@ -526,7 +526,7 @@ namespace
 
 		check (notes[0].logicalChannel == 12, "ADPCM-B is channel 12");
 		check (absoluteNote (notes[0]) == 69, "a 16-nibble cycle at 7080 nibbles a second is A4");
-		check (notes[0].family == toybox::chips::Family::opnAdpcmB,
+		check (notes[0].channelKind == toybox::chips::ChannelKind::opnAdpcmB,
 			   "and its family says the pitch is real");
 		check (! notes[0].isDrum, "so it is not a trigger");
 	}
@@ -869,7 +869,7 @@ namespace
 		check (distance (notes[0].endSample, 44100) <= 128, "the power switch ends the note");
 		check (notes[0].velocity == 127, "envelope volume 15 is full velocity");
 		check (notes[0].logicalChannel == 0, "pulse 1 is channel 0");
-		check (notes[0].family == toybox::chips::Family::gbPulse, "the note carries the GB family");
+		check (notes[0].channelKind == toybox::chips::ChannelKind::gbPulse, "the note carries the GB family");
 	}
 
 	void testGbLengthCounterEndsTheNote (void)
@@ -930,7 +930,7 @@ namespace
 
 		check (absoluteNote (notes[0]) == 69, "the wave channel divides the clock by 64, so 1899 is A4");
 		check (notes[0].logicalChannel == 2, "the wave channel is channel 2");
-		check (notes[0].family == toybox::chips::Family::gbWave, "the note carries the wave family");
+		check (notes[0].channelKind == toybox::chips::ChannelKind::gbWave, "the note carries the wave family");
 		check (notes[0].isDrum == false, "the wave channel is melodic");
 	}
 
@@ -959,7 +959,7 @@ namespace
 
 		check (fastNotes[0].isDrum, "the noise channel is a drum track");
 		check (fastNotes[0].logicalChannel == 3, "the noise is channel 3");
-		check (fastNotes[0].family == toybox::chips::Family::gbNoise, "the note carries the noise family");
+		check (fastNotes[0].channelKind == toybox::chips::ChannelKind::gbNoise, "the note carries the noise family");
 		check (absoluteNote (fastNotes[0]) == 38, "the fastest noise lands on the first drum key");
 		check (slowNotes[0].note > fastNotes[0].note, "a slower noise lands on a higher drum key");
 	}
@@ -1005,7 +1005,7 @@ namespace
 
 		check (absoluteNote (notes[0]) == 69, "divider 254 decodes to A4");
 		check (notes[0].logicalChannel == 0, "the selected channel is channel 0");
-		check (notes[0].family == toybox::chips::Family::c6280Wave, "the note carries the wave family");
+		check (notes[0].channelKind == toybox::chips::ChannelKind::c6280Wave, "the note carries the wave family");
 		check (notes[0].velocity == 127, "volume 31 is full velocity");
 		check (! notes[0].isDrum, "a wave channel is melodic");
 	}
@@ -1112,7 +1112,7 @@ namespace
 		// 3579545 / (16 * 509) = 439.5 Hz
 		check (absoluteNote (notes[0]) == 69, "divider 508 is A4");
 		check (notes[0].logicalChannel == 0, "the latch selected channel 0");
-		check (notes[0].family == toybox::chips::Family::sccWave, "the note carries the wave family");
+		check (notes[0].channelKind == toybox::chips::ChannelKind::sccWave, "the note carries the wave family");
 		check (notes[0].velocity == 127, "volume 15 is full velocity");
 	}
 
@@ -1196,7 +1196,7 @@ namespace
 		// 8000000 * 8 / (512 * (511 - 227)) = 440.1 Hz
 		check (absoluteNote (notes[0]) == 69, "octave 3 and frequency 227 are A4");
 		check (notes[0].logicalChannel == 0, "the note is on channel 0");
-		check (notes[0].family == toybox::chips::Family::saaSquare, "the note carries the SAA family");
+		check (notes[0].channelKind == toybox::chips::ChannelKind::saaSquare, "the note carries the SAA family");
 		check (notes[0].velocity == 127, "amplitude 15 is full velocity");
 		check (! notes[0].isDrum, "a tone channel is melodic");
 	}
@@ -1301,7 +1301,7 @@ namespace
 		// (1789772 / 28) / (2 * 73) = 437.8 Hz
 		check (absoluteNote (notes[0]) == 69, "divider 72 in the 64 kHz mode is A4");
 		check (notes[0].logicalChannel == 0, "the note is on channel 0");
-		check (notes[0].family == toybox::chips::Family::pokeySquare, "the note carries the POKEY family");
+		check (notes[0].channelKind == toybox::chips::ChannelKind::pokeySquare, "the note carries the POKEY family");
 		check (notes[0].velocity == 127, "volume 15 is full velocity");
 	}
 
@@ -1386,7 +1386,7 @@ namespace
 			// 3072000 / (32 * (2048 - 1830)) = 440.4 Hz
 			check (absoluteNote (notes[0]) == 69, "divider 1830 is A4");
 			check (notes[0].logicalChannel == 0, "the note is on channel 0");
-			check (notes[0].family == toybox::chips::Family::wsWave,
+			check (notes[0].channelKind == toybox::chips::ChannelKind::wsWave,
 				   "the note carries the WonderSwan family");
 			check (notes[0].velocity == 127, "volume 15 is full velocity");
 
@@ -1446,7 +1446,7 @@ namespace
 
 			check (absoluteNote (notes[0]) == 38, "the slowest noise rate is the base drum key");
 			check (notes[0].isDrum, "the noise channel is a drum");
-			check (notes[0].family == toybox::chips::Family::wsNoise,
+			check (notes[0].channelKind == toybox::chips::ChannelKind::wsNoise,
 				   "the note carries the noise family");
 
 			Stream stopped;
@@ -1520,7 +1520,7 @@ namespace
 
 			check (absoluteNote (notes[0]) == 60, "the voice is a C4 marker");
 			check (notes[0].endSample <= 4480, "the marker lasts about 100 ms");
-			check (notes[0].family == toybox::chips::Family::adpcmDrum, "the voice is a sample");
+			check (notes[0].channelKind == toybox::chips::ChannelKind::adpcmDrum, "the voice is a sample");
 		}
 
 		// ---- SN76489 ----
@@ -1589,7 +1589,7 @@ namespace
 
 			check (notes[0].note >= 35 && notes[0].note <= 81, "the noise mode lands on a drum key");
 			check (notes[0].isDrum, "SN76489 channel 3 is a drum track");
-			check (notes[0].family == toybox::chips::Family::sn76489Noise, "the noise has its own family");
+			check (notes[0].channelKind == toybox::chips::ChannelKind::sn76489Noise, "the noise has its own family");
 		}
 
 		/** Sega parts stop at divider 0 instead of folding it to 0x400, so it must be silence. */
@@ -1632,7 +1632,7 @@ namespace
 
 			check (absoluteNote (notes[0]) == 69, "AY divider 254 decodes to A4");
 			check (notes[0].logicalChannel == 0, "AY channel A is its own track");
-			check (notes[0].family == toybox::chips::Family::aySquare, "the AY square has its own family");
+			check (notes[0].channelKind == toybox::chips::ChannelKind::aySquare, "the AY square has its own family");
 		}
 
 		/** A set mixer bit disables the tone: the register is an enable mask, not a volume. */
@@ -1910,7 +1910,7 @@ namespace
 
 			check (absoluteNote (notes[0]) == 69, "block 4, fns 0x51C, multiple 1 is A4");
 			check (notes[0].logicalChannel == 0, "group 0 is its own track");
-			check (notes[0].family == toybox::chips::Family::fm, "the note carries the FM family");
+			check (notes[0].channelKind == toybox::chips::ChannelKind::fm, "the note carries the FM family");
 			check (! notes[0].isDrum, "a four-operator group is melodic");
 			check (notes[0].velocity == 127, "total level 0 is full velocity");
 			check (distance (notes[0].endSample, 8000) <= 64, "the key-off ends the note");
@@ -2025,7 +2025,7 @@ namespace
 
 			check (absoluteNote (notes[0]) == 60, "the sample is a C4 marker");
 			check (notes[0].isDrum, "a PCM group is a drum track");
-			check (notes[0].family == toybox::chips::Family::adpcmDrum,
+			check (notes[0].channelKind == toybox::chips::ChannelKind::adpcmDrum,
 				   "the note carries the ADPCM family");
 			check (distance (notes[0].startSample, 100) <= 64, "the note starts at the key-on");
 			check (distance (notes[0].endSample, 3628) <= 64, "the 80 ms gate ends the sample");
@@ -2952,7 +2952,7 @@ namespace
 
 		check (absoluteNote (notes[0]) == 60, "a sample with no period is the C4 trigger, not a pitch");
 		check (notes[0].isDrum, "and it is marked as a drum");
-		check (notes[0].family == toybox::chips::Family::adpcmDrum,
+		check (notes[0].channelKind == toybox::chips::ChannelKind::adpcmDrum,
 			   "its family says the pitch is not real");
 	}
 
@@ -3530,7 +3530,7 @@ namespace
 
 		check (notes.size() == 1 && absoluteNote (notes[0]) == 60 && notes[0].isDrum,
 			   "a sample with no period is the C4 drum trigger");
-		check (notes.size() == 1 && notes[0].family == toybox::chips::Family::adpcmDrum,
+		check (notes.size() == 1 && notes[0].channelKind == toybox::chips::ChannelKind::adpcmDrum,
 			   "and its family says the pitch is not real");
 	}
 
@@ -3669,7 +3669,7 @@ namespace
 		check (absoluteNote (notes[0]) == 67, "an 18-byte cycle at 7159 bytes a second is G4");
 		check (notes[0].logicalChannel == 0, "GA20 voice 0 is its own track");
 		check (! notes[0].isDrum, "a sample with a period is melodic");
-		check (notes[0].family == toybox::chips::Family::ga20Pcm, "and its family says so");
+		check (notes[0].channelKind == toybox::chips::ChannelKind::ga20Pcm, "and its family says so");
 		check (notes[0].velocity == 127, "full-scale volume is full velocity");
 		check (distance (notes[0].endSample, 3153) <= 80,
 			   "the 0x00 terminator ends the note: 512 bytes at 125 samples of clock/4 each");
@@ -4178,7 +4178,7 @@ namespace
 		check (notes[0].logicalChannel == 0, "ES5503 oscillator 0 is its own track");
 		check (absoluteNote (notes[0]) == 67, "a 1024-byte table at 8,000 is G4");
 		check (! notes[0].isDrum, "a table with a pitch is melodic");
-		check (notes[0].family == toybox::chips::Family::wavetableWave, "and its family says so");
+		check (notes[0].channelKind == toybox::chips::ChannelKind::wavetableWave, "and its family says so");
 		check (notes[0].velocity == 127, "full-scale volume is full velocity");
 	}
 
@@ -4335,7 +4335,7 @@ namespace
 		check (notes[0].logicalChannel == 2, "Sega PCM voice 2 is its own track");
 		check (absoluteNote (notes[0]) == 57, "a 16-byte cycle at 3563 bytes a second is A3");
 		check (! notes[0].isDrum, "a sample with a period is melodic");
-		check (notes[0].family == toybox::chips::Family::segaPcm, "and its family says so");
+		check (notes[0].channelKind == toybox::chips::ChannelKind::segaPcm, "and its family says so");
 		check (notes[0].velocity == 127, "a full-scale volume register is full velocity");
 		check (distance (notes[0].endSample, 25350) <= 200,
 			   "the end register ends it: 2048 bytes at 3563 a second");

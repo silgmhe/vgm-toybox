@@ -164,10 +164,10 @@ const NoteTable& K051649Decoder::noteTable (int channel) const
 	return *impl->table;
 }
 
-Family K051649Decoder::family (int channel) const
+ChannelKind K051649Decoder::channelKind (int channel) const
 {
 	(void) channel;
-	return Family::sccWave;
+	return ChannelKind::sccWave;
 }
 
 } // namespace toybox::chips

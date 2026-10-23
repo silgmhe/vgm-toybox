@@ -201,10 +201,10 @@ const NoteTable& Saa1099Decoder::noteTable (int channel) const
 	return *impl->table;
 }
 
-Family Saa1099Decoder::family (int channel) const
+ChannelKind Saa1099Decoder::channelKind (int channel) const
 {
 	(void) channel;
-	return Family::saaSquare;
+	return ChannelKind::saaSquare;
 }
 
 } // namespace toybox::chips

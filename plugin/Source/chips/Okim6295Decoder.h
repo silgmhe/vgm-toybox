@@ -38,7 +38,7 @@ public:
 	int channelCount() const override;
 	ChannelState channelState (int channel) const override;
 	const NoteTable& noteTable (int channel) const override;
-	Family family (int channel) const override;
+	ChannelKind channelKind (int channel) const override;
 	bool isDrum (int channel) const override;
 
 	/** The 256 KB sample ROM (`0x8B` blocks); without it there is neither a length nor a pitch. */

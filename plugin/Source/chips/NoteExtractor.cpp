@@ -63,7 +63,7 @@ ExtractedPerformance extractPerformance (IChipDecoder& decoder,
 			event.note = (std::uint8_t) current.note;
 			event.velocity = (std::uint8_t) current.velocity;
 			event.logicalChannel = channel;
-			event.family = decoder.family (channel);
+			event.channelKind = decoder.channelKind (channel);
 			event.isDrum = decoder.isDrum (channel);
 			event.transposeCents = current.transposeCents;
 			event.rootCents = current.rootCents;

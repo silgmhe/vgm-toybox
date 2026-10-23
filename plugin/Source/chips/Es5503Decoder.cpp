@@ -500,9 +500,9 @@ const NoteTable& Es5503Decoder::noteTable (int channel) const
 	return *impl->tables[index];
 }
 
-Family Es5503Decoder::family (int channel) const
+ChannelKind Es5503Decoder::channelKind (int channel) const
 {
-	return isDrum (channel) ? Family::adpcmDrum : Family::wavetableWave;
+	return isDrum (channel) ? ChannelKind::adpcmDrum : ChannelKind::wavetableWave;
 }
 
 bool Es5503Decoder::isDrum (int channel) const

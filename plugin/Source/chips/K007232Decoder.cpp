@@ -151,9 +151,9 @@ const NoteTable& K007232Decoder::noteTable (int) const
 	return impl != nullptr ? impl->table : fallback;
 }
 
-Family K007232Decoder::family (int) const
+ChannelKind K007232Decoder::channelKind (int) const
 {
-	return Family::k053260Pcm;		// the same shape: a PCM voice with a rate register
+	return ChannelKind::k053260Pcm;		// the same shape: a PCM voice with a rate register
 }
 
 } // namespace toybox::chips

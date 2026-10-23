@@ -667,9 +667,9 @@ const NoteTable& QSoundDecoder::noteTable (int channel) const
 	return *impl->tables[index];
 }
 
-Family QSoundDecoder::family (int channel) const
+ChannelKind QSoundDecoder::channelKind (int channel) const
 {
-	return isDrum (channel) ? Family::adpcmDrum : Family::qsoundPcm;
+	return isDrum (channel) ? ChannelKind::adpcmDrum : ChannelKind::qsoundPcm;
 }
 
 bool QSoundDecoder::isDrum (int channel) const

@@ -97,10 +97,10 @@ const NoteTable& Ay8910Decoder::noteTable (int channel) const
 	return *impl->table;
 }
 
-Family Ay8910Decoder::family (int channel) const
+ChannelKind Ay8910Decoder::channelKind (int channel) const
 {
 	(void) channel;
-	return Family::aySquare;
+	return ChannelKind::aySquare;
 }
 
 } // namespace toybox::chips

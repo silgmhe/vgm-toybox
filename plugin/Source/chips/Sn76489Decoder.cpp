@@ -158,9 +158,9 @@ const NoteTable& Sn76489Decoder::noteTable (int channel) const
 	return *impl->toneTable;
 }
 
-Family Sn76489Decoder::family (int channel) const
+ChannelKind Sn76489Decoder::channelKind (int channel) const
 {
-	return channel == noiseChannel ? Family::sn76489Noise : Family::sn76489Square;
+	return channel == noiseChannel ? ChannelKind::sn76489Noise : ChannelKind::sn76489Square;
 }
 
 bool Sn76489Decoder::isDrum (int channel) const

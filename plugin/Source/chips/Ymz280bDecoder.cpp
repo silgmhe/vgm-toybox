@@ -146,10 +146,10 @@ const NoteTable& Ymz280bDecoder::noteTable (int channel) const
 	return impl->table;
 }
 
-Family Ymz280bDecoder::family (int channel) const
+ChannelKind Ymz280bDecoder::channelKind (int channel) const
 {
 	(void) channel;
-	return Family::adpcmDrum;
+	return ChannelKind::adpcmDrum;
 }
 
 } // namespace toybox::chips
