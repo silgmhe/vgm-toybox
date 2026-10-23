@@ -9,6 +9,7 @@
 #include "../Support/TestSupport.h"
 #include "chips/ChipTypes.h"
 #include "formats/ftm/FtmSongLoader.h"
+#include "formats/ftm/compiler/Chunk.h"
 #include "formats/ftm/compiler/DriverData2A03.h"
 #include "formats/ftm/compiler/ModuleSongSource.h"
 #include "formats/vgm/VgmSongLoader.h"
@@ -932,6 +933,40 @@ void testFtmDriverData (void)
 	check (sizeof (DRIVER_2A03) == 7076, "and the music driver is 7,076 bytes of assembled 6502");
 	check (DRIVER_2A03[0] == 0x4C, "which starts with a JMP, as the driver's entry point does");
 }
+/** The compiler's output buffer. Its items stay symbolic until the driver is laid out, so the
+	questions worth asking are about the two kinds that carry a label - a reference and a bank
+	reference - and about the bounds, which the port answers instead of asserting. */
+
+void testFtmChunk (void)
+{
+	using toybox::formats::ftm::compiler::Chunk;
+	using toybox::formats::ftm::compiler::ChunkType;
+
+	Chunk chunk (ChunkType::pattern, "pat_0");
+
+	chunk.StoreByte (0x12);
+	chunk.StoreWord (0x3456);
+	chunk.StoreReference ("seq_3");
+	chunk.StoreBankReference ("seq_3", 2);
+	chunk.StoreString ({ 1, 2, 3 });
+
+	check (chunk.GetLength() == 5, "five items, not five bytes");
+	check (chunk.GetData (0) == 0x12 && chunk.GetDataSize (0) == 1, "a byte is one byte");
+	check (chunk.GetData (1) == 0x3456 && chunk.GetDataSize (1) == 2, "a word is two");
+	check (chunk.GetDataRefName (2) == "seq_3", "a reference remembers its label");
+	check (chunk.GetData (3) == 2, "a bank reference carries the bank it was given");
+	check (chunk.GetStringData (4).size() == 3, "a string keeps its bytes");
+
+	chunk.UpdateDataRefName (2, "seq_4");
+	check (chunk.GetDataRefName (2) == "seq_4", "and the label can be rewritten at layout time");
+
+	// the port answers out of range rather than asserting, because a compiler asks in loops
+	check (chunk.GetDataRefName (99).empty() && chunk.GetStringData (99).empty(),
+		   "an index past the end answers empty instead of crashing");
+	check (chunk.GetType() == ChunkType::pattern && chunk.GetLabel() == "pat_0",
+		   "the chunk keeps its identity");
+}
+
 void runFormatTests (void)
 {
 	testVgmLoaderIr();
@@ -945,6 +980,7 @@ void runFormatTests (void)
 	testFtmTonePortamento();
 	testFtmCompilerSource();
 	testFtmDriverData();
+	testFtmChunk();
 }
 
 } // namespace toybox::test
