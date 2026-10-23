@@ -9,6 +9,7 @@
 #include "../Support/TestSupport.h"
 #include "chips/ChipTypes.h"
 #include "formats/ftm/FtmSongLoader.h"
+#include "formats/ftm/compiler/ModuleSongSource.h"
 #include "formats/vgm/VgmSongLoader.h"
 #include "midi/NoteStream.h"
 #include "playback/MidiSequence.h"
@@ -841,6 +842,39 @@ void testFtmTonePortamento (void)
 		check (slide.unitsPerFrame == 4, "at the speed 3xx names");
 	}
 }
+/** The adapter the compiler port will read through: everything it can already answer comes from
+	Module, and the rest is a documented default rather than a guess. */
+
+void testFtmCompilerSource (void)
+{
+	toybox::formats::ftm::Module module;
+	module.channels = 2;
+	module.channelTypes = { 0, 2 };
+	module.frameCount = 3;
+	module.patternLength = 16;
+	module.speed = 6;
+	module.tempo = 150;
+	module.title = "T";
+	module.author = "A";
+	module.order = { { 0, 1, 2 }, { 3, 4, 5 } };
+	module.instruments.resize (3);
+	module.instruments[2].name = "used";
+
+	const toybox::formats::ftm::compiler::ModuleSongSource source (module);
+
+	check (source.GetPatternLength() == 16 && source.GetFrameCount() == 3,
+		   "the compiler sees the module's shape");
+	check (source.GetChannelCount() == 2 && source.GetAvailableChannels() == 2,
+		   "and the channels that actually play");
+	check (source.GetChannelType (1) == 2, "a channel keeps its type");
+	check (source.GetPatternAtFrame (0, 2, 1) == 5, "a frame resolves to a pattern per channel");
+	check (source.GetPatternAtFrame (0, 9, 1) == -1, "and a frame past the end is -1, not a crash");
+	check (source.GetSongSpeed() == 6 && source.GetSongTempo() == 150, "speed and tempo come through");
+	check (source.IsInstrumentUsed (2) && ! source.IsInstrumentUsed (1),
+		   "an instrument with no name is not used");
+	check (source.GetInstrument (1) == nullptr,
+		   "the instrument object is a port-time question, so it stays null for now");
+}
 void runFormatTests (void)
 {
 	testVgmLoaderIr();
@@ -852,6 +886,7 @@ void runFormatTests (void)
 	testFtmArpeggioMacro();
 	testPitchBendRange();
 	testFtmTonePortamento();
+	testFtmCompilerSource();
 }
 
 } // namespace toybox::test
