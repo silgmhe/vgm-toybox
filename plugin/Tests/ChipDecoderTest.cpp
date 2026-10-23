@@ -4308,7 +4308,7 @@ namespace
 		toybox::midi::NoteStream stream;
 		std::string error;
 		const bool ok = toybox::formats::ftm::loadNoteStream (bytes.data(), bytes.size(), stream, error);
-		std::printf ("ftm %s ok=%d notes=%d tracks=%d rows/s=%.2f %s\n", argv[2], (int) ok,
+		std::printf ("ftm %s ok=%d notes=%d tracks=%d frames/s=%.2f %s\n", argv[2], (int) ok,
 					 (int) stream.notes.size(), (int) stream.tracks.size(), stream.tickRate,
 					 ok ? "" : error.c_str());
 		return ok ? 0 : 1;
