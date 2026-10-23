@@ -875,6 +875,34 @@ void testFtmCompilerSource (void)
 		   "an instrument with no name is not used");
 	check (source.GetInstrument (1) == nullptr,
 		   "the instrument object is a port-time question, so it stays null for now");
+
+	// The compiler indexes patterns by row, so the adapter expands the sparse rows into a dense
+	// array once; empty rows keep FamiTracker's sentinels rather than zeros.
+	toybox::formats::ftm::ModulePattern pattern;
+	pattern.channel = 1;
+	pattern.index = 5;
+	toybox::formats::ftm::ModuleRow row;
+	row.row = 4;
+	row.note = 3;
+	row.octave = 4;
+	row.instrument = 2;
+	row.volume = 9;
+	row.effects.emplace_back (6, 4);
+	pattern.rows.push_back (row);
+	module.patterns.push_back (pattern);
+
+	const toybox::formats::ftm::compiler::ModuleSongSource withCells (module);
+	const auto* cell = withCells.GetDataAtPattern (0, 1, 5, 4);
+
+	check (cell != nullptr, "a pattern is materialised for the compiler");
+	if (cell != nullptr)
+	{
+		check (cell[4].Note == 3 && cell[4].Octave == 4, "the note lands in its row");
+		check (cell[4].Instrument == 2 && cell[4].Vol == 9, "with its instrument and volume");
+		check (cell[4].EffNumber[0] == 6 && cell[4].EffParam[0] == 4, "and its effect");
+		check (cell[0].Note == 0 && cell[0].Vol == 0x10,
+			   "an empty row keeps FamiTracker's sentinels, not zeros");
+	}
 }
 /** The driver the compiler will embed is FamiTracker's own, byte for byte: it is the same array its
 	build produces from driver.s, copied rather than re-derived. The assertions pin the identity

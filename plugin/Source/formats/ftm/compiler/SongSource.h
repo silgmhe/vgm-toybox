@@ -26,7 +26,27 @@ namespace toybox::formats::ftm::compiler
 {
 
 class CInstrument;			// FamiTracker's instrument, ported alongside the compiler
-struct stChanNote;			// FamiTracker's pattern cell (note, octave, instrument, volume, effects)
+
+/** One pattern cell, laid out as FamiTracker's `stChanNote` is (PatternNote.h:27) so the compiler
+	can keep reading cells the way it always has.
+
+	The defaults are FamiTracker's own sentinels, not zero: an empty cell holds NONE for the note,
+	MAX_VOLUME for the volume and MAX_INSTRUMENTS for the instrument. Zeroing them instead would
+	turn "nothing here" into "play C-0 at volume 0", which the compiler would happily encode. */
+struct stChanNote
+{
+	static constexpr unsigned char NONE = 0;
+	static constexpr unsigned char MAX_VOLUME = 0x10;
+	static constexpr unsigned char MAX_INSTRUMENTS = 0x40;
+	static constexpr int MAX_EFFECT_COLUMNS = 4;
+
+	unsigned char Note = NONE;
+	unsigned char Octave = 0;
+	unsigned char Vol = MAX_VOLUME;
+	unsigned char Instrument = MAX_INSTRUMENTS;
+	unsigned char EffNumber[MAX_EFFECT_COLUMNS] = {};
+	unsigned char EffParam[MAX_EFFECT_COLUMNS] = {};
+};
 
 /** Everything the compiler asks a module, in one place. */
 class ISongSource
