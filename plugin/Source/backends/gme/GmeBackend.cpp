@@ -1,6 +1,8 @@
 #include "GmeBackend.h"
 
 #include <atomic>
+#include <cstdio>
+#include <set>
 #include <cstring>
 #include <vector>
 
@@ -50,20 +52,28 @@ LoopPoint findLoop (Nsf_Emu& emu, double rate)
 
 	// A single matching frame proves nothing - silence and sustained notes repeat constantly - so
 	// eight consecutive matches are required before a repeat is believed.
-	constexpr int confirm = 8;
+	constexpr int confirm = 20;
 
-	std::map<unsigned long, int> lastSeen;
+	// Every earlier occurrence is kept, not just the most recent: a frame with no writes has the
+	// same hash as the frame before it, so keeping only the latest would overwrite the candidate
+	// that matters with an adjacent duplicate.
+	std::map<unsigned long, std::vector<int>> seen;
 
 	for (int k = 0; k < (int) hashes.size(); ++k)
 	{
-		auto it = lastSeen.find (hashes[(std::size_t) k]);
+		auto& candidates = seen[hashes[(std::size_t) k]];
 
-		if (it != lastSeen.end())
+		if (k + confirm < (int) hashes.size())
 		{
-			const int j = it->second;
-
-			if (k - j > confirm && k + confirm < (int) hashes.size())
+			for (auto it = candidates.rbegin(); it != candidates.rend() && *it < k; ++it)
 			{
+				const int j = *it;
+
+				if (k - j <= confirm)
+				{
+					continue;
+				}
+
 				bool same = true;
 
 				for (int n = 0; n < confirm && same; ++n)
@@ -71,7 +81,11 @@ LoopPoint findLoop (Nsf_Emu& emu, double rate)
 					same = hashes[(std::size_t) (j + n)] == hashes[(std::size_t) (k + n)];
 				}
 
-				if (same)
+				// A window where nothing is written repeats trivially - two long rests look
+				// identical - so a candidate has to contain some activity of its own.
+				std::set<unsigned long> within (hashes.begin() + k, hashes.begin() + k + confirm);
+
+				if (same && within.size() > 12)
 				{
 					const double framesPerSecond = rate / (double) frameSamples;
 					result.found = true;
@@ -82,7 +96,7 @@ LoopPoint findLoop (Nsf_Emu& emu, double rate)
 			}
 		}
 
-		lastSeen[hashes[(std::size_t) k]] = k;
+		candidates.push_back (k);
 	}
 
 	return result;
