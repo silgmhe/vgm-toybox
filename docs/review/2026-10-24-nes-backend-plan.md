@@ -35,7 +35,7 @@ emu/cores/  178 个文件，NES 系只有 np_nes_apu.c / np_nes_dmc.c / np_nes_f
 
 ## 3. NSFPlay 提供什么
 
-`reference/nsfplay/nsfplay-master/xgm/devices/Sound/` 下：
+`plugin/Source/backends/nes/third_party/nsfplay/xgm/devices/Sound/` 下（从本地参考树复制而来，见 §8）：
 
 ```
 nes_apu.cpp/.h     2A03 方波/三角/噪声
@@ -90,3 +90,25 @@ plugin/Source/backends/nes/
 - `FtmSongIr.cpp` 已经把 FTM 编译成寄存器写（音符、音量、占空比、宏、行效果、DPCM）；
 - 本后端消费的正是这份输出，不重新解析模块；
 - 已有的 `--ftm-audio` 探针与 `ftm_vgm` 生成路径继续用于 libvgm 侧的回归。
+
+## 8. 第三方代码与依赖边界
+
+`reference/` 是**本地参考树，且被 `.gitignore` 排除**——它只在开发者的机器上存在，构建、`ctest` 与
+任何自动化流程都不得依赖它。因此凡是被编译的第三方代码都已复制进仓库：
+
+| 位置 | 来源 | 用途 | 是否参与构建 |
+|---|---|---|---|
+| `plugin/Source/backends/nes/third_party/nsfplay/` | NSFPlay `xgm/` | NES 芯片核心（APU/DMC 已编译，VRC6/N163 等备用） | 是（3 个 .cpp） |
+| `plugin/Source/formats/ftm/compiler/DriverData2A03.h` | Dn-FamiTracker `drivers/drv_2a03.h` | 2A03 驱动二进制（8 + 7,076 字节） | 是（数据） |
+| `plugin/Source/formats/ftm/compiler/{SongSource,ModuleSongSource,Chunk,Instrument}` | 本项目自行编写 | 编译器移植的接口与数据缓冲 | 是 |
+
+**仅文档与可选工具仍提到 `reference/`**：
+
+| 项 | 说明 |
+|---|---|
+| `tools/build_dnft.ps1` | 编译本地参考实现，用于生成权威导出；缺参考树时脚本自行失败，不影响构建 |
+| `tools/ftm_regression.ps1` | 默认 `-TrackerExe` 指向参考树里的 exe；缺省时逐首 SKIP |
+| `docs/**` | 设计文档引用了参考源码的行号，属于出处标注 |
+
+验证方式（本文件写作时的实测）：CMake 与 `plugin/Source` 中的 `reference/` 出现次数为 **0**，
+且 `ctest` 的 21 个测试无一调用 `tools/` 下的脚本。

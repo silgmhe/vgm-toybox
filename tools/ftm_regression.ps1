@@ -6,6 +6,8 @@
 #
 #   tools/ftm_regression.ps1                 # compare every module with an export
 #   tools/ftm_regression.ps1 -Export         # regenerate the exports first (needs the tracker)
+# 注意：reference/ 是本地参考树并被 .gitignore 排除；构建、ctest 与自动化流程都不依赖它，
+#       只有本脚本需要（且缺树时应自行失败，而不是静默产出错误结果）。
 param(
     [string] $ModuleDir = "test_file\ftm",
     [string] $ExportDir = "build\ftm_exports",

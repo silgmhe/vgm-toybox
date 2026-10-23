@@ -4,6 +4,8 @@
 # location: the MSVC toolset here is 14.51 (v145) and the SDK lives on D: because the registry's
 # KitsRoot10 says so. Both are passed explicitly rather than by editing the project files, so the
 # reference tree stays pristine.
+# 注意：reference/ 是本地参考树并被 .gitignore 排除；构建、ctest 与自动化流程都不依赖它，
+#       只有本脚本需要（且缺树时应自行失败，而不是静默产出错误结果）。
 param(
     [string] $Configuration = "Release",
     [string] $Platform = "Win32",
