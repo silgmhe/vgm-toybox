@@ -460,11 +460,108 @@ using toybox::test::check;
 			check (monotonic, "porta up never steps back down");
 		}
 	}
+/** Sxx ends a note where the tracker ends it. Built as its own module because none of the other
+	three carry a cut, which is why the behaviour was first evidenced only by a real file changing. */
+void testFtmNoteCut (void)
+{
+	std::vector<std::uint8_t> image;
+	const auto put32 = [&image] (std::uint32_t v)
+	{
+		for (int i = 0; i < 4; ++i)
+		{
+			image.push_back ((std::uint8_t) ((v >> (8 * i)) & 0xFF));
+		}
+	};
+	const auto putText = [&image] (const char* text)
+	{
+		for (const char* c = text; *c != '\0'; ++c)
+		{
+			image.push_back ((std::uint8_t) *c);
+		}
+	};
+	const auto block = [&image, &put32] (const char* id, std::uint32_t version,
+										  const std::vector<std::uint8_t>& payload)
+	{
+		char padded[16] = {};
+		for (int i = 0; i < 16 && id[i] != '\0'; ++i)
+		{
+			padded[i] = id[i];
+		}
+		image.insert (image.end(), padded, padded + 16);
+		put32 (version);
+		put32 ((std::uint32_t) payload.size());
+		image.insert (image.end(), payload.begin(), payload.end());
+	};
+
+	putText ("FamiTracker Module");
+	put32 (0x0420);
+	block ("PARAMS", 3, { 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 });
+	block ("HEADER", 3, { 0x00, 'T', 0x00, 0x00, 0x00 });
+
+	{	// one frame of sixteen rows, speed 6
+		std::vector<std::uint8_t> payload;
+		const auto word = [&payload] (std::uint32_t v)
+		{
+			for (int i = 0; i < 4; ++i)
+			{
+				payload.push_back ((std::uint8_t) ((v >> (8 * i)) & 0xFF));
+			}
+		};
+		word (1);
+		word (6);
+		word (150);
+		word (16);
+		payload.push_back (0);
+		block ("FRAMES", 3, payload);
+	}
+
+	{	// C-4 at row 0, then S00 on row 4: the note stops there, 24 frames in
+		std::vector<std::uint8_t> body;
+		const auto word = [&body] (std::uint32_t v)
+		{
+			for (int i = 0; i < 4; ++i)
+			{
+				body.push_back ((std::uint8_t) ((v >> (8 * i)) & 0xFF));
+			}
+		};
+		word (0); word (0); word (0); word (2);		// two items
+		word (0);									// row 0
+		body.push_back (1);		// C
+		body.push_back (4);
+		body.push_back (1);
+		body.push_back (15);
+		body.push_back (0);
+		body.push_back (0);
+		word (4);									// row 4
+		body.push_back (0);		// no note
+		body.push_back (0);
+		body.push_back (0);
+		body.push_back (0);
+		body.push_back (23);	// effect 23 = note cut
+		body.push_back (0);		// no delay
+		block ("PATTERNS", 3, body);
+	}
+
+	putText ("END");
+
+	toybox::midi::NoteStream stream;
+	std::string error;
+	check (toybox::formats::ftm::loadNoteStream (image.data(), image.size(), stream, error),
+		   "the module with a cut loads");
+
+	check (stream.notes.size() == 1, "the cut leaves the note itself in place");
+	if (stream.notes.size() == 1)
+	{
+		check (stream.notes[0].note.endSample == 24, "S00 on row 4 ends it at frame 24");
+	}
+}
+
 void runFormatTests (void)
 {
 	testVgmLoaderIr();
 	testFtmAuthoredStream();
 	testFtmSkipEffect();
+	testFtmNoteCut();
 	testFtmPortamento();
 }
 
