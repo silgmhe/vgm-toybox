@@ -9,6 +9,7 @@
 
 #include "VgmCommandReader.h"
 #include "formats/vgm/VgmSongLoader.h"
+#include "midi/NoteStream.h"
 #include "midi/SongIr.h"
 
 #include "chips/Ay8910Decoder.h"
@@ -181,6 +182,21 @@ namespace
 			{
 				dispatch (ir, write);
 			}
+
+			// A -> B, then B -> MIDI. Two stages, one direction: the encoder below cannot see a
+			// register write, and this stage cannot see a MIDI event.
+			return encode (inferNotes (ir));
+		}
+
+		/** A -> B: the register writes become notes.
+
+			This is the only place where a note is *guessed* - every decoder's pitch model, every
+			measured sample, every one-shot decision ends up here as a `NoteEvent`. A module loader
+			that knows its notes outright produces the same `NoteStream` without calling this. */
+		midi::NoteStream inferNotes (const midi::SongIr& ir)
+		{
+			stream = midi::NoteStream {};
+			stream.tickRate = tickRate;
 
 			const std::uint32_t lastSampleTime = ir.totalTicks;
 
@@ -364,20 +380,7 @@ namespace
 			flushDecoded (decoders.decoder<chips::Ymf271Decoder> (), 16934400u, lastSampleTime);
 			flushDecoded (decoders.decoder<chips::Ymz280bDecoder> (), 16934400u, lastSampleTime);
 
-			if (events.empty())
-			{
-				return nullptr;
-			}
-
-			std::stable_sort (events.begin(), events.end(),
-							  [] (const playback::MidiEvent& a, const playback::MidiEvent& b)
-							  {
-								  return a.timeSeconds < b.timeSeconds;
-							  });
-
-			auto sequence = std::make_unique<playback::MidiSequence>();
-			sequence->events = std::move (events);
-			return sequence;
+			return std::move (stream);
 		}
 
 	private:
@@ -549,25 +552,20 @@ namespace
 			nesDevices[device->id] = device;
 		}
 
-		/** Emits the notes a decoder produced, through the track each chip channel maps to.
-
-			The bends go in after the notes so that, at equal timestamps, the stable sort keeps
-			every note-on ahead of the bend that belongs to it. */
-		void emitDecodedNotes (const PLR_DEV_INFO* device,
-							   const chips::ExtractedPerformance& performance)
+		/** B -> MIDI. The track is already resolved on every note, so nothing here knows a device,
+			a chip or a format - only notes, bends and the unit their times are in. */
+		std::unique_ptr<playback::MidiSequence> encode (const midi::NoteStream& in)
 		{
+			events.clear();
 			// With the sample-root preference on, the note moves by whatever the sample's own root
 			// says (design doc section 14); the cents left over ride on the bend that already
 			// belongs to the note's own start, so vibrato after it is untouched.
 			std::map<std::pair<int, std::uint32_t>, int> rootRemainder;
 
-			for (const auto& note : performance.notes)
+			for (const auto& entry : in.notes)
 			{
-				const int track = trackFor (device, note.logicalChannel);
-				if (track < 0)
-				{
-					continue;
-				}
+				const auto& note = entry.note;
+				const int track = entry.track;
 
 				int midiNote = note.note;
 				if (useSampleRoot && note.rootCents != 0)
@@ -591,13 +589,10 @@ namespace
 				noteOff (track, end, midiNote);
 			}
 
-			for (const auto& bend : performance.bends)
+			for (const auto& entry : in.bends)
 			{
-				const int track = trackFor (device, bend.logicalChannel);
-				if (track < 0)
-				{
-					continue;
-				}
+				const auto& bend = entry.bend;
+				const int track = entry.track;
 
 				int cents = bend.cents;
 				const auto extra = rootRemainder.find ({ track, bend.sampleTime });
@@ -607,6 +602,44 @@ namespace
 				}
 
 				pitchBend (track, (double) bend.sampleTime / tickRate, (double) cents / 100.0);
+			}
+
+			if (events.empty())
+			{
+				return nullptr;
+			}
+
+			std::stable_sort (events.begin(), events.end(),
+							  [] (const playback::MidiEvent& a, const playback::MidiEvent& b)
+							  {
+								  return a.timeSeconds < b.timeSeconds;
+							  });
+
+			auto sequence = std::make_unique<playback::MidiSequence>();
+			sequence->events = std::move (events);
+			return sequence;
+		}
+
+		/** Collects one decoder's notes, with the MIDI track each chip channel maps to already
+			resolved - the last thing that needs a device pointer before the encoder takes over. */
+		void appendNotes (const PLR_DEV_INFO* device, const chips::ExtractedPerformance& performance)
+		{
+			for (const auto& note : performance.notes)
+			{
+				const int track = trackFor (device, note.logicalChannel);
+				if (track >= 0)
+				{
+					stream.notes.push_back ({ track, note });
+				}
+			}
+
+			for (const auto& bend : performance.bends)
+			{
+				const int track = trackFor (device, bend.logicalChannel);
+				if (track >= 0)
+				{
+					stream.bends.push_back ({ track, bend });
+				}
 			}
 		}
 
@@ -628,7 +661,7 @@ namespace
 				chips::NesApuDecoder decoder;
 				decoder.reset (chips::ChipConfig { clock, tickRate });
 
-				emitDecodedNotes (device->second,
+				appendNotes (device->second,
 								  chips::extractPerformance (decoder, entry.second, totalSamples));
 			}
 
@@ -701,7 +734,7 @@ namespace
 					decoder.setAdpcmBRom (adpcmBRom);
 				}
 
-				emitDecodedNotes (&info,
+				appendNotes (&info,
 								  chips::extractPerformance (decoder, entry.second, totalSamples));
 			}
 
@@ -761,7 +794,7 @@ namespace
 				chips::OplDecoder decoder (variant, adpcm);
 				decoder.reset (chips::ChipConfig { clock, tickRate });
 
-				emitDecodedNotes (&info,
+				appendNotes (&info,
 								  chips::extractPerformance (decoder, entry.second, totalSamples));
 			}
 
@@ -807,7 +840,7 @@ namespace
 				decoder.reset (chips::ChipConfig { clock, tickRate });
 				configure (decoder);
 
-				emitDecodedNotes (device->second,
+				appendNotes (device->second,
 								  chips::extractPerformance (decoder, entry.second, totalSamples));
 			}
 
@@ -1071,7 +1104,7 @@ namespace
 				chips::GbcApuDecoder decoder;
 				decoder.reset (chips::ChipConfig { clock, tickRate });
 
-				emitDecodedNotes (device->second,
+				appendNotes (device->second,
 								  chips::extractPerformance (decoder, entry.second, totalSamples));
 			}
 
@@ -1138,6 +1171,9 @@ namespace
 			loader declared it. VGM says 44100; a CPU-rate format would say 1.79 MHz and
 			the conversion happens here, once. */
 		double tickRate = 44100.0;
+
+		/** A -> B's output; `encode` is the only reader. */
+		midi::NoteStream stream;
 
 		std::vector<playback::MidiEvent> events;
 
