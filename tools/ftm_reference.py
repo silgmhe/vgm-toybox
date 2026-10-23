@@ -159,6 +159,7 @@ def walk(module):
 
             notes = [entry for entry in rows if entry[1] != 0]
             for i, (row, note, octave, instrument, volume, effects) in enumerate(notes):
+                row = max(0, min(row, length - 1))   # a row past the pattern is not a position
                 start = base + offsets[row]
                 end = (base + offsets[notes[i + 1][0] % len(offsets)] if i + 1 < len(notes)
                        else base + offsets[length])
