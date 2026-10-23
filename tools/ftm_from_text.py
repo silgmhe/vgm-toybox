@@ -26,6 +26,7 @@ ORDER_RE = re.compile(r'^ORDER ([0-9A-F]+) : (.*)$')
 
 def parse(path):
     pattern_length = speed = 0
+    track = -1
     order = []
     patterns = {}
     current = None
@@ -40,14 +41,22 @@ def parse(path):
                 speed = int(parts[2])
                 continue
 
+            if line.startswith('# track ') and 'block' in line:
+                section = line.split()[2]
+                if section == 'FRAMES':
+                    track += 1
+                continue
+
             match = ORDER_RE.match(line)
             if match:
-                order.append([int(v, 16) for v in match.group(2).split()])
+                if track == 0:
+                    order.append([int(v, 16) for v in match.group(2).split()])
                 continue
 
             if line.startswith('PATTERN '):
-                current = int(line.split()[1], 16)
-                patterns[current] = {}
+                current = int(line.split()[1], 16) if track == 0 else None
+                if current is not None:
+                    patterns[current] = {}
                 continue
 
             match = ROW_RE.match(line)
@@ -94,7 +103,12 @@ def walk(pattern_length, speed, order, patterns, channels):
         frame_speed = speed
 
         for row in range(pattern_length):
-            for channel in channels:
+            # structure effects (Fxx/Bxx/Dxx) may sit on any channel, including ones this run does
+            # not compare; scanning only the compared channels made the walk miss a loop and run to
+            # the end of the order list while the loader stopped at the jump.
+            for channel in range(max(order[frame]) + 1 if order[frame] else 0):
+                if channel >= len(order[frame]):
+                    continue
                 cells = patterns.get(order[frame][channel], {}).get(row)
                 if not cells or channel >= len(cells):
                     continue
