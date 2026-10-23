@@ -524,7 +524,7 @@ void testFtmNoteCut (void)
 				body.push_back ((std::uint8_t) ((v >> (8 * i)) & 0xFF));
 			}
 		};
-		word (0); word (0); word (0); word (2);		// two items
+		word (0); word (0); word (0); word (3);		// three items
 		word (0);									// row 0
 		body.push_back (1);		// C
 		body.push_back (4);
@@ -532,6 +532,13 @@ void testFtmNoteCut (void)
 		body.push_back (15);
 		body.push_back (0);
 		body.push_back (0);
+		word (2);									// row 2: F03 halves the row length
+		body.push_back (0);
+		body.push_back (0);
+		body.push_back (0);
+		body.push_back (0);
+		body.push_back (1);		// effect 1 = speed
+		body.push_back (3);
 		word (4);									// row 4
 		body.push_back (0);		// no note
 		body.push_back (0);
@@ -552,7 +559,7 @@ void testFtmNoteCut (void)
 	check (stream.notes.size() == 1, "the cut leaves the note itself in place");
 	if (stream.notes.size() == 1)
 	{
-		check (stream.notes[0].note.endSample == 24, "S00 on row 4 ends it at frame 24");
+		check (stream.notes[0].note.endSample == 18, "S00 at row 4 ends it at frame 18: rows 0-1 at six frames, row 2 on at three");
 	}
 }
 

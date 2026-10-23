@@ -442,13 +442,15 @@ bool loadNoteStream (const void* data, std::size_t size, midi::NoteStream& out, 
 		std::uint32_t clock = rowFrames;
 		for (int row = 0; row < module.patternLength; ++row)
 		{
-			offsets[(std::size_t) row + 1] = offsets[(std::size_t) row] + clock;
-
+			// The effect executes at its own row, so that row already lasts the new speed - which is
+			// what the reference's scan does (FamiTrackerDoc.cpp:4953 sets Speed, then advances).
 			const auto found = speedAtRow.find (row);
 			if (found != speedAtRow.end())
 			{
 				clock = found->second;
 			}
+
+			offsets[(std::size_t) row + 1] = offsets[(std::size_t) row] + clock;
 		}
 		rowFrames = clock;
 
