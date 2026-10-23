@@ -198,7 +198,7 @@ namespace
 			for (int item = 0; item < items && reader.ok(); ++item)
 			{
 				const int row = reader.i32();
-				ModuleRow note;
+				ModuleNote note;
 				note.row = row;
 				note.note = reader.u8();
 				note.octave = reader.u8();
@@ -209,17 +209,13 @@ namespace
 											? module.effectColumns[(std::size_t) channel] : 0;
 				for (int column = 0; column <= effectColumns; ++column)
 				{
-					const int number = reader.u8();
-					const int param = reader.u8();
-					if (number != 0)
-					{
-						note.effects.emplace_back (number, param);
-					}
+					(void) reader.u8();		// effect number
+					(void) reader.u8();		// effect parameter
 				}
 
-				if (note.hasNote() || ! note.effects.empty())
+				if (note.note != 0)
 				{
-					pattern.rows.push_back (note);
+					pattern.notes.push_back (note);
 				}
 			}
 
@@ -405,23 +401,14 @@ bool loadNoteStream (const void* data, std::size_t size, midi::NoteStream& out, 
 			const ModulePattern& pattern = *found->second;
 			const std::uint32_t base = (std::uint32_t) frame * (std::uint32_t) module.patternLength;
 
-			std::vector<const ModuleRow*> notes;
-			for (const auto& row : pattern.rows)
+			for (std::size_t i = 0; i < pattern.notes.size(); ++i)
 			{
-				if (row.hasNote())
-				{
-					notes.push_back (&row);
-				}
-			}
-
-			for (std::size_t i = 0; i < notes.size(); ++i)
-			{
-				const ModuleRow& note = *notes[i];
+				const ModuleNote& note = pattern.notes[i];
 
 				chips::NoteEvent event;
 				event.startSample = base + (std::uint32_t) note.row;
-				event.endSample = (i + 1 < notes.size())
-									  ? base + (std::uint32_t) notes[i + 1]->row
+				event.endSample = (i + 1 < pattern.notes.size())
+									  ? base + (std::uint32_t) pattern.notes[i + 1].row
 									  : base + (std::uint32_t) module.patternLength;
 
 				const int midiNote = 12 + note.octave * 12 + (note.note - 1);
