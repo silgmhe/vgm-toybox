@@ -29,6 +29,9 @@ public:
 	/** A register of the chip's own map: $9000-$9002, $A000-$A002, $B000-$B002. */
 	void write (int address, int value);
 
+	/** Muted voices, one bit each, in the tracker's order: pulse 1, pulse 2, sawtooth. */
+	void setMask (int mask);
+
 	/** Adds `samples` frames into the two buffers, like the APU wrapper. */
 	void render (float* left, float* right, int samples);
 

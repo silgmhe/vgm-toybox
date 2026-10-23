@@ -1,6 +1,7 @@
 #include "playback/BackendRegistry.h"
 
 #include "backends/libvgm/LibvgmBackend.h"
+#include "backends/nes/NesBackend.h"
 
 namespace toybox::playback
 {
@@ -22,7 +23,12 @@ void registerBuiltInBackends (void)
 	}
 	registered = true;
 
-	// the first backend that recognises an image wins, so this order is the priority
+	// the first backend that recognises an image wins, so this order is the priority.
+	//
+	// Modules go first because they need the chip cores: libvgm can open a .ftm too, by compiling it
+	// to a VGM image, but the VGM format has no command for VRC6, N163 or VRC7, so that path drops
+	// those voices without a word. The NES backend plays them.
+	BackendRegistry::getInstance().add (std::make_unique<backends::nes::NesBackend>());
 	BackendRegistry::getInstance().add (std::make_unique<backends::libvgm::LibvgmBackend>());
 
 	// optional backends go here, e.g. a SNES/SPC engine:

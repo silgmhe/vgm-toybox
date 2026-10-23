@@ -27,6 +27,11 @@ void NsfN163Chip::write (int address, int value)
 	chip->Write ((UINT32) address, (UINT32) (value & 0xFF));
 }
 
+void NsfN163Chip::setMask (int mask)
+{
+	chip->SetMask (mask);
+}
+
 void NsfN163Chip::render (float* left, float* right, int samples)
 {
 	for (int i = 0; i < samples; ++i)

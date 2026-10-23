@@ -30,6 +30,9 @@ public:
 	/** A register of the chip's map, $9010-$9030. */
 	void write (int address, int value);
 
+	/** Muted voices, one bit each, in the tracker's order. */
+	void setMask (int mask);
+
 	void render (float* left, float* right, int samples);
 
 	static constexpr float fullScale = 32768.0f;

@@ -229,6 +229,23 @@ target_sources(VGMToybox PRIVATE
 	Source/backends/libvgm/LibvgmSongInstance.cpp
 	Source/backends/libvgm/LibvgmTrackPlayer.cpp
 	Source/backends/libvgm/LibvgmVgz.cpp
+
+	# The NES backend: our adapter and the NSFPlay cores it drives. The cores are vendored under
+	# Source/backends/nes/third_party and are compiled into the plugin itself - see
+	# docs/review/2026-10-24-nes-backend-plan.md for why this exists at all (libvgm has no VRC6).
+	Source/backends/nes/NesBackend.cpp
+	Source/backends/nes/NsfApuChip.cpp
+	Source/backends/nes/NsfVrc6Chip.cpp
+	Source/backends/nes/NsfVrc7Chip.cpp
+	Source/backends/nes/NsfN163Chip.cpp
+	Source/backends/nes/NsfPlayStubs.cpp
+	Source/backends/nes/third_party/nsfplay/xgm/devices/Sound/nes_apu.cpp
+	Source/backends/nes/third_party/nsfplay/xgm/devices/Sound/nes_dmc.cpp
+	Source/backends/nes/third_party/nsfplay/xgm/devices/Sound/nes_vrc6.cpp
+	Source/backends/nes/third_party/nsfplay/xgm/devices/Sound/nes_vrc7.cpp
+	Source/backends/nes/third_party/nsfplay/xgm/devices/Sound/nes_n106.cpp
+	Source/backends/nes/third_party/nsfplay/xgm/devices/Sound/legacy/emu2413.c
+	Source/backends/nes/third_party/nsfplay/xgm/devices/CPU/nes_cpu.cpp
 	Source/i18n/LanguageManager.cpp
 	Source/i18n/LanguagePack.cpp
 	Source/settings/SettingsStore.cpp
@@ -387,6 +404,19 @@ add_executable(vgm_mixer_test EXCLUDE_FROM_ALL
 	Source/backends/libvgm/LibvgmSongInstance.cpp
 	Source/backends/libvgm/LibvgmTrackPlayer.cpp
 	Source/backends/libvgm/LibvgmVgz.cpp
+	Source/backends/nes/NesBackend.cpp
+	Source/backends/nes/NsfApuChip.cpp
+	Source/backends/nes/NsfVrc6Chip.cpp
+	Source/backends/nes/NsfVrc7Chip.cpp
+	Source/backends/nes/NsfN163Chip.cpp
+	Source/backends/nes/NsfPlayStubs.cpp
+	Source/backends/nes/third_party/nsfplay/xgm/devices/Sound/nes_apu.cpp
+	Source/backends/nes/third_party/nsfplay/xgm/devices/Sound/nes_dmc.cpp
+	Source/backends/nes/third_party/nsfplay/xgm/devices/Sound/nes_vrc6.cpp
+	Source/backends/nes/third_party/nsfplay/xgm/devices/Sound/nes_vrc7.cpp
+	Source/backends/nes/third_party/nsfplay/xgm/devices/Sound/nes_n106.cpp
+	Source/backends/nes/third_party/nsfplay/xgm/devices/Sound/legacy/emu2413.c
+	Source/backends/nes/third_party/nsfplay/xgm/devices/CPU/nes_cpu.cpp
 )
 # --- console test for the chip decoders (not built by default) ---
 # Register writes in, notes out. Links Source/chips and nothing else - no libvgm, no JUCE.

@@ -27,6 +27,11 @@ void NsfVrc7Chip::write (int address, int value)
 	chip->Write ((UINT32) address, (UINT32) (value & 0xFF));
 }
 
+void NsfVrc7Chip::setMask (int mask)
+{
+	chip->SetMask (mask);
+}
+
 void NsfVrc7Chip::render (float* left, float* right, int samples)
 {
 	for (int i = 0; i < samples; ++i)
