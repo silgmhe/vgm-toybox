@@ -63,7 +63,11 @@ struct Module
 		std::string name;
 		int volume = -1;		// SEQ_VOLUME: the level the note starts at
 		int arpeggio = -1;		// SEQ_ARPEGGIO: semitone offsets, stepped one per frame
-		int pitch = -1;			// SEQ_PITCH: fine detune, kept but not applied (see the .cpp)
+		/** SEQ_PITCH: fine detune. Parsed, not applied - the unit is genuinely unknown here, and
+			the one number the reference makes easy to find (`m_iPitch`, clamped at 511) turned out to
+			be *the MIDI pitch wheel offset*, not this macro (ChannelHandler.h:104). Guessing a scale
+			would bend every note that uses the macro by a wrong constant and report nothing. */
+		int pitch = -1;
 		int duty = -1;			// SEQ_DUTYCYCLE: no MIDI equivalent, kept for a future audio path
 	};
 
