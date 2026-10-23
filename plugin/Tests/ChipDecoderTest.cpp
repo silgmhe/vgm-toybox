@@ -4385,6 +4385,14 @@ namespace
 			// Drive NSFPlay's core from the same register stream the VGM path uses: if this makes
 			// sound, the backend plan holds and the expansion chips are only a mapping away.
 			toybox::backends::nes::NsfApuChip apu (44100.0);
+
+			for (const auto& rom : song.ownedRoms)
+			{
+				if (rom.memoryType == 0x08 && ! rom.bytes.empty())
+				{
+					apu.setDpcmRom (rom.bytes.data(), rom.bytes.size());
+				}
+			}
 			std::unique_ptr<toybox::backends::nes::NsfVrc6Chip> vrc6;
 			std::unique_ptr<toybox::backends::nes::NsfVrc7Chip> vrc7;
 			std::unique_ptr<toybox::backends::nes::NsfN163Chip> n163;
