@@ -4321,7 +4321,7 @@ namespace
 {
 	// `--ftm <file>` parses a real module and prints what came out. The unit test can only build a
 	// synthetic module, so this is how the seven files in test_file/ftm get checked.
-	if (argc >= 3 && (std::string (argv[1]) == "--ftm" || std::string (argv[1]) == "--ftm-dump" || std::string (argv[1]) == "--ftm-audio" || std::string (argv[1]) == "--ftm-vgm" || std::string (argv[1]) == "--ftm-nsf"))
+	if (argc >= 3 && (std::string (argv[1]) == "--ftm" || std::string (argv[1]) == "--ftm-dump" || std::string (argv[1]) == "--ftm-audio" || std::string (argv[1]) == "--ftm-vgm" || std::string (argv[1]) == "--ftm-nsf" || std::string (argv[1]) == "--ftm-writes"))
 	{
 		std::ifstream file (argv[2], std::ios::binary);
 		const std::vector<char> bytes ((std::istreambuf_iterator<char> (file)),
@@ -4344,6 +4344,28 @@ namespace
 			std::ofstream out (argv[3], std::ios::binary);
 			out.write ((const char*) image.data(), (std::streamsize) image.size());
 			std::printf ("ftm-vgm %s bytes=%d\n", argv[3], (int) image.size());
+			return 0;
+		}
+
+		if (std::string (argv[1]) == "--ftm-writes")
+		{
+			toybox::midi::SongIr song;
+			std::string error;
+
+			if (! toybox::formats::ftm::loadSongIr (bytes.data(), bytes.size(), song, error))
+			{
+				std::printf ("error %s\n", error.c_str());
+				return 1;
+			}
+
+			const int limit = (argc >= 4) ? std::atoi (argv[3]) : 12;
+			for (int i = 0; i < limit && i < (int) song.writes.size(); ++i)
+			{
+				const auto& write = song.writes[i];
+				std::printf ("  t=%u dev=%u port=%02X reg=%02X val=%02X\n", write.sampleTime,
+							 write.deviceId, write.port, write.reg, write.value);
+			}
+
 			return 0;
 		}
 
