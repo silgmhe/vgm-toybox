@@ -224,6 +224,21 @@ target_sources(VGMToybox PRIVATE
 	Source/backends/libvgm/MidiSequenceBuilder.cpp
 	Source/backends/libvgm/VgmCommandReader.cpp
 	Source/formats/vgm/VgmSongLoader.cpp
+
+	# The NSF path: our reader, our memory map, our player, and the vendor cores they drive.
+	# See docs/review/2026-10-24-furnace-analysis.md for why a driver-based format belongs here.
+	Source/formats/nsf/NsfFile.cpp
+	Source/formats/nsf/NsfMemory.cpp
+	Source/backends/nsf/NsfPlayer.cpp
+	Source/backends/nsf/NsfPlayStubs.cpp
+	Source/backends/nsf/third_party/nsfplay/xgm/devices/Sound/nes_apu.cpp
+	Source/backends/nsf/third_party/nsfplay/xgm/devices/Sound/nes_dmc.cpp
+	Source/backends/nsf/third_party/nsfplay/xgm/devices/Sound/nes_vrc6.cpp
+	Source/backends/nsf/third_party/nsfplay/xgm/devices/Sound/nes_vrc7.cpp
+	Source/backends/nsf/third_party/nsfplay/xgm/devices/Sound/nes_n106.cpp
+	Source/backends/nsf/third_party/nsfplay/xgm/devices/Sound/legacy/emu2413.c
+	Source/backends/nsf/third_party/nsfplay/xgm/devices/CPU/nes_cpu.cpp
+	Source/backends/nsf/third_party/nsfplay/xgm/devices/Memory/nes_mem.cpp
 	Source/backends/libvgm/LibvgmSongInstance.cpp
 	Source/backends/libvgm/LibvgmTrackPlayer.cpp
 	Source/backends/libvgm/LibvgmVgz.cpp
@@ -380,10 +395,46 @@ add_executable(vgm_mixer_test EXCLUDE_FROM_ALL
 	Source/backends/libvgm/MidiSequenceBuilder.cpp
 	Source/backends/libvgm/VgmCommandReader.cpp
 	Source/formats/vgm/VgmSongLoader.cpp
+
+	# The NSF path: our reader, our memory map, our player, and the vendor cores they drive.
+	# See docs/review/2026-10-24-furnace-analysis.md for why a driver-based format belongs here.
+	Source/formats/nsf/NsfFile.cpp
+	Source/formats/nsf/NsfMemory.cpp
+	Source/backends/nsf/NsfPlayer.cpp
+	Source/backends/nsf/NsfPlayStubs.cpp
+	Source/backends/nsf/third_party/nsfplay/xgm/devices/Sound/nes_apu.cpp
+	Source/backends/nsf/third_party/nsfplay/xgm/devices/Sound/nes_dmc.cpp
+	Source/backends/nsf/third_party/nsfplay/xgm/devices/Sound/nes_vrc6.cpp
+	Source/backends/nsf/third_party/nsfplay/xgm/devices/Sound/nes_vrc7.cpp
+	Source/backends/nsf/third_party/nsfplay/xgm/devices/Sound/nes_n106.cpp
+	Source/backends/nsf/third_party/nsfplay/xgm/devices/Sound/legacy/emu2413.c
+	Source/backends/nsf/third_party/nsfplay/xgm/devices/CPU/nes_cpu.cpp
+	Source/backends/nsf/third_party/nsfplay/xgm/devices/Memory/nes_mem.cpp
 	Source/backends/libvgm/LibvgmSongInstance.cpp
 	Source/backends/libvgm/LibvgmTrackPlayer.cpp
 	Source/backends/libvgm/LibvgmVgz.cpp
 )
+# --- console probe for the NSF player (not built by default) ---
+#   cmake --build <build dir> --target vgm_nsf_probe
+#   <build dir>/plugin/vgm_nsf_probe <file.nsf> <seconds> [out.wav]
+add_executable(vgm_nsf_probe EXCLUDE_FROM_ALL
+	Tests/NsfProbe.cpp
+	Source/formats/nsf/NsfFile.cpp
+	Source/formats/nsf/NsfMemory.cpp
+	Source/backends/nsf/NsfPlayer.cpp
+	Source/backends/nsf/NsfPlayStubs.cpp
+	Source/backends/nsf/third_party/nsfplay/xgm/devices/Sound/nes_apu.cpp
+	Source/backends/nsf/third_party/nsfplay/xgm/devices/Sound/nes_dmc.cpp
+	Source/backends/nsf/third_party/nsfplay/xgm/devices/Sound/nes_vrc6.cpp
+	Source/backends/nsf/third_party/nsfplay/xgm/devices/Sound/nes_vrc7.cpp
+	Source/backends/nsf/third_party/nsfplay/xgm/devices/Sound/nes_n106.cpp
+	Source/backends/nsf/third_party/nsfplay/xgm/devices/Sound/legacy/emu2413.c
+	Source/backends/nsf/third_party/nsfplay/xgm/devices/CPU/nes_cpu.cpp
+	Source/backends/nsf/third_party/nsfplay/xgm/devices/Memory/nes_mem.cpp
+)
+target_include_directories(vgm_nsf_probe PRIVATE Source)
+target_compile_features(vgm_nsf_probe PRIVATE cxx_std_17)
+
 # --- console test for the chip decoders (not built by default) ---
 # Register writes in, notes out. Links Source/chips and nothing else - no libvgm, no JUCE.
 #   cmake --build <build dir> --target vgm_chip_test
@@ -391,6 +442,21 @@ add_executable(vgm_mixer_test EXCLUDE_FROM_ALL
 add_executable(vgm_chip_test EXCLUDE_FROM_ALL
 	Source/backends/libvgm/VgmCommandReader.cpp
 	Source/formats/vgm/VgmSongLoader.cpp
+
+	# The NSF path: our reader, our memory map, our player, and the vendor cores they drive.
+	# See docs/review/2026-10-24-furnace-analysis.md for why a driver-based format belongs here.
+	Source/formats/nsf/NsfFile.cpp
+	Source/formats/nsf/NsfMemory.cpp
+	Source/backends/nsf/NsfPlayer.cpp
+	Source/backends/nsf/NsfPlayStubs.cpp
+	Source/backends/nsf/third_party/nsfplay/xgm/devices/Sound/nes_apu.cpp
+	Source/backends/nsf/third_party/nsfplay/xgm/devices/Sound/nes_dmc.cpp
+	Source/backends/nsf/third_party/nsfplay/xgm/devices/Sound/nes_vrc6.cpp
+	Source/backends/nsf/third_party/nsfplay/xgm/devices/Sound/nes_vrc7.cpp
+	Source/backends/nsf/third_party/nsfplay/xgm/devices/Sound/nes_n106.cpp
+	Source/backends/nsf/third_party/nsfplay/xgm/devices/Sound/legacy/emu2413.c
+	Source/backends/nsf/third_party/nsfplay/xgm/devices/CPU/nes_cpu.cpp
+	Source/backends/nsf/third_party/nsfplay/xgm/devices/Memory/nes_mem.cpp
 	Tests/ChipDecoderTest.cpp
 	Source/chips/GbcApuDecoder.cpp
 	Source/chips/HuC6280Decoder.cpp
