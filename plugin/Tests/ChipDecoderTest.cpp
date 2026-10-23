@@ -4422,7 +4422,8 @@ namespace
 		std::string ignored;
 		if (ok && toybox::formats::ftm::parseModule (bytes.data(), bytes.size(), module, ignored))
 		{
-			std::printf ("    instruments=%d", (int) module.instruments.size());
+			std::printf ("    instruments=%d samples=%d", (int) module.instruments.size(),
+							 (int) module.samples.size());
 			for (std::size_t i = 0; i < module.instruments.size() && i < 4; ++i)
 			{
 				std::printf (" [%d] %s vol=%d arp=%d pitch=%d duty=%d", (int) i,

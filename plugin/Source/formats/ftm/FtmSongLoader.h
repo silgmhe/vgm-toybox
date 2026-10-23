@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstddef>
+#include <array>
 #include <cstdint>
 #include <string>
 #include <vector>
@@ -56,6 +57,22 @@ struct Module
 	std::vector<std::vector<int>> order;			// [channel][frame] -> pattern index
 	std::vector<ModulePattern> patterns;
 
+	/** One DPCM sample: a name and the bytes the chip plays. */
+	struct DpcmSample
+	{
+		std::string name;
+		std::vector<std::uint8_t> data;
+	};
+
+	/** Which sample a note triggers, at what rate, with which delta counter value. Mirrors the
+		fields the driver reads out of its own table; -1 means the file did not carry a delta. */
+	struct DpcmAssignment
+	{
+		int sample = 0;
+		int pitch = 0;
+		int delta = -1;
+	};
+
 	/** What an instrument says about itself. Index 0 means "no instrument" in FamiTracker, so the
 		table is sparse and an entry whose sequences are all -1 is a real, silent instrument. */
 	struct Instrument
@@ -69,7 +86,13 @@ struct Module
 			would bend every note that uses the macro by a wrong constant and report nothing. */
 		int pitch = -1;
 		int duty = -1;			// SEQ_DUTYCYCLE: no MIDI equivalent, kept for a future audio path
+
+		/** The per-note sample assignment, octave-major: `dpcm[octave][note]`. */
+		std::array<std::array<DpcmAssignment, 12>, 8> dpcm {};
 	};
+
+	/** The module's DPCM samples, indexed the way the instrument assignments refer to them. */
+	std::vector<DpcmSample> samples;
 
 	std::vector<Instrument> instruments;
 	/** SEQ_VOLUME sequences, indexed the way the instrument table refers to them. */

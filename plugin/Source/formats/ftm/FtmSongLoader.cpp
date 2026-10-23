@@ -247,15 +247,46 @@ namespace
 			// table into a counted list.
 			const int bytesPerAssignment = (block.version > 5) ? 3 : 2;
 
+			// Read rather than skipped: the audio path needs to know which sample a note triggers,
+			// and the table is the only place that says so. The order is octave-major, twelve
+			// notes each, which is the layout 192 bytes of a version 2 instrument accounts for.
+			std::array<std::array<Module::DpcmAssignment, 12>, 8> dpcm {};
+
+			const auto readAssignment = [&reader, bytesPerAssignment, &dpcm] (int octave, int note)
+			{
+				const int sample = reader.u8();
+				const int pitch = reader.u8();
+				const int delta = (bytesPerAssignment > 2) ? (int) (std::int8_t) reader.u8() : -1;
+
+				if (octave >= 0 && octave < 8 && note >= 0 && note < 12)
+				{
+					auto& slot = dpcm[(std::size_t) octave][(std::size_t) note];
+					slot.sample = sample;
+					slot.pitch = pitch;
+					slot.delta = delta;
+				}
+			};
+
 			if (block.version >= 7)
 			{
+				// Version 7 replaced the dense table with a counted list of the notes in use.
 				const int assigned = reader.i32();
-				reader.skip ((std::size_t) (assigned * bytesPerAssignment));
+				for (int i = 0; i < assigned && reader.ok(); ++i)
+				{
+					const int noteIndex = reader.u8();
+					readAssignment ((noteIndex - 1) / 12, (noteIndex - 1) % 12);
+				}
 			}
 			else
 			{
 				const int octaves = (block.version == 1) ? 6 : 8;
-				reader.skip ((std::size_t) (octaves * 12 * bytesPerAssignment));
+				for (int octave = 0; octave < octaves; ++octave)
+				{
+					for (int note = 0; note < 12; ++note)
+					{
+						readAssignment (octave, note);
+					}
+				}
 			}
 
 			const std::size_t nameLength = reader.u32();
@@ -273,6 +304,7 @@ namespace
 				module.instruments[(std::size_t) index].arpeggio = arpeggioSequence;
 				module.instruments[(std::size_t) index].pitch = pitchSequence;
 				module.instruments[(std::size_t) index].duty = dutySequence;
+				module.instruments[(std::size_t) index].dpcm = dpcm;
 			}
 		}
 	}
@@ -403,6 +435,44 @@ double Module::framesPerSecond (void) const
 	return (double) tempo / 2.5;
 }
 
+	/** DPCM SAMPLES: a byte count, then per sample an index, a length-prefixed name, and the bytes.
+
+		The count is a byte rather than a word - the reference writes it with WriteBlockChar - which
+		is the one place in this format where a count is not 32 bits. */
+	void parseDpcmSamples (const Block& block, Module& module)
+	{
+		Reader reader (block.payload, block.size);
+		const int count = reader.u8();
+
+		for (int i = 0; i < count && reader.ok(); ++i)
+		{
+			const int index = reader.u8();
+			const std::size_t nameLength = reader.u32();
+			const std::string name = reader.fixedString (nameLength);
+			const std::size_t length = reader.u32();
+
+			if (index < 0 || index >= 256)
+			{
+				reader.skip (length);
+				continue;
+			}
+
+			if ((int) module.samples.size() <= index)
+			{
+				module.samples.resize ((std::size_t) index + 1);
+			}
+
+			auto& sample = module.samples[(std::size_t) index];
+			sample.name = name;
+			sample.data.resize (length);
+
+			for (std::size_t byte = 0; byte < length && reader.ok(); ++byte)
+			{
+				sample.data[byte] = (std::uint8_t) reader.u8();
+			}
+		}
+	}
+
 bool parseModule (const void* data, std::size_t size, Module& out, std::string& error)
 {
 	const auto* bytes = static_cast<const std::uint8_t*> (data);
@@ -433,6 +503,7 @@ bool parseModule (const void* data, std::size_t size, Module& out, std::string& 
 	Block patterns;
 	Block instruments;
 	Block sequences;
+	Block dpcmSamples;
 	bool sawEnd = false;
 
 	while (position + 24 <= size)
@@ -464,6 +535,7 @@ bool parseModule (const void* data, std::size_t size, Module& out, std::string& 
 		else if (block.id == "PATTERNS") patterns = block;
 		else if (block.id == "INSTRUMENTS") instruments = block;
 		else if (block.id == "SEQUENCES") sequences = block;
+		else if (block.id == "DPCM SAMPLES") dpcmSamples = block;
 	}
 
 	// The reference writes a bare "END" after the last block rather than another block record.
@@ -497,6 +569,11 @@ bool parseModule (const void* data, std::size_t size, Module& out, std::string& 
 	if (sequences.payload != nullptr)
 	{
 		parseSequences (sequences, out);
+	}
+
+	if (dpcmSamples.payload != nullptr)
+	{
+		parseDpcmSamples (dpcmSamples, out);
 	}
 
 	if (out.channels <= 0 || out.channelTypes.empty())
