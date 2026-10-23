@@ -70,6 +70,8 @@ public:
 	void force_chip_flags_ (int flags) { forced_flags = flags; }
 	// Writes seen in the VRC6 range, whether or not the chip was created.
 	int vrc6_writes_() const { return vrc6Writes; }
+	void enable_isolation_ (void);
+	void set_voice_mask_ (unsigned mask) { voiceMask = mask; }
 protected:
 	blargg_err_t track_info_( track_info_t*, int track ) const;
 	blargg_err_t load_( Data_Reader& );
@@ -113,9 +115,14 @@ private:
 	Nes_Apu apu;
 	static int pcm_read( void*, nes_addr_t );
 	blargg_err_t init_sound();
+	blargg_err_t play_ (long count, sample_t* out);
 	
 	header_t header_;
 	unsigned long regHash = 0;
+	enum { iso_max_voices = 16 };
+	Blip_Buffer* isoBufs [iso_max_voices];
+	int isoCount = 0;
+	unsigned voiceMask = 0xFFFFFFFFu;
 	int forced_flags = -1;
 	int vrc6Writes = 0;
 	

@@ -412,6 +412,15 @@ target_include_directories(gme_nsf PUBLIC "${GME_DIR}")
 target_compile_features(gme_nsf PRIVATE cxx_std_14)
 
 
+# --- isolation spike for the NSF player (not built by default) ---
+add_executable(vgm_nsf_iso_probe EXCLUDE_FROM_ALL
+	Tests/NsfIsoProbe.cpp
+)
+target_link_libraries(vgm_nsf_iso_probe PRIVATE gme_nsf)
+target_include_directories(vgm_nsf_iso_probe PRIVATE Source)
+target_compile_features(vgm_nsf_iso_probe PRIVATE cxx_std_17)
+target_link_options(vgm_nsf_iso_probe PRIVATE "/MAP:${CMAKE_CURRENT_BINARY_DIR}/nsf_iso.map")
+
 # --- console test for the chip decoders (not built by default) ---
 # Register writes in, notes out. Links Source/chips and nothing else - no libvgm, no JUCE.
 #   cmake --build <build dir> --target vgm_chip_test

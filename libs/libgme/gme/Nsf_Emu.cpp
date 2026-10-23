@@ -563,3 +563,84 @@ blargg_err_t Nsf_Emu::run_clocks( blip_time_t& duration, int )
 	
 	return 0;
 }
+
+void Nsf_Emu::enable_isolation_ (void)
+{
+	if ( isoCount > 0 )
+		return;
+
+	int n = voice_count();
+	if ( n > iso_max_voices ) n = iso_max_voices;
+
+	for ( int i = 0; i < n; ++i )
+	{
+		isoBufs [i] = new Blip_Buffer;
+		isoBufs [i]->set_sample_rate ( sample_rate(), 250 );
+		isoBufs [i]->clock_rate ( clock_rate() );
+		set_voice ( i, isoBufs [i], 0, 0 );
+	}
+
+	isoCount = n;
+}
+
+blargg_err_t Nsf_Emu::play_ ( long count, sample_t* out )
+{
+	long remain = count;
+
+	while ( remain > 0 )
+	{
+		int const msec = 20;
+		blip_time_t clocks = (blargg_long) msec * clock_rate() / 1000;
+		RETURN_ERR ( run_clocks ( clocks, msec ) );
+
+		for ( int i = 0; i < isoCount; ++i )
+			isoBufs [i]->end_frame ( clocks );
+
+		long frames = (long) sample_rate() * msec / 1000;
+
+		if ( frames > remain )
+			frames = remain;
+
+		if ( frames <= 0 )
+			continue;
+
+		static blip_sample_t mix [2048];
+		static blip_sample_t tmp [2048];
+
+		if ( frames > 2048 )
+			frames = 2048;
+
+		for ( long k = 0; k < frames; ++k )
+			mix [k] = 0;
+
+		for ( int i = 0; i < isoCount; ++i )
+		{
+			long got = isoBufs [i]->read_samples ( tmp, frames, 0 );
+
+			if ( (voiceMask & (1u << i)) == 0 )
+				continue;
+
+			for ( long k = 0; k < got && k < frames; ++k )
+			{
+				int sum = (int) mix [k] + (int) tmp [k];
+
+				if ( sum > 32767 ) sum = 32767;
+				if ( sum < -32768 ) sum = -32768;
+
+				mix [k] = (blip_sample_t) sum;
+			}
+		}
+
+		long const base = count - remain;
+
+		for ( long k = 0; k < frames; ++k )
+		{
+			out [(base + k) * 2 + 0] = mix [k];
+			out [(base + k) * 2 + 1] = mix [k];
+		}
+
+		remain -= frames;
+	}
+
+	return 0;
+}
