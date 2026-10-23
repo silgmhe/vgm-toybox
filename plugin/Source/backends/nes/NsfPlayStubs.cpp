@@ -6,12 +6,17 @@
 // steals cycles from a running CPU and when it raises an IRQ, and there is no CPU here to steal
 // from and nothing to interrupt.
 //
+// The includes are spelled out relative to this file on purpose. NSFPlay's headers include each
+// other relatively, so no include directory is needed to parse them; writing the paths here keeps
+// the file analysable on its own (an editor that has no compilation database entry for it still
+// resolves them) instead of failing with "nes_cpu.h not found".
+//
 // This file exists only because the linker needs the symbols. If the backend later grows a real NSF
 // path, it should link the real implementations and this file should go.
 
-#include "nes_cpu.h"
-#include "nes_mem.h"
-#include "nsf2_irq.h"
+#include "third_party/nsfplay/xgm/devices/CPU/nes_cpu.h"
+#include "third_party/nsfplay/xgm/devices/Memory/nes_mem.h"
+#include "third_party/nsfplay/xgm/devices/Misc/nsf2_irq.h"
 
 namespace xgm
 {

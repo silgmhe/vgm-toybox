@@ -3,7 +3,7 @@
 #include <algorithm>
 #include <cmath>
 
-#include "nes_apu.h"
+#include "third_party/nsfplay/xgm/devices/Sound/nes_apu.h"
 
 namespace toybox::backends::nes
 {
