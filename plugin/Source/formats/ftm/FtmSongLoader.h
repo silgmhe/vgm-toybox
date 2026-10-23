@@ -10,21 +10,29 @@
 namespace toybox::formats::ftm
 {
 
-/** One row of a pattern that carries a note. */
-struct ModuleNote
+/** One row of a pattern. A row can carry a note, an effect, or both - an effect-only row still
+	matters, because `Bxx`/`Dxx` are the song's structure and usually sit on rows with no note. */
+struct ModuleRow
 {
 	int row = 0;
 	int note = 0;			// 1..12 = C..B, 0 = empty, above 12 = release/cut
 	int octave = 0;			// 0..7
 	int instrument = 0;
 	int volume = 0;
+
+	/** On-disk effect codes, which are FamiTracker 0.5.0's order (the conversion only permutes
+		the expansion-chip tail, so the core ones keep their indices): 2 = jump, 3 = skip,
+		4 = halt. */
+	std::vector<std::pair<int, int>> effects;
+
+	bool hasNote (void) const { return note != 0; }
 };
 
 struct ModulePattern
 {
 	int channel = 0;
 	int index = 0;
-	std::vector<ModuleNote> notes;
+	std::vector<ModuleRow> rows;
 };
 
 /** A FamiTracker module as the file states it - no MIDI, no chip model.
