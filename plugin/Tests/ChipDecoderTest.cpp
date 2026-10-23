@@ -3873,6 +3873,23 @@ namespace
 			   "a zero rate stays silent");
 	}
 
+	/** The portamento unit is not a unit of pitch: on the 2A03 the divider makes the same slide wider
+		wider higher up. That is the whole reason the conversion lives in chips/ and not in a
+		format loader. */
+
+	void testPortamentoCents (void)
+	{
+		using toybox::chips::ChannelKind;
+
+		const int middle = toybox::chips::centsForPortamento (ChannelKind::nesPulse, 60, 1, 10);
+		const int high = toybox::chips::centsForPortamento (ChannelKind::nesPulse, 84, 1, 10);
+
+		check (middle > 30 && middle < 50, "ten units near middle C is about forty cents");
+		check (high > middle, "the same slide is wider higher up, because the divider is not linear");
+		check (toybox::chips::centsForPortamento (ChannelKind::nesPulse, 60, 0, 10) == 0, "no units is no movement");
+		check (toybox::chips::centsForPortamento (ChannelKind::fm, 60, 1, 10) == 0, "an unmodelled divider reports unknown, not zero movement");
+	}
+
 	/** M-1: the two pitch camps. A decoder must fill one of them; a channel that fills neither is
 		silent in MIDI with nothing to show for it, which is the failure this contract exists to catch. */
 
@@ -4510,6 +4527,8 @@ namespace
 
 
 
+
+	testPortamentoCents();
 
 	testSampledNoteHelpers();
 

@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cmath>
 #include <cstdint>
 #include <vector>
 
@@ -200,6 +201,41 @@ inline bool isPitchStateSane (const ChannelState& state)
 	}
 
 	return state.finePitch > -100 && state.finePitch <= 100;
+}
+
+/** How far a tracker's portamento moves the pitch, in cents.
+
+	FamiTracker writes `1xx` as "slide the channel's *period* by xx per frame", and a period is
+	not a unit of pitch: on the 2A03 the divider is `frequency = clock / (16 * (period + 1))`, so
+	one unit is roughly four cents low in the range and roughly one cent high. The magnitude
+	therefore depends on the note it starts from and on the chip that owns the divider - which is
+	why it is answered here and not by a format loader, which knows rows but not dividers.
+
+	Returns 0 for chips whose divider is not modelled yet. A caller must read that as "unknown",
+	not as "no slide": the alternative is reporting a real effect as zero movement. */
+inline int centsForPortamento (ChannelKind kind, int fromNote, int units, int frames)
+{
+	if (units == 0 || frames <= 0)
+	{
+		return 0;
+	}
+
+	if (kind != ChannelKind::nesPulse && kind != ChannelKind::nesTriangle)
+	{
+		return 0;			// expansion chips have their own dividers, none of them modelled
+	}
+
+	constexpr double clock = 1789773.0;		// NTSC 2A03; PAL is 1662607, a parameter when it matters
+	const double frequency = 440.0 * std::pow (2.0, (fromNote - 69) / 12.0);
+	const double period = clock / (16.0 * frequency);
+
+	const double moved = period - (double) (units * frames);
+	if (moved <= 1.0)
+	{
+		return 0;
+	}
+
+	return (int) std::lround (1200.0 * std::log2 (period / moved));
 }
 
 /** A period-to-note lookup. Built per chip family, clock and tuning, because a period means
