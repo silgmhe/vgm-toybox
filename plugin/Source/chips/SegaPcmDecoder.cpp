@@ -377,7 +377,7 @@ const NoteTable& SegaPcmDecoder::noteTable (int channel) const
 
 Family SegaPcmDecoder::family (int channel) const
 {
-	return isDrum (channel) ? Family::adpcmDrum : Family::segaPcmPcm;
+	return isDrum (channel) ? Family::adpcmDrum : Family::segaPcm;
 }
 
 bool SegaPcmDecoder::isDrum (int channel) const

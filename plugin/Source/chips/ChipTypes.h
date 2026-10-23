@@ -41,7 +41,7 @@ enum class Family
 	wavetableWave,	// ES5503: 32 oscillators walking tables at freq * (clock/8/(n+2)) / 2^(9+res-size)
 	rf5cPcm,		// RF5C68/164: 8 voices stepping a 64 KB RAM at step * (clock/384) / 2048 bytes a second
 	okimAdpcm,		// OKIM6295: 4 voices at one fixed DAC rate, so the note is the sample's own cycle
-	segaPcmPcm,		// Sega PCM: 16 voices, a step in 1/256 bytes and an end address in 256-byte units
+	segaPcm,		// Sega PCM: 16 voices, a step in 1/256 bytes and an end address in 256-byte units
 	opnAdpcmB,		// YM2610/YM2608 ADPCM-B: a sampled voice with a real pitch register
 	saaSquare,
 	pokeySquare,	// distortion and clock mode change the timbre, not the note
@@ -53,10 +53,19 @@ enum class Family
 	unknown
 };
 
-/** One register write, in stream order, with its absolute position in 44100 Hz samples. */
+/** No device: the value `RegisterWrite::deviceId` carries until a loader or the assembler names one.
+
+	A real device can legitimately be number 0 (the first chip of a song), so zero cannot mean
+	"unspecified" - that ambiguity would make an unrouted write look like a write to the first chip. */
+inline constexpr std::uint32_t kNoDevice = 0xFFFFFFFFu;
+
+/** One register write, in stream order.
+
+	`sampleTime` is in the unit the song's loader declared (ChipConfig::timeBaseHz): 44100 for a VGM,
+	1.79 MHz for a CPU-cycle format. Nothing below the loader reinterprets it - see SongIr. */
 struct RegisterWrite
 {
-	std::uint32_t deviceId = 0;		// libvgm instance id; routing only, never interpreted
+	std::uint32_t deviceId = kNoDevice;	// routing only, never interpreted: an index into SongIr::chips
 	std::uint8_t reg = 0;
 	std::uint16_t value = 0;		// the whole register word; byte-wide chips use the low byte
 	std::uint8_t port = 0;			// second port / second chip of a pair

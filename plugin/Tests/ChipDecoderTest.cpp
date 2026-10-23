@@ -4335,7 +4335,7 @@ namespace
 		check (notes[0].logicalChannel == 2, "Sega PCM voice 2 is its own track");
 		check (absoluteNote (notes[0]) == 57, "a 16-byte cycle at 3563 bytes a second is A3");
 		check (! notes[0].isDrum, "a sample with a period is melodic");
-		check (notes[0].family == toybox::chips::Family::segaPcmPcm, "and its family says so");
+		check (notes[0].family == toybox::chips::Family::segaPcm, "and its family says so");
 		check (notes[0].velocity == 127, "a full-scale volume register is full velocity");
 		check (distance (notes[0].endSample, 25350) <= 200,
 			   "the end register ends it: 2048 bytes at 3563 a second");

@@ -105,9 +105,19 @@ struct RomBlock
 
 /** A song reduced to "which chips, which register writes, which memory" - no format left in it.
 
-	`writes` use `chips::RegisterWrite`, where `deviceId` is the index of the chip in `chips`. Times
-	are in `tickRate` units, so a loader that works in 1.79 MHz CPU cycles says so and the assembly
-	layer converts once.
+	`writes` use `chips::RegisterWrite`, where `deviceId` is the index of the chip in `chips`.
+
+	**The time-base contract (M-3)** - one rule, three places it shows up:
+
+	1. a loader converts whatever its file counts in (VGM samples, CPU cycles, driver ticks) into
+	   `tickRate` units and declares that rate here. A VGM loader says 44100 because its waits are
+	   samples; an NSF loader would say 1.79 MHz because its writes are cycles. Nothing above the
+	   loader needs to know which format produced the number;
+	2. the assembly layer converts ticks to seconds exactly once, in `Builder::tickRate`, and hands
+	   the same number to every decoder as `ChipConfig::timeBaseHz` - a decoder therefore never sees
+	   an audio rate, only the unit its timestamps are in;
+	3. the `MidiSequence` holds seconds, so the encoder, the UI and the pitch report are all
+	   format-agnostic.
 
 	This is the seam the review asked for (C-1): `midi/` reads this and produces a `MidiSequence`;
 	`formats/*` writes this and knows nothing about MIDI. */
