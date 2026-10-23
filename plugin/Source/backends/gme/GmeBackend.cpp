@@ -64,7 +64,25 @@ public:
 	}
 
 	void pause (void) override {}
-	bool seekSeconds (double) override { return false; }
+
+	/** libgme seeks by running the driver forward from the start of the track, so a backwards
+		seek costs as much as the distance from the beginning - the capability is real, not free. */
+	bool seekSeconds (double target) override
+	{
+		if (emu == nullptr || target < 0.0)
+		{
+			return false;
+		}
+
+		if (emu->seek ((long) (target * 1000.0)) != nullptr)
+		{
+			return false;
+		}
+
+		seconds = target;
+		finished = false;
+		return true;
+	}
 	void setTimeline (int, double) override {}
 	void setTrackAudible (playback::TrackId, bool) override {}
 	void setChipAudible (playback::DeviceId, bool) override {}
@@ -174,7 +192,7 @@ public:
 	playback::BackendCapabilities getCapabilities (void) const override
 	{
 		playback::BackendCapabilities caps;
-		caps.canSeek = false;
+		caps.canSeek = true;
 		caps.canLoop = false;
 		caps.canFade = false;
 		caps.hasLoopPoint = false;
