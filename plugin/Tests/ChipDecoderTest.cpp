@@ -4037,6 +4037,107 @@ namespace
 		check (signs == 3, "the vibrato swings both ways");
 	}
 
+	/** Portamento (1xx) slides a note's pitch away from it. The magnitude is an approximation -
+		FamiTracker counts in period units, this counts 1/16 semitone - so the test pins the shape and
+		the direction, and the code says which part is approximate. */
+
+	void testFtmPortamento (void)
+	{
+		std::vector<std::uint8_t> image;
+		const auto put32 = [&image] (std::uint32_t v)
+		{
+			for (int i = 0; i < 4; ++i)
+			{
+				image.push_back ((std::uint8_t) ((v >> (8 * i)) & 0xFF));
+			}
+		};
+		const auto putText = [&image] (const char* text)
+		{
+			for (const char* c = text; *c != '\0'; ++c)
+			{
+				image.push_back ((std::uint8_t) *c);
+			}
+		};
+		const auto block = [&image, &put32] (const char* id, std::uint32_t version,
+											  const std::vector<std::uint8_t>& payload)
+		{
+			char padded[16] = {};
+			for (int i = 0; i < 16 && id[i] != '\0'; ++i)
+			{
+				padded[i] = id[i];
+			}
+			image.insert (image.end(), padded, padded + 16);
+			put32 (version);
+			put32 ((std::uint32_t) payload.size());
+			image.insert (image.end(), payload.begin(), payload.end());
+		};
+
+		putText ("FamiTracker Module");
+		put32 (0x0420);
+		block ("PARAMS", 3, { 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 });
+		block ("HEADER", 3, { 0x00, 'T', 0x00, 0x00, 0x00 });
+
+		{	// one frame of eight rows: C-4 at row 0 with 1xx 08 (porta up)
+			std::vector<std::uint8_t> payload;
+			const auto word = [&payload] (std::uint32_t v)
+			{
+				for (int i = 0; i < 4; ++i)
+				{
+					payload.push_back ((std::uint8_t) ((v >> (8 * i)) & 0xFF));
+				}
+			};
+			word (1);			// frames
+			word (6);			// speed
+			word (150);			// tempo
+			word (8);			// pattern length
+			payload.push_back (0);
+			block ("FRAMES", 3, payload);
+		}
+
+		{
+			std::vector<std::uint8_t> body;
+			const auto word = [&body] (std::uint32_t v)
+			{
+				for (int i = 0; i < 4; ++i)
+				{
+					body.push_back ((std::uint8_t) ((v >> (8 * i)) & 0xFF));
+				}
+			};
+			word (0); word (0); word (0); word (1);		// one item in pattern 0
+			word (0);									// row 0
+			body.push_back (1);		// C
+			body.push_back (4);		// octave
+			body.push_back (1);		// instrument
+			body.push_back (15);	// volume
+			body.push_back (16);	// effect 16 = porta up
+			body.push_back (0x08);	// eight units per frame
+			block ("PATTERNS", 3, body);
+		}
+
+		putText ("END");
+
+		toybox::midi::NoteStream stream;
+		std::string error;
+		check (toybox::formats::ftm::loadNoteStream (image.data(), image.size(), stream, error),
+			   "the module with portamento loads");
+
+		check (stream.notes.size() == 1 && stream.bends.size() == 7,
+			   "seven rows after the first step once each");
+
+		if (stream.bends.size() == 7)
+		{
+			check (stream.bends.front().bend.cents == 50, "eight units of 1/16 semitone is 50 cents");
+			check (stream.bends.back().bend.cents == 350, "and it keeps climbing, one step per row");
+
+			bool monotonic = true;
+			for (std::size_t i = 1; i < stream.bends.size(); ++i)
+			{
+				monotonic = monotonic && stream.bends[i].bend.cents > stream.bends[i - 1].bend.cents;
+			}
+			check (monotonic, "porta up never steps back down");
+		}
+	}
+
 	/** The order list is walked, not played straight through. A `Dxx` on the first frame must skip
 		the second one, so its note never appears - which the real files could only hint at. */
 
@@ -4860,6 +4961,8 @@ namespace
 	testFtmAuthoredStream();
 
 	testFtmSkipEffect();
+
+	testFtmPortamento();
 
 	testSampledNoteHelpers();
 

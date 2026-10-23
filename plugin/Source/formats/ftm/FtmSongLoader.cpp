@@ -473,6 +473,27 @@ bool loadNoteStream (const void* data, std::size_t size, midi::NoteStream& out, 
 							++step;
 						}
 					}
+					else if (effect.first == 16 || effect.first == 17)
+					{
+						// 1xx porta up / 2xx porta down: the pitch walks away from the note, one step
+						// per frame, by `xx` units. FamiTracker measures those in period units, which
+						// are not a constant number of cents; one unit is taken as 1/16 semitone here
+						// so the shape is right and the magnitude is an approximation, stated rather
+						// than hidden.
+						const int sign = (effect.first == 16) ? 1 : -1;
+						const double step = (double) (effect.second & 0xFF) * 6.25;
+						std::size_t index = 1;
+
+						for (std::uint32_t row = event.startSample + 1; row < event.endSample; ++row)
+						{
+							chips::PitchEvent bend;
+							bend.sampleTime = row;
+							bend.logicalChannel = channel;
+							bend.cents = (std::int16_t) std::lround (sign * step * (double) index);
+							out.bends.push_back ({ track, bend });
+							++index;
+						}
+					}
 					else if (effect.first == 11)
 					{
 						// 4xy vibrato: x is the speed in table steps, y the depth. FamiTracker walks a
