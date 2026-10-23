@@ -4323,7 +4323,7 @@ namespace
 {
 	// `--ftm <file>` parses a real module and prints what came out. The unit test can only build a
 	// synthetic module, so this is how the seven files in test_file/ftm get checked.
-	if (argc >= 3 && (std::string (argv[1]) == "--ftm" || std::string (argv[1]) == "--ftm-dump" || std::string (argv[1]) == "--ftm-audio" || std::string (argv[1]) == "--ftm-vgm" || std::string (argv[1]) == "--ftm-nsf" || std::string (argv[1]) == "--ftm-writes"))
+	if (argc >= 3 && (std::string (argv[1]) == "--ftm" || std::string (argv[1]) == "--ftm-dump" || std::string (argv[1]) == "--ftm-audio" || std::string (argv[1]) == "--ftm-vgm" || std::string (argv[1]) == "--ftm-nsf" || std::string (argv[1]) == "--ftm-writes" || std::string (argv[1]) == "--ftm-wav"))
 	{
 		std::ifstream file (argv[2], std::ios::binary);
 		const std::vector<char> bytes ((std::istreambuf_iterator<char> (file)),
@@ -4368,6 +4368,140 @@ namespace
 							 write.deviceId, write.port, write.reg, write.value);
 			}
 
+			return 0;
+		}
+
+		if (std::string (argv[1]) == "--ftm-wav" && argc >= 5)
+		{
+			toybox::midi::SongIr song;
+			std::string error;
+
+			if (! toybox::formats::ftm::loadSongIr (bytes.data(), bytes.size(), song, error))
+			{
+				std::printf ("error %s\n", error.c_str());
+				return 1;
+			}
+
+			const int seconds = std::atoi (argv[4]);
+			const int total = 44100 * (seconds > 0 ? seconds : 30);
+
+			toybox::backends::nes::NsfApuChip apu (44100.0);
+			std::unique_ptr<toybox::backends::nes::NsfVrc6Chip> vrc6;
+			std::unique_ptr<toybox::backends::nes::NsfVrc7Chip> vrc7;
+			std::unique_ptr<toybox::backends::nes::NsfN163Chip> n163;
+
+			for (const auto& chip : song.chips)
+			{
+				if (chip.kind == toybox::midi::ChipKind::nesVrc6)
+				{
+					vrc6.reset (new toybox::backends::nes::NsfVrc6Chip (44100.0));
+				}
+				else if (chip.kind == toybox::midi::ChipKind::nesVrc7)
+				{
+					vrc7.reset (new toybox::backends::nes::NsfVrc7Chip (44100.0));
+				}
+				else if (chip.kind == toybox::midi::ChipKind::nesN163)
+				{
+					n163.reset (new toybox::backends::nes::NsfN163Chip (44100.0));
+				}
+			}
+
+			for (const auto& rom : song.ownedRoms)
+			{
+				if (rom.memoryType == 0x08 && ! rom.bytes.empty())
+				{
+					apu.setDpcmRom (rom.bytes.data(), rom.bytes.size());
+				}
+			}
+
+			constexpr int blockSize = 512;
+			std::vector<float> left ((std::size_t) blockSize, 0.0f);
+			std::vector<float> right ((std::size_t) blockSize, 0.0f);
+			std::vector<std::int16_t> samples;
+			samples.reserve ((std::size_t) total * 2);
+
+			std::size_t next = 0;
+			int written = 0;
+
+			while (written < total)
+			{
+				while (next < song.writes.size() && song.writes[next].sampleTime <= (std::uint32_t) written)
+				{
+					const auto& write = song.writes[next];
+					const int address = ((int) write.port << 8) | write.reg;
+
+					if (write.deviceId == 0)
+					{
+						apu.write (0x4000 + write.reg, write.value & 0xFF);
+					}
+					else if (vrc6 != nullptr)
+					{
+						vrc6->write (address, write.value & 0xFF);
+					}
+					else if (vrc7 != nullptr)
+					{
+						vrc7->write (address, write.value & 0xFF);
+					}
+					else if (n163 != nullptr)
+					{
+						n163->write (address, write.value & 0xFF);
+					}
+
+					++next;
+				}
+
+				const int chunk = std::min (blockSize, total - written);
+				std::fill (left.begin(), left.end(), 0.0f);
+				std::fill (right.begin(), right.end(), 0.0f);
+
+				apu.render (left.data(), right.data(), chunk);
+
+				if (vrc6 != nullptr) { vrc6->render (left.data(), right.data(), chunk); }
+				if (vrc7 != nullptr) { vrc7->render (left.data(), right.data(), chunk); }
+				if (n163 != nullptr) { n163->render (left.data(), right.data(), chunk); }
+
+				for (int i = 0; i < chunk; ++i)
+				{
+					const double value = std::clamp ((double) left[(std::size_t) i], -1.0, 1.0);
+					samples.push_back ((std::int16_t) (value * 32000.0));
+					samples.push_back ((std::int16_t) (value * 32000.0));
+				}
+
+				written += chunk;
+			}
+
+			std::FILE* file = std::fopen (argv[3], "wb");
+			if (file == nullptr)
+			{
+				std::printf ("error cannot write %s\n", argv[3]);
+				return 1;
+			}
+
+			const std::uint32_t dataBytes = (std::uint32_t) samples.size() * 2;
+			std::fwrite ("RIFF", 1, 4, file);
+			const std::uint32_t riffSize = 36 + dataBytes;
+			std::fwrite (&riffSize, 4, 1, file);
+			std::fwrite ("WAVEfmt ", 1, 8, file);
+			const std::uint32_t fmtSize = 16;
+			std::fwrite (&fmtSize, 4, 1, file);
+			const std::uint16_t format = 1;
+			const std::uint16_t channels = 2;
+			const std::uint32_t rate = 44100;
+			const std::uint32_t byteRate = rate * 4;
+			const std::uint16_t align = 4;
+			const std::uint16_t bits = 16;
+			std::fwrite (&format, 2, 1, file);
+			std::fwrite (&channels, 2, 1, file);
+			std::fwrite (&rate, 4, 1, file);
+			std::fwrite (&byteRate, 4, 1, file);
+			std::fwrite (&align, 2, 1, file);
+			std::fwrite (&bits, 2, 1, file);
+			std::fwrite ("data", 1, 4, file);
+			std::fwrite (&dataBytes, 4, 1, file);
+			std::fwrite (samples.data(), 2, samples.size(), file);
+			std::fclose (file);
+
+			std::printf ("ftm-wav %s -> %s %.2f s\n", argv[2], argv[3], (double) total / 44100.0);
 			return 0;
 		}
 
