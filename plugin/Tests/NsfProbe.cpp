@@ -124,8 +124,8 @@ int main (int argc, char** argv)
 
 	const double rms = counted > 0 ? std::sqrt (sumSquares / (double) counted) : 0.0;
 
-	std::printf ("nsf %s chip=%d pal=%d seconds=%.1f peak=%.4f rms=%.4f\n", argv[1],
-				 (int) player.chip(), player.isPal() ? 1 : 0, (double) total / 44100.0, peak, rms);
+	std::printf ("nsf %s chip=%d pal=%d writes=%llu seconds=%.1f peak=%.4f rms=%.4f\n", argv[1],
+				 (int) player.chip(), player.isPal() ? 1 : 0, (unsigned long long) player.soundWrites(), (double) total / 44100.0, peak, rms);
 
 	if (argc >= 4)
 	{

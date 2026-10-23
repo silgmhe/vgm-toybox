@@ -44,6 +44,9 @@ public:
 	/** Fills the two buffers with `samples` frames. Adds, like the chip wrappers do. */
 	void render (float* left, float* right, int samples);
 
+	/** How many sound-register writes the driver has made - a zero here means it never ran. */
+	std::uint64_t soundWrites (void) const { return writes; }
+
 	double positionSeconds (void) const;
 	bool isFinished (void) const { return finished; }
 
@@ -80,6 +83,7 @@ private:
 	bool pal = false;
 	bool running = false;
 	bool finished = false;
+	std::uint64_t writes = 0;
 };
 
 } // namespace toybox::backends::nsf

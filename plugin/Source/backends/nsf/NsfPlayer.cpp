@@ -83,21 +83,25 @@ bool NsfPlayer::load (const void* data, std::size_t size, std::string& error)
 	bus = std::make_unique<Bus> (*this);
 	bus->Reset();
 
-	// The CPU reaches the init and play entries through a trampoline: run_from() writes the target
-	// address into \/\ and jumps to \, expecting a JSR there followed by a loop that
-	// the core breaks on. Without these six bytes the CPU executes zeroes and goes wild.
-	static const UINT8 kPlayerProgram[] = { 0x20, 0x00, 0x00, 0x4C, 0x03, 0x41 };
-	bus->SetReserved (kPlayerProgram, (UINT32) sizeof (kPlayerProgram));
-
 	if (! bus->SetImage (file.rom.data(), file.loadAddress, (UINT32) file.rom.size()))
 	{
 		error = "the program does not fit the address space";
 		return false;
 	}
 
+	// The CPU reaches the init and play entries through a trampoline: run_from() writes the target
+	// address into \/\ and jumps to \, expecting a JSR there followed by a loop that
+	// the core breaks on. These six bytes have to be placed after SetImage, which clears the whole
+	// 64 KB image - writing them first means the CPU fetches zeroes and never reaches the driver.
+	static const UINT8 kPlayerProgram[] = { 0x20, 0x00, 0x00, 0x4C, 0x03, 0x41 };
+	bus->SetReserved (kPlayerProgram, (UINT32) sizeof (kPlayerProgram));
+
 	cpu = std::make_unique<xgm::NES_CPU> (clockHz);
 	cpu->SetMemory (bus.get());
 	cpu->SetNESMemory (bus.get());
+	// Reset installs the CPU's memory callbacks - without it the first instruction fetch goes
+	// through a null pointer. It also leaves the PC at  waiting for Start to point it at init.
+	cpu->Reset();
 
 	apu = std::make_unique<xgm::NES_APU>();
 	apu->SetClock (clockHz);
@@ -175,6 +179,7 @@ bool NsfPlayer::writeExpansion (std::uint16_t address, std::uint8_t value)
 
 void NsfPlayer::writeSoundRegister (std::uint16_t address, std::uint8_t value)
 {
+	++writes;
 	// The 2A03 is split in two cores: the squares answer $4000-$4007, the triangle, noise and DPCM
 	// answer from $4008 up, and $4015 enables channels on both.
 	if (address <= 0x4007)
