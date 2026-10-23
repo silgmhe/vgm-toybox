@@ -125,6 +125,38 @@ bool loadSongIr (const void* data, std::size_t size, midi::SongIr& out, std::str
 	Emitter emitter (out);
 	emitter.write (0, kFrameCounter, 0x40, 0);		// four-step sequence, as the driver sets it
 
+	// $4015 is a latch, not a bitfield: writing one channel's bit switches the others off. The
+	// status byte is therefore kept here and written whole, or a four-channel module would end up
+	// with whichever channel wrote last and nothing else.
+	std::uint8_t statusMask = 0;
+
+	// DPCM samples have to be laid out before they can be addressed, and $4012 counts 64-byte units
+	// from $8000 - the base a VGM data block is loaded at. Each sample therefore starts on a
+	// 64-byte boundary, and the padding is 0xAA because an unprogrammed DMC byte that reads as 0
+	// would leave the delta counter standing still.
+	std::vector<std::uint32_t> sampleOffset (module.samples.size(), 0);
+	{
+		midi::OwnedRom rom;
+		rom.memoryType = 0x08;
+
+		for (std::size_t i = 0; i < module.samples.size(); ++i)
+		{
+			while (rom.bytes.size() % 64 != 0)
+			{
+				rom.bytes.push_back (0xAA);
+			}
+
+			sampleOffset[i] = (std::uint32_t) rom.bytes.size();
+			rom.bytes.insert (rom.bytes.end(), module.samples[i].data.begin(),
+							  module.samples[i].data.end());
+		}
+
+		if (! rom.bytes.empty())
+		{
+			out.ownedRoms.push_back (std::move (rom));
+		}
+	}
+
 	// Patterns by (channel, index), as the loader builds them.
 	std::map<std::pair<int, int>, const ModulePattern*> lookup;
 	for (const auto& pattern : module.patterns)
@@ -230,6 +262,42 @@ bool loadSongIr (const void* data, std::size_t size, midi::SongIr& out, std::str
 									state.level = entry.volume > 0 ? entry.volume : 15;
 									state.enabled = true;
 									sounding[0] = channel;
+
+									// The DPCM channel does not play a pitch: the instrument's table says
+									// which sample the note triggers, at what rate, and sets the delta
+									// counter from there.
+									if (type == 4 && state.instrument > 0
+										&& state.instrument < (int) module.instruments.size()
+										&& entry.octave >= 0 && entry.octave < 8
+										&& entry.note >= 1 && entry.note <= 12)
+									{
+										const auto& assignment =
+											module.instruments[(std::size_t) state.instrument]
+												.dpcm[(std::size_t) entry.octave][(std::size_t) (entry.note - 1)];
+
+										const int sample = assignment.sample;
+
+										if (sample > 0 && sample < (int) module.samples.size()
+											&& ! module.samples[(std::size_t) sample].data.empty())
+										{
+											const std::uint32_t address = 0x8000u
+																		  + sampleOffset[(std::size_t) sample];
+											const std::uint32_t length =
+												(std::uint32_t) module.samples[(std::size_t) sample].data.size();
+											const std::uint32_t blocks =
+												std::max<std::uint32_t> (1u, (length + 15u) / 16u);
+
+											emitter.write (0, 0x10, 0x0F | (assignment.pitch & 0x0F), when);
+											emitter.write (0, 0x11,
+														   assignment.delta >= 0 ? (assignment.delta & 0x7F)
+																				: 0x40, when);
+											emitter.write (0, 0x12, (int) ((address >> 6) & 0xFF), when);
+											emitter.write (0, 0x13, (int) (blocks - 1), when);
+
+											statusMask |= 0x10;
+											emitter.write (0, kStatus, statusMask, when);
+										}
+									}
 								}
 
 								if (entry.note == 14)		// cut
@@ -382,7 +450,8 @@ bool loadSongIr (const void* data, std::size_t size, midi::SongIr& out, std::str
 									   (duty << 6) | 0x30 | ((state.silenced ? 0 : level) & 0x0F), when);
 						emitter.write (0, kPulsePeriodLow[index], period & 0xFF, when);
 						emitter.write (0, kPulsePeriodHigh[index], (period >> 8) & 0x07, when);
-						emitter.write (0, kStatus, 1 << index, when);
+						statusMask |= (std::uint8_t) (1 << index);
+						emitter.write (0, kStatus, statusMask, when);
 						state.lastPeriod = period;
 					}
 					else if (triangle)
@@ -393,7 +462,8 @@ bool loadSongIr (const void* data, std::size_t size, midi::SongIr& out, std::str
 						emitter.write (0, kTriangleLinear, state.silenced ? 0x00 : 0x7F, when);
 						emitter.write (0, kTrianglePeriodLow, period & 0xFF, when);
 						emitter.write (0, kTrianglePeriodHigh, (period >> 8) & 0x07, when);
-						emitter.write (0, kStatus, 1 << 2, when);
+						statusMask |= 1 << 2;
+						emitter.write (0, kStatus, statusMask, when);
 						state.lastPeriod = period;
 					}
 					else if (noise)
@@ -401,7 +471,8 @@ bool loadSongIr (const void* data, std::size_t size, midi::SongIr& out, std::str
 						emitter.write (0, kNoiseControl,
 									   0x30 | ((state.silenced ? 0 : level) & 0x0F), when);
 						emitter.write (0, kNoisePeriod, noiseIndex (pitch), when);
-						emitter.write (0, kStatus, 1 << 3, when);
+						statusMask |= 1 << 3;
+						emitter.write (0, kStatus, statusMask, when);
 					}
 
 					++state.macroStep;
@@ -476,6 +547,23 @@ bool buildVgm (const void* data, std::size_t size, std::vector<std::uint8_t>& ou
 	// end of a small image, which the reader rejects as "not a VGM stream".
 	put32 (0x34, 0x00000100 - 0x34);
 	put32 (0x84, song.chips.empty() ? nesApuClockHz : song.chips[0].clockHz);				// NES APU clock
+
+	// A sample area the loader owns (DPCM) travels as a data block before the command stream: the
+	// registers that address it count from $8000, where this block is loaded.
+	for (const auto& rom : song.ownedRoms)
+	{
+		out.push_back (0x67);
+		out.push_back (0x66);
+		out.push_back ((std::uint8_t) rom.memoryType);
+
+		const std::uint32_t length = (std::uint32_t) rom.bytes.size();
+		for (int i = 0; i < 4; ++i)
+		{
+			out.push_back ((std::uint8_t) ((length >> (8 * i)) & 0xFF));
+		}
+
+		out.insert (out.end(), rom.bytes.begin(), rom.bytes.end());
+	}
 
 	// Writes are already ordered by time; a wait is only emitted when the clock actually moves,
 	// because zero-wait commands are what the format is designed around.

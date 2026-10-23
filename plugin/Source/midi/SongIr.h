@@ -103,6 +103,18 @@ struct RomBlock
 	bool isRam = false;
 };
 
+/** Bytes the loader owns, for a format whose register stream needs sample data that the file does
+	not carry at a usable offset - a compiled module, for instance, whose DPCM samples have to be
+	laid out before they can be addressed.
+
+	`roms` points into the file image and stays a view; this is the exception, and it is a vector so
+	the loader can build it. A VGM leaves it empty. */
+struct OwnedRom
+{
+	int memoryType = 0;				// 0x08 for the NES APU's sample area, per the VGM data block types
+	std::vector<std::uint8_t> bytes;
+};
+
 /** A song reduced to "which chips, which register writes, which memory" - no format left in it.
 
 	`writes` use `chips::RegisterWrite`, where `deviceId` is the index of the chip in `chips`.
@@ -127,6 +139,7 @@ struct SongIr
 	std::vector<ChipSlot> chips;
 	std::vector<chips::RegisterWrite> writes;
 	std::vector<RomBlock> roms;
+	std::vector<OwnedRom> ownedRoms;
 	std::uint32_t totalTicks = 0;
 };
 
