@@ -8,6 +8,7 @@
 
 #include "../Support/TestSupport.h"
 #include "chips/ChipTypes.h"
+#include "formats/ftm/FtmSongIr.h"
 #include "formats/ftm/FtmSongLoader.h"
 #include "formats/ftm/compiler/Chunk.h"
 #include "formats/ftm/compiler/DriverData2A03.h"
@@ -1012,6 +1013,75 @@ void testFtmInstrumentCompile (void)
 			   "an instrument with no sequences writes the header and no references");
 	}
 }
+/** The audio path: a module becomes APU register writes, not notes.
+
+	What playback needs is what the driver *does* - per frame, each channel's period, volume and duty
+	- so this asserts the three registers that make a pulse channel sound, at the sample the frame
+	lands on. A note is not enough here: the whole point is that the numbers a chip would receive are
+	the ones FamiTracker would send. */
+
+void testFtmApuWrites (void)
+{
+	std::vector<std::uint8_t> image;
+	putText (image, "FamiTracker Module");
+	put32 (image, 0x0420);
+	putBlock (image, "PARAMS", 3, { 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 });
+	putBlock (image, "HEADER", 3, { 0x00, 'T', 0x00, 0x00, 0x00 });
+
+	{
+		std::vector<std::uint8_t> payload;
+		put32 (payload, 1);
+		put32 (payload, 6);
+		put32 (payload, 150);
+		put32 (payload, 16);
+		payload.push_back (0);
+		putBlock (image, "FRAMES", 3, payload);
+	}
+
+	{
+		std::vector<std::uint8_t> body;
+		put32 (body, 0); put32 (body, 0); put32 (body, 0); put32 (body, 1);
+		put32 (body, 0);
+		body.push_back (1);			// C
+		body.push_back (4);			// octave 4
+		body.push_back (0);
+		body.push_back (15);		// volume column: full
+		body.push_back (0);
+		body.push_back (0);
+		putBlock (image, "PATTERNS", 3, body);
+	}
+
+	putText (image, "END");
+
+	toybox::midi::SongIr song;
+	std::string error;
+	check (toybox::formats::ftm::loadSongIr (image.data(), image.size(), song, error),
+		   "the module becomes a register stream");
+
+	check (song.chips.size() == 1 && song.chips[0].kind == toybox::midi::ChipKind::nesApu,
+		   "one 2A03, declared");
+	check (song.tickRate == 44100.0, "and the stream is in samples, like every other loader");
+
+	int control = -1;
+	int low = -1;
+	int high = -1;
+	int status = -1;
+
+	for (const auto& write : song.writes)
+	{
+		if (write.reg == 0x00) { control = write.value; }
+		if (write.reg == 0x02) { low = write.value; }
+		if (write.reg == 0x03) { high = write.value; }
+		if (write.reg == 0x15) { status = write.value; }
+	}
+
+	check (control == ((2 << 6) | 0x30 | 15), "constant volume, full level, default duty");
+	check (status == 1, "and the pulse 1 status bit is set");
+
+	// C-4 is 261.63 Hz: 1789773 / (16 * 261.63) - 1 = 427, which is 0x1AB
+	check (low == 0xAB && high == 0x01, "the period is the chip's own arithmetic, not a note number");
+}
+
 void runFormatTests (void)
 {
 	testVgmLoaderIr();
@@ -1020,6 +1090,7 @@ void runFormatTests (void)
 	testFtmNoteCut();
 	testFtmPortamento();
 	testFtmVolumeEnvelope();
+	testFtmApuWrites();
 	testFtmArpeggioMacro();
 	testPitchBendRange();
 	testFtmTonePortamento();

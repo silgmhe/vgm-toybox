@@ -392,6 +392,7 @@ add_executable(vgm_chip_test EXCLUDE_FROM_ALL
 	Source/backends/libvgm/VgmCommandReader.cpp
 	Source/formats/vgm/VgmSongLoader.cpp
 	Source/formats/ftm/FtmSongLoader.cpp
+	Source/formats/ftm/FtmSongIr.cpp
 	Source/formats/ftm/compiler/Chunk.cpp
 	Tests/Support/TestSupport.cpp
 	Tests/Formats/FormatsTests.cpp

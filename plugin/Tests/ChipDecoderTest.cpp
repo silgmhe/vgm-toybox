@@ -27,6 +27,7 @@
 #include <iterator>
 #include <string>
 #include "chips/Pitch.h"
+#include "formats/ftm/FtmSongIr.h"
 #include "formats/ftm/FtmSongLoader.h"
 #include "formats/vgm/VgmSongLoader.h"
 #include "chips/Msm5232Decoder.h"
@@ -4316,7 +4317,7 @@ namespace
 {
 	// `--ftm <file>` parses a real module and prints what came out. The unit test can only build a
 	// synthetic module, so this is how the seven files in test_file/ftm get checked.
-	if (argc >= 3 && (std::string (argv[1]) == "--ftm" || std::string (argv[1]) == "--ftm-dump"))
+	if (argc >= 3 && (std::string (argv[1]) == "--ftm" || std::string (argv[1]) == "--ftm-dump" || std::string (argv[1]) == "--ftm-audio"))
 	{
 		std::ifstream file (argv[2], std::ios::binary);
 		const std::vector<char> bytes ((std::istreambuf_iterator<char> (file)),
@@ -4325,6 +4326,22 @@ namespace
 		toybox::midi::NoteStream stream;
 		std::string error;
 		const bool ok = toybox::formats::ftm::loadNoteStream (bytes.data(), bytes.size(), stream, error);
+
+		if (std::string (argv[1]) == "--ftm-audio")
+		{
+			toybox::midi::SongIr song;
+			std::string error;
+			if (! toybox::formats::ftm::loadSongIr (bytes.data(), bytes.size(), song, error))
+			{
+				std::printf ("error %s\n", error.c_str());
+				return 1;
+			}
+
+			const double seconds = song.tickRate > 0.0 ? (double) song.totalTicks / song.tickRate : 0.0;
+			std::printf ("ftm-audio %s chips=%d writes=%d seconds=%.2f\n", argv[2],
+						 (int) song.chips.size(), (int) song.writes.size(), seconds);
+			return 0;
+		}
 
 		// `--ftm-dump` prints what the loader decided, one event per line, so two runs can be diffed
 		// and - once FamiTracker's own export is available - so can the two implementations.
