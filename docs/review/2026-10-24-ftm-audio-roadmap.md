@@ -221,3 +221,48 @@ Tracks  : Square 1 / Square 2 / Triangle / Noise / DPCM
 | `15_coffeezoneb` | VRC7 | ⚠️ 仅 2A03 |
 
 要让扩展声部发声，需要自带核心（B）或换播放内核（C），都是另一个量级的决定。
+
+## 9. 客观比对的前提：FT 不能导 WAV
+
+想把「渲染得像不像」从主观变客观，需要一份参考渲染。查了 Dn-FamiTracker 的命令行导出
+（`CommandLineExport.cpp`）后确认：
+
+| 扩展名 | 实现 |
+|---|---|
+| `.nsf` / `.nsfe` / `.nsf2` | ✅ 走 `CCompiler` |
+| `.nes` / `.bin` / `.prg` / `.asm` | ✅ |
+| `.txt` | ✅ `CTextExport` |
+| **`.wav`** | ❌ **空分支** |
+
+`.wav` 那条只有一句日志：
+
+```cpp
+else if (0 == ext.CompareNoCase(_T(".wav")))        // // !!
+{
+    LogText += "\nWAVE export complete.\n";          // writes nothing
+    ...
+}
+```
+
+所以「跑一次 FT 导出 WAV 来比对」这条路**不存在**，不是我们的调用方式不对。
+
+**可用的替代**：`.nsf` 导出确实能出文件（实测 `fod_pancake` → 27,264 字节，magic `NESM`，
+驱动 7,076 字节 + 歌曲数据 18,846 字节）。要渲染它需要一个 NSF 播放器：
+
+```
+NSF 头（load/init/play、芯片位） → 6502 执行 → 逐帧调用 play → 寄存器写 → 芯片核心
+```
+
+需要的部件我们已经 vendored 了一半（`nes_cpu.cpp` 已编译，`nes_mem` / `nes_bank` / `nsf2_irq`
+在 `third_party` 里但未编译）；缺的是 NSFPlay 的播放循环本身。
+
+**这条路的额外价值**：它同时是「FTM → NSF 导出」路线的前置条件——那条路线现在只剩下数据打包。
+
+### 现状
+
+| 项 | 状态 |
+|---|---|
+| 音符级对标（FT 文本 vs 我们的 loader） | ✅ 4/7 逐音符一致 |
+| 渲染级对标（WAV 包络） | ❌ 参考渲染不可得（FT 无 WAV 导出） |
+| 我们的渲染产物 | ✅ `--ftm-wav <ftm> <out.wav> <秒>` |
+| NSF 参考 | ⏳ 需要最小 NSF 播放器 |
