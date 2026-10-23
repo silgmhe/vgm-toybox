@@ -1,5 +1,7 @@
 #include "LibvgmVgz.h"
 
+#include <cstring>
+
 #include "stdtype.h"
 #include "utils/DataLoader.h"
 #include "utils/MemoryLoader.h"
@@ -11,6 +13,27 @@ bool isCompressedImage (const void* data, std::size_t size)
 {
 	const auto* raw = static_cast<const unsigned char*> (data);
 	return (raw != nullptr && size >= 2 && raw[0] == 0x1f && raw[1] == 0x8b);
+}
+
+bool isFtmModule (const void* data, std::size_t size)
+{
+	static const char kFamiTracker[] = "FamiTracker Module";
+	static const char kDnFamiTracker[] = "Dn-FamiTracker Module";
+
+	const auto* raw = static_cast<const char*> (data);
+	if (raw == nullptr)
+	{
+		return false;
+	}
+
+	if (size >= sizeof (kFamiTracker) - 1
+		&& std::memcmp (raw, kFamiTracker, sizeof (kFamiTracker) - 1) == 0)
+	{
+		return true;
+	}
+
+	return size >= sizeof (kDnFamiTracker) - 1
+		   && std::memcmp (raw, kDnFamiTracker, sizeof (kDnFamiTracker) - 1) == 0;
 }
 
 bool flattenCompressedImage (const void* data, std::size_t size, juce::MemoryBlock& plain)

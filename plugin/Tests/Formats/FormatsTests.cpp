@@ -1138,6 +1138,18 @@ void testFtmVgmImage (void)
 
 	check (sawStatusWrite, "and the pulse 1 enable travels as an APU write");
 	check (vgm.back() == 0x66, "ending with the end-of-stream marker");
+
+	// The proof that this will play: the image goes back through the loader the player uses, so a
+	// header field or a command byte that a real core would reject fails here instead of at runtime.
+	toybox::midi::SongIr roundTrip;
+	std::string roundTripError;
+	toybox::formats::vgm::VgmSongLoader loader;
+
+	check (loader.load (vgm.data(), vgm.size(), roundTrip, roundTripError),
+		   "and the player's own loader accepts it");
+	check (roundTrip.chips.size() == 1 && roundTrip.chips[0].kind == toybox::midi::ChipKind::nesApu,
+		   "as a 2A03 song");
+	check (! roundTrip.writes.empty(), "with its register writes intact");
 }
 
 void runFormatTests (void)

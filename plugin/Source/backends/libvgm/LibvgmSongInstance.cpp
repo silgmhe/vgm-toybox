@@ -1,5 +1,7 @@
 #include "LibvgmSongInstance.h"
 
+#include "formats/ftm/FtmSongIr.h"
+
 #include <map>
 
 #include "emu/SoundDevs.h"
@@ -272,6 +274,26 @@ bool LibvgmSongInstance::unpackImage (juce::String& errorMessage)
 {
 	if (! isCompressedImage (memory.data, memory.size))
 	{
+		// A module is not a register dump, but it compiles to one: the three edits that make .ftm
+		// playable all happen here, where every image already passes and where `ownedImage` is ours
+		// to fill. Downstream sees a VGM like any other and knows nothing about the tracker.
+		if (isFtmModule (memory.data, memory.size))
+		{
+			std::vector<std::uint8_t> image;
+			std::string error;
+
+			if (! formats::ftm::buildVgm (memory.data, memory.size, image, error))
+			{
+				errorMessage = juce::String (error);
+				return false;
+			}
+
+			ownedImage.replaceAll (image.data(), image.size());
+			playerMemory.data = ownedImage.getData();
+			playerMemory.size = ownedImage.getSize();
+			return true;
+		}
+
 		return true;	// plain image - the players read the core's bytes directly
 	}
 

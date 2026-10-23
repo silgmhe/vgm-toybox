@@ -454,7 +454,10 @@ bool buildVgm (const void* data, std::size_t size, std::vector<std::uint8_t>& ou
 
 	put32 (0x08, 0x00000151);					// version 1.51, which has the NES clock field
 	put32 (0x18, song.totalTicks);				// total samples
-	put32 (0x34, 0x00000100);					// data starts at 0x100
+	// The data offset is relative to 0x34, not absolute: libvgm and this project's own reader both
+	// compute 0x34 + field, so writing 0x100 here would put the command stream at 0x134 - past the
+	// end of a small image, which the reader rejects as "not a VGM stream".
+	put32 (0x34, 0x00000100 - 0x34);
 	put32 (0x84, nesApuClockHz);				// NES APU clock
 
 	// Writes are already ordered by time; a wait is only emitted when the clock actually moves,
