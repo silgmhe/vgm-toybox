@@ -7,7 +7,7 @@
 | 范围 | `plugin/Source/chips/`（31 个解码器）、`backends/libvgm/`（装配层）、`formats/`、`midi/`、`playback/`；不含 UI 细节与 libvgm 本身 |
 | 方法 | 静态阅读接口与实现、统计规模与重复度、以 95 首真实 rips 建立行为基线并逐行比对 |
 | 结论 | 评审时「芯片层已解耦、装配层仍绑死 VGM」。**R0–R2 之后装配层也已解耦**：新增一种格式只剩一个 loader 文件 |
-| 状态 | R0/R1/R2、H-2、M-1 已实施；H-3 第 1 步完成；H-4、M-2、M-3、L-1 待办（§4） |
+| 状态 | R0/R1/R2、H-2、H-3、M-1 已完成；H-4、M-2、M-3、L-1 待办（§4） |
 
 ## 1. 实现了什么
 
@@ -33,7 +33,7 @@
 | C-3 | 阻断 | `IChipDecoder::reset` 的契约把 VGM 写进芯片层 | **已解决（R0a）** |
 | H-1 | 高 | `RegisterWrite.value2` 为单颗芯片而加 | **已解决（R0b）** |
 | H-2 | 高 | `kVgmRate = 44100.0` 是全局常量，时间栅格无处传递 | **已解决** `bf30b28` |
-| H-3 | 高 | 30 个 `NoteTable` 各写一遍 `noteFor` | **已解决（第 1 步）** 采样族的守卫收敛；FM/噪声/one-shot 保留 |
+| H-3 | 高 | 30 个 `NoteTable` 各写一遍 `noteFor` | **已解决**：采样族收为一个守则；FM/噪声/one-shot 保留（各有公式） |
 | H-4 | 高 | `LibvgmSongInstance` 同时做解包、libvgm 生命周期、轨枚举、能力表、序列构建 | 待办 |
 | M-1 | 中 | `ChannelState` 同时带查表派与速率派两组字段，新芯片作者需自行判断 | **已解决（诊断版）** `b8335bb` |
 | M-2 | 中 | `Family` 混装芯片族与声道种类（`aySquare` 与 `fm` 同级） | 待办 |
