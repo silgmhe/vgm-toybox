@@ -99,6 +99,28 @@ inline int quantiseTransposition (int cents, int* finePitch)
 	return note;
 }
 
+/** The three shapes a sampled decoder's `noteFor` takes - pick one, do not invent a fourth.
+
+	1. **Transposition only** - the register is a playback rate and the chip names its reference.
+	   `quantisePlaybackRate (rate, referenceRate, finePitch)`, with the sample's own cycle riding
+	   beside it as the root correction (`describeSamplePitch`), never dividing it here.
+	   C140, C352, OPN ADPCM-B.
+
+	2. **Rate plus the drum verdict** - the same, but the decoder knows whether the sample is
+	   melodic at all, so a drum becomes a C4 trigger instead of a wrong note.
+	   `noteFromPlaybackRate (rate, referenceRate, measured, oneShotNote, finePitch)`.
+	   RF5C68, SegaPCM, Ga20, QSound, K053260, K054539.
+
+	3. **The cycle is the pitch** - there is no transposition to report; what sounds is whatever
+	   the sample's own period says. `noteFromSampleCycle (rate, cycleLength, melodic, ...)`.
+	   OKIM6295.
+
+	ES5503 is deliberately outside all three: its register is a step through a table, not a rate, so
+	it has no L1 and measures the whole pitch itself. That difference is real and should stay visible
+	rather than be folded into shape 1 for the sake of uniformity.
+
+	The FM, noise and one-shot tables are not sampled decoders at all and share none of this. */
+
 /** Turns the playback rate of a recorded sample into a note.
 
 	A sampled voice carries no pitch in its registers, only the number of bytes a second the chip
