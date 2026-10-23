@@ -200,185 +200,46 @@ namespace
 
 			const std::uint32_t lastSampleTime = ir.totalTicks;
 
-			// chips with a real state machine are decoded in one pass after the stream is read:
-			// their note boundaries come from the chip's own counters, not from a register write
+			// Chips that need the finished stream before they can place a note. The order matters: at
+			// equal timestamps the stable sort keeps whichever was appended first, so the flush order
+			// is part of the output.
 			flushNes (lastSampleTime);
-
-			// ADPCM-B's pitch only exists in its DELTA-T ROM (block 0x82): the sample's period has
-			// to be measured, and DELTA-N turns it into the note the driver asked for
-			flushOpn (decoders.decoder<chips::OpnDecoder> ().writes.empty() ? std::vector<std::uint8_t>()
-										 : assembleRom (ir, 0x82, 16 * 1024 * 1024, true),
+			// ADPCM-B's pitch only exists in its DELTA-T ROM (block 0x82), which is why the OPN family
+			// is flushed through its own entry point: it also splits ports and drums.
+			flushOpn (decoders.decoder<chips::OpnDecoder> ().writes.empty()
+						  ? std::vector<std::uint8_t>()
+						  : assembleRom (ir, 0x82, 16 * 1024 * 1024, true),
 					  lastSampleTime);
 			flushGb (lastSampleTime);
 			flushOpl (lastSampleTime);
-			flushDecoded (decoders.decoder<chips::OpmDecoder> (), 3579545u, lastSampleTime);
-			flushDecoded (decoders.decoder<chips::HuC6280Decoder> (), 3579545u, lastSampleTime);
-			flushDecoded (decoders.decoder<chips::K051649Decoder> (), 3579545u, lastSampleTime);
-			flushDecoded (decoders.decoder<chips::Saa1099Decoder> (), 8000000u, lastSampleTime);
-			flushDecoded (decoders.decoder<chips::PokeyDecoder> (), 1789772u, lastSampleTime);
-			flushDecoded (decoders.decoder<chips::WswanDecoder> (), 3072000u, lastSampleTime);
-			flushDecoded (decoders.decoder<chips::Sn76489Decoder> (), 3579545u, lastSampleTime);
-			flushDecoded (decoders.decoder<chips::Ay8910Decoder> (), 1789773u, lastSampleTime);
-			// The RF5C164 keeps its samples in the chip's own RAM, which the stream uploads as a PCM
-			// bank (a 0x67 block of type 0x02, no ROM header) plus 0x68 writes. Without the image no
-			// cycle can be measured, so the decoder needs it before it can name a pitch.
-			const std::vector<std::uint8_t> rf5cRam =
-				decoders.decoder<chips::Rf5c68Decoder> ().writes.empty() ? std::vector<std::uint8_t>()
-									: assemblePcmBank (ir, 0x02, 64 * 1024);
-			flushDecoded (decoders.decoder<chips::Rf5c68Decoder> (), 12500000u, lastSampleTime,
-						  [&rf5cRam] (chips::Rf5c68Decoder& decoder)
-						  {
-							  if (! rf5cRam.empty())
-							  {
-								  decoder.setRam (rf5cRam);
-							  }
-						  });
-			// The OKIM6295 has no pitch register: every voice plays at `clock / 165` and the note is
-			// the sample's own cycle, so the 256 KB ROM (0x8B blocks) is the only source of a pitch.
-			const std::vector<std::uint8_t> okimRom =
-				decoders.decoder<chips::Okim6295Decoder> ().writes.empty() ? std::vector<std::uint8_t>()
-									: assembleRom (ir, 0x8B, 256 * 1024);
-			flushDecoded (decoders.decoder<chips::K007232Decoder> (), 8000000u, lastSampleTime);
-			flushDecoded (decoders.decoder<chips::VsuDecoder> (), 5370000u, lastSampleTime);
-			flushDecoded (decoders.decoder<chips::K005289Decoder> (), 4000000u, lastSampleTime);
-			flushDecoded (decoders.decoder<chips::Msm5232Decoder> (), 2119040u, lastSampleTime);
-			flushDecoded (decoders.decoder<chips::MultiPcmDecoder> (), 8000000u, lastSampleTime);
-			flushDecoded (decoders.decoder<chips::MikeyDecoder> (), 16000000u, lastSampleTime);
-			flushDecoded (decoders.decoder<chips::Okim6295Decoder> (), 1000000u, lastSampleTime,
-						  [&okimRom] (chips::Okim6295Decoder& decoder)
-						  {
-							  if (! okimRom.empty())
-							  {
-								  decoder.setRom (okimRom);
-							  }
-						  });
-			flushDecoded (decoders.decoder<chips::X1_010Decoder> (), 16000000u, lastSampleTime);
 
-			// The C140's note is the playback rate divided by the sample's own cycle length, and
-			// only the ROM holds that length: without it every voice is quantised against a fixed
-			// 8 kHz root and a song recorded at another rate comes out at the wrong octave (this
-			// is the bug that made "Submerged City" send 59/62 where the chip plays 32/56). The
-			// ROM is the song's 0x8D blocks, and the banking that folds a voice's bank into a ROM
-			// offset is the header's byte 0x96 - both are part of the same fact, so they travel
-			// together and the decoder cannot read one without the other.
-			const std::vector<std::uint8_t> c140Rom =
-				decoders.decoder<chips::C140Decoder> ().writes.empty() ? std::vector<std::uint8_t>()
-									: assembleRom (ir, 0x8D, 2 * 1024 * 1024);
-			const auto c140Banking = chips::C140Decoder::bankingFromHeaderByte (c140BankingOf (ir));
-			flushDecoded (decoders.decoder<chips::C140Decoder> (), 8000000u, lastSampleTime,
-						  [&c140Rom, c140Banking] (chips::C140Decoder& decoder)
-						  {
-							  if (! c140Rom.empty())
-							  {
-								  decoder.setRom (c140Rom, c140Banking);
-							  }
-						  });
-
-			// The C352 needs its ROM for the same reason, from its own block type (0x92), and its
-			// sample address is `bank << 16 | start`, so the image is the whole ROM the song
-			// declares - the chip masks it to a power of two rather than clipping at 2 MB.
-			const std::vector<std::uint8_t> c352Rom =
-				decoders.decoder<chips::C352Decoder> ().writes.empty() ? std::vector<std::uint8_t>()
-									: assembleRom (ir, 0x92, 32 * 1024 * 1024);
-			flushDecoded (decoders.decoder<chips::C352Decoder> (), 12288000u, lastSampleTime,
-						  [&c352Rom] (chips::C352Decoder& decoder)
-						  {
-							  if (! c352Rom.empty())
-							  {
-								  decoder.setRom (c352Rom);
-							  }
-						  });
-
-			// The K053260 needs its ROM for the same reason, from its own block type (0x8E). Its
-			// start address is 21 bits with no bank register, so the image is the declared ROM and
-			// the chip masks it to a power of two.
-			const std::vector<std::uint8_t> k053260Rom =
-				decoders.decoder<chips::K053260Decoder> ().writes.empty() ? std::vector<std::uint8_t>()
-									   : assembleRom (ir, 0x8E, 2 * 1024 * 1024);
-			flushDecoded (decoders.decoder<chips::K053260Decoder> (), 3579545u, lastSampleTime,
-						  [&k053260Rom] (chips::K053260Decoder& decoder)
-						  {
-							  if (! k053260Rom.empty())
-							  {
-								  decoder.setRom (k053260Rom);
-							  }
-						  });
-			// The K054539 needs its ROM to know where a sample ends - the marker byte is what
-			// keys the voice off in the core - and to measure the cycle between the start and that
-			// marker. Block type 0x8C, 24-bit addresses.
-			const std::vector<std::uint8_t> k054539Rom =
-				decoders.decoder<chips::K054539Decoder> ().writes.empty() ? std::vector<std::uint8_t>()
-									   : assembleRom (ir, 0x8C, 16 * 1024 * 1024);
-			flushDecoded (decoders.decoder<chips::K054539Decoder> (), 18432000u, lastSampleTime,
-						  [&k054539Rom] (chips::K054539Decoder& decoder)
-						  {
-							  if (! k054539Rom.empty())
-							  {
-								  decoder.setRom (k054539Rom);
-							  }
-						  });
-
-			// QSound's samples are its 0x8F blocks: 16-bit addresses inside a 64 KB bank, so the
-			// image is the declared ROM and the chip masks it to a power of two.
-			const std::vector<std::uint8_t> qsoundRom =
-				decoders.decoder<chips::QSoundDecoder> ().writes.empty() ? std::vector<std::uint8_t>()
-									  : assembleRom (ir, 0x8F, 8 * 1024 * 1024);
-			flushDecoded (decoders.decoder<chips::QSoundDecoder> (), 60000000u, lastSampleTime,
-						  [&qsoundRom] (chips::QSoundDecoder& decoder)
-						  {
-							  if (! qsoundRom.empty())
-							  {
-								  decoder.setRom (qsoundRom);
-							  }
-						  });
-
-			// GA20's samples are its 0x93 blocks, addressed in 16-byte units inside 1 MB.
-			const std::vector<std::uint8_t> ga20Rom =
-				decoders.decoder<chips::Ga20Decoder> ().writes.empty() ? std::vector<std::uint8_t>()
-									: assembleRom (ir, 0x93, 1024 * 1024);
-			// the GA20's byte rate is `clock / 4 / (256 - rate)`: the decoder needs the clock the
-			// device was started with, which `flushDecoded` takes from the device config (the
-			// header's 0xE0); the constant is only the fallback when there is no device
-			flushDecoded (decoders.decoder<chips::Ga20Decoder> (), 3579545u, lastSampleTime,
-						  [&ga20Rom] (chips::Ga20Decoder& decoder)
-						  {
-							  if (! ga20Rom.empty())
-							  {
-								  decoder.setRom (ga20Rom);
-							  }
-						  });
-
-			// Sega PCM's samples are its 0x80 blocks, indexed by the 24-bit position's byte part.
-			const std::vector<std::uint8_t> segaPcmRom =
-				decoders.decoder<chips::SegaPcmDecoder> ().writes.empty() ? std::vector<std::uint8_t>()
-									   : assembleRom (ir, 0x80, 8 * 1024 * 1024);
-			flushDecoded (decoders.decoder<chips::SegaPcmDecoder> (), 8000000u, lastSampleTime,
-						  [&segaPcmRom] (chips::SegaPcmDecoder& decoder)
-						  {
-							  if (! segaPcmRom.empty())
-							  {
-								  decoder.setRom (segaPcmRom);
-							  }
-						  });
-
-			// The ES5503 walks a table it points at, so its note is the table's repeat rate: the
-			// frequency register gives the byte rate and the table's own cycle length - which only
-			// the RAM (0xE1 blocks, 128 KB) holds - divides it. Its clock runs at 7,159,090 Hz on
-			// the Apple IIgs, and the core divides it by eight and by the oscillator count.
-			const std::vector<std::uint8_t> es5503Ram =
-				decoders.decoder<chips::Es5503Decoder> ().writes.empty() ? std::vector<std::uint8_t>()
-									  : assembleRam (ir, 0xE1, 128 * 1024);
-			flushDecoded (decoders.decoder<chips::Es5503Decoder> (), 7159090u, lastSampleTime,
-						  [&es5503Ram] (chips::Es5503Decoder& decoder)
-						  {
-							  if (! es5503Ram.empty())
-							  {
-								  decoder.setRam (es5503Ram);
-							  }
-						  });
-
-			flushDecoded (decoders.decoder<chips::Ymf271Decoder> (), 16934400u, lastSampleTime);
-			flushDecoded (decoders.decoder<chips::Ymz280bDecoder> (), 16934400u, lastSampleTime);
+			flushDecoded (decoders.decoder<chips::OpmDecoder> (), ir, lastSampleTime);
+			flushDecoded (decoders.decoder<chips::HuC6280Decoder> (), ir, lastSampleTime);
+			flushDecoded (decoders.decoder<chips::K051649Decoder> (), ir, lastSampleTime);
+			flushDecoded (decoders.decoder<chips::Saa1099Decoder> (), ir, lastSampleTime);
+			flushDecoded (decoders.decoder<chips::PokeyDecoder> (), ir, lastSampleTime);
+			flushDecoded (decoders.decoder<chips::WswanDecoder> (), ir, lastSampleTime);
+			flushDecoded (decoders.decoder<chips::Sn76489Decoder> (), ir, lastSampleTime);
+			flushDecoded (decoders.decoder<chips::Ay8910Decoder> (), ir, lastSampleTime);
+			flushDecoded (decoders.decoder<chips::Rf5c68Decoder> (), ir, lastSampleTime);
+			flushDecoded (decoders.decoder<chips::K007232Decoder> (), ir, lastSampleTime);
+			flushDecoded (decoders.decoder<chips::VsuDecoder> (), ir, lastSampleTime);
+			flushDecoded (decoders.decoder<chips::K005289Decoder> (), ir, lastSampleTime);
+			flushDecoded (decoders.decoder<chips::Msm5232Decoder> (), ir, lastSampleTime);
+			flushDecoded (decoders.decoder<chips::MultiPcmDecoder> (), ir, lastSampleTime);
+			flushDecoded (decoders.decoder<chips::MikeyDecoder> (), ir, lastSampleTime);
+			flushDecoded (decoders.decoder<chips::Okim6295Decoder> (), ir, lastSampleTime);
+			flushDecoded (decoders.decoder<chips::X1_010Decoder> (), ir, lastSampleTime);
+			flushDecoded (decoders.decoder<chips::C140Decoder> (), ir, lastSampleTime);
+			flushDecoded (decoders.decoder<chips::C352Decoder> (), ir, lastSampleTime);
+			flushDecoded (decoders.decoder<chips::K053260Decoder> (), ir, lastSampleTime);
+			flushDecoded (decoders.decoder<chips::K054539Decoder> (), ir, lastSampleTime);
+			flushDecoded (decoders.decoder<chips::QSoundDecoder> (), ir, lastSampleTime);
+			flushDecoded (decoders.decoder<chips::Ga20Decoder> (), ir, lastSampleTime);
+			flushDecoded (decoders.decoder<chips::SegaPcmDecoder> (), ir, lastSampleTime);
+			flushDecoded (decoders.decoder<chips::Es5503Decoder> (), ir, lastSampleTime);
+			flushDecoded (decoders.decoder<chips::Ymf271Decoder> (), ir, lastSampleTime);
+			flushDecoded (decoders.decoder<chips::Ymz280bDecoder> (), ir, lastSampleTime);
 
 			return std::move (stream);
 		}
@@ -802,25 +663,43 @@ namespace
 			decoders.decoder<chips::OplDecoder> ().devices.clear();
 		}
 
-		/** Register writes of one chip, kept per device until the stream ends.
+		/** Runs one decoder over its whole write stream and hands the notes to the stream.
 
-			The PSG decoders below (HuC6280, SCC, SAA1099, POKEY, WonderSwan) all need the
-			finished stream: which note is playing at a given moment follows from the chip's own
-			state - a divider that was set earlier, a key mask that was switched on, a sweep that
-			has been running - and not from the write that happens to arrive. */
+			Everything chip-specific comes from the decoder: `kRequirements` says which clock to assume
+			and which memory image to assemble, `attachMemory` receives it. This used to be one call per
+			chip with those facts written out at the call site - twenty-five lines of "0x8D, 2 MB" in
+			the layer that is meant to know nothing about chips. */
 		template <typename Decoder>
-		void flushDecoded (ChipBuffer<Decoder>& buffer, std::uint32_t fallbackClock,
+		void flushDecoded (ChipBuffer<Decoder>& buffer, const midi::SongIr& ir,
 						   std::uint32_t totalSamples)
 		{
-			flushDecoded (buffer, fallbackClock, totalSamples, [] (Decoder&) {});
-		}
+			constexpr auto requirements = Decoder::kRequirements;
 
-		/** The same pass, with a hook that hands the decoder whatever the stream carried besides
-			register writes - a sampled chip needs its ROM before it can say what pitch a sample is. */
-		template <typename Decoder, typename Configure>
-		void flushDecoded (ChipBuffer<Decoder>& buffer, std::uint32_t fallbackClock,
-						   std::uint32_t totalSamples, Configure configure)
-		{
+			// A block below 0x40 is a PCM bank (concatenated by type), a RAM block writes at an
+			// address, a ROM block declares the size of the whole image - three shapes, and the
+			// type in the file is what distinguishes them (VGM's own numbering).
+			std::vector<std::uint8_t> image;
+			chips::ChipMemory memory;
+			if (requirements.hasMemory && ! buffer.writes.empty())
+			{
+				if (requirements.memoryType < 0x40)
+				{
+					image = assemblePcmBank (ir, requirements.memoryType, requirements.memoryBytes);
+				}
+				else if (requirements.memoryIsRam)
+				{
+					image = assembleRam (ir, requirements.memoryType, requirements.memoryBytes);
+				}
+				else
+				{
+					image = assembleRom (ir, requirements.memoryType, requirements.memoryBytes,
+										 requirements.clipToContent);
+				}
+
+				memory.bytes = &image;
+				memory.banking = c140BankingOf (ir);
+			}
+
 			for (auto& entry : buffer.writes)
 			{
 				const auto device = buffer.devices.find (entry.first);
@@ -829,19 +708,20 @@ namespace
 					continue;
 				}
 
-				// the clock decides the pitch of every note on the chip, so a missing one is not
-				// something to guess per write: the header's value, or the chip's usual clock
 				const std::uint32_t clock = (device->second->devCfg != nullptr
 											 && device->second->devCfg->clock > 0)
 												? device->second->devCfg->clock
-												: fallbackClock;
+												: requirements.fallbackClock;
 
 				Decoder decoder;
 				decoder.reset (chips::ChipConfig { clock, tickRate });
-				configure (decoder);
+				if (requirements.hasMemory)
+				{
+					decoder.attachMemory (memory);
+				}
 
 				appendNotes (device->second,
-								  chips::extractPerformance (decoder, entry.second, totalSamples));
+							 chips::extractPerformance (decoder, entry.second, totalSamples));
 			}
 
 			buffer.writes.clear();
