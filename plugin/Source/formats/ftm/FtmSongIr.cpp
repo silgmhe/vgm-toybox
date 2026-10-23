@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cmath>
 #include <map>
+#include <tuple>
 #include <utility>
 #include <vector>
 
@@ -84,9 +85,9 @@ namespace
 	public:
 		explicit Emitter (midi::SongIr& song) : ir (song) {}
 
-		void write (int device, std::uint8_t reg, int value, std::uint32_t time)
+		void write (int device, std::uint8_t reg, int value, std::uint32_t time, int port = 0)
 		{
-			const auto key = std::make_pair (device, reg);
+			const auto key = std::make_tuple (device, port, reg);
 			const auto found = last.find (key);
 			if (found != last.end() && found->second == value)
 			{
@@ -98,6 +99,7 @@ namespace
 			chips::RegisterWrite entry;
 			entry.deviceId = (std::uint32_t) device;
 			entry.reg = reg;
+			entry.port = (std::uint8_t) port;
 			entry.value = (std::uint16_t) (value & 0xFF);
 			entry.sampleTime = time;
 			ir.writes.push_back (entry);
@@ -106,7 +108,7 @@ namespace
 
 	private:
 		midi::SongIr& ir;
-		std::map<std::pair<int, int>, int> last;
+		std::map<std::tuple<int, int, int>, int> last;
 	};
 }
 
@@ -142,6 +144,19 @@ bool loadSongIr (const void* data, std::size_t size, midi::SongIr& out, std::str
 	slot.kind = midi::ChipKind::nesApu;
 	slot.clockHz = apuClock;
 	out.chips.push_back (slot);
+
+	// VRC6 channels are 5, 6 and 7 in the module's channel table. When one is present the chip is
+	// declared second, so its writes carry deviceId 1 whatever else the module turns out to use.
+	const bool hasVrc6 = std::find_if (module.channelTypes.begin(), module.channelTypes.end(),
+                                       [] (int type) { return type >= 5 && type <= 7; })
+                         != module.channelTypes.end();
+	if (hasVrc6)
+	{
+		midi::ChipSlot expansion;
+		expansion.kind = midi::ChipKind::nesVrc6;
+		expansion.clockHz = apuClock;
+		out.chips.push_back (expansion);
+	}
 
 	Emitter emitter (out);
 	emitter.write (0, kFrameCounter, 0x40, 0);		// four-step sequence, as the driver sets it
@@ -496,6 +511,33 @@ bool loadSongIr (const void* data, std::size_t size, midi::SongIr& out, std::str
 						emitter.write (0, kStatus, statusMask, when);
 					}
 
+					else if (type >= 5 && type <= 7)
+					{
+						// VRC6: two pulses whose period is `clock / (16 * f) - 1`, and a sawtooth
+						// that accumulates at `clock / (14 * f) - 1`. The registers repeat every
+						// $1000 from $9000, and each voice is (control, period low, period high
+						// with bit 7 as the gate).
+						const int voice = type - 5;
+						const std::uint32_t base = 0x9000u + (std::uint32_t) voice * 0x1000u;
+						const bool saw = (voice == 2);
+						const double divider = saw ? 14.0 : 16.0;
+						const double frequency = 440.0 * std::pow (2.0, (pitch - 69) / 12.0);
+						const double raw = (double) apuClock / (divider * frequency) - 1.0;
+						const int period = (int) std::lround (std::clamp (raw, 0.0, 4095.0));
+
+						const int voiceLevel = state.silenced ? 0 : (level & 0x0F);
+						const int control = saw ? (voiceLevel << 2)
+												: ((duty & 0x07) << 4) | voiceLevel;
+
+						emitter.write (1, (std::uint8_t) (base & 0xFF), control, when,
+									   (int) (base >> 8));
+						emitter.write (1, (std::uint8_t) ((base + 1) & 0xFF), period & 0xFF, when,
+									   (int) ((base + 1) >> 8));
+						emitter.write (1, (std::uint8_t) ((base + 2) & 0xFF),
+									   0x80 | ((period >> 8) & 0x0F), when,
+									   (int) ((base + 2) >> 8));
+					}
+
 					++state.macroStep;
 					++state.effectFrame;
 				}
@@ -591,6 +633,14 @@ bool buildVgm (const void* data, std::size_t size, std::vector<std::uint8_t>& ou
 	std::uint32_t clock = 0;
 	for (const auto& write : song.writes)
 	{
+		// VGM has no command for VRC6 (or any other NES expansion but the FDS), so those writes
+		// cannot travel in this container. Dropping them here is honest: emitting them as APU
+		// writes would send the wrong bytes to the right chip. The NES backend reads them instead.
+		if (write.deviceId != 0)
+		{
+			continue;
+		}
+
 		if (write.sampleTime > clock)
 		{
 			std::uint32_t gap = write.sampleTime - clock;

@@ -23,12 +23,15 @@
 #include "chips/QSoundDecoder.h"
 #include "chips/Es5503Decoder.h"
 #include "chips/MikeyDecoder.h"
+#include <cstdlib>
 #include <fstream>
+#include <memory>
 #include <iterator>
 #include <string>
 #include "chips/Pitch.h"
 #include "formats/ftm/FtmSongIr.h"
 #include "backends/nes/NsfApuChip.h"
+#include "backends/nes/NsfVrc6Chip.h"
 #include "formats/ftm/FtmSongLoader.h"
 #include "formats/vgm/VgmSongLoader.h"
 #include "chips/Msm5232Decoder.h"
@@ -4358,14 +4361,25 @@ namespace
 			// Drive NSFPlay's core from the same register stream the VGM path uses: if this makes
 			// sound, the backend plan holds and the expansion chips are only a mapping away.
 			toybox::backends::nes::NsfApuChip apu (44100.0);
+			std::unique_ptr<toybox::backends::nes::NsfVrc6Chip> vrc6;
+
+			for (const auto& chip : song.chips)
+			{
+				if (chip.kind == toybox::midi::ChipKind::nesVrc6)
+				{
+					vrc6.reset (new toybox::backends::nes::NsfVrc6Chip (44100.0));
+				}
+			}
 
 			constexpr int blockSize = 512;
-			constexpr int blocks = (44100 * 5) / blockSize;
+			const int seconds = (argc >= 4) ? std::atoi (argv[3]) : 5;
+			const int blocks = (44100 * (seconds > 0 ? seconds : 5)) / blockSize;
 
 			std::vector<float> left ((std::size_t) blockSize, 0.0f);
 			std::vector<float> right ((std::size_t) blockSize, 0.0f);
 
 			std::size_t next = 0;
+			int vrc6Writes = 0;
 			double peak = 0.0;
 			double sumSquares = 0.0;
 			std::int64_t counted = 0;
@@ -4376,13 +4390,29 @@ namespace
 
 				while (next < song.writes.size() && song.writes[next].sampleTime < end)
 				{
-					apu.write (0x4000 + song.writes[next].reg, song.writes[next].value & 0xFF);
+					const auto& write = song.writes[next];
+
+					if (write.deviceId == 0)
+					{
+						apu.write (0x4000 + write.reg, write.value & 0xFF);
+					}
+					else if (vrc6 != nullptr)
+					{
+						vrc6->write (((int) write.port << 8) | write.reg, write.value & 0xFF);
+						++vrc6Writes;
+					}
+
 					++next;
 				}
 
 				std::fill (left.begin(), left.end(), 0.0f);
 				std::fill (right.begin(), right.end(), 0.0f);
 				apu.render (left.data(), right.data(), blockSize);
+
+				if (vrc6 != nullptr)
+				{
+					vrc6->render (left.data(), right.data(), blockSize);
+				}
 
 				for (int i = 0; i < blockSize; ++i)
 				{
@@ -4394,8 +4424,57 @@ namespace
 			}
 
 			const double rms = counted > 0 ? std::sqrt (sumSquares / (double) counted) : 0.0;
-			std::printf ("ftm-nsf %s writes=%d peak=%.4f rms=%.4f\n", argv[2],
-						 (int) song.writes.size(), peak, rms);
+
+			// The expansion chip on its own: a mix can look healthy while the part that matters is
+			// silent, so this asks the VRC6 what it contributes by itself.
+			double soloPeak = 0.0;
+			double soloRms = 0.0;
+
+			if (vrc6 != nullptr)
+			{
+				toybox::backends::nes::NsfVrc6Chip solo (44100.0);
+				std::vector<float> soloLeft ((std::size_t) blockSize, 0.0f);
+				std::vector<float> soloRight ((std::size_t) blockSize, 0.0f);
+
+				std::size_t index = 0;
+				double squares = 0.0;
+				std::int64_t frames = 0;
+
+				for (int block = 0; block < blocks; ++block)
+				{
+					const std::uint32_t end = (std::uint32_t) ((block + 1) * blockSize);
+
+					while (index < song.writes.size() && song.writes[index].sampleTime < end)
+					{
+						const auto& write = song.writes[index];
+
+						if (write.deviceId == 1)
+						{
+							solo.write (((int) write.port << 8) | write.reg, write.value & 0xFF);
+						}
+
+						++index;
+					}
+
+					std::fill (soloLeft.begin(), soloLeft.end(), 0.0f);
+					std::fill (soloRight.begin(), soloRight.end(), 0.0f);
+					solo.render (soloLeft.data(), soloRight.data(), blockSize);
+
+					for (int i = 0; i < blockSize; ++i)
+					{
+						const double sample = (double) soloLeft[(std::size_t) i];
+						soloPeak = std::max (soloPeak, std::abs (sample));
+						squares += sample * sample;
+						++frames;
+					}
+				}
+
+				soloRms = frames > 0 ? std::sqrt (squares / (double) frames) : 0.0;
+			}
+
+			std::printf ("ftm-nsf %s chips=%d writes=%d vrc6writes=%d peak=%.4f rms=%.4f vrc6peak=%.4f vrc6rms=%.4f\n",
+						 argv[2], (int) song.chips.size(), (int) song.writes.size(), vrc6Writes, peak,
+						 rms, soloPeak, soloRms);
 			return 0;
 		}
 

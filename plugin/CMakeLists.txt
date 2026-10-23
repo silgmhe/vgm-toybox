@@ -441,8 +441,10 @@ add_executable(vgm_chip_test EXCLUDE_FROM_ALL
 set(NSFPLAY_DIR "${CMAKE_CURRENT_SOURCE_DIR}/Source/backends/nes/third_party/nsfplay")
 target_sources(vgm_chip_test PRIVATE
 	Source/backends/nes/NsfApuChip.cpp
+	Source/backends/nes/NsfVrc6Chip.cpp
 	Source/backends/nes/NsfPlayStubs.cpp
 	"${NSFPLAY_DIR}/xgm/devices/Sound/nes_apu.cpp"
+	"${NSFPLAY_DIR}/xgm/devices/Sound/nes_vrc6.cpp"
 	"${NSFPLAY_DIR}/xgm/devices/Sound/nes_dmc.cpp"
 	"${NSFPLAY_DIR}/xgm/devices/CPU/nes_cpu.cpp"
 )

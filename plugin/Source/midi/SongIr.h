@@ -63,6 +63,14 @@ enum class ChipKind
 	mikey,			// Atari Lynx
 	msm5232,		// OKI, the register is a key index
 	nesApu,			// 2A03
+	/** The NES expansion chips. They are separate values rather than one "expansion" because each
+		needs its own emulation, and because a module can use at most one of them. */
+	nesVrc6,		// two pulses and a sawtooth
+	nesN163,		// wavetable, up to eight voices
+	nesVrc7,		// six FM voices
+	nesFds,			// one wavetable voice with its own modulator
+	nesMmc5,		// two pulses and PCM
+	nesS5b,			// three squares, noise and envelope
 	vsu,			// Virtual Boy
 	wonderswan,
 	x1_010,			// Seta X1-010
