@@ -28,6 +28,7 @@
 #include <string>
 #include "chips/Pitch.h"
 #include "formats/ftm/FtmSongIr.h"
+#include "backends/nes/NsfApuChip.h"
 #include "formats/ftm/FtmSongLoader.h"
 #include "formats/vgm/VgmSongLoader.h"
 #include "chips/Msm5232Decoder.h"
@@ -4317,7 +4318,7 @@ namespace
 {
 	// `--ftm <file>` parses a real module and prints what came out. The unit test can only build a
 	// synthetic module, so this is how the seven files in test_file/ftm get checked.
-	if (argc >= 3 && (std::string (argv[1]) == "--ftm" || std::string (argv[1]) == "--ftm-dump" || std::string (argv[1]) == "--ftm-audio" || std::string (argv[1]) == "--ftm-vgm"))
+	if (argc >= 3 && (std::string (argv[1]) == "--ftm" || std::string (argv[1]) == "--ftm-dump" || std::string (argv[1]) == "--ftm-audio" || std::string (argv[1]) == "--ftm-vgm" || std::string (argv[1]) == "--ftm-nsf"))
 	{
 		std::ifstream file (argv[2], std::ios::binary);
 		const std::vector<char> bytes ((std::istreambuf_iterator<char> (file)),
@@ -4340,6 +4341,61 @@ namespace
 			std::ofstream out (argv[3], std::ios::binary);
 			out.write ((const char*) image.data(), (std::streamsize) image.size());
 			std::printf ("ftm-vgm %s bytes=%d\n", argv[3], (int) image.size());
+			return 0;
+		}
+
+		if (std::string (argv[1]) == "--ftm-nsf")
+		{
+			toybox::midi::SongIr song;
+			std::string error;
+
+			if (! toybox::formats::ftm::loadSongIr (bytes.data(), bytes.size(), song, error))
+			{
+				std::printf ("error %s\n", error.c_str());
+				return 1;
+			}
+
+			// Drive NSFPlay's core from the same register stream the VGM path uses: if this makes
+			// sound, the backend plan holds and the expansion chips are only a mapping away.
+			toybox::backends::nes::NsfApuChip apu (44100.0);
+
+			constexpr int blockSize = 512;
+			constexpr int blocks = (44100 * 5) / blockSize;
+
+			std::vector<float> left ((std::size_t) blockSize, 0.0f);
+			std::vector<float> right ((std::size_t) blockSize, 0.0f);
+
+			std::size_t next = 0;
+			double peak = 0.0;
+			double sumSquares = 0.0;
+			std::int64_t counted = 0;
+
+			for (int block = 0; block < blocks; ++block)
+			{
+				const std::uint32_t end = (std::uint32_t) ((block + 1) * blockSize);
+
+				while (next < song.writes.size() && song.writes[next].sampleTime < end)
+				{
+					apu.write (0x4000 + song.writes[next].reg, song.writes[next].value & 0xFF);
+					++next;
+				}
+
+				std::fill (left.begin(), left.end(), 0.0f);
+				std::fill (right.begin(), right.end(), 0.0f);
+				apu.render (left.data(), right.data(), blockSize);
+
+				for (int i = 0; i < blockSize; ++i)
+				{
+					const double sample = (double) left[(std::size_t) i];
+					peak = std::max (peak, std::abs (sample));
+					sumSquares += sample * sample;
+					++counted;
+				}
+			}
+
+			const double rms = counted > 0 ? std::sqrt (sumSquares / (double) counted) : 0.0;
+			std::printf ("ftm-nsf %s writes=%d peak=%.4f rms=%.4f\n", argv[2],
+						 (int) song.writes.size(), peak, rms);
 			return 0;
 		}
 

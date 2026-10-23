@@ -434,6 +434,27 @@ add_executable(vgm_chip_test EXCLUDE_FROM_ALL
 	Source/chips/OpmDecoder.cpp
 	Source/chips/OpnDecoder.cpp
 )
+# NSFPlay's chip cores, for the NES backend. Vendored under reference/ (not built by the plugin
+# target yet): the plan is to drive them from the module compiler's register stream, which is what
+# makes the expansion chips reachable at all - libvgm has no VRC6 and the VGM format has no command
+# for one. See docs/review/2026-10-24-nes-backend-plan.md.
+set(NSFPLAY_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../reference/nsfplay/nsfplay-master")
+target_sources(vgm_chip_test PRIVATE
+	Source/backends/nes/NsfApuChip.cpp
+	Source/backends/nes/NsfPlayStubs.cpp
+	"${NSFPLAY_DIR}/xgm/devices/Sound/nes_apu.cpp"
+	"${NSFPLAY_DIR}/xgm/devices/Sound/nes_dmc.cpp"
+	"${NSFPLAY_DIR}/xgm/devices/CPU/nes_cpu.cpp"
+)
+target_include_directories(vgm_chip_test PRIVATE Source
+	"${NSFPLAY_DIR}/xgm"
+	"${NSFPLAY_DIR}/xgm/devices"
+	"${NSFPLAY_DIR}/xgm/devices/Sound"
+	"${NSFPLAY_DIR}/xgm/devices/CPU"
+	"${NSFPLAY_DIR}/xgm/devices/Memory"
+	"${NSFPLAY_DIR}/xgm/devices/Misc"
+)
+
 target_include_directories(vgm_chip_test PRIVATE Source)
 # the chips sources are C++17 (nested namespaces, std::clamp); the plugin target gets the same
 # standard from JUCE's own flags, this target has no JUCE
