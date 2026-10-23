@@ -33,6 +33,7 @@
 #include "backends/nes/NsfApuChip.h"
 #include "backends/nes/NsfVrc6Chip.h"
 #include "backends/nes/NsfVrc7Chip.h"
+#include "backends/nes/NsfN163Chip.h"
 #include "formats/ftm/FtmSongLoader.h"
 #include "formats/vgm/VgmSongLoader.h"
 #include "chips/Msm5232Decoder.h"
@@ -4386,6 +4387,7 @@ namespace
 			toybox::backends::nes::NsfApuChip apu (44100.0);
 			std::unique_ptr<toybox::backends::nes::NsfVrc6Chip> vrc6;
 			std::unique_ptr<toybox::backends::nes::NsfVrc7Chip> vrc7;
+			std::unique_ptr<toybox::backends::nes::NsfN163Chip> n163;
 
 			for (const auto& chip : song.chips)
 			{
@@ -4396,6 +4398,10 @@ namespace
 				else if (chip.kind == toybox::midi::ChipKind::nesVrc7)
 				{
 					vrc7.reset (new toybox::backends::nes::NsfVrc7Chip (44100.0));
+				}
+				else if (chip.kind == toybox::midi::ChipKind::nesN163)
+				{
+					n163.reset (new toybox::backends::nes::NsfN163Chip (44100.0));
 				}
 			}
 
@@ -4409,6 +4415,7 @@ namespace
 			std::size_t next = 0;
 			int vrc6Writes = 0;
 			int vrc7Writes = 0;
+			int n163Writes = 0;
 			double peak = 0.0;
 			double sumSquares = 0.0;
 			std::int64_t counted = 0;
@@ -4435,6 +4442,11 @@ namespace
 						vrc7->write (((int) write.port << 8) | write.reg, write.value & 0xFF);
 						++vrc7Writes;
 					}
+					else if (n163 != nullptr)
+					{
+						n163->write (((int) write.port << 8) | write.reg, write.value & 0xFF);
+						++n163Writes;
+					}
 
 					++next;
 				}
@@ -4453,6 +4465,11 @@ namespace
 					vrc7->render (left.data(), right.data(), blockSize);
 				}
 
+				if (n163 != nullptr)
+				{
+					n163->render (left.data(), right.data(), blockSize);
+				}
+
 				for (int i = 0; i < blockSize; ++i)
 				{
 					const double sample = (double) left[(std::size_t) i];
@@ -4469,12 +4486,14 @@ namespace
 			double soloPeak = 0.0;
 			double soloRms = 0.0;
 
-			if (vrc6 != nullptr || vrc7 != nullptr)
+			if (vrc6 != nullptr || vrc7 != nullptr || n163 != nullptr)
 			{
 				// The solo pass drives a fresh copy of the expansion chip so the mix cannot hide a
 				// silent part behind a healthy total.
 				toybox::backends::nes::NsfVrc6Chip soloVrc6 (44100.0);
 				toybox::backends::nes::NsfVrc7Chip soloVrc7 (44100.0);
+				toybox::backends::nes::NsfN163Chip soloN163 (44100.0);
+				const bool useN163 = (n163 != nullptr);
 				const bool useVrc7 = (vrc7 != nullptr);
 				std::vector<float> soloLeft ((std::size_t) blockSize, 0.0f);
 				std::vector<float> soloRight ((std::size_t) blockSize, 0.0f);
@@ -4495,7 +4514,11 @@ namespace
 						{
 							const int address = ((int) write.port << 8) | write.reg;
 
-							if (useVrc7)
+							if (useN163)
+							{
+								soloN163.write (address, write.value & 0xFF);
+							}
+							else if (useVrc7)
 							{
 								soloVrc7.write (address, write.value & 0xFF);
 							}
@@ -4510,7 +4533,11 @@ namespace
 
 					std::fill (soloLeft.begin(), soloLeft.end(), 0.0f);
 					std::fill (soloRight.begin(), soloRight.end(), 0.0f);
-					if (useVrc7)
+					if (useN163)
+					{
+						soloN163.render (soloLeft.data(), soloRight.data(), blockSize);
+					}
+					else if (useVrc7)
 					{
 						soloVrc7.render (soloLeft.data(), soloRight.data(), blockSize);
 					}
@@ -4533,7 +4560,7 @@ namespace
 
 			std::printf ("ftm-nsf %s chips=%d writes=%d expwrites=%d peak=%.4f rms=%.4f exppeak=%.4f exprms=%.4f\n",
 						 argv[2], (int) song.chips.size(), (int) song.writes.size(),
-						 vrc6Writes + vrc7Writes, peak, rms, soloPeak, soloRms);
+						 vrc6Writes + vrc7Writes + n163Writes, peak, rms, soloPeak, soloRms);
 			return 0;
 		}
 
@@ -4620,11 +4647,14 @@ namespace
 							 (int) module.samples.size());
 			for (std::size_t i = 0; i < module.instruments.size() && i < 6; ++i)
 			{
-				std::printf (" [%d] %s type=%d vol=%d arp=%d pitch=%d duty=%d patch=%d regs=%02X%02X%02X%02X%02X%02X%02X%02X",
+				std::printf (" [%d] %s type=%d vol=%d arp=%d pitch=%d duty=%d patch=%d wave=%d@%d(%d) regs=%02X%02X%02X%02X%02X%02X%02X%02X",
 							 (int) i, module.instruments[i].name.c_str(), module.instruments[i].type,
 							 module.instruments[i].volume, module.instruments[i].arpeggio,
 							 module.instruments[i].pitch, module.instruments[i].duty,
 							 module.instruments[i].vrc7Patch,
+							 module.instruments[i].waveSize,
+							 module.instruments[i].wavePos,
+							 (int) module.instruments[i].wave.size(),
 							 module.instruments[i].vrc7Regs[0], module.instruments[i].vrc7Regs[1],
 							 module.instruments[i].vrc7Regs[2], module.instruments[i].vrc7Regs[3],
 							 module.instruments[i].vrc7Regs[4], module.instruments[i].vrc7Regs[5],

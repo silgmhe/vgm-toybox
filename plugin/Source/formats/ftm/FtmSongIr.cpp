@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cmath>
 #include <map>
+#include <set>
 #include <tuple>
 #include <utility>
 #include <vector>
@@ -169,10 +170,24 @@ bool loadSongIr (const void* data, std::size_t size, midi::SongIr& out, std::str
                                        [] (int type) { return type >= 20 && type <= 25; })
                          != module.channelTypes.end();
 
+	// N163 channels are 11 to 18 in the module's table, eight of them, and the chip is similarly
+	// declared second. Its voices are not independent oscillators: one of them is clocked at a
+	// time, which is why the core needs to be told how many are in use.
+	const bool hasN163 = std::find_if (module.channelTypes.begin(), module.channelTypes.end(),
+                                       [] (int type) { return type >= 11 && type <= 18; })
+                         != module.channelTypes.end();
+
 	if (hasVrc6)
 	{
 		midi::ChipSlot expansion;
 		expansion.kind = midi::ChipKind::nesVrc6;
+		expansion.clockHz = apuClock;
+		out.chips.push_back (expansion);
+	}
+	else if (hasN163)
+	{
+		midi::ChipSlot expansion;
+		expansion.kind = midi::ChipKind::nesN163;
 		expansion.clockHz = apuClock;
 		out.chips.push_back (expansion);
 	}
@@ -198,6 +213,23 @@ bool loadSongIr (const void* data, std::size_t size, midi::SongIr& out, std::str
 	// Which instrument's custom OPLL registers are loaded on each VRC7 voice, so they are written
 	// when the patch changes rather than on every frame.
 	int customPatchChannel[6] = { -1, -1, -1, -1, -1, -1 };
+
+	// The N163 counts its voices down from the top of its register file, so the highest channel
+	// index the module uses decides how many to switch on. Fewer voices also means a louder mix
+	// per voice, which is why the count cannot simply be left at eight.
+	int n163Voices = 0;
+	for (std::size_t channel = 0; channel < module.channelTypes.size(); ++channel)
+	{
+		if (module.channelTypes[channel] >= 11 && module.channelTypes[channel] <= 18)
+		{
+			n163Voices = std::max (n163Voices, module.channelTypes[channel] - 11 + 1);
+		}
+	}
+	n163Voices = std::clamp (n163Voices, 1, 8);
+
+	// Waves already copied into the chip's RAM. A wave is uploaded once, when an instrument is
+	// first heard, rather than on every note.
+	std::set<int> n163WavesLoaded;
 
 	// DPCM samples have to be laid out before they can be addressed, and $4012 counts 64-byte units
 	// from $8000 - the base a VGM data block is loaded at. Each sample therefore starts on a
@@ -634,6 +666,61 @@ bool loadSongIr (const void* data, std::size_t size, midi::SongIr& out, std::str
 
 						emitter.writeAlways (1, 0x10, 0x20 + voice, when, 0x90);
 						emitter.writeAlways (1, 0x30, ((fnum >> 8) & 1) | (block << 1) | key, when, 0x90);
+					}
+
+					else if (type >= 11 && type <= 18)
+					{
+						// N163: a wave-table chip whose eight voices are clocked one at a time. Each
+						// voice owns eight registers, and the voices are numbered downwards - voice 0
+						// of the tracker is hardware voice 7 - which is why the address walks backwards.
+						const int hwChannel = 7 - (type - 11);
+						const int base = 0x40 + hwChannel * 8;
+
+						// Everything the chip needs goes through a select port: the address to $F800,
+						// the byte to $4800.
+						const auto poke = [&emitter, when] (int address, int value)
+						{
+							emitter.writeAlways (1, 0x00, address, when, 0xF8);
+							emitter.writeAlways (1, 0x00, value, when, 0x48);
+						};
+
+						const bool haveInstrument = state.instrument > 0
+													&& state.instrument < (int) module.instruments.size();
+						const auto& instrument = haveInstrument
+													 ? module.instruments[(std::size_t) state.instrument]
+													 : module.instruments.front();
+
+						const int waveSize = std::clamp (instrument.waveSize, 4, 256);
+
+						if (haveInstrument && ! instrument.wave.empty()
+							&& n163WavesLoaded.insert (state.instrument).second)
+						{
+							// Four-bit samples, two per byte, at the nibble address the tracker chose.
+							const int firstByte = (instrument.wavePos & 0xFF) >> 1;
+
+							for (int i = 0; i + 1 < (int) instrument.wave.size(); i += 2)
+							{
+								const int packed = (instrument.wave[(std::size_t) i] & 0x0F)
+												   | ((instrument.wave[(std::size_t) (i + 1)] & 0x0F) << 4);
+								poke ((firstByte + i / 2) & 0x7F, packed);
+							}
+						}
+
+						// The frequency is a phase increment: each voice advances one step per
+						// fifteen clocks, and one wave cycle is `waveSize` four-bit samples.
+						const double frequency = 440.0 * std::pow (2.0, (pitch - 69) / 12.0);
+						const double raw = frequency * 15.0 * (double) waveSize * 65536.0
+										   / (double) apuClock;
+						const int n163Freq = (int) std::lround (std::clamp (raw, 0.0, 524287.0));
+
+						const int level163 = state.silenced ? 0 : (state.level & 0x0F);
+						const int lengthField = (256 - (waveSize >> 2)) << 2;
+
+						poke (base + 0, n163Freq & 0xFF);
+						poke (base + 2, (n163Freq >> 8) & 0xFF);
+						poke (base + 4, (lengthField & 0xFC) | ((n163Freq >> 16) & 0x03));
+						poke (base + 6, instrument.wavePos & 0xFF);
+						poke (base + 7, ((n163Voices - 1) << 4) | level163);
 					}
 
 					++state.macroStep;

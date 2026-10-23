@@ -93,6 +93,13 @@ struct Module
 		/** FamiTracker's inst_type_t: 1 = 2A03, 2 = VRC6, 3 = VRC7, 4 = FDS, 5 = N163, 6 = S5B. */
 		int type = 0;
 
+		/** N163 only: the wave, four bits per sample, and where the tracker put it in the chip's
+			128-byte RAM. `wavePos` is a nibble address - the hardware counts four-bit samples, which
+			is why the RAM byte is `wavePos >> 1`. */
+		int waveSize = 0;
+		int wavePos = 0;
+		std::vector<std::uint8_t> wave;
+
 		/** VRC7 only: the patch. The chip is an OPLL, so a patch is either a preset number or, when
 			the module says so, eight register bytes written before the note. */
 		int vrc7Patch = 0;

@@ -236,7 +236,7 @@ namespace
 			// an unknown type cannot be skipped - stop rather than read the rest as noise.
 			// CInstrumentVRC6 and CInstrumentS5B are sequence instruments like the 2A03's, minus the
 			// DPCM table; only the 2A03 carries that, so the read below is gated on the type.
-			if (type != 1 && type != 2 && type != 6)	// 2A03, VRC6, S5B
+			if (type != 1 && type != 2 && type != 5 && type != 6)	// 2A03, VRC6, N163, S5B
 			{
 				break;
 			}
@@ -327,6 +327,46 @@ namespace
 
 			}
 
+			// CInstrumentN163::Store appends its wave after the sequences: size, position in the
+			// chip's RAM, an automatic-position flag from block version 8, a wave count, and then
+			// count * size samples of four bits each.
+			int waveSize = 0;
+			int wavePos = 0;
+			std::vector<std::uint8_t> wave;
+
+			if (type == 5)				// INST_N163
+			{
+				waveSize = reader.i32();
+				wavePos = reader.i32();
+
+				if (block.version >= 8)
+				{
+					(void) reader.i32();		// auto wave position, which only affects editing
+				}
+
+				const int waveCount = reader.i32();
+
+				if (waveSize < 0 || waveSize > 256 || waveCount < 0 || waveCount > 16)
+				{
+					break;			// a record with no length prefix: better to stop than to guess
+				}
+
+				// The chip holds one wave per channel, so only the first one is representable here;
+				// the rest are read to keep the stream aligned.
+				for (int i = 0; i < waveCount; ++i)
+				{
+					for (int j = 0; j < waveSize; ++j)
+					{
+						const std::uint8_t sample = (std::uint8_t) reader.u8();
+
+						if (i == 0)
+						{
+							wave.push_back ((std::uint8_t) (sample & 0x0F));
+						}
+					}
+				}
+			}
+
 			const std::size_t nameLength = reader.u32();
 			const std::string name = reader.fixedString (nameLength);
 
@@ -343,6 +383,9 @@ namespace
 				module.instruments[(std::size_t) index].pitch = pitchSequence;
 				module.instruments[(std::size_t) index].duty = dutySequence;
 				module.instruments[(std::size_t) index].dpcm = dpcm;
+				module.instruments[(std::size_t) index].waveSize = waveSize;
+				module.instruments[(std::size_t) index].wavePos = wavePos;
+				module.instruments[(std::size_t) index].wave = wave;
 				module.instruments[(std::size_t) index].type = type;
 			}
 		}
