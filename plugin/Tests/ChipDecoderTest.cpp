@@ -4326,11 +4326,11 @@ namespace
 		std::string ignored;
 		if (ok && toybox::formats::ftm::parseModule (bytes.data(), bytes.size(), module, ignored))
 		{
-			std::printf ("    instruments=%d", (int) module.instrumentNames.size());
-			for (std::size_t i = 0; i < module.instrumentNames.size() && i < 4; ++i)
+			std::printf ("    instruments=%d", (int) module.instruments.size());
+			for (std::size_t i = 0; i < module.instruments.size() && i < 4; ++i)
 			{
-				std::printf (" [%d] %s vol=%d", (int) i, module.instrumentNames[i].c_str(),
-							 module.instrumentVolume[i]);
+				std::printf (" [%d] %s vol=%d arp=%d", (int) i, module.instruments[i].name.c_str(),
+							 module.instruments[i].volume, module.instruments[i].arpeggio);
 			}
 			std::printf ("\n");
 		}

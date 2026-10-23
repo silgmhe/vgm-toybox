@@ -56,12 +56,20 @@ struct Module
 	std::vector<std::vector<int>> order;			// [channel][frame] -> pattern index
 	std::vector<ModulePattern> patterns;
 
-	/** Per instrument: the sequence index its volume envelope uses, or -1 when it has none. */
-	std::vector<int> instrumentVolume;
+	/** What an instrument says about itself. Index 0 means "no instrument" in FamiTracker, so the
+		table is sparse and an entry whose sequences are all -1 is a real, silent instrument. */
+	struct Instrument
+	{
+		std::string name;
+		int volume = -1;		// SEQ_VOLUME: the level the note starts at
+		int arpeggio = -1;		// SEQ_ARPEGGIO: semitone offsets, stepped one per frame
+	};
+
+	std::vector<Instrument> instruments;
 	/** SEQ_VOLUME sequences, indexed the way the instrument table refers to them. */
 	std::vector<std::vector<std::uint8_t>> volumeSequences;
-	/** Kept so a probe can prove the block was aligned: names are readable or they are not. */
-	std::vector<std::string> instrumentNames;
+	/** SEQ_ARPEGGIO sequences, in the same index space. */
+	std::vector<std::vector<std::uint8_t>> arpeggioSequences;
 
 	/** Rows per second: FamiTracker's tempo is 2.5 frames per unit, and `speed` rows pass per
 		frame. At the defaults (150, 6) that is 10 rows a second. */

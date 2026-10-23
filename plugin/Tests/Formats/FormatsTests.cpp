@@ -684,6 +684,94 @@ void testFtmVolumeEnvelope (void)
 	}
 }
 
+/** An arpeggio macro is an instrument's answer to 0xy: semitone offsets stepped one per frame.
+
+	NES music usually keeps its chords here rather than on a row, so a transcription that ignores the
+	macro reports a bare note where the original plays a chord figure. The numbers are the instrument's
+	own, the output is the same bend the command produces. */
+
+void testFtmArpeggioMacro (void)
+{
+	std::vector<std::uint8_t> image;
+	putText (image, "FamiTracker Module");
+	put32 (image, 0x0420);
+	putBlock (image, "PARAMS", 3, { 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 });
+	putBlock (image, "HEADER", 3, { 0x00, 'T', 0x00, 0x00, 0x00 });
+
+	{
+		std::vector<std::uint8_t> payload;
+		put32 (payload, 1);
+		put32 (payload, 6);
+		put32 (payload, 150);
+		put32 (payload, 16);
+		payload.push_back (0);
+		putBlock (image, "FRAMES", 3, payload);
+	}
+
+	{	// instrument 1: the arpeggio macro is enabled, the volume macro is not
+		std::vector<std::uint8_t> payload;
+		put32 (payload, 1);
+		put32 (payload, 1);
+		payload.push_back (1);		// INST_2A03
+		put32 (payload, 5);
+
+		for (int type = 0; type < 5; ++type)
+		{
+			payload.push_back (type == 1 ? 1 : 0);
+			payload.push_back (0);
+		}
+
+		payload.resize (payload.size() + (std::size_t) (8 * 12 * 2), 0);
+
+		put32 (payload, 5);
+		putText (payload, "Major");
+		putBlock (image, "INSTRUMENTS", 2, payload);
+	}
+
+	{	// sequence 0, type SEQ_ARPEGGIO: root, major third, fifth
+		std::vector<std::uint8_t> payload;
+		put32 (payload, 1);
+		put32 (payload, 0);
+		put32 (payload, 1);			// SEQ_ARPEGGIO
+		payload.push_back (3);		// three items
+		put32 (payload, 0);			// loop point
+		payload.push_back (0);
+		payload.push_back (4);
+		payload.push_back (7);
+		putBlock (image, "SEQUENCES", 5, payload);
+	}
+
+	{
+		std::vector<std::uint8_t> body;
+		put32 (body, 0); put32 (body, 0); put32 (body, 0); put32 (body, 1);
+		put32 (body, 0);
+		body.push_back (1);			// C
+		body.push_back (4);
+		body.push_back (1);			// instrument 1
+		body.push_back (0);
+		body.push_back (0);
+		body.push_back (0);
+		putBlock (image, "PATTERNS", 3, body);
+	}
+
+	putText (image, "END");
+
+	toybox::midi::NoteStream stream;
+	std::string error;
+	check (toybox::formats::ftm::loadNoteStream (image.data(), image.size(), stream, error),
+		   "the module with an arpeggio macro loads");
+
+	check (stream.notes.size() == 1 && stream.bends.size() == 95,
+		   "the macro bends once per frame of the note");
+
+	if (stream.bends.size() == 95)
+	{
+		check (stream.bends[0].bend.cents == 400, "the second item of the macro is the first step");
+		check (stream.bends[1].bend.cents == 700, "then the fifth");
+		check (stream.bends[2].bend.cents == 0, "and the loop returns to the root");
+	}
+}
+
 void runFormatTests (void)
 {
 	testVgmLoaderIr();
@@ -692,6 +780,7 @@ void runFormatTests (void)
 	testFtmNoteCut();
 	testFtmPortamento();
 	testFtmVolumeEnvelope();
+	testFtmArpeggioMacro();
 }
 
 } // namespace toybox::test

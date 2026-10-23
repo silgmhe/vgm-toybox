@@ -210,14 +210,25 @@ namespace
 			(void) reader.i32();		// sequence count, which the reference then forces to SEQ_COUNT
 
 			int volumeSequence = -1;
+			int arpeggioSequence = -1;
+
 			for (int sequenceType = 0; sequenceType < 5; ++sequenceType)
 			{
 				const int enabled = reader.u8();
 				const int sequence = reader.u8();
 
-				if (sequenceType == 0 && enabled != 0)		// SEQ_VOLUME
+				if (enabled == 0)
+				{
+					continue;
+				}
+
+				if (sequenceType == 0)			// SEQ_VOLUME
 				{
 					volumeSequence = sequence;
+				}
+				else if (sequenceType == 1)		// SEQ_ARPEGGIO
+				{
+					arpeggioSequence = sequence;
 				}
 			}
 
@@ -242,14 +253,14 @@ namespace
 
 			if (index >= 0 && index < 256)
 			{
-				if ((int) module.instrumentVolume.size() <= index)
+				if ((int) module.instruments.size() <= index)
 				{
-					module.instrumentVolume.resize ((std::size_t) index + 1, -1);
-					module.instrumentNames.resize ((std::size_t) index + 1);
+					module.instruments.resize ((std::size_t) index + 1);
 				}
 
-				module.instrumentVolume[(std::size_t) index] = volumeSequence;
-				module.instrumentNames[(std::size_t) index] = name;
+				module.instruments[(std::size_t) index].name = name;
+				module.instruments[(std::size_t) index].volume = volumeSequence;
+				module.instruments[(std::size_t) index].arpeggio = arpeggioSequence;
 			}
 		}
 	}
@@ -280,6 +291,15 @@ namespace
 				}
 
 				module.volumeSequences[(std::size_t) index] = std::move (values);
+			}
+			else if (type == 1)			// SEQ_ARPEGGIO
+			{
+				if ((int) module.arpeggioSequences.size() <= index)
+				{
+					module.arpeggioSequences.resize ((std::size_t) index + 1);
+				}
+
+				module.arpeggioSequences[(std::size_t) index] = std::move (values);
 			}
 		}
 	}
@@ -619,9 +639,9 @@ bool loadNoteStream (const void* data, std::size_t size, midi::NoteStream& out, 
 				bool stated = level > 0;
 
 				if (! stated && note.instrument > 0
-					&& note.instrument < (int) module.instrumentVolume.size())
+					&& note.instrument < (int) module.instruments.size())
 				{
-					const int sequence = module.instrumentVolume[(std::size_t) note.instrument];
+					const int sequence = module.instruments[(std::size_t) note.instrument].volume;
 
 					if (sequence >= 0 && sequence < (int) module.volumeSequences.size())
 					{
@@ -670,6 +690,34 @@ bool loadNoteStream (const void* data, std::size_t size, midi::NoteStream& out, 
 				if (event.endSample <= event.startSample)
 				{
 					continue;		// cut before it began: nothing to hear
+				}
+
+				// The instrument's arpeggio macro: semitone offsets stepped one per frame, from the
+				// note's own pitch. Same shape as 0xy and the same output, but the numbers come from
+				// the instrument rather than from a row - which is where NES music usually keeps them.
+				if (note.instrument > 0 && note.instrument < (int) module.instruments.size())
+				{
+					const int sequence = module.instruments[(std::size_t) note.instrument].arpeggio;
+
+					if (sequence >= 0 && sequence < (int) module.arpeggioSequences.size())
+					{
+						const auto& items = module.arpeggioSequences[(std::size_t) sequence];
+
+						if (! items.empty())
+						{
+							std::size_t index = 1;
+
+							for (std::uint32_t frame = event.startSample + 1; frame < event.endSample; ++frame)
+							{
+								chips::PitchEvent bend;
+								bend.sampleTime = frame;
+								bend.logicalChannel = channel;
+								bend.cents = (std::int16_t) ((std::int8_t) items[index % items.size()] * 100);
+								out.bends.push_back ({ track, bend });
+								++index;
+							}
+						}
+					}
 				}
 
 				out.notes.push_back ({ track, event });
