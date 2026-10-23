@@ -69,6 +69,55 @@ FT 的导出就是金标准，不需要人工判断。
 
 完成后 `Compile` 的两个实现才有落脚点。
 
+## 6.1 交接：`CChunk` 已侦察，未移植
+
+读 `Chunk.h`（133 行）得到的事实，下次可直接照此开工：
+
+**五种数据元素**（多态，`GetSize()` + `GetData()`）：
+
+| 类型 | 尺寸 | 用途 |
+|---|---|---|
+| `CChunkDataByte` | 1 | 立即数 |
+| `CChunkDataWord` | 2 | 立即数（16 位） |
+| `CChunkDataReference` | 2 | 对某个 label 的引用，稍后回填 |
+| `CChunkDataBank` | 1 | 引用某 label 所在的 bank |
+| `CChunkDataString` | 变长 | 原始字节块 |
+
+**17 种 chunk 类型**：`CHUNK_HEADER`、`CHUNK_SEQUENCE`、`CHUNK_INSTRUMENT_LIST`、`CHUNK_INSTRUMENT`、
+`CHUNK_SAMPLE_LIST`、`CHUNK_SAMPLE_POINTERS`、`CHUNK_GROOVE_LIST`、`CHUNK_GROOVE`、`CHUNK_SONG_LIST`、
+`CHUNK_SONG`、`CHUNK_FRAME_LIST`、`CHUNK_FRAME`、`CHUNK_PATTERN`、`CHUNK_WAVETABLE`、`CHUNK_WAVES`、
+`CHUNK_CHANNEL_MAP`、`CHUNK_CHANNEL_TYPES`。
+
+**`CChunk` 公开接口**（后半部分与 `Chunk.cpp` 尚未读）：
+
+```cpp
+CChunk (chunk_type_t Type, CStringA label);
+void Clear();
+chunk_type_t GetType() const;
+LPCSTR GetLabel() const;
+void SetBank (unsigned char);
+unsigned char GetBank() const;
+int GetLength() const;
+unsigned short GetData (int index) const;
+unsigned short GetDataSize (int index) const;
+void StoreByte (unsigned char);
+void StoreWord (unsigned short);
+void StoreReference (CStringA refName);
+```
+
+**替换表**：
+
+| FamiTracker | 本项目 |
+|---|---|
+| `CStringA label` | `std::string` |
+| `LPCSTR GetLabel()` | `const std::string&` |
+| 重定位表（label → 偏移） | 保留原样 |
+
+`Chunk.cpp`（140 行）只做“按 label 查偏移并回填”，无 MFC 逻辑，可直接改写。
+
+**开工顺序**：读 `Chunk.h` 剩余 ~50 行 + `Chunk.cpp` → 复制进 `formats/ftm/compiler/` →
+`CStringA` 换 `std::string` → 单元测试（写入、读取、写入引用、应用重定位）→ 与 FT 同输入对比字节。
+
 ## 7. 与 MIDI 工作的关系
 
 两条线互不影响：
