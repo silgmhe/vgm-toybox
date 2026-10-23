@@ -9,6 +9,7 @@
 #include "../Support/TestSupport.h"
 #include "chips/ChipTypes.h"
 #include "formats/ftm/FtmSongLoader.h"
+#include "formats/ftm/compiler/DriverData2A03.h"
 #include "formats/ftm/compiler/ModuleSongSource.h"
 #include "formats/vgm/VgmSongLoader.h"
 #include "midi/NoteStream.h"
@@ -875,6 +876,25 @@ void testFtmCompilerSource (void)
 	check (source.GetInstrument (1) == nullptr,
 		   "the instrument object is a port-time question, so it stays null for now");
 }
+/** The driver the compiler will embed is FamiTracker's own, byte for byte: it is the same array its
+	build produces from driver.s, copied rather than re-derived. The assertions pin the identity
+	header and the size, which are what a truncated or swapped copy would break. */
+
+void testFtmDriverData (void)
+{
+	const unsigned char expectedId[] = { 'D', 'n', '-', 'F', 'T', ' ', 0x02, 0x10 };
+
+	bool sameId = true;
+	for (std::size_t i = 0; i < sizeof (expectedId); ++i)
+	{
+		sameId = sameId; (NSFDRV_2A03[i] == expectedId[i]);
+	}
+
+	check (sameId, "the driver data starts with FamiTracker's identity header");
+	check (sizeof (NSFDRV_2A03) == 8, "the NSF driver data is the identity header alone");
+	check (sizeof (DRIVER_2A03) == 7076, "and the music driver is 7,076 bytes of assembled 6502");
+	check (DRIVER_2A03[0] == 0x4C, "which starts with a JMP, as the driver's entry point does");
+}
 void runFormatTests (void)
 {
 	testVgmLoaderIr();
@@ -887,6 +907,7 @@ void runFormatTests (void)
 	testPitchBendRange();
 	testFtmTonePortamento();
 	testFtmCompilerSource();
+	testFtmDriverData();
 }
 
 } // namespace toybox::test
