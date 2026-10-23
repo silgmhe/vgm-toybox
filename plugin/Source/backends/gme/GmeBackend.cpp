@@ -12,6 +12,55 @@ namespace toybox::backends::gme
 namespace
 {
 
+/** The chip flags an NSF header carries. libgme emulates three of the six expansions and refuses
+	any image that asks for one it does not have, so the flags are read here to say which chip is
+	missing rather than leaving "could not read the image" as the only message. */
+struct NsfChips
+{
+	std::uint8_t flags = 0;
+	bool nsfe = false;
+	bool readable = false;
+
+	bool has (std::uint8_t bit) const { return (flags & bit) != 0; }
+	bool hasUnsupported (void) const { return has (0x02) || has (0x04) || has (0x08); }
+};
+
+NsfChips readNsfChips (const std::vector<char>& bytes)
+{
+	NsfChips chips;
+
+	if (bytes.size() < 0x7B)
+	{
+		return chips;
+	}
+
+	const auto* data = reinterpret_cast<const unsigned char*> (bytes.data());
+
+	if (std::memcmp (data, "NSFE", 4) == 0)
+	{
+		chips.nsfe = true;
+		chips.readable = true;
+		return chips;
+	}
+
+	if (std::memcmp (data, "NESM", 4) != 0)
+	{
+		return chips;
+	}
+
+	chips.flags = data[0x7A];
+	chips.readable = true;
+	return chips;
+}
+
+juce::String unsupportedChipName (const NsfChips& chips)
+{
+	if (chips.has (0x02)) { return "VRC7"; }
+	if (chips.has (0x04)) { return "FDS"; }
+	if (chips.has (0x08)) { return "MMC5"; }
+	return {};
+}
+
 /** libgme renders a song as a whole - it has no per-channel mute and no isolation - so the
 	instance offers a single track and says so through its capabilities. */
 constexpr playback::TrackId kSingleTrack = 1;
@@ -212,6 +261,13 @@ public:
 		info_.chips.clear();
 		info_.chips.push_back (playback::ChipInfo { "2A03", "libgme", 0 });
 
+		// The header says which expansion the driver expects; libgme emulates three of them.
+		const auto chips = readNsfChips (bytes);
+
+		if (chips.has (0x01)) { info_.chips.push_back (playback::ChipInfo { "VRC6", "libgme", 1 }); }
+		if (chips.has (0x10)) { info_.chips.push_back (playback::ChipInfo { "N163", "libgme", 1 }); }
+		if (chips.has (0x20)) { info_.chips.push_back (playback::ChipInfo { "S5B", "libgme", 1 }); }
+
 		tracks_.clear();
 
 		// One track per oscillator. libgme can point each of them at its own output, which is the
@@ -289,6 +345,17 @@ std::unique_ptr<playback::ISongInstance> GmeBackend::open (const playback::SongM
 	if (! canOpen (memory))
 	{
 		errorMessage = "not an NSF image";
+		return nullptr;
+	}
+
+	const std::vector<char> bytes (static_cast<const char*> (memory.data),
+								   static_cast<const char*> (memory.data) + memory.size);
+	const auto chips = readNsfChips (bytes);
+
+	if (chips.hasUnsupported())
+	{
+		errorMessage = "this NSF needs the " + unsupportedChipName (chips)
+					 + " expansion chip, which libgme does not emulate";
 		return nullptr;
 	}
 
