@@ -45,6 +45,11 @@ public:
 	Saa1099Decoder();
 	~Saa1099Decoder() override;
 
+	/** What this chip needs besides its register writes: the clock to assume when the song names
+		none, and (for a sampled chip) the memory image its pitch is measured against. The assembler
+		asks instead of carrying a table of these. */
+	static constexpr ChipRequirements kRequirements { 8000000u };
+
 	void reset (const ChipConfig& config) override;
 	void write (const RegisterWrite& write) override;
 	void advance (std::uint32_t sampleTime) override;

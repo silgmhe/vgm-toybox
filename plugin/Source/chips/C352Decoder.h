@@ -126,6 +126,19 @@ public:
 	C352Decoder();
 	~C352Decoder() override;
 
+	/** What this chip needs besides its register writes: the clock to assume when the song names
+		none, and (for a sampled chip) the memory image its pitch is measured against. The assembler
+		asks instead of carrying a table of these. */
+	static constexpr ChipRequirements kRequirements { 12288000u, true, 0x92, 32u << 20, false, false };
+
+	void attachMemory (const ChipMemory& memory) override
+	{
+		if (memory.bytes != nullptr && ! memory.bytes->empty())
+		{
+			setRom (*memory.bytes);
+		}
+	}
+
 	void reset (const ChipConfig& config) override;
 	void write (const RegisterWrite& write) override;
 	void advance (std::uint32_t sampleTime) override;
