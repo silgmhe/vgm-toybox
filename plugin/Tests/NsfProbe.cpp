@@ -81,6 +81,13 @@ int main (int argc, char** argv)
 
 			for (int c = 0; c < channels; ++c)
 			{
+				float peak = 0.0f;
+				for (float v : buffers[(std::size_t) c]) { peak = (std::max) (peak, std::fabs (v)); }
+				std::printf ("CHANNELPEAK %d %.4f\n", c, (double) peak);
+			}
+
+			for (int c = 0; c < channels; ++c)
+			{
 				for (int i = 0; i < frames; ++i)
 				{
 					sumLeft[(std::size_t) i] += buffers[(std::size_t) c][(std::size_t) i * 2 + 0];
