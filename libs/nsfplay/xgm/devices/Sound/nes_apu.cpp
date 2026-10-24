@@ -397,4 +397,49 @@ namespace xgm
 
     return false;
   }
+
+  UINT32 NES_APU::RenderChannels (INT32* dest, int stride, int maxChannels)
+  {
+    // Same arithmetic as Render(), but each square is left in its own slot so the caller can mix
+    // them separately. Render() is called first so the mask is applied exactly once and to the
+    // same values.
+    INT32 mixed[2];
+    Render (mixed);
+
+    INT32 m[2];
+
+    if(option[OPT_NONLINEAR_MIXER])
+    {
+        INT32 voltage = square_table[out[0] + out[1]];
+        m[0] = out[0] << 6;
+        m[1] = out[1] << 6;
+        INT32 ref = m[0] + m[1];
+        if (ref > 0)
+        {
+            m[0] = (m[0] * voltage) / ref;
+            m[1] = (m[1] * voltage) / ref;
+        }
+        else
+        {
+            m[0] = voltage;
+            m[1] = voltage;
+        }
+    }
+    else
+    {
+        m[0] = (out[0] * square_linear) / 15;
+        m[1] = (out[1] * square_linear) / 15;
+    }
+
+    for (int i = 0; i < 2; ++i)
+    {
+      if (i >= maxChannels) break;
+
+      dest[i * stride + 0] = (m[i] * sm[0][i]) >> 7;
+      dest[i * stride + 1] = (m[i] * sm[1][i]) >> 7;
+    }
+
+    return 2;
+  }
+
 } // namespace xgm;

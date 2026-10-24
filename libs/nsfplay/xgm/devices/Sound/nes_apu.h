@@ -73,6 +73,11 @@ namespace xgm
     virtual void Reset ();
     virtual void Tick (UINT32 clocks);
     virtual UINT32 Render (INT32 b[2]);
+
+  // Added for VGMToybox: one render, with each channel written separately instead of
+  // summed. Their sum is what Render() returns, which is what lets a player produce
+  // per-track audio without running the chip once per track.
+  UINT32 RenderChannels (INT32* dest, int stride, int maxChannels);
     virtual bool Read (UINT32 adr, UINT32 & val, UINT32 id=0);
     virtual bool Write (UINT32 adr, UINT32 val, UINT32 id=0);
     virtual void SetRate (double rate);

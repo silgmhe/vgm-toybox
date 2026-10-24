@@ -16,6 +16,8 @@
 #include "TestSupport.h"
 #include "backends/nsf/NsfBus.h"
 #include "formats/nsf/NsfFile.h"
+#include "xgm/devices/Sound/nes_apu.h"
+#include "xgm/devices/Sound/nes_dmc.h"
 
 namespace
 {
@@ -205,6 +207,37 @@ int main (void)
 		bus.Read (0xE000, value);
 		check (value == 6, "the fourth window follows its own register");
 	}
+
+	std::printf ("[3] the chip renders its channels separately\n");
+
+	{
+		xgm::NES_APU apu;
+		apu.SetClock (1789772.727272727);
+		apu.SetRate (44100.0);
+		apu.Reset ();
+		apu.Write (0x4015, 0x0F);
+		apu.Write (0x4000, 0xBF);
+		apu.Write (0x4002, 0xFF);
+		apu.Write (0x4003, 0x00);
+		apu.Write (0x4004, 0xBF);
+		apu.Write (0x4006, 0x55);
+		apu.Write (0x4007, 0x00);
+		apu.Tick (2000);
+
+		INT32 mixed[2] = { 0, 0 };
+		apu.Render (mixed);
+
+		INT32 channels[4] = { 0, 0, 0, 0 };
+		apu.RenderChannels (channels, 2, 2);
+
+		const int sumLeft = (int) channels[0] + (int) channels[2];
+		const int sumRight = (int) channels[1] + (int) channels[3];
+
+		check (std::abs (sumLeft - (int) mixed[0]) <= 2 && std::abs (sumRight - (int) mixed[1]) <= 2,
+			   "and their sum is what Render returns");
+	}
+
+
 
 	std::printf ("\nResult    : %s\n", toybox::test::failures() == 0 ? "all checks passed" : "FAILURES");
 

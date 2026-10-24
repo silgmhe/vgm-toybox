@@ -415,6 +415,12 @@ namespace xgm
     b[1] += m[2] * sm[1][2];
     b[1] >>= 7;
 
+        for (int i = 0; i < 3; ++i)
+    {
+        chOut[0][i] = (m[i] * sm[0][i]) >> 7;
+        chOut[1][i] = (m[i] * sm[1][i]) >> 7;
+    }
+
     return 2;
   }
 
@@ -768,4 +774,20 @@ namespace xgm
   {
       cpu = cpu_;
   }
+
+  UINT32 NES_DMC::RenderChannels (INT32* dest, int stride, int maxChannels)
+  {
+    INT32 mixed[2];
+    Render (mixed);
+
+    for (int i = 0; i < 3; ++i)
+    {
+      if (i >= maxChannels) break;
+      dest[i * stride + 0] = chOut[0][i];
+      dest[i * stride + 1] = chOut[1][i];
+    }
+
+    return 3;
+  }
+
 } // namespace
