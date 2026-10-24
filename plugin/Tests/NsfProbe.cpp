@@ -192,7 +192,15 @@ int main (int argc, char** argv)
 		toybox::playback::ChipStateSnapshot snapshot;
 		const bool ok = player.captureState (snapshot);
 
-		std::printf ("chips valid=%d channels=%d\n", ok ? 1 : 0, (int) snapshot.channels.size ());
+		std::string chipNames;
+		for (const auto& name : snapshot.chips)
+		{
+			if (! chipNames.empty ()) { chipNames += " / "; }
+			chipNames += name;
+		}
+
+		std::printf ("chips valid=%d [%s] channels=%d\n", ok ? 1 : 0,
+					 chipNames.c_str (), (int) snapshot.channels.size ());
 
 		for (const auto& channel : snapshot.channels)
 		{

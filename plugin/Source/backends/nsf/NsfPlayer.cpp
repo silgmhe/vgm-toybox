@@ -361,13 +361,32 @@ void NsfPlayer::setTrackAudible (int trackIndex)
 
 bool NsfPlayer::captureState (playback::ChipStateSnapshot& snapshot) const
 {
+	snapshot.chips.clear ();
 	snapshot.channels.clear ();
 	snapshot.positionSeconds = positionSeconds ();
 	snapshot.valid = false;
 
+	// Always the 2A03; the expansion the header declares on top of it.
+	snapshot.chips.push_back ("2A03");
+
+	switch (file.chip ())
+	{
+	case formats::nsf::NsfChip::vrc6: snapshot.chips.push_back ("VRC6"); break;
+	case formats::nsf::NsfChip::vrc7: snapshot.chips.push_back ("VRC7"); break;
+	case formats::nsf::NsfChip::fds:  snapshot.chips.push_back ("FDS");  break;
+	case formats::nsf::NsfChip::mmc5: snapshot.chips.push_back ("MMC5"); break;
+	case formats::nsf::NsfChip::n163: snapshot.chips.push_back ("N163"); break;
+	case formats::nsf::NsfChip::fme7: snapshot.chips.push_back ("FME7"); break;
+	case formats::nsf::NsfChip::none: break;
+	}
+
+	// Only the N163 reports per-channel state in this core, so a song without one has a chip list
+	// and nothing else - which the panel shows as "this chip cannot be displayed yet".
+	snapshot.valid = true;
+
 	if (n106 == nullptr)
 	{
-		return false;
+		return true;
 	}
 
 	// Eight channels, in the order GetTrackInfo reports them. The hardware numbers them the other
@@ -408,8 +427,7 @@ bool NsfPlayer::captureState (playback::ChipStateSnapshot& snapshot) const
 		snapshot.channels.push_back (std::move (state));
 	}
 
-	snapshot.valid = ! snapshot.channels.empty ();
-	return snapshot.valid;
+	return true;
 }
 
 void NsfPlayer::setOutputGain (float linear)

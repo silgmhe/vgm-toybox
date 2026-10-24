@@ -35,6 +35,10 @@ struct ChannelState
 
 struct ChipStateSnapshot
 {
+	/** The chips this song declares, whether or not their channels can be described. A panel needs
+		this to say "VRC6 is playing here and I cannot show it" instead of showing nothing. */
+	std::vector<std::string> chips;
+
 	std::vector<ChannelState> channels;
 	double positionSeconds = 0.0;
 	bool valid = false;

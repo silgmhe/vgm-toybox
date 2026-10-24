@@ -196,10 +196,26 @@ public:
 
 		if (snapshot.channels.empty ())
 		{
+			juce::String chips;
+
+			for (const auto& name : snapshot.chips)
+			{
+				if (chips.isNotEmpty ()) { chips << " / "; }
+				chips << name;
+			}
+
+			if (chips.isNotEmpty ())
+			{
+				g.setColour (theme::primaryText ());
+				g.setFont (juce::Font (juce::FontOptions (13.0f)));
+				g.drawText (chips, area.removeFromTop (26), juce::Justification::centredTop, false);
+			}
+
 			g.setColour (theme::secondaryText ());
-			g.setFont (juce::Font (juce::FontOptions (13.0f)));
-			g.drawText (toybox::i18n::tr ("visualiser.chipsUnavailable"),
-						area.withTrimmedTop (30), juce::Justification::centredTop, false);
+			g.setFont (juce::Font (juce::FontOptions (12.5f)));
+			g.drawText (toybox::i18n::tr (chips.isNotEmpty () ? "visualiser.chipsUnsupported"
+															  : "visualiser.chipsUnavailable"),
+						area.removeFromTop (24), juce::Justification::centredTop, false);
 			return;
 		}
 
@@ -415,6 +431,7 @@ void ContentSlot::songChanged (void)
 {
 	if (mixer != nullptr) { mixer->refresh (); }
 
+	chipState.chips.clear ();
 	chipState.channels.clear ();
 	chipState.valid = false;
 	lastChannelCount = -1;
@@ -422,6 +439,9 @@ void ContentSlot::songChanged (void)
 
 	if (chipStatePanel != nullptr)
 	{
+		// The panel paints its own copy; clearing only the slot's left the previous song's
+		// channels on screen, which is exactly the bug this line fixes.
+		chipStatePanel->setSnapshot (chipState);
 		chipStatePanel->repaint ();
 	}
 }
