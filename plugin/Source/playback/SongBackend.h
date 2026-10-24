@@ -154,6 +154,22 @@ public:
 	/** Audio thread: see the real-time contract above. Returns the frames written. */
 	virtual int render (float* left, float* right, int numSamples) = 0;
 
+	/** Fills one buffer per track for the same block, for backends that can produce every track in
+		a single pass (IsolationMode::inPlaceChannelMix). uffers holds 	rackCount stereo pairs,
+		each 
+umSamples frames long; the backend writes all of them or none.
+
+		Returns the frames written, or 0 when it cannot render several tracks at once - the core then
+		falls back to one player per track, which is what every backend did before this existed.
+		Default is 0, so adding it changed nothing for anyone. */
+	virtual int renderTracks (float* const* buffers, int trackCount, int numSamples)
+	{
+		(void) buffers;
+		(void) trackCount;
+		(void) numSamples;
+		return 0;
+	}
+
 	/** Playback position in seconds (message thread; the core caches it for the UI). */
 	virtual double positionSeconds (void) = 0;
 	/** Set by the backend when the song reached its end (plain atomic, read lock-free). */
