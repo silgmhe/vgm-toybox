@@ -86,6 +86,9 @@ namespace xgm
     virtual void SetMask(int m){ mask = m; }
     virtual void SetStereoMix (int trk, xgm::INT16 mixl, xgm::INT16 mixr);
     virtual ITrackInfo *GetTrackInfo(int trk);
+  // Added for VGMToybox: the pulse duty setting is part of the register file, and a display
+  // that wants to draw the shape the channel produces needs to read it.
+  UINT8 GetReg (int index) const { return reg[index & 0x1F]; }
   };
 
 }                               // namespace
