@@ -1,5 +1,6 @@
 #pragma once
 
+#include <array>
 #include <cstdint>
 #include <memory>
 
@@ -67,6 +68,11 @@ public:
 		whether the emulation is being starved or the program itself is just slow. */
 	std::uint64_t executedClocks (void) const;
 
+	/** Where the program counter spends its time, one bin per 256-byte page. Sampled inside the
+		render loop on purpose: after it returns the CPU is always parked at the trampoline, which is
+		why every file looked identical there. */
+	const std::array<std::uint32_t, 256>& pcHistogram (void) const { return pcPages; }
+
 	/** How many times the $0211 gate was written, and with what - 0 means init never reached it. */
 	std::uint64_t gateWrites (void) const;
 	int gateValue (void) const;
@@ -101,6 +107,7 @@ private:
 	const formats::nsf::NsfFile& file;
 	double rate = 44100.0;
 	std::uint64_t clocksExecuted = 0;
+	std::array<std::uint32_t, 256> pcPages {};
 	double cpuClockRest = 0.0;
 	std::uint64_t rendered = 0;
 

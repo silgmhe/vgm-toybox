@@ -207,6 +207,13 @@ int NsfPlayer::render (float* left, float* right, int frames)
 		{
 			const int executed = cpu->Exec (clocks);
 		clocksExecuted += (std::uint64_t) (std::max) (0, executed);
+
+		// One sample every 64 frames is enough to see where the time goes and cheap enough to
+		// leave the emulation at full speed.
+		if ((i & 63) == 0)
+		{
+			++pcPages[(cpu->GetPC () >> 8) & 0xFF];
+		}
 			cpuClockRest -= (double) executed;
 
 			// Envelopes and length counters live here; Tick() alone leaves every note at the level

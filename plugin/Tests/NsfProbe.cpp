@@ -9,6 +9,7 @@
 #include <chrono>
 #include <cmath>
 #include <cstdio>
+#include <utility>
 #include <cstdlib>
 #include <fstream>
 #include <iterator>
@@ -178,6 +179,25 @@ int main (int argc, char** argv)
 	}
 
 	const double rms = counted > 0 ? std::sqrt (sumSquares / (double) counted) : 0.0;
+
+	{
+		const auto& hist = player.pcHistogram ();
+		std::vector<std::pair<std::uint32_t, int>> top;
+
+		for (int page = 0; page < 256; ++page)
+		{
+			if (hist[(std::size_t) page] > 0) { top.push_back ({ hist[(std::size_t) page], page }); }
+		}
+
+		std::sort (top.begin (), top.end (), [] (const auto& a, const auto& b) { return a.first > b.first; });
+
+		std::printf ("PC pages:");
+		for (std::size_t i = 0; i < top.size () && i < 6; ++i)
+		{
+			std::printf (" %02X00=%u", top[i].second, top[i].first);
+		}
+		std::printf ("\\n");
+	}
 
 	std::printf ("nsf %s chip=0x%02X pal=%d writes=%llu seconds=%.1f peak=%.4f rms=%.4f\n",
 				 argv[1], (unsigned) file.chipFlags, file.isPal () ? 1 : 0,
