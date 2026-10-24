@@ -606,9 +606,7 @@ void TransportPanel::seekToSeconds (double seconds)
 						 + " of " + juce::String (duration, 2) + "\n");
 	}
 
-	// Asynchronous: an NSF seek replays the song for every track, and blocking the message thread
-	// for that long is what made the bar feel unresponsive on files with an expansion chip.
-	engine.requestPositionSeconds (seconds);
+	engine.setPositionSeconds (seconds);
 
 	// while the transport is running the cursor stays where it is; a stationary transport
 	// carries it along, so the position and the cursor cannot drift apart
