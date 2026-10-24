@@ -1739,6 +1739,77 @@ int main (int argc, char* argv[])
 		}
 	}
 
+	std::printf ("[4.8] what the snapshot reports is well formed\n");
+	{
+		// A conformance check rather than a feature check: whatever a backend claims to describe
+		// has to arrive in a shape a panel can trust. It runs on every file the suite loads, so a
+		// new backend is held to the same contract as the two that exist.
+		engine.setStateCaptureWanted (true);
+		engine.setPositionSeconds (0.0);
+		engine.play ();
+		renderSeconds (engine, 0.5, sampleRate, blockSize);
+
+		toybox::playback::ChipStateSnapshot shot;
+		const bool captured = engine.captureChipState (shot);
+		engine.setStateCaptureWanted (false);
+
+		if (! captured || shot.channels.empty ())
+		{
+			std::printf ("      this backend reports no per-channel state, nothing to conform\n");
+		}
+		else
+		{
+			bool chipsNamed = ! shot.chips.empty ();
+			bool chipKnown = true;
+			bool rangesHeld = true;
+			bool namesPresent = true;
+
+			for (const auto& name : shot.chips)
+			{
+				chipsNamed = chipsNamed && name.size () > 0;
+			}
+
+			for (const auto& channel : shot.channels)
+			{
+				namesPresent = namesPresent && ! channel.name.empty ();
+
+				bool listed = false;
+				for (const auto& name : shot.chips)
+				{
+					listed = listed || (name == channel.chipName);
+				}
+
+				chipKnown = chipKnown && listed;
+
+				const bool noteOk = channel.note == -1 || (channel.note >= 0 && channel.note <= 127);
+				const bool volumeOk = channel.volume >= 0.0f && channel.volume <= 1.0f;
+				const bool freqOk = channel.frequency >= 0.0f;
+
+				bool waveOk = true;
+				for (float sample : channel.wave)
+				{
+					waveOk = waveOk && sample >= -1.0f && sample <= 1.0f;
+				}
+
+				if (! (noteOk && volumeOk && freqOk && waveOk))
+				{
+					std::printf ("      out of range: %s note=%d vol=%.3f freq=%.1f\n",
+								 channel.name.c_str (), channel.note, channel.volume, channel.frequency);
+				}
+
+				rangesHeld = rangesHeld && noteOk && volumeOk && freqOk && waveOk;
+			}
+
+			std::printf ("      %d channels over %d chip(s)\n",
+						 (int) shot.channels.size (), (int) shot.chips.size ());
+
+			check (namesPresent, "every channel is named");
+			check (chipsNamed, "every chip in the snapshot has a name");
+			check (chipKnown, "every channel names a chip the snapshot declares");
+			check (rangesHeld, "note, volume, frequency and wave stay inside their ranges");
+		}
+	}
+
 	std::printf ("Result    : %s\n", (toybox::test::failures() == 0) ? "all checks passed" : "FAILURES");
 
 	if (toybox::test::failures() > 0)

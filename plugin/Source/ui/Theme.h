@@ -67,6 +67,15 @@ struct Palette
 	// still has keys beyond it. These are palette values rather than something the panel mixes
 	// from card and text colours - a ratio that reads well in the light theme is muddy in the
 	// dark one, and the panel has no business knowing which is on.
+	//
+	// The relationships, which are what a new palette has to preserve:
+	//   keyBed    always a shade darker than `card` - it is a recess, not a surface.
+	//   keyWhite  lighter than the bed.
+	//   keyBlack  the darker of the two faces in the light theme, and the *lighter* one in the
+	//             dark theme: on a dark bed a black key is a hole, and the eye needs it to read as
+	//             a key rather than as a gap. Getting this backwards once turned the whole
+	//             keyboard into a black rectangle.
+	//   edgeFade  the shadow that says "there are more keys this way".
 	juce::Colour keyBed, keyWhite, keyBlack, edgeFade;
 };
 

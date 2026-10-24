@@ -2,6 +2,8 @@
 
 #include "ButtonPaint.h"
 #include "MixerPanel.h"
+#include "KeyboardLayout.h"
+#include "WaveShape.h"
 #include "Theme.h"
 #include "i18n/LanguageManager.h"
 #include "playback/PlaybackEngine.h"
@@ -37,31 +39,63 @@ namespace
 	constexpr int kMeterHeight = 20;
 	constexpr int kMeterGap = 18;
 
-	/** Semitones to subtract when naming an octave.
-
-		MIDI 60 is called C3, C4 or C5 depending on who you ask, and the settings page has the
-		answer: 5 minus the octave number the user gave middle C. Four is the international
-		convention, three the one this project starts with.
-	*/
+	/** The shift comes from the setting; the table itself lives in KeyboardLayout so the settings
+		page, the note column and the octave labels all name a note the same way. */
 	int octaveShiftForNaming (void)
 	{
-		const int middle = toybox::settings::SettingsStore::getInstance ().getKeyboardMiddleCOctave ();
-		return 5 - juce::jlimit (2, 5, middle);
+		return octaveShiftForMiddleC (
+			toybox::settings::SettingsStore::getInstance ().getKeyboardMiddleCOctave ());
 	}
 
 	juce::String noteName (int note, int octaveShift)
 	{
-		static const char* const names[] = { "C", "C#", "D", "D#", "E", "F",
-											 "F#", "G", "G#", "A", "A#", "B" };
-
-		if (note < 0)
-		{
-			return "-";
-		}
-
-		return juce::String (names[note % 12]) + juce::String (note / 12 - octaveShift);
+		return midiNoteName (note, octaveShift);
 	}
 } // namespace
+
+//==============================================================================
+namespace
+{
+	const std::vector<ContentViewInfo> viewTable
+	{
+		{ ContentView::mixer,			"mixer",		"view.mixer" },
+		{ ContentView::keyboard,		"keyboard",		"view.keyboard" },
+		{ ContentView::oscilloscope,	"oscilloscope",	"view.oscilloscope" }
+	};
+}
+
+namespace toybox::ui
+{
+
+const std::vector<ContentViewInfo>& contentViews (void)
+{
+	return viewTable;
+}
+
+int contentViewCount (void)
+{
+	return (int) viewTable.size ();
+}
+
+ContentView contentViewAt (int index)
+{
+	return viewTable[(size_t) juce::jlimit (0, contentViewCount () - 1, index)].view;
+}
+
+int contentViewIndex (ContentView view)
+{
+	for (size_t i = 0; i < viewTable.size (); ++i)
+	{
+		if (viewTable[i].view == view)
+		{
+			return (int) i;
+		}
+	}
+
+	return 0;
+}
+
+} // namespace toybox::ui
 
 //==============================================================================
 /**
@@ -601,7 +635,7 @@ private:
 
 		if (cycle.empty ())
 		{
-			cycle = synthesisedCycle (channel);
+			cycle = waveform::cycleFor (channel.waveKind, channel.duty);
 		}
 
 		if (cycle.size () < 2)
@@ -639,73 +673,6 @@ private:
 		g.strokePath (path, juce::PathStrokeType (1.0f));
 	}
 
-	/** A cycle for the channels that generate their shape rather than read it. */
-	std::vector<float> synthesisedCycle (const toybox::playback::ChannelState& channel) const
-	{
-		std::vector<float> cycle;
-
-		switch (channel.waveKind)
-		{
-			case 2:		// pulse: high for the duty setting, low for the rest
-			{
-				constexpr int points = 32;
-				const int high = juce::jlimit (1, points - 1, (int) std::lround ((double) channel.duty * points));
-
-				for (int i = 0; i < points; ++i)
-				{
-					cycle.push_back (i < high ? 1.0f : -1.0f);
-				}
-
-				break;
-			}
-
-			case 3:		// triangle: 32 steps down and back up
-			{
-				constexpr int points = 32;
-
-				for (int i = 0; i < points; ++i)
-				{
-					const int step = i < points / 2 ? i : points - 1 - i;
-					cycle.push_back ((float) step / (float) (points / 2 - 1) * 2.0f - 1.0f);
-				}
-
-				break;
-			}
-
-			case 4:		// noise: a short burst from the same feedback the chip uses
-			{
-				std::uint32_t shift = 1;
-
-				for (int i = 0; i < 32; ++i)
-				{
-					const std::uint32_t bit = ((shift >> 0) ^ (shift >> 1)) & 1u;
-					shift = (shift >> 1) | (bit << 14);
-					cycle.push_back ((shift & 1u) ? 1.0f : -1.0f);
-				}
-
-				break;
-			}
-
-			case 5:		// delta: one bit per step, integrated - the shape the DAC produces
-			{
-				float level = 0.0f;
-
-				for (int i = 0; i < 32; ++i)
-				{
-					level += (i % 7 == 0) ? -0.6f : 0.2f;
-					level = juce::jlimit (-1.0f, 1.0f, level);
-					cycle.push_back (level);
-				}
-
-				break;
-			}
-
-			default:
-				break;
-		}
-
-		return cycle;
-	}
 
 	/** Keys are a fixed width. A wider window shows more of them rather than bigger ones, which
 		is what a keyboard is: the distance between two keys does not change because the window
@@ -717,26 +684,11 @@ private:
 	static constexpr int kFirstMusicalNote = 0;
 	static constexpr int kLastMusicalNote = 127;
 
-	/** What one row's keyboard covers, worked out from the room it has. */
-	struct KeySpan
-	{
-		int base = 36;			// lowest note drawn
-		int whiteKeys = 28;
-		float keyWidth = (float) kWhiteKeyWidth;
-		int lastNote = 83;
-	};
+	using KeySpan = keyboard::KeySpan;
 
-	static int octaveFloor (int note)
-	{
-		return note - ((note % 12) + 12) % 12;
-	}
-
-	/** The note of the k-th white key counted from `base`, which is itself a C. */
-	static int noteForWhite (int base, int k)
-	{
-		static const int offsets[7] = { 0, 2, 4, 5, 7, 9, 11 };
-		return base + (k / 7) * 12 + offsets[k % 7];
-	}
+	// Thin forwarders: the panel keeps calling these by name, the arithmetic lives in KeyboardLayout.
+	static int octaveFloor (int note) { return keyboard::octaveFloor (note); }
+	static int noteForWhite (int base, int k) { return keyboard::noteForWhite (base, k); }
 
 	/** Where the keyboard starts.
 
@@ -778,55 +730,17 @@ private:
 							 octaveFloor (mid) - (octavesVisible / 2) * 12);
 	}
 
+	/** Which notes this row shows: the arithmetic is in KeyboardLayout, the starting point is here
+		because it depends on the song, the setting and the user's last shift. */
 	KeySpan spanFor (juce::Rectangle<int> area) const
 	{
-		KeySpan span;
-
-		// The count of keys is rounded to the nearest, and the width is then derived from it, so
-		// the keyboard fills the column exactly at every window width. Flooring the count left the
-		// keys at a fixed twenty pixels and the leftovers as margins, which made the whole thing
-		// grow a key at a time - the granularity this replaces.
-		const int minWhite = 14;		// two octaves, however narrow the window gets
-		const int wanted = juce::jmax (minWhite, juce::roundToInt ((float) area.getWidth () / (float) kWhiteKeyWidth));
-
-		span.keyWidth = juce::jmax (10.0f, (float) area.getWidth () / (float) wanted);
-		span.whiteKeys = wanted;
-
-		const int octavesVisible = juce::jmax (2, span.whiteKeys / 7);
-		span.base = baseNote (octavesVisible);
-
-		// Nothing above B8 can light, so the keys stop there and the rest is left blank - and the
-		// block is centred, because a keyboard that ended early and hugged the left edge looked
-		// like it had been cut.
-		const int whiteByRange = ((kLastMusicalNote - span.base) / 12) * 7 + 7;
-		span.whiteKeys = juce::jmin (span.whiteKeys, whiteByRange);
-
-		span.lastNote = noteForWhite (span.base, span.whiteKeys - 1);
-
-		return span;
+		const int width = area.getWidth ();
+		return keyboard::spanFor (width, baseNote (keyboard::octavesFor (width)));
 	}
 
-	/** Whether the window can move by an octave without losing keys off the far end.
-
-		This is what the header arrows ask: a shift that runs the block into B8 makes it shorter,
-		so the right arrow used to move the window and shrink the keyboard at the same time.
-	*/
 	bool canShift (int direction) const
 	{
-		if (direction > 0)
-		{
-			const int candidate = lastSpan.base + 12;
-
-			if (candidate > kLastMusicalNote)
-			{
-				return false;
-			}
-
-			const int whiteByRange = ((kLastMusicalNote - candidate) / 12) * 7 + 7;
-			return whiteByRange >= lastSpan.whiteKeys;
-		}
-
-		return lastSpan.base - 12 >= kFirstMusicalNote;
+		return keyboard::canShift (lastSpan, direction);
 	}
 
 	/** A fixed-width keyboard starting at the span's base note, with the sounding key lit. */

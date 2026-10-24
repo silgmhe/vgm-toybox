@@ -397,7 +397,9 @@ void SettingsStore::setKeyboardRangeHints (bool shouldShow)
 
 int SettingsStore::getContentViewIndex (void) const
 {
-	return file != nullptr ? juce::jlimit (0, 2, file->getIntValue (kContentViewKey, 0)) : 0;
+	// No clamp here on purpose: the number of views belongs to the UI, and a copy of it in the
+	// settings layer is one more thing to forget when a fourth view is added. The reader clamps.
+	return file != nullptr ? file->getIntValue (kContentViewKey, 0) : 0;
 }
 
 void SettingsStore::setContentViewIndex (int index)

@@ -118,22 +118,32 @@ ToyboxAudioProcessorEditor::ToyboxAudioProcessorEditor (ToyboxAudioProcessor& p)
 	viewStack.addView (playPage);
 
 	// Whatever the user was looking at last time; the design's default is the mixer.
-	playPage->setContentView ((ContentView) settings::SettingsStore::getInstance ().getContentViewIndex ());
+	playPage->setContentView (contentViewAt (settings::SettingsStore::getInstance ().getContentViewIndex ()));
 	addAndMakeVisible (viewStack);
 
 	// The View menu lists what the content area can show, not pages of the window: there is one
 	// page, and switching replaces the rectangle above the transport.
-	menu.viewNames = juce::StringArray { i18n::tr ("view.mixer"), i18n::tr ("view.keyboard"),
-										 i18n::tr ("view.scope") };
-	menu.viewIds = juce::StringArray { "mixer", "keyboard", "scope" };
+	// Built from the registry, in its order: the ids a script invokes, the labels a user reads and
+	// the index the shortcut uses all come from one table now.
+	menu.viewNames.clear ();
+	menu.viewIds.clear ();
+
+	for (const auto& info : contentViews ())
+	{
+		menu.viewNames.add (i18n::tr (info.labelKey));
+		menu.viewIds.add (info.id);
+	}
 	// The tick asks the page what it is showing each time the menu is built, so it follows any
 	// switch - this menu, Ctrl+1..3, or a change made from code.
-	menu.getCurrentView = [this] { return playView != nullptr ? (int) playView->getContentView () : 0; };
+	menu.getCurrentView = [this]
+	{
+		return playView != nullptr ? contentViewIndex (playView->getContentView ()) : 0;
+	};
 	menu.onSelectView = [this] (int index)
 	{
 		if (playView != nullptr)
 		{
-			playView->setContentView ((ContentView) index);
+			playView->setContentView (contentViewAt (index));
 			settings::SettingsStore::getInstance ().setContentViewIndex (index);
 		}
 	};
@@ -356,10 +366,10 @@ bool ToyboxAudioProcessorEditor::keyPressed (const juce::KeyPress& key)
 	// or the accelerator works and the item it stands for does not.
 	if (const int wanted = ui::EditorCommands::pageForKey (key); wanted >= 0)
 	{
-		if (playView != nullptr && wanted <= (int) ContentView::oscilloscope
-			&& wanted != (int) playView->getContentView ())
+		if (playView != nullptr && wanted < contentViewCount ()
+			&& contentViewAt (wanted) != playView->getContentView ())
 		{
-			playView->setContentView ((ContentView) wanted);
+			playView->setContentView (contentViewAt (wanted));
 			settings::SettingsStore::getInstance ().setContentViewIndex (wanted);
 			return true;
 		}

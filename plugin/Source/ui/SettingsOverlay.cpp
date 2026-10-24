@@ -1,6 +1,7 @@
 #include "SettingsOverlay.h"
 
 #include "FontChooserDialog.h"
+#include "KeyboardLayout.h"
 #include "Theme.h"
 #include "Standalone/StandaloneHooks.h"
 #include "UiFont.h"
@@ -819,14 +820,14 @@ void KeyboardSettingsPage::refresh (void)
 						   juce::dontSendNotification);
 
 	{
-		const int middle = toybox::settings::SettingsStore::getInstance ().getKeyboardMiddleCOctave ();
-		const int shift = 5 - juce::jlimit (2, 5, middle);
-		static const char* const names[] = { "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B" };
+		// The same table the keyboard draws from: two copies would eventually disagree about what
+		// the note the setting stores is called.
+		const int shift = octaveShiftForMiddleC (
+			toybox::settings::SettingsStore::getInstance ().getKeyboardMiddleCOctave ());
 
 		for (int i = 0; i < 3; ++i)
 		{
-			const int note = 24 + i * 12;
-			startNote.changeItemText (2 + i, juce::String (names[note % 12]) + juce::String (note / 12 - shift));
+			startNote.changeItemText (2 + i, midiNoteName (24 + i * 12, shift));
 		}
 	}
 
