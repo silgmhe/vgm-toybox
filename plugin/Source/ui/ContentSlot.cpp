@@ -21,7 +21,7 @@ namespace
 	constexpr int kRefreshHz = 30;
 
 	// The keyboard row: one line per channel, five columns.
-	constexpr int kRowHeight = 40;
+	constexpr int kRowHeight = 48;		// tall enough that the keyboard sits inside the card
 	constexpr int kGroupHeader = 26;
 	constexpr int kGroupGap = 10;
 	constexpr int kRowInsetLeft = 14;
@@ -31,7 +31,10 @@ namespace
 	constexpr int kButtonGap = 6;
 	constexpr int kNoteWidth = 56;
 	constexpr int kWaveWidth = 88;
+	constexpr int kWaveHeight = 26;
+	constexpr int kKeyHeight = 32;
 	constexpr int kMeterWidth = 96;
+	constexpr int kMeterHeight = 20;
 	constexpr int kMeterGap = 18;
 
 	juce::String noteName (int note)
@@ -343,13 +346,15 @@ private:
 			row.note = inner.removeFromLeft (kNoteWidth);
 			inner.removeFromLeft (8);
 
-			row.wave = inner.removeFromLeft (kWaveWidth).withSizeKeepingCentre (kWaveWidth, 24);
+			row.wave = inner.removeFromLeft (kWaveWidth).withSizeKeepingCentre (kWaveWidth, kWaveHeight);
 			inner.removeFromLeft (10);
 
-			row.meter = inner.removeFromRight (kMeterWidth).withSizeKeepingCentre (kMeterWidth, 16);
+			row.meter = inner.removeFromRight (kMeterWidth).withSizeKeepingCentre (kMeterWidth, kMeterHeight);
 			inner.removeFromRight (kMeterGap);
 
-			row.keys = inner;
+			// The keyboard is centred in the row rather than filling it: a keyboard that reached
+			// the row's edges stuck out of the card on both sides.
+			row.keys = inner.withSizeKeepingCentre (inner.getWidth (), kKeyHeight);
 
 			out.push_back (row);
 
@@ -521,6 +526,29 @@ private:
 
 	void paintWave (juce::Graphics& g, juce::Rectangle<int> area, const toybox::playback::ChannelState& channel)
 	{
+		// A window rather than a bare line: the card's own rounded material, a hairline, and a
+		// shade along the top edge. Enough to read as something seen through glass, and cheap -
+		// no image is blurred, because the surface behind it is a flat colour.
+		const auto window = area.toFloat ();
+
+		g.setColour (theme::card ().darker (0.05f));
+		g.fillRoundedRectangle (window, 4.0f);
+
+		{
+			juce::Graphics::ScopedSaveState clip (g);
+			g.reduceClipRegion (window.toNearestInt ());
+
+			juce::ColourGradient shade (juce::Colours::black.withAlpha (0.12f), window.getX (), window.getY (),
+										juce::Colours::transparentBlack, window.getX (), window.getY () + 7.0f, false);
+			g.setGradientFill (shade);
+			g.fillRoundedRectangle (window, 4.0f);
+		}
+
+		g.setColour (theme::cardBorder ().withAlpha (0.7f));
+		g.drawRoundedRectangle (window.reduced (0.5f), 4.0f, 1.0f);
+
+		area = area.reduced (4, 3);
+
 		std::vector<float> cycle = channel.wave;
 
 		if (cycle.empty ())
@@ -745,12 +773,16 @@ private:
 		// The keyboard sits in a bed: a strip a shade darker than the card, with a hairline and an
 		// inner shadow along its top. Without it the white keys were nine percent ink over a card
 		// of the same colour - invisible - and the black keys were the only thing on screen.
-		const auto bed = area.expanded (2, 2).toFloat ();
+		//
+		// The bed is exactly the keys' area, never larger: expanding it by even two pixels on each
+		// side pushed it through the row's rounded card, which is what made the keyboard look like
+		// it was growing out of the row.
+		const auto bed = area.toFloat ();
 
-		drawSoftShadow (g, bed, theme::buttonRadius, theme::cardKeyShadow (), 6, juce::Point<int> (0, 1));
+		drawSoftShadow (g, bed, 5.0f, theme::cardKeyShadow (), 5, juce::Point<int> (0, 1));
 
-		g.setColour (theme::card ().darker (0.10f));
-		g.fillRoundedRectangle (bed, theme::buttonRadius);
+		g.setColour (theme::card ().darker (0.16f));
+		g.fillRoundedRectangle (bed, 5.0f);
 
 		{
 			juce::Graphics::ScopedSaveState inner (g);
@@ -759,14 +791,16 @@ private:
 			juce::ColourGradient shade (juce::Colours::black.withAlpha (0.10f), bed.getX (), bed.getY (),
 										juce::Colours::transparentBlack, bed.getX (), bed.getY () + 5.0f, false);
 			g.setGradientFill (shade);
-			g.fillRoundedRectangle (bed, theme::buttonRadius);
+			g.fillRoundedRectangle (bed, 5.0f);
 		}
 
 		g.setColour (theme::cardBorder ().withAlpha (0.7f));
-		g.drawRoundedRectangle (bed.reduced (0.5f), theme::buttonRadius, 1.0f);
+		g.drawRoundedRectangle (bed.reduced (0.5f), 5.0f, 1.0f);
 
-		const juce::Colour whiteKey = theme::card ().brighter (0.05f);
-		const juce::Colour blackKey = theme::card ().interpolatedWith (theme::primaryText (), 0.58f);
+		// The white keys are the card's own colour: against a bed sixteen percent darker that is
+		// enough contrast, and tinting them made them read as another shade of the background.
+		const juce::Colour whiteKey = theme::card ();
+		const juce::Colour blackKey = theme::card ().interpolatedWith (theme::primaryText (), 0.52f);
 		const juce::Colour litKey = theme::accent ();
 		const juce::Colour litBlack = theme::accent ().darker (0.22f);
 
@@ -915,7 +949,9 @@ private:
 	void paintMeter (juce::Graphics& g, juce::Rectangle<int> area, const toybox::playback::ChannelState& channel,
 					 float peak)
 	{
-		auto track = area.reduced (0, 8);
+		// Two pixels, not eight: the meter's rect is twenty tall, and reducing it by eight on each
+		// side left a zero-height strip that drew nothing at all.
+		auto track = area.reduced (0, 2);
 
 		g.setColour (theme::cardBorder ());
 		g.fillRoundedRectangle (track.toFloat (), 2.0f);
