@@ -123,14 +123,14 @@ void NsfPlayer::writeSound (std::uint16_t address, std::uint8_t value)
 	// \-\ are the APU\'s triangle and \-\ belong to the DMC object - that is
 	// where its noise and DPCM live. Sending everything to the APU left the last two channels of
 	// every song silent while the triangle worked.
-	if (address <= 0x400B || address == 0x4015)
+	if (address <= 0x4007 || address == 0x4015)
 	{
 		apu->Write (address, value);
 		if (address == 0x4015) { dmc->Write (address, value); }
 		return;
 	}
 
-	if (address >= 0x400C && address <= 0x4013)
+	if (address >= 0x4008 && address <= 0x4013)
 	{
 		dmc->Write (address, value);
 		return;
