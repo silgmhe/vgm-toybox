@@ -1405,6 +1405,12 @@ void PlaybackEngine::render (const playback::OutputBusBuffers* buses, int numBus
 
 	finaliseMasterBus (buses, busCount, usable);
 	applyOutputVolume (buses, busCount, numSamples);
+
+	if (buses != nullptr && busCount > 0)
+	{
+		captureScope (buses[0].left, numSamples);
+	}
+
 	publishPositionAndEnd();
 }
 
@@ -1968,6 +1974,45 @@ void PlaybackEngine::publishPositionAndEnd (void)
 		playing = false;	// the song is over -> silence
 		paused = false;
 	}
+}
+
+void PlaybackEngine::captureScope (const float* left, int numSamples)
+{
+	if (left == nullptr || numSamples <= 0)
+	{
+		return;
+	}
+
+	const auto count = (std::uint32_t) kScopeSamples;
+	auto position = scopeWrite.load (std::memory_order_relaxed);
+
+	for (int i = 0; i < numSamples; ++i)
+	{
+		scopeSamples[(position + (std::uint32_t) i) % count].store (left[i], std::memory_order_relaxed);
+	}
+
+	scopeWrite.store ((position + (std::uint32_t) numSamples) % count, std::memory_order_relaxed);
+}
+
+int PlaybackEngine::readScope (float* dest, int maxSamples) const
+{
+	if (dest == nullptr || maxSamples <= 0)
+	{
+		return 0;
+	}
+
+	const auto count = (std::uint32_t) kScopeSamples;
+	const auto wanted = (std::uint32_t) juce::jmin (maxSamples, (int) count);
+	const auto end = scopeWrite.load (std::memory_order_relaxed);
+
+	for (std::uint32_t i = 0; i < wanted; ++i)
+	{
+		// Walk backwards from the newest sample so the caller always gets the most recent window.
+		const auto index = (end + count - wanted + i) % count;
+		dest[i] = scopeSamples[index].load (std::memory_order_relaxed);
+	}
+
+	return (int) wanted;
 }
 
 } // namespace toybox

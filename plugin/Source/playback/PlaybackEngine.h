@@ -142,6 +142,11 @@ public:
 		the same lock that writes them, and a public copy would invite reading them without it.) */
 	playback::DawSync& getDawSync (void) { return dawSync; }
 	float getMasterVolume (void) const { return masterVolume.load(); }
+
+	/** Copies the most recent output for display - the waveform of what is being heard - with the
+		newest sample last. The audio thread writes it without a lock and this reads it the same way:
+		a sample torn in half is one wrong pixel, never a wrong sound. Returns the count written. */
+	int readScope (float* dest, int maxSamples) const;
 	float getMixerMasterGain (void) const { return mixerMasterGain.load(); }
 	const juce::File& getFile (void) const { return currentFile; }
 	juce::String getTag (const juce::String& tagName) const;
@@ -497,7 +502,15 @@ private:
 	// volume last, so neither control is driven by the other.
 	std::atomic<float> masterVolume { 1.0f };		// output volume (transport card slider)
 	std::atomic<float> mixerMasterGain { 1.0f };
-	std::atomic<float> sourceGain { 2.5119f };	// +8 dB, the NES default	// mixer master (master strip fader)
+	std::atomic<float> sourceGain { 2.5119f };	// +8 dB, the NES default
+
+	// The scope: a ring of the final mix. Twelve thousand samples is a quarter second at 48 kHz -
+	// long enough to see a note's shape, short enough to stay a snapshot.
+	static constexpr int kScopeSamples = 12000;
+	std::array<std::atomic<float>, (std::size_t) kScopeSamples> scopeSamples {};
+	std::atomic<std::uint32_t> scopeWrite { 0 };
+
+	void captureScope (const float* left, int numSamples);	// mixer master (master strip fader)
 
 	// song facts for the lock-free getters - written on the message thread while the lock is
 	// held (load / loop / fade / sample-rate changes), read without the lock

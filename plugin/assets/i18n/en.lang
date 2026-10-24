@@ -209,6 +209,9 @@ language: English
 "visualiser.item.waveform" = "the waveform of what you are hearing";
 "visualiser.subtitle" = "Not built yet - this page is where these will live:";
 "visualiser.title" = "Visualiser";
+	"visualiser.scopeIdle" = "Nothing is playing.";
+	"visualiser.scopeHint" = "The mix you are hearing, after the mixer and the output volume.";
+	"visualiser.scope" = "Waveform";
 "settings.nes" = "NSF";
 "settings.nes.duration" = "Song length";
 "settings.nes.seconds" = "s";

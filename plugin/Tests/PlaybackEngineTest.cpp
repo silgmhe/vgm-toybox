@@ -636,6 +636,20 @@ int main (int argc, char* argv[])
 		check (settled, "the background seek reaches its target");
 	}
 
+	std::printf ("[4.4] the scope tap\n");
+	{
+		renderSeconds (engine, 0.05, sampleRate, blockSize);
+
+		std::vector<float> tapped (512, 0.0f);
+		const int got = engine.readScope (tapped.data (), (int) tapped.size ());
+
+		float peak = 0.0f;
+		for (float value : tapped) { peak = juce::jmax (peak, std::fabs (value)); }
+
+		std::printf ("    scope returned %d samples, peak %.4f\n", got, (double) peak);
+		check (got == (int) tapped.size (), "the scope returns the window it was asked for");
+	}
+
 	std::printf ("[5] render cost (20 blocks)\n");
 	const auto timeRender = [&engine, blockSize]
 	{

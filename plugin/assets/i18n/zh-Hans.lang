@@ -205,6 +205,9 @@ language: 简体中文
 "visualiser.item.waveform" = "你正在听到的声音的波形";
 "visualiser.subtitle" = "尚未构建 - 这些内容将来会出现在此页：";
 "visualiser.title" = "可视化";
+	"visualiser.scopeIdle" = "当前没有播放。";
+	"visualiser.scopeHint" = "你正在听到的混音——经过混音器与输出音量之后。";
+	"visualiser.scope" = "波形";
 "settings.nes" = "NSF";
 "settings.nes.duration" = "歌曲长度";
 "settings.nes.seconds" = "秒";
