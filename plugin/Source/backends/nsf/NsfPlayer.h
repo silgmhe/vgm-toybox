@@ -1,5 +1,6 @@
 #pragma once
 
+#include "playback/ChipState.h"
 #include <array>
 #include <cstdint>
 #include <memory>
@@ -83,6 +84,10 @@ public:
 	/** Mutes every channel. A player built for one track needs this for the case where that
 		track is not audible at all. */
 	void setSilent (bool silent);
+
+	/** Fills what the chips can report: N163 for now, because it is the only chip in this core
+		that exposes per-channel state including the waveform it is reading. */
+	bool captureState (playback::ChipStateSnapshot& snapshot) const;
 
 	/** Scales the output. The NES mix table leaves a lot of headroom - five four-bit channels never
 		approach full scale - so a file played back unamplified sits eight to twelve decibels below a

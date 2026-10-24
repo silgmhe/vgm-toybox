@@ -132,6 +132,34 @@ int main (int argc, char** argv)
 		return 0;
 	}
 
+	if (argc > 2 && std::string (argv[2]) == "--chips")
+	{
+		// The corpus files declare no expansion, so the N163 is forced here: this mode exists to
+		// exercise the state path, and a player built without the chip has nothing to report.
+		auto forced = file;
+		forced.chipFlags |= (std::uint8_t) toybox::formats::nsf::NsfChip::n163;
+
+		toybox::backends::nsf::NsfPlayer player (forced, 44100.0);
+		player.start ();
+
+		std::vector<float> l (1024, 0.0f), r (1024, 0.0f);
+		for (int i = 0; i < 200; ++i) { player.render (l.data (), r.data (), 1024); }
+
+		toybox::playback::ChipStateSnapshot snapshot;
+		const bool ok = player.captureState (snapshot);
+
+		std::printf ("chips valid=%d channels=%d\n", ok ? 1 : 0, (int) snapshot.channels.size ());
+
+		for (const auto& channel : snapshot.channels)
+		{
+			std::printf ("  %-8s note=%3d vol=%.3f wave=%d active=%d\n",
+						 channel.name.c_str (), channel.note, (double) channel.volume,
+						 (int) channel.wave.size (), channel.active ? 1 : 0);
+		}
+
+		return 0;
+	}
+
 	const double seconds = argc > 2 ? std::atof (argv[2]) : 5.0;
 	const double rate = 44100.0;
 

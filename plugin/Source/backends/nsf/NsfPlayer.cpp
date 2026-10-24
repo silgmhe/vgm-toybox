@@ -359,6 +359,59 @@ void NsfPlayer::setTrackAudible (int trackIndex)
 	applyMasks ();
 }
 
+bool NsfPlayer::captureState (playback::ChipStateSnapshot& snapshot) const
+{
+	snapshot.channels.clear ();
+	snapshot.positionSeconds = positionSeconds ();
+	snapshot.valid = false;
+
+	if (n106 == nullptr)
+	{
+		return false;
+	}
+
+	// Eight channels, in the order GetTrackInfo reports them. The hardware numbers them the other
+	// way round (7 - channel); the display follows the API, and a panel that wants hardware
+	// numbering can reverse it.
+	for (int channel = 0; channel < 8; ++channel)
+	{
+		auto* info = dynamic_cast<xgm::TrackInfoN106*> (n106->GetTrackInfo (channel));
+
+		if (info == nullptr)
+		{
+			continue;
+		}
+
+		playback::ChannelState state;
+		state.chipName = "N163";
+		state.name = "Wave " + std::to_string (channel + 1);
+		state.active = info->GetKeyStatus ();
+		state.frequency = (float) info->GetFreqHz ();
+		state.note = state.active ? playback::noteForFrequency (state.frequency) : -1;
+
+		const int maxVolume = (std::max) (1, info->GetMaxVolume ());
+		state.volume = (float) (std::clamp) (info->GetVolume (), 0, maxVolume) / (float) maxVolume;
+
+		const int length = (std::clamp) (info->wavelen, 0, 256);
+
+		if (length > 0)
+		{
+			state.wave.reserve ((std::size_t) length);
+
+			// The chip stores four-bit samples; -1..1 is what every panel wants to draw.
+			for (int i = 0; i < length; ++i)
+			{
+				state.wave.push_back ((float) info->wave[i] / 15.0f * 2.0f - 1.0f);
+			}
+		}
+
+		snapshot.channels.push_back (std::move (state));
+	}
+
+	snapshot.valid = ! snapshot.channels.empty ();
+	return snapshot.valid;
+}
+
 void NsfPlayer::setOutputGain (float linear)
 {
 	outputGain = linear > 0.0f ? linear : 0.0f;

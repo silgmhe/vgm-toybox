@@ -147,6 +147,10 @@ public:
 		newest sample last. The audio thread writes it without a lock and this reads it the same way:
 		a sample torn in half is one wrong pixel, never a wrong sound. Returns the count written. */
 	int readScope (float* dest, int maxSamples) const;
+
+	/** A snapshot of what the chips are doing, for the visualisation page. Takes the lock, so it
+		is a message-thread call: the players it asks are the ones the audio thread renders. */
+	bool captureChipState (playback::ChipStateSnapshot& snapshot) const;
 	float getMixerMasterGain (void) const { return mixerMasterGain.load(); }
 	const juce::File& getFile (void) const { return currentFile; }
 	juce::String getTag (const juce::String& tagName) const;

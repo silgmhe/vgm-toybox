@@ -211,7 +211,9 @@ language: English
 "visualiser.title" = "Visualiser";
 	"visualiser.scopeIdle" = "Nothing is playing.";
 	"visualiser.scopeHint" = "The mix you are hearing, after the mixer and the output volume.";
-	"visualiser.scope" = "Waveform";
+		"visualiser.chips" = "Chip state";
+	"visualiser.chipsUnavailable" = "This format does not report per-channel state yet.";
+"visualiser.scope" = "Waveform";
 "settings.nes" = "NSF";
 "settings.nes.duration" = "Song length";
 "settings.nes.seconds" = "s";

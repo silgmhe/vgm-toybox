@@ -3,6 +3,7 @@
 #include "View.h"
 
 #include "i18n/LanguageManager.h"
+#include "playback/ChipState.h"
 
 #include <vector>
 
@@ -21,9 +22,10 @@ namespace toybox::ui
 	anything else on the page next to it - which is the whole reason the window shows one View at a
 	time (ui/ViewStack.h).
 
-	What is here now is the first of them: the scope. It reads the engine's ring of final output
-	samples, so what it draws is the mix after the mixer, the master gain and the output volume -
-	the same signal the host receives.
+	Two of them are here. The scope reads the engine's ring of final output samples, so what it
+	draws is the mix after the mixer, the master gain and the output volume - the same signal the
+	host receives. The chip panel reads a snapshot the backend fills in: a copy, taken under the
+	engine's lock, because the alternative is reading the audio thread's registers from this one.
 */
 class VisualiserView : public View,
 					   private juce::Timer
@@ -40,14 +42,22 @@ public:
 	void resized (void) override;
 
 private:
+	struct Areas
+	{
+		juce::Rectangle<int> scope;
+		juce::Rectangle<int> chips;
+		juce::Rectangle<int> plans;
+	};
+
+	Areas layoutAreas (void) const;
+
 	void timerCallback (void) override;
 
-	juce::Rectangle<int> scopeBounds (void) const;
-	juce::Rectangle<int> plansBounds (void) const;
-
 	void paintScope (juce::Graphics& g, juce::Rectangle<int> area);
+	void paintChips (juce::Graphics& g, juce::Rectangle<int> area);
 
 	toybox::PlaybackEngine& engine;
+	playback::ChipStateSnapshot chipState;
 
 	// Reused between frames: the scope is redrawn thirty times a second and a fresh allocation
 	// each time is the one cost this page does not need to pay.

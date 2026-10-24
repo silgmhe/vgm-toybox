@@ -32,6 +32,11 @@ public:
 		return player.seekTo (seconds);
 	}
 	void setTimeline (int, double) override {}
+	bool captureState (playback::ChipStateSnapshot& snapshot) const override
+	{
+		return player.captureState (snapshot);
+	}
+
 	void setOutputGain (float linear) override
 	{
 		// The player already defaults to +8 dB; this is how the settings page overrides it.

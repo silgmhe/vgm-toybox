@@ -22,12 +22,26 @@ namespace
 
 	constexpr int kInset = 20;
 	constexpr int kCardGap = 12;
-	constexpr int kScopeHeight = 210;
-	constexpr int kPlansHeader = 62;
-	constexpr int kLineHeight = 27;
-	constexpr int kPlansFooter = 30;
+	constexpr int kScopeHeight = 190;
+	constexpr int kPlansHeight = 150;
+	constexpr int kChipsHeader = 58;
+	constexpr int kRowHeight = 26;
+	constexpr int kChipsPadding = 18;
 
 	constexpr int kRefreshHz = 30;
+
+	juce::String noteName (int note)
+	{
+		static const char* const names[] = { "C", "C#", "D", "D#", "E", "F",
+											 "F#", "G", "G#", "A", "A#", "B" };
+
+		if (note < 0)
+		{
+			return "-";
+		}
+
+		return juce::String (names[note % 12]) + juce::String (note / 12 - 1);
+	}
 }
 
 VisualiserView::VisualiserView (toybox::PlaybackEngine& engineToUse)
@@ -43,26 +57,33 @@ VisualiserView::~VisualiserView (void)
 	stopTimer ();
 }
 
-juce::Rectangle<int> VisualiserView::scopeBounds (void) const
+VisualiserView::Areas VisualiserView::layoutAreas (void) const
 {
-	return getLocalBounds().removeFromTop (kScopeHeight);
-}
+	Areas areas;
 
-juce::Rectangle<int> VisualiserView::plansBounds (void) const
-{
-	const int wanted = kPlansHeader + kLineHeight * (int) juce::numElementsInArray (kPlannedPanelKeys)
-					   + kPlansFooter;
+	auto all = getLocalBounds ();
 
-	auto all = getLocalBounds();
-	all.removeFromTop (kScopeHeight + kCardGap);
+	areas.scope = all.removeFromTop (juce::jmin (all.getHeight (), kScopeHeight));
+	all.removeFromTop (kCardGap);
 
-	return all.removeFromTop (juce::jmin (all.getHeight (), wanted));
+	const int rows = juce::jmax (1, (int) chipState.channels.size ());
+	const int wanted = kChipsHeader + rows * kRowHeight + kChipsPadding;
+	const int ceiling = juce::jmax (0, all.getHeight () - kPlansHeight - kCardGap);
+
+	areas.chips = all.removeFromTop (juce::jmin (all.getHeight (), juce::jmin (wanted, ceiling)));
+	all.removeFromTop (kCardGap);
+	areas.plans = all.removeFromTop (juce::jmin (all.getHeight (), kPlansHeight));
+
+	return areas;
 }
 
 void VisualiserView::paintCardShadows (juce::Graphics& g) const
 {
-	drawCardShadow (g, scopeBounds().toFloat());
-	drawCardShadow (g, plansBounds().toFloat());
+	const auto areas = layoutAreas ();
+
+	drawCardShadow (g, areas.scope.toFloat ());
+	drawCardShadow (g, areas.chips.toFloat ());
+	drawCardShadow (g, areas.plans.toFloat ());
 }
 
 void VisualiserView::resized (void)
@@ -79,6 +100,7 @@ void VisualiserView::timerCallback (void)
 		return;
 	}
 
+	engine.captureChipState (chipState);
 	repaint ();
 }
 
@@ -149,6 +171,85 @@ void VisualiserView::paintScope (juce::Graphics& g, juce::Rectangle<int> area)
 				area.removeFromTop (16), juce::Justification::topRight, false);
 }
 
+void VisualiserView::paintChips (juce::Graphics& g, juce::Rectangle<int> area)
+{
+	if (area.getHeight () < kChipsHeader)
+	{
+		return;
+	}
+
+	auto inner = area.reduced (kInset, 0);
+
+	g.setColour (theme::primaryText ());
+	g.setFont (juce::Font (juce::FontOptions (15.0f, juce::Font::bold)));
+	g.drawText (toybox::i18n::tr ("visualiser.chips"), inner.removeFromTop (26).withTrimmedTop (12),
+				juce::Justification::centredLeft, false);
+
+	if (chipState.channels.empty ())
+	{
+		g.setColour (theme::secondaryText ());
+		g.setFont (juce::Font (juce::FontOptions (12.5f)));
+		g.drawText (toybox::i18n::tr ("visualiser.chipsUnavailable"),
+					inner.removeFromTop (24), juce::Justification::centredLeft, false);
+		return;
+	}
+
+	inner.removeFromTop (8);
+
+	for (const auto& channel : chipState.channels)
+	{
+		auto row = inner.removeFromTop (kRowHeight);
+
+		if (row.getY () + row.getHeight () > area.getBottom ())
+		{
+			break;
+		}
+
+		g.setColour (channel.active ? theme::primaryText () : theme::secondaryText ());
+		g.setFont (juce::Font (juce::FontOptions (12.0f)));
+		g.drawText (juce::String (channel.name), row.removeFromLeft (66), juce::Justification::centredLeft, false);
+
+		g.setColour (theme::secondaryText ());
+		g.drawText (noteName (channel.note), row.removeFromLeft (44), juce::Justification::centredLeft, false);
+
+		// volume as a bar: a number changes too slowly to read at a glance
+		auto bar = row.removeFromLeft (64).reduced (2, 9);
+		g.setColour (theme::cardBorder ());
+		g.fillRoundedRectangle (bar.toFloat (), 2.0f);
+		g.setColour (theme::accent ().withAlpha (0.85f));
+		g.fillRoundedRectangle (bar.toFloat ().withWidth (bar.getWidth () * juce::jlimit (0.0f, 1.0f, channel.volume)),
+								2.0f);
+
+		row.removeFromLeft (10);
+
+		// the waveform, one period of whatever the chip is reading
+		if (channel.wave.size () >= 2 && row.getWidth () > 8)
+		{
+			juce::Path wave;
+			const auto count = (int) channel.wave.size ();
+			const float half = (float) row.getHeight () * 0.5f - 3.0f;
+
+			for (int i = 0; i < count; ++i)
+			{
+				const float x = (float) row.getX () + (float) i / (float) (count - 1) * (float) row.getWidth ();
+				const float y = (float) row.getCentreY () - juce::jlimit (-1.0f, 1.0f, channel.wave[(std::size_t) i]) * half;
+
+				if (i == 0)
+				{
+					wave.startNewSubPath (x, y);
+				}
+				else
+				{
+					wave.lineTo (x, y);
+				}
+			}
+
+			g.setColour (theme::accent ().withAlpha (channel.active ? 0.9f : 0.35f));
+			g.strokePath (wave, juce::PathStrokeType (1.1f));
+		}
+	}
+}
+
 void VisualiserView::paint (juce::Graphics& g)
 {
 	const auto drawCard = [] (juce::Graphics& target, juce::Rectangle<int> bounds)
@@ -159,11 +260,12 @@ void VisualiserView::paint (juce::Graphics& g)
 		target.drawRoundedRectangle (bounds.toFloat ().reduced (0.5f), theme::cardRadius, 1.0f);
 	};
 
-	// --- the scope ---
-	const auto scope = scopeBounds ();
-	drawCard (g, scope);
+	const auto areas = layoutAreas ();
 
-	auto scopeInner = scope.reduced (kInset, 0);
+	// --- the scope ---
+	drawCard (g, areas.scope);
+
+	auto scopeInner = areas.scope.reduced (kInset, 0);
 	auto scopeText = scopeInner.withTrimmedTop (14);
 
 	g.setColour (theme::primaryText ());
@@ -178,12 +280,15 @@ void VisualiserView::paint (juce::Graphics& g)
 
 	paintScope (g, scopeInner.withTrimmedTop (58).withTrimmedBottom (12));
 
-	// --- what is still to come ---
-	const auto plans = plansBounds ();
-	drawCard (g, plans);
+	// --- what the chips are doing ---
+	drawCard (g, areas.chips);
+	paintChips (g, areas.chips);
 
-	auto inner = plans.reduced (kInset, 0);
-	auto text = inner.withTrimmedTop (16);
+	// --- what is still to come ---
+	drawCard (g, areas.plans);
+
+	auto inner = areas.plans.reduced (kInset, 0);
+	auto text = inner.withTrimmedTop (14);
 
 	g.setColour (theme::primaryText ());
 	g.setFont (juce::Font (juce::FontOptions (15.0f, juce::Font::bold)));
@@ -197,7 +302,7 @@ void VisualiserView::paint (juce::Graphics& g)
 
 	for (const auto* key : kPlannedPanelKeys)
 	{
-		auto row = text.removeFromTop (kLineHeight);
+		auto row = text.removeFromTop (22);
 
 		// a small accent dot instead of a bullet character: it survives every platform font
 		g.setColour (theme::accent ());
@@ -208,9 +313,4 @@ void VisualiserView::paint (juce::Graphics& g)
 		g.setColour (theme::primaryText ());
 		g.drawText (toybox::i18n::tr (key), row, juce::Justification::centredLeft, false);
 	}
-
-	g.setColour (theme::secondaryText ());
-	g.setFont (juce::Font (juce::FontOptions (12.0f)));
-	g.drawText (toybox::i18n::tr ("visualiser.footer"), text.removeFromTop (kPlansFooter),
-				juce::Justification::centredLeft, false);
 }

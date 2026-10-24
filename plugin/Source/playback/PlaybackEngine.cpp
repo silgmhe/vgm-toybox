@@ -1994,6 +1994,20 @@ void PlaybackEngine::captureScope (const float* left, int numSamples)
 	scopeWrite.store ((position + (std::uint32_t) numSamples) % count, std::memory_order_relaxed);
 }
 
+bool PlaybackEngine::captureChipState (playback::ChipStateSnapshot& snapshot) const
+{
+	const juce::ScopedLock sl (lock);
+
+	snapshot = {};
+
+	if (trackPlayers.empty () || trackPlayers[0] == nullptr)
+	{
+		return false;
+	}
+
+	return trackPlayers[0]->captureState (snapshot);
+}
+
 int PlaybackEngine::readScope (float* dest, int maxSamples) const
 {
 	if (dest == nullptr || maxSamples <= 0)

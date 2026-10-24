@@ -9,6 +9,7 @@
 #include <juce_core/juce_core.h>
 
 #include "playback/MidiSequence.h"
+#include "playback/ChipState.h"
 
 /**
 	The playback backend port - the standard every format engine (libvgm today, an SNES/SPC
@@ -154,6 +155,15 @@ public:
 		engine's master, so a format default cannot change how another format sounds. Ignored by
 		backends that do not need it. */
 	virtual void setOutputGain (float linear) { juce::ignoreUnused (linear); }
+
+	/** Fills a snapshot of the chips' live state for display. Backends that cannot describe their
+		chips leave it untouched and return false - a panel that shows nothing is better than one
+		that shows invented numbers. */
+	virtual bool captureState (ChipStateSnapshot& snapshot) const
+	{
+		juce::ignoreUnused (snapshot);
+		return false;
+	}
 	/** Silences one device (the chips card). No-op when the backend cannot mute chips. */
 	virtual void setChipAudible (DeviceId device, bool audible) = 0;
 
