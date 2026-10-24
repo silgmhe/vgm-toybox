@@ -1,5 +1,6 @@
 #include "ContentSlot.h"
 
+#include "ButtonPaint.h"
 #include "MixerPanel.h"
 #include "Theme.h"
 #include "i18n/LanguageManager.h"
@@ -119,6 +120,10 @@ public:
 		g.drawText (toybox::i18n::tr ("visualiser.keyboard"), header.removeFromLeft (200).withTrimmedTop (10),
 					juce::Justification::centredLeft, false);
 
+		// The window controls live in the header so they never scroll away, and to the left of the
+		// export button so they sit where this page keeps its other actions.
+		paintShiftControls (g, header.withTrimmedTop (8).withHeight (26));
+
 		if (exportStatus.isNotEmpty ())
 		{
 			g.setColour (theme::secondaryText ());
@@ -169,6 +174,17 @@ public:
 	{
 		const auto point = event.getPosition ();
 
+		if (shiftLeftRect.contains (point)) { shiftOctaves (-1); return; }
+		if (shiftRightRect.contains (point)) { shiftOctaves (1); return; }
+
+		if (autoRect.contains (point))
+		{
+			// Back to following the song, and back to the setting's answer if it named a note.
+			manualBase = -1;
+			repaint ();
+			return;
+		}
+
 		for (const auto& row : rows)
 		{
 			if (row.header || row.channel < 0 || ! row.area.contains (point))
@@ -211,6 +227,28 @@ public:
 			}
 
 			return;
+		}
+	}
+
+	void mouseMove (const juce::MouseEvent& event) override
+	{
+		const auto point = event.getPosition ();
+		const int hovered = shiftLeftRect.contains (point) ? 0
+						  : (shiftRightRect.contains (point) ? 1 : -1);
+
+		if (hovered != hoveredControl)
+		{
+			hoveredControl = hovered;
+			repaint (getLocalBounds ().withHeight (kHeader));
+		}
+	}
+
+	void mouseExit (const juce::MouseEvent&) override
+	{
+		if (hoveredControl != -1)
+		{
+			hoveredControl = -1;
+			repaint (getLocalBounds ().withHeight (kHeader));
 		}
 	}
 
@@ -373,6 +411,16 @@ private:
 		const auto& channel = snapshot.channels[(std::size_t) row.channel];
 		const bool audible = channel.active && channel.volume > 0.001f;
 
+		// A tile per row, the material the mixer strips use, with its shadow drawn through the
+		// same helper the cards use - a real gaussian blur, not a second rectangle pretending to
+		// be one. The shadow stays inside the row's own height, so nothing gets cut off.
+		const auto tile = row.area.reduced (0, 2).toFloat ();
+		drawSoftShadow (g, tile, theme::buttonRadius, theme::cardKeyShadow (), 6, juce::Point<int> (0, 2));
+		g.setColour (theme::track ().withAlpha (0.32f));
+		g.fillRoundedRectangle (tile, theme::buttonRadius);
+		g.setColour (theme::cardBorder ().withAlpha (0.6f));
+		g.drawRoundedRectangle (tile.reduced (0.5f), theme::buttonRadius, 1.0f);
+
 		g.setColour (audible ? theme::primaryText () : theme::secondaryText ());
 		g.setFont (juce::Font (juce::FontOptions (12.0f)));
 		g.drawText (juce::String (channel.name), row.name, juce::Justification::centredLeft, false);
@@ -392,19 +440,79 @@ private:
 		paintMeter (g, row.meter, channel, peakHold[(std::size_t) row.channel]);
 	}
 
-	void paintToggle (juce::Graphics& g, juce::Rectangle<int> area, const char* letter, bool on, bool warn)
+	/** Mute and solo, drawn with the mixer's own face and colours: mute fills red, solo amber,
+		and a toggled one carries the matching glow. Anything else here would make the two views
+		look like different applications. */
+	void paintToggle (juce::Graphics& g, juce::Rectangle<int> area, const char* letter, bool on, bool mute)
 	{
-		g.setColour (on ? (warn ? theme::accent ().withAlpha (0.9f) : theme::accent ().withAlpha (0.75f))
-						: theme::cardBorder ());
-		g.fillRoundedRectangle (area.toFloat (), 3.0f);
+		if (on)
+		{
+			drawButtonGlow (g, area, mute ? theme::muteGlow () : theme::soloGlow (), theme::compactGlowBlur);
+		}
 
-		g.setColour (on ? theme::onAccent () : theme::secondaryText ());
-		g.setFont (juce::Font (juce::FontOptions (11.0f, juce::Font::bold)));
+		ButtonFace face;
+		face.level = on ? ButtonLevel::filled : ButtonLevel::material;
+		face.toggled = on;
+		face.fill = mute ? theme::mute () : theme::solo ();
+
+		drawButtonFace (g, area.toFloat (), face);
+
+		g.setColour (on ? (mute ? theme::onAccent () : theme::primaryText ()) : theme::secondaryText ());
+		g.setFont (juce::Font (juce::FontOptions (10.5f, juce::Font::bold)));
 		g.drawText (letter, area, juce::Justification::centred, false);
 	}
 
-	/** One cycle, stepped. A table is drawn as it is; a generated shape is drawn from the
-		registers that define it - which is the same thing the chip does, one level up. */
+	/** The octave shift, and the note the window currently starts at. */
+	void paintShiftControls (juce::Graphics& g, juce::Rectangle<int> area)
+	{
+		if (area.getWidth () < 300)
+		{
+			shiftLeftRect = shiftRightRect = autoRect = {};
+			return;
+		}
+
+		auto strip = area.withTrimmedRight (124 + 6);
+
+		autoRect = strip.removeFromRight (54);
+		strip.removeFromRight (4);
+		shiftRightRect = strip.removeFromRight (26);
+		strip.removeFromRight (4);
+		shiftLeftRect = strip.removeFromRight (26);
+
+		const int base = lastSpan.base;
+		const bool canGoDown = base > kFirstMusicalNote;
+		const bool canGoUp = base + 12 * 8 <= kLastMusicalNote;
+
+		const auto drawShift = [&] (juce::Rectangle<int> bounds, const juce::String& glyph,
+									bool enabled, int index)
+		{
+			ButtonFace face;
+			face.level = ButtonLevel::material;
+			face.enabled = enabled;
+			face.hovered = (hoveredControl == index);
+
+			drawButtonFace (g, bounds.toFloat (), face);
+
+			g.setColour (enabled ? theme::primaryText () : theme::secondaryText ().withAlpha (0.35f));
+			g.setFont (juce::Font (juce::FontOptions (10.0f)));
+			g.drawText (glyph, bounds, juce::Justification::centred, false);
+		};
+
+		drawShift (shiftLeftRect, juce::String::charToString ((juce::juce_wchar) 0x25C0), canGoDown, 0);
+		drawShift (shiftRightRect, juce::String::charToString ((juce::juce_wchar) 0x25B6), canGoUp, 1);
+
+		// The starting note doubles as the way back to automatic: it is the state a manual shift
+		// replaced, so showing it there costs no extra control and answers "why did it stop
+		// following the song?".
+		const bool automatic = toybox::settings::SettingsStore::getInstance ().getKeyboardStartNote () < 0
+							   && manualBase < 0;
+
+		g.setColour (automatic ? theme::secondaryText () : theme::accent ());
+		g.setFont (juce::Font (juce::FontOptions (11.0f)));
+		g.drawText (noteName (base), autoRect, juce::Justification::centred, false);
+	}
+
+
 	void paintWave (juce::Graphics& g, juce::Rectangle<int> area, const toybox::playback::ChannelState& channel)
 	{
 		std::vector<float> cycle = channel.wave;
@@ -796,6 +904,11 @@ private:
 	int manualBase = -1;
 
 	KeySpan lastSpan;
+
+	// The header's shift controls. Drawn rather than built as child buttons, so they sit in the
+	// same material as everything else without a child's clipping deciding where their shadow ends.
+	juce::Rectangle<int> shiftLeftRect, shiftRightRect, autoRect;
+	int hoveredControl = -1;
 
 	juce::String& exportStatus;
 	juce::TextButton exportButton { "export" };
