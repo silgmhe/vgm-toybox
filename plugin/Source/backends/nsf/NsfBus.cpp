@@ -70,7 +70,10 @@ bool NsfBus::Read (UINT32 adr, UINT32& val, UINT32 id)
 		// Eight 4 KB windows, selected one register each: $5FF8 is the one at $8000 and $5FFF the
 		// one at $F000. Bank numbers are counted in the same 4 KB units.
 		const std::uint32_t window = (adr >> 12) & 0x07u;
-		const std::uint32_t offset = (std::uint32_t) banks[window] * 0x1000u + (adr & 0x0FFFu);
+		// The windows are counted from the load address, which is not required to be 4 KB aligned:
+// a file loaded at \ puts its first byte at window 0 offset \, not at offset 0.
+		const std::uint32_t bankBase = (std::uint32_t) (file.loadAddress & 0x0FFF);
+		const std::uint32_t offset = (std::uint32_t) banks[window] * 0x1000u + (adr & 0x0FFFu) - bankBase;
 
 		val = offset < file.rom.size() ? file.rom[offset] : 0;
 		return true;
