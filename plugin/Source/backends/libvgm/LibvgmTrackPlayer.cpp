@@ -256,6 +256,22 @@ void LibvgmTrackPlayer::applyIsolation (void)
 
 	const playback::TrackInfo* myTrackInfo = findMyTrack();
 
+	// One chip can be more than one device: OPL4 is the OPL3 half plus a PCM half that libvgm
+	// reports as a linked child, and a mute sent only to the parent left the PCM playing. Every
+	// mute therefore goes to the device and to whatever is linked under it.
+	auto applyMuteGroup = [&devices, this] (const PLR_DEV_INFO& device, const PLR_MUTE_OPTS& options)
+	{
+		applyMuting (device.id, options);
+
+		for (const auto& child : devices)
+		{
+			if (child.parentIdx == device.id)
+			{
+				applyMuting (child.id, options);
+			}
+		}
+	};
+
 	for (const auto& info : devices)
 	{
 		if (info.parentIdx != (UINT32) -1)
@@ -263,29 +279,32 @@ void LibvgmTrackPlayer::applyIsolation (void)
 			continue;	// linked devices are configured through their parent
 		}
 
+
 		if (! isolated)
 		{
 			// the plain, un-isolated player: every device plays, only the chips card mutes
-			applyMuting (info.id, chipMuteOptions (! isChipAudible (info.id), false));
+			applyMuteGroup (info, chipMuteOptions (! isChipAudible (info.id), false));
 			continue;
 		}
 
-		if (myTrackInfo == nullptr || info.id != myTrackInfo->deviceId || ! myTrackAudible)
+		// Not this track's device, the track is switched off, or the chip it belongs to is muted
+		// on the chips card: suspend it completely.
+		//
+		// The muted case used to keep the single-channel options and only set `disable`, which
+		// left the one channel this player exists for audible - so the checkbox did nothing on a
+		// mixer-enabled player while the plain player honoured it. A suspended device is what
+		// "this chip is muted" means for an isolated player.
+		if (myTrackInfo == nullptr || info.id != myTrackInfo->deviceId || ! myTrackAudible
+			|| ! isChipAudible (info.id))
 		{
-			// not this track's device (or the track is switched off) -> suspend it completely
-			applyMuting (info.id, suspendedMuteOptions());
+			applyMuteGroup (info, suspendedMuteOptions());
 			continue;
 		}
 
 		// the track's own device: every channel muted except the track's own one - unless the
 		// core cannot mute single channels, in which case the whole device is the track
-		PLR_MUTE_OPTS isolate = singleChannelMuteOptions (myTrackInfo->channelIndex,
-														  myTrackInfo->isolatable);
-		if (! isChipAudible (info.id))
-		{
-			isolate.disable = chipMuteOptions (true, true).disable;
-		}
-		applyMuting (info.id, isolate);
+		applyMuteGroup (info, singleChannelMuteOptions (myTrackInfo->channelIndex,
+													   myTrackInfo->isolatable));
 	}
 }
 

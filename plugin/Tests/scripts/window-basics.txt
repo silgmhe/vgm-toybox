@@ -1,4 +1,4 @@
-# The window as it starts, and the two switches every page has.
+# The window as it starts, and the three content views the View menu offers.
 #
 # Run:  build\plugin\vgm_app_test plugin\Tests\scripts\window-basics.txt
 #
@@ -10,9 +10,9 @@ assert editor.open    visible == true
 assert editor.status  visible == true
 assert editor.status  text contains "No file"
 
-# the playback page is the one on screen
-assert view.play       visible == true
-assert view.visualiser visible == false
+# One page, and it is the one on screen. The visualisation stopped being a page of its own when the
+# View menu started switching the rectangle above the transport instead.
+assert view.play visible == true
 
 # the transport buttons are reachable by ID (IconButton names itself: "Play" -> btn.play)
 assert btn.play  visible == true
@@ -20,33 +20,35 @@ assert btn.pause visible == true
 assert btn.stop  visible == true
 assert btn.loop  visible == true
 
-# Ctrl+2 shows the visualisation page and Ctrl+1 brings the player back - the accelerators the View
-# menu advertises, driven through the same keyPressed() the window itself uses
-press ctrl+2
-assert view.visualiser visible == true
-assert view.play       visible == false
-press ctrl+1
-assert view.play       visible == true
-assert view.visualiser visible == false
-
 # space reaches the transport (the shortcut the transport card documents); with nothing loaded it
 # does nothing, and the status line still says so
 press space
 tick
 assert editor.status text contains "No file"
 
-# The View menu as text - and the regression that started this: the tick follows the page. It used
-# to be checkable only in a screenshot (docs/review, the `99aa57a` bug). `tick` is not needed here:
-# the menu asks the window which page is on screen every time it is described.
+# Ctrl+2 and Ctrl+3 pick a content view - the accelerators the View menu advertises, driven through
+# the same keyPressed() the window itself uses. They no longer switch pages, so what moves is the
+# tick in the menu, not a view's visibility.
 menu
-assert menu.view.play       checked == true
-assert menu.view.visualiser checked == false
+assert menu.view.mixer    checked == true
+assert menu.view.keyboard checked == false
+
 press ctrl+2
-assert menu.view.visualiser checked == true
-assert menu.view.play       checked == false
+assert menu.view.keyboard checked == true
+assert menu.view.mixer    checked == false
+
+press ctrl+3
+assert menu.view.scope    checked == true
+assert menu.view.keyboard checked == false
+
 press ctrl+1
-assert menu.view.play       checked == true
-assert menu.view.visualiser checked == false
+assert menu.view.mixer    checked == true
+assert menu.view.scope    checked == false
+
+# The View menu as text - and the regression that started this: the tick follows what is on screen.
+# It used to be checkable only in a screenshot (docs/review, the `99aa57a` bug).
+menu
+assert menu.view.mixer checked == true
 
 # the File menu is the standalone's, with the labels it shows (multi-word values need quotes)
 assert menu.file.open  label == "Open Song..."

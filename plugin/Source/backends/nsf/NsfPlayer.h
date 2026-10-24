@@ -1,5 +1,6 @@
 #pragma once
 
+#include "playback/ChipState.h"
 #include <array>
 #include <cstdint>
 #include <memory>
@@ -84,6 +85,13 @@ public:
 		track is not audible at all. */
 	void setSilent (bool silent);
 
+	/** Silences a whole chip. 0 is the 2A03 (both of its objects), 1 the expansion. */
+	void setChipAudible (int device, bool audible);
+
+	/** Fills what the chips can report: N163 for now, because it is the only chip in this core
+		that exposes per-channel state including the waveform it is reading. */
+	bool captureState (playback::ChipStateSnapshot& snapshot) const;
+
 	/** Scales the output. The NES mix table leaves a lot of headroom - five four-bit channels never
 		approach full scale - so a file played back unamplified sits eight to twelve decibels below a
 		VGM of the same music. The default is the +8 dB the settings page offers. */
@@ -106,6 +114,8 @@ public:
 private:
 	void writeSound (std::uint16_t address, std::uint8_t value);
 	void applyMasks (void);
+	bool chipAudible[2] = { true, true };
+
 	int soloTrack = -1;
 	bool silent = false;
 	float outputGain = 2.5119f;			// +8 dB

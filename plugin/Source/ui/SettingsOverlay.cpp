@@ -5,6 +5,7 @@
 #include "Standalone/StandaloneHooks.h"
 #include "UiFont.h"
 #include "playback/MidiSequence.h"
+#include "settings/KeyboardSettings.h"
 #include "settings/NsfSettings.h"
 
 #include <algorithm>
@@ -136,7 +137,8 @@ namespace
 		languagePageIndex = 2,
 		midiPageIndex = 3,
 		nesPageIndex = 4,
-		audioPageIndex = 5
+		keyboardPageIndex = 5,
+		audioPageIndex = 6
 	};
 }
 
@@ -729,6 +731,170 @@ void NesSettingsPage::lookAndFeelChanged (void)
 	repaint ();
 }
 
+KeyboardSettingsPage::KeyboardSettingsPage (void)
+{
+	caption.setFont (juce::Font (juce::FontOptions (12.5f)));
+	caption.setJustificationType (juce::Justification::centredLeft);
+	addAndMakeVisible (caption);
+
+	startCaption.setFont (juce::Font (juce::FontOptions (12.5f)));
+	startCaption.setJustificationType (juce::Justification::centredLeft);
+	addAndMakeVisible (startCaption);
+
+	// 1 is "follow the song"; the rest are the notes a player is likely to want fixed.
+	startNote.setComponentID ("settings.keyboard.startNote");
+	startNote.addItem (i18n::tr ("settings.keyboard.startAuto"), 1);
+	// The three fixed starts are MIDI notes 24, 36 and 48; what they are called follows the
+	// middle-C setting, so the labels are filled in by refresh() rather than written here.
+	startNote.addItem (juce::String (), 2);
+	startNote.addItem (juce::String (), 3);
+	startNote.addItem (juce::String (), 4);
+	startNote.onChange = [this]
+	{
+		static const int notes[] = { -1, 24, 36, 48 };
+		const int index = juce::jlimit (0, 3, startNote.getSelectedId () - 1);
+
+		toybox::settings::SettingsStore::getInstance ().setKeyboardStartNote (notes[index]);
+	};
+	addAndMakeVisible (startNote);
+
+	holdCaption.setFont (juce::Font (juce::FontOptions (12.5f)));
+	holdCaption.setJustificationType (juce::Justification::centredLeft);
+	addAndMakeVisible (holdCaption);
+
+	middleCaption.setFont (juce::Font (juce::FontOptions (12.5f)));
+	middleCaption.setJustificationType (juce::Justification::centredLeft);
+	addAndMakeVisible (middleCaption);
+
+	middleC.setComponentID ("settings.keyboard.middleC");
+	for (int octave = toybox::settings::keyboard::minMiddleCOctave;
+		 octave <= toybox::settings::keyboard::maxMiddleCOctave; ++octave)
+	{
+		middleC.addItem ("C" + juce::String (octave), octave);
+	}
+	middleC.onChange = [this]
+	{
+		toybox::settings::SettingsStore::getInstance ().setKeyboardMiddleCOctave (middleC.getSelectedId ());
+	};
+	addAndMakeVisible (middleC);
+
+	holdSlider.setComponentID ("settings.keyboard.noteHold");
+	holdSlider.setSliderStyle (juce::Slider::LinearHorizontal);
+	holdSlider.setTextBoxStyle (juce::Slider::TextBoxRight, false, 76, 22);
+	holdSlider.setRange ((double) toybox::settings::keyboard::minNoteHoldMs,
+						 (double) toybox::settings::keyboard::maxNoteHoldMs,
+						 (double) toybox::settings::keyboard::noteHoldStepMs);
+	holdSlider.setTextValueSuffix (" ms");
+	holdSlider.onValueChange = [this]
+	{
+		toybox::settings::SettingsStore::getInstance ()
+			.setKeyboardNoteHoldMs ((int) std::lround (holdSlider.getValue ()));
+	};
+	addAndMakeVisible (holdSlider);
+
+	rangeHints.setComponentID ("settings.keyboard.rangeHints");
+	rangeHints.onClick = [this]
+	{
+		toybox::settings::SettingsStore::getInstance ()
+			.setKeyboardRangeHints (rangeHints.getToggleState ());
+	};
+	addAndMakeVisible (rangeHints);
+
+	hint.setFont (juce::Font (juce::FontOptions (12.5f)));
+	hint.setJustificationType (juce::Justification::topLeft);
+	addAndMakeVisible (hint);
+
+	refreshLanguage ();
+	refresh ();
+}
+
+void KeyboardSettingsPage::refresh (void)
+{
+	const int stored = toybox::settings::SettingsStore::getInstance ().getKeyboardStartNote ();
+	const int id = stored < 0 ? 1 : (stored <= 24 ? 2 : (stored <= 36 ? 3 : 4));
+
+	startNote.setSelectedId (id, juce::dontSendNotification);
+
+	middleC.setSelectedId (toybox::settings::SettingsStore::getInstance ().getKeyboardMiddleCOctave (),
+						   juce::dontSendNotification);
+
+	{
+		const int middle = toybox::settings::SettingsStore::getInstance ().getKeyboardMiddleCOctave ();
+		const int shift = 5 - juce::jlimit (2, 5, middle);
+		static const char* const names[] = { "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B" };
+
+		for (int i = 0; i < 3; ++i)
+		{
+			const int note = 24 + i * 12;
+			startNote.changeItemText (2 + i, juce::String (names[note % 12]) + juce::String (note / 12 - shift));
+		}
+	}
+
+	holdSlider.setValue ((double) toybox::settings::SettingsStore::getInstance ().getKeyboardNoteHoldMs (),
+						 juce::dontSendNotification);
+
+	rangeHints.setToggleState (toybox::settings::SettingsStore::getInstance ().getKeyboardRangeHints (),
+							   juce::dontSendNotification);
+}
+
+void KeyboardSettingsPage::paint (juce::Graphics& g)
+{
+	paintHeading (g, i18n::tr ("settings.keyboard"), i18n::tr ("settings.keyboard.explanation"),
+				  getLocalBounds(), kTwoLineHeadingHeight, 2);
+}
+
+void KeyboardSettingsPage::resized (void)
+{
+	auto area = pageContent (getLocalBounds(), kTwoLineHeadingHeight);
+
+	startCaption.setBounds (area.removeFromTop (18));
+	area.removeFromTop (4);
+
+	auto startRow = area.removeFromTop (kFooterHeight);
+	startNote.setBounds (startRow.removeFromLeft (juce::jmin (160, startRow.getWidth ())));
+
+	area.removeFromTop (12);
+	caption.setBounds (area.removeFromTop (18));
+	area.removeFromTop (4);
+
+	auto rangeRow = area.removeFromTop (kFooterHeight);
+	rangeHints.setBounds (rangeRow.removeFromLeft (juce::jmin (320, rangeRow.getWidth ())));
+
+	area.removeFromTop (12);
+	holdCaption.setBounds (area.removeFromTop (18));
+	area.removeFromTop (4);
+
+	auto holdRow = area.removeFromTop (kFooterHeight);
+	holdSlider.setBounds (holdRow.removeFromLeft (juce::jmin (320, holdRow.getWidth ())));
+
+	area.removeFromTop (12);
+	middleCaption.setBounds (area.removeFromTop (18));
+	area.removeFromTop (4);
+
+	auto middleRow = area.removeFromTop (kFooterHeight);
+	middleC.setBounds (middleRow.removeFromLeft (juce::jmin (120, middleRow.getWidth ())));
+
+	area.removeFromTop (6);
+	hint.setBounds (area.removeFromTop (72));
+}
+
+void KeyboardSettingsPage::lookAndFeelChanged (void)
+{
+	repaint ();
+}
+
+void KeyboardSettingsPage::refreshLanguage (void)
+{
+	startCaption.setText (i18n::tr ("settings.keyboard.startNote"), juce::dontSendNotification);
+	startNote.changeItemText (1, i18n::tr ("settings.keyboard.startAuto"));
+	holdCaption.setText (i18n::tr ("settings.keyboard.noteHold"), juce::dontSendNotification);
+	middleCaption.setText (i18n::tr ("settings.keyboard.middleC"), juce::dontSendNotification);
+	caption.setText (i18n::tr ("settings.keyboard.rangeHints"), juce::dontSendNotification);
+	rangeHints.setButtonText (i18n::tr ("settings.keyboard.rangeHintsOn"));
+	hint.setText (i18n::tr ("settings.keyboard.rangeHintsHint"), juce::dontSendNotification);
+	repaint ();
+}
+
 AudioSettingsPage::AudioSettingsPage (void)
 {
 	deviceLabel.setComponentID ("settings.audio.device");
@@ -1223,6 +1389,9 @@ SettingsOverlay::SettingsOverlay (void)
 	rootItem->addSubItem (new CategoryItem ("nes", i18n::tr ("settings.nes"), nesPageIndex,
 										   [this] (int page) { pages.setCurrentView (page); }));
 
+	rootItem->addSubItem (new CategoryItem ("keyboard", i18n::tr ("settings.keyboard"), keyboardPageIndex,
+										   [this] (int page) { pages.setCurrentView (page); }));
+
 	// Audio only where there is an audio device to choose between: the standalone application says
 	// so through Source/Standalone/StandaloneHooks.h, and in a plugin the host owns the device. The
 	// row goes in with the page, so the sidebar cannot offer a page that was never created.
@@ -1244,6 +1413,7 @@ SettingsOverlay::SettingsOverlay (void)
 	languagePage = new LanguageSettingsPage();
 	midiPage = new MidiSettingsPage();
 	nesPage = new NesSettingsPage();
+	keyboardPage = new KeyboardSettingsPage();
 	// Forwarded rather than handled here: only the window owns an engine, and reloading a song at
 	// the position it was at is what makes the switch take effect.
 	midiPage->onSampleRootChanged = [this]
@@ -1258,11 +1428,13 @@ SettingsOverlay::SettingsOverlay (void)
 	languagePage->setComponentID ("settings.page.language");
 	midiPage->setComponentID ("settings.page.midi");
 	nesPage->setComponentID ("settings.page.nes");
+	keyboardPage->setComponentID ("settings.page.keyboard");
 	pages.addView (appearancePage);
 	pages.addView (generalPage);
 	pages.addView (languagePage);
 	pages.addView (midiPage);
 	pages.addView (nesPage);
+	pages.addView (keyboardPage);
 
 	if (hasAudio)
 	{
@@ -1273,7 +1445,7 @@ SettingsOverlay::SettingsOverlay (void)
 
 	// The indices the rows carry and the order the stack holds are two lists that have to agree;
 	// a page inserted between two others would otherwise open its neighbour, silently.
-	jassert (pages.getNumViews() == (hasAudio ? audioPageIndex : nesPageIndex) + 1);
+	jassert (pages.getNumViews() == (hasAudio ? audioPageIndex : keyboardPageIndex) + 1);
 
 	addAndMakeVisible (pages);
 
@@ -1314,6 +1486,8 @@ void SettingsOverlay::refreshLanguage (void)
 			case generalPageIndex:	row->setLabel (i18n::tr ("settings.general")); break;
 			case languagePageIndex:	row->setLabel (i18n::tr ("settings.language")); break;
 			case midiPageIndex:		row->setLabel (i18n::tr ("settings.midi")); break;
+
+	case keyboardPageIndex:	row->setLabel (i18n::tr ("settings.keyboard")); break;
 			case audioPageIndex:	row->setLabel (i18n::tr ("settings.audio")); break;
 			default: break;
 		}

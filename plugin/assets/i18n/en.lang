@@ -199,6 +199,9 @@ language: English
 "transport.stopTooltip" = "Stop - return to the playback start marker";
 "transport.volumeTooltip" = "Output volume - the last stage of the engine, after the mixer master";
 
+	"view.mixer" = "Mixer";
+	"view.keyboard" = "Keyboard";
+	"view.scope" = "Oscilloscope";
 "view.play" = "Play";
 "view.visualiser" = "Visualiser";
 
@@ -209,6 +212,14 @@ language: English
 "visualiser.item.waveform" = "the waveform of what you are hearing";
 "visualiser.subtitle" = "Not built yet - this page is where these will live:";
 "visualiser.title" = "Visualiser";
+	"visualiser.scopeIdle" = "Nothing is playing.";
+	"visualiser.scopeHint" = "The mix you are hearing, after the mixer and the output volume.";
+		"visualiser.keyboard" = "Keyboard";
+	"visualiser.keyboardUnavailable" = "This format does not report per-channel state yet.";
+	"visualiser.keyboardUnsupported" = "The channels of this chip cannot be shown yet.";
+	"visualiser.export" = "Export waves";
+	"visualiser.exportEmpty" = "Nothing to export yet.";
+"visualiser.scope" = "Waveform";
 "settings.nes" = "NSF";
 "settings.nes.duration" = "Song length";
 "settings.nes.seconds" = "s";
@@ -216,3 +227,12 @@ language: English
 	"settings.nes.outputGainHint" = "The NES mix leaves headroom, so files play quieter here than the same music does as a VGM. +8 dB is the default; past about +10 dB the loudest songs reach the ceiling.";
 "settings.nes.durationHint" = "An NSF has no length in its header and its driver never ends: it loops until it is stopped. This is the length the timeline, the seek bar and the end of the song are built on.";
 "settings.nes.explanation" = "An NSF has no length in its header and its driver never ends: it loops until it is stopped. This is the length the timeline, the seek bar and the end of the song are built on.";
+	"settings.keyboard.rangeHintsHint" = "A narrow window shows fewer octaves. When a channel plays a note outside them, the edge of its keyboard carries an arrow saying so. Turn this off for a quieter row.";
+	"settings.keyboard.rangeHintsOn" = "Show an arrow when a note is outside the keys";
+	"settings.keyboard.rangeHints" = "Out-of-range notes";
+	"settings.keyboard.noteHold" = "Note-off delay";
+	"settings.keyboard.middleC" = "Middle C is";
+	"settings.keyboard.explanation" = "What the keyboard draws. The octave range follows the window width; the arrow is a choice.";
+	"settings.keyboard" = "Keyboard";
+	"settings.keyboard.startAuto" = "Follow the song";
+	"settings.keyboard.startNote" = "Lowest key";

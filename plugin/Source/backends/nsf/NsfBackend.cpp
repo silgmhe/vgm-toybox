@@ -32,6 +32,11 @@ public:
 		return player.seekTo (seconds);
 	}
 	void setTimeline (int, double) override {}
+	bool captureState (playback::ChipStateSnapshot& snapshot) const override
+	{
+		return player.captureState (snapshot);
+	}
+
 	void setOutputGain (float linear) override
 	{
 		// The player already defaults to +8 dB; this is how the settings page overrides it.
@@ -53,7 +58,10 @@ public:
 			player.setSilent (true);
 		}
 	}
-	void setChipAudible (playback::DeviceId, bool) override {}
+	void setChipAudible (playback::DeviceId device, bool audible) override
+	{
+		player.setChipAudible ((int) device, audible);
+	}
 
 	int render (float* left, float* right, int numSamples) override
 	{
@@ -192,6 +200,9 @@ public:
 		caps.isolation = playback::IsolationMode::multiInstance;
 		caps.canSeek = true;
 		caps.rendersAtHostRate = true;
+		// Every chip the emulation renders can be silenced on its own: the core mutes per output
+		// bit, and setChipAudible() turns a whole group of those bits off at once.
+		caps.canMuteChips = true;
 		return caps;
 	}
 

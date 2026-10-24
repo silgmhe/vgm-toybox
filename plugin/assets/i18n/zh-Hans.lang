@@ -195,6 +195,9 @@ language: 简体中文
 "transport.stopTooltip" = "停止 - 回到播放起点标记";
 "transport.volumeTooltip" = "输出音量 - 引擎的最后一级，位于混音器主输出之后";
 
+	"view.mixer" = "混音器";
+	"view.keyboard" = "键盘";
+	"view.scope" = "示波器";
 "view.play" = "播放";
 "view.visualiser" = "可视化";
 
@@ -205,6 +208,14 @@ language: 简体中文
 "visualiser.item.waveform" = "你正在听到的声音的波形";
 "visualiser.subtitle" = "尚未构建 - 这些内容将来会出现在此页：";
 "visualiser.title" = "可视化";
+	"visualiser.scopeIdle" = "当前没有播放。";
+	"visualiser.scopeHint" = "你正在听到的混音——经过混音器与输出音量之后。";
+		"visualiser.keyboard" = "键盘";
+	"visualiser.keyboardUnavailable" = "该格式暂未提供逐通道状态。";
+	"visualiser.keyboardUnsupported" = "该芯片的逐通道状态尚未支持。";
+	"visualiser.export" = "导出波表";
+	"visualiser.exportEmpty" = "当前没有可导出的波形。";
+"visualiser.scope" = "波形";
 "settings.nes" = "NSF";
 "settings.nes.duration" = "歌曲长度";
 "settings.nes.seconds" = "秒";
@@ -212,3 +223,12 @@ language: 简体中文
 	"settings.nes.outputGainHint" = "NES 的混音表留有大量余量，同一首曲子会比 VGM 明显偏小。默认 +8 dB；超过 +10 dB 后，较响的曲子会触及满幅。";
 "settings.nes.durationHint" = "NSF 头部没有长度，驱动也不会结束——它会一直循环直到被停下。时间轴、进度条与歌曲结束都由这里设定的长度决定。";
 "settings.nes.explanation" = "NSF 头部没有长度，驱动也不会结束——它会一直循环直到被停下。时间轴、进度条与歌曲结束都由这里设定的长度决定。";
+	"settings.keyboard.rangeHintsHint" = "窗口越窄，显示的八度越少。当某个通道演奏的音符落在可见范围之外时，键盘边缘会出现一个箭头。关掉它可以让那一行更干净。";
+	"settings.keyboard.rangeHintsOn" = "音符超出可见键位时显示箭头";
+	"settings.keyboard.rangeHints" = "超出音域的提示";
+	"settings.keyboard.noteHold" = "音符熄灭延迟";
+	"settings.keyboard.middleC" = "中央 C 记作";
+	"settings.keyboard.explanation" = "键盘视图画什么。八度范围随窗口宽度自动调整；箭头则是一项选择。";
+	"settings.keyboard" = "键盘";
+	"settings.keyboard.startAuto" = "跟随歌曲";
+	"settings.keyboard.startNote" = "起始音";

@@ -88,8 +88,7 @@ NsfPlayer::NsfPlayer (const formats::nsf::NsfFile& image, double sampleRate)
 NsfPlayer::~NsfPlayer () = default;
 
 void NsfPlayer::start (void)
-{
-	rendered = 0;
+{	rendered = 0;
 	cpuClockRest = 0.0;
 
 	// Order matters, and each step was paid for once already:
@@ -263,6 +262,7 @@ int NsfPlayer::render (float* left, float* right, int frames)
 
 		mix (0, left[i]);
 		mix (1, right[i]);
+
 	}
 
 	rendered += (std::uint64_t) frames;
@@ -359,6 +359,156 @@ void NsfPlayer::setTrackAudible (int trackIndex)
 	applyMasks ();
 }
 
+bool NsfPlayer::captureState (playback::ChipStateSnapshot& snapshot) const
+{
+	snapshot.chips.clear ();
+	snapshot.channels.clear ();
+	snapshot.positionSeconds = positionSeconds ();
+	snapshot.valid = false;
+
+	// Always the 2A03; the expansion the header declares on top of it.
+	snapshot.chips.push_back ("2A03");
+
+	switch (file.chip ())
+	{
+	case formats::nsf::NsfChip::vrc6: snapshot.chips.push_back ("VRC6"); break;
+	case formats::nsf::NsfChip::vrc7: snapshot.chips.push_back ("VRC7"); break;
+	case formats::nsf::NsfChip::fds:  snapshot.chips.push_back ("FDS");  break;
+	case formats::nsf::NsfChip::mmc5: snapshot.chips.push_back ("MMC5"); break;
+	case formats::nsf::NsfChip::n163: snapshot.chips.push_back ("N163"); break;
+	case formats::nsf::NsfChip::fme7: snapshot.chips.push_back ("FME7"); break;
+	case formats::nsf::NsfChip::none: break;
+	}
+
+	// Only the N163 reports per-channel state in this core, so a song without one has a chip list
+	// and nothing else - which the panel shows as "this chip cannot be displayed yet".
+	snapshot.valid = true;
+
+	const auto addChannel = [&snapshot] (const char* name, const char* chipName, int trackIndex,
+										 int waveKind, float duty, xgm::ITrackInfo* info)
+	{
+		playback::ChannelState state;
+		state.name = name;
+		state.chipName = chipName;
+		state.trackIndex = trackIndex;
+		state.waveKind = waveKind;
+		state.duty = duty;
+
+		if (info != nullptr)
+		{
+			state.frequency = (float) info->GetFreqHz ();
+			state.note = playback::noteForFrequency (state.frequency);
+			state.active = info->GetKeyStatus ();
+
+			const int maxVolume = (std::max) (1, info->GetMaxVolume ());
+			const float fromVolume = (float) (std::clamp) (info->GetVolume (), 0, maxVolume) / (float) maxVolume;
+
+			// The triangle has no volume register - it is either sounding or not - and reports zero
+			// there while still playing. Its output level is the honest number, and the same is
+			// true of the noise and delta channels, so both are taken into account.
+			const float fromOutput = (float) (std::clamp) ((int) info->GetOutput (), 0, 15) / 15.0f;
+
+			state.volume = (std::max) (fromVolume, fromOutput);
+
+			// The triangle and the delta channel have no volume register: they are either sounding
+			// at their fixed level or silent. Their instantaneous output can be zero at the moment
+			// a block ends, which is why those rows showed an empty meter while they were playing.
+			if (waveKind == 3 || waveKind == 5)
+			{
+				state.volume = state.active ? 1.0f : 0.0f;
+			}
+
+			// Noise and the delta channel have no pitch: what their track info reports is a rate,
+			// not a note, and drawing it as one would light a key that means nothing.
+			if (waveKind >= 4)
+			{
+				state.note = -1;
+				state.frequency = 0.0f;
+			}
+
+			// A channel that is not sounding has no note. The period register keeps its last value
+			// after key-off, so a channel that had gone quiet still reported the note it stopped
+			// on - and the keyboard kept that key lit, showing a pitch nobody could hear.
+			if (! state.active)
+			{
+				state.note = -1;
+				state.frequency = 0.0f;
+				state.volume = 0.0f;		// the volume register also keeps its last value
+			}
+		}
+
+		snapshot.channels.push_back (state);
+	};
+
+	// The 2A03 is always there: two pulses on the APU, and triangle, noise and the delta channel
+	// on the DMC. Both chips already report pitch, level and key state, so this is wiring rather
+	// than new emulation - which is why the keyboard can show a NES song without a coprocessor.
+	static const char* const pulseNames[] = { "Pulse 1", "Pulse 2" };
+	static const char* const dmcNames[] = { "Triangle", "Noise", "DMC" };
+
+	// Duty comes from the pulse register's top two bits; the four settings are fixed by hardware.
+	static const float duties[] = { 0.125f, 0.25f, 0.5f, 0.75f };
+
+	for (int i = 0; i < 2; ++i)
+	{
+		const int setting = (apu->GetReg (i * 4) >> 6) & 0x03;
+		addChannel (pulseNames[i], "2A03", i, 2, duties[setting], apu->GetTrackInfo (i));
+	}
+
+	for (int i = 0; i < 3; ++i)
+	{
+		addChannel (dmcNames[i], "2A03", 2 + i, 3 + i, 0.5f, dmc->GetTrackInfo (i));
+	}
+
+	if (n106 == nullptr)
+	{
+		return true;
+	}
+
+	// Eight channels, in the order GetTrackInfo reports them. The hardware numbers them the other
+	// way round (7 - channel); the display follows the API, and a panel that wants hardware
+	// numbering can reverse it.
+	for (int channel = 0; channel < 8; ++channel)
+	{
+		auto* info = dynamic_cast<xgm::TrackInfoN106*> (n106->GetTrackInfo (channel));
+
+		if (info == nullptr)
+		{
+			continue;
+		}
+
+		playback::ChannelState state;
+		state.chipName = "N163";
+		state.trackIndex = 5 + channel;		// the five 2A03 tracks come first
+		state.waveKind = 1;					// a real table, read from the chip
+
+		state.name = "Wave " + std::to_string (channel + 1);
+		state.active = info->GetKeyStatus ();
+		state.frequency = (float) info->GetFreqHz ();
+		state.note = state.active ? playback::noteForFrequency (state.frequency) : -1;
+
+		const int maxVolume = (std::max) (1, info->GetMaxVolume ());
+		state.volume = (float) (std::clamp) (info->GetVolume (), 0, maxVolume) / (float) maxVolume;
+
+		const int length = (std::clamp) (info->wavelen, 0, 256);
+
+		if (length > 0)
+		{
+			state.wave.reserve ((std::size_t) length);
+
+			// The chip stores four-bit samples; -1..1 is what every panel wants to draw.
+			for (int i = 0; i < length; ++i)
+			{
+				state.wave.push_back ((float) info->wave[i] / 15.0f * 2.0f - 1.0f);
+			}
+		}
+
+		snapshot.channels.push_back (std::move (state));
+	}
+
+	return true;
+}
+
 void NsfPlayer::setOutputGain (float linear)
 {
 	outputGain = linear > 0.0f ? linear : 0.0f;
@@ -407,6 +557,19 @@ int NsfPlayer::channelCount (void) const
 	return 5;
 }
 
+void NsfPlayer::setChipAudible (int device, bool audible)
+{
+	const int index = device <= 0 ? 0 : 1;
+
+	if (chipAudible[index] == audible)
+	{
+		return;
+	}
+
+	chipAudible[index] = audible;
+	applyMasks ();
+}
+
 void NsfPlayer::applyMasks (void)
 {
 	// Each chip mutes with a set bit over its own outputs, and the track list is the concatenation
@@ -414,13 +577,13 @@ void NsfPlayer::applyMasks (void)
 	// expansion's. A solo is therefore one bit cleared in exactly one of these masks.
 	const bool all = soloTrack < 0;
 
-	const auto maskFor = [all, this] (int base, int count)
+	const auto maskFor = [all, this] (int base, int count, bool chipMuted)
 	{
 		int mask = 0;
 
 		for (int i = 0; i < count; ++i)
 		{
-			if (silent || (! all && soloTrack != base + i))
+			if (silent || chipMuted || (! all && soloTrack != base + i))
 			{
 				mask |= (1 << i);
 			}
@@ -429,13 +592,13 @@ void NsfPlayer::applyMasks (void)
 		return mask;
 	};
 
-	apu->SetMask (maskFor (0, 2));
-	dmc->SetMask (maskFor (2, 3));
+	apu->SetMask (maskFor (0, 2, ! chipAudible[0]));
+	dmc->SetMask (maskFor (2, 3, ! chipAudible[0]));
 
-	if (vrc6) { vrc6->SetMask (maskFor (5, 3)); }
-	if (n106) { n106->SetMask (maskFor (5, 8)); }
-	if (vrc7) { vrc7->SetMask (maskFor (5, 6)); }
-	if (fme7) { fme7->SetMask (maskFor (5, 5)); }
+	if (vrc6) { vrc6->SetMask (maskFor (5, 3, ! chipAudible[1])); }
+	if (n106) { n106->SetMask (maskFor (5, 8, ! chipAudible[1])); }
+	if (vrc7) { vrc7->SetMask (maskFor (5, 6, ! chipAudible[1])); }
+	if (fme7) { fme7->SetMask (maskFor (5, 5, ! chipAudible[1])); }
 }
 
 int NsfPlayer::renderChannels (float* const* dest, int channelCount, int frames)

@@ -1077,6 +1077,11 @@ void PlaybackEngine::installSong (LoadedSong&& built)
 	// facts and a handful of flags. The players of the outgoing song are destroyed here, with
 	// everything else that goes out of scope - bounded work, unlike building them.
 	song = std::move (built.song);
+
+	// The chips card is only offered when the backend can honour it, and every load path passes
+	// through here - buildSong is static and cannot record it itself.
+	chipsMuteable.store (song != nullptr && song->getCapabilities ().canMuteChips);
+
 	trackPlayers = std::move (built.players);
 	playerCount.store ((int) trackPlayers.size ());
 
@@ -1405,6 +1410,26 @@ void PlaybackEngine::render (const playback::OutputBusBuffers* buses, int numBus
 
 	finaliseMasterBus (buses, busCount, usable);
 	applyOutputVolume (buses, busCount, numSamples);
+
+	if (buses != nullptr && busCount > 0)
+	{
+		// Captured after the blocker, so the scope shows what the host receives rather than what
+		// the chips produced before the offset was removed.
+		captureScope (buses[0].left, numSamples);
+	}
+
+	if (stateCaptureWanted.load (std::memory_order_relaxed))
+	{
+		// try_lock on this side too: if the message thread happens to be copying the previous
+		// snapshot, losing one frame of display is free; waiting for it would drop a block.
+		std::unique_lock<std::mutex> guard (stateMutex, std::try_to_lock);
+
+		if (guard.owns_lock () && ! trackPlayers.empty () && trackPlayers[0] != nullptr)
+		{
+			trackPlayers[0]->captureState (stateSnapshot);
+		}
+	}
+
 	publishPositionAndEnd();
 }
 
@@ -1968,6 +1993,67 @@ void PlaybackEngine::publishPositionAndEnd (void)
 		playing = false;	// the song is over -> silence
 		paused = false;
 	}
+}
+
+
+
+
+
+void PlaybackEngine::captureScope (const float* left, int numSamples)
+{
+	if (left == nullptr || numSamples <= 0)
+	{
+		return;
+	}
+
+	const auto count = (std::uint32_t) kScopeSamples;
+	auto position = scopeWrite.load (std::memory_order_relaxed);
+
+	for (int i = 0; i < numSamples; ++i)
+	{
+		scopeSamples[(position + (std::uint32_t) i) % count].store (left[i], std::memory_order_relaxed);
+	}
+
+	scopeWrite.store ((position + (std::uint32_t) numSamples) % count, std::memory_order_relaxed);
+}
+
+void PlaybackEngine::setStateCaptureWanted (bool wanted)
+{
+	stateCaptureWanted.store (wanted);
+}
+
+bool PlaybackEngine::captureChipState (playback::ChipStateSnapshot& snapshot) const
+{
+	std::unique_lock<std::mutex> guard (stateMutex, std::try_to_lock);
+
+	if (! guard.owns_lock ())
+	{
+		return false;
+	}
+
+	snapshot = stateSnapshot;
+	return snapshot.valid;
+}
+
+int PlaybackEngine::readScope (float* dest, int maxSamples) const
+{
+	if (dest == nullptr || maxSamples <= 0)
+	{
+		return 0;
+	}
+
+	const auto count = (std::uint32_t) kScopeSamples;
+	const auto wanted = (std::uint32_t) juce::jmin (maxSamples, (int) count);
+	const auto end = scopeWrite.load (std::memory_order_relaxed);
+
+	for (std::uint32_t i = 0; i < wanted; ++i)
+	{
+		// Walk backwards from the newest sample so the caller always gets the most recent window.
+		const auto index = (end + count - wanted + i) % count;
+		dest[i] = scopeSamples[index].load (std::memory_order_relaxed);
+	}
+
+	return (int) wanted;
 }
 
 } // namespace toybox

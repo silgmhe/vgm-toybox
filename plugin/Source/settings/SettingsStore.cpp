@@ -1,3 +1,4 @@
+#include "KeyboardSettings.h"
 #include "NsfSettings.h"
 #include "SettingsStore.h"
 
@@ -33,6 +34,11 @@ namespace
 	constexpr const char* kLastSongKey = "standalone.lastSong";
 	constexpr const char* kNsfDurationKey = "nsf.durationSeconds";
 constexpr const char* kNsfOutputGainKey = "nsf.outputGainDb";
+constexpr const char* kContentViewKey = "ui.view";
+constexpr const char* kKeyboardRangeHintsKey = "keyboard.rangeHints";
+constexpr const char* kKeyboardStartNoteKey = "keyboard.startNote";
+constexpr const char* kKeyboardNoteHoldKey = "keyboard.noteHoldMs";
+constexpr const char* kKeyboardMiddleCKey = "keyboard.middleCOctave";
 constexpr const char* kMidiBendRangeKey = "midi.pitchBendRange";
 	constexpr const char* kMidiBendEnabledKey = "midi.pitchBendEnabled";
 
@@ -322,6 +328,84 @@ void SettingsStore::setNsfDurationSeconds (int seconds)
 
 	file->setValue (kNsfDurationKey, clamped);
 	lastErrorMessage = file->saveIfNeeded() ? juce::String() : writeErrorFor (settingsFile());
+}
+
+int SettingsStore::getKeyboardMiddleCOctave (void) const
+{
+	const int stored = file != nullptr ? file->getIntValue (kKeyboardMiddleCKey, toybox::settings::keyboard::defaultMiddleCOctave)
+									   : toybox::settings::keyboard::defaultMiddleCOctave;
+
+	return juce::jlimit (toybox::settings::keyboard::minMiddleCOctave,
+						 toybox::settings::keyboard::maxMiddleCOctave, stored);
+}
+
+void SettingsStore::setKeyboardMiddleCOctave (int octave)
+{
+	if (file != nullptr)
+	{
+		file->setValue (kKeyboardMiddleCKey,
+						juce::jlimit (toybox::settings::keyboard::minMiddleCOctave,
+									  toybox::settings::keyboard::maxMiddleCOctave, octave));
+	}
+}
+
+int SettingsStore::getKeyboardNoteHoldMs (void) const
+{
+	const int stored = file != nullptr ? file->getIntValue (kKeyboardNoteHoldKey, toybox::settings::keyboard::defaultNoteHoldMs)
+									   : toybox::settings::keyboard::defaultNoteHoldMs;
+
+	return juce::jlimit (toybox::settings::keyboard::minNoteHoldMs, toybox::settings::keyboard::maxNoteHoldMs, stored);
+}
+
+void SettingsStore::setKeyboardNoteHoldMs (int milliseconds)
+{
+	if (file != nullptr)
+	{
+		file->setValue (kKeyboardNoteHoldKey,
+						juce::jlimit (toybox::settings::keyboard::minNoteHoldMs,
+									  toybox::settings::keyboard::maxNoteHoldMs, milliseconds));
+	}
+}
+
+int SettingsStore::getKeyboardStartNote (void) const
+{
+	const int stored = file != nullptr ? file->getIntValue (kKeyboardStartNoteKey, -1) : -1;
+
+	return stored >= 0 && stored <= 108 ? stored : -1;
+}
+
+void SettingsStore::setKeyboardStartNote (int note)
+{
+	if (file != nullptr)
+	{
+		file->setValue (kKeyboardStartNoteKey, note);
+	}
+}
+
+bool SettingsStore::getKeyboardRangeHints (void) const
+{
+	return file != nullptr ? file->getBoolValue (kKeyboardRangeHintsKey, true) : true;
+}
+
+void SettingsStore::setKeyboardRangeHints (bool shouldShow)
+{
+	if (file != nullptr)
+	{
+		file->setValue (kKeyboardRangeHintsKey, shouldShow);
+	}
+}
+
+int SettingsStore::getContentViewIndex (void) const
+{
+	return file != nullptr ? juce::jlimit (0, 2, file->getIntValue (kContentViewKey, 0)) : 0;
+}
+
+void SettingsStore::setContentViewIndex (int index)
+{
+	if (file != nullptr)
+	{
+		file->setValue (kContentViewKey, juce::jlimit (0, 2, index));
+	}
 }
 
 int SettingsStore::getNsfOutputGainDb (void) const

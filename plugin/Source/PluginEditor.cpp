@@ -113,16 +113,30 @@ ToyboxAudioProcessorEditor::ToyboxAudioProcessorEditor (ToyboxAudioProcessor& p)
 	// ui/VisualiserView.h the visualisation one, and everything below the top row belongs to
 	// whichever of them is on screen. The View menu is built from the stack, so a new page shows
 	// up there without a line of menu code.
-	viewStack.addView (new PlayView (engine, processor.wrapperType != juce::AudioProcessor::wrapperType_Standalone));
-	viewStack.addView (new VisualiserView());
+	auto* playPage = new PlayView (engine, processor.wrapperType != juce::AudioProcessor::wrapperType_Standalone);
+	playView = playPage;
+	viewStack.addView (playPage);
+
+	// Whatever the user was looking at last time; the design's default is the mixer.
+	playPage->setContentView ((ContentView) settings::SettingsStore::getInstance ().getContentViewIndex ());
 	addAndMakeVisible (viewStack);
 
-	menu.viewNames = viewStack.getViewNames();
-	menu.viewIds = viewStack.getViewIds();
-	// The menu asks the stack which page is on screen every time it builds the View menu, so the
-	// tick follows any switch - this menu, Ctrl+1..9, or a page changed from code.
-	menu.getCurrentView = [this] { return viewStack.getCurrentViewIndex(); };
-	menu.onSelectView = [this] (int index) { viewStack.setCurrentView (index); };
+	// The View menu lists what the content area can show, not pages of the window: there is one
+	// page, and switching replaces the rectangle above the transport.
+	menu.viewNames = juce::StringArray { i18n::tr ("view.mixer"), i18n::tr ("view.keyboard"),
+										 i18n::tr ("view.scope") };
+	menu.viewIds = juce::StringArray { "mixer", "keyboard", "scope" };
+	// The tick asks the page what it is showing each time the menu is built, so it follows any
+	// switch - this menu, Ctrl+1..3, or a change made from code.
+	menu.getCurrentView = [this] { return playView != nullptr ? (int) playView->getContentView () : 0; };
+	menu.onSelectView = [this] (int index)
+	{
+		if (playView != nullptr)
+		{
+			playView->setContentView ((ContentView) index);
+			settings::SettingsStore::getInstance ().setContentViewIndex (index);
+		}
+	};
 
 	// The pages are told what the engine holds right now: an editor can be created while a song is
 	// already loaded (a host reopening its window), and the chip card belongs to that song.
@@ -337,13 +351,16 @@ bool ToyboxAudioProcessorEditor::keyPressed (const juce::KeyPress& key)
 		return true;
 	}
 
-	// Ctrl+1..9 picks a page, in the order the View menu lists them. The key comes from pageKey(),
-	// the same call the menu describes it with.
+	// Ctrl+1..3 picks a content view, in the order the View menu lists them. The key comes from
+	// pageKey(), the same call the menu describes it with - and it has to do what the menu does,
+	// or the accelerator works and the item it stands for does not.
 	if (const int wanted = ui::EditorCommands::pageForKey (key); wanted >= 0)
 	{
-		if (wanted < viewStack.getNumViews() && wanted != viewStack.getCurrentViewIndex())
+		if (playView != nullptr && wanted <= (int) ContentView::oscilloscope
+			&& wanted != (int) playView->getContentView ())
 		{
-			viewStack.setCurrentView (wanted);
+			playView->setContentView ((ContentView) wanted);
+			settings::SettingsStore::getInstance ().setContentViewIndex (wanted);
 			return true;
 		}
 
@@ -618,6 +635,20 @@ void ToyboxAudioProcessorEditor::restoreLastSongIfNeeded (void)
 
 void ToyboxAudioProcessorEditor::timerCallback (void)
 {
+	// The visualisation page has no transport of its own - it shows what the chips are doing to a
+	// song that is already open - so the open button has nothing to act on there. Synchronised
+	// here rather than in the menu callback because the page can also change by shortcut.
+	{
+		const auto ids = viewStack.getViewIds ();
+		const int index = viewStack.getCurrentViewIndex ();
+		const bool onVisualiserPage = index >= 0 && index < ids.size () && ids[index] == "visualiser";
+
+		if (openButton.isVisible () == onVisualiserPage)
+		{
+			openButton.setVisible (! onVisualiserPage);
+		}
+	}
+
 	// A song handed over by a second launch of the application (or, on macOS, by the Finder opening
 	// a document in the running window). It goes through loadFile() like a drop does, so the two
 	// paths cannot drift apart; the processor held it because the message can arrive before this

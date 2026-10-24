@@ -113,6 +113,10 @@ public:
 	void setSourceGain (float linear);
 	void setChipMuted (size_t chipIndex, bool shouldBeMuted);
 
+	/** Whether this backend can silence a chip on its own - the chips card is only shown when it
+		can, because a checkbox that changes nothing is worse than no checkbox. */
+	bool canMuteChips (void) const { return chipsMuteable.load(); }
+
 	bool isLoaded (void) const { return loaded; }
 	bool isPlaying (void) const { return playing.load(); }
 	/** Whether the last local transport action was pause rather than stop or load. The button
@@ -142,6 +146,20 @@ public:
 		the same lock that writes them, and a public copy would invite reading them without it.) */
 	playback::DawSync& getDawSync (void) { return dawSync; }
 	float getMasterVolume (void) const { return masterVolume.load(); }
+
+	/** Copies the most recent output for display - the waveform of what is being heard - with the
+		newest sample last. The audio thread writes it without a lock and this reads it the same way:
+		a sample torn in half is one wrong pixel, never a wrong sound. Returns the count written. */
+	int readScope (float* dest, int maxSamples) const;
+
+	/** Copies the last state the audio thread captured. Never blocks the audio thread: it tries a
+		lock, and answering "nothing right now" is better than making a block of audio wait. */
+	bool captureChipState (playback::ChipStateSnapshot& snapshot) const;
+
+	/** Tells the engine whether anyone is looking. While true, each rendered block ends with a
+		capture; while false it costs one atomic read per block. A page that is not on screen must
+		turn this off, or the capture runs for nobody. */
+	void setStateCaptureWanted (bool wanted);
 	float getMixerMasterGain (void) const { return mixerMasterGain.load(); }
 	const juce::File& getFile (void) const { return currentFile; }
 	juce::String getTag (const juce::String& tagName) const;
@@ -497,7 +515,24 @@ private:
 	// volume last, so neither control is driven by the other.
 	std::atomic<float> masterVolume { 1.0f };		// output volume (transport card slider)
 	std::atomic<float> mixerMasterGain { 1.0f };
-	std::atomic<float> sourceGain { 2.5119f };	// +8 dB, the NES default	// mixer master (master strip fader)
+	std::atomic<float> sourceGain { 2.5119f };	// +8 dB, the NES default
+
+	// The scope: a ring of the final mix. Twelve thousand samples is a quarter second at 48 kHz -
+	// long enough to see a note's shape, short enough to stay a snapshot.
+	static constexpr int kScopeSamples = 12000;
+	std::array<std::atomic<float>, (std::size_t) kScopeSamples> scopeSamples {};
+	std::atomic<std::uint32_t> scopeWrite { 0 };
+
+	// The snapshot handover: written by the audio thread at the end of a block, read by the
+	// message thread. Its own lock, never the engine's - see setStateCaptureWanted.
+	mutable std::mutex stateMutex;
+	playback::ChipStateSnapshot stateSnapshot;
+	std::atomic<bool> stateCaptureWanted { false };
+
+
+
+
+	void captureScope (const float* left, int numSamples);	// mixer master (master strip fader)
 
 	// song facts for the lock-free getters - written on the message thread while the lock is
 	// held (load / loop / fade / sample-rate changes), read without the lock
@@ -529,6 +564,7 @@ private:
 	// Output routing: the master bus target/mute and the connectivity the host showed us in the
 	// last block (bit i = bus i was connected; bus 0 counts as connected until told otherwise).
 	std::atomic<playback::OutputTarget> masterOutput { 0 };		// Out 1/2 by default
+	std::atomic<bool> chipsMuteable { false };
 	std::atomic<bool> masterMuted { false };
 	std::atomic<std::uint64_t> connectedBuses { 1 };
 	static_assert (playback::kOutputBusCount <= 64,

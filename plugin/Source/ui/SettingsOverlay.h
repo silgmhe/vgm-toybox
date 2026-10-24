@@ -257,6 +257,40 @@ private:
 	juce::Label hint;
 };
 
+/**
+	What the keyboard draws.
+
+	The octave count follows the window width and is not a setting - a keyboard that does not fit
+	is not a preference. What is a preference is the arrow: some players read it as information
+	("that note was higher than the keys"), others as clutter next to a keyboard they are not
+	reading that closely.
+*/
+class KeyboardSettingsPage : public View
+{
+public:
+	KeyboardSettingsPage (void);
+
+	juce::String getViewId (void) const override { return "settings-keyboard"; }
+	juce::String getViewName (void) const override { return i18n::tr ("settings.keyboard"); }
+
+	void refresh (void) override;
+	void paint (juce::Graphics& g) override;
+	void resized (void) override;
+	void lookAndFeelChanged (void) override;
+	void refreshLanguage (void) override;
+
+private:
+	juce::Label caption;
+	juce::Label startCaption;
+	juce::ComboBox startNote;
+	juce::ToggleButton rangeHints;
+	juce::Label holdCaption;
+	juce::Slider holdSlider;
+	juce::Label middleCaption;
+	juce::ComboBox middleC;
+	juce::Label hint;
+};
+
 class AudioSettingsPage : public View,
 						  private juce::Timer
 {
@@ -411,6 +445,7 @@ private:
 	LanguageSettingsPage* languagePage = nullptr;		// owned by `pages`
 	NesSettingsPage* nesPage = nullptr;				// owned by `pages`
 	MidiSettingsPage* midiPage = nullptr;				// owned by `pages`
+	KeyboardSettingsPage* keyboardPage = nullptr;	// owned by `pages`
 	AudioSettingsPage* audioPage = nullptr;				// owned by `pages`; null in a plugin build
 
 	juce::TextButton closeButton;

@@ -158,8 +158,28 @@ public:
 
 	/** Output gain for the NES, in decibels. The mix table leaves a lot of headroom, so a file
 		played unamplified sits well below a VGM of the same music. Applied to the NES only. */
+	/** Which panel the playback page was showing: 0 mixer, 1 chip state, 2 oscilloscope. */
+	int getContentViewIndex (void) const;
+	void setContentViewIndex (int index);
+
 	int getNsfOutputGainDb (void) const;
 	void setNsfOutputGainDb (int decibels);
+
+	/** Lowest key the keyboard starts at: -1 to follow the song, otherwise a MIDI note. */
+	int getKeyboardStartNote (void) const;
+	void setKeyboardStartNote (int note);
+
+	/** Whether the keyboard draws an arrow when a note falls outside the octaves on screen. */
+	bool getKeyboardRangeHints (void) const;
+	void setKeyboardRangeHints (bool shouldShow);
+
+	/** Which octave number MIDI 60 carries: 3 means the keyboard calls middle C a C3. */
+	int getKeyboardMiddleCOctave (void) const;
+	void setKeyboardMiddleCOctave (int octave);
+
+	/** How long a key stays lit after its note stops, in milliseconds. */
+	int getKeyboardNoteHoldMs (void) const;
+	void setKeyboardNoteHoldMs (int milliseconds);
 
 	/** Stores the range (clamped to what the engine can encode) and tells every listener. */
 	void setMidiPitchBendRange (int semitones);

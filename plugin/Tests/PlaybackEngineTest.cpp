@@ -18,7 +18,8 @@
 	  Build: cmake --build <build dir> --target vgm_mixer_test
 	  */
 
-	  #include <algorithm>
+	  #include "playback/ChipState.h"
+#include <algorithm>
 	  #include <cmath>
 	  #include <cstdint>
 	  #include <cstdio>
@@ -299,6 +300,7 @@ namespace
 		std::vector<std::int64_t> blockStarts;		// where each event's block began, in samples
 		std::int64_t blockStartSample = 0;			// set by the render loop below
 		double rms = 0.0;							// the audio of the same render (both channels)
+
 	};
 
 	/** Renders `seconds` with the MIDI sink attached and measures the audio in the same pass.
@@ -1630,6 +1632,113 @@ int main (int argc, char* argv[])
 	std::printf ("Peak      : %.4f\n", plain.peak);
 	std::printf ("RMS       : %.4f\n", plain.rms);
 	std::printf ("WAV       : %s\n", outputFile.getFullPathName().toRawUTF8());
+	std::printf ("[4.5] the chip snapshot does not starve the audio thread\n");
+	{
+		const int before = engine.getStarvedBlocks ();
+		engine.setStateCaptureWanted (true);
+
+		for (int i = 0; i < 40; ++i)
+		{
+			renderSeconds (engine, 0.01, sampleRate, blockSize);
+
+			toybox::playback::ChipStateSnapshot snapshot;
+			engine.captureChipState (snapshot);
+		}
+
+		engine.setStateCaptureWanted (false);
+
+		const int starved = engine.getStarvedBlocks () - before;
+		std::printf ("    starved blocks while capturing: %d\n", starved);
+		check (starved == 0, "requesting a snapshot never starves a block");
+	}
+
+	std::printf ("[4.4] the scope tap\n");
+	{
+		// The ring already holds what the previous sections rendered, so this reads the very
+		// same signal the host receives without moving the transport to get it.
+		renderSeconds (engine, 0.05, sampleRate, blockSize);
+
+		std::vector<float> tapped (512, 0.0f);
+		const int got = engine.readScope (tapped.data (), (int) tapped.size ());
+
+		float peak = 0.0f;
+		for (float value : tapped) { peak = juce::jmax (peak, std::fabs (value)); }
+
+		double mean = 0.0;
+		float lo = 0.0f, hi = 0.0f;
+		for (float value : tapped) { mean += value; lo = juce::jmin (lo, value); hi = juce::jmax (hi, value); }
+		mean /= (double) juce::jmax (1, (int) tapped.size ());
+
+		std::printf ("    scope returned %d samples, peak %.4f mean %+.4f range [%+.3f %+.3f]\n",
+					 got, (double) peak, mean, (double) lo, (double) hi);
+		check (got == (int) tapped.size (), "the scope returns the window it was asked for");
+
+
+	}
+
+	std::printf ("[4.7] the chips card silences what it names\n");
+	{
+		const auto chips = engine.getChips ();
+
+		if (chips.empty ())
+		{
+			std::printf ("      this file has no chips card, nothing to mute\n");
+		}
+		else
+		{
+			auto measure = [&] (void) -> RenderedBuffer
+			{
+				engine.setPositionSeconds (0.0);
+				engine.play ();
+				return renderSeconds (engine, 0.5, sampleRate, blockSize);
+			};
+
+			const auto plain = measure ();
+
+			if (plain.rms <= 0.01)
+			{
+				std::printf ("      (the opening half second is quiet here, nothing to compare)\n");
+			}
+			else
+			{
+				// Every chip at once: the mix goes quiet. True wherever the card exists at all,
+				// which is the promise the card makes simply by being drawn.
+				for (size_t c = 0; c < chips.size (); ++c) { engine.setChipMuted (c, true); }
+				const auto allMuted = measure ();
+				for (size_t c = 0; c < chips.size (); ++c) { engine.setChipMuted (c, false); }
+
+				std::printf ("      all muted     rms %.4f -> %.4f\n", plain.rms, allMuted.rms);
+				check (allMuted.rms < plain.rms * 0.1, "muting every chip silences the mix");
+
+				// One chip at a time. A backend that only honoured the all-muted case would pass
+				// the check above and still leave every individual checkbox decorative, and a chip
+				// that happens to be silent in this window is not evidence of anything - so the
+				// requirement is one effective chip, not all of them.
+				int effective = 0;
+
+				for (size_t c = 0; c < chips.size (); ++c)
+				{
+					engine.setChipMuted (c, true);
+					const auto oneMuted = measure ();
+					engine.setChipMuted (c, false);
+
+					const bool changed = oneMuted.rms < plain.rms * 0.75;
+
+					if (changed)
+					{
+						++effective;
+					}
+
+					std::printf ("      %-12s rms %.4f -> %.4f%s\n", chips[c].name.toRawUTF8 (),
+								 plain.rms, oneMuted.rms,
+								 changed ? "" : "   (not sounding in this window)");
+				}
+
+				check (effective > 0, "at least one chip changes the mix when muted");
+			}
+		}
+	}
+
 	std::printf ("Result    : %s\n", (toybox::test::failures() == 0) ? "all checks passed" : "FAILURES");
 
 	if (toybox::test::failures() > 0)
