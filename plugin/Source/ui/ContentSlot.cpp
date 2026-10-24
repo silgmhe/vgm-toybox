@@ -89,18 +89,6 @@ public:
 	{
 		snapshot = snapshotToUse;
 
-		// Peak hold: the level a meter is asked for is the level you just heard, and a bar that
-		// falls as fast as the signal rises is unreadable on a fast passage.
-		if (peakHold.size () != snapshot.channels.size ())
-		{
-			peakHold.assign (snapshot.channels.size (), 0.0f);
-		}
-
-		for (std::size_t i = 0; i < peakHold.size () && i < snapshot.channels.size (); ++i)
-		{
-			peakHold[i] = juce::jmax (snapshot.channels[i].volume, peakHold[i] * 0.94f);
-		}
-
 		for (const auto& channel : snapshot.channels)
 		{
 			if (channel.note < 0)
@@ -455,7 +443,7 @@ private:
 
 		paintWave (g, row.wave, channel);
 		paintKeyboard (g, row.keys, channel.note);
-		paintMeter (g, row.meter, channel, peakHold[(std::size_t) row.channel]);
+		paintMeter (g, row.meter, channel);
 	}
 
 	/** Mute and solo, drawn with the mixer's own face and colours: mute fills red, solo amber,
@@ -983,8 +971,16 @@ private:
 		repaint ();
 	}
 
-	void paintMeter (juce::Graphics& g, juce::Rectangle<int> area, const toybox::playback::ChannelState& channel,
-					 float peak)
+	/** The note's own level - velocity, not loudness.
+
+		This is a different quantity from the mixer's meters, which show what is coming out of the
+		speakers and turn amber and red as it approaches full scale. A channel's velocity says how
+		hard the note is played, and a pulse played at full volume is the normal case rather than a
+		warning - so it gets the accent colour, the same one the lit key uses, and no threshold.
+		Painting it red at the top of the scale made every square-wave song look like it was about
+		to clip.
+	*/
+	void paintMeter (juce::Graphics& g, juce::Rectangle<int> area, const toybox::playback::ChannelState& channel)
 	{
 		// Two pixels, not eight: the meter's rect is twenty tall, and reducing it by eight on each
 		// side left a zero-height strip that drew nothing at all.
@@ -997,23 +993,13 @@ private:
 
 		if (level > 0.001f)
 		{
-			// The palette's own meter colours: green for a level, red at the top of the scale. The
-			// red used to be a literal here, which is one of the ways a theme change went unnoticed.
-			g.setColour (level > 0.9f ? theme::meterHigh () : theme::meterLow ());
+			g.setColour (theme::accent ().withAlpha (0.9f));
 			g.fillRoundedRectangle (track.toFloat ().withWidth ((float) track.getWidth () * level), 2.0f);
-		}
-
-		if (peak > 0.01f)
-		{
-			const float x = (float) track.getX () + (float) track.getWidth () * juce::jlimit (0.0f, 1.0f, peak);
-			g.setColour (theme::primaryText ().withAlpha (0.5f));
-			g.fillRect (juce::Rectangle<float> (x - 0.5f, (float) track.getY (), 1.0f, (float) track.getHeight ()));
 		}
 	}
 
 	toybox::PlaybackEngine& engine;
 	toybox::playback::ChipStateSnapshot snapshot;
-	std::vector<float> peakHold;
 	std::vector<Row> rows;
 
 	int scrollOffset = 0;
