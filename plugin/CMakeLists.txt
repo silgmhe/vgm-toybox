@@ -227,6 +227,11 @@ target_sources(VGMToybox PRIVATE
 	Source/backends/libvgm/LibvgmSongInstance.cpp
 	Source/backends/libvgm/LibvgmTrackPlayer.cpp
 	Source/backends/libvgm/LibvgmVgz.cpp
+	Source/backends/nsf/NsfBackend.cpp
+	Source/backends/nsf/NsfPlayer.cpp
+	Source/backends/nsf/NsfBus.cpp
+	Source/backends/nsf/NsfCpuLoggerStub.cpp
+	Source/formats/nsf/NsfFile.cpp
 	Source/i18n/LanguageManager.cpp
 	Source/i18n/LanguagePack.cpp
 	Source/settings/SettingsStore.cpp
@@ -322,6 +327,13 @@ target_compile_definitions(VGMToybox PUBLIC
 	TOYBOX_GIT_COMMIT="${TOYBOX_GIT_COMMIT}"
 )
 
+# --- NSFPlay's device cores ---
+# The library is defined where its sources live (libs/nsfplay), so another checkout can build it
+# without this file knowing which translation units it needs.
+add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/../libs/nsfplay
+				 /nsfplay
+				 EXCLUDE_FROM_ALL)
+
 target_link_libraries(VGMToybox PRIVATE
 	# libvgm (built by the parent project, see the root CMakeLists.txt)
 	${LIBVGM_TARGETS}
@@ -376,6 +388,11 @@ add_executable(vgm_mixer_test EXCLUDE_FROM_ALL
 	Source/chips/OpmDecoder.cpp
 	Source/chips/OpnDecoder.cpp
 	Source/backends/BuiltInBackends.cpp
+	Source/backends/nsf/NsfBackend.cpp
+	Source/backends/nsf/NsfPlayer.cpp
+	Source/backends/nsf/NsfBus.cpp
+	Source/backends/nsf/NsfCpuLoggerStub.cpp
+	Source/formats/nsf/NsfFile.cpp
 	Source/backends/libvgm/LibvgmBackend.cpp
 	Source/backends/libvgm/MidiSequenceBuilder.cpp
 	Source/backends/libvgm/VgmCommandReader.cpp
@@ -388,6 +405,30 @@ add_executable(vgm_mixer_test EXCLUDE_FROM_ALL
 # Register writes in, notes out. Links Source/chips and nothing else - no libvgm, no JUCE.
 #   cmake --build <build dir> --target vgm_chip_test
 #   <build dir>/plugin/vgm_chip_test
+# --- console test for the NSF reader and address space (not built by default) ---
+#   cmake --build <build dir> --target vgm_nsf_test
+# --- console probe for the NSF player (not built by default) ---
+add_executable(vgm_nsf_probe EXCLUDE_FROM_ALL
+	Tests/NsfProbe.cpp
+	Source/formats/nsf/NsfFile.cpp
+	Source/backends/nsf/NsfBus.cpp
+	Source/backends/nsf/NsfPlayer.cpp
+	Source/backends/nsf/NsfCpuLoggerStub.cpp
+)
+target_link_libraries(vgm_nsf_probe PRIVATE nsfplay_core)
+target_include_directories(vgm_nsf_probe PRIVATE Source)
+target_compile_features(vgm_nsf_probe PRIVATE cxx_std_17)
+
+add_executable(vgm_nsf_test EXCLUDE_FROM_ALL
+	Tests/NsfFormatTest.cpp
+	Source/formats/nsf/NsfFile.cpp
+	Source/backends/nsf/NsfBus.cpp
+	Source/backends/nsf/NsfCpuLoggerStub.cpp
+)
+target_link_libraries(vgm_nsf_test PRIVATE nsfplay_core juce::juce_core juce::juce_recommended_config_flags)
+target_include_directories(vgm_nsf_test PRIVATE Source)
+target_compile_features(vgm_nsf_test PRIVATE cxx_std_17)
+
 add_executable(vgm_chip_test EXCLUDE_FROM_ALL
 	Source/backends/libvgm/VgmCommandReader.cpp
 	Source/formats/vgm/VgmSongLoader.cpp
@@ -576,6 +617,7 @@ if(EXISTS "${TOYBOX_TEST_SONG}")
 endif()
 
 add_test(NAME chip COMMAND vgm_chip_test)
+add_test(NAME nsf  COMMAND vgm_nsf_test)
 add_test(NAME core COMMAND vgm_core_test)
 add_test(NAME ui   COMMAND vgm_ui_test)
 add_test(NAME opn  COMMAND vgm_opn_test)
@@ -778,3 +820,8 @@ foreach(_script_file IN LISTS _toybox_scripts)
 			WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/..")
 	endif()
 endforeach()
+
+# The NSF backend compiles against the vendored cores; stated separately so every target that
+# includes NsfBackend.cpp gets the include path without repeating it in each block.
+target_link_libraries(vgm_mixer_test PRIVATE nsfplay_core)
+target_link_libraries(VGMToybox PRIVATE nsfplay_core)

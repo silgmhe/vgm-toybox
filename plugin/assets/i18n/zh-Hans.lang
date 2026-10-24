@@ -165,6 +165,7 @@ language: 简体中文
 
 "tag.artist" = "艺术家";
 "tag.date" = "日期";
+	"tag.copyright" = "版权";
 "tag.game" = "游戏";
 "tag.system" = "系统";
 
@@ -204,3 +205,10 @@ language: 简体中文
 "visualiser.item.waveform" = "你正在听到的声音的波形";
 "visualiser.subtitle" = "尚未构建 - 这些内容将来会出现在此页：";
 "visualiser.title" = "可视化";
+"settings.nes" = "NSF";
+"settings.nes.duration" = "歌曲长度";
+"settings.nes.seconds" = "秒";
+	"settings.nes.outputGain" = "输出增益";
+	"settings.nes.outputGainHint" = "NES 的混音表留有大量余量，同一首曲子会比 VGM 明显偏小。默认 +8 dB；超过 +10 dB 后，较响的曲子会触及满幅。";
+"settings.nes.durationHint" = "NSF 头部没有长度，驱动也不会结束——它会一直循环直到被停下。时间轴、进度条与歌曲结束都由这里设定的长度决定。";
+"settings.nes.explanation" = "NSF 头部没有长度，驱动也不会结束——它会一直循环直到被停下。时间轴、进度条与歌曲结束都由这里设定的长度决定。";

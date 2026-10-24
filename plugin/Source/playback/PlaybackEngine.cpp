@@ -1,3 +1,4 @@
+#include <cstdio>
 #include "PlaybackEngine.h"
 
 #include <set>
@@ -17,6 +18,7 @@ namespace toybox
 
 PlaybackEngine::PlaybackEngine (void)
 {
+	seekThread = std::thread ([this] { runSeekWorker (); });
 }
 
 PlaybackEngine::~PlaybackEngine (void)
@@ -27,6 +29,16 @@ PlaybackEngine::~PlaybackEngine (void)
 	// The timeout keeps a pathological build from hanging the host on teardown.
 	alive->store (false);
 	loadPool.removeAllJobs (true, 3000);
+
+	// The worker may be inside a replay holding the lock, so it is stopped and joined before the
+	// lock is taken below.
+	seekThreadShouldStop.store (true);
+	seekCv.notify_all ();
+
+	if (seekThread.joinable ())
+	{
+		seekThread.join ();
+	}
 
 	const juce::ScopedLock sl (lock);
 	resetState();
@@ -465,6 +477,114 @@ void PlaybackEngine::setPositionSeconds (double seconds)
 	setPositionSecondsLocked (seconds);
 }
 
+void PlaybackEngine::requestPositionSeconds (double seconds)
+{
+	const double duration = getPlayLengthSeconds ();
+	const double target = duration > 0.0 ? juce::jlimit (0.0, duration, seconds)
+										 : juce::jmax (0.0, seconds);
+
+	// One player per track means one replay per track, and an NSF cannot be seeked into - the
+	// driver has to run from its beginning to the target. On a thirteen-track file that is seconds
+	// of work, so it happens on the worker: the request is published, the transport draws it, and
+	// the audio thread renders silence until the players have caught up (it cannot take the lock
+	// while the worker holds it, which is the same behaviour as before - minus the frozen window).
+	if (playerCount.load () > 1)
+	{
+		positionSeconds.store (target);
+		finished.store (false);
+		midiResetGeneration.fetch_add (1);
+
+		seekTargetSeconds.store (target);
+		seekRequested.store (true);
+		seekCv.notify_one ();
+		return;
+	}
+
+	const juce::ScopedLock sl (lock);
+	setPositionSecondsLocked (target);
+}
+
+void PlaybackEngine::seekAllPlayersTo (double target)
+{
+	// Every track seeks to the very same sample, which is what keeps them in sync.
+	//
+	// A backend that isolates by instance - one player per track, each silenced down to its own
+	// channel - makes this the most expensive operation in the program: thirteen instances each
+	// replay the song from the beginning. They are independent, so they replay at the same time
+	// instead of one after another, which turns thirteen sequential replays into roughly one,
+	// spread across the cores. The lock is held throughout, so the audio thread renders silence
+	// while this runs rather than reading half-seeked players.
+	if (trackPlayers.size() > 1)
+	{
+		const size_t workers = (size_t) juce::jlimit (1, (int) trackPlayers.size (),
+													  juce::SystemStats::getNumCpus ());
+
+		std::atomic<size_t> next { 0 };
+		std::vector<std::thread> threads;
+		threads.reserve (workers);
+
+		for (size_t t = 0; t < workers; ++t)
+		{
+			threads.emplace_back ([this, &next, target]
+			{
+				for (;;)
+				{
+					const size_t index = next.fetch_add (1);
+
+					if (index >= trackPlayers.size ())
+					{
+						return;
+					}
+
+					trackPlayers[index]->seekSeconds (target);
+				}
+			});
+		}
+
+		for (auto& thread : threads)
+		{
+			thread.join ();
+		}
+	}
+	else
+	{
+		for (auto& player : trackPlayers)
+		{
+			player->seekSeconds (target);
+		}
+	}
+}
+
+void PlaybackEngine::runSeekWorker (void)
+{
+	for (;;)
+	{
+		double target = 0.0;
+
+		{
+			std::unique_lock<std::mutex> ul (seekMutex);
+			seekCv.wait (ul, [this] { return seekThreadShouldStop.load () || seekRequested.load (); });
+
+			if (seekThreadShouldStop.load ())
+			{
+				return;
+			}
+
+			// Cleared before the replay, so a request arriving during it is not lost - it simply
+			// becomes the next round rather than being swallowed by this one.
+			seekRequested.store (false);
+			target = seekTargetSeconds.load ();
+		}
+
+		{
+			const juce::ScopedLock sl (lock);
+			seekAllPlayersTo (target);
+			positionSeconds.store (target);
+			finished.store (false);
+		}
+	}
+}
+
 void PlaybackEngine::followDawTransport (void)
 {
 	// The sync switch and the loaded flag are atomics, so a block that does not follow costs
@@ -539,11 +659,7 @@ void PlaybackEngine::setPositionSecondsLocked (double seconds)
 	const double target = duration > 0.0 ? juce::jlimit (0.0, duration, seconds)
 										 : juce::jmax (0.0, seconds);
 
-	// every track seeks to the very same sample, which is what keeps them in sync
-	for (auto& player : trackPlayers)
-	{
-		player->seekSeconds (target);
-	}
+seekAllPlayersTo (target);
 
 	positionSeconds = target;
 	finished = false;
@@ -577,6 +693,18 @@ void PlaybackEngine::setMixerMasterGain (float linear)
 {
 	// the mixer master is a mix-time gain like the track gains: one atomic, read by render()
 	mixerMasterGain.store (juce::jmax (0.0f, linear));
+}
+
+void PlaybackEngine::setSourceGain (float linear)
+{
+	sourceGain.store (linear > 0.0f ? linear : 0.0f);
+
+	const juce::ScopedLock sl (lock);
+
+	for (auto& player : trackPlayers)
+	{
+		if (player != nullptr) { player->setOutputGain (sourceGain.load ()); }
+	}
 }
 
 void PlaybackEngine::setChipMuted (size_t chipIndex, bool shouldBeMuted)
@@ -685,12 +813,17 @@ float PlaybackEngine::getOutputPeak (int channel) const
 double PlaybackEngine::getTrackPositionSeconds (size_t trackIndex) const
 {
 	const juce::ScopedLock sl (lock);
-	if (trackIndex >= trackPlayers.size())
+	// One player serves every track in the one-pass mode, so the position of any track is the
+	// position of that player - asking for the nth player there would answer -1 for all but the
+	// first.
+	const size_t index = inPlaceMode ? 0 : trackIndex;
+
+	if (index >= trackPlayers.size())
 	{
 		return -1.0;
 	}
 
-	return trackPlayers[trackIndex]->positionSeconds();
+	return trackPlayers[index]->positionSeconds();
 }
 
 //==============================================================================
@@ -904,6 +1037,15 @@ PlaybackEngine::LoadedSong PlaybackEngine::buildSong (const BuildConfig& config,
 	const bool perTrack = config.mixerEnabled
 						   && caps.isolation == playback::IsolationMode::multiInstance
 						   && ! pending.layout.empty();
+
+	// One player for every track, because this backend produces all of them from a single pass.
+	// The difference is eight emulations of a 6502 against one.
+	const bool inPlace = config.mixerEnabled
+						 && caps.isolation == playback::IsolationMode::inPlaceChannelMix
+						 && ! pending.layout.empty();
+
+	pending.inPlace = inPlace;
+
 	const size_t playersWanted = perTrack ? pending.layout.size() : 1;
 
 	for (size_t i = 0; i < playersWanted; ++i)
@@ -936,6 +1078,12 @@ void PlaybackEngine::installSong (LoadedSong&& built)
 	// everything else that goes out of scope - bounded work, unlike building them.
 	song = std::move (built.song);
 	trackPlayers = std::move (built.players);
+	playerCount.store ((int) trackPlayers.size ());
+
+	for (auto& player : trackPlayers)
+	{
+		if (player != nullptr) { player->setOutputGain (sourceGain.load ()); }
+	}
 	trackLayout = std::move (built.layout);
 	tracks = std::move (built.tracks);
 	soloCount = built.soloCount;
@@ -951,6 +1099,34 @@ void PlaybackEngine::installSong (LoadedSong&& built)
 	midiLastSongTime = -1.0;
 
 	cachedTimeline = built.timeline;
+
+	// Buffer space for the one-pass path: one interleaved stereo pair per track, plus the
+	// de-interleaved copies the mixer reads. Allocated here because this runs on the message
+	// thread; render() must not allocate.
+	inPlaceMode = built.inPlace && ! trackPlayers.empty ();
+
+	if (inPlaceMode)
+	{
+		const size_t count = tracks.size ();
+		const size_t stride = (size_t) juce::jmax (1, maxBlockSize);
+
+		inPlaceStereo.assign (count * stride * 2, 0.0f);
+		inPlaceLeft.assign (count * stride, 0.0f);
+		inPlaceRight.assign (count * stride, 0.0f);
+		inPlaceBuffers.assign (count, nullptr);
+
+		for (size_t i = 0; i < count; ++i)
+		{
+			inPlaceBuffers[i] = inPlaceStereo.data () + i * stride * 2;
+		}
+	}
+	else
+	{
+		inPlaceStereo.clear ();
+		inPlaceLeft.clear ();
+		inPlaceRight.clear ();
+		inPlaceBuffers.clear ();
+	}
 
 	positionSeconds = 0.0;
 	finished = false;
@@ -1598,14 +1774,63 @@ void PlaybackEngine::renderPlainPlayer (int usable)
 void PlaybackEngine::mixTracks (const playback::OutputBusBuffers* buses, int busCount, int usable)
 {
 	const bool anySolo = (soloCount.load() > 0);
-	const size_t numTracks = juce::jmin (trackPlayers.size(), tracks.size());
+
+	// One pass for every track when the backend can do it. The result arrives interleaved, one
+	// stereo pair per track; it is split here so the mixing below reads a track the same way
+	// whichever path produced it.
+	int inPlaceRendered = 0;
+
+	if (inPlaceMode && ! trackPlayers.empty () && ! inPlaceBuffers.empty ())
+	{
+		inPlaceRendered = trackPlayers.front ()->renderTracks (inPlaceBuffers.data (),
+															  (int) inPlaceBuffers.size (), usable);
+
+		if (inPlaceRendered > 0)
+		{
+			const size_t stride = (size_t) juce::jmax (1, maxBlockSize);
+
+			for (size_t t = 0; t < inPlaceBuffers.size (); ++t)
+			{
+				const float* src = inPlaceBuffers[t];
+				float* destL = inPlaceLeft.data () + t * stride;
+				float* destR = inPlaceRight.data () + t * stride;
+
+				for (int i = 0; i < inPlaceRendered; ++i)
+				{
+					destL[i] = src[(size_t) i * 2 + 0];
+					destR[i] = src[(size_t) i * 2 + 1];
+				}
+			}
+		}
+	}
+
+	const bool usingInPlace = inPlaceMode && inPlaceRendered > 0;
+	const size_t numTracks = usingInPlace ? inPlaceBuffers.size ()
+										  : juce::jmin (trackPlayers.size(), tracks.size());
 
 	for (size_t t = 0; t < numTracks; ++t)
 	{
-		playback::ITrackPlayer& player = *trackPlayers[t];
 		TrackState& state = *tracks[t];
 
-		const int rendered = player.render (mixLeft.data(), mixRight.data(), usable);
+		int rendered = 0;
+		const float* srcL = nullptr;
+		const float* srcR = nullptr;
+
+		if (usingInPlace)
+		{
+			const size_t stride = (size_t) juce::jmax (1, maxBlockSize);
+			rendered = inPlaceRendered;
+			srcL = inPlaceLeft.data () + t * stride;
+			srcR = inPlaceRight.data () + t * stride;
+		}
+		else
+		{
+			playback::ITrackPlayer& player = *trackPlayers[t];
+			rendered = player.render (mixLeft.data(), mixRight.data(), usable);
+			srcL = mixLeft.data();
+			srcR = mixRight.data();
+		}
+
 		if (rendered <= 0)
 		{
 			state.peakL.store (0.0f);
@@ -1635,8 +1860,8 @@ void PlaybackEngine::mixTracks (const playback::OutputBusBuffers* buses, int bus
 		float peakR = 0.0f;
 		for (int i = 0; i < rendered; ++i)
 		{
-			const float l = mixLeft[(size_t) i] * gainL;
-			const float r = mixRight[(size_t) i] * gainR;
+			const float l = srcL[(size_t) i] * gainL;
+			const float r = srcR[(size_t) i] * gainR;
 
 			// a track whose target bus is not connected is silent (the strip's dropdown
 			// marks that bus as "not connected", so this is never a surprise)
@@ -1729,7 +1954,10 @@ void PlaybackEngine::publishPositionAndEnd (void)
 	// publish the position for the lock-free UI getter (an O(1) query, still under the lock);
 	// the first player carries the song timeline in both modes
 	const double position = trackPlayers[0]->positionSeconds();
-	if (position >= 0.0)
+
+	// Not while a seek is outstanding: the players are still at the old position until the worker
+	// is done, and publishing that would drag the bar back to where it came from for a moment.
+	if (position >= 0.0 && ! seekRequested.load ())
 	{
 		positionSeconds.store (position);
 	}

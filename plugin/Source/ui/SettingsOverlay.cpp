@@ -5,6 +5,7 @@
 #include "Standalone/StandaloneHooks.h"
 #include "UiFont.h"
 #include "playback/MidiSequence.h"
+#include "settings/NsfSettings.h"
 
 #include <algorithm>
 #include <cmath>
@@ -134,7 +135,8 @@ namespace
 		generalPageIndex = 1,
 		languagePageIndex = 2,
 		midiPageIndex = 3,
-		audioPageIndex = 4
+		nesPageIndex = 4,
+		audioPageIndex = 5
 	};
 }
 
@@ -629,6 +631,104 @@ void GeneralSettingsPage::lookAndFeelChanged (void)
 //==============================================================================
 // Audio
 
+NesSettingsPage::NesSettingsPage (void)
+{
+	caption.setFont (juce::Font (juce::FontOptions (12.5f)));
+	caption.setJustificationType (juce::Justification::centredLeft);
+	addAndMakeVisible (caption);
+
+	secondsSlider.setComponentID ("settings.nes.duration");
+	secondsSlider.setSliderStyle (juce::Slider::LinearHorizontal);
+	secondsSlider.setTextBoxStyle (juce::Slider::TextBoxRight, false, 68, 22);
+	secondsSlider.setRange ((double) toybox::settings::nsf::minDurationSeconds,
+						   (double) toybox::settings::nsf::maxDurationSeconds,
+						   (double) toybox::settings::nsf::durationStepSeconds);
+	secondsSlider.onValueChange = [this]
+	{
+		toybox::settings::SettingsStore::getInstance ()
+			.setNsfDurationSeconds ((int) std::lround (secondsSlider.getValue ()));
+		refresh ();
+	};
+	addAndMakeVisible (secondsSlider);
+
+	gainCaption.setFont (juce::Font (juce::FontOptions (12.5f)));
+	gainCaption.setJustificationType (juce::Justification::centredLeft);
+	addAndMakeVisible (gainCaption);
+
+	gainSlider.setComponentID ("settings.nes.outputGain");
+	gainSlider.setSliderStyle (juce::Slider::LinearHorizontal);
+	gainSlider.setTextBoxStyle (juce::Slider::TextBoxRight, false, 68, 22);
+	gainSlider.setRange ((double) toybox::settings::nsf::minOutputGainDb,
+						(double) toybox::settings::nsf::maxOutputGainDb,
+						(double) toybox::settings::nsf::outputGainStepDb);
+	gainSlider.onValueChange = [this]
+	{
+		toybox::settings::SettingsStore::getInstance ()
+			.setNsfOutputGainDb ((int) std::lround (gainSlider.getValue ()));
+		refresh ();
+	};
+	addAndMakeVisible (gainSlider);
+
+	hint.setFont (juce::Font (juce::FontOptions (12.5f)));
+	hint.setJustificationType (juce::Justification::topLeft);
+	hint.setMinimumHorizontalScale (0.8f);
+	addAndMakeVisible (hint);
+
+	refreshLanguage ();
+	lookAndFeelChanged ();
+}
+
+void NesSettingsPage::refreshLanguage (void)
+{
+	caption.setText (i18n::tr ("settings.nes.duration"), juce::dontSendNotification);
+	gainCaption.setText (i18n::tr ("settings.nes.outputGain"), juce::dontSendNotification);
+	gainSlider.setTextValueSuffix (" dB");
+	secondsSlider.setTextValueSuffix (" " + i18n::tr ("settings.nes.seconds"));
+	hint.setText (i18n::tr ("settings.nes.durationHint"), juce::dontSendNotification);
+	refresh ();
+	repaint ();
+}
+
+void NesSettingsPage::refresh (void)
+{
+	secondsSlider.setValue ((double) toybox::settings::SettingsStore::getInstance ()
+								.getNsfDurationSeconds (), juce::dontSendNotification);
+	gainSlider.setValue ((double) toybox::settings::SettingsStore::getInstance ()
+							 .getNsfOutputGainDb (), juce::dontSendNotification);
+}
+
+void NesSettingsPage::paint (juce::Graphics& g)
+{
+	paintHeading (g, i18n::tr ("settings.nes"), i18n::tr ("settings.nes.explanation"),
+				  getLocalBounds(), kTwoLineHeadingHeight, 2);
+}
+
+void NesSettingsPage::resized (void)
+{
+	auto area = pageContent (getLocalBounds(), kTwoLineHeadingHeight);
+
+	caption.setBounds (area.removeFromTop (18));
+	area.removeFromTop (4);
+
+	auto row = area.removeFromTop (kFooterHeight);
+	secondsSlider.setBounds (row.removeFromLeft (juce::jmin (300, row.getWidth ())));
+
+	area.removeFromTop (10);
+	gainCaption.setBounds (area.removeFromTop (18));
+	area.removeFromTop (4);
+
+	auto gainRow = area.removeFromTop (kFooterHeight);
+	gainSlider.setBounds (gainRow.removeFromLeft (juce::jmin (300, gainRow.getWidth ())));
+
+	area.removeFromTop (6);
+	hint.setBounds (area.removeFromTop (72));
+}
+
+void NesSettingsPage::lookAndFeelChanged (void)
+{
+	repaint ();
+}
+
 AudioSettingsPage::AudioSettingsPage (void)
 {
 	deviceLabel.setComponentID ("settings.audio.device");
@@ -1120,6 +1220,9 @@ SettingsOverlay::SettingsOverlay (void)
 	rootItem->addSubItem (new CategoryItem ("midi", i18n::tr ("settings.midi"), midiPageIndex,
 										   [this] (int page) { pages.setCurrentView (page); }));
 
+	rootItem->addSubItem (new CategoryItem ("nes", i18n::tr ("settings.nes"), nesPageIndex,
+										   [this] (int page) { pages.setCurrentView (page); }));
+
 	// Audio only where there is an audio device to choose between: the standalone application says
 	// so through Source/Standalone/StandaloneHooks.h, and in a plugin the host owns the device. The
 	// row goes in with the page, so the sidebar cannot offer a page that was never created.
@@ -1140,6 +1243,7 @@ SettingsOverlay::SettingsOverlay (void)
 	generalPage = new GeneralSettingsPage();
 	languagePage = new LanguageSettingsPage();
 	midiPage = new MidiSettingsPage();
+	nesPage = new NesSettingsPage();
 	// Forwarded rather than handled here: only the window owns an engine, and reloading a song at
 	// the position it was at is what makes the switch take effect.
 	midiPage->onSampleRootChanged = [this]
@@ -1153,10 +1257,12 @@ SettingsOverlay::SettingsOverlay (void)
 	generalPage->setComponentID ("settings.page.general");
 	languagePage->setComponentID ("settings.page.language");
 	midiPage->setComponentID ("settings.page.midi");
+	nesPage->setComponentID ("settings.page.nes");
 	pages.addView (appearancePage);
 	pages.addView (generalPage);
 	pages.addView (languagePage);
 	pages.addView (midiPage);
+	pages.addView (nesPage);
 
 	if (hasAudio)
 	{
@@ -1167,7 +1273,7 @@ SettingsOverlay::SettingsOverlay (void)
 
 	// The indices the rows carry and the order the stack holds are two lists that have to agree;
 	// a page inserted between two others would otherwise open its neighbour, silently.
-	jassert (pages.getNumViews() == (hasAudio ? audioPageIndex : midiPageIndex) + 1);
+	jassert (pages.getNumViews() == (hasAudio ? audioPageIndex : nesPageIndex) + 1);
 
 	addAndMakeVisible (pages);
 

@@ -227,6 +227,36 @@ private:
 	menu save and load the plugin's state, which this application deliberately leaves empty, so
 	they are not here: a button that writes an empty file is worse than no button.
 */
+/**
+	The NES page: how long a song is taken to be.
+
+	An NSF header carries no length and its driver never ends - it loops until it is stopped - so
+	a timeline has to come from somewhere. It comes from here: a number the user can see and change,
+	three minutes by default, which is what the seek bar, the duration and the end of the song are
+	built on.
+*/
+class NesSettingsPage : public View
+{
+public:
+	NesSettingsPage (void);
+
+	juce::String getViewId (void) const override { return "settings-nes"; }
+	juce::String getViewName (void) const override { return i18n::tr ("settings.nes"); }
+
+	void refresh (void) override;
+	void paint (juce::Graphics& g) override;
+	void resized (void) override;
+	void lookAndFeelChanged (void) override;
+	void refreshLanguage (void) override;
+
+private:
+	juce::Label caption;
+	juce::Slider secondsSlider;
+	juce::Label gainCaption;
+	juce::Slider gainSlider;
+	juce::Label hint;
+};
+
 class AudioSettingsPage : public View,
 						  private juce::Timer
 {
@@ -379,6 +409,7 @@ private:
 	AppearanceSettingsPage* appearancePage = nullptr;	// owned by `pages`
 	GeneralSettingsPage* generalPage = nullptr;			// owned by `pages`
 	LanguageSettingsPage* languagePage = nullptr;		// owned by `pages`
+	NesSettingsPage* nesPage = nullptr;				// owned by `pages`
 	MidiSettingsPage* midiPage = nullptr;				// owned by `pages`
 	AudioSettingsPage* audioPage = nullptr;				// owned by `pages`; null in a plugin build
 

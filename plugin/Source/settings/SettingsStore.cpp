@@ -1,3 +1,4 @@
+#include "NsfSettings.h"
 #include "SettingsStore.h"
 
 #include "playback/MidiSequence.h"	// the bend range limits the engine and the page share
@@ -30,7 +31,9 @@ namespace
 	constexpr const char* kRestoreLastSongKey = "standalone.restoreLastSong";
 	constexpr const char* kCloseToTrayKey = "standalone.closeToTray";
 	constexpr const char* kLastSongKey = "standalone.lastSong";
-	constexpr const char* kMidiBendRangeKey = "midi.pitchBendRange";
+	constexpr const char* kNsfDurationKey = "nsf.durationSeconds";
+constexpr const char* kNsfOutputGainKey = "nsf.outputGainDb";
+constexpr const char* kMidiBendRangeKey = "midi.pitchBendRange";
 	constexpr const char* kMidiBendEnabledKey = "midi.pitchBendEnabled";
 
 // The sample's own root, added to the transposition the registers ask for. Off by default: the
@@ -293,6 +296,50 @@ void SettingsStore::setCloseToTray (bool shouldCloseToTray)
 	lastErrorMessage = file->saveIfNeeded() ? juce::String() : writeErrorFor (settingsFile());
 
 	broadcastChange();
+}
+
+namespace
+{
+}
+
+int SettingsStore::getNsfDurationSeconds (void) const
+{
+	// Three minutes by default: an NSF header has no length, so the only honest source is a number
+	// the user can see and change. Clamped on read, like every other number here, so a hand-edited
+	// file cannot produce a seek bar that lies.
+	return juce::jlimit (toybox::settings::nsf::minDurationSeconds, toybox::settings::nsf::maxDurationSeconds,
+						 file->getIntValue (kNsfDurationKey, toybox::settings::nsf::defaultDurationSeconds));
+}
+
+void SettingsStore::setNsfDurationSeconds (int seconds)
+{
+	const int clamped = juce::jlimit (toybox::settings::nsf::minDurationSeconds, toybox::settings::nsf::maxDurationSeconds, seconds);
+
+	if (clamped == getNsfDurationSeconds())
+	{
+		return;
+	}
+
+	file->setValue (kNsfDurationKey, clamped);
+	lastErrorMessage = file->saveIfNeeded() ? juce::String() : writeErrorFor (settingsFile());
+}
+
+int SettingsStore::getNsfOutputGainDb (void) const
+{
+	return file != nullptr ? juce::jlimit (toybox::settings::nsf::minOutputGainDb, toybox::settings::nsf::maxOutputGainDb, file->getIntValue (kNsfOutputGainKey, toybox::settings::nsf::defaultOutputGainDb))
+						   : toybox::settings::nsf::defaultOutputGainDb;
+}
+
+void SettingsStore::setNsfOutputGainDb (int decibels)
+{
+	const int clamped = juce::jlimit (toybox::settings::nsf::minOutputGainDb, toybox::settings::nsf::maxOutputGainDb, decibels);
+
+	if (file != nullptr && clamped != getNsfOutputGainDb ())
+	{
+		file->setValue (kNsfOutputGainKey, clamped);
+	}
+
+	broadcastChange ();
 }
 
 int SettingsStore::getMidiPitchBendRange (void) const

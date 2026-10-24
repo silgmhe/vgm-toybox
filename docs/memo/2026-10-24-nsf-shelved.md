@@ -55,3 +55,16 @@ ctest --test-dir build            # 应 34/34
 撤销时发现的一处**通用缺陷**：UI 与引擎两处 `jlimit(0.0, duration, seconds)`，在 `duration == 0`（长度未知）时会把**每一次 seek 都变成 seek 到 0**。同样的坑还出现过第二次（`getTrackPositionSeconds` 在多实例下返回 −1，被当成"位置漂移 91 秒"）。
 
 修复目前只保留在 NSF 分支：`duration > 0` 才钳制、`inPlace` 模式下位置取 0 号播放器。**master 将来若接入任何"长度未知"的格式会再次踩到**，建议在引擎里预先处理。
+
+## 后续（同日）：已重启并通过
+
+放弃数小时后，换一条路线重新尝试并成功——eature/nsf-format-multiinstance @ 159cb6：
+
+- 隔离方式改为 **multiInstance**（一轨一份模拟，各实例用 SetMask 把自己的声道独奏），不再追求一份模拟出多轨；
+- 三首文件（Entry080 / od_snowburnb / od_hopeless）混音验收**全部通过**，轨道 8 / 8 / 13，seek spread 0.0000 s；
+- 代价是 11.5×（13 轨）的 CPU，与 VGM 侧 16 轨同构。
+
+真正的转折点不是多实例这个概念，而是 **SetMask 真的作用到了渲染**——libgme 的 osc_output(i, NULL) 从未生效（播放循环读共享 buffer），所以同样的多实例策略在那边看起来已经实现却全是整曲混音。
+
+本文保留，作为为什么当时必须放弃的记录；重启的完整方案与实测见 docs/desgin/nsf-multiinstance-exploration.md。
+

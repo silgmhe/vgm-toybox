@@ -1,6 +1,7 @@
 #include "playback/BackendRegistry.h"
 
 #include "backends/libvgm/LibvgmBackend.h"
+#include "backends/nsf/NsfBackend.h"
 
 namespace toybox::playback
 {
@@ -23,6 +24,8 @@ void registerBuiltInBackends (void)
 	registered = true;
 
 	// the first backend that recognises an image wins, so this order is the priority
+	// NSF is not a register dump - libvgm has no player for it - so the NES backend comes first.
+	BackendRegistry::getInstance().add (std::make_unique<backends::nsf::NsfBackend>());
 	BackendRegistry::getInstance().add (std::make_unique<backends::libvgm::LibvgmBackend>());
 
 	// optional backends go here, e.g. a SNES/SPC engine:

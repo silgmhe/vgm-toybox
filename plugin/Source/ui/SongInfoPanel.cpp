@@ -83,6 +83,7 @@ void SongInfoPanel::refresh (void)
 	appendTag (i18n::tr ("tag.system"), engine.getTag ("SYSTEM"));
 	appendTag (i18n::tr ("tag.artist"), engine.getTag ("ARTIST"));
 	appendTag (i18n::tr ("tag.date"), engine.getTag ("DATE"));
+	appendTag (i18n::tr ("tag.copyright"), engine.getTag ("COPYRIGHT"));
 	detailsLabel.setText (details.trim(), juce::dontSendNotification);
 
 	fileLabel.setText (file.getFileName() + "   -   " + formatTime (engine.getPositionSeconds())

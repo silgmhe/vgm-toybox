@@ -11,6 +11,11 @@
 #include "playback/DawSync.h"
 #include "playback/MidiSink.h"
 #include "playback/OutputRouting.h"
+#include <atomic>
+#include <condition_variable>
+#include <mutex>
+#include <thread>
+
 #include "playback/SongBackend.h"
 
 namespace toybox::playback
@@ -88,6 +93,11 @@ public:
 	void pause (void);
 	void stop (void);
 	void setPositionSeconds (double seconds);
+
+	/** Same request, but the replay happens on a worker and this returns at once. The transport uses
+		it because a seek can take seconds on a backend that replays every track; anything that needs
+		to read the players straight afterwards must use setPositionSeconds() instead. */
+	void requestPositionSeconds (double seconds);
 	void setLoopCount (int loops);			// 0 = loop forever
 	void setFadeSeconds (double seconds);
 	/** The output volume: the **last** gain stage of the engine, applied after every mixer
@@ -96,6 +106,11 @@ public:
 	/** The mixer's master gain - the master strip's fader. It scales the sum of the tracks
 		and sits *before* the output volume, so both controls are independent stages. */
 	void setMixerMasterGain (float linear);	// 1.0 = 100 %
+
+	/** A gain in the format's own output, not in the mix. Formats whose synthesis has headroom -
+		the NES is the example - pick this up; everything else ignores it. It scales the material
+		before the per-track faders, so the meters show what is actually heard. */
+	void setSourceGain (float linear);
 	void setChipMuted (size_t chipIndex, bool shouldBeMuted);
 
 	bool isLoaded (void) const { return loaded; }
@@ -292,6 +307,8 @@ private:
 		does rebuildPlayers() - which runs with the lock already held. Named this way so the
 		convention is visible instead of relying on the lock being recursive. */
 	void setPositionSecondsLocked (double seconds);		// caller must hold the lock
+	void seekAllPlayersTo (double target);				// caller must hold the lock
+	void runSeekWorker (void);
 	void updatePlayerTimeline (void);					// caller must hold the lock
 	void emitMidiForBlock (double blockStartSeconds, int numSamples, double sampleRate,
 						   playback::MidiBlockSink* sink);	// caller must hold the lock
@@ -322,6 +339,8 @@ private:
 		std::map<juce::String, juce::String> tags;
 		playback::SongTimeline timeline;
 		const playback::MidiSequence* midiSequence = nullptr;
+	/** The backend renders every track in one pass, so one player serves all of them. */
+	bool inPlace = false;
 	};
 
 	/** Everything buildSong() reads, copied from the engine on the message thread so that a build
@@ -424,6 +443,15 @@ private:
 	std::unique_ptr<playback::ISongInstance> song;		// the open song (backend object)
 	std::vector<std::unique_ptr<playback::ITrackPlayer>> trackPlayers;
 	std::vector<float> mixLeft, mixRight;				// per-track scratch for render()
+
+	// A backend that renders every track in one pass: one interleaved stereo buffer per
+	// track, the pointer array renderTracks() expects, and de-interleaved copies the mixing
+	// loop below reads like any other track. Allocated when a song is installed, which
+	// happens on the message thread, so the audio thread only writes into them.
+	bool inPlaceMode = false;
+	std::vector<float> inPlaceStereo;
+	std::vector<float> inPlaceLeft, inPlaceRight;
+	std::vector<float*> inPlaceBuffers;
 	std::vector<float> masterLeft, masterRight;			// the internal master bus sum
 	std::vector<std::unique_ptr<TrackState>> tracks;	// one per layout entry (UI state)
 	std::vector<playback::TrackInfo> trackLayout;
@@ -468,7 +496,8 @@ private:
 	// Two independent volume stages - render() applies the mixer master first and the output
 	// volume last, so neither control is driven by the other.
 	std::atomic<float> masterVolume { 1.0f };		// output volume (transport card slider)
-	std::atomic<float> mixerMasterGain { 1.0f };	// mixer master (master strip fader)
+	std::atomic<float> mixerMasterGain { 1.0f };
+	std::atomic<float> sourceGain { 2.5119f };	// +8 dB, the NES default	// mixer master (master strip fader)
 
 	// song facts for the lock-free getters - written on the message thread while the lock is
 	// held (load / loop / fade / sample-rate changes), read without the lock
@@ -484,6 +513,18 @@ private:
 	std::atomic<float> outputPeakL { 0.0f };		// master meter, published by render()
 	std::atomic<float> outputPeakR { 0.0f };
 	std::atomic<int> starvedBlocks { 0 };			// diagnostics - see getStarvedBlocks()
+
+	// Seeking on a worker: a backend that isolates per track has to replay every one of them, and
+	// an NSF has no state to jump into - so the work is seconds, and doing it on the message thread
+	// freezes the window. The request is published here and the worker does the replay; the number
+	// the UI draws is the request, which is the only thing it can know.
+	std::atomic<int> playerCount { 0 };
+	std::atomic<bool> seekRequested { false };
+	std::atomic<bool> seekThreadShouldStop { false };
+	std::atomic<double> seekTargetSeconds { 0.0 };
+	std::thread seekThread;
+	std::mutex seekMutex;
+	std::condition_variable seekCv;
 
 	// Output routing: the master bus target/mute and the connectivity the host showed us in the
 	// last block (bit i = bus i was connected; bus 0 counts as connected until told otherwise).

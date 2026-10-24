@@ -148,11 +148,33 @@ public:
 
 	/** Makes this instance output only `track` (the isolation the mixer is built on). */
 	virtual void setTrackAudible (TrackId track, bool audible) = 0;
+
+	/** Scales this instance's output. Formats whose mix has headroom - the NES is the example, its
+		five four-bit channels never reach full scale - ask for a boost here rather than at the
+		engine's master, so a format default cannot change how another format sounds. Ignored by
+		backends that do not need it. */
+	virtual void setOutputGain (float linear) { juce::ignoreUnused (linear); }
 	/** Silences one device (the chips card). No-op when the backend cannot mute chips. */
 	virtual void setChipAudible (DeviceId device, bool audible) = 0;
 
 	/** Audio thread: see the real-time contract above. Returns the frames written. */
 	virtual int render (float* left, float* right, int numSamples) = 0;
+
+	/** Fills one buffer per track for the same block, for backends that can produce every track in
+		a single pass (IsolationMode::inPlaceChannelMix). uffers holds 	rackCount stereo pairs,
+		each 
+umSamples frames long; the backend writes all of them or none.
+
+		Returns the frames written, or 0 when it cannot render several tracks at once - the core then
+		falls back to one player per track, which is what every backend did before this existed.
+		Default is 0, so adding it changed nothing for anyone. */
+	virtual int renderTracks (float* const* buffers, int trackCount, int numSamples)
+	{
+		(void) buffers;
+		(void) trackCount;
+		(void) numSamples;
+		return 0;
+	}
 
 	/** Playback position in seconds (message thread; the core caches it for the UI). */
 	virtual double positionSeconds (void) = 0;
