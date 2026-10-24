@@ -5,6 +5,7 @@
 #include "Standalone/StandaloneHooks.h"
 #include "UiFont.h"
 #include "playback/MidiSequence.h"
+#include "settings/NsfSettings.h"
 
 #include <algorithm>
 #include <cmath>
@@ -639,7 +640,9 @@ NesSettingsPage::NesSettingsPage (void)
 	secondsSlider.setComponentID ("settings.nes.duration");
 	secondsSlider.setSliderStyle (juce::Slider::LinearHorizontal);
 	secondsSlider.setTextBoxStyle (juce::Slider::TextBoxRight, false, 68, 22);
-	secondsSlider.setRange (10.0, 600.0, 5.0);
+	secondsSlider.setRange ((double) toybox::settings::nsf::minDurationSeconds,
+						   (double) toybox::settings::nsf::maxDurationSeconds,
+						   (double) toybox::settings::nsf::durationStepSeconds);
 	secondsSlider.onValueChange = [this]
 	{
 		toybox::settings::SettingsStore::getInstance ()
@@ -655,7 +658,9 @@ NesSettingsPage::NesSettingsPage (void)
 	gainSlider.setComponentID ("settings.nes.outputGain");
 	gainSlider.setSliderStyle (juce::Slider::LinearHorizontal);
 	gainSlider.setTextBoxStyle (juce::Slider::TextBoxRight, false, 68, 22);
-	gainSlider.setRange (0.0, 24.0, 1.0);
+	gainSlider.setRange ((double) toybox::settings::nsf::minOutputGainDb,
+						(double) toybox::settings::nsf::maxOutputGainDb,
+						(double) toybox::settings::nsf::outputGainStepDb);
 	gainSlider.onValueChange = [this]
 	{
 		toybox::settings::SettingsStore::getInstance ()

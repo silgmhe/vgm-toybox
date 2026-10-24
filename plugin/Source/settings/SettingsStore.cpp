@@ -1,3 +1,4 @@
+#include "NsfSettings.h"
 #include "SettingsStore.h"
 
 #include "playback/MidiSequence.h"	// the bend range limits the engine and the page share
@@ -32,7 +33,6 @@ namespace
 	constexpr const char* kLastSongKey = "standalone.lastSong";
 	constexpr const char* kNsfDurationKey = "nsf.durationSeconds";
 constexpr const char* kNsfOutputGainKey = "nsf.outputGainDb";
-constexpr int kDefaultNsfOutputGainDb = 8;
 constexpr const char* kMidiBendRangeKey = "midi.pitchBendRange";
 	constexpr const char* kMidiBendEnabledKey = "midi.pitchBendEnabled";
 
@@ -300,9 +300,6 @@ void SettingsStore::setCloseToTray (bool shouldCloseToTray)
 
 namespace
 {
-	constexpr int kDefaultNsfSeconds = 180;
-	constexpr int kMinNsfSeconds = 10;
-	constexpr int kMaxNsfSeconds = 3600;
 }
 
 int SettingsStore::getNsfDurationSeconds (void) const
@@ -310,13 +307,13 @@ int SettingsStore::getNsfDurationSeconds (void) const
 	// Three minutes by default: an NSF header has no length, so the only honest source is a number
 	// the user can see and change. Clamped on read, like every other number here, so a hand-edited
 	// file cannot produce a seek bar that lies.
-	return juce::jlimit (kMinNsfSeconds, kMaxNsfSeconds,
-						 file->getIntValue (kNsfDurationKey, kDefaultNsfSeconds));
+	return juce::jlimit (toybox::settings::nsf::minDurationSeconds, toybox::settings::nsf::maxDurationSeconds,
+						 file->getIntValue (kNsfDurationKey, toybox::settings::nsf::defaultDurationSeconds));
 }
 
 void SettingsStore::setNsfDurationSeconds (int seconds)
 {
-	const int clamped = juce::jlimit (kMinNsfSeconds, kMaxNsfSeconds, seconds);
+	const int clamped = juce::jlimit (toybox::settings::nsf::minDurationSeconds, toybox::settings::nsf::maxDurationSeconds, seconds);
 
 	if (clamped == getNsfDurationSeconds())
 	{
@@ -329,13 +326,13 @@ void SettingsStore::setNsfDurationSeconds (int seconds)
 
 int SettingsStore::getNsfOutputGainDb (void) const
 {
-	return file != nullptr ? juce::jlimit (0, 24, file->getIntValue (kNsfOutputGainKey, kDefaultNsfOutputGainDb))
-						   : kDefaultNsfOutputGainDb;
+	return file != nullptr ? juce::jlimit (toybox::settings::nsf::minOutputGainDb, toybox::settings::nsf::maxOutputGainDb, file->getIntValue (kNsfOutputGainKey, toybox::settings::nsf::defaultOutputGainDb))
+						   : toybox::settings::nsf::defaultOutputGainDb;
 }
 
 void SettingsStore::setNsfOutputGainDb (int decibels)
 {
-	const int clamped = juce::jlimit (0, 24, decibels);
+	const int clamped = juce::jlimit (toybox::settings::nsf::minOutputGainDb, toybox::settings::nsf::maxOutputGainDb, decibels);
 
 	if (file != nullptr && clamped != getNsfOutputGainDb ())
 	{
