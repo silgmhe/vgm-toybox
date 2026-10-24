@@ -253,6 +253,7 @@ target_sources(VGMToybox PRIVATE
 	Source/ui/SyncGroup.cpp
 	Source/ui/TransportPanel.cpp
 	Source/ui/ContentSlot.cpp
+	Source/ui/KeyboardLayout.cpp
 )
 
 target_include_directories(VGMToybox PRIVATE Source)
@@ -620,12 +621,27 @@ if(EXISTS "${TOYBOX_TEST_SONG}")
 	set(_toybox_test_env "VGM_TEST_SONG=${_toybox_test_song}")
 endif()
 
+# The keyboard's arithmetic: note naming, the white-key mapping, the span a column is worth, and
+# when a shift is allowed. Pure functions - which is the point of moving them out of the panel,
+# where they were private members of a nested class and could only be checked in a screenshot.
+add_executable(vgm_keyboard_test EXCLUDE_FROM_ALL
+	Tests/KeyboardLayoutTest.cpp
+	Source/ui/KeyboardLayout.cpp
+)
+target_include_directories(vgm_keyboard_test PRIVATE Source)
+target_compile_definitions(vgm_keyboard_test PRIVATE ${TOYBOX_JUCE_DEFINITIONS})
+target_link_libraries(vgm_keyboard_test PRIVATE
+	juce::juce_core
+	juce::juce_recommended_config_flags
+)
+
 add_test(NAME chip COMMAND vgm_chip_test)
 add_test(NAME nsf  COMMAND vgm_nsf_test)
 add_test(NAME core COMMAND vgm_core_test)
 add_test(NAME ui   COMMAND vgm_ui_test)
+add_test(NAME keyboard-layout COMMAND vgm_keyboard_test)
 add_test(NAME opn  COMMAND vgm_opn_test)
-set_tests_properties(core ui PROPERTIES LABELS "unit" TIMEOUT 120)
+set_tests_properties(core ui keyboard-layout PROPERTIES LABELS "unit" TIMEOUT 120)
 set_tests_properties(opn PROPERTIES LABELS "unit" TIMEOUT 300)
 
 if(_toybox_test_env)
