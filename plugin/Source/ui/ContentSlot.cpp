@@ -500,8 +500,8 @@ private:
 		shiftLeftRect = strip.removeFromRight (26);
 
 		const int base = lastSpan.base;
-		const bool canGoDown = base > kFirstMusicalNote;
-		const bool canGoUp = base + 12 * 8 <= kLastMusicalNote;
+		const bool canGoDown = canShift (-1);
+		const bool canGoUp = canShift (1);
 
 		const auto drawShift = [&] (juce::Rectangle<int> bounds, const juce::String& glyph,
 									bool enabled, int index)
@@ -681,7 +681,7 @@ private:
 	{
 		int base = 36;			// lowest note drawn
 		int whiteKeys = 28;
-		int keyWidth = kWhiteKeyWidth;
+		float keyWidth = (float) kWhiteKeyWidth;
 		int lastNote = 83;
 	};
 
@@ -741,27 +741,51 @@ private:
 	{
 		KeySpan span;
 
+		// The count of keys is rounded to the nearest, and the width is then derived from it, so
+		// the keyboard fills the column exactly at every window width. Flooring the count left the
+		// keys at a fixed twenty pixels and the leftovers as margins, which made the whole thing
+		// grow a key at a time - the granularity this replaces.
 		const int minWhite = 14;		// two octaves, however narrow the window gets
+		const int wanted = juce::jmax (minWhite, juce::roundToInt ((float) area.getWidth () / (float) kWhiteKeyWidth));
 
-		span.keyWidth = kWhiteKeyWidth;
-
-		if (area.getWidth () / span.keyWidth < minWhite)
-		{
-			span.keyWidth = juce::jmax (10, area.getWidth () / minWhite);
-		}
-
-		span.whiteKeys = juce::jmax (7, area.getWidth () / span.keyWidth);
+		span.keyWidth = juce::jmax (10.0f, (float) area.getWidth () / (float) wanted);
+		span.whiteKeys = wanted;
 
 		const int octavesVisible = juce::jmax (2, span.whiteKeys / 7);
 		span.base = baseNote (octavesVisible);
 
-		// Nothing above B8 can light, so the keys stop there and the rest is left blank.
+		// Nothing above B8 can light, so the keys stop there and the rest is left blank - and the
+		// block is centred, because a keyboard that ended early and hugged the left edge looked
+		// like it had been cut.
 		const int whiteByRange = ((kLastMusicalNote - span.base) / 12) * 7 + 7;
 		span.whiteKeys = juce::jmin (span.whiteKeys, whiteByRange);
 
 		span.lastNote = noteForWhite (span.base, span.whiteKeys - 1);
 
 		return span;
+	}
+
+	/** Whether the window can move by an octave without losing keys off the far end.
+
+		This is what the header arrows ask: a shift that runs the block into B8 makes it shorter,
+		so the right arrow used to move the window and shrink the keyboard at the same time.
+	*/
+	bool canShift (int direction) const
+	{
+		if (direction > 0)
+		{
+			const int candidate = lastSpan.base + 12;
+
+			if (candidate > kLastMusicalNote)
+			{
+				return false;
+			}
+
+			const int whiteByRange = ((kLastMusicalNote - candidate) / 12) * 7 + 7;
+			return whiteByRange >= lastSpan.whiteKeys;
+		}
+
+		return lastSpan.base - 12 >= kFirstMusicalNote;
 	}
 
 	/** A fixed-width keyboard starting at the span's base note, with the sounding key lit. */
@@ -841,14 +865,36 @@ private:
 													face.getWidth () - 2.0f, 1.0f));
 			}
 
-			if (lit && key.getWidth () >= 13.0f)
+			if (lit)
 			{
-				// The name sits in the lower third: the black key above it covers the top, and the
-				// centre is where the octave label already lives.
-				g.setColour (theme::onAccent ());
-				g.setFont (juce::Font (juce::FontOptions (9.5f, juce::Font::bold)));
-				g.drawText (noteName (keyNote), face.toNearestInt ().withTrimmedTop ((int) (face.getHeight () * 0.55f)),
-							juce::Justification::centredBottom, false);
+				// White keys name themselves in the lower third - the black key above covers the
+				// top, and the centre is where the octave label sits. Black keys are only twelve
+				// pixels wide, so they get their own size and a slight squeeze instead of being
+				// left unnamed.
+				const float minimumWidth = black ? 9.0f : 13.0f;
+
+				if (face.getWidth () >= minimumWidth)
+				{
+					juce::Font font (juce::FontOptions (black ? 7.0f : 9.5f, juce::Font::bold));
+					font.setHorizontalScale (black ? 0.82f : 1.0f);
+
+					g.setColour (theme::onAccent ());
+					g.setFont (font);
+
+					auto label = face.toNearestInt ();
+
+					if (black)
+					{
+						label = label.withSizeKeepingCentre (label.getWidth (), juce::jmin (label.getHeight (), 10));
+					}
+					else
+					{
+						label = label.withTrimmedTop ((int) (face.getHeight () * 0.55f));
+					}
+
+					g.drawText (noteName (keyNote), label,
+								black ? juce::Justification::centred : juce::Justification::centredBottom, false);
+				}
 			}
 		};
 
@@ -980,8 +1026,13 @@ private:
 		to it until the next song. */
 	void shiftOctaves (int direction)
 	{
+		if (! canShift (direction))
+		{
+			return;
+		}
+
 		const int step = direction > 0 ? 12 : -12;
-		manualBase = juce::jlimit (kFirstMusicalNote, kLastMusicalNote - 12 * 3, lastSpan.base + step);
+		manualBase = juce::jlimit (kFirstMusicalNote, kLastMusicalNote - 12, lastSpan.base + step);
 		repaint ();
 	}
 
