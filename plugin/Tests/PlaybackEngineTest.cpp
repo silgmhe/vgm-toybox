@@ -659,6 +659,10 @@ int main (int argc, char* argv[])
 
 	std::printf ("[4.4] the scope tap\n");
 	{
+		// Replay from a known point: the renders before this one may have run past the end, and
+		// a scope that is asked to confirm an offset on silence confirms nothing.
+		engine.setPositionSeconds (1.0);
+		engine.play ();
 		renderSeconds (engine, 0.05, sampleRate, blockSize);
 
 		std::vector<float> tapped (512, 0.0f);
@@ -667,8 +671,16 @@ int main (int argc, char* argv[])
 		float peak = 0.0f;
 		for (float value : tapped) { peak = juce::jmax (peak, std::fabs (value)); }
 
-		std::printf ("    scope returned %d samples, peak %.4f\n", got, (double) peak);
+		double mean = 0.0;
+		float lo = 0.0f, hi = 0.0f;
+		for (float value : tapped) { mean += value; lo = juce::jmin (lo, value); hi = juce::jmax (hi, value); }
+		mean /= (double) juce::jmax (1, (int) tapped.size ());
+
+		std::printf ("    scope returned %d samples, peak %.4f mean %+.4f range [%+.3f %+.3f]\n",
+					 got, (double) peak, mean, (double) lo, (double) hi);
 		check (got == (int) tapped.size (), "the scope returns the window it was asked for");
+		check (std::abs (mean) < 0.05, "the output is centred on zero, not riding an offset");
+		check (peak > 0.0f, "and it holds audio");
 	}
 
 	std::printf ("[5] render cost (20 blocks)\n");
