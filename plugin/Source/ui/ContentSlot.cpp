@@ -618,13 +618,15 @@ private:
 
 			juce::Path arrow;
 
+			// Pointing along the keyboard rather than up or down. An arrow that pointed up read as
+			// "this note is high", when what it means is "further along, off this edge".
 			if (above)
 			{
-				arrow.addTriangle (cx - size, cy + size, cx + size, cy + size, cx, cy - size);
+				arrow.addTriangle (cx + size, cy, cx - size, cy - size, cx - size, cy + size);
 			}
 			else
 			{
-				arrow.addTriangle (cx - size, cy - size, cx + size, cy - size, cx, cy + size);
+				arrow.addTriangle (cx - size, cy, cx + size, cy - size, cx + size, cy + size);
 			}
 
 			g.setColour (theme::accent ().withAlpha (0.9f));
