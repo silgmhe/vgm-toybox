@@ -112,42 +112,42 @@ public:
 		playback::TrackId nextId = 1;
 		int channel = 0;
 
-		const auto addTrack = [&] (const char* name, const char* group, bool melodic)
+		const auto addTrack = [&] (const char* name, const char* group, bool melodic, playback::DeviceId device)
 		{
-			tracks_.push_back (playback::TrackInfo { nextId++, 0, 0, channel++, true, name, group,
+			tracks_.push_back (playback::TrackInfo { nextId++, device, (int) device, channel++, true, name, group,
 												 melodic ? playback::MidiCapability::melodic
 														 : playback::MidiCapability::unavailable });
 		};
 
-		for (const char* name : apuNames) { addTrack (name, "2A03", true); }
-		for (const char* name : dmcNames) { addTrack (name, "2A03", false); }
+		for (const char* name : apuNames) { addTrack (name, "2A03", true, 0); }
+		for (const char* name : dmcNames) { addTrack (name, "2A03", false, 0); }
 
 		switch (file.chip ())
 		{
 			case formats::nsf::NsfChip::vrc6:
-				addTrack ("Saw Wave", "VRC6", true);
-				addTrack ("Square 3", "VRC6", true);
-				addTrack ("Square 4", "VRC6", true);
+				addTrack ("Saw Wave", "VRC6", true, 1);
+				addTrack ("Square 3", "VRC6", true, 1);
+				addTrack ("Square 4", "VRC6", true, 1);
 				break;
 
 			case formats::nsf::NsfChip::vrc7:
 				for (int i = 0; i < 6; ++i)
 				{
-					addTrack (juce::String ("FM " + juce::String (i + 1)).toRawUTF8 (), "VRC7", true);
+					addTrack (juce::String ("FM " + juce::String (i + 1)).toRawUTF8 (), "VRC7", true, 1);
 				}
 				break;
 
 			case formats::nsf::NsfChip::n163:
 				for (int i = 0; i < 8; ++i)
 				{
-					addTrack (juce::String ("Wave " + juce::String (i + 1)).toRawUTF8 (), "N163", true);
+					addTrack (juce::String ("Wave " + juce::String (i + 1)).toRawUTF8 (), "N163", true, 1);
 				}
 				break;
 
 			case formats::nsf::NsfChip::fme7:
 				for (int i = 0; i < 5; ++i)
 				{
-					addTrack (juce::String ("Square " + juce::String (i + 1)).toRawUTF8 (), "S5B", true);
+					addTrack (juce::String ("Square " + juce::String (i + 1)).toRawUTF8 (), "S5B", true, 1);
 				}
 				break;
 
