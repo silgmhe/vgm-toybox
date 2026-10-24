@@ -27,7 +27,13 @@ public:
 	void pause (void) override {}
 	bool seekSeconds (double) override { return false; }
 	void setTimeline (int, double) override {}
-	void setTrackAudible (playback::TrackId, bool) override {}
+	void setTrackAudible (playback::TrackId track, bool audible) override
+	{
+		if (audible && track >= 1 && track <= 5)
+		{
+			player.setTrackAudible ((int) track - 1);
+		}
+	}
 	void setChipAudible (playback::DeviceId, bool) override {}
 
 	int render (float* left, float* right, int numSamples) override
@@ -72,10 +78,17 @@ public:
 			default: break;
 		}
 
-		// One track for now: the chips are mixed inside the emulation, and isolating them needs the
-		// per-channel masks the chips expose - the next step, not this one.
-		tracks_.push_back (playback::TrackInfo { 1, 0, 0, -1, false, "All", "2A03",
-												 playback::MidiCapability::unavailable });
+		// Five channels, because the two chip objects expose exactly that many outputs between them:
+		// the APU renders the two pulses, and the DMC object renders triangle, noise and DPCM.
+		static const char* const names[] = { "Pulse 1", "Pulse 2", "Triangle", "Noise", "DMC" };
+
+		for (int i = 0; i < 5; ++i)
+		{
+			tracks_.push_back (playback::TrackInfo { (playback::TrackId) (i + 1), 0, 0, i, true,
+													 names[i], "2A03",
+													 i < 2 ? playback::MidiCapability::melodic
+														   : playback::MidiCapability::unavailable });
+		}
 	}
 
 	const playback::SongInfo& getInfo (void) const override { return info_; }
@@ -84,7 +97,7 @@ public:
 	playback::BackendCapabilities getCapabilities (void) const override
 	{
 		playback::BackendCapabilities caps;
-		caps.isolation = playback::IsolationMode::none;
+		caps.isolation = playback::IsolationMode::multiInstance;
 		caps.rendersAtHostRate = true;
 		return caps;
 	}

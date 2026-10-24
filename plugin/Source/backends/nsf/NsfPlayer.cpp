@@ -73,6 +73,8 @@ void NsfPlayer::start (void)
 	const int song = file.startSong > 0 ? file.startSong - 1 : 0;
 	const int region = file.isPal () ? 1 : 0;
 
+	applyMasks ();
+
 	cpu->Start ((int) file.initAddress, (int) file.playAddress, file.framesPerSecond (), song,
 				region, 0, false, nullptr);
 
@@ -158,6 +160,38 @@ std::uint64_t NsfPlayer::soundWrites (void) const
 double NsfPlayer::positionSeconds (void) const
 {
 	return (double) rendered / rate;
+}
+
+void NsfPlayer::setTrackAudible (int trackIndex)
+{
+	soloTrack = trackIndex;
+	applyMasks ();
+}
+
+void NsfPlayer::applyMasks (void)
+{
+	// The chips mute with a set bit, and they are split across two objects: the APU renders the two
+	// pulse channels, the DMC object renders triangle, noise and DPCM. A track index is mapped onto
+	// those two masks here, which is the whole of the isolation.
+	const bool all = soloTrack < 0;
+
+	const bool pulse1 = all || soloTrack == 0;
+	const bool pulse2 = all || soloTrack == 1;
+	const bool triangle = all || soloTrack == 2;
+	const bool noise = all || soloTrack == 3;
+	const bool dmcChannel = all || soloTrack == 4;
+
+	int apuMask = 0;
+	if (! pulse1) { apuMask |= 1; }
+	if (! pulse2) { apuMask |= 2; }
+
+	int dmcMask = 0;
+	if (! triangle) { dmcMask |= 1; }
+	if (! noise) { dmcMask |= 2; }
+	if (! dmcChannel) { dmcMask |= 4; }
+
+	apu->SetMask (apuMask);
+	dmc->SetMask (dmcMask);
 }
 
 } // namespace toybox::backends::nsf

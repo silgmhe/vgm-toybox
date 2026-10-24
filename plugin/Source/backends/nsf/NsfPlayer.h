@@ -40,11 +40,16 @@ public:
 	/** Renders `frames` stereo frames. Returns how many were written. */
 	int render (float* left, float* right, int frames);
 
+	/** Solos one of the five channels; -1 leaves them all audible. */
+	void setTrackAudible (int trackIndex);
+
 	std::uint64_t soundWrites (void) const;
 	double positionSeconds (void) const;
 
 private:
 	void writeSound (std::uint16_t address, std::uint8_t value);
+	void applyMasks (void);
+	int soloTrack = -1;
 
 	const formats::nsf::NsfFile& file;
 	double rate = 44100.0;
