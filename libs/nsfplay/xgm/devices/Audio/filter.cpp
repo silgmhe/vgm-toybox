@@ -1,4 +1,4 @@
-#include "filter.h"
+ï»¿#include "filter.h"
 using namespace xgm;
 
 static const double pi = (3.14159265358979);
@@ -61,7 +61,7 @@ void SimpleFIR::Reset()
     gain += h[i];
   }
 
-  // o—ÍƒQƒCƒ“’²®
+  // å‡ºåŠ›ã‚²ã‚¤ãƒ³èª¿æ•´
   for(i=0; i<=M; i++) 
     h[i] /= gain;
 

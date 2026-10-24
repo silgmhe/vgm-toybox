@@ -1,4 +1,4 @@
-#include "detect.h"
+ï»¿#include "detect.h"
 
 namespace xgm {
 
@@ -60,7 +60,7 @@ namespace xgm {
     if (m_wspeed)
       m_wspeed = (m_wspeed + m_bidx - m_blast) / 2;
     else
-      m_wspeed = m_bidx - m_blast;      // ‰‰ñ
+      m_wspeed = m_bidx - m_blast;      // åˆå›
     m_blast = m_bidx;
 
     match_size = m_wspeed * match_second / match_interval;

@@ -1,10 +1,10 @@
-#ifndef _BLOCK_H_
+ï»¿#ifndef _BLOCK_H_
 #define _BLOCK_H_
 #include "../device.h"
 
 namespace xgm
 {
-  // Layer‚É‹²‚ñ‚ÅC‚±‚ÌƒfƒoƒCƒXˆÈ‰º‚ÌƒfƒoƒCƒXƒAƒNƒZƒX‚ğŠ®‘S‚ÉƒuƒƒbƒN‚·‚éƒfƒoƒCƒX
+  // Layerã«æŒŸã‚“ã§ï¼Œã“ã®ãƒ‡ãƒã‚¤ã‚¹ä»¥ä¸‹ã®ãƒ‡ãƒã‚¤ã‚¹ã‚¢ã‚¯ã‚»ã‚¹ã‚’å®Œå…¨ã«ãƒ–ãƒ­ãƒƒã‚¯ã™ã‚‹ãƒ‡ãƒã‚¤ã‚¹
   class BlockingDevice : public IDevice
   {
   public:

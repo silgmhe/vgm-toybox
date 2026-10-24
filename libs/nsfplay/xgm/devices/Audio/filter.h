@@ -1,4 +1,4 @@
-#ifndef _FILTER_H_
+ï»¿#ifndef _FILTER_H_
 #define _FILTER_H_
 #include <math.h>
 #include "../device.h"
@@ -108,7 +108,7 @@ namespace xgm
 
     void SetRate(double r)
     {
-      // ƒJƒbƒgƒIƒtü”g” : 2pi*R*C
+      // ã‚«ãƒƒãƒˆã‚ªãƒ•å‘¨æ³¢æ•° : 2pi*R*C
       rate = r;
       UpdateFactor();
     }
@@ -133,7 +133,7 @@ namespace xgm
       UpdateFactor();
     }
 
-    // ”ñvirtual‚ÈRender
+    // évirtualãªRender
     inline UINT32 FastRender(INT32 b[2])
     {
       if(a<1.0)

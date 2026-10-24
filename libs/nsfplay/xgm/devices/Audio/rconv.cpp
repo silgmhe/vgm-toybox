@@ -1,4 +1,4 @@
-#include "rconv.h"
+ï»¿#include "rconv.h"
 #include "../CPU/nes_cpu.h"
 #include "../Sound/nes_dmc.h"
 #include "../Sound/nes_mmc5.h"
@@ -73,7 +73,7 @@ void RateConverter::Reset ()
 
 }
 
-// ”{—¦‚ÍŠï””{‚Ì‚İ
+// å€ç‡ã¯å¥‡æ•°å€ã®ã¿
 void RateConverter::SetClock (double c)
 {
   clock = c;
@@ -154,7 +154,7 @@ void RateConverter::Skip ()
 	}
 }
 
-// “ü—Í‚Í-32768`+32767‚Ü‚Å
+// å…¥åŠ›ã¯-32768ï½+32767ã¾ã§
 inline UINT32 RateConverter::FastRender (INT32 b[2])
 {
   assert (target);

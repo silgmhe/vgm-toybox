@@ -1,4 +1,4 @@
-#include <assert.h>
+ï»¿#include <assert.h>
 #include <string.h>
 #include "nes_mem.h"
 
@@ -16,7 +16,7 @@ namespace xgm
   void NES_MEM::Reset ()
   {
     memset (image, 0, 0x800);
-    //memset (image + 0x6000, 0, 0x2000); // •ª‚©‚Á‚Ä‚Ä‚ ‚¦‚Ä‰Šú‰»‚µ‚Ä‚Ü‚¹‚ñB
+    //memset (image + 0x6000, 0, 0x2000); // åˆ†ã‹ã£ã¦ã¦ã‚ãˆã¦åˆæœŸåŒ–ã—ã¦ã¾ã›ã‚“ã€‚
   }
 
   bool NES_MEM::SetImage (UINT8 * data, UINT32 offset, UINT32 size)

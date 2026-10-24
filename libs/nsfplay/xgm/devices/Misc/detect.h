@@ -1,4 +1,4 @@
-#ifndef _DETECT_H_
+ï»¿#ifndef _DETECT_H_
 #define _DETECT_H_
 #include "../device.h"
 
@@ -24,7 +24,7 @@ namespace xgm
     int *m_stream_buf;
     int *m_time_buf;
     int m_bidx;
-    int m_blast;                    // ‘O‰ñƒ`ƒFƒbƒN‚Ìbidx;
+    int m_blast;                    // å‰å›ãƒã‚§ãƒƒã‚¯æ™‚ã®bidx;
     int m_wspeed;
     int m_current_time;
     int m_loop_start, m_loop_end;

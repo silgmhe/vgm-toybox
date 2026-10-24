@@ -1,4 +1,4 @@
-#include <assert.h>
+ï»¿#include <assert.h>
 #include <cstring>
 #include "nes_cpu.h"
 #include "../Memory/nes_mem.h"
@@ -262,7 +262,7 @@ bool NES_CPU::Read (UINT32 adr, UINT32 & val, UINT32 id)
 
 void NES_CPU::Reset ()
 {
-  // KM6502‚ÌƒŠƒZƒbƒg
+  // KM6502ã®ãƒªã‚»ãƒƒãƒˆ
   memset (&context, 0, sizeof (K6502_Context));
   context.ReadByte = readByte;
   context.WriteByte = writeByte;

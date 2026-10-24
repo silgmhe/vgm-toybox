@@ -1,4 +1,4 @@
-#ifndef _VCM_UI_H_
+ï»¿#ifndef _VCM_UI_H_
 #define _VCM_UI_H_
 
 #include <cstdlib>
@@ -7,18 +7,18 @@ namespace vcm
 {
   class ValueCtrl;
 
-  // ValueCtrl•ÏŠ·
+  // ValueCtrlå¤‰æ›
   class ValueConv
   {
   public:
     virtual ~ValueConv(){}
-    // “à•”’l‚ğŒöŠJ’l‚É•ÏŠ·‚·‚éD•ÏŠ·‚É¸”s‚·‚éê‡‚Í false ‚ğ•Ô‚·D
+    // å†…éƒ¨å€¤ã‚’å…¬é–‹å€¤ã«å¤‰æ›ã™ã‚‹ï¼å¤‰æ›ã«å¤±æ•—ã™ã‚‹å ´åˆã¯ false ã‚’è¿”ã™ï¼
     virtual bool GetExportValue( ValueCtrl *vt, Configuration &cfg, const std::string &id, const Value &src_value, Value &result ) 
     {
       result = src_value;
       return true;
     }
-    // ŒöŠJ’l‚ğ“à•”’l‚É•ÏŠ·‚·‚éD•ÏŠ·‚É¸”s‚µ‚½‚çCfalse ‚ğ•Ô‚·D
+    // å…¬é–‹å€¤ã‚’å†…éƒ¨å€¤ã«å¤‰æ›ã™ã‚‹ï¼å¤‰æ›ã«å¤±æ•—ã—ãŸã‚‰ï¼Œfalse ã‚’è¿”ã™ï¼
     virtual bool GetImportValue( ValueCtrl *vt, Configuration &cfg, const std::string &id, const Value &src_value, Value &result )
     {
       result = src_value;
@@ -26,7 +26,7 @@ namespace vcm
     }
   };
 
-  // ’l‚Ìƒ‰ƒxƒ‹Cà–¾ ‚Æ §–ñ
+  // å€¤ã®ãƒ©ãƒ™ãƒ«ï¼Œèª¬æ˜ ã¨ åˆ¶ç´„
   class ValueCtrl
   {
   public:
@@ -90,15 +90,15 @@ namespace vcm
   };
 
   //
-  // ƒRƒ“ƒtƒBƒOî•ñ‚ÌƒOƒ‹[ƒv‰»
+  // ã‚³ãƒ³ãƒ•ã‚£ã‚°æƒ…å ±ã®ã‚°ãƒ«ãƒ¼ãƒ—åŒ–
   //
   class ConfigGroup
   {
   public:
     typedef std::deque < std::pair< std::string, ValueCtrl * > > GroupList;
-    GroupList members;     // ‚±‚ÌƒOƒ‹[ƒv‚ÉŠÜ‚Ü‚ê‚é€–Ú
-    std::string label;     // ‚±‚ÌƒOƒ‹[ƒv‚Ìƒ‰ƒxƒ‹
-    std::string desc;      // à–¾
+    GroupList members;     // ã“ã®ã‚°ãƒ«ãƒ¼ãƒ—ã«å«ã¾ã‚Œã‚‹é …ç›®
+    std::string label;     // ã“ã®ã‚°ãƒ«ãƒ¼ãƒ—ã®ãƒ©ãƒ™ãƒ«
+    std::string desc;      // èª¬æ˜
 
     std::list< ConfigGroup * > subGroup;
 
@@ -107,17 +107,17 @@ namespace vcm
     bool AddSubGroup( ConfigGroup *sub );
     bool Insert( const std::string &id, ValueCtrl *type, ValueConv *conv=NULL );
     bool Insert( const std::string &id, ValueCtrl *type, std::vector<ValueConv *>convs );
-    void UpdateData( Configuration &config, bool d ); // ƒRƒ“ƒtƒBƒOî•ñ‚ğo‚µ‚½‚è“ü‚ê‚½‚è
+    void UpdateData( Configuration &config, bool d ); // ã‚³ãƒ³ãƒ•ã‚£ã‚°æƒ…å ±ã‚’å‡ºã—ãŸã‚Šå…¥ã‚ŒãŸã‚Š
     void Clear();
-    void NotifyUpdate( const std::string &id ); // XV’Ê’m
+    void NotifyUpdate( const std::string &id ); // æ›´æ–°é€šçŸ¥
   };
 
-  // ‰½‚É‚àƒ}ƒbƒv‚³‚ê‚È‚¢ƒf[ƒ^‚¾‚¯‚Ì‘¶İ
+  // ä½•ã«ã‚‚ãƒãƒƒãƒ—ã•ã‚Œãªã„ãƒ‡ãƒ¼ã‚¿ã ã‘ã®å­˜åœ¨
   class VT_HIDDEN : public ValueCtrl {};
 
   class VT_LABEL : public ValueCtrl {};
 
-  // bool’l‚Æ‚µ‚Äƒ`ƒFƒbƒNƒ{ƒbƒNƒX‚Éƒ}ƒbƒv
+  // boolå€¤ã¨ã—ã¦ãƒã‚§ãƒƒã‚¯ãƒœãƒƒã‚¯ã‚¹ã«ãƒãƒƒãƒ—
   class VT_CHECK : public ValueCtrl
   {
   public:
@@ -125,7 +125,7 @@ namespace vcm
       : ValueCtrl ( label, desc, CT_CHECK ){}
   };
 
-  // Å‘åCÅ¬’l‚Ì§–ñ•t‚«•ÏŠ·
+  // æœ€å¤§ï¼Œæœ€å°å€¤ã®åˆ¶ç´„ä»˜ãå¤‰æ›
   class VC_RANGE : public ValueConv
   {
   public:
@@ -157,7 +157,7 @@ namespace vcm
     }
   };
 
-  // ”’l‚Æ‚µ‚ÄƒeƒLƒXƒg—Ìˆæ‚Éƒ}ƒbƒv‚·‚é
+  // æ•°å€¤ã¨ã—ã¦ãƒ†ã‚­ã‚¹ãƒˆé ˜åŸŸã«ãƒãƒƒãƒ—ã™ã‚‹
   class VT_SPIN : public ValueCtrl
   {
   public:
@@ -169,7 +169,7 @@ namespace vcm
     }
   };
 
-  // ”’l‚Æ‚µ‚ÄƒXƒ‰ƒCƒ_[ƒRƒ“ƒgƒ[ƒ‹‚Éƒ}ƒbƒv‚·‚é
+  // æ•°å€¤ã¨ã—ã¦ã‚¹ãƒ©ã‚¤ãƒ€ãƒ¼ã‚³ãƒ³ãƒˆãƒ­ãƒ¼ãƒ«ã«ãƒãƒƒãƒ—ã™ã‚‹
   class VT_SLIDER : public ValueCtrl
   {
   public:
@@ -185,7 +185,7 @@ namespace vcm
     }
   };
 
-  // •¶š—ñ‚Ì’·‚³§–ñ
+  // æ–‡å­—åˆ—ã®é•·ã•åˆ¶ç´„
   class VC_LENGTH : public ValueConv
   {
   public:
@@ -205,7 +205,7 @@ namespace vcm
     }
   };
 
-  // ƒhƒƒbƒvƒ_ƒEƒ“ƒŠƒXƒg
+  // ãƒ‰ãƒ­ãƒƒãƒ—ãƒ€ã‚¦ãƒ³ãƒªã‚¹ãƒˆ
   class VT_COMBO : public ValueCtrl
   {
   public:
@@ -271,7 +271,7 @@ namespace vcm
   };
 
 
-  // •¶š—ñ‚Æ‚µ‚ÄƒeƒLƒXƒg—Ìˆæ‚Éƒ}ƒbƒv‚·‚é
+  // æ–‡å­—åˆ—ã¨ã—ã¦ãƒ†ã‚­ã‚¹ãƒˆé ˜åŸŸã«ãƒãƒƒãƒ—ã™ã‚‹
   class VT_TEXT : public ValueCtrl
   {
   public:

@@ -1,4 +1,4 @@
-#ifndef _XTYPES_H_
+ï»¿#ifndef _XTYPES_H_
 #define _XTYPES_H_
 
 #if defined(_MSC_VER)
@@ -13,19 +13,19 @@
 
 namespace xgm
 {
-/** 8bit•„†‚È‚µ‚Ì®”Œ^ */
+/** 8bitç¬¦å·ãªã—ã®æ•´æ•°å‹ */
 typedef unsigned char UINT8;
-/** 16bit•„†‚È‚µ‚Ì®”Œ^ */
+/** 16bitç¬¦å·ãªã—ã®æ•´æ•°å‹ */
 typedef unsigned short UINT16;
-/** 32bit•„†‚È‚µ‚Ì®”Œ^ */
+/** 32bitç¬¦å·ãªã—ã®æ•´æ•°å‹ */
 typedef unsigned int UINT32;
 /** 64bit unsigned */
 typedef unsigned long long UINT64;
-/** 8bit•„†•t‚«®”Œ^ */
+/** 8bitç¬¦å·ä»˜ãæ•´æ•°å‹ */
 typedef signed char INT8;
-/** 16bit•„†•t‚«®”Œ^ */
+/** 16bitç¬¦å·ä»˜ãæ•´æ•°å‹ */
 typedef signed short INT16;
-/** 32bit•„†•t‚«®”Œ^ */
+/** 32bitç¬¦å·ä»˜ãæ•´æ•°å‹ */
 typedef signed int INT32;
 /** 64bit signed */
 typedef signed long long INT64;

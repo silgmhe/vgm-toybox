@@ -1,7 +1,7 @@
-#ifndef _DEVINFO_H_
+ï»¿#ifndef _DEVINFO_H_
 #define _DEVINFO_H_
 #include <math.h>
-// ƒfƒoƒCƒXî•ñ
+// ãƒ‡ãƒã‚¤ã‚¹æƒ…å ±
 namespace xgm
 {
   class IDeviceInfo
@@ -15,22 +15,22 @@ namespace xgm
   {
   public:
     virtual IDeviceInfo *Clone()=0;
-    // Œ»İ‚Ìo—Í’l‚ğ‚»‚Ì‚Ü‚Ü•Ô‚·
+    // ç¾åœ¨ã®å‡ºåŠ›å€¤ã‚’ãã®ã¾ã¾è¿”ã™
     virtual INT32 GetOutput()=0;
-    // ü”g”‚ğHz‚Å•Ô‚·
+    // å‘¨æ³¢æ•°ã‚’Hzã§è¿”ã™
     virtual double GetFreqHz()=0;
-    // ü”g”‚ğƒfƒoƒCƒXˆË‘¶’l‚Å•Ô‚·D
+    // å‘¨æ³¢æ•°ã‚’ãƒ‡ãƒã‚¤ã‚¹ä¾å­˜å€¤ã§è¿”ã™ï¼
     virtual UINT32 GetFreq()=0;
-    // ‰¹—Ê‚ğ•Ô‚·
+    // éŸ³é‡ã‚’è¿”ã™
     virtual INT32 GetVolume()=0;
-    // ‰¹—Ê‚ÌÅ‘å’l‚ğ•Ô‚·
+    // éŸ³é‡ã®æœ€å¤§å€¤ã‚’è¿”ã™
     virtual INT32 GetMaxVolume()=0;
-    // ”­‰¹’†‚È‚çtrue OFF‚È‚çfalse
+    // ç™ºéŸ³ä¸­ãªã‚‰true OFFãªã‚‰false
     virtual bool GetKeyStatus()=0;
-    // ƒg[ƒ“”Ô†
+    // ãƒˆãƒ¼ãƒ³ç•ªå·
     virtual INT32 GetTone()=0;
 
-    // ü”g”‚ğƒm[ƒg”Ô†‚É•ÏŠ·D0x60‚ªo4c 0‚Í–³Œø
+    // å‘¨æ³¢æ•°ã‚’ãƒãƒ¼ãƒˆç•ªå·ã«å¤‰æ›ï¼0x60ãŒo4c 0ã¯ç„¡åŠ¹
     static int GetNote(double freq)
     {
       const double LOG2_440 = 8.7813597135246596040696824762152;
@@ -44,7 +44,7 @@ namespace xgm
     }
   };
 
-  /* TrackInfo ‚ğ ƒoƒbƒtƒ@ƒŠƒ“ƒO */
+  /* TrackInfo ã‚’ ãƒãƒƒãƒ•ã‚¡ãƒªãƒ³ã‚° */
   class InfoBuffer
   {
     int bufmax;

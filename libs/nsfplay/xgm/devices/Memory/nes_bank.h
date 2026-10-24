@@ -1,11 +1,11 @@
-#ifndef _NES_BANK_H_
+ï»¿#ifndef _NES_BANK_H_
 #define _NES_BANK_H_
 #include "../device.h"
 namespace xgm
 {
 
   /**
-   * 4KB*16ƒoƒ“ƒN‚Ìƒoƒ“ƒN‹óŠÔ
+   * 4KB*16ãƒãƒ³ã‚¯ã®ãƒãƒ³ã‚¯ç©ºé–“
    **/
   class NES_BANK : public IDevice
   {

@@ -1,4 +1,4 @@
-#ifndef _DEVICE_H_
+﻿#ifndef _DEVICE_H_
 #define _DEVICE_H_
 #include <stdio.h>
 #include <vector>
@@ -13,60 +13,60 @@ namespace xgm
   const int DEFAULT_RATE = 48000;
 
   /**
-   * �G�~�����[�^�Ŏg�p����f�o�C�X�̒���
+   * エミュレータで使用するデバイスの抽象
    */
   class IDevice
   {
   public:
     /**
-     * �f�o�C�X�̃��Z�b�g
+     * デバイスのリセット
      *
      * <P>
-     * ���̃��\�b�h�̌Ăяo����C���̃f�o�C�X�͂ǂ̂悤�ȃ��\�b�h�̌Ă�
-     * �o���ɑ΂��Ă��C���s���G���[���N�����Ă͂Ȃ�Ȃ��D�t�ɁC���̃��\�b
-     * �h���ĂԈȑO�́C���̃��\�b�h�̓���͈�ؕۏ؂��Ȃ��Ă��ǂ��B
+     * このメソッドの呼び出し後，このデバイスはどのようなメソッドの呼び
+     * 出しに対しても，実行時エラーを起こしてはならない．逆に，このメソッ
+     * ドを呼ぶ以前は，他のメソッドの動作は一切保証しなくても良い。
      * </P>
      */
     virtual void Reset () = 0;
 
     /**
-     * �f�o�C�X�ւ̏�������
+     * デバイスへの書き込み
      * 
-     * @param adr �A�h���X
-     * @param val �������ޒl
-     * @param id  �f�o�C�X���ʏ��D��̃f�o�C�X��������IO���T�|�[�g���鎞�Ȃ�
-     * @return ������ true ���s�� false
+     * @param adr アドレス
+     * @param val 書き込む値
+     * @param id  デバイス識別情報．一つのデバイスが複数のIOをサポートする時など
+     * @return 成功時 true 失敗時 false
      */
     virtual bool Write (UINT32 adr, UINT32 val, UINT32 id=0)=0;
 
     /**
-     * �f�o�C�X����ǂݍ���
+     * デバイスから読み込み
      *
-     * @param adr �A�h���X
-     * @param val �ǂݏo�����l���󂯎��ϐ��D
-     * @return ������ true ���s�� false
+     * @param adr アドレス
+     * @param val 読み出した値を受け取る変数．
+     * @return 成功時 true 失敗時 false
      */
     virtual bool Read (UINT32 adr, UINT32 & val, UINT32 id=0)=0;
 
     /**
-     * �e��I�v�V������ݒ肷��(���������)
+     * 各種オプションを設定する(もしあれば)
      */
     virtual void SetOption (int id, int val){};
     virtual ~IDevice() {};
   };
 
   /**
-   * �C���^�[�t�F�[�X�F�����̃����_�����O���\�ȃN���X
+   * インターフェース：音声のレンダリングが可能なクラス
    */
   class IRenderable
   {
   public:
     /**
-     * �����̃����_�����O
+     * 音声のレンダリング
      * 
-     * @param b[2] �������ꂽ�f�[�^���i�[����z��D
-     * b[0]�����`�����l���Cb[1]���E�`�����l���̉����f�[�^�D
-     * @return ���������f�[�^�̃T�C�Y�D1�Ȃ烂�m�����D2�Ȃ�X�e���I�D0�͍������s�D
+     * @param b[2] 合成されたデータを格納する配列．
+     * b[0]が左チャンネル，b[1]が右チャンネルの音声データ．
+     * @return 合成したデータのサイズ．1ならモノラル．2ならステレオ．0は合成失敗．
      */
     virtual UINT32 Render (INT32 b[2]) = 0;
 
@@ -82,7 +82,7 @@ namespace xgm
   };
 
   /**
-   * ���������`�b�v
+   * 音声合成チップ
    */
   class ISoundChip : public IDevice, virtual public IRenderable
   {
@@ -93,16 +93,16 @@ namespace xgm
     virtual void Tick (UINT32 clocks) = 0;
 
     /**
-     * �`�b�v�̓���N���b�N��ݒ�
+     * チップの動作クロックを設定
      *
-     * @param clock ������g��
+     * @param clock 動作周波数
      */
     virtual void SetClock (double clock) = 0;
 
     /**
-     * �����������[�g�ݒ�
+     * 音声合成レート設定
      *
-     * @param rate �o�͎��g��
+     * @param rate 出力周波数
      */
     virtual void SetRate (double rate) = 0;
 
@@ -130,10 +130,10 @@ namespace xgm
   };
 
   /**
-   * �o�X
+   * バス
    *
    * <P>
-   * �����̃f�o�C�X�ɁC���Z�b�g�C�������݁C�ǂݍ��ݓ�����u���[�h�L���X�g����D
+   * 複数のデバイスに，リセット，書き込み，読み込み動作をブロードキャストする．
    * <P>
    */
   class Bus : public IDevice
@@ -142,11 +142,11 @@ namespace xgm
     std::vector < IDevice * > vd;
   public:
     /**
-     * ���Z�b�g
+     * リセット
      *
      * <P>
-     * ���t�����Ă���S�Ẵf�o�C�X�́CReset���\�b�h���Ăяo���D
-     * �Ăяo�������́C�f�o�C�X�����t����ꂽ�����ɓ������D
+     * 取り付けられている全てのデバイスの，Resetメソッドを呼び出す．
+     * 呼び出し順序は，デバイスが取り付けられた順序に等しい．
      * </P>
      */
     void Reset ()
@@ -157,7 +157,7 @@ namespace xgm
     }
 
     /**
-     * �S�f�o�C�X�̎��O��
+     * 全デバイスの取り外し
      */
     void DetachAll ()
     {
@@ -165,13 +165,13 @@ namespace xgm
     }
 
     /**
-     * �f�o�C�X�̎��t��
+     * デバイスの取り付け
      *
      * <P>
-     * ���̃o�X�Ƀf�o�C�X�����t����D
+     * このバスにデバイスを取り付ける．
      * </P>
      *
-     * @param d ���t����f�o�C�X�ւ̃|�C���^
+     * @param d 取り付けるデバイスへのポインタ
      */
     void Attach (IDevice * d)
     {
@@ -179,11 +179,11 @@ namespace xgm
     }
 
     /**
-     * ��������
+     * 書き込み
      *
      * <P>
-     * ���t�����Ă���S�Ẵf�o�C�X�́CWrite���\�b�h���Ăяo���D
-     * �Ăяo�������́C�f�o�C�X�����t����ꂽ�����ɓ������D
+     * 取り付けられている全てのデバイスの，Writeメソッドを呼び出す．
+     * 呼び出し順序は，デバイスが取り付けられた順序に等しい．
      * </P>
      */
     bool Write (UINT32 adr, UINT32 val, UINT32 id=0)
@@ -196,13 +196,13 @@ namespace xgm
     }
 
     /**
-     * �ǂݍ���
+     * 読み込み
      *
      * <P>
-     * ���t�����Ă���S�Ẵf�o�C�X��Read���\�b�h���Ăяo���D
-     * �Ăяo�������́C�f�o�C�X�����t����ꂽ�����ɓ������D
-     * �A��l�͗L����(Read���\�b�h��true��ԋp����)�f�o�C�X��
-     * �Ԃ�l�̘_���a�D
+     * 取り付けられている全てのデバイスのReadメソッドを呼び出す．
+     * 呼び出し順序は，デバイスが取り付けられた順序に等しい．
+     * 帰り値は有効な(Readメソッドがtrueを返却した)デバイスの
+     * 返り値の論理和．
      * </P>
      */
     bool Read (UINT32 adr, UINT32 & val, UINT32 id=0)
@@ -225,11 +225,11 @@ namespace xgm
   };
 
   /**
-   * ���C���[
+   * レイヤー
    *
    * <P>
-   * �o�X�Ǝ��Ă��邪�C�ǂݏ����̓����S�f�o�C�X�ɓ`�d�����Ȃ��D
-   * �ŏ��ɓǂݏ����ɐ��������f�o�C�X�𔭌��������_�ŏI������D
+   * バスと似ているが，読み書きの動作を全デバイスに伝播させない．
+   * 最初に読み書きに成功したデバイスを発見した時点で終了する．
    * </P>
    */
   class Layer : public Bus
@@ -237,12 +237,12 @@ namespace xgm
   protected:
   public:
     /**
-     * ��������
+     * 書き込み
      *
      * <P>
-     * ���t�����Ă���f�o�C�X��Write���\�b�h���Ăяo���D
-     * �Ăяo�������́C�f�o�C�X�����t����ꂽ�����ɓ������D
-     * Write�ɐ��������f�o�C�X�������������_�ŏI���D
+     * 取り付けられているデバイスのWriteメソッドを呼び出す．
+     * 呼び出し順序は，デバイスが取り付けられた順序に等しい．
+     * Writeに成功したデバイスが見つかった時点で終了．
      * </P>
      */
     bool Write (UINT32 adr, UINT32 val, UINT32 id=0)
@@ -255,12 +255,12 @@ namespace xgm
     }
 
     /**
-     * �ǂݍ���
+     * 読み込み
      *
      * <P>
-     * ���t�����Ă���f�o�C�X��Read���\�b�h���Ăяo���D
-     * �Ăяo�������́C�f�o�C�X�����t����ꂽ�����ɓ������D
-     * Read�ɐ��������f�o�C�X�������������_�ŏI���D
+     * 取り付けられているデバイスのReadメソッドを呼び出す．
+     * 呼び出し順序は，デバイスが取り付けられた順序に等しい．
+     * Readに成功したデバイスが見つかった時点で終了．
      * </P>
      */
     bool Read (UINT32 adr, UINT32 & val, UINT32 id=0)

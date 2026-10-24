@@ -1,4 +1,4 @@
-#include <stdio.h>
+ï»¿#include <stdio.h>
 #include <stdlib.h>
 #include <cstring>
 #include "nes_bank.h"
@@ -45,7 +45,7 @@ namespace xgm
   {
     int i;
 
-    // ƒoƒ“ƒNƒXƒCƒbƒ`‚Ì‰Šú’l‚Í‘S‚Äuƒoƒ“ƒN–³Œøv
+    // ãƒãƒ³ã‚¯ã‚¹ã‚¤ãƒƒãƒã®åˆæœŸå€¤ã¯å…¨ã¦ã€Œãƒãƒ³ã‚¯ç„¡åŠ¹ã€
     for (i = 0; i < 16; i++)
       bankdefault[i] = -1; // -1 is special empty bank
 

@@ -1,9 +1,9 @@
-#ifndef _MEDIAN_FILTER_H_
+ï»¿#ifndef _MEDIAN_FILTER_H_
 #define _MEDIAN_FILTER_H_
 #include "../../xtypes.h"
 
 namespace xgm {
-  // ƒƒfƒBƒAƒ“ƒtƒBƒ‹ƒ^
+  // ãƒ¡ãƒ‡ã‚£ã‚¢ãƒ³ãƒ•ã‚£ãƒ«ã‚¿
   class MedianFilter {
   private:
     int tapSize_;
