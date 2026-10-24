@@ -1,3 +1,4 @@
+#include <cstdio>
 #include "PlaybackEngine.h"
 
 #include <set>
@@ -682,12 +683,17 @@ float PlaybackEngine::getOutputPeak (int channel) const
 double PlaybackEngine::getTrackPositionSeconds (size_t trackIndex) const
 {
 	const juce::ScopedLock sl (lock);
-	if (trackIndex >= trackPlayers.size())
+	// One player serves every track in the one-pass mode, so the position of any track is the
+	// position of that player - asking for the nth player there would answer -1 for all but the
+	// first.
+	const size_t index = inPlaceMode ? 0 : trackIndex;
+
+	if (index >= trackPlayers.size())
 	{
 		return -1.0;
 	}
 
-	return trackPlayers[trackIndex]->positionSeconds();
+	return trackPlayers[index]->positionSeconds();
 }
 
 //==============================================================================
