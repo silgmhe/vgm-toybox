@@ -275,21 +275,28 @@ bool NsfPlayer::seekTo (double seconds)
 	// the music lives in a program that has to be executed from its beginning.
 	start ();
 
-	float left [1024] = {};
-	float right [1024] = {};
+	// Big steps, not one sample at a time. The CPU keeps its own frame schedule, so the size of the
+	// step does not change when play is called - it only decides how often this loop looks at the
+	// clock. Forty clocks per step would be one sample's worth; four thousand is a hundred times
+	// less bookkeeping for exactly the same emulation.
+	constexpr int clocksPerStep = 4096;
+	const auto target = (std::uint64_t) (seconds * rate);
 
-	while (positionSeconds() < seconds)
+	while (rendered < target)
 	{
-		const auto remaining = seconds - positionSeconds();
-		auto block = (int) (remaining * rate);
+		const int executed = cpu->Exec (clocksPerStep);
+		const auto clocks = (UINT32) (std::max) (0, executed);
 
-		if (block <= 0)
-		{
-			break;
-		}
+		dmc->TickFrameSequence (clocks);
+		apu->Tick (clocks);
+		dmc->Tick (clocks);
 
-		block = block > 1024 ? 1024 : block;
-		render (left, right, block);
+		if (vrc6) { vrc6->Tick (clocks); }
+		if (vrc7) { vrc7->Tick (clocks); }
+		if (n106) { n106->Tick (clocks); }
+		if (fme7) { fme7->Tick (clocks); }
+
+		rendered += (std::uint64_t) executed;
 	}
 
 	return true;

@@ -84,14 +84,19 @@ bool NsfBus::Write (UINT32 adr, UINT32 val, UINT32 id)
 
 	// Counted before dispatch, and counted even when the chip was never created: that is exactly
 	// the case worth catching - the driver writing to a chip its header did not mention.
+	bool expansion = true;
+
 	if (adr >= 0x9000 && adr <= 0xB003) { ++expansionWrites[0]; }
 	else if (adr == 0x9010 || adr == 0x9030) { ++expansionWrites[1]; }
 	else if (adr == 0x4800 || adr == 0xF800) { ++expansionWrites[2]; }
 	else if (adr == 0xC000 || adr == 0xE000) { ++expansionWrites[3]; }
+	else { expansion = false; }
 
-	if (adr >= 0x4000 && adr <= 0x4017)
+	if (expansion || (adr >= 0x4000 && adr <= 0x4017))
 	{
-		// The registers are the music. They leave the map here rather than being stored.
+		// The registers are the music, whichever chip owns them. They leave the map here rather
+		// than being stored - and an expansion write has to leave it too, or the chip is created,
+		// ticked, mixed and never told anything.
 		if (onSoundWrite)
 		{
 			onSoundWrite ((std::uint16_t) adr, (std::uint8_t) (val & 0xFF));
