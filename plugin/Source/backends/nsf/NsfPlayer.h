@@ -7,6 +7,10 @@
 #include "xgm/devices/CPU/nes_cpu.h"
 #include "xgm/devices/Sound/nes_apu.h"
 #include "xgm/devices/Sound/nes_dmc.h"
+#include "xgm/devices/Sound/nes_fme7.h"
+#include "xgm/devices/Sound/nes_n106.h"
+#include "xgm/devices/Sound/nes_vrc6.h"
+#include "xgm/devices/Sound/nes_vrc7.h"
 
 namespace toybox::backends::nsf
 {
@@ -47,6 +51,9 @@ public:
 	/** Solos one of the five channels; -1 leaves them all audible. */
 	void setTrackAudible (int trackIndex);
 
+	/** True when the file declared an expansion chip and one was created. */
+	bool hasExpansion (void) const;
+
 	std::uint64_t soundWrites (void) const;
 	double positionSeconds (void) const;
 
@@ -64,6 +71,10 @@ private:
 	std::unique_ptr<xgm::NES_CPU> cpu;
 	std::unique_ptr<xgm::NES_APU> apu;
 	std::unique_ptr<xgm::NES_DMC> dmc;
+	std::unique_ptr<xgm::NES_VRC6> vrc6;
+	std::unique_ptr<xgm::NES_VRC7> vrc7;
+	std::unique_ptr<xgm::NES_N106> n106;
+	std::unique_ptr<xgm::NES_FME7> fme7;
 };
 
 } // namespace toybox::backends::nsf

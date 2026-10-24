@@ -41,6 +41,38 @@ NsfPlayer::NsfPlayer (const formats::nsf::NsfFile& image, double sampleRate)
 
 	// The DMC fetches its sample bytes through a memory device; without one the first DPCM read
 	// dereferences a null pointer, and a driver is allowed to start one during init.
+	// Only the expansion the header declares exists, and each one is fed by the writes its own
+	// address range receives - the routing below is the whole of the contract with them.
+	const auto chip = file.chip ();
+
+	if (chip == formats::nsf::NsfChip::vrc6)
+	{
+		vrc6 = std::make_unique<xgm::NES_VRC6> ();
+		vrc6->SetClock (clock);
+		vrc6->SetRate (rate);
+	}
+
+	if (chip == formats::nsf::NsfChip::vrc7)
+	{
+		vrc7 = std::make_unique<xgm::NES_VRC7> ();
+		vrc7->SetClock (clock);
+		vrc7->SetRate (rate);
+	}
+
+	if (chip == formats::nsf::NsfChip::n163)
+	{
+		n106 = std::make_unique<xgm::NES_N106> ();
+		n106->SetClock (clock);
+		n106->SetRate (rate);
+	}
+
+	if (chip == formats::nsf::NsfChip::fme7)
+	{
+		fme7 = std::make_unique<xgm::NES_FME7> ();
+		fme7->SetClock (clock);
+		fme7->SetRate (rate);
+	}
+
 	dmc->SetMemory (bus.get ());
 	dmc->SetAPU (apu.get ());
 	dmc->SetCPU (cpu.get ());
@@ -64,6 +96,11 @@ void NsfPlayer::start (void)
 	// TickFrameSequence() has nothing to advance against.
 	apu->Reset ();
 	dmc->Reset ();
+
+	if (vrc6) { vrc6->Reset (); }
+	if (vrc7) { vrc7->Reset (); }
+	if (n106) { n106->Reset (); }
+	if (fme7) { fme7->Reset (); }
 
 	cpu->SetMemory (bus.get ());
 	cpu->SetNESMemory (bus.get ());
@@ -95,12 +132,41 @@ void NsfPlayer::writeSound (std::uint16_t address, std::uint8_t value)
 		return;
 	}
 
+	if (vrc6 && address >= 0x9000 && address <= 0xB003)
+	{
+		vrc6->Write (address, value);
+		return;
+	}
+
+	if (vrc7 && (address == 0x9010 || address == 0x9030))
+	{
+		vrc7->Write (address, value);
+		return;
+	}
+
+	if (n106 && (address == 0x4800 || address == 0xF800))
+	{
+		n106->Write (address, value);
+		return;
+	}
+
+	if (fme7 && (address == 0xC000 || address == 0xE000))
+	{
+		fme7->Write (address, value);
+		return;
+	}
+
 	if (address == 0x4017)
 	{
 		// The frame counter register is shared: the APU sequences on it and the DMC's IRQ does too.
 		apu->Write (address, value);
 		dmc->Write (address, value);
 	}
+}
+
+bool NsfPlayer::hasExpansion (void) const
+{
+	return vrc6 != nullptr || vrc7 != nullptr || n106 != nullptr || fme7 != nullptr;
 }
 
 int NsfPlayer::render (float* left, float* right, int frames)
@@ -129,8 +195,14 @@ int NsfPlayer::render (float* left, float* right, int frames)
 			// it was given.
 			dmc->TickFrameSequence ((UINT32) (std::max) (0, executed));
 
-			apu->Tick ((UINT32) (std::max) (0, executed));
-			dmc->Tick ((UINT32) (std::max) (0, executed));
+			const auto clocks = (UINT32) (std::max) (0, executed);
+			apu->Tick (clocks);
+			dmc->Tick (clocks);
+
+			if (vrc6) { vrc6->Tick (clocks); }
+			if (vrc7) { vrc7->Tick (clocks); }
+			if (n106) { n106->Tick (clocks); }
+			if (fme7) { fme7->Tick (clocks); }
 		}
 
 		INT32 a[2] = { 0, 0 };
@@ -138,9 +210,29 @@ int NsfPlayer::render (float* left, float* right, int frames)
 		apu->Render (a);
 		dmc->Render (d);
 
+		INT32 extra[2] = { 0, 0 };
+
+		const auto addChip = [&extra] (xgm::ISoundChip* chip)
+		{
+			if (chip == nullptr)
+			{
+				return;
+			}
+
+			INT32 out[2] = { 0, 0 };
+			chip->Render (out);
+			extra[0] += out[0];
+			extra[1] += out[1];
+		};
+
+		addChip (vrc6.get ());
+		addChip (vrc7.get ());
+		addChip (n106.get ());
+		addChip (fme7.get ());
+
 		const auto mix = [&] (int channel, float& out)
 		{
-			const int value = (int) a[channel] + (int) d[channel];
+			const int value = (int) a[channel] + (int) d[channel] + (int) extra[channel];
 			out = (std::clamp) ((float) value / 32768.0f, -1.0f, 1.0f);
 		};
 

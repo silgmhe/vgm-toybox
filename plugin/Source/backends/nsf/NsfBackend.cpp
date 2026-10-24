@@ -96,12 +96,26 @@ public:
 		// the APU renders the two pulses, and the DMC object renders triangle, noise and DPCM.
 		static const char* const names[] = { "Pulse 1", "Pulse 2", "Triangle", "Noise", "DMC" };
 
-		for (int i = 0; i < 5; ++i)
+		// An expansion chip mixes inside the emulation and the masks only split the two 2A03
+		// objects, so a song that has one is offered as a single track rather than five that would
+		// each carry the expansion channels.
+		expansionPresent = file.chip () != formats::nsf::NsfChip::none;
+		const bool hasExpansion = expansionPresent;
+
+		if (hasExpansion)
 		{
-			tracks_.push_back (playback::TrackInfo { (playback::TrackId) (i + 1), 0, 0, i, true,
-													 names[i], "2A03",
-													 i < 2 ? playback::MidiCapability::melodic
-														   : playback::MidiCapability::unavailable });
+			tracks_.push_back (playback::TrackInfo { 1, 0, 0, -1, false, "All", "2A03",
+													 playback::MidiCapability::unavailable });
+		}
+		else
+		{
+			for (int i = 0; i < 5; ++i)
+			{
+				tracks_.push_back (playback::TrackInfo { (playback::TrackId) (i + 1), 0, 0, i, true,
+														 names[i], "2A03",
+														 i < 2 ? playback::MidiCapability::melodic
+															   : playback::MidiCapability::unavailable });
+			}
 		}
 	}
 
@@ -111,7 +125,8 @@ public:
 	playback::BackendCapabilities getCapabilities (void) const override
 	{
 		playback::BackendCapabilities caps;
-		caps.isolation = playback::IsolationMode::multiInstance;
+		caps.isolation = expansionPresent ? playback::IsolationMode::none
+									   : playback::IsolationMode::multiInstance;
 		caps.canSeek = true;
 		caps.rendersAtHostRate = true;
 		return caps;
@@ -141,6 +156,7 @@ private:
 	std::vector<playback::TrackInfo> tracks_;
 	double rate = 44100.0;
 	double length = 180.0;
+	bool expansionPresent = false;
 	int blockSize = 512;
 };
 
