@@ -200,7 +200,7 @@ language: English
 "transport.volumeTooltip" = "Output volume - the last stage of the engine, after the mixer master";
 
 	"view.mixer" = "Mixer";
-	"view.chipState" = "Chip State";
+	"view.keyboard" = "Keyboard";
 	"view.scope" = "Oscilloscope";
 "view.play" = "Play";
 "view.visualiser" = "Visualiser";
@@ -214,9 +214,9 @@ language: English
 "visualiser.title" = "Visualiser";
 	"visualiser.scopeIdle" = "Nothing is playing.";
 	"visualiser.scopeHint" = "The mix you are hearing, after the mixer and the output volume.";
-		"visualiser.chips" = "Chip state";
-	"visualiser.chipsUnavailable" = "This format does not report per-channel state yet.";
-	"visualiser.chipsUnsupported" = "The channels of this chip cannot be shown yet.";
+		"visualiser.keyboard" = "Keyboard";
+	"visualiser.keyboardUnavailable" = "This format does not report per-channel state yet.";
+	"visualiser.keyboardUnsupported" = "The channels of this chip cannot be shown yet.";
 	"visualiser.export" = "Export waves";
 	"visualiser.exportEmpty" = "Nothing to export yet.";
 "visualiser.scope" = "Waveform";

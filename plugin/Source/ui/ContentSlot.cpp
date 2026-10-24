@@ -152,10 +152,10 @@ namespace
 
 //==============================================================================
 /** The chip tab of the old page, minus the page: keyboard, rows, and the export button. */
-class ContentSlot::ChipStatePanel : public juce::Component
+class ContentSlot::KeyboardPanel : public juce::Component
 {
 public:
-	ChipStatePanel (juce::String& statusToUse)
+	KeyboardPanel (juce::String& statusToUse)
 		: exportStatus (statusToUse)
 	{
 		exportButton.setButtonText (toybox::i18n::tr ("visualiser.export"));
@@ -183,7 +183,7 @@ public:
 
 		g.setColour (theme::primaryText ());
 		g.setFont (juce::Font (juce::FontOptions (14.0f, juce::Font::bold)));
-		g.drawText (toybox::i18n::tr ("visualiser.chips"), header.removeFromLeft (200).withTrimmedTop (10),
+		g.drawText (toybox::i18n::tr ("visualiser.keyboard"), header.removeFromLeft (200).withTrimmedTop (10),
 					juce::Justification::centredLeft, false);
 
 		if (exportStatus.isNotEmpty ())
@@ -213,8 +213,8 @@ public:
 
 			g.setColour (theme::secondaryText ());
 			g.setFont (juce::Font (juce::FontOptions (12.5f)));
-			g.drawText (toybox::i18n::tr (chips.isNotEmpty () ? "visualiser.chipsUnsupported"
-															  : "visualiser.chipsUnavailable"),
+			g.drawText (toybox::i18n::tr (chips.isNotEmpty () ? "visualiser.keyboardUnsupported"
+															  : "visualiser.keyboardUnavailable"),
 						area.removeFromTop (24), juce::Justification::centredTop, false);
 			return;
 		}
@@ -317,17 +317,17 @@ ContentSlot::ContentSlot (toybox::PlaybackEngine& engineToUse)
 {
 	mixer = std::make_unique<MixerPanel> (engine);
 
-	chipStatePanel = std::make_unique<ChipStatePanel> (exportStatus);
-	chipStatePanel->onExport = [this]
+	keyboardPanel = std::make_unique<KeyboardPanel> (exportStatus);
+	keyboardPanel->onExport = [this]
 	{
 		// The export lives with the panel that owns the waves, but the file chooser is the
 		// slot's: one chooser per page rather than one per view.
-		const int writable = (int) chipState.channels.size ();
+		const int writable = (int) snapshot.channels.size ();
 
 		if (writable == 0)
 		{
 			exportStatus = toybox::i18n::tr ("visualiser.exportEmpty");
-			chipStatePanel->repaint ();
+			keyboardPanel->repaint ();
 			return;
 		}
 
@@ -348,9 +348,9 @@ ContentSlot::ContentSlot (toybox::PlaybackEngine& engineToUse)
 
 			int written = 0;
 
-			for (std::size_t i = 0; i < chipState.channels.size (); ++i)
+			for (std::size_t i = 0; i < snapshot.channels.size (); ++i)
 			{
-				const auto& channel = chipState.channels[i];
+				const auto& channel = snapshot.channels[i];
 
 				if (channel.wave.size () < 2)
 				{
@@ -368,14 +368,14 @@ ContentSlot::ContentSlot (toybox::PlaybackEngine& engineToUse)
 			}
 
 			exportStatus = juce::String (written) + " WAV";
-			chipStatePanel->repaint ();
+			keyboardPanel->repaint ();
 		});
 	};
 
 	scopePanel = std::make_unique<ScopePanel> ();
 
 	addAndMakeVisible (*mixer);
-	addChildComponent (*chipStatePanel);
+	addChildComponent (*keyboardPanel);
 	addChildComponent (*scopePanel);
 
 	startTimerHz (kRefreshHz);
@@ -389,7 +389,7 @@ ContentSlot::~ContentSlot (void)
 
 void ContentSlot::setView (ContentView view)
 {
-	if (view == current && (mixer->isVisible () || chipStatePanel->isVisible () || scopePanel->isVisible ()))
+	if (view == current && (mixer->isVisible () || keyboardPanel->isVisible () || scopePanel->isVisible ()))
 	{
 		return;
 	}
@@ -397,13 +397,13 @@ void ContentSlot::setView (ContentView view)
 	current = view;
 
 	mixer->setVisible (view == ContentView::mixer);
-	chipStatePanel->setVisible (view == ContentView::chipState);
+	keyboardPanel->setVisible (view == ContentView::keyboard);
 	scopePanel->setVisible (view == ContentView::oscilloscope);
 
 	// The capture is only worth running for the panel that is showing.
-	engine.setStateCaptureWanted (view == ContentView::chipState);
+	engine.setStateCaptureWanted (view == ContentView::keyboard);
 
-	if (view == ContentView::chipState)
+	if (view == ContentView::keyboard)
 	{
 		lastChannelCount = -1;		// force a relayout of the panel on the next tick
 	}
@@ -423,7 +423,7 @@ void ContentSlot::refresh (void)
 void ContentSlot::refreshLanguage (void)
 {
 	if (mixer != nullptr) { mixer->refreshLanguage (); }
-	if (chipStatePanel != nullptr) { chipStatePanel->refreshLanguage (); }
+	if (keyboardPanel != nullptr) { keyboardPanel->refreshLanguage (); }
 	if (scopePanel != nullptr) { scopePanel->repaint (); }
 }
 
@@ -431,18 +431,18 @@ void ContentSlot::songChanged (void)
 {
 	if (mixer != nullptr) { mixer->refresh (); }
 
-	chipState.chips.clear ();
-	chipState.channels.clear ();
-	chipState.valid = false;
+	snapshot.chips.clear ();
+	snapshot.channels.clear ();
+	snapshot.valid = false;
 	lastChannelCount = -1;
 	exportStatus.clear ();
 
-	if (chipStatePanel != nullptr)
+	if (keyboardPanel != nullptr)
 	{
 		// The panel paints its own copy; clearing only the slot's left the previous song's
 		// channels on screen, which is exactly the bug this line fixes.
-		chipStatePanel->setSnapshot (chipState);
-		chipStatePanel->repaint ();
+		keyboardPanel->setSnapshot (snapshot);
+		keyboardPanel->repaint ();
 	}
 }
 
@@ -469,13 +469,13 @@ void ContentSlot::resized (void)
 	const auto inner = getLocalBounds ().reduced (2);
 
 	if (mixer != nullptr) { mixer->setBounds (getLocalBounds ()); }
-	if (chipStatePanel != nullptr) { chipStatePanel->setBounds (inner); }
+	if (keyboardPanel != nullptr) { keyboardPanel->setBounds (inner); }
 	if (scopePanel != nullptr) { scopePanel->setBounds (inner); }
 }
 
 void ContentSlot::timerCallback (void)
 {
-	if (current != ContentView::chipState || ! chipStatePanel->isVisible ())
+	if (current != ContentView::keyboard || ! keyboardPanel->isVisible ())
 	{
 		return;
 	}
@@ -488,21 +488,21 @@ void ContentSlot::timerCallback (void)
 
 	engine.setStateCaptureWanted (true);
 
-	if (engine.captureChipState (chipState))
+	if (engine.captureChipState (snapshot))
 	{
-		chipStatePanel->setSnapshot (chipState);
+		keyboardPanel->setSnapshot (snapshot);
 
-		const int rows = (int) chipState.channels.size ();
+		const int rows = (int) snapshot.channels.size ();
 
 		if (rows != lastChannelCount)
 		{
 			lastChannelCount = rows;
-			chipStatePanel->resized ();
+			keyboardPanel->resized ();
 		}
 
 		if (isShowing ())
 		{
-			chipStatePanel->repaint ();
+			keyboardPanel->repaint ();
 		}
 	}
 }

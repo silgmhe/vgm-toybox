@@ -17,7 +17,7 @@ class MixerPanel;
 enum class ContentView
 {
 	mixer = 0,
-	chipState = 1,
+	keyboard = 1,
 	oscilloscope = 2
 };
 
@@ -52,7 +52,7 @@ public:
 	static constexpr int minHeight = 170;
 
 private:
-	class ChipStatePanel;
+	class KeyboardPanel;
 	class ScopePanel;
 
 	void timerCallback (void) override;
@@ -60,11 +60,11 @@ private:
 	toybox::PlaybackEngine& engine;
 	ContentView current = ContentView::mixer;
 
-	playback::ChipStateSnapshot chipState;
+	playback::ChipStateSnapshot snapshot;
 	int lastChannelCount = -1;
 
 	std::unique_ptr<MixerPanel> mixer;
-	std::unique_ptr<ChipStatePanel> chipStatePanel;
+	std::unique_ptr<KeyboardPanel> keyboardPanel;
 	std::unique_ptr<ScopePanel> scopePanel;
 
 	std::unique_ptr<juce::FileChooser> waveChooser;

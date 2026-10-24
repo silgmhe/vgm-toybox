@@ -123,9 +123,9 @@ ToyboxAudioProcessorEditor::ToyboxAudioProcessorEditor (ToyboxAudioProcessor& p)
 
 	// The View menu lists what the content area can show, not pages of the window: there is one
 	// page, and switching replaces the rectangle above the transport.
-	menu.viewNames = juce::StringArray { i18n::tr ("view.mixer"), i18n::tr ("view.chipState"),
+	menu.viewNames = juce::StringArray { i18n::tr ("view.mixer"), i18n::tr ("view.keyboard"),
 										 i18n::tr ("view.scope") };
-	menu.viewIds = juce::StringArray { "mixer", "chipState", "scope" };
+	menu.viewIds = juce::StringArray { "mixer", "keyboard", "scope" };
 	// The tick asks the page what it is showing each time the menu is built, so it follows any
 	// switch - this menu, Ctrl+1..3, or a change made from code.
 	menu.getCurrentView = [this] { return playView != nullptr ? (int) playView->getContentView () : 0; };
