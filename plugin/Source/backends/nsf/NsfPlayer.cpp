@@ -162,6 +162,37 @@ double NsfPlayer::positionSeconds (void) const
 	return (double) rendered / rate;
 }
 
+bool NsfPlayer::seekTo (double seconds)
+{
+	if (seconds < 0.0)
+	{
+		return false;
+	}
+
+	// Restart, then run the driver until the position is reached. There is no state to seek into:
+	// the music lives in a program that has to be executed from its beginning.
+	start ();
+
+	float left [1024] = {};
+	float right [1024] = {};
+
+	while (positionSeconds() < seconds)
+	{
+		const auto remaining = seconds - positionSeconds();
+		auto block = (int) (remaining * rate);
+
+		if (block <= 0)
+		{
+			break;
+		}
+
+		block = block > 1024 ? 1024 : block;
+		render (left, right, block);
+	}
+
+	return true;
+}
+
 void NsfPlayer::setTrackAudible (int trackIndex)
 {
 	soloTrack = trackIndex;

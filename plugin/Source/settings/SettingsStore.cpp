@@ -30,7 +30,8 @@ namespace
 	constexpr const char* kRestoreLastSongKey = "standalone.restoreLastSong";
 	constexpr const char* kCloseToTrayKey = "standalone.closeToTray";
 	constexpr const char* kLastSongKey = "standalone.lastSong";
-	constexpr const char* kMidiBendRangeKey = "midi.pitchBendRange";
+	constexpr const char* kNsfDurationKey = "nsf.durationSeconds";
+constexpr const char* kMidiBendRangeKey = "midi.pitchBendRange";
 	constexpr const char* kMidiBendEnabledKey = "midi.pitchBendEnabled";
 
 // The sample's own root, added to the transposition the registers ask for. Off by default: the
@@ -293,6 +294,35 @@ void SettingsStore::setCloseToTray (bool shouldCloseToTray)
 	lastErrorMessage = file->saveIfNeeded() ? juce::String() : writeErrorFor (settingsFile());
 
 	broadcastChange();
+}
+
+namespace
+{
+	constexpr int kDefaultNsfSeconds = 180;
+	constexpr int kMinNsfSeconds = 10;
+	constexpr int kMaxNsfSeconds = 3600;
+}
+
+int SettingsStore::getNsfDurationSeconds (void) const
+{
+	// Three minutes by default: an NSF header has no length, so the only honest source is a number
+	// the user can see and change. Clamped on read, like every other number here, so a hand-edited
+	// file cannot produce a seek bar that lies.
+	return juce::jlimit (kMinNsfSeconds, kMaxNsfSeconds,
+						 file->getIntValue (kNsfDurationKey, kDefaultNsfSeconds));
+}
+
+void SettingsStore::setNsfDurationSeconds (int seconds)
+{
+	const int clamped = juce::jlimit (kMinNsfSeconds, kMaxNsfSeconds, seconds);
+
+	if (clamped == getNsfDurationSeconds())
+	{
+		return;
+	}
+
+	file->setValue (kNsfDurationKey, clamped);
+	lastErrorMessage = file->saveIfNeeded() ? juce::String() : writeErrorFor (settingsFile());
 }
 
 int SettingsStore::getMidiPitchBendRange (void) const

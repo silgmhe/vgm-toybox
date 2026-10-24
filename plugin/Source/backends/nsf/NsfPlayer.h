@@ -40,6 +40,10 @@ public:
 	/** Renders `frames` stereo frames. Returns how many were written. */
 	int render (float* left, float* right, int frames);
 
+	/** Restarts and runs to `seconds`. An NSF cannot be resumed from the middle - the only
+		way to a point is through everything before it. */
+	bool seekTo (double seconds);
+
 	/** Solos one of the five channels; -1 leaves them all audible. */
 	void setTrackAudible (int trackIndex);
 

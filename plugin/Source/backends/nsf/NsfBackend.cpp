@@ -6,6 +6,7 @@
 
 #include "backends/nsf/NsfPlayer.h"
 #include "formats/nsf/NsfFile.h"
+#include "settings/SettingsStore.h"
 
 namespace toybox::backends::nsf
 {
@@ -17,15 +18,19 @@ namespace
 class NsfTrackPlayer final : public playback::ITrackPlayer
 {
 public:
-	NsfTrackPlayer (const formats::nsf::NsfFile& file, double sampleRate)
-		: player (file, sampleRate)
+	NsfTrackPlayer (const formats::nsf::NsfFile& file, double sampleRate, double seconds)
+		: player (file, sampleRate), length (seconds)
 	{
 		player.start ();
 	}
 
 	void start (void) override {}
 	void pause (void) override {}
-	bool seekSeconds (double) override { return false; }
+
+	bool seekSeconds (double seconds) override
+	{
+		return player.seekTo (seconds);
+	}
 	void setTimeline (int, double) override {}
 	void setTrackAudible (playback::TrackId track, bool audible) override
 	{
@@ -45,12 +50,13 @@ public:
 
 	bool isFinished (void) const override
 	{
-		// An NSF has no end: the driver loops until it is stopped.
-		return false;
+		// The driver loops forever; the length the user configured is what ends a song here.
+		return player.positionSeconds () >= length;
 	}
 
 private:
 	NsfPlayer player;
+	double length = 180.0;
 };
 
 class NsfSongInstance final : public playback::ISongInstance
@@ -60,6 +66,14 @@ public:
 		: file (std::move (image)), image (std::move (bytes))
 	{
 		info_.formatName = "NSF (NSFPlay core)";
+
+		// The header has no length and the driver never ends, so the timeline comes from the
+		// setting: three minutes unless the user says otherwise.
+		length = (double) settings::SettingsStore::getInstance ().getNsfDurationSeconds ();
+		info_.durationSeconds = length;
+		info_.singlePassSeconds = length;
+		info_.durationSeconds = length;
+		info_.singlePassSeconds = length;
 
 		if (! file.name.empty ()) { info_.tags["title"] = file.name.c_str (); }
 		if (! file.artist.empty ()) { info_.tags["artist"] = file.artist.c_str (); }
@@ -98,6 +112,7 @@ public:
 	{
 		playback::BackendCapabilities caps;
 		caps.isolation = playback::IsolationMode::multiInstance;
+		caps.canSeek = true;
 		caps.rendersAtHostRate = true;
 		return caps;
 	}
@@ -105,6 +120,7 @@ public:
 	bool prepare (double hostSampleRate, int maxBlockSize, juce::String& errorMessage) override
 	{
 		rate = hostSampleRate > 0.0 ? hostSampleRate : 44100.0;
+		length = (double) settings::SettingsStore::getInstance ().getNsfDurationSeconds ();
 		blockSize = maxBlockSize > 0 ? maxBlockSize : 512;
 		errorMessage.clear ();
 		return true;
@@ -115,7 +131,7 @@ public:
 	std::unique_ptr<playback::ITrackPlayer> createPlayer (juce::String& errorMessage) override
 	{
 		errorMessage.clear ();
-		return std::make_unique<NsfTrackPlayer> (file, rate);
+		return std::make_unique<NsfTrackPlayer> (file, rate, length);
 	}
 
 private:
@@ -124,6 +140,7 @@ private:
 	playback::SongInfo info_;
 	std::vector<playback::TrackInfo> tracks_;
 	double rate = 44100.0;
+	double length = 180.0;
 	int blockSize = 512;
 };
 

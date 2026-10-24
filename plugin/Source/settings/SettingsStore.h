@@ -151,6 +151,11 @@ public:
 		instrument, not one project's routing. */
 	int getMidiPitchBendRange (void) const;
 
+	/** How long an NSF is taken to be, in seconds. The format carries no length and its driver
+		never ends, so this is what the timeline and the seek bar are built on. */
+	int getNsfDurationSeconds (void) const;
+	void setNsfDurationSeconds (int seconds);
+
 	/** Stores the range (clamped to what the engine can encode) and tells every listener. */
 	void setMidiPitchBendRange (int semitones);
 
