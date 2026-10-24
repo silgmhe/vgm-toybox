@@ -11,6 +11,11 @@
 #include "playback/DawSync.h"
 #include "playback/MidiSink.h"
 #include "playback/OutputRouting.h"
+#include <atomic>
+#include <condition_variable>
+#include <mutex>
+#include <thread>
+
 #include "playback/SongBackend.h"
 
 namespace toybox::playback
@@ -88,6 +93,11 @@ public:
 	void pause (void);
 	void stop (void);
 	void setPositionSeconds (double seconds);
+
+	/** Same request, but the replay happens on a worker and this returns at once. The transport uses
+		it because a seek can take seconds on a backend that replays every track; anything that needs
+		to read the players straight afterwards must use setPositionSeconds() instead. */
+	void requestPositionSeconds (double seconds);
 	void setLoopCount (int loops);			// 0 = loop forever
 	void setFadeSeconds (double seconds);
 	/** The output volume: the **last** gain stage of the engine, applied after every mixer
@@ -292,6 +302,8 @@ private:
 		does rebuildPlayers() - which runs with the lock already held. Named this way so the
 		convention is visible instead of relying on the lock being recursive. */
 	void setPositionSecondsLocked (double seconds);		// caller must hold the lock
+	void seekAllPlayersTo (double target);				// caller must hold the lock
+	void runSeekWorker (void);
 	void updatePlayerTimeline (void);					// caller must hold the lock
 	void emitMidiForBlock (double blockStartSeconds, int numSamples, double sampleRate,
 						   playback::MidiBlockSink* sink);	// caller must hold the lock
@@ -495,6 +507,18 @@ private:
 	std::atomic<float> outputPeakL { 0.0f };		// master meter, published by render()
 	std::atomic<float> outputPeakR { 0.0f };
 	std::atomic<int> starvedBlocks { 0 };			// diagnostics - see getStarvedBlocks()
+
+	// Seeking on a worker: a backend that isolates per track has to replay every one of them, and
+	// an NSF has no state to jump into - so the work is seconds, and doing it on the message thread
+	// freezes the window. The request is published here and the worker does the replay; the number
+	// the UI draws is the request, which is the only thing it can know.
+	std::atomic<int> playerCount { 0 };
+	std::atomic<bool> seekRequested { false };
+	std::atomic<bool> seekThreadShouldStop { false };
+	std::atomic<double> seekTargetSeconds { 0.0 };
+	std::thread seekThread;
+	std::mutex seekMutex;
+	std::condition_variable seekCv;
 
 	// Output routing: the master bus target/mute and the connectivity the host showed us in the
 	// last block (bit i = bus i was connected; bus 0 counts as connected until told otherwise).

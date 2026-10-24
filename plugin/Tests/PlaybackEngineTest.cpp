@@ -606,6 +606,33 @@ int main (int argc, char* argv[])
 	}
 
 	// --- [5] suspended devices really save emulation time -----------------------------------
+	// Async seek: the transport asks for a position and returns at once, so the only thing that can
+	// go wrong here is the worker never finishing. Poll it with a deadline and report how long the
+	// message thread was free - that number is what the user feels.
+	{
+		const double before = (double) juce::Time::getMillisecondCounterHiRes ();
+		engine.requestPositionSeconds (60.0);
+		const double returned = (double) juce::Time::getMillisecondCounterHiRes () - before;
+
+		bool settled = false;
+		double waited = 0.0;
+
+		for (int i = 0; i < 400 && ! settled; ++i)
+		{
+			renderSeconds (engine, 0.05, sampleRate, blockSize);
+
+			// The published position is the request, so only the player\'s own position says the
+			// worker is actually done.
+			settled = std::abs (engine.getTrackPositionSeconds (0) - 60.0) < 1.0;
+			waited = (double) juce::Time::getMillisecondCounterHiRes () - before;
+		}
+
+		std::printf ("    async seek: returned in %.1f ms, settled after %.0f ms (wall clock) (player 0 at %.2f s)\n",
+					 returned, waited, engine.getTrackPositionSeconds (0));
+		check (returned < 50.0, "requesting a seek does not block the message thread");
+		check (settled, "the background seek reaches its target");
+	}
+
 	std::printf ("[5] render cost (20 blocks)\n");
 	const auto timeRender = [&engine, blockSize]
 	{
