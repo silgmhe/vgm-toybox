@@ -588,7 +588,14 @@ void TransportPanel::seekToSeconds (double seconds)
 	}
 
 	const double duration = engine.getDurationSeconds();
-	seconds = juce::jlimit (0.0, duration, seconds);
+
+	// A length of zero means the backend has not reported one, not that the song is empty. Clamping
+	// to it turns every seek into a seek to the beginning, which reads as a dead progress bar rather
+	// than as a missing number.
+	if (duration > 0.0)
+	{
+		seconds = juce::jlimit (0.0, duration, seconds);
+	}
 	engine.setPositionSeconds (seconds);
 
 	// while the transport is running the cursor stays where it is; a stationary transport

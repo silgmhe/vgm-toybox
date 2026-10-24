@@ -534,7 +534,10 @@ void PlaybackEngine::setPositionSecondsLocked (double seconds)
 	}
 
 	const double duration = getPlayLengthSeconds();
-	const double target = juce::jlimit (0.0, juce::jmax (0.0, duration), seconds);
+	// The same guard as the transport's, for the same reason: a backend that has not reported a
+	// length must not have its seeks folded to zero on the way through.
+	const double target = duration > 0.0 ? juce::jlimit (0.0, duration, seconds)
+										 : juce::jmax (0.0, seconds);
 
 	// every track seeks to the very same sample, which is what keeps them in sync
 	for (auto& player : trackPlayers)
