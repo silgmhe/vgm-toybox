@@ -68,6 +68,14 @@ public:
 		addAndMakeVisible (exportButton);
 	}
 
+	/** Back to the default window: a new song has its own range and no manual shift. */
+	void resetRange (void)
+	{
+		observedMin = -1;
+		observedMax = -1;
+		manualBase = -1;
+	}
+
 	void setSnapshot (const toybox::playback::ChipStateSnapshot& snapshotToUse)
 	{
 		snapshot = snapshotToUse;
@@ -82,6 +90,17 @@ public:
 		for (std::size_t i = 0; i < peakHold.size () && i < snapshot.channels.size (); ++i)
 		{
 			peakHold[i] = juce::jmax (snapshot.channels[i].volume, peakHold[i] * 0.94f);
+		}
+
+		for (const auto& channel : snapshot.channels)
+		{
+			if (channel.note < 0)
+			{
+				continue;
+			}
+
+			observedMin = observedMin < 0 ? channel.note : juce::jmin (observedMin, channel.note);
+			observedMax = observedMax < 0 ? channel.note : juce::jmax (observedMax, channel.note);
 		}
 	}
 
@@ -164,6 +183,20 @@ public:
 				return;
 			}
 
+			// The arrow is a button: it already says which way the note went, so going there
+			// costs nothing and needs no second control.
+			if (row.keys.contains (point))
+			{
+				const bool left = point.x < row.keys.getX () + 14;
+				const bool right = point.x > row.keys.getRight () - 14;
+
+				if (left || right)
+				{
+					shiftOctaves (left ? -1 : 1);
+					return;
+				}
+			}
+
 			if (row.mute.contains (point))
 			{
 				engine.setTrackMute ((std::size_t) channel.trackIndex,
@@ -181,8 +214,18 @@ public:
 		}
 	}
 
-	void mouseWheelMove (const juce::MouseEvent&, const juce::MouseWheelDetails& wheel) override
+	void mouseWheelMove (const juce::MouseEvent& event, const juce::MouseWheelDetails& wheel) override
 	{
+		if (event.mods.isCtrlDown ())
+		{
+			if (std::abs (wheel.deltaY) > 0.01f)
+			{
+				shiftOctaves (wheel.deltaY > 0.0f ? 1 : -1);
+			}
+
+			return;
+		}
+
 		// Scrolling by hand rather than through a Viewport: the panel draws only the rows that are
 		// on screen, so it already knows where everything is and a viewport would be a second
 		// authority on the same geometry.
@@ -474,32 +517,114 @@ private:
 		return cycle;
 	}
 
-	/** How many octaves fit. Twenty pixels per white key is the smallest that still reads as a
-		keyboard; below that the range shrinks rather than the keys. */
-	int octavesFor (int keysWidth) const
+	/** Keys are a fixed width. A wider window shows more of them rather than bigger ones, which
+		is what a keyboard is: the distance between two keys does not change because the window
+		did. */
+	static constexpr int kWhiteKeyWidth = 20;
+	static constexpr int kMinWhiteKeyWidth = 16;
+	static constexpr int kFirstMusicalNote = 12;	// C0
+	static constexpr int kLastMusicalNote = 119;	// B8
+
+	/** What one row's keyboard covers, worked out from the room it has. */
+	struct KeySpan
 	{
-		return juce::jlimit (3, 7, keysWidth / (7 * 20));
+		int base = 36;			// lowest note drawn
+		int whiteKeys = 28;
+		int keyWidth = kWhiteKeyWidth;
+		int lastNote = 83;
+	};
+
+	static int octaveFloor (int note)
+	{
+		return note - ((note % 12) + 12) % 12;
 	}
 
-	/** Four octaves at a narrow window, seven at a wide one, the left edge pinned to C2.
+	/** The note of the k-th white key counted from `base`, which is itself a C. */
+	static int noteForWhite (int base, int k)
+	{
+		static const int offsets[7] = { 0, 2, 4, 5, 7, 9, 11 };
+		return base + (k / 7) * 12 + offsets[k % 7];
+	}
 
-		Pinned on purpose: a keyboard centred on C4 would slide every key on every resize, and
-		thirteen rows sliding independently reads as a fault rather than as a layout.
+	/** Where the keyboard starts.
+
+		Three answers, in order of authority: the setting, if the user named a note; the manual
+		shift, if they moved the window; otherwise the notes this song has played so far, taking
+		the lowest of them and rounding down to a C.
 	*/
+	int baseNote (int octavesVisible) const
+	{
+		const int setting = toybox::settings::SettingsStore::getInstance ().getKeyboardStartNote ();
+
+		if (setting >= 0)
+		{
+			return setting;
+		}
+
+		if (manualBase >= 0)
+		{
+			return manualBase;
+		}
+
+		if (observedMin < 0)
+		{
+			return 36;		// C2 until the song has played something
+		}
+
+		const int low = octaveFloor (observedMin);
+
+		if (observedMax - low < octavesVisible * 12)
+		{
+			return juce::jlimit (0, kLastMusicalNote - 12, low);
+		}
+
+		// The music is wider than the window. Centre on its median so both edges run out at
+		// roughly the same time, rather than pinning the lowest note and losing the top half.
+		const int mid = (observedMin + observedMax) / 2;
+
+		return juce::jlimit (0, kLastMusicalNote - octavesVisible * 12,
+							 octaveFloor (mid) - (octavesVisible / 2) * 12);
+	}
+
+	KeySpan spanFor (juce::Rectangle<int> area) const
+	{
+		KeySpan span;
+
+		const int minWhite = 14;		// two octaves, however narrow the window gets
+
+		span.keyWidth = kWhiteKeyWidth;
+
+		if (area.getWidth () / span.keyWidth < minWhite)
+		{
+			span.keyWidth = juce::jmax (10, area.getWidth () / minWhite);
+		}
+
+		span.whiteKeys = juce::jmax (7, area.getWidth () / span.keyWidth);
+
+		const int octavesVisible = juce::jmax (2, span.whiteKeys / 7);
+		span.base = baseNote (octavesVisible);
+
+		// Nothing above B8 can light, so the keys stop there and the rest is left blank.
+		const int whiteByRange = ((kLastMusicalNote - span.base) / 12) * 7 + 7;
+		span.whiteKeys = juce::jmin (span.whiteKeys, whiteByRange);
+
+		span.lastNote = noteForWhite (span.base, span.whiteKeys - 1);
+
+		return span;
+	}
+
+	/** A fixed-width keyboard starting at the span's base note, with the sounding key lit. */
 	void paintKeyboard (juce::Graphics& g, juce::Rectangle<int> area, int note)
 	{
-		if (area.getWidth () < 80 || area.getHeight () < 12)
+		if (area.getWidth () < 60 || area.getHeight () < 12)
 		{
 			return;
 		}
 
-		constexpr int firstNote = 36;		// C2
-		constexpr int whiteIndex[12] = { 0, -1, 1, -1, 2, 3, -1, 4, -1, 5, -1, 6 };
+		const auto span = spanFor (area);
+		lastSpan = span;
 
-		const int octaves = octavesFor (area.getWidth ());
-		const int lastNote = firstNote + octaves * 12;
-
-		const float whiteWidth = (float) area.getWidth () / (float) (octaves * 7);
+		const float whiteWidth = (float) span.keyWidth;
 		const float blackWidth = whiteWidth * 0.62f;
 		const float blackHeight = (float) area.getHeight () * 0.62f;
 
@@ -510,46 +635,14 @@ private:
 		const juce::Colour litKey = theme::accent ();
 		const juce::Colour litBlack = theme::accent ().darker (0.25f);
 
-		const auto keyFor = [&] (int offset, float& x, float& width, bool& black)
+		const auto drawKey = [&] (int keyNote, juce::Rectangle<float> key, bool black)
 		{
-			const int octave = offset / 12;
-			const int pitchClass = offset % 12;
-
-			if (whiteIndex[pitchClass] >= 0)
-			{
-				x = (float) area.getX () + whiteWidth * (float) (octave * 7 + whiteIndex[pitchClass]);
-				width = whiteWidth;
-				black = false;
-			}
-			else
-			{
-				x = (float) area.getX () + whiteWidth * (float) (octave * 7 + whiteIndex[pitchClass - 1] + 1)
-					- blackWidth * 0.5f;
-				width = blackWidth;
-				black = true;
-			}
-		};
-
-		const auto paintKey = [&] (int offset, bool wantBlack)
-		{
-			float x = 0.0f, width = 0.0f;
-			bool black = false;
-			keyFor (offset, x, width, black);
-
-			if (black != wantBlack)
-			{
-				return;
-			}
-
-			const int keyNote = firstNote + offset;
-			const bool lit = note == keyNote;
-			const float height = black ? blackHeight : (float) area.getHeight ();
-			const juce::Rectangle<float> key (x + 0.5f, (float) area.getY (), width - 1.0f, height);
+			const bool lit = keyNote == note;
 
 			g.setColour (lit ? (black ? litBlack : litKey) : (black ? blackKey : whiteKey));
 			g.fillRoundedRectangle (key, 1.5f);
 
-			if (lit && width >= 13.0f)
+			if (lit && key.getWidth () >= 13.0f)
 			{
 				g.setColour (theme::onAccent ());
 				g.setFont (juce::Font (juce::FontOptions (9.0f)));
@@ -557,48 +650,63 @@ private:
 			}
 		};
 
-		for (int octave = 0; octave < octaves; ++octave)
+		// White keys first, then the blacks on top of them.
+		for (int k = 0; k < span.whiteKeys; ++k)
 		{
-			for (int pc = 0; pc < 12; ++pc)
-			{
-				if (whiteIndex[pc] >= 0)
-				{
-					paintKey (octave * 12 + pc, false);
-				}
-			}
+			const int keyNote = noteForWhite (span.base, k);
+			const juce::Rectangle<float> key ((float) area.getX () + whiteWidth * (float) k,
+											  (float) area.getY (), whiteWidth - 1.0f,
+											  (float) area.getHeight ());
+			drawKey (keyNote, key, false);
 		}
 
-		for (int octave = 0; octave < octaves; ++octave)
+		for (int k = 0; k < span.whiteKeys; ++k)
 		{
-			for (int pc = 0; pc < 12; ++pc)
-			{
-				if (whiteIndex[pc] < 0)
-				{
-					paintKey (octave * 12 + pc, true);
-				}
-			}
+			const int pc = k % 7;
+
+			// E and B have no black key above them; the rest do.
+			if (pc == 2 || pc == 6) { continue; }
+
+			const int keyNote = noteForWhite (span.base, k) + 1;
+
+			if (keyNote > kLastMusicalNote) { continue; }
+
+			const juce::Rectangle<float> key ((float) area.getX () + whiteWidth * (float) (k + 1) - blackWidth * 0.5f,
+											  (float) area.getY (), blackWidth, blackHeight);
+			drawKey (keyNote, key, true);
 		}
 
-		// The octave names, on the C keys only. Three density steps, because a label that collides
-		// with its neighbour is worse than no label at all.
+		// The octave names, on the C keys. Fewer of them as the keys get small, because a label
+		// that collides with its neighbour is worse than no label at all.
 		const int everyNth = whiteWidth >= 15.0f ? 1 : (whiteWidth >= 10.0f ? 2 : 0);
 
 		if (everyNth > 0)
 		{
 			g.setFont (juce::Font (juce::FontOptions (8.5f)));
+			int nth = 0;
 
-			for (int octave = 0; octave < octaves; octave += everyNth)
+			for (int k = 0; k < span.whiteKeys; ++k)
 			{
-				const int keyNote = firstNote + octave * 12;
+				const int keyNote = noteForWhite (span.base, k);
+
+				if (keyNote % 12 != 0)
+				{
+					continue;
+				}
 
 				if (keyNote == note)
 				{
 					continue;		// the row's own note label already names this key
 				}
 
-				const float x = (float) area.getX () + whiteWidth * (float) (octave * 7);
-				const juce::Rectangle<float> key (x + 1.0f, (float) area.getY (),
-												  whiteWidth - 2.0f, (float) area.getHeight ());
+				if ((nth++ % everyNth) != 0)
+				{
+					continue;
+				}
+
+				const juce::Rectangle<float> key ((float) area.getX () + whiteWidth * (float) k + 1.0f,
+												  (float) area.getY (), whiteWidth - 2.0f,
+												  (float) area.getHeight ());
 
 				g.setColour (theme::secondaryText ().withAlpha (0.75f));
 				g.drawText (noteName (keyNote), key.toNearestInt ().withTrimmedBottom (1),
@@ -606,20 +714,18 @@ private:
 			}
 		}
 
-		// Out of range: a narrow window shows fewer octaves, and a note above or below them has
-		// nowhere to light. The arrow says which way it went without moving the keyboard.
-		if (note >= 0 && (note < firstNote || note >= lastNote)
+		// Out of range: the note is further along the keyboard than the keys on screen. The arrow
+		// points that way and, when clicked, moves the window there.
+		if (note >= 0 && (note < span.base || note > span.lastNote)
 			&& toybox::settings::SettingsStore::getInstance ().getKeyboardRangeHints ())
 		{
-			const bool above = note >= lastNote;
+			const bool above = note > span.lastNote;
 			const float size = 4.0f;
 			const float cx = above ? (float) area.getRight () - 6.0f : (float) area.getX () + 6.0f;
 			const float cy = (float) area.getCentreY ();
 
 			juce::Path arrow;
 
-			// Pointing along the keyboard rather than up or down. An arrow that pointed up read as
-			// "this note is high", when what it means is "further along, off this edge".
 			if (above)
 			{
 				arrow.addTriangle (cx + size, cy, cx - size, cy - size, cx - size, cy + size);
@@ -637,6 +743,15 @@ private:
 			g.drawText (noteName (note), area.withTrimmedLeft (above ? 0 : 12).withTrimmedRight (above ? 12 : 0),
 						juce::Justification::centred, false);
 		}
+	}
+
+	/** Moves the window by whole octaves; the setting and the song's observed range both yield
+		to it until the next song. */
+	void shiftOctaves (int direction)
+	{
+		const int step = direction > 0 ? 12 : -12;
+		manualBase = juce::jlimit (kFirstMusicalNote, kLastMusicalNote - 12 * 3, lastSpan.base + step);
+		repaint ();
 	}
 
 	void paintMeter (juce::Graphics& g, juce::Rectangle<int> area, const toybox::playback::ChannelState& channel,
@@ -671,6 +786,16 @@ private:
 
 	int scrollOffset = 0;
 	int contentHeight = 0;
+
+	// The range this song has played so far. It only ever grows: a window that shrank whenever a
+	// bass note passed would move the whole page, and thirteen rows moving at once is unreadable.
+	int observedMin = -1;
+	int observedMax = -1;
+
+	// Set when the user moves the window by hand; -1 means "follow the setting or the song".
+	int manualBase = -1;
+
+	KeySpan lastSpan;
 
 	juce::String& exportStatus;
 	juce::TextButton exportButton { "export" };
@@ -819,6 +944,7 @@ void ContentSlot::songChanged (void)
 	{
 		// The panel paints its own copy; clearing only the slot's left the previous song's
 		// channels on screen, which is exactly the bug this line fixes.
+		keyboardPanel->resetRange ();
 		keyboardPanel->setSnapshot (snapshot);
 		keyboardPanel->repaint ();
 	}

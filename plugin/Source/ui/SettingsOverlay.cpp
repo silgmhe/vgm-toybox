@@ -736,6 +736,25 @@ KeyboardSettingsPage::KeyboardSettingsPage (void)
 	caption.setJustificationType (juce::Justification::centredLeft);
 	addAndMakeVisible (caption);
 
+	startCaption.setFont (juce::Font (juce::FontOptions (12.5f)));
+	startCaption.setJustificationType (juce::Justification::centredLeft);
+	addAndMakeVisible (startCaption);
+
+	// 1 is "follow the song"; the rest are the notes a player is likely to want fixed.
+	startNote.setComponentID ("settings.keyboard.startNote");
+	startNote.addItem (i18n::tr ("settings.keyboard.startAuto"), 1);
+	startNote.addItem ("C1", 2);
+	startNote.addItem ("C2", 3);
+	startNote.addItem ("C3", 4);
+	startNote.onChange = [this]
+	{
+		static const int notes[] = { -1, 24, 36, 48 };
+		const int index = juce::jlimit (0, 3, startNote.getSelectedId () - 1);
+
+		toybox::settings::SettingsStore::getInstance ().setKeyboardStartNote (notes[index]);
+	};
+	addAndMakeVisible (startNote);
+
 	rangeHints.setComponentID ("settings.keyboard.rangeHints");
 	rangeHints.onClick = [this]
 	{
@@ -754,6 +773,11 @@ KeyboardSettingsPage::KeyboardSettingsPage (void)
 
 void KeyboardSettingsPage::refresh (void)
 {
+	const int stored = toybox::settings::SettingsStore::getInstance ().getKeyboardStartNote ();
+	const int id = stored < 0 ? 1 : (stored <= 24 ? 2 : (stored <= 36 ? 3 : 4));
+
+	startNote.setSelectedId (id, juce::dontSendNotification);
+
 	rangeHints.setToggleState (toybox::settings::SettingsStore::getInstance ().getKeyboardRangeHints (),
 							   juce::dontSendNotification);
 }
@@ -771,6 +795,13 @@ void KeyboardSettingsPage::resized (void)
 	caption.setBounds (area.removeFromTop (18));
 	area.removeFromTop (4);
 
+	auto startRow = area.removeFromTop (kFooterHeight);
+	startCaption.setBounds (startRow.removeFromLeft (120));
+	startNote.setBounds (startRow.removeFromLeft (juce::jmin (160, startRow.getWidth ())));
+
+	area.removeFromTop (14);
+	startCaption.setText (i18n::tr ("settings.keyboard.startNote"), juce::dontSendNotification);
+
 	auto row = area.removeFromTop (kFooterHeight);
 	rangeHints.setBounds (row.removeFromLeft (juce::jmin (320, row.getWidth ())));
 
@@ -785,6 +816,8 @@ void KeyboardSettingsPage::lookAndFeelChanged (void)
 
 void KeyboardSettingsPage::refreshLanguage (void)
 {
+	startCaption.setText (i18n::tr ("settings.keyboard.startNote"), juce::dontSendNotification);
+	startNote.changeItemText (1, i18n::tr ("settings.keyboard.startAuto"));
 	caption.setText (i18n::tr ("settings.keyboard.rangeHints"), juce::dontSendNotification);
 	rangeHints.setButtonText (i18n::tr ("settings.keyboard.rangeHintsOn"));
 	hint.setText (i18n::tr ("settings.keyboard.rangeHintsHint"), juce::dontSendNotification);

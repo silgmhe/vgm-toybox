@@ -281,6 +281,8 @@ public:
 
 private:
 	juce::Label caption;
+	juce::Label startCaption;
+	juce::ComboBox startNote;
 	juce::ToggleButton rangeHints;
 	juce::Label hint;
 };

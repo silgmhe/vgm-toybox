@@ -165,6 +165,10 @@ public:
 	int getNsfOutputGainDb (void) const;
 
 	/** Whether the keyboard draws an arrow when a note falls outside the octaves on screen. */
+	/** Lowest key the keyboard starts at: -1 to follow the song, otherwise a MIDI note. */
+	int getKeyboardStartNote (void) const;
+	void setKeyboardStartNote (int note);
+
 	bool getKeyboardRangeHints (void) const;
 	void setKeyboardRangeHints (bool shouldShow);
 	void setNsfOutputGainDb (int decibels);
