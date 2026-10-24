@@ -252,7 +252,7 @@ target_sources(VGMToybox PRIVATE
 	Source/ui/UiFont.cpp
 	Source/ui/SyncGroup.cpp
 	Source/ui/TransportPanel.cpp
-	Source/ui/VisualiserView.cpp
+	Source/ui/VisualiserPanel.cpp
 )
 
 target_include_directories(VGMToybox PRIVATE Source)

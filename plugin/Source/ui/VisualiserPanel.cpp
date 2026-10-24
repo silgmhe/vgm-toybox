@@ -1,6 +1,7 @@
-#include "VisualiserView.h"
+#include "VisualiserPanel.h"
 
 #include "Theme.h"
+#include "i18n/LanguageManager.h"
 #include "playback/PlaybackEngine.h"
 #include "playback/WaveExport.h"
 
@@ -12,7 +13,7 @@ using namespace toybox::ui;
 namespace
 {
 	constexpr int kInset = 20;
-	constexpr int kHeader = 44;
+	constexpr int kHeader = 40;
 	constexpr int kKeyboardHeight = 62;
 	constexpr int kRowHeight = 30;
 	constexpr int kRefreshHz = 30;
@@ -149,8 +150,7 @@ namespace
 }
 
 //==============================================================================
-/** The first tab: what each channel is playing, and the keyboard it is playing it on. */
-class VisualiserView::ChipPanel : public juce::Component
+class VisualiserPanel::ChipPanel : public juce::Component
 {
 public:
 	ChipPanel (const toybox::playback::ChipStateSnapshot& snapshotToUse, juce::String& statusToUse)
@@ -172,12 +172,11 @@ public:
 	void paint (juce::Graphics& g) override
 	{
 		auto area = getLocalBounds ().reduced (kInset, 0);
-
 		auto header = area.removeFromTop (kHeader);
 
 		g.setColour (theme::primaryText ());
-		g.setFont (juce::Font (juce::FontOptions (15.0f, juce::Font::bold)));
-		g.drawText (toybox::i18n::tr ("visualiser.chips"), header.removeFromLeft (200).withTrimmedTop (12),
+		g.setFont (juce::Font (juce::FontOptions (14.0f, juce::Font::bold)));
+		g.drawText (toybox::i18n::tr ("visualiser.chips"), header.removeFromLeft (200).withTrimmedTop (10),
 					juce::Justification::centredLeft, false);
 
 		if (exportStatus.isNotEmpty ())
@@ -193,12 +192,12 @@ public:
 			g.setColour (theme::secondaryText ());
 			g.setFont (juce::Font (juce::FontOptions (13.0f)));
 			g.drawText (toybox::i18n::tr ("visualiser.chipsUnavailable"),
-						area.withTrimmedTop (40), juce::Justification::centredTop, false);
+						area.withTrimmedTop (30), juce::Justification::centredTop, false);
 			return;
 		}
 
 		drawKeyboard (g, area.removeFromTop (kKeyboardHeight), snapshot);
-		area.removeFromTop (14);
+		area.removeFromTop (12);
 
 		for (const auto& channel : snapshot.channels)
 		{
@@ -265,7 +264,7 @@ public:
 
 	void resized (void) override
 	{
-		exportButton.setBounds (getWidth () - kInset - 112, 12, 112, 24);
+		exportButton.setBounds (getWidth () - kInset - 112, 10, 112, 24);
 	}
 
 	std::function<void ()> onExport;
@@ -277,8 +276,7 @@ private:
 };
 
 //==============================================================================
-/** The second tab: a placeholder, and honest about it. */
-class VisualiserView::ScopePanel : public juce::Component
+class VisualiserPanel::ScopePanel : public juce::Component
 {
 public:
 	void paint (juce::Graphics& g) override
@@ -291,7 +289,7 @@ public:
 };
 
 //==============================================================================
-VisualiserView::VisualiserView (toybox::PlaybackEngine& engineToUse)
+VisualiserPanel::VisualiserPanel (toybox::PlaybackEngine& engineToUse)
 	: engine (engineToUse)
 {
 	chipPanel = std::make_unique<ChipPanel> (chipState, exportStatus);
@@ -299,7 +297,7 @@ VisualiserView::VisualiserView (toybox::PlaybackEngine& engineToUse)
 
 	scopePanel = std::make_unique<ScopePanel> ();
 
-	tabs.setTabBarDepth (34);
+	tabs.setTabBarDepth (32);
 	tabs.setIndent (0);
 	tabs.setOutline (0);
 	tabs.setColour (juce::TabbedComponent::backgroundColourId, juce::Colours::transparentBlack);
@@ -309,30 +307,34 @@ VisualiserView::VisualiserView (toybox::PlaybackEngine& engineToUse)
 	tabs.setColour (juce::TabbedButtonBar::tabTextColourId, theme::secondaryText ());
 	tabs.setColour (juce::TabbedButtonBar::frontTextColourId, theme::primaryText ());
 
-	tabs.addTab (toybox::i18n::tr ("visualiser.tab.chip"), theme::card (), chipPanel.get (), false);
-	tabs.addTab (toybox::i18n::tr ("visualiser.tab.scope"), theme::card (), scopePanel.get (), false);
+	tabs.addTab (toybox::i18n::tr ("visualiser.tab.chip"), juce::Colours::transparentBlack, chipPanel.get (), false);
+	tabs.addTab (toybox::i18n::tr ("visualiser.tab.scope"), juce::Colours::transparentBlack, scopePanel.get (), false);
 
 	addAndMakeVisible (tabs);
 	startTimerHz (kRefreshHz);
 }
 
-VisualiserView::~VisualiserView (void)
+VisualiserPanel::~VisualiserPanel (void)
 {
 	stopTimer ();
 	engine.setStateCaptureWanted (false);
 }
 
-void VisualiserView::paint (juce::Graphics&)
+void VisualiserPanel::paint (juce::Graphics& g)
 {
-	// the tabbed component paints its own background and every page inside it
+	// The card the panel sits in - the same rounded rectangle every other card on the page uses.
+	g.setColour (theme::card ());
+	g.fillRoundedRectangle (getLocalBounds ().toFloat (), theme::cardRadius);
+	g.setColour (theme::cardBorder ());
+	g.drawRoundedRectangle (getLocalBounds ().toFloat ().reduced (0.5f), theme::cardRadius, 1.0f);
 }
 
-void VisualiserView::resized (void)
+void VisualiserPanel::resized (void)
 {
-	tabs.setBounds (getLocalBounds ());
+	tabs.setBounds (getLocalBounds ().reduced (2));
 }
 
-void VisualiserView::refreshLanguage (void)
+void VisualiserPanel::refreshLanguage (void)
 {
 	auto& bar = tabs.getTabbedButtonBar ();
 	bar.setTabName (0, toybox::i18n::tr ("visualiser.tab.chip"));
@@ -346,9 +348,21 @@ void VisualiserView::refreshLanguage (void)
 	repaint ();
 }
 
-void VisualiserView::timerCallback (void)
+void VisualiserPanel::songChanged (void)
 {
-	// A page that is not on screen still ticks otherwise, and repainting an invisible component
+	// The snapshot belongs to the previous song; clear it so the panel does not show one song's
+	// channels under another song's name for a frame.
+	chipState.channels.clear ();
+	chipState.valid = false;
+	lastChannelCount = -1;
+	exportStatus.clear ();
+	chipPanel->resized ();
+	chipPanel->repaint ();
+}
+
+void VisualiserPanel::timerCallback (void)
+{
+	// A panel that is not on screen still ticks otherwise, and repainting an invisible component
 	// costs the same as repainting a visible one. The capture is told to stop with it: an engine
 	// that keeps building snapshots for nobody is exactly the kind of cost that shows up later
 	// as an unexplained load.
@@ -377,7 +391,7 @@ void VisualiserView::timerCallback (void)
 	}
 }
 
-void VisualiserView::exportWaves (void)
+void VisualiserPanel::exportWaves (void)
 {
 	int writable = 0;
 

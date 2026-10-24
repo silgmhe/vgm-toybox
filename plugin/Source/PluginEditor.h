@@ -11,7 +11,6 @@
 #include "ui/SettingsOverlay.h"
 #include "ui/ToyboxLookAndFeel.h"
 #include "ui/ViewStack.h"
-#include "ui/VisualiserView.h"
 
 /**
 	The plugin window: the menu bar, a top row (open button + status line), and then one page.

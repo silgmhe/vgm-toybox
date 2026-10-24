@@ -1,10 +1,8 @@
 #pragma once
 
-#include "ChipPanel.h"
-#include "MixerPanel.h"
-#include "SongInfoPanel.h"
 #include "TransportPanel.h"
 #include "View.h"
+#include "VisualiserPanel.h"
 
 #include "i18n/LanguageManager.h"
 
@@ -14,12 +12,14 @@ namespace toybox::ui
 {
 
 /**
-	The playback page: everything the window shows while it plays - the song info card, the sound
-	chip mutes, the mixer and the transport.
+	The playback page: the chip visualisation above the transport.
 
-	It was the whole window until the View menu arrived; the panels, their layout, their refresh
-	and the transport keys moved here unchanged, so the window itself could shrink to what is
-	genuinely global to it (the menu bar, the open button, the status line, the file drops).
+	It used to hold the song info card, the chip mutes and the mixer. Those are gone - the mixer
+	and the info card by choice, so the window shows one thing at a time - and what sits above the
+	transport is now the visualisation, as two tabs.
+
+	The transport stays where it was, at the bottom, always visible: it is the part of the page
+	that is operated rather than read.
 */
 class PlayView : public View
 {
@@ -39,16 +39,8 @@ public:
 	bool handleKey (const juce::KeyPress& key) override;
 
 private:
-	/** The chip checkboxes belong to the song, so this runs whenever there is a different one.
-		It relayouts as well: the card can appear, disappear or change height. */
-	void rebuildChipButtons (void);
-
-	toybox::PlaybackEngine& engine;
-
-	SongInfoPanel songInfoPanel;
 	TransportPanel transportPanel;
-	ChipPanel chipPanel;
-	MixerPanel mixerPanel;
+	VisualiserPanel visualiserPanel;
 
 	JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (PlayView)
 };
