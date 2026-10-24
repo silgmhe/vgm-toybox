@@ -5,7 +5,7 @@
 #include "i18n/LanguageManager.h"
 #include "playback/ChipState.h"
 
-#include <vector>
+#include <memory>
 
 namespace toybox { class PlaybackEngine; }
 
@@ -13,15 +13,15 @@ namespace toybox::ui
 {
 
 /**
-	The visualisation page.
+	The visualisation page, as two tabs.
 
-	It exists so the panels that will live here can arrive one at a time without touching the
-	playback page. What is here is the chip panel: a snapshot the backend fills in, copied under
-	the engine's own lock rather than read out of the audio thread's registers.
+	"The chip" shows what each channel is doing: its note, drawn on a piano keyboard as a lit key,
+	its level, and - for the chips that read one - the waveform it is playing. "The oscilloscope"
+	is a placeholder; it will show the output signal and has nothing in it yet.
 
-	The scope that used to sit above it has been removed. It drew the final mix, which the
-	transport and the mixer already show in their own way, and it made this page the busiest thing
-	on screen for information the player did not need twice.
+	Both read the same snapshot the backend fills in, copied under the engine's own lock rather
+	than read out of the audio thread's registers. Which tab is showing does not change the cost:
+	the capture runs once per frame for the page, not per tab.
 */
 class VisualiserView : public View,
 					   private juce::Timer
@@ -34,29 +34,24 @@ public:
 	juce::String getViewName (void) const override { return toybox::i18n::tr ("view.visualiser"); }
 
 	void paint (juce::Graphics& g) override;
-	void paintCardShadows (juce::Graphics& g) const override;
 	void resized (void) override;
 	void refreshLanguage (void) override;
 
 private:
-	struct Areas
-	{
-		juce::Rectangle<int> chips;
-		juce::Rectangle<int> plans;
-	};
-
-	Areas layoutAreas (void) const;
+	class ChipPanel;
+	class ScopePanel;
 
 	void timerCallback (void) override;
-
-	void paintChips (juce::Graphics& g, juce::Rectangle<int> area);
 	void exportWaves (void);
 
 	toybox::PlaybackEngine& engine;
 	playback::ChipStateSnapshot chipState;
 	int lastChannelCount = -1;
 
-	juce::TextButton exportButton { "export" };
+	juce::TabbedComponent tabs { juce::TabbedButtonBar::TabsAtTop };
+	std::unique_ptr<ChipPanel> chipPanel;
+	std::unique_ptr<ScopePanel> scopePanel;
+
 	std::unique_ptr<juce::FileChooser> waveChooser;
 	juce::String exportStatus;
 

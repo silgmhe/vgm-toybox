@@ -208,6 +208,9 @@ language: English
 "visualiser.item.spectrum" = "a spectrum analyser of the mix";
 "visualiser.item.waveform" = "the waveform of what you are hearing";
 "visualiser.subtitle" = "Not built yet - this page is where these will live:";
+	"visualiser.tab.chip" = "Chip";
+	"visualiser.tab.scope" = "Oscilloscope";
+	"visualiser.scopePlaceholder" = "The oscilloscope is not built yet.";
 "visualiser.title" = "Visualiser";
 	"visualiser.scopeIdle" = "Nothing is playing.";
 	"visualiser.scopeHint" = "The mix you are hearing, after the mixer and the output volume.";

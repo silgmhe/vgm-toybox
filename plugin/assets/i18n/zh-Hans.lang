@@ -204,6 +204,9 @@ language: 简体中文
 "visualiser.item.spectrum" = "混音的频谱分析";
 "visualiser.item.waveform" = "你正在听到的声音的波形";
 "visualiser.subtitle" = "尚未构建 - 这些内容将来会出现在此页：";
+	"visualiser.tab.chip" = "芯片";
+	"visualiser.tab.scope" = "示波器";
+	"visualiser.scopePlaceholder" = "示波器尚未实现。";
 "visualiser.title" = "可视化";
 	"visualiser.scopeIdle" = "当前没有播放。";
 	"visualiser.scopeHint" = "你正在听到的混音——经过混音器与输出音量之后。";
