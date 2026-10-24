@@ -6,6 +6,7 @@
     no amount of chip work will produce sound.
 */
 
+#include <chrono>
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
@@ -58,6 +59,9 @@ int main (int argc, char** argv)
 	long long counted = 0;
 	const auto total = (long long) (rate * seconds);
 
+	const auto started = std::chrono::steady_clock::now();
+	auto nextReport = 200LL;
+
 	while (counted < total)
 	{
 		const int frames = player.render (left.data (), right.data (), 1024);
@@ -70,6 +74,16 @@ int main (int argc, char** argv)
 		}
 
 		counted += frames;
+
+		if (counted >= nextReport)
+		{
+			const auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+				std::chrono::steady_clock::now() - started).count();
+			std::fprintf (stderr, "PROG samples=%lld elapsed=%lldms writes=%llu\n",
+						  counted, (long long) ms, (unsigned long long) player.soundWrites ());
+			std::fflush (stderr);
+			nextReport += 200;
+		}
 	}
 
 	const double rms = counted > 0 ? std::sqrt (sumSquares / (double) counted) : 0.0;
