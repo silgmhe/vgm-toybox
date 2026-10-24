@@ -426,6 +426,18 @@ add_executable(vgm_mixer_test EXCLUDE_FROM_ALL
 #   <build dir>/plugin/vgm_chip_test
 # --- console test for the NSF reader and address space (not built by default) ---
 #   cmake --build <build dir> --target vgm_nsf_test
+# --- console probe for the NSF player (not built by default) ---
+add_executable(vgm_nsf_probe EXCLUDE_FROM_ALL
+	Tests/NsfProbe.cpp
+	Source/formats/nsf/NsfFile.cpp
+	Source/backends/nsf/NsfBus.cpp
+	Source/backends/nsf/NsfPlayer.cpp
+	Source/backends/nsf/NsfCpuLoggerStub.cpp
+)
+target_link_libraries(vgm_nsf_probe PRIVATE nsfplay_core)
+target_include_directories(vgm_nsf_probe PRIVATE Source)
+target_compile_features(vgm_nsf_probe PRIVATE cxx_std_17)
+
 add_executable(vgm_nsf_test EXCLUDE_FROM_ALL
 	Tests/NsfFormatTest.cpp
 	Source/formats/nsf/NsfFile.cpp
