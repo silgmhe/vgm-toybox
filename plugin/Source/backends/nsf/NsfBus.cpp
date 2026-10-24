@@ -79,6 +79,10 @@ bool NsfBus::Write (UINT32 adr, UINT32 val, UINT32 id)
 	if (banked && adr >= 0x5FF8 && adr <= 0x5FFF)
 	{
 		banks[adr - 0x5FF8] = (std::uint8_t) (val & 0xFF);
+
+		// Stored as well as applied: a driver is allowed to read the register back to remember what
+		// it selected, and answering zero there is a silent difference from hardware.
+		xgm::NES_MEM::Write (adr, val, id);
 		return true;
 	}
 
