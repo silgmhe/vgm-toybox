@@ -357,6 +357,11 @@ void NsfPlayer::setSilent (bool value)
 	applyMasks ();
 }
 
+int NsfPlayer::currentPC (void) const
+{
+	return (int) cpu->GetPC ();
+}
+
 int NsfPlayer::channelCount (void) const
 {
 	// Five on the 2A03 - the two the APU renders and the three the DMC object renders - plus the

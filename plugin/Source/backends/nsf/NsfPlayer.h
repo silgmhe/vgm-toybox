@@ -57,6 +57,9 @@ public:
 		the declared expansion chip renders. */
 	int channelCount (void) const;
 
+	/** Where the 6502 is right now - diagnostics, for files whose driver never writes anything. */
+	int currentPC (void) const;
+
 	/** Solos one channel of that list; -1 leaves them all audible. */
 	void setTrackAudible (int trackIndex);
 
