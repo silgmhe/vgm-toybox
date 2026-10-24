@@ -165,9 +165,11 @@ int main (int argc, char** argv)
 		{
 			const auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(
 				std::chrono::steady_clock::now() - started).count();
-			std::fprintf (stderr, "PROG samples=%lld elapsed=%lldms writes=%llu ram=%llu pc=%04X\n",
+			std::fprintf (stderr, "PROG samples=%lld elapsed=%lldms writes=%llu ram=%llu gate=%llu/%d pc=%04X\n",
 						  counted, (long long) ms, (unsigned long long) player.soundWrites (),
 				(unsigned long long) player.ramWrites (),
+				(unsigned long long) player.gateWrites (),
+				player.gateValue (),
 				(unsigned) player.currentPC ());
 			std::fflush (stderr);
 			nextReport += 44100;

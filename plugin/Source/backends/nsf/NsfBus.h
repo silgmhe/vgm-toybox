@@ -41,6 +41,11 @@ public:
 		nothing". Diagnostics. */
 	std::uint64_t ramWriteCount = 0;
 
+	/** Writes to the $0211 gate, and the last value written. Diagnostics: a driver that sets this
+		byte has decided its play routine should run, so zero here means init never finished. */
+	std::uint64_t gateWrites = 0;
+	std::uint8_t gateValue = 0;
+
 	/** Writes seen in each expansion chip's address range, whether or not that chip exists:
 		index 0 VRC6, 1 VRC7, 2 N163, 3 FME7. A file may use a chip without declaring it, and
 		this is how that is caught before the chip is created. */

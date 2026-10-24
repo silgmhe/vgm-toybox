@@ -63,6 +63,10 @@ public:
 	/** Writes the driver made into the $0200 page - zero means its RAM decoder never ran. */
 	std::uint64_t ramWrites (void) const;
 
+	/** How many times the $0211 gate was written, and with what - 0 means init never reached it. */
+	std::uint64_t gateWrites (void) const;
+	int gateValue (void) const;
+
 	/** Solos one channel of that list; -1 leaves them all audible. */
 	void setTrackAudible (int trackIndex);
 

@@ -357,6 +357,16 @@ void NsfPlayer::setSilent (bool value)
 	applyMasks ();
 }
 
+std::uint64_t NsfPlayer::gateWrites (void) const
+{
+	return bus->gateWrites;
+}
+
+int NsfPlayer::gateValue (void) const
+{
+	return (int) bus->gateValue;
+}
+
 std::uint64_t NsfPlayer::ramWrites (void) const
 {
 	return bus->ramWriteCount;

@@ -82,6 +82,12 @@ bool NsfBus::Read (UINT32 adr, UINT32& val, UINT32 id)
 bool NsfBus::Write (UINT32 adr, UINT32 val, UINT32 id)
 {
 
+	if (adr == 0x0211)
+	{
+		++gateWrites;
+		gateValue = (std::uint8_t) (val & 0xFF);
+	}
+
 	if (adr >= 0x0200 && adr <= 0x02FF)
 	{
 		++ramWriteCount;
