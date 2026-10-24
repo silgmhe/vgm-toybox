@@ -164,6 +164,20 @@ public:
 				paintChannelRow (g, row);
 			}
 		}
+
+		// A fade along the bottom when there is more to scroll: without it the last row is cut in
+		// half by the card's edge, which reads as a layout fault rather than as "keep going".
+		const int visible = juce::jmax (0, getHeight () - kHeader);
+
+		if (contentHeight > visible)
+		{
+			auto bottom = getLocalBounds ().removeFromBottom (18).toFloat ();
+
+			juce::ColourGradient fade (theme::card ().withAlpha (0.0f), bottom.getX (), bottom.getY (),
+									   theme::card (), bottom.getX (), bottom.getBottom (), false);
+			g.setGradientFill (fade);
+			g.fillRect (bottom);
+		}
 	}
 
 	void resized (void) override
