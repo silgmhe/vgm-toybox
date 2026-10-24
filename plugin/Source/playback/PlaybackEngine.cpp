@@ -1411,6 +1411,18 @@ void PlaybackEngine::render (const playback::OutputBusBuffers* buses, int numBus
 		captureScope (buses[0].left, numSamples);
 	}
 
+	if (stateCaptureWanted.load (std::memory_order_relaxed))
+	{
+		// try_lock on this side too: if the message thread happens to be copying the previous
+		// snapshot, losing one frame of display is free; waiting for it would drop a block.
+		std::unique_lock<std::mutex> guard (stateMutex, std::try_to_lock);
+
+		if (guard.owns_lock () && ! trackPlayers.empty () && trackPlayers[0] != nullptr)
+		{
+			trackPlayers[0]->captureState (stateSnapshot);
+		}
+	}
+
 	publishPositionAndEnd();
 }
 
@@ -1994,18 +2006,22 @@ void PlaybackEngine::captureScope (const float* left, int numSamples)
 	scopeWrite.store ((position + (std::uint32_t) numSamples) % count, std::memory_order_relaxed);
 }
 
+void PlaybackEngine::setStateCaptureWanted (bool wanted)
+{
+	stateCaptureWanted.store (wanted);
+}
+
 bool PlaybackEngine::captureChipState (playback::ChipStateSnapshot& snapshot) const
 {
-	const juce::ScopedLock sl (lock);
+	std::unique_lock<std::mutex> guard (stateMutex, std::try_to_lock);
 
-	snapshot = {};
-
-	if (trackPlayers.empty () || trackPlayers[0] == nullptr)
+	if (! guard.owns_lock ())
 	{
 		return false;
 	}
 
-	return trackPlayers[0]->captureState (snapshot);
+	snapshot = stateSnapshot;
+	return snapshot.valid;
 }
 
 int PlaybackEngine::readScope (float* dest, int maxSamples) const

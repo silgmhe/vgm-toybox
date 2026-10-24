@@ -18,7 +18,8 @@
 	  Build: cmake --build <build dir> --target vgm_mixer_test
 	  */
 
-	  #include <algorithm>
+	  #include "playback/ChipState.h"
+#include <algorithm>
 	  #include <cmath>
 	  #include <cstdint>
 	  #include <cstdio>
@@ -634,6 +635,26 @@ int main (int argc, char* argv[])
 					 returned, waited, engine.getTrackPositionSeconds (0));
 		check (returned < 50.0, "requesting a seek does not block the message thread");
 		check (settled, "the background seek reaches its target");
+	}
+
+	std::printf ("[4.5] the chip snapshot does not starve the audio thread\n");
+	{
+		const int before = engine.getStarvedBlocks ();
+		engine.setStateCaptureWanted (true);
+
+		for (int i = 0; i < 40; ++i)
+		{
+			renderSeconds (engine, 0.01, sampleRate, blockSize);
+
+			toybox::playback::ChipStateSnapshot snapshot;
+			engine.captureChipState (snapshot);
+		}
+
+		engine.setStateCaptureWanted (false);
+
+		const int starved = engine.getStarvedBlocks () - before;
+		std::printf ("    starved blocks while capturing: %d\n", starved);
+		check (starved == 0, "requesting a snapshot never starves a block");
 	}
 
 	std::printf ("[4.4] the scope tap\n");

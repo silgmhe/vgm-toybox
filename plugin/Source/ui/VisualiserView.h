@@ -60,6 +60,7 @@ private:
 
 	toybox::PlaybackEngine& engine;
 	playback::ChipStateSnapshot chipState;
+	int lastChannelCount = -1;
 
 	juce::TextButton exportButton { "export" };
 	std::unique_ptr<juce::FileChooser> waveChooser;

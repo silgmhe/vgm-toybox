@@ -148,9 +148,14 @@ public:
 		a sample torn in half is one wrong pixel, never a wrong sound. Returns the count written. */
 	int readScope (float* dest, int maxSamples) const;
 
-	/** A snapshot of what the chips are doing, for the visualisation page. Takes the lock, so it
-		is a message-thread call: the players it asks are the ones the audio thread renders. */
+	/** Copies the last state the audio thread captured. Never blocks the audio thread: it tries a
+		lock, and answering "nothing right now" is better than making a block of audio wait. */
 	bool captureChipState (playback::ChipStateSnapshot& snapshot) const;
+
+	/** Tells the engine whether anyone is looking. While true, each rendered block ends with a
+		capture; while false it costs one atomic read per block. A page that is not on screen must
+		turn this off, or the capture runs for nobody. */
+	void setStateCaptureWanted (bool wanted);
 	float getMixerMasterGain (void) const { return mixerMasterGain.load(); }
 	const juce::File& getFile (void) const { return currentFile; }
 	juce::String getTag (const juce::String& tagName) const;
@@ -513,6 +518,12 @@ private:
 	static constexpr int kScopeSamples = 12000;
 	std::array<std::atomic<float>, (std::size_t) kScopeSamples> scopeSamples {};
 	std::atomic<std::uint32_t> scopeWrite { 0 };
+
+	// The snapshot handover: written by the audio thread at the end of a block, read by the
+	// message thread. Its own lock, never the engine's - see setStateCaptureWanted.
+	mutable std::mutex stateMutex;
+	playback::ChipStateSnapshot stateSnapshot;
+	std::atomic<bool> stateCaptureWanted { false };
 
 	void captureScope (const float* left, int numSamples);	// mixer master (master strip fader)
 

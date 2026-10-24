@@ -62,6 +62,7 @@ VisualiserView::VisualiserView (toybox::PlaybackEngine& engineToUse)
 VisualiserView::~VisualiserView (void)
 {
 	stopTimer ();
+	engine.setStateCaptureWanted (false);
 }
 
 VisualiserView::Areas VisualiserView::layoutAreas (void) const
@@ -174,14 +175,30 @@ void VisualiserView::exportWaves (void)
 void VisualiserView::timerCallback (void)
 {
 	// A page that is not on screen still ticks otherwise, and repainting an invisible component
-	// costs the same as repainting a visible one.
+	// costs the same as repainting a visible one. The capture is told to stop with it: an engine
+	// that keeps building snapshots for nobody is exactly the kind of cost that shows up later
+	// as an unexplained load.
 	if (! isShowing ())
 	{
+		engine.setStateCaptureWanted (false);
 		return;
 	}
 
-	engine.captureChipState (chipState);
-	resized ();
+	engine.setStateCaptureWanted (true);
+
+	if (engine.captureChipState (chipState))
+	{
+		const int rows = (int) chipState.channels.size ();
+
+		// The card grows with the channel list, so the layout is rebuilt when that changes - not
+		// on every frame, which is what this used to do.
+		if (rows != lastChannelCount)
+		{
+			lastChannelCount = rows;
+			resized ();
+		}
+	}
+
 	repaint ();
 }
 
