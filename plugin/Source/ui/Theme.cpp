@@ -40,7 +40,11 @@ static const Palette kLight
 	/* controlEdge       */ juce::Colour (0xffc5c5cb),
 	/* controlGroove     */ juce::Colour (0xff8e8e96),
 	/* groupFrame        */ juce::Colour (0xffc9c9d2),
-	/* tooltipBackground */ juce::Colour (0xf7ffffff)
+	/* tooltipBackground */ juce::Colour (0xf7ffffff),
+	/* keyBed            */ juce::Colour (0xffe2e2e9),
+	/* keyWhite          */ juce::Colour (0xffffffff),
+	/* keyBlack          */ juce::Colour (0xff9a9aa4),
+	/* edgeFade          */ juce::Colour (0x33000000)
 };
 
 /** The dark palette, after One Dark.
@@ -92,7 +96,11 @@ static const Palette kDark
 	/* controlEdge       */ juce::Colour (0xff20242b),
 	/* controlGroove     */ juce::Colour (0xff20242b),
 	/* groupFrame        */ juce::Colour (0xff454b57),
-	/* tooltipBackground */ juce::Colour (0xf72c313a)
+	/* tooltipBackground */ juce::Colour (0xf72c313a),
+	/* keyBed            */ juce::Colour (0xff1f242c),
+	/* keyWhite          */ juce::Colour (0xff39404b),
+	/* keyBlack          */ juce::Colour (0xff737b89),
+	/* edgeFade          */ juce::Colour (0x66000000)
 };
 
 /** Message thread only (see setTheme), so this needs no lock: nothing else reads it. */

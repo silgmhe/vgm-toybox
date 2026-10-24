@@ -69,9 +69,10 @@ public:
 	KeyboardPanel (toybox::PlaybackEngine& engineToUse, juce::String& statusToUse)
 		: engine (engineToUse), exportStatus (statusToUse)
 	{
+		// No colours set here on purpose: the button is drawn by the application's look and feel,
+		// which asks the palette. Overriding them once in the constructor is why this button kept
+		// its old colours after a theme change.
 		exportButton.setButtonText (toybox::i18n::tr ("visualiser.export"));
-		exportButton.setColour (juce::TextButton::buttonColourId, theme::card ());
-		exportButton.setColour (juce::TextButton::textColourOffId, theme::primaryText ());
 		exportButton.onClick = [this] { if (onExport) { onExport (); } };
 		addAndMakeVisible (exportButton);
 	}
@@ -115,6 +116,12 @@ public:
 	void refreshLanguage (void)
 	{
 		exportButton.setButtonText (toybox::i18n::tr ("visualiser.export"));
+		repaint ();
+	}
+
+	void lookAndFeelChanged (void) override
+	{
+		// The header is drawn with palette colours, so it has to be redrawn when the palette does.
 		repaint ();
 	}
 
@@ -770,18 +777,19 @@ private:
 		const float blackWidth = whiteWidth * 0.62f;
 		const float blackHeight = (float) area.getHeight () * 0.62f;
 
-		// The keyboard sits in a bed: a strip a shade darker than the card, with a hairline and an
-		// inner shadow along its top. Without it the white keys were nine percent ink over a card
-		// of the same colour - invisible - and the black keys were the only thing on screen.
-		//
-		// The bed is exactly the keys' area, never larger: expanding it by even two pixels on each
-		// side pushed it through the row's rounded card, which is what made the keyboard look like
-		// it was growing out of the row.
-		const auto bed = area.toFloat ();
+		// The bed is exactly as wide as the keys that are drawn, and centred in the column. A bed
+		// that filled the column left a bare strip on the right whenever the keys stopped at B8 -
+		// pale, empty, and the first thing the eye went to.
+		const float keysWidth = (float) span.whiteKeys * whiteWidth;
+		const float offsetX = (float) area.getX ()
+							  + juce::jmax (0.0f, ((float) area.getWidth () - keysWidth) * 0.5f);
+		const juce::Rectangle<float> bed (offsetX, (float) area.getY (),
+										  juce::jmin (keysWidth, (float) area.getWidth ()),
+										  (float) area.getHeight ());
 
 		drawSoftShadow (g, bed, 5.0f, theme::cardKeyShadow (), 5, juce::Point<int> (0, 1));
 
-		g.setColour (theme::card ().darker (0.16f));
+		g.setColour (theme::keyBed ());
 		g.fillRoundedRectangle (bed, 5.0f);
 
 		{
@@ -797,10 +805,10 @@ private:
 		g.setColour (theme::cardBorder ().withAlpha (0.7f));
 		g.drawRoundedRectangle (bed.reduced (0.5f), 5.0f, 1.0f);
 
-		// The white keys are the card's own colour: against a bed sixteen percent darker that is
-		// enough contrast, and tinting them made them read as another shade of the background.
-		const juce::Colour whiteKey = theme::card ();
-		const juce::Colour blackKey = theme::card ().interpolatedWith (theme::primaryText (), 0.52f);
+		// The keys take their colours from the palette; nothing here mixes card and text, because a
+		// ratio that reads well on the light card is mud on the dark one.
+		const juce::Colour whiteKey = theme::keyWhite ();
+		const juce::Colour blackKey = theme::keyBlack ();
 		const juce::Colour litKey = theme::accent ();
 		const juce::Colour litBlack = theme::accent ().darker (0.22f);
 
@@ -846,7 +854,7 @@ private:
 		for (int k = 0; k < span.whiteKeys; ++k)
 		{
 			const int keyNote = noteForWhite (span.base, k);
-			const juce::Rectangle<float> key ((float) area.getX () + whiteWidth * (float) k,
+			const juce::Rectangle<float> key (offsetX + whiteWidth * (float) k,
 											  (float) area.getY (), whiteWidth - 1.0f,
 											  (float) area.getHeight ());
 			drawKey (keyNote, key, false);
@@ -863,7 +871,7 @@ private:
 
 			if (keyNote > kLastMusicalNote) { continue; }
 
-			const juce::Rectangle<float> key ((float) area.getX () + whiteWidth * (float) (k + 1) - blackWidth * 0.5f,
+			const juce::Rectangle<float> key (offsetX + whiteWidth * (float) (k + 1) - blackWidth * 0.5f,
 											  (float) area.getY (), blackWidth, blackHeight);
 			drawKey (keyNote, key, true);
 		}
@@ -896,13 +904,37 @@ private:
 					continue;
 				}
 
-				const juce::Rectangle<float> key ((float) area.getX () + whiteWidth * (float) k + 1.0f,
+				const juce::Rectangle<float> key (offsetX + whiteWidth * (float) k + 1.0f,
 												  (float) area.getY (), whiteWidth - 2.0f,
 												  (float) area.getHeight ());
 
 				g.setColour (theme::secondaryText ().withAlpha (0.75f));
 				g.drawText (noteName (keyNote), key.toNearestInt ().withTrimmedBottom (1),
 							juce::Justification::centredBottom, false);
+			}
+		}
+
+		// A fade at an end that still has keys beyond it. The range stops at B8 by arithmetic, and
+		// the window can be narrower than the music; either way the edge is the only place that can
+		// say "there is more this way" without moving anything. Drawn inside the bed.
+		{
+			juce::Graphics::ScopedSaveState clipped (g);
+			g.reduceClipRegion (bed.toNearestInt ());
+
+			if (span.base > kFirstMusicalNote)
+			{
+				juce::ColourGradient fade (theme::edgeFade (), bed.getX (), bed.getY (),
+										   juce::Colours::transparentBlack, bed.getX () + 12.0f, bed.getY (), false);
+				g.setGradientFill (fade);
+				g.fillRect (bed.withWidth (12.0f));
+			}
+
+			if (span.lastNote < kLastMusicalNote - 12)
+			{
+				juce::ColourGradient fade (juce::Colours::transparentBlack, bed.getRight () - 12.0f, bed.getY (),
+										   theme::edgeFade (), bed.getRight (), bed.getY (), false);
+				g.setGradientFill (fade);
+				g.fillRect (bed.withTrimmedLeft (bed.getWidth () - 12.0f));
 			}
 		}
 
@@ -926,6 +958,11 @@ private:
 			{
 				arrow.addTriangle (cx - size, cy, cx + size, cy - size, cx + size, cy + size);
 			}
+
+			// A blurred halo behind the arrow: it sits on top of the keys, and a hard triangle on a
+			// keyboard reads as a stray mark. The blur is the same helper the cards use.
+			drawSoftShadow (g, juce::Rectangle<float> (cx - 7.0f, cy - 7.0f, 14.0f, 14.0f), 7.0f,
+							theme::accentGlow (), 6, juce::Point<int> (0, 0));
 
 			g.setColour (theme::accent ().withAlpha (0.9f));
 			g.fillPath (arrow);
@@ -953,15 +990,16 @@ private:
 		// side left a zero-height strip that drew nothing at all.
 		auto track = area.reduced (0, 2);
 
-		g.setColour (theme::cardBorder ());
+		g.setColour (theme::track ());
 		g.fillRoundedRectangle (track.toFloat (), 2.0f);
 
 		const float level = juce::jlimit (0.0f, 1.0f, channel.volume);
 
 		if (level > 0.001f)
 		{
-			g.setColour (level > 0.9f ? juce::Colour (0xffd0564b)
-									   : theme::accent ().withAlpha (0.85f));
+			// The palette's own meter colours: green for a level, red at the top of the scale. The
+			// red used to be a literal here, which is one of the ways a theme change went unnoticed.
+			g.setColour (level > 0.9f ? theme::meterHigh () : theme::meterLow ());
 			g.fillRoundedRectangle (track.toFloat ().withWidth ((float) track.getWidth () * level), 2.0f);
 		}
 

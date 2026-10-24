@@ -410,6 +410,14 @@ bool NsfPlayer::captureState (playback::ChipStateSnapshot& snapshot) const
 
 			state.volume = (std::max) (fromVolume, fromOutput);
 
+			// The triangle and the delta channel have no volume register: they are either sounding
+			// at their fixed level or silent. Their instantaneous output can be zero at the moment
+			// a block ends, which is why those rows showed an empty meter while they were playing.
+			if (waveKind == 3 || waveKind == 5)
+			{
+				state.volume = state.active ? 1.0f : 0.0f;
+			}
+
 			// Noise and the delta channel have no pitch: what their track info reports is a rate,
 			// not a note, and drawing it as one would light a key that means nothing.
 			if (waveKind >= 4)

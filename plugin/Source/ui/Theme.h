@@ -62,6 +62,12 @@ struct Palette
 
 	// Tooltips float over everything, so they are not card-coloured in either palette.
 	juce::Colour tooltipBackground;
+
+	// The keyboard: the bed the keys sit in, the two key faces, and the fade along an edge that
+	// still has keys beyond it. These are palette values rather than something the panel mixes
+	// from card and text colours - a ratio that reads well in the light theme is muddy in the
+	// dark one, and the panel has no business knowing which is on.
+	juce::Colour keyBed, keyWhite, keyBlack, edgeFade;
 };
 
 /** The palette in force. Both are static, so this only ever picks one. */
@@ -99,6 +105,11 @@ inline juce::Colour solo (void)				{ return palette().solo; }
 inline juce::Colour meterLow (void)			{ return palette().meterLow; }
 inline juce::Colour meterMid (void)			{ return palette().meterMid; }
 inline juce::Colour meterHigh (void)		{ return palette().meterHigh; }
+
+inline juce::Colour keyBed (void)			{ return palette().keyBed; }
+inline juce::Colour keyWhite (void)			{ return palette().keyWhite; }
+inline juce::Colour keyBlack (void)			{ return palette().keyBlack; }
+inline juce::Colour edgeFade (void)			{ return palette().edgeFade; }
 
 // --- metrics ------------------------------------------------------------------------
 inline constexpr int margin = 14;			// window border
