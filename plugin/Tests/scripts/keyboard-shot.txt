@@ -1,0 +1,41 @@
+# A screenshot of the keyboard view.
+#
+# The point of this script is the last line: `shot` renders the editor through
+# createComponentSnapshot and writes a PNG, so UI work can be looked at without a window, a
+# window manager or a desktop. Everything before it is just the state worth photographing.
+#
+# Run:  build\plugin\vgm_app_test plugin\Tests\scripts\keyboard-shot.txt
+# Output: build\shots\keyboard.png
+#
+# The chip panel is filled from the audio thread, so the transport has to run for the rows to have
+# anything in them: `engine play` starts it and `host` drives one process block per call. Without
+# those two lines the view is empty, which is a state worth looking at too - just not this one.
+
+size 1500 900
+
+load test_file/nsf/fod_hopeless.nsf
+tick
+
+menu invoke view.keyboard
+tick
+
+sleep 400
+
+engine play
+
+# Twelve blocks of 4096 at 44.1 kHz is a little over a second of audio, which is enough for the
+# N163 to start and for the keyboard to have notes on it.
+host 0.1 playing
+host 0.2 playing
+host 0.3 playing
+host 0.4 playing
+host 0.5 playing
+host 0.6 playing
+host 0.7 playing
+host 0.8 playing
+host 0.9 playing
+host 1.0 playing
+
+sleep 300
+
+shot build/shots/keyboard.png

@@ -1221,7 +1221,11 @@ void ContentSlot::timerCallback (void)
 		return;
 	}
 
-	if (! isShowing ())
+	// isVisible(), not isShowing(): a component in a window has both, but the headless harness
+	// builds the editor without a peer - showing is then false forever, and the panel stayed empty
+	// in every screenshot the harness took. Being invisible still closes the gate, which is the
+	// case that matters (the view is not the one on screen).
+	if (! isVisible ())
 	{
 		engine.setStateCaptureWanted (false);
 		return;
