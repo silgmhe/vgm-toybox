@@ -618,6 +618,20 @@ void ToyboxAudioProcessorEditor::restoreLastSongIfNeeded (void)
 
 void ToyboxAudioProcessorEditor::timerCallback (void)
 {
+	// The visualisation page has no transport of its own - it shows what the chips are doing to a
+	// song that is already open - so the open button has nothing to act on there. Synchronised
+	// here rather than in the menu callback because the page can also change by shortcut.
+	{
+		const auto ids = viewStack.getViewIds ();
+		const int index = viewStack.getCurrentViewIndex ();
+		const bool onVisualiserPage = index >= 0 && index < ids.size () && ids[index] == "visualiser";
+
+		if (openButton.isVisible () == onVisualiserPage)
+		{
+			openButton.setVisible (! onVisualiserPage);
+		}
+	}
+
 	// A song handed over by a second launch of the application (or, on macOS, by the Finder opening
 	// a document in the running window). It goes through loadFile() like a drop does, so the two
 	// paths cannot drift apart; the processor held it because the message can arrive before this
