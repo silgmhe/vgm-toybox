@@ -610,8 +610,11 @@ int main (int argc, char* argv[])
 	// go wrong here is the worker never finishing. Poll it with a deadline and report how long the
 	// message thread was free - that number is what the user feels.
 	{
+		// Half the song or a minute, whichever is smaller: asking for 60 s in a ten-second file is
+		// clamped by the engine and would look like a worker that never arrives.
+		const double asyncTarget = juce::jmax (0.5, juce::jmin (60.0, engine.getDurationSeconds () * 0.5));
 		const double before = (double) juce::Time::getMillisecondCounterHiRes ();
-		engine.requestPositionSeconds (60.0);
+		engine.requestPositionSeconds (asyncTarget);
 		const double returned = (double) juce::Time::getMillisecondCounterHiRes () - before;
 
 		bool settled = false;
@@ -623,7 +626,7 @@ int main (int argc, char* argv[])
 
 			// The published position is the request, so only the player\'s own position says the
 			// worker is actually done.
-			settled = std::abs (engine.getTrackPositionSeconds (0) - 60.0) < 1.0;
+			settled = std::abs (engine.getTrackPositionSeconds (0) - asyncTarget) < 1.0;
 			waited = (double) juce::Time::getMillisecondCounterHiRes () - before;
 		}
 
