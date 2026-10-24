@@ -322,6 +322,8 @@ private:
 		std::map<juce::String, juce::String> tags;
 		playback::SongTimeline timeline;
 		const playback::MidiSequence* midiSequence = nullptr;
+	/** The backend renders every track in one pass, so one player serves all of them. */
+	bool inPlace = false;
 	};
 
 	/** Everything buildSong() reads, copied from the engine on the message thread so that a build
@@ -424,6 +426,15 @@ private:
 	std::unique_ptr<playback::ISongInstance> song;		// the open song (backend object)
 	std::vector<std::unique_ptr<playback::ITrackPlayer>> trackPlayers;
 	std::vector<float> mixLeft, mixRight;				// per-track scratch for render()
+
+	// A backend that renders every track in one pass: one interleaved stereo buffer per
+	// track, the pointer array renderTracks() expects, and de-interleaved copies the mixing
+	// loop below reads like any other track. Allocated when a song is installed, which
+	// happens on the message thread, so the audio thread only writes into them.
+	bool inPlaceMode = false;
+	std::vector<float> inPlaceStereo;
+	std::vector<float> inPlaceLeft, inPlaceRight;
+	std::vector<float*> inPlaceBuffers;
 	std::vector<float> masterLeft, masterRight;			// the internal master bus sum
 	std::vector<std::unique_ptr<TrackState>> tracks;	// one per layout entry (UI state)
 	std::vector<playback::TrackInfo> trackLayout;

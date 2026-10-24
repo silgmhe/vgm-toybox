@@ -901,6 +901,15 @@ PlaybackEngine::LoadedSong PlaybackEngine::buildSong (const BuildConfig& config,
 	const bool perTrack = config.mixerEnabled
 						   && caps.isolation == playback::IsolationMode::multiInstance
 						   && ! pending.layout.empty();
+
+	// One player for every track, because this backend produces all of them from a single pass.
+	// The difference is eight emulations of a 6502 against one.
+	const bool inPlace = config.mixerEnabled
+						 && caps.isolation == playback::IsolationMode::inPlaceChannelMix
+						 && ! pending.layout.empty();
+
+	pending.inPlace = inPlace;
+
 	const size_t playersWanted = perTrack ? pending.layout.size() : 1;
 
 	for (size_t i = 0; i < playersWanted; ++i)
@@ -948,6 +957,34 @@ void PlaybackEngine::installSong (LoadedSong&& built)
 	midiLastSongTime = -1.0;
 
 	cachedTimeline = built.timeline;
+
+	// Buffer space for the one-pass path: one interleaved stereo pair per track, plus the
+	// de-interleaved copies the mixer reads. Allocated here because this runs on the message
+	// thread; render() must not allocate.
+	inPlaceMode = built.inPlace && ! trackPlayers.empty ();
+
+	if (inPlaceMode)
+	{
+		const size_t count = tracks.size ();
+		const size_t stride = (size_t) juce::jmax (1, maxBlockSize);
+
+		inPlaceStereo.assign (count * stride * 2, 0.0f);
+		inPlaceLeft.assign (count * stride, 0.0f);
+		inPlaceRight.assign (count * stride, 0.0f);
+		inPlaceBuffers.assign (count, nullptr);
+
+		for (size_t i = 0; i < count; ++i)
+		{
+			inPlaceBuffers[i] = inPlaceStereo.data () + i * stride * 2;
+		}
+	}
+	else
+	{
+		inPlaceStereo.clear ();
+		inPlaceLeft.clear ();
+		inPlaceRight.clear ();
+		inPlaceBuffers.clear ();
+	}
 
 	positionSeconds = 0.0;
 	finished = false;
@@ -1595,14 +1632,63 @@ void PlaybackEngine::renderPlainPlayer (int usable)
 void PlaybackEngine::mixTracks (const playback::OutputBusBuffers* buses, int busCount, int usable)
 {
 	const bool anySolo = (soloCount.load() > 0);
-	const size_t numTracks = juce::jmin (trackPlayers.size(), tracks.size());
+
+	// One pass for every track when the backend can do it. The result arrives interleaved, one
+	// stereo pair per track; it is split here so the mixing below reads a track the same way
+	// whichever path produced it.
+	int inPlaceRendered = 0;
+
+	if (inPlaceMode && ! trackPlayers.empty () && ! inPlaceBuffers.empty ())
+	{
+		inPlaceRendered = trackPlayers.front ()->renderTracks (inPlaceBuffers.data (),
+															  (int) inPlaceBuffers.size (), usable);
+
+		if (inPlaceRendered > 0)
+		{
+			const size_t stride = (size_t) juce::jmax (1, maxBlockSize);
+
+			for (size_t t = 0; t < inPlaceBuffers.size (); ++t)
+			{
+				const float* src = inPlaceBuffers[t];
+				float* destL = inPlaceLeft.data () + t * stride;
+				float* destR = inPlaceRight.data () + t * stride;
+
+				for (int i = 0; i < inPlaceRendered; ++i)
+				{
+					destL[i] = src[(size_t) i * 2 + 0];
+					destR[i] = src[(size_t) i * 2 + 1];
+				}
+			}
+		}
+	}
+
+	const bool usingInPlace = inPlaceMode && inPlaceRendered > 0;
+	const size_t numTracks = usingInPlace ? inPlaceBuffers.size ()
+										  : juce::jmin (trackPlayers.size(), tracks.size());
 
 	for (size_t t = 0; t < numTracks; ++t)
 	{
-		playback::ITrackPlayer& player = *trackPlayers[t];
 		TrackState& state = *tracks[t];
 
-		const int rendered = player.render (mixLeft.data(), mixRight.data(), usable);
+		int rendered = 0;
+		const float* srcL = nullptr;
+		const float* srcR = nullptr;
+
+		if (usingInPlace)
+		{
+			const size_t stride = (size_t) juce::jmax (1, maxBlockSize);
+			rendered = inPlaceRendered;
+			srcL = inPlaceLeft.data () + t * stride;
+			srcR = inPlaceRight.data () + t * stride;
+		}
+		else
+		{
+			playback::ITrackPlayer& player = *trackPlayers[t];
+			rendered = player.render (mixLeft.data(), mixRight.data(), usable);
+			srcL = mixLeft.data();
+			srcR = mixRight.data();
+		}
+
 		if (rendered <= 0)
 		{
 			state.peakL.store (0.0f);
@@ -1632,8 +1718,8 @@ void PlaybackEngine::mixTracks (const playback::OutputBusBuffers* buses, int bus
 		float peakR = 0.0f;
 		for (int i = 0; i < rendered; ++i)
 		{
-			const float l = mixLeft[(size_t) i] * gainL;
-			const float r = mixRight[(size_t) i] * gainR;
+			const float l = srcL[(size_t) i] * gainL;
+			const float r = srcR[(size_t) i] * gainR;
 
 			// a track whose target bus is not connected is silent (the strip's dropdown
 			// marks that bus as "not connected", so this is never a surprise)

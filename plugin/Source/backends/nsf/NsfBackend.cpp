@@ -46,6 +46,13 @@ public:
 		return player.render (left, right, numSamples);
 	}
 
+	/** One pass for every track: the chips render their channels separately, so the whole mixer is
+		fed from a single emulation instead of one per track. */
+	int renderTracks (float* const* buffers, int trackCount, int numSamples) override
+	{
+		return player.renderChannels (buffers, trackCount, numSamples);
+	}
+
 	double positionSeconds (void) override { return player.positionSeconds (); }
 
 	bool isFinished (void) const override
@@ -155,7 +162,12 @@ public:
 	playback::BackendCapabilities getCapabilities (void) const override
 	{
 		playback::BackendCapabilities caps;
-		caps.isolation = playback::IsolationMode::multiInstance;
+		// A song without an expansion has every channel split by the core, so one emulation can feed
+		// the whole mixer. With an expansion only the 2A03's five are split - the other chips have
+		// no per-channel render yet - so those songs stay on one player per track rather than
+		// offering tracks that would be silent.
+		caps.isolation = expansionPresent ? playback::IsolationMode::multiInstance
+										  : playback::IsolationMode::inPlaceChannelMix;
 		caps.canSeek = true;
 		caps.rendersAtHostRate = true;
 		return caps;
