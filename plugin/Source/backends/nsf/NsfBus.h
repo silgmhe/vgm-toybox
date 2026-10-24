@@ -51,6 +51,9 @@ public:
 		The order matters: the image is cleared first, the trampoline after. */
 	void load (void);
 
+	/** Puts the windows back to the mapping the header declares - what a reset does on hardware. */
+	void resetBanks (void);
+
 private:
 	const formats::nsf::NsfFile& file;
 	bool banked = false;

@@ -31,22 +31,26 @@ const UINT8 kPlayerProgram[] =
 
 NsfBus::NsfBus (const formats::nsf::NsfFile& image) : file (image)
 {
-	banked = file.isBanked();
+	banked = file.isBanked ();
+	resetBanks ();
+}
 
-	// A banked program starts with the first four banks in the windows, which is the state a
-	// driver expects after reset. Files that declare their own selection are honoured.
+void NsfBus::resetBanks (void)
+{
+	// With no mapping declared, the first eight banks are visible - the state a driver expects
+	// after reset. A banked song that is restarted (a seek, a loop) has to come back to this
+	// mapping: the driver left its own selection behind, and starting in the middle of it runs
+	// the wrong code, which sounds like one chip having gone quiet.
 	bool declared = false;
 
-	for (std::size_t i = 0; i < banks.size(); ++i)
+	for (std::size_t i = 0; i < banks.size (); ++i)
 	{
-		declared = declared || (i < file.bankSwitch.size() && file.bankSwitch[i] != 0);
+		declared = declared || (i < file.bankSwitch.size () && file.bankSwitch[i] != 0);
 	}
 
-	// Eight windows of 4 KB cover $8000-$FFFF, so a driver selects them one at a time. With no
-	// mapping declared, the first eight banks are visible - the state a driver expects after reset.
-	for (std::size_t i = 0; i < banks.size(); ++i)
+	for (std::size_t i = 0; i < banks.size (); ++i)
 	{
-		banks[i] = declared && i < file.bankSwitch.size() ? file.bankSwitch[i] : (std::uint8_t) i;
+		banks[i] = declared && i < file.bankSwitch.size () ? file.bankSwitch[i] : (std::uint8_t) i;
 	}
 }
 
@@ -54,6 +58,7 @@ void NsfBus::load (void)
 {
 	// SetImage clears the whole 64 KB before copying, so anything written before it is lost - the
 	// trampoline in particular. It goes in afterwards, every time.
+	resetBanks ();
 	SetImage (const_cast<UINT8*> (file.rom.data()), file.loadAddress, (UINT32) file.rom.size());
 	SetReserved (kPlayerProgram, (UINT32) sizeof (kPlayerProgram));
 }
