@@ -24,11 +24,15 @@ namespace
 	constexpr int kRowHeight = 40;
 	constexpr int kGroupHeader = 26;
 	constexpr int kGroupGap = 10;
+	constexpr int kRowInsetLeft = 14;
+	constexpr int kRowInsetRight = 14;
 	constexpr int kNameWidth = 72;
-	constexpr int kButtonWidth = 26;
+	constexpr int kButtonSize = 28;		// the mixer's button height, so the two views agree
+	constexpr int kButtonGap = 6;
 	constexpr int kNoteWidth = 56;
 	constexpr int kWaveWidth = 88;
 	constexpr int kMeterWidth = 96;
+	constexpr int kMeterGap = 18;
 
 	juce::String noteName (int note)
 	{
@@ -325,23 +329,25 @@ private:
 			row.channel = (int) i;
 			row.area = { left, y, width, kRowHeight };
 
-			auto inner = row.area.reduced (0, 4);
+			auto inner = row.area.reduced (kRowInsetLeft, 0);
+			inner.removeFromRight (kRowInsetRight);
+
 			row.name = inner.removeFromLeft (kNameWidth);
 
-			inner.removeFromLeft (6);
-			row.mute = inner.removeFromLeft (kButtonWidth).reduced (0, 6);
-			inner.removeFromLeft (4);
-			row.solo = inner.removeFromLeft (kButtonWidth).reduced (0, 6);
-			inner.removeFromLeft (10);
+			inner.removeFromLeft (kButtonGap);
+			row.mute = inner.removeFromLeft (kButtonSize).withSizeKeepingCentre (kButtonSize, kButtonSize);
+			inner.removeFromLeft (kButtonGap);
+			row.solo = inner.removeFromLeft (kButtonSize).withSizeKeepingCentre (kButtonSize, kButtonSize);
 
+			inner.removeFromLeft (10);
 			row.note = inner.removeFromLeft (kNoteWidth);
-			inner.removeFromLeft (6);
+			inner.removeFromLeft (8);
 
-			row.wave = inner.removeFromLeft (kWaveWidth);
+			row.wave = inner.removeFromLeft (kWaveWidth).withSizeKeepingCentre (kWaveWidth, 24);
 			inner.removeFromLeft (10);
 
-			row.meter = inner.removeFromRight (kMeterWidth);
-			inner.removeFromRight (10);
+			row.meter = inner.removeFromRight (kMeterWidth).withSizeKeepingCentre (kMeterWidth, 16);
+			inner.removeFromRight (kMeterGap);
 
 			row.keys = inner;
 
@@ -393,8 +399,8 @@ private:
 																   { return juce::String (channel.chipName) == row.title; }));
 
 		auto area = row.area;
-		g.setColour (theme::secondaryText ().withAlpha (0.35f));
-		g.fillRoundedRectangle (area.toFloat (), 3.0f);
+		g.setColour (theme::secondaryText ().withAlpha (0.28f));
+		g.fillRoundedRectangle (area.toFloat (), theme::buttonRadius);
 
 		g.setColour (theme::primaryText ());
 		g.setFont (juce::Font (juce::FontOptions (12.0f, juce::Font::bold)));
@@ -736,25 +742,69 @@ private:
 		const float blackWidth = whiteWidth * 0.62f;
 		const float blackHeight = (float) area.getHeight () * 0.62f;
 
-		// Opaque colours. A translucent black key let the white keys' divider lines show through
-		// it, which looked like a printing fault rather than like a keyboard.
-		const juce::Colour whiteKey = theme::card ().interpolatedWith (theme::primaryText (), 0.09f);
-		const juce::Colour blackKey = theme::card ().interpolatedWith (theme::primaryText (), 0.74f);
+		// The keyboard sits in a bed: a strip a shade darker than the card, with a hairline and an
+		// inner shadow along its top. Without it the white keys were nine percent ink over a card
+		// of the same colour - invisible - and the black keys were the only thing on screen.
+		const auto bed = area.expanded (2, 2).toFloat ();
+
+		drawSoftShadow (g, bed, theme::buttonRadius, theme::cardKeyShadow (), 6, juce::Point<int> (0, 1));
+
+		g.setColour (theme::card ().darker (0.10f));
+		g.fillRoundedRectangle (bed, theme::buttonRadius);
+
+		{
+			juce::Graphics::ScopedSaveState inner (g);
+			g.reduceClipRegion (bed.toNearestInt ());
+
+			juce::ColourGradient shade (juce::Colours::black.withAlpha (0.10f), bed.getX (), bed.getY (),
+										juce::Colours::transparentBlack, bed.getX (), bed.getY () + 5.0f, false);
+			g.setGradientFill (shade);
+			g.fillRoundedRectangle (bed, theme::buttonRadius);
+		}
+
+		g.setColour (theme::cardBorder ().withAlpha (0.7f));
+		g.drawRoundedRectangle (bed.reduced (0.5f), theme::buttonRadius, 1.0f);
+
+		const juce::Colour whiteKey = theme::card ().brighter (0.05f);
+		const juce::Colour blackKey = theme::card ().interpolatedWith (theme::primaryText (), 0.58f);
 		const juce::Colour litKey = theme::accent ();
-		const juce::Colour litBlack = theme::accent ().darker (0.25f);
+		const juce::Colour litBlack = theme::accent ().darker (0.22f);
 
 		const auto drawKey = [&] (int keyNote, juce::Rectangle<float> key, bool black)
 		{
 			const bool lit = keyNote == note;
 
+			// A press moves the key down a pixel and darkens it, so the finger has somewhere to
+			// have gone. The key is drawn one pixel taller to keep its top edge where it was.
+			const juce::Rectangle<float> face = lit ? key.translated (0.0f, 1.0f) : key;
+
 			g.setColour (lit ? (black ? litBlack : litKey) : (black ? blackKey : whiteKey));
-			g.fillRoundedRectangle (key, 1.5f);
+			g.fillRoundedRectangle (face, 1.5f);
+
+			if (lit)
+			{
+				// an inner shadow along the top: what makes it read as pressed rather than tinted
+				juce::Graphics::ScopedSaveState clipped (g);
+				g.reduceClipRegion (face.toNearestInt ());
+
+				juce::ColourGradient shade (juce::Colours::black.withAlpha (0.30f), face.getX (), face.getY (),
+											juce::Colours::transparentBlack, face.getX (), face.getY () + 5.0f, false);
+				g.setGradientFill (shade);
+				g.fillRoundedRectangle (face, 1.5f);
+
+				g.setColour (theme::onAccent ().withAlpha (0.55f));
+				g.fillRect (juce::Rectangle<float> (face.getX () + 1.0f, face.getBottom () - 1.5f,
+													face.getWidth () - 2.0f, 1.0f));
+			}
 
 			if (lit && key.getWidth () >= 13.0f)
 			{
+				// The name sits in the lower third: the black key above it covers the top, and the
+				// centre is where the octave label already lives.
 				g.setColour (theme::onAccent ());
-				g.setFont (juce::Font (juce::FontOptions (9.0f)));
-				g.drawText (noteName (keyNote), key.toNearestInt (), juce::Justification::centred, false);
+				g.setFont (juce::Font (juce::FontOptions (9.5f, juce::Font::bold)));
+				g.drawText (noteName (keyNote), face.toNearestInt ().withTrimmedTop ((int) (face.getHeight () * 0.55f)),
+							juce::Justification::centredBottom, false);
 			}
 		};
 
