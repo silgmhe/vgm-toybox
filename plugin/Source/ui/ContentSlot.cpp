@@ -3,6 +3,7 @@
 #include "ButtonPaint.h"
 #include "MixerPanel.h"
 #include "KeyboardLayout.h"
+#include "WaveShape.h"
 #include "Theme.h"
 #include "i18n/LanguageManager.h"
 #include "playback/PlaybackEngine.h"
@@ -590,7 +591,7 @@ private:
 
 		if (cycle.empty ())
 		{
-			cycle = synthesisedCycle (channel);
+			cycle = waveform::cycleFor (channel.waveKind, channel.duty);
 		}
 
 		if (cycle.size () < 2)
@@ -628,73 +629,6 @@ private:
 		g.strokePath (path, juce::PathStrokeType (1.0f));
 	}
 
-	/** A cycle for the channels that generate their shape rather than read it. */
-	std::vector<float> synthesisedCycle (const toybox::playback::ChannelState& channel) const
-	{
-		std::vector<float> cycle;
-
-		switch (channel.waveKind)
-		{
-			case 2:		// pulse: high for the duty setting, low for the rest
-			{
-				constexpr int points = 32;
-				const int high = juce::jlimit (1, points - 1, (int) std::lround ((double) channel.duty * points));
-
-				for (int i = 0; i < points; ++i)
-				{
-					cycle.push_back (i < high ? 1.0f : -1.0f);
-				}
-
-				break;
-			}
-
-			case 3:		// triangle: 32 steps down and back up
-			{
-				constexpr int points = 32;
-
-				for (int i = 0; i < points; ++i)
-				{
-					const int step = i < points / 2 ? i : points - 1 - i;
-					cycle.push_back ((float) step / (float) (points / 2 - 1) * 2.0f - 1.0f);
-				}
-
-				break;
-			}
-
-			case 4:		// noise: a short burst from the same feedback the chip uses
-			{
-				std::uint32_t shift = 1;
-
-				for (int i = 0; i < 32; ++i)
-				{
-					const std::uint32_t bit = ((shift >> 0) ^ (shift >> 1)) & 1u;
-					shift = (shift >> 1) | (bit << 14);
-					cycle.push_back ((shift & 1u) ? 1.0f : -1.0f);
-				}
-
-				break;
-			}
-
-			case 5:		// delta: one bit per step, integrated - the shape the DAC produces
-			{
-				float level = 0.0f;
-
-				for (int i = 0; i < 32; ++i)
-				{
-					level += (i % 7 == 0) ? -0.6f : 0.2f;
-					level = juce::jlimit (-1.0f, 1.0f, level);
-					cycle.push_back (level);
-				}
-
-				break;
-			}
-
-			default:
-				break;
-		}
-
-		return cycle;
-	}
 
 	/** Keys are a fixed width. A wider window shows more of them rather than bigger ones, which
 		is what a keyboard is: the distance between two keys does not change because the window

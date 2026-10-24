@@ -17,6 +17,7 @@
 #include <cstdio>
 
 #include "ui/KeyboardLayout.h"
+#include "ui/WaveShape.h"
 #include "TestSupport.h"
 
 using namespace toybox::ui;
@@ -116,16 +117,79 @@ void testShifts (void)
 	check (! keyboard::canShift (atBottom, -1), "and the bottom of the range cannot move left");
 }
 
+void testWaveShapes (void)
+{
+	using namespace toybox::ui::waveform;
+
+	// A pulse is high for its duty and low for the rest; the width is clamped so neither half
+	// disappears, which would draw a flat line.
+	{
+		const auto quarter = cycleFor ((int) Kind::pulse, 0.25f);
+		check (quarter.size () == 32, "a pulse cycle is thirty-two steps");
+		check (quarter[0] > 0.5f && quarter[7] > 0.5f, "the first quarter is high");
+		check (quarter[8] < -0.5f && quarter[31] < -0.5f, "and the rest is low");
+
+		const auto empty = cycleFor ((int) Kind::pulse, 0.0f);
+		check (empty[0] > 0.5f && empty[1] < -0.5f, "a zero duty still has one high step");
+
+		const auto full = cycleFor ((int) Kind::pulse, 1.0f);
+		check (full[31] < -0.5f, "and a hundred percent duty still has one low step");
+	}
+
+	// The triangle is a staircase: it has to start at the bottom, climb, and come back.
+	{
+		const auto tri = cycleFor ((int) Kind::triangle, 0.5f);
+		check (tri.size () == 32, "a triangle cycle is thirty-two steps");
+		check (tri.front () < -0.99f, "it starts at the bottom");
+		check (tri[15] > 0.9f, "reaches the top half way through");
+		check (tri.back () < -0.99f, "and returns to the bottom");
+	}
+
+	// Noise is deterministic: two calls agree, and the values are the two rails.
+	{
+		const auto a = cycleFor ((int) Kind::noise, 0.5f);
+		const auto b = cycleFor ((int) Kind::noise, 0.5f);
+		check (a.size () == 32, "a noise cycle is thirty-two steps");
+		check (a == b, "the same burst every time, so the display does not shimmer");
+
+		bool railsOnly = true;
+		for (float v : a) { railsOnly = railsOnly && (std::abs (v) == 1.0f); }
+		check (railsOnly, "every step is at one rail or the other");
+	}
+
+	// Delta integrates its bits and stays inside the rails.
+	{
+		const auto d = cycleFor ((int) Kind::delta, 0.5f);
+		check (d.size () == 32, "a delta cycle is thirty-two steps");
+
+		bool inside = true;
+		bool moved = false;
+		for (float v : d)
+		{
+			inside = inside && v >= -1.0f && v <= 1.0f;
+			moved = moved || v != d.front ();
+		}
+		check (inside, "the integrated level never leaves -1..1");
+		check (moved, "and it is not a flat line");
+	}
+
+	// Nothing to synthesise: the stored-table kind and anything unknown leave it to the backend.
+	check (cycleFor ((int) Kind::none, 0.5f).empty (), "kind 0 has no shape");
+	check (cycleFor ((int) Kind::stored, 0.5f).empty (), "a stored table is not synthesised");
+	check (cycleFor (99, 0.5f).empty (), "and an unknown kind draws nothing");
+}
+
 } // namespace
 
 int main (void)
 {
-	std::printf ("keyboard layout\n");
+	std::printf ("keyboard layout and wave shapes\n");
 
 	testNaming ();
 	testWhiteKeys ();
 	testSpans ();
 	testShifts ();
+	testWaveShapes ();
 
 	std::printf ("%s\n", toybox::test::failures() == 0 ? "all checks passed" : "FAILURES");
 
