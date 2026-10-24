@@ -1,3 +1,4 @@
+#include "KeyboardSettings.h"
 #include "NsfSettings.h"
 #include "SettingsStore.h"
 
@@ -36,6 +37,7 @@ constexpr const char* kNsfOutputGainKey = "nsf.outputGainDb";
 constexpr const char* kContentViewKey = "ui.view";
 constexpr const char* kKeyboardRangeHintsKey = "keyboard.rangeHints";
 constexpr const char* kKeyboardStartNoteKey = "keyboard.startNote";
+constexpr const char* kKeyboardNoteHoldKey = "keyboard.noteHoldMs";
 constexpr const char* kMidiBendRangeKey = "midi.pitchBendRange";
 	constexpr const char* kMidiBendEnabledKey = "midi.pitchBendEnabled";
 
@@ -325,6 +327,24 @@ void SettingsStore::setNsfDurationSeconds (int seconds)
 
 	file->setValue (kNsfDurationKey, clamped);
 	lastErrorMessage = file->saveIfNeeded() ? juce::String() : writeErrorFor (settingsFile());
+}
+
+int SettingsStore::getKeyboardNoteHoldMs (void) const
+{
+	const int stored = file != nullptr ? file->getIntValue (kKeyboardNoteHoldKey, toybox::settings::keyboard::defaultNoteHoldMs)
+									   : toybox::settings::keyboard::defaultNoteHoldMs;
+
+	return juce::jlimit (toybox::settings::keyboard::minNoteHoldMs, toybox::settings::keyboard::maxNoteHoldMs, stored);
+}
+
+void SettingsStore::setKeyboardNoteHoldMs (int milliseconds)
+{
+	if (file != nullptr)
+	{
+		file->setValue (kKeyboardNoteHoldKey,
+						juce::jlimit (toybox::settings::keyboard::minNoteHoldMs,
+									  toybox::settings::keyboard::maxNoteHoldMs, milliseconds));
+	}
 }
 
 int SettingsStore::getKeyboardStartNote (void) const

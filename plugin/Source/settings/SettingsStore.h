@@ -163,15 +163,19 @@ public:
 	void setContentViewIndex (int index);
 
 	int getNsfOutputGainDb (void) const;
+	void setNsfOutputGainDb (int decibels);
 
-	/** Whether the keyboard draws an arrow when a note falls outside the octaves on screen. */
 	/** Lowest key the keyboard starts at: -1 to follow the song, otherwise a MIDI note. */
 	int getKeyboardStartNote (void) const;
 	void setKeyboardStartNote (int note);
 
+	/** Whether the keyboard draws an arrow when a note falls outside the octaves on screen. */
 	bool getKeyboardRangeHints (void) const;
 	void setKeyboardRangeHints (bool shouldShow);
-	void setNsfOutputGainDb (int decibels);
+
+	/** How long a key stays lit after its note stops, in milliseconds. */
+	int getKeyboardNoteHoldMs (void) const;
+	void setKeyboardNoteHoldMs (int milliseconds);
 
 	/** Stores the range (clamped to what the engine can encode) and tells every listener. */
 	void setMidiPitchBendRange (int semitones);

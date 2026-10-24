@@ -89,6 +89,33 @@ public:
 	{
 		snapshot = snapshotToUse;
 
+		// A chip's period register holds its last value, and a fast passage has gaps between notes
+		// shorter than a display frame. Holding the last note for a configurable moment keeps a row
+		// from blinking; it is what the note-off delay in the settings page changes.
+		const int holdMs = toybox::settings::SettingsStore::getInstance ().getKeyboardNoteHoldMs ();
+		const double now = juce::Time::getMillisecondCounterHiRes ();
+
+		if (held.size () != snapshot.channels.size ())
+		{
+			held.assign (snapshot.channels.size (), Held {});
+		}
+
+		for (std::size_t i = 0; i < snapshot.channels.size (); ++i)
+		{
+			auto& channel = snapshot.channels[i];
+
+			if (channel.active)
+			{
+				held[i] = { channel.note, channel.volume, now };
+			}
+			else if (holdMs > 0 && held[i].at > 0.0 && (now - held[i].at) <= (double) holdMs)
+			{
+				channel.note = held[i].note;
+				channel.volume = held[i].volume;
+				channel.active = true;
+			}
+		}
+
 		for (const auto& channel : snapshot.channels)
 		{
 			if (channel.note < 0)
@@ -1069,6 +1096,16 @@ private:
 
 	int scrollOffset = 0;
 	int contentHeight = 0;
+
+	// What each channel last played, and when - the note-off delay reads from here.
+	struct Held
+	{
+		int note = -1;
+		float volume = 0.0f;
+		double at = 0.0;
+	};
+
+	std::vector<Held> held;
 
 	// The range this song has played so far. It only ever grows: a window that shrank whenever a
 	// bass note passed would move the whole page, and thirteen rows moving at once is unreadable.

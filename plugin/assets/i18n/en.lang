@@ -230,6 +230,7 @@ language: English
 	"settings.keyboard.rangeHintsHint" = "A narrow window shows fewer octaves. When a channel plays a note outside them, the edge of its keyboard carries an arrow saying so. Turn this off for a quieter row.";
 	"settings.keyboard.rangeHintsOn" = "Show an arrow when a note is outside the keys";
 	"settings.keyboard.rangeHints" = "Out-of-range notes";
+	"settings.keyboard.noteHold" = "Note-off delay";
 	"settings.keyboard.explanation" = "What the keyboard draws. The octave range follows the window width; the arrow is a choice.";
 	"settings.keyboard" = "Keyboard";
 	"settings.keyboard.startAuto" = "Follow the song";

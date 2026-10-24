@@ -5,6 +5,7 @@
 #include "Standalone/StandaloneHooks.h"
 #include "UiFont.h"
 #include "playback/MidiSequence.h"
+#include "settings/KeyboardSettings.h"
 #include "settings/NsfSettings.h"
 
 #include <algorithm>
@@ -755,6 +756,24 @@ KeyboardSettingsPage::KeyboardSettingsPage (void)
 	};
 	addAndMakeVisible (startNote);
 
+	holdCaption.setFont (juce::Font (juce::FontOptions (12.5f)));
+	holdCaption.setJustificationType (juce::Justification::centredLeft);
+	addAndMakeVisible (holdCaption);
+
+	holdSlider.setComponentID ("settings.keyboard.noteHold");
+	holdSlider.setSliderStyle (juce::Slider::LinearHorizontal);
+	holdSlider.setTextBoxStyle (juce::Slider::TextBoxRight, false, 76, 22);
+	holdSlider.setRange ((double) toybox::settings::keyboard::minNoteHoldMs,
+						 (double) toybox::settings::keyboard::maxNoteHoldMs,
+						 (double) toybox::settings::keyboard::noteHoldStepMs);
+	holdSlider.setTextValueSuffix (" ms");
+	holdSlider.onValueChange = [this]
+	{
+		toybox::settings::SettingsStore::getInstance ()
+			.setKeyboardNoteHoldMs ((int) std::lround (holdSlider.getValue ()));
+	};
+	addAndMakeVisible (holdSlider);
+
 	rangeHints.setComponentID ("settings.keyboard.rangeHints");
 	rangeHints.onClick = [this]
 	{
@@ -778,6 +797,9 @@ void KeyboardSettingsPage::refresh (void)
 
 	startNote.setSelectedId (id, juce::dontSendNotification);
 
+	holdSlider.setValue ((double) toybox::settings::SettingsStore::getInstance ().getKeyboardNoteHoldMs (),
+						 juce::dontSendNotification);
+
 	rangeHints.setToggleState (toybox::settings::SettingsStore::getInstance ().getKeyboardRangeHints (),
 							   juce::dontSendNotification);
 }
@@ -792,18 +814,25 @@ void KeyboardSettingsPage::resized (void)
 {
 	auto area = pageContent (getLocalBounds(), kTwoLineHeadingHeight);
 
-	caption.setBounds (area.removeFromTop (18));
+	startCaption.setBounds (area.removeFromTop (18));
 	area.removeFromTop (4);
 
 	auto startRow = area.removeFromTop (kFooterHeight);
-	startCaption.setBounds (startRow.removeFromLeft (120));
 	startNote.setBounds (startRow.removeFromLeft (juce::jmin (160, startRow.getWidth ())));
 
-	area.removeFromTop (14);
-	startCaption.setText (i18n::tr ("settings.keyboard.startNote"), juce::dontSendNotification);
+	area.removeFromTop (12);
+	caption.setBounds (area.removeFromTop (18));
+	area.removeFromTop (4);
 
-	auto row = area.removeFromTop (kFooterHeight);
-	rangeHints.setBounds (row.removeFromLeft (juce::jmin (320, row.getWidth ())));
+	auto rangeRow = area.removeFromTop (kFooterHeight);
+	rangeHints.setBounds (rangeRow.removeFromLeft (juce::jmin (320, rangeRow.getWidth ())));
+
+	area.removeFromTop (12);
+	holdCaption.setBounds (area.removeFromTop (18));
+	area.removeFromTop (4);
+
+	auto holdRow = area.removeFromTop (kFooterHeight);
+	holdSlider.setBounds (holdRow.removeFromLeft (juce::jmin (320, holdRow.getWidth ())));
 
 	area.removeFromTop (6);
 	hint.setBounds (area.removeFromTop (72));
@@ -818,6 +847,7 @@ void KeyboardSettingsPage::refreshLanguage (void)
 {
 	startCaption.setText (i18n::tr ("settings.keyboard.startNote"), juce::dontSendNotification);
 	startNote.changeItemText (1, i18n::tr ("settings.keyboard.startAuto"));
+	holdCaption.setText (i18n::tr ("settings.keyboard.noteHold"), juce::dontSendNotification);
 	caption.setText (i18n::tr ("settings.keyboard.rangeHints"), juce::dontSendNotification);
 	rangeHints.setButtonText (i18n::tr ("settings.keyboard.rangeHintsOn"));
 	hint.setText (i18n::tr ("settings.keyboard.rangeHintsHint"), juce::dontSendNotification);
