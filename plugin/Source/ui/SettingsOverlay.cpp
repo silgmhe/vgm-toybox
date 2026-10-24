@@ -744,9 +744,11 @@ KeyboardSettingsPage::KeyboardSettingsPage (void)
 	// 1 is "follow the song"; the rest are the notes a player is likely to want fixed.
 	startNote.setComponentID ("settings.keyboard.startNote");
 	startNote.addItem (i18n::tr ("settings.keyboard.startAuto"), 1);
-	startNote.addItem ("C1", 2);
-	startNote.addItem ("C2", 3);
-	startNote.addItem ("C3", 4);
+	// The three fixed starts are MIDI notes 24, 36 and 48; what they are called follows the
+	// middle-C setting, so the labels are filled in by refresh() rather than written here.
+	startNote.addItem (juce::String (), 2);
+	startNote.addItem (juce::String (), 3);
+	startNote.addItem (juce::String (), 4);
 	startNote.onChange = [this]
 	{
 		static const int notes[] = { -1, 24, 36, 48 };
@@ -759,6 +761,22 @@ KeyboardSettingsPage::KeyboardSettingsPage (void)
 	holdCaption.setFont (juce::Font (juce::FontOptions (12.5f)));
 	holdCaption.setJustificationType (juce::Justification::centredLeft);
 	addAndMakeVisible (holdCaption);
+
+	middleCaption.setFont (juce::Font (juce::FontOptions (12.5f)));
+	middleCaption.setJustificationType (juce::Justification::centredLeft);
+	addAndMakeVisible (middleCaption);
+
+	middleC.setComponentID ("settings.keyboard.middleC");
+	for (int octave = toybox::settings::keyboard::minMiddleCOctave;
+		 octave <= toybox::settings::keyboard::maxMiddleCOctave; ++octave)
+	{
+		middleC.addItem ("C" + juce::String (octave), octave);
+	}
+	middleC.onChange = [this]
+	{
+		toybox::settings::SettingsStore::getInstance ().setKeyboardMiddleCOctave (middleC.getSelectedId ());
+	};
+	addAndMakeVisible (middleC);
 
 	holdSlider.setComponentID ("settings.keyboard.noteHold");
 	holdSlider.setSliderStyle (juce::Slider::LinearHorizontal);
@@ -797,6 +815,21 @@ void KeyboardSettingsPage::refresh (void)
 
 	startNote.setSelectedId (id, juce::dontSendNotification);
 
+	middleC.setSelectedId (toybox::settings::SettingsStore::getInstance ().getKeyboardMiddleCOctave (),
+						   juce::dontSendNotification);
+
+	{
+		const int middle = toybox::settings::SettingsStore::getInstance ().getKeyboardMiddleCOctave ();
+		const int shift = 5 - juce::jlimit (2, 5, middle);
+		static const char* const names[] = { "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B" };
+
+		for (int i = 0; i < 3; ++i)
+		{
+			const int note = 24 + i * 12;
+			startNote.changeItemText (2 + i, juce::String (names[note % 12]) + juce::String (note / 12 - shift));
+		}
+	}
+
 	holdSlider.setValue ((double) toybox::settings::SettingsStore::getInstance ().getKeyboardNoteHoldMs (),
 						 juce::dontSendNotification);
 
@@ -834,6 +867,13 @@ void KeyboardSettingsPage::resized (void)
 	auto holdRow = area.removeFromTop (kFooterHeight);
 	holdSlider.setBounds (holdRow.removeFromLeft (juce::jmin (320, holdRow.getWidth ())));
 
+	area.removeFromTop (12);
+	middleCaption.setBounds (area.removeFromTop (18));
+	area.removeFromTop (4);
+
+	auto middleRow = area.removeFromTop (kFooterHeight);
+	middleC.setBounds (middleRow.removeFromLeft (juce::jmin (120, middleRow.getWidth ())));
+
 	area.removeFromTop (6);
 	hint.setBounds (area.removeFromTop (72));
 }
@@ -848,6 +888,7 @@ void KeyboardSettingsPage::refreshLanguage (void)
 	startCaption.setText (i18n::tr ("settings.keyboard.startNote"), juce::dontSendNotification);
 	startNote.changeItemText (1, i18n::tr ("settings.keyboard.startAuto"));
 	holdCaption.setText (i18n::tr ("settings.keyboard.noteHold"), juce::dontSendNotification);
+	middleCaption.setText (i18n::tr ("settings.keyboard.middleC"), juce::dontSendNotification);
 	caption.setText (i18n::tr ("settings.keyboard.rangeHints"), juce::dontSendNotification);
 	rangeHints.setButtonText (i18n::tr ("settings.keyboard.rangeHintsOn"));
 	hint.setText (i18n::tr ("settings.keyboard.rangeHintsHint"), juce::dontSendNotification);

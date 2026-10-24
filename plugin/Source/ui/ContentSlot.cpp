@@ -37,7 +37,19 @@ namespace
 	constexpr int kMeterHeight = 20;
 	constexpr int kMeterGap = 18;
 
-	juce::String noteName (int note)
+	/** Semitones to subtract when naming an octave.
+
+		MIDI 60 is called C3, C4 or C5 depending on who you ask, and the settings page has the
+		answer: 5 minus the octave number the user gave middle C. Four is the international
+		convention, three the one this project starts with.
+	*/
+	int octaveShiftForNaming (void)
+	{
+		const int middle = toybox::settings::SettingsStore::getInstance ().getKeyboardMiddleCOctave ();
+		return 5 - juce::jlimit (2, 5, middle);
+	}
+
+	juce::String noteName (int note, int octaveShift)
 	{
 		static const char* const names[] = { "C", "C#", "D", "D#", "E", "F",
 											 "F#", "G", "G#", "A", "A#", "B" };
@@ -47,7 +59,7 @@ namespace
 			return "-";
 		}
 
-		return juce::String (names[note % 12]) + juce::String (note / 12 - 1);
+		return juce::String (names[note % 12]) + juce::String (note / 12 - octaveShift);
 	}
 } // namespace
 
@@ -480,7 +492,7 @@ private:
 		// the note, or a dash when the channel has no pitch to speak of
 		g.setColour (channel.note >= 0 ? theme::primaryText () : theme::secondaryText ());
 		g.setFont (juce::Font (juce::FontOptions (12.5f, juce::Font::bold)));
-		g.drawText (noteName (channel.note), row.note, juce::Justification::centred, false);
+		g.drawText (noteName (channel.note, octaveShiftForNaming ()), row.note, juce::Justification::centred, false);
 
 		paintWave (g, row.wave, channel);
 		paintKeyboard (g, row.keys, channel.note);
@@ -556,7 +568,7 @@ private:
 
 		g.setColour (automatic ? theme::secondaryText () : theme::accent ());
 		g.setFont (juce::Font (juce::FontOptions (11.0f)));
-		g.drawText (noteName (base), autoRect, juce::Justification::centred, false);
+		g.drawText (noteName (base, octaveShiftForNaming ()), autoRect, juce::Justification::centred, false);
 	}
 
 
@@ -700,8 +712,10 @@ private:
 		did. */
 	static constexpr int kWhiteKeyWidth = 20;
 	static constexpr int kMinWhiteKeyWidth = 16;
-	static constexpr int kFirstMusicalNote = 12;	// C0
-	static constexpr int kLastMusicalNote = 119;	// B8
+	// The whole MIDI range: note 0 to 127. What those are called depends on where middle C is
+	// named, which is a setting - the range itself is not.
+	static constexpr int kFirstMusicalNote = 0;
+	static constexpr int kLastMusicalNote = 127;
 
 	/** What one row's keyboard covers, worked out from the room it has. */
 	struct KeySpan
@@ -826,6 +840,8 @@ private:
 		const auto span = spanFor (area);
 		lastSpan = span;
 
+		const int octaveShift = octaveShiftForNaming ();
+
 		const float whiteWidth = (float) span.keyWidth;
 		const float blackWidth = whiteWidth * 0.62f;
 		const float blackHeight = (float) area.getHeight () * 0.62f;
@@ -919,7 +935,7 @@ private:
 						label = label.withTrimmedTop ((int) (face.getHeight () * 0.55f));
 					}
 
-					g.drawText (noteName (keyNote), label,
+					g.drawText (noteName (keyNote, octaveShift), label,
 								black ? juce::Justification::centred : juce::Justification::centredBottom, false);
 				}
 			}
@@ -929,6 +945,14 @@ private:
 		for (int k = 0; k < span.whiteKeys; ++k)
 		{
 			const int keyNote = noteForWhite (span.base, k);
+
+			// The white-key count is an estimate rounded up to a whole octave; past G8 there is
+			// nothing to draw, so the last one or two of them are dropped here.
+			if (keyNote > kLastMusicalNote)
+			{
+				continue;
+			}
+
 			const juce::Rectangle<float> key (offsetX + whiteWidth * (float) k,
 											  (float) area.getY (), whiteWidth - 1.0f,
 											  (float) area.getHeight ());
@@ -964,6 +988,11 @@ private:
 			{
 				const int keyNote = noteForWhite (span.base, k);
 
+				if (keyNote > kLastMusicalNote)
+				{
+					break;
+				}
+
 				if (keyNote % 12 != 0)
 				{
 					continue;
@@ -984,7 +1013,7 @@ private:
 												  (float) area.getHeight ());
 
 				g.setColour (theme::secondaryText ().withAlpha (0.75f));
-				g.drawText (noteName (keyNote), key.toNearestInt ().withTrimmedBottom (1),
+				g.drawText (noteName (keyNote, octaveShift), key.toNearestInt ().withTrimmedBottom (1),
 							juce::Justification::centredBottom, false);
 			}
 		}
@@ -1044,7 +1073,7 @@ private:
 
 			g.setColour (theme::secondaryText ());
 			g.setFont (juce::Font (juce::FontOptions (8.5f)));
-			g.drawText (noteName (note), area.withTrimmedLeft (above ? 0 : 12).withTrimmedRight (above ? 12 : 0),
+			g.drawText (noteName (note, octaveShift), area.withTrimmedLeft (above ? 0 : 12).withTrimmedRight (above ? 12 : 0),
 						juce::Justification::centred, false);
 		}
 	}

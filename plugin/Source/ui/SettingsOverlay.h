@@ -286,6 +286,8 @@ private:
 	juce::ToggleButton rangeHints;
 	juce::Label holdCaption;
 	juce::Slider holdSlider;
+	juce::Label middleCaption;
+	juce::ComboBox middleC;
 	juce::Label hint;
 };
 

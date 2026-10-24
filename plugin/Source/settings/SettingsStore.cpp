@@ -38,6 +38,7 @@ constexpr const char* kContentViewKey = "ui.view";
 constexpr const char* kKeyboardRangeHintsKey = "keyboard.rangeHints";
 constexpr const char* kKeyboardStartNoteKey = "keyboard.startNote";
 constexpr const char* kKeyboardNoteHoldKey = "keyboard.noteHoldMs";
+constexpr const char* kKeyboardMiddleCKey = "keyboard.middleCOctave";
 constexpr const char* kMidiBendRangeKey = "midi.pitchBendRange";
 	constexpr const char* kMidiBendEnabledKey = "midi.pitchBendEnabled";
 
@@ -327,6 +328,25 @@ void SettingsStore::setNsfDurationSeconds (int seconds)
 
 	file->setValue (kNsfDurationKey, clamped);
 	lastErrorMessage = file->saveIfNeeded() ? juce::String() : writeErrorFor (settingsFile());
+}
+
+int SettingsStore::getKeyboardMiddleCOctave (void) const
+{
+	const int stored = file != nullptr ? file->getIntValue (kKeyboardMiddleCKey, toybox::settings::keyboard::defaultMiddleCOctave)
+									   : toybox::settings::keyboard::defaultMiddleCOctave;
+
+	return juce::jlimit (toybox::settings::keyboard::minMiddleCOctave,
+						 toybox::settings::keyboard::maxMiddleCOctave, stored);
+}
+
+void SettingsStore::setKeyboardMiddleCOctave (int octave)
+{
+	if (file != nullptr)
+	{
+		file->setValue (kKeyboardMiddleCKey,
+						juce::jlimit (toybox::settings::keyboard::minMiddleCOctave,
+									  toybox::settings::keyboard::maxMiddleCOctave, octave));
+	}
 }
 
 int SettingsStore::getKeyboardNoteHoldMs (void) const

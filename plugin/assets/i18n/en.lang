@@ -231,6 +231,7 @@ language: English
 	"settings.keyboard.rangeHintsOn" = "Show an arrow when a note is outside the keys";
 	"settings.keyboard.rangeHints" = "Out-of-range notes";
 	"settings.keyboard.noteHold" = "Note-off delay";
+	"settings.keyboard.middleC" = "Middle C is";
 	"settings.keyboard.explanation" = "What the keyboard draws. The octave range follows the window width; the arrow is a choice.";
 	"settings.keyboard" = "Keyboard";
 	"settings.keyboard.startAuto" = "Follow the song";

@@ -173,6 +173,10 @@ public:
 	bool getKeyboardRangeHints (void) const;
 	void setKeyboardRangeHints (bool shouldShow);
 
+	/** Which octave number MIDI 60 carries: 3 means the keyboard calls middle C a C3. */
+	int getKeyboardMiddleCOctave (void) const;
+	void setKeyboardMiddleCOctave (int octave);
+
 	/** How long a key stays lit after its note stops, in milliseconds. */
 	int getKeyboardNoteHoldMs (void) const;
 	void setKeyboardNoteHoldMs (int milliseconds);

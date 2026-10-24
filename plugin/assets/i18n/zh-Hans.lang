@@ -227,6 +227,7 @@ language: 简体中文
 	"settings.keyboard.rangeHintsOn" = "音符超出可见键位时显示箭头";
 	"settings.keyboard.rangeHints" = "超出音域的提示";
 	"settings.keyboard.noteHold" = "音符熄灭延迟";
+	"settings.keyboard.middleC" = "中央 C 记作";
 	"settings.keyboard.explanation" = "键盘视图画什么。八度范围随窗口宽度自动调整；箭头则是一项选择。";
 	"settings.keyboard" = "键盘";
 	"settings.keyboard.startAuto" = "跟随歌曲";
