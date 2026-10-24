@@ -715,6 +715,25 @@ int main (int argc, char* argv[])
 			engine.setTrackMidiChannel (i, 0);
 		}
 	}
+	// Per-track survey: every track soloed in turn must give a different signal. Tracks that print
+	// the same numbers are the symptom this backend showed when isolation silently did nothing -
+	// one emulation per track that never muted the others.
+	{
+		std::printf ("    per-track survey (0.50 s each):\n");
+
+		for (std::size_t i = 0; i < tracks.size (); ++i)
+		{
+			engine.setTrackSolo (i, true);
+			engine.setPositionSeconds (0.0);
+			engine.play ();
+			const auto one = renderSeconds (engine, 0.5, sampleRate, blockSize);
+			engine.setTrackSolo (i, false);
+
+			std::printf ("      [%2d] %-18s rms %.4f  peak %.4f\n", (int) i,
+						 tracks[i].name.toRawUTF8 (), one.rms, one.peak);
+		}
+	}
+
 	std::printf ("    the mixer checks use track %d (%s)\n", fixtureTrack,
 				 fixtureTrack < (int) tracks.size() ? tracks[(size_t) fixtureTrack].name.toRawUTF8()
 													: "out of range");

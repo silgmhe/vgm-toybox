@@ -31,6 +31,13 @@ NsfPlayer::NsfPlayer (const formats::nsf::NsfFile& image, double sampleRate)
 	apu = std::make_unique<xgm::NES_APU> ();
 	dmc = std::make_unique<xgm::NES_DMC> ();
 
+	// NSFPlay randomises the noise LFSR and the triangle's phase at power-on so that repeated
+	// playback does not sound machine-identical. That makes a restart produce different samples -
+	// which breaks the one property a mixer depends on: seeking back to the same position has to
+	// give the same audio. Off, so a render is a function of position alone.
+	dmc->SetOption (xgm::NES_DMC::OPT_RANDOMIZE_NOISE, 0);
+	dmc->SetOption (xgm::NES_DMC::OPT_RANDOMIZE_TRI, 0);
+
 	const double clock = file.isPal() ? kPalClock : kNtscClock;
 
 	apu->SetClock (clock);
@@ -300,11 +307,25 @@ bool NsfPlayer::seekTo (double seconds)
 	// clock. Forty clocks per step would be one sample's worth; four thousand is a hundred times
 	// less bookkeeping for exactly the same emulation.
 	constexpr int clocksPerStep = 4096;
-	const auto target = (std::uint64_t) (seconds * rate);
 
-	while (rendered < target)
+	// The target is in CPU clocks, not in samples: rendered counts samples everywhere else, and
+	// adding clocks to it made every seek land about forty times short of where it was asked to
+	// go - the position said 90 s while the audio was at 2.2 s, and each instance stopped at a
+	// slightly different one of those wrong places, which is the spread the mixer measured.
+	const double clock = file.isPal () ? kPalClock : kNtscClock;
+	const auto targetClocks = (std::uint64_t) (seconds * clock);
+
+	std::uint64_t clocksRun = 0;
+
+	while (clocksRun < targetClocks)
 	{
-		const int executed = cpu->Exec (clocksPerStep);
+		// The last step is clipped to what remains, so the run lands on the target rather than
+		// past it: an overshoot of one step is 2.3 ms, and thirteen instances overshooting by
+		// different amounts is exactly the drift the mixer reported between tracks.
+		const auto remaining = targetClocks - clocksRun;
+		const int step = (int) (remaining < (std::uint64_t) clocksPerStep ? remaining
+																		 : (std::uint64_t) clocksPerStep);
+		const int executed = cpu->Exec (step);
 		const auto clocks = (UINT32) (std::max) (0, executed);
 
 		dmc->TickFrameSequence (clocks);
@@ -316,8 +337,10 @@ bool NsfPlayer::seekTo (double seconds)
 		if (n106) { n106->Tick (clocks); }
 		if (fme7) { fme7->Tick (clocks); }
 
-		rendered += (std::uint64_t) executed;
+		clocksRun += (std::uint64_t) (std::max) (0, executed);
 	}
+
+	rendered = (std::uint64_t) ((double) clocksRun / clock * rate);
 
 	return true;
 }
