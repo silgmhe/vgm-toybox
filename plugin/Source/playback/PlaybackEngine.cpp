@@ -18,6 +18,7 @@ namespace toybox
 
 PlaybackEngine::PlaybackEngine (void)
 {
+	seekThread = std::thread ([this] { runSeekWorker (); });
 }
 
 PlaybackEngine::~PlaybackEngine (void)
@@ -28,6 +29,16 @@ PlaybackEngine::~PlaybackEngine (void)
 	// The timeout keeps a pathological build from hanging the host on teardown.
 	alive->store (false);
 	loadPool.removeAllJobs (true, 3000);
+
+	// The worker may be inside a replay holding the lock, so it is stopped and joined before the
+	// lock is taken below.
+	seekThreadShouldStop.store (true);
+	seekCv.notify_all ();
+
+	if (seekThread.joinable ())
+	{
+		seekThread.join ();
+	}
 
 	const juce::ScopedLock sl (lock);
 	resetState();
@@ -466,6 +477,114 @@ void PlaybackEngine::setPositionSeconds (double seconds)
 	setPositionSecondsLocked (seconds);
 }
 
+void PlaybackEngine::requestPositionSeconds (double seconds)
+{
+	const double duration = getPlayLengthSeconds ();
+	const double target = duration > 0.0 ? juce::jlimit (0.0, duration, seconds)
+										 : juce::jmax (0.0, seconds);
+
+	// One player per track means one replay per track, and an NSF cannot be seeked into - the
+	// driver has to run from its beginning to the target. On a thirteen-track file that is seconds
+	// of work, so it happens on the worker: the request is published, the transport draws it, and
+	// the audio thread renders silence until the players have caught up (it cannot take the lock
+	// while the worker holds it, which is the same behaviour as before - minus the frozen window).
+	if (playerCount.load () > 1)
+	{
+		positionSeconds.store (target);
+		finished.store (false);
+		midiResetGeneration.fetch_add (1);
+
+		seekTargetSeconds.store (target);
+		seekRequested.store (true);
+		seekCv.notify_one ();
+		return;
+	}
+
+	const juce::ScopedLock sl (lock);
+	setPositionSecondsLocked (target);
+}
+
+void PlaybackEngine::seekAllPlayersTo (double target)
+{
+	// Every track seeks to the very same sample, which is what keeps them in sync.
+	//
+	// A backend that isolates by instance - one player per track, each silenced down to its own
+	// channel - makes this the most expensive operation in the program: thirteen instances each
+	// replay the song from the beginning. They are independent, so they replay at the same time
+	// instead of one after another, which turns thirteen sequential replays into roughly one,
+	// spread across the cores. The lock is held throughout, so the audio thread renders silence
+	// while this runs rather than reading half-seeked players.
+	if (trackPlayers.size() > 1)
+	{
+		const size_t workers = (size_t) juce::jlimit (1, (int) trackPlayers.size (),
+													  juce::SystemStats::getNumCpus ());
+
+		std::atomic<size_t> next { 0 };
+		std::vector<std::thread> threads;
+		threads.reserve (workers);
+
+		for (size_t t = 0; t < workers; ++t)
+		{
+			threads.emplace_back ([this, &next, target]
+			{
+				for (;;)
+				{
+					const size_t index = next.fetch_add (1);
+
+					if (index >= trackPlayers.size ())
+					{
+						return;
+					}
+
+					trackPlayers[index]->seekSeconds (target);
+				}
+			});
+		}
+
+		for (auto& thread : threads)
+		{
+			thread.join ();
+		}
+	}
+	else
+	{
+		for (auto& player : trackPlayers)
+		{
+			player->seekSeconds (target);
+		}
+	}
+}
+
+void PlaybackEngine::runSeekWorker (void)
+{
+	for (;;)
+	{
+		double target = 0.0;
+
+		{
+			std::unique_lock<std::mutex> ul (seekMutex);
+			seekCv.wait (ul, [this] { return seekThreadShouldStop.load () || seekRequested.load (); });
+
+			if (seekThreadShouldStop.load ())
+			{
+				return;
+			}
+
+			// Cleared before the replay, so a request arriving during it is not lost - it simply
+			// becomes the next round rather than being swallowed by this one.
+			seekRequested.store (false);
+			target = seekTargetSeconds.load ();
+		}
+
+		{
+			const juce::ScopedLock sl (lock);
+			seekAllPlayersTo (target);
+			positionSeconds.store (target);
+			finished.store (false);
+		}
+	}
+}
+
 void PlaybackEngine::followDawTransport (void)
 {
 	// The sync switch and the loaded flag are atomics, so a block that does not follow costs
@@ -541,53 +660,7 @@ void PlaybackEngine::setPositionSecondsLocked (double seconds)
 	const double target = duration > 0.0 ? juce::jlimit (0.0, duration, seconds)
 										 : juce::jmax (0.0, seconds);
 
-	// Every track seeks to the very same sample, which is what keeps them in sync.
-	//
-	// A backend that isolates by instance - one player per track, each silenced down to its own
-	// channel - makes this the most expensive operation in the program: thirteen instances each
-	// replay the song from the beginning. They are independent, so they replay at the same time
-	// instead of one after another, which turns thirteen sequential replays into roughly one,
-	// spread across the cores. The lock is held throughout, so the audio thread renders silence
-	// while this runs rather than reading half-seeked players.
-	if (trackPlayers.size() > 1)
-	{
-		const size_t workers = (size_t) juce::jlimit (1, (int) trackPlayers.size (),
-													  juce::SystemStats::getNumCpus ());
-
-		std::atomic<size_t> next { 0 };
-		std::vector<std::thread> threads;
-		threads.reserve (workers);
-
-		for (size_t t = 0; t < workers; ++t)
-		{
-			threads.emplace_back ([this, &next, target]
-			{
-				for (;;)
-				{
-					const size_t index = next.fetch_add (1);
-
-					if (index >= trackPlayers.size ())
-					{
-						return;
-					}
-
-					trackPlayers[index]->seekSeconds (target);
-				}
-			});
-		}
-
-		for (auto& thread : threads)
-		{
-			thread.join ();
-		}
-	}
-	else
-	{
-		for (auto& player : trackPlayers)
-		{
-			player->seekSeconds (target);
-		}
-	}
+	seekAllPlayersTo (target);
 
 	positionSeconds = target;
 	finished = false;
@@ -994,6 +1067,7 @@ void PlaybackEngine::installSong (LoadedSong&& built)
 	// everything else that goes out of scope - bounded work, unlike building them.
 	song = std::move (built.song);
 	trackPlayers = std::move (built.players);
+	playerCount.store ((int) trackPlayers.size ());
 	trackLayout = std::move (built.layout);
 	tracks = std::move (built.tracks);
 	soloCount = built.soloCount;
@@ -1864,7 +1938,10 @@ void PlaybackEngine::publishPositionAndEnd (void)
 	// publish the position for the lock-free UI getter (an O(1) query, still under the lock);
 	// the first player carries the song timeline in both modes
 	const double position = trackPlayers[0]->positionSeconds();
-	if (position >= 0.0)
+
+	// Not while a seek is outstanding: the players are still at the old position until the worker
+	// is done, and publishing that would drag the bar back to where it came from for a moment.
+	if (position >= 0.0 && ! seekRequested.load ())
 	{
 		positionSeconds.store (position);
 	}
