@@ -227,6 +227,11 @@ target_sources(VGMToybox PRIVATE
 	Source/backends/libvgm/LibvgmSongInstance.cpp
 	Source/backends/libvgm/LibvgmTrackPlayer.cpp
 	Source/backends/libvgm/LibvgmVgz.cpp
+	Source/backends/nsf/NsfBackend.cpp
+	Source/backends/nsf/NsfPlayer.cpp
+	Source/backends/nsf/NsfBus.cpp
+	Source/backends/nsf/NsfCpuLoggerStub.cpp
+	Source/formats/nsf/NsfFile.cpp
 	Source/i18n/LanguageManager.cpp
 	Source/i18n/LanguagePack.cpp
 	Source/settings/SettingsStore.cpp
@@ -412,6 +417,11 @@ add_executable(vgm_mixer_test EXCLUDE_FROM_ALL
 	Source/chips/OpmDecoder.cpp
 	Source/chips/OpnDecoder.cpp
 	Source/backends/BuiltInBackends.cpp
+	Source/backends/nsf/NsfBackend.cpp
+	Source/backends/nsf/NsfPlayer.cpp
+	Source/backends/nsf/NsfBus.cpp
+	Source/backends/nsf/NsfCpuLoggerStub.cpp
+	Source/formats/nsf/NsfFile.cpp
 	Source/backends/libvgm/LibvgmBackend.cpp
 	Source/backends/libvgm/MidiSequenceBuilder.cpp
 	Source/backends/libvgm/VgmCommandReader.cpp
@@ -838,3 +848,8 @@ foreach(_script_file IN LISTS _toybox_scripts)
 			WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/..")
 	endif()
 endforeach()
+
+# The NSF backend compiles against the vendored cores; stated separately so every target that
+# includes NsfBackend.cpp gets the include path without repeating it in each block.
+target_link_libraries(vgm_mixer_test PRIVATE nsfplay_core)
+target_link_libraries(VGMToybox PRIVATE nsfplay_core)
