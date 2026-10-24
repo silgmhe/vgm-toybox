@@ -34,7 +34,7 @@ public:
 	void setTimeline (int, double) override {}
 	void setTrackAudible (playback::TrackId track, bool audible) override
 	{
-		if (audible && track >= 1 && track <= 5)
+		if (audible && track >= 1)
 		{
 			player.setTrackAudible ((int) track - 1);
 		}
@@ -74,8 +74,6 @@ public:
 		length = (double) settings::SettingsStore::getInstance ().getNsfDurationSeconds ();
 		info_.durationSeconds = length;
 		info_.singlePassSeconds = length;
-		info_.durationSeconds = length;
-		info_.singlePassSeconds = length;
 
 		if (! file.name.empty ()) { info_.tags["title"] = file.name.c_str (); }
 		if (! file.artist.empty ()) { info_.tags["artist"] = file.artist.c_str (); }
@@ -98,26 +96,56 @@ public:
 		// the APU renders the two pulses, and the DMC object renders triangle, noise and DPCM.
 		static const char* const names[] = { "Pulse 1", "Pulse 2", "Triangle", "Noise", "DMC" };
 
-		// An expansion chip mixes inside the emulation and the masks only split the two 2A03
-		// objects, so a song that has one is offered as a single track rather than five that would
-		// each carry the expansion channels.
-		expansionPresent = file.chip () != formats::nsf::NsfChip::none;
-		const bool hasExpansion = expansionPresent;
+		// Every channel the emulation renders separately becomes a track, including the expansion
+		// chip's: each of them has its own mask bit, so isolating one is a matter of the player
+		// clearing a single bit rather than of the backend guessing.
+		static const char* const apuNames[] = { "Pulse 1", "Pulse 2" };
+		static const char* const dmcNames[] = { "Triangle", "Noise", "DMC" };
 
-		if (hasExpansion)
+		playback::TrackId nextId = 1;
+		int channel = 0;
+
+		const auto addTrack = [&] (const char* name, const char* group, bool melodic)
 		{
-			tracks_.push_back (playback::TrackInfo { 1, 0, 0, -1, false, "All", "2A03",
-													 playback::MidiCapability::unavailable });
-		}
-		else
+			tracks_.push_back (playback::TrackInfo { nextId++, 0, 0, channel++, true, name, group,
+												 melodic ? playback::MidiCapability::melodic
+														 : playback::MidiCapability::unavailable });
+		};
+
+		for (const char* name : apuNames) { addTrack (name, "2A03", true); }
+		for (const char* name : dmcNames) { addTrack (name, "2A03", false); }
+
+		switch (file.chip ())
 		{
-			for (int i = 0; i < 5; ++i)
-			{
-				tracks_.push_back (playback::TrackInfo { (playback::TrackId) (i + 1), 0, 0, i, true,
-														 names[i], "2A03",
-														 i < 2 ? playback::MidiCapability::melodic
-															   : playback::MidiCapability::unavailable });
-			}
+			case formats::nsf::NsfChip::vrc6:
+				addTrack ("Saw Wave", "VRC6", true);
+				addTrack ("Square 3", "VRC6", true);
+				addTrack ("Square 4", "VRC6", true);
+				break;
+
+			case formats::nsf::NsfChip::vrc7:
+				for (int i = 0; i < 6; ++i)
+				{
+					addTrack (juce::String ("FM " + juce::String (i + 1)).toRawUTF8 (), "VRC7", true);
+				}
+				break;
+
+			case formats::nsf::NsfChip::n163:
+				for (int i = 0; i < 8; ++i)
+				{
+					addTrack (juce::String ("Wave " + juce::String (i + 1)).toRawUTF8 (), "N163", true);
+				}
+				break;
+
+			case formats::nsf::NsfChip::fme7:
+				for (int i = 0; i < 5; ++i)
+				{
+					addTrack (juce::String ("Square " + juce::String (i + 1)).toRawUTF8 (), "S5B", true);
+				}
+				break;
+
+			default:
+				break;
 		}
 	}
 
@@ -127,8 +155,7 @@ public:
 	playback::BackendCapabilities getCapabilities (void) const override
 	{
 		playback::BackendCapabilities caps;
-		caps.isolation = expansionPresent ? playback::IsolationMode::none
-									   : playback::IsolationMode::multiInstance;
+		caps.isolation = playback::IsolationMode::multiInstance;
 		caps.canSeek = true;
 		caps.rendersAtHostRate = true;
 		return caps;

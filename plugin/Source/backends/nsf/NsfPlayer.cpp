@@ -301,30 +301,47 @@ void NsfPlayer::setTrackAudible (int trackIndex)
 	applyMasks ();
 }
 
+int NsfPlayer::channelCount (void) const
+{
+	// Five on the 2A03 - the two the APU renders and the three the DMC object renders - plus the
+	// expansion chip's own, of which a file can declare only one.
+	if (vrc6) { return 5 + 3; }
+	if (n106) { return 5 + 8; }
+	if (vrc7) { return 5 + 6; }
+	if (fme7) { return 5 + 5; }
+
+	return 5;
+}
+
 void NsfPlayer::applyMasks (void)
 {
-	// The chips mute with a set bit, and they are split across two objects: the APU renders the two
-	// pulse channels, the DMC object renders triangle, noise and DPCM. A track index is mapped onto
-	// those two masks here, which is the whole of the isolation.
+	// Each chip mutes with a set bit over its own outputs, and the track list is the concatenation
+	// of those outputs in this order: two from the APU, three from the DMC object, then the
+	// expansion's. A solo is therefore one bit cleared in exactly one of these masks.
 	const bool all = soloTrack < 0;
 
-	const bool pulse1 = all || soloTrack == 0;
-	const bool pulse2 = all || soloTrack == 1;
-	const bool triangle = all || soloTrack == 2;
-	const bool noise = all || soloTrack == 3;
-	const bool dmcChannel = all || soloTrack == 4;
+	const auto maskFor = [all, this] (int base, int count)
+	{
+		int mask = 0;
 
-	int apuMask = 0;
-	if (! pulse1) { apuMask |= 1; }
-	if (! pulse2) { apuMask |= 2; }
+		for (int i = 0; i < count; ++i)
+		{
+			if (! all && soloTrack != base + i)
+			{
+				mask |= (1 << i);
+			}
+		}
 
-	int dmcMask = 0;
-	if (! triangle) { dmcMask |= 1; }
-	if (! noise) { dmcMask |= 2; }
-	if (! dmcChannel) { dmcMask |= 4; }
+		return mask;
+	};
 
-	apu->SetMask (apuMask);
-	dmc->SetMask (dmcMask);
+	apu->SetMask (maskFor (0, 2));
+	dmc->SetMask (maskFor (2, 3));
+
+	if (vrc6) { vrc6->SetMask (maskFor (5, 3)); }
+	if (n106) { n106->SetMask (maskFor (5, 8)); }
+	if (vrc7) { vrc7->SetMask (maskFor (5, 6)); }
+	if (fme7) { fme7->SetMask (maskFor (5, 5)); }
 }
 
 } // namespace toybox::backends::nsf

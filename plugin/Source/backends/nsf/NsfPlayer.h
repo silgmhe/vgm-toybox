@@ -48,7 +48,11 @@ public:
 		way to a point is through everything before it. */
 	bool seekTo (double seconds);
 
-	/** Solos one of the five channels; -1 leaves them all audible. */
+	/** How many separately audible channels this song has: five on the 2A03 plus whatever
+		the declared expansion chip renders. */
+	int channelCount (void) const;
+
+	/** Solos one channel of that list; -1 leaves them all audible. */
 	void setTrackAudible (int trackIndex);
 
 	/** True when the file declared an expansion chip and one was created. */
