@@ -5,6 +5,7 @@
 #include "i18n/LanguageManager.h"
 #include "playback/PlaybackEngine.h"
 #include "playback/WaveExport.h"
+#include "settings/SettingsStore.h"
 
 #include <algorithm>
 #include <cmath>
@@ -473,22 +474,41 @@ private:
 		return cycle;
 	}
 
-	/** Four octaves, the sounding key lit and named. Narrow keys on purpose: the point is to see
-		where a note sits, and more keys means more of the range on screen at once. */
+	/** How many octaves fit. Twenty pixels per white key is the smallest that still reads as a
+		keyboard; below that the range shrinks rather than the keys. */
+	int octavesFor (int keysWidth) const
+	{
+		return juce::jlimit (3, 7, keysWidth / (7 * 20));
+	}
+
+	/** Four octaves at a narrow window, seven at a wide one, the left edge pinned to C2.
+
+		Pinned on purpose: a keyboard centred on C4 would slide every key on every resize, and
+		thirteen rows sliding independently reads as a fault rather than as a layout.
+	*/
 	void paintKeyboard (juce::Graphics& g, juce::Rectangle<int> area, int note)
 	{
-		if (area.getWidth () < 60 || area.getHeight () < 12)
+		if (area.getWidth () < 80 || area.getHeight () < 12)
 		{
 			return;
 		}
 
 		constexpr int firstNote = 36;		// C2
-		constexpr int octaves = 4;
 		constexpr int whiteIndex[12] = { 0, -1, 1, -1, 2, 3, -1, 4, -1, 5, -1, 6 };
+
+		const int octaves = octavesFor (area.getWidth ());
+		const int lastNote = firstNote + octaves * 12;
 
 		const float whiteWidth = (float) area.getWidth () / (float) (octaves * 7);
 		const float blackWidth = whiteWidth * 0.62f;
 		const float blackHeight = (float) area.getHeight () * 0.62f;
+
+		// Opaque colours. A translucent black key let the white keys' divider lines show through
+		// it, which looked like a printing fault rather than like a keyboard.
+		const juce::Colour whiteKey = theme::card ().interpolatedWith (theme::primaryText (), 0.09f);
+		const juce::Colour blackKey = theme::card ().interpolatedWith (theme::primaryText (), 0.74f);
+		const juce::Colour litKey = theme::accent ();
+		const juce::Colour litBlack = theme::accent ().darker (0.25f);
 
 		const auto keyFor = [&] (int offset, float& x, float& width, bool& black)
 		{
@@ -526,16 +546,7 @@ private:
 			const float height = black ? blackHeight : (float) area.getHeight ();
 			const juce::Rectangle<float> key (x + 0.5f, (float) area.getY (), width - 1.0f, height);
 
-			if (lit)
-			{
-				g.setColour (theme::accent ().withAlpha (black ? 0.95f : 0.85f));
-			}
-			else
-			{
-				g.setColour (black ? theme::primaryText ().withAlpha (0.5f)
-								   : theme::secondaryText ().withAlpha (0.13f));
-			}
-
+			g.setColour (lit ? (black ? litBlack : litKey) : (black ? blackKey : whiteKey));
 			g.fillRoundedRectangle (key, 1.5f);
 
 			if (lit && width >= 13.0f)
@@ -566,6 +577,63 @@ private:
 					paintKey (octave * 12 + pc, true);
 				}
 			}
+		}
+
+		// The octave names, on the C keys only. Three density steps, because a label that collides
+		// with its neighbour is worse than no label at all.
+		const int everyNth = whiteWidth >= 15.0f ? 1 : (whiteWidth >= 10.0f ? 2 : 0);
+
+		if (everyNth > 0)
+		{
+			g.setFont (juce::Font (juce::FontOptions (8.5f)));
+
+			for (int octave = 0; octave < octaves; octave += everyNth)
+			{
+				const int keyNote = firstNote + octave * 12;
+
+				if (keyNote == note)
+				{
+					continue;		// the row's own note label already names this key
+				}
+
+				const float x = (float) area.getX () + whiteWidth * (float) (octave * 7);
+				const juce::Rectangle<float> key (x + 1.0f, (float) area.getY (),
+												  whiteWidth - 2.0f, (float) area.getHeight ());
+
+				g.setColour (theme::secondaryText ().withAlpha (0.75f));
+				g.drawText (noteName (keyNote), key.toNearestInt ().withTrimmedBottom (1),
+							juce::Justification::centredBottom, false);
+			}
+		}
+
+		// Out of range: a narrow window shows fewer octaves, and a note above or below them has
+		// nowhere to light. The arrow says which way it went without moving the keyboard.
+		if (note >= 0 && (note < firstNote || note >= lastNote)
+			&& toybox::settings::SettingsStore::getInstance ().getKeyboardRangeHints ())
+		{
+			const bool above = note >= lastNote;
+			const float size = 4.0f;
+			const float cx = above ? (float) area.getRight () - 6.0f : (float) area.getX () + 6.0f;
+			const float cy = (float) area.getCentreY ();
+
+			juce::Path arrow;
+
+			if (above)
+			{
+				arrow.addTriangle (cx - size, cy + size, cx + size, cy + size, cx, cy - size);
+			}
+			else
+			{
+				arrow.addTriangle (cx - size, cy - size, cx + size, cy - size, cx, cy + size);
+			}
+
+			g.setColour (theme::accent ().withAlpha (0.9f));
+			g.fillPath (arrow);
+
+			g.setColour (theme::secondaryText ());
+			g.setFont (juce::Font (juce::FontOptions (8.5f)));
+			g.drawText (noteName (note), area.withTrimmedLeft (above ? 0 : 12).withTrimmedRight (above ? 12 : 0),
+						juce::Justification::centred, false);
 		}
 	}
 

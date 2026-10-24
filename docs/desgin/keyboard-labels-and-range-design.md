@@ -1,6 +1,6 @@
 # 键盘视图：八度标记与自适应音域
 
-- **状态**：设计稿，待评审
+- **状态**：已实现（Q1 固定 C2、Q2 上限 7、Q3 是、Q4 箭头且可在「键盘」设置页关闭、Q5 只标 C）
 - **日期**：2026-10-24
 - **涉及**：`plugin/Source/ui/ContentSlot.cpp` → `ContentSlot::KeyboardPanel::paintKeyboard()`
 
@@ -36,10 +36,10 @@ const float whiteWidth = (float) area.getWidth () / (float) (octaves * 7);
 
 ### 3.2 八度数量
 
-以**白键最小宽度 16 px** 为界，向下取整；上限 7 个八度，下限 3 个：
+以**白键最小宽度 20 px** 为界（评审后由 16 提高到 20：16 px 时键已不成形，宁可少一个八度），向下取整；上限 7 个八度，下限 3 个：
 
 ```cpp
-int octaves = juce::jlimit (3, 7, (int) (keysWidth / (7 * 16)));
+int octaves = juce::jlimit (3, 7, keysWidth / (7 * 20));
 ```
 
 | 窗口宽度 | 键盘列 | 八度 | 白键宽 | 音域 |

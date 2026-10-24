@@ -34,6 +34,7 @@ namespace
 	constexpr const char* kNsfDurationKey = "nsf.durationSeconds";
 constexpr const char* kNsfOutputGainKey = "nsf.outputGainDb";
 constexpr const char* kContentViewKey = "ui.view";
+constexpr const char* kKeyboardRangeHintsKey = "keyboard.rangeHints";
 constexpr const char* kMidiBendRangeKey = "midi.pitchBendRange";
 	constexpr const char* kMidiBendEnabledKey = "midi.pitchBendEnabled";
 
@@ -323,6 +324,19 @@ void SettingsStore::setNsfDurationSeconds (int seconds)
 
 	file->setValue (kNsfDurationKey, clamped);
 	lastErrorMessage = file->saveIfNeeded() ? juce::String() : writeErrorFor (settingsFile());
+}
+
+bool SettingsStore::getKeyboardRangeHints (void) const
+{
+	return file != nullptr ? file->getBoolValue (kKeyboardRangeHintsKey, true) : true;
+}
+
+void SettingsStore::setKeyboardRangeHints (bool shouldShow)
+{
+	if (file != nullptr)
+	{
+		file->setValue (kKeyboardRangeHintsKey, shouldShow);
+	}
 }
 
 int SettingsStore::getContentViewIndex (void) const

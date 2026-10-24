@@ -136,7 +136,8 @@ namespace
 		languagePageIndex = 2,
 		midiPageIndex = 3,
 		nesPageIndex = 4,
-		audioPageIndex = 5
+		keyboardPageIndex = 5,
+		audioPageIndex = 6
 	};
 }
 
@@ -729,6 +730,67 @@ void NesSettingsPage::lookAndFeelChanged (void)
 	repaint ();
 }
 
+KeyboardSettingsPage::KeyboardSettingsPage (void)
+{
+	caption.setFont (juce::Font (juce::FontOptions (12.5f)));
+	caption.setJustificationType (juce::Justification::centredLeft);
+	addAndMakeVisible (caption);
+
+	rangeHints.setComponentID ("settings.keyboard.rangeHints");
+	rangeHints.onClick = [this]
+	{
+		toybox::settings::SettingsStore::getInstance ()
+			.setKeyboardRangeHints (rangeHints.getToggleState ());
+	};
+	addAndMakeVisible (rangeHints);
+
+	hint.setFont (juce::Font (juce::FontOptions (12.5f)));
+	hint.setJustificationType (juce::Justification::topLeft);
+	addAndMakeVisible (hint);
+
+	refreshLanguage ();
+	refresh ();
+}
+
+void KeyboardSettingsPage::refresh (void)
+{
+	rangeHints.setToggleState (toybox::settings::SettingsStore::getInstance ().getKeyboardRangeHints (),
+							   juce::dontSendNotification);
+}
+
+void KeyboardSettingsPage::paint (juce::Graphics& g)
+{
+	paintHeading (g, i18n::tr ("settings.keyboard"), i18n::tr ("settings.keyboard.explanation"),
+				  getLocalBounds(), kTwoLineHeadingHeight, 2);
+}
+
+void KeyboardSettingsPage::resized (void)
+{
+	auto area = pageContent (getLocalBounds(), kTwoLineHeadingHeight);
+
+	caption.setBounds (area.removeFromTop (18));
+	area.removeFromTop (4);
+
+	auto row = area.removeFromTop (kFooterHeight);
+	rangeHints.setBounds (row.removeFromLeft (juce::jmin (320, row.getWidth ())));
+
+	area.removeFromTop (6);
+	hint.setBounds (area.removeFromTop (72));
+}
+
+void KeyboardSettingsPage::lookAndFeelChanged (void)
+{
+	repaint ();
+}
+
+void KeyboardSettingsPage::refreshLanguage (void)
+{
+	caption.setText (i18n::tr ("settings.keyboard.rangeHints"), juce::dontSendNotification);
+	rangeHints.setButtonText (i18n::tr ("settings.keyboard.rangeHintsOn"));
+	hint.setText (i18n::tr ("settings.keyboard.rangeHintsHint"), juce::dontSendNotification);
+	repaint ();
+}
+
 AudioSettingsPage::AudioSettingsPage (void)
 {
 	deviceLabel.setComponentID ("settings.audio.device");
@@ -1223,6 +1285,9 @@ SettingsOverlay::SettingsOverlay (void)
 	rootItem->addSubItem (new CategoryItem ("nes", i18n::tr ("settings.nes"), nesPageIndex,
 										   [this] (int page) { pages.setCurrentView (page); }));
 
+	rootItem->addSubItem (new CategoryItem ("keyboard", i18n::tr ("settings.keyboard"), keyboardPageIndex,
+										   [this] (int page) { pages.setCurrentView (page); }));
+
 	// Audio only where there is an audio device to choose between: the standalone application says
 	// so through Source/Standalone/StandaloneHooks.h, and in a plugin the host owns the device. The
 	// row goes in with the page, so the sidebar cannot offer a page that was never created.
@@ -1244,6 +1309,7 @@ SettingsOverlay::SettingsOverlay (void)
 	languagePage = new LanguageSettingsPage();
 	midiPage = new MidiSettingsPage();
 	nesPage = new NesSettingsPage();
+	keyboardPage = new KeyboardSettingsPage();
 	// Forwarded rather than handled here: only the window owns an engine, and reloading a song at
 	// the position it was at is what makes the switch take effect.
 	midiPage->onSampleRootChanged = [this]
@@ -1258,11 +1324,13 @@ SettingsOverlay::SettingsOverlay (void)
 	languagePage->setComponentID ("settings.page.language");
 	midiPage->setComponentID ("settings.page.midi");
 	nesPage->setComponentID ("settings.page.nes");
+	keyboardPage->setComponentID ("settings.page.keyboard");
 	pages.addView (appearancePage);
 	pages.addView (generalPage);
 	pages.addView (languagePage);
 	pages.addView (midiPage);
 	pages.addView (nesPage);
+	pages.addView (keyboardPage);
 
 	if (hasAudio)
 	{
@@ -1273,7 +1341,7 @@ SettingsOverlay::SettingsOverlay (void)
 
 	// The indices the rows carry and the order the stack holds are two lists that have to agree;
 	// a page inserted between two others would otherwise open its neighbour, silently.
-	jassert (pages.getNumViews() == (hasAudio ? audioPageIndex : nesPageIndex) + 1);
+	jassert (pages.getNumViews() == (hasAudio ? audioPageIndex : keyboardPageIndex) + 1);
 
 	addAndMakeVisible (pages);
 
@@ -1314,6 +1382,8 @@ void SettingsOverlay::refreshLanguage (void)
 			case generalPageIndex:	row->setLabel (i18n::tr ("settings.general")); break;
 			case languagePageIndex:	row->setLabel (i18n::tr ("settings.language")); break;
 			case midiPageIndex:		row->setLabel (i18n::tr ("settings.midi")); break;
+
+	case keyboardPageIndex:	row->setLabel (i18n::tr ("settings.keyboard")); break;
 			case audioPageIndex:	row->setLabel (i18n::tr ("settings.audio")); break;
 			default: break;
 		}

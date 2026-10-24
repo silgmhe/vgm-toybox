@@ -227,3 +227,8 @@ language: English
 	"settings.nes.outputGainHint" = "The NES mix leaves headroom, so files play quieter here than the same music does as a VGM. +8 dB is the default; past about +10 dB the loudest songs reach the ceiling.";
 "settings.nes.durationHint" = "An NSF has no length in its header and its driver never ends: it loops until it is stopped. This is the length the timeline, the seek bar and the end of the song are built on.";
 "settings.nes.explanation" = "An NSF has no length in its header and its driver never ends: it loops until it is stopped. This is the length the timeline, the seek bar and the end of the song are built on.";
+	"settings.keyboard.rangeHintsHint" = "A narrow window shows fewer octaves. When a channel plays a note outside them, the edge of its keyboard carries an arrow saying so. Turn this off for a quieter row.";
+	"settings.keyboard.rangeHintsOn" = "Show an arrow when a note is outside the keys";
+	"settings.keyboard.rangeHints" = "Out-of-range notes";
+	"settings.keyboard.explanation" = "What the keyboard draws. The octave range follows the window width; the arrow is a choice.";
+	"settings.keyboard" = "Keyboard";

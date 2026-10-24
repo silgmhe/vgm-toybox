@@ -163,6 +163,10 @@ public:
 	void setContentViewIndex (int index);
 
 	int getNsfOutputGainDb (void) const;
+
+	/** Whether the keyboard draws an arrow when a note falls outside the octaves on screen. */
+	bool getKeyboardRangeHints (void) const;
+	void setKeyboardRangeHints (bool shouldShow);
 	void setNsfOutputGainDb (int decibels);
 
 	/** Stores the range (clamped to what the engine can encode) and tells every listener. */
