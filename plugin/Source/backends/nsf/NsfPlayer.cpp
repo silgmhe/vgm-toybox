@@ -384,6 +384,64 @@ bool NsfPlayer::captureState (playback::ChipStateSnapshot& snapshot) const
 	// and nothing else - which the panel shows as "this chip cannot be displayed yet".
 	snapshot.valid = true;
 
+	const auto addChannel = [&snapshot] (const char* name, const char* chipName, int trackIndex,
+										 int waveKind, float duty, xgm::ITrackInfo* info)
+	{
+		playback::ChannelState state;
+		state.name = name;
+		state.chipName = chipName;
+		state.trackIndex = trackIndex;
+		state.waveKind = waveKind;
+		state.duty = duty;
+
+		if (info != nullptr)
+		{
+			state.frequency = (float) info->GetFreqHz ();
+			state.note = playback::noteForFrequency (state.frequency);
+			state.active = info->GetKeyStatus ();
+
+			const int maxVolume = (std::max) (1, info->GetMaxVolume ());
+			const float fromVolume = (float) (std::clamp) (info->GetVolume (), 0, maxVolume) / (float) maxVolume;
+
+			// The triangle has no volume register - it is either sounding or not - and reports zero
+			// there while still playing. Its output level is the honest number, and the same is
+			// true of the noise and delta channels, so both are taken into account.
+			const float fromOutput = (float) (std::clamp) ((int) info->GetOutput (), 0, 15) / 15.0f;
+
+			state.volume = (std::max) (fromVolume, fromOutput);
+
+			// Noise and the delta channel have no pitch: what their track info reports is a rate,
+			// not a note, and drawing it as one would light a key that means nothing.
+			if (waveKind >= 4)
+			{
+				state.note = -1;
+				state.frequency = 0.0f;
+			}
+		}
+
+		snapshot.channels.push_back (state);
+	};
+
+	// The 2A03 is always there: two pulses on the APU, and triangle, noise and the delta channel
+	// on the DMC. Both chips already report pitch, level and key state, so this is wiring rather
+	// than new emulation - which is why the keyboard can show a NES song without a coprocessor.
+	static const char* const pulseNames[] = { "Pulse 1", "Pulse 2" };
+	static const char* const dmcNames[] = { "Triangle", "Noise", "DMC" };
+
+	// Duty comes from the pulse register's top two bits; the four settings are fixed by hardware.
+	static const float duties[] = { 0.125f, 0.25f, 0.5f, 0.75f };
+
+	for (int i = 0; i < 2; ++i)
+	{
+		const int setting = (apu->GetReg (i * 4) >> 6) & 0x03;
+		addChannel (pulseNames[i], "2A03", i, 2, duties[setting], apu->GetTrackInfo (i));
+	}
+
+	for (int i = 0; i < 3; ++i)
+	{
+		addChannel (dmcNames[i], "2A03", 2 + i, 3 + i, 0.5f, dmc->GetTrackInfo (i));
+	}
+
 	if (n106 == nullptr)
 	{
 		return true;
@@ -403,6 +461,9 @@ bool NsfPlayer::captureState (playback::ChipStateSnapshot& snapshot) const
 
 		playback::ChannelState state;
 		state.chipName = "N163";
+		state.trackIndex = 5 + channel;		// the five 2A03 tracks come first
+		state.waveKind = 1;					// a real table, read from the chip
+
 		state.name = "Wave " + std::to_string (channel + 1);
 		state.active = info->GetKeyStatus ();
 		state.frequency = (float) info->GetFreqHz ();
