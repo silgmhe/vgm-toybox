@@ -255,6 +255,7 @@ target_sources(VGMToybox PRIVATE
 	Source/ui/ContentSlot.cpp
 	Source/ui/KeyboardLayout.cpp
 	Source/ui/KeyboardRowLayout.cpp
+	Source/ui/KeyboardRowPaint.cpp
 	Source/ui/WaveShape.cpp
 )
 
