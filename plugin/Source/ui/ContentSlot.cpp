@@ -3,6 +3,7 @@
 #include "ButtonPaint.h"
 #include "MixerPanel.h"
 #include "KeyboardLayout.h"
+#include "KeyboardRowLayout.h"
 #include "WaveShape.h"
 #include "Theme.h"
 #include "i18n/LanguageManager.h"
@@ -22,22 +23,9 @@ namespace
 	constexpr int kHeader = 44;
 	constexpr int kRefreshHz = 30;
 
-	// The keyboard row: one line per channel, five columns.
-	constexpr int kRowHeight = 48;		// tall enough that the keyboard sits inside the card
-	constexpr int kGroupHeader = 26;
-	constexpr int kGroupGap = 10;
-	constexpr int kRowInsetLeft = 14;
-	constexpr int kRowInsetRight = 14;
-	constexpr int kNameWidth = 72;
-	constexpr int kButtonSize = 28;		// the mixer's button height, so the two views agree
-	constexpr int kButtonGap = 6;
-	constexpr int kNoteWidth = 56;
-	constexpr int kWaveWidth = 88;
-	constexpr int kWaveHeight = 26;
-	constexpr int kKeyHeight = 32;
-	constexpr int kMeterWidth = 96;
-	constexpr int kMeterHeight = 20;
-	constexpr int kMeterGap = 18;
+	// The row's own measurements live in KeyboardRowLayout: thirteen columns that have to fit
+	// a card are arithmetic, and arithmetic belongs where a test can call it.
+	keyboard::RowMetrics metrics;
 
 	/** The shift comes from the setting; the table itself lives in KeyboardLayout so the settings
 		page, the note column and the octave labels all name a note the same way. */
@@ -207,9 +195,10 @@ public:
 						juce::Justification::centredRight, false);
 		}
 
-		rows.clear ();
-		buildRows (rows);
-		contentHeight = rows.empty () ? 0 : rows.back ().area.getBottom () - getLocalBounds ().getY () - kHeader;
+		const auto layout = keyboard::layoutRows (chipNamesFor (snapshot), getWidth (),
+												 scrollOffset, kHeader, metrics);
+		rows = layout.rows;
+		contentHeight = layout.contentHeight;
 
 		if (snapshot.channels.empty ())
 		{
@@ -356,7 +345,7 @@ public:
 		// Scrolling by hand rather than through a Viewport: the panel draws only the rows that are
 		// on screen, so it already knows where everything is and a viewport would be a second
 		// authority on the same geometry.
-		scrollOffset -= (int) std::lround (wheel.deltaY * (float) kRowHeight * 3.0f);
+		scrollOffset -= (int) std::lround (wheel.deltaY * (float) metrics.rowHeight * 3.0f);
 		clampScroll ();
 		repaint ();
 	}
@@ -364,93 +353,26 @@ public:
 	std::function<void ()> onExport;
 
 private:
-	struct Row
-	{
-		bool header = false;
-		juce::String title;
-		int channel = -1;
-
-		juce::Rectangle<int> area, name, mute, solo, note, wave, keys, meter;
-	};
+	using Row = keyboard::Row;
 
 	void clampScroll (void)
 	{
-		const int visible = juce::jmax (0, getHeight () - kHeader);
-		scrollOffset = juce::jlimit (0, juce::jmax (0, contentHeight - visible), scrollOffset);
+		scrollOffset = keyboard::clampScroll (scrollOffset, contentHeight,
+											  juce::jmax (0, getHeight () - kHeader));
 	}
 
-	void buildRows (std::vector<Row>& out) const
+	/** The chips in snapshot order - everything layoutRows needs to know about grouping. */
+	static std::vector<std::string> chipNamesFor (const toybox::playback::ChipStateSnapshot& from)
 	{
-		if (snapshot.channels.empty ())
+		std::vector<std::string> names;
+		names.reserve (from.channels.size ());
+
+		for (const auto& channel : from.channels)
 		{
-			return;
+			names.push_back (channel.chipName);
 		}
 
-		const int left = kInset;
-		const int width = juce::jmax (200, getWidth () - 2 * kInset);
-		int y = kHeader - scrollOffset;
-
-		juce::String group;
-
-		for (std::size_t i = 0; i < snapshot.channels.size (); ++i)
-		{
-			const auto& channel = snapshot.channels[i];
-			const auto chip = juce::String (channel.chipName);
-
-			if (chip != group)
-			{
-				group = chip;
-
-				Row header;
-				header.header = true;
-				header.title = chip;
-				header.area = { left, y, width, kGroupHeader };
-				out.push_back (header);
-
-				y += kGroupHeader + 2;
-			}
-
-			Row row;
-			row.channel = (int) i;
-			row.area = { left, y, width, kRowHeight };
-
-			auto inner = row.area.reduced (kRowInsetLeft, 0);
-			inner.removeFromRight (kRowInsetRight);
-
-			row.name = inner.removeFromLeft (kNameWidth);
-
-			inner.removeFromLeft (kButtonGap);
-			row.mute = inner.removeFromLeft (kButtonSize).withSizeKeepingCentre (kButtonSize, kButtonSize);
-			inner.removeFromLeft (kButtonGap);
-			row.solo = inner.removeFromLeft (kButtonSize).withSizeKeepingCentre (kButtonSize, kButtonSize);
-
-			inner.removeFromLeft (10);
-			row.note = inner.removeFromLeft (kNoteWidth);
-			inner.removeFromLeft (8);
-
-			row.wave = inner.removeFromLeft (kWaveWidth).withSizeKeepingCentre (kWaveWidth, kWaveHeight);
-			inner.removeFromLeft (10);
-
-			row.meter = inner.removeFromRight (kMeterWidth).withSizeKeepingCentre (kMeterWidth, kMeterHeight);
-			inner.removeFromRight (kMeterGap);
-
-			// The keyboard is centred in the row rather than filling it: a keyboard that reached
-			// the row's edges stuck out of the card on both sides.
-			row.keys = inner.withSizeKeepingCentre (inner.getWidth (), kKeyHeight);
-
-			out.push_back (row);
-
-			y += kRowHeight + 2;
-
-			// a gap between groups, once the next channel belongs to another chip
-			const bool lastOfGroup = (i + 1 >= snapshot.channels.size ())
-									 || juce::String (snapshot.channels[i + 1].chipName) != chip;
-
-			if (lastOfGroup)
-			{
-				y += kGroupGap;
-			}
-		}
+		return names;
 	}
 
 	void paintEmptyState (juce::Graphics& g)
