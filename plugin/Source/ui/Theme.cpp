@@ -97,9 +97,9 @@ static const Palette kDark
 	/* controlGroove     */ juce::Colour (0xff20242b),
 	/* groupFrame        */ juce::Colour (0xff454b57),
 	/* tooltipBackground */ juce::Colour (0xf72c313a),
-	/* keyBed            */ juce::Colour (0xff1a1f27),
+	/* keyBed            */ juce::Colour (0xff1f242c),
 	/* keyWhite          */ juce::Colour (0xff39404b),
-	/* keyBlack          */ juce::Colour (0xff10141a),
+	/* keyBlack          */ juce::Colour (0xff737b89),
 	/* edgeFade          */ juce::Colour (0x66000000)
 };
 
