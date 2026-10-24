@@ -327,41 +327,12 @@ target_compile_definitions(VGMToybox PUBLIC
 	TOYBOX_GIT_COMMIT="${TOYBOX_GIT_COMMIT}"
 )
 
-# --- NSFPlay's device cores, used by the NSF backend (vendored in libs/nsfplay) ---
-#
-# Permissive: libs/nsfplay/README-nsfplay.txt states "You may reuse this code without restriction".
-# Only the parts a player needs are compiled - the CPU, the memory map, the APU and DPCM, the four
-# expansion chips, and the two Yamaha-derived emulators those depend on. The loop detector and the
-# CPU logger are left out: they are tools of the original program, not of a player.
-set(NSFPLAY_DIR ${CMAKE_CURRENT_SOURCE_DIR}/../libs/nsfplay)
-add_library(nsfplay_core STATIC
-	${NSFPLAY_DIR}/vcm/group.cpp
-	${NSFPLAY_DIR}/vcm/value.cpp
-	${NSFPLAY_DIR}/xgm/devices/Audio/rconv.cpp
-	${NSFPLAY_DIR}/xgm/devices/CPU/nes_cpu.cpp
-	${NSFPLAY_DIR}/xgm/devices/Memory/nes_bank.cpp
-	${NSFPLAY_DIR}/xgm/devices/Memory/nes_mem.cpp
-	${NSFPLAY_DIR}/xgm/devices/Memory/nsf2_vectors.cpp
-	${NSFPLAY_DIR}/xgm/devices/Memory/ram64k.cpp
-	${NSFPLAY_DIR}/xgm/devices/Misc/nsf2_irq.cpp
-	${NSFPLAY_DIR}/xgm/devices/Sound/legacy/emu2149.c
-	${NSFPLAY_DIR}/xgm/devices/Sound/legacy/emu2413.c
-	${NSFPLAY_DIR}/xgm/devices/Sound/nes_apu.cpp
-	${NSFPLAY_DIR}/xgm/devices/Sound/nes_dmc.cpp
-	${NSFPLAY_DIR}/xgm/devices/Sound/nes_fds.cpp
-	${NSFPLAY_DIR}/xgm/devices/Sound/nes_fme7.cpp
-	${NSFPLAY_DIR}/xgm/devices/Sound/nes_mmc5.cpp
-	${NSFPLAY_DIR}/xgm/devices/Sound/nes_n106.cpp
-	${NSFPLAY_DIR}/xgm/devices/Sound/nes_vrc6.cpp
-	${NSFPLAY_DIR}/xgm/devices/Sound/nes_vrc7.cpp
-)
-target_include_directories(nsfplay_core PUBLIC ${NSFPLAY_DIR})
-target_compile_features(nsfplay_core PRIVATE cxx_std_17)
-# The vendored code predates the warnings this project turns on, and rewriting it is not the job.
-target_compile_options(nsfplay_core PRIVATE
-	$<$<CXX_COMPILER_ID:MSVC>:/W0>
-	$<$<NOT:$<CXX_COMPILER_ID:MSVC>>:-w>
-)
+# --- NSFPlay's device cores ---
+# The library is defined where its sources live (libs/nsfplay), so another checkout can build it
+# without this file knowing which translation units it needs.
+add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/../libs/nsfplay
+				 /nsfplay
+				 EXCLUDE_FROM_ALL)
 
 target_link_libraries(VGMToybox PRIVATE
 	# libvgm (built by the parent project, see the root CMakeLists.txt)
