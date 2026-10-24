@@ -1,6 +1,6 @@
 # NSF 再探：改用多实例隔离
 
-- **状态**：方案（未编码）
+- **状态**：已实现并验证（`b159cb6`）
 - **日期**：2026-10-24
 - **分支**：`feature/nsf-format-multiinstance`，起点 `e3d5baa`（原 `feature/nsf-format-support-ref-nsfplay`）
 - **相关**：`docs/memo/2026-10-24-nsf-shelved.md`（上一轮放弃的记录）、`playback-backend-design.md`
@@ -161,3 +161,29 @@ int render (float* left, float* right, int numSamples) override
 ## 10. 失败判据（提前写下来，避免又一次"再改一版就好"）
 
 若第 3 条（求和一致）与第 2 条（互不相同）**不能同时成立**，说明 `SetMask` 静音会改变模拟行为，那么多实例同样不成立；此时应停在分支上、写结论，而不是继续调参。
+
+## 11. 实测结果（2026-10-24，`b159cb6`）
+
+失败判据没有触发：两条结论同时成立。
+
+| 文件 | 轨道 / 芯片 | seek spread | 混音验收 |
+|---|---|---|---|
+| `Entry080.nsf` | 8 / 2 | 0.0000 s | 全部通过 |
+| `fod_snowburnb.nsf` | 8 / 2 | 0.0000 s | 全部通过 |
+| `fod_hopeless.nsf` | 13 / 2 | 0.0000 s | 全部通过 |
+
+逐轨 RMS（`fod_snowburnb` 前 0.5 s，八条互不相同）：
+
+```
+Pulse 1 0.0023   Pulse 2 0.0000   Triangle 0.0045   Noise 0.0065
+DMC     0.0000   Saw     0.0000   Square3  0.0000   Square4 0.0000
+```
+
+比例断言连跑两次一致：`master 0.5 -> 0.500`、`output volume 0.5 -> 0.250`。
+
+代价：`plain 2.2 ms vs mixer 25.6 ms`（13 轨，11.5×），与 VGM 同构。
+
+### 实现过程中修掉的两个真 bug（都会在别处重现）
+
+1. **seek 的单位**：`rendered` 记采样，循环里加的是 CPU 时钟，导致每次 seek 只走到目标的三十分之一（报告 90 s，音频在 2.2 s），十三个实例各自停在不同位置，正是 `spread 0.0163 s` 的来源。改为按时钟计数 + 末步裁剪。
+2. **NSFPlay 在构造时随机化噪声与三角初相**（`OPT_RANDOMIZE_NOISE` / `OPT_RANDOMIZE_TRI` 默认为 1）：同一位置两次渲染结果不同，任何比例断言都无法稳定复现——同一文件曾跑出 0.862 与 0.436 两个比值。两个选项必须关掉，否则"可重复"这个前提不成立。
