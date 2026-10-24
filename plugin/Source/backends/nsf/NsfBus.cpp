@@ -37,14 +37,16 @@ NsfBus::NsfBus (const formats::nsf::NsfFile& image) : file (image)
 	// driver expects after reset. Files that declare their own selection are honoured.
 	bool declared = false;
 
-	for (int i = 0; i < 4; ++i)
+	for (std::size_t i = 0; i < banks.size(); ++i)
 	{
-		declared = declared || file.bankSwitch[(std::size_t) i] != 0;
+		declared = declared || (i < file.bankSwitch.size() && file.bankSwitch[i] != 0);
 	}
 
-	for (int i = 0; i < 4; ++i)
+	// Eight windows of 4 KB cover $8000-$FFFF, so a driver selects them one at a time. With no
+	// mapping declared, the first eight banks are visible - the state a driver expects after reset.
+	for (std::size_t i = 0; i < banks.size(); ++i)
 	{
-		banks[(std::size_t) i] = declared ? file.bankSwitch[(std::size_t) i] : (std::uint8_t) i;
+		banks[i] = declared && i < file.bankSwitch.size() ? file.bankSwitch[i] : (std::uint8_t) i;
 	}
 }
 
@@ -60,10 +62,10 @@ bool NsfBus::Read (UINT32 adr, UINT32& val, UINT32 id)
 {
 	if (banked && adr >= 0x8000 && adr <= 0xFFFF)
 	{
-		const std::uint32_t window = (adr >> 13) & 0x03u;
-
-		// Bank numbers count 4 KB units, so an 8 KB window starts that many kilobytes into the file.
-		const std::uint32_t offset = (std::uint32_t) banks[window] * 0x1000u + (adr & 0x1FFFu);
+		// Eight 4 KB windows, selected one register each: $5FF8 is the one at $8000 and $5FFF the
+		// one at $F000. Bank numbers are counted in the same 4 KB units.
+		const std::uint32_t window = (adr >> 12) & 0x07u;
+		const std::uint32_t offset = (std::uint32_t) banks[window] * 0x1000u + (adr & 0x0FFFu);
 
 		val = offset < file.rom.size() ? file.rom[offset] : 0;
 		return true;
@@ -74,7 +76,7 @@ bool NsfBus::Read (UINT32 adr, UINT32& val, UINT32 id)
 
 bool NsfBus::Write (UINT32 adr, UINT32 val, UINT32 id)
 {
-	if (banked && adr >= 0x5FF8 && adr <= 0x5FFB)
+	if (banked && adr >= 0x5FF8 && adr <= 0x5FFF)
 	{
 		banks[adr - 0x5FF8] = (std::uint8_t) (val & 0xFF);
 		return true;

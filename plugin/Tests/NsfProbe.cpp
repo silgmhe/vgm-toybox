@@ -60,7 +60,7 @@ int main (int argc, char** argv)
 	const auto total = (long long) (rate * seconds);
 
 	const auto started = std::chrono::steady_clock::now();
-	auto nextReport = 200LL;
+	auto nextReport = 44100LL;
 
 	while (counted < total)
 	{
@@ -82,7 +82,7 @@ int main (int argc, char** argv)
 			std::fprintf (stderr, "PROG samples=%lld elapsed=%lldms writes=%llu\n",
 						  counted, (long long) ms, (unsigned long long) player.soundWrites ());
 			std::fflush (stderr);
-			nextReport += 200;
+			nextReport += 44100;
 		}
 	}
 

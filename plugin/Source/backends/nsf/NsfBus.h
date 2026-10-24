@@ -14,9 +14,10 @@
 	   callback that feeds the chips; nothing is stored and reading back gives zero, which is what
 	   the hardware does and what a driver that polls a register would notice.
 
-	2. A program larger than the 32 KB the address space holds can only be reached through the four
-	   8 KB windows the driver selects at $5FF8-$5FFB. Those reads come from the file, not from the
-	   copied image, because only one bank of it fits.
+	2. A program larger than the 32 KB the address space holds can only be reached through the
+	   eight 4 KB windows the driver selects at $5FF8-$5FFF - one register per window, in address
+	   order. Those reads come from the file, not from the copied image, because only one bank of it
+	   fits at a time.
 */
 namespace toybox::backends::nsf
 {
@@ -47,7 +48,7 @@ public:
 private:
 	const formats::nsf::NsfFile& file;
 	bool banked = false;
-	std::array<std::uint8_t, 4> banks {};
+	std::array<std::uint8_t, 8> banks {};
 };
 
 } // namespace toybox::backends::nsf
