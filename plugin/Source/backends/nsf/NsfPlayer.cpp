@@ -59,6 +59,12 @@ void NsfPlayer::start (void)
 	//   3. Start() last, which is what actually runs the driver's init.
 	bus->load ();
 
+	// NSFPlay resets every attached device through its stack before starting; we own the two
+	// devices directly, so they are reset here. Without this the frame sequencer has no phase and
+	// TickFrameSequence() has nothing to advance against.
+	apu->Reset ();
+	dmc->Reset ();
+
 	cpu->SetMemory (bus.get ());
 	cpu->SetNESMemory (bus.get ());
 	cpu->nes_basecycles = file.isPal () ? kPalClock : kNtscClock;
@@ -108,6 +114,7 @@ int NsfPlayer::render (float* left, float* right, int frames)
 	for (int i = 0; i < frames; ++i)
 	{
 		cpuClockRest += clocksPerSample;
+
 
 		const auto clocks = (int) cpuClockRest;
 
