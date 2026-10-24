@@ -60,6 +60,10 @@ public:
 	/** Solos one channel of that list; -1 leaves them all audible. */
 	void setTrackAudible (int trackIndex);
 
+	/** Mutes every channel. A player built for one track needs this for the case where that
+		track is not audible at all. */
+	void setSilent (bool silent);
+
 	/** True when the file declared an expansion chip and one was created. */
 	bool hasExpansion (void) const;
 
@@ -78,6 +82,7 @@ private:
 	void writeSound (std::uint16_t address, std::uint8_t value);
 	void applyMasks (void);
 	int soloTrack = -1;
+	bool silent = false;
 
 	const formats::nsf::NsfFile& file;
 	double rate = 44100.0;

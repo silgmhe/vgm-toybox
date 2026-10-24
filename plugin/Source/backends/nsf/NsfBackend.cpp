@@ -34,9 +34,17 @@ public:
 	void setTimeline (int, double) override {}
 	void setTrackAudible (playback::TrackId track, bool audible) override
 	{
+		// One player per track: audible means this instance solos its own channel, and the
+		// alternative is silence rather than the whole mix. The core mutes per channel bit, so
+		// the other voices really are absent from this instance's output.
 		if (audible && track >= 1)
 		{
+			player.setSilent (false);
 			player.setTrackAudible ((int) track - 1);
+		}
+		else
+		{
+			player.setSilent (true);
 		}
 	}
 	void setChipAudible (playback::DeviceId, bool) override {}
@@ -166,8 +174,10 @@ public:
 		// the whole mixer. With an expansion only the 2A03's five are split - the other chips have
 		// no per-channel render yet - so those songs stay on one player per track rather than
 		// offering tracks that would be silent.
-		caps.isolation = expansionPresent ? playback::IsolationMode::multiInstance
-										  : playback::IsolationMode::inPlaceChannelMix;
+		// One player per track, for every file. Muting a channel is what the core supports; making
+		// one emulation render every channel separately is what it does not, and the attempt to
+		// fake it cost more than the extra instances do.
+		caps.isolation = playback::IsolationMode::multiInstance;
 		caps.canSeek = true;
 		caps.rendersAtHostRate = true;
 		return caps;

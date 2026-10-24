@@ -328,6 +328,12 @@ void NsfPlayer::setTrackAudible (int trackIndex)
 	applyMasks ();
 }
 
+void NsfPlayer::setSilent (bool value)
+{
+	silent = value;
+	applyMasks ();
+}
+
 int NsfPlayer::channelCount (void) const
 {
 	// Five on the 2A03 - the two the APU renders and the three the DMC object renders - plus the
@@ -353,7 +359,7 @@ void NsfPlayer::applyMasks (void)
 
 		for (int i = 0; i < count; ++i)
 		{
-			if (! all && soloTrack != base + i)
+			if (silent || (! all && soloTrack != base + i))
 			{
 				mask |= (1 << i);
 			}
