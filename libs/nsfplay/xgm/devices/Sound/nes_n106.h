@@ -1,4 +1,4 @@
-#ifndef _NES_N106_H_
+﻿#ifndef _NES_N106_H_
 #define _NES_N106_H_
 #include "../device.h"
 
@@ -59,6 +59,9 @@ public:
     virtual void Reset ();
     virtual void Tick (UINT32 clocks);
     virtual UINT32 Render (INT32 b[2]);
+
+  // Added for VGMToybox: the 8 channels Render() sums, kept apart.
+  UINT32 RenderChannels (INT32* dest, int stride, int maxChannels);
     virtual bool Write (UINT32 adr, UINT32 val, UINT32 id=0);
     virtual bool Read (UINT32 adr, UINT32 & val, UINT32 id=0);
     virtual void SetRate (double);

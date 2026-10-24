@@ -411,12 +411,21 @@ int NsfPlayer::renderChannels (float* const* dest, int channelCount, int frames)
 			dest[2 + c][2 * i + 1] = (float) tnd[c * 2 + 1] / 32768.0f;
 		}
 
-		// The expansion chip's channels are not filled yet: it has no RenderChannels of its own,
-		// and pretending otherwise would give tracks that are silent for a reason nobody can see.
+		// The expansion's channels, in the order the track list uses. FME7 has no RenderChannels
+		// yet, so a song that declares one keeps its 2A03 tracks and leaves the rest silent here -
+		// which is why those songs still take the one-player-per-track path in the backend.
+		INT32 expansion[16] = {};
+
+		if (vrc6) { vrc6->RenderChannels (expansion, 2, 3); }
+		if (n106) { n106->RenderChannels (expansion, 2, 8); }
+		if (vrc7) { vrc7->RenderChannels (expansion, 2, 6); }
+
 		for (int c = 5; c < channelCount; ++c)
 		{
-			dest[c][2 * i + 0] = 0.0f;
-			dest[c][2 * i + 1] = 0.0f;
+			const int index = c - 5;
+
+			dest[c][2 * i + 0] = (float) expansion[index * 2 + 0] / 32768.0f;
+			dest[c][2 * i + 1] = (float) expansion[index * 2 + 1] / 32768.0f;
 		}
 	}
 

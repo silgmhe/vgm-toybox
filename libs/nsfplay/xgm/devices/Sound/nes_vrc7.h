@@ -1,4 +1,4 @@
-#ifndef _NES_VRC7_H_
+﻿#ifndef _NES_VRC7_H_
 #define _NES_VRC7_H_
 #include "../device.h"
 #include "legacy/emu2413.h"
@@ -35,6 +35,9 @@ namespace xgm
     virtual void Reset ();
     virtual void Tick (UINT32 clocks);
     virtual UINT32 Render (INT32 b[2]);
+
+  // Added for VGMToybox: the 6 channels Render() sums, kept apart.
+  UINT32 RenderChannels (INT32* dest, int stride, int maxChannels);
     virtual bool Read (UINT32 adr, UINT32 & val, UINT32 id=0);
     virtual bool Write (UINT32 adr, UINT32 val, UINT32 id=0);
     virtual void UseAllChannels (bool b);

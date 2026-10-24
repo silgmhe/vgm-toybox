@@ -1,4 +1,4 @@
-#include <cstring>
+﻿#include <cstring>
 #include "nes_n106.h"
 
 namespace xgm {
@@ -363,5 +363,30 @@ inline void NES_N106::set_phase (UINT32 phase, int channel)
     reg[0x43 + channel] = (phase >> 8 ) & 0xFF;
     reg[0x45 + channel] = (phase >> 16) & 0xFF;
 }
+
+  UINT32 NES_N106::RenderChannels (INT32* dest, int stride, int maxChannels)
+  {
+    // One Render() per channel with the others muted, then the mask put back. Correct, and it
+    // keeps this file out of the chip's internal mixing - but it costs one render per channel, so
+    // it is the shape to improve once the channels are exposed directly.
+    const int saved = mask;
+
+    for (int i = 0; i < 8; ++i)
+    {
+      mask = ~(1 << i);
+
+      INT32 b[2] = { 0, 0 };
+      Render (b);
+
+      if (i < maxChannels)
+      {
+        dest[i * stride + 0] = b[0];
+        dest[i * stride + 1] = b[1];
+      }
+    }
+
+    mask = saved;
+    return 8;
+  }
 
 } //namespace
