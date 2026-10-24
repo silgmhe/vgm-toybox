@@ -425,6 +425,16 @@ bool NsfPlayer::captureState (playback::ChipStateSnapshot& snapshot) const
 				state.note = -1;
 				state.frequency = 0.0f;
 			}
+
+			// A channel that is not sounding has no note. The period register keeps its last value
+			// after key-off, so a channel that had gone quiet still reported the note it stopped
+			// on - and the keyboard kept that key lit, showing a pitch nobody could hear.
+			if (! state.active)
+			{
+				state.note = -1;
+				state.frequency = 0.0f;
+				state.volume = 0.0f;		// the volume register also keeps its last value
+			}
 		}
 
 		snapshot.channels.push_back (state);
