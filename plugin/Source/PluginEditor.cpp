@@ -109,10 +109,12 @@ ToyboxAudioProcessorEditor::ToyboxAudioProcessorEditor (ToyboxAudioProcessor& p)
 	addAndMakeVisible (statusLabel);
 
 	// --- the pages ---
-	// The window owns no cards: ui/PlayView.h is the page, and everything below the top row
-	// belongs to it. The View menu is built from the stack, so a page added here shows up there
-	// without a line of menu code.
+	// The window owns no cards any more: ui/PlayView.h is the playback page and
+	// ui/VisualiserView.h the visualisation one, and everything below the top row belongs to
+	// whichever of them is on screen. The View menu is built from the stack, so a new page shows
+	// up there without a line of menu code.
 	viewStack.addView (new PlayView (engine, processor.wrapperType != juce::AudioProcessor::wrapperType_Standalone));
+	viewStack.addView (new VisualiserView (engine));
 	addAndMakeVisible (viewStack);
 
 	menu.viewNames = viewStack.getViewNames();
@@ -616,6 +618,20 @@ void ToyboxAudioProcessorEditor::restoreLastSongIfNeeded (void)
 
 void ToyboxAudioProcessorEditor::timerCallback (void)
 {
+	// The visualisation page has no transport of its own - it shows what the chips are doing to a
+	// song that is already open - so the open button has nothing to act on there. Synchronised
+	// here rather than in the menu callback because the page can also change by shortcut.
+	{
+		const auto ids = viewStack.getViewIds ();
+		const int index = viewStack.getCurrentViewIndex ();
+		const bool onVisualiserPage = index >= 0 && index < ids.size () && ids[index] == "visualiser";
+
+		if (openButton.isVisible () == onVisualiserPage)
+		{
+			openButton.setVisible (! onVisualiserPage);
+		}
+	}
+
 	// A song handed over by a second launch of the application (or, on macOS, by the Finder opening
 	// a document in the running window). It goes through loadFile() like a drop does, so the two
 	// paths cannot drift apart; the processor held it because the message can arrive before this
