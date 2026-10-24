@@ -588,7 +588,24 @@ void TransportPanel::seekToSeconds (double seconds)
 	}
 
 	const double duration = engine.getDurationSeconds();
-	seconds = juce::jlimit (0.0, duration, seconds);
+
+	// A backend whose length is not known yet reports zero, and clamping to that turns every seek
+	// into a seek to the beginning - which looks exactly like a player that ignores the bar. The
+	// clamp only applies when there is a length to clamp to.
+	if (duration > 0.0)
+	{
+		seconds = juce::jlimit (0.0, duration, seconds);
+	}
+
+	{
+		// Temporary: one line per seek, so a report of "it starts over" can be checked against the
+		// numbers instead of reproduced by ear.
+		const auto file = juce::File::getSpecialLocation (juce::File::tempDirectory)
+							  .getChildFile ("vgmtoybox-seek.log");
+		file.appendText (juce::String ("seek ") + juce::String (seconds, 2)
+						 + " of " + juce::String (duration, 2) + "\n");
+	}
+
 	engine.setPositionSeconds (seconds);
 
 	// while the transport is running the cursor stays where it is; a stationary transport
