@@ -134,7 +134,8 @@ namespace
 		generalPageIndex = 1,
 		languagePageIndex = 2,
 		midiPageIndex = 3,
-		audioPageIndex = 4
+		nesPageIndex = 4,
+		audioPageIndex = 5
 	};
 }
 
@@ -673,18 +674,22 @@ void NesSettingsPage::refresh (void)
 
 void NesSettingsPage::paint (juce::Graphics& g)
 {
-	g.fillAll (theme::panel ());
+	paintHeading (g, i18n::tr ("settings.nes"), i18n::tr ("settings.nes.explanation"),
+				  getLocalBounds(), kTwoLineHeadingHeight, 2);
 }
 
 void NesSettingsPage::resized (void)
 {
-	auto area = getLocalBounds ().reduced (24, 20);
+	auto area = pageContent (getLocalBounds(), kTwoLineHeadingHeight);
 
-	caption.setBounds (area.removeFromTop (20));
+	caption.setBounds (area.removeFromTop (18));
+	area.removeFromTop (4);
+
+	auto row = area.removeFromTop (kFooterHeight);
+	secondsSlider.setBounds (row.removeFromLeft (juce::jmin (300, row.getWidth ())));
+
 	area.removeFromTop (6);
-	secondsSlider.setBounds (area.removeFromTop (26));
-	area.removeFromTop (10);
-	hint.setBounds (area.removeFromTop (90));
+	hint.setBounds (area.removeFromTop (72));
 }
 
 void NesSettingsPage::lookAndFeelChanged (void)

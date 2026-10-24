@@ -212,3 +212,4 @@ language: English
 "settings.nes.duration" = "Song length";
 "settings.nes.seconds" = "s";
 "settings.nes.durationHint" = "An NSF has no length in its header and its driver never ends: it loops until it is stopped. This is the length the timeline, the seek bar and the end of the song are built on.";
+"settings.nes.explanation" = "An NSF has no length in its header and its driver never ends: it loops until it is stopped. This is the length the timeline, the seek bar and the end of the song are built on.";

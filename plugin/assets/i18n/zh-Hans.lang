@@ -208,3 +208,4 @@ language: 简体中文
 "settings.nes.duration" = "歌曲长度";
 "settings.nes.seconds" = "秒";
 "settings.nes.durationHint" = "NSF 头部没有长度，驱动也不会结束——它会一直循环直到被停下。时间轴、进度条与歌曲结束都由这里设定的长度决定。";
+"settings.nes.explanation" = "NSF 头部没有长度，驱动也不会结束——它会一直循环直到被停下。时间轴、进度条与歌曲结束都由这里设定的长度决定。";
