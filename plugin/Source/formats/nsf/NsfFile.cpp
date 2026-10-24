@@ -107,16 +107,12 @@ bool NsfFile::parse (const void* data, std::size_t size, NsfFile& out, std::stri
 	file.totalSongs = bytes[offsetTotalSongs] != 0 ? bytes[offsetTotalSongs] : 1;
 	file.startSong = bytes[offsetStartSong] != 0 ? bytes[offsetStartSong] : 1;
 
-	// Version 1 stores the program's size in the load field and always loads at $8000; later
-	// versions store the load address itself.
-	if (file.version == 1)
-	{
-		file.loadAddress = 0x8000;
-	}
-	else
-	{
-		file.loadAddress = readLE16 (bytes + offsetLoadAddress);
-	}
+	// The load address is the load address in every version: the field holds it, and zero is the
+	// documented shorthand for $8000. Treating version 1 as if it stored a size instead - and
+	// hard-coding $8000 - relocates every file that declares anything else, which is how a driver
+	// at $8AFF ended up executing the bytes that live at $8000.
+	const std::uint16_t declaredLoad = readLE16 (bytes + offsetLoadAddress);
+	file.loadAddress = declaredLoad != 0 ? declaredLoad : 0x8000;
 
 	file.initAddress = readLE16 (bytes + offsetInitAddress);
 	file.playAddress = readLE16 (bytes + offsetPlayAddress);
