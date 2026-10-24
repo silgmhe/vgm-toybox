@@ -258,7 +258,7 @@ int NsfPlayer::render (float* left, float* right, int frames)
 		const auto mix = [&] (int channel, float& out)
 		{
 			const int value = (int) a[channel] + (int) d[channel] + (int) extra[channel];
-			out = (std::clamp) ((float) value / 32768.0f, -1.0f, 1.0f);
+			out = (std::clamp) ((float) value / 32768.0f * outputGain, -1.0f, 1.0f);
 		};
 
 		mix (0, left[i]);
@@ -357,6 +357,11 @@ void NsfPlayer::setTrackAudible (int trackIndex)
 {
 	soloTrack = trackIndex;
 	applyMasks ();
+}
+
+void NsfPlayer::setOutputGain (float linear)
+{
+	outputGain = linear > 0.0f ? linear : 0.0f;
 }
 
 void NsfPlayer::setSilent (bool value)
@@ -473,14 +478,14 @@ int NsfPlayer::renderChannels (float* const* dest, int channelCount, int frames)
 
 		for (int c = 0; c < 2 && c < usable; ++c)
 		{
-			dest[c][2 * i + 0] = (float) squares[c * 2 + 0] / 32768.0f;
-			dest[c][2 * i + 1] = (float) squares[c * 2 + 1] / 32768.0f;
+			dest[c][2 * i + 0] = (float) squares[c * 2 + 0] / 32768.0f * outputGain;
+			dest[c][2 * i + 1] = (float) squares[c * 2 + 1] / 32768.0f * outputGain;
 		}
 
 		for (int c = 0; c < 3 && 2 + c < usable; ++c)
 		{
-			dest[2 + c][2 * i + 0] = (float) tnd[c * 2 + 0] / 32768.0f;
-			dest[2 + c][2 * i + 1] = (float) tnd[c * 2 + 1] / 32768.0f;
+			dest[2 + c][2 * i + 0] = (float) tnd[c * 2 + 0] / 32768.0f * outputGain;
+			dest[2 + c][2 * i + 1] = (float) tnd[c * 2 + 1] / 32768.0f * outputGain;
 		}
 
 		// The expansion's channels, in the order the track list uses. FME7 has no RenderChannels
@@ -496,8 +501,8 @@ int NsfPlayer::renderChannels (float* const* dest, int channelCount, int frames)
 		{
 			const int index = c - 5;
 
-			dest[c][2 * i + 0] = (float) expansion[index * 2 + 0] / 32768.0f;
-			dest[c][2 * i + 1] = (float) expansion[index * 2 + 1] / 32768.0f;
+			dest[c][2 * i + 0] = (float) expansion[index * 2 + 0] / 32768.0f * outputGain;
+			dest[c][2 * i + 1] = (float) expansion[index * 2 + 1] / 32768.0f * outputGain;
 		}
 	}
 

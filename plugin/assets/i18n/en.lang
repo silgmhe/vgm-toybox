@@ -212,5 +212,7 @@ language: English
 "settings.nes" = "NES";
 "settings.nes.duration" = "Song length";
 "settings.nes.seconds" = "s";
+	"settings.nes.outputGain" = "Output gain";
+	"settings.nes.outputGainHint" = "The NES mix leaves headroom, so files play quieter here than the same music does as a VGM. +8 dB brings it level.";
 "settings.nes.durationHint" = "An NSF has no length in its header and its driver never ends: it loops until it is stopped. This is the length the timeline, the seek bar and the end of the song are built on.";
 "settings.nes.explanation" = "An NSF has no length in its header and its driver never ends: it loops until it is stopped. This is the length the timeline, the seek bar and the end of the song are built on.";

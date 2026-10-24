@@ -34,6 +34,9 @@ void ToyboxAudioProcessor::applyMidiSettings (void)
 	const auto& settings = settings::SettingsStore::getInstance();
 	engine.setMidiPitchBendRange (settings.getMidiPitchBendRange());
 	engine.setMidiPitchBendEnabled (settings.getMidiPitchBendEnabled());
+
+	// +8 dB by default, because the NES mix never approaches full scale. Other backends ignore it.
+	engine.setSourceGain (juce::Decibels::decibelsToGain ((float) settings.getNsfOutputGainDb ()));
 }
 
 void ToyboxAudioProcessor::changeListenerCallback (juce::ChangeBroadcaster*)

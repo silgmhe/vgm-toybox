@@ -252,6 +252,8 @@ public:
 private:
 	juce::Label caption;
 	juce::Slider secondsSlider;
+	juce::Label gainCaption;
+	juce::Slider gainSlider;
 	juce::Label hint;
 };
 

@@ -31,6 +31,8 @@ namespace
 	constexpr const char* kCloseToTrayKey = "standalone.closeToTray";
 	constexpr const char* kLastSongKey = "standalone.lastSong";
 	constexpr const char* kNsfDurationKey = "nsf.durationSeconds";
+constexpr const char* kNsfOutputGainKey = "nsf.outputGainDb";
+constexpr int kDefaultNsfOutputGainDb = 8;
 constexpr const char* kMidiBendRangeKey = "midi.pitchBendRange";
 	constexpr const char* kMidiBendEnabledKey = "midi.pitchBendEnabled";
 
@@ -323,6 +325,24 @@ void SettingsStore::setNsfDurationSeconds (int seconds)
 
 	file->setValue (kNsfDurationKey, clamped);
 	lastErrorMessage = file->saveIfNeeded() ? juce::String() : writeErrorFor (settingsFile());
+}
+
+int SettingsStore::getNsfOutputGainDb (void) const
+{
+	return file != nullptr ? juce::jlimit (0, 12, file->getIntValue (kNsfOutputGainKey, kDefaultNsfOutputGainDb))
+						   : kDefaultNsfOutputGainDb;
+}
+
+void SettingsStore::setNsfOutputGainDb (int decibels)
+{
+	const int clamped = juce::jlimit (0, 12, decibels);
+
+	if (file != nullptr && clamped != getNsfOutputGainDb ())
+	{
+		file->setValue (kNsfOutputGainKey, clamped);
+	}
+
+	broadcastChange ();
 }
 
 int SettingsStore::getMidiPitchBendRange (void) const

@@ -648,6 +648,22 @@ NesSettingsPage::NesSettingsPage (void)
 	};
 	addAndMakeVisible (secondsSlider);
 
+	gainCaption.setFont (juce::Font (juce::FontOptions (12.5f)));
+	gainCaption.setJustificationType (juce::Justification::centredLeft);
+	addAndMakeVisible (gainCaption);
+
+	gainSlider.setComponentID ("settings.nes.outputGain");
+	gainSlider.setSliderStyle (juce::Slider::LinearHorizontal);
+	gainSlider.setTextBoxStyle (juce::Slider::TextBoxRight, false, 68, 22);
+	gainSlider.setRange (0.0, 12.0, 1.0);
+	gainSlider.onValueChange = [this]
+	{
+		toybox::settings::SettingsStore::getInstance ()
+			.setNsfOutputGainDb ((int) std::lround (gainSlider.getValue ()));
+		refresh ();
+	};
+	addAndMakeVisible (gainSlider);
+
 	hint.setFont (juce::Font (juce::FontOptions (12.5f)));
 	hint.setJustificationType (juce::Justification::topLeft);
 	hint.setMinimumHorizontalScale (0.8f);
@@ -660,6 +676,8 @@ NesSettingsPage::NesSettingsPage (void)
 void NesSettingsPage::refreshLanguage (void)
 {
 	caption.setText (i18n::tr ("settings.nes.duration"), juce::dontSendNotification);
+	gainCaption.setText (i18n::tr ("settings.nes.outputGain"), juce::dontSendNotification);
+	gainSlider.setTextValueSuffix (" dB");
 	secondsSlider.setTextValueSuffix (" " + i18n::tr ("settings.nes.seconds"));
 	hint.setText (i18n::tr ("settings.nes.durationHint"), juce::dontSendNotification);
 	refresh ();
@@ -670,6 +688,8 @@ void NesSettingsPage::refresh (void)
 {
 	secondsSlider.setValue ((double) toybox::settings::SettingsStore::getInstance ()
 								.getNsfDurationSeconds (), juce::dontSendNotification);
+	gainSlider.setValue ((double) toybox::settings::SettingsStore::getInstance ()
+							 .getNsfOutputGainDb (), juce::dontSendNotification);
 }
 
 void NesSettingsPage::paint (juce::Graphics& g)
@@ -687,6 +707,13 @@ void NesSettingsPage::resized (void)
 
 	auto row = area.removeFromTop (kFooterHeight);
 	secondsSlider.setBounds (row.removeFromLeft (juce::jmin (300, row.getWidth ())));
+
+	area.removeFromTop (10);
+	gainCaption.setBounds (area.removeFromTop (18));
+	area.removeFromTop (4);
+
+	auto gainRow = area.removeFromTop (kFooterHeight);
+	gainSlider.setBounds (gainRow.removeFromLeft (juce::jmin (300, gainRow.getWidth ())));
 
 	area.removeFromTop (6);
 	hint.setBounds (area.removeFromTop (72));

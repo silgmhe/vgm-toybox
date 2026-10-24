@@ -106,6 +106,11 @@ public:
 	/** The mixer's master gain - the master strip's fader. It scales the sum of the tracks
 		and sits *before* the output volume, so both controls are independent stages. */
 	void setMixerMasterGain (float linear);	// 1.0 = 100 %
+
+	/** A gain in the format's own output, not in the mix. Formats whose synthesis has headroom -
+		the NES is the example - pick this up; everything else ignores it. It scales the material
+		before the per-track faders, so the meters show what is actually heard. */
+	void setSourceGain (float linear);
 	void setChipMuted (size_t chipIndex, bool shouldBeMuted);
 
 	bool isLoaded (void) const { return loaded; }
@@ -491,7 +496,8 @@ private:
 	// Two independent volume stages - render() applies the mixer master first and the output
 	// volume last, so neither control is driven by the other.
 	std::atomic<float> masterVolume { 1.0f };		// output volume (transport card slider)
-	std::atomic<float> mixerMasterGain { 1.0f };	// mixer master (master strip fader)
+	std::atomic<float> mixerMasterGain { 1.0f };
+	std::atomic<float> sourceGain { 2.5119f };	// +8 dB, the NES default	// mixer master (master strip fader)
 
 	// song facts for the lock-free getters - written on the message thread while the lock is
 	// held (load / loop / fade / sample-rate changes), read without the lock

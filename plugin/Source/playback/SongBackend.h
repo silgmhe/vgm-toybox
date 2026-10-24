@@ -148,6 +148,12 @@ public:
 
 	/** Makes this instance output only `track` (the isolation the mixer is built on). */
 	virtual void setTrackAudible (TrackId track, bool audible) = 0;
+
+	/** Scales this instance's output. Formats whose mix has headroom - the NES is the example, its
+		five four-bit channels never reach full scale - ask for a boost here rather than at the
+		engine's master, so a format default cannot change how another format sounds. Ignored by
+		backends that do not need it. */
+	virtual void setOutputGain (float linear) { juce::ignoreUnused (linear); }
 	/** Silences one device (the chips card). No-op when the backend cannot mute chips. */
 	virtual void setChipAudible (DeviceId device, bool audible) = 0;
 

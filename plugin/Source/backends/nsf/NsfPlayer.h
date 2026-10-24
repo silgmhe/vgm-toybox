@@ -84,6 +84,11 @@ public:
 		track is not audible at all. */
 	void setSilent (bool silent);
 
+	/** Scales the output. The NES mix table leaves a lot of headroom - five four-bit channels never
+		approach full scale - so a file played back unamplified sits eight to twelve decibels below a
+		VGM of the same music. The default is the +8 dB the settings page offers. */
+	void setOutputGain (float linear);
+
 	/** True when the file declared an expansion chip and one was created. */
 	bool hasExpansion (void) const;
 
@@ -103,6 +108,7 @@ private:
 	void applyMasks (void);
 	int soloTrack = -1;
 	bool silent = false;
+	float outputGain = 2.5119f;			// +8 dB
 
 	const formats::nsf::NsfFile& file;
 	double rate = 44100.0;

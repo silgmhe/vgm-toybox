@@ -32,6 +32,12 @@ public:
 		return player.seekTo (seconds);
 	}
 	void setTimeline (int, double) override {}
+	void setOutputGain (float linear) override
+	{
+		// The player already defaults to +8 dB; this is how the settings page overrides it.
+		player.setOutputGain (linear);
+	}
+
 	void setTrackAudible (playback::TrackId track, bool audible) override
 	{
 		// One player per track: audible means this instance solos its own channel, and the

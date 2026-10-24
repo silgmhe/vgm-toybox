@@ -156,6 +156,11 @@ public:
 	int getNsfDurationSeconds (void) const;
 	void setNsfDurationSeconds (int seconds);
 
+	/** Output gain for the NES, in decibels. The mix table leaves a lot of headroom, so a file
+		played unamplified sits well below a VGM of the same music. Applied to the NES only. */
+	int getNsfOutputGainDb (void) const;
+	void setNsfOutputGainDb (int decibels);
+
 	/** Stores the range (clamped to what the engine can encode) and tells every listener. */
 	void setMidiPitchBendRange (int semitones);
 

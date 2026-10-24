@@ -696,6 +696,18 @@ void PlaybackEngine::setMixerMasterGain (float linear)
 	mixerMasterGain.store (juce::jmax (0.0f, linear));
 }
 
+void PlaybackEngine::setSourceGain (float linear)
+{
+	sourceGain.store (linear > 0.0f ? linear : 0.0f);
+
+	const juce::ScopedLock sl (lock);
+
+	for (auto& player : trackPlayers)
+	{
+		if (player != nullptr) { player->setOutputGain (sourceGain.load ()); }
+	}
+}
+
 void PlaybackEngine::setChipMuted (size_t chipIndex, bool shouldBeMuted)
 {
 	const juce::ScopedLock sl (lock);
@@ -1068,6 +1080,11 @@ void PlaybackEngine::installSong (LoadedSong&& built)
 	song = std::move (built.song);
 	trackPlayers = std::move (built.players);
 	playerCount.store ((int) trackPlayers.size ());
+
+	for (auto& player : trackPlayers)
+	{
+		if (player != nullptr) { player->setOutputGain (sourceGain.load ()); }
+	}
 	trackLayout = std::move (built.layout);
 	tracks = std::move (built.tracks);
 	soloCount = built.soloCount;
