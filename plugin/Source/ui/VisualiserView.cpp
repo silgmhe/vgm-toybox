@@ -1,29 +1,34 @@
 #include "VisualiserView.h"
 
+#include "SoftShadow.h"
 #include "Theme.h"
 #include "playback/PlaybackEngine.h"
 #include "playback/WaveExport.h"
 
 #include <cmath>
-#include <functional>
 
 using namespace toybox::ui;
 
 namespace
 {
+	// What this page is for, in the order a player meets it. The list is a signpost, not a
+	// feature: every line of it disappears as the panel behind it arrives. The keys are stable;
+	// the text is looked up when the page paints, so a language switch needs only a repaint.
+	const char* const kPlannedPanelKeys[] =
+	{
+		"visualiser.item.spectrum",
+		"visualiser.item.midi",
+		"visualiser.item.chip",
+	};
+
 	constexpr int kInset = 20;
-	constexpr int kHeader = 44;
-	constexpr int kKeyboardHeight = 62;
-	constexpr int kRowHeight = 30;
+	constexpr int kCardGap = 12;
+	constexpr int kPlansHeight = 150;
+	constexpr int kChipsHeader = 58;
+	constexpr int kRowHeight = 26;
+	constexpr int kChipsPadding = 18;
+
 	constexpr int kRefreshHz = 30;
-
-	// C1 to B5: five octaves cover every chip in the corpus, and a wider range would make the
-	// keys too narrow to read at this height.
-	constexpr int kFirstNote = 24;
-	constexpr int kOctaves = 5;
-
-	// Where each pitch class sits among the white keys; -1 for the ones that are black.
-	constexpr int kWhiteIndex[12] = { 0, -1, 1, -1, 2, 3, -1, 4, -1, 5, -1, 6 };
 
 	juce::String noteName (int note)
 	{
@@ -37,282 +42,17 @@ namespace
 
 		return juce::String (names[note % 12]) + juce::String (note / 12 - 1);
 	}
-
-	/** One key per semitone, white behind black, with the notes being played lit. */
-	void drawKeyboard (juce::Graphics& g, juce::Rectangle<int> area,
-					   const toybox::playback::ChipStateSnapshot& snapshot)
-	{
-		if (area.getWidth () < 40 || area.getHeight () < 10)
-		{
-			return;
-		}
-
-		const float whiteWidth = (float) area.getWidth () / (float) (kOctaves * 7);
-		const float blackWidth = whiteWidth * 0.62f;
-		const float blackHeight = (float) area.getHeight () * 0.6f;
-
-		const auto keyAt = [&] (int note, float& x, float& width, bool& isBlack)
-		{
-			const int offset = note - kFirstNote;
-
-			if (offset < 0 || offset >= kOctaves * 12)
-			{
-				return false;
-			}
-
-			const int octave = offset / 12;
-			const int pitchClass = offset % 12;
-
-			if (kWhiteIndex[pitchClass] >= 0)
-			{
-				x = (float) area.getX () + whiteWidth * (float) (octave * 7 + kWhiteIndex[pitchClass]);
-				width = whiteWidth;
-				isBlack = false;
-			}
-			else
-			{
-				const int leftWhite = kWhiteIndex[pitchClass - 1];
-				x = (float) area.getX () + whiteWidth * (float) (octave * 7 + leftWhite + 1) - blackWidth * 0.5f;
-				width = blackWidth;
-				isBlack = true;
-			}
-
-			return true;
-		};
-
-		// which semitones are sounding, and how many channels share them
-		int lit[128] = {};
-
-		for (const auto& channel : snapshot.channels)
-		{
-			if (channel.active && channel.note >= 0 && channel.note < 128)
-			{
-				++lit[channel.note];
-			}
-		}
-
-		const auto paintKey = [&] (int note, bool isBlack)
-		{
-			float x = 0.0f, width = 0.0f;
-			bool black = false;
-
-			if (! keyAt (note, x, width, black) || black != isBlack)
-			{
-				return;
-			}
-
-			const float height = isBlack ? blackHeight : (float) area.getHeight ();
-			const juce::Rectangle<float> key (x + 0.5f, (float) area.getY (), width - 1.0f, height);
-
-			if (lit[note] > 0)
-			{
-				g.setColour (theme::accent ().withAlpha (isBlack ? 0.95f : 0.85f));
-			}
-			else
-			{
-				g.setColour (isBlack ? theme::primaryText ().withAlpha (0.55f)
-									 : theme::secondaryText ().withAlpha (0.14f));
-			}
-
-			g.fillRoundedRectangle (key, 2.0f);
-
-			if (! isBlack && lit[note] > 1)
-			{
-				// two channels on one key: a second tick, because a shared note is information
-				g.setColour (theme::onAccent ());
-				g.fillEllipse (key.getCentreX () - 2.0f, key.getBottom () - 8.0f, 4.0f, 4.0f);
-			}
-		};
-
-		for (int octave = 0; octave < kOctaves; ++octave)
-		{
-			for (int pitchClass = 0; pitchClass < 12; ++pitchClass)
-			{
-				if (kWhiteIndex[pitchClass] >= 0)
-				{
-					paintKey (kFirstNote + octave * 12 + pitchClass, false);
-				}
-			}
-		}
-
-		for (int octave = 0; octave < kOctaves; ++octave)
-		{
-			for (int pitchClass = 0; pitchClass < 12; ++pitchClass)
-			{
-				if (kWhiteIndex[pitchClass] < 0)
-				{
-					paintKey (kFirstNote + octave * 12 + pitchClass, true);
-				}
-			}
-		}
-	}
 }
 
-//==============================================================================
-/** The first tab: what each channel is playing, and the keyboard it is playing it on. */
-class VisualiserView::ChipPanel : public juce::Component
-{
-public:
-	ChipPanel (const toybox::playback::ChipStateSnapshot& snapshotToUse, juce::String& statusToUse)
-		: snapshot (snapshotToUse), exportStatus (statusToUse)
-	{
-		exportButton.setButtonText (toybox::i18n::tr ("visualiser.export"));
-		exportButton.setColour (juce::TextButton::buttonColourId, theme::card ());
-		exportButton.setColour (juce::TextButton::textColourOffId, theme::primaryText ());
-		exportButton.onClick = [this] { if (onExport) { onExport (); } };
-		addAndMakeVisible (exportButton);
-	}
-
-	void refreshLanguage (void)
-	{
-		exportButton.setButtonText (toybox::i18n::tr ("visualiser.export"));
-		repaint ();
-	}
-
-	void paint (juce::Graphics& g) override
-	{
-		auto area = getLocalBounds ().reduced (kInset, 0);
-
-		auto header = area.removeFromTop (kHeader);
-
-		g.setColour (theme::primaryText ());
-		g.setFont (juce::Font (juce::FontOptions (15.0f, juce::Font::bold)));
-		g.drawText (toybox::i18n::tr ("visualiser.chips"), header.removeFromLeft (200).withTrimmedTop (12),
-					juce::Justification::centredLeft, false);
-
-		if (exportStatus.isNotEmpty ())
-		{
-			g.setColour (theme::secondaryText ());
-			g.setFont (juce::Font (juce::FontOptions (11.5f)));
-			g.drawText (exportStatus, header.withTrimmedRight (124),
-						juce::Justification::centredRight, false);
-		}
-
-		if (snapshot.channels.empty ())
-		{
-			g.setColour (theme::secondaryText ());
-			g.setFont (juce::Font (juce::FontOptions (13.0f)));
-			g.drawText (toybox::i18n::tr ("visualiser.chipsUnavailable"),
-						area.withTrimmedTop (40), juce::Justification::centredTop, false);
-			return;
-		}
-
-		drawKeyboard (g, area.removeFromTop (kKeyboardHeight), snapshot);
-		area.removeFromTop (14);
-
-		for (const auto& channel : snapshot.channels)
-		{
-			auto row = area.removeFromTop (kRowHeight);
-
-			if (row.getY () + row.getHeight () > getLocalBounds ().getBottom ())
-			{
-				break;
-			}
-
-			g.setColour (channel.active ? theme::primaryText () : theme::secondaryText ());
-			g.setFont (juce::Font (juce::FontOptions (12.0f)));
-			g.drawText (juce::String (channel.name), row.removeFromLeft (70),
-						juce::Justification::centredLeft, false);
-
-			g.setColour (theme::secondaryText ());
-			g.drawText (noteName (channel.note), row.removeFromLeft (48), juce::Justification::centredLeft, false);
-
-			// level as a bar: a number changes too slowly to read at a glance
-			auto bar = row.removeFromLeft (70).reduced (2, 11);
-			g.setColour (theme::cardBorder ());
-			g.fillRoundedRectangle (bar.toFloat (), 2.0f);
-			g.setColour (theme::accent ().withAlpha (0.85f));
-			g.fillRoundedRectangle (bar.toFloat ().withWidth (bar.getWidth () * juce::jlimit (0.0f, 1.0f, channel.volume)),
-									2.0f);
-
-			row.removeFromLeft (12);
-
-			if (channel.wave.size () < 2 || row.getWidth () < 8)
-			{
-				continue;
-			}
-
-			// Stepped, not interpolated. A chip channel holds each sample for a full period and
-			// then jumps; joining the points with straight lines would draw a ramp the hardware
-			// never produced - which matters here, because the shape is the thing being shown.
-			juce::Path wave;
-			const auto count = (int) channel.wave.size ();
-			const float half = (float) row.getHeight () * 0.5f - 4.0f;
-			const float span = (float) row.getWidth () / (float) count;
-
-			for (int i = 0; i < count; ++i)
-			{
-				const float level = juce::jlimit (-1.0f, 1.0f, channel.wave[(std::size_t) i]);
-				const float y = (float) row.getCentreY () - level * half;
-				const float x0 = (float) row.getX () + span * (float) i;
-
-				if (i == 0)
-				{
-					wave.startNewSubPath (x0, y);
-				}
-				else
-				{
-					wave.lineTo (x0, y);		// the vertical edge between levels
-				}
-
-				wave.lineTo (x0 + span, y);		// the hold
-			}
-
-			g.setColour (theme::accent ().withAlpha (channel.active ? 0.9f : 0.3f));
-			g.strokePath (wave, juce::PathStrokeType (1.1f));
-		}
-	}
-
-	void resized (void) override
-	{
-		exportButton.setBounds (getWidth () - kInset - 112, 12, 112, 24);
-	}
-
-	std::function<void ()> onExport;
-
-private:
-	const toybox::playback::ChipStateSnapshot& snapshot;
-	juce::String& exportStatus;
-	juce::TextButton exportButton { "export" };
-};
-
-//==============================================================================
-/** The second tab: a placeholder, and honest about it. */
-class VisualiserView::ScopePanel : public juce::Component
-{
-public:
-	void paint (juce::Graphics& g) override
-	{
-		g.setColour (theme::secondaryText ());
-		g.setFont (juce::Font (juce::FontOptions (13.0f)));
-		g.drawText (toybox::i18n::tr ("visualiser.scopePlaceholder"), getLocalBounds (),
-					juce::Justification::centred, false);
-	}
-};
-
-//==============================================================================
 VisualiserView::VisualiserView (toybox::PlaybackEngine& engineToUse)
 	: engine (engineToUse)
 {
-	chipPanel = std::make_unique<ChipPanel> (chipState, exportStatus);
-	chipPanel->onExport = [this] { exportWaves (); };
+	exportButton.onClick = [this] { exportWaves (); };
+	exportButton.setColour (juce::TextButton::buttonColourId, theme::card ());
+	exportButton.setColour (juce::TextButton::textColourOffId, theme::primaryText ());
+	exportButton.setButtonText (toybox::i18n::tr ("visualiser.export"));
+	addAndMakeVisible (exportButton);
 
-	scopePanel = std::make_unique<ScopePanel> ();
-
-	tabs.setTabBarDepth (34);
-	tabs.setIndent (0);
-	tabs.setOutline (0);
-	tabs.setColour (juce::TabbedComponent::backgroundColourId, juce::Colours::transparentBlack);
-	tabs.setColour (juce::TabbedComponent::outlineColourId, juce::Colours::transparentBlack);
-	tabs.setColour (juce::TabbedButtonBar::tabOutlineColourId, theme::cardBorder ());
-	tabs.setColour (juce::TabbedButtonBar::frontOutlineColourId, theme::accent ());
-	tabs.setColour (juce::TabbedButtonBar::tabTextColourId, theme::secondaryText ());
-	tabs.setColour (juce::TabbedButtonBar::frontTextColourId, theme::primaryText ());
-
-	tabs.addTab (toybox::i18n::tr ("visualiser.tab.chip"), theme::card (), chipPanel.get (), false);
-	tabs.addTab (toybox::i18n::tr ("visualiser.tab.scope"), theme::card (), scopePanel.get (), false);
-
-	addAndMakeVisible (tabs);
 	startTimerHz (kRefreshHz);
 }
 
@@ -322,27 +62,45 @@ VisualiserView::~VisualiserView (void)
 	engine.setStateCaptureWanted (false);
 }
 
-void VisualiserView::paint (juce::Graphics&)
+VisualiserView::Areas VisualiserView::layoutAreas (void) const
 {
-	// the tabbed component paints its own background and every page inside it
+	Areas areas;
+
+	auto all = getLocalBounds ();
+	const int rows = juce::jmax (1, (int) chipState.channels.size ());
+	const int wanted = kChipsHeader + rows * kRowHeight + kChipsPadding;
+	const int ceiling = juce::jmax (0, all.getHeight () - kPlansHeight - kCardGap);
+
+	areas.chips = all.removeFromTop (juce::jmin (all.getHeight (), juce::jmin (wanted, ceiling)));
+	all.removeFromTop (kCardGap);
+	areas.plans = all.removeFromTop (juce::jmin (all.getHeight (), kPlansHeight));
+
+	return areas;
+}
+
+void VisualiserView::paintCardShadows (juce::Graphics& g) const
+{
+	const auto areas = layoutAreas ();
+
+	drawCardShadow (g, areas.chips.toFloat ());
+	drawCardShadow (g, areas.plans.toFloat ());
 }
 
 void VisualiserView::resized (void)
 {
-	tabs.setBounds (getLocalBounds ());
+	// The button lives in the chip card's header, which moves when the channel count changes -
+	// so its bounds are recomputed with everything else rather than once.
+	const auto areas = layoutAreas ();
+	auto header = areas.chips.reduced (kInset, 0).withHeight (kChipsHeader);
+
+	exportButton.setBounds (header.removeFromTop (26).removeFromRight (112).withTrimmedTop (12).reduced (0, 1));
+
+	repaint ();
 }
 
 void VisualiserView::refreshLanguage (void)
 {
-	auto& bar = tabs.getTabbedButtonBar ();
-	bar.setTabName (0, toybox::i18n::tr ("visualiser.tab.chip"));
-	bar.setTabName (1, toybox::i18n::tr ("visualiser.tab.scope"));
-
-	if (chipPanel != nullptr)
-	{
-		chipPanel->refreshLanguage ();
-	}
-
+	exportButton.setButtonText (toybox::i18n::tr ("visualiser.export"));
 	repaint ();
 }
 
@@ -364,17 +122,16 @@ void VisualiserView::timerCallback (void)
 	{
 		const int rows = (int) chipState.channels.size ();
 
+		// The card grows with the channel list, so the layout is rebuilt when that changes - not
+		// on every frame, which is what this used to do.
 		if (rows != lastChannelCount)
 		{
 			lastChannelCount = rows;
-			chipPanel->resized ();
-		}
-
-		if (tabs.getCurrentTabIndex () == 0)
-		{
-			chipPanel->repaint ();
+			resized ();
 		}
 	}
+
+	repaint ();
 }
 
 void VisualiserView::exportWaves (void)
@@ -392,7 +149,7 @@ void VisualiserView::exportWaves (void)
 	if (writable == 0)
 	{
 		exportStatus = toybox::i18n::tr ("visualiser.exportEmpty");
-		chipPanel->repaint ();
+		repaint ();
 		return;
 	}
 
@@ -433,6 +190,150 @@ void VisualiserView::exportWaves (void)
 		}
 
 		exportStatus = juce::String (written) + " WAV";
-		chipPanel->repaint ();
+		repaint ();
 	});
+}
+
+void VisualiserView::paintChips (juce::Graphics& g, juce::Rectangle<int> area)
+{
+	if (area.getHeight () < kChipsHeader)
+	{
+		return;
+	}
+
+	auto inner = area.reduced (kInset, 0);
+
+	auto titleRow = inner.removeFromTop (26).withTrimmedTop (12);
+	g.setColour (theme::primaryText ());
+	g.setFont (juce::Font (juce::FontOptions (15.0f, juce::Font::bold)));
+	g.drawText (toybox::i18n::tr ("visualiser.chips"), titleRow,
+				juce::Justification::centredLeft, false);
+
+	if (exportStatus.isNotEmpty ())
+	{
+		g.setColour (theme::secondaryText ());
+		g.setFont (juce::Font (juce::FontOptions (11.5f)));
+		g.drawText (exportStatus, titleRow.withTrimmedRight (120),
+					juce::Justification::centredRight, false);
+	}
+
+	if (chipState.channels.empty ())
+	{
+		g.setColour (theme::secondaryText ());
+		g.setFont (juce::Font (juce::FontOptions (12.5f)));
+		g.drawText (toybox::i18n::tr ("visualiser.chipsUnavailable"),
+					inner.removeFromTop (24), juce::Justification::centredLeft, false);
+		return;
+	}
+
+	inner.removeFromTop (8);
+
+	for (const auto& channel : chipState.channels)
+	{
+		auto row = inner.removeFromTop (kRowHeight);
+
+		if (row.getY () + row.getHeight () > area.getBottom ())
+		{
+			break;
+		}
+
+		g.setColour (channel.active ? theme::primaryText () : theme::secondaryText ());
+		g.setFont (juce::Font (juce::FontOptions (12.0f)));
+		g.drawText (juce::String (channel.name), row.removeFromLeft (66),
+					juce::Justification::centredLeft, false);
+
+		g.setColour (theme::secondaryText ());
+		g.drawText (noteName (channel.note), row.removeFromLeft (44), juce::Justification::centredLeft, false);
+
+		// volume as a bar: a number changes too slowly to read at a glance
+		auto bar = row.removeFromLeft (64).reduced (2, 9);
+		g.setColour (theme::cardBorder ());
+		g.fillRoundedRectangle (bar.toFloat (), 2.0f);
+		g.setColour (theme::accent ().withAlpha (0.85f));
+		g.fillRoundedRectangle (bar.toFloat ().withWidth (bar.getWidth () * juce::jlimit (0.0f, 1.0f, channel.volume)),
+								2.0f);
+
+		row.removeFromLeft (10);
+
+		// the waveform, one period of whatever the chip is reading
+		if (channel.wave.size () >= 2 && row.getWidth () > 8)
+		{
+			juce::Path wave;
+			const auto count = (int) channel.wave.size ();
+			const float half = (float) row.getHeight () * 0.5f - 3.0f;
+			const float span = (float) row.getWidth () / (float) count;
+
+			// Stepped, not interpolated. A chip channel holds each sample for a full period and
+			// then jumps; joining the points with straight lines would draw a ramp the hardware
+			// never produced - which matters here, because the shape is the thing being shown.
+			for (int i = 0; i < count; ++i)
+			{
+				const float level = juce::jlimit (-1.0f, 1.0f, channel.wave[(std::size_t) i]);
+				const float y = (float) row.getCentreY () - level * half;
+				const float x0 = (float) row.getX () + span * (float) i;
+				const float x1 = x0 + span;
+
+				if (i == 0)
+				{
+					wave.startNewSubPath (x0, y);
+				}
+				else
+				{
+					wave.lineTo (x0, y);		// the vertical edge between levels
+				}
+
+				wave.lineTo (x1, y);			// the hold
+			}
+
+			g.setColour (theme::accent ().withAlpha (channel.active ? 0.9f : 0.35f));
+			g.strokePath (wave, juce::PathStrokeType (1.1f));
+		}
+	}
+}
+
+void VisualiserView::paint (juce::Graphics& g)
+{
+	const auto drawCard = [] (juce::Graphics& target, juce::Rectangle<int> bounds)
+	{
+		target.setColour (theme::card ());
+		target.fillRoundedRectangle (bounds.toFloat (), theme::cardRadius);
+		target.setColour (theme::cardBorder ());
+		target.drawRoundedRectangle (bounds.toFloat ().reduced (0.5f), theme::cardRadius, 1.0f);
+	};
+
+	const auto areas = layoutAreas ();
+
+	// --- what the chips are doing ---
+	drawCard (g, areas.chips);
+	paintChips (g, areas.chips);
+
+	// --- what is still to come ---
+	drawCard (g, areas.plans);
+
+	auto inner = areas.plans.reduced (kInset, 0);
+	auto text = inner.withTrimmedTop (14);
+
+	g.setColour (theme::primaryText ());
+	g.setFont (juce::Font (juce::FontOptions (15.0f, juce::Font::bold)));
+	g.drawText (toybox::i18n::tr ("visualiser.title"), text.removeFromTop (22),
+				juce::Justification::centredLeft, false);
+
+	g.setColour (theme::secondaryText ());
+	g.setFont (juce::Font (juce::FontOptions (12.5f)));
+	g.drawText (toybox::i18n::tr ("visualiser.subtitle"), text.removeFromTop (20),
+				juce::Justification::centredLeft, false);
+
+	for (const auto* key : kPlannedPanelKeys)
+	{
+		auto row = text.removeFromTop (22);
+
+		// a small accent dot instead of a bullet character: it survives every platform font
+		g.setColour (theme::accent ());
+		g.fillEllipse (juce::Rectangle<float> ((float) row.getX () + 3.0f,
+											   (float) row.getCentreY () - 2.5f, 5.0f, 5.0f));
+		row.removeFromLeft (16);
+
+		g.setColour (theme::primaryText ());
+		g.drawText (toybox::i18n::tr (key), row, juce::Justification::centredLeft, false);
+	}
 }
