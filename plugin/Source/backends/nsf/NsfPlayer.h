@@ -63,6 +63,10 @@ public:
 	/** Writes the driver made into the $0200 page - zero means its RAM decoder never ran. */
 	std::uint64_t ramWrites (void) const;
 
+	/** CPU clocks executed so far. Against the 1.79 MHz the driver is clocked at, this says
+		whether the emulation is being starved or the program itself is just slow. */
+	std::uint64_t executedClocks (void) const;
+
 	/** How many times the $0211 gate was written, and with what - 0 means init never reached it. */
 	std::uint64_t gateWrites (void) const;
 	int gateValue (void) const;
@@ -96,6 +100,7 @@ private:
 
 	const formats::nsf::NsfFile& file;
 	double rate = 44100.0;
+	std::uint64_t clocksExecuted = 0;
 	double cpuClockRest = 0.0;
 	std::uint64_t rendered = 0;
 

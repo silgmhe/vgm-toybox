@@ -206,6 +206,7 @@ int NsfPlayer::render (float* left, float* right, int frames)
 		if (clocks > 0)
 		{
 			const int executed = cpu->Exec (clocks);
+		clocksExecuted += (std::uint64_t) (std::max) (0, executed);
 			cpuClockRest -= (double) executed;
 
 			// Envelopes and length counters live here; Tick() alone leaves every note at the level
@@ -365,6 +366,11 @@ std::uint64_t NsfPlayer::gateWrites (void) const
 int NsfPlayer::gateValue (void) const
 {
 	return (int) bus->gateValue;
+}
+
+std::uint64_t NsfPlayer::executedClocks (void) const
+{
+	return clocksExecuted;
 }
 
 std::uint64_t NsfPlayer::ramWrites (void) const
