@@ -43,7 +43,7 @@ std::vector<std::uint8_t> makeNsf (int version = 1, int songs = 3, int start = 2
 		image[at + 1] = (std::uint8_t) (value >> 8);
 	};
 
-	put16 (NsfFile::offsetLoadAddress, version == 1 ? 0x1234 : 0x6000);
+	put16 (NsfFile::offsetLoadAddress, version == 1 ? 0x8000 : 0x6000);
 	put16 (NsfFile::offsetInitAddress, 0x8123);
 	put16 (NsfFile::offsetPlayAddress, 0x8456);
 	put16 (NsfFile::offsetNtscSpeed, ntsc);
@@ -78,9 +78,46 @@ int main (void)
 		check (NsfFile::looksLikeNsf (image.data(), image.size()), "and is recognised by its magic");
 		check (file.totalSongs == 3 && file.startSong == 2, "the song count and start are as written");
 		check (file.initAddress == 0x8123 && file.playAddress == 0x8456, "with its two entry points");
-		check (file.loadAddress == 0x8000, "version 1 always loads at $8000, whatever the field says");
+		check (file.loadAddress == 0x8000, "the load address comes from the field");
 		check (file.name == "A title" && file.artist == "An artist", "and its names survive");
 		check (file.copyright == "2026", "including the copyright");
+
+		// The field is the load address in version 1 too. Entry025.nsf declares $8AFF and its
+		// driver is assembled for that address: forcing $8000 executes somebody else's bytes.
+		{
+			auto unaligned = makeNsf (1, 1, 1, 16639, 0, 0x100);
+			unaligned[NsfFile::offsetLoadAddress] = 0xFF;
+			unaligned[NsfFile::offsetLoadAddress + 1] = 0x8A;
+
+			NsfFile other;
+			std::string otherError;
+			check (NsfFile::parse (unaligned.data (), unaligned.size (), other, otherError),
+				   "a version 1 image with an unaligned load address parses");
+			check (other.loadAddress == 0x8AFF, "and keeps the address it declares");
+		}
+
+		// Japanese titles are Shift-JIS; the card needs UTF-8.
+		{
+			auto japanese = makeNsf ();
+			const unsigned char title[] = { 0x31, 0x39, 0x38, 0x33, 0x94, 0x4E, 0x82, 0xCC };  // 1983年
+
+			std::memcpy (japanese.data () + NsfFile::offsetName, title, sizeof (title));
+			japanese[NsfFile::offsetName + sizeof (title)] = 0;
+
+			NsfFile other;
+			std::string otherError;
+			check (NsfFile::parse (japanese.data (), japanese.size (), other, otherError),
+				   "an image with a Japanese title parses");
+			// "1983" stays as it is, and the two Shift-JIS characters become three UTF-8 bytes
+			// each, starting with a lead byte - the exact code points belong to the decoder, not
+			// to this test.
+			const bool converted = other.name.size () == 10
+								   && other.name.compare (0, 4, "1983") == 0
+								   && (unsigned char) other.name[4] == 0xE5
+								   && (unsigned char) other.name[7] == 0xE3;
+
+			check (converted, "and its title is converted to UTF-8");
+		}
 		check (file.chipFlags == 0x01 && file.chip() == toybox::formats::nsf::NsfChip::vrc6,
 			   "the chip byte names the expansion");
 		check (! file.isPal(), "an even speed is NTSC");

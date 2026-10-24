@@ -1,3 +1,7 @@
+#if defined(_WIN32)
+#include <windows.h>
+#endif
+
 #include "formats/nsf/NsfFile.h"
 
 #include <cstring>
@@ -15,6 +19,82 @@ std::uint16_t readLE16 (const std::uint8_t* p)
 
 /** The name fields are fixed-length and not necessarily terminated. Trailing spaces are part of the
 	padding, not of the title, and control bytes are dropped rather than shown as boxes. */
+namespace
+{
+
+/** Text fields are ASCII in most files and Shift-JIS in Japanese ones. CP932 is a superset of
+	ASCII, so a plain-ASCII field is returned byte for byte; anything else is decoded so the tag
+	shows the title instead of boxes. A field that is already valid UTF-8 is left alone, and a field
+	that will not decode is returned as it came - showing something is better than dropping it. */
+std::string decodeTextField (const std::string& raw)
+{
+	bool ascii = true;
+
+	for (unsigned char c : raw)
+	{
+		if (c >= 0x80) { ascii = false; break; }
+	}
+
+	if (ascii || raw.empty ())
+	{
+		return raw;
+	}
+
+	// Already UTF-8? Then it is not Shift-JIS and must not be converted twice.
+	{
+		bool utf8 = true;
+		std::size_t i = 0;
+
+		while (i < raw.size () && utf8)
+		{
+			const auto lead = (unsigned char) raw[i];
+
+			if (lead < 0x80) { ++i; continue; }
+
+			const int extra = lead >= 0xF0 ? 3 : lead >= 0xE0 ? 2 : lead >= 0xC0 ? 1 : -1;
+
+			if (extra < 0 || i + (std::size_t) extra >= raw.size ()) { utf8 = false; break; }
+
+			for (int k = 1; k <= extra; ++k)
+			{
+				if (((unsigned char) raw[i + (std::size_t) k] & 0xC0) != 0x80) { utf8 = false; break; }
+			}
+
+			i += (std::size_t) extra + 1;
+		}
+
+		if (utf8) { return raw; }
+	}
+
+#if defined(_WIN32)
+	{
+		const int wide = MultiByteToWideChar (932, 0, raw.c_str (), (int) raw.size (), nullptr, 0);
+
+		if (wide > 0)
+		{
+			std::wstring buffer ((std::size_t) wide, L'\0');
+
+			if (MultiByteToWideChar (932, 0, raw.c_str (), (int) raw.size (), &buffer[0], wide) == wide)
+			{
+				const int utf8 = WideCharToMultiByte (CP_UTF8, 0, buffer.c_str (), wide, nullptr, 0,
+													  nullptr, nullptr);
+
+				if (utf8 > 0)
+				{
+					std::string out ((std::size_t) utf8, '\0');
+					WideCharToMultiByte (CP_UTF8, 0, buffer.c_str (), wide, &out[0], utf8, nullptr, nullptr);
+					return out;
+				}
+			}
+		}
+	}
+#endif
+
+	return raw;
+}
+
+} // namespace
+
 std::string readField (const std::uint8_t* p, std::size_t length)
 {
 	std::string out;
@@ -117,9 +197,9 @@ bool NsfFile::parse (const void* data, std::size_t size, NsfFile& out, std::stri
 	file.initAddress = readLE16 (bytes + offsetInitAddress);
 	file.playAddress = readLE16 (bytes + offsetPlayAddress);
 
-	file.name = readField (bytes + offsetName, 32);
-	file.artist = readField (bytes + offsetArtist, 32);
-	file.copyright = readField (bytes + offsetCopyright, 32);
+	file.name = decodeTextField (readField (bytes + offsetName, 32));
+	file.artist = decodeTextField (readField (bytes + offsetArtist, 32));
+	file.copyright = decodeTextField (readField (bytes + offsetCopyright, 32));
 
 	file.ntscSpeed = readLE16 (bytes + offsetNtscSpeed);
 	file.palSpeed = readLE16 (bytes + offsetPalSpeed);

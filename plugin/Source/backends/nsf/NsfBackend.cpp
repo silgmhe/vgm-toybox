@@ -90,9 +90,15 @@ public:
 		info_.durationSeconds = length;
 		info_.singlePassSeconds = length;
 
-		if (! file.name.empty ()) { info_.tags["title"] = file.name.c_str (); }
-		if (! file.artist.empty ()) { info_.tags["artist"] = file.artist.c_str (); }
-		if (! file.copyright.empty ()) { info_.tags["copyright"] = file.copyright.c_str (); }
+		// The song card reads upper-case keys, the way the libvgm backend publishes them; the
+		// strings are already UTF-8 by the time the file is parsed.
+		if (! file.name.empty ()) { info_.tags["TITLE"] = juce::String::fromUTF8 (file.name.c_str ()); }
+		if (! file.artist.empty ()) { info_.tags["ARTIST"] = juce::String::fromUTF8 (file.artist.c_str ()); }
+		if (! file.copyright.empty ())
+		{
+			info_.tags["COPYRIGHT"] = juce::String::fromUTF8 (file.copyright.c_str ());
+		}
+		info_.tags["SYSTEM"] = "Nintendo NES";
 
 		info_.chips.push_back (playback::ChipInfo { "2A03", "NSFPlay", 0 });
 

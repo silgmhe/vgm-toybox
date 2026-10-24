@@ -169,6 +169,7 @@ language: English
 
 "tag.artist" = "Artist";
 "tag.date" = "Date";
+	"tag.copyright" = "Copyright";
 "tag.game" = "Game";
 "tag.system" = "System";
 
