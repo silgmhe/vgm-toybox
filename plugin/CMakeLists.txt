@@ -803,8 +803,18 @@ endif()
 file(GLOB _toybox_scripts CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/Tests/scripts/*.txt")
 list(SORT _toybox_scripts)
 
+# A script that only takes screenshots asserts nothing, so registering it as a test would report a
+# pass for work nobody checked - the sort of green that hides a regression. They stay in the
+# repository as tooling (`vgm_app_test <script>` by hand), just not in ctest.
+set(_toybox_shot_scripts "keyboard-shot")
+
 foreach(_script_file IN LISTS _toybox_scripts)
 	get_filename_component(_script_name "${_script_file}" NAME_WE)
+
+	if(_script_name IN_LIST _toybox_shot_scripts)
+		message(STATUS "app.${_script_name}: a screenshot script, not a test - run it by hand")
+		continue()
+	endif()
 
 	add_test(NAME "app.${_script_name}" COMMAND vgm_app_test "${_script_file}")
 
