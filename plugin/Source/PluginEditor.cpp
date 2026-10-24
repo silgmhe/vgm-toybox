@@ -351,13 +351,16 @@ bool ToyboxAudioProcessorEditor::keyPressed (const juce::KeyPress& key)
 		return true;
 	}
 
-	// Ctrl+1..9 picks a page, in the order the View menu lists them. The key comes from pageKey(),
-	// the same call the menu describes it with.
+	// Ctrl+1..3 picks a content view, in the order the View menu lists them. The key comes from
+	// pageKey(), the same call the menu describes it with - and it has to do what the menu does,
+	// or the accelerator works and the item it stands for does not.
 	if (const int wanted = ui::EditorCommands::pageForKey (key); wanted >= 0)
 	{
-		if (wanted < viewStack.getNumViews() && wanted != viewStack.getCurrentViewIndex())
+		if (playView != nullptr && wanted <= (int) ContentView::oscilloscope
+			&& wanted != (int) playView->getContentView ())
 		{
-			viewStack.setCurrentView (wanted);
+			playView->setContentView ((ContentView) wanted);
+			settings::SettingsStore::getInstance ().setContentViewIndex (wanted);
 			return true;
 		}
 
