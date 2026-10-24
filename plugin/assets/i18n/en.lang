@@ -203,7 +203,6 @@ language: English
 	"view.keyboard" = "Keyboard";
 	"view.oscilloscope" = "Oscilloscope";
 "view.play" = "Play";
-"view.visualiser" = "Visualiser";
 
 "visualiser.footer" = "View > Play takes you back to the player.";
 "visualiser.item.chip" = "inside a chip: FM operators, algorithms and their parameters";

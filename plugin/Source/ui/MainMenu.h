@@ -44,7 +44,7 @@ struct MenuGroup
 	JUCE cannot enumerate a PopupMenu, so nothing could ask what the menu says or which item is
 	ticked; the only way to check "does the tick follow the page" was a screenshot. `buildGroups()`
 	is the single source now: `getMenuForIndex()` renders it for JUCE, and `describe()` prints it as
-	text for the console harness (`assert menu.view.visualiser checked == true` in a script). The
+	text for the console harness (`assert menu.view.keyboard checked == true` in a script). The
 	page items come from `viewNames` (the window's ViewStack) and their tick from `getCurrentView`,
 	which is asked every time rather than remembered - that bug is why.
 

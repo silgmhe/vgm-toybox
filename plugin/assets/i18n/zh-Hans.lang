@@ -199,7 +199,6 @@ language: 简体中文
 	"view.keyboard" = "键盘";
 	"view.oscilloscope" = "示波器";
 "view.play" = "播放";
-"view.visualiser" = "可视化";
 
 "visualiser.footer" = "通过“视图 > 播放”返回播放器页。";
 "visualiser.item.chip" = "芯片内部：FM 算子、算法及其参数";
