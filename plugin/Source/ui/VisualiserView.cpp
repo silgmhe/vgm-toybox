@@ -334,20 +334,28 @@ void VisualiserView::paintChips (juce::Graphics& g, juce::Rectangle<int> area)
 			juce::Path wave;
 			const auto count = (int) channel.wave.size ();
 			const float half = (float) row.getHeight () * 0.5f - 3.0f;
+			const float span = (float) row.getWidth () / (float) count;
 
+			// Stepped, not interpolated. A chip channel holds each sample for a full period and
+			// then jumps; joining the points with straight lines would draw a ramp the hardware
+			// never produced - which matters here, because the shape is the thing being shown.
 			for (int i = 0; i < count; ++i)
 			{
-				const float x = (float) row.getX () + (float) i / (float) (count - 1) * (float) row.getWidth ();
-				const float y = (float) row.getCentreY () - juce::jlimit (-1.0f, 1.0f, channel.wave[(std::size_t) i]) * half;
+				const float level = juce::jlimit (-1.0f, 1.0f, channel.wave[(std::size_t) i]);
+				const float y = (float) row.getCentreY () - level * half;
+				const float x0 = (float) row.getX () + span * (float) i;
+				const float x1 = x0 + span;
 
 				if (i == 0)
 				{
-					wave.startNewSubPath (x, y);
+					wave.startNewSubPath (x0, y);
 				}
 				else
 				{
-					wave.lineTo (x, y);
+					wave.lineTo (x0, y);		// the vertical edge between levels
 				}
+
+				wave.lineTo (x1, y);			// the hold
 			}
 
 			g.setColour (theme::accent ().withAlpha (channel.active ? 0.9f : 0.35f));
