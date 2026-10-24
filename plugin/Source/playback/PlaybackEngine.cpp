@@ -541,10 +541,52 @@ void PlaybackEngine::setPositionSecondsLocked (double seconds)
 	const double target = duration > 0.0 ? juce::jlimit (0.0, duration, seconds)
 										 : juce::jmax (0.0, seconds);
 
-	// every track seeks to the very same sample, which is what keeps them in sync
-	for (auto& player : trackPlayers)
+	// Every track seeks to the very same sample, which is what keeps them in sync.
+	//
+	// A backend that isolates by instance - one player per track, each silenced down to its own
+	// channel - makes this the most expensive operation in the program: thirteen instances each
+	// replay the song from the beginning. They are independent, so they replay at the same time
+	// instead of one after another, which turns thirteen sequential replays into roughly one,
+	// spread across the cores. The lock is held throughout, so the audio thread renders silence
+	// while this runs rather than reading half-seeked players.
+	if (trackPlayers.size() > 1)
 	{
-		player->seekSeconds (target);
+		const size_t workers = (size_t) juce::jlimit (1, (int) trackPlayers.size (),
+													  juce::SystemStats::getNumCpus ());
+
+		std::atomic<size_t> next { 0 };
+		std::vector<std::thread> threads;
+		threads.reserve (workers);
+
+		for (size_t t = 0; t < workers; ++t)
+		{
+			threads.emplace_back ([this, &next, target]
+			{
+				for (;;)
+				{
+					const size_t index = next.fetch_add (1);
+
+					if (index >= trackPlayers.size ())
+					{
+						return;
+					}
+
+					trackPlayers[index]->seekSeconds (target);
+				}
+			});
+		}
+
+		for (auto& thread : threads)
+		{
+			thread.join ();
+		}
+	}
+	else
+	{
+		for (auto& player : trackPlayers)
+		{
+			player->seekSeconds (target);
+		}
 	}
 
 	positionSeconds = target;
