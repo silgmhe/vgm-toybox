@@ -110,6 +110,27 @@ int main (int argc, char** argv)
 		return worst < 0.05 ? 0 : 1;
 	}
 
+	if (argc > 3 && std::string (argv[2]) == "--seek")
+	{
+		const double target = std::atof (argv[3]);
+		toybox::backends::nsf::NsfPlayer player (file, 44100.0);
+		player.start ();
+
+		const bool ok = player.seekTo (target);
+		std::printf ("seek %s to %.2f -> position %.2f s\n", ok ? "ok" : "failed", target,
+					 player.positionSeconds ());
+
+		std::vector<float> l (1024, 0.0f), r (1024, 0.0f);
+		double peak = 0.0;
+		for (int i = 0; i < 20; ++i)
+		{
+			player.render (l.data (), r.data (), 1024);
+			for (float v : l) { peak = (std::max) (peak, (double) std::fabs (v)); }
+		}
+		std::printf ("after seek peak %.4f\n", peak);
+		return 0;
+	}
+
 	const double seconds = argc > 2 ? std::atof (argv[2]) : 5.0;
 	const double rate = 44100.0;
 
