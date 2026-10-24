@@ -300,6 +300,11 @@ namespace
 		std::vector<std::int64_t> blockStarts;		// where each event's block began, in samples
 		std::int64_t blockStartSample = 0;			// set by the render loop below
 		double rms = 0.0;							// the audio of the same render (both channels)
+
+		/** The same measurement with the window's mean removed. A chip that reports from an
+			unsigned table leaves a standing offset, and an rms that counts it calls a silent track
+			audible - which is exactly how a DC blocker once broke seven tests. */
+		double rmsAc = 0.0;
 	};
 
 	/** Renders `seconds` with the MIDI sink attached and measures the audio in the same pass.
@@ -318,6 +323,7 @@ namespace
 		toybox::playback::OutputBusBuffers buses[1] = { { blockL.data(), blockR.data() } };
 
 		double sumOfSquares = 0.0;
+		double sum = 0.0;
 		std::int64_t sampleCount = 0;
 
 		while (rendered < totalSamples && ! engine.isFinished())
@@ -329,8 +335,11 @@ namespace
 
 			for (int i = 0; i < blockSize; ++i)
 			{
-				sumOfSquares += (double) blockL[(size_t) i] * (double) blockL[(size_t) i]
-								+ (double) blockR[(size_t) i] * (double) blockR[(size_t) i];
+				const double l = (double) blockL[(size_t) i];
+				const double r = (double) blockR[(size_t) i];
+
+				sumOfSquares += l * l + r * r;
+				sum += l + r;
 				++sampleCount;
 			}
 
@@ -338,6 +347,15 @@ namespace
 		}
 
 		recorder.rms = (sampleCount > 0) ? std::sqrt (sumOfSquares / (double) (2 * sampleCount)) : 0.0;
+
+		if (sampleCount > 0)
+		{
+			const double mean = sum / (double) (2 * sampleCount);
+			const double variance = sumOfSquares / (double) (2 * sampleCount) - mean * mean;
+
+			recorder.rmsAc = variance > 0.0 ? std::sqrt (variance) : 0.0;
+		}
+
 		return recorder;
 	}
 
@@ -1355,7 +1373,7 @@ int main (int argc, char* argv[])
 			engine.setTrackSolo ((int) i, false);
 			engine.setTrackMidiChannel (i, 0);
 
-			probes[i].audible = probe.rms > audibleFloor;
+			probes[i].audible = probe.rmsAc > audibleFloor;
 			probes[i].notes = (int) probe.notesOn (1).size();
 			for (size_t e = 0; e < probe.events.size() && e < probe.blockStarts.size(); ++e)
 			{

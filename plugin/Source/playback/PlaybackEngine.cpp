@@ -1991,6 +1991,7 @@ void PlaybackEngine::publishPositionAndEnd (void)
 }
 
 
+
 void PlaybackEngine::captureScope (const float* left, int numSamples)
 {
 	if (left == nullptr || numSamples <= 0)
