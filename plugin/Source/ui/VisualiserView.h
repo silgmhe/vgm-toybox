@@ -40,6 +40,7 @@ public:
 	void paint (juce::Graphics& g) override;
 	void paintCardShadows (juce::Graphics& g) const override;
 	void resized (void) override;
+	void refreshLanguage (void) override;
 
 private:
 	struct Areas
@@ -55,9 +56,14 @@ private:
 
 	void paintScope (juce::Graphics& g, juce::Rectangle<int> area);
 	void paintChips (juce::Graphics& g, juce::Rectangle<int> area);
+	void exportWaves (void);
 
 	toybox::PlaybackEngine& engine;
 	playback::ChipStateSnapshot chipState;
+
+	juce::TextButton exportButton { "export" };
+	std::unique_ptr<juce::FileChooser> waveChooser;
+	juce::String exportStatus;
 
 	// Reused between frames: the scope is redrawn thirty times a second and a fresh allocation
 	// each time is the one cost this page does not need to pay.

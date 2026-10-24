@@ -6,6 +6,7 @@
     no amount of chip work will produce sound.
 */
 
+#include "playback/WaveExport.h"
 #include <chrono>
 #include <cmath>
 #include <cstdio>
@@ -129,6 +130,49 @@ int main (int argc, char** argv)
 			for (float v : l) { peak = (std::max) (peak, (double) std::fabs (v)); }
 		}
 		std::printf ("after seek peak %.4f\n", peak);
+		return 0;
+	}
+
+	if (argc > 3 && std::string (argv[2]) == "--waves")
+	{
+		const std::string directory = argv[3];
+
+		// Same forced chip as --chips: the corpus declares no expansion, and the point of this
+		// mode is to exercise the export path.
+		auto forced = file;
+		forced.chipFlags |= (std::uint8_t) toybox::formats::nsf::NsfChip::n163;
+
+		toybox::backends::nsf::NsfPlayer player (forced, 44100.0);
+		player.start ();
+
+		std::vector<float> l (1024, 0.0f), r (1024, 0.0f);
+		for (int i = 0; i < 200; ++i) { player.render (l.data (), r.data (), 1024); }
+
+		toybox::playback::ChipStateSnapshot snapshot;
+		player.captureState (snapshot);
+
+		int written = 0;
+
+		for (std::size_t i = 0; i < snapshot.channels.size (); ++i)
+		{
+			const auto& channel = snapshot.channels[i];
+
+			if (channel.wave.size () < 2)
+			{
+				continue;
+			}
+
+			const auto path = directory + "/wave" + std::to_string (i + 1) + ".wav";
+
+			if (toybox::playback::writeCycleWav (channel, path))
+			{
+				++written;
+				std::printf ("  %s  cycle=%d freq=%.1f Hz\n", path.c_str (),
+							 (int) channel.wave.size (), (double) channel.frequency);
+			}
+		}
+
+		std::printf ("wrote %d files\n", written);
 		return 0;
 	}
 

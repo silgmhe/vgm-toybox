@@ -3,6 +3,7 @@
 #include "SoftShadow.h"
 #include "Theme.h"
 #include "playback/PlaybackEngine.h"
+#include "playback/WaveExport.h"
 
 #include <cmath>
 
@@ -50,6 +51,12 @@ VisualiserView::VisualiserView (toybox::PlaybackEngine& engineToUse)
 	// A scope has nothing to show between notes, but it must keep drawing while silence is
 	// playing through - the line drifting back to zero is information too.
 	startTimerHz (kRefreshHz);
+
+	exportButton.onClick = [this] { exportWaves (); };
+	exportButton.setColour (juce::TextButton::buttonColourId, theme::card ());
+	exportButton.setColour (juce::TextButton::textColourOffId, theme::primaryText ());
+	exportButton.setButtonText (toybox::i18n::tr ("visualiser.export"));
+	addAndMakeVisible (exportButton);
 }
 
 VisualiserView::~VisualiserView (void)
@@ -88,7 +95,80 @@ void VisualiserView::paintCardShadows (juce::Graphics& g) const
 
 void VisualiserView::resized (void)
 {
+	// The button lives in the chip card's header, which moves when the channel count changes -
+	// so its bounds are recomputed with everything else rather than once.
+	const auto areas = layoutAreas ();
+	auto header = areas.chips.reduced (kInset, 0).withHeight (kChipsHeader);
+
+	exportButton.setBounds (header.removeFromTop (26).removeFromRight (112).withTrimmedTop (12).reduced (0, 1));
+
 	repaint ();
+}
+
+void VisualiserView::refreshLanguage (void)
+{
+	exportButton.setButtonText (toybox::i18n::tr ("visualiser.export"));
+	repaint ();
+}
+
+void VisualiserView::exportWaves (void)
+{
+	int writable = 0;
+
+	for (const auto& channel : chipState.channels)
+	{
+		if (channel.wave.size () >= 2)
+		{
+			++writable;
+		}
+	}
+
+	if (writable == 0)
+	{
+		exportStatus = toybox::i18n::tr ("visualiser.exportEmpty");
+		repaint ();
+		return;
+	}
+
+	waveChooser = std::make_unique<juce::FileChooser> (toybox::i18n::tr ("visualiser.export"),
+													   juce::File::getSpecialLocation (juce::File::userDesktopDirectory),
+													   juce::String (), true);
+
+	waveChooser->launchAsync (juce::FileBrowserComponent::openMode
+							  | juce::FileBrowserComponent::canSelectDirectories,
+							  [this] (const juce::FileChooser& chooser)
+	{
+		const auto folder = chooser.getResult ();
+
+		if (folder == juce::File () || ! folder.isDirectory ())
+		{
+			return;
+		}
+
+		int written = 0;
+
+		for (std::size_t i = 0; i < chipState.channels.size (); ++i)
+		{
+			const auto& channel = chipState.channels[i];
+
+			if (channel.wave.size () < 2)
+			{
+				continue;
+			}
+
+			const auto name = juce::File::createLegalFileName (juce::String (channel.name)
+															   + " " + juce::String ((int) i + 1))
+							  + ".wav";
+
+			if (playback::writeCycleWav (channel, folder.getChildFile (name).getFullPathName ().toStdString ()))
+			{
+				++written;
+			}
+		}
+
+		exportStatus = juce::String (written) + " WAV";
+		repaint ();
+	});
 }
 
 void VisualiserView::timerCallback (void)
@@ -101,6 +181,7 @@ void VisualiserView::timerCallback (void)
 	}
 
 	engine.captureChipState (chipState);
+	resized ();
 	repaint ();
 }
 
@@ -182,8 +263,16 @@ void VisualiserView::paintChips (juce::Graphics& g, juce::Rectangle<int> area)
 
 	g.setColour (theme::primaryText ());
 	g.setFont (juce::Font (juce::FontOptions (15.0f, juce::Font::bold)));
-	g.drawText (toybox::i18n::tr ("visualiser.chips"), inner.removeFromTop (26).withTrimmedTop (12),
+	auto titleRow = inner.removeFromTop (26).withTrimmedTop (12);
+	g.drawText (toybox::i18n::tr ("visualiser.chips"), titleRow,
 				juce::Justification::centredLeft, false);
+
+	if (exportStatus.isNotEmpty ())
+	{
+		g.setFont (juce::Font (juce::FontOptions (11.5f)));
+		g.drawText (exportStatus, titleRow.withTrimmedRight (120),
+					juce::Justification::centredRight, false);
+	}
 
 	if (chipState.channels.empty ())
 	{

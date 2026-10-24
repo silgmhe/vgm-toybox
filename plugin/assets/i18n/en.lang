@@ -213,6 +213,8 @@ language: English
 	"visualiser.scopeHint" = "The mix you are hearing, after the mixer and the output volume.";
 		"visualiser.chips" = "Chip state";
 	"visualiser.chipsUnavailable" = "This format does not report per-channel state yet.";
+	"visualiser.export" = "Export waves";
+	"visualiser.exportEmpty" = "Nothing to export yet.";
 "visualiser.scope" = "Waveform";
 "settings.nes" = "NSF";
 "settings.nes.duration" = "Song length";
