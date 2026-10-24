@@ -424,6 +424,17 @@ add_executable(vgm_mixer_test EXCLUDE_FROM_ALL
 # Register writes in, notes out. Links Source/chips and nothing else - no libvgm, no JUCE.
 #   cmake --build <build dir> --target vgm_chip_test
 #   <build dir>/plugin/vgm_chip_test
+# --- console test for the NSF reader and address space (not built by default) ---
+#   cmake --build <build dir> --target vgm_nsf_test
+add_executable(vgm_nsf_test EXCLUDE_FROM_ALL
+	Tests/NsfFormatTest.cpp
+	Source/formats/nsf/NsfFile.cpp
+	Source/backends/nsf/NsfBus.cpp
+)
+target_link_libraries(vgm_nsf_test PRIVATE nsfplay_core juce::juce_core juce::juce_recommended_config_flags)
+target_include_directories(vgm_nsf_test PRIVATE Source)
+target_compile_features(vgm_nsf_test PRIVATE cxx_std_17)
+
 add_executable(vgm_chip_test EXCLUDE_FROM_ALL
 	Source/backends/libvgm/VgmCommandReader.cpp
 	Source/formats/vgm/VgmSongLoader.cpp
@@ -612,6 +623,7 @@ if(EXISTS "${TOYBOX_TEST_SONG}")
 endif()
 
 add_test(NAME chip COMMAND vgm_chip_test)
+add_test(NAME nsf  COMMAND vgm_nsf_test)
 add_test(NAME core COMMAND vgm_core_test)
 add_test(NAME ui   COMMAND vgm_ui_test)
 add_test(NAME opn  COMMAND vgm_opn_test)
