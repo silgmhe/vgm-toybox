@@ -1077,6 +1077,11 @@ void PlaybackEngine::installSong (LoadedSong&& built)
 	// facts and a handful of flags. The players of the outgoing song are destroyed here, with
 	// everything else that goes out of scope - bounded work, unlike building them.
 	song = std::move (built.song);
+
+	// The chips card is only offered when the backend can honour it, and every load path passes
+	// through here - buildSong is static and cannot record it itself.
+	chipsMuteable.store (song != nullptr && song->getCapabilities ().canMuteChips);
+
 	trackPlayers = std::move (built.players);
 	playerCount.store ((int) trackPlayers.size ());
 

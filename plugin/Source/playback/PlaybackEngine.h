@@ -113,6 +113,10 @@ public:
 	void setSourceGain (float linear);
 	void setChipMuted (size_t chipIndex, bool shouldBeMuted);
 
+	/** Whether this backend can silence a chip on its own - the chips card is only shown when it
+		can, because a checkbox that changes nothing is worse than no checkbox. */
+	bool canMuteChips (void) const { return chipsMuteable.load(); }
+
 	bool isLoaded (void) const { return loaded; }
 	bool isPlaying (void) const { return playing.load(); }
 	/** Whether the last local transport action was pause rather than stop or load. The button
@@ -560,6 +564,7 @@ private:
 	// Output routing: the master bus target/mute and the connectivity the host showed us in the
 	// last block (bit i = bus i was connected; bus 0 counts as connected until told otherwise).
 	std::atomic<playback::OutputTarget> masterOutput { 0 };		// Out 1/2 by default
+	std::atomic<bool> chipsMuteable { false };
 	std::atomic<bool> masterMuted { false };
 	std::atomic<std::uint64_t> connectedBuses { 1 };
 	static_assert (playback::kOutputBusCount <= 64,

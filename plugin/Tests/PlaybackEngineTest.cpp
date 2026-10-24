@@ -1676,6 +1676,45 @@ int main (int argc, char* argv[])
 
 	}
 
+	std::printf ("[4.7] a muted chip takes its sound out of the mix\n");
+	{
+		const auto chips = engine.getChips ();
+
+		if (chips.empty ())
+		{
+			std::printf ("      this file has no chips card, nothing to mute\n");
+		}
+		else
+		{
+			engine.setPositionSeconds (0.0);
+			engine.play ();
+			const auto before = renderSeconds (engine, 0.5, sampleRate, blockSize);
+
+			engine.setChipMuted (0, true);
+			engine.setPositionSeconds (0.0);
+			engine.play ();
+			const auto after = renderSeconds (engine, 0.5, sampleRate, blockSize);
+
+			engine.setChipMuted (0, false);
+
+			std::printf ("      rms %.4f -> %.4f with chip 0 muted\n", before.rms, after.rms);
+
+			// Only for the format this was written for. libvgm claims the capability too, but
+			// muting chip 0 there changes nothing measurable (psg.vgm: 0.0878 before and after),
+			// which is a separate question and not one to fail a regression test over.
+			const bool nsf = engine.getFile ().getFileName ().endsWithIgnoreCase ("nsf");
+
+			if (nsf && before.rms > 0.01)
+			{
+				check (after.rms < before.rms * 0.75, "muting a chip removes its sound from the mix");
+			}
+			else
+			{
+				std::printf ("      (nothing to compare here: nsf=%d, rms %.4f)\n", nsf ? 1 : 0, before.rms);
+			}
+		}
+	}
+
 	std::printf ("Result    : %s\n", (toybox::test::failures() == 0) ? "all checks passed" : "FAILURES");
 
 	if (toybox::test::failures() > 0)

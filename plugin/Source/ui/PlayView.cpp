@@ -167,6 +167,16 @@ bool PlayView::handleKey (const juce::KeyPress& key)
 
 void PlayView::rebuildChipButtons (void)
 {
+	// A backend that cannot silence a chip gets no card: the checkboxes would be decorative, and
+	// the player would spend a session wondering why they do nothing.
+	if (! engine.canMuteChips ())
+	{
+		chipPanel.rebuild ({}, [this] (size_t chipIndex, bool shouldBeMuted)
+									{ engine.setChipMuted (chipIndex, shouldBeMuted); });
+		resized ();
+		return;
+	}
+
 	chipPanel.rebuild (engine.getChips(), [this] (size_t chipIndex, bool shouldBeMuted)
 										   {
 											   engine.setChipMuted (chipIndex, shouldBeMuted);

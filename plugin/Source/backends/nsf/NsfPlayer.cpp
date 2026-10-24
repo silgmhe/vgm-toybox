@@ -557,6 +557,19 @@ int NsfPlayer::channelCount (void) const
 	return 5;
 }
 
+void NsfPlayer::setChipAudible (int device, bool audible)
+{
+	const int index = device <= 0 ? 0 : 1;
+
+	if (chipAudible[index] == audible)
+	{
+		return;
+	}
+
+	chipAudible[index] = audible;
+	applyMasks ();
+}
+
 void NsfPlayer::applyMasks (void)
 {
 	// Each chip mutes with a set bit over its own outputs, and the track list is the concatenation
@@ -564,13 +577,13 @@ void NsfPlayer::applyMasks (void)
 	// expansion's. A solo is therefore one bit cleared in exactly one of these masks.
 	const bool all = soloTrack < 0;
 
-	const auto maskFor = [all, this] (int base, int count)
+	const auto maskFor = [all, this] (int base, int count, bool chipMuted)
 	{
 		int mask = 0;
 
 		for (int i = 0; i < count; ++i)
 		{
-			if (silent || (! all && soloTrack != base + i))
+			if (silent || chipMuted || (! all && soloTrack != base + i))
 			{
 				mask |= (1 << i);
 			}
@@ -579,13 +592,13 @@ void NsfPlayer::applyMasks (void)
 		return mask;
 	};
 
-	apu->SetMask (maskFor (0, 2));
-	dmc->SetMask (maskFor (2, 3));
+	apu->SetMask (maskFor (0, 2, ! chipAudible[0]));
+	dmc->SetMask (maskFor (2, 3, ! chipAudible[0]));
 
-	if (vrc6) { vrc6->SetMask (maskFor (5, 3)); }
-	if (n106) { n106->SetMask (maskFor (5, 8)); }
-	if (vrc7) { vrc7->SetMask (maskFor (5, 6)); }
-	if (fme7) { fme7->SetMask (maskFor (5, 5)); }
+	if (vrc6) { vrc6->SetMask (maskFor (5, 3, ! chipAudible[1])); }
+	if (n106) { n106->SetMask (maskFor (5, 8, ! chipAudible[1])); }
+	if (vrc7) { vrc7->SetMask (maskFor (5, 6, ! chipAudible[1])); }
+	if (fme7) { fme7->SetMask (maskFor (5, 5, ! chipAudible[1])); }
 }
 
 int NsfPlayer::renderChannels (float* const* dest, int channelCount, int frames)

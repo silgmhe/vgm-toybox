@@ -85,6 +85,9 @@ public:
 		track is not audible at all. */
 	void setSilent (bool silent);
 
+	/** Silences a whole chip. 0 is the 2A03 (both of its objects), 1 the expansion. */
+	void setChipAudible (int device, bool audible);
+
 	/** Fills what the chips can report: N163 for now, because it is the only chip in this core
 		that exposes per-channel state including the waveform it is reading. */
 	bool captureState (playback::ChipStateSnapshot& snapshot) const;
@@ -111,6 +114,8 @@ public:
 private:
 	void writeSound (std::uint16_t address, std::uint8_t value);
 	void applyMasks (void);
+	bool chipAudible[2] = { true, true };
+
 	int soloTrack = -1;
 	bool silent = false;
 	float outputGain = 2.5119f;			// +8 dB
