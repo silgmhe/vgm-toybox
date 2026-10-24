@@ -3,6 +3,8 @@
 #include "ButtonPaint.h"
 #include "MixerPanel.h"
 #include "KeyboardLayout.h"
+#include "KeyboardRowLayout.h"
+#include "KeyboardRowPaint.h"
 #include "WaveShape.h"
 #include "Theme.h"
 #include "i18n/LanguageManager.h"
@@ -22,22 +24,9 @@ namespace
 	constexpr int kHeader = 44;
 	constexpr int kRefreshHz = 30;
 
-	// The keyboard row: one line per channel, five columns.
-	constexpr int kRowHeight = 48;		// tall enough that the keyboard sits inside the card
-	constexpr int kGroupHeader = 26;
-	constexpr int kGroupGap = 10;
-	constexpr int kRowInsetLeft = 14;
-	constexpr int kRowInsetRight = 14;
-	constexpr int kNameWidth = 72;
-	constexpr int kButtonSize = 28;		// the mixer's button height, so the two views agree
-	constexpr int kButtonGap = 6;
-	constexpr int kNoteWidth = 56;
-	constexpr int kWaveWidth = 88;
-	constexpr int kWaveHeight = 26;
-	constexpr int kKeyHeight = 32;
-	constexpr int kMeterWidth = 96;
-	constexpr int kMeterHeight = 20;
-	constexpr int kMeterGap = 18;
+	// The row's own measurements live in KeyboardRowLayout: thirteen columns that have to fit
+	// a card are arithmetic, and arithmetic belongs where a test can call it.
+	keyboard::RowMetrics metrics;
 
 	/** The shift comes from the setting; the table itself lives in KeyboardLayout so the settings
 		page, the note column and the octave labels all name a note the same way. */
@@ -207,9 +196,10 @@ public:
 						juce::Justification::centredRight, false);
 		}
 
-		rows.clear ();
-		buildRows (rows);
-		contentHeight = rows.empty () ? 0 : rows.back ().area.getBottom () - getLocalBounds ().getY () - kHeader;
+		const auto layout = keyboard::layoutRows (chipNamesFor (snapshot), getWidth (),
+												 scrollOffset, kHeader, metrics);
+		rows = layout.rows;
+		contentHeight = layout.contentHeight;
 
 		if (snapshot.channels.empty ())
 		{
@@ -221,6 +211,8 @@ public:
 		juce::Graphics::ScopedSaveState clip (g);
 		g.reduceClipRegion (getLocalBounds ().withTrimmedTop (kHeader));
 
+		const int octaveShift = octaveShiftForNaming ();
+
 		for (const auto& row : rows)
 		{
 			if (row.area.getBottom () < kHeader || row.area.getY () > getHeight ())
@@ -230,11 +222,23 @@ public:
 
 			if (row.header)
 			{
-				paintGroupHeader (g, row);
+				const int count = (int) std::count_if (snapshot.channels.begin (), snapshot.channels.end (),
+													  [&row] (const auto& channel)
+													  { return juce::String (channel.chipName) == row.title; });
+
+				keyboard::paintGroupHeader (g, row, count);
 			}
 			else
 			{
-				paintChannelRow (g, row);
+				const auto& channel = snapshot.channels[(std::size_t) row.channel];
+				const bool muted = channel.trackIndex >= 0
+								   && engine.isTrackMuted ((std::size_t) channel.trackIndex);
+				const bool soloed = channel.trackIndex >= 0
+									&& engine.isTrackSoloed ((std::size_t) channel.trackIndex);
+
+				keyboard::paintChannelRow (g, row, channel, muted, soloed, octaveShift,
+										   [this] (juce::Graphics& graphics, juce::Rectangle<int> area, int note)
+										   { paintKeyboard (graphics, area, note); });
 			}
 		}
 
@@ -356,7 +360,7 @@ public:
 		// Scrolling by hand rather than through a Viewport: the panel draws only the rows that are
 		// on screen, so it already knows where everything is and a viewport would be a second
 		// authority on the same geometry.
-		scrollOffset -= (int) std::lround (wheel.deltaY * (float) kRowHeight * 3.0f);
+		scrollOffset -= (int) std::lround (wheel.deltaY * (float) metrics.rowHeight * 3.0f);
 		clampScroll ();
 		repaint ();
 	}
@@ -364,93 +368,26 @@ public:
 	std::function<void ()> onExport;
 
 private:
-	struct Row
-	{
-		bool header = false;
-		juce::String title;
-		int channel = -1;
-
-		juce::Rectangle<int> area, name, mute, solo, note, wave, keys, meter;
-	};
+	using Row = keyboard::Row;
 
 	void clampScroll (void)
 	{
-		const int visible = juce::jmax (0, getHeight () - kHeader);
-		scrollOffset = juce::jlimit (0, juce::jmax (0, contentHeight - visible), scrollOffset);
+		scrollOffset = keyboard::clampScroll (scrollOffset, contentHeight,
+											  juce::jmax (0, getHeight () - kHeader));
 	}
 
-	void buildRows (std::vector<Row>& out) const
+	/** The chips in snapshot order - everything layoutRows needs to know about grouping. */
+	static std::vector<std::string> chipNamesFor (const toybox::playback::ChipStateSnapshot& from)
 	{
-		if (snapshot.channels.empty ())
+		std::vector<std::string> names;
+		names.reserve (from.channels.size ());
+
+		for (const auto& channel : from.channels)
 		{
-			return;
+			names.push_back (channel.chipName);
 		}
 
-		const int left = kInset;
-		const int width = juce::jmax (200, getWidth () - 2 * kInset);
-		int y = kHeader - scrollOffset;
-
-		juce::String group;
-
-		for (std::size_t i = 0; i < snapshot.channels.size (); ++i)
-		{
-			const auto& channel = snapshot.channels[i];
-			const auto chip = juce::String (channel.chipName);
-
-			if (chip != group)
-			{
-				group = chip;
-
-				Row header;
-				header.header = true;
-				header.title = chip;
-				header.area = { left, y, width, kGroupHeader };
-				out.push_back (header);
-
-				y += kGroupHeader + 2;
-			}
-
-			Row row;
-			row.channel = (int) i;
-			row.area = { left, y, width, kRowHeight };
-
-			auto inner = row.area.reduced (kRowInsetLeft, 0);
-			inner.removeFromRight (kRowInsetRight);
-
-			row.name = inner.removeFromLeft (kNameWidth);
-
-			inner.removeFromLeft (kButtonGap);
-			row.mute = inner.removeFromLeft (kButtonSize).withSizeKeepingCentre (kButtonSize, kButtonSize);
-			inner.removeFromLeft (kButtonGap);
-			row.solo = inner.removeFromLeft (kButtonSize).withSizeKeepingCentre (kButtonSize, kButtonSize);
-
-			inner.removeFromLeft (10);
-			row.note = inner.removeFromLeft (kNoteWidth);
-			inner.removeFromLeft (8);
-
-			row.wave = inner.removeFromLeft (kWaveWidth).withSizeKeepingCentre (kWaveWidth, kWaveHeight);
-			inner.removeFromLeft (10);
-
-			row.meter = inner.removeFromRight (kMeterWidth).withSizeKeepingCentre (kMeterWidth, kMeterHeight);
-			inner.removeFromRight (kMeterGap);
-
-			// The keyboard is centred in the row rather than filling it: a keyboard that reached
-			// the row's edges stuck out of the card on both sides.
-			row.keys = inner.withSizeKeepingCentre (inner.getWidth (), kKeyHeight);
-
-			out.push_back (row);
-
-			y += kRowHeight + 2;
-
-			// a gap between groups, once the next channel belongs to another chip
-			const bool lastOfGroup = (i + 1 >= snapshot.channels.size ())
-									 || juce::String (snapshot.channels[i + 1].chipName) != chip;
-
-			if (lastOfGroup)
-			{
-				y += kGroupGap;
-			}
-		}
+		return names;
 	}
 
 	void paintEmptyState (juce::Graphics& g)
@@ -479,82 +416,9 @@ private:
 					area.removeFromTop (24), juce::Justification::centredTop, false);
 	}
 
-	void paintGroupHeader (juce::Graphics& g, const Row& row)
-	{
-		const int count = juce::jlimit (0, 32, (int) std::count_if (snapshot.channels.begin (), snapshot.channels.end (),
-																   [&row] (const auto& channel)
-																   { return juce::String (channel.chipName) == row.title; }));
-
-		auto area = row.area;
-		g.setColour (theme::secondaryText ().withAlpha (0.28f));
-		g.fillRoundedRectangle (area.toFloat (), theme::buttonRadius);
-
-		g.setColour (theme::primaryText ());
-		g.setFont (juce::Font (juce::FontOptions (12.0f, juce::Font::bold)));
-		g.drawText (row.title, area.reduced (10, 0), juce::Justification::centredLeft, false);
-
-		g.setColour (theme::secondaryText ());
-		g.setFont (juce::Font (juce::FontOptions (11.0f)));
-		g.drawText (juce::String (count) + " ch", area.reduced (10, 0),
-					juce::Justification::centredRight, false);
-	}
-
-	void paintChannelRow (juce::Graphics& g, const Row& row)
-	{
-		const auto& channel = snapshot.channels[(std::size_t) row.channel];
-		const bool audible = channel.active && channel.volume > 0.001f;
-
-		// A tile per row, the material the mixer strips use, with its shadow drawn through the
-		// same helper the cards use - a real gaussian blur, not a second rectangle pretending to
-		// be one. The shadow stays inside the row's own height, so nothing gets cut off.
-		const auto tile = row.area.reduced (0, 2).toFloat ();
-		drawSoftShadow (g, tile, theme::buttonRadius, theme::cardKeyShadow (), 6, juce::Point<int> (0, 2));
-		g.setColour (theme::track ().withAlpha (0.32f));
-		g.fillRoundedRectangle (tile, theme::buttonRadius);
-		g.setColour (theme::cardBorder ().withAlpha (0.6f));
-		g.drawRoundedRectangle (tile.reduced (0.5f), theme::buttonRadius, 1.0f);
-
-		g.setColour (audible ? theme::primaryText () : theme::secondaryText ());
-		g.setFont (juce::Font (juce::FontOptions (12.0f)));
-		g.drawText (juce::String (channel.name), row.name, juce::Justification::centredLeft, false);
-
-		paintToggle (g, row.mute, "M", channel.trackIndex >= 0
-					 && engine.isTrackMuted ((std::size_t) channel.trackIndex), true);
-		paintToggle (g, row.solo, "S", channel.trackIndex >= 0
-					 && engine.isTrackSoloed ((std::size_t) channel.trackIndex), false);
-
-		// the note, or a dash when the channel has no pitch to speak of
-		g.setColour (channel.note >= 0 ? theme::primaryText () : theme::secondaryText ());
-		g.setFont (juce::Font (juce::FontOptions (12.5f, juce::Font::bold)));
-		g.drawText (noteName (channel.note, octaveShiftForNaming ()), row.note, juce::Justification::centred, false);
-
-		paintWave (g, row.wave, channel);
-		paintKeyboard (g, row.keys, channel.note);
-		paintMeter (g, row.meter, channel);
-	}
-
 	/** Mute and solo, drawn with the mixer's own face and colours: mute fills red, solo amber,
 		and a toggled one carries the matching glow. Anything else here would make the two views
 		look like different applications. */
-	void paintToggle (juce::Graphics& g, juce::Rectangle<int> area, const char* letter, bool on, bool mute)
-	{
-		if (on)
-		{
-			drawButtonGlow (g, area, mute ? theme::muteGlow () : theme::soloGlow (), theme::compactGlowBlur);
-		}
-
-		ButtonFace face;
-		face.level = on ? ButtonLevel::filled : ButtonLevel::material;
-		face.toggled = on;
-		face.fill = mute ? theme::mute () : theme::solo ();
-
-		drawButtonFace (g, area.toFloat (), face);
-
-		g.setColour (on ? (mute ? theme::onAccent () : theme::primaryText ()) : theme::secondaryText ());
-		g.setFont (juce::Font (juce::FontOptions (10.5f, juce::Font::bold)));
-		g.drawText (letter, area, juce::Justification::centred, false);
-	}
-
 	/** The octave shift, and the note the window currently starts at. */
 	void paintShiftControls (juce::Graphics& g, juce::Rectangle<int> area)
 	{
@@ -605,73 +469,6 @@ private:
 		g.drawText (noteName (base, octaveShiftForNaming ()), autoRect, juce::Justification::centred, false);
 	}
 
-
-	void paintWave (juce::Graphics& g, juce::Rectangle<int> area, const toybox::playback::ChannelState& channel)
-	{
-		// A window rather than a bare line: the card's own rounded material, a hairline, and a
-		// shade along the top edge. Enough to read as something seen through glass, and cheap -
-		// no image is blurred, because the surface behind it is a flat colour.
-		const auto window = area.toFloat ();
-
-		g.setColour (theme::card ().darker (0.05f));
-		g.fillRoundedRectangle (window, 4.0f);
-
-		{
-			juce::Graphics::ScopedSaveState clip (g);
-			g.reduceClipRegion (window.toNearestInt ());
-
-			juce::ColourGradient shade (juce::Colours::black.withAlpha (0.12f), window.getX (), window.getY (),
-										juce::Colours::transparentBlack, window.getX (), window.getY () + 7.0f, false);
-			g.setGradientFill (shade);
-			g.fillRoundedRectangle (window, 4.0f);
-		}
-
-		g.setColour (theme::cardBorder ().withAlpha (0.7f));
-		g.drawRoundedRectangle (window.reduced (0.5f), 4.0f, 1.0f);
-
-		area = area.reduced (4, 3);
-
-		std::vector<float> cycle = channel.wave;
-
-		if (cycle.empty ())
-		{
-			cycle = waveform::cycleFor (channel.waveKind, channel.duty);
-		}
-
-		if (cycle.size () < 2)
-		{
-			g.setColour (theme::secondaryText ());
-			g.setFont (juce::Font (juce::FontOptions (10.5f)));
-			g.drawText ("-", area, juce::Justification::centred, false);
-			return;
-		}
-
-		juce::Path path;
-		const auto count = (int) cycle.size ();
-		const float half = (float) area.getHeight () * 0.5f - 2.0f;
-		const float span = (float) area.getWidth () / (float) count;
-
-		for (int i = 0; i < count; ++i)
-		{
-			const float level = juce::jlimit (-1.0f, 1.0f, cycle[(std::size_t) i]);
-			const float y = (float) area.getCentreY () - level * half;
-			const float x0 = (float) area.getX () + span * (float) i;
-
-			if (i == 0)
-			{
-				path.startNewSubPath (x0, y);
-			}
-			else
-			{
-				path.lineTo (x0, y);
-			}
-
-			path.lineTo (x0 + span, y);
-		}
-
-		g.setColour (theme::accent ().withAlpha (channel.active ? 0.9f : 0.35f));
-		g.strokePath (path, juce::PathStrokeType (1.0f));
-	}
 
 
 	/** Keys are a fixed width. A wider window shows more of them rather than bigger ones, which
@@ -1026,24 +823,6 @@ private:
 		Painting it red at the top of the scale made every square-wave song look like it was about
 		to clip.
 	*/
-	void paintMeter (juce::Graphics& g, juce::Rectangle<int> area, const toybox::playback::ChannelState& channel)
-	{
-		// Two pixels, not eight: the meter's rect is twenty tall, and reducing it by eight on each
-		// side left a zero-height strip that drew nothing at all.
-		auto track = area.reduced (0, 2);
-
-		g.setColour (theme::track ());
-		g.fillRoundedRectangle (track.toFloat (), 2.0f);
-
-		const float level = juce::jlimit (0.0f, 1.0f, channel.volume);
-
-		if (level > 0.001f)
-		{
-			g.setColour (theme::accent ().withAlpha (0.9f));
-			g.fillRoundedRectangle (track.toFloat ().withWidth ((float) track.getWidth () * level), 2.0f);
-		}
-	}
-
 	toybox::PlaybackEngine& engine;
 	toybox::playback::ChipStateSnapshot snapshot;
 	std::vector<Row> rows;

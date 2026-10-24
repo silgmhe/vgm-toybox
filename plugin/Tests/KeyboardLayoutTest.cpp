@@ -17,6 +17,7 @@
 #include <cstdio>
 
 #include "ui/KeyboardLayout.h"
+#include "ui/KeyboardRowLayout.h"
 #include "ui/WaveShape.h"
 #include "TestSupport.h"
 
@@ -179,6 +180,100 @@ void testWaveShapes (void)
 	check (cycleFor (99, 0.5f).empty (), "and an unknown kind draws nothing");
 }
 
+void testRowLayout (void)
+{
+	using namespace toybox::ui::keyboard;
+
+	// One chip, three channels: a header and three rows, in that order.
+	{
+		const auto layout = layoutRows ({ "2A03", "2A03", "2A03" }, 900, 0, 44);
+
+		check (layout.rows.size () == 4, "three channels on one chip make four rows");
+		check (layout.rows[0].header, "the first row is the chip's title");
+		check (layout.rows[0].title == "2A03", "and it is named after the chip");
+		check (! layout.rows[1].header, "the rows after it are channels");
+		check (layout.rows[1].channel == 0 && layout.rows[3].channel == 2, "in snapshot order");
+	}
+
+	// Two chips: a second header exactly where the chip changes.
+	{
+		const auto layout = layoutRows ({ "2A03", "2A03", "N163" }, 900, 0, 44);
+
+		check (layout.rows.size () == 5, "two chips make five rows");
+		check (layout.rows[3].header && layout.rows[3].title == "N163",
+			   "the header sits before the first channel of the new chip");
+	}
+
+	// Rows stack downward and never overlap.
+	{
+		const auto layout = layoutRows ({ "2A03", "2A03", "2A03" }, 900, 0, 44);
+
+		bool stacked = true;
+		for (std::size_t i = 1; i < layout.rows.size (); ++i)
+		{
+			stacked = stacked && layout.rows[i].area.getY () >= layout.rows[i - 1].area.getBottom ();
+		}
+
+		check (stacked, "each row starts at or below the end of the one above");
+	}
+
+	// The columns sit inside the card, in order, and do not overlap.
+	{
+		const auto layout = layoutRows ({ "2A03" }, 900, 0, 44);
+		const auto& row = layout.rows[1];
+
+		check (row.name.getX () >= row.area.getX (), "the name starts inside the card");
+		check (row.meter.getRight () <= row.area.getRight (), "and the meter ends inside it");
+		check (row.name.getRight () <= row.mute.getX (), "name then mute");
+		check (row.mute.getRight () <= row.solo.getX (), "mute then solo");
+		check (row.solo.getRight () <= row.note.getX (), "solo then the note column");
+		check (row.note.getRight () <= row.wave.getX (), "the note column then the waveform");
+		check (row.wave.getRight () <= row.keys.getX (), "the waveform then the keyboard");
+		check (row.keys.getRight () <= row.meter.getX (), "and the keyboard before the meter");
+		check (row.mute.getHeight () == 28 && row.mute.getWidth () == 28,
+			   "the mute button is the mixer's size");
+	}
+
+	// The keyboard is centred vertically in its row and does not fill it.
+	{
+		const auto layout = layoutRows ({ "2A03" }, 900, 0, 44);
+		const auto& row = layout.rows[1];
+
+		check (row.keys.getHeight () == 32, "the keyboard is thirty-two tall in a forty-eight row");
+		check (row.keys.getY () > row.area.getY () && row.keys.getBottom () < row.area.getBottom (),
+			   "with room above and below");
+	}
+
+	// Content height is measured without the scroll, so it does not shrink as the view scrolls.
+	{
+		const auto top = layoutRows ({ "2A03", "2A03", "N163" }, 900, 0, 44);
+		const auto scrolled = layoutRows ({ "2A03", "2A03", "N163" }, 900, 120, 44);
+
+		check (top.contentHeight == scrolled.contentHeight,
+			   "scrolling does not change how tall the content is");
+		check (scrolled.rows[1].area.getY () == top.rows[1].area.getY () - 120,
+			   "it only moves the rows up");
+	}
+
+	// Narrow windows keep a usable card width rather than a negative one.
+	{
+		const auto layout = layoutRows ({ "2A03" }, 60, 0, 44);
+		check (layout.rows[1].area.getWidth () >= 200, "a narrow window keeps a minimum card width");
+	}
+}
+
+void testScrollClamping (void)
+{
+	using namespace toybox::ui::keyboard;
+
+	check (clampScroll (0, 100, 400) == 0, "content shorter than the view does not scroll");
+	check (clampScroll (50, 100, 400) == 0, "and an offset inside it is pulled back to zero");
+	check (clampScroll (0, 1000, 400) == 0, "a long list starts at the top");
+	check (clampScroll (600, 1000, 400) == 600, "the last row can be reached");
+	check (clampScroll (9999, 1000, 400) == 600, "and not scrolled past");
+	check (clampScroll (-40, 1000, 400) == 0, "a negative offset is zero");
+}
+
 } // namespace
 
 int main (void)
@@ -190,6 +285,8 @@ int main (void)
 	testSpans ();
 	testShifts ();
 	testWaveShapes ();
+	testRowLayout ();
+	testScrollClamping ();
 
 	std::printf ("%s\n", toybox::test::failures() == 0 ? "all checks passed" : "FAILURES");
 

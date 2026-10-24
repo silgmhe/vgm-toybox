@@ -254,6 +254,8 @@ target_sources(VGMToybox PRIVATE
 	Source/ui/TransportPanel.cpp
 	Source/ui/ContentSlot.cpp
 	Source/ui/KeyboardLayout.cpp
+	Source/ui/KeyboardRowLayout.cpp
+	Source/ui/KeyboardRowPaint.cpp
 	Source/ui/WaveShape.cpp
 )
 
@@ -628,12 +630,13 @@ endif()
 add_executable(vgm_keyboard_test EXCLUDE_FROM_ALL
 	Tests/KeyboardLayoutTest.cpp
 	Source/ui/KeyboardLayout.cpp
+	Source/ui/KeyboardRowLayout.cpp
 	Source/ui/WaveShape.cpp
 )
 target_include_directories(vgm_keyboard_test PRIVATE Source)
 target_compile_definitions(vgm_keyboard_test PRIVATE ${TOYBOX_JUCE_DEFINITIONS})
 target_link_libraries(vgm_keyboard_test PRIVATE
-	juce::juce_core
+	juce::juce_gui_basics
 	juce::juce_recommended_config_flags
 )
 

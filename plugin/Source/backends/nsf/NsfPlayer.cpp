@@ -359,6 +359,54 @@ void NsfPlayer::setTrackAudible (int trackIndex)
 	applyMasks ();
 }
 
+namespace
+{
+	// What the snapshot calls things. The strings appeared twice in the capture (the chip list and
+	// each channel), and a typo in one of them produced a channel that named a chip the snapshot
+	// did not declare - the exact shape the conformance check now rejects.
+	constexpr const char* kChipName2A03 = "2A03";
+	constexpr const char* kChipNameN163 = "N163";
+
+	constexpr int kPulseChannels = 2;
+	constexpr int kDmcChannels = 3;				// triangle, noise and the delta channel
+	constexpr int kN163Channels = 8;
+
+	// The 2A03's five tracks come first in the snapshot's channel order.
+	constexpr int kFirstDmcTrack = kPulseChannels;
+	constexpr int kFirstN163Track = kPulseChannels + kDmcChannels;
+
+	// $4000 and $4004: duty/sweep, then timer low, timer high - four registers apart.
+	constexpr int kPulseRegisterStride = 4;
+	constexpr int kDutyShift = 6;
+	constexpr int kDutyMask = 0x03;
+	constexpr float kDutySettings[] = { 0.125f, 0.25f, 0.5f, 0.75f };
+
+	/** The shapes a channel can have, as playback/ChipState.h numbers them. */
+	enum WaveShape
+	{
+		kShapeStored = 1,		// a real table, read out of the chip
+		kShapePulse = 2,
+		kShapeTriangle = 3,
+		kShapeNoise = 4,
+		kShapeDelta = 5
+	};
+
+	// The 2A03's mixer in this core is four bits wide per output.
+	constexpr int kMixerMaximum = 15;
+	constexpr float kMixerMaximumFloat = 15.0f;
+
+	// The N163's wave RAM holds at most 256 four-bit samples per channel.
+	// A channel with no duty cycle of its own - noise, the delta channel, the triangle - still has
+	// to fill the field, and half is what the panel draws as a centred line.
+	constexpr float kNoDuty = 0.5f;
+
+	// A chip that reports no maximum volume would divide by zero; one is the smallest sensible.
+	constexpr int kLowestMaximumVolume = 1;
+
+	constexpr int kN163MaximumWaveLength = 256;
+	constexpr float kN163SampleMaximum = 15.0f;
+}
+
 bool NsfPlayer::captureState (playback::ChipStateSnapshot& snapshot) const
 {
 	snapshot.chips.clear ();
@@ -367,7 +415,7 @@ bool NsfPlayer::captureState (playback::ChipStateSnapshot& snapshot) const
 	snapshot.valid = false;
 
 	// Always the 2A03; the expansion the header declares on top of it.
-	snapshot.chips.push_back ("2A03");
+	snapshot.chips.push_back (kChipName2A03);
 
 	switch (file.chip ())
 	{
@@ -375,7 +423,7 @@ bool NsfPlayer::captureState (playback::ChipStateSnapshot& snapshot) const
 	case formats::nsf::NsfChip::vrc7: snapshot.chips.push_back ("VRC7"); break;
 	case formats::nsf::NsfChip::fds:  snapshot.chips.push_back ("FDS");  break;
 	case formats::nsf::NsfChip::mmc5: snapshot.chips.push_back ("MMC5"); break;
-	case formats::nsf::NsfChip::n163: snapshot.chips.push_back ("N163"); break;
+	case formats::nsf::NsfChip::n163: snapshot.chips.push_back (kChipNameN163); break;
 	case formats::nsf::NsfChip::fme7: snapshot.chips.push_back ("FME7"); break;
 	case formats::nsf::NsfChip::none: break;
 	}
@@ -400,27 +448,28 @@ bool NsfPlayer::captureState (playback::ChipStateSnapshot& snapshot) const
 			state.note = playback::noteForFrequency (state.frequency);
 			state.active = info->GetKeyStatus ();
 
-			const int maxVolume = (std::max) (1, info->GetMaxVolume ());
+			const int maxVolume = (std::max) (kLowestMaximumVolume, info->GetMaxVolume ());
 			const float fromVolume = (float) (std::clamp) (info->GetVolume (), 0, maxVolume) / (float) maxVolume;
 
 			// The triangle has no volume register - it is either sounding or not - and reports zero
 			// there while still playing. Its output level is the honest number, and the same is
 			// true of the noise and delta channels, so both are taken into account.
-			const float fromOutput = (float) (std::clamp) ((int) info->GetOutput (), 0, 15) / 15.0f;
+			const float fromOutput = (float) (std::clamp) ((int) info->GetOutput (), 0, kMixerMaximum)
+										  / kMixerMaximumFloat;
 
 			state.volume = (std::max) (fromVolume, fromOutput);
 
 			// The triangle and the delta channel have no volume register: they are either sounding
 			// at their fixed level or silent. Their instantaneous output can be zero at the moment
 			// a block ends, which is why those rows showed an empty meter while they were playing.
-			if (waveKind == 3 || waveKind == 5)
+			if (waveKind == kShapeTriangle || waveKind == kShapeDelta)
 			{
 				state.volume = state.active ? 1.0f : 0.0f;
 			}
 
 			// Noise and the delta channel have no pitch: what their track info reports is a rate,
 			// not a note, and drawing it as one would light a key that means nothing.
-			if (waveKind >= 4)
+			if (waveKind >= kShapeNoise)
 			{
 				state.note = -1;
 				state.frequency = 0.0f;
@@ -447,17 +496,19 @@ bool NsfPlayer::captureState (playback::ChipStateSnapshot& snapshot) const
 	static const char* const dmcNames[] = { "Triangle", "Noise", "DMC" };
 
 	// Duty comes from the pulse register's top two bits; the four settings are fixed by hardware.
-	static const float duties[] = { 0.125f, 0.25f, 0.5f, 0.75f };
+	
 
-	for (int i = 0; i < 2; ++i)
+	for (int i = 0; i < kPulseChannels; ++i)
 	{
-		const int setting = (apu->GetReg (i * 4) >> 6) & 0x03;
-		addChannel (pulseNames[i], "2A03", i, 2, duties[setting], apu->GetTrackInfo (i));
+		const int setting = (apu->GetReg (i * kPulseRegisterStride) >> kDutyShift) & kDutyMask;
+		addChannel (pulseNames[i], kChipName2A03, i, kShapePulse, kDutySettings[setting],
+					apu->GetTrackInfo (i));
 	}
 
-	for (int i = 0; i < 3; ++i)
+	for (int i = 0; i < kDmcChannels; ++i)
 	{
-		addChannel (dmcNames[i], "2A03", 2 + i, 3 + i, 0.5f, dmc->GetTrackInfo (i));
+		addChannel (dmcNames[i], kChipName2A03, kFirstDmcTrack + i, kShapeTriangle + i, kNoDuty,
+								dmc->GetTrackInfo (i));
 	}
 
 	if (n106 == nullptr)
@@ -468,7 +519,7 @@ bool NsfPlayer::captureState (playback::ChipStateSnapshot& snapshot) const
 	// Eight channels, in the order GetTrackInfo reports them. The hardware numbers them the other
 	// way round (7 - channel); the display follows the API, and a panel that wants hardware
 	// numbering can reverse it.
-	for (int channel = 0; channel < 8; ++channel)
+	for (int channel = 0; channel < kN163Channels; ++channel)
 	{
 		auto* info = dynamic_cast<xgm::TrackInfoN106*> (n106->GetTrackInfo (channel));
 
@@ -478,19 +529,19 @@ bool NsfPlayer::captureState (playback::ChipStateSnapshot& snapshot) const
 		}
 
 		playback::ChannelState state;
-		state.chipName = "N163";
-		state.trackIndex = 5 + channel;		// the five 2A03 tracks come first
-		state.waveKind = 1;					// a real table, read from the chip
+		state.chipName = kChipNameN163;
+		state.trackIndex = kFirstN163Track + channel;
+		state.waveKind = kShapeStored;
 
 		state.name = "Wave " + std::to_string (channel + 1);
 		state.active = info->GetKeyStatus ();
 		state.frequency = (float) info->GetFreqHz ();
 		state.note = state.active ? playback::noteForFrequency (state.frequency) : -1;
 
-		const int maxVolume = (std::max) (1, info->GetMaxVolume ());
+		const int maxVolume = (std::max) (kLowestMaximumVolume, info->GetMaxVolume ());
 		state.volume = (float) (std::clamp) (info->GetVolume (), 0, maxVolume) / (float) maxVolume;
 
-		const int length = (std::clamp) (info->wavelen, 0, 256);
+		const int length = (std::clamp) (info->wavelen, 0, kN163MaximumWaveLength);
 
 		if (length > 0)
 		{
@@ -499,7 +550,7 @@ bool NsfPlayer::captureState (playback::ChipStateSnapshot& snapshot) const
 			// The chip stores four-bit samples; -1..1 is what every panel wants to draw.
 			for (int i = 0; i < length; ++i)
 			{
-				state.wave.push_back ((float) info->wave[i] / 15.0f * 2.0f - 1.0f);
+				state.wave.push_back ((float) info->wave[i] / kN163SampleMaximum * 2.0f - 1.0f);
 			}
 		}
 
