@@ -629,6 +629,69 @@ void GeneralSettingsPage::lookAndFeelChanged (void)
 //==============================================================================
 // Audio
 
+NesSettingsPage::NesSettingsPage (void)
+{
+	caption.setFont (juce::Font (juce::FontOptions (12.5f)));
+	caption.setJustificationType (juce::Justification::centredLeft);
+	addAndMakeVisible (caption);
+
+	secondsSlider.setComponentID ("settings.nes.duration");
+	secondsSlider.setSliderStyle (juce::Slider::LinearHorizontal);
+	secondsSlider.setTextBoxStyle (juce::Slider::TextBoxRight, false, 68, 22);
+	secondsSlider.setRange (10.0, 600.0, 5.0);
+	secondsSlider.onValueChange = [this]
+	{
+		toybox::settings::SettingsStore::getInstance ()
+			.setNsfDurationSeconds ((int) std::lround (secondsSlider.getValue ()));
+		refresh ();
+	};
+	addAndMakeVisible (secondsSlider);
+
+	hint.setFont (juce::Font (juce::FontOptions (12.5f)));
+	hint.setJustificationType (juce::Justification::topLeft);
+	hint.setMinimumHorizontalScale (0.8f);
+	addAndMakeVisible (hint);
+
+	refreshLanguage ();
+	lookAndFeelChanged ();
+}
+
+void NesSettingsPage::refreshLanguage (void)
+{
+	caption.setText (i18n::tr ("settings.nes.duration"), juce::dontSendNotification);
+	secondsSlider.setTextValueSuffix (" " + i18n::tr ("settings.nes.seconds"));
+	hint.setText (i18n::tr ("settings.nes.durationHint"), juce::dontSendNotification);
+	refresh ();
+	repaint ();
+}
+
+void NesSettingsPage::refresh (void)
+{
+	secondsSlider.setValue ((double) toybox::settings::SettingsStore::getInstance ()
+								.getNsfDurationSeconds (), juce::dontSendNotification);
+}
+
+void NesSettingsPage::paint (juce::Graphics& g)
+{
+	g.fillAll (theme::panel ());
+}
+
+void NesSettingsPage::resized (void)
+{
+	auto area = getLocalBounds ().reduced (24, 20);
+
+	caption.setBounds (area.removeFromTop (20));
+	area.removeFromTop (6);
+	secondsSlider.setBounds (area.removeFromTop (26));
+	area.removeFromTop (10);
+	hint.setBounds (area.removeFromTop (90));
+}
+
+void NesSettingsPage::lookAndFeelChanged (void)
+{
+	repaint ();
+}
+
 AudioSettingsPage::AudioSettingsPage (void)
 {
 	deviceLabel.setComponentID ("settings.audio.device");
@@ -1120,6 +1183,9 @@ SettingsOverlay::SettingsOverlay (void)
 	rootItem->addSubItem (new CategoryItem ("midi", i18n::tr ("settings.midi"), midiPageIndex,
 										   [this] (int page) { pages.setCurrentView (page); }));
 
+	rootItem->addSubItem (new CategoryItem ("nes", i18n::tr ("settings.nes"), nesPageIndex,
+										   [this] (int page) { pages.setCurrentView (page); }));
+
 	// Audio only where there is an audio device to choose between: the standalone application says
 	// so through Source/Standalone/StandaloneHooks.h, and in a plugin the host owns the device. The
 	// row goes in with the page, so the sidebar cannot offer a page that was never created.
@@ -1140,6 +1206,7 @@ SettingsOverlay::SettingsOverlay (void)
 	generalPage = new GeneralSettingsPage();
 	languagePage = new LanguageSettingsPage();
 	midiPage = new MidiSettingsPage();
+	nesPage = new NesSettingsPage();
 	// Forwarded rather than handled here: only the window owns an engine, and reloading a song at
 	// the position it was at is what makes the switch take effect.
 	midiPage->onSampleRootChanged = [this]
@@ -1153,10 +1220,12 @@ SettingsOverlay::SettingsOverlay (void)
 	generalPage->setComponentID ("settings.page.general");
 	languagePage->setComponentID ("settings.page.language");
 	midiPage->setComponentID ("settings.page.midi");
+	nesPage->setComponentID ("settings.page.nes");
 	pages.addView (appearancePage);
 	pages.addView (generalPage);
 	pages.addView (languagePage);
 	pages.addView (midiPage);
+	pages.addView (nesPage);
 
 	if (hasAudio)
 	{
@@ -1167,7 +1236,7 @@ SettingsOverlay::SettingsOverlay (void)
 
 	// The indices the rows carry and the order the stack holds are two lists that have to agree;
 	// a page inserted between two others would otherwise open its neighbour, silently.
-	jassert (pages.getNumViews() == (hasAudio ? audioPageIndex : midiPageIndex) + 1);
+	jassert (pages.getNumViews() == (hasAudio ? audioPageIndex : nesPageIndex) + 1);
 
 	addAndMakeVisible (pages);
 
