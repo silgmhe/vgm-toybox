@@ -941,6 +941,16 @@ private:
 			}
 		};
 
+		// The gap between two white keys, drawn rather than left to the bed showing through: at
+		// twenty pixels wide and one pixel of gap, the bed was too thin to read as a separation,
+		// so the keys ran together into one pale strip.
+		const auto drawKeyGap = [&] (juce::Rectangle<float> key)
+		{
+			g.setColour (theme::track ());
+			g.fillRect (juce::Rectangle<float> (key.getRight (), key.getY () + 1.0f,
+												1.0f, key.getHeight () - 2.0f));
+		};
+
 		// White keys first, then the blacks on top of them.
 		for (int k = 0; k < span.whiteKeys; ++k)
 		{
@@ -957,6 +967,7 @@ private:
 											  (float) area.getY (), whiteWidth - 1.0f,
 											  (float) area.getHeight ());
 			drawKey (keyNote, key, false);
+			drawKeyGap (key);
 		}
 
 		for (int k = 0; k < span.whiteKeys; ++k)

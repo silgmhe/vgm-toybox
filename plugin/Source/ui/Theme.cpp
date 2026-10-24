@@ -41,9 +41,9 @@ static const Palette kLight
 	/* controlGroove     */ juce::Colour (0xff8e8e96),
 	/* groupFrame        */ juce::Colour (0xffc9c9d2),
 	/* tooltipBackground */ juce::Colour (0xf7ffffff),
-	/* keyBed            */ juce::Colour (0xffe2e2e9),
+	/* keyBed            */ juce::Colour (0xffd9d9e2),
 	/* keyWhite          */ juce::Colour (0xffffffff),
-	/* keyBlack          */ juce::Colour (0xff9a9aa4),
+	/* keyBlack          */ juce::Colour (0xff4b4b54),
 	/* edgeFade          */ juce::Colour (0x33000000)
 };
 
@@ -97,9 +97,9 @@ static const Palette kDark
 	/* controlGroove     */ juce::Colour (0xff20242b),
 	/* groupFrame        */ juce::Colour (0xff454b57),
 	/* tooltipBackground */ juce::Colour (0xf72c313a),
-	/* keyBed            */ juce::Colour (0xff1f242c),
+	/* keyBed            */ juce::Colour (0xff1a1f27),
 	/* keyWhite          */ juce::Colour (0xff39404b),
-	/* keyBlack          */ juce::Colour (0xff737b89),
+	/* keyBlack          */ juce::Colour (0xff10141a),
 	/* edgeFade          */ juce::Colour (0x66000000)
 };
 
