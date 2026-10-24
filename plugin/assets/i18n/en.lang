@@ -199,6 +199,9 @@ language: English
 "transport.stopTooltip" = "Stop - return to the playback start marker";
 "transport.volumeTooltip" = "Output volume - the last stage of the engine, after the mixer master";
 
+	"view.mixer" = "Mixer";
+	"view.chipState" = "Chip State";
+	"view.scope" = "Oscilloscope";
 "view.play" = "Play";
 "view.visualiser" = "Visualiser";
 

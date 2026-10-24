@@ -195,6 +195,9 @@ language: 简体中文
 "transport.stopTooltip" = "停止 - 回到播放起点标记";
 "transport.volumeTooltip" = "输出音量 - 引擎的最后一级，位于混音器主输出之后";
 
+	"view.mixer" = "混音器";
+	"view.chipState" = "芯片状态";
+	"view.scope" = "示波器";
 "view.play" = "播放";
 "view.visualiser" = "可视化";
 

@@ -158,6 +158,10 @@ public:
 
 	/** Output gain for the NES, in decibels. The mix table leaves a lot of headroom, so a file
 		played unamplified sits well below a VGM of the same music. Applied to the NES only. */
+	/** Which panel the playback page was showing: 0 mixer, 1 chip state, 2 oscilloscope. */
+	int getContentViewIndex (void) const;
+	void setContentViewIndex (int index);
+
 	int getNsfOutputGainDb (void) const;
 	void setNsfOutputGainDb (int decibels);
 

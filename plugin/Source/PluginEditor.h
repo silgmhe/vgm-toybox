@@ -11,7 +11,6 @@
 #include "ui/SettingsOverlay.h"
 #include "ui/ToyboxLookAndFeel.h"
 #include "ui/ViewStack.h"
-#include "ui/VisualiserView.h"
 
 /**
 	The plugin window: the menu bar, a top row (open button + status line), and then one page.
@@ -114,6 +113,7 @@ private:
 	juce::TextButton openButton { "Open file..." };
 	juce::Label statusLabel;
 	toybox::ui::ViewStack viewStack;	// holds the pages; exactly one of them is visible
+	toybox::ui::PlayView* playView = nullptr;	// the page, so the View menu can ask it what it shows
 	toybox::ui::DropHintOverlay dropHint;
 	toybox::ui::AboutOverlay aboutOverlay;		// in-window, so it can never block the application
 	toybox::ui::SettingsOverlay settingsOverlay;	// the same, for Options > Settings

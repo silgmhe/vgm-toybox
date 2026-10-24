@@ -12,14 +12,24 @@ PlayView::PlayView (toybox::PlaybackEngine& playback, bool syncAvailable)
 	: engine (playback),
 	  songInfoPanel (playback),
 	  transportPanel (playback, syncAvailable),
-	  mixerPanel (playback)
+	  contentSlot (playback)
 {
 	addAndMakeVisible (songInfoPanel);
 	addAndMakeVisible (transportPanel);
 	// hidden until a file with sound chips is loaded (ChipPanel::rebuild sets the visibility)
 	addChildComponent (chipPanel);
-	// hidden while no song with tracks is loaded (MixerPanel::refresh sets the visibility)
-	addChildComponent (mixerPanel);
+	addAndMakeVisible (contentSlot);
+}
+
+void PlayView::setContentView (ContentView view)
+{
+	contentSlot.setView (view);
+	repaint ();
+}
+
+ContentView PlayView::getContentView (void) const
+{
+	return contentSlot.getView ();
 }
 
 void PlayView::paintCardShadows (juce::Graphics& g) const
@@ -35,9 +45,10 @@ void PlayView::paintCardShadows (juce::Graphics& g) const
 	{
 		drawCardShadow (g, chipPanel.getBounds().toFloat());
 	}
-	if (mixerPanel.isVisible() && ! mixerPanel.getBounds().isEmpty())
+
+	if (! contentSlot.getBounds().isEmpty())
 	{
-		drawCardShadow (g, mixerPanel.getBounds().toFloat());
+		drawCardShadow (g, contentSlot.getBounds().toFloat());
 	}
 }
 
@@ -46,22 +57,22 @@ void PlayView::resized (void)
 	auto area = getLocalBounds();
 
 	// transport card (always at the bottom)
-	const int transportHeight = juce::jmin (TransportPanel::preferredHeight, juce::jmax (90, area.getHeight() - 110));
+	const int transportHeight = juce::jmin (TransportPanel::preferredHeight,
+											juce::jmax (90, area.getHeight() - ContentSlot::minHeight - 110));
 	transportPanel.setBounds (area.removeFromBottom (transportHeight));
 	area.removeFromBottom (theme::cardGap);
 
 	// song info card
 	const int infoHeight = juce::jmin (SongInfoPanel::preferredHeight,
-									   juce::jmax (SongInfoPanel::minHeight, area.getHeight() - 80));
+									   juce::jmax (SongInfoPanel::minHeight, area.getHeight() - ContentSlot::minHeight));
 	songInfoPanel.setBounds (area.removeFromTop (infoHeight));
 	area.removeFromTop (theme::cardGap);
 
-	// chip mute card (+ section header) - it takes no space while it is hidden and never eats
-	// into the mixer's minimum height
+	// chip mute card - takes no space while hidden and never eats into the content area's minimum
 	if (chipPanel.hasChips())
 	{
 		const int chipsHeight = juce::jmin (chipPanel.getPreferredHeight (area.getWidth()),
-											juce::jmax (0, area.getHeight() - MixerPanel::minimumHeight));
+											juce::jmax (0, area.getHeight() - ContentSlot::minHeight));
 		if (chipsHeight > 0)
 		{
 			chipPanel.setBounds (area.removeFromTop (chipsHeight));
@@ -77,16 +88,8 @@ void PlayView::resized (void)
 		chipPanel.setBounds ({});
 	}
 
-	// The mixer card owns the whole area between the chips card and the transport card - it
-	// simply follows the window height (its strips scroll inside).
-	if (mixerPanel.isVisible())
-	{
-		mixerPanel.setBounds (area);
-	}
-	else
-	{
-		mixerPanel.setBounds ({});
-	}
+	// The content area owns everything that is left: the mixer, the chip state or the oscilloscope.
+	contentSlot.setBounds (area);
 
 	// The card shadows are painted by paint(), outside the card bounds - a relayout has to clear
 	// the ring around a card that moved, appeared or changed size.
@@ -97,7 +100,7 @@ void PlayView::refresh (void)
 {
 	transportPanel.refresh();
 	songInfoPanel.refresh();
-	mixerPanel.refresh();
+	contentSlot.refresh();
 }
 
 void PlayView::refreshLanguage (void)
@@ -105,14 +108,14 @@ void PlayView::refreshLanguage (void)
 	transportPanel.refreshLanguage();
 	songInfoPanel.refreshLanguage();
 	chipPanel.refreshLanguage();
-	mixerPanel.refreshLanguage();
+	contentSlot.refreshLanguage();
 	repaint();
 }
 
 void PlayView::songChanged (void)
 {
 	rebuildChipButtons();		// relayouts as well: the chips card may appear or change height
-	mixerPanel.refresh();		// the track list belongs to the new song (may show/hide the card)
+	contentSlot.songChanged();	// the track list and the chip snapshot belong to the new song
 	transportPanel.refresh();
 	songInfoPanel.refresh();
 	resized();

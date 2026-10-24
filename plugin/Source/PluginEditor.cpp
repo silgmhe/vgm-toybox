@@ -113,16 +113,30 @@ ToyboxAudioProcessorEditor::ToyboxAudioProcessorEditor (ToyboxAudioProcessor& p)
 	// ui/VisualiserView.h the visualisation one, and everything below the top row belongs to
 	// whichever of them is on screen. The View menu is built from the stack, so a new page shows
 	// up there without a line of menu code.
-	viewStack.addView (new PlayView (engine, processor.wrapperType != juce::AudioProcessor::wrapperType_Standalone));
-	viewStack.addView (new VisualiserView (engine));
+	auto* playPage = new PlayView (engine, processor.wrapperType != juce::AudioProcessor::wrapperType_Standalone);
+	playView = playPage;
+	viewStack.addView (playPage);
+
+	// Whatever the user was looking at last time; the design's default is the mixer.
+	playPage->setContentView ((ContentView) settings::SettingsStore::getInstance ().getContentViewIndex ());
 	addAndMakeVisible (viewStack);
 
-	menu.viewNames = viewStack.getViewNames();
-	menu.viewIds = viewStack.getViewIds();
-	// The menu asks the stack which page is on screen every time it builds the View menu, so the
-	// tick follows any switch - this menu, Ctrl+1..9, or a page changed from code.
-	menu.getCurrentView = [this] { return viewStack.getCurrentViewIndex(); };
-	menu.onSelectView = [this] (int index) { viewStack.setCurrentView (index); };
+	// The View menu lists what the content area can show, not pages of the window: there is one
+	// page, and switching replaces the rectangle above the transport.
+	menu.viewNames = juce::StringArray { i18n::tr ("view.mixer"), i18n::tr ("view.chipState"),
+										 i18n::tr ("view.scope") };
+	menu.viewIds = juce::StringArray { "mixer", "chipState", "scope" };
+	// The tick asks the page what it is showing each time the menu is built, so it follows any
+	// switch - this menu, Ctrl+1..3, or a change made from code.
+	menu.getCurrentView = [this] { return playView != nullptr ? (int) playView->getContentView () : 0; };
+	menu.onSelectView = [this] (int index)
+	{
+		if (playView != nullptr)
+		{
+			playView->setContentView ((ContentView) index);
+			settings::SettingsStore::getInstance ().setContentViewIndex (index);
+		}
+	};
 
 	// The pages are told what the engine holds right now: an editor can be created while a song is
 	// already loaded (a host reopening its window), and the chip card belongs to that song.
