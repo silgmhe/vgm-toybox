@@ -254,6 +254,16 @@ std::uint32_t NsfPlayer::expansionWrites (int index) const
 	return bus->expansionWrites[(std::size_t) index];
 }
 
+std::uint32_t NsfPlayer::expansionSignature (int index) const
+{
+	if (bus == nullptr || index < 0 || index >= 4)
+	{
+		return 0;
+	}
+
+	return bus->expansionSignature[(std::size_t) index];
+}
+
 std::uint64_t NsfPlayer::soundWrites (void) const
 {
 	return bus != nullptr ? bus->soundWriteCount : 0;

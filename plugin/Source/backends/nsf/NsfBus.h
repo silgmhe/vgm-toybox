@@ -41,6 +41,12 @@ public:
 		this is how that is caught before the chip is created. */
 	std::array<std::uint32_t, 4> expansionWrites {};
 
+	/** Writes to the addresses that only a real driver of that chip touches, as opposed to any
+		write that merely falls inside the range. This is what the detection judges by: \
+		\-\ for VRC6 (control and pitch of the first pulse), \/\ for VRC7,
+		\/\ for N163, \/\ for FME7. */
+	std::array<std::uint32_t, 4> expansionSignature {};
+
 	/** Puts the program in place and installs the six-byte entry trampoline at $4100.
 		The order matters: the image is cleared first, the trampoline after. */
 	void load (void);

@@ -86,10 +86,26 @@ bool NsfBus::Write (UINT32 adr, UINT32 val, UINT32 id)
 	// the case worth catching - the driver writing to a chip its header did not mention.
 	bool expansion = true;
 
-	if (adr >= 0x9000 && adr <= 0xB003) { ++expansionWrites[0]; }
-	else if (adr == 0x9010 || adr == 0x9030) { ++expansionWrites[1]; }
-	else if (adr == 0x4800 || adr == 0xF800) { ++expansionWrites[2]; }
-	else if (adr == 0xC000 || adr == 0xE000) { ++expansionWrites[3]; }
+	if (adr >= 0x9000 && adr <= 0xB003)
+	{
+		++expansionWrites[0];
+		if (adr <= 0x9003) { ++expansionSignature[0]; }
+	}
+	else if (adr == 0x9010 || adr == 0x9030)
+	{
+		++expansionWrites[1];
+		++expansionSignature[1];
+	}
+	else if (adr == 0x4800 || adr == 0xF800)
+	{
+		++expansionWrites[2];
+		++expansionSignature[2];
+	}
+	else if (adr == 0xC000 || adr == 0xE000)
+	{
+		++expansionWrites[3];
+		++expansionSignature[3];
+	}
 	else { expansion = false; }
 
 	if (expansion || (adr >= 0x4000 && adr <= 0x4017))

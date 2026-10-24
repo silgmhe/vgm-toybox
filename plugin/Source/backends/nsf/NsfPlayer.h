@@ -67,6 +67,10 @@ public:
 		when no such chip was created - the evidence a file uses one it did not declare. */
 	std::uint32_t expansionWrites (int index) const;
 
+	/** Writes to that chip's own registers rather than to its address range - the evidence a probe
+		should believe, because a driver that merely uses the range as memory writes other addresses. */
+	std::uint32_t expansionSignature (int index) const;
+
 	std::uint64_t soundWrites (void) const;
 	double positionSeconds (void) const;
 
