@@ -655,7 +655,7 @@ NesSettingsPage::NesSettingsPage (void)
 	gainSlider.setComponentID ("settings.nes.outputGain");
 	gainSlider.setSliderStyle (juce::Slider::LinearHorizontal);
 	gainSlider.setTextBoxStyle (juce::Slider::TextBoxRight, false, 68, 22);
-	gainSlider.setRange (0.0, 12.0, 1.0);
+	gainSlider.setRange (0.0, 24.0, 1.0);
 	gainSlider.onValueChange = [this]
 	{
 		toybox::settings::SettingsStore::getInstance ()

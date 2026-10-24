@@ -329,13 +329,13 @@ void SettingsStore::setNsfDurationSeconds (int seconds)
 
 int SettingsStore::getNsfOutputGainDb (void) const
 {
-	return file != nullptr ? juce::jlimit (0, 12, file->getIntValue (kNsfOutputGainKey, kDefaultNsfOutputGainDb))
+	return file != nullptr ? juce::jlimit (0, 24, file->getIntValue (kNsfOutputGainKey, kDefaultNsfOutputGainDb))
 						   : kDefaultNsfOutputGainDb;
 }
 
 void SettingsStore::setNsfOutputGainDb (int decibels)
 {
-	const int clamped = juce::jlimit (0, 12, decibels);
+	const int clamped = juce::jlimit (0, 24, decibels);
 
 	if (file != nullptr && clamped != getNsfOutputGainDb ())
 	{
