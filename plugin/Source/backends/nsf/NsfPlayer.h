@@ -44,6 +44,11 @@ public:
 	/** Renders `frames` stereo frames. Returns how many were written. */
 	int render (float* left, float* right, int frames);
 
+	/** Renders every channel separately for the same block: dest[i] gets channel i's stereo pair.
+		Returns the frames written. Used by renderTracks, and by the check that the sum of the
+		channels is what render() produces. */
+	int renderChannels (float* const* dest, int channelCount, int frames);
+
 	/** Restarts and runs to `seconds`. An NSF cannot be resumed from the middle - the only
 		way to a point is through everything before it. */
 	bool seekTo (double seconds);

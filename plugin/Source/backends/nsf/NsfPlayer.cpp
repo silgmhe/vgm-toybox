@@ -351,4 +351,67 @@ void NsfPlayer::applyMasks (void)
 	if (fme7) { fme7->SetMask (maskFor (5, 5)); }
 }
 
+int NsfPlayer::renderChannels (float* const* dest, int channelCount, int frames)
+{
+	if (frames <= 0 || dest == nullptr)
+	{
+		return 0;
+	}
+
+	const double clocksPerSample = (file.isPal () ? kPalClock : kNtscClock) / rate;
+	const int usable = (std::min) (channelCount, 5);	// the two 2A03 objects, for now
+
+	for (int i = 0; i < frames; ++i)
+	{
+		cpuClockRest += clocksPerSample;
+
+		const auto clocks = (int) cpuClockRest;
+
+		if (clocks > 0)
+		{
+			const int executed = cpu->Exec (clocks);
+			cpuClockRest -= (double) executed;
+
+			const auto tick = (UINT32) (std::max) (0, executed);
+			dmc->TickFrameSequence (tick);
+			apu->Tick (tick);
+			dmc->Tick (tick);
+
+			if (vrc6) { vrc6->Tick (tick); }
+			if (vrc7) { vrc7->Tick (tick); }
+			if (n106) { n106->Tick (tick); }
+			if (fme7) { fme7->Tick (tick); }
+		}
+
+		INT32 squares[4] = { 0, 0, 0, 0 };
+		INT32 tnd[6] = { 0, 0, 0, 0, 0, 0 };
+
+		apu->RenderChannels (squares, 2, 2);
+		dmc->RenderChannels (tnd, 2, 3);
+
+		for (int c = 0; c < 2 && c < usable; ++c)
+		{
+			dest[c][2 * i + 0] = (float) squares[c * 2 + 0] / 32768.0f;
+			dest[c][2 * i + 1] = (float) squares[c * 2 + 1] / 32768.0f;
+		}
+
+		for (int c = 0; c < 3 && 2 + c < usable; ++c)
+		{
+			dest[2 + c][2 * i + 0] = (float) tnd[c * 2 + 0] / 32768.0f;
+			dest[2 + c][2 * i + 1] = (float) tnd[c * 2 + 1] / 32768.0f;
+		}
+
+		// The expansion chip's channels are not filled yet: it has no RenderChannels of its own,
+		// and pretending otherwise would give tracks that are silent for a reason nobody can see.
+		for (int c = 5; c < channelCount; ++c)
+		{
+			dest[c][2 * i + 0] = 0.0f;
+			dest[c][2 * i + 1] = 0.0f;
+		}
+	}
+
+	rendered += (std::uint64_t) frames;
+	return frames;
+}
+
 } // namespace toybox::backends::nsf
