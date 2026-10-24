@@ -244,6 +244,16 @@ int NsfPlayer::render (float* left, float* right, int frames)
 	return frames;
 }
 
+std::uint32_t NsfPlayer::expansionWrites (int index) const
+{
+	if (bus == nullptr || index < 0 || index >= 4)
+	{
+		return 0;
+	}
+
+	return bus->expansionWrites[(std::size_t) index];
+}
+
 std::uint64_t NsfPlayer::soundWrites (void) const
 {
 	return bus != nullptr ? bus->soundWriteCount : 0;

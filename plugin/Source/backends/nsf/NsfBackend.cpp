@@ -65,6 +65,8 @@ public:
 	NsfSongInstance (formats::nsf::NsfFile image, std::vector<char> bytes)
 		: file (std::move (image)), image (std::move (bytes))
 	{
+		detectUndeclaredChip ();
+
 		info_.formatName = "NSF (NSFPlay core)";
 
 		// The header has no length and the driver never ends, so the timeline comes from the
@@ -147,6 +149,45 @@ public:
 	{
 		errorMessage.clear ();
 		return std::make_unique<NsfTrackPlayer> (file, rate, length);
+	}
+
+	/** Runs the driver for a moment and, if it writes to a chip its header never mentioned, turns
+		that chip on. Two of the files this was written for do exactly that: they declare chip_flags
+		0x00 and drive a VRC6 regardless. */
+	void detectUndeclaredChip (void)
+	{
+		if (file.chip () != formats::nsf::NsfChip::none)
+		{
+			return;
+		}
+
+		NsfPlayer probe (file, 44100.0);
+		probe.start ();
+
+		float left [512] = {};
+		float right [512] = {};
+
+		for (int block = 0; block < 44; ++block)   // half a second at 44.1 kHz
+		{
+			probe.render (left, right, 512);
+		}
+
+		struct { int index; std::uint8_t flag; } const candidates[] =
+		{
+			{ 0, 0x01 },	// VRC6
+			{ 2, 0x10 },	// N163
+			{ 3, 0x20 },	// FME7
+			{ 1, 0x02 }		// VRC7
+		};
+
+		for (const auto& candidate : candidates)
+		{
+			if (probe.expansionWrites (candidate.index) > 0)
+			{
+				file.chipFlags |= candidate.flag;
+				return;
+			}
+		}
 	}
 
 private:

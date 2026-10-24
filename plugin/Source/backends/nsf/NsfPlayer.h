@@ -54,6 +54,10 @@ public:
 	/** True when the file declared an expansion chip and one was created. */
 	bool hasExpansion (void) const;
 
+	/** Writes seen in each expansion range (0 VRC6, 1 VRC7, 2 N163, 3 FME7), counted even
+		when no such chip was created - the evidence a file uses one it did not declare. */
+	std::uint32_t expansionWrites (int index) const;
+
 	std::uint64_t soundWrites (void) const;
 	double positionSeconds (void) const;
 

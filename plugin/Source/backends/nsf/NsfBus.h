@@ -35,6 +35,11 @@ public:
 	/** How many sound-register writes have been forwarded - the cheapest proof the driver ran. */
 	std::uint64_t soundWriteCount = 0;
 
+	/** Writes seen in each expansion chip's address range, whether or not that chip exists:
+		index 0 VRC6, 1 VRC7, 2 N163, 3 FME7. A file may use a chip without declaring it, and
+		this is how that is caught before the chip is created. */
+	std::array<std::uint32_t, 4> expansionWrites {};
+
 	/** Puts the program in place and installs the six-byte entry trampoline at $4100.
 		The order matters: the image is cleared first, the trampoline after. */
 	void load (void);
