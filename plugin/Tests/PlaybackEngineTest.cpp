@@ -1676,7 +1676,7 @@ int main (int argc, char* argv[])
 
 	}
 
-	std::printf ("[4.7] a muted chip takes its sound out of the mix\n");
+	std::printf ("[4.7] the chips card silences what it names\n");
 	{
 		const auto chips = engine.getChips ();
 
@@ -1686,31 +1686,55 @@ int main (int argc, char* argv[])
 		}
 		else
 		{
-			engine.setPositionSeconds (0.0);
-			engine.play ();
-			const auto before = renderSeconds (engine, 0.5, sampleRate, blockSize);
-
-			engine.setChipMuted (0, true);
-			engine.setPositionSeconds (0.0);
-			engine.play ();
-			const auto after = renderSeconds (engine, 0.5, sampleRate, blockSize);
-
-			engine.setChipMuted (0, false);
-
-			std::printf ("      rms %.4f -> %.4f with chip 0 muted\n", before.rms, after.rms);
-
-			// Only for the format this was written for. libvgm claims the capability too, but
-			// muting chip 0 there changes nothing measurable (psg.vgm: 0.0878 before and after),
-			// which is a separate question and not one to fail a regression test over.
-			const bool nsf = engine.getFile ().getFileName ().endsWithIgnoreCase ("nsf");
-
-			if (nsf && before.rms > 0.01)
+			auto measure = [&] (void) -> RenderedBuffer
 			{
-				check (after.rms < before.rms * 0.75, "muting a chip removes its sound from the mix");
+				engine.setPositionSeconds (0.0);
+				engine.play ();
+				return renderSeconds (engine, 0.5, sampleRate, blockSize);
+			};
+
+			const auto plain = measure ();
+
+			if (plain.rms <= 0.01)
+			{
+				std::printf ("      (the opening half second is quiet here, nothing to compare)\n");
 			}
 			else
 			{
-				std::printf ("      (nothing to compare here: nsf=%d, rms %.4f)\n", nsf ? 1 : 0, before.rms);
+				// Every chip at once: the mix goes quiet. True wherever the card exists at all,
+				// which is the promise the card makes simply by being drawn.
+				for (size_t c = 0; c < chips.size (); ++c) { engine.setChipMuted (c, true); }
+				const auto allMuted = measure ();
+				for (size_t c = 0; c < chips.size (); ++c) { engine.setChipMuted (c, false); }
+
+				std::printf ("      all muted     rms %.4f -> %.4f\n", plain.rms, allMuted.rms);
+				check (allMuted.rms < plain.rms * 0.1, "muting every chip silences the mix");
+
+				// One chip at a time. A backend that only honoured the all-muted case would pass
+				// the check above and still leave every individual checkbox decorative, and a chip
+				// that happens to be silent in this window is not evidence of anything - so the
+				// requirement is one effective chip, not all of them.
+				int effective = 0;
+
+				for (size_t c = 0; c < chips.size (); ++c)
+				{
+					engine.setChipMuted (c, true);
+					const auto oneMuted = measure ();
+					engine.setChipMuted (c, false);
+
+					const bool changed = oneMuted.rms < plain.rms * 0.75;
+
+					if (changed)
+					{
+						++effective;
+					}
+
+					std::printf ("      %-12s rms %.4f -> %.4f%s\n", chips[c].name.toRawUTF8 (),
+								 plain.rms, oneMuted.rms,
+								 changed ? "" : "   (not sounding in this window)");
+				}
+
+				check (effective > 0, "at least one chip changes the mix when muted");
 			}
 		}
 	}
