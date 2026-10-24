@@ -140,7 +140,13 @@ void MixerPanel::rebuildStrips (void)
 	meterLeft.assign (tracks.size(), 0.0f);
 	meterRight.assign (tracks.size(), 0.0f);
 
-	setVisible (! tracks.empty());
+	// Only ever hides itself. The content slot decides whether the mixer is on screen at all, and
+	// a panel that could show itself would draw over whichever view the user picked - which is
+	// exactly what happened the first time this ran: the chip panel and the mixer were both up.
+	if (tracks.empty ())
+	{
+		setVisible (false);
+	}
 	layoutStrips();
 	repaint();
 }
