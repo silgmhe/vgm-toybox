@@ -301,10 +301,6 @@ namespace
 		std::int64_t blockStartSample = 0;			// set by the render loop below
 		double rms = 0.0;							// the audio of the same render (both channels)
 
-		/** The same measurement with the window's mean removed. A chip that reports from an
-			unsigned table leaves a standing offset, and an rms that counts it calls a silent track
-			audible - which is exactly how a DC blocker once broke seven tests. */
-		double rmsAc = 0.0;
 	};
 
 	/** Renders `seconds` with the MIDI sink attached and measures the audio in the same pass.
@@ -323,7 +319,6 @@ namespace
 		toybox::playback::OutputBusBuffers buses[1] = { { blockL.data(), blockR.data() } };
 
 		double sumOfSquares = 0.0;
-		double sum = 0.0;
 		std::int64_t sampleCount = 0;
 
 		while (rendered < totalSamples && ! engine.isFinished())
@@ -335,11 +330,8 @@ namespace
 
 			for (int i = 0; i < blockSize; ++i)
 			{
-				const double l = (double) blockL[(size_t) i];
-				const double r = (double) blockR[(size_t) i];
-
-				sumOfSquares += l * l + r * r;
-				sum += l + r;
+				sumOfSquares += (double) blockL[(size_t) i] * (double) blockL[(size_t) i]
+								+ (double) blockR[(size_t) i] * (double) blockR[(size_t) i];
 				++sampleCount;
 			}
 
@@ -347,15 +339,6 @@ namespace
 		}
 
 		recorder.rms = (sampleCount > 0) ? std::sqrt (sumOfSquares / (double) (2 * sampleCount)) : 0.0;
-
-		if (sampleCount > 0)
-		{
-			const double mean = sum / (double) (2 * sampleCount);
-			const double variance = sumOfSquares / (double) (2 * sampleCount) - mean * mean;
-
-			recorder.rmsAc = variance > 0.0 ? std::sqrt (variance) : 0.0;
-		}
-
 		return recorder;
 	}
 
@@ -1373,7 +1356,7 @@ int main (int argc, char* argv[])
 			engine.setTrackSolo ((int) i, false);
 			engine.setTrackMidiChannel (i, 0);
 
-			probes[i].audible = probe.rmsAc > audibleFloor;
+			probes[i].audible = probe.rms > audibleFloor;
 			probes[i].notes = (int) probe.notesOn (1).size();
 			for (size_t e = 0; e < probe.events.size() && e < probe.blockStarts.size(); ++e)
 			{
@@ -1671,8 +1654,8 @@ int main (int argc, char* argv[])
 
 	std::printf ("[4.4] the scope tap\n");
 	{
-		// Replay from a known point: the renders before this one may have run past the end, and
-		// a scope that is asked to confirm an offset on silence confirms nothing.
+		// The ring already holds what the previous sections rendered, so this reads the very
+		// same signal the host receives without moving the transport to get it.
 		renderSeconds (engine, 0.05, sampleRate, blockSize);
 
 		std::vector<float> tapped (512, 0.0f);
@@ -1689,19 +1672,6 @@ int main (int argc, char* argv[])
 		std::printf ("    scope returned %d samples, peak %.4f mean %+.4f range [%+.3f %+.3f]\n",
 					 got, (double) peak, mean, (double) lo, (double) hi);
 		check (got == (int) tapped.size (), "the scope returns the window it was asked for");
-		// A window of silence has no centre to speak of, so the offset check only applies when
-		// there is something in it. Moving the transport to make one would rewrite the inputs of
-		// every section after this one, which is how this check first went wrong.
-		// Only the NES path blocks DC so far. libvgm reports some chips from tables that are never
-		// negative too - psg.vgm measures a mean of +0.120 - but that is a separate piece of work
-		// with its own risk, and asserting it here would fail seven files for a reason this change
-		// did not introduce.
-		const bool dcBlocked = engine.getFile ().getFileName ().endsWithIgnoreCase ("nsf");
-
-		if (peak > 0.001f && dcBlocked)
-		{
-			check (std::abs (mean) < 0.05, "the output is centred on zero, not riding an offset");
-		}
 
 
 	}

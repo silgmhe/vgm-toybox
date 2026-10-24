@@ -88,14 +88,7 @@ NsfPlayer::NsfPlayer (const formats::nsf::NsfFile& image, double sampleRate)
 NsfPlayer::~NsfPlayer () = default;
 
 void NsfPlayer::start (void)
-{
-	// A restart must not carry the blocker's last state across: it would push a thump into the
-	// first samples, which is the one thing a seek is expected not to do.
-	dcX1[0] = dcX1[1] = 0.0f;
-	dcY1[0] = dcY1[1] = 0.0f;
-	chDcX1.clear ();
-	chDcY1.clear ();
-	rendered = 0;
+{	rendered = 0;
 	cpuClockRest = 0.0;
 
 	// Order matters, and each step was paid for once already:
@@ -267,22 +260,9 @@ int NsfPlayer::render (float* left, float* right, int frames)
 			out = (std::clamp) ((float) value / 32768.0f * outputGain, -1.0f, 1.0f);
 		};
 
-		// The squares are centred; the TND table is not - every entry in it is zero or positive -
-		// so their sum carries a standing offset. Without this it is multiplied by the output gain
-		// and the waveform sits above the centre line instead of around it.
-		const auto dcBlock = [this] (int side, float input)
-		{
-			const float filtered = input - dcX1[side] + dcPole * dcY1[side];
-			dcX1[side] = input;
-			dcY1[side] = filtered;
-			return filtered;
-		};
-
 		mix (0, left[i]);
 		mix (1, right[i]);
 
-		left[i] = dcBlock (0, left[i]);
-		right[i] = dcBlock (1, right[i]);
 	}
 
 	rendered += (std::uint64_t) frames;
@@ -576,31 +556,6 @@ int NsfPlayer::renderChannels (float* const* dest, int channelCount, int frames)
 
 			dest[c][2 * i + 0] = (float) expansion[index * 2 + 0] / 32768.0f * outputGain;
 			dest[c][2 * i + 1] = (float) expansion[index * 2 + 1] / 32768.0f * outputGain;
-		}
-
-		// The same blocker per channel: a track view that skipped it would show the offset the
-		// mix hides, and the sum of the tracks would no longer be the mix.
-		if ((int) chDcX1.size () < channelCount)
-		{
-			chDcX1.assign ((std::size_t) channelCount, 0.0f);
-			chDcY1.assign ((std::size_t) channelCount, 0.0f);
-		}
-
-		for (int c = 0; c < channelCount && c < (int) chDcX1.size (); ++c)
-		{
-			if (dest[c] == nullptr)
-			{
-				continue;
-			}
-
-			for (int side = 0; side < 2; ++side)
-			{
-				const float input = dest[c][2 * i + side];
-				const float filtered = input - chDcX1[(std::size_t) c] + dcPole * chDcY1[(std::size_t) c];
-				chDcX1[(std::size_t) c] = input;
-				chDcY1[(std::size_t) c] = filtered;
-				dest[c][2 * i + side] = filtered;
-			}
 		}
 	}
 

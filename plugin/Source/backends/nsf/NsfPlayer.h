@@ -113,15 +113,6 @@ private:
 	void applyMasks (void);
 	int soloTrack = -1;
 	bool silent = false;
-
-	// The TND unit (triangle/noise/DPCM) reports from a table that is never negative, so summing
-	// it with the squares leaves a standing offset - which then gets multiplied by the output gain
-	// and pins the waveform above the centre line. One-pole DC blocker per side, as the reference
-	// player's own output stage does.
-	static constexpr float dcPole = 0.995f;
-	float dcX1[2] = { 0.0f, 0.0f };
-	float dcY1[2] = { 0.0f, 0.0f };
-	std::vector<float> chDcX1, chDcY1;	// per channel, per side
 	float outputGain = 2.5119f;			// +8 dB
 
 	const formats::nsf::NsfFile& file;

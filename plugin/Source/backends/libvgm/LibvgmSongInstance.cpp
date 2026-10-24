@@ -113,7 +113,11 @@ namespace
 																   ? playback::MidiCapability::oneShot
 																   : playback::MidiCapability::unavailable);
 		case DEVID_AY8910:
-			return fmChannel (3);
+			// Nothing in this backend decodes the SSG: the chip is emulated, mixed and isolated, but
+			// no register read turns into a note. Claiming melodic made the engine promise MIDI that
+			// never arrived, which a test caught as "audible but silent in MIDI" - the honest answer
+			// is that the capability is not there yet.
+			return playback::MidiCapability::unavailable;
 		case DEVID_SN76496:
 			return (channelIndex >= 0 && channelIndex < 3) ? playback::MidiCapability::melodic
 														   : (channelIndex == 3
