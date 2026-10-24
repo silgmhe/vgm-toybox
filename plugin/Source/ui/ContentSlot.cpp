@@ -428,7 +428,14 @@ void ContentSlot::songChanged (void)
 
 void ContentSlot::paint (juce::Graphics& g)
 {
-	// The card every panel on this page sits in.
+	// The mixer is a CardComponent and paints its own rounded card, border and shadow included.
+	// Drawing one here as well put a card inside a card, which reads as a doubled outline.
+	if (current == ContentView::mixer)
+	{
+		return;
+	}
+
+	// The other two are contents only, so the slot provides the card they sit in.
 	g.setColour (theme::card ());
 	g.fillRoundedRectangle (getLocalBounds ().toFloat (), theme::cardRadius);
 	g.setColour (theme::cardBorder ());
@@ -437,10 +444,11 @@ void ContentSlot::paint (juce::Graphics& g)
 
 void ContentSlot::resized (void)
 {
-	// The panels sit inside the card's rounded corners.
+	// The panels sit inside the card's rounded corners; the mixer brings its own card, so it takes
+	// the whole slot rather than an inset copy of it.
 	const auto inner = getLocalBounds ().reduced (2);
 
-	if (mixer != nullptr) { mixer->setBounds (inner.reduced (2)); }
+	if (mixer != nullptr) { mixer->setBounds (getLocalBounds ()); }
 	if (chipStatePanel != nullptr) { chipStatePanel->setBounds (inner); }
 	if (scopePanel != nullptr) { scopePanel->setBounds (inner); }
 }
