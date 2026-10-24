@@ -54,6 +54,50 @@ namespace
 } // namespace
 
 //==============================================================================
+namespace
+{
+	const std::vector<ContentViewInfo> viewTable
+	{
+		{ ContentView::mixer,			"mixer",		"view.mixer" },
+		{ ContentView::keyboard,		"keyboard",		"view.keyboard" },
+		{ ContentView::oscilloscope,	"oscilloscope",	"view.oscilloscope" }
+	};
+}
+
+namespace toybox::ui
+{
+
+const std::vector<ContentViewInfo>& contentViews (void)
+{
+	return viewTable;
+}
+
+int contentViewCount (void)
+{
+	return (int) viewTable.size ();
+}
+
+ContentView contentViewAt (int index)
+{
+	return viewTable[(size_t) juce::jlimit (0, contentViewCount () - 1, index)].view;
+}
+
+int contentViewIndex (ContentView view)
+{
+	for (size_t i = 0; i < viewTable.size (); ++i)
+	{
+		if (viewTable[i].view == view)
+		{
+			return (int) i;
+		}
+	}
+
+	return 0;
+}
+
+} // namespace toybox::ui
+
+//==============================================================================
 /**
 	The keyboard: one row per channel, grouped by the chip that plays it.
 

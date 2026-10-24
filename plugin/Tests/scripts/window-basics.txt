@@ -38,12 +38,12 @@ assert menu.view.keyboard checked == true
 assert menu.view.mixer    checked == false
 
 press ctrl+3
-assert menu.view.scope    checked == true
+assert menu.view.oscilloscope    checked == true
 assert menu.view.keyboard checked == false
 
 press ctrl+1
 assert menu.view.mixer    checked == true
-assert menu.view.scope    checked == false
+assert menu.view.oscilloscope    checked == false
 
 # The View menu as text - and the regression that started this: the tick follows what is on screen.
 # It used to be checkable only in a screenshot (docs/review, the `99aa57a` bug).

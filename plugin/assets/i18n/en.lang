@@ -201,7 +201,7 @@ language: English
 
 	"view.mixer" = "Mixer";
 	"view.keyboard" = "Keyboard";
-	"view.scope" = "Oscilloscope";
+	"view.oscilloscope" = "Oscilloscope";
 "view.play" = "Play";
 "view.visualiser" = "Visualiser";
 

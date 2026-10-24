@@ -5,6 +5,7 @@
 #include <juce_gui_basics/juce_gui_basics.h>
 
 #include <memory>
+#include <vector>
 
 namespace toybox { class PlaybackEngine; }
 
@@ -20,6 +21,29 @@ enum class ContentView
 	keyboard = 1,
 	oscilloscope = 2
 };
+
+/** One row of the View menu: the view, the id a script invokes, and the label's i18n key.
+
+	The menu, the Ctrl+1..3 accelerators and the stored index all read this table, so adding a
+	view is one line here rather than an entry in four places that have to agree about order.
+*/
+struct ContentViewInfo
+{
+	ContentView view;
+	const char* id;
+	const char* labelKey;
+};
+
+/** The views, in menu order. */
+const std::vector<ContentViewInfo>& contentViews (void);
+
+/** The view at `index`, clamped: a settings file cannot name a view that does not exist. */
+ContentView contentViewAt (int index);
+
+/** Where `view` sits in the menu. */
+int contentViewIndex (ContentView view);
+
+int contentViewCount (void);
 
 /**
 	The swappable part of the playback page.

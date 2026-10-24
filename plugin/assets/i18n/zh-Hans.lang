@@ -197,7 +197,7 @@ language: 简体中文
 
 	"view.mixer" = "混音器";
 	"view.keyboard" = "键盘";
-	"view.scope" = "示波器";
+	"view.oscilloscope" = "示波器";
 "view.play" = "播放";
 "view.visualiser" = "可视化";
 
