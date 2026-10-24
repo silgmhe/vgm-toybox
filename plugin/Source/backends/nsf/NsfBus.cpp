@@ -81,6 +81,11 @@ bool NsfBus::Read (UINT32 adr, UINT32& val, UINT32 id)
 
 bool NsfBus::Write (UINT32 adr, UINT32 val, UINT32 id)
 {
+
+	if (adr >= 0x0200 && adr <= 0x02FF)
+	{
+		++ramWriteCount;
+	}
 	if (banked && adr >= 0x5FF8 && adr <= 0x5FFF)
 	{
 		banks[adr - 0x5FF8] = (std::uint8_t) (val & 0xFF);

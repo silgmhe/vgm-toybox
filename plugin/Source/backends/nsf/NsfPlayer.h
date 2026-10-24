@@ -60,6 +60,9 @@ public:
 	/** Where the 6502 is right now - diagnostics, for files whose driver never writes anything. */
 	int currentPC (void) const;
 
+	/** Writes the driver made into the $0200 page - zero means its RAM decoder never ran. */
+	std::uint64_t ramWrites (void) const;
+
 	/** Solos one channel of that list; -1 leaves them all audible. */
 	void setTrackAudible (int trackIndex);
 

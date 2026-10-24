@@ -357,6 +357,11 @@ void NsfPlayer::setSilent (bool value)
 	applyMasks ();
 }
 
+std::uint64_t NsfPlayer::ramWrites (void) const
+{
+	return bus->ramWriteCount;
+}
+
 int NsfPlayer::currentPC (void) const
 {
 	return (int) cpu->GetPC ();
