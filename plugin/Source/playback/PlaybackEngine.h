@@ -525,6 +525,7 @@ private:
 	playback::ChipStateSnapshot stateSnapshot;
 	std::atomic<bool> stateCaptureWanted { false };
 
+
 	void captureScope (const float* left, int numSamples);	// mixer master (master strip fader)
 
 	// song facts for the lock-free getters - written on the message thread while the lock is

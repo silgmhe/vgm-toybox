@@ -1408,6 +1408,8 @@ void PlaybackEngine::render (const playback::OutputBusBuffers* buses, int numBus
 
 	if (buses != nullptr && busCount > 0)
 	{
+		// Captured after the blocker, so the scope shows what the host receives rather than what
+		// the chips produced before the offset was removed.
 		captureScope (buses[0].left, numSamples);
 	}
 
@@ -1987,6 +1989,7 @@ void PlaybackEngine::publishPositionAndEnd (void)
 		paused = false;
 	}
 }
+
 
 void PlaybackEngine::captureScope (const float* left, int numSamples)
 {
