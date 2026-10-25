@@ -204,8 +204,10 @@ namespace xgm
       8, 9,10,11,12,13,14,15,
     };
 
-    if (linear_counter > 0 && length_counter[0] > 0
-        && (!option[OPT_TRI_MUTE] || tri_freq > 0))
+    const bool sounding = (linear_counter > 0 && length_counter[0] > 0
+        && (!option[OPT_TRI_MUTE] || tri_freq > 0));
+
+    if (sounding)
     {
       counter[0] -= clocks;
       while (counter[0] < 0)
@@ -215,8 +217,10 @@ namespace xgm
       }
     }
 
-    UINT32 ret = tritbl[tphase];
-    return ret;
+    // The phase keeps its position when the channel is silenced - that is what the hardware DAC
+    // does - but its level is not reported: a held level is a DC offset, and every mixer here is
+    // DC coupled, so a triangle that never played measured 0.147 rms on its own track.
+    return sounding ? tritbl[tphase] : 0;
   }
 
   // ノイズチャンネルの計算 戻り値は0-127
@@ -376,8 +380,12 @@ namespace xgm
         }
         else
         {
+            // ref == 0 means all three channels are silent, and tnd_table[1][0][0][0] is the
+            // mixer's resting level, not a signal: copying it into every channel turned silence
+            // into a DC offset that every downstream mixer had to carry (measured 0.147 rms on a
+            // track whose chip never played). Silence is zero.
             for (int i=0; i < 3; ++i)
-                m[i] = voltage;
+                m[i] = 0;
         }
     }
 
