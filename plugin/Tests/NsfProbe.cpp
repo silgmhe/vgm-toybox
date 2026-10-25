@@ -210,9 +210,21 @@ int main (int argc, char** argv)
 
 		for (const auto& channel : snapshot.channels)
 		{
-			std::printf ("  %-8s note=%3d vol=%.3f wave=%d active=%d\n",
+			// The width only means anything for a pulse (waveKind 2): every other shape fills the
+			// field with the value a centred line is drawn at, and printing it would read as a
+			// real duty cycle. This column exists because a pulse drawn at twice its width looked
+			// plausible on screen until the number was written down.
+			const bool isPulse = channel.waveKind == 2;
+			char duty[ 16 ] = "-";
+
+			if (isPulse)
+			{
+				std::snprintf (duty, sizeof (duty), "%.4f", (double) channel.duty);
+			}
+
+			std::printf ("  %-8s note=%3d vol=%.3f wave=%d duty=%-6s active=%d\n",
 						 channel.name.c_str (), channel.note, (double) channel.volume,
-						 (int) channel.wave.size (), channel.active ? 1 : 0);
+						 (int) channel.wave.size (), duty, channel.active ? 1 : 0);
 		}
 
 		return 0;
