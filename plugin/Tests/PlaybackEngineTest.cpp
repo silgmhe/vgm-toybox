@@ -2413,6 +2413,37 @@ int main (int argc, char* argv[])
 		}
 	}
 
+	std::printf ("[8.1] a chip-state snapshot does not outlive the song that produced it\n");
+	{
+		// The failure this guards: switching from an NSF to a format with no chip state left the
+		// keyboard drawing the previous song's rows. captureChipState() answers whether the
+		// snapshot is valid, and it still was - the snapshot itself had never been cleared on the
+		// way out. Unloading is the same transition as switching songs, and needs no second file.
+		engine.setStateCaptureWanted (true);
+		engine.setPositionSeconds (0.0);
+		engine.play ();
+		renderSeconds (engine, 0.3, sampleRate, blockSize);
+
+		toybox::playback::ChipStateSnapshot before;
+		const bool hadState = engine.captureChipState (before);
+
+		engine.setStateCaptureWanted (false);
+		engine.unloadFile ();
+
+		toybox::playback::ChipStateSnapshot after;
+		const bool stillHasState = engine.captureChipState (after);
+
+		if (hadState)
+		{
+			check (! stillHasState && ! after.valid,
+				   "a closed song leaves no chip state behind");
+		}
+		else
+		{
+			std::printf ("      this backend reports no per-channel state, nothing to clear\n");
+		}
+	}
+
 	std::printf ("Result    : %s\n", (toybox::test::failures() == 0) ? "all checks passed" : "FAILURES");
 
 	if (toybox::test::failures() > 0)

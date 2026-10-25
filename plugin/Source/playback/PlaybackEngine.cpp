@@ -1243,6 +1243,16 @@ void PlaybackEngine::resetState (void)
 
 	positionSeconds = 0.0;
 	cachedTimeline = {};
+
+	// A chip-state snapshot belongs to the song that produced it. Left behind, it outlives a
+	// switch to a format with no chip state at all - and the keyboard went on drawing the
+	// previous song's rows, because captureChipState() only ever told the caller whether the
+	// snapshot was valid, and it still was.
+	//
+	// Cleared here rather than on pause or stop on purpose: a paused song is still the song on
+	// screen, and the last waveform is exactly what someone pausing wants to look at.
+	const std::lock_guard<std::mutex> stateGuard (stateMutex);
+	stateSnapshot = playback::ChipStateSnapshot {};
 }
 
 //==============================================================================
