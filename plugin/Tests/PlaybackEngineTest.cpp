@@ -707,6 +707,13 @@ int main (int argc, char* argv[])
 					 ssgTracks, loudestSsg, loudestFm);
 
 		check (ssgTracks == 3, "the YM2608's linked SSG has three tracks of its own");
+
+		// A track whose capability says "unavailable" shows no MIDI mark in the mixer and cannot be
+		// routed, however many notes its decoder produces.
+		const auto ssgCapability = tracks.size() > 13 ? tracks[13].midiCapability
+													  : toybox::playback::MidiCapability::unavailable;
+		check (ssgCapability == toybox::playback::MidiCapability::melodic,
+			   "the SSG tracks are offered as melodic MIDI");
 		check (loudestSsg > 0.01, "the SSG tracks carry the sound the file makes");
 		check (loudestFm < 0.001, "no FM track carries the SSG");
 	}

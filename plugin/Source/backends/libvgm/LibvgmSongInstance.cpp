@@ -69,6 +69,13 @@ namespace
 			// is a pitch register - the same one the reference implementation turns into a note
 			// (`form/KB/OPN/frmYM2610.cs` -> `searchYM2608Adpcm`), so it is melodic without needing
 			// the sample to be measurable.
+			// 13..15 are the linked SSG's three channels: square waves with a tone divider, which the
+			// AY decoder reads - melodic like any other pitched voice.
+			if (channelIndex >= 13 && channelIndex < 16)
+			{
+				return playback::MidiCapability::melodic;
+			}
+
 			return (channelIndex == 12) ? playback::MidiCapability::melodic
 										: (channelIndex < 12 ? playback::MidiCapability::oneShot
 															 : playback::MidiCapability::unavailable);
@@ -77,14 +84,22 @@ namespace
 			{
 				return playback::MidiCapability::melodic;
 			}
-			// the same split as the YM2610: ADPCM-A triggers, ADPCM-B carries a pitch
+			// the same split as the YM2610: ADPCM-A triggers, ADPCM-B carries a pitch, and the SSG
+			// sits at 13..15
+			if (channelIndex >= 13 && channelIndex < 16)
+			{
+				return playback::MidiCapability::melodic;
+			}
+
 			return (channelIndex == 12) ? playback::MidiCapability::melodic
 										: (channelIndex < 12 ? playback::MidiCapability::oneShot
 															 : playback::MidiCapability::unavailable);
 		case DEVID_YM2612:
 			return (channelIndex == 6) ? playback::MidiCapability::oneShot : fmChannel (6);
 		case DEVID_YM2203:
-			return fmChannel (3);
+			// its SSG is numbered 3..5, behind the three FM channels
+			return (channelIndex >= 3 && channelIndex < 6) ? playback::MidiCapability::melodic
+														   : fmChannel (3);
 		case DEVID_YM2151:
 			return fmChannel (8);
 		case DEVID_YMF271:
