@@ -204,6 +204,7 @@ bool NsfFile::parse (const void* data, std::size_t size, NsfFile& out, std::stri
 	file.ntscSpeed = readLE16 (bytes + offsetNtscSpeed);
 	file.palSpeed = readLE16 (bytes + offsetPalSpeed);
 	file.chipFlags = bytes[offsetChipFlags];
+	file.extraChipFlags = bytes[offsetExtraChipFlags];
 
 	for (std::size_t i = 0; i < file.bankSwitch.size(); ++i)
 	{

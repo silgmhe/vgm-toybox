@@ -27,7 +27,8 @@ using toybox::formats::nsf::NsfFile;
 /** Builds an image with the fields this reader is supposed to find. */
 std::vector<std::uint8_t> makeNsf (int version = 1, int songs = 3, int start = 2,
 								   std::uint16_t ntsc = 16666, std::uint8_t chips = 0x01,
-								   std::size_t programBytes = 0x100)
+								   std::size_t programBytes = 0x100,
+								   std::uint8_t extraChips = 0)
 {
 	std::vector<std::uint8_t> image (NsfFile::headerSize + programBytes, 0);
 
@@ -54,6 +55,7 @@ std::vector<std::uint8_t> makeNsf (int version = 1, int songs = 3, int start = 2
 	std::memcpy (image.data() + NsfFile::offsetCopyright, "2026", 4);
 
 	image[NsfFile::offsetChipFlags] = chips;
+	image[NsfFile::offsetExtraChipFlags] = extraChips;
 
 	for (std::size_t i = 0; i < programBytes; ++i)
 	{
@@ -122,6 +124,30 @@ int main (void)
 			   "the chip byte names the expansion");
 		check (! file.isPal(), "an even speed is NTSC");
 		check (file.rom.size() == 0x100, "the program is everything after the header");
+	}
+
+	{
+		// Every VRC6 and VRC7 file in test_file leaves 0x7A at zero and names its chip in 0x7B, the
+		// NSF 2.0 byte. A reader that only looked at 0x7A played them as a bare 2A03 - and the
+		// hand-assembled assets could not catch it, because they write the flag where the format
+		// puts it and those files do not.
+		const auto extended = makeNsf (1, 1, 1, 16666, 0x00, 0x100, 0x02);
+		NsfFile file;
+		std::string error;
+
+		check (NsfFile::parse (extended.data(), extended.size(), file, error),
+			   "an image with the chip in the extended byte parses");
+		check (file.chip() == toybox::formats::nsf::NsfChip::vrc7,
+			   "the extended byte names the expansion when the first one is empty");
+
+		// And 0x7A still wins where both are set: it is where the format puts the flags, and a
+		// reader that preferred the extension byte would be guessing.
+		const auto both = makeNsf (1, 1, 1, 16666, 0x01, 0x100, 0x02);
+		NsfFile second;
+
+		check (NsfFile::parse (both.data(), both.size(), second, error)
+				 && second.chip() == toybox::formats::nsf::NsfChip::vrc6,
+			   "the format byte wins when both are set");
 	}
 
 	{
