@@ -185,31 +185,34 @@ void drawMelodyGlyph (juce::Graphics& g, juce::Rectangle<float> iconArea, juce::
 
 void drawDrumGlyph (juce::Graphics& g, juce::Rectangle<float> iconArea, juce::Colour colour)
 {
-	// A drum, not a stacked pair of the other marks. At the ten pixels a strip badge allows, a
-	// keyboard above a burst turned into two grey smudges; one shape with a clear silhouette reads
-	// at half that size. The head line is what makes it a drum rather than a box.
+	// A snare seen from the side, the way a kit icon draws one: a shallow top head, a body that
+	// starts at the head's centre line so the two read as one shape, and two light strokes for
+	// the hoops. Filled rather than outlined - an outline at ten pixels is a grey ring with
+	// nothing inside it.
 	const float width = iconArea.getWidth ();
 	const float height = iconArea.getHeight ();
-	const float lineWidth = juce::jmax (1.1f, width * 0.10f);
+	const float lineWidth = juce::jmax (1.0f, width * 0.09f);
 
-	const auto shell = juce::Rectangle<float> (iconArea.getX () + width * 0.13f,
-											   iconArea.getY () + height * 0.20f,
-											   width * 0.74f,
-											   height * 0.46f);
+	const float left = iconArea.getX () + width * 0.08f;
+	const float right = iconArea.getRight () - width * 0.08f;
+	const float top = iconArea.getY () + height * 0.18f;
+	const float bottom = iconArea.getY () + height * 0.84f;
+	const float rimHeight = (bottom - top) * 0.30f;
+
+	const auto body = juce::Rectangle<float> (left, top + rimHeight * 0.5f,
+											  right - left, bottom - top - rimHeight * 0.5f);
 
 	g.setColour (colour);
-	g.fillRoundedRectangle (shell, height * 0.14f);
+	g.fillRoundedRectangle (body, juce::jmin (body.getWidth (), body.getHeight ()) * 0.22f);
+
+	// The head: an ellipse sitting on the body's top edge, which is what makes it a drum and not
+	// a box. Its own centre line is the top stroke below.
+	g.fillEllipse (juce::Rectangle<float> (left, top, right - left, rimHeight));
 
 	g.setColour (colour.contrasting (0.55f));
-	g.fillRect (juce::Rectangle<float> (shell.getX () + width * 0.10f, shell.getY () + height * 0.09f,
-										shell.getWidth () - width * 0.20f, lineWidth));
-
-	// Two legs, angled out from under the shell.
-	g.setColour (colour);
-	g.drawLine (shell.getX () + width * 0.16f, shell.getBottom (),
-				iconArea.getX () + width * 0.05f, iconArea.getBottom () - height * 0.04f, lineWidth);
-	g.drawLine (shell.getRight () - width * 0.16f, shell.getBottom (),
-				iconArea.getRight () - width * 0.05f, iconArea.getBottom () - height * 0.04f, lineWidth);
+	g.drawLine (left + lineWidth, top + rimHeight * 0.5f,
+				right - lineWidth, top + rimHeight * 0.5f, lineWidth);
+	g.drawLine (left, top + (bottom - top) * 0.60f, right, top + (bottom - top) * 0.60f, lineWidth);
 }
 
 void drawSampleGlyph (juce::Graphics& g, juce::Rectangle<float> iconArea, juce::Colour colour)

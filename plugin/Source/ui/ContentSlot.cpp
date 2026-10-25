@@ -823,9 +823,9 @@ private:
 					juce::DropShadow (theme::shadowTint ().withAlpha (0.32f), 2, { 0, 1 })
 						.drawForPath (g, discPath);
 
-					// Same disc as the off-keyboard label, and for the same reason: on-accent is
-					// pure black on the dark palette, which reads as a hole rather than a lift.
-					g.setColour (theme::keyBed ());
+					// Same disc as the off-keyboard label, and for the same reason: white on the
+					// light palette, a mid grey on the dark one, never the on-accent black.
+					g.setColour (theme::keyWhite ());
 					g.fillEllipse (disc);
 
 					g.setColour (theme::cardBorder ().withAlpha (0.45f));
@@ -998,10 +998,11 @@ private:
 			// reads as a stray mark rather than as something floating above them.
 			drawSoftShadow (g, disc.expanded (1.0f), 6.0f, theme::accentGlow (), 6, juce::Point<int> (0, 0));
 
-			// The palette's keyboard bed rather than the on-accent colour: on the dark theme that
-			// one is pure black, which reads as a hole punched through the keys. The bed is a step
-			// away from whichever key the disc lands on, in either palette.
-			g.setColour (theme::keyBed ());
+			// White on the light palette, the white key's own colour, and a mid grey on the dark
+			// one. The on-accent colour this replaces is pure black there, which reads as a hole
+			// punched through the keys; a hairline border below keeps the disc's edge where it
+			// lands on a same-coloured key.
+			g.setColour (theme::keyWhite ());
 			g.fillEllipse (disc);
 
 			g.setColour (theme::cardBorder ().withAlpha (0.45f));
