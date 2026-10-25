@@ -2,52 +2,29 @@
 
 #include <array>
 #include <cmath>
-#include <map>
-#include <memory>
-#include <mutex>
 
 namespace toybox::ui
 {
 
 namespace
 {
-	/** The drum badge, 16 x 16, in the same black-ink stroke form as the tray glyphs.
+	/** Appends the lower half of an ellipse, from its left end to its right end.
 
-		Strokes rather than fills on purpose: the badge is drawn in whatever the strip's text
-		colour is, and replacing one ink colour is how a single source serves both palettes. A
-		filled silhouette would need a second colour for the hoops, and that second colour would
-		have to be the card's background - which is not the same in both themes.
-
-		Two curves facing opposite ways is what makes it a cylinder: the ellipse of the head at
-		the top, the same ellipse's lower half at the bottom. The sides are straight because they
-		are straight in the reference.
+		Written as two cubics rather than through Path::addCentredArc because the direction that
+		helper sweeps is easy to get backwards, and a drum whose body curves the wrong way is not
+		a drum. Kappa is the standard circle-to-bezier constant.
 	*/
-	constexpr const char* kDrumSvg = R"svg(<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16"><path d="M2.7 5.4 L2.7 10.2 A5.3 1.7 0 0 0 13.3 10.2 L13.3 5.4" fill="none" stroke="#000" stroke-width="1.45" stroke-linejoin="round" stroke-linecap="round"/><ellipse cx="8" cy="5.4" rx="5.3" ry="1.7" fill="none" stroke="#000" stroke-width="1.45"/><path d="M2.7 9.7 A5.3 1.7 0 0 0 13.3 9.7" fill="none" stroke="#000" stroke-width="1.1"/></svg>)svg";
-
-	/** One parsed drum per ink colour, parsed on first use. Two entries at most - the strip asks
-		for the secondary text colour and the highlight - and the lock is there because the cache
-		is shared by every strip. */
-	const juce::Drawable* drumGlyph (juce::Colour colour)
+	void addLowerHalfEllipse (juce::Path& path, float centreX, float centreY,
+							  float radiusX, float radiusY)
 	{
-		static std::mutex mutex;
-		static std::map<juce::uint32, std::unique_ptr<juce::Drawable>> cache;
+		constexpr float kappa = 0.5523f;
 
-		const std::lock_guard<std::mutex> guard (mutex);
-		auto& entry = cache[colour.getARGB ()];
-
-		if (entry == nullptr)
-		{
-			if (auto xml = juce::XmlDocument::parse (juce::String (kDrumSvg)))
-			{
-				if (auto drawable = juce::Drawable::createFromSVG (*xml))
-				{
-					drawable->replaceColour (juce::Colours::black, colour);
-					entry = std::move (drawable);
-				}
-			}
-		}
-
-		return entry.get ();
+		path.cubicTo (centreX - radiusX, centreY + radiusY * kappa,
+					  centreX - radiusX * kappa, centreY + radiusY,
+					  centreX, centreY + radiusY);
+		path.cubicTo (centreX + radiusX * kappa, centreY + radiusY,
+					  centreX + radiusX, centreY + radiusY * kappa,
+					  centreX + radiusX, centreY);
 	}
 } // namespace
 
@@ -230,17 +207,50 @@ void drawMelodyGlyph (juce::Graphics& g, juce::Rectangle<float> iconArea, juce::
 
 void drawDrumGlyph (juce::Graphics& g, juce::Rectangle<float> iconArea, juce::Colour colour)
 {
-	// A drawn SVG, not a hand-built Path: the tray glyphs are 16 x 16 strokes of black ink that
-	// get recoloured at draw time, and this is the same shape of asset. Line art also survives the
-	// tiny sizes a strip badge allows far better than a filled silhouette does.
-	const auto* glyph = drumGlyph (colour);
+	// The same geometry as the 16 x 16 SVG this was meant to be, built here instead: JUCE's SVG
+	// reader produced nothing for it. Design coordinates are kept so the numbers still match the
+	// artwork, and the whole path is scaled at the end rather than each value.
+	constexpr float kDesign = 16.0f;
+	constexpr float kLeft = 2.7f;
+	constexpr float kRight = 13.3f;
+	constexpr float kHeadY = 5.4f;
+	constexpr float kBodyBottom = 10.2f;
+	constexpr float kRadiusX = 5.3f;
+	constexpr float kRadiusY = 1.7f;
+	constexpr float kHoopY = 9.7f;
 
-	if (glyph == nullptr)
+	const float scale = juce::jmin (iconArea.getWidth (), iconArea.getHeight ()) / kDesign;
+
+	if (scale <= 0.0f)
 	{
 		return;
 	}
 
-	glyph->drawWithin (g, iconArea, juce::RectanglePlacement::centred, 1.0f);
+	juce::Path path;
+
+	// Body: straight sides, ending in the lower half of the same ellipse as the head.
+	path.startNewSubPath (kLeft, kHeadY);
+	path.lineTo (kLeft, kBodyBottom);
+	addLowerHalfEllipse (path, (kLeft + kRight) * 0.5f, kBodyBottom, kRadiusX, kRadiusY);
+	path.lineTo (kRight, kHeadY);
+
+	// Head.
+	path.addEllipse (kLeft, kHeadY - kRadiusY, kRight - kLeft, kRadiusY * 2.0f);
+
+	// Lower hoop, half an ellipse across the body.
+	path.startNewSubPath (kLeft, kHoopY);
+	addLowerHalfEllipse (path, (kLeft + kRight) * 0.5f, kHoopY, kRadiusX, kRadiusY * 0.55f);
+
+	path.applyTransform (juce::AffineTransform::scale (scale)
+							 .translated (iconArea.getCentreX () - kDesign * 0.5f * scale,
+										  iconArea.getCentreY () - kDesign * 0.5f * scale));
+
+	// Strokes, not fills: one ink colour then serves both palettes, and line art holds up at the
+	// ten pixels a strip badge allows where a filled silhouette turns into a blob.
+	g.setColour (colour);
+	g.strokePath (path, juce::PathStrokeType (juce::jmax (1.0f, 1.45f * scale),
+											  juce::PathStrokeType::curved,
+											  juce::PathStrokeType::rounded));
 }
 
 void drawSampleGlyph (juce::Graphics& g, juce::Rectangle<float> iconArea, juce::Colour colour)
