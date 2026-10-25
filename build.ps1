@@ -501,13 +501,11 @@ Invoke-Native 'cmake' @('--build', $buildDir)
 # they are EXCLUDE_FROM_ALL, and a -Test that runs a binary nobody just built is exactly the trap
 # v0.1.0 fell into (docs/memo/2026-10-17-stale-test-binary-and-the-restore-test.md).
 if ($Test) {
-	# Every executable plugin/CMakeLists.txt hands to add_test() belongs here. It is a second list,
-	# and the two that were missing from it - vgm_nsf_test and vgm_keyboard_test - were registered
-	# as tests, never built, and reported by ctest as "Not Run" on a CI machine that builds less
-	# than a developer's tree does.
-	$Target = @($Target + @('vgm_chip_test', 'vgm_opn_test', 'vgm_core_test', 'vgm_ui_test',
-							'vgm_app_test', 'vgm_mixer_test', 'vgm_nsf_test', 'vgm_keyboard_test') |
-		Select-Object -Unique)
+	# One name, not eight. plugin/CMakeLists.txt defines console_tests as every binary it hands to
+	# add_test(); this list used to be written out here, and the two names that were missing from
+	# it - vgm_nsf_test and vgm_keyboard_test - were registered as tests, never built, and reported
+	# by ctest as "Not Run" on a machine that builds less than a developer's tree.
+	$Target = @($Target + @('console_tests') | Select-Object -Unique)
 }
 
 if ($Target.Count -gt 0) {

@@ -88,7 +88,9 @@ jobs:
       run: |
         cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_OSX_ARCHITECTURES="x86_64;arm64"
         cmake --build build --parallel 3
-        cmake --build build --target vgm_core_test vgm_ui_test vgm_app_test --parallel 3
+        # console_tests: every binary plugin/CMakeLists.txt hands to add_test(). Naming three of
+        # them here was the fourth copy of one list.
+        cmake --build build --target console_tests --parallel 3
         ./build/plugin/vgm_core_test
         ./build/plugin/vgm_ui_test
         ./build/plugin/vgm_app_test plugin/Tests/scripts/window-basics.txt

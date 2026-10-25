@@ -25,71 +25,10 @@ defaults:
     shell: bash
 
 jobs:
-  build:
-    strategy:
-      matrix:
-        config:
-          # Release, 64-bit, and MSVC only - every one of those is a decision rather than an
-          # oversight, and the rows that were removed for each are worth knowing about before one
-          # comes back:
-          #   * Debug: a local `build.ps1 -Config Debug` shows the same problems sooner and with a
-          #     debugger attached; jassert fires there, not in a CI log.
-          #   * 32-bit: not a target this project ships for - the plugin, the dist folder and every
-          #     other platform here are 64-bit.
-          #   * MinGW/MSYS2: JUCE supports MSVC (or Clang) on Windows, not MinGW, so such a row could
-          #     only ever build the command-line player - and the two that were here never built
-          #     anything at all, because nothing in this workflow installs or registers the
-          #     `msys2 {0}` shell they name (upstream's copy fails the same way).
-          #
-          # Pinned images, not `-latest`: the label decides what the build machine can target, and
-          # it moves without a commit. The macOS deployment target is stated in CMakeLists.txt so
-          # that a newer image cannot raise the minimum system version of a release quietly.
-          - { os: windows-2022, build_type: Release, extra_settings: '-A x64' }
-          - { os: macos-15, build_type: Release }
-          - { os: ubuntu-24.04, build_type: Release }
-      fail-fast: false
-
-    runs-on: ${{ matrix.config.os }}
-
-    steps:
-    - name: Checkout
-      uses: actions/checkout@v2
-
-    - name: Configure
-      run: |
-        # The dependencies are vendored source in this repository (libs/libvgm, libs/inih,
-        # libs/wingetopt - no submodules to fetch), and zlib is fetched and built by libvgm's own
-        # CMake. This matrix builds the command-line player on every platform the project ships
-        # for; the plugin, its tests and the window scripts have their own job below.
-        CMAKE_OPTS="$CMAKE_OPTS -DTOYBOX_BUILD_PLUGIN=OFF"
-
-        cmake ${{ matrix.config.extra_settings }} \
-          -B ${GITHUB_WORKSPACE}/build \
-          -DCMAKE_INSTALL_PREFIX=${GITHUB_WORKSPACE}/install \
-          -DCMAKE_BUILD_TYPE=${{ matrix.config.build_type }} \
-          ${CMAKE_OPTS}
-
-    - name: Build
-      run: |
-        cmake \
-          --build ${GITHUB_WORKSPACE}/build \
-          --config ${{ matrix.config.build_type }} \
-          --parallel 2
-
-    - name: Install
-      run: |
-        cmake \
-          --install ${GITHUB_WORKSPACE}/build \
-          --config ${{ matrix.config.build_type }}
-
-  # The matrix above builds only the command-line player, which meant the 7k lines that contain the
-  # whole UI were never compiled anywhere but on the machine of whoever was editing them. This job
-  # builds the plugin and its console tests on all three platforms and runs them.
-  #
-  # It is deliberately on every push to master, not only on a tag: the plugin had never been built
-  # on macOS or Linux at all, so a platform that cannot build it has to be found while there is
-  # still time to fix it - a tag is the wrong moment to discover it. The release workflow builds the
-  # same three platforms again from the tagged commit.
+  # One job, because there is one product. A second matrix used to build the command-line player
+  # with -DTOYBOX_BUILD_PLUGIN=OFF on three platforms; the player is gone, so that job would have
+  # configured three trees and built nothing in all of them. What it was for - does the project
+  # build everywhere it ships - is this job, and this one also runs the tests.
   plugin-tests:
     name: Plugin and console tests (${{ matrix.os }})
     strategy:
@@ -158,7 +97,10 @@ jobs:
       run: |
         cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_OSX_ARCHITECTURES="x86_64;arm64"
         cmake --build build --parallel 3
-        cmake --build build --target vgm_chip_test vgm_opn_test vgm_core_test vgm_ui_test vgm_app_test vgm_mixer_test --parallel 3
+        # console_tests is defined in plugin/CMakeLists.txt as every binary it hands to add_test().
+        # Naming them here instead was the third copy of one list, and the two names missing from
+        # all three were never built - ctest reported them as Not Run.
+        cmake --build build --target console_tests --parallel 3
 
     - name: Run the console tests (macOS)
       if: matrix.os == 'macos-15'
@@ -172,7 +114,7 @@ jobs:
       run: |
         cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
         cmake --build build --parallel 3
-        cmake --build build --target vgm_chip_test vgm_opn_test vgm_core_test vgm_ui_test vgm_app_test vgm_mixer_test --parallel 3
+        cmake --build build --target console_tests --parallel 3
 
     - name: Run the console tests (Linux)
       if: startsWith(matrix.os, 'ubuntu')

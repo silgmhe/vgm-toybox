@@ -651,6 +651,16 @@ add_test(NAME opn  COMMAND vgm_opn_test)
 set_tests_properties(core ui keyboard-layout PROPERTIES LABELS "unit" TIMEOUT 120)
 set_tests_properties(opn PROPERTIES LABELS "unit" TIMEOUT 300)
 
+# Every console test binary as one build target, because they are all EXCLUDE_FROM_ALL and each
+# caller used to name them out loud: build.ps1's -Test, the macOS step and the Linux step. Three
+# copies of one list, and the two names missing from all three - vgm_nsf_test and
+# vgm_keyboard_test - were registered as tests, never built, and reported "Not Run" by ctest on a
+# machine that builds less than a developer's tree. A caller now asks for console_tests.
+add_custom_target(console_tests
+	DEPENDS vgm_chip_test vgm_nsf_test vgm_core_test vgm_ui_test vgm_keyboard_test vgm_opn_test
+			vgm_mixer_test
+	COMMENT "Console test binaries")
+
 if(_toybox_test_env)
 	add_test(NAME engine COMMAND vgm_mixer_test "${_toybox_test_song}" 3)
 	set_tests_properties(engine PROPERTIES LABELS "integration" TIMEOUT 300)
