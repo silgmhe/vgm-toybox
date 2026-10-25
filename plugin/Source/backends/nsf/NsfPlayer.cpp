@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <deque>
 #include <mutex>
 #include <string>
 #include <unordered_map>
@@ -43,7 +44,17 @@ struct ScanResult
 
 std::mutex sampleSlotMutex;
 std::unordered_map<std::size_t, ScanResult> sampleSlotCache;
-constexpr std::size_t kSampleSlotCacheLimit = 16;
+
+/** Insertion order, so the oldest entry can go when the cache is full. A deque rather than a
+	list: only the ends are touched, and it keeps the eviction order in one place instead of
+	stamping a counter into every ScanResult. */
+std::deque<std::size_t> sampleSlotOrder;
+
+/** Four, not sixteen. A stream is 0.4 to 2 MB depending on the song, so the old limit was a
+	sixteen-to-thirty-megabyte ceiling; and when it was reached the whole map was cleared, which
+	means listening to one song too many made the one before it scan again from scratch. Four
+	songs is what going back and forth actually looks like. */
+constexpr std::size_t kSampleSlotCacheLimit = 4;
 
 } // namespace
 
@@ -142,7 +153,7 @@ void NsfPlayer::start (void)
 	{
 		// Assume the scan is outstanding until the cache says otherwise: a file opened for the
 		// first time has nothing to adopt, and the DPCM row has to say so from the first frame.
-		analysing = true;
+		analysing.store (true, std::memory_order_relaxed);
 		adoptScan (true);
 	}
 
@@ -173,13 +184,13 @@ bool NsfPlayer::adoptScan (bool waitForLock)
 	{
 		// Nothing to adopt yet. The DPCM row shows "analysing" until this turns false, and every
 		// other row is unaffected: its note comes from a register, not from the scan.
-		analysing = true;
+		analysing.store (true, std::memory_order_relaxed);
 		return false;
 	}
 
 	sampleNotes = found->second.sampleNotes;
 	midiSequence = found->second.midiSequence;
-	analysing = false;
+	analysing.store (false, std::memory_order_relaxed);
 	return true;
 }
 
@@ -254,7 +265,7 @@ void NsfPlayer::scanSampleChannels (double seconds)
 	std::vector<float> left ((std::size_t) block, 0.0f);
 	std::vector<float> right ((std::size_t) block, 0.0f);
 
-	scanning = true;
+	scanning.store (true, std::memory_order_relaxed);
 	sampleDirty = false;		// nothing is a sample until the driver has written $4010 or $4012
 
 	// The note each row was last seen playing, and when that note started. A drum can begin and
@@ -331,7 +342,7 @@ void NsfPlayer::scanSampleChannels (double seconds)
 		}
 	}
 
-	scanning = false;
+	scanning.store (false, std::memory_order_relaxed);
 
 	// The minimum-length rule can push a note-off past events recorded after it, and the engine
 	// walks this list with lower_bound - time order is the one thing it requires.
@@ -358,11 +369,15 @@ void NsfPlayer::scanSampleChannels (double seconds)
 
 	std::lock_guard<std::mutex> guard (sampleSlotMutex);
 
-	if (sampleSlotCache.size () >= kSampleSlotCacheLimit)
+	// Oldest out, one at a time. The map used to be emptied when it filled, so the song the user
+	// had just left was thrown away along with the ones that had gone stale.
+	while (sampleSlotOrder.size () >= kSampleSlotCacheLimit)
 	{
-		sampleSlotCache.clear ();
+		sampleSlotCache.erase (sampleSlotOrder.front ());
+		sampleSlotOrder.pop_front ();
 	}
 
+	sampleSlotOrder.push_back (key);
 	sampleSlotCache[key] = ScanResult { sampleNotes, midiSequence };
 }
 
@@ -512,7 +527,8 @@ int NsfPlayer::render (float* left, float* right, int frames)
 	// song was reopened, because the only other place that checks runs from start().
 	// Not while scanning: that pass is trying to produce the very thing being waited for, and
 	// polling from inside it only takes the cache lock it is about to write.
-	if (analysing && ! scanning && (rendered % 4096u) < (std::uint64_t) frames)
+	if (analysing.load (std::memory_order_relaxed) && ! scanning.load (std::memory_order_relaxed)
+		&& (rendered % 4096u) < (std::uint64_t) frames)
 	{
 		adoptScan (false);
 	}
@@ -834,7 +850,7 @@ bool NsfPlayer::captureState (playback::ChipStateSnapshot& snapshot, bool includ
 				// The slot this sample would be is not known until the walk finishes, so the row
 				// says so rather than showing a note that would change under it. Everything else
 				// about the row - the shape, the level, whether it is sounding - is known now.
-				state.analysing = analysing;
+				state.analysing = analysing.load (std::memory_order_relaxed);
 
 				// The slot's identity, spread so that address and rate each move the drawing -
 				// a sample played at two speeds is two marks, as it is two notes.

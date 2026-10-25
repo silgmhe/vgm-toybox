@@ -507,7 +507,12 @@ private:
 	std::atomic<int> midiResetGeneration { 0 };
 	std::atomic<int> midiPitchBendRange { playback::defaultPitchBendRange };
 	std::atomic<bool> midiPitchBendEnabled { true };
-	const playback::MidiSequence* midiSequence = nullptr;
+
+	/** Atomic because two threads write it: the message thread on load and unload, and the audio
+		thread when a song's stream arrives after it started playing - an NSF is scanned in the
+		background and publishes later. The pointee is kept alive by the backend for as long as the
+		song is open, so a plain pointer is enough once the write itself is atomic. */
+	std::atomic<const playback::MidiSequence*> midiSequence { nullptr };
 	std::size_t midiCursor = 0;
 	int midiSeenGeneration = 0;
 	int midiSeenBendRange = playback::defaultPitchBendRange;	// audio-side copy of the two settings:

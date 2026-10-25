@@ -100,11 +100,6 @@ public:
 	{
 		detectUndeclaredChip ();
 
-		// Started before anything can ask for a note. It runs on a player of its own, so this file
-		// is playable while it works, and it publishes into the shared cache that every track
-		// player reads.
-		scanner = std::thread ([this] { runScan (); });
-
 		info_.formatName = "NSF (NSFPlay core)";
 
 		// The header has no length and the driver never ends, so the timeline comes from the
@@ -231,6 +226,11 @@ public:
 			default:
 				break;
 		}
+		// Started last, not first. A thread launched before the rest of this constructor ran would
+		// outlive a constructor that threw: the destructor does not run for an object that was
+		// never constructed, so nothing would ever set the cancel flag, and the scan would go on
+		// reading members of an object that had already been freed.
+		scanner = std::thread ([this] { runScan (); });
 	}
 
 	~NsfSongInstance () override
@@ -252,16 +252,18 @@ public:
 	const playback::MidiSequence* getMidiSequence (void) const override
 	{
 		// Whatever the scan has produced so far: null until it lands, the real stream afterwards.
-		// The pointer may be replaced under the caller, so the previous stream is kept alive in
-		// retiredStreams rather than freed - the engine holds this raw pointer across blocks.
+		// Published once and never replaced, so the pointer the engine caches stays valid for as
+		// long as this instance does - see runScan().
 		std::lock_guard<std::mutex> guard (streamMutex);
 		return midiSequence.get ();
 	}
 
 	bool isAnalysing (void) const override
 	{
-		std::lock_guard<std::mutex> guard (streamMutex);
-		return midiSequence == nullptr;
+		// Not "no stream yet": a scan can end without one - cancelled, or the song plays nothing
+		// worth numbering - and asking the stream would then say "analysing" for as long as the
+		// file was open. This is the flag the scan sets when it stops, however it stops.
+		return ! scanFinished.load (std::memory_order_acquire);
 	}
 
 	playback::BackendCapabilities getCapabilities (void) const override
@@ -364,33 +366,40 @@ private:
 	mutable std::mutex streamMutex;
 	std::shared_ptr<const playback::MidiSequence> midiSequence;
 
-	/** Every stream this instance has ever handed out. The engine caches the raw pointer and can
-		hold it across blocks, so replacing the shared_ptr must not free what it points at. */
-	std::vector<std::shared_ptr<const playback::MidiSequence>> retiredStreams;
+	/** True once the scan has stopped, however it stopped.
+
+		Kept apart from `midiSequence` because the two answer different questions: a scan that was
+		cancelled, or that found nothing to publish, ends with no stream - and reading "still
+		working" out of "no stream" left the song saying "analysing" forever.
+	*/
+	std::atomic<bool> scanFinished { false };
 
 	void runScan (void)
 	{
-		// A player of its own: scanning resets the CPU and runs it to the end of the song, which
-		// would wreck playback if it shared the emulation the mixer is rendering from.
-		NsfPlayer probe (file, 44100.0);
-		probe.setScanCancelFlag (&cancelScan);
-		probe.scanSong ();
-
-		auto finished = probe.shareMidiSequence ();
-
-		if (finished == nullptr)
+		// One publication, from null to non-null: the engine holds this raw pointer across blocks
+		// and it is never replaced, so there is no retired list to keep.
+		try
 		{
-			return;
+			// A player of its own: scanning resets the CPU and runs it to the end of the song,
+			// which would wreck playback if it shared the emulation the mixer renders from.
+			NsfPlayer probe (file, 44100.0);
+			probe.setScanCancelFlag (&cancelScan);
+			probe.scanSong ();
+
+			if (auto finished = probe.shareMidiSequence (); finished != nullptr)
+			{
+				std::lock_guard<std::mutex> guard (streamMutex);
+				midiSequence = std::move (finished);
+			}
+		}
+		catch (...)
+		{
+			// An exception escaping a thread takes the whole process with it. Nothing here is
+			// expected to throw, but leaving the stream empty and reporting the scan finished is
+			// the one failure this file can survive.
 		}
 
-		std::lock_guard<std::mutex> guard (streamMutex);
-
-		if (midiSequence != nullptr)
-		{
-			retiredStreams.push_back (midiSequence);
-		}
-
-		midiSequence = std::move (finished);
+		scanFinished.store (true, std::memory_order_release);
 	}
 };
 

@@ -237,3 +237,48 @@ if (midiSequence == nullptr && song != nullptr)
 **如果只做四条**：P1-1、P1-3、P1-4、P2-1。前两条是"错了会崩/会永久错"，后两条是并发正确性的底线，合计约 30 行。
 
 **P1-2 和 P2-2** 属于清理与容量，可以合成一个"缓存整理"提交。
+
+---
+
+## 六、评审结论与实施
+
+### 6.1 P1-1 为什么不换成 `juce::ThreadPool`
+
+问得对，但本轮不换，三条理由：
+
+**一、JUCE 没有"统一的线程池"。** `juce::ThreadPool` 每个实例自己管理线程，实例之间不共享。项目里的 `loadPool` 是 `PlaybackEngine` 的成员（一个线程），`NsfSongInstance` 在层次上取不到它——中间隔着 `ISongInstance`。
+
+**二、按实例建池等于没建。** 一首曲子有 8–13 个 player，每个都 `ThreadPool(1)` 就是 13 个线程，和现在的 `std::thread` 没有区别，还多了一层 `ThreadPoolJob` 的生命周期。
+
+**三、真正的收益在别处。** 池能带来的两件事——多文件排队（不在音频线程旁边同时扫三首）、统一取消——需要一个**全局单例池**加上 `SongBackend` 的接口改造。那正是 P2-3（曲子级事实经全局静态变量跨实例传递）要一起动的东西，单独为它开一刀反而不划算。
+
+**本轮的修法**仍是"移到构造末尾 + `try/catch`"：这是修 bug，不是换机制。换机制留给 P2-3 一起做。
+
+### 6.2 实施
+
+| 编号 | 做法 |
+|---|---|
+| P1-1 | `scanner = std::thread (...)` 移到构造函数最后一行，注释写明"构造抛异常时析构不会执行" |
+| P1-2 | 删 `retiredStreams` 与那段永远为假的分支，注释改为"只发布一次，指针终身有效" |
+| P1-3 | 新增 `std::atomic<bool> scanFinished`；`runScan` 无论成功、失败还是被取消都在末尾置位；`isAnalysing()` 改读它 |
+| P1-4 | `analysing` 与 `scanning` 改成 `std::atomic<bool>`，读写用 `memory_order_relaxed`——这里不需要顺序，只需要不撕裂 |
+| P2-1 | `PlaybackEngine::midiSequence` 改成 `std::atomic<const MidiSequence*>`，写入 `release`、读取 `acquire` |
+| P2-2 | 缓存限 4 项，按插入顺序淘汰最旧（`std::deque` 记顺序），不再整体清空 |
+| P2-3 | 不改，记录在案 |
+| P2-4 | `runScan` 全体包 `try/catch (...)`，异常时仍置 `scanFinished` |
+
+### 6.3 改的时候撞到的一件事
+
+`midiSequence` 原子化之后，`renderMidi` 起初写成"先取快照，再拾取新流"：
+
+```cpp
+auto* sequence = midiSequence.load();          // 可能是 null
+if (sequence == nullptr) { ... store (arrived) ... }
+if (sequence == nullptr) return;               // 刚到的流，这一块用不上
+```
+
+后果是序列到达的那个 block 被整个跳过：`RPN 0`（bend range）和第一个音符一起推迟到下一个 block。在 0.05 秒的测试窗口里，那等于全丢。
+
+**四条 NSF 用例同时报 `the bend range is declared as RPN 0 before the first note` 才发现。**改成"先拾取、再读一次"后恢复。
+
+这和第七节 7.3 是同一类错误：**改成原子之后，"读一次就够"这个直觉不再成立**——两次读之间可以发生写入，而这段时间正好是别人交付结果的时刻。

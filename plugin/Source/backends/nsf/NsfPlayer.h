@@ -161,7 +161,7 @@ public:
 	void setScanCancelFlag (const std::atomic<bool>* flag) { scanCancelFlag = flag; }
 
 	/** True while this player is playing a song whose scan has not landed yet. */
-	bool isAnalysing (void) const { return analysing; }
+	bool isAnalysing (void) const { return analysing.load (std::memory_order_relaxed); }
 
 private:
 	/** Picks up a finished scan from the shared cache, or notes that there is not one yet.
@@ -220,14 +220,21 @@ private:
 	std::shared_ptr<const playback::MidiSequence> midiSequence;
 
 	/** Set while the scan for this song has not landed. Cleared by adoptScan() the moment the
-		cache has it, which is what turns the DPCM row's "analysing" label off. */
-	bool analysing = false;
+		cache has it, which is what turns the DPCM row's "analysing" label off.
+
+		Atomic because it is written from start() and read from render(): the same player is driven
+		by the message thread when it is set up and by the audio thread when it plays.
+	*/
+	std::atomic<bool> analysing { false };
 
 	/** Read by the scan loop, written by whoever owns the scanning thread's lifetime. */
 	const std::atomic<bool>* scanCancelFlag = nullptr;
 
 	bool prescanDisabled = false;
-	bool scanning = false;
+
+	/** True while the whole-song pass is running on this player. Atomic for the same reason as
+		`analysing`: the pass runs on the scanning thread and render() tests it on the audio one. */
+	std::atomic<bool> scanning { false };
 	bool sampleDirty = false;			// a whole slot has been written since the last look
 	bool sampleRateWritten = false;
 	bool sampleAddrWritten = false;
