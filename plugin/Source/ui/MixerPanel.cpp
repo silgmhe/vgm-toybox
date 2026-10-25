@@ -62,6 +62,11 @@ MixerPanel::MixerPanel (toybox::PlaybackEngine& engineToUse)
 		engine.setDcBlockEnabled (dcBlockButton.getToggleState ());
 		dcBlockButton.setTooltip (i18n::tr (dcBlockButton.getToggleState ()
 											? "mixer.dcBlockOn" : "mixer.dcBlockOff"));
+
+		// The glow is painted by the card, behind this button and reaching past its bounds.
+		// Repainting only the button left the new glow clipped to the button's own rectangle -
+		// a square halo on two sides, which is what a clipped one looks like.
+		repaint (buttonGlowBounds (dcBlockButton.getBounds ()));
 	};
 
 	masterStrip.setup (i18n::tr ("mixer.master"), true);
@@ -170,6 +175,7 @@ void MixerPanel::refresh (void)
 	if (dcBlockButton.getToggleState () != engine.isDcBlockEnabled ())
 	{
 		dcBlockButton.setToggleState (engine.isDcBlockEnabled (), juce::dontSendNotification);
+		repaint (buttonGlowBounds (dcBlockButton.getBounds ()));
 	}
 
 	// Which strips exist changes only with the song, so that part is a check rather than work: the
