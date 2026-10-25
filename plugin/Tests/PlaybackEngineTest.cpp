@@ -694,13 +694,22 @@ int main (int argc, char* argv[])
 		}
 	}
 
-	// --- [3c] the FDS is a voice the player has to have instantiated ---------------------------
-	if (inputFile.getFileName() == "fds_song.nsf")
+	// --- [3c] an expansion voice reaches its track -------------------------------------------
+	if (inputFile.getFileName() == "fds_song.nsf"
+		|| inputFile.getFileName() == "mmc5_song.nsf"
+		|| inputFile.getFileName() == "fme7_song.nsf")
 	{
-		// The asset's INIT writes the FDS wavetable and one frequency; nothing else sounds. Before
-		// the chip existed in the player, and before the bus forwarded /-, this file
-		// was five silent tracks and a mix that was not quite silent.
-		std::printf ("[3c] the FDS voice reaches its track\\n");
+		// Each asset turns one expansion channel on and leaves the 2A03 silent, so the track that
+		// carries the tone is the one the header's chip name sits on. Before these wires existed
+		// the file was five silent tracks and an expansion chip that was ticked and never fed.
+		const juce::String expansionGroup = inputFile.getFileName() == "fds_song.nsf" ? "FDS"
+										  : inputFile.getFileName() == "mmc5_song.nsf" ? "MMC5"
+																					   : "S5B";
+
+		std::printf ("[3c] the %s voice reaches its track\n", expansionGroup.toRawUTF8 ());
+
+		double loudestExpansion = 0.0;
+		double loudestApu = 0.0;
 
 		for (size_t i = 0; i < tracks.size(); ++i)
 		{
@@ -713,9 +722,13 @@ int main (int argc, char* argv[])
 			engine.play ();
 			const auto solo = renderSeconds (engine, 0.25, sampleRate, blockSize);
 
-			if (tracks[i].name == "FDS")
+			if (tracks[i].groupName == expansionGroup)
 			{
-				check (solo.rms > 0.01, "the FDS track carries the tone the file writes");
+				loudestExpansion = juce::jmax (loudestExpansion, solo.rms);
+			}
+			else if (tracks[i].groupName == "2A03")
+			{
+				loudestApu = juce::jmax (loudestApu, tracks[i].name == "Triangle" ? 0.0 : solo.rms);
 			}
 		}
 
@@ -723,6 +736,12 @@ int main (int argc, char* argv[])
 		{
 			engine.setTrackMute (j, false);
 		}
+
+		std::printf ("    %s %.5f vs the loudest 2A03 %.5f\n",
+					 expansionGroup.toRawUTF8 (), loudestExpansion, loudestApu);
+
+		check (loudestExpansion > 0.01, "the expansion's own track carries the tone");
+		check (loudestApu < 0.001, "the 2A03 tracks stay silent, so the tone is the expansion's");
 	}
 
 	// --- [3b] a linked voice set does not leak into the parent's tracks -----------------------

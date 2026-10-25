@@ -122,8 +122,6 @@ public:
 			case formats::nsf::NsfChip::vrc6: info_.chips.push_back ({ "VRC6", "NSFPlay", 1 }); break;
 			case formats::nsf::NsfChip::vrc7: info_.chips.push_back ({ "VRC7", "NSFPlay", 1 }); break;
 			case formats::nsf::NsfChip::fds:  info_.chips.push_back ({ "FDS",  "NSFPlay", 1 }); break;
-			case formats::nsf::NsfChip::mmc5: info_.chips.push_back ({ "MMC5", "NSFPlay", 1 }); break;
-			case formats::nsf::NsfChip::n163: info_.chips.push_back ({ "N163", "NSFPlay", 1 }); break;
 			case formats::nsf::NsfChip::fme7: info_.chips.push_back ({ "S5B",  "NSFPlay", 1 }); break;
 			default: break;
 		}
@@ -181,6 +179,14 @@ public:
 
 			case formats::nsf::NsfChip::fds:
 				addTrack ("FDS", "FDS", true, 1);
+				break;
+
+			case formats::nsf::NsfChip::mmc5:
+				// two pulse channels and the PCM voice; the nonlinear mixer in the chip is where
+				// the three outputs come from
+				addTrack ("Square 1", "MMC5", true, 1);
+				addTrack ("Square 2", "MMC5", true, 1);
+				addTrack ("PCM", "MMC5", false, 1);
 				break;
 
 			case formats::nsf::NsfChip::fme7:
