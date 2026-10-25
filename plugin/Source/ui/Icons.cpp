@@ -2,9 +2,54 @@
 
 #include <array>
 #include <cmath>
+#include <map>
+#include <memory>
+#include <mutex>
 
 namespace toybox::ui
 {
+
+namespace
+{
+	/** The drum badge, 16 x 16, in the same black-ink stroke form as the tray glyphs.
+
+		Strokes rather than fills on purpose: the badge is drawn in whatever the strip's text
+		colour is, and replacing one ink colour is how a single source serves both palettes. A
+		filled silhouette would need a second colour for the hoops, and that second colour would
+		have to be the card's background - which is not the same in both themes.
+
+		Two curves facing opposite ways is what makes it a cylinder: the ellipse of the head at
+		the top, the same ellipse's lower half at the bottom. The sides are straight because they
+		are straight in the reference.
+	*/
+	constexpr const char* kDrumSvg = R"svg(<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16"><path d="M2.7 5.4 L2.7 10.2 A5.3 1.7 0 0 0 13.3 10.2 L13.3 5.4" fill="none" stroke="#000" stroke-width="1.45" stroke-linejoin="round" stroke-linecap="round"/><ellipse cx="8" cy="5.4" rx="5.3" ry="1.7" fill="none" stroke="#000" stroke-width="1.45"/><path d="M2.7 9.7 A5.3 1.7 0 0 0 13.3 9.7" fill="none" stroke="#000" stroke-width="1.1"/></svg>)svg";
+
+	/** One parsed drum per ink colour, parsed on first use. Two entries at most - the strip asks
+		for the secondary text colour and the highlight - and the lock is there because the cache
+		is shared by every strip. */
+	const juce::Drawable* drumGlyph (juce::Colour colour)
+	{
+		static std::mutex mutex;
+		static std::map<juce::uint32, std::unique_ptr<juce::Drawable>> cache;
+
+		const std::lock_guard<std::mutex> guard (mutex);
+		auto& entry = cache[colour.getARGB ()];
+
+		if (entry == nullptr)
+		{
+			if (auto xml = juce::XmlDocument::parse (juce::String (kDrumSvg)))
+			{
+				if (auto drawable = juce::Drawable::createFromSVG (*xml))
+				{
+					drawable->replaceColour (juce::Colours::black, colour);
+					entry = std::move (drawable);
+				}
+			}
+		}
+
+		return entry.get ();
+	}
+} // namespace
 
 void drawRepeatGlyph (juce::Graphics& g, juce::Rectangle<float> iconArea, juce::Colour colour)
 {
@@ -185,43 +230,17 @@ void drawMelodyGlyph (juce::Graphics& g, juce::Rectangle<float> iconArea, juce::
 
 void drawDrumGlyph (juce::Graphics& g, juce::Rectangle<float> iconArea, juce::Colour colour)
 {
-	// A snare from the side. What makes it a cylinder rather than a box is that the body's bottom
-	// is the lower half of an ellipse, not a corner: the top head curves away and the bottom
-	// curves back, and the two curves are what the eye reads as round.
-	const float width = iconArea.getWidth ();
-	const float height = iconArea.getHeight ();
-	const float lineWidth = juce::jmax (1.0f, width * 0.09f);
+	// A drawn SVG, not a hand-built Path: the tray glyphs are 16 x 16 strokes of black ink that
+	// get recoloured at draw time, and this is the same shape of asset. Line art also survives the
+	// tiny sizes a strip badge allows far better than a filled silhouette does.
+	const auto* glyph = drumGlyph (colour);
 
-	const float inset = width * 0.08f;
-	const float left = iconArea.getX () + inset;
-	const float right = iconArea.getRight () - inset;
-	const float topEdge = iconArea.getY () + height * 0.16f;
-	const float bottomEdge = iconArea.getY () + height * 0.86f;
+	if (glyph == nullptr)
+	{
+		return;
+	}
 
-	const float ellipseHeight = (bottomEdge - topEdge) * 0.30f;
-	const float topCentre = topEdge + ellipseHeight * 0.5f;
-	const float bottomCentre = bottomEdge - ellipseHeight * 0.5f;
-
-	juce::Path body;
-	body.startNewSubPath (left, topCentre);
-	body.lineTo (left, bottomCentre);
-	body.addCentredArc ((left + right) * 0.5f, bottomCentre,
-						(right - left) * 0.5f, ellipseHeight * 0.5f,
-						0.0f, juce::MathConstants<float>::pi, juce::MathConstants<float>::twoPi,
-						true);
-	body.lineTo (right, topCentre);
-	body.closeSubPath ();
-
-	g.setColour (colour);
-	g.fillPath (body);
-	g.fillEllipse (juce::Rectangle<float> (left, topEdge, right - left, ellipseHeight));
-
-	// Two light strokes: the head's own edge, and the lower hoop. Without them a filled cylinder
-	// at ten pixels is a grey lozenge.
-	g.setColour (colour.contrasting (0.55f));
-	g.drawLine (left + lineWidth, topCentre, right - lineWidth, topCentre, lineWidth);
-	g.drawLine (left, topCentre + (bottomCentre - topCentre) * 0.58f,
-				right, topCentre + (bottomCentre - topCentre) * 0.58f, lineWidth);
+	glyph->drawWithin (g, iconArea, juce::RectanglePlacement::centred, 1.0f);
 }
 
 void drawSampleGlyph (juce::Graphics& g, juce::Rectangle<float> iconArea, juce::Colour colour)
