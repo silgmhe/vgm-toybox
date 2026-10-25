@@ -90,6 +90,10 @@ void IconButton::paintButton (juce::Graphics& g, bool isMouseOverButton, bool is
 	{
 		drawCueGlyph (g, glyphArea, iconColour);
 	}
+	else if (icon == Icon::dcBlock)
+	{
+		drawDcBlockGlyph (g, glyphArea, iconColour);
+	}
 	else
 	{
 		drawRepeatGlyph (g, glyphArea, iconColour);

@@ -1810,6 +1810,51 @@ int main (int argc, char* argv[])
 		}
 	}
 
+	std::printf ("[4.9] the DC switch takes the offset out of the signal\n");
+	{
+		// Some chips leave their output above zero when they are idle; a Sega PSG VGM renders with
+		// a mean around 0.12. The switch is off by default - it changes what the file sounds like,
+		// and every other test here measures the chip's own output - so this test turns it on and
+		// checks that the offset actually goes.
+		const auto meanOf = [] (const std::vector<float>& samples)
+		{
+			double sum = 0.0;
+
+			for (float value : samples)
+			{
+				sum += (double) value;
+			}
+
+			return samples.empty () ? 0.0 : sum / (double) samples.size ();
+		};
+
+		engine.setDcBlockEnabled (false);
+		engine.setPositionSeconds (0.0);
+		engine.play ();
+		const auto plain = renderSeconds (engine, 0.5, sampleRate, blockSize);
+		const double before = meanOf (plain.left);
+
+		engine.setDcBlockEnabled (true);
+		engine.setPositionSeconds (0.0);
+		engine.play ();
+		const auto blocked = renderSeconds (engine, 0.5, sampleRate, blockSize);
+		const double after = meanOf (blocked.left);
+
+		engine.setDcBlockEnabled (false);
+
+		std::printf ("      mean %.4f -> %.4f with the blocker on\n", before, after);
+
+		if (std::abs (before) > 0.01)
+		{
+			check (std::abs (after) < std::abs (before) * 0.5,
+				   "the DC switch removes most of the offset");
+		}
+		else
+		{
+			std::printf ("      (this file has no offset to remove)\n");
+		}
+	}
+
 	std::printf ("Result    : %s\n", (toybox::test::failures() == 0) ? "all checks passed" : "FAILURES");
 
 	if (toybox::test::failures() > 0)

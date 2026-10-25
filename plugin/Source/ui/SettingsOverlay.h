@@ -313,6 +313,7 @@ private:
 
 	juce::Label deviceLabel;	// one line: the device, its rate, buffer and output count
 	juce::TextButton settingsButton;
+	juce::ToggleButton dcBlock;
 	juce::Label hintLabel;
 
 	juce::String shownLine;		// what deviceLabel already says, so most ticks do nothing

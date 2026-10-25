@@ -1,5 +1,6 @@
 #pragma once
 
+#include <array>
 #include <atomic>
 #include <functional>
 #include <map>
@@ -112,6 +113,16 @@ public:
 		before the per-track faders, so the meters show what is actually heard. */
 	void setSourceGain (float linear);
 	void setChipMuted (size_t chipIndex, bool shouldBeMuted);
+
+	/** Removes the DC offset the chips' DACs leave in the signal.
+
+		Several of the old sound chips have an output that sits above zero when they are silent -
+		a VGM of the Sega PSG renders with a mean around 0.12 - which eats headroom and can click
+		when a song starts. Off by default: it changes what the file sounds like, and the tests
+		measure the signal as the chip produced it.
+	*/
+	void setDcBlockEnabled (bool shouldBeEnabled);
+	bool isDcBlockEnabled (void) const { return dcBlockEnabled.load(); }
 
 	/** Whether this backend can silence a chip on its own - the chips card is only shown when it
 		can, because a checkbox that changes nothing is worse than no checkbox. */
@@ -440,6 +451,9 @@ private:
 	void reportSilenceWhenIdle (void);					// audio thread, lock-free
 	void mixTracks (const playback::OutputBusBuffers* buses, int busCount, int usable);
 	void renderPlainPlayer (int usable);
+	/** The one-pole high pass behind the DC switch; see its definition for the arithmetic. */
+	void applyDcBlock (const playback::OutputBusBuffers* buses, int busCount, int numSamples);
+
 	void finaliseMasterBus (const playback::OutputBusBuffers* buses, int busCount, int usable);
 	void applyOutputVolume (const playback::OutputBusBuffers* buses, int busCount, int numSamples);
 	void publishPositionAndEnd (void);
@@ -564,6 +578,18 @@ private:
 	// Output routing: the master bus target/mute and the connectivity the host showed us in the
 	// last block (bit i = bus i was connected; bus 0 counts as connected until told otherwise).
 	std::atomic<playback::OutputTarget> masterOutput { 0 };		// Out 1/2 by default
+	std::atomic<bool> dcBlockEnabled { false };
+
+	/** One filter state per bus and channel: a DC blocker is a one-pole high pass, and its memory
+		must not be reset between blocks or every block boundary clicks. */
+	struct DcBlockState
+	{
+		float lastInL = 0.0f, lastOutL = 0.0f;
+		float lastInR = 0.0f, lastOutR = 0.0f;
+	};
+
+	std::array<DcBlockState, playback::kOutputBusCount> dcBlockStates {};
+
 	std::atomic<bool> chipsMuteable { false };
 	std::atomic<bool> masterMuted { false };
 	std::atomic<std::uint64_t> connectedBuses { 1 };

@@ -177,6 +177,10 @@ public:
 	int getKeyboardMiddleCOctave (void) const;
 	void setKeyboardMiddleCOctave (int octave);
 
+	/** Whether a new session starts with the DC blocker on. Existing sessions carry their own. */
+	bool getAudioDcBlock (void) const;
+	void setAudioDcBlock (bool shouldRemove);
+
 	/** How long a key stays lit after its note stops, in milliseconds. */
 	int getKeyboardNoteHoldMs (void) const;
 	void setKeyboardNoteHoldMs (int milliseconds);

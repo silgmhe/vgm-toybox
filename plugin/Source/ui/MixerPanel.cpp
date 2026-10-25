@@ -54,6 +54,15 @@ MixerPanel::MixerPanel (toybox::PlaybackEngine& engineToUse)
 	};
 	mixerToggle.setComponentID ("mixer.enable");
 	addAndMakeVisible (mixerToggle);
+	addAndMakeVisible (dcBlockButton);
+
+	dcBlockButton.setClickingTogglesState (true);
+	dcBlockButton.onClick = [this]
+	{
+		engine.setDcBlockEnabled (dcBlockButton.getToggleState ());
+		dcBlockButton.setTooltip (i18n::tr (dcBlockButton.getToggleState ()
+											? "mixer.dcBlockOn" : "mixer.dcBlockOff"));
+	};
 
 	masterStrip.setup (i18n::tr ("mixer.master"), true);
 	// the master fader is the mixer's own master gain - a stage of its own, in front of the
@@ -154,6 +163,11 @@ void MixerPanel::rebuildStrips (void)
 
 void MixerPanel::refresh (void)
 {
+	if (dcBlockButton.getToggleState () != engine.isDcBlockEnabled ())
+	{
+		dcBlockButton.setToggleState (engine.isDcBlockEnabled (), juce::dontSendNotification);
+	}
+
 	// Which strips exist changes only with the song, so that part is a check rather than work: the
 	// path the timer calls 10-15 times a second stays value-only, because anything else would cost
 	// more than the meters it is there to show.
@@ -337,6 +351,8 @@ void MixerPanel::resized (void)
 	spreadOutputsButton.setBounds (headerBounds.removeFromRight (kHeaderButtonSize));
 	headerBounds.removeFromRight (8);
 	mergeToMasterButton.setBounds (headerBounds.removeFromRight (kHeaderButtonSize));
+	headerBounds.removeFromRight (8);
+	dcBlockButton.setBounds (headerBounds.removeFromRight (kHeaderButtonSize));
 
 	// From the right: the card's scrollbar, then the master, then the scrolling rows. The bar is
 	// outside everything it scrolls - one bar for the whole mixer, at the card's edge.

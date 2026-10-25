@@ -349,6 +349,19 @@ void SettingsStore::setKeyboardMiddleCOctave (int octave)
 	}
 }
 
+bool SettingsStore::getAudioDcBlock (void) const
+{
+	return file != nullptr && file->getBoolValue ("audio.dcBlock", false);
+}
+
+void SettingsStore::setAudioDcBlock (bool shouldRemove)
+{
+	if (file != nullptr)
+	{
+		file->setValue ("audio.dcBlock", shouldRemove);
+	}
+}
+
 int SettingsStore::getKeyboardNoteHoldMs (void) const
 {
 	const int stored = file != nullptr ? file->getIntValue (kKeyboardNoteHoldKey, toybox::settings::keyboard::defaultNoteHoldMs)
