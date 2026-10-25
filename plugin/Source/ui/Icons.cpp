@@ -211,13 +211,14 @@ void drawDrumGlyph (juce::Graphics& g, juce::Rectangle<float> iconArea, juce::Co
 	// reader produced nothing for it. Design coordinates are kept so the numbers still match the
 	// artwork, and the whole path is scaled at the end rather than each value.
 	constexpr float kDesign = 16.0f;
-	constexpr float kLeft = 2.7f;
-	constexpr float kRight = 13.3f;
-	constexpr float kHeadY = 5.4f;
-	constexpr float kBodyBottom = 10.2f;
-	constexpr float kRadiusX = 5.3f;
-	constexpr float kRadiusY = 1.7f;
-	constexpr float kHoopY = 9.7f;
+	constexpr float kLeft = 3.0f;
+	constexpr float kRight = 13.0f;
+	constexpr float kHeadY = 4.6f;
+	constexpr float kBodyBottom = 10.0f;
+	constexpr float kRadiusX = 5.0f;
+	constexpr float kRadiusY = 1.4f;
+	constexpr float kHoopY = 6.3f;
+	constexpr float kFootY = 14.2f;
 
 	const float scale = juce::jmin (iconArea.getWidth (), iconArea.getHeight ()) / kDesign;
 
@@ -237,9 +238,17 @@ void drawDrumGlyph (juce::Graphics& g, juce::Rectangle<float> iconArea, juce::Co
 	// Head.
 	path.addEllipse (kLeft, kHeadY - kRadiusY, kRight - kLeft, kRadiusY * 2.0f);
 
-	// Lower hoop, half an ellipse across the body.
+	// Upper hoop.
 	path.startNewSubPath (kLeft, kHoopY);
-	addLowerHalfEllipse (path, (kLeft + kRight) * 0.5f, kHoopY, kRadiusX, kRadiusY * 0.55f);
+	addLowerHalfEllipse (path, (kLeft + kRight) * 0.5f, kHoopY, kRadiusX, kRadiusY * 0.5f);
+
+	// Two legs. This is what separates a drum from a database icon: a cylinder on its own says
+	// storage, and what says snare is that it stands on something.
+	path.startNewSubPath (kLeft + 0.6f, kBodyBottom + 0.6f);
+	path.lineTo (kLeft - 0.7f, kFootY);
+
+	path.startNewSubPath (kRight - 0.6f, kBodyBottom + 0.6f);
+	path.lineTo (kRight + 0.7f, kFootY);
 
 	path.applyTransform (juce::AffineTransform::scale (scale)
 							 .translated (iconArea.getCentreX () - kDesign * 0.5f * scale,
@@ -248,7 +257,7 @@ void drawDrumGlyph (juce::Graphics& g, juce::Rectangle<float> iconArea, juce::Co
 	// Strokes, not fills: one ink colour then serves both palettes, and line art holds up at the
 	// ten pixels a strip badge allows where a filled silhouette turns into a blob.
 	g.setColour (colour);
-	g.strokePath (path, juce::PathStrokeType (juce::jmax (1.0f, 1.45f * scale),
+	g.strokePath (path, juce::PathStrokeType (juce::jmax (1.0f, 1.35f * scale),
 											  juce::PathStrokeType::curved,
 											  juce::PathStrokeType::rounded));
 }
