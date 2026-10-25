@@ -672,10 +672,13 @@ endif()
 # PlaybackEngineTest: a build could break the AY mixer mask, the OPL4 second bank or the YM2610 ADPCM
 # trigger and every ctest entry stayed green, because no test ever loaded those files. Each one now
 # asserts the notes its generator writes down, so they belong in the suite.
-# mmc5_song and fme7_song are generated and checked by hand: their assertions in [3c] pass, but the
-# suite's chip-mute checks compare the mix against silence, and an all-silent 2A03 mix is not silent
-# - its triangle holds a DC level (see the review document). Registering them before that is fixed
-# would fail tests that have nothing to do with these two chips.
+# mmc5_song and fme7_song are checked by hand, not here, for two reasons that are both deliberate.
+# Their [3c] assertions pass, but the suite's chip-mute checks compare the mix against silence and
+# an all-silent 2A03 mix is not silent - its triangle holds a DC level
+# (docs/memo/2026-10-25-nsf-dc-offset.md) - so registering them would fail tests that have nothing
+# to do with these chips. And NSFs using MMC5 or FME7 are rare enough that they are not worth a
+# standing guard: the assets and the code are here, and re-running one is a single command when
+# something does go wrong.
 foreach(_toybox_asset psg opl4 ym2610 ym2608 fm_alg0 fds_song)
 	set(_toybox_asset_song "${CMAKE_CURRENT_SOURCE_DIR}/Tests/assets/${_toybox_asset}.vgm")
 	if(EXISTS "${_toybox_asset_song}")
