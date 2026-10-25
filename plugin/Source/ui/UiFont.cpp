@@ -13,15 +13,26 @@ juce::String systemUiFamily (void)
 		{
 			const auto name = typeface->getName();
 
-			if (name.isNotEmpty())
+			// Only a name the font system can actually resolve is worth setting - the same check
+			// the custom branch below does, and for the same reason. On a KDE desktop where
+			// fc-match resolves sans-serif to a .ttc collection, the name this typeface reports
+			// need not be one findAllTypefaceNames() lists, and a LookAndFeel told to use a family
+			// it cannot find draws every glyph as nothing: the window comes up with its buttons,
+			// cards and colours intact and not one character on it.
+			for (const auto& installed : juce::Font::findAllTypefaceNames())
 			{
-				return name;
+				if (installed.equalsIgnoreCase (name))
+				{
+					return installed;
+				}
 			}
 		}
 
-		// A platform that cannot report its UI font still has JUCE's placeholder, which its own
-		// resolver understands even if a LookAndFeel does not.
-		return juce::Font::getSystemUIFontName();
+		// Empty means "leave JUCE's own default alone". It used to return
+		// Font::getSystemUIFontName() here, which is a placeholder this comment already admitted
+		// a LookAndFeel may not understand - and setting it is exactly how the blank window
+		// happened.
+		return juce::String();
 	}();
 
 	return family;
@@ -72,7 +83,13 @@ void applyStoredSelection (void)
 	auto& store = settings::SettingsStore::getInstance();
 	const auto family = resolvedFamily (store.getFontMode(), store.getFontFamily());
 
-	juce::LookAndFeel::getDefaultLookAndFeel().setDefaultSansSerifTypefaceName (family);
+	// Empty keeps the name JUCE chose for itself. Setting an unresolvable one is worse than not
+	// setting anything: the resolver finds no typeface and draws no glyphs, which is a window full
+	// of empty controls rather than one in the wrong font.
+	if (family.isNotEmpty())
+	{
+		juce::LookAndFeel::getDefaultLookAndFeel().setDefaultSansSerifTypefaceName (family);
+	}
 }
 
 } // namespace toybox::ui::fonts
