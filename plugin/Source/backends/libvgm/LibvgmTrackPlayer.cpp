@@ -7,6 +7,7 @@
 #include "utils/MemoryLoader.h"
 
 #include "LibvgmMuteIsolation.h"
+#include "emu/SoundDevs.h"
 
 namespace toybox::backends::libvgm
 {
@@ -303,8 +304,24 @@ void LibvgmTrackPlayer::applyIsolation (void)
 
 		// the track's own device: every channel muted except the track's own one - unless the
 		// core cannot mute single channels, in which case the whole device is the track
-		applyMuteGroup (info, singleChannelMuteOptions (myTrackInfo->channelIndex,
-													   myTrackInfo->isolatable));
+		PLR_MUTE_OPTS isolate = singleChannelMuteOptions (myTrackInfo->channelIndex,
+														 myTrackInfo->isolatable);
+
+		// The YM2610's SSG is a three-channel device linked behind a thirteen-channel chip, and
+		// the mask's second half is applied to *its* numbering. A track for FM channel 2 therefore
+		// left SSG channel 2 audible - measured at 32% of that strip's energy on a song where the
+		// SSG is loud, and heard as crosstalk and a noise floor under the FM.
+		//
+		// The SSG never becomes a track of its own, so on an isolated player it has nothing to
+		// contribute: suspend it. Chips whose linked device carries part of the sound - an OPL4's
+		// FM half is the linked OPL3 - keep the mask in both halves, because muting there would
+		// silence the chip (the engine's OPL4 test says so).
+		if (info.type == DEVID_YM2610)
+		{
+			isolate.disable |= 0x02;	// 0x02: the linked devices of this chain
+		}
+
+		applyMuteGroup (info, isolate);
 	}
 }
 

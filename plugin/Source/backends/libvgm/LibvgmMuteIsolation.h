@@ -51,6 +51,16 @@ inline PLR_MUTE_OPTS singleChannelMuteOptions (int channelIndex, bool isolatable
 		mask = 0xFFFFFFFF & ~channelMuteBit (channelIndex);
 	}
 
+	// Both halves carry the same mask: libvgm applies chnMute[1] to the *linked* device
+	// (VGMPlayer::RefreshMuting), and when a chip's linked device describes the same channels as
+	// its parent - an OPL4's FM half is an OPL3 whose channel n is the parent's channel n - the
+	// track's own channel has to stay audible in that half too. Filling it with "everything
+	// muted" is the natural reading of a two-word mask and it silences exactly the tracks the
+	// mixer is trying to isolate.
+	//
+	// A linked device with channel numbers of its own does not fit this, and cannot be fixed
+	// here: see the YM2610 case in LibvgmTrackPlayer::applyIsolation, where the linked SSG no
+	// longer takes part in a track's render at all.
 	opts.chnMute[0] = mask;
 	opts.chnMute[1] = mask;
 
