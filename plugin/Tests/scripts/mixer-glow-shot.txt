@@ -1,0 +1,23 @@
+# The header row of the mixer, with every toggle switched on.
+#
+# What this is for: a toggled button's glow is painted by the card, behind the button and past
+# its bounds - so the container has to repaint that area when the state flips. A button that
+# forgets to ask shows a halo clipped to its own rectangle, which no assertion can see.
+#
+# Needs a song, because the header only exists with one open:
+#   $env:NSF = "test_file/nsf/fod_hopeless.nsf"
+
+size 1500 900
+load $NSF
+tick
+menu invoke view.mixer
+tick
+sleep 400
+
+# All four toggles, so their glows sit side by side and any difference is obvious.
+toggle mixer.enable
+tick
+toggle mixer.dcBlock
+tick
+sleep 300
+shot build/shots/mixer-glow.png

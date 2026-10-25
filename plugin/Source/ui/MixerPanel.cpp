@@ -56,6 +56,9 @@ MixerPanel::MixerPanel (toybox::PlaybackEngine& engineToUse)
 	addAndMakeVisible (mixerToggle);
 	addAndMakeVisible (dcBlockButton);
 
+	// Named so the harness can reach it: the glow of a toggled button is painted by the card, and
+	// whether the repaint reached far enough is only visible in a screenshot.
+	dcBlockButton.setComponentID ("mixer.dcBlock");
 	dcBlockButton.setClickingTogglesState (true);
 	dcBlockButton.onClick = [this]
 	{
