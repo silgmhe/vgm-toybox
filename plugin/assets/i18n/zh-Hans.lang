@@ -43,7 +43,6 @@ language: 简体中文
 "menu.view.none" = "暂无页面";
 
 "mixer.gainTooltip" = "增益（双击恢复 100%）";
-"mixer.hint" = "静音 / 独奏 / 增益 / 声像";
 "mixer.master" = "主控";
 "mixer.masterBus" = "主总线";
 "mixer.masterGainTooltip" = "混音器主增益 - 输出音量在其之后（双击恢复 100%）";

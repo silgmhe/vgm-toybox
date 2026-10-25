@@ -496,10 +496,14 @@ void MixerPanel::layoutMaster (void)
 
 void MixerPanel::paintCardContent (juce::Graphics& g)
 {
-	// The three header buttons glow in the accent colour while they are on. The card paints them
-	// (and therefore behind the buttons): the glow reaches further than the shadow room a button
-	// keeps inside its own bounds (ButtonPaint.h).
-	for (auto* button : { &mixerToggle, &spreadOutputsButton, &mergeToMasterButton })
+	// The header buttons glow in the accent colour while they are on. The card paints them (and
+	// therefore behind the buttons): the glow reaches further than the shadow room a button keeps
+	// inside its own bounds (ButtonPaint.h).
+	//
+	// Every toggle in the header belongs in this list. The DC blocker was added to the row and
+	// not to the loop, so it lit up like its neighbours with nothing around it - which reads as
+	// "this one is not really on".
+	for (auto* button : { &mixerToggle, &dcBlockButton, &spreadOutputsButton, &mergeToMasterButton })
 	{
 		if (button->getToggleState())
 		{
@@ -507,7 +511,11 @@ void MixerPanel::paintCardContent (juce::Graphics& g)
 		}
 	}
 
-	paintCardHeaderRow (g, headerBounds, i18n::tr ("mixer.title"), i18n::tr ("mixer.hint"));
+	// No legend on the right any more. It said "MUTE / SOLO / GAIN / PAN", which described the
+	// strip controls beside it - and by the time it read that, the row above held four toggles,
+	// one of which is a DC blocker and none of which is gain or pan. Every button carries its own
+	// tooltip, so the line that had to be kept in step with the row is simply gone.
+	paintCardHeaderRow (g, headerBounds, i18n::tr ("mixer.title"), {});
 }
 
 void MixerPanel::StripHolder::paint (juce::Graphics& g)
