@@ -746,6 +746,12 @@ namespace
 	constexpr int kDutyMask = 0x03;
 	constexpr float kDutySettings[] = { 0.125f, 0.25f, 0.5f, 0.75f };
 
+	/** The VRC6's eight widths, in sixteenths: 1/16 up to 8/16. The widest is a square wave and
+		not silence, which is why these are not eighths - and why dividing by the count of settings
+		drew a 50 % pulse as a solid bar. */
+	constexpr float kVrc6DutySettings[] = { 0.0625f, 0.125f, 0.1875f, 0.25f,
+											0.3125f, 0.375f, 0.4375f, 0.5f };
+
 	/** The shapes a channel can have, as playback/ChipState.h numbers them. */
 	enum WaveShape
 	{
@@ -944,7 +950,16 @@ bool NsfPlayer::captureState (playback::ChipStateSnapshot& snapshot, bool includ
 		int trackIndex;
 		int chipChannel;
 		int waveKind;
-		int dutySteps;			// 0 fixed half, 4 the 2A03's settings, 8 the VRC6's
+
+		/** The widths this channel's register selects from, or null for a fixed half.
+
+			A table rather than a count: the VRC6's eight settings are sixteenths of a cycle and
+			the MMC5's four are the 2A03's set, so "n of m" was two different fractions wearing one
+			field. Dividing by the count drew the VRC6's 50 % pulse as a solid bar.
+		*/
+		const float* dutyTable;
+		int dutyCount;
+
 		bool levelImpliesKey;	// true when the chip says key-on for a channel it is not sounding
 		float levelScale;		// the chip reports its volume against a wider register than it has
 	};
@@ -964,10 +979,10 @@ bool NsfPlayer::captureState (playback::ChipStateSnapshot& snapshot, bool includ
 
 			float duty = kNoDuty;
 
-			if (info != nullptr && row.dutySteps > 0)
+			if (info != nullptr && row.dutyTable != nullptr)
 			{
-				const int setting = (std::clamp) (info->GetTone (), 0, row.dutySteps - 1);
-				duty = (float) (setting + 1) / (float) row.dutySteps;
+				const int setting = (std::clamp) (info->GetTone (), 0, row.dutyCount - 1);
+				duty = row.dutyTable[setting];
 			}
 
 			const std::size_t index = addChannel (row.name, row.chipName, row.trackIndex,
@@ -993,27 +1008,27 @@ bool NsfPlayer::captureState (playback::ChipStateSnapshot& snapshot, bool includ
 		// In the chip's own order, which is also the track order. The ramp's volume register is six
 		// bits wide while the chip reports it against 255, so its meter read a quarter of what it
 		// played; scaling by four puts the full 63 back at full scale.
-		{ "Square 3", "VRC6", kFirstExpansionTrack + 0, 0, kShapePulse, 8, false, 1.0f },
-		{ "Square 4", "VRC6", kFirstExpansionTrack + 1, 1, kShapePulse, 8, false, 1.0f },
-		{ "Saw Wave", "VRC6", kFirstExpansionTrack + 2, 2, kShapeSaw, 0, false, 4.0f }
+		{ "Square 3", "VRC6", kFirstExpansionTrack + 0, 0, kShapePulse, kVrc6DutySettings, 8, false, 1.0f },
+		{ "Square 4", "VRC6", kFirstExpansionTrack + 1, 1, kShapePulse, kVrc6DutySettings, 8, false, 1.0f },
+		{ "Saw Wave", "VRC6", kFirstExpansionTrack + 2, 2, kShapeSaw, nullptr, 0, false, 4.0f }
 	};
 
 	static const ExpansionRow mmc5Rows[] =
 	{
-		{ "Square 1", "MMC5", kFirstExpansionTrack + 0, 0, kShapePulse, 4, false, 1.0f },
-		{ "Square 2", "MMC5", kFirstExpansionTrack + 1, 1, kShapePulse, 4, false, 1.0f },
+		{ "Square 1", "MMC5", kFirstExpansionTrack + 0, 0, kShapePulse, kDutySettings, 4, false, 1.0f },
+		{ "Square 2", "MMC5", kFirstExpansionTrack + 1, 1, kShapePulse, kDutySettings, 4, false, 1.0f },
 		// The PCM voice has neither pitch nor key: it plays whatever byte the CPU feeds it, and
 		// its output is the sample's own level rather than a tone.
-		{ "PCM", "MMC5", kFirstExpansionTrack + 2, 2, kShapeDelta, 0, false, 1.0f }
+		{ "PCM", "MMC5", kFirstExpansionTrack + 2, 2, kShapeDelta, nullptr, 0, false, 1.0f }
 	};
 
 	static const ExpansionRow s5bRows[] =
 	{
 		// Three tone channels. The chip's noise and envelope are modes of these three rather than
 		// voices of their own, which is why the track list has three rows and not five.
-		{ "Square 1", "S5B", kFirstExpansionTrack + 0, 0, kShapePulse, 0, true, 1.0f },
-		{ "Square 2", "S5B", kFirstExpansionTrack + 1, 1, kShapePulse, 0, true, 1.0f },
-		{ "Square 3", "S5B", kFirstExpansionTrack + 2, 2, kShapePulse, 0, true, 1.0f }
+		{ "Square 1", "S5B", kFirstExpansionTrack + 0, 0, kShapePulse, nullptr, 0, true, 1.0f },
+		{ "Square 2", "S5B", kFirstExpansionTrack + 1, 1, kShapePulse, nullptr, 0, true, 1.0f },
+		{ "Square 3", "S5B", kFirstExpansionTrack + 2, 2, kShapePulse, nullptr, 0, true, 1.0f }
 	};
 
 	if (vrc6 != nullptr) { addExpansionRows (vrc6Rows, 3, vrc6.get ()); }
