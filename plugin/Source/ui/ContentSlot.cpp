@@ -107,7 +107,8 @@ int contentViewIndex (ContentView view)
 	The mute and solo buttons are not this panel's state: they call into the engine's own track
 	mute, so the mixer and this view cannot disagree about what is silent.
 */
-class ContentSlot::KeyboardPanel : public juce::Component
+class ContentSlot::KeyboardPanel : public juce::Component,
+								   private juce::ScrollBar::Listener
 {
 public:
 	KeyboardPanel (toybox::PlaybackEngine& engineToUse, juce::String& statusToUse)
@@ -120,7 +121,21 @@ public:
 		exportButton.onClick = [this] { if (onExport) { onExport (); } };
 		setComponentID ("view.keyboard");
 
+		// The real thing, so its hover and drag behaviour come from the same look and feel the
+		// mixer's bar uses. An earlier attempt at this did not paint, and the reason was not the
+		// component: it was being shown and hidden from inside paint(), and toggling a child's
+		// visibility during a paint callback cancels that child's paint for the frame. Everything
+		// that touches the bar now happens outside paint - see syncScrollBar().
+		verticalBar.setAutoHide (false);
+		verticalBar.addListener (this);
+
 		addAndMakeVisible (exportButton);
+		addAndMakeVisible (verticalBar);
+	}
+
+	~KeyboardPanel (void) override
+	{
+		verticalBar.removeListener (this);
 	}
 
 	/** Back to the default window: a new song has its own range and no manual shift. */
@@ -175,7 +190,7 @@ public:
 		// A new snapshot can bring a channel the last one did not have, which changes how tall the
 		// content is. Rebuilt here rather than in paint(), which only draws what it is given.
 		relayout ();
-
+		syncScrollBar ();
 	}
 
 	void refreshLanguage (void)
@@ -259,8 +274,6 @@ public:
 			}
 		}
 
-		paintScrollBar (g);
-
 		// A fade along the bottom when there is more to scroll: without it the last row is cut in
 		// half by the card's edge, which reads as a layout fault rather than as "keep going".
 		const int visible = juce::jmax (0, getHeight () - kHeader);
@@ -285,6 +298,40 @@ public:
 		// Inside the card's right edge, in the column every row reserves for it.
 		clampScroll ();
 		relayout ();
+		verticalBar.setBounds (scrollBarTrack ());
+		syncScrollBar ();
+		repaint ();
+	}
+
+	/** Everything that changes the bar. Called from the load path and from user input, never from
+		paint(): a child whose visibility is toggled during a paint callback has that paint
+		cancelled for the frame, which is what made the first attempt at this bar invisible while
+		the component tree said it was there.
+	*/
+	void syncScrollBar (void)
+	{
+		const int visible = juce::jmax (1, getHeight () - kHeader);
+
+		verticalBar.setVisible (contentHeight > visible);
+
+		if (contentHeight > visible)
+		{
+			verticalBar.setRangeLimits (0.0, (double) contentHeight, juce::dontSendNotification);
+			verticalBar.setCurrentRange ((double) scrollOffset, (double) visible,
+										 juce::dontSendNotification);
+		}
+	}
+
+	void scrollBarMoved (juce::ScrollBar* bar, double newRangeStart) override
+	{
+		if (bar != &verticalBar)
+		{
+			return;
+		}
+
+		scrollOffset = (int) std::lround (newRangeStart);
+		clampScroll ();
+		relayout ();
 		repaint ();
 	}
 
@@ -292,15 +339,6 @@ public:
 	void mouseDown (const juce::MouseEvent& event) override
 	{
 		const auto point = event.getPosition ();
-
-		// The bar first: it sits in the strip relayout() keeps clear of every row, so nothing else
-		// can claim a press there - but before this, nothing claimed it either, and the bar only
-		// answered the wheel.
-		if (scrollBarTrack ().contains (point) && contentHeight > juce::jmax (1, getHeight () - kHeader))
-		{
-			beginScrollDrag (point.y);
-			return;
-		}
 
 		if (shiftLeftRect.contains (point)) { shiftOctaves (-1); return; }
 		if (shiftRightRect.contains (point)) { shiftOctaves (1); return; }
@@ -447,32 +485,6 @@ public:
 		}
 	}
 
-	void mouseDrag (const juce::MouseEvent& event) override
-	{
-		if (! scrollDragging)
-		{
-			return;
-		}
-
-		const int visible = juce::jmax (1, getHeight () - kHeader);
-
-		if (contentHeight <= visible)
-		{
-			return;
-		}
-
-		const auto track = scrollBarTrack ();
-		const float thumbHeight = thumbHeightFor (track, visible);
-		const float travel = thumbTravelFor (track, thumbHeight);
-
-		scrollToThumbTop (track, (float) event.getPosition ().y - scrollDragOffset, travel);
-	}
-
-	void mouseUp (const juce::MouseEvent&) override
-	{
-		scrollDragging = false;
-	}
-
 	void mouseWheelMove (const juce::MouseEvent& event, const juce::MouseWheelDetails& wheel) override
 	{
 		if (event.mods.isCtrlDown ())
@@ -491,6 +503,7 @@ public:
 		scrollOffset -= (int) std::lround (wheel.deltaY * (float) metrics.rowHeight * 3.0f);
 		clampScroll ();
 		relayout ();
+		syncScrollBar ();
 		repaint ();
 	}
 
@@ -533,86 +546,6 @@ private:
 				 kHeader + kScrollBarGap,
 				 kScrollBarWidth,
 				 juce::jmax (0, getHeight () - kHeader - kBottomFade) };
-	}
-
-	/** Where the thumb sits inside the track, in pixels from the track's top. */
-	float thumbHeightFor (const juce::Rectangle<int>& track, int visible) const
-	{
-		return juce::jmax (24.0f, (float) track.getHeight () * (float) visible
-										  / (float) juce::jmax (1, contentHeight));
-	}
-
-	float thumbTravelFor (const juce::Rectangle<int>& track, float thumbHeight) const
-	{
-		return juce::jmax (1.0f, (float) track.getHeight () - thumbHeight);
-	}
-
-	/** Moves the view so the thumb's top lands at `thumbTop`. Clamped, so dragging past either
-		end parks the view at that end rather than overshooting. */
-	void scrollToThumbTop (const juce::Rectangle<int>& track, float thumbTop, float travel)
-	{
-		const int visible = juce::jmax (1, getHeight () - kHeader);
-		const float position = juce::jlimit (0.0f, 1.0f,
-											 (thumbTop - (float) track.getY ()) / travel);
-
-		scrollOffset = (int) std::lround (position * (float) juce::jmax (1, contentHeight - visible));
-		clampScroll ();
-		relayout ();
-		repaint ();
-	}
-
-	/** Starts a drag from `y`. Pressing the thumb keeps the grab offset so the thumb does not jump
-		under the pointer; pressing the track moves the thumb there and grabs its middle, which is
-		what every other scroll bar does. */
-	void beginScrollDrag (int y)
-	{
-		const int visible = juce::jmax (1, getHeight () - kHeader);
-
-		if (contentHeight <= visible)
-		{
-			return;
-		}
-
-		const auto track = scrollBarTrack ();
-		const float thumbHeight = thumbHeightFor (track, visible);
-		const float travel = thumbTravelFor (track, thumbHeight);
-		const float position = (float) scrollOffset / (float) juce::jmax (1, contentHeight - visible);
-		const float thumbTop = (float) track.getY () + travel * juce::jlimit (0.0f, 1.0f, position);
-
-		const bool onThumb = (float) y >= thumbTop && (float) y <= thumbTop + thumbHeight;
-
-		scrollDragOffset = onThumb ? (float) y - thumbTop : thumbHeight * 0.5f;
-		scrollDragging = true;
-
-		if (! onThumb)
-		{
-			scrollToThumbTop (track, (float) y - scrollDragOffset, travel);
-		}
-	}
-
-	void paintScrollBar (juce::Graphics& g)
-	{
-		const int visible = juce::jmax (1, getHeight () - kHeader);
-
-		if (contentHeight <= visible)
-		{
-			return;
-		}
-
-		const auto track = scrollBarTrack ();
-
-		g.setColour (theme::scrollBarTrack ());
-		g.fillRoundedRectangle (track.toFloat (), 5.0f);
-
-		const float thumbHeight = thumbHeightFor (track, visible);
-		const float travel = thumbTravelFor (track, thumbHeight);
-		const float position = (float) scrollOffset / (float) juce::jmax (1, contentHeight - visible);
-
-		g.setColour (theme::scrollBarThumb ());
-		g.fillRoundedRectangle ({ (float) track.getX (),
-								  (float) track.getY () + travel * juce::jlimit (0.0f, 1.0f, position),
-								  (float) track.getWidth (),
-								  thumbHeight }, 5.0f);
 	}
 
 	void clampScroll (void)
@@ -866,33 +799,41 @@ private:
 
 			if (lit)
 			{
-				// White keys name themselves in the lower third - the black key above covers the
-				// top, and the centre is where the octave label sits. Black keys are only twelve
-				// pixels wide, so they get their own size and a slight squeeze instead of being
-				// left unnamed.
-				const float minimumWidth = black ? 9.0f : 13.0f;
+				// The note this key is playing sits on a disc of its own rather than being painted
+				// straight onto the key. The key is already the accent colour, so the label cannot
+				// be - a disc in the palette's on-accent colour with the accent in it keeps the two
+				// apart on the light and the dark palette alike, and the shadow lifts it off the
+				// key the way the octave arrows sit above theirs.
+				//
+				// White keys get the disc in the lower third (the black key above covers the top),
+				// black keys in the middle. Both are sized to the key, so a narrow black key gets a
+				// smaller disc and a squeezed font rather than a label spilling onto its neighbours.
+				const float diameter = juce::jmin (face.getWidth () - 1.0f, black ? 11.0f : 15.0f);
 
-				if (face.getWidth () >= minimumWidth)
+				if (diameter >= 8.0f)
 				{
-					juce::Font font (juce::FontOptions (black ? 7.0f : 9.5f, juce::Font::bold));
-					font.setHorizontalScale (black ? 0.82f : 1.0f);
+					const auto centre = juce::Point<float> (face.getCentreX (),
+															black ? face.getCentreY ()
+																  : face.getY () + face.getHeight () * 0.68f);
+					const auto disc = juce::Rectangle<float> (diameter, diameter).withCentre (centre);
+
+					juce::Path discPath;
+					discPath.addEllipse (disc);
+
+					juce::DropShadow (theme::shadowTint ().withAlpha (0.32f), 2, { 0, 1 })
+						.drawForPath (g, discPath);
 
 					g.setColour (theme::onAccent ());
+					g.fillEllipse (disc);
+
+					const float size = juce::jlimit (7.0f, 11.0f, diameter * 0.74f);
+					juce::Font font (juce::FontOptions (size, juce::Font::bold));
+					font.setHorizontalScale (black ? 0.82f : 1.0f);
+
+					g.setColour (theme::accent ());
 					g.setFont (font);
-
-					auto label = face.toNearestInt ();
-
-					if (black)
-					{
-						label = label.withSizeKeepingCentre (label.getWidth (), juce::jmin (label.getHeight (), 10));
-					}
-					else
-					{
-						label = label.withTrimmedTop ((int) (face.getHeight () * 0.55f));
-					}
-
-					g.drawText (noteName (keyNote, octaveShift), label,
-								black ? juce::Justification::centred : juce::Justification::centredBottom, false);
+					g.drawText (noteName (keyNote, octaveShift), disc.toNearestInt (),
+								juce::Justification::centred, false);
 				}
 			}
 		};
@@ -1076,11 +1017,11 @@ private:
 	int scrollOffset = 0;
 	int contentHeight = 0;
 
-	/** True while the thumb is held. `scrollDragOffset` is where inside the thumb the press landed,
-		so the thumb keeps its grab point instead of snapping under the pointer when the track was
-		pressed instead. */
-	bool scrollDragging = false;
-	float scrollDragOffset = 0.0f;
+	/** The real thing, so its hover and drag come from the same look and feel the mixer's bar
+		uses. Its bounds are set in resized(); its visibility and range in syncScrollBar() - both
+		outside paint(), and that is the whole of the difference from the version that refused to
+		appear. */
+	juce::ScrollBar verticalBar { true };
 
 	// What each channel last played, and when - the note-off delay reads from here.
 	struct Held
