@@ -103,7 +103,11 @@ namespace xgm
       trkinfo[trk].freq = clock*trkinfo[trk]._freq/(double)(0x80000>>blk);
       trkinfo[trk].tone = (opll->reg[0x30+trk]>>4)&15;
       //trkinfo[trk].key = (opll->reg[0x20+trk]&0x10)?true:false;
-      trkinfo[trk].key = opll->slot_key_status & (3 << trk)?true:false;
+
+      // Two bits per channel, so channel 1 starts at bit 2. Shifting by one put every channel's
+      // window on top of its neighbour's: keying channel 0 lit channels 1 and 2 as well, and the
+      // keyboard showed voices nobody had started.
+      trkinfo[trk].key = (opll->slot_key_status & (3 << (trk * 2))) != 0;
       return &trkinfo[trk];
     }
     else
@@ -192,11 +196,15 @@ namespace xgm
     // One Render() per channel with the others muted, then the mask put back. Correct, and it
     // keeps this file out of the chip's internal mixing - but it costs one render per channel, so
     // it is the shape to improve once the channels are exposed directly.
+    //
+    // `saved` is ORed in rather than discarded: it is what the mixer set for solo, track mute and
+    // the chip's own checkbox. Overwriting it meant those controls did nothing in this path -
+    // the mix was right, because the mix does not come through here, but every track played.
     const int saved = mask;
 
     for (int i = 0; i < 6; ++i)
     {
-      mask = ~(1 << i);
+      mask = ~(1 << i) | saved;
 
       INT32 b[2] = { 0, 0 };
       Render (b);

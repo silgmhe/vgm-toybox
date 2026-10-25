@@ -434,7 +434,11 @@ UINT32 NES_MMC5::RenderChannels (INT32* dest, int stride, int maxChannels)
 
     for (int i = 0; i < 3; ++i)
     {
-      mask = ~(1 << i);
+      // `saved` is ORed in rather than discarded: it is what the mixer set for solo, track mute
+      // and the chip's own checkbox. Overwriting it meant those controls did nothing in this
+      // path - the mix was right, because the mix does not come through here, but every track
+      // played.
+      mask = ~(1 << i) | saved;
 
       INT32 b[2] = { 0, 0 };
       Render (b);

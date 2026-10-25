@@ -89,6 +89,35 @@ std::vector<float> cycleFor (int waveKind, float duty)
 			break;
 		}
 
+		case Kind::saw:
+		{
+			// A counter that climbs by one step each period and wraps at the top - the ramp the
+			// VRC6 accumulates, not a smoothed line. The steps are what the chip has.
+			for (int i = 0; i < pointsPerCycle; ++i)
+			{
+				cycle.push_back ((float) i / (float) (pointsPerCycle - 1) * 2.0f - 1.0f);
+			}
+
+			break;
+		}
+
+		case Kind::fm:
+		{
+			// A carrier with its phase modulated by a second operator - the outline of what a
+			// two-operator voice does, not a cycle any one instrument produces. An FM patch has
+			// no waveform to read, so drawing the modulator's mark on the carrier is the honest
+			// sketch: it shows that the shape belongs to the patch, not to the chip.
+			const double twoPi = 6.283185307179586;
+
+			for (int i = 0; i < pointsPerCycle; ++i)
+			{
+				const double phase = twoPi * (double) i / (double) pointsPerCycle;
+				cycle.push_back ((float) std::sin (phase + 1.4 * std::sin (2.0 * phase)) * 0.85f);
+			}
+
+			break;
+		}
+
 		case Kind::none:
 		case Kind::stored:
 		default:

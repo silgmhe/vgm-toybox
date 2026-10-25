@@ -33,7 +33,7 @@ struct ChannelState
 	std::vector<float> wave;
 
 	/** How the channel makes its shape, so a panel can draw it without knowing the chip:
-		0 none, 1 stored table, 2 pulse, 3 triangle, 4 noise, 5 delta. */
+		0 none, 1 stored table, 2 pulse, 3 triangle, 4 noise, 5 delta, 6 saw, 7 FM. */
 	int waveKind = 0;
 
 	/** Duty cycle for a pulse channel, 0..1. Ignored by the other kinds. */

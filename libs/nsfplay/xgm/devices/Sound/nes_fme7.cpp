@@ -8,6 +8,7 @@ NES_FME7::NES_FME7 ()
 {
   psg = PSG_new ((e_uint32)DEFAULT_CLOCK, DEFAULT_RATE);
   divider = 0;
+  mask = 0;
 
   for(int c=0;c<2;++c)
     for(int t=0;t<3;++t)
@@ -121,6 +122,9 @@ UINT32 NES_FME7::RenderChannels (INT32* dest, int stride, int maxChannels)
     // no output to report.
     const INT32 MASTER = INT32(0.64 * 256.0);
 
+    // This path reads the chip's per-channel accumulators rather than going through Render() -
+    // which means the mask has to be honoured here too. It was not, so solo and the chip's own
+    // checkbox silenced the mix and left every track playing.
     for (int i = 0; i < 3; ++i)
     {
       if (i >= maxChannels)
@@ -128,7 +132,10 @@ UINT32 NES_FME7::RenderChannels (INT32* dest, int stride, int maxChannels)
         break;
       }
 
-      const INT32 value = (((psg->cout[i] * sm[0][i]) >> (7 - 4)) * MASTER) >> 8;
+      const INT32 value = (mask & (1 << i))
+                            ? 0
+                            : (((psg->cout[i] * sm[0][i]) >> (7 - 4)) * MASTER) >> 8;
+
       dest[i * stride + 0] = value;
       dest[i * stride + 1] = value;
     }

@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <string>
 
 #include "backends/nsf/NsfBus.h"
 #include "backends/nsf/NsfChannelNaming.h"
@@ -408,7 +409,12 @@ namespace
 	constexpr int kDmcChannels = 3;				// triangle, noise and the delta channel
 	// The 2A03's five tracks come first in the snapshot's channel order.
 	constexpr int kFirstDmcTrack = kPulseChannels;
-	constexpr int kFirstN163Track = kPulseChannels + kDmcChannels;
+	// Six voices on the VRC7's OPLL. The chip addresses nine, but a NES cartridge wires six.
+	constexpr int kVrc7Channels = 6;
+
+	// Every expansion chip starts its tracks here; a file declares at most one of them.
+	constexpr int kFirstExpansionTrack = kPulseChannels + kDmcChannels;
+	constexpr int kFirstN163Track = kFirstExpansionTrack;
 
 	// $4000 and $4004: duty/sweep, then timer low, timer high - four registers apart.
 	constexpr int kPulseRegisterStride = 4;
@@ -423,7 +429,9 @@ namespace
 		kShapePulse = 2,
 		kShapeTriangle = 3,
 		kShapeNoise = 4,
-		kShapeDelta = 5
+		kShapeDelta = 5,
+		kShapeSaw = 6,			// the VRC6's ramp: a stepped line, not a stored table
+		kShapeFm = 7			// the VRC7's FM - a pitch and a level, no waveform to read
 	};
 
 	// The 2A03's mixer in this core is four bits wide per output.
@@ -459,16 +467,16 @@ bool NsfPlayer::captureState (playback::ChipStateSnapshot& snapshot) const
 	case formats::nsf::NsfChip::fds:  snapshot.chips.push_back ("FDS");  break;
 	case formats::nsf::NsfChip::mmc5: snapshot.chips.push_back ("MMC5"); break;
 	case formats::nsf::NsfChip::n163: snapshot.chips.push_back (kChipNameN163); break;
-	case formats::nsf::NsfChip::fme7: snapshot.chips.push_back ("FME7"); break;
+	case formats::nsf::NsfChip::fme7: snapshot.chips.push_back ("S5B"); break;
 	case formats::nsf::NsfChip::none: break;
 	}
 
-	// Only the N163 reports per-channel state in this core, so a song without one has a chip list
-	// and nothing else - which the panel shows as "this chip cannot be displayed yet".
+	// The chip list is what a panel shows when no channel can be described; the channels below
+	// cover every chip that reports them.
 	snapshot.valid = true;
 
 	const auto addChannel = [&snapshot] (const char* name, const char* chipName, int trackIndex,
-										 int waveKind, float duty, xgm::ITrackInfo* info)
+										 int waveKind, float duty, xgm::ITrackInfo* info) -> std::size_t
 	{
 		playback::ChannelState state;
 		state.name = name;
@@ -503,8 +511,10 @@ bool NsfPlayer::captureState (playback::ChipStateSnapshot& snapshot) const
 			}
 
 			// Noise and the delta channel have no pitch: what their track info reports is a rate,
-			// not a note, and drawing it as one would light a key that means nothing.
-			if (waveKind >= kShapeNoise)
+			// not a note, and drawing it as one would light a key that means nothing. Named one
+			// by one rather than measured against a threshold: the kinds above noise are pitched,
+			// and a comparison would have quietly silenced the VRC6's ramp and the VRC7's FM.
+			if (waveKind == kShapeNoise || waveKind == kShapeDelta)
 			{
 				state.note = -1;
 				state.frequency = 0.0f;
@@ -522,6 +532,7 @@ bool NsfPlayer::captureState (playback::ChipStateSnapshot& snapshot) const
 		}
 
 		snapshot.channels.push_back (state);
+		return snapshot.channels.size () - 1;
 	};
 
 	// The 2A03 is always there: two pulses on the APU, and triangle, noise and the delta channel
@@ -544,6 +555,126 @@ bool NsfPlayer::captureState (playback::ChipStateSnapshot& snapshot) const
 	{
 		addChannel (dmcNames[i], kChipName2A03, kFirstDmcTrack + i, kShapeTriangle + i, kNoDuty,
 								dmc->GetTrackInfo (i));
+	}
+
+	// Four of the five expansion chips describe themselves through the same TrackInfo the 2A03
+	// uses, so one table covers them: a name, the track it drives, which of the chip's own channels
+	// to read, the shape to draw, and how many duty settings it has. Rows are in track order,
+	// because a row and a track are the same thing to the mixer.
+	struct ExpansionRow
+	{
+		const char* name;
+		const char* chipName;
+		int trackIndex;
+		int chipChannel;
+		int waveKind;
+		int dutySteps;			// 0 fixed half, 4 the 2A03's settings, 8 the VRC6's
+		bool levelImpliesKey;	// true when the chip says key-on for a channel it is not sounding
+		float levelScale;		// the chip reports its volume against a wider register than it has
+	};
+
+	const auto addExpansionRows = [&] (const ExpansionRow* rows, int count, xgm::ISoundChip* chip)
+	{
+		for (int i = 0; i < count; ++i)
+		{
+			const auto& row = rows[i];
+
+			if (chip == nullptr)
+			{
+				continue;
+			}
+
+			auto* info = chip->GetTrackInfo (row.chipChannel);
+
+			float duty = kNoDuty;
+
+			if (info != nullptr && row.dutySteps > 0)
+			{
+				const int setting = (std::clamp) (info->GetTone (), 0, row.dutySteps - 1);
+				duty = (float) (setting + 1) / (float) row.dutySteps;
+			}
+
+			const std::size_t index = addChannel (row.name, row.chipName, row.trackIndex,
+												  row.waveKind, duty, info);
+
+			// The S5B reports key-on for any channel its tone mask lets through, whatever the
+			// volume register says - so a channel at zero volume lit a key nobody could hear.
+			auto& state = snapshot.channels[index];
+
+			state.volume = (std::min) (1.0f, state.volume * row.levelScale);
+
+			if (row.levelImpliesKey && state.active && state.volume <= 0.0f)
+			{
+				state.active = false;
+				state.note = -1;
+				state.frequency = 0.0f;
+			}
+		}
+	};
+
+	static const ExpansionRow vrc6Rows[] =
+	{
+		// In the chip's own order, which is also the track order. The ramp's volume register is six
+		// bits wide while the chip reports it against 255, so its meter read a quarter of what it
+		// played; scaling by four puts the full 63 back at full scale.
+		{ "Square 3", "VRC6", kFirstExpansionTrack + 0, 0, kShapePulse, 8, false, 1.0f },
+		{ "Square 4", "VRC6", kFirstExpansionTrack + 1, 1, kShapePulse, 8, false, 1.0f },
+		{ "Saw Wave", "VRC6", kFirstExpansionTrack + 2, 2, kShapeSaw, 0, false, 4.0f }
+	};
+
+	static const ExpansionRow mmc5Rows[] =
+	{
+		{ "Square 1", "MMC5", kFirstExpansionTrack + 0, 0, kShapePulse, 4, false, 1.0f },
+		{ "Square 2", "MMC5", kFirstExpansionTrack + 1, 1, kShapePulse, 4, false, 1.0f },
+		// The PCM voice has neither pitch nor key: it plays whatever byte the CPU feeds it, and
+		// its output is the sample's own level rather than a tone.
+		{ "PCM", "MMC5", kFirstExpansionTrack + 2, 2, kShapeDelta, 0, false, 1.0f }
+	};
+
+	static const ExpansionRow s5bRows[] =
+	{
+		// Three tone channels. The chip's noise and envelope are modes of these three rather than
+		// voices of their own, which is why the track list has three rows and not five.
+		{ "Square 1", "S5B", kFirstExpansionTrack + 0, 0, kShapePulse, 0, true, 1.0f },
+		{ "Square 2", "S5B", kFirstExpansionTrack + 1, 1, kShapePulse, 0, true, 1.0f },
+		{ "Square 3", "S5B", kFirstExpansionTrack + 2, 2, kShapePulse, 0, true, 1.0f }
+	};
+
+	if (vrc6 != nullptr) { addExpansionRows (vrc6Rows, 3, vrc6.get ()); }
+	if (mmc5 != nullptr) { addExpansionRows (mmc5Rows, 3, mmc5.get ()); }
+	if (fme7 != nullptr) { addExpansionRows (s5bRows, 3, fme7.get ()); }
+
+	if (fds != nullptr)
+	{
+		// The FDS reads its shape from a table the track info hands out a copy of: 64 six-bit
+		// samples. Unipolar, so the DAC's midpoint - 31.5 - is the centre line to draw around.
+		auto* info = dynamic_cast<xgm::TrackInfoFDS*> (fds->GetTrackInfo (0));
+
+		const std::size_t index = snapshot.channels.size ();
+		addChannel ("FDS", "FDS", kFirstExpansionTrack + 0, kShapeStored, kNoDuty, info);
+
+		if (info != nullptr && snapshot.channels.size () > index)
+		{
+			auto& state = snapshot.channels[index];
+			state.wave.reserve (64);
+
+			for (int i = 0; i < 64; ++i)
+			{
+				state.wave.push_back ((float) (std::clamp) ((int) info->wave[i], 0, 63) / 31.5f - 1.0f);
+			}
+		}
+	}
+
+	if (vrc7 != nullptr)
+	{
+		// Six FM voices. There is no waveform to read - the chip computes its own - so the panel
+		// synthesises one from the shape kind, and the instrument number is what identifies it.
+		for (int i = 0; i < kVrc7Channels; ++i)
+		{
+			const std::string name = "FM " + std::to_string (i + 1);
+			addChannel (name.c_str (), "VRC7", kFirstExpansionTrack + i, kShapeFm, kNoDuty,
+						vrc7->GetTrackInfo (i));
+		}
 	}
 
 	if (n106 == nullptr)
@@ -635,13 +766,17 @@ int NsfPlayer::currentPC (void) const
 int NsfPlayer::channelCount (void) const
 {
 	// Five on the 2A03 - the two the APU renders and the three the DMC object renders - plus the
-	// expansion chip's own, of which a file can declare only one.
-	if (vrc6) { return 5 + 3; }
-	if (n106) { return 5 + 8; }
-	if (vrc7) { return 5 + 6; }
-	if (fme7) { return 5 + 5; }
+	// expansion chip's own, of which a file can declare only one. The S5B answers with three and
+	// not the five its GetTrackInfo can describe: the noise and the envelope are modes of those
+	// three channels, and the mixer has no separate output to mute.
+	if (vrc6) { return kFirstExpansionTrack + 3; }
+	if (vrc7) { return kFirstExpansionTrack + kVrc7Channels; }
+	if (fds) { return kFirstExpansionTrack + 1; }
+	if (mmc5) { return kFirstExpansionTrack + 3; }
+	if (fme7) { return kFirstExpansionTrack + 3; }
+	if (n106) { return kFirstExpansionTrack + kN163Channels; }
 
-	return 5;
+	return kFirstExpansionTrack;
 }
 
 void NsfPlayer::setChipAudible (int device, bool audible)

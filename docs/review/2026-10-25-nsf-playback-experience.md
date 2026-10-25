@@ -153,10 +153,74 @@ build/plugin/vgm_mixer_test.exe plugin/Tests/assets/fme7_song.nsf 1 44100 --trac
 它们的不变量，都记在 `docs/memo/2026-10-25-nsf-dc-offset.md`。
 
 ### 阶段 2：可视化（P2）
-- [ ] captureState 改成表驱动：一颗芯片一条表项（名称、起止轨、shape）
-- [ ] VRC6 三轨 / VRC7 六轨 / FDS 一轨（带 wave[64]）/ MMC5 两轨 / FME7 五轨
-- [ ] 轨道名与 VGM 侧一致（Square n / Saw Wave / FM n）
-- [ ] 每个芯片至少一张键盘视图截图，逐轨独奏确认行与声音对应
+
+**状态：代码完成，五颗芯片全部有 CI 覆盖（42/42）。**
+
+#### 2.1 表驱动
+
+`captureState` 里加了一张表，每行是「名字 / 轨道索引 / 芯片自己的通道号 / 形状 / 占空比档数」。
+四颗芯片共用同一套填充逻辑，因为它们都通过 `ITrackInfo` 报自己的状态：
+
+| 芯片 | 行数 | 形状 | 实测（`--chips`） |
+|---|---|---|---|
+| FDS | 1 | stored（64 样本波表） | `note=64 vol=1.00 wave=64` |
+| VRC6 | 3 | pulse ×2 + saw | `Square 3 note=69`、`Saw Wave note=57 kind=6` |
+| MMC5 | 3 | pulse ×2 + delta（PCM） | `Square 1 note=53` |
+| S5B | 3 | pulse ×3 | `Square 1 note=57` |
+| VRC7 | 6 | FM | `FM 1 note=69 kind=7` |
+
+FDS 单独处理：`dynamic_cast<TrackInfoFDS*>` 拿到 `wave[64]`，按单极性（中点 31.5）归一化。
+
+新形状两种：`kShapeSaw = 6`（VRC6 的累加锯齿）、`kShapeFm = 7`（VRC7 的 FM）。
+`WaveShape.cpp` 增加对应合成：锯齿画成阶梯上升（不是平滑线），FM 画成调相载波。
+
+**顺带修掉一个地雷**：原有代码用 `waveKind >= kShapeNoise` 判断“无音高”，
+新形状 6/7 都大于 4，会让 VRC6 锯齿与 VRC7 一起被判成无音高。改成显式列举
+（`== kShapeNoise || == kShapeDelta`）。
+
+#### 2.2 抓到三个真 bug
+
+| 现象 | 根因 |
+|---|---|
+| VRC6 的 Solo/静音对扩展声道无效，且轨道名与声音错位 | ① 轨道顺序是 `Saw Wave / Square 3 / Square 4`，而 `RenderChannels` 的通道 0 是**第一个脉冲**——名与声整体错位一格；② `RenderChannels` 里 `mask = ~(1 << i)` 直接覆盖了混音器设的掩码（solo / 轨道静音 / 芯片勾选框），三颗芯片（VRC6/MMC5/VRC7）同型 |
+| S5B 的 Solo 无效 | 它的 `RenderChannels` 直接读 `psg->cout[i]`，**根本没看 mask** |
+| MMC5 的芯片卡比轨道少一组 | `NsfBackend` 的 `info_.chips` 漏了 MMC5 的声明，落到 `default` |
+
+修法分别是：轨道改成芯片的通道顺序（`Square 3 / Square 4 / Saw Wave`）、
+`mask = ~(1 << i) | saved`、FME7 保存并检查 `mask`、补上 MMC5 的声明。
+
+#### 2.3 两份新资源，与一次断言修正
+
+语料里没有任何 VRC6 / VRC7 的 NSF（5 个文件全是 N163 或无扩展），所以照阶段 1 的做法自己拼：
+`vrc6_song.nsf`（160 字节，脉冲 440 Hz + 锯齿 220 Hz，用来验证**通道顺序**）与
+`vrc7_song.nsf`（160 字节，`$9010`/`$9030` 写 OPLL 寄存器 0x30/0x10/0x20，437 Hz）。
+
+VRC7 有两点值得记下：
+
+1. `SetClock` 把时钟**除以 36** 才存起来，频率公式要用 `clock/36`；
+2. 音色号 **0 是自定义槽**，不加载 patch 就是静音——用内置音色 1 才有声音。
+
+同时修了它的 `slot_key_status` 位映射（`3 << trk` → `3 << (trk * 2)`）：
+原来按键道 0 会连通道 1、2 一起点亮。
+
+**断言修正**：套件里「静音某颗芯片 → 混音应当变化」用的是原始 RMS，
+而直流偏置会与音乐**反相抵消**——于是静音一颗芯片反而让读数变大（VRC6：0.0849 → 0.1150/0.1470）。
+改成**去均值后的能量**（`acRms`）后，这条断言问的才是「这颗芯片有没有贡献声音」。
+五份资源因此全部可以进 CI，此前「MMC5/FME7 只手工验证」的限制随之解除。
+
+#### 2.4 覆盖
+
+`[3d]` 对五份资源断言：快照存在、芯片列表两枚、每条扩展轨都有对应行、
+行指向真实轨道、形状可绘制、发声行带音高与电平。五份资源全部注册进 ctest。
+
+```
+ctest 42/42（新增 engine.fds_song / vrc6_song / vrc7_song / mmc5_song / fme7_song）
+```
+
+- [x] captureState 改成表驱动
+- [x] VRC6 三轨 / VRC7 六轨 / FDS 一轨（带 wave[64]）/ MMC5 三轨 / FME7 三轨
+- [x] 轨道名与 VGM 侧一致（Square n / Saw Wave / FM n）
+- [ ] 键盘视图逐轨独奏的人工确认（需在 UI 里看一遍）
 
 ### 阶段 3：MIDI（P1，方案 B）
 - [ ] 懒加载预演：第一次指定 MIDI 通道时，在工作线程跑一遍 CPU（5 ms 采样），生成 MidiSequence

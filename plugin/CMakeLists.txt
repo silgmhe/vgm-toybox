@@ -672,15 +672,18 @@ endif()
 # PlaybackEngineTest: a build could break the AY mixer mask, the OPL4 second bank or the YM2610 ADPCM
 # trigger and every ctest entry stayed green, because no test ever loaded those files. Each one now
 # asserts the notes its generator writes down, so they belong in the suite.
-# mmc5_song and fme7_song are checked by hand, not here, for two reasons that are both deliberate.
-# Their [3c] assertions pass, but the suite's chip-mute checks compare the mix against silence and
-# an all-silent 2A03 mix is not silent - its triangle holds a DC level
-# (docs/memo/2026-10-25-nsf-dc-offset.md) - so registering them would fail tests that have nothing
-# to do with these chips. And NSFs using MMC5 or FME7 are rare enough that they are not worth a
-# standing guard: the assets and the code are here, and re-running one is a single command when
-# something does go wrong.
-foreach(_toybox_asset psg opl4 ym2610 ym2608 fm_alg0 fds_song)
+# The five hand-assembled NSF assets live here too. They were checked by hand for a while: their own
+# assertions passed, but the suite's chip-mute checks compared the mix against silence and an
+# all-silent 2A03 mix is not silent - its triangle holds a DC level
+# (docs/memo/2026-10-25-nsf-dc-offset.md) - so registering them failed tests that had nothing to do
+# with these chips. That comparison now measures the signal's own energy with the offset taken out,
+# which is the question it meant to ask, and all five pass.
+foreach(_toybox_asset psg opl4 ym2610 ym2608 fm_alg0
+		fds_song vrc6_song vrc7_song mmc5_song fme7_song)
 	set(_toybox_asset_song "${CMAKE_CURRENT_SOURCE_DIR}/Tests/assets/${_toybox_asset}.vgm")
+	if(NOT EXISTS "${_toybox_asset_song}")
+		set(_toybox_asset_song "${CMAKE_CURRENT_SOURCE_DIR}/Tests/assets/${_toybox_asset}.nsf")
+	endif()
 	if(EXISTS "${_toybox_asset_song}")
 		add_test(NAME "engine.${_toybox_asset}" COMMAND vgm_mixer_test "${_toybox_asset_song}" 3)
 		set_tests_properties("engine.${_toybox_asset}" PROPERTIES LABELS "integration" TIMEOUT 120)

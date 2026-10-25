@@ -272,11 +272,15 @@ namespace xgm
     // One Render() per channel with the others muted, then the mask put back. Correct, and it
     // keeps this file out of the chip's internal mixing - but it costs one render per channel, so
     // it is the shape to improve once the channels are exposed directly.
+    //
+    // `saved` is ORed in rather than discarded: it is what the mixer set for solo, track mute and
+    // the chip's own checkbox. Overwriting it meant those controls did nothing in this path -
+    // the mix was right, because the mix does not come through here, but every track played.
     const int saved = mask;
 
     for (int i = 0; i < 3; ++i)
     {
-      mask = ~(1 << i);
+      mask = ~(1 << i) | saved;
 
       INT32 b[2] = { 0, 0 };
       Render (b);

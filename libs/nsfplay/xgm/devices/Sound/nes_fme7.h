@@ -17,6 +17,7 @@ namespace xgm
     //int option[OPT_END];
     INT32 sm[2][3]; // stereo mix
     INT16 buf[2];
+    int mask; // kept here as well: RenderChannels reads the channels directly
     PSG *psg;
     int divider; // clock divider
     double clock, rate;
@@ -33,7 +34,7 @@ namespace xgm
     virtual void SetClock (double);
     virtual void SetRate (double);
     virtual void SetOption (int, int);
-    virtual void SetMask (int m){ if(psg) PSG_setMask(psg,m); }
+    virtual void SetMask (int m){ mask = m; if(psg) PSG_setMask(psg,m); }
     virtual void SetStereoMix (int trk, xgm::INT16 mixl, xgm::INT16 mixr);
     virtual ITrackInfo *GetTrackInfo(int trk);
   };

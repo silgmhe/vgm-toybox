@@ -18,7 +18,9 @@ enum class Kind
 	pulse = 2,
 	triangle = 3,
 	noise = 4,
-	delta = 5
+	delta = 5,
+	saw = 6,		// the VRC6's ramp: a counter that climbs until it overflows
+	fm = 7			// the VRC7: two operators, a carrier and a modulator, no fixed shape
 };
 
 /** One period of the shape, values in -1..1, or empty when there is nothing to synthesise.

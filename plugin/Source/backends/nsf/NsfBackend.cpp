@@ -122,6 +122,7 @@ public:
 			case formats::nsf::NsfChip::vrc6: info_.chips.push_back ({ "VRC6", "NSFPlay", 1 }); break;
 			case formats::nsf::NsfChip::vrc7: info_.chips.push_back ({ "VRC7", "NSFPlay", 1 }); break;
 			case formats::nsf::NsfChip::fds:  info_.chips.push_back ({ "FDS",  "NSFPlay", 1 }); break;
+			case formats::nsf::NsfChip::mmc5: info_.chips.push_back ({ "MMC5", "NSFPlay", 1 }); break;
 			case formats::nsf::NsfChip::fme7: info_.chips.push_back ({ "S5B",  "NSFPlay", 1 }); break;
 			default: break;
 		}
@@ -158,9 +159,13 @@ public:
 		switch (file.chip ())
 		{
 			case formats::nsf::NsfChip::vrc6:
-				addTrack ("Saw Wave", "VRC6", true, 1);
+				// Track order is the chip's channel order: the per-channel render writes channel 0
+				// into the first expansion track, and channel 0 is the first pulse. Listing the ramp
+				// first - as this did - put each track's name on a different voice than the one it
+				// carried, which the mute buttons and the keyboard both read.
 				addTrack ("Square 3", "VRC6", true, 1);
 				addTrack ("Square 4", "VRC6", true, 1);
+				addTrack ("Saw Wave", "VRC6", true, 1);
 				break;
 
 			case formats::nsf::NsfChip::vrc7:

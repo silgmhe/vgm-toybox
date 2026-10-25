@@ -94,6 +94,15 @@ namespace
 		std::vector<float> left, right;
 		double peak = 0.0;
 		double rms = 0.0;
+
+		/** RMS with the mean taken out - what the mix sounds like, without a constant offset.
+
+			The two are not the same measure. A DC offset is inaudible on its own and cancels part
+			of the music when the chips are summed, so muting a chip that was fighting the offset
+			raises the raw RMS: a mixer that lost a voice measured louder than one that had it.
+			Its own energy is the number that answers "did that chip contribute".
+		*/
+		double acRms = 0.0;
 	};
 
 	/** Renders up to `seconds` of the engine output (stops early when the song ends). */
@@ -128,6 +137,19 @@ namespace
 		}
 
 		result.rms = (sampleCount > 0) ? std::sqrt (sumOfSquares / (double) sampleCount) : 0.0;
+
+		if (sampleCount > 0)
+		{
+			double mean = 0.0;
+			for (float sample : result.left) { mean += (double) sample; }
+			mean /= (double) sampleCount;
+
+			double ac = 0.0;
+			for (float sample : result.left) { const double centred = (double) sample - mean; ac += centred * centred; }
+
+			result.acRms = std::sqrt (ac / (double) sampleCount);
+		}
+
 		return result;
 	}
 
@@ -742,6 +764,70 @@ int main (int argc, char* argv[])
 
 		check (loudestExpansion > 0.01, "the expansion's own track carries the tone");
 		check (loudestApu < 0.001, "the 2A03 tracks stay silent, so the tone is the expansion's");
+	}
+
+	// --- [3d] the expansion chips describe themselves -----------------------------------------
+	if (inputFile.getFileName() == "fds_song.nsf"
+		|| inputFile.getFileName() == "mmc5_song.nsf"
+		|| inputFile.getFileName() == "fme7_song.nsf"
+		|| inputFile.getFileName() == "vrc6_song.nsf"
+		|| inputFile.getFileName() == "vrc7_song.nsf")
+	{
+		// The keyboard and the chip card read a snapshot, and until now only the 2A03 and the N163
+		// ever filled one in: every other expansion showed its name in the chip list and no rows
+		// under it. What is asked here is the whole contract a panel depends on - a row per
+		// expansion track, each row pointing at its track, sounding rows carrying a pitch and a
+		// level, and every row having something to draw.
+		engine.setStateCaptureWanted (true);
+		engine.setPositionSeconds (0.0);
+		engine.play ();
+		renderSeconds (engine, 0.25, sampleRate, blockSize);
+
+		toybox::playback::ChipStateSnapshot snapshot;
+		const bool described = engine.captureChipState (snapshot);
+		engine.setStateCaptureWanted (false);
+
+		std::printf ("[3d] the file's chips describe themselves\n");
+
+		check (described, "the player fills in a snapshot for this file");
+		check (snapshot.chips.size () == 2, "the chip list holds the 2A03 and the expansion");
+
+		int expansionRows = 0;
+		int pitched = 0;
+		bool rowsPointAtTracks = true;
+		bool rowsCanBeDrawn = true;
+
+		for (const auto& channel : snapshot.channels)
+		{
+			if (channel.trackIndex < 5)
+			{
+				continue;
+			}
+
+			++expansionRows;
+			rowsPointAtTracks = rowsPointAtTracks && channel.trackIndex < (int) tracks.size ();
+
+			// A row the panel cannot draw is a blank cell: either a stored waveform arrived, or
+			// the shape kind is one the panel knows how to synthesise. The range is checked rather
+			// than the value, so a new kind that nobody taught the panel to draw fails here.
+			const bool knownShape = (channel.waveKind >= 2 && channel.waveKind <= 7);
+			rowsCanBeDrawn = rowsCanBeDrawn && (knownShape || ! channel.wave.empty ());
+
+			if (channel.active && channel.note >= 0)
+			{
+				++pitched;
+				check (channel.volume > 0.0f, "a sounding expansion row carries a level");
+			}
+
+			std::printf ("      %-9s note=%3d vol=%.2f wave=%d kind=%d\n",
+						 channel.name.c_str (), channel.note, (double) channel.volume,
+						 (int) channel.wave.size (), channel.waveKind);
+		}
+
+		check (expansionRows == (int) tracks.size () - 5, "every expansion track has a row");
+		check (rowsPointAtTracks, "every row points at a track the mixer has");
+		check (rowsCanBeDrawn, "every row has a shape the panel can draw");
+		check (pitched >= 1, "at least one expansion row is sounding with a pitch");
 	}
 
 	// --- [3b] a linked voice set does not leak into the parent's tracks -----------------------
@@ -2008,8 +2094,8 @@ int main (int argc, char* argv[])
 				const auto allMuted = measure ();
 				for (size_t c = 0; c < chips.size (); ++c) { engine.setChipMuted (c, false); }
 
-				std::printf ("      all muted     rms %.4f -> %.4f\n", plain.rms, allMuted.rms);
-				check (allMuted.rms < plain.rms * 0.1, "muting every chip silences the mix");
+				std::printf ("      all muted     ac %.4f -> %.4f\n", plain.acRms, allMuted.acRms);
+				check (allMuted.acRms < plain.acRms * 0.1, "muting every chip silences the mix");
 
 				// One chip at a time. A backend that only honoured the all-muted case would pass
 				// the check above and still leave every individual checkbox decorative, and a chip
@@ -2023,15 +2109,19 @@ int main (int argc, char* argv[])
 					const auto oneMuted = measure ();
 					engine.setChipMuted (c, false);
 
-					const bool changed = oneMuted.rms < plain.rms * 0.75;
+					// Against the signal's own energy, not the raw level: the DC offset the 2A03
+					// leaves behind is a constant, and a constant takes part in every sum without
+					// being heard. Comparing raw RMS here asked the wrong question of every file
+					// that carries one - see docs/memo/2026-10-25-nsf-dc-offset.md.
+					const bool changed = oneMuted.acRms < plain.acRms * 0.75;
 
 					if (changed)
 					{
 						++effective;
 					}
 
-					std::printf ("      %-12s rms %.4f -> %.4f%s\n", chips[c].name.toRawUTF8 (),
-								 plain.rms, oneMuted.rms,
+					std::printf ("      %-12s ac %.4f -> %.4f%s\n", chips[c].name.toRawUTF8 (),
+								 plain.acRms, oneMuted.acRms,
 								 changed ? "" : "   (not sounding in this window)");
 				}
 
