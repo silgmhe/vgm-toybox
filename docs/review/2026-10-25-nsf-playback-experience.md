@@ -291,3 +291,32 @@ ctest 42/42（新增 engine.fds_song / vrc6_song / vrc7_song / mmc5_song / fme7_
 - 每条轨能独奏、能被 MIDI 输出（若 D1 选了 A/B）；
 - 键盘视图对每颗芯片都能画出对应的行，波形/占空比与该芯片一致；
 - 上述每一条都有端到端断言，而不只是截图。
+
+## 6. 手工回归
+
+`test_file/` 不在仓库里（`.gitignore` 排除了整个目录），所以真实曲目只能在本地跑。它们能
+暴露自造样例覆盖不到的东西——这一轮就有一个：N163 的芯片声明缺失，在 `n163_song.nsf`
+被造出来之前，套件里没有任何东西能发现它。
+
+一条命令看芯片声明与轨道数是否一致：
+
+```
+build/plugin/vgm_mixer_test.exe test_file/nsf/<file>.nsf 1 44100
+```
+
+| 文件 | 芯片 | 期望 |
+|---|---|---|
+| `fod_hopeless.nsf` | **N163** | `13 tracks over 2 chip(s)` |
+| `fod_snowburnb.nsf` | VRC6 | `8 tracks over 2 chip(s)` |
+| `Entry080.nsf` | VRC6 | `8 tracks over 2 chip(s)` |
+| `1983.nsf` | 无扩展 | `5 tracks over 1 chip(s)` |
+
+任一行与 `OK  one group per chip, no device missing or extra` 不符，就是芯片声明和轨道
+列表又分叉了。
+
+**`Entry080.nsf` 不能当 N163 用**：它的头部 `0x7A` 是空的、`0x7B` 是 `0x01`，曾经被
+`detectUndeclaredChip` 猜成 N163。修好 `0x7A`/`0x7B` 之后它露出真身是 VRC6——所以「它跑通
+了」从来不等于「N163 跑通了」。N163 只有 `fod_hopeless.nsf` 作数。
+
+另外 `fod_hopeless.nsf` 还顺带验证了样本通道的编号：`Noise` 落在 43–58、`DPCM` 是 60 起的
+某个槽位。两处都不对时，先看 `--chips` 的输出。
