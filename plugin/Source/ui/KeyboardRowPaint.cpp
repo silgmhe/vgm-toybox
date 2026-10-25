@@ -57,6 +57,7 @@ void paintChannelRow (juce::Graphics& g,
 					  bool muted,
 					  bool soloed,
 					  int octaveShift,
+					  RowHover hover,
 					  const KeyPainter& paintKeys)
 {
 	const bool audible = channel.active && channel.volume > kSilenceLevel;
@@ -78,8 +79,8 @@ void paintChannelRow (juce::Graphics& g,
 	g.setFont (juce::Font (juce::FontOptions (12.0f)));
 	g.drawText (juce::String (channel.name), row.name, juce::Justification::centredLeft, false);
 
-	paintToggle (g, row.mute, "M", muted, true);
-	paintToggle (g, row.solo, "S", soloed, false);
+	paintToggle (g, row.mute, "M", muted, true, hover.mute);
+	paintToggle (g, row.solo, "S", soloed, false, hover.solo);
 
 	// The note, or a dash when the channel has no pitch to speak of.
 	g.setColour (channel.note >= 0 ? theme::primaryText () : theme::secondaryText ());
@@ -98,7 +99,7 @@ void paintChannelRow (juce::Graphics& g,
 }
 
 void paintToggle (juce::Graphics& g, juce::Rectangle<int> area,
-				  const char* letter, bool on, bool mute)
+				  const char* letter, bool on, bool mute, bool hovered)
 {
 	if (on)
 	{
@@ -109,6 +110,7 @@ void paintToggle (juce::Graphics& g, juce::Rectangle<int> area,
 	ButtonFace face;
 	face.level = on ? ButtonLevel::filled : ButtonLevel::material;
 	face.toggled = on;
+	face.hovered = hovered;
 	face.fill = mute ? theme::mute () : theme::solo ();
 
 	drawButtonFace (g, area.toFloat (), face);
@@ -130,7 +132,7 @@ void paintWave (juce::Graphics& g, juce::Rectangle<int> area,
 		juce::Graphics::ScopedSaveState clip (g);
 		g.reduceClipRegion (window.toNearestInt ());
 
-		juce::ColourGradient shade (juce::Colours::black.withAlpha (kWindowShadeAlpha),
+		juce::ColourGradient shade (theme::shadowTint ().withAlpha (kWindowShadeAlpha),
 									window.getX (), window.getY (),
 									juce::Colours::transparentBlack,
 									window.getX (), window.getY () + kWindowShadeDepth, false);

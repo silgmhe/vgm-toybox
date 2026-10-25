@@ -4,6 +4,7 @@
 #include <cmath>
 
 #include "backends/nsf/NsfBus.h"
+#include "backends/nsf/NsfChannelNaming.h"
 
 namespace toybox::backends::nsf
 {
@@ -369,8 +370,6 @@ namespace
 
 	constexpr int kPulseChannels = 2;
 	constexpr int kDmcChannels = 3;				// triangle, noise and the delta channel
-	constexpr int kN163Channels = 8;
-
 	// The 2A03's five tracks come first in the snapshot's channel order.
 	constexpr int kFirstDmcTrack = kPulseChannels;
 	constexpr int kFirstN163Track = kPulseChannels + kDmcChannels;
@@ -516,9 +515,10 @@ bool NsfPlayer::captureState (playback::ChipStateSnapshot& snapshot) const
 		return true;
 	}
 
-	// Eight channels, in the order GetTrackInfo reports them. The hardware numbers them the other
-	// way round (7 - channel); the display follows the API, and a panel that wants hardware
-	// numbering can reverse it.
+	// Eight channels, in the order GetTrackInfo reports them - which is the reverse of the way the
+	// hardware numbers them: the chip calls them 7 down to 0, so the row for channel 0 is the one a
+	// NSF composer would call channel 8. The name follows the hardware, because the name is what a
+	// musician reads; trackIndex keeps the API's order, because that is what the engine mutes.
 	for (int channel = 0; channel < kN163Channels; ++channel)
 	{
 		auto* info = dynamic_cast<xgm::TrackInfoN106*> (n106->GetTrackInfo (channel));
@@ -533,7 +533,7 @@ bool NsfPlayer::captureState (playback::ChipStateSnapshot& snapshot) const
 		state.trackIndex = kFirstN163Track + channel;
 		state.waveKind = kShapeStored;
 
-		state.name = "Wave " + std::to_string (channel + 1);
+		state.name = n163ChannelName (channel);
 		state.active = info->GetKeyStatus ();
 		state.frequency = (float) info->GetFreqHz ();
 		state.note = state.active ? playback::noteForFrequency (state.frequency) : -1;

@@ -13,6 +13,7 @@
 #include "settings/SettingsStore.h"
 
 #include <algorithm>
+#include <cstdio>
 #include <cmath>
 #include <functional>
 
@@ -27,6 +28,14 @@ namespace
 	// The row's own measurements live in KeyboardRowLayout: thirteen columns that have to fit
 	// a card are arithmetic, and arithmetic belongs where a test can call it.
 	keyboard::RowMetrics metrics;
+
+	// The card's own scrollbar, at its right edge - the mixer's width, for the same reason: it is
+	// the same gesture in the same kind of card.
+	constexpr int kScrollBarWidth = 12;
+	constexpr int kScrollBarGap = 6;		// between the bar and the card's edge
+
+	// How tall the "there is more below" fade is, at the card's bottom edge.
+	constexpr int kBottomFade = 18;
 
 	/** The shift comes from the setting; the table itself lives in KeyboardLayout so the settings
 		page, the note column and the octave labels all name a note the same way. */
@@ -109,6 +118,8 @@ public:
 		// its old colours after a theme change.
 		exportButton.setButtonText (toybox::i18n::tr ("visualiser.export"));
 		exportButton.onClick = [this] { if (onExport) { onExport (); } };
+		setComponentID ("view.keyboard");
+
 		addAndMakeVisible (exportButton);
 	}
 
@@ -161,6 +172,10 @@ public:
 			observedMin = observedMin < 0 ? channel.note : juce::jmin (observedMin, channel.note);
 			observedMax = observedMax < 0 ? channel.note : juce::jmax (observedMax, channel.note);
 		}
+		// A new snapshot can bring a channel the last one did not have, which changes how tall the
+		// content is. Rebuilt here rather than in paint(), which only draws what it is given.
+		relayout ();
+
 	}
 
 	void refreshLanguage (void)
@@ -196,10 +211,8 @@ public:
 						juce::Justification::centredRight, false);
 		}
 
-		const auto layout = keyboard::layoutRows (chipNamesFor (snapshot), getWidth (),
-												 scrollOffset, kHeader, metrics);
-		rows = layout.rows;
-		contentHeight = layout.contentHeight;
+		relayout ();
+
 
 		if (snapshot.channels.empty ())
 		{
@@ -236,11 +249,17 @@ public:
 				const bool soloed = channel.trackIndex >= 0
 									&& engine.isTrackSoloed ((std::size_t) channel.trackIndex);
 
-				keyboard::paintChannelRow (g, row, channel, muted, soloed, octaveShift,
+				keyboard::RowHover hover;
+				hover.mute = (hoveredRowChannel == row.channel && hoveredRowMute);
+				hover.solo = (hoveredRowChannel == row.channel && ! hoveredRowMute);
+
+				keyboard::paintChannelRow (g, row, channel, muted, soloed, octaveShift, hover,
 										   [this] (juce::Graphics& graphics, juce::Rectangle<int> area, int note)
 										   { paintKeyboard (graphics, area, note); });
 			}
 		}
+
+		paintScrollBar (g);
 
 		// A fade along the bottom when there is more to scroll: without it the last row is cut in
 		// half by the card's edge, which reads as a layout fault rather than as "keep going".
@@ -248,7 +267,7 @@ public:
 
 		if (contentHeight > visible)
 		{
-			auto bottom = getLocalBounds ().removeFromBottom (18).toFloat ();
+			auto bottom = getLocalBounds ().removeFromBottom (kBottomFade).toFloat ();
 
 			juce::ColourGradient fade (theme::card ().withAlpha (0.0f), bottom.getX (), bottom.getY (),
 									   theme::card (), bottom.getX (), bottom.getBottom (), false);
@@ -260,8 +279,15 @@ public:
 	void resized (void) override
 	{
 		exportButton.setBounds (getWidth () - kInset - 112, 10, 112, 24);
+
+		// Tail to tail with the card, above the fade at the bottom: a thumb that ran into the fade
+		// would look like part of it.
+		// Inside the card's right edge, in the column every row reserves for it.
 		clampScroll ();
+		relayout ();
+		repaint ();
 	}
+
 
 	void mouseDown (const juce::MouseEvent& event) override
 	{
@@ -325,19 +351,86 @@ public:
 
 	void mouseMove (const juce::MouseEvent& event) override
 	{
+		// The rows are built in relayout, which runs when the panel paints. A pointer that arrives
+		// before the first paint - a script, a restored window - would be hit-tested against an
+		// empty list.
+		if (rows.empty ())
+		{
+			relayout ();
+		}
+
 		const auto point = event.getPosition ();
 		const int hovered = shiftLeftRect.contains (point) ? 0
 						  : (shiftRightRect.contains (point) ? 1 : -1);
+
+		int rowChannel = -1;
+		bool rowMute = false;
+
+		if (hovered < 0)
+		{
+			for (const auto& row : rows)
+			{
+				if (row.header)
+				{
+					continue;
+				}
+
+				if (row.mute.contains (point)) { rowChannel = row.channel; rowMute = true;  break; }
+				if (row.solo.contains (point)) { rowChannel = row.channel; rowMute = false; break; }
+			}
+		}
+
+
+		const bool pointer = hovered >= 0 || rowChannel >= 0;
+
+		if (pointer != lastPointerWasOverControl)
+		{
+			lastPointerWasOverControl = pointer;
+			setMouseCursor (pointer ? juce::MouseCursor::PointingHandCursor
+									: juce::MouseCursor::NormalCursor);
+		}
 
 		if (hovered != hoveredControl)
 		{
 			hoveredControl = hovered;
 			repaint (getLocalBounds ().withHeight (kHeader));
 		}
+
+		if (rowChannel != hoveredRowChannel || rowMute != hoveredRowMute)
+		{
+			// Only the two rows involved: repainting thirteen of them at every mouse move is how a
+			// hover effect becomes a fan.
+			const auto repaintRow = [this] (int channel)
+			{
+				for (const auto& row : rows)
+				{
+					if (! row.header && row.channel == channel)
+					{
+						repaint (row.mute.getUnion (row.solo).expanded (2));
+					}
+				}
+			};
+
+			if (hoveredRowChannel >= 0) { repaintRow (hoveredRowChannel); }
+
+			hoveredRowChannel = rowChannel;
+			hoveredRowMute = rowMute;
+
+			if (hoveredRowChannel >= 0) { repaintRow (hoveredRowChannel); }
+		}
 	}
 
 	void mouseExit (const juce::MouseEvent&) override
 	{
+		if (hoveredRowChannel >= 0)
+		{
+			hoveredRowChannel = -1;
+			repaint ();
+
+			lastPointerWasOverControl = false;
+			setMouseCursor (juce::MouseCursor::NormalCursor);
+		}
+
 		if (hoveredControl != -1)
 		{
 			hoveredControl = -1;
@@ -362,6 +455,7 @@ public:
 		// authority on the same geometry.
 		scrollOffset -= (int) std::lround (wheel.deltaY * (float) metrics.rowHeight * 3.0f);
 		clampScroll ();
+		relayout ();
 		repaint ();
 	}
 
@@ -369,6 +463,63 @@ public:
 
 private:
 	using Row = keyboard::Row;
+
+	/** Rebuilds the rows and the content height from the width, the snapshot and the scroll.
+
+		Kept out of paint(): it shows and hides the scroll bar, and toggling a child's visibility
+		from inside a paint callback cancels that child's paint for the frame - the bar was visible
+		according to the component tree and drew nothing at all.
+	*/
+	void relayout (void)
+	{
+		// The column is the card's width minus the bar, always: a bar that appeared and vanished
+		// with the content would reflow every key each time a song gained a channel.
+		metrics.reservedRight = kScrollBarWidth + 2 * kScrollBarGap;
+
+		const auto layout = keyboard::layoutRows (chipNamesFor (snapshot), getWidth (),
+												 scrollOffset, kHeader, metrics);
+
+		rows = std::move (layout.rows);
+		contentHeight = layout.contentHeight;
+	}
+
+	/** Pushes the content height into the bar without the bar pushing it back. */
+
+	/** The card's scroll bar, drawn rather than built.
+
+		A juce::ScrollBar is a child component, and as a child of this panel it could not be made to
+		paint: visible in the component tree, bounds inside the card, and not one coloured pixel on
+		screen. Ten lines of drawing take the palette's colours like everything else and cannot end
+		up behind the rows.
+	*/
+	void paintScrollBar (juce::Graphics& g)
+	{
+		const int visible = juce::jmax (1, getHeight () - kHeader);
+
+		if (contentHeight <= visible)
+		{
+			return;
+		}
+
+		const juce::Rectangle<int> track (getWidth () - metrics.cardInset - kScrollBarGap - kScrollBarWidth,
+										  kHeader + kScrollBarGap,
+										  kScrollBarWidth,
+										  juce::jmax (0, getHeight () - kHeader - kBottomFade));
+
+		g.setColour (theme::scrollBarTrack ());
+		g.fillRoundedRectangle (track.toFloat (), 5.0f);
+
+		const float thumbHeight = juce::jmax (24.0f, (float) track.getHeight () * (float) visible
+														 / (float) contentHeight);
+		const float travel = (float) track.getHeight () - thumbHeight;
+		const float position = (float) scrollOffset / (float) juce::jmax (1, contentHeight - visible);
+
+		g.setColour (theme::scrollBarThumb ());
+		g.fillRoundedRectangle ({ (float) track.getX (),
+								  (float) track.getY () + travel * juce::jlimit (0.0f, 1.0f, position),
+								  (float) track.getWidth (),
+								  thumbHeight }, 5.0f);
+	}
 
 	void clampScroll (void)
 	{
@@ -576,7 +727,7 @@ private:
 			juce::Graphics::ScopedSaveState inner (g);
 			g.reduceClipRegion (bed.toNearestInt ());
 
-			juce::ColourGradient shade (juce::Colours::black.withAlpha (0.10f), bed.getX (), bed.getY (),
+			juce::ColourGradient shade (theme::shadowTint ().withAlpha (0.10f), bed.getX (), bed.getY (),
 										juce::Colours::transparentBlack, bed.getX (), bed.getY () + 5.0f, false);
 			g.setGradientFill (shade);
 			g.fillRoundedRectangle (bed, 5.0f);
@@ -609,7 +760,7 @@ private:
 				juce::Graphics::ScopedSaveState clipped (g);
 				g.reduceClipRegion (face.toNearestInt ());
 
-				juce::ColourGradient shade (juce::Colours::black.withAlpha (0.30f), face.getX (), face.getY (),
+				juce::ColourGradient shade (theme::shadowTint ().withAlpha (0.30f), face.getX (), face.getY (),
 											juce::Colours::transparentBlack, face.getX (), face.getY () + 5.0f, false);
 				g.setGradientFill (shade);
 				g.fillRoundedRectangle (face, 1.5f);
@@ -827,6 +978,7 @@ private:
 	toybox::playback::ChipStateSnapshot snapshot;
 	std::vector<Row> rows;
 
+
 	int scrollOffset = 0;
 	int contentHeight = 0;
 
@@ -854,6 +1006,12 @@ private:
 	// same material as everything else without a child's clipping deciding where their shadow ends.
 	juce::Rectangle<int> shiftLeftRect, shiftRightRect, autoRect;
 	int hoveredControl = -1;
+
+	// Which row's mute or solo the pointer is over: -1 for none. The two are one member because
+	// only one of them can be under the pointer at a time.
+	int hoveredRowChannel = -1;
+	bool hoveredRowMute = false;
+	bool lastPointerWasOverControl = false;
 
 	juce::String& exportStatus;
 	juce::TextButton exportButton { "export" };

@@ -1,5 +1,7 @@
 #pragma once
 
+#include "NumericSettings.h"
+
 #include <juce_data_structures/juce_data_structures.h>
 
 namespace toybox::settings
@@ -176,6 +178,15 @@ public:
 	/** Which octave number MIDI 60 carries: 3 means the keyboard calls middle C a C3. */
 	int getKeyboardMiddleCOctave (void) const;
 	void setKeyboardMiddleCOctave (int octave);
+
+	/** Reads and writes a numeric preference through its descriptor: one place that knows the
+		key, the bounds and the default. */
+	int getNumericSetting (const NumericSetting& setting) const;
+	void setNumericSetting (const NumericSetting& setting, int value);
+
+	/** Whether a new session starts with the DC blocker on. Existing sessions carry their own. */
+	bool getAudioDcBlock (void) const;
+	void setAudioDcBlock (bool shouldRemove);
 
 	/** How long a key stays lit after its note stops, in milliseconds. */
 	int getKeyboardNoteHoldMs (void) const;

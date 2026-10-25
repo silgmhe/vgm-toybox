@@ -272,6 +272,7 @@ void PlaybackEngine::writeState (juce::MemoryBlock& destData) const
 		state.mixerEnabled = mixerEnabled;
 		state.mixerMasterGain = mixerMasterGain.load();
 		state.masterMuted = masterMuted.load();
+	state.dcBlockEnabled = dcBlockEnabled.load();
 		state.masterOutput = masterOutput.load();
 		state.masterMidiChannel = masterMidiChannel.load();
 		state.defaultRouting = defaultRouting;
@@ -337,6 +338,7 @@ bool PlaybackEngine::readState (const void* data, int sizeInBytes, juce::String&
 		setMixerMasterGain (state.mixerMasterGain);
 		setMasterVolume (state.volume);
 		setMasterMuted (state.masterMuted);
+	setDcBlockEnabled (state.dcBlockEnabled);
 		setMasterOutput ((playback::OutputTarget) state.masterOutput);
 		setMasterMidiChannel (state.masterMidiChannel);
 
@@ -404,6 +406,19 @@ void PlaybackEngine::unloadFile (void)
 
 	const juce::ScopedLock sl (lock);
 	resetState();
+}
+
+void PlaybackEngine::setDcBlockEnabled (bool shouldBeEnabled)
+{
+	if (dcBlockEnabled.exchange (shouldBeEnabled) != shouldBeEnabled)
+	{
+		// The filter's memory belongs to the signal that produced it: switching the block on with
+		// stale state would push a step through the first block.
+		for (auto& st : dcBlockStates)
+		{
+			st = {};
+		}
+	}
 }
 
 void PlaybackEngine::setMixerEnabled (bool shouldBeEnabled)
@@ -1955,6 +1970,11 @@ void PlaybackEngine::finaliseMasterBus (const playback::OutputBusBuffers* buses,
 
 void PlaybackEngine::applyOutputVolume (const playback::OutputBusBuffers* buses, int busCount, int numSamples)
 {
+	if (dcBlockEnabled.load())
+	{
+		applyDcBlock (buses, busCount, numSamples);
+	}
+
 	// The output volume (the transport card's slider) is the very last stage and applies to
 	// every bus - it is the plugin's own output level, so direct outputs are not exempt.
 	const float outputVolume = masterVolume.load();
@@ -1969,6 +1989,44 @@ void PlaybackEngine::applyOutputVolume (const playback::OutputBusBuffers* buses,
 			if (buses[bus].right != nullptr)
 			{
 				juce::FloatVectorOperations::multiply (buses[bus].right, outputVolume, numSamples);
+			}
+		}
+	}
+}
+
+void PlaybackEngine::applyDcBlock (const playback::OutputBusBuffers* buses, int busCount, int numSamples)
+{
+	// A one-pole high pass: y[n] = x[n] - x[n-1] + r * y[n-1]. r is set for a corner at five hertz,
+	// low enough that nothing musical is touched and high enough that the drift is gone within a
+	// second or so.
+	const double rate = sampleRate > 0.0 ? sampleRate : 44100.0;
+	const float r = (float) (1.0 - 2.0 * juce::MathConstants<double>::pi * 5.0 / rate);
+
+	for (int bus = 0; bus < juce::jmin (busCount, (int) dcBlockStates.size()); ++bus)
+	{
+		auto& state = dcBlockStates[(size_t) bus];
+
+		if (buses[bus].left != nullptr)
+		{
+			for (int i = 0; i < numSamples; ++i)
+			{
+				const float x = buses[bus].left[i];
+				const float y = x - state.lastInL + r * state.lastOutL;
+				state.lastInL = x;
+				state.lastOutL = y;
+				buses[bus].left[i] = y;
+			}
+		}
+
+		if (buses[bus].right != nullptr)
+		{
+			for (int i = 0; i < numSamples; ++i)
+			{
+				const float x = buses[bus].right[i];
+				const float y = x - state.lastInR + r * state.lastOutR;
+				state.lastInR = x;
+				state.lastOutR = y;
+				buses[bus].right[i] = y;
 			}
 		}
 	}

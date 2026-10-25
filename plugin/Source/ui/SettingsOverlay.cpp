@@ -7,6 +7,7 @@
 #include "UiFont.h"
 #include "playback/MidiSequence.h"
 #include "settings/KeyboardSettings.h"
+#include "settings/NumericSettings.h"
 #include "settings/NsfSettings.h"
 
 #include <algorithm>
@@ -782,10 +783,11 @@ KeyboardSettingsPage::KeyboardSettingsPage (void)
 	holdSlider.setComponentID ("settings.keyboard.noteHold");
 	holdSlider.setSliderStyle (juce::Slider::LinearHorizontal);
 	holdSlider.setTextBoxStyle (juce::Slider::TextBoxRight, false, 76, 22);
-	holdSlider.setRange ((double) toybox::settings::keyboard::minNoteHoldMs,
-						 (double) toybox::settings::keyboard::maxNoteHoldMs,
-						 (double) toybox::settings::keyboard::noteHoldStepMs);
-	holdSlider.setTextValueSuffix (" ms");
+	if (const auto* hold = toybox::settings::numericSetting ("keyboard.noteHoldMs"))
+	{
+		holdSlider.setRange ((double) hold->minimum, (double) hold->maximum, (double) hold->step);
+		holdSlider.setTextValueSuffix (hold->suffix);
+	}
 	holdSlider.onValueChange = [this]
 	{
 		toybox::settings::SettingsStore::getInstance ()
@@ -888,7 +890,10 @@ void KeyboardSettingsPage::refreshLanguage (void)
 {
 	startCaption.setText (i18n::tr ("settings.keyboard.startNote"), juce::dontSendNotification);
 	startNote.changeItemText (1, i18n::tr ("settings.keyboard.startAuto"));
-	holdCaption.setText (i18n::tr ("settings.keyboard.noteHold"), juce::dontSendNotification);
+	if (const auto* hold = toybox::settings::numericSetting ("keyboard.noteHoldMs"))
+	{
+		holdCaption.setText (i18n::tr (hold->labelKey), juce::dontSendNotification);
+	}
 	middleCaption.setText (i18n::tr ("settings.keyboard.middleC"), juce::dontSendNotification);
 	caption.setText (i18n::tr ("settings.keyboard.rangeHints"), juce::dontSendNotification);
 	rangeHints.setButtonText (i18n::tr ("settings.keyboard.rangeHintsOn"));
@@ -914,6 +919,13 @@ AudioSettingsPage::AudioSettingsPage (void)
 		}
 	};
 
+	dcBlock.setComponentID ("settings.audio.dcBlock");
+	dcBlock.setTooltip (i18n::tr ("settings.audio.dcBlockTooltip"));
+	dcBlock.onClick = [this]
+	{
+		toybox::settings::SettingsStore::getInstance ().setAudioDcBlock (dcBlock.getToggleState ());
+	};
+
 	hintLabel.setComponentID ("settings.audio.hint");
 	hintLabel.setFont (juce::Font (juce::FontOptions (12.0f)));
 	hintLabel.setJustificationType (juce::Justification::topLeft);
@@ -921,6 +933,7 @@ AudioSettingsPage::AudioSettingsPage (void)
 
 	addAndMakeVisible (deviceLabel);
 	addAndMakeVisible (settingsButton);
+	addAndMakeVisible (dcBlock);
 	addAndMakeVisible (hintLabel);
 
 	refreshLanguage();
@@ -934,6 +947,10 @@ AudioSettingsPage::AudioSettingsPage (void)
 
 void AudioSettingsPage::refresh (void)
 {
+	dcBlock.setToggleState (toybox::settings::SettingsStore::getInstance ().getAudioDcBlock (),
+							juce::dontSendNotification);
+
+
 	juce::String line;
 
 	if (auto& table = toybox::standalone::hooks(); table.describeAudioDevice != nullptr)
@@ -966,6 +983,8 @@ void AudioSettingsPage::timerCallback (void)
 void AudioSettingsPage::refreshLanguage (void)
 {
 	settingsButton.setButtonText (i18n::tr ("settings.audio.open"));
+	dcBlock.setButtonText (i18n::tr ("settings.audio.dcBlock"));
+	dcBlock.setTooltip (i18n::tr ("settings.audio.dcBlockTooltip"));
 	hintLabel.setText (i18n::tr ("settings.audio.hint"), juce::dontSendNotification);
 	shownLine.clear();		// force refresh() to re-apply the placeholder if it is showing
 	refresh();
@@ -986,6 +1005,8 @@ void AudioSettingsPage::resized (void)
 	area.removeFromTop (theme::cardGap + 6);
 	settingsButton.setBounds (area.removeFromTop (kFooterHeight).removeFromLeft (196));
 	area.removeFromTop (theme::cardGap + 6);
+	dcBlock.setBounds (area.removeFromTop (24).removeFromLeft (320));
+	area.removeFromTop (theme::cardGap);
 	hintLabel.setBounds (area.removeFromTop (44));
 }
 
@@ -1563,7 +1584,7 @@ void SettingsOverlay::paint (juce::Graphics& g)
 {
 	// The scrim, exactly as over the About box: it dims the window, and the area around the panel
 	// is the "go back" one that mouseDown() below acts on.
-	g.fillAll (juce::Colours::black.withAlpha (0.35f));
+	g.fillAll (theme::scrim ());
 
 	const auto panel = panelBounds().toFloat();
 	g.setColour (theme::card());

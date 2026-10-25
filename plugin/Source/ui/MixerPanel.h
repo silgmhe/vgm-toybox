@@ -111,6 +111,7 @@ private:
 
 	toybox::PlaybackEngine& engine;
 	IconButton mixerToggle { "mixer", "Mixer", IconButton::Icon::sliders };
+	IconButton dcBlockButton { "dc-block", "Remove DC offset", IconButton::Icon::dcBlock };
 	// the two routing shortcuts in the card header: spread every track over the output buses,
 	// or send all of them back to the master bus
 	IconButton spreadOutputsButton { "spread-outputs", "Spread outputs", IconButton::Icon::spreadOutputs };

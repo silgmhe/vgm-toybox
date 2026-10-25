@@ -55,6 +55,7 @@ struct SessionState
 	bool mixerEnabled = true;
 	float mixerMasterGain = 1.0f;
 	bool masterMuted = false;
+	bool dcBlockEnabled = false;
 	OutputTarget masterOutput = 0;
 	int masterMidiChannel = 0;		// 0 = Off, 1..16
 	DefaultRouting defaultRouting = DefaultRouting::master;

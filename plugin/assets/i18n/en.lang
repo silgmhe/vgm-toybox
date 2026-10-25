@@ -95,6 +95,10 @@ language: English
 "settings.audio.hint" = "The same dialog JUCE's own window used to offer: device, sample rate, buffer size and MIDI input. A change takes effect at once.";
 "settings.audio.noDevice" = "No audio device is open.";
 "settings.audio.open" = "Audio/MIDI settings...";
+	"mixer.dcBlockOff" = "DC offset present (click to remove)";
+	"mixer.dcBlockOn" = "DC offset removed";
+	"settings.audio.dcBlockTooltip" = "New sessions start with the DC blocker on. Existing songs keep their own setting.";
+	"settings.audio.dcBlock" = "Remove DC offset by default";
 "settings.general" = "General";
 "settings.general.closeToTray" = "Keep running in the system tray";
 "settings.general.closeToTrayHint" = "The close button hides the window instead of quitting. Use the tray icon to reopen it, or Quit in its menu to exit.";

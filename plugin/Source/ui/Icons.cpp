@@ -310,4 +310,23 @@ void drawCueGlyph (juce::Graphics& g, juce::Rectangle<float> iconArea, juce::Col
 	g.fillPath (pennant);
 }
 
+void drawDcBlockGlyph (juce::Graphics& g, juce::Rectangle<float> iconArea, juce::Colour colour)
+{
+	// The response of a one-pole high pass: nothing at zero, a rise, then flat.
+	juce::Path path;
+
+	path.startNewSubPath (iconArea.getX (), iconArea.getBottom ());
+	path.lineTo (iconArea.getX () + iconArea.getWidth () * 0.42f, iconArea.getY ());
+	path.lineTo (iconArea.getRight (), iconArea.getY ());
+
+	g.setColour (colour);
+	g.strokePath (path, juce::PathStrokeType (1.4f, juce::PathStrokeType::curved,
+											  juce::PathStrokeType::rounded));
+
+	// The axis it is a response against.
+	g.setColour (colour.withAlpha (0.45f));
+	g.fillRect (juce::Rectangle<float> (iconArea.getX (), iconArea.getBottom () - 0.8f,
+										iconArea.getWidth (), 0.8f));
+}
+
 } // namespace toybox::ui

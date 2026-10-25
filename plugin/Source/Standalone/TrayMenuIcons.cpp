@@ -100,15 +100,18 @@ namespace
 	void drawSvg (juce::Graphics& graphics, const juce::Drawable& drawable, juce::Colour colour,
 				  float opacity)
 	{
-		// The asset is monochrome black; recolouring a copy keeps the cached drawable reusable
-		// on light and dark menus alike.
+		// The asset is monochrome, drawn in black: that is the ink it ships in, not a colour the
+		// application chose, so it is a constant here rather than a palette role. Recolouring a
+		// copy keeps the cached drawable reusable on light and dark menus alike.
+		static constexpr juce::uint32 kSourceInk = 0xff000000;
+
 		auto copy = drawable.createCopy();
 		if (copy == nullptr)
 		{
 			return;
 		}
 
-		copy->replaceColour (juce::Colours::black, colour);
+		copy->replaceColour (juce::Colour (kSourceInk), colour);
 		// Draw in the SVG's own 16x16 coordinates: drawWithin() would stretch the ink's
 		// bounding box to the target, which makes each glyph a different size.
 		copy->draw (graphics, opacity);
@@ -145,7 +148,11 @@ juce::Image makeTrayMenuIcon (TrayMenuIcon icon, int pixelSize, juce::Colour cor
 
 juce::Image makeTrayMenuIconTemplate (TrayMenuIcon icon, int pixelSize)
 {
-	return renderIcon (icon, pixelSize, juce::Colours::white, 1.0f);
+	// White is the operating system's contract for a template image - it inverts the silhouette
+	// for a dark or a light taskbar - so this is not the application's colour to choose.
+	static constexpr juce::uint32 kTemplateInk = 0xffffffff;
+
+	return renderIcon (icon, pixelSize, juce::Colour (kTemplateInk), 1.0f);
 }
 
 } // namespace toybox::standalone

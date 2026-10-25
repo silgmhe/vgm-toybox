@@ -230,7 +230,7 @@ void testRowLayout (void)
 		check (row.note.getRight () <= row.wave.getX (), "the note column then the waveform");
 		check (row.wave.getRight () <= row.keys.getX (), "the waveform then the keyboard");
 		check (row.keys.getRight () <= row.meter.getX (), "and the keyboard before the meter");
-		check (row.mute.getHeight () == 28 && row.mute.getWidth () == 28,
+		check (row.mute.getHeight () == 30 && row.mute.getWidth () == 30,
 			   "the mute button is the mixer's size");
 	}
 

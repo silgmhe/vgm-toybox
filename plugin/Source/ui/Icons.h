@@ -25,6 +25,10 @@ void drawSpreadOutputsGlyph (juce::Graphics& g, juce::Rectangle<float> iconArea,
 /** The "send to master" glyph: several tracks on the left converging into one bus on the right. */
 void drawMergeToMasterGlyph (juce::Graphics& g, juce::Rectangle<float> iconArea, juce::Colour colour);
 
+/** The "remove DC" glyph: a flat line that curves up and levels off - the shape of a high pass,
+	which is what the button switches on. */
+void drawDcBlockGlyph (juce::Graphics& g, juce::Rectangle<float> iconArea, juce::Colour colour);
+
 /** The "linked to the host" glyph: two interlocking chain links, of the DAW sync toggle. */
 void drawSyncGlyph (juce::Graphics& g, juce::Rectangle<float> iconArea, juce::Colour colour);
 

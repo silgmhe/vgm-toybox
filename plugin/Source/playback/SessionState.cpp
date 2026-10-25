@@ -70,6 +70,7 @@ void writeSessionState (const SessionState& state, juce::XmlElement& xml)
 	mixer->setAttribute ("enabled", state.mixerEnabled ? 1 : 0);
 	mixer->setAttribute ("masterGain", (double) state.mixerMasterGain);
 	mixer->setAttribute ("masterMuted", state.masterMuted ? 1 : 0);
+		mixer->setAttribute ("dcBlock", state.dcBlockEnabled ? 1 : 0);
 	mixer->setAttribute ("masterOutput", state.masterOutput);
 	mixer->setAttribute ("masterMidiChannel", state.masterMidiChannel);
 	mixer->setAttribute ("defaultRouting", routingToName (state.defaultRouting));
@@ -154,6 +155,7 @@ bool readSessionState (const juce::XmlElement& xml, SessionState& state, juce::S
 		state.mixerMasterGain = (float) mixer->getDoubleAttribute ("masterGain",
 																  (double) state.mixerMasterGain);
 		state.masterMuted = mixer->getBoolAttribute ("masterMuted", state.masterMuted);
+	state.dcBlockEnabled = mixer->getBoolAttribute ("dcBlock", state.dcBlockEnabled);
 		state.masterOutput = mixer->getIntAttribute ("masterOutput", state.masterOutput);
 		state.masterMidiChannel = juce::jlimit (0, 16,
 												mixer->getIntAttribute ("masterMidiChannel", state.masterMidiChannel));
