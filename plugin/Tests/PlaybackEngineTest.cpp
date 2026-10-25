@@ -1331,7 +1331,21 @@ int main (int argc, char* argv[])
 	engine.setPositionSeconds (0.0);
 	engine.play();
 	const auto backToPlain = renderSeconds (engine, renderLength, sampleRate, blockSize);
-	check (differenceDb (plain, backToPlain) < 0.5, "switching the mixer off restores the plain mix");
+
+	// `plainAgain`, not `plain`: both sides get the same seek history, which is the rule this file
+	// states for itself a hundred lines up. `plain` came from a fresh start and this render comes
+	// after a rewind, and libvgm's seek warm-up is not the same as a cold start - measured at 0.99
+	// of the fresh level on wswan but 0.70 on k053260, so a comparison across the two histories
+	// measures the warm-up, not the mixer.
+	const double backToPlainRatio = (plainAgain.rms > 0.0) ? backToPlain.rms / plainAgain.rms : 0.0;
+	std::printf ("    mixer off -> rms %.4f vs plain-after-seek %.4f (ratio %.3f)\n",
+				 backToPlain.rms, plainAgain.rms, backToPlainRatio);
+
+	// What the check is for is that the strip settings stop applying - a muted track must not
+	// silence the plain player, a gain of 0.5 must not halve it. Both of those would give a ratio
+	// far below the 0.9 here; ordinary warm-up noise stays well above it.
+	check (backToPlain.rms > 0.001 && backToPlainRatio > 0.9,
+		   "switching the mixer off restores the plain mix");
 
 	for (size_t i = 0; i < tracks.size(); ++i)
 	{
