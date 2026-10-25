@@ -105,8 +105,15 @@ else()
 	set(LIBVGM_TARGETS libvgm::vgm-utils libvgm::vgm-audio libvgm::vgm-emu libvgm::vgm-player)
 endif()
 
-# --- the command-line player (upstream VGMPlay) ---
-add_subdirectory(vgmplayer)
+# --- NSFPlay's device cores ---
+# Introduced here rather than from plugin/, so everything under libs/ is added in one place. A
+# dependency added by a subdirectory is one nobody can find by reading this file, and that is
+# how the nsfplay build tree ended up at an absolute path (/nsfplay) for months: the only
+# add_subdirectory() in the project with two arguments was the one buried in plugin/.
+#
+# EXCLUDE_FROM_ALL because nothing outside the plugin links it: the console tests that touch
+# NSFPlay do so through the plugin's own objects.
+add_subdirectory(libs/nsfplay EXCLUDE_FROM_ALL)
 
 # --- the JUCE-based GUI plugin (VGM Toybox) ---
 # Uses the same libvgm libraries as the command-line player. JUCE itself is fetched with

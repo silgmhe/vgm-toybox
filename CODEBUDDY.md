@@ -7,34 +7,33 @@ This repository plays video game music log formats: `.vgm`/`.vgz` (Video Game Mu
 
 The fork's own product is **VGMToybox** (`vgm-toybox`) — the two names are deliberately distinct: everything the plugin builds is "VGMToybox", while the command-line player keeps the upstream "VGMPlay" identity, so the upstream tool and this fork's plugin never get mixed up.
 
-The repository builds two front-ends on top of the same libvgm libraries:
+The repository builds one front-end on top of the libvgm libraries:
 
-1. **`VGMPlay64.exe` / `vgmplay`** — the classic command-line player (sources in `vgmplayer/`, `PLAYSTATE_*`-driven render loop in `playctrl.cpp`), upstream's, name and all.
-2. **`plugin/`** — **VGMToybox**: a JUCE-based GUI plugin (VST3 + standalone, artefacts `VGMToybox.vst3` / `VGMToybox.exe`) with a transport UI, seekable progress bar, per-chip mute buttons and a DAW-style mixer with multi-output routing. See "GUI plugin" in the architecture section.
+1. **`plugin/`** — **VGMToybox**: a JUCE-based GUI plugin (VST3 + standalone, artefacts `VGMToybox.vst3` / `VGMToybox.exe`) with a transport UI, seekable progress bar, per-chip mute buttons and a DAW-style mixer with multi-output routing. See "GUI plugin" in the architecture section.
+
+Upstream's command-line player (`vgmplayer/`, `VGMPlay64.exe`) used to live beside it and has been removed: it was a second consumer of the same libraries, and keeping its target, INI template and two text documents in step with the plugin's build was work that bought nothing.
 
 The authoritative docs are `README.md` (what the product is, build, usage - English, with `README.zh-CN.md` alongside), `VGMPlay.txt` (keys, supported formats) and `libs/libvgm/Compiling.txt` (build notes for the library).
 
 ## Build commands
 
-Nothing to fetch — `libs/libvgm`, `libs/inih` and `libs/wingetopt` are vendored source, part of this repository.
+Nothing to fetch — `libs/libvgm` and `libs/nsfplay` are vendored source, part of this repository.
 
-Everything is built in **one CMake tree**: the root project adds the vendored libvgm with `add_subdirectory(libs/libvgm)` (static libraries `vgm-utils`, `vgm-audio`, `vgm-emu`, `vgm-player`), and libvgm fetches + adds zlib itself (`libs/libvgm/cmake/CPM.cmake`, used in `libs/libvgm/utils/CMakeLists.txt`). `find_package(libvgm)` is only a fallback for when the in-tree copy is missing. `.github/workflows/GHA.yml` builds the command-line player only (`-DTOYBOX_BUILD_PLUGIN=OFF`), because the GUI plugin is a Windows target.
+Everything is built in **one CMake tree**: the root project adds both vendored libraries with `add_subdirectory(libs/libvgm)` (static libraries `vgm-utils`, `vgm-audio`, `vgm-emu`, `vgm-player`) and `add_subdirectory(libs/nsfplay)` (`nsfplay_core`), and libvgm fetches + adds zlib itself (`libs/libvgm/cmake/CPM.cmake`, used in `libs/libvgm/utils/CMakeLists.txt`). `find_package(libvgm)` is only a fallback for when the in-tree copy is missing. **Every vendored dependency is added in the root file** — a library introduced from a subdirectory is one nobody finds by reading the list, and the absolute build path `/nsfplay` that broke CI on Linux and macOS lived in exactly such a call. `.github/workflows/GHA.yml` builds the plugin and its console tests on all three platforms.
 
 ```bash
 # Windows: MSVC + Ninja + static runtime, output in .\dist (+ clangd database)
 .\build.ps1                      # options: -Arch x86 | -Config Debug | -Clean | -NoPlugin | -Clang | -Test | -Target <t> | -Proxy <url> | -NoDeploy
 build.bat -Clean                 # wrapper for cmd.exe
-build.bat -NoPlugin              # command-line player only (skips the JUCE download/build)
+build.bat -NoPlugin              # build without the JUCE plugin (skips its download and target)
 
 # manual equivalent (any platform/toolchain)
 cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release \
       -DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreaded -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
-cmake --build build              # or: cmake --build build --target VGMPlay64
+cmake --build build              # or: cmake --build build --target VGMToybox
 ```
 
-`build.ps1` locates Visual Studio (`vswhere` + `vcvars64.bat`), configures and builds, then copies `VGMPlay*.exe` + `VGMPlay.ini` + the two text docs into `.\dist\` and writes `compile_commands.json` to the repository root (CMake writes it to `build/`; the root copy lets clangd resolve flags for *all* sources: VGMPlay, libvgm and zlib).
-
-The executable is `VGMPlay64.exe` (x64 MSVC), `VGMPlay.exe` (Win32 MSVC) or `vgmplay` (other toolchains) inside the build directory.
+`build.ps1` locates Visual Studio (`vswhere` + `vcvars64.bat`), configures and builds, then copies the VST3 bundle and the standalone application into `.\dist\` and writes `compile_commands.json` to the repository root (CMake writes it to `build/`; the root copy lets clangd resolve flags for *all* sources: plugin, libvgm, nsfplay and zlib).
 
 Static runtime: the root `CMakeLists.txt` sets `CMAKE_MSVC_RUNTIME_LIBRARY=MultiThreaded` (`/MT`) for every target, so the executable does not require the VC++ Redistributable, a UCRT DLL or `zlib1.dll` — only Windows system DLLs (check with `dumpbin /dependents`). Pass `-DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreadedDLL` to use the runtime DLLs instead.
 
@@ -49,18 +48,21 @@ The root `CMakeLists.txt` pre-sets the in-tree libvgm defaults (overridable): st
 ## Running
 
 ```bash
-dist/VGMPlay64.exe song.vgm [song2.vgz ...]     # Windows (copied there by build.ps1)
-build/VGMPlay64.exe song.vgm                    # straight from the build tree
-build/vgmplay song.vgm                          # Linux/macOS
+dist/Standalone/VGMToybox.exe        # standalone application
+dist/VST3/VGMToybox.vst3             # the plugin bundle, for a DAW
 ```
 
-With no file argument the player prompts for a file name. Command-line options (see `main.cpp`, `OPT_LIST_ARR`): `-h/--help`, `-v/--version`, `-L/--lib-info` (supported formats + sound cores), `-w/--dump-wav`, `-W/--dump-path <path>`, `-d/--output-device <id>`, `-c/--config section.key=Data`, `-C/--cfg-file <path>`.
-
-Runtime keys (from `VGMPlay.txt`): Space/P pause, ESC/Q quit, Left/Right seek 5 s (Ctrl = 60 s), 0–9 jump to 0–90 %, PgUp/B previous, PgDn/N next, R restart, F fade out, Up/Down volume ±0.2 dB (Ctrl ±3 dB), `[`/`]` speed ±1/16, `{`/`}` halve/double speed, Ctrl+X quit after song, Ctrl+P pause after song. All keys work during silent WAV logging too.
+A song is opened by dropping it on the window (or Ctrl+O); the standalone remembers the last one.
+The command-line player's runtime keys went with it: transport, seek and per-chip mute are on the
+window now, and the console tests drive that window through `vgm_app_test` (below).
 
 ## Tests and validation
 
-There are **six console test binaries and the window scripts** below, and no linter setup. CI (`.github/workflows/GHA.yml`) builds the command-line player on Windows (x64, MSVC), macOS and Ubuntu - **Release only** - and a second job builds the plugin and runs the same ctest list on all three platforms; see "Tests and validation" for what each covers, and the workflow's matrix for why there is no Debug, no 32-bit and no MinGW/MSYS2 row. `build.ps1 -Config Debug` and `-Arch x86` remain local options.
+There are **eight console test binaries and the window scripts** below, and no linter setup. They are
+`vgm_core_test`, `vgm_ui_test`, `vgm_app_test`, `vgm_mixer_test`, `vgm_chip_test`, `vgm_opn_test`,
+`vgm_nsf_test` and `vgm_keyboard_test` - every one of them is `EXCLUDE_FROM_ALL`, so `build.ps1 -Test`
+names them all, and a test added to `add_test()` without being added there reports `Not Run` on a machine
+that builds less than a developer's tree. CI (`.github/workflows/GHA.yml`) builds the plugin and runs the same ctest list on all three platforms - **Release only**, triggered on `master` or by hand; see "Tests and validation" for what each covers, and the workflow's matrix for why there is no Debug, no 32-bit and no MinGW/MSYS2 row. `build.ps1 -Config Debug` and `-Arch x86` remain local options.
 
 libvgm ships manual test programs behind `-DBUILD_TESTS=ON` (`audiotest`, `emutest`, `audemutest`, `vgmtest`). The closest thing to a smoke test is the VGM renderer test, which takes a **gz-compressed** VGM only (it also exercises the in-tree zlib):
 
@@ -70,7 +72,7 @@ cmake -S . -B build -DBUILD_TESTS=ON && cmake --build build --target vgmtest
 build/vgmtest song.vgz
 ```
 
-For end-to-end verification, play a file (or dump audio with `-w`) and compare while listening; WAV dumps written by the app use the same render path as live output, so they are the practical regression artifact.
+For end-to-end verification, play a file and compare while listening; `vgm_mixer_test` writes the plain render to a WAV beside the input, and it uses the same render path as live output, so that file is the practical regression artifact.
 
 The plugin's playback engine can be tested without a DAW: `plugin/Tests/PlaybackEngineTest.cpp` renders a file offline with exactly the same `PlaybackEngine` class that the VST3/standalone plugin uses. It renders the plain player and the per-channel mixer, writes the plain render to a WAV and checks the mixer criteria (one track per channel, the unity-gain sum equals the plain mix, the tracks stay in sync through seek/loop/end, mute/solo/pan/gain change the mix as expected), plus the MIDI the host would receive (section `[10]`: per-track channels, mute/solo filtering, the master's merged copy and its dedupe, no notes while the mixer is off, a stop and a seek ending exactly the notes still sounding with one note-off each plus all-notes-off only on the channels that played, chronological sample offsets). Two sections guard the time base those notes sit on: `[11]` reads a synthetic stream (a `0x8n` DAC command and a `0x67` PCM data block among them) and requires the command clock to end on the VGM header's `total_samples` - the same number the engine plays to - which is how a dropped wait (the `0x8n` wait used to be dropped: Green Hill Zone came out 21.4 s of MIDI time against 52.9 s of audio) is caught as a number rather than by listening; it also requires each `0x8n` to hand out the next byte of the data block, at the command's own time, which is what the DAC channel's notes are made of; `[12]` plays a song with a loop point for two passes and counts notice-ons after the first one, because the event list covers one pass while the engine plays many. It puts every track on a channel (wrapping at 16) and sums the channels, because only the part of the list behind the loop point is replayed: watching one track made it a false failure on Galaxy Force II, whose first track has a single note at 0.02 s and whose loop point is at 3.84 s. `[12]` needs a looped song, so most assets make it report "skipped"; `plugin/Tests/assets/loop.vgm` exists for it (twenty notes per 2 s pass, the loop declared in the header) and is the one file where a missing loop point is a failure rather than a skip - otherwise a header edit would silently put the check back to sleep. Trap for new checks: libvgm does not reset the oscillators on a seek, so two renders that were both started by a seek are never sample-identical (~-30 dB apart, plain player mode included) - compare levels, or render both sides from the same kind of start. It is not part of the default build and has to be built explicitly:
 
@@ -110,49 +112,23 @@ build/plugin/vgm_core_test
 
 **The window scripts** are the fifth entry point, and the one that drives the real window: `plugin/Tests/AppHarnessTest.cpp` builds `ToyboxAudioProcessor` + `ToyboxAudioProcessorEditor` in a console process (**no** desktop, no peer) and runs a text script against them - `load` (through the drop path; it pumps until the asynchronous load is done), `press`, `click`, `toggle`, `set`, `menu invoke`, `tick` (one synchronous frame of the window's own refresh), **`sleep`** (the explicit way to run the message loop, which is how a script reaches anything asynchronous - a `TreeView` recalculating its rows, a posted click), `dump`, `assert`, `shot <path.png>` (offscreen render), `size <w> <h>` (resize the window - the cards lay themselves out again, which is the only way a script can see a layout at more than one height). A failed assertion prints expected and actual and exits 1. Like the other test targets it is `EXCLUDE_FROM_ALL` (`build.ps1 -Target vgm_app_test`, though `-Test` now asks for it), and `sleep` works because that target **alone** is compiled with `JUCE_MODAL_LOOPS_PERMITTED=1` (`plugin/CMakeLists.txt` - the plugin and the VST3 do not get it). Nine scripts ship in the repository - `window-basics.txt` (needs nothing), `load-and-play.txt`, `midi.txt` (the per-track MIDI selectors: their `Ch.n` values, the capability badge on every strip, and that they grey out while the mixer is off), `language.txt`, `daw-sync-follow.txt`, `daw-sync.txt`, `settings-pages.txt` (its first line, `# hooks audio`, makes the harness fill the standalone hooks with fakes before the editor exists, because the settings panel decides at construction whether it has an Audio page), and `last-song.txt` / `last-song-off.txt` (their `# settings` directives write the state a previous session would have left, because the restore is decided before the first command runs) - and the song they load is there too, `plugin/Tests/assets/minimal.vgm` (431 bytes, generated). `build.ps1 -Test` builds the console tests and then runs one `ctest` over the list `plugin/CMakeLists.txt` registers (`chip`, `core`, `ui`, `engine`, and one `app.<script>` per script, with labels, timeouts and `--output-junit`), so a local run cannot pass on a binary nobody just built. Every script runs with `VGMTOYBOX_SETTINGS_DIR` pointed at a temporary directory (the settings page and the last-song scripts both write), so a test never touches the user's real settings file. The design and the per-phase records are in `docs/desgin/testing-architecture.md`.
 
-Linux build dependencies: `libinih-dev` (otherwise the vendored `libs/inih` is used), `zlib1g-dev`, and for the audio drivers `libasound2-dev` / `libpulse-dev` / `libao-dev`; `libdbus-1-dev` for MPRIS media controls. MSVC needs no extra packages (`libs/wingetopt` supplies `getopt_long` on MSVC; MinGW/Linux use the system implementation).
+Linux build dependencies: `zlib1g-dev`, and for the audio drivers `libasound2-dev` / `libpulse-dev` / `libao-dev`; `libdbus-1-dev` for MPRIS media controls. MSVC needs no extra packages. `libs/inih` and `libs/wingetopt` are still on disk but nothing builds them any more - they served the command-line player.
 
 ## Architecture
 
 ### Two layers, built in a single CMake tree
 
-The repository is not one program but a library + application pair:
+The repository is not one program but a library + plugin pair:
 
 1. **`libs/libvgm/`** (vendored upstream source) — four libraries: `vgm-utils` (data loaders with zlib/`.vgz` support, OS thread/mutex abstraction, charset conversion), `vgm-audio` (audio output drivers + `AudioStream` abstraction), `vgm-emu` (sound chip emulation cores + resampling), `vgm-player` (format playback engines). It also still ships a CMake package config (`libvgm::` namespace) and pkg-config files for out-of-tree consumers.
-2. **`vgmplayer/`** — the VGMPlay CLI application (`main.cpp`, `playctrl.cpp`, `playcfg.cpp`, `config.cpp`, `mediainfo.cpp`, `m3uargparse.cpp`, `utils.cpp`, `mediactrl*.cpp`), its `VGMPlay.ini` template and its two text documents. Moved out of the repository root so that the two front-ends sit beside each other; the target, name and install rules are unchanged. The root `CMakeLists.txt` only assembles the project (`add_subdirectory(vgmplayer)`, `add_subdirectory(plugin)`) and owns the libvgm setup the two share.
+2. **`libs/nsfplay/`** (vendored upstream source) — `nsfplay_core`, the 6502, the APU and DPCM, and the expansion chips the NSF format allows. Built with its warnings off (it predates this project's settings); the two logger symbols `NES_CPU` references come from `vgm_nsf_*` targets.
+
+3. **`plugin/`** — VGMToybox, the only front-end. The root `CMakeLists.txt` assembles the project (`add_subdirectory(libs/libvgm)`, `add_subdirectory(libs/nsfplay)`, `add_subdirectory(plugin)`) and owns the setup all three share.
 
 The root project builds libvgm in-tree: `add_subdirectory(libvgm)` creates the four static targets (`vgm-utils`, `vgm-audio`, `vgm-emu`, `vgm-player`) in the same build tree and links them directly, so one configure + build produces the executable. Two constraints inside `libs/libvgm/` exist because of this and must be kept in mind:
 
 - `libs/libvgm/utils/CMakeLists.txt` fetches zlib with CPM and adds it via `add_subdirectory`, then links it as `$<BUILD_INTERFACE:$<TARGET_FILE:zlibstatic>> $<INSTALL_INTERFACE:ZLIB::ZLIB>`. Referring to the zlib target by name would make libvgm's `export()`/`install(EXPORT)` rules fail ("target … is not in any export set"), because the zlib target is not part of libvgm's export set; the same reason applies to the `$<BUILD_INTERFACE:…>` wrapping of zlib's include directories. Only zlib symbols may be taken from that target — do not "simplify" this back to `find_package(ZLIB)`.
-- libvgm (and `libs/inih`, `libs/wingetopt`) is vendored source, so a change to it is an ordinary commit in this repository - that is how the zlib/CPM patch is stored, and why raising the upstream revision is a plain merge of the upstream files rather than a submodule bump. Each library's upstream revision and licence file stay with it under `libs/` - the tree is the record. The MSVC builds of the whole tree must share one runtime: the root sets `CMAKE_MSVC_RUNTIME_LIBRARY=/MT`, which the libvgm and zlib sub-projects inherit.
-
-### Root application data flow
-
-`main.cpp` is startup only: it initializes search paths, loads the INI, merges command-line overrides, parses file/playlist arguments, then calls `PlayerMain()` (implemented in `playctrl.cpp`).
-
-**Configuration**: `Configuration` (`config.hpp/cpp`) is a generic `map<section, CfgSection>` where each section keeps unordered entries plus an *ordered* list used for channel `Mute*`/`Pan*` keys where order matters. Two sources are built as `Configuration` objects and merged with `operator+=`; command line wins over INI (`playerCfg += argCfg`). `playcfg.cpp` then converts the merged config into typed structures: `GeneralOptions` (sample rate/bits, volume, loops, fade/pause times, resampler mode, WAV logging mode and path, log levels, audio driver/device selection, UI options) and `ChipOptions[0x300]` (per-chip core choice, per-channel mute and pan, extra options). The `CFG_CHIP_LIST` table maps libvgm `DEV_ID` values to INI section names (`[YM2612]`, `[NES APU]`, ...); `[Chip]` applies to every instance of that chip, while `[Chip-0]`/`[Chip-1]` target a single instance (stored in slots `0x100 + devID*2 + inst`). `ApplyCfg_General`/`ApplyCfg_Chip` push the result into the `PlayerA` facade via `SetConfiguration`/`SetDeviceOptions`.
-
-**INI search order** (`InitAppSearchPaths` in `main.cpp`): Unix install datadir, executable directory, the directory the app was invoked from, per-user config dir (`%USERPROFILE%/.vgmplay/` on Windows, `$XDG_CONFIG_HOME|~/.config` + `/vgmplay/` elsewhere), then `./`. First `VGMPlay.ini`/`vgmplay.ini` found is loaded; `-C` overrides the search entirely. `VGMPlay.ini` in `vgmplayer/` is the default template and is installed next to the binary.
-
-**Song list**: `m3uargparse.cpp` expands command-line arguments into `songList` (one entry per playable file, with optional playlist back-reference) and `plList` (playlist files); `.m3u` files are recursively read and must only reference supported formats.
-
-### Playback runtime (`playctrl.cpp`, `mediainfo.cpp`)
-
-`PlayerMain()` is the program's main loop and the densest file in the repo. Sequence:
-
-1. `InitAudioSystem()` — `Audio_Init()`, enumerate drivers, choose an *output* driver (`adOut`, default: first driver on Windows / last on Linux) and a *disk writer* (`adLog`, WaveWriter) according to `General.pbMode` (play / log / play+log). `InitAudioDriver()` adds driver-specific setup (e.g. DSound window handle, Pulse stream name).
-2. `StartAudioDevice()` — pushes sample rate/channels/bits and buffer settings into the driver, sizes the local render buffer, and calls `PlayerA::SetOutputSettings(sampleRate, channels, bits, smplAlloc)`.
-3. Register the four playback engines on the single `PlayerA` instance: `new VGMPlayer`, `S98Player`, `DROPlayer`, `GYMPlayer` (kept alive for the whole run so per-chip options survive track changes). Event/file-request/log callbacks are installed, then configuration is applied.
-4. Per song: `OpenFile()` (UTF-8 path → `FileLoader`/`FileLoader_InitW` via `CPCONV`) → `PlayerA::LoadFile(DATA_LOADER*)` → `PreparePlayback()` (loop count, fade/end-silence samples) → `Start()` → `EnumerateChips()` (must run *after* `Start()` to learn which cores were actually created) → `Render(0, NULL)` once (consumes the init block, gives the real start offset) → print song info → optional disk writer → `PlayFile()`.
-5. `PlayFile()` loops until `PLAYSTATE_END`, refreshing the status line, reading the keyboard, and draining `MediaInfo::_evtQueue` through `HandleCtrlEvent()`. Audio is produced by the audio driver calling `FillBuffer()`, which locks `renderMtx` and calls `PlayerA::Render()`; when no output driver is available, `manualRenderLoop` makes the main loop render into `audioBuf` itself.
-
-**Threading model**: the audio driver's callback thread renders; the main thread handles display/keys/events; `renderMtx` (an `OS_MUTEX`) guards every player mutation (volume, seek, fade, reset, pause). `MediaInfo::_evtQueue` is the thread-safe-ish hand-off used by media controls to inject commands (see `mediactrl_*.cpp` calling `Event()` from other threads or signals).
-
-**`MediaInfo`** (`mediainfo.hpp/cpp`) is the shared state hub: the `PlayerA` instance, `GeneralOptions`/`ChipOptions`, play-state bit flags, current song/playlist paths, song tags, used-chip list, code-page converters, signal callbacks (`MI_SIG_*`, notified via `Signal()`) and the event queue (`MI_EVT_*` with parameters like `MIE_CTRL_*`, `MIE_PS_*`, `MIE_PL_*`). Media controls subscribe to signals (metadata/play-state/position) and push events back; `playctrl.cpp` translates both directions for keyboard and MPRIS/SMTC.
-
-**Media controls** (`mediactrl.hpp` + `GetMediaControl(sig)`): `MediaControl` is a small base class; implementations are `mediactrl_WinKeys.cpp` (Windows `RegisterHotKey`), `mediactrl_WinSMTC.cpp` (Windows Runtime `SystemMediaTransportControls`, requires `ENABLE_WINRT`), and `mediactrl_dbus.cpp` (Linux MPRIS over DBus). Selected at build time through the `MEDIA_CONTROLS` variable (defines `MEDIACTRL_WINKEYS`/`MEDIACTRL_SMTC`/`MEDIACTRL_DBUS`) and at runtime by `General.MediaKeys` (`Default`/`None`/`WinKeys`/`SMTC`/`DBus`).
-
-**Windows specifics**: the entry point is `wmain` (`USE_WMAIN`); wide `argv` is converted to UTF-8 up front, and all user-facing strings are UTF-8 (`u8printf` in `utils.cpp`). `utils.hpp` `#undef`s `GetFileTitle`/`GetFileExtension` to avoid clashing with the Windows API macros.
+- libvgm and nsfplay are vendored source, so a change to either is an ordinary commit in this repository - that is how the zlib/CPM patch is stored, and why raising the upstream revision is a plain merge of the upstream files rather than a submodule bump. Each library's upstream revision and licence file stay with it under `libs/` - the tree is the record. The MSVC builds of the whole tree must share one runtime: the root sets `CMAKE_MSVC_RUNTIME_LIBRARY=/MT`, which the libvgm, nsfplay and zlib sub-projects inherit.
 
 ### Inside libvgm (read these before touching the library)
 

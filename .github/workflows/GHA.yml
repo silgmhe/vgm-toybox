@@ -135,6 +135,8 @@ jobs:
       #   vgm_core_test   the mixer maths against analytically known levels, the two volume stages,
       #                   seek/end, the output routing, and the startup-argument rule
       #   vgm_ui_test     the button pixels (shadow, hairline, focus ring, glow, press)
+      #   vgm_nsf_test    the NSF header, the ROM map and the expansion-chip detection
+      #   vgm_keyboard_test the note layout and the octave shift the keyboard view asks for
       #   vgm_app_test    the window itself: constructed headless, laid out, dumped as text
       #   vgm_mixer_test  the sample-exact render/mix gate, on the song the repository ships
       #   vgm_chip_test   the chip decoders: register writes in, notes out

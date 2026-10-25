@@ -37,9 +37,8 @@ The script sets up the MSVC environment, configures with CMake + Ninja and copie
 | `dist\VST3\VGMToybox.vst3` | the plugin |
 | `dist\Standalone\VGMToybox.exe` | the same engine as a standalone application |
 | `dist\AAX\VGMToybox.aaxplugin` | Pro Tools - unsigned, so developer builds only |
-| `dist\VGMPlay64.exe` + `VGMPlay.ini` | the upstream command-line player |
 
-`-NoPlugin` builds only the command-line player; `-Proxy <url>` / `-NoProxy` control how CPM reaches
+`-NoPlugin` skips the JUCE plugin and builds nothing else; `-Proxy <url>` / `-NoProxy` control how CPM reaches
 GitHub. `-Clang` is a check instead of a build: when clang-cl is installed, every plugin source is run
 through it with `/Zs` (syntax and type check only, no object files) on the same command line the MSVC
 build used. It is there for the writing MSVC accepts and clang does not - a green Windows build and a

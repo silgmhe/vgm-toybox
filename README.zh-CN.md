@@ -29,9 +29,8 @@
 | `dist\VST3\VGMToybox.vst3` | 插件 |
 | `dist\Standalone\VGMToybox.exe` | 同一套引擎的独立程序 |
 | `dist\AAX\VGMToybox.aaxplugin` | Pro Tools 格式 —— 未签名，只能在开发者版里加载 |
-| `dist\VGMPlay64.exe` + `VGMPlay.ini` | 上游的命令行播放器 |
 
-`-NoPlugin` 只构建命令行播放器；`-Proxy <url>` / `-NoProxy` 控制 CPM 访问 GitHub 的方式。`-Clang` 不是构建而是检查：装了 clang-cl 时，用 MSVC 那次构建的同一条命令行把每个插件源码交给 clang 走一遍 `/Zs`（只做语法与类型检查，不产出 obj）。它针对的是「MSVC 收、clang 不收」的写法 —— Windows 绿、macOS 红就是它要拦的那种；没有 clang 时它打一行说明就跳过。
+`-NoPlugin` 跳过 JUCE 插件，不再构建其它产物；`-Proxy <url>` / `-NoProxy` 控制 CPM 访问 GitHub 的方式。`-Clang` 不是构建而是检查：装了 clang-cl 时，用 MSVC 那次构建的同一条命令行把每个插件源码交给 clang 走一遍 `/Zs`（只做语法与类型检查，不产出 obj）。它针对的是「MSVC 收、clang 不收」的写法 —— Windows 绿、macOS 红就是它要拦的那种；没有 clang 时它打一行说明就跳过。
 
 AAX 与总线数是构建期常量，第一次构建前写进缓存一次即可：
 

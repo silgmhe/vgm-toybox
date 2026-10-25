@@ -1,21 +1,20 @@
 #Requires -Version 5.1
 <#
 .SYNOPSIS
-    Builds VGMPlay with MSVC + Ninja as a self-contained (statically linked) executable.
+    Builds the VGM Toybox plugin with MSVC + Ninja, statically linked, and publishes it to .\dist.
 
 .DESCRIPTION
     The script performs a complete one-shot build:
       1. sets up the MSVC environment (vswhere + vcvars64/vcvars32)
       2. configures the project with CMake/Ninja:
-           - libvgm is built from the vendored source in libs/ (static libraries)
+           - libvgm and nsfplay are built from the vendored source in libs/ (static libraries)
            - zlib is fetched with CPM.cmake and built from source (no zlib DLL)
            - static MSVC runtime (/MT)  -> no VC++ Redistributable required
            - CMAKE_EXPORT_COMPILE_COMMANDS -> compile_commands.json for clangd
-      3. builds the VGMPlay executable
-      4. copies VGMPlay*.exe + VGMPlay.ini + the docs, the VST3 bundle and the standalone
-        application to .\dist
+      3. builds the plugin, and with -Test the console tests as well
+      4. copies the VST3 bundle and the standalone application to .\dist
          and writes compile_commands.json to the repository root
-      5. prints the DLL dependencies of the executable
+      5. prints the DLL dependencies of the standalone application
 
     Required tools (must be in PATH or installed):
       - Visual Studio with the "Desktop development with C++" workload
@@ -435,9 +434,10 @@ Write-Step 'Setting up dependency downloads'
 Initialize-NetworkProxy -ProxyUrl $Proxy -Disabled:$NoProxy
 
 Write-Step 'Checking the vendored libraries'
-# libvgm, inih and wingetopt are source in this repository (no submodules), so a missing one means
-# an incomplete checkout - there is nothing to fetch.
-foreach ($library in @('libs\libvgm', 'libs\inih', 'libs\wingetopt')) {
+# libvgm and nsfplay are source in this repository (no submodules), so a missing one means an
+# incomplete checkout - there is nothing to fetch. inih and wingetopt were only used by the
+# command-line player and are no longer checked; the directories are still there untouched.
+foreach ($library in @('libs\libvgm', 'libs\nsfplay')) {
 	if (-not (Test-Path -LiteralPath (Join-Path $RepoRoot $library))) {
 		throw "The vendored library '$library' is missing - it is part of this repository."
 	}
@@ -517,25 +517,9 @@ if ($Target.Count -gt 0) {
 
 Write-Step 'Creating the distribution folder'
 New-Item -ItemType Directory -Force -Path $DistDir | Out-Null
-# The player is a subdirectory project (vgmplayer/), so its executable sits one level down in the
-# build tree - search recursively so this keeps working wherever the target lands.
-$exe = Get-ChildItem -LiteralPath $BuildDir -Filter 'VGMPlay*.exe' -File -Recurse |
-	Sort-Object LastWriteTime -Descending | Select-Object -First 1
-if (-not $exe) {
-	$exe = Get-ChildItem -LiteralPath $BuildDir -Filter 'vgmplay*' -File -Recurse |
-		Sort-Object LastWriteTime -Descending | Select-Object -First 1
-}
-if (-not $exe) {
-	throw "No VGMPlay executable found in '$BuildDir'."
-}
-Copy-Item -LiteralPath $exe.FullName -Destination $DistDir -Force
-# the player's INI template and its two text documents live next to its sources now
-foreach ($file in @('VGMPlay.ini', 'Updates.txt', 'VGMPlay.txt')) {
-	$src = Join-Path $RepoRoot ('vgmplayer\' + $file)
-	if (Test-Path -LiteralPath $src) {
-		Copy-Item -LiteralPath $src -Destination $DistDir -Force
-	}
-}
+# The command-line player (vgmplayer/) is gone: the plugin and its console tests are what this
+# repository builds now. Nothing to copy here - the distribution is the VST3 bundle and the
+# standalone application below.
 
 # the JUCE plugin artefacts (VST3 bundle + standalone application)
 # -NoDeploy points this at a path that does not exist, so the whole copy block below is skipped:
@@ -588,7 +572,7 @@ Write-Step 'Updating compile_commands.json'
 $generatedDb = Join-Path $BuildDir 'compile_commands.json'
 if (Test-Path -LiteralPath $generatedDb) {
 	Copy-Item -LiteralPath $generatedDb -Destination $CompileDb -Force
-	Write-Host "wrote $CompileDb (all sources: vgmplayer, plugin, libvgm, for clangd)"
+	Write-Host "wrote $CompileDb (all sources: plugin, libvgm, nsfplay, for clangd)"
 } else {
 	Write-Warning "'$generatedDb' not found - clangd will not have a compilation database."
 }
@@ -599,8 +583,12 @@ if ($Clang) {
 }
 
 Write-Step 'Result'
-$exePath = Join-Path $DistDir $exe.Name
-Write-Host ("executable : {0} ({1:N0} bytes)" -f $exePath, (Get-Item -LiteralPath $exePath).Length)
+# The standalone application is the only executable this repository produces now that the
+# command-line player is gone - and with -NoDeploy there may not even be that.
+$exePath = if ($standaloneApp) { $standaloneApp.FullName } else { $null }
+if ($exePath) {
+	Write-Host ("executable : {0} ({1:N0} bytes)" -f $exePath, (Get-Item -LiteralPath $exePath).Length)
+}
 if ($vst3Bundle) {
 	Write-Host ("VST3       : {0}" -f (Join-Path $DistDir 'VST3\VGMToybox.vst3'))
 }
