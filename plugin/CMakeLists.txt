@@ -642,27 +642,27 @@ target_link_libraries(vgm_keyboard_test PRIVATE
 	juce::juce_recommended_config_flags
 )
 
-add_test(NAME chip COMMAND vgm_chip_test)
-add_test(NAME nsf  COMMAND vgm_nsf_test)
-add_test(NAME core COMMAND vgm_core_test)
-add_test(NAME ui   COMMAND vgm_ui_test)
-add_test(NAME keyboard-layout COMMAND vgm_keyboard_test)
-add_test(NAME opn  COMMAND vgm_opn_test)
+# Every console test is registered through this function, so its target is recorded in the
+# same breath. CMake cannot ask a test which target it runs, and a list written somewhere
+# else drifts: console_tests DEPENDS missed vgm_app_test on the first attempt, and the ten
+# window-script tests reported "Not Run" on CI while passing locally, where everything gets
+# built anyway.
+function(toybox_console_test test_name test_target)
+	add_test(NAME ${test_name} COMMAND ${test_target} ${ARGN})
+	set_property(GLOBAL APPEND PROPERTY TOYBOX_CONSOLE_TEST_TARGETS ${test_target})
+endfunction()
+
+toybox_console_test(chip vgm_chip_test)
+toybox_console_test(nsf vgm_nsf_test)
+toybox_console_test(core vgm_core_test)
+toybox_console_test(ui vgm_ui_test)
+toybox_console_test(keyboard-layout vgm_keyboard_test)
+toybox_console_test(opn vgm_opn_test)
 set_tests_properties(core ui keyboard-layout PROPERTIES LABELS "unit" TIMEOUT 120)
 set_tests_properties(opn PROPERTIES LABELS "unit" TIMEOUT 300)
 
-# Every console test binary as one build target, because they are all EXCLUDE_FROM_ALL and each
-# caller used to name them out loud: build.ps1's -Test, the macOS step and the Linux step. Three
-# copies of one list, and the two names missing from all three - vgm_nsf_test and
-# vgm_keyboard_test - were registered as tests, never built, and reported "Not Run" by ctest on a
-# machine that builds less than a developer's tree. A caller now asks for console_tests.
-add_custom_target(console_tests
-	DEPENDS vgm_chip_test vgm_nsf_test vgm_core_test vgm_ui_test vgm_keyboard_test vgm_opn_test
-			vgm_mixer_test
-	COMMENT "Console test binaries")
-
 if(_toybox_test_env)
-	add_test(NAME engine COMMAND vgm_mixer_test "${_toybox_test_song}" 3)
+	toybox_console_test(engine vgm_mixer_test "${_toybox_test_song}" 3)
 	set_tests_properties(engine PROPERTIES LABELS "integration" TIMEOUT 300)
 endif()
 
@@ -672,7 +672,7 @@ endif()
 # seconds, not two: the sweep on Ch 3 runs to 1.88 s and the check names its last step.
 set(_toybox_wswan_song "${CMAKE_CURRENT_SOURCE_DIR}/Tests/assets/wswan.vgm")
 if(EXISTS "${_toybox_wswan_song}")
-	add_test(NAME engine.wswan COMMAND vgm_mixer_test "${_toybox_wswan_song}" 3)
+	toybox_console_test(engine.wswan vgm_mixer_test "${_toybox_wswan_song}" 3)
 	set_tests_properties(engine.wswan PROPERTIES LABELS "integration" TIMEOUT 120)
 endif()
 
@@ -693,7 +693,7 @@ foreach(_toybox_asset psg opl4 ym2610 ym2608 fm_alg0
 		set(_toybox_asset_song "${CMAKE_CURRENT_SOURCE_DIR}/Tests/assets/${_toybox_asset}.nsf")
 	endif()
 	if(EXISTS "${_toybox_asset_song}")
-		add_test(NAME "engine.${_toybox_asset}" COMMAND vgm_mixer_test "${_toybox_asset_song}" 3)
+		toybox_console_test("engine.${_toybox_asset}" vgm_mixer_test "${_toybox_asset_song}" 3)
 		set_tests_properties("engine.${_toybox_asset}" PROPERTIES LABELS "integration" TIMEOUT 120)
 	endif()
 endforeach()
@@ -703,7 +703,7 @@ endforeach()
 # "the DAC track reports notes" means the bank was read from its first byte to its last.
 set(_toybox_dac_song "${CMAKE_CURRENT_SOURCE_DIR}/Tests/assets/dac.vgm")
 if(EXISTS "${_toybox_dac_song}")
-	add_test(NAME engine.dac COMMAND vgm_mixer_test "${_toybox_dac_song}" 2)
+	toybox_console_test(engine.dac vgm_mixer_test "${_toybox_dac_song}" 2)
 	set_tests_properties(engine.dac PROPERTIES LABELS "integration" TIMEOUT 120)
 endif()
 
@@ -713,7 +713,7 @@ endif()
 # no notes is a failure rather than a missing precondition.
 set(_toybox_loop_song "${CMAKE_CURRENT_SOURCE_DIR}/Tests/assets/loop.vgm")
 if(EXISTS "${_toybox_loop_song}")
-	add_test(NAME engine.loop COMMAND vgm_mixer_test "${_toybox_loop_song}" 2)
+	toybox_console_test(engine.loop vgm_mixer_test "${_toybox_loop_song}" 2)
 	set_tests_properties(engine.loop PROPERTIES LABELS "integration" TIMEOUT 120)
 endif()
 
@@ -723,7 +723,7 @@ endif()
 # the notes travel on.
 set(_toybox_x1_song "${CMAKE_CURRENT_SOURCE_DIR}/Tests/assets/x1.vgm")
 if(EXISTS "${_toybox_x1_song}")
-	add_test(NAME engine.x1 COMMAND vgm_mixer_test "${_toybox_x1_song}" 2)
+	toybox_console_test(engine.x1 vgm_mixer_test "${_toybox_x1_song}" 2)
 	set_tests_properties(engine.x1 PROPERTIES LABELS "integration" TIMEOUT 120)
 endif()
 
@@ -733,7 +733,7 @@ endif()
 # two four-operator groups, one an octave above the other, whose notes have to land on two tracks.
 set(_toybox_opx_song "${CMAKE_CURRENT_SOURCE_DIR}/Tests/assets/opx.vgm")
 if(EXISTS "${_toybox_opx_song}")
-	add_test(NAME engine.opx COMMAND vgm_mixer_test "${_toybox_opx_song}" 2)
+	toybox_console_test(engine.opx vgm_mixer_test "${_toybox_opx_song}" 2)
 	set_tests_properties(engine.opx PROPERTIES LABELS "integration" TIMEOUT 120)
 endif()
 
@@ -744,7 +744,7 @@ endif()
 # length rules survived the trip through the file.
 set(_toybox_c140_song "${CMAKE_CURRENT_SOURCE_DIR}/Tests/assets/c140.vgm")
 if(EXISTS "${_toybox_c140_song}")
-	add_test(NAME engine.c140 COMMAND vgm_mixer_test "${_toybox_c140_song}" 2)
+	toybox_console_test(engine.c140 vgm_mixer_test "${_toybox_c140_song}" 2)
 	set_tests_properties(engine.c140 PROPERTIES LABELS "integration" TIMEOUT 120)
 endif()
 
@@ -756,7 +756,7 @@ endif()
 # execute write, both bytes of the offset and both halves of every value.
 set(_toybox_c352_song "${CMAKE_CURRENT_SOURCE_DIR}/Tests/assets/c352.vgm")
 if(EXISTS "${_toybox_c352_song}")
-	add_test(NAME engine.c352 COMMAND vgm_mixer_test "${_toybox_c352_song}" 2)
+	toybox_console_test(engine.c352 vgm_mixer_test "${_toybox_c352_song}" 2)
 	set_tests_properties(engine.c352 PROPERTIES LABELS "integration" TIMEOUT 120)
 endif()
 
@@ -767,7 +767,7 @@ endif()
 # a key register plays nothing; one that ignores the zero write never stops.
 set(_toybox_qsound_song "${CMAKE_CURRENT_SOURCE_DIR}/Tests/assets/qsound.vgm")
 if(EXISTS "${_toybox_qsound_song}")
-	add_test(NAME engine.qsound COMMAND vgm_mixer_test "${_toybox_qsound_song}" 2)
+	toybox_console_test(engine.qsound vgm_mixer_test "${_toybox_qsound_song}" 2)
 	set_tests_properties(engine.qsound PROPERTIES LABELS "integration" TIMEOUT 120)
 endif()
 
@@ -777,7 +777,7 @@ endif()
 # decoder treating the start registers as a byte address reads past the sample and plays nothing.
 set(_toybox_ga20_song "${CMAKE_CURRENT_SOURCE_DIR}/Tests/assets/ga20.vgm")
 if(EXISTS "${_toybox_ga20_song}")
-	add_test(NAME engine.ga20 COMMAND vgm_mixer_test "${_toybox_ga20_song}" 2)
+	toybox_console_test(engine.ga20 vgm_mixer_test "${_toybox_ga20_song}" 2)
 	set_tests_properties(engine.ga20 PROPERTIES LABELS "integration" TIMEOUT 120)
 endif()
 
@@ -788,8 +788,7 @@ endif()
 foreach(_toybox_pitch_asset k053260 es5503 ga20)
 	set(_toybox_pitch_song "${CMAKE_CURRENT_SOURCE_DIR}/Tests/assets/${_toybox_pitch_asset}.vgm")
 	if(EXISTS "${_toybox_pitch_song}")
-		add_test(NAME pitch.${_toybox_pitch_asset}
-				 COMMAND vgm_mixer_test "${_toybox_pitch_song}" 2 --pitch-report)
+		toybox_console_test(pitch.${_toybox_pitch_asset} vgm_mixer_test "${_toybox_pitch_song}" 2 --pitch-report)
 		set_tests_properties(pitch.${_toybox_pitch_asset} PROPERTIES LABELS "integration" TIMEOUT 120)
 	endif()
 endforeach()
@@ -802,7 +801,7 @@ endforeach()
 # each note.
 set(_toybox_es5503_song "${CMAKE_CURRENT_SOURCE_DIR}/Tests/assets/es5503.vgm")
 if(EXISTS "${_toybox_es5503_song}")
-	add_test(NAME engine.es5503 COMMAND vgm_mixer_test "${_toybox_es5503_song}" 2)
+	toybox_console_test(engine.es5503 vgm_mixer_test "${_toybox_es5503_song}" 2)
 	set_tests_properties(engine.es5503 PROPERTIES LABELS "integration" TIMEOUT 120)
 endif()
 
@@ -813,7 +812,7 @@ endif()
 # a byte address looks two hundred and fifty-six times too far into the ROM and plays nothing.
 set(_toybox_segapcm_song "${CMAKE_CURRENT_SOURCE_DIR}/Tests/assets/segapcm.vgm")
 if(EXISTS "${_toybox_segapcm_song}")
-	add_test(NAME engine.segapcm COMMAND vgm_mixer_test "${_toybox_segapcm_song}" 2)
+	toybox_console_test(engine.segapcm vgm_mixer_test "${_toybox_segapcm_song}" 2)
 	set_tests_properties(engine.segapcm PROPERTIES LABELS "integration" TIMEOUT 120)
 endif()
 
@@ -825,7 +824,7 @@ endif()
 # or ignored the marker would fail on the pitch, the count or the timing.
 set(_toybox_k054539_song "${CMAKE_CURRENT_SOURCE_DIR}/Tests/assets/k054539.vgm")
 if(EXISTS "${_toybox_k054539_song}")
-	add_test(NAME engine.k054539 COMMAND vgm_mixer_test "${_toybox_k054539_song}" 2)
+	toybox_console_test(engine.k054539 vgm_mixer_test "${_toybox_k054539_song}" 2)
 	set_tests_properties(engine.k054539 PROPERTIES LABELS "integration" TIMEOUT 120)
 endif()
 
@@ -837,7 +836,7 @@ endif()
 # timing or the pitch.
 set(_toybox_k053260_song "${CMAKE_CURRENT_SOURCE_DIR}/Tests/assets/k053260.vgm")
 if(EXISTS "${_toybox_k053260_song}")
-	add_test(NAME engine.k053260 COMMAND vgm_mixer_test "${_toybox_k053260_song}" 2)
+	toybox_console_test(engine.k053260 vgm_mixer_test "${_toybox_k053260_song}" 2)
 	set_tests_properties(engine.k053260 PROPERTIES LABELS "integration" TIMEOUT 120)
 endif()
 
@@ -859,7 +858,7 @@ foreach(_script_file IN LISTS _toybox_scripts)
 		continue()
 	endif()
 
-	add_test(NAME "app.${_script_name}" COMMAND vgm_app_test "${_script_file}")
+	toybox_console_test("app.${_script_name}" vgm_app_test "${_script_file}")
 
 	# The scripts name the assets they use from the repository root (`plugin/Tests/...`), and
 	# the settings directives do the same. CTest's default is the build directory, so pin the
@@ -882,3 +881,10 @@ endforeach()
 # includes NsfBackend.cpp gets the include path without repeating it in each block.
 target_link_libraries(vgm_mixer_test PRIVATE nsfplay_core)
 target_link_libraries(VGMToybox PRIVATE nsfplay_core)
+
+# One target that builds every binary the tests above run. Its contents come from the same
+# calls that registered the tests, so it cannot be short of one.
+get_property(_toybox_console_test_targets GLOBAL PROPERTY TOYBOX_CONSOLE_TEST_TARGETS)
+list(REMOVE_DUPLICATES _toybox_console_test_targets)
+add_custom_target(console_tests DEPENDS ${_toybox_console_test_targets}
+	COMMENT "Console test binaries")
