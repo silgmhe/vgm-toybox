@@ -185,34 +185,43 @@ void drawMelodyGlyph (juce::Graphics& g, juce::Rectangle<float> iconArea, juce::
 
 void drawDrumGlyph (juce::Graphics& g, juce::Rectangle<float> iconArea, juce::Colour colour)
 {
-	// A snare seen from the side, the way a kit icon draws one: a shallow top head, a body that
-	// starts at the head's centre line so the two read as one shape, and two light strokes for
-	// the hoops. Filled rather than outlined - an outline at ten pixels is a grey ring with
-	// nothing inside it.
+	// A snare from the side. What makes it a cylinder rather than a box is that the body's bottom
+	// is the lower half of an ellipse, not a corner: the top head curves away and the bottom
+	// curves back, and the two curves are what the eye reads as round.
 	const float width = iconArea.getWidth ();
 	const float height = iconArea.getHeight ();
 	const float lineWidth = juce::jmax (1.0f, width * 0.09f);
 
-	const float left = iconArea.getX () + width * 0.08f;
-	const float right = iconArea.getRight () - width * 0.08f;
-	const float top = iconArea.getY () + height * 0.18f;
-	const float bottom = iconArea.getY () + height * 0.84f;
-	const float rimHeight = (bottom - top) * 0.30f;
+	const float inset = width * 0.08f;
+	const float left = iconArea.getX () + inset;
+	const float right = iconArea.getRight () - inset;
+	const float topEdge = iconArea.getY () + height * 0.16f;
+	const float bottomEdge = iconArea.getY () + height * 0.86f;
 
-	const auto body = juce::Rectangle<float> (left, top + rimHeight * 0.5f,
-											  right - left, bottom - top - rimHeight * 0.5f);
+	const float ellipseHeight = (bottomEdge - topEdge) * 0.30f;
+	const float topCentre = topEdge + ellipseHeight * 0.5f;
+	const float bottomCentre = bottomEdge - ellipseHeight * 0.5f;
+
+	juce::Path body;
+	body.startNewSubPath (left, topCentre);
+	body.lineTo (left, bottomCentre);
+	body.addCentredArc ((left + right) * 0.5f, bottomCentre,
+						(right - left) * 0.5f, ellipseHeight * 0.5f,
+						0.0f, juce::MathConstants<float>::pi, juce::MathConstants<float>::twoPi,
+						true);
+	body.lineTo (right, topCentre);
+	body.closeSubPath ();
 
 	g.setColour (colour);
-	g.fillRoundedRectangle (body, juce::jmin (body.getWidth (), body.getHeight ()) * 0.22f);
+	g.fillPath (body);
+	g.fillEllipse (juce::Rectangle<float> (left, topEdge, right - left, ellipseHeight));
 
-	// The head: an ellipse sitting on the body's top edge, which is what makes it a drum and not
-	// a box. Its own centre line is the top stroke below.
-	g.fillEllipse (juce::Rectangle<float> (left, top, right - left, rimHeight));
-
+	// Two light strokes: the head's own edge, and the lower hoop. Without them a filled cylinder
+	// at ten pixels is a grey lozenge.
 	g.setColour (colour.contrasting (0.55f));
-	g.drawLine (left + lineWidth, top + rimHeight * 0.5f,
-				right - lineWidth, top + rimHeight * 0.5f, lineWidth);
-	g.drawLine (left, top + (bottom - top) * 0.60f, right, top + (bottom - top) * 0.60f, lineWidth);
+	g.drawLine (left + lineWidth, topCentre, right - lineWidth, topCentre, lineWidth);
+	g.drawLine (left, topCentre + (bottomCentre - topCentre) * 0.58f,
+				right, topCentre + (bottomCentre - topCentre) * 0.58f, lineWidth);
 }
 
 void drawSampleGlyph (juce::Graphics& g, juce::Rectangle<float> iconArea, juce::Colour colour)
