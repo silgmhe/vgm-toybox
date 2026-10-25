@@ -979,10 +979,26 @@ private:
 			g.setColour (theme::accent ().withAlpha (0.9f));
 			g.fillPath (arrow);
 
-			g.setColour (theme::secondaryText ());
-			g.setFont (juce::Font (juce::FontOptions (8.5f)));
-			g.drawText (noteName (note, octaveShift), area.withTrimmedLeft (above ? 0 : 12).withTrimmedRight (above ? 12 : 0),
-						juce::Justification::centred, false);
+			// The note that is off the edge, named on a disc in the middle of the keyboard. It is
+			// the one thing in this row that is not a key, and painting it straight onto the keys
+			// read as small print on whichever key happened to be under it - the accent disc says
+			// "this note is somewhere else" the same way the arrows do.
+			const auto label = noteName (note, octaveShift);
+			const float diameter = juce::jmax (20.0f, (float) label.length () * 6.6f + 9.0f);
+
+			const auto disc = juce::Rectangle<float> (diameter, diameter)
+								  .withCentre ({ (float) area.getCentreX (), (float) area.getCentreY () });
+
+			// The same halo the arrows use: both sit on top of the keys, and a hard shape there
+			// reads as a stray mark rather than as something floating above them.
+			drawSoftShadow (g, disc.expanded (1.0f), 6.0f, theme::accentGlow (), 6, juce::Point<int> (0, 0));
+
+			g.setColour (theme::onAccent ());
+			g.fillEllipse (disc);
+
+			g.setColour (theme::accent ());
+			g.setFont (juce::Font (juce::FontOptions (10.5f, juce::Font::bold)));
+			g.drawText (label, disc.toNearestInt (), juce::Justification::centred, false);
 		}
 	}
 
