@@ -21,7 +21,7 @@ namespace
 	}
 }
 
-std::vector<float> cycleFor (int waveKind, float duty)
+std::vector<float> cycleFor (int waveKind, float duty, int shapeParameter)
 {
 	std::vector<float> cycle;
 	cycle.reserve (pointsPerCycle);
@@ -62,13 +62,37 @@ std::vector<float> cycleFor (int waveKind, float duty)
 			// The same 15-bit feedback the chip uses, so the burst has the right texture rather
 			// than looking like a random scribble. Deterministic: a display that changed every
 			// frame would be worse than one that never changed.
-			std::uint32_t shift = 1;
+			//
+			// Seeded and then warmed up. Starting from a single set bit is the textbook seed and
+			// the wrong one here: it leaves the low bits zero for fourteen shifts, so the first
+			// cycle drew as a flat line with one spike in it - which is exactly what it looked
+			// like, and why the row did not read as noise at all.
+			std::uint32_t shift = 0x4A5u;
 
-			for (int i = 0; i < pointsPerCycle; ++i)
+			for (int i = 0; i < 16; ++i)
 			{
 				const std::uint32_t bit = ((shift >> 0) ^ (shift >> 1)) & 1u;
 				shift = (shift >> 1) | (bit << 14);
-				cycle.push_back ((shift & 1u) ? 1.0f : -1.0f);
+			}
+
+			// Holding each step for longer is the whole of what the period setting does: the same
+			// texture at a slower speed. Period 0 is a hiss, period 15 a rumble, and a display that
+			// drew both the same would hide the one thing that differs.
+			const int period = clampTo (shapeParameter, 0, 15);
+			const int hold = 1 + (period * 7) / 15;
+
+			std::uint32_t current = shift & 1u;
+
+			for (int i = 0; i < pointsPerCycle; ++i)
+			{
+				if ((i % hold) == 0)
+				{
+					const std::uint32_t bit = ((shift >> 0) ^ (shift >> 1)) & 1u;
+					shift = (shift >> 1) | (bit << 14);
+					current = shift & 1u;
+				}
+
+				cycle.push_back (current ? 1.0f : -1.0f);
 			}
 
 			break;
@@ -77,11 +101,33 @@ std::vector<float> cycleFor (int waveKind, float duty)
 		case Kind::delta:
 		{
 			// One bit per step, integrated: what the DAC does with a stream of ones and zeros.
+			//
+			// Seeded from the sample's identity, so two samples in one song draw two different
+			// marks - which is what tells a kick from a hi-hat at a glance. The previous version
+			// used a fixed `i % 7` pattern, and a regular staircase is indistinguishable from the
+			// VRC6 ramp drawn two rows below it.
+			//
+			// The level is pulled back towards the centre as it walks, and the steps shrink over
+			// the cycle: without either, the walk parks against a rail and reads as a square.
+			std::uint32_t state = 0x9E3779B9u ^ (std::uint32_t) shapeParameter;
+
+			if (state == 0)
+			{
+				state = 1;
+			}
+
 			float level = 0.0f;
 
 			for (int i = 0; i < pointsPerCycle; ++i)
 			{
-				level += (i % 7 == 0) ? -0.6f : 0.2f;
+				state ^= state << 13;
+				state ^= state >> 17;
+				state ^= state << 5;
+
+				const float step = (state & 1u) ? 1.0f : -1.0f;
+				const float envelope = 1.0f - (float) i / (float) (pointsPerCycle - 1) * 0.72f;
+
+				level = level * 0.90f + step * 0.62f * envelope;
 				level = clampTo (level, -1.0f, 1.0f);
 				cycle.push_back (level);
 			}

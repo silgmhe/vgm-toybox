@@ -39,6 +39,16 @@ struct ChannelState
 	/** Duty cycle for a pulse channel, 0..1. Ignored by the other kinds. */
 	float duty = 0.5f;
 
+	/** What the shape needs beyond its kind, in the channel's own units: the noise channel's
+		period setting (0..15, the coarsest last), the DPCM channel's sample identity. Zero for
+		the chips whose shape is fixed - a pulse's duty already carries everything a pulse has.
+
+		Both exist because those two shapes are not fixed: a noise burst at period 0 is a fine
+		hiss and at period 15 a slow rumble, and a kick and a hi-hat are two different samples.
+		Drawing one generic mark for either would say nothing about what is playing.
+	*/
+	int shapeParameter = 0;
+
 	/** Index into the engine's track list, or -1. A panel needs this to offer mute and solo:
 		the engine already owns that state, and a second copy would drift. */
 	int trackIndex = -1;

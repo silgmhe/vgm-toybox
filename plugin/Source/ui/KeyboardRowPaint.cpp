@@ -149,7 +149,7 @@ void paintWave (juce::Graphics& g, juce::Rectangle<int> area,
 
 	if (cycle.empty ())
 	{
-		cycle = waveform::cycleFor (channel.waveKind, channel.duty);
+		cycle = waveform::cycleFor (channel.waveKind, channel.duty, channel.shapeParameter);
 	}
 
 	if (cycle.size () < 2)

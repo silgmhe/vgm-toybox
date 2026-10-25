@@ -665,11 +665,21 @@ bool NsfPlayer::captureState (playback::ChipStateSnapshot& snapshot) const
 			//   lets a drum kit built against one song be reused in it.
 			if (waveKind == kShapeNoise)
 			{
+				// The period is both the note and the shape: it is what makes the sixteen settings
+				// sound different, and the panel has nothing else to draw it from.
 				state.note = ((int) info->GetFreq () ^ 0x0F) + kNoiseNoteFloor;
+				state.shapeParameter = (int) info->GetFreq ();
 			}
 			else if (waveKind == kShapeDelta)
 			{
-				state.note = noteForDpcmSample ((int) info->GetTone (), (int) info->GetFreq ());
+				const int tone = (int) info->GetTone ();
+				const int rate = (int) info->GetFreq ();
+
+				state.note = noteForDpcmSample (tone, rate);
+
+				// The slot's identity, spread so that address and rate each move the drawing -
+				// a sample played at two speeds is two marks, as it is two notes.
+				state.shapeParameter = (tone << 4) ^ (rate * 7919);
 			}
 			else
 			{
