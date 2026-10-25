@@ -128,6 +128,10 @@ public:
 
 		info_.chips.push_back (playback::ChipInfo { "2A03", "NSFPlay", 0 });
 
+		// A chip with no case here does not exist as far as the chip card is concerned, however
+		// many tracks it contributes. The N163 was the one missing, and a file that declared it
+		// showed a card with the 2A03 alone while the mixer drew all eight of its channels
+		// underneath - so this switch is the whole list, not a list plus a fallback.
 		switch (file.chip ())
 		{
 			case formats::nsf::NsfChip::vrc6: info_.chips.push_back ({ "VRC6", "NSFPlay", 1 }); break;
@@ -136,11 +140,6 @@ public:
 			case formats::nsf::NsfChip::mmc5: info_.chips.push_back ({ "MMC5", "NSFPlay", 1 }); break;
 			case formats::nsf::NsfChip::fme7: info_.chips.push_back ({ "S5B",  "NSFPlay", 1 }); break;
 			case formats::nsf::NsfChip::n163: info_.chips.push_back ({ "N163", "NSFPlay", 1 }); break;
-
-			// Every chip above has a row here or it does not exist as far as the chip card is
-			// concerned, however many tracks it contributes. The N163 was the one missing, and a
-			// file that declares it showed a card with the 2A03 alone while the mixer drew all
-			// eight of its channels underneath.
 			default: break;
 		}
 

@@ -195,13 +195,13 @@ if (midiSequence == nullptr && song != nullptr)
 
 ## 三、观察（不建议本轮改）
 
-| # | 位置 | 说明 |
-|---|---|---|
-| O-1 | `NsfPlayer.cpp:515` | `(rendered % 4096) < frames` 依赖 `frames` 小于 4096 且不跨界。能工作，但读的人要停下来算一遍。可改为 `rendered / 4096 != (rendered + frames) / 4096`。 |
-| O-2 | `NsfBackend.cpp` | `dmcNames[]` + `addSampleTrack()` 只表达了一半："哪些叫这个名字"在表里，"哪两个是采样通道"在两次调用里。改成 `{name, capability}` 数组更贴合第 4 条。 |
-| O-3 | `NsfBackend.cpp` | 那段 "Every chip above has a row here or it does not exist…" 的注释放在 `default: break;` **之前**，读起来像在解释 `default` 该做什么。它解释的是"不许漏 case"，应贴在上一个 `case` 之后或挪到 switch 上方。 |
-| O-4 | `NsfPlayer.cpp:145` | `start()` 先置 `analysing = true`，`adoptScan()` 在缓存未命中时又置一次。重复但无害；删掉前者会丢掉"缓存命中时不会先闪一下"的意图，保留更好。 |
-| O-5 | `NsfBackend.cpp` | `probe.skipPrescan ()` 让 DPCM 探测不再触发一次全曲扫描，是好改动。注释 "only the write counters are read below" 准确。 |
+| # | 位置 | 说明 | 处置 |
+|---|---|---|---|
+| O-1 | `NsfPlayer.cpp` | `(rendered % interval) < frames` 要求 `frames` 小于间隔，读的人得先算一遍才敢信 | **已改**：写成"这个 block 是否跨过轮询边界"，条件相同，意思自明 |
+| O-2 | `NsfBackend.cpp` | `dmcNames[]` + `addSampleTrack()` 只表达了一半：名字在表里，类型在两次调用里 | **不改**。硬合成一张表要给 `addTrack` 加两个参数，而它服务的三种行只有能力不同、其余全一样；分开写反而更短 |
+| O-3 | `NsfBackend.cpp` | "Every chip above has a row here…" 放在 `default:` 之前，读起来像在解释 `default` 该做什么 | **已改**：移到 switch 上方，并把"这一段就是全部清单"说清楚 |
+| O-4 | `NsfPlayer.cpp` | `start()` 先置 `analysing = true`、`adoptScan()` 又置一次 | **已消失**：`start()` 现在只在 handle 为空时设一次，没有第二处 |
+| O-5 | `NsfBackend.cpp` | `probe.skipPrescan()` 让 DPCM 探测不再触发全曲扫描，注释准确 | 无需行动 |
 
 ---
 

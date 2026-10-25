@@ -527,8 +527,14 @@ int NsfPlayer::render (float* left, float* right, int frames)
 	// song was reopened, because the only other place that checks runs from start().
 	// Not while scanning: that pass is trying to produce the very thing being waited for, and
 	// looking from inside it would only take the handle's lock between its own writes.
+	// "Crossed a poll boundary during this block" rather than a modulo on where the block starts:
+	// the same condition, said so that a reader does not have to convince themselves the interval
+	// is larger than a block for it to work.
+	const auto pollBoundary = rendered / kScanPollIntervalSamples;
+	const auto nextBoundary = (rendered + (std::uint64_t) frames) / kScanPollIntervalSamples;
+
 	if (analysing.load (std::memory_order_relaxed) && ! scanning.load (std::memory_order_relaxed)
-		&& (rendered % kScanPollIntervalSamples) < (std::uint64_t) frames)
+		&& pollBoundary != nextBoundary)
 	{
 		if (auto scan = scanHandle != nullptr ? scanHandle->snapshot () : nullptr)
 		{
