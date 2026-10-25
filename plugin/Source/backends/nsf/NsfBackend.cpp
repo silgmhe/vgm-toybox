@@ -18,6 +18,10 @@ namespace toybox::backends::nsf
 namespace
 {
 
+/** Three minutes, until the settings page has an answer. The header carries no length: an NSF's
+	driver loops until it is told to stop, so the user is the only source of a duration. */
+constexpr double kDefaultLengthSeconds = 180.0;
+
 /** One rendered instance of the song. The emulation is the player's; this only adapts it. */
 class NsfTrackPlayer final : public playback::ITrackPlayer
 {
@@ -93,7 +97,7 @@ public:
 
 private:
 	NsfPlayer player;
-	double length = 180.0;
+	double length = kDefaultLengthSeconds;
 };
 
 class NsfSongInstance final : public playback::ISongInstance
@@ -333,7 +337,7 @@ public:
 			return;
 		}
 
-		NsfPlayer probe (file, 44100.0);
+		NsfPlayer probe (file, rate);
 		probe.skipPrescan ();		// only the write counters are read below
 		probe.start ();
 
@@ -368,8 +372,10 @@ private:
 	std::vector<char> image;
 	playback::SongInfo info_;
 	std::vector<playback::TrackInfo> tracks_;
+	/** What the host asked for, until it has asked. Every probe in this file uses this rather
+		than a literal, so a scan and the playback it feeds describe time the same way. */
 	double rate = 44100.0;
-	double length = 180.0;
+	double length = kDefaultLengthSeconds;
 	bool expansionPresent = false;
 	int blockSize = 512;
 
@@ -416,7 +422,7 @@ private:
 			// which would wreck playback if it shared the emulation the mixer renders from. It
 			// publishes into the song's handle, which is how the player rendering audio hears
 			// about it.
-			NsfPlayer probe (file, 44100.0);
+			NsfPlayer probe (file, rate);
 			probe.setScanHandle (scanHandle);
 			probe.setScanCancelFlag (&cancelScan);
 			probe.scanSong ();

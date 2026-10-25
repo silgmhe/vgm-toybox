@@ -26,6 +26,15 @@ constexpr double kPalClock = 1662607.0;
 	receivers drop - which would silence exactly the drums a DPCM track is for. */
 constexpr double kMinimumNoteSeconds = 1.0 / 60.0;
 
+/** How often a player waiting for its scan looks again, in samples: 4096 is about 93 ms at
+	44.1 kHz. Frequent enough that the DPCM row's label clears while the user is still looking
+	at it, rare enough that the check costs nothing on the blocks in between. */
+constexpr std::uint64_t kScanPollIntervalSamples = 4096;
+
+/** MIDI's top velocity. The walk records a channel's level as 0..1, so this is the one place
+	where the two scales meet. */
+constexpr double kMaxMidiVelocity = 127.0;
+
 /** DPCM sample slots per song, keyed by the file's content hash and its start song.
 
 	A backend is rebuilt several times while one song is open - switching the mixer on, seeking -
@@ -314,7 +323,7 @@ void NsfPlayer::scanSampleChannels (double seconds)
 				on.timeSeconds = time;
 				on.type = playback::MidiEventType::noteOn;
 				on.data1 = (std::uint8_t) note;
-				on.data2 = (std::uint8_t) (std::clamp) ((int) std::lround ((double) channel.volume * 127.0),
+				on.data2 = (std::uint8_t) (std::clamp) ((int) std::lround ((double) channel.volume * kMaxMidiVelocity),
 														1, 127);
 				on.sourceTrack = (std::uint32_t) index;
 				events.push_back (on);
@@ -517,9 +526,9 @@ int NsfPlayer::render (float* left, float* right, int frames)
 	// every 4096 samples, about 93 ms. Without it the DPCM row would say "analysing" until the
 	// song was reopened, because the only other place that checks runs from start().
 	// Not while scanning: that pass is trying to produce the very thing being waited for, and
-	// polling from inside it only takes the cache lock it is about to write.
+	// looking from inside it would only take the handle's lock between its own writes.
 	if (analysing.load (std::memory_order_relaxed) && ! scanning.load (std::memory_order_relaxed)
-		&& (rendered % 4096u) < (std::uint64_t) frames)
+		&& (rendered % kScanPollIntervalSamples) < (std::uint64_t) frames)
 	{
 		if (auto scan = scanHandle != nullptr ? scanHandle->snapshot () : nullptr)
 		{

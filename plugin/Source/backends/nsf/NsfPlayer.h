@@ -268,8 +268,8 @@ private:
 		because the scan is cached and every player built from this file gets the same stream. */
 	std::shared_ptr<const playback::MidiSequence> midiSequence;
 
-	/** Set while the scan for this song has not landed. Cleared by adoptScan() the moment the
-		cache has it, which is what turns the DPCM row's "analysing" label off.
+	/** Set while the scan for this song has not landed. Cleared by applyScan() the moment the
+		song's handle has the result, which is what turns the DPCM row's "analysing" label off.
 
 		Atomic because it is written from start() and read from render(): the same player is driven
 		by the message thread when it is set up and by the audio thread when it plays.
