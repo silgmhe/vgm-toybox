@@ -132,7 +132,7 @@ void paintWave (juce::Graphics& g, juce::Rectangle<int> area,
 		juce::Graphics::ScopedSaveState clip (g);
 		g.reduceClipRegion (window.toNearestInt ());
 
-		juce::ColourGradient shade (juce::Colours::black.withAlpha (kWindowShadeAlpha),
+		juce::ColourGradient shade (theme::shadowTint ().withAlpha (kWindowShadeAlpha),
 									window.getX (), window.getY (),
 									juce::Colours::transparentBlack,
 									window.getX (), window.getY () + kWindowShadeDepth, false);

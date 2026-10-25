@@ -435,7 +435,7 @@ juce::Rectangle<int> ToyboxLookAndFeel::getTooltipBounds (const juce::String& ti
 														  juce::Point<int> screenPos,
 														  juce::Rectangle<int> parentArea)
 {
-	const auto layout = makeTooltipLayout (getDefaultMetricsKind(), tipText, juce::Colours::black);
+	const auto layout = makeTooltipLayout (getDefaultMetricsKind(), tipText, theme::primaryText ());
 	const int cardWidth = (int) std::ceil (layout.getWidth()) + 14;
 	const int cardHeight = (int) std::ceil (layout.getHeight()) + 6;
 

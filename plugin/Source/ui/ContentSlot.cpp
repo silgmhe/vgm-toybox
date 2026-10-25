@@ -727,7 +727,7 @@ private:
 			juce::Graphics::ScopedSaveState inner (g);
 			g.reduceClipRegion (bed.toNearestInt ());
 
-			juce::ColourGradient shade (juce::Colours::black.withAlpha (0.10f), bed.getX (), bed.getY (),
+			juce::ColourGradient shade (theme::shadowTint ().withAlpha (0.10f), bed.getX (), bed.getY (),
 										juce::Colours::transparentBlack, bed.getX (), bed.getY () + 5.0f, false);
 			g.setGradientFill (shade);
 			g.fillRoundedRectangle (bed, 5.0f);
@@ -760,7 +760,7 @@ private:
 				juce::Graphics::ScopedSaveState clipped (g);
 				g.reduceClipRegion (face.toNearestInt ());
 
-				juce::ColourGradient shade (juce::Colours::black.withAlpha (0.30f), face.getX (), face.getY (),
+				juce::ColourGradient shade (theme::shadowTint ().withAlpha (0.30f), face.getX (), face.getY (),
 											juce::Colours::transparentBlack, face.getX (), face.getY () + 5.0f, false);
 				g.setGradientFill (shade);
 				g.fillRoundedRectangle (face, 1.5f);

@@ -85,6 +85,14 @@ struct Palette
 		two answers. These are palette values so the next card that scrolls gets the same one.
 	*/
 	juce::Colour scrollBarThumb, scrollBarTrack;
+
+	/** What shadows and scrims are made of.
+
+		A window shade, a key's shadow and the backdrop behind a modal are the same gesture - "this
+		is behind that" - so they come from one colour and differ only in alpha, which the caller
+		knows and the palette does not.
+	*/
+	juce::Colour shadowTint, scrim;
 };
 
 /** The palette in force. Both are static, so this only ever picks one. */
@@ -129,6 +137,8 @@ inline juce::Colour keyBlack (void)			{ return palette().keyBlack; }
 inline juce::Colour edgeFade (void)			{ return palette().edgeFade; }
 inline juce::Colour scrollBarThumb (void)	{ return palette().scrollBarThumb; }
 inline juce::Colour scrollBarTrack (void)	{ return palette().scrollBarTrack; }
+inline juce::Colour shadowTint (void)		{ return palette().shadowTint; }
+inline juce::Colour scrim (void)			{ return palette().scrim; }
 
 // --- metrics ------------------------------------------------------------------------
 inline constexpr int margin = 14;			// window border

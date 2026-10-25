@@ -4,6 +4,7 @@
 #include <memory>
 #include <vector>
 
+#include "backends/nsf/NsfChannelNaming.h"
 #include "backends/nsf/NsfPlayer.h"
 #include "formats/nsf/NsfFile.h"
 #include "settings/SettingsStore.h"
@@ -168,7 +169,7 @@ public:
 			case formats::nsf::NsfChip::n163:
 				for (int i = 0; i < 8; ++i)
 				{
-					addTrack (juce::String ("Wave " + juce::String (i + 1)).toRawUTF8 (), "N163", true, 1);
+					addTrack (n163ChannelName (i).c_str (), "N163", true, 1);
 				}
 				break;
 

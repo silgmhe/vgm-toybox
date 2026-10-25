@@ -1584,7 +1584,7 @@ void SettingsOverlay::paint (juce::Graphics& g)
 {
 	// The scrim, exactly as over the About box: it dims the window, and the area around the panel
 	// is the "go back" one that mouseDown() below acts on.
-	g.fillAll (juce::Colours::black.withAlpha (0.35f));
+	g.fillAll (theme::scrim ());
 
 	const auto panel = panelBounds().toFloat();
 	g.setColour (theme::card());

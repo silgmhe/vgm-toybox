@@ -49,7 +49,10 @@ alwaysApply: true
 
 - 面板只画"收到的数据"，不推断来源芯片。
 - **任何颜色都必须来自 `theme::`**。组件里出现 `juce::Colour (0x…)`、`juce::Colours::red`、`colours::black.withAlpha (…)` 这类就地取值，一律视为缺陷，不因为"只有这一处"而通融。
-- 唯一允许的例外是 `juce::Colours::transparentBlack`：它表示"没有颜色"，不携带任何设计决定。
+- 允许的例外只有三类，且都要在代码里**具名并注明理由**：
+  1. `juce::Colours::transparentBlack` —— 表示"没有颜色"，不携带任何设计决定；
+  2. **素材自身的墨色** —— 例如托盘 SVG 以黑色绘制，`replaceColour` 里的黑色是源文件的墨色，不是我们选的颜色；
+  3. **操作系统契约** —— 例如 Windows 模板图标必须是白色，由外壳按任务栏明暗反转；换成主题色会让它在深色任务栏上消失。
 - 不在构造函数里 `setColour`（主题切换时不会重设）。全局控件交给 `ToyboxLookAndFeel`，组件私有颜色在 `paint()` 里现取现用。
 
 ### 要让一个颜色"可管理"，四步

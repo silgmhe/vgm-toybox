@@ -117,7 +117,7 @@ public:
 	{
 		// The scrim is rounded like the card it covers: the overlay's own bounds are rectangles,
 		// so a square fill would paint over the card's rounded corners.
-		g.setColour (juce::Colours::black.withAlpha (0.30f));
+		g.setColour (theme::shadowTint ().withAlpha (0.30f));
 		g.fillRoundedRectangle (getLocalBounds().toFloat(), theme::cardRadius);
 
 		const auto box = boxBounds().toFloat();

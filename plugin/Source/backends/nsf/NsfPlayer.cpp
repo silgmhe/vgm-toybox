@@ -4,6 +4,7 @@
 #include <cmath>
 
 #include "backends/nsf/NsfBus.h"
+#include "backends/nsf/NsfChannelNaming.h"
 
 namespace toybox::backends::nsf
 {
@@ -369,8 +370,6 @@ namespace
 
 	constexpr int kPulseChannels = 2;
 	constexpr int kDmcChannels = 3;				// triangle, noise and the delta channel
-	constexpr int kN163Channels = 8;
-
 	// The 2A03's five tracks come first in the snapshot's channel order.
 	constexpr int kFirstDmcTrack = kPulseChannels;
 	constexpr int kFirstN163Track = kPulseChannels + kDmcChannels;
@@ -534,7 +533,7 @@ bool NsfPlayer::captureState (playback::ChipStateSnapshot& snapshot) const
 		state.trackIndex = kFirstN163Track + channel;
 		state.waveKind = kShapeStored;
 
-		state.name = "Wave " + std::to_string (kN163Channels - channel);
+		state.name = n163ChannelName (channel);
 		state.active = info->GetKeyStatus ();
 		state.frequency = (float) info->GetFreqHz ();
 		state.note = state.active ? playback::noteForFrequency (state.frequency) : -1;

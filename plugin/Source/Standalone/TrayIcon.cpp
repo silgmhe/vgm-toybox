@@ -227,7 +227,10 @@ juce::Image TrayIcon::makeTemplateImage (const juce::Image& colourIcon)
 				&& pixel.getGreen() > 180
 				&& pixel.getBlue() > 180)
 			{
-				image.setPixelAt (x, y, juce::Colours::white.withAlpha (pixel.getAlpha()));
+				// White is the operating system's contract for a template image, not the
+				// application's colour: the shell inverts this silhouette for either taskbar.
+				static constexpr juce::uint32 kTemplateInk = 0xffffffff;
+				image.setPixelAt (x, y, juce::Colour (kTemplateInk).withAlpha (pixel.getAlpha()));
 			}
 		}
 	}
