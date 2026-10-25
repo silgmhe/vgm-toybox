@@ -15,6 +15,7 @@
 	    load <path>              a file dropped on the window - the same path the drag & drop uses
 	    press <key>              escape space enter home left right ctrl+o ctrl+1 .. ctrl+9
 	    click <componentId>      trigger a button (and report its new state)
+    hover <componentId> <x> <y>   move the pointer there, so hover states can be photographed
 	    toggle <componentId>     the same, for the controls that toggle
 	    set <componentId> <v>    set a slider or a combo box, with the notification the UI sends
 	    select <treeId> <row>    select a tree row, e.g. a settings page in the sidebar
@@ -362,6 +363,7 @@ private:
 		if (command == "load") { commandLoad (tokens); }
 		else if (command == "press") { commandPress (tokens); }
 		else if (command == "click" || command == "toggle") { commandClick (tokens, command == "toggle"); }
+		else if (command == "hover") { commandHover (tokens); }
 		else if (command == "set") { commandSet (tokens); }
 		else if (command == "select") { commandSelect (tokens); }
 		else if (command == "dump") { commandDump (tokens); }
@@ -455,6 +457,51 @@ private:
 		const bool handled = editor.keyPressed (key);
 		settle (60);
 		report (handled == wantsHandled, "press " + tokens[1] + (wantsHandled ? "" : " (unhandled)"));
+	}
+
+	/** Moves the pointer to a point in the window and tells the component under it.
+
+		The harness has no mouse, so anything that only happens on hover was unreachable from a
+		script - and hover is exactly the state that is invisible in a build log and obvious in a
+		picture. Coordinates are in editor space, the same space as `shot`.
+	*/
+	/** Moves the pointer to a point inside a component and tells it so.
+
+		The harness has no mouse, so anything that only happens on hover was unreachable from a
+		script - and hover is exactly the state that is invisible in a build log and obvious in a
+		picture. Coordinates are relative to the component: `hover view.keyboard 127 96`.
+	*/
+	void commandHover (const juce::StringArray& tokens)
+	{
+		if (tokens.size() < 4)
+		{
+			report (false, "hover needs a component id and x y");
+			return;
+		}
+
+		auto* target = findByID (editor, tokens[1]);
+
+		if (target == nullptr)
+		{
+			report (false, "hover: no component '" + tokens[1] + "'");
+			return;
+		}
+
+		const juce::Point<float> local ((float) tokens[2].getIntValue(),
+										(float) tokens[3].getIntValue());
+
+		const auto now = juce::Time::getCurrentTime();
+
+		const juce::MouseEvent event (juce::Desktop::getInstance().getMainMouseSource(),
+									  local,
+									  juce::ModifierKeys(),
+									  0.0f, 0.0f, 0.0f, 0.0f, 0.0f,
+									  nullptr, target,
+									  now, local, now, 1, false);
+
+		target->mouseMove (event);
+
+		report (true, "hover " + tokens[1] + " " + tokens[2] + "," + tokens[3]);
 	}
 
 	void commandClick (const juce::StringArray& tokens, bool expectToggle)

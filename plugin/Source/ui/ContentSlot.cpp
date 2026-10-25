@@ -119,6 +119,8 @@ public:
 		// its old colours after a theme change.
 		exportButton.setButtonText (toybox::i18n::tr ("visualiser.export"));
 		exportButton.onClick = [this] { if (onExport) { onExport (); } };
+		setComponentID ("view.keyboard");
+
 		addAndMakeVisible (exportButton);
 
 		// The rows scroll with the wheel and the arrows, but nothing said how much of the list was
@@ -257,7 +259,11 @@ public:
 				const bool soloed = channel.trackIndex >= 0
 									&& engine.isTrackSoloed ((std::size_t) channel.trackIndex);
 
-				keyboard::paintChannelRow (g, row, channel, muted, soloed, octaveShift,
+				keyboard::RowHover hover;
+				hover.mute = (hoveredRowChannel == row.channel && hoveredRowMute);
+				hover.solo = (hoveredRowChannel == row.channel && ! hoveredRowMute);
+
+				keyboard::paintChannelRow (g, row, channel, muted, soloed, octaveShift, hover,
 										   [this] (juce::Graphics& graphics, juce::Rectangle<int> area, int note)
 										   { paintKeyboard (graphics, area, note); });
 			}
@@ -371,19 +377,86 @@ public:
 
 	void mouseMove (const juce::MouseEvent& event) override
 	{
+		// The rows are built in relayout, which runs when the panel paints. A pointer that arrives
+		// before the first paint - a script, a restored window - would be hit-tested against an
+		// empty list.
+		if (rows.empty ())
+		{
+			relayout ();
+		}
+
 		const auto point = event.getPosition ();
 		const int hovered = shiftLeftRect.contains (point) ? 0
 						  : (shiftRightRect.contains (point) ? 1 : -1);
+
+		int rowChannel = -1;
+		bool rowMute = false;
+
+		if (hovered < 0)
+		{
+			for (const auto& row : rows)
+			{
+				if (row.header)
+				{
+					continue;
+				}
+
+				if (row.mute.contains (point)) { rowChannel = row.channel; rowMute = true;  break; }
+				if (row.solo.contains (point)) { rowChannel = row.channel; rowMute = false; break; }
+			}
+		}
+
+
+		const bool pointer = hovered >= 0 || rowChannel >= 0;
+
+		if (pointer != lastPointerWasOverControl)
+		{
+			lastPointerWasOverControl = pointer;
+			setMouseCursor (pointer ? juce::MouseCursor::PointingHandCursor
+									: juce::MouseCursor::NormalCursor);
+		}
 
 		if (hovered != hoveredControl)
 		{
 			hoveredControl = hovered;
 			repaint (getLocalBounds ().withHeight (kHeader));
 		}
+
+		if (rowChannel != hoveredRowChannel || rowMute != hoveredRowMute)
+		{
+			// Only the two rows involved: repainting thirteen of them at every mouse move is how a
+			// hover effect becomes a fan.
+			const auto repaintRow = [this] (int channel)
+			{
+				for (const auto& row : rows)
+				{
+					if (! row.header && row.channel == channel)
+					{
+						repaint (row.mute.getUnion (row.solo).expanded (2));
+					}
+				}
+			};
+
+			if (hoveredRowChannel >= 0) { repaintRow (hoveredRowChannel); }
+
+			hoveredRowChannel = rowChannel;
+			hoveredRowMute = rowMute;
+
+			if (hoveredRowChannel >= 0) { repaintRow (hoveredRowChannel); }
+		}
 	}
 
 	void mouseExit (const juce::MouseEvent&) override
 	{
+		if (hoveredRowChannel >= 0)
+		{
+			hoveredRowChannel = -1;
+			repaint ();
+
+			lastPointerWasOverControl = false;
+			setMouseCursor (juce::MouseCursor::NormalCursor);
+		}
+
 		if (hoveredControl != -1)
 		{
 			hoveredControl = -1;
@@ -937,6 +1010,12 @@ private:
 	// same material as everything else without a child's clipping deciding where their shadow ends.
 	juce::Rectangle<int> shiftLeftRect, shiftRightRect, autoRect;
 	int hoveredControl = -1;
+
+	// Which row's mute or solo the pointer is over: -1 for none. The two are one member because
+	// only one of them can be under the pointer at a time.
+	int hoveredRowChannel = -1;
+	bool hoveredRowMute = false;
+	bool lastPointerWasOverControl = false;
 
 	juce::String& exportStatus;
 	juce::TextButton exportButton { "export" };

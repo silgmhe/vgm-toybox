@@ -23,6 +23,13 @@ using KeyPainter = std::function<void (juce::Graphics&, juce::Rectangle<int>, in
 	rows no longer carry the snapshot. */
 void paintGroupHeader (juce::Graphics& g, const Row& row, int channelCount);
 
+/** Which of a row's two buttons the pointer is over, if any. */
+struct RowHover
+{
+	bool mute = false;
+	bool solo = false;
+};
+
 /** One channel: its card, its name, its mute and solo, its note, its waveform, its keys and its
 	meter. The keys come from `paintKeys`; everything else is drawn here. */
 void paintChannelRow (juce::Graphics& g,
@@ -31,13 +38,14 @@ void paintChannelRow (juce::Graphics& g,
 					  bool muted,
 					  bool soloed,
 					  int octaveShift,
+					  RowHover hover,
 					  const KeyPainter& paintKeys);
 
 /** Mute and solo, drawn with the mixer's own face and colours: mute fills red, solo amber, and a
 	toggled one carries the matching glow. Anything else would make the two views look like
 	different applications. */
 void paintToggle (juce::Graphics& g, juce::Rectangle<int> area,
-				  const char* letter, bool on, bool mute);
+				  const char* letter, bool on, bool mute, bool hovered);
 
 /** The waveform column: a rounded window over the card, a hairline, and the cycle inside it. */
 void paintWave (juce::Graphics& g, juce::Rectangle<int> area,
