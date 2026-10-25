@@ -1,5 +1,7 @@
 #include "LibvgmSongInstance.h"
 
+#include "LibvgmMuteIsolation.h"
+
 #include <map>
 
 #include "emu/SoundDevs.h"
@@ -479,16 +481,44 @@ SongDescription describeSong (LibvgmTrackPlayer* probe)
 	// picked cannot mute single channels (without it the channels cannot be isolated, and
 	// duplicating the device's audio across tracks would be wrong)
 	int deviceIndex = 0;
-	for (const auto& device : devices)
+
+	/** Whether a device's core can mute single channels - and therefore whether its voices can be
+		tracks at all. */
+	const auto isIsolatable = [] (const PLR_DEV_INFO& info)
 	{
+		if (info.devDecl == nullptr)
+		{
+			return false;
+		}
+
+		for (const DEV_DEF* const* core = info.devDecl->cores; *core != nullptr; ++core)
+		{
+			if ((*core)->coreID == info.core)
+			{
+				return (*core)->SetMuteMask != nullptr;
+			}
+		}
+
+		return false;
+	};
+
+	const auto channelCountOf = [] (const PLR_DEV_INFO& info)
+	{
+		return (info.devDecl != nullptr && info.devDecl->channelCount != nullptr)
+				   ? (int) info.devDecl->channelCount (info.devCfg) : 0;
+	};
+
+	for (size_t headIndex = 0; headIndex < devices.size(); ++headIndex)
+	{
+		const auto& device = devices[headIndex];
+
 		if (! isTrackDevice (device))
 		{
 			continue;
 		}
 
 		const DEV_DECL* decl = device.devDecl;
-		const int channelCount = (decl != nullptr && decl->channelCount != nullptr)
-								   ? (int) decl->channelCount (device.devCfg) : 0;
+		const int channelCount = channelCountOf (device);
 		const char** channelNames = (decl != nullptr && decl->channelNames != nullptr)
 									  ? decl->channelNames (device.devCfg) : nullptr;
 
@@ -503,18 +533,7 @@ SongDescription describeSong (LibvgmTrackPlayer* probe)
 			groupName << " #" << instanceNumber;
 		}
 
-		bool isolatable = false;
-		if (decl != nullptr)
-		{
-			for (const DEV_DEF* const* core = decl->cores; *core != nullptr; ++core)
-			{
-				if ((*core)->coreID == device.core)
-				{
-					isolatable = ((*core)->SetMuteMask != nullptr);
-					break;
-				}
-			}
-		}
+		const bool isolatable = isIsolatable (device);
 
 		const auto addTrack = [&result, &device, deviceIndex, &groupName] (int channelIndex,
 																		const juce::String& name,
@@ -545,6 +564,33 @@ SongDescription describeSong (LibvgmTrackPlayer* probe)
 											: ("Ch " + juce::String (channel + 1));
 				addTrack (channel, name, true);
 			}
+		}
+
+		// A linked device that is a voice set of its own - the SSG behind an OPN chip - gets its
+		// channels as tracks, numbered after the parent's so the parent's indices do not move: a
+		// session saved before this change keeps its per-track gains and mutes.
+		//
+		// Leaving the SSG out of the layout and trusting the mask to keep it quiet is what this
+		// replaces, and the mask does not (docs/memo/2026-10-25-linked-devices-and-channel-numbering.md).
+		int linkedBase = channelCount;
+
+		for (const auto& child : devices)
+		{
+			if (child.parentIdx != (UINT32) headIndex
+				|| linkedDeviceKindFor (child.type) != LinkedDeviceKind::extraVoices)
+			{
+				continue;
+			}
+
+			const int childChannels = channelCountOf (child);
+			const bool childIsolatable = isIsolatable (child);
+
+			for (int channel = 0; channel < childChannels; ++channel)
+			{
+				addTrack (linkedBase + channel, "SSG " + juce::String (channel + 1), childIsolatable);
+			}
+
+			linkedBase += childChannels;
 		}
 
 		++deviceIndex;

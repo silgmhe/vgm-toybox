@@ -260,31 +260,49 @@ void LibvgmTrackPlayer::applyIsolation (void)
 	// One chip can be more than one device: OPL4 is the OPL3 half plus a PCM half that libvgm
 	// reports as a linked child, and a mute sent only to the parent left the PCM playing. Every
 	// mute therefore goes to the device and to whatever is linked under it.
-	auto applyMuteGroup = [&devices, this] (const PLR_DEV_INFO& device, const PLR_MUTE_OPTS& options)
+	// Children are matched by the parent's *index* in the device list: a linked device shares its
+	// parent's id - both are 0 on a YM2610 - so comparing ids finds the child of the wrong chain
+	// as soon as a song has two chips of the same kind.
+	auto applyMuteGroup = [&devices, this] (size_t parentIndex, const PLR_MUTE_OPTS& options)
 	{
-		applyMuting (device.id, options);
+		applyMuting (devices[parentIndex].id, options);
 
-		for (const auto& child : devices)
+		for (size_t i = 0; i < devices.size(); ++i)
 		{
-			if (child.parentIdx == device.id)
+			if (devices[i].parentIdx == (UINT32) parentIndex)
 			{
-				applyMuting (child.id, options);
+				applyMuting (devices[i].id, options);
 			}
 		}
 	};
 
-	for (const auto& info : devices)
+	/** The kind of the devices linked behind one chain, if it has any. */
+	const auto linkedKindOf = [&devices] (size_t parentIndex)
 	{
+		for (const auto& child : devices)
+		{
+			if (child.parentIdx == (UINT32) parentIndex)
+			{
+				return linkedDeviceKindFor (child.type);
+			}
+		}
+
+		return LinkedDeviceKind::mirror;	// nothing linked, or nothing that cares
+	};
+
+	for (size_t deviceIndex = 0; deviceIndex < devices.size(); ++deviceIndex)
+	{
+		const auto& info = devices[deviceIndex];
+
 		if (info.parentIdx != (UINT32) -1)
 		{
 			continue;	// linked devices are configured through their parent
 		}
 
-
 		if (! isolated)
 		{
 			// the plain, un-isolated player: every device plays, only the chips card mutes
-			applyMuteGroup (info, chipMuteOptions (! isChipAudible (info.id), false));
+			applyMuteGroup (deviceIndex, chipMuteOptions (! isChipAudible (info.id), false));
 			continue;
 		}
 
@@ -298,7 +316,28 @@ void LibvgmTrackPlayer::applyIsolation (void)
 		if (myTrackInfo == nullptr || info.id != myTrackInfo->deviceId || ! myTrackAudible
 			|| ! isChipAudible (info.id))
 		{
-			applyMuteGroup (info, suspendedMuteOptions());
+			applyMuteGroup (deviceIndex, suspendedMuteOptions());
+			continue;
+		}
+
+		// A track can live on a device linked behind this one - the SSG's three channels are
+		// numbered after the parent's - and then the second half of the mask is the one that
+		// counts, against the linked device's own numbering.
+		const int parentChannels = (info.devDecl != nullptr && info.devDecl->channelCount != nullptr)
+									   ? (int) info.devDecl->channelCount (info.devCfg) : 0;
+
+		if (parentChannels > 0 && myTrackInfo->channelIndex >= parentChannels)
+		{
+			PLR_MUTE_OPTS linked = {};
+			linked.disable = 0x01;			// the parent device contributes nothing to this track
+			linked.chnMute[0] = 0xFFFFFFFF;	// (unused while the parent is suspended)
+
+			const int localChannel = myTrackInfo->channelIndex - parentChannels;
+			linked.chnMute[1] = myTrackInfo->isolatable
+									? (0xFFFFFFFF & ~channelMuteBit (localChannel))
+									: 0x00000000;
+
+			applyMuteGroup (deviceIndex, linked);
 			continue;
 		}
 
@@ -307,21 +346,22 @@ void LibvgmTrackPlayer::applyIsolation (void)
 		PLR_MUTE_OPTS isolate = singleChannelMuteOptions (myTrackInfo->channelIndex,
 														 myTrackInfo->isolatable);
 
-		// The YM2610's SSG is a three-channel device linked behind a thirteen-channel chip, and
-		// the mask's second half is applied to *its* numbering. A track for FM channel 2 therefore
-		// left SSG channel 2 audible - measured at 32% of that strip's energy on a song where the
-		// SSG is loud, and heard as crosstalk and a noise floor under the FM.
+		// A linked device with channel numbers of its own does not belong in this track's render:
+		// the mask's second half is read against *its* numbering, so a track for FM channel 2 left
+		// SSG channel 2 audible - measured at 32% of that strip's energy on a song where the SSG
+		// is loud, and heard as crosstalk and a noise floor under the FM. The same mistake is in
+		// every OPN chip: YM2203 leaks all three of its SSG channels into its three FM tracks, and
+		// YM2608 leaks them into tracks 0-2.
 		//
-		// The SSG never becomes a track of its own, so on an isolated player it has nothing to
-		// contribute: suspend it. Chips whose linked device carries part of the sound - an OPL4's
-		// FM half is the linked OPL3 - keep the mask in both halves, because muting there would
-		// silence the chip (the engine's OPL4 test says so).
-		if (info.type == DEVID_YM2610)
+		// The SSG has no track of its own yet, so suspending it costs nothing that is mixed. A
+		// mirror - an OPL4's OPL3 - must keep the mask in both halves: there the linked device is
+		// where the chip's audio is, and suspending it silences the whole chip.
+		if (linkedKindOf (deviceIndex) == LinkedDeviceKind::extraVoices)
 		{
 			isolate.disable |= 0x02;	// 0x02: the linked devices of this chain
 		}
 
-		applyMuteGroup (info, isolate);
+		applyMuteGroup (deviceIndex, isolate);
 	}
 }
 

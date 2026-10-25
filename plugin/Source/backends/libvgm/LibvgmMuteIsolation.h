@@ -1,10 +1,44 @@
 #pragma once
 
 #include "stdtype.h"
+#include "emu/SoundDevs.h"
 #include "player/playerbase.hpp"
 
 namespace toybox::backends::libvgm
 {
+
+/** What the device linked behind a chip is, relative to that chip.
+
+	The distinction decides whether one mute mask can serve both halves of a chain:
+
+	- `mirror`     the linked device is an implementation detail of the parent and its channel n is
+	               the parent's channel n - an OPL4 is a YMF278B with an OPL3 doing its FM. The same
+	               mask belongs in both halves, and muting the linked device silences the chip.
+	- `extraVoices` the linked device is a voice set of its own with its own numbering - the SSG
+	               behind an OPN chip is three channels behind three, thirteen or thirteen more.
+	               The parent's mask means something else there, so the linked device must be kept
+	               out of a parent track's render entirely.
+
+	Only four devices in libvgm have a linked device at all (YM2203, YM2608, YM2610/B behind an
+	SSG; YMF278B behind an OPL3), which is why this can be a type test rather than a table.
+*/
+enum class LinkedDeviceKind
+{
+	mirror,
+	extraVoices
+};
+
+inline LinkedDeviceKind linkedDeviceKindFor (DEV_ID type)
+{
+	switch (type)
+	{
+	case DEVID_AY8910:		// SSG: AY-3-8910 and its clones, three channels of its own
+		return LinkedDeviceKind::extraVoices;
+
+	default:
+		return LinkedDeviceKind::mirror;
+	}
+}
 
 /** Channel number -> position of its mute bit inside PLR_MUTE_OPTS::chnMute[2] (32 bits each). */
 inline int channelMuteHalf (int channelIndex) { return channelIndex / 32; }
