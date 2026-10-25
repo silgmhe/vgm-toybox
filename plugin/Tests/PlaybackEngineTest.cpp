@@ -857,7 +857,8 @@ int main (int argc, char* argv[])
 		|| inputFile.getFileName() == "mmc5_song.nsf"
 		|| inputFile.getFileName() == "fme7_song.nsf"
 		|| inputFile.getFileName() == "vrc6_song.nsf"
-		|| inputFile.getFileName() == "vrc7_song.nsf")
+		|| inputFile.getFileName() == "vrc7_song.nsf"
+		|| inputFile.getFileName() == "n163_song.nsf")
 	{
 		// The keyboard and the chip card read a snapshot, and until now only the 2A03 and the N163
 		// ever filled one in: every other expansion showed its name in the chip list and no rows
@@ -896,8 +897,15 @@ int main (int argc, char* argv[])
 			// A row the panel cannot draw is a blank cell: either a stored waveform arrived, or
 			// the shape kind is one the panel knows how to synthesise. The range is checked rather
 			// than the value, so a new kind that nobody taught the panel to draw fails here.
+			//
+			// Only asked of rows that are sounding. A silent N163 row has no wave loaded and
+			// draws nothing, which is correct - there is no shape to draw.
 			const bool knownShape = (channel.waveKind >= 2 && channel.waveKind <= 7);
-			rowsCanBeDrawn = rowsCanBeDrawn && (knownShape || ! channel.wave.empty ());
+
+			if (channel.active)
+			{
+				rowsCanBeDrawn = rowsCanBeDrawn && (knownShape || ! channel.wave.empty ());
+			}
 
 			if (channel.active && channel.note >= 0)
 			{
