@@ -1,5 +1,7 @@
 #include "LibvgmSongInstance.h"
 
+#include "LibvgmMuteIsolation.h"
+
 #include <map>
 
 #include "emu/SoundDevs.h"
@@ -42,7 +44,15 @@ namespace
 	playback::MidiCapability midiCapabilityFor (const PLR_DEV_INFO& device, int channelIndex)
 	{
 		const auto type = device.type;
-		const auto fmChannel = [channelIndex] (int count)
+		/** Whether this channel is one of the linked SSG's: they are numbered after the parent's
+		channels, which is where the layout puts their tracks. */
+	const auto isSsgChannel = [] (const PLR_DEV_INFO& parent, int channel)
+	{
+		const int first = channelCountOf (parent);
+		return channel >= first && channel < first + kSsgChannels;
+	};
+
+	const auto fmChannel = [channelIndex] (int count)
 		{
 			return channelIndex >= 0 && channelIndex < count ? playback::MidiCapability::melodic
 															 : playback::MidiCapability::unavailable;
@@ -67,6 +77,11 @@ namespace
 			// is a pitch register - the same one the reference implementation turns into a note
 			// (`form/KB/OPN/frmYM2610.cs` -> `searchYM2608Adpcm`), so it is melodic without needing
 			// the sample to be measurable.
+			if (isSsgChannel (device, channelIndex))
+			{
+				return playback::MidiCapability::melodic;
+			}
+
 			return (channelIndex == 12) ? playback::MidiCapability::melodic
 										: (channelIndex < 12 ? playback::MidiCapability::oneShot
 															 : playback::MidiCapability::unavailable);
@@ -75,14 +90,22 @@ namespace
 			{
 				return playback::MidiCapability::melodic;
 			}
-			// the same split as the YM2610: ADPCM-A triggers, ADPCM-B carries a pitch
+			// the same split as the YM2610: ADPCM-A triggers, ADPCM-B carries a pitch, and the SSG
+			// follows the parent's channels
+			if (isSsgChannel (device, channelIndex))
+			{
+				return playback::MidiCapability::melodic;
+			}
+
 			return (channelIndex == 12) ? playback::MidiCapability::melodic
 										: (channelIndex < 12 ? playback::MidiCapability::oneShot
 															 : playback::MidiCapability::unavailable);
 		case DEVID_YM2612:
 			return (channelIndex == 6) ? playback::MidiCapability::oneShot : fmChannel (6);
 		case DEVID_YM2203:
-			return fmChannel (3);
+			// its SSG is numbered after the three FM channels
+			return isSsgChannel (device, channelIndex) ? playback::MidiCapability::melodic
+													   : fmChannel (3);
 		case DEVID_YM2151:
 			return fmChannel (8);
 		case DEVID_YMF271:
@@ -479,16 +502,38 @@ SongDescription describeSong (LibvgmTrackPlayer* probe)
 	// picked cannot mute single channels (without it the channels cannot be isolated, and
 	// duplicating the device's audio across tracks would be wrong)
 	int deviceIndex = 0;
-	for (const auto& device : devices)
+
+	/** Whether a device's core can mute single channels - and therefore whether its voices can be
+		tracks at all. */
+	const auto isIsolatable = [] (const PLR_DEV_INFO& info)
 	{
+		if (info.devDecl == nullptr)
+		{
+			return false;
+		}
+
+		for (const DEV_DEF* const* core = info.devDecl->cores; *core != nullptr; ++core)
+		{
+			if ((*core)->coreID == info.core)
+			{
+				return (*core)->SetMuteMask != nullptr;
+			}
+		}
+
+		return false;
+	};
+
+	for (size_t headIndex = 0; headIndex < devices.size(); ++headIndex)
+	{
+		const auto& device = devices[headIndex];
+
 		if (! isTrackDevice (device))
 		{
 			continue;
 		}
 
 		const DEV_DECL* decl = device.devDecl;
-		const int channelCount = (decl != nullptr && decl->channelCount != nullptr)
-								   ? (int) decl->channelCount (device.devCfg) : 0;
+		const int channelCount = channelCountOf (device);
 		const char** channelNames = (decl != nullptr && decl->channelNames != nullptr)
 									  ? decl->channelNames (device.devCfg) : nullptr;
 
@@ -503,18 +548,7 @@ SongDescription describeSong (LibvgmTrackPlayer* probe)
 			groupName << " #" << instanceNumber;
 		}
 
-		bool isolatable = false;
-		if (decl != nullptr)
-		{
-			for (const DEV_DEF* const* core = decl->cores; *core != nullptr; ++core)
-			{
-				if ((*core)->coreID == device.core)
-				{
-					isolatable = ((*core)->SetMuteMask != nullptr);
-					break;
-				}
-			}
-		}
+		const bool isolatable = isIsolatable (device);
 
 		const auto addTrack = [&result, &device, deviceIndex, &groupName] (int channelIndex,
 																		const juce::String& name,
@@ -545,6 +579,33 @@ SongDescription describeSong (LibvgmTrackPlayer* probe)
 											: ("Ch " + juce::String (channel + 1));
 				addTrack (channel, name, true);
 			}
+		}
+
+		// A linked device that is a voice set of its own - the SSG behind an OPN chip - gets its
+		// channels as tracks, numbered after the parent's so the parent's indices do not move: a
+		// session saved before this change keeps its per-track gains and mutes.
+		//
+		// Leaving the SSG out of the layout and trusting the mask to keep it quiet is what this
+		// replaces, and the mask does not (docs/memo/2026-10-25-linked-devices-and-channel-numbering.md).
+		int linkedBase = channelCount;
+
+		for (const auto& child : devices)
+		{
+			if (child.parentIdx != (UINT32) headIndex
+				|| linkedDeviceKindFor (child.type) != LinkedDeviceKind::extraVoices)
+			{
+				continue;
+			}
+
+			const int childChannels = channelCountOf (child);
+			const bool childIsolatable = isIsolatable (child);
+
+			for (int channel = 0; channel < childChannels; ++channel)
+			{
+				addTrack (linkedBase + channel, "SSG " + juce::String (channel + 1), childIsolatable);
+			}
+
+			linkedBase += childChannels;
 		}
 
 		++deviceIndex;

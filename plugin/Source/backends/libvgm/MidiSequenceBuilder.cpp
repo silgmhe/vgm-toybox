@@ -210,6 +210,7 @@ namespace
 						  ? std::vector<std::uint8_t>()
 						  : assembleRom (ir, 0x82, 16 * 1024 * 1024, true),
 					  lastSampleTime);
+			flushSsg (ir, lastSampleTime);
 			flushGb (lastSampleTime);
 			flushOpl (lastSampleTime);
 
@@ -287,14 +288,19 @@ namespace
 			case midi::ChipKind::ym2612:
 				decoders.decoder<chips::OpnDecoder> ().queue (deviceFor (DEVID_YM2612, instance), reg, value, time, port);
 				break;
+			// The SSG behind an OPN chip answers registers 0x00..0x0F on port 0; the rest of that port
+			// is the FM half. Two decoders, because they are two voice sets: three square channels
+			// with their own clock (half the chip's on the YM2608 and YM2610, the full clock on the
+			// YM2203) and their own numbering - which is why their notes belong on tracks after the
+			// FM ones and not on top of them.
 			case midi::ChipKind::ym2203:
-				decoders.decoder<chips::OpnDecoder> ().queue (deviceFor (DEVID_YM2203, instance), reg, value, time, port);
+				queueOpn (DEVID_YM2203, instance, reg, value, time, port);
 				break;
 			case midi::ChipKind::ym2608:
-				decoders.decoder<chips::OpnDecoder> ().queue (deviceFor (DEVID_YM2608, instance), reg, value, time, port);
+				queueOpn (DEVID_YM2608, instance, reg, value, time, port);
 				break;
 			case midi::ChipKind::ym2610:
-				decoders.decoder<chips::OpnDecoder> ().queue (deviceFor (DEVID_YM2610, instance), reg, value, time, port);
+				queueOpn (DEVID_YM2610, instance, reg, value, time, port);
 				break;
 			case midi::ChipKind::ym2151:
 				decoders.decoder<chips::OpmDecoder> ().queue (deviceFor (DEVID_YM2151, instance), reg, value, time);
@@ -483,11 +489,12 @@ namespace
 
 		/** Collects one decoder's notes, with the MIDI track each chip channel maps to already
 			resolved - the last thing that needs a device pointer before the encoder takes over. */
-		void appendNotes (const PLR_DEV_INFO* device, const chips::ExtractedPerformance& performance)
+		void appendNotes (const PLR_DEV_INFO* device, const chips::ExtractedPerformance& performance,
+						  int channelOffset = 0)
 		{
 			for (const auto& note : performance.notes)
 			{
-				const int track = trackFor (device, note.logicalChannel);
+				const int track = trackFor (device, note.logicalChannel + channelOffset);
 				if (track >= 0)
 				{
 					stream.notes.push_back ({ track, note });
@@ -496,12 +503,36 @@ namespace
 
 			for (const auto& bend : performance.bends)
 			{
-				const int track = trackFor (device, bend.logicalChannel);
+				const int track = trackFor (device, bend.logicalChannel + channelOffset);
 				if (track >= 0)
 				{
 					stream.bends.push_back ({ track, bend });
 				}
 			}
+		}
+
+		/** Splits one OPN register write between the FM decoder and the linked SSG's. */
+		void queueOpn (DEV_ID type, int instance, std::uint8_t reg, std::uint16_t value,
+					   std::uint32_t time, std::uint8_t port)
+		{
+			const PLR_DEV_INFO* device = deviceFor (type, instance);
+
+			constexpr std::uint8_t kLastSsgRegister = 0x0F;	// 0x00..0x0F are the AY's file
+
+			if (port == 0 && reg <= kLastSsgRegister)
+			{
+				ssgWrites.queue (device, reg, static_cast<std::uint8_t> (value), time, 0);
+				return;
+			}
+
+			decoders.decoder<chips::OpnDecoder> ().queue (device, reg, value, time, port);
+		}
+
+		/** The SSG behind an OPN chip: its own buffer, its own clock divisor, and its notes shifted
+			past the FM channels because that is where its tracks are. */
+		void flushSsg (const midi::SongIr& ir, std::uint32_t totalSamples)
+		{
+			flushDecoded (ssgWrites, ir, totalSamples, DecoderScope::opnSsg);
 		}
 
 		void flushNes (std::uint32_t totalSamples)
@@ -663,6 +694,10 @@ namespace
 			decoders.decoder<chips::OplDecoder> ().devices.clear();
 		}
 
+		/** What a decoder is reading: a chip that stands alone, or the voice set linked behind one.
+			The latter runs at a fraction of the parent's clock and numbers its channels after it.
+			(Not to be confused with LinkedDeviceKind, which is how a linked device is muted.) */
+		enum class DecoderScope { standalone, opnSsg };
 		/** Runs one decoder over its whole write stream and hands the notes to the stream.
 
 			Everything chip-specific comes from the decoder: `kRequirements` says which clock to assume
@@ -671,7 +706,7 @@ namespace
 			the layer that is meant to know nothing about chips. */
 		template <typename Decoder>
 		void flushDecoded (ChipBuffer<Decoder>& buffer, const midi::SongIr& ir,
-						   std::uint32_t totalSamples)
+						   std::uint32_t totalSamples, DecoderScope scope = DecoderScope::standalone)
 		{
 			constexpr auto requirements = Decoder::kRequirements;
 
@@ -708,10 +743,17 @@ namespace
 					continue;
 				}
 
-				const std::uint32_t clock = (device->second->devCfg != nullptr
-											 && device->second->devCfg->clock > 0)
-												? device->second->devCfg->clock
-												: requirements.fallbackClock;
+				std::uint32_t clock = (device->second->devCfg != nullptr
+									   && device->second->devCfg->clock > 0)
+										  ? device->second->devCfg->clock
+										  : requirements.fallbackClock;
+
+				// The SSG inside an OPN chip is clocked from the master: the YM2608 and YM2610 hand
+				// it half, the YM2203 the whole thing (libvgm's init_ssg_devinfo clock divisors).
+				if (scope == DecoderScope::opnSsg && device->second->type != DEVID_YM2203)
+				{
+					clock /= 2;
+				}
 
 				Decoder decoder;
 				decoder.reset (chips::ChipConfig { clock, tickRate });
@@ -720,8 +762,15 @@ namespace
 					decoder.attachMemory (memory);
 				}
 
+				const int channelOffset = (scope == DecoderScope::opnSsg
+											  && device->second->devDecl != nullptr
+											  && device->second->devDecl->channelCount != nullptr)
+											 ? (int) device->second->devDecl->channelCount (device->second->devCfg)
+											 : 0;
+
 				appendNotes (device->second,
-							 chips::extractPerformance (decoder, entry.second, totalSamples));
+							 chips::extractPerformance (decoder, entry.second, totalSamples),
+							 channelOffset);
 			}
 
 			buffer.writes.clear();
@@ -1046,6 +1095,9 @@ namespace
 		// the frequency register - and its key is the falling edge of a halt bit
 		// every decoder this song needs, created the first time a write names one
 		DecoderRegistry decoders;
+
+	/** The SSG behind an OPN chip: same decoder as a standalone AY, different clock and numbering. */
+	ChipBuffer<chips::Ay8910Decoder> ssgWrites;
 
 		/** The unit of RegisterWrite::sampleTime and of every note time below, as the
 			loader declared it. VGM says 44100; a CPU-rate format would say 1.79 MHz and

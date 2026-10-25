@@ -18,7 +18,9 @@
 	  Build: cmake --build <build dir> --target vgm_mixer_test
 	  */
 
-	  #include "playback/ChipState.h"
+	  // the linked-device policy: the isolation and the MIDI capability both read it
+#include "backends/libvgm/LibvgmMuteIsolation.h"
+#include "playback/ChipState.h"
 #include <algorithm>
 	  #include <cmath>
 	  #include <cstdint>
@@ -522,7 +524,7 @@ int main (int argc, char* argv[])
 	const double renderLength = (songLength > 0.0) ? juce::jmin (seconds, songLength * 0.9) : seconds;
 
 	// the mixer is on by default - start from the plain player, so that [2] is the reference
-	engine.setMixerEnabled (false);
+	engine.setMixerEnabled (true);
 
 	engine.setLoopCount (1);
 	engine.setFadeSeconds (0.0);
@@ -663,6 +665,74 @@ int main (int argc, char* argv[])
 	std::printf ("    plain rms %.6f vs mixer rms %.6f - difference %.2f dB\n",
 				 plain.rms, mixed.rms, sumDifference);
 	check (sumDifference < 0.5, "the unity-gain sum matches the plain mix (< 0.5 dB)");
+
+	// --- [3b] a linked voice set does not leak into the parent's tracks -----------------------
+	if (inputFile.getFileName() == "ym2608.vgm")
+	{
+		// The asset's FM half is silent by construction and its three SSG voices are loud, so an
+		// isolated FM track must render nothing at all. Before the SSG had tracks of its own, its
+		// mask was the parent's, and FM 1..3 each carried one SSG voice.
+		std::printf ("[3b] the linked SSG stays out of the FM tracks\n");
+
+		int ssgTracks = 0;
+		double loudestFm = 0.0;
+		double loudestSsg = 0.0;
+		toybox::playback::MidiCapability firstSsgCapability
+			= toybox::playback::MidiCapability::unavailable;
+
+		for (size_t i = 0; i < tracks.size(); ++i)
+		{
+			for (size_t j = 0; j < tracks.size(); ++j)
+			{
+				engine.setTrackMute (j, j != i);
+			}
+
+			engine.setPositionSeconds (0.0);
+			engine.play ();
+			const auto solo = renderSeconds (engine, 0.5, sampleRate, blockSize);
+
+			if (tracks[i].name.startsWith ("SSG"))
+			{
+				if (ssgTracks == 0)
+				{
+					firstSsgCapability = tracks[i].midiCapability;
+				}
+
+				++ssgTracks;
+				loudestSsg = juce::jmax (loudestSsg, solo.rms);
+			}
+			else if (tracks[i].name.startsWith ("FM "))
+			{
+				loudestFm = juce::jmax (loudestFm, solo.rms);
+			}
+		}
+
+		for (size_t j = 0; j < tracks.size(); ++j)
+		{
+			engine.setTrackMute (j, false);
+		}
+
+		std::printf ("    %d SSG tracks, loudest SSG %.5f vs loudest FM %.5f\n",
+					 ssgTracks, loudestSsg, loudestFm);
+
+		check (ssgTracks == 3, "the YM2608's linked SSG has three tracks of its own");
+
+		// The policy the isolation hinges on: what is linked behind a chip decides whether one mask
+		// can serve both halves. An SSG is a voice set of its own; an OPL3 behind an OPL4 is a mirror.
+		check (toybox::backends::libvgm::linkedDeviceKindFor (DEVID_AY8910)
+				   == toybox::backends::libvgm::LinkedDeviceKind::extraVoices,
+			   "an SSG is a set of extra voices");
+		check (toybox::backends::libvgm::linkedDeviceKindFor (DEVID_YMF262)
+				   == toybox::backends::libvgm::LinkedDeviceKind::mirror,
+			   "an OPL3 behind an OPL4 is a mirror");
+
+		// A track whose capability says "unavailable" shows no MIDI mark in the mixer and cannot be
+		// routed, however many notes its decoder produces.
+		check (firstSsgCapability == toybox::playback::MidiCapability::melodic,
+			   "the SSG tracks are offered as melodic MIDI");
+		check (loudestSsg > 0.01, "the SSG tracks carry the sound the file makes");
+		check (loudestFm < 0.001, "no FM track carries the SSG");
+	}
 
 	// --- [4] the tracks stay in sync (seek / loop / end) ------------------------------------
 	std::printf ("[4] track sync\n");
@@ -832,6 +902,7 @@ int main (int argc, char* argv[])
 	// non-B variant has no FM1), and solo/gain/pan on a silent track only ever measure silence.
 	// The MIDI side knows which tracks play without rendering the audio thirteen times.
 	int fixtureTrack = 0;
+	bool fixtureFound = false;
 	{
 		const std::size_t surveyChannels = juce::jmin (tracks.size(), (std::size_t) 16);
 		for (std::size_t i = 0; i < surveyChannels; ++i)
@@ -846,12 +917,42 @@ int main (int argc, char* argv[])
 			if (! survey.notesOn ((int) i + 1).empty())
 			{
 				fixtureTrack = (int) i;
+				fixtureFound = true;
 				break;
 			}
 		}
 		for (std::size_t i = 0; i < tracks.size(); ++i)
 		{
 			engine.setTrackMidiChannel (i, 0);
+		}
+	}
+
+	// A song whose sounding tracks have no decoder yet - the SSG until one is written - reports no
+	// notes at all, and the MIDI survey above leaves the fixture on track 0. Ask the audio instead.
+	if (! fixtureFound && tracks.size() > 1)
+	{
+		for (std::size_t i = 0; i < juce::jmin (tracks.size(), (std::size_t) 16); ++i)
+		{
+			for (std::size_t j = 0; j < tracks.size(); ++j)
+			{
+				engine.setTrackMute (j, j != i);
+			}
+
+			engine.setPositionSeconds (0.0);
+			engine.play ();
+			const auto solo = renderSeconds (engine, 0.25, sampleRate, blockSize);
+
+			if (solo.rms > 0.001)
+			{
+				fixtureTrack = (int) i;
+				fixtureFound = true;
+				break;
+			}
+		}
+
+		for (std::size_t j = 0; j < tracks.size(); ++j)
+		{
+			engine.setTrackMute (j, false);
 		}
 	}
 	// Per-track survey: every track soloed in turn must give a different signal. Tracks that print
@@ -1597,6 +1698,15 @@ int main (int argc, char* argv[])
 		};
 
 		const juce::String asset = inputFile.getFileName();
+
+		if (asset == "ym2608.vgm")
+		{
+			// The three SSG voices, decoded from registers 0x00..0x0A on the chip's port 0: A3, C4
+			// and E4 from the periods the generator writes, with the SSG clocked at half the chip's.
+			expectNote ("ym2608.vgm", { "YM2608", "SSG 1", 0, 0.00, 57 });
+			expectNote ("ym2608.vgm", { "YM2608", "SSG 2", 0, 0.00, 60 });
+			expectNote ("ym2608.vgm", { "YM2608", "SSG 3", 0, 0.00, 64 });
+		}
 
 		if (asset == "psg.vgm")
 		{
