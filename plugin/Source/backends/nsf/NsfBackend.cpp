@@ -1,7 +1,10 @@
 #include "backends/nsf/NsfBackend.h"
 
+#include <atomic>
 #include <cstring>
 #include <memory>
+#include <mutex>
+#include <thread>
 #include <vector>
 
 #include "backends/nsf/NsfChannelNaming.h"
@@ -96,6 +99,11 @@ public:
 		: file (std::move (image)), image (std::move (bytes))
 	{
 		detectUndeclaredChip ();
+
+		// Started before anything can ask for a note. It runs on a player of its own, so this file
+		// is playable while it works, and it publishes into the shared cache that every track
+		// player reads.
+		scanner = std::thread ([this] { runScan (); });
 
 		info_.formatName = "NSF (NSFPlay core)";
 
@@ -225,24 +233,35 @@ public:
 		}
 	}
 
+	~NsfSongInstance () override
+	{
+		// A scan in flight keeps its own emulation and would outlive this object. Asking it to stop
+		// and waiting is the only way to know the thread has finished touching anything - and the
+		// scan checks the flag once per block, so the wait is bounded by one block, not by the song.
+		cancelScan.store (true);
+
+		if (scanner.joinable ())
+		{
+			scanner.join ();
+		}
+	}
+
 	const playback::SongInfo& getInfo (void) const override { return info_; }
 	const std::vector<playback::TrackInfo>& getTracks (void) const override { return tracks_; }
 
 	const playback::MidiSequence* getMidiSequence (void) const override
 	{
-		// Built on first ask, and only once per file: the scan behind it is cached on the file's
-		// bytes, so a second backend opening the same song gets the stream back without walking
-		// it again. A player is created here rather than borrowed from a track player because
-		// those are built later, and because what this needs is the product of the scan, not a
-		// running emulation.
-		if (midiSequence == nullptr)
-		{
-			NsfPlayer probe (file, 44100.0);
-			probe.start ();
-			midiSequence = probe.shareMidiSequence ();
-		}
-
+		// Whatever the scan has produced so far: null until it lands, the real stream afterwards.
+		// The pointer may be replaced under the caller, so the previous stream is kept alive in
+		// retiredStreams rather than freed - the engine holds this raw pointer across blocks.
+		std::lock_guard<std::mutex> guard (streamMutex);
 		return midiSequence.get ();
+	}
+
+	bool isAnalysing (void) const override
+	{
+		std::lock_guard<std::mutex> guard (streamMutex);
+		return midiSequence == nullptr;
 	}
 
 	playback::BackendCapabilities getCapabilities (void) const override
@@ -336,9 +355,43 @@ private:
 	bool expansionPresent = false;
 	int blockSize = 512;
 
-	/** Filled the first time the engine asks for the stream; mutable because getMidiSequence()
-		is const and the ask is what builds it. */
-	mutable std::shared_ptr<const playback::MidiSequence> midiSequence;
+	/** Walks the song on its own thread: numbering the DPCM samples and recording every note. The
+		file is playable the whole time, and the DPCM row shows "analysing" until it lands. */
+	std::thread scanner;
+	std::atomic<bool> cancelScan { false };
+
+	/** Guards midiSequence, which the scanner writes and getMidiSequence() reads. */
+	mutable std::mutex streamMutex;
+	std::shared_ptr<const playback::MidiSequence> midiSequence;
+
+	/** Every stream this instance has ever handed out. The engine caches the raw pointer and can
+		hold it across blocks, so replacing the shared_ptr must not free what it points at. */
+	std::vector<std::shared_ptr<const playback::MidiSequence>> retiredStreams;
+
+	void runScan (void)
+	{
+		// A player of its own: scanning resets the CPU and runs it to the end of the song, which
+		// would wreck playback if it shared the emulation the mixer is rendering from.
+		NsfPlayer probe (file, 44100.0);
+		probe.setScanCancelFlag (&cancelScan);
+		probe.scanSong ();
+
+		auto finished = probe.shareMidiSequence ();
+
+		if (finished == nullptr)
+		{
+			return;
+		}
+
+		std::lock_guard<std::mutex> guard (streamMutex);
+
+		if (midiSequence != nullptr)
+		{
+			retiredStreams.push_back (midiSequence);
+		}
+
+		midiSequence = std::move (finished);
+	}
 };
 
 } // namespace

@@ -25,6 +25,15 @@ struct ChannelState
 
 	bool active = false;				// key on / currently producing a tone
 	int note = -1;						// semitones above C-1, -1 when silent
+
+	/** The song is still being scanned, so this row's note is not known yet.
+
+		Only the DPCM row can be in this state: its note is a sample slot, and a slot has to be
+		numbered against the whole song before it means anything. The row can still be drawn -
+		the shape comes from the address and rate, not from the slot - so this is a note-cell
+		label rather than a blank row.
+	*/
+	bool analysing = false;
 	float frequency = 0.0f;				// Hz, 0 when unknown
 	float volume = 0.0f;				// 0..1, normalised against the chip's own maximum
 

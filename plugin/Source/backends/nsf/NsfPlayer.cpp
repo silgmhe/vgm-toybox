@@ -132,46 +132,69 @@ NsfPlayer::~NsfPlayer () = default;
 
 void NsfPlayer::start (void)
 {
-	// The scan has to start from the top of the song and leaves the CPU at its end, so the song is
-	// set up twice: once to read it, once to play it.
 	resetToStart ();
 
-	// Numbering the samples needs the whole song. Done as samples arrive, the numbers would depend
-	// on where playback began - a seek to 0:30 would hand the same sample a different note, and a
-	// drum kit mapped against the track would slide.
+	// The whole-song pass does not happen here any more. It walks 180 seconds of music - 0.3 to
+	// 2.8 seconds of CPU depending on the expansion chip - and a file has to be playable before
+	// that finishes. The backend runs it on a thread of its own; this only picks up a result the
+	// cache already has, and notes that there is not one yet otherwise.
 	if (! prescanDisabled)
 	{
-		const std::size_t key = file.contentHash ^ (std::size_t) file.startSong;
-		bool cached = false;
-
-		{
-			std::lock_guard<std::mutex> guard (sampleSlotMutex);
-			const auto found = sampleSlotCache.find (key);
-
-			if (found != sampleSlotCache.end ())
-			{
-				sampleNotes = found->second.sampleNotes;
-				midiSequence = found->second.midiSequence;
-				cached = true;
-			}
-		}
-
-		if (! cached)
-		{
-			scanSampleChannels (scanSeconds);
-
-			std::lock_guard<std::mutex> guard (sampleSlotMutex);
-
-			if (sampleSlotCache.size () >= kSampleSlotCacheLimit)
-			{
-				sampleSlotCache.clear ();
-			}
-
-			sampleSlotCache[key] = ScanResult { sampleNotes, midiSequence };
-		}
+		// Assume the scan is outstanding until the cache says otherwise: a file opened for the
+		// first time has nothing to adopt, and the DPCM row has to say so from the first frame.
+		analysing = true;
+		adoptScan (true);
 	}
 
 	resetToStart ();
+}
+
+bool NsfPlayer::adoptScan (bool waitForLock)
+{
+	const std::size_t key = file.contentHash ^ (std::size_t) file.startSong;
+
+	// Reached from render() too, on the audio thread: waiting there for the scanning thread to
+	// finish publishing would drop a block, and the only cost of losing the race is that the
+	// label stays on for another ninety milliseconds.
+	std::unique_lock<std::mutex> guard (sampleSlotMutex, std::defer_lock);
+
+	if (waitForLock)
+	{
+		guard.lock ();
+	}
+	else if (! guard.try_lock ())
+	{
+		return false;
+	}
+
+	const auto found = sampleSlotCache.find (key);
+
+	if (found == sampleSlotCache.end ())
+	{
+		// Nothing to adopt yet. The DPCM row shows "analysing" until this turns false, and every
+		// other row is unaffected: its note comes from a register, not from the scan.
+		analysing = true;
+		return false;
+	}
+
+	sampleNotes = found->second.sampleNotes;
+	midiSequence = found->second.midiSequence;
+	analysing = false;
+	return true;
+}
+
+void NsfPlayer::scanSong (void)
+{
+	// Another player may have walked this file already. The scan is a fact about the song, so a
+	// second one is spent time for the same answer - and with one backend per track plus the one
+	// that owns the scan, there are a lot of second ones.
+	if (adoptScan (true))
+	{
+		return;
+	}
+
+	resetToStart ();
+	scanSampleChannels (scanSeconds);
 }
 
 void NsfPlayer::resetToStart (void)
@@ -244,6 +267,13 @@ void NsfPlayer::scanSampleChannels (double seconds)
 
 	for (int done = 0; done < total; done += block)
 	{
+		// Stopping early leaves the numbering with however far it got, which is still better than
+		// none - and it is what closing the song or opening another one asks for.
+		if (scanCancelFlag != nullptr && scanCancelFlag->load ())
+		{
+			break;
+		}
+
 		// The output is thrown away. Rendering is the only way to advance the CPU by the schedule
 		// the player already keeps, and it is cheap: the emulation runs about fifteen times
 		// faster than the audio it produces.
@@ -320,6 +350,20 @@ void NsfPlayer::scanSampleChannels (double seconds)
 	sequence->loopEndSeconds = -1.0;
 
 	midiSequence = std::move (sequence);
+
+	// Publish before anything else can ask: the players that are already running look for this
+	// entry on their own clock, and a scan that never published would leave them saying
+	// "analysing" for as long as the song was open.
+	const std::size_t key = file.contentHash ^ (std::size_t) file.startSong;
+
+	std::lock_guard<std::mutex> guard (sampleSlotMutex);
+
+	if (sampleSlotCache.size () >= kSampleSlotCacheLimit)
+	{
+		sampleSlotCache.clear ();
+	}
+
+	sampleSlotCache[key] = ScanResult { sampleNotes, midiSequence };
 }
 
 std::shared_ptr<const playback::MidiSequence> NsfPlayer::shareMidiSequence (void) const
@@ -461,6 +505,16 @@ int NsfPlayer::render (float* left, float* right, int frames)
 	if (frames <= 0)
 	{
 		return 0;
+	}
+
+	// The scan is published by a thread that tells nobody, so this looks again on its own clock -
+	// every 4096 samples, about 93 ms. Without it the DPCM row would say "analysing" until the
+	// song was reopened, because the only other place that checks runs from start().
+	// Not while scanning: that pass is trying to produce the very thing being waited for, and
+	// polling from inside it only takes the cache lock it is about to write.
+	if (analysing && ! scanning && (rendered % 4096u) < (std::uint64_t) frames)
+	{
+		adoptScan (false);
 	}
 
 
@@ -776,6 +830,11 @@ bool NsfPlayer::captureState (playback::ChipStateSnapshot& snapshot, bool includ
 				const int rate = (int) info->GetFreq ();
 
 				state.note = noteForDpcmSample (tone, rate);
+
+				// The slot this sample would be is not known until the walk finishes, so the row
+				// says so rather than showing a note that would change under it. Everything else
+				// about the row - the shape, the level, whether it is sounding - is known now.
+				state.analysing = analysing;
 
 				// The slot's identity, spread so that address and rate each move the drawing -
 				// a sample played at two speeds is two marks, as it is two notes.

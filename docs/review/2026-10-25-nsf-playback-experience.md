@@ -313,6 +313,35 @@ length counter 归零后停在直流上，读数是 0.147 而实际无声。改�
 - [x] 扫描时同时产出 MidiSequence
 - [x] 测试：VRC6 的 A4/A3 逐音比对，噪声落 43–58，DPCM 从 60 起
 
+#### 3.1 扫描搬到后台
+
+`start()` 里同步扫描意味着**打开一首 N163 曲子要等 2.8 秒**，VRC7 也要 2.2 秒。曲子本身半秒就能出声，等的是那张表。
+
+改成：`NsfSongInstance` 构造后立刻起一个线程，用**独立的 `NsfPlayer`** 跑扫描（扫描会 `resetToStart()` 并把 CPU 跑到曲尾，复用正在播放的实例会毁掉播放），结果发布到共享缓存。
+
+| 改动 | 理由 |
+|---|---|
+| `NsfPlayer::start()` 不再扫描，只 `adoptScan(true)` | 打开即可播放 |
+| `render()` 里每 4096 采样 `adoptScan(false)` | 缓存由别的线程发布，没人通知音频线程；`try_lock` 是因为在音频线程上等锁会丢块 |
+| `scanSong()` 先 `adoptScan(true)` | 一首曲子有 8–13 个 `NsfPlayer`（每轨一个），不查重就会扫 13 遍 |
+| `NsfSongInstance` 持 `std::thread` + `std::atomic<bool> cancelScan` | 析构要能打断；扫描每 block 检查一次，等待上界是一个 block 而不是一首歌 |
+| `retiredStreams` 保留旧序列 | 引擎持有裸指针，替换 `shared_ptr` 不能把旧对象释放掉 |
+| `ChannelState::analysing` | DPCM 行的音符是"槽位"，扫描完成前没有意义，显示"分析中"而不是一个会变的数字 |
+| `ISongInstance::isAnalysing()` + `PlaybackEngine::waitForAnalysis()` | 测试要能等；这也是"没有音符"和"还没算完"的区别 |
+
+**实测加载**（`vgm_mixer_test` 的 `loadFile`，含 `detectUndeclaredChip` 的 250 ms）：
+
+| 资源 | 之前 | 现在 |
+|---|---|---|
+| `apu_percussion` | ~0.8 s | **97 ms** |
+| `vrc6_song` | ~0.8 s | **121 ms** |
+| `vrc7_song` | ~2.2 s | **168 ms** |
+
+**两个坑**，都是第一版没考虑的：
+
+1. `render()` 里的轮询在**扫描期间**也会触发 —— 扫描线程自己拿 `sampleSlotMutex`，轮询又去要，白等。加 `! scanning` 后消失。
+2. 三个 `NsfPlayer` 同时启动扫描（`NsfSongInstance` 一个 + 两个 track player），因为缓存都还是空的。`scanSong()` 开头查缓存后只剩一次真扫。
+
 ## 5. 验收标准
 
 - 任意 NSF 在混音器里的轨道数 = 芯片实际声部数（2A03 五条 + 扩展芯片各声部）；

@@ -58,6 +58,7 @@ language: English
 "mixer.midiMelodyTooltip" = "Melodic channel: every note carries the pitch the chip plays";
 "mixer.midiOff" = "Off";
 "mixer.midiDiscreteTooltip" = "Fixed-note channel: a small set of notes, one per noise period or sample slot; no pitch slide";
+"visualiser.analysing" = "analysing";
 "mixer.midiOneShotTooltip" = "One-shot channel: MIDI note C4 is a trigger; pitch is not tracked";
 "mixer.midiTooltip" = "MIDI output channel";
 "mixer.midiUnavailable" = "Not available";

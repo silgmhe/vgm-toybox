@@ -132,6 +132,17 @@ public:
 		channel: a track's capability describes its voice, not whether anything can be sent. */
 	bool canEmitMidi (void) const { return midiEmittable.load(); }
 
+	/** True while the open song's MIDI stream is still being produced on a background thread.
+
+		A format that has to be run to be understood - an NSF - cannot answer at load time, so it
+		answers later. This is how a caller asks whether "no notes yet" means "still working" or
+		"this song has none".
+	*/
+	bool isAnalysing (void) const;
+
+	/** Waits up to `timeoutMs` for that work to finish. True when nothing is outstanding. */
+	bool waitForAnalysis (int timeoutMs) const;
+
 	bool isLoaded (void) const { return loaded; }
 	bool isPlaying (void) const { return playing.load(); }
 	/** Whether the last local transport action was pause rather than stop or load. The button

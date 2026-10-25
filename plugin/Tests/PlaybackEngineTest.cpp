@@ -528,9 +528,25 @@ int main (int argc, char* argv[])
 	engine.prepare ((double) sampleRate, blockSize);
 
 	juce::String errorMessage;
+	const double loadStarted = juce::Time::getMillisecondCounterHiRes ();
+
 	if (! engine.loadFile (inputFile, errorMessage))
 	{
 		std::printf ("Loading failed: %s\n", errorMessage.toRawUTF8());
+		return 1;
+	}
+
+	// The load must not wait for the scan - that is the whole point of running it on a thread -
+	// so this number is what a user feels when they open a file.
+	std::printf ("Loaded in %.1f ms\n", juce::Time::getMillisecondCounterHiRes () - loadStarted);
+
+	// An NSF's notes come from a scan that runs on a thread of its own, because the song has to be
+	// playable before that finishes. Everything below asks what the engine does once the stream has
+	// landed, so the wait belongs to the setup - ten seconds covers the slowest asset (six FM
+	// voices, 2.2 s) with room to spare.
+	if (! engine.waitForAnalysis (30000))
+	{
+		std::printf ("The song's scan did not finish within thirty seconds\n");
 		return 1;
 	}
 

@@ -3,6 +3,7 @@
 #include "playback/ChipState.h"
 #include "playback/MidiSequence.h"
 #include <array>
+#include <atomic>
 #include <cstdint>
 #include <memory>
 #include <unordered_map>
@@ -146,7 +147,31 @@ public:
 	*/
 	std::shared_ptr<const playback::MidiSequence> shareMidiSequence (void) const;
 
+	/** Runs the whole-song pass that numbers the DPCM samples and records every note.
+
+		Called by the backend on its own thread, not from start(): the walk is 0.3 to 2.8 seconds
+		depending on the expansion chip, and a song has to be playable before it finishes. The
+		result is published to the shared cache, so players already running pick it up on their
+		next look (see adoptScan).
+	*/
+	void scanSong (void);
+
+	/** Asks the scan to stop early. Checked once per block; a scan that has been asked to stop
+		still publishes whatever it had, because partial numbering beats none. */
+	void setScanCancelFlag (const std::atomic<bool>* flag) { scanCancelFlag = flag; }
+
+	/** True while this player is playing a song whose scan has not landed yet. */
+	bool isAnalysing (void) const { return analysing; }
+
 private:
+	/** Picks up a finished scan from the shared cache, or notes that there is not one yet.
+		Returns whether one was there.
+
+		`waitForLock` false is for the audio thread: it skips the attempt rather than block on the
+		scanning thread, and the only cost is another ninety milliseconds of "analysing".
+	*/
+	bool adoptScan (bool waitForLock);
+
 	void resetToStart (void);
 	void scanSampleChannels (double seconds);
 	void observeDpcmSample (void);
@@ -193,6 +218,13 @@ private:
 	/** The other product of that same pass: every note the song plays, in time order. Shared
 		because the scan is cached and every player built from this file gets the same stream. */
 	std::shared_ptr<const playback::MidiSequence> midiSequence;
+
+	/** Set while the scan for this song has not landed. Cleared by adoptScan() the moment the
+		cache has it, which is what turns the DPCM row's "analysing" label off. */
+	bool analysing = false;
+
+	/** Read by the scan loop, written by whoever owns the scanning thread's lifetime. */
+	const std::atomic<bool>* scanCancelFlag = nullptr;
 
 	bool prescanDisabled = false;
 	bool scanning = false;

@@ -54,6 +54,7 @@ language: 简体中文
 "mixer.midiMelodyTooltip" = "旋律通道：每个音符都带芯片实际播放的音高";
 "mixer.midiOff" = "关闭";
 "mixer.midiDiscreteTooltip" = "固定音符通道：只有一组离散音符，每个噪声音色周期或采样槽对应一个；无音高滑动";
+"visualiser.analysing" = "分析中";
 "mixer.midiOneShotTooltip" = "一次性通道：以 C4 作为触发音符，不跟踪音高";
 "mixer.midiTooltip" = "MIDI 输出通道";
 "mixer.midiUnavailable" = "不可用";
