@@ -500,10 +500,9 @@ void MixerPanel::paintCardContent (juce::Graphics& g)
 	// therefore behind the buttons): the glow reaches further than the shadow room a button keeps
 	// inside its own bounds (ButtonPaint.h).
 	//
-	// Every toggle in the header belongs in this list. The DC blocker was added to the row and
-	// not to the loop, so it lit up like its neighbours with nothing around it - which reads as
-	// "this one is not really on".
-	for (auto* button : { &mixerToggle, &dcBlockButton, &spreadOutputsButton, &mergeToMasterButton })
+	// headerToggles is the row. This used to be a second list written out here, and the DC
+	// blocker was added to one and not the other - lit, with nothing around it.
+	for (auto* button : headerToggles)
 	{
 		if (button->getToggleState())
 		{
