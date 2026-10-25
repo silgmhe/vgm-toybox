@@ -13,7 +13,8 @@ namespace
 	// The header row is as tall as the buttons in it. Each button carries its own shadow room, so
 	// this is the face (22, as before they were given a shadow) plus 2 * buttonShadowInset - see
 	// docs/desgin/ui-button-design.md §8.
-	constexpr int kHeaderButtonSize = 26;
+	constexpr int kHeaderButtonSize = 30;		// the same size as the keyboard's mute and solo, so the
+										// two views really do share one set of buttons
 	constexpr int kGroupHeaderHeight = 16;		// painted above each row of strips
 	constexpr int kStripWidth = 88;				// meter + graduations + fader, see ChannelStrip
 	constexpr int kStripGap = 6;
@@ -332,9 +333,9 @@ void MixerPanel::resized (void)
 
 	// the header's right edge: the mixer toggle, then the two routing shortcuts to its left
 	mixerToggle.setBounds (headerBounds.removeFromRight (kHeaderButtonSize));
-	headerBounds.removeFromRight (6);
+	headerBounds.removeFromRight (8);
 	spreadOutputsButton.setBounds (headerBounds.removeFromRight (kHeaderButtonSize));
-	headerBounds.removeFromRight (6);
+	headerBounds.removeFromRight (8);
 	mergeToMasterButton.setBounds (headerBounds.removeFromRight (kHeaderButtonSize));
 
 	// From the right: the card's scrollbar, then the master, then the scrolling rows. The bar is

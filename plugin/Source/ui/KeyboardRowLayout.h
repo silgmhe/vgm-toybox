@@ -23,11 +23,15 @@ struct RowMetrics
 	int groupGap = 10;
 	int rowGap = 2;
 
+	/** Width kept clear at the card's right edge for its scroll bar. Every row gives it up,
+		headers included: a header that ran under the bar had its "5 ch" label covered by the thumb. */
+	int reservedRight = 0;
+
 	int rowInsetLeft = 14;		// where the columns start inside the card
 	int rowInsetRight = 14;
 	int nameWidth = 72;
-	int buttonSize = 28;		// the mixer's button height, so the two views agree
-	int buttonGap = 6;
+	int buttonSize = 30;		// the mixer's button height, so the two views agree
+	int buttonGap = 8;
 	int noteWidth = 56;
 	int waveWidth = 88;
 	int waveHeight = 26;

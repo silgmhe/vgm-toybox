@@ -13,6 +13,7 @@
 #include "settings/SettingsStore.h"
 
 #include <algorithm>
+#include <cstdio>
 #include <cmath>
 #include <functional>
 
@@ -27,6 +28,14 @@ namespace
 	// The row's own measurements live in KeyboardRowLayout: thirteen columns that have to fit
 	// a card are arithmetic, and arithmetic belongs where a test can call it.
 	keyboard::RowMetrics metrics;
+
+	// The card's own scrollbar, at its right edge - the mixer's width, for the same reason: it is
+	// the same gesture in the same kind of card.
+	constexpr int kScrollBarWidth = 12;
+	constexpr int kScrollBarGap = 6;		// between the bar and the card's edge
+
+	// How tall the "there is more below" fade is, at the card's bottom edge.
+	constexpr int kBottomFade = 18;
 
 	/** The shift comes from the setting; the table itself lives in KeyboardLayout so the settings
 		page, the note column and the octave labels all name a note the same way. */
@@ -98,7 +107,8 @@ int contentViewIndex (ContentView view)
 	The mute and solo buttons are not this panel's state: they call into the engine's own track
 	mute, so the mixer and this view cannot disagree about what is silent.
 */
-class ContentSlot::KeyboardPanel : public juce::Component
+class ContentSlot::KeyboardPanel : public juce::Component,
+								 private juce::ScrollBar::Listener
 {
 public:
 	KeyboardPanel (toybox::PlaybackEngine& engineToUse, juce::String& statusToUse)
@@ -110,6 +120,19 @@ public:
 		exportButton.setButtonText (toybox::i18n::tr ("visualiser.export"));
 		exportButton.onClick = [this] { if (onExport) { onExport (); } };
 		addAndMakeVisible (exportButton);
+
+		// The rows scroll with the wheel and the arrows, but nothing said how much of the list was
+		// left; the mixer has had a bar since it first overflowed.
+		verticalBar.setAutoHide (false);
+
+		// Palette colours: the default light scheme's thumb is a pale grey on a white card,
+		// which is there and cannot be seen. The track is faint, so the bar reads as part of the
+		// card rather than as another control.
+		verticalBar.setColour (juce::ScrollBar::thumbColourId, theme::secondaryText ().withAlpha (0.30f));
+		verticalBar.setColour (juce::ScrollBar::trackColourId, theme::track ().withAlpha (0.45f));
+		
+		verticalBar.addListener (this);
+		addAndMakeVisible (verticalBar);
 	}
 
 	/** Back to the default window: a new song has its own range and no manual shift. */
@@ -196,10 +219,8 @@ public:
 						juce::Justification::centredRight, false);
 		}
 
-		const auto layout = keyboard::layoutRows (chipNamesFor (snapshot), getWidth (),
-												 scrollOffset, kHeader, metrics);
-		rows = layout.rows;
-		contentHeight = layout.contentHeight;
+		relayout ();
+
 
 		if (snapshot.channels.empty ())
 		{
@@ -248,7 +269,7 @@ public:
 
 		if (contentHeight > visible)
 		{
-			auto bottom = getLocalBounds ().removeFromBottom (18).toFloat ();
+			auto bottom = getLocalBounds ().removeFromBottom (kBottomFade).toFloat ();
 
 			juce::ColourGradient fade (theme::card ().withAlpha (0.0f), bottom.getX (), bottom.getY (),
 									   theme::card (), bottom.getX (), bottom.getBottom (), false);
@@ -260,7 +281,32 @@ public:
 	void resized (void) override
 	{
 		exportButton.setBounds (getWidth () - kInset - 112, 10, 112, 24);
+
+		// Tail to tail with the card, above the fade at the bottom: a thumb that ran into the fade
+		// would look like part of it.
+		// Inside the card's right edge, in the column every row reserves for it.
+		verticalBar.setBounds (getWidth () - metrics.cardInset - kScrollBarGap - kScrollBarWidth,
+							   kHeader + kScrollBarGap,
+							   kScrollBarWidth,
+							   juce::jmax (0, getHeight () - kHeader - kBottomFade));
+
 		clampScroll ();
+		relayout ();
+		syncScrollBar ();
+		repaint ();
+	}
+
+	void scrollBarMoved (juce::ScrollBar*, double newRangeStart) override
+	{
+		if (updatingScrollBar)
+		{
+			return;
+		}
+
+		scrollOffset = juce::roundToInt (newRangeStart);
+		clampScroll ();
+		relayout ();
+		repaint ();
 	}
 
 	void mouseDown (const juce::MouseEvent& event) override
@@ -362,6 +408,8 @@ public:
 		// authority on the same geometry.
 		scrollOffset -= (int) std::lround (wheel.deltaY * (float) metrics.rowHeight * 3.0f);
 		clampScroll ();
+		relayout ();
+		syncScrollBar ();
 		repaint ();
 	}
 
@@ -369,6 +417,38 @@ public:
 
 private:
 	using Row = keyboard::Row;
+
+	/** Rebuilds the rows and the content height from the width, the snapshot and the scroll.
+
+		Kept out of paint(): it shows and hides the scroll bar, and toggling a child's visibility
+		from inside a paint callback cancels that child's paint for the frame - the bar was visible
+		according to the component tree and drew nothing at all.
+	*/
+	void relayout (void)
+	{
+		// The column is the card's width minus the bar, always: a bar that appeared and vanished
+		// with the content would reflow every key each time a song gained a channel.
+		metrics.reservedRight = kScrollBarWidth + 2 * kScrollBarGap;
+
+		const auto layout = keyboard::layoutRows (chipNamesFor (snapshot), getWidth (),
+												 scrollOffset, kHeader, metrics);
+
+		rows = std::move (layout.rows);
+		contentHeight = layout.contentHeight;
+	}
+
+	/** Pushes the content height into the bar without the bar pushing it back. */
+	void syncScrollBar (void)
+	{
+		const int visible = juce::jmax (1, getHeight () - kHeader);
+
+		verticalBar.setVisible (contentHeight > visible);
+
+		const juce::ScopedValueSetter<bool> guard (updatingScrollBar, true);
+
+		verticalBar.setRangeLimits (0.0, juce::jmax (1, contentHeight));
+		verticalBar.setCurrentRange (scrollOffset, juce::jmax (1, visible));
+	}
 
 	void clampScroll (void)
 	{
@@ -826,6 +906,9 @@ private:
 	toybox::PlaybackEngine& engine;
 	toybox::playback::ChipStateSnapshot snapshot;
 	std::vector<Row> rows;
+
+	juce::ScrollBar verticalBar { true };
+	bool updatingScrollBar = false;
 
 	int scrollOffset = 0;
 	int contentHeight = 0;

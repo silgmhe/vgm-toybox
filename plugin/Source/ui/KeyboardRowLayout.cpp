@@ -17,7 +17,7 @@ Layout layoutRows (const std::vector<std::string>& chipNames,
 	}
 
 	const int cardX = metrics.cardInset;
-	const int cardWidth = juce::jmax (200, width - 2 * metrics.cardInset);
+	const int cardWidth = juce::jmax (200, width - 2 * metrics.cardInset - metrics.reservedRight);
 
 	int y = top - scrollOffset;
 	juce::String group;
