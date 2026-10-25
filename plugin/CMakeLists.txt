@@ -430,6 +430,12 @@ add_executable(vgm_nsf_test EXCLUDE_FROM_ALL
 	Source/backends/nsf/NsfBus.cpp
 )
 target_link_libraries(vgm_nsf_test PRIVATE nsfplay_core juce::juce_core juce::juce_recommended_config_flags)
+
+# The definitions the plugin gets from juce_add_plugin, applied by hand. Without them JUCE compiles
+# its own translation unit with its defaults, one of which is JUCE_USE_CURL=1 - so a test that reads
+# a 128-byte header and a ROM asked the CI runners for libcurl's development headers. vgm_keyboard_test
+# has always done this; this one had not.
+target_compile_definitions(vgm_nsf_test PRIVATE ${TOYBOX_JUCE_DEFINITIONS})
 target_include_directories(vgm_nsf_test PRIVATE Source)
 target_compile_features(vgm_nsf_test PRIVATE cxx_std_17)
 
