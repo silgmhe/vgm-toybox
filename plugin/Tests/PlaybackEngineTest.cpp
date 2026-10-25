@@ -1676,6 +1676,15 @@ int main (int argc, char* argv[])
 
 		const juce::String asset = inputFile.getFileName();
 
+		if (asset == "ym2608.vgm")
+		{
+			// The three SSG voices, decoded from registers 0x00..0x0A on the chip's port 0: A3, C4
+			// and E4 from the periods the generator writes, with the SSG clocked at half the chip's.
+			expectNote ("ym2608.vgm", { "YM2608", "SSG 1", 0, 0.00, 57 });
+			expectNote ("ym2608.vgm", { "YM2608", "SSG 2", 0, 0.00, 60 });
+			expectNote ("ym2608.vgm", { "YM2608", "SSG 3", 0, 0.00, 64 });
+		}
+
 		if (asset == "psg.vgm")
 		{
 			expectNote ("psg.vgm", { "AY-3-8910", "Ch 1", 0, 0.00, 69 });
