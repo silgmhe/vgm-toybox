@@ -293,6 +293,15 @@ public:
 	{
 		const auto point = event.getPosition ();
 
+		// The bar first: it sits in the strip relayout() keeps clear of every row, so nothing else
+		// can claim a press there - but before this, nothing claimed it either, and the bar only
+		// answered the wheel.
+		if (scrollBarTrack ().contains (point) && contentHeight > juce::jmax (1, getHeight () - kHeader))
+		{
+			beginScrollDrag (point.y);
+			return;
+		}
+
 		if (shiftLeftRect.contains (point)) { shiftOctaves (-1); return; }
 		if (shiftRightRect.contains (point)) { shiftOctaves (1); return; }
 
@@ -438,6 +447,32 @@ public:
 		}
 	}
 
+	void mouseDrag (const juce::MouseEvent& event) override
+	{
+		if (! scrollDragging)
+		{
+			return;
+		}
+
+		const int visible = juce::jmax (1, getHeight () - kHeader);
+
+		if (contentHeight <= visible)
+		{
+			return;
+		}
+
+		const auto track = scrollBarTrack ();
+		const float thumbHeight = thumbHeightFor (track, visible);
+		const float travel = thumbTravelFor (track, thumbHeight);
+
+		scrollToThumbTop (track, (float) event.getPosition ().y - scrollDragOffset, travel);
+	}
+
+	void mouseUp (const juce::MouseEvent&) override
+	{
+		scrollDragging = false;
+	}
+
 	void mouseWheelMove (const juce::MouseEvent& event, const juce::MouseWheelDetails& wheel) override
 	{
 		if (event.mods.isCtrlDown ())
@@ -492,6 +527,69 @@ private:
 		screen. Ten lines of drawing take the palette's colours like everything else and cannot end
 		up behind the rows.
 	*/
+	juce::Rectangle<int> scrollBarTrack (void) const
+	{
+		return { getWidth () - metrics.cardInset - kScrollBarGap - kScrollBarWidth,
+				 kHeader + kScrollBarGap,
+				 kScrollBarWidth,
+				 juce::jmax (0, getHeight () - kHeader - kBottomFade) };
+	}
+
+	/** Where the thumb sits inside the track, in pixels from the track's top. */
+	float thumbHeightFor (const juce::Rectangle<int>& track, int visible) const
+	{
+		return juce::jmax (24.0f, (float) track.getHeight () * (float) visible
+										  / (float) juce::jmax (1, contentHeight));
+	}
+
+	float thumbTravelFor (const juce::Rectangle<int>& track, float thumbHeight) const
+	{
+		return juce::jmax (1.0f, (float) track.getHeight () - thumbHeight);
+	}
+
+	/** Moves the view so the thumb's top lands at `thumbTop`. Clamped, so dragging past either
+		end parks the view at that end rather than overshooting. */
+	void scrollToThumbTop (const juce::Rectangle<int>& track, float thumbTop, float travel)
+	{
+		const int visible = juce::jmax (1, getHeight () - kHeader);
+		const float position = juce::jlimit (0.0f, 1.0f,
+											 (thumbTop - (float) track.getY ()) / travel);
+
+		scrollOffset = (int) std::lround (position * (float) juce::jmax (1, contentHeight - visible));
+		clampScroll ();
+		relayout ();
+		repaint ();
+	}
+
+	/** Starts a drag from `y`. Pressing the thumb keeps the grab offset so the thumb does not jump
+		under the pointer; pressing the track moves the thumb there and grabs its middle, which is
+		what every other scroll bar does. */
+	void beginScrollDrag (int y)
+	{
+		const int visible = juce::jmax (1, getHeight () - kHeader);
+
+		if (contentHeight <= visible)
+		{
+			return;
+		}
+
+		const auto track = scrollBarTrack ();
+		const float thumbHeight = thumbHeightFor (track, visible);
+		const float travel = thumbTravelFor (track, thumbHeight);
+		const float position = (float) scrollOffset / (float) juce::jmax (1, contentHeight - visible);
+		const float thumbTop = (float) track.getY () + travel * juce::jlimit (0.0f, 1.0f, position);
+
+		const bool onThumb = (float) y >= thumbTop && (float) y <= thumbTop + thumbHeight;
+
+		scrollDragOffset = onThumb ? (float) y - thumbTop : thumbHeight * 0.5f;
+		scrollDragging = true;
+
+		if (! onThumb)
+		{
+			scrollToThumbTop (track, (float) y - scrollDragOffset, travel);
+		}
+	}
+
 	void paintScrollBar (juce::Graphics& g)
 	{
 		const int visible = juce::jmax (1, getHeight () - kHeader);
@@ -501,17 +599,13 @@ private:
 			return;
 		}
 
-		const juce::Rectangle<int> track (getWidth () - metrics.cardInset - kScrollBarGap - kScrollBarWidth,
-										  kHeader + kScrollBarGap,
-										  kScrollBarWidth,
-										  juce::jmax (0, getHeight () - kHeader - kBottomFade));
+		const auto track = scrollBarTrack ();
 
 		g.setColour (theme::scrollBarTrack ());
 		g.fillRoundedRectangle (track.toFloat (), 5.0f);
 
-		const float thumbHeight = juce::jmax (24.0f, (float) track.getHeight () * (float) visible
-														 / (float) contentHeight);
-		const float travel = (float) track.getHeight () - thumbHeight;
+		const float thumbHeight = thumbHeightFor (track, visible);
+		const float travel = thumbTravelFor (track, thumbHeight);
 		const float position = (float) scrollOffset / (float) juce::jmax (1, contentHeight - visible);
 
 		g.setColour (theme::scrollBarThumb ());
@@ -981,6 +1075,12 @@ private:
 
 	int scrollOffset = 0;
 	int contentHeight = 0;
+
+	/** True while the thumb is held. `scrollDragOffset` is where inside the thumb the press landed,
+		so the thumb keeps its grab point instead of snapping under the pointer when the track was
+		pressed instead. */
+	bool scrollDragging = false;
+	float scrollDragOffset = 0.0f;
 
 	// What each channel last played, and when - the note-off delay reads from here.
 	struct Held
