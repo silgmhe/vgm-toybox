@@ -1,5 +1,7 @@
 #if defined(_WIN32)
 #include <windows.h>
+#else
+#include <iconv.h>
 #endif
 
 #include "formats/nsf/NsfFile.h"
@@ -70,6 +72,7 @@ std::string decodeTextField (const std::string& raw)
 	{
 		const int wide = MultiByteToWideChar (932, 0, raw.c_str (), (int) raw.size (), nullptr, 0);
 
+
 		if (wide > 0)
 		{
 			std::wstring buffer ((std::size_t) wide, L'\0');
@@ -86,6 +89,32 @@ std::string decodeTextField (const std::string& raw)
 					return out;
 				}
 			}
+		}
+	}
+#else
+	// iconv, because the same title has to read on every platform this builds for. macOS spells the
+	// encoding Shift_JIS and Linux accepts both that and CP932; neither has MultiByteToWideChar, so
+	// before this the Japanese branch fell through to `return raw` and the card showed the raw
+	// Shift-JIS bytes as mojibake. The test caught it on macOS only because Linux had never run it.
+	iconv_t conversion = iconv_open ("UTF-8", "SHIFT_JIS");
+
+	if (conversion != (iconv_t) -1)
+	{
+		// Three UTF-8 bytes per Shift-JIS pair at worst, plus room for the terminator iconv does
+		// not write.
+		std::string out (raw.size () * 3 / 2 + 4, '\0');
+		char* in = const_cast<char*> (raw.data ());
+		std::size_t inLeft = raw.size ();
+		char* outPtr = &out[0];
+		std::size_t outLeft = out.size ();
+
+		const bool ok = iconv (conversion, &in, &inLeft, &outPtr, &outLeft) != (std::size_t) -1;
+		iconv_close (conversion);
+
+		if (ok)
+		{
+			out.resize (out.size () - outLeft);
+			return out;
 		}
 	}
 #endif

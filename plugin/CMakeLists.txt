@@ -347,6 +347,13 @@ target_link_libraries(VGMToybox PRIVATE
 	juce::juce_recommended_lto_flags
 )
 
+# NsfFile.cpp converts Shift-JIS titles with iconv off Windows. glibc has it in libc, so this is a
+# no-op there; macOS needs libiconv on the link line. Windows uses MultiByteToWideChar instead.
+if (NOT WIN32)
+	find_package (Iconv REQUIRED)
+	target_link_libraries (VGMToybox PRIVATE Iconv::Iconv)
+endif ()
+
 # --- console test for the mixer engine (not built by default) ---
 # Renders a VGM/VGZ file offline (plain player and per-channel mixer), writes the plain render
 # to a WAV and checks the mixer acceptance criteria, e.g.:
@@ -436,6 +443,10 @@ target_link_libraries(vgm_nsf_test PRIVATE nsfplay_core juce::juce_core juce::ju
 # a 128-byte header and a ROM asked the CI runners for libcurl's development headers. vgm_keyboard_test
 # has always done this; this one had not.
 target_compile_definitions(vgm_nsf_test PRIVATE ${TOYBOX_JUCE_DEFINITIONS})
+
+if (NOT WIN32)
+	target_link_libraries (vgm_nsf_test PRIVATE Iconv::Iconv)
+endif ()
 target_include_directories(vgm_nsf_test PRIVATE Source)
 target_compile_features(vgm_nsf_test PRIVATE cxx_std_17)
 
