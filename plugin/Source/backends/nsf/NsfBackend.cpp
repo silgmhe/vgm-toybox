@@ -129,13 +129,12 @@ public:
 
 		// Five channels, because the two chip objects expose exactly that many outputs between them:
 		// the APU renders the two pulses, and the DMC object renders triangle, noise and DPCM.
-		static const char* const names[] = { "Pulse 1", "Pulse 2", "Triangle", "Noise", "DMC" };
 
 		// Every channel the emulation renders separately becomes a track, including the expansion
 		// chip's: each of them has its own mask bit, so isolating one is a matter of the player
 		// clearing a single bit rather than of the backend guessing.
 		static const char* const apuNames[] = { "Pulse 1", "Pulse 2" };
-		static const char* const dmcNames[] = { "Triangle", "Noise", "DMC" };
+		static const char* const dmcNames[] = { "Triangle", "Noise", "DPCM" };
 
 		playback::TrackId nextId = 1;
 		int channel = 0;
@@ -152,6 +151,8 @@ public:
 		// The triangle has a period register and a wavetable: it has a pitch, unlike the noise and
 		// the delta channel that share its object. Calling it unavailable kept the one 2A03 voice a
 		// bass line is written for out of every MIDI menu.
+		// "DPCM", not "DMC": the community names the voice after what it plays, and the DMC is
+		// the object that plays it. A strip labelled with the chip reads like a second device.
 		addTrack (dmcNames[0], "2A03", true, 0);
 		addTrack (dmcNames[1], "2A03", false, 0);
 		addTrack (dmcNames[2], "2A03", false, 0);

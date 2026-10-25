@@ -539,7 +539,7 @@ bool NsfPlayer::captureState (playback::ChipStateSnapshot& snapshot) const
 	// on the DMC. Both chips already report pitch, level and key state, so this is wiring rather
 	// than new emulation - which is why the keyboard can show a NES song without a coprocessor.
 	static const char* const pulseNames[] = { "Pulse 1", "Pulse 2" };
-	static const char* const dmcNames[] = { "Triangle", "Noise", "DMC" };
+	static const char* const dmcNames[] = { "Triangle", "Noise", "DPCM" };
 
 	// Duty comes from the pulse register's top two bits; the four settings are fixed by hardware.
 	
