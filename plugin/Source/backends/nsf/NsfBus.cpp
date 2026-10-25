@@ -129,6 +129,20 @@ bool NsfBus::Write (UINT32 adr, UINT32 val, UINT32 id)
 		++expansionWrites[3];
 		++expansionSignature[3];
 	}
+	else if (adr >= 0x5000 && adr <= 0x5015)
+	{
+		// The MMC5's audio registers live in the CPU's own map, not in an expansion window; the
+		// write still has to leave the map or the chip is ticked and never told anything.
+		expansion = true;
+	}
+
+	else if (adr == 0x4023 || (adr >= 0x4040 && adr <= 0x408A))
+	{
+		// The FDS keeps its register file - wavetable included - at - rather than in an
+		// expansion window, and its master switch at . Not counted in expansionWrites: that
+		// tally is what detectUndeclaredChip reads, and the FDS declares itself in the header.
+		expansion = true;
+	}
 	else { expansion = false; }
 
 	if (expansion || (adr >= 0x4000 && adr <= 0x4017))

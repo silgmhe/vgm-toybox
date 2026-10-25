@@ -1096,6 +1096,7 @@ void PlaybackEngine::installSong (LoadedSong&& built)
 	// The chips card is only offered when the backend can honour it, and every load path passes
 	// through here - buildSong is static and cannot record it itself.
 	chipsMuteable.store (song != nullptr && song->getCapabilities ().canMuteChips);
+	midiEmittable.store (song != nullptr && song->getCapabilities ().canEmitMidi);
 
 	trackPlayers = std::move (built.players);
 	playerCount.store ((int) trackPlayers.size ());
@@ -1335,6 +1336,41 @@ void PlaybackEngine::setDefaultRouting (playback::DefaultRouting mode)
 	applyDefaultRouting();
 }
 
+bool PlaybackEngine::isAnalysing (void) const
+{
+	const juce::ScopedLock sl (lock);
+	return song != nullptr && song->isAnalysing ();
+}
+
+bool PlaybackEngine::waitForAnalysis (int timeoutMs) const
+{
+	// Polled rather than signalled: the work is on a thread the engine does not own, and waking
+	// it up to tell someone it has finished would be more machinery than a five-millisecond
+	// check. The timeout is there so a caller can never hang on a scan that stopped early.
+	const auto deadline = juce::Time::getMillisecondCounter () + (juce::uint32) juce::jmax (0, timeoutMs);
+
+	while (true)
+	{
+		{
+			const juce::ScopedLock sl (lock);
+
+			// A load still in flight has no song yet, and "nothing loaded" is not the same answer
+			// as "nothing outstanding" - the caller wants the second one, so this keeps waiting.
+			if (song != nullptr && ! song->isAnalysing ())
+			{
+				return true;
+			}
+		}
+
+		if (juce::Time::getMillisecondCounter () >= deadline)
+		{
+			return false;
+		}
+
+		juce::Thread::sleep (5);
+	}
+}
+
 bool PlaybackEngine::isOutputBusConnected (int busIndex) const
 {
 	if (busIndex < 0 || busIndex >= playback::kOutputBusCount)
@@ -1487,6 +1523,21 @@ void PlaybackEngine::emitMidiForBlock (double blockStartSeconds, int numSamples,
 			midiWasEnabled = false;
 		}
 		return;
+	}
+
+	// A backend can publish its stream after the song is already playing: an NSF has to be run
+	// before its notes exist, and that run happens on a thread of its own. Picking it up here
+	// starts the notes the moment it lands rather than on the next load. The generation bump
+	// makes the cursor seek to where playback already is - without it the host would be sent
+	// every note from the top of the song at once.
+	if (midiSequence == nullptr && song != nullptr)
+	{
+		if (const auto* arrived = song->getMidiSequence (); arrived != nullptr)
+		{
+			midiSequence = arrived;
+			midiCursor = 0;
+			midiResetGeneration.fetch_add (1);
+		}
 	}
 
 	if (midiSequence == nullptr)
@@ -1970,7 +2021,7 @@ void PlaybackEngine::finaliseMasterBus (const playback::OutputBusBuffers* buses,
 
 void PlaybackEngine::applyOutputVolume (const playback::OutputBusBuffers* buses, int busCount, int numSamples)
 {
-	if (dcBlockEnabled.load())
+	if (dcBlockEnabled.load ())
 	{
 		applyDcBlock (buses, busCount, numSamples);
 	}

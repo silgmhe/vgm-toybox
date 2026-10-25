@@ -425,4 +425,33 @@ namespace xgm
       cpu = cpu_;
   }
 
+UINT32 NES_MMC5::RenderChannels (INT32* dest, int stride, int maxChannels)
+  {
+    // One Render() per channel with the others masked off. The two squares share a nonlinear mixer
+    // before shaping, so a masked render is not an exactly additive split - the same approximation
+    // VRC6's RenderChannels makes.
+    const int saved = mask;
+
+    for (int i = 0; i < 3; ++i)
+    {
+      // `saved` is ORed in rather than discarded: it is what the mixer set for solo, track mute
+      // and the chip's own checkbox. Overwriting it meant those controls did nothing in this
+      // path - the mix was right, because the mix does not come through here, but every track
+      // played.
+      mask = ~(1 << i) | saved;
+
+      INT32 b[2] = { 0, 0 };
+      Render (b);
+
+      if (i < maxChannels)
+      {
+        dest[i * stride + 0] = b[0];
+        dest[i * stride + 1] = b[1];
+      }
+    }
+
+    mask = saved;
+    return 3;
+  }
+
 }// namespace

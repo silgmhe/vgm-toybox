@@ -629,6 +629,7 @@ playback::BackendCapabilities LibvgmSongInstance::getCapabilities (void) const
 	caps.canFade = true;
 	caps.hasLoopPoint = (info.loopPointSeconds >= 0.0);
 	caps.canMuteChips = ! info.chips.empty();
+	caps.canEmitMidi = true;		// the register stream is parsed into a sequence at load
 	caps.isolation = playback::IsolationMode::multiInstance;
 	caps.rendersAtHostRate = true;		// the players are built at the host rate (and rebuilt when it changes)
 	caps.nativeSampleRate = 0.0;

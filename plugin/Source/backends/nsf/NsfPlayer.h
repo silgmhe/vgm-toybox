@@ -1,15 +1,20 @@
 #pragma once
 
 #include "playback/ChipState.h"
+#include "playback/MidiSequence.h"
 #include <array>
+#include <atomic>
 #include <cstdint>
 #include <memory>
+#include <unordered_map>
 
 #include "formats/nsf/NsfFile.h"
 #include "xgm/devices/CPU/nes_cpu.h"
 #include "xgm/devices/Sound/nes_apu.h"
 #include "xgm/devices/Sound/nes_dmc.h"
+#include "xgm/devices/Sound/nes_fds.h"
 #include "xgm/devices/Sound/nes_fme7.h"
+#include "xgm/devices/Sound/nes_mmc5.h"
 #include "xgm/devices/Sound/nes_n106.h"
 #include "xgm/devices/Sound/nes_vrc6.h"
 #include "xgm/devices/Sound/nes_vrc7.h"
@@ -40,8 +45,23 @@ public:
 	NsfPlayer (const NsfPlayer&) = delete;
 	NsfPlayer& operator= (const NsfPlayer&) = delete;
 
-	/** Builds the address space, resets the CPU and runs the driver's init. Message thread. */
+	/** Builds the address space, resets the CPU and runs the driver's init. Message thread.
+
+		It also scans the song once, with the output thrown away, to number its DPCM samples. That
+		scan is what keeps a sample on one note: numbering them as they are first heard would make
+		the note depend on where playback started, and a seek to 0:30 would renumber the kit.
+		180 seconds of scan costs about 0.7 s - the whole reason it can be done here at all is
+		that the CPU runs some fifteen times faster than the audio it produces.
+	*/
 	void start (void);
+
+	/** How much of the song the sample scan covers. Past this point a sample that has never been
+		heard gets no note rather than a made-up one. */
+	static constexpr double scanSeconds = 180.0;
+
+	/** Skips that scan. For a probe that only wants the write counters: the scan costs more than
+		everything else about opening a song put together. */
+	void skipPrescan (void) { prescanDisabled = true; }
 
 	/** Renders `frames` stereo frames. Returns how many were written. */
 	int render (float* left, float* right, int frames);
@@ -88,9 +108,13 @@ public:
 	/** Silences a whole chip. 0 is the 2A03 (both of its objects), 1 the expansion. */
 	void setChipAudible (int device, bool audible);
 
-	/** Fills what the chips can report: N163 for now, because it is the only chip in this core
-		that exposes per-channel state including the waveform it is reading. */
-	bool captureState (playback::ChipStateSnapshot& snapshot) const;
+	/** Fills what the chips can report: the five 2A03 voices and every row of whichever
+		expansion chip the file declares.
+
+		`includeWaves` off skips the waveform copies an FDS or N163 row carries. The preset scan
+		reads this tens of thousands of times and never draws anything, and those copies are the
+		bulk of the cost - 64 floats for the FDS, up to 256 for each of the N163's eight rows. */
+	bool captureState (playback::ChipStateSnapshot& snapshot, bool includeWaves = true) const;
 
 	/** Scales the output. The NES mix table leaves a lot of headroom - five four-bit channels never
 		approach full scale - so a file played back unamplified sits eight to twelve decibels below a
@@ -111,7 +135,55 @@ public:
 	std::uint64_t soundWrites (void) const;
 	double positionSeconds (void) const;
 
+	/** The MIDI stream the preset scan produced, or null when the scan has not run.
+
+		The scan that numbers the DPCM samples already walks the whole song; recording the note
+		changes on the way costs almost nothing extra, and it is what the mixer's MIDI column
+		needs. Null is the honest answer before start(): nothing has been read yet.
+
+		Shared rather than borrowed because it outlives the player it came from: the backend holds
+		on to it, and a player that handed out a raw pointer would leave that pointer dangling the
+		moment the player that scanned the file goes away.
+	*/
+	std::shared_ptr<const playback::MidiSequence> shareMidiSequence (void) const;
+
+	/** Runs the whole-song pass that numbers the DPCM samples and records every note.
+
+		Called by the backend on its own thread, not from start(): the walk is 0.3 to 2.8 seconds
+		depending on the expansion chip, and a song has to be playable before it finishes. The
+		result is published to the shared cache, so players already running pick it up on their
+		next look (see adoptScan).
+	*/
+	void scanSong (void);
+
+	/** Asks the scan to stop early. Checked once per block; a scan that has been asked to stop
+		still publishes whatever it had, because partial numbering beats none. */
+	void setScanCancelFlag (const std::atomic<bool>* flag) { scanCancelFlag = flag; }
+
+	/** True while this player is playing a song whose scan has not landed yet. */
+	bool isAnalysing (void) const { return analysing; }
+
 private:
+	/** Picks up a finished scan from the shared cache, or notes that there is not one yet.
+		Returns whether one was there.
+
+		`waitForLock` false is for the audio thread: it skips the attempt rather than block on the
+		scanning thread, and the only cost is another ninety milliseconds of "analysing".
+	*/
+	bool adoptScan (bool waitForLock);
+
+	void resetToStart (void);
+	void scanSampleChannels (double seconds);
+	void observeDpcmSample (void);
+
+	/** The MIDI note a DPCM sample slot was given, or -1 when the scan never met it.
+
+		Keyed by the sample's address and its playback rate, because those two together are what
+		sets the pitch: the same bytes at half the rate are an octave down, and FamiStudio gives
+		them a note of their own for exactly that reason.
+	*/
+	int noteForDpcmSample (int tone, int rate) const;
+
 	void writeSound (std::uint16_t address, std::uint8_t value);
 	void applyMasks (void);
 	bool chipAudible[2] = { true, true };
@@ -134,7 +206,31 @@ private:
 	std::unique_ptr<xgm::NES_VRC6> vrc6;
 	std::unique_ptr<xgm::NES_VRC7> vrc7;
 	std::unique_ptr<xgm::NES_N106> n106;
+	std::unique_ptr<xgm::NES_FDS> fds;
 	std::unique_ptr<xgm::NES_FME7> fme7;
+	std::unique_ptr<xgm::NES_MMC5> mmc5;
+
+	/** The DPCM scan. `sampleNotes` is built by one pass over the song and then only read, so the
+		note a sample has cannot change while the song plays. */
+	std::unordered_map<int, int> sampleNotes;
+	int nextSampleNote = 60;			// MIDI 60: the octave FamiStudio starts allocating from
+
+	/** The other product of that same pass: every note the song plays, in time order. Shared
+		because the scan is cached and every player built from this file gets the same stream. */
+	std::shared_ptr<const playback::MidiSequence> midiSequence;
+
+	/** Set while the scan for this song has not landed. Cleared by adoptScan() the moment the
+		cache has it, which is what turns the DPCM row's "analysing" label off. */
+	bool analysing = false;
+
+	/** Read by the scan loop, written by whoever owns the scanning thread's lifetime. */
+	const std::atomic<bool>* scanCancelFlag = nullptr;
+
+	bool prescanDisabled = false;
+	bool scanning = false;
+	bool sampleDirty = false;			// a whole slot has been written since the last look
+	bool sampleRateWritten = false;
+	bool sampleAddrWritten = false;
 };
 
 } // namespace toybox::backends::nsf

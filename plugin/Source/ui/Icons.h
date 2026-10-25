@@ -47,6 +47,10 @@ void drawMelodyGlyph (juce::Graphics& g, juce::Rectangle<float> iconArea, juce::
 	shape says "a sample is playing", not "a pitch is playing". */
 void drawSampleGlyph (juce::Graphics& g, juce::Rectangle<float> iconArea, juce::Colour colour);
 
+/** A drum: the sample voices answer with a note but they are percussion, and the keyboard-and-
+	burst pair this replaced was unreadable at the ten pixels a strip badge allows. */
+void drawDrumGlyph (juce::Graphics& g, juce::Rectangle<float> iconArea, juce::Colour colour);
+
 /** The MIDI mark: the DIN ring, its five contacts and the alignment notch. */
 void drawMidiGlyph (juce::Graphics& g, juce::Rectangle<float> iconArea, juce::Colour colour);
 

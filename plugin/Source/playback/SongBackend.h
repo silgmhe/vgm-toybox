@@ -72,7 +72,10 @@ enum class MidiCapability
 {
 	unavailable,	// no MIDI decoder for this chip/channel yet
 	melodic,		// the channel has a note and pitch (FM, PSG, square, ...)
-	oneShot			// the channel can only trigger a fixed note (ADPCM, DAC, noise, ...)
+	discrete,		// a note, but only from a fixed set of them - the noise channel's sixteen
+					// periods, the slots a song gives its DPCM samples. The note is real enough
+					// to play and to build a drum kit on, and carries no pitch to slide.
+	oneShot			// the channel can only trigger a fixed note (ADPCM, DAC, ...)
 };
 
 /** One mixer track: a channel of a device, or the whole device when it cannot be split. */
@@ -125,6 +128,10 @@ struct BackendCapabilities
 	bool canFade = false;				// the fadeSeconds of setTimeline() is honoured
 	bool hasLoopPoint = false;			// the song carries a loop point (the seek bar marker)
 	bool canMuteChips = false;			// setChipAudible() works (the chips card)
+
+	/** The backend produces a MIDI sequence at all. Off for a backend that emulates rather than
+		reads registers - offering a MIDI channel there would promise notes nothing can send. */
+	bool canEmitMidi = false;
 	IsolationMode isolation = IsolationMode::none;
 	bool rendersAtHostRate = false;		// the backend can render at any host sample rate
 	double nativeSampleRate = 0.0;		// its own rate when it cannot (0 = does not care)
@@ -171,7 +178,7 @@ public:
 	virtual int render (float* left, float* right, int numSamples) = 0;
 
 	/** Fills one buffer per track for the same block, for backends that can produce every track in
-		a single pass (IsolationMode::inPlaceChannelMix). uffers holds 	rackCount stereo pairs,
+		a single pass (IsolationMode::inPlaceChannelMix). Buffers holds 	rackCount stereo pairs,
 		each 
 umSamples frames long; the backend writes all of them or none.
 
@@ -202,6 +209,15 @@ public:
 	virtual const SongInfo& getInfo (void) const = 0;
 	/** Optional MIDI event stream for this song; null when the backend has no decoder. */
 	virtual const MidiSequence* getMidiSequence (void) const { return nullptr; }
+
+	/** True while the stream above is still being produced.
+
+		A format that has to be run to be understood cannot hand over its notes at load time, so
+		it produces them on a thread of its own and publishes them when it is done. This says the
+		work is still outstanding, so a caller can wait for it rather than conclude the song is
+		silent - the suite does, and the keyboard shows "analysing" on the rows that need it.
+	*/
+	virtual bool isAnalysing (void) const { return false; }
 	/** One entry per mixer track; empty when the song has no devices at all. */
 	virtual const std::vector<TrackInfo>& getTracks (void) const = 0;
 	virtual BackendCapabilities getCapabilities (void) const = 0;

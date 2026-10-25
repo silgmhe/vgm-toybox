@@ -25,6 +25,15 @@ struct ChannelState
 
 	bool active = false;				// key on / currently producing a tone
 	int note = -1;						// semitones above C-1, -1 when silent
+
+	/** The song is still being scanned, so this row's note is not known yet.
+
+		Only the DPCM row can be in this state: its note is a sample slot, and a slot has to be
+		numbered against the whole song before it means anything. The row can still be drawn -
+		the shape comes from the address and rate, not from the slot - so this is a note-cell
+		label rather than a blank row.
+	*/
+	bool analysing = false;
 	float frequency = 0.0f;				// Hz, 0 when unknown
 	float volume = 0.0f;				// 0..1, normalised against the chip's own maximum
 
@@ -33,11 +42,21 @@ struct ChannelState
 	std::vector<float> wave;
 
 	/** How the channel makes its shape, so a panel can draw it without knowing the chip:
-		0 none, 1 stored table, 2 pulse, 3 triangle, 4 noise, 5 delta. */
+		0 none, 1 stored table, 2 pulse, 3 triangle, 4 noise, 5 delta, 6 saw, 7 FM. */
 	int waveKind = 0;
 
 	/** Duty cycle for a pulse channel, 0..1. Ignored by the other kinds. */
 	float duty = 0.5f;
+
+	/** What the shape needs beyond its kind, in the channel's own units: the noise channel's
+		period setting (0..15, the coarsest last), the DPCM channel's sample identity. Zero for
+		the chips whose shape is fixed - a pulse's duty already carries everything a pulse has.
+
+		Both exist because those two shapes are not fixed: a noise burst at period 0 is a fine
+		hiss and at period 15 a slow rumble, and a kick and a hi-hat are two different samples.
+		Drawing one generic mark for either would say nothing about what is playing.
+	*/
+	int shapeParameter = 0;
 
 	/** Index into the engine's track list, or -1. A panel needs this to offer mute and solo:
 		the engine already owns that state, and a second copy would drift. */

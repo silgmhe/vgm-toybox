@@ -1,7 +1,10 @@
 #include "backends/nsf/NsfBackend.h"
 
+#include <atomic>
 #include <cstring>
 #include <memory>
+#include <mutex>
+#include <thread>
 #include <vector>
 
 #include "backends/nsf/NsfChannelNaming.h"
@@ -97,6 +100,11 @@ public:
 	{
 		detectUndeclaredChip ();
 
+		// Started before anything can ask for a note. It runs on a player of its own, so this file
+		// is playable while it works, and it publishes into the shared cache that every track
+		// player reads.
+		scanner = std::thread ([this] { runScan (); });
+
 		info_.formatName = "NSF (NSFPlay core)";
 
 		// The header has no length and the driver never ends, so the timeline comes from the
@@ -123,20 +131,24 @@ public:
 			case formats::nsf::NsfChip::vrc7: info_.chips.push_back ({ "VRC7", "NSFPlay", 1 }); break;
 			case formats::nsf::NsfChip::fds:  info_.chips.push_back ({ "FDS",  "NSFPlay", 1 }); break;
 			case formats::nsf::NsfChip::mmc5: info_.chips.push_back ({ "MMC5", "NSFPlay", 1 }); break;
-			case formats::nsf::NsfChip::n163: info_.chips.push_back ({ "N163", "NSFPlay", 1 }); break;
 			case formats::nsf::NsfChip::fme7: info_.chips.push_back ({ "S5B",  "NSFPlay", 1 }); break;
+			case formats::nsf::NsfChip::n163: info_.chips.push_back ({ "N163", "NSFPlay", 1 }); break;
+
+			// Every chip above has a row here or it does not exist as far as the chip card is
+			// concerned, however many tracks it contributes. The N163 was the one missing, and a
+			// file that declares it showed a card with the 2A03 alone while the mixer drew all
+			// eight of its channels underneath.
 			default: break;
 		}
 
 		// Five channels, because the two chip objects expose exactly that many outputs between them:
 		// the APU renders the two pulses, and the DMC object renders triangle, noise and DPCM.
-		static const char* const names[] = { "Pulse 1", "Pulse 2", "Triangle", "Noise", "DMC" };
 
 		// Every channel the emulation renders separately becomes a track, including the expansion
 		// chip's: each of them has its own mask bit, so isolating one is a matter of the player
 		// clearing a single bit rather than of the backend guessing.
 		static const char* const apuNames[] = { "Pulse 1", "Pulse 2" };
-		static const char* const dmcNames[] = { "Triangle", "Noise", "DMC" };
+		static const char* const dmcNames[] = { "Triangle", "Noise", "DPCM" };
 
 		playback::TrackId nextId = 1;
 		int channel = 0;
@@ -148,15 +160,37 @@ public:
 														 : playback::MidiCapability::unavailable });
 		};
 
+		// The two sample voices answer with a note now: the noise channel's sixteen periods are
+		// laid out as sixteen semitones, and a DPCM sample keeps the slot the scan gave it. Neither
+		// carries a pitch to slide, so neither is melodic - what they are is a fixed set of notes a
+		// drum kit can be built on.
+		const auto addSampleTrack = [&] (const char* name, const char* group)
+		{
+			tracks_.push_back (playback::TrackInfo { nextId++, (playback::DeviceId) 0, 0, channel++, true, name,
+													  group, playback::MidiCapability::discrete });
+		};
+
 		for (const char* name : apuNames) { addTrack (name, "2A03", true, 0); }
-		for (const char* name : dmcNames) { addTrack (name, "2A03", false, 0); }
+
+		// The triangle has a period register and a wavetable: it has a pitch, unlike the noise and
+		// the delta channel that share its object. Calling it unavailable kept the one 2A03 voice a
+		// bass line is written for out of every MIDI menu.
+		// "DPCM", not "DMC": the community names the voice after what it plays, and the DMC is
+		// the object that plays it. A strip labelled with the chip reads like a second device.
+		addTrack (dmcNames[0], "2A03", true, 0);
+		addSampleTrack (dmcNames[1], "2A03");
+		addSampleTrack (dmcNames[2], "2A03");
 
 		switch (file.chip ())
 		{
 			case formats::nsf::NsfChip::vrc6:
-				addTrack ("Saw Wave", "VRC6", true, 1);
+				// Track order is the chip's channel order: the per-channel render writes channel 0
+				// into the first expansion track, and channel 0 is the first pulse. Listing the ramp
+				// first - as this did - put each track's name on a different voice than the one it
+				// carried, which the mute buttons and the keyboard both read.
 				addTrack ("Square 3", "VRC6", true, 1);
 				addTrack ("Square 4", "VRC6", true, 1);
+				addTrack ("Saw Wave", "VRC6", true, 1);
 				break;
 
 			case formats::nsf::NsfChip::vrc7:
@@ -173,8 +207,22 @@ public:
 				}
 				break;
 
+			case formats::nsf::NsfChip::fds:
+				addTrack ("FDS", "FDS", true, 1);
+				break;
+
+			case formats::nsf::NsfChip::mmc5:
+				// two pulse channels and the PCM voice; the nonlinear mixer in the chip is where
+				// the three outputs come from
+				addTrack ("Square 1", "MMC5", true, 1);
+				addTrack ("Square 2", "MMC5", true, 1);
+				addTrack ("PCM", "MMC5", false, 1);
+				break;
+
 			case formats::nsf::NsfChip::fme7:
-				for (int i = 0; i < 5; ++i)
+				// Three, not five: the S5B has three tone channels, and the noise and the envelope
+				// are modes of those channels rather than voices with an output of their own.
+				for (int i = 0; i < 3; ++i)
 				{
 					addTrack (juce::String ("Square " + juce::String (i + 1)).toRawUTF8 (), "S5B", true, 1);
 				}
@@ -185,8 +233,36 @@ public:
 		}
 	}
 
+	~NsfSongInstance () override
+	{
+		// A scan in flight keeps its own emulation and would outlive this object. Asking it to stop
+		// and waiting is the only way to know the thread has finished touching anything - and the
+		// scan checks the flag once per block, so the wait is bounded by one block, not by the song.
+		cancelScan.store (true);
+
+		if (scanner.joinable ())
+		{
+			scanner.join ();
+		}
+	}
+
 	const playback::SongInfo& getInfo (void) const override { return info_; }
 	const std::vector<playback::TrackInfo>& getTracks (void) const override { return tracks_; }
+
+	const playback::MidiSequence* getMidiSequence (void) const override
+	{
+		// Whatever the scan has produced so far: null until it lands, the real stream afterwards.
+		// The pointer may be replaced under the caller, so the previous stream is kept alive in
+		// retiredStreams rather than freed - the engine holds this raw pointer across blocks.
+		std::lock_guard<std::mutex> guard (streamMutex);
+		return midiSequence.get ();
+	}
+
+	bool isAnalysing (void) const override
+	{
+		std::lock_guard<std::mutex> guard (streamMutex);
+		return midiSequence == nullptr;
+	}
 
 	playback::BackendCapabilities getCapabilities (void) const override
 	{
@@ -204,6 +280,11 @@ public:
 		// Every chip the emulation renders can be silenced on its own: the core mutes per output
 		// bit, and setChipAudible() turns a whole group of those bits off at once.
 		caps.canMuteChips = true;
+
+		// An NSF has no register stream to read - it is a program - so the sequence comes from
+		// running that program once with the output thrown away. That pass is the same one that
+		// numbers the DPCM samples, and it is cached on the file's bytes.
+		caps.canEmitMidi = true;
 		return caps;
 	}
 
@@ -235,6 +316,7 @@ public:
 		}
 
 		NsfPlayer probe (file, 44100.0);
+		probe.skipPrescan ();		// only the write counters are read below
 		probe.start ();
 
 		float left [512] = {};
@@ -272,6 +354,44 @@ private:
 	double length = 180.0;
 	bool expansionPresent = false;
 	int blockSize = 512;
+
+	/** Walks the song on its own thread: numbering the DPCM samples and recording every note. The
+		file is playable the whole time, and the DPCM row shows "analysing" until it lands. */
+	std::thread scanner;
+	std::atomic<bool> cancelScan { false };
+
+	/** Guards midiSequence, which the scanner writes and getMidiSequence() reads. */
+	mutable std::mutex streamMutex;
+	std::shared_ptr<const playback::MidiSequence> midiSequence;
+
+	/** Every stream this instance has ever handed out. The engine caches the raw pointer and can
+		hold it across blocks, so replacing the shared_ptr must not free what it points at. */
+	std::vector<std::shared_ptr<const playback::MidiSequence>> retiredStreams;
+
+	void runScan (void)
+	{
+		// A player of its own: scanning resets the CPU and runs it to the end of the song, which
+		// would wreck playback if it shared the emulation the mixer is rendering from.
+		NsfPlayer probe (file, 44100.0);
+		probe.setScanCancelFlag (&cancelScan);
+		probe.scanSong ();
+
+		auto finished = probe.shareMidiSequence ();
+
+		if (finished == nullptr)
+		{
+			return;
+		}
+
+		std::lock_guard<std::mutex> guard (streamMutex);
+
+		if (midiSequence != nullptr)
+		{
+			retiredStreams.push_back (midiSequence);
+		}
+
+		midiSequence = std::move (finished);
+	}
 };
 
 } // namespace

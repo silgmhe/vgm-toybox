@@ -6,6 +6,28 @@
 namespace toybox::ui
 {
 
+namespace
+{
+	/** Appends the lower half of an ellipse, from its left end to its right end.
+
+		Written as two cubics rather than through Path::addCentredArc because the direction that
+		helper sweeps is easy to get backwards, and a drum whose body curves the wrong way is not
+		a drum. Kappa is the standard circle-to-bezier constant.
+	*/
+	void addLowerHalfEllipse (juce::Path& path, float centreX, float centreY,
+							  float radiusX, float radiusY)
+	{
+		constexpr float kappa = 0.5523f;
+
+		path.cubicTo (centreX - radiusX, centreY + radiusY * kappa,
+					  centreX - radiusX * kappa, centreY + radiusY,
+					  centreX, centreY + radiusY);
+		path.cubicTo (centreX + radiusX * kappa, centreY + radiusY,
+					  centreX + radiusX, centreY + radiusY * kappa,
+					  centreX + radiusX, centreY);
+	}
+} // namespace
+
 void drawRepeatGlyph (juce::Graphics& g, juce::Rectangle<float> iconArea, juce::Colour colour)
 {
 	g.setColour (colour);
@@ -181,6 +203,63 @@ void drawMelodyGlyph (juce::Graphics& g, juce::Rectangle<float> iconArea, juce::
 		g.drawLine (x, top, x, bottom, separatorWidth);
 		g.fillRect (x - blackWidth * 0.5f, top, blackWidth, blackHeight);
 	}
+}
+
+void drawDrumGlyph (juce::Graphics& g, juce::Rectangle<float> iconArea, juce::Colour colour)
+{
+	// The same geometry as the 16 x 16 SVG this was meant to be, built here instead: JUCE's SVG
+	// reader produced nothing for it. Design coordinates are kept so the numbers still match the
+	// artwork, and the whole path is scaled at the end rather than each value.
+	constexpr float kDesign = 16.0f;
+	constexpr float kLeft = 3.0f;
+	constexpr float kRight = 13.0f;
+	constexpr float kHeadY = 4.6f;
+	constexpr float kBodyBottom = 10.0f;
+	constexpr float kRadiusX = 5.0f;
+	constexpr float kRadiusY = 1.4f;
+	constexpr float kHoopY = 6.3f;
+	constexpr float kFootY = 14.2f;
+
+	const float scale = juce::jmin (iconArea.getWidth (), iconArea.getHeight ()) / kDesign;
+
+	if (scale <= 0.0f)
+	{
+		return;
+	}
+
+	juce::Path path;
+
+	// Body: straight sides, ending in the lower half of the same ellipse as the head.
+	path.startNewSubPath (kLeft, kHeadY);
+	path.lineTo (kLeft, kBodyBottom);
+	addLowerHalfEllipse (path, (kLeft + kRight) * 0.5f, kBodyBottom, kRadiusX, kRadiusY);
+	path.lineTo (kRight, kHeadY);
+
+	// Head.
+	path.addEllipse (kLeft, kHeadY - kRadiusY, kRight - kLeft, kRadiusY * 2.0f);
+
+	// Upper hoop.
+	path.startNewSubPath (kLeft, kHoopY);
+	addLowerHalfEllipse (path, (kLeft + kRight) * 0.5f, kHoopY, kRadiusX, kRadiusY * 0.5f);
+
+	// Two legs. This is what separates a drum from a database icon: a cylinder on its own says
+	// storage, and what says snare is that it stands on something.
+	path.startNewSubPath (kLeft + 0.6f, kBodyBottom + 0.6f);
+	path.lineTo (kLeft - 0.7f, kFootY);
+
+	path.startNewSubPath (kRight - 0.6f, kBodyBottom + 0.6f);
+	path.lineTo (kRight + 0.7f, kFootY);
+
+	path.applyTransform (juce::AffineTransform::scale (scale)
+							 .translated (iconArea.getCentreX () - kDesign * 0.5f * scale,
+										  iconArea.getCentreY () - kDesign * 0.5f * scale));
+
+	// Strokes, not fills: one ink colour then serves both palettes, and line art holds up at the
+	// ten pixels a strip badge allows where a filled silhouette turns into a blob.
+	g.setColour (colour);
+	g.strokePath (path, juce::PathStrokeType (juce::jmax (1.0f, 1.35f * scale),
+											  juce::PathStrokeType::curved,
+											  juce::PathStrokeType::rounded));
 }
 
 void drawSampleGlyph (juce::Graphics& g, juce::Rectangle<float> iconArea, juce::Colour colour)

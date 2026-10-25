@@ -204,8 +204,10 @@ namespace xgm
       8, 9,10,11,12,13,14,15,
     };
 
-    if (linear_counter > 0 && length_counter[0] > 0
-        && (!option[OPT_TRI_MUTE] || tri_freq > 0))
+    const bool sounding = (linear_counter > 0 && length_counter[0] > 0
+        && (!option[OPT_TRI_MUTE] || tri_freq > 0));
+
+    if (sounding)
     {
       counter[0] -= clocks;
       while (counter[0] < 0)
@@ -215,8 +217,11 @@ namespace xgm
       }
     }
 
-    UINT32 ret = tritbl[tphase];
-    return ret;
+    // The hardware holds the DAC level while the channel is silenced, and the console's output
+    // capacitor removes the resulting offset. Keep the hardware here: zeroing the level made every
+    // note-on a step from 0 to the held value, which is audible as a click. NsfPlayer removes the
+    // offset continuously instead, which is what a capacitor does.
+    return tritbl[tphase];
   }
 
   // ノイズチャンネルの計算 戻り値は0-127
@@ -376,8 +381,12 @@ namespace xgm
         }
         else
         {
+            // ref == 0 means all three channels are silent, and tnd_table[1][0][0][0] is the
+            // mixer's resting level, not a signal: copying it into every channel turned silence
+            // into a DC offset that every downstream mixer had to carry (measured 0.147 rms on a
+            // track whose chip never played). Silence is zero.
             for (int i=0; i < 3; ++i)
-                m[i] = voltage;
+                m[i] = 0;
         }
     }
 

@@ -158,6 +158,28 @@ void testWaveShapes (void)
 		check (railsOnly, "every step is at one rail or the other");
 	}
 
+	// The period is what makes the sixteen settings sound different, so it has to reach the
+	// drawing: period 0 is a fine hiss, period 15 a slow rumble.
+	{
+		const auto fine = cycleFor ((int) Kind::noise, 0.5f, 0);
+		const auto coarse = cycleFor ((int) Kind::noise, 0.5f, 15);
+
+		int fineFlips = 0;
+		int coarseFlips = 0;
+
+		for (std::size_t i = 1; i < fine.size (); ++i)
+		{
+			if (fine[i] != fine[i - 1]) { ++fineFlips; }
+			if (coarse[i] != coarse[i - 1]) { ++coarseFlips; }
+		}
+
+		// A single set bit as the seed left the register's low bits zero for fourteen shifts, and
+		// the old drawing had four flips in thirty-two steps - a flat line with one spike. This is
+		// the check that keeps that from coming back.
+		check (fineFlips >= 8, "the finest period still reads as a burst, not a flat line");
+		check (fineFlips > coarseFlips, "and a coarser period draws a coarser burst");
+	}
+
 	// Delta integrates its bits and stays inside the rails.
 	{
 		const auto d = cycleFor ((int) Kind::delta, 0.5f);
@@ -172,6 +194,38 @@ void testWaveShapes (void)
 		}
 		check (inside, "the integrated level never leaves -1..1");
 		check (moved, "and it is not a flat line");
+	}
+
+	// Two samples in one song are two marks. A fixed pattern drew a regular staircase, which is
+	// indistinguishable from the VRC6 ramp two rows below it - the row said "sample" and looked
+	// like "saw".
+	{
+		const auto kick = cycleFor ((int) Kind::delta, 0.5f, 0xC0000);
+		const auto hat = cycleFor ((int) Kind::delta, 0.5f, 0xC0400);
+
+		check (kick != hat, "two samples do not draw the same shape");
+
+		// Regular means periodic: a walk that repeats with a short period reads as a waveform, not
+		// as a sample. The old `i % 7` pattern repeated five times in one cycle.
+		int repeats = 0;
+
+		for (std::size_t start = 1; start <= 8; ++start)
+		{
+			bool periodic = true;
+
+			for (std::size_t i = start; i < kick.size (); ++i)
+			{
+				if (std::abs (kick[i] - kick[i - start]) > 0.001f)
+				{
+					periodic = false;
+					break;
+				}
+			}
+
+			if (periodic) { ++repeats; }
+		}
+
+		check (repeats == 0, "and neither of them repeats on a short cycle");
 	}
 
 	// Nothing to synthesise: the stored-table kind and anything unknown leave it to the backend.

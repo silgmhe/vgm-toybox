@@ -178,10 +178,16 @@ int main (int argc, char** argv)
 
 	if (argc > 2 && std::string (argv[2]) == "--chips")
 	{
-		// The corpus files declare no expansion, so the N163 is forced here: this mode exists to
-		// exercise the state path, and a player built without the chip has nothing to report.
+		// The corpus files declare no expansion, so a file without one gets the N163 forced on: this
+		// mode exists to exercise the state path, and a player built without the chip has nothing to
+		// report. A file that does declare one keeps it - the question here is what that chip says
+		// about itself, not what a different chip would have said.
 		auto forced = file;
-		forced.chipFlags |= (std::uint8_t) toybox::formats::nsf::NsfChip::n163;
+
+		if (forced.chip () == toybox::formats::nsf::NsfChip::none)
+		{
+			forced.chipFlags |= (std::uint8_t) toybox::formats::nsf::NsfChip::n163;
+		}
 
 		toybox::backends::nsf::NsfPlayer player (forced, 44100.0);
 		player.start ();

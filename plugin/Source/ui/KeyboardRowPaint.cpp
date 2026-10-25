@@ -2,6 +2,7 @@
 
 #include "ButtonPaint.h"
 #include "KeyboardLayout.h"
+#include "i18n/LanguageManager.h"
 #include "SoftShadow.h"
 #include "Theme.h"
 #include "WaveShape.h"
@@ -83,10 +84,22 @@ void paintChannelRow (juce::Graphics& g,
 	paintToggle (g, row.solo, "S", soloed, false, hover.solo);
 
 	// The note, or a dash when the channel has no pitch to speak of.
-	g.setColour (channel.note >= 0 ? theme::primaryText () : theme::secondaryText ());
-	g.setFont (juce::Font (juce::FontOptions (12.5f, juce::Font::bold)));
-	g.drawText (midiNoteName (channel.note, octaveShift), row.note,
-				juce::Justification::centred, false);
+	if (channel.analysing)
+	{
+		// The row is playing and its shape is drawn from the registers, but its note is a sample
+		// slot and a slot means nothing until the walk over the song has numbered them. Saying so
+		// is better than a note that changes under the reader a second later.
+		g.setColour (theme::secondaryText ());
+		g.setFont (juce::Font (juce::FontOptions (11.0f)));
+		g.drawText (i18n::tr ("visualiser.analysing"), row.note, juce::Justification::centred, false);
+	}
+	else
+	{
+		g.setColour (channel.note >= 0 ? theme::primaryText () : theme::secondaryText ());
+		g.setFont (juce::Font (juce::FontOptions (12.5f, juce::Font::bold)));
+		g.drawText (midiNoteName (channel.note, octaveShift), row.note,
+					juce::Justification::centred, false);
+	}
 
 	paintWave (g, row.wave, channel);
 
@@ -149,7 +162,7 @@ void paintWave (juce::Graphics& g, juce::Rectangle<int> area,
 
 	if (cycle.empty ())
 	{
-		cycle = waveform::cycleFor (channel.waveKind, channel.duty);
+		cycle = waveform::cycleFor (channel.waveKind, channel.duty, channel.shapeParameter);
 	}
 
 	if (cycle.size () < 2)

@@ -94,6 +94,15 @@ namespace
 		std::vector<float> left, right;
 		double peak = 0.0;
 		double rms = 0.0;
+
+		/** RMS with the mean taken out - what the mix sounds like, without a constant offset.
+
+			The two are not the same measure. A DC offset is inaudible on its own and cancels part
+			of the music when the chips are summed, so muting a chip that was fighting the offset
+			raises the raw RMS: a mixer that lost a voice measured louder than one that had it.
+			Its own energy is the number that answers "did that chip contribute".
+		*/
+		double acRms = 0.0;
 	};
 
 	/** Renders up to `seconds` of the engine output (stops early when the song ends). */
@@ -128,6 +137,19 @@ namespace
 		}
 
 		result.rms = (sampleCount > 0) ? std::sqrt (sumOfSquares / (double) sampleCount) : 0.0;
+
+		if (sampleCount > 0)
+		{
+			double mean = 0.0;
+			for (float sample : result.left) { mean += (double) sample; }
+			mean /= (double) sampleCount;
+
+			double ac = 0.0;
+			for (float sample : result.left) { const double centred = (double) sample - mean; ac += centred * centred; }
+
+			result.acRms = std::sqrt (ac / (double) sampleCount);
+		}
+
 		return result;
 	}
 
@@ -303,6 +325,11 @@ namespace
 		std::int64_t blockStartSample = 0;			// set by the render loop below
 		double rms = 0.0;							// the audio of the same render (both channels)
 
+		/** The same audio with its mean removed. A channel that is silent but parks its DAC on a
+			constant reads as loud by `rms` - the 2A03's triangle does exactly that once its length
+			counter runs out - so "is this track making sound" has to be asked of this one. */
+		double acRms = 0.0;
+
 	};
 
 	/** Renders `seconds` with the MIDI sink attached and measures the audio in the same pass.
@@ -321,6 +348,7 @@ namespace
 		toybox::playback::OutputBusBuffers buses[1] = { { blockL.data(), blockR.data() } };
 
 		double sumOfSquares = 0.0;
+		double sum = 0.0;
 		std::int64_t sampleCount = 0;
 
 		while (rendered < totalSamples && ! engine.isFinished())
@@ -334,13 +362,21 @@ namespace
 			{
 				sumOfSquares += (double) blockL[(size_t) i] * (double) blockL[(size_t) i]
 								+ (double) blockR[(size_t) i] * (double) blockR[(size_t) i];
+				sum += (double) blockL[(size_t) i] + (double) blockR[(size_t) i];
 				++sampleCount;
 			}
 
 			rendered += blockSize;
 		}
 
-		recorder.rms = (sampleCount > 0) ? std::sqrt (sumOfSquares / (double) (2 * sampleCount)) : 0.0;
+		const double samples = (double) (2 * sampleCount);
+		recorder.rms = (sampleCount > 0) ? std::sqrt (sumOfSquares / samples) : 0.0;
+
+		const double mean = (sampleCount > 0) ? sum / samples : 0.0;
+		recorder.acRms = (sampleCount > 0)
+							 ? std::sqrt (std::max (0.0, sumOfSquares / samples - mean * mean))
+							 : 0.0;
+
 		return recorder;
 	}
 
@@ -492,9 +528,25 @@ int main (int argc, char* argv[])
 	engine.prepare ((double) sampleRate, blockSize);
 
 	juce::String errorMessage;
+	const double loadStarted = juce::Time::getMillisecondCounterHiRes ();
+
 	if (! engine.loadFile (inputFile, errorMessage))
 	{
 		std::printf ("Loading failed: %s\n", errorMessage.toRawUTF8());
+		return 1;
+	}
+
+	// The load must not wait for the scan - that is the whole point of running it on a thread -
+	// so this number is what a user feels when they open a file.
+	std::printf ("Loaded in %.1f ms\n", juce::Time::getMillisecondCounterHiRes () - loadStarted);
+
+	// An NSF's notes come from a scan that runs on a thread of its own, because the song has to be
+	// playable before that finishes. Everything below asks what the engine does once the stream has
+	// landed, so the wait belongs to the setup - ten seconds covers the slowest asset (six FM
+	// voices, 2.2 s) with room to spare.
+	if (! engine.waitForAnalysis (30000))
+	{
+		std::printf ("The song's scan did not finish within thirty seconds\n");
 		return 1;
 	}
 
@@ -665,6 +717,245 @@ int main (int argc, char* argv[])
 	std::printf ("    plain rms %.6f vs mixer rms %.6f - difference %.2f dB\n",
 				 plain.rms, mixed.rms, sumDifference);
 	check (sumDifference < 0.5, "the unity-gain sum matches the plain mix (< 0.5 dB)");
+
+	// Whether the song can send MIDI at all is a property of the backend, and the mixer asks it
+	// before offering a channel: a track's capability describes its voice, not what can be sent.
+	//
+	// An NSF can now answer yes, and by a different route than a VGM: there is no register stream
+	// to read, so the sequence comes from running the driver once with the output discarded.
+	{
+		const juce::String extension = inputFile.getFileExtension().toLowerCase();
+		const bool expectsMidi = (extension == ".vgm" || extension == ".vgz" || extension == ".nsf");
+
+		std::printf ("    canEmitMidi %s (expected %s for %s)\\n",
+					 engine.canEmitMidi () ? "yes" : "no",
+					 expectsMidi ? "yes" : "no", extension.toRawUTF8 ());
+
+		check (engine.canEmitMidi () == expectsMidi, "the backend's MIDI capability matches the format");
+
+		if (extension == ".nsf")
+		{
+			// The triangle is a wavetable with a period register - the one 2A03 voice a bass line is
+			// written for - and was grouped with the noise and the DPCM channel as if it had no pitch.
+			for (const auto& track : tracks)
+			{
+				if (track.name == "Triangle")
+				{
+					check (track.midiCapability == toybox::playback::MidiCapability::melodic,
+						   "the 2A03 triangle is a pitched voice");
+					break;
+				}
+			}
+		}
+	}
+
+	// --- [3c] an expansion voice reaches its track -------------------------------------------
+	if (inputFile.getFileName() == "fds_song.nsf"
+		|| inputFile.getFileName() == "mmc5_song.nsf"
+		|| inputFile.getFileName() == "fme7_song.nsf")
+	{
+		// Each asset turns one expansion channel on and leaves the 2A03 silent, so the track that
+		// carries the tone is the one the header's chip name sits on. Before these wires existed
+		// the file was five silent tracks and an expansion chip that was ticked and never fed.
+		const juce::String expansionGroup = inputFile.getFileName() == "fds_song.nsf" ? "FDS"
+										  : inputFile.getFileName() == "mmc5_song.nsf" ? "MMC5"
+																					   : "S5B";
+
+		std::printf ("[3c] the %s voice reaches its track\n", expansionGroup.toRawUTF8 ());
+
+		double loudestExpansion = 0.0;
+		double loudestApu = 0.0;
+
+		for (size_t i = 0; i < tracks.size(); ++i)
+		{
+			for (size_t j = 0; j < tracks.size(); ++j)
+			{
+				engine.setTrackMute (j, j != i);
+			}
+
+			engine.setPositionSeconds (0.0);
+			engine.play ();
+			const auto solo = renderSeconds (engine, 0.25, sampleRate, blockSize);
+
+			if (tracks[i].groupName == expansionGroup)
+			{
+				loudestExpansion = juce::jmax (loudestExpansion, solo.rms);
+			}
+			else if (tracks[i].groupName == "2A03")
+			{
+				loudestApu = juce::jmax (loudestApu, tracks[i].name == "Triangle" ? 0.0 : solo.rms);
+			}
+		}
+
+		for (size_t j = 0; j < tracks.size(); ++j)
+		{
+			engine.setTrackMute (j, false);
+		}
+
+		std::printf ("    %s %.5f vs the loudest 2A03 %.5f\n",
+					 expansionGroup.toRawUTF8 (), loudestExpansion, loudestApu);
+
+		check (loudestExpansion > 0.01, "the expansion's own track carries the tone");
+		check (loudestApu < 0.001, "the 2A03 tracks stay silent, so the tone is the expansion's");
+	}
+
+	// --- [3e] the two sample voices answer with notes -------------------------------------------
+	if (inputFile.getFileName() == "apu_percussion.nsf")
+	{
+		// The noise channel and the DPCM channel have no pitch of their own, and both the panel and
+		// the MIDI port need a note anyway. The noise channel's sixteen periods are laid out as
+		// sixteen semitones; a DPCM sample keeps the slot the scan gave it. This checks that both
+		// answers exist, that the noise note follows the period, and that the DPCM slot is the same
+		// answer two seeks apart.
+		engine.setStateCaptureWanted (true);
+
+		std::printf ("[3e] the sample voices answer with notes\n");
+
+		toybox::playback::MidiCapability noiseCapability = toybox::playback::MidiCapability::unavailable;
+		toybox::playback::MidiCapability dpcmCapability = toybox::playback::MidiCapability::unavailable;
+
+		for (const auto& track : tracks)
+		{
+			if (track.name == "Noise") { noiseCapability = track.midiCapability; }
+			if (track.name == "DPCM") { dpcmCapability = track.midiCapability; }
+		}
+
+		check (noiseCapability == toybox::playback::MidiCapability::discrete,
+			   "the noise channel is offered as a fixed-note channel");
+		check (dpcmCapability == toybox::playback::MidiCapability::discrete,
+			   "the DPCM channel is offered as a fixed-note channel");
+
+		std::vector<int> noiseNotes;
+		std::vector<int> dpcmNotes;
+
+		// Two positions chosen to land on different noise periods: the driver steps the period
+		// every 64 play calls, and a play call is one sixtieth of a second.
+		for (double at : { 0.2, 2.4 })
+		{
+			engine.setPositionSeconds (at);
+			engine.play ();
+			renderSeconds (engine, 0.3, sampleRate, blockSize);
+
+			toybox::playback::ChipStateSnapshot snapshot;
+
+			if (! engine.captureChipState (snapshot))
+			{
+				continue;
+			}
+
+			for (const auto& channel : snapshot.channels)
+			{
+				if (! channel.active)
+				{
+					continue;
+				}
+
+				if (channel.name == "Noise") { noiseNotes.push_back (channel.note); }
+				if (channel.name == "DPCM") { dpcmNotes.push_back (channel.note); }
+			}
+
+			std::printf ("      at %.1f s: noise %d, dpcm %d\n", at,
+						 noiseNotes.empty () ? -1 : noiseNotes.back (),
+						 dpcmNotes.empty () ? -1 : dpcmNotes.back ());
+		}
+
+		engine.setStateCaptureWanted (false);
+
+		bool inNoiseRange = ! noiseNotes.empty ();
+
+		for (int note : noiseNotes)
+		{
+			inNoiseRange = inNoiseRange && note >= 43 && note <= 58;
+		}
+
+		check (inNoiseRange, "the noise note stays inside the sixteen periods' range");
+
+		bool inSampleRange = ! dpcmNotes.empty ();
+
+		for (int note : dpcmNotes)
+		{
+			inSampleRange = inSampleRange && note >= 60 && note <= 61;
+		}
+
+		check (inSampleRange, "the DPCM note is one of this file's two sample slots");
+
+		// The driver changes the noise period as the song plays, so two positions three seconds
+		// apart must not read the same note.
+		check (noiseNotes.size () >= 2 && noiseNotes.front () != noiseNotes.back (),
+			   "the noise note follows the period, not the seek position");
+	}
+
+	// --- [3d] the expansion chips describe themselves -----------------------------------------
+	if (inputFile.getFileName() == "fds_song.nsf"
+		|| inputFile.getFileName() == "mmc5_song.nsf"
+		|| inputFile.getFileName() == "fme7_song.nsf"
+		|| inputFile.getFileName() == "vrc6_song.nsf"
+		|| inputFile.getFileName() == "vrc7_song.nsf"
+		|| inputFile.getFileName() == "n163_song.nsf")
+	{
+		// The keyboard and the chip card read a snapshot, and until now only the 2A03 and the N163
+		// ever filled one in: every other expansion showed its name in the chip list and no rows
+		// under it. What is asked here is the whole contract a panel depends on - a row per
+		// expansion track, each row pointing at its track, sounding rows carrying a pitch and a
+		// level, and every row having something to draw.
+		engine.setStateCaptureWanted (true);
+		engine.setPositionSeconds (0.0);
+		engine.play ();
+		renderSeconds (engine, 0.25, sampleRate, blockSize);
+
+		toybox::playback::ChipStateSnapshot snapshot;
+		const bool described = engine.captureChipState (snapshot);
+		engine.setStateCaptureWanted (false);
+
+		std::printf ("[3d] the file's chips describe themselves\n");
+
+		check (described, "the player fills in a snapshot for this file");
+		check (snapshot.chips.size () == 2, "the chip list holds the 2A03 and the expansion");
+
+		int expansionRows = 0;
+		int pitched = 0;
+		bool rowsPointAtTracks = true;
+		bool rowsCanBeDrawn = true;
+
+		for (const auto& channel : snapshot.channels)
+		{
+			if (channel.trackIndex < 5)
+			{
+				continue;
+			}
+
+			++expansionRows;
+			rowsPointAtTracks = rowsPointAtTracks && channel.trackIndex < (int) tracks.size ();
+
+			// A row the panel cannot draw is a blank cell: either a stored waveform arrived, or
+			// the shape kind is one the panel knows how to synthesise. The range is checked rather
+			// than the value, so a new kind that nobody taught the panel to draw fails here.
+			//
+			// Only asked of rows that are sounding. A silent N163 row has no wave loaded and
+			// draws nothing, which is correct - there is no shape to draw.
+			const bool knownShape = (channel.waveKind >= 2 && channel.waveKind <= 7);
+
+			if (channel.active)
+			{
+				rowsCanBeDrawn = rowsCanBeDrawn && (knownShape || ! channel.wave.empty ());
+			}
+
+			if (channel.active && channel.note >= 0)
+			{
+				++pitched;
+				check (channel.volume > 0.0f, "a sounding expansion row carries a level");
+			}
+
+			std::printf ("      %-9s note=%3d vol=%.2f wave=%d kind=%d\n",
+						 channel.name.c_str (), channel.note, (double) channel.volume,
+						 (int) channel.wave.size (), channel.waveKind);
+		}
+
+		check (expansionRows == (int) tracks.size () - 5, "every expansion track has a row");
+		check (rowsPointAtTracks, "every row points at a track the mixer has");
+		check (rowsCanBeDrawn, "every row has a shape the panel can draw");
+		check (pitched >= 1, "at least one expansion row is sounding with a pitch");
+	}
 
 	// --- [3b] a linked voice set does not leak into the parent's tracks -----------------------
 	if (inputFile.getFileName() == "ym2608.vgm")
@@ -1564,7 +1855,9 @@ int main (int argc, char* argv[])
 			engine.setTrackSolo ((int) i, false);
 			engine.setTrackMidiChannel (i, 0);
 
-			probes[i].audible = probe.rms > audibleFloor;
+			// acRms, not rms: a channel silent but resting on a constant reads as loud otherwise,
+			// and the 2A03's triangle does exactly that when its length counter has run out.
+			probes[i].audible = probe.acRms > audibleFloor;
 			probes[i].notes = (int) probe.notesOn (1).size();
 			for (size_t e = 0; e < probe.events.size() && e < probe.blockStarts.size(); ++e)
 			{
@@ -1594,10 +1887,16 @@ int main (int argc, char* argv[])
 					++knownGaps;
 					mark = "  <- no MIDI output for this channel (design doc 11.2)";
 				}
-				else
+				else if (engine.canEmitMidi ())
 				{
 					++missingNotes;
 					mark = "  <- AUDIBLE BUT SILENT IN MIDI";
+				}
+				else
+				{
+					// This format has no MIDI sequence at all: every track is silent over MIDI, and
+					// repeating that twenty times would drown the one line that matters.
+					mark = "  <- no MIDI sequence for this format";
 				}
 			}
 
@@ -1610,6 +1909,44 @@ int main (int argc, char* argv[])
 					 audibleTracks, (int) tracks.size(), audibleTracks - knownGaps);
 		check (audibleTracks > 0, "the song's opening has audible tracks to compare against");
 		check (! hasMidiDecoder || missingNotes == 0, "every track that makes sound also produces MIDI notes");
+
+		// The pitches, not just the count: a note that arrives but carries the wrong number is
+		// worse than none, and the two assets here have known answers. Square 3 of the VRC6 file
+		// is A4, its ramp A3 - the same two numbers --chips prints for those rows.
+		if (inputFile.getFileName() == "vrc6_song.nsf")
+		{
+			check (probes[5].ons.size() == 1 && probes[5].ons[0].note == 69,
+				   "the VRC6 pulse reaches the port as A4");
+			check (probes[7].ons.size() == 1 && probes[7].ons[0].note == 57,
+				   "and its ramp as A3");
+		}
+
+		// The two sample voices answer with notes of their own, and this is the check that those
+		// notes reach the port: the noise channel's sixteen periods live in 43..58, a DPCM slot
+		// starts at 60. An empty set passes - a file whose noise is silent has nothing to send.
+		//
+		// Both mappings belong to the NSF path, and so do rows 3 and 4: a VGM's noise channel goes
+		// out on the GM drum keys its decoder picked (38..48), and a VGM with fewer than five
+		// tracks has no row 4 at all - reading one there crashed four suites before this moved
+		// inside the condition.
+		if (inputFile.getFileExtension().equalsIgnoreCase (".nsf") && probes.size () >= 5)
+		{
+			bool noiseInRange = true;
+			bool sampleInRange = true;
+
+			for (const auto& on : probes[3].ons)
+			{
+				noiseInRange = noiseInRange && on.note >= 43 && on.note <= 58;
+			}
+
+			for (const auto& on : probes[4].ons)
+			{
+				sampleInRange = sampleInRange && on.note >= 60;
+			}
+
+			check (noiseInRange, "every noise note the port sends is inside the sixteen periods' range");
+			check (sampleInRange, "and every DPCM note is a sample slot, not a pitch");
+		}
 
 		// The generated algorithm-0 asset exists for this one sentence: its only carrier is
 		// operator 4, whose total level is the register the decoder used to misread. Silence in MIDI
@@ -1924,8 +2261,8 @@ int main (int argc, char* argv[])
 				const auto allMuted = measure ();
 				for (size_t c = 0; c < chips.size (); ++c) { engine.setChipMuted (c, false); }
 
-				std::printf ("      all muted     rms %.4f -> %.4f\n", plain.rms, allMuted.rms);
-				check (allMuted.rms < plain.rms * 0.1, "muting every chip silences the mix");
+				std::printf ("      all muted     ac %.4f -> %.4f\n", plain.acRms, allMuted.acRms);
+				check (allMuted.acRms < plain.acRms * 0.1, "muting every chip silences the mix");
 
 				// One chip at a time. A backend that only honoured the all-muted case would pass
 				// the check above and still leave every individual checkbox decorative, and a chip
@@ -1939,15 +2276,19 @@ int main (int argc, char* argv[])
 					const auto oneMuted = measure ();
 					engine.setChipMuted (c, false);
 
-					const bool changed = oneMuted.rms < plain.rms * 0.75;
+					// Against the signal's own energy, not the raw level: the DC offset the 2A03
+					// leaves behind is a constant, and a constant takes part in every sum without
+					// being heard. Comparing raw RMS here asked the wrong question of every file
+					// that carries one - see docs/memo/2026-10-25-nsf-dc-offset.md.
+					const bool changed = oneMuted.acRms < plain.acRms * 0.75;
 
 					if (changed)
 					{
 						++effective;
 					}
 
-					std::printf ("      %-12s rms %.4f -> %.4f%s\n", chips[c].name.toRawUTF8 (),
-								 plain.rms, oneMuted.rms,
+					std::printf ("      %-12s ac %.4f -> %.4f%s\n", chips[c].name.toRawUTF8 (),
+								 plain.acRms, oneMuted.acRms,
 								 changed ? "" : "   (not sounding in this window)");
 				}
 
