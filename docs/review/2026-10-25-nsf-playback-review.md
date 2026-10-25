@@ -163,19 +163,19 @@ if (midiSequence == nullptr && song != nullptr)
 
 ---
 
-### P2-3 十三个播放器各自一套仿真，靠全局缓存交换结果
+### P2-3 两个播放器靠全局缓存交换一个曲子级事实
 
-**位置**：`NsfBackend.cpp` 的 `NsfTrackPlayer`（每轨一个 `NsfPlayer`）与 `NsfPlayer.cpp` 的静态 `sampleSlotCache`
+**位置**：`NsfBackend.cpp` 的 `NsfSongInstance`（扫描用的 `probe`）与 `NsfTrackPlayer`（播放用的 `player`）
 
-**问题**：一个曲子级的事实（扫描结果）在 8–13 个互相不知道对方存在的实例之间，通过**文件级静态变量**传递。
+**更正**：本节最初写的是"十三个播放器"，那是错的。`ISongInstance::createPlayer()` 只创建一个 `NsfTrackPlayer`，它用 `renderTracks()` 一次渲染所有轨道。真实的实例数是**两个**：扫描一个、播放一个。
 
-这是上一轮为"打开即可播放"付出的代价，方向对；但它是设计债：三个 `NsfPlayer` 会同时启动扫描（已被 `scanSong` 开头的查重挡住），13 个 `start()` 会各自等一次全局锁。
+**问题**：`NsfTrackPlayer` 构造时调 `player.start()`，`start()` 去查文件级静态缓存 `sampleSlotCache` 换回扫描结果。扫描完成时，结果由扫描线程写进同一份缓存，播放侧的 `render()` 每 93 ms 再看一次。
 
-**规则依据**：第 3 条，领域逻辑不靠全局状态通信。
+也就是说：**同一首歌的两个对象之间，唯一的数据通道是一个按文件内容寻址的全局 map**。它现在能工作（`scanSong` 开头查重，且扫描只跑一次），但"这首歌扫出过什么"这件事没有主人——`NsfSongInstance` 自己就持有扫描线程，却把结果交给了一个全局表。
 
-**建议**：本轮不改。写进文档作为已知结构，等下一次动 NSF 后端时考虑把扫描结果提升到 `NsfSongInstance`，由构造参数注入给 track player。
+**规则依据**：第 3 条，谁拥有状态谁负责它。
 
-**代价**：改动大，且需要重新验证"缓存命中即跳过扫描"这条断言。
+**建议**：见第六节 6.4，本轮已改。
 
 ---
 
@@ -248,7 +248,7 @@ if (midiSequence == nullptr && song != nullptr)
 
 **一、JUCE 没有"统一的线程池"。** `juce::ThreadPool` 每个实例自己管理线程，实例之间不共享。项目里的 `loadPool` 是 `PlaybackEngine` 的成员（一个线程），`NsfSongInstance` 在层次上取不到它——中间隔着 `ISongInstance`。
 
-**二、按实例建池等于没建。** 一首曲子有 8–13 个 player，每个都 `ThreadPool(1)` 就是 13 个线程，和现在的 `std::thread` 没有区别，还多了一层 `ThreadPoolJob` 的生命周期。
+**二、按实例建池等于没建。** 每首歌有两个 player（扫描一个、播放一个），每个都 `ThreadPool(1)` 就是两个池、两条线程，和现在的 `std::thread` 没有区别，还多了一层 `ThreadPoolJob` 的生命周期要管。
 
 **三、真正的收益在别处。** 池能带来的两件事——多文件排队（不在音频线程旁边同时扫三首）、统一取消——需要一个**全局单例池**加上 `SongBackend` 的接口改造。那正是 P2-3（曲子级事实经全局静态变量跨实例传递）要一起动的东西，单独为它开一刀反而不划算。
 
@@ -282,3 +282,20 @@ if (sequence == nullptr) return;               // 刚到的流，这一块用不
 **四条 NSF 用例同时报 `the bend range is declared as RPN 0 before the first note` 才发现。**改成"先拾取、再读一次"后恢复。
 
 这和第七节 7.3 是同一类错误：**改成原子之后，"读一次就够"这个直觉不再成立**——两次读之间可以发生写入，而这段时间正好是别人交付结果的时刻。
+
+### 6.4 P2-3 的实施：`ScanHandle`
+
+新增 `ScanHandle`（`NsfPlayer.h`）：持有 `shared_ptr<const ScanResult>`，发布与读取都在锁内，读一次拿一份 `shared_ptr` 的拷贝。
+
+```
+NsfSongInstance
+  ├─ scanHandle ──┬── 扫描线程的 probe.setScanHandle()
+  │                └── createPlayer() 传给 NsfTrackPlayer → player.setScanHandle()
+  └─ 构造时先问缓存：命中就填 handle、置 scanFinished，不起线程
+```
+
+`NsfPlayer::start()` 与 `render()` 都改成从 handle 取，不再查文件级表。`adoptScan(bool waitForLock)` 那个"音频线程拿不到锁就跳过"的参数随之消失——handle 返回的是 `shared_ptr` 拷贝，调用方不需要持锁。
+
+**缓存仍然在**，但角色变了：只负责"再次打开同一个文件时不重扫"，不再承担"同一首歌两个 player 之间传递数据"。这两件事原本被同一张表承担，也是它们互相掩盖的原因。
+
+**一个必须同时处理的细节**：命中缓存时线程不启动，`scanFinished` 就没有人置位——`isAnalysing()` 会永远返回 true，`waitForAnalysis()` 会等满超时。构造里补上 `scanFinished.store (true)` 并把 `midiSequence` 从 handle 取一次。这条被 `engine.vrc6_song` 抓到，它是唯一一个在同一次运行里加载同一文件两次的用例。

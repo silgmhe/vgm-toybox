@@ -22,9 +22,13 @@ namespace
 class NsfTrackPlayer final : public playback::ITrackPlayer
 {
 public:
-	NsfTrackPlayer (const formats::nsf::NsfFile& file, double sampleRate, double seconds)
+	NsfTrackPlayer (const formats::nsf::NsfFile& file, double sampleRate, double seconds,
+					std::shared_ptr<ScanHandle> scan)
 		: player (file, sampleRate), length (seconds)
 	{
+		// Handed down from the song instance rather than looked up in a file-level table: this
+		// player's scan is this song's scan, and the backend that owns both is the one that knows.
+		player.setScanHandle (std::move (scan));
 		player.start ();
 	}
 
@@ -226,11 +230,23 @@ public:
 			default:
 				break;
 		}
-		// Started last, not first. A thread launched before the rest of this constructor ran would
-		// outlive a constructor that threw: the destructor does not run for an object that was
-		// never constructed, so nothing would ever set the cancel flag, and the scan would go on
-		// reading members of an object that had already been freed.
-		scanner = std::thread ([this] { runScan (); });
+		// A file walked in an earlier session needs no thread at all: the cache goes straight into
+		// this song's handle, and the player created below finds it already there. scanFinished
+		// has to be set here as well - nothing else will, and "no thread" would otherwise read as
+		// "still scanning" for everyone who asks.
+		if (NsfPlayer::adoptCachedScan (file, *scanHandle))
+		{
+			adoptFromHandle ();
+			scanFinished.store (true, std::memory_order_release);
+		}
+		else
+		{
+			// Started last, not first. A thread launched before the rest of this constructor ran
+			// would outlive a constructor that threw: the destructor does not run for an object
+			// that was never constructed, so nothing would ever set the cancel flag, and the scan
+			// would go on reading members of an object that had already been freed.
+			scanner = std::thread ([this] { runScan (); });
+		}
 	}
 
 	~NsfSongInstance () override
@@ -304,7 +320,7 @@ public:
 	std::unique_ptr<playback::ITrackPlayer> createPlayer (juce::String& errorMessage) override
 	{
 		errorMessage.clear ();
-		return std::make_unique<NsfTrackPlayer> (file, rate, length);
+		return std::make_unique<NsfTrackPlayer> (file, rate, length, scanHandle);
 	}
 
 	/** Runs the driver for a moment and, if it writes to a chip its header never mentioned, turns
@@ -362,6 +378,11 @@ private:
 	std::thread scanner;
 	std::atomic<bool> cancelScan { false };
 
+	/** This song's scan: written by the scanner thread, read by the player that renders audio and
+		by getMidiSequence(). Both players in a song hold the same handle, which is what replaced
+		the file-level table they used to meet in. */
+	std::shared_ptr<ScanHandle> scanHandle = std::make_shared<ScanHandle> ();
+
 	/** Guards midiSequence, which the scanner writes and getMidiSequence() reads. */
 	mutable std::mutex streamMutex;
 	std::shared_ptr<const playback::MidiSequence> midiSequence;
@@ -374,6 +395,17 @@ private:
 	*/
 	std::atomic<bool> scanFinished { false };
 
+	/** Takes the stream out of the handle. Both paths end here: the scan publishes into it, and a
+		cache hit fills it before the constructor is done. */
+	void adoptFromHandle (void)
+	{
+		if (auto scan = scanHandle->snapshot ())
+		{
+			std::lock_guard<std::mutex> guard (streamMutex);
+			midiSequence = scan->midiSequence;
+		}
+	}
+
 	void runScan (void)
 	{
 		// One publication, from null to non-null: the engine holds this raw pointer across blocks
@@ -381,16 +413,15 @@ private:
 		try
 		{
 			// A player of its own: scanning resets the CPU and runs it to the end of the song,
-			// which would wreck playback if it shared the emulation the mixer renders from.
+			// which would wreck playback if it shared the emulation the mixer renders from. It
+			// publishes into the song's handle, which is how the player rendering audio hears
+			// about it.
 			NsfPlayer probe (file, 44100.0);
+			probe.setScanHandle (scanHandle);
 			probe.setScanCancelFlag (&cancelScan);
 			probe.scanSong ();
 
-			if (auto finished = probe.shareMidiSequence (); finished != nullptr)
-			{
-				std::lock_guard<std::mutex> guard (streamMutex);
-				midiSequence = std::move (finished);
-			}
+			adoptFromHandle ();
 		}
 		catch (...)
 		{

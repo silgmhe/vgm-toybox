@@ -33,15 +33,6 @@ constexpr double kMinimumNoteSeconds = 1.0 / 60.0;
 	that, and the scan costs about half a second, so it is kept here rather than on whichever file
 	object the current backend happens to own.
 */
-/** What one pass over the song produces: the note each DPCM sample slot was given, and every
-	note the song plays. Both come out of the same walk, and both are facts about the file rather
-	than about a player - which is why they are cached together. */
-struct ScanResult
-{
-	std::unordered_map<int, int> sampleNotes;
-	std::shared_ptr<const playback::MidiSequence> midiSequence;
-};
-
 std::mutex sampleSlotMutex;
 std::unordered_map<std::size_t, ScanResult> sampleSlotCache;
 
@@ -148,58 +139,51 @@ void NsfPlayer::start (void)
 	// The whole-song pass does not happen here any more. It walks 180 seconds of music - 0.3 to
 	// 2.8 seconds of CPU depending on the expansion chip - and a file has to be playable before
 	// that finishes. The backend runs it on a thread of its own; this only picks up a result the
-	// cache already has, and notes that there is not one yet otherwise.
+	// song's handle already has, and says so when it does not.
 	if (! prescanDisabled)
 	{
-		// Assume the scan is outstanding until the cache says otherwise: a file opened for the
-		// first time has nothing to adopt, and the DPCM row has to say so from the first frame.
-		analysing.store (true, std::memory_order_relaxed);
-		adoptScan (true);
+		if (auto scan = scanHandle != nullptr ? scanHandle->snapshot () : nullptr)
+		{
+			applyScan (*scan);
+		}
+		else
+		{
+			// A player built outside a backend has no handle, and nothing to wait for.
+			analysing.store (scanHandle != nullptr, std::memory_order_relaxed);
+		}
 	}
 
 	resetToStart ();
 }
 
-bool NsfPlayer::adoptScan (bool waitForLock)
+void NsfPlayer::applyScan (const ScanResult& scan)
+{
+	sampleNotes = scan.sampleNotes;
+	midiSequence = scan.midiSequence;
+	analysing.store (false, std::memory_order_relaxed);
+}
+
+bool NsfPlayer::adoptCachedScan (const formats::nsf::NsfFile& file, ScanHandle& handle)
 {
 	const std::size_t key = file.contentHash ^ (std::size_t) file.startSong;
 
-	// Reached from render() too, on the audio thread: waiting there for the scanning thread to
-	// finish publishing would drop a block, and the only cost of losing the race is that the
-	// label stays on for another ninety milliseconds.
-	std::unique_lock<std::mutex> guard (sampleSlotMutex, std::defer_lock);
-
-	if (waitForLock)
-	{
-		guard.lock ();
-	}
-	else if (! guard.try_lock ())
-	{
-		return false;
-	}
-
+	std::lock_guard<std::mutex> guard (sampleSlotMutex);
 	const auto found = sampleSlotCache.find (key);
 
 	if (found == sampleSlotCache.end ())
 	{
-		// Nothing to adopt yet. The DPCM row shows "analysing" until this turns false, and every
-		// other row is unaffected: its note comes from a register, not from the scan.
-		analysing.store (true, std::memory_order_relaxed);
 		return false;
 	}
 
-	sampleNotes = found->second.sampleNotes;
-	midiSequence = found->second.midiSequence;
-	analysing.store (false, std::memory_order_relaxed);
+	handle.publish (std::make_shared<const ScanResult> (found->second));
 	return true;
 }
 
 void NsfPlayer::scanSong (void)
 {
-	// Another player may have walked this file already. The scan is a fact about the song, so a
-	// second one is spent time for the same answer - and with one backend per track plus the one
-	// that owns the scan, there are a lot of second ones.
-	if (adoptScan (true))
+	// Another backend may have walked this file already. Reopening a file is common, and the
+	// answer does not depend on who asks, so a second walk is spent time for the same result.
+	if (scanHandle != nullptr && adoptCachedScan (file, *scanHandle))
 	{
 		return;
 	}
@@ -362,9 +346,16 @@ void NsfPlayer::scanSampleChannels (double seconds)
 
 	midiSequence = std::move (sequence);
 
-	// Publish before anything else can ask: the players that are already running look for this
-	// entry on their own clock, and a scan that never published would leave them saying
-	// "analysing" for as long as the song was open.
+	// Published twice, to two different audiences. The handle is how this song's other player
+	// hears about it - it asked on its own clock and will not ask again; the cache is how the
+	// next session avoids walking the same file a second time.
+	auto result = std::make_shared<const ScanResult> (ScanResult { sampleNotes, midiSequence });
+
+	if (scanHandle != nullptr)
+	{
+		scanHandle->publish (result);
+	}
+
 	const std::size_t key = file.contentHash ^ (std::size_t) file.startSong;
 
 	std::lock_guard<std::mutex> guard (sampleSlotMutex);
@@ -378,7 +369,7 @@ void NsfPlayer::scanSampleChannels (double seconds)
 	}
 
 	sampleSlotOrder.push_back (key);
-	sampleSlotCache[key] = ScanResult { sampleNotes, midiSequence };
+	sampleSlotCache[key] = *result;
 }
 
 std::shared_ptr<const playback::MidiSequence> NsfPlayer::shareMidiSequence (void) const
@@ -530,7 +521,10 @@ int NsfPlayer::render (float* left, float* right, int frames)
 	if (analysing.load (std::memory_order_relaxed) && ! scanning.load (std::memory_order_relaxed)
 		&& (rendered % 4096u) < (std::uint64_t) frames)
 	{
-		adoptScan (false);
+		if (auto scan = scanHandle != nullptr ? scanHandle->snapshot () : nullptr)
+		{
+			applyScan (*scan);
+		}
 	}
 
 
