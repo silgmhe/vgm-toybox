@@ -196,7 +196,8 @@ Roadmap for the DAW multi-out feature: each chip can already be muted/disabled f
 ### Conventions
 
 - Style is C++98-era by design (the codebase still contains MSVC6 compatibility paths): use `std::string`/`std::vector`/`std::map`, the `UINT8/UINT16/UINT32/INT32` typedefs from `stdtype.h`, tabs for indentation, and keep new libvgm code C++98/C90-clean (`REALLY_NEED_CXX14` exists as an opt-in). Avoid C++11+ features in libvgm; the root app is also written without them in active code.
-- Error convention is `UINT8`/`UINT32` return codes where the high bit (`& 0x80`) means failure and `0x00`/`AERR_OK` means success; libvgm uses `0xF0`-style codes. Log output goes through `PlayerLogCallback` (`playctrl.cpp`) honoring `General.LogLevelFile`/`LogLevelEmu`.
+- Error convention is `uint8_t`/`uint32_t` return codes where the high bit (`& 0x80`) means failure and `0x00`/`AERR_OK` means success
+- Integers are `<cstdint>` types throughout (`uint32_t`, `int16_t`, ...). The tree used to carry three sets of aliases — `UINT32` in `libs/libvgm/stdtype.h`, the same name inside `namespace xgm` in `libs/nsfplay/xgm/xtypes.h`, and `Uint32` in one chip core — and a bare `UINT32` resolved on Windows through `windows.h` while failing everywhere else. They are gone: do not reintroduce one. The bundled SDK headers under `libs/libvgm/libs/` keep theirs, because those belong to the SDK.; libvgm uses `0xF0`-style codes. Log output goes through `PlayerLogCallback` (`playctrl.cpp`) honoring `General.LogLevelFile`/`LogLevelEmu`.
 - Code that must run on old MSVC uses `stricmp`/`strnicmp`/`snprintf` shims defined at the top of the affected `.cpp` files — follow the existing `#ifdef _MSC_VER` pattern rather than introducing new portability helpers.
 
 ## Reference projects (`reference/`)

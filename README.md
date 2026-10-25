@@ -284,13 +284,17 @@ table is an overview, not a replacement for the licence text in each source tree
 |---|---|---|
 | [libvgm](https://github.com/ValleyBell/libvgm) | VGM/VGZ/S98/DRO/GYM decoding, chip emulation and playback | Per-file: BSD-3-Clause, GPL-2.0 / GPL-2.0-or-later, LGPL-2.1-or-later, MIT; see the file headers |
 | [JUCE](https://github.com/juce-framework/JUCE) 8.0.9 | VST3/AU/AAX and standalone framework, UI and host integration | AGPLv3 or commercial; this project uses the AGPLv3 option |
-| [inih](https://github.com/benhoyt/inih) | INI parser for configuration | BSD-3-Clause |
-| [wingetopt](https://github.com/alex85k/wingetopt) | getopt for the MSVC command-line build | ISC, with a BSD-3-Clause part |
+| [nsfplay](https://bbbradsmith.github.io/nsfplay/) | NSF decoding: the 6502, the APU and DPCM, and the expansion chips | "You may reuse this code without restriction" (see `libs/nsfplay/README-nsfplay.txt`) |
+| [inih](https://github.com/benhoyt/inih) | INI parser for configuration — **no longer built** | BSD-3-Clause |
+| [wingetopt](https://github.com/alex85k/wingetopt) | getopt for the MSVC command-line build — **no longer built** | ISC, with a BSD-3-Clause part |
 | [zlib](https://zlib.net/) 1.3.1 | DEFLATE for `.vgz` | zlib |
 | [CPM.cmake](https://github.com/cpm-cmake/CPM.cmake) | build-only dependency manager; not shipped | MIT |
 
-libvgm, inih and wingetopt are vendored under `libs/`; JUCE and zlib are fetched by CPM at configure
-time. The pinned JUCE version is `JUCE_TAG` in `plugin/CMakeLists.txt`.
+libvgm and nsfplay are vendored under `libs/` and built by the root `CMakeLists.txt`; JUCE and zlib
+are fetched by CPM at configure time. The pinned JUCE version is `JUCE_TAG` in
+`plugin/CMakeLists.txt`. inih and wingetopt are still on disk because their upstream revisions and
+licences live with them, but nothing builds them any more — they served the command-line player,
+which is gone.
 
 ## Subscribe
 

@@ -472,7 +472,7 @@ void ToyboxAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer,
 ### 7.2 linked SSG：第一版不做
 
 - libvgm 把 OPN 的 SSG 作为 **linked AY8910**（`opnintf.c:48-52`）；
-- `LibvgmSongInstance` 的 `isTrackDevice()` 只保留 `parentIdx == (UINT32)-1` 的设备（`LibvgmSongInstance.cpp:31-36`），所以 YM2610/YM2608/YM2203 的 SSG **没有自己的 mixer track**；
+- `LibvgmSongInstance` 的 `isTrackDevice()` 只保留 `parentIdx == (uint32_t)-1` 的设备（`LibvgmSongInstance.cpp:31-36`），所以 YM2610/YM2608/YM2203 的 SSG **没有自己的 mixer track**；
 - 当前 YM2610 的 13 个 track 是 6 FM + 6 ADPCM-A + 1 ADPCM-B，SSG 不在其中；
 - **第一版接受这个缺口**：不给 linked SSG 做独立 MIDI 通道，也不在 UI 上伪造轨道；
 - 后续可选方案（MIDI-only lane、真正可隔离 track）见 **附录 A**，作为备忘。
@@ -857,7 +857,7 @@ void render (const playback::OutputBusBuffers* buses, int numBuses, int numSampl
 | 2026-10-22 | **M5 的三颗无音高芯片按设计不支持**（用户决定）：PWM、OKIM6258、uPD7759 不输出 MIDI。前两者是流式 DAC——VGM 记录的“寄存器写”就是音频本身，不存在音符事件；uPD7759 虽有 start 边沿与样本号，但整颗芯片没有音高，一个 C4 只会把语音当乐器。代码在 `LibvgmSongInstance` 里显式列出三者并返回 `unavailable`，使其在 `[13]` 中计为“已知缺口”而不是“有声却无声部”；覆盖维持 35 / 54 |
 | 2026-10-22 | **C219 不写解码器，复用 C140**：`0xD4` 在 libvgm 里同时服务 C140 与 C219（chip type 同为 `0x1C`，`vgmplayer.cpp:1177`），而 219 的歌曲里**没有 C140 设备**——只找 `DEVID_C140` 会让每次写入落到空指针，音频照响、MIDI 全空。`MidiSequenceBuilder` 的 `case 0xD4` 因此先取 C140、再回退 C219；能力表把 `DEVID_C219` 记为 `fmChannel (16)`。这个三元表达式是 C219 能出音符的唯一原因，不要当成冗余清理掉 |
 
-背景：libvgm 把 OPN 的 SSG 作为 linked AY8910（`opnintf.c:48-52`）；`LibvgmSongInstance::isTrackDevice()` 只保留 `parentIdx == (UINT32)-1` 的设备（`LibvgmSongInstance.cpp:31-36`），所以 YM2610/YM2608/YM2203 的 3 个 SSG 当前没有独立 mixer track。
+背景：libvgm 把 OPN 的 SSG 作为 linked AY8910（`opnintf.c:48-52`）；`LibvgmSongInstance::isTrackDevice()` 只保留 `parentIdx == (uint32_t)-1` 的设备（`LibvgmSongInstance.cpp:31-36`），所以 YM2610/YM2608/YM2203 的 3 个 SSG 当前没有独立 mixer track。
 
 后续如果要做，有三条路：
 

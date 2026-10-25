@@ -95,7 +95,7 @@
 ```cpp
 struct MixerTrack
 {
-    UINT32 deviceID;            // libvgm 设备 ID
+    uint32_t deviceID;            // libvgm 设备 ID
     int    channelIndex;        // 通道序号（掩码位由核映射决定）
     juce::String name;          // 通道名（libvgm channelNames，缺失时 "Ch n"）
     juce::String groupName;     // 芯片分组名（设备名 + 实例号）

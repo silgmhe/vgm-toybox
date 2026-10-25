@@ -208,12 +208,13 @@ VGMToybox 建立在以下上游项目之上。它们各自的许可证适用于�
 |---|---|---|
 | [libvgm](https://github.com/ValleyBell/libvgm) | VGM/VGZ/S98/DRO/GYM 解码、芯片仿真与播放 | 按文件：BSD-3-Clause、GPL-2.0 / GPL-2.0-or-later、LGPL-2.1-or-later、MIT；见各文件头 |
 | [JUCE](https://github.com/juce-framework/JUCE) 8.0.9 | VST3/AU/AAX 与独立程序框架、UI 和宿主集成 | AGPLv3 或商业；本项目使用 AGPLv3 |
-| [inih](https://github.com/benhoyt/inih) | 配置文件 INI 解析 | BSD-3-Clause |
-| [wingetopt](https://github.com/alex85k/wingetopt) | MSVC 命令行构建使用的 getopt | ISC，含 BSD-3-Clause 部分 |
+| [nsfplay](https://bbbradsmith.github.io/nsfplay/) | NSF 解码：6502、APU 与 DPCM，以及扩展芯片 | "You may reuse this code without restriction"（见 `libs/nsfplay/README-nsfplay.txt`） |
+| [inih](https://github.com/benhoyt/inih) | 配置文件 INI 解析 —— **已不参与构建** | BSD-3-Clause |
+| [wingetopt](https://github.com/alex85k/wingetopt) | MSVC 命令行构建使用的 getopt —— **已不参与构建** | ISC，含 BSD-3-Clause 部分 |
 | [zlib](https://zlib.net/) 1.3.1 | `.vgz` 使用的 DEFLATE | zlib |
 | [CPM.cmake](https://github.com/cpm-cmake/CPM.cmake) | 仅构建期依赖管理，不随二进制分发 | MIT |
 
-libvgm、inih 和 wingetopt 以源码形式放在 `libs/` 下；JUCE 与 zlib 由 CPM 在配置阶段拉取。JUCE 的固定版本是 `plugin/CMakeLists.txt` 中的 `JUCE_TAG`。
+libvgm 与 nsfplay 以源码形式放在 `libs/` 下，由根 `CMakeLists.txt` 构建；JUCE 与 zlib 由 CPM 在配置阶段拉取。JUCE 的固定版本是 `plugin/CMakeLists.txt` 中的 `JUCE_TAG`。inih 与 wingetopt 仍留在磁盘上，因为它们的上游版本与许可证随目录保存，但已经没有任何东西构建它们——它们服务于已被移除的命令行播放器。
 
 ## 关于作者
 

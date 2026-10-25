@@ -57,7 +57,9 @@ UI / `PluginProcessor` **不直接** include libvgm，但通过 `vgm/MixerEngine
 2. **隔离机制**：`PLR_MUTE_OPTS`（`disable` 挂起省 CPU + `chnMute[2]` 位序）同时承担"通道隔离 / 芯片静音 / 省电"三件事，且只能探测核心是否支持 `SetMuteMask`。
 3. **时间模型**：`PlayerA::Config{loopCount, fadeSmpls, endSilenceSmpls, pbSpeed, masterVol}`、`PLAYTIME_LOOP_INCL|PLAYTIME_TIME_PBK`（负值=无限）、`GetLoopTime()` 其实是**循环长度**、VGM 专属 `GetModifiedLoopCount`、`PLAYPOS_SAMPLE` seek。
 4. **枚举模型**：`PLR_DEV_INFO` + `DEV_DECL` + `DEV_DEF` + `SndEmu_GetDevName` + `DEVID_*` 特例（如 T6W28 后半的处理）。
-5. **类型泄漏**：`ChipEntry::devID`（`UINT32`）、`TrackLayoutEntry::deviceID`、`ui/MixerPanel.cpp` 的 `UINT32`、公共头里的 `stdtype.h`。
+5. **类型泄漏**：`ChipEntry::devID`（`UINT32`）、`TrackLayoutEntry::deviceID`、`ui/MixerPanel.cpp` 的 `UINT32`、公共头里的 `stdtype.h`
+
+   > **2026-10-25 更新**：本条已部分达成。`stdtype.h` 不再定义任何类型（只剩 `#include <stdint.h>`），`libs/nsfplay/xgm/xtypes.h` 与 `emu/cores/nes_defs.h` 同理；全树的 `UINT32` 与 `Uint32` 共约 9300 处已改为 `<cstdint>` 的标准名字。未完成的是 `DeviceId`/`TrackId` 这两个自有不透明类型。。
 
 ### 2.3 可复用的好基础（决定重构风险高低）
 
@@ -308,6 +310,8 @@ Source/
 **决策**：`DeviceId`/`TrackId` 为自有不透明类型；边界只用 `float/double/int/juce::String/std::vector`。
 **备选**：沿用 `UINT32`（现状）——已被 UI 直接引用，是正在扩大的技术债。
 **后果**：需要一次机械改造（`ChipEntry::devID`、`TrackLayoutEntry::deviceID`、`ui/MixerPanel.cpp`），收益是 UI 与 libvgm 彻底无关。
+
+**状态（2026-10-25）**：一半已做。类型名统一到 `<cstdint>`，`stdtype.h` 降为一次 include —— 公共头不再带 libvgm 的类型定义。`DeviceId`/`TrackId` 这两个不透明类型仍未引入，所以 `devID` 仍然是一个 `uint32_t`，只是不再叫 `UINT32`。
 
 ### ADR-006：端口上的实时契约用"测试 + 守卫"保证，而非评论
 **决策**：`render()` 无锁/无分配/无日志写入接口注释，并由"FakeBackend 全链路测试 + 现有 −1000 dB 逐样本回归"守护。
