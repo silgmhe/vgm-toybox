@@ -517,7 +517,9 @@ namespace
 		{
 			const PLR_DEV_INFO* device = deviceFor (type, instance);
 
-			if (port == 0 && reg < 0x10)
+			constexpr std::uint8_t kLastSsgRegister = 0x0F;	// 0x00..0x0F are the AY's file
+
+			if (port == 0 && reg <= kLastSsgRegister)
 			{
 				ssgWrites.queue (device, reg, static_cast<std::uint8_t> (value), time, 0);
 				return;
@@ -530,7 +532,7 @@ namespace
 			past the FM channels because that is where its tracks are. */
 		void flushSsg (const midi::SongIr& ir, std::uint32_t totalSamples)
 		{
-			flushDecoded (ssgWrites, ir, totalSamples, LinkedDevice::opnSsg);
+			flushDecoded (ssgWrites, ir, totalSamples, DecoderScope::opnSsg);
 		}
 
 		void flushNes (std::uint32_t totalSamples)
@@ -692,9 +694,10 @@ namespace
 			decoders.decoder<chips::OplDecoder> ().devices.clear();
 		}
 
-		/** Whether a decoder's device is a chip of its own or the voice set linked behind one: the
-			latter runs at a fraction of the parent's clock and numbers its channels after it. */
-		enum class LinkedDevice { none, opnSsg };
+		/** What a decoder is reading: a chip that stands alone, or the voice set linked behind one.
+			The latter runs at a fraction of the parent's clock and numbers its channels after it.
+			(Not to be confused with LinkedDeviceKind, which is how a linked device is muted.) */
+		enum class DecoderScope { standalone, opnSsg };
 		/** Runs one decoder over its whole write stream and hands the notes to the stream.
 
 			Everything chip-specific comes from the decoder: `kRequirements` says which clock to assume
@@ -703,7 +706,7 @@ namespace
 			the layer that is meant to know nothing about chips. */
 		template <typename Decoder>
 		void flushDecoded (ChipBuffer<Decoder>& buffer, const midi::SongIr& ir,
-						   std::uint32_t totalSamples, LinkedDevice linked = LinkedDevice::none)
+						   std::uint32_t totalSamples, DecoderScope scope = DecoderScope::standalone)
 		{
 			constexpr auto requirements = Decoder::kRequirements;
 
@@ -747,7 +750,7 @@ namespace
 
 				// The SSG inside an OPN chip is clocked from the master: the YM2608 and YM2610 hand
 				// it half, the YM2203 the whole thing (libvgm's init_ssg_devinfo clock divisors).
-				if (linked == LinkedDevice::opnSsg && device->second->type != DEVID_YM2203)
+				if (scope == DecoderScope::opnSsg && device->second->type != DEVID_YM2203)
 				{
 					clock /= 2;
 				}
@@ -759,7 +762,7 @@ namespace
 					decoder.attachMemory (memory);
 				}
 
-				const int channelOffset = (linked == LinkedDevice::opnSsg
+				const int channelOffset = (scope == DecoderScope::opnSsg
 											  && device->second->devDecl != nullptr
 											  && device->second->devDecl->channelCount != nullptr)
 											 ? (int) device->second->devDecl->channelCount (device->second->devCfg)

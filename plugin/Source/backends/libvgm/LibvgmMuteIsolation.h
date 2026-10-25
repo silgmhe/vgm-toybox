@@ -40,6 +40,26 @@ inline LinkedDeviceKind linkedDeviceKindFor (DEV_ID type)
 	}
 }
 
+/** The bits of PLR_MUTE_OPTS::disable: what a mute suspends, in a chain of one main device and the
+	devices linked behind it. Naming them keeps the three call sites - the chips card, a parent
+	track's isolation and a linked track's - from each writing a bare 0x01 or 0x02 with a comment. */
+inline constexpr UINT8 kSuspendMainDevice = 0x01;
+inline constexpr UINT8 kSuspendLinkedDevices = 0x02;
+inline constexpr UINT8 kSuspendWholeChain = 0xFF;
+
+/** How many channels a linked SSG has. One number for the layout, the isolation and the MIDI
+	capability, which otherwise each carry their own copy of "three". */
+inline constexpr int kSsgChannels = 3;
+
+/** The channels a device declares - its index space, and the offset at which the devices linked
+	behind it start. A decl that says nothing contributes none. */
+inline int channelCountOf (const PLR_DEV_INFO& info)
+{
+	return (info.devDecl != nullptr && info.devDecl->channelCount != nullptr)
+			   ? (int) info.devDecl->channelCount (info.devCfg)
+			   : 0;
+}
+
 /** Channel number -> position of its mute bit inside PLR_MUTE_OPTS::chnMute[2] (32 bits each). */
 inline int channelMuteHalf (int channelIndex) { return channelIndex / 32; }
 inline UINT32 channelMuteBit (int channelIndex) { return 1u << (channelIndex % 32); }
@@ -49,7 +69,7 @@ inline UINT32 channelMuteBit (int channelIndex) { return 1u << (channelIndex % 3
 inline PLR_MUTE_OPTS suspendedMuteOptions (void)
 {
 	PLR_MUTE_OPTS opts = {};
-	opts.disable = 0xFF;
+	opts.disable = kSuspendWholeChain;
 	opts.chnMute[0] = 0xFFFFFFFF;
 	opts.chnMute[1] = 0xFFFFFFFF;
 	return opts;
@@ -106,7 +126,9 @@ inline PLR_MUTE_OPTS singleChannelMuteOptions (int channelIndex, bool isolatable
 inline PLR_MUTE_OPTS chipMuteOptions (bool muted, bool isolatedPlayer)
 {
 	PLR_MUTE_OPTS opts = wholeDeviceMuteOptions();
-	opts.disable = muted ? (isolatedPlayer ? 0x01 : 0x03) : 0x00;
+	opts.disable = muted ? (isolatedPlayer ? kSuspendMainDevice
+										   : (kSuspendMainDevice | kSuspendLinkedDevices))
+						 : 0x00;
 	return opts;
 }
 

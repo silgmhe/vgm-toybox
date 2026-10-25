@@ -323,14 +323,15 @@ void LibvgmTrackPlayer::applyIsolation (void)
 		// A track can live on a device linked behind this one - the SSG's three channels are
 		// numbered after the parent's - and then the second half of the mask is the one that
 		// counts, against the linked device's own numbering.
-		const int parentChannels = (info.devDecl != nullptr && info.devDecl->channelCount != nullptr)
-									   ? (int) info.devDecl->channelCount (info.devCfg) : 0;
+		const int parentChannels = channelCountOf (info);
 
 		if (parentChannels > 0 && myTrackInfo->channelIndex >= parentChannels)
 		{
+			// The parent device contributes nothing to this track, so it is suspended rather than
+			// muted channel by channel - and the mask below is read against the linked device's own
+			// numbering, starting at zero.
 			PLR_MUTE_OPTS linked = {};
-			linked.disable = 0x01;			// the parent device contributes nothing to this track
-			linked.chnMute[0] = 0xFFFFFFFF;	// (unused while the parent is suspended)
+			linked.disable = kSuspendMainDevice;
 
 			const int localChannel = myTrackInfo->channelIndex - parentChannels;
 			linked.chnMute[1] = myTrackInfo->isolatable
@@ -358,7 +359,7 @@ void LibvgmTrackPlayer::applyIsolation (void)
 		// where the chip's audio is, and suspending it silences the whole chip.
 		if (linkedKindOf (deviceIndex) == LinkedDeviceKind::extraVoices)
 		{
-			isolate.disable |= 0x02;	// 0x02: the linked devices of this chain
+			isolate.disable |= kSuspendLinkedDevices;
 		}
 
 		applyMuteGroup (deviceIndex, isolate);

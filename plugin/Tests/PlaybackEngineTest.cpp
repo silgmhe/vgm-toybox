@@ -18,7 +18,9 @@
 	  Build: cmake --build <build dir> --target vgm_mixer_test
 	  */
 
-	  #include "playback/ChipState.h"
+	  // the linked-device policy: the isolation and the MIDI capability both read it
+#include "backends/libvgm/LibvgmMuteIsolation.h"
+#include "playback/ChipState.h"
 #include <algorithm>
 	  #include <cmath>
 	  #include <cstdint>
@@ -675,6 +677,8 @@ int main (int argc, char* argv[])
 		int ssgTracks = 0;
 		double loudestFm = 0.0;
 		double loudestSsg = 0.0;
+		toybox::playback::MidiCapability firstSsgCapability
+			= toybox::playback::MidiCapability::unavailable;
 
 		for (size_t i = 0; i < tracks.size(); ++i)
 		{
@@ -689,6 +693,11 @@ int main (int argc, char* argv[])
 
 			if (tracks[i].name.startsWith ("SSG"))
 			{
+				if (ssgTracks == 0)
+				{
+					firstSsgCapability = tracks[i].midiCapability;
+				}
+
 				++ssgTracks;
 				loudestSsg = juce::jmax (loudestSsg, solo.rms);
 			}
@@ -708,11 +717,18 @@ int main (int argc, char* argv[])
 
 		check (ssgTracks == 3, "the YM2608's linked SSG has three tracks of its own");
 
+		// The policy the isolation hinges on: what is linked behind a chip decides whether one mask
+		// can serve both halves. An SSG is a voice set of its own; an OPL3 behind an OPL4 is a mirror.
+		check (toybox::backends::libvgm::linkedDeviceKindFor (DEVID_AY8910)
+				   == toybox::backends::libvgm::LinkedDeviceKind::extraVoices,
+			   "an SSG is a set of extra voices");
+		check (toybox::backends::libvgm::linkedDeviceKindFor (DEVID_YMF262)
+				   == toybox::backends::libvgm::LinkedDeviceKind::mirror,
+			   "an OPL3 behind an OPL4 is a mirror");
+
 		// A track whose capability says "unavailable" shows no MIDI mark in the mixer and cannot be
 		// routed, however many notes its decoder produces.
-		const auto ssgCapability = tracks.size() > 13 ? tracks[13].midiCapability
-													  : toybox::playback::MidiCapability::unavailable;
-		check (ssgCapability == toybox::playback::MidiCapability::melodic,
+		check (firstSsgCapability == toybox::playback::MidiCapability::melodic,
 			   "the SSG tracks are offered as melodic MIDI");
 		check (loudestSsg > 0.01, "the SSG tracks carry the sound the file makes");
 		check (loudestFm < 0.001, "no FM track carries the SSG");
