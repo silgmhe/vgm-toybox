@@ -6,12 +6,19 @@
 # What is built is the subset a player needs: the 6502, the memory map, the APU and DPCM, the
 # expansion chips, and the two Yamaha-derived emulators those depend on. The loop detector, the CPU
 # logger and the module model are left out: they are tools of the original application, not of
-# playback. vgm_nsf_* targets supply the two logger symbols NES_CPU references.
+# playback. CPULoggerStub.cpp supplies the two logger symbols NES_CPU references, and does it
+# from inside this library on purpose: as a separate object in the plugin it was only found when
+# the linker happened to walk the archives in the right order. GNU ld walks left to right and had
+# already passed the stub when nsfplay_core asked for it, so Linux failed to link while MSVC -
+# which rescans - was happy. A library that references a symbol should also define it.
 #
 # Vendored sources are compiled with warnings off. They predate this project's warning settings and
 # bringing them up to it is not the job here; anything of ours that uses them is compiled normally.
 
 add_library(nsfplay_core STATIC
+	# Ours, not upstream's: the two logger members NES_CPU calls. It lives in this library so the
+	# symbols travel with the code that needs them - see the note at the top of this file.
+	${CMAKE_CURRENT_SOURCE_DIR}/CPULoggerStub.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/vcm/group.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/vcm/value.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/xgm/devices/Audio/rconv.cpp

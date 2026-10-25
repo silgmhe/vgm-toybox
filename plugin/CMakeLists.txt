@@ -231,7 +231,6 @@ target_sources(VGMToybox PRIVATE
 	Source/backends/nsf/NsfBackend.cpp
 	Source/backends/nsf/NsfPlayer.cpp
 	Source/backends/nsf/NsfBus.cpp
-	Source/backends/nsf/NsfCpuLoggerStub.cpp
 	Source/formats/nsf/NsfFile.cpp
 	Source/i18n/LanguageManager.cpp
 	Source/i18n/LanguagePack.cpp
@@ -398,7 +397,6 @@ add_executable(vgm_mixer_test EXCLUDE_FROM_ALL
 	Source/backends/nsf/NsfBackend.cpp
 	Source/backends/nsf/NsfPlayer.cpp
 	Source/backends/nsf/NsfBus.cpp
-	Source/backends/nsf/NsfCpuLoggerStub.cpp
 	Source/formats/nsf/NsfFile.cpp
 	Source/backends/libvgm/LibvgmBackend.cpp
 	Source/backends/libvgm/MidiSequenceBuilder.cpp
@@ -420,7 +418,6 @@ add_executable(vgm_nsf_probe EXCLUDE_FROM_ALL
 	Source/formats/nsf/NsfFile.cpp
 	Source/backends/nsf/NsfBus.cpp
 	Source/backends/nsf/NsfPlayer.cpp
-	Source/backends/nsf/NsfCpuLoggerStub.cpp
 	Source/playback/WaveExport.cpp
 )
 target_link_libraries(vgm_nsf_probe PRIVATE nsfplay_core)
@@ -431,7 +428,6 @@ add_executable(vgm_nsf_test EXCLUDE_FROM_ALL
 	Tests/NsfFormatTest.cpp
 	Source/formats/nsf/NsfFile.cpp
 	Source/backends/nsf/NsfBus.cpp
-	Source/backends/nsf/NsfCpuLoggerStub.cpp
 )
 target_link_libraries(vgm_nsf_test PRIVATE nsfplay_core juce::juce_core juce::juce_recommended_config_flags)
 target_include_directories(vgm_nsf_test PRIVATE Source)
