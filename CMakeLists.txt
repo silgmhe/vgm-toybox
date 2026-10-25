@@ -19,7 +19,7 @@ endif()
 # (docs/desgin/maintenance-policy.md section 6). Everything downstream reads it from here: JUCE
 # turns it into JucePlugin_VersionString (Help > About), the VST3 module info and the Windows file
 # version, and the release workflow refuses a tag that does not match it.
-project(vgmtoybox VERSION 0.6.0 LANGUAGES C CXX)
+project(vgmtoybox VERSION 0.6.1 LANGUAGES C CXX)
 
 # CTest is the runner for the console tests (plugin/Tests); their add_test() calls sit next to the
 # targets in plugin/CMakeLists.txt. It does not mean the tests are built: they are EXCLUDE_FROM_ALL,
