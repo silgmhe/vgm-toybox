@@ -2343,19 +2343,28 @@ int main (int argc, char* argv[])
 				const bool volumeOk = channel.volume >= 0.0f && channel.volume <= 1.0f;
 				const bool freqOk = channel.frequency >= 0.0f;
 
+				// A pulse is high for a fraction of its cycle and low for the rest. The widest any
+				// chip here offers is the 2A03's and MMC5's 3/4 - the VRC6 stops at 8/16, its eight
+				// settings being sixteenths. Dividing a setting by the number of settings made the
+				// widest one a solid bar, which is how a 50 % pulse came to be drawn at ninety-odd
+				// per cent; nothing legitimate gets near that.
+				const bool dutyOk = channel.waveKind != 2	// the pulse shape
+								 || (channel.duty > 0.0f && channel.duty <= 0.76f);
+
 				bool waveOk = true;
 				for (float sample : channel.wave)
 				{
 					waveOk = waveOk && sample >= -1.0f && sample <= 1.0f;
 				}
 
-				if (! (noteOk && volumeOk && freqOk && waveOk))
+				if (! (noteOk && volumeOk && freqOk && waveOk && dutyOk))
 				{
-					std::printf ("      out of range: %s note=%d vol=%.3f freq=%.1f\n",
-								 channel.name.c_str (), channel.note, channel.volume, channel.frequency);
+					std::printf ("      out of range: %s note=%d vol=%.3f freq=%.1f duty=%.3f\n",
+								 channel.name.c_str (), channel.note, channel.volume, channel.frequency,
+								 channel.duty);
 				}
 
-				rangesHeld = rangesHeld && noteOk && volumeOk && freqOk && waveOk;
+				rangesHeld = rangesHeld && noteOk && volumeOk && freqOk && waveOk && dutyOk;
 			}
 
 			std::printf ("      %d channels over %d chip(s)\n",
@@ -2410,6 +2419,37 @@ int main (int argc, char* argv[])
 		else
 		{
 			std::printf ("      (this file has no offset to remove)\n");
+		}
+	}
+
+	std::printf ("[8.1] a chip-state snapshot does not outlive the song that produced it\n");
+	{
+		// The failure this guards: switching from an NSF to a format with no chip state left the
+		// keyboard drawing the previous song's rows. captureChipState() answers whether the
+		// snapshot is valid, and it still was - the snapshot itself had never been cleared on the
+		// way out. Unloading is the same transition as switching songs, and needs no second file.
+		engine.setStateCaptureWanted (true);
+		engine.setPositionSeconds (0.0);
+		engine.play ();
+		renderSeconds (engine, 0.3, sampleRate, blockSize);
+
+		toybox::playback::ChipStateSnapshot before;
+		const bool hadState = engine.captureChipState (before);
+
+		engine.setStateCaptureWanted (false);
+		engine.unloadFile ();
+
+		toybox::playback::ChipStateSnapshot after;
+		const bool stillHasState = engine.captureChipState (after);
+
+		if (hadState)
+		{
+			check (! stillHasState && ! after.valid,
+				   "a closed song leaves no chip state behind");
+		}
+		else
+		{
+			std::printf ("      this backend reports no per-channel state, nothing to clear\n");
 		}
 	}
 

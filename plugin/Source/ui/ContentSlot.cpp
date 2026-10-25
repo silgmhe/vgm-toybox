@@ -1281,21 +1281,29 @@ void ContentSlot::timerCallback (void)
 
 	engine.setStateCaptureWanted (true);
 
-	if (engine.captureChipState (snapshot))
+	// Three outcomes, and the panel needs two of them. A capture that arrives is drawn; a frame
+	// that lost the lock leaves the last one alone, because a dropped frame is not a change of
+	// song; and a song with no chip state at all arrives as a snapshot whose valid flag is off -
+	// which has to be handed on, or the keyboard keeps painting the song before it.
+	const bool captured = engine.captureChipState (snapshot);
+
+	if (! captured && snapshot.valid)
 	{
-		keyboardPanel->setSnapshot (snapshot);
+		return;
+	}
 
-		const int rows = (int) snapshot.channels.size ();
+	keyboardPanel->setSnapshot (snapshot);
 
-		if (rows != lastChannelCount)
-		{
-			lastChannelCount = rows;
-			keyboardPanel->resized ();
-		}
+	const int rows = (int) snapshot.channels.size ();
 
-		if (isShowing ())
-		{
-			keyboardPanel->repaint ();
-		}
+	if (rows != lastChannelCount)
+	{
+		lastChannelCount = rows;
+		keyboardPanel->resized ();
+	}
+
+	if (isShowing ())
+	{
+		keyboardPanel->repaint ();
 	}
 }

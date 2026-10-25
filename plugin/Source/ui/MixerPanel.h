@@ -1,5 +1,6 @@
 #pragma once
 
+#include <array>
 #include <utility>
 #include <vector>
 
@@ -116,6 +117,17 @@ private:
 	// or send all of them back to the master bus
 	IconButton spreadOutputsButton { "spread-outputs", "Spread outputs", IconButton::Icon::spreadOutputs };
 	IconButton mergeToMasterButton { "send-to-master", "Send to master", IconButton::Icon::mergeToMaster };
+
+	/** Every toggle in the header, in one place.
+
+		The card paints their glow, not the buttons - it has to reach outside their bounds - so the
+		header used to keep a second list written out inside paintCardContent(). The DC blocker was
+		added to the row and not to that list, and lit up with no glow: a button that looks on but
+		not switched on. This array is the row; anything added to it cannot be forgotten by the
+		painting code, because there is nothing there to forget.
+	*/
+	std::array<IconButton*, 4> headerToggles { &mixerToggle, &dcBlockButton,
+												&spreadOutputsButton, &mergeToMasterButton };
 	StripViewport viewport { *this };
 	StripHolder holder;
 	juce::OwnedArray<ChannelStrip> strips;

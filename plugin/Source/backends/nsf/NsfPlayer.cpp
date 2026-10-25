@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <deque>
 #include <mutex>
 #include <string>
 #include <unordered_map>
@@ -25,6 +26,15 @@ constexpr double kPalClock = 1662607.0;
 	receivers drop - which would silence exactly the drums a DPCM track is for. */
 constexpr double kMinimumNoteSeconds = 1.0 / 60.0;
 
+/** How often a player waiting for its scan looks again, in samples: 4096 is about 93 ms at
+	44.1 kHz. Frequent enough that the DPCM row's label clears while the user is still looking
+	at it, rare enough that the check costs nothing on the blocks in between. */
+constexpr std::uint64_t kScanPollIntervalSamples = 4096;
+
+/** MIDI's top velocity. The walk records a channel's level as 0..1, so this is the one place
+	where the two scales meet. */
+constexpr double kMaxMidiVelocity = 127.0;
+
 /** DPCM sample slots per song, keyed by the file's content hash and its start song.
 
 	A backend is rebuilt several times while one song is open - switching the mixer on, seeking -
@@ -32,18 +42,19 @@ constexpr double kMinimumNoteSeconds = 1.0 / 60.0;
 	that, and the scan costs about half a second, so it is kept here rather than on whichever file
 	object the current backend happens to own.
 */
-/** What one pass over the song produces: the note each DPCM sample slot was given, and every
-	note the song plays. Both come out of the same walk, and both are facts about the file rather
-	than about a player - which is why they are cached together. */
-struct ScanResult
-{
-	std::unordered_map<int, int> sampleNotes;
-	std::shared_ptr<const playback::MidiSequence> midiSequence;
-};
-
 std::mutex sampleSlotMutex;
 std::unordered_map<std::size_t, ScanResult> sampleSlotCache;
-constexpr std::size_t kSampleSlotCacheLimit = 16;
+
+/** Insertion order, so the oldest entry can go when the cache is full. A deque rather than a
+	list: only the ends are touched, and it keeps the eviction order in one place instead of
+	stamping a counter into every ScanResult. */
+std::deque<std::size_t> sampleSlotOrder;
+
+/** Four, not sixteen. A stream is 0.4 to 2 MB depending on the song, so the old limit was a
+	sixteen-to-thirty-megabyte ceiling; and when it was reached the whole map was cleared, which
+	means listening to one song too many made the one before it scan again from scratch. Four
+	songs is what going back and forth actually looks like. */
+constexpr std::size_t kSampleSlotCacheLimit = 4;
 
 } // namespace
 
@@ -137,58 +148,51 @@ void NsfPlayer::start (void)
 	// The whole-song pass does not happen here any more. It walks 180 seconds of music - 0.3 to
 	// 2.8 seconds of CPU depending on the expansion chip - and a file has to be playable before
 	// that finishes. The backend runs it on a thread of its own; this only picks up a result the
-	// cache already has, and notes that there is not one yet otherwise.
+	// song's handle already has, and says so when it does not.
 	if (! prescanDisabled)
 	{
-		// Assume the scan is outstanding until the cache says otherwise: a file opened for the
-		// first time has nothing to adopt, and the DPCM row has to say so from the first frame.
-		analysing = true;
-		adoptScan (true);
+		if (auto scan = scanHandle != nullptr ? scanHandle->snapshot () : nullptr)
+		{
+			applyScan (*scan);
+		}
+		else
+		{
+			// A player built outside a backend has no handle, and nothing to wait for.
+			analysing.store (scanHandle != nullptr, std::memory_order_relaxed);
+		}
 	}
 
 	resetToStart ();
 }
 
-bool NsfPlayer::adoptScan (bool waitForLock)
+void NsfPlayer::applyScan (const ScanResult& scan)
+{
+	sampleNotes = scan.sampleNotes;
+	midiSequence = scan.midiSequence;
+	analysing.store (false, std::memory_order_relaxed);
+}
+
+bool NsfPlayer::adoptCachedScan (const formats::nsf::NsfFile& file, ScanHandle& handle)
 {
 	const std::size_t key = file.contentHash ^ (std::size_t) file.startSong;
 
-	// Reached from render() too, on the audio thread: waiting there for the scanning thread to
-	// finish publishing would drop a block, and the only cost of losing the race is that the
-	// label stays on for another ninety milliseconds.
-	std::unique_lock<std::mutex> guard (sampleSlotMutex, std::defer_lock);
-
-	if (waitForLock)
-	{
-		guard.lock ();
-	}
-	else if (! guard.try_lock ())
-	{
-		return false;
-	}
-
+	std::lock_guard<std::mutex> guard (sampleSlotMutex);
 	const auto found = sampleSlotCache.find (key);
 
 	if (found == sampleSlotCache.end ())
 	{
-		// Nothing to adopt yet. The DPCM row shows "analysing" until this turns false, and every
-		// other row is unaffected: its note comes from a register, not from the scan.
-		analysing = true;
 		return false;
 	}
 
-	sampleNotes = found->second.sampleNotes;
-	midiSequence = found->second.midiSequence;
-	analysing = false;
+	handle.publish (std::make_shared<const ScanResult> (found->second));
 	return true;
 }
 
 void NsfPlayer::scanSong (void)
 {
-	// Another player may have walked this file already. The scan is a fact about the song, so a
-	// second one is spent time for the same answer - and with one backend per track plus the one
-	// that owns the scan, there are a lot of second ones.
-	if (adoptScan (true))
+	// Another backend may have walked this file already. Reopening a file is common, and the
+	// answer does not depend on who asks, so a second walk is spent time for the same result.
+	if (scanHandle != nullptr && adoptCachedScan (file, *scanHandle))
 	{
 		return;
 	}
@@ -254,7 +258,7 @@ void NsfPlayer::scanSampleChannels (double seconds)
 	std::vector<float> left ((std::size_t) block, 0.0f);
 	std::vector<float> right ((std::size_t) block, 0.0f);
 
-	scanning = true;
+	scanning.store (true, std::memory_order_relaxed);
 	sampleDirty = false;		// nothing is a sample until the driver has written $4010 or $4012
 
 	// The note each row was last seen playing, and when that note started. A drum can begin and
@@ -319,7 +323,7 @@ void NsfPlayer::scanSampleChannels (double seconds)
 				on.timeSeconds = time;
 				on.type = playback::MidiEventType::noteOn;
 				on.data1 = (std::uint8_t) note;
-				on.data2 = (std::uint8_t) (std::clamp) ((int) std::lround ((double) channel.volume * 127.0),
+				on.data2 = (std::uint8_t) (std::clamp) ((int) std::lround ((double) channel.volume * kMaxMidiVelocity),
 														1, 127);
 				on.sourceTrack = (std::uint32_t) index;
 				events.push_back (on);
@@ -331,7 +335,7 @@ void NsfPlayer::scanSampleChannels (double seconds)
 		}
 	}
 
-	scanning = false;
+	scanning.store (false, std::memory_order_relaxed);
 
 	// The minimum-length rule can push a note-off past events recorded after it, and the engine
 	// walks this list with lower_bound - time order is the one thing it requires.
@@ -351,19 +355,30 @@ void NsfPlayer::scanSampleChannels (double seconds)
 
 	midiSequence = std::move (sequence);
 
-	// Publish before anything else can ask: the players that are already running look for this
-	// entry on their own clock, and a scan that never published would leave them saying
-	// "analysing" for as long as the song was open.
+	// Published twice, to two different audiences. The handle is how this song's other player
+	// hears about it - it asked on its own clock and will not ask again; the cache is how the
+	// next session avoids walking the same file a second time.
+	auto result = std::make_shared<const ScanResult> (ScanResult { sampleNotes, midiSequence });
+
+	if (scanHandle != nullptr)
+	{
+		scanHandle->publish (result);
+	}
+
 	const std::size_t key = file.contentHash ^ (std::size_t) file.startSong;
 
 	std::lock_guard<std::mutex> guard (sampleSlotMutex);
 
-	if (sampleSlotCache.size () >= kSampleSlotCacheLimit)
+	// Oldest out, one at a time. The map used to be emptied when it filled, so the song the user
+	// had just left was thrown away along with the ones that had gone stale.
+	while (sampleSlotOrder.size () >= kSampleSlotCacheLimit)
 	{
-		sampleSlotCache.clear ();
+		sampleSlotCache.erase (sampleSlotOrder.front ());
+		sampleSlotOrder.pop_front ();
 	}
 
-	sampleSlotCache[key] = ScanResult { sampleNotes, midiSequence };
+	sampleSlotOrder.push_back (key);
+	sampleSlotCache[key] = *result;
 }
 
 std::shared_ptr<const playback::MidiSequence> NsfPlayer::shareMidiSequence (void) const
@@ -511,10 +526,20 @@ int NsfPlayer::render (float* left, float* right, int frames)
 	// every 4096 samples, about 93 ms. Without it the DPCM row would say "analysing" until the
 	// song was reopened, because the only other place that checks runs from start().
 	// Not while scanning: that pass is trying to produce the very thing being waited for, and
-	// polling from inside it only takes the cache lock it is about to write.
-	if (analysing && ! scanning && (rendered % 4096u) < (std::uint64_t) frames)
+	// looking from inside it would only take the handle's lock between its own writes.
+	// "Crossed a poll boundary during this block" rather than a modulo on where the block starts:
+	// the same condition, said so that a reader does not have to convince themselves the interval
+	// is larger than a block for it to work.
+	const auto pollBoundary = rendered / kScanPollIntervalSamples;
+	const auto nextBoundary = (rendered + (std::uint64_t) frames) / kScanPollIntervalSamples;
+
+	if (analysing.load (std::memory_order_relaxed) && ! scanning.load (std::memory_order_relaxed)
+		&& pollBoundary != nextBoundary)
 	{
-		adoptScan (false);
+		if (auto scan = scanHandle != nullptr ? scanHandle->snapshot () : nullptr)
+		{
+			applyScan (*scan);
+		}
 	}
 
 
@@ -721,6 +746,12 @@ namespace
 	constexpr int kDutyMask = 0x03;
 	constexpr float kDutySettings[] = { 0.125f, 0.25f, 0.5f, 0.75f };
 
+	/** The VRC6's eight widths, in sixteenths: 1/16 up to 8/16. The widest is a square wave and
+		not silence, which is why these are not eighths - and why dividing by the count of settings
+		drew a 50 % pulse as a solid bar. */
+	constexpr float kVrc6DutySettings[] = { 0.0625f, 0.125f, 0.1875f, 0.25f,
+											0.3125f, 0.375f, 0.4375f, 0.5f };
+
 	/** The shapes a channel can have, as playback/ChipState.h numbers them. */
 	enum WaveShape
 	{
@@ -834,7 +865,7 @@ bool NsfPlayer::captureState (playback::ChipStateSnapshot& snapshot, bool includ
 				// The slot this sample would be is not known until the walk finishes, so the row
 				// says so rather than showing a note that would change under it. Everything else
 				// about the row - the shape, the level, whether it is sounding - is known now.
-				state.analysing = analysing;
+				state.analysing = analysing.load (std::memory_order_relaxed);
 
 				// The slot's identity, spread so that address and rate each move the drawing -
 				// a sample played at two speeds is two marks, as it is two notes.
@@ -919,7 +950,16 @@ bool NsfPlayer::captureState (playback::ChipStateSnapshot& snapshot, bool includ
 		int trackIndex;
 		int chipChannel;
 		int waveKind;
-		int dutySteps;			// 0 fixed half, 4 the 2A03's settings, 8 the VRC6's
+
+		/** The widths this channel's register selects from, or null for a fixed half.
+
+			A table rather than a count: the VRC6's eight settings are sixteenths of a cycle and
+			the MMC5's four are the 2A03's set, so "n of m" was two different fractions wearing one
+			field. Dividing by the count drew the VRC6's 50 % pulse as a solid bar.
+		*/
+		const float* dutyTable;
+		int dutyCount;
+
 		bool levelImpliesKey;	// true when the chip says key-on for a channel it is not sounding
 		float levelScale;		// the chip reports its volume against a wider register than it has
 	};
@@ -939,10 +979,10 @@ bool NsfPlayer::captureState (playback::ChipStateSnapshot& snapshot, bool includ
 
 			float duty = kNoDuty;
 
-			if (info != nullptr && row.dutySteps > 0)
+			if (info != nullptr && row.dutyTable != nullptr)
 			{
-				const int setting = (std::clamp) (info->GetTone (), 0, row.dutySteps - 1);
-				duty = (float) (setting + 1) / (float) row.dutySteps;
+				const int setting = (std::clamp) (info->GetTone (), 0, row.dutyCount - 1);
+				duty = row.dutyTable[setting];
 			}
 
 			const std::size_t index = addChannel (row.name, row.chipName, row.trackIndex,
@@ -968,27 +1008,27 @@ bool NsfPlayer::captureState (playback::ChipStateSnapshot& snapshot, bool includ
 		// In the chip's own order, which is also the track order. The ramp's volume register is six
 		// bits wide while the chip reports it against 255, so its meter read a quarter of what it
 		// played; scaling by four puts the full 63 back at full scale.
-		{ "Square 3", "VRC6", kFirstExpansionTrack + 0, 0, kShapePulse, 8, false, 1.0f },
-		{ "Square 4", "VRC6", kFirstExpansionTrack + 1, 1, kShapePulse, 8, false, 1.0f },
-		{ "Saw Wave", "VRC6", kFirstExpansionTrack + 2, 2, kShapeSaw, 0, false, 4.0f }
+		{ "Square 3", "VRC6", kFirstExpansionTrack + 0, 0, kShapePulse, kVrc6DutySettings, 8, false, 1.0f },
+		{ "Square 4", "VRC6", kFirstExpansionTrack + 1, 1, kShapePulse, kVrc6DutySettings, 8, false, 1.0f },
+		{ "Saw Wave", "VRC6", kFirstExpansionTrack + 2, 2, kShapeSaw, nullptr, 0, false, 4.0f }
 	};
 
 	static const ExpansionRow mmc5Rows[] =
 	{
-		{ "Square 1", "MMC5", kFirstExpansionTrack + 0, 0, kShapePulse, 4, false, 1.0f },
-		{ "Square 2", "MMC5", kFirstExpansionTrack + 1, 1, kShapePulse, 4, false, 1.0f },
+		{ "Square 1", "MMC5", kFirstExpansionTrack + 0, 0, kShapePulse, kDutySettings, 4, false, 1.0f },
+		{ "Square 2", "MMC5", kFirstExpansionTrack + 1, 1, kShapePulse, kDutySettings, 4, false, 1.0f },
 		// The PCM voice has neither pitch nor key: it plays whatever byte the CPU feeds it, and
 		// its output is the sample's own level rather than a tone.
-		{ "PCM", "MMC5", kFirstExpansionTrack + 2, 2, kShapeDelta, 0, false, 1.0f }
+		{ "PCM", "MMC5", kFirstExpansionTrack + 2, 2, kShapeDelta, nullptr, 0, false, 1.0f }
 	};
 
 	static const ExpansionRow s5bRows[] =
 	{
 		// Three tone channels. The chip's noise and envelope are modes of these three rather than
 		// voices of their own, which is why the track list has three rows and not five.
-		{ "Square 1", "S5B", kFirstExpansionTrack + 0, 0, kShapePulse, 0, true, 1.0f },
-		{ "Square 2", "S5B", kFirstExpansionTrack + 1, 1, kShapePulse, 0, true, 1.0f },
-		{ "Square 3", "S5B", kFirstExpansionTrack + 2, 2, kShapePulse, 0, true, 1.0f }
+		{ "Square 1", "S5B", kFirstExpansionTrack + 0, 0, kShapePulse, nullptr, 0, true, 1.0f },
+		{ "Square 2", "S5B", kFirstExpansionTrack + 1, 1, kShapePulse, nullptr, 0, true, 1.0f },
+		{ "Square 3", "S5B", kFirstExpansionTrack + 2, 2, kShapePulse, nullptr, 0, true, 1.0f }
 	};
 
 	if (vrc6 != nullptr) { addExpansionRows (vrc6Rows, 3, vrc6.get ()); }

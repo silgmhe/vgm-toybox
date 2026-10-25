@@ -56,12 +56,20 @@ MixerPanel::MixerPanel (toybox::PlaybackEngine& engineToUse)
 	addAndMakeVisible (mixerToggle);
 	addAndMakeVisible (dcBlockButton);
 
+	// Named so the harness can reach it: the glow of a toggled button is painted by the card, and
+	// whether the repaint reached far enough is only visible in a screenshot.
+	dcBlockButton.setComponentID ("mixer.dcBlock");
 	dcBlockButton.setClickingTogglesState (true);
 	dcBlockButton.onClick = [this]
 	{
 		engine.setDcBlockEnabled (dcBlockButton.getToggleState ());
 		dcBlockButton.setTooltip (i18n::tr (dcBlockButton.getToggleState ()
 											? "mixer.dcBlockOn" : "mixer.dcBlockOff"));
+
+		// The glow is painted by the card, behind this button and reaching past its bounds.
+		// Repainting only the button left the new glow clipped to the button's own rectangle -
+		// a square halo on two sides, which is what a clipped one looks like.
+		repaint (buttonGlowBounds (dcBlockButton.getBounds ()));
 	};
 
 	masterStrip.setup (i18n::tr ("mixer.master"), true);
@@ -170,6 +178,7 @@ void MixerPanel::refresh (void)
 	if (dcBlockButton.getToggleState () != engine.isDcBlockEnabled ())
 	{
 		dcBlockButton.setToggleState (engine.isDcBlockEnabled (), juce::dontSendNotification);
+		repaint (buttonGlowBounds (dcBlockButton.getBounds ()));
 	}
 
 	// Which strips exist changes only with the song, so that part is a check rather than work: the
@@ -496,10 +505,13 @@ void MixerPanel::layoutMaster (void)
 
 void MixerPanel::paintCardContent (juce::Graphics& g)
 {
-	// The three header buttons glow in the accent colour while they are on. The card paints them
-	// (and therefore behind the buttons): the glow reaches further than the shadow room a button
-	// keeps inside its own bounds (ButtonPaint.h).
-	for (auto* button : { &mixerToggle, &spreadOutputsButton, &mergeToMasterButton })
+	// The header buttons glow in the accent colour while they are on. The card paints them (and
+	// therefore behind the buttons): the glow reaches further than the shadow room a button keeps
+	// inside its own bounds (ButtonPaint.h).
+	//
+	// headerToggles is the row. This used to be a second list written out here, and the DC
+	// blocker was added to one and not the other - lit, with nothing around it.
+	for (auto* button : headerToggles)
 	{
 		if (button->getToggleState())
 		{
@@ -507,7 +519,11 @@ void MixerPanel::paintCardContent (juce::Graphics& g)
 		}
 	}
 
-	paintCardHeaderRow (g, headerBounds, i18n::tr ("mixer.title"), i18n::tr ("mixer.hint"));
+	// No legend on the right any more. It said "MUTE / SOLO / GAIN / PAN", which described the
+	// strip controls beside it - and by the time it read that, the row above held four toggles,
+	// one of which is a DC blocker and none of which is gain or pan. Every button carries its own
+	// tooltip, so the line that had to be kept in step with the row is simply gone.
+	paintCardHeaderRow (g, headerBounds, i18n::tr ("mixer.title"), {});
 }
 
 void MixerPanel::StripHolder::paint (juce::Graphics& g)

@@ -6,6 +6,7 @@
 #include <atomic>
 #include <cstdint>
 #include <memory>
+#include <mutex>
 #include <unordered_map>
 
 #include "formats/nsf/NsfFile.h"
@@ -23,6 +24,42 @@ namespace toybox::backends::nsf
 {
 
 class NsfBus;
+
+/** What one pass over a song produces: the note each DPCM sample slot was given, and every note
+	the song plays. Both come out of the same walk over the file, so they travel together. */
+struct ScanResult
+{
+	std::unordered_map<int, int> sampleNotes;
+	std::shared_ptr<const playback::MidiSequence> midiSequence;
+};
+
+/** One song's scan, shared by the object that runs it and the object that plays it.
+
+	The walk needs a player of its own - it resets the CPU and runs the song to its end - so its
+	result has to cross from that player to the one rendering audio. It used to cross through a
+	file-level map keyed by content hash, which left the song's own backend watching from outside
+	something it had asked for. This is the handle both sides hold instead; the cache is still
+	there, but only so that reopening the same file does not walk it again.
+*/
+class ScanHandle
+{
+public:
+	void publish (std::shared_ptr<const ScanResult> result)
+	{
+		const std::lock_guard<std::mutex> guard (mutex);
+		value = std::move (result);
+	}
+
+	std::shared_ptr<const ScanResult> snapshot (void) const
+	{
+		const std::lock_guard<std::mutex> guard (mutex);
+		return value;
+	}
+
+private:
+	mutable std::mutex mutex;
+	std::shared_ptr<const ScanResult> value;
+};
 
 /**
 	One NSF, running.
@@ -147,12 +184,27 @@ public:
 	*/
 	std::shared_ptr<const playback::MidiSequence> shareMidiSequence (void) const;
 
+	/** The handle this player publishes its scan into, and reads one from.
+
+		Both players in a song are given the same handle by the backend that owns them: the one
+		that runs the walk publishes, the one that renders picks it up on its next look. Without
+		it each player would search the file-level cache for an answer its own song already had.
+	*/
+	void setScanHandle (std::shared_ptr<ScanHandle> handle) { scanHandle = std::move (handle); }
+
+	/** Publishes a scan an earlier session already made into `handle`, when there is one.
+
+		Static because the backend asks before it has a player to ask with: a file that has been
+		walked once should not start a thread at all the next time it is opened.
+	*/
+	static bool adoptCachedScan (const formats::nsf::NsfFile& file, ScanHandle& handle);
+
 	/** Runs the whole-song pass that numbers the DPCM samples and records every note.
 
 		Called by the backend on its own thread, not from start(): the walk is 0.3 to 2.8 seconds
 		depending on the expansion chip, and a song has to be playable before it finishes. The
-		result is published to the shared cache, so players already running pick it up on their
-		next look (see adoptScan).
+		result is published into this player's handle, so the player rendering audio picks it up
+		on its next look.
 	*/
 	void scanSong (void);
 
@@ -161,16 +213,13 @@ public:
 	void setScanCancelFlag (const std::atomic<bool>* flag) { scanCancelFlag = flag; }
 
 	/** True while this player is playing a song whose scan has not landed yet. */
-	bool isAnalysing (void) const { return analysing; }
+	bool isAnalysing (void) const { return analysing.load (std::memory_order_relaxed); }
 
 private:
-	/** Picks up a finished scan from the shared cache, or notes that there is not one yet.
-		Returns whether one was there.
-
-		`waitForLock` false is for the audio thread: it skips the attempt rather than block on the
-		scanning thread, and the only cost is another ninety milliseconds of "analysing".
-	*/
-	bool adoptScan (bool waitForLock);
+	/** Takes a finished scan into this player. Called from start() and, while waiting, from
+		render() - the latter on the audio thread, which is why the handle hands back a shared_ptr
+		rather than making the caller hold a lock. */
+	void applyScan (const ScanResult& scan);
 
 	void resetToStart (void);
 	void scanSampleChannels (double seconds);
@@ -219,15 +268,26 @@ private:
 		because the scan is cached and every player built from this file gets the same stream. */
 	std::shared_ptr<const playback::MidiSequence> midiSequence;
 
-	/** Set while the scan for this song has not landed. Cleared by adoptScan() the moment the
-		cache has it, which is what turns the DPCM row's "analysing" label off. */
-	bool analysing = false;
+	/** Set while the scan for this song has not landed. Cleared by applyScan() the moment the
+		song's handle has the result, which is what turns the DPCM row's "analysing" label off.
+
+		Atomic because it is written from start() and read from render(): the same player is driven
+		by the message thread when it is set up and by the audio thread when it plays.
+	*/
+	std::atomic<bool> analysing { false };
+
+	/** The song's scan, shared with the other player in the same song. Null only for a player
+		built outside a backend - the tests construct one directly to read registers. */
+	std::shared_ptr<ScanHandle> scanHandle;
 
 	/** Read by the scan loop, written by whoever owns the scanning thread's lifetime. */
 	const std::atomic<bool>* scanCancelFlag = nullptr;
 
 	bool prescanDisabled = false;
-	bool scanning = false;
+
+	/** True while the whole-song pass is running on this player. Atomic for the same reason as
+		`analysing`: the pass runs on the scanning thread and render() tests it on the audio one. */
+	std::atomic<bool> scanning { false };
 	bool sampleDirty = false;			// a whole slot has been written since the last look
 	bool sampleRateWritten = false;
 	bool sampleAddrWritten = false;

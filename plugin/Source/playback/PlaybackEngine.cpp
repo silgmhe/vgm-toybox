@@ -1110,7 +1110,7 @@ void PlaybackEngine::installSong (LoadedSong&& built)
 	soloCount = built.soloCount;
 	chips = std::move (built.chips);
 	tags = std::move (built.tags);
-	midiSequence = built.midiSequence;
+	midiSequence.store (built.midiSequence, std::memory_order_release);
 	midiCursor = 0;
 	// Force one flush on the first block: a song swap must end the notes the previous song left
 	// sounding, not leave them hanging in the host.
@@ -1231,7 +1231,7 @@ void PlaybackEngine::resetState (void)
 	trackLayout.clear();
 	tracks.clear();
 	soloCount = 0;
-	midiSequence = nullptr;
+	midiSequence.store (nullptr, std::memory_order_release);
 	midiCursor = 0;
 	midiWasEnabled = false;
 	midiLastSongTime = -1.0;
@@ -1243,6 +1243,16 @@ void PlaybackEngine::resetState (void)
 
 	positionSeconds = 0.0;
 	cachedTimeline = {};
+
+	// A chip-state snapshot belongs to the song that produced it. Left behind, it outlives a
+	// switch to a format with no chip state at all - and the keyboard went on drawing the
+	// previous song's rows, because captureChipState() only ever told the caller whether the
+	// snapshot was valid, and it still was.
+	//
+	// Cleared here rather than on pause or stop on purpose: a paused song is still the song on
+	// screen, and the last waveform is exactly what someone pausing wants to look at.
+	const std::lock_guard<std::mutex> stateGuard (stateMutex);
+	stateSnapshot = playback::ChipStateSnapshot {};
 }
 
 //==============================================================================
@@ -1268,7 +1278,9 @@ std::vector<PlaybackEngine::TrackPitchSummary> PlaybackEngine::getPitchSummary (
 {
 	std::vector<TrackPitchSummary> summary (trackLayout.size());
 
-	if (midiSequence == nullptr)
+	const auto* const sequence = midiSequence.load (std::memory_order_acquire);
+
+	if (sequence == nullptr)
 	{
 		return summary;
 	}
@@ -1276,7 +1288,7 @@ std::vector<PlaybackEngine::TrackPitchSummary> PlaybackEngine::getPitchSummary (
 	// per track, the set of roots its notes measured: a sample played at two rates must report one
 	std::vector<std::set<int>> roots (trackLayout.size());
 
-	for (const auto& event : midiSequence->events)
+	for (const auto& event : sequence->events)
 	{
 		if (event.type != playback::MidiEventType::noteOn || event.sourceTrack >= summary.size())
 		{
@@ -1530,17 +1542,23 @@ void PlaybackEngine::emitMidiForBlock (double blockStartSeconds, int numSamples,
 	// starts the notes the moment it lands rather than on the next load. The generation bump
 	// makes the cursor seek to where playback already is - without it the host would be sent
 	// every note from the top of the song at once.
-	if (midiSequence == nullptr && song != nullptr)
+	// Pick it up first, then read it again: a stream that arrives during this block is usable in
+	// this same block. Taking one snapshot before the pickup left the notes - and the RPN that has
+	// to be declared before them - waiting for the next block, which in a short render is the
+	// whole window.
+	if (midiSequence.load (std::memory_order_acquire) == nullptr && song != nullptr)
 	{
 		if (const auto* arrived = song->getMidiSequence (); arrived != nullptr)
 		{
-			midiSequence = arrived;
+			midiSequence.store (arrived, std::memory_order_release);
 			midiCursor = 0;
 			midiResetGeneration.fetch_add (1);
 		}
 	}
 
-	if (midiSequence == nullptr)
+	auto* const sequence = midiSequence.load (std::memory_order_acquire);
+
+	if (sequence == nullptr)
 	{
 		return;
 	}
@@ -1626,14 +1644,14 @@ void PlaybackEngine::emitMidiForBlock (double blockStartSeconds, int numSamples,
 	{
 		sendAllNotesOff (0);	// ends the notes and puts back the bends: both masks are drained there
 		midiSeenGeneration = generation;
-		midiCursor = (std::size_t) (std::lower_bound (midiSequence->events.begin(),
-													   midiSequence->events.end(),
+		midiCursor = (std::size_t) (std::lower_bound (sequence->events.begin(),
+													   sequence->events.end(),
 													   songTime,
 													   [] (const playback::MidiEvent& event, double time)
 													   {
 														   return event.timeSeconds < time;
 													   })
-									 - midiSequence->events.begin());
+									 - sequence->events.begin());
 	}
 
 	midiLastSongTime = songTime;
@@ -1674,9 +1692,9 @@ void PlaybackEngine::emitMidiForBlock (double blockStartSeconds, int numSamples,
 		}
 	};
 
-	while (midiCursor < midiSequence->events.size())
+	while (midiCursor < sequence->events.size())
 	{
-		const playback::MidiEvent& event = midiSequence->events[midiCursor];
+		const playback::MidiEvent& event = sequence->events[midiCursor];
 		if (event.timeSeconds >= blockEnd)
 		{
 			break;

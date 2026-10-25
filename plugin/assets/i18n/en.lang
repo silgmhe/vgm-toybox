@@ -47,7 +47,6 @@ language: English
 "menu.view.none" = "No pages yet";
 
 "mixer.gainTooltip" = "Gain (double-click: 100%)";
-"mixer.hint" = "MUTE / SOLO / GAIN / PAN";
 "mixer.master" = "MASTER";
 "mixer.masterBus" = "Master";
 "mixer.masterGainTooltip" = "Mixer master gain - the output volume sits behind it (double-click: 100%)";

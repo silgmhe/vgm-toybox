@@ -18,13 +18,21 @@ namespace toybox::backends::nsf
 namespace
 {
 
+/** Three minutes, until the settings page has an answer. The header carries no length: an NSF's
+	driver loops until it is told to stop, so the user is the only source of a duration. */
+constexpr double kDefaultLengthSeconds = 180.0;
+
 /** One rendered instance of the song. The emulation is the player's; this only adapts it. */
 class NsfTrackPlayer final : public playback::ITrackPlayer
 {
 public:
-	NsfTrackPlayer (const formats::nsf::NsfFile& file, double sampleRate, double seconds)
+	NsfTrackPlayer (const formats::nsf::NsfFile& file, double sampleRate, double seconds,
+					std::shared_ptr<ScanHandle> scan)
 		: player (file, sampleRate), length (seconds)
 	{
+		// Handed down from the song instance rather than looked up in a file-level table: this
+		// player's scan is this song's scan, and the backend that owns both is the one that knows.
+		player.setScanHandle (std::move (scan));
 		player.start ();
 	}
 
@@ -89,7 +97,7 @@ public:
 
 private:
 	NsfPlayer player;
-	double length = 180.0;
+	double length = kDefaultLengthSeconds;
 };
 
 class NsfSongInstance final : public playback::ISongInstance
@@ -99,11 +107,6 @@ public:
 		: file (std::move (image)), image (std::move (bytes))
 	{
 		detectUndeclaredChip ();
-
-		// Started before anything can ask for a note. It runs on a player of its own, so this file
-		// is playable while it works, and it publishes into the shared cache that every track
-		// player reads.
-		scanner = std::thread ([this] { runScan (); });
 
 		info_.formatName = "NSF (NSFPlay core)";
 
@@ -125,6 +128,10 @@ public:
 
 		info_.chips.push_back (playback::ChipInfo { "2A03", "NSFPlay", 0 });
 
+		// A chip with no case here does not exist as far as the chip card is concerned, however
+		// many tracks it contributes. The N163 was the one missing, and a file that declared it
+		// showed a card with the 2A03 alone while the mixer drew all eight of its channels
+		// underneath - so this switch is the whole list, not a list plus a fallback.
 		switch (file.chip ())
 		{
 			case formats::nsf::NsfChip::vrc6: info_.chips.push_back ({ "VRC6", "NSFPlay", 1 }); break;
@@ -133,11 +140,6 @@ public:
 			case formats::nsf::NsfChip::mmc5: info_.chips.push_back ({ "MMC5", "NSFPlay", 1 }); break;
 			case formats::nsf::NsfChip::fme7: info_.chips.push_back ({ "S5B",  "NSFPlay", 1 }); break;
 			case formats::nsf::NsfChip::n163: info_.chips.push_back ({ "N163", "NSFPlay", 1 }); break;
-
-			// Every chip above has a row here or it does not exist as far as the chip card is
-			// concerned, however many tracks it contributes. The N163 was the one missing, and a
-			// file that declares it showed a card with the 2A03 alone while the mixer drew all
-			// eight of its channels underneath.
 			default: break;
 		}
 
@@ -231,6 +233,23 @@ public:
 			default:
 				break;
 		}
+		// A file walked in an earlier session needs no thread at all: the cache goes straight into
+		// this song's handle, and the player created below finds it already there. scanFinished
+		// has to be set here as well - nothing else will, and "no thread" would otherwise read as
+		// "still scanning" for everyone who asks.
+		if (NsfPlayer::adoptCachedScan (file, *scanHandle))
+		{
+			adoptFromHandle ();
+			scanFinished.store (true, std::memory_order_release);
+		}
+		else
+		{
+			// Started last, not first. A thread launched before the rest of this constructor ran
+			// would outlive a constructor that threw: the destructor does not run for an object
+			// that was never constructed, so nothing would ever set the cancel flag, and the scan
+			// would go on reading members of an object that had already been freed.
+			scanner = std::thread ([this] { runScan (); });
+		}
 	}
 
 	~NsfSongInstance () override
@@ -252,16 +271,18 @@ public:
 	const playback::MidiSequence* getMidiSequence (void) const override
 	{
 		// Whatever the scan has produced so far: null until it lands, the real stream afterwards.
-		// The pointer may be replaced under the caller, so the previous stream is kept alive in
-		// retiredStreams rather than freed - the engine holds this raw pointer across blocks.
+		// Published once and never replaced, so the pointer the engine caches stays valid for as
+		// long as this instance does - see runScan().
 		std::lock_guard<std::mutex> guard (streamMutex);
 		return midiSequence.get ();
 	}
 
 	bool isAnalysing (void) const override
 	{
-		std::lock_guard<std::mutex> guard (streamMutex);
-		return midiSequence == nullptr;
+		// Not "no stream yet": a scan can end without one - cancelled, or the song plays nothing
+		// worth numbering - and asking the stream would then say "analysing" for as long as the
+		// file was open. This is the flag the scan sets when it stops, however it stops.
+		return ! scanFinished.load (std::memory_order_acquire);
 	}
 
 	playback::BackendCapabilities getCapabilities (void) const override
@@ -302,7 +323,7 @@ public:
 	std::unique_ptr<playback::ITrackPlayer> createPlayer (juce::String& errorMessage) override
 	{
 		errorMessage.clear ();
-		return std::make_unique<NsfTrackPlayer> (file, rate, length);
+		return std::make_unique<NsfTrackPlayer> (file, rate, length, scanHandle);
 	}
 
 	/** Runs the driver for a moment and, if it writes to a chip its header never mentioned, turns
@@ -315,7 +336,7 @@ public:
 			return;
 		}
 
-		NsfPlayer probe (file, 44100.0);
+		NsfPlayer probe (file, rate);
 		probe.skipPrescan ();		// only the write counters are read below
 		probe.start ();
 
@@ -350,8 +371,10 @@ private:
 	std::vector<char> image;
 	playback::SongInfo info_;
 	std::vector<playback::TrackInfo> tracks_;
+	/** What the host asked for, until it has asked. Every probe in this file uses this rather
+		than a literal, so a scan and the playback it feeds describe time the same way. */
 	double rate = 44100.0;
-	double length = 180.0;
+	double length = kDefaultLengthSeconds;
 	bool expansionPresent = false;
 	int blockSize = 512;
 
@@ -360,37 +383,59 @@ private:
 	std::thread scanner;
 	std::atomic<bool> cancelScan { false };
 
+	/** This song's scan: written by the scanner thread, read by the player that renders audio and
+		by getMidiSequence(). Both players in a song hold the same handle, which is what replaced
+		the file-level table they used to meet in. */
+	std::shared_ptr<ScanHandle> scanHandle = std::make_shared<ScanHandle> ();
+
 	/** Guards midiSequence, which the scanner writes and getMidiSequence() reads. */
 	mutable std::mutex streamMutex;
 	std::shared_ptr<const playback::MidiSequence> midiSequence;
 
-	/** Every stream this instance has ever handed out. The engine caches the raw pointer and can
-		hold it across blocks, so replacing the shared_ptr must not free what it points at. */
-	std::vector<std::shared_ptr<const playback::MidiSequence>> retiredStreams;
+	/** True once the scan has stopped, however it stopped.
+
+		Kept apart from `midiSequence` because the two answer different questions: a scan that was
+		cancelled, or that found nothing to publish, ends with no stream - and reading "still
+		working" out of "no stream" left the song saying "analysing" forever.
+	*/
+	std::atomic<bool> scanFinished { false };
+
+	/** Takes the stream out of the handle. Both paths end here: the scan publishes into it, and a
+		cache hit fills it before the constructor is done. */
+	void adoptFromHandle (void)
+	{
+		if (auto scan = scanHandle->snapshot ())
+		{
+			std::lock_guard<std::mutex> guard (streamMutex);
+			midiSequence = scan->midiSequence;
+		}
+	}
 
 	void runScan (void)
 	{
-		// A player of its own: scanning resets the CPU and runs it to the end of the song, which
-		// would wreck playback if it shared the emulation the mixer is rendering from.
-		NsfPlayer probe (file, 44100.0);
-		probe.setScanCancelFlag (&cancelScan);
-		probe.scanSong ();
-
-		auto finished = probe.shareMidiSequence ();
-
-		if (finished == nullptr)
+		// One publication, from null to non-null: the engine holds this raw pointer across blocks
+		// and it is never replaced, so there is no retired list to keep.
+		try
 		{
-			return;
+			// A player of its own: scanning resets the CPU and runs it to the end of the song,
+			// which would wreck playback if it shared the emulation the mixer renders from. It
+			// publishes into the song's handle, which is how the player rendering audio hears
+			// about it.
+			NsfPlayer probe (file, rate);
+			probe.setScanHandle (scanHandle);
+			probe.setScanCancelFlag (&cancelScan);
+			probe.scanSong ();
+
+			adoptFromHandle ();
+		}
+		catch (...)
+		{
+			// An exception escaping a thread takes the whole process with it. Nothing here is
+			// expected to throw, but leaving the stream empty and reporting the scan finished is
+			// the one failure this file can survive.
 		}
 
-		std::lock_guard<std::mutex> guard (streamMutex);
-
-		if (midiSequence != nullptr)
-		{
-			retiredStreams.push_back (midiSequence);
-		}
-
-		midiSequence = std::move (finished);
+		scanFinished.store (true, std::memory_order_release);
 	}
 };
 
