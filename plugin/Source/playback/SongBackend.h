@@ -72,7 +72,10 @@ enum class MidiCapability
 {
 	unavailable,	// no MIDI decoder for this chip/channel yet
 	melodic,		// the channel has a note and pitch (FM, PSG, square, ...)
-	oneShot			// the channel can only trigger a fixed note (ADPCM, DAC, noise, ...)
+	discrete,		// a note, but only from a fixed set of them - the noise channel's sixteen
+					// periods, the slots a song gives its DPCM samples. The note is real enough
+					// to play and to build a drum kit on, and carries no pitch to slide.
+	oneShot			// the channel can only trigger a fixed note (ADPCM, DAC, ...)
 };
 
 /** One mixer track: a channel of a device, or the whole device when it cannot be split. */

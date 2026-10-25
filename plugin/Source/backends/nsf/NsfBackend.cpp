@@ -146,6 +146,16 @@ public:
 														 : playback::MidiCapability::unavailable });
 		};
 
+		// The two sample voices answer with a note now: the noise channel's sixteen periods are
+		// laid out as sixteen semitones, and a DPCM sample keeps the slot the scan gave it. Neither
+		// carries a pitch to slide, so neither is melodic - what they are is a fixed set of notes a
+		// drum kit can be built on.
+		const auto addSampleTrack = [&] (const char* name, const char* group)
+		{
+			tracks_.push_back (playback::TrackInfo { nextId++, (playback::DeviceId) 0, 0, channel++, true, name,
+													  group, playback::MidiCapability::discrete });
+		};
+
 		for (const char* name : apuNames) { addTrack (name, "2A03", true, 0); }
 
 		// The triangle has a period register and a wavetable: it has a pitch, unlike the noise and
@@ -154,8 +164,8 @@ public:
 		// "DPCM", not "DMC": the community names the voice after what it plays, and the DMC is
 		// the object that plays it. A strip labelled with the chip reads like a second device.
 		addTrack (dmcNames[0], "2A03", true, 0);
-		addTrack (dmcNames[1], "2A03", false, 0);
-		addTrack (dmcNames[2], "2A03", false, 0);
+		addSampleTrack (dmcNames[1], "2A03");
+		addSampleTrack (dmcNames[2], "2A03");
 
 		switch (file.chip ())
 		{
@@ -259,6 +269,7 @@ public:
 		}
 
 		NsfPlayer probe (file, 44100.0);
+		probe.skipPrescan ();		// only the write counters are read below
 		probe.start ();
 
 		float left [512] = {};

@@ -183,6 +183,18 @@ void drawMelodyGlyph (juce::Graphics& g, juce::Rectangle<float> iconArea, juce::
 	}
 }
 
+void drawDiscreteGlyph (juce::Graphics& g, juce::Rectangle<float> iconArea, juce::Colour colour)
+{
+	// A note that is really a slot, so the mark is both marks: the keyboard says it has a pitch,
+	// the burst says it is struck rather than held. Stacked rather than side by side - at fifteen
+	// pixels, two half-width glyphs would each be a barcode.
+	const float gap = juce::jmax (1.0f, iconArea.getHeight() * 0.12f);
+	const float keyboardHeight = (iconArea.getHeight() - gap) * 0.58f;
+
+	drawMelodyGlyph (g, iconArea.withHeight (keyboardHeight), colour);
+	drawSampleGlyph (g, iconArea.withTrimmedTop (keyboardHeight + gap), colour);
+}
+
 void drawSampleGlyph (juce::Graphics& g, juce::Rectangle<float> iconArea, juce::Colour colour)
 {
 	g.setColour (colour);

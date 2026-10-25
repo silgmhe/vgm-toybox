@@ -213,6 +213,18 @@ bool NsfFile::parse (const void* data, std::size_t size, NsfFile& out, std::stri
 
 	file.rom.assign (bytes + headerSize, bytes + size);
 
+	// FNV-1a over the program. The sample-slot cache needs an identity for the song that survives
+	// a backend being rebuilt, and its bytes are the only one that does.
+	std::size_t hash = (std::size_t) 1469598103934665603ull;
+
+	for (std::uint8_t byte : file.rom)
+	{
+		hash ^= (std::size_t) byte;
+		hash *= (std::size_t) 1099511628211ull;
+	}
+
+	file.contentHash = hash;
+
 	if (file.rom.empty())
 	{
 		error = "the header is followed by no program";

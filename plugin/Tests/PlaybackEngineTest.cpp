@@ -766,6 +766,92 @@ int main (int argc, char* argv[])
 		check (loudestApu < 0.001, "the 2A03 tracks stay silent, so the tone is the expansion's");
 	}
 
+	// --- [3e] the two sample voices answer with notes -------------------------------------------
+	if (inputFile.getFileName() == "apu_percussion.nsf")
+	{
+		// The noise channel and the DPCM channel have no pitch of their own, and both the panel and
+		// the MIDI port need a note anyway. The noise channel's sixteen periods are laid out as
+		// sixteen semitones; a DPCM sample keeps the slot the scan gave it. This checks that both
+		// answers exist, that the noise note follows the period, and that the DPCM slot is the same
+		// answer two seeks apart.
+		engine.setStateCaptureWanted (true);
+
+		std::printf ("[3e] the sample voices answer with notes\n");
+
+		toybox::playback::MidiCapability noiseCapability = toybox::playback::MidiCapability::unavailable;
+		toybox::playback::MidiCapability dpcmCapability = toybox::playback::MidiCapability::unavailable;
+
+		for (const auto& track : tracks)
+		{
+			if (track.name == "Noise") { noiseCapability = track.midiCapability; }
+			if (track.name == "DPCM") { dpcmCapability = track.midiCapability; }
+		}
+
+		check (noiseCapability == toybox::playback::MidiCapability::discrete,
+			   "the noise channel is offered as a fixed-note channel");
+		check (dpcmCapability == toybox::playback::MidiCapability::discrete,
+			   "the DPCM channel is offered as a fixed-note channel");
+
+		std::vector<int> noiseNotes;
+		std::vector<int> dpcmNotes;
+
+		// Two positions chosen to land on different noise periods: the driver steps the period
+		// every 64 play calls, and a play call is one sixtieth of a second.
+		for (double at : { 0.2, 2.4 })
+		{
+			engine.setPositionSeconds (at);
+			engine.play ();
+			renderSeconds (engine, 0.3, sampleRate, blockSize);
+
+			toybox::playback::ChipStateSnapshot snapshot;
+
+			if (! engine.captureChipState (snapshot))
+			{
+				continue;
+			}
+
+			for (const auto& channel : snapshot.channels)
+			{
+				if (! channel.active)
+				{
+					continue;
+				}
+
+				if (channel.name == "Noise") { noiseNotes.push_back (channel.note); }
+				if (channel.name == "DPCM") { dpcmNotes.push_back (channel.note); }
+			}
+
+			std::printf ("      at %.1f s: noise %d, dpcm %d\n", at,
+						 noiseNotes.empty () ? -1 : noiseNotes.back (),
+						 dpcmNotes.empty () ? -1 : dpcmNotes.back ());
+		}
+
+		engine.setStateCaptureWanted (false);
+
+		bool inNoiseRange = ! noiseNotes.empty ();
+
+		for (int note : noiseNotes)
+		{
+			inNoiseRange = inNoiseRange && note >= 43 && note <= 58;
+		}
+
+		check (inNoiseRange, "the noise note stays inside the sixteen periods' range");
+
+		bool inSampleRange = ! dpcmNotes.empty ();
+
+		for (int note : dpcmNotes)
+		{
+			inSampleRange = inSampleRange && note >= 60 && note <= 61;
+		}
+
+		check (inSampleRange, "the DPCM note is one of this file's two sample slots");
+
+		// The driver changes the noise period as the song plays, so two positions three seconds
+		// apart must not read the same note.
+		check (noiseNotes.size () >= 2 && noiseNotes.front () != noiseNotes.back (),
+			   "the noise note follows the period, not the seek position");
+	}
+
 	// --- [3d] the expansion chips describe themselves -----------------------------------------
 	if (inputFile.getFileName() == "fds_song.nsf"
 		|| inputFile.getFileName() == "mmc5_song.nsf"

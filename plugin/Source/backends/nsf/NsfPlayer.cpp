@@ -2,7 +2,9 @@
 
 #include <algorithm>
 #include <cmath>
+#include <mutex>
 #include <string>
+#include <unordered_map>
 
 #include "backends/nsf/NsfBus.h"
 #include "backends/nsf/NsfChannelNaming.h"
@@ -17,6 +19,17 @@ namespace
 	multiple: the APU runs from the same crystal divided internally. */
 constexpr double kNtscClock = 1789772.727272727;
 constexpr double kPalClock = 1662607.0;
+
+/** DPCM sample slots per song, keyed by the file's content hash and its start song.
+
+	A backend is rebuilt several times while one song is open - switching the mixer on, seeking -
+	and each rebuild is a fresh player with an empty table. The numbering does not depend on any of
+	that, and the scan costs about half a second, so it is kept here rather than on whichever file
+	object the current backend happens to own.
+*/
+std::mutex sampleSlotMutex;
+std::unordered_map<std::size_t, std::unordered_map<int, int>> sampleSlotCache;
+constexpr std::size_t kSampleSlotCacheLimit = 16;
 
 } // namespace
 
@@ -104,8 +117,56 @@ NsfPlayer::NsfPlayer (const formats::nsf::NsfFile& image, double sampleRate)
 NsfPlayer::~NsfPlayer () = default;
 
 void NsfPlayer::start (void)
-{	rendered = 0;
+{
+	// The scan has to start from the top of the song and leaves the CPU at its end, so the song is
+	// set up twice: once to read it, once to play it.
+	resetToStart ();
+
+	// Numbering the samples needs the whole song. Done as samples arrive, the numbers would depend
+	// on where playback began - a seek to 0:30 would hand the same sample a different note, and a
+	// drum kit mapped against the track would slide.
+	if (! prescanDisabled)
+	{
+		const std::size_t key = file.contentHash ^ (std::size_t) file.startSong;
+		bool cached = false;
+
+		{
+			std::lock_guard<std::mutex> guard (sampleSlotMutex);
+			const auto found = sampleSlotCache.find (key);
+
+			if (found != sampleSlotCache.end ())
+			{
+				sampleNotes = found->second;
+				cached = true;
+			}
+		}
+
+		if (! cached)
+		{
+			scanSampleChannels (scanSeconds);
+
+			std::lock_guard<std::mutex> guard (sampleSlotMutex);
+
+			if (sampleSlotCache.size () >= kSampleSlotCacheLimit)
+			{
+				sampleSlotCache.clear ();
+			}
+
+			sampleSlotCache[key] = sampleNotes;
+		}
+	}
+
+	resetToStart ();
+}
+
+void NsfPlayer::resetToStart (void)
+{
+	rendered = 0;
 	cpuClockRest = 0.0;
+	clocksExecuted = 0;
+	pcPages.fill (0);
+	sampleRateWritten = false;
+	sampleAddrWritten = false;
 
 	// Order matters, and each step was paid for once already:
 	//   1. the image, then the trampoline (SetImage clears the 64 KB it lives in);
@@ -139,8 +200,86 @@ void NsfPlayer::start (void)
 
 }
 
+void NsfPlayer::scanSampleChannels (double seconds)
+{
+	if (dmc == nullptr || seconds <= 0.0)
+	{
+		return;
+	}
+
+	const int block = 1024;
+	const int total = (int) (seconds * rate);
+
+	std::vector<float> left ((std::size_t) block, 0.0f);
+	std::vector<float> right ((std::size_t) block, 0.0f);
+
+	scanning = true;
+	sampleDirty = false;		// nothing is a sample until the driver has written $4010 or $4012
+
+	for (int done = 0; done < total; done += block)
+	{
+		// The output is thrown away. Rendering is the only way to advance the CPU by the schedule
+		// the player already keeps, and it is cheap: the emulation runs about fifteen times
+		// faster than the audio it produces.
+		render (left.data (), right.data (), block);
+	}
+
+	scanning = false;
+}
+
+void NsfPlayer::observeDpcmSample (void)
+{
+	auto* info = dmc->GetTrackInfo (2);
+
+	if (info == nullptr)
+	{
+		return;
+	}
+
+	// Deliberately not checking key status: a short sample is finished by the time the scan looks,
+	// and the slot would never be recorded. Writing $4012 is the evidence that a slot is about to
+	// play, and it is the write that brought us here.
+	const int tone = (int) info->GetTone ();
+	const int rate = (int) (info->GetFreq () & 0x0F);
+	const int key = (tone << 4) | rate;
+
+	if (sampleNotes.find (key) != sampleNotes.end ())
+	{
+		return;
+	}
+
+	// MIDI stops at 127. A song with more slots than that keeps the ones it has rather than
+	// wrapping around and giving two samples one note.
+	if (nextSampleNote > 126)
+	{
+		return;
+	}
+
+	sampleNotes[key] = nextSampleNote++;
+}
+
+int NsfPlayer::noteForDpcmSample (int tone, int rate) const
+{
+	const int key = (tone << 4) | (rate & 0x0F);
+	const auto found = sampleNotes.find (key);
+
+	return found == sampleNotes.end () ? -1 : found->second;
+}
+
 void NsfPlayer::writeSound (std::uint16_t address, std::uint8_t value)
 {
+	// $4010 is the sample rate and $4012 the sample address: together they decide which slot is
+	// about to play. Neither alone is one, and a driver may write them on different frames - the
+	// check has to wait for the second, or the first read records the address at a rate of zero
+	// and takes the note the real slot should have had.
+	if (address == 0x4010) { sampleRateWritten = true; }
+	if (address == 0x4012) { sampleAddrWritten = true; }
+
+	if (sampleRateWritten && sampleAddrWritten)
+	{
+		sampleDirty = true;
+	}
+
 	// $4000-$4013 are the pulse, triangle and noise registers, $4015 the status/enable mask.
 	// \-\ are the APU\'s triangle and \-\ belong to the DMC object - that is
 	// where its noise and DPCM live. Sending everything to the APU left the last two channels of
@@ -261,6 +400,12 @@ int NsfPlayer::render (float* left, float* right, int frames)
 			if (fds) { fds->Tick (clocks); }
 			if (mmc5) { mmc5->Tick (clocks); }
 
+		}
+
+		if (scanning && sampleDirty)
+		{
+			observeDpcmSample ();
+			sampleDirty = false;
 		}
 
 		INT32 a[2] = { 0, 0 };
@@ -443,6 +588,11 @@ namespace
 	// to fill the field, and half is what the panel draws as a centred line.
 	constexpr float kNoDuty = 0.5f;
 
+	// Where the noise channel's sixteen period settings land in MIDI. FamiStudio lays them out as
+	// sixteen semitones starting at its note 32, in a scheme whose C4 is 49; MIDI's C4 is 60, so
+	// the same arrangement starts eleven higher. Period 0 is the brightest, hence the reversal.
+	constexpr int kNoiseNoteFloor = 43;
+
 	// A chip that reports no maximum volume would divide by zero; one is the smallest sensible.
 	constexpr int kLowestMaximumVolume = 1;
 
@@ -475,7 +625,7 @@ bool NsfPlayer::captureState (playback::ChipStateSnapshot& snapshot) const
 	// cover every chip that reports them.
 	snapshot.valid = true;
 
-	const auto addChannel = [&snapshot] (const char* name, const char* chipName, int trackIndex,
+	const auto addChannel = [&snapshot, this] (const char* name, const char* chipName, int trackIndex,
 										 int waveKind, float duty, xgm::ITrackInfo* info) -> std::size_t
 	{
 		playback::ChannelState state;
@@ -488,8 +638,43 @@ bool NsfPlayer::captureState (playback::ChipStateSnapshot& snapshot) const
 		if (info != nullptr)
 		{
 			state.frequency = (float) info->GetFreqHz ();
-			state.note = playback::noteForFrequency (state.frequency);
 			state.active = info->GetKeyStatus ();
+
+			// A DPCM sample lasts a few milliseconds, and a block boundary usually falls between
+			// two of them, so key status is false far more often than true - the row would blink
+			// out between hits and the note would never be seen. A DAC that still holds a value is
+			// the evidence that this voice has been used at all. GetOutput() rather than GetVolume(): the
+			// volume field is the register the driver wrote once, and this core never updates it as
+			// the sample plays.
+			if (waveKind == kShapeDelta && ! state.active && info->GetOutput () > 0)
+			{
+				state.active = true;
+			}
+
+			// Two of the 2A03's five voices have no pitch of their own and both answer with a note
+			// anyway, because a panel has nothing to draw and a MIDI port has nothing to send
+			// without one. What the note means differs:
+			//
+			//   the noise channel's sixteen period settings are laid out as sixteen semitones -
+			//   FamiStudio's arrangement - so a hi-hat written at one period is never the kick
+			//   written at another. It is a numbering, not a frequency: the real periods span ten
+			//   octaves, and none of that survives an instrument.
+			//
+			//   the DPCM channel plays whatever sample it is pointed at, so its note is the slot
+			//   the scan gave that sample. Same bytes at the same rate, same note - which is what
+			//   lets a drum kit built against one song be reused in it.
+			if (waveKind == kShapeNoise)
+			{
+				state.note = ((int) info->GetFreq () ^ 0x0F) + kNoiseNoteFloor;
+			}
+			else if (waveKind == kShapeDelta)
+			{
+				state.note = noteForDpcmSample ((int) info->GetTone (), (int) info->GetFreq ());
+			}
+			else
+			{
+				state.note = playback::noteForFrequency (state.frequency);
+			}
 
 			const int maxVolume = (std::max) (kLowestMaximumVolume, info->GetMaxVolume ());
 			const float fromVolume = (float) (std::clamp) (info->GetVolume (), 0, maxVolume) / (float) maxVolume;
@@ -510,13 +695,10 @@ bool NsfPlayer::captureState (playback::ChipStateSnapshot& snapshot) const
 				state.volume = state.active ? 1.0f : 0.0f;
 			}
 
-			// Noise and the delta channel have no pitch: what their track info reports is a rate,
-			// not a note, and drawing it as one would light a key that means nothing. Named one
-			// by one rather than measured against a threshold: the kinds above noise are pitched,
-			// and a comparison would have quietly silenced the VRC6's ramp and the VRC7's FM.
+			// Neither of the two has a frequency worth reporting - a period setting and a sample
+			// rate are not pitches - but both carry a note now, so only the frequency goes.
 			if (waveKind == kShapeNoise || waveKind == kShapeDelta)
 			{
-				state.note = -1;
 				state.frequency = 0.0f;
 			}
 

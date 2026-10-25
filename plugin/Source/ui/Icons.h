@@ -47,6 +47,9 @@ void drawMelodyGlyph (juce::Graphics& g, juce::Rectangle<float> iconArea, juce::
 	shape says "a sample is playing", not "a pitch is playing". */
 void drawSampleGlyph (juce::Graphics& g, juce::Rectangle<float> iconArea, juce::Colour colour);
 
+/** The two above, stacked: a note that belongs to a fixed set of them. */
+void drawDiscreteGlyph (juce::Graphics& g, juce::Rectangle<float> iconArea, juce::Colour colour);
+
 /** The MIDI mark: the DIN ring, its five contacts and the alignment notch. */
 void drawMidiGlyph (juce::Graphics& g, juce::Rectangle<float> iconArea, juce::Colour colour);
 

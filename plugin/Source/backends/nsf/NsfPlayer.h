@@ -4,6 +4,7 @@
 #include <array>
 #include <cstdint>
 #include <memory>
+#include <unordered_map>
 
 #include "formats/nsf/NsfFile.h"
 #include "xgm/devices/CPU/nes_cpu.h"
@@ -42,8 +43,23 @@ public:
 	NsfPlayer (const NsfPlayer&) = delete;
 	NsfPlayer& operator= (const NsfPlayer&) = delete;
 
-	/** Builds the address space, resets the CPU and runs the driver's init. Message thread. */
+	/** Builds the address space, resets the CPU and runs the driver's init. Message thread.
+
+		It also scans the song once, with the output thrown away, to number its DPCM samples. That
+		scan is what keeps a sample on one note: numbering them as they are first heard would make
+		the note depend on where playback started, and a seek to 0:30 would renumber the kit.
+		180 seconds of scan costs about 0.7 s - the whole reason it can be done here at all is
+		that the CPU runs some fifteen times faster than the audio it produces.
+	*/
 	void start (void);
+
+	/** How much of the song the sample scan covers. Past this point a sample that has never been
+		heard gets no note rather than a made-up one. */
+	static constexpr double scanSeconds = 180.0;
+
+	/** Skips that scan. For a probe that only wants the write counters: the scan costs more than
+		everything else about opening a song put together. */
+	void skipPrescan (void) { prescanDisabled = true; }
 
 	/** Renders `frames` stereo frames. Returns how many were written. */
 	int render (float* left, float* right, int frames);
@@ -114,6 +130,18 @@ public:
 	double positionSeconds (void) const;
 
 private:
+	void resetToStart (void);
+	void scanSampleChannels (double seconds);
+	void observeDpcmSample (void);
+
+	/** The MIDI note a DPCM sample slot was given, or -1 when the scan never met it.
+
+		Keyed by the sample's address and its playback rate, because those two together are what
+		sets the pitch: the same bytes at half the rate are an octave down, and FamiStudio gives
+		them a note of their own for exactly that reason.
+	*/
+	int noteForDpcmSample (int tone, int rate) const;
+
 	void writeSound (std::uint16_t address, std::uint8_t value);
 	void applyMasks (void);
 	bool chipAudible[2] = { true, true };
@@ -139,6 +167,16 @@ private:
 	std::unique_ptr<xgm::NES_FDS> fds;
 	std::unique_ptr<xgm::NES_FME7> fme7;
 	std::unique_ptr<xgm::NES_MMC5> mmc5;
+
+	/** The DPCM scan. `sampleNotes` is built by one pass over the song and then only read, so the
+		note a sample has cannot change while the song plays. */
+	std::unordered_map<int, int> sampleNotes;
+	int nextSampleNote = 60;			// MIDI 60: the octave FamiStudio starts allocating from
+	bool prescanDisabled = false;
+	bool scanning = false;
+	bool sampleDirty = false;			// a whole slot has been written since the last look
+	bool sampleRateWritten = false;
+	bool sampleAddrWritten = false;
 };
 
 } // namespace toybox::backends::nsf

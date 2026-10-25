@@ -78,6 +78,11 @@ struct NsfFile
 	/** The program and its data, from the end of the header to the end of the file. */
 	std::vector<std::uint8_t> rom;
 
+	/** FNV-1a over `rom`, computed once when the image is read. It is what the DPCM sample-slot
+		cache keys on: a backend can be rebuilt while a song is open, so the file itself is not a
+		stable identity, but its bytes are. */
+	std::size_t contentHash = 0;
+
 	bool isPal (void) const { return (ntscSpeed & 1u) != 0; }
 	/** True when the program cannot be held in the 32 KB the address space gives it. */
 	bool isBanked (void) const;

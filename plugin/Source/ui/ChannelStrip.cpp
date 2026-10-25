@@ -412,6 +412,8 @@ void ChannelStrip::updateMidiTooltip (void)
 	// the only way to learn that a keyboard means "the pitch is real" and a waveform "it is not".
 	capabilityBadge.setTooltip (midiCapability == playback::MidiCapability::oneShot
 									? i18n::tr ("mixer.midiOneShotTooltip")
+								: midiCapability == playback::MidiCapability::discrete
+									? i18n::tr ("mixer.midiDiscreteTooltip")
 									: i18n::tr ("mixer.midiMelodyTooltip"));
 }
 
