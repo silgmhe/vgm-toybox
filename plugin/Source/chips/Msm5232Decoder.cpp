@@ -12,7 +12,7 @@ namespace
 	constexpr int kLastIndex = 0x57;		// the core clamps to this (msm5232.c:296)
 
 	/** A value this high does not name a pitch: it puts the voice into noise mode (msm5232.c:290). */
-	constexpr std::uint8_t kNoiseThreshold = 0xD8;
+	constexpr uint8_t kNoiseThreshold = 0xD8;
 }
 
 struct Msm5232Decoder::Impl
@@ -27,14 +27,14 @@ struct Msm5232Decoder::Impl
 	/** The index *is* the note, so the table has nothing to compute and nothing to measure. */
 	struct Table final : NoteTable
 	{
-		int noteFor (std::uint32_t period, int, int* finePitch) const override
+		int noteFor (uint32_t period, int, int* finePitch) const override
 		{
 			if (finePitch != nullptr)
 			{
 				*finePitch = 0;
 			}
 
-			const int index = (int) (period > (std::uint32_t) kLastIndex ? kLastIndex : period);
+			const int index = (int) (period > (uint32_t) kLastIndex ? kLastIndex : period);
 			return kFirstKey + index;
 		}
 	};
@@ -48,7 +48,7 @@ Msm5232Decoder::~Msm5232Decoder() = default;
 
 void Msm5232Decoder::reset (const ChipConfig& config)
 {
-	[[maybe_unused]] const std::uint32_t clock = config.clockHz;
+	[[maybe_unused]] const uint32_t clock = config.clockHz;
 	[[maybe_unused]] const double sampleRate = config.timeBaseHz;
 	impl = std::make_unique<Impl>();
 }
@@ -75,7 +75,7 @@ void Msm5232Decoder::write (const RegisterWrite& write)
 	}
 }
 
-void Msm5232Decoder::advance (std::uint32_t)
+void Msm5232Decoder::advance (uint32_t)
 {
 	// the envelope is the chip's own business; every boundary here is a write
 }
@@ -92,7 +92,7 @@ ChannelState Msm5232Decoder::channelState (int channel) const
 	state.present = true;
 	state.gate = voice.keyed && (voice.noise || voice.key > 0);
 	state.volume = state.gate ? 15 : 0;
-	state.period = (std::uint32_t) voice.key;
+	state.period = (uint32_t) voice.key;
 
 	if (! state.gate)
 	{

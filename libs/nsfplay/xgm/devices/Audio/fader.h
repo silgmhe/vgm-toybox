@@ -8,7 +8,7 @@ namespace xgm
   class Fader : virtual public IRenderable
   {
   protected:
-    UINT32 fade_pos, fade_end;
+    uint32_t fade_pos, fade_end;
     IRenderable* d;
 
   public:
@@ -47,11 +47,11 @@ namespace xgm
     {
       if (fade_in_ms)
       {
-        const UINT32 MAX_SAMPLES = (UINT32)~0UL;
+        const uint32_t MAX_SAMPLES = (uint32_t)~0UL;
         double samples = (double)fade_in_ms * rate / 1000.0;
         if (samples < (double)MAX_SAMPLES)
         {
-          fade_end = UINT32(samples);
+          fade_end = uint32_t(samples);
         }
         else
         {
@@ -75,19 +75,19 @@ namespace xgm
       d->Skip();
     }
 
-    virtual void Tick (UINT32 clocks)
+    virtual void Tick (uint32_t clocks)
     {
       d->Tick(clocks);
     }
 
-    virtual UINT32 Render (INT32 b[2])
+    virtual uint32_t Render (int32_t b[2])
     {
       d->Render (b);
       if (fade_pos > 0)
       {
         double fade_amount = double(fade_end - fade_pos) / double(fade_end);
-        b[0] = INT32(fade_amount * b[0]);
-        b[1] = INT32(fade_amount * b[1]);
+        b[0] = int32_t(fade_amount * b[0]);
+        b[1] = int32_t(fade_amount * b[1]);
 
         if (fade_pos < fade_end) ++fade_pos;
         else fade_pos = fade_end;

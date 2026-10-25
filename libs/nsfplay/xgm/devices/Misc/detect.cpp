@@ -36,7 +36,7 @@ namespace xgm {
     m_empty = true;
   }
 
-  bool BasicDetector::Write (UINT32 adr, UINT32 val, UINT32 id)
+  bool BasicDetector::Write (uint32_t adr, uint32_t val, uint32_t id)
   {
     m_empty = false;
     m_time_buf[m_bidx] = m_current_time;

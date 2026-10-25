@@ -10,18 +10,18 @@ namespace toybox::playback
 {
 namespace
 {
-	void put32 (std::vector<std::uint8_t>& out, std::uint32_t value)
+	void put32 (std::vector<uint8_t>& out, uint32_t value)
 	{
-		out.push_back ((std::uint8_t) (value & 0xFF));
-		out.push_back ((std::uint8_t) ((value >> 8) & 0xFF));
-		out.push_back ((std::uint8_t) ((value >> 16) & 0xFF));
-		out.push_back ((std::uint8_t) ((value >> 24) & 0xFF));
+		out.push_back ((uint8_t) (value & 0xFF));
+		out.push_back ((uint8_t) ((value >> 8) & 0xFF));
+		out.push_back ((uint8_t) ((value >> 16) & 0xFF));
+		out.push_back ((uint8_t) ((value >> 24) & 0xFF));
 	}
 
-	void put16 (std::vector<std::uint8_t>& out, std::uint16_t value)
+	void put16 (std::vector<uint8_t>& out, uint16_t value)
 	{
-		out.push_back ((std::uint8_t) (value & 0xFF));
-		out.push_back ((std::uint8_t) ((value >> 8) & 0xFF));
+		out.push_back ((uint8_t) (value & 0xFF));
+		out.push_back ((uint8_t) ((value >> 8) & 0xFF));
 	}
 }
 
@@ -51,10 +51,10 @@ bool writeCycleWav (const ChannelState& channel, const std::string& path, int re
 		}
 	}
 
-	const auto sampleRate = (std::uint32_t) std::lround (rate);
-	const std::uint32_t dataBytes = (std::uint32_t) frames * 2u;
+	const auto sampleRate = (uint32_t) std::lround (rate);
+	const uint32_t dataBytes = (uint32_t) frames * 2u;
 
-	std::vector<std::uint8_t> header;
+	std::vector<uint8_t> header;
 	header.reserve (44);
 
 	header.insert (header.end (), { 'R', 'I', 'F', 'F' });
@@ -85,7 +85,7 @@ bool writeCycleWav (const ChannelState& channel, const std::string& path, int re
 		for (int i = 0; i < cycleLength; ++i)
 		{
 			const float value = (std::clamp) (channel.wave[(std::size_t) i], -1.0f, 1.0f);
-			const auto pcm = (std::int16_t) std::lround (value * 32000.0f);
+			const auto pcm = (int16_t) std::lround (value * 32000.0f);
 
 			const char bytes[2] = { (char) (pcm & 0xFF), (char) ((pcm >> 8) & 0xFF) };
 			file.write (bytes, 2);

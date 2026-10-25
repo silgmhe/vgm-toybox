@@ -116,14 +116,14 @@ internal_refresh (EPSG * psg)
 }
 
 void
-EPSG_set_clock(EPSG * psg, UINT32 c)
+EPSG_set_clock(EPSG * psg, uint32_t c)
 {
   psg->clk = c;
   internal_refresh(psg);
 }
 
 void
-EPSG_set_rate (EPSG * psg, UINT32 r)
+EPSG_set_rate (EPSG * psg, uint32_t r)
 {
   psg->rate = r ? r : 44100;
   internal_refresh (psg);
@@ -136,13 +136,13 @@ EPSG_set_quality (EPSG * psg, uint32_t q)
   internal_refresh (psg);
 }
 
-static UINT8 device_start_ay8910_emu(const AY8910_CFG* cfg, DEV_INFO* retDevInf)
+static uint8_t device_start_ay8910_emu(const AY8910_CFG* cfg, DEV_INFO* retDevInf)
 {
 	EPSG* chip;
-	UINT8 isYM;
-	UINT8 flags;
-	UINT32 clock;
-	UINT32 rate;
+	uint8_t isYM;
+	uint8_t flags;
+	uint32_t clock;
+	uint32_t rate;
 	
 	clock = cfg->_genCfg.clock;
 	isYM = ((cfg->chipType & 0xF0) > 0x00);
@@ -169,7 +169,7 @@ static UINT8 device_start_ay8910_emu(const AY8910_CFG* cfg, DEV_INFO* retDevInf)
 }
 
 EPSG *
-EPSG_new (UINT32 c, UINT32 r)
+EPSG_new (uint32_t c, uint32_t r)
 {
   EPSG *psg;
   uint8_t i;
@@ -198,7 +198,7 @@ EPSG_new (UINT32 c, UINT32 r)
 }
 
 void
-EPSG_setFlags (EPSG * psg, UINT8 flags)
+EPSG_setFlags (EPSG * psg, uint8_t flags)
 {
   psg->chp_flags = flags;
 
@@ -263,14 +263,14 @@ EPSG_toggleMask (EPSG *psg, uint32_t mask)
 }
 
 void
-EPSG_setMuteMask (EPSG *psg, UINT32 mask)
+EPSG_setMuteMask (EPSG *psg, uint32_t mask)
 {
   psg->mask = mask;
   return;
 }
 
 void
-EPSG_setStereoMask (EPSG *psg, UINT32 mask)
+EPSG_setStereoMask (EPSG *psg, uint32_t mask)
 {
   if(psg)
   {
@@ -325,22 +325,22 @@ EPSG_delete (EPSG * psg)
   free (psg);
 }
 
-UINT8
-EPSG_readIO (EPSG * psg, UINT8 adr)
+uint8_t
+EPSG_readIO (EPSG * psg, uint8_t adr)
 {
   // note: "adr" parameter is not used
-  return (UINT8) (psg->reg[psg->adr]);
+  return (uint8_t) (psg->reg[psg->adr]);
 }
 
-UINT8
-EPSG_readReg (EPSG * psg, UINT8 reg)
+uint8_t
+EPSG_readReg (EPSG * psg, uint8_t reg)
 {
-  return (UINT8) (psg->reg[reg & 0x1f]);
+  return (uint8_t) (psg->reg[reg & 0x1f]);
 
 }
 
 void
-EPSG_writeIO (EPSG * psg, UINT8 adr, UINT8 val)
+EPSG_writeIO (EPSG * psg, uint8_t adr, uint8_t val)
 {
   if (adr & 1)
     EPSG_writeReg (psg, psg->adr, val);
@@ -490,12 +490,12 @@ mix_output_stereo(EPSG *psg, int32_t out[2])
 }
 
 void
-EPSG_calc_stereo (EPSG * psg, UINT32 samples, DEV_SMPL **out)
+EPSG_calc_stereo (EPSG * psg, uint32_t samples, DEV_SMPL **out)
 {
   DEV_SMPL *bufMO = out[0];
   DEV_SMPL *bufRO = out[1];
   int32_t buffers[2];
-  UINT32 i;
+  uint32_t i;
 
   if (!psg->quality)
   {
@@ -548,7 +548,7 @@ static void EPSG_Is3ChPcm(EPSG* psg)
 }
 
 void
-EPSG_writeReg (EPSG * psg, UINT8 reg, UINT8 val)
+EPSG_writeReg (EPSG * psg, uint8_t reg, uint8_t val)
 {
   int c;
 
@@ -624,7 +624,7 @@ void EPSG_set_pan (EPSG * psg, uint8_t ch, int16_t pan)
   Panning_Calculate( psg->pan[ch], pan );
 }
 
-static void ay8910_emu_set_options(void *chip, UINT32 Flags)
+static void ay8910_emu_set_options(void *chip, uint32_t Flags)
 {
   EPSG* psg = (EPSG*)chip;
 
@@ -633,9 +633,9 @@ static void ay8910_emu_set_options(void *chip, UINT32 Flags)
   return;
 }
 
-static void ay8910_emu_pan(void* chip, const INT16* PanVals)
+static void ay8910_emu_pan(void* chip, const int16_t* PanVals)
 {
-  UINT8 curChn;
+  uint8_t curChn;
   
   for (curChn = 0; curChn < 3; curChn ++)
     EPSG_set_pan((EPSG*)chip, curChn, PanVals[curChn]);

@@ -10,11 +10,11 @@ extern "C"
 
 typedef struct _os_signal OS_SIGNAL;
 
-UINT8 OSSignal_Init(OS_SIGNAL** retSignal, UINT8 initState);
+uint8_t OSSignal_Init(OS_SIGNAL** retSignal, uint8_t initState);
 void OSSignal_Deinit(OS_SIGNAL* sig);
-UINT8 OSSignal_Signal(OS_SIGNAL* sig);
-UINT8 OSSignal_Reset(OS_SIGNAL* sig);
-UINT8 OSSignal_Wait(OS_SIGNAL* sig);
+uint8_t OSSignal_Signal(OS_SIGNAL* sig);
+uint8_t OSSignal_Reset(OS_SIGNAL* sig);
+uint8_t OSSignal_Wait(OS_SIGNAL* sig);
 
 #ifdef __cplusplus
 }

@@ -20,17 +20,17 @@
 #include "gbintf.h"
 
 
-static void gb_sameboy_update(void *chip, UINT32 samples, DEV_SMPL **outputs);
-static UINT8 device_start_gb_sameboy(const DEV_GEN_CFG* cfg, DEV_INFO* retDevInf);
+static void gb_sameboy_update(void *chip, uint32_t samples, DEV_SMPL **outputs);
+static uint8_t device_start_gb_sameboy(const DEV_GEN_CFG* cfg, DEV_INFO* retDevInf);
 static void device_stop_gb_sameboy(void *chip);
 static void device_reset_gb_sameboy(void *chip);
 
-static void gb_sameboy_set_mute_mask(void *chip, UINT32 MuteMask);
-static UINT32 gb_sameboy_get_mute_mask(void *chip);
-static void gb_sameboy_set_options(void *chip, UINT32 Flags);
+static void gb_sameboy_set_mute_mask(void *chip, uint32_t MuteMask);
+static uint32_t gb_sameboy_get_mute_mask(void *chip);
+static void gb_sameboy_set_options(void *chip, uint32_t Flags);
 
-static void gb_sameboy_w(void *chip, UINT8 offset, UINT8 data);
-static UINT8 gb_sameboy_r(void *chip, UINT8 offset);
+static void gb_sameboy_w(void *chip, uint8_t offset, uint8_t data);
+static uint8_t gb_sameboy_r(void *chip, uint8_t offset);
 
 
 static DEVDEF_RWFUNC devFunc[] =
@@ -2285,10 +2285,10 @@ static void GB_advance_cycles(GB_gameboy_t *gb, uint8_t cycles)
 }
 
 
-static void gb_sameboy_update(void *chip, UINT32 samples, DEV_SMPL **outputs)
+static void gb_sameboy_update(void *chip, uint32_t samples, DEV_SMPL **outputs)
 {
 	GB_gameboy_t *gb = (GB_gameboy_t *)chip;
-	UINT32 i;
+	uint32_t i;
 
 	for (i = 0; i < samples; i++)
 	{
@@ -2301,7 +2301,7 @@ static void gb_sameboy_update(void *chip, UINT32 samples, DEV_SMPL **outputs)
 	}
 }
 
-static UINT8 device_start_gb_sameboy(const DEV_GEN_CFG* cfg, DEV_INFO* retDevInf)
+static uint8_t device_start_gb_sameboy(const DEV_GEN_CFG* cfg, DEV_INFO* retDevInf)
 {
 	GB_gameboy_t *gb;
 
@@ -2346,7 +2346,7 @@ static void device_stop_gb_sameboy(void *chip)
 static void device_reset_gb_sameboy(void *chip)
 {
 	GB_gameboy_t *gb = (GB_gameboy_t *)chip;
-	UINT32 muteMask;
+	uint32_t muteMask;
 
 	muteMask = gb_sameboy_get_mute_mask(gb);
 
@@ -2362,7 +2362,7 @@ static void device_reset_gb_sameboy(void *chip)
 	return;
 }
 
-static void gb_sameboy_set_mute_mask(void *chip, UINT32 MuteMask)
+static void gb_sameboy_set_mute_mask(void *chip, uint32_t MuteMask)
 {
 	GB_gameboy_t *gb = (GB_gameboy_t *)chip;
 	
@@ -2374,10 +2374,10 @@ static void gb_sameboy_set_mute_mask(void *chip, UINT32 MuteMask)
 	return;
 }
 
-static UINT32 gb_sameboy_get_mute_mask(void *chip)
+static uint32_t gb_sameboy_get_mute_mask(void *chip)
 {
 	GB_gameboy_t *gb = (GB_gameboy_t *)chip;
-	UINT32 muteMask;
+	uint32_t muteMask;
 	
 	muteMask =	(gb->apu_output.channel_muted[0] << 0) |
 				(gb->apu_output.channel_muted[1] << 1) |
@@ -2387,7 +2387,7 @@ static UINT32 gb_sameboy_get_mute_mask(void *chip)
 	return muteMask;
 }
 
-static void gb_sameboy_set_options(void *chip, UINT32 Flags)
+static void gb_sameboy_set_options(void *chip, uint32_t Flags)
 {
 	GB_gameboy_t *gb = (GB_gameboy_t *)chip;
 	
@@ -2400,13 +2400,13 @@ static void gb_sameboy_set_options(void *chip, UINT32 Flags)
 	return;
 }
 
-static void gb_sameboy_w(void *chip, UINT8 offset, UINT8 data)
+static void gb_sameboy_w(void *chip, uint8_t offset, uint8_t data)
 {
 	GB_gameboy_t *gb = (GB_gameboy_t *)chip;
 	GB_apu_write(gb, GB_IO_NR10 + offset, data);
 }
 
-static UINT8 gb_sameboy_r(void *chip, UINT8 offset)
+static uint8_t gb_sameboy_r(void *chip, uint8_t offset)
 {
 	GB_gameboy_t *gb = (GB_gameboy_t *)chip;
 	return GB_apu_read(gb, GB_IO_NR10 + offset);

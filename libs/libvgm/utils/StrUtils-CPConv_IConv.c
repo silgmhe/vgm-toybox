@@ -38,9 +38,9 @@ struct _codepage_conversion
 static size_t GetEncodingCharSize(const char* encoding)
 {
 	if (! strnicmp(encoding, "UCS-2", 5) || ! strnicmp(encoding, "UTF-16", 6))
-		return sizeof(UINT16);
+		return sizeof(uint16_t);
 	else if (! strnicmp(encoding, "UCS-4", 5) || ! strnicmp(encoding, "UTF-32", 6))
-		return sizeof(UINT32);
+		return sizeof(uint32_t);
 	else
 		return sizeof(char);
 }
@@ -53,16 +53,16 @@ static size_t GetStrSize(const char* str, size_t charBytes)
 	}
 	else if (charBytes == 2)
 	{
-		const UINT16* u16str = (const UINT16*)str;
-		const UINT16* ptr;
+		const uint16_t* u16str = (const uint16_t*)str;
+		const uint16_t* ptr;
 		for (ptr = u16str; *ptr != 0; ptr ++)
 			;
 		return (ptr - u16str) * charBytes;
 	}
 	else if (charBytes == 4)
 	{
-		const UINT32* u32str = (const UINT32*)str;
-		const UINT32* ptr;
+		const uint32_t* u32str = (const uint32_t*)str;
+		const uint32_t* ptr;
 		for (ptr = u32str; *ptr != 0; ptr ++)
 			;
 		return (ptr - u32str) * charBytes;
@@ -70,7 +70,7 @@ static size_t GetStrSize(const char* str, size_t charBytes)
 	return 0;
 }
 
-UINT8 CPConv_Init(CPCONV** retCPC, const char* cpFrom, const char* cpTo)
+uint8_t CPConv_Init(CPCONV** retCPC, const char* cpFrom, const char* cpTo)
 {
 	CPCONV* cpc;
 	
@@ -106,7 +106,7 @@ void CPConv_Deinit(CPCONV* cpc)
 	return;
 }
 
-UINT8 CPConv_StrConvert(CPCONV* cpc, size_t* outSize, char** outStr, size_t inSize, const char* inStr)
+uint8_t CPConv_StrConvert(CPCONV* cpc, size_t* outSize, char** outStr, size_t inSize, const char* inStr)
 {
 	size_t outBufSize;
 	size_t remBytesIn;
@@ -115,7 +115,7 @@ UINT8 CPConv_StrConvert(CPCONV* cpc, size_t* outSize, char** outStr, size_t inSi
 	char* outPtr;
 	size_t wrtBytes;
 	char resVal;
-	UINT8 canRealloc;
+	uint8_t canRealloc;
 	char* outPtrPrev;
 	
 	iconv(cpc->hIConv, NULL, NULL, NULL, NULL);	// reset conversion state

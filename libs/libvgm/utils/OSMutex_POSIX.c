@@ -16,7 +16,7 @@ struct _os_mutex
 	pthread_mutex_t hMutex;
 };
 
-UINT8 OSMutex_Init(OS_MUTEX** retMutex, UINT8 initLocked)
+uint8_t OSMutex_Init(OS_MUTEX** retMutex, uint8_t initLocked)
 {
 	OS_MUTEX* mtx;
 	int retVal;
@@ -46,7 +46,7 @@ void OSMutex_Deinit(OS_MUTEX* mtx)
 	return;
 }
 
-UINT8 OSMutex_Lock(OS_MUTEX* mtx)
+uint8_t OSMutex_Lock(OS_MUTEX* mtx)
 {
 	int retVal;
 	
@@ -57,7 +57,7 @@ UINT8 OSMutex_Lock(OS_MUTEX* mtx)
 		return 0xFF;
 }
 
-UINT8 OSMutex_TryLock(OS_MUTEX* mtx)
+uint8_t OSMutex_TryLock(OS_MUTEX* mtx)
 {
 	int retVal;
 	
@@ -70,7 +70,7 @@ UINT8 OSMutex_TryLock(OS_MUTEX* mtx)
 		return 0xFF;
 }
 
-UINT8 OSMutex_Unlock(OS_MUTEX* mtx)
+uint8_t OSMutex_Unlock(OS_MUTEX* mtx)
 {
 	int retVal;
 	

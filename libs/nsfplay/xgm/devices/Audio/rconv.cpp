@@ -64,7 +64,7 @@ void RateConverter::Reset ()
     for(int i=0; i<=m; i++)
     {
       hr[i] /= gain;
-      hri[i] = INT64(hr[i] * (1<<PRECISION));
+      hri[i] = int64_t(hr[i] * (1<<PRECISION));
     }
 
     for(int i=0; i<=mult*2; i++) 
@@ -84,13 +84,13 @@ void RateConverter::SetRate (double r)
   rate = r;
 }
 
-void RateConverter::Tick (UINT32 clocks_)
+void RateConverter::Tick (uint32_t clocks_)
 {
   assert (target);
   clocks += clocks_;
 }
 
-UINT32 RateConverter::Render (INT32 b[2])
+uint32_t RateConverter::Render (int32_t b[2])
 {
   return FastRender(b);
 }
@@ -155,13 +155,13 @@ void RateConverter::Skip ()
 }
 
 // 入力は-32768～+32767まで
-inline UINT32 RateConverter::FastRender (INT32 b[2])
+inline uint32_t RateConverter::FastRender (int32_t b[2])
 {
   assert (target);
 
   //double out[2];
-  INT64 out[2];
-  static INT32 t[2];
+  int64_t out[2];
+  static int32_t t[2];
 
   for(int i=0; i<=mult; i++)
   {
@@ -214,10 +214,10 @@ inline UINT32 RateConverter::FastRender (INT32 b[2])
     out[1] += hri[i] * (tap[1][mult+i]+tap[1][mult-i]);
   }
 
-  //b[0] = (INT32)out[0];
-  //b[1] = (INT32)out[1];
-  b[0] = INT32(out[0] >> PRECISION);
-  b[1] = INT32(out[1] >> PRECISION);
+  //b[0] = (int32_t)out[0];
+  //b[1] = (int32_t)out[1];
+  b[0] = int32_t(out[0] >> PRECISION);
+  b[1] = int32_t(out[1] >> PRECISION);
 
   return 2;
 }

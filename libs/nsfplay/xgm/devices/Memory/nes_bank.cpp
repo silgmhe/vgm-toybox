@@ -13,7 +13,7 @@
 #define DETECT_FDS_MIRROR 0
 
 #if FDS_MEMCPY
-static UINT8* fds_image = NULL;
+static uint8_t* fds_image = NULL;
 #endif
 
 namespace xgm
@@ -36,12 +36,12 @@ namespace xgm
     #endif
   }
 
-  void NES_BANK::SetBankDefault (UINT8 bank, int value)
+  void NES_BANK::SetBankDefault (uint8_t bank, int value)
   {
     bankdefault[bank] = value;
   }
 
-  bool NES_BANK::SetImage (UINT8 * data, UINT32 offset, UINT32 size)
+  bool NES_BANK::SetImage (uint8_t * data, uint32_t offset, uint32_t size)
   {
     int i;
 
@@ -53,14 +53,14 @@ namespace xgm
     bankmax = (total_size >> 12); // count of full banks
     if (total_size & 0xfff) bankmax += 1; // include last partial bank
     if (bankmax > 256) bankmax = 256;
-    UINT32 image_size = 0x1000 * bankmax;
+    uint32_t image_size = 0x1000 * bankmax;
 
     if (image)
       delete[]image;
-    image = new UINT8[image_size];
+    image = new uint8_t[image_size];
     memset (image, 0, image_size);
 
-    UINT32 start = offset & 0xfff;
+    uint32_t start = offset & 0xfff;
     if ((start + size) > image_size)
       size = image_size;
     memcpy (image + (offset & 0xfff), data, size);
@@ -68,7 +68,7 @@ namespace xgm
     #if FDS_MEMCPY
       if (fds_image)
         delete[] fds_image;
-      fds_image = new UINT8[0x10000];
+      fds_image = new uint8_t[0x10000];
       memset(fds_image, 0, 0x10000);
       for (i = 0; i < 16; i++)
         bank[i] = fds_image + 0x1000 * i;
@@ -99,7 +99,7 @@ namespace xgm
     }
   }
 
-  bool NES_BANK::Write (UINT32 adr, UINT32 val, UINT32 id)
+  bool NES_BANK::Write (uint32_t adr, uint32_t val, uint32_t id)
   {
     #if FDS_MEMCPY
     if (!fds_enable)
@@ -153,7 +153,7 @@ namespace xgm
     return false;
   }
 
-  bool NES_BANK::Read (UINT32 adr, UINT32 & val, UINT32 id)
+  bool NES_BANK::Read (uint32_t adr, uint32_t & val, uint32_t id)
   {
     if (0x5ff8 <= adr && adr < 0x5fff)
     {

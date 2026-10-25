@@ -1390,7 +1390,7 @@ bool PlaybackEngine::isOutputBusConnected (int busIndex) const
 		return false;
 	}
 
-	return (connectedBuses.load() & ((std::uint64_t) 1 << busIndex)) != 0;
+	return (connectedBuses.load() & ((uint64_t) 1 << busIndex)) != 0;
 }
 
 //==============================================================================
@@ -1519,7 +1519,7 @@ void PlaybackEngine::emitMidiForBlock (double blockStartSeconds, int numSamples,
 				// Only what this engine bent is its to put back.
 				if ((midiBentChannels & (1u << channel)) != 0)
 				{
-					sink->send ({ sampleOffset, (std::uint8_t) (0xE0 | channel), 0, 64 });
+					sink->send ({ sampleOffset, (uint8_t) (0xE0 | channel), 0, 64 });
 				}
 			}
 		}
@@ -1570,7 +1570,7 @@ void PlaybackEngine::emitMidiForBlock (double blockStartSeconds, int numSamples,
 	// and resumes at the loop point exactly like a seek to it would.
 	// Which channels are routed (0-based bit set). The bend-range RPN is a channel setting, so it
 	// goes only to channels something actually plays on.
-	std::uint32_t usedChannels = 0;
+	uint32_t usedChannels = 0;
 	for (const auto& track : tracks)
 	{
 		const int channel = track->midiChannel.load();
@@ -1606,10 +1606,10 @@ void PlaybackEngine::emitMidiForBlock (double blockStartSeconds, int numSamples,
 					continue;
 				}
 
-				const std::uint8_t status = (std::uint8_t) (0xB0 | channel);
+				const uint8_t status = (uint8_t) (0xB0 | channel);
 				sink->send ({ 0, status, 101, 0 });			// RPN 0, parameter 0
 				sink->send ({ 0, status, 100, 0 });			// = pitch bend sensitivity
-				sink->send ({ 0, status, 6, (std::uint8_t) juce::jlimit (0, 127, bendRange) });
+				sink->send ({ 0, status, 6, (uint8_t) juce::jlimit (0, 127, bendRange) });
 				sink->send ({ 0, status, 38, 0 });			// cents part: whole semitones only
 				sink->send ({ 0, status, 101, 127 });		// deselect the parameter, so the
 				sink->send ({ 0, status, 100, 127 });		// next data entry is not swallowed
@@ -1625,7 +1625,7 @@ void PlaybackEngine::emitMidiForBlock (double blockStartSeconds, int numSamples,
 			{
 				if ((midiBentChannels & (1u << channel)) != 0)
 				{
-					sink->send ({ 0, (std::uint8_t) (0xE0 | channel), 0, 64 });
+					sink->send ({ 0, (uint8_t) (0xE0 | channel), 0, 64 });
 				}
 			}
 
@@ -1663,15 +1663,15 @@ void PlaybackEngine::emitMidiForBlock (double blockStartSeconds, int numSamples,
 	// What the host is told and what a stop has to end are the same fact, so the note state is
 	// updated exactly where the message goes out - including the master's merged copy, which is
 	// a second note on a second channel.
-	const auto trackNote = [this] (int wireChannel, std::uint8_t noteStatus,
-								   std::uint8_t note, std::uint8_t velocity)
+	const auto trackNote = [this] (int wireChannel, uint8_t noteStatus,
+								   uint8_t note, uint8_t velocity)
 	{
 		if (wireChannel < 0 || wireChannel >= 16 || note > 127)
 		{
 			return;
 		}
 
-		const std::uint64_t bit = (std::uint64_t) 1 << (note & 63);
+		const uint64_t bit = (uint64_t) 1 << (note & 63);
 		if ((noteStatus & 0xF0) == 0x90 && velocity > 0)
 		{
 			midiActiveNotes[wireChannel][note >> 6] |= bit;
@@ -1684,7 +1684,7 @@ void PlaybackEngine::emitMidiForBlock (double blockStartSeconds, int numSamples,
 
 	// A bend that actually went out is remembered per channel: it is the only state a stop or a
 	// seek has to put back, and only on the channel that received it.
-	const auto trackBend = [this] (int wireChannel, std::uint8_t noteStatus)
+	const auto trackBend = [this] (int wireChannel, uint8_t noteStatus)
 	{
 		if (noteStatus == 0xE0 && wireChannel >= 0 && wireChannel < 16)
 		{
@@ -1723,9 +1723,9 @@ void PlaybackEngine::emitMidiForBlock (double blockStartSeconds, int numSamples,
 											  (int) std::lround ((event.timeSeconds - songTime)
 																 * hostSampleRate));
 
-		std::uint8_t status = 0;
-		std::uint8_t data1 = event.data1;
-		std::uint8_t data2 = event.data2;
+		uint8_t status = 0;
+		uint8_t data1 = event.data1;
+		uint8_t data2 = event.data2;
 		switch (event.type)
 		{
 		case playback::MidiEventType::noteOn:  status = 0x90; break;
@@ -1742,8 +1742,8 @@ void PlaybackEngine::emitMidiForBlock (double blockStartSeconds, int numSamples,
 				}
 
 				status = 0xE0;
-				data1 = (std::uint8_t) (value & 0x7F);
-				data2 = (std::uint8_t) ((value >> 7) & 0x7F);
+				data1 = (uint8_t) (value & 0x7F);
+				data2 = (uint8_t) ((value >> 7) & 0x7F);
 			}
 			break;
 		}
@@ -1756,7 +1756,7 @@ void PlaybackEngine::emitMidiForBlock (double blockStartSeconds, int numSamples,
 		if (channel > 0)
 		{
 			const int wireChannel = channel - 1;
-			sink->send ({ sampleOffset, (std::uint8_t) (status | wireChannel), data1, data2 });
+			sink->send ({ sampleOffset, (uint8_t) (status | wireChannel), data1, data2 });
 			trackNote (wireChannel, status, data1, data2);
 			trackBend (wireChannel, status);
 		}
@@ -1767,7 +1767,7 @@ void PlaybackEngine::emitMidiForBlock (double blockStartSeconds, int numSamples,
 		if (masterChannel > 0 && channel > 0 && masterChannel != channel && ! masterMuted.load())
 		{
 			const int wireChannel = masterChannel - 1;
-			sink->send ({ sampleOffset, (std::uint8_t) (status | wireChannel), data1, data2 });
+			sink->send ({ sampleOffset, (uint8_t) (status | wireChannel), data1, data2 });
 			trackNote (wireChannel, status, data1, data2);
 			trackBend (wireChannel, status);
 		}
@@ -1783,7 +1783,7 @@ void PlaybackEngine::flushActiveNotesOff (playback::MidiBlockSink* sink, int sam
 
 	// The cheap test first: an idle block with nothing sounding (the normal case, every block
 	// while the transport is stopped) must not walk the whole 16 x 128 set.
-	std::uint64_t any = 0;
+	uint64_t any = 0;
 	for (int channel = 0; channel < 16; ++channel)
 	{
 		any |= midiActiveNotes[channel][0] | midiActiveNotes[channel][1];
@@ -1793,18 +1793,18 @@ void PlaybackEngine::flushActiveNotesOff (playback::MidiBlockSink* sink, int sam
 		return;
 	}
 
-	std::uint32_t channels = 0;
+	uint32_t channels = 0;
 	for (int channel = 0; channel < 16; ++channel)
 	{
 		for (int note = 0; note < 128; ++note)
 		{
-			const std::uint64_t bit = (std::uint64_t) 1 << (note & 63);
+			const uint64_t bit = (uint64_t) 1 << (note & 63);
 			if ((midiActiveNotes[channel][note >> 6] & bit) == 0)
 			{
 				continue;
 			}
 
-			sink->send ({ sampleOffset, (std::uint8_t) (0x80 | channel), (std::uint8_t) note, 0 });
+			sink->send ({ sampleOffset, (uint8_t) (0x80 | channel), (uint8_t) note, 0 });
 			midiActiveNotes[channel][note >> 6] &= ~bit;
 			channels |= 1u << channel;
 		}
@@ -1818,7 +1818,7 @@ void PlaybackEngine::flushActiveNotesOff (playback::MidiBlockSink* sink, int sam
 	{
 		if ((channels & (1u << channel)) != 0)
 		{
-			sink->send ({ sampleOffset, (std::uint8_t) (0xB0 | channel), 123, 0 });
+			sink->send ({ sampleOffset, (uint8_t) (0xB0 | channel), 123, 0 });
 		}
 	}
 }
@@ -1827,12 +1827,12 @@ void PlaybackEngine::publishBusConnectivity (const playback::OutputBusBuffers* b
 {
 	// Publish which buses the host connected (the mixer card marks the others "not connected").
 	// This runs before the early exits - the layout is valid while nothing plays, too.
-	std::uint64_t connected = 0;
+	uint64_t connected = 0;
 	for (int bus = 0; bus < busCount; ++bus)
 	{
 		if (buses[bus].isConnected())
 		{
-			connected |= (std::uint64_t) 1 << bus;
+			connected |= (uint64_t) 1 << bus;
 		}
 	}
 	connectedBuses.store (connected);
@@ -2133,15 +2133,15 @@ void PlaybackEngine::captureScope (const float* left, int numSamples)
 		return;
 	}
 
-	const auto count = (std::uint32_t) kScopeSamples;
+	const auto count = (uint32_t) kScopeSamples;
 	auto position = scopeWrite.load (std::memory_order_relaxed);
 
 	for (int i = 0; i < numSamples; ++i)
 	{
-		scopeSamples[(position + (std::uint32_t) i) % count].store (left[i], std::memory_order_relaxed);
+		scopeSamples[(position + (uint32_t) i) % count].store (left[i], std::memory_order_relaxed);
 	}
 
-	scopeWrite.store ((position + (std::uint32_t) numSamples) % count, std::memory_order_relaxed);
+	scopeWrite.store ((position + (uint32_t) numSamples) % count, std::memory_order_relaxed);
 }
 
 void PlaybackEngine::setStateCaptureWanted (bool wanted)
@@ -2169,11 +2169,11 @@ int PlaybackEngine::readScope (float* dest, int maxSamples) const
 		return 0;
 	}
 
-	const auto count = (std::uint32_t) kScopeSamples;
-	const auto wanted = (std::uint32_t) juce::jmin (maxSamples, (int) count);
+	const auto count = (uint32_t) kScopeSamples;
+	const auto wanted = (uint32_t) juce::jmin (maxSamples, (int) count);
 	const auto end = scopeWrite.load (std::memory_order_relaxed);
 
-	for (std::uint32_t i = 0; i < wanted; ++i)
+	for (uint32_t i = 0; i < wanted; ++i)
 	{
 		// Walk backwards from the newest sample so the caller always gets the most recent window.
 		const auto index = (end + count - wanted + i) % count;

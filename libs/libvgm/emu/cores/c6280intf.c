@@ -16,7 +16,7 @@ static const char* DeviceName(const DEV_GEN_CFG* devCfg)
 	return "C6280";
 }
 
-static UINT16 DeviceChannels(const DEV_GEN_CFG* devCfg)
+static uint16_t DeviceChannels(const DEV_GEN_CFG* devCfg)
 {
 	return 6;
 }

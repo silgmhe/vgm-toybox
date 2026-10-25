@@ -21,13 +21,13 @@
 //**************************************************************************
 
 // ADPCM state and tables
-static UINT8 s_tables_computed = 0;
-static const INT8 s_index_shift[8] = { -1, -1, -1, -1, 2, 4, 6, 8 };
-static INT16 s_diff_lookup[49*16];
+static uint8_t s_tables_computed = 0;
+static const int8_t s_index_shift[8] = { -1, -1, -1, -1, 2, 4, 6, 8 };
+static int16_t s_diff_lookup[49*16];
 
 static void compute_tables(void);
 
-oki_adpcm_state* oki_adpcm_create(const INT8* custom_index_shift, const INT16* custom_diff_lookup)
+oki_adpcm_state* oki_adpcm_create(const int8_t* custom_index_shift, const int16_t* custom_diff_lookup)
 {
 	oki_adpcm_state* adpcm;
 	
@@ -47,7 +47,7 @@ void oki_adpcm_destroy(oki_adpcm_state* adpcm)
 	return;
 }
 
-void oki_adpcm_init(oki_adpcm_state* adpcm, const INT8* custom_index_shift, const INT16* custom_diff_lookup)
+void oki_adpcm_init(oki_adpcm_state* adpcm, const int8_t* custom_index_shift, const int16_t* custom_diff_lookup)
 {
 	adpcm->index_shift =  (custom_index_shift != NULL) ? custom_index_shift : s_index_shift;
 	if (custom_diff_lookup != NULL)
@@ -80,7 +80,7 @@ void oki_adpcm_reset(oki_adpcm_state* adpcm)
 //  clock -- clock the next ADPCM byte
 //-------------------------------------------------
 
-INT16 oki_adpcm_clock(oki_adpcm_state* adpcm, UINT8 nibble)
+int16_t oki_adpcm_clock(oki_adpcm_state* adpcm, uint8_t nibble)
 {
 	// update the signal
 	adpcm->signal += adpcm->diff_lookup[adpcm->step * 16 + (nibble & 15)];
@@ -111,7 +111,7 @@ INT16 oki_adpcm_clock(oki_adpcm_state* adpcm, UINT8 nibble)
 static void compute_tables(void)
 {
 	// nibble to bit map
-	static const INT8 nbl2bit[16][4] =
+	static const int8_t nbl2bit[16][4] =
 	{
 		{ 1, 0, 0, 0}, { 1, 0, 0, 1}, { 1, 0, 1, 0}, { 1, 0, 1, 1},
 		{ 1, 1, 0, 0}, { 1, 1, 0, 1}, { 1, 1, 1, 0}, { 1, 1, 1, 1},

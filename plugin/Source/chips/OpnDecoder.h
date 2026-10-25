@@ -56,9 +56,9 @@ public:
 
 	/** The DELTA-T ROM (VGM block 0x82). Without it ADPCM-B has no sample to measure, and the
 		channel stays the C4 trigger it was before. */
-	void setAdpcmBRom (std::vector<std::uint8_t> rom);
+	void setAdpcmBRom (std::vector<uint8_t> rom);
 	void write (const RegisterWrite& write) override;
-	void advance (std::uint32_t sampleTime) override;
+	void advance (uint32_t sampleTime) override;
 
 	int channelCount() const override;
 	ChannelState channelState (int channel) const override;

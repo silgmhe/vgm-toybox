@@ -14,21 +14,21 @@ namespace xgm
   protected:
     int option[OPT_END];
     int mask;
-    INT32 sm[2][3]; // stereo panning
-    UINT8 ram[0x6000 - 0x5c00];
-    UINT8 reg[8];
-    UINT8 mreg[2];
-    UINT8 pcm; // PCM channel
+    int32_t sm[2][3]; // stereo panning
+    uint8_t ram[0x6000 - 0x5c00];
+    uint8_t reg[8];
+    uint8_t mreg[2];
+    uint8_t pcm; // PCM channel
     bool pcm_mode; // PCM channel
     NES_CPU* cpu; // PCM channel reads need CPU access
 
-    UINT32 scounter[2];            // frequency divider
-    UINT32 sphase[2];              // phase counter
+    uint32_t scounter[2];            // frequency divider
+    uint32_t sphase[2];              // phase counter
 
-    UINT32 duty[2];
-    UINT32 volume[2];
-    UINT32 freq[2];
-    INT32 out[3];
+    uint32_t duty[2];
+    uint32_t volume[2];
+    uint32_t freq[2];
+    int32_t out[3];
     bool enable[2];
 
     bool envelope_disable[2];   // エンベロープ有効フラグ
@@ -43,28 +43,28 @@ namespace xgm
     int frame_sequence_count;
 
     double clock, rate;
-    INT32 calc_sqr (int i, UINT32 clocks);
-    INT32 square_table[32];
-    INT32 pcm_table[256];
+    int32_t calc_sqr (int i, uint32_t clocks);
+    int32_t square_table[32];
+    int32_t pcm_table[256];
     TrackInfoBasic trkinfo[3];
   public:
       NES_MMC5 ();
      ~NES_MMC5 ();
 
     void FrameSequence ();
-    void TickFrameSequence (UINT32 clocks);
+    void TickFrameSequence (uint32_t clocks);
 
     virtual void Reset ();
-    virtual void Tick (UINT32 clocks);
-    virtual UINT32 Render (INT32 b[2]);
-    UINT32 RenderChannels (INT32* dest, int stride, int maxChannels);
-    virtual bool Write (UINT32 adr, UINT32 val, UINT32 id=0);
-    virtual bool Read (UINT32 adr, UINT32 & val, UINT32 id=0);
+    virtual void Tick (uint32_t clocks);
+    virtual uint32_t Render (int32_t b[2]);
+    uint32_t RenderChannels (int32_t* dest, int stride, int maxChannels);
+    virtual bool Write (uint32_t adr, uint32_t val, uint32_t id=0);
+    virtual bool Read (uint32_t adr, uint32_t & val, uint32_t id=0);
     virtual void SetOption (int id, int b);
     virtual void SetClock (double);
     virtual void SetRate (double);
     virtual void SetMask (int m){ mask = m; }
-    virtual void SetStereoMix (int trk, xgm::INT16 mixl, xgm::INT16 mixr);
+    virtual void SetStereoMix (int trk, int16_t mixl, int16_t mixr);
     virtual ITrackInfo *GetTrackInfo(int trk);
 
     void SetCPU(NES_CPU* cpu_);

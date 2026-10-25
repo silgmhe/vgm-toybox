@@ -1,4 +1,4 @@
-static UINT8 ADrvLst_Add(ADRV_LIST** headPtr, const ADRV_INSTANCE* drvData)
+static uint8_t ADrvLst_Add(ADRV_LIST** headPtr, const ADRV_INSTANCE* drvData)
 {
 	ADRV_LIST* newLstItem;
 	ADRV_LIST* curLstItem;
@@ -24,7 +24,7 @@ static UINT8 ADrvLst_Add(ADRV_LIST** headPtr, const ADRV_INSTANCE* drvData)
 	return 0x00;
 }
 
-static UINT8 ADrvLst_Remove(ADRV_LIST** headPtr, const ADRV_INSTANCE* drvData)
+static uint8_t ADrvLst_Remove(ADRV_LIST** headPtr, const ADRV_INSTANCE* drvData)
 {
 	ADRV_LIST* curLstItem;
 	ADRV_LIST* lastLstItm;
@@ -60,7 +60,7 @@ static ADRV_LIST* ADrvLst_FindItem(ADRV_LIST* head, const ADRV_INSTANCE* drvData
 	return curLstItem;
 }
 
-static UINT8 ADrvLst_Clear(ADRV_LIST** headPtr)
+static uint8_t ADrvLst_Clear(ADRV_LIST** headPtr)
 {
 	ADRV_LIST* curLstItem;
 	ADRV_LIST* lastLstItm;

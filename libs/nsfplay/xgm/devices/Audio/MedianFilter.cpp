@@ -3,7 +3,7 @@
 
 using namespace xgm;
 
-static int INT32CMP(const INT32 *a, const INT32 *b) {
+static int INT32CMP(const int32_t *a, const int32_t *b) {
   if (*a < *b)
     return -1;
   else if (*a> *b)
@@ -13,7 +13,7 @@ static int INT32CMP(const INT32 *a, const INT32 *b) {
 
 MedianFilter::MedianFilter(int tapSize) {
   tapSize_ = tapSize;
-  tap_ = new INT32[tapSize_];
+  tap_ = new int32_t[tapSize_];
 }
 
 MedianFilter::~MedianFilter() {
@@ -27,14 +27,14 @@ void MedianFilter::Reset() {
   tapIndex_ = 0;
 }
 
-void MedianFilter::Put(INT32 data) {
+void MedianFilter::Put(int32_t data) {
   tap_[tapIndex_++%tapSize_] = data;
   dirty_ = true;
 }
 
-INT32 MedianFilter::Get() {
+int32_t MedianFilter::Get() {
   if(dirty_) {
-    qsort(tap_, tapSize_, sizeof(INT32), (int(*)(const void*, const void*))INT32CMP);
+    qsort(tap_, tapSize_, sizeof(int32_t), (int(*)(const void*, const void*))INT32CMP);
     dirty_ = false;
   }
   return tap_[tapSize_>>1];

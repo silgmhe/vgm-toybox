@@ -41,19 +41,19 @@ extern "C"
  *
  * @return error code. 0 = success, see AERR constants
  */
-UINT8 Audio_Init(void);
+uint8_t Audio_Init(void);
 /**
  * @brief Deinitializes the audio output system.
  *
  * @return error code. 0 = success, see AERR constants
  */
-UINT8 Audio_Deinit(void);
+uint8_t Audio_Deinit(void);
 /**
  * @brief Retrieve the number of loaded audio drivers.
  *
  * @return number of loaded audio drivers
  */
-UINT32 Audio_GetDriverCount(void);
+uint32_t Audio_GetDriverCount(void);
 /**
  * @brief Retrieve information about a certain audio driver.
  *
@@ -61,7 +61,7 @@ UINT32 Audio_GetDriverCount(void);
  * @param retDrvInfo buffer for returning driver information
  * @return error code. 0 = success, see AERR constants
  */
-UINT8 Audio_GetDriverInfo(UINT32 drvID, AUDDRV_INFO** retDrvInfo);
+uint8_t Audio_GetDriverInfo(uint32_t drvID, AUDDRV_INFO** retDrvInfo);
 
 /**
  * @brief Creates an audio driver instance and initializes it.
@@ -70,14 +70,14 @@ UINT8 Audio_GetDriverInfo(UINT32 drvID, AUDDRV_INFO** retDrvInfo);
  * @param retDrvStruct buffer for returning the audio driver instance
  * @return error code. 0 = success, see AERR constants
  */
-UINT8 AudioDrv_Init(UINT32 drvID, void** retDrvStruct);
+uint8_t AudioDrv_Init(uint32_t drvID, void** retDrvStruct);
 /**
  * @brief Deinitializes and destroys an audio driver instance.
  *
  * @param drvStruct pointer to audio driver instance
  * @return error code. 0 = success, see AERR constants
  */
-UINT8 AudioDrv_Deinit(void** drvStruct);
+uint8_t AudioDrv_Deinit(void** drvStruct);
 /**
  * @brief Retrieve the list of devices supported by an audio driver.
  *
@@ -107,28 +107,28 @@ void* AudioDrv_GetDrvData(void* drvStruct);
  * @param devID ID of the audio driver's device to be used
  * @return error code. 0 = success, see AERR constants
  */
-UINT8 AudioDrv_Start(void* drvStruct, UINT32 devID);
+uint8_t AudioDrv_Start(void* drvStruct, uint32_t devID);
 /**
  * @brief Stops the audio stream and close the device.
  *
  * @param drvStruct audio driver instance
  * @return error code. 0 = success, see AERR constants
  */
-UINT8 AudioDrv_Stop(void* drvStruct);
+uint8_t AudioDrv_Stop(void* drvStruct);
 /**
  * @brief Pause the audio stream.
  *
  * @param drvStruct audio driver instance
  * @return error code. 0 = success, see AERR constants
  */
-UINT8 AudioDrv_Pause(void* drvStruct);
+uint8_t AudioDrv_Pause(void* drvStruct);
 /**
  * @brief Resume the audio stream.
  *
  * @param drvStruct audio driver instance
  * @return error code. 0 = success, see AERR constants
  */
-UINT8 AudioDrv_Resume(void* drvStruct);
+uint8_t AudioDrv_Resume(void* drvStruct);
 
 /**
  * @brief Sets a callback function that is called whenever a buffer is free.
@@ -138,7 +138,7 @@ UINT8 AudioDrv_Resume(void* drvStruct);
  * @param userParam pointer to user data
  * @return error code. 0 = success, see AERR constants
  */
-UINT8 AudioDrv_SetCallback(void* drvStruct, AUDFUNC_FILLBUF FillBufCallback, void* userParam);
+uint8_t AudioDrv_SetCallback(void* drvStruct, AUDFUNC_FILLBUF FillBufCallback, void* userParam);
 /**
  * @brief Adds another audio driver instance to data forwarding, so it will receive a copy of all audio data.
  *
@@ -150,7 +150,7 @@ UINT8 AudioDrv_SetCallback(void* drvStruct, AUDFUNC_FILLBUF FillBufCallback, voi
  * @param destDrvStruct audio driver instance to be added to data forwarding
  * @return error code. 0 = success, see AERR constants
  */
-UINT8 AudioDrv_DataForward_Add(void* drvStruct, const void* destDrvStruct);
+uint8_t AudioDrv_DataForward_Add(void* drvStruct, const void* destDrvStruct);
 /**
  * @brief Removes an audio driver instance from data forwarding.
  *
@@ -158,14 +158,14 @@ UINT8 AudioDrv_DataForward_Add(void* drvStruct, const void* destDrvStruct);
  * @param destDrvStruct audio driver instance to be removed from data forwarding
  * @return error code. 0 = success, see AERR constants
  */
-UINT8 AudioDrv_DataForward_Remove(void* drvStruct, const void* destDrvStruct);
+uint8_t AudioDrv_DataForward_Remove(void* drvStruct, const void* destDrvStruct);
 /**
  * @brief Remove all audio driver instances from data forwarding.
  *
  * @param drvStruct audio driver instance
  * @return error code. 0 = success, see AERR constants
  */
-UINT8 AudioDrv_DataForward_RemoveAll(void* drvStruct);
+uint8_t AudioDrv_DataForward_RemoveAll(void* drvStruct);
 
 /**
  * @brief Returns the maximum number of bytes that can be written using AudioDrv_WriteData().
@@ -174,14 +174,14 @@ UINT8 AudioDrv_DataForward_RemoveAll(void* drvStruct);
  * @param drvStruct audio driver instance
  * @return current buffer size in bytes
  */
-UINT32 AudioDrv_GetBufferSize(void* drvStruct);
+uint32_t AudioDrv_GetBufferSize(void* drvStruct);
 /**
  * @brief Checks whether you can send more data to the audio driver or not.
  *
  * @param drvStruct audio driver instance
  * @return AERR_OK: ready for more data, AERR_BUSY: busy playing previous data, see AERR constants for more error codes
  */
-UINT8 AudioDrv_IsBusy(void* drvStruct);
+uint8_t AudioDrv_IsBusy(void* drvStruct);
 /**
  * @brief Sends data to the audio driver in order to be played.
  *
@@ -190,14 +190,14 @@ UINT8 AudioDrv_IsBusy(void* drvStruct);
  * @param data sample data to be sent
  * @return latency in milliseconds
  */
-UINT8 AudioDrv_WriteData(void* drvStruct, UINT32 dataSize, void* data);
+uint8_t AudioDrv_WriteData(void* drvStruct, uint32_t dataSize, void* data);
 /**
  * @brief Returns the current latency of the audio device in milliseconds.
  *
  * @param drvStruct audio driver instance
  * @return latency in milliseconds
  */
-UINT32 AudioDrv_GetLatency(void* drvStruct);
+uint32_t AudioDrv_GetLatency(void* drvStruct);
 
 #ifdef __cplusplus
 }

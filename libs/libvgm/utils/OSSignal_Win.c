@@ -15,7 +15,7 @@ struct _os_signal
 	HANDLE hEvent;
 };
 
-UINT8 OSSignal_Init(OS_SIGNAL** retSignal, UINT8 initState)
+uint8_t OSSignal_Init(OS_SIGNAL** retSignal, uint8_t initState)
 {
 	OS_SIGNAL* sig;
 	
@@ -42,7 +42,7 @@ void OSSignal_Deinit(OS_SIGNAL* sig)
 	return;
 }
 
-UINT8 OSSignal_Signal(OS_SIGNAL* sig)
+uint8_t OSSignal_Signal(OS_SIGNAL* sig)
 {
 	BOOL retVal;
 	
@@ -50,7 +50,7 @@ UINT8 OSSignal_Signal(OS_SIGNAL* sig)
 	return retVal ? 0x00 : 0xFF;
 }
 
-UINT8 OSSignal_Reset(OS_SIGNAL* sig)
+uint8_t OSSignal_Reset(OS_SIGNAL* sig)
 {
 	BOOL retVal;
 	
@@ -58,7 +58,7 @@ UINT8 OSSignal_Reset(OS_SIGNAL* sig)
 	return retVal ? 0x00 : 0xFF;
 }
 
-UINT8 OSSignal_Wait(OS_SIGNAL* sig)
+uint8_t OSSignal_Wait(OS_SIGNAL* sig)
 {
 	DWORD retVal;
 	

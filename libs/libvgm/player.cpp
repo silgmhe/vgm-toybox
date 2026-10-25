@@ -53,26 +53,26 @@ extern "C" int __cdecl _kbhit(void);
 int main(int argc, char* argv[]);
 static void DoChipControlMode(PlayerBase* player);
 static void StripNewline(char* str);
-static std::string FCC2Str(UINT32 fcc);
+static std::string FCC2Str(uint32_t fcc);
 #if USE_MEMORY_LOADER
-static UINT8 *SlurpFile(const char *fileName, UINT32 *fileSize);
+static uint8_t *SlurpFile(const char *fileName, uint32_t *fileSize);
 #endif
 static const char* GetFileTitle(const char* filePath);
-static UINT32 FillBuffer(void* drvStruct, void* userParam, UINT32 bufSize, void* Data);
-static UINT8 FilePlayCallback(PlayerBase* player, void* userParam, UINT8 evtType, void* evtParam);
+static uint32_t FillBuffer(void* drvStruct, void* userParam, uint32_t bufSize, void* Data);
+static uint8_t FilePlayCallback(PlayerBase* player, void* userParam, uint8_t evtType, void* evtParam);
 static DATA_LOADER* RequestFileCallback(void* userParam, PlayerBase* player, const char* fileName);
-static const char* LogLevel2Str(UINT8 level);
-static void PlayerLogCallback(void* userParam, PlayerBase* player, UINT8 level, UINT8 srcType,
+static const char* LogLevel2Str(uint8_t level);
+static void PlayerLogCallback(void* userParam, PlayerBase* player, uint8_t level, uint8_t srcType,
 	const char* srcTag, const char* message);
-static UINT32 GetNthAudioDriver(UINT8 adrvType, INT32 drvNumber);
-static UINT8 InitAudioSystem(void);
-static UINT8 DeinitAudioSystem(void);
-static UINT8 StartAudioDevice(void);
-static UINT8 StopAudioDevice(void);
-static UINT8 StartDiskWriter(const char* fileName);
-static UINT8 StopDiskWriter(void);
+static uint32_t GetNthAudioDriver(uint8_t adrvType, int32_t drvNumber);
+static uint8_t InitAudioSystem(void);
+static uint8_t DeinitAudioSystem(void);
+static uint8_t StartAudioDevice(void);
+static uint8_t StopAudioDevice(void);
+static uint8_t StartDiskWriter(const char* fileName);
+static uint8_t StopDiskWriter(void);
 #ifndef _WIN32
-static void changemode(UINT8 noEcho);
+static void changemode(uint8_t noEcho);
 static int _kbhit(void);
 #define	_getch	getchar
 #endif
@@ -80,34 +80,34 @@ static int _kbhit(void);
 
 static void* audDrv;
 static void* audDrvLog;
-static std::vector<UINT8> locAudBuf;	// local audio buffer (for WAV dumping)
+static std::vector<uint8_t> locAudBuf;	// local audio buffer (for WAV dumping)
 static OS_MUTEX* renderMtx;	// render thread mutex
 
-static UINT32 sampleRate = 44100;
-static UINT32 maxLoops = 2;
+static uint32_t sampleRate = 44100;
+static uint32_t maxLoops = 2;
 static bool manualRenderLoop = false;
-static volatile UINT8 playState;
+static volatile uint8_t playState;
 
-static UINT32 idWavOut;
-static UINT32 idWavOutDev;
-static UINT32 idWavWrt;
+static uint32_t idWavOut;
+static uint32_t idWavOutDev;
+static uint32_t idWavWrt;
 
-static INT32 AudioOutDrv = -2;
-static INT32 WaveWrtDrv = -1;
+static int32_t AudioOutDrv = -2;
+static int32_t WaveWrtDrv = -1;
 
-static UINT32 masterVol = 0x10000;	// fixed point 16.16
+static uint32_t masterVol = 0x10000;	// fixed point 16.16
 
-static UINT8 showTags = 1;
+static uint8_t showTags = 1;
 static bool showFileInfo = false;
-static UINT8 logLevel = DEVLOG_INFO;
-static UINT8 pbTimeMode = PLAYTIME_LOOP_INCL | PLAYTIME_TIME_FILE;
+static uint8_t logLevel = DEVLOG_INFO;
+static uint8_t pbTimeMode = PLAYTIME_LOOP_INCL | PLAYTIME_TIME_FILE;
 
 static PlayerA mainPlr;
 
 int main(int argc, char* argv[])
 {
 	int argbase;
-	UINT8 retVal;
+	uint8_t retVal;
 	DATA_LOADER *dLoad;
 	int curSong;
 	bool needRefresh;
@@ -160,8 +160,8 @@ int main(int argc, char* argv[])
 	fflush(stdout);
 
 #if USE_MEMORY_LOADER
-	UINT32 fileSize;
-	UINT8 *fileData = SlurpFile(argv[curSong],&fileSize);
+	uint32_t fileSize;
+	uint8_t *fileData = SlurpFile(argv[curSong],&fileSize);
 	dLoad = MemoryLoader_Init(fileData, fileSize);
 #else
 	dLoad = FileLoader_Init(argv[curSong]);
@@ -269,13 +269,13 @@ int main(int argc, char* argv[])
 	
 	{
 		PLR_DEV_OPTS devOpts;
-		UINT32 devOptID;
+		uint32_t devOptID;
 		
 		devOptID = PLR_DEV_ID(DEVID_SN76496, 0);
 		retVal = player->GetDeviceOptions(devOptID, devOpts);
 		if (! (retVal & 0x80))
 		{
-			static const INT16 panPos[4] = {0x00, -0x80, +0x80, 0x00};
+			static const int16_t panPos[4] = {0x00, -0x80, +0x80, 0x00};
 			if (! devOpts.emuCore[0])
 				devOpts.emuCore[0] = FCC_MAXM;
 			memcpy(devOpts.panOpts.chnPan, panPos, sizeof(panPos));
@@ -286,7 +286,7 @@ int main(int argc, char* argv[])
 		retVal = player->GetDeviceOptions(devOptID, devOpts);
 		if (! (retVal & 0x80))
 		{
-			static const INT16 panPos[14] = {
+			static const int16_t panPos[14] = {
 				-0x100, +0x100, -0x80, +0x80, -0x40, +0x40, -0xC0, +0xC0, 0x00,
 				-0x60, +0x60, 0x00, -0xC0, +0xC0};
 			memcpy(devOpts.panOpts.chnPan, panPos, sizeof(panPos));
@@ -297,7 +297,7 @@ int main(int argc, char* argv[])
 		retVal = player->GetDeviceOptions(devOptID, devOpts);
 		if (! (retVal & 0x80))
 		{
-			static const INT16 panPos[3] = {-0x80, +0x80, 0x00};
+			static const int16_t panPos[3] = {-0x80, +0x80, 0x00};
 			memcpy(devOpts.panOpts.chnPan, panPos, sizeof(panPos));
 			player->SetDeviceOptions(devOptID, devOpts);
 		}
@@ -330,23 +330,23 @@ int main(int argc, char* argv[])
 		{
 			const PLR_DEV_INFO& pdi = diList[curDev];
 			const char* devName = "";
-			UINT16 chns = 0;
+			uint16_t chns = 0;
 			if (pdi.devDecl != NULL)
 			{
 				devName = pdi.devDecl->name(pdi.devCfg);
 				chns = pdi.devDecl->channelCount(pdi.devCfg);
 			}
-			if (pdi.parentIdx == (UINT32)-1)
+			if (pdi.parentIdx == (uint32_t)-1)
 			{
 				// main device
 				printf(" Dev %d: Type 0x%02X %7s #%d, Core %-4s, Clk %u, Rate %u, Vol 0x%X, Chns %u\n",
-					(int)pdi.id, pdi.type, devName, (INT8)pdi.instance, FCC2Str(pdi.core).c_str(),
+					(int)pdi.id, pdi.type, devName, (int8_t)pdi.instance, FCC2Str(pdi.core).c_str(),
 					pdi.devCfg->clock, pdi.smplRate, pdi.volume, chns);
 			}
 			else
 			{
 				// linked device
-				UINT32 parentId = diList[pdi.parentIdx].id;
+				uint32_t parentId = diList[pdi.parentIdx].id;
 				printf("  Dev %d-%d: Type 0x%02X %7s, Core %-4s, Clk %u, Rate %u, Vol 0x%X, Chns %u\n",
 					(int)parentId, (int)pdi.instance, pdi.type, devName, FCC2Str(pdi.core).c_str(),
 					pdi.devCfg->clock, pdi.smplRate, pdi.volume, chns);
@@ -413,7 +413,7 @@ int main(int argc, char* argv[])
 		
 		if (manualRenderLoop && ! (playState & PLAYSTATE_PAUSE))
 		{
-			UINT32 wrtBytes = FillBuffer(audDrvLog, &mainPlr, (UINT32)locAudBuf.size(), &locAudBuf[0]);
+			uint32_t wrtBytes = FillBuffer(audDrvLog, &mainPlr, (uint32_t)locAudBuf.size(), &locAudBuf[0]);
 			AudioDrv_WriteData(audDrvLog, wrtBytes, &locAudBuf[0]);
 		}
 		else
@@ -445,9 +445,9 @@ int main(int argc, char* argv[])
 			}
 			else if (letter >= '0' && letter <= '9')
 			{
-				UINT32 maxPos;
-				UINT8 pbPos10;
-				UINT32 destPos;
+				uint32_t maxPos;
+				uint8_t pbPos10;
+				uint32_t destPos;
 				
 				OSMutex_Lock(renderMtx);
 				maxPos = mainPlr.GetPlayer()->GetTotalPlayTicks(maxLoops);
@@ -572,7 +572,7 @@ static void DoChipControlMode(PlayerBase* player)
 	char line[0x80];
 	char* endPtr;
 	int chipID;
-	UINT8 retVal;
+	uint8_t retVal;
 	
 	printf("Command Mode. ");
 	mode = 0;	// start
@@ -597,7 +597,7 @@ static void DoChipControlMode(PlayerBase* player)
 			chipID = (int)strtoul(line, &endPtr, 0);
 			if (endPtr > line)
 			{
-				retVal = player->GetDeviceOptions((UINT32)chipID, devOpts);
+				retVal = player->GetDeviceOptions((uint32_t)chipID, devOpts);
 				if (retVal & 0x80)
 				{
 					printf("Invalid sound chip ID.\n");
@@ -673,7 +673,7 @@ static void DoChipControlMode(PlayerBase* player)
 			char* tokenStr;
 			PLR_DEV_OPTS devOpts;
 			
-			retVal = player->GetDeviceOptions((UINT32)chipID, devOpts);
+			retVal = player->GetDeviceOptions((uint32_t)chipID, devOpts);
 			if (retVal & 0x80)
 			{
 				mode = 0;
@@ -699,7 +699,7 @@ static void DoChipControlMode(PlayerBase* player)
 				devOpts.emuCore[0] =
 					(fccStr[0] << 24) | (fccStr[1] << 16) |
 					(fccStr[2] <<  8) | (fccStr[3] <<  0);
-				player->SetDeviceOptions((UINT32)chipID, devOpts);
+				player->SetDeviceOptions((uint32_t)chipID, devOpts);
 			}
 			else if (! strcmp(line, "LC"))
 			{
@@ -708,31 +708,31 @@ static void DoChipControlMode(PlayerBase* player)
 				devOpts.emuCore[1] =
 					(fccStr[0] << 24) | (fccStr[1] << 16) |
 					(fccStr[2] <<  8) | (fccStr[3] <<  0);
-				player->SetDeviceOptions((UINT32)chipID, devOpts);
+				player->SetDeviceOptions((uint32_t)chipID, devOpts);
 			}
 			else if (! strcmp(line, "O"))
 			{
-				devOpts.coreOpts = (UINT32)strtoul(tokenStr, &endPtr, 0);
+				devOpts.coreOpts = (uint32_t)strtoul(tokenStr, &endPtr, 0);
 				if (endPtr > tokenStr)
-					player->SetDeviceOptions((UINT32)chipID, devOpts);
+					player->SetDeviceOptions((uint32_t)chipID, devOpts);
 			}
 			else if (! strcmp(line, "SRM"))
 			{
-				devOpts.srMode = (UINT8)strtoul(tokenStr, &endPtr, 0);
+				devOpts.srMode = (uint8_t)strtoul(tokenStr, &endPtr, 0);
 				if (endPtr > tokenStr)
-					player->SetDeviceOptions((UINT32)chipID, devOpts);
+					player->SetDeviceOptions((uint32_t)chipID, devOpts);
 			}
 			else if (! strcmp(line, "SR"))
 			{
-				devOpts.smplRate = (UINT32)strtoul(tokenStr, &endPtr, 0);
+				devOpts.smplRate = (uint32_t)strtoul(tokenStr, &endPtr, 0);
 				if (endPtr > tokenStr)
-					player->SetDeviceOptions((UINT32)chipID, devOpts);
+					player->SetDeviceOptions((uint32_t)chipID, devOpts);
 			}
 			else if (! strcmp(line, "RSM"))
 			{
-				devOpts.resmplMode = (UINT8)strtoul(tokenStr, &endPtr, 0);
+				devOpts.resmplMode = (uint8_t)strtoul(tokenStr, &endPtr, 0);
 				if (endPtr > tokenStr)
-					player->SetDeviceOptions((UINT32)chipID, devOpts);
+					player->SetDeviceOptions((uint32_t)chipID, devOpts);
 			}
 			else if (! strcmp(line, "M"))
 			{
@@ -761,15 +761,15 @@ static void DoChipControlMode(PlayerBase* player)
 					tokenStr = strtok(NULL, ",");
 				}
 				
-				player->SetDeviceMuting((UINT32)chipID, muteOpts);
+				player->SetDeviceMuting((uint32_t)chipID, muteOpts);
 				printf("-> Chip %s [0x%02X], Channel Mask: 0x%02X\n",
 					(muteOpts.disable & 0x01) ? "Off" : "On", muteOpts.disable, muteOpts.chnMute[0]);
 			}
 			else if (! strcmp(line, "P"))
 			{
 				PLR_PAN_OPTS& panOpts = devOpts.panOpts;
-				UINT32 chnID;
-				UINT32 curChn;
+				uint32_t chnID;
+				uint32_t curChn;
 				
 				letter = '\0';
 				tokenStr = strtok(NULL, ",");
@@ -778,13 +778,13 @@ static void DoChipControlMode(PlayerBase* player)
 				{
 					double panPos = strtod(tokenStr, &endPtr);
 					if (endPtr > tokenStr)
-						panOpts.chnPan[0][chnID] = (INT16)(panPos * 0x100);
+						panOpts.chnPan[0][chnID] = (int16_t)(panPos * 0x100);
 					
 					tokenStr = strtok(NULL, ",");
 					chnID ++;
 				}
 				
-				player->SetDeviceOptions((UINT32)chipID, devOpts);
+				player->SetDeviceOptions((uint32_t)chipID, devOpts);
 				printf("-> Panning: ");
 				for (curChn = 0; curChn < chnID; curChn ++)
 					printf("%.2f,", panOpts.chnPan[0][chnID] / (float)0x100);
@@ -826,7 +826,7 @@ static void DoChipControlMode(PlayerBase* player)
 				}
 				else if (! strcmp(line, "OPL3"))
 				{
-					playOpts.v2opl3Mode = (UINT8)strtoul(tokenStr, &endPtr, 0);
+					playOpts.v2opl3Mode = (uint8_t)strtoul(tokenStr, &endPtr, 0);
 					if (endPtr > tokenStr)
 						droplay->SetPlayerOptions(playOpts);
 				}
@@ -894,13 +894,13 @@ static void DoChipControlMode(PlayerBase* player)
 				}
 				else if (! strcmp(line, "PHZ"))
 				{
-					playOpts.playbackHz = (UINT32)strtoul(tokenStr, &endPtr, 0);
+					playOpts.playbackHz = (uint32_t)strtoul(tokenStr, &endPtr, 0);
 					if (endPtr > tokenStr)
 						vgmplay->SetPlayerOptions(playOpts);
 				}
 				else if (! strcmp(line, "HSO"))
 				{
-					playOpts.hardStopOld = (UINT8)strtoul(tokenStr, &endPtr, 0);
+					playOpts.hardStopOld = (uint8_t)strtoul(tokenStr, &endPtr, 0);
 					if (endPtr > tokenStr)
 						vgmplay->SetPlayerOptions(playOpts);
 				}
@@ -988,13 +988,13 @@ static void DoChipControlMode(PlayerBase* player)
 			}
 			else if (! strcmp(line, "LL"))
 			{
-				UINT8 newLevel = (UINT8)strtoul(tokenStr, &endPtr, 0);
+				uint8_t newLevel = (uint8_t)strtoul(tokenStr, &endPtr, 0);
 				if (endPtr > tokenStr)
 					logLevel = newLevel;
 			}
 			else if (! strcmp(line, "TD"))
 			{
-				UINT8 newTimeMode = (UINT8)strtoul(tokenStr, &endPtr, 0);
+				uint8_t newTimeMode = (uint8_t)strtoul(tokenStr, &endPtr, 0);
 				if (endPtr > tokenStr)
 					pbTimeMode = newTimeMode;
 			}
@@ -1023,7 +1023,7 @@ static void StripNewline(char* str)
 	return;
 }
 
-static std::string FCC2Str(UINT32 fcc)
+static std::string FCC2Str(uint32_t fcc)
 {
 	char result[5];
 	result[0] = (char)((fcc >> 24) & 0xFF);
@@ -1035,17 +1035,17 @@ static std::string FCC2Str(UINT32 fcc)
 }
 
 #if USE_MEMORY_LOADER
-static UINT8 *SlurpFile(const char *fileName, UINT32 *fileSize)
+static uint8_t *SlurpFile(const char *fileName, uint32_t *fileSize)
 {
 	*fileSize = 0;
 	FILE *hFile = fopen(fileName,"rb");
-	UINT32 hFileSize;
-	UINT8 *fileData;
+	uint32_t hFileSize;
+	uint8_t *fileData;
 	if(hFile == NULL) return NULL;
 	fseek(hFile,0,SEEK_END);
 	hFileSize = ftell(hFile);
 	rewind(hFile);
-	fileData = (UINT8 *)malloc(hFileSize);
+	fileData = (uint8_t *)malloc(hFileSize);
 	if(fileData == NULL)
 	{
 		fclose(hFile);
@@ -1076,7 +1076,7 @@ static const char* GetFileTitle(const char* filePath)
 	return (dirSep1 == NULL) ? filePath : (dirSep1 + 1);
 }
 
-static UINT32 FillBuffer(void* drvStruct, void* userParam, UINT32 bufSize, void* data)
+static uint32_t FillBuffer(void* drvStruct, void* userParam, uint32_t bufSize, void* data)
 {
 	PlayerA& myPlr = *(PlayerA*)userParam;
 	if (! (myPlr.GetState() & PLAYSTATE_PLAY))
@@ -1086,7 +1086,7 @@ static UINT32 FillBuffer(void* drvStruct, void* userParam, UINT32 bufSize, void*
 		return bufSize;
 	}
 	
-	UINT32 renderedBytes;
+	uint32_t renderedBytes;
 	OSMutex_Lock(renderMtx);
 	renderedBytes = myPlr.Render(bufSize, data);
 	OSMutex_Unlock(renderMtx);
@@ -1094,7 +1094,7 @@ static UINT32 FillBuffer(void* drvStruct, void* userParam, UINT32 bufSize, void*
 	return renderedBytes;
 }
 
-static UINT8 FilePlayCallback(PlayerBase* player, void* userParam, UINT8 evtType, void* evtParam)
+static uint8_t FilePlayCallback(PlayerBase* player, void* userParam, uint8_t evtType, void* evtParam)
 {
 	switch(evtType)
 	{
@@ -1106,7 +1106,7 @@ static UINT8 FilePlayCallback(PlayerBase* player, void* userParam, UINT8 evtType
 		break;
 	case PLREVT_LOOP:
 		{
-			UINT32* curLoop = (UINT32*)evtParam;
+			uint32_t* curLoop = (uint32_t*)evtParam;
 			if (player->GetState() & PLAYSTATE_SEEK)
 				break;
 			printf("Loop %u.\n", 1 + *curLoop);
@@ -1127,14 +1127,14 @@ static DATA_LOADER* RequestFileCallback(void* userParam, PlayerBase* player, con
 	DATA_LOADER* dLoad = FileLoader_Init(fileName);
 	if (dLoad == NULL)
 		return NULL;
-	UINT8 retVal = DataLoader_Load(dLoad);
+	uint8_t retVal = DataLoader_Load(dLoad);
 	if (! retVal)
 		return dLoad;
 	DataLoader_Deinit(dLoad);
 	return NULL;
 }
 
-static const char* LogLevel2Str(UINT8 level)
+static const char* LogLevel2Str(uint8_t level)
 {
 	static const char* LVL_NAMES[6] = {" ??? ", "Error", "Warn ", "Info ", "Debug", "Trace"};
 	if (level >= (sizeof(LVL_NAMES) / sizeof(LVL_NAMES[0])))
@@ -1142,7 +1142,7 @@ static const char* LogLevel2Str(UINT8 level)
 	return LVL_NAMES[level];
 }
 
-static void PlayerLogCallback(void* userParam, PlayerBase* player, UINT8 level, UINT8 srcType,
+static void PlayerLogCallback(void* userParam, PlayerBase* player, uint8_t level, uint8_t srcType,
 	const char* srcTag, const char* message)
 {
 	if (level > logLevel)
@@ -1154,23 +1154,23 @@ static void PlayerLogCallback(void* userParam, PlayerBase* player, UINT8 level, 
 	return;
 }
 
-static UINT32 GetNthAudioDriver(UINT8 adrvType, INT32 drvNumber)
+static uint32_t GetNthAudioDriver(uint8_t adrvType, int32_t drvNumber)
 {
 	// special numbers for drvNumber:
 	//	-1 - don't select any
 	//	-2 - select last found driver
 	if (drvNumber == -1)
-		return (UINT32)-1;
+		return (uint32_t)-1;
 	
-	UINT32 drvCount;
-	UINT32 curDrv;
-	INT32 typedDrv;
-	UINT32 lastDrv;
+	uint32_t drvCount;
+	uint32_t curDrv;
+	int32_t typedDrv;
+	uint32_t lastDrv;
 	AUDDRV_INFO* drvInfo;
 	
 	// go through all audio drivers get the ID of the requested Output/Disk Writer driver
 	drvCount = Audio_GetDriverCount();
-	lastDrv = (UINT32)-1;
+	lastDrv = (uint32_t)-1;
 	for (typedDrv = 0, curDrv = 0; curDrv < drvCount; curDrv ++)
 	{
 		Audio_GetDriverInfo(curDrv, &drvInfo);
@@ -1185,14 +1185,14 @@ static UINT32 GetNthAudioDriver(UINT8 adrvType, INT32 drvNumber)
 	
 	if (drvNumber == -2)
 		return lastDrv;
-	return (UINT32)-1;
+	return (uint32_t)-1;
 }
 
 // initialize audio system and search for requested audio drivers
-static UINT8 InitAudioSystem(void)
+static uint8_t InitAudioSystem(void)
 {
 	AUDDRV_INFO* drvInfo;
-	UINT8 retVal;
+	uint8_t retVal;
 	
 	retVal = OSMutex_Init(&renderMtx, 0);
 	
@@ -1203,7 +1203,7 @@ static UINT8 InitAudioSystem(void)
 	
 	idWavOut = GetNthAudioDriver(ADRVTYPE_OUT, AudioOutDrv);
 	idWavOutDev = 0;	// default device
-	if (AudioOutDrv != -1 && idWavOut == (UINT32)-1)
+	if (AudioOutDrv != -1 && idWavOut == (uint32_t)-1)
 	{
 		fprintf(stderr, "Requested Audio Output driver not found!\n");
 		Audio_Deinit();
@@ -1212,7 +1212,7 @@ static UINT8 InitAudioSystem(void)
 	idWavWrt = GetNthAudioDriver(ADRVTYPE_DISK, WaveWrtDrv);
 	
 	audDrv = NULL;
-	if (idWavOut != (UINT32)-1)
+	if (idWavOut != (uint32_t)-1)
 	{
 		Audio_GetDriverInfo(idWavOut, &drvInfo);
 		printf("Using driver %s.\n", drvInfo->drvName);
@@ -1230,7 +1230,7 @@ static UINT8 InitAudioSystem(void)
 	}
 	
 	audDrvLog = NULL;
-	if (idWavWrt != (UINT32)-1)
+	if (idWavWrt != (uint32_t)-1)
 	{
 		retVal = AudioDrv_Init(idWavWrt, &audDrvLog);
 		if (retVal)
@@ -1240,9 +1240,9 @@ static UINT8 InitAudioSystem(void)
 	return 0x00;
 }
 
-static UINT8 DeinitAudioSystem(void)
+static uint8_t DeinitAudioSystem(void)
 {
-	UINT8 retVal;
+	uint8_t retVal;
 	
 	retVal = 0x00;
 	if (audDrv != NULL)
@@ -1260,13 +1260,13 @@ static UINT8 DeinitAudioSystem(void)
 	return retVal;
 }
 
-static UINT8 StartAudioDevice(void)
+static uint8_t StartAudioDevice(void)
 {
 	AUDIO_OPTS* opts;
-	UINT8 retVal;
-	UINT32 smplSize;
-	UINT32 smplAlloc;
-	UINT32 localAudBufSize;
+	uint8_t retVal;
+	uint32_t smplSize;
+	uint32_t smplAlloc;
+	uint32_t localAudBufSize;
 	
 	opts = NULL;
 	smplAlloc = 0x00;
@@ -1307,9 +1307,9 @@ static UINT8 StartAudioDevice(void)
 	return 0x00;
 }
 
-static UINT8 StopAudioDevice(void)
+static uint8_t StopAudioDevice(void)
 {
-	UINT8 retVal;
+	uint8_t retVal;
 	
 	retVal = 0x00;
 	if (audDrv != NULL)
@@ -1319,10 +1319,10 @@ static UINT8 StopAudioDevice(void)
 	return retVal;
 }
 
-static UINT8 StartDiskWriter(const char* fileName)
+static uint8_t StartDiskWriter(const char* fileName)
 {
 	AUDIO_OPTS* opts;
-	UINT8 retVal;
+	uint8_t retVal;
 	
 	if (audDrvLog == NULL)
 		return 0x00;
@@ -1338,7 +1338,7 @@ static UINT8 StartDiskWriter(const char* fileName)
 	return retVal;
 }
 
-static UINT8 StopDiskWriter(void)
+static uint8_t StopDiskWriter(void)
 {
 	if (audDrvLog == NULL)
 		return 0x00;
@@ -1351,9 +1351,9 @@ static UINT8 StopDiskWriter(void)
 
 #ifndef _WIN32
 static struct termios oldterm;
-static UINT8 termmode = 0xFF;
+static uint8_t termmode = 0xFF;
 
-static void changemode(UINT8 noEcho)
+static void changemode(uint8_t noEcho)
 {
 	if (termmode == 0xFF)
 	{

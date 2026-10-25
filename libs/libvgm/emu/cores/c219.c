@@ -58,18 +58,18 @@ Unmapped registers:
 #include "../EmuHelper.h"
 #include "c219.h"
 
-static void c219_update(void *param, UINT32 samples, DEV_SMPL **outputs);
-static UINT8 device_start_c219(const DEV_GEN_CFG* cfg, DEV_INFO* retDevInf);
+static void c219_update(void *param, uint32_t samples, DEV_SMPL **outputs);
+static uint8_t device_start_c219(const DEV_GEN_CFG* cfg, DEV_INFO* retDevInf);
 static void device_stop_c219(void *chip);
 static void device_reset_c219(void *chip);
 
-static UINT8 c219_r(void *chip, UINT16 offset);
-static void c219_w(void *chip, UINT16 offset, UINT8 data);
+static uint8_t c219_r(void *chip, uint16_t offset);
+static void c219_w(void *chip, uint16_t offset, uint8_t data);
 
-static void c219_alloc_rom(void* chip, UINT32 memsize);
-static void c219_write_rom(void *chip, UINT32 offset, UINT32 length, const UINT8* data);
+static void c219_alloc_rom(void* chip, uint32_t memsize);
+static void c219_write_rom(void *chip, uint32_t offset, uint32_t length, const uint8_t* data);
 
-static void c219_set_mute_mask(void *chip, UINT32 MuteMask);
+static void c219_set_mute_mask(void *chip, uint32_t MuteMask);
 
 
 static DEVDEF_RWFUNC devFunc[] =
@@ -105,7 +105,7 @@ static const char* DeviceName(const DEV_GEN_CFG* devCfg)
 	return "C219";
 }
 
-static UINT16 DeviceChannels(const DEV_GEN_CFG* devCfg)
+static uint16_t DeviceChannels(const DEV_GEN_CFG* devCfg)
 {
 	return 16;
 }
@@ -148,33 +148,33 @@ enum
 
 typedef struct
 {
-	UINT8 volume_right;
-	UINT8 volume_left;
-	UINT8 frequency_msb;
-	UINT8 frequency_lsb;
-	UINT8 bank;
-	UINT8 mode;
-	UINT8 start_msb;
-	UINT8 start_lsb;
-	UINT8 end_msb;
-	UINT8 end_lsb;
-	UINT8 loop_msb;
-	UINT8 loop_lsb;
-	UINT8 reserved[4];
+	uint8_t volume_right;
+	uint8_t volume_left;
+	uint8_t frequency_msb;
+	uint8_t frequency_lsb;
+	uint8_t bank;
+	uint8_t mode;
+	uint8_t start_msb;
+	uint8_t start_lsb;
+	uint8_t end_msb;
+	uint8_t end_lsb;
+	uint8_t loop_msb;
+	uint8_t loop_lsb;
+	uint8_t reserved[4];
 } C219_VREGS;
 
 typedef struct
 {
-	UINT32  pos;
-	UINT16  pofs;
-	INT16   sample;
-	INT16   last_sample;
+	uint32_t  pos;
+	uint16_t  pofs;
+	int16_t   sample;
+	int16_t   last_sample;
 
-	UINT32  sample_start;
-	UINT32  sample_end;
-	UINT32  sample_loop;
-	UINT8   key;
-	UINT8   Muted;
+	uint32_t  sample_start;
+	uint32_t  sample_end;
+	uint32_t  sample_loop;
+	uint8_t   key;
+	uint8_t   Muted;
 } C219_VOICE;
 
 typedef struct _c219_state c219_state;
@@ -182,16 +182,16 @@ struct _c219_state
 {
 	DEV_DATA _devData;
 
-	UINT32 sample_rate;
+	uint32_t sample_rate;
 
-	UINT32 pRomSize;
-	UINT32 pRomMask;
-	UINT8 *pRom;
-	UINT8 REG[0x200];
+	uint32_t pRomSize;
+	uint32_t pRomMask;
+	uint8_t *pRom;
+	uint8_t REG[0x200];
 
-	UINT16 random;
+	uint16_t random;
 
-	INT16 mulaw_table[256];
+	int16_t mulaw_table[256];
 
 	C219_VOICE voi[MAX_VOICE];
 };
@@ -205,15 +205,15 @@ struct _c219_state
    is done by a small PAL or GAL external to the sound chip, which can be switched
    per-game or at least per-PCB revision as addressing range needs grow.
  */
-static UINT32 find_sample(c219_state *info, UINT32 adrs, int voice)
+static uint32_t find_sample(c219_state *info, uint32_t adrs, int voice)
 {
 	// ASIC219's banking is fairly simple
-	static const UINT16 asic219banks[4] = { 0x1f7, 0x1f1, 0x1f3, 0x1f5 };
-	UINT8 bank = info->REG[asic219banks[voice/4]];
+	static const uint16_t asic219banks[4] = { 0x1f7, 0x1f1, 0x1f3, 0x1f5 };
+	uint8_t bank = info->REG[asic219banks[voice/4]];
 	return ((bank << 17) | adrs) & info->pRomMask;
 }
 
-INLINE UINT8 c219_keyon_status_read(c219_state *info, UINT16 offset)
+INLINE uint8_t c219_keyon_status_read(c219_state *info, uint16_t offset)
 {
 	//m_stream->update();
 	C219_VOICE const *v = &info->voi[offset >> 4];
@@ -224,7 +224,7 @@ INLINE UINT8 c219_keyon_status_read(c219_state *info, UINT16 offset)
 	return (v->key ? 0x40 : 0x00) | (info->REG[offset] & 0x3f);
 }
 
-static UINT8 c219_r(void *chip, UINT16 offset)
+static uint8_t c219_r(void *chip, uint16_t offset)
 {
 	c219_state *info = (c219_state *)chip;
 	offset &= 0x1ff;
@@ -239,7 +239,7 @@ static UINT8 c219_r(void *chip, UINT16 offset)
 	return info->REG[offset];
 }
 
-static void c219_w(void *chip, UINT16 offset, UINT8 data)
+static void c219_w(void *chip, uint16_t offset, uint8_t data)
 {
 	c219_state *info = (c219_state *)chip;
 
@@ -285,7 +285,7 @@ static void c219_w(void *chip, UINT16 offset, UINT8 data)
 	}
 }
 
-static void c219_fetch_sample(c219_state *chip, UINT32 vid)
+static void c219_fetch_sample(c219_state *chip, uint32_t vid)
 {
 	C219_VOICE* v = &chip->voi[vid];
 	C219_VREGS* vreg = (C219_VREGS*)&chip->REG[vid*16];
@@ -299,12 +299,12 @@ static void c219_fetch_sample(c219_state *chip, UINT32 vid)
 	}
 	else
 	{
-		UINT32 addr = find_sample(chip, v->pos, vid);
+		uint32_t addr = find_sample(chip, v->pos, vid);
 		
 		if (vreg->mode & C219_MODE_MULAW)
 			v->sample = chip->mulaw_table[chip->pRom[addr]];
 		else
-			v->sample = (INT8)chip->pRom[addr] << 8;
+			v->sample = (int8_t)chip->pRom[addr] << 8;
 		
 		v->pos ++;
 		if (v->pos == v->sample_end)
@@ -324,10 +324,10 @@ static void c219_fetch_sample(c219_state *chip, UINT32 vid)
 	return;
 }
 
-static void c219_update(void *param, UINT32 samples, DEV_SMPL **outputs)
+static void c219_update(void *param, uint32_t samples, DEV_SMPL **outputs)
 {
 	c219_state *chip = (c219_state *)param;
-	UINT32 i, j;
+	uint32_t i, j;
 
 	DEV_SMPL out[2];
 
@@ -347,9 +347,9 @@ static void c219_update(void *param, UINT32 samples, DEV_SMPL **outputs)
 
 			if (v->key && ! v->Muted)
 			{
-				UINT32 frequency = (vreg->frequency_msb<<8) | vreg->frequency_lsb;
-				INT32 newofs;
-				INT32 s;
+				uint32_t frequency = (vreg->frequency_msb<<8) | vreg->frequency_lsb;
+				int32_t newofs;
+				int32_t s;
 
 				newofs = v->pofs + frequency;
 				v->pofs = newofs & 0xFFFF;
@@ -357,7 +357,7 @@ static void c219_update(void *param, UINT32 samples, DEV_SMPL **outputs)
 					c219_fetch_sample(chip, j);
 
 				// Interpolate samples
-				s = v->last_sample + (INT32)((INT64)v->pofs * (v->sample - v->last_sample) >> 16);
+				s = v->last_sample + (int32_t)((int64_t)v->pofs * (v->sample - v->last_sample) >> 16);
 
 				if (vreg->mode & C219_MODE_INVERT)
 					s = -s;
@@ -371,11 +371,11 @@ static void c219_update(void *param, UINT32 samples, DEV_SMPL **outputs)
 	}
 }
 
-static UINT8 device_start_c219(const DEV_GEN_CFG* cfg, DEV_INFO* retDevInf)
+static uint8_t device_start_c219(const DEV_GEN_CFG* cfg, DEV_INFO* retDevInf)
 {
 	c219_state *info;
 	int i;
-	INT16 j;
+	int16_t j;
 	
 	info = (c219_state *)calloc(1, sizeof(c219_state));
 	if (info == NULL)
@@ -444,14 +444,14 @@ static void device_reset_c219(void *chip)
 	return;
 }
 
-static void c219_alloc_rom(void* chip, UINT32 memsize)
+static void c219_alloc_rom(void* chip, uint32_t memsize)
 {
 	c219_state *info = (c219_state *)chip;
 	
 	if (info->pRomSize == memsize)
 		return;
 	
-	info->pRom = (UINT8*)realloc(info->pRom, memsize);
+	info->pRom = (uint8_t*)realloc(info->pRom, memsize);
 	info->pRomSize = memsize;
 	info->pRomMask = pow2_mask(memsize);
 	memset(info->pRom, 0xFF, memsize);
@@ -459,7 +459,7 @@ static void c219_alloc_rom(void* chip, UINT32 memsize)
 	return;
 }
 
-static void c219_write_rom(void *chip, UINT32 offset, UINT32 length, const UINT8* data)
+static void c219_write_rom(void *chip, uint32_t offset, uint32_t length, const uint8_t* data)
 {
 	c219_state *info = (c219_state *)chip;
 	
@@ -474,10 +474,10 @@ static void c219_write_rom(void *chip, UINT32 offset, UINT32 length, const UINT8
 }
 
 
-static void c219_set_mute_mask(void *chip, UINT32 MuteMask)
+static void c219_set_mute_mask(void *chip, uint32_t MuteMask)
 {
 	c219_state *info = (c219_state *)chip;
-	UINT8 CurChn;
+	uint8_t CurChn;
 	
 	for (CurChn = 0; CurChn < MAX_VOICE; CurChn ++)
 		info->voi[CurChn].Muted = (MuteMask >> CurChn) & 0x01;

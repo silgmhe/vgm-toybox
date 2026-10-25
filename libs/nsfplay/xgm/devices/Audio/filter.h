@@ -9,9 +9,9 @@ namespace xgm
   class Compressor : public IRenderable
   {
   private:
-    INT32 strength;
-    INT32 limit;
-    INT32 threshold;
+    int32_t strength;
+    int32_t limit;
+    int32_t threshold;
 
   public:
     Compressor()
@@ -33,12 +33,12 @@ namespace xgm
     void SetParam(double lim, double thr, double str)
     {
       if(lim<0.0) lim=0.0;
-      limit = (lim<1.0)?((INT32)(lim*32767)):0;
-      threshold = (INT32)(thr * limit);
-      strength =  (INT32)(str * (1<<12));
+      limit = (lim<1.0)?((int32_t)(lim*32767)):0;
+      threshold = (int32_t)(thr * limit);
+      strength =  (int32_t)(str * (1<<12));
     }
 
-    inline INT32 Limiter(INT32 in)
+    inline int32_t Limiter(int32_t in)
     {
       if( threshold < in)
         in = threshold + (((in - threshold) * strength) >> 12);
@@ -56,16 +56,16 @@ namespace xgm
       return in;
     }
 
-    void Tick(UINT32 clocks)
+    void Tick(uint32_t clocks)
     {
     }
 
-    UINT32 Render(INT32 b[2])
+    uint32_t Render(int32_t b[2])
     {
       return FastRender(b);
     }
 
-    inline UINT32 FastRender(INT32 b[2])
+    inline uint32_t FastRender(int32_t b[2])
     {
       b[0] = Limiter(b[0]);
       b[1] = Limiter(b[1]);
@@ -134,27 +134,27 @@ namespace xgm
     }
 
     // 非virtualなRender
-    inline UINT32 FastRender(INT32 b[2])
+    inline uint32_t FastRender(int32_t b[2])
     {
       if(a<1.0)
       {
         out[0] = a * ( out[0] + b[0] - in [0] );
         in[0] = b[0];
-        b[0] = (INT32)out[0];
+        b[0] = (int32_t)out[0];
 
         out[1] = a * ( out[1] + b[1] - in [1] );
         in[1] = b[1];
-        b[1] = (INT32)out[1];
+        b[1] = (int32_t)out[1];
       }
       return 2;
     }
 
-    UINT32 Render (INT32 b[2])
+    uint32_t Render (int32_t b[2])
     {
       return FastRender(b);
     }
 
-    void Tick(UINT32 clocks)
+    void Tick(uint32_t clocks)
     {
     }
 
@@ -164,7 +164,7 @@ namespace xgm
       out[0] = out[1] = 0;
     }
 
-    void SetLevel(INT32 b[2])
+    void SetLevel(int32_t b[2])
     {
       in[0] = b[0];
       in[1] = b[1];
@@ -174,7 +174,7 @@ namespace xgm
   class SimpleFIR
   {
   protected:
-	  INT32 *tap;
+	  int32_t *tap;
 	  double *h;
 	  int N,M;
 	  double rate;
@@ -185,8 +185,8 @@ namespace xgm
 	  void SetRate(double r);
 	  void SetCutoff(double c);
 	  void Reset();
-	  void Put(INT32 wav);
-	  INT32 Get();
+	  void Put(int32_t wav);
+	  int32_t Get();
   };
  
   class Filter : public IRenderable
@@ -195,7 +195,7 @@ namespace xgm
     IRenderable * target;
 
     int type;
-    INT32 out[2];
+    int32_t out[2];
     double a;
     double rate, R, C;
     bool disable;
@@ -220,25 +220,25 @@ namespace xgm
       target = t;
     }
 
-    inline UINT32 FastRender (INT32 b[2])
+    inline uint32_t FastRender (int32_t b[2])
     {
       if(target) target->Render (b);
       if(a<1.0)
       {
-        out[0]+=(INT32)(a*(b[0]-out[0]));
-        out[1]+=(INT32)(a*(b[1]-out[1]));
+        out[0]+=(int32_t)(a*(b[0]-out[0]));
+        out[1]+=(int32_t)(a*(b[1]-out[1]));
         b[0]=out[0];
         b[1]=out[1];
       }
       return 2;
     }
 
-    virtual void Tick(UINT32 clocks)
+    virtual void Tick(uint32_t clocks)
     {
       if (target) target->Tick(clocks);
     }
 
-    virtual UINT32 Render(INT32 b[2])
+    virtual uint32_t Render(int32_t b[2])
     {
       return FastRender(b);
     }

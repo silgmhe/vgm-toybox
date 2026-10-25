@@ -19,7 +19,7 @@ namespace xgm
     //memset (image + 0x6000, 0, 0x2000); // 分かっててあえて初期化してません。
   }
 
-  bool NES_MEM::SetImage (UINT8 * data, UINT32 offset, UINT32 size)
+  bool NES_MEM::SetImage (uint8_t * data, uint32_t offset, uint32_t size)
   {
     memset (image, 0, 0x10000);
     if( offset + size < 0x10000 )
@@ -29,7 +29,7 @@ namespace xgm
     return true;
   }
 
-  bool NES_MEM::Write (UINT32 adr, UINT32 val, UINT32 id)
+  bool NES_MEM::Write (uint32_t adr, uint32_t val, uint32_t id)
   {
     if (0x0000 <= adr && adr < 0x2000)
     {
@@ -48,7 +48,7 @@ namespace xgm
     return false;
   }
 
-  bool NES_MEM::Read (UINT32 adr, UINT32 & val, UINT32 id)
+  bool NES_MEM::Read (uint32_t adr, uint32_t & val, uint32_t id)
   {
     if (0x0000 <= adr && adr < 0x2000)
     {
@@ -74,13 +74,13 @@ namespace xgm
     fds_enable = t;
   }
 
-  void NES_MEM::SetReserved (const UINT8* data, UINT32 size)
+  void NES_MEM::SetReserved (const uint8_t* data, uint32_t size)
   {
     assert(size <= PLAYER_RESERVED_SIZE);
     ::memcpy(image + PLAYER_RESERVED, data, size);
   }
 
-  bool NES_MEM::WriteReserved (UINT32 adr, UINT32 val)
+  bool NES_MEM::WriteReserved (uint32_t adr, uint32_t val)
   {
     if (PLAYER_RESERVED <= adr && adr < (PLAYER_RESERVED + PLAYER_RESERVED_SIZE))
     {

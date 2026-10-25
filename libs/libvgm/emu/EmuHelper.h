@@ -34,7 +34,7 @@
 #endif
 
 
-INLINE void INIT_DEVINF(DEV_INFO* devInf, DEV_DATA* devData, UINT32 sampleRate, const DEV_DEF* devDef)
+INLINE void INIT_DEVINF(DEV_INFO* devInf, DEV_DATA* devData, uint32_t sampleRate, const DEV_DEF* devDef)
 {
 	devInf->dataPtr = devData;
 	devInf->sampleRate = sampleRate;
@@ -59,7 +59,7 @@ INLINE void INIT_DEVINF(DEV_INFO* devInf, DEV_DATA* devData, UINT32 sampleRate, 
 
 // round up to the nearest power of 2
 // from http://graphics.stanford.edu/~seander/bithacks.html#RoundUpPowerOf2
-INLINE UINT32 ceil_pow2(UINT32 v)
+INLINE uint32_t ceil_pow2(uint32_t v)
 {
 	v --;
 	v |= (v >>  1);
@@ -72,7 +72,7 @@ INLINE UINT32 ceil_pow2(UINT32 v)
 }
 
 // create a mask that covers the range 0...v-1
-INLINE UINT32 pow2_mask(UINT32 v)
+INLINE uint32_t pow2_mask(uint32_t v)
 {
 	if (v == 0)
 		return 0;

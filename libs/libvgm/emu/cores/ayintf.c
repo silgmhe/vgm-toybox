@@ -14,7 +14,7 @@
 static const char* DeviceName(const DEV_GEN_CFG* devCfg)
 {
 	const AY8910_CFG* ayCfg = (const AY8910_CFG*)devCfg;
-	UINT8 chipType = (devCfg != NULL) ? ayCfg->chipType : AYTYPE_AY8910;
+	uint8_t chipType = (devCfg != NULL) ? ayCfg->chipType : AYTYPE_AY8910;
 	if ((chipType & 0xF0) == 0x20)
 		chipType = AYTYPE_YM2149;
 	
@@ -43,7 +43,7 @@ static const char* DeviceName(const DEV_GEN_CFG* devCfg)
 	}
 }
 
-static UINT16 DeviceChannels(const DEV_GEN_CFG* devCfg)
+static uint16_t DeviceChannels(const DEV_GEN_CFG* devCfg)
 {
 	return 3;
 }

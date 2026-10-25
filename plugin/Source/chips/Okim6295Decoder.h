@@ -46,7 +46,7 @@ public:
 
 	void reset (const ChipConfig& config) override;
 	void write (const RegisterWrite& write) override;
-	void advance (std::uint32_t sampleTime) override;
+	void advance (uint32_t sampleTime) override;
 
 	int channelCount() const override;
 	ChannelState channelState (int channel) const override;
@@ -55,7 +55,7 @@ public:
 	bool isDrum (int channel) const override;
 
 	/** The 256 KB sample ROM (`0x8B` blocks); without it there is neither a length nor a pitch. */
-	void setRom (std::vector<std::uint8_t> rom);
+	void setRom (std::vector<uint8_t> rom);
 
 	struct Impl;
 

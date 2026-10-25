@@ -72,26 +72,26 @@ struct _nesapu_state
 	DEV_DATA _devData;
 
 	apu_t   APU;                   /* Actual APUs */
-	uint8   is_pal;
-	uint8   nonlinear_mixing;
-	uint8   old_rp2a03;            /* enable first-generation Famicom RP2A03 with smaller noise */
+	uint8_t   is_pal;
+	uint8_t   nonlinear_mixing;
+	uint8_t   old_rp2a03;            /* enable first-generation Famicom RP2A03 with smaller noise */
 	float   apu_incsize;           /* Adjustment increment */
-	uint32  samps_per_sync;        /* Number of samples per vsync */
-	uint32  real_rate;             /* Actual playback rate */
-	uint32  vbl_times[SYNCS_MAX1]; /* VBL durations in samples */
-	uint32  sync_times1[SYNCS_MAX1]; /* Samples per sync table */
-	uint32  sync_times2[SYNCS_MAX2]; /* Samples per sync table */
+	uint32_t  samps_per_sync;        /* Number of samples per vsync */
+	uint32_t  real_rate;             /* Actual playback rate */
+	uint32_t  vbl_times[SYNCS_MAX1]; /* VBL durations in samples */
+	uint32_t  sync_times1[SYNCS_MAX1]; /* Samples per sync table */
+	uint32_t  sync_times2[SYNCS_MAX2]; /* Samples per sync table */
 };
 
 static DEV_SMPL square_lut[31];       // Non-linear Square wave output LUT
 static DEV_SMPL tnd_lut[16][16][128]; // Non-linear Triangle, Noise, DMC output LUT
-static UINT8 tablesInit = 0;
+static uint8_t tablesInit = 0;
 
-static UINT8 DPCMBase0 = 0x01;
+static uint8_t DPCMBase0 = 0x01;
 
 /* INTERNAL FUNCTIONS */
 
-static void calculate_rates(nesapu_state *info, UINT32 clock, UINT32 rate)
+static void calculate_rates(nesapu_state *info, uint32_t clock, uint32_t rate)
 {
 	int i;
 
@@ -171,7 +171,7 @@ static void apu_square(nesapu_state *info, square_t *chan)
 {
 	int env_delay;
 	int sweep_delay;
-	uint8 freq_index;
+	uint8_t freq_index;
 
 	/* reg0: 0-3=volume, 4=envelope, 5=hold, 6-7=duty cycle
 	** reg1: 0-2=sweep shifts, 3=sweep inc/dec, 4-6=sweep length, 7=sweep on
@@ -259,7 +259,7 @@ static void apu_square(nesapu_state *info, square_t *chan)
 static void apu_triangle(nesapu_state *info, triangle_t *chan)
 {
 	int freq;
-	uint8 not_held;
+	uint8_t not_held;
 
 	/* reg0: 7=holdnote, 6-0=linear length counter
 	** reg2: low 8 bits of frequency
@@ -335,7 +335,7 @@ INLINE void apu2a03_device_update_lfsr(nesapu_state *info, noise_t *chan);
 static void apu_noise(nesapu_state *info, noise_t *chan)
 {
 	int freq, env_delay;
-	uint8 outvol;
+	uint8_t outvol;
 
 	/* reg0: 0-3=volume, 4=envelope, 5=hold
 	** reg2: 7=small(93 byte) sample,3-0=freq lookup
@@ -411,8 +411,8 @@ INLINE void apu2a03_device_update_lfsr(nesapu_state *info, noise_t *chan)
 /* RESET DPCM PARAMETERS */
 INLINE void apu_dpcmreset(dpcm_t *chan)
 {
-	chan->address = 0xc000 + (uint16) (chan->regs[2] << 6);
-	chan->length = (uint16) (chan->regs[3] << 4) + 1;
+	chan->address = 0xc000 + (uint16_t) (chan->regs[2] << 6);
+	chan->length = (uint16_t) (chan->regs[3] << 4) + 1;
 	chan->bits_left = chan->length << 3;
 	chan->irq_occurred = false;
 	chan->enabled = true; /* Fixed * Proper DPCM channel ENABLE/DISABLE flag behaviour*/
@@ -497,11 +497,11 @@ static void apu_dpcm(nesapu_state *info, dpcm_t *chan)
 		else if (chan->vol < 0)
 			chan->vol = 0;
 	}
-	chan->output = (int8)chan->vol;
+	chan->output = (int8_t)chan->vol;
 }
 
 /* WRITE REGISTER VALUE */
-INLINE void apu_regwrite(nesapu_state *info, uint8 offset, uint8 value)
+INLINE void apu_regwrite(nesapu_state *info, uint8_t offset, uint8_t value)
 {
 	int chan = (offset & 4) ? 1 : 0;
 
@@ -726,17 +726,17 @@ logerror("invalid apu write: $%02X at $%04X\n", value, offset);
 }
 
 /* UPDATE SOUND BUFFER USING CURRENT DATA */
-void nes_apu_update(void* chip, UINT32 samples, DEV_SMPL **outputs)
+void nes_apu_update(void* chip, uint32_t samples, DEV_SMPL **outputs)
 {
 	nesapu_state *info = (nesapu_state*)chip;
 	apu_t *apu = &info->APU;
 	DEV_SMPL* bufL = outputs[0];
 	DEV_SMPL* bufR = outputs[1];
-	UINT32 i;
+	uint32_t i;
 
 	for (i = 0; i < samples; i++)
 	{
-		INT16 squ1, squ2, tri, noi, dpcm;
+		int16_t squ1, squ2, tri, noi, dpcm;
 
 		apu_square(info, &apu->squ[0]);
 		apu_square(info, &apu->squ[1]);
@@ -779,13 +779,13 @@ void nes_apu_update(void* chip, UINT32 samples, DEV_SMPL **outputs)
 }
 
 /* READ VALUES FROM REGISTERS */
-uint8 nes_apu_read(void* chip, uint8 offset)
+uint8_t nes_apu_read(void* chip, uint8_t offset)
 {
 	nesapu_state *info = (nesapu_state*)chip;
 	
 	if (offset == 0x15) /*FIXED* Address $4015 has different behaviour*/
 	{
-		uint8 readval = 0;
+		uint8_t readval = 0;
 		if (info->APU.squ[0].vbl_length > 0)
 			readval |= 0x01;
 
@@ -818,7 +818,7 @@ uint8 nes_apu_read(void* chip, uint8 offset)
 }
 
 /* WRITE VALUE TO TEMP REGISTRY AND QUEUE EVENT */
-void nes_apu_write(void *chip,uint8 address, uint8 value)
+void nes_apu_write(void *chip,uint8_t address, uint8_t value)
 {
 	nesapu_state *info = (nesapu_state*)chip;
 	
@@ -829,7 +829,7 @@ void nes_apu_write(void *chip,uint8 address, uint8 value)
 }
 
 /* INITIALIZE APU SYSTEM */
-void* device_start_nesapu(UINT32 clock, UINT32 rate)
+void* device_start_nesapu(uint32_t clock, uint32_t rate)
 {
 	nesapu_state *info;
 
@@ -870,12 +870,12 @@ void device_stop_nesapu(void* chip)
 void device_reset_nesapu(void* chip)
 {
 	nesapu_state *info = (nesapu_state*)chip;
-	const UINT8* MemPtr;
-	UINT32 MuteMask;
-	INT32* PanPtrs[5] = {info->APU.squ[0].Pan, info->APU.squ[1].Pan, info->APU.tri.Pan, info->APU.noi.Pan, info->APU.dpcm.Pan};
-	INT32 PanBak[5][2];
-	UINT8 CurChn;
-	UINT8 CurReg;
+	const uint8_t* MemPtr;
+	uint32_t MuteMask;
+	int32_t* PanPtrs[5] = {info->APU.squ[0].Pan, info->APU.squ[1].Pan, info->APU.tri.Pan, info->APU.noi.Pan, info->APU.dpcm.Pan};
+	int32_t PanBak[5][2];
+	uint8_t CurChn;
+	uint8_t CurReg;
 	
 	MemPtr = info->APU.dpcm.memory;
 	MuteMask = nesapu_get_mute_mask(info);
@@ -904,7 +904,7 @@ void device_reset_nesapu(void* chip)
 	return;
 }
 
-void nesapu_set_rom(void* chip, const UINT8* ROMData)
+void nesapu_set_rom(void* chip, const uint8_t* ROMData)
 {
 	nesapu_state *info = (nesapu_state*)chip;
 	info->APU.dpcm.memory = ROMData;
@@ -912,7 +912,7 @@ void nesapu_set_rom(void* chip, const UINT8* ROMData)
 	return;
 }
 
-void nesapu_set_mute_mask(void* chip, UINT32 MuteMask)
+void nesapu_set_mute_mask(void* chip, uint32_t MuteMask)
 {
 	nesapu_state *info = (nesapu_state*)chip;
 	
@@ -925,10 +925,10 @@ void nesapu_set_mute_mask(void* chip, UINT32 MuteMask)
 	return;
 }
 
-UINT32 nesapu_get_mute_mask(void* chip)
+uint32_t nesapu_get_mute_mask(void* chip)
 {
 	nesapu_state *info = (nesapu_state*)chip;
-	UINT32 muteMask;
+	uint32_t muteMask;
 	
 	muteMask =	(info->APU.squ[0].Muted << 0) |
 				(info->APU.squ[1].Muted << 1) |
@@ -939,7 +939,7 @@ UINT32 nesapu_get_mute_mask(void* chip)
 	return muteMask;
 }
 
-void nesapu_set_options(void *chip, UINT32 Flags)
+void nesapu_set_options(void *chip, uint32_t Flags)
 {
 	nesapu_state *info = (nesapu_state*)chip;
 	
@@ -947,7 +947,7 @@ void nesapu_set_options(void *chip, UINT32 Flags)
 	info->old_rp2a03 = (Flags >> 15) & 0x01;
 }
 
-void nesapu_set_panning(void* chip, INT16 square1, INT16 square2, INT16 triangle, INT16 noise, INT16 dpcm)
+void nesapu_set_panning(void* chip, int16_t square1, int16_t square2, int16_t triangle, int16_t noise, int16_t dpcm)
 {
 	nesapu_state *info = (nesapu_state*)chip;
 	

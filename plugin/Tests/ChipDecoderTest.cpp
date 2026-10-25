@@ -77,7 +77,7 @@ namespace
 	{
 		std::vector<RegisterWrite> writes;
 
-		void at (std::uint32_t time, std::uint8_t reg, std::uint8_t value)
+		void at (uint32_t time, uint8_t reg, uint8_t value)
 		{
 			RegisterWrite write;
 			write.reg = reg;
@@ -86,7 +86,7 @@ namespace
 			writes.push_back (write);
 		}
 
-		void at (std::uint32_t time, std::uint8_t port, std::uint8_t reg, std::uint8_t value)
+		void at (uint32_t time, uint8_t port, uint8_t reg, uint8_t value)
 		{
 			RegisterWrite write;
 			write.port = port;
@@ -97,25 +97,25 @@ namespace
 		}
 	};
 
-	std::vector<NoteEvent> run (const Stream& stream, std::uint32_t totalSamples)
+	std::vector<NoteEvent> run (const Stream& stream, uint32_t totalSamples)
 	{
 		toybox::chips::NesApuDecoder decoder;
 		decoder.reset (toybox::chips::ChipConfig { 1789773, 44100.0 });
 		return toybox::chips::extractNotes (decoder, stream.writes, totalSamples);
 	}
 
-	std::uint32_t distance (std::uint32_t a, std::uint32_t b)
+	uint32_t distance (uint32_t a, uint32_t b)
 	{
 		return a > b ? a - b : b - a;
 	}
 
-	void enableApu (Stream& stream, std::uint32_t time = 0)
+	void enableApu (Stream& stream, uint32_t time = 0)
 	{
 		stream.at (time, 0x15, 0x0F);		// pulse 1/2, triangle, noise
 	}
 
 	/** Pulse 1, constant volume 15, period 252 = 442 Hz = A4 (69). */
-	void startA4 (Stream& stream, std::uint32_t time)
+	void startA4 (Stream& stream, uint32_t time)
 	{
 		stream.at (time, 0x00, 0x9F);		// duty 2, halt, constant volume 15
 		stream.at (time, 0x02, 0xFC);
@@ -278,11 +278,11 @@ namespace
 
 	// --- YM2612 -------------------------------------------------------------------------------
 
-	constexpr std::uint32_t kYmClock = 7670453;		// the Mega Drive's master clock
+	constexpr uint32_t kYmClock = 7670453;		// the Mega Drive's master clock
 
 	template <typename Decoder>
-	std::vector<NoteEvent> runChip (const Stream& stream, std::uint32_t totalSamples,
-									std::uint32_t clock)
+	std::vector<NoteEvent> runChip (const Stream& stream, uint32_t totalSamples,
+									uint32_t clock)
 	{
 		Decoder decoder;
 		decoder.reset (toybox::chips::ChipConfig { clock, 44100.0 });
@@ -290,8 +290,8 @@ namespace
 	}
 
 	/** Channel 1 at A4: fnum 0x21D, block 4 on a 7.67 MHz chip is 439.7 Hz. */
-	void startFmNote (Stream& stream, std::uint32_t time, std::uint8_t algorithm,
-					  std::uint8_t op1Level, std::uint8_t op4Level)
+	void startFmNote (Stream& stream, uint32_t time, uint8_t algorithm,
+					  uint8_t op1Level, uint8_t op4Level)
 	{
 		// In 0x40-0x4F the low two bits pick the channel and bits 2-3 the operator, so
 		// channel 0's operators sit at 0x40 (op 1) and 0x4C (op 4); 0x43 is channel 3's
@@ -485,11 +485,11 @@ namespace
 
 	/** A tonal DELTA-T sample for the ADPCM-B tests: eight nibbles of +1 then eight of -1, which
 		the decoder integrates into a triangle whose period is exactly 16 nibbles. */
-	std::vector<std::uint8_t> makeAdpcmBTone (std::size_t size, std::size_t offset)
+	std::vector<uint8_t> makeAdpcmBTone (std::size_t size, std::size_t offset)
 	{
-		const std::uint8_t cycle[8] = { 0x00, 0x00, 0x00, 0x00, 0x88, 0x88, 0x88, 0x88 };
+		const uint8_t cycle[8] = { 0x00, 0x00, 0x00, 0x00, 0x88, 0x88, 0x88, 0x88 };
 
-		std::vector<std::uint8_t> rom (size, 0);
+		std::vector<uint8_t> rom (size, 0);
 		for (std::size_t i = 0; i + offset < size; ++i)
 		{
 			rom[offset + i] = cycle[i % 8];
@@ -619,12 +619,12 @@ namespace
 	/** A sample with no period stays the C4 trigger: the drums share this voice. */
 	void testOpnAdpcmBPercussion (void)
 	{
-		std::vector<std::uint8_t> rom (0x4000, 0);
-		std::uint32_t seed = 24681357u;
+		std::vector<uint8_t> rom (0x4000, 0);
+		uint32_t seed = 24681357u;
 		for (std::size_t i = 0; i < 512; ++i)
 		{
 			seed = seed * 1103515245u + 12345u;
-			rom[0x1000 + i] = (std::uint8_t) (seed >> 16);
+			rom[0x1000 + i] = (uint8_t) (seed >> 16);
 		}
 
 		Stream stream;
@@ -683,11 +683,11 @@ namespace
 		Stream stream;
 		for (int pair = 0; pair < 2; ++pair)
 		{
-			const std::uint8_t base = (std::uint8_t) (pair == 0 ? 0x40 : 0x41);
-			const std::uint8_t op4 = (std::uint8_t) (pair == 0 ? 0x4C : 0x4D);
-			const std::uint8_t low = (std::uint8_t) (pair == 0 ? 0xA0 : 0xA1);
-			const std::uint8_t high = (std::uint8_t) (pair == 0 ? 0xA4 : 0xA5);
-			const std::uint8_t algorithm = (std::uint8_t) (pair == 0 ? 0xB0 : 0xB1);
+			const uint8_t base = (uint8_t) (pair == 0 ? 0x40 : 0x41);
+			const uint8_t op4 = (uint8_t) (pair == 0 ? 0x4C : 0x4D);
+			const uint8_t low = (uint8_t) (pair == 0 ? 0xA0 : 0xA1);
+			const uint8_t high = (uint8_t) (pair == 0 ? 0xA4 : 0xA5);
+			const uint8_t algorithm = (uint8_t) (pair == 0 ? 0xB0 : 0xB1);
 			stream.at (0, base, 0x00);
 			stream.at (0, op4, 0x00);
 			stream.at (0, low, 0x1D);
@@ -830,23 +830,23 @@ namespace
 
 	// --- Game Boy DMG -------------------------------------------------------------------------
 
-	constexpr std::uint32_t kGbClock = 4194304;		// the DMG's CPU clock
+	constexpr uint32_t kGbClock = 4194304;		// the DMG's CPU clock
 
-	std::vector<NoteEvent> runGb (const Stream& stream, std::uint32_t totalSamples)
+	std::vector<NoteEvent> runGb (const Stream& stream, uint32_t totalSamples)
 	{
 		return runChip<toybox::chips::GbcApuDecoder> (stream, totalSamples, kGbClock);
 	}
 
 	/** Pulse 1 at A4: 131072 / (2048 - 1750) = 439.8 Hz. The envelope holds at 15, so only the
 		power switch or the length counter can end the note. */
-	void startGbA4 (Stream& stream, std::uint32_t time, std::uint8_t envelope = 0xF0,
-					bool lengthEnable = false, std::uint8_t lengthLoad = 0)
+	void startGbA4 (Stream& stream, uint32_t time, uint8_t envelope = 0xF0,
+					bool lengthEnable = false, uint8_t lengthLoad = 0)
 	{
 		// the trigger seeds the counter from the length load, so that write goes first
-		stream.at (time, 0x01, (std::uint8_t) (0x80 | (lengthLoad & 0x3F)));	// duty 2
+		stream.at (time, 0x01, (uint8_t) (0x80 | (lengthLoad & 0x3F)));	// duty 2
 		stream.at (time, 0x02, envelope);	// NR12
 		stream.at (time, 0x03, 0xD6);		// frequency 1750 low
-		stream.at (time, 0x04, (std::uint8_t) (0x86 | (lengthEnable ? 0x40 : 0)));
+		stream.at (time, 0x04, (uint8_t) (0x86 | (lengthEnable ? 0x40 : 0)));
 	}
 
 	void testGbPulseNote (void)
@@ -974,7 +974,7 @@ namespace
 
 	// ---- HuC6280 (PC Engine) ----
 
-	std::vector<NoteEvent> runC6280 (const Stream& stream, std::uint32_t totalSamples)
+	std::vector<NoteEvent> runC6280 (const Stream& stream, uint32_t totalSamples)
 	{
 		toybox::chips::HuC6280Decoder decoder;
 		decoder.reset (toybox::chips::ChipConfig { 3579545, 44100.0 });
@@ -982,11 +982,11 @@ namespace
 	}
 
 	/** Register 0x00 selects the channel, 0x02/0x03 hold its 12-bit divider, 0x04 enables it. */
-	void startC6280Note (Stream& stream, std::uint32_t time, std::uint8_t channel, int frequency)
+	void startC6280Note (Stream& stream, uint32_t time, uint8_t channel, int frequency)
 	{
 		stream.at (time, 0x00, channel);
-		stream.at (time, 0x02, (std::uint8_t) (frequency & 0xFF));
-		stream.at (time, 0x03, (std::uint8_t) ((frequency >> 8) & 0x0F));
+		stream.at (time, 0x02, (uint8_t) (frequency & 0xFF));
+		stream.at (time, 0x03, (uint8_t) ((frequency >> 8) & 0x0F));
 		stream.at (time, 0x04, 0x9F);		// enable, volume 31
 	}
 
@@ -1078,7 +1078,7 @@ namespace
 
 	// ---- K051649 / SCC ----
 
-	std::vector<NoteEvent> runScc (const Stream& stream, std::uint32_t totalSamples)
+	std::vector<NoteEvent> runScc (const Stream& stream, uint32_t totalSamples)
 	{
 		toybox::chips::K051649Decoder decoder;
 		decoder.reset (toybox::chips::ChipConfig { 3579545, 44100.0 });
@@ -1086,11 +1086,11 @@ namespace
 	}
 
 	/** Every SCC access is a latch (even offset) and then a value (the offset after it). */
-	void setSccRegister (Stream& stream, std::uint32_t time, std::uint8_t group, std::uint8_t latch,
-						 std::uint8_t value)
+	void setSccRegister (Stream& stream, uint32_t time, uint8_t group, uint8_t latch,
+						 uint8_t value)
 	{
-		stream.at (time, (std::uint8_t) (group * 2), latch);
-		stream.at (time, (std::uint8_t) (group * 2 + 1), value);
+		stream.at (time, (uint8_t) (group * 2), latch);
+		stream.at (time, (uint8_t) (group * 2 + 1), value);
 	}
 
 	void testSccWaveNote (void)
@@ -1169,7 +1169,7 @@ namespace
 
 	// ---- SAA1099 ----
 
-	std::vector<NoteEvent> runSaa (const Stream& stream, std::uint32_t totalSamples)
+	std::vector<NoteEvent> runSaa (const Stream& stream, uint32_t totalSamples)
 	{
 		toybox::chips::Saa1099Decoder decoder;
 		decoder.reset (toybox::chips::ChipConfig { 8000000, 44100.0 });
@@ -1277,7 +1277,7 @@ namespace
 
 	// ---- POKEY ----
 
-	std::vector<NoteEvent> runPokey (const Stream& stream, std::uint32_t totalSamples)
+	std::vector<NoteEvent> runPokey (const Stream& stream, uint32_t totalSamples)
 	{
 		toybox::chips::PokeyDecoder decoder;
 		decoder.reset (toybox::chips::ChipConfig { 1789772, 44100.0 });
@@ -1359,8 +1359,8 @@ namespace
 
 		// ---- WonderSwan ----
 
-		std::vector<NoteEvent> runWswan (const Stream& stream, std::uint32_t totalSamples,
-										 std::uint32_t clock = 3072000)
+		std::vector<NoteEvent> runWswan (const Stream& stream, uint32_t totalSamples,
+										 uint32_t clock = 3072000)
 		{
 			toybox::chips::WswanDecoder decoder;
 			decoder.reset (toybox::chips::ChipConfig { clock, 44100.0 });
@@ -1525,8 +1525,8 @@ namespace
 
 		// ---- SN76489 ----
 
-		std::vector<NoteEvent> runSn (const Stream& stream, std::uint32_t totalSamples,
-									  std::uint32_t clock = 3579545)
+		std::vector<NoteEvent> runSn (const Stream& stream, uint32_t totalSamples,
+									  uint32_t clock = 3579545)
 		{
 			toybox::chips::Sn76489Decoder decoder;
 			decoder.reset (toybox::chips::ChipConfig { clock, 44100.0 });
@@ -1605,8 +1605,8 @@ namespace
 
 		// ---- AY-3-8910 ----
 
-		std::vector<NoteEvent> runAy (const Stream& stream, std::uint32_t totalSamples,
-									  std::uint32_t clock = 1789773)
+		std::vector<NoteEvent> runAy (const Stream& stream, uint32_t totalSamples,
+									  uint32_t clock = 1789773)
 		{
 			toybox::chips::Ay8910Decoder decoder;
 			decoder.reset (toybox::chips::ChipConfig { clock, 44100.0 });
@@ -1664,7 +1664,7 @@ namespace
 
 		// ---- RF5C68 ----
 
-		std::vector<NoteEvent> runRf5c (const Stream& stream, std::uint32_t totalSamples)
+		std::vector<NoteEvent> runRf5c (const Stream& stream, uint32_t totalSamples)
 		{
 			toybox::chips::Rf5c68Decoder decoder;
 			decoder.reset (toybox::chips::ChipConfig { 12500000, 44100.0 });
@@ -1721,7 +1721,7 @@ namespace
 
 		// --- X1-010: one channel, two instruments ---------------------------------------------
 
-		std::vector<NoteEvent> runX1 (const Stream& stream, std::uint32_t totalSamples)
+		std::vector<NoteEvent> runX1 (const Stream& stream, uint32_t totalSamples)
 		{
 			toybox::chips::X1_010Decoder decoder;
 			decoder.reset (toybox::chips::ChipConfig { 16000000, 44100.0 });
@@ -1804,7 +1804,7 @@ namespace
 
 		// --- YMZ280B: a latch, then a key-on ------------------------------------------------
 
-		std::vector<NoteEvent> runYmz (const Stream& stream, std::uint32_t totalSamples)
+		std::vector<NoteEvent> runYmz (const Stream& stream, uint32_t totalSamples)
 		{
 			toybox::chips::Ymz280bDecoder decoder;
 			decoder.reset (toybox::chips::ChipConfig { 16934400, 44100.0 });
@@ -1813,7 +1813,7 @@ namespace
 
 		/** VGM's 0x5D carries the register number in `aa` and the value in `dd` - the shape a real
 			rip uses (0x5D 0x0D 0x20, 0x5D 0x6C 0xBD, ...), not a latch pair. */
-		void writeYmz (Stream& stream, std::uint32_t time, std::uint8_t reg, std::uint8_t value)
+		void writeYmz (Stream& stream, uint32_t time, uint8_t reg, uint8_t value)
 		{
 			stream.at (time, reg, value);
 		}
@@ -1866,7 +1866,7 @@ namespace
 
 		// --- YMF271 / OPX: twelve groups, four sync modes ----------------------------------
 
-		std::vector<NoteEvent> runOpx (const Stream& stream, std::uint32_t totalSamples)
+		std::vector<NoteEvent> runOpx (const Stream& stream, uint32_t totalSamples)
 		{
 			toybox::chips::Ymf271Decoder decoder;
 			decoder.reset (toybox::chips::ChipConfig { 16934400, 44100.0 });
@@ -1874,17 +1874,17 @@ namespace
 		}
 
 		/** One FM register write: the address byte is register << 4 | group. */
-		void writeOpx (Stream& stream, std::uint32_t time, std::uint8_t port, std::uint8_t reg,
-					   std::uint8_t group, std::uint8_t value)
+		void writeOpx (Stream& stream, uint32_t time, uint8_t port, uint8_t reg,
+					   uint8_t group, uint8_t value)
 		{
-			stream.at (time, port, (std::uint8_t) ((reg << 4) | group), value);
+			stream.at (time, port, (uint8_t) ((reg << 4) | group), value);
 		}
 
 		/** A four-operator group at block 4, fns 0x51C, multiple 1: 440 Hz, A4. The pitch and the
 			algorithm go to bank 0, where the group copies them to the other operators. */
-		void startOpxFm (Stream& stream, std::uint8_t group, std::uint8_t algorithm)
+		void startOpxFm (Stream& stream, uint8_t group, uint8_t algorithm)
 		{
-			for (std::uint8_t port = 0; port < 4; ++port)
+			for (uint8_t port = 0; port < 4; ++port)
 			{
 				writeOpx (stream, 0, port, 0x3, group, 0x01);		// multiple 1 on every operator
 			}
@@ -2056,9 +2056,9 @@ namespace
 
 	// --- C140: a playback rate, an end address and a loop bit ---------------------------------
 
-	std::vector<NoteEvent> runC140 (const Stream& stream, std::uint32_t totalSamples,
-									std::uint32_t clock = 8000000,
-									const std::vector<std::uint8_t>& rom = {})
+	std::vector<NoteEvent> runC140 (const Stream& stream, uint32_t totalSamples,
+									uint32_t clock = 8000000,
+									const std::vector<uint8_t>& rom = {})
 	{
 		toybox::chips::C140Decoder decoder;
 		decoder.reset (toybox::chips::ChipConfig { clock, 44100.0 });
@@ -2071,13 +2071,13 @@ namespace
 	}
 
 	/** A ROM holding one sine wave of `period` bytes - sixteen cycles of it - at 0x1000. */
-	std::vector<std::uint8_t> makeC140SinRom (int period)
+	std::vector<uint8_t> makeC140SinRom (int period)
 	{
-		std::vector<std::uint8_t> rom (0x1100, 0);
+		std::vector<uint8_t> rom (0x1100, 0);
 		for (int i = 0; i < 16 * period; ++i)
 		{
 			const double phase = 2.0 * 3.14159265358979323846 * (double) i / (double) period;
-			rom[0x1000 + (std::size_t) i] = (std::uint8_t) (128 + (int) std::lround (std::sin (phase) * 100.0));
+			rom[0x1000 + (std::size_t) i] = (uint8_t) (128 + (int) std::lround (std::sin (phase) * 100.0));
 		}
 
 		return rom;
@@ -2085,7 +2085,7 @@ namespace
 
 	/** The voice the period tests key on: 256 bytes at 0x1000, looped back to the start, played at
 		19931 - 8448 bytes a second at 8 MHz. */
-	void setC140LoopedSampleAt (Stream& stream, std::uint16_t frequency)
+	void setC140LoopedSampleAt (Stream& stream, uint16_t frequency)
 	{
 		stream.at (0, 0x00, 0x00, 0xFF);		// volume right
 		stream.at (0, 0x00, 0x01, 0xFF);		// volume left
@@ -2095,8 +2095,8 @@ namespace
 		stream.at (0, 0x00, 0x09, 0x00);
 		stream.at (0, 0x00, 0x0A, 0x10);		// loop back to the start
 		stream.at (0, 0x00, 0x0B, 0x00);
-		stream.at (0, 0x00, 0x02, (std::uint8_t) (frequency >> 8));		// the C140 holds it high first
-		stream.at (0, 0x00, 0x03, (std::uint8_t) (frequency & 0xFF));
+		stream.at (0, 0x00, 0x02, (uint8_t) (frequency >> 8));		// the C140 holds it high first
+		stream.at (0, 0x00, 0x03, (uint8_t) (frequency & 0xFF));
 		stream.at (10, 0x00, 0x05, 0x90);		// key on with loop
 		stream.at (8000, 0x00, 0x05, 0x10);		// the loop bit alone: the key-off
 	}
@@ -2118,16 +2118,16 @@ namespace
 	}
 
 	/** Volume, a sample at 0x1000 with 1344 bytes, and the frequency for 13440 bytes a second. */
-	void setC140Voice (Stream& stream, std::uint8_t port, std::uint8_t base)
+	void setC140Voice (Stream& stream, uint8_t port, uint8_t base)
 	{
 		stream.at (0, port, base, 0xFF);			// volume right
-		stream.at (0, port, (std::uint8_t) (base + 1), 0xFF);	// volume left
-		stream.at (0, port, (std::uint8_t) (base + 6), 0x10);	// start 0x1000
-		stream.at (0, port, (std::uint8_t) (base + 7), 0x00);
-		stream.at (0, port, (std::uint8_t) (base + 8), 0x15);	// end 0x1540
-		stream.at (0, port, (std::uint8_t) (base + 9), 0x40);
-		stream.at (0, port, (std::uint8_t) (base + 2), 0x7B);	// frequency 31711
-		stream.at (0, port, (std::uint8_t) (base + 3), 0xDF);
+		stream.at (0, port, (uint8_t) (base + 1), 0xFF);	// volume left
+		stream.at (0, port, (uint8_t) (base + 6), 0x10);	// start 0x1000
+		stream.at (0, port, (uint8_t) (base + 7), 0x00);
+		stream.at (0, port, (uint8_t) (base + 8), 0x15);	// end 0x1540
+		stream.at (0, port, (uint8_t) (base + 9), 0x40);
+		stream.at (0, port, (uint8_t) (base + 2), 0x7B);	// frequency 31711
+		stream.at (0, port, (uint8_t) (base + 3), 0xDF);
 	}
 
 	/** The frequency register is a rate, not a note: at 8 MHz 31711 is 13440 bytes a second, and
@@ -2341,12 +2341,12 @@ namespace
 		to the root rate, which is hard to tell from "the ROM is not wired up at all". */
 	void testC140System2BankIsFolded (void)
 	{
-		std::vector<std::uint8_t> rom (0x100000, 0);
-		const std::uint32_t offset = 0x495C0;		// (0x14 << 16 | 0x95C0) folded by System 2
+		std::vector<uint8_t> rom (0x100000, 0);
+		const uint32_t offset = 0x495C0;		// (0x14 << 16 | 0x95C0) folded by System 2
 		for (int i = 0; i < 256; ++i)
 		{
 			const double phase = 2.0 * 3.14159265358979323846 * (double) i / 16.0;
-			rom[offset + (std::size_t) i] = (std::uint8_t) (128 + (int) std::lround (std::sin (phase) * 100.0));
+			rom[offset + (std::size_t) i] = (uint8_t) (128 + (int) std::lround (std::sin (phase) * 100.0));
 		}
 
 		Stream stream;
@@ -2386,12 +2386,12 @@ namespace
 		correlate with nothing, so the root rate decides there too. */
 	void testC140NoisySampleFallsBackToTheRootRate (void)
 	{
-		std::vector<std::uint8_t> rom (0x1100, 0);
-		std::uint32_t seed = 12345u;
+		std::vector<uint8_t> rom (0x1100, 0);
+		uint32_t seed = 12345u;
 		for (int i = 0; i < 256; ++i)
 		{
 			seed = seed * 1103515245u + 12345u;
-			rom[0x1000 + (std::size_t) i] = (std::uint8_t) (seed >> 16);
+			rom[0x1000 + (std::size_t) i] = (uint8_t) (seed >> 16);
 		}
 
 		Stream stream;
@@ -2405,13 +2405,13 @@ namespace
 
 	// --- C352: a playback rate behind an explicit key-on write -----------------------------------
 
-	constexpr std::uint16_t kC352KeyOn = 0x4000;
-	constexpr std::uint16_t kC352KeyOff = 0x2000;
-	constexpr std::uint16_t kC352Loop = 0x0002;
+	constexpr uint16_t kC352KeyOn = 0x4000;
+	constexpr uint16_t kC352KeyOff = 0x2000;
+	constexpr uint16_t kC352Loop = 0x0002;
 
-	std::vector<NoteEvent> runC352 (const Stream& stream, std::uint32_t totalSamples,
-									std::uint32_t clock = 12288000,
-									const std::vector<std::uint8_t>& rom = {})
+	std::vector<NoteEvent> runC352 (const Stream& stream, uint32_t totalSamples,
+									uint32_t clock = 12288000,
+									const std::vector<uint8_t>& rom = {})
 	{
 		toybox::chips::C352Decoder decoder;
 		decoder.reset (toybox::chips::ChipConfig { clock, 44100.0 });
@@ -2425,11 +2425,11 @@ namespace
 
 	/** One C352 register write: the VGM's 0xE1 carries a 16-bit big-endian offset and a 16-bit
 		big-endian value, so the offset's high byte goes in `port` and the value is one 16-bit word. */
-	void c352Write (Stream& stream, std::uint32_t time, std::uint16_t offset, std::uint16_t value)
+	void c352Write (Stream& stream, uint32_t time, uint16_t offset, uint16_t value)
 	{
 		RegisterWrite write;
-		write.port = (std::uint8_t) ((offset >> 8) & 0x7F);
-		write.reg = (std::uint8_t) (offset & 0xFF);
+		write.port = (uint8_t) ((offset >> 8) & 0x7F);
+		write.reg = (uint8_t) (offset & 0xFF);
 		write.value = value;
 		write.sampleTime = time;
 		stream.writes.push_back (write);
@@ -2437,28 +2437,28 @@ namespace
 
 	/** Volume on all four outputs, a sample from `start` to `end`, the loop register, the frequency
 		and the flags - everything but the execute write, which is what actually keys the voice on. */
-	void setC352Voice (Stream& stream, int voice, std::uint16_t start, std::uint16_t end,
-					   std::uint16_t loop, std::uint16_t frequency, std::uint16_t flags)
+	void setC352Voice (Stream& stream, int voice, uint16_t start, uint16_t end,
+					   uint16_t loop, uint16_t frequency, uint16_t flags)
 	{
-		const std::uint16_t base = (std::uint16_t) (voice * 8);
-		c352Write (stream, 0, (std::uint16_t) (base + 0), 0xFFFF);		// front left/right
-		c352Write (stream, 0, (std::uint16_t) (base + 1), 0xFFFF);		// rear left/right
-		c352Write (stream, 0, (std::uint16_t) (base + 2), frequency);
-		c352Write (stream, 0, (std::uint16_t) (base + 4), 0x0000);		// bank 0
-		c352Write (stream, 0, (std::uint16_t) (base + 5), start);
-		c352Write (stream, 0, (std::uint16_t) (base + 6), end);
-		c352Write (stream, 0, (std::uint16_t) (base + 7), loop);
-		c352Write (stream, 0, (std::uint16_t) (base + 3), flags);
+		const uint16_t base = (uint16_t) (voice * 8);
+		c352Write (stream, 0, (uint16_t) (base + 0), 0xFFFF);		// front left/right
+		c352Write (stream, 0, (uint16_t) (base + 1), 0xFFFF);		// rear left/right
+		c352Write (stream, 0, (uint16_t) (base + 2), frequency);
+		c352Write (stream, 0, (uint16_t) (base + 4), 0x0000);		// bank 0
+		c352Write (stream, 0, (uint16_t) (base + 5), start);
+		c352Write (stream, 0, (uint16_t) (base + 6), end);
+		c352Write (stream, 0, (uint16_t) (base + 7), loop);
+		c352Write (stream, 0, (uint16_t) (base + 3), flags);
 	}
 
 	/** The execute write at offset 0x202: it starts every voice whose flag register asks for it. */
-	void c352Execute (Stream& stream, std::uint32_t time)
+	void c352Execute (Stream& stream, uint32_t time)
 	{
 		c352Write (stream, time, 0x0202, 0x0000);
 	}
 
 	/** `bytes` of a two-level waveform at `offset`, one cycle every `period` bytes. */
-	void fillC352Square (std::vector<std::uint8_t>& rom, std::size_t offset, int period,
+	void fillC352Square (std::vector<uint8_t>& rom, std::size_t offset, int period,
 						 std::size_t bytes)
 	{
 		for (std::size_t i = 0; i < bytes; ++i)
@@ -2471,7 +2471,7 @@ namespace
 	/** The frequency that plays 28160 bytes a second at 12.288 MHz: the rate a 64-byte cycle turns
 		into 440 Hz. It is the rate the root-rate tests use, so their notes land where the root
 		puts them rather than on a rounding step. */
-	constexpr std::uint16_t kC352Rate28160 = 43254;
+	constexpr uint16_t kC352Rate28160 = 43254;
 
 	/** At 12.288 MHz the frequency register is a rate of `frequency * 12288000 / 18874368` bytes a
 		second, and 0x8000 is exactly the chip's own rate (`clock / 576`) - middle C. The note also
@@ -2534,9 +2534,9 @@ namespace
 	void testC352KeyOffEndsALoopingVoice (void)
 	{
 		Stream stream;
-		setC352Voice (stream, 0, 0x0000, 0x0400, 0x0000, 0x8000, (std::uint16_t) (kC352KeyOn | kC352Loop));
+		setC352Voice (stream, 0, 0x0000, 0x0400, 0x0000, 0x8000, (uint16_t) (kC352KeyOn | kC352Loop));
 		c352Execute (stream, 10);
-		c352Write (stream, 8000, 0x0003, (std::uint16_t) (kC352KeyOff | kC352Loop));
+		c352Write (stream, 8000, 0x0003, (uint16_t) (kC352KeyOff | kC352Loop));
 		c352Execute (stream, 8000);
 
 		const auto notes = runC352 (stream, 20000);
@@ -2587,7 +2587,7 @@ namespace
 		is 440 Hz, A4 - not the 65 the root rate claims for the same rate. */
 	void testC352SamplePeriodIsTheNote (void)
 	{
-		std::vector<std::uint8_t> rom (0x2000, 0);
+		std::vector<uint8_t> rom (0x2000, 0);
 		fillC352Square (rom, 0x0000, 64, 2816);
 
 		Stream stream;
@@ -2627,12 +2627,12 @@ namespace
 		correlate with nothing, so the root rate decides there too. */
 	void testC352NoisySampleFallsBackToTheRootRate (void)
 	{
-		std::vector<std::uint8_t> rom (0x2000, 0);
-		std::uint32_t seed = 12345u;
+		std::vector<uint8_t> rom (0x2000, 0);
+		uint32_t seed = 12345u;
 		for (int i = 0; i < 2816; ++i)
 		{
 			seed = seed * 1103515245u + 12345u;
-			rom[0x0000 + (std::size_t) i] = (std::uint8_t) (seed >> 16);
+			rom[0x0000 + (std::size_t) i] = (uint8_t) (seed >> 16);
 		}
 
 		Stream stream;
@@ -2650,7 +2650,7 @@ namespace
 		dropped the bank would measure the wrong waveforms and send the same note twice. */
 	void testC352BankIsPartOfTheAddress (void)
 	{
-		std::vector<std::uint8_t> rom (0x20000, 0);
+		std::vector<uint8_t> rom (0x20000, 0);
 		fillC352Square (rom, 0x0000, 64, 2816);			// bank 0: 440 Hz at this rate
 		fillC352Square (rom, 0x10000, 32, 2816);		// bank 1: an octave up
 
@@ -2686,24 +2686,24 @@ namespace
 		same waveform that stops one byte earlier is a semitone higher. */
 	void testC352WavetableCycle (void)
 	{
-		std::vector<std::uint8_t> rom (0x2000, 0);
+		std::vector<uint8_t> rom (0x2000, 0);
 		for (int i = 0; i < 16; ++i)
 		{
 			const double value = std::sin ((double) i * 2.0 * 3.14159265358979 / 16.0) * 100.0;
-			rom[0x1000 + (std::size_t) i] = (std::uint8_t) (std::int8_t) std::lround (value);
+			rom[0x1000 + (std::size_t) i] = (uint8_t) (int8_t) std::lround (value);
 		}
 
 		// 7040 bytes a second over a sixteen-byte cycle is 440 Hz, A4
-		constexpr std::uint16_t kRate7040 = 10813;
+		constexpr uint16_t kRate7040 = 10813;
 
 		Stream whole;
 		setC352Voice (whole, 0, 0x1000, 0x100F, 0x1000, kRate7040,
-					  (std::uint16_t) (kC352KeyOn | kC352Loop));
+					  (uint16_t) (kC352KeyOn | kC352Loop));
 		c352Execute (whole, 10);
 
 		Stream shortCycle;
 		setC352Voice (shortCycle, 0, 0x1000, 0x100E, 0x1000, kRate7040,
-					  (std::uint16_t) (kC352KeyOn | kC352Loop));
+					  (uint16_t) (kC352KeyOn | kC352Loop));
 		c352Execute (shortCycle, 10);
 
 		const auto wholeNotes = runC352 (whole, 20000, 12288000, rom);
@@ -2743,9 +2743,9 @@ namespace
 
 	// --- K053260: four voices keyed by a shared mask register ------------------------------------
 
-	std::vector<NoteEvent> runK053260 (const Stream& stream, std::uint32_t totalSamples,
-									   std::uint32_t clock = 3579545,
-									   const std::vector<std::uint8_t>& rom = {})
+	std::vector<NoteEvent> runK053260 (const Stream& stream, uint32_t totalSamples,
+									   uint32_t clock = 3579545,
+									   const std::vector<uint8_t>& rom = {})
 	{
 		toybox::chips::K053260Decoder decoder;
 		decoder.reset (toybox::chips::ChipConfig { clock, 44100.0 });
@@ -2757,7 +2757,7 @@ namespace
 		return toybox::chips::extractNotes (decoder, stream.writes, totalSamples);
 	}
 
-	void k053260Write (Stream& stream, std::uint32_t time, std::uint8_t offset, std::uint8_t value)
+	void k053260Write (Stream& stream, uint32_t time, uint8_t offset, uint8_t value)
 	{
 		RegisterWrite write;
 		write.reg = offset;
@@ -2768,30 +2768,30 @@ namespace
 
 	/** Sound output on, both pan registers at centre (4), then the voice's four registers. The
 		start address is the one the driver writes: the core's first fetch is `start + 1`. */
-	void setK053260Voice (Stream& stream, int voice, std::uint32_t start, std::uint16_t length,
-						  std::uint16_t pitch, std::uint8_t volume)
+	void setK053260Voice (Stream& stream, int voice, uint32_t start, uint16_t length,
+						  uint16_t pitch, uint8_t volume)
 	{
-		const std::uint8_t base = (std::uint8_t) (0x08 + voice * 8);
+		const uint8_t base = (uint8_t) (0x08 + voice * 8);
 		k053260Write (stream, 0, 0x2F, 0x06);		// control: sound output enabled
 		k053260Write (stream, 0, 0x2C, 0x24);		// pan voices 0/1: both centre
 		k053260Write (stream, 0, 0x2D, 0x24);		// pan voices 2/3: both centre
-		k053260Write (stream, 0, (std::uint8_t) (base + 0), (std::uint8_t) (pitch & 0xFF));
-		k053260Write (stream, 0, (std::uint8_t) (base + 1), (std::uint8_t) (pitch >> 8));
-		k053260Write (stream, 0, (std::uint8_t) (base + 2), (std::uint8_t) (length & 0xFF));
-		k053260Write (stream, 0, (std::uint8_t) (base + 3), (std::uint8_t) (length >> 8));
-		k053260Write (stream, 0, (std::uint8_t) (base + 4), (std::uint8_t) (start & 0xFF));
-		k053260Write (stream, 0, (std::uint8_t) (base + 5), (std::uint8_t) ((start >> 8) & 0xFF));
-		k053260Write (stream, 0, (std::uint8_t) (base + 6), (std::uint8_t) ((start >> 16) & 0x1F));
-		k053260Write (stream, 0, (std::uint8_t) (base + 7), volume);
+		k053260Write (stream, 0, (uint8_t) (base + 0), (uint8_t) (pitch & 0xFF));
+		k053260Write (stream, 0, (uint8_t) (base + 1), (uint8_t) (pitch >> 8));
+		k053260Write (stream, 0, (uint8_t) (base + 2), (uint8_t) (length & 0xFF));
+		k053260Write (stream, 0, (uint8_t) (base + 3), (uint8_t) (length >> 8));
+		k053260Write (stream, 0, (uint8_t) (base + 4), (uint8_t) (start & 0xFF));
+		k053260Write (stream, 0, (uint8_t) (base + 5), (uint8_t) ((start >> 8) & 0xFF));
+		k053260Write (stream, 0, (uint8_t) (base + 6), (uint8_t) ((start >> 16) & 0x1F));
+		k053260Write (stream, 0, (uint8_t) (base + 7), volume);
 	}
 
 	/** The key mask: a rising bit starts that voice, a cleared bit stops it. */
-	void k053260Key (Stream& stream, std::uint32_t time, std::uint8_t mask)
+	void k053260Key (Stream& stream, uint32_t time, uint8_t mask)
 	{
 		k053260Write (stream, time, 0x28, mask);
 	}
 
-	void fillK053260Square (std::vector<std::uint8_t>& rom, std::size_t offset, int period,
+	void fillK053260Square (std::vector<uint8_t>& rom, std::size_t offset, int period,
 							std::size_t bytes)
 	{
 		for (std::size_t i = 0; i < bytes; ++i)
@@ -2806,7 +2806,7 @@ namespace
 		note lasts 1024 bytes, which is 36 ms and needs no key-off. */
 	void testK053260Note (void)
 	{
-		std::vector<std::uint8_t> rom (0x2000, 0);
+		std::vector<uint8_t> rom (0x2000, 0);
 		fillK053260Square (rom, 0x1000, 64, 1024);
 
 		Stream stream;
@@ -2833,7 +2833,7 @@ namespace
 		stops the voice, and raising it again is the next note. */
 	void testK053260KeyOnIsARisingEdge (void)
 	{
-		std::vector<std::uint8_t> rom (0x2000, 0);
+		std::vector<uint8_t> rom (0x2000, 0);
 		fillK053260Square (rom, 0x1000, 64, 1024);
 
 		Stream stream;
@@ -2858,7 +2858,7 @@ namespace
 	/** Half the length register, half the note - the length is the sample's own size, not a guess. */
 	void testK053260LengthSetsTheDuration (void)
 	{
-		std::vector<std::uint8_t> rom (0x2000, 0);
+		std::vector<uint8_t> rom (0x2000, 0);
 		fillK053260Square (rom, 0x1000, 64, 1024);
 
 		Stream stream;
@@ -2874,7 +2874,7 @@ namespace
 	/** With the loop bit the pointer wraps instead of stopping, so only a key-off ends it. */
 	void testK053260LoopRunsUntilKeyOff (void)
 	{
-		std::vector<std::uint8_t> rom (0x2000, 0);
+		std::vector<uint8_t> rom (0x2000, 0);
 		fillK053260Square (rom, 0x1000, 64, 1024);
 
 		Stream stream;
@@ -2893,7 +2893,7 @@ namespace
 		voice with nothing to play, and the control register's sound bit gates the whole chip. */
 	void testK053260SilentVoiceIsNoNote (void)
 	{
-		std::vector<std::uint8_t> rom (0x2000, 0);
+		std::vector<uint8_t> rom (0x2000, 0);
 		fillK053260Square (rom, 0x1000, 64, 1024);
 
 		Stream quiet;
@@ -2930,12 +2930,12 @@ namespace
 		is what the four shared voices need on these boards. */
 	void testK053260PercussionIsATrigger (void)
 	{
-		std::vector<std::uint8_t> rom (0x2000, 0);
-		std::uint32_t seed = 987654321u;
+		std::vector<uint8_t> rom (0x2000, 0);
+		uint32_t seed = 987654321u;
 		for (int i = 0; i < 1024; ++i)
 		{
 			seed = seed * 1103515245u + 12345u;
-			rom[0x1000 + (std::size_t) i] = (std::uint8_t) (seed >> 16);
+			rom[0x1000 + (std::size_t) i] = (uint8_t) (seed >> 16);
 		}
 
 		Stream stream;
@@ -2962,7 +2962,7 @@ namespace
 		trigger; a real note below the ceiling is unaffected. */
 	void testK053260UnmusicalPeriodIsATrigger (void)
 	{
-		std::vector<std::uint8_t> rom (0x2000, 0);
+		std::vector<uint8_t> rom (0x2000, 0);
 		fillK053260Square (rom, 0x1000, 8, 1024);
 
 		Stream fast;
@@ -2980,8 +2980,8 @@ namespace
 		cycles and a pitch of 516 (7046 nibbles a second) is A4 again. */
 	void testK053260KadpcmIsMeasured (void)
 	{
-		std::vector<std::uint8_t> rom (0x2000, 0);
-		const std::uint8_t pattern[8] = { 0x11, 0x11, 0x11, 0x11, 0xFF, 0xFF, 0xFF, 0xFF };
+		std::vector<uint8_t> rom (0x2000, 0);
+		const uint8_t pattern[8] = { 0x11, 0x11, 0x11, 0x11, 0xFF, 0xFF, 0xFF, 0xFF };
 		for (std::size_t i = 0; i < 64; ++i)
 		{
 			rom[0x1000 + i] = pattern[i % 8];
@@ -3004,7 +3004,7 @@ namespace
 		toybox::chips::K053260Decoder decoder;
 		check (decoder.channelCount() == 4, "the K053260 has four voices");
 
-		std::vector<std::uint8_t> rom (0x2000, 0);
+		std::vector<uint8_t> rom (0x2000, 0);
 		fillK053260Square (rom, 0x1000, 64, 1024);
 
 		Stream stream;
@@ -3019,9 +3019,9 @@ namespace
 
 	// --- K054539: an attenuating volume and a sample that ends on a marker ------------------------
 
-	std::vector<NoteEvent> runK054539 (const Stream& stream, std::uint32_t totalSamples,
-									   std::uint32_t clock = 18432000,
-									   const std::vector<std::uint8_t>& rom = {})
+	std::vector<NoteEvent> runK054539 (const Stream& stream, uint32_t totalSamples,
+									   uint32_t clock = 18432000,
+									   const std::vector<uint8_t>& rom = {})
 	{
 		toybox::chips::K054539Decoder decoder;
 		decoder.reset (toybox::chips::ChipConfig { clock, 44100.0 });
@@ -3035,49 +3035,49 @@ namespace
 
 	/** The chip is addressed with sixteen bits (0xD3), so the high byte of the offset travels in
 		the write's port - and its key-on/key-off registers (0x214/0x215) are not channel indices. */
-	void k054539Write (Stream& stream, std::uint32_t time, std::uint16_t offset, std::uint8_t value)
+	void k054539Write (Stream& stream, uint32_t time, uint16_t offset, uint8_t value)
 	{
 		RegisterWrite write;
-		write.port = (std::uint8_t) ((offset >> 8) & 0xFF);
-		write.reg = (std::uint8_t) (offset & 0xFF);
+		write.port = (uint8_t) ((offset >> 8) & 0xFF);
+		write.reg = (uint8_t) (offset & 0xFF);
 		write.value = value;
 		write.sampleTime = time;
 		stream.writes.push_back (write);
 	}
 
-	const std::uint8_t k054539Type8 = 0x00;
-	const std::uint8_t k054539Type16 = 0x04;
-	const std::uint8_t k054539Type4 = 0x08;
+	const uint8_t k054539Type8 = 0x00;
+	const uint8_t k054539Type16 = 0x04;
+	const uint8_t k054539Type4 = 0x08;
 
 	/** One voice: output on, format, no loop, pitch, volume, pan centre and the start address. */
-	void setK054539Voice (Stream& stream, int channel, std::uint32_t start, std::uint8_t type,
-						  std::uint32_t pitch, std::uint8_t volume)
+	void setK054539Voice (Stream& stream, int channel, uint32_t start, uint8_t type,
+						  uint32_t pitch, uint8_t volume)
 	{
-		const std::uint16_t base = (std::uint16_t) (channel * 0x20);
+		const uint16_t base = (uint16_t) (channel * 0x20);
 		k054539Write (stream, 0, 0x22F, 0x01);		// control: PCM output enabled
-		k054539Write (stream, 0, (std::uint16_t) (0x200 + 2 * channel), type);
-		k054539Write (stream, 0, (std::uint16_t) (0x201 + 2 * channel), 0x00);		// no loop
-		k054539Write (stream, 0, (std::uint16_t) (base + 0x00), (std::uint8_t) (pitch & 0xFF));
-		k054539Write (stream, 0, (std::uint16_t) (base + 0x01), (std::uint8_t) ((pitch >> 8) & 0xFF));
-		k054539Write (stream, 0, (std::uint16_t) (base + 0x02), (std::uint8_t) ((pitch >> 16) & 0xFF));
-		k054539Write (stream, 0, (std::uint16_t) (base + 0x03), volume);
-		k054539Write (stream, 0, (std::uint16_t) (base + 0x05), 0x10);				// pan centre
-		k054539Write (stream, 0, (std::uint16_t) (base + 0x08), 0x00);
-		k054539Write (stream, 0, (std::uint16_t) (base + 0x09), 0x00);
-		k054539Write (stream, 0, (std::uint16_t) (base + 0x0A), 0x00);
-		k054539Write (stream, 0, (std::uint16_t) (base + 0x0C), (std::uint8_t) (start & 0xFF));
-		k054539Write (stream, 0, (std::uint16_t) (base + 0x0D), (std::uint8_t) ((start >> 8) & 0xFF));
-		k054539Write (stream, 0, (std::uint16_t) (base + 0x0E), (std::uint8_t) ((start >> 16) & 0xFF));
+		k054539Write (stream, 0, (uint16_t) (0x200 + 2 * channel), type);
+		k054539Write (stream, 0, (uint16_t) (0x201 + 2 * channel), 0x00);		// no loop
+		k054539Write (stream, 0, (uint16_t) (base + 0x00), (uint8_t) (pitch & 0xFF));
+		k054539Write (stream, 0, (uint16_t) (base + 0x01), (uint8_t) ((pitch >> 8) & 0xFF));
+		k054539Write (stream, 0, (uint16_t) (base + 0x02), (uint8_t) ((pitch >> 16) & 0xFF));
+		k054539Write (stream, 0, (uint16_t) (base + 0x03), volume);
+		k054539Write (stream, 0, (uint16_t) (base + 0x05), 0x10);				// pan centre
+		k054539Write (stream, 0, (uint16_t) (base + 0x08), 0x00);
+		k054539Write (stream, 0, (uint16_t) (base + 0x09), 0x00);
+		k054539Write (stream, 0, (uint16_t) (base + 0x0A), 0x00);
+		k054539Write (stream, 0, (uint16_t) (base + 0x0C), (uint8_t) (start & 0xFF));
+		k054539Write (stream, 0, (uint16_t) (base + 0x0D), (uint8_t) ((start >> 8) & 0xFF));
+		k054539Write (stream, 0, (uint16_t) (base + 0x0E), (uint8_t) ((start >> 16) & 0xFF));
 	}
 
 	/** Key on (0x214) or off (0x215) by bit mask. */
-	void k054539Key (Stream& stream, std::uint32_t time, std::uint16_t offset, std::uint8_t mask)
+	void k054539Key (Stream& stream, uint32_t time, uint16_t offset, uint8_t mask)
 	{
 		k054539Write (stream, time, offset, mask);
 	}
 
 	/** `bytes` of a two-level 8-bit waveform at `offset`, one cycle every `period` bytes. */
-	void fillK054539Square (std::vector<std::uint8_t>& rom, std::size_t offset, int period,
+	void fillK054539Square (std::vector<uint8_t>& rom, std::size_t offset, int period,
 							std::size_t bytes)
 	{
 		for (std::size_t i = 0; i < bytes; ++i)
@@ -3089,13 +3089,13 @@ namespace
 
 	/** 440 Hz needs 56320 units a second over a 128-byte cycle; at 18.432 MHz the pitch for that
 		is 76896 (one unit per output sample is 0x10000). */
-	constexpr std::uint32_t kK054539PitchA4 = 76896;
+	constexpr uint32_t kK054539PitchA4 = 76896;
 
 	/** A non-looping voice ends where the sample's marker byte sits, not at a length register: the
 		core keys off when it fetches 0x80. 2048 bytes at 56320 a second is 36 ms. */
 	void testK054539Note (void)
 	{
-		std::vector<std::uint8_t> rom (0x4000, 0);
+		std::vector<uint8_t> rom (0x4000, 0);
 		fillK054539Square (rom, 0x1000, 128, 2048);
 		rom[0x1000 + 2048] = 0x80;		// the end marker
 
@@ -3122,7 +3122,7 @@ namespace
 	/** Half the sample, half the note - and the marker has to be in the ROM for that to work. */
 	void testK054539MarkerSetsTheLength (void)
 	{
-		std::vector<std::uint8_t> rom (0x4000, 0);
+		std::vector<uint8_t> rom (0x4000, 0);
 		fillK054539Square (rom, 0x1000, 128, 2048);
 		rom[0x1000 + 512] = 0x80;
 
@@ -3140,7 +3140,7 @@ namespace
 		0x20 is quiet rather than loud. A decoder that read it as a level would invert both. */
 	void testK054539VolumeAttenuates (void)
 	{
-		std::vector<std::uint8_t> rom (0x4000, 0);
+		std::vector<uint8_t> rom (0x4000, 0);
 		fillK054539Square (rom, 0x1000, 128, 2048);
 		rom[0x1000 + 2048] = 0x80;
 
@@ -3164,7 +3164,7 @@ namespace
 		key-off register (0x215) ends the note. */
 	void testK054539LoopRunsUntilKeyOff (void)
 	{
-		std::vector<std::uint8_t> rom (0x4000, 0);
+		std::vector<uint8_t> rom (0x4000, 0);
 		fillK054539Square (rom, 0x1000, 128, 2048);
 		rom[0x1000 + 2048] = 0x80;
 
@@ -3183,7 +3183,7 @@ namespace
 	/** The control register's PCM bit gates the chip, and a pitch of zero never steps. */
 	void testK054539SilentVoiceIsNoNote (void)
 	{
-		std::vector<std::uint8_t> rom (0x4000, 0);
+		std::vector<uint8_t> rom (0x4000, 0);
 		fillK054539Square (rom, 0x1000, 128, 2048);
 		rom[0x1000 + 2048] = 0x80;
 
@@ -3205,13 +3205,13 @@ namespace
 		on a byte 0x80 inside a word would end in the wrong place. */
 	void testK054539SixteenBitPcm (void)
 	{
-		std::vector<std::uint8_t> rom (0x4000, 0);
+		std::vector<uint8_t> rom (0x4000, 0);
 		for (int i = 0; i < 64 * 8; ++i)		// 8 cycles of 64 16-bit samples
 		{
 			const bool high = (i % 64) < 32;
-			const std::uint16_t value = high ? 0x5000 : 0xB000;
-			rom[0x1000 + (std::size_t) i * 2] = (std::uint8_t) (value & 0xFF);
-			rom[0x1000 + (std::size_t) i * 2 + 1] = (std::uint8_t) (value >> 8);
+			const uint16_t value = high ? 0x5000 : 0xB000;
+			rom[0x1000 + (std::size_t) i * 2] = (uint8_t) (value & 0xFF);
+			rom[0x1000 + (std::size_t) i * 2 + 1] = (uint8_t) (value >> 8);
 		}
 		rom[0x1000 + 512 * 2] = 0x00;				// the marker 0x8000
 		rom[0x1000 + 512 * 2 + 1] = 0x80;
@@ -3231,8 +3231,8 @@ namespace
 		the byte 0x88 is the marker, whatever its nibbles would mean. */
 	void testK054539FourBitDpcm (void)
 	{
-		std::vector<std::uint8_t> rom (0x4000, 0);
-		std::uint8_t triangle[16];
+		std::vector<uint8_t> rom (0x4000, 0);
+		uint8_t triangle[16];
 		for (int i = 0; i < 8; ++i)
 		{
 			triangle[i] = 0x11;			// sixteen nibbles of +1
@@ -3264,7 +3264,7 @@ namespace
 		correlation to fall away before the peak it picks, which is what makes this a trigger. */
 	void testK054539SmoothAttackIsADrum (void)
 	{
-		const std::uint8_t drum[96] = {
+		const uint8_t drum[96] = {
 			0x06, 0x0A, 0x0A, 0x0D, 0x10, 0x13, 0x15, 0x18, 0x1C, 0x21, 0x26, 0x2C,
 			0x32, 0x38, 0x3E, 0x43, 0x4A, 0x52, 0x59, 0x60, 0x66, 0x6B, 0x6D, 0x6F,
 			0x6E, 0x6F, 0x73, 0x76, 0x78, 0x77, 0x76, 0x71, 0x6F, 0x6D, 0x67, 0x5F,
@@ -3275,7 +3275,7 @@ namespace
 			0xBA, 0xC0, 0xBE, 0xBB, 0xB8, 0xBA, 0xBD, 0xBD, 0xB8, 0xB3, 0xB3, 0xB4
 		};
 
-		std::vector<std::uint8_t> rom (0x4000, 0);
+		std::vector<uint8_t> rom (0x4000, 0);
 		for (std::size_t i = 0; i < sizeof (drum); ++i)
 		{
 			rom[0x1000 + i] = drum[i];
@@ -3299,7 +3299,7 @@ namespace
 		came out as a single note per track over 82 seconds. */
 	void testK054539RetriggerIsANewNote (void)
 	{
-		std::vector<std::uint8_t> rom (0x4000, 0);
+		std::vector<uint8_t> rom (0x4000, 0);
 		fillK054539Square (rom, 0x1000, 128, 2048);
 		rom[0x1000 + 2048] = 0x80;
 
@@ -3325,7 +3325,7 @@ namespace
 		toybox::chips::K054539Decoder decoder;
 		check (decoder.channelCount() == 8, "the K054539 has eight voices");
 
-		std::vector<std::uint8_t> rom (0x4000, 0);
+		std::vector<uint8_t> rom (0x4000, 0);
 		fillK054539Square (rom, 0x1000, 128, 2048);
 		rom[0x1000 + 2048] = 0x80;
 
@@ -3341,9 +3341,9 @@ namespace
 
 	// --- QSound: sixteen voices, no key bit, and a loop that is a length -------------------------
 
-	std::vector<NoteEvent> runQSound (const Stream& stream, std::uint32_t totalSamples,
-									  std::uint32_t clock = 60000000,
-									  const std::vector<std::uint8_t>& rom = {})
+	std::vector<NoteEvent> runQSound (const Stream& stream, uint32_t totalSamples,
+									  uint32_t clock = 60000000,
+									  const std::vector<uint8_t>& rom = {})
 	{
 		toybox::chips::QSoundDecoder decoder;
 		decoder.reset (toybox::chips::ChipConfig { clock, 44100.0 });
@@ -3356,7 +3356,7 @@ namespace
 	}
 
 	/** QSound writes are a 16-bit value first, then the offset (`0xC4 vh vl ofs`). */
-	void qsoundWrite (Stream& stream, std::uint32_t time, std::uint8_t offset, std::uint16_t value)
+	void qsoundWrite (Stream& stream, uint32_t time, uint8_t offset, uint16_t value)
 	{
 		RegisterWrite write;
 		write.reg = offset;
@@ -3367,24 +3367,24 @@ namespace
 
 	/** One voice: pan centre, start, end, no loop, full volume - the driver's own order, with the
 		rate written last because that is what starts the voice. */
-	void setQSoundVoice (Stream& stream, int voice, std::uint32_t start, std::uint32_t end,
-						 std::uint16_t rate, std::uint16_t volume)
+	void setQSoundVoice (Stream& stream, int voice, uint32_t start, uint32_t end,
+						 uint16_t rate, uint16_t volume)
 	{
-		const std::uint8_t base = (std::uint8_t) (voice * 8);
-		qsoundWrite (stream, 0, (std::uint8_t) (0x80 + voice), 0x0120);		// pan centre
-		qsoundWrite (stream, 0, (std::uint8_t) (base + 1), (std::uint16_t) start);
-		qsoundWrite (stream, 0, (std::uint8_t) (base + 5), (std::uint16_t) end);
-		qsoundWrite (stream, 0, (std::uint8_t) (base + 4), 0x0000);			// no loop
-		qsoundWrite (stream, 0, (std::uint8_t) (base + 6), volume);
-		qsoundWrite (stream, 0, (std::uint8_t) (base + 2), rate);			// key on
+		const uint8_t base = (uint8_t) (voice * 8);
+		qsoundWrite (stream, 0, (uint8_t) (0x80 + voice), 0x0120);		// pan centre
+		qsoundWrite (stream, 0, (uint8_t) (base + 1), (uint16_t) start);
+		qsoundWrite (stream, 0, (uint8_t) (base + 5), (uint16_t) end);
+		qsoundWrite (stream, 0, (uint8_t) (base + 4), 0x0000);			// no loop
+		qsoundWrite (stream, 0, (uint8_t) (base + 6), volume);
+		qsoundWrite (stream, 0, (uint8_t) (base + 2), rate);			// key on
 	}
 
-	void qsoundKeyOff (Stream& stream, std::uint32_t time, int voice)
+	void qsoundKeyOff (Stream& stream, uint32_t time, int voice)
 	{
-		qsoundWrite (stream, time, (std::uint8_t) (voice * 8 + 2), 0x0000);
+		qsoundWrite (stream, time, (uint8_t) (voice * 8 + 2), 0x0000);
 	}
 
-	void fillQSoundSquare (std::vector<std::uint8_t>& rom, std::size_t offset, int period,
+	void fillQSoundSquare (std::vector<uint8_t>& rom, std::size_t offset, int period,
 						   std::size_t bytes)
 	{
 		for (std::size_t i = 0; i < bytes; ++i)
@@ -3399,7 +3399,7 @@ namespace
 		ends it: 2048 bytes is 85 ms, with no key-off anywhere. */
 	void testQSoundNote (void)
 	{
-		std::vector<std::uint8_t> rom (0x8000, 0);
+		std::vector<uint8_t> rom (0x8000, 0);
 		fillQSoundSquare (rom, 0x1000, 55, 2048);
 
 		Stream stream;
@@ -3425,7 +3425,7 @@ namespace
 		the key-off - which is exactly what the core's mixer plays. */
 	void testQSoundRateIsTheKey (void)
 	{
-		std::vector<std::uint8_t> rom (0x8000, 0);
+		std::vector<uint8_t> rom (0x8000, 0);
 		fillQSoundSquare (rom, 0x1000, 55, 4096);
 
 		Stream stream;
@@ -3442,7 +3442,7 @@ namespace
 		repeats that region and only the rate going to zero stops it. */
 	void testQSoundLoopIsALength (void)
 	{
-		std::vector<std::uint8_t> rom (0x8000, 0);
+		std::vector<uint8_t> rom (0x8000, 0);
 		fillQSoundSquare (rom, 0x1000, 55, 4096);
 
 		Stream stream;
@@ -3468,7 +3468,7 @@ namespace
 		and keying on every write turned the melody into a burst of triggers. */
 	void testQSoundRateSlideIsNotANewNote (void)
 	{
-		std::vector<std::uint8_t> rom (0x8000, 0);
+		std::vector<uint8_t> rom (0x8000, 0);
 		fillQSoundSquare (rom, 0x1000, 55, 4096);
 
 		Stream stream;
@@ -3498,7 +3498,7 @@ namespace
 		there, and every voice then measures no period and becomes a C4 trigger. */
 	void testQSoundRomBeyondFourMegabytes (void)
 	{
-		std::vector<std::uint8_t> rom (5 * 1024 * 1024, 0);
+		std::vector<uint8_t> rom (5 * 1024 * 1024, 0);
 		fillQSoundSquare (rom, 0x480000, 55, 2048);
 
 		Stream stream;
@@ -3515,12 +3515,12 @@ namespace
 		the K054539, because the Street Fighter II drum kit shares these sixteen voices. */
 	void testQSoundPercussion (void)
 	{
-		std::vector<std::uint8_t> rom (0x8000, 0);
-		std::uint32_t seed = 987654321u;
+		std::vector<uint8_t> rom (0x8000, 0);
+		uint32_t seed = 987654321u;
 		for (std::size_t i = 0; i < 2048; ++i)
 		{
 			seed = seed * 1103515245u + 12345u;
-			rom[0x2000 + i] = (std::uint8_t) (seed >> 16);
+			rom[0x2000 + i] = (uint8_t) (seed >> 16);
 		}
 
 		Stream stream;
@@ -3539,12 +3539,12 @@ namespace
 		that gave the bank to the wrong voice makes voice 1 a drum instead of the A4 in bank 1. */
 	void testQSoundBankBelongsToTheNextVoice (void)
 	{
-		std::vector<std::uint8_t> rom (0x20000, 0);
-		std::uint32_t seed = 12345u;
+		std::vector<uint8_t> rom (0x20000, 0);
+		uint32_t seed = 12345u;
 		for (std::size_t i = 0; i < 2048; ++i)			// bank 0: noise
 		{
 			seed = seed * 1103515245u + 12345u;
-			rom[0x1000 + i] = (std::uint8_t) (seed >> 16);
+			rom[0x1000 + i] = (uint8_t) (seed >> 16);
 		}
 		fillQSoundSquare (rom, 0x11000, 55, 2048);		// bank 1: a periodic waveform
 
@@ -3562,7 +3562,7 @@ namespace
 		volume register is not a note. */
 	void testQSoundSilentVoiceIsNoNote (void)
 	{
-		std::vector<std::uint8_t> rom (0x8000, 0);
+		std::vector<uint8_t> rom (0x8000, 0);
 		fillQSoundSquare (rom, 0x1000, 55, 2048);
 
 		Stream quiet;
@@ -3583,7 +3583,7 @@ namespace
 		toybox::chips::QSoundDecoder decoder;
 		check (decoder.channelCount() == 19, "QSound has sixteen PCM voices and three ADPCM ones");
 
-		std::vector<std::uint8_t> rom (0x8000, 0);
+		std::vector<uint8_t> rom (0x8000, 0);
 		fillQSoundSquare (rom, 0x3000, 55, 2048);
 
 		Stream stream;
@@ -3604,8 +3604,8 @@ namespace
 
 	// --- GA20: four voices, a 16-byte address unit and a sample that ends on 0x00 ------------------
 
-	std::vector<NoteEvent> runGa20 (const Stream& stream, std::uint32_t totalSamples,
-								   const std::vector<std::uint8_t>& rom)
+	std::vector<NoteEvent> runGa20 (const Stream& stream, uint32_t totalSamples,
+								   const std::vector<uint8_t>& rom)
 	{
 		toybox::chips::Ga20Decoder decoder;
 		decoder.reset (toybox::chips::ChipConfig { 3579545, 44100.0 });
@@ -3614,7 +3614,7 @@ namespace
 	}
 
 	/** `0xBF <register> <value>`, register = channel * 8 + n. */
-	void ga20Write (Stream& stream, std::uint32_t time, std::uint8_t reg, std::uint8_t value)
+	void ga20Write (Stream& stream, uint32_t time, uint8_t reg, uint8_t value)
 	{
 		RegisterWrite write;
 		write.reg = reg;
@@ -3624,23 +3624,23 @@ namespace
 	}
 
 	/** Start, rate, volume - and the control bit that keys the voice on. */
-	void startGa20Voice (Stream& stream, std::uint32_t time, int channel, std::uint32_t start,
-						 std::uint8_t rate, std::uint8_t volume)
+	void startGa20Voice (Stream& stream, uint32_t time, int channel, uint32_t start,
+						 uint8_t rate, uint8_t volume)
 	{
-		const std::uint8_t base = (std::uint8_t) (channel * 8);
-		ga20Write (stream, time, (std::uint8_t) (base + 0), (std::uint8_t) ((start >> 4) & 0xFF));
-		ga20Write (stream, time, (std::uint8_t) (base + 1), (std::uint8_t) ((start >> 12) & 0xFF));
-		ga20Write (stream, time, (std::uint8_t) (base + 4), rate);
-		ga20Write (stream, time, (std::uint8_t) (base + 5), volume);
-		ga20Write (stream, time, (std::uint8_t) (base + 6), 0x02);
+		const uint8_t base = (uint8_t) (channel * 8);
+		ga20Write (stream, time, (uint8_t) (base + 0), (uint8_t) ((start >> 4) & 0xFF));
+		ga20Write (stream, time, (uint8_t) (base + 1), (uint8_t) ((start >> 12) & 0xFF));
+		ga20Write (stream, time, (uint8_t) (base + 4), rate);
+		ga20Write (stream, time, (uint8_t) (base + 5), volume);
+		ga20Write (stream, time, (uint8_t) (base + 6), 0x02);
 	}
 
 	/** A periodic sample of `length` bytes, then the ROM's zeroes - which are the sample's end
 		marker, the only thing that stops a GA20 note early. */
-	std::vector<std::uint8_t> ga20Square (std::size_t size, std::size_t offset, int cycle,
+	std::vector<uint8_t> ga20Square (std::size_t size, std::size_t offset, int cycle,
 										  std::size_t length = 512)
 	{
-		std::vector<std::uint8_t> rom (size, 0);
+		std::vector<uint8_t> rom (size, 0);
 		for (std::size_t i = 0; i < length && offset + i < size; ++i)
 		{
 			rom[offset + i] = ((i % (std::size_t) cycle) < (std::size_t) cycle / 2) ? 0x50 : 0xB0;
@@ -3693,12 +3693,12 @@ namespace
 		melody on the same four voices, and the decision is per key-on. */
 	void testGa20Percussion (void)
 	{
-		std::vector<std::uint8_t> rom (0x10000, 0);
-		std::uint32_t seed = 24681357u;
+		std::vector<uint8_t> rom (0x10000, 0);
+		uint32_t seed = 24681357u;
 		for (std::size_t i = 0; i < 512; ++i)
 		{
 			seed = seed * 1103515245u + 12345u;
-			rom[0x5000 + i] = (std::uint8_t) (seed >> 16);
+			rom[0x5000 + i] = (uint8_t) (seed >> 16);
 		}
 
 		Stream stream;
@@ -3732,8 +3732,8 @@ namespace
 	// --- OKIM6295: a two-byte command port, no pitch register, the sample's cycle is the note ------
 
 	std::vector<NoteEvent> runOkim6295 (const Stream& stream,
-										const std::vector<std::uint8_t>& rom,
-										std::uint32_t totalSamples = 44100)
+										const std::vector<uint8_t>& rom,
+										uint32_t totalSamples = 44100)
 	{
 		toybox::chips::Okim6295Decoder decoder;
 		decoder.reset (toybox::chips::ChipConfig { 1000000, 44100.0 });
@@ -3743,9 +3743,9 @@ namespace
 
 	/** A 4 KB ROM whose sample 0 runs 0x0200..0x02FF, with `byte` in every position: the sample
 		table is three bytes of start and three of stop, big endian, at `sample * 8`. */
-	std::vector<std::uint8_t> okimRom (std::uint8_t byte)
+	std::vector<uint8_t> okimRom (uint8_t byte)
 	{
-		std::vector<std::uint8_t> rom (4096, byte);
+		std::vector<uint8_t> rom (4096, byte);
 		rom[0] = 0x00;			// start 0x000200
 		rom[1] = 0x02;
 		rom[2] = 0x00;
@@ -3761,7 +3761,7 @@ namespace
 		the chip has no pitch register at all. */
 	void testOkim6295Notes (void)
 	{
-		std::vector<std::uint8_t> rom = okimRom (0x00);
+		std::vector<uint8_t> rom = okimRom (0x00);
 		for (std::size_t i = 0x200; i <= 0x2FF; ++i)
 		{
 			rom[i] = ((i - 0x200) % 16 < 8) ? 0x02 : 0x0E;		// eight up, eight down: 16 nibbles
@@ -3822,7 +3822,7 @@ namespace
 	void testK005289Notes (void)
 	{
 		std::vector<toybox::chips::RegisterWrite> writes;
-		const auto add = [&writes] (std::uint8_t reg, std::uint16_t data, std::uint32_t time)
+		const auto add = [&writes] (uint8_t reg, uint16_t data, uint32_t time)
 		{
 			toybox::chips::RegisterWrite write;
 			write.reg = reg;
@@ -3942,22 +3942,22 @@ namespace
 
 	void testVgmLoaderIr (void)
 	{
-		std::vector<std::uint8_t> image (0x100, 0);
+		std::vector<uint8_t> image (0x100, 0);
 		image[0] = 'V'; image[1] = 'g'; image[2] = 'm'; image[3] = ' ';
 
-		const auto put32 = [&image] (std::size_t at, std::uint32_t value)
+		const auto put32 = [&image] (std::size_t at, uint32_t value)
 		{
 			for (int i = 0; i < 4; ++i)
 			{
-				image[at + (std::size_t) i] = (std::uint8_t) ((value >> (8 * i)) & 0xFF);
+				image[at + (std::size_t) i] = (uint8_t) ((value >> (8 * i)) & 0xFF);
 			}
 		};
 
 		put32 (0x08, 0x150);					// version 1.50
 		put32 (0x34, 0x100 - 0x34);				// data starts right after the header block
 
-		std::vector<std::uint8_t> data;
-		const auto emit = [&data] (std::initializer_list<std::uint8_t> bytes)
+		std::vector<uint8_t> data;
+		const auto emit = [&data] (std::initializer_list<uint8_t> bytes)
 		{
 			data.insert (data.end(), bytes.begin(), bytes.end());
 		};
@@ -3968,18 +3968,18 @@ namespace
 		emit ({ 0xE1, 0x00, 0x80, 0x12, 0x34 });	// C352: offset 0x0080, value 0x1234
 
 		// one ROM block: type 0x8D, romSize 0x100, placed at 0, sixteen payload bytes
-		std::vector<std::uint8_t> payload (16, 0xAB);
+		std::vector<uint8_t> payload (16, 0xAB);
 		emit ({ 0x67, 0x66, 0x8D });
-		const std::uint32_t blockSize = 8 + (std::uint32_t) payload.size();
-		emit ({ (std::uint8_t) (blockSize & 0xFF), (std::uint8_t) ((blockSize >> 8) & 0xFF),
-				(std::uint8_t) ((blockSize >> 16) & 0xFF), (std::uint8_t) ((blockSize >> 24) & 0xFF) });
+		const uint32_t blockSize = 8 + (uint32_t) payload.size();
+		emit ({ (uint8_t) (blockSize & 0xFF), (uint8_t) ((blockSize >> 8) & 0xFF),
+				(uint8_t) ((blockSize >> 16) & 0xFF), (uint8_t) ((blockSize >> 24) & 0xFF) });
 		emit ({ 0x00, 0x01, 0x00, 0x00 });		// romSize 0x100
 		emit ({ 0x00, 0x00, 0x00, 0x00 });		// romOffset 0
 		data.insert (data.end(), payload.begin(), payload.end());
 		emit ({ 0x66 });
 
 		image.insert (image.end(), data.begin(), data.end());
-		put32 (0x04, (std::uint32_t) image.size());
+		put32 (0x04, (uint32_t) image.size());
 
 		toybox::midi::SongIr ir;
 		std::string error;
@@ -4022,7 +4022,7 @@ namespace
 	void testMikeyNotes (void)
 	{
 		std::vector<toybox::chips::RegisterWrite> writes;
-		const auto add = [&writes] (std::uint8_t reg, std::uint8_t value)
+		const auto add = [&writes] (uint8_t reg, uint8_t value)
 		{
 			toybox::chips::RegisterWrite write;
 			write.reg = reg;
@@ -4056,7 +4056,7 @@ namespace
 		std::vector<toybox::chips::RegisterWrite> writes;
 		toybox::chips::RegisterWrite write;
 		write.reg = 0x00;							// voice 0
-		write.value = (std::uint8_t) (0x80 | 48);	// gate, key A4
+		write.value = (uint8_t) (0x80 | 48);	// gate, key A4
 		write.sampleTime = 0;
 		writes.push_back (write);
 
@@ -4078,7 +4078,7 @@ namespace
 	void testVsuNotes (void)
 	{
 		std::vector<toybox::chips::RegisterWrite> writes;
-		const auto add = [&writes] (std::uint8_t reg, std::uint8_t value, std::uint32_t time)
+		const auto add = [&writes] (uint8_t reg, uint8_t value, uint32_t time)
 		{
 			toybox::chips::RegisterWrite write;
 			write.reg = reg;
@@ -4110,9 +4110,9 @@ namespace
 
 	// --- ES5503: thirty-two wavetable oscillators, a halt bit as the key and a table's own cycle ----
 
-	std::vector<NoteEvent> runEs5503 (const Stream& stream, std::uint32_t totalSamples,
-									  const std::vector<std::uint8_t>& ram,
-									  std::uint32_t clock = 7159090)
+	std::vector<NoteEvent> runEs5503 (const Stream& stream, uint32_t totalSamples,
+									  const std::vector<uint8_t>& ram,
+									  uint32_t clock = 7159090)
 	{
 		toybox::chips::Es5503Decoder decoder;
 		decoder.reset (toybox::chips::ChipConfig { clock, 44100.0 });
@@ -4121,7 +4121,7 @@ namespace
 	}
 
 	/** `0xD5 <port> <register> <value>` - the register space is the chip's own. */
-	void es5503Write (Stream& stream, std::uint32_t time, std::uint8_t reg, std::uint8_t value)
+	void es5503Write (Stream& stream, uint32_t time, uint8_t reg, uint8_t value)
 	{
 		RegisterWrite write;
 		write.reg = reg;
@@ -4132,25 +4132,25 @@ namespace
 
 	/** Pointer, table size and resolution, frequency, full volume - then the control byte that
 		starts the oscillator (bit 0 is the halt bit, so clearing it is the key-on). */
-	void startEs5503Voice (Stream& stream, std::uint32_t time, int osc, std::uint16_t frequency,
-						   std::uint8_t pointerHigh, std::uint8_t sizeAndResolution,
-						   std::uint8_t control = 0x00)
+	void startEs5503Voice (Stream& stream, uint32_t time, int osc, uint16_t frequency,
+						   uint8_t pointerHigh, uint8_t sizeAndResolution,
+						   uint8_t control = 0x00)
 	{
-		const std::uint8_t base = (std::uint8_t) osc;
+		const uint8_t base = (uint8_t) osc;
 		es5503Write (stream, time, 0xE1, 0x3E);			// thirty-two oscillators
-		es5503Write (stream, time, (std::uint8_t) (0x80 + base), pointerHigh);
-		es5503Write (stream, time, (std::uint8_t) (0xC0 + base), sizeAndResolution);
-		es5503Write (stream, time, (std::uint8_t) (0x00 + base), (std::uint8_t) (frequency & 0xFF));
-		es5503Write (stream, time, (std::uint8_t) (0x20 + base), (std::uint8_t) (frequency >> 8));
-		es5503Write (stream, time, (std::uint8_t) (0x40 + base), 0xFF);
-		es5503Write (stream, time, (std::uint8_t) (0xA0 + base), control);
+		es5503Write (stream, time, (uint8_t) (0x80 + base), pointerHigh);
+		es5503Write (stream, time, (uint8_t) (0xC0 + base), sizeAndResolution);
+		es5503Write (stream, time, (uint8_t) (0x00 + base), (uint8_t) (frequency & 0xFF));
+		es5503Write (stream, time, (uint8_t) (0x20 + base), (uint8_t) (frequency >> 8));
+		es5503Write (stream, time, (uint8_t) (0x40 + base), 0xFF);
+		es5503Write (stream, time, (uint8_t) (0xA0 + base), control);
 	}
 
 	/** A table of `cycle`-byte waves repeated over `length` bytes. */
-	std::vector<std::uint8_t> es5503Ram (std::size_t tableOffset, std::size_t cycle, std::size_t length,
+	std::vector<uint8_t> es5503Ram (std::size_t tableOffset, std::size_t cycle, std::size_t length,
 										 std::size_t ramSize = 128 * 1024)
 	{
-		std::vector<std::uint8_t> ram (ramSize, 0);
+		std::vector<uint8_t> ram (ramSize, 0);
 		for (std::size_t i = 0; i < length && tableOffset + i < ramSize; ++i)
 		{
 			ram[tableOffset + i] = ((i % cycle) < cycle / 2) ? 0x50 : 0xB0;
@@ -4202,7 +4202,7 @@ namespace
 	{
 		Stream stream;
 		startEs5503Voice (stream, 0, 2, 8000, 0x00, 0x12);
-		es5503Write (stream, 1000, (std::uint8_t) (0xA0 + 2), 0x01);
+		es5503Write (stream, 1000, (uint8_t) (0xA0 + 2), 0x01);
 
 		const auto notes = runEs5503 (stream, 30000, es5503Ram (0x0000, 1024, 1024));
 
@@ -4233,12 +4233,12 @@ namespace
 		thirty-two oscillators as the music. */
 	void testEs5503Percussion (void)
 	{
-		std::vector<std::uint8_t> ram (128 * 1024, 0);
-		std::uint32_t seed = 24681357u;
+		std::vector<uint8_t> ram (128 * 1024, 0);
+		uint32_t seed = 24681357u;
 		for (std::size_t i = 0; i < 1024; ++i)
 		{
 			seed = seed * 1103515245u + 12345u;
-			ram[0x0000 + i] = (std::uint8_t) (seed >> 16);
+			ram[0x0000 + i] = (uint8_t) (seed >> 16);
 		}
 
 		Stream stream;
@@ -4262,7 +4262,7 @@ namespace
 		es5503Write (few, 0, 0xE1, 0x02);					// (0x02 >> 1) + 1 = two
 		es5503Write (few, 0, 0x85, 0x00);
 		es5503Write (few, 0, 0xC5, 0x12);
-		es5503Write (few, 0, 0x05, (std::uint8_t) (500 & 0xFF));
+		es5503Write (few, 0, 0x05, (uint8_t) (500 & 0xFF));
 		es5503Write (few, 0, 0x25, 0x01);
 		es5503Write (few, 0, 0x45, 0xFF);
 		es5503Write (few, 0, 0xA5, 0x00);
@@ -4279,9 +4279,9 @@ namespace
 
 	// --- Sega PCM: sixteen voices, registers as playback state, an end address in 256-byte units --
 
-	std::vector<NoteEvent> runSegaPcm (const Stream& stream, std::uint32_t totalSamples,
-									   const std::vector<std::uint8_t>& rom,
-									   std::uint32_t clock = 4026987)
+	std::vector<NoteEvent> runSegaPcm (const Stream& stream, uint32_t totalSamples,
+									   const std::vector<uint8_t>& rom,
+									   uint32_t clock = 4026987)
 	{
 		toybox::chips::SegaPcmDecoder decoder;
 		decoder.reset (toybox::chips::ChipConfig { clock, 44100.0 });
@@ -4290,31 +4290,31 @@ namespace
 	}
 
 	/** `0xC0 <offset low> <offset high> <value>`, a byte of the chip's register RAM. */
-	void segaWrite (Stream& stream, std::uint32_t time, std::uint16_t offset, std::uint8_t value)
+	void segaWrite (Stream& stream, uint32_t time, uint16_t offset, uint8_t value)
 	{
 		RegisterWrite write;
-		write.reg = (std::uint8_t) (offset & 0xFF);
-		write.port = (std::uint8_t) (offset >> 8);
+		write.reg = (uint8_t) (offset & 0xFF);
+		write.port = (uint8_t) (offset >> 8);
 		write.value = value;
 		write.sampleTime = time;
 		stream.writes.push_back (write);
 	}
 
 	/** Volume, end, pitch and the current address, then the control byte that starts the voice. */
-	void startSegaVoice (Stream& stream, std::uint32_t time, int channel, std::uint32_t start,
-						 std::uint8_t pitch, std::uint8_t endReg, std::uint8_t control = 0x02)
+	void startSegaVoice (Stream& stream, uint32_t time, int channel, uint32_t start,
+						 uint8_t pitch, uint8_t endReg, uint8_t control = 0x02)
 	{
-		const std::uint16_t low = (std::uint16_t) (channel * 8);
-		const std::uint16_t high = (std::uint16_t) (0x80 + channel * 8);
-		segaWrite (stream, time, (std::uint16_t) (low + 2), 0x7F);		// volume left
-		segaWrite (stream, time, (std::uint16_t) (low + 3), 0x7F);		// volume right
-		segaWrite (stream, time, (std::uint16_t) (low + 6), endReg);
-		segaWrite (stream, time, (std::uint16_t) (low + 7), pitch);
+		const uint16_t low = (uint16_t) (channel * 8);
+		const uint16_t high = (uint16_t) (0x80 + channel * 8);
+		segaWrite (stream, time, (uint16_t) (low + 2), 0x7F);		// volume left
+		segaWrite (stream, time, (uint16_t) (low + 3), 0x7F);		// volume right
+		segaWrite (stream, time, (uint16_t) (low + 6), endReg);
+		segaWrite (stream, time, (uint16_t) (low + 7), pitch);
 		// the 24-bit position's low byte is the chip's own fraction, so the byte address is
 		// `(high << 8) | mid`: a start of 0x4000 is mid 0x00 and high 0x40
-		segaWrite (stream, time, (std::uint16_t) (high + 4), (std::uint8_t) (start & 0xFF));
-		segaWrite (stream, time, (std::uint16_t) (high + 5), (std::uint8_t) ((start >> 8) & 0xFF));
-		segaWrite (stream, time, (std::uint16_t) (high + 6), control);
+		segaWrite (stream, time, (uint16_t) (high + 4), (uint8_t) (start & 0xFF));
+		segaWrite (stream, time, (uint16_t) (high + 5), (uint8_t) ((start >> 8) & 0xFF));
+		segaWrite (stream, time, (uint16_t) (high + 6), control);
 	}
 
 	/** At 4.03 MHz a pitch of 29 advances 3563 bytes a second, so a 16-byte cycle is A3. The end
@@ -4360,7 +4360,7 @@ namespace
 	{
 		Stream stream;
 		startSegaVoice (stream, 0, 2, 0x4000, 29, 0x47, 0x00);		// loops
-		segaWrite (stream, 1000, (std::uint16_t) (0x80 + 2 * 8 + 6), 0x01);	// off
+		segaWrite (stream, 1000, (uint16_t) (0x80 + 2 * 8 + 6), 0x01);	// off
 
 		const auto notes = runSegaPcm (stream, 60000, ga20Square (0x10000, 0x4000, 16, 2048));
 
@@ -4371,12 +4371,12 @@ namespace
 	/** Drums share these sixteen voices, so a sample with no period stays the C4 trigger. */
 	void testSegaPcmPercussion (void)
 	{
-		std::vector<std::uint8_t> rom (0x10000, 0);
-		std::uint32_t seed = 135792468u;
+		std::vector<uint8_t> rom (0x10000, 0);
+		uint32_t seed = 135792468u;
 		for (std::size_t i = 0; i < 2048; ++i)
 		{
 			seed = seed * 1103515245u + 12345u;
-			rom[0x5000 + i] = (std::uint8_t) (seed >> 16);
+			rom[0x5000 + i] = (uint8_t) (seed >> 16);
 		}
 
 		Stream stream;

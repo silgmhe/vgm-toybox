@@ -9,11 +9,11 @@ namespace toybox::chips
 {
 namespace
 {
-	constexpr std::uint32_t kDefaultClock = 8000000;
+	constexpr uint32_t kDefaultClock = 8000000;
 
 	// A channel that plays noise instead of its divider has no pitch at all; the noise generator's
 	// rate travels in this bit, above the 8-bit frequency register.
-	constexpr std::uint32_t kNoiseFlag = 0x100;
+	constexpr uint32_t kNoiseFlag = 0x100;
 
 	/** The core works at clock / 256 and toggles a channel every (511 - frequency) / 2^octave of
 		those samples, which is half a wave: the output is clock * 2^octave / (512 * (511 - f)).
@@ -25,7 +25,7 @@ namespace
 	public:
 		explicit Saa1099Table (double clock) : clock (clock) {}
 
-		int noteFor (std::uint32_t period, int block, int* finePitch) const override
+		int noteFor (uint32_t period, int block, int* finePitch) const override
 		{
 			if ((period & kNoiseFlag) != 0)
 			{
@@ -57,12 +57,12 @@ namespace
 
 struct Saa1099Decoder::Impl
 {
-	std::uint8_t amplitude[numChannels] = {};	// registers 0x00-0x05
-	std::uint8_t frequency[numChannels] = {};	// registers 0x08-0x0D
+	uint8_t amplitude[numChannels] = {};	// registers 0x00-0x05
+	uint8_t frequency[numChannels] = {};	// registers 0x08-0x0D
 	int octave[numChannels] = {};				// registers 0x10-0x12, one value per pair
 	bool toneEnabled[numChannels] = {};			// register 0x14
 	bool noiseEnabled[numChannels] = {};		// register 0x15
-	std::uint8_t noiseParams[2] = {};			// register 0x16, one value per noise generator
+	uint8_t noiseParams[2] = {};			// register 0x16, one value per noise generator
 	bool allChannels = false;					// register 0x1C, bit 0
 	double clock = (double) kDefaultClock;
 	std::unique_ptr<Saa1099Table> table;
@@ -77,7 +77,7 @@ Saa1099Decoder::~Saa1099Decoder() = default;
 
 void Saa1099Decoder::reset (const ChipConfig& config)
 {
-	[[maybe_unused]] const std::uint32_t clock = config.clockHz;
+	[[maybe_unused]] const uint32_t clock = config.clockHz;
 	[[maybe_unused]] const double sampleRate = config.timeBaseHz;
 	(void) sampleRate;		// the chip has no timers; the registers are the whole state
 
@@ -110,7 +110,7 @@ void Saa1099Decoder::write (const RegisterWrite& w)
 	case 0x04:
 	case 0x05:
 		// left and right nibbles are separate outputs; the louder one is the channel's volume
-		impl->amplitude[channel] = (std::uint8_t) std::max (w.value & 0x0F, (w.value >> 4) & 0x0F);
+		impl->amplitude[channel] = (uint8_t) std::max (w.value & 0x0F, (w.value >> 4) & 0x0F);
 		break;
 	case 0x08:
 	case 0x09:
@@ -153,7 +153,7 @@ void Saa1099Decoder::write (const RegisterWrite& w)
 	}
 }
 
-void Saa1099Decoder::advance (std::uint32_t sampleTime)
+void Saa1099Decoder::advance (uint32_t sampleTime)
 {
 	(void) sampleTime;		// no timers
 }

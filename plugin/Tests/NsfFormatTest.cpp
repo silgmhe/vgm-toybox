@@ -25,23 +25,23 @@ namespace
 using toybox::formats::nsf::NsfFile;
 
 /** Builds an image with the fields this reader is supposed to find. */
-std::vector<std::uint8_t> makeNsf (int version = 1, int songs = 3, int start = 2,
-								   std::uint16_t ntsc = 16666, std::uint8_t chips = 0x01,
+std::vector<uint8_t> makeNsf (int version = 1, int songs = 3, int start = 2,
+								   uint16_t ntsc = 16666, uint8_t chips = 0x01,
 								   std::size_t programBytes = 0x100,
-								   std::uint8_t extraChips = 0)
+								   uint8_t extraChips = 0)
 {
-	std::vector<std::uint8_t> image (NsfFile::headerSize + programBytes, 0);
+	std::vector<uint8_t> image (NsfFile::headerSize + programBytes, 0);
 
 	std::memcpy (image.data(), "NESM", 4);
 	image[0x04] = 0x1A;
-	image[NsfFile::offsetVersion] = (std::uint8_t) version;
-	image[NsfFile::offsetTotalSongs] = (std::uint8_t) songs;
-	image[NsfFile::offsetStartSong] = (std::uint8_t) start;
+	image[NsfFile::offsetVersion] = (uint8_t) version;
+	image[NsfFile::offsetTotalSongs] = (uint8_t) songs;
+	image[NsfFile::offsetStartSong] = (uint8_t) start;
 
-	const auto put16 = [&image] (std::size_t at, std::uint16_t value)
+	const auto put16 = [&image] (std::size_t at, uint16_t value)
 	{
-		image[at] = (std::uint8_t) (value & 0xFF);
-		image[at + 1] = (std::uint8_t) (value >> 8);
+		image[at] = (uint8_t) (value & 0xFF);
+		image[at + 1] = (uint8_t) (value >> 8);
 	};
 
 	put16 (NsfFile::offsetLoadAddress, version == 1 ? 0x8000 : 0x6000);
@@ -59,7 +59,7 @@ std::vector<std::uint8_t> makeNsf (int version = 1, int songs = 3, int start = 2
 
 	for (std::size_t i = 0; i < programBytes; ++i)
 	{
-		image[NsfFile::headerSize + i] = (std::uint8_t) (0xEA); // NOP
+		image[NsfFile::headerSize + i] = (uint8_t) (0xEA); // NOP
 	}
 
 	return image;
@@ -181,7 +181,7 @@ int main (void)
 	}
 
 	{
-		std::vector<std::uint8_t> shortImage (16, 0);
+		std::vector<uint8_t> shortImage (16, 0);
 		NsfFile file;
 		std::string error;
 
@@ -212,14 +212,14 @@ int main (void)
 		bus.load();
 
 		int writes = 0;
-		std::uint16_t lastAddress = 0;
-		bus.onSoundWrite = [&] (std::uint16_t address, std::uint8_t)
+		uint16_t lastAddress = 0;
+		bus.onSoundWrite = [&] (uint16_t address, uint8_t)
 		{
 			++writes;
 			lastAddress = address;
 		};
 
-		UINT32 value = 0;
+		uint32_t value = 0;
 		bus.Write (0x4015, 0x0F);
 		check (writes == 1 && lastAddress == 0x4015, "a sound-register write reaches the player");
 		check (bus.soundWriteCount == 1, "and is counted");
@@ -246,7 +246,7 @@ int main (void)
 		// Mark each 4 KB bank with its own number at its first byte.
 		for (std::size_t bank = 0; bank < 12; ++bank)
 		{
-			image[NsfFile::headerSize + bank * 0x1000] = (std::uint8_t) bank;
+			image[NsfFile::headerSize + bank * 0x1000] = (uint8_t) bank;
 		}
 
 		NsfFile file;
@@ -258,7 +258,7 @@ int main (void)
 		toybox::backends::nsf::NsfBus bus (file);
 		bus.load();
 
-		UINT32 value = 0;
+		uint32_t value = 0;
 		bus.Read (0x8000, value);
 		check (value == 0, "the first window starts on bank 0");
 
@@ -287,10 +287,10 @@ int main (void)
 		apu.Write (0x4007, 0x00);
 		apu.Tick (2000);
 
-		INT32 mixed[2] = { 0, 0 };
+		int32_t mixed[2] = { 0, 0 };
 		apu.Render (mixed);
 
-		INT32 channels[4] = { 0, 0, 0, 0 };
+		int32_t channels[4] = { 0, 0, 0, 0 };
 		apu.RenderChannels (channels, 2, 2);
 
 		const int sumLeft = (int) channels[0] + (int) channels[2];

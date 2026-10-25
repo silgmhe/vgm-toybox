@@ -56,7 +56,7 @@
 	DEVID_GA20, DEVID_MIKEY, DEVID_K007232, DEVID_K005289, DEVID_MSM5205, DEVID_MSM5232, DEVID_BSMT2000, DEVID_ICS2115, 
 };
 
-/*static*/ const UINT32 VGMPlayer::_CHIPCLK_OFS[_CHIP_COUNT] =
+/*static*/ const uint32_t VGMPlayer::_CHIPCLK_OFS[_CHIP_COUNT] =
 {
 	0x0C, 0x10, 0x2C, 0x30, 0x38, 0x40, 0x44, 0x48,
 	0x4C, 0x50, 0x54, 0x58, 0x5C, 0x60, 0x64, 0x68,
@@ -65,7 +65,7 @@
 	0xB8, 0xC0, 0xC4, 0xC8, 0xCC, 0xD0, 0xD8, 0xDC,
 	0xE0, 0xE4, 0xE8, 0xEC, 0xF0, 0xF4, 0xF8, 0xFC,
 };
-/*static*/ const UINT16 VGMPlayer::_CHIP_VOLUME[_CHIP_COUNT] =
+/*static*/ const uint16_t VGMPlayer::_CHIP_VOLUME[_CHIP_COUNT] =
 {	0x80, 0x200, 0x100, 0x100, 0x180, 0xB0, 0x100, 0x80,
 	0x80, 0x100, 0x100, 0x100, 0x100, 0x100, 0x100, 0x98,
 	0x80, 0xE0, 0x100, 0xC0, 0x100, 0x40, 0x11E, 0x1C0,
@@ -73,7 +73,7 @@
 	0x20, 0x100, 0x100, 0x100, 0x40, 0x20, 0x100, 0x40,
 	0x280, 0x100, 0x100, 0x100, 0x100, 0x100, 0x200, 0x40, 
 };
-/*static*/ const UINT16 VGMPlayer::_PB_VOL_AMNT[_CHIP_COUNT] =
+/*static*/ const uint16_t VGMPlayer::_PB_VOL_AMNT[_CHIP_COUNT] =
 {	0x100, 0x80, 0x100, 0x100, 0x100, 0x100, 0x100, 0x100,
 	0x100, 0x200, 0x200, 0x200, 0x200, 0x100, 0x100, 0x1AF,
 	0x200, 0x100, 0x200, 0x400, 0x200, 0x400, 0x100, 0x200,
@@ -97,45 +97,45 @@
 #define P2612FIX_ENABLE	0x80	// the VGM needs a special workaround due to VGMTool2 YM2612 trimming
 
 
-INLINE UINT16 ReadLE16(const UINT8* data)
+INLINE uint16_t ReadLE16(const uint8_t* data)
 {
 	// read 16-Bit Word (Little Endian/Intel Byte Order)
 #ifdef VGM_LITTLE_ENDIAN
-	return *(UINT16*)data;
+	return *(uint16_t*)data;
 #else
 	return (data[0x01] << 8) | (data[0x00] << 0);
 #endif
 }
 
-INLINE UINT32 ReadLE32(const UINT8* data)
+INLINE uint32_t ReadLE32(const uint8_t* data)
 {
 	// read 32-Bit Word (Little Endian/Intel Byte Order)
 #ifdef VGM_LITTLE_ENDIAN
-	return	*(UINT32*)data;
+	return	*(uint32_t*)data;
 #else
 	return	(data[0x03] << 24) | (data[0x02] << 16) |
 			(data[0x01] <<  8) | (data[0x00] <<  0);
 #endif
 }
 
-INLINE UINT32 ReadRelOfs(const UINT8* data, UINT32 fileOfs)
+INLINE uint32_t ReadRelOfs(const uint8_t* data, uint32_t fileOfs)
 {
 	// read a VGM-style (relative) offset
-	UINT32 ofs = ReadLE32(&data[fileOfs]);
+	uint32_t ofs = ReadLE32(&data[fileOfs]);
 	return ofs ? (fileOfs + ofs) : ofs;	// add base to offset, if offset != 0
 }
 
-INLINE UINT16 MulFixed8x8(UINT16 a, UINT16 b)	// 8.8 fixed point multiplication
+INLINE uint16_t MulFixed8x8(uint16_t a, uint16_t b)	// 8.8 fixed point multiplication
 {
-	UINT32 res16;	// 16.16 fixed point result
+	uint32_t res16;	// 16.16 fixed point result
 	
-	res16 = (UINT32)a * b;
+	res16 = (uint32_t)a * b;
 	return (res16 + 0x80) >> 8;	// round to nearest neighbour + scale back to 8.8 fixed point
 }
 
-INLINE void SaveDeviceConfig(std::vector<UINT8>& dst, const void* srcData, size_t srcLen)
+INLINE void SaveDeviceConfig(std::vector<uint8_t>& dst, const void* srcData, size_t srcLen)
 {
-	const UINT8* srcPtr = (const UINT8*)srcData;
+	const uint8_t* srcPtr = (const uint8_t*)srcData;
 	dst.assign(srcPtr, srcPtr + srcLen);
 	return;
 }
@@ -149,9 +149,9 @@ VGMPlayer::VGMPlayer() :
 	_playState(0x00),
 	_psTrigger(0x00)
 {
-	UINT8 retVal;
-	UINT16 optChip;
-	UINT8 chipID;
+	uint8_t retVal;
+	uint16_t optChip;
+	uint8_t chipID;
 	
 	dev_logger_set(&_logger, this, VGMPlayer::PlayerLogCB, NULL);
 	
@@ -190,7 +190,7 @@ VGMPlayer::VGMPlayer() :
 		}
 	}
 	{
-		UINT8 vgmChip;
+		uint8_t vgmChip;
 		for (vgmChip = 0x00; vgmChip < _CHIP_COUNT; vgmChip ++)
 		{
 			for (chipID = 0; chipID < 2; chipID ++)
@@ -220,7 +220,7 @@ VGMPlayer::~VGMPlayer()
 	return;
 }
 
-UINT32 VGMPlayer::GetPlayerType(void) const
+uint32_t VGMPlayer::GetPlayerType(void) const
 {
 	return FCC_VGM;
 }
@@ -230,7 +230,7 @@ const char* VGMPlayer::GetPlayerName(void) const
 	return "VGM";
 }
 
-/*static*/ UINT8 VGMPlayer::PlayerCanLoadFile(DATA_LOADER *dataLoader)
+/*static*/ uint8_t VGMPlayer::PlayerCanLoadFile(DATA_LOADER *dataLoader)
 {
 	DataLoader_ReadUntil(dataLoader,0x38);
 	if (DataLoader_GetSize(dataLoader) < 0x38)
@@ -240,12 +240,12 @@ const char* VGMPlayer::GetPlayerName(void) const
 	return 0x00;
 }
 
-UINT8 VGMPlayer::CanLoadFile(DATA_LOADER *dataLoader) const
+uint8_t VGMPlayer::CanLoadFile(DATA_LOADER *dataLoader) const
 {
 	return this->PlayerCanLoadFile(dataLoader);
 }
 
-UINT8 VGMPlayer::LoadFile(DATA_LOADER *dataLoader)
+uint8_t VGMPlayer::LoadFile(DATA_LOADER *dataLoader)
 {
 	_dLoad = NULL;
 	DataLoader_ReadUntil(dataLoader,0x38);
@@ -274,7 +274,7 @@ UINT8 VGMPlayer::LoadFile(DATA_LOADER *dataLoader)
 	return 0x00;
 }
 
-UINT8 VGMPlayer::ParseHeader(void)
+uint8_t VGMPlayer::ParseHeader(void)
 {
 	memset(&_fileHdr, 0x00, sizeof(VGM_HEADER));
 	
@@ -306,7 +306,7 @@ UINT8 VGMPlayer::ParseHeader(void)
 	_fileHdr.loopTicks = ReadLE32(&_hdrBuffer[0x20]);
 	_fileHdr.recordHz = ReadLE32(&_hdrBuffer[0x24]);
 	
-	_fileHdr.loopBase = (INT8)_hdrBuffer[0x7E];
+	_fileHdr.loopBase = (int8_t)_hdrBuffer[0x7E];
 	_fileHdr.loopModifier = _hdrBuffer[0x7F];
 	if (_hdrBuffer[0x7C] <= 0xC0)
 		_fileHdr.volumeGain = _hdrBuffer[0x7C];
@@ -330,7 +330,7 @@ UINT8 VGMPlayer::ParseHeader(void)
 	
 	if (_fileHdr.extraHdrOfs && _fileHdr.extraHdrOfs < _fileHdr.eofOfs)
 	{
-		UINT32 xhLen = ReadLE32(&_fileData[_fileHdr.extraHdrOfs]);
+		uint32_t xhLen = ReadLE32(&_fileData[_fileHdr.extraHdrOfs]);
 		if (xhLen >= 0x08)
 			_fileHdr.xhChpClkOfs = ReadRelOfs(_fileData, _fileHdr.extraHdrOfs + 0x04);
 		if (xhLen >= 0x0C)
@@ -376,13 +376,13 @@ UINT8 VGMPlayer::ParseHeader(void)
 	return 0x00;
 }
 
-void VGMPlayer::ParseXHdr_Data32(UINT32 fileOfs, std::vector<XHDR_DATA32>& xData)
+void VGMPlayer::ParseXHdr_Data32(uint32_t fileOfs, std::vector<XHDR_DATA32>& xData)
 {
 	xData.clear();
 	if (! fileOfs || fileOfs >= DataLoader_GetSize(_dLoad))
 		return;
 	
-	UINT32 curPos = fileOfs;
+	uint32_t curPos = fileOfs;
 	size_t curChip;
 	
 	xData.resize(_fileData[curPos]);	curPos ++;
@@ -402,13 +402,13 @@ void VGMPlayer::ParseXHdr_Data32(UINT32 fileOfs, std::vector<XHDR_DATA32>& xData
 	return;
 }
 
-void VGMPlayer::ParseXHdr_Data16(UINT32 fileOfs, std::vector<XHDR_DATA16>& xData)
+void VGMPlayer::ParseXHdr_Data16(uint32_t fileOfs, std::vector<XHDR_DATA16>& xData)
 {
 	xData.clear();
 	if (! fileOfs || fileOfs >= DataLoader_GetSize(_dLoad))
 		return;
 	
-	UINT32 curPos = fileOfs;
+	uint32_t curPos = fileOfs;
 	size_t curChip;
 	
 	xData.resize(_fileData[curPos]);	curPos ++;
@@ -429,7 +429,7 @@ void VGMPlayer::ParseXHdr_Data16(UINT32 fileOfs, std::vector<XHDR_DATA16>& xData
 	return;
 }
 
-UINT8 VGMPlayer::LoadTags(void)
+uint8_t VGMPlayer::LoadTags(void)
 {
 	size_t curTag;
 	
@@ -441,8 +441,8 @@ UINT8 VGMPlayer::LoadTags(void)
 	if (_fileHdr.gd3Ofs >= _fileHdr.eofOfs)
 		return 0xF3;	// tag error (offset out-of-range)
 	
-	UINT32 curPos;
-	UINT32 eotPos;
+	uint32_t curPos;
+	uint32_t eotPos;
 	
 	if (_fileHdr.gd3Ofs + 0x0C > _fileHdr.eofOfs)	// separate check to catch overflows
 		return 0xF3;	// tag error (GD3 header incomplete)
@@ -462,7 +462,7 @@ UINT8 VGMPlayer::LoadTags(void)
 	const char **tagListEnd = _tagList;
 	for (curTag = 0; curTag < _TAG_COUNT; curTag ++)
 	{
-		UINT32 startPos = curPos;
+		uint32_t startPos = curPos;
 		if (curPos >= eotPos)
 			break;
 		
@@ -481,7 +481,7 @@ UINT8 VGMPlayer::LoadTags(void)
 	return 0x00;
 }
 
-std::string VGMPlayer::GetUTF8String(const UINT8* startPtr, const UINT8* endPtr)
+std::string VGMPlayer::GetUTF8String(const uint8_t* startPtr, const uint8_t* endPtr)
 {
 	if (_cpcUTF16 == NULL || startPtr == endPtr)
 		return std::string();
@@ -489,7 +489,7 @@ std::string VGMPlayer::GetUTF8String(const UINT8* startPtr, const UINT8* endPtr)
 	size_t convSize = 0;
 	char* convData = NULL;
 	std::string result;
-	UINT8 retVal;
+	uint8_t retVal;
 	
 	retVal = CPConv_StrConvert(_cpcUTF16, &convSize, &convData, endPtr - startPtr, (const char*)startPtr);
 	
@@ -498,7 +498,7 @@ std::string VGMPlayer::GetUTF8String(const UINT8* startPtr, const UINT8* endPtr)
 	return result;
 }
 
-UINT8 VGMPlayer::UnloadFile(void)
+uint8_t VGMPlayer::UnloadFile(void)
 {
 	if (_playState & PLAYSTATE_PLAY)
 		return 0xFF;
@@ -529,12 +529,12 @@ const char* const* VGMPlayer::GetTags(void)
 	return _tagList;
 }
 
-UINT8 VGMPlayer::GetSongInfo(PLR_SONG_INFO& songInf)
+uint8_t VGMPlayer::GetSongInfo(PLR_SONG_INFO& songInf)
 {
 	if (_dLoad == NULL)
 		return 0xFF;
 	
-	UINT8 vgmChip;
+	uint8_t vgmChip;
 	
 	songInf.format = FCC_VGM;
 	songInf.fileVerMaj = (_fileHdr.fileVer >> 8) & 0xFFFFFF;
@@ -542,8 +542,8 @@ UINT8 VGMPlayer::GetSongInfo(PLR_SONG_INFO& songInf)
 	songInf.tickRateMul = 1;
 	songInf.tickRateDiv = 44100;
 	songInf.songLen = GetTotalTicks();
-	songInf.loopTick = _fileHdr.loopOfs ? GetLoopTicks() : (UINT32)-1;
-	songInf.volGain = (INT32)(0x10000 * pow(2.0, _fileHdr.volumeGain / (double)0x100) + 0.5);
+	songInf.loopTick = _fileHdr.loopOfs ? GetLoopTicks() : (uint32_t)-1;
+	songInf.volGain = (int32_t)(0x10000 * pow(2.0, _fileHdr.volumeGain / (double)0x100) + 0.5);
 	songInf.deviceCnt = 0;
 	for (vgmChip = 0x00; vgmChip < _CHIP_COUNT; vgmChip ++)
 		songInf.deviceCnt += GetChipCount(vgmChip);
@@ -551,7 +551,7 @@ UINT8 VGMPlayer::GetSongInfo(PLR_SONG_INFO& songInf)
 	return 0x00;
 }
 
-UINT8 VGMPlayer::GetSongDeviceInfo(std::vector<PLR_DEV_INFO>& devInfList) const
+uint8_t VGMPlayer::GetSongDeviceInfo(std::vector<PLR_DEV_INFO>& devInfList) const
 {
 	if (_dLoad == NULL)
 		return 0xFF;
@@ -592,15 +592,15 @@ UINT8 VGMPlayer::GetSongDeviceInfo(std::vector<PLR_DEV_INFO>& devInfList) const
 		// chip configuration from VGM header
 		memset(&devInf, 0x00, sizeof(PLR_DEV_INFO));
 		devInf.type = sdCfg.type;
-		devInf.id = (UINT32)sdCfg.deviceID;
-		devInf.parentIdx = (UINT32)-1;
-		devInf.instance = (UINT8)sdCfg.instance;
+		devInf.id = (uint32_t)sdCfg.deviceID;
+		devInf.parentIdx = (uint32_t)-1;
+		devInf.instance = (uint8_t)sdCfg.instance;
 		devInf.devCfg = dCfg;
 		if (cDev != NULL)
 		{
 			// when playing, get information from device structures (may feature modified volume levels)
 			const VGM_BASEDEV* clDev = &cDev->base;
-			UINT32 curLDev;
+			uint32_t curLDev;
 			
 			devInf.devDecl = clDev->defInf.devDecl;
 			devInf.core = (clDev->defInf.devDef != NULL) ? clDev->defInf.devDef->coreID : 0x00;
@@ -615,9 +615,9 @@ UINT8 VGMPlayer::GetSongDeviceInfo(std::vector<PLR_DEV_INFO>& devInfList) const
 				
 				memset(&lDevInf, 0x00, sizeof(PLR_DEV_INFO));
 				lDevInf.type = dLink->devID;
-				lDevInf.id = (UINT32)sdCfg.deviceID;
+				lDevInf.id = (uint32_t)sdCfg.deviceID;
 				lDevInf.parentIdx = diIdxParent;
-				lDevInf.instance = (UINT16)curLDev;
+				lDevInf.instance = (uint16_t)curLDev;
 				lDevInf.devCfg = dLink->cfg;
 				lDevInf.devDecl = clDev->defInf.devDecl;
 				lDevInf.core = (clDev->defInf.devDef != NULL) ? clDev->defInf.devDef->coreID : 0x00;
@@ -643,9 +643,9 @@ UINT8 VGMPlayer::GetSongDeviceInfo(std::vector<PLR_DEV_INFO>& devInfList) const
 					
 					memset(&lDevInf, 0x00, sizeof(PLR_DEV_INFO));
 					lDevInf.type = dlIds->devIDs[curLDev];
-					lDevInf.id = (UINT32)sdCfg.deviceID;
+					lDevInf.id = (uint32_t)sdCfg.deviceID;
 					lDevInf.parentIdx = diIdxParent;
-					lDevInf.instance = (UINT16)curLDev;
+					lDevInf.instance = (uint16_t)curLDev;
 					lDevInf.devDecl = SndEmu_GetDevDecl(lDevInf.type, _userDevList, _devStartOpts);
 					lDevInf.devCfg = NULL;
 					lDevInf.core = 0x00;
@@ -661,10 +661,10 @@ UINT8 VGMPlayer::GetSongDeviceInfo(std::vector<PLR_DEV_INFO>& devInfList) const
 		return 0x00;	// returned data based on file header
 }
 
-size_t VGMPlayer::DeviceID2OptionID(UINT32 id) const
+size_t VGMPlayer::DeviceID2OptionID(uint32_t id) const
 {
 	DEV_ID type;
-	UINT8 instance;
+	uint8_t instance;
 	
 	if (id & 0x80000000)
 	{
@@ -694,7 +694,7 @@ void VGMPlayer::RefreshDevOptions(CHIP_DEVICE& chipDev, const PLR_DEV_OPTS& devO
 	if (devInf->devDef->SetOptionBits == NULL)
 		return;
 	
-	UINT32 coreOpts = devOpts.coreOpts;
+	uint32_t coreOpts = devOpts.coreOpts;
 	if (chipType == DEVID_YM2612)
 	{
 		if (chipDev.flags)
@@ -712,7 +712,7 @@ void VGMPlayer::RefreshDevOptions(CHIP_DEVICE& chipDev, const PLR_DEV_OPTS& devO
 void VGMPlayer::RefreshMuting(VGMPlayer::CHIP_DEVICE& chipDev, const PLR_MUTE_OPTS& muteOpts)
 {
 	VGM_BASEDEV* clDev;
-	UINT8 linkCntr = 0;
+	uint8_t linkCntr = 0;
 	
 	for (clDev = &chipDev.base; clDev != NULL && linkCntr < 2; clDev = clDev->linkDev, linkCntr ++)
 	{
@@ -727,7 +727,7 @@ void VGMPlayer::RefreshMuting(VGMPlayer::CHIP_DEVICE& chipDev, const PLR_MUTE_OP
 void VGMPlayer::RefreshPanning(VGMPlayer::CHIP_DEVICE& chipDev, const PLR_PAN_OPTS& panOpts)
 {
 	VGM_BASEDEV* clDev;
-	UINT8 linkCntr = 0;
+	uint8_t linkCntr = 0;
 	
 	for (clDev = &chipDev.base; clDev != NULL && linkCntr < 2; clDev = clDev->linkDev, linkCntr ++)
 	{
@@ -735,7 +735,7 @@ void VGMPlayer::RefreshPanning(VGMPlayer::CHIP_DEVICE& chipDev, const PLR_PAN_OP
 		if (devInf->dataPtr == NULL)
 			continue;
 		DEVFUNC_PANALL funcPan = NULL;
-		UINT8 retVal = SndEmu_GetDeviceFunc(devInf->devDef, RWF_CHN_PAN | RWF_WRITE, DEVRW_ALL, 0, (void**)&funcPan);
+		uint8_t retVal = SndEmu_GetDeviceFunc(devInf->devDef, RWF_CHN_PAN | RWF_WRITE, DEVRW_ALL, 0, (void**)&funcPan);
 		if (retVal != EERR_NOT_FOUND && funcPan != NULL)
 			funcPan(devInf->dataPtr, &panOpts.chnPan[linkCntr][0]);
 	}
@@ -743,7 +743,7 @@ void VGMPlayer::RefreshPanning(VGMPlayer::CHIP_DEVICE& chipDev, const PLR_PAN_OP
 	return;
 }
 
-UINT8 VGMPlayer::SetDeviceOptions(UINT32 id, const PLR_DEV_OPTS& devOpts)
+uint8_t VGMPlayer::SetDeviceOptions(uint32_t id, const PLR_DEV_OPTS& devOpts)
 {
 	size_t optID = DeviceID2OptionID(id);
 	if (optID == (size_t)-1)
@@ -762,7 +762,7 @@ UINT8 VGMPlayer::SetDeviceOptions(UINT32 id, const PLR_DEV_OPTS& devOpts)
 	return 0x00;
 }
 
-UINT8 VGMPlayer::GetDeviceOptions(UINT32 id, PLR_DEV_OPTS& devOpts) const
+uint8_t VGMPlayer::GetDeviceOptions(uint32_t id, PLR_DEV_OPTS& devOpts) const
 {
 	size_t optID = DeviceID2OptionID(id);
 	if (optID == (size_t)-1)
@@ -772,7 +772,7 @@ UINT8 VGMPlayer::GetDeviceOptions(UINT32 id, PLR_DEV_OPTS& devOpts) const
 	return 0x00;
 }
 
-UINT8 VGMPlayer::SetDeviceMuting(UINT32 id, const PLR_MUTE_OPTS& muteOpts)
+uint8_t VGMPlayer::SetDeviceMuting(uint32_t id, const PLR_MUTE_OPTS& muteOpts)
 {
 	size_t optID = DeviceID2OptionID(id);
 	if (optID == (size_t)-1)
@@ -786,7 +786,7 @@ UINT8 VGMPlayer::SetDeviceMuting(UINT32 id, const PLR_MUTE_OPTS& muteOpts)
 	return 0x00;
 }
 
-UINT8 VGMPlayer::GetDeviceMuting(UINT32 id, PLR_MUTE_OPTS& muteOpts) const
+uint8_t VGMPlayer::GetDeviceMuting(uint32_t id, PLR_MUTE_OPTS& muteOpts) const
 {
 	size_t optID = DeviceID2OptionID(id);
 	if (optID == (size_t)-1)
@@ -796,20 +796,20 @@ UINT8 VGMPlayer::GetDeviceMuting(UINT32 id, PLR_MUTE_OPTS& muteOpts) const
 	return 0x00;
 }
 
-UINT8 VGMPlayer::SetPlayerOptions(const VGM_PLAY_OPTIONS& playOpts)
+uint8_t VGMPlayer::SetPlayerOptions(const VGM_PLAY_OPTIONS& playOpts)
 {
 	_playOpts = playOpts;
 	RefreshTSRates();	// refresh, in case _playOpts.playbackHz changed
 	return 0x00;
 }
 
-UINT8 VGMPlayer::GetPlayerOptions(VGM_PLAY_OPTIONS& playOpts) const
+uint8_t VGMPlayer::GetPlayerOptions(VGM_PLAY_OPTIONS& playOpts) const
 {
 	playOpts = _playOpts;
 	return 0x00;
 }
 
-UINT8 VGMPlayer::SetSampleRate(UINT32 sampleRate)
+uint8_t VGMPlayer::SetSampleRate(uint32_t sampleRate)
 {
 	if (_playState & PLAYSTATE_PLAY)
 		return 0x01;	// can't set during playback
@@ -823,9 +823,9 @@ double VGMPlayer::GetPlaybackSpeed(void) const
 	return _playOpts.genOpts.pbSpeed / (double)0x10000;
 }
 
-UINT8 VGMPlayer::SetPlaybackSpeed(double speed)
+uint8_t VGMPlayer::SetPlaybackSpeed(double speed)
 {
-	_playOpts.genOpts.pbSpeed = (UINT32)(0x10000 * speed);
+	_playOpts.genOpts.pbSpeed = (uint32_t)(0x10000 * speed);
 	RefreshTSRates();
 	return 0x00;
 }
@@ -850,40 +850,40 @@ void VGMPlayer::RefreshTSRates(void)
 	    _tsDiv != _lastTsDiv)
 	{
 		if (_lastTsMult && _lastTsDiv)	// the order * / * / is required to avoid overflow
-			_playSmpl = (UINT32)(_playSmpl * _lastTsDiv / _lastTsMult * _tsMult / _tsDiv);
+			_playSmpl = (uint32_t)(_playSmpl * _lastTsDiv / _lastTsMult * _tsMult / _tsDiv);
 		_lastTsMult = _tsMult;
 		_lastTsDiv = _tsDiv;
 	}
 	return;
 }
 
-UINT32 VGMPlayer::Tick2Sample(UINT32 ticks) const
+uint32_t VGMPlayer::Tick2Sample(uint32_t ticks) const
 {
-	if (ticks == (UINT32)-1)
+	if (ticks == (uint32_t)-1)
 		return -1;
-	return (UINT32)(ticks * _tsMult / _tsDiv);
+	return (uint32_t)(ticks * _tsMult / _tsDiv);
 }
 
-UINT32 VGMPlayer::Sample2Tick(UINT32 samples) const
+uint32_t VGMPlayer::Sample2Tick(uint32_t samples) const
 {
-	if (samples == (UINT32)-1)
+	if (samples == (uint32_t)-1)
 		return -1;
-	return (UINT32)(samples * _tsDiv / _tsMult);
+	return (uint32_t)(samples * _tsDiv / _tsMult);
 }
 
-double VGMPlayer::Tick2Second(UINT32 ticks) const
+double VGMPlayer::Tick2Second(uint32_t ticks) const
 {
-	if (ticks == (UINT32)-1)
+	if (ticks == (uint32_t)-1)
 		return -1.0;
-	return (INT64)(ticks * _ttMult) / (double)(INT64)_tsDiv;
+	return (int64_t)(ticks * _ttMult) / (double)(int64_t)_tsDiv;
 }
 
-UINT8 VGMPlayer::GetState(void) const
+uint8_t VGMPlayer::GetState(void) const
 {
 	return _playState;
 }
 
-UINT32 VGMPlayer::GetCurPos(UINT8 unit) const
+uint32_t VGMPlayer::GetCurPos(uint8_t unit) const
 {
 	switch(unit)
 	{
@@ -895,21 +895,21 @@ UINT32 VGMPlayer::GetCurPos(UINT8 unit) const
 		return _playSmpl;
 	case PLAYPOS_COMMAND:
 	default:
-		return (UINT32)-1;
+		return (uint32_t)-1;
 	}
 }
 
-UINT32 VGMPlayer::GetCurLoop(void) const
+uint32_t VGMPlayer::GetCurLoop(void) const
 {
 	return _curLoop;
 }
 
-UINT32 VGMPlayer::GetTotalTicks(void) const
+uint32_t VGMPlayer::GetTotalTicks(void) const
 {
 	return _fileHdr.numTicks;
 }
 
-UINT32 VGMPlayer::GetLoopTicks(void) const
+uint32_t VGMPlayer::GetLoopTicks(void) const
 {
 	if (! _fileHdr.loopOfs)
 		return 0;
@@ -917,16 +917,16 @@ UINT32 VGMPlayer::GetLoopTicks(void) const
 		return _fileHdr.loopTicks;
 }
 
-UINT32 VGMPlayer::GetModifiedLoopCount(UINT32 defaultLoops) const
+uint32_t VGMPlayer::GetModifiedLoopCount(uint32_t defaultLoops) const
 {
 	if (defaultLoops == 0)
 		return 0;
-	UINT32 loopCntModified;
+	uint32_t loopCntModified;
 	if (_fileHdr.loopModifier)
 		loopCntModified = (defaultLoops * _fileHdr.loopModifier + 0x08) / 0x10;
 	else
 		loopCntModified = defaultLoops;
-	if ((INT32)loopCntModified <= _fileHdr.loopBase)
+	if ((int32_t)loopCntModified <= _fileHdr.loopBase)
 		return 1;
 	else
 		return loopCntModified - _fileHdr.loopBase;
@@ -937,7 +937,7 @@ const std::vector<VGMPlayer::DACSTRM_DEV>& VGMPlayer::GetStreamDevInfo(void) con
 	return _dacStreams;
 }
 
-/*static*/ void VGMPlayer::PlayerLogCB(void* userParam, void* source, UINT8 level, const char* message)
+/*static*/ void VGMPlayer::PlayerLogCB(void* userParam, void* source, uint8_t level, const char* message)
 {
 	VGMPlayer* player = (VGMPlayer*)source;
 	if (player->_logCbFunc == NULL)
@@ -946,7 +946,7 @@ const std::vector<VGMPlayer::DACSTRM_DEV>& VGMPlayer::GetStreamDevInfo(void) con
 	return;
 }
 
-/*static*/ void VGMPlayer::SndEmuLogCB(void* userParam, void* source, UINT8 level, const char* message)
+/*static*/ void VGMPlayer::SndEmuLogCB(void* userParam, void* source, uint8_t level, const char* message)
 {
 	DEVLOG_CB_DATA* cbData = (DEVLOG_CB_DATA*)userParam;
 	VGMPlayer* player = cbData->player;
@@ -960,7 +960,7 @@ const std::vector<VGMPlayer::DACSTRM_DEV>& VGMPlayer::GetStreamDevInfo(void) con
 }
 
 
-UINT8 VGMPlayer::Start(void)
+uint8_t VGMPlayer::Start(void)
 {
 	InitDevices();
 	
@@ -972,7 +972,7 @@ UINT8 VGMPlayer::Start(void)
 	return 0x00;
 }
 
-UINT8 VGMPlayer::Stop(void)
+uint8_t VGMPlayer::Stop(void)
 {
 	size_t curDev;
 	size_t curBank;
@@ -1006,11 +1006,11 @@ UINT8 VGMPlayer::Stop(void)
 	return 0x00;
 }
 
-UINT8 VGMPlayer::Reset(void)
+uint8_t VGMPlayer::Reset(void)
 {
 	size_t curDev;
 	size_t curStrm;
-	UINT8 chipID;
+	uint8_t chipID;
 	size_t curBank;
 	
 	_filePos = _fileHdr.dataOfs;
@@ -1077,7 +1077,7 @@ UINT8 VGMPlayer::Reset(void)
 	return 0x00;
 }
 
-UINT32 VGMPlayer::GetHeaderChipClock(UINT8 chipType) const
+uint32_t VGMPlayer::GetHeaderChipClock(uint8_t chipType) const
 {
 	if (chipType >= _CHIP_COUNT)
 		return 0;
@@ -1101,18 +1101,18 @@ UINT32 VGMPlayer::GetHeaderChipClock(UINT8 chipType) const
 	return ReadLE32(&_hdrBuffer[_CHIPCLK_OFS[chipType]]);
 }
 
-inline UINT32 VGMPlayer::GetChipCount(UINT8 chipType) const
+inline uint32_t VGMPlayer::GetChipCount(uint8_t chipType) const
 {
-	UINT32 clock = GetHeaderChipClock(chipType);
+	uint32_t clock = GetHeaderChipClock(chipType);
 	if (! clock)
 		return 0;
 	return (clock & 0x40000000) ? 2 : 1;
 }
 
-UINT32 VGMPlayer::GetChipClock(UINT8 chipType, UINT8 chipID) const
+uint32_t VGMPlayer::GetChipClock(uint8_t chipType, uint8_t chipID) const
 {
 	size_t curChip;
-	UINT32 clock = GetHeaderChipClock(chipType);
+	uint32_t clock = GetHeaderChipClock(chipType);
 	
 	if (chipID == 0)
 		return clock & ~0x40000000;	// return clock without dual-chip bit
@@ -1129,14 +1129,14 @@ UINT32 VGMPlayer::GetChipClock(UINT8 chipType, UINT8 chipID) const
 	return clock & ~0x40000000;	// return clock without dual-chip bit
 }
 
-UINT16 VGMPlayer::GetChipVolume(UINT8 chipType, UINT8 chipID, UINT8 isLinked) const
+uint16_t VGMPlayer::GetChipVolume(uint8_t chipType, uint8_t chipID, uint8_t isLinked) const
 {
 	if (chipType >= _CHIP_COUNT)
 		return 0;
 	
 	size_t curChip;
-	UINT16 numChips;
-	UINT16 vol = _CHIP_VOLUME[chipType];
+	uint16_t numChips;
+	uint16_t vol = _CHIP_VOLUME[chipType];
 	
 	numChips = GetChipCount(chipType);
 	if (chipType == 0x00)
@@ -1179,11 +1179,11 @@ UINT16 VGMPlayer::GetChipVolume(UINT8 chipType, UINT8 chipID, UINT8 isLinked) co
 	return vol;
 }
 
-UINT16 VGMPlayer::EstimateOverallVolume(void) const
+uint16_t VGMPlayer::EstimateOverallVolume(void) const
 {
 	size_t curChip;
 	const VGM_BASEDEV* clDev;
-	UINT16 absVol;
+	uint16_t absVol;
 	
 	absVol = 0x00;
 	for (curChip = 0; curChip < _devices.size(); curChip ++)
@@ -1199,12 +1199,12 @@ UINT16 VGMPlayer::EstimateOverallVolume(void) const
 	return absVol;
 }
 
-void VGMPlayer::NormalizeOverallVolume(UINT16 overallVol)
+void VGMPlayer::NormalizeOverallVolume(uint16_t overallVol)
 {
 	if (! overallVol)
 		return;
 	
-	UINT16 volFactor;
+	uint16_t volFactor;
 	size_t curChip;
 	VGM_BASEDEV* clDev;
 	
@@ -1252,8 +1252,8 @@ void VGMPlayer::NormalizeOverallVolume(UINT16 overallVol)
 
 void VGMPlayer::GenerateDeviceConfig(void)
 {
-	UINT8 vgmChip;
-	UINT8 chipID;
+	uint8_t vgmChip;
+	uint8_t chipID;
 	
 	_devCfgs.clear();
 	for (vgmChip = 0x00; vgmChip < _CHIP_COUNT; vgmChip ++)
@@ -1263,7 +1263,7 @@ void VGMPlayer::GenerateDeviceConfig(void)
 			DEV_GEN_CFG devCfg;
 			SONG_DEV_CFG sdCfg;
 			DEV_ID chipType = _DEV_LIST[vgmChip];
-			UINT32 hdrClock = GetChipClock(vgmChip, chipID);
+			uint32_t hdrClock = GetChipClock(vgmChip, chipID);
 			
 			memset(&devCfg, 0x00, sizeof(DEV_GEN_CFG));
 			devCfg.clock = hdrClock & ~0xC0000000;
@@ -1434,8 +1434,8 @@ void VGMPlayer::InitDevices(void)
 	_devices.clear();
 	_devNames.clear();
 	{
-		UINT8 vgmChip;
-		UINT8 chipID;
+		uint8_t vgmChip;
+		uint8_t chipID;
 		for (vgmChip = 0x00; vgmChip < _CHIP_COUNT; vgmChip ++)
 		{
 			for (chipID = 0; chipID < 2; chipID ++)
@@ -1455,12 +1455,12 @@ void VGMPlayer::InitDevices(void)
 	{
 		SONG_DEV_CFG& sdCfg = _devCfgs[curChip];
 		DEV_ID chipType = sdCfg.type;
-		UINT8 chipID = sdCfg.instance;
+		uint8_t chipID = sdCfg.instance;
 		DEV_GEN_CFG* devCfg = (DEV_GEN_CFG*)&sdCfg.cfgData[0];
 		CHIP_DEVICE chipDev;
 		DEV_INFO* devInf;
 		const PLR_DEV_OPTS* devOpts;
-		UINT8 retVal;
+		uint8_t retVal;
 		
 		memset(&chipDev, 0x00, sizeof(CHIP_DEVICE));
 		devInf = &chipDev.base.defInf;
@@ -1568,7 +1568,7 @@ void VGMPlayer::InitDevices(void)
 		case DEVID_QSOUND:
 			chipDev.flags = 0x00;
 			{
-				UINT32 hdrClock = GetChipClock(sdCfg.vgmChipType, chipID) & ~0xC0000000;
+				uint32_t hdrClock = GetChipClock(sdCfg.vgmChipType, chipID) & ~0xC0000000;
 				if (hdrClock < devCfg->clock)	// QSound VGMs with old (4 MHz) clock
 					chipDev.flags |= 0x01;	// enable QSound hacks (required for proper playback of old VGMs)
 			}
@@ -1710,11 +1710,11 @@ void VGMPlayer::InitDevices(void)
 		if (devInf->devDef->SetLogCB != NULL)
 			devInf->devDef->SetLogCB(devInf->dataPtr, VGMPlayer::SndEmuLogCB, &chipDev.logCbData);
 		
-		UINT8 linkCntr = 0;
+		uint8_t linkCntr = 0;
 		for (clDev = &chipDev.base; clDev != NULL; clDev = clDev->linkDev, linkCntr ++)
 		{
-			UINT16 chipVol = GetChipVolume(chipDev.vgmChipType, chipDev.chipID, linkCntr);
-			UINT8 resmplMode = (devOpts != NULL) ? devOpts->resmplMode : RSMODE_LINEAR;
+			uint16_t chipVol = GetChipVolume(chipDev.vgmChipType, chipDev.chipID, linkCntr);
+			uint8_t resmplMode = (devOpts != NULL) ? devOpts->resmplMode : RSMODE_LINEAR;
 			
 			Resmpl_SetVals(&clDev->resmpl, resmplMode, chipVol, _outSmplRate);
 			Resmpl_DevConnect(&clDev->resmpl, &clDev->defInf);
@@ -1781,7 +1781,7 @@ void VGMPlayer::InitDevices(void)
 	return;
 }
 
-VGMPlayer::CHIP_DEVICE* VGMPlayer::GetDevicePtr(UINT8 chipType, UINT8 chipID)
+VGMPlayer::CHIP_DEVICE* VGMPlayer::GetDevicePtr(uint8_t chipType, uint8_t chipID)
 {
 	if (chipType >= _CHIP_COUNT || chipID >= 2)
 		return NULL;
@@ -1794,17 +1794,17 @@ VGMPlayer::CHIP_DEVICE* VGMPlayer::GetDevicePtr(UINT8 chipType, UINT8 chipID)
 
 void VGMPlayer::ParseFileForOPL4ROMRequirement(void)
 {
-	UINT32 filePos = _fileHdr.dataOfs;
-	UINT8 yrwUse = 0x00;
-	UINT8 fileRom = 0x00;
-	UINT8 waveTblHdr[2] = {0x00, 0x00};
-	UINT16 slotWave[2][24];
-	UINT8 stopScan = 0x00;
+	uint32_t filePos = _fileHdr.dataOfs;
+	uint8_t yrwUse = 0x00;
+	uint8_t fileRom = 0x00;
+	uint8_t waveTblHdr[2] = {0x00, 0x00};
+	uint16_t slotWave[2][24];
+	uint8_t stopScan = 0x00;
 	memset(slotWave, 0x00, sizeof(slotWave));
 	
 	while(filePos < _fileHdr.dataEnd && ! stopScan)
 	{
-		UINT8 curCmd = _fileData[filePos];
+		uint8_t curCmd = _fileData[filePos];
 		
 		switch(curCmd)
 		{
@@ -1818,9 +1818,9 @@ void VGMPlayer::ParseFileForOPL4ROMRequirement(void)
 				break;
 			}
 			{
-				UINT8 dblkType = _fileData[filePos + 0x02];
-				UINT32 dblkLenRaw = ReadLE32(&_fileData[filePos + 0x03]);
-				UINT32 dblkLen = dblkLenRaw & 0x7FFFFFFF;
+				uint8_t dblkType = _fileData[filePos + 0x02];
+				uint32_t dblkLenRaw = ReadLE32(&_fileData[filePos + 0x03]);
+				uint32_t dblkLen = dblkLenRaw & 0x7FFFFFFF;
 				if (dblkType == 0x84)	// YMF278B ROM
 					fileRom |= 1 << (dblkLenRaw >> 31);
 				if (dblkLen > _fileHdr.dataEnd - filePos - 0x07)
@@ -1838,10 +1838,10 @@ void VGMPlayer::ParseFileForOPL4ROMRequirement(void)
 				break;
 			}
 			{
-				UINT8 chipID = (_fileData[filePos + 0x01] & 0x80) >> 7;
-				UINT8 port = _fileData[filePos + 0x01] & 0x7F;
-				UINT8 reg = _fileData[filePos + 0x02];
-				UINT8 data = _fileData[filePos + 0x03];
+				uint8_t chipID = (_fileData[filePos + 0x01] & 0x80) >> 7;
+				uint8_t port = _fileData[filePos + 0x01] & 0x7F;
+				uint8_t reg = _fileData[filePos + 0x02];
+				uint8_t data = _fileData[filePos + 0x03];
 				
 				if (port == 0x02)
 				{
@@ -1851,8 +1851,8 @@ void VGMPlayer::ParseFileForOPL4ROMRequirement(void)
 					}
 					else if (reg >= 0x08 && reg <= 0xF7)
 					{
-						UINT8 slot = (reg - 0x08) % 24;
-						UINT8 regGrp = (reg - 0x08) / 24;
+						uint8_t slot = (reg - 0x08) % 24;
+						uint8_t regGrp = (reg - 0x08) / 24;
 						
 						if (regGrp == 0x00)
 						{
@@ -1917,8 +1917,8 @@ void VGMPlayer::LoadOPL4ROM(CHIP_DEVICE* chipDev)
 		}
 		DataLoader_ReadAll(romDLoad);
 		
-		UINT32 yrwSize = DataLoader_GetSize(romDLoad);
-		const UINT8* yrwData = DataLoader_GetData(romDLoad);
+		uint32_t yrwSize = DataLoader_GetSize(romDLoad);
+		const uint8_t* yrwData = DataLoader_GetData(romDLoad);
 		if (yrwSize > 0 && yrwData != NULL)
 			_yrwRom.assign(yrwData, yrwData + yrwSize);
 		DataLoader_Deinit(romDLoad);
@@ -1930,13 +1930,13 @@ void VGMPlayer::LoadOPL4ROM(CHIP_DEVICE* chipDev)
 	}
 	
 	if (chipDev->romSize != NULL)
-		chipDev->romSize(chipDev->base.defInf.dataPtr, (UINT32)_yrwRom.size());
-	chipDev->romWrite(chipDev->base.defInf.dataPtr, 0x00, (UINT32)_yrwRom.size(), &_yrwRom[0]);
+		chipDev->romSize(chipDev->base.defInf.dataPtr, (uint32_t)_yrwRom.size());
+	chipDev->romWrite(chipDev->base.defInf.dataPtr, 0x00, (uint32_t)_yrwRom.size(), &_yrwRom[0]);
 	
 	return;
 }
 
-UINT8 VGMPlayer::Seek(UINT8 unit, UINT32 pos)
+uint8_t VGMPlayer::Seek(uint8_t unit, uint32_t pos)
 {
 	switch(unit)
 	{
@@ -1959,7 +1959,7 @@ UINT8 VGMPlayer::Seek(UINT8 unit, UINT32 pos)
 	}
 }
 
-UINT8 VGMPlayer::SeekToTick(UINT32 tick)
+uint8_t VGMPlayer::SeekToTick(uint32_t tick)
 {
 	_playState |= PLAYSTATE_SEEK;
 	if (tick > _playTick)
@@ -1969,12 +1969,12 @@ UINT8 VGMPlayer::SeekToTick(UINT32 tick)
 	return 0x00;
 }
 
-UINT8 VGMPlayer::SeekToFilePos(UINT32 pos)
+uint8_t VGMPlayer::SeekToFilePos(uint32_t pos)
 {
 	_playState |= PLAYSTATE_SEEK;
 	while(_filePos < _fileHdr.dataEnd && _filePos <= pos && ! (_playState & PLAYSTATE_END))
 	{
-		UINT8 curCmd = _fileData[_filePos];
+		uint8_t curCmd = _fileData[_filePos];
 		COMMAND_FUNC func = _CMD_INFO[curCmd].func;
 		(this->*func)();
 		_filePos += _CMD_INFO[curCmd].cmdLen;
@@ -1995,12 +1995,12 @@ UINT8 VGMPlayer::SeekToFilePos(UINT32 pos)
 	return 0x00;
 }
 
-UINT32 VGMPlayer::Render(UINT32 smplCnt, WAVE_32BS* data)
+uint32_t VGMPlayer::Render(uint32_t smplCnt, WAVE_32BS* data)
 {
-	UINT32 curSmpl;
-	UINT32 smplFileTick;
-	UINT32 maxSmpl;
-	INT32 smplStep;	// might be negative due to rounding errors in Tick2Sample
+	uint32_t curSmpl;
+	uint32_t smplFileTick;
+	uint32_t maxSmpl;
+	int32_t smplStep;	// might be negative due to rounding errors in Tick2Sample
 	size_t curDev;
 	
 	// Note: use do {} while(), so that "smplCnt == 0" can be used to process until reaching the next sample.
@@ -2016,13 +2016,13 @@ UINT32 VGMPlayer::Render(UINT32 smplCnt, WAVE_32BS* data)
 		// When DAC streams are active, limit step size to 1, so that DAC streams and sound chip emulation are in sync.
 		if (smplStep < 1 || ! _dacStreams.empty())
 			smplStep = 1;	// must render at least 1 sample in order to advance
-		if ((UINT32)smplStep > smplCnt - curSmpl)
+		if ((uint32_t)smplStep > smplCnt - curSmpl)
 			smplStep = smplCnt - curSmpl;
 		
 		for (curDev = 0; curDev < _devices.size(); curDev ++)
 		{
 			CHIP_DEVICE* cDev = &_devices[curDev];
-			UINT8 disable = (cDev->optID != (size_t)-1) ? _devOpts[cDev->optID].muteOpts.disable : 0x00;
+			uint8_t disable = (cDev->optID != (size_t)-1) ? _devOpts[cDev->optID].muteOpts.disable : 0x00;
 			VGM_BASEDEV* clDev;
 			
 			for (clDev = &cDev->base; clDev != NULL; clDev = clDev->linkDev, disable >>= 1)
@@ -2049,7 +2049,7 @@ UINT32 VGMPlayer::Render(UINT32 smplCnt, WAVE_32BS* data)
 	return curSmpl;
 }
 
-void VGMPlayer::ParseFile(UINT32 ticks)
+void VGMPlayer::ParseFile(uint32_t ticks)
 {
 	_playTick += ticks;
 	if (_playState & PLAYSTATE_END)
@@ -2057,7 +2057,7 @@ void VGMPlayer::ParseFile(UINT32 ticks)
 	
 	while(_filePos < _fileHdr.dataEnd && _fileTick <= _playTick && ! (_playState & PLAYSTATE_END))
 	{
-		UINT8 curCmd = _fileData[_filePos];
+		uint8_t curCmd = _fileData[_filePos];
 		COMMAND_FUNC func = _CMD_INFO[curCmd].func;
 		(this->*func)();
 		_filePos += _CMD_INFO[curCmd].cmdLen;
@@ -2093,7 +2093,7 @@ void VGMPlayer::ParseFile(UINT32 ticks)
 
 void VGMPlayer::ParseFileForFMClocks()
 {
-	UINT32 filePos = _fileHdr.dataOfs;
+	uint32_t filePos = _fileHdr.dataOfs;
 
 	_v101ym2413clock = GetHeaderChipClock(0x01);
 	_v101ym2612clock = 0;
@@ -2101,7 +2101,7 @@ void VGMPlayer::ParseFileForFMClocks()
 
 	while(filePos < _fileHdr.dataEnd)
 	{
-		UINT8 curCmd = _fileData[filePos];
+		uint8_t curCmd = _fileData[filePos];
 
 		switch (curCmd)
 		{

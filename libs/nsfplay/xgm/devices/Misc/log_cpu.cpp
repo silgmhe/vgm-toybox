@@ -36,7 +36,7 @@ void CPULogger::Reset ()
 {
 }
 
-bool CPULogger::Write (UINT32 adr, UINT32 val, UINT32 id)
+bool CPULogger::Write (uint32_t adr, uint32_t val, uint32_t id)
 {
     if (log_level < 1) return false;
     if (log_level < 2)
@@ -86,7 +86,7 @@ bool CPULogger::Write (UINT32 adr, UINT32 val, UINT32 id)
     return false;
 }
 
-bool CPULogger::Read (UINT32 adr, UINT32 & val, UINT32 id)
+bool CPULogger::Read (uint32_t adr, uint32_t & val, uint32_t id)
 {
     if (log_level == 4) // only RAM reads
     {
@@ -116,7 +116,7 @@ int CPULogger::GetLogLevel () const
     return log_level;
 }
 
-void CPULogger::SetSoundchip (UINT8 soundchip_)
+void CPULogger::SetSoundchip (uint8_t soundchip_)
 {
     soundchip = soundchip_;
 }
@@ -153,7 +153,7 @@ void CPULogger::Begin (const char* title)
     frame_count = 0;
 }
 
-void CPULogger::Init (UINT8 reg_a, UINT8 reg_x)
+void CPULogger::Init (uint8_t reg_a, uint8_t reg_x)
 {
     if (file && log_level == 4 && nsf != NULL)
     {

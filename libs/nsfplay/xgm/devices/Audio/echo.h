@@ -7,20 +7,20 @@ namespace xgm {
   class EchoUnit : public IRenderable {
   protected:
     int rate;
-    INT32 *echo_buf;
+    int32_t *echo_buf;
     int h[32];
     int eidx, edelay;
     Filter lpf;
     DCFilter hpf;
 
   public:
-    EchoUnit(){ echo_buf = new INT32[1<<17]; }
+    EchoUnit(){ echo_buf = new int32_t[1<<17]; }
     ~EchoUnit(){ delete [] echo_buf; }
     void Reset();
     void SetRate(double r);
-    virtual void Tick(UINT32 clocks);
-    virtual UINT32 Render(INT32 b[2]);
-    inline UINT32 FastRender(INT32 b[2]);
+    virtual void Tick(uint32_t clocks);
+    virtual uint32_t Render(int32_t b[2]);
+    inline uint32_t FastRender(int32_t b[2]);
   };
 
 } // xgm

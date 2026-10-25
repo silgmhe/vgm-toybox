@@ -30,7 +30,7 @@ constexpr double kMinimumNoteSeconds = 1.0 / 60.0;
 /** How often a player waiting for its scan looks again, in samples: 4096 is about 93 ms at
 	44.1 kHz. Frequent enough that the DPCM row's label clears while the user is still looking
 	at it, rare enough that the check costs nothing on the blocks in between. */
-constexpr std::uint64_t kScanPollIntervalSamples = 4096;
+constexpr uint64_t kScanPollIntervalSamples = 4096;
 
 /** MIDI's top velocity. The walk records a channel's level as 0..1, so this is the one place
 	where the two scales meet. */
@@ -63,7 +63,7 @@ NsfPlayer::NsfPlayer (const formats::nsf::NsfFile& image, double sampleRate)
 	: file (image), rate (sampleRate > 0.0 ? sampleRate : 44100.0)
 {
 	bus = std::make_unique<NsfBus> (file);
-	bus->onSoundWrite = [this] (std::uint16_t address, std::uint8_t value)
+	bus->onSoundWrite = [this] (uint16_t address, uint8_t value)
 	{
 		writeSound (address, value);
 	};
@@ -313,8 +313,8 @@ void NsfPlayer::scanSampleChannels (double seconds)
 				playback::MidiEvent off;
 				off.timeSeconds = (std::max) (time, noteOnTime[row] + kMinimumNoteSeconds);
 				off.type = playback::MidiEventType::noteOff;
-				off.data1 = (std::uint8_t) lastNote[row];
-				off.sourceTrack = (std::uint32_t) index;
+				off.data1 = (uint8_t) lastNote[row];
+				off.sourceTrack = (uint32_t) index;
 				events.push_back (off);
 			}
 
@@ -323,10 +323,10 @@ void NsfPlayer::scanSampleChannels (double seconds)
 				playback::MidiEvent on;
 				on.timeSeconds = time;
 				on.type = playback::MidiEventType::noteOn;
-				on.data1 = (std::uint8_t) note;
-				on.data2 = (std::uint8_t) (std::clamp) ((int) std::lround ((double) channel.volume * kMaxMidiVelocity),
+				on.data1 = (uint8_t) note;
+				on.data2 = (uint8_t) (std::clamp) ((int) std::lround ((double) channel.volume * kMaxMidiVelocity),
 														1, 127);
-				on.sourceTrack = (std::uint32_t) index;
+				on.sourceTrack = (uint32_t) index;
 				events.push_back (on);
 
 				noteOnTime[row] = time;
@@ -426,7 +426,7 @@ int NsfPlayer::noteForDpcmSample (int tone, int rate) const
 	return found == sampleNotes.end () ? -1 : found->second;
 }
 
-void NsfPlayer::writeSound (std::uint16_t address, std::uint8_t value)
+void NsfPlayer::writeSound (uint16_t address, uint8_t value)
 {
 	// $4010 is the sample rate and $4012 the sample address: together they decide which slot is
 	// about to play. Neither alone is one, and a driver may write them on different frames - the
@@ -532,7 +532,7 @@ int NsfPlayer::render (float* left, float* right, int frames)
 	// the same condition, said so that a reader does not have to convince themselves the interval
 	// is larger than a block for it to work.
 	const auto pollBoundary = rendered / kScanPollIntervalSamples;
-	const auto nextBoundary = (rendered + (std::uint64_t) frames) / kScanPollIntervalSamples;
+	const auto nextBoundary = (rendered + (uint64_t) frames) / kScanPollIntervalSamples;
 
 	if (analysing.load (std::memory_order_relaxed) && ! scanning.load (std::memory_order_relaxed)
 		&& pollBoundary != nextBoundary)
@@ -556,7 +556,7 @@ int NsfPlayer::render (float* left, float* right, int frames)
 		if (clocks > 0)
 		{
 			const int executed = cpu->Exec (clocks);
-		clocksExecuted += (std::uint64_t) (std::max) (0, executed);
+		clocksExecuted += (uint64_t) (std::max) (0, executed);
 
 		// One sample every 64 frames is enough to see where the time goes and cheap enough to
 		// leave the emulation at full speed.
@@ -568,9 +568,9 @@ int NsfPlayer::render (float* left, float* right, int frames)
 
 			// Envelopes and length counters live here; Tick() alone leaves every note at the level
 			// it was given.
-			dmc->TickFrameSequence ((std::uint32_t) (std::max) (0, executed));
+			dmc->TickFrameSequence ((uint32_t) (std::max) (0, executed));
 
-			const auto clocks = (std::uint32_t) (std::max) (0, executed);
+			const auto clocks = (uint32_t) (std::max) (0, executed);
 			apu->Tick (clocks);
 			dmc->Tick (clocks);
 			if (vrc6) { vrc6->Tick (clocks); }
@@ -588,12 +588,12 @@ int NsfPlayer::render (float* left, float* right, int frames)
 			sampleDirty = false;
 		}
 
-		std::int32_t a[2] = { 0, 0 };
-		std::int32_t d[2] = { 0, 0 };
+		int32_t a[2] = { 0, 0 };
+		int32_t d[2] = { 0, 0 };
 		apu->Render (a);
 		dmc->Render (d);
 
-		std::int32_t extra[2] = { 0, 0 };
+		int32_t extra[2] = { 0, 0 };
 
 		const auto addChip = [&extra] (xgm::ISoundChip* chip)
 		{
@@ -602,7 +602,7 @@ int NsfPlayer::render (float* left, float* right, int frames)
 				return;
 			}
 
-			std::int32_t out[2] = { 0, 0 };
+			int32_t out[2] = { 0, 0 };
 			chip->Render (out);
 			extra[0] += out[0];
 			extra[1] += out[1];
@@ -626,11 +626,11 @@ int NsfPlayer::render (float* left, float* right, int frames)
 
 	}
 
-	rendered += (std::uint64_t) frames;
+	rendered += (uint64_t) frames;
 	return frames;
 }
 
-std::uint32_t NsfPlayer::expansionWrites (int index) const
+uint32_t NsfPlayer::expansionWrites (int index) const
 {
 	if (bus == nullptr || index < 0 || index >= 4)
 	{
@@ -640,7 +640,7 @@ std::uint32_t NsfPlayer::expansionWrites (int index) const
 	return bus->expansionWrites[(std::size_t) index];
 }
 
-std::uint32_t NsfPlayer::expansionSignature (int index) const
+uint32_t NsfPlayer::expansionSignature (int index) const
 {
 	if (bus == nullptr || index < 0 || index >= 4)
 	{
@@ -650,7 +650,7 @@ std::uint32_t NsfPlayer::expansionSignature (int index) const
 	return bus->expansionSignature[(std::size_t) index];
 }
 
-std::uint64_t NsfPlayer::soundWrites (void) const
+uint64_t NsfPlayer::soundWrites (void) const
 {
 	return bus != nullptr ? bus->soundWriteCount : 0;
 }
@@ -682,9 +682,9 @@ bool NsfPlayer::seekTo (double seconds)
 	// go - the position said 90 s while the audio was at 2.2 s, and each instance stopped at a
 	// slightly different one of those wrong places, which is the spread the mixer measured.
 	const double clock = file.isPal () ? kPalClock : kNtscClock;
-	const auto targetClocks = (std::uint64_t) (seconds * clock);
+	const auto targetClocks = (uint64_t) (seconds * clock);
 
-	std::uint64_t clocksRun = 0;
+	uint64_t clocksRun = 0;
 
 	while (clocksRun < targetClocks)
 	{
@@ -692,10 +692,10 @@ bool NsfPlayer::seekTo (double seconds)
 		// past it: an overshoot of one step is 2.3 ms, and thirteen instances overshooting by
 		// different amounts is exactly the drift the mixer reported between tracks.
 		const auto remaining = targetClocks - clocksRun;
-		const int step = (int) (remaining < (std::uint64_t) clocksPerStep ? remaining
-																		 : (std::uint64_t) clocksPerStep);
+		const int step = (int) (remaining < (uint64_t) clocksPerStep ? remaining
+																		 : (uint64_t) clocksPerStep);
 		const int executed = cpu->Exec (step);
-		const auto clocks = (std::uint32_t) (std::max) (0, executed);
+		const auto clocks = (uint32_t) (std::max) (0, executed);
 
 		dmc->TickFrameSequence (clocks);
 		apu->Tick (clocks);
@@ -708,10 +708,10 @@ bool NsfPlayer::seekTo (double seconds)
 		if (mmc5) { mmc5->Tick (clocks); }
 
 
-		clocksRun += (std::uint64_t) (std::max) (0, executed);
+		clocksRun += (uint64_t) (std::max) (0, executed);
 	}
 
-	rendered = (std::uint64_t) ((double) clocksRun / clock * rate);
+	rendered = (uint64_t) ((double) clocksRun / clock * rate);
 
 	return true;
 }
@@ -1130,7 +1130,7 @@ void NsfPlayer::setSilent (bool value)
 	applyMasks ();
 }
 
-std::uint64_t NsfPlayer::gateWrites (void) const
+uint64_t NsfPlayer::gateWrites (void) const
 {
 	return bus->gateWrites;
 }
@@ -1140,12 +1140,12 @@ int NsfPlayer::gateValue (void) const
 	return (int) bus->gateValue;
 }
 
-std::uint64_t NsfPlayer::executedClocks (void) const
+uint64_t NsfPlayer::executedClocks (void) const
 {
 	return clocksExecuted;
 }
 
-std::uint64_t NsfPlayer::ramWrites (void) const
+uint64_t NsfPlayer::ramWrites (void) const
 {
 	return bus->ramWriteCount;
 }
@@ -1238,7 +1238,7 @@ int NsfPlayer::renderChannels (float* const* dest, int channelCount, int frames)
 			const int executed = cpu->Exec (clocks);
 			cpuClockRest -= (double) executed;
 
-			const auto tick = (std::uint32_t) (std::max) (0, executed);
+			const auto tick = (uint32_t) (std::max) (0, executed);
 			dmc->TickFrameSequence (tick);
 			apu->Tick (tick);
 			dmc->Tick (tick);
@@ -1251,8 +1251,8 @@ int NsfPlayer::renderChannels (float* const* dest, int channelCount, int frames)
 
 		}
 
-		std::int32_t squares[4] = { 0, 0, 0, 0 };
-		std::int32_t tnd[6] = { 0, 0, 0, 0, 0, 0 };
+		int32_t squares[4] = { 0, 0, 0, 0 };
+		int32_t tnd[6] = { 0, 0, 0, 0, 0, 0 };
 
 		apu->RenderChannels (squares, 2, 2);
 		dmc->RenderChannels (tnd, 2, 3);
@@ -1272,7 +1272,7 @@ int NsfPlayer::renderChannels (float* const* dest, int channelCount, int frames)
 		// The expansion's channels, in the order the track list uses. FME7 has no RenderChannels
 		// yet, so a song that declares one keeps its 2A03 tracks and leaves the rest silent here -
 		// which is why those songs still take the one-player-per-track path in the backend.
-		std::int32_t expansion[16] = {};
+		int32_t expansion[16] = {};
 
 		if (vrc6) { vrc6->RenderChannels (expansion, 2, 3); }
 		if (n106) { n106->RenderChannels (expansion, 2, 8); }
@@ -1283,7 +1283,7 @@ int NsfPlayer::renderChannels (float* const* dest, int channelCount, int frames)
 		// The FDS is one voice: its whole output is its single channel.
 		if (fds)
 		{
-			std::int32_t one[2] = { 0, 0 };
+			int32_t one[2] = { 0, 0 };
 			fds->Render (one);
 			expansion[0] = one[0];
 			expansion[1] = one[1];
@@ -1298,7 +1298,7 @@ int NsfPlayer::renderChannels (float* const* dest, int channelCount, int frames)
 		}
 	}
 
-	rendered += (std::uint64_t) frames;
+	rendered += (uint64_t) frames;
 	return frames;
 }
 

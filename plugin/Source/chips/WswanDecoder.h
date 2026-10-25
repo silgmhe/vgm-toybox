@@ -50,7 +50,7 @@ public:
 
 	void reset (const ChipConfig& config) override;
 	void write (const RegisterWrite& write) override;
-	void advance (std::uint32_t sampleTime) override;
+	void advance (uint32_t sampleTime) override;
 
 	int channelCount() const override { return channelCount_; }
 	ChannelState channelState (int channel) const override;
@@ -63,9 +63,9 @@ private:
 	std::unique_ptr<Impl> impl;
 
 	/** 0x8D counts sweep ticks in HBlanks; turning that into samples needs the clock. */
-	void setSweepTime (std::uint8_t value, std::uint32_t sampleTime);
+	void setSweepTime (uint8_t value, uint32_t sampleTime);
 
-	void stepSweep (std::uint32_t sampleTime);
+	void stepSweep (uint32_t sampleTime);
 
 	int channelCount_ = (int) WswanDecoder::numChannels;
 };

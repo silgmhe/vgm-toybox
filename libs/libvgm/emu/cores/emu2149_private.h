@@ -79,27 +79,27 @@ extern "C"
   } EPSG;
 
   void EPSG_set_quality (EPSG * psg, uint32_t q);
-  void EPSG_set_clock(EPSG * psg, UINT32 c);
-  void EPSG_set_rate (EPSG * psg, UINT32 r);
-  static UINT8 device_start_ay8910_emu(const AY8910_CFG* cfg, DEV_INFO* retDevInf);
-  EPSG *EPSG_new (UINT32 clk, UINT32 rate);
+  void EPSG_set_clock(EPSG * psg, uint32_t c);
+  void EPSG_set_rate (EPSG * psg, uint32_t r);
+  static uint8_t device_start_ay8910_emu(const AY8910_CFG* cfg, DEV_INFO* retDevInf);
+  EPSG *EPSG_new (uint32_t clk, uint32_t rate);
   void EPSG_reset (EPSG *);
   void EPSG_delete (EPSG *);
-  void EPSG_writeReg (EPSG *, UINT8 reg, UINT8 val);
-  void EPSG_writeIO (EPSG * psg, UINT8 adr, UINT8 val);
-  UINT8 EPSG_readReg (EPSG * psg, UINT8 reg);
-  UINT8 EPSG_readIO (EPSG * psg, UINT8 adr);
+  void EPSG_writeReg (EPSG *, uint8_t reg, uint8_t val);
+  void EPSG_writeIO (EPSG * psg, uint8_t adr, uint8_t val);
+  uint8_t EPSG_readReg (EPSG * psg, uint8_t reg);
+  uint8_t EPSG_readIO (EPSG * psg, uint8_t adr);
   int16_t EPSG_calc (EPSG *);
-  void EPSG_calc_stereo (EPSG * psg, UINT32 samples, DEV_SMPL **out);
-  void EPSG_setFlags (EPSG * psg, UINT8 flags);
+  void EPSG_calc_stereo (EPSG * psg, uint32_t samples, DEV_SMPL **out);
+  void EPSG_setFlags (EPSG * psg, uint8_t flags);
   void EPSG_setVolumeMode (EPSG * psg, int type);
   uint32_t EPSG_setMask (EPSG *, uint32_t mask);
   uint32_t EPSG_toggleMask (EPSG *, uint32_t mask);
-  void EPSG_setMuteMask (EPSG *, UINT32 mask);
-  void EPSG_setStereoMask (EPSG *psg, UINT32 mask);
+  void EPSG_setMuteMask (EPSG *, uint32_t mask);
+  void EPSG_setStereoMask (EPSG *psg, uint32_t mask);
   void EPSG_set_pan (EPSG * psg, uint8_t ch, int16_t pan);
-  static void ay8910_emu_set_options(void *chip, UINT32 Flags);
-  static void ay8910_emu_pan(void* chip, const INT16* PanVals);
+  static void ay8910_emu_set_options(void *chip, uint32_t Flags);
+  static void ay8910_emu_pan(void* chip, const int16_t* PanVals);
     
 #ifdef __cplusplus
 }

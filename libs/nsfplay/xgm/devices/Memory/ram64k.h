@@ -8,13 +8,13 @@ namespace xgm
   {
 
   public:
-    UINT8 image[0x10000];
+    uint8_t image[0x10000];
       RAM64K ();
      ~RAM64K ();
     void Reset ();
-    bool Read (UINT32 adr, UINT32 & val, UINT32 id=0);
-    bool Write (UINT32 adr, UINT32 val, UINT32 id=0);
-    bool SetImage (UINT8 * data, UINT32 offset, UINT32 size);
+    bool Read (uint32_t adr, uint32_t & val, uint32_t id=0);
+    bool Write (uint32_t adr, uint32_t val, uint32_t id=0);
+    bool SetImage (uint8_t * data, uint32_t offset, uint32_t size);
   };
 
 } // namespace

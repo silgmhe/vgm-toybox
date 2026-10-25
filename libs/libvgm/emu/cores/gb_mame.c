@@ -67,19 +67,19 @@ TODO:
 #include "gb_mame.h"
 
 
-static UINT8 gb_wave_r(void *chip, UINT8 offset);
-static void gb_wave_w(void *chip, UINT8 offset, UINT8 data);
-static UINT8 gb_sound_r(void *chip, UINT8 offset);
-static void gb_sound_w(void *chip, UINT8 offset, UINT8 data);
+static uint8_t gb_wave_r(void *chip, uint8_t offset);
+static void gb_wave_w(void *chip, uint8_t offset, uint8_t data);
+static uint8_t gb_sound_r(void *chip, uint8_t offset);
+static void gb_sound_w(void *chip, uint8_t offset, uint8_t data);
 
-static void gameboy_update(void *chip, UINT32 samples, DEV_SMPL **outputs);
-static UINT8 device_start_gameboy_sound(const DEV_GEN_CFG* cfg, DEV_INFO* retDevInf);
+static void gameboy_update(void *chip, uint32_t samples, DEV_SMPL **outputs);
+static uint8_t device_start_gameboy_sound(const DEV_GEN_CFG* cfg, DEV_INFO* retDevInf);
 static void device_stop_gameboy_sound(void *chip);
 static void device_reset_gameboy_sound(void *chip);
 
-static void gameboy_sound_set_mute_mask(void *chip, UINT32 MuteMask);
-static UINT32 gameboy_sound_get_mute_mask(void *chip);
-static void gameboy_sound_set_options(void *chip, UINT32 Flags);
+static void gameboy_sound_set_mute_mask(void *chip, uint32_t MuteMask);
+static uint32_t gameboy_sound_get_mute_mask(void *chip);
+static void gameboy_sound_set_options(void *chip, uint32_t Flags);
 
 
 
@@ -174,53 +174,53 @@ static const int wave_duty_table[4] =
 struct SOUND
 {
 	/* Common */
-	UINT8  reg[5];
+	uint8_t  reg[5];
 	bool   on;
-	UINT8  channel;
-	UINT8  length;
-	UINT8  length_mask;
+	uint8_t  channel;
+	uint8_t  length;
+	uint8_t  length_mask;
 	bool   length_counting;
 	bool   length_enabled;
-	UINT16 frequency;
-	UINT16 frequency_counter;
+	uint16_t frequency;
+	uint16_t frequency_counter;
 	/* Channel 1, 2, 3 */
-	INT32  cycles_left;
-	INT8   duty;
+	int32_t  cycles_left;
+	int8_t   duty;
 	/* Channel 1, 2, 4 */
 	bool   envelope_enabled;
-	INT8   envelope_value;
-	INT8   envelope_direction;
-	UINT8  envelope_time;
-	UINT8  envelope_count;
-	INT8   signal;
+	int8_t   envelope_value;
+	int8_t   envelope_direction;
+	uint8_t  envelope_time;
+	uint8_t  envelope_count;
+	int8_t   signal;
 	/* Channel 1 */
-	UINT16 frequency_shadow;
+	uint16_t frequency_shadow;
 	bool   sweep_enabled;
 	bool   sweep_neg_mode_used;
-	UINT8  sweep_shift;
-	INT32  sweep_direction;
-	UINT8  sweep_time;
-	UINT8  sweep_count;
+	uint8_t  sweep_shift;
+	int32_t  sweep_direction;
+	uint8_t  sweep_time;
+	uint8_t  sweep_count;
 	/* Channel 3 */
-	UINT8  level;
-	UINT8  offset;
-	UINT32 duty_count;
-	INT8   current_sample;
+	uint8_t  level;
+	uint8_t  offset;
+	uint32_t duty_count;
+	int8_t   current_sample;
 	bool   sample_reading;
 	/* Channel 4 */
 	bool   noise_short;
-	UINT16 noise_lfsr;
-	UINT8  Muted;
+	uint16_t noise_lfsr;
+	uint8_t  Muted;
 };
 
 struct SOUNDC
 {
-	UINT8 on;
-	UINT8 vol_left;
-	UINT8 vol_right;
+	uint8_t on;
+	uint8_t vol_left;
+	uint8_t vol_right;
 	bool chan_left[4];
 	bool chan_right[4];
-	UINT32 cycles;
+	uint32_t cycles;
 	bool wave_ram_locked;
 };
 
@@ -232,33 +232,33 @@ struct _gb_sound_t
 {
 	DEV_DATA _devData;
 
-	UINT32 rate;
+	uint32_t rate;
 
 	struct SOUND  snd[4];
 	struct SOUNDC snd_control;
 
-	UINT8 snd_regs[0x30];
+	uint8_t snd_regs[0x30];
 
 	RATIO_CNTR cycleCntr;
 
-	UINT8 gbMode;
-	UINT8 NoWaveCorrupt;
-	UINT8 LegacyMode;
+	uint8_t gbMode;
+	uint8_t NoWaveCorrupt;
+	uint8_t LegacyMode;
 };
 
 
 static void gb_corrupt_wave_ram(gb_sound_t *gb);
 static void gb_apu_power_off(gb_sound_t *gb);
 static void gb_tick_length(struct SOUND *snd);
-static INT32 gb_calculate_next_sweep(struct SOUND *snd);
+static int32_t gb_calculate_next_sweep(struct SOUND *snd);
 INLINE bool gb_dac_enabled(struct SOUND *snd);
-INLINE UINT32 gb_noise_period_cycles(gb_sound_t *gb);
+INLINE uint32_t gb_noise_period_cycles(gb_sound_t *gb);
 
 /***************************************************************************
     IMPLEMENTATION
 ***************************************************************************/
 
-static UINT8 gb_wave_r(void *chip, UINT8 offset)
+static uint8_t gb_wave_r(void *chip, uint8_t offset)
 {
 	gb_sound_t *gb = (gb_sound_t *)chip;
 
@@ -275,7 +275,7 @@ static UINT8 gb_wave_r(void *chip, UINT8 offset)
 	return gb->snd_regs[AUD3W0 + offset];
 }
 
-static void gb_wave_w(void *chip, UINT8 offset, UINT8 data)
+static void gb_wave_w(void *chip, uint8_t offset, uint8_t data)
 {
 	gb_sound_t *gb = (gb_sound_t *)chip;
 
@@ -301,9 +301,9 @@ static void gb_wave_w(void *chip, UINT8 offset, UINT8 data)
 	}
 }
 
-static UINT8 gb_sound_r(void *chip, UINT8 offset)
+static uint8_t gb_sound_r(void *chip, uint8_t offset)
 {
-	static const UINT8 read_mask[0x40] =
+	static const uint8_t read_mask[0x40] =
 	{
 		0x80,0x3F,0x00,0xFF,0xBF,0xFF,0x3F,0x00,0xFF,0xBF,0x7F,0xFF,0x9F,0xFF,0xBF,0xFF,
 		0xFF,0x00,0x00,0xBF,0x00,0x00,0x70,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,
@@ -336,10 +336,10 @@ static UINT8 gb_sound_r(void *chip, UINT8 offset)
 	return 0xFF;
 }
 
-static void gb_sound_w_internal(gb_sound_t *gb, UINT8 offset, UINT8 data)
+static void gb_sound_w_internal(gb_sound_t *gb, uint8_t offset, uint8_t data)
 {
 	/* Store the value */
-	UINT8 old_data = gb->snd_regs[offset];
+	uint8_t old_data = gb->snd_regs[offset];
 
 	if (gb->snd_control.on)
 	{
@@ -690,7 +690,7 @@ static void gb_sound_w_internal(gb_sound_t *gb, UINT8 offset, UINT8 data)
 	}
 }
 
-static void gb_sound_w(void *chip, UINT8 offset, UINT8 data)
+static void gb_sound_w(void *chip, uint8_t offset, uint8_t data)
 {
 	gb_sound_t *gb = (gb_sound_t *)chip;
 
@@ -839,9 +839,9 @@ static void gb_tick_length(struct SOUND *snd)
 }
 
 
-static INT32 gb_calculate_next_sweep(struct SOUND *snd)
+static int32_t gb_calculate_next_sweep(struct SOUND *snd)
 {
-	INT32 new_frequency;
+	int32_t new_frequency;
 	snd->sweep_neg_mode_used = (snd->sweep_direction < 0);
 	new_frequency = snd->frequency_shadow + snd->sweep_direction * (snd->frequency_shadow >> snd->sweep_shift);
 
@@ -856,7 +856,7 @@ static INT32 gb_calculate_next_sweep(struct SOUND *snd)
 
 static void gb_apply_next_sweep(struct SOUND *snd)
 {
-	INT32 new_frequency = gb_calculate_next_sweep(snd);
+	int32_t new_frequency = gb_calculate_next_sweep(snd);
 
 	if (snd->on && snd->sweep_shift > 0)
 	{
@@ -896,7 +896,7 @@ static void gb_tick_envelope(struct SOUND *snd)
 
 			if (snd->envelope_count)
 			{
-				INT8 new_envelope_value = snd->envelope_value + snd->envelope_direction;
+				int8_t new_envelope_value = snd->envelope_value + snd->envelope_direction;
 
 				if (new_envelope_value >= 0 && new_envelope_value <= 15)
 				{
@@ -918,11 +918,11 @@ INLINE bool gb_dac_enabled(struct SOUND *snd)
 }
 
 
-static void gb_update_square_channel(struct SOUND *snd, UINT32 cycles)
+static void gb_update_square_channel(struct SOUND *snd, uint32_t cycles)
 {
 	if (snd->on)
 	{
-		UINT16 distance;
+		uint16_t distance;
 		// compensate for leftover cycles
 		snd->cycles_left += cycles;
 		if (snd->cycles_left <= 0)
@@ -933,7 +933,7 @@ static void gb_update_square_channel(struct SOUND *snd, UINT32 cycles)
 		distance = 0x800 - snd->frequency_counter;
 		if (cycles >= distance)
 		{
-			UINT32 counter;
+			uint32_t counter;
 			cycles -= distance;
 			distance = 0x800 - snd->frequency;
 			counter = 1 + cycles / distance;
@@ -952,7 +952,7 @@ static void gb_update_square_channel(struct SOUND *snd, UINT32 cycles)
 }
 
 
-static void gb_update_wave_channel(gb_sound_t *gb, struct SOUND *snd, UINT32 cycles)
+static void gb_update_wave_channel(gb_sound_t *gb, struct SOUND *snd, uint32_t cycles)
 {
 	if (snd->on)
 	{
@@ -992,13 +992,13 @@ static void gb_update_wave_channel(gb_sound_t *gb, struct SOUND *snd, UINT32 cyc
 }
 
 
-static void gb_update_noise_channel(gb_sound_t *gb, struct SOUND *snd, UINT32 cycles)
+static void gb_update_noise_channel(gb_sound_t *gb, struct SOUND *snd, uint32_t cycles)
 {
-	UINT32 period = gb_noise_period_cycles(gb);
+	uint32_t period = gb_noise_period_cycles(gb);
 	snd->cycles_left += cycles;
-	while (snd->cycles_left >= (INT32)period)
+	while (snd->cycles_left >= (int32_t)period)
 	{
-		UINT16 feedback;
+		uint16_t feedback;
 		snd->cycles_left -= period;
 
 		// Using a Polynomial Counter (aka Linear Feedback Shift Register)
@@ -1014,9 +1014,9 @@ static void gb_update_noise_channel(gb_sound_t *gb, struct SOUND *snd, UINT32 cy
 }
 
 
-static void gb_update_state(gb_sound_t *gb, UINT32 cycles)
+static void gb_update_state(gb_sound_t *gb, uint32_t cycles)
 {
-	UINT32 old_cycles;
+	uint32_t old_cycles;
 
 	if (!gb->snd_control.on)
 		return;
@@ -1027,7 +1027,7 @@ static void gb_update_state(gb_sound_t *gb, UINT32 cycles)
 	if ((old_cycles / FRAME_CYCLES) != (gb->snd_control.cycles / FRAME_CYCLES))
 	{
 		// Left over cycles in current frame
-		UINT32 cycles_current_frame = FRAME_CYCLES - (old_cycles & (FRAME_CYCLES - 1));
+		uint32_t cycles_current_frame = FRAME_CYCLES - (old_cycles & (FRAME_CYCLES - 1));
 
 		gb_update_square_channel(&gb->snd[0], cycles_current_frame);
 		gb_update_square_channel(&gb->snd[1], cycles_current_frame);
@@ -1087,18 +1087,18 @@ static void gb_update_state(gb_sound_t *gb, UINT32 cycles)
 }
 
 
-INLINE UINT32 gb_noise_period_cycles(gb_sound_t *gb)
+INLINE uint32_t gb_noise_period_cycles(gb_sound_t *gb)
 {
-	static const UINT32 divisor[8] = { 8, 16,32, 48, 64, 80, 96, 112 };
+	static const uint32_t divisor[8] = { 8, 16,32, 48, 64, 80, 96, 112 };
 	return divisor[gb->snd[3].reg[3] & 7] << (gb->snd[3].reg[3] >> 4);
 }
 
 
-static void gameboy_update(void *chip, UINT32 samples, DEV_SMPL **outputs)
+static void gameboy_update(void *chip, uint32_t samples, DEV_SMPL **outputs)
 {
 	gb_sound_t *gb = (gb_sound_t *)chip;
 	DEV_SMPL sample, left, right;
-	UINT32 i;
+	uint32_t i;
 
 	for (i = 0; i < samples; i++)
 	{
@@ -1166,7 +1166,7 @@ static void gameboy_update(void *chip, UINT32 samples, DEV_SMPL **outputs)
 }
 
 
-static UINT8 device_start_gameboy_sound(const DEV_GEN_CFG* cfg, DEV_INFO* retDevInf)
+static uint8_t device_start_gameboy_sound(const DEV_GEN_CFG* cfg, DEV_INFO* retDevInf)
 {
 	gb_sound_t *gb;
 
@@ -1202,7 +1202,7 @@ static void device_stop_gameboy_sound(void *chip)
 static void device_reset_gameboy_sound(void *chip)
 {
 	gb_sound_t *gb = (gb_sound_t *)chip;
-	UINT32 muteMask;
+	uint32_t muteMask;
 
 	muteMask = gameboy_sound_get_mute_mask(gb);
 
@@ -1268,7 +1268,7 @@ static void device_reset_gameboy_sound(void *chip)
 	return;
 }
 
-static void gameboy_sound_set_mute_mask(void *chip, UINT32 MuteMask)
+static void gameboy_sound_set_mute_mask(void *chip, uint32_t MuteMask)
 {
 	gb_sound_t *gb = (gb_sound_t *)chip;
 	
@@ -1280,10 +1280,10 @@ static void gameboy_sound_set_mute_mask(void *chip, UINT32 MuteMask)
 	return;
 }
 
-static UINT32 gameboy_sound_get_mute_mask(void *chip)
+static uint32_t gameboy_sound_get_mute_mask(void *chip)
 {
 	gb_sound_t *gb = (gb_sound_t *)chip;
-	UINT32 muteMask;
+	uint32_t muteMask;
 	
 	muteMask =	(gb->snd[0].Muted << 0) |
 				(gb->snd[1].Muted << 1) |
@@ -1293,7 +1293,7 @@ static UINT32 gameboy_sound_get_mute_mask(void *chip)
 	return muteMask;
 }
 
-static void gameboy_sound_set_options(void *chip, UINT32 Flags)
+static void gameboy_sound_set_options(void *chip, uint32_t Flags)
 {
 	gb_sound_t *gb = (gb_sound_t *)chip;
 	

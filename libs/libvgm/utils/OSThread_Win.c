@@ -20,7 +20,7 @@ struct _os_thread
 
 static DWORD WINAPI OSThread_Main(LPVOID lpParam);
 
-UINT8 OSThread_Init(OS_THREAD** retThread, OS_THR_FUNC threadFunc, void* args)
+uint8_t OSThread_Init(OS_THREAD** retThread, OS_THR_FUNC threadFunc, void* args)
 {
 	OS_THREAD* thr;
 	
@@ -82,7 +82,7 @@ void OSThread_Cancel(OS_THREAD* thr)
 	return;
 }
 
-UINT64 OSThread_GetID(const OS_THREAD* thr)
+uint64_t OSThread_GetID(const OS_THREAD* thr)
 {
 	return thr->id;
 }

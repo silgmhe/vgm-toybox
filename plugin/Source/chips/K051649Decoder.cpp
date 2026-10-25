@@ -8,7 +8,7 @@ namespace toybox::chips
 {
 namespace
 {
-	constexpr std::uint32_t kDefaultClock = 3579545;
+	constexpr uint32_t kDefaultClock = 3579545;
 
 	// the core stops a channel at this frequency: nine clocks cannot fill 32 waveform samples
 	constexpr int kMinimumFrequency = 8;
@@ -20,7 +20,7 @@ namespace
 	public:
 		explicit SccTable (double clock) : clock (clock) {}
 
-		int noteFor (std::uint32_t period, int, int* finePitch) const override
+		int noteFor (uint32_t period, int, int* finePitch) const override
 		{
 			if (period > 0x0FFF)
 			{
@@ -38,10 +38,10 @@ namespace
 struct K051649Decoder::Impl
 {
 	int frequency[numChannels] = {};
-	std::uint8_t volume[numChannels] = {};
+	uint8_t volume[numChannels] = {};
 	bool key[numChannels] = {};
-	std::uint8_t latch = 0;
-	std::uint8_t test = 0;
+	uint8_t latch = 0;
+	uint8_t test = 0;
 	double clock = (double) kDefaultClock;
 	std::unique_ptr<SccTable> table;
 };
@@ -55,7 +55,7 @@ K051649Decoder::~K051649Decoder() = default;
 
 void K051649Decoder::reset (const ChipConfig& config)
 {
-	[[maybe_unused]] const std::uint32_t clock = config.clockHz;
+	[[maybe_unused]] const uint32_t clock = config.clockHz;
 	[[maybe_unused]] const double sampleRate = config.timeBaseHz;
 	(void) sampleRate;		// no timers: the key mask is the gate
 
@@ -74,7 +74,7 @@ void K051649Decoder::write (const RegisterWrite& w)
 		return;
 	}
 
-	const std::uint8_t value = w.value;
+	const uint8_t value = w.value;
 
 	// The SCC's register halves, after the latch (the address is `reg >> 1`, which is why the
 	// labels below are 0x00..0x05 rather than byte offsets):
@@ -114,7 +114,7 @@ void K051649Decoder::write (const RegisterWrite& w)
 		const int channel = impl->latch & 0x07;
 		if (channel < numChannels)
 		{
-			impl->volume[channel] = (std::uint8_t) (value & 0x0F);
+			impl->volume[channel] = (uint8_t) (value & 0x0F);
 		}
 
 		break;
@@ -134,7 +134,7 @@ void K051649Decoder::write (const RegisterWrite& w)
 	}
 }
 
-void K051649Decoder::advance (std::uint32_t sampleTime)
+void K051649Decoder::advance (uint32_t sampleTime)
 {
 	(void) sampleTime;		// no timers
 }
@@ -149,7 +149,7 @@ ChannelState K051649Decoder::channelState (int channel) const
 	}
 
 	state.present = true;
-	state.period = (std::uint32_t) impl->frequency[channel];
+	state.period = (uint32_t) impl->frequency[channel];
 	state.volume = impl->volume[channel];
 	state.gate = impl->key[channel] && state.volume > 0
 				 && impl->frequency[channel] > kMinimumFrequency;

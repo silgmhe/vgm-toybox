@@ -8,7 +8,7 @@ class TrackInfoN106 : public TrackInfoBasic
 {
 public:
     int wavelen;
-    INT16 wave[256];
+    int16_t wave[256];
     virtual IDeviceInfo *Clone(){ return new TrackInfoN106(*this); }
 };
 
@@ -26,13 +26,13 @@ public:
 protected:
     double rate, clock;
     int mask;
-    INT32 sm[2][8]; // stereo mix
-    INT32 fout[8]; // current output
+    int32_t sm[2][8]; // stereo mix
+    int32_t fout[8]; // current output
     TrackInfoN106 trkinfo[8];
     int option[OPT_END];
 
     bool master_disable;
-    UINT32 reg[0x80]; // all state is contained here
+    uint32_t reg[0x80]; // all state is contained here
     unsigned int reg_select;
     bool reg_advance;
     int tick_channel;
@@ -42,33 +42,33 @@ protected:
     int render_subclock;
 
     // convenience functions to interact with regs
-    inline UINT32 get_phase (int channel);
-    inline UINT32 get_freq (int channel);
-    inline UINT32 get_off (int channel);
-    inline UINT32 get_len (int channel);
-    inline INT32  get_vol (int channel);
-    inline INT32  get_sample (UINT32 index);
+    inline uint32_t get_phase (int channel);
+    inline uint32_t get_freq (int channel);
+    inline uint32_t get_off (int channel);
+    inline uint32_t get_len (int channel);
+    inline int32_t  get_vol (int channel);
+    inline int32_t  get_sample (uint32_t index);
     inline int    get_channels ();
     // for storing back the phase after modifying
-    inline void   set_phase (UINT32 phase, int channel);
+    inline void   set_phase (uint32_t phase, int channel);
 
 public:
     NES_N106 ();
     ~NES_N106 ();
 
     virtual void Reset ();
-    virtual void Tick (UINT32 clocks);
-    virtual UINT32 Render (INT32 b[2]);
+    virtual void Tick (uint32_t clocks);
+    virtual uint32_t Render (int32_t b[2]);
 
   // Added for VGMToybox: the 8 channels Render() sums, kept apart.
-  UINT32 RenderChannels (INT32* dest, int stride, int maxChannels);
-    virtual bool Write (UINT32 adr, UINT32 val, UINT32 id=0);
-    virtual bool Read (UINT32 adr, UINT32 & val, UINT32 id=0);
+  uint32_t RenderChannels (int32_t* dest, int stride, int maxChannels);
+    virtual bool Write (uint32_t adr, uint32_t val, uint32_t id=0);
+    virtual bool Read (uint32_t adr, uint32_t & val, uint32_t id=0);
     virtual void SetRate (double);
     virtual void SetClock (double);
     virtual void SetOption (int, int);
     virtual void SetMask (int m);
-    virtual void SetStereoMix (int trk, INT16 mixl, INT16 mixr);
+    virtual void SetStereoMix (int trk, int16_t mixl, int16_t mixr);
     virtual ITrackInfo *GetTrackInfo(int trk);
 };
 

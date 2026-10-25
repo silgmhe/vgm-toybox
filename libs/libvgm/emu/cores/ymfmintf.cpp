@@ -54,9 +54,9 @@ struct ymfm_ym2414_chip
 	libvgm_ymfm_interface* intf;		// Interface instance
 	ymfm::ym2414* chip;					// Chip instance
 
-	UINT32 clock;						// Input clock
-	UINT32 sample_rate;					// Output sample rate
-	UINT8 address;						// Current register address
+	uint32_t clock;						// Input clock
+	uint32_t sample_rate;					// Output sample rate
+	uint8_t address;						// Current register address
 };
 
 
@@ -71,13 +71,13 @@ struct ymfm_ym2414_chip
 //  DEVICE FUNCTION DECLARATIONS
 //*********************************************************
 
-static UINT8 device_start_ym2414(const DEV_GEN_CFG* cfg, DEV_INFO* retDevInf);
+static uint8_t device_start_ym2414(const DEV_GEN_CFG* cfg, DEV_INFO* retDevInf);
 static void device_stop_ym2414(void* chip);
 static void device_reset_ym2414(void* chip);
-static void ym2414_update(void* chip, UINT32 samples, DEV_SMPL** outputs);
-static UINT8 ym2414_write(void* chip, UINT8 offset, UINT8 data);
-static UINT8 ym2414_read(void* chip, UINT8 offset);
-static void ym2414_set_mute_mask(void* chip, UINT32 muteMask);
+static void ym2414_update(void* chip, uint32_t samples, DEV_SMPL** outputs);
+static uint8_t ym2414_write(void* chip, uint8_t offset, uint8_t data);
+static uint8_t ym2414_read(void* chip, uint8_t offset);
+static void ym2414_set_mute_mask(void* chip, uint32_t muteMask);
 
 
 //*********************************************************
@@ -116,11 +116,11 @@ static DEV_DEF devDef_YM2414 =
 //  DEVICE FUNCTIONS
 //*********************************************************
 
-static UINT8 device_start_ym2414(const DEV_GEN_CFG* cfg, DEV_INFO* retDevInf)
+static uint8_t device_start_ym2414(const DEV_GEN_CFG* cfg, DEV_INFO* retDevInf)
 {
 	ymfm_ym2414_chip* info;
 	DEV_DATA* devData;
-	UINT32 rate;
+	uint32_t rate;
 
 	info = (ymfm_ym2414_chip*)calloc(1, sizeof(ymfm_ym2414_chip));
 	if (info == NULL)
@@ -163,12 +163,12 @@ static void device_reset_ym2414(void* chip)
 	return;
 }
 
-static void ym2414_update(void* chip, UINT32 samples, DEV_SMPL** outputs)
+static void ym2414_update(void* chip, uint32_t samples, DEV_SMPL** outputs)
 {
 	ymfm_ym2414_chip* info = CHP_GET_PTR(chip);
 	DEV_SMPL* outL = outputs[0];
 	DEV_SMPL* outR = outputs[1];
-	UINT32 i;
+	uint32_t i;
 
 	ymfm::ym2414::output_data output;
 
@@ -185,7 +185,7 @@ static void ym2414_update(void* chip, UINT32 samples, DEV_SMPL** outputs)
 	return;
 }
 
-static UINT8 ym2414_write(void* chip, UINT8 offset, UINT8 data)
+static uint8_t ym2414_write(void* chip, uint8_t offset, uint8_t data)
 {
 	ymfm_ym2414_chip* info = CHP_GET_PTR(chip);
 
@@ -207,7 +207,7 @@ static UINT8 ym2414_write(void* chip, UINT8 offset, UINT8 data)
 	return 0x00;
 }
 
-static UINT8 ym2414_read(void* chip, UINT8 offset)
+static uint8_t ym2414_read(void* chip, uint8_t offset)
 {
 	ymfm_ym2414_chip* info = CHP_GET_PTR(chip);
 
@@ -222,7 +222,7 @@ static UINT8 ym2414_read(void* chip, UINT8 offset)
 	return 0x00;
 }
 
-static void ym2414_set_mute_mask(void* chip, UINT32 muteMask)
+static void ym2414_set_mute_mask(void* chip, uint32_t muteMask)
 {
 	// YM2414 has 8 channels
 	// TODO: Implement channel muting if needed
@@ -241,7 +241,7 @@ static const char* DeviceName_YM2414(const DEV_GEN_CFG* devCfg)
 	return "YM2414";
 }
 
-static UINT16 DeviceChannels_YM2414(const DEV_GEN_CFG* devCfg)
+static uint16_t DeviceChannels_YM2414(const DEV_GEN_CFG* devCfg)
 {
 	return 8;	// 8 FM channels
 }

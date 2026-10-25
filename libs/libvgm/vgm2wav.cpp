@@ -53,35 +53,35 @@ loops = 2;
 
 /* vgm-specific functions */
 static void
-FCC2STR(char *str, UINT32 fcc);
+FCC2STR(char *str, uint32_t fcc);
 
-static UINT32
+static uint32_t
 STR2FCC(const char *str);
 
 static void
-set_core(PlayerBase *player, UINT8 devId, UINT32 coreId);
+set_core(PlayerBase *player, uint8_t devId, uint32_t coreId);
 
 static void
 dump_info(PlayerBase *player);
 
 static void
-pack_uint16le(UINT8 *d, UINT16 n);
+pack_uint16le(uint8_t *d, uint16_t n);
 
 static void
-pack_uint32le(UINT8 *d, UINT32 n);
+pack_uint32le(uint8_t *d, uint32_t n);
 
-static inline void repack_int16le(UINT8 *d, const UINT8 *src);
-static inline void repack_int24le(UINT8 *d, const UINT8 *src);
-static inline void repack_int32le(UINT8 *d, const UINT8 *src);
+static inline void repack_int16le(uint8_t *d, const uint8_t *src);
+static inline void repack_int24le(uint8_t *d, const uint8_t *src);
+static inline void repack_int32le(uint8_t *d, const uint8_t *src);
 
 static int
 write_wav_header(FILE *f, unsigned int totalFrames);
 
 static void
-frames_to_little_endian(UINT8 *data, unsigned int frame_count);
+frames_to_little_endian(uint8_t *data, unsigned int frame_count);
 
 static int
-write_frames(FILE *f, unsigned int frame_count, UINT8 *d);
+write_frames(FILE *f, unsigned int frame_count, uint8_t *d);
 
 static unsigned int
 scan_uint(const char *str);
@@ -108,7 +108,7 @@ int main(int argc, const char *argv[]) {
     const char *s;
     FILE *f;
     DATA_LOADER *loader;
-    UINT8 *packed;
+    uint8_t *packed;
     double complete;
     double inc;
 
@@ -217,10 +217,10 @@ int main(int argc, const char *argv[]) {
     /* we'll want to make sure to pack our audio samples
      * into little-endian, interleaved format.
      * If we only supported 16-bit samples this could be
-     * malloc(sizeof(INT16) * 2 * BUFFER_LEN) - but in
-     * this case we're using INT32 to ensure we can pack
+     * malloc(sizeof(int16_t) * 2 * BUFFER_LEN) - but in
+     * this case we're using int32_t to ensure we can pack
      * 16 and 24-bit frames */
-    packed = (UINT8 *)malloc(sizeof(INT32) * 2 * BUFFER_LEN);
+    packed = (uint8_t *)malloc(sizeof(int32_t) * 2 * BUFFER_LEN);
     if(packed == NULL) {
         fprintf(stderr,"out of memory\n");
         return 1;
@@ -245,7 +245,7 @@ int main(int argc, const char *argv[]) {
         PlayerA::Config pCfg = player.GetConfiguration();
         pCfg.masterVol = 0x10000;	// == 1.0 == 100%
         pCfg.loopCount = loops;
-        pCfg.fadeSmpls = (UINT32)(sample_rate * fade_len);
+        pCfg.fadeSmpls = (uint32_t)(sample_rate * fade_len);
         pCfg.endSilenceSmpls = 0;
         pCfg.pbSpeed = 1.0;
         player.SetConfiguration(pCfg);
@@ -356,7 +356,7 @@ int main(int argc, const char *argv[]) {
 
     while(totalFrames) {
 
-        memset(packed,0,sizeof(INT32)     * BUFFER_LEN * 2);
+        memset(packed,0,sizeof(int32_t)     * BUFFER_LEN * 2);
 
         /* default to BUFFER_LEN PCM frames unless we have under BUFFER_LEN remaining */
         curFrames = (BUFFER_LEN > totalFrames ? totalFrames : BUFFER_LEN);
@@ -368,7 +368,7 @@ int main(int argc, const char *argv[]) {
          * want to pack into bytes like this - presumably, the host
          * application would handle converting machine-native PCM frames
          * into whatever's needed. We could have to "pack" into machine-native
-         * samples, like INT16, or maybe de-interleave into separate buffers
+         * samples, like int16_t, or maybe de-interleave into separate buffers
          * for the left and right channels. */
         frames_to_little_endian(packed, curFrames);
 
@@ -397,9 +397,9 @@ int main(int argc, const char *argv[]) {
     return 0;
 }
 
-static void set_core(PlayerBase *player, UINT8 devId, UINT32 coreId) {
+static void set_core(PlayerBase *player, uint8_t devId, uint32_t coreId) {
     PLR_DEV_OPTS devOpts;
-    UINT32 id;
+    uint32_t id;
 
     /* just going to set the first instance */
     id = PLR_DEV_ID(devId,0);
@@ -413,7 +413,7 @@ static void dump_info(PlayerBase *player) {
     std::vector<PLR_DEV_INFO> devInfList;
     PLR_SONG_INFO songInfo;
     const DEV_DEF* const* devDefList;
-    UINT32 i;
+    uint32_t i;
     char str[5];
 
     fprintf(stderr,"PlayerName: %s\n",player->GetPlayerName());
@@ -436,7 +436,7 @@ static void dump_info(PlayerBase *player) {
         fprintf(stderr,"  Dev %d: Type 0x%02X #%d, Core %s, Clock %u, Rate %u, Volume 0x%X\n",
           devInfList[i].id,
           devInfList[i].type,
-          (INT8)devInfList[i].instance,
+          (int8_t)devInfList[i].instance,
           str,
           devInfList[i].devCfg->clock,
           devInfList[i].smplRate,
@@ -483,7 +483,7 @@ fmt_time(double sec) {
 static DATA_LOADER*
 request_file_callback(void* userParam, PlayerBase* player, const char* fileName) {
     DATA_LOADER* loader = FileLoader_Init(fileName);
-    UINT8 retVal;
+    uint8_t retVal;
 
     if (loader == NULL) {
         return NULL;
@@ -496,7 +496,7 @@ request_file_callback(void* userParam, PlayerBase* player, const char* fileName)
     return NULL;
 }
 
-static void FCC2STR(char *str, UINT32 fcc) {
+static void FCC2STR(char *str, uint32_t fcc) {
     str[4] = '\0';
     str[0] = (char)((fcc >> 24) & 0xFF);
     str[1] = (char)((fcc >> 16) & 0xFF);
@@ -504,27 +504,27 @@ static void FCC2STR(char *str, UINT32 fcc) {
     str[3] = (char)((fcc >>  0) & 0xFF);
 }
 
-static UINT32 STR2FCC(const char *str) {
-    UINT32 fcc = 0;
-    fcc += (UINT8)str[0] << 24;
-    fcc += (UINT8)str[1] << 16;
-    fcc += (UINT8)str[2] << 8;
-    fcc += (UINT8)str[3];
+static uint32_t STR2FCC(const char *str) {
+    uint32_t fcc = 0;
+    fcc += (uint8_t)str[0] << 24;
+    fcc += (uint8_t)str[1] << 16;
+    fcc += (uint8_t)str[2] << 8;
+    fcc += (uint8_t)str[3];
     return fcc;
 }
 
-static inline void repack_int16le(UINT8 *d, const UINT8 *src) {
+static inline void repack_int16le(uint8_t *d, const uint8_t *src) {
 #ifdef VGM_BIG_ENDIAN
-    UINT8 tmp[2];
+    uint8_t tmp[2];
     memcpy(tmp,src,2);
     d[0] = tmp[1];
     d[1] = tmp[0];
 #endif
 }
 
-static inline void repack_int24le(UINT8 *d, const UINT8 *src) {
+static inline void repack_int24le(uint8_t *d, const uint8_t *src) {
 #ifdef VGM_BIG_ENDIAN
-    UINT8 tmp[3];
+    uint8_t tmp[3];
     memcpy(tmp,src,3);
     d[0] = tmp[2];
     d[1] = tmp[1];
@@ -532,9 +532,9 @@ static inline void repack_int24le(UINT8 *d, const UINT8 *src) {
 #endif
 }
 
-static inline void repack_int32le(UINT8 *d, const UINT8 *src) {
+static inline void repack_int32le(uint8_t *d, const uint8_t *src) {
 #ifdef VGM_BIG_ENDIAN
-    UINT8 tmp[4];
+    uint8_t tmp[4];
     memcpy(tmp,src,4);
     d[0] = tmp[3];
     d[1] = tmp[2];
@@ -543,21 +543,21 @@ static inline void repack_int32le(UINT8 *d, const UINT8 *src) {
 #endif
 }
 
-static void pack_uint16le(UINT8 *d, UINT16 n) {
-    d[0] = (UINT8)((UINT16) n      );
-    d[1] = (UINT8)((UINT16) n >> 8 );
+static void pack_uint16le(uint8_t *d, uint16_t n) {
+    d[0] = (uint8_t)((uint16_t) n      );
+    d[1] = (uint8_t)((uint16_t) n >> 8 );
 }
 
-static void pack_uint32le(UINT8 *d, UINT32 n) {
-    d[0] = (UINT8)(n      );
-    d[1] = (UINT8)(n >> 8 );
-    d[2] = (UINT8)(n >> 16);
-    d[3] = (UINT8)(n >> 24);
+static void pack_uint32le(uint8_t *d, uint32_t n) {
+    d[0] = (uint8_t)(n      );
+    d[1] = (uint8_t)(n >> 8 );
+    d[2] = (uint8_t)(n >> 16);
+    d[3] = (uint8_t)(n >> 24);
 }
 
 static int write_wav_header(FILE *f, unsigned int totalFrames) {
     unsigned int dataSize = totalFrames * (bit_depth / 8) * 2;
-    UINT8 tmp[4];
+    uint8_t tmp[4];
     if(fwrite("RIFF",1,4,f) != 4) return 0;
     pack_uint32le(tmp, 4 + ( 8 + dataSize ) + (8 + 40) );
     if(fwrite(tmp,1,4,f) != 4) return 0;
@@ -629,7 +629,7 @@ static int write_wav_header(FILE *f, unsigned int totalFrames) {
     return 1;
 }
 
-static void frames_to_little_endian(UINT8 *data, unsigned int frame_count) {
+static void frames_to_little_endian(uint8_t *data, unsigned int frame_count) {
     unsigned int i = 0;
     while(i<frame_count) {
         switch(bit_depth) {
@@ -655,7 +655,7 @@ static void frames_to_little_endian(UINT8 *data, unsigned int frame_count) {
     }
 }
 
-static int write_frames(FILE *f, unsigned int frame_count, UINT8 *d) {
+static int write_frames(FILE *f, unsigned int frame_count, uint8_t *d) {
     return fwrite(d,(bit_depth / 8) * 2,frame_count,f) == frame_count;
 }
 

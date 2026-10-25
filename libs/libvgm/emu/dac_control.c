@@ -68,37 +68,37 @@ typedef struct _dac_control
 	DEVWRITE_FUNCS Write;
 	
 	// Commands sent to dest-chip
-	UINT8 DstChipType;
-	UINT16 DstCommand;
-	UINT8 CmdSize;
+	uint8_t DstChipType;
+	uint16_t DstCommand;
+	uint8_t CmdSize;
 	
-	UINT32 sampleRate;
-	UINT32 Frequency;	// Frequency (Hz) at which the commands are sent
-	UINT32 DataLen;		// to protect from reading beyond End Of Data
-	const UINT8* Data;
-	UINT32 DataStart;	// Position where to start
-	UINT8 StepSize;		// usually 1, set to 2 for L/R interleaved data
-	UINT8 StepBase;		// usually 0, set to 0/1 for L/R interleaved data
-	UINT32 CmdsToSend;
+	uint32_t sampleRate;
+	uint32_t Frequency;	// Frequency (Hz) at which the commands are sent
+	uint32_t DataLen;		// to protect from reading beyond End Of Data
+	const uint8_t* Data;
+	uint32_t DataStart;	// Position where to start
+	uint8_t StepSize;		// usually 1, set to 2 for L/R interleaved data
+	uint8_t StepBase;		// usually 0, set to 0/1 for L/R interleaved data
+	uint32_t CmdsToSend;
 	
 	// Running Bits:	0 (01) - is playing
 	//					2 (04) - loop sample (simple loop from start to end)
 	//					7 (80) - disabled (needs setup)
-	UINT8 Running;
-	UINT8 Reverse;
+	uint8_t Running;
+	uint8_t Reverse;
 	RATIO_CNTR stepCntr;
-	UINT32 RemainCmds;
-	UINT32 RealPos;		// true Position in Data (== Pos, if Reverse is off)
-	UINT8 DataStep;		// always StepSize * CmdSize
+	uint32_t RemainCmds;
+	uint32_t RealPos;		// true Position in Data (== Pos, if Reverse is off)
+	uint8_t DataStep;		// always StepSize * CmdSize
 } dac_control;
 
 INLINE void daccontrol_SendCommand(dac_control* chip)
 {
-	UINT8 Port;
-	UINT8 Command;
-	UINT8 Data;
-	UINT16 Data16;
-	const UINT8* ChipData;
+	uint8_t Port;
+	uint8_t Command;
+	uint8_t Data;
+	uint16_t Data16;
+	const uint8_t* ChipData;
 	
 	if (chip->DataStart + chip->RealPos >= chip->DataLen)
 		return;
@@ -237,7 +237,7 @@ INLINE void daccontrol_SendCommand(dac_control* chip)
 		}
 		else
 		{
-			UINT8 prevChn;
+			uint8_t prevChn;
 			
 			prevChn = Port;	// by default don't restore channel
 			// get current channel for supported chips
@@ -285,11 +285,11 @@ INLINE void daccontrol_SendCommand(dac_control* chip)
 	return;
 }
 
-void daccontrol_update(void* info, UINT32 samples, DEV_SMPL** dummy)
+void daccontrol_update(void* info, uint32_t samples, DEV_SMPL** dummy)
 {
 	dac_control* chip = (dac_control*)info;
-	INT32 RealDataStp;
-	UINT32 cmdsToProc;
+	int32_t RealDataStp;
+	uint32_t cmdsToProc;
 	
 	if (chip->Running & 0x80)	// disabled
 		return;
@@ -335,7 +335,7 @@ void daccontrol_update(void* info, UINT32 samples, DEV_SMPL** dummy)
 	return;
 }
 
-UINT8 device_start_daccontrol(const DEV_GEN_CFG* cfg, DEV_INFO* retDevInf)
+uint8_t device_start_daccontrol(const DEV_GEN_CFG* cfg, DEV_INFO* retDevInf)
 {
 	dac_control* chip;
 	DEV_DATA* devData;
@@ -394,7 +394,7 @@ void device_reset_daccontrol(void* info)
 	return;
 }
 
-void daccontrol_setup_chip(void* info, DEV_INFO* devInf, UINT8 ChType, UINT16 Command)
+void daccontrol_setup_chip(void* info, DEV_INFO* devInf, uint8_t ChType, uint16_t Command)
 {
 	dac_control* chip = (dac_control*)info;
 	
@@ -442,7 +442,7 @@ void daccontrol_setup_chip(void* info, DEV_INFO* devInf, UINT8 ChType, UINT16 Co
 	return;
 }
 
-void daccontrol_set_data(void* info, UINT8* Data, UINT32 DataLen, UINT8 StepSize, UINT8 StepBase)
+void daccontrol_set_data(void* info, uint8_t* Data, uint32_t DataLen, uint8_t StepSize, uint8_t StepBase)
 {
 	dac_control* chip = (dac_control*)info;
 	
@@ -466,7 +466,7 @@ void daccontrol_set_data(void* info, UINT8* Data, UINT32 DataLen, UINT8 StepSize
 	return;
 }
 
-void daccontrol_refresh_data(void* info, UINT8* Data, UINT32 DataLen)
+void daccontrol_refresh_data(void* info, uint8_t* Data, uint32_t DataLen)
 {
 	// should be called to fix the data pointer (e.g. after a realloc)
 	dac_control* chip = (dac_control*)info;
@@ -488,7 +488,7 @@ void daccontrol_refresh_data(void* info, UINT8* Data, UINT32 DataLen)
 	return;
 }
 
-void daccontrol_set_frequency(void* info, UINT32 Frequency)
+void daccontrol_set_frequency(void* info, uint32_t Frequency)
 {
 	dac_control* chip = (dac_control*)info;
 	
@@ -501,16 +501,16 @@ void daccontrol_set_frequency(void* info, UINT32 Frequency)
 	return;
 }
 
-void daccontrol_start(void* info, UINT32 DataPos, UINT8 LenMode, UINT32 Length)
+void daccontrol_start(void* info, uint32_t DataPos, uint8_t LenMode, uint32_t Length)
 {
 	dac_control* chip = (dac_control*)info;
-	UINT16 CmdStepBase;
+	uint16_t CmdStepBase;
 	
 	if (chip->Running & 0x80)
 		return;
 	
 	CmdStepBase = chip->CmdSize * chip->StepBase;
-	if (DataPos != (UINT32)-1)	// skip setting DataStart, if Pos == -1
+	if (DataPos != (uint32_t)-1)	// skip setting DataStart, if Pos == -1
 	{
 		chip->DataStart = DataPos + CmdStepBase;
 		if (chip->DataStart > chip->DataLen)	// catch bad value and force silence

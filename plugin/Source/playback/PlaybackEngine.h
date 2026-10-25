@@ -517,19 +517,19 @@ private:
 	int midiSeenGeneration = 0;
 	int midiSeenBendRange = playback::defaultPitchBendRange;	// audio-side copy of the two settings:
 	bool midiSeenBendEnabled = true;							// a change re-sends the RPN
-	std::uint32_t midiSeenChannels = 0;							// channels the RPN was last sent to
+	uint32_t midiSeenChannels = 0;							// channels the RPN was last sent to
 	// Channels this engine has bent and not put back: a 0xE0 went out on them and nothing has
 	// centred them since. A seek, a song swap and the "bends off" switch each retire exactly
 	// these - the state this engine created, on the channels it created it on - never a channel
 	// that was never bent.
-	std::uint32_t midiBentChannels = 0;
+	uint32_t midiBentChannels = 0;
 	bool midiWasEnabled = false;
 	// The notes this engine has sent a note-on for and not yet ended, per channel, 128 bits
 	// each. A stop cannot trust All Notes Off to be honoured - several receivers ignore it, and
 	// a MIDI monitor then keeps showing the note - while a note-off for a note the receiver was
 	// told to start is the one message it has to act on. Audio thread only: emitMidiForBlock()
 	// adds and removes, flushActiveNotesOff() (from the idle branch of render()) drains it.
-	std::uint64_t midiActiveNotes[16][2] = {};
+	uint64_t midiActiveNotes[16][2] = {};
 	double midiLastSongTime = -1.0;	// in the sequence's own (single pass) coordinate system
 	bool mixerEnabled = true;	// the mixer card is always there - off is the CPU-saving opt-out
 	// the routing scheme new songs start with (message thread only - the audio thread reads the
@@ -555,7 +555,7 @@ private:
 	// long enough to see a note's shape, short enough to stay a snapshot.
 	static constexpr int kScopeSamples = 12000;
 	std::array<std::atomic<float>, (std::size_t) kScopeSamples> scopeSamples {};
-	std::atomic<std::uint32_t> scopeWrite { 0 };
+	std::atomic<uint32_t> scopeWrite { 0 };
 
 	// The snapshot handover: written by the audio thread at the end of a block, read by the
 	// message thread. Its own lock, never the engine's - see setStateCaptureWanted.
@@ -614,7 +614,7 @@ private:
 	std::atomic<bool> midiEmittable { false };
 	bool backendNeedsDcBlock = false;
 	std::atomic<bool> masterMuted { false };
-	std::atomic<std::uint64_t> connectedBuses { 1 };
+	std::atomic<uint64_t> connectedBuses { 1 };
 	static_assert (playback::kOutputBusCount <= 64,
 				   "more than 64 output buses need the connectivity mask to become an array");
 

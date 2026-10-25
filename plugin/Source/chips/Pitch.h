@@ -36,7 +36,7 @@ inline int quantiseFrequency (double hz, int* finePitch)
 
 	if (finePitch != nullptr)
 	{
-		*finePitch = (std::int16_t) std::lround ((exact - (double) rounded) * 100.0);
+		*finePitch = (int16_t) std::lround ((exact - (double) rounded) * 100.0);
 	}
 
 	return rounded;

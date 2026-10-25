@@ -36,15 +36,15 @@ typedef struct _dsound_device
 typedef struct _directsound_driver
 {
 	void* audDrvPtr;
-	volatile UINT8 devState;	// 0 - not running, 1 - running, 2 - terminating
-	UINT16 dummy;	// [for alignment purposes]
+	volatile uint8_t devState;	// 0 - not running, 1 - running, 2 - terminating
+	uint16_t dummy;	// [for alignment purposes]
 	
 	WAVEFORMATEX waveFmt;
-	UINT32 bufSmpls;
-	UINT32 bufSize;
-	UINT32 bufSegSize;
-	UINT32 bufSegCount;
-	UINT8* bufSpace;
+	uint32_t bufSmpls;
+	uint32_t bufSize;
+	uint32_t bufSegSize;
+	uint32_t bufSegCount;
+	uint8_t* bufSpace;
 	
 	HWND hWnd;
 	LPDIRECTSOUND dSndIntf;
@@ -55,34 +55,34 @@ typedef struct _directsound_driver
 	void* userParam;
 	AUDFUNC_FILLBUF FillBuffer;
 	
-	UINT32 writePos;
+	uint32_t writePos;
 } DRV_DSND;
 
 
-EXT_C UINT8 DSound_IsAvailable(void);
-EXT_C UINT8 DSound_Init(void);
-EXT_C UINT8 DSound_Deinit(void);
+EXT_C uint8_t DSound_IsAvailable(void);
+EXT_C uint8_t DSound_Init(void);
+EXT_C uint8_t DSound_Deinit(void);
 EXT_C const AUDIO_DEV_LIST* DSound_GetDeviceList(void);
 EXT_C AUDIO_OPTS* DSound_GetDefaultOpts(void);
 
-EXT_C UINT8 DSound_Create(void** retDrvObj);
-EXT_C UINT8 DSound_Destroy(void* drvObj);
-EXT_C UINT8 DSound_SetHWnd(void* drvObj, HWND hWnd);
-EXT_C UINT8 DSound_Start(void* drvObj, UINT32 deviceID, AUDIO_OPTS* options, void* audDrvParam);
-EXT_C UINT8 DSound_Stop(void* drvObj);
-EXT_C UINT8 DSound_Pause(void* drvObj);
-EXT_C UINT8 DSound_Resume(void* drvObj);
+EXT_C uint8_t DSound_Create(void** retDrvObj);
+EXT_C uint8_t DSound_Destroy(void* drvObj);
+EXT_C uint8_t DSound_SetHWnd(void* drvObj, HWND hWnd);
+EXT_C uint8_t DSound_Start(void* drvObj, uint32_t deviceID, AUDIO_OPTS* options, void* audDrvParam);
+EXT_C uint8_t DSound_Stop(void* drvObj);
+EXT_C uint8_t DSound_Pause(void* drvObj);
+EXT_C uint8_t DSound_Resume(void* drvObj);
 
-EXT_C UINT8 DSound_SetCallback(void* drvObj, AUDFUNC_FILLBUF FillBufCallback, void* userParam);
-EXT_C UINT32 DSound_GetBufferSize(void* drvObj);
-static UINT32 GetFreeBytes(DRV_DSND* drv);
-EXT_C UINT8 DSound_IsBusy(void* drvObj);
-EXT_C UINT8 DSound_WriteData(void* drvObj, UINT32 dataSize, void* data);
+EXT_C uint8_t DSound_SetCallback(void* drvObj, AUDFUNC_FILLBUF FillBufCallback, void* userParam);
+EXT_C uint32_t DSound_GetBufferSize(void* drvObj);
+static uint32_t GetFreeBytes(DRV_DSND* drv);
+EXT_C uint8_t DSound_IsBusy(void* drvObj);
+EXT_C uint8_t DSound_WriteData(void* drvObj, uint32_t dataSize, void* data);
 
-EXT_C UINT32 DSound_GetLatency(void* drvObj);
+EXT_C uint32_t DSound_GetLatency(void* drvObj);
 static void DirectSoundThread(void* Arg);
-static UINT8 WriteBuffer(DRV_DSND* drv, UINT32 dataSize, void* data);
-static UINT8 ClearBuffer(DRV_DSND* drv);
+static uint8_t WriteBuffer(DRV_DSND* drv, uint32_t dataSize, void* data);
+static uint8_t ClearBuffer(DRV_DSND* drv);
 
 
 // Notes:
@@ -116,14 +116,14 @@ AUDIO_DRV audDrv_DSound =
 static AUDIO_OPTS defOptions;
 static AUDIO_DEV_LIST deviceList;
 
-static UINT8 isInit = 0;
-static UINT32 activeDrivers;
+static uint8_t isInit = 0;
+static uint32_t activeDrivers;
 
-static UINT32 devLstAlloc;
-static UINT32 devLstCount;
+static uint32_t devLstAlloc;
+static uint32_t devLstCount;
 static DSND_DEVICE* devList;
 
-UINT8 DSound_IsAvailable(void)
+uint8_t DSound_IsAvailable(void)
 {
 	return 1;
 }
@@ -151,10 +151,10 @@ static BOOL CALLBACK DSEnumCallback(LPGUID lpGuid, LPCSTR lpcstrDescription,
 	return TRUE;
 }
 
-UINT8 DSound_Init(void)
+uint8_t DSound_Init(void)
 {
 	HRESULT retVal;
-	UINT32 curDev;
+	uint32_t curDev;
 	
 	if (isInit)
 		return AERR_WASDONE;
@@ -186,9 +186,9 @@ UINT8 DSound_Init(void)
 	return AERR_OK;
 }
 
-UINT8 DSound_Deinit(void)
+uint8_t DSound_Deinit(void)
 {
-	UINT32 curDev;
+	uint32_t curDev;
 	DSND_DEVICE* tempDev;
 	
 	if (! isInit)
@@ -223,10 +223,10 @@ AUDIO_OPTS* DSound_GetDefaultOpts(void)
 }
 
 
-UINT8 DSound_Create(void** retDrvObj)
+uint8_t DSound_Create(void** retDrvObj)
 {
 	DRV_DSND* drv;
-	UINT8 retVal8;
+	uint8_t retVal8;
 	
 	drv = (DRV_DSND*)malloc(sizeof(DRV_DSND));
 	drv->devState = 0;
@@ -253,7 +253,7 @@ UINT8 DSound_Create(void** retDrvObj)
 	return AERR_OK;
 }
 
-UINT8 DSound_Destroy(void* drvObj)
+uint8_t DSound_Destroy(void* drvObj)
 {
 	DRV_DSND* drv = (DRV_DSND*)drvObj;
 	
@@ -275,7 +275,7 @@ UINT8 DSound_Destroy(void* drvObj)
 	return AERR_OK;
 }
 
-UINT8 DSound_SetHWnd(void* drvObj, HWND hWnd)
+uint8_t DSound_SetHWnd(void* drvObj, HWND hWnd)
 {
 	DRV_DSND* drv = (DRV_DSND*)drvObj;
 	
@@ -284,14 +284,14 @@ UINT8 DSound_SetHWnd(void* drvObj, HWND hWnd)
 	return AERR_OK;
 }
 
-UINT8 DSound_Start(void* drvObj, UINT32 deviceID, AUDIO_OPTS* options, void* audDrvParam)
+uint8_t DSound_Start(void* drvObj, uint32_t deviceID, AUDIO_OPTS* options, void* audDrvParam)
 {
 	DRV_DSND* drv = (DRV_DSND*)drvObj;
 	GUID* devGUID;
-	UINT64 tempInt64;
+	uint64_t tempInt64;
 	DSBUFFERDESC bufDesc;
 	HRESULT retVal;
-	UINT8 retVal8;
+	uint8_t retVal8;
 #ifdef NDEBUG
 	HANDLE hWinThr;
 	BOOL retValB;
@@ -315,8 +315,8 @@ UINT8 DSound_Start(void* drvObj, UINT32 deviceID, AUDIO_OPTS* options, void* aud
 	drv->waveFmt.nAvgBytesPerSec = drv->waveFmt.nSamplesPerSec * drv->waveFmt.nBlockAlign;
 	drv->waveFmt.cbSize = 0;
 	
-	tempInt64 = (UINT64)options->sampleRate * options->usecPerBuf;
-	drv->bufSmpls = (UINT32)((tempInt64 + 500000) / 1000000);
+	tempInt64 = (uint64_t)options->sampleRate * options->usecPerBuf;
+	drv->bufSmpls = (uint32_t)((tempInt64 + 500000) / 1000000);
 	drv->bufSegSize = drv->waveFmt.nBlockAlign * drv->bufSmpls;
 	drv->bufSegCount = options->numBuffers ? options->numBuffers : 10;
 	drv->bufSize = drv->bufSegSize * drv->bufSegCount;
@@ -364,7 +364,7 @@ UINT8 DSound_Start(void* drvObj, UINT32 deviceID, AUDIO_OPTS* options, void* aud
 	}
 #endif
 	
-	drv->bufSpace = (UINT8*)malloc(drv->bufSegSize);
+	drv->bufSpace = (uint8_t*)malloc(drv->bufSegSize);
 	
 	drv->writePos = 0;
 	ClearBuffer(drv);
@@ -376,7 +376,7 @@ UINT8 DSound_Start(void* drvObj, UINT32 deviceID, AUDIO_OPTS* options, void* aud
 	return AERR_OK;
 }
 
-UINT8 DSound_Stop(void* drvObj)
+uint8_t DSound_Stop(void* drvObj)
 {
 	DRV_DSND* drv = (DRV_DSND*)drvObj;
 	
@@ -407,7 +407,7 @@ UINT8 DSound_Stop(void* drvObj)
 	return AERR_OK;
 }
 
-UINT8 DSound_Pause(void* drvObj)
+uint8_t DSound_Pause(void* drvObj)
 {
 	DRV_DSND* drv = (DRV_DSND*)drvObj;
 	HRESULT retVal;
@@ -419,7 +419,7 @@ UINT8 DSound_Pause(void* drvObj)
 	return (retVal == DS_OK) ? AERR_OK : 0xFF;
 }
 
-UINT8 DSound_Resume(void* drvObj)
+uint8_t DSound_Resume(void* drvObj)
 {
 	DRV_DSND* drv = (DRV_DSND*)drvObj;
 	HRESULT retVal;
@@ -432,7 +432,7 @@ UINT8 DSound_Resume(void* drvObj)
 }
 
 
-UINT8 DSound_SetCallback(void* drvObj, AUDFUNC_FILLBUF FillBufCallback, void* userParam)
+uint8_t DSound_SetCallback(void* drvObj, AUDFUNC_FILLBUF FillBufCallback, void* userParam)
 {
 	DRV_DSND* drv = (DRV_DSND*)drvObj;
 	
@@ -444,14 +444,14 @@ UINT8 DSound_SetCallback(void* drvObj, AUDFUNC_FILLBUF FillBufCallback, void* us
 	return AERR_OK;
 }
 
-UINT32 DSound_GetBufferSize(void* drvObj)
+uint32_t DSound_GetBufferSize(void* drvObj)
 {
 	DRV_DSND* drv = (DRV_DSND*)drvObj;
 	
 	return drv->bufSegSize;
 }
 
-static UINT32 GetFreeBytes(DRV_DSND* drv)
+static uint32_t GetFreeBytes(DRV_DSND* drv)
 {
 	HRESULT retVal;
 	DWORD writeEndPos;
@@ -466,10 +466,10 @@ static UINT32 GetFreeBytes(DRV_DSND* drv)
 		return (drv->bufSize - drv->writePos) + writeEndPos;
 }
 
-UINT8 DSound_IsBusy(void* drvObj)
+uint8_t DSound_IsBusy(void* drvObj)
 {
 	DRV_DSND* drv = (DRV_DSND*)drvObj;
-	UINT32 freeBytes;
+	uint32_t freeBytes;
 	
 	if (drv->FillBuffer != NULL)
 		return AERR_BAD_MODE;
@@ -478,10 +478,10 @@ UINT8 DSound_IsBusy(void* drvObj)
 	return (freeBytes >= drv->bufSegSize) ? AERR_OK : AERR_BUSY;
 }
 
-UINT8 DSound_WriteData(void* drvObj, UINT32 dataSize, void* data)
+uint8_t DSound_WriteData(void* drvObj, uint32_t dataSize, void* data)
 {
 	DRV_DSND* drv = (DRV_DSND*)drvObj;
-	UINT32 freeBytes;
+	uint32_t freeBytes;
 	
 	if (dataSize > drv->bufSegSize)
 		return AERR_TOO_MUCH_DATA;
@@ -495,10 +495,10 @@ UINT8 DSound_WriteData(void* drvObj, UINT32 dataSize, void* data)
 }
 
 
-UINT32 DSound_GetLatency(void* drvObj)
+uint32_t DSound_GetLatency(void* drvObj)
 {
 	DRV_DSND* drv = (DRV_DSND*)drvObj;
-	UINT32 bytesBehind;
+	uint32_t bytesBehind;
 #if 0
 	DWORD readPos;
 	HRESULT retVal;
@@ -520,8 +520,8 @@ UINT32 DSound_GetLatency(void* drvObj)
 static void DirectSoundThread(void* Arg)
 {
 	DRV_DSND* drv = (DRV_DSND*)Arg;
-	UINT32 wrtBytes;
-	UINT32 didBuffers;	// number of processed buffers
+	uint32_t wrtBytes;
+	uint32_t didBuffers;	// number of processed buffers
 	
 	OSSignal_Wait(drv->hSignal);	// wait until the initialization is done
 	
@@ -549,7 +549,7 @@ static void DirectSoundThread(void* Arg)
 	return;
 }
 
-static UINT8 WriteBuffer(DRV_DSND* drv, UINT32 dataSize, void* data)
+static uint8_t WriteBuffer(DRV_DSND* drv, uint32_t dataSize, void* data)
 {
 	HRESULT retVal;
 	DWORD bufSize1;
@@ -579,7 +579,7 @@ static UINT8 WriteBuffer(DRV_DSND* drv, UINT32 dataSize, void* data)
 	return AERR_OK;
 }
 
-static UINT8 ClearBuffer(DRV_DSND* drv)
+static uint8_t ClearBuffer(DRV_DSND* drv)
 {
 	HRESULT retVal;
 	DWORD bufSize;

@@ -17,9 +17,9 @@ typedef struct msm6258_config
 {
 	DEV_GEN_CFG _genCfg;
 	
-	UINT8 divider;		// clock divider, 0 = /1024, 1 = /768, 2 = /512
-	UINT8 adpcmBits;	// bits per ADPCM sample (3, 4), 0 = default (4)
-	UINT8 outputBits;	// DAC output precision bits (10, 12), 0 = default (10)
+	uint8_t divider;		// clock divider, 0 = /1024, 1 = /768, 2 = /512
+	uint8_t adpcmBits;	// bits per ADPCM sample (3, 4), 0 = default (4)
+	uint8_t outputBits;	// DAC output precision bits (10, 12), 0 = default (10)
 } MSM6258_CFG;
 
 

@@ -6,13 +6,13 @@
 #if ! LOW_PRECISION_RATIOCNTR
 // by default we use a high-precision 32.32 fixed point counter
 #define RC_SHIFT	32
-typedef UINT64		RC_TYPE;
-typedef INT64		RC_STYPE;
+typedef uint64_t		RC_TYPE;
+typedef int64_t		RC_STYPE;
 #else
 // alternatively we can use lower-precision 12.20 fixed point
 #define RC_SHIFT	20
-typedef UINT32		RC_TYPE;
-typedef INT32		RC_STYPE;
+typedef uint32_t		RC_TYPE;
+typedef int32_t		RC_STYPE;
 #endif
 
 typedef struct
@@ -21,9 +21,9 @@ typedef struct
 	RC_TYPE val;	// current value
 } RATIO_CNTR;
 
-INLINE void RC_SET_RATIO(RATIO_CNTR* rc, UINT32 mul, UINT32 div)
+INLINE void RC_SET_RATIO(RATIO_CNTR* rc, uint32_t mul, uint32_t div)
 {
-	rc->inc = (RC_TYPE)((((UINT64)mul << RC_SHIFT) + div / 2) / div);
+	rc->inc = (RC_TYPE)((((uint64_t)mul << RC_SHIFT) + div / 2) / div);
 }
 
 INLINE void RC_SET_INC(RATIO_CNTR* rc, double val)
@@ -36,17 +36,17 @@ INLINE void RC_STEP(RATIO_CNTR* rc)
 	rc->val += rc->inc;
 }
 
-INLINE void RC_STEPS(RATIO_CNTR* rc, UINT32 step)
+INLINE void RC_STEPS(RATIO_CNTR* rc, uint32_t step)
 {
 	rc->val += rc->inc * step;
 }
 
-INLINE UINT32 RC_GET_VAL(const RATIO_CNTR* rc)
+INLINE uint32_t RC_GET_VAL(const RATIO_CNTR* rc)
 {
-	return (UINT32)(rc->val >> RC_SHIFT);
+	return (uint32_t)(rc->val >> RC_SHIFT);
 }
 
-INLINE void RC_SET_VAL(RATIO_CNTR* rc, UINT32 val)
+INLINE void RC_SET_VAL(RATIO_CNTR* rc, uint32_t val)
 {
 	rc->val = (RC_TYPE)val << RC_SHIFT;
 }
@@ -76,12 +76,12 @@ INLINE void RC_VAL_DEC(RATIO_CNTR* rc)
 	rc->val -= (RC_TYPE)1 << RC_SHIFT;
 }
 
-INLINE void RC_VAL_ADD(RATIO_CNTR* rc, INT32 val)
+INLINE void RC_VAL_ADD(RATIO_CNTR* rc, int32_t val)
 {
 	rc->val += (RC_STYPE)val << RC_SHIFT;
 }
 
-INLINE void RC_VAL_SUB(RATIO_CNTR* rc, INT32 val)
+INLINE void RC_VAL_SUB(RATIO_CNTR* rc, int32_t val)
 {
 	rc->val -= (RC_STYPE)val << RC_SHIFT;
 }

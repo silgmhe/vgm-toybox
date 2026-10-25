@@ -8,13 +8,13 @@
 #include "EmuStructs.h"
 #include "Resampler.h"
 
-static void Resmpl_Exec_Old(RESMPL_STATE* CAA, UINT32 length, WAVE_32BS* retSample);
-static void Resmpl_Exec_LinearUp(RESMPL_STATE* CAA, UINT32 length, WAVE_32BS* retSample);
-static void Resmpl_Exec_Copy(RESMPL_STATE* CAA, UINT32 length, WAVE_32BS* retSample);
-static void Resmpl_Exec_LinearDown(RESMPL_STATE* CAA, UINT32 length, WAVE_32BS* retSample);
+static void Resmpl_Exec_Old(RESMPL_STATE* CAA, uint32_t length, WAVE_32BS* retSample);
+static void Resmpl_Exec_LinearUp(RESMPL_STATE* CAA, uint32_t length, WAVE_32BS* retSample);
+static void Resmpl_Exec_Copy(RESMPL_STATE* CAA, uint32_t length, WAVE_32BS* retSample);
+static void Resmpl_Exec_LinearDown(RESMPL_STATE* CAA, uint32_t length, WAVE_32BS* retSample);
 
 // Ensures `CAA->smplBufs[0]` and `CAA->smplBufs[1]` can each contain at least `length` samples.
-static void Resmpl_EnsureBuffers(RESMPL_STATE* CAA, UINT32 length)
+static void Resmpl_EnsureBuffers(RESMPL_STATE* CAA, uint32_t length)
 {
 	if (CAA->smplBufSize < length)
 	{
@@ -41,7 +41,7 @@ void Resmpl_DevConnect(RESMPL_STATE* CAA, const DEV_INFO* devInf)
 	return;
 }
 
-void Resmpl_SetVals(RESMPL_STATE* CAA, UINT8 resampleMode, UINT16 volume, UINT32 destSampleRate)
+void Resmpl_SetVals(RESMPL_STATE* CAA, uint8_t resampleMode, uint16_t volume, uint32_t destSampleRate)
 {
 	CAA->resampleMode = resampleMode;
 	CAA->smpRateDst = destSampleRate;
@@ -133,7 +133,7 @@ void Resmpl_Deinit(RESMPL_STATE* CAA)
 	return;
 }
 
-void Resmpl_ChangeRate(void* DataPtr, UINT32 newSmplRate)
+void Resmpl_ChangeRate(void* DataPtr, uint32_t newSmplRate)
 {
 	RESMPL_STATE* CAA = (RESMPL_STATE*)DataPtr;
 	
@@ -154,10 +154,10 @@ void Resmpl_ChangeRate(void* DataPtr, UINT32 newSmplRate)
 #define FIXPNT_BITS		11
 #define FIXPNT_FACT		(1 << FIXPNT_BITS)
 #if (FIXPNT_BITS <= 11)	// allows for chip sample rates of about 10 MHz without overflow
-	typedef UINT32	SLINT;	// 32-bit is a lot faster
+	typedef uint32_t	SLINT;	// 32-bit is a lot faster
 	#define SLI_BITS	32
 #else
-	typedef UINT64	SLINT;
+	typedef uint64_t	SLINT;
 	#define SLI_BITS	64
 #endif
 #define FIXPNT_MASK		(FIXPNT_FACT - 1)
@@ -170,23 +170,23 @@ void Resmpl_ChangeRate(void* DataPtr, UINT32 newSmplRate)
 #define fp2i_floor(x)	((x) / FIXPNT_FACT)
 #define fp2i_ceil(x)	((x + FIXPNT_MASK) / FIXPNT_FACT)
 
-static void Resmpl_Exec_Old(RESMPL_STATE* CAA, UINT32 length, WAVE_32BS* retSample)
+static void Resmpl_Exec_Old(RESMPL_STATE* CAA, uint32_t length, WAVE_32BS* retSample)
 {
 	// RESALGO_OLD: old, but very fast resampler
 	// This is effectively nearest-neighbour resampling, but with small improvements for downsampling.
 	DEV_SMPL* CurBufL;
 	DEV_SMPL* CurBufR;
-	UINT32 OutPos;
-	INT32 TempS32L;
-	INT32 TempS32R;
-	INT32 SmpCnt;	// must be signed, else I'm getting calculation errors
-	INT32 CurSmpl;
+	uint32_t OutPos;
+	int32_t TempS32L;
+	int32_t TempS32R;
+	int32_t SmpCnt;	// must be signed, else I'm getting calculation errors
+	int32_t CurSmpl;
 	
 	for (OutPos = 0; OutPos < length; OutPos ++)
 	{
 		CAA->smpLast = CAA->smpNext;
 		CAA->smpP ++;
-		CAA->smpNext = (UINT32)((UINT64)CAA->smpP * CAA->smpRateSrc / CAA->smpRateDst);
+		CAA->smpNext = (uint32_t)((uint64_t)CAA->smpP * CAA->smpRateSrc / CAA->smpRateDst);
 		if (CAA->smpLast >= CAA->smpNext)
 		{
 			// duplicate last sample (nearest-neighbour resampling)
@@ -247,31 +247,31 @@ static void Resmpl_Exec_Old(RESMPL_STATE* CAA, UINT32 length, WAVE_32BS* retSamp
 	return;
 }
 
-static void Resmpl_Exec_LinearUp(RESMPL_STATE* CAA, UINT32 length, WAVE_32BS* retSample)
+static void Resmpl_Exec_LinearUp(RESMPL_STATE* CAA, uint32_t length, WAVE_32BS* retSample)
 {
 	// RESALGO_LINEAR_UP: Linear Upsampling
 	DEV_SMPL* CurBufL;
 	DEV_SMPL* CurBufR;
 	DEV_SMPL* StreamPnt[0x02];
-	UINT32 InBase;
-	UINT32 InPos;
-	UINT32 OutPos;
-	UINT32 SmpFrc;	// Sample Fraction
-	UINT32 InPre;
-	UINT32 InNow;
+	uint32_t InBase;
+	uint32_t InPos;
+	uint32_t OutPos;
+	uint32_t SmpFrc;	// Sample Fraction
+	uint32_t InPre;
+	uint32_t InNow;
 	SLINT InPosL;
-	INT64 TempSmpL;
-	INT64 TempSmpR;
-	INT32 SmpCnt;	// must be signed, else I'm getting calculation errors
-	UINT64 ChipSmpRateFP;
+	int64_t TempSmpL;
+	int64_t TempSmpR;
+	int32_t SmpCnt;	// must be signed, else I'm getting calculation errors
+	uint64_t ChipSmpRateFP;
 	
-	ChipSmpRateFP = FIXPNT_FACT * (UINT64)CAA->smpRateSrc;
+	ChipSmpRateFP = FIXPNT_FACT * (uint64_t)CAA->smpRateSrc;
 	// TODO: Make it work *properly* with large blocks. (this is very hackish)
 	for (OutPos = 0; OutPos < length; OutPos ++)
 	{
 		InPosL = (SLINT)(CAA->smpP * ChipSmpRateFP / CAA->smpRateDst);
-		InPre = (UINT32)fp2i_floor(InPosL);
-		InNow = (UINT32)fp2i_ceil(InPosL);
+		InPre = (uint32_t)fp2i_floor(InPosL);
+		InNow = (uint32_t)fp2i_ceil(InPosL);
 		
 		Resmpl_EnsureBuffers(CAA, InNow - CAA->smpNext + 2);
 		CurBufL = CAA->smplBufs[0];
@@ -288,13 +288,13 @@ static void Resmpl_Exec_LinearUp(RESMPL_STATE* CAA, UINT32 length, WAVE_32BS* re
 			CAA->StreamUpdate(CAA->su_DataPtr, InNow - CAA->smpNext, StreamPnt);
 		}
 		
-		InBase = FIXPNT_FACT + (UINT32)(InPosL - (SLINT)CAA->smpNext * FIXPNT_FACT);
+		InBase = FIXPNT_FACT + (uint32_t)(InPosL - (SLINT)CAA->smpNext * FIXPNT_FACT);
 		SmpCnt = FIXPNT_FACT;
 		CAA->smpLast = InPre;
 		CAA->smpNext = InNow;
 		//for (OutPos = 0; OutPos < length; OutPos ++)
 		//{
-		//InPos = InBase + (UINT32)(OutPos * ChipSmpRateFP / CAA->smpRateDst);
+		//InPos = InBase + (uint32_t)(OutPos * ChipSmpRateFP / CAA->smpRateDst);
 		InPos = InBase;
 		
 		InPre = fp2i_floor(InPos);
@@ -302,12 +302,12 @@ static void Resmpl_Exec_LinearUp(RESMPL_STATE* CAA, UINT32 length, WAVE_32BS* re
 		SmpFrc = getfraction(InPos);
 		
 		// Linear interpolation
-		TempSmpL = ((INT64)CurBufL[InPre] * (FIXPNT_FACT - SmpFrc)) +
-					((INT64)CurBufL[InNow] * SmpFrc);
-		TempSmpR = ((INT64)CurBufR[InPre] * (FIXPNT_FACT - SmpFrc)) +
-					((INT64)CurBufR[InNow] * SmpFrc);
-		retSample[OutPos].L += (INT32)(TempSmpL * CAA->volumeL / SmpCnt);
-		retSample[OutPos].R += (INT32)(TempSmpR * CAA->volumeR / SmpCnt);
+		TempSmpL = ((int64_t)CurBufL[InPre] * (FIXPNT_FACT - SmpFrc)) +
+					((int64_t)CurBufL[InNow] * SmpFrc);
+		TempSmpR = ((int64_t)CurBufR[InPre] * (FIXPNT_FACT - SmpFrc)) +
+					((int64_t)CurBufR[InNow] * SmpFrc);
+		retSample[OutPos].L += (int32_t)(TempSmpL * CAA->volumeL / SmpCnt);
+		retSample[OutPos].R += (int32_t)(TempSmpR * CAA->volumeR / SmpCnt);
 		//}
 		CAA->lSmpl.L = CurBufL[InPre];
 		CAA->lSmpl.R = CurBufR[InPre];
@@ -326,10 +326,10 @@ static void Resmpl_Exec_LinearUp(RESMPL_STATE* CAA, UINT32 length, WAVE_32BS* re
 	return;
 }
 
-static void Resmpl_Exec_Copy(RESMPL_STATE* CAA, UINT32 length, WAVE_32BS* retSample)
+static void Resmpl_Exec_Copy(RESMPL_STATE* CAA, uint32_t length, WAVE_32BS* retSample)
 {
 	// RESALGO_COPY: Copying
-	UINT32 OutPos;
+	uint32_t OutPos;
 	
 	CAA->smpNext = CAA->smpP * CAA->smpRateSrc / CAA->smpRateDst;
 	Resmpl_EnsureBuffers(CAA, length);
@@ -356,35 +356,35 @@ static void Resmpl_Exec_Copy(RESMPL_STATE* CAA, UINT32 length, WAVE_32BS* retSam
 // TODO: The resample is not completely stable.
 //	Resampling tiny blocks (1 resulting sample) sometimes causes values to be off-by-one,
 //	compared to resampling large blocks.
-static void Resmpl_Exec_LinearDown(RESMPL_STATE* CAA, UINT32 length, WAVE_32BS* retSample)
+static void Resmpl_Exec_LinearDown(RESMPL_STATE* CAA, uint32_t length, WAVE_32BS* retSample)
 {
 	// RESALGO_LINEAR_DOWN: Linear Downsampling
 	DEV_SMPL* CurBufL;
 	DEV_SMPL* CurBufR;
 	DEV_SMPL* StreamPnt[0x02];
-	UINT32 InBase;
-	UINT32 InPos;
-	UINT32 InPosNext;
-	UINT32 OutPos;
-	UINT32 SmpFrc;	// Sample Fraction
-	UINT32 InPre;
-	UINT32 InNow;
+	uint32_t InBase;
+	uint32_t InPos;
+	uint32_t InPosNext;
+	uint32_t OutPos;
+	uint32_t SmpFrc;	// Sample Fraction
+	uint32_t InPre;
+	uint32_t InNow;
 	SLINT InPosL;
-	INT64 TempSmpL;
-	INT64 TempSmpR;
-	INT32 SmpCnt;	// must be signed, else I'm getting calculation errors
-	UINT64 ChipSmpRateFP;
+	int64_t TempSmpL;
+	int64_t TempSmpR;
+	int32_t SmpCnt;	// must be signed, else I'm getting calculation errors
+	uint64_t ChipSmpRateFP;
 	
-	ChipSmpRateFP = FIXPNT_FACT * (UINT64)CAA->smpRateSrc;
+	ChipSmpRateFP = FIXPNT_FACT * (uint64_t)CAA->smpRateSrc;
 	InPosL = (SLINT)((CAA->smpP + length) * ChipSmpRateFP / CAA->smpRateDst);
-	CAA->smpNext = (UINT32)fp2i_ceil(InPosL);
+	CAA->smpNext = (uint32_t)fp2i_ceil(InPosL);
 #if FIXPNT_OFLW_BIT < 32
 	if (CAA->smpNext < CAA->smpLast)
 	{
 		// work around overflow in InPosL (may happen with extremely high chip sample rates)
-		CAA->smpNext |= CAA->smpLast & ~(((UINT32)1 << FIXPNT_OFLW_BIT) - 1);
+		CAA->smpNext |= CAA->smpLast & ~(((uint32_t)1 << FIXPNT_OFLW_BIT) - 1);
 		if (CAA->smpNext < CAA->smpLast)
-			CAA->smpNext += ((UINT32)1 << FIXPNT_OFLW_BIT);
+			CAA->smpNext += ((uint32_t)1 << FIXPNT_OFLW_BIT);
 	}
 #endif
 	
@@ -399,22 +399,22 @@ static void Resmpl_Exec_LinearDown(RESMPL_STATE* CAA, UINT32 length, WAVE_32BS* 
 	
 	InPosL = (SLINT)(CAA->smpP * ChipSmpRateFP / CAA->smpRateDst);
 	// I'm adding 1.0 to avoid negative indexes
-	InBase = FIXPNT_FACT + (UINT32)(InPosL - (SLINT)CAA->smpLast * FIXPNT_FACT);
+	InBase = FIXPNT_FACT + (uint32_t)(InPosL - (SLINT)CAA->smpLast * FIXPNT_FACT);
 	InPosNext = InBase;
 	InPre = fp2i_floor(InPosNext);
 	for (OutPos = 0; OutPos < length; OutPos ++)
 	{
-		//InPos = InBase + (UINT32)(OutPos * ChipSmpRateFP / CAA->smpRateDst);
+		//InPos = InBase + (uint32_t)(OutPos * ChipSmpRateFP / CAA->smpRateDst);
 		InPos = InPosNext;
-		InPosNext = InBase + (UINT32)((OutPos+1) * ChipSmpRateFP / CAA->smpRateDst);
+		InPosNext = InBase + (uint32_t)((OutPos+1) * ChipSmpRateFP / CAA->smpRateDst);
 		
 		// first fractional Sample
 		SmpFrc = getnfraction(InPos);
 		if (SmpFrc)
 		{
 			InPre = fp2i_floor(InPos);
-			TempSmpL = (INT64)CurBufL[InPre] * SmpFrc;
-			TempSmpR = (INT64)CurBufR[InPre] * SmpFrc;
+			TempSmpL = (int64_t)CurBufL[InPre] * SmpFrc;
+			TempSmpR = (int64_t)CurBufR[InPre] * SmpFrc;
 		}
 		else
 		{
@@ -427,8 +427,8 @@ static void Resmpl_Exec_LinearDown(RESMPL_STATE* CAA, UINT32 length, WAVE_32BS* 
 		InPre = fp2i_floor(InPosNext);
 		if (SmpFrc)
 		{
-			TempSmpL += (INT64)CurBufL[InPre] * SmpFrc;
-			TempSmpR += (INT64)CurBufR[InPre] * SmpFrc;
+			TempSmpL += (int64_t)CurBufL[InPre] * SmpFrc;
+			TempSmpR += (int64_t)CurBufR[InPre] * SmpFrc;
 			SmpCnt += SmpFrc;
 		}
 		
@@ -438,14 +438,14 @@ static void Resmpl_Exec_LinearDown(RESMPL_STATE* CAA, UINT32 length, WAVE_32BS* 
 		SmpCnt += (InPre - InNow) * FIXPNT_FACT;	// this is faster
 		while(InNow < InPre)
 		{
-			TempSmpL += (INT64)CurBufL[InNow] * FIXPNT_FACT;
-			TempSmpR += (INT64)CurBufR[InNow] * FIXPNT_FACT;
+			TempSmpL += (int64_t)CurBufL[InNow] * FIXPNT_FACT;
+			TempSmpR += (int64_t)CurBufR[InNow] * FIXPNT_FACT;
 			//SmpCnt ++;
 			InNow ++;
 		}
 		
-		retSample[OutPos].L += (INT32)(TempSmpL * CAA->volumeL / SmpCnt);
-		retSample[OutPos].R += (INT32)(TempSmpR * CAA->volumeR / SmpCnt);
+		retSample[OutPos].L += (int32_t)(TempSmpL * CAA->volumeL / SmpCnt);
+		retSample[OutPos].R += (int32_t)(TempSmpR * CAA->volumeR / SmpCnt);
 	}
 	
 	CAA->lSmpl.L = CurBufL[InPre];
@@ -463,7 +463,7 @@ static void Resmpl_Exec_LinearDown(RESMPL_STATE* CAA, UINT32 length, WAVE_32BS* 
 	return;
 }
 
-void Resmpl_Execute(RESMPL_STATE* CAA, UINT32 smplCount, WAVE_32BS* smplBuffer)
+void Resmpl_Execute(RESMPL_STATE* CAA, uint32_t smplCount, WAVE_32BS* smplBuffer)
 {
 	if (! smplCount)
 		return;

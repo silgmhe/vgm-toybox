@@ -14,10 +14,10 @@ extern "C"
 // apply panning value to x, x should be within +-16384
 #define APPLY_PANNING_S(x, panval)	((x * panval) >> PANNING_BITS)
 // apply panning value to x, version for larger values
-#define APPLY_PANNING_L(x, panval)	(INT32)(((INT64)x * panval) >> PANNING_BITS)
+#define APPLY_PANNING_L(x, panval)	(int32_t)(((int64_t)x * panval) >> PANNING_BITS)
 
-void Panning_Calculate(INT32 channels[2], INT16 position);
-void Panning_Centre(INT32 channels[2]);
+void Panning_Calculate(int32_t channels[2], int16_t position);
+void Panning_Centre(int32_t channels[2]);
 
 #ifdef __cplusplus
 }

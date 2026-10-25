@@ -15,9 +15,9 @@ namespace
 	// The VGM header stores the QSound's old 4 MHz clock and libvgm multiplies it by 15 before the
 	// core sees it (vgmplayer.cpp, "QSound clock used to be 4 MHz"), so the normalised clock is
 	// 60 MHz and the chip renders at 60 MHz / 2 / 1248 = 24.04 kHz.
-	constexpr std::uint32_t kDefaultClock = 60000000;
-	constexpr std::uint32_t kLegacyClockCeiling = 5000000;		// below this the header is the old clock
-	constexpr std::uint32_t kLegacyClockScale = 15;
+	constexpr uint32_t kDefaultClock = 60000000;
+	constexpr uint32_t kLegacyClockCeiling = 5000000;		// below this the header is the old clock
+	constexpr uint32_t kLegacyClockScale = 15;
 
 	// pcm_update() adds `rate` (4.12 fixed point) to a 28-bit position each output sample, so a
 	// voice advances by `rate / 4096` bytes per sample and `rate * clock / (4096 * 2 * 1248)` a
@@ -50,7 +50,7 @@ namespace
 	{
 	public:
 		QSoundNoteTable (double clock, double fixedRate, const double* sampleCycle,
-						 const bool* melodic, const std::vector<std::uint8_t>* rom)
+						 const bool* melodic, const std::vector<uint8_t>* rom)
 			: unitsPerSecondPerStep (fixedRate > 0.0 ? 0.0 : clock / kRateDivisor)
 			, fixedRate (fixedRate)
 			, rootRate (clock / kOutputDivisor)
@@ -58,7 +58,7 @@ namespace
 			, melodic (melodic)
 			, rom (rom) {}
 
-		int noteFor (std::uint32_t period, int, int* finePitch) const override
+		int noteFor (uint32_t period, int, int* finePitch) const override
 		{
 			const double rate = (fixedRate > 0.0) ? fixedRate
 												  : (double) period * unitsPerSecondPerStep;
@@ -74,15 +74,15 @@ const bool measured = (rom == nullptr || rom->empty())
 		double rootRate;
 		const double* cycleLength;
 		const bool* melodic;
-		const std::vector<std::uint8_t>* rom;
+		const std::vector<uint8_t>* rom;
 	};
 
 	/** What a measurement belongs to: the registers that name one sample's bytes. */
 	struct SampleKey
 	{
-		std::uint32_t address;
-		std::uint32_t length;
-		std::int32_t loopOffset;
+		uint32_t address;
+		uint32_t length;
+		int32_t loopOffset;
 
 		bool operator< (const SampleKey& other) const
 		{
@@ -91,14 +91,14 @@ const bool measured = (rom == nullptr || rom->empty())
 		}
 	};
 
-	std::uint32_t pow2Mask (std::size_t size)
+	uint32_t pow2Mask (std::size_t size)
 	{
 		if (size == 0)
 		{
 			return 0;
 		}
 
-		std::uint32_t mask = (std::uint32_t) (size - 1);
+		uint32_t mask = (uint32_t) (size - 1);
 		mask |= mask >> 1;
 		mask |= mask >> 2;
 		mask |= mask >> 4;
@@ -112,69 +112,69 @@ struct QSoundDecoder::Impl
 {
 	struct PcmVoice
 	{
-		std::uint16_t bank = 0x8000;
-		std::uint16_t addr = 0;			// current position, and the start a note latches
-		std::uint16_t phase = 0;
-		std::uint16_t rate = 0;			// 4.12 fixed point
-		std::int16_t loopLength = 0;
-		std::int16_t end = 0;
-		std::int16_t volume = 0;
-		std::int16_t echo = 0;
-		std::uint16_t pan = 0x120;
+		uint16_t bank = 0x8000;
+		uint16_t addr = 0;			// current position, and the start a note latches
+		uint16_t phase = 0;
+		uint16_t rate = 0;			// 4.12 fixed point
+		int16_t loopLength = 0;
+		int16_t end = 0;
+		int16_t volume = 0;
+		int16_t echo = 0;
+		uint16_t pan = 0x120;
 
 		// latched at the rising edge that starts a note
 		bool keyed = false;
-		std::uint32_t latchStart = 0;
-		std::uint32_t gateEnd = 0;
+		uint32_t latchStart = 0;
+		uint32_t gateEnd = 0;
 		double cycleLength = 0.0;
 		bool melodic = false;
-		std::uint32_t keyOns = 0;
+		uint32_t keyOns = 0;
 	};
 
 	struct AdpcmVoice
 	{
-		std::uint16_t startAddress = 0;
-		std::uint16_t endAddress = 0;
-		std::uint16_t bank = 0x8000;
-		std::int16_t volume = 0;
-		std::uint16_t flag = 0;
-		std::uint16_t pan = 0x120;
+		uint16_t startAddress = 0;
+		uint16_t endAddress = 0;
+		uint16_t bank = 0x8000;
+		int16_t volume = 0;
+		uint16_t flag = 0;
+		uint16_t pan = 0x120;
 
 		bool keyed = false;
-		std::uint32_t gateEnd = 0;
-		std::uint32_t latchStart = 0;
-		std::uint32_t latchEnd = 0;
+		uint32_t gateEnd = 0;
+		uint32_t latchStart = 0;
+		uint32_t latchEnd = 0;
 		double cycleLength = 0.0;
 		bool melodic = false;
-		std::uint32_t keyOns = 0;
+		uint32_t keyOns = 0;
 	};
 
 	PcmVoice pcm[kPcmVoices];
 	AdpcmVoice adpcm[kAdpcmVoices];
-	std::uint32_t now = 0;
+	uint32_t now = 0;
 	double clock = (double) kDefaultClock;
 	double streamRate = 44100.0;
-	std::vector<std::uint8_t> rom;
-	std::uint32_t romMask = 0;
+	std::vector<uint8_t> rom;
+	uint32_t romMask = 0;
 	std::map<SampleKey, double> cycleCache;
 	std::vector<std::unique_ptr<QSoundNoteTable>> tables;
 
-	std::uint8_t romByte (std::uint32_t address) const
+	uint8_t romByte (uint32_t address) const
 	{
-		const std::uint32_t index = address & romMask;
+		const uint32_t index = address & romMask;
 		return (index < rom.size()) ? rom[index] : 0;
 	}
 
 	/** The chip masks a banked address to the ROM's power-of-two size and refuses to read the DSP
 		program ROM (bank bit 15 clear). */
-	int sampleAt (std::uint16_t bank, std::uint16_t address) const
+	int sampleAt (uint16_t bank, uint16_t address) const
 	{
 		if (rom.empty() || (bank & 0x8000) == 0)
 		{
 			return 0;
 		}
 
-		return (int) (std::int8_t) romByte ((((std::uint32_t) (bank & 0x7FFF)) << 16) | address);
+		return (int) (int8_t) romByte ((((uint32_t) (bank & 0x7FFF)) << 16) | address);
 	}
 
 	double unitsPerSecond (const PcmVoice& voice) const
@@ -187,9 +187,9 @@ struct QSoundDecoder::Impl
 		return clock / kAdpcmClockDivisor;
 	}
 
-	std::uint32_t pcmAddressOf (const PcmVoice& voice) const
+	uint32_t pcmAddressOf (const PcmVoice& voice) const
 	{
-		return (((std::uint32_t) (voice.bank & 0x7FFF)) << 16) | voice.addr;
+		return (((uint32_t) (voice.bank & 0x7FFF)) << 16) | voice.addr;
 	}
 
 	/** The bytes a sample covers inside its 64 KB bank.
@@ -197,7 +197,7 @@ struct QSoundDecoder::Impl
 		`end` is stored as a signed 16-bit register, but the address is unsigned - and a sample that
 		starts near the top of its bank wraps through 0x10000 back to the bottom (Street Fighter II's
 		voices do exactly that), which as a signed comparison looks like an empty sample. */
-	static std::uint32_t bankLength (std::uint32_t start, std::uint32_t end)
+	static uint32_t bankLength (uint32_t start, uint32_t end)
 	{
 		start &= 0xFFFF;
 		end &= 0xFFFF;
@@ -212,7 +212,7 @@ struct QSoundDecoder::Impl
 
 	/** How long a non-looping note lasts: the sample's own length over the rate the driver set. A
 		looping voice has no such length - only the rate going to zero ends it. */
-	std::uint32_t durationOf (const PcmVoice& voice) const
+	uint32_t durationOf (const PcmVoice& voice) const
 	{
 		if (voice.rate == 0 || voice.loopLength != 0)
 		{
@@ -220,10 +220,10 @@ struct QSoundDecoder::Impl
 		}
 
 		// the chip's own samples, converted to the rate the extractor counts in
-		const double bytes = (double) bankLength (voice.latchStart, (std::uint16_t) voice.end);
+		const double bytes = (double) bankLength (voice.latchStart, (uint16_t) voice.end);
 		const double chipSamples = bytes / ((double) voice.rate / 4096.0);
 		const double samples = chipSamples * streamRate / (clock / kOutputDivisor);
-		return (std::uint32_t) std::llround (std::min (samples, 1.0e9));
+		return (uint32_t) std::llround (std::min (samples, 1.0e9));
 	}
 
 	/** The cycle length of the sample a voice is about to play - measured once per register set.
@@ -237,14 +237,14 @@ struct QSoundDecoder::Impl
 			return 0.0;
 		}
 
-		const std::uint32_t start = voice.latchStart & 0xFFFF;
-		const std::uint32_t end = (std::uint16_t) voice.end;
-		const std::uint32_t loopLength = (voice.loopLength > 0) ? (std::uint32_t) voice.loopLength : 0;
-		const std::uint32_t bank = voice.bank;
+		const uint32_t start = voice.latchStart & 0xFFFF;
+		const uint32_t end = (uint16_t) voice.end;
+		const uint32_t loopLength = (voice.loopLength > 0) ? (uint32_t) voice.loopLength : 0;
+		const uint32_t bank = voice.bank;
 
-		const std::uint32_t total = bankLength (start, end);
-		std::uint32_t offset = start;
-		std::uint32_t length = total;
+		const uint32_t total = bankLength (start, end);
+		uint32_t offset = start;
+		uint32_t length = total;
 		if (loopLength > 0 && loopLength <= total)
 		{
 			offset = (end - loopLength) & 0xFFFF;
@@ -262,7 +262,7 @@ struct QSoundDecoder::Impl
 		std::vector<double> waveform (window);
 		for (std::size_t i = 0; i < window; ++i)
 		{
-			waveform[i] = (double) sampleAt (bank, (std::uint16_t) (offset + (std::uint32_t) i));
+			waveform[i] = (double) sampleAt (bank, (uint16_t) (offset + (uint32_t) i));
 		}
 
 		const double cycle = estimateCycleLength (waveform, 0, loopLength > 0 ? waveform.size() : 0);
@@ -296,7 +296,7 @@ struct QSoundDecoder::Impl
 		int stepSize = 10;
 		for (std::size_t i = 0; i < bytes; ++i)
 		{
-			const int byte = sampleAt (voice.bank, (std::uint16_t) (voice.latchStart + i));
+			const int byte = sampleAt (voice.bank, (uint16_t) (voice.latchStart + i));
 			for (int half = 0; half < 2; ++half)
 			{
 				// top nibble first, then bottom; each is a signed four-bit step
@@ -322,7 +322,7 @@ struct QSoundDecoder::Impl
 		return cycle;
 	}
 
-	void keyOnPcm (int channel, std::uint32_t sampleTime)
+	void keyOnPcm (int channel, uint32_t sampleTime)
 	{
 		PcmVoice& voice = pcm[channel];
 		voice.keyed = true;
@@ -331,7 +331,7 @@ struct QSoundDecoder::Impl
 
 		// 0 means "no end": a looping voice, or one whose end is behind its start, is stopped by
 		// the rate or the volume going to zero, not by a deadline
-		const std::uint32_t duration = durationOf (voice);
+		const uint32_t duration = durationOf (voice);
 		voice.gateEnd = (duration > 0) ? sampleTime + duration : 0;
 		voice.cycleLength = cycleFor (voice);
 
@@ -346,7 +346,7 @@ struct QSoundDecoder::Impl
 
 	}
 
-	void keyOnAdpcm (int channel, std::uint32_t sampleTime)
+	void keyOnAdpcm (int channel, uint32_t sampleTime)
 	{
 		AdpcmVoice& voice = adpcm[channel];
 		voice.keyed = true;
@@ -359,7 +359,7 @@ struct QSoundDecoder::Impl
 		const double nibbles = (voice.latchEnd > voice.latchStart)
 								   ? 2.0 * (double) (voice.latchEnd - voice.latchStart)
 								   : 0.0;
-		voice.gateEnd = (nibbles > 0.0) ? sampleTime + (std::uint32_t) std::llround (nibbles /
+		voice.gateEnd = (nibbles > 0.0) ? sampleTime + (uint32_t) std::llround (nibbles /
 																					adpcmUnitsPerSecond()
 																					* streamRate)
 										: sampleTime + 1;
@@ -409,17 +409,17 @@ QSoundDecoder::~QSoundDecoder() = default;
 
 void QSoundDecoder::reset (const ChipConfig& config)
 {
-	[[maybe_unused]] const std::uint32_t clock = config.clockHz;
+	[[maybe_unused]] const uint32_t clock = config.clockHz;
 	[[maybe_unused]] const double sampleRate = config.timeBaseHz;
 	// the ROM belongs to the song, not to the clock
-	std::vector<std::uint8_t> rom = impl != nullptr ? std::move (impl->rom) : std::vector<std::uint8_t>();
-	const std::uint32_t romMask = impl != nullptr ? impl->romMask : 0u;
+	std::vector<uint8_t> rom = impl != nullptr ? std::move (impl->rom) : std::vector<uint8_t>();
+	const uint32_t romMask = impl != nullptr ? impl->romMask : 0u;
 
 	impl = std::make_unique<Impl>();
 
 	// a header that still carries the old 4 MHz clock means the same chip: normalise it the way
 	// libvgm does, so the decoder works with either form
-	std::uint32_t normalised = (clock > 100000) ? clock : kDefaultClock;
+	uint32_t normalised = (clock > 100000) ? clock : kDefaultClock;
 	if (normalised < kLegacyClockCeiling)
 	{
 		normalised *= kLegacyClockScale;
@@ -450,7 +450,7 @@ void QSoundDecoder::reset (const ChipConfig& config)
 	(void) adpcmRate;
 }
 
-void QSoundDecoder::setRom (std::vector<std::uint8_t> rom)
+void QSoundDecoder::setRom (std::vector<uint8_t> rom)
 {
 	impl->romMask = pow2Mask (rom.size());
 	impl->rom = std::move (rom);
@@ -460,8 +460,8 @@ void QSoundDecoder::setRom (std::vector<std::uint8_t> rom)
 void QSoundDecoder::write (const RegisterWrite& w)
 {
 	// the reader packs the command's two bytes into one word, high half first (ChipTypes.h)
-	const std::uint16_t value = w.value;
-	const std::uint8_t offset = w.reg;
+	const uint16_t value = w.value;
+	const uint8_t offset = w.reg;
 
 	if (offset < 0x80)
 	{
@@ -511,13 +511,13 @@ void QSoundDecoder::write (const RegisterWrite& w)
 			voice.phase = value;
 			break;
 		case 0x04:
-			voice.loopLength = (std::int16_t) value;
+			voice.loopLength = (int16_t) value;
 			break;
 		case 0x05:
-			voice.end = (std::int16_t) value;
+			voice.end = (int16_t) value;
 			break;
 		case 0x06:
-			voice.volume = (std::int16_t) value;
+			voice.volume = (int16_t) value;
 			if (value == 0)
 			{
 				voice.keyed = false;
@@ -528,7 +528,7 @@ void QSoundDecoder::write (const RegisterWrite& w)
 			}
 			break;
 		case 0x07:
-			voice.echo = (std::int16_t) value;
+			voice.echo = (int16_t) value;
 			break;
 		default:
 			break;
@@ -565,7 +565,7 @@ void QSoundDecoder::write (const RegisterWrite& w)
 			voice.bank = value;
 			break;
 		case 3:
-			voice.volume = (std::int16_t) value;
+			voice.volume = (int16_t) value;
 			break;
 		default:
 			break;
@@ -590,7 +590,7 @@ void QSoundDecoder::write (const RegisterWrite& w)
 	// 0x93 / 0xD9.. the echo and the Q1 filter: no notes live there
 }
 
-void QSoundDecoder::advance (std::uint32_t sampleTime)
+void QSoundDecoder::advance (uint32_t sampleTime)
 {
 	impl->now = sampleTime;
 

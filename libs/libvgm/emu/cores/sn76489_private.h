@@ -41,53 +41,53 @@ struct _SN76489_Context
 	DEV_DATA _devData;
 	SN76496_CFG cfg;
 	
-	UINT8 Mute;				/* per-channel muting */
+	uint8_t Mute;				/* per-channel muting */
 	
 	/* Variables */
 	float Clock;
 	float dClock;
-	UINT8 PSGStereo;
-	UINT32 NumClocksForSample;
-	UINT32 WhiteNoiseFeedback;
-	UINT8 SRWidth;
+	uint8_t PSGStereo;
+	uint32_t NumClocksForSample;
+	uint32_t WhiteNoiseFeedback;
+	uint8_t SRWidth;
 	
 	/* PSG registers: */
-	UINT16 Registers[8];	/* Tone, vol x4 */
-	UINT8 LatchedRegister;
-	UINT32 NoiseShiftRegister;
-	UINT16 NoiseFreq;		/* Noise channel signal generator frequency */
+	uint16_t Registers[8];	/* Tone, vol x4 */
+	uint8_t LatchedRegister;
+	uint32_t NoiseShiftRegister;
+	uint16_t NoiseFreq;		/* Noise channel signal generator frequency */
 	
 	/* Output calculation variables */
-	INT32 ToneFreqVals[4];	/* Frequency register values (counters) */
-	INT32 ToneFreqPos[4];	/* Frequency channel flip-flops */
+	int32_t ToneFreqVals[4];	/* Frequency register values (counters) */
+	int32_t ToneFreqPos[4];	/* Frequency channel flip-flops */
 	float IntermediatePos[4];	/* intermediate values used at boundaries between + and - (does not need double accuracy)*/
 	float ChannelState[4];	/* output state of each channel, before volume/stereo is applied */
 	
-	INT32 panning[4][2];	/* fake stereo */
+	int32_t panning[4][2];	/* fake stereo */
 	
-	UINT8 NgpFlags;			/* bit 7 - NGP Mode on/off, bit 0 - is 2nd NGP chip */
+	uint8_t NgpFlags;			/* bit 7 - NGP Mode on/off, bit 0 - is 2nd NGP chip */
 	SN76489_Context* NgpChip2;
 };
 
 /* Function prototypes */
-static SN76489_Context* SN76489_Init(UINT32 PSGClockValue, UINT32 SamplingRate);
+static SN76489_Context* SN76489_Init(uint32_t PSGClockValue, uint32_t SamplingRate);
 static void SN76489_ConnectT6W28(SN76489_Context* noisechip, SN76489_Context* tonechip);
 static void SN76489_Reset(SN76489_Context* chip);
 static void SN76489_Shutdown(SN76489_Context* chip);
-static void SN76489_Config(SN76489_Context* chip, UINT32 feedback, UINT8 sr_width);
-static void SN76489_Write(SN76489_Context* chip, UINT8 data);
-static void SN76489_GGStereoWrite(SN76489_Context* chip, UINT8 data);
-static void SN76489_Update(SN76489_Context* chip, UINT32 length, DEV_SMPL **buffer);
+static void SN76489_Config(SN76489_Context* chip, uint32_t feedback, uint8_t sr_width);
+static void SN76489_Write(SN76489_Context* chip, uint8_t data);
+static void SN76489_GGStereoWrite(SN76489_Context* chip, uint8_t data);
+static void SN76489_Update(SN76489_Context* chip, uint32_t length, DEV_SMPL **buffer);
 
 /* Non-standard getters and setters */
-static UINT32 SN76489_GetMute(SN76489_Context* chip);
-static void SN76489_SetMute(SN76489_Context* chip, UINT32 val);
+static uint32_t SN76489_GetMute(SN76489_Context* chip);
+static void SN76489_SetMute(SN76489_Context* chip, uint32_t val);
 
-static void SN76489_SetPanning(SN76489_Context* chip, INT16 ch0, INT16 ch1, INT16 ch2, INT16 ch3);
+static void SN76489_SetPanning(SN76489_Context* chip, int16_t ch0, int16_t ch1, int16_t ch2, int16_t ch3);
 
-static UINT8 device_start_sn76496_maxim(const SN76496_CFG* cfg, DEV_INFO* retDevInf);
-static void sn76496_w_maxim(SN76489_Context* chip, UINT8 reg, UINT8 data);
-static void sn76489_mute_maxim(SN76489_Context* chip, UINT32 MuteMask);
-static void sn76489_pan_maxim(SN76489_Context* chip, const INT16* PanVals);
+static uint8_t device_start_sn76496_maxim(const SN76496_CFG* cfg, DEV_INFO* retDevInf);
+static void sn76496_w_maxim(SN76489_Context* chip, uint8_t reg, uint8_t data);
+static void sn76489_mute_maxim(SN76489_Context* chip, uint32_t MuteMask);
+static void sn76489_pan_maxim(SN76489_Context* chip, const int16_t* PanVals);
 
 #endif	// __SN76489_PRIVATE_H__

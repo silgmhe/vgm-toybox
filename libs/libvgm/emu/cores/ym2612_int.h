@@ -68,7 +68,7 @@ typedef struct channel__ {
 	int KC[4];				// Key Code = valeur fonction de la fréquence (voir KSR pour les slots, KSR = KC >> KSR_S)
 	struct slot__ SLOT[4];	// four slot.operators = les 4 slots de la voie
 	//int FFlag;				// Frequency step recalculation flag
-	UINT8 Mute;				// Maxim: channel mute flag
+	uint8_t Mute;				// Maxim: channel mute flag
 } channel_;
 
 struct ym2612__ {
@@ -89,15 +89,15 @@ struct ym2612__ {
 	int TimerB;			// timerB limit = valeur jusqu'à laquelle le timer B doit compter
 	int TimerBL;
 	int TimerBcnt;		// timerB counter = valeur courante du Timer B
-	UINT8 Mode;			// Mode actuel des voie 3 et 6 (normal / spécial)
-	UINT8 DAC;			// DAC enabled flag
+	uint8_t Mode;			// Mode actuel des voie 3 et 6 (normal / spécial)
+	uint8_t DAC;			// DAC enabled flag
 	int DACdata;		// DAC data
 	int dac_highpass;
 	double Frequence;	// Fréquence de base, se calcul par rapport à l'horlage et au sample rate
 	unsigned int Inter_Cnt;			// Interpolation Counter
 	unsigned int Inter_Step;		// Interpolation Step
 	struct channel__ CHANNEL[6];	// Les 6 voies du YM2612
-	UINT8 REG[2][0x100];	// Sauvegardes des valeurs de tout les registres, c'est facultatif
+	uint8_t REG[2][0x100];	// Sauvegardes des valeurs de tout les registres, c'est facultatif
 							// cela nous rend le débuggage plus facile
 
 	// --- tables ---
@@ -115,50 +115,50 @@ struct ym2612__ {
 
 	int LFO_INC_TAB[8];             // LFO step table
 
-	UINT8 DAC_Mute;
+	uint8_t DAC_Mute;
 
 	/* Gens */
-	UINT8 Enable_SSGEG; // enable SSG-EG envelope (causes inacurate sound sometimes - rodrigo)
-	UINT8 DAC_Highpass_Enable; // sometimes it creates a terrible noise
+	uint8_t Enable_SSGEG; // enable SSG-EG envelope (causes inacurate sound sometimes - rodrigo)
+	uint8_t DAC_Highpass_Enable; // sometimes it creates a terrible noise
 	/* end */
 };
 
 // used for forward...
-static void Update_Chan_Algo0(ym2612_ *YM2612, channel_ *CH, DEV_SMPL **buf, UINT32 lenght);
-static void Update_Chan_Algo1(ym2612_ *YM2612, channel_ *CH, DEV_SMPL **buf, UINT32 lenght);
-static void Update_Chan_Algo2(ym2612_ *YM2612, channel_ *CH, DEV_SMPL **buf, UINT32 lenght);
-static void Update_Chan_Algo3(ym2612_ *YM2612, channel_ *CH, DEV_SMPL **buf, UINT32 lenght);
-static void Update_Chan_Algo4(ym2612_ *YM2612, channel_ *CH, DEV_SMPL **buf, UINT32 lenght);
-static void Update_Chan_Algo5(ym2612_ *YM2612, channel_ *CH, DEV_SMPL **buf, UINT32 lenght);
-static void Update_Chan_Algo6(ym2612_ *YM2612, channel_ *CH, DEV_SMPL **buf, UINT32 lenght);
-static void Update_Chan_Algo7(ym2612_ *YM2612, channel_ *CH, DEV_SMPL **buf, UINT32 lenght);
+static void Update_Chan_Algo0(ym2612_ *YM2612, channel_ *CH, DEV_SMPL **buf, uint32_t lenght);
+static void Update_Chan_Algo1(ym2612_ *YM2612, channel_ *CH, DEV_SMPL **buf, uint32_t lenght);
+static void Update_Chan_Algo2(ym2612_ *YM2612, channel_ *CH, DEV_SMPL **buf, uint32_t lenght);
+static void Update_Chan_Algo3(ym2612_ *YM2612, channel_ *CH, DEV_SMPL **buf, uint32_t lenght);
+static void Update_Chan_Algo4(ym2612_ *YM2612, channel_ *CH, DEV_SMPL **buf, uint32_t lenght);
+static void Update_Chan_Algo5(ym2612_ *YM2612, channel_ *CH, DEV_SMPL **buf, uint32_t lenght);
+static void Update_Chan_Algo6(ym2612_ *YM2612, channel_ *CH, DEV_SMPL **buf, uint32_t lenght);
+static void Update_Chan_Algo7(ym2612_ *YM2612, channel_ *CH, DEV_SMPL **buf, uint32_t lenght);
 
-static void Update_Chan_Algo0_LFO(ym2612_ *YM2612, channel_ *CH, DEV_SMPL **buf, UINT32 lenght);
-static void Update_Chan_Algo1_LFO(ym2612_ *YM2612, channel_ *CH, DEV_SMPL **buf, UINT32 lenght);
-static void Update_Chan_Algo2_LFO(ym2612_ *YM2612, channel_ *CH, DEV_SMPL **buf, UINT32 lenght);
-static void Update_Chan_Algo3_LFO(ym2612_ *YM2612, channel_ *CH, DEV_SMPL **buf, UINT32 lenght);
-static void Update_Chan_Algo4_LFO(ym2612_ *YM2612, channel_ *CH, DEV_SMPL **buf, UINT32 lenght);
-static void Update_Chan_Algo5_LFO(ym2612_ *YM2612, channel_ *CH, DEV_SMPL **buf, UINT32 lenght);
-static void Update_Chan_Algo6_LFO(ym2612_ *YM2612, channel_ *CH, DEV_SMPL **buf, UINT32 lenght);
-static void Update_Chan_Algo7_LFO(ym2612_ *YM2612, channel_ *CH, DEV_SMPL **buf, UINT32 lenght);
+static void Update_Chan_Algo0_LFO(ym2612_ *YM2612, channel_ *CH, DEV_SMPL **buf, uint32_t lenght);
+static void Update_Chan_Algo1_LFO(ym2612_ *YM2612, channel_ *CH, DEV_SMPL **buf, uint32_t lenght);
+static void Update_Chan_Algo2_LFO(ym2612_ *YM2612, channel_ *CH, DEV_SMPL **buf, uint32_t lenght);
+static void Update_Chan_Algo3_LFO(ym2612_ *YM2612, channel_ *CH, DEV_SMPL **buf, uint32_t lenght);
+static void Update_Chan_Algo4_LFO(ym2612_ *YM2612, channel_ *CH, DEV_SMPL **buf, uint32_t lenght);
+static void Update_Chan_Algo5_LFO(ym2612_ *YM2612, channel_ *CH, DEV_SMPL **buf, uint32_t lenght);
+static void Update_Chan_Algo6_LFO(ym2612_ *YM2612, channel_ *CH, DEV_SMPL **buf, uint32_t lenght);
+static void Update_Chan_Algo7_LFO(ym2612_ *YM2612, channel_ *CH, DEV_SMPL **buf, uint32_t lenght);
 
-static void Update_Chan_Algo0_Int(ym2612_ *YM2612, channel_ *CH, DEV_SMPL **buf, UINT32 lenght);
-static void Update_Chan_Algo1_Int(ym2612_ *YM2612, channel_ *CH, DEV_SMPL **buf, UINT32 lenght);
-static void Update_Chan_Algo2_Int(ym2612_ *YM2612, channel_ *CH, DEV_SMPL **buf, UINT32 lenght);
-static void Update_Chan_Algo3_Int(ym2612_ *YM2612, channel_ *CH, DEV_SMPL **buf, UINT32 lenght);
-static void Update_Chan_Algo4_Int(ym2612_ *YM2612, channel_ *CH, DEV_SMPL **buf, UINT32 lenght);
-static void Update_Chan_Algo5_Int(ym2612_ *YM2612, channel_ *CH, DEV_SMPL **buf, UINT32 lenght);
-static void Update_Chan_Algo6_Int(ym2612_ *YM2612, channel_ *CH, DEV_SMPL **buf, UINT32 lenght);
-static void Update_Chan_Algo7_Int(ym2612_ *YM2612, channel_ *CH, DEV_SMPL **buf, UINT32 lenght);
+static void Update_Chan_Algo0_Int(ym2612_ *YM2612, channel_ *CH, DEV_SMPL **buf, uint32_t lenght);
+static void Update_Chan_Algo1_Int(ym2612_ *YM2612, channel_ *CH, DEV_SMPL **buf, uint32_t lenght);
+static void Update_Chan_Algo2_Int(ym2612_ *YM2612, channel_ *CH, DEV_SMPL **buf, uint32_t lenght);
+static void Update_Chan_Algo3_Int(ym2612_ *YM2612, channel_ *CH, DEV_SMPL **buf, uint32_t lenght);
+static void Update_Chan_Algo4_Int(ym2612_ *YM2612, channel_ *CH, DEV_SMPL **buf, uint32_t lenght);
+static void Update_Chan_Algo5_Int(ym2612_ *YM2612, channel_ *CH, DEV_SMPL **buf, uint32_t lenght);
+static void Update_Chan_Algo6_Int(ym2612_ *YM2612, channel_ *CH, DEV_SMPL **buf, uint32_t lenght);
+static void Update_Chan_Algo7_Int(ym2612_ *YM2612, channel_ *CH, DEV_SMPL **buf, uint32_t lenght);
 
-static void Update_Chan_Algo0_LFO_Int(ym2612_ *YM2612, channel_ *CH, DEV_SMPL **buf, UINT32 lenght);
-static void Update_Chan_Algo1_LFO_Int(ym2612_ *YM2612, channel_ *CH, DEV_SMPL **buf, UINT32 lenght);
-static void Update_Chan_Algo2_LFO_Int(ym2612_ *YM2612, channel_ *CH, DEV_SMPL **buf, UINT32 lenght);
-static void Update_Chan_Algo3_LFO_Int(ym2612_ *YM2612, channel_ *CH, DEV_SMPL **buf, UINT32 lenght);
-static void Update_Chan_Algo4_LFO_Int(ym2612_ *YM2612, channel_ *CH, DEV_SMPL **buf, UINT32 lenght);
-static void Update_Chan_Algo5_LFO_Int(ym2612_ *YM2612, channel_ *CH, DEV_SMPL **buf, UINT32 lenght);
-static void Update_Chan_Algo6_LFO_Int(ym2612_ *YM2612, channel_ *CH, DEV_SMPL **buf, UINT32 lenght);
-static void Update_Chan_Algo7_LFO_Int(ym2612_ *YM2612, channel_ *CH, DEV_SMPL **buf, UINT32 lenght);
+static void Update_Chan_Algo0_LFO_Int(ym2612_ *YM2612, channel_ *CH, DEV_SMPL **buf, uint32_t lenght);
+static void Update_Chan_Algo1_LFO_Int(ym2612_ *YM2612, channel_ *CH, DEV_SMPL **buf, uint32_t lenght);
+static void Update_Chan_Algo2_LFO_Int(ym2612_ *YM2612, channel_ *CH, DEV_SMPL **buf, uint32_t lenght);
+static void Update_Chan_Algo3_LFO_Int(ym2612_ *YM2612, channel_ *CH, DEV_SMPL **buf, uint32_t lenght);
+static void Update_Chan_Algo4_LFO_Int(ym2612_ *YM2612, channel_ *CH, DEV_SMPL **buf, uint32_t lenght);
+static void Update_Chan_Algo5_LFO_Int(ym2612_ *YM2612, channel_ *CH, DEV_SMPL **buf, uint32_t lenght);
+static void Update_Chan_Algo6_LFO_Int(ym2612_ *YM2612, channel_ *CH, DEV_SMPL **buf, uint32_t lenght);
+static void Update_Chan_Algo7_LFO_Int(ym2612_ *YM2612, channel_ *CH, DEV_SMPL **buf, uint32_t lenght);
 
 static void Env_Attack_Next(ym2612_ *YM2612, slot_ *SL);
 static void Env_Decay_Next(ym2612_ *YM2612, slot_ *SL);

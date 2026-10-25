@@ -19,9 +19,9 @@
 #endif
 
 
-static UINT8 device_start_ymf262_mame(const DEV_GEN_CFG* cfg, DEV_INFO* retDevInf);
-static UINT8 device_start_ymf262_adlibemu(const DEV_GEN_CFG* cfg, DEV_INFO* retDevInf);
-static UINT8 device_start_ymf262_nuked(const DEV_GEN_CFG* cfg, DEV_INFO* retDevInf);
+static uint8_t device_start_ymf262_mame(const DEV_GEN_CFG* cfg, DEV_INFO* retDevInf);
+static uint8_t device_start_ymf262_adlibemu(const DEV_GEN_CFG* cfg, DEV_INFO* retDevInf);
+static uint8_t device_start_ymf262_nuked(const DEV_GEN_CFG* cfg, DEV_INFO* retDevInf);
 
 
 
@@ -119,7 +119,7 @@ static const char* DeviceName(const DEV_GEN_CFG* devCfg)
 }
 
 #define DEV_CHN_COUNT	23
-static UINT16 DeviceChannels(const DEV_GEN_CFG* devCfg)
+static uint16_t DeviceChannels(const DEV_GEN_CFG* devCfg)
 {
 	return DEV_CHN_COUNT;
 }
@@ -163,11 +163,11 @@ const DEV_DECL sndDev_YMF262 =
 
 
 #ifdef EC_YMF262_MAME
-static UINT8 device_start_ymf262_mame(const DEV_GEN_CFG* cfg, DEV_INFO* retDevInf)
+static uint8_t device_start_ymf262_mame(const DEV_GEN_CFG* cfg, DEV_INFO* retDevInf)
 {
 	void* chip;
 	DEV_DATA* devData;
-	UINT32 rate;
+	uint32_t rate;
 	
 	rate = cfg->clock / 288;
 	SRATE_CUSTOM_HIGHEST(cfg->srMode, rate, cfg->smplRate);
@@ -189,11 +189,11 @@ static UINT8 device_start_ymf262_mame(const DEV_GEN_CFG* cfg, DEV_INFO* retDevIn
 #endif
 
 #ifdef EC_YMF262_ADLIBEMU
-static UINT8 device_start_ymf262_adlibemu(const DEV_GEN_CFG* cfg, DEV_INFO* retDevInf)
+static uint8_t device_start_ymf262_adlibemu(const DEV_GEN_CFG* cfg, DEV_INFO* retDevInf)
 {
 	void* chip;
 	DEV_DATA* devData;
-	UINT32 rate;
+	uint32_t rate;
 	
 	rate = cfg->clock / 288;
 	SRATE_CUSTOM_HIGHEST(cfg->srMode, rate, cfg->smplRate);
@@ -210,11 +210,11 @@ static UINT8 device_start_ymf262_adlibemu(const DEV_GEN_CFG* cfg, DEV_INFO* retD
 #endif
 
 #ifdef EC_YMF262_NUKED
-static UINT8 device_start_ymf262_nuked(const DEV_GEN_CFG* cfg, DEV_INFO* retDevInf)
+static uint8_t device_start_ymf262_nuked(const DEV_GEN_CFG* cfg, DEV_INFO* retDevInf)
 {
 	void* chip;
 	DEV_DATA* devData;
-	UINT32 rate;
+	uint32_t rate;
 	
 	rate = cfg->clock / 288;
 	SRATE_CUSTOM_HIGHEST(cfg->srMode, rate, cfg->smplRate);

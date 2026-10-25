@@ -76,21 +76,21 @@ OKI M5255, Winbond WF19054, JFC 95101, File KC89C72, Toshiba T7766A : difference
 
 typedef struct _ay8910_context ay8910_context;
 
-UINT8 device_start_ay8910_mame(const AY8910_CFG* cfg, DEV_INFO* retDevInf);
-UINT32 ay8910_start(void **chip, UINT32 clock, UINT8 ay_type, UINT8 ay_flags);
+uint8_t device_start_ay8910_mame(const AY8910_CFG* cfg, DEV_INFO* retDevInf);
+uint32_t ay8910_start(void **chip, uint32_t clock, uint8_t ay_type, uint8_t ay_flags);
 
 void ay8910_stop(void *chip);
 void ay8910_reset(void *chip);
-void ay8910_set_clock(void *chip, UINT32 clock);
-UINT32 ay8910_get_sample_rate(void *chip);
-void ay8910_write(void *chip, UINT8 addr, UINT8 data);
-UINT8 ay8910_read(void *chip, UINT8 addr);
-void ay8910_write_reg(ay8910_context *psg, UINT8 r, UINT8 v);
+void ay8910_set_clock(void *chip, uint32_t clock);
+uint32_t ay8910_get_sample_rate(void *chip);
+void ay8910_write(void *chip, uint8_t addr, uint8_t data);
+uint8_t ay8910_read(void *chip, uint8_t addr);
+void ay8910_write_reg(ay8910_context *psg, uint8_t r, uint8_t v);
 
-void ay8910_update_one(void *param, UINT32 samples, DEV_SMPL **outputs);
+void ay8910_update_one(void *param, uint32_t samples, DEV_SMPL **outputs);
 
-void ay8910_set_mute_mask(void *chip, UINT32 MuteMask);
-void ay8910_set_stereo_mask(void *chip, UINT32 StereoMask);
+void ay8910_set_mute_mask(void *chip, uint32_t MuteMask);
+void ay8910_set_stereo_mask(void *chip, uint32_t StereoMask);
 void ay8910_set_srchg_cb(void *chip, DEVCB_SRATE_CHG CallbackFunc, void* DataPtr);
 void ay8910_set_log_cb(void* chip, DEVCB_LOG func, void* param);
 

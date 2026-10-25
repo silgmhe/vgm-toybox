@@ -9,7 +9,7 @@ namespace toybox::chips
 namespace
 {
 	// 64 samples is ~1.5 ms: finer than a MIDI tick and far cheaper than per-sample polling
-	constexpr std::uint32_t kPollStep = 64;
+	constexpr uint32_t kPollStep = 64;
 
 	// A bend smaller than this is inaudible and would only cost MIDI bandwidth: a shallow
 	// vibrato sampled at the poll rate crosses it a few dozen times a second, not hundreds.
@@ -24,14 +24,14 @@ namespace
 
 ExtractedPerformance extractPerformance (IChipDecoder& decoder,
 										 const std::vector<RegisterWrite>& writes,
-										 std::uint32_t totalSamples)
+										 uint32_t totalSamples)
 {
 	struct OpenNote
 	{
 		bool active = false;
 		int note = -1;
 		int fine = 0;
-		std::uint32_t start = 0;
+		uint32_t start = 0;
 		int velocity = 100;
 		int transposeCents = 0;
 		int rootCents = 0;
@@ -43,11 +43,11 @@ ExtractedPerformance extractPerformance (IChipDecoder& decoder,
 
 	// The key-on counter of each channel as it was at the last poll: a sampled voice that is
 	// retriggered at the same pitch is a new note even though nothing else changed.
-	std::vector<std::uint32_t> lastKeyOns ((std::size_t) std::max (decoder.channelCount(), 0), 0);
+	std::vector<uint32_t> lastKeyOns ((std::size_t) std::max (decoder.channelCount(), 0), 0);
 
 	std::size_t nextWrite = 0;
 
-	auto closeNote = [&] (int channel, std::uint32_t end)
+	auto closeNote = [&] (int channel, uint32_t end)
 	{
 		OpenNote& current = open[(std::size_t) channel];
 		if (! current.active)
@@ -60,8 +60,8 @@ ExtractedPerformance extractPerformance (IChipDecoder& decoder,
 			NoteEvent event;
 			event.startSample = current.start;
 			event.endSample = end;
-			event.note = (std::uint8_t) current.note;
-			event.velocity = (std::uint8_t) current.velocity;
+			event.note = (uint8_t) current.note;
+			event.velocity = (uint8_t) current.velocity;
 			event.logicalChannel = channel;
 			event.channelKind = decoder.channelKind (channel);
 			event.isDrum = decoder.isDrum (channel);
@@ -75,7 +75,7 @@ ExtractedPerformance extractPerformance (IChipDecoder& decoder,
 	};
 
 	// a new note always starts on an exact bend, whatever the previous one left behind
-	auto openNote = [&] (int channel, std::uint32_t time, int note, int fine, int volume,
+	auto openNote = [&] (int channel, uint32_t time, int note, int fine, int volume,
 						 const ChannelState& state)
 	{
 		OpenNote& current = open[(std::size_t) channel];
@@ -91,12 +91,12 @@ ExtractedPerformance extractPerformance (IChipDecoder& decoder,
 		PitchEvent bend;
 		bend.sampleTime = time;
 		bend.logicalChannel = channel;
-		bend.cents = (std::int16_t) std::clamp (fine, -32767, 32767);
+		bend.cents = (int16_t) std::clamp (fine, -32767, 32767);
 		result.bends.push_back (bend);
 	};
 
-	const std::uint32_t lastSample = std::max (totalSamples, 1u);
-	for (std::uint32_t time = 0; time <= lastSample; time += kPollStep)
+	const uint32_t lastSample = std::max (totalSamples, 1u);
+	for (uint32_t time = 0; time <= lastSample; time += kPollStep)
 	{
 		while (nextWrite < writes.size() && writes[nextWrite].sampleTime <= time)
 		{
@@ -140,7 +140,7 @@ ExtractedPerformance extractPerformance (IChipDecoder& decoder,
 					PitchEvent bend;
 					bend.sampleTime = time;
 					bend.logicalChannel = channel;
-					bend.cents = (std::int16_t) std::clamp (finePitch, -32767, 32767);
+					bend.cents = (int16_t) std::clamp (finePitch, -32767, 32767);
 					result.bends.push_back (bend);
 				}
 				continue;
@@ -172,7 +172,7 @@ ExtractedPerformance extractPerformance (IChipDecoder& decoder,
 
 std::vector<NoteEvent> extractNotes (IChipDecoder& decoder,
 									 const std::vector<RegisterWrite>& writes,
-									 std::uint32_t totalSamples)
+									 uint32_t totalSamples)
 {
 	return extractPerformance (decoder, writes, totalSamples).notes;
 }

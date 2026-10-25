@@ -654,33 +654,33 @@ struct _ay8910_context
 	
 	// internal state
 	psg_type_t type;
-	UINT8 streams;
-	UINT8 ioports;
-	//UINT8 ready;
-	UINT8 active;
-	UINT8 register_latch;
-	UINT8 regs[16];
-	UINT8 last_enable;
-	INT32 count[NUM_CHANNELS];
-	UINT8 output[NUM_CHANNELS];
-	UINT8 prescale_noise;
-	INT32 count_noise;
-	INT32 count_env;
-	INT8 env_step;
-	UINT32 env_volume;
-	UINT8 hold,alternate,attack,holding;
-	INT32 rng;
-	UINT8 env_step_mask;
+	uint8_t streams;
+	uint8_t ioports;
+	//uint8_t ready;
+	uint8_t active;
+	uint8_t register_latch;
+	uint8_t regs[16];
+	uint8_t last_enable;
+	int32_t count[NUM_CHANNELS];
+	uint8_t output[NUM_CHANNELS];
+	uint8_t prescale_noise;
+	int32_t count_noise;
+	int32_t count_env;
+	int8_t env_step;
+	uint32_t env_volume;
+	uint8_t hold,alternate,attack,holding;
+	int32_t rng;
+	uint8_t env_step_mask;
 	/* init parameters ... */
 	int step;
-	UINT8 zero_is_off;
-	UINT8 vol_enabled[NUM_CHANNELS];
+	uint8_t zero_is_off;
+	uint8_t vol_enabled[NUM_CHANNELS];
 	const ay_ym_param *par;
 	const ay_ym_param *par_env;
-	INT32 vol_table[NUM_CHANNELS][16];
-	INT32 env_table[NUM_CHANNELS][32];
+	int32_t vol_table[NUM_CHANNELS][16];
+	int32_t env_table[NUM_CHANNELS][32];
 #if ENABLE_CUSTOM_OUTPUTS
-	INT32 vol3d_table[8*32*32*32];
+	int32_t vol3d_table[8*32*32*32];
 #endif
 	int flags;          /* Flags */
 	int res_load[3];    /* Load on channel in ohms */
@@ -689,12 +689,12 @@ struct _ay8910_context
 	//devcb_write8 port_a_write_cb;
 	//devcb_write8 port_b_write_cb;
 	
-	UINT8 StereoMask[NUM_CHANNELS];
-	UINT32 MuteMsk[NUM_CHANNELS];
+	uint8_t StereoMask[NUM_CHANNELS];
+	uint32_t MuteMsk[NUM_CHANNELS];
 	
-	UINT32 clock;
-	UINT8 chip_type;
-	UINT8 chip_flags;
+	uint32_t clock;
+	uint8_t chip_type;
+	uint8_t chip_flags;
 	
 	DEVCB_SRATE_CHG SmpRateFunc;
 	void* SmpRateData;
@@ -856,7 +856,7 @@ static const mosfet_param ay8910_mosfet_param =
  *************************************/
 
 #if ENABLE_CUSTOM_OUTPUTS
-INLINE void build_3D_table(double rl, const ay_ym_param *par, const ay_ym_param *par_env, int normalize, double factor, int zero_is_off, INT32 *tab)
+INLINE void build_3D_table(double rl, const ay_ym_param *par, const ay_ym_param *par_env, int normalize, double factor, int zero_is_off, int32_t *tab)
 {
 	int j, j1, j2, j3, e, indx;
 	double rt, rw, n;
@@ -920,7 +920,7 @@ INLINE void build_3D_table(double rl, const ay_ym_param *par, const ay_ym_param 
 }
 #endif
 
-INLINE void build_single_table(double rl, const ay_ym_param *par, int normalize, INT32 *tab, int zero_is_off)
+INLINE void build_single_table(double rl, const ay_ym_param *par, int normalize, int32_t *tab, int zero_is_off)
 {
 	int j;
 	double rt;
@@ -952,20 +952,20 @@ INLINE void build_single_table(double rl, const ay_ym_param *par, int normalize,
 			/* The following line generates values that cause clicks when starting/pausing/stopping
 				because there're off (the center is at zero, not the base).
 				That's quite bad for a player.
-			tab[j] = (INT32)(MAX_OUTPUT * (((temp[j] - min)/(max-min)) - 0.25) * 0.5);
+			tab[j] = (int32_t)(MAX_OUTPUT * (((temp[j] - min)/(max-min)) - 0.25) * 0.5);
 			*/
-			tab[j] = (INT32)(MAX_OUTPUT * ((temp[j] - min)/(max-min)) / NUM_CHANNELS);
+			tab[j] = (int32_t)(MAX_OUTPUT * ((temp[j] - min)/(max-min)) / NUM_CHANNELS);
 	}
 	else
 	{
 		for (j=0; j < par->res_count; j++)
-			tab[j] = (INT32)(MAX_OUTPUT * temp[j] / NUM_CHANNELS);
+			tab[j] = (int32_t)(MAX_OUTPUT * temp[j] / NUM_CHANNELS);
 	}
 
 }
 
 #if ENABLE_CUSTOM_OUTPUTS
-INLINE void build_mosfet_resistor_table(const mosfet_param *par, const double rd, INT32 *tab)
+INLINE void build_mosfet_resistor_table(const mosfet_param *par, const double rd, int32_t *tab)
 {
 	int j;
 
@@ -989,7 +989,7 @@ INLINE void build_mosfet_resistor_table(const mosfet_param *par, const double rd
 }
 
 
-INLINE UINT16 mix_3D(ay8910_context *psg)
+INLINE uint16_t mix_3D(ay8910_context *psg)
 {
 	int indx = 0, chan;
 
@@ -1019,7 +1019,7 @@ INLINE UINT16 mix_3D(ay8910_context *psg)
  *
  *************************************/
 
-void ay8910_write_reg(ay8910_context *psg, UINT8 r, UINT8 v)
+void ay8910_write_reg(ay8910_context *psg, uint8_t r, uint8_t v)
 {
 	//if (r >= 11 && r <= 13 ) printf("%d %x %02x\n", PSG->index, r, v);
 	psg->regs[r] = v;
@@ -1042,7 +1042,7 @@ void ay8910_write_reg(ay8910_context *psg, UINT8 r, UINT8 v)
 			break;
 		case AY_ENABLE:
 			{
-				UINT8 enable = psg->regs[AY_ENABLE] & 0x40;
+				uint8_t enable = psg->regs[AY_ENABLE] & 0x40;
 				if (enable != (psg->last_enable & 0x40))
 				{
 					// output is high-impedance if port is set to input
@@ -1111,11 +1111,11 @@ void ay8910_write_reg(ay8910_context *psg, UINT8 r, UINT8 v)
 	}
 }
 
-void ay8910_update_one(void *param, UINT32 samples, DEV_SMPL **outputs)
+void ay8910_update_one(void *param, uint32_t samples, DEV_SMPL **outputs)
 {
 	ay8910_context *psg = (ay8910_context *)param;
 	int chan;
-	UINT32 cur_smpl;
+	uint32_t cur_smpl;
 	DEV_SMPL *bufL = outputs[0];
 	DEV_SMPL *bufR = outputs[1];
 	DEV_SMPL chnout;
@@ -1302,7 +1302,7 @@ static void build_mixer_table(ay8910_context *psg)
  *
  *************************************/
 
-static void ay8910_set_type(ay8910_context *info, UINT8 chip_type)
+static void ay8910_set_type(ay8910_context *info, uint8_t chip_type)
 {
 	info->chip_type = chip_type;
 	if ((chip_type & 0xF0) == 0x20)
@@ -1366,11 +1366,11 @@ static void ay8910_set_type(ay8910_context *info, UINT8 chip_type)
 	return;
 }
 
-UINT8 device_start_ay8910_mame(const AY8910_CFG* cfg, DEV_INFO* retDevInf)
+uint8_t device_start_ay8910_mame(const AY8910_CFG* cfg, DEV_INFO* retDevInf)
 {
 	void* chip;
 	DEV_DATA* devData;
-	UINT32 rate;
+	uint32_t rate;
 	
 	rate = ay8910_start(&chip, cfg->_genCfg.clock, cfg->chipType, cfg->chipFlags);
 	if (chip == NULL)
@@ -1382,7 +1382,7 @@ UINT8 device_start_ay8910_mame(const AY8910_CFG* cfg, DEV_INFO* retDevInf)
 	return 0x00;
 }
 
-UINT32 ay8910_start(void **chip, UINT32 clock, UINT8 ay_type, UINT8 ay_flags)
+uint32_t ay8910_start(void **chip, uint32_t clock, uint8_t ay_type, uint8_t ay_flags)
 {
 	ay8910_context *info;
 
@@ -1428,7 +1428,7 @@ void ay8910_stop(void *chip)
 void ay8910_reset(void *chip)
 {
 	ay8910_context *psg = (ay8910_context *)chip;
-	UINT8 i;
+	uint8_t i;
 
 	psg->active = 0;
 	psg->register_latch = 0;
@@ -1464,7 +1464,7 @@ void ay8910_reset(void *chip)
 #endif
 }
 
-void ay8910_set_clock(void *chip, UINT32 clock)
+void ay8910_set_clock(void *chip, uint32_t clock)
 {
 	ay8910_context *psg = (ay8910_context *)chip;
 	
@@ -1475,10 +1475,10 @@ void ay8910_set_clock(void *chip, UINT32 clock)
 	return;
 }
 
-UINT32 ay8910_get_sample_rate(void *chip)
+uint32_t ay8910_get_sample_rate(void *chip)
 {
 	ay8910_context *psg = (ay8910_context *)chip;
-	UINT32 master_clock = psg->clock;
+	uint32_t master_clock = psg->clock;
 	
 	if (psg->type == PSG_TYPE_YM)
 	{
@@ -1491,7 +1491,7 @@ UINT32 ay8910_get_sample_rate(void *chip)
 	return master_clock / 8;
 }
 
-void ay8910_write(void *chip, UINT8 addr, UINT8 data)
+void ay8910_write(void *chip, uint8_t addr, uint8_t data)
 {
 	ay8910_context *psg = (ay8910_context *)chip;
 
@@ -1518,10 +1518,10 @@ void ay8910_write(void *chip, UINT8 addr, UINT8 data)
 	}
 }
 
-UINT8 ay8910_read(void *chip, UINT8 addr)
+uint8_t ay8910_read(void *chip, uint8_t addr)
 {
 	ay8910_context *psg = (ay8910_context *)chip;
-	UINT8 r = psg->register_latch;
+	uint8_t r = psg->register_latch;
 
 	if (!psg->active) return 0xff; // high impedance
 
@@ -1564,14 +1564,14 @@ UINT8 ay8910_read(void *chip, UINT8 addr)
 	- YM2149: no anomaly
 	*/
 	if (psg->chip_type == AYTYPE_AY8914) {
-		const UINT8 mask[0x10]={
+		const uint8_t mask[0x10]={
 			0xff,0x0f,0xff,0x0f,0xff,0x0f,0x1f,0xff,0x3f,0x3f,0x3f,0xff,0xff,0x0f,0xff,0xff
 		};
 		return psg->regs[r] & mask[r];
 	}
 	//else if (psg->chip_type == AYTYPE_AY8910) {
 	else if (psg->type == PSG_TYPE_AY) {
-		const UINT8 mask[0x10]={
+		const uint8_t mask[0x10]={
 			0xff,0x0f,0xff,0x0f,0xff,0x0f,0x1f,0xff,0x1f,0x1f,0x1f,0xff,0xff,0x0f,0xff,0xff
 		};
 		return psg->regs[r] & mask[r];
@@ -1579,10 +1579,10 @@ UINT8 ay8910_read(void *chip, UINT8 addr)
 	else return psg->regs[r];
 }
 
-void ay8910_set_mute_mask(void *chip, UINT32 MuteMask)
+void ay8910_set_mute_mask(void *chip, uint32_t MuteMask)
 {
 	ay8910_context *psg = (ay8910_context *)chip;
-	UINT8 CurChn;
+	uint8_t CurChn;
 	
 	for (CurChn = 0; CurChn < NUM_CHANNELS; CurChn ++)
 		psg->MuteMsk[CurChn] = (MuteMask & (1 << CurChn)) ? 0 : ~0;
@@ -1590,10 +1590,10 @@ void ay8910_set_mute_mask(void *chip, UINT32 MuteMask)
 	return;
 }
 
-void ay8910_set_stereo_mask(void *chip, UINT32 StereoMask)
+void ay8910_set_stereo_mask(void *chip, uint32_t StereoMask)
 {
 	ay8910_context *psg = (ay8910_context *)chip;
-	UINT8 CurChn;
+	uint8_t CurChn;
 	
 	for (CurChn = 0; CurChn < NUM_CHANNELS; CurChn ++)
 	{

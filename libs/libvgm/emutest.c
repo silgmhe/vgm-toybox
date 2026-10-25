@@ -14,8 +14,8 @@ int main(int argc, char* argv[])
 	SN76496_CFG snCfg;
 	DEV_INFO snDefInf;
 	DEVFUNC_WRITE_A8D8 snWrite;
-	UINT8 retVal;
-	UINT8 curReg;
+	uint8_t retVal;
+	uint8_t curReg;
 	
 	devCfg.emuCore = 0;	// default core
 	devCfg.srMode = DEVRI_SRMODE_NATIVE;
@@ -48,10 +48,10 @@ int main(int argc, char* argv[])
 	snWrite(snDefInf.dataPtr, 0, 0xF0 | 0x00);
 	
 	{
-		UINT32 smplCount;
+		uint32_t smplCount;
 		DEV_SMPL* smplData[2];
 		FILE* hFile;
-		UINT32 curSmpl;
+		uint32_t curSmpl;
 		
 		smplCount = snDefInf.sampleRate;
 		smplData[0] = (DEV_SMPL*)malloc(smplCount * sizeof(DEV_SMPL));

@@ -8,7 +8,7 @@ extern "C" {
 #include "../stdtype.h"
 #include "DataLoader.h"
 
-DATA_LOADER *MemoryLoader_Init(const UINT8 *buffer, UINT32 length);
+DATA_LOADER *MemoryLoader_Init(const uint8_t *buffer, uint32_t length);
 #define MemoryLoader_Load				DataLoader_Load
 #define MemoryLoader_Reset				DataLoader_Reset
 #define MemoryLoader_GetData			DataLoader_GetData

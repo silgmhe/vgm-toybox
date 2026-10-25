@@ -40,19 +40,19 @@
 #include "qsound_mame.h"
 
 
-static void qsound_update(void *param, UINT32 samples, DEV_SMPL **outputs);
-static UINT8 device_start_qsound(const DEV_GEN_CFG* cfg, DEV_INFO* retDevInf);
+static void qsound_update(void *param, uint32_t samples, DEV_SMPL **outputs);
+static uint8_t device_start_qsound(const DEV_GEN_CFG* cfg, DEV_INFO* retDevInf);
 static void device_stop_qsound(void *info);
 static void device_reset_qsound(void *info);
 
-static void qsound_w(void *info, UINT8 offset, UINT8 data);
-static UINT8 qsound_r(void *info, UINT8 offset);
-static void qsound_write_data(void *info, UINT8 address, UINT16 data);
+static void qsound_w(void *info, uint8_t offset, uint8_t data);
+static uint8_t qsound_r(void *info, uint8_t offset);
+static void qsound_write_data(void *info, uint8_t address, uint16_t data);
 
-static void qsound_alloc_rom(void* info, UINT32 memsize);
-static void qsound_write_rom(void *info, UINT32 offset, UINT32 length, const UINT8* data);
-static void qsound_set_mute_mask(void *info, UINT32 MuteMask);
-static UINT32 qsound_get_mute_mask(void *info);
+static void qsound_alloc_rom(void* info, uint32_t memsize);
+static void qsound_write_rom(void *info, uint32_t offset, uint32_t length, const uint8_t* data);
+static void qsound_set_mute_mask(void *info, uint32_t MuteMask);
+static uint32_t qsound_get_mute_mask(void *info);
 static void qsound_set_log_cb(void* info, DEVCB_LOG func, void* param);
 
 
@@ -92,20 +92,20 @@ DEV_DEF devDef_QSound_MAME =
 
 typedef struct QSOUND_CHANNEL
 {
-	UINT32 bank;        // bank
-	UINT32 address;     // start/cur address
-	UINT16 loop;        // loop address
-	UINT16 end;         // end address
-	UINT32 freq;        // frequency
-	UINT16 vol;         // master volume
+	uint32_t bank;        // bank
+	uint32_t address;     // start/cur address
+	uint16_t loop;        // loop address
+	uint16_t end;         // end address
+	uint32_t freq;        // frequency
+	uint16_t vol;         // master volume
 
 	// work variables
-	UINT8 enabled;      // key on / key off
+	uint8_t enabled;      // key on / key off
 	int lvol;           // left volume
 	int rvol;           // right volume
-	UINT32 step_ptr;    // current offset counter
+	uint32_t step_ptr;    // current offset counter
 	
-	UINT8 Muted;
+	uint8_t Muted;
 } qsound_channel;
 
 typedef struct _qsound_state qsound_state;
@@ -116,15 +116,15 @@ struct _qsound_state
 	
 	qsound_channel channel[QSOUND_CHANNELS];
 	
-	INT8 *sample_rom;		/* Q sound sample ROM */
-	UINT32 sample_rom_length;
-	UINT32 sample_rom_mask;
+	int8_t *sample_rom;		/* Q sound sample ROM */
+	uint32_t sample_rom_length;
+	uint32_t sample_rom_mask;
 
 	int pan_table[33];		/* Pan volume table */
-	UINT16 data;			/* register latch data */
+	uint16_t data;			/* register latch data */
 };
 
-static UINT8 device_start_qsound(const DEV_GEN_CFG* cfg, DEV_INFO* retDevInf)
+static uint8_t device_start_qsound(const DEV_GEN_CFG* cfg, DEV_INFO* retDevInf)
 {
 	qsound_state *chip;
 	int i;
@@ -162,7 +162,7 @@ static void device_stop_qsound(void *info)
 static void device_reset_qsound(void *info)
 {
 	qsound_state *chip = (qsound_state *)info;
-	UINT32 muteMask;
+	uint32_t muteMask;
 	int adr;
 
 	muteMask = qsound_get_mute_mask(chip);
@@ -178,7 +178,7 @@ static void device_reset_qsound(void *info)
 	return;
 }
 
-static void qsound_w(void *info, UINT8 offset, UINT8 data)
+static void qsound_w(void *info, uint8_t offset, uint8_t data)
 {
 	qsound_state *chip = (qsound_state *)info;
 	switch (offset)
@@ -201,14 +201,14 @@ static void qsound_w(void *info, UINT8 offset, UINT8 data)
 	}
 }
 
-static UINT8 qsound_r(void *info, UINT8 offset)
+static uint8_t qsound_r(void *info, uint8_t offset)
 {
 	/* Port ready bit (0x80 if ready) */
 	return 0x80;
 }
 
 
-static void qsound_write_data(void *info, UINT8 address, UINT16 data)
+static void qsound_write_data(void *info, uint8_t address, uint16_t data)
 {
 	qsound_state *chip = (qsound_state *)info;
 	int ch = 0, reg = 0;
@@ -313,12 +313,12 @@ static void qsound_write_data(void *info, UINT8 address, UINT16 data)
 }
 
 
-static void qsound_update(void *param, UINT32 samples, DEV_SMPL **outputs)
+static void qsound_update(void *param, uint32_t samples, DEV_SMPL **outputs)
 {
 	qsound_state *chip = (qsound_state *)param;
-	UINT32 i,j;
-	UINT32 offset;
-	INT8 sample;
+	uint32_t i,j;
+	uint32_t offset;
+	int8_t sample;
 	qsound_channel *pC;
 
 	// Clear the buffers
@@ -371,14 +371,14 @@ static void qsound_update(void *param, UINT32 samples, DEV_SMPL **outputs)
 	}
 }
 
-static void qsound_alloc_rom(void* info, UINT32 memsize)
+static void qsound_alloc_rom(void* info, uint32_t memsize)
 {
 	qsound_state* chip = (qsound_state *)info;
 	
 	if (chip->sample_rom_length == memsize)
 		return;
 	
-	chip->sample_rom = (INT8*)realloc(chip->sample_rom, memsize);
+	chip->sample_rom = (int8_t*)realloc(chip->sample_rom, memsize);
 	chip->sample_rom_length = memsize;
 	chip->sample_rom_mask = pow2_mask(memsize);
 	memset(chip->sample_rom, 0xFF, memsize);
@@ -386,7 +386,7 @@ static void qsound_alloc_rom(void* info, UINT32 memsize)
 	return;
 }
 
-static void qsound_write_rom(void *info, UINT32 offset, UINT32 length, const UINT8* data)
+static void qsound_write_rom(void *info, uint32_t offset, uint32_t length, const uint8_t* data)
 {
 	qsound_state* chip = (qsound_state *)info;
 	
@@ -401,10 +401,10 @@ static void qsound_write_rom(void *info, UINT32 offset, UINT32 length, const UIN
 }
 
 
-static void qsound_set_mute_mask(void *info, UINT32 MuteMask)
+static void qsound_set_mute_mask(void *info, uint32_t MuteMask)
 {
 	qsound_state* chip = (qsound_state *)info;
-	UINT8 CurChn;
+	uint8_t CurChn;
 	
 	for (CurChn = 0; CurChn < QSOUND_CHANNELS; CurChn ++)
 		chip->channel[CurChn].Muted = (MuteMask >> CurChn) & 0x01;
@@ -412,11 +412,11 @@ static void qsound_set_mute_mask(void *info, UINT32 MuteMask)
 	return;
 }
 
-static UINT32 qsound_get_mute_mask(void *info)
+static uint32_t qsound_get_mute_mask(void *info)
 {
 	qsound_state* chip = (qsound_state *)info;
-	UINT32 muteMask;
-	UINT8 CurChn;
+	uint32_t muteMask;
+	uint8_t CurChn;
 	
 	muteMask = 0x0000;
 	for (CurChn = 0; CurChn < QSOUND_CHANNELS; CurChn ++)

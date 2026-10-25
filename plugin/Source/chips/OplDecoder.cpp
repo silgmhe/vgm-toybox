@@ -11,10 +11,10 @@ namespace
 {
 	// A rhythm instrument or a Delta-T sample has no pitch of its own: C4 marks the hit.
 	constexpr int kOneShotNote = 60;
-	constexpr std::uint32_t kOneShotPeriod = 0x80000000u;
+	constexpr uint32_t kOneShotPeriod = 0x80000000u;
 
-	constexpr std::uint32_t kRhythmGate = 4410;		// 100 ms at 44.1 kHz
-	constexpr std::uint32_t kAdpcmGate = 5292;		// 120 ms
+	constexpr uint32_t kRhythmGate = 4410;		// 100 ms at 44.1 kHz
+	constexpr uint32_t kAdpcmGate = 5292;		// 120 ms
 
 	class OplNoteTable final : public NoteTable
 	{
@@ -26,7 +26,7 @@ namespace
 			reference = octaveReference;
 		}
 
-		int noteFor (std::uint32_t fnum, int block, int* finePitch) const override
+		int noteFor (uint32_t fnum, int block, int* finePitch) const override
 		{
 			if ((fnum & kOneShotPeriod) != 0)
 			{
@@ -64,7 +64,7 @@ struct OplDecoder::Impl
 	/** A level-triggered hit: the rising edge sets the end time, the chip itself ends it. */
 	struct Pulse
 	{
-		std::uint32_t end = 0;
+		uint32_t end = 0;
 	};
 
 	Variant variant = Variant::opl2;
@@ -72,9 +72,9 @@ struct OplDecoder::Impl
 	Channel channels[18];
 	Pulse rhythm[5];
 	Pulse deltaT;
-	std::uint8_t rhythmBits = 0;
+	uint8_t rhythmBits = 0;
 	bool rhythmEnabled = false;
-	std::uint32_t now = 0;
+	uint32_t now = 0;
 	OplNoteTable table;
 
 	int channelCount = 14;
@@ -111,7 +111,7 @@ struct OplDecoder::Impl
 
 	/** Rhythm mode borrows channels 6..8 of the first bank; entering it stops whatever those
 		channels still held, exactly as the chip does. */
-	void rhythmWrite (std::uint32_t time, std::uint8_t data, bool enabled)
+	void rhythmWrite (uint32_t time, uint8_t data, bool enabled)
 	{
 		if (! enabled)
 		{
@@ -130,8 +130,8 @@ struct OplDecoder::Impl
 			}
 		}
 
-		const std::uint8_t bits = (std::uint8_t) (data & 0x1F);
-		const std::uint8_t rising = (std::uint8_t) (bits & (std::uint8_t) ~rhythmBits);
+		const uint8_t bits = (uint8_t) (data & 0x1F);
+		const uint8_t rising = (uint8_t) (bits & (uint8_t) ~rhythmBits);
 		for (int i = 0; i < 5; ++i)
 		{
 			if ((rising & (0x10u >> i)) != 0)
@@ -163,7 +163,7 @@ OplDecoder::~OplDecoder() = default;
 
 void OplDecoder::reset (const ChipConfig& config)
 {
-	[[maybe_unused]] const std::uint32_t clock = config.clockHz;
+	[[maybe_unused]] const uint32_t clock = config.clockHz;
 	[[maybe_unused]] const double sampleRate = config.timeBaseHz;
 	const Variant variant = impl->variant;
 	const bool adpcm = impl->adpcm;
@@ -189,9 +189,9 @@ void OplDecoder::reset (const ChipConfig& config)
 
 void OplDecoder::write (const RegisterWrite& write)
 {
-	const std::uint8_t reg = write.reg;
+	const uint8_t reg = write.reg;
 	const int port = write.port != 0 ? 1 : 0;
-	const std::uint32_t time = write.sampleTime;
+	const uint32_t time = write.sampleTime;
 
 	if (impl->adpcm && port == 0 && reg == 0x07)
 	{
@@ -273,7 +273,7 @@ void OplDecoder::write (const RegisterWrite& write)
 	}
 }
 
-void OplDecoder::advance (std::uint32_t sampleTime)
+void OplDecoder::advance (uint32_t sampleTime)
 {
 	impl->now = sampleTime;
 }
@@ -296,7 +296,7 @@ ChannelState OplDecoder::channelState (int channel) const
 	{
 		const Impl::Channel& voice = impl->channels[channel];
 		state.present = true;
-		state.period = (std::uint32_t) voice.fnum;
+		state.period = (uint32_t) voice.fnum;
 		state.block = voice.block;
 		state.gate = voice.keyed;
 		state.volume = 15;

@@ -51,41 +51,41 @@
 #define K007232_ADDR_MASK 0x1FFFF
 
 typedef struct {
-	UINT8  vol[2];    // [0]=left, [1]=right
-	UINT32 addr;      // current PCM address (17 bits)
-	INT32  counter;
-	UINT32 start;     // start address (17 bits)
-	UINT16 step;      // frequency/step value (12 bits)
-	UINT32 bank;      // base bank address (upper bits, shifted left by 17)
-	UINT8  play;      // playing flag
-	UINT8  mute;
+	uint8_t  vol[2];    // [0]=left, [1]=right
+	uint32_t addr;      // current PCM address (17 bits)
+	int32_t  counter;
+	uint32_t start;     // start address (17 bits)
+	uint16_t step;      // frequency/step value (12 bits)
+	uint32_t bank;      // base bank address (upper bits, shifted left by 17)
+	uint8_t  play;      // playing flag
+	uint8_t  mute;
 } K007232_Channel;
 
 typedef struct {
 	DEV_DATA    _devData;
 
 	K007232_Channel channel[K007232_PCM_MAX];
-	UINT8 wreg[0x10];
-	UINT8 *rom;
-	UINT32 rom_size;
-	UINT32 rom_mask;
+	uint8_t wreg[0x10];
+	uint8_t *rom;
+	uint32_t rom_size;
+	uint32_t rom_mask;
 
-	UINT8 loop_en;       // loop control register
+	uint8_t loop_en;       // loop control register
 
-	void (*port_write_cb)(UINT8 data); // external port write callback
+	void (*port_write_cb)(uint8_t data); // external port write callback
 } k007232_state;
 
 // --- Forward declarations ---
-static UINT8 device_start_k007232(const DEV_GEN_CFG* cfg, DEV_INFO* retDevInf);
+static uint8_t device_start_k007232(const DEV_GEN_CFG* cfg, DEV_INFO* retDevInf);
 static void device_stop_k007232(void* chip);
 static void device_reset_k007232(void* chip);
-static void k007232_update(void* chip, UINT32 samples, DEV_SMPL **outputs);
-static void k007232_write(void* chip, UINT8 offset, UINT8 data);
-static UINT8 k007232_read(void* chip, UINT8 offset);
-static void k007232_write_rom(void* chip, UINT32 offset, UINT32 length, const UINT8* data);
-static void k007232_alloc_rom(void* chip, UINT32 memsize);
-static void k007232_set_mute_mask(void* chip, UINT32 MuteMask);
-void k007232_set_port_write_cb(void* chip, void (*cb)(UINT8 data));	// TODO: integrate into DEVDEF_RWFUNC list
+static void k007232_update(void* chip, uint32_t samples, DEV_SMPL **outputs);
+static void k007232_write(void* chip, uint8_t offset, uint8_t data);
+static uint8_t k007232_read(void* chip, uint8_t offset);
+static void k007232_write_rom(void* chip, uint32_t offset, uint32_t length, const uint8_t* data);
+static void k007232_alloc_rom(void* chip, uint32_t memsize);
+static void k007232_set_mute_mask(void* chip, uint32_t MuteMask);
+void k007232_set_port_write_cb(void* chip, void (*cb)(uint8_t data));	// TODO: integrate into DEVDEF_RWFUNC list
 
 // --- Device definition ---
 static DEVDEF_RWFUNC devFunc[] =
@@ -121,7 +121,7 @@ static const char* DeviceName(const DEV_GEN_CFG* devCfg)
 	return "K007232";
 }
 
-static UINT16 DeviceChannels(const DEV_GEN_CFG* devCfg)
+static uint16_t DeviceChannels(const DEV_GEN_CFG* devCfg)
 {
 	return K007232_PCM_MAX;
 }
@@ -151,10 +151,10 @@ const DEV_DECL sndDev_K007232 =
 
 
 // --- Core implementation ---
-static UINT8 device_start_k007232(const DEV_GEN_CFG* cfg, DEV_INFO* retDevInf)
+static uint8_t device_start_k007232(const DEV_GEN_CFG* cfg, DEV_INFO* retDevInf)
 {
 	k007232_state* chip = (k007232_state*)calloc(1, sizeof(k007232_state));
-	UINT32 rate = cfg->clock / K007232_CLOCKDIV;
+	uint32_t rate = cfg->clock / K007232_CLOCKDIV;
 	int i;
 
 	chip->rom = NULL;
@@ -204,10 +204,10 @@ static void device_reset_k007232(void* chip)
 }
 
 // --- Streamed update ---
-static void k007232_update(void* chip, UINT32 samples, DEV_SMPL **outputs)
+static void k007232_update(void* chip, uint32_t samples, DEV_SMPL **outputs)
 {
 	k007232_state* c = (k007232_state*)chip;
-	UINT32 i, j;
+	uint32_t i, j;
 
 	if(c->rom == NULL)
 	{
@@ -217,13 +217,13 @@ static void k007232_update(void* chip, UINT32 samples, DEV_SMPL **outputs)
 	}
 
 	for (j = 0; j < samples; j++) {
-		INT32 lsum = 0, rsum = 0;
+		int32_t lsum = 0, rsum = 0;
 		for (i = 0; i < K007232_PCM_MAX; i++) {
 			K007232_Channel* ch = &c->channel[i];
 			if (ch->play && !ch->mute) {
-				UINT32 pcm_addr = ch->bank + (ch->addr & K007232_ADDR_MASK);
-				UINT8 value;
-				INT16 out;
+				uint32_t pcm_addr = ch->bank + (ch->addr & K007232_ADDR_MASK);
+				uint8_t value;
+				int16_t out;
 
 				if (pcm_addr >= c->rom_size)
 					continue;
@@ -258,7 +258,7 @@ static void k007232_update(void* chip, UINT32 samples, DEV_SMPL **outputs)
 }
 
 // --- Register interface ---
-static void k007232_write(void* chip, UINT8 offset, UINT8 data)
+static void k007232_write(void* chip, uint8_t offset, uint8_t data)
 {
 	k007232_state* c = (k007232_state*)chip;
 	int ch = offset / 6;
@@ -271,9 +271,9 @@ static void k007232_write(void* chip, UINT8 offset, UINT8 data)
 	case 0x00: case 0x06: // Pitch LSB
 	case 0x01: case 0x07: // Pitch MSB
 	{
-		UINT8 pitch_lsb = c->wreg[reg_base + 0];
-		UINT8 pitch_msb = c->wreg[reg_base + 1];
-		UINT8 mode = (pitch_msb >> 4) & 0x03;
+		uint8_t pitch_lsb = c->wreg[reg_base + 0];
+		uint8_t pitch_msb = c->wreg[reg_base + 1];
+		uint8_t mode = (pitch_msb >> 4) & 0x03;
 		switch (mode) {
 		case 0x00: // 12-bit frequency mode (normal) (not implemented / dummy)
 			v->step = ((pitch_msb & 0x0F) << 8) | pitch_lsb;
@@ -323,7 +323,7 @@ static void k007232_write(void* chip, UINT8 offset, UINT8 data)
 	}
 }
 
-static UINT8 k007232_read(void* chip, UINT8 offset)
+static uint8_t k007232_read(void* chip, uint8_t offset)
 {
 	k007232_state* c = (k007232_state*)chip;
 	if (offset == 5 || offset == 11)
@@ -337,14 +337,14 @@ static UINT8 k007232_read(void* chip, UINT8 offset)
 }
 
 // --- ROM loading and memory ---
-static void k007232_alloc_rom(void* chip, UINT32 memsize)
+static void k007232_alloc_rom(void* chip, uint32_t memsize)
 {
 	k007232_state* c = (k007232_state*)chip;
 
 	if (c->rom_size == memsize)
 		return;
 
-	c->rom = (UINT8*)realloc(c->rom, memsize);
+	c->rom = (uint8_t*)realloc(c->rom, memsize);
 	c->rom_size = memsize;
 	memset(c->rom, 0xFF, memsize);
 
@@ -353,7 +353,7 @@ static void k007232_alloc_rom(void* chip, UINT32 memsize)
 	return;
 }
 
-static void k007232_write_rom(void* chip, UINT32 offset, UINT32 length, const UINT8* data)
+static void k007232_write_rom(void* chip, uint32_t offset, uint32_t length, const uint8_t* data)
 {
 	k007232_state* c = (k007232_state*)chip;
 	if (offset >= c->rom_size) return;
@@ -362,7 +362,7 @@ static void k007232_write_rom(void* chip, UINT32 offset, UINT32 length, const UI
 }
 
 // --- Mute mask, callback, etc. ---
-static void k007232_set_mute_mask(void* chip, UINT32 MuteMask)
+static void k007232_set_mute_mask(void* chip, uint32_t MuteMask)
 {
 	k007232_state* c = (k007232_state*)chip;
 	int i;
@@ -371,7 +371,7 @@ static void k007232_set_mute_mask(void* chip, UINT32 MuteMask)
 }
 
 // --- Optional: attach external volume/pan callback (for host integration like Ajax and Chequered Flag) ---
-void k007232_set_port_write_cb(void* chip, void (*cb)(UINT8 data))
+void k007232_set_port_write_cb(void* chip, void (*cb)(uint8_t data))
 {
 	k007232_state* c = (k007232_state*)chip;
 	c->port_write_cb = cb;

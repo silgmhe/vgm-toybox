@@ -34,8 +34,8 @@ namespace
 	using toybox::chips::OpnDecoder;
 	using toybox::chips::RegisterWrite;
 
-	constexpr std::uint32_t kClock = 7670453;	// NTSC Mega Drive
-	constexpr std::uint32_t kRate = 44100;
+	constexpr uint32_t kClock = 7670453;	// NTSC Mega Drive
+	constexpr uint32_t kRate = 44100;
 
 	// The render window: long enough for the fastest attack (microseconds) and for the release
 	// after a key-off to reach zero, short enough that 64 patches stay cheap.
@@ -98,10 +98,10 @@ namespace
 		bool isValid() const { return usable; }
 		const char* name() const { return usable ? info.devDef->name : ""; }
 
-		void reg (int port, std::uint8_t reg, std::uint8_t value)
+		void reg (int port, uint8_t reg, uint8_t value)
 		{
-			writeFn (info.dataPtr, (UINT8) (port * 2), reg);
-			writeFn (info.dataPtr, (UINT8) (port * 2 + 1), value);
+			writeFn (info.dataPtr, (uint8_t) (port * 2), reg);
+			writeFn (info.dataPtr, (uint8_t) (port * 2 + 1), value);
 		}
 
 		/** Renders one window with every channel muted but one, and returns that channel's rms. */
@@ -112,7 +112,7 @@ namespace
 			std::fill (right.begin(), right.end(), 0);
 
 			DEV_SMPL* outputs[2] = { left.data(), right.data() };
-			info.devDef->Update (info.dataPtr, (UINT32) kWindow, outputs);
+			info.devDef->Update (info.dataPtr, (uint32_t) kWindow, outputs);
 			info.devDef->SetMuteMask (info.dataPtr, 0x00);
 
 			double sum = 0.0;
@@ -141,16 +141,16 @@ namespace
 		key register turns on. */
 	struct Patch
 	{
-		std::uint8_t algorithm[6] {};
-		std::uint8_t level[6][4] {};	// 0x00 = loudest, 0x7F = silent
+		uint8_t algorithm[6] {};
+		uint8_t level[6][4] {};	// 0x00 = loudest, 0x7F = silent
 		bool keyed[6] {};
 
 		// One extra write after the voices are set up: the register-layout cases need an address
 		// outside the per-operator loop.
 		bool hasExtra = false;
 		int extraPort = 0;
-		std::uint8_t extraReg = 0;
-		std::uint8_t extraValue = 0;
+		uint8_t extraReg = 0;
+		uint8_t extraValue = 0;
 	};
 
 	/** The chip's answer and the decoder's, per channel. */
@@ -166,12 +166,12 @@ namespace
 		OpnDecoder decoder (OpnDecoder::Variant::ym2612);
 		decoder.reset (toybox::chips::ChipConfig { kClock, kRate });
 
-		auto write = [&] (int port, std::uint8_t reg, std::uint8_t value)
+		auto write = [&] (int port, uint8_t reg, uint8_t value)
 		{
 			core.reg (port, reg, value);
 
 			RegisterWrite entry;
-			entry.port = (std::uint8_t) port;
+			entry.port = (uint8_t) port;
 			entry.reg = reg;
 			entry.value = value;
 			entry.sampleTime = 0;
@@ -185,24 +185,24 @@ namespace
 		for (int channel = 0; channel < 6; ++channel)
 		{
 			const int port = channel / 3;
-			const std::uint8_t slot = (std::uint8_t) (channel % 3);
+			const uint8_t slot = (uint8_t) (channel % 3);
 
-			write (port, (std::uint8_t) (0xB0 + slot), patch.algorithm[channel]);
+			write (port, (uint8_t) (0xB0 + slot), patch.algorithm[channel]);
 
 			for (int op = 0; op < 4; ++op)
 			{
-				const std::uint8_t base = (std::uint8_t) (op * 4 + slot);
-				write (port, (std::uint8_t) (0x30 + base), 0x01);	// MULT 1
-				write (port, (std::uint8_t) (0x40 + base), patch.level[channel][op]);
-				write (port, (std::uint8_t) (0x50 + base), 0x1F);	// attack: audible at once
-				write (port, (std::uint8_t) (0x60 + base), 0x00);	// no decay: the note holds
-				write (port, (std::uint8_t) (0x70 + base), 0x00);
-				write (port, (std::uint8_t) (0x80 + base), 0x0F);	// sustain 0, release fast
+				const uint8_t base = (uint8_t) (op * 4 + slot);
+				write (port, (uint8_t) (0x30 + base), 0x01);	// MULT 1
+				write (port, (uint8_t) (0x40 + base), patch.level[channel][op]);
+				write (port, (uint8_t) (0x50 + base), 0x1F);	// attack: audible at once
+				write (port, (uint8_t) (0x60 + base), 0x00);	// no decay: the note holds
+				write (port, (uint8_t) (0x70 + base), 0x00);
+				write (port, (uint8_t) (0x80 + base), 0x0F);	// sustain 0, release fast
 			}
 
 			// A4 on every channel: the pitch is not what this test is about, only the level.
-			write (port, (std::uint8_t) (0xA4 + slot), 0x22);		// block 4, f-number high
-			write (port, (std::uint8_t) (0xA0 + slot), 0x1D);		// f-number low
+			write (port, (uint8_t) (0xA4 + slot), 0x22);		// block 4, f-number high
+			write (port, (uint8_t) (0xA0 + slot), 0x1D);		// f-number low
 		}
 
 		if (patch.hasExtra)
@@ -214,13 +214,13 @@ namespace
 		{
 			// 0x28 carries the channel and the operator mask; a mask of zero keys that one channel
 			// off, which is how a silent channel is written.
-			const std::uint8_t slot = (std::uint8_t) (channel % 3);
-			const std::uint8_t portBit = (std::uint8_t) (channel >= 3 ? 0x04 : 0x00);
-			const std::uint8_t mask = patch.keyed[channel] ? 0xF0 : 0x00;
-			write (0, 0x28, (std::uint8_t) (mask | portBit | slot));
+			const uint8_t slot = (uint8_t) (channel % 3);
+			const uint8_t portBit = (uint8_t) (channel >= 3 ? 0x04 : 0x00);
+			const uint8_t mask = patch.keyed[channel] ? 0xF0 : 0x00;
+			write (0, 0x28, (uint8_t) (mask | portBit | slot));
 		}
 
-		decoder.advance ((std::uint32_t) kWindow);
+		decoder.advance ((uint32_t) kWindow);
 
 		Verdict verdict;
 		for (int channel = 0; channel < 6; ++channel)
@@ -331,7 +331,7 @@ int main()
 			Patch patch;
 			for (int channel = 0; channel < 6; ++channel)
 			{
-				patch.algorithm[channel] = (std::uint8_t) algorithm;
+				patch.algorithm[channel] = (uint8_t) algorithm;
 				for (int op = 0; op < 4; ++op)
 				{
 					patch.level[channel][op] = (op == open) ? 0x00 : 0x7F;
@@ -352,13 +352,13 @@ int main()
 	// channel only shows up when its neighbours differ. mt19937's output is specified, so a failing
 	// seed reproduces anywhere.
 	std::mt19937 random (0x2612);
-	const std::uint8_t levels[] = { 0x00, 0x20, 0x40, 0x7F };
+	const uint8_t levels[] = { 0x00, 0x20, 0x40, 0x7F };
 	for (int index = 0; index < 32; ++index)
 	{
 		Patch patch;
 		for (int channel = 0; channel < 6; ++channel)
 		{
-			patch.algorithm[channel] = (std::uint8_t) (random() % 8u);
+			patch.algorithm[channel] = (uint8_t) (random() % 8u);
 			for (int op = 0; op < 4; ++op)
 			{
 				patch.level[channel][op] = levels[random() % 4u];

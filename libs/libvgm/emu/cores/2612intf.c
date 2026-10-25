@@ -21,10 +21,10 @@
 #endif
 
 
-static void ym2612_gens_update(void* chip, UINT32 samples, DEV_SMPL** outputs);
-static UINT8 device_start_ym2612_mame(const DEV_GEN_CFG* cfg, DEV_INFO* retDevInf);
-static UINT8 device_start_ym2612_gens(const DEV_GEN_CFG* cfg, DEV_INFO* retDevInf);
-static UINT8 device_start_ym2612_nuked(const DEV_GEN_CFG* cfg, DEV_INFO* retDevInf);
+static void ym2612_gens_update(void* chip, uint32_t samples, DEV_SMPL** outputs);
+static uint8_t device_start_ym2612_mame(const DEV_GEN_CFG* cfg, DEV_INFO* retDevInf);
+static uint8_t device_start_ym2612_gens(const DEV_GEN_CFG* cfg, DEV_INFO* retDevInf);
+static uint8_t device_start_ym2612_nuked(const DEV_GEN_CFG* cfg, DEV_INFO* retDevInf);
 
 
 #ifdef EC_YM2612_GPGX
@@ -115,7 +115,7 @@ static const char* DeviceName_YM2612(const DEV_GEN_CFG* devCfg)
 }
 
 #define DEV_CHN_COUNT_YM2612	7
-static UINT16 DeviceChannels_YM2612(const DEV_GEN_CFG* devCfg)
+static uint16_t DeviceChannels_YM2612(const DEV_GEN_CFG* devCfg)
 {
 	return DEV_CHN_COUNT_YM2612;
 }
@@ -158,7 +158,7 @@ const DEV_DECL sndDev_YM2612 =
 
 
 #ifdef EC_YM2612_GENS
-static void ym2612_gens_update(void* chip, UINT32 samples, DEV_SMPL** outputs)
+static void ym2612_gens_update(void* chip, uint32_t samples, DEV_SMPL** outputs)
 {
 	ym2612_* YM2612 = (ym2612_*)chip;
 	
@@ -172,11 +172,11 @@ static void ym2612_gens_update(void* chip, UINT32 samples, DEV_SMPL** outputs)
 
 
 #ifdef EC_YM2612_GPGX
-static UINT8 device_start_ym2612_mame(const DEV_GEN_CFG* cfg, DEV_INFO* retDevInf)
+static uint8_t device_start_ym2612_mame(const DEV_GEN_CFG* cfg, DEV_INFO* retDevInf)
 {
 	void* chip;
 	DEV_DATA* devData;
-	UINT32 rate;
+	uint32_t rate;
 	
 	rate = cfg->clock / 2 / 72;
 	//if (PseudoSt & 0x02))
@@ -193,11 +193,11 @@ static UINT8 device_start_ym2612_mame(const DEV_GEN_CFG* cfg, DEV_INFO* retDevIn
 #endif
 
 #ifdef EC_YM2612_GENS
-static UINT8 device_start_ym2612_gens(const DEV_GEN_CFG* cfg, DEV_INFO* retDevInf)
+static uint8_t device_start_ym2612_gens(const DEV_GEN_CFG* cfg, DEV_INFO* retDevInf)
 {
 	ym2612_* chip;
 	DEV_DATA* devData;
-	UINT32 rate;
+	uint32_t rate;
 	
 	rate = cfg->clock / 2 / 72;
 	SRATE_CUSTOM_HIGHEST(cfg->srMode, rate, cfg->smplRate);
@@ -212,11 +212,11 @@ static UINT8 device_start_ym2612_gens(const DEV_GEN_CFG* cfg, DEV_INFO* retDevIn
 #endif
 
 #ifdef EC_YM2612_NUKED
-static UINT8 device_start_ym2612_nuked(const DEV_GEN_CFG* cfg, DEV_INFO* retDevInf)
+static uint8_t device_start_ym2612_nuked(const DEV_GEN_CFG* cfg, DEV_INFO* retDevInf)
 {
 	void* chip;
 	DEV_DATA* devData;
-	UINT32 rate;
+	uint32_t rate;
 	
 	rate = cfg->clock / 2 / 72;
 	SRATE_CUSTOM_HIGHEST(cfg->srMode, rate, cfg->smplRate);

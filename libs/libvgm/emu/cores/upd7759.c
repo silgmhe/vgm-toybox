@@ -137,27 +137,27 @@
 #include "upd7759.h"
 
 
-static void upd7759_update(void *param, UINT32 samples, DEV_SMPL **outputs);
+static void upd7759_update(void *param, uint32_t samples, DEV_SMPL **outputs);
 static void upd7759_slave_update(void *ptr);
 static void upd7759_reset(void *info);
-static UINT8 device_start_upd7759(const DEV_GEN_CFG* cfg, DEV_INFO* retDevInf);
+static uint8_t device_start_upd7759(const DEV_GEN_CFG* cfg, DEV_INFO* retDevInf);
 static void device_stop_upd7759(void *info);
 
-static void upd7759_set_bank_base(void *info, UINT32 base);
+static void upd7759_set_bank_base(void *info, uint32_t base);
 
-static void upd7759_reset_w(void *info, UINT8 data);
-static void upd7759_start_w(void *info, UINT8 data);
-static UINT8 upd7759_busy_r(void *info);
-static UINT8 upd7759_get_fifo_space(void *info);
-static void upd7759_port_w(void *info, UINT8 data);
+static void upd7759_reset_w(void *info, uint8_t data);
+static void upd7759_start_w(void *info, uint8_t data);
+static uint8_t upd7759_busy_r(void *info);
+static uint8_t upd7759_get_fifo_space(void *info);
+static void upd7759_port_w(void *info, uint8_t data);
 
-static void upd7759_write(void *info, UINT8 offset, UINT8 data);
-static UINT8 upd7759_read(void *info, UINT8 offset);
+static void upd7759_write(void *info, uint8_t offset, uint8_t data);
+static uint8_t upd7759_read(void *info, uint8_t offset);
 
-static void upd7759_alloc_rom(void* info, UINT32 memsize);
-static void upd7759_write_rom(void* info, UINT32 offset, UINT32 length, const UINT8* data);
+static void upd7759_alloc_rom(void* info, uint32_t memsize);
+static void upd7759_write_rom(void* info, uint32_t offset, uint32_t length, const uint8_t* data);
 
-static void upd7759_set_mute_mask(void *info, UINT32 MuteMask);
+static void upd7759_set_mute_mask(void *info, uint32_t MuteMask);
 static void upd7759_set_log_cb(void* info, DEVCB_LOG func, void* param);
 
 
@@ -194,7 +194,7 @@ static const char* DeviceName(const DEV_GEN_CFG* devCfg)
 	return "uPD7759";
 }
 
-static UINT16 DeviceChannels(const DEV_GEN_CFG* devCfg)
+static uint16_t DeviceChannels(const DEV_GEN_CFG* devCfg)
 {
 	return 1;
 }
@@ -288,54 +288,54 @@ struct _upd7759_state
 	DEV_LOGGER logger;
 
 	/* chip configuration */
-	UINT8     sample_offset_shift;        /* header sample address shift (access data > 0xffff) */
+	uint8_t     sample_offset_shift;        /* header sample address shift (access data > 0xffff) */
 
 	/* internal clock to output sample rate mapping */
-	UINT32      pos;                        /* current output sample position */
-	UINT32      step;                       /* step value per output sample */
+	uint32_t      pos;                        /* current output sample position */
+	uint32_t      step;                       /* step value per output sample */
 	//attotime  clock_period;               /* clock period */
 
 	/* I/O lines */
-	UINT8       fifo_in;                    /* last data written to the sound chip */
-	UINT8       reset;                      /* current state of the RESET line */
-	UINT8       start;                      /* current state of the START line */
-	UINT8       drq;                        /* current state of the DRQ line */
+	uint8_t       fifo_in;                    /* last data written to the sound chip */
+	uint8_t       reset;                      /* current state of the RESET line */
+	uint8_t       start;                      /* current state of the START line */
+	uint8_t       drq;                        /* current state of the DRQ line */
 	void (*drqcallback)(void* info, int param); /* drq callback */
 
 	/* internal state machine */
-	INT8        state;                      /* current overall chip state */
-	INT32       clocks_left;                /* number of clocks left in this state */
-	UINT16      nibbles_left;               /* number of ADPCM nibbles left to process */
-	UINT8       repeat_count;               /* number of repeats remaining in current repeat block */
-	INT8        post_drq_state;             /* state we will be in after the DRQ line is dropped */
-	INT32       post_drq_clocks;            /* clocks that will be left after the DRQ line is dropped */
-	UINT8       req_sample;                 /* requested sample number */
-	UINT8       last_sample;                /* last sample number available */
-	UINT8       block_header;               /* header byte */
-	UINT8       sample_rate;                /* number of UPD clocks per ADPCM nibble */
-	UINT8       first_valid_header;         /* did we get our first valid header yet? */
-	UINT32      offset;                     /* current ROM offset */
-	UINT32      repeat_offset;              /* current ROM repeat offset */
+	int8_t        state;                      /* current overall chip state */
+	int32_t       clocks_left;                /* number of clocks left in this state */
+	uint16_t      nibbles_left;               /* number of ADPCM nibbles left to process */
+	uint8_t       repeat_count;               /* number of repeats remaining in current repeat block */
+	int8_t        post_drq_state;             /* state we will be in after the DRQ line is dropped */
+	int32_t       post_drq_clocks;            /* clocks that will be left after the DRQ line is dropped */
+	uint8_t       req_sample;                 /* requested sample number */
+	uint8_t       last_sample;                /* last sample number available */
+	uint8_t       block_header;               /* header byte */
+	uint8_t       sample_rate;                /* number of UPD clocks per ADPCM nibble */
+	uint8_t       first_valid_header;         /* did we get our first valid header yet? */
+	uint32_t      offset;                     /* current ROM offset */
+	uint32_t      repeat_offset;              /* current ROM repeat offset */
 	int         mode;                       /* current mode of the sound chip */
 
 	/* ADPCM processing */
-	INT8        adpcm_state;                /* ADPCM state index */
-	UINT8       adpcm_data;                 /* current byte of ADPCM data */
-	INT16       sample;                     /* current sample value */
+	int8_t        adpcm_state;                /* ADPCM state index */
+	uint8_t       adpcm_data;                 /* current byte of ADPCM data */
+	int16_t       sample;                     /* current sample value */
 
 	/* ROM access */
-	UINT32      romsize;
-	UINT8 *     rom;                        /* pointer to ROM data or NULL for slave mode */
-	UINT8 *     rombase;                    /* pointer to ROM data or NULL for slave mode */
-	UINT32      romoffset;                  /* ROM offset to make save/restore easier */
-	UINT32      rommask;                    /* maximum address offset */
+	uint32_t      romsize;
+	uint8_t *     rom;                        /* pointer to ROM data or NULL for slave mode */
+	uint8_t *     rombase;                    /* pointer to ROM data or NULL for slave mode */
+	uint32_t      romoffset;                  /* ROM offset to make save/restore easier */
+	uint32_t      rommask;                    /* maximum address offset */
 
-	UINT8       Muted;
+	uint8_t       Muted;
 
 	// Valley Bell: Added a FIFO buffer based on Sega Pico.
-	UINT8 data_buf[0x40];
-	UINT8 dbuf_pos_read;
-	UINT8 dbuf_pos_write;
+	uint8_t data_buf[0x40];
+	uint8_t dbuf_pos_read;
+	uint8_t dbuf_pos_write;
 };
 
 enum
@@ -401,7 +401,7 @@ INLINE void update_adpcm(upd7759_state *chip, int data)
 
 *************************************************************/
 
-static UINT8 get_fifo_data(upd7759_state *chip)
+static uint8_t get_fifo_data(upd7759_state *chip)
 {
 	if (chip->dbuf_pos_read == chip->dbuf_pos_write)
 	{
@@ -429,7 +429,7 @@ static void advance_state(upd7759_state *chip)
 		case STATE_DROP_DRQ:
 			if (chip->mode == MODE_SLAVE) // Slave Mode only
 			{
-				UINT8 fail = get_fifo_data(chip);
+				uint8_t fail = get_fifo_data(chip);
 				if (fail)
 				{
 					if (chip->drq < 2)	// up to 2 attempts at waiting for the data
@@ -640,10 +640,10 @@ static void advance_state(upd7759_state *chip)
 
 *************************************************************/
 
-static void upd7759_update(void *param, UINT32 samples, DEV_SMPL **outputs)
+static void upd7759_update(void *param, uint32_t samples, DEV_SMPL **outputs)
 {
 	upd7759_state *chip = (upd7759_state *)param;
-	UINT32 i;
+	uint32_t i;
 	DEV_SMPL *buffer = outputs[0];
 	DEV_SMPL *buffer2 = outputs[1];
 
@@ -653,7 +653,7 @@ static void upd7759_update(void *param, UINT32 samples, DEV_SMPL **outputs)
 		for (; i < samples; i++)
 		{
 			/* store the current sample */
-			INT16 sample = chip->Muted ? 0 : chip->sample;
+			int16_t sample = chip->Muted ? 0 : chip->sample;
 			buffer[i] = sample << 7;
 			buffer2[i] = sample << 7;
 
@@ -685,7 +685,7 @@ static void upd7759_update(void *param, UINT32 samples, DEV_SMPL **outputs)
 			}
 			else
 			{
-				while(chip->clocks_left <= (INT32)(chip->pos >> FRAC_BITS))
+				while(chip->clocks_left <= (int32_t)(chip->pos >> FRAC_BITS))
 				{
 					chip->pos -= chip->clocks_left << FRAC_BITS;
 					chip->clocks_left = 0;
@@ -714,7 +714,7 @@ static void upd7759_update(void *param, UINT32 samples, DEV_SMPL **outputs)
 static void upd7759_slave_update(void *ptr)
 {
 	upd7759_state *chip = (upd7759_state *)ptr;
-	UINT8 olddrq = chip->drq;
+	uint8_t olddrq = chip->drq;
 
 	// advance the state
 	advance_state(chip);
@@ -772,7 +772,7 @@ static void upd7759_reset(void *info)
 }
 
 
-static UINT8 device_start_upd7759(const DEV_GEN_CFG* cfg, DEV_INFO* retDevInf)
+static uint8_t device_start_upd7759(const DEV_GEN_CFG* cfg, DEV_INFO* retDevInf)
 {
 	upd7759_state *chip;
 
@@ -841,11 +841,11 @@ static void device_stop_upd7759(void *info)
 
 *************************************************************/
 
-static void upd7759_reset_w(void *info, UINT8 state)
+static void upd7759_reset_w(void *info, uint8_t state)
 {
 	/* update the reset value */
 	upd7759_state *chip = (upd7759_state *)info;
-	UINT8 oldreset = chip->reset;
+	uint8_t oldreset = chip->reset;
 	chip->reset = (state != 0);
 
 	/* on the falling edge, reset everything */
@@ -853,11 +853,11 @@ static void upd7759_reset_w(void *info, UINT8 state)
 		upd7759_reset(chip);
 }
 
-static void upd7759_start_w(void *info, UINT8 state)
+static void upd7759_start_w(void *info, uint8_t state)
 {
 	/* update the start value */
 	upd7759_state *chip = (upd7759_state *)info;
-	UINT8 oldstart = chip->start;
+	uint8_t oldstart = chip->start;
 	chip->start = (state != 0);
 
 	//emu_logf(&chip->logger, DEVLOG_DEBUG, "start_w: %d->%d\n", oldstart, chip->start);
@@ -875,7 +875,7 @@ static void upd7759_start_w(void *info, UINT8 state)
 }
 
 
-static void upd7759_port_w(void *info, UINT8 data)
+static void upd7759_port_w(void *info, uint8_t data)
 {
 	/* update the FIFO value */
 	upd7759_state *chip = (upd7759_state *)info;
@@ -899,28 +899,28 @@ static void upd7759_port_w(void *info, UINT8 data)
 }
 
 
-static UINT8 upd7759_busy_r(void *info)
+static uint8_t upd7759_busy_r(void *info)
 {
 	/* return /BUSY */
 	upd7759_state *chip = (upd7759_state *)info;
 	return (chip->state == STATE_IDLE);
 }
 
-static UINT8 upd7759_get_fifo_space(void *info)
+static uint8_t upd7759_get_fifo_space(void *info)
 {
 	upd7759_state *chip = (upd7759_state *)info;
 	return (chip->dbuf_pos_read - chip->dbuf_pos_write - 0x01) & 0x3F;
 }
 
 
-static void upd7759_set_bank_base(void *info, UINT32 base)
+static void upd7759_set_bank_base(void *info, uint32_t base)
 {
 	upd7759_state *chip = (upd7759_state *)info;
 	chip->rom = chip->rombase + base;
 	chip->romoffset = base;
 }
 
-static void upd7759_write(void *info, UINT8 offset, UINT8 data)
+static void upd7759_write(void *info, uint8_t offset, uint8_t data)
 {
 	switch(offset)
 	{
@@ -941,21 +941,21 @@ static void upd7759_write(void *info, UINT8 offset, UINT8 data)
 	return;
 }
 
-static UINT8 upd7759_read(void *info, UINT8 offset)
+static uint8_t upd7759_read(void *info, uint8_t offset)
 {
 	if (offset == 'F')
 		return upd7759_get_fifo_space(info);
 	return upd7759_busy_r(info);
 }
 
-static void upd7759_alloc_rom(void* info, UINT32 memsize)
+static void upd7759_alloc_rom(void* info, uint32_t memsize)
 {
 	upd7759_state *chip = (upd7759_state *)info;
 	
 	if (chip->romsize == memsize)
 		return;
 	
-	chip->rombase = (UINT8*)realloc(chip->rombase, memsize);
+	chip->rombase = (uint8_t*)realloc(chip->rombase, memsize);
 	chip->romsize = memsize;
 	memset(chip->rombase, 0xFF, chip->romsize);
 	
@@ -968,7 +968,7 @@ static void upd7759_alloc_rom(void* info, UINT32 memsize)
 	return;
 }
 
-static void upd7759_write_rom(void* info, UINT32 offset, UINT32 length, const UINT8* data)
+static void upd7759_write_rom(void* info, uint32_t offset, uint32_t length, const uint8_t* data)
 {
 	upd7759_state *chip = (upd7759_state *)info;
 	
@@ -982,7 +982,7 @@ static void upd7759_write_rom(void* info, UINT32 offset, UINT32 length, const UI
 	return;
 }
 
-static void upd7759_set_mute_mask(void *info, UINT32 MuteMask)
+static void upd7759_set_mute_mask(void *info, uint32_t MuteMask)
 {
 	upd7759_state *chip = (upd7759_state *)info;
 	

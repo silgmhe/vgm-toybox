@@ -249,12 +249,12 @@ void MixerPanel::refreshValues (void)
 	// The item list is rebuilt only when it can have changed (the host's bus layout) or when a
 	// strip shows something else than the engine - rebuilding 65 combo items per strip on every
 	// tick would be pointless work.
-	std::uint64_t connectivity = 0;
+	uint64_t connectivity = 0;
 	for (int bus = 0; bus < playback::kOutputBusCount; ++bus)
 	{
 		if (engine.isOutputBusConnected (bus))
 		{
-			connectivity |= (std::uint64_t) 1 << bus;
+			connectivity |= (uint64_t) 1 << bus;
 		}
 	}
 

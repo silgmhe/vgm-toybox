@@ -65,7 +65,7 @@ enum class ChannelKind
 
 	A real device can legitimately be number 0 (the first chip of a song), so zero cannot mean
 	"unspecified" - that ambiguity would make an unrouted write look like a write to the first chip. */
-inline constexpr std::uint32_t kNoDevice = 0xFFFFFFFFu;
+inline constexpr uint32_t kNoDevice = 0xFFFFFFFFu;
 
 /** One register write, in stream order.
 
@@ -73,11 +73,11 @@ inline constexpr std::uint32_t kNoDevice = 0xFFFFFFFFu;
 	1.79 MHz for a CPU-cycle format. Nothing below the loader reinterprets it - see SongIr. */
 struct RegisterWrite
 {
-	std::uint32_t deviceId = kNoDevice;	// routing only, never interpreted: an index into SongIr::chips
-	std::uint8_t reg = 0;
-	std::uint16_t value = 0;		// the whole register word; byte-wide chips use the low byte
-	std::uint8_t port = 0;			// second port / second chip of a pair
-	std::uint32_t sampleTime = 0;
+	uint32_t deviceId = kNoDevice;	// routing only, never interpreted: an index into SongIr::chips
+	uint8_t reg = 0;
+	uint16_t value = 0;		// the whole register word; byte-wide chips use the low byte
+	uint8_t port = 0;			// second port / second chip of a pair
+	uint32_t sampleTime = 0;
 };
 
 /** What a decoder needs to know to start: the chip's clock, and the unit of the timestamps it will be told.
@@ -88,9 +88,9 @@ struct RegisterWrite
 	business. flags carries the board variants a chip needs (C140's banking). */
 	struct ChipConfig
 	{
-		std::uint32_t clockHz = 0;			// 0 = unknown: the decoder falls back to its default
+		uint32_t clockHz = 0;			// 0 = unknown: the decoder falls back to its default
 		double timeBaseHz = 44100.0;	// the unit of RegisterWrite::sampleTime
-		std::uint32_t flags = 0;		// board / variant selection
+		uint32_t flags = 0;		// board / variant selection
 	};
 
 	/** Where a note's pitch came from - the honesty label the pitch model is built around.
@@ -118,11 +118,11 @@ struct ChannelState
 	bool present = false;			// the channel exists on this chip
 	bool gate = false;				// key on: the channel is producing sound
 	bool released = false;			// key off, but the envelope is still audible
-	std::uint32_t period = 0;		// chip-native period / F-number (0 = silence)
+	uint32_t period = 0;		// chip-native period / F-number (0 = silence)
 	int block = 0;					// FM octave
 	int volume = 0;					// 0..15, envelope already applied
 	int patch = 0;					// duty / waveform / drum id
-	std::int16_t finePitch = 0;		// cents outside the note table
+	int16_t finePitch = 0;		// cents outside the note table
 
 	/** The pitch as the registers state it, in Hz. 0 when the channel has no pitch (a gate that is
 		closed, a drum, a rate register of zero). */
@@ -146,7 +146,7 @@ struct ChannelState
 		hit on the same key - is starting a *new* note, but the sampled state alone cannot say so:
 		the gate never dropped and the pitch never moved. The counter is what lets the extractor cut
 		the previous note at the retrigger. Chips that do not fill it leave every note as it was. */
-	std::uint32_t keyOns = 0;
+	uint32_t keyOns = 0;
 };
 
 /** Which set of pitch fields a decoder filled - derived from the state, never stored, so a
@@ -209,7 +209,7 @@ class NoteTable
 public:
 	/** Nearest MIDI note for a chip period, or -1 when the period is out of range. Sets
 		finePitch to the distance from the table entry in cents. */
-	virtual int noteFor (std::uint32_t period, int block, int* finePitch) const = 0;
+	virtual int noteFor (uint32_t period, int block, int* finePitch) const = 0;
 
 	virtual ~NoteTable() = default;
 };
@@ -217,10 +217,10 @@ public:
 /** One note as the encoder wants it. Times are absolute samples at 44100 Hz. */
 struct NoteEvent
 {
-	std::uint32_t startSample = 0;
-	std::uint32_t endSample = 0;
-	std::uint8_t note = 60;
-	std::uint8_t velocity = 100;
+	uint32_t startSample = 0;
+	uint32_t endSample = 0;
+	uint8_t note = 60;
+	uint8_t velocity = 100;
 	int logicalChannel = 0;			// track / chip channel index inside the song
 	ChannelKind channelKind = ChannelKind::unknown;
 	int patch = 0;
@@ -238,9 +238,9 @@ struct NoteEvent
 	pitch registers every frame, so a note's pitch is a curve the note itself cannot carry. */
 struct PitchEvent
 {
-	std::uint32_t sampleTime = 0;
+	uint32_t sampleTime = 0;
 	int logicalChannel = 0;
-	std::int16_t cents = 0;
+	int16_t cents = 0;
 };
 
 } // namespace toybox::chips

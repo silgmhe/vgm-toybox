@@ -66,22 +66,22 @@
 typedef struct _okim6295_state okim6295_state;
 
 
-static void okim6295_set_bank_base(okim6295_state *info, UINT32 base);
-static UINT32 okim6295_get_rate(void* chip);
-static void okim6295_set_clock(void *chip, UINT32 clock);
-INLINE void okim6295_set_pin7(okim6295_state *info, UINT8 pin7);
+static void okim6295_set_bank_base(okim6295_state *info, uint32_t base);
+static uint32_t okim6295_get_rate(void* chip);
+static void okim6295_set_clock(void *chip, uint32_t clock);
+INLINE void okim6295_set_pin7(okim6295_state *info, uint8_t pin7);
 
-static void okim6295_update(void* info, UINT32 samples, DEV_SMPL** outputs);
-static UINT8 device_start_okim6295(const DEV_GEN_CFG* cfg, DEV_INFO* retDevInf);
+static void okim6295_update(void* info, uint32_t samples, DEV_SMPL** outputs);
+static uint8_t device_start_okim6295(const DEV_GEN_CFG* cfg, DEV_INFO* retDevInf);
 static void device_stop_okim6295(void* chipptr);
 static void device_reset_okim6295(void *chip);
 
-static UINT8 okim6295_r(void* chip, UINT8 offset);
-static void okim6295_w(void* chip, UINT8 offset, UINT8 data);
+static uint8_t okim6295_r(void* chip, uint8_t offset);
+static void okim6295_w(void* chip, uint8_t offset, uint8_t data);
 
-static void okim6295_alloc_rom(void* info, UINT32 memsize);
-static void okim6295_write_rom(void* info, UINT32 offset, UINT32 length, const UINT8* data);
-static void okim6295_set_mute_mask(void *info, UINT32 MuteMask);
+static void okim6295_alloc_rom(void* info, uint32_t memsize);
+static void okim6295_write_rom(void* info, uint32_t offset, uint32_t length, const uint8_t* data);
+static void okim6295_set_mute_mask(void *info, uint32_t MuteMask);
 static void okim6295_set_srchg_cb(void* chip, DEVCB_SRATE_CHG CallbackFunc, void* DataPtr);
 static void okim6295_set_log_cb(void* chip, DEVCB_LOG func, void* param);
 
@@ -121,7 +121,7 @@ static const char* DeviceName(const DEV_GEN_CFG* devCfg)
 	return "MSM6295";
 }
 
-static UINT16 DeviceChannels(const DEV_GEN_CFG* devCfg)
+static uint16_t DeviceChannels(const DEV_GEN_CFG* devCfg)
 {
 	return 4;
 }
@@ -154,14 +154,14 @@ const DEV_DECL sndDev_MSM6295 =
 typedef struct _okim_voice
 {
 	oki_adpcm_state adpcm;          // current ADPCM state
-	UINT8           playing;        // 1 if we are actively playing
+	uint8_t           playing;        // 1 if we are actively playing
 
-	UINT32          base_offset;    // pointer to the base memory location
-	UINT32          sample;         // current sample number
-	UINT32          count;          // total samples to play
+	uint32_t          base_offset;    // pointer to the base memory location
+	uint32_t          sample;         // current sample number
+	uint32_t          count;          // total samples to play
 
-	INT32           volume;         // output volume
-	UINT8           Muted;
+	int32_t           volume;         // output volume
+	uint8_t           Muted;
 } okim_voice;
 
 struct _okim6295_state
@@ -173,21 +173,21 @@ struct _okim6295_state
 	#define OKIM6295_VOICES 4
 	
 	okim_voice voice[OKIM6295_VOICES];
-	INT16 command;
-	UINT32 bank_offs;
-	UINT8 pin7_state;
+	int16_t command;
+	uint32_t bank_offs;
+	uint8_t pin7_state;
 	
-	//const UINT8 s_volume_table[16];
+	//const uint8_t s_volume_table[16];
 	
-	UINT8 pin7_initial;
-	UINT8 nmk_mode;
-	UINT8 nmk_bank[4];
-	UINT32 master_clock;    // master clock frequency
-	UINT8 clock_buffer[4];
-	UINT32 initial_clock;
+	uint8_t pin7_initial;
+	uint8_t nmk_mode;
+	uint8_t nmk_bank[4];
+	uint32_t master_clock;    // master clock frequency
+	uint8_t clock_buffer[4];
+	uint32_t initial_clock;
 	
-	UINT32  ROMSize;
-	UINT8*  ROM;
+	uint32_t  ROMSize;
+	uint8_t*  ROM;
 	
 	DEVCB_SRATE_CHG SmpRateFunc;
 	void* SmpRateData;
@@ -217,13 +217,13 @@ static const int volume_table[16] =
 };
 
 
-INLINE UINT32 ReadLE32(const UINT8* buffer)
+INLINE uint32_t ReadLE32(const uint8_t* buffer)
 {
 	return	(buffer[0] <<  0) | (buffer[1] <<  8) |
 			(buffer[2] << 16) | (buffer[3] << 24);
 }
 
-INLINE void WriteLE32(UINT8* buffer, UINT32 value)
+INLINE void WriteLE32(uint8_t* buffer, uint32_t value)
 {
 	buffer[0] = (value >>  0) & 0xFF;
 	buffer[1] = (value >>  8) & 0xFF;
@@ -248,9 +248,9 @@ INLINE void WriteLE32(UINT8* buffer, UINT32 value)
 #define NMK_BANKMASK	(NMK_BANKSIZE - 1)		// 0xFFFF
 #define NMK_ROMBASE		(4 * NMK_BANKSIZE)		// 0x40000
 
-static UINT8 memory_raw_read_byte(okim6295_state *chip, UINT32 offset)
+static uint8_t memory_raw_read_byte(okim6295_state *chip, uint32_t offset)
 {
-	UINT32 CurOfs;
+	uint32_t CurOfs;
 	
 	if (! chip->nmk_mode)
 	{
@@ -258,7 +258,7 @@ static UINT8 memory_raw_read_byte(okim6295_state *chip, UINT32 offset)
 	}
 	else
 	{
-		UINT8 BankID;
+		uint8_t BankID;
 		
 		if (offset < NMK_TABLESIZE && (chip->nmk_mode & 0x80))
 		{
@@ -279,9 +279,9 @@ static UINT8 memory_raw_read_byte(okim6295_state *chip, UINT32 offset)
 		return 0x00;
 }
 
-static void generate_adpcm(okim6295_state *chip, okim_voice *voice, DEV_SMPL *buffer, UINT32 samples)
+static void generate_adpcm(okim6295_state *chip, okim_voice *voice, DEV_SMPL *buffer, uint32_t samples)
 {
-	UINT32 i;
+	uint32_t i;
 
 	// skip if not active
 	if (!voice->playing || voice->Muted)
@@ -291,7 +291,7 @@ static void generate_adpcm(okim6295_state *chip, okim_voice *voice, DEV_SMPL *bu
 	for (i = 0; i < samples; i++)
 	{
 		// fetch the next sample byte
-		UINT8 nibble = memory_raw_read_byte(chip, voice->base_offset + voice->sample / 2) >> (((voice->sample & 1) << 2) ^ 4);
+		uint8_t nibble = memory_raw_read_byte(chip, voice->base_offset + voice->sample / 2) >> (((voice->sample & 1) << 2) ^ 4);
 
 		// output to the buffer, scaling by the volume
 		// signal in range -2048..2047, volume in range 2..32 => signal * volume / 2 in range -32768..32767
@@ -314,7 +314,7 @@ static void generate_adpcm(okim6295_state *chip, okim_voice *voice, DEV_SMPL *bu
 
 ***********************************************************************************************/
 
-static void okim6295_update(void* info, UINT32 samples, DEV_SMPL** outputs)
+static void okim6295_update(void* info, uint32_t samples, DEV_SMPL** outputs)
 {
 	okim6295_state *chip = (okim6295_state *)info;
 	int i;
@@ -340,10 +340,10 @@ static void okim6295_update(void* info, UINT32 samples, DEV_SMPL** outputs)
 
 ***********************************************************************************************/
 
-static UINT8 device_start_okim6295(const DEV_GEN_CFG* cfg, DEV_INFO* retDevInf)
+static uint8_t device_start_okim6295(const DEV_GEN_CFG* cfg, DEV_INFO* retDevInf)
 {
 	okim6295_state *info;
-	UINT32 divisor;
+	uint32_t divisor;
 	int voicenum;
 
 	info = (okim6295_state *)calloc(1, sizeof(okim6295_state));
@@ -356,7 +356,7 @@ static UINT8 device_start_okim6295(const DEV_GEN_CFG* cfg, DEV_INFO* retDevInf)
 	info->command = -1;
 	info->bank_offs = 0;
 	info->nmk_mode = 0x00;
-	memset(info->nmk_bank, 0x00, 4 * sizeof(UINT8));
+	memset(info->nmk_bank, 0x00, 4 * sizeof(uint8_t));
 	info->ROM = NULL;
 	info->ROMSize = 0x00;
 
@@ -395,7 +395,7 @@ static void device_stop_okim6295(void* chipptr)
 static void device_reset_okim6295(void *chip)
 {
 	okim6295_state *info = (okim6295_state *)chip;
-	UINT8 voice;
+	uint8_t voice;
 	
 	info->master_clock = info->initial_clock;
 	WriteLE32(info->clock_buffer, info->master_clock);
@@ -406,7 +406,7 @@ static void device_reset_okim6295(void *chip)
 	info->command = -1;
 	info->bank_offs = 0;
 	info->nmk_mode = 0x00;
-	memset(info->nmk_bank, 0x00, 4 * sizeof(UINT8));
+	memset(info->nmk_bank, 0x00, 4 * sizeof(uint8_t));
 	
 	for (voice = 0; voice < OKIM6295_VOICES; voice++)
 	{
@@ -425,7 +425,7 @@ static void device_reset_okim6295(void *chip)
 
 ***********************************************************************************************/
 
-static void okim6295_set_bank_base(okim6295_state *info, UINT32 base)
+static void okim6295_set_bank_base(okim6295_state *info, uint32_t base)
 {
 	info->bank_offs = base;
 }
@@ -438,14 +438,14 @@ static void okim6295_set_bank_base(okim6295_state *info, UINT32 base)
 
 ***********************************************************************************************/
 
-static UINT32 okim6295_get_rate(void* chip)
+static uint32_t okim6295_get_rate(void* chip)
 {
 	okim6295_state *info = (okim6295_state *)chip;
-	UINT32 divisor = info->pin7_state ? 132 : 165;
+	uint32_t divisor = info->pin7_state ? 132 : 165;
 	return info->master_clock / divisor;
 }
 
-static void okim6295_set_clock(void *chip, UINT32 clock)
+static void okim6295_set_clock(void *chip, uint32_t clock)
 {
 	okim6295_state *info = (okim6295_state *)chip;
 	
@@ -457,7 +457,7 @@ static void okim6295_set_clock(void *chip, UINT32 clock)
 		info->SmpRateFunc(info->SmpRateData, okim6295_get_rate(chip));
 }
 
-INLINE void okim6295_set_pin7(okim6295_state *info, UINT8 pin7)
+INLINE void okim6295_set_pin7(okim6295_state *info, uint8_t pin7)
 {
 	info->pin7_state = pin7;
 	if (info->SmpRateFunc != NULL)
@@ -471,11 +471,11 @@ INLINE void okim6295_set_pin7(okim6295_state *info, UINT8 pin7)
 
 ***********************************************************************************************/
 
-static UINT8 okim6295_r(void* chip, UINT8 offset)
+static uint8_t okim6295_r(void* chip, uint8_t offset)
 {
 	okim6295_state *info = (okim6295_state *)chip;
 	int voicenum;
-	UINT8 result;
+	uint8_t result;
 
 	result = 0xf0;  // naname expects bits 4-7 to be 1
 
@@ -495,13 +495,13 @@ static UINT8 okim6295_r(void* chip, UINT8 offset)
 
 ***********************************************************************************************/
 
-static void okim6295_write_command(okim6295_state *info, UINT8 data)
+static void okim6295_write_command(okim6295_state *info, uint8_t data)
 {
 	// if a command is pending, process the second half
 	if (info->command != -1)
 	{
 		// the manual explicitly says that it's not possible to start multiple voices at the same time
-		UINT8 voicemask = data >> 4;
+		uint8_t voicemask = data >> 4;
 		int voicenum;
 		//if (voicemask != 0 && voicemask != 1 && voicemask != 2 && voicemask != 4 && voicemask != 8)
 		//	printf("OKI6295 start %x contact MAMEDEV\n", voicemask);
@@ -514,7 +514,7 @@ static void okim6295_write_command(okim6295_state *info, UINT8 data)
 
 				if (!voice->playing) // fixes Got-cha and Steel Force
 				{
-					UINT32 start, stop, base;
+					uint32_t start, stop, base;
 					// determine the start/stop positions
 					base = info->command * 8;
 
@@ -569,7 +569,7 @@ static void okim6295_write_command(okim6295_state *info, UINT8 data)
 	else
 	{
 		// determine which voice(s) (voice is set by a 1 bit in bits 3-6 of the command
-		UINT8 voicemask = data >> 3;
+		uint8_t voicemask = data >> 3;
 		int voicenum;
 		for (voicenum = 0; voicenum < OKIM6295_VOICES; voicenum++, voicemask >>= 1)
 			if (voicemask & 1)
@@ -577,7 +577,7 @@ static void okim6295_write_command(okim6295_state *info, UINT8 data)
 	}
 }
 
-static void okim6295_w(void* chip, UINT8 offset, UINT8 data)
+static void okim6295_w(void* chip, uint8_t offset, uint8_t data)
 {
 	okim6295_state *info = (okim6295_state *)chip;
 	
@@ -615,21 +615,21 @@ static void okim6295_w(void* chip, UINT8 offset, UINT8 data)
 	return;
 }
 
-static void okim6295_alloc_rom(void* info, UINT32 memsize)
+static void okim6295_alloc_rom(void* info, uint32_t memsize)
 {
 	okim6295_state *chip = (okim6295_state *)info;
 	
 	if (chip->ROMSize == memsize)
 		return;
 	
-	chip->ROM = (UINT8*)realloc(chip->ROM, memsize);
+	chip->ROM = (uint8_t*)realloc(chip->ROM, memsize);
 	chip->ROMSize = memsize;
 	memset(chip->ROM, 0xFF, chip->ROMSize);
 	
 	return;
 }
 
-static void okim6295_write_rom(void* info, UINT32 offset, UINT32 length, const UINT8* data)
+static void okim6295_write_rom(void* info, uint32_t offset, uint32_t length, const uint8_t* data)
 {
 	okim6295_state *chip = (okim6295_state *)info;
 	
@@ -644,10 +644,10 @@ static void okim6295_write_rom(void* info, UINT32 offset, UINT32 length, const U
 }
 
 
-static void okim6295_set_mute_mask(void *info, UINT32 MuteMask)
+static void okim6295_set_mute_mask(void *info, uint32_t MuteMask)
 {
 	okim6295_state *chip = (okim6295_state *)info;
-	UINT8 CurChn;
+	uint8_t CurChn;
 	
 	for (CurChn = 0; CurChn < OKIM6295_VOICES; CurChn ++)
 		chip->voice[CurChn].Muted = (MuteMask >> CurChn) & 0x01;

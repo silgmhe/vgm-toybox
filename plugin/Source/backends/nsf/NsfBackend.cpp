@@ -348,7 +348,7 @@ public:
 			probe.render (left, right, 512);
 		}
 
-		struct { int index; std::uint8_t flag; } const candidates[] =
+		struct { int index; uint8_t flag; } const candidates[] =
 		{
 			{ 0, 0x01 },	// VRC6
 			{ 2, 0x10 },	// N163

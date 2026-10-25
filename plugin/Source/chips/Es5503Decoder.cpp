@@ -18,10 +18,10 @@ namespace
 
 	// The window a table's cycle is measured in, and how far the scan walks. The same numbers the
 	// GA20 decoder uses: 512 bytes keeps a scan local, and a table bigger than this is rare.
-	constexpr std::uint32_t kMeasurementUnits = 512;
-	constexpr std::uint32_t kScanStep = kMeasurementUnits / 2;
-	constexpr std::uint32_t kScanBytes = 8 * 1024;
-	constexpr std::uint32_t kMinimumWindow = 128;
+	constexpr uint32_t kMeasurementUnits = 512;
+	constexpr uint32_t kScanStep = kMeasurementUnits / 2;
+	constexpr uint32_t kScanBytes = 8 * 1024;
+	constexpr uint32_t kMinimumWindow = 128;
 
 	// A period is a lag where the waveform's correlation dips below this, and the period is the
 	// peak that follows it - a steady tone anti-correlates at half its cycle, noise never dips.
@@ -30,11 +30,11 @@ namespace
 
 	// Table sizes and their pointer masks, straight out of es5503.c (`wavesizes` / `wavemasks`).
 	// The mask is what keeps a table inside the chip's 128 KB however the driver wrote the pointer.
-	constexpr std::uint32_t kTableSizes[8] = { 256, 512, 1024, 2048, 4096, 8192, 16384, 32768 };
-	constexpr std::uint32_t kTableMasks[8] =
+	constexpr uint32_t kTableSizes[8] = { 256, 512, 1024, 2048, 4096, 8192, 16384, 32768 };
+	constexpr uint32_t kTableMasks[8] =
 		{ 0x1ff00, 0x1fe00, 0x1fc00, 0x1f800, 0x1f000, 0x1e000, 0x1c000, 0x18000 };
 
-	constexpr std::uint32_t kRamBytes = 128 * 1024;
+	constexpr uint32_t kRamBytes = 128 * 1024;
 
 	enum Mode
 	{
@@ -46,14 +46,14 @@ namespace
 
 	/** The mask an address is folded with: the emulated RAM is a power-of-two buffer, so a table
 		that runs past its end wraps instead of reading elsewhere. */
-	std::uint32_t pow2Mask (std::size_t size)
+	uint32_t pow2Mask (std::size_t size)
 	{
 		if (size == 0)
 		{
 			return 0;
 		}
 
-		std::uint32_t mask = (std::uint32_t) (size - 1);
+		uint32_t mask = (uint32_t) (size - 1);
 		mask |= mask >> 1;
 		mask |= mask >> 2;
 		mask |= mask >> 4;
@@ -67,31 +67,31 @@ struct Es5503Decoder::Impl
 {
 	struct Oscillator
 	{
-		std::uint16_t frequency = 0;
-		std::uint32_t tablePointer = 0;		// register byte << 8, plus bit 16 from the bank bit
-		std::uint8_t volume = 0;
-		std::uint8_t sizeIndex = 0;			// 0..7 -> 256..32768 bytes
-		std::uint8_t resolution = 0;
-		std::uint8_t control = 0;
+		uint16_t frequency = 0;
+		uint32_t tablePointer = 0;		// register byte << 8, plus bit 16 from the bank bit
+		uint8_t volume = 0;
+		uint8_t sizeIndex = 0;			// 0..7 -> 256..32768 bytes
+		uint8_t resolution = 0;
+		uint8_t control = 0;
 		bool keyed = false;
 		double cycleLength = 0.0;			// the table's own period in bytes, 0 = unmeasured
 		bool melodic = false;
-		std::uint32_t gateEnd = 0;			// 0 when the table loops
-		std::uint32_t keyOns = 0;
+		uint32_t gateEnd = 0;			// 0 when the table loops
+		uint32_t keyOns = 0;
 	};
 
 	Oscillator oscillators[Es5503Decoder::numChannels];
-	std::vector<std::uint8_t> ram;
-	std::uint32_t ramMask = 0;
+	std::vector<uint8_t> ram;
+	uint32_t ramMask = 0;
 	double clockRate = 7159090.0;			// the chip's master clock
 	double outRate = 44100.0;				// the rate the note times and gates are in
 	int enabledOscillators = 1;				// register 0xE1, 1..32
-	std::map<std::uint32_t, double> cycleCache;
-	std::uint32_t now = 0;
+	std::map<uint32_t, double> cycleCache;
+	uint32_t now = 0;
 
-	std::uint8_t byteAt (std::uint32_t address) const
+	uint8_t byteAt (uint32_t address) const
 	{
-		const std::uint32_t index = address & ramMask;
+		const uint32_t index = address & ramMask;
 		return index < ram.size() ? ram[index] : 0;
 	}
 
@@ -203,9 +203,9 @@ struct Es5503Decoder::Impl
 		A single-cycle table cannot show its period in a window of its own length (there is no
 		repeat inside it), so the measurement returns 0 there; the caller falls back to the table
 		length when the mode loops, because that *is* the rate the chip repeats the table at. */
-	double measuredCycle (std::uint32_t base, int sizeIndex)
+	double measuredCycle (uint32_t base, int sizeIndex)
 	{
-		const std::uint32_t key = (base << 3) | (std::uint32_t) sizeIndex;
+		const uint32_t key = (base << 3) | (uint32_t) sizeIndex;
 		const auto cached = cycleCache.find (key);
 		if (cached != cycleCache.end())
 		{
@@ -215,15 +215,15 @@ struct Es5503Decoder::Impl
 		double cycle = 0.0;
 		if (! ram.empty())
 		{
-			const std::uint32_t length = kTableSizes[sizeIndex];
-			const std::uint32_t limit = std::min<std::uint32_t> (length, kScanBytes);
-			for (std::uint32_t offset = 0; cycle <= 0.0 && offset + kMinimumWindow <= limit;
+			const uint32_t length = kTableSizes[sizeIndex];
+			const uint32_t limit = std::min<uint32_t> (length, kScanBytes);
+			for (uint32_t offset = 0; cycle <= 0.0 && offset + kMinimumWindow <= limit;
 				 offset += kScanStep)
 			{
-				const std::uint32_t window =
-					std::min<std::uint32_t> (limit - offset, kMeasurementUnits);
+				const uint32_t window =
+					std::min<uint32_t> (limit - offset, kMeasurementUnits);
 				std::vector<double> waveform (window);
-				for (std::uint32_t i = 0; i < window; ++i)
+				for (uint32_t i = 0; i < window; ++i)
 				{
 					waveform[i] = (double) ((int) byteAt (base + offset + i) - 0x80);
 				}
@@ -236,19 +236,19 @@ struct Es5503Decoder::Impl
 		return cycle;
 	}
 
-	std::uint32_t tableBase (const Oscillator& oscillator) const
+	uint32_t tableBase (const Oscillator& oscillator) const
 	{
 		const int index = oscillator.sizeIndex & 0x07;
 		return oscillator.tablePointer & kTableMasks[index];
 	}
 
-	void keyOn (Oscillator& oscillator, std::uint32_t time)
+	void keyOn (Oscillator& oscillator, uint32_t time)
 	{
 		++oscillator.keyOns;
 
 		const int sizeIndex = oscillator.sizeIndex & 0x07;
-		const std::uint32_t base = tableBase (oscillator);
-		const std::uint32_t length = kTableSizes[sizeIndex];
+		const uint32_t base = tableBase (oscillator);
+		const uint32_t length = kTableSizes[sizeIndex];
 		const int mode = (oscillator.control >> 1) & 0x03;
 
 		double cycle = measuredCycle (base, sizeIndex);
@@ -272,7 +272,7 @@ struct Es5503Decoder::Impl
 		// a mode that does not loop ends when the table runs out - that length is exact
 		if ((mode == modeOneShot || mode == modeSwap) && rate > 0.0)
 		{
-			oscillator.gateEnd = time + (std::uint32_t) std::llround ((double) length * outRate / rate);
+			oscillator.gateEnd = time + (uint32_t) std::llround ((double) length * outRate / rate);
 		}
 
 		oscillator.keyed = true;
@@ -282,7 +282,7 @@ struct Es5503Decoder::Impl
 		Writing the same clear value again does not retrigger - the core only resets the
 		accumulator when the bit was set - and a one-shot that ran out counts as set, because the
 		core sets it itself (`es5503_halt_osc`). */
-	void writeControl (Oscillator& oscillator, std::uint8_t value, std::uint32_t time)
+	void writeControl (Oscillator& oscillator, uint8_t value, uint32_t time)
 	{
 		const bool wasHalted = (oscillator.control & 0x01) != 0;
 		oscillator.control = value;
@@ -326,7 +326,7 @@ struct Es5503Decoder::Impl
 			: impl (owner)
 			, channel (index) {}
 
-		int noteFor (std::uint32_t frequency, int, int* finePitch) const override
+		int noteFor (uint32_t frequency, int, int* finePitch) const override
 		{
 			*finePitch = 0;
 
@@ -362,11 +362,11 @@ Es5503Decoder::~Es5503Decoder() = default;
 
 void Es5503Decoder::reset (const ChipConfig& config)
 {
-	[[maybe_unused]] const std::uint32_t clock = config.clockHz;
+	[[maybe_unused]] const uint32_t clock = config.clockHz;
 	[[maybe_unused]] const double sampleRate = config.timeBaseHz;
 	// the RAM belongs to the song, not to the run
-	std::vector<std::uint8_t> ram = std::move (impl->ram);
-	const std::uint32_t mask = impl->ramMask;
+	std::vector<uint8_t> ram = std::move (impl->ram);
+	const uint32_t mask = impl->ramMask;
 
 	*impl = Impl();
 	impl->ram = std::move (ram);
@@ -391,7 +391,7 @@ void Es5503Decoder::reset (const ChipConfig& config)
 	}
 }
 
-void Es5503Decoder::setRam (std::vector<std::uint8_t> ram)
+void Es5503Decoder::setRam (std::vector<uint8_t> ram)
 {
 	impl->ramMask = pow2Mask (ram.size());
 	impl->ram = std::move (ram);
@@ -400,7 +400,7 @@ void Es5503Decoder::setRam (std::vector<std::uint8_t> ram)
 
 void Es5503Decoder::write (const RegisterWrite& write)
 {
-	const std::uint8_t offset = write.reg;
+	const uint8_t offset = write.reg;
 
 	if (offset >= 0xE0)
 	{
@@ -419,12 +419,12 @@ void Es5503Decoder::write (const RegisterWrite& write)
 	switch (offset & 0xE0)
 	{
 	case 0x00:		// frequency, low byte
-		oscillator.frequency = (std::uint16_t) ((oscillator.frequency & 0xFF00) | write.value);
+		oscillator.frequency = (uint16_t) ((oscillator.frequency & 0xFF00) | write.value);
 		break;
 
 	case 0x20:		// frequency, high byte
-		oscillator.frequency = (std::uint16_t) ((oscillator.frequency & 0x00FF)
-												| ((std::uint16_t) write.value << 8));
+		oscillator.frequency = (uint16_t) ((oscillator.frequency & 0x00FF)
+												| ((uint16_t) write.value << 8));
 		break;
 
 	case 0x40:		// volume
@@ -435,7 +435,7 @@ void Es5503Decoder::write (const RegisterWrite& write)
 		break;
 
 	case 0x80:		// wavetable pointer, high byte only
-		oscillator.tablePointer = (oscillator.tablePointer & 0x10000u) | ((std::uint32_t) write.value << 8);
+		oscillator.tablePointer = (oscillator.tablePointer & 0x10000u) | ((uint32_t) write.value << 8);
 		break;
 
 	case 0xA0:		// control: halt bit, mode, IRQ, output channel
@@ -452,8 +452,8 @@ void Es5503Decoder::write (const RegisterWrite& write)
 		oscillator.tablePointer = (write.value & 0x40)
 									  ? (oscillator.tablePointer | 0x10000u)
 									  : (oscillator.tablePointer & 0xFFFFu);
-		oscillator.sizeIndex = (std::uint8_t) ((write.value >> 3) & 0x07);
-		oscillator.resolution = (std::uint8_t) (write.value & 0x07);
+		oscillator.sizeIndex = (uint8_t) ((write.value >> 3) & 0x07);
+		oscillator.resolution = (uint8_t) (write.value & 0x07);
 		break;
 
 	default:
@@ -461,7 +461,7 @@ void Es5503Decoder::write (const RegisterWrite& write)
 	}
 }
 
-void Es5503Decoder::advance (std::uint32_t sampleTime)
+void Es5503Decoder::advance (uint32_t sampleTime)
 {
 	impl->now = sampleTime;
 }

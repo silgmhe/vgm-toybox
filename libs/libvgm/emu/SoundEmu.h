@@ -26,7 +26,7 @@ const DEV_DEF* const* SndEmu_GetDevDefList(DEV_ID deviceID);
  * @param opts option flags, see EST_OPT constants
  * @return pointer to device declaration or NULL if the device is not found
  */
-const DEV_DECL* SndEmu_GetDevDecl(DEV_ID deviceID, const DEV_DECL** userDevList, UINT8 opts);
+const DEV_DECL* SndEmu_GetDevDecl(DEV_ID deviceID, const DEV_DECL** userDevList, uint8_t opts);
 /**
  * @brief Initializes emulation for a sound device. Uses built-in sound devices.
  *
@@ -36,7 +36,7 @@ const DEV_DECL* SndEmu_GetDevDecl(DEV_ID deviceID, const DEV_DECL** userDevList,
  *        caller has to free information about linkable devices
  * @return error code. 0 = success, see EERR constants
  */
-UINT8 SndEmu_Start(DEV_ID deviceID, const DEV_GEN_CFG* cfg, DEV_INFO* retDevInf);
+uint8_t SndEmu_Start(DEV_ID deviceID, const DEV_GEN_CFG* cfg, DEV_INFO* retDevInf);
 /**
  * @brief Initializes emulation for a sound device.
  *        Devices in the user-specified device list take priority with fallback to the default list for missing cores.
@@ -49,14 +49,14 @@ UINT8 SndEmu_Start(DEV_ID deviceID, const DEV_GEN_CFG* cfg, DEV_INFO* retDevInf)
  * @param opts option flags, see EST_OPT constants
  * @return error code. 0 = success, see EERR constants
  */
-UINT8 SndEmu_Start2(DEV_ID deviceID, const DEV_GEN_CFG* cfg, DEV_INFO* retDevInf, const DEV_DECL** userDevList, UINT8 opts);
+uint8_t SndEmu_Start2(DEV_ID deviceID, const DEV_GEN_CFG* cfg, DEV_INFO* retDevInf, const DEV_DECL** userDevList, uint8_t opts);
 /**
  * @brief Deinitializes the sound core.
  *
  * @param devInf DEV_INFO structure of the device to be stopped
  * @return always returns 0 (success)
  */
-UINT8 SndEmu_Stop(DEV_INFO* devInf);
+uint8_t SndEmu_Stop(DEV_INFO* devInf);
 /**
  * @brief Frees memory that holds information about linkable devices.
  *        Should be called sometime after a successful SndEmu_Start() in order to prevent memory leaks.
@@ -74,7 +74,7 @@ void SndEmu_FreeDevLinkData(DEV_INFO* devInf);
  * @param retFuncPtr parameter the function pointer is stored in
  * @return error code. 0 = success, 1 - success, but more possible candidates found, see EERR constants
  */
-UINT8 SndEmu_GetDeviceFunc(const DEV_DEF* devInf, UINT8 funcType, UINT8 rwType, UINT16 user, void** retFuncPtr);
+uint8_t SndEmu_GetDeviceFunc(const DEV_DEF* devInf, uint8_t funcType, uint8_t rwType, uint16_t user, void** retFuncPtr);
 /**
  * @brief Retrieve the name of a sound device.
  *        Device configuration parameters may be use to identify exact sound chip models.
@@ -86,7 +86,7 @@ UINT8 SndEmu_GetDeviceFunc(const DEV_DEF* devInf, UINT8 funcType, UINT8 rwType, 
  *            ONLY used when long names are enabled
  * @return pointer to name of the device
  */
-const char* SndEmu_GetDevName(DEV_ID deviceID, UINT8 opts, const DEV_GEN_CFG* devCfg);
+const char* SndEmu_GetDevName(DEV_ID deviceID, uint8_t opts, const DEV_GEN_CFG* devCfg);
 
 
 extern const DEV_DECL* sndEmu_Devices[];	// list of built-in sound devices, terminated by a NULL pointer

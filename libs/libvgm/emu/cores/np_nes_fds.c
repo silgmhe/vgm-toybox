@@ -44,11 +44,11 @@ enum
 // 8 bit approximation of master volume
 #define MASTER_VOL	(2.4 * 1223.0)	// max FDS vol vs max APU square (arbitrarily 1223)
 #define MAX_OUT		(32.0 * 63.0)	// value that should map to master vol
-static const INT32 MASTER[4] = {
-	(INT32)((MASTER_VOL / MAX_OUT) * 256.0 * 2.0f / 2.0f),
-	(INT32)((MASTER_VOL / MAX_OUT) * 256.0 * 2.0f / 3.0f),
-	(INT32)((MASTER_VOL / MAX_OUT) * 256.0 * 2.0f / 4.0f),
-	(INT32)((MASTER_VOL / MAX_OUT) * 256.0 * 2.0f / 5.0f) };
+static const int32_t MASTER[4] = {
+	(int32_t)((MASTER_VOL / MAX_OUT) * 256.0 * 2.0f / 2.0f),
+	(int32_t)((MASTER_VOL / MAX_OUT) * 256.0 * 2.0f / 3.0f),
+	(int32_t)((MASTER_VOL / MAX_OUT) * 256.0 * 2.0f / 4.0f),
+	(int32_t)((MASTER_VOL / MAX_OUT) * 256.0 * 2.0f / 5.0f) };
 
 
 typedef struct _NES_FDS NES_FDS;
@@ -56,47 +56,47 @@ struct _NES_FDS
 {
 	DEV_DATA _devData;
 
-	UINT32 rate, clock;
+	uint32_t rate, clock;
 	int mask;
-	INT32 sm[2];	// stereo mix
-	INT32 fout;		// current output
+	int32_t sm[2];	// stereo mix
+	int32_t fout;		// current output
 	int option[OPT_END];
 
 	bool master_io;
-	UINT8 master_vol;
-	UINT32 last_freq;	// for trackinfo
-	UINT32 last_vol;	// for trackinfo
+	uint8_t master_vol;
+	uint32_t last_freq;	// for trackinfo
+	uint32_t last_vol;	// for trackinfo
 
 	// two wavetables
 	//const enum { TMOD=0, TWAV=1 };
-	INT32 wave[2][64];
-	UINT32 freq[2];
-	UINT32 phase[2];
+	int32_t wave[2][64];
+	uint32_t freq[2];
+	uint32_t phase[2];
 	bool wav_write;
 	bool wav_halt;
 	bool env_halt;
 	bool mod_halt;
-	UINT32 mod_pos;
-	UINT32 mod_write_pos;
+	uint32_t mod_pos;
+	uint32_t mod_write_pos;
 
 	// two ramp envelopes
 	//const enum { EMOD=0, EVOL=1 };
 	bool env_mode[2];
 	bool env_disable[2];
-	UINT32 env_timer[2];
-	UINT32 env_speed[2];
-	UINT32 env_out[2];
-	UINT32 master_env_speed;
+	uint32_t env_timer[2];
+	uint32_t env_speed[2];
+	uint32_t env_out[2];
+	uint32_t master_env_speed;
 
 	// 1-pole RC lowpass filter
-	INT32 rc_accum;
-	INT32 rc_k;
-	INT32 rc_l;
+	int32_t rc_accum;
+	int32_t rc_k;
+	int32_t rc_l;
 
 	RATIO_CNTR tick_count;
 };
 
-void* NES_FDS_Create(UINT32 clock, UINT32 rate)
+void* NES_FDS_Create(uint32_t clock, uint32_t rate)
 {
 	NES_FDS* fds;
 
@@ -135,7 +135,7 @@ void NES_FDS_SetMask(void* chip, int m)
 	fds->mask = m&1;
 }
 
-void NES_FDS_SetStereoMix(void* chip, int trk, INT16 mixl, INT16 mixr)
+void NES_FDS_SetStereoMix(void* chip, int trk, int16_t mixl, int16_t mixr)
 {
 	NES_FDS* fds = (NES_FDS*)chip;
 
@@ -145,14 +145,14 @@ void NES_FDS_SetStereoMix(void* chip, int trk, INT16 mixl, INT16 mixr)
 	fds->sm[1] = mixr;
 }
 
-void NES_FDS_SetClock(void* chip, UINT32 c)
+void NES_FDS_SetClock(void* chip, uint32_t c)
 {
 	NES_FDS* fds = (NES_FDS*)chip;
 
 	fds->clock = c;
 }
 
-void NES_FDS_SetRate(void* chip, UINT32 r)
+void NES_FDS_SetRate(void* chip, uint32_t r)
 {
 	NES_FDS* fds = (NES_FDS*)chip;
 	double cutoff, leak;
@@ -166,7 +166,7 @@ void NES_FDS_SetRate(void* chip, UINT32 r)
 	leak = 0.0;
 	if (cutoff > 0)
 		leak = exp(-2.0 * 3.14159 * cutoff / fds->rate);
-	fds->rc_k = (INT32)(leak * (double)(1<<RC_BITS));
+	fds->rc_k = (int32_t)(leak * (double)(1<<RC_BITS));
 	fds->rc_l = (1<<RC_BITS) - fds->rc_k;
 }
 
@@ -247,9 +247,9 @@ void NES_FDS_Reset(void* chip)
 	RC_RESET(&fds->tick_count);
 }
 
-static void Tick(NES_FDS* fds, UINT32 clocks)
+static void Tick(NES_FDS* fds, uint32_t clocks)
 {
-	INT32 vol_out;
+	int32_t vol_out;
 
 	// clock envelopes
 	if (!fds->env_halt && !fds->wav_halt && (fds->master_env_speed != 0))
@@ -260,7 +260,7 @@ static void Tick(NES_FDS* fds, UINT32 clocks)
 		{
 			if (!fds->env_disable[i])
 			{
-				UINT32 period;
+				uint32_t period;
 				
 				fds->env_timer[i] += clocks;
 				period = ((fds->env_speed[i]+1) * fds->master_env_speed) << 3;
@@ -284,7 +284,7 @@ static void Tick(NES_FDS* fds, UINT32 clocks)
 	// clock the mod table
 	if (!fds->mod_halt)
 	{
-		UINT32 start_pos, end_pos, p;
+		uint32_t start_pos, end_pos, p;
 
 		// advance phase, adjust for modulator
 		start_pos = fds->phase[TMOD] >> 16;
@@ -297,12 +297,12 @@ static void Tick(NES_FDS* fds, UINT32 clocks)
 		// execute all clocked steps
 		for (p = start_pos; p < end_pos; ++p)
 		{
-			INT32 wv = fds->wave[TMOD][p & 0x3F];
+			int32_t wv = fds->wave[TMOD][p & 0x3F];
 			if (wv == 4)	// 4 resets mod position
 				fds->mod_pos = 0;
 			else
 			{
-				static const INT32 BIAS[8] = { 0, 1, 2, 4, 0, -4, -2, -1 };
+				static const int32_t BIAS[8] = { 0, 1, 2, 4, 0, -4, -2, -1 };
 				fds->mod_pos += BIAS[wv];
 				fds->mod_pos &= 0x7F;	// 7-bit clamp
 			}
@@ -312,19 +312,19 @@ static void Tick(NES_FDS* fds, UINT32 clocks)
 	// clock the wav table
 	if (!fds->wav_halt)
 	{
-		INT32 mod, f;
+		int32_t mod, f;
 
 		// complex mod calculation
 		mod = 0;
 		if (fds->env_out[EMOD] != 0)	// skip if modulator off
 		{
 			// convert mod_pos to 7-bit signed
-			INT32 pos = (fds->mod_pos < 64) ? fds->mod_pos : (fds->mod_pos-128);
+			int32_t pos = (fds->mod_pos < 64) ? fds->mod_pos : (fds->mod_pos-128);
 
 			// multiply pos by gain,
 			// shift off 4 bits but with odd "rounding" behaviour
-			INT32 temp = pos * fds->env_out[EMOD];
-			INT32 rem = temp & 0x0F;
+			int32_t temp = pos * fds->env_out[EMOD];
+			int32_t rem = temp & 0x0F;
 			temp >>= 4;
 			if ((rem > 0) && ((temp & 0x80) == 0))
 			{
@@ -373,21 +373,21 @@ static void Tick(NES_FDS* fds, UINT32 clocks)
 	fds->last_vol = vol_out;
 }
 
-UINT32 NES_FDS_Render(void* chip, INT32 b[2])
+uint32_t NES_FDS_Render(void* chip, int32_t b[2])
 {
 	NES_FDS* fds = (NES_FDS*)chip;
 
 /*	// 8 bit approximation of master volume
 	static const double MASTER_VOL = 2.4 * 1223.0;	// max FDS vol vs max APU square (arbitrarily 1223)
 	static const double MAX_OUT = 32.0f * 63.0f;	// value that should map to master vol
-	static const INT32 MASTER[4] = {
-		(INT32)((MASTER_VOL / MAX_OUT) * 256.0 * 2.0f / 2.0f),
-		(INT32)((MASTER_VOL / MAX_OUT) * 256.0 * 2.0f / 3.0f),
-		(INT32)((MASTER_VOL / MAX_OUT) * 256.0 * 2.0f / 4.0f),
-		(INT32)((MASTER_VOL / MAX_OUT) * 256.0 * 2.0f / 5.0f) };*/
+	static const int32_t MASTER[4] = {
+		(int32_t)((MASTER_VOL / MAX_OUT) * 256.0 * 2.0f / 2.0f),
+		(int32_t)((MASTER_VOL / MAX_OUT) * 256.0 * 2.0f / 3.0f),
+		(int32_t)((MASTER_VOL / MAX_OUT) * 256.0 * 2.0f / 4.0f),
+		(int32_t)((MASTER_VOL / MAX_OUT) * 256.0 * 2.0f / 5.0f) };*/
 
-	UINT32 clocks;
-	INT32 v, rc_out, m;
+	uint32_t clocks;
+	int32_t v, rc_out, m;
 
 	RC_STEP(&fds->tick_count);
 	clocks = RC_GET_VAL(&fds->tick_count);
@@ -408,7 +408,7 @@ UINT32 NES_FDS_Render(void* chip, INT32 b[2])
 	return 2;
 }
 
-bool NES_FDS_Write(void* chip, UINT16 adr, UINT8 val)
+bool NES_FDS_Write(void* chip, uint16_t adr, uint8_t val)
 {
 	NES_FDS* fds = (NES_FDS*)chip;
 
@@ -511,7 +511,7 @@ bool NES_FDS_Write(void* chip, UINT16 adr, UINT8 val)
 	return false;
 }
 
-bool NES_FDS_Read(void* chip, UINT16 adr, UINT8* val)
+bool NES_FDS_Read(void* chip, uint16_t adr, uint8_t* val)
 {
 	NES_FDS* fds = (NES_FDS*)chip;
 
@@ -520,19 +520,19 @@ bool NES_FDS_Read(void* chip, UINT16 adr, UINT8* val)
 		// TODO: if wav_write is not enabled, the
 		// read address may not be reliable? need
 		// to test this on hardware.
-		*val = (UINT8)fds->wave[TWAV][adr - 0x4040];
+		*val = (uint8_t)fds->wave[TWAV][adr - 0x4040];
 		return true;
 	}
 
 	if (adr == 0x4090)	// $4090 read volume envelope
 	{
-		*val = (UINT8)fds->env_out[EVOL] | 0x40;
+		*val = (uint8_t)fds->env_out[EVOL] | 0x40;
 		return true;
 	}
 
 	if (adr == 0x4092)	// $4092 read mod envelope
 	{
-		*val = (UINT8)fds->env_out[EMOD] | 0x40;
+		*val = (uint8_t)fds->env_out[EMOD] | 0x40;
 		return true;
 	}
 

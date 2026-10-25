@@ -33,10 +33,10 @@ int main(int argc, char* argv[]);
 #ifdef AUDDRV_DSOUND
 static void SetupDirectSound(void* audDrv);
 #endif
-static UINT32 FillBuffer(void* drvStruct, void* userParam, UINT32 bufSize, void* Data);
+static uint32_t FillBuffer(void* drvStruct, void* userParam, uint32_t bufSize, void* Data);
 
 
-static UINT32 smplSize;
+static uint32_t smplSize;
 static void* audDrv;
 static DEV_INFO snDefInf;
 static DEV_INFO okiDefInf;
@@ -44,11 +44,11 @@ static DEV_INFO opllDefInf;
 static RESMPL_STATE snResmpl;
 static RESMPL_STATE okiResmpl;
 static RESMPL_STATE opllResmpl;
-static UINT32 smplAlloc;
+static uint32_t smplAlloc;
 static DEV_SMPL* smplData;
 static volatile bool canRender;
 
-static void OPLL_Write(DEVFUNC_WRITE_A8D8 write, void* info, UINT8 addr, UINT8 data)
+static void OPLL_Write(DEVFUNC_WRITE_A8D8 write, void* info, uint8_t addr, uint8_t data)
 {
 	write(info, 0, addr);
 	write(info, 1, data);
@@ -57,10 +57,10 @@ static void OPLL_Write(DEVFUNC_WRITE_A8D8 write, void* info, UINT8 addr, UINT8 d
 
 int main(int argc, char* argv[])
 {
-	UINT8 retVal;
-	UINT32 drvCount;
-	UINT32 idWavOut;
-	UINT32 idWavOutDev;
+	uint8_t retVal;
+	uint32_t drvCount;
+	uint32_t idWavOut;
+	uint32_t idWavOutDev;
 	AUDDRV_INFO* drvInfo;
 	AUDIO_OPTS* opts;
 	
@@ -83,7 +83,7 @@ int main(int argc, char* argv[])
 		return 0;
 	}
 	
-	idWavOut = (UINT32)-1;
+	idWavOut = (uint32_t)-1;
 	idWavOutDev = 0;
 	if (argc >= 2)
 		idWavOut = strtoul(argv[1], NULL, 0);
@@ -136,15 +136,15 @@ int main(int argc, char* argv[])
 		FILE* hFile = fopen("122a05.bin", "rb");	// load Hexion sample ROM
 		if (hFile != NULL)
 		{
-			UINT32 fileLen;
-			UINT8* fileData;
+			uint32_t fileLen;
+			uint8_t* fileData;
 			DEVFUNC_WRITE_MEMSIZE okiRomSize;
 			DEVFUNC_WRITE_BLOCK okiRomWrite;
 			
 			fseek(hFile, 0, SEEK_END);
 			fileLen = ftell(hFile);
 			rewind(hFile);
-			fileData = (UINT8*)malloc(fileLen);
+			fileData = (uint8_t*)malloc(fileLen);
 			fread(fileData, 0x01, fileLen, hFile);
 			fclose(hFile);
 			
@@ -254,11 +254,11 @@ Exit_AudDeinit:
 	return 0;
 }
 
-static UINT32 FillBuffer(void* drvStruct, void* userParam, UINT32 bufSize, void* data)
+static uint32_t FillBuffer(void* drvStruct, void* userParam, uint32_t bufSize, void* data)
 {
-	UINT32 smplCount;
-	INT16* SmplPtr16;
-	UINT32 curSmpl;
+	uint32_t smplCount;
+	int16_t* SmplPtr16;
+	uint32_t curSmpl;
 	WAVE_32BS* smplDataW = (WAVE_32BS*)smplData;
 	
 	if (! canRender)
@@ -279,7 +279,7 @@ static UINT32 FillBuffer(void* drvStruct, void* userParam, UINT32 bufSize, void*
 	switch(smplSize)
 	{
 	case 4:
-		SmplPtr16 = (INT16*)data;
+		SmplPtr16 = (int16_t*)data;
 		for (curSmpl = 0; curSmpl < smplCount; curSmpl ++, SmplPtr16 += 2)
 		{
 			SmplPtr16[0] = smplDataW[curSmpl].L >> 8;

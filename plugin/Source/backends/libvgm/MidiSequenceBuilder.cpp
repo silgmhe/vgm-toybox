@@ -52,14 +52,14 @@ namespace toybox::backends::libvgm
 namespace
 {
 
-	std::uint64_t deviceChannelKey (playback::DeviceId device, int channel)
+	uint64_t deviceChannelKey (playback::DeviceId device, int channel)
 	{
-		return ((std::uint64_t) device << 8) | (std::uint64_t) (channel & 0xFF);
+		return ((uint64_t) device << 8) | (uint64_t) (channel & 0xFF);
 	}
 
-	std::uint64_t typeInstanceKey (DEV_ID type, int instance)
+	uint64_t typeInstanceKey (DEV_ID type, int instance)
 	{
-		return ((std::uint64_t) type << 16) | (std::uint64_t) (instance & 0xFFFF);
+		return ((uint64_t) type << 16) | (uint64_t) (instance & 0xFFFF);
 	}
 
 	/** One decoder's queued writes, type-erased so the builder can hold them by decoder type.
@@ -75,8 +75,8 @@ namespace
 	template <typename Decoder>
 	struct ChipBuffer final : DecoderBufferBase
 	{
-		void queue (const PLR_DEV_INFO* device, std::uint8_t reg, std::uint16_t value,
-					std::uint32_t sampleTime, std::uint8_t port = 0)
+		void queue (const PLR_DEV_INFO* device, uint8_t reg, uint16_t value,
+					uint32_t sampleTime, uint8_t port = 0)
 		{
 			if (device == nullptr)
 			{
@@ -95,15 +95,15 @@ namespace
 
 		/** The SCC command carries a latch and the value that follows it: the chip sees two writes,
 			and so does the decoder. */
-		void queuePair (const PLR_DEV_INFO* device, std::uint8_t reg, std::uint8_t latch,
-						std::uint8_t value, std::uint32_t sampleTime, std::uint8_t port)
+		void queuePair (const PLR_DEV_INFO* device, uint8_t reg, uint8_t latch,
+						uint8_t value, uint32_t sampleTime, uint8_t port)
 		{
 			queue (device, reg, latch, sampleTime, port);
-			queue (device, (std::uint8_t) (reg | 1), value, sampleTime, port);
+			queue (device, (uint8_t) (reg | 1), value, sampleTime, port);
 		}
 
-		std::map<std::uint32_t, std::vector<chips::RegisterWrite>> writes;
-		std::map<std::uint32_t, const PLR_DEV_INFO*> devices;
+		std::map<uint32_t, std::vector<chips::RegisterWrite>> writes;
+		std::map<uint32_t, const PLR_DEV_INFO*> devices;
 	};
 
 	/** The decoders this build can run, created on first use and owned for the song's lifetime.
@@ -142,7 +142,7 @@ namespace
 		{
 			for (const auto& device : devices)
 			{
-				if (device.parentIdx != (UINT32) -1)
+				if (device.parentIdx != (uint32_t) -1)
 				{
 					continue;
 				}
@@ -198,7 +198,7 @@ namespace
 			stream = midi::NoteStream {};
 			stream.tickRate = tickRate;
 
-			const std::uint32_t lastSampleTime = ir.totalTicks;
+			const uint32_t lastSampleTime = ir.totalTicks;
 
 			// Chips that need the finished stream before they can place a note. The order matters: at
 			// equal timestamps the stable sort keeps whichever was appended first, so the flush order
@@ -207,7 +207,7 @@ namespace
 			// ADPCM-B's pitch only exists in its DELTA-T ROM (block 0x82), which is why the OPN family
 			// is flushed through its own entry point: it also splits ports and drums.
 			flushOpn (decoders.decoder<chips::OpnDecoder> ().writes.empty()
-						  ? std::vector<std::uint8_t>()
+						  ? std::vector<uint8_t>()
 						  : assembleRom (ir, 0x82, 16 * 1024 * 1024, true),
 					  lastSampleTime);
 			flushSsg (ir, lastSampleTime);
@@ -257,7 +257,7 @@ namespace
 		{
 			const auto& slot = ir.chips[w.deviceId];
 			const int instance = slot.instance;
-			const auto port = (std::uint8_t) w.port;
+			const auto port = (uint8_t) w.port;
 			const auto reg = w.reg;
 			const auto value = w.value;
 			const auto time = w.sampleTime;
@@ -402,8 +402,8 @@ namespace
 		/** Buffers one 2A03 register write. The chip's notes cannot be read off a single write:
 			they end when the length counter or the envelope says so, which only the decoder's own
 			frame sequencer knows. */
-		void queueNesWrite (const PLR_DEV_INFO* device, std::uint8_t reg, std::uint8_t value,
-							std::uint32_t sampleTime)
+		void queueNesWrite (const PLR_DEV_INFO* device, uint8_t reg, uint8_t value,
+							uint32_t sampleTime)
 		{
 			if (device == nullptr)
 			{
@@ -427,7 +427,7 @@ namespace
 			// With the sample-root preference on, the note moves by whatever the sample's own root
 			// says (design doc section 14); the cents left over ride on the bend that already
 			// belongs to the note's own start, so vibrato after it is untouched.
-			std::map<std::pair<int, std::uint32_t>, int> rootRemainder;
+			std::map<std::pair<int, uint32_t>, int> rootRemainder;
 
 			for (const auto& entry : in.notes)
 			{
@@ -449,9 +449,9 @@ namespace
 				noteOn (track, start, midiNote, note.velocity);
 
 				// the report needs to know where the pitch came from; `data1` already carries it
-				events.back().transposeCents = (std::int16_t) note.transposeCents;
-				events.back().rootCents = (std::int16_t) note.rootCents;
-				events.back().pitchSource = (std::uint8_t) note.pitchSource;
+				events.back().transposeCents = (int16_t) note.transposeCents;
+				events.back().rootCents = (int16_t) note.rootCents;
+				events.back().pitchSource = (uint8_t) note.pitchSource;
 
 				noteOff (track, end, midiNote);
 			}
@@ -512,16 +512,16 @@ namespace
 		}
 
 		/** Splits one OPN register write between the FM decoder and the linked SSG's. */
-		void queueOpn (DEV_ID type, int instance, std::uint8_t reg, std::uint16_t value,
-					   std::uint32_t time, std::uint8_t port)
+		void queueOpn (DEV_ID type, int instance, uint8_t reg, uint16_t value,
+					   uint32_t time, uint8_t port)
 		{
 			const PLR_DEV_INFO* device = deviceFor (type, instance);
 
-			constexpr std::uint8_t kLastSsgRegister = 0x0F;	// 0x00..0x0F are the AY's file
+			constexpr uint8_t kLastSsgRegister = 0x0F;	// 0x00..0x0F are the AY's file
 
 			if (port == 0 && reg <= kLastSsgRegister)
 			{
-				ssgWrites.queue (device, reg, static_cast<std::uint8_t> (value), time, 0);
+				ssgWrites.queue (device, reg, static_cast<uint8_t> (value), time, 0);
 				return;
 			}
 
@@ -530,12 +530,12 @@ namespace
 
 		/** The SSG behind an OPN chip: its own buffer, its own clock divisor, and its notes shifted
 			past the FM channels because that is where its tracks are. */
-		void flushSsg (const midi::SongIr& ir, std::uint32_t totalSamples)
+		void flushSsg (const midi::SongIr& ir, uint32_t totalSamples)
 		{
 			flushDecoded (ssgWrites, ir, totalSamples, DecoderScope::opnSsg);
 		}
 
-		void flushNes (std::uint32_t totalSamples)
+		void flushNes (uint32_t totalSamples)
 		{
 			for (auto& entry : nesWrites)
 			{
@@ -545,7 +545,7 @@ namespace
 					continue;
 				}
 
-				const std::uint32_t clock = (device->second->devCfg != nullptr
+				const uint32_t clock = (device->second->devCfg != nullptr
 											 && device->second->devCfg->clock > 0)
 												? device->second->devCfg->clock
 												: 1789773u;
@@ -588,7 +588,7 @@ namespace
 		/** Decodes every OPN write once the stream is read. One pass per device, because the
 			decoder needs the whole register history: algorithm changes, a total level written
 			before the key-on, ADPCM start bits and the DAC's 0x2A stream. */
-		void flushOpn (const std::vector<std::uint8_t>& adpcmBRom, std::uint32_t totalSamples)
+		void flushOpn (const std::vector<uint8_t>& adpcmBRom, uint32_t totalSamples)
 		{
 			for (auto& entry : decoders.decoder<chips::OpnDecoder> ().writes)
 			{
@@ -599,7 +599,7 @@ namespace
 				}
 
 				const PLR_DEV_INFO& info = *device->second;
-				std::uint32_t fallbackClock = 7670453u;
+				uint32_t fallbackClock = 7670453u;
 				switch (info.type)
 				{
 				case DEVID_YM2203:
@@ -615,7 +615,7 @@ namespace
 					break;
 				}
 
-				const std::uint32_t clock = (info.devCfg != nullptr && info.devCfg->clock > 0)
+				const uint32_t clock = (info.devCfg != nullptr && info.devCfg->clock > 0)
 												? info.devCfg->clock
 												: fallbackClock;
 
@@ -655,7 +655,7 @@ namespace
 
 		/** One pass per OPL device: OPLL and OPL2 have different pitch registers, and the
 			rhythm mode borrows channels as it is entered, so the whole stream is needed. */
-		void flushOpl (std::uint32_t totalSamples)
+		void flushOpl (uint32_t totalSamples)
 		{
 			for (auto& entry : decoders.decoder<chips::OplDecoder> ().writes)
 			{
@@ -669,10 +669,10 @@ namespace
 				bool adpcm = false;
 				const chips::OplDecoder::Variant variant = oplVariantFor (info, adpcm);
 
-				const std::uint32_t fallbackClock = variant == chips::OplDecoder::Variant::opl3
+				const uint32_t fallbackClock = variant == chips::OplDecoder::Variant::opl3
 														? 14318180u
 														: 3579545u;
-				std::uint32_t clock = (info.devCfg != nullptr && info.devCfg->clock > 0)
+				uint32_t clock = (info.devCfg != nullptr && info.devCfg->clock > 0)
 										  ? info.devCfg->clock
 										  : fallbackClock;
 
@@ -706,14 +706,14 @@ namespace
 			the layer that is meant to know nothing about chips. */
 		template <typename Decoder>
 		void flushDecoded (ChipBuffer<Decoder>& buffer, const midi::SongIr& ir,
-						   std::uint32_t totalSamples, DecoderScope scope = DecoderScope::standalone)
+						   uint32_t totalSamples, DecoderScope scope = DecoderScope::standalone)
 		{
 			constexpr auto requirements = Decoder::kRequirements;
 
 			// A block below 0x40 is a PCM bank (concatenated by type), a RAM block writes at an
 			// address, a ROM block declares the size of the whole image - three shapes, and the
 			// type in the file is what distinguishes them (VGM's own numbering).
-			std::vector<std::uint8_t> image;
+			std::vector<uint8_t> image;
 			chips::ChipMemory memory;
 			if (requirements.hasMemory && ! buffer.writes.empty())
 			{
@@ -743,7 +743,7 @@ namespace
 					continue;
 				}
 
-				std::uint32_t clock = (device->second->devCfg != nullptr
+				uint32_t clock = (device->second->devCfg != nullptr
 									   && device->second->devCfg->clock > 0)
 										  ? device->second->devCfg->clock
 										  : requirements.fallbackClock;
@@ -793,21 +793,21 @@ namespace
 			only exists in these bytes. See chips/C140Decoder.h and chips/C352Decoder.h for the
 			measurement (shared through chips/Pitch.h) and the reason it cannot be skipped. */
 		/** The C140's ROM banking travels in the slot's flags, the way the header byte did before. */
-		static std::uint8_t c140BankingOf (const midi::SongIr& ir)
+		static uint8_t c140BankingOf (const midi::SongIr& ir)
 		{
 			for (const auto& slot : ir.chips)
 			{
 				if (slot.kind == midi::ChipKind::c140)
 				{
-					return (std::uint8_t) slot.flags;
+					return (uint8_t) slot.flags;
 				}
 			}
 
 			return 0;
 		}
 
-		static std::vector<std::uint8_t> assembleRom (const midi::SongIr& ir,
-													  std::uint8_t type,
+		static std::vector<uint8_t> assembleRom (const midi::SongIr& ir,
+													  uint8_t type,
 													  std::size_t maxRomBytes,
 													  bool clipToContent = false)
 		{
@@ -827,7 +827,7 @@ namespace
 				romSize = std::max (romSize, clipToContent ? end : (std::size_t) block.romSize);
 			}
 
-			std::vector<std::uint8_t> rom;
+			std::vector<uint8_t> rom;
 			romSize = std::min (romSize, maxRomBytes);
 			if (romSize == 0)
 			{
@@ -854,11 +854,11 @@ namespace
 
 			The RF5C164's samples live there, as type 0x02; a bank larger than the chip's RAM is cut at
 			the chip's limit, because everything past it is unreachable anyway. */
-		static std::vector<std::uint8_t> assemblePcmBank (const midi::SongIr& ir,
-														  std::uint8_t type,
+		static std::vector<uint8_t> assemblePcmBank (const midi::SongIr& ir,
+														  uint8_t type,
 														  std::size_t maxBytes)
 		{
-			std::vector<std::uint8_t> bank;
+			std::vector<uint8_t> bank;
 			for (const auto& block : ir.roms)
 			{
 				if (block.memoryType != type || bank.size() >= maxBytes)
@@ -879,11 +879,11 @@ namespace
 			address to write at and nothing else - so the image is `maxRamBytes` of zeroes with every
 			block copied to its own address. A gap stays zero, which is also what the chip reads
 			there, and a table that lives in one measures as "no period". */
-		static std::vector<std::uint8_t> assembleRam (const midi::SongIr& ir,
-													  std::uint8_t type,
+		static std::vector<uint8_t> assembleRam (const midi::SongIr& ir,
+													  uint8_t type,
 													  std::size_t maxRamBytes)
 		{
-			std::vector<std::uint8_t> ram (maxRamBytes, 0);
+			std::vector<uint8_t> ram (maxRamBytes, 0);
 			for (const auto& block : ir.roms)
 			{
 				if (block.memoryType != type || block.ramOffset >= ram.size())
@@ -916,7 +916,7 @@ namespace
 		{
 			for (const auto& device : devices)
 			{
-				if (device.parentIdx != (UINT32) -1 || device.type != DEVID_RF5C68
+				if (device.parentIdx != (uint32_t) -1 || device.type != DEVID_RF5C68
 					|| device.instance != instance || device.devCfg == nullptr)
 				{
 					continue;
@@ -952,8 +952,8 @@ namespace
 			playback::MidiEvent event;
 			event.timeSeconds = time;
 			event.type = playback::MidiEventType::noteOn;
-			event.data1 = (std::uint8_t) note;
-			event.data2 = (std::uint8_t) juce::jlimit (1, 127, velocity);
+			event.data1 = (uint8_t) note;
+			event.data2 = (uint8_t) juce::jlimit (1, 127, velocity);
 			event.sourceTrack = tracks[(std::size_t) track].id;
 			events.push_back (event);
 		}
@@ -968,7 +968,7 @@ namespace
 			playback::MidiEvent event;
 			event.timeSeconds = time;
 			event.type = playback::MidiEventType::noteOff;
-			event.data1 = (std::uint8_t) note;
+			event.data1 = (uint8_t) note;
 			event.data2 = 0;
 			event.sourceTrack = tracks[(std::size_t) track].id;
 			events.push_back (event);
@@ -988,7 +988,7 @@ namespace
 			playback::MidiEvent event;
 			event.timeSeconds = time;
 			event.type = playback::MidiEventType::pitchBend;
-			event.bendCents = (std::int16_t) std::lround (
+			event.bendCents = (int16_t) std::lround (
 				juce::jlimit (-(double) playback::maxPitchBendRange, (double) playback::maxPitchBendRange,
 							  semitones) * 100.0);
 			event.sourceTrack = tracks[(std::size_t) track].id;
@@ -998,8 +998,8 @@ namespace
 		/** Buffers one DMG APU register write. A Game Boy note is not a register write either: the
 			length counters, the envelopes and the sweep run off the chip's frame sequencer, which
 			only the decoder models, so the stream is decoded once it has been read. */
-		void queueGbWrite (const PLR_DEV_INFO* device, std::uint8_t reg, std::uint8_t value,
-						   std::uint32_t sampleTime)
+		void queueGbWrite (const PLR_DEV_INFO* device, uint8_t reg, uint8_t value,
+						   uint32_t sampleTime)
 		{
 			if (device == nullptr)
 			{
@@ -1015,7 +1015,7 @@ namespace
 			gbDevices[device->id] = device;
 		}
 
-		void flushGb (std::uint32_t totalSamples)
+		void flushGb (uint32_t totalSamples)
 		{
 			for (auto& entry : gbWrites)
 			{
@@ -1025,7 +1025,7 @@ namespace
 					continue;
 				}
 
-				const std::uint32_t clock = (device->second->devCfg != nullptr
+				const uint32_t clock = (device->second->devCfg != nullptr
 											 && device->second->devCfg->clock > 0)
 												? device->second->devCfg->clock
 												: 4194304u;
@@ -1045,15 +1045,15 @@ namespace
 			everything else is the normal OPN FM register file. */
 		const std::vector<PLR_DEV_INFO>& devices;
 		const std::vector<playback::TrackInfo>& tracks;
-		std::map<std::uint64_t, const PLR_DEV_INFO*> deviceByType;
-		std::map<std::uint64_t, int> trackByDeviceChannel;
+		std::map<uint64_t, const PLR_DEV_INFO*> deviceByType;
+		std::map<uint64_t, int> trackByDeviceChannel;
 
 		// 2A03 writes, kept until the stream ends so the decoder can run its frame sequencer
-		std::map<std::uint32_t, std::vector<chips::RegisterWrite>> nesWrites;
-		std::map<std::uint32_t, const PLR_DEV_INFO*> nesDevices;
+		std::map<uint32_t, std::vector<chips::RegisterWrite>> nesWrites;
+		std::map<uint32_t, const PLR_DEV_INFO*> nesDevices;
 		// DMG writes: same reason as the 2A03, its frame sequencer owns the note ends
-		std::map<std::uint32_t, std::vector<chips::RegisterWrite>> gbWrites;
-		std::map<std::uint32_t, const PLR_DEV_INFO*> gbDevices;
+		std::map<uint32_t, std::vector<chips::RegisterWrite>> gbWrites;
+		std::map<uint32_t, const PLR_DEV_INFO*> gbDevices;
 		// the OPN family: algorithm and total level decide whether a key-on is a note, and the
 		// ADPCM/DAC channels are one-shots the chip itself ends, so the whole stream is needed
 		// the PSGs whose registers describe the whole voice: a write only matters in context
@@ -1126,7 +1126,7 @@ std::unique_ptr<playback::MidiSequence> buildMidiSequence (
 	}
 
 	Builder builder (devices, tracks, transposeBySampleRoot);
-	return builder.parse (static_cast<const UINT8*> (data), size);
+	return builder.parse (static_cast<const uint8_t*> (data), size);
 }
 
 } // namespace toybox::backends::libvgm

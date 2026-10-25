@@ -16,22 +16,22 @@
 #include "rf5c68.h"
 
 
-static void rf5c68_update(void *info, UINT32 samples, DEV_SMPL **outputs);
+static void rf5c68_update(void *info, uint32_t samples, DEV_SMPL **outputs);
 
-static UINT8 device_start_rf5c68_mame(const DEV_GEN_CFG* cfg, DEV_INFO* retDevInf);
-static void* device_start_rf5c68(UINT32 clock);
+static uint8_t device_start_rf5c68_mame(const DEV_GEN_CFG* cfg, DEV_INFO* retDevInf);
+static void* device_start_rf5c68(uint32_t clock);
 static void device_stop_rf5c68(void *info);
 static void device_reset_rf5c68(void *info);
 //void rf5c68_set_sample_end_callback(void *info, SAMPLE_END_CB callback, void* param);
 
-static UINT8 rf5c68_r(void *info, UINT8 offset);
-static void rf5c68_w(void *info, UINT8 offset, UINT8 data);
+static uint8_t rf5c68_r(void *info, uint8_t offset);
+static void rf5c68_w(void *info, uint8_t offset, uint8_t data);
 
-static UINT8 rf5c68_mem_r(void *info, UINT16 offset);
-static void rf5c68_mem_w(void *info, UINT16 offset, UINT8 data);
-static void rf5c68_write_ram(void *info, UINT32 offset, UINT32 length, const UINT8* data);
+static uint8_t rf5c68_mem_r(void *info, uint16_t offset);
+static void rf5c68_mem_w(void *info, uint16_t offset, uint8_t data);
+static void rf5c68_write_ram(void *info, uint32_t offset, uint32_t length, const uint8_t* data);
 
-static void rf5c68_set_mute_mask(void *info, UINT32 MuteMask);
+static void rf5c68_set_mute_mask(void *info, uint32_t MuteMask);
 
 
 static DEVDEF_RWFUNC devFunc[] =
@@ -71,14 +71,14 @@ DEV_DEF devDef_RF5C68_MAME =
 typedef struct _pcm_channel pcm_channel;
 struct _pcm_channel
 {
-	UINT8		enable;
-	UINT8		env;
-	UINT8		pan;
-	UINT8		start;
-	UINT32		addr;
-	UINT16		step;
-	UINT16		loopst;
-	UINT8		Muted;
+	uint8_t		enable;
+	uint8_t		env;
+	uint8_t		pan;
+	uint8_t		start;
+	uint32_t		addr;
+	uint16_t		step;
+	uint16_t		loopst;
+	uint8_t		Muted;
 };
 
 
@@ -88,11 +88,11 @@ struct _rf5c68_state
 	DEV_DATA _devData;
 
 	pcm_channel			chan[NUM_CHANNELS];
-	UINT8				cbank;
-	UINT8				wbank;
-	UINT8				enable;
-	UINT32				datasize;
-	UINT8*				data;
+	uint8_t				cbank;
+	uint8_t				wbank;
+	uint8_t				enable;
+	uint32_t				datasize;
+	uint8_t*				data;
 	
 	SAMPLE_END_CB		sample_end_cb;
 	void*				sample_cb_param;
@@ -103,13 +103,13 @@ struct _rf5c68_state
 //    RF5C68 stream update
 //-------------------------------------------------
 
-static void rf5c68_update(void *info, UINT32 samples, DEV_SMPL **outputs)
+static void rf5c68_update(void *info, uint32_t samples, DEV_SMPL **outputs)
 {
 	rf5c68_state *chip = (rf5c68_state *)info;
 	DEV_SMPL *left = outputs[0];
 	DEV_SMPL *right = outputs[1];
-	UINT8 i;
-	UINT32 j;
+	uint8_t i;
+	uint32_t j;
 
 	/* start with clean buffers */
 	memset(left, 0, samples * sizeof(*left));
@@ -191,11 +191,11 @@ static void rf5c68_update(void *info, UINT32 samples, DEV_SMPL **outputs)
 }
 
 
-static UINT8 device_start_rf5c68_mame(const DEV_GEN_CFG* cfg, DEV_INFO* retDevInf)
+static uint8_t device_start_rf5c68_mame(const DEV_GEN_CFG* cfg, DEV_INFO* retDevInf)
 {
 	void* chip;
 	DEV_DATA* devData;
-	UINT32 rate;
+	uint32_t rate;
 	
 	rate = cfg->clock / 384;
 	chip = device_start_rf5c68(cfg->clock);
@@ -213,7 +213,7 @@ static UINT8 device_start_rf5c68_mame(const DEV_GEN_CFG* cfg, DEV_INFO* retDevIn
 //    RF5C68 start
 //-------------------------------------------------
 
-void* device_start_rf5c68(UINT32 clock)
+void* device_start_rf5c68(uint32_t clock)
 {
 	rf5c68_state *chip;
 	
@@ -223,7 +223,7 @@ void* device_start_rf5c68(UINT32 clock)
 		return NULL;
 	
 	chip->datasize = 0x10000;
-	chip->data = (UINT8*)malloc(chip->datasize);
+	chip->data = (uint8_t*)malloc(chip->datasize);
 	
 	chip->sample_end_cb = NULL;
 	chip->sample_cb_param = NULL;
@@ -244,7 +244,7 @@ static void device_stop_rf5c68(void *info)
 static void device_reset_rf5c68(void *info)
 {
 	rf5c68_state *chip = (rf5c68_state *)info;
-	UINT8 i;
+	uint8_t i;
 	pcm_channel* chan;
 	
 	// Clear the PCM memory.
@@ -282,10 +282,10 @@ void rf5c68_set_sample_end_callback(void *info, SAMPLE_END_CB callback, void* pa
 //    RF5C68 write register
 //-------------------------------------------------
 
-static UINT8 rf5c68_r(void *info, UINT8 offset)
+static uint8_t rf5c68_r(void *info, uint8_t offset)
 {
 	rf5c68_state *chip = (rf5c68_state *)info;
-	UINT8 shift;
+	uint8_t shift;
 
 	shift = (offset & 1) ? 11 + 8 : 11;
 
@@ -294,11 +294,11 @@ static UINT8 rf5c68_r(void *info, UINT8 offset)
 	return (chip->chan[(offset & 0x0e) >> 1].addr) >> shift;
 }
 
-static void rf5c68_w(void *info, UINT8 offset, UINT8 data)
+static void rf5c68_w(void *info, uint8_t offset, uint8_t data)
 {
 	rf5c68_state *chip = (rf5c68_state *)info;
 	pcm_channel *chan = &chip->chan[chip->cbank];
-	UINT8 i;
+	uint8_t i;
 
 	/* switch off the address */
 	switch (offset)
@@ -357,7 +357,7 @@ static void rf5c68_w(void *info, UINT8 offset, UINT8 data)
 //    RF5C68 read memory
 //-------------------------------------------------
 
-static UINT8 rf5c68_mem_r(void *info, UINT16 offset)
+static uint8_t rf5c68_mem_r(void *info, uint16_t offset)
 {
 	rf5c68_state *chip = (rf5c68_state *)info;
 	offset &= 0x0FFF;
@@ -369,14 +369,14 @@ static UINT8 rf5c68_mem_r(void *info, UINT16 offset)
 //    RF5C68 write memory
 //-------------------------------------------------
 
-static void rf5c68_mem_w(void *info, UINT16 offset, UINT8 data)
+static void rf5c68_mem_w(void *info, uint16_t offset, uint8_t data)
 {
 	rf5c68_state *chip = (rf5c68_state *)info;
 	offset &= 0x0FFF;
 	chip->data[chip->wbank * 0x1000 | offset] = data;
 }
 
-static void rf5c68_write_ram(void *info, UINT32 offset, UINT32 length, const UINT8* data)
+static void rf5c68_write_ram(void *info, uint32_t offset, uint32_t length, const uint8_t* data)
 {
 	rf5c68_state *chip = (rf5c68_state *)info;
 	
@@ -392,10 +392,10 @@ static void rf5c68_write_ram(void *info, UINT32 offset, UINT32 length, const UIN
 }
 
 
-static void rf5c68_set_mute_mask(void *info, UINT32 MuteMask)
+static void rf5c68_set_mute_mask(void *info, uint32_t MuteMask)
 {
 	rf5c68_state *chip = (rf5c68_state *)info;
-	UINT8 CurChn;
+	uint8_t CurChn;
 	
 	for (CurChn = 0; CurChn < NUM_CHANNELS; CurChn ++)
 		chip->chan[CurChn].Muted = (MuteMask >> CurChn) & 0x01;

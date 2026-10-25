@@ -30,11 +30,11 @@
 
 struct GYM_HEADER
 {
-	UINT8 hasHeader;
-	UINT32 uncomprSize;
-	UINT32 loopFrame;
-	UINT32 dataOfs;
-	UINT32 realFileSize;	// internal file size after possible decompression
+	uint8_t hasHeader;
+	uint32_t uncomprSize;
+	uint32_t loopFrame;
+	uint32_t dataOfs;
+	uint32_t realFileSize;	// internal file size after possible decompression
 };
 
 struct GYM_PLAY_OPTIONS
@@ -49,8 +49,8 @@ private:
 	struct DevCfg
 	{
 		DEV_ID type;
-		UINT16 volume;
-		std::vector<UINT8> data;
+		uint16_t volume;
+		std::vector<uint8_t> data;
 	};
 	struct DEVLOG_CB_DATA
 	{
@@ -69,101 +69,101 @@ public:
 	GYMPlayer();
 	~GYMPlayer();
 	
-	UINT32 GetPlayerType(void) const;
+	uint32_t GetPlayerType(void) const;
 	const char* GetPlayerName(void) const;
-	static UINT8 PlayerCanLoadFile(DATA_LOADER *dataLoader);
-	UINT8 CanLoadFile(DATA_LOADER *dataLoader) const;
-	UINT8 LoadFile(DATA_LOADER *dataLoader);
-	UINT8 UnloadFile(void);
+	static uint8_t PlayerCanLoadFile(DATA_LOADER *dataLoader);
+	uint8_t CanLoadFile(DATA_LOADER *dataLoader) const;
+	uint8_t LoadFile(DATA_LOADER *dataLoader);
+	uint8_t UnloadFile(void);
 	const GYM_HEADER* GetFileHeader(void) const;
 	
 	const char* const* GetTags(void);
-	UINT8 GetSongInfo(PLR_SONG_INFO& songInf);
-	UINT8 GetSongDeviceInfo(std::vector<PLR_DEV_INFO>& devInfList) const;
-	UINT8 SetDeviceOptions(UINT32 id, const PLR_DEV_OPTS& devOpts);
-	UINT8 GetDeviceOptions(UINT32 id, PLR_DEV_OPTS& devOpts) const;
-	UINT8 SetDeviceMuting(UINT32 id, const PLR_MUTE_OPTS& muteOpts);
-	UINT8 GetDeviceMuting(UINT32 id, PLR_MUTE_OPTS& muteOpts) const;
-	UINT8 SetPlayerOptions(const GYM_PLAY_OPTIONS& playOpts);
-	UINT8 GetPlayerOptions(GYM_PLAY_OPTIONS& playOpts) const;
+	uint8_t GetSongInfo(PLR_SONG_INFO& songInf);
+	uint8_t GetSongDeviceInfo(std::vector<PLR_DEV_INFO>& devInfList) const;
+	uint8_t SetDeviceOptions(uint32_t id, const PLR_DEV_OPTS& devOpts);
+	uint8_t GetDeviceOptions(uint32_t id, PLR_DEV_OPTS& devOpts) const;
+	uint8_t SetDeviceMuting(uint32_t id, const PLR_MUTE_OPTS& muteOpts);
+	uint8_t GetDeviceMuting(uint32_t id, PLR_MUTE_OPTS& muteOpts) const;
+	uint8_t SetPlayerOptions(const GYM_PLAY_OPTIONS& playOpts);
+	uint8_t GetPlayerOptions(GYM_PLAY_OPTIONS& playOpts) const;
 	
-	//UINT32 GetSampleRate(void) const;
-	UINT8 SetSampleRate(UINT32 sampleRate);
+	//uint32_t GetSampleRate(void) const;
+	uint8_t SetSampleRate(uint32_t sampleRate);
 	double GetPlaybackSpeed(void) const;
-	UINT8 SetPlaybackSpeed(double speed);
+	uint8_t SetPlaybackSpeed(double speed);
 	//void SetEventCallback(PLAYER_EVENT_CB cbFunc, void* cbParam);
-	UINT32 Tick2Sample(UINT32 ticks) const;
-	UINT32 Sample2Tick(UINT32 samples) const;
-	double Tick2Second(UINT32 ticks) const;
-	//double Sample2Second(UINT32 samples) const;
+	uint32_t Tick2Sample(uint32_t ticks) const;
+	uint32_t Sample2Tick(uint32_t samples) const;
+	double Tick2Second(uint32_t ticks) const;
+	//double Sample2Second(uint32_t samples) const;
 	
-	UINT8 GetState(void) const;
-	UINT32 GetCurPos(UINT8 unit) const;
-	UINT32 GetCurLoop(void) const;
-	UINT32 GetTotalTicks(void) const;	// get time for playing once in ticks
-	UINT32 GetLoopTicks(void) const;	// get time for one loop in ticks
-	//UINT32 GetTotalPlayTicks(UINT32 numLoops) const;	// get time for playing + looping (without fading)
+	uint8_t GetState(void) const;
+	uint32_t GetCurPos(uint8_t unit) const;
+	uint32_t GetCurLoop(void) const;
+	uint32_t GetTotalTicks(void) const;	// get time for playing once in ticks
+	uint32_t GetLoopTicks(void) const;	// get time for one loop in ticks
+	//uint32_t GetTotalPlayTicks(uint32_t numLoops) const;	// get time for playing + looping (without fading)
 	
-	UINT8 Start(void);
-	UINT8 Stop(void);
-	UINT8 Reset(void);
-	UINT8 Seek(UINT8 unit, UINT32 pos);
-	UINT32 Render(UINT32 smplCnt, WAVE_32BS* data);
+	uint8_t Start(void);
+	uint8_t Stop(void);
+	uint8_t Reset(void);
+	uint8_t Seek(uint8_t unit, uint32_t pos);
+	uint32_t Render(uint32_t smplCnt, WAVE_32BS* data);
 	
 private:
-	size_t DeviceID2OptionID(UINT32 id) const;
+	size_t DeviceID2OptionID(uint32_t id) const;
 	void RefreshMuting(GYM_CHIPDEV& chipDev, const PLR_MUTE_OPTS& muteOpts);
 	void RefreshPanning(GYM_CHIPDEV& chipDev, const PLR_PAN_OPTS& panOpts);
 	
-	static bool CheckRawGYMFile(UINT32 dataLen, const UINT8* data);
-	UINT8 DecompressZlibData(void);
+	static bool CheckRawGYMFile(uint32_t dataLen, const uint8_t* data);
+	uint8_t DecompressZlibData(void);
 	void CalcSongLength(void);
-	UINT8 LoadTags(void);
+	uint8_t LoadTags(void);
 	void LoadTag(const char* tagName, const void* data, size_t maxlen);
 	std::string GetUTF8String(const char* startPtr, const char* endPtr);
 
 	void RefreshTSRates(void);
 	
-	static void PlayerLogCB(void* userParam, void* source, UINT8 level, const char* message);
-	static void SndEmuLogCB(void* userParam, void* source, UINT8 level, const char* message);
+	static void PlayerLogCB(void* userParam, void* source, uint8_t level, const char* message);
+	static void SndEmuLogCB(void* userParam, void* source, uint8_t level, const char* message);
 	
 	void GenerateDeviceConfig(void);
-	UINT8 SeekToTick(UINT32 tick);
-	UINT8 SeekToFilePos(UINT32 pos);
-	void ParseFile(UINT32 ticks);
+	uint8_t SeekToTick(uint32_t tick);
+	uint8_t SeekToFilePos(uint32_t pos);
+	void ParseFile(uint32_t ticks);
 	void DoCommand(void);
 	void DoFileEnd(void);
 	
 	CPCONV* _cpc1252;	// CP1252 -> UTF-8 codepage conversion
 	DEV_LOGGER _logger;
 	DATA_LOADER* _dLoad;
-	UINT32 _fileLen;
-	const UINT8* _fileData;	// data pointer for quick access, equals _dLoad->GetFileData().data()
-	std::vector<UINT8> _decFData;
+	uint32_t _fileLen;
+	const uint8_t* _fileData;	// data pointer for quick access, equals _dLoad->GetFileData().data()
+	std::vector<uint8_t> _decFData;
 	
 	GYM_HEADER _fileHdr;
 	std::vector<DevCfg> _devCfgs;
-	UINT32 _tickFreq;
-	UINT32 _totalTicks;
-	UINT32 _loopOfs;
+	uint32_t _tickFreq;
+	uint32_t _totalTicks;
+	uint32_t _loopOfs;
 	std::map<std::string, std::string> _tagData;
 	std::vector<const char*> _tagList;
 	
-	std::vector<UINT8> _pcmBuffer;
-	UINT32 _pcmBaseTick;
-	UINT32 _pcmInPos;	// input position (GYM -> buffer)
-	UINT32 _pcmOutPos;	// output position (buffer -> YM2612)
-	UINT8 _ymFreqRegs[0x20];	// cache of 0x0A0..0x0AF and 0x1A0..0x1AF frequency registers
-	UINT8 _ymLatch[2];	// current latch value ([0] = normal channels, [1] = CH3 multi-freq mode registers]
+	std::vector<uint8_t> _pcmBuffer;
+	uint32_t _pcmBaseTick;
+	uint32_t _pcmInPos;	// input position (GYM -> buffer)
+	uint32_t _pcmOutPos;	// output position (buffer -> YM2612)
+	uint8_t _ymFreqRegs[0x20];	// cache of 0x0A0..0x0AF and 0x1A0..0x1AF frequency registers
+	uint8_t _ymLatch[2];	// current latch value ([0] = normal channels, [1] = CH3 multi-freq mode registers]
 	
-	//UINT32 _outSmplRate;
+	//uint32_t _outSmplRate;
 	
 	// tick/sample conversion rates
-	UINT64 _tsMult;
-	UINT64 _tsDiv;
-	UINT64 _ttMult;
-	UINT64 _lastTsMult;
-	UINT64 _lastTsDiv;
+	uint64_t _tsMult;
+	uint64_t _tsDiv;
+	uint64_t _ttMult;
+	uint64_t _lastTsMult;
+	uint64_t _lastTsDiv;
 	
 	GYM_PLAY_OPTIONS _playOpts;
 	PLR_DEV_OPTS _devOpts[2];	// 0 = YM2612, 1 = SEGA PSG
@@ -171,15 +171,15 @@ private:
 	std::vector<std::string> _devNames;
 	size_t _optDevMap[2];	// maps _devOpts vector index to _devices vector
 	
-	UINT32 _filePos;
-	UINT32 _fileTick;
-	UINT32 _playTick;
-	UINT32 _playSmpl;
-	UINT32 _curLoop;
-	UINT32 _lastLoopTick;
+	uint32_t _filePos;
+	uint32_t _fileTick;
+	uint32_t _playTick;
+	uint32_t _playSmpl;
+	uint32_t _curLoop;
+	uint32_t _lastLoopTick;
 
-	UINT8 _playState;
-	UINT8 _psTrigger;	// used to temporarily trigger special commands
+	uint8_t _playState;
+	uint8_t _psTrigger;	// used to temporarily trigger special commands
 	//PLAYER_EVENT_CB _eventCbFunc;
 	//void* _eventCbParam;
 };

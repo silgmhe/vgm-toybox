@@ -28,10 +28,10 @@ protected:
   int region;
   K6502_Context context;
   bool breaked;
-  INT64 fclocks_per_frame; // fCPU clocks per frame timer with fixed point precision
-  INT64 fclocks_left_in_frame;
-  UINT32 breakpoint;
-  UINT32 irqs;
+  int64_t fclocks_per_frame; // fCPU clocks per frame timer with fixed point precision
+  int64_t fclocks_left_in_frame;
+  uint32_t breakpoint;
+  uint32_t irqs;
   unsigned int stolen_cycles;
   bool enable_irq;
   bool enable_nmi;
@@ -40,11 +40,11 @@ protected:
   bool play_ready;
   IDevice *bus;
   NES_MEM* nes_mem;
-  UINT8 nsf2_bits;
+  uint8_t nsf2_bits;
   NSF2_IRQ* nsf2_irq;
   CPULogger *log_cpu;
 
-  void run_from (UINT32 address);
+  void run_from (uint32_t address);
 
 public:
   double nes_basecycles;
@@ -57,14 +57,14 @@ public:
     double play_rate,
     int song_,
     int region_,
-    UINT8 nsf2_bits_,
+    uint8_t nsf2_bits_,
     bool enable_irq_,
     NSF2_IRQ* nsf2_irq_);
   int Exec (int clock); // returns number of clocks executed
   void SetMemory (IDevice *);
   void SetNESMemory (NES_MEM *);
-  bool Read (UINT32 adr, UINT32 & val, UINT32 id=0);
-  bool Write (UINT32 adr, UINT32 val, UINT32 id=0);
+  bool Read (uint32_t adr, uint32_t & val, uint32_t id=0);
+  bool Write (uint32_t adr, uint32_t val, uint32_t id=0);
   void SetLogger (CPULogger *logger);
   unsigned int GetPC() const;
   void StealCycles(unsigned int cycles);

@@ -22,7 +22,7 @@ NES_N106::~NES_N106 ()
 {
 }
 
-void NES_N106::SetStereoMix (int trk, INT16 mixl, INT16 mixr)
+void NES_N106::SetStereoMix (int trk, int16_t mixl, int16_t mixr)
 {
     if (trk < 0 || trk >= 8) return;
     trk = 7-trk; // displayed channels are inverted
@@ -120,7 +120,7 @@ void NES_N106::Reset ()
     Write(0xF800, 0x00); // select $00 without auto-increment
 }
 
-void NES_N106::Tick (UINT32 clocks)
+void NES_N106::Tick (uint32_t clocks)
 {
     if (master_disable) return;
 
@@ -132,24 +132,24 @@ void NES_N106::Tick (UINT32 clocks)
     {
         int channel = 7-tick_channel;
 
-        UINT32 phase = get_phase(channel);
-        UINT32 freq  = get_freq(channel);
-        UINT32 len   = get_len(channel);
-        UINT32 off   = get_off(channel);
-        INT32  vol   = get_vol(channel);
+        uint32_t phase = get_phase(channel);
+        uint32_t freq  = get_freq(channel);
+        uint32_t len   = get_len(channel);
+        uint32_t off   = get_off(channel);
+        int32_t  vol   = get_vol(channel);
 
         // accumulate 24-bit phase
         phase = (phase + freq) & 0x00FFFFFF;
 
         // wrap phase if wavelength exceeded
-        UINT32 hilen = len << 16;
+        uint32_t hilen = len << 16;
         while (phase >= hilen) phase -= hilen;
 
         // write back phase
         set_phase(phase, channel);
 
         // fetch sample (note: N163 output is centred at 8, and inverted w.r.t 2A03)
-        INT32 sample = 8 - get_sample(((phase >> 16) + off) & 0xFF);
+        int32_t sample = 8 - get_sample(((phase >> 16) + off) & 0xFF);
         fout[channel] = sample * vol;
 
         // cycle to next channel every 15 clocks
@@ -160,7 +160,7 @@ void NES_N106::Tick (UINT32 clocks)
     }
 }
 
-UINT32 NES_N106::Render (INT32 b[2])
+uint32_t NES_N106::Render (int32_t b[2])
 {
     b[0] = 0;
     b[1] = 0;
@@ -217,7 +217,7 @@ UINT32 NES_N106::Render (INT32 b[2])
         }
 
         // mix together, increase output level by 8 bits, roll off 7 bits from sm
-        INT32 MIX[9] = { 256/1, 256/1, 256/2, 256/3, 256/4, 256/5, 256/6, 256/6, 256/6 };
+        int32_t MIX[9] = { 256/1, 256/1, 256/2, 256/3, 256/4, 256/5, 256/6, 256/6, 256/6 };
         b[0] = (b[0] * MIX[channels]) >> 7;
         b[1] = (b[1] * MIX[channels]) >> 7;
         // when approximating the serial multiplex as a straight mix, once the
@@ -233,14 +233,14 @@ UINT32 NES_N106::Render (INT32 b[2])
     // and lower volumes on others. Using 6.0x as a rough "one size fits all".
     const double MASTER_VOL = 6.0 * 1223.0;
     const double MAX_OUT = 15.0 * 15.0 * 256.0; // max digital value
-    const INT32 GAIN = int((MASTER_VOL / MAX_OUT) * 256.0f);
+    const int32_t GAIN = int((MASTER_VOL / MAX_OUT) * 256.0f);
     b[0] = (b[0] * GAIN) >> 8;
     b[1] = (b[1] * GAIN) >> 8;
 
     return 2;
 }
 
-bool NES_N106::Write (UINT32 adr, UINT32 val, UINT32 id)
+bool NES_N106::Write (uint32_t adr, uint32_t val, uint32_t id)
 {
     if (adr == 0xE000) // master disable
     {
@@ -286,7 +286,7 @@ bool NES_N106::Write (UINT32 adr, UINT32 val, UINT32 id)
     return false;
 }
 
-bool NES_N106::Read (UINT32 adr, UINT32 & val, UINT32 id)
+bool NES_N106::Read (uint32_t adr, uint32_t & val, uint32_t id)
 {
     if (adr == 0x4800) // register read
     {
@@ -302,7 +302,7 @@ bool NES_N106::Read (UINT32 adr, UINT32 & val, UINT32 id)
 // register decoding/encoding functions
 // 
 
-inline UINT32 NES_N106::get_phase (int channel)
+inline uint32_t NES_N106::get_phase (int channel)
 {
     // 24-bit phase stored in channel regs 1/3/5
     channel = channel << 3;
@@ -311,7 +311,7 @@ inline UINT32 NES_N106::get_phase (int channel)
         +  (reg[0x45 + channel] << 16);
 }
 
-inline UINT32 NES_N106::get_freq (int channel)
+inline uint32_t NES_N106::get_freq (int channel)
 {
     // 19-bit frequency stored in channel regs 0/2/4
     channel = channel << 3;
@@ -320,28 +320,28 @@ inline UINT32 NES_N106::get_freq (int channel)
         +  ((reg[0x44 + channel] & 0x03) << 16);
 }
 
-inline UINT32 NES_N106::get_off (int channel)
+inline uint32_t NES_N106::get_off (int channel)
 {
     // 8-bit offset stored in channel reg 6
     channel = channel << 3;
     return reg[0x46 + channel];
 }
 
-inline UINT32 NES_N106::get_len (int channel)
+inline uint32_t NES_N106::get_len (int channel)
 {
     // 6-bit<<3 length stored obscurely in channel reg 4
     channel = channel << 3;
     return 256 - (reg[0x44 + channel] & 0xFC);
 }
 
-inline INT32 NES_N106::get_vol (int channel)
+inline int32_t NES_N106::get_vol (int channel)
 {
     // 4-bit volume stored in channel reg 7
     channel = channel << 3;
     return reg[0x47 + channel] & 0x0F;
 }
 
-inline INT32 NES_N106::get_sample (UINT32 index)
+inline int32_t NES_N106::get_sample (uint32_t index)
 {
     // every sample becomes 2 samples in regs
     return (index&1) ?
@@ -355,7 +355,7 @@ inline int NES_N106::get_channels ()
     return ((reg[0x7F] >> 4) & 0x07) + 1;
 }
 
-inline void NES_N106::set_phase (UINT32 phase, int channel)
+inline void NES_N106::set_phase (uint32_t phase, int channel)
 {
     // 24-bit phase stored in channel regs 1/3/5
     channel = channel << 3;
@@ -364,7 +364,7 @@ inline void NES_N106::set_phase (UINT32 phase, int channel)
     reg[0x45 + channel] = (phase >> 16) & 0xFF;
 }
 
-  UINT32 NES_N106::RenderChannels (INT32* dest, int stride, int maxChannels)
+  uint32_t NES_N106::RenderChannels (int32_t* dest, int stride, int maxChannels)
   {
     // One Render() per channel with the others muted, then the mask put back. Correct, and it
     // keeps this file out of the chip's internal mixing - but it costs one render per channel, so
@@ -375,7 +375,7 @@ inline void NES_N106::set_phase (UINT32 phase, int channel)
     {
       mask = ~(1 << i);
 
-      INT32 b[2] = { 0, 0 };
+      int32_t b[2] = { 0, 0 };
       Render (b);
 
       if (i < maxChannels)

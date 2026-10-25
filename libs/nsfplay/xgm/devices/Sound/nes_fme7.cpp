@@ -57,7 +57,7 @@ void NES_FME7::Reset ()
     PSG_reset (psg);
 }
 
-bool NES_FME7::Write (xgm::UINT32 adr, xgm::UINT32 val, xgm::UINT32 id)
+bool NES_FME7::Write (uint32_t adr, uint32_t val, uint32_t id)
 {
   if (adr == 0xC000)
   {
@@ -75,7 +75,7 @@ bool NES_FME7::Write (xgm::UINT32 adr, xgm::UINT32 val, xgm::UINT32 id)
     return false;
 }
 
-bool NES_FME7::Read (xgm::UINT32 adr, xgm::UINT32 & val, xgm::UINT32 id)
+bool NES_FME7::Read (uint32_t adr, uint32_t & val, uint32_t id)
 {
   // not sure why this was here - BS
   //if (psg)
@@ -84,7 +84,7 @@ bool NES_FME7::Read (xgm::UINT32 adr, xgm::UINT32 & val, xgm::UINT32 id)
   return false;
 }
 
-void NES_FME7::Tick (xgm::UINT32 clocks)
+void NES_FME7::Tick (uint32_t clocks)
 {
   divider += clocks;
   while (divider >= DIVIDER)
@@ -94,7 +94,7 @@ void NES_FME7::Tick (xgm::UINT32 clocks)
   }
 }
 
-xgm::UINT32 NES_FME7::Render (xgm::INT32 b[2])
+uint32_t NES_FME7::Render (int32_t b[2])
 {
   b[0] = b[1] = 0;
 
@@ -108,19 +108,19 @@ xgm::UINT32 NES_FME7::Render (xgm::INT32 b[2])
   b[1] >>= (7-4);
 
   // master volume adjustment
-  const INT32 MASTER = INT32(0.64 * 256.0);
+  const int32_t MASTER = int32_t(0.64 * 256.0);
   b[0] = (b[0] * MASTER) >> 8;
   b[1] = (b[1] * MASTER) >> 8;
 
   return 2;
 }
 
-UINT32 NES_FME7::RenderChannels (INT32* dest, int stride, int maxChannels)
+uint32_t NES_FME7::RenderChannels (int32_t* dest, int stride, int maxChannels)
   {
     // The three tone channels are accumulated separately in psg->cout, so they split exactly. The
     // noise and the envelope are modes of those channels rather than voices of their own, and have
     // no output to report.
-    const INT32 MASTER = INT32(0.64 * 256.0);
+    const int32_t MASTER = int32_t(0.64 * 256.0);
 
     // This path reads the chip's per-channel accumulators rather than going through Render() -
     // which means the mask has to be honoured here too. It was not, so solo and the chip's own
@@ -132,7 +132,7 @@ UINT32 NES_FME7::RenderChannels (INT32* dest, int stride, int maxChannels)
         break;
       }
 
-      const INT32 value = (mask & (1 << i))
+      const int32_t value = (mask & (1 << i))
                             ? 0
                             : (((psg->cout[i] * sm[0][i]) >> (7 - 4)) * MASTER) >> 8;
 
@@ -143,7 +143,7 @@ UINT32 NES_FME7::RenderChannels (INT32* dest, int stride, int maxChannels)
     return 3;
   }
 
-void NES_FME7::SetStereoMix(int trk, xgm::INT16 mixl, xgm::INT16 mixr)
+void NES_FME7::SetStereoMix(int trk, int16_t mixl, int16_t mixr)
 {
       if (trk < 0) return;
       if (trk > 2) return;

@@ -23,15 +23,15 @@ class PlayerA
 public:
 	struct Config
 	{
-		INT32 masterVol;	// master volume (16.16 fixed point, negative value = phase inversion)
+		int32_t masterVol;	// master volume (16.16 fixed point, negative value = phase inversion)
 		bool ignoreVolGain;	// ignore track-specific volume gain
-		UINT8 chnInvert;	// channel phase inversion (bit 0 - left, bit 1 - right)
-		UINT32 loopCount;
-		UINT32 fadeSmpls;
-		UINT32 endSilenceSmpls;
+		uint8_t chnInvert;	// channel phase inversion (bit 0 - left, bit 1 - right)
+		uint32_t loopCount;
+		uint32_t fadeSmpls;
+		uint32_t endSilenceSmpls;
 		double pbSpeed;
 	};
-	typedef void (*PLR_SMPL_PACK)(void* buffer, INT32 value);
+	typedef void (*PLR_SMPL_PACK)(void* buffer, int32_t value);
 
 	PlayerA();
 	~PlayerA();
@@ -39,69 +39,69 @@ public:
 	void UnregisterAllPlayers(void);
 	const std::vector<PlayerBase*>& GetRegisteredPlayers(void) const;
 	
-	UINT8 SetOutputSettings(UINT32 smplRate, UINT8 channels, UINT8 smplBits, UINT32 smplBufferLen);
-	UINT32 GetSampleRate(void) const;
-	void SetSampleRate(UINT32 sampleRate);
+	uint8_t SetOutputSettings(uint32_t smplRate, uint8_t channels, uint8_t smplBits, uint32_t smplBufferLen);
+	uint32_t GetSampleRate(void) const;
+	void SetSampleRate(uint32_t sampleRate);
 	double GetPlaybackSpeed(void) const;
 	void SetPlaybackSpeed(double speed);
-	UINT32 GetLoopCount(void) const;
-	void SetLoopCount(UINT32 loops);
-	INT32 GetMasterVolume(void) const;
-	void SetMasterVolume(INT32 volume);
-	INT32 GetSongVolume(void) const;
-	UINT32 GetFadeSamples(void) const;
-	void SetFadeSamples(UINT32 smplCnt);
-	UINT32 GetEndSilenceSamples(void) const;
-	void SetEndSilenceSamples(UINT32 smplCnt);
+	uint32_t GetLoopCount(void) const;
+	void SetLoopCount(uint32_t loops);
+	int32_t GetMasterVolume(void) const;
+	void SetMasterVolume(int32_t volume);
+	int32_t GetSongVolume(void) const;
+	uint32_t GetFadeSamples(void) const;
+	void SetFadeSamples(uint32_t smplCnt);
+	uint32_t GetEndSilenceSamples(void) const;
+	void SetEndSilenceSamples(uint32_t smplCnt);
 	const Config& GetConfiguration(void) const;
 	void SetConfiguration(const Config& config);
 
 	void SetEventCallback(PLAYER_EVENT_CB cbFunc, void* cbParam);
 	void SetFileReqCallback(PLAYER_FILEREQ_CB cbFunc, void* cbParam);
 	void SetLogCallback(PLAYER_LOG_CB cbFunc, void* cbParam);
-	UINT8 GetState(void) const;
-	UINT32 GetCurPos(UINT8 unit) const;
-	double GetCurTime(UINT8 flags) const;	// TODO: add GetCurSample()
-	double GetTotalTime(UINT8 flags) const;	// TODO: add GetTotalSamples()
-	UINT32 GetCurLoop(void) const;
+	uint8_t GetState(void) const;
+	uint32_t GetCurPos(uint8_t unit) const;
+	double GetCurTime(uint8_t flags) const;	// TODO: add GetCurSample()
+	double GetTotalTime(uint8_t flags) const;	// TODO: add GetTotalSamples()
+	uint32_t GetCurLoop(void) const;
 	double GetLoopTime(void) const;	// TODO: add GetLoopSamples()
 	PlayerBase* GetPlayer(void);
 	const PlayerBase* GetPlayer(void) const;
 	
-	UINT8 LoadFile(DATA_LOADER* dLoad);
-	UINT8 UnloadFile(void);
-	UINT32 GetFileSize(void);
-	UINT8 Start(void);
-	UINT8 Stop(void);
-	UINT8 Reset(void);
-	UINT8 FadeOut(void);
-	UINT8 Seek(UINT8 unit, UINT32 pos);
-	UINT32 Render(UINT32 bufSize, void* data);
+	uint8_t LoadFile(DATA_LOADER* dLoad);
+	uint8_t UnloadFile(void);
+	uint32_t GetFileSize(void);
+	uint8_t Start(void);
+	uint8_t Stop(void);
+	uint8_t Reset(void);
+	uint8_t FadeOut(void);
+	uint8_t Seek(uint8_t unit, uint32_t pos);
+	uint32_t Render(uint32_t bufSize, void* data);
 private:
 	void FindPlayerEngine(void);
-	INT32 CalcSongVolume(void);
-	INT32 CalcCurrentVolume(UINT32 playbackSmpl);
-	static UINT8 PlayCallbackS(PlayerBase* player, void* userParam, UINT8 evtType, void* evtParam);
-	UINT8 PlayCallback(PlayerBase* player, UINT8 evtType, void* evtParam);
+	int32_t CalcSongVolume(void);
+	int32_t CalcCurrentVolume(uint32_t playbackSmpl);
+	static uint8_t PlayCallbackS(PlayerBase* player, void* userParam, uint8_t evtType, void* evtParam);
+	uint8_t PlayCallback(PlayerBase* player, uint8_t evtType, void* evtParam);
 	
 	std::vector<PlayerBase*> _avbPlrs;	// available players
-	UINT32 _smplRate;
+	uint32_t _smplRate;
 	Config _config;
 	PLAYER_EVENT_CB _plrCbFunc;
 	void* _plrCbParam;
-	UINT8 _myPlayState;
+	uint8_t _myPlayState;
 	
-	UINT8 _outSmplChns;
-	UINT8 _outSmplBits;
-	UINT32 _outSmplSize1;	// for 1 channel
-	UINT32 _outSmplSizeA;	// for all channels
+	uint8_t _outSmplChns;
+	uint8_t _outSmplBits;
+	uint32_t _outSmplSize1;	// for 1 channel
+	uint32_t _outSmplSizeA;	// for all channels
 	PLR_SMPL_PACK _outSmplPack;
 	std::vector<WAVE_32BS> _smplBuf;
 	PlayerBase* _player;
 	DATA_LOADER* _dLoad;
-	INT32 _songVolume;
-	UINT32 _fadeSmplStart;
-	UINT32 _endSilenceStart;
+	int32_t _songVolume;
+	uint32_t _fadeSmplStart;
+	uint32_t _endSilenceStart;
 };
 
 #endif	// __PLAYERA_HPP__

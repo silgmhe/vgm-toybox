@@ -1444,7 +1444,7 @@ Bit8u NOPN2_Read(ym3438_t *chip, Bit32u port)
     return 0;
 }
 
-void NOPN2_WriteBuffered(ym3438_t *chip, UINT8 port, UINT8 data)
+void NOPN2_WriteBuffered(ym3438_t *chip, uint8_t port, uint8_t data)
 {
     Bit64u time1, time2;
     Bit32s buffer[2];
@@ -1479,12 +1479,12 @@ void NOPN2_WriteBuffered(ym3438_t *chip, UINT8 port, UINT8 data)
     chip->writebuf_last = (chip->writebuf_last + 1) % NOPN_WRITEBUF_SIZE;
 }
 
-void nukedopn2_write(void *chip, UINT8 port, UINT8 data)
+void nukedopn2_write(void *chip, uint8_t port, uint8_t data)
 {
     NOPN2_WriteBuffered((ym3438_t *)chip, port, data);
 }
 
-UINT8 nukedopn2_read(void *chip, UINT8 port)
+uint8_t nukedopn2_read(void *chip, uint8_t port)
 {
 	return NOPN2_Read((ym3438_t*)chip, port);
 }
@@ -1565,7 +1565,7 @@ void NOPN2_GenerateResampled(ym3438_t *chip, Bit32s *buf)
     chip->samplecnt += 1 << RSM_FRAC;
 }
 
-void nukedopn2_update(void *chip, UINT32 numsamples, DEV_SMPL **sndptr)
+void nukedopn2_update(void *chip, uint32_t numsamples, DEV_SMPL **sndptr)
 {
     ym3438_t* opn2 = (ym3438_t*)chip;
     Bit32u i;
@@ -1582,7 +1582,7 @@ void nukedopn2_update(void *chip, UINT32 numsamples, DEV_SMPL **sndptr)
     }
 }
 
-void nukedopn2_set_options(void *chip, UINT32 flags)
+void nukedopn2_set_options(void *chip, uint32_t flags)
 {
     ym3438_t* opn2 = (ym3438_t*)chip;
     switch ((flags >> 4) & 0x03)
@@ -1603,7 +1603,7 @@ void nukedopn2_set_options(void *chip, UINT32 flags)
     }
 }
 
-void nukedopn2_set_mute_mask(void *chip, UINT32 mute)
+void nukedopn2_set_mute_mask(void *chip, uint32_t mute)
 {
     ym3438_t* opn2 = (ym3438_t*)chip;
     Bit32u i;
@@ -1613,7 +1613,7 @@ void nukedopn2_set_mute_mask(void *chip, UINT32 mute)
     }
 }
 
-void* nukedopn2_init(UINT32 clock, UINT32 rate)
+void* nukedopn2_init(uint32_t clock, uint32_t rate)
 {
     ym3438_t *opn2;
     
@@ -1637,7 +1637,7 @@ void nukedopn2_reset_chip(void *chip)
     ym3438_t* opn2 = (ym3438_t*)chip;
     Bit32u i;
     DEV_DATA devData;
-    UINT32 mute;
+    uint32_t mute;
     Bit32u type;
     Bit32u filter;
     

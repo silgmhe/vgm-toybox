@@ -6,7 +6,7 @@ namespace toybox::chips
 {
 namespace
 {
-	constexpr std::uint32_t kDefaultClock = 3579545;
+	constexpr uint32_t kDefaultClock = 3579545;
 
 	/** Three tone channels share the same relation: half a wave lasts 16 divider ticks, so the
 		frequency is clock / (32 * period). */
@@ -15,7 +15,7 @@ namespace
 	public:
 		explicit SnToneTable (double clock) : clock (clock) {}
 
-		int noteFor (std::uint32_t period, int, int* finePitch) const override
+		int noteFor (uint32_t period, int, int* finePitch) const override
 		{
 			if (period == 0)
 			{
@@ -35,7 +35,7 @@ namespace
 	class SnNoiseTable final : public NoteTable
 	{
 	public:
-		int noteFor (std::uint32_t mode, int, int* finePitch) const override
+		int noteFor (uint32_t mode, int, int* finePitch) const override
 		{
 			if (finePitch != nullptr)
 			{
@@ -52,10 +52,10 @@ namespace
 
 struct Sn76489Decoder::Impl
 {
-	std::uint32_t period[3] = {};						// ten-bit dividers, low nibble first
-	std::uint32_t pendingLow[3] = {};					// the first byte of an unfinished tone write
-	std::uint8_t attenuation[numChannels] = { 15, 15, 15, 15 };
-	std::uint8_t noiseMode = 0;							// 0xE0..0xE7: rate and white-noise flag
+	uint32_t period[3] = {};						// ten-bit dividers, low nibble first
+	uint32_t pendingLow[3] = {};					// the first byte of an unfinished tone write
+	uint8_t attenuation[numChannels] = { 15, 15, 15, 15 };
+	uint8_t noiseMode = 0;							// 0xE0..0xE7: rate and white-noise flag
 	int latch = 0;
 	bool latchIsVolume = false;
 	bool haveLow[3] = {};								// a low nibble is waiting for its high byte
@@ -73,7 +73,7 @@ Sn76489Decoder::~Sn76489Decoder() = default;
 
 void Sn76489Decoder::reset (const ChipConfig& config)
 {
-	[[maybe_unused]] const std::uint32_t clock = config.clockHz;
+	[[maybe_unused]] const uint32_t clock = config.clockHz;
 	[[maybe_unused]] const double sampleRate = config.timeBaseHz;
 	(void) sampleRate;		// no timers: the latch and the registers are the whole state
 
@@ -87,7 +87,7 @@ void Sn76489Decoder::reset (const ChipConfig& config)
 void Sn76489Decoder::write (const RegisterWrite& w)
 {
 	// the byte carries its own latch: there is no register index to compare against
-	const std::uint8_t byte = w.reg;
+	const uint8_t byte = w.reg;
 	if ((byte & 0x80) != 0)
 	{
 		impl->latch = (byte >> 5) & 0x03;
@@ -113,11 +113,11 @@ void Sn76489Decoder::write (const RegisterWrite& w)
 	if (! impl->latchIsVolume && impl->latch < noiseChannel && impl->haveLow[impl->latch])
 	{
 		impl->period[impl->latch] = impl->pendingLow[impl->latch]
-									| (((std::uint32_t) byte & 0x3F) << 4);
+									| (((uint32_t) byte & 0x3F) << 4);
 	}
 }
 
-void Sn76489Decoder::advance (std::uint32_t sampleTime)
+void Sn76489Decoder::advance (uint32_t sampleTime)
 {
 	(void) sampleTime;		// no timers
 }

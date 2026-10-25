@@ -35,7 +35,7 @@ namespace xgm
     patch_set = p;
   }
 
-  void NES_VRC7::SetPatchSetCustom (const UINT8* pset)
+  void NES_VRC7::SetPatchSetCustom (const uint8_t* pset)
   {
     patch_custom = pset;
   }
@@ -82,7 +82,7 @@ namespace xgm
     OPLL_reset (opll);
   }
 
-  void NES_VRC7::SetStereoMix(int trk, xgm::INT16 mixl, xgm::INT16 mixr)
+  void NES_VRC7::SetStereoMix(int trk, int16_t mixl, int16_t mixr)
   {
       if (trk < 0) return;
       //if (trk > 5) return;
@@ -114,7 +114,7 @@ namespace xgm
       return NULL;
   }
 
-  bool NES_VRC7::Write (UINT32 adr, UINT32 val, UINT32 id)
+  bool NES_VRC7::Write (uint32_t adr, uint32_t val, uint32_t id)
   {
     if (adr == 0x9010)
     {
@@ -130,12 +130,12 @@ namespace xgm
       return false;
   }
 
-  bool NES_VRC7::Read (UINT32 adr, UINT32 & val, UINT32 id)
+  bool NES_VRC7::Read (uint32_t adr, uint32_t & val, uint32_t id)
   {
     return false;
   }
 
-  void NES_VRC7::Tick (UINT32 clocks)
+  void NES_VRC7::Tick (uint32_t clocks)
   {
     divider += clocks;
     while (divider >= 36)
@@ -145,12 +145,12 @@ namespace xgm
     }
   }
 
-  UINT32 NES_VRC7::Render (INT32 b[2])
+  uint32_t NES_VRC7::Render (int32_t b[2])
   {
     b[0] = b[1] = 0;
     for (int i=0; i < 6; ++i)
     {
-        INT32 val = (mask & (1<<i)) ? 0 : opll->ch_out[i] >> 4;
+        int32_t val = (mask & (1<<i)) ? 0 : opll->ch_out[i] >> 4;
         b[0] += val * sm[0][i];
         b[1] += val * sm[1][i];
     }
@@ -162,7 +162,7 @@ namespace xgm
         {
             if (mask & (1<<i)) continue;
             
-            INT32 val;
+            int32_t val;
             if (opll->patch_number[i] > 15) // rhytm mode
             {
               if      (i == 6) val = opll->ch_out[9]; // BD
@@ -184,14 +184,14 @@ namespace xgm
     b[1] >>= (7 - 4);
 
     // master volume adjustment
-    const INT32 MASTER = INT32(1.15 * 256.0);
+    const int32_t MASTER = int32_t(1.15 * 256.0);
     b[0] = (b[0] * MASTER) >> 8;
     b[1] = (b[1] * MASTER) >> 8;
 
     return 2;
   }
 
-  UINT32 NES_VRC7::RenderChannels (INT32* dest, int stride, int maxChannels)
+  uint32_t NES_VRC7::RenderChannels (int32_t* dest, int stride, int maxChannels)
   {
     // One Render() per channel with the others muted, then the mask put back. Correct, and it
     // keeps this file out of the chip's internal mixing - but it costs one render per channel, so
@@ -206,7 +206,7 @@ namespace xgm
     {
       mask = ~(1 << i) | saved;
 
-      INT32 b[2] = { 0, 0 };
+      int32_t b[2] = { 0, 0 };
       Render (b);
 
       if (i < maxChannels)

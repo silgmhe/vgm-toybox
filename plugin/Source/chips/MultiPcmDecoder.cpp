@@ -26,7 +26,7 @@ struct MultiPcmDecoder::Impl
 {
 	struct Voice
 	{
-		std::uint16_t pitch = 0;			// ten bits
+		uint16_t pitch = 0;			// ten bits
 		int octave = 0;						// four bits, signed
 		bool keyed = false;
 		int attenuation = 0x7F;
@@ -35,11 +35,11 @@ struct MultiPcmDecoder::Impl
 
 	struct Table final : NoteTable
 	{
-		int noteFor (std::uint32_t period, int, int* finePitch) const override
+		int noteFor (uint32_t period, int, int* finePitch) const override
 		{
 			const int octave = (int) ((period >> 10) & 0xFF);
 			const int pitch = (int) (period & 0x3FF);
-			const double ratio = ratioOf ((std::int8_t) (std::uint8_t) octave, pitch);
+			const double ratio = ratioOf ((int8_t) (uint8_t) octave, pitch);
 
 			if (ratio <= 0.0)
 			{
@@ -89,7 +89,7 @@ MultiPcmDecoder::~MultiPcmDecoder() = default;
 
 void MultiPcmDecoder::reset (const ChipConfig& config)
 {
-	[[maybe_unused]] const std::uint32_t clock = config.clockHz;
+	[[maybe_unused]] const uint32_t clock = config.clockHz;
 	[[maybe_unused]] const double sampleRate = config.timeBaseHz;
 	impl = std::make_unique<Impl>();
 }
@@ -139,11 +139,11 @@ void MultiPcmDecoder::write (const RegisterWrite& write)
 		state.sampleIndex = write.value;
 		break;
 	case 0x2:		// pitch, low eight bits
-		state.pitch = (std::uint16_t) ((state.pitch & 0x300) | write.value);
+		state.pitch = (uint16_t) ((state.pitch & 0x300) | write.value);
 		break;
 	case 0x3:		// four-bit signed octave above a ten-bit pitch
-		state.octave = (std::int8_t) (std::uint8_t) (write.value >> 4);
-		state.pitch = (std::uint16_t) ((state.pitch & 0x0FF) | ((write.value & 0x03) << 8));
+		state.octave = (int8_t) (uint8_t) (write.value >> 4);
+		state.pitch = (uint16_t) ((state.pitch & 0x0FF) | ((write.value & 0x03) << 8));
 		break;
 	case 0x4:		// bit 7 keys the voice on; clearing it releases it
 		state.keyed = (write.value & 0x80) != 0;
@@ -156,7 +156,7 @@ void MultiPcmDecoder::write (const RegisterWrite& write)
 	}
 }
 
-void MultiPcmDecoder::advance (std::uint32_t)
+void MultiPcmDecoder::advance (uint32_t)
 {
 }
 
@@ -172,7 +172,7 @@ ChannelState MultiPcmDecoder::channelState (int channel) const
 	state.present = true;
 	state.gate = voice.keyed;
 	state.volume = state.gate ? 15 - (voice.attenuation * 15 / 0x7F) : 0;
-	state.period = (std::uint32_t) (((voice.octave & 0xFF) << 10) | (voice.pitch & 0x3FF));
+	state.period = (uint32_t) (((voice.octave & 0xFF) << 10) | (voice.pitch & 0x3FF));
 	state.patch = voice.sampleIndex;
 
 	if (! state.gate)

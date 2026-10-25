@@ -19,8 +19,8 @@
 
 typedef struct _LFO
 {
-	UINT16 phase;
-	UINT32 phase_step;
+	uint16_t phase;
+	uint32_t phase_step;
 	int *table;
 	int *scale;
 } SCSP_LFO_t;
@@ -44,7 +44,7 @@ static const float ASCALE[8]={0.0f,0.4f,0.8f,1.5f,3.0f,6.0f,12.0f,24.0f};
 static const float PSCALE[8]={0.0f,7.0f,13.5f,27.0f,55.0f,112.0f,230.0f,494.0f};
 static int PSCALES[8][256];
 static int ASCALES[8][256];
-static UINT8 IsInit;
+static uint8_t IsInit;
 
 static void LFO_Init(void)
 {
@@ -142,7 +142,7 @@ INLINE signed int ALFO_Step(SCSP_LFO_t *LFO)
 	return p<<(SHIFT-LFO_SHIFT);
 }
 
-static void LFO_ComputeStep(SCSP_LFO_t *LFO,UINT32 LFOF,UINT32 LFOWS,UINT32 LFOS,int ALFO)
+static void LFO_ComputeStep(SCSP_LFO_t *LFO,uint32_t LFOF,uint32_t LFOWS,uint32_t LFOS,int ALFO)
 {
 	float step=(float) LFOFreq[LFOF]*256.0f/44100.0f;
 	LFO->phase_step=(unsigned int) ((float) (1<<LFO_SHIFT)*step);

@@ -38,12 +38,12 @@
 #include "nukedopm_int.h"
 
 
-static void nukedopm_write(void *chip, UINT8 a, UINT8 v);
-static UINT8 device_start_ym2151_nuked(const DEV_GEN_CFG* cfg, DEV_INFO* retDevInf);
+static void nukedopm_write(void *chip, uint8_t a, uint8_t v);
+static uint8_t device_start_ym2151_nuked(const DEV_GEN_CFG* cfg, DEV_INFO* retDevInf);
 static void nukedopm_shutdown(void *chip);
 static void nukedopm_reset_chip(void *chipptr);
-static void nukedopm_update(void *chipptr, UINT32 samples, DEV_SMPL **out);
-static void nukedopm_set_mute_mask(void *chipptr, UINT32 MuteMask);
+static void nukedopm_update(void *chipptr, uint32_t samples, DEV_SMPL **out);
+static void nukedopm_set_mute_mask(void *chipptr, uint32_t MuteMask);
 
 
 static DEVDEF_RWFUNC devFunc[] =
@@ -2371,15 +2371,15 @@ static void OPM_GenerateResampled(opm_t *chip, int32_t *buf)
     chip->samplecnt += 1 << RSM_FRAC;
 }
 
-static void nukedopm_write(void *chip, UINT8 a, UINT8 v)
+static void nukedopm_write(void *chip, uint8_t a, uint8_t v)
 {
     OPM_WriteBuffered((opm_t *)chip, a, v);
 }
 
-static UINT8 device_start_ym2151_nuked(const DEV_GEN_CFG* cfg, DEV_INFO* retDevInf)
+static uint8_t device_start_ym2151_nuked(const DEV_GEN_CFG* cfg, DEV_INFO* retDevInf)
 {
     opm_t* chip;
-    UINT32 rate;
+    uint32_t rate;
     
     rate = cfg->clock / 64;
     SRATE_CUSTOM_HIGHEST(cfg->srMode, rate, cfg->smplRate);
@@ -2407,9 +2407,9 @@ static void nukedopm_shutdown(void *chip)
 static void nukedopm_reset_chip(void *chipptr)
 {
     opm_t *chip = (opm_t *)chipptr;
-    UINT8 chn;
+    uint8_t chn;
     DEV_DATA devData;
-    UINT32 mute;
+    uint32_t mute;
     
     devData = chip->_devData;
     mute = 0;
@@ -2425,11 +2425,11 @@ static void nukedopm_reset_chip(void *chipptr)
     return;
 }
 
-static void nukedopm_update(void *chipptr, UINT32 samples, DEV_SMPL **out)
+static void nukedopm_update(void *chipptr, uint32_t samples, DEV_SMPL **out)
 {
     opm_t *chip = (opm_t *)chipptr;
     int32_t buffer[2];
-    UINT32 i;
+    uint32_t i;
     
     for (i = 0; i < samples; i ++)
     {
@@ -2441,10 +2441,10 @@ static void nukedopm_update(void *chipptr, UINT32 samples, DEV_SMPL **out)
     return;
 }
 
-static void nukedopm_set_mute_mask(void *chipptr, UINT32 MuteMask)
+static void nukedopm_set_mute_mask(void *chipptr, uint32_t MuteMask)
 {
     opm_t *chip = (opm_t *)chipptr;
-    UINT8 chn;
+    uint8_t chn;
     
     for (chn = 0; chn < 8; chn ++)
         chip->mute[chn] = (MuteMask >> chn) & 0x01;

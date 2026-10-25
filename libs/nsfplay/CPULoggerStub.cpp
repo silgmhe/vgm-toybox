@@ -9,7 +9,7 @@
 namespace xgm
 {
 
-void CPULogger::Init (UINT8, UINT8) {}
+void CPULogger::Init (uint8_t, uint8_t) {}
 void CPULogger::Play () {}
 
 } // namespace xgm

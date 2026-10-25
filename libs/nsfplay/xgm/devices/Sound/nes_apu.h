@@ -24,15 +24,15 @@ namespace xgm
   protected:
     int option[OPT_END];        // 各種オプション
     int mask;
-    INT32 sm[2][2];
+    int32_t sm[2][2];
 
-    UINT32 gclock;
-    UINT8 reg[0x20];
-    INT32 out[2];
+    uint32_t gclock;
+    uint8_t reg[0x20];
+    int32_t out[2];
     double rate, clock;
 
-    INT32 square_table[32];     // nonlinear mixer
-    INT32 square_linear;        // linear mix approximation
+    int32_t square_table[32];     // nonlinear mixer
+    int32_t square_linear;        // linear mix approximation
 
     int scounter[2];            // frequency divider
     int sphase[2];              // phase counter
@@ -61,7 +61,7 @@ namespace xgm
     bool enable[2];
 
     void sweep_sqr (int ch); // calculates target sweep frequency
-    INT32 calc_sqr (int ch, UINT32 clocks);
+    int32_t calc_sqr (int ch, uint32_t clocks);
     TrackInfoBasic trkinfo[2];
 
   public:
@@ -71,24 +71,24 @@ namespace xgm
     void FrameSequence(int s);
 
     virtual void Reset ();
-    virtual void Tick (UINT32 clocks);
-    virtual UINT32 Render (INT32 b[2]);
+    virtual void Tick (uint32_t clocks);
+    virtual uint32_t Render (int32_t b[2]);
 
   // Added for VGMToybox: one render, with each channel written separately instead of
   // summed. Their sum is what Render() returns, which is what lets a player produce
   // per-track audio without running the chip once per track.
-  UINT32 RenderChannels (INT32* dest, int stride, int maxChannels);
-    virtual bool Read (UINT32 adr, UINT32 & val, UINT32 id=0);
-    virtual bool Write (UINT32 adr, UINT32 val, UINT32 id=0);
+  uint32_t RenderChannels (int32_t* dest, int stride, int maxChannels);
+    virtual bool Read (uint32_t adr, uint32_t & val, uint32_t id=0);
+    virtual bool Write (uint32_t adr, uint32_t val, uint32_t id=0);
     virtual void SetRate (double rate);
     virtual void SetClock (double clock);
     virtual void SetOption (int id, int b);
     virtual void SetMask(int m){ mask = m; }
-    virtual void SetStereoMix (int trk, xgm::INT16 mixl, xgm::INT16 mixr);
+    virtual void SetStereoMix (int trk, int16_t mixl, int16_t mixr);
     virtual ITrackInfo *GetTrackInfo(int trk);
   // Added for VGMToybox: the pulse duty setting is part of the register file, and a display
   // that wants to draw the shape the channel produces needs to read it.
-  UINT8 GetReg (int index) const { return reg[index & 0x1F]; }
+  uint8_t GetReg (int index) const { return reg[index & 0x1F]; }
   };
 
 }                               // namespace

@@ -120,19 +120,19 @@ public:
 	int currentPC (void) const;
 
 	/** Writes the driver made into the $0200 page - zero means its RAM decoder never ran. */
-	std::uint64_t ramWrites (void) const;
+	uint64_t ramWrites (void) const;
 
 	/** CPU clocks executed so far. Against the 1.79 MHz the driver is clocked at, this says
 		whether the emulation is being starved or the program itself is just slow. */
-	std::uint64_t executedClocks (void) const;
+	uint64_t executedClocks (void) const;
 
 	/** Where the program counter spends its time, one bin per 256-byte page. Sampled inside the
 		render loop on purpose: after it returns the CPU is always parked at the trampoline, which is
 		why every file looked identical there. */
-	const std::array<std::uint32_t, 256>& pcHistogram (void) const { return pcPages; }
+	const std::array<uint32_t, 256>& pcHistogram (void) const { return pcPages; }
 
 	/** How many times the $0211 gate was written, and with what - 0 means init never reached it. */
-	std::uint64_t gateWrites (void) const;
+	uint64_t gateWrites (void) const;
 	int gateValue (void) const;
 
 	/** Solos one channel of that list; -1 leaves them all audible. */
@@ -163,13 +163,13 @@ public:
 
 	/** Writes seen in each expansion range (0 VRC6, 1 VRC7, 2 N163, 3 FME7), counted even
 		when no such chip was created - the evidence a file uses one it did not declare. */
-	std::uint32_t expansionWrites (int index) const;
+	uint32_t expansionWrites (int index) const;
 
 	/** Writes to that chip's own registers rather than to its address range - the evidence a probe
 		should believe, because a driver that merely uses the range as memory writes other addresses. */
-	std::uint32_t expansionSignature (int index) const;
+	uint32_t expansionSignature (int index) const;
 
-	std::uint64_t soundWrites (void) const;
+	uint64_t soundWrites (void) const;
 	double positionSeconds (void) const;
 
 	/** The MIDI stream the preset scan produced, or null when the scan has not run.
@@ -233,7 +233,7 @@ private:
 	*/
 	int noteForDpcmSample (int tone, int rate) const;
 
-	void writeSound (std::uint16_t address, std::uint8_t value);
+	void writeSound (uint16_t address, uint8_t value);
 	void applyMasks (void);
 	bool chipAudible[2] = { true, true };
 
@@ -243,10 +243,10 @@ private:
 
 	const formats::nsf::NsfFile& file;
 	double rate = 44100.0;
-	std::uint64_t clocksExecuted = 0;
-	std::array<std::uint32_t, 256> pcPages {};
+	uint64_t clocksExecuted = 0;
+	std::array<uint32_t, 256> pcPages {};
 	double cpuClockRest = 0.0;
-	std::uint64_t rendered = 0;
+	uint64_t rendered = 0;
 
 	std::unique_ptr<NsfBus> bus;
 	std::unique_ptr<xgm::NES_CPU> cpu;

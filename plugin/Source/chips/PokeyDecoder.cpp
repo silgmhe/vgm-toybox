@@ -8,28 +8,28 @@ namespace toybox::chips
 {
 namespace
 {
-	constexpr std::uint32_t kDefaultClock = 1789772;
+	constexpr uint32_t kDefaultClock = 1789772;
 
 	// AUDCTL
-	constexpr std::uint8_t kClock15kHz = 0x01;
-	constexpr std::uint8_t kChannel3High = 0x20;
-	constexpr std::uint8_t kChannel1High = 0x40;
-	constexpr std::uint8_t kJoin34 = 0x08;
-	constexpr std::uint8_t kJoin12 = 0x10;
+	constexpr uint8_t kClock15kHz = 0x01;
+	constexpr uint8_t kChannel3High = 0x20;
+	constexpr uint8_t kChannel1High = 0x40;
+	constexpr uint8_t kJoin34 = 0x08;
+	constexpr uint8_t kJoin12 = 0x10;
 
 	// AUDC
-	constexpr std::uint8_t kVolumeOnly = 0x10;
+	constexpr uint8_t kVolumeOnly = 0x10;
 
 	// A POKEY divisor is not one number: with the high clock the channel counts CPU cycles and
 	// the core adds four of them (seven for a joined pair), so the period has to carry the clock
 	// source along with the divisor. Twelve bits of divider do not reach into these bits.
-	constexpr std::uint32_t kBase64kHz = 0;
-	constexpr std::uint32_t kBase1_79MHz = 1;
-	constexpr std::uint32_t kBase15kHz = 2;
+	constexpr uint32_t kBase64kHz = 0;
+	constexpr uint32_t kBase1_79MHz = 1;
+	constexpr uint32_t kBase15kHz = 2;
 
-	std::uint32_t encodePeriod (std::uint32_t base, int divisor)
+	uint32_t encodePeriod (uint32_t base, int divisor)
 	{
-		return (base << 24) | ((std::uint32_t) std::max (divisor, 1) & 0x0FFFFF);
+		return (base << 24) | ((uint32_t) std::max (divisor, 1) & 0x0FFFFF);
 	}
 
 	/** frequency = clock source / (2 * divisor). The source is the CPU clock for the 1.79 MHz
@@ -39,9 +39,9 @@ namespace
 	public:
 		explicit PokeyTable (double clock) : clock (clock) {}
 
-		int noteFor (std::uint32_t period, int, int* finePitch) const override
+		int noteFor (uint32_t period, int, int* finePitch) const override
 		{
-			const std::uint32_t base = (period >> 24) & 0x03;
+			const uint32_t base = (period >> 24) & 0x03;
 			const double divisor = (double) (period & 0x0FFFFF);
 			if (divisor < 1.0)
 			{
@@ -68,9 +68,9 @@ namespace
 
 struct PokeyDecoder::Impl
 {
-	std::uint8_t audc[numChannels] = {};	// 0x00/0x02/0x04/0x06
-	std::uint8_t audf[numChannels] = {};	// 0x01/0x03/0x05/0x07
-	std::uint8_t audctl = 0;				// 0x08
+	uint8_t audc[numChannels] = {};	// 0x00/0x02/0x04/0x06
+	uint8_t audf[numChannels] = {};	// 0x01/0x03/0x05/0x07
+	uint8_t audctl = 0;				// 0x08
 	double clock = (double) kDefaultClock;
 	std::unique_ptr<PokeyTable> table;
 
@@ -92,7 +92,7 @@ struct PokeyDecoder::Impl
 			   || (channel == channel2 && (audctl & kChannel3High) != 0);
 	}
 
-	std::uint32_t baseClockCode (int channel) const
+	uint32_t baseClockCode (int channel) const
 	{
 		if (highClock (channel))
 		{
@@ -112,7 +112,7 @@ PokeyDecoder::~PokeyDecoder() = default;
 
 void PokeyDecoder::reset (const ChipConfig& config)
 {
-	[[maybe_unused]] const std::uint32_t clock = config.clockHz;
+	[[maybe_unused]] const uint32_t clock = config.clockHz;
 	[[maybe_unused]] const double sampleRate = config.timeBaseHz;
 	(void) sampleRate;		// no timers: the registers are the whole state
 
@@ -149,7 +149,7 @@ void PokeyDecoder::write (const RegisterWrite& w)
 	}
 }
 
-void PokeyDecoder::advance (std::uint32_t sampleTime)
+void PokeyDecoder::advance (uint32_t sampleTime)
 {
 	(void) sampleTime;		// no timers
 }
@@ -172,14 +172,14 @@ ChannelState PokeyDecoder::channelState (int channel) const
 
 	int volume = impl->audc[channel] & 0x0F;
 	bool volumeOnly = (impl->audc[channel] & kVolumeOnly) != 0;
-	std::uint32_t divisor = 0;
-	std::uint32_t base = impl->baseClockCode (channel);
+	uint32_t divisor = 0;
+	uint32_t base = impl->baseClockCode (channel);
 
 	if (impl->joinedLow (channel))
 	{
 		const int high = channel + 1;
-		const std::uint32_t combined = (std::uint32_t) impl->audf[channel]
-									   | ((std::uint32_t) impl->audf[high] << 8);
+		const uint32_t combined = (uint32_t) impl->audf[channel]
+									   | ((uint32_t) impl->audf[high] << 8);
 
 		// the pair's loudness comes from whichever channel the driver gave a volume to
 		volume = std::max (volume, (int) (impl->audc[high] & 0x0F));
@@ -188,7 +188,7 @@ ChannelState PokeyDecoder::channelState (int channel) const
 	}
 	else
 	{
-		divisor = (std::uint32_t) impl->audf[channel] + ((base == kBase1_79MHz) ? 4u : 1u);
+		divisor = (uint32_t) impl->audf[channel] + ((base == kBase1_79MHz) ? 4u : 1u);
 	}
 
 	state.present = true;

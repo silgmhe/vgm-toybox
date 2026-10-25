@@ -48,19 +48,19 @@
 #include "../EmuHelper.h"
 #include "multipcm.h"
 
-static void MultiPCM_update(void *info, UINT32 samples, DEV_SMPL **outputs);
-static UINT8 device_start_multipcm(const DEV_GEN_CFG* cfg, DEV_INFO* retDevInf);
+static void MultiPCM_update(void *info, uint32_t samples, DEV_SMPL **outputs);
+static uint8_t device_start_multipcm(const DEV_GEN_CFG* cfg, DEV_INFO* retDevInf);
 static void device_stop_multipcm(void *info);
 static void device_reset_multipcm(void *info);
 
-static void multipcm_write(void *info, UINT8 offset, UINT8 data);
-static void multipcm_w_quick(void *info, UINT8 offset, UINT8 data);
-static UINT8 multipcm_r(void *info, UINT8 offset);
+static void multipcm_write(void *info, uint8_t offset, uint8_t data);
+static void multipcm_w_quick(void *info, uint8_t offset, uint8_t data);
+static uint8_t multipcm_r(void *info, uint8_t offset);
 
-static void multipcm_alloc_rom(void* info, UINT32 memsize);
-static void multipcm_write_rom(void *info, UINT32 offset, UINT32 length, const UINT8* data);
+static void multipcm_alloc_rom(void* info, uint32_t memsize);
+static void multipcm_write_rom(void *info, uint32_t offset, uint32_t length, const uint8_t* data);
 
-static void multipcm_set_mute_mask(void *info, UINT32 MuteMask);
+static void multipcm_set_mute_mask(void *info, uint32_t MuteMask);
 
 
 static DEVDEF_RWFUNC devFunc[] =
@@ -97,7 +97,7 @@ static const char* DeviceName(const DEV_GEN_CFG* devCfg)
 	return "YMW258";
 }
 
-static UINT16 DeviceChannels(const DEV_GEN_CFG* devCfg)
+static uint16_t DeviceChannels(const DEV_GEN_CFG* devCfg)
 {
 	return 28;
 }
@@ -130,18 +130,18 @@ const DEV_DECL sndDev_YMW258 =
 
 typedef struct
 {
-	UINT32 start;
-	UINT32 loop;
-	UINT32 end;
-	UINT8 attack_reg;
-	UINT8 decay1_reg;
-	UINT8 decay2_reg;
-	UINT8 decay_level;
-	UINT8 release_reg;
-	UINT8 key_rate_scale;
-	UINT8 lfo_vibrato_reg;
-	UINT8 lfo_amplitude_reg;
-	UINT8 format;
+	uint32_t start;
+	uint32_t loop;
+	uint32_t end;
+	uint8_t attack_reg;
+	uint8_t decay1_reg;
+	uint8_t decay2_reg;
+	uint8_t decay_level;
+	uint8_t release_reg;
+	uint8_t key_rate_scale;
+	uint8_t lfo_vibrato_reg;
+	uint8_t lfo_amplitude_reg;
+	uint8_t format;
 } sample_t;
 
 typedef enum
@@ -154,50 +154,50 @@ typedef enum
 
 typedef struct
 {
-	INT32 volume;
+	int32_t volume;
 	state_t state;
-	UINT8 reverb;
-	INT32 step;
+	uint8_t reverb;
+	int32_t step;
 	//step vals
-	INT32 attack_rate;  // Attack
-	INT32 decay1_rate;  // Decay1
-	INT32 decay2_rate;  // Decay2
-	INT32 release_rate; // Release
-	INT32 decay_level;  // Decay level
+	int32_t attack_rate;  // Attack
+	int32_t decay1_rate;  // Decay1
+	int32_t decay2_rate;  // Decay2
+	int32_t release_rate; // Release
+	int32_t decay_level;  // Decay level
 } envelope_gen_t;
 
 typedef struct
 {
-	UINT16 phase;
-	UINT32 phase_step;
-	INT32 *table;
-	INT32 *scale;
+	uint16_t phase;
+	uint32_t phase_step;
+	int32_t *table;
+	int32_t *scale;
 } lfo_t;
 
 typedef struct
 {
-	UINT8 regs[8];
-	UINT8 playing;
+	uint8_t regs[8];
+	uint8_t playing;
 	sample_t sample;
-	UINT32 base;
-	UINT32 offset;
-	UINT8 octave;
-	UINT16 pitch;
-	UINT32 step;
-	UINT8 reverse;
-	UINT32 pan;
-	UINT32 total_level;
-	UINT32 dest_total_level;
-	INT32 total_level_step;
-	INT32 prev_sample;
+	uint32_t base;
+	uint32_t offset;
+	uint8_t octave;
+	uint16_t pitch;
+	uint32_t step;
+	uint8_t reverse;
+	uint32_t pan;
+	uint32_t total_level;
+	uint32_t dest_total_level;
+	int32_t total_level_step;
+	int32_t prev_sample;
 	envelope_gen_t envelope_gen;
-	UINT8 lfo_frequency;
+	uint8_t lfo_frequency;
 	lfo_t pitch_lfo; // Pitch lfo
-	UINT8 vibrato;
+	uint8_t vibrato;
 	lfo_t amplitude_lfo; // AM lfo
-	UINT8 tremolo;
+	uint8_t tremolo;
 	
-	UINT8 muted;
+	uint8_t muted;
 } slot_t;
 
 typedef struct _MultiPCM MultiPCM;
@@ -207,39 +207,39 @@ struct _MultiPCM
 	
 	// internal state
 	slot_t slots[28];
-	INT32 cur_slot;
-	INT32 address;
-	UINT8 sega_banking;
-	UINT32 bank0;
-	UINT32 bank1;
+	int32_t cur_slot;
+	int32_t address;
+	uint8_t sega_banking;
+	uint32_t bank0;
+	uint32_t bank1;
 	float rate;
 
-	UINT32 attack_step[0x40];
-	UINT32 decay_release_step[0x40];    // Envelope step tables
-	UINT32 freq_step_table[0x400];      // Frequency step table
+	uint32_t attack_step[0x40];
+	uint32_t decay_release_step[0x40];    // Envelope step tables
+	uint32_t freq_step_table[0x400];      // Frequency step table
 
-	//INT32 left_pan_table[0x800];
-	//INT32 right_pan_table[0x800];
-	//INT32 linear_to_exp_volume[0x400];
-	INT32 total_level_steps[2];
+	//int32_t left_pan_table[0x800];
+	//int32_t right_pan_table[0x800];
+	//int32_t linear_to_exp_volume[0x400];
+	int32_t total_level_steps[2];
 
-	//INT32 pitch_table[256];
-	//INT32 pitch_scale_tables[8][256];
-	//INT32 amplitude_table[256];
-	//INT32 amplitude_scale_tables[8][256];
+	//int32_t pitch_table[256];
+	//int32_t pitch_scale_tables[8][256];
+	//int32_t amplitude_table[256];
+	//int32_t amplitude_scale_tables[8][256];
 	
-	UINT32 ROMMask;
-	UINT32 ROMSize;
-	UINT8 *ROM;
+	uint32_t ROMMask;
+	uint32_t ROMSize;
+	uint8_t *ROM;
 };
 
 
-static UINT8 IsInit = 0;
+static uint8_t IsInit = 0;
 
-static INT32 left_pan_table[0x800];
-static INT32 right_pan_table[0x800];
+static int32_t left_pan_table[0x800];
+static int32_t right_pan_table[0x800];
 
-static const INT32 VALUE_TO_CHANNEL[32] =
+static const int32_t VALUE_TO_CHANNEL[32] =
 {
 	0, 1, 2, 3, 4, 5, 6 , -1,
 	7, 8, 9, 10,11,12,13, -1,
@@ -273,14 +273,14 @@ static const double BASE_TIMES[64] = {
 	0.45,       0.45,       0.45,       0.45
 };
 
-static INT32 linear_to_exp_volume[0x400];
+static int32_t linear_to_exp_volume[0x400];
 
 #define TL_SHIFT    12
 #define EG_SHIFT    16
 
-static void init_sample(MultiPCM *ptChip, sample_t *sample, UINT16 index)
+static void init_sample(MultiPCM *ptChip, sample_t *sample, uint16_t index)
 {
-	UINT32 address = (index * 12) & ptChip->ROMMask;
+	uint32_t address = (index * 12) & ptChip->ROMMask;
 
 	sample->start = (ptChip->ROM[address + 0] << 16) | (ptChip->ROM[address + 1] << 8) | ptChip->ROM[address + 2];
 	sample->format = (sample->start>>20) & 0xfe;
@@ -311,8 +311,8 @@ static void retrigger_sample(MultiPCM *ptChip, slot_t *slot)
 
 static void update_step(MultiPCM *ptChip, slot_t *slot)
 {
-	const UINT8 oct = (slot->octave - 1) & 0xf;
-	UINT32 pitch = ptChip->freq_step_table[slot->pitch];
+	const uint8_t oct = (slot->octave - 1) & 0xf;
+	uint32_t pitch = ptChip->freq_step_table[slot->pitch];
 	if (oct & 0x8)
 	{
 		pitch >>= (16 - oct);
@@ -321,24 +321,24 @@ static void update_step(MultiPCM *ptChip, slot_t *slot)
 	{
 		pitch <<= oct;
 	}
-	slot->step = (UINT32)(pitch / ptChip->rate);
+	slot->step = (uint32_t)(pitch / ptChip->rate);
 }
 
 static void envelope_generator_init(MultiPCM *ptChip, const double rates[64], double attack_decay_ratio)
 {
-	INT32 i;
+	int32_t i;
 	for (i = 4; i < 0x40; ++i)
 	{
 		// Times are based on 44100Hz clock, adjust to real chip clock
-		ptChip->attack_step[i] = (UINT32)((0x400 << EG_SHIFT) / (float)(rates[i] * 44100.0 / 1000.0));
-		ptChip->decay_release_step[i] = (UINT32)((0x400 << EG_SHIFT) / (float)(rates[i] * attack_decay_ratio * 44100.0 / 1000.0));
+		ptChip->attack_step[i] = (uint32_t)((0x400 << EG_SHIFT) / (float)(rates[i] * 44100.0 / 1000.0));
+		ptChip->decay_release_step[i] = (uint32_t)((0x400 << EG_SHIFT) / (float)(rates[i] * attack_decay_ratio * 44100.0 / 1000.0));
 	}
 	ptChip->attack_step[0] = ptChip->attack_step[1] = ptChip->attack_step[2] = ptChip->attack_step[3] = 0;
 	ptChip->attack_step[0x3f] = 0x400 << EG_SHIFT;
 	ptChip->decay_release_step[0] = ptChip->decay_release_step[1] = ptChip->decay_release_step[2] = ptChip->decay_release_step[3] = 0;
 }
 
-static INT32 envelope_generator_update(MultiPCM *ptChip, slot_t *slot)
+static int32_t envelope_generator_update(MultiPCM *ptChip, slot_t *slot)
 {
 	switch(slot->envelope_gen.state)
 	{
@@ -396,7 +396,7 @@ static INT32 envelope_generator_update(MultiPCM *ptChip, slot_t *slot)
 	return linear_to_exp_volume[slot->envelope_gen.volume >> EG_SHIFT];
 }
 
-INLINE UINT32 get_rate(const UINT32 *steps, INT32 rate, UINT32 val)
+INLINE uint32_t get_rate(const uint32_t *steps, int32_t rate, uint32_t val)
 {
 	int r;
 	if (val == 0)
@@ -417,8 +417,8 @@ INLINE UINT32 get_rate(const UINT32 *steps, INT32 rate, UINT32 val)
 
 static void envelope_generator_calc(MultiPCM *ptChip, slot_t *slot)
 {
-	INT32 octave = slot->octave;
-	INT32 rate;
+	int32_t octave = slot->octave;
+	int32_t rate;
 	if (octave & 8)
 	{
 		octave = octave - 16;
@@ -447,8 +447,8 @@ static void envelope_generator_calc(MultiPCM *ptChip, slot_t *slot)
 
 #define LFO_SHIFT   8
 
-static INT32 pitch_table[256];
-static INT32 amplitude_table[256];
+static int32_t pitch_table[256];
+static int32_t amplitude_table[256];
 
 static const float LFO_FREQ[8] = // In Hertz
 {
@@ -486,19 +486,19 @@ static const float AMPLITUDE_SCALE_LIMIT[8] = // In Decibels
 	24.0f
 };
 
-static INT32 pitch_scale_tables[8][256];
-static INT32 amplitude_scale_tables[8][256];
+static int32_t pitch_scale_tables[8][256];
+static int32_t amplitude_scale_tables[8][256];
 
-INLINE UINT32 value_to_fixed(const UINT32 bits, const float value)
+INLINE uint32_t value_to_fixed(const uint32_t bits, const float value)
 {
 	const float float_shift = (float)(1 << bits);
-	return (UINT32)(float_shift * value);
+	return (uint32_t)(float_shift * value);
 }
 
 static void lfo_init(void)
 {
-	INT32 i;
-	INT32 table;
+	int32_t i;
+	int32_t table;
 
 	for (i = 0; i < 256; ++i)
 	{
@@ -549,28 +549,28 @@ static void lfo_init(void)
 	}
 }
 
-INLINE INT32 pitch_lfo_step(lfo_t *lfo)
+INLINE int32_t pitch_lfo_step(lfo_t *lfo)
 {
-	INT32 p;
+	int32_t p;
 	lfo->phase += lfo->phase_step;
 	p = lfo->table[(lfo->phase >> LFO_SHIFT) & 0xff];
 	p = lfo->scale[p];
 	return p << (TL_SHIFT - LFO_SHIFT);
 }
 
-INLINE INT32 amplitude_lfo_step(lfo_t *lfo)
+INLINE int32_t amplitude_lfo_step(lfo_t *lfo)
 {
-	INT32 p;
+	int32_t p;
 	lfo->phase += lfo->phase_step;
 	p = lfo->table[(lfo->phase >> LFO_SHIFT) & 0xff];
 	p = lfo->scale[p];
 	return p << (TL_SHIFT - LFO_SHIFT);
 }
 
-INLINE void lfo_compute_step(MultiPCM *ptChip, lfo_t *lfo, UINT8 lfo_frequency, UINT8 lfo_scale, UINT8 amplitude_lfo)
+INLINE void lfo_compute_step(MultiPCM *ptChip, lfo_t *lfo, uint8_t lfo_frequency, uint8_t lfo_scale, uint8_t amplitude_lfo)
 {
 	float step = (float)LFO_FREQ[lfo_frequency] * 256.0f / (float)ptChip->rate;
-	lfo->phase_step = (UINT32)((float)(1 << LFO_SHIFT) * step);
+	lfo->phase_step = (uint32_t)((float)(1 << LFO_SHIFT) * step);
 	if (amplitude_lfo)
 	{
 		lfo->table = amplitude_table;
@@ -583,10 +583,10 @@ INLINE void lfo_compute_step(MultiPCM *ptChip, lfo_t *lfo, UINT8 lfo_frequency, 
 	}
 }
 
-static UINT8 device_start_multipcm(const DEV_GEN_CFG* cfg, DEV_INFO* retDevInf)
+static uint8_t device_start_multipcm(const DEV_GEN_CFG* cfg, DEV_INFO* retDevInf)
 {
 	MultiPCM *ptChip;
-	INT32 i;
+	int32_t i;
 
 	ptChip = (MultiPCM *)calloc(1, sizeof(MultiPCM));
 	if (ptChip == NULL)
@@ -599,7 +599,7 @@ static UINT8 device_start_multipcm(const DEV_GEN_CFG* cfg, DEV_INFO* retDevInf)
 
 	if (! IsInit)
 	{
-	INT32 level;
+	int32_t level;
 
 	IsInit = 1;
 
@@ -608,7 +608,7 @@ static UINT8 device_start_multipcm(const DEV_GEN_CFG* cfg, DEV_INFO* retDevInf)
 	{
 		const float vol_db = (float)level * (-24.0f) / 64.0f;
 		const float total_level = powf(10.0f, vol_db / 20.0f) / 4.0f;
-		INT32 pan;
+		int32_t pan;
 
 		for (pan = 0; pan < 0x10; ++pan)
 		{
@@ -625,7 +625,7 @@ static UINT8 device_start_multipcm(const DEV_GEN_CFG* cfg, DEV_INFO* retDevInf)
 			}
 			else if (pan & 0x8)
 			{
-				const INT32 inverted_pan = 0x10 - pan;
+				const int32_t inverted_pan = 0x10 - pan;
 				const float pan_vol_db = (float)inverted_pan * (-12.0f) / 4.0f;
 
 				pan_left = 1.0;
@@ -676,13 +676,13 @@ static UINT8 device_start_multipcm(const DEV_GEN_CFG* cfg, DEV_INFO* retDevInf)
 	envelope_generator_init(ptChip, BASE_TIMES, 14.32833);
 
 	// Total level interpolation steps
-	ptChip->total_level_steps[0] = -(INT32)((0x80 << TL_SHIFT) / (78.2f * 44100.0f / 1000.0f)); // lower
-	ptChip->total_level_steps[1] = (INT32)((0x80 << TL_SHIFT) / (78.2f * 2 * 44100.0f / 1000.0f)); // raise
+	ptChip->total_level_steps[0] = -(int32_t)((0x80 << TL_SHIFT) / (78.2f * 44100.0f / 1000.0f)); // lower
+	ptChip->total_level_steps[1] = (int32_t)((0x80 << TL_SHIFT) / (78.2f * 2 * 44100.0f / 1000.0f)); // raise
 
 	multipcm_set_mute_mask(ptChip, 0x00);
 
 	ptChip->_devData.chipInf = ptChip;
-	INIT_DEVINF(retDevInf, &ptChip->_devData, (UINT32)ptChip->rate, &devDef);
+	INIT_DEVINF(retDevInf, &ptChip->_devData, (uint32_t)ptChip->rate, &devDef);
 
 	return 0x00;
 }
@@ -701,7 +701,7 @@ static void device_stop_multipcm(void *info)
 static void device_reset_multipcm(void *info)
 {
 	MultiPCM *ptChip = (MultiPCM *)info;
-	INT32 slot;
+	int32_t slot;
 	
 	for (slot = 0; slot < 28; ++slot)
 	{
@@ -714,7 +714,7 @@ static void device_reset_multipcm(void *info)
 	return;
 }
 
-static void write_slot(MultiPCM *ptChip, slot_t *slot, INT32 reg, UINT8 data)
+static void write_slot(MultiPCM *ptChip, slot_t *slot, int32_t reg, uint8_t data)
 {
 	slot->regs[reg] = data;
 
@@ -808,15 +808,15 @@ static void write_slot(MultiPCM *ptChip, slot_t *slot, INT32 reg, UINT8 data)
 	}
 }
 
-INLINE UINT8 read_byte(MultiPCM *ptChip, UINT32 addr)
+INLINE uint8_t read_byte(MultiPCM *ptChip, uint32_t addr)
 {
 	return ptChip->ROM[addr & ptChip->ROMMask];
 }
 
-static void MultiPCM_update(void *info, UINT32 samples, DEV_SMPL **outputs)
+static void MultiPCM_update(void *info, uint32_t samples, DEV_SMPL **outputs)
 {
 	MultiPCM *ptChip = (MultiPCM *)info;
-	UINT32 i, sl;
+	uint32_t i, sl;
 
 	if (ptChip->ROM == NULL)
 	{
@@ -834,12 +834,12 @@ static void MultiPCM_update(void *info, UINT32 samples, DEV_SMPL **outputs)
 			slot_t *slot = &ptChip->slots[sl];
 			if (slot->playing && ! slot->muted)
 			{
-				UINT32 vol = (slot->total_level >> TL_SHIFT) | (slot->pan << 7);
-				UINT32 spos = slot->offset >> TL_SHIFT;
-				UINT32 step = slot->step;
-				INT32 csample;
-				INT32 fpart = slot->offset & ((1 << TL_SHIFT) - 1);
-				INT32 sample;
+				uint32_t vol = (slot->total_level >> TL_SHIFT) | (slot->pan << 7);
+				uint32_t spos = slot->offset >> TL_SHIFT;
+				uint32_t step = slot->step;
+				int32_t csample;
+				int32_t fpart = slot->offset & ((1 << TL_SHIFT) - 1);
+				int32_t sample;
 
 				if (slot->reverse)
 				{
@@ -848,23 +848,23 @@ static void MultiPCM_update(void *info, UINT32 samples, DEV_SMPL **outputs)
 
 				if (slot->sample.format & 4)	// 12-bit linear
 				{
-					UINT32 adr = slot->base + (spos >> 1) * 3;
+					uint32_t adr = slot->base + (spos >> 1) * 3;
 					if (!(spos & 1))
 					{ // ab.c ..
-						INT16 w0 = (read_byte(ptChip, adr) << 8) | ((read_byte(ptChip, adr + 1) & 0xf) << 4);
+						int16_t w0 = (read_byte(ptChip, adr) << 8) | ((read_byte(ptChip, adr + 1) & 0xf) << 4);
 						csample = w0;
 						break;
 					}
 					else
 					{ // ..C. AB
-						INT16 w0 = (read_byte(ptChip, adr + 2) << 8) | (read_byte(ptChip, adr + 1) & 0xf0);
+						int16_t w0 = (read_byte(ptChip, adr + 2) << 8) | (read_byte(ptChip, adr + 1) & 0xf0);
 						csample = w0;
 						break;
 					}
 				}
 				else
 				{
-					csample = (INT16)(read_byte(ptChip, slot->base + spos) << 8);
+					csample = (int16_t)(read_byte(ptChip, slot->base + spos) << 8);
 				}
 
 				sample = (csample * fpart + slot->prev_sample * ((1 << TL_SHIFT) - fpart)) >> TL_SHIFT;
@@ -912,14 +912,14 @@ static void MultiPCM_update(void *info, UINT32 samples, DEV_SMPL **outputs)
 	}
 }
 
-static UINT8 multipcm_r(void *info, UINT8 offset)
+static uint8_t multipcm_r(void *info, uint8_t offset)
 {
 	MultiPCM *ptChip = (MultiPCM *)info;
 	return 0;
 }
 
 
-static void multipcm_write(void *info, UINT8 offset, UINT8 data)
+static void multipcm_write(void *info, uint8_t offset, uint8_t data)
 {
 	MultiPCM *ptChip = (MultiPCM *)info;
 	switch(offset)
@@ -954,7 +954,7 @@ static void multipcm_write(void *info, UINT8 offset, UINT8 data)
 	}
 }
 
-static void multipcm_w_quick(void *info, UINT8 offset, UINT8 data)
+static void multipcm_w_quick(void *info, uint8_t offset, uint8_t data)
 {
 	MultiPCM *ptChip = (MultiPCM *)info;
 	ptChip->cur_slot = VALUE_TO_CHANNEL[(offset >> 3) & 0x1F];
@@ -966,14 +966,14 @@ static void multipcm_w_quick(void *info, UINT8 offset, UINT8 data)
 
 /* MAME/M1 access functions */
 
-static void multipcm_alloc_rom(void* info, UINT32 memsize)
+static void multipcm_alloc_rom(void* info, uint32_t memsize)
 {
 	MultiPCM *ptChip = (MultiPCM *)info;
 	
 	if (ptChip->ROMSize == memsize)
 		return;
 	
-	ptChip->ROM = (UINT8*)realloc(ptChip->ROM, memsize);
+	ptChip->ROM = (uint8_t*)realloc(ptChip->ROM, memsize);
 	ptChip->ROMSize = memsize;
 	memset(ptChip->ROM, 0xFF, memsize);
 	
@@ -982,7 +982,7 @@ static void multipcm_alloc_rom(void* info, UINT32 memsize)
 	return;
 }
 
-static void multipcm_write_rom(void *info, UINT32 offset, UINT32 length, const UINT8* data)
+static void multipcm_write_rom(void *info, uint32_t offset, uint32_t length, const uint8_t* data)
 {
 	MultiPCM *ptChip = (MultiPCM *)info;
 	
@@ -997,10 +997,10 @@ static void multipcm_write_rom(void *info, UINT32 offset, UINT32 length, const U
 }
 
 
-static void multipcm_set_mute_mask(void *info, UINT32 MuteMask)
+static void multipcm_set_mute_mask(void *info, uint32_t MuteMask)
 {
 	MultiPCM* ptChip = (MultiPCM *)info;
-	UINT8 CurChn;
+	uint8_t CurChn;
 	
 	for (CurChn = 0; CurChn < 28; CurChn ++)
 		ptChip->slots[CurChn].muted = (MuteMask >> CurChn) & 0x01;

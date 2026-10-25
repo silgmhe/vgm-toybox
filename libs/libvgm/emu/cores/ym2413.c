@@ -52,22 +52,22 @@ to do:
 #include "ym2413.h"
 
 #ifdef _MSC_VER
-#pragma warning(disable: 4244)	// disable warning for converting double -> UINT32
+#pragma warning(disable: 4244)	// disable warning for converting double -> uint32_t
 #endif
 
 
-static UINT8 device_start_ym2413_mame(const DEV_GEN_CFG* cfg, DEV_INFO* retDevInf);
-static void *ym2413_init(UINT32 clock, UINT32 rate);
+static uint8_t device_start_ym2413_mame(const DEV_GEN_CFG* cfg, DEV_INFO* retDevInf);
+static void *ym2413_init(uint32_t clock, uint32_t rate);
 static void ym2413_shutdown(void *chip);
 static void ym2413_reset_chip(void *chip);
-static void ym2413_write(void *chip, UINT8 a, UINT8 v);
-static UINT8 ym2413_read(void *chip, UINT8 a);
-static void ym2413_update_one(void *chip, UINT32 length, DEV_SMPL **buffers);
+static void ym2413_write(void *chip, uint8_t a, uint8_t v);
+static uint8_t ym2413_read(void *chip, uint8_t a);
+static void ym2413_update_one(void *chip, uint32_t length, DEV_SMPL **buffers);
 
 //void ym2413_set_update_handler(void *chip, OPLL_UPDATEHANDLER UpdateHandler, void *param);
-static void ym2413_set_mute_mask(void* chip, UINT32 MuteMask);
-//void ym2413_set_chip_mode(void* chip, UINT8 Mode);
-//void ym2413_override_patches(void* chip, const UINT8* PatchDump);
+static void ym2413_set_mute_mask(void* chip, uint32_t MuteMask);
+//void ym2413_set_chip_mode(void* chip, uint8_t Mode);
+//void ym2413_override_patches(void* chip, const uint8_t* PatchDump);
 
 
 static DEVDEF_RWFUNC devFunc[] =
@@ -140,44 +140,44 @@ DEV_DEF devDef_YM2413_MAME =
 
 typedef struct
 {
-	UINT32  ar;         /* attack rate: AR<<2           */
-	UINT32  dr;         /* decay rate:  DR<<2           */
-	UINT32  rr;         /* release rate:RR<<2           */
-	UINT8   KSR;        /* key scale rate               */
-	UINT8   ksl;        /* keyscale level               */
-	UINT8   ksr;        /* key scale rate: kcode>>KSR   */
-	UINT8   mul;        /* multiple: mul_tab[ML]        */
+	uint32_t  ar;         /* attack rate: AR<<2           */
+	uint32_t  dr;         /* decay rate:  DR<<2           */
+	uint32_t  rr;         /* release rate:RR<<2           */
+	uint8_t   KSR;        /* key scale rate               */
+	uint8_t   ksl;        /* keyscale level               */
+	uint8_t   ksr;        /* key scale rate: kcode>>KSR   */
+	uint8_t   mul;        /* multiple: mul_tab[ML]        */
 
 	/* Phase Generator */
-	UINT32  phase;      /* frequency counter            */
-	UINT32  freq;       /* frequency counter step       */
-	UINT8   fb_shift;   /* feedback shift value         */
-	INT32   op1_out[2]; /* slot1 output for feedback    */
+	uint32_t  phase;      /* frequency counter            */
+	uint32_t  freq;       /* frequency counter step       */
+	uint8_t   fb_shift;   /* feedback shift value         */
+	int32_t   op1_out[2]; /* slot1 output for feedback    */
 
 	/* Envelope Generator */
-	UINT8   eg_type;    /* percussive/nonpercussive mode*/
-	UINT8   state;      /* phase type                   */
-	UINT32  TL;         /* total level: TL << 2         */
-	INT32   TLL;        /* adjusted now TL              */
-	INT32   volume;     /* envelope counter             */
-	UINT32  sl;         /* sustain level: sl_tab[SL]    */
+	uint8_t   eg_type;    /* percussive/nonpercussive mode*/
+	uint8_t   state;      /* phase type                   */
+	uint32_t  TL;         /* total level: TL << 2         */
+	int32_t   TLL;        /* adjusted now TL              */
+	int32_t   volume;     /* envelope counter             */
+	uint32_t  sl;         /* sustain level: sl_tab[SL]    */
 
-	UINT8   eg_sh_dp;   /* (dump state)                 */
-	UINT8   eg_sel_dp;  /* (dump state)                 */
-	UINT8   eg_sh_ar;   /* (attack state)               */
-	UINT8   eg_sel_ar;  /* (attack state)               */
-	UINT8   eg_sh_dr;   /* (decay state)                */
-	UINT8   eg_sel_dr;  /* (decay state)                */
-	UINT8   eg_sh_rr;   /* (release state for non-perc.)*/
-	UINT8   eg_sel_rr;  /* (release state for non-perc.)*/
-	UINT8   eg_sh_rs;   /* (release state for perc.mode)*/
-	UINT8   eg_sel_rs;  /* (release state for perc.mode)*/
+	uint8_t   eg_sh_dp;   /* (dump state)                 */
+	uint8_t   eg_sel_dp;  /* (dump state)                 */
+	uint8_t   eg_sh_ar;   /* (attack state)               */
+	uint8_t   eg_sel_ar;  /* (attack state)               */
+	uint8_t   eg_sh_dr;   /* (decay state)                */
+	uint8_t   eg_sel_dr;  /* (decay state)                */
+	uint8_t   eg_sh_rr;   /* (release state for non-perc.)*/
+	uint8_t   eg_sel_rr;  /* (release state for non-perc.)*/
+	uint8_t   eg_sh_rs;   /* (release state for perc.mode)*/
+	uint8_t   eg_sel_rs;  /* (release state for perc.mode)*/
 
-	UINT32  key;        /* 0 = KEY OFF, >0 = KEY ON     */
+	uint32_t  key;        /* 0 = KEY OFF, >0 = KEY ON     */
 
 	/* LFO */
-	UINT32  AMmask;     /* LFO Amplitude Modulation enable mask */
-	UINT8   vib;        /* LFO Phase Modulation enable flag (active high)*/
+	uint32_t  AMmask;     /* LFO Amplitude Modulation enable mask */
+	uint8_t   vib;        /* LFO Phase Modulation enable flag (active high)*/
 
 	/* waveform select */
 	unsigned int wavetable;
@@ -187,12 +187,12 @@ typedef struct
 {
 	OPLL_SLOT SLOT[2];
 	/* phase generator state */
-	UINT32  block_fnum; /* block+fnum                   */
-	UINT32  fc;         /* Freq. freqement base         */
-	UINT32  ksl_base;   /* KeyScaleLevel Base step      */
-	UINT8   kcode;      /* key code (for key scaling)   */
-	UINT8   sus;        /* sus on/off (release speed in percussive mode)*/
-	UINT8   Muted;
+	uint32_t  block_fnum; /* block+fnum                   */
+	uint32_t  fc;         /* Freq. freqement base         */
+	uint32_t  ksl_base;   /* KeyScaleLevel Base step      */
+	uint8_t   kcode;      /* key code (for key scaling)   */
+	uint8_t   sus;        /* sus on/off (release speed in percussive mode)*/
+	uint8_t   Muted;
 } OPLL_CH;
 
 /* chip state */
@@ -200,27 +200,27 @@ typedef struct {
 	DEV_DATA _devData;
 
 	OPLL_CH P_CH[9];                /* OPLL chips have 9 channels*/
-	UINT8   instvol_r[9];           /* instrument/volume (or volume/volume in percussive mode)*/
-	UINT8   MuteSpc[5];             /* Mute Special: 5 Rhythm */
+	uint8_t   instvol_r[9];           /* instrument/volume (or volume/volume in percussive mode)*/
+	uint8_t   MuteSpc[5];             /* Mute Special: 5 Rhythm */
 
-	UINT32  eg_cnt;                 /* global envelope generator counter    */
-	UINT32  eg_timer;               /* global envelope generator counter works at frequency = chipclock/72 */
-	UINT32  eg_timer_add;           /* step of eg_timer                     */
-	UINT32  eg_timer_overflow;      /* envelope generator timer overflows every 1 sample (on real chip) */
+	uint32_t  eg_cnt;                 /* global envelope generator counter    */
+	uint32_t  eg_timer;               /* global envelope generator counter works at frequency = chipclock/72 */
+	uint32_t  eg_timer_add;           /* step of eg_timer                     */
+	uint32_t  eg_timer_overflow;      /* envelope generator timer overflows every 1 sample (on real chip) */
 
-	UINT8   rhythm;                 /* Rhythm mode                  */
+	uint8_t   rhythm;                 /* Rhythm mode                  */
 
 	/* LFO */
-	UINT32  LFO_AM;
-	INT32   LFO_PM;
-	UINT32  lfo_am_cnt;
-	UINT32  lfo_am_inc;
-	UINT32  lfo_pm_cnt;
-	UINT32  lfo_pm_inc;
+	uint32_t  LFO_AM;
+	int32_t   LFO_PM;
+	uint32_t  lfo_am_cnt;
+	uint32_t  lfo_am_inc;
+	uint32_t  lfo_pm_cnt;
+	uint32_t  lfo_pm_inc;
 
-	UINT32  noise_rng;              /* 23 bit noise shift register  */
-	UINT32  noise_p;                /* current noise 'phase'        */
-	UINT32  noise_f;                /* current noise period         */
+	uint32_t  noise_rng;              /* 23 bit noise shift register  */
+	uint32_t  noise_p;                /* current noise 'phase'        */
+	uint32_t  noise_f;                /* current noise period         */
 
 
 /* instrument settings */
@@ -230,16 +230,16 @@ typedef struct {
     16 -bass drum settings
     17,18 - other percussion instruments
 */
-	const UINT8* base_instab;
-	UINT8 inst_tab[19][8];
+	const uint8_t* base_instab;
+	uint8_t inst_tab[19][8];
 
-	UINT32  fn_tab[1024];           /* fnumber->increment counter   */
+	uint32_t  fn_tab[1024];           /* fnumber->increment counter   */
 
-	UINT8 address;                  /* address register             */
+	uint8_t address;                  /* address register             */
 
-	UINT8 VRC7_Mode;
-	UINT32 clock;                   /* master clock  (Hz)           */
-	UINT32 rate;                    /* sampling rate (Hz)           */
+	uint8_t VRC7_Mode;
+	uint32_t clock;                   /* master clock  (Hz)           */
+	uint32_t rate;                    /* sampling rate (Hz)           */
 	double freqbase;                /* frequency base               */
 
 	signed int output[2];
@@ -253,7 +253,7 @@ typedef struct {
 /* table is 3dB/octave, DV converts this into 6dB/octave */
 /* 0.1875 is bit 0 weight of the envelope counter (volume) expressed in the 'decibel' scale */
 #define DV (0.1875/1.0)
-static const UINT32 ksl_tab[8*16] =
+static const uint32_t ksl_tab[8*16] =
 {
 	/* OCT 0 */
 	 0.000/DV, 0.000/DV, 0.000/DV, 0.000/DV,
@@ -299,13 +299,13 @@ static const UINT32 ksl_tab[8*16] =
 #undef DV
 
 /* 0 / 1.5 / 3.0 / 6.0 dB/OCT, confirmed on a real YM2413 (the application manual is incorrect) */
-static const UINT32 ksl_shift[4] = { 31, 2, 1, 0 };
+static const uint32_t ksl_shift[4] = { 31, 2, 1, 0 };
 
 
 /* sustain level table (3dB per step) */
 /* 0 - 15: 0, 3, 6, 9,12,15,18,21,24,27,30,33,36,39,42,45 (dB)*/
-#define SC(db) (UINT32) ( db * (1.0/ENV_STEP) )
-static const UINT32 sl_tab[16] = {
+#define SC(db) (uint32_t) ( db * (1.0/ENV_STEP) )
+static const uint32_t sl_tab[16] = {
  SC( 0),SC( 1),SC( 2),SC(3 ),SC(4 ),SC(5 ),SC(6 ),SC( 7),
  SC( 8),SC( 9),SC(10),SC(11),SC(12),SC(13),SC(14),SC(15)
 };
@@ -419,7 +419,7 @@ static const unsigned char eg_rate_shift[16+64+16] = {    /* Envelope Generator 
 
 /* multiple table */
 #define ML 2
-static const UINT8 mul_tab[16] = {
+static const uint8_t mul_tab[16] = {
 	/* 1/2, 1, 2, 3, 4, 5, 6, 7, 8, 9,10,10,12,12,15,15 */
 	ML/2, 1*ML, 2*ML, 3*ML, 4*ML, 5*ML, 6*ML, 7*ML,
 	8*ML, 9*ML,10*ML,10*ML,12*ML,12*ML,15*ML,15*ML
@@ -456,7 +456,7 @@ We use data>>1, until we find what it really is on real chip...
 
 #define LFO_AM_TAB_ELEMENTS 210
 
-static const UINT8 lfo_am_table[LFO_AM_TAB_ELEMENTS] = {
+static const uint8_t lfo_am_table[LFO_AM_TAB_ELEMENTS] = {
 	0,0,0,0,0,0,0,
 	1,1,1,1,
 	2,2,2,2,
@@ -512,7 +512,7 @@ static const UINT8 lfo_am_table[LFO_AM_TAB_ELEMENTS] = {
 };
 
 /* LFO Phase Modulation table (verified on real YM2413) */
-static const INT8 lfo_pm_table[8*8] = {
+static const int8_t lfo_pm_table[8*8] = {
 	/* FNUM2/FNUM = 0 00xxxxxx (0x0000) */
 	0, 0, 0, 0, 0, 0, 0, 0,
 
@@ -598,15 +598,15 @@ static unsigned char vrc7_instable[(16 + 3) * 8] =
 #define SLOT8_2 (&chip->P_CH[8].SLOT[SLOT2])
 
 
-static UINT8 tablesInit = 0;
+static uint8_t tablesInit = 0;
 
 /* advance LFO to next sample */
 INLINE void advance_lfo(YM2413 *chip)
 {
 	/* LFO */
 	chip->lfo_am_cnt += chip->lfo_am_inc;
-	if (chip->lfo_am_cnt >= ((UINT32)LFO_AM_TAB_ELEMENTS<<LFO_SH) ) /* lfo_am_table is 210 elements long */
-		chip->lfo_am_cnt -= ((UINT32)LFO_AM_TAB_ELEMENTS<<LFO_SH);
+	if (chip->lfo_am_cnt >= ((uint32_t)LFO_AM_TAB_ELEMENTS<<LFO_SH) ) /* lfo_am_table is 210 elements long */
+		chip->lfo_am_cnt -= ((uint32_t)LFO_AM_TAB_ELEMENTS<<LFO_SH);
 
 	chip->LFO_AM = lfo_am_table[ chip->lfo_am_cnt >> LFO_SH ] >> 1;
 
@@ -677,7 +677,7 @@ INLINE void advance(YM2413 *chip)
 				{
 					op->volume += eg_inc[op->eg_sel_dr + ((chip->eg_cnt>>op->eg_sh_dr)&7)];
 
-					if ( op->volume >= (INT32)op->sl )
+					if ( op->volume >= (int32_t)op->sl )
 						op->state = EG_SUS;
 				}
 			break;
@@ -783,7 +783,7 @@ INLINE void advance(YM2413 *chip)
 		/* Phase Generator */
 		if(op->vib)
 		{
-			UINT8 block;
+			uint8_t block;
 
 			unsigned int fnum_lfo   = 8*((CH->block_fnum&0x01c0) >> 6);
 			unsigned int block_fnum = CH->block_fnum * 2;
@@ -823,7 +823,7 @@ INLINE void advance(YM2413 *chip)
 	while (i)
 	{
 		/*
-		UINT32 j;
+		uint32_t j;
 		j = ( (chip->noise_rng) ^ (chip->noise_rng>>14) ^ (chip->noise_rng>>15) ^ (chip->noise_rng>>22) ) & 1;
 		chip->noise_rng = (j<<22) | (chip->noise_rng>>1);
 		*/
@@ -844,9 +844,9 @@ INLINE void advance(YM2413 *chip)
 }
 
 
-INLINE signed int op_calc(UINT32 phase, unsigned int env, signed int pm, unsigned int wave_tab)
+INLINE signed int op_calc(uint32_t phase, unsigned int env, signed int pm, unsigned int wave_tab)
 {
-	UINT32 p;
+	uint32_t p;
 
 	p = (env<<5) + sin_tab[wave_tab + ((((signed int)((phase & ~FREQ_MASK) + (pm<<17))) >> FREQ_SH ) & SIN_MASK) ];
 
@@ -855,10 +855,10 @@ INLINE signed int op_calc(UINT32 phase, unsigned int env, signed int pm, unsigne
 	return tl_tab[p];
 }
 
-INLINE signed int op_calc1(UINT32 phase, unsigned int env, signed int pm, unsigned int wave_tab)
+INLINE signed int op_calc1(uint32_t phase, unsigned int env, signed int pm, unsigned int wave_tab)
 {
-	UINT32 p;
-	INT32  i;
+	uint32_t p;
+	int32_t  i;
 
 	i = (phase & ~FREQ_MASK) + pm;
 
@@ -874,7 +874,7 @@ INLINE signed int op_calc1(UINT32 phase, unsigned int env, signed int pm, unsign
 }
 
 
-#define volume_calc(OP) ((OP)->TLL + ((UINT32)(OP)->volume) + (chip->LFO_AM & (OP)->AMmask))
+#define volume_calc(OP) ((OP)->TLL + ((uint32_t)(OP)->volume) + (chip->LFO_AM & (OP)->AMmask))
 
 /* calculate output */
 INLINE void chan_calc( YM2413*chip, OPLL_CH *CH )
@@ -1026,7 +1026,7 @@ INLINE void rhythm_calc( YM2413 *chip, OPLL_CH *CH, unsigned int noise )
 
 		/* when res1 = 0 phase = 0x000 | 0xd0; */
 		/* when res1 = 1 phase = 0x200 | (0xd0>>2); */
-		UINT32 phase = res1 ? (0x200|(0xd0>>2)) : 0xd0;
+		uint32_t phase = res1 ? (0x200|(0xd0>>2)) : 0xd0;
 
 		/* enable gate based on frequency of operator 2 in channel 8 */
 		unsigned char bit5e= ((SLOT8_2->phase>>FREQ_SH)>>5)&1;
@@ -1067,7 +1067,7 @@ INLINE void rhythm_calc( YM2413 *chip, OPLL_CH *CH, unsigned int noise )
 
 		/* when bit8 = 0 phase = 0x100; */
 		/* when bit8 = 1 phase = 0x200; */
-		UINT32 phase = bit8 ? 0x200 : 0x100;
+		uint32_t phase = bit8 ? 0x200 : 0x100;
 
 		/* Noise bit XOR'es phase by 0x100 */
 		/* when noisebit = 0 pass the phase from calculation above */
@@ -1097,7 +1097,7 @@ INLINE void rhythm_calc( YM2413 *chip, OPLL_CH *CH, unsigned int noise )
 
 		/* when res1 = 0 phase = 0x000 | 0x100; */
 		/* when res1 = 1 phase = 0x200 | 0x100; */
-		UINT32 phase = res1 ? 0x300 : 0x100;
+		uint32_t phase = res1 ? 0x300 : 0x100;
 
 		/* enable gate based on frequency of operator 2 in channel 8 */
 		unsigned char bit5e= ((SLOT8_2->phase>>FREQ_SH)>>5)&1;
@@ -1198,7 +1198,7 @@ static void OPLL_initalize(YM2413 *chip)
 	{
 		/* OPLL (YM2413) phase increment counter = 18bit */
 
-		chip->fn_tab[i] = (UINT32)( (double)i * 64 * chip->freqbase * (1<<(FREQ_SH-10)) ); /* -10 because chip works with 10.10 fixed point, while we use 16.16 */
+		chip->fn_tab[i] = (uint32_t)( (double)i * 64 * chip->freqbase * (1<<(FREQ_SH-10)) ); /* -10 because chip works with 10.10 fixed point, while we use 16.16 */
 	}
 
 	/* Amplitude modulation: 27 output levels (triangle waveform); 1 level takes one of: 192, 256 or 448 samples */
@@ -1215,7 +1215,7 @@ static void OPLL_initalize(YM2413 *chip)
 	chip->eg_timer_overflow = (1<<EG_SH);
 }
 
-INLINE void KEY_ON(OPLL_SLOT *SLOT, UINT32 key_set)
+INLINE void KEY_ON(OPLL_SLOT *SLOT, uint32_t key_set)
 {
 	if( !SLOT->key )
 	{
@@ -1226,7 +1226,7 @@ INLINE void KEY_ON(OPLL_SLOT *SLOT, UINT32 key_set)
 	SLOT->key |= key_set;
 }
 
-INLINE void KEY_OFF(OPLL_SLOT *SLOT, UINT32 key_clr)
+INLINE void KEY_OFF(OPLL_SLOT *SLOT, uint32_t key_clr)
 {
 	if( SLOT->key )
 	{
@@ -1245,8 +1245,8 @@ INLINE void KEY_OFF(OPLL_SLOT *SLOT, UINT32 key_clr)
 INLINE void CALC_FCSLOT(OPLL_CH *CH,OPLL_SLOT *SLOT)
 {
 	int ksr;
-	UINT32 SLOT_rs;
-	UINT32 SLOT_dp;
+	uint32_t SLOT_rs;
+	uint32_t SLOT_dp;
 
 	/* (frequency) phase increment counter */
 	SLOT->freq = CH->fc * SLOT->mul;
@@ -1368,7 +1368,7 @@ INLINE void set_sl_rr(YM2413 *chip,int slot,int v)
 	SLOT->eg_sel_rr = eg_rate_select[SLOT->rr + SLOT->ksr ];
 }
 
-static void load_instrument(YM2413 *chip, UINT32 chan, UINT32 slot, UINT8* inst )
+static void load_instrument(YM2413 *chip, uint32_t chan, uint32_t slot, uint8_t* inst )
 {
 	set_mul         (chip, slot,   inst[0]);
 	set_mul         (chip, slot+1, inst[1]);
@@ -1380,11 +1380,11 @@ static void load_instrument(YM2413 *chip, UINT32 chan, UINT32 slot, UINT8* inst 
 	set_sl_rr       (chip, slot+1, inst[7]);
 }
 
-static void update_instrument_zero(YM2413 *chip, UINT8 r )
+static void update_instrument_zero(YM2413 *chip, uint8_t r )
 {
-	UINT8* inst = &chip->inst_tab[0][0]; /* point to user instrument */
-	UINT32 chan;
-	UINT32 chan_max;
+	uint8_t* inst = &chip->inst_tab[0][0]; /* point to user instrument */
+	uint32_t chan;
+	uint32_t chan_max;
 
 	chan_max = 9;
 	if (chip->rhythm & 0x20)
@@ -1472,7 +1472,7 @@ static void OPLLWriteReg(YM2413 *chip, int r, int v)
 {
 	OPLL_CH *CH;
 	OPLL_SLOT *SLOT;
-	UINT8 *inst;
+	uint8_t *inst;
 	int chan;
 	int slot;
 
@@ -1652,7 +1652,7 @@ static void OPLLWriteReg(YM2413 *chip, int r, int v)
 		/* update */
 		if(CH->block_fnum != block_fnum)
 		{
-			UINT8 block;
+			uint8_t block;
 
 			CH->block_fnum = block_fnum;
 
@@ -1678,7 +1678,7 @@ static void OPLLWriteReg(YM2413 *chip, int r, int v)
 
 	case 0x30:	/* inst 4 MSBs, VOL 4 LSBs */
 	{
-		UINT8 old_instvol;
+		uint8_t old_instvol;
 
 		chan = r&0x0f;
 
@@ -1775,7 +1775,7 @@ static void OPLLResetChip(YM2413 *chip)
 /* Create one of virtual YM2413 */
 /* 'clock' is chip clock in Hz  */
 /* 'rate'  is sampling rate  */
-static YM2413 *OPLLCreate(UINT32 clock, UINT32 rate)
+static YM2413 *OPLLCreate(uint32_t clock, uint32_t rate)
 {
 	YM2413 *chip;
 
@@ -1816,7 +1816,7 @@ static void OPLLSetUpdateHandler(YM2413 *chip,OPLL_UPDATEHANDLER UpdateHandler,v
 }
 
 /* YM2413 I/O interface */
-INLINE void OPLLWrite(YM2413 *chip,UINT8 a,UINT8 v)
+INLINE void OPLLWrite(YM2413 *chip,uint8_t a,uint8_t v)
 {
 	if( !(a&1) )
 	{	/* address port */
@@ -1833,11 +1833,11 @@ INLINE void OPLLWrite(YM2413 *chip,UINT8 a,UINT8 v)
 
 
 
-static UINT8 device_start_ym2413_mame(const DEV_GEN_CFG* cfg, DEV_INFO* retDevInf)
+static uint8_t device_start_ym2413_mame(const DEV_GEN_CFG* cfg, DEV_INFO* retDevInf)
 {
 	void* chip;
 	DEV_DATA* devData;
-	UINT32 rate;
+	uint32_t rate;
 	
 	rate = cfg->clock / 72;
 	SRATE_CUSTOM_HIGHEST(cfg->srMode, rate, cfg->smplRate);
@@ -1854,7 +1854,7 @@ static UINT8 device_start_ym2413_mame(const DEV_GEN_CFG* cfg, DEV_INFO* retDevIn
 	return 0x00;
 }
 
-static void * ym2413_init(UINT32 clock, UINT32 rate)
+static void * ym2413_init(uint32_t clock, uint32_t rate)
 {
 	/* emulator create */
 	return OPLLCreate(clock, rate);
@@ -1874,13 +1874,13 @@ static void ym2413_reset_chip(void *chip)
 	OPLLResetChip(OPLL);
 }
 
-static void ym2413_write(void *chip, UINT8 a, UINT8 v)
+static void ym2413_write(void *chip, uint8_t a, uint8_t v)
 {
 	YM2413 *OPLL = (YM2413 *)chip;
 	OPLLWrite(OPLL, a, v);
 }
 
-static UINT8 ym2413_read(void *chip, UINT8 a)
+static uint8_t ym2413_read(void *chip, uint8_t a)
 {
 	return 0xFF;
 }
@@ -1899,14 +1899,14 @@ void ym2413_set_update_handler(void *chip,OPLL_UPDATEHANDLER UpdateHandler,void 
 ** '*buffer' is the output buffer pointer
 ** 'length' is the number of samples that should be generated
 */
-static void ym2413_update_one(void *_chip, UINT32 length, DEV_SMPL **buffers)
+static void ym2413_update_one(void *_chip, uint32_t length, DEV_SMPL **buffers)
 {
 	YM2413		*chip  = (YM2413 *)_chip;
-	UINT8		rhythm = chip->rhythm&0x20;
+	uint8_t		rhythm = chip->rhythm&0x20;
 	DEV_SMPL	*bufMO = buffers[0];
 	DEV_SMPL	*bufRO = buffers[1];
 
-	UINT32 i;
+	uint32_t i;
 
 	for( i=0; i < length ; i++ )
 	{
@@ -1944,10 +1944,10 @@ static void ym2413_update_one(void *_chip, UINT32 length, DEV_SMPL **buffers)
 	}
 }
 
-static void ym2413_set_mute_mask(void* chip, UINT32 MuteMask)
+static void ym2413_set_mute_mask(void* chip, uint32_t MuteMask)
 {
 	YM2413* OPLL = (YM2413*)chip;
-	UINT8 CurChn;
+	uint8_t CurChn;
 	
 	for (CurChn = 0; CurChn < 9; CurChn ++)
 		OPLL->P_CH[CurChn].Muted = (MuteMask >> CurChn) & 0x01;
@@ -1957,7 +1957,7 @@ static void ym2413_set_mute_mask(void* chip, UINT32 MuteMask)
 	return;
 }
 
-void ym2413_set_chip_mode(void* chip, UINT8 Mode)
+void ym2413_set_chip_mode(void* chip, uint8_t Mode)
 {
 	// Enable/Disable VRC7 Mode (with only 6 instead of 9 channels and no rhythm part)
 	YM2413* OPLL = (YM2413*)chip;
@@ -1968,11 +1968,11 @@ void ym2413_set_chip_mode(void* chip, UINT8 Mode)
 	return;
 }
 
-void ym2413_override_patches(void* chip, const UINT8* PatchDump)
+void ym2413_override_patches(void* chip, const uint8_t* PatchDump)
 {
 	YM2413* OPLL = (YM2413*)chip;
-	UINT8 CurIns;
-	UINT8 CurReg;
+	uint8_t CurIns;
+	uint8_t CurReg;
 	
 	for (CurIns = 0; CurIns < 19; CurIns ++)
 	{

@@ -11,7 +11,7 @@
 #define LOGBUF_SIZE	0x100
 
 // formatted logging
-void emu_logf(DEV_LOGGER* logger, UINT8 level, const char* format, ...)
+void emu_logf(DEV_LOGGER* logger, uint8_t level, const char* format, ...)
 {
 	va_list arg_list;
 	int retVal;

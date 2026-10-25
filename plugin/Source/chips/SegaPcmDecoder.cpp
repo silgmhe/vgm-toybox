@@ -26,14 +26,14 @@ namespace
 
 	/** The mask the ROM is folded with: the chip addresses `bank | (addr >> 8)` into a power-of-two
 		buffer, so a sample that runs off the end wraps rather than reading elsewhere. */
-	std::uint32_t pow2Mask (std::size_t size)
+	uint32_t pow2Mask (std::size_t size)
 	{
 		if (size == 0)
 		{
 			return 0;
 		}
 
-		std::uint32_t mask = (std::uint32_t) (size - 1);
+		uint32_t mask = (uint32_t) (size - 1);
 		mask |= mask >> 1;
 		mask |= mask >> 2;
 		mask |= mask >> 4;
@@ -56,7 +56,7 @@ namespace
 			, cycleLength (sampleCycle)
 			, melodic (sampleMelodic) {}
 
-		int noteFor (std::uint32_t pitch, int, int* finePitch) const override
+		int noteFor (uint32_t pitch, int, int* finePitch) const override
 		{
 			const bool measured = pitch != 0 && melodic != nullptr && *melodic
 						&& cycleLength != nullptr && *cycleLength > 0.0;
@@ -77,40 +77,40 @@ struct SegaPcmDecoder::Impl
 	struct Voice
 	{
 		// the low window of the register RAM (8n + 0..7)
-		std::uint8_t volumeLeft = 0;
-		std::uint8_t volumeRight = 0;
-		std::uint8_t loopLow = 0;
-		std::uint8_t loopHigh = 0;
-		std::uint8_t endReg = 0;
-		std::uint8_t pitch = 0;
+		uint8_t volumeLeft = 0;
+		uint8_t volumeRight = 0;
+		uint8_t loopLow = 0;
+		uint8_t loopHigh = 0;
+		uint8_t endReg = 0;
+		uint8_t pitch = 0;
 
 		// the high window (0x80 + 8n + 0..7): current address and control
-		std::uint8_t addressMid = 0;
-		std::uint8_t addressHigh = 0;
-		std::uint8_t control = 0xFF;
+		uint8_t addressMid = 0;
+		uint8_t addressHigh = 0;
+		uint8_t control = 0xFF;
 
 		bool keyed = false;
-		std::uint32_t latchStart = 0;
-		std::uint32_t latchEnd = 0;
+		uint32_t latchStart = 0;
+		uint32_t latchEnd = 0;
 		bool loops = false;
-		std::uint32_t gateEnd = 0;
+		uint32_t gateEnd = 0;
 		double cycleLength = 0.0;
 		bool melodic = false;
-		std::uint32_t keyOns = 0;
+		uint32_t keyOns = 0;
 	};
 
 	Voice voices[SegaPcmDecoder::numChannels];
-	std::vector<std::uint8_t> rom;
-	std::uint32_t romMask = 0;
+	std::vector<uint8_t> rom;
+	uint32_t romMask = 0;
 	double clock = 8000000.0;
 	double streamRate = 44100.0;
-	std::map<std::uint32_t, double> cycleCache;
+	std::map<uint32_t, double> cycleCache;
 	std::unique_ptr<SegaPcmNoteTable> tables[SegaPcmDecoder::numChannels];
-	std::uint32_t now = 0;
+	uint32_t now = 0;
 
-	std::uint8_t byteAt (std::uint32_t address) const
+	uint8_t byteAt (uint32_t address) const
 	{
-		const std::uint32_t index = address & romMask;
+		const uint32_t index = address & romMask;
 		return index < rom.size() ? rom[index] : 0;
 	}
 
@@ -131,19 +131,19 @@ struct SegaPcmDecoder::Impl
 
 	/** Where the voice starts, in bytes: the 24-bit position's low byte is the chip's own fraction,
 		so the address byte is `(addressHigh << 8) | addressMid`. */
-	static std::uint32_t startOf (const Voice& voice)
+	static uint32_t startOf (const Voice& voice)
 	{
-		return ((std::uint32_t) voice.addressHigh << 8) | voice.addressMid;
+		return ((uint32_t) voice.addressHigh << 8) | voice.addressMid;
 	}
 
 	/** The end register counts 256-byte units and the core compares `addr >> 16`, so the sample ends
 		at `(reg + 1) * 256`. */
-	static std::uint32_t endOf (const Voice& voice)
+	static uint32_t endOf (const Voice& voice)
 	{
-		return (std::uint32_t) (voice.endReg + 1) << 8;
+		return (uint32_t) (voice.endReg + 1) << 8;
 	}
 
-	double cycleFor (std::uint32_t start, std::uint32_t length)
+	double cycleFor (uint32_t start, uint32_t length)
 	{
 		if (rom.empty() || length == 0)
 		{
@@ -159,11 +159,11 @@ struct SegaPcmDecoder::Impl
 		// The sample has no loop, so the only window is its opening - and the opening of a slap bass
 		// is the slap itself: a noise burst that hides the pitch. Measure from a quarter in, where
 		// the string is already ringing, and keep the first two kilobytes of that.
-		const std::uint32_t begin = length / 4;
-		const std::uint32_t window =
-			std::min<std::uint32_t> (length - begin, (std::uint32_t) kMeasurementUnits);
+		const uint32_t begin = length / 4;
+		const uint32_t window =
+			std::min<uint32_t> (length - begin, (uint32_t) kMeasurementUnits);
 		std::vector<double> waveform (window);
-		for (std::uint32_t i = 0; i < window; ++i)
+		for (uint32_t i = 0; i < window; ++i)
 		{
 			waveform[i] = (double) ((int) byteAt (start + begin + i) - 0x80);
 		}
@@ -173,7 +173,7 @@ struct SegaPcmDecoder::Impl
 		return cycle;
 	}
 
-	void keyOn (Voice& voice, std::uint32_t time)
+	void keyOn (Voice& voice, uint32_t time)
 	{
 		voice.keyed = true;
 		++voice.keyOns;
@@ -200,7 +200,7 @@ struct SegaPcmDecoder::Impl
 		{
 			const double seconds =
 				(double) (voice.latchEnd - voice.latchStart) / bytesPerSecond (voice);
-			voice.gateEnd = time + (std::uint32_t) std::llround (std::min (seconds * streamRate, 1.0e9));
+			voice.gateEnd = time + (uint32_t) std::llround (std::min (seconds * streamRate, 1.0e9));
 		}
 	}
 
@@ -230,11 +230,11 @@ SegaPcmDecoder::~SegaPcmDecoder() = default;
 
 void SegaPcmDecoder::reset (const ChipConfig& config)
 {
-	[[maybe_unused]] const std::uint32_t clock = config.clockHz;
+	[[maybe_unused]] const uint32_t clock = config.clockHz;
 	[[maybe_unused]] const double sampleRate = config.timeBaseHz;
 	// the ROM belongs to the song, not to the clock
-	std::vector<std::uint8_t> rom = std::move (impl->rom);
-	const std::uint32_t mask = impl->romMask;
+	std::vector<uint8_t> rom = std::move (impl->rom);
+	const uint32_t mask = impl->romMask;
 
 	*impl = Impl();
 	impl->rom = std::move (rom);
@@ -250,7 +250,7 @@ void SegaPcmDecoder::reset (const ChipConfig& config)
 	}
 }
 
-void SegaPcmDecoder::setRom (std::vector<std::uint8_t> rom)
+void SegaPcmDecoder::setRom (std::vector<uint8_t> rom)
 {
 	impl->romMask = pow2Mask (rom.size());
 	impl->rom = std::move (rom);
@@ -261,7 +261,7 @@ void SegaPcmDecoder::write (const RegisterWrite& write)
 {
 	// the command addresses the chip's register RAM: 8n + 0..7 is the low window, 0x80 + 8n + 0..7
 	// the current address and control
-	const std::uint16_t offset = (std::uint16_t) (((std::uint16_t) write.port << 8) | write.reg);
+	const uint16_t offset = (uint16_t) (((uint16_t) write.port << 8) | write.reg);
 	const bool highWindow = (offset & 0x80) != 0;
 	const int channel = (int) ((offset & 0x7F) >> 3);
 	if (channel < 0 || channel >= (int) SegaPcmDecoder::numChannels)
@@ -336,7 +336,7 @@ void SegaPcmDecoder::write (const RegisterWrite& write)
 	}
 }
 
-void SegaPcmDecoder::advance (std::uint32_t sampleTime)
+void SegaPcmDecoder::advance (uint32_t sampleTime)
 {
 	impl->now = sampleTime;
 }

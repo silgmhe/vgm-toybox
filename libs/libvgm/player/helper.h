@@ -23,7 +23,7 @@ typedef void (*SETUPLINKDEV_CB)(void* userParam, VGM_BASEDEV* cDev, DEVLINK_INFO
 
 
 void SetupLinkedDevices(VGM_BASEDEV* cBaseDev, SETUPLINKDEV_CB devCfgCB, void* cbUserParam);
-void FreeDeviceTree(VGM_BASEDEV* cBaseDev, UINT8 freeBase);
+void FreeDeviceTree(VGM_BASEDEV* cBaseDev, uint8_t freeBase);
 
 #ifdef __cplusplus
 }

@@ -11,24 +11,10 @@
 #define INLINE
 #endif
 
-namespace xgm
-{
-/** 8bit符号なしの整数型 */
-typedef unsigned char UINT8;
-/** 16bit符号なしの整数型 */
-typedef unsigned short UINT16;
-/** 32bit符号なしの整数型 */
-typedef unsigned int UINT32;
-/** 64bit unsigned */
-typedef unsigned long long UINT64;
-/** 8bit符号付き整数型 */
-typedef signed char INT8;
-/** 16bit符号付き整数型 */
-typedef signed short INT16;
-/** 32bit符号付き整数型 */
-typedef signed int INT32;
-/** 64bit signed */
-typedef signed long long INT64;
-}
+// The (U)INTnn aliases that used to live here are gone: the sources say uint32_t now, which
+// is the same type on every compiler this project builds with, and says so without a namespace to
+// qualify it. What is left is INLINE, which upstream's sources use, and the standard header the
+// rest of them need.
+#include <stdint.h>
 
-#endif
+#endif	// _XTYPES_H_

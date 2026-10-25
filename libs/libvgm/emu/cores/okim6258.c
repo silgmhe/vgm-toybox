@@ -25,24 +25,24 @@
 #include "okim6258.h"
 
 
-static void okim6258_update(void *param, UINT32 samples, DEV_SMPL **outputs);
-static UINT8 device_start_okim6258(const MSM6258_CFG* cfg, DEV_INFO* retDevInf);
+static void okim6258_update(void *param, uint32_t samples, DEV_SMPL **outputs);
+static uint8_t device_start_okim6258(const MSM6258_CFG* cfg, DEV_INFO* retDevInf);
 static void device_stop_okim6258(void *chip);
 static void device_reset_okim6258(void *chip);
 
-static void okim6258_set_divider(void *chip, UINT8 divmode);
-static void okim6258_set_clock(void *chip, UINT32 clock);
-static UINT32 okim6258_get_vclk(void *chip);
+static void okim6258_set_divider(void *chip, uint8_t divmode);
+static void okim6258_set_clock(void *chip, uint32_t clock);
+static uint32_t okim6258_get_vclk(void *chip);
 
-static UINT8 okim6258_status_r(void *chip, UINT8 offset);
-static void okim6258_data_w(void *chip, UINT8 data);
-static void okim6258_ctrl_w(void *chip, UINT8 data);
-static void okim6258_pan_w(void *chip, UINT8 data);
-static void okim6258_write(void *chip, UINT8 offset, UINT8 data);
+static uint8_t okim6258_status_r(void *chip, uint8_t offset);
+static void okim6258_data_w(void *chip, uint8_t data);
+static void okim6258_ctrl_w(void *chip, uint8_t data);
+static void okim6258_pan_w(void *chip, uint8_t data);
+static void okim6258_write(void *chip, uint8_t offset, uint8_t data);
 
-static void okim6258_set_options(void *chip, UINT32 Options);
+static void okim6258_set_options(void *chip, uint32_t Options);
 static void okim6258_set_srchg_cb(void *chip, DEVCB_SRATE_CHG CallbackFunc, void* DataPtr);
-static void okim6258_set_mute_mask(void *chip, UINT32 MuteMask);
+static void okim6258_set_mute_mask(void *chip, uint32_t MuteMask);
 static void okim6258_set_log_cb(void* chip, DEVCB_LOG func, void* param);
 
 
@@ -79,7 +79,7 @@ static const char* DeviceName(const DEV_GEN_CFG* devCfg)
 	return "MSM6258";
 }
 
-static UINT16 DeviceChannels(const DEV_GEN_CFG* devCfg)
+static uint16_t DeviceChannels(const DEV_GEN_CFG* devCfg)
 {
 	return 1;
 }
@@ -115,7 +115,7 @@ const DEV_DECL sndDev_MSM6258 =
 #define STATUS_PLAYING		(1 << 1)
 #define STATUS_RECORDING	(1 << 2)
 
-static const UINT32 dividers[4] = { 1024, 768, 512, 512 };
+static const uint32_t dividers[4] = { 1024, 768, 512, 512 };
 
 typedef struct _okim6258_state okim6258_state;
 struct _okim6258_state
@@ -123,40 +123,40 @@ struct _okim6258_state
 	DEV_DATA _devData;
 	DEV_LOGGER logger;
 
-	UINT8  status;
+	uint8_t  status;
 
-	UINT32 master_clock;    /* master clock frequency */
-	UINT32 divider;          /* master clock divider */
-	UINT8 start_divider;
-	UINT8 adpcm_type;       /* 3/4 bit ADPCM select */
-	UINT8 data_in;          /* ADPCM data-in register */
-	UINT8 nibble_shift;     /* nibble select */
+	uint32_t master_clock;    /* master clock frequency */
+	uint32_t divider;          /* master clock divider */
+	uint8_t start_divider;
+	uint8_t adpcm_type;       /* 3/4 bit ADPCM select */
+	uint8_t data_in;          /* ADPCM data-in register */
+	uint8_t nibble_shift;     /* nibble select */
 
-	UINT8 output_12force;   // enforce 12 bit output (for high quality)
-	UINT8 output_bits;      /* D/A precision is 10-bits but 12-bit data can be
+	uint8_t output_12force;   // enforce 12 bit output (for high quality)
+	uint8_t output_bits;      /* D/A precision is 10-bits but 12-bit data can be
 	                           output serially to an external DAC */
-	INT16 output_mask;
+	int16_t output_mask;
 
-	INT16 signal;
-	INT16 step;
+	int16_t signal;
+	int16_t step;
 
 	// Valley Bell: Added a small queue to prevent race conditions.
-	UINT8 data_buf[8];
-	UINT8 data_in_last;
-	UINT8 data_buf_pos;
+	uint8_t data_buf[8];
+	uint8_t data_in_last;
+	uint8_t data_buf_pos;
 	// Data Empty Values:
 	//	00 - data written, but not read yet
 	//	01 - read data, waiting for next write
 	//	02 - tried to read, but had no data
-	UINT8 data_empty;
+	uint8_t data_empty;
 	// Valley Bell: Added panning (for Sharp X68000)
-	UINT8 pan;
-	INT16 last_smpl;
+	uint8_t pan;
+	int16_t last_smpl;
 
-	UINT8 clock_buffer[4];
-	UINT32 initial_clock;
+	uint8_t clock_buffer[4];
+	uint32_t initial_clock;
 	
-	UINT8 Muted;
+	uint8_t Muted;
 	
 	DEVCB_SRATE_CHG SmpRateFunc;
 	void* SmpRateData;
@@ -172,13 +172,13 @@ static int diff_lookup[49*16];
 static int tables_computed = 0;
 
 
-INLINE UINT32 ReadLE32(const UINT8* buffer)
+INLINE uint32_t ReadLE32(const uint8_t* buffer)
 {
 	return	(buffer[0] <<  0) | (buffer[1] <<  8) |
 			(buffer[2] << 16) | (buffer[3] << 24);
 }
 
-INLINE void WriteLE32(UINT8* buffer, UINT32 value)
+INLINE void WriteLE32(uint8_t* buffer, uint32_t value)
 {
 	buffer[0] = (value >>  0) & 0xFF;
 	buffer[1] = (value >>  8) & 0xFF;
@@ -230,7 +230,7 @@ static void compute_tables(void)
 }
 
 
-static INT16 clock_adpcm(okim6258_state *chip, UINT8 nibble)
+static int16_t clock_adpcm(okim6258_state *chip, uint8_t nibble)
 {
 	// original MAME algorithm (causes a DC offset over time)
 	//chip->signal += diff_lookup[chip->step * 16 + (nibble & 15)];
@@ -262,22 +262,22 @@ static INT16 clock_adpcm(okim6258_state *chip, UINT8 nibble)
 
 ***********************************************************************************************/
 
-static void okim6258_update(void *param, UINT32 samples, DEV_SMPL **outputs)
+static void okim6258_update(void *param, uint32_t samples, DEV_SMPL **outputs)
 {
 	okim6258_state *chip = (okim6258_state *)param;
 	DEV_SMPL *bufL = outputs[0];
 	DEV_SMPL *bufR = outputs[1];
-	UINT32 i;
+	uint32_t i;
 
 	if ((chip->status & STATUS_PLAYING) && ! chip->Muted)
 	{
-		UINT8 nibble_shift = chip->nibble_shift;
+		uint8_t nibble_shift = chip->nibble_shift;
 
 		for (i = 0; i < samples; i++)
 		{
 			/* Compute the new amplitude and update the current step */
 			int nibble;
-			INT16 sample;
+			int16_t sample;
 			
 			if (! nibble_shift)
 			{
@@ -346,16 +346,16 @@ static void okim6258_update(void *param, UINT32 samples, DEV_SMPL **outputs)
 
 ***********************************************************************************************/
 
-INLINE UINT32 get_vclk(okim6258_state* info)
+INLINE uint32_t get_vclk(okim6258_state* info)
 {
-	UINT32 clk_rnd;
+	uint32_t clk_rnd;
 	
 	clk_rnd = info->master_clock;
 	clk_rnd += info->divider / 2;	 // for better rounding - should help some of the streams
 	return clk_rnd / info->divider;
 }
 
-static UINT8 device_start_okim6258(const MSM6258_CFG* cfg, DEV_INFO* retDevInf)
+static uint8_t device_start_okim6258(const MSM6258_CFG* cfg, DEV_INFO* retDevInf)
 {
 	okim6258_state *info;
 
@@ -436,7 +436,7 @@ static void device_reset_okim6258(void *chip)
 
 ***********************************************************************************************/
 
-static void okim6258_set_divider(void *chip, UINT8 divmode)
+static void okim6258_set_divider(void *chip, uint8_t divmode)
 {
 	okim6258_state *info = (okim6258_state *)chip;
 
@@ -452,7 +452,7 @@ static void okim6258_set_divider(void *chip, UINT8 divmode)
 
 ***********************************************************************************************/
 
-static void okim6258_set_clock(void *chip, UINT32 clock)
+static void okim6258_set_clock(void *chip, uint32_t clock)
 {
 	okim6258_state *info = (okim6258_state *)chip;
 
@@ -471,7 +471,7 @@ static void okim6258_set_clock(void *chip, UINT32 clock)
 
 ***********************************************************************************************/
 
-static UINT32 okim6258_get_vclk(void *chip)
+static uint32_t okim6258_get_vclk(void *chip)
 {
 	okim6258_state *info = (okim6258_state *)chip;
 
@@ -485,7 +485,7 @@ static UINT32 okim6258_get_vclk(void *chip)
 
 ***********************************************************************************************/
 
-static UINT8 okim6258_status_r(void *chip, UINT8 offset)
+static uint8_t okim6258_status_r(void *chip, uint8_t offset)
 {
 	okim6258_state *info = (okim6258_state *)chip;
 
@@ -498,7 +498,7 @@ static UINT8 okim6258_status_r(void *chip, UINT8 offset)
      okim6258_data_w -- write to the control port of an OKIM6258-compatible chip
 
 ***********************************************************************************************/
-static void okim6258_data_w(void *chip, UINT8 data)
+static void okim6258_data_w(void *chip, uint8_t data)
 {
 	okim6258_state *info = (okim6258_state *)chip;
 
@@ -526,7 +526,7 @@ static void okim6258_data_w(void *chip, UINT8 data)
 
 ***********************************************************************************************/
 
-static void okim6258_ctrl_w(void *chip, UINT8 data)
+static void okim6258_ctrl_w(void *chip, uint8_t data)
 {
 	okim6258_state *info = (okim6258_state *)chip;
 
@@ -570,7 +570,7 @@ static void okim6258_ctrl_w(void *chip, UINT8 data)
 	}
 }
 
-static void okim6258_pan_w(void *chip, UINT8 data)
+static void okim6258_pan_w(void *chip, uint8_t data)
 {
 	okim6258_state *info = (okim6258_state *)chip;
 
@@ -580,7 +580,7 @@ static void okim6258_pan_w(void *chip, UINT8 data)
 }
 
 
-static void okim6258_write(void *chip, UINT8 offset, UINT8 data)
+static void okim6258_write(void *chip, uint8_t offset, uint8_t data)
 {
 	okim6258_state *info = (okim6258_state *)chip;
 	switch(offset)
@@ -612,7 +612,7 @@ static void okim6258_write(void *chip, UINT8 offset, UINT8 data)
 }
 
 
-static void okim6258_set_options(void *chip, UINT32 Options)
+static void okim6258_set_options(void *chip, uint32_t Options)
 {
 	okim6258_state *info = (okim6258_state *)chip;
 	
@@ -636,7 +636,7 @@ static void okim6258_set_srchg_cb(void *chip, DEVCB_SRATE_CHG CallbackFunc, void
 	return;
 }
 
-static void okim6258_set_mute_mask(void *chip, UINT32 MuteMask)
+static void okim6258_set_mute_mask(void *chip, uint32_t MuteMask)
 {
 	okim6258_state *info = (okim6258_state *)chip;
 	

@@ -60,7 +60,7 @@
 
 #define BSMT2000_ROM_BANKSIZE 0x10000     /* 64k per bank */
 
-static const UINT8 regmap[8][7] = {
+static const uint8_t regmap[8][7] = {
     { 0x00, 0x18, 0x24, 0x30, 0x3c, 0x48, 0xff }, // last one (stereo/leftvol) unused, set to max for mapping
     { 0x00, 0x16, 0x21, 0x2c, 0x37, 0x42, 0x4d },
     { 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 }, // mode 2 only a testmode left channel
@@ -73,11 +73,11 @@ static const UINT8 regmap[8][7] = {
 /* ==== Internal Voice State ==== */
 typedef struct
 {
-    UINT16 reg[9]; // 9 registers per voice, match MAME/M1
-    UINT32 position; // 16.16 fixed-point
-    UINT32 loop_start_position;
-    UINT32 loop_stop_position;
-    UINT32 adjusted_rate;
+    uint16_t reg[9]; // 9 registers per voice, match MAME/M1
+    uint32_t position; // 16.16 fixed-point
+    uint32_t loop_start_position;
+    uint32_t loop_stop_position;
+    uint32_t adjusted_rate;
 } bsmt2000_voice;
 
 /* ==== Main Chip State ==== */
@@ -88,31 +88,31 @@ struct _bsmt2000_state
     DEV_LOGGER logger;
 
     // Sample ROM
-    UINT8 *sample_rom;
-    UINT32 sample_rom_length;
-    UINT32 sample_rom_mask;
-    UINT32 total_banks;
+    uint8_t *sample_rom;
+    uint32_t sample_rom_length;
+    uint32_t sample_rom_mask;
+    uint32_t total_banks;
 
     // Voices and ADPCM/compressed
     bsmt2000_voice voice[BSMT2000_MAX_VOICES];
-    UINT8 right_volume_set; // Right volume is set (from PinMAME)
-    UINT8 voices;         // actual number of voices (usually 11 or 12)
-    UINT8 stereo;         // stereo output enabled?
-    UINT8 adpcm;          // ADPCM/compressed enabled?
-    UINT8 mode;           // current mode (0,1,5,6,7)
-    UINT8 last_register;  // last register written
-    UINT16 latch;         // buffer to combine 8-bit writes to a 16-bit words
-    UINT32 clock;         // Chip clock
+    uint8_t right_volume_set; // Right volume is set (from PinMAME)
+    uint8_t voices;         // actual number of voices (usually 11 or 12)
+    uint8_t stereo;         // stereo output enabled?
+    uint8_t adpcm;          // ADPCM/compressed enabled?
+    uint8_t mode;           // current mode (0,1,5,6,7)
+    uint8_t last_register;  // last register written
+    uint16_t latch;         // buffer to combine 8-bit writes to a 16-bit words
+    uint32_t clock;         // Chip clock
 
     // ADPCM/compressed state
-    INT32 adpcm_current;
-    INT32 adpcm_delta_n;
+    int32_t adpcm_current;
+    int32_t adpcm_delta_n;
 
     // Output sample rate
     double sample_rate;
 
     // Mute mask
-    UINT8 Muted[BSMT2000_MAX_VOICES];
+    uint8_t Muted[BSMT2000_MAX_VOICES];
 
     // Misc
     // (can add more fields as needed)
@@ -121,19 +121,19 @@ struct _bsmt2000_state
 };
 
 /* ==== Prototypes ==== */
-static void bsmt2000_update(void *param, UINT32 samples, DEV_SMPL **outputs);
-static UINT8 device_start_bsmt2000(const DEV_GEN_CFG* cfg, DEV_INFO* retDevInf);
+static void bsmt2000_update(void *param, uint32_t samples, DEV_SMPL **outputs);
+static uint8_t device_start_bsmt2000(const DEV_GEN_CFG* cfg, DEV_INFO* retDevInf);
 static void device_stop_bsmt2000(void *info);
 static void device_reset_bsmt2000(void *info);
 
-static void bsmt2000_w(void *info, UINT8 offset, UINT8 data);
-static UINT8 bsmt2000_r(void *info, UINT8 offset);
-static void bsmt2000_write_data(void *info, UINT8 address, UINT16 data);
+static void bsmt2000_w(void *info, uint8_t offset, uint8_t data);
+static uint8_t bsmt2000_r(void *info, uint8_t offset);
+static void bsmt2000_write_data(void *info, uint8_t address, uint16_t data);
 
-static void bsmt2000_alloc_rom(void* info, UINT32 memsize);
-static void bsmt2000_write_rom(void *info, UINT32 offset, UINT32 length, const UINT8* data);
-static void bsmt2000_set_mute_mask(void *info, UINT32 MuteMask);
-static UINT32 bsmt2000_get_mute_mask(void *info);
+static void bsmt2000_alloc_rom(void* info, uint32_t memsize);
+static void bsmt2000_write_rom(void *info, uint32_t offset, uint32_t length, const uint8_t* data);
+static void bsmt2000_set_mute_mask(void *info, uint32_t MuteMask);
+static uint32_t bsmt2000_get_mute_mask(void *info);
 static void bsmt2000_set_log_cb(void* info, DEVCB_LOG func, void* param);
 static void bsmt2000_set_srchg_cb(void *info, DEVCB_SRATE_CHG CallbackFunc, void* DataPtr);
 
@@ -174,7 +174,7 @@ static const char* DeviceName(const DEV_GEN_CFG* devCfg)
 	return "BSMT2000";
 }
 
-static UINT16 DeviceChannels(const DEV_GEN_CFG* devCfg)
+static uint16_t DeviceChannels(const DEV_GEN_CFG* devCfg)
 {
 	return BSMT2000_MAX_VOICES;
 }
@@ -232,7 +232,7 @@ static void init_all_voices(bsmt2000_state *chip)
 }
 
 /* ==== Device Start ==== */
-static UINT8 device_start_bsmt2000(const DEV_GEN_CFG* cfg, DEV_INFO* retDevInf)
+static uint8_t device_start_bsmt2000(const DEV_GEN_CFG* cfg, DEV_INFO* retDevInf)
 {
     bsmt2000_state *chip;
     chip = (bsmt2000_state *)calloc(1, sizeof(bsmt2000_state));
@@ -262,7 +262,7 @@ static UINT8 device_start_bsmt2000(const DEV_GEN_CFG* cfg, DEV_INFO* retDevInf)
     bsmt2000_set_mute_mask(chip, 0x0000);
 
     chip->_devData.chipInf = chip;
-    INIT_DEVINF(retDevInf, &chip->_devData, (UINT32)chip->sample_rate, &devDef);
+    INIT_DEVINF(retDevInf, &chip->_devData, (uint32_t)chip->sample_rate, &devDef);
 
     return 0x00;
 }
@@ -328,11 +328,11 @@ static void device_reset_bsmt2000(void *info) {
             break;
     }
     if (chip->SmpRateFunc != NULL)
-        chip->SmpRateFunc(chip->SmpRateData, (UINT32)chip->sample_rate);
+        chip->SmpRateFunc(chip->SmpRateData, (uint32_t)chip->sample_rate);
 }
 /* ==== Register/Command Interface ==== */
 
-static void bsmt2000_w(void *info, UINT8 offset, UINT8 data)
+static void bsmt2000_w(void *info, uint8_t offset, uint8_t data)
 {
     bsmt2000_state *chip = (bsmt2000_state *)info;
     switch (offset)
@@ -356,13 +356,13 @@ static void bsmt2000_w(void *info, UINT8 offset, UINT8 data)
     }
 }
 
-static UINT8 bsmt2000_r(void *info, UINT8 offset)
+static uint8_t bsmt2000_r(void *info, uint8_t offset)
 {
     /* Always ready (bit 7 = 1) */
     return 0x80;
 }
 
-static void bsmt2000_write_data(void *info, UINT8 address, UINT16 data) {
+static void bsmt2000_write_data(void *info, uint8_t address, uint16_t data) {
     bsmt2000_state *chip = (bsmt2000_state *)info;
     bsmt2000_voice *voice;
 
@@ -431,20 +431,20 @@ static void bsmt2000_write_data(void *info, UINT8 address, UINT16 data) {
 }
 
 /* ==== Sample ROM Handling ==== */
-static void bsmt2000_alloc_rom(void* info, UINT32 memsize) {
+static void bsmt2000_alloc_rom(void* info, uint32_t memsize) {
     bsmt2000_state* chip = (bsmt2000_state *)info;
     memsize = (memsize + BSMT2000_ROM_BANKSIZE - 1) & ~(BSMT2000_ROM_BANKSIZE - 1);
     chip->total_banks = memsize / BSMT2000_ROM_BANKSIZE;
     if (chip->sample_rom_length == memsize)
         return;
-    chip->sample_rom = (UINT8*)realloc(chip->sample_rom, memsize);
+    chip->sample_rom = (uint8_t*)realloc(chip->sample_rom, memsize);
     chip->sample_rom_length = memsize;
     chip->sample_rom_mask = pow2_mask(memsize);
     chip->total_banks = memsize / BSMT2000_ROM_BANKSIZE;
     memset(chip->sample_rom, 0, memsize);
 }
 
-static void bsmt2000_write_rom(void *info, UINT32 offset, UINT32 length, const UINT8* data) {
+static void bsmt2000_write_rom(void *info, uint32_t offset, uint32_t length, const uint8_t* data) {
     bsmt2000_state* chip = (bsmt2000_state *)info;
     if (offset > chip->sample_rom_length) return;
     if (offset + length > chip->sample_rom_length)
@@ -453,19 +453,19 @@ static void bsmt2000_write_rom(void *info, UINT32 offset, UINT32 length, const U
 }
 
 /* ==== Mute Mask ==== */
-static void bsmt2000_set_mute_mask(void *info, UINT32 MuteMask)
+static void bsmt2000_set_mute_mask(void *info, uint32_t MuteMask)
 {
     bsmt2000_state* chip = (bsmt2000_state *)info;
-    UINT8 CurChn;
+    uint8_t CurChn;
     for (CurChn = 0; CurChn < BSMT2000_MAX_VOICES; CurChn++)
         chip->Muted[CurChn] = (MuteMask >> CurChn) & 0x01;
 }
 
-static UINT32 bsmt2000_get_mute_mask(void *info)
+static uint32_t bsmt2000_get_mute_mask(void *info)
 {
     bsmt2000_state* chip = (bsmt2000_state *)info;
-    UINT32 muteMask = 0;
-    UINT8 CurChn;
+    uint32_t muteMask = 0;
+    uint8_t CurChn;
     for (CurChn = 0; CurChn < BSMT2000_MAX_VOICES; CurChn++)
         muteMask |= (chip->Muted[CurChn] << CurChn);
     return muteMask;
@@ -479,14 +479,14 @@ static void bsmt2000_set_log_cb(void* info, DEVCB_LOG func, void* param)
 }
 
 /* ==== Interpolation Macro ==== */
-#define INTERPOLATE(s1,s2,frac)  (((s1) * (INT32)(0x10000 - ((frac)&0xffff)) + (s2) * (INT32)((frac)&0xffff)) >> 16)
+#define INTERPOLATE(s1,s2,frac)  (((s1) * (int32_t)(0x10000 - ((frac)&0xffff)) + (s2) * (int32_t)((frac)&0xffff)) >> 16)
 
 /* ==== Sound Update ==== */
-static void bsmt2000_update(void *param, UINT32 samples, DEV_SMPL **outputs)
+static void bsmt2000_update(void *param, uint32_t samples, DEV_SMPL **outputs)
 {
     bsmt2000_state *chip = (bsmt2000_state *)param;
-    INT32 left[BSMT2000_SAMPLE_CHUNK];
-    INT32 right[BSMT2000_SAMPLE_CHUNK];
+    int32_t left[BSMT2000_SAMPLE_CHUNK];
+    int32_t right[BSMT2000_SAMPLE_CHUNK];
     bsmt2000_voice *voice;
     int samp, v, length = MIN(samples, BSMT2000_SAMPLE_CHUNK);	// TODO: allow updating in larger chunks
 
@@ -502,9 +502,9 @@ static void bsmt2000_update(void *param, UINT32 samples, DEV_SMPL **outputs)
     // PCM voices
     for (v = 0; v < chip->voices; v++)
     {
-        UINT8 *base;
-        UINT32 rate, pos;
-        INT32 lvol, rvol;
+        uint8_t *base;
+        uint32_t rate, pos;
+        int32_t lvol, rvol;
 
         if (chip->Muted[v])
             continue;
@@ -520,18 +520,18 @@ static void bsmt2000_update(void *param, UINT32 samples, DEV_SMPL **outputs)
             rvol = lvol;
 
         for (samp = 0; samp < length; samp ++) {
-            INT32 idx = pos >> 16;
-            INT32 sample;
+            int32_t idx = pos >> 16;
+            int32_t sample;
             if (1)
             {
                 // no interpolation (original chip behaviour)
-                sample = (INT8)base[idx] << 8;
+                sample = (int8_t)base[idx] << 8;
             }
             else
             {
                 // linear interpolation (softer samples, breaks SFX in "Tales from the Crypt")
-                INT32 s1 = (INT8)base[idx] << 8;
-                INT32 s2 = (INT8)base[idx+1] << 8;
+                int32_t s1 = (int8_t)base[idx] << 8;
+                int32_t s2 = (int8_t)base[idx+1] << 8;
                 sample = INTERPOLATE(s1, s2, pos);
             }
             left[samp]  += (sample * lvol) >> 16;
@@ -549,26 +549,26 @@ static void bsmt2000_update(void *param, UINT32 samples, DEV_SMPL **outputs)
         voice = &chip->voice[BSMT2000_ADPCM_INDEX];
         if (voice->reg[BSMT2000_REG_BANK] < chip->total_banks)
         {
-            UINT8 *base = chip->sample_rom + voice->reg[BSMT2000_REG_BANK] * BSMT2000_ROM_BANKSIZE;
-            UINT32 rate = 0x02aa << 4;
-            UINT32 pos = voice->position;
-            INT32 rvol = voice->reg[BSMT2000_REG_RIGHTVOL];
-            INT32 lvol = chip->stereo ? voice->reg[BSMT2000_REG_LEFTVOL] : rvol;
+            uint8_t *base = chip->sample_rom + voice->reg[BSMT2000_REG_BANK] * BSMT2000_ROM_BANKSIZE;
+            uint32_t rate = 0x02aa << 4;
+            uint32_t pos = voice->position;
+            int32_t rvol = voice->reg[BSMT2000_REG_RIGHTVOL];
+            int32_t lvol = chip->stereo ? voice->reg[BSMT2000_REG_LEFTVOL] : rvol;
             if (chip->stereo && !chip->right_volume_set)
                 rvol = lvol;
 
             for (samp = 0; samp < length && pos < voice->loop_stop_position; samp ++)
             {
-                UINT32 oldpos = pos;
+                uint32_t oldpos = pos;
                 left[samp]  += (chip->adpcm_current * (lvol * 2)) >> 16;
                 right[samp] += (chip->adpcm_current * (rvol * 2)) >> 16;
 
                 pos += rate;
                 if ((oldpos ^ pos) & 0x8000)
                 {
-                    static const UINT8 delta_tab[16] = { 154, 154, 128, 102, 77, 58, 58, 58, 58, 58, 58, 58, 77, 102, 128, 154 };
+                    static const uint8_t delta_tab[16] = { 154, 154, 128, 102, 77, 58, 58, 58, 58, 58, 58, 58, 77, 102, 128, 154 };
                     int nibble = base[oldpos >> 16] >> ((~oldpos >> 13) & 4);
-                    INT32 value = (nibble & 0xF) | ((nibble & 0x8) ? ~0xF : 0);
+                    int32_t value = (nibble & 0xF) | ((nibble & 0x8) ? ~0xF : 0);
                     int temp;
 
                     temp = chip->adpcm_delta_n * value;
@@ -596,8 +596,8 @@ static void bsmt2000_update(void *param, UINT32 samples, DEV_SMPL **outputs)
 
     // Output clamp and write
     for (samp = 0; samp < length; samp++) {
-        INT32 l = left[samp];
-        INT32 r = right[samp];
+        int32_t l = left[samp];
+        int32_t r = right[samp];
         l = (l > 32767) ? 32767 : (l < -32768) ? -32768 : l;
         r = (r > 32767) ? 32767 : (r < -32768) ? -32768 : r;
         outputs[0][samp] = (DEV_SMPL)l;

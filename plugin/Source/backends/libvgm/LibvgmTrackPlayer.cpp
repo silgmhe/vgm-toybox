@@ -23,7 +23,7 @@ namespace
 	// stay silent on the audio thread (building the strings or entering the logger allocates).
 	juce::Thread::ThreadID messageThreadId = {};
 
-	void logCallback (void*, PlayerBase* player, UINT8 level, UINT8 srcType, const char* srcTag, const char* message)
+	void logCallback (void*, PlayerBase* player, uint8_t level, uint8_t srcType, const char* srcTag, const char* message)
 	{
 		if (level > PLRLOG_WARN)
 		{
@@ -65,7 +65,7 @@ void LibvgmTrackPlayer::prepare (double hostSampleRate, int newMaxBlockSize)
 	renderBuffer.assign ((size_t) maxBlockSize, WAVE_32BS());
 
 	// 32-bit integer stereo output (libvgm's highest precision integer format)
-	playerEngine.SetOutputSettings ((UINT32) sampleRate, 2, 32, (UINT32) maxBlockSize);
+	playerEngine.SetOutputSettings ((uint32_t) sampleRate, 2, 32, (uint32_t) maxBlockSize);
 }
 
 bool LibvgmTrackPlayer::load (const playback::SongMemory& memory, juce::String& errorMessage)
@@ -78,14 +78,14 @@ bool LibvgmTrackPlayer::load (const playback::SongMemory& memory, juce::String& 
 		return false;
 	}
 
-	dataLoader = MemoryLoader_Init ((const UINT8*) memory.data, (UINT32) memory.size);
+	dataLoader = MemoryLoader_Init ((const uint8_t*) memory.data, (uint32_t) memory.size);
 	if (dataLoader == NULL)
 	{
 		errorMessage = "Out of memory.";
 		return false;
 	}
 
-	UINT8 retVal = DataLoader_Load (dataLoader);
+	uint8_t retVal = DataLoader_Load (dataLoader);
 	if (retVal)
 	{
 		errorMessage = juce::String::formatted ("Could not load the file (error 0x%02X).", (unsigned) retVal);
@@ -138,7 +138,7 @@ bool LibvgmTrackPlayer::seekSeconds (double seconds)
 		return false;
 	}
 
-	playerEngine.Seek (PLAYPOS_SAMPLE, (UINT32) (juce::jmax (0.0, seconds) * sampleRate));
+	playerEngine.Seek (PLAYPOS_SAMPLE, (uint32_t) (juce::jmax (0.0, seconds) * sampleRate));
 	finished = false;
 	return true;
 }
@@ -150,8 +150,8 @@ void LibvgmTrackPlayer::setTimeline (int loops, double fade)
 
 	PlayerA::Config cfg = playerEngine.GetConfiguration();
 	cfg.masterVol = 0x10000;	// unity - the engine applies its own volume stages
-	cfg.loopCount = (UINT32) loopCount;
-	cfg.fadeSmpls = (UINT32) (fadeSeconds * sampleRate);
+	cfg.loopCount = (uint32_t) loopCount;
+	cfg.fadeSmpls = (uint32_t) (fadeSeconds * sampleRate);
 	cfg.endSilenceSmpls = 0;	// a plugin should not render trailing silence
 	cfg.pbSpeed = 1.0;
 	playerEngine.SetConfiguration (cfg);
@@ -167,7 +167,7 @@ void LibvgmTrackPlayer::setTimeline (int loops, double fade)
 	{
 		if (VGMPlayer* vgmPlayer = dynamic_cast<VGMPlayer*> (pBase))
 		{
-			playerEngine.SetLoopCount (vgmPlayer->GetModifiedLoopCount ((UINT32) loopCount));
+			playerEngine.SetLoopCount (vgmPlayer->GetModifiedLoopCount ((uint32_t) loopCount));
 		}
 	}
 
@@ -188,7 +188,7 @@ double LibvgmTrackPlayer::positionSeconds (void)
 												: (PLAYTIME_LOOP_INCL | PLAYTIME_TIME_PBK));
 }
 
-void LibvgmTrackPlayer::applyMuting (UINT32 deviceId, const PLR_MUTE_OPTS& muteOpts)
+void LibvgmTrackPlayer::applyMuting (uint32_t deviceId, const PLR_MUTE_OPTS& muteOpts)
 {
 	PlayerBase* pBase = playerEngine.GetPlayer();
 	if (pBase != NULL)
@@ -269,7 +269,7 @@ void LibvgmTrackPlayer::applyIsolation (void)
 
 		for (size_t i = 0; i < devices.size(); ++i)
 		{
-			if (devices[i].parentIdx == (UINT32) parentIndex)
+			if (devices[i].parentIdx == (uint32_t) parentIndex)
 			{
 				applyMuting (devices[i].id, options);
 			}
@@ -281,7 +281,7 @@ void LibvgmTrackPlayer::applyIsolation (void)
 	{
 		for (const auto& child : devices)
 		{
-			if (child.parentIdx == (UINT32) parentIndex)
+			if (child.parentIdx == (uint32_t) parentIndex)
 			{
 				return linkedDeviceKindFor (child.type);
 			}
@@ -294,7 +294,7 @@ void LibvgmTrackPlayer::applyIsolation (void)
 	{
 		const auto& info = devices[deviceIndex];
 
-		if (info.parentIdx != (UINT32) -1)
+		if (info.parentIdx != (uint32_t) -1)
 		{
 			continue;	// linked devices are configured through their parent
 		}
@@ -375,9 +375,9 @@ int LibvgmTrackPlayer::render (float* left, float* right, int numSamples)
 
 	const int samplesToRender = juce::jmin (numSamples, maxBlockSize);
 	// note: PlayerA::Render() returns the number of *bytes* that were written
-	const UINT32 renderedBytes = playerEngine.Render ((UINT32) samplesToRender * (UINT32) kBytesPerSample,
+	const uint32_t renderedBytes = playerEngine.Render ((uint32_t) samplesToRender * (uint32_t) kBytesPerSample,
 													  renderBuffer.data());
-	const int outSamples = juce::jmin ((int) (renderedBytes / (UINT32) kBytesPerSample), samplesToRender);
+	const int outSamples = juce::jmin ((int) (renderedBytes / (uint32_t) kBytesPerSample), samplesToRender);
 
 	for (int i = 0; i < outSamples; ++i)
 	{
@@ -388,13 +388,13 @@ int LibvgmTrackPlayer::render (float* left, float* right, int numSamples)
 	return outSamples;
 }
 
-UINT8 LibvgmTrackPlayer::eventCallback (PlayerBase* /*player*/, void* userParam, UINT8 evtType, void* evtParam)
+uint8_t LibvgmTrackPlayer::eventCallback (PlayerBase* /*player*/, void* userParam, uint8_t evtType, void* evtParam)
 {
 	LibvgmTrackPlayer* track = static_cast<LibvgmTrackPlayer*> (userParam);
 	return (track != nullptr) ? track->handleEvent (evtType, evtParam) : 0x00;
 }
 
-UINT8 LibvgmTrackPlayer::handleEvent (UINT8 evtType, void* /*evtParam*/)
+uint8_t LibvgmTrackPlayer::handleEvent (uint8_t evtType, void* /*evtParam*/)
 {
 	if (evtType == PLREVT_END)
 	{

@@ -26,7 +26,7 @@ NES_FDS::~NES_FDS ()
 {
 }
 
-void NES_FDS::SetStereoMix(int trk, INT16 mixl, INT16 mixr)
+void NES_FDS::SetStereoMix(int trk, int16_t mixl, int16_t mixr)
 {
     if (trk < 0) return;
     if (trk > 1) return;
@@ -62,7 +62,7 @@ void NES_FDS::SetRate (double r)
     double leak = 0.0;
     if (cutoff > 0)
         leak = ::exp(-2.0 * 3.14159 * cutoff / rate);
-    rc_k = INT32(leak * double(1<<RC_BITS));
+    rc_k = int32_t(leak * double(1<<RC_BITS));
     rc_l = (1<<RC_BITS) - rc_k;
 }
 
@@ -126,7 +126,7 @@ void NES_FDS::Reset ()
     Write(0x4089, 0x00); // wav write disable, max global volume}
 }
 
-void NES_FDS::Tick (UINT32 clocks)
+void NES_FDS::Tick (uint32_t clocks)
 {
     // clock envelopes
     if (!env_halt && !wav_halt && (master_env_speed != 0))
@@ -136,7 +136,7 @@ void NES_FDS::Tick (UINT32 clocks)
             if (!env_disable[i])
             {
                 env_timer[i] += clocks;
-                UINT32 period = ((env_speed[i]+1) * master_env_speed) << 3;
+                uint32_t period = ((env_speed[i]+1) * master_env_speed) << 3;
                 while (env_timer[i] >= period)
                 {
                     // clock the envelope
@@ -158,22 +158,22 @@ void NES_FDS::Tick (UINT32 clocks)
     if (!mod_halt)
     {
         // advance phase, adjust for modulator
-        UINT32 start_pos = phase[TMOD] >> 16;
+        uint32_t start_pos = phase[TMOD] >> 16;
         phase[TMOD] += (clocks * freq[TMOD]);
-        UINT32 end_pos = phase[TMOD] >> 16;
+        uint32_t end_pos = phase[TMOD] >> 16;
 
         // wrap the phase to the 64-step table (+ 16 bit accumulator)
         phase[TMOD] = phase[TMOD] & 0x3FFFFF;
 
         // execute all clocked steps
-        for (UINT32 p = start_pos; p < end_pos; ++p)
+        for (uint32_t p = start_pos; p < end_pos; ++p)
         {
-            INT32 wv = wave[TMOD][p & 0x3F];
+            int32_t wv = wave[TMOD][p & 0x3F];
             if (wv == 4) // 4 resets mod position
                 mod_pos = 0;
             else
             {
-                const INT32 BIAS[8] = { 0, 1, 2, 4, 0, -4, -2, -1 };
+                const int32_t BIAS[8] = { 0, 1, 2, 4, 0, -4, -2, -1 };
                 mod_pos += BIAS[wv];
                 mod_pos &= 0x7F; // 7-bit clamp
             }
@@ -184,16 +184,16 @@ void NES_FDS::Tick (UINT32 clocks)
     if (!wav_halt)
     {
         // complex mod calculation
-        INT32 mod = 0;
+        int32_t mod = 0;
         if (env_out[EMOD] != 0) // skip if modulator off
         {
             // convert mod_pos to 7-bit signed
-            INT32 pos = (mod_pos < 64) ? mod_pos : (mod_pos-128);
+            int32_t pos = (mod_pos < 64) ? mod_pos : (mod_pos-128);
 
             // multiply pos by gain,
             // shift off 4 bits but with odd "rounding" behaviour
-            INT32 temp = pos * env_out[EMOD];
-            INT32 rem = temp & 0x0F;
+            int32_t temp = pos * env_out[EMOD];
+            int32_t rem = temp & 0x0F;
             temp >>= 4;
             if ((rem > 0) && ((temp & 0x80) == 0))
             {
@@ -216,7 +216,7 @@ void NES_FDS::Tick (UINT32 clocks)
         }
 
         // advance wavetable position
-        INT32 f = freq[TWAV] + mod;
+        int32_t f = freq[TWAV] + mod;
         phase[TWAV] = phase[TWAV] + (clocks * f);
         phase[TWAV] = phase[TWAV] & 0x3FFFFF; // wrap
 
@@ -225,7 +225,7 @@ void NES_FDS::Tick (UINT32 clocks)
     }
 
     // output volume caps at 32
-    INT32 vol_out = env_out[EVOL];
+    int32_t vol_out = env_out[EVOL];
     if (vol_out > 32) vol_out = 32;
 
     // final output
@@ -242,32 +242,32 @@ void NES_FDS::Tick (UINT32 clocks)
     last_vol = vol_out;
 }
 
-UINT32 NES_FDS::Render (INT32 b[2])
+uint32_t NES_FDS::Render (int32_t b[2])
 {
     // 8 bit approximation of master volume
     const double MASTER_VOL = 2.4 * 1223.0; // max FDS vol vs max APU square (arbitrarily 1223)
     const double MAX_OUT = 32.0f * 63.0f; // value that should map to master vol
-    const INT32 MASTER[4] = {
+    const int32_t MASTER[4] = {
         int((MASTER_VOL / MAX_OUT) * 256.0 * 2.0f / 2.0f),
         int((MASTER_VOL / MAX_OUT) * 256.0 * 2.0f / 3.0f),
         int((MASTER_VOL / MAX_OUT) * 256.0 * 2.0f / 4.0f),
         int((MASTER_VOL / MAX_OUT) * 256.0 * 2.0f / 5.0f) };
 
-    INT32 v = fout * MASTER[master_vol] >> 8;
+    int32_t v = fout * MASTER[master_vol] >> 8;
 
     // lowpass RC filter
-    INT32 rc_out = ((rc_accum * rc_k) + (v * rc_l)) >> RC_BITS;
+    int32_t rc_out = ((rc_accum * rc_k) + (v * rc_l)) >> RC_BITS;
     rc_accum = rc_out;
     v = rc_out;
 
     // output mix
-    INT32 m = mask ? 0 : v;
+    int32_t m = mask ? 0 : v;
     b[0] = (m * sm[0]) >> 7;
     b[1] = (m * sm[1]) >> 7;
     return 2;
 }
 
-bool NES_FDS::Write (UINT32 adr, UINT32 val, UINT32 id)
+bool NES_FDS::Write (uint32_t adr, uint32_t val, uint32_t id)
 {
     // $4023 master I/O enable/disable
     if (adr == 0x4023)
@@ -368,7 +368,7 @@ bool NES_FDS::Write (UINT32 adr, UINT32 val, UINT32 id)
     return false;
 }
 
-bool NES_FDS::Read (UINT32 adr, UINT32 & val, UINT32 id)
+bool NES_FDS::Read (uint32_t adr, uint32_t & val, uint32_t id)
 {
     if (adr >= 0x4040 && adr <= 0x407F)
     {

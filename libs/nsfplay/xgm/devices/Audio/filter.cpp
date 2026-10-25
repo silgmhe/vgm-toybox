@@ -25,7 +25,7 @@ static double HAMMING_window(int n, int M)
 
 SimpleFIR::SimpleFIR(int tap_num) {
   N = tap_num|1;
-  tap = new INT32[N];
+  tap = new int32_t[N];
   M = (N-1)/2 ;
   h = new double[M+1];
 }
@@ -67,16 +67,16 @@ void SimpleFIR::Reset()
 
 }
 
-void SimpleFIR::Put(xgm::INT32 wav) 
+void SimpleFIR::Put(int32_t wav) 
 {
   for(int i=0;i<N-1;i++) tap[i]=tap[i+1];
   tap[N-1] = wav;
 }
 
-xgm::INT32 SimpleFIR::Get() 
+int32_t SimpleFIR::Get() 
 {
   double temp = h[0]*tap[M];
   for(int i=1;i<=M;i++)
     temp += h[i]*(tap[M+i]+tap[M-i]);
-  return (INT32)temp;
+  return (int32_t)temp;
 }

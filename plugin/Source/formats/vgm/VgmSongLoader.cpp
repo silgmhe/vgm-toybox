@@ -32,14 +32,14 @@ bool VgmSongLoader::load (const void* data, std::size_t size, midi::SongIr& out,
 
 	// One slot per (chip, instance, variant). The clock is left at zero on purpose: the runtime
 	// owns the started devices and knows their clocks, so the assembly layer fills it in.
-	const auto slotFor = [&out] (ChipKind kind, int instance, std::uint32_t flags) -> std::uint32_t
+	const auto slotFor = [&out] (ChipKind kind, int instance, uint32_t flags) -> uint32_t
 	{
 		for (std::size_t i = 0; i < out.chips.size(); ++i)
 		{
 			const auto& slot = out.chips[i];
 			if (slot.kind == kind && slot.instance == instance && slot.flags == flags)
 			{
-				return (std::uint32_t) i;
+				return (uint32_t) i;
 			}
 		}
 
@@ -48,31 +48,31 @@ bool VgmSongLoader::load (const void* data, std::size_t size, midi::SongIr& out,
 		slot.instance = instance;
 		slot.flags = flags;
 		out.chips.push_back (slot);
-		return (std::uint32_t) (out.chips.size() - 1);
+		return (uint32_t) (out.chips.size() - 1);
 	};
 
 	const auto emit = [&out, &slotFor] (ChipKind kind, int instance, int port,
-										std::uint8_t reg, std::uint16_t value,
-										std::uint32_t time, std::uint32_t flags = 0)
+										uint8_t reg, uint16_t value,
+										uint32_t time, uint32_t flags = 0)
 	{
 		chips::RegisterWrite write;
 		write.deviceId = slotFor (kind, instance, flags);
 		write.reg = reg;
 		write.value = value;
-		write.port = (std::uint8_t) port;
+		write.port = (uint8_t) port;
 		write.sampleTime = time;
 		out.writes.push_back (write);
 	};
 
 	VgmCommand command;
-	std::uint32_t lastSampleTime = 0;
+	uint32_t lastSampleTime = 0;
 	while (reader.next (command))
 	{
 		lastSampleTime = command.sampleTime;
 
 		const auto port = (int) command.port;
 		const auto reg = command.addr;
-		const auto value = (std::uint16_t) command.data;
+		const auto value = (uint16_t) command.data;
 		const auto time = command.sampleTime;
 
 		switch (command.command)
@@ -133,25 +133,25 @@ bool VgmSongLoader::load (const void* data, std::size_t size, midi::SongIr& out,
 		// --- 16-bit offsets and values ------------------------------------------------------
 		case 0xC4:	// QSound: value first, then the offset
 			emit (ChipKind::qsound, 0, 0, reg,
-				  (std::uint16_t) (((std::uint16_t) command.data << 8) | command.data2), time);
+				  (uint16_t) (((uint16_t) command.data << 8) | command.data2), time);
 			break;
 		case 0xD3:	// K054539: the offset's high byte rides in `port`
 			emit (ChipKind::k054539, 0, port, reg, value, time);
 			break;
 		case 0xE1:	// C352: a 16-bit offset and a 16-bit value, both big-endian
 			emit (ChipKind::c352, (port >> 7) & 1, port & 0x7F, reg,
-				  (std::uint16_t) (((std::uint16_t) command.data << 8) | command.data2), time);
+				  (uint16_t) (((uint16_t) command.data << 8) | command.data2), time);
 			break;
 		case 0xD4:	// C140 / 219: bit 7 picks the instance, the rest is the offset's high byte
 			emit (ChipKind::c140, (port >> 7) & 1, port & 0x7F, reg, value, time,
-				  (std::uint32_t) reader.c140Banking());
+				  (uint32_t) reader.c140Banking());
 			break;
 
 		// --- commands that are not one write ------------------------------------------------
 		case 0xD2:	// K051649: one command stands for two registers, `reg` and `reg | 1`
 			emit (ChipKind::k051649, port, port, reg, value, time);
-			emit (ChipKind::k051649, port, port, (std::uint8_t) (reg | 1),
-				  (std::uint16_t) command.data2, time);
+			emit (ChipKind::k051649, port, port, (uint8_t) (reg | 1),
+				  (uint16_t) command.data2, time);
 			break;
 		case 0xD0:	// YMF278B: only its OPL3 half (ports 0/1) has a decoder; the wavetable half
 					// (ports 2..5) has none, so those writes are dropped here rather than later
@@ -169,7 +169,7 @@ bool VgmSongLoader::load (const void* data, std::size_t size, midi::SongIr& out,
 		case 0x41:	emit (ChipKind::k007232, port, 0, reg, value, time); break;
 		case 0x42:	// K005289: Ofs4_Data12 - the register is the command's high nibble
 			emit (ChipKind::k005289, 0, 0, reg,
-				  (std::uint16_t) ((((std::uint16_t) command.data2 & 0x0F) << 8) | command.data), time);
+				  (uint16_t) ((((uint16_t) command.data2 & 0x0F) << 8) | command.data), time);
 			break;
 		case 0x43:	emit (ChipKind::msm5232, 0, 0, reg, value, time); break;
 

@@ -19,18 +19,18 @@
 #include "scd_pcm.h"
 
 
-static UINT8 device_start_rf5c68_gens(const DEV_GEN_CFG* cfg, DEV_INFO* retDevInf);
-static void*SCD_PCM_Init(UINT32 Clock, UINT32 Rate, UINT8 smpl0patch);
+static uint8_t device_start_rf5c68_gens(const DEV_GEN_CFG* cfg, DEV_INFO* retDevInf);
+static void*SCD_PCM_Init(uint32_t Clock, uint32_t Rate, uint8_t smpl0patch);
 static void SCD_PCM_Deinit(void* info);
-static void SCD_PCM_Set_Rate(void* info, UINT32 Clock, UINT32 Rate);
+static void SCD_PCM_Set_Rate(void* info, uint32_t Clock, uint32_t Rate);
 static void SCD_PCM_Reset(void* info);
-static void SCD_PCM_Write_Reg(void* info, UINT8 Reg, UINT8 Data);
-static UINT8 SCD_PCM_Read_Reg(void* info, UINT8 Reg);
-static void SCD_PCM_Update(void* info, UINT32 Length, DEV_SMPL **buf);
-static UINT8 SCD_PCM_MemRead(void *info, UINT16 offset);
-static void SCD_PCM_MemWrite(void *info, UINT16 offset, UINT8 data);
-static void SCD_PCM_MemBlockWrite(void* info, UINT32 offset, UINT32 length, const UINT8* data);
-static void SCD_PCM_SetMuteMask(void* info, UINT32 MuteMask);
+static void SCD_PCM_Write_Reg(void* info, uint8_t Reg, uint8_t Data);
+static uint8_t SCD_PCM_Read_Reg(void* info, uint8_t Reg);
+static void SCD_PCM_Update(void* info, uint32_t Length, DEV_SMPL **buf);
+static uint8_t SCD_PCM_MemRead(void *info, uint16_t offset);
+static void SCD_PCM_MemWrite(void *info, uint16_t offset, uint8_t data);
+static void SCD_PCM_MemBlockWrite(void* info, uint32_t offset, uint32_t length, const uint8_t* data);
+static void SCD_PCM_SetMuteMask(void* info, uint32_t MuteMask);
 
 
 static DEVDEF_RWFUNC devFunc[] =
@@ -65,43 +65,43 @@ DEV_DEF devDef_RF5C68_Gens =
 
 struct pcm_chan_
 {
-	UINT8 ENV;				/* envelope register */
-	UINT8 PAN;				/* pan register */
-	UINT16 MUL_L;			/* envelope & pan product left */
-	UINT16 MUL_R;			/* envelope & pan product right */
-	UINT16 St_Addr;			/* start address register */
-	UINT16 Loop_Addr;		/* loop address register */
-	UINT32 Addr;			/* current address register */
-	UINT32 Step;			/* frequency register */
-	UINT16 Step_B;			/* frequency register binaire */
-	UINT8 Enable;			/* channel on/off register */
-	INT8 Data;				/* wave data */
-	UINT8 Muted;
+	uint8_t ENV;				/* envelope register */
+	uint8_t PAN;				/* pan register */
+	uint16_t MUL_L;			/* envelope & pan product left */
+	uint16_t MUL_R;			/* envelope & pan product right */
+	uint16_t St_Addr;			/* start address register */
+	uint16_t Loop_Addr;		/* loop address register */
+	uint32_t Addr;			/* current address register */
+	uint32_t Step;			/* frequency register */
+	uint16_t Step_B;			/* frequency register binaire */
+	uint8_t Enable;			/* channel on/off register */
+	int8_t Data;				/* wave data */
+	uint8_t Muted;
 };
 struct pcm_chip_
 {
 	DEV_DATA _devData;
 
 	float Rate;
-	UINT8 Smpl0Patch;
-	UINT8 Enable;
-	UINT8 Cur_Chan;
-	UINT16 Bank;
+	uint8_t Smpl0Patch;
+	uint8_t Enable;
+	uint8_t Cur_Chan;
+	uint16_t Bank;
 
 	struct pcm_chan_ Channel[8];
 
-	UINT32 RAMSize;
-	UINT8* RAM;
+	uint32_t RAMSize;
+	uint8_t* RAM;
 };
 
 #define PCM_STEP_SHIFT 11
 
 
-static UINT8 device_start_rf5c68_gens(const DEV_GEN_CFG* cfg, DEV_INFO* retDevInf)
+static uint8_t device_start_rf5c68_gens(const DEV_GEN_CFG* cfg, DEV_INFO* retDevInf)
 {
 	void* chip;
 	DEV_DATA* devData;
-	UINT32 rate;
+	uint32_t rate;
 	
 	rate = cfg->clock / 384;
 	SRATE_CUSTOM_HIGHEST(cfg->srMode, rate, cfg->smplRate);
@@ -121,7 +121,7 @@ static UINT8 device_start_rf5c68_gens(const DEV_GEN_CFG* cfg, DEV_INFO* retDevIn
  * @param Rate Sample rate.
  * @return 0 if successful.
  */
-static void* SCD_PCM_Init(UINT32 Clock, UINT32 Rate, UINT8 smpl0patch)
+static void* SCD_PCM_Init(uint32_t Clock, uint32_t Rate, uint8_t smpl0patch)
 {
 	struct pcm_chip_ *chip;
 	
@@ -133,7 +133,7 @@ static void* SCD_PCM_Init(UINT32 Clock, UINT32 Rate, UINT8 smpl0patch)
 	SCD_PCM_SetMuteMask(chip, 0x00);
 	
 	chip->RAMSize = 64 * 1024;
-	chip->RAM = (UINT8*)malloc(chip->RAMSize);
+	chip->RAM = (uint8_t*)malloc(chip->RAMSize);
 	//SCD_PCM_Reset(chip);
 	SCD_PCM_Set_Rate(chip, Clock, Rate);
 	
@@ -187,7 +187,7 @@ static void SCD_PCM_Reset(void* info)
  * SCD_PCM_Set_Rate(): Change the PCM sample rate.
  * @param Rate New sample rate.
  */
-static void SCD_PCM_Set_Rate(void* info, UINT32 Clock, UINT32 Rate)
+static void SCD_PCM_Set_Rate(void* info, uint32_t Clock, uint32_t Rate)
 {
 	struct pcm_chip_ *chip = (struct pcm_chip_ *)info;
 	int i;
@@ -211,7 +211,7 @@ static void SCD_PCM_Set_Rate(void* info, UINT32 Clock, UINT32 Rate)
  * @param Reg Register ID.
  * @param Data Data to write.
  */
-static void SCD_PCM_Write_Reg(void* info, UINT8 Reg, UINT8 Data)
+static void SCD_PCM_Write_Reg(void* info, uint8_t Reg, uint8_t Data)
 {
 	struct pcm_chip_ *chip = (struct pcm_chip_ *)info;
 	int i;
@@ -237,7 +237,7 @@ static void SCD_PCM_Write_Reg(void* info, UINT8 Reg, UINT8 Data)
 			/* frequency step (LB) registers */
 			chan->Step_B &= 0xFF00;
 			chan->Step_B |= Data;
-			chan->Step = (UINT32)((float)chan->Step_B * chip->Rate);
+			chan->Step = (uint32_t)((float)chan->Step_B * chip->Rate);
 			
 			//LOG_MSG(pcm, LOG_MSG_LEVEL_DEBUG1,
 			//	"Step low = %.2X   Step calculated = %.8X",
@@ -248,7 +248,7 @@ static void SCD_PCM_Write_Reg(void* info, UINT8 Reg, UINT8 Data)
 			/* frequency step (HB) registers */
 			chan->Step_B &= 0x00FF;
 			chan->Step_B |= Data << 8;
-			chan->Step = (UINT32)((float)chan->Step_B * chip->Rate);
+			chan->Step = (uint32_t)((float)chan->Step_B * chip->Rate);
 			
 			//LOG_MSG(pcm, LOG_MSG_LEVEL_DEBUG1,
 			//	"Step high = %.2X   Step calculated = %.8X",
@@ -329,11 +329,11 @@ static void SCD_PCM_Write_Reg(void* info, UINT8 Reg, UINT8 Data)
 	}
 }
 
-static UINT8 SCD_PCM_Read_Reg(void* info, UINT8 Reg)
+static uint8_t SCD_PCM_Read_Reg(void* info, uint8_t Reg)
 {
 	struct pcm_chip_ *chip = (struct pcm_chip_ *)info;
-	UINT8 shift;
-	UINT8 chn;
+	uint8_t shift;
+	uint8_t chn;
 	
 	shift = (Reg & 0x01) ? 8 : 0;
 	chn = (Reg >> 1) & 0x07;
@@ -345,13 +345,13 @@ static UINT8 SCD_PCM_Read_Reg(void* info, UINT8 Reg)
  * @param Length Buffer length.
  * @param buf PCM buffer.
  */
-static void SCD_PCM_Update(void* info, UINT32 Length, DEV_SMPL **buf)
+static void SCD_PCM_Update(void* info, uint32_t Length, DEV_SMPL **buf)
 {
 	struct pcm_chip_ *chip = (struct pcm_chip_ *)info;
 	int i;
-	UINT32 j;
+	uint32_t j;
 	DEV_SMPL *bufL, *bufR;
-	UINT32 Addr, k;
+	uint32_t Addr, k;
 	struct pcm_chan_ *CH;
 	
 	bufL = buf[0];
@@ -432,21 +432,21 @@ static void SCD_PCM_Update(void* info, UINT32 Length, DEV_SMPL **buf)
 }
 
 
-static UINT8 SCD_PCM_MemRead(void *info, UINT16 offset)
+static uint8_t SCD_PCM_MemRead(void *info, uint16_t offset)
 {
 	struct pcm_chip_ *chip = (struct pcm_chip_ *)info;
 	offset &= 0x0FFF;
 	return chip->RAM[chip->Bank | offset];
 }
 
-static void SCD_PCM_MemWrite(void *info, UINT16 offset, UINT8 data)
+static void SCD_PCM_MemWrite(void *info, uint16_t offset, uint8_t data)
 {
 	struct pcm_chip_ *chip = (struct pcm_chip_ *)info;
 	offset &= 0x0FFF;
 	chip->RAM[chip->Bank | offset] = data;
 }
 
-static void SCD_PCM_MemBlockWrite(void* info, UINT32 offset, UINT32 length, const UINT8* data)
+static void SCD_PCM_MemBlockWrite(void* info, uint32_t offset, uint32_t length, const uint8_t* data)
 {
 	struct pcm_chip_ *chip = (struct pcm_chip_ *)info;
 	
@@ -462,7 +462,7 @@ static void SCD_PCM_MemBlockWrite(void* info, UINT32 offset, UINT32 length, cons
 }
 
 
-static void SCD_PCM_SetMuteMask(void* info, UINT32 MuteMask)
+static void SCD_PCM_SetMuteMask(void* info, uint32_t MuteMask)
 {
 	struct pcm_chip_ *chip = (struct pcm_chip_ *)info;
 	unsigned char CurChn;

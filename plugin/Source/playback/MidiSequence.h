@@ -50,21 +50,21 @@ struct MidiEvent
 {
 	double timeSeconds = 0.0;
 	MidiEventType type = MidiEventType::noteOn;
-	std::uint8_t data1 = 0;		// note / controller (unused by pitchBend)
-	std::uint8_t data2 = 0;		// velocity / value (unused by pitchBend)
+	uint8_t data1 = 0;		// note / controller (unused by pitchBend)
+	uint8_t data2 = 0;		// velocity / value (unused by pitchBend)
 	/** pitchBend only: how far the note is bent, in cents, from the note's own pitch. The
 		sequence stores pitch, not MIDI bytes, because the 14-bit scale depends on a setting the
 		song does not know (the receiver's range - see encodePitchBend). */
-	std::int16_t bendCents = 0;
+	int16_t bendCents = 0;
 
 	/** noteOn only: the two pitch layers the note came from, carried so the pitch report can say
 		which notes are register-exact and which needed a measured root (design doc section 15). They
 		are not sent anywhere - `data1` is already the played note. */
-	std::int16_t transposeCents = 0;
-	std::int16_t rootCents = 0;
-	std::uint8_t pitchSource = 0;	// chips::PitchSource
+	int16_t transposeCents = 0;
+	int16_t rootCents = 0;
+	uint8_t pitchSource = 0;	// chips::PitchSource
 
-	std::uint32_t sourceTrack = 0;
+	uint32_t sourceTrack = 0;
 };
 
 /** A read-only event list for one song. It is built while the song is loaded and never changed

@@ -21,7 +21,7 @@ namespace toybox::chips
 
 		/** How much of a sample is decoded for the measurement, and the window it is measured in:
 			the same shape the RF5C164 uses, because an OKI sample also opens with an attack. */
-		constexpr std::uint32_t kScanNibbles = 4096;
+		constexpr uint32_t kScanNibbles = 4096;
 		constexpr std::size_t kWindow = 512;
 		constexpr std::size_t kScanStep = 256;
 
@@ -42,9 +42,9 @@ namespace toybox::chips
 		{
 			bool playing = false;
 			bool melodic = false;
-			std::uint32_t start = 0;
-			std::uint32_t stop = 0;
-			std::uint32_t gateEnd = 0;
+			uint32_t start = 0;
+			uint32_t stop = 0;
+			uint32_t gateEnd = 0;
 			int keyOns = 0;
 			int volume = 0;
 			int command = -1;
@@ -59,7 +59,7 @@ namespace toybox::chips
 			NoteTableImpl (const Impl* owner, int index, double voiceRate)
 				: impl (owner), voice (index), rate (voiceRate) {}
 
-			int noteFor (std::uint32_t, int, int* finePitch) const override
+			int noteFor (uint32_t, int, int* finePitch) const override
 			{
 				const Voice& state = impl->voices[voice];
 			return noteFromSampleCycle (rate, state.cycleLength, state.melodic, kOneShotNote, finePitch);
@@ -71,13 +71,13 @@ namespace toybox::chips
 			double rate;
 		};
 
-		std::uint32_t clock = 1000000;
-		std::uint32_t now = 0;
+		uint32_t clock = 1000000;
+		uint32_t now = 0;
 		double outRate = 44100.0;
 		bool pin7High = false;
 		int pendingCommand = -1;
-		std::vector<std::uint8_t> rom;
-		std::map<std::uint32_t, double> cycleCache;
+		std::vector<uint8_t> rom;
+		std::map<uint32_t, double> cycleCache;
 		Voice voices[kVoices];
 		std::vector<std::unique_ptr<NoteTableImpl>> tables;
 
@@ -86,22 +86,22 @@ namespace toybox::chips
 			return (double) clock / (pin7High ? kDivisorPin7High : kDivisorPin7Low);
 		}
 
-		std::uint8_t byteAt (std::uint32_t address) const
+		uint8_t byteAt (uint32_t address) const
 		{
 			return (address < rom.size()) ? rom[address] : 0xFF;
 		}
 
 		/** The nibble stream decoded into a waveform: MSM6295's delta codec, as `okim6295.c` runs it. */
-		std::vector<double> decode (std::uint32_t start, std::uint32_t nibbles) const
+		std::vector<double> decode (uint32_t start, uint32_t nibbles) const
 		{
 			std::vector<double> waveform;
 			waveform.reserve (nibbles);
 
 			int signal = 0;
 			int stepIndex = 0;
-			for (std::uint32_t i = 0; i < nibbles; ++i)
+			for (uint32_t i = 0; i < nibbles; ++i)
 			{
-				const std::uint8_t byte = byteAt (start + i / 2);
+				const uint8_t byte = byteAt (start + i / 2);
 				const int nibble = (i % 2 == 0) ? (byte >> 4) : (byte & 0x0F);
 
 				const int magnitude = nibble & 0x07;
@@ -194,24 +194,24 @@ namespace toybox::chips
 			immutable, so a cache keyed by the sample is exact. */
 		double cycleFor (int command)
 		{
-			const auto cached = cycleCache.find ((std::uint32_t) command);
+			const auto cached = cycleCache.find ((uint32_t) command);
 			if (cached != cycleCache.end())
 			{
 				return cached->second;
 			}
 
 			double cycle = 0.0;
-			const std::uint32_t base = (std::uint32_t) command * 8;
-			const std::uint32_t start =
-				((std::uint32_t) byteAt (base) << 16 | (std::uint32_t) byteAt (base + 1) << 8
-				 | (std::uint32_t) byteAt (base + 2)) & 0x3FFFFu;
-			const std::uint32_t stop =
-				((std::uint32_t) byteAt (base + 3) << 16 | (std::uint32_t) byteAt (base + 4) << 8
-				 | (std::uint32_t) byteAt (base + 5)) & 0x3FFFFu;
+			const uint32_t base = (uint32_t) command * 8;
+			const uint32_t start =
+				((uint32_t) byteAt (base) << 16 | (uint32_t) byteAt (base + 1) << 8
+				 | (uint32_t) byteAt (base + 2)) & 0x3FFFFu;
+			const uint32_t stop =
+				((uint32_t) byteAt (base + 3) << 16 | (uint32_t) byteAt (base + 4) << 8
+				 | (uint32_t) byteAt (base + 5)) & 0x3FFFFu;
 
 			if (start < stop && ! rom.empty())
 			{
-				const std::uint32_t nibbles = std::min<std::uint32_t> (2 * (stop - start + 1),
+				const uint32_t nibbles = std::min<uint32_t> (2 * (stop - start + 1),
 																	   kScanNibbles);
 				const std::vector<double> waveform = decode (start, nibbles);
 				for (std::size_t offset = 0; cycle <= 0.0 && offset + 64 <= waveform.size();
@@ -223,11 +223,11 @@ namespace toybox::chips
 				}
 			}
 
-			cycleCache[(std::uint32_t) command] = cycle;
+			cycleCache[(uint32_t) command] = cycle;
 			return cycle;
 		}
 
-		void startVoices (std::uint8_t data, std::uint32_t time)
+		void startVoices (uint8_t data, uint32_t time)
 		{
 			const int command = pendingCommand;
 			pendingCommand = -1;
@@ -236,16 +236,16 @@ namespace toybox::chips
 				return;
 			}
 
-			const std::uint32_t base = (std::uint32_t) command * 8;
-			const std::uint32_t start =
-				((std::uint32_t) byteAt (base) << 16 | (std::uint32_t) byteAt (base + 1) << 8
-				 | (std::uint32_t) byteAt (base + 2)) & 0x3FFFFu;
-			const std::uint32_t stop =
-				((std::uint32_t) byteAt (base + 3) << 16 | (std::uint32_t) byteAt (base + 4) << 8
-				 | (std::uint32_t) byteAt (base + 5)) & 0x3FFFFu;
+			const uint32_t base = (uint32_t) command * 8;
+			const uint32_t start =
+				((uint32_t) byteAt (base) << 16 | (uint32_t) byteAt (base + 1) << 8
+				 | (uint32_t) byteAt (base + 2)) & 0x3FFFFu;
+			const uint32_t stop =
+				((uint32_t) byteAt (base + 3) << 16 | (uint32_t) byteAt (base + 4) << 8
+				 | (uint32_t) byteAt (base + 5)) & 0x3FFFFu;
 
 			const double rate = sampleRate();
-			const std::uint32_t nibbles = (start < stop) ? 2 * (stop - start + 1) : 0;
+			const uint32_t nibbles = (start < stop) ? 2 * (stop - start + 1) : 0;
 			const double cycle = (start < stop) ? cycleFor (command) : 0.0;
 
 			for (int voice = 0; voice < kVoices; ++voice)
@@ -271,7 +271,7 @@ namespace toybox::chips
 				++state.keyOns;
 
 				// the length is exact: `2 * (stop - start + 1)` nibbles at the fixed DAC rate
-				state.gateEnd = time + (std::uint32_t) std::llround ((double) nibbles * outRate / rate);
+				state.gateEnd = time + (uint32_t) std::llround ((double) nibbles * outRate / rate);
 			}
 		}
 	};
@@ -282,7 +282,7 @@ namespace toybox::chips
 
 	void Okim6295Decoder::reset (const ChipConfig& config)
 {
-	[[maybe_unused]] const std::uint32_t clock = config.clockHz;
+	[[maybe_unused]] const uint32_t clock = config.clockHz;
 	[[maybe_unused]] const double sampleRate = config.timeBaseHz;
 		impl = std::make_unique<Impl>();
 		impl->clock = clock > 0 ? clock : 1000000;
@@ -295,7 +295,7 @@ namespace toybox::chips
 		}
 	}
 
-	void Okim6295Decoder::setRom (std::vector<std::uint8_t> rom)
+	void Okim6295Decoder::setRom (std::vector<uint8_t> rom)
 	{
 		impl->rom = std::move (rom);
 		impl->cycleCache.clear();
@@ -342,7 +342,7 @@ namespace toybox::chips
 		}
 	}
 
-	void Okim6295Decoder::advance (std::uint32_t sampleTime)
+	void Okim6295Decoder::advance (uint32_t sampleTime)
 	{
 		// every note's end is an absolute sample, so the clock only has to be remembered for the
 		// gate comparison in channelState()
@@ -366,7 +366,7 @@ namespace toybox::chips
 		state.present = true;
 		state.gate = voice.playing && (voice.gateEnd == 0 || impl->now < voice.gateEnd);
 		state.keyOns = voice.keyOns;
-		state.period = (voice.command >= 0) ? (std::uint32_t) voice.command : 0;
+		state.period = (voice.command >= 0) ? (uint32_t) voice.command : 0;
 		state.volume = 15 - voice.volume;		// the field is an attenuation index: 0 is the loudest
 
 		// no L1 at all: the chip plays at one fixed rate, so the whole pitch comes from the
@@ -384,7 +384,7 @@ namespace toybox::chips
 		// a channel out of range has no state and therefore no pitch: the C4 marker
 		struct Fallback final : NoteTable
 		{
-			int noteFor (std::uint32_t, int, int* finePitch) const override
+			int noteFor (uint32_t, int, int* finePitch) const override
 			{
 				if (finePitch != nullptr)
 				{

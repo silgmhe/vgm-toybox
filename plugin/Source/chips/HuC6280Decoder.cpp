@@ -9,12 +9,12 @@ namespace toybox::chips
 {
 namespace
 {
-	constexpr std::uint32_t kDefaultClock = 3579545;
+	constexpr uint32_t kDefaultClock = 3579545;
 
 	// A channel with noise switched on ignores its frequency register; its rate comes from the
 	// noise control register instead. Reported in this bit so one table can serve both cases -
 	// 12 bits cannot hold the frequency and a marker at the same time.
-	constexpr std::uint32_t kNoiseFlag = 0x1000;
+	constexpr uint32_t kNoiseFlag = 0x1000;
 
 	/** Wave: the core steps the wavetable once every 4096 counter ticks with a step of
 		(clock / rate) * 4096 / f, so one step lasts f / clock seconds and the 32 steps of the
@@ -30,7 +30,7 @@ namespace
 	public:
 		explicit HuC6280Table (double clock) : clock (clock) {}
 
-		int noteFor (std::uint32_t period, int, int* finePitch) const override
+		int noteFor (uint32_t period, int, int* finePitch) const override
 		{
 			if ((period & kNoiseFlag) != 0)
 			{
@@ -42,7 +42,7 @@ namespace
 		}
 
 	private:
-		int noiseNote (std::uint32_t index, int* finePitch) const
+		int noiseNote (uint32_t index, int* finePitch) const
 		{
 			if (finePitch != nullptr)
 			{
@@ -68,13 +68,13 @@ struct HuC6280Decoder::Impl
 	struct Channel
 	{
 		int frequency = 0;				// 12 bits, registers 0x02/0x03
-		std::uint8_t control = 0;		// 0x04: bit 7 enable, bit 6 DDA, bits 4-0 volume
-		std::uint8_t noiseControl = 0;	// 0x07: bit 7 noise on, bits 4-0 rate
+		uint8_t control = 0;		// 0x04: bit 7 enable, bit 6 DDA, bits 4-0 volume
+		uint8_t noiseControl = 0;	// 0x07: bit 7 noise on, bits 4-0 rate
 	};
 
 	// the select register is three bits wide, and a driver may address 6/7; keep room for them
 	Channel channels[8];
-	std::uint8_t select = 0;
+	uint8_t select = 0;
 	double clock = (double) kDefaultClock;
 	std::unique_ptr<HuC6280Table> table;
 
@@ -90,7 +90,7 @@ HuC6280Decoder::~HuC6280Decoder() = default;
 
 void HuC6280Decoder::reset (const ChipConfig& config)
 {
-	[[maybe_unused]] const std::uint32_t clock = config.clockHz;
+	[[maybe_unused]] const uint32_t clock = config.clockHz;
 	[[maybe_unused]] const double sampleRate = config.timeBaseHz;
 	(void) sampleRate;		// the chip has no time base of its own; nothing here needs the rate
 
@@ -117,7 +117,7 @@ void HuC6280Decoder::write (const RegisterWrite& w)
 	//   0x06  waveform data - the shape, not the note
 	//   0x07  noise control: bit 7 enable, bits 4-0 the noise frequency
 	case 0x00:
-		impl->select = (std::uint8_t) (w.value & 0x07);
+		impl->select = (uint8_t) (w.value & 0x07);
 		break;
 	case 0x01:
 		break;		// global balance: panning only, a MIDI note cannot carry it
@@ -142,7 +142,7 @@ void HuC6280Decoder::write (const RegisterWrite& w)
 	}
 }
 
-void HuC6280Decoder::advance (std::uint32_t sampleTime)
+void HuC6280Decoder::advance (uint32_t sampleTime)
 {
 	(void) sampleTime;		// no timers: the driver keys the channel on and off
 }
@@ -174,7 +174,7 @@ ChannelState HuC6280Decoder::channelState (int channel) const
 	}
 	else
 	{
-		state.period = (std::uint32_t) current.frequency;
+		state.period = (uint32_t) current.frequency;
 	}
 
 	return state;

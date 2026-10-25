@@ -74,7 +74,7 @@ static const int PSGVolumeValues[16] = {
 };
 
 
-static SN76489_Context* SN76489_Init( UINT32 PSGClockValue, UINT32 SamplingRate)
+static SN76489_Context* SN76489_Init( uint32_t PSGClockValue, uint32_t SamplingRate)
 {
 	int i;
 	SN76489_Context* chip = (SN76489_Context*)calloc(1, sizeof(SN76489_Context));
@@ -146,13 +146,13 @@ static void SN76489_Shutdown(SN76489_Context* chip)
 	free(chip);
 }
 
-static void SN76489_Config(SN76489_Context* chip, UINT32 feedback, UINT8 sr_width)
+static void SN76489_Config(SN76489_Context* chip, uint32_t feedback, uint8_t sr_width)
 {
 	chip->WhiteNoiseFeedback = feedback;
 	chip->SRWidth = sr_width;
 }
 
-static void SN76489_Write(SN76489_Context* chip, UINT8 data)
+static void SN76489_Write(SN76489_Context* chip, uint8_t data)
 {
 	if ( data & 0x80 )
 	{
@@ -186,14 +186,14 @@ static void SN76489_Write(SN76489_Context* chip, UINT8 data)
 	}
 }
 
-static void SN76489_GGStereoWrite(SN76489_Context* chip, UINT8 data)
+static void SN76489_GGStereoWrite(SN76489_Context* chip, uint8_t data)
 {
 	chip->PSGStereo=data;
 }
 
-static void SN76489_Update(SN76489_Context* chip, UINT32 length, DEV_SMPL **buffer)
+static void SN76489_Update(SN76489_Context* chip, uint32_t length, DEV_SMPL **buffer)
 {
-	UINT32 i, j;
+	uint32_t i, j;
 	SN76489_Context* chip_t;
 	SN76489_Context* chip_n;
 	
@@ -295,7 +295,7 @@ static void SN76489_Update(SN76489_Context* chip, UINT32 length, DEV_SMPL **buff
 
 		/* Increment clock by 1 sample length */
 		chip->Clock += chip->dClock;
-		chip->NumClocksForSample = (UINT32)chip->Clock;   /* truncate */
+		chip->NumClocksForSample = (uint32_t)chip->Clock;   /* truncate */
 		chip->Clock -= chip->NumClocksForSample;      /* remove integer part */
 	
 		/* Decrement tone channel counters */
@@ -339,7 +339,7 @@ static void SN76489_Update(SN76489_Context* chip, UINT32 length, DEV_SMPL **buff
 				chip->ToneFreqVals[3] += chip->NoiseFreq * ( chip->NumClocksForSample / chip->NoiseFreq + 1 );
 			if (chip->ToneFreqPos[3] == 1) {
 				/* On the positive edge of the square wave (only once per cycle) */
-				UINT32 Feedback;
+				uint32_t Feedback;
 				if ( chip->Registers[6] & 0x4 ) {
 					/* White noise */
 					/* Calculate parity of fed-back bits for feedback */
@@ -373,17 +373,17 @@ static void SN76489_Update(SN76489_Context* chip, UINT32 length, DEV_SMPL **buff
 }
 
 
-static UINT32 SN76489_GetMute(SN76489_Context* chip)
+static uint32_t SN76489_GetMute(SN76489_Context* chip)
 {
 	return chip->Mute;
 }
 
-static void SN76489_SetMute(SN76489_Context* chip, UINT32 val)
+static void SN76489_SetMute(SN76489_Context* chip, uint32_t val)
 {
-	chip->Mute=(UINT8)val;
+	chip->Mute=(uint8_t)val;
 }
 
-static void SN76489_SetPanning(SN76489_Context* chip, INT16 ch0, INT16 ch1, INT16 ch2, INT16 ch3)
+static void SN76489_SetPanning(SN76489_Context* chip, int16_t ch0, int16_t ch1, int16_t ch2, int16_t ch3)
 {
 	Panning_Calculate( chip->panning[0], ch0 );
 	Panning_Calculate( chip->panning[1], ch1 );
@@ -391,11 +391,11 @@ static void SN76489_SetPanning(SN76489_Context* chip, INT16 ch0, INT16 ch1, INT1
 	Panning_Calculate( chip->panning[3], ch3 );
 }
 
-static UINT8 device_start_sn76496_maxim(const SN76496_CFG* cfg, DEV_INFO* retDevInf)
+static uint8_t device_start_sn76496_maxim(const SN76496_CFG* cfg, DEV_INFO* retDevInf)
 {
 	SN76489_Context* chip;
 	DEV_DATA* devData;
-	UINT32 rate;
+	uint32_t rate;
 	
 	rate = cfg->_genCfg.smplRate;
 	chip = SN76489_Init(cfg->_genCfg.clock, rate);
@@ -413,7 +413,7 @@ static UINT8 device_start_sn76496_maxim(const SN76496_CFG* cfg, DEV_INFO* retDev
 	return 0x00;
 }
 
-static void sn76496_w_maxim(SN76489_Context* chip, UINT8 reg, UINT8 data)
+static void sn76496_w_maxim(SN76489_Context* chip, uint8_t reg, uint8_t data)
 {
 	switch(reg)
 	{
@@ -427,13 +427,13 @@ static void sn76496_w_maxim(SN76489_Context* chip, UINT8 reg, UINT8 data)
 	return;
 }
 
-static void sn76489_mute_maxim(SN76489_Context* chip, UINT32 MuteMask)
+static void sn76489_mute_maxim(SN76489_Context* chip, uint32_t MuteMask)
 {
 	SN76489_SetMute(chip, ~MuteMask & 0x0F);
 	return;
 }
 
-static void sn76489_pan_maxim(SN76489_Context* chip, const INT16* PanVals)
+static void sn76489_pan_maxim(SN76489_Context* chip, const int16_t* PanVals)
 {
 	SN76489_SetPanning(chip, PanVals[0x00], PanVals[0x01], PanVals[0x02], PanVals[0x03]);
 	return;

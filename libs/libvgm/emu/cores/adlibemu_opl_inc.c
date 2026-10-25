@@ -660,7 +660,7 @@ static void adlibemu_update_req(void* param)
 	ADLIBEMU(getsample)(param, 0, NULL);
 }
 
-void* ADLIBEMU(init)(UINT32 clock, UINT32 samplerate)
+void* ADLIBEMU(init)(uint32_t clock, uint32_t samplerate)
 {
 	OPL_DATA* OPL;
 
@@ -759,7 +759,7 @@ void ADLIBEMU(reset)(void *chip)
 
 
 
-void ADLIBEMU(writeIO)(void *chip, UINT8 addr, UINT8 val)
+void ADLIBEMU(writeIO)(void *chip, uint8_t addr, uint8_t val)
 {
 	OPL_DATA* OPL = (OPL_DATA*)chip;
 	
@@ -1136,7 +1136,7 @@ static void adlib_write(void *chip, Bit16u idx, Bit8u val)
 }
 
 
-UINT8 ADLIBEMU(reg_read)(void *chip, UINT8 port)
+uint8_t ADLIBEMU(reg_read)(void *chip, uint8_t port)
 {
 	OPL_DATA* OPL = (OPL_DATA*)chip;
 	
@@ -1182,7 +1182,7 @@ UINT8 ADLIBEMU(reg_read)(void *chip, UINT8 port)
 	outbufr[i] += chanval;
 #endif
 
-void ADLIBEMU(getsample)(void *chip, UINT32 numsamples, DEV_SMPL** sndptr)
+void ADLIBEMU(getsample)(void *chip, uint32_t numsamples, DEV_SMPL** sndptr)
 {
 	OPL_DATA* OPL = (OPL_DATA*)chip;
 	
@@ -1943,11 +1943,11 @@ void ADLIBEMU(set_update_handler)(void *chip, ADL_UPDATEHANDLER UpdateHandler, v
 	return;
 }
 
-void ADLIBEMU(set_mute_mask)(void *chip, UINT32 MuteMask)
+void ADLIBEMU(set_mute_mask)(void *chip, uint32_t MuteMask)
 {
 	OPL_DATA* OPL = (OPL_DATA*)chip;
 	
-	UINT8 CurChn;
+	uint8_t CurChn;
 	
 	for (CurChn = 0; CurChn < NUM_CHANNELS + 5; CurChn ++)
 		OPL->MuteChn[CurChn] = (MuteMask >> CurChn) & 0x01;
@@ -1955,12 +1955,12 @@ void ADLIBEMU(set_mute_mask)(void *chip, UINT32 MuteMask)
 	return;
 }
 
-void ADLIBEMU(set_volume)(void *chip, INT32 volume)
+void ADLIBEMU(set_volume)(void *chip, int32_t volume)
 {
 	ADLIBEMU(set_volume_lr)(chip, volume, volume);
 }
 
-void ADLIBEMU(set_volume_lr)(void *chip, INT32 volLeft, INT32 volRight)
+void ADLIBEMU(set_volume_lr)(void *chip, int32_t volLeft, int32_t volRight)
 {
 	OPL_DATA* OPL = (OPL_DATA*)chip;
 

@@ -26,7 +26,7 @@ INLINE void dev_logger_set(DEV_LOGGER* logger, void* source, DEVCB_LOG func, voi
 	return;
 }
 
-void emu_logf(DEV_LOGGER* logger, UINT8 level, const char* format, ...);
+void emu_logf(DEV_LOGGER* logger, uint8_t level, const char* format, ...);
 
 #ifdef __cplusplus
 }

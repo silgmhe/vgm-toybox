@@ -9,16 +9,16 @@ extern "C"
 #include "../stdtype.h"
 #include "EmuStructs.h"
 
-void daccontrol_update(void* info, UINT32 samples, DEV_SMPL** dummy);
-UINT8 device_start_daccontrol(const DEV_GEN_CFG* cfg, DEV_INFO* retDevInf);
+void daccontrol_update(void* info, uint32_t samples, DEV_SMPL** dummy);
+uint8_t device_start_daccontrol(const DEV_GEN_CFG* cfg, DEV_INFO* retDevInf);
 void device_stop_daccontrol(void* info);
 void device_reset_daccontrol(void* info);
 
-void daccontrol_setup_chip(void* info, DEV_INFO* devInf, UINT8 ChType, UINT16 Command);
-void daccontrol_set_data(void* info, UINT8* Data, UINT32 DataLen, UINT8 StepSize, UINT8 StepBase);
-void daccontrol_refresh_data(void* info, UINT8* Data, UINT32 DataLen);
-void daccontrol_set_frequency(void* info, UINT32 Frequency);
-void daccontrol_start(void* info, UINT32 DataPos, UINT8 LenMode, UINT32 Length);
+void daccontrol_setup_chip(void* info, DEV_INFO* devInf, uint8_t ChType, uint16_t Command);
+void daccontrol_set_data(void* info, uint8_t* Data, uint32_t DataLen, uint8_t StepSize, uint8_t StepBase);
+void daccontrol_refresh_data(void* info, uint8_t* Data, uint32_t DataLen);
+void daccontrol_set_frequency(void* info, uint32_t Frequency);
+void daccontrol_start(void* info, uint32_t DataPos, uint8_t LenMode, uint32_t Length);
 void daccontrol_stop(void* info);
 
 #define DCTRL_LMODE_IGNORE	0x00

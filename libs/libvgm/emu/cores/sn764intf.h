@@ -14,13 +14,13 @@ typedef struct sn76496_config
 {
 	DEV_GEN_CFG _genCfg;
 	
-	UINT16 noiseTaps;		// noise tap mask (usually 2 bits set)
-	UINT8 shiftRegWidth;	// noise shift register width
-	UINT8 negate;			// invert output
-	UINT8 clkDiv;			// clock divider (1 or 8)
-	UINT8 ncrPSG;			// enable NCR noise algorithm
-	UINT8 segaPSG;			// enable Sega PSG frequencies (frequency 0 is treated as 1)
-	UINT8 stereo;			// enable Sega Game Gear stereo
+	uint16_t noiseTaps;		// noise tap mask (usually 2 bits set)
+	uint8_t shiftRegWidth;	// noise shift register width
+	uint8_t negate;			// invert output
+	uint8_t clkDiv;			// clock divider (1 or 8)
+	uint8_t ncrPSG;			// enable NCR noise algorithm
+	uint8_t segaPSG;			// enable Sega PSG frequencies (frequency 0 is treated as 1)
+	uint8_t stereo;			// enable Sega Game Gear stereo
 	
 	void* t6w28_tone;		// SN-chip that emulates the "tone" part of a T6W28
 } SN76496_CFG;

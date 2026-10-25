@@ -13,7 +13,7 @@ namespace toybox::chips
 namespace
 {
 	// Konami's boards clock the K053260 at 3.579545 MHz; the header supplies the real one.
-	constexpr std::uint32_t kDefaultClock = 3579545;
+	constexpr uint32_t kDefaultClock = 3579545;
 
 	// k053260.c: `CLOCKS_PER_SAMPLE = 64`, so the chip renders at `clock / 64` (55.9 kHz here).
 	constexpr double kOutputDivisor = 64.0;
@@ -23,12 +23,12 @@ namespace
 	// A third of the C140's and C352's divisor, but the same kind of number: a rate, not a note.
 	constexpr double kPitchDivisor = 64.0 * 4096.0;
 
-	constexpr std::uint8_t kKeyMaskOffset = 0x28;
-	constexpr std::uint8_t kLoopModeOffset = 0x2A;
-	constexpr std::uint8_t kPanLowOffset = 0x2C;
-	constexpr std::uint8_t kPanHighOffset = 0x2D;
-	constexpr std::uint8_t kControlOffset = 0x2F;
-	constexpr std::uint8_t kControlSoundEnable = 0x02;
+	constexpr uint8_t kKeyMaskOffset = 0x28;
+	constexpr uint8_t kLoopModeOffset = 0x2A;
+	constexpr uint8_t kPanLowOffset = 0x2C;
+	constexpr uint8_t kPanHighOffset = 0x2D;
+	constexpr uint8_t kControlOffset = 0x2F;
+	constexpr uint8_t kControlSoundEnable = 0x02;
 
 	// KADPCM's sixteen deltas (`kadpcm_table` in k053260.c): a nibble is added to a running sum,
 	// which is why the format has to be decoded before the waveform can be measured.
@@ -37,14 +37,14 @@ namespace
 	/** The mask the core folds a sample address with (`pow2_mask` in EmuHelper.h): the ROM is
 		covered as a power-of-two buffer, so a sample that runs off the end wraps instead of reading
 		elsewhere. Measured addresses are masked the same way. */
-	std::uint32_t pow2Mask (std::size_t size)
+	uint32_t pow2Mask (std::size_t size)
 	{
 		if (size == 0)
 		{
 			return 0;
 		}
 
-		std::uint32_t mask = (std::uint32_t) (size - 1);
+		uint32_t mask = (uint32_t) (size - 1);
 		mask |= mask >> 1;
 		mask |= mask >> 2;
 		mask |= mask >> 4;
@@ -66,14 +66,14 @@ namespace
 	{
 	public:
 		K053260NoteTable (double clock, const double* sampleCycle, const bool* melodic,
-						  const std::vector<std::uint8_t>* rom)
+						  const std::vector<uint8_t>* rom)
 			: bytesPerSecondPerStep (clock / kPitchDivisor)
 			, rootRate (clock / kOutputDivisor)
 			, cycleLength (sampleCycle)
 			, melodic (melodic)
 			, rom (rom) {}
 
-		int noteFor (std::uint32_t period, int, int* finePitch) const override
+		int noteFor (uint32_t period, int, int* finePitch) const override
 		{
 			const double rate = (double) period * bytesPerSecondPerStep;
 
@@ -87,14 +87,14 @@ const bool measured = (rom == nullptr || rom->empty())
 		double rootRate;
 		const double* cycleLength;
 		const bool* melodic;
-		const std::vector<std::uint8_t>* rom;
+		const std::vector<uint8_t>* rom;
 	};
 
 	/** What a measurement belongs to: the registers that name one sample's bytes. */
 	struct SampleKey
 	{
-		std::uint32_t start;
-		std::uint16_t length;
+		uint32_t start;
+		uint16_t length;
 		bool kadpcm;
 		bool reverse;
 
@@ -110,31 +110,31 @@ struct K053260Decoder::Impl
 {
 	struct Voice
 	{
-		std::uint16_t pitch = 0;		// 12 bits
-		std::uint16_t length = 0;		// bytes
-		std::uint32_t start = 0;		// 21 bits
-		std::uint8_t volume = 0;		// 7 bits
-		std::uint8_t pan = 0;			// 3 bits, 0 = silent, 4 = centre
+		uint16_t pitch = 0;		// 12 bits
+		uint16_t length = 0;		// bytes
+		uint32_t start = 0;		// 21 bits
+		uint8_t volume = 0;		// 7 bits
+		uint8_t pan = 0;			// 3 bits, 0 = silent, 4 = centre
 		bool loop = false;
 		bool kadpcm = false;
 		bool reverse = false;
 
 		// latched where the core latches its pointer and counter
 		bool keyed = false;
-		std::uint32_t keyOns = 0;		// monotonic: a retrigger at the same pitch is a new note
-		std::uint32_t gateEnd = 0;
+		uint32_t keyOns = 0;		// monotonic: a retrigger at the same pitch is a new note
+		uint32_t gateEnd = 0;
 		double cycleLength = 0.0;		// one cycle in fetch units; 0 = no period (a drum)
 		bool melodic = false;			// cycleLength turned into a note this chip could be playing
 	};
 
 	Voice voices[numChannels];
-	std::uint32_t now = 0;
+	uint32_t now = 0;
 	double clock = (double) kDefaultClock;
 	double streamRate = 44100.0;
-	std::vector<std::uint8_t> rom;
-	std::uint32_t romMask = 0;
-	std::uint8_t keyMask = 0;			// the level 0x28 last held, for the rising edges
-	std::uint8_t mode = 0;				// 0x2F: bit 1 gates all sound, as in the core
+	std::vector<uint8_t> rom;
+	uint32_t romMask = 0;
+	uint8_t keyMask = 0;			// the level 0x28 last held, for the rising edges
+	uint8_t mode = 0;				// 0x2F: bit 1 gates all sound, as in the core
 	std::map<SampleKey, double> cycleCache;
 	std::vector<std::unique_ptr<K053260NoteTable>> tables;
 
@@ -144,9 +144,9 @@ struct K053260Decoder::Impl
 		return (voice.kadpcm ? 2.0 : 1.0) * (double) voice.length;
 	}
 
-	std::uint8_t romByte (std::uint32_t address) const
+	uint8_t romByte (uint32_t address) const
 	{
-		const std::uint32_t index = address & romMask;
+		const uint32_t index = address & romMask;
 		return (index < rom.size()) ? rom[index] : 0;
 	}
 
@@ -156,7 +156,7 @@ struct K053260Decoder::Impl
 		gate guess, unlike the RF5C68. A loop restarts the sample instead, so only a key-off ends
 		it. A zero pitch never overflows the 12-bit accumulator and a zero length is nothing to
 		fetch: both are silence, exactly as in the core. */
-	std::uint32_t durationOf (const Voice& voice) const
+	uint32_t durationOf (const Voice& voice) const
 	{
 		if (voice.loop || voice.length == 0 || voice.pitch == 0)
 		{
@@ -165,7 +165,7 @@ struct K053260Decoder::Impl
 
 		const double perSecond = (double) voice.pitch * clock / kPitchDivisor;
 		const double samples = fetchUnits (voice) / perSecond * streamRate;
-		return (std::uint32_t) std::llround (std::min (samples, 1.0e9));
+		return (uint32_t) std::llround (std::min (samples, 1.0e9));
 	}
 
 	/** The cycle length of the sample a voice is about to play, measured once per sample.
@@ -192,7 +192,7 @@ struct K053260Decoder::Impl
 			return cached->second;
 		}
 
-		const std::uint32_t begin = voice.start + 1;
+		const uint32_t begin = voice.start + 1;
 		std::vector<double> waveform;
 
 		if (! voice.kadpcm)
@@ -200,7 +200,7 @@ struct K053260Decoder::Impl
 			waveform.resize (voice.length);
 			for (std::size_t i = 0; i < waveform.size(); ++i)
 			{
-				waveform[i] = (double) (std::int8_t) romByte (begin + (std::uint32_t) i);
+				waveform[i] = (double) (int8_t) romByte (begin + (uint32_t) i);
 			}
 		}
 		else
@@ -211,7 +211,7 @@ struct K053260Decoder::Impl
 			double accumulator = 0.0;
 			for (std::size_t i = 0; i < waveform.size(); ++i)
 			{
-				const std::uint8_t byte = romByte (begin + (std::uint32_t) (i / 2));
+				const uint8_t byte = romByte (begin + (uint32_t) (i / 2));
 				const int nibble = (i % 2 == 0) ? (byte & 0x0F) : (byte >> 4);
 				accumulator += (double) kKadpcmTable[nibble];
 				waveform[i] = accumulator;
@@ -226,7 +226,7 @@ struct K053260Decoder::Impl
 	/** The key-on edge of one voice: the core copies the pointer, forces the counter and reads the
 		registers that are live at that moment (length, pitch, format), so the note's length and its
 		pitch both come from here. */
-	void keyOn (int channel, std::uint32_t sampleTime)
+	void keyOn (int channel, uint32_t sampleTime)
 	{
 		Voice& voice = voices[channel];
 		voice.keyed = true;
@@ -286,11 +286,11 @@ K053260Decoder::~K053260Decoder() = default;
 
 void K053260Decoder::reset (const ChipConfig& config)
 {
-	[[maybe_unused]] const std::uint32_t clock = config.clockHz;
+	[[maybe_unused]] const uint32_t clock = config.clockHz;
 	[[maybe_unused]] const double sampleRate = config.timeBaseHz;
 	// the ROM belongs to the song, not to the clock: a reset only changes the rate the chip runs at
-	std::vector<std::uint8_t> rom = impl != nullptr ? std::move (impl->rom) : std::vector<std::uint8_t>();
-	const std::uint32_t romMask = impl != nullptr ? impl->romMask : 0u;
+	std::vector<uint8_t> rom = impl != nullptr ? std::move (impl->rom) : std::vector<uint8_t>();
+	const uint32_t romMask = impl != nullptr ? impl->romMask : 0u;
 
 	impl = std::make_unique<Impl>();
 	impl->clock = (clock > 100000) ? (double) clock : (double) kDefaultClock;
@@ -305,7 +305,7 @@ void K053260Decoder::reset (const ChipConfig& config)
 	}
 }
 
-void K053260Decoder::setRom (std::vector<std::uint8_t> rom)
+void K053260Decoder::setRom (std::vector<uint8_t> rom)
 {
 	impl->romMask = pow2Mask (rom.size());
 	impl->rom = std::move (rom);
@@ -314,8 +314,8 @@ void K053260Decoder::setRom (std::vector<std::uint8_t> rom)
 
 void K053260Decoder::write (const RegisterWrite& w)
 {
-	const std::uint8_t offset = (std::uint8_t) (w.reg & 0x3F);
-	const std::uint8_t value = w.value;
+	const uint8_t offset = (uint8_t) (w.reg & 0x3F);
+	const uint8_t value = w.value;
 
 	if (offset >= 0x08 && offset <= 0x27)
 	{
@@ -325,28 +325,28 @@ void K053260Decoder::write (const RegisterWrite& w)
 		switch (offset & 7)
 		{
 		case 0:		// pitch, low eight bits
-			voice.pitch = (std::uint16_t) ((voice.pitch & 0x0F00) | value);
+			voice.pitch = (uint16_t) ((voice.pitch & 0x0F00) | value);
 			break;
 		case 1:		// pitch, high four bits
-			voice.pitch = (std::uint16_t) ((voice.pitch & 0x00FF) | ((value << 8) & 0x0F00));
+			voice.pitch = (uint16_t) ((voice.pitch & 0x00FF) | ((value << 8) & 0x0F00));
 			break;
 		case 2:		// length, low eight bits
-			voice.length = (std::uint16_t) ((voice.length & 0xFF00) | value);
+			voice.length = (uint16_t) ((voice.length & 0xFF00) | value);
 			break;
 		case 3:		// length, high eight bits
-			voice.length = (std::uint16_t) ((voice.length & 0x00FF) | (value << 8));
+			voice.length = (uint16_t) ((voice.length & 0x00FF) | (value << 8));
 			break;
 		case 4:		// start, low eight bits
 			voice.start = (voice.start & 0x1FFF00u) | value;
 			break;
 		case 5:		// start, middle eight bits
-			voice.start = (voice.start & 0x1F00FFu) | ((std::uint32_t) value << 8);
+			voice.start = (voice.start & 0x1F00FFu) | ((uint32_t) value << 8);
 			break;
 		case 6:		// start, high five bits
-			voice.start = (voice.start & 0x00FFFFu) | (((std::uint32_t) value << 16) & 0x1F0000u);
+			voice.start = (voice.start & 0x00FFFFu) | (((uint32_t) value << 16) & 0x1F0000u);
 			break;
 		case 7:		// volume, seven bits
-			voice.volume = (std::uint8_t) (value & 0x7F);
+			voice.volume = (uint8_t) (value & 0x7F);
 			break;
 		default:
 			break;
@@ -361,7 +361,7 @@ void K053260Decoder::write (const RegisterWrite& w)
 		// the whole key-on/key-off protocol lives here: a rising bit starts a voice (the core
 		// compares against the level it last saw), a cleared bit stops it, and the high nibble is
 		// that voice's reverse flag
-		const std::uint8_t rising = (std::uint8_t) (value & ~impl->keyMask);
+		const uint8_t rising = (uint8_t) (value & ~impl->keyMask);
 
 		for (int channel = 0; channel < channelCount_; ++channel)
 		{
@@ -390,12 +390,12 @@ void K053260Decoder::write (const RegisterWrite& w)
 		}
 		break;
 	case kPanLowOffset:
-		impl->voices[0].pan = (std::uint8_t) (value & 0x07);
-		impl->voices[1].pan = (std::uint8_t) ((value >> 3) & 0x07);
+		impl->voices[0].pan = (uint8_t) (value & 0x07);
+		impl->voices[1].pan = (uint8_t) ((value >> 3) & 0x07);
 		break;
 	case kPanHighOffset:
-		impl->voices[2].pan = (std::uint8_t) (value & 0x07);
-		impl->voices[3].pan = (std::uint8_t) ((value >> 3) & 0x07);
+		impl->voices[2].pan = (uint8_t) (value & 0x07);
+		impl->voices[3].pan = (uint8_t) ((value >> 3) & 0x07);
 		break;
 	case kControlOffset:
 		impl->mode = value;
@@ -405,7 +405,7 @@ void K053260Decoder::write (const RegisterWrite& w)
 	}
 }
 
-void K053260Decoder::advance (std::uint32_t sampleTime)
+void K053260Decoder::advance (uint32_t sampleTime)
 {
 	impl->now = sampleTime;
 

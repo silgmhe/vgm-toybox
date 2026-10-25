@@ -67,11 +67,11 @@ std::vector<float> cycleFor (int waveKind, float duty, int shapeParameter)
 			// the wrong one here: it leaves the low bits zero for fourteen shifts, so the first
 			// cycle drew as a flat line with one spike in it - which is exactly what it looked
 			// like, and why the row did not read as noise at all.
-			std::uint32_t shift = 0x4A5u;
+			uint32_t shift = 0x4A5u;
 
 			for (int i = 0; i < 16; ++i)
 			{
-				const std::uint32_t bit = ((shift >> 0) ^ (shift >> 1)) & 1u;
+				const uint32_t bit = ((shift >> 0) ^ (shift >> 1)) & 1u;
 				shift = (shift >> 1) | (bit << 14);
 			}
 
@@ -81,13 +81,13 @@ std::vector<float> cycleFor (int waveKind, float duty, int shapeParameter)
 			const int period = clampTo (shapeParameter, 0, 15);
 			const int hold = 1 + (period * 7) / 15;
 
-			std::uint32_t current = shift & 1u;
+			uint32_t current = shift & 1u;
 
 			for (int i = 0; i < pointsPerCycle; ++i)
 			{
 				if ((i % hold) == 0)
 				{
-					const std::uint32_t bit = ((shift >> 0) ^ (shift >> 1)) & 1u;
+					const uint32_t bit = ((shift >> 0) ^ (shift >> 1)) & 1u;
 					shift = (shift >> 1) | (bit << 14);
 					current = shift & 1u;
 				}
@@ -109,7 +109,7 @@ std::vector<float> cycleFor (int waveKind, float duty, int shapeParameter)
 			//
 			// The level is pulled back towards the centre as it walks, and the steps shrink over
 			// the cycle: without either, the walk parks against a rail and reads as a square.
-			std::uint32_t state = 0x9E3779B9u ^ (std::uint32_t) shapeParameter;
+			uint32_t state = 0x9E3779B9u ^ (uint32_t) shapeParameter;
 
 			if (state == 0)
 			{

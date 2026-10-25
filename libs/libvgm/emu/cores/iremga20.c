@@ -54,19 +54,19 @@ Revisions:
 #include "iremga20.h"
 
 
-static void IremGA20_update(void *param, UINT32 samples, DEV_SMPL **outputs);
-static UINT8 device_start_iremga20(const DEV_GEN_CFG* cfg, DEV_INFO* retDevInf);
+static void IremGA20_update(void *param, uint32_t samples, DEV_SMPL **outputs);
+static uint8_t device_start_iremga20(const DEV_GEN_CFG* cfg, DEV_INFO* retDevInf);
 static void device_stop_iremga20(void *info);
 static void device_reset_iremga20(void *info);
 
-static UINT8 irem_ga20_r(void *info, UINT8 offset);
-static void irem_ga20_w(void *info, UINT8 offset, UINT8 data);
+static uint8_t irem_ga20_r(void *info, uint8_t offset);
+static void irem_ga20_w(void *info, uint8_t offset, uint8_t data);
 
-static void iremga20_alloc_rom(void* info, UINT32 memsize);
-static void iremga20_write_rom(void *info, UINT32 offset, UINT32 length, const UINT8* data);
+static void iremga20_alloc_rom(void* info, uint32_t memsize);
+static void iremga20_write_rom(void *info, uint32_t offset, uint32_t length, const uint8_t* data);
 
-static void iremga20_set_mute_mask(void *info, UINT32 MuteMask);
-static void iremga20_set_options(void *chip, UINT32 Flags);
+static void iremga20_set_mute_mask(void *info, uint32_t MuteMask);
+static void iremga20_set_options(void *chip, uint32_t Flags);
 static void iremga20_set_log_cb(void* info, DEVCB_LOG func, void* param);
 
 
@@ -103,7 +103,7 @@ static const char* DeviceName(const DEV_GEN_CFG* devCfg)
 	return "GA20";
 }
 
-static UINT16 DeviceChannels(const DEV_GEN_CFG* devCfg)
+static uint16_t DeviceChannels(const DEV_GEN_CFG* devCfg)
 {
 	return 4;
 }
@@ -137,19 +137,19 @@ const DEV_DECL sndDev_GA20 =
 
 struct IremGA20_channel_def
 {
-	UINT32 start;
-	UINT32 end;
-	UINT32 pos;
-	UINT32 frac;
-	UINT32 fracrate;
-	UINT16 volume;
-	UINT8 rate;
-	UINT8 counter;
-	UINT8 play;
-	UINT8 Muted;
+	uint32_t start;
+	uint32_t end;
+	uint32_t pos;
+	uint32_t frac;
+	uint32_t fracrate;
+	uint16_t volume;
+	uint8_t rate;
+	uint8_t counter;
+	uint8_t play;
+	uint8_t Muted;
 	
-	INT8 smpl1;
-	INT8 smpl2;
+	int8_t smpl1;
+	int8_t smpl2;
 };
 
 typedef struct _ga20_state ga20_state;
@@ -158,12 +158,12 @@ struct _ga20_state
 	DEV_DATA _devData;
 	DEV_LOGGER logger;
 	
-	UINT8 *rom;
-	UINT32 rom_size;
-	UINT8 regs[0x20];
+	uint8_t *rom;
+	uint32_t rom_size;
+	uint8_t regs[0x20];
 	struct IremGA20_channel_def channel[4];
 	
-	UINT8 interpolate;
+	uint8_t interpolate;
 };
 
 
@@ -181,11 +181,11 @@ INLINE void irem_ga20_cache_samples(ga20_state *chip, struct IremGA20_channel_de
 	return;
 }
 
-static void IremGA20_update(void *param, UINT32 samples, DEV_SMPL **outputs)
+static void IremGA20_update(void *param, uint32_t samples, DEV_SMPL **outputs)
 {
 	ga20_state *chip = (ga20_state *)param;
 	DEV_SMPL *outL, *outR;
-	UINT32 i;
+	uint32_t i;
 	int j;
 	DEV_SMPL smpl_int;
 	DEV_SMPL sampleout;
@@ -212,12 +212,12 @@ static void IremGA20_update(void *param, UINT32 samples, DEV_SMPL **outputs)
 			
 			if (! chip->interpolate)
 			{
-				sampleout += ch->smpl1 * (INT32)ch->volume;
+				sampleout += ch->smpl1 * (int32_t)ch->volume;
 			}
 			else
 			{
 				smpl_int = (ch->smpl1 * ((1 << RATE_SHIFT) - ch->frac) + ch->smpl2 * ch->frac);
-				sampleout += (smpl_int * (INT32)ch->volume) >> RATE_SHIFT;
+				sampleout += (smpl_int * (int32_t)ch->volume) >> RATE_SHIFT;
 			}
 			ch->frac += ch->fracrate;
 			ch->counter ++;
@@ -237,7 +237,7 @@ static void IremGA20_update(void *param, UINT32 samples, DEV_SMPL **outputs)
 	}
 }
 
-static void irem_ga20_w(void *info, UINT8 offset, UINT8 data)
+static void irem_ga20_w(void *info, uint8_t offset, uint8_t data)
 {
 	ga20_state *chip = (ga20_state *)info;
 	struct IremGA20_channel_def* ch;
@@ -307,7 +307,7 @@ static void irem_ga20_w(void *info, UINT8 offset, UINT8 data)
 	}
 }
 
-static UINT8 irem_ga20_r(void *info, UINT8 offset)
+static uint8_t irem_ga20_r(void *info, uint8_t offset)
 {
 	ga20_state *chip = (ga20_state *)info;
 	int channel;
@@ -345,10 +345,10 @@ static void device_reset_iremga20(void *info)
 		chip->channel[i].play = 0;
 	}
 
-	memset(chip->regs, 0x00, 0x20 * sizeof(UINT8));
+	memset(chip->regs, 0x00, 0x20 * sizeof(uint8_t));
 }
 
-static UINT8 device_start_iremga20(const DEV_GEN_CFG* cfg, DEV_INFO* retDevInf)
+static uint8_t device_start_iremga20(const DEV_GEN_CFG* cfg, DEV_INFO* retDevInf)
 {
 	ga20_state *chip;
 
@@ -379,21 +379,21 @@ static void device_stop_iremga20(void *info)
 	return;
 }
 
-static void iremga20_alloc_rom(void* info, UINT32 memsize)
+static void iremga20_alloc_rom(void* info, uint32_t memsize)
 {
 	ga20_state *chip = (ga20_state *)info;
 	
 	if (chip->rom_size == memsize)
 		return;
 	
-	chip->rom = (UINT8*)realloc(chip->rom, memsize);
+	chip->rom = (uint8_t*)realloc(chip->rom, memsize);
 	chip->rom_size = memsize;
 	memset(chip->rom, 0xFF, memsize);
 	
 	return;
 }
 
-static void iremga20_write_rom(void *info, UINT32 offset, UINT32 length, const UINT8* data)
+static void iremga20_write_rom(void *info, uint32_t offset, uint32_t length, const uint8_t* data)
 {
 	ga20_state *chip = (ga20_state *)info;
 	
@@ -408,10 +408,10 @@ static void iremga20_write_rom(void *info, UINT32 offset, UINT32 length, const U
 }
 
 
-static void iremga20_set_mute_mask(void *info, UINT32 MuteMask)
+static void iremga20_set_mute_mask(void *info, uint32_t MuteMask)
 {
 	ga20_state *chip = (ga20_state *)info;
-	UINT8 CurChn;
+	uint8_t CurChn;
 	
 	for (CurChn = 0; CurChn < 4; CurChn ++)
 		chip->channel[CurChn].Muted = (MuteMask >> CurChn) & 0x01;
@@ -419,7 +419,7 @@ static void iremga20_set_mute_mask(void *info, UINT32 MuteMask)
 	return;
 }
 
-static void iremga20_set_options(void *info, UINT32 Flags)
+static void iremga20_set_options(void *info, uint32_t Flags)
 {
 	ga20_state *chip = (ga20_state *)info;
 	

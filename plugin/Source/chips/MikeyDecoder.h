@@ -41,7 +41,7 @@ public:
 
 	void reset (const ChipConfig& config) override;
 	void write (const RegisterWrite& write) override;
-	void advance (std::uint32_t sampleTime) override;
+	void advance (uint32_t sampleTime) override;
 
 	int channelCount() const override { return 4; }
 	ChannelState channelState (int channel) const override;

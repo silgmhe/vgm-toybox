@@ -1,4 +1,7 @@
 // license:GPL-2.0+
+
+// uint8_t and friends: this header used to define them as uint8/uint32, which are gone.
+#include <stdint.h>
 // copyright-holders:Matthew Conte
 /*****************************************************************************
 
@@ -26,81 +29,73 @@
 #include "../../_stdbool.h"
 
 /* REGULAR TYPE DEFINITIONS */
-typedef INT8          int8;
-typedef INT16         int16;
-typedef INT32         int32;
-typedef UINT8         uint8;
-typedef UINT16        uint16;
-typedef UINT32        uint32;
-
-
 /* CHANNEL TYPE DEFINITIONS */
 
 /* Square Wave */
 typedef struct square_s
 {
-	uint8 regs[4];
+	uint8_t regs[4];
 	int vbl_length;
 	int freq;
 	float phaseacc;
 	float env_phase;
 	float sweep_phase;
-	uint8 adder;
-	uint8 env_vol;
+	uint8_t adder;
+	uint8_t env_vol;
 	bool enabled;
-	int8 output;
+	int8_t output;
 	bool Muted;
-	INT32 Pan[2];
+	int32_t Pan[2];
 } square_t;
 
 /* Triangle Wave */
 typedef struct triangle_s
 {
-	uint8 regs[4]; /* regs[1] unused */
+	uint8_t regs[4]; /* regs[1] unused */
 	int linear_length;
 	bool linear_reload;
 	int vbl_length;
 	int write_latency;
 	float phaseacc;
-	uint8 adder;
+	uint8_t adder;
 	bool counter_started;
 	bool enabled;
-	int8 output;
+	int8_t output;
 	bool Muted;
-	INT32 Pan[2];
+	int32_t Pan[2];
 } triangle_t;
 
 /* Noise Wave */
 typedef struct noise_s
 {
-	uint8 regs[4]; /* regs[1] unused */
-	uint16 lfsr;
+	uint8_t regs[4]; /* regs[1] unused */
+	uint16_t lfsr;
 	int vbl_length;
 	float phaseacc;
 	float env_phase;
-	uint8 env_vol;
+	uint8_t env_vol;
 	bool enabled;
-	int8 output;
+	int8_t output;
 	bool Muted;
-	INT32 Pan[2];
+	int32_t Pan[2];
 } noise_t;
 
 /* DPCM Wave */
 typedef struct dpcm_s
 {
-	uint8 regs[4];
-	uint32 address;
-	uint32 length;
+	uint8_t regs[4];
+	uint32_t address;
+	uint32_t length;
 	int bits_left;
 	float phaseacc;
-	uint8 cur_byte;
+	uint8_t cur_byte;
 	bool enabled;
 	bool irq_occurred;
-	const uint8 *memory;
-	int16 vol;
-	int8 output;
+	const uint8_t *memory;
+	int16_t vol;
+	int8_t output;
 	bool Muted;
-	INT32 Pan[2];
+	int32_t Pan[2];
 } dpcm_t;
 
 /* REGISTER DEFINITIONS */
@@ -138,15 +133,15 @@ typedef struct apu
 	/* APU registers */
 	unsigned char regs[0x20];
 
-	uint8 step_mode;
-	uint8 frame_irq_enabled;
-	uint8 frame_irq_occurred;
+	uint8_t step_mode;
+	uint8_t frame_irq_enabled;
+	uint8_t frame_irq_occurred;
 } apu_t;
 
 /* CONSTANTS */
 
 /* vblank length table used for squares, triangle, noise */
-static const uint8 vbl_length[32] =
+static const uint8_t vbl_length[32] =
 {
 	10, 254, 20,  2, 40,  4, 80,  6, 160,  8, 60, 10, 14, 12, 26, 14,
 	12,  16, 24, 18, 48, 20, 96, 22, 192, 24, 72, 26, 16, 28, 32, 30

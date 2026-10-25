@@ -23,21 +23,21 @@
 #include "../logging.h"
 #include "k054539.h"
 
-static void k054539_update(void *param, UINT32 samples, DEV_SMPL **outputs);
-static UINT8 device_start_k054539(const DEV_GEN_CFG* cfg, DEV_INFO* retDevInf);
+static void k054539_update(void *param, uint32_t samples, DEV_SMPL **outputs);
+static uint8_t device_start_k054539(const DEV_GEN_CFG* cfg, DEV_INFO* retDevInf);
 static void device_stop_k054539(void *chip);
 static void device_reset_k054539(void *chip);
 
-static void k054539_w(void *chip, UINT16 offset, UINT8 data);
-static UINT8 k054539_r(void *chip, UINT16 offset);
+static void k054539_w(void *chip, uint16_t offset, uint8_t data);
+static uint8_t k054539_r(void *chip, uint16_t offset);
 
-static void k054539_init_flags(void *chip, UINT8 _flags);
-static void k054539_set_gain(void *chip, UINT8 channel, double _gain);
+static void k054539_init_flags(void *chip, uint8_t _flags);
+static void k054539_set_gain(void *chip, uint8_t channel, double _gain);
 
-static void k054539_alloc_rom(void* chip, UINT32 memsize);
-static void k054539_write_rom(void *chip, UINT32 offset, UINT32 length, const UINT8* data);
+static void k054539_alloc_rom(void* chip, uint32_t memsize);
+static void k054539_write_rom(void *chip, uint32_t offset, uint32_t length, const uint8_t* data);
 
-static void k054539_set_mute_mask(void *chip, UINT32 MuteMask);
+static void k054539_set_mute_mask(void *chip, uint32_t MuteMask);
 static void k054539_set_log_cb(void* chip, DEVCB_LOG func, void* param);
 
 
@@ -74,7 +74,7 @@ static const char* DeviceName(const DEV_GEN_CFG* devCfg)
 	return "K054539";
 }
 
-static UINT16 DeviceChannels(const DEV_GEN_CFG* devCfg)
+static uint16_t DeviceChannels(const DEV_GEN_CFG* devCfg)
 {
 	return 8;
 }
@@ -144,10 +144,10 @@ const DEV_DECL sndDev_K054539 =
 
 typedef struct _k054539_channel k054539_channel;
 struct _k054539_channel {
-	UINT32 pos;
-	UINT32 pfrac;
-	INT32 val;
-	INT32 pval;
+	uint32_t pos;
+	uint32_t pfrac;
+	int32_t val;
+	int32_t pval;
 };
 
 typedef struct _k054539_state k054539_state;
@@ -159,37 +159,37 @@ struct _k054539_state {
 	double pantab[0xf];
 
 	double gain[8];
-	UINT8 posreg_latch[8][3];
-	UINT8 flags;
+	uint8_t posreg_latch[8][3];
+	uint8_t flags;
 
-	UINT8 regs[0x230];
-	UINT8 *ram;
-	UINT16 reverb_pos;
+	uint8_t regs[0x230];
+	uint8_t *ram;
+	uint16_t reverb_pos;
 
-	UINT32 cur_ptr;
-	UINT32 rom_addr;
-	UINT8 *rom;
-	UINT32 rom_size;
-	UINT32 rom_mask;
+	uint32_t cur_ptr;
+	uint32_t rom_addr;
+	uint8_t *rom;
+	uint32_t rom_size;
+	uint32_t rom_mask;
 
 	k054539_channel channels[8];
-	UINT8 Muted[8];
+	uint8_t Muted[8];
 
 	//emu_timer          *timer;
-	UINT8              timer_state;
+	uint8_t              timer_state;
 	//devcb_write_line   timer_handler;
 	//k054539_cb_delegate apan_cb;
 
-	UINT32 clock;
+	uint32_t clock;
 };
 
-static void k054539_init_flags(void *chip, UINT8 _flags)
+static void k054539_init_flags(void *chip, uint8_t _flags)
 {
 	k054539_state *info = (k054539_state *)chip;
 	info->flags = _flags;
 }
 
-static void k054539_set_gain(void *chip, UINT8 channel, double _gain)
+static void k054539_set_gain(void *chip, uint8_t channel, double _gain)
 {
 	k054539_state *info = (k054539_state *)chip;
 	if (_gain >= 0)
@@ -214,18 +214,18 @@ static void k054539_keyoff(k054539_state *info, int channel)
 		info->regs[0x22c] &= ~(1 << channel);
 }
 
-static void k054539_update(void *param, UINT32 samples, DEV_SMPL **outputs)
+static void k054539_update(void *param, uint32_t samples, DEV_SMPL **outputs)
 {
 	k054539_state *info = (k054539_state *)param;
 #define VOL_CAP 1.80
 
-	static const INT16 dpcm[16] = {
+	static const int16_t dpcm[16] = {
 		0 * 0x100,   1 * 0x100,   2 * 0x100,   4 * 0x100,  8 * 0x100, 16 * 0x100, 32 * 0x100, 64 * 0x100,
 		0 * 0x100, -64 * 0x100, -32 * 0x100, -16 * 0x100, -8 * 0x100, -4 * 0x100, -2 * 0x100, -1 * 0x100
 	};
 
-	INT16 *rbase = (INT16 *)info->ram;
-	UINT32 sample, ch;
+	int16_t *rbase = (int16_t *)info->ram;
+	uint32_t sample, ch;
 
 	if(info->rom == NULL || !(info->regs[0x22f] & 1))
 	{
@@ -244,12 +244,12 @@ static void k054539_update(void *param, UINT32 samples, DEV_SMPL **outputs)
 
 		for(ch=0; ch<8; ch++)
 			if(info->regs[0x22c] & (1<<ch) && ! info->Muted[ch]) {
-				UINT8 *base1 = info->regs + 0x20*ch;
-				UINT8 *base2 = info->regs + 0x200 + 0x2*ch;
+				uint8_t *base1 = info->regs + 0x20*ch;
+				uint8_t *base2 = info->regs + 0x200 + 0x2*ch;
 				k054539_channel *chan = info->channels + ch;
 				int delta, vol, bval, pan;
 				double cur_gain, lvol, rvol, rbvol;
-				UINT32 cur_pos;
+				uint32_t cur_pos;
 				int rdelta, fdelta, pdelta;
 				int cur_pfrac, cur_val, cur_pval;
 
@@ -317,13 +317,13 @@ static void k054539_update(void *param, UINT32 samples, DEV_SMPL **outputs)
 						cur_pos += pdelta;
 
 						cur_pval = cur_val;
-						cur_val = (INT16)(info->rom[cur_pos & info->rom_mask] << 8);
-						if(cur_val == (INT16)0x8000 && (base2[1] & 1)) {
+						cur_val = (int16_t)(info->rom[cur_pos & info->rom_mask] << 8);
+						if(cur_val == (int16_t)0x8000 && (base2[1] & 1)) {
 							cur_pos = base1[0x08] | (base1[0x09] << 8) | (base1[0x0a] << 16);
-							cur_val = (INT16)(info->rom[cur_pos & info->rom_mask] << 8);
+							cur_val = (int16_t)(info->rom[cur_pos & info->rom_mask] << 8);
 						}
 
-						if(cur_val == (INT16)0x8000) {
+						if(cur_val == (int16_t)0x8000) {
 							k054539_keyoff(info, ch);
 							cur_val = 0;
 							break;
@@ -341,13 +341,13 @@ static void k054539_update(void *param, UINT32 samples, DEV_SMPL **outputs)
 						cur_pos += pdelta;
 
 						cur_pval = cur_val;
-						cur_val = (INT16)(info->rom[cur_pos & info->rom_mask] | info->rom[(cur_pos+1) & info->rom_mask]<<8);
-						if(cur_val == (INT16)0x8000 && (base2[1] & 1)) {
+						cur_val = (int16_t)(info->rom[cur_pos & info->rom_mask] | info->rom[(cur_pos+1) & info->rom_mask]<<8);
+						if(cur_val == (int16_t)0x8000 && (base2[1] & 1)) {
 							cur_pos = base1[0x08] | (base1[0x09] << 8) | (base1[0x0a] << 16);
-							cur_val = (INT16)(info->rom[cur_pos & info->rom_mask] | info->rom[(cur_pos+1) & info->rom_mask]<<8);
+							cur_val = (int16_t)(info->rom[cur_pos & info->rom_mask] | info->rom[(cur_pos+1) & info->rom_mask]<<8);
 						}
 
-						if(cur_val == (INT16)0x8000) {
+						if(cur_val == (int16_t)0x8000) {
 							k054539_keyoff(info, ch);
 							cur_val = 0;
 							break;
@@ -405,7 +405,7 @@ static void k054539_update(void *param, UINT32 samples, DEV_SMPL **outputs)
 
 				lval += cur_val * (float)lvol;
 				rval += cur_val * (float)rvol;
-				rbase[(rdelta + info->reverb_pos) & 0x1fff] += (INT16)(cur_val*rbvol);
+				rbase[(rdelta + info->reverb_pos) & 0x1fff] += (int16_t)(cur_val*rbvol);
 
 				chan->pos = cur_pos;
 				chan->pfrac = cur_pfrac;
@@ -432,10 +432,10 @@ static void k054539_update(void *param, UINT32 samples, DEV_SMPL **outputs)
 //		info->timer_handler(info, info->timer_state ^= 1);
 //}
 
-static void k054539_w(void *chip, UINT16 offset, UINT8 data)
+static void k054539_w(void *chip, uint16_t offset, uint8_t data)
 {
 	k054539_state *info = (k054539_state *)chip;
-	UINT8 latch;
+	uint8_t latch;
 	int ch;
 
 	if(0) {
@@ -489,8 +489,8 @@ static void k054539_w(void *chip, UINT16 offset, UINT8 data)
 				{
 					if(data & (1<<ch))
 					{
-						UINT8 *posptr = &info->posreg_latch[ch][0];
-						UINT8 *regptr = info->regs + (ch<<5) + 0xc;
+						uint8_t *posptr = &info->posreg_latch[ch][0];
+						uint8_t *regptr = info->regs + (ch<<5) + 0xc;
 
 						// update the chip at key-on
 						regptr[0] = posptr[0];
@@ -528,7 +528,7 @@ static void k054539_w(void *chip, UINT16 offset, UINT8 data)
 
 		case 0x22d:
 			if(info->rom_addr == 0x80) {
-				UINT32 addr = (info->cur_ptr & 0x3fff) | ((info->cur_ptr & 0x10000) >> 2);
+				uint32_t addr = (info->cur_ptr & 0x3fff) | ((info->cur_ptr & 0x10000) >> 2);
 				info->ram[addr] = data;
 			}
 			info->cur_ptr = (info->cur_ptr + 1) & 0x1ffff;
@@ -568,14 +568,14 @@ static void k054539_w(void *chip, UINT16 offset, UINT8 data)
 	info->regs[offset] = data;
 }
 
-static UINT8 k054539_r(void *chip, UINT16 offset)
+static uint8_t k054539_r(void *chip, uint16_t offset)
 {
 	k054539_state *info = (k054539_state *)chip;
 	switch(offset) {
 	case 0x22d:
 		if(info->regs[0x22f] & 0x10) {
-			UINT32 addr = (info->cur_ptr & 0x3fff) | ((info->cur_ptr & 0x10000) >> 2);
-			UINT8 res = (info->rom_addr == 0x80) ? info->ram[addr] : info->rom[((0x20000*info->rom_addr) + info->cur_ptr) & info->rom_mask];
+			uint32_t addr = (info->cur_ptr & 0x3fff) | ((info->cur_ptr & 0x10000) >> 2);
+			uint8_t res = (info->rom_addr == 0x80) ? info->ram[addr] : info->rom[((0x20000*info->rom_addr) + info->cur_ptr) & info->rom_mask];
 			info->cur_ptr = (info->cur_ptr + 1) & 0x1ffff;
 			return res;
 		} else
@@ -589,7 +589,7 @@ static UINT8 k054539_r(void *chip, UINT16 offset)
 	return info->regs[offset];
 }
 
-static UINT8 device_start_k054539(const DEV_GEN_CFG* cfg, DEV_INFO* retDevInf)
+static uint8_t device_start_k054539(const DEV_GEN_CFG* cfg, DEV_INFO* retDevInf)
 {
 	int i;
 	k054539_state *info;
@@ -635,7 +635,7 @@ static UINT8 device_start_k054539(const DEV_GEN_CFG* cfg, DEV_INFO* retDevInf)
 
 	info->flags |= K054539_UPDATE_AT_KEYON; //* make it default until proven otherwise
 
-	info->ram = (UINT8*)malloc(0x8000);
+	info->ram = (uint8_t*)malloc(0x8000);
 	info->rom = NULL;
 	info->rom_size = 0x00;
 	info->rom_mask = 0x00;
@@ -676,14 +676,14 @@ static void device_reset_k054539(void *chip)
 	return;
 }
 
-static void k054539_alloc_rom(void* chip, UINT32 memsize)
+static void k054539_alloc_rom(void* chip, uint32_t memsize)
 {
 	k054539_state *info = (k054539_state *)chip;
 	
 	if (info->rom_size == memsize)
 		return;
 	
-	info->rom = (UINT8*)realloc(info->rom, memsize);
+	info->rom = (uint8_t*)realloc(info->rom, memsize);
 	info->rom_size = memsize;
 	memset(info->rom, 0xFF, memsize);
 	
@@ -692,7 +692,7 @@ static void k054539_alloc_rom(void* chip, UINT32 memsize)
 	return;
 }
 
-static void k054539_write_rom(void *chip, UINT32 offset, UINT32 length, const UINT8* data)
+static void k054539_write_rom(void *chip, uint32_t offset, uint32_t length, const uint8_t* data)
 {
 	k054539_state *info = (k054539_state *)chip;
 	
@@ -707,10 +707,10 @@ static void k054539_write_rom(void *chip, UINT32 offset, UINT32 length, const UI
 }
 
 
-static void k054539_set_mute_mask(void *chip, UINT32 MuteMask)
+static void k054539_set_mute_mask(void *chip, uint32_t MuteMask)
 {
 	k054539_state *info = (k054539_state *)chip;
-	UINT8 CurChn;
+	uint8_t CurChn;
 	
 	for (CurChn = 0; CurChn < 8; CurChn ++)
 		info->Muted[CurChn] = (MuteMask >> CurChn) & 0x01;

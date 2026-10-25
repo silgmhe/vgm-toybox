@@ -24,15 +24,15 @@
 #include "../../stdtype.h"
 #include "../snddef.h"
 
-static UINT8 device_start_c6280_ootake(const DEV_GEN_CFG* cfg, DEV_INFO* retDevInf);
+static uint8_t device_start_c6280_ootake(const DEV_GEN_CFG* cfg, DEV_INFO* retDevInf);
 
 /*-----------------------------------------------------------------------------
 ** 関数のプロトタイプ宣言を行ないます．
 **---------------------------------------------------------------------------*/
 static void*
 OPSG_Init(
-	UINT32		clock,
-	UINT32		sampleRate);
+	uint32_t		clock,
+	uint32_t		sampleRate);
 
 static void
 OPSG_Deinit(void* chip);
@@ -40,17 +40,17 @@ OPSG_Deinit(void* chip);
 static void
 OPSG_Mix(
 	void*		chip,
-	UINT32		nSample,			// 書き出すサンプル数
+	uint32_t		nSample,			// 書き出すサンプル数
 	DEV_SMPL**	pDst);				// 出力先バッファ
 
-static UINT8
-OPSG_Read(void* chip, UINT8 regNum);
+static uint8_t
+OPSG_Read(void* chip, uint8_t regNum);
 
 static void
 OPSG_Write(
 	void*		chip,
-	UINT8		regNum,
-	UINT8		data);
+	uint8_t		regNum,
+	uint8_t		data);
 
 //Kitao追加
 static void
@@ -60,21 +60,21 @@ OPSG_ResetVolumeReg(void* chip);
 static void
 OPSG_SetMutePsgChannel(
 	void*	chip,
-	UINT8	num,
-	UINT8	bMute);
+	uint8_t	num,
+	uint8_t	bMute);
 
-static void OPSG_SetMuteMask(void* chip, UINT32 MuteMask);
+static void OPSG_SetMuteMask(void* chip, uint32_t MuteMask);
 
 //Kitao追加
-static UINT8
+static uint8_t
 OPSG_GetMutePsgChannel(
 	void*	chip,
-	UINT8	num);
+	uint8_t	num);
 
 //Kitao追加。v2.60
 static void
 OPSG_SetHoneyInTheSky(
 	void*	chip,
-	UINT8	bHoneyInTheSky);
+	uint8_t	bHoneyInTheSky);
 
 #endif	// __OOTAKE_PSG_PRIVATE_H__

@@ -18,12 +18,12 @@ namespace xgm
     int option[OPT_END];
     int mask;
     int patch_set;
-    const UINT8* patch_custom;
-    //INT32 sm[2][6]; // stereo mix
-    INT32 sm[2][9]; // stereo mix temporary HACK to support YM2413
-    INT16 buf[2];
+    const uint8_t* patch_custom;
+    //int32_t sm[2][6]; // stereo mix
+    int32_t sm[2][9]; // stereo mix temporary HACK to support YM2413
+    int16_t buf[2];
     OPLL *opll;
-    UINT32 divider; // clock divider
+    uint32_t divider; // clock divider
     double clock, rate;
     //TrackInfoBasic trkinfo[6];
     TrackInfoBasic trkinfo[9]; // HACK to support YM2413
@@ -33,21 +33,21 @@ namespace xgm
      ~NES_VRC7 ();
 
     virtual void Reset ();
-    virtual void Tick (UINT32 clocks);
-    virtual UINT32 Render (INT32 b[2]);
+    virtual void Tick (uint32_t clocks);
+    virtual uint32_t Render (int32_t b[2]);
 
   // Added for VGMToybox: the 6 channels Render() sums, kept apart.
-  UINT32 RenderChannels (INT32* dest, int stride, int maxChannels);
-    virtual bool Read (UINT32 adr, UINT32 & val, UINT32 id=0);
-    virtual bool Write (UINT32 adr, UINT32 val, UINT32 id=0);
+  uint32_t RenderChannels (int32_t* dest, int stride, int maxChannels);
+    virtual bool Read (uint32_t adr, uint32_t & val, uint32_t id=0);
+    virtual bool Write (uint32_t adr, uint32_t val, uint32_t id=0);
     virtual void UseAllChannels (bool b);
     virtual void SetPatchSet (int p);
-    virtual void SetPatchSetCustom (const UINT8* pset);
+    virtual void SetPatchSetCustom (const uint8_t* pset);
     virtual void SetClock (double);
     virtual void SetRate (double);
     virtual void SetOption (int, int);
     virtual void SetMask (int m){ mask = m; if(opll) OPLL_setMask(opll, m); }
-    virtual void SetStereoMix (int trk, xgm::INT16 mixl, xgm::INT16 mixr);
+    virtual void SetStereoMix (int trk, int16_t mixl, int16_t mixr);
     virtual ITrackInfo *GetTrackInfo(int trk);
   };
 

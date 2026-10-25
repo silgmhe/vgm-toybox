@@ -354,7 +354,7 @@ static const DEV_DECL* SndEmu_DevDeclFromList(DEV_ID deviceID, const DEV_DECL** 
 	return *devPtr;	// return device with respective deviceID
 }
 
-const DEV_DECL* SndEmu_GetDevDecl(DEV_ID deviceID, const DEV_DECL** userDevList, UINT8 opts)
+const DEV_DECL* SndEmu_GetDevDecl(DEV_ID deviceID, const DEV_DECL** userDevList, uint8_t opts)
 {
 	const DEV_DECL** devLists[2] = {userDevList, sndEmu_Devices};
 	size_t curDevList;
@@ -373,7 +373,7 @@ const DEV_DECL* SndEmu_GetDevDecl(DEV_ID deviceID, const DEV_DECL** userDevList,
 	return NULL;
 }
 
-static UINT8 SndEmu_StartCore(const DEV_DECL* devDecl, const DEV_GEN_CFG* cfg, DEV_INFO* retDevInf)
+static uint8_t SndEmu_StartCore(const DEV_DECL* devDecl, const DEV_GEN_CFG* cfg, DEV_INFO* retDevInf)
 {
 	const DEV_DEF* const* devCorePtr;
 	for (devCorePtr = devDecl->cores; *devCorePtr != NULL; devCorePtr ++)
@@ -382,7 +382,7 @@ static UINT8 SndEmu_StartCore(const DEV_DECL* devDecl, const DEV_GEN_CFG* cfg, D
 		// emuCore == 0 -> use default
 		if (! cfg->emuCore || devCore->coreID == cfg->emuCore)
 		{
-			UINT8 retVal = devCore->Start(cfg, retDevInf);
+			uint8_t retVal = devCore->Start(cfg, retDevInf);
 			retDevInf->devDecl = devDecl;
 			if (! retVal)	// if initialization is successful, reset the chip to ensure a clean state
 				devCore->Reset(retDevInf->dataPtr);
@@ -392,10 +392,10 @@ static UINT8 SndEmu_StartCore(const DEV_DECL* devDecl, const DEV_GEN_CFG* cfg, D
 	return EERR_NOT_FOUND;
 }
 
-UINT8 SndEmu_Start2(DEV_ID deviceID, const DEV_GEN_CFG* cfg, DEV_INFO* retDevInf, const DEV_DECL** userDevList, UINT8 opts)
+uint8_t SndEmu_Start2(DEV_ID deviceID, const DEV_GEN_CFG* cfg, DEV_INFO* retDevInf, const DEV_DECL** userDevList, uint8_t opts)
 {
 	const DEV_DECL** devLists[2] = {userDevList, sndEmu_Devices};
-	UINT8 retErr = EERR_UNK_DEVICE;
+	uint8_t retErr = EERR_UNK_DEVICE;
 	size_t curDevList;
 	
 	if (opts & EST_OPT_NO_DEFAULT)
@@ -407,7 +407,7 @@ UINT8 SndEmu_Start2(DEV_ID deviceID, const DEV_GEN_CFG* cfg, DEV_INFO* retDevInf
 			const DEV_DECL* device = SndEmu_DevDeclFromList(deviceID, devLists[curDevList]);
 			if (device != NULL)
 			{
-				UINT8 retVal = SndEmu_StartCore(device, cfg, retDevInf);
+				uint8_t retVal = SndEmu_StartCore(device, cfg, retDevInf);
 				if (retVal != EERR_NOT_FOUND || (opts & EST_OPT_STRICT_OVRD))
 					return retVal;
 				retErr = retVal;
@@ -423,13 +423,13 @@ const DEV_DEF* const* SndEmu_GetDevDefList(DEV_ID deviceID)
 	return (device != NULL) ? device->cores : NULL;
 }
 
-UINT8 SndEmu_Start(DEV_ID deviceID, const DEV_GEN_CFG* cfg, DEV_INFO* retDevInf)
+uint8_t SndEmu_Start(DEV_ID deviceID, const DEV_GEN_CFG* cfg, DEV_INFO* retDevInf)
 {
 	return SndEmu_Start2(deviceID, cfg, retDevInf, NULL, 0x00);
 }
 
 
-UINT8 SndEmu_Stop(DEV_INFO* devInf)
+uint8_t SndEmu_Stop(DEV_INFO* devInf)
 {
 	devInf->devDef->Stop(devInf->dataPtr);
 	devInf->dataPtr = NULL;
@@ -439,7 +439,7 @@ UINT8 SndEmu_Stop(DEV_INFO* devInf)
 
 void SndEmu_FreeDevLinkData(DEV_INFO* devInf)
 {
-	UINT32 curLDev;
+	uint32_t curLDev;
 	
 	if (! devInf->linkDevCount)
 		return;
@@ -452,12 +452,12 @@ void SndEmu_FreeDevLinkData(DEV_INFO* devInf)
 	return;
 }
 
-UINT8 SndEmu_GetDeviceFunc(const DEV_DEF* devDef, UINT8 funcType, UINT8 rwType, UINT16 user, void** retFuncPtr)
+uint8_t SndEmu_GetDeviceFunc(const DEV_DEF* devDef, uint8_t funcType, uint8_t rwType, uint16_t user, void** retFuncPtr)
 {
-	UINT32 curFunc;
+	uint32_t curFunc;
 	const DEVDEF_RWFUNC* tempFnc;
-	UINT32 firstFunc;
-	UINT32 foundFunc;
+	uint32_t firstFunc;
+	uint32_t foundFunc;
 	
 	foundFunc = 0;
 	firstFunc = 0;
@@ -485,7 +485,7 @@ UINT8 SndEmu_GetDeviceFunc(const DEV_DEF* devDef, UINT8 funcType, UINT8 rwType, 
 
 // opts:
 //	0x01: long names (1) / short names (0)
-const char* SndEmu_GetDevName(DEV_ID deviceID, UINT8 opts, const DEV_GEN_CFG* devCfg)
+const char* SndEmu_GetDevName(DEV_ID deviceID, uint8_t opts, const DEV_GEN_CFG* devCfg)
 {
 	const DEV_DECL* device = SndEmu_DevDeclFromList(deviceID, sndEmu_Devices);
 	if (device == NULL)

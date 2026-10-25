@@ -56,11 +56,11 @@ public:
 	PlayerA& player (void) { return playerEngine; }
 
 private:
-	static UINT8 eventCallback (PlayerBase* player, void* userParam, UINT8 evtType, void* evtParam);
-	UINT8 handleEvent (UINT8 evtType, void* evtParam);
+	static uint8_t eventCallback (PlayerBase* player, void* userParam, uint8_t evtType, void* evtParam);
+	uint8_t handleEvent (uint8_t evtType, void* evtParam);
 
 	void unload (void);
-	void applyMuting (UINT32 deviceId, const PLR_MUTE_OPTS& muteOpts);
+	void applyMuting (uint32_t deviceId, const PLR_MUTE_OPTS& muteOpts);
 	/** Rebuilds the whole mute configuration from the isolated track and the chip mute states. */
 	void applyIsolation (void);
 	bool isChipAudible (playback::DeviceId device) const;

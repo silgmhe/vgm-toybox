@@ -9,11 +9,11 @@ namespace xgm
   {
   public:
     void Reset(){}
-    bool Write(UINT32 adr, UINT32 val, UINT32 id = 0)
+    bool Write(uint32_t adr, uint32_t val, uint32_t id = 0)
     {
       return blocking;
     }
-    bool Read(UINT32 adr, UINT32 &val, UINT32 id = 0)
+    bool Read(uint32_t adr, uint32_t &val, uint32_t id = 0)
     {
       return false;
     }

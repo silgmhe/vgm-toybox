@@ -194,7 +194,7 @@ namespace
 		/** Note-ons of one channel that arrived at or after `sample` on the render's own clock.
 			The events alone only know their offset inside a block, which cannot tell the first
 			pass of a loop from the second. */
-		int countNoteOnsFrom (int channel, std::int64_t sample) const
+		int countNoteOnsFrom (int channel, int64_t sample) const
 		{
 			int result = 0;
 			for (std::size_t i = 0; i < events.size() && i < blockStarts.size(); ++i)
@@ -209,7 +209,7 @@ namespace
 		}
 
 		/** Messages of one kind: 0x90 note-on, 0x80 note-off, 0xB0 control change. */
-		int count (std::uint8_t statusHighNibble) const
+		int count (uint8_t statusHighNibble) const
 		{
 			int result = 0;
 			for (const auto& event : events)
@@ -223,7 +223,7 @@ namespace
 		}
 
 		/** Whether one exact message went out on any channel (used for the RPN sequence). */
-		bool has (std::uint8_t statusHighNibble, std::uint8_t data1, std::uint8_t data2) const
+		bool has (uint8_t statusHighNibble, uint8_t data1, uint8_t data2) const
 		{
 			for (const auto& event : events)
 			{
@@ -236,7 +236,7 @@ namespace
 		}
 
 		/** The same, restricted to one channel (1..16). */
-		int count (std::uint8_t statusHighNibble, int channel) const
+		int count (uint8_t statusHighNibble, int channel) const
 		{
 			int result = 0;
 			for (const auto& event : events)
@@ -250,7 +250,7 @@ namespace
 		}
 
 		/** Messages with this exact content, any channel - tells a centred bend from a real one. */
-		int countOf (std::uint8_t statusHighNibble, std::uint8_t data1, std::uint8_t data2) const
+		int countOf (uint8_t statusHighNibble, uint8_t data1, uint8_t data2) const
 		{
 			int result = 0;
 			for (const auto& event : events)
@@ -269,7 +269,7 @@ namespace
 			int result = 0;
 			for (const auto& event : events)
 			{
-				if ((event.status & 0xF0) == 0xB0 && event.data1 == (std::uint8_t) controller)
+				if ((event.status & 0xF0) == 0xB0 && event.data1 == (uint8_t) controller)
 				{
 					++result;
 				}
@@ -321,8 +321,8 @@ namespace
 		}
 
 		std::vector<toybox::playback::MidiBlockEvent> events;
-		std::vector<std::int64_t> blockStarts;		// where each event's block began, in samples
-		std::int64_t blockStartSample = 0;			// set by the render loop below
+		std::vector<int64_t> blockStarts;		// where each event's block began, in samples
+		int64_t blockStartSample = 0;			// set by the render loop below
 		double rms = 0.0;							// the audio of the same render (both channels)
 
 		/** The same audio with its mean removed. A channel that is silent but parks its DAC on a
@@ -349,7 +349,7 @@ namespace
 
 		double sumOfSquares = 0.0;
 		double sum = 0.0;
-		std::int64_t sampleCount = 0;
+		int64_t sampleCount = 0;
 
 		while (rendered < totalSamples && ! engine.isFinished())
 		{
@@ -1643,17 +1643,17 @@ int main (int argc, char* argv[])
 	{
 		// 0x52 0x2B 0x80 (DAC on) | 0x67 0x66 type 0x00 length 3 data 40 80 C0 | 0x8F | 0x8F |
 		// 0x61 0x10 0x00 (wait 16) | 0x66
-		std::vector<std::uint8_t> image (0x53, 0);
-		const auto putU32 = [&image] (std::size_t offset, std::uint32_t value)
+		std::vector<uint8_t> image (0x53, 0);
+		const auto putU32 = [&image] (std::size_t offset, uint32_t value)
 		{
-			image[offset + 0] = (std::uint8_t) (value & 0xFF);
-			image[offset + 1] = (std::uint8_t) ((value >> 8) & 0xFF);
-			image[offset + 2] = (std::uint8_t) ((value >> 16) & 0xFF);
-			image[offset + 3] = (std::uint8_t) ((value >> 24) & 0xFF);
+			image[offset + 0] = (uint8_t) (value & 0xFF);
+			image[offset + 1] = (uint8_t) ((value >> 8) & 0xFF);
+			image[offset + 2] = (uint8_t) ((value >> 16) & 0xFF);
+			image[offset + 3] = (uint8_t) ((value >> 24) & 0xFF);
 		};
 
 		std::memcpy (image.data(), "Vgm ", 4);
-		putU32 (0x04, (std::uint32_t) (image.size() - 4));	// EOF offset: the stream ends with it
+		putU32 (0x04, (uint32_t) (image.size() - 4));	// EOF offset: the stream ends with it
 		putU32 (0x08, 0x170);								// version 1.70
 		putU32 (0x18, 46);									// total samples: the length it plays to
 		image[0x40] = 0x52; image[0x41] = 0x2B; image[0x42] = 0x80;
@@ -1667,9 +1667,9 @@ int main (int argc, char* argv[])
 
 		toybox::backends::libvgm::VgmCommandReader reader (image.data(), image.size());
 		toybox::backends::libvgm::VgmCommand command;
-		std::vector<std::uint8_t> dacBytes;
-		std::vector<std::uint32_t> dacTimes;
-		std::uint32_t lastTime = 0;
+		std::vector<uint8_t> dacBytes;
+		std::vector<uint32_t> dacTimes;
+		uint32_t lastTime = 0;
 		while (reader.next (command))
 		{
 			const bool isDacWrite = command.kind == toybox::backends::libvgm::VgmCommand::Kind::registerWrite
@@ -1706,16 +1706,16 @@ int main (int argc, char* argv[])
 		juce::MemoryBlock bytes;
 		if (inputFile.loadFileAsData (bytes) && bytes.getSize() >= 0x40)
 		{
-			const auto* raw = static_cast<const std::uint8_t*> (bytes.getData());
+			const auto* raw = static_cast<const uint8_t*> (bytes.getData());
 			if (std::memcmp (raw, "Vgm ", 4) == 0)
 			{
-				const auto readU32 = [] (const std::uint8_t* p)
+				const auto readU32 = [] (const uint8_t* p)
 				{
-					return (std::uint32_t) p[0] | ((std::uint32_t) p[1] << 8)
-						   | ((std::uint32_t) p[2] << 16) | ((std::uint32_t) p[3] << 24);
+					return (uint32_t) p[0] | ((uint32_t) p[1] << 8)
+						   | ((uint32_t) p[2] << 16) | ((uint32_t) p[3] << 24);
 				};
 
-				const std::uint32_t headerSamples = readU32 (raw + 0x18);
+				const uint32_t headerSamples = readU32 (raw + 0x18);
 				toybox::backends::libvgm::VgmCommandReader songReader (raw, bytes.getSize());
 				toybox::backends::libvgm::VgmCommand ignored;
 				while (songReader.next (ignored))
@@ -1761,7 +1761,7 @@ int main (int argc, char* argv[])
 		engine.play();
 
 		const auto looped = recordMidi (engine, wanted, sampleRate, blockSize);
-		const auto passBoundary = (std::int64_t) (firstPass * sampleRate);
+		const auto passBoundary = (int64_t) (firstPass * sampleRate);
 		int totalNotes = 0;
 		int secondPassNotes = 0;
 		for (int channel = 1; channel <= 16; ++channel)

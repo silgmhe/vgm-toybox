@@ -37,17 +37,17 @@ typedef struct _pwm_chip pwm_chip;
 static void PWM_Init(void* info);
 static void PWM_Recalc_Scale(pwm_chip* chip);
 
-static void PWM_Set_Cycle(pwm_chip* chip, UINT16 cycle);
-static void PWM_Set_Int(pwm_chip* chip, UINT8 int_time);
+static void PWM_Set_Cycle(pwm_chip* chip, uint16_t cycle);
+static void PWM_Set_Int(pwm_chip* chip, uint8_t int_time);
 
-static void PWM_Update(void* info, UINT32 length, DEV_SMPL **buf);
+static void PWM_Update(void* info, uint32_t length, DEV_SMPL **buf);
 
-static UINT8 device_start_pwm(const DEV_GEN_CFG* cfg, DEV_INFO* retDevInf);
+static uint8_t device_start_pwm(const DEV_GEN_CFG* cfg, DEV_INFO* retDevInf);
 static void device_stop_pwm(void* info);
 
-static void pwm_chn_w(void* info, UINT8 Channel, UINT16 data);
+static void pwm_chn_w(void* info, uint8_t Channel, uint16_t data);
 
-static void pwm_set_mute_mask(void *info, UINT32 MuteMask);
+static void pwm_set_mute_mask(void *info, uint32_t MuteMask);
 
 
 static DEVDEF_RWFUNC devFunc[] =
@@ -80,7 +80,7 @@ static const char* DeviceName(const DEV_GEN_CFG* devCfg)
 	return "32X PWM";
 }
 
-static UINT16 DeviceChannels(const DEV_GEN_CFG* devCfg)
+static uint16_t DeviceChannels(const DEV_GEN_CFG* devCfg)
 {
 	return 1;
 }
@@ -113,21 +113,21 @@ struct _pwm_chip
 {
 	DEV_DATA _devData;
 	
-	UINT16 PWM_Cycle;
-	UINT8 PWM_Int;
-	UINT8 PWM_Int_Cnt;
-	UINT8 PWM_Mode;
-	UINT8 PWM_Mute;
-	UINT16 PWM_Out_R;
-	UINT16 PWM_Out_L;
+	uint16_t PWM_Cycle;
+	uint8_t PWM_Int;
+	uint8_t PWM_Int_Cnt;
+	uint8_t PWM_Mode;
+	uint8_t PWM_Mute;
+	uint16_t PWM_Out_R;
+	uint16_t PWM_Out_L;
 	
 	// PWM scaling variables.
-	INT32 PWM_Offset;
-	INT32 PWM_Scale;
+	int32_t PWM_Offset;
+	int32_t PWM_Scale;
 #define PWM_Loudness	0
-	//UINT8 PWM_Loudness;
+	//uint8_t PWM_Loudness;
 	
-	UINT32 clock;
+	uint32_t clock;
 };
 
 
@@ -155,7 +155,7 @@ static void PWM_Recalc_Scale(pwm_chip* chip)
 }
 
 
-static void PWM_Set_Cycle(pwm_chip* chip, UINT16 cycle)
+static void PWM_Set_Cycle(pwm_chip* chip, uint16_t cycle)
 {
 	cycle--;
 	chip->PWM_Cycle = (cycle & 0xFFF);
@@ -164,7 +164,7 @@ static void PWM_Set_Cycle(pwm_chip* chip, UINT16 cycle)
 }
 
 
-static void PWM_Set_Int(pwm_chip* chip, UINT8 int_time)
+static void PWM_Set_Int(pwm_chip* chip, uint8_t int_time)
 {
 	int_time &= 0x0F;
 	if (int_time)
@@ -174,7 +174,7 @@ static void PWM_Set_Int(pwm_chip* chip, UINT8 int_time)
 }
 
 
-INLINE DEV_SMPL PWM_Update_Scale(pwm_chip* chip, INT16 PWM_In)
+INLINE DEV_SMPL PWM_Update_Scale(pwm_chip* chip, int16_t PWM_In)
 {
 	if (PWM_In == 0)
 		return 0;
@@ -191,12 +191,12 @@ INLINE DEV_SMPL PWM_Update_Scale(pwm_chip* chip, INT16 PWM_In)
 }
 
 
-static void PWM_Update(void* info, UINT32 length, DEV_SMPL **buf)
+static void PWM_Update(void* info, uint32_t length, DEV_SMPL **buf)
 {
 	pwm_chip* chip = (pwm_chip*)info;
 	DEV_SMPL tmpOutL;
 	DEV_SMPL tmpOutR;
-	UINT32 i;
+	uint32_t i;
 	
 	if (chip->PWM_Mute)
 	{
@@ -206,8 +206,8 @@ static void PWM_Update(void* info, UINT32 length, DEV_SMPL **buf)
 	}
 	
 	// New PWM scaling algorithm provided by Chilly Willy on the Sonic Retro forums.
-	tmpOutL = PWM_Update_Scale(chip, (INT16)chip->PWM_Out_L);
-	tmpOutR = PWM_Update_Scale(chip, (INT16)chip->PWM_Out_R);
+	tmpOutL = PWM_Update_Scale(chip, (int16_t)chip->PWM_Out_L);
+	tmpOutR = PWM_Update_Scale(chip, (int16_t)chip->PWM_Out_R);
 	
 	for (i = 0; i < length; i ++)
 	{
@@ -219,10 +219,10 @@ static void PWM_Update(void* info, UINT32 length, DEV_SMPL **buf)
 }
 
 
-static UINT8 device_start_pwm(const DEV_GEN_CFG* cfg, DEV_INFO* retDevInf)
+static uint8_t device_start_pwm(const DEV_GEN_CFG* cfg, DEV_INFO* retDevInf)
 {
 	pwm_chip *chip;
-	UINT32 rate;
+	uint32_t rate;
 	
 	chip = (pwm_chip *)calloc(1, sizeof(pwm_chip));
 	if (chip == NULL)
@@ -249,7 +249,7 @@ static void device_stop_pwm(void* info)
 	return;
 }
 
-static void pwm_chn_w(void* info, UINT8 Channel, UINT16 data)
+static void pwm_chn_w(void* info, uint8_t Channel, uint16_t data)
 {
 	pwm_chip* chip = (pwm_chip*)info;
 	
@@ -291,7 +291,7 @@ static void pwm_chn_w(void* info, UINT8 Channel, UINT16 data)
 	return;
 }
 
-static void pwm_set_mute_mask(void *info, UINT32 MuteMask)
+static void pwm_set_mute_mask(void *info, uint32_t MuteMask)
 {
 	pwm_chip* chip = (pwm_chip*)info;
 	

@@ -238,7 +238,7 @@ typedef enum {
 struct GB_gameboy_s {
     DEV_DATA _devData;
 
-    UINT32 smpl_rate;
+    uint32_t smpl_rate;
     uint32_t clock_rate;
 
     RATIO_CNTR cycleCntr;

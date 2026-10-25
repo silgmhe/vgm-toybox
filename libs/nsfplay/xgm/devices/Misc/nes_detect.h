@@ -8,7 +8,7 @@ namespace xgm
 class NESDetector : public BasicDetector
 {
 public:
-  virtual bool Write (UINT32, UINT32, UINT32 id=0);
+  virtual bool Write (uint32_t, uint32_t, uint32_t id=0);
 };
 
 class NESDetectorEx : public ILoopDetector
@@ -23,15 +23,15 @@ protected:
   };
   BasicDetector *m_LD[MAX_CH];
   bool m_looped[MAX_CH];
-  UINT32 m_n106_addr;
+  uint32_t m_n106_addr;
   int m_loop_start, m_loop_end;
 public:
   NESDetectorEx();
   virtual ~NESDetectorEx();
   virtual bool IsLooped (int time_in_ms, int match_second, int match_interval);
   virtual void Reset ();
-  virtual bool Write (UINT32, UINT32, UINT32 id=0);
-  virtual bool Read (UINT32, UINT32 &, UINT32 id=0){ return false; }
+  virtual bool Write (uint32_t, uint32_t, uint32_t id=0);
+  virtual bool Read (uint32_t, uint32_t &, uint32_t id=0){ return false; }
   virtual int GetLoopStart(){ return m_loop_start; }
   virtual int GetLoopEnd(){ return m_loop_end; }
   virtual bool IsEmpty()

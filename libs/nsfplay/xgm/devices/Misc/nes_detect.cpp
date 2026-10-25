@@ -2,7 +2,7 @@
 
 namespace xgm
 {
-  static UINT8 maskAPU[16] = 
+  static uint8_t maskAPU[16] = 
   { 
 #if 1
     0xff, 0xff, 0xff, 0xff,
@@ -17,7 +17,7 @@ namespace xgm
 #endif
   };
 
-  bool NESDetector::Write (UINT32 adr, UINT32 val, UINT32 id)
+  bool NESDetector::Write (uint32_t adr, uint32_t val, uint32_t id)
   {
     if (
         (0x4000 <= adr && adr <= 0x4013) // APU / DMC
@@ -92,7 +92,7 @@ namespace xgm
     return !all_empty&all_looped;
   }
 
-  bool NESDetectorEx::Write (UINT32 adr, UINT32 val, UINT32 id)
+  bool NESDetectorEx::Write (uint32_t adr, uint32_t val, uint32_t id)
   {
     if (0x4000 <= adr && adr < 0x4004)
       m_LD[SQR_0]->Write(adr,val&maskAPU[adr-0x4000]);

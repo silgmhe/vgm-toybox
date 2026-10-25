@@ -11,7 +11,7 @@ namespace
 {
 	// The frame sequencer runs at 512 Hz off the CPU clock: 8192 cycles per step at 4.19 MHz.
 	constexpr double kFrameCycles = 8192.0;
-	constexpr std::uint32_t kDefaultClock = 4194304;
+	constexpr uint32_t kDefaultClock = 4194304;
 
 	/** Pulse and wave: frequency = clock / (divider * (2048 - register)). The pulse channels
 		divide the clock by 32, the wave channel by 64 - the same register is an octave lower
@@ -21,7 +21,7 @@ namespace
 	public:
 		GbToneTable (double clock, double divider) : cpuClock (clock), divider (divider) {}
 
-		int noteFor (std::uint32_t period, int, int* finePitch) const override
+		int noteFor (uint32_t period, int, int* finePitch) const override
 		{
 			if (period > 2047)
 			{
@@ -43,7 +43,7 @@ namespace
 	class GbNoiseTable final : public NoteTable
 	{
 	public:
-		int noteFor (std::uint32_t period, int, int* finePitch) const override
+		int noteFor (uint32_t period, int, int* finePitch) const override
 		{
 			if (finePitch != nullptr)
 			{
@@ -125,13 +125,13 @@ struct GbcApuDecoder::Impl
 	double frameStep = kFrameCycles * 44100.0 / (double) kDefaultClock;
 	double frameAccumulator = 0.0;
 	int frameIndex = 0;
-	std::uint32_t currentSample = 0;
+	uint32_t currentSample = 0;
 
 	std::unique_ptr<NoteTable> pulseTable;
 	std::unique_ptr<NoteTable> waveTable;
 	std::unique_ptr<NoteTable> noiseTable;
 
-	void writeEnvelope (Envelope& envelope, std::uint8_t value)
+	void writeEnvelope (Envelope& envelope, uint8_t value)
 	{
 		envelope.initialVolume = (value >> 4) & 0x0F;
 		envelope.increase = (value & 0x08) != 0;
@@ -322,7 +322,7 @@ GbcApuDecoder::~GbcApuDecoder() = default;
 
 void GbcApuDecoder::reset (const ChipConfig& config)
 {
-	[[maybe_unused]] const std::uint32_t clock = config.clockHz;
+	[[maybe_unused]] const uint32_t clock = config.clockHz;
 	[[maybe_unused]] const double sampleRate = config.timeBaseHz;
 	impl = std::make_unique<Impl>();
 
@@ -340,8 +340,8 @@ void GbcApuDecoder::write (const RegisterWrite& w)
 {
 	advance (w.sampleTime);
 
-	const std::uint8_t reg = w.reg;
-	const std::uint8_t value = w.value;
+	const uint8_t reg = w.reg;
+	const uint8_t value = w.value;
 
 	int pulseChannel = -1;
 	if (reg >= 0x01 && reg <= 0x04)
@@ -474,14 +474,14 @@ void GbcApuDecoder::write (const RegisterWrite& w)
 	}
 }
 
-void GbcApuDecoder::advance (std::uint32_t sampleTime)
+void GbcApuDecoder::advance (uint32_t sampleTime)
 {
 	if (sampleTime <= impl->currentSample)
 	{
 		return;
 	}
 
-	const std::uint32_t delta = sampleTime - impl->currentSample;
+	const uint32_t delta = sampleTime - impl->currentSample;
 	impl->currentSample = sampleTime;
 
 	impl->frameAccumulator += (double) delta;
@@ -510,20 +510,20 @@ ChannelState GbcApuDecoder::channelState (int channel) const
 	{
 		const Impl::Pulse& pulse = impl->pulses[channel];
 		state.gate = impl->pulseAudible (pulse);
-		state.period = (std::uint32_t) pulse.frequency;
+		state.period = (uint32_t) pulse.frequency;
 		state.volume = pulse.envelope.volume;
 		state.patch = pulse.duty;
 		break;
 	}
 	case wave:
 		state.gate = impl->waveAudible();
-		state.period = (std::uint32_t) impl->wave.frequency;
+		state.period = (uint32_t) impl->wave.frequency;
 		state.volume = impl->waveVolume();
 		state.patch = 0;
 		break;
 	case noise:
 		state.gate = impl->noiseAudible();
-		state.period = (std::uint32_t) ((impl->noiseChannel.shift << 4)
+		state.period = (uint32_t) ((impl->noiseChannel.shift << 4)
 										| (impl->noiseChannel.widthMode ? 0x08 : 0)
 										| impl->noiseChannel.divisorCode);
 		state.volume = impl->noiseChannel.envelope.volume;

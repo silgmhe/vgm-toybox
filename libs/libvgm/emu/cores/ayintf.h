@@ -37,8 +37,8 @@ typedef struct ay8910_config
 {
 	DEV_GEN_CFG _genCfg;
 	
-	UINT8 chipType;
-	UINT8 chipFlags;
+	uint8_t chipType;
+	uint8_t chipFlags;
 } AY8910_CFG;
 
 

@@ -28,15 +28,15 @@
 #include "vsu.h"
 
 
-static void vsu_stream_update(void *param, UINT32 samples, DEV_SMPL **outputs);
-static UINT8 device_start_vsu(const DEV_GEN_CFG* cfg, DEV_INFO* retDevInf);
+static void vsu_stream_update(void *param, uint32_t samples, DEV_SMPL **outputs);
+static uint8_t device_start_vsu(const DEV_GEN_CFG* cfg, DEV_INFO* retDevInf);
 static void device_stop_vsu(void *info);
 static void device_reset_vsu(void *info);
 
-static void VSU_Write(void* info, UINT16 A, UINT8 V);
+static void VSU_Write(void* info, uint16_t A, uint8_t V);
 
-static void vsu_set_options(void* info, UINT32 Options);
-static void vsu_set_mute_mask(void *info, UINT32 MuteMask);
+static void vsu_set_options(void* info, uint32_t Options);
+static void vsu_set_mute_mask(void *info, uint32_t MuteMask);
 
 
 static DEVDEF_RWFUNC devFunc[] =
@@ -70,7 +70,7 @@ static const char* DeviceName(const DEV_GEN_CFG* devCfg)
 	return "VBoy VSU";
 }
 
-static UINT16 DeviceChannels(const DEV_GEN_CFG* devCfg)
+static uint16_t DeviceChannels(const DEV_GEN_CFG* devCfg)
 {
 	return 6;
 }
@@ -103,60 +103,60 @@ typedef struct
 {
 	DEV_DATA _devData;
 	
-	UINT8 IntlControl[6];
-	UINT8 LeftLevel[6];
-	UINT8 RightLevel[6];
-	UINT16 Frequency[6];
-	UINT16 EnvControl[6];	// Channel 5/6 extra functionality tacked on too.
+	uint8_t IntlControl[6];
+	uint8_t LeftLevel[6];
+	uint8_t RightLevel[6];
+	uint16_t Frequency[6];
+	uint16_t EnvControl[6];	// Channel 5/6 extra functionality tacked on too.
 
-	UINT8 RAMAddress[6];
+	uint8_t RAMAddress[6];
 
-	UINT8 SweepControl;
+	uint8_t SweepControl;
 
-	UINT8 WaveData[5][0x20];
+	uint8_t WaveData[5][0x20];
 
-	UINT8 ModData[0x20];
+	uint8_t ModData[0x20];
 
-	INT32 EffFreq[6];
-	INT32 EnvelopeValue[6];
-	INT32 EnvelopeReload[6];
+	int32_t EffFreq[6];
+	int32_t EnvelopeValue[6];
+	int32_t EnvelopeReload[6];
 
-	UINT8 WavePos[6];
-	UINT8 ModWavePos;
+	uint8_t WavePos[6];
+	uint8_t ModWavePos;
 
-	INT32 LatcherClockDivider[6];
+	int32_t LatcherClockDivider[6];
 
-	INT32 FreqCounter[6];
-	INT32 IntervalCounter[6];
-	INT32 EnvelopeCounter[6];
-	INT32 SweepModCounter;
+	int32_t FreqCounter[6];
+	int32_t IntervalCounter[6];
+	int32_t EnvelopeCounter[6];
+	int32_t SweepModCounter;
 
-	INT32 EffectsClockDivider[6];
-	INT32 IntervalClockDivider[6];
-	INT32 EnvelopeClockDivider[6];
-	INT32 SweepModClockDivider;
+	int32_t EffectsClockDivider[6];
+	int32_t IntervalClockDivider[6];
+	int32_t EnvelopeClockDivider[6];
+	int32_t SweepModClockDivider;
 
-	INT32 EnvelopeModMask[6];
-	INT32 ModState;
-	INT32 ModLock;
+	int32_t EnvelopeModMask[6];
+	int32_t ModState;
+	int32_t ModLock;
 
-	INT32 NoiseLatcherClockDivider;
-	UINT8 NoiseLatcher;
+	int32_t NoiseLatcherClockDivider;
+	uint8_t NoiseLatcher;
 
-	UINT32 lfsr;
+	uint32_t lfsr;
 
-	UINT32 clock;
-	UINT32 smplrate;
+	uint32_t clock;
+	uint32_t smplrate;
 	RATIO_CNTR cycleCntr;
 
-	UINT8 allowWavWriteWhileOn;
-	UINT8 Muted[6];
+	uint8_t allowWavWriteWhileOn;
+	uint8_t Muted[6];
 } vsu_state;
 
 static void VSU_Power(vsu_state* chip);
 
 INLINE void VSU_CalcCurrentOutput(vsu_state* chip, int ch, DEV_SMPL* left, DEV_SMPL* right);
-static void VSU_Update(vsu_state* chip, UINT32 clocks, DEV_SMPL* outleft, DEV_SMPL* outright);
+static void VSU_Update(vsu_state* chip, uint32_t clocks, DEV_SMPL* outleft, DEV_SMPL* outright);
 
 
 static const int Tap_LUT[8] = { 15 - 1, 11 - 1, 14 - 1, 5 - 1, 9 - 1, 7 - 1, 10 - 1, 12 - 1 };
@@ -206,7 +206,7 @@ static void VSU_Power(vsu_state* chip)
 	RC_RESET(&chip->cycleCntr);
 }
 
-static void VSU_Write(void* info, UINT16 A, UINT8 V)
+static void VSU_Write(void* info, uint16_t A, uint8_t V)
 {
 	vsu_state* chip = (vsu_state*)info;
 	
@@ -370,7 +370,7 @@ static void VSU_Write(void* info, UINT16 A, UINT8 V)
 
 INLINE void VSU_CalcCurrentOutput(vsu_state* chip, int ch, DEV_SMPL* left, DEV_SMPL* right)
 {
-	INT16 WD;
+	int16_t WD;
 	int l_ol, r_ol;
 
 	if(!(chip->IntlControl[ch] & 0x80) || chip->Muted[ch])
@@ -405,7 +405,7 @@ INLINE void VSU_CalcCurrentOutput(vsu_state* chip, int ch, DEV_SMPL* left, DEV_S
 	return;
 }
 
-static void VSU_Update(vsu_state* chip, UINT32 clocks, DEV_SMPL* outleft, DEV_SMPL* outright)
+static void VSU_Update(vsu_state* chip, uint32_t clocks, DEV_SMPL* outleft, DEV_SMPL* outright)
 {
 	int ch;
 
@@ -415,14 +415,14 @@ static void VSU_Update(vsu_state* chip, UINT32 clocks, DEV_SMPL* outleft, DEV_SM
 	//puts("VSU Start");
 	for(ch = 0; ch < 6; ch++)
 	{
-		INT32 rem_clocks = (INT32)clocks;
+		int32_t rem_clocks = (int32_t)clocks;
 
 		if(!(chip->IntlControl[ch] & 0x80) || chip->Muted[ch])
 			continue;	// channel disabled - don't add anything to output
 
 		while(rem_clocks > 0)
 		{
-			INT32 chunk_clocks = rem_clocks;
+			int32_t chunk_clocks = rem_clocks;
 
 			if(chunk_clocks > chip->EffectsClockDivider[ch])
 				chunk_clocks = chip->EffectsClockDivider[ch];
@@ -502,7 +502,7 @@ static void VSU_Update(vsu_state* chip, UINT32 clocks, DEV_SMPL* outleft, DEV_SM
 					chip->EnvelopeClockDivider[ch]--;
 					while(chip->EnvelopeClockDivider[ch] <= 0)
 					{
-						INT32 new_envelope;
+						int32_t new_envelope;
 						chip->EnvelopeClockDivider[ch] += 4;
 
 						new_envelope = chip->EnvelopeValue[ch];
@@ -535,8 +535,8 @@ static void VSU_Update(vsu_state* chip, UINT32 clocks, DEV_SMPL* outleft, DEV_SM
 				if(ch == 4)
 				{
 					// Calculate sweep early
-					INT32 delta = chip->EffFreq[ch] >> (chip->SweepControl & 0x7);
-					INT32 NewSweepFreq = chip->EffFreq[ch] + ((chip->SweepControl & 0x8) ? delta : -delta);
+					int32_t delta = chip->EffFreq[ch] >> (chip->SweepControl & 0x7);
+					int32_t NewSweepFreq = chip->EffFreq[ch] + ((chip->SweepControl & 0x8) ? delta : -delta);
 
 					if(!(chip->EnvControl[ch] & 0x1000))
 					{
@@ -563,7 +563,7 @@ static void VSU_Update(vsu_state* chip, UINT32 clocks, DEV_SMPL* outleft, DEV_SM
 								if(chip->EnvControl[ch] & 0x1000)	// Modulation
 								{
 									if(chip->ModState == 0 || (chip->EnvControl[ch] & 0x2000))
-										chip->EffFreq[ch] = (chip->Frequency[ch] + (INT8)chip->ModData[chip->ModWavePos]) & 0x7FF;
+										chip->EffFreq[ch] = (chip->Frequency[ch] + (int8_t)chip->ModData[chip->ModWavePos]) & 0x7FF;
 									if(chip->ModState == 1)
 										chip->ModState = 2;
 									
@@ -598,10 +598,10 @@ static void VSU_Update(vsu_state* chip, UINT32 clocks, DEV_SMPL* outleft, DEV_SM
 }
 
 
-static void vsu_stream_update(void *param, UINT32 samples, DEV_SMPL **outputs)
+static void vsu_stream_update(void *param, uint32_t samples, DEV_SMPL **outputs)
 {
 	vsu_state* chip = (vsu_state*)param;
-	UINT32 curSmpl;
+	uint32_t curSmpl;
 	
 	for (curSmpl = 0; curSmpl < samples; curSmpl ++)
 	{
@@ -620,7 +620,7 @@ static void vsu_stream_update(void *param, UINT32 samples, DEV_SMPL **outputs)
 	return;
 }
 
-static UINT8 device_start_vsu(const DEV_GEN_CFG* cfg, DEV_INFO* retDevInf)
+static uint8_t device_start_vsu(const DEV_GEN_CFG* cfg, DEV_INFO* retDevInf)
 {
 	vsu_state* chip;
 	
@@ -663,7 +663,7 @@ static void device_reset_vsu(void* info)
 	return;
 }
 
-static void vsu_set_options(void* info, UINT32 Options)
+static void vsu_set_options(void* info, uint32_t Options)
 {
 	vsu_state* chip = (vsu_state*)info;
 
@@ -672,10 +672,10 @@ static void vsu_set_options(void* info, UINT32 Options)
 	return;
 }
 
-static void vsu_set_mute_mask(void* info, UINT32 MuteMask)
+static void vsu_set_mute_mask(void* info, uint32_t MuteMask)
 {
 	vsu_state* chip = (vsu_state*)info;
-	UINT8 CurChn;
+	uint8_t CurChn;
 	
 	for (CurChn = 0; CurChn < 6; CurChn ++)
 		chip->Muted[CurChn] = (MuteMask >> CurChn) & 0x01;

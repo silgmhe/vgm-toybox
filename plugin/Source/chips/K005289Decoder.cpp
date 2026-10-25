@@ -12,9 +12,9 @@ namespace
 	constexpr double kStepsPerCycle = 32.0;
 
 	/** The clock to assume when the VGM header carries none for this chip. */
-	constexpr std::uint32_t kDefaultClock = 4000000;
+	constexpr uint32_t kDefaultClock = 4000000;
 
-	double frequencyOf (std::uint32_t clock, std::uint16_t divider)
+	double frequencyOf (uint32_t clock, uint16_t divider)
 	{
 		return (double) clock / (kStepsPerCycle * ((double) divider + 1.0));
 	}
@@ -24,8 +24,8 @@ struct K005289Decoder::Impl
 {
 	struct Voice
 	{
-		std::uint16_t latch = 0;		// the LD value, already inverted by the driver
-		std::uint16_t freq = 0;			// what TG copied out of it - the pitch in force
+		uint16_t latch = 0;		// the LD value, already inverted by the driver
+		uint16_t freq = 0;			// what TG copied out of it - the pitch in force
 		bool triggered = false;
 		int volume = 0;					// 0..15; zero is silence
 		int waveform = 0;
@@ -34,11 +34,11 @@ struct K005289Decoder::Impl
 	/** Both voices share one formula, so one table serves them: it needs the clock, nothing else. */
 	struct Table final : NoteTable
 	{
-		std::uint32_t clock = kDefaultClock;
+		uint32_t clock = kDefaultClock;
 
-		int noteFor (std::uint32_t period, int, int* finePitch) const override
+		int noteFor (uint32_t period, int, int* finePitch) const override
 		{
-			return quantiseFrequency (frequencyOf (clock, (std::uint16_t) period), finePitch);
+			return quantiseFrequency (frequencyOf (clock, (uint16_t) period), finePitch);
 		}
 	};
 
@@ -51,7 +51,7 @@ K005289Decoder::~K005289Decoder() = default;
 
 void K005289Decoder::reset (const ChipConfig& config)
 {
-	[[maybe_unused]] const std::uint32_t clock = config.clockHz;
+	[[maybe_unused]] const uint32_t clock = config.clockHz;
 	[[maybe_unused]] const double sampleRate = config.timeBaseHz;
 	(void) sampleRate;
 	impl = std::make_unique<Impl>();
@@ -69,7 +69,7 @@ void K005289Decoder::write (const RegisterWrite& write)
 	Impl::Voice& voice = impl->voices[channel];
 
 	// the reader packs the command's twelve bits into one word (ChipTypes.h)
-	const std::uint16_t data = (std::uint16_t) (write.value & 0x0FFF);
+	const uint16_t data = (uint16_t) (write.value & 0x0FFF);
 
 	switch (write.reg & 0x06)
 	{
@@ -78,7 +78,7 @@ void K005289Decoder::write (const RegisterWrite& write)
 		voice.waveform = (data >> 5) & 0x07;
 		break;
 	case 0x02:		// LD: the driver writes the inverted divider, the core stores 0xFFF - value
-		voice.latch = (std::uint16_t) (0x0FFF - (data & 0x0FFF));
+		voice.latch = (uint16_t) (0x0FFF - (data & 0x0FFF));
 		break;
 	case 0x04:		// TG: the latched pitch becomes audible - the key-on edge
 		voice.freq = voice.latch;
@@ -89,7 +89,7 @@ void K005289Decoder::write (const RegisterWrite& write)
 	}
 }
 
-void K005289Decoder::advance (std::uint32_t)
+void K005289Decoder::advance (uint32_t)
 {
 	// note boundaries come from the writes; there is no envelope to step here
 }

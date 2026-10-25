@@ -14,8 +14,8 @@ namespace xgm {
     MedianFilter(int tapSize);
     void Reset();
     virtual ~MedianFilter();
-    void Put(INT32 wav);
-    INT32 Get();
+    void Put(int32_t wav);
+    int32_t Get();
   };
 
 } // namespace

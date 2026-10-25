@@ -3,19 +3,19 @@
 
 typedef struct _nesapu_state nesapu_state;
 
-UINT8 nes_apu_read(void* chip, UINT8 address);
-void nes_apu_write(void* chip, UINT8 offset, UINT8 data);
+uint8_t nes_apu_read(void* chip, uint8_t address);
+void nes_apu_write(void* chip, uint8_t offset, uint8_t data);
 
-void nes_apu_update(void* chip, UINT32 samples, DEV_SMPL **outputs);
-void* device_start_nesapu(UINT32 clock, UINT32 rate);
+void nes_apu_update(void* chip, uint32_t samples, DEV_SMPL **outputs);
+void* device_start_nesapu(uint32_t clock, uint32_t rate);
 void device_stop_nesapu(void* chip);
 void device_reset_nesapu(void* chip);
 
-void nesapu_set_rom(void* chip, const UINT8* ROMData);
+void nesapu_set_rom(void* chip, const uint8_t* ROMData);
 
-void nesapu_set_mute_mask(void* chip, UINT32 MuteMask);
-UINT32 nesapu_get_mute_mask(void* chip);
-void nesapu_set_options(void *chip, UINT32 Flags);
-void nesapu_set_panning(void* chip, INT16 square1, INT16 square2, INT16 triangle, INT16 noise, INT16 dpcm);
+void nesapu_set_mute_mask(void* chip, uint32_t MuteMask);
+uint32_t nesapu_get_mute_mask(void* chip);
+void nesapu_set_options(void *chip, uint32_t Flags);
+void nesapu_set_panning(void* chip, int16_t square1, int16_t square2, int16_t triangle, int16_t noise, int16_t dpcm);
 
 #endif	// __NES_APU_H__

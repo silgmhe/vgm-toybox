@@ -19,10 +19,10 @@ namespace
 	// The window a period is measured in. 512 bytes keeps a slide local, which is what makes the
 	// period findable at all; the scan walks the sample in half-window steps and gives up after
 	// eight kilobytes, because a driver that has not keyed off by then is not playing one note.
-	constexpr std::uint32_t kMeasurementUnits = 512;
-	constexpr std::uint32_t kScanStep = kMeasurementUnits / 2;
-	constexpr std::uint32_t kScanBytes = 8 * 1024;
-	constexpr std::uint32_t kMinimumWindow = 128;
+	constexpr uint32_t kMeasurementUnits = 512;
+	constexpr uint32_t kScanStep = kMeasurementUnits / 2;
+	constexpr uint32_t kScanBytes = 8 * 1024;
+	constexpr uint32_t kMinimumWindow = 128;
 
 	/** The reference of the transposition layer: the byte rate a GA20 sample is taken to be recorded
 		at.
@@ -43,19 +43,19 @@ namespace
 
 	// A sample ends on a 0x00 byte; one that never reaches one is treated as open-ended rather than
 	// scanned through a whole ROM.
-	constexpr std::uint32_t kMaxSampleScan = 256 * 1024;
+	constexpr uint32_t kMaxSampleScan = 256 * 1024;
 
 	/** The mask the chip's address is folded with: the ROM is covered as a power-of-two buffer
 		(`pow2_mask` in the core), so a sample that runs off the end wraps instead of reading
 		elsewhere. */
-	std::uint32_t pow2Mask (std::size_t size)
+	uint32_t pow2Mask (std::size_t size)
 	{
 		if (size == 0)
 		{
 			return 0;
 		}
 
-		std::uint32_t mask = (std::uint32_t) (size - 1);
+		uint32_t mask = (uint32_t) (size - 1);
 		mask |= mask >> 1;
 		mask |= mask >> 2;
 		mask |= mask >> 4;
@@ -78,7 +78,7 @@ namespace
 			, cycleLength (sampleCycle)
 			, melodic (sampleMelodic) {}
 
-		int noteFor (std::uint32_t rate, int, int* finePitch) const override
+		int noteFor (uint32_t rate, int, int* finePitch) const override
 		{
 			const bool measured = rate < 0x100 && melodic != nullptr && *melodic
 						&& cycleLength != nullptr && *cycleLength > 0.0;
@@ -97,31 +97,31 @@ struct Ga20Decoder::Impl
 {
 	struct Voice
 	{
-		std::uint16_t start = 0;		// in 16-byte units, exactly as the two registers hold it
-		std::uint8_t rate = 0;
-		std::uint8_t volume = 0;
+		uint16_t start = 0;		// in 16-byte units, exactly as the two registers hold it
+		uint8_t rate = 0;
+		uint8_t volume = 0;
 		bool keyed = false;
 
-		std::uint32_t latchStart = 0;	// byte address at the key-on
-		std::uint32_t gateEnd = 0;
+		uint32_t latchStart = 0;	// byte address at the key-on
+		uint32_t gateEnd = 0;
 		double cycleLength = 0.0;
 		bool melodic = false;
-		std::uint32_t keyOns = 0;
+		uint32_t keyOns = 0;
 	};
 
 	Voice voices[4];
-	std::vector<std::uint8_t> rom;
-	std::uint32_t romMask = 0;
+	std::vector<uint8_t> rom;
+	uint32_t romMask = 0;
 	double byteClock = 44100.0;		// the chip's own rate: clock / 4
 	double outRate = 44100.0;		// the rate the note times and gates are in
-	std::map<std::uint32_t, std::uint32_t> lengthCache;
-	std::map<std::uint32_t, double> cycleCache;
+	std::map<uint32_t, uint32_t> lengthCache;
+	std::map<uint32_t, double> cycleCache;
 	std::unique_ptr<Ga20NoteTable> tables[4];
-	std::uint32_t now = 0;
+	uint32_t now = 0;
 
-	std::uint8_t byteAt (std::uint32_t address) const
+	uint8_t byteAt (uint32_t address) const
 	{
-		const std::uint32_t index = address & romMask;
+		const uint32_t index = address & romMask;
 		return index < rom.size() ? rom[index] : 0;
 	}
 
@@ -136,7 +136,7 @@ struct Ga20Decoder::Impl
 	}
 
 	/** How many bytes the sample holds before its 0x00 terminator, measured once per address. */
-	std::uint32_t lengthOf (std::uint32_t start)
+	uint32_t lengthOf (uint32_t start)
 	{
 		if (rom.empty())
 		{
@@ -149,7 +149,7 @@ struct Ga20Decoder::Impl
 			return cached->second;
 		}
 
-		std::uint32_t length = 0;
+		uint32_t length = 0;
 		while (length < kMaxSampleScan && byteAt (start + length) != 0)
 		{
 			++length;
@@ -256,7 +256,7 @@ struct Ga20Decoder::Impl
 
 		The trough has to come before the peak because that is what tells a period from a
 		smoothness: a tone anti-correlates at half its cycle, while a drum's noise never dips. */
-	double cycleFor (std::uint32_t start, std::uint32_t length)
+	double cycleFor (uint32_t start, uint32_t length)
 	{
 		if (rom.empty() || length == 0)
 		{
@@ -270,14 +270,14 @@ struct Ga20Decoder::Impl
 		}
 
 		double cycle = 0.0;
-		const std::uint32_t limit = std::min<std::uint32_t> (length, kScanBytes);
-		for (std::uint32_t offset = 0; cycle <= 0.0 && offset + kMinimumWindow <= limit;
+		const uint32_t limit = std::min<uint32_t> (length, kScanBytes);
+		for (uint32_t offset = 0; cycle <= 0.0 && offset + kMinimumWindow <= limit;
 			 offset += kScanStep)
 		{
-			const std::uint32_t window =
-				std::min<std::uint32_t> (limit - offset, kMeasurementUnits);
+			const uint32_t window =
+				std::min<uint32_t> (limit - offset, kMeasurementUnits);
 			std::vector<double> waveform (window);
-			for (std::uint32_t i = 0; i < window; ++i)
+			for (uint32_t i = 0; i < window; ++i)
 			{
 				waveform[i] = (double) ((int) byteAt (start + offset + i) - 0x80);
 			}
@@ -289,16 +289,16 @@ struct Ga20Decoder::Impl
 		return cycle;
 	}
 
-	void keyOn (Voice& voice, std::uint32_t time)
+	void keyOn (Voice& voice, uint32_t time)
 	{
-		voice.latchStart = (std::uint32_t) voice.start << 4;
+		voice.latchStart = (uint32_t) voice.start << 4;
 		++voice.keyOns;
 
 		// the gate is a count of the chip's own samples, and the note times are output samples
-		const std::uint32_t length = lengthOf (voice.latchStart);
-		const std::uint32_t nativePerByte = 0x100 - voice.rate;
+		const uint32_t length = lengthOf (voice.latchStart);
+		const uint32_t nativePerByte = 0x100 - voice.rate;
 		voice.gateEnd = (length > 0)
-							? time + (std::uint32_t) std::llround ((double) length
+							? time + (uint32_t) std::llround ((double) length
 									* (double) nativePerByte * outRate / byteClock)
 							: 0;
 
@@ -317,7 +317,7 @@ struct Ga20Decoder::Impl
 	/** The core's control bit: writing 2 plays, anything else stops. A sample whose first byte is
 		the terminator never sounds (`irem_ga20_cache_samples` clears `play`), which is mirrored
 		here so a key-on into silence does not become a note. */
-	void writeControl (Voice& voice, std::uint8_t value, std::uint32_t time)
+	void writeControl (Voice& voice, uint8_t value, uint32_t time)
 	{
 		if ((value & 0x02) == 0)
 		{
@@ -325,7 +325,7 @@ struct Ga20Decoder::Impl
 			return;
 		}
 
-		const std::uint32_t start = (std::uint32_t) voice.start << 4;
+		const uint32_t start = (uint32_t) voice.start << 4;
 		if (! rom.empty() && byteAt (start) == 0)
 		{
 			voice.keyed = false;
@@ -338,7 +338,7 @@ struct Ga20Decoder::Impl
 	int volumeOf (const Voice& voice) const
 	{
 		// `data * 256 / (data + 10)`, scaled to the 0..127 the extractor carries
-		const int level = (int) ((std::uint32_t) voice.volume * 256u / ((std::uint32_t) voice.volume + 10u));
+		const int level = (int) ((uint32_t) voice.volume * 256u / ((uint32_t) voice.volume + 10u));
 		return std::min (127, (level * 127 + 128) / 256);
 	}
 
@@ -362,11 +362,11 @@ Ga20Decoder::~Ga20Decoder() = default;
 
 void Ga20Decoder::reset (const ChipConfig& config)
 {
-	[[maybe_unused]] const std::uint32_t clock = config.clockHz;
+	[[maybe_unused]] const uint32_t clock = config.clockHz;
 	[[maybe_unused]] const double sampleRate = config.timeBaseHz;
 	// the ROM belongs to the song, not to the clock
-	std::vector<std::uint8_t> rom = std::move (impl->rom);
-	const std::uint32_t mask = impl->romMask;
+	std::vector<uint8_t> rom = std::move (impl->rom);
+	const uint32_t mask = impl->romMask;
 
 	*impl = Impl();
 	impl->rom = std::move (rom);
@@ -388,7 +388,7 @@ void Ga20Decoder::reset (const ChipConfig& config)
 	}
 }
 
-void Ga20Decoder::setRom (std::vector<std::uint8_t> rom)
+void Ga20Decoder::setRom (std::vector<uint8_t> rom)
 {
 	impl->romMask = pow2Mask (rom.size());
 	impl->rom = std::move (rom);
@@ -398,7 +398,7 @@ void Ga20Decoder::setRom (std::vector<std::uint8_t> rom)
 
 void Ga20Decoder::write (const RegisterWrite& write)
 {
-	const std::uint8_t offset = (std::uint8_t) (write.reg & 0x1F);
+	const uint8_t offset = (uint8_t) (write.reg & 0x1F);
 	const int channel = offset >> 3;
 	if (channel < 0 || channel >= (int) Ga20Decoder::numChannels)
 	{
@@ -409,11 +409,11 @@ void Ga20Decoder::write (const RegisterWrite& write)
 	switch (offset & 0x07)
 	{
 	case 0:		// start, low: bits 4..11 of the byte address
-		voice.start = (std::uint16_t) ((voice.start & 0xFF00) | (write.value & 0xFF));
+		voice.start = (uint16_t) ((voice.start & 0xFF00) | (write.value & 0xFF));
 		break;
 
 	case 1:		// start, high: bits 12..19
-		voice.start = (std::uint16_t) ((voice.start & 0x00FF) | ((std::uint16_t) write.value << 8));
+		voice.start = (uint16_t) ((voice.start & 0x00FF) | ((uint16_t) write.value << 8));
 		break;
 
 	case 2:		// end, low - written by every driver, never read by the core
@@ -437,7 +437,7 @@ void Ga20Decoder::write (const RegisterWrite& write)
 	}
 }
 
-void Ga20Decoder::advance (std::uint32_t sampleTime)
+void Ga20Decoder::advance (uint32_t sampleTime)
 {
 	impl->now = sampleTime;
 }

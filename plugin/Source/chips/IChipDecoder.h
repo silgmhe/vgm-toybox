@@ -20,9 +20,9 @@ namespace toybox::chips
 	it changes per song. */
 struct ChipRequirements
 {
-	std::uint32_t fallbackClock = 0;	// used when the device reports no clock of its own
+	uint32_t fallbackClock = 0;	// used when the device reports no clock of its own
 	bool hasMemory = false;				// the decoder needs a ROM or RAM image
-	std::uint8_t memoryType = 0;		// the stream's block type that carries it
+	uint8_t memoryType = 0;		// the stream's block type that carries it
 	std::size_t memoryBytes = 0;		// the chip's addressable limit
 	bool memoryIsRam = false;			// RAM uploads concatenate; ROM blocks place at an offset
 	bool clipToContent = false;			// mask by what was sent rather than by the declared size
@@ -34,8 +34,8 @@ struct ChipRequirements
 	`banking` only means anything to the C140, whose ROM offset folds a voice's bank into it. */
 struct ChipMemory
 {
-	const std::vector<std::uint8_t>* bytes = nullptr;
-	std::uint8_t banking = 0;
+	const std::vector<uint8_t>* bytes = nullptr;
+	uint8_t banking = 0;
 };
 
 /** A chip's register-level model.
@@ -61,7 +61,7 @@ public:
 	virtual void write (const RegisterWrite& write) = 0;
 
 	/** Move the internal timers/sequencers forward to this absolute sample time. */
-	virtual void advance (std::uint32_t sampleTime) = 0;
+	virtual void advance (uint32_t sampleTime) = 0;
 
 	virtual int channelCount() const = 0;
 

@@ -43,9 +43,9 @@ inline LinkedDeviceKind linkedDeviceKindFor (DEV_ID type)
 /** The bits of PLR_MUTE_OPTS::disable: what a mute suspends, in a chain of one main device and the
 	devices linked behind it. Naming them keeps the three call sites - the chips card, a parent
 	track's isolation and a linked track's - from each writing a bare 0x01 or 0x02 with a comment. */
-inline constexpr UINT8 kSuspendMainDevice = 0x01;
-inline constexpr UINT8 kSuspendLinkedDevices = 0x02;
-inline constexpr UINT8 kSuspendWholeChain = 0xFF;
+inline constexpr uint8_t kSuspendMainDevice = 0x01;
+inline constexpr uint8_t kSuspendLinkedDevices = 0x02;
+inline constexpr uint8_t kSuspendWholeChain = 0xFF;
 
 /** How many channels a linked SSG has. One number for the layout, the isolation and the MIDI
 	capability, which otherwise each carry their own copy of "three". */
@@ -62,7 +62,7 @@ inline int channelCountOf (const PLR_DEV_INFO& info)
 
 /** Channel number -> position of its mute bit inside PLR_MUTE_OPTS::chnMute[2] (32 bits each). */
 inline int channelMuteHalf (int channelIndex) { return channelIndex / 32; }
-inline UINT32 channelMuteBit (int channelIndex) { return 1u << (channelIndex % 32); }
+inline uint32_t channelMuteBit (int channelIndex) { return 1u << (channelIndex % 32); }
 
 /** Suspends a device completely. `disable` skips the emulation, which is what makes a dozen
 	isolated players affordable - the devices a track does not need cost no CPU at all. */
@@ -99,7 +99,7 @@ inline PLR_MUTE_OPTS singleChannelMuteOptions (int channelIndex, bool isolatable
 	PLR_MUTE_OPTS opts = {};
 	opts.disable = 0x00;
 
-	UINT32 mask = 0x00;
+	uint32_t mask = 0x00;
 	if (isolatable && channelIndex >= 0)
 	{
 		mask = 0xFFFFFFFF & ~channelMuteBit (channelIndex);

@@ -25,7 +25,7 @@ bool flattenCompressedImage (const void* data, std::size_t size, juce::MemoryBlo
 		return true;	// nothing to do - the caller keeps its own image
 	}
 
-	DATA_LOADER* loader = MemoryLoader_Init ((const UINT8*) data, (UINT32) size);
+	DATA_LOADER* loader = MemoryLoader_Init ((const uint8_t*) data, (uint32_t) size);
 	if (loader == NULL)
 	{
 		return false;
@@ -34,8 +34,8 @@ bool flattenCompressedImage (const void* data, std::size_t size, juce::MemoryBlo
 	bool success = false;
 	if (DataLoader_Load (loader) == 0x00)
 	{
-		const UINT32 plainSize = DataLoader_GetSize (loader);
-		const UINT8* plainData = DataLoader_GetData (loader);
+		const uint32_t plainSize = DataLoader_GetSize (loader);
+		const uint8_t* plainData = DataLoader_GetData (loader);
 		if (plainData != nullptr && plainSize > 0)
 		{
 			juce::MemoryBlock inflated (plainData, (size_t) plainSize);

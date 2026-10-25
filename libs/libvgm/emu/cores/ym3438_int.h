@@ -49,14 +49,14 @@ enum {
     ym3438_mode_readmode = 0x02     /* Enables status read on any port (TeraDrive, MD1 VA7, MD2, etc) */
 };
 
-typedef UINT64          Bit64u;
-typedef INT64           Bit64s;
-typedef UINT32          Bit32u;
-typedef INT32           Bit32s;
-typedef UINT16          Bit16u;
-typedef INT16           Bit16s;
-typedef UINT8           Bit8u;
-typedef INT8            Bit8s;
+typedef uint64_t          Bit64u;
+typedef int64_t           Bit64s;
+typedef uint32_t          Bit32u;
+typedef int32_t           Bit32s;
+typedef uint16_t          Bit16u;
+typedef int16_t           Bit16s;
+typedef uint8_t           Bit8u;
+typedef int8_t            Bit8s;
 
 typedef struct _opn2_writebuf {
     Bit64u time;

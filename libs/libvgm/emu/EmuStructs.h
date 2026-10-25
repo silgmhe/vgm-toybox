@@ -13,7 +13,7 @@ extern "C"
 #include "../stdtype.h"
 #include "snddef.h"
 
-typedef UINT8 DEV_ID;
+typedef uint8_t DEV_ID;
 typedef struct _device_core_definition DEV_DEF;
 typedef struct _device_declaration DEV_DECL;
 typedef struct _device_info DEV_INFO;
@@ -23,40 +23,40 @@ typedef struct _device_generic_config DEV_GEN_CFG;
 
 
 typedef const char* (*DEVDECLFUNC_NAME)(const DEV_GEN_CFG* devCfg);
-typedef UINT16 (*DEVDECLFUNC_CHNCOUNT)(const DEV_GEN_CFG* devCfg);
+typedef uint16_t (*DEVDECLFUNC_CHNCOUNT)(const DEV_GEN_CFG* devCfg);
 typedef const char** (*DEVDECLFUNC_CHNNAMES)(const DEV_GEN_CFG* devCfg);
 typedef const DEVLINK_IDS* (*DEVDECLFUNC_LINKIDS)(const DEV_GEN_CFG* devCfg);
 
 
-typedef void (*DEVCB_SRATE_CHG)(void* userParam, UINT32 newSRate);
-typedef void (*DEVCB_LOG)(void* userParam, void* source, UINT8 level, const char* message);
+typedef void (*DEVCB_SRATE_CHG)(void* userParam, uint32_t newSRate);
+typedef void (*DEVCB_LOG)(void* userParam, void* source, uint8_t level, const char* message);
 
-typedef UINT8 (*DEVFUNC_START)(const DEV_GEN_CFG* cfg, DEV_INFO* retDevInf);
+typedef uint8_t (*DEVFUNC_START)(const DEV_GEN_CFG* cfg, DEV_INFO* retDevInf);
 typedef void (*DEVFUNC_CTRL)(void* info);
-typedef void (*DEVFUNC_UPDATE)(void* info, UINT32 samples, DEV_SMPL** outputs);
-typedef void (*DEVFUNC_OPTMASK)(void* info, UINT32 optionBits);
-typedef void (*DEVFUNC_PANALL)(void* info, const INT16* channelPanVal);
+typedef void (*DEVFUNC_UPDATE)(void* info, uint32_t samples, DEV_SMPL** outputs);
+typedef void (*DEVFUNC_OPTMASK)(void* info, uint32_t optionBits);
+typedef void (*DEVFUNC_PANALL)(void* info, const int16_t* channelPanVal);
 typedef void (*DEVFUNC_SRCCB)(void* info, DEVCB_SRATE_CHG SmpRateChgCallback, void* paramPtr);
-typedef UINT8 (*DEVFUNC_LINKDEV)(void* info, UINT8 linkID, const DEV_INFO* devInfLink);
+typedef uint8_t (*DEVFUNC_LINKDEV)(void* info, uint8_t linkID, const DEV_INFO* devInfLink);
 typedef void (*DEVFUNC_SETLOGCB)(void* info, DEVCB_LOG logFunc, void* userParam);
 
-typedef UINT8 (*DEVFUNC_READ_A8D8)(void* info, UINT8 addr);
-typedef UINT16 (*DEVFUNC_READ_A8D16)(void* info, UINT8 addr);
-typedef UINT8 (*DEVFUNC_READ_A16D8)(void* info, UINT16 addr);
-typedef UINT16 (*DEVFUNC_READ_A16D16)(void* info, UINT16 addr);
-typedef UINT32 (*DEVFUNC_READ_CLOCK)(void* info);
-typedef UINT32 (*DEVFUNC_READ_SRATE)(void* info);
-typedef UINT32 (*DEVFUNC_READ_VOLUME)(void* info);
+typedef uint8_t (*DEVFUNC_READ_A8D8)(void* info, uint8_t addr);
+typedef uint16_t (*DEVFUNC_READ_A8D16)(void* info, uint8_t addr);
+typedef uint8_t (*DEVFUNC_READ_A16D8)(void* info, uint16_t addr);
+typedef uint16_t (*DEVFUNC_READ_A16D16)(void* info, uint16_t addr);
+typedef uint32_t (*DEVFUNC_READ_CLOCK)(void* info);
+typedef uint32_t (*DEVFUNC_READ_SRATE)(void* info);
+typedef uint32_t (*DEVFUNC_READ_VOLUME)(void* info);
 
-typedef void (*DEVFUNC_WRITE_A8D8)(void* info, UINT8 addr, UINT8 data);
-typedef void (*DEVFUNC_WRITE_A8D16)(void* info, UINT8 addr, UINT16 data);
-typedef void (*DEVFUNC_WRITE_A16D8)(void* info, UINT16 addr, UINT8 data);
-typedef void (*DEVFUNC_WRITE_A16D16)(void* info, UINT16 addr, UINT16 data);
-typedef void (*DEVFUNC_WRITE_MEMSIZE)(void* info, UINT32 memsize);
-typedef void (*DEVFUNC_WRITE_BLOCK)(void* info, UINT32 offset, UINT32 length, const UINT8* data);
-typedef void (*DEVFUNC_WRITE_CLOCK)(void* info, UINT32 clock);
-typedef void (*DEVFUNC_WRITE_VOLUME)(void* info, INT32 volume);	// 16.16 fixed point
-typedef void (*DEVFUNC_WRITE_VOL_LR)(void* info, INT32 volL, INT32 volR);
+typedef void (*DEVFUNC_WRITE_A8D8)(void* info, uint8_t addr, uint8_t data);
+typedef void (*DEVFUNC_WRITE_A8D16)(void* info, uint8_t addr, uint16_t data);
+typedef void (*DEVFUNC_WRITE_A16D8)(void* info, uint16_t addr, uint8_t data);
+typedef void (*DEVFUNC_WRITE_A16D16)(void* info, uint16_t addr, uint16_t data);
+typedef void (*DEVFUNC_WRITE_MEMSIZE)(void* info, uint32_t memsize);
+typedef void (*DEVFUNC_WRITE_BLOCK)(void* info, uint32_t offset, uint32_t length, const uint8_t* data);
+typedef void (*DEVFUNC_WRITE_CLOCK)(void* info, uint32_t clock);
+typedef void (*DEVFUNC_WRITE_VOLUME)(void* info, int32_t volume);	// 16.16 fixed point
+typedef void (*DEVFUNC_WRITE_VOL_LR)(void* info, int32_t volL, int32_t volR);
 
 #define RWF_WRITE		0x00
 #define RWF_READ		0x01
@@ -92,9 +92,9 @@ typedef void (*DEVFUNC_WRITE_VOL_LR)(void* info, INT32 volL, INT32 volR);
 
 typedef struct _devdef_readwrite_function
 {
-	UINT8 funcType;	// function type, see RWF_ constants
-	UINT8 rwType;	// read/write function type, see DEVRW_ constants
-	UINT16 user;	// user-defined value
+	uint8_t funcType;	// function type, see RWF_ constants
+	uint8_t rwType;	// read/write function type, see DEVRW_ constants
+	uint16_t user;	// user-defined value
 	void* funcPtr;
 } DEVDEF_RWFUNC;
 
@@ -102,7 +102,7 @@ struct _device_core_definition
 {
 	const char* name;	// name of the device
 	const char* author;	// author/origin of emulation
-	UINT32 coreID;		// 4-character identifier ID to distinguish between
+	uint32_t coreID;		// 4-character identifier ID to distinguish between
 						// multiple emulators of a device
 	
 	DEVFUNC_START Start;
@@ -131,23 +131,23 @@ struct _device_declaration
 struct _device_info
 {
 	DEV_DATA* dataPtr;		// points to chip data structure
-	UINT32 sampleRate;		// sample rate of the Update() function
+	uint32_t sampleRate;		// sample rate of the Update() function
 	const DEV_DEF* devDef;	// points to device definition
 	const DEV_DECL* devDecl;	// points to device declaration (will be NULL when calling DEV_DEV::Start() directly)
 	
-	UINT32 linkDevCount;	// number of link-able devices
+	uint32_t linkDevCount;	// number of link-able devices
 	DEVLINK_INFO* linkDevs;	// [freed by caller]
 };	// DEV_INFO
 
 struct _device_link_ids
 {
-	UINT32 devCount;	// number of link-able devices
+	uint32_t devCount;	// number of link-able devices
 	DEV_ID devIDs[];	// list of device IDs that can be expected to be linked
 };	// DEVLINK_IDS
 struct _device_link_info
 {
 	DEV_ID devID;		// device ID (DEVID_ constant)
-	UINT8 linkID;		// device link ID
+	uint8_t linkID;		// device link ID
 	DEV_GEN_CFG* cfg;	// pointer to DEV_GEN_CFG structures and derivates [freed by caller]
 };	// DEVLINK_INFO
 
@@ -158,12 +158,12 @@ struct _device_link_info
 #define DEVRI_SRMODE_HIGHEST	0x02
 struct _device_generic_config
 {
-	UINT32 emuCore;		// emulation core (4-character code, 0 = default)
-	UINT8 srMode;		// sample rate mode
+	uint32_t emuCore;		// emulation core (4-character code, 0 = default)
+	uint8_t srMode;		// sample rate mode
 	
-	UINT8 flags;		// chip flags
-	UINT32 clock;		// chip clock
-	UINT32 smplRate;	// sample rate for SRMODE_CUSTOM/DEVRI_SRMODE_HIGHEST
+	uint8_t flags;		// chip flags
+	uint32_t clock;		// chip clock
+	uint32_t smplRate;	// sample rate for SRMODE_CUSTOM/DEVRI_SRMODE_HIGHEST
 						// Note: Some cores ignore the srMode setting and always use smplRate.
 };	// DEV_GEN_CFG
 

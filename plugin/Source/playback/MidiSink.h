@@ -10,9 +10,9 @@ namespace toybox::playback
 struct MidiBlockEvent
 {
 	int sampleOffset = 0;
-	std::uint8_t status = 0;
-	std::uint8_t data1 = 0;
-	std::uint8_t data2 = 0;
+	uint8_t status = 0;
+	uint8_t data1 = 0;
+	uint8_t data2 = 0;
 };
 
 class MidiBlockSink

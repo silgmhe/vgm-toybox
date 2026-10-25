@@ -16,7 +16,7 @@ namespace
 	driver's init or play returned. The rest of the program is NSFPlay's own - it saves A/X/Y and
 	masks the NMI so an INIT that never returns still leaves the machine usable.
 */
-const std::uint8_t kPlayerProgram[] =
+const uint8_t kPlayerProgram[] =
 {
 	0x20, 0x1E, 0x41,				// $4100 JSR $411E   (operand patched by run_from)
 	0x4C, 0x03, 0x41,				// $4103 JMP $4103   (the breakpoint)
@@ -52,7 +52,7 @@ void NsfBus::resetBanks (void)
 
 	for (std::size_t i = 0; i < banks.size (); ++i)
 	{
-		banks[i] = declared && i < file.bankSwitch.size () ? file.bankSwitch[i] : (std::uint8_t) i;
+		banks[i] = declared && i < file.bankSwitch.size () ? file.bankSwitch[i] : (uint8_t) i;
 	}
 }
 
@@ -61,21 +61,21 @@ void NsfBus::load (void)
 	// SetImage clears the whole 64 KB before copying, so anything written before it is lost - the
 	// trampoline in particular. It goes in afterwards, every time.
 	resetBanks ();
-	SetImage (const_cast<std::uint8_t*> (file.rom.data()), file.loadAddress, (std::uint32_t) file.rom.size());
-	SetReserved (kPlayerProgram, (std::uint32_t) sizeof (kPlayerProgram));
+	SetImage (const_cast<uint8_t*> (file.rom.data()), file.loadAddress, (uint32_t) file.rom.size());
+	SetReserved (kPlayerProgram, (uint32_t) sizeof (kPlayerProgram));
 }
 
-bool NsfBus::Read (std::uint32_t adr, std::uint32_t& val, std::uint32_t id)
+bool NsfBus::Read (uint32_t adr, uint32_t& val, uint32_t id)
 {
 	if (banked && adr >= 0x8000 && adr <= 0xFFFF)
 	{
 		// Eight 4 KB windows, selected one register each: $5FF8 is the one at $8000 and $5FFF the
 		// one at $F000. Bank numbers are counted in the same 4 KB units.
-		const std::uint32_t window = (adr >> 12) & 0x07u;
+		const uint32_t window = (adr >> 12) & 0x07u;
 		// The windows are counted from the load address, which is not required to be 4 KB aligned:
 // a file loaded at \ puts its first byte at window 0 offset \, not at offset 0.
-		const std::uint32_t bankBase = (std::uint32_t) (file.loadAddress & 0x0FFF);
-		const std::uint32_t offset = (std::uint32_t) banks[window] * 0x1000u + (adr & 0x0FFFu) - bankBase;
+		const uint32_t bankBase = (uint32_t) (file.loadAddress & 0x0FFF);
+		const uint32_t offset = (uint32_t) banks[window] * 0x1000u + (adr & 0x0FFFu) - bankBase;
 
 		val = offset < file.rom.size() ? file.rom[offset] : 0;
 		return true;
@@ -84,13 +84,13 @@ bool NsfBus::Read (std::uint32_t adr, std::uint32_t& val, std::uint32_t id)
 	return xgm::NES_MEM::Read (adr, val, id);
 }
 
-bool NsfBus::Write (std::uint32_t adr, std::uint32_t val, std::uint32_t id)
+bool NsfBus::Write (uint32_t adr, uint32_t val, uint32_t id)
 {
 
 	if (adr == 0x0211)
 	{
 		++gateWrites;
-		gateValue = (std::uint8_t) (val & 0xFF);
+		gateValue = (uint8_t) (val & 0xFF);
 	}
 
 	if (adr >= 0x0200 && adr <= 0x02FF)
@@ -99,7 +99,7 @@ bool NsfBus::Write (std::uint32_t adr, std::uint32_t val, std::uint32_t id)
 	}
 	if (banked && adr >= 0x5FF8 && adr <= 0x5FFF)
 	{
-		banks[adr - 0x5FF8] = (std::uint8_t) (val & 0xFF);
+		banks[adr - 0x5FF8] = (uint8_t) (val & 0xFF);
 
 		// Stored as well as applied: a driver is allowed to read the register back to remember what
 		// it selected, and answering zero there is a silent difference from hardware.
@@ -154,7 +154,7 @@ bool NsfBus::Write (std::uint32_t adr, std::uint32_t val, std::uint32_t id)
 		// ticked, mixed and never told anything.
 		if (onSoundWrite)
 		{
-			onSoundWrite ((std::uint16_t) adr, (std::uint8_t) (val & 0xFF));
+			onSoundWrite ((uint16_t) adr, (uint8_t) (val & 0xFF));
 		}
 
 		++soundWriteCount;

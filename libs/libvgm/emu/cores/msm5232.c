@@ -93,20 +93,20 @@ typedef struct {
 	// --- TA7630 external volume (0..15, as used by Taito hardware) ---
 	uint8_t ext_vol[MSM5232_EXTVOL_GROUPS]; // [0]=group1 0..3, [1]=group2 4..7
 
-	UINT8 per_out_vol[MSM5232_NUM_OUTPUTS]; // per-output volume
-	UINT8 Muted[MSM5232_NUM_OUTPUTS];
+	uint8_t per_out_vol[MSM5232_NUM_OUTPUTS]; // per-output volume
+	uint8_t Muted[MSM5232_NUM_OUTPUTS];
 	double vol_ctrl[16];
 } MSM5232_STATE;
 
 // Forward declarations
-static UINT8 device_start_msm5232(const MSM5232_CFG* cfg, DEV_INFO* retDevInf);
+static uint8_t device_start_msm5232(const MSM5232_CFG* cfg, DEV_INFO* retDevInf);
 static void device_stop_msm5232(void* info);
 static void device_reset_msm5232(void* info);
-static UINT32 msm5232_get_rate(void* info);
-static void msm5232_set_clock(void *info, UINT32 clock);
-static void device_update_msm5232(void* info, UINT32 samples, DEV_SMPL** outputs);
-static void msm5232_write(void* info, UINT8 reg, UINT8 value);
-static void msm5232_set_mute_mask(void* info, UINT32 muteMask);
+static uint32_t msm5232_get_rate(void* info);
+static void msm5232_set_clock(void *info, uint32_t clock);
+static void device_update_msm5232(void* info, uint32_t samples, DEV_SMPL** outputs);
+static void msm5232_write(void* info, uint8_t reg, uint8_t value);
+static void msm5232_set_mute_mask(void* info, uint32_t muteMask);
 static void msm5232_set_srchg_cb(void *info, DEVCB_SRATE_CHG CallbackFunc, void *DataPtr);
 
 static DEVDEF_RWFUNC devFunc[] = {
@@ -139,7 +139,7 @@ static const char* DeviceName(const DEV_GEN_CFG* devCfg)
 	return "MSM5232";
 }
 
-static UINT16 DeviceChannels(const DEV_GEN_CFG* devCfg)
+static uint16_t DeviceChannels(const DEV_GEN_CFG* devCfg)
 {
 	return MSM5232_NUM_OUTPUTS;
 }
@@ -168,13 +168,13 @@ const DEV_DECL sndDev_MSM5232 =
 };
 
 // --- Helper Functions ---
-INLINE UINT32 ReadLE32(const UINT8* buffer)
+INLINE uint32_t ReadLE32(const uint8_t* buffer)
 {
 	return	(buffer[0] <<  0) | (buffer[1] <<  8) |
 			(buffer[2] << 16) | (buffer[3] << 24);
 }
 
-INLINE void WriteLE32(UINT8* buffer, UINT32 value)
+INLINE void WriteLE32(uint8_t* buffer, uint32_t value)
 {
 	buffer[0] = (value >>  0) & 0xFF;
 	buffer[1] = (value >>  8) & 0xFF;
@@ -236,7 +236,7 @@ static void init_voice(MSM5232_STATE* chip, int i)
 
 // --- Core Functions ---
 
-static UINT8 device_start_msm5232(const MSM5232_CFG* cfg, DEV_INFO* retDevInf)
+static uint8_t device_start_msm5232(const MSM5232_CFG* cfg, DEV_INFO* retDevInf)
 {
     MSM5232_STATE* chip;
     int i;
@@ -253,7 +253,7 @@ static UINT8 device_start_msm5232(const MSM5232_CFG* cfg, DEV_INFO* retDevInf)
     chip->sample_rate = msm5232_get_rate(chip);
     SRATE_CUSTOM_HIGHEST(cfg->_genCfg.srMode, chip->sample_rate, cfg->_genCfg.smplRate);
 	{
-		UINT32 nativeSRate = chip->clock / CLOCK_RATE_DIVIDER;
+		uint32_t nativeSRate = chip->clock / CLOCK_RATE_DIVIDER;
 		int sRateDiff = (int)chip->sample_rate - (int)nativeSRate;
 		chip->smpRateNative = (abs(sRateDiff) <= 2);
 	}
@@ -320,16 +320,16 @@ static void device_reset_msm5232(void* info)
         chip->SmpRateFunc(chip->SmpRateData, chip->sample_rate);
 }
 
-static UINT32 msm5232_get_rate(void* info)
+static uint32_t msm5232_get_rate(void* info)
 {
 	MSM5232_STATE* chip = (MSM5232_STATE*)info;
 	return chip->clock / CLOCK_RATE_DIVIDER;
 }
 
-static void msm5232_set_clock(void *info, UINT32 clock)
+static void msm5232_set_clock(void *info, uint32_t clock)
 {
 	MSM5232_STATE* chip = (MSM5232_STATE*)info;
-	UINT32 old_clk = chip->clock;
+	uint32_t old_clk = chip->clock;
 
 	if (clock)
 		chip->clock = clock;	// set to parameter
@@ -419,8 +419,8 @@ static void EG_voices_advance(MSM5232_STATE* chip)
 
 // Tone generator, closely following MAME's TG_group_advance
 typedef struct {
-	INT32 o2, o4, o8, o16;
-	INT32 solo8, solo16;
+	int32_t o2, o4, o8, o16;
+	int32_t solo8, solo16;
 } MSM5232_GROUP_OUT;
 
 static void TG_group_advance(MSM5232_STATE* chip, int groupidx, MSM5232_GROUP_OUT* out)
@@ -514,16 +514,16 @@ static void update_noise(MSM5232_STATE* chip)
 }
 
 // --- Main Update ---
-static void device_update_msm5232(void* info, UINT32 samples, DEV_SMPL** outputs)
+static void device_update_msm5232(void* info, uint32_t samples, DEV_SMPL** outputs)
 {
 	MSM5232_STATE* chip = (MSM5232_STATE*)info;
 	DEV_SMPL* outL = outputs[0];
 	DEV_SMPL* outR = outputs[1];
-	UINT32 i;
+	uint32_t i;
 
 	for (i = 0; i < samples; i++) {
 		MSM5232_GROUP_OUT group1, group2;
-		INT32 g1o2, g1o4, g1o8, g1o16, g2o2, g2o4, g2o8, g2o16, so8, so16, nout;
+		int32_t g1o2, g1o4, g1o8, g1o16, g2o2, g2o4, g2o8, g2o16, so8, so16, nout;
 		DEV_SMPL mix;
 
 		// 1. Advance envelopes
@@ -559,7 +559,7 @@ static void device_update_msm5232(void* info, UINT32 samples, DEV_SMPL** outputs
 }
 
 // --- Register Write Handler ---
-static void msm5232_write(void* info, UINT8 reg, UINT8 value)
+static void msm5232_write(void* info, uint8_t reg, uint8_t value)
 {
     MSM5232_STATE* chip = (MSM5232_STATE*)info;
     int i;
@@ -683,10 +683,10 @@ static void msm5232_write(void* info, UINT8 reg, UINT8 value)
 	}
 }
 
-static void msm5232_set_mute_mask(void* info, UINT32 muteMask)
+static void msm5232_set_mute_mask(void* info, uint32_t muteMask)
 {
 	MSM5232_STATE* chip = (MSM5232_STATE*)info;
-	UINT8 i;
+	uint8_t i;
 	for (i = 0; i < MSM5232_NUM_OUTPUTS; i++)
 		chip->Muted[i] = (muteMask >> i) & 1;
 }

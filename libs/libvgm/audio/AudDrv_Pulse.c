@@ -21,20 +21,20 @@
 typedef struct _pulse_driver
 {
 	void* audDrvPtr;
-	volatile UINT8 devState;	// 0 - not running, 1 - running, 2 - terminating
+	volatile uint8_t devState;	// 0 - not running, 1 - running, 2 - terminating
 	
 	pa_sample_spec pulseFmt;
-	UINT32 bufSmpls;
-	UINT32 bufSize;
-	UINT32 bufCount;
-	UINT8* bufSpace;
+	uint32_t bufSmpls;
+	uint32_t bufSize;
+	uint32_t bufCount;
+	uint8_t* bufSpace;
 	
 	OS_THREAD* hThread;
 	OS_SIGNAL* hSignal;
 	OS_MUTEX* hMutex;
 	pa_simple* hPulse;
-	volatile UINT8 pauseThread;
-	UINT8 canPause;
+	volatile uint8_t pauseThread;
+	uint8_t canPause;
 	char* streamDesc;
 	
 	void* userParam;
@@ -42,27 +42,27 @@ typedef struct _pulse_driver
 } DRV_PULSE;
 
 
-UINT8 Pulse_IsAvailable(void);
-UINT8 Pulse_Init(void);
-UINT8 Pulse_Deinit(void);
+uint8_t Pulse_IsAvailable(void);
+uint8_t Pulse_Init(void);
+uint8_t Pulse_Deinit(void);
 const AUDIO_DEV_LIST* Pulse_GetDeviceList(void);
 AUDIO_OPTS* Pulse_GetDefaultOpts(void);
 
-UINT8 Pulse_Create(void** retDrvObj);
-UINT8 Pulse_Destroy(void* drvObj);
-UINT8 Pulse_Start(void* drvObj, UINT32 deviceID, AUDIO_OPTS* options, void* audDrvParam);
-UINT8 Pulse_Stop(void* drvObj);
-UINT8 Pulse_Pause(void* drvObj);
-UINT8 Pulse_Resume(void* drvObj);
+uint8_t Pulse_Create(void** retDrvObj);
+uint8_t Pulse_Destroy(void* drvObj);
+uint8_t Pulse_Start(void* drvObj, uint32_t deviceID, AUDIO_OPTS* options, void* audDrvParam);
+uint8_t Pulse_Stop(void* drvObj);
+uint8_t Pulse_Pause(void* drvObj);
+uint8_t Pulse_Resume(void* drvObj);
 
-UINT8 Pulse_SetCallback(void* drvObj, AUDFUNC_FILLBUF FillBufCallback, void* userParam);
-UINT32 Pulse_GetBufferSize(void* drvObj);
-UINT8 Pulse_IsBusy(void* drvObj);
-UINT8 Pulse_WriteData(void* drvObj, UINT32 dataSize, void* data);
+uint8_t Pulse_SetCallback(void* drvObj, AUDFUNC_FILLBUF FillBufCallback, void* userParam);
+uint32_t Pulse_GetBufferSize(void* drvObj);
+uint8_t Pulse_IsBusy(void* drvObj);
+uint8_t Pulse_WriteData(void* drvObj, uint32_t dataSize, void* data);
 
-UINT8 Pulse_SetStreamDesc(void* drvObj, const char* fileName);
+uint8_t Pulse_SetStreamDesc(void* drvObj, const char* fileName);
 const char* Pulse_GetStreamDesc(void* drvObj);
-UINT32 Pulse_GetLatency(void* drvObj);
+uint32_t Pulse_GetLatency(void* drvObj);
 static void PulseThread(void* Arg);
 
 
@@ -89,15 +89,15 @@ static char* PulseDevNames[1] = {"default"};
 static AUDIO_OPTS defOptions;
 static AUDIO_DEV_LIST deviceList;
 
-static UINT8 isInit = 0;
-static UINT32 activeDrivers;
+static uint8_t isInit = 0;
+static uint32_t activeDrivers;
 
-UINT8 Pulse_IsAvailable(void)
+uint8_t Pulse_IsAvailable(void)
 {
 	return 1;
 }
 
-UINT8 Pulse_Init(void)
+uint8_t Pulse_Init(void)
 {
 	if (isInit)
 		return AERR_WASDONE;
@@ -120,7 +120,7 @@ UINT8 Pulse_Init(void)
 	return AERR_OK;
 }
 
-UINT8 Pulse_Deinit(void)
+uint8_t Pulse_Deinit(void)
 {
 	if (! isInit)
 		return AERR_WASDONE;
@@ -144,10 +144,10 @@ AUDIO_OPTS* Pulse_GetDefaultOpts(void)
 }
 
 
-UINT8 Pulse_Create(void** retDrvObj)
+uint8_t Pulse_Create(void** retDrvObj)
 {
 	DRV_PULSE* drv;
-	UINT8 retVal8;
+	uint8_t retVal8;
 	
 	drv = (DRV_PULSE*)malloc(sizeof(DRV_PULSE));
 	drv->devState = 0;
@@ -173,7 +173,7 @@ UINT8 Pulse_Create(void** retDrvObj)
 	return AERR_OK;
 }
 
-UINT8 Pulse_Destroy(void* drvObj)
+uint8_t Pulse_Destroy(void* drvObj)
 {
 	DRV_PULSE* drv = (DRV_PULSE*)drvObj;
 	
@@ -196,7 +196,7 @@ UINT8 Pulse_Destroy(void* drvObj)
 	return AERR_OK;
 }
 
-UINT8 Pulse_SetStreamDesc(void* drvObj, const char* streamDesc)
+uint8_t Pulse_SetStreamDesc(void* drvObj, const char* streamDesc)
 {
 	DRV_PULSE* drv = (DRV_PULSE*)drvObj;
 	
@@ -217,11 +217,11 @@ const char* Pulse_GetStreamDesc(void* drvObj)
 	return drv->streamDesc;
 }
 
-UINT8 Pulse_Start(void* drvObj, UINT32 deviceID, AUDIO_OPTS* options, void* audDrvParam)
+uint8_t Pulse_Start(void* drvObj, uint32_t deviceID, AUDIO_OPTS* options, void* audDrvParam)
 {
 	DRV_PULSE* drv = (DRV_PULSE*)drvObj;
-	UINT64 tempInt64;
-	UINT8 retVal8;
+	uint64_t tempInt64;
+	uint8_t retVal8;
 	
 	if (drv->devState != 0)
 		return 0xD0;	// already running
@@ -232,8 +232,8 @@ UINT8 Pulse_Start(void* drvObj, UINT32 deviceID, AUDIO_OPTS* options, void* audD
 	drv->pulseFmt.channels = options->numChannels;
 	drv->pulseFmt.rate = options->sampleRate;
 	
-	tempInt64 = (UINT64)options->sampleRate * options->usecPerBuf;
-	drv->bufSmpls = (UINT32)((tempInt64 + 500000) / 1000000);
+	tempInt64 = (uint64_t)options->sampleRate * options->usecPerBuf;
+	drv->bufSmpls = (uint32_t)((tempInt64 + 500000) / 1000000);
 	drv->bufSize = (options->numBitsPerSmpl * drv->pulseFmt.channels / 8) * drv->bufSmpls;
 	drv->bufCount = options->numBuffers ? options->numBuffers : 10;
 	
@@ -262,7 +262,7 @@ UINT8 Pulse_Start(void* drvObj, UINT32 deviceID, AUDIO_OPTS* options, void* audD
 		return 0xC8;	// CreateThread failed
 	}
 	
-	drv->bufSpace = (UINT8*)malloc(drv->bufSize);
+	drv->bufSpace = (uint8_t*)malloc(drv->bufSize);
 	
 	drv->devState = 1;
 	drv->pauseThread = 0x00;
@@ -271,7 +271,7 @@ UINT8 Pulse_Start(void* drvObj, UINT32 deviceID, AUDIO_OPTS* options, void* audD
 	return AERR_OK;
 }
 
-UINT8 Pulse_Stop(void* drvObj)
+uint8_t Pulse_Stop(void* drvObj)
 {
 	DRV_PULSE* drv = (DRV_PULSE*)drvObj;
 	
@@ -293,7 +293,7 @@ UINT8 Pulse_Stop(void* drvObj)
 	return AERR_OK;
 }
 
-UINT8 Pulse_Pause(void* drvObj)
+uint8_t Pulse_Pause(void* drvObj)
 {
 	DRV_PULSE* drv = (DRV_PULSE*)drvObj;
 	
@@ -301,7 +301,7 @@ UINT8 Pulse_Pause(void* drvObj)
 	return AERR_OK;
 }
 
-UINT8 Pulse_Resume(void* drvObj)
+uint8_t Pulse_Resume(void* drvObj)
 {
 	DRV_PULSE* drv = (DRV_PULSE*)drvObj;
 	
@@ -309,7 +309,7 @@ UINT8 Pulse_Resume(void* drvObj)
 	return AERR_OK;
 }
 
-UINT8 Pulse_SetCallback(void* drvObj, AUDFUNC_FILLBUF FillBufCallback, void* userParam)
+uint8_t Pulse_SetCallback(void* drvObj, AUDFUNC_FILLBUF FillBufCallback, void* userParam)
 {
 	DRV_PULSE* drv = (DRV_PULSE*)drvObj;
 	
@@ -323,14 +323,14 @@ UINT8 Pulse_SetCallback(void* drvObj, AUDFUNC_FILLBUF FillBufCallback, void* use
 	return AERR_OK;
 }
 
-UINT32 Pulse_GetBufferSize(void* drvObj)
+uint32_t Pulse_GetBufferSize(void* drvObj)
 {
 	DRV_PULSE* drv = (DRV_PULSE*)drvObj;
 	
 	return drv->bufSize;
 }
 
-UINT8 Pulse_IsBusy(void* drvObj)
+uint8_t Pulse_IsBusy(void* drvObj)
 {
 	DRV_PULSE* drv = (DRV_PULSE*)drvObj;
 	
@@ -340,7 +340,7 @@ UINT8 Pulse_IsBusy(void* drvObj)
 	return AERR_OK;
 }
 
-UINT8 Pulse_WriteData(void* drvObj, UINT32 dataSize, void* data)
+uint8_t Pulse_WriteData(void* drvObj, uint32_t dataSize, void* data)
 {
 	DRV_PULSE* drv = (DRV_PULSE*)drvObj;
 	int retVal;
@@ -356,18 +356,18 @@ UINT8 Pulse_WriteData(void* drvObj, UINT32 dataSize, void* data)
 }
 
 
-UINT32 Pulse_GetLatency(void* drvObj)
+uint32_t Pulse_GetLatency(void* drvObj)
 {
 	DRV_PULSE* drv = (DRV_PULSE*)drvObj;
 	
-	return (UINT32)(pa_simple_get_latency(drv->hPulse, NULL) / 1000);
+	return (uint32_t)(pa_simple_get_latency(drv->hPulse, NULL) / 1000);
 }
 
 static void PulseThread(void* Arg)
 {
 	DRV_PULSE* drv = (DRV_PULSE*)Arg;
-	UINT32 didBuffers;	// number of processed buffers
-	UINT32 bufBytes;
+	uint32_t didBuffers;	// number of processed buffers
+	uint32_t bufBytes;
 	int retVal;
 	
 	OSSignal_Wait(drv->hSignal);	// wait until the initialization is done

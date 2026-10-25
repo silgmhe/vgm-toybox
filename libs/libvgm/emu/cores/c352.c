@@ -29,20 +29,20 @@
 #include "../EmuHelper.h"
 #include "c352.h"
 
-static void c352_update(void *chip, UINT32 samples, DEV_SMPL **outputs);
-static UINT8 device_start_c352(const DEV_GEN_CFG* cfg, DEV_INFO* retDevInf);
+static void c352_update(void *chip, uint32_t samples, DEV_SMPL **outputs);
+static uint8_t device_start_c352(const DEV_GEN_CFG* cfg, DEV_INFO* retDevInf);
 static void device_stop_c352(void *chip);
 static void device_reset_c352(void *chip);
 
-static UINT16 c352_r(void *chip, UINT16 offset);
-static void c352_w(void *chip, UINT16 offset, UINT16 data);
+static uint16_t c352_r(void *chip, uint16_t offset);
+static void c352_w(void *chip, uint16_t offset, uint16_t data);
 
-static void c352_alloc_rom(void* chip, UINT32 memsize);
-static void c352_write_rom(void *chip, UINT32 offset, UINT32 length, const UINT8* data);
+static void c352_alloc_rom(void* chip, uint32_t memsize);
+static void c352_write_rom(void *chip, uint32_t offset, uint32_t length, const uint8_t* data);
 
-static void c352_set_mute_mask(void *chip, UINT32 MuteMask);
-static UINT32 c352_get_mute_mask(void *chip);
-static void c352_set_options(void *chip, UINT32 Flags);
+static void c352_set_mute_mask(void *chip, uint32_t MuteMask);
+static uint32_t c352_get_mute_mask(void *chip);
+static void c352_set_options(void *chip, uint32_t Flags);
 
 
 static DEVDEF_RWFUNC devFunc[] =
@@ -78,7 +78,7 @@ static const char* DeviceName(const DEV_GEN_CFG* devCfg)
 	return "C352";
 }
 
-static UINT16 DeviceChannels(const DEV_GEN_CFG* devCfg)
+static uint16_t DeviceChannels(const DEV_GEN_CFG* devCfg)
 {
 	return 32;
 }
@@ -130,24 +130,24 @@ enum {
 
 typedef struct {
 
-	UINT32 pos;
-	UINT32 counter;
+	uint32_t pos;
+	uint32_t counter;
 
-	INT16 sample;
-	INT16 last_sample;
+	int16_t sample;
+	int16_t last_sample;
 
-	UINT16 vol_f;
-	UINT16 vol_r;
-	UINT8 curr_vol[4];
-	UINT16 freq;
-	UINT16 flags;
+	uint16_t vol_f;
+	uint16_t vol_r;
+	uint8_t curr_vol[4];
+	uint16_t freq;
+	uint16_t flags;
 
-	UINT16 wave_bank;
-	UINT16 wave_start;
-	UINT16 wave_end;
-	UINT16 wave_loop;
+	uint16_t wave_bank;
+	uint16_t wave_start;
+	uint16_t wave_end;
+	uint16_t wave_loop;
 
-	UINT8 mute;
+	uint8_t mute;
 
 } C352_Voice;
 
@@ -155,21 +155,21 @@ typedef struct {
 
 	DEV_DATA _devData;
 
-	UINT32 sample_rate_base;
+	uint32_t sample_rate_base;
 
 	C352_Voice v[C352_VOICES];
 
-	UINT16 random;
-	UINT16 control; // control flags, purpose unknown.
+	uint16_t random;
+	uint16_t control; // control flags, purpose unknown.
 
-	UINT8* wave;
-	UINT32 wavesize;
-	UINT32 wave_mask;
+	uint8_t* wave;
+	uint32_t wavesize;
+	uint32_t wave_mask;
 
-	UINT8 muteRear;     // flag from VGM header
-	UINT8 optMuteRear;  // option
+	uint8_t muteRear;     // flag from VGM header
+	uint8_t optMuteRear;  // option
 
-	INT16 mulaw_table[256];
+	int16_t mulaw_table[256];
 
 } C352;
 
@@ -185,10 +185,10 @@ static void C352_fetch_sample(C352 *c, C352_Voice *v)
 	}
 	else
 	{
-		INT8 s;
-		UINT16 pos;
+		int8_t s;
+		uint16_t pos;
 
-		s = (INT8)c->wave[v->pos & c->wave_mask];
+		s = (int8_t)c->wave[v->pos & c->wave_mask];
 
 		if(v->flags & C352_FLG_MULAW)
 			v->sample = c->mulaw_table[s&0xff];
@@ -234,19 +234,19 @@ static void C352_fetch_sample(C352 *c, C352_Voice *v)
 	}
 }
 
-static void c352_ramp_volume(C352_Voice* v,int ch,UINT8 val)
+static void c352_ramp_volume(C352_Voice* v,int ch,uint8_t val)
 {
-	INT16 vol_delta = v->curr_vol[ch] - val;
+	int16_t vol_delta = v->curr_vol[ch] - val;
 	if(vol_delta != 0)
 		v->curr_vol[ch] += (vol_delta>0) ? -1 : 1;
 }
 
-static void c352_update(void *chip, UINT32 samples, DEV_SMPL **outputs)
+static void c352_update(void *chip, uint32_t samples, DEV_SMPL **outputs)
 {
 	C352 *c = (C352 *)chip;
-	UINT32 i, j;
-	INT32 s;
-	INT32 next_counter;
+	uint32_t i, j;
+	int32_t s;
+	int32_t next_counter;
 	C352_Voice* v;
 
 	DEV_SMPL out[4];
@@ -287,7 +287,7 @@ static void c352_update(void *chip, UINT32 samples, DEV_SMPL **outputs)
 
 				// Interpolate samples
 				if((v->flags & C352_FLG_FILTER) == 0)
-					s = v->last_sample + (INT32)((INT64)v->counter*(v->sample-v->last_sample)>>16);
+					s = v->last_sample + (int32_t)((int64_t)v->counter*(v->sample-v->last_sample)>>16);
 				else
 					s = v->sample;
 			}
@@ -314,11 +314,11 @@ static void c352_update(void *chip, UINT32 samples, DEV_SMPL **outputs)
 	}
 }
 
-static UINT8 device_start_c352(const DEV_GEN_CFG* cfg, DEV_INFO* retDevInf)
+static uint8_t device_start_c352(const DEV_GEN_CFG* cfg, DEV_INFO* retDevInf)
 {
 	C352 *c;
 	int i;
-	INT16 j;
+	int16_t j;
 
 	c = (C352 *)calloc(1, sizeof(C352));
 	if (c == NULL)
@@ -371,7 +371,7 @@ static void device_stop_c352(void *chip)
 static void device_reset_c352(void *chip)
 {
 	C352 *c = (C352 *)chip;
-	UINT32 muteMask;
+	uint32_t muteMask;
 	
 	muteMask = c352_get_mute_mask(c);
 	
@@ -387,30 +387,30 @@ static void device_reset_c352(void *chip)
 	return;
 }
 
-static UINT16 C352RegMap[8] = {
-	offsetof(C352_Voice,vol_f) / sizeof(UINT16),
-	offsetof(C352_Voice,vol_r) / sizeof(UINT16),
-	offsetof(C352_Voice,freq) / sizeof(UINT16),
-	offsetof(C352_Voice,flags) / sizeof(UINT16),
-	offsetof(C352_Voice,wave_bank) / sizeof(UINT16),
-	offsetof(C352_Voice,wave_start) / sizeof(UINT16),
-	offsetof(C352_Voice,wave_end) / sizeof(UINT16),
-	offsetof(C352_Voice,wave_loop) / sizeof(UINT16),
+static uint16_t C352RegMap[8] = {
+	offsetof(C352_Voice,vol_f) / sizeof(uint16_t),
+	offsetof(C352_Voice,vol_r) / sizeof(uint16_t),
+	offsetof(C352_Voice,freq) / sizeof(uint16_t),
+	offsetof(C352_Voice,flags) / sizeof(uint16_t),
+	offsetof(C352_Voice,wave_bank) / sizeof(uint16_t),
+	offsetof(C352_Voice,wave_start) / sizeof(uint16_t),
+	offsetof(C352_Voice,wave_end) / sizeof(uint16_t),
+	offsetof(C352_Voice,wave_loop) / sizeof(uint16_t),
 };
 
-static UINT16 c352_r(void *chip, UINT16 address)
+static uint16_t c352_r(void *chip, uint16_t address)
 {
 	C352 *c = (C352 *)chip;
 
 	if(address < 0x100)
-		return *((UINT16*)&c->v[address/8]+C352RegMap[address%8]);
+		return *((uint16_t*)&c->v[address/8]+C352RegMap[address%8]);
 	else if(address == 0x200)
 		return c->control;
 	else
 		return 0;
 }
 
-static void c352_w(void *chip, UINT16 address, UINT16 val)
+static void c352_w(void *chip, uint16_t address, uint16_t val)
 {
 	C352 *c = (C352 *)chip;
 	
@@ -418,7 +418,7 @@ static void c352_w(void *chip, UINT16 address, UINT16 val)
 	
 	if(address < 0x100) // Channel registers, see map above.
 	{
-		*((UINT16*)&c->v[address/8]+C352RegMap[address%8]) = val;
+		*((uint16_t*)&c->v[address/8]+C352RegMap[address%8]) = val;
 	}
 	else if(address == 0x200)
 	{
@@ -453,14 +453,14 @@ static void c352_w(void *chip, UINT16 address, UINT16 val)
 }
 
 
-static void c352_alloc_rom(void* chip, UINT32 memsize)
+static void c352_alloc_rom(void* chip, uint32_t memsize)
 {
 	C352 *c = (C352 *)chip;
 	
 	if (c->wavesize == memsize)
 		return;
 	
-	c->wave = (UINT8*)realloc(c->wave, memsize);
+	c->wave = (uint8_t*)realloc(c->wave, memsize);
 	c->wavesize = memsize;
 	memset(c->wave, 0xFF, memsize);
 	c->wave_mask = pow2_mask(memsize);
@@ -468,7 +468,7 @@ static void c352_alloc_rom(void* chip, UINT32 memsize)
 	return;
 }
 
-static void c352_write_rom(void *chip, UINT32 offset, UINT32 length, const UINT8* data)
+static void c352_write_rom(void *chip, uint32_t offset, uint32_t length, const uint8_t* data)
 {
 	C352 *c = (C352 *)chip;
 	
@@ -482,10 +482,10 @@ static void c352_write_rom(void *chip, UINT32 offset, UINT32 length, const UINT8
 	return;
 }
 
-static void c352_set_mute_mask(void *chip, UINT32 MuteMask)
+static void c352_set_mute_mask(void *chip, uint32_t MuteMask)
 {
 	C352 *c = (C352 *)chip;
-	UINT8 CurChn;
+	uint8_t CurChn;
 	
 	for (CurChn = 0; CurChn < C352_VOICES; CurChn ++)
 		c->v[CurChn].mute = (MuteMask >> CurChn) & 0x01;
@@ -493,11 +493,11 @@ static void c352_set_mute_mask(void *chip, UINT32 MuteMask)
 	return;
 }
 
-static UINT32 c352_get_mute_mask(void *chip)
+static uint32_t c352_get_mute_mask(void *chip)
 {
 	C352 *c = (C352 *)chip;
-	UINT32 muteMask;
-	UINT8 CurChn;
+	uint32_t muteMask;
+	uint8_t CurChn;
 	
 	muteMask = 0x00000000;
 	for (CurChn = 0; CurChn < C352_VOICES; CurChn ++)
@@ -506,7 +506,7 @@ static UINT32 c352_get_mute_mask(void *chip)
 	return muteMask;
 }
 
-static void c352_set_options(void *chip, UINT32 Flags)
+static void c352_set_options(void *chip, uint32_t Flags)
 {
 	C352 *c = (C352 *)chip;
 	

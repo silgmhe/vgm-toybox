@@ -20,12 +20,12 @@
 
 typedef struct
 {
-	UINT16 wFormatTag;
-	UINT16 nChannels;
-	UINT32 nSamplesPerSec;
-	UINT32 nAvgBytesPerSec;
-	UINT16 nBlockAlign;
-	UINT16 wBitsPerSample;
+	uint16_t wFormatTag;
+	uint16_t nChannels;
+	uint32_t nSamplesPerSec;
+	uint32_t nAvgBytesPerSec;
+	uint16_t nBlockAlign;
+	uint16_t wBitsPerSample;
 } WAVEFORMAT;	// from MSDN Help
 
 #define WAVE_FORMAT_PCM	0x0001
@@ -34,47 +34,47 @@ typedef struct
 typedef struct _alsa_driver
 {
 	void* audDrvPtr;
-	volatile UINT8 devState;	// 0 - not running, 1 - running, 2 - terminating
+	volatile uint8_t devState;	// 0 - not running, 1 - running, 2 - terminating
 	
 	WAVEFORMAT waveFmt;
-	UINT32 bufSmpls;
-	UINT32 bufSize;
-	UINT32 bufCount;
-	UINT8* bufSpace;
+	uint32_t bufSmpls;
+	uint32_t bufSize;
+	uint32_t bufCount;
+	uint8_t* bufSpace;
 	
 	OS_THREAD* hThread;
 	OS_SIGNAL* hSignal;
 	OS_MUTEX* hMutex;
 	snd_pcm_t* hPCM;
-	volatile UINT8 pauseThread;
-	UINT8 canPause;
+	volatile uint8_t pauseThread;
+	uint8_t canPause;
 	
 	void* userParam;
 	AUDFUNC_FILLBUF FillBuffer;
 } DRV_ALSA;
 
 
-UINT8 ALSA_IsAvailable(void);
-UINT8 ALSA_Init(void);
-UINT8 ALSA_Deinit(void);
+uint8_t ALSA_IsAvailable(void);
+uint8_t ALSA_Init(void);
+uint8_t ALSA_Deinit(void);
 const AUDIO_DEV_LIST* ALSA_GetDeviceList(void);
 AUDIO_OPTS* ALSA_GetDefaultOpts(void);
 
-UINT8 ALSA_Create(void** retDrvObj);
-UINT8 ALSA_Destroy(void* drvObj);
-UINT8 ALSA_Start(void* drvObj, UINT32 deviceID, AUDIO_OPTS* options, void* audDrvParam);
-UINT8 ALSA_Stop(void* drvObj);
-UINT8 ALSA_Pause(void* drvObj);
-UINT8 ALSA_Resume(void* drvObj);
+uint8_t ALSA_Create(void** retDrvObj);
+uint8_t ALSA_Destroy(void* drvObj);
+uint8_t ALSA_Start(void* drvObj, uint32_t deviceID, AUDIO_OPTS* options, void* audDrvParam);
+uint8_t ALSA_Stop(void* drvObj);
+uint8_t ALSA_Pause(void* drvObj);
+uint8_t ALSA_Resume(void* drvObj);
 
-UINT8 ALSA_SetCallback(void* drvObj, AUDFUNC_FILLBUF FillBufCallback, void* userParam);
-UINT32 ALSA_GetBufferSize(void* drvObj);
-UINT8 ALSA_IsBusy(void* drvObj);
-UINT8 ALSA_WriteData(void* drvObj, UINT32 dataSize, void* data);
+uint8_t ALSA_SetCallback(void* drvObj, AUDFUNC_FILLBUF FillBufCallback, void* userParam);
+uint32_t ALSA_GetBufferSize(void* drvObj);
+uint8_t ALSA_IsBusy(void* drvObj);
+uint8_t ALSA_WriteData(void* drvObj, uint32_t dataSize, void* data);
 
-UINT32 ALSA_GetLatency(void* drvObj);
+uint32_t ALSA_GetLatency(void* drvObj);
 static void AlsaThread(void* Arg);
-static UINT8 WriteBuffer(DRV_ALSA* drv, UINT32 dataSize, void* data);
+static uint8_t WriteBuffer(DRV_ALSA* drv, uint32_t dataSize, void* data);
 
 
 AUDIO_DRV audDrv_ALSA =
@@ -100,19 +100,19 @@ static char* alsaDevNames[1] = {"default"};
 static AUDIO_OPTS defOptions;
 static AUDIO_DEV_LIST deviceList;
 
-static UINT8 isInit = 0;
-static UINT32 activeDrivers;
+static uint8_t isInit = 0;
+static uint32_t activeDrivers;
 
-UINT8 ALSA_IsAvailable(void)
+uint8_t ALSA_IsAvailable(void)
 {
 	return 1;
 }
 
-UINT8 ALSA_Init(void)
+uint8_t ALSA_Init(void)
 {
-	UINT32 numDevs;
-	UINT32 curDev;
-	UINT32 devLstID;
+	uint32_t numDevs;
+	uint32_t curDev;
+	uint32_t devLstID;
 	
 	if (isInit)
 		return AERR_WASDONE;
@@ -137,9 +137,9 @@ UINT8 ALSA_Init(void)
 	return AERR_OK;
 }
 
-UINT8 ALSA_Deinit(void)
+uint8_t ALSA_Deinit(void)
 {
-	UINT32 curDev;
+	uint32_t curDev;
 	
 	if (! isInit)
 		return AERR_WASDONE;
@@ -163,10 +163,10 @@ AUDIO_OPTS* ALSA_GetDefaultOpts(void)
 }
 
 
-UINT8 ALSA_Create(void** retDrvObj)
+uint8_t ALSA_Create(void** retDrvObj)
 {
 	DRV_ALSA* drv;
-	UINT8 retVal8;
+	uint8_t retVal8;
 	
 	drv = (DRV_ALSA*)malloc(sizeof(DRV_ALSA));
 	drv->devState = 0;
@@ -191,7 +191,7 @@ UINT8 ALSA_Create(void** retDrvObj)
 	return AERR_OK;
 }
 
-UINT8 ALSA_Destroy(void* drvObj)
+uint8_t ALSA_Destroy(void* drvObj)
 {
 	DRV_ALSA* drv = (DRV_ALSA*)drvObj;
 	
@@ -213,12 +213,12 @@ UINT8 ALSA_Destroy(void* drvObj)
 	return AERR_OK;
 }
 
-UINT8 ALSA_Start(void* drvObj, UINT32 deviceID, AUDIO_OPTS* options, void* audDrvParam)
+uint8_t ALSA_Start(void* drvObj, uint32_t deviceID, AUDIO_OPTS* options, void* audDrvParam)
 {
 	DRV_ALSA* drv = (DRV_ALSA*)drvObj;
-	UINT64 tempInt64;
+	uint64_t tempInt64;
 	int retVal;
-	UINT8 retVal8;
+	uint8_t retVal8;
 	snd_pcm_hw_params_t* sndParams;
 	snd_pcm_format_t sndPcmFmt;
 	snd_pcm_uframes_t periodSize;
@@ -239,8 +239,8 @@ UINT8 ALSA_Start(void* drvObj, UINT32 deviceID, AUDIO_OPTS* options, void* audDr
 	drv->waveFmt.nBlockAlign = drv->waveFmt.wBitsPerSample * drv->waveFmt.nChannels / 8;
 	drv->waveFmt.nAvgBytesPerSec = drv->waveFmt.nSamplesPerSec * drv->waveFmt.nBlockAlign;
 	
-	tempInt64 = (UINT64)options->sampleRate * options->usecPerBuf;
-	drv->bufSmpls = (UINT32)((tempInt64 + 500000) / 1000000);
+	tempInt64 = (uint64_t)options->sampleRate * options->usecPerBuf;
+	drv->bufSmpls = (uint32_t)((tempInt64 + 500000) / 1000000);
 	//drv->bufSize = drv->waveFmt.nBlockAlign * drv->bufSmpls;
 	drv->bufCount = options->numBuffers ? options->numBuffers : 10;
 	
@@ -292,7 +292,7 @@ UINT8 ALSA_Start(void* drvObj, UINT32 deviceID, AUDIO_OPTS* options, void* audDr
 		//printf("fix count %u, total %u (%u)\n", drv->bufCount, bufferSize, drv->bufCount * periodSize);
 	}
 	
-	drv->canPause = (UINT8)snd_pcm_hw_params_can_pause(sndParams);
+	drv->canPause = (uint8_t)snd_pcm_hw_params_can_pause(sndParams);
 	
 	retVal = snd_pcm_hw_params(drv->hPCM, sndParams);
 	// disabled for now, as it sometimes causes a double-free crash
@@ -312,7 +312,7 @@ UINT8 ALSA_Start(void* drvObj, UINT32 deviceID, AUDIO_OPTS* options, void* audDr
 	}
 	
 	drv->bufSize = drv->waveFmt.nBlockAlign * drv->bufSmpls;
-	drv->bufSpace = (UINT8*)malloc(drv->bufSize);
+	drv->bufSpace = (uint8_t*)malloc(drv->bufSize);
 	
 	drv->devState = 1;
 	drv->pauseThread = 0x00;
@@ -321,7 +321,7 @@ UINT8 ALSA_Start(void* drvObj, UINT32 deviceID, AUDIO_OPTS* options, void* audDr
 	return AERR_OK;
 }
 
-UINT8 ALSA_Stop(void* drvObj)
+uint8_t ALSA_Stop(void* drvObj)
 {
 	DRV_ALSA* drv = (DRV_ALSA*)drvObj;
 	int retVal;
@@ -350,7 +350,7 @@ UINT8 ALSA_Stop(void* drvObj)
 	return AERR_OK;
 }
 
-UINT8 ALSA_Pause(void* drvObj)
+uint8_t ALSA_Pause(void* drvObj)
 {
 	DRV_ALSA* drv = (DRV_ALSA*)drvObj;
 	int retVal;
@@ -368,7 +368,7 @@ UINT8 ALSA_Pause(void* drvObj)
 	return AERR_OK;
 }
 
-UINT8 ALSA_Resume(void* drvObj)
+uint8_t ALSA_Resume(void* drvObj)
 {
 	DRV_ALSA* drv = (DRV_ALSA*)drvObj;
 	int retVal;
@@ -387,7 +387,7 @@ UINT8 ALSA_Resume(void* drvObj)
 }
 
 
-UINT8 ALSA_SetCallback(void* drvObj, AUDFUNC_FILLBUF FillBufCallback, void* userParam)
+uint8_t ALSA_SetCallback(void* drvObj, AUDFUNC_FILLBUF FillBufCallback, void* userParam)
 {
 	DRV_ALSA* drv = (DRV_ALSA*)drvObj;
 	
@@ -401,14 +401,14 @@ UINT8 ALSA_SetCallback(void* drvObj, AUDFUNC_FILLBUF FillBufCallback, void* user
 	return AERR_OK;
 }
 
-UINT32 ALSA_GetBufferSize(void* drvObj)
+uint32_t ALSA_GetBufferSize(void* drvObj)
 {
 	DRV_ALSA* drv = (DRV_ALSA*)drvObj;
 	
 	return drv->bufSize;
 }
 
-UINT8 ALSA_IsBusy(void* drvObj)
+uint8_t ALSA_IsBusy(void* drvObj)
 {
 	DRV_ALSA* drv = (DRV_ALSA*)drvObj;
 	snd_pcm_sframes_t frmCount;
@@ -420,10 +420,10 @@ UINT8 ALSA_IsBusy(void* drvObj)
 	return (frmCount > 0) ? AERR_OK : AERR_BUSY;
 }
 
-UINT8 ALSA_WriteData(void* drvObj, UINT32 dataSize, void* data)
+uint8_t ALSA_WriteData(void* drvObj, uint32_t dataSize, void* data)
 {
 	DRV_ALSA* drv = (DRV_ALSA*)drvObj;
-	UINT8 retVal;
+	uint8_t retVal;
 	
 	if (dataSize > drv->bufSize)
 		return AERR_TOO_MUCH_DATA;
@@ -435,7 +435,7 @@ UINT8 ALSA_WriteData(void* drvObj, UINT32 dataSize, void* data)
 }
 
 
-UINT32 ALSA_GetLatency(void* drvObj)
+uint32_t ALSA_GetLatency(void* drvObj)
 {
 	DRV_ALSA* drv = (DRV_ALSA*)drvObj;
 	int retVal;
@@ -450,7 +450,7 @@ UINT32 ALSA_GetLatency(void* drvObj)
 static void AlsaThread(void* Arg)
 {
 	DRV_ALSA* drv = (DRV_ALSA*)Arg;
-	UINT32 bufBytes;
+	uint32_t bufBytes;
 	int retVal;
 	
 	OSSignal_Wait(drv->hSignal);	// wait until the initialization is done
@@ -481,7 +481,7 @@ static void AlsaThread(void* Arg)
 	return;
 }
 
-static UINT8 WriteBuffer(DRV_ALSA* drv, UINT32 dataSize, void* data)
+static uint8_t WriteBuffer(DRV_ALSA* drv, uint32_t dataSize, void* data)
 {
 	int retVal;
 	

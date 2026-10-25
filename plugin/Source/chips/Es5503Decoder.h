@@ -83,12 +83,12 @@ public:
 
 	void reset (const ChipConfig& config) override;
 	void write (const RegisterWrite& write) override;
-	void advance (std::uint32_t sampleTime) override;
+	void advance (uint32_t sampleTime) override;
 
 	/** Hands the chip its 128 KB of wave RAM - the song's 0xE1 blocks assembled at their own
 		addresses. Without it no table can be measured: every voice stays the C4 trigger. The RAM
 		survives a `reset()`: it belongs to the song, not to the run. */
-	void setRam (std::vector<std::uint8_t> ram);
+	void setRam (std::vector<uint8_t> ram);
 
 	int channelCount() const override { return numChannels; }
 	ChannelState channelState (int channel) const override;

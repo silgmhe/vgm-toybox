@@ -21,7 +21,7 @@ RAM64K::Reset ()
 }
 
 bool
-RAM64K::SetImage (UINT8 * data, UINT32 offset, UINT32 size)
+RAM64K::SetImage (uint8_t * data, uint32_t offset, uint32_t size)
 {
   if( offset + size < 0x10000 )
     memcpy (image + offset, data, size );
@@ -31,14 +31,14 @@ RAM64K::SetImage (UINT8 * data, UINT32 offset, UINT32 size)
 }
 
 bool
-RAM64K::Write (UINT32 adr, UINT32 val, UINT32 id)
+RAM64K::Write (uint32_t adr, uint32_t val, uint32_t id)
 {
   image[adr & 0xFFFF] = val&0xFF;
   return true;
 }
 
 bool
-RAM64K::Read (UINT32 adr, UINT32 & val, UINT32 id)
+RAM64K::Read (uint32_t adr, uint32_t & val, uint32_t id)
 {
   val = image[adr & 0xFFFF];
   return true;

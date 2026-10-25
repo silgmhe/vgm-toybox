@@ -42,19 +42,19 @@
 #define ACCESSING_BITS_8_15 ((mem_mask & 0xff00) != 0)
 #define ACCESSING_BITS_0_7 ((mem_mask & 0x00ff) != 0)
 
-static void ics2115_update(void *param, UINT32 samples, DEV_SMPL **outputs);
-static UINT8 device_start_ics2115(const DEV_GEN_CFG* cfg, DEV_INFO* retDevInf);
+static void ics2115_update(void *param, uint32_t samples, DEV_SMPL **outputs);
+static uint8_t device_start_ics2115(const DEV_GEN_CFG* cfg, DEV_INFO* retDevInf);
 static void device_stop_ics2115(void *info);
 static void device_reset_ics2115(void *info);
 
-static UINT8 ics2115_byte_r(void *info, UINT8 offset);
-static void ics2115_byte_w(void *info, UINT8 offset, UINT8 data);
+static uint8_t ics2115_byte_r(void *info, uint8_t offset);
+static void ics2115_byte_w(void *info, uint8_t offset, uint8_t data);
 
-static void ics2115_alloc_rom(void* info, UINT32 memsize);
-static void ics2115_write_rom(void *info, UINT32 offset, UINT32 length, const UINT8* data);
+static void ics2115_alloc_rom(void* info, uint32_t memsize);
+static void ics2115_write_rom(void *info, uint32_t offset, uint32_t length, const uint8_t* data);
 
-static void ics2115_set_mute_mask(void *info, UINT32 MuteMask);
-static UINT32 ics2115_get_mute_mask(void *info);
+static void ics2115_set_mute_mask(void *info, uint32_t MuteMask);
+static uint32_t ics2115_get_mute_mask(void *info);
 static void ics2115_set_srchg_cb(void *info, DEVCB_SRATE_CHG CallbackFunc, void* DataPtr);
 
 static DEVDEF_RWFUNC devFunc[] =
@@ -90,7 +90,7 @@ static const char* DeviceName(const DEV_GEN_CFG* devCfg)
 	return "ICS2115";
 }
 
-static UINT16 DeviceChannels(const DEV_GEN_CFG* devCfg)
+static uint16_t DeviceChannels(const DEV_GEN_CFG* devCfg)
 {
 	return 32;
 }
@@ -118,11 +118,11 @@ const DEV_DECL sndDev_ICS2115 =
 	}
 };
 
-INLINE UINT8 count_leading_zeros_32(UINT32 val)
+INLINE uint8_t count_leading_zeros_32(uint32_t val)
 {
-	UINT8 count;
+	uint8_t count;
 	if (!val) return 32U;
-	for (count = 0; (INT32)val >= 0; count++) val <<= 1;
+	for (count = 0; (int32_t)val >= 0; count++) val <<= 1;
 	return count;
 }
 
@@ -132,50 +132,50 @@ typedef struct {
 	ics2115_state *device;
 
 	struct {
-		INT32 left;
-		INT32 acc, start, end; // address counters (20.9 fixed point)
-		UINT16 fc;              // frequency (6.9 fixed point)
-		UINT8 ctl, saddr;
+		int32_t left;
+		int32_t acc, start, end; // address counters (20.9 fixed point)
+		uint16_t fc;              // frequency (6.9 fixed point)
+		uint8_t ctl, saddr;
 	} osc;
 
 	struct {
-		INT32 left;
-		UINT32 add;
-		UINT32 start, end;
-		UINT32 acc;
-		UINT16 regacc;
-		UINT8 incr;
-		UINT8 pan, mode;
+		int32_t left;
+		uint32_t add;
+		uint32_t start, end;
+		uint32_t acc;
+		uint16_t regacc;
+		uint8_t incr;
+		uint8_t pan, mode;
 	} vol;
 
 	union {
 		struct {
-			UINT8 ulaw       : 1;   // compressed sample format
-			UINT8 stop       : 1;   // stops wave + vol envelope
-			UINT8 eightbit   : 1;   // 8 bit sample format
-			UINT8 loop       : 1;   // loop enable
-			UINT8 loop_bidir : 1;   // bi-directional loop enable
-			UINT8 irq        : 1;   // enable IRQ generation
-			UINT8 invert     : 1;   // invert direction
-			UINT8 irq_pending: 1;   // (read only?) IRQ pending
+			uint8_t ulaw       : 1;   // compressed sample format
+			uint8_t stop       : 1;   // stops wave + vol envelope
+			uint8_t eightbit   : 1;   // 8 bit sample format
+			uint8_t loop       : 1;   // loop enable
+			uint8_t loop_bidir : 1;   // bi-directional loop enable
+			uint8_t irq        : 1;   // enable IRQ generation
+			uint8_t invert     : 1;   // invert direction
+			uint8_t irq_pending: 1;   // (read only?) IRQ pending
 			// IRQ on variable?
 		} bitflags;
-		UINT8 value;
+		uint8_t value;
 	} osc_conf;
 
 	union {
 		struct {
-			UINT8 done       : 1;   // indicates ramp has stopped
-			UINT8 stop       : 1;   // stops the ramp
-			UINT8 rollover   : 1;   // rollover (TODO)
-			UINT8 loop       : 1;   // loop enable
-			UINT8 loop_bidir : 1;   // bi-directional loop enable
-			UINT8 irq        : 1;   // enable IRQ generation
-			UINT8 invert     : 1;   // invert direction
-			UINT8 irq_pending: 1;   // (read only?) IRQ pending
+			uint8_t done       : 1;   // indicates ramp has stopped
+			uint8_t stop       : 1;   // stops the ramp
+			uint8_t rollover   : 1;   // rollover (TODO)
+			uint8_t loop       : 1;   // loop enable
+			uint8_t loop_bidir : 1;   // bi-directional loop enable
+			uint8_t irq        : 1;   // enable IRQ generation
+			uint8_t invert     : 1;   // invert direction
+			uint8_t irq_pending: 1;   // (read only?) IRQ pending
 			// noenvelope == (done | stop)
 		} bitflags;
-		UINT8 value;
+		uint8_t value;
 	} vol_ctrl;
 
 	// Possibly redundant state. => improvements of wavetable logic
@@ -184,16 +184,16 @@ typedef struct {
 		bool on;
 	} state;
 
-	UINT16 regs[0x20]; // channel registers
+	uint16_t regs[0x20]; // channel registers
 
-	UINT8  Muted;
+	uint8_t  Muted;
 } ics2115_voice;
 
 /*
 typedef struct {
-	UINT8 scale, preset;
+	uint8_t scale, preset;
 	//emu_timer *timer;
-	UINT64 period;  // in nsec
+	uint64_t period;  // in nsec
 } ics2115_timer;
 */
 
@@ -201,53 +201,53 @@ struct _ics2115_state
 {
 	DEV_DATA _devData;
 
-	void (*irq_func)(void *, UINT8);	// IRQ callback
+	void (*irq_func)(void *, uint8_t);	// IRQ callback
 	void *irq_param;
 
 	DEVCB_SRATE_CHG SmpRateFunc;
 	void* SmpRateData;
 
-	UINT8 *rom;
-	UINT32 rom_size;
-	UINT32 rom_mask;
+	uint8_t *rom;
+	uint32_t rom_size;
+	uint32_t rom_mask;
 
 	ics2115_voice voice[32];
 	//ics2115_timer timer[2];
 
 	// tables
-	INT16 ulaw[256];
-	UINT16 volume[4096];
-	UINT16 panlaw[256];
+	int16_t ulaw[256];
+	uint16_t volume[4096];
+	uint16_t panlaw[256];
 
 	/* global sound parameters */
-	UINT32 clock;
-	UINT32 output_rate;
+	uint32_t clock;
+	uint32_t output_rate;
 
 	/* chip registers */
-	UINT8 active_osc;
-	UINT8 osc_select;
-	UINT8 reg_select;
-	UINT8 irq_enabled;
-	UINT8 irq_pending;
-	UINT8 irq_on;
+	uint8_t active_osc;
+	uint8_t osc_select;
+	uint8_t reg_select;
+	uint8_t irq_enabled;
+	uint8_t irq_pending;
+	uint8_t irq_on;
 
-	UINT16 regs[0x40]; // global registers
+	uint16_t regs[0x40]; // global registers
 
 	/*
 		Unknown variable, seems to be effected by 0x12. Further investigation
 		Required.
 	*/
-	UINT32 volinc_frac[32];
+	uint32_t volinc_frac[32];
 };
 
 // internal register helper functions
-static void reg_write(ics2115_state *chip, UINT16 data, UINT16 mem_mask);
+static void reg_write(ics2115_state *chip, uint16_t data, uint16_t mem_mask);
 //static void recalc_timer(ics2115_state *chip, int timer);
 
 // stream helper functions
-static UINT8 read_sample(ics2115_state *chip, ics2115_voice *voice, UINT32 addr) { return chip->rom[((voice->osc.saddr & 0x0F) << 20) | (addr & 0xFFFFF)]; }
+static uint8_t read_sample(ics2115_state *chip, ics2115_voice *voice, uint32_t addr) { return chip->rom[((voice->osc.saddr & 0x0F) << 20) | (addr & 0xFFFFF)]; }
 
-INLINE UINT32 ics2115_get_output_rate(ics2115_state *chip)
+INLINE uint32_t ics2115_get_output_rate(ics2115_state *chip)
 {
 	return (chip->clock / 32) / (chip->active_osc + 1);
 }
@@ -260,12 +260,12 @@ INLINE UINT32 ics2115_get_output_rate(ics2115_state *chip)
 //  device_start - device-specific startup
 //-------------------------------------------------
 
-static UINT8 device_start_ics2115(const DEV_GEN_CFG* cfg, DEV_INFO* retDevInf)
+static uint8_t device_start_ics2115(const DEV_GEN_CFG* cfg, DEV_INFO* retDevInf)
 {
 	ics2115_state *chip;
 	int i;
-	UINT16 lut[8];
-	UINT16 lut_initial;
+	uint16_t lut[8];
+	uint16_t lut_initial;
 
 	chip = (ics2115_state *)calloc(1, sizeof(ics2115_state));
 	if (chip == NULL)
@@ -304,7 +304,7 @@ static UINT8 device_start_ics2115(const DEV_GEN_CFG* cfg, DEV_INFO* retDevInf)
 	// mant = i[7:0]
 	// exp == 0 : mant >> 7
 	// exp > 0 : ceil(((0x100 | mant) << exp) / 512)
-	UINT8 exponent, mantissa;
+	uint8_t exponent, mantissa;
 	for (i = 0; i < 4096; i++)
 	{
 		exponent = i >> 8;
@@ -322,9 +322,9 @@ static UINT8 device_start_ics2115(const DEV_GEN_CFG* cfg, DEV_INFO* retDevInf)
 
 	for (i = 0; i < 256; i++)
 	{
-		UINT8 exponent = (~i >> 4) & 0x07;
-		UINT8 mantissa = ~i & 0x0f;
-		INT16 value = lut[exponent] + (mantissa << (exponent + 3));
+		uint8_t exponent = (~i >> 4) & 0x07;
+		uint8_t mantissa = ~i & 0x0f;
+		int16_t value = lut[exponent] + (mantissa << (exponent + 3));
 		chip->ulaw[i] = (i & 0x80) ? -value : value;
 		chip->panlaw[i] = PAN_LEVEL - (31 - count_leading_zeros_32(i)); //chip->panlaw[i] = PAN_LEVEL - log2(i)
 	}
@@ -334,7 +334,7 @@ static UINT8 device_start_ics2115(const DEV_GEN_CFG* cfg, DEV_INFO* retDevInf)
 	// round(1024*2^(frac/32))
 	for (i = 0; i < 32; i++)
 	{
-		chip->volinc_frac[i] = (UINT16)(round(1024.0 * pow(2.0, (double)(i) / 32.0)));
+		chip->volinc_frac[i] = (uint16_t)(round(1024.0 * pow(2.0, (double)(i) / 32.0)));
 	}
 
 	return 0x00;
@@ -358,7 +358,7 @@ static void device_reset_ics2115(void *info)
 {
 	ics2115_state *chip = (ics2115_state *)info;
 	int i;
-	UINT32 muteMask;
+	uint32_t muteMask;
 	
 	muteMask = ics2115_get_mute_mask(chip);
 	chip->irq_enabled = 0;
@@ -435,7 +435,7 @@ static void recalc_irq(ics2115_state *chip)
 	int i;
 
 	//Suspect
-	UINT8 irq = (chip->irq_pending & chip->irq_enabled) ? 1 : 0;
+	uint8_t irq = (chip->irq_pending & chip->irq_enabled) ? 1 : 0;
 	for (i = 0; (!irq) && (i < 32); i++)
 		irq |= (chip->voice[i].vol_ctrl.bitflags.irq_pending || chip->voice[i].osc_conf.bitflags.irq_pending) ? 1 : 0;
 	chip->irq_on = irq;
@@ -465,7 +465,7 @@ static void recalc_irq(ics2115_state *chip)
 */
 static int update_volume_envelope(ics2115_voice *voice)
 {
-	UINT8 bc;
+	uint8_t bc;
 	int ret;
 
 	// test for boundary cross
@@ -526,7 +526,7 @@ static int update_volume_envelope(ics2115_voice *voice)
 	return ret;
 }
 
-/*UINT32 ics2115_device::ics2115_voice::next_address()
+/*uint32_t ics2115_device::ics2115_voice::next_address()
 {
 	//Patent 6,246,774 B1, Column 111, Row 25
 	//LEN   BLEN    DIR     BC      NextAddress
@@ -596,13 +596,13 @@ static int update_oscillator(ics2115_voice *voice)
 }
 
 //TODO: proper interpolation for 8-bit samples (looping)
-static INT32 get_sample(ics2115_state *chip, ics2115_voice *voice)
+static int32_t get_sample(ics2115_state *chip, ics2115_voice *voice)
 {
-	UINT32 curaddr = voice->osc.acc >> 12;
-	UINT32 nextaddr;
-	INT32 sample1, sample2;
-	INT32 diff;
-	UINT16 fract;
+	uint32_t curaddr = voice->osc.acc >> 12;
+	uint32_t nextaddr;
+	int32_t sample1, sample2;
+	int32_t diff;
+	uint16_t fract;
 
 	if (voice->state.on && voice->osc_conf.bitflags.loop && !voice->osc_conf.bitflags.loop_bidir &&
 			(voice->osc.left < (voice->osc.fc << 2)))
@@ -620,14 +620,14 @@ static INT32 get_sample(ics2115_state *chip, ics2115_voice *voice)
 	}
 	else if (voice->osc_conf.bitflags.eightbit)
 	{
-		sample1 = ((INT8)read_sample(chip, voice, curaddr)) << 8;
-		sample2 = ((INT8)read_sample(chip, voice, curaddr + 1)) << 8;
+		sample1 = ((int8_t)read_sample(chip, voice, curaddr)) << 8;
+		sample2 = ((int8_t)read_sample(chip, voice, curaddr + 1)) << 8;
 	}
 	else
 	{
-		sample1 = read_sample(chip, voice, curaddr + 0) | (((INT8)read_sample(chip, voice, curaddr + 1)) << 8);
-		sample2 = read_sample(chip, voice, nextaddr+ 0) | (((INT8)read_sample(chip, voice, nextaddr+ 1)) << 8);
-		//sample2 = read_sample(chip, voice, curaddr + 2) | (((INT8)read_sample(chip, voice, curaddr + 3)) << 8);
+		sample1 = read_sample(chip, voice, curaddr + 0) | (((int8_t)read_sample(chip, voice, curaddr + 1)) << 8);
+		sample2 = read_sample(chip, voice, nextaddr+ 0) | (((int8_t)read_sample(chip, voice, nextaddr+ 1)) << 8);
+		//sample2 = read_sample(chip, voice, curaddr + 2) | (((int8_t)read_sample(chip, voice, curaddr + 3)) << 8);
 	}
 
 	//linear interpolation as in US patent 6,246,774 B1, column 2 row 59
@@ -640,7 +640,7 @@ static INT32 get_sample(ics2115_state *chip, ics2115_voice *voice)
 	//    return sample1;
 
 	//return sample1;
-	return (((INT32)sample1 << 9) + diff * fract) >> 9;
+	return (((int32_t)sample1 << 9) + diff * fract) >> 9;
 }
 
 static bool playing(ics2115_voice *voice)
@@ -648,11 +648,11 @@ static bool playing(ics2115_voice *voice)
 	return voice->state.on && !(voice->osc_conf.bitflags.stop);
 }
 
-static UINT8 fill_output(ics2115_state *chip, ics2115_voice *voice, UINT32 samples, INT32 *loutput, INT32 *routput)
+static uint8_t fill_output(ics2115_state *chip, ics2115_voice *voice, uint32_t samples, int32_t *loutput, int32_t *routput)
 {
-	UINT32 i;
-	UINT8 irq_invalid = 0;
-	UINT16 e;
+	uint32_t i;
+	uint8_t irq_invalid = 0;
+	uint16_t e;
 	// measured from hardware
 	switch (voice->vol.mode & 0x3)
 	{
@@ -671,19 +671,19 @@ static UINT8 fill_output(ics2115_state *chip, ics2115_voice *voice, UINT32 sampl
 
 	for (i = 0; i < samples; i++)
 	{
-		INT32 volacc = (voice->vol.acc >> 14) & 0xfff;
-		INT32 vlefti = volacc - chip->panlaw[255 - voice->vol.pan]; // left index from acc - pan law
-		INT32 vrighti = volacc - chip->panlaw[voice->vol.pan]; // right index from acc - pan law
+		int32_t volacc = (voice->vol.acc >> 14) & 0xfff;
+		int32_t vlefti = volacc - chip->panlaw[255 - voice->vol.pan]; // left index from acc - pan law
+		int32_t vrighti = volacc - chip->panlaw[voice->vol.pan]; // right index from acc - pan law
 		//check negative values so no cracks, is it a hardware feature ?
-		INT32 vleft = (vlefti > 0) ? chip->volume[vlefti] : 0;
-		INT32 vright = (vrighti > 0) ? chip->volume[vrighti] : 0;
+		int32_t vleft = (vlefti > 0) ? chip->volume[vlefti] : 0;
+		int32_t vright = (vrighti > 0) ? chip->volume[vrighti] : 0;
 
 		//From GUS doc:
 		//In general, it is necessary to remember that all voices are being summed in to the
 		//final output, even if they are not running.  This means that whatever data value
 		//that the voice is pointing at is contributing to the summation.
 		//(austere note: this will of course fix some of the glitches due to multiple transition)
-		INT32 sample = get_sample(chip, voice);
+		int32_t sample = get_sample(chip, voice);
 
 		//15-bit volume + (5-bit worth of 32 channel sum) + 16-bit samples = 4-bit extra
 		//if (playing(voice))
@@ -704,10 +704,10 @@ static UINT8 fill_output(ics2115_state *chip, ics2115_voice *voice, UINT32 sampl
 	return irq_invalid;
 }
 
-static void ics2115_update(void *param, UINT32 samples, DEV_SMPL **outputs)
+static void ics2115_update(void *param, uint32_t samples, DEV_SMPL **outputs)
 {
 	ics2115_state *chip = (ics2115_state *)param;
-	UINT8 irq_invalid;
+	uint8_t irq_invalid;
 	int osc;
 
 	memset(outputs[0], 0, samples * sizeof(DEV_SMPL));
@@ -726,9 +726,9 @@ static void ics2115_update(void *param, UINT32 samples, DEV_SMPL **outputs)
 #endif
 /*
 #if 0
-		UINT32 curaddr = ((voice->osc.saddr << 20) & 0xffffff) | (voice->osc.acc >> 12);
-		INT32 sample = get_sample(voice);
-		logerror("[%06x=%04x]", curaddr, (INT16)sample);
+		uint32_t curaddr = ((voice->osc.saddr << 20) & 0xffffff) | (voice->osc.acc >> 12);
+		int32_t sample = get_sample(voice);
+		logerror("[%06x=%04x]", curaddr, (int16_t)sample);
 #endif
 */
 		if (fill_output(chip, voice, samples, outputs[0], outputs[1]))
@@ -769,11 +769,11 @@ static void ics2115_update(void *param, UINT32 samples, DEV_SMPL **outputs)
 }
 
 //Helper Function (Reads off current register)
-static UINT16 reg_read(ics2115_state *chip)
+static uint16_t reg_read(ics2115_state *chip)
 {
 	int i;
 
-	UINT16 ret = 0;
+	uint16_t ret = 0;
 	ics2115_voice *voice = &chip->voice[chip->osc_select];
 
 	switch (chip->reg_select)
@@ -957,7 +957,7 @@ static UINT16 reg_read(ics2115_state *chip)
 	return ret;
 }
 
-static void reg_write(ics2115_state *chip, UINT16 data, UINT16 mem_mask)
+static void reg_write(ics2115_state *chip, uint16_t data, uint16_t mem_mask)
 {
 	ics2115_voice *voice = &chip->voice[chip->osc_select];
 
@@ -1088,7 +1088,7 @@ static void reg_write(ics2115_state *chip, UINT16 data, UINT16 mem_mask)
 			if (ACCESSING_BITS_8_15)
 			{
 				data >>= 8;
-				voice->osc.ctl = (UINT8)data;
+				voice->osc.ctl = (uint8_t)data;
 				voice->state.on = !voice->osc.ctl; // some early PGM games need this
 				if (!data)
 					keyon(chip);
@@ -1180,10 +1180,10 @@ static void reg_write(ics2115_state *chip, UINT16 data, UINT16 mem_mask)
 	}
 }
 
-static UINT8 ics2115_byte_r(void *info, UINT8 offset)
+static uint8_t ics2115_byte_r(void *info, uint8_t offset)
 {
 	ics2115_state *chip = (ics2115_state *)info;
-	UINT8 ret = 0;
+	uint8_t ret = 0;
 
 	switch (offset)
 	{
@@ -1211,7 +1211,7 @@ static UINT8 ics2115_byte_r(void *info, UINT8 offset)
 			ret = chip->reg_select;
 			break;
 		case 2:
-			ret = (UINT8)(reg_read(chip));
+			ret = (uint8_t)(reg_read(chip));
 			break;
 		case 3:
 			ret = reg_read(chip) >> 8;
@@ -1225,7 +1225,7 @@ static UINT8 ics2115_byte_r(void *info, UINT8 offset)
 	return ret;
 }
 
-static void ics2115_byte_w(void *info, UINT8 offset, UINT8 data)
+static void ics2115_byte_w(void *info, uint8_t offset, uint8_t data)
 {
 	ics2115_state *chip = (ics2115_state *)info;
 	switch (offset)
@@ -1268,7 +1268,7 @@ TIMER_CALLBACK_MEMBER( ics2115_device::timer_cb_1 )
 
 static void recalc_timer(ics2115_state *chip, int timer)
 {
-	UINT64 period  = ((chip->timer[timer].scale & 0x1f) + 1) * (chip->timer[timer].preset + 1);
+	uint64_t period  = ((chip->timer[timer].scale & 0x1f) + 1) * (chip->timer[timer].preset + 1);
 	period <<= (4 + (chip->timer[timer].scale >> 5));
 
 	if (chip->timer[timer].period != period)
@@ -1281,14 +1281,14 @@ static void recalc_timer(ics2115_state *chip, int timer)
 }
 */
 
-static void ics2115_alloc_rom(void* info, UINT32 memsize)
+static void ics2115_alloc_rom(void* info, uint32_t memsize)
 {
 	ics2115_state *chip = (ics2115_state *)info;
 	
 	if (chip->rom_size == memsize)
 		return;
 	
-	chip->rom = (UINT8*)realloc(chip->rom, memsize);
+	chip->rom = (uint8_t*)realloc(chip->rom, memsize);
 	chip->rom_size = memsize;
 	memset(chip->rom, 0, memsize);
 	
@@ -1297,7 +1297,7 @@ static void ics2115_alloc_rom(void* info, UINT32 memsize)
 	return;
 }
 
-static void ics2115_write_rom(void *info, UINT32 offset, UINT32 length, const UINT8* data)
+static void ics2115_write_rom(void *info, uint32_t offset, uint32_t length, const uint8_t* data)
 {
 	ics2115_state *chip = (ics2115_state *)info;
 	
@@ -1311,10 +1311,10 @@ static void ics2115_write_rom(void *info, UINT32 offset, UINT32 length, const UI
 	return;
 }
 
-static void ics2115_set_mute_mask(void *info, UINT32 MuteMask)
+static void ics2115_set_mute_mask(void *info, uint32_t MuteMask)
 {
 	ics2115_state *chip = (ics2115_state *)info;
-	UINT8 CurChn;
+	uint8_t CurChn;
 	
 	for (CurChn = 0; CurChn < 32; CurChn ++)
 		chip->voice[CurChn].Muted = (MuteMask >> CurChn) & 0x01;
@@ -1322,11 +1322,11 @@ static void ics2115_set_mute_mask(void *info, UINT32 MuteMask)
 	return;
 }
 
-static UINT32 ics2115_get_mute_mask(void *info)
+static uint32_t ics2115_get_mute_mask(void *info)
 {
 	ics2115_state *chip = (ics2115_state *)info;
-	UINT32 muteMask;
-	UINT8 CurChn;
+	uint32_t muteMask;
+	uint8_t CurChn;
 	
 	muteMask = 0x00000000;
 	for (CurChn = 0; CurChn < 32; CurChn ++)

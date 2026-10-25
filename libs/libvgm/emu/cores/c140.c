@@ -32,18 +32,18 @@ TODO: What does the INT0 pin do? Normally Namco tied it to VOL0 (with VOL1 = VCC
 #include "../EmuHelper.h"
 #include "c140.h"
 
-static void c140_update(void *param, UINT32 samples, DEV_SMPL **outputs);
-static UINT8 device_start_c140(const DEV_GEN_CFG* cfg, DEV_INFO* retDevInf);
+static void c140_update(void *param, uint32_t samples, DEV_SMPL **outputs);
+static uint8_t device_start_c140(const DEV_GEN_CFG* cfg, DEV_INFO* retDevInf);
 static void device_stop_c140(void *chip);
 static void device_reset_c140(void *chip);
 
-static UINT8 c140_r(void *chip, UINT16 offset);
-static void c140_w(void *chip, UINT16 offset, UINT8 data);
+static uint8_t c140_r(void *chip, uint16_t offset);
+static void c140_w(void *chip, uint16_t offset, uint8_t data);
 
-static void c140_alloc_rom(void* chip, UINT32 memsize);
-static void c140_write_rom(void *chip, UINT32 offset, UINT32 length, const UINT8* data);
+static void c140_alloc_rom(void* chip, uint32_t memsize);
+static void c140_write_rom(void *chip, uint32_t offset, uint32_t length, const uint8_t* data);
 
-static void c140_set_mute_mask(void *chip, UINT32 MuteMask);
+static void c140_set_mute_mask(void *chip, uint32_t MuteMask);
 
 
 static DEVDEF_RWFUNC devFunc[] =
@@ -79,7 +79,7 @@ static const char* DeviceName(const DEV_GEN_CFG* devCfg)
 	return "C140";
 }
 
-static UINT16 DeviceChannels(const DEV_GEN_CFG* devCfg)
+static uint16_t DeviceChannels(const DEV_GEN_CFG* devCfg)
 {
 	return 24;
 }
@@ -119,35 +119,35 @@ enum
 
 struct voice_registers
 {
-	UINT8 volume_right;
-	UINT8 volume_left;
-	UINT8 frequency_msb;
-	UINT8 frequency_lsb;
-	UINT8 bank;
-	UINT8 mode;
-	UINT8 start_msb;
-	UINT8 start_lsb;
-	UINT8 end_msb;
-	UINT8 end_lsb;
-	UINT8 loop_msb;
-	UINT8 loop_lsb;
-	UINT8 reserved[4];
+	uint8_t volume_right;
+	uint8_t volume_left;
+	uint8_t frequency_msb;
+	uint8_t frequency_lsb;
+	uint8_t bank;
+	uint8_t mode;
+	uint8_t start_msb;
+	uint8_t start_lsb;
+	uint8_t end_msb;
+	uint8_t end_lsb;
+	uint8_t loop_msb;
+	uint8_t loop_lsb;
+	uint8_t reserved[4];
 };
 
 typedef struct
 {
-	INT32   ptoffset;
-	INT32   pos;
+	int32_t   ptoffset;
+	int32_t   pos;
 	//--work
-	INT32   lastdt;
-	INT32   prevdt;
-	INT32   dltdt;
+	int32_t   lastdt;
+	int32_t   prevdt;
+	int32_t   dltdt;
 
-	UINT32  sample_start;
-	UINT32  sample_end;
-	UINT32  sample_loop;
-	UINT8   key;
-	UINT8   Muted;
+	uint32_t  sample_start;
+	uint32_t  sample_end;
+	uint32_t  sample_loop;
+	uint8_t   key;
+	uint8_t   Muted;
 } C140_VOICE;
 
 typedef struct _c140_state c140_state;
@@ -155,17 +155,17 @@ struct _c140_state
 {
 	DEV_DATA _devData;
 
-	UINT32 clock;
-	UINT32 sample_rate;
+	uint32_t clock;
+	uint32_t sample_rate;
 	float pbase;
-	UINT8 banking_type;
+	uint8_t banking_type;
 
-	UINT32 romSize;
-	UINT32 romMask;
-	UINT8 *pRom;
-	UINT8 REG[0x200];
+	uint32_t romSize;
+	uint32_t romMask;
+	uint8_t *pRom;
+	uint8_t REG[0x200];
 
-	INT16 mulaw_table[256];
+	int16_t mulaw_table[256];
 
 	C140_VOICE voi[MAX_VOICE];
 };
@@ -188,7 +188,7 @@ static void init_voice( C140_VOICE *v )
    is done by a small PAL or GAL external to the sound chip, which can be switched
    per-game or at least per-PCB revision as addressing range needs grow.
  */
-static UINT32 find_sample(c140_state *info, UINT32 adrs, UINT8 bank, int voice)
+static uint32_t find_sample(c140_state *info, uint32_t adrs, uint8_t bank, int voice)
 {
 	adrs=(bank<<16)+adrs;
 
@@ -210,7 +210,7 @@ static UINT32 find_sample(c140_state *info, UINT32 adrs, UINT8 bank, int voice)
 	return 0;
 }
 
-INLINE UINT8 c140_keyon_status_read(c140_state *info, UINT16 offset)
+INLINE uint8_t c140_keyon_status_read(c140_state *info, uint16_t offset)
 {
 	//m_stream->update();
 	C140_VOICE const *v = &info->voi[offset >> 4];
@@ -221,7 +221,7 @@ INLINE UINT8 c140_keyon_status_read(c140_state *info, UINT16 offset)
 	return (v->key ? 0x40 : 0x00) | (info->REG[offset] & 0x3f);
 }
 
-static UINT8 c140_r(void *chip, UINT16 offset)
+static uint8_t c140_r(void *chip, uint16_t offset)
 {
 	c140_state *info = (c140_state *)chip;
 	offset&=0x1ff;
@@ -232,7 +232,7 @@ static UINT8 c140_r(void *chip, UINT16 offset)
 	return info->REG[offset];
 }
 
-static void c140_w(void *chip, UINT16 offset, UINT8 data)
+static void c140_w(void *chip, uint16_t offset, uint8_t data)
 {
 	c140_state *info = (c140_state *)chip;
 
@@ -290,17 +290,17 @@ static void c140_w(void *chip, UINT16 offset, UINT8 data)
 	}
 }
 
-static void c140_update(void *param, UINT32 samples, DEV_SMPL **outputs)
+static void c140_update(void *param, uint32_t samples, DEV_SMPL **outputs)
 {
 	c140_state *info = (c140_state *)param;
-	UINT32  i,j;
+	uint32_t  i,j;
 
-	INT32   dt;
-	INT32   sz;
+	int32_t   dt;
+	int32_t   sz;
 
-	UINT32  sampleAdr;
-	INT32   frequency,delta;
-	UINT32  cnt;
+	uint32_t  sampleAdr;
+	int32_t   frequency,delta;
+	uint32_t  cnt;
 
 	DEV_SMPL *lmix, *rmix;
 
@@ -328,7 +328,7 @@ static void c140_update(void *param, UINT32 samples, DEV_SMPL **outputs)
 			if (frequency==0) continue;
 
 			/* Delta =  frequency * ((8MHz/374)*2 / sample rate) */
-			delta = (INT32)((float)frequency * info->pbase);
+			delta = (int32_t)((float)frequency * info->pbase);
 
 			/* calculate sample size */
 			sz = v->sample_end - v->sample_start;
@@ -364,12 +364,12 @@ static void c140_update(void *param, UINT32 samples, DEV_SMPL **outputs)
 					if (vreg->mode & C140_MODE_MULAW)
 						v->lastdt = info->mulaw_table[info->pRom[(sampleAdr + v->pos) & info->romMask]];
 					else
-						v->lastdt = (INT8)info->pRom[(sampleAdr + v->pos) & info->romMask] << 8;
+						v->lastdt = (int8_t)info->pRom[(sampleAdr + v->pos) & info->romMask] << 8;
 					v->dltdt = (v->lastdt - v->prevdt);
 				}
 
 				/* Caclulate the sample value */
-				dt = (INT32)(((INT64)v->dltdt * v->ptoffset) >> 16) + v->prevdt;
+				dt = (int32_t)(((int64_t)v->dltdt * v->ptoffset) >> 16) + v->prevdt;
 
 				/* Write the data to the sample buffers */
 				lmix[j] += (dt * vreg->volume_left) >> (5 + 4);
@@ -379,7 +379,7 @@ static void c140_update(void *param, UINT32 samples, DEV_SMPL **outputs)
 	}
 }
 
-static UINT8 device_start_c140(const DEV_GEN_CFG* cfg, DEV_INFO* retDevInf)
+static uint8_t device_start_c140(const DEV_GEN_CFG* cfg, DEV_INFO* retDevInf)
 {
 	c140_state *info;
 	int i;
@@ -400,8 +400,8 @@ static UINT8 device_start_c140(const DEV_GEN_CFG* cfg, DEV_INFO* retDevInf)
 
 	for(i = 0; i < 256; i++)
 	{
-		UINT8 s1 = i & 7;
-		UINT8 s2 = abs((INT8)i >> 3) & 0x1F;
+		uint8_t s1 = i & 7;
+		uint8_t s2 = abs((int8_t)i >> 3) & 0x1F;
 		info->mulaw_table[i]  = (0x80 << s1) & 0xFF00;
 		info->mulaw_table[i] += s2 << (s1 ? (s1+3) : 4);
 		if (i & 0x80)
@@ -440,14 +440,14 @@ static void device_reset_c140(void *chip)
 	return;
 }
 
-static void c140_alloc_rom(void* chip, UINT32 memsize)
+static void c140_alloc_rom(void* chip, uint32_t memsize)
 {
 	c140_state *info = (c140_state *)chip;
 	
 	if (info->romSize == memsize)
 		return;
 	
-	info->pRom = (UINT8*)realloc(info->pRom, memsize);
+	info->pRom = (uint8_t*)realloc(info->pRom, memsize);
 	info->romSize = memsize;
 	info->romMask = pow2_mask(memsize);
 	memset(info->pRom, 0xFF, memsize);
@@ -455,7 +455,7 @@ static void c140_alloc_rom(void* chip, UINT32 memsize)
 	return;
 }
 
-static void c140_write_rom(void *chip, UINT32 offset, UINT32 length, const UINT8* data)
+static void c140_write_rom(void *chip, uint32_t offset, uint32_t length, const uint8_t* data)
 {
 	c140_state *info = (c140_state *)chip;
 	
@@ -470,10 +470,10 @@ static void c140_write_rom(void *chip, UINT32 offset, UINT32 length, const UINT8
 }
 
 
-static void c140_set_mute_mask(void *chip, UINT32 MuteMask)
+static void c140_set_mute_mask(void *chip, uint32_t MuteMask)
 {
 	c140_state *info = (c140_state *)chip;
-	UINT8 CurChn;
+	uint8_t CurChn;
 	
 	for (CurChn = 0; CurChn < MAX_VOICE; CurChn ++)
 		info->voi[CurChn].Muted = (MuteMask >> CurChn) & 0x01;

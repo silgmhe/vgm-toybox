@@ -92,11 +92,11 @@ public:
 
 	void reset (const ChipConfig& config) override;
 	void write (const RegisterWrite& write) override;
-	void advance (std::uint32_t sampleTime) override;
+	void advance (uint32_t sampleTime) override;
 
 	/** The sample ROM: the song's 0x8F data blocks assembled at their own offsets. It survives a
 		`reset()`, because it belongs to the song rather than to the run. */
-	void setRom (std::vector<std::uint8_t> rom);
+	void setRom (std::vector<uint8_t> rom);
 
 	int channelCount() const override { return channelCount_; }
 	ChannelState channelState (int channel) const override;

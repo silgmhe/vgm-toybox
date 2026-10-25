@@ -22,7 +22,7 @@ struct _os_thread
 
 static void* OSThread_Main(void* param);
 
-UINT8 OSThread_Init(OS_THREAD** retThread, OS_THR_FUNC threadFunc, void* args)
+uint8_t OSThread_Init(OS_THREAD** retThread, OS_THR_FUNC threadFunc, void* args)
 {
 	OS_THREAD* thr;
 	int retVal;
@@ -86,16 +86,16 @@ void OSThread_Cancel(OS_THREAD* thr)
 	return;
 }
 
-UINT64 OSThread_GetID(const OS_THREAD* thr)
+uint64_t OSThread_GetID(const OS_THREAD* thr)
 {
 #ifdef __APPLE__
-	UINT64 idNum;
+	uint64_t idNum;
 	pthread_threadid_np (thr->id, &idNum);
 	return idNum;
 #elif defined (__HAIKU__)
 	return get_pthread_thread_id (thr->id);
 #else
-	return (UINT64)thr->id;
+	return (uint64_t)thr->id;
 #endif
 }
 

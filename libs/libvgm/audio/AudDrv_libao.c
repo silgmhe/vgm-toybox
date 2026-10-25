@@ -20,12 +20,12 @@
 
 typedef struct
 {
-	UINT16 wFormatTag;
-	UINT16 nChannels;
-	UINT32 nSamplesPerSec;
-	UINT32 nAvgBytesPerSec;
-	UINT16 nBlockAlign;
-	UINT16 wBitsPerSample;
+	uint16_t wFormatTag;
+	uint16_t nChannels;
+	uint32_t nSamplesPerSec;
+	uint32_t nAvgBytesPerSec;
+	uint16_t nBlockAlign;
+	uint16_t wBitsPerSample;
 } WAVEFORMAT;	// from MSDN Help
 
 #define WAVE_FORMAT_PCM	0x0001
@@ -34,19 +34,19 @@ typedef struct
 typedef struct _libao_driver
 {
 	void* audDrvPtr;
-	volatile UINT8 devState;	// 0 - not running, 1 - running, 2 - terminating
+	volatile uint8_t devState;	// 0 - not running, 1 - running, 2 - terminating
 	
 	WAVEFORMAT waveFmt;
-	UINT32 bufSmpls;
-	UINT32 bufSize;
-	UINT32 bufCount;
-	UINT8* bufSpace;
+	uint32_t bufSmpls;
+	uint32_t bufSize;
+	uint32_t bufCount;
+	uint8_t* bufSpace;
 	
 	OS_THREAD* hThread;
 	OS_SIGNAL* hSignal;
 	OS_MUTEX* hMutex;
 	ao_device* hDevAO;
-	volatile UINT8 pauseThread;
+	volatile uint8_t pauseThread;
 	
 	void* userParam;
 	AUDFUNC_FILLBUF FillBuffer;
@@ -54,25 +54,25 @@ typedef struct _libao_driver
 } DRV_AO;
 
 
-UINT8 LibAO_IsAvailable(void);
-UINT8 LibAO_Init(void);
-UINT8 LibAO_Deinit(void);
+uint8_t LibAO_IsAvailable(void);
+uint8_t LibAO_Init(void);
+uint8_t LibAO_Deinit(void);
 const AUDIO_DEV_LIST* LibAO_GetDeviceList(void);
 AUDIO_OPTS* LibAO_GetDefaultOpts(void);
 
-UINT8 LibAO_Create(void** retDrvObj);
-UINT8 LibAO_Destroy(void* drvObj);
-UINT8 LibAO_Start(void* drvObj, UINT32 deviceID, AUDIO_OPTS* options, void* audDrvParam);
-UINT8 LibAO_Stop(void* drvObj);
-UINT8 LibAO_Pause(void* drvObj);
-UINT8 LibAO_Resume(void* drvObj);
+uint8_t LibAO_Create(void** retDrvObj);
+uint8_t LibAO_Destroy(void* drvObj);
+uint8_t LibAO_Start(void* drvObj, uint32_t deviceID, AUDIO_OPTS* options, void* audDrvParam);
+uint8_t LibAO_Stop(void* drvObj);
+uint8_t LibAO_Pause(void* drvObj);
+uint8_t LibAO_Resume(void* drvObj);
 
-UINT8 LibAO_SetCallback(void* drvObj, AUDFUNC_FILLBUF FillBufCallback, void* userParam);
-UINT32 LibAO_GetBufferSize(void* drvObj);
-UINT8 LibAO_IsBusy(void* drvObj);
-UINT8 LibAO_WriteData(void* drvObj, UINT32 dataSize, void* data);
+uint8_t LibAO_SetCallback(void* drvObj, AUDFUNC_FILLBUF FillBufCallback, void* userParam);
+uint32_t LibAO_GetBufferSize(void* drvObj);
+uint8_t LibAO_IsBusy(void* drvObj);
+uint8_t LibAO_WriteData(void* drvObj, uint32_t dataSize, void* data);
 
-UINT32 LibAO_GetLatency(void* drvObj);
+uint32_t LibAO_GetLatency(void* drvObj);
 static void AoThread(void* Arg);
 
 
@@ -99,20 +99,20 @@ static char* aoDevNames[1] = {"default"};
 static AUDIO_OPTS defOptions;
 static AUDIO_DEV_LIST deviceList;
 
-static UINT8 isInit = 0;
-static UINT32 activeDrivers;
+static uint8_t isInit = 0;
+static uint32_t activeDrivers;
 
-UINT8 LibAO_IsAvailable(void)
+uint8_t LibAO_IsAvailable(void)
 {
 	return 1;
 }
 
-UINT8 LibAO_Init(void)
+uint8_t LibAO_Init(void)
 {
 	// TODO: generate a list of all libao drivers
-	//UINT32 numDevs;
-	//UINT32 curDev;
-	//UINT32 devLstID;
+	//uint32_t numDevs;
+	//uint32_t curDev;
+	//uint32_t devLstID;
 	
 	if (isInit)
 		return AERR_WASDONE;
@@ -136,9 +136,9 @@ UINT8 LibAO_Init(void)
 	return AERR_OK;
 }
 
-UINT8 LibAO_Deinit(void)
+uint8_t LibAO_Deinit(void)
 {
-	//UINT32 curDev;
+	//uint32_t curDev;
 	
 	if (! isInit)
 		return AERR_WASDONE;
@@ -164,10 +164,10 @@ AUDIO_OPTS* LibAO_GetDefaultOpts(void)
 }
 
 
-UINT8 LibAO_Create(void** retDrvObj)
+uint8_t LibAO_Create(void** retDrvObj)
 {
 	DRV_AO* drv;
-	UINT8 retVal8;
+	uint8_t retVal8;
 	
 	drv = (DRV_AO*)malloc(sizeof(DRV_AO));
 	drv->devState = 0;
@@ -192,7 +192,7 @@ UINT8 LibAO_Create(void** retDrvObj)
 	return AERR_OK;
 }
 
-UINT8 LibAO_Destroy(void* drvObj)
+uint8_t LibAO_Destroy(void* drvObj)
 {
 	DRV_AO* drv = (DRV_AO*)drvObj;
 	
@@ -214,12 +214,12 @@ UINT8 LibAO_Destroy(void* drvObj)
 	return AERR_OK;
 }
 
-UINT8 LibAO_Start(void* drvObj, UINT32 deviceID, AUDIO_OPTS* options, void* audDrvParam)
+uint8_t LibAO_Start(void* drvObj, uint32_t deviceID, AUDIO_OPTS* options, void* audDrvParam)
 {
 	DRV_AO* drv = (DRV_AO*)drvObj;
-	UINT64 tempInt64;
+	uint64_t tempInt64;
 	int retVal;
-	UINT8 retVal8;
+	uint8_t retVal8;
 	
 	if (drv->devState != 0)
 		return 0xD0;	// already running
@@ -234,8 +234,8 @@ UINT8 LibAO_Start(void* drvObj, UINT32 deviceID, AUDIO_OPTS* options, void* audD
 	drv->waveFmt.nBlockAlign = drv->waveFmt.wBitsPerSample * drv->waveFmt.nChannels / 8;
 	drv->waveFmt.nAvgBytesPerSec = drv->waveFmt.nSamplesPerSec * drv->waveFmt.nBlockAlign;
 	
-	tempInt64 = (UINT64)options->sampleRate * options->usecPerBuf;
-	drv->bufSmpls = (UINT32)((tempInt64 + 500000) / 1000000);
+	tempInt64 = (uint64_t)options->sampleRate * options->usecPerBuf;
+	drv->bufSmpls = (uint32_t)((tempInt64 + 500000) / 1000000);
 	drv->bufSize = drv->waveFmt.nBlockAlign * drv->bufSmpls;
 	drv->bufCount = options->numBuffers ? options->numBuffers : 10;
 	
@@ -258,7 +258,7 @@ UINT8 LibAO_Start(void* drvObj, UINT32 deviceID, AUDIO_OPTS* options, void* audD
 		return 0xC8;	// CreateThread failed
 	}
 	
-	drv->bufSpace = (UINT8*)malloc(drv->bufSize);
+	drv->bufSpace = (uint8_t*)malloc(drv->bufSize);
 	
 	drv->devState = 1;
 	drv->pauseThread = 0x00;
@@ -267,7 +267,7 @@ UINT8 LibAO_Start(void* drvObj, UINT32 deviceID, AUDIO_OPTS* options, void* audD
 	return AERR_OK;
 }
 
-UINT8 LibAO_Stop(void* drvObj)
+uint8_t LibAO_Stop(void* drvObj)
 {
 	DRV_AO* drv = (DRV_AO*)drvObj;
 	int retVal;
@@ -291,7 +291,7 @@ UINT8 LibAO_Stop(void* drvObj)
 	return AERR_OK;
 }
 
-UINT8 LibAO_Pause(void* drvObj)
+uint8_t LibAO_Pause(void* drvObj)
 {
 	DRV_AO* drv = (DRV_AO*)drvObj;
 	
@@ -302,7 +302,7 @@ UINT8 LibAO_Pause(void* drvObj)
 	return AERR_OK;
 }
 
-UINT8 LibAO_Resume(void* drvObj)
+uint8_t LibAO_Resume(void* drvObj)
 {
 	DRV_AO* drv = (DRV_AO*)drvObj;
 	
@@ -314,7 +314,7 @@ UINT8 LibAO_Resume(void* drvObj)
 }
 
 
-UINT8 LibAO_SetCallback(void* drvObj, AUDFUNC_FILLBUF FillBufCallback, void* userParam)
+uint8_t LibAO_SetCallback(void* drvObj, AUDFUNC_FILLBUF FillBufCallback, void* userParam)
 {
 	DRV_AO* drv = (DRV_AO*)drvObj;
 	
@@ -328,14 +328,14 @@ UINT8 LibAO_SetCallback(void* drvObj, AUDFUNC_FILLBUF FillBufCallback, void* use
 	return AERR_OK;
 }
 
-UINT32 LibAO_GetBufferSize(void* drvObj)
+uint32_t LibAO_GetBufferSize(void* drvObj)
 {
 	DRV_AO* drv = (DRV_AO*)drvObj;
 	
 	return drv->bufSize;
 }
 
-UINT8 LibAO_IsBusy(void* drvObj)
+uint8_t LibAO_IsBusy(void* drvObj)
 {
 	DRV_AO* drv = (DRV_AO*)drvObj;
 	
@@ -346,7 +346,7 @@ UINT8 LibAO_IsBusy(void* drvObj)
 	return AERR_OK;
 }
 
-UINT8 LibAO_WriteData(void* drvObj, UINT32 dataSize, void* data)
+uint8_t LibAO_WriteData(void* drvObj, uint32_t dataSize, void* data)
 {
 	DRV_AO* drv = (DRV_AO*)drvObj;
 	int retVal;
@@ -361,7 +361,7 @@ UINT8 LibAO_WriteData(void* drvObj, UINT32 dataSize, void* data)
 }
 
 
-UINT32 LibAO_GetLatency(void* drvObj)
+uint32_t LibAO_GetLatency(void* drvObj)
 {
 	//DRV_AO* drv = (DRV_AO*)drvObj;
 	
@@ -371,8 +371,8 @@ UINT32 LibAO_GetLatency(void* drvObj)
 static void AoThread(void* Arg)
 {
 	DRV_AO* drv = (DRV_AO*)Arg;
-	UINT32 didBuffers;	// number of processed buffers
-	UINT32 bufBytes;
+	uint32_t didBuffers;	// number of processed buffers
+	uint32_t bufBytes;
 	int retVal;
 	
 	OSSignal_Wait(drv->hSignal);	// wait until the initialization is done

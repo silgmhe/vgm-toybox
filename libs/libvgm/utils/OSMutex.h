@@ -10,11 +10,11 @@ extern "C"
 
 typedef struct _os_mutex OS_MUTEX;
 
-UINT8 OSMutex_Init(OS_MUTEX** retMutex, UINT8 initLocked);
+uint8_t OSMutex_Init(OS_MUTEX** retMutex, uint8_t initLocked);
 void OSMutex_Deinit(OS_MUTEX* mtx);
-UINT8 OSMutex_Lock(OS_MUTEX* mtx);
-UINT8 OSMutex_TryLock(OS_MUTEX* mtx);
-UINT8 OSMutex_Unlock(OS_MUTEX* mtx);
+uint8_t OSMutex_Lock(OS_MUTEX* mtx);
+uint8_t OSMutex_TryLock(OS_MUTEX* mtx);
+uint8_t OSMutex_Unlock(OS_MUTEX* mtx);
 
 #ifdef __cplusplus
 }

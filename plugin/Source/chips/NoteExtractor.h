@@ -26,11 +26,11 @@ struct ExtractedPerformance
 */
 ExtractedPerformance extractPerformance (IChipDecoder& decoder,
 										 const std::vector<RegisterWrite>& writes,
-										 std::uint32_t totalSamples);
+										 uint32_t totalSamples);
 
 /** The notes alone, for callers that do not reproduce vibrato. */
 std::vector<NoteEvent> extractNotes (IChipDecoder& decoder,
 									 const std::vector<RegisterWrite>& writes,
-									 std::uint32_t totalSamples);
+									 uint32_t totalSamples);
 
 } // namespace toybox::chips

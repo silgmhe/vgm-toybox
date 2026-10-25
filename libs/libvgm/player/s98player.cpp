@@ -73,20 +73,20 @@ static const char* const S98_TAG_MAPPING[] =
 };
 
 
-INLINE UINT16 ReadLE16(const UINT8* data)
+INLINE uint16_t ReadLE16(const uint8_t* data)
 {
 	return (data[0x01] << 8) | (data[0x00] << 0);
 }
 
-INLINE UINT32 ReadLE32(const UINT8* data)
+INLINE uint32_t ReadLE32(const uint8_t* data)
 {
 	return	(data[0x03] << 24) | (data[0x02] << 16) |
 			(data[0x01] <<  8) | (data[0x00] <<  0);
 }
 
-INLINE void SaveDeviceConfig(std::vector<UINT8>& dst, const void* srcData, size_t srcLen)
+INLINE void SaveDeviceConfig(std::vector<uint8_t>& dst, const void* srcData, size_t srcLen)
 {
-	const UINT8* srcPtr = (const UINT8*)srcData;
+	const uint8_t* srcPtr = (const uint8_t*)srcData;
 	dst.assign(srcPtr, srcPtr + srcLen);
 	return;
 }
@@ -101,9 +101,9 @@ S98Player::S98Player() :
 	_playState(0x00),
 	_psTrigger(0x00)
 {
-	UINT8 retVal;
-	UINT16 optChip;
-	UINT8 chipID;
+	uint8_t retVal;
+	uint16_t optChip;
+	uint8_t chipID;
 
 	_playOpts.genOpts.pbSpeed = 0x10000;
 
@@ -146,7 +146,7 @@ S98Player::~S98Player()
 		CPConv_Deinit(_cpcSJIS);
 }
 
-UINT32 S98Player::GetPlayerType(void) const
+uint32_t S98Player::GetPlayerType(void) const
 {
 	return FCC_S98;
 }
@@ -156,7 +156,7 @@ const char* S98Player::GetPlayerName(void) const
 	return "S98";
 }
 
-/*static*/ UINT8 S98Player::PlayerCanLoadFile(DATA_LOADER *dataLoader)
+/*static*/ uint8_t S98Player::PlayerCanLoadFile(DATA_LOADER *dataLoader)
 {
 	DataLoader_ReadUntil(dataLoader,0x20);
 	if (DataLoader_GetSize(dataLoader) < 0x20)
@@ -166,16 +166,16 @@ const char* S98Player::GetPlayerName(void) const
 	return 0x00;
 }
 
-UINT8 S98Player::CanLoadFile(DATA_LOADER *dataLoader) const
+uint8_t S98Player::CanLoadFile(DATA_LOADER *dataLoader) const
 {
 	return this->PlayerCanLoadFile(dataLoader);
 }
 
-UINT8 S98Player::LoadFile(DATA_LOADER *dataLoader)
+uint8_t S98Player::LoadFile(DATA_LOADER *dataLoader)
 {
-	UINT32 devCount;
-	UINT32 curDev;
-	UINT32 curPos;
+	uint32_t devCount;
+	uint32_t curDev;
+	uint32_t curPos;
 	
 	_dLoad = NULL;
 	DataLoader_ReadUntil(dataLoader,0x20);
@@ -281,9 +281,9 @@ UINT8 S98Player::LoadFile(DATA_LOADER *dataLoader)
 
 void S98Player::CalcSongLength(void)
 {
-	UINT32 filePos;
+	uint32_t filePos;
 	bool fileEnd;
-	UINT8 curCmd;
+	uint8_t curCmd;
 	
 	_totalTicks = 0;
 	_loopTick = 0;
@@ -317,7 +317,7 @@ void S98Player::CalcSongLength(void)
 	return;
 }
 
-UINT8 S98Player::LoadTags(void)
+uint8_t S98Player::LoadTags(void)
 {
 	_tagData.clear();
 	_tagList.clear();
@@ -411,7 +411,7 @@ std::string S98Player::GetUTF8String(const char* startPtr, const char* endPtr)
 		size_t convSize = 0;
 		char* convData = NULL;
 		std::string result;
-		UINT8 retVal;
+		uint8_t retVal;
 		
 		retVal = CPConv_StrConvert(_cpcSJIS, &convSize, &convData, endPtr - startPtr, startPtr);
 		
@@ -444,7 +444,7 @@ static std::string TrimPSFTagWhitespace(const std::string& data)
 	return data.substr(posStart, posEnd - posStart);
 }
 
-static UINT8 ExtractKeyValue(const std::string& line, std::string& retKey, std::string& retValue)
+static uint8_t ExtractKeyValue(const std::string& line, std::string& retKey, std::string& retValue)
 {
 	size_t equalPos;
 	
@@ -463,14 +463,14 @@ static UINT8 ExtractKeyValue(const std::string& line, std::string& retKey, std::
 	return 0x00;
 }
 
-UINT8 S98Player::ParsePSFTags(const std::string& tagData)
+uint8_t S98Player::ParsePSFTags(const std::string& tagData)
 {
 	size_t lineStart;
 	size_t lineEnd;
 	std::string curLine;
 	std::string curKey;
 	std::string curVal;
-	UINT8 retVal;
+	uint8_t retVal;
 	
 	lineStart = 0;
 	while(lineStart < tagData.length())
@@ -500,7 +500,7 @@ UINT8 S98Player::ParsePSFTags(const std::string& tagData)
 	return 0x00;
 }
 
-UINT8 S98Player::UnloadFile(void)
+uint8_t S98Player::UnloadFile(void)
 {
 	if (_playState & PLAYSTATE_PLAY)
 		return 0xFF;
@@ -527,7 +527,7 @@ const char* const* S98Player::GetTags(void)
 	return &_tagList[0];
 }
 
-UINT8 S98Player::GetSongInfo(PLR_SONG_INFO& songInf)
+uint8_t S98Player::GetSongInfo(PLR_SONG_INFO& songInf)
 {
 	if (_dLoad == NULL)
 		return 0xFF;
@@ -538,14 +538,14 @@ UINT8 S98Player::GetSongInfo(PLR_SONG_INFO& songInf)
 	songInf.tickRateMul = _fileHdr.tickMult;
 	songInf.tickRateDiv = _fileHdr.tickDiv;
 	songInf.songLen = GetTotalTicks();
-	songInf.loopTick = _fileHdr.loopOfs ? GetLoopTicks() : (UINT32)-1;
+	songInf.loopTick = _fileHdr.loopOfs ? GetLoopTicks() : (uint32_t)-1;
 	songInf.volGain = 0x10000;
-	songInf.deviceCnt = (UINT32)_devHdrs.size();
+	songInf.deviceCnt = (uint32_t)_devHdrs.size();
 	
 	return 0x00;
 }
 
-UINT8 S98Player::GetSongDeviceInfo(std::vector<PLR_DEV_INFO>& devInfList) const
+uint8_t S98Player::GetSongDeviceInfo(std::vector<PLR_DEV_INFO>& devInfList) const
 {
 	if (_dLoad == NULL)
 		return 0xFF;
@@ -580,16 +580,16 @@ UINT8 S98Player::GetSongDeviceInfo(std::vector<PLR_DEV_INFO>& devInfList) const
 		diIdx ++;
 		
 		memset(&devInf, 0x00, sizeof(PLR_DEV_INFO));
-		devInf.id = (UINT32)curDev;
-		devInf.parentIdx = (UINT32)-1;
+		devInf.id = (uint32_t)curDev;
+		devInf.parentIdx = (uint32_t)-1;
 		devInf.type = S98_DEV_LIST[devHdr->devType];
-		devInf.instance = (UINT16)GetDeviceInstance(curDev);
+		devInf.instance = (uint16_t)GetDeviceInstance(curDev);
 		devInf.devCfg = (const DEV_GEN_CFG*)&_devCfgs[curDev].data[0];
 		if (! _devices.empty())
 		{
 			const VGM_BASEDEV& cDev = _devices[curDev].base;
 			const VGM_BASEDEV* clDev;
-			UINT32 curLDev;
+			uint32_t curLDev;
 			
 			devInf.devDecl = cDev.defInf.devDecl;
 			devInf.core = (cDev.defInf.devDef != NULL) ? cDev.defInf.devDef->coreID : 0x00;
@@ -604,9 +604,9 @@ UINT8 S98Player::GetSongDeviceInfo(std::vector<PLR_DEV_INFO>& devInfList) const
 				
 				memset(&lDevInf, 0x00, sizeof(PLR_DEV_INFO));
 				lDevInf.type = dLink->devID;
-				lDevInf.id = (UINT32)curDev;
+				lDevInf.id = (uint32_t)curDev;
 				lDevInf.parentIdx = diIdxParent;
-				lDevInf.instance = (UINT16)curLDev;
+				lDevInf.instance = (uint16_t)curLDev;
 				lDevInf.devCfg = dLink->cfg;
 				lDevInf.devDecl = clDev->defInf.devDecl;
 				lDevInf.core = (clDev->defInf.devDef != NULL) ? clDev->defInf.devDef->coreID : 0x00;
@@ -632,9 +632,9 @@ UINT8 S98Player::GetSongDeviceInfo(std::vector<PLR_DEV_INFO>& devInfList) const
 					
 					memset(&lDevInf, 0x00, sizeof(PLR_DEV_INFO));
 					lDevInf.type = dlIds->devIDs[curLDev];
-					lDevInf.id = (UINT32)curDev;
+					lDevInf.id = (uint32_t)curDev;
 					lDevInf.parentIdx = diIdxParent;
-					lDevInf.instance = (UINT16)curLDev;
+					lDevInf.instance = (uint16_t)curLDev;
 					lDevInf.devDecl = SndEmu_GetDevDecl(lDevInf.type, _userDevList, _devStartOpts);
 					lDevInf.devCfg = NULL;
 					lDevInf.core = 0x00;
@@ -668,7 +668,7 @@ size_t S98Player::GetDeviceInstance(size_t id) const
 	return instance;
 }
 
-size_t S98Player::DeviceID2OptionID(UINT32 id) const
+size_t S98Player::DeviceID2OptionID(uint32_t id) const
 {
 	DEV_ID type;
 	size_t instance;
@@ -680,7 +680,7 @@ size_t S98Player::DeviceID2OptionID(UINT32 id) const
 	}
 	else if (id < _devHdrs.size())
 	{
-		UINT32 s98DevType;
+		uint32_t s98DevType;
 		
 		s98DevType = _devHdrs[id].devType;
 		type = (s98DevType < S98DEV_END) ? S98_DEV_LIST[s98DevType] : 0xFF;
@@ -700,7 +700,7 @@ size_t S98Player::DeviceID2OptionID(UINT32 id) const
 void S98Player::RefreshMuting(S98_CHIPDEV& chipDev, const PLR_MUTE_OPTS& muteOpts)
 {
 	VGM_BASEDEV* clDev;
-	UINT8 linkCntr = 0;
+	uint8_t linkCntr = 0;
 	
 	for (clDev = &chipDev.base; clDev != NULL && linkCntr < 2; clDev = clDev->linkDev, linkCntr ++)
 	{
@@ -715,7 +715,7 @@ void S98Player::RefreshMuting(S98_CHIPDEV& chipDev, const PLR_MUTE_OPTS& muteOpt
 void S98Player::RefreshPanning(S98_CHIPDEV& chipDev, const PLR_PAN_OPTS& panOpts)
 {
 	VGM_BASEDEV* clDev;
-	UINT8 linkCntr = 0;
+	uint8_t linkCntr = 0;
 	
 	for (clDev = &chipDev.base; clDev != NULL && linkCntr < 2; clDev = clDev->linkDev, linkCntr ++)
 	{
@@ -723,7 +723,7 @@ void S98Player::RefreshPanning(S98_CHIPDEV& chipDev, const PLR_PAN_OPTS& panOpts
 		if (devInf->dataPtr == NULL)
 			continue;
 		DEVFUNC_PANALL funcPan = NULL;
-		UINT8 retVal = SndEmu_GetDeviceFunc(devInf->devDef, RWF_CHN_PAN | RWF_WRITE, DEVRW_ALL, 0, (void**)&funcPan);
+		uint8_t retVal = SndEmu_GetDeviceFunc(devInf->devDef, RWF_CHN_PAN | RWF_WRITE, DEVRW_ALL, 0, (void**)&funcPan);
 		if (retVal != EERR_NOT_FOUND && funcPan != NULL)
 			funcPan(devInf->dataPtr, &panOpts.chnPan[linkCntr][0]);
 	}
@@ -731,7 +731,7 @@ void S98Player::RefreshPanning(S98_CHIPDEV& chipDev, const PLR_PAN_OPTS& panOpts
 	return;
 }
 
-UINT8 S98Player::SetDeviceOptions(UINT32 id, const PLR_DEV_OPTS& devOpts)
+uint8_t S98Player::SetDeviceOptions(uint32_t id, const PLR_DEV_OPTS& devOpts)
 {
 	size_t optID = DeviceID2OptionID(id);
 	if (optID == (size_t)-1)
@@ -748,7 +748,7 @@ UINT8 S98Player::SetDeviceOptions(UINT32 id, const PLR_DEV_OPTS& devOpts)
 	return 0x00;
 }
 
-UINT8 S98Player::GetDeviceOptions(UINT32 id, PLR_DEV_OPTS& devOpts) const
+uint8_t S98Player::GetDeviceOptions(uint32_t id, PLR_DEV_OPTS& devOpts) const
 {
 	size_t optID = DeviceID2OptionID(id);
 	if (optID == (size_t)-1)
@@ -758,7 +758,7 @@ UINT8 S98Player::GetDeviceOptions(UINT32 id, PLR_DEV_OPTS& devOpts) const
 	return 0x00;
 }
 
-UINT8 S98Player::SetDeviceMuting(UINT32 id, const PLR_MUTE_OPTS& muteOpts)
+uint8_t S98Player::SetDeviceMuting(uint32_t id, const PLR_MUTE_OPTS& muteOpts)
 {
 	size_t optID = DeviceID2OptionID(id);
 	if (optID == (size_t)-1)
@@ -772,7 +772,7 @@ UINT8 S98Player::SetDeviceMuting(UINT32 id, const PLR_MUTE_OPTS& muteOpts)
 	return 0x00;
 }
 
-UINT8 S98Player::GetDeviceMuting(UINT32 id, PLR_MUTE_OPTS& muteOpts) const
+uint8_t S98Player::GetDeviceMuting(uint32_t id, PLR_MUTE_OPTS& muteOpts) const
 {
 	size_t optID = DeviceID2OptionID(id);
 	if (optID == (size_t)-1)
@@ -782,20 +782,20 @@ UINT8 S98Player::GetDeviceMuting(UINT32 id, PLR_MUTE_OPTS& muteOpts) const
 	return 0x00;
 }
 
-UINT8 S98Player::SetPlayerOptions(const S98_PLAY_OPTIONS& playOpts)
+uint8_t S98Player::SetPlayerOptions(const S98_PLAY_OPTIONS& playOpts)
 {
 	_playOpts = playOpts;
 	RefreshTSRates();
 	return 0x00;
 }
 
-UINT8 S98Player::GetPlayerOptions(S98_PLAY_OPTIONS& playOpts) const
+uint8_t S98Player::GetPlayerOptions(S98_PLAY_OPTIONS& playOpts) const
 {
 	playOpts = _playOpts;
 	return 0x00;
 }
 
-UINT8 S98Player::SetSampleRate(UINT32 sampleRate)
+uint8_t S98Player::SetSampleRate(uint32_t sampleRate)
 {
 	if (_playState & PLAYSTATE_PLAY)
 		return 0x01;	// can't set during playback
@@ -809,9 +809,9 @@ double S98Player::GetPlaybackSpeed(void) const
 	return _playOpts.genOpts.pbSpeed / (double)0x10000;
 }
 
-UINT8 S98Player::SetPlaybackSpeed(double speed)
+uint8_t S98Player::SetPlaybackSpeed(double speed)
 {
-	_playOpts.genOpts.pbSpeed = (UINT32)(0x10000 * speed);
+	_playOpts.genOpts.pbSpeed = (uint32_t)(0x10000 * speed);
 	RefreshTSRates();
 	return 0x00;
 }
@@ -831,40 +831,40 @@ void S98Player::RefreshTSRates(void)
 	    _tsDiv != _lastTsDiv)
 	{
 		if (_lastTsMult && _lastTsDiv)	// the order * / * / is required to avoid overflow
-			_playSmpl = (UINT32)(_playSmpl * _lastTsDiv / _lastTsMult * _tsMult / _tsDiv);
+			_playSmpl = (uint32_t)(_playSmpl * _lastTsDiv / _lastTsMult * _tsMult / _tsDiv);
 		_lastTsMult = _tsMult;
 		_lastTsDiv = _tsDiv;
 	}
 	return;
 }
 
-UINT32 S98Player::Tick2Sample(UINT32 ticks) const
+uint32_t S98Player::Tick2Sample(uint32_t ticks) const
 {
-	if (ticks == (UINT32)-1)
+	if (ticks == (uint32_t)-1)
 		return -1;
-	return (UINT32)(ticks * _tsMult / _tsDiv);
+	return (uint32_t)(ticks * _tsMult / _tsDiv);
 }
 
-UINT32 S98Player::Sample2Tick(UINT32 samples) const
+uint32_t S98Player::Sample2Tick(uint32_t samples) const
 {
-	if (samples == (UINT32)-1)
+	if (samples == (uint32_t)-1)
 		return -1;
-	return (UINT32)(samples * _tsDiv / _tsMult);
+	return (uint32_t)(samples * _tsDiv / _tsMult);
 }
 
-double S98Player::Tick2Second(UINT32 ticks) const
+double S98Player::Tick2Second(uint32_t ticks) const
 {
-	if (ticks == (UINT32)-1)
+	if (ticks == (uint32_t)-1)
 		return -1.0;
-	return (INT64)(ticks * _ttMult) / (double)(INT64)_tsDiv;
+	return (int64_t)(ticks * _ttMult) / (double)(int64_t)_tsDiv;
 }
 
-UINT8 S98Player::GetState(void) const
+uint8_t S98Player::GetState(void) const
 {
 	return _playState;
 }
 
-UINT32 S98Player::GetCurPos(UINT8 unit) const
+uint32_t S98Player::GetCurPos(uint8_t unit) const
 {
 	switch(unit)
 	{
@@ -876,21 +876,21 @@ UINT32 S98Player::GetCurPos(UINT8 unit) const
 		return _playSmpl;
 	case PLAYPOS_COMMAND:
 	default:
-		return (UINT32)-1;
+		return (uint32_t)-1;
 	}
 }
 
-UINT32 S98Player::GetCurLoop(void) const
+uint32_t S98Player::GetCurLoop(void) const
 {
 	return _curLoop;
 }
 
-UINT32 S98Player::GetTotalTicks(void) const
+uint32_t S98Player::GetTotalTicks(void) const
 {
 	return _totalTicks;
 }
 
-UINT32 S98Player::GetLoopTicks(void) const
+uint32_t S98Player::GetLoopTicks(void) const
 {
 	if (! _fileHdr.loopOfs)
 		return 0;
@@ -898,7 +898,7 @@ UINT32 S98Player::GetLoopTicks(void) const
 		return _totalTicks - _loopTick;
 }
 
-/*static*/ void S98Player::PlayerLogCB(void* userParam, void* source, UINT8 level, const char* message)
+/*static*/ void S98Player::PlayerLogCB(void* userParam, void* source, uint8_t level, const char* message)
 {
 	S98Player* player = (S98Player*)source;
 	if (player->_logCbFunc == NULL)
@@ -907,7 +907,7 @@ UINT32 S98Player::GetLoopTicks(void) const
 	return;
 }
 
-/*static*/ void S98Player::SndEmuLogCB(void* userParam, void* source, UINT8 level, const char* message)
+/*static*/ void S98Player::SndEmuLogCB(void* userParam, void* source, uint8_t level, const char* message)
 {
 	DEVLOG_CB_DATA* cbData = (DEVLOG_CB_DATA*)userParam;
 	S98Player* player = cbData->player;
@@ -932,7 +932,7 @@ void S98Player::GenerateDeviceConfig(void)
 	{
 		const S98_DEVICE* devHdr = &_devHdrs[curDev];
 		DEV_GEN_CFG devCfg;
-		UINT8 deviceID;
+		uint8_t deviceID;
 		
 		memset(&devCfg, 0x00, sizeof(DEV_GEN_CFG));
 		devCfg.clock = devHdr->clock;
@@ -1015,10 +1015,10 @@ void S98Player::GenerateDeviceConfig(void)
 	return;
 }
 
-UINT8 S98Player::Start(void)
+uint8_t S98Player::Start(void)
 {
 	size_t curDev;
-	UINT8 retVal;
+	uint8_t retVal;
 	
 	for (curDev = 0; curDev < _OPT_DEV_COUNT * 2; curDev ++)
 		_optDevMap[curDev] = (size_t)-1;
@@ -1099,7 +1099,7 @@ UINT8 S98Player::Start(void)
 		
 		for (clDev = &cDev->base; clDev != NULL; clDev = clDev->linkDev)
 		{
-			UINT8 resmplMode = (devOpts != NULL) ? devOpts->resmplMode : RSMODE_LINEAR;
+			uint8_t resmplMode = (devOpts != NULL) ? devOpts->resmplMode : RSMODE_LINEAR;
 			Resmpl_SetVals(&clDev->resmpl, resmplMode, 0x100, _outSmplRate);
 			if (deviceID == DEVID_YM2203 || deviceID == DEVID_YM2608)
 			{
@@ -1120,7 +1120,7 @@ UINT8 S98Player::Start(void)
 	return 0x00;
 }
 
-UINT8 S98Player::Stop(void)
+uint8_t S98Player::Stop(void)
 {
 	size_t curDev;
 	
@@ -1138,10 +1138,10 @@ UINT8 S98Player::Stop(void)
 	return 0x00;
 }
 
-UINT8 S98Player::Reset(void)
+uint8_t S98Player::Reset(void)
 {
 	size_t curDev;
-	std::vector<UINT8> tmp(0x40000, 0x00);
+	std::vector<uint8_t> tmp(0x40000, 0x00);
 	
 	_filePos = _fileHdr.dataOfs;
 	_fileTick = 0;
@@ -1180,7 +1180,7 @@ UINT8 S98Player::Reset(void)
 				SetRamSize(defInf->dataPtr, 0x40000);	// 256 KB
 			// initialize DeltaT RAM with 00, because come S98 files seem to expect that (e.g. King Breeder/11.s98)
 			if (SetRamData != NULL)
-				SetRamData(defInf->dataPtr, 0x00, (UINT32)tmp.size(), &tmp[0]);
+				SetRamData(defInf->dataPtr, 0x00, (uint32_t)tmp.size(), &tmp[0]);
 			
 			// The YM2608 defaults to OPN mode. (YM2203 fallback),
 			// so put it into OPNA mode (6 channels).
@@ -1192,7 +1192,7 @@ UINT8 S98Player::Reset(void)
 	return 0x00;
 }
 
-UINT8 S98Player::Seek(UINT8 unit, UINT32 pos)
+uint8_t S98Player::Seek(uint8_t unit, uint32_t pos)
 {
 	switch(unit)
 	{
@@ -1215,7 +1215,7 @@ UINT8 S98Player::Seek(UINT8 unit, UINT32 pos)
 	}
 }
 
-UINT8 S98Player::SeekToTick(UINT32 tick)
+uint8_t S98Player::SeekToTick(uint32_t tick)
 {
 	_playState |= PLAYSTATE_SEEK;
 	if (tick > _playTick)
@@ -1225,7 +1225,7 @@ UINT8 S98Player::SeekToTick(UINT32 tick)
 	return 0x00;
 }
 
-UINT8 S98Player::SeekToFilePos(UINT32 pos)
+uint8_t S98Player::SeekToFilePos(uint32_t pos)
 {
 	_playState |= PLAYSTATE_SEEK;
 	while(_filePos <= pos && ! (_playState & PLAYSTATE_END))
@@ -1237,12 +1237,12 @@ UINT8 S98Player::SeekToFilePos(UINT32 pos)
 	return 0x00;
 }
 
-UINT32 S98Player::Render(UINT32 smplCnt, WAVE_32BS* data)
+uint32_t S98Player::Render(uint32_t smplCnt, WAVE_32BS* data)
 {
-	UINT32 curSmpl;
-	UINT32 smplFileTick;
-	UINT32 maxSmpl;
-	INT32 smplStep;	// might be negative due to rounding errors in Tick2Sample
+	uint32_t curSmpl;
+	uint32_t smplFileTick;
+	uint32_t maxSmpl;
+	int32_t smplStep;	// might be negative due to rounding errors in Tick2Sample
 	size_t curDev;
 	
 	// Note: use do {} while(), so that "smplCnt == 0" can be used to process until reaching the next sample.
@@ -1257,13 +1257,13 @@ UINT32 S98Player::Render(UINT32 smplCnt, WAVE_32BS* data)
 		smplStep = maxSmpl - _playSmpl;
 		if (smplStep < 1)
 			smplStep = 1;	// must render at least 1 sample in order to advance
-		if ((UINT32)smplStep > smplCnt - curSmpl)
+		if ((uint32_t)smplStep > smplCnt - curSmpl)
 			smplStep = smplCnt - curSmpl;
 		
 		for (curDev = 0; curDev < _devices.size(); curDev ++)
 		{
 			S98_CHIPDEV* cDev = &_devices[curDev];
-			UINT8 disable = (cDev->optID != (size_t)-1) ? _devOpts[cDev->optID].muteOpts.disable : 0x00;
+			uint8_t disable = (cDev->optID != (size_t)-1) ? _devOpts[cDev->optID].muteOpts.disable : 0x00;
 			VGM_BASEDEV* clDev;
 			
 			for (clDev = &cDev->base; clDev != NULL; clDev = clDev->linkDev, disable >>= 1)
@@ -1284,7 +1284,7 @@ UINT32 S98Player::Render(UINT32 smplCnt, WAVE_32BS* data)
 	return curSmpl;
 }
 
-void S98Player::ParseFile(UINT32 ticks)
+void S98Player::ParseFile(uint32_t ticks)
 {
 	_playTick += ticks;
 	if (_playState & PLAYSTATE_END)
@@ -1298,7 +1298,7 @@ void S98Player::ParseFile(UINT32 ticks)
 
 void S98Player::HandleEOF(void)
 {
-	UINT8 doLoop = (_fileHdr.loopOfs != 0);
+	uint8_t doLoop = (_fileHdr.loopOfs != 0);
 	
 	if (_playState & PLAYSTATE_SEEK)	// recalculate playSmpl to fix state when triggering callbacks
 		_playSmpl = Tick2Sample(_fileTick);	// Note: fileTick results in more accurate position
@@ -1319,7 +1319,7 @@ void S98Player::HandleEOF(void)
 		_curLoop ++;
 		if (_eventCbFunc != NULL)
 		{
-			UINT8 retVal;
+			uint8_t retVal;
 			
 			retVal = _eventCbFunc(this, _eventCbParam, PLREVT_LOOP, &_curLoop);
 			if (retVal == 0x01)	// "stop" signal?
@@ -1357,7 +1357,7 @@ void S98Player::DoCommand(void)
 		return;
 	}
 	
-	UINT8 curCmd;
+	uint8_t curCmd;
 	
 	curCmd = _fileData[_filePos];
 	_filePos ++;
@@ -1381,7 +1381,7 @@ void S98Player::DoCommand(void)
 	return;
 }
 
-void S98Player::DoRegWrite(UINT8 deviceID, UINT8 port, UINT8 reg, UINT8 data)
+void S98Player::DoRegWrite(uint8_t deviceID, uint8_t port, uint8_t reg, uint8_t data)
 {
 	if (deviceID >= _devices.size())
 		return;
@@ -1407,11 +1407,11 @@ void S98Player::DoRegWrite(UINT8 deviceID, UINT8 port, UINT8 reg, UINT8 data)
 	return;
 }
 
-UINT32 S98Player::ReadVarInt(UINT32& filePos)
+uint32_t S98Player::ReadVarInt(uint32_t& filePos)
 {
-	UINT32 tickVal = 0;
-	UINT8 tickShift = 0;
-	UINT8 moreFlag;
+	uint32_t tickVal = 0;
+	uint8_t tickShift = 0;
+	uint8_t moreFlag;
 	
 	do
 	{

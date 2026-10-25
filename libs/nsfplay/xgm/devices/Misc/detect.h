@@ -9,9 +9,9 @@ namespace xgm
   public:
     virtual ~ILoopDetector(){}
     virtual void Reset ()=0;
-    virtual bool Write (UINT32, UINT32, UINT32 id=0)=0;
+    virtual bool Write (uint32_t, uint32_t, uint32_t id=0)=0;
     virtual bool IsLooped (int time_in_ms, int match_second, int match_interval)=0;
-    virtual bool Read (UINT32, UINT32 &, UINT32 id=0)=0;
+    virtual bool Read (uint32_t, uint32_t &, uint32_t id=0)=0;
     virtual int GetLoopStart()=0;
     virtual int GetLoopEnd()=0;
     virtual bool IsEmpty ()=0;
@@ -34,8 +34,8 @@ namespace xgm
     BasicDetector(int bufbits = 16);
     virtual ~BasicDetector();
     virtual void Reset ();
-    virtual bool Write (UINT32, UINT32, UINT32 id=0);
-    virtual bool Read (UINT32, UINT32 &, UINT32 id=0){ return false; }
+    virtual bool Write (uint32_t, uint32_t, uint32_t id=0);
+    virtual bool Read (uint32_t, uint32_t &, uint32_t id=0){ return false; }
     virtual bool IsLooped (int time_in_ms, int match_secound, int match_interval);
     virtual int GetLoopStart(){ return m_loop_start; }
     virtual int GetLoopEnd(){ return m_loop_end; }

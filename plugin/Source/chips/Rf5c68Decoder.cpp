@@ -14,35 +14,35 @@ namespace
 {
 	// The clock of an RF5C164/68 when the VGM header does not say (Sonic CD's rips leave field 0x98
 	// at 0xFFFFFFFF). 12.5 MHz is what every board and libvgm's own default use.
-	constexpr std::uint32_t kDefaultClock = 12500000;
+	constexpr uint32_t kDefaultClock = 12500000;
 
 	// The core's sample rate is `clock / 384` (rf5c68.c: INIT_DEVINF), and the address advances by
 	// `step` in 1/2048-byte units per sample, so step 2048 is one byte per sample.
 	constexpr double kClockDivisor = 384.0;
-	constexpr std::uint32_t kOneBytePerSample = 2048;
+	constexpr uint32_t kOneBytePerSample = 2048;
 
 	// Above this a "period" is a measurement artifact, not a note - the same C8 ceiling the other
 	// sampled players use.
 	constexpr int kHighestMelodicNote = 108;
 
-	constexpr std::uint32_t kRamBytes = 64 * 1024;
+	constexpr uint32_t kRamBytes = 64 * 1024;
 
 	// A sample ends at a 0xFF byte; one that never reaches one is treated as open-ended rather than
 	// scanned through the whole RAM.
-	constexpr std::uint32_t kMaxSampleScan = kRamBytes;
+	constexpr uint32_t kMaxSampleScan = kRamBytes;
 
 	// The marker a channel gets when nothing says how long its sample is: 80 ms at 44.1 kHz, the
 	// convention the OPN's ADPCM-A uses.
-	constexpr std::uint32_t kGateSamples = 3528;
+	constexpr uint32_t kGateSamples = 3528;
 
 	// The window a cycle is measured in, and how far the scan walks. These are the GA20's numbers for
 	// the same reason: a Sega CD instrument opens with an attack that is not yet periodic (the four
 	// samples of Palmtree Panic's first bank only measure from 768-2560 bytes in), so the scan walks
 	// 512-byte windows from the start and keeps the first one with a period.
-	constexpr std::uint32_t kMeasurementUnits = 512;
-	constexpr std::uint32_t kScanStep = kMeasurementUnits / 2;
-	constexpr std::uint32_t kScanBytes = 8 * 1024;
-	constexpr std::uint32_t kMinimumWindow = 128;
+	constexpr uint32_t kMeasurementUnits = 512;
+	constexpr uint32_t kScanStep = kMeasurementUnits / 2;
+	constexpr uint32_t kScanBytes = 8 * 1024;
+	constexpr uint32_t kMinimumWindow = 128;
 
 	// A period is a lag whose correlation dips below the first value and peaks above the second: a
 	// steady tone anti-correlates at half its cycle, noise never dips.
@@ -54,32 +54,32 @@ struct Rf5c68Decoder::Impl
 {
 	struct Channel
 	{
-		std::uint8_t envelope = 0;
-		std::uint8_t pan = 0;
-		std::uint16_t step = 0;		// 0x02 / 0x03
-		std::uint16_t loopStart = 0;	// 0x04 / 0x05, in 256-byte units
-		std::uint8_t start = 0;		// 0x06, in 256-byte units
+		uint8_t envelope = 0;
+		uint8_t pan = 0;
+		uint16_t step = 0;		// 0x02 / 0x03
+		uint16_t loopStart = 0;	// 0x04 / 0x05, in 256-byte units
+		uint8_t start = 0;		// 0x06, in 256-byte units
 		bool enabled = false;
 		bool keyed = false;
 
-		std::uint32_t latchStart = 0;	// byte address at the key-on
+		uint32_t latchStart = 0;	// byte address at the key-on
 		double cycleLength = 0.0;
 		bool melodic = false;
-		std::uint32_t gateEnd = 0;		// 0 when the sample loops
-		std::uint32_t keyOns = 0;
+		uint32_t gateEnd = 0;		// 0 when the sample loops
+		uint32_t keyOns = 0;
 	};
 
 	Channel channels[numChannels];
-	std::vector<std::uint8_t> ram;
-	std::map<std::uint32_t, double> cycleCache;
+	std::vector<uint8_t> ram;
+	std::map<uint32_t, double> cycleCache;
 
 	double clockRate = (double) kDefaultClock;
 	double outRate = 44100.0;
-	std::uint8_t bank = 0;			// 0x07 bit 6: which channel 0x00-0x06 address
+	uint8_t bank = 0;			// 0x07 bit 6: which channel 0x00-0x06 address
 	bool master = true;				// 0x07 bit 7
-	std::uint32_t now = 0;
+	uint32_t now = 0;
 
-	std::uint8_t byteAt (std::uint32_t address) const
+	uint8_t byteAt (uint32_t address) const
 	{
 		if (ram.empty())
 		{
@@ -101,9 +101,9 @@ struct Rf5c68Decoder::Impl
 	}
 
 	/** Bytes from `start` to the terminating 0xFF, which is the only length the chip has. */
-	std::uint32_t lengthOf (std::uint32_t start) const
+	uint32_t lengthOf (uint32_t start) const
 	{
-		std::uint32_t length = 0;
+		uint32_t length = 0;
 		while (length < kMaxSampleScan && byteAt (start + length) != 0xFF)
 		{
 			++length;
@@ -192,7 +192,7 @@ struct Rf5c68Decoder::Impl
 		(this bank's four samples measure from 768 to 2560 bytes in). So the scan walks 512-byte
 		windows and keeps the first with a period, the same rule the GA20 decoder uses for its slides.
 		Anything it cannot measure - a drum, a chord, noise - is 0, the C4 trigger. */
-	double cycleFor (std::uint32_t start)
+	double cycleFor (uint32_t start)
 	{
 		const auto cached = cycleCache.find (start);
 		if (cached != cycleCache.end())
@@ -201,14 +201,14 @@ struct Rf5c68Decoder::Impl
 		}
 
 		double cycle = 0.0;
-		const std::uint32_t length = lengthOf (start);
-		const std::uint32_t limit = std::min<std::uint32_t> (length, kScanBytes);
-		for (std::uint32_t offset = 0; cycle <= 0.0 && offset + kMinimumWindow <= limit;
+		const uint32_t length = lengthOf (start);
+		const uint32_t limit = std::min<uint32_t> (length, kScanBytes);
+		for (uint32_t offset = 0; cycle <= 0.0 && offset + kMinimumWindow <= limit;
 			 offset += kScanStep)
 		{
-			const std::uint32_t window = std::min<std::uint32_t> (limit - offset, kMeasurementUnits);
+			const uint32_t window = std::min<uint32_t> (limit - offset, kMeasurementUnits);
 			std::vector<double> waveform (window);
-			for (std::uint32_t i = 0; i < window; ++i)
+			for (uint32_t i = 0; i < window; ++i)
 			{
 				waveform[i] = (double) byteAt (start + offset + i);
 			}
@@ -226,11 +226,11 @@ struct Rf5c68Decoder::Impl
 		channel.gateEnd = 0;
 	}
 
-	void keyOn (Channel& channel, std::uint32_t time)
+	void keyOn (Channel& channel, uint32_t time)
 	{
 		++channel.keyOns;
 		channel.keyed = true;
-		channel.latchStart = (std::uint32_t) channel.start << 8;
+		channel.latchStart = (uint32_t) channel.start << 8;
 		channel.cycleLength = cycleFor (channel.latchStart);
 		channel.gateEnd = 0;
 
@@ -248,9 +248,9 @@ struct Rf5c68Decoder::Impl
 		// clears the channel's bit in 0x08.
 
 
-		const std::uint32_t loopAddress = (std::uint32_t) channel.loopStart << 8;
+		const uint32_t loopAddress = (uint32_t) channel.loopStart << 8;
 		const bool diesAtTheEnd = byteAt (loopAddress) == 0xFF;
-		const std::uint32_t length = lengthOf (channel.latchStart);
+		const uint32_t length = lengthOf (channel.latchStart);
 		if (length == 0)
 		{
 			// no RAM (or no sample at that address): nothing tells the note's length, so it gets the
@@ -260,7 +260,7 @@ struct Rf5c68Decoder::Impl
 		}
 		else if (diesAtTheEnd && rate > 0.0)
 		{
-			channel.gateEnd = time + (std::uint32_t) std::llround ((double) length * outRate / rate);
+			channel.gateEnd = time + (uint32_t) std::llround ((double) length * outRate / rate);
 		}
 	}
 
@@ -289,7 +289,7 @@ struct Rf5c68Decoder::Impl
 			: impl (owner)
 			, channel (index) {}
 
-		int noteFor (std::uint32_t step, int, int* finePitch) const override
+		int noteFor (uint32_t step, int, int* finePitch) const override
 		{
 			*finePitch = 0;
 
@@ -316,10 +316,10 @@ Rf5c68Decoder::~Rf5c68Decoder() = default;
 
 void Rf5c68Decoder::reset (const ChipConfig& config)
 {
-	[[maybe_unused]] const std::uint32_t clock = config.clockHz;
+	[[maybe_unused]] const uint32_t clock = config.clockHz;
 	[[maybe_unused]] const double sampleRate = config.timeBaseHz;
 	// the RAM belongs to the song, not to the run
-	std::vector<std::uint8_t> ram = std::move (impl->ram);
+	std::vector<uint8_t> ram = std::move (impl->ram);
 
 	impl = std::make_unique<Impl>();
 	impl->ram = std::move (ram);
@@ -332,7 +332,7 @@ void Rf5c68Decoder::reset (const ChipConfig& config)
 	}
 }
 
-void Rf5c68Decoder::setRam (std::vector<std::uint8_t> ram)
+void Rf5c68Decoder::setRam (std::vector<uint8_t> ram)
 {
 	impl->ram = std::move (ram);
 	impl->cycleCache.clear();
@@ -340,7 +340,7 @@ void Rf5c68Decoder::setRam (std::vector<std::uint8_t> ram)
 
 void Rf5c68Decoder::write (const RegisterWrite& w)
 {
-	const std::uint8_t offset = w.reg;
+	const uint8_t offset = w.reg;
 
 	if (offset == 0x08)
 	{
@@ -370,7 +370,7 @@ void Rf5c68Decoder::write (const RegisterWrite& w)
 		impl->master = (w.value & 0x80) != 0;
 		if ((w.value & 0x40) != 0)
 		{
-			impl->bank = (std::uint8_t) (w.value & 0x07);
+			impl->bank = (uint8_t) (w.value & 0x07);
 		}
 
 		if (! impl->master)
@@ -396,16 +396,16 @@ void Rf5c68Decoder::write (const RegisterWrite& w)
 	//   0x06  start address, in 256-byte units; writing it starts the voice
 	case 0x00: voice.envelope = w.value; break;
 	case 0x01: voice.pan = w.value; break;
-	case 0x02: voice.step = (std::uint16_t) ((voice.step & 0xFF00) | w.value); break;
-	case 0x03: voice.step = (std::uint16_t) ((voice.step & 0x00FF) | ((std::uint16_t) w.value << 8)); break;
-	case 0x04: voice.loopStart = (std::uint16_t) ((voice.loopStart & 0xFF00) | w.value); break;
-	case 0x05: voice.loopStart = (std::uint16_t) ((voice.loopStart & 0x00FF) | ((std::uint16_t) w.value << 8)); break;
+	case 0x02: voice.step = (uint16_t) ((voice.step & 0xFF00) | w.value); break;
+	case 0x03: voice.step = (uint16_t) ((voice.step & 0x00FF) | ((uint16_t) w.value << 8)); break;
+	case 0x04: voice.loopStart = (uint16_t) ((voice.loopStart & 0xFF00) | w.value); break;
+	case 0x05: voice.loopStart = (uint16_t) ((voice.loopStart & 0x00FF) | ((uint16_t) w.value << 8)); break;
 	case 0x06: voice.start = w.value; break;
 	default: break;
 	}
 }
 
-void Rf5c68Decoder::advance (std::uint32_t sampleTime)
+void Rf5c68Decoder::advance (uint32_t sampleTime)
 {
 	impl->now = sampleTime;
 }

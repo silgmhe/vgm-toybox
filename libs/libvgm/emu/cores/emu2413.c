@@ -26,10 +26,10 @@
 #undef INLINE	// emu2413 uses its own INLINE definition
 
 
-static UINT8 device_start_ym2413_emu(const DEV_GEN_CFG* cfg, DEV_INFO* retDevInf);
-static void ym2413_update_emu(void *chip, UINT32 samples, DEV_SMPL **out);
-static void ym2413_set_mute_mask_emu(void *chip, UINT32 MuteMask);
-static void ym2413_pan_emu(void* chip, const INT16* PanVals);
+static uint8_t device_start_ym2413_emu(const DEV_GEN_CFG* cfg, DEV_INFO* retDevInf);
+static void ym2413_update_emu(void *chip, uint32_t samples, DEV_SMPL **out);
+static void ym2413_set_mute_mask_emu(void *chip, uint32_t MuteMask);
+static void ym2413_pan_emu(void* chip, const int16_t* PanVals);
 
 
 static DEVDEF_RWFUNC devFunc[] =
@@ -1555,7 +1555,7 @@ uint32_t EOPLL_toggleMask(EOPLL *opll, uint32_t mask) {
 }
 
 
-static UINT8 device_start_ym2413_emu(const DEV_GEN_CFG* cfg, DEV_INFO* retDevInf)
+static uint8_t device_start_ym2413_emu(const DEV_GEN_CFG* cfg, DEV_INFO* retDevInf)
 {
 	EOPLL* chip;
 	uint32_t rate;
@@ -1574,7 +1574,7 @@ static UINT8 device_start_ym2413_emu(const DEV_GEN_CFG* cfg, DEV_INFO* retDevInf
 	return 0x00;
 }
 
-static void ym2413_update_emu(void *chip, UINT32 samples, DEV_SMPL **out)
+static void ym2413_update_emu(void *chip, uint32_t samples, DEV_SMPL **out)
 {
 	EOPLL *opll = (EOPLL *)chip;
 	int32_t buffers[2];
@@ -1597,7 +1597,7 @@ static const uint32_t MUTE_MASK_MAP[14] = {
 	EOPLL_MASK_BD, EOPLL_MASK_SD, EOPLL_MASK_TOM, EOPLL_MASK_CYM, EOPLL_MASK_HH
 };
 
-static void ym2413_set_mute_mask_emu(void *chip, UINT32 MuteMask)
+static void ym2413_set_mute_mask_emu(void *chip, uint32_t MuteMask)
 {
 	EOPLL *opll = (EOPLL *)chip;
 	uint8_t curChn;
@@ -1617,7 +1617,7 @@ static const uint8_t PAN_MAP[14] = {
 	9, 11, 12, 13, 10
 };
 
-static void ym2413_pan_emu(void* chip, const INT16* PanVals)
+static void ym2413_pan_emu(void* chip, const int16_t* PanVals)
 {
 	EOPLL *opll = (EOPLL *)chip;
 	uint8_t curChn;

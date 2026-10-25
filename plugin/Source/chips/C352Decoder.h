@@ -141,7 +141,7 @@ public:
 
 	void reset (const ChipConfig& config) override;
 	void write (const RegisterWrite& write) override;
-	void advance (std::uint32_t sampleTime) override;
+	void advance (uint32_t sampleTime) override;
 
 	/** Hands the chip's sample ROM to the decoder - the song's 0x92 data blocks assembled at their
 		own offsets, one byte per address (MidiSequenceBuilder::assembleRom()).
@@ -149,7 +149,7 @@ public:
 		Without it nothing can be measured and every voice falls back to the root rate, so the
 		notes are the register values against the chip's own rate rather than the samples' own
 		pitch. The ROM survives a `reset()`: it belongs to the song, not to the run. */
-	void setRom (std::vector<std::uint8_t> rom);
+	void setRom (std::vector<uint8_t> rom);
 
 	int channelCount() const override { return channelCount_; }
 	ChannelState channelState (int channel) const override;

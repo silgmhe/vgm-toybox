@@ -9,33 +9,33 @@
 
 #include "playera.hpp"
 
-static void SampleConv_toU8(void* buffer, INT32 value)
+static void SampleConv_toU8(void* buffer, int32_t value)
 {
 	value >>= 16;	// 24 bit -> 8 bit
 	if (value < -0x80)
 		value = -0x80;
 	else if (value > +0x7F)
 		value = +0x7F;
-	*(UINT8*)buffer = (UINT8)(0x80 + value);
+	*(uint8_t*)buffer = (uint8_t)(0x80 + value);
 	return;
 }
 
-static void SampleConv_toS16(void* buffer, INT32 value)
+static void SampleConv_toS16(void* buffer, int32_t value)
 {
-	INT16 v;
+	int16_t v;
 	value >>= 8;	// 24 bit -> 16 bit
 	if (value < -0x8000)
 		value = -0x8000;
 	else if (value > +0x7FFF)
 		value = +0x7FFF;
-	v = (INT16)value;
+	v = (int16_t)value;
 	memcpy(buffer,&v,sizeof(v));
 	return;
 }
 
-static void SampleConv_toS24(void* buffer, INT32 value)
+static void SampleConv_toS24(void* buffer, int32_t value)
 {
-	UINT8 tmp[3];
+	uint8_t tmp[3];
 	if (value < -0x800000)
 		value = -0x800000;
 	else if (value > +0x7FFFFF)
@@ -55,7 +55,7 @@ static void SampleConv_toS24(void* buffer, INT32 value)
 	return;
 }
 
-static void SampleConv_toS32(void* buffer, INT32 value)
+static void SampleConv_toS32(void* buffer, int32_t value)
 {
 	// internal scale is 24-bit, so limit to that
 	if (value < -0x800000)
@@ -67,7 +67,7 @@ static void SampleConv_toS32(void* buffer, INT32 value)
 	return;
 }
 
-static void SampleConv_toF32(void* buffer, INT32 value)
+static void SampleConv_toF32(void* buffer, int32_t value)
 {
 	// limiting not required here
 	float v = value / (float)0x800000;
@@ -75,7 +75,7 @@ static void SampleConv_toF32(void* buffer, INT32 value)
 	return;
 }
 
-static PlayerA::PLR_SMPL_PACK GetSampleConvFunc(UINT8 bits)
+static PlayerA::PLR_SMPL_PACK GetSampleConvFunc(uint8_t bits)
 {
 	if (bits == 8)
 		return SampleConv_toU8;
@@ -112,8 +112,8 @@ PlayerA::PlayerA()
 	_player = NULL;
 	_dLoad = NULL;
 	_songVolume = CalcSongVolume();
-	_fadeSmplStart = (UINT32)-1;
-	_endSilenceStart = (UINT32)-1;
+	_fadeSmplStart = (uint32_t)-1;
+	_endSilenceStart = (uint32_t)-1;
 	
 	return;
 }
@@ -149,7 +149,7 @@ const std::vector<PlayerBase*>& PlayerA::GetRegisteredPlayers(void) const
 	return _avbPlrs;
 }
 
-UINT8 PlayerA::SetOutputSettings(UINT32 smplRate, UINT8 channels, UINT8 smplBits, UINT32 smplBufferLen)
+uint8_t PlayerA::SetOutputSettings(uint32_t smplRate, uint8_t channels, uint8_t smplBits, uint32_t smplBufferLen)
 {
 	if (channels != 2)
 		return 0xF0;	// TODO: support channels = 1
@@ -167,12 +167,12 @@ UINT8 PlayerA::SetOutputSettings(UINT32 smplRate, UINT8 channels, UINT8 smplBits
 	return 0x00;
 }
 
-UINT32 PlayerA::GetSampleRate(void) const
+uint32_t PlayerA::GetSampleRate(void) const
 {
 	return _smplRate;
 }
 
-void PlayerA::SetSampleRate(UINT32 sampleRate)
+void PlayerA::SetSampleRate(uint32_t sampleRate)
 {
 	_smplRate = sampleRate;
 	for (size_t curPlr = 0; curPlr < _avbPlrs.size(); curPlr++)
@@ -197,51 +197,51 @@ void PlayerA::SetPlaybackSpeed(double speed)
 	return;
 }
 
-UINT32 PlayerA::GetLoopCount(void) const
+uint32_t PlayerA::GetLoopCount(void) const
 {
 	return _config.loopCount;
 }
 
-void PlayerA::SetLoopCount(UINT32 loops)
+void PlayerA::SetLoopCount(uint32_t loops)
 {
 	_config.loopCount = loops;
 	return;
 }
 
-UINT32 PlayerA::GetFadeSamples(void) const
+uint32_t PlayerA::GetFadeSamples(void) const
 {
 	return _config.fadeSmpls;
 }
 
-INT32 PlayerA::GetMasterVolume(void) const
+int32_t PlayerA::GetMasterVolume(void) const
 {
 	return _config.masterVol;
 }
 
-void PlayerA::SetMasterVolume(INT32 volume)
+void PlayerA::SetMasterVolume(int32_t volume)
 {
 	_config.masterVol = volume;
 	_songVolume = CalcSongVolume();
 	return;
 }
 
-INT32 PlayerA::GetSongVolume(void) const
+int32_t PlayerA::GetSongVolume(void) const
 {
 	return _songVolume;
 }
 
-void PlayerA::SetFadeSamples(UINT32 smplCnt)
+void PlayerA::SetFadeSamples(uint32_t smplCnt)
 {
 	_config.fadeSmpls = smplCnt;
 	return;
 }
 
-UINT32 PlayerA::GetEndSilenceSamples(void) const
+uint32_t PlayerA::GetEndSilenceSamples(void) const
 {
 	return _config.endSilenceSmpls;
 }
 
-void PlayerA::SetEndSilenceSamples(UINT32 smplCnt)
+void PlayerA::SetEndSilenceSamples(uint32_t smplCnt)
 {
 	_config.endSilenceSmpls = smplCnt;
 	return;
@@ -284,31 +284,31 @@ void PlayerA::SetLogCallback(PLAYER_LOG_CB cbFunc, void* cbParam)
 	return;
 }
 
-UINT8 PlayerA::GetState(void) const
+uint8_t PlayerA::GetState(void) const
 {
 	if (_player == NULL)
 		return 0x00;
-	UINT8 finalState = _myPlayState;
-	if (_fadeSmplStart != (UINT32)-1)
+	uint8_t finalState = _myPlayState;
+	if (_fadeSmplStart != (uint32_t)-1)
 		finalState |= PLAYSTATE_FADE;
 	return finalState;
 }
 
-UINT32 PlayerA::GetCurPos(UINT8 unit) const
+uint32_t PlayerA::GetCurPos(uint8_t unit) const
 {
 	if (_player == NULL)
-		return (UINT32)-1;
+		return (uint32_t)-1;
 	return _player->GetCurPos(unit);
 }
 
-double PlayerA::GetCurTime(UINT8 flags) const
+double PlayerA::GetCurTime(uint8_t flags) const
 {
 	if (_player == NULL)
 		return -1.0;
 	
 	// using samples here, as it may be more accurate than the (possibly low-resolution) ticks
 	double secs = _player->Sample2Second(_player->GetCurPos(PLAYPOS_SAMPLE));
-	UINT32 curLoop = _player->GetCurLoop();
+	uint32_t curLoop = _player->GetCurLoop();
 	if (! (flags & PLAYTIME_LOOP_INCL) && curLoop > 0)
 		secs -= _player->Tick2Second(_player->GetLoopTicks() * curLoop);
 	
@@ -317,7 +317,7 @@ double PlayerA::GetCurTime(UINT8 flags) const
 	return secs;
 }
 
-double PlayerA::GetTotalTime(UINT8 flags) const
+double PlayerA::GetTotalTime(uint8_t flags) const
 {
 	if (_player == NULL)
 		return -1.0;
@@ -341,10 +341,10 @@ double PlayerA::GetTotalTime(UINT8 flags) const
 	return secs;
 }
 
-UINT32 PlayerA::GetCurLoop(void) const
+uint32_t PlayerA::GetCurLoop(void) const
 {
 	if (_player == NULL)
-		return (UINT32)-1;
+		return (uint32_t)-1;
 	return _player->GetCurLoop();
 }
 
@@ -372,7 +372,7 @@ void PlayerA::FindPlayerEngine(void)
 	_player = NULL;
 	for (curPlr = 0; curPlr < _avbPlrs.size(); curPlr ++)
 	{
-		UINT8 retVal = _avbPlrs[curPlr]->CanLoadFile(_dLoad);
+		uint8_t retVal = _avbPlrs[curPlr]->CanLoadFile(_dLoad);
 		if (! retVal)
 		{
 			_player = _avbPlrs[curPlr];
@@ -383,7 +383,7 @@ void PlayerA::FindPlayerEngine(void)
 	return;
 }
 
-UINT8 PlayerA::LoadFile(DATA_LOADER* dLoad)
+uint8_t PlayerA::LoadFile(DATA_LOADER* dLoad)
 {
 	_dLoad = dLoad;
 	FindPlayerEngine();
@@ -394,93 +394,93 @@ UINT8 PlayerA::LoadFile(DATA_LOADER* dLoad)
 	_player->SetSampleRate(_smplRate);
 	_player->SetPlaybackSpeed(_config.pbSpeed);
 	
-	UINT8 retVal = _player->LoadFile(dLoad);
+	uint8_t retVal = _player->LoadFile(dLoad);
 	if (retVal >= 0x80)
 		return retVal;
 	return retVal;
 }
 
-UINT8 PlayerA::UnloadFile(void)
+uint8_t PlayerA::UnloadFile(void)
 {
 	if (_player == NULL)
 		return 0xFF;
 	
 	_player->Stop();
-	UINT8 retVal = _player->UnloadFile();
+	uint8_t retVal = _player->UnloadFile();
 	_player = NULL;
 	_dLoad = NULL;
 	return retVal;
 }
 
-UINT32 PlayerA::GetFileSize(void)
+uint32_t PlayerA::GetFileSize(void)
 {
 	if (_dLoad == NULL)
 		return 0x00;
 	
-	UINT32 result = DataLoader_GetTotalSize(_dLoad);
-	if (result != (UINT32)-1)
+	uint32_t result = DataLoader_GetTotalSize(_dLoad);
+	if (result != (uint32_t)-1)
 		return result;
 	else
 		return DataLoader_GetSize(_dLoad);
 }
 
-UINT8 PlayerA::Start(void)
+uint8_t PlayerA::Start(void)
 {
 	if (_player == NULL)
 		return 0xFF;
 	_player->SetSampleRate(_smplRate);
 	_player->SetPlaybackSpeed(_config.pbSpeed);
 	_songVolume = CalcSongVolume();
-	_fadeSmplStart = (UINT32)-1;
-	_endSilenceStart = (UINT32)-1;
+	_fadeSmplStart = (uint32_t)-1;
+	_endSilenceStart = (uint32_t)-1;
 	
-	UINT8 retVal = _player->Start();
+	uint8_t retVal = _player->Start();
 	_myPlayState = _player->GetState() & (PLAYSTATE_PLAY | PLAYSTATE_END);
 	return retVal;
 }
 
-UINT8 PlayerA::Stop(void)
+uint8_t PlayerA::Stop(void)
 {
 	if (_player == NULL)
 		return 0xFF;
-	UINT8 retVal = _player->Stop();
+	uint8_t retVal = _player->Stop();
 	_myPlayState = _player->GetState() & (PLAYSTATE_PLAY | PLAYSTATE_END);
 	_myPlayState |= PLAYSTATE_FIN;
 	return retVal;
 }
 
-UINT8 PlayerA::Reset(void)
+uint8_t PlayerA::Reset(void)
 {
 	if (_player == NULL)
 		return 0xFF;
-	_fadeSmplStart = (UINT32)-1;
-	_endSilenceStart = (UINT32)-1;
-	UINT8 retVal = _player->Reset();
+	_fadeSmplStart = (uint32_t)-1;
+	_endSilenceStart = (uint32_t)-1;
+	uint8_t retVal = _player->Reset();
 	_myPlayState = _player->GetState() & (PLAYSTATE_PLAY | PLAYSTATE_END);
 	return retVal;
 }
 
-UINT8 PlayerA::FadeOut(void)
+uint8_t PlayerA::FadeOut(void)
 {
 	if (_player == NULL)
 		return 0xFF;
-	if (_fadeSmplStart == (UINT32)-1)
+	if (_fadeSmplStart == (uint32_t)-1)
 		_fadeSmplStart = _player->GetCurPos(PLAYPOS_SAMPLE);
 	return 0x00;
 }
 
-UINT8 PlayerA::Seek(UINT8 unit, UINT32 pos)
+uint8_t PlayerA::Seek(uint8_t unit, uint32_t pos)
 {
 	if (_player == NULL)
 		return 0xFF;
-	UINT8 retVal = _player->Seek(unit, pos);
+	uint8_t retVal = _player->Seek(unit, pos);
 	_myPlayState = _player->GetState() & (PLAYSTATE_PLAY | PLAYSTATE_END);
 	
-	UINT32 pbSmpl = _player->GetCurPos(PLAYPOS_SAMPLE);
+	uint32_t pbSmpl = _player->GetCurPos(PLAYPOS_SAMPLE);
 	if (pbSmpl < _fadeSmplStart)
-		_fadeSmplStart = (UINT32)-1;
+		_fadeSmplStart = (uint32_t)-1;
 	if (pbSmpl < _endSilenceStart)
-		_endSilenceStart = (UINT32)-1;
+		_endSilenceStart = (uint32_t)-1;
 	return retVal;
 }
 
@@ -500,16 +500,16 @@ UINT8 PlayerA::Seek(UINT8 unit, UINT32 pos)
 #define VOL_POSTSH	(VOL_BITS - VOL_PRESH)	// post-shift after volume multiplication
 
 // 16.16 fixed point multiplication
-#define MUL16X16_FIXED(a, b)	(INT32)(((INT64)a * b) >> 16)
+#define MUL16X16_FIXED(a, b)	(int32_t)(((int64_t)a * b) >> 16)
 
-INT32 PlayerA::CalcSongVolume(void)
+int32_t PlayerA::CalcSongVolume(void)
 {
-	INT32 volume = _config.masterVol;
+	int32_t volume = _config.masterVol;
 	
 	if (! _config.ignoreVolGain && _player != NULL)
 	{
 		PLR_SONG_INFO songInfo;
-		UINT8 retVal = _player->GetSongInfo(songInfo);
+		uint8_t retVal = _player->GetSongInfo(songInfo);
 		if (! retVal)
 			volume = MUL16X16_FIXED(volume, songInfo.volGain);
 	}
@@ -517,9 +517,9 @@ INT32 PlayerA::CalcSongVolume(void)
 	return volume;
 }
 
-INT32 PlayerA::CalcCurrentVolume(UINT32 playbackSmpl)
+int32_t PlayerA::CalcCurrentVolume(uint32_t playbackSmpl)
 {
-	INT32 curVol;	// 16.16 fixed point
+	int32_t curVol;	// 16.16 fixed point
 	
 	// 1. master volume
 	curVol = _songVolume;
@@ -527,31 +527,31 @@ INT32 PlayerA::CalcCurrentVolume(UINT32 playbackSmpl)
 	// 2. apply fade-out factor
 	if (playbackSmpl >= _fadeSmplStart)
 	{
-		UINT32 fadeSmpls;
-		UINT64 fadeVol;	// 64 bit for less type casts when doing multiplications with .16 fixed point
+		uint32_t fadeSmpls;
+		uint64_t fadeVol;	// 64 bit for less type casts when doing multiplications with .16 fixed point
 		
 		fadeSmpls = playbackSmpl - _fadeSmplStart;
 		if (fadeSmpls >= _config.fadeSmpls)
 			return 0x0000;	// going beyond fade time -> volume 0
 		
-		fadeVol = (UINT64)fadeSmpls * 0x10000 / _config.fadeSmpls;
+		fadeVol = (uint64_t)fadeSmpls * 0x10000 / _config.fadeSmpls;
 		fadeVol = 0x10000 - fadeVol;	// fade from full volume to silence
 		fadeVol = fadeVol * fadeVol;	// logarithmic fading sounds nicer
-		curVol = (INT32)(((INT64)fadeVol * curVol) >> 32);
+		curVol = (int32_t)(((int64_t)fadeVol * curVol) >> 32);
 	}
 	
 	return curVol;
 }
 
-UINT32 PlayerA::Render(UINT32 bufSize, void* data)
+uint32_t PlayerA::Render(uint32_t bufSize, void* data)
 {
-	UINT8* bData = (UINT8*)data;
-	UINT32 basePbSmpl;
-	UINT32 smplCount;
-	UINT32 smplRendered;
-	UINT32 curSmpl;
+	uint8_t* bData = (uint8_t*)data;
+	uint32_t basePbSmpl;
+	uint32_t smplCount;
+	uint32_t smplRendered;
+	uint32_t curSmpl;
 	WAVE_32BS fnlSmpl;	// final sample value
-	INT32 curVolume;
+	int32_t curVolume;
 	
 	smplCount = bufSize / _outSmplSizeA;
 	if (_player == NULL)
@@ -572,8 +572,8 @@ UINT32 PlayerA::Render(UINT32 bufSize, void* data)
 		return 0;
 	}
 	
-	if (smplCount > (UINT32)_smplBuf.size())
-		smplCount = (UINT32)_smplBuf.size();
+	if (smplCount > (uint32_t)_smplBuf.size())
+		smplCount = (uint32_t)_smplBuf.size();
 	memset(&_smplBuf[0], 0, smplCount * sizeof(WAVE_32BS));
 	basePbSmpl = _player->GetCurPos(PLAYPOS_SAMPLE);
 	smplRendered = _player->Render(smplCount, &_smplBuf[0]);
@@ -584,10 +584,10 @@ UINT32 PlayerA::Render(UINT32 bufSize, void* data)
 	{
 		if (basePbSmpl >= _fadeSmplStart)
 		{
-			UINT32 fadeSmpls = basePbSmpl - _fadeSmplStart;
+			uint32_t fadeSmpls = basePbSmpl - _fadeSmplStart;
 			if (fadeSmpls >= _config.fadeSmpls && ! (_myPlayState & PLAYSTATE_END))
 			{
-				if (_endSilenceStart == (UINT32)-1)
+				if (_endSilenceStart == (uint32_t)-1)
 					_endSilenceStart = basePbSmpl;
 				_myPlayState |= PLAYSTATE_END;
 			}
@@ -596,7 +596,7 @@ UINT32 PlayerA::Render(UINT32 bufSize, void* data)
 		}
 		if (basePbSmpl >= _endSilenceStart)
 		{
-			UINT32 silenceSmpls = basePbSmpl - _endSilenceStart;
+			uint32_t silenceSmpls = basePbSmpl - _endSilenceStart;
 			if (silenceSmpls >= _config.endSilenceSmpls && ! (_myPlayState & PLAYSTATE_FIN))
 			{
 				_myPlayState |= PLAYSTATE_FIN;
@@ -613,8 +613,8 @@ UINT32 PlayerA::Render(UINT32 bufSize, void* data)
 		fnlSmpl = _smplBuf[curSmpl];
 		
 #ifdef VOLCALC64
-		fnlSmpl.L = (INT32)( ((INT64)fnlSmpl.L * curVolume) >> VOL_BITS );
-		fnlSmpl.R = (INT32)( ((INT64)fnlSmpl.R * curVolume) >> VOL_BITS );
+		fnlSmpl.L = (int32_t)( ((int64_t)fnlSmpl.L * curVolume) >> VOL_BITS );
+		fnlSmpl.R = (int32_t)( ((int64_t)fnlSmpl.R * curVolume) >> VOL_BITS );
 #else
 		fnlSmpl.L = ((fnlSmpl.L >> VOL_PRESH) * curVolume) >> VOL_POSTSH;
 		fnlSmpl.R = ((fnlSmpl.R >> VOL_PRESH) * curVolume) >> VOL_POSTSH;
@@ -632,15 +632,15 @@ UINT32 PlayerA::Render(UINT32 bufSize, void* data)
 	return curSmpl * _outSmplSizeA;
 }
 
-/*static*/ UINT8 PlayerA::PlayCallbackS(PlayerBase* player, void* userParam, UINT8 evtType, void* evtParam)
+/*static*/ uint8_t PlayerA::PlayCallbackS(PlayerBase* player, void* userParam, uint8_t evtType, void* evtParam)
 {
 	PlayerA* plr = (PlayerA*)userParam;
 	return plr->PlayCallback(player, evtType, evtParam);
 }
 
-UINT8 PlayerA::PlayCallback(PlayerBase* player, UINT8 evtType, void* evtParam)
+uint8_t PlayerA::PlayCallback(PlayerBase* player, uint8_t evtType, void* evtParam)
 {
-	UINT8 retVal = 0x00;
+	uint8_t retVal = 0x00;
 	
 	if (evtType != PLREVT_END)	// We will generate our own PLREVT_END event depending on fading/endSilence.
 	{
@@ -657,7 +657,7 @@ UINT8 PlayerA::PlayCallback(PlayerBase* player, UINT8 evtType, void* evtParam)
 		break;
 	case PLREVT_LOOP:
 		{
-			UINT32* curLoop = (UINT32*)evtParam;
+			uint32_t* curLoop = (uint32_t*)evtParam;
 			if (_config.loopCount > 0 && *curLoop >= _config.loopCount)
 			{
 				//if (_config.fadeSmpls == 0)

@@ -7,16 +7,16 @@ extern "C" {
 
 #include "../stdtype.h"
 
-typedef UINT8 (*DLOADCB_GENERIC)(void *context);
+typedef uint8_t (*DLOADCB_GENERIC)(void *context);
 typedef void (*DLOADCB_GEN_CALL)(void *context);
-typedef UINT32 (*DLOADCB_READ)(void *context, UINT8 *buffer, UINT32 numBytes);
-typedef UINT8 (*DLOADCB_SEEK)(void *context, UINT32 offset, UINT8 whence);
-typedef INT32 (*DLOADCB_TELL)(void *context);
-typedef UINT32 (*DLOADCB_LENGTH)(void *context);
+typedef uint32_t (*DLOADCB_READ)(void *context, uint8_t *buffer, uint32_t numBytes);
+typedef uint8_t (*DLOADCB_SEEK)(void *context, uint32_t offset, uint8_t whence);
+typedef int32_t (*DLOADCB_TELL)(void *context);
+typedef uint32_t (*DLOADCB_LENGTH)(void *context);
 
 typedef struct _data_loader_callbacks
 {
-	UINT32 type;            /* 4-character-code for the file loader */
+	uint32_t type;            /* 4-character-code for the file loader */
 	const char *name;       /* human-readable name of the file loader */
 	DLOADCB_GENERIC dopen;  /* open a file, URL, piece of memory, return 0 on success */
 	DLOADCB_READ dread;     /* read bytes into buffer */
@@ -37,11 +37,11 @@ enum
 
 typedef struct _data_loader
 {
-	UINT8 _status;
-	UINT32 _bytesTotal;
-	UINT32 _bytesLoaded;
-	UINT32 _readStopOfs;
-	UINT8 *_data;
+	uint8_t _status;
+	uint32_t _bytesTotal;
+	uint32_t _bytesLoaded;
+	uint32_t _readStopOfs;
+	uint8_t *_data;
 	const DATA_LOADER_CALLBACKS *_callbacks;
 	void *_context;
 } DATA_LOADER;
@@ -49,37 +49,37 @@ typedef struct _data_loader
 /* calls the dopen and dlength functions
  * by default, loads whole file into memory, use
  * DataLoader_SetPreloadBytes to change this */
-UINT8 DataLoader_Load(DATA_LOADER *loader);
+uint8_t DataLoader_Load(DATA_LOADER *loader);
 
 /* Resets the DataLoader (calls DataReader_CancelLoading, unloads data, etc */
-UINT8 DataLoader_Reset(DATA_LOADER *loader);
+uint8_t DataLoader_Reset(DATA_LOADER *loader);
 
 /* Returns a pointer to the DataLoader's memory buffer
  * call after any invocation of "Read", "ReadUntil", etc,
  * since the memory buffer pointer can change */
-UINT8 *DataLoader_GetData(DATA_LOADER *loader);
+uint8_t *DataLoader_GetData(DATA_LOADER *loader);
 
 /* returns _bytesTotal */
-UINT32 DataLoader_GetTotalSize(const DATA_LOADER *loader);
+uint32_t DataLoader_GetTotalSize(const DATA_LOADER *loader);
 
 /* returns _bytesLoaded */
-UINT32 DataLoader_GetSize(const DATA_LOADER *loader);
+uint32_t DataLoader_GetSize(const DATA_LOADER *loader);
 
 /* returns _status */
-UINT8 DataLoader_GetStatus(const DATA_LOADER *loader);
+uint8_t DataLoader_GetStatus(const DATA_LOADER *loader);
 
 /* calls dread, then deof
  * if deof > 0, also calls CancelLoading (dclose) */
-UINT32 DataLoader_Read(DATA_LOADER *loader, UINT32 numBytes);
+uint32_t DataLoader_Read(DATA_LOADER *loader, uint32_t numBytes);
 
 /* calls dclose */
-UINT8 DataLoader_CancelLoading(DATA_LOADER *loader);
+uint8_t DataLoader_CancelLoading(DATA_LOADER *loader);
 
 /* sets number of bytes to preload */
-void DataLoader_SetPreloadBytes(DATA_LOADER *loader, UINT32 byteCount);
+void DataLoader_SetPreloadBytes(DATA_LOADER *loader, uint32_t byteCount);
 
 /* reads until offset */
-void DataLoader_ReadUntil(DATA_LOADER *loader, UINT32 fileOffset);
+void DataLoader_ReadUntil(DATA_LOADER *loader, uint32_t fileOffset);
 
 /* read all data */
 void DataLoader_ReadAll(DATA_LOADER *loader);

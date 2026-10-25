@@ -16,21 +16,21 @@
 
 #include "segapcm.h"
 
-static void SEGAPCM_update(void *chip, UINT32 samples, DEV_SMPL **outputs);
+static void SEGAPCM_update(void *chip, uint32_t samples, DEV_SMPL **outputs);
 
-static UINT8 device_start_segapcm(const SEGAPCM_CFG* cfg, DEV_INFO* retDevInf);
+static uint8_t device_start_segapcm(const SEGAPCM_CFG* cfg, DEV_INFO* retDevInf);
 static void device_stop_segapcm(void *chip);
 static void device_reset_segapcm(void *chip);
 
-static void sega_pcm_w(void *chip, UINT16 offset, UINT8 data);
-static UINT8 sega_pcm_r(void *chip, UINT16 offset);
-static void sega_pcm_alloc_rom(void *chip, UINT32 memsize);
-static void sega_pcm_write_rom(void *chip, UINT32 offset, UINT32 length, const UINT8* data);
+static void sega_pcm_w(void *chip, uint16_t offset, uint8_t data);
+static uint8_t sega_pcm_r(void *chip, uint16_t offset);
+static void sega_pcm_alloc_rom(void *chip, uint32_t memsize);
+static void sega_pcm_write_rom(void *chip, uint32_t offset, uint32_t length, const uint8_t* data);
 #ifdef _DEBUG
 static void sega_pcm_fwrite_romusage(void *chip);
 #endif
 
-static void segapcm_set_mute_mask(void *chip, UINT32 MuteMask);
+static void segapcm_set_mute_mask(void *chip, uint32_t MuteMask);
 
 
 static DEVDEF_RWFUNC devFunc[] =
@@ -66,7 +66,7 @@ static const char* DeviceName(const DEV_GEN_CFG* devCfg)
 	return "Sega PCM";
 }
 
-static UINT16 DeviceChannels(const DEV_GEN_CFG* devCfg)
+static uint16_t DeviceChannels(const DEV_GEN_CFG* devCfg)
 {
 	return 16;
 }
@@ -100,20 +100,20 @@ struct _segapcm_state
 {
 	DEV_DATA _devData;
 
-	UINT8  *ram;
-	UINT8 low[16];
-	UINT32 ROMSize;
-	UINT8 *rom;
+	uint8_t  *ram;
+	uint8_t low[16];
+	uint32_t ROMSize;
+	uint8_t *rom;
 #ifdef _DEBUG
-	UINT8 *romusage;
+	uint8_t *romusage;
 #endif
-	UINT8 bankshift;
-	UINT8 bankmask;
-	UINT8 intf_mask;
-	UINT8 Muted[16];
+	uint8_t bankshift;
+	uint8_t bankmask;
+	uint8_t intf_mask;
+	uint8_t Muted[16];
 };
 
-static void SEGAPCM_update(void *chip, UINT32 samples, DEV_SMPL **outputs)
+static void SEGAPCM_update(void *chip, uint32_t samples, DEV_SMPL **outputs)
 {
 	segapcm_state *spcm = (segapcm_state *)chip;
 	int ch;
@@ -148,21 +148,21 @@ static void SEGAPCM_update(void *chip, UINT32 samples, DEV_SMPL **outputs)
 	/* loop over channels */
 	for (ch = 0; ch < 16; ch++)
 	{
-		UINT8 *regs = spcm->ram+8*ch;
+		uint8_t *regs = spcm->ram+8*ch;
 
 		/* only process active channels */
 		if (!(regs[0x86] & 1) && ! spcm->Muted[ch])
 		{
-			UINT32 offset = (regs[0x86] & spcm->bankmask) << spcm->bankshift;
-			UINT32 addr = (regs[0x85] << 16) | (regs[0x84] << 8) | spcm->low[ch];
-			UINT32 loop = (regs[0x05] << 16) | (regs[0x04] << 8);
-			UINT8 end = regs[6] + 1;
-			UINT32 i;
+			uint32_t offset = (regs[0x86] & spcm->bankmask) << spcm->bankshift;
+			uint32_t addr = (regs[0x85] << 16) | (regs[0x84] << 8) | spcm->low[ch];
+			uint32_t loop = (regs[0x05] << 16) | (regs[0x04] << 8);
+			uint8_t end = regs[6] + 1;
+			uint32_t i;
 
 			/* loop over samples on this channel */
 			for (i = 0; i < samples; i++)
 			{
-				INT8 v = 0;
+				int8_t v = 0;
 
 				/* handle looping if we've hit the end */
 				if ((addr >> 16) == end)
@@ -198,9 +198,9 @@ static void SEGAPCM_update(void *chip, UINT32 samples, DEV_SMPL **outputs)
 	}
 }
 
-static UINT8 device_start_segapcm(const SEGAPCM_CFG* cfg, DEV_INFO* retDevInf)
+static uint8_t device_start_segapcm(const SEGAPCM_CFG* cfg, DEV_INFO* retDevInf)
 {
-	static const UINT32 STD_ROM_SIZE = 0x80000;
+	static const uint32_t STD_ROM_SIZE = 0x80000;
 	segapcm_state *spcm;
 	
 	spcm = (segapcm_state *)calloc(1, sizeof(segapcm_state));
@@ -215,7 +215,7 @@ static UINT8 device_start_segapcm(const SEGAPCM_CFG* cfg, DEV_INFO* retDevInf)
 #ifdef _DEBUG
 	spcm->romusage = NULL;
 #endif
-	spcm->ram = (UINT8*)malloc(0x800);
+	spcm->ram = (uint8_t*)malloc(0x800);
 	// RAM clear is done at device_reset
 	
 	sega_pcm_alloc_rom(spcm, STD_ROM_SIZE);
@@ -251,27 +251,27 @@ static void device_reset_segapcm(void *chip)
 }
 
 
-static void sega_pcm_w(void *chip, UINT16 offset, UINT8 data)
+static void sega_pcm_w(void *chip, uint16_t offset, uint8_t data)
 {
 	segapcm_state *spcm = (segapcm_state *)chip;
 	
 	spcm->ram[offset & 0x07ff] = data;
 }
 
-static UINT8 sega_pcm_r(void *chip, UINT16 offset)
+static uint8_t sega_pcm_r(void *chip, uint16_t offset)
 {
 	segapcm_state *spcm = (segapcm_state *)chip;
 	return spcm->ram[offset & 0x07ff];
 }
 
-static void sega_pcm_alloc_rom(void *chip, UINT32 memsize)
+static void sega_pcm_alloc_rom(void *chip, uint32_t memsize)
 {
 	segapcm_state *spcm = (segapcm_state *)chip;
 	
 	if (spcm->ROMSize == memsize)
 		return;
 	
-	spcm->rom = (UINT8*)realloc(spcm->rom, memsize);
+	spcm->rom = (uint8_t*)realloc(spcm->rom, memsize);
 #ifndef _DEBUG
 	//memset(spcm->rom, 0xFF, memsize);
 	// filling 0xFF would actually be more true to the hardware,
@@ -279,7 +279,7 @@ static void sega_pcm_alloc_rom(void *chip, UINT32 memsize)
 	// but 0x80 is the effective 'null' byte
 	memset(spcm->rom, 0x80, memsize);
 #else
-	spcm->romusage = (UINT8*)realloc(spcm->romusage, memsize);
+	spcm->romusage = (uint8_t*)realloc(spcm->romusage, memsize);
 	// filling with FF makes it easier to find bugs in a .wav-log
 	memset(spcm->rom, 0xFF, memsize);
 	memset(spcm->romusage, 0x02, memsize);
@@ -291,7 +291,7 @@ static void sega_pcm_alloc_rom(void *chip, UINT32 memsize)
 	return;
 }
 
-static void sega_pcm_write_rom(void *chip, UINT32 offset, UINT32 length, const UINT8* data)
+static void sega_pcm_write_rom(void *chip, uint32_t offset, uint32_t length, const uint8_t* data)
 {
 	segapcm_state *spcm = (segapcm_state *)chip;
 	
@@ -326,10 +326,10 @@ static void sega_pcm_fwrite_romusage(void *chip)
 }
 #endif
 
-static void segapcm_set_mute_mask(void *chip, UINT32 MuteMask)
+static void segapcm_set_mute_mask(void *chip, uint32_t MuteMask)
 {
 	segapcm_state *spcm = (segapcm_state *)chip;
-	UINT8 CurChn;
+	uint8_t CurChn;
 	
 	for (CurChn = 0; CurChn < 16; CurChn ++)
 		spcm->Muted[CurChn] = (MuteMask >> CurChn) & 0x01;

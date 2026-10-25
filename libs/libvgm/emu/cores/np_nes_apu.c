@@ -47,15 +47,15 @@ struct _NES_APU
 
 	int option[OPT_END];		// 各種オプション
 	int mask;
-	INT32 sm[2][2];
+	int32_t sm[2][2];
 
-	UINT32 gclock;
-	UINT8 reg[0x20];
-	INT32 out[2];
-	UINT32 rate, clock;
+	uint32_t gclock;
+	uint8_t reg[0x20];
+	int32_t out[2];
+	uint32_t rate, clock;
 
-	INT32 square_table[32];		// nonlinear mixer
-	INT32 square_linear;		// linear mix approximation
+	int32_t square_table[32];		// nonlinear mixer
+	int32_t square_linear;		// linear mix approximation
 
 	int scounter[2];			// frequency divider
 	int sphase[2];				// phase counter
@@ -87,8 +87,8 @@ struct _NES_APU
 };
 
 static void sweep_sqr(NES_APU* apu, int ch);	// calculates target sweep frequency
-static INT32 calc_sqr(NES_APU* apu, int ch, UINT32 clocks);
-static void Tick(NES_APU* apu, UINT32 clocks);
+static int32_t calc_sqr(NES_APU* apu, int ch, uint32_t clocks);
+static void Tick(NES_APU* apu, uint32_t clocks);
 
 
 static void sweep_sqr(NES_APU* apu, int i)
@@ -174,15 +174,15 @@ void NES_APU_np_FrameSequence(void* chip, int s)
 
 }
 
-static INT32 calc_sqr(NES_APU* apu, int i, UINT32 clocks)
+static int32_t calc_sqr(NES_APU* apu, int i, uint32_t clocks)
 {
-	static const INT16 sqrtbl[4][16] = {
+	static const int16_t sqrtbl[4][16] = {
 		{0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
 		{0, 0, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
 		{0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0},
 		{1, 1, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1}
 	};
-	INT32 ret;
+	int32_t ret;
 
 	apu->scounter[i] -= clocks;
 	while (apu->scounter[i] < 0)
@@ -204,7 +204,7 @@ static INT32 calc_sqr(NES_APU* apu, int i, UINT32 clocks)
 	return ret;
 }
 
-bool NES_APU_np_Read(void* chip, UINT16 adr, UINT8* val)
+bool NES_APU_np_Read(void* chip, uint16_t adr, uint8_t* val)
 {
 	NES_APU* apu = (NES_APU*)chip;
 
@@ -222,18 +222,18 @@ bool NES_APU_np_Read(void* chip, UINT16 adr, UINT8* val)
 		return false;
 }
 
-static void Tick(NES_APU* apu, UINT32 clocks)
+static void Tick(NES_APU* apu, uint32_t clocks)
 {
 	apu->out[0] = calc_sqr(apu, 0, clocks);
 	apu->out[1] = calc_sqr(apu, 1, clocks);
 }
 
 // 生成される波形の振幅は0-8191
-UINT32 NES_APU_np_Render(void* chip, INT32 b[2])
+uint32_t NES_APU_np_Render(void* chip, int32_t b[2])
 {
 	NES_APU* apu = (NES_APU*)chip;
-	UINT32 clocks;
-	INT32 m[2];
+	uint32_t clocks;
+	int32_t m[2];
 
 	RC_STEP(&apu->tick_count);
 	clocks = RC_GET_VAL(&apu->tick_count);
@@ -245,8 +245,8 @@ UINT32 NES_APU_np_Render(void* chip, INT32 b[2])
 
 	if(apu->option[OPT_NONLINEAR_MIXER])
 	{
-		INT32 ref;
-		INT32 voltage = apu->square_table[apu->out[0] + apu->out[1]];
+		int32_t ref;
+		int32_t voltage = apu->square_table[apu->out[0] + apu->out[1]];
 		m[0] = apu->out[0] << 6;
 		m[1] = apu->out[1] << 6;
 		ref = m[0] + m[1];
@@ -279,7 +279,7 @@ UINT32 NES_APU_np_Render(void* chip, INT32 b[2])
 	return 2;
 }
 
-void* NES_APU_np_Create(UINT32 clock, UINT32 rate)
+void* NES_APU_np_Create(uint32_t clock, uint32_t rate)
 {
 	NES_APU* apu;
 	int i, c, t;
@@ -298,7 +298,7 @@ void* NES_APU_np_Create(UINT32 clock, UINT32 rate)
 
 	apu->square_table[0] = 0;
 	for(i=1;i<32;i++)
-		apu->square_table[i]=(INT32)((8192.0*95.88)/(8128.0/i+100));
+		apu->square_table[i]=(int32_t)((8192.0*95.88)/(8128.0/i+100));
 
 	apu->square_linear = apu->square_table[15]; // match linear scale to one full volume square of nonlinear
 
@@ -373,14 +373,14 @@ void NES_APU_np_SetOption(void* chip, int id, int val)
 	if(id<OPT_END) apu->option[id] = val;
 }
 
-void NES_APU_np_SetClock(void* chip, UINT32 c)
+void NES_APU_np_SetClock(void* chip, uint32_t c)
 {
 	NES_APU* apu = (NES_APU*)chip;
 
 	apu->clock = c;
 }
 
-void NES_APU_np_SetRate(void* chip, UINT32 r)
+void NES_APU_np_SetRate(void* chip, uint32_t r)
 {
 	NES_APU* apu = (NES_APU*)chip;
 
@@ -395,7 +395,7 @@ void NES_APU_np_SetMask(void* chip, int m)
 	apu->mask = m;
 }
 
-void NES_APU_np_SetStereoMix(void* chip, int trk, INT16 mixl, INT16 mixr)
+void NES_APU_np_SetStereoMix(void* chip, int trk, int16_t mixl, int16_t mixr)
 {
 	NES_APU* apu = (NES_APU*)chip;
 
@@ -405,12 +405,12 @@ void NES_APU_np_SetStereoMix(void* chip, int trk, INT16 mixl, INT16 mixr)
 	apu->sm[1][trk] = mixr;
 }
 
-bool NES_APU_np_Write(void* chip, UINT16 adr, UINT8 val)
+bool NES_APU_np_Write(void* chip, uint16_t adr, uint8_t val)
 {
 	NES_APU* apu = (NES_APU*)chip;
 	int ch;
 
-	static const UINT8 length_table[32] = {
+	static const uint8_t length_table[32] = {
 		0x0A, 0xFE,
 		0x14, 0x02,
 		0x28, 0x04,

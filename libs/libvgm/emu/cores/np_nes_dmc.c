@@ -45,47 +45,47 @@ struct _NES_DMC
 	DEV_DATA _devData;
 
 	//const int GETA_BITS;
-	//static const UINT32 freq_table[2][16];
-	//static const UINT32 wavlen_table[2][16];
-	UINT32 tnd_table[2][16][16][128];
+	//static const uint32_t freq_table[2][16];
+	//static const uint32_t wavlen_table[2][16];
+	uint32_t tnd_table[2][16][16][128];
 
 	int option[OPT_END];
 	int mask;
-	INT32 sm[2][3];
-	UINT8 reg[0x10];
-	UINT32 len_reg;
-	UINT32 adr_reg;
+	int32_t sm[2][3];
+	uint8_t reg[0x10];
+	uint32_t len_reg;
+	uint32_t adr_reg;
 	//IDevice *memory;
-	const UINT8* memory;
-	UINT32 out[3];
-	UINT32 daddress;
-	UINT32 dlength;
-	UINT32 data;
+	const uint8_t* memory;
+	uint32_t out[3];
+	uint32_t daddress;
+	uint32_t dlength;
+	uint32_t data;
 	bool empty;
-	INT16 damp;
+	int16_t damp;
 	int dac_lsb;
 	bool dmc_pop;
-	INT32 dmc_pop_offset;
-	INT32 dmc_pop_follow;
-	UINT32 clock;
-	UINT32 rate;
+	int32_t dmc_pop_offset;
+	int32_t dmc_pop_follow;
+	uint32_t clock;
+	uint32_t rate;
 	int pal;
 	int mode;
 	bool irq;
 
-	INT32 counter[3];	// frequency dividers
+	int32_t counter[3];	// frequency dividers
 	int tphase;			// triangle phase
-	UINT32 nfreq;		// noise frequency
-	UINT32 dfreq;		// DPCM frequency
+	uint32_t nfreq;		// noise frequency
+	uint32_t dfreq;		// DPCM frequency
 
-	UINT32 tri_freq;
+	uint32_t tri_freq;
 	int linear_counter;
 	int linear_counter_reload;
 	bool linear_counter_halt;
 	bool linear_counter_control;
 
 	int noise_volume;
-	UINT32 noise, noise_tap;
+	uint32_t noise, noise_tap;
 
 	// noise envelope
 	bool envelope_loop;
@@ -110,15 +110,15 @@ struct _NES_DMC
 	RATIO_CNTR tick_count;
 };
 
-INLINE UINT32 calc_tri(NES_DMC* dmc, UINT32 clocks);
-INLINE UINT32 calc_dmc(NES_DMC* dmc, UINT32 clocks);
-INLINE UINT32 calc_noise(NES_DMC* dmc, UINT32 clocks);
+INLINE uint32_t calc_tri(NES_DMC* dmc, uint32_t clocks);
+INLINE uint32_t calc_dmc(NES_DMC* dmc, uint32_t clocks);
+INLINE uint32_t calc_noise(NES_DMC* dmc, uint32_t clocks);
 static void FrameSequence(NES_DMC* dmc, int s);
-static void TickFrameSequence(NES_DMC* dmc, UINT32 clocks);
-static void Tick(NES_DMC* dmc, UINT32 clocks);
+static void TickFrameSequence(NES_DMC* dmc, uint32_t clocks);
+static void Tick(NES_DMC* dmc, uint32_t clocks);
 
 #define GETA_BITS	20
-static const UINT32 wavlen_table[2][16] = {
+static const uint32_t wavlen_table[2][16] = {
 {	// NTSC
 	4, 8, 16, 32, 64, 96, 128, 160, 202, 254, 380, 508, 762, 1016, 2034, 4068
 },
@@ -126,7 +126,7 @@ static const UINT32 wavlen_table[2][16] = {
 	4, 8, 14, 30, 60, 88, 118, 148, 188, 236, 354, 472, 708,  944, 1890, 3778
 }};
 
-static const UINT32 freq_table[2][16] = {
+static const uint32_t freq_table[2][16] = {
 {	// NTSC
 	428, 380, 340, 320, 286, 254, 226, 214, 190, 160, 142, 128, 106,  84,  72,  54
 },
@@ -134,7 +134,7 @@ static const UINT32 freq_table[2][16] = {
 	398, 354, 316, 298, 276, 236, 210, 198, 176, 148, 132, 118,  98,  78,  66,  50
 }};
 
-static const UINT32 BITREVERSE[256] = {
+static const uint32_t BITREVERSE[256] = {
 	0x00, 0x80, 0x40, 0xC0, 0x20, 0xA0, 0x60, 0xE0, 0x10, 0x90, 0x50, 0xD0, 0x30, 0xB0, 0x70, 0xF0,
 	0x08, 0x88, 0x48, 0xC8, 0x28, 0xA8, 0x68, 0xE8, 0x18, 0x98, 0x58, 0xD8, 0x38, 0xB8, 0x78, 0xF8,
 	0x04, 0x84, 0x44, 0xC4, 0x24, 0xA4, 0x64, 0xE4, 0x14, 0x94, 0x54, 0xD4, 0x34, 0xB4, 0x74, 0xF4,
@@ -153,7 +153,7 @@ static const UINT32 BITREVERSE[256] = {
 	0x0F, 0x8F, 0x4F, 0xCF, 0x2F, 0xAF, 0x6F, 0xEF, 0x1F, 0x9F, 0x5F, 0xDF, 0x3F, 0xBF, 0x7F, 0xFF,
 };
 
-void* NES_DMC_np_Create(UINT32 clock, UINT32 rate)
+void* NES_DMC_np_Create(uint32_t clock, uint32_t rate)
 {
 	NES_DMC* dmc;
 	int c, t;
@@ -211,7 +211,7 @@ void NES_DMC_np_SetMask(void* chip, int m)
 	dmc->mask = m;
 }
 
-void NES_DMC_np_SetStereoMix(void* chip, int trk, INT16 mixl, INT16 mixr)
+void NES_DMC_np_SetStereoMix(void* chip, int trk, int16_t mixl, int16_t mixr)
 {
 	NES_DMC* dmc = (NES_DMC*)chip;
 
@@ -297,9 +297,9 @@ static void FrameSequence(NES_DMC* dmc, int s)
 }
 
 // 三角波チャンネルの計算 戻り値は0-15
-UINT32 calc_tri(NES_DMC* dmc, UINT32 clocks)
+uint32_t calc_tri(NES_DMC* dmc, uint32_t clocks)
 {
-	static UINT32 tritbl[32] =
+	static uint32_t tritbl[32] =
 	{
 	  0, 1, 2, 3, 4, 5, 6, 7,
 	  8, 9,10,11,12,13,14,15,
@@ -332,7 +332,7 @@ UINT32 calc_tri(NES_DMC* dmc, UINT32 clocks)
 		}
 	}
 
-	//UINT32 ret = tritbl[dmc->tphase];
+	//uint32_t ret = tritbl[dmc->tphase];
 	//return ret;
 	return tritbl[dmc->tphase];
 }
@@ -341,10 +341,10 @@ UINT32 calc_tri(NES_DMC* dmc, UINT32 clocks)
 // 低サンプリングレートで合成するとエイリアスノイズが激しいので
 // ノイズだけはこの関数内で高クロック合成し、簡易なサンプリングレート
 // 変換を行っている。
-UINT32 calc_noise(NES_DMC* dmc, UINT32 clocks)
+uint32_t calc_noise(NES_DMC* dmc, uint32_t clocks)
 {
-	UINT32 last, count, accum, accum_clocks, average;
-	UINT32 env = dmc->envelope_disable ? dmc->noise_volume : dmc->envelope_counter;
+	uint32_t last, count, accum, accum_clocks, average;
+	uint32_t env = dmc->envelope_disable ? dmc->noise_volume : dmc->envelope_counter;
 	if (dmc->length_counter[1] < 1) env = 0;
 
 	last = (dmc->noise & 0x4000) ? 0 : env;
@@ -355,7 +355,7 @@ UINT32 calc_noise(NES_DMC* dmc, UINT32 clocks)
 	accum = dmc->counter[1] * last; // samples pending from previous calc
 	accum_clocks = dmc->counter[1];
 	#ifdef _DEBUG_NSFP
-		INT32 start_clocks = dmc->counter[1];
+		int32_t start_clocks = dmc->counter[1];
 	#endif
 	if (dmc->counter[1] < 0) // only happens on startup when using the randomize noise option
 	{
@@ -370,7 +370,7 @@ UINT32 calc_noise(NES_DMC* dmc, UINT32 clocks)
 	while (dmc->counter[1] < 0)
 	{
 		// tick the noise generator
-		UINT32 feedback = (dmc->noise&1) ^ ((dmc->noise&dmc->noise_tap)?1:0);
+		uint32_t feedback = (dmc->noise&1) ^ ((dmc->noise&dmc->noise_tap)?1:0);
 		dmc->noise = (dmc->noise>>1) | (feedback<<14);
 
 		last = (dmc->noise & 0x4000) ? 0 : env;
@@ -397,7 +397,7 @@ UINT32 calc_noise(NES_DMC* dmc, UINT32 clocks)
 }
 
 // DMCチャンネルの計算 戻り値は0-127
-UINT32 calc_dmc(NES_DMC* dmc, UINT32 clocks)
+uint32_t calc_dmc(NES_DMC* dmc, uint32_t clocks)
 {
 	dmc->counter[2] -= clocks;
 //	assert(dmc->dfreq > 0);	// prevent infinite loop
@@ -458,7 +458,7 @@ UINT32 calc_dmc(NES_DMC* dmc, UINT32 clocks)
 	return (dmc->damp<<1) + dmc->dac_lsb;
 }
 
-static void TickFrameSequence(NES_DMC* dmc, UINT32 clocks)
+static void TickFrameSequence(NES_DMC* dmc, uint32_t clocks)
 {
 	dmc->frame_sequence_count += clocks;
 	while (dmc->frame_sequence_count > dmc->frame_sequence_length)
@@ -471,18 +471,18 @@ static void TickFrameSequence(NES_DMC* dmc, UINT32 clocks)
 	}
 }
 
-static void Tick(NES_DMC* dmc, UINT32 clocks)
+static void Tick(NES_DMC* dmc, uint32_t clocks)
 {
 	dmc->out[0] = calc_tri(dmc, clocks);
 	dmc->out[1] = calc_noise(dmc, clocks);
 	dmc->out[2] = calc_dmc(dmc, clocks);
 }
 
-UINT32 NES_DMC_np_Render(void* chip, INT32 b[2])
+uint32_t NES_DMC_np_Render(void* chip, int32_t b[2])
 {
 	NES_DMC* dmc = (NES_DMC*)chip;
-	UINT32 clocks;
-	INT32 m[3];
+	uint32_t clocks;
+	int32_t m[3];
 
 	RC_STEP(&dmc->tick_count);
 	clocks = RC_GET_VAL(&dmc->tick_count);
@@ -500,8 +500,8 @@ UINT32 NES_DMC_np_Render(void* chip, INT32 b[2])
 
 	if (dmc->option[OPT_NONLINEAR_MIXER])
 	{
-		INT32 ref = m[0] + m[1] + m[2];
-		INT32 voltage = dmc->tnd_table[1][dmc->out[0]][dmc->out[1]][dmc->out[2]];
+		int32_t ref = m[0] + m[1] + m[2];
+		int32_t voltage = dmc->tnd_table[1][dmc->out[0]][dmc->out[1]][dmc->out[2]];
 		int i;
 		if (ref)
 		{
@@ -553,7 +553,7 @@ UINT32 NES_DMC_np_Render(void* chip, INT32 b[2])
 }
 
 
-void NES_DMC_np_SetClock(void* chip, UINT32 c)
+void NES_DMC_np_SetClock(void* chip, uint32_t c)
 {
 	NES_DMC* dmc = (NES_DMC*)chip;
 
@@ -565,7 +565,7 @@ void NES_DMC_np_SetClock(void* chip, UINT32 c)
 		NES_DMC_np_SetPal(dmc, false);
 }
 
-void NES_DMC_np_SetRate(void* chip, UINT32 r)
+void NES_DMC_np_SetRate(void* chip, uint32_t r)
 {
 	NES_DMC* dmc = (NES_DMC*)chip;
 
@@ -607,7 +607,7 @@ static void InitializeTNDTable(NES_DMC* dmc, double wt, double wn, double wd)
 		for(t=0; t<16 ; t++) {
 			for(n=0; n<16; n++) {
 				for(d=0; d<128; d++) {
-						dmc->tnd_table[0][t][n][d] = (UINT32)(MASTER*(3.0*t+2.0*n+d)/208.0);
+						dmc->tnd_table[0][t][n][d] = (uint32_t)(MASTER*(3.0*t+2.0*n+d)/208.0);
 				}
 			}
 		}
@@ -618,7 +618,7 @@ static void InitializeTNDTable(NES_DMC* dmc, double wt, double wn, double wd)
 			for(n=0; n<16; n++) {
 				for(d=0; d<128; d++) {
 					if(t!=0||n!=0||d!=0)
-						dmc->tnd_table[1][t][n][d] = (UINT32)((MASTER*159.79)/(100.0+1.0/((double)t/wt+(double)n/wn+(double)d/wd)));
+						dmc->tnd_table[1][t][n][d] = (uint32_t)((MASTER*159.79)/(100.0+1.0/((double)t/wt+(double)n/wn+(double)d/wd)));
 				}
 			}
 		}
@@ -705,7 +705,7 @@ void NES_DMC_np_Reset(void* chip)
 	RC_RESET(&dmc->tick_count);
 }
 
-void NES_DMC_np_SetMemory(void* chip, const UINT8* r)
+void NES_DMC_np_SetMemory(void* chip, const uint8_t* r)
 {
 	NES_DMC* dmc = (NES_DMC*)chip;
 
@@ -724,9 +724,9 @@ void NES_DMC_np_SetOption(void* chip, int id, int val)
 	}
 }
 
-bool NES_DMC_np_Write(void* chip, UINT16 adr, UINT8 val)
+bool NES_DMC_np_Write(void* chip, uint16_t adr, uint8_t val)
 {
-	static const UINT8 length_table[32] = {
+	static const uint8_t length_table[32] = {
 		0x0A, 0xFE,
 		0x14, 0x02,
 		0x28, 0x04,
@@ -898,7 +898,7 @@ bool NES_DMC_np_Write(void* chip, UINT16 adr, UINT8 val)
 	return true;
 }
 
-bool NES_DMC_np_Read(void* chip, UINT16 adr, UINT8* val)
+bool NES_DMC_np_Read(void* chip, uint16_t adr, uint8_t* val)
 {
 	NES_DMC* dmc = (NES_DMC*)chip;
 

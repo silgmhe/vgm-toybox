@@ -15,11 +15,11 @@
 
 static void mikey_write( void*, uint8_t address, uint8_t value );
 static uint8_t mikey_read( void*, uint8_t address );
-static void mikey_set_mute_mask( void*, UINT32 mutes );
-static UINT8 mikey_start( const DEV_GEN_CFG*, DEV_INFO* );
+static void mikey_set_mute_mask( void*, uint32_t mutes );
+static uint8_t mikey_start( const DEV_GEN_CFG*, DEV_INFO* );
 static void mikey_stop( void* );
 static void mikey_reset( void* );
-static void mikey_update( void*, UINT32 samples, DEV_SMPL** outputs );
+static void mikey_update( void*, uint32_t samples, DEV_SMPL** outputs );
 
 static DEVDEF_RWFUNC devFunc[] =
 {
@@ -53,7 +53,7 @@ static const char* DeviceName(const DEV_GEN_CFG* devCfg)
 	return "Mikey";
 }
 
-static UINT16 DeviceChannels(const DEV_GEN_CFG* devCfg)
+static uint16_t DeviceChannels(const DEV_GEN_CFG* devCfg)
 {
 	return 4;
 }
@@ -958,7 +958,7 @@ typedef struct
   uint32_t mTicksPerSample2;
 } mikey_t;
 
-static UINT8 mikey_start( const DEV_GEN_CFG* cfg, DEV_INFO* retDevInf )
+static uint8_t mikey_start( const DEV_GEN_CFG* cfg, DEV_INFO* retDevInf )
 {
   mikey_t* mikey;
 
@@ -1008,10 +1008,10 @@ static void mikey_write( void* info, uint8_t address, uint8_t value )
   }
 }
 
-static void mikey_update( void* info, UINT32 samples, DEV_SMPL** outputs )
+static void mikey_update( void* info, uint32_t samples, DEV_SMPL** outputs )
 {
   mikey_t* mikey = (mikey_t*)info;
-  UINT32 i = 0;
+  uint32_t i = 0;
   for ( ;; )
   {
     int stage;
@@ -1050,7 +1050,7 @@ static uint8_t mikey_read( void* info, uint8_t address )
   return mikey_pimpl_read( &mikey->mMikey, mikey->mTick, address );
 }
 
-static void mikey_set_mute_mask( void* info, UINT32 mutes )
+static void mikey_set_mute_mask( void* info, uint32_t mutes )
 {
   mikey_t* mikey = (mikey_t*)info;
   int i;

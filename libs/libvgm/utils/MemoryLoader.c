@@ -15,40 +15,40 @@ enum
 
 typedef struct _memory_loader MEMORY_LOADER;
 
-typedef UINT32 (*MLOAD_READ)(MEMORY_LOADER *loader, UINT8 *buffer, UINT32 numBytes);
+typedef uint32_t (*MLOAD_READ)(MEMORY_LOADER *loader, uint8_t *buffer, uint32_t numBytes);
 
 struct _memory_loader
 {
-	UINT8 modeCompr;
-	UINT32 srcSize;	// size of source data
-	const UINT8 *srcData;
-	UINT32 decSize;	// decompressed size
-	UINT32 pos;
+	uint8_t modeCompr;
+	uint32_t srcSize;	// size of source data
+	const uint8_t *srcData;
+	uint32_t decSize;	// decompressed size
+	uint32_t pos;
 	z_stream zStream;
 
 	MLOAD_READ ReadData;
 };
 
 
-static UINT8 MemoryLoader_dopen(void *context);
-static UINT32 MemoryLoader_dread(void *context, UINT8 *buffer, UINT32 numBytes);
-static UINT32 MemoryLoader_ReadDataRaw(MEMORY_LOADER *loader, UINT8 *buffer, UINT32 numBytes);
-static UINT32 MemoryLoader_ReadDataGZ(MEMORY_LOADER *loader, UINT8 *buffer, UINT32 numBytes);
-static UINT32 MemoryLoader_dlength(void *context);
-static INT32 MemoryLoader_dtell(void *context);
-static UINT8 MemoryLoader_dseek(void *context, UINT32 offset, UINT8 whence);
-static UINT8 MemoryLoader_dclose(void *context);
-static UINT8 MemoryLoader_deof(void *context);
-//DATA_LOADER *MemoryLoader_Init(const UINT8 *buffer, UINT32 length);
+static uint8_t MemoryLoader_dopen(void *context);
+static uint32_t MemoryLoader_dread(void *context, uint8_t *buffer, uint32_t numBytes);
+static uint32_t MemoryLoader_ReadDataRaw(MEMORY_LOADER *loader, uint8_t *buffer, uint32_t numBytes);
+static uint32_t MemoryLoader_ReadDataGZ(MEMORY_LOADER *loader, uint8_t *buffer, uint32_t numBytes);
+static uint32_t MemoryLoader_dlength(void *context);
+static int32_t MemoryLoader_dtell(void *context);
+static uint8_t MemoryLoader_dseek(void *context, uint32_t offset, uint8_t whence);
+static uint8_t MemoryLoader_dclose(void *context);
+static uint8_t MemoryLoader_deof(void *context);
+//DATA_LOADER *MemoryLoader_Init(const uint8_t *buffer, uint32_t length);
 
 
-INLINE UINT32 ReadLE32(const UINT8 *data)
+INLINE uint32_t ReadLE32(const uint8_t *data)
 {
 	return	(data[0x03] << 24) | (data[0x02] << 16) |
 			(data[0x01] <<  8) | (data[0x00] <<  0);
 }
 
-static UINT8 MemoryLoader_dopen(void *context)
+static uint8_t MemoryLoader_dopen(void *context)
 {
 	MEMORY_LOADER *loader = (MEMORY_LOADER *)context;
 
@@ -76,7 +76,7 @@ static UINT8 MemoryLoader_dopen(void *context)
 	return 0x00;
 }
 
-static UINT32 MemoryLoader_dread(void *context, UINT8 *buffer, UINT32 numBytes)
+static uint32_t MemoryLoader_dread(void *context, uint8_t *buffer, uint32_t numBytes)
 {
 	MEMORY_LOADER *loader = (MEMORY_LOADER *)context;
 
@@ -87,17 +87,17 @@ static UINT32 MemoryLoader_dread(void *context, UINT8 *buffer, UINT32 numBytes)
 	return loader->ReadData(loader, buffer, numBytes);
 }
 
-static UINT32 MemoryLoader_ReadDataRaw(MEMORY_LOADER *loader, UINT8 *buffer, UINT32 numBytes)
+static uint32_t MemoryLoader_ReadDataRaw(MEMORY_LOADER *loader, uint8_t *buffer, uint32_t numBytes)
 {
 	memcpy(buffer, &loader->srcData[loader->pos], numBytes);
 	loader->pos += numBytes;
 	return numBytes;
 }
 
-static UINT32 MemoryLoader_ReadDataGZ(MEMORY_LOADER *loader, UINT8 *buffer, UINT32 numBytes)
+static uint32_t MemoryLoader_ReadDataGZ(MEMORY_LOADER *loader, uint8_t *buffer, uint32_t numBytes)
 {
 	int ret;
-	UINT32 bytesWritten;
+	uint32_t bytesWritten;
 
 	loader->zStream.avail_out = numBytes;
 	loader->zStream.next_out = (Bytef *)buffer;
@@ -113,19 +113,19 @@ static UINT32 MemoryLoader_ReadDataGZ(MEMORY_LOADER *loader, UINT8 *buffer, UINT
 	return bytesWritten;
 }
 
-static UINT32 MemoryLoader_dlength(void *context)
+static uint32_t MemoryLoader_dlength(void *context)
 {
 	MEMORY_LOADER *loader = (MEMORY_LOADER *)context;
 	return loader->decSize;
 }
 
-static INT32 MemoryLoader_dtell(void *context)
+static int32_t MemoryLoader_dtell(void *context)
 {
 	MEMORY_LOADER *loader = (MEMORY_LOADER *)context;
 	return loader->pos;
 }
 
-static UINT8 MemoryLoader_dseek(void *context, UINT32 offset, UINT8 whence)
+static uint8_t MemoryLoader_dseek(void *context, uint32_t offset, uint8_t whence)
 {
 	(void)context;
 	(void)offset;
@@ -133,7 +133,7 @@ static UINT8 MemoryLoader_dseek(void *context, UINT32 offset, UINT8 whence)
 	return 0; /* TODO */
 }
 
-static UINT8 MemoryLoader_dclose(void *context)
+static uint8_t MemoryLoader_dclose(void *context)
 {
 	MEMORY_LOADER *loader = (MEMORY_LOADER *)context;
 	if(loader->modeCompr == MLMODE_CMP_GZ)
@@ -141,13 +141,13 @@ static UINT8 MemoryLoader_dclose(void *context)
 	return 0x00;
 }
 
-static UINT8 MemoryLoader_deof(void *context)
+static uint8_t MemoryLoader_deof(void *context)
 {
 	MEMORY_LOADER *loader = (MEMORY_LOADER *)context;
 	return loader->pos >= loader->decSize;
 }
 
-DATA_LOADER *MemoryLoader_Init(const UINT8 *buffer, UINT32 length)
+DATA_LOADER *MemoryLoader_Init(const uint8_t *buffer, uint32_t length)
 {
 	DATA_LOADER *dLoader;
 	MEMORY_LOADER *mLoader;

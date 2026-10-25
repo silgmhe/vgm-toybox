@@ -44,27 +44,27 @@
 
 typedef struct _k051649_state k051649_state;
 
-static void k051649_update(void *param, UINT32 samples, DEV_SMPL **outputs);
-static UINT8 device_start_k051649(const DEV_GEN_CFG* cfg, DEV_INFO* retDevInf);
+static void k051649_update(void *param, uint32_t samples, DEV_SMPL **outputs);
+static uint8_t device_start_k051649(const DEV_GEN_CFG* cfg, DEV_INFO* retDevInf);
 static void device_stop_k051649(void *chip);
 static void device_reset_k051649(void *chip);
 
-static void k051649_waveform_w(void *chip, UINT8 offset, UINT8 data);
-static UINT8 k051649_waveform_r(void *chip, UINT8 offset);
-static void k051649_volume_w(void *chip, UINT8 offset, UINT8 data);
-static void k051649_frequency_w(void *chip, UINT8 offset, UINT8 data);
-static void k051649_keyonoff_w(void *chip, UINT8 offset, UINT8 data);
+static void k051649_waveform_w(void *chip, uint8_t offset, uint8_t data);
+static uint8_t k051649_waveform_r(void *chip, uint8_t offset);
+static void k051649_volume_w(void *chip, uint8_t offset, uint8_t data);
+static void k051649_frequency_w(void *chip, uint8_t offset, uint8_t data);
+static void k051649_keyonoff_w(void *chip, uint8_t offset, uint8_t data);
 
-static void k052539_waveform_w(void *chip, UINT8 offset, UINT8 data);
-static UINT8 k052539_waveform_r(void *chip, UINT8 offset);
+static void k052539_waveform_w(void *chip, uint8_t offset, uint8_t data);
+static uint8_t k052539_waveform_r(void *chip, uint8_t offset);
 
-static void k051649_test_w(void *chip, UINT8 offset, UINT8 data);
-static UINT8 k051649_test_r(void *chip, UINT8 offset);
+static void k051649_test_w(void *chip, uint8_t offset, uint8_t data);
+static uint8_t k051649_test_r(void *chip, uint8_t offset);
 
-static void k051649_w(void *chip, UINT8 offset, UINT8 data);
-static UINT8 k051649_r(void *chip, UINT8 offset, UINT8 data);
+static void k051649_w(void *chip, uint8_t offset, uint8_t data);
+static uint8_t k051649_r(void *chip, uint8_t offset, uint8_t data);
 
-static void k051649_set_mute_mask(void *chip, UINT32 MuteMask);
+static void k051649_set_mute_mask(void *chip, uint32_t MuteMask);
 
 
 static DEVDEF_RWFUNC devFunc[] =
@@ -100,7 +100,7 @@ static const char* DeviceName(const DEV_GEN_CFG* devCfg)
 	return "K051649";
 }
 
-static UINT16 DeviceChannels(const DEV_GEN_CFG* devCfg)
+static uint16_t DeviceChannels(const DEV_GEN_CFG* devCfg)
 {
 	return 5;
 }
@@ -134,12 +134,12 @@ const DEV_DECL sndDev_K051649 =
 // Parameters for a channel
 typedef struct
 {
-	UINT32 counter;
-	INT32 frequency;
-	UINT8 volume;
-	UINT8 key;
-	INT8 waveram[32];
-	UINT8 Muted;
+	uint32_t counter;
+	int32_t frequency;
+	uint8_t volume;
+	uint8_t key;
+	int8_t waveram[32];
+	uint8_t Muted;
 } k051649_sound_channel;
 
 struct _k051649_state
@@ -149,24 +149,24 @@ struct _k051649_state
 	k051649_sound_channel channel_list[5];
 
 	/* global sound parameters */
-	UINT32 mclock;
-	UINT32 rate;
+	uint32_t mclock;
+	uint32_t rate;
 
 	/* chip registers */
-	UINT8 test; // test register
-	UINT8 cur_reg;
-	UINT8 mode_plus;
+	uint8_t test; // test register
+	uint8_t cur_reg;
+	uint8_t mode_plus;
 };
 
 
 /* generate sound to the mix buffer */
-static void k051649_update(void *param, UINT32 samples, DEV_SMPL **outputs)
+static void k051649_update(void *param, uint32_t samples, DEV_SMPL **outputs)
 {
 	k051649_state *info = (k051649_state *)param;
 	k051649_sound_channel *voice=info->channel_list;
 	DEV_SMPL *buffer = outputs[0];
 	DEV_SMPL *buffer2 = outputs[1];
-	UINT32 i,j;
+	uint32_t i,j;
 
 	// zap the contents of the mixer buffer
 	memset(buffer, 0, samples * sizeof(DEV_SMPL));
@@ -177,14 +177,14 @@ static void k051649_update(void *param, UINT32 samples, DEV_SMPL **outputs)
 		// channel is halted for freq < 9
 		if (voice[j].frequency > 8 && ! voice[j].Muted)
 		{
-			UINT32 step = (UINT32)(((INT64)info->mclock * (1 << FREQ_BITS)) / (float)((voice[j].frequency + 1) * info->rate / 2.0f) + 0.5f);
+			uint32_t step = (uint32_t)(((int64_t)info->mclock * (1 << FREQ_BITS)) / (float)((voice[j].frequency + 1) * info->rate / 2.0f) + 0.5f);
 
 			for (i = 0; i < samples; i++)
 			{
 				voice[j].counter += step;
 				if (voice[j].key)
 				{
-					UINT32 offs = (voice[j].counter >> FREQ_BITS) & 0x1f;
+					uint32_t offs = (voice[j].counter >> FREQ_BITS) & 0x1f;
 					// 0x80 [wave] * 0x0F [volume] -> range +-0x780 per channel, 0x2580 total
 					DEV_SMPL smpl = voice[j].waveram[offs] * voice[j].volume;
 					// scale to 11 bit digital output on chip
@@ -202,7 +202,7 @@ static void k051649_update(void *param, UINT32 samples, DEV_SMPL **outputs)
 	}
 }
 
-static UINT8 device_start_k051649(const DEV_GEN_CFG* cfg, DEV_INFO* retDevInf)
+static uint8_t device_start_k051649(const DEV_GEN_CFG* cfg, DEV_INFO* retDevInf)
 {
 	k051649_state *info;
 
@@ -255,7 +255,7 @@ static void device_reset_k051649(void *chip)
 
 /******************************************************************************/
 
-static void k051649_waveform_w(void *chip, UINT8 offset, UINT8 data)
+static void k051649_waveform_w(void *chip, uint8_t offset, uint8_t data)
 {
 	k051649_state *info = (k051649_state *)chip;
 	
@@ -274,10 +274,10 @@ static void k051649_waveform_w(void *chip, UINT8 offset, UINT8 data)
 }
 
 
-static UINT8 k051649_waveform_r(void *chip, UINT8 offset)
+static uint8_t k051649_waveform_r(void *chip, uint8_t offset)
 {
 	k051649_state *info = (k051649_state *)chip;
-	UINT8 counter = 0;
+	uint8_t counter = 0;
 	
 	// test register bits 6/7 expose the internal counter
 	if (info->test & 0xc0)
@@ -291,7 +291,7 @@ static UINT8 k051649_waveform_r(void *chip, UINT8 offset)
 }
 
 
-static void k052539_waveform_w(void *chip, UINT8 offset, UINT8 data)
+static void k052539_waveform_w(void *chip, uint8_t offset, uint8_t data)
 {
 	k051649_state *info = (k051649_state *)chip;
 	
@@ -303,10 +303,10 @@ static void k052539_waveform_w(void *chip, UINT8 offset, UINT8 data)
 }
 
 
-static UINT8 k052539_waveform_r(void *chip, UINT8 offset)
+static uint8_t k052539_waveform_r(void *chip, uint8_t offset)
 {
 	k051649_state *info = (k051649_state *)chip;
-	UINT8 counter = 0;
+	uint8_t counter = 0;
 	
 	// test register bits 6/7 expose the internal counter
 	if (info->test & 0x40)
@@ -317,17 +317,17 @@ static UINT8 k052539_waveform_r(void *chip, UINT8 offset)
 }
 
 
-static void k051649_volume_w(void *chip, UINT8 offset, UINT8 data)
+static void k051649_volume_w(void *chip, uint8_t offset, uint8_t data)
 {
 	k051649_state *info = (k051649_state *)chip;
 	info->channel_list[offset&0x7].volume=data&0xf;
 }
 
 
-static void k051649_frequency_w(void *chip, UINT8 offset, UINT8 data)
+static void k051649_frequency_w(void *chip, uint8_t offset, uint8_t data)
 {
 	k051649_state *info = (k051649_state *)chip;
-	UINT8 freq_hi = offset & 1;
+	uint8_t freq_hi = offset & 1;
 	k051649_sound_channel* chn = &info->channel_list[offset >> 1];
 
 	// update frequency
@@ -345,7 +345,7 @@ static void k051649_frequency_w(void *chip, UINT8 offset, UINT8 data)
 }
 
 
-static void k051649_keyonoff_w(void *chip, UINT8 offset, UINT8 data)
+static void k051649_keyonoff_w(void *chip, uint8_t offset, uint8_t data)
 {
 	k051649_state *info = (k051649_state *)chip;
 	int i;
@@ -358,14 +358,14 @@ static void k051649_keyonoff_w(void *chip, UINT8 offset, UINT8 data)
 }
 
 
-static void k051649_test_w(void *chip, UINT8 offset, UINT8 data)
+static void k051649_test_w(void *chip, uint8_t offset, uint8_t data)
 {
 	k051649_state *info = (k051649_state *)chip;
 	info->test = data;
 }
 
 
-static UINT8 k051649_test_r(void *chip, UINT8 offset)
+static uint8_t k051649_test_r(void *chip, uint8_t offset)
 {
 	// reading the test register sets it to $ff!
 	k051649_test_w(chip, offset, 0xff);
@@ -373,7 +373,7 @@ static UINT8 k051649_test_r(void *chip, UINT8 offset)
 }
 
 
-static void k051649_w(void *chip, UINT8 offset, UINT8 data)
+static void k051649_w(void *chip, uint8_t offset, uint8_t data)
 {
 	k051649_state *info = (k051649_state *)chip;
 	
@@ -411,7 +411,7 @@ static void k051649_w(void *chip, UINT8 offset, UINT8 data)
 	return;
 }
 
-static UINT8 k051649_r(void *chip, UINT8 offset, UINT8 data)
+static uint8_t k051649_r(void *chip, uint8_t offset, uint8_t data)
 {
 	k051649_state *info = (k051649_state *)chip;
 	
@@ -437,10 +437,10 @@ static UINT8 k051649_r(void *chip, UINT8 offset, UINT8 data)
 }
 
 
-static void k051649_set_mute_mask(void *chip, UINT32 MuteMask)
+static void k051649_set_mute_mask(void *chip, uint32_t MuteMask)
 {
 	k051649_state *info = (k051649_state *)chip;
-	UINT8 CurChn;
+	uint8_t CurChn;
 	
 	for (CurChn = 0; CurChn < 5; CurChn ++)
 		info->channel_list[CurChn].Muted = (MuteMask >> CurChn) & 0x01;

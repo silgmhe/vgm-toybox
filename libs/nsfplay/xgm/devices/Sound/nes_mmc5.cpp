@@ -15,19 +15,19 @@ namespace xgm
     // square nonlinear mix, same as 2A03
     square_table[0] = 0;
     for(int i=1;i<32;i++) 
-        square_table[i]=(INT32)((8192.0*95.88)/(8128.0/i+100));
+        square_table[i]=(int32_t)((8192.0*95.88)/(8128.0/i+100));
 
     // 2A03 style nonlinear pcm mix with double the bits
     //pcm_table[0] = 0;
-    //INT32 wd = 22638;
+    //int32_t wd = 22638;
     //for(int d=1;d<256; ++d)
-    //    pcm_table[d] = (INT32)((8192.0*159.79)/(100.0+1.0/((double)d/wd)));
+    //    pcm_table[d] = (int32_t)((8192.0*159.79)/(100.0+1.0/((double)d/wd)));
 
     // linear pcm mix (actual hardware seems closer to this)
     pcm_table[0] = 0;
     double pcm_scale = 32.0;
     for (int d=1; d<256; ++d)
-        pcm_table[d] = (INT32)(double(d) * pcm_scale);
+        pcm_table[d] = (int32_t)(double(d) * pcm_scale);
 
     // stereo mix
     for(int c=0;c<2;++c)
@@ -130,9 +130,9 @@ namespace xgm
     }
   }
 
-  INT32 NES_MMC5::calc_sqr (int i, UINT32 clocks)
+  int32_t NES_MMC5::calc_sqr (int i, uint32_t clocks)
   {
-    static const INT16 sqrtbl[4][16] = {
+    static const int16_t sqrtbl[4][16] = {
       {0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
       {0, 0, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
       {0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0},
@@ -146,7 +146,7 @@ namespace xgm
         scounter[i] -= (freq[i] + 1);
     }
 
-    INT32 ret = 0;
+    int32_t ret = 0;
     if (length_counter[i] > 0)
     {
         // note MMC5 does not silence the highest 8 frequencies like APU,
@@ -159,7 +159,7 @@ namespace xgm
     return ret;
   }
 
-  void NES_MMC5::TickFrameSequence (UINT32 clocks)
+  void NES_MMC5::TickFrameSequence (uint32_t clocks)
   {
       frame_sequence_count += clocks;
       while (frame_sequence_count > 7458)
@@ -169,28 +169,28 @@ namespace xgm
       }
   }
 
-  void NES_MMC5::Tick (UINT32 clocks)
+  void NES_MMC5::Tick (uint32_t clocks)
   {
     out[0] = calc_sqr(0, clocks);
     out[1] = calc_sqr(1, clocks);
     out[2] = pcm;
   }
 
-  UINT32 NES_MMC5::Render (INT32 b[2])
+  uint32_t NES_MMC5::Render (int32_t b[2])
   {
     out[0] = (mask & 1) ? 0 : out[0];
     out[1] = (mask & 2) ? 0 : out[1];
     out[2] = (mask & 4) ? 0 : out[2];
 
-    INT32 m[3];
+    int32_t m[3];
 
     if(option[OPT_NONLINEAR_MIXER])
     {
         // squares nonlinear
-        INT32 voltage = square_table[out[0] + out[1]];
+        int32_t voltage = square_table[out[0] + out[1]];
         m[0] = out[0] << 6;
         m[1] = out[1] << 6;
-        INT32 ref = m[0] + m[1];
+        int32_t ref = m[0] + m[1];
         if (ref > 0)
         {
             m[0] = (m[0] * voltage) / ref;
@@ -230,11 +230,11 @@ namespace xgm
     return 2;
   }
 
-  bool NES_MMC5::Write (UINT32 adr, UINT32 val, UINT32 id)
+  bool NES_MMC5::Write (uint32_t adr, uint32_t val, uint32_t id)
   {
     int ch;
 
-    static const UINT8 length_table[32] = {
+    static const uint8_t length_table[32] = {
         0x0A, 0xFE,
         0x14, 0x02,
         0x28, 0x04,
@@ -335,13 +335,13 @@ namespace xgm
     return true;
   }
 
-  bool NES_MMC5::Read (UINT32 adr, UINT32 & val, UINT32 id)
+  bool NES_MMC5::Read (uint32_t adr, uint32_t & val, uint32_t id)
   {
     // in PCM read mode, reads from $8000-$C000 automatically load the PCM output
     if (pcm_mode && (0x8000 <= adr) && (adr < 0xC000) && cpu)
     {
         pcm_mode = false; // prevent recursive entry
-        UINT32 pcm_read;
+        uint32_t pcm_read;
         cpu->Read(adr, pcm_read);
         pcm_read &= 0xFF;
         if (pcm_read != 0)
@@ -379,7 +379,7 @@ namespace xgm
     return false;
   }
 
-  void NES_MMC5::SetStereoMix(int trk, xgm::INT16 mixl, xgm::INT16 mixr)
+  void NES_MMC5::SetStereoMix(int trk, int16_t mixl, int16_t mixr)
   {
       if (trk < 0) return;
       if (trk > 2) return;
@@ -425,7 +425,7 @@ namespace xgm
       cpu = cpu_;
   }
 
-UINT32 NES_MMC5::RenderChannels (INT32* dest, int stride, int maxChannels)
+uint32_t NES_MMC5::RenderChannels (int32_t* dest, int stride, int maxChannels)
   {
     // One Render() per channel with the others masked off. The two squares share a nonlinear mixer
     // before shaping, so a masked render is not an exactly additive split - the same approximation
@@ -440,7 +440,7 @@ UINT32 NES_MMC5::RenderChannels (INT32* dest, int stride, int maxChannels)
       // played.
       mask = ~(1 << i) | saved;
 
-      INT32 b[2] = { 0, 0 };
+      int32_t b[2] = { 0, 0 };
       Render (b);
 
       if (i < maxChannels)

@@ -83,14 +83,14 @@
 #define PIN_S2      0x02
 
 // ========== Function Prototypes ==========
-static UINT8 device_start_msm5205(const MSM5205_CFG *cfg, DEV_INFO *retDevInf);
+static uint8_t device_start_msm5205(const MSM5205_CFG *cfg, DEV_INFO *retDevInf);
 static void device_stop_msm5205(void *chip);
 static void device_reset_msm5205(void *chip);
-static void msm5205_update(void *param, UINT32 samples, DEV_SMPL **outputs);
-static UINT32 msm5205_get_rate(void *chip);
-static void msm5205_set_clock(void *chip, UINT32 clock);
-static void msm5205_write(void *chip, UINT8 offset, UINT8 data);
-static void msm5205_set_mute_mask(void *chip, UINT32 MuteMask);
+static void msm5205_update(void *param, uint32_t samples, DEV_SMPL **outputs);
+static uint32_t msm5205_get_rate(void *chip);
+static void msm5205_set_clock(void *chip, uint32_t clock);
+static void msm5205_write(void *chip, uint8_t offset, uint8_t data);
+static void msm5205_set_mute_mask(void *chip, uint32_t MuteMask);
 static void msm5205_set_srchg_cb(void *chip, DEVCB_SRATE_CHG CallbackFunc, void *DataPtr);
 static void msm5205_set_log_cb(void *chip, DEVCB_LOG func, void *param);
 
@@ -99,25 +99,25 @@ typedef struct _msm5205_state {
     DEV_DATA _devData;
     DEV_LOGGER logger;
     
-    UINT32  master_clock;
-    INT32   signal;
-    INT32   step;
-    UINT8   vclk;
+    uint32_t  master_clock;
+    int32_t   signal;
+    int32_t   step;
+    uint8_t   vclk;
     
-    UINT8   data_buf[8];
-    UINT8   data_in_last;
-    UINT8   data_buf_pos;
-    UINT8   data_empty;
+    uint8_t   data_buf[8];
+    uint8_t   data_in_last;
+    uint8_t   data_buf_pos;
+    uint8_t   data_empty;
     
-    UINT8   reset;
-    UINT8   init_prescaler;
-    UINT8   prescaler;
-    UINT8   init_bitwidth;
-    UINT8   bitwidth;
-    UINT8   output_mask;
-    UINT8   Muted;
+    uint8_t   reset;
+    uint8_t   init_prescaler;
+    uint8_t   prescaler;
+    uint8_t   init_bitwidth;
+    uint8_t   bitwidth;
+    uint8_t   output_mask;
+    uint8_t   Muted;
 
-    UINT8   is_msm6585; // 0 = MSM5205, 1 = MSM6585
+    uint8_t   is_msm6585; // 0 = MSM5205, 1 = MSM6585
 
     DEVCB_SRATE_CHG SmpRateFunc;
     void*   SmpRateData;
@@ -126,7 +126,7 @@ typedef struct _msm5205_state {
 // ========== Global Tables ==========
 static const int index_shift[8] = {-1, -1, -1, -1, 2, 4, 6, 8};
 static int diff_lookup[49*16];
-static UINT8 tables_computed = 0;
+static uint8_t tables_computed = 0;
 
 // ========== Device Definition ==========
 static DEVDEF_RWFUNC devFunc[] = {
@@ -162,7 +162,7 @@ static const char* DeviceName(const DEV_GEN_CFG* devCfg)
 	return "MSM5205";
 }
 
-static UINT16 DeviceChannels(const DEV_GEN_CFG* devCfg)
+static uint16_t DeviceChannels(const DEV_GEN_CFG* devCfg)
 {
 	return 1;
 }
@@ -216,7 +216,7 @@ static void compute_tables(void) {
     tables_computed = 1;
 }
 
-INLINE UINT32 get_prescaler(msm5205_state *info) {
+INLINE uint32_t get_prescaler(msm5205_state *info) {
     if (info->is_msm6585) {
         // prescalers: 160, 80, 40, 20
         return (info->prescaler & PIN_S1) ? 
@@ -231,7 +231,7 @@ INLINE UINT32 get_prescaler(msm5205_state *info) {
 }
 
 // ========== Core ADPCM Processing ==========
-static INT16 clock_adpcm(msm5205_state *chip, UINT8 data) {
+static int16_t clock_adpcm(msm5205_state *chip, uint8_t data) {
     int sample;
 
     if (chip->reset) {
@@ -253,11 +253,11 @@ static INT16 clock_adpcm(msm5205_state *chip, UINT8 data) {
     chip->step = (chip->step > 48) ? 48 : 
                 ((chip->step < 0) ? 0 : chip->step);
     
-    return (INT16)chip->signal;
+    return (int16_t)chip->signal;
 }
 
 // ========== Device Interface ==========
-static UINT8 device_start_msm5205(const MSM5205_CFG *cfg, DEV_INFO *retDevInf) {
+static uint8_t device_start_msm5205(const MSM5205_CFG *cfg, DEV_INFO *retDevInf) {
     msm5205_state *info;
 
     compute_tables();
@@ -307,25 +307,25 @@ static void device_reset_msm5205(void *chip) {
 }
 
 // ========== Audio Generation ==========
-static void msm5205_update(void *param, UINT32 samples, DEV_SMPL **outputs) {
+static void msm5205_update(void *param, uint32_t samples, DEV_SMPL **outputs) {
     msm5205_state *info = (msm5205_state*)param;
     DEV_SMPL *bufL = outputs[0];
     DEV_SMPL *bufR = outputs[1];
-    UINT32 i;
+    uint32_t i;
 
     for (i = 0; i < samples; i++) {
-        INT16 sample = 0;
+        int16_t sample = 0;
         
         if (!info->Muted && !(info->reset)) {
-            UINT8 read_pos = info->data_buf_pos & 0x0F;
-            UINT8 write_pos = (info->data_buf_pos >> 4) & 0x07;
+            uint8_t read_pos = info->data_buf_pos & 0x0F;
+            uint8_t write_pos = (info->data_buf_pos >> 4) & 0x07;
             
             if ((read_pos != write_pos) && (get_prescaler(info) != 1)) { // if not slave mode
-                UINT8 data = info->data_buf[read_pos];
+                uint8_t data = info->data_buf[read_pos];
                 sample = clock_adpcm(info, data);
                 info->data_buf_pos = (write_pos << 4) | ((read_pos + 1) & 0x07);
             } else {
-                sample = (INT16)info->signal;
+                sample = (int16_t)info->signal;
             }
         }
         
@@ -334,13 +334,13 @@ static void msm5205_update(void *param, UINT32 samples, DEV_SMPL **outputs) {
 }
 
 // ========== I/O Handling ==========
-static void msm5205_write(void *chip, UINT8 offset, UINT8 data) {
+static void msm5205_write(void *chip, uint8_t offset, uint8_t data) {
     msm5205_state *info = (msm5205_state*)chip;
     
     switch (offset)
     {
         case 0: /* reset */ {
-            UINT8 old = info->reset;
+            uint8_t old = info->reset;
             info->reset = data;
             
             if (old ^ data) {
@@ -352,8 +352,8 @@ static void msm5205_write(void *chip, UINT8 offset, UINT8 data) {
             break;
         }
         case 1: /* data_w */ {
-            UINT8 write_pos = (info->data_buf_pos >> 4) & 0x07;
-            UINT8 read_pos = info->data_buf_pos & 0x07;
+            uint8_t write_pos = (info->data_buf_pos >> 4) & 0x07;
+            uint8_t read_pos = info->data_buf_pos & 0x07;
             
             if (((write_pos + 1) & 0x07) == read_pos) {
                 emu_logf(&info->logger, DEVLOG_DEBUG, "MSM5205 FIFO overflow\n");
@@ -365,17 +365,17 @@ static void msm5205_write(void *chip, UINT8 offset, UINT8 data) {
             break;
         }
         case 2: { // vclk
-            UINT8 old = info->vclk;
+            uint8_t old = info->vclk;
             info->vclk = data;
 
             if (get_prescaler(info) == 1) { // if slave mode
                 if (((old ^ data) & 1) && info->vclk) {
                     if (!info->Muted && !(info->reset)) {
-                        UINT8 read_pos = info->data_buf_pos & 0x0F;
-                        UINT8 write_pos = (info->data_buf_pos >> 4) & 0x07;
+                        uint8_t read_pos = info->data_buf_pos & 0x0F;
+                        uint8_t write_pos = (info->data_buf_pos >> 4) & 0x07;
                         
                         if (read_pos != write_pos) {
-                            UINT8 data = info->data_buf[read_pos];
+                            uint8_t data = info->data_buf[read_pos];
                             clock_adpcm(info, data);
                             info->data_buf_pos = (write_pos << 4) | ((read_pos + 1) & 0x07);
                         }
@@ -385,7 +385,7 @@ static void msm5205_write(void *chip, UINT8 offset, UINT8 data) {
             break;
         }
         case 4: /* set prescaler */ {
-            UINT8 old = info->prescaler;
+            uint8_t old = info->prescaler;
             info->prescaler = data;
             
             if ((old ^ data) & (PIN_S1|PIN_S2)) {
@@ -402,19 +402,19 @@ static void msm5205_write(void *chip, UINT8 offset, UINT8 data) {
 }
 
 // ========== Configuration ==========
-static UINT32 msm5205_get_rate(void *chip) {
+static uint32_t msm5205_get_rate(void *chip) {
     msm5205_state *info = (msm5205_state*)chip;
     return info->master_clock / get_prescaler(info);
 }
 
-static void msm5205_set_clock(void *chip, UINT32 clock) {
+static void msm5205_set_clock(void *chip, uint32_t clock) {
     msm5205_state *info = (msm5205_state*)chip;
     info->master_clock = clock;
     if (info->SmpRateFunc)
         info->SmpRateFunc(info->SmpRateData, msm5205_get_rate(info));
 }
 
-static void msm5205_set_mute_mask(void *chip, UINT32 MuteMask) {
+static void msm5205_set_mute_mask(void *chip, uint32_t MuteMask) {
     msm5205_state *info = (msm5205_state*)chip;
     info->Muted = MuteMask & 0x01;
 }

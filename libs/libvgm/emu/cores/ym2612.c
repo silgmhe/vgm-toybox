@@ -154,7 +154,7 @@ static int LFO_FREQ_TAB[LFO_LENGTH];            // LFO FMS TABLE
 //static int in0, in1, in2, in3;          // current phase calculation
 //static int en0, en1, en2, en3;          // current enveloppe calculation
 
-static void (* const UPDATE_CHAN[8 * 8])(ym2612_ *YM2612, channel_ *CH, DEV_SMPL **buf, UINT32 length) =    // Update Channel functions pointer table
+static void (* const UPDATE_CHAN[8 * 8])(ym2612_ *YM2612, channel_ *CH, DEV_SMPL **buf, uint32_t length) =    // Update Channel functions pointer table
 {
   Update_Chan_Algo0,
   Update_Chan_Algo1,
@@ -208,7 +208,7 @@ static void (* const ENV_NEXT_EVENT[8])(ym2612_ *YM2612, slot_ *SL) =
 
 // Default detune table.
 // FD == F number
-static const UINT8 DT_DEF_TAB[4][32] =
+static const uint8_t DT_DEF_TAB[4][32] =
 {
   // FD = 0
   {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
@@ -227,7 +227,7 @@ static const UINT8 DT_DEF_TAB[4][32] =
    8, 8, 9, 10, 11, 12, 13, 14, 16, 17, 19, 20, 22, 22, 22, 22}
 };
 
-static const UINT8 FKEY_TAB[16] =
+static const uint8_t FKEY_TAB[16] =
 {
   0, 0, 0, 0,
   0, 0, 0, 1,
@@ -235,7 +235,7 @@ static const UINT8 FKEY_TAB[16] =
   3, 3, 3, 3
 };
 
-static const UINT8 LFO_AMS_TAB[4] =
+static const uint8_t LFO_AMS_TAB[4] =
 {
   31, 4, 1, 0
 };
@@ -1233,9 +1233,9 @@ YM2612->en3 = ENV_TAB[(CH->SLOT[S3].Ecnt >> ENV_LBITS)] + CH->SLOT[S3].TLL + (en
 }
 
 
-static void Update_Chan_Algo0(ym2612_ *YM2612, channel_ *CH, DEV_SMPL **buf, UINT32 length)
+static void Update_Chan_Algo0(ym2612_ *YM2612, channel_ *CH, DEV_SMPL **buf, uint32_t length)
 {
-  UINT32 i;
+  uint32_t i;
 
   if (CH->SLOT[S3].Ecnt == ENV_END)
     return;
@@ -1256,9 +1256,9 @@ static void Update_Chan_Algo0(ym2612_ *YM2612, channel_ *CH, DEV_SMPL **buf, UIN
 }
 
 
-static void Update_Chan_Algo1(ym2612_ *YM2612, channel_ *CH, DEV_SMPL **buf, UINT32 length)
+static void Update_Chan_Algo1(ym2612_ *YM2612, channel_ *CH, DEV_SMPL **buf, uint32_t length)
 {
-  UINT32 i;
+  uint32_t i;
 
   if (CH->SLOT[S3].Ecnt == ENV_END)
     return;
@@ -1279,9 +1279,9 @@ static void Update_Chan_Algo1(ym2612_ *YM2612, channel_ *CH, DEV_SMPL **buf, UIN
 }
 
 
-static void Update_Chan_Algo2(ym2612_ *YM2612, channel_ *CH, DEV_SMPL **buf, UINT32 length)
+static void Update_Chan_Algo2(ym2612_ *YM2612, channel_ *CH, DEV_SMPL **buf, uint32_t length)
 {
-  UINT32 i;
+  uint32_t i;
 
   if (CH->SLOT[S3].Ecnt == ENV_END)
     return;
@@ -1302,9 +1302,9 @@ static void Update_Chan_Algo2(ym2612_ *YM2612, channel_ *CH, DEV_SMPL **buf, UIN
 }
 
 
-static void Update_Chan_Algo3(ym2612_ *YM2612, channel_ *CH, DEV_SMPL **buf, UINT32 length)
+static void Update_Chan_Algo3(ym2612_ *YM2612, channel_ *CH, DEV_SMPL **buf, uint32_t length)
 {
-  UINT32 i;
+  uint32_t i;
 
   if (CH->SLOT[S3].Ecnt == ENV_END)
     return;
@@ -1325,9 +1325,9 @@ static void Update_Chan_Algo3(ym2612_ *YM2612, channel_ *CH, DEV_SMPL **buf, UIN
 }
 
 
-static void Update_Chan_Algo4(ym2612_ *YM2612, channel_ *CH, DEV_SMPL **buf, UINT32 length)
+static void Update_Chan_Algo4(ym2612_ *YM2612, channel_ *CH, DEV_SMPL **buf, uint32_t length)
 {
-  UINT32 i;
+  uint32_t i;
 
   if ((CH->SLOT[S1].Ecnt == ENV_END) && (CH->SLOT[S3].Ecnt == ENV_END))
     return;
@@ -1348,9 +1348,9 @@ static void Update_Chan_Algo4(ym2612_ *YM2612, channel_ *CH, DEV_SMPL **buf, UIN
 }
 
 
-static void Update_Chan_Algo5(ym2612_ *YM2612, channel_ *CH, DEV_SMPL **buf, UINT32 length)
+static void Update_Chan_Algo5(ym2612_ *YM2612, channel_ *CH, DEV_SMPL **buf, uint32_t length)
 {
-  UINT32 i;
+  uint32_t i;
 
   if ((CH->SLOT[S1].Ecnt == ENV_END) && (CH->SLOT[S2].Ecnt == ENV_END) && (CH->SLOT[S3].Ecnt == ENV_END))
     return;
@@ -1371,9 +1371,9 @@ static void Update_Chan_Algo5(ym2612_ *YM2612, channel_ *CH, DEV_SMPL **buf, UIN
 }
 
 
-static void Update_Chan_Algo6(ym2612_ *YM2612, channel_ *CH, DEV_SMPL **buf, UINT32 length)
+static void Update_Chan_Algo6(ym2612_ *YM2612, channel_ *CH, DEV_SMPL **buf, uint32_t length)
 {
-  UINT32 i;
+  uint32_t i;
 
   if ((CH->SLOT[S1].Ecnt == ENV_END) && (CH->SLOT[S2].Ecnt == ENV_END) && (CH->SLOT[S3].Ecnt == ENV_END))
     return;
@@ -1394,9 +1394,9 @@ static void Update_Chan_Algo6(ym2612_ *YM2612, channel_ *CH, DEV_SMPL **buf, UIN
 }
 
 
-static void Update_Chan_Algo7(ym2612_ *YM2612, channel_ *CH, DEV_SMPL **buf, UINT32 length)
+static void Update_Chan_Algo7(ym2612_ *YM2612, channel_ *CH, DEV_SMPL **buf, uint32_t length)
 {
-  UINT32 i;
+  uint32_t i;
 
   if ((CH->SLOT[S0].Ecnt == ENV_END) && (CH->SLOT[S1].Ecnt == ENV_END) && (CH->SLOT[S2].Ecnt == ENV_END) && (CH->SLOT[S3].Ecnt == ENV_END))
     return;
@@ -1417,9 +1417,9 @@ static void Update_Chan_Algo7(ym2612_ *YM2612, channel_ *CH, DEV_SMPL **buf, UIN
 }
 
 
-static void Update_Chan_Algo0_LFO(ym2612_ *YM2612, channel_ *CH, DEV_SMPL **buf, UINT32 length)
+static void Update_Chan_Algo0_LFO(ym2612_ *YM2612, channel_ *CH, DEV_SMPL **buf, uint32_t length)
 {
-  UINT32 i;
+  uint32_t i;
   int env_LFO, freq_LFO;
 
   if (CH->SLOT[S3].Ecnt == ENV_END)
@@ -1441,9 +1441,9 @@ static void Update_Chan_Algo0_LFO(ym2612_ *YM2612, channel_ *CH, DEV_SMPL **buf,
 }
 
 
-static void Update_Chan_Algo1_LFO(ym2612_ *YM2612, channel_ *CH, DEV_SMPL **buf, UINT32 length)
+static void Update_Chan_Algo1_LFO(ym2612_ *YM2612, channel_ *CH, DEV_SMPL **buf, uint32_t length)
 {
-  UINT32 i;
+  uint32_t i;
   int env_LFO, freq_LFO;
 
   if (CH->SLOT[S3].Ecnt == ENV_END)
@@ -1465,9 +1465,9 @@ static void Update_Chan_Algo1_LFO(ym2612_ *YM2612, channel_ *CH, DEV_SMPL **buf,
 }
 
 
-static void Update_Chan_Algo2_LFO(ym2612_ *YM2612, channel_ *CH, DEV_SMPL **buf, UINT32 length)
+static void Update_Chan_Algo2_LFO(ym2612_ *YM2612, channel_ *CH, DEV_SMPL **buf, uint32_t length)
 {
-  UINT32 i;
+  uint32_t i;
   int env_LFO, freq_LFO;
 
   if (CH->SLOT[S3].Ecnt == ENV_END)
@@ -1489,9 +1489,9 @@ static void Update_Chan_Algo2_LFO(ym2612_ *YM2612, channel_ *CH, DEV_SMPL **buf,
 }
 
 
-static void Update_Chan_Algo3_LFO(ym2612_ *YM2612, channel_ *CH, DEV_SMPL **buf, UINT32 length)
+static void Update_Chan_Algo3_LFO(ym2612_ *YM2612, channel_ *CH, DEV_SMPL **buf, uint32_t length)
 {
-  UINT32 i;
+  uint32_t i;
   int env_LFO, freq_LFO;
 
   if (CH->SLOT[S3].Ecnt == ENV_END)
@@ -1513,9 +1513,9 @@ static void Update_Chan_Algo3_LFO(ym2612_ *YM2612, channel_ *CH, DEV_SMPL **buf,
 }
 
 
-static void Update_Chan_Algo4_LFO(ym2612_ *YM2612, channel_ *CH, DEV_SMPL **buf, UINT32 length)
+static void Update_Chan_Algo4_LFO(ym2612_ *YM2612, channel_ *CH, DEV_SMPL **buf, uint32_t length)
 {
-  UINT32 i;
+  uint32_t i;
   int env_LFO, freq_LFO;
 
   if ((CH->SLOT[S1].Ecnt == ENV_END) && (CH->SLOT[S3].Ecnt == ENV_END))
@@ -1537,9 +1537,9 @@ static void Update_Chan_Algo4_LFO(ym2612_ *YM2612, channel_ *CH, DEV_SMPL **buf,
 }
 
 
-static void Update_Chan_Algo5_LFO(ym2612_ *YM2612, channel_ *CH, DEV_SMPL **buf, UINT32 length)
+static void Update_Chan_Algo5_LFO(ym2612_ *YM2612, channel_ *CH, DEV_SMPL **buf, uint32_t length)
 {
-  UINT32 i;
+  uint32_t i;
   int env_LFO, freq_LFO;
 
   if ((CH->SLOT[S1].Ecnt == ENV_END) && (CH->SLOT[S2].Ecnt == ENV_END) && (CH->SLOT[S3].Ecnt == ENV_END))
@@ -1561,9 +1561,9 @@ static void Update_Chan_Algo5_LFO(ym2612_ *YM2612, channel_ *CH, DEV_SMPL **buf,
 }
 
 
-static void Update_Chan_Algo6_LFO(ym2612_ *YM2612, channel_ *CH, DEV_SMPL **buf, UINT32 length)
+static void Update_Chan_Algo6_LFO(ym2612_ *YM2612, channel_ *CH, DEV_SMPL **buf, uint32_t length)
 {
-  UINT32 i;
+  uint32_t i;
   int env_LFO, freq_LFO;
 
   if ((CH->SLOT[S1].Ecnt == ENV_END) && (CH->SLOT[S2].Ecnt == ENV_END) && (CH->SLOT[S3].Ecnt == ENV_END))
@@ -1585,9 +1585,9 @@ static void Update_Chan_Algo6_LFO(ym2612_ *YM2612, channel_ *CH, DEV_SMPL **buf,
 }
 
 
-static void Update_Chan_Algo7_LFO(ym2612_ *YM2612, channel_ *CH, DEV_SMPL **buf, UINT32 length)
+static void Update_Chan_Algo7_LFO(ym2612_ *YM2612, channel_ *CH, DEV_SMPL **buf, uint32_t length)
 {
-  UINT32 i;
+  uint32_t i;
   int env_LFO, freq_LFO;
 
   if ((CH->SLOT[S0].Ecnt == ENV_END) && (CH->SLOT[S1].Ecnt == ENV_END) && (CH->SLOT[S2].Ecnt == ENV_END) && (CH->SLOT[S3].Ecnt == ENV_END))
@@ -1614,9 +1614,9 @@ static void Update_Chan_Algo7_LFO(ym2612_ *YM2612, channel_ *CH, DEV_SMPL **buf,
  *****************************************************/
 
 
-static void Update_Chan_Algo0_Int(ym2612_ *YM2612, channel_ *CH, DEV_SMPL **buf, UINT32 length)
+static void Update_Chan_Algo0_Int(ym2612_ *YM2612, channel_ *CH, DEV_SMPL **buf, uint32_t length)
 {
-  UINT32 i;
+  uint32_t i;
 
   if (CH->SLOT[S3].Ecnt == ENV_END)
     return;
@@ -1637,9 +1637,9 @@ static void Update_Chan_Algo0_Int(ym2612_ *YM2612, channel_ *CH, DEV_SMPL **buf,
 }
 
 
-static void Update_Chan_Algo1_Int(ym2612_ *YM2612, channel_ *CH, DEV_SMPL **buf, UINT32 length)
+static void Update_Chan_Algo1_Int(ym2612_ *YM2612, channel_ *CH, DEV_SMPL **buf, uint32_t length)
 {
-  UINT32 i;
+  uint32_t i;
 
   if (CH->SLOT[S3].Ecnt == ENV_END)
     return;
@@ -1660,9 +1660,9 @@ static void Update_Chan_Algo1_Int(ym2612_ *YM2612, channel_ *CH, DEV_SMPL **buf,
 }
 
 
-static void Update_Chan_Algo2_Int(ym2612_ *YM2612, channel_ *CH, DEV_SMPL **buf, UINT32 length)
+static void Update_Chan_Algo2_Int(ym2612_ *YM2612, channel_ *CH, DEV_SMPL **buf, uint32_t length)
 {
-  UINT32 i;
+  uint32_t i;
 
   if (CH->SLOT[S3].Ecnt == ENV_END)
     return;
@@ -1683,9 +1683,9 @@ static void Update_Chan_Algo2_Int(ym2612_ *YM2612, channel_ *CH, DEV_SMPL **buf,
 }
 
 
-static void Update_Chan_Algo3_Int(ym2612_ *YM2612, channel_ *CH, DEV_SMPL **buf, UINT32 length)
+static void Update_Chan_Algo3_Int(ym2612_ *YM2612, channel_ *CH, DEV_SMPL **buf, uint32_t length)
 {
-  UINT32 i;
+  uint32_t i;
 
   if (CH->SLOT[S3].Ecnt == ENV_END)
     return;
@@ -1706,9 +1706,9 @@ static void Update_Chan_Algo3_Int(ym2612_ *YM2612, channel_ *CH, DEV_SMPL **buf,
 }
 
 
-static void Update_Chan_Algo4_Int(ym2612_ *YM2612, channel_ *CH, DEV_SMPL **buf, UINT32 length)
+static void Update_Chan_Algo4_Int(ym2612_ *YM2612, channel_ *CH, DEV_SMPL **buf, uint32_t length)
 {
-  UINT32 i;
+  uint32_t i;
 
   if ((CH->SLOT[S1].Ecnt == ENV_END) && (CH->SLOT[S3].Ecnt == ENV_END))
     return;
@@ -1729,9 +1729,9 @@ static void Update_Chan_Algo4_Int(ym2612_ *YM2612, channel_ *CH, DEV_SMPL **buf,
 }
 
 
-static void Update_Chan_Algo5_Int(ym2612_ *YM2612, channel_ *CH, DEV_SMPL **buf, UINT32 length)
+static void Update_Chan_Algo5_Int(ym2612_ *YM2612, channel_ *CH, DEV_SMPL **buf, uint32_t length)
 {
-  UINT32 i;
+  uint32_t i;
 
   if ((CH->SLOT[S1].Ecnt == ENV_END) && (CH->SLOT[S2].Ecnt == ENV_END) && (CH->SLOT[S3].Ecnt == ENV_END))
     return;
@@ -1752,9 +1752,9 @@ static void Update_Chan_Algo5_Int(ym2612_ *YM2612, channel_ *CH, DEV_SMPL **buf,
 }
 
 
-static void Update_Chan_Algo6_Int(ym2612_ *YM2612, channel_ *CH, DEV_SMPL **buf, UINT32 length)
+static void Update_Chan_Algo6_Int(ym2612_ *YM2612, channel_ *CH, DEV_SMPL **buf, uint32_t length)
 {
-  UINT32 i;
+  uint32_t i;
 
   if ((CH->SLOT[S1].Ecnt == ENV_END) && (CH->SLOT[S2].Ecnt == ENV_END) && (CH->SLOT[S3].Ecnt == ENV_END))
     return;
@@ -1775,9 +1775,9 @@ static void Update_Chan_Algo6_Int(ym2612_ *YM2612, channel_ *CH, DEV_SMPL **buf,
 }
 
 
-static void Update_Chan_Algo7_Int(ym2612_ *YM2612, channel_ *CH, DEV_SMPL **buf, UINT32 length)
+static void Update_Chan_Algo7_Int(ym2612_ *YM2612, channel_ *CH, DEV_SMPL **buf, uint32_t length)
 {
-  UINT32 i;
+  uint32_t i;
 
   if ((CH->SLOT[S0].Ecnt == ENV_END) && (CH->SLOT[S1].Ecnt == ENV_END) && (CH->SLOT[S2].Ecnt == ENV_END) && (CH->SLOT[S3].Ecnt == ENV_END))
     return;
@@ -1798,9 +1798,9 @@ static void Update_Chan_Algo7_Int(ym2612_ *YM2612, channel_ *CH, DEV_SMPL **buf,
 }
 
 
-static void Update_Chan_Algo0_LFO_Int(ym2612_ *YM2612, channel_ *CH, DEV_SMPL **buf, UINT32 length)
+static void Update_Chan_Algo0_LFO_Int(ym2612_ *YM2612, channel_ *CH, DEV_SMPL **buf, uint32_t length)
 {
-  UINT32 i;
+  uint32_t i;
   int env_LFO, freq_LFO;
 
   if (CH->SLOT[S3].Ecnt == ENV_END)
@@ -1822,9 +1822,9 @@ static void Update_Chan_Algo0_LFO_Int(ym2612_ *YM2612, channel_ *CH, DEV_SMPL **
 }
 
 
-static void Update_Chan_Algo1_LFO_Int(ym2612_ *YM2612, channel_ *CH, DEV_SMPL **buf, UINT32 length)
+static void Update_Chan_Algo1_LFO_Int(ym2612_ *YM2612, channel_ *CH, DEV_SMPL **buf, uint32_t length)
 {
-  UINT32 i;
+  uint32_t i;
   int env_LFO, freq_LFO;
 
   if (CH->SLOT[S3].Ecnt == ENV_END)
@@ -1846,9 +1846,9 @@ static void Update_Chan_Algo1_LFO_Int(ym2612_ *YM2612, channel_ *CH, DEV_SMPL **
 }
 
 
-static void Update_Chan_Algo2_LFO_Int(ym2612_ *YM2612, channel_ *CH, DEV_SMPL **buf, UINT32 length)
+static void Update_Chan_Algo2_LFO_Int(ym2612_ *YM2612, channel_ *CH, DEV_SMPL **buf, uint32_t length)
 {
-  UINT32 i;
+  uint32_t i;
   int env_LFO, freq_LFO;
 
   if (CH->SLOT[S3].Ecnt == ENV_END)
@@ -1870,9 +1870,9 @@ static void Update_Chan_Algo2_LFO_Int(ym2612_ *YM2612, channel_ *CH, DEV_SMPL **
 }
 
 
-static void Update_Chan_Algo3_LFO_Int(ym2612_ *YM2612, channel_ *CH, DEV_SMPL **buf, UINT32 length)
+static void Update_Chan_Algo3_LFO_Int(ym2612_ *YM2612, channel_ *CH, DEV_SMPL **buf, uint32_t length)
 {
-  UINT32 i;
+  uint32_t i;
   int env_LFO, freq_LFO;
 
   if (CH->SLOT[S3].Ecnt == ENV_END)
@@ -1894,9 +1894,9 @@ static void Update_Chan_Algo3_LFO_Int(ym2612_ *YM2612, channel_ *CH, DEV_SMPL **
 }
 
 
-static void Update_Chan_Algo4_LFO_Int(ym2612_ *YM2612, channel_ *CH, DEV_SMPL **buf, UINT32 length)
+static void Update_Chan_Algo4_LFO_Int(ym2612_ *YM2612, channel_ *CH, DEV_SMPL **buf, uint32_t length)
 {
-  UINT32 i;
+  uint32_t i;
   int env_LFO, freq_LFO;
 
   if ((CH->SLOT[S1].Ecnt == ENV_END) && (CH->SLOT[S3].Ecnt == ENV_END))
@@ -1918,9 +1918,9 @@ static void Update_Chan_Algo4_LFO_Int(ym2612_ *YM2612, channel_ *CH, DEV_SMPL **
 }
 
 
-static void Update_Chan_Algo5_LFO_Int(ym2612_ *YM2612, channel_ *CH, DEV_SMPL **buf, UINT32 length)
+static void Update_Chan_Algo5_LFO_Int(ym2612_ *YM2612, channel_ *CH, DEV_SMPL **buf, uint32_t length)
 {
-  UINT32 i;
+  uint32_t i;
   int env_LFO, freq_LFO;
 
   if ((CH->SLOT[S1].Ecnt == ENV_END) && (CH->SLOT[S2].Ecnt == ENV_END) && (CH->SLOT[S3].Ecnt == ENV_END))
@@ -1942,9 +1942,9 @@ static void Update_Chan_Algo5_LFO_Int(ym2612_ *YM2612, channel_ *CH, DEV_SMPL **
 }
 
 
-static void Update_Chan_Algo6_LFO_Int(ym2612_ *YM2612, channel_ *CH, DEV_SMPL **buf, UINT32 length)
+static void Update_Chan_Algo6_LFO_Int(ym2612_ *YM2612, channel_ *CH, DEV_SMPL **buf, uint32_t length)
 {
-  UINT32 i;
+  uint32_t i;
   int env_LFO, freq_LFO;
 
   if ((CH->SLOT[S1].Ecnt == ENV_END) && (CH->SLOT[S2].Ecnt == ENV_END) && (CH->SLOT[S3].Ecnt == ENV_END))
@@ -1966,9 +1966,9 @@ static void Update_Chan_Algo6_LFO_Int(ym2612_ *YM2612, channel_ *CH, DEV_SMPL **
 }
 
 
-static void Update_Chan_Algo7_LFO_Int(ym2612_ *YM2612, channel_ *CH, DEV_SMPL **buf, UINT32 length)
+static void Update_Chan_Algo7_LFO_Int(ym2612_ *YM2612, channel_ *CH, DEV_SMPL **buf, uint32_t length)
 {
-  UINT32 i;
+  uint32_t i;
   int env_LFO, freq_LFO;
 
   if ((CH->SLOT[S0].Ecnt == ENV_END) && (CH->SLOT[S1].Ecnt == ENV_END) && (CH->SLOT[S2].Ecnt == ENV_END) && (CH->SLOT[S3].Ecnt == ENV_END))
@@ -1997,7 +1997,7 @@ static void Update_Chan_Algo7_LFO_Int(ym2612_ *YM2612, channel_ *CH, DEV_SMPL **
 
 
 // Initialisation de l'émulateur YM2612
-ym2612_ *YM2612_Init(UINT32 Clock, UINT32 Rate, UINT8 Interpolation)
+ym2612_ *YM2612_Init(uint32_t Clock, uint32_t Rate, uint8_t Interpolation)
 {
   ym2612_ *YM2612;
   int i, j;
@@ -2344,17 +2344,17 @@ void YM2612_Reset(ym2612_ *YM2612)
 
   for (i = 0xB6; i >= 0xB4; i--)
   {
-    YM2612_Write(YM2612, 0, (UINT8) i);
+    YM2612_Write(YM2612, 0, (uint8_t) i);
     YM2612_Write(YM2612, 1, 0xC0);
-    YM2612_Write(YM2612, 2, (UINT8) i);
+    YM2612_Write(YM2612, 2, (uint8_t) i);
     YM2612_Write(YM2612, 3, 0xC0);
   }
 
   for (i = 0xB2; i >= 0x22; i--)
   {
-    YM2612_Write(YM2612, 0, (UINT8) i);
+    YM2612_Write(YM2612, 0, (uint8_t) i);
     YM2612_Write(YM2612, 1, 0);
-    YM2612_Write(YM2612, 2, (UINT8) i);
+    YM2612_Write(YM2612, 2, (uint8_t) i);
     YM2612_Write(YM2612, 3, 0);
   }
 
@@ -2369,7 +2369,7 @@ void YM2612_Reset(ym2612_ *YM2612)
 }
 
 
-UINT8 YM2612_Read(ym2612_ *YM2612, UINT8 adr)
+uint8_t YM2612_Read(ym2612_ *YM2612, uint8_t adr)
 {
 #if 0
   static int cnt = 0;
@@ -2389,11 +2389,11 @@ UINT8 YM2612_Read(ym2612_ *YM2612, UINT8 adr)
    * OVRA: If 1, timer A has overflowed.
    * OVRB: If 1, timer B has overflowed.
    */
-  return (UINT8)YM2612->Status;
+  return (uint8_t)YM2612->Status;
 }
 
 
-void YM2612_Write(ym2612_ *YM2612, UINT8 adr, UINT8 data)
+void YM2612_Write(ym2612_ *YM2612, uint8_t adr, uint8_t data)
 {
   /**
    * Possible addresses:
@@ -2473,7 +2473,7 @@ void YM2612_Write(ym2612_ *YM2612, UINT8 adr, UINT8 data)
   return /*0*/;
 }
 
-UINT32 YM2612_GetMute(ym2612_ *YM2612)
+uint32_t YM2612_GetMute(ym2612_ *YM2612)
 {
   int i, result = 0;
   for (i = 0; i < 6; ++i)
@@ -2484,7 +2484,7 @@ UINT32 YM2612_GetMute(ym2612_ *YM2612)
   return result;
 }
 
-void YM2612_SetMute(ym2612_ *YM2612, UINT32 val)
+void YM2612_SetMute(ym2612_ *YM2612, uint32_t val)
 {
   int i;
   for (i = 0; i < 6; ++i)
@@ -2494,18 +2494,18 @@ void YM2612_SetMute(ym2612_ *YM2612, UINT32 val)
   YM2612->DAC_Mute = (val >> 6) & 1;
 }
 
-void YM2612_SetOptions(ym2612_ *YM2612, UINT32 Flags)
+void YM2612_SetOptions(ym2612_ *YM2612, uint32_t Flags)
 {
 	YM2612->DAC_Highpass_Enable = (Flags >> 0) & 0x01;
 	YM2612->Enable_SSGEG = (Flags >> 1) & 0x01;
 }
 
-void YM2612_ClearBuffer(DEV_SMPL **buffer, UINT32 length)
+void YM2612_ClearBuffer(DEV_SMPL **buffer, uint32_t length)
 {
 	// the MAME core does this before updating,
 	// but the Gens core does this before mixing
 	DEV_SMPL *bufL, *bufR;
-	UINT32 i;
+	uint32_t i;
 	
 	bufL = buffer[0];
 	bufR = buffer[1];
@@ -2517,10 +2517,10 @@ void YM2612_ClearBuffer(DEV_SMPL **buffer, UINT32 length)
 	}
 }
 
-void YM2612_Update(ym2612_ *YM2612, DEV_SMPL **buf, UINT32 length)
+void YM2612_Update(ym2612_ *YM2612, DEV_SMPL **buf, uint32_t length)
 {
-  UINT32 i, j, algo_type;
-  UINT32 proclen;
+  uint32_t i, j, algo_type;
+  uint32_t proclen;
   DEV_SMPL *procbuf[2];
 
 #if YM_DEBUG_LEVEL > 1
@@ -2624,10 +2624,10 @@ void YM2612_Update(ym2612_ *YM2612, DEV_SMPL **buf, UINT32 length)
 
 enum { highpass_fract = 15 };
 enum { highpass_shift = 9 }; // higher values reduce highpass on DAC
-void YM2612_DacAndTimers_Update(ym2612_ *YM2612, DEV_SMPL **buffer, UINT32 length)
+void YM2612_DacAndTimers_Update(ym2612_ *YM2612, DEV_SMPL **buffer, uint32_t length)
 {
   DEV_SMPL *bufL, *bufR;
-  UINT32 i;
+  uint32_t i;
 
   if (YM2612->DAC && YM2612->DACdata && ! YM2612->DAC_Mute)
   {

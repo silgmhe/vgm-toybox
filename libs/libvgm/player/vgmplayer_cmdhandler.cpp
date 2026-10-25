@@ -278,7 +278,7 @@
 	{0xFF, 0x05, &VGMPlayer::Cmd_unknown},              // FF
 };
 
-/*static*/ const UINT8 VGMPlayer::_VGM_BANK_CHIPS[VGMPlayer::_PCM_BANK_COUNT] =
+/*static*/ const uint8_t VGMPlayer::_VGM_BANK_CHIPS[VGMPlayer::_PCM_BANK_COUNT] =
 {
 	0x02,	// 00 YM2612
 	0x05,	// 01 RF5C68
@@ -346,7 +346,7 @@
 	0xFF,	// 3F
 };
 
-/*static*/ const UINT8 VGMPlayer::_VGM_ROM_CHIPS[0x40][2] =
+/*static*/ const uint8_t VGMPlayer::_VGM_ROM_CHIPS[0x40][2] =
 {
 // {chipType, memIdx}
 	{0x04, 0},	// 80 SegaPCM
@@ -415,7 +415,7 @@
 	{0xFF, 0},	// BF
 };
 
-/*static*/ const UINT8 VGMPlayer::_VGM_RAM_CHIPS[0x40] =
+/*static*/ const uint8_t VGMPlayer::_VGM_RAM_CHIPS[0x40] =
 {
 	// --- RAM --- (16-bit addressing)
 	0x05,	// C0 RF5C68
@@ -486,41 +486,41 @@
 };
 
 
-INLINE UINT16 ReadLE16(const UINT8* data)
+INLINE uint16_t ReadLE16(const uint8_t* data)
 {
 	// read 16-Bit Word (Little Endian/Intel Byte Order)
 #ifdef VGM_LITTLE_ENDIAN
-	return *(UINT16*)data;
+	return *(uint16_t*)data;
 #else
 	return (data[0x01] << 8) | (data[0x00] << 0);
 #endif
 }
 
-INLINE UINT16 ReadBE16(const UINT8* data)
+INLINE uint16_t ReadBE16(const uint8_t* data)
 {
 	// read 16-Bit Word (Big Endian/Motorola Byte Order)
 #ifdef VGM_BIG_ENDIAN
-	return *(UINT16*)data;
+	return *(uint16_t*)data;
 #else
 	return (data[0x00] << 8) | (data[0x01] << 0);
 #endif
 }
 
-INLINE UINT32 ReadLE24(const UINT8* data)
+INLINE uint32_t ReadLE24(const uint8_t* data)
 {
 	// read 24-Bit Word (Little Endian/Intel Byte Order)
 #ifdef VGM_LITTLE_ENDIAN
-	return	(*(UINT32*)data) & 0x00FFFFFF;
+	return	(*(uint32_t*)data) & 0x00FFFFFF;
 #else
 	return	(data[0x02] << 16) | (data[0x01] <<  8) | (data[0x00] <<  0);
 #endif
 }
 
-INLINE UINT32 ReadLE32(const UINT8* data)
+INLINE uint32_t ReadLE32(const uint8_t* data)
 {
 	// read 32-Bit Word (Little Endian/Intel Byte Order)
 #ifdef VGM_LITTLE_ENDIAN
-	return	*(UINT32*)data;
+	return	*(uint32_t*)data;
 #else
 	return	(data[0x03] << 24) | (data[0x02] << 16) |
 			(data[0x01] <<  8) | (data[0x00] <<  0);
@@ -541,7 +541,7 @@ void VGMPlayer::Cmd_unknown(void)
 {
 	// The difference between "invalid" and "unknown" is, that there is a command length
 	// defined for "unknown" and thus it is possible to just skip it.
-	UINT8 cmdID = fData[0x00];
+	uint8_t cmdID = fData[0x00];
 	if (_shownCmdWarnings[cmdID] < 10)
 	{
 		_shownCmdWarnings[cmdID] ++;
@@ -552,8 +552,8 @@ void VGMPlayer::Cmd_unknown(void)
 
 void VGMPlayer::Cmd_EndOfData(void)
 {
-	UINT8 silenceStop = 0;
-	UINT8 doLoop = (_fileHdr.loopOfs != 0);
+	uint8_t silenceStop = 0;
+	uint8_t doLoop = (_fileHdr.loopOfs != 0);
 	
 	if (_playState & PLAYSTATE_SEEK)	// recalculate playSmpl to fix state when triggering callbacks
 		_playSmpl = Tick2Sample(_fileTick);	// Note: fileTick results in more accurate position
@@ -574,7 +574,7 @@ void VGMPlayer::Cmd_EndOfData(void)
 		_curLoop ++;
 		if (_eventCbFunc != NULL)
 		{
-			UINT8 retVal = _eventCbFunc(this, _eventCbParam, PLREVT_LOOP, &_curLoop);
+			uint8_t retVal = _eventCbFunc(this, _eventCbParam, PLREVT_LOOP, &_curLoop);
 			if (retVal == 0x01)	// "stop" signal?
 			{
 				_playState |= PLAYSTATE_END;
@@ -635,15 +635,15 @@ void VGMPlayer::Cmd_DelaySamplesN1(void)
 	return;
 }
 
-INLINE void SendYMCommand(VGMPlayer::CHIP_DEVICE* cDev, UINT8 port, UINT8 reg, UINT8 data)
+INLINE void SendYMCommand(VGMPlayer::CHIP_DEVICE* cDev, uint8_t port, uint8_t reg, uint8_t data)
 {
 	cDev->write8(cDev->base.defInf.dataPtr, (port << 1) | 0, reg);
 	cDev->write8(cDev->base.defInf.dataPtr, (port << 1) | 1, data);
 	return;
 }
 
-static void WriteChipROM(VGMPlayer::CHIP_DEVICE* cDev, UINT8 memID,
-						 UINT32 memSize, UINT32 dataOfs, UINT32 dataLen, const UINT8* data)
+static void WriteChipROM(VGMPlayer::CHIP_DEVICE* cDev, uint8_t memID,
+						 uint32_t memSize, uint32_t dataOfs, uint32_t dataLen, const uint8_t* data)
 {
 	if (memID == 0)
 	{
@@ -663,7 +663,7 @@ static void WriteChipROM(VGMPlayer::CHIP_DEVICE* cDev, UINT8 memID,
 	return;
 }
 
-void VGMPlayer::DoRAMOfsPatches(UINT8 chipType, UINT8 chipID, UINT32& dataOfs, UINT32& dataLen)
+void VGMPlayer::DoRAMOfsPatches(uint8_t chipType, uint8_t chipID, uint32_t& dataOfs, uint32_t& dataLen)
 {
 	switch(chipType)
 	{
@@ -680,14 +680,14 @@ void VGMPlayer::DoRAMOfsPatches(UINT8 chipType, UINT8 chipID, UINT32& dataOfs, U
 
 void VGMPlayer::Cmd_DataBlock(void)
 {
-	UINT8 dblkType;
-	UINT8 chipType;
-	UINT8 chipID;
-	UINT32 dblkLen;
-	UINT32 memSize;
-	UINT32 dataOfs;
-	UINT32 dataLen;
-	const UINT8* dataPtr;
+	uint8_t dblkType;
+	uint8_t chipType;
+	uint8_t chipID;
+	uint32_t dblkLen;
+	uint32_t memSize;
+	uint32_t dataOfs;
+	uint32_t dataLen;
+	const uint8_t* dataPtr;
 	CHIP_DEVICE* cDev;
 	
 	dblkType = fData[0x02];
@@ -711,7 +711,7 @@ void VGMPlayer::Cmd_DataBlock(void)
 		{
 			PCM_BANK* pcmBnk = &_pcmBank[dblkType & 0x3F];
 			PCM_CDB_INF dbCI;
-			UINT32 oldLen = (UINT32)pcmBnk->data.size();
+			uint32_t oldLen = (uint32_t)pcmBnk->data.size();
 			dataLen = dblkLen;
 			dataPtr = &fData[0x00];
 			
@@ -730,7 +730,7 @@ void VGMPlayer::Cmd_DataBlock(void)
 			pcmBnk->data.resize(oldLen + dataLen);
 			if (dblkType & 0x40)
 			{
-				UINT8 retVal = DecompressDataBlk(dataLen, &pcmBnk->data[oldLen],
+				uint8_t retVal = DecompressDataBlk(dataLen, &pcmBnk->data[oldLen],
 					dblkLen - dbCI.hdrSize, &dataPtr[dbCI.hdrSize], &dbCI.cmprInfo);
 				if (retVal == 0x10)
 					emu_logf(&_logger, PLRLOG_ERROR, "Error loading table-compressed data block! No table loaded!\n");
@@ -763,8 +763,8 @@ void VGMPlayer::Cmd_DataBlock(void)
 		{
 			// chip == ASIC 219 (ID 0x1C + flags 0x01): byte-swap sample data
 			dataLen &= ~0x01;
-			std::vector<UINT8> swpData(dataLen);
-			for (UINT32 curPos = 0x00; curPos < dataLen; curPos += 0x02)
+			std::vector<uint8_t> swpData(dataLen);
+			for (uint32_t curPos = 0x00; curPos < dataLen; curPos += 0x02)
 			{
 				swpData[curPos + 0x00] = dataPtr[curPos + 0x01];
 				swpData[curPos + 0x01] = dataPtr[curPos + 0x00];
@@ -811,22 +811,22 @@ void VGMPlayer::Cmd_DataBlock(void)
 
 void VGMPlayer::Cmd_PcmRamWrite(void)
 {
-	UINT8 dbType = fData[0x02] & 0x7F;
+	uint8_t dbType = fData[0x02] & 0x7F;
 	if (dbType >= _PCM_BANK_COUNT)
 		return;
 	
-	UINT8 chipType = _VGM_BANK_CHIPS[dbType];
-	UINT8 chipID = (fData[0x02] & 0x80) >> 7;
+	uint8_t chipType = _VGM_BANK_CHIPS[dbType];
+	uint8_t chipID = (fData[0x02] & 0x80) >> 7;
 	CHIP_DEVICE* cDev = GetDevicePtr(chipType, chipID);
 	if (cDev == NULL || cDev->romWrite == NULL)
 		return;
 	
-	UINT32 dbPos = ReadLE24(&fData[0x03]);
-	UINT32 wrtAddr = ReadLE24(&fData[0x06]);
-	UINT32 dataLen = ReadLE24(&fData[0x09]);
+	uint32_t dbPos = ReadLE24(&fData[0x03]);
+	uint32_t wrtAddr = ReadLE24(&fData[0x06]);
+	uint32_t dataLen = ReadLE24(&fData[0x09]);
 	if (dbPos >= _pcmBank[dbType].data.size())
 		return;
-	const UINT8* ROMData = &_pcmBank[dbType].data[dbPos];
+	const uint8_t* ROMData = &_pcmBank[dbType].data[dbPos];
 	if (! dataLen)
 		dataLen += 0x01000000;
 	if (dataLen > _pcmBank[dbType].data.size() - dbPos)
@@ -854,7 +854,7 @@ void VGMPlayer::Cmd_YM2612PCM_Delay(void)
 	if (_ym2612pcm_bnkPos >= _pcmBank[0].data.size())
 		return;
 	
-	UINT8 data = _pcmBank[0].data[_ym2612pcm_bnkPos];
+	uint8_t data = _pcmBank[0].data[_ym2612pcm_bnkPos];
 	SendYMCommand(cDev, 0x00, 0x2A, data);
 	_ym2612pcm_bnkPos ++;
 	// TODO: clip when exceeding pcmBank size
@@ -878,7 +878,7 @@ void VGMPlayer::Cmd_DACCtrl_Setup(void)	// DAC Stream Control: Setup Chip
 		
 		DEV_GEN_CFG devCfg;
 		DACSTRM_DEV dacStrm;
-		UINT8 retVal;
+		uint8_t retVal;
 		
 		devCfg.emuCore = 0x00;
 		devCfg.srMode = DEVRI_SRMODE_NATIVE;
@@ -893,7 +893,7 @@ void VGMPlayer::Cmd_DACCtrl_Setup(void)	// DAC Stream Control: Setup Chip
 		dacStrm.bankID = 0xFF;
 		dacStrm.pbMode = 0x00;
 		dacStrm.freq = 0;
-		dacStrm.lastItem = (UINT32)-1;
+		dacStrm.lastItem = (uint32_t)-1;
 		dacStrm.maxItems = 0;
 		
 		_dacStrmMap[dacStrm.streamID] = _dacStreams.size();
@@ -903,9 +903,9 @@ void VGMPlayer::Cmd_DACCtrl_Setup(void)	// DAC Stream Control: Setup Chip
 	}
 	
 	DACSTRM_DEV* dacStrm = &_dacStreams[dsID];
-	UINT8 chipType = fData[0x02] & 0x7F;
-	UINT8 chipID = (fData[0x02] & 0x80) >> 7;
-	UINT16 chipCmd = ReadBE16(&fData[0x03]);
+	uint8_t chipType = fData[0x02] & 0x7F;
+	uint8_t chipID = (fData[0x02] & 0x80) >> 7;
+	uint16_t chipCmd = ReadBE16(&fData[0x03]);
 	CHIP_DEVICE* destChip = GetDevicePtr(chipType, chipID);
 	if (destChip == NULL)
 		return;
@@ -926,11 +926,11 @@ void VGMPlayer::Cmd_DACCtrl_SetData(void)	// DAC Stream Control: Set Data Bank
 		return;
 	PCM_BANK* pcmBnk = &_pcmBank[dacStrm->bankID];
 	
-	dacStrm->maxItems = (UINT32)pcmBnk->bankOfs.size();
+	dacStrm->maxItems = (uint32_t)pcmBnk->bankOfs.size();
 	if (pcmBnk->data.empty())
 		daccontrol_set_data(dacStrm->defInf.dataPtr, NULL, 0, fData[0x03], fData[0x04]);
 	else
-		daccontrol_set_data(dacStrm->defInf.dataPtr, &pcmBnk->data[0], (UINT32)pcmBnk->data.size(), fData[0x03], fData[0x04]);
+		daccontrol_set_data(dacStrm->defInf.dataPtr, &pcmBnk->data[0], (uint32_t)pcmBnk->data.size(), fData[0x03], fData[0x04]);
 	return;
 }
 
@@ -953,9 +953,9 @@ void VGMPlayer::Cmd_DACCtrl_PlayData_Loc(void)	// DAC Stream Control: Play Data 
 		return;
 	DACSTRM_DEV* dacStrm = &_dacStreams[dsID];
 	
-	UINT32 startOfs = ReadLE32(&fData[0x02]);
-	UINT32 soundLen = ReadLE32(&fData[0x07]);
-	dacStrm->lastItem = (UINT32)-1;
+	uint32_t startOfs = ReadLE32(&fData[0x02]);
+	uint32_t soundLen = ReadLE32(&fData[0x07]);
+	dacStrm->lastItem = (uint32_t)-1;
 	dacStrm->pbMode = fData[0x06];
 	daccontrol_start(dacStrm->defInf.dataPtr, startOfs, dacStrm->pbMode, soundLen);
 	return;
@@ -968,7 +968,7 @@ void VGMPlayer::Cmd_DACCtrl_Stop(void)	// DAC Stream Control: Stop immediately
 		for (size_t curStrm = 0; curStrm < _dacStreams.size(); curStrm++)
 		{
 			DACSTRM_DEV* dacStrm = &_dacStreams[curStrm];
-			dacStrm->lastItem = (UINT32)-1;
+			dacStrm->lastItem = (uint32_t)-1;
 			daccontrol_stop(dacStrm->defInf.dataPtr);
 		}
 		return;
@@ -979,7 +979,7 @@ void VGMPlayer::Cmd_DACCtrl_Stop(void)	// DAC Stream Control: Stop immediately
 		return;
 	DACSTRM_DEV* dacStrm = &_dacStreams[dsID];
 	
-	dacStrm->lastItem = (UINT32)-1;
+	dacStrm->lastItem = (uint32_t)-1;
 	daccontrol_stop(dacStrm->defInf.dataPtr);
 	return;
 }
@@ -994,13 +994,13 @@ void VGMPlayer::Cmd_DACCtrl_PlayData_Blk(void)	// DAC Stream Control: Play Data 
 		return;
 	PCM_BANK* pcmBnk = &_pcmBank[dacStrm->bankID];
 	
-	UINT16 sndID = ReadLE16(&fData[0x02]);
+	uint16_t sndID = ReadLE16(&fData[0x02]);
 	dacStrm->lastItem = sndID;
-	dacStrm->maxItems = (UINT32)pcmBnk->bankOfs.size();
+	dacStrm->maxItems = (uint32_t)pcmBnk->bankOfs.size();
 	if (sndID >= pcmBnk->bankOfs.size())
 		return;
-	UINT32 startOfs = pcmBnk->bankOfs[sndID];
-	UINT32 soundLen = pcmBnk->bankSize[sndID];
+	uint32_t startOfs = pcmBnk->bankOfs[sndID];
+	uint32_t soundLen = pcmBnk->bankSize[sndID];
 	dacStrm->pbMode = DCTRL_LMODE_BYTES |
 					((fData[0x04] & 0x10) << 0) |	// Reverse Mode
 					((fData[0x04] & 0x01) << 7);	// Looping
@@ -1010,8 +1010,8 @@ void VGMPlayer::Cmd_DACCtrl_PlayData_Blk(void)	// DAC Stream Control: Play Data 
 
 void VGMPlayer::Cmd_GGStereo(void)
 {
-	UINT8 chipType = _CMD_INFO[fData[0x00]].chipType;
-	UINT8 chipID = (fData[0x00] == 0x3F) ? 1 : 0;
+	uint8_t chipType = _CMD_INFO[fData[0x00]].chipType;
+	uint8_t chipID = (fData[0x00] == 0x3F) ? 1 : 0;
 	CHIP_DEVICE* cDev = GetDevicePtr(chipType, chipID);
 	if (cDev == NULL || cDev->write8 == NULL)
 		return;
@@ -1022,8 +1022,8 @@ void VGMPlayer::Cmd_GGStereo(void)
 
 void VGMPlayer::Cmd_SN76489(void)
 {
-	UINT8 chipType = _CMD_INFO[fData[0x00]].chipType;
-	UINT8 chipID = (fData[0x00] == 0x30) ? 1 : 0;
+	uint8_t chipType = _CMD_INFO[fData[0x00]].chipType;
+	uint8_t chipID = (fData[0x00] == 0x30) ? 1 : 0;
 	CHIP_DEVICE* cDev = GetDevicePtr(chipType, chipID);
 	if (cDev == NULL || cDev->write8 == NULL)
 		return;
@@ -1034,8 +1034,8 @@ void VGMPlayer::Cmd_SN76489(void)
 
 void VGMPlayer::Cmd_Reg8_Data8(void)
 {
-	UINT8 chipType = _CMD_INFO[fData[0x00]].chipType;
-	UINT8 chipID = (fData[0x00] >= 0xA0) ? 1 : 0;
+	uint8_t chipType = _CMD_INFO[fData[0x00]].chipType;
+	uint8_t chipID = (fData[0x00] >= 0xA0) ? 1 : 0;
 	CHIP_DEVICE* cDev = GetDevicePtr(chipType, chipID);
 	if (cDev == NULL || cDev->write8 == NULL)
 		return;
@@ -1046,8 +1046,8 @@ void VGMPlayer::Cmd_Reg8_Data8(void)
 
 void VGMPlayer::Cmd_CPort_Reg8_Data8(void)
 {
-	UINT8 chipType = _CMD_INFO[fData[0x00]].chipType;
-	UINT8 chipID = (fData[0x00] >= 0xA0) ? 1 : 0;
+	uint8_t chipType = _CMD_INFO[fData[0x00]].chipType;
+	uint8_t chipID = (fData[0x00] >= 0xA0) ? 1 : 0;
 	CHIP_DEVICE* cDev = GetDevicePtr(chipType, chipID);
 	if (cDev == NULL || cDev->write8 == NULL)
 		return;
@@ -1058,8 +1058,8 @@ void VGMPlayer::Cmd_CPort_Reg8_Data8(void)
 
 void VGMPlayer::Cmd_Port_Reg8_Data8(void)
 {
-	UINT8 chipType = _CMD_INFO[fData[0x00]].chipType;
-	UINT8 chipID = (fData[0x01] & 0x80) >> 7;
+	uint8_t chipType = _CMD_INFO[fData[0x00]].chipType;
+	uint8_t chipID = (fData[0x01] & 0x80) >> 7;
 	CHIP_DEVICE* cDev = GetDevicePtr(chipType, chipID);
 	if (cDev == NULL || cDev->write8 == NULL)
 		return;
@@ -1070,8 +1070,8 @@ void VGMPlayer::Cmd_Port_Reg8_Data8(void)
 
 void VGMPlayer::Cmd_MSM5205_Reg(void)
 {
-	UINT8 chipType = _CMD_INFO[fData[0x00]].chipType;
-	UINT8 chipID = (fData[0x01] & 0x80) >> 7;
+	uint8_t chipType = _CMD_INFO[fData[0x00]].chipType;
+	uint8_t chipID = (fData[0x01] & 0x80) >> 7;
 	CHIP_DEVICE* cDev = GetDevicePtr(chipType, chipID);
 	if (cDev == NULL || cDev->write8 == NULL)
 		return;
@@ -1082,8 +1082,8 @@ void VGMPlayer::Cmd_MSM5205_Reg(void)
 
 void VGMPlayer::Cmd_Ofs8_Data8(void)
 {
-	UINT8 chipType = _CMD_INFO[fData[0x00]].chipType;
-	UINT8 chipID = (fData[0x01] & 0x80) >> 7;
+	uint8_t chipType = _CMD_INFO[fData[0x00]].chipType;
+	uint8_t chipID = (fData[0x01] & 0x80) >> 7;
 	CHIP_DEVICE* cDev = GetDevicePtr(chipType, chipID);
 	if (cDev == NULL || cDev->write8 == NULL)
 		return;
@@ -1094,48 +1094,48 @@ void VGMPlayer::Cmd_Ofs8_Data8(void)
 
 void VGMPlayer::Cmd_Ofs16_Data8(void)
 {
-	UINT8 chipType = _CMD_INFO[fData[0x00]].chipType;
-	UINT8 chipID = (fData[0x01] & 0x80) >> 7;
+	uint8_t chipType = _CMD_INFO[fData[0x00]].chipType;
+	uint8_t chipID = (fData[0x01] & 0x80) >> 7;
 	CHIP_DEVICE* cDev = GetDevicePtr(chipType, chipID);
 	if (cDev == NULL || cDev->writeM8 == NULL)
 		return;
 	
-	UINT16 ofs = ReadBE16(&fData[0x01]) & 0x7FFF;
+	uint16_t ofs = ReadBE16(&fData[0x01]) & 0x7FFF;
 	cDev->writeM8(cDev->base.defInf.dataPtr, ofs, fData[0x03]);
 	return;
 }
 
 void VGMPlayer::Cmd_Ofs8_Data16(void)
 {
-	UINT8 chipType = _CMD_INFO[fData[0x00]].chipType;
-	UINT8 chipID = (fData[0x01] & 0x80) >> 7;
+	uint8_t chipType = _CMD_INFO[fData[0x00]].chipType;
+	uint8_t chipID = (fData[0x01] & 0x80) >> 7;
 	CHIP_DEVICE* cDev = GetDevicePtr(chipType, chipID);
 	if (cDev == NULL || cDev->writeD16 == NULL)
 		return;
 	
-	UINT16 value = ReadLE16(&fData[0x02]);
+	uint16_t value = ReadLE16(&fData[0x02]);
 	cDev->writeD16(cDev->base.defInf.dataPtr, fData[0x01] & 0x7F, value);
 	return;
 }
 
 void VGMPlayer::Cmd_Ofs16_Data16(void)
 {
-	UINT8 chipType = _CMD_INFO[fData[0x00]].chipType;
-	UINT8 chipID = (fData[0x01] & 0x80) >> 7;
+	uint8_t chipType = _CMD_INFO[fData[0x00]].chipType;
+	uint8_t chipID = (fData[0x01] & 0x80) >> 7;
 	CHIP_DEVICE* cDev = GetDevicePtr(chipType, chipID);
 	if (cDev == NULL || cDev->writeM16 == NULL)
 		return;
 	
-	UINT16 ofs = ReadBE16(&fData[0x01]) & 0x7FFF;
-	UINT16 value = ReadBE16(&fData[0x03]);
+	uint16_t ofs = ReadBE16(&fData[0x01]) & 0x7FFF;
+	uint16_t value = ReadBE16(&fData[0x03]);
 	cDev->writeM16(cDev->base.defInf.dataPtr, ofs, value);
 	return;
 }
 
 void VGMPlayer::Cmd_Port_Ofs8_Data8(void)
 {
-	UINT8 chipType = _CMD_INFO[fData[0x00]].chipType;
-	UINT8 chipID = (fData[0x01] & 0x80) >> 7;
+	uint8_t chipType = _CMD_INFO[fData[0x00]].chipType;
+	uint8_t chipID = (fData[0x01] & 0x80) >> 7;
 	CHIP_DEVICE* cDev = GetDevicePtr(chipType, chipID);
 	if (cDev == NULL || cDev->write8 == NULL)
 		return;
@@ -1146,8 +1146,8 @@ void VGMPlayer::Cmd_Port_Ofs8_Data8(void)
 
 void VGMPlayer::Cmd_DReg8_Data8(void)
 {
-	UINT8 chipType = _CMD_INFO[fData[0x00]].chipType;
-	UINT8 chipID = (fData[0x01] & 0x80) >> 7;
+	uint8_t chipType = _CMD_INFO[fData[0x00]].chipType;
+	uint8_t chipID = (fData[0x01] & 0x80) >> 7;
 	CHIP_DEVICE* cDev = GetDevicePtr(chipType, chipID);
 	if (cDev == NULL || cDev->write8 == NULL)
 		return;
@@ -1158,26 +1158,26 @@ void VGMPlayer::Cmd_DReg8_Data8(void)
 
 void VGMPlayer::Cmd_SegaPCM_Mem(void)
 {
-	UINT8 chipType = _CMD_INFO[fData[0x00]].chipType;
-	UINT8 chipID = (fData[0x02] & 0x80) >> 7;
+	uint8_t chipType = _CMD_INFO[fData[0x00]].chipType;
+	uint8_t chipID = (fData[0x02] & 0x80) >> 7;
 	CHIP_DEVICE* cDev = GetDevicePtr(chipType, chipID);
 	if (cDev == NULL || cDev->writeM8 == NULL)
 		return;
 	
-	UINT16 memOfs = ReadLE16(&fData[0x01]) & 0x7FFF;
+	uint16_t memOfs = ReadLE16(&fData[0x01]) & 0x7FFF;
 	cDev->writeM8(cDev->base.defInf.dataPtr, memOfs, fData[0x03]);
 	return;
 }
 
 void VGMPlayer::Cmd_RF5C_Mem(void)
 {
-	UINT8 chipType = _CMD_INFO[fData[0x00]].chipType;
-	UINT8 chipID = 0;
+	uint8_t chipType = _CMD_INFO[fData[0x00]].chipType;
+	uint8_t chipID = 0;
 	CHIP_DEVICE* cDev = GetDevicePtr(chipType, chipID);
 	if (cDev == NULL || cDev->writeM8 == NULL)
 		return;
 	
-	UINT16 memOfs = ReadLE16(&fData[0x01]);
+	uint16_t memOfs = ReadLE16(&fData[0x01]);
 	if (memOfs & 0xF000)
 		emu_logf(&_logger, PLRLOG_WARN, "RF5C mem write to out-of-window offset 0x%04X\n", memOfs);
 	cDev->writeM8(cDev->base.defInf.dataPtr, memOfs, fData[0x03]);
@@ -1186,19 +1186,19 @@ void VGMPlayer::Cmd_RF5C_Mem(void)
 
 void VGMPlayer::Cmd_RF5C_Reg(void)
 {
-	UINT8 chipType = _CMD_INFO[fData[0x00]].chipType;
-	UINT8 chipID = (fData[0x01] & 0x80) >> 7;
+	uint8_t chipType = _CMD_INFO[fData[0x00]].chipType;
+	uint8_t chipID = (fData[0x01] & 0x80) >> 7;
 	CHIP_DEVICE* cDev = GetDevicePtr(chipType, chipID);
 	if (cDev == NULL || cDev->write8 == NULL)
 		return;
 	
-	UINT8 ofs = fData[0x01] & 0x7F;
+	uint8_t ofs = fData[0x01] & 0x7F;
 	cDev->write8(cDev->base.defInf.dataPtr, ofs, fData[0x02]);
 	
 	// RF5C68 bank patch
 	if (ofs == 0x07 && ! (fData[0x02] & 0x40))
 	{
-		UINT8 rfNum = (chipType == 0x10) ? 1 : 0;
+		uint8_t rfNum = (chipType == 0x10) ? 1 : 0;
 		_rf5cBank[rfNum][chipID] = fData[0x02] & 0x0F;
 	}
 	
@@ -1207,22 +1207,22 @@ void VGMPlayer::Cmd_RF5C_Reg(void)
 
 void VGMPlayer::Cmd_Ofs4_Data12(void)
 {
-	UINT8 chipType = _CMD_INFO[fData[0x00]].chipType;
-	UINT8 chipID = (fData[0x01] & 0x80) >> 7;
+	uint8_t chipType = _CMD_INFO[fData[0x00]].chipType;
+	uint8_t chipID = (fData[0x01] & 0x80) >> 7;
 	CHIP_DEVICE* cDev = GetDevicePtr(chipType, chipID);
 	if (cDev == NULL || cDev->writeD16 == NULL)
 		return;
 	
-	UINT8 ofs = (fData[0x01] >> 4) & 0x07;
-	UINT16 value = ReadBE16(&fData[0x01]) & 0x0FFF;
+	uint8_t ofs = (fData[0x01] >> 4) & 0x07;
+	uint16_t value = ReadBE16(&fData[0x01]) & 0x0FFF;
 	cDev->writeD16(cDev->base.defInf.dataPtr, ofs, value);
 	return;
 }
 
 void VGMPlayer::Cmd_QSound_Reg(void)
 {
-	UINT8 chipType = _CMD_INFO[fData[0x00]].chipType;
-	UINT8 chipID = 0;
+	uint8_t chipType = _CMD_INFO[fData[0x00]].chipType;
+	uint8_t chipID = 0;
 	CHIP_DEVICE* cDev = GetDevicePtr(chipType, chipID);
 	QSOUND_WORK* qsWork = &_qsWork[chipID];
 	if (cDev == NULL || qsWork->write == NULL)
@@ -1230,7 +1230,7 @@ void VGMPlayer::Cmd_QSound_Reg(void)
 	
 	if (cDev->flags & 0x01)	// enable hacks for proper playback of old VGMs with a good QSound core
 	{
-		UINT8 offset = fData[0x03];
+		uint8_t offset = fData[0x03];
 		// need to handle three cases, as vgm_cmp can remove writes to both phase and bank
 		// registers, depending on version.
 		// - start address was written before end/loop, but phase register is written
@@ -1238,8 +1238,8 @@ void VGMPlayer::Cmd_QSound_Reg(void)
 		// - voice parameters are written during a note (we can't rewrite the address then)
 		if (offset < 0x80)
 		{
-			UINT8 chn = offset >> 3;
-			UINT16 data = ReadBE16(&fData[0x01]);
+			uint8_t chn = offset >> 3;
+			uint16_t data = ReadBE16(&fData[0x01]);
 			
 			switch(offset & 0x07)
 			{
@@ -1263,13 +1263,13 @@ void VGMPlayer::Cmd_QSound_Reg(void)
 	return;
 }
 
-/*static*/ void VGMPlayer::WriteQSound_A(CHIP_DEVICE* cDev, UINT8 ofs, UINT16 data)
+/*static*/ void VGMPlayer::WriteQSound_A(CHIP_DEVICE* cDev, uint8_t ofs, uint16_t data)
 {
 	cDev->writeD16(cDev->base.defInf.dataPtr, ofs, data);
 	return;
 }
 
-/*static*/ void VGMPlayer::WriteQSound_B(CHIP_DEVICE* cDev, UINT8 ofs, UINT16 data)
+/*static*/ void VGMPlayer::WriteQSound_B(CHIP_DEVICE* cDev, uint8_t ofs, uint16_t data)
 {
 	cDev->write8(cDev->base.defInf.dataPtr, 0x00, (data >> 8) & 0xFF);	// Data MSB
 	cDev->write8(cDev->base.defInf.dataPtr, 0x01, (data >> 0) & 0xFF);	// Data LSB
@@ -1279,8 +1279,8 @@ void VGMPlayer::Cmd_QSound_Reg(void)
 
 void VGMPlayer::Cmd_WSwan_Reg(void)
 {
-	UINT8 chipType = _CMD_INFO[fData[0x00]].chipType;
-	UINT8 chipID = (fData[0x01] & 0x80) >> 7;
+	uint8_t chipType = _CMD_INFO[fData[0x00]].chipType;
+	uint8_t chipID = (fData[0x01] & 0x80) >> 7;
 	CHIP_DEVICE* cDev = GetDevicePtr(chipType, chipID);
 	if (cDev == NULL || cDev->write8 == NULL)
 		return;
@@ -1291,13 +1291,13 @@ void VGMPlayer::Cmd_WSwan_Reg(void)
 
 void VGMPlayer::Cmd_NES_Reg(void)
 {
-	UINT8 chipType = _CMD_INFO[fData[0x00]].chipType;
-	UINT8 chipID = (fData[0x01] & 0x80) >> 7;
+	uint8_t chipType = _CMD_INFO[fData[0x00]].chipType;
+	uint8_t chipID = (fData[0x01] & 0x80) >> 7;
 	CHIP_DEVICE* cDev = GetDevicePtr(chipType, chipID);
 	if (cDev == NULL || cDev->write8 == NULL)
 		return;
 	
-	UINT8 ofs = fData[0x01] & 0x7F;
+	uint8_t ofs = fData[0x01] & 0x7F;
 	
 	// remap FDS registers
 	if (ofs == 0x3F)
@@ -1311,13 +1311,13 @@ void VGMPlayer::Cmd_NES_Reg(void)
 
 void VGMPlayer::Cmd_YMW_Bank(void)
 {
-	UINT8 chipType = _CMD_INFO[fData[0x00]].chipType;
-	UINT8 chipID = (fData[0x01] & 0x80) >> 7;
+	uint8_t chipType = _CMD_INFO[fData[0x00]].chipType;
+	uint8_t chipID = (fData[0x01] & 0x80) >> 7;
 	CHIP_DEVICE* cDev = GetDevicePtr(chipType, chipID);
 	if (cDev == NULL || cDev->write8 == NULL)
 		return;
 	
-	UINT8 bankmask = fData[0x01] & 0x03;
+	uint8_t bankmask = fData[0x01] & 0x03;
 	// fData[0x03] is ignored as we don't support YMW258 ROMs > 16 MB
 	if (bankmask == 0x03 && ! (fData[0x02] & 0x08))
 	{
@@ -1338,8 +1338,8 @@ void VGMPlayer::Cmd_YMW_Bank(void)
 
 void VGMPlayer::Cmd_SAA_Reg(void)
 {
-	UINT8 chipType = _CMD_INFO[fData[0x00]].chipType;
-	UINT8 chipID = (fData[0x01] & 0x80) >> 7;
+	uint8_t chipType = _CMD_INFO[fData[0x00]].chipType;
+	uint8_t chipID = (fData[0x01] & 0x80) >> 7;
 	CHIP_DEVICE* cDev = GetDevicePtr(chipType, chipID);
 	if (cDev == NULL || cDev->write8 == NULL)
 		return;
@@ -1351,14 +1351,14 @@ void VGMPlayer::Cmd_SAA_Reg(void)
 
 void VGMPlayer::Cmd_OKIM6295_Reg(void)
 {
-	UINT8 chipType = _CMD_INFO[fData[0x00]].chipType;
-	UINT8 chipID = (fData[0x01] & 0x80) >> 7;
+	uint8_t chipType = _CMD_INFO[fData[0x00]].chipType;
+	uint8_t chipID = (fData[0x01] & 0x80) >> 7;
 	CHIP_DEVICE* cDev = GetDevicePtr(chipType, chipID);
 	if (cDev == NULL || cDev->write8 == NULL)
 		return;
 	
-	UINT8 ofs = fData[0x01] & 0x7F;
-	UINT8 data = fData[0x02];
+	uint8_t ofs = fData[0x01] & 0x7F;
+	uint8_t data = fData[0x02];
 	if (ofs == 0x0B)
 	{
 		if (data & 0x80)
@@ -1375,13 +1375,13 @@ void VGMPlayer::Cmd_OKIM6295_Reg(void)
 
 void VGMPlayer::Cmd_K007232_Reg(void)
 {
-	UINT8 chipType = _CMD_INFO[fData[0x00]].chipType;
-	UINT8 chipID = (fData[0x01] & 0x80) >> 7;
+	uint8_t chipType = _CMD_INFO[fData[0x00]].chipType;
+	uint8_t chipID = (fData[0x01] & 0x80) >> 7;
 	CHIP_DEVICE* cDev = GetDevicePtr(chipType, chipID);
 	if (cDev == NULL || cDev->write8 == NULL)
 		return;
 
-	UINT8 ofs = fData[0x01] & 0x7F;
+	uint8_t ofs = fData[0x01] & 0x7F;
 	if (ofs == 0x1F)	// offset 0x1F: execute chip read
 		cDev->read8(cDev->base.defInf.dataPtr, fData[0x02]);	// the data value is the offset
 	else
@@ -1391,12 +1391,12 @@ void VGMPlayer::Cmd_K007232_Reg(void)
 
 void VGMPlayer::Cmd_AY_Stereo(void)
 {
-	UINT8 chipType = (fData[0x01] & 0x40) ? 0x06 : 0x12;	// YM2203 SSG or AY8910
-	UINT8 chipID = (fData[0x01] & 0x80) >> 7;
+	uint8_t chipType = (fData[0x01] & 0x40) ? 0x06 : 0x12;	// YM2203 SSG or AY8910
+	uint8_t chipID = (fData[0x01] & 0x80) >> 7;
 	CHIP_DEVICE* cDev = GetDevicePtr(chipType, chipID);
 	VGM_BASEDEV* clDev;
 	DEVFUNC_OPTMASK writeStMask = NULL;
-	UINT8 retVal;
+	uint8_t retVal;
 	
 	if (cDev == NULL)
 		return;
@@ -1415,13 +1415,13 @@ void VGMPlayer::Cmd_AY_Stereo(void)
 
 void VGMPlayer::Cmd_BSMT2000_Reg(void)
 {
-	UINT8 chipType = _CMD_INFO[fData[0x00]].chipType;
-	UINT8 chipID = (fData[0x01] & 0x80) >> 7;
+	uint8_t chipType = _CMD_INFO[fData[0x00]].chipType;
+	uint8_t chipID = (fData[0x01] & 0x80) >> 7;
 	CHIP_DEVICE* cDev = GetDevicePtr(chipType, chipID);
 	if (cDev == NULL || cDev->write8 == NULL)
 		return;
 
-	UINT8 ofs = fData[0x01] & 0x7F;
+	uint8_t ofs = fData[0x01] & 0x7F;
 	if (ofs == 0x7F)	// special register
 		cDev->write8(cDev->base.defInf.dataPtr, 0x10 + fData[0x02], fData[0x03]);
 	else

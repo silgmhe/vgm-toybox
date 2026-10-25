@@ -15,7 +15,7 @@ namespace
 	public:
 		NesPeriodTable (double cpu, double divisor) : cpuClock (cpu), divider (divisor) {}
 
-		int noteFor (std::uint32_t period, int, int* finePitch) const override
+		int noteFor (uint32_t period, int, int* finePitch) const override
 		{
 			return quantiseFrequency (cpuClock / (divider * ((double) period + 1.0)), finePitch);
 		}
@@ -30,11 +30,11 @@ namespace
 	class NesNoiseTable final : public NoteTable
 	{
 	public:
-		int noteFor (std::uint32_t period, int, int* finePitch) const override
+		int noteFor (uint32_t period, int, int* finePitch) const override
 		{
 			static const int keys[] = { 38, 38, 39, 39, 40, 40, 41, 41,
 										42, 42, 43, 44, 45, 46, 47, 48 };
-			const int index = (int) std::min<std::uint32_t> (period, 15);
+			const int index = (int) std::min<uint32_t> (period, 15);
 			if (finePitch != nullptr)
 			{
 				*finePitch = 0;
@@ -47,7 +47,7 @@ namespace
 	class DmcTable final : public NoteTable
 	{
 	public:
-		int noteFor (std::uint32_t, int, int* finePitch) const override
+		int noteFor (uint32_t, int, int* finePitch) const override
 		{
 			if (finePitch != nullptr)
 			{
@@ -59,15 +59,15 @@ namespace
 	};
 
 	// NTSC 128/64/32/16-point noise period table, in CPU cycles
-	const std::uint16_t kNoisePeriods[16] = { 4, 8, 16, 32, 64, 96, 128, 160,
+	const uint16_t kNoisePeriods[16] = { 4, 8, 16, 32, 64, 96, 128, 160,
 											  202, 254, 380, 508, 762, 1016, 2034, 4068 };
 
 	// DMC rate table: CPU cycles per output byte
-	const std::uint16_t kDmcRates[16] = { 428, 380, 340, 320, 286, 254, 226, 214,
+	const uint16_t kDmcRates[16] = { 428, 380, 340, 320, 286, 254, 226, 214,
 										 190, 160, 142, 128, 106, 85, 72, 54 };
 
 	// length counter load values, in half frames: the register holds the index, not the count
-	const std::uint8_t kLengthTable[32] = { 10, 254, 20, 2, 40, 4, 80, 6, 160, 8, 60, 10, 14, 12, 26, 14,
+	const uint8_t kLengthTable[32] = { 10, 254, 20, 2, 40, 4, 80, 6, 160, 8, 60, 10, 14, 12, 26, 14,
 											12, 16, 24, 18, 48, 20, 96, 22, 192, 24, 72, 26, 16, 28, 32, 30 };
 }
 
@@ -77,7 +77,7 @@ struct NesApuDecoder::Impl
 	Triangle tri;
 	NoiseChannel noiseChannel;
 	Envelope dpcm {};
-	std::uint8_t channelEnabled = 0;
+	uint8_t channelEnabled = 0;
 	bool dpcmEnabled = false;
 	int dpcmBytes = 0;
 	double dpcmFraction = 0.0;
@@ -91,7 +91,7 @@ struct NesApuDecoder::Impl
 	int frameCounter = 0;			// 0..3 / 0..4
 	bool fiveStep = false;
 
-	std::uint32_t currentSample = 0;
+	uint32_t currentSample = 0;
 
 	std::unique_ptr<NoteTable> pulseTable;
 	std::unique_ptr<NoteTable> triangleTable;
@@ -139,7 +139,7 @@ NesApuDecoder::~NesApuDecoder() = default;
 
 void NesApuDecoder::reset (const ChipConfig& config)
 {
-	[[maybe_unused]] const std::uint32_t clock = config.clockHz;
+	[[maybe_unused]] const uint32_t clock = config.clockHz;
 	[[maybe_unused]] const double sampleRate = config.timeBaseHz;
 	impl = std::make_unique<Impl>();
 
@@ -166,8 +166,8 @@ void NesApuDecoder::write (const RegisterWrite& w)
 {
 	advance (w.sampleTime);
 
-	const std::uint8_t reg = w.reg;
-	const std::uint8_t value = w.value;
+	const uint8_t reg = w.reg;
+	const uint8_t value = w.value;
 
 	if (reg >= 0x00 && reg <= 0x07)
 	{
@@ -261,7 +261,7 @@ void NesApuDecoder::write (const RegisterWrite& w)
 		break;
 	case 0x15:
 	{
-		const std::uint8_t wasEnabled = impl->channelEnabled;
+		const uint8_t wasEnabled = impl->channelEnabled;
 		impl->channelEnabled = value & 0x1F;
 
 		// clearing a bit while written 0 zeroes that channel's length counter: this is how a
@@ -301,14 +301,14 @@ void NesApuDecoder::write (const RegisterWrite& w)
 	}
 }
 
-void NesApuDecoder::advance (std::uint32_t sampleTime)
+void NesApuDecoder::advance (uint32_t sampleTime)
 {
 	if (sampleTime <= impl->currentSample)
 	{
 		return;
 	}
 
-	const std::uint32_t delta = sampleTime - impl->currentSample;
+	const uint32_t delta = sampleTime - impl->currentSample;
 	impl->currentSample = sampleTime;
 
 	// the DMC is a byte-stream channel: its bytes are consumed at a rate fixed by the CPU
@@ -464,20 +464,20 @@ ChannelState NesApuDecoder::channelState (int channel) const
 	{
 		const Pulse& pulse = impl->pulses[channel];
 		state.gate = impl->pulseActive (pulse);
-		state.period = (std::uint32_t) pulse.timerPeriod;
+		state.period = (uint32_t) pulse.timerPeriod;
 		state.volume = impl->effectiveVolume (pulse.envelope);
 		state.patch = pulse.duty;
 		break;
 	}
 	case triangle:
 		state.gate = impl->triangleActive();
-		state.period = (std::uint32_t) impl->tri.timerPeriod;
+		state.period = (uint32_t) impl->tri.timerPeriod;
 		state.volume = 15;
 		state.patch = 1;
 		break;
 	case noise:
 		state.gate = impl->noiseActive();
-		state.period = (std::uint32_t) impl->noiseChannel.periodIndex;
+		state.period = (uint32_t) impl->noiseChannel.periodIndex;
 		state.volume = impl->effectiveVolume (impl->noiseChannel.envelope);
 		state.patch = impl->noiseChannel.mode ? 1 : 0;
 		break;

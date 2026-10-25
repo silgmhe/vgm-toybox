@@ -27,32 +27,32 @@
 
 typedef struct nesapu_info NESAPU_INF;
 
-static void nes_stream_update_mame(void* chip, UINT32 samples, DEV_SMPL** outputs);
-static void nes_stream_update_nsfplay(void* chip, UINT32 samples, DEV_SMPL** outputs);
-static void nes_render_fds(void* chip_fds, UINT32 samples, DEV_SMPL** outputs);
+static void nes_stream_update_mame(void* chip, uint32_t samples, DEV_SMPL** outputs);
+static void nes_stream_update_nsfplay(void* chip, uint32_t samples, DEV_SMPL** outputs);
+static void nes_render_fds(void* chip_fds, uint32_t samples, DEV_SMPL** outputs);
 
-static UINT8 device_start_nes_mame(const DEV_GEN_CFG* cfg, DEV_INFO* retDevInf);
-static UINT8 device_start_nes_nsfplay(const DEV_GEN_CFG* cfg, DEV_INFO* retDevInf);
+static uint8_t device_start_nes_mame(const DEV_GEN_CFG* cfg, DEV_INFO* retDevInf);
+static uint8_t device_start_nes_nsfplay(const DEV_GEN_CFG* cfg, DEV_INFO* retDevInf);
 static void device_stop_nes_mame(void* chip);
 static void device_stop_nes_nsfplay(void* chip);
 static void device_stop_nes_common(NESAPU_INF* info);
 static void device_reset_nes_mame(void* chip);
 static void device_reset_nes_nsfplay(void* chip);
 
-static void nes_w_mame(void* chip, UINT8 offset, UINT8 data);
-static UINT8 nes_r_mame(void* chip, UINT8 offset);
-static void nes_w_nsfplay(void* chip, UINT8 offset, UINT8 data);
-static UINT8 nes_r_nsfplay(void* chip, UINT8 offset);
-static UINT8 nes_read_fds(void* chip_fds, UINT8 offset);
-static void nes_write_ram(void* chip, UINT32 offset, UINT32 length, const UINT8* data);
+static void nes_w_mame(void* chip, uint8_t offset, uint8_t data);
+static uint8_t nes_r_mame(void* chip, uint8_t offset);
+static void nes_w_nsfplay(void* chip, uint8_t offset, uint8_t data);
+static uint8_t nes_r_nsfplay(void* chip, uint8_t offset);
+static uint8_t nes_read_fds(void* chip_fds, uint8_t offset);
+static void nes_write_ram(void* chip, uint32_t offset, uint32_t length, const uint8_t* data);
 
-static void nes_set_chip_option_mame(void* chip, UINT32 NesOptions);
-static void nes_set_chip_option_nsfplay(void* chip, UINT32 NesOptions);
-static void nes_set_chip_option_fds(NESAPU_INF* info, UINT32 NesOptions);
-static void nes_set_mute_mask_mame(void* chip, UINT32 MuteMask);
-static void nes_set_pan_mame(void* chipptr, const INT16* PanVals);
-static void nes_set_mute_mask_nsfplay(void* chip, UINT32 MuteMask);
-static void nes_set_pan_nsfplay(void* chip, const INT16* PanVals);
+static void nes_set_chip_option_mame(void* chip, uint32_t NesOptions);
+static void nes_set_chip_option_nsfplay(void* chip, uint32_t NesOptions);
+static void nes_set_chip_option_fds(NESAPU_INF* info, uint32_t NesOptions);
+static void nes_set_mute_mask_mame(void* chip, uint32_t MuteMask);
+static void nes_set_pan_mame(void* chipptr, const int16_t* PanVals);
+static void nes_set_mute_mask_nsfplay(void* chip, uint32_t MuteMask);
+static void nes_set_pan_nsfplay(void* chip, const int16_t* PanVals);
 
 
 #ifdef EC_NES_MAME
@@ -123,7 +123,7 @@ static const char* DeviceName(const DEV_GEN_CFG* devCfg)
 
 #define DEV_CHN_COUNT_BASE	5
 #define DEV_CHN_COUNT_FDS	(DEV_CHN_COUNT_BASE + 1)
-static UINT16 DeviceChannels(const DEV_GEN_CFG* devCfg)
+static uint16_t DeviceChannels(const DEV_GEN_CFG* devCfg)
 {
 	if (devCfg != NULL)
 	{
@@ -176,18 +176,18 @@ struct nesapu_info
 	void* chip_apu;
 	void* chip_dmc;
 	void* chip_fds;
-	UINT8* memory;
-	UINT8 fds_disable;
+	uint8_t* memory;
+	uint8_t fds_disable;
 };
 
 // bit shift for transforming the "usual" panning values (factor 1<<16) into
 // NSFPlay's scale, which uses a factor of 1<<7
 #define PAN_NSFSHIFT	(PANNING_BITS - 7)
-#define PAN_EMU2NSF(x)	(INT16)((x + (1 << PAN_NSFSHIFT >> 1)) >> PAN_NSFSHIFT)	// (x >> PAN_NSFSHIFT) with additional rounding
+#define PAN_EMU2NSF(x)	(int16_t)((x + (1 << PAN_NSFSHIFT >> 1)) >> PAN_NSFSHIFT)	// (x >> PAN_NSFSHIFT) with additional rounding
 
 
 #ifdef EC_NES_MAME
-static void nes_stream_update_mame(void* chip, UINT32 samples, DEV_SMPL** outputs)
+static void nes_stream_update_mame(void* chip, uint32_t samples, DEV_SMPL** outputs)
 {
 	NESAPU_INF* info = (NESAPU_INF*)chip;
 	
@@ -203,11 +203,11 @@ static void nes_stream_update_mame(void* chip, UINT32 samples, DEV_SMPL** output
 #endif
 
 #ifdef EC_NES_NSFPLAY
-static void nes_stream_update_nsfplay(void* chip, UINT32 samples, DEV_SMPL** outputs)
+static void nes_stream_update_nsfplay(void* chip, uint32_t samples, DEV_SMPL** outputs)
 {
 	NESAPU_INF* info = (NESAPU_INF*)chip;
-	UINT32 CurSmpl;
-	INT32 Buffer[4];
+	uint32_t CurSmpl;
+	int32_t Buffer[4];
 	
 	for (CurSmpl = 0; CurSmpl < samples; CurSmpl ++)
 	{
@@ -227,10 +227,10 @@ static void nes_stream_update_nsfplay(void* chip, UINT32 samples, DEV_SMPL** out
 #endif
 
 #ifdef EC_NES_NSFP_FDS
-static void nes_render_fds(void* chip_fds, UINT32 samples, DEV_SMPL** outputs)
+static void nes_render_fds(void* chip_fds, uint32_t samples, DEV_SMPL** outputs)
 {
-	UINT32 CurSmpl;
-	INT32 Buffer[2];
+	uint32_t CurSmpl;
+	int32_t Buffer[2];
 	
 	for (CurSmpl = 0; CurSmpl < samples; CurSmpl ++)
 	{
@@ -244,11 +244,11 @@ static void nes_render_fds(void* chip_fds, UINT32 samples, DEV_SMPL** outputs)
 #endif
 
 #ifdef EC_NES_MAME
-static UINT8 device_start_nes_mame(const DEV_GEN_CFG* cfg, DEV_INFO* retDevInf)
+static uint8_t device_start_nes_mame(const DEV_GEN_CFG* cfg, DEV_INFO* retDevInf)
 {
 	NESAPU_INF* info;
 	DEV_DATA* devData;
-	UINT32 rate;
+	uint32_t rate;
 	
 	rate = cfg->clock / 4;
 	SRATE_CUSTOM_HIGHEST(cfg->srMode, rate, cfg->smplRate);
@@ -271,7 +271,7 @@ static UINT8 device_start_nes_mame(const DEV_GEN_CFG* cfg, DEV_INFO* retDevInf)
 #endif
 		info->chip_fds = NULL;
 	
-	info->memory = (UINT8*)malloc(0x8000);
+	info->memory = (uint8_t*)malloc(0x8000);
 	memset(info->memory, 0x00, 0x8000);
 	nesapu_set_rom(info->chip_apu, info->memory - 0x8000);
 	
@@ -292,11 +292,11 @@ static UINT8 device_start_nes_mame(const DEV_GEN_CFG* cfg, DEV_INFO* retDevInf)
 #endif
 
 #ifdef EC_NES_NSFPLAY
-static UINT8 device_start_nes_nsfplay(const DEV_GEN_CFG* cfg, DEV_INFO* retDevInf)
+static uint8_t device_start_nes_nsfplay(const DEV_GEN_CFG* cfg, DEV_INFO* retDevInf)
 {
 	NESAPU_INF* info;
 	DEV_DATA* devData;
-	UINT32 rate;
+	uint32_t rate;
 	
 	rate = cfg->clock / 4;
 	SRATE_CUSTOM_HIGHEST(cfg->srMode, rate, cfg->smplRate);
@@ -326,7 +326,7 @@ static UINT8 device_start_nes_nsfplay(const DEV_GEN_CFG* cfg, DEV_INFO* retDevIn
 #endif
 		info->chip_fds = NULL;
 	
-	info->memory = (UINT8*)malloc(0x8000);
+	info->memory = (uint8_t*)malloc(0x8000);
 	memset(info->memory, 0x00, 0x8000);
 	NES_DMC_np_SetMemory(info->chip_dmc, info->memory - 0x8000);
 	
@@ -417,7 +417,7 @@ static void device_reset_nes_nsfplay(void* chip)
 
 
 #ifdef EC_NES_MAME
-static void nes_w_mame(void* chip, UINT8 offset, UINT8 data)
+static void nes_w_mame(void* chip, uint8_t offset, uint8_t data)
 {
 	NESAPU_INF* info = (NESAPU_INF*)chip;
 	
@@ -435,7 +435,7 @@ static void nes_w_mame(void* chip, UINT8 offset, UINT8 data)
 	return;
 }
 
-static UINT8 nes_r_mame(void* chip, UINT8 offset)
+static uint8_t nes_r_mame(void* chip, uint8_t offset)
 {
 	NESAPU_INF* info = (NESAPU_INF*)chip;
 	
@@ -455,7 +455,7 @@ static UINT8 nes_r_mame(void* chip, UINT8 offset)
 #endif
 
 #ifdef EC_NES_NSFPLAY
-static void nes_w_nsfplay(void* chip, UINT8 offset, UINT8 data)
+static void nes_w_nsfplay(void* chip, uint8_t offset, uint8_t data)
 {
 	NESAPU_INF* info = (NESAPU_INF*)chip;
 	
@@ -475,12 +475,12 @@ static void nes_w_nsfplay(void* chip, UINT8 offset, UINT8 data)
 	return;
 }
 
-static UINT8 nes_r_nsfplay(void* chip, UINT8 offset)
+static uint8_t nes_r_nsfplay(void* chip, uint8_t offset)
 {
 	NESAPU_INF* info = (NESAPU_INF*)chip;
 	if (offset < 0x20)	// NES APU
 	{
-		UINT8 readVal = 0x00;
+		uint8_t readVal = 0x00;
 		
 		// the functions OR the result to the value
 		NES_APU_np_Read(info, 0x4000 | offset, &readVal);
@@ -500,10 +500,10 @@ static UINT8 nes_r_nsfplay(void* chip, UINT8 offset)
 #endif
 
 #ifdef EC_NES_NSFP_FDS
-static UINT8 nes_read_fds(void* chip_fds, UINT8 offset)
+static uint8_t nes_read_fds(void* chip_fds, uint8_t offset)
 {
 	bool success;
-	UINT8 readVal;
+	uint8_t readVal;
 	
 	success = NES_FDS_Read(chip_fds, 0x4000 | offset, &readVal);
 	if (success)
@@ -513,10 +513,10 @@ static UINT8 nes_read_fds(void* chip_fds, UINT8 offset)
 }
 #endif
 
-static void nes_write_ram(void* chip, UINT32 offset, UINT32 length, const UINT8* data)
+static void nes_write_ram(void* chip, uint32_t offset, uint32_t length, const uint8_t* data)
 {
 	NESAPU_INF* info = (NESAPU_INF*)chip;
-	UINT32 remBytes;
+	uint32_t remBytes;
 	
 	if (offset >= 0x10000)
 		return;
@@ -555,7 +555,7 @@ static void nes_write_ram(void* chip, UINT32 offset, UINT32 length, const UINT8*
 
 
 #ifdef EC_NES_MAME
-static void nes_set_chip_option_mame(void* chip, UINT32 NesOptions)
+static void nes_set_chip_option_mame(void* chip, uint32_t NesOptions)
 {
 	NESAPU_INF* info = (NESAPU_INF*)chip;
 	
@@ -571,10 +571,10 @@ static void nes_set_chip_option_mame(void* chip, UINT32 NesOptions)
 #endif
 
 #ifdef EC_NES_NSFPLAY
-static void nes_set_chip_option_nsfplay(void* chip, UINT32 NesOptions)
+static void nes_set_chip_option_nsfplay(void* chip, uint32_t NesOptions)
 {
 	NESAPU_INF* info = (NESAPU_INF*)chip;
-	UINT8 CurOpt;
+	uint8_t CurOpt;
 	
 	// shared APU/DMC options
 	for (CurOpt = 0; CurOpt < 2; CurOpt ++)
@@ -599,9 +599,9 @@ static void nes_set_chip_option_nsfplay(void* chip, UINT32 NesOptions)
 #endif
 
 #ifdef EC_NES_NSFP_FDS
-static void nes_set_chip_option_fds(NESAPU_INF* info, UINT32 NesOptions)
+static void nes_set_chip_option_fds(NESAPU_INF* info, uint32_t NesOptions)
 {
-	UINT8 CurOpt;
+	uint8_t CurOpt;
 	
 	// FDS options
 	// I skip the Cutoff frequency here, since it's not a boolean value.
@@ -614,7 +614,7 @@ static void nes_set_chip_option_fds(NESAPU_INF* info, UINT32 NesOptions)
 #endif
 
 #ifdef EC_NES_MAME
-static void nes_set_mute_mask_mame(void* chip, UINT32 MuteMask)
+static void nes_set_mute_mask_mame(void* chip, uint32_t MuteMask)
 {
 	NESAPU_INF* info = (NESAPU_INF*)chip;
 	
@@ -627,7 +627,7 @@ static void nes_set_mute_mask_mame(void* chip, UINT32 MuteMask)
 	return;
 }
 
-static void nes_set_pan_mame(void* chip, const INT16* PanVals)
+static void nes_set_pan_mame(void* chip, const int16_t* PanVals)
 {
 	NESAPU_INF* info = (NESAPU_INF*)chip;
 	
@@ -636,7 +636,7 @@ static void nes_set_pan_mame(void* chip, const INT16* PanVals)
 #ifdef EC_NES_NSFP_FDS
 	if (info->chip_fds != NULL)
 	{
-		INT32 fdsPan[2];
+		int32_t fdsPan[2];
 		Panning_Calculate(fdsPan, PanVals[5]);
 		NES_FDS_SetStereoMix(info->chip_fds, 0, PAN_EMU2NSF(fdsPan[0]), PAN_EMU2NSF(fdsPan[1]));
 	}
@@ -647,7 +647,7 @@ static void nes_set_pan_mame(void* chip, const INT16* PanVals)
 #endif
 
 #ifdef EC_NES_NSFPLAY
-static void nes_set_mute_mask_nsfplay(void* chip, UINT32 MuteMask)
+static void nes_set_mute_mask_nsfplay(void* chip, uint32_t MuteMask)
 {
 	NESAPU_INF* info = (NESAPU_INF*)chip;
 	
@@ -661,11 +661,11 @@ static void nes_set_mute_mask_nsfplay(void* chip, UINT32 MuteMask)
 	return;
 }
 
-static void nes_set_pan_nsfplay(void* chip, const INT16* PanVals)
+static void nes_set_pan_nsfplay(void* chip, const int16_t* PanVals)
 {
 	NESAPU_INF* info = (NESAPU_INF*)chip;
-	UINT8 curChn;
-	INT32 pan[6][2];
+	uint8_t curChn;
+	int32_t pan[6][2];
 	
 	for (curChn = 0; curChn < 6; curChn++)
 		Panning_Calculate(pan[curChn], PanVals[curChn]);

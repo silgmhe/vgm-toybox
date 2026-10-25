@@ -12,19 +12,19 @@
 
 typedef void (*ADL_UPDATEHANDLER)(void *param);
 
-void* ADLIBEMU(init)(UINT32 clock, UINT32 samplerate);
+void* ADLIBEMU(init)(uint32_t clock, uint32_t samplerate);
 void ADLIBEMU(stop)(void *chip);
 void ADLIBEMU(reset)(void *chip);
 
-void ADLIBEMU(writeIO)(void *chip, UINT8 addr, UINT8 val);
-void ADLIBEMU(getsample)(void *chip, UINT32 numsamples, DEV_SMPL ** sndptr);
+void ADLIBEMU(writeIO)(void *chip, uint8_t addr, uint8_t val);
+void ADLIBEMU(getsample)(void *chip, uint32_t numsamples, DEV_SMPL ** sndptr);
 
-UINT8 ADLIBEMU(reg_read)(void *chip, UINT8 port);
+uint8_t ADLIBEMU(reg_read)(void *chip, uint8_t port);
 
 void ADLIBEMU(set_update_handler)(void *chip, ADL_UPDATEHANDLER UpdateHandler, void* param);
-void ADLIBEMU(set_mute_mask)(void *chip, UINT32 MuteMask);
+void ADLIBEMU(set_mute_mask)(void *chip, uint32_t MuteMask);
 
-void ADLIBEMU(set_volume)(void *chip, INT32 volume);
-void ADLIBEMU(set_volume_lr)(void *chip, INT32 volL, INT32 volR);
+void ADLIBEMU(set_volume)(void *chip, int32_t volume);
+void ADLIBEMU(set_volume_lr)(void *chip, int32_t volL, int32_t volR);
 
 #endif	// __ADLIBEMU_H__

@@ -25,30 +25,30 @@ int main(int argc, char* argv[]);
 #ifdef AUDDRV_DSOUND
 static void SetupDirectSound(void* audDrv);
 #endif
-static UINT32 FillBuffer(void* drvStruct, void* userParam, UINT32 bufSize, void* Data);
+static uint32_t FillBuffer(void* drvStruct, void* userParam, uint32_t bufSize, void* Data);
 
 
 #pragma pack(1)
 typedef struct
 {
-	UINT16 lsb16;
-	INT8 msb8;
+	uint16_t lsb16;
+	int8_t msb8;
 } SMPL24BIT;
 #pragma pack()
 
 
-static UINT32 smplSize;
+static uint32_t smplSize;
 static void* audDrv;
 static void* audDrvLog;
 
 int main(int argc, char* argv[])
 {
-	UINT8 retVal;
-	UINT32 drvCount;
-	UINT32 curDrv;
-	UINT32 idWavOut;
-	UINT32 idWavOutDev;
-	UINT32 idWavWrt;
+	uint8_t retVal;
+	uint32_t drvCount;
+	uint32_t curDrv;
+	uint32_t idWavOut;
+	uint32_t idWavOutDev;
+	uint32_t idWavWrt;
 	AUDDRV_INFO* drvInfo;
 	AUDIO_OPTS* opts;
 	AUDIO_OPTS* optsLog;
@@ -60,18 +60,18 @@ int main(int argc, char* argv[])
 		goto Exit_Deinit;
 	
 #if 0
-	idWavOut = (UINT32)-1;
+	idWavOut = (uint32_t)-1;
 	idWavOutDev = 0;
-	idWavWrt = (UINT32)-1;
+	idWavWrt = (uint32_t)-1;
 	for (curDrv = 0; curDrv < drvCount; curDrv ++)
 	{
 		Audio_GetDriverInfo(curDrv, &drvInfo);
-		if (drvInfo->drvType == ADRVTYPE_OUT /*&& idWavOut == (UINT32)-1*/)
+		if (drvInfo->drvType == ADRVTYPE_OUT /*&& idWavOut == (uint32_t)-1*/)
 			idWavOut = curDrv;
-		else if (drvInfo->drvType == ADRVTYPE_DISK && idWavWrt == (UINT32)-1)
+		else if (drvInfo->drvType == ADRVTYPE_DISK && idWavWrt == (uint32_t)-1)
 			idWavWrt = curDrv;
 	}
-	if (idWavOut == (UINT32)-1)
+	if (idWavOut == (uint32_t)-1)
 	{
 		printf("Unable to find output driver\n");
 		goto Exit_Deinit;
@@ -93,9 +93,9 @@ int main(int argc, char* argv[])
 		return 0;
 	}
 	
-	idWavOut = (UINT32)-1;
+	idWavOut = (uint32_t)-1;
 	idWavOutDev = 0;
-	idWavWrt = (UINT32)-1;
+	idWavWrt = (uint32_t)-1;
 	if (argc >= 2)
 		idWavOut = strtoul(argv[1], NULL, 0);
 	if (argc >= 3)
@@ -128,7 +128,7 @@ int main(int argc, char* argv[])
 		SetupDirectSound(audDrv);
 #endif
 	
-	if (idWavWrt == (UINT32)-1)
+	if (idWavWrt == (uint32_t)-1)
 	{
 		audDrvLog = NULL;
 	}
@@ -232,20 +232,20 @@ Exit_Deinit:
 	return 0;
 }
 
-static UINT32 FillBuffer(void* drvStruct, void* userParam, UINT32 bufSize, void* data)
+static uint32_t FillBuffer(void* drvStruct, void* userParam, uint32_t bufSize, void* data)
 {
-	UINT32 smplCount;
-	UINT8* SmplPtr8;
-	INT16* SmplPtr16;
+	uint32_t smplCount;
+	uint8_t* SmplPtr8;
+	int16_t* SmplPtr16;
 	SMPL24BIT* SmplPtr24;
-	INT32* SmplPtr32;
-	UINT32 curSmpl;
+	int32_t* SmplPtr32;
+	uint32_t curSmpl;
 	
 	smplCount = bufSize / smplSize;
 	switch(smplSize)
 	{
 	case 2:
-		SmplPtr16 = (INT16*)data;
+		SmplPtr16 = (int16_t*)data;
 		for (curSmpl = 0; curSmpl < smplCount; curSmpl ++)
 		{
 			if ((curSmpl / (smplCount / 16)) < 15)
@@ -255,7 +255,7 @@ static UINT32 FillBuffer(void* drvStruct, void* userParam, UINT32 bufSize, void*
 		}
 		break;
 	case 1:
-		SmplPtr8 = (UINT8*)data;
+		SmplPtr8 = (uint8_t*)data;
 		for (curSmpl = 0; curSmpl < smplCount; curSmpl ++)
 		{
 			if ((curSmpl / (smplCount / 16)) < 15)
@@ -276,7 +276,7 @@ static UINT32 FillBuffer(void* drvStruct, void* userParam, UINT32 bufSize, void*
 		}
 		break;
 	case 4:
-		SmplPtr32 = (INT32*)data;
+		SmplPtr32 = (int32_t*)data;
 		for (curSmpl = 0; curSmpl < smplCount; curSmpl ++)
 		{
 			if ((curSmpl / (smplCount / 16)) < 15)

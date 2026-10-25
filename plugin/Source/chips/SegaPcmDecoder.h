@@ -60,11 +60,11 @@ public:
 
 	void reset (const ChipConfig& config) override;
 	void write (const RegisterWrite& write) override;
-	void advance (std::uint32_t sampleTime) override;
+	void advance (uint32_t sampleTime) override;
 
 	/** The song's `0x80` data blocks assembled at their own offsets. Without it no cycle can be
 		measured and every voice stays the C4 trigger. The ROM survives a `reset()`. */
-	void setRom (std::vector<std::uint8_t> rom);
+	void setRom (std::vector<uint8_t> rom);
 
 	int channelCount() const override { return (int) SegaPcmDecoder::numChannels; }
 	ChannelState channelState (int channel) const override;

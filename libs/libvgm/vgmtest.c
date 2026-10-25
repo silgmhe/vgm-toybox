@@ -45,77 +45,77 @@ int __cdecl _getch(void);	// from conio.h
 
 typedef struct _vgm_file_header
 {
-	UINT32 fccVGM;
-	UINT32 lngEOFOffset;
-	UINT32 lngVersion;
-	UINT32 lngHzPSG;
-	UINT32 lngHzYM2413;
-	UINT32 lngGD3Offset;
-	UINT32 lngTotalSamples;
-	UINT32 lngLoopOffset;
-	UINT32 lngLoopSamples;
-	UINT32 lngRate;
-	UINT16 shtPSG_Feedback;
-	UINT8 bytPSG_SRWidth;
-	UINT8 bytPSG_Flags;
-	UINT32 lngHzYM2612;
-	UINT32 lngHzYM2151;
-	UINT32 lngDataOffset;
-	UINT32 lngHzSPCM;
-	UINT32 lngSPCMIntf;
-	UINT32 lngHzRF5C68;
-	UINT32 lngHzYM2203;
-	UINT32 lngHzYM2608;
-	UINT32 lngHzYM2610;
-	UINT32 lngHzYM3812;
-	UINT32 lngHzYM3526;
-	UINT32 lngHzY8950;
-	UINT32 lngHzYMF262;
-	UINT32 lngHzYMF278B;
-	UINT32 lngHzYMF271;
-	UINT32 lngHzYMZ280B;
-	UINT32 lngHzRF5C164;
-	UINT32 lngHzPWM;
-	UINT32 lngHzAY8910;
-	UINT8 bytAYType;
-	UINT8 bytAYFlag;
-	UINT8 bytAYFlagYM2203;
-	UINT8 bytAYFlagYM2608;
-	UINT8 bytVolumeModifier;
-	UINT8 bytReserved2;
-	INT8 bytLoopBase;
-	UINT8 bytLoopModifier;
-	UINT32 lngHzGBDMG;
-	UINT32 lngHzNESAPU;
-	UINT32 lngHzYMW258;
-	UINT32 lngHzUPD7759;
-	UINT32 lngHzOKIM6258;
-	UINT8 bytOKI6258Flags;
-	UINT8 bytK054539Flags;
-	UINT8 bytC140Type;
-	UINT8 bytReservedFlags;
-	UINT32 lngHzOKIM6295;
-	UINT32 lngHzK051649;
-	UINT32 lngHzK054539;
-	UINT32 lngHzHuC6280;
-	UINT32 lngHzC140;
-	UINT32 lngHzK053260;
-	UINT32 lngHzPokey;
-	UINT32 lngHzQSound;
-	UINT32 lngHzSCSP;
-	UINT32 lngExtraOffset;
-	UINT32 lngHzWSwan;
-	UINT32 lngHzVSU;
-	UINT32 lngHzSAA1099;
-	UINT32 lngHzES5503;
-	UINT32 lngHzES5506;
-	UINT8 bytES5503Chns;
-	UINT8 bytES5506Chns;
-	UINT8 bytC352ClkDiv;
-	UINT8 bytESReserved;
-	UINT32 lngHzX1_010;
-	UINT32 lngHzC352;
-	UINT32 lngHzGA20;
+	uint32_t fccVGM;
+	uint32_t lngEOFOffset;
+	uint32_t lngVersion;
+	uint32_t lngHzPSG;
+	uint32_t lngHzYM2413;
+	uint32_t lngGD3Offset;
+	uint32_t lngTotalSamples;
+	uint32_t lngLoopOffset;
+	uint32_t lngLoopSamples;
+	uint32_t lngRate;
+	uint16_t shtPSG_Feedback;
+	uint8_t bytPSG_SRWidth;
+	uint8_t bytPSG_Flags;
+	uint32_t lngHzYM2612;
+	uint32_t lngHzYM2151;
+	uint32_t lngDataOffset;
+	uint32_t lngHzSPCM;
+	uint32_t lngSPCMIntf;
+	uint32_t lngHzRF5C68;
+	uint32_t lngHzYM2203;
+	uint32_t lngHzYM2608;
+	uint32_t lngHzYM2610;
+	uint32_t lngHzYM3812;
+	uint32_t lngHzYM3526;
+	uint32_t lngHzY8950;
+	uint32_t lngHzYMF262;
+	uint32_t lngHzYMF278B;
+	uint32_t lngHzYMF271;
+	uint32_t lngHzYMZ280B;
+	uint32_t lngHzRF5C164;
+	uint32_t lngHzPWM;
+	uint32_t lngHzAY8910;
+	uint8_t bytAYType;
+	uint8_t bytAYFlag;
+	uint8_t bytAYFlagYM2203;
+	uint8_t bytAYFlagYM2608;
+	uint8_t bytVolumeModifier;
+	uint8_t bytReserved2;
+	int8_t bytLoopBase;
+	uint8_t bytLoopModifier;
+	uint32_t lngHzGBDMG;
+	uint32_t lngHzNESAPU;
+	uint32_t lngHzYMW258;
+	uint32_t lngHzUPD7759;
+	uint32_t lngHzOKIM6258;
+	uint8_t bytOKI6258Flags;
+	uint8_t bytK054539Flags;
+	uint8_t bytC140Type;
+	uint8_t bytReservedFlags;
+	uint32_t lngHzOKIM6295;
+	uint32_t lngHzK051649;
+	uint32_t lngHzK054539;
+	uint32_t lngHzHuC6280;
+	uint32_t lngHzC140;
+	uint32_t lngHzK053260;
+	uint32_t lngHzPokey;
+	uint32_t lngHzQSound;
+	uint32_t lngHzSCSP;
+	uint32_t lngExtraOffset;
+	uint32_t lngHzWSwan;
+	uint32_t lngHzVSU;
+	uint32_t lngHzSAA1099;
+	uint32_t lngHzES5503;
+	uint32_t lngHzES5506;
+	uint8_t bytES5503Chns;
+	uint8_t bytES5506Chns;
+	uint8_t bytC352ClkDiv;
+	uint8_t bytESReserved;
+	uint32_t lngHzX1_010;
+	uint32_t lngHzC352;
+	uint32_t lngHzGA20;
 } VGM_HEADER;
 typedef struct _vgm_linked_chip_device VGM_LINKCDEV;
 struct _vgm_linked_chip_device
@@ -144,72 +144,72 @@ typedef struct _vgm_dac_stream VGM_DACSTRM;
 struct _vgm_dac_stream
 {
 	DEV_INFO defInf;
-	UINT8 bankID;
+	uint8_t bankID;
 };
 typedef struct _vgm_pcm_bank
 {
-	UINT32 dataSize;
-	UINT8* data;
+	uint32_t dataSize;
+	uint8_t* data;
 	
-	UINT32 bankAlloc;
-	UINT32 bankCount;
-	UINT32* bankOfs;
-	UINT32* bankSize;
+	uint32_t bankAlloc;
+	uint32_t bankCount;
+	uint32_t* bankOfs;
+	uint32_t* bankSize;
 } VGM_PCM_BANK;
 
 
 int main(int argc, char* argv[]);
-static void ProcessVGM(UINT32 smplCount, UINT32 smplOfs);
-static UINT32 FillBuffer(void* drvStruct, void* userParam, UINT32 bufSize, void* Data);
+static void ProcessVGM(uint32_t smplCount, uint32_t smplOfs);
+static uint32_t FillBuffer(void* drvStruct, void* userParam, uint32_t bufSize, void* Data);
 #ifdef AUDDRV_DSOUND
 static void SetupDirectSound(void* audDrv);
 #endif
 static void InitVGMChips(void);
 static void DeinitVGMChips(void);
-static void SendChipCommand_Data8(UINT8 chipID, UINT8 chipNum, UINT8 ofs, UINT8 data);
-static void SendChipCommand_RegData8(UINT8 chipID, UINT8 chipNum, UINT8 port, UINT8 reg, UINT8 data);
-static void SendChipCommand_MemData8(UINT8 chipID, UINT8 chipNum, UINT16 ofs, UINT8 data);
-static void SendChipCommand_Data16(UINT8 chipID, UINT8 chipNum, UINT8 ofs, UINT16 data);
-static UINT32 DoVgmCommand(UINT8 cmd, const UINT8* data);
-static void ReadVGMFile(UINT32 samples);
+static void SendChipCommand_Data8(uint8_t chipID, uint8_t chipNum, uint8_t ofs, uint8_t data);
+static void SendChipCommand_RegData8(uint8_t chipID, uint8_t chipNum, uint8_t port, uint8_t reg, uint8_t data);
+static void SendChipCommand_MemData8(uint8_t chipID, uint8_t chipNum, uint16_t ofs, uint8_t data);
+static void SendChipCommand_Data16(uint8_t chipID, uint8_t chipNum, uint8_t ofs, uint16_t data);
+static uint32_t DoVgmCommand(uint8_t cmd, const uint8_t* data);
+static void ReadVGMFile(uint32_t samples);
 
 
-static UINT32 smplSize;
+static uint32_t smplSize;
 static void* audDrv;
 static void* audDrvLog;
-static UINT32 smplAlloc;
+static uint32_t smplAlloc;
 static WAVE_32BS* smplData;
 static volatile bool canRender;
 
-static UINT32 VGMLen;
-static UINT8* VGMData;
-static UINT32 VGMPos;
+static uint32_t VGMLen;
+static uint8_t* VGMData;
+static uint32_t VGMPos;
 static VGM_HEADER VGMHdr;
-static UINT32 VGMSmplPos;
-static UINT32 renderSmplPos;
+static uint32_t VGMSmplPos;
+static uint32_t renderSmplPos;
 #define CHIP_COUNT	0x29
 static VGM_CHIPDEV VGMChips[CHIP_COUNT][2];
 #define DACSTRM_COUNT	0x10	// only 0x10 for now
 static VGM_DACSTRM DACStreams[DACSTRM_COUNT];
-static UINT32 sampleRate;
+static uint32_t sampleRate;
 
 #define PCM_BANK_COUNT	0x40
 VGM_PCM_BANK PCMBank[PCM_BANK_COUNT];
 PCM_COMPR_TBL PCMComprTbl;
-UINT32 ym2612_pcmBnkPos;
+uint32_t ym2612_pcmBnkPos;
 
 int main(int argc, char* argv[])
 {
 	gzFile hFile;
-	UINT8 retVal;
-	UINT32 drvCount;
-	UINT32 idWavOut;
-	UINT32 idWavOutDev;
-	UINT32 idWavWrt;
+	uint8_t retVal;
+	uint32_t drvCount;
+	uint32_t idWavOut;
+	uint32_t idWavOutDev;
+	uint32_t idWavWrt;
 	AUDDRV_INFO* drvInfo;
 	AUDIO_OPTS* opts;
 	const AUDIO_DEV_LIST *devList;
-	UINT32 tempData[2];
+	uint32_t tempData[2];
 	
 	if (argc < 2)
 	{
@@ -230,7 +230,7 @@ int main(int argc, char* argv[])
 	if (! memcmp(&tempData[0], "Vgm ", 4))
 	{
 		VGMLen = 0x04 + tempData[0];
-		VGMData = (UINT8*)malloc(VGMLen);
+		VGMData = (uint8_t*)malloc(VGMLen);
 		memcpy(&VGMData[0x00], tempData, 0x08);
 		gzread(hFile, &VGMData[0x08], VGMLen - 0x08);
 		
@@ -263,7 +263,7 @@ int main(int argc, char* argv[])
 	
 	idWavOut = 1;
 	idWavOutDev = 0;
-	idWavWrt = (UINT32)-1;
+	idWavWrt = (uint32_t)-1;
 	//idWavWrt = 0;
 	
 	Audio_GetDriverInfo(idWavOut, &drvInfo);
@@ -305,7 +305,7 @@ int main(int argc, char* argv[])
 	smplData = (WAVE_32BS*)malloc(smplAlloc * sizeof(WAVE_32BS));
 	
 	audDrvLog = NULL;
-	if (idWavWrt != (UINT32)-1)
+	if (idWavWrt != (uint32_t)-1)
 	{
 		retVal = AudioDrv_Init(idWavWrt, &audDrvLog);
 		if (retVal)
@@ -363,10 +363,10 @@ Exit_AudDeinit:
 	return 0;
 }
 
-static void ProcessVGM(UINT32 smplCount, UINT32 smplOfs)
+static void ProcessVGM(uint32_t smplCount, uint32_t smplOfs)
 {
-	UINT8 curChip;
-	UINT8 chipNum;
+	uint8_t curChip;
+	uint8_t chipNum;
 	VGM_CHIPDEV* cDev;
 	VGM_LINKCDEV* clDev;
 	DEV_INFO* dacDInf;
@@ -397,11 +397,11 @@ static void ProcessVGM(UINT32 smplCount, UINT32 smplOfs)
 	return;
 }
 
-static UINT32 FillBuffer(void* drvStruct, void* userParam, UINT32 bufSize, void* data)
+static uint32_t FillBuffer(void* drvStruct, void* userParam, uint32_t bufSize, void* data)
 {
-	UINT32 smplCount;
-	INT16* SmplPtr16;
-	UINT32 curSmpl;
+	uint32_t smplCount;
+	int16_t* SmplPtr16;
+	uint32_t curSmpl;
 	WAVE_32BS fnlSmpl;
 	
 	smplCount = bufSize / smplSize;
@@ -421,7 +421,7 @@ static UINT32 FillBuffer(void* drvStruct, void* userParam, UINT32 bufSize, void*
 #if VGM_LONG_UPDATE
 	ProcessVGM(smplCount, 0);
 #endif
-	SmplPtr16 = (INT16*)data;
+	SmplPtr16 = (int16_t*)data;
 	for (curSmpl = 0; curSmpl < smplCount; curSmpl ++, SmplPtr16 += 2)
 	{
 #if ! VGM_LONG_UPDATE
@@ -437,8 +437,8 @@ static UINT32 FillBuffer(void* drvStruct, void* userParam, UINT32 bufSize, void*
 			fnlSmpl.R = -0x8000;
 		else if (fnlSmpl.R > +0x7FFF)
 			fnlSmpl.R = +0x7FFF;
-		SmplPtr16[0] = (INT16)fnlSmpl.L;
-		SmplPtr16[1] = (INT16)fnlSmpl.R;
+		SmplPtr16[0] = (int16_t)fnlSmpl.L;
+		SmplPtr16[1] = (int16_t)fnlSmpl.R;
 	}
 	
 	return curSmpl * smplSize;
@@ -467,23 +467,23 @@ static void SetupDirectSound(void* audDrv)
 
 static void InitVGMChips(void)
 {
-	static UINT32 chipOfs[CHIP_COUNT] =
+	static uint32_t chipOfs[CHIP_COUNT] =
 	{	0x0C, 0x10, 0x2C, 0x30, 0x38, 0x40, 0x44, 0x48, 0x4C, 0x50, 0x54, 0x58, 0x5C, 0x60, 0x64, 0x68, 0x6C, 0x70, 0x74,
 		0x80, 0x84, 0x88, 0x8C, 0x90, 0x98, 0x9C, 0xA0, 0xA4, 0xA8, 0xAC, 0xB0, 0xB4, 0xB8,
 		0xC0, 0xC4, 0xC8, 0xCC, 0xD0, 0xD8, 0xDC, 0xE0};
-	UINT8* vgmHdrArr;
-	UINT8 curChip;
-	UINT8 chipNum;
-	UINT32 chpClk;
+	uint8_t* vgmHdrArr;
+	uint8_t curChip;
+	uint8_t chipNum;
+	uint32_t chpClk;
 	DEV_GEN_CFG devCfg;
 	VGM_CHIPDEV* cDev;
 	VGM_LINKCDEV* clDev;
 	DEV_INFO* devInf;
-	UINT8 retVal;
+	uint8_t retVal;
 	DEVFUNC_PANALL funcPan;
 	
 	memset(&VGMChips, 0x00, sizeof(VGMChips));
-	vgmHdrArr = (UINT8*)&VGMHdr;	// can't use VGMData due to the data offset
+	vgmHdrArr = (uint8_t*)&VGMHdr;	// can't use VGMData due to the data offset
 	for (curChip = 0x00; curChip < CHIP_COUNT; curChip ++)
 	for (chipNum = 0; chipNum < 2; chipNum ++)
 	{
@@ -517,7 +517,7 @@ static void InitVGMChips(void)
 				devCfg.flags = 0x00;
 				snCfg._genCfg = devCfg;
 				snCfg.shiftRegWidth = VGMHdr.bytPSG_SRWidth;
-				snCfg.noiseTaps = (UINT8)VGMHdr.shtPSG_Feedback;
+				snCfg.noiseTaps = (uint8_t)VGMHdr.shtPSG_Feedback;
 				snCfg.segaPSG = (VGMHdr.bytPSG_Flags & 0x01) ? 0 : 1;
 				snCfg.negate = (VGMHdr.bytPSG_Flags & 0x02) ? 1 : 0;
 				snCfg.stereo = (VGMHdr.bytPSG_Flags & 0x04) ? 0 : 1;
@@ -537,7 +537,7 @@ static void InitVGMChips(void)
 				SndEmu_GetDeviceFunc(cDev->defInf.devDef, RWF_CHN_PAN | RWF_WRITE, DEVRW_ALL, 0, (void**)&funcPan);
 				if (funcPan != NULL)
 				{
-					INT16 panPos[4] = {0x00, -0x80, +0x80, 0x00};
+					int16_t panPos[4] = {0x00, -0x80, +0x80, 0x00};
 					funcPan(cDev->defInf.dataPtr, panPos);
 				}
 			}
@@ -593,8 +593,8 @@ static void InitVGMChips(void)
 			{
 				const char* romFile = "yrw801.rom";
 				FILE* hFile;
-				UINT32 yrwSize;
-				UINT8* yrwData;
+				uint32_t yrwSize;
+				uint8_t* yrwData;
 				
 				hFile = fopen(romFile, "rb");
 				if (hFile == NULL)
@@ -606,7 +606,7 @@ static void InitVGMChips(void)
 				fseek(hFile, 0, SEEK_END);
 				yrwSize = ftell(hFile);
 				rewind(hFile);
-				yrwData = (UINT8*)malloc(yrwSize);
+				yrwData = (uint8_t*)malloc(yrwSize);
 				fread(yrwData, 1, yrwSize, hFile);
 				fclose(hFile);
 				
@@ -633,7 +633,7 @@ static void InitVGMChips(void)
 				SndEmu_GetDeviceFunc(cDev->defInf.devDef, RWF_CHN_PAN | RWF_WRITE, DEVRW_ALL, 0, (void**)&funcPan);
 				if (funcPan != NULL)
 				{
-					INT16 panPos[3] = {-0x80, +0x80, 0x00};
+					int16_t panPos[3] = {-0x80, +0x80, 0x00};
 					funcPan(cDev->defInf.dataPtr, panPos);
 				}
 			}
@@ -807,7 +807,7 @@ static void InitVGMChips(void)
 		
 		if (cDev->defInf.linkDevCount > 0 && cDev->defInf.devDef->LinkDevice != NULL)
 		{
-			UINT32 curLDev;
+			uint32_t curLDev;
 			DEVLINK_INFO* dLink;
 			VGM_LINKCDEV* clParent;
 			
@@ -887,8 +887,8 @@ static void InitVGMChips(void)
 
 static void DeinitVGMChips(void)
 {
-	UINT8 curChip;
-	UINT8 chipNum;
+	uint8_t curChip;
+	uint8_t chipNum;
 	VGM_CHIPDEV* cDev;
 	VGM_LINKCDEV* clDev;
 	VGM_LINKCDEV* clDevOld;
@@ -943,7 +943,7 @@ static void DeinitVGMChips(void)
 	return;
 }
 
-static void SendChipCommand_Data8(UINT8 chipID, UINT8 chipNum, UINT8 ofs, UINT8 data)
+static void SendChipCommand_Data8(uint8_t chipID, uint8_t chipNum, uint8_t ofs, uint8_t data)
 {
 	VGM_CHIPDEV* cDev;
 	
@@ -955,7 +955,7 @@ static void SendChipCommand_Data8(UINT8 chipID, UINT8 chipNum, UINT8 ofs, UINT8 
 	return;
 }
 
-static void SendChipCommand_RegData8(UINT8 chipID, UINT8 chipNum, UINT8 port, UINT8 reg, UINT8 data)
+static void SendChipCommand_RegData8(uint8_t chipID, uint8_t chipNum, uint8_t port, uint8_t reg, uint8_t data)
 {
 	VGM_CHIPDEV* cDev;
 	
@@ -968,7 +968,7 @@ static void SendChipCommand_RegData8(UINT8 chipID, UINT8 chipNum, UINT8 port, UI
 	return;
 }
 
-static void SendChipCommand_MemData8(UINT8 chipID, UINT8 chipNum, UINT16 ofs, UINT8 data)
+static void SendChipCommand_MemData8(uint8_t chipID, uint8_t chipNum, uint16_t ofs, uint8_t data)
 {
 	VGM_CHIPDEV* cDev;
 	
@@ -980,7 +980,7 @@ static void SendChipCommand_MemData8(UINT8 chipID, UINT8 chipNum, UINT16 ofs, UI
 	return;
 }
 
-static void SendChipCommand_Data16(UINT8 chipID, UINT8 chipNum, UINT8 ofs, UINT16 data)
+static void SendChipCommand_Data16(uint8_t chipID, uint8_t chipNum, uint8_t ofs, uint16_t data)
 {
 	VGM_CHIPDEV* cDev;
 	
@@ -992,7 +992,7 @@ static void SendChipCommand_Data16(UINT8 chipID, UINT8 chipNum, UINT8 ofs, UINT1
 	return;
 }
 
-static void SendChipCommand_MemData16(UINT8 chipID, UINT8 chipNum, UINT16 ofs, UINT16 data)
+static void SendChipCommand_MemData16(uint8_t chipID, uint8_t chipNum, uint16_t ofs, uint16_t data)
 {
 	VGM_CHIPDEV* cDev;
 	
@@ -1004,8 +1004,8 @@ static void SendChipCommand_MemData16(UINT8 chipID, UINT8 chipNum, UINT16 ofs, U
 	return;
 }
 
-static void WriteChipROM(UINT8 chipID, UINT8 chipNum, UINT8 memID,
-						 UINT32 memSize, UINT32 dataOfs, UINT32 dataSize, const UINT8* data)
+static void WriteChipROM(uint8_t chipID, uint8_t chipNum, uint8_t memID,
+						 uint32_t memSize, uint32_t dataOfs, uint32_t dataSize, const uint8_t* data)
 {
 	VGM_CHIPDEV* cDev;
 	
@@ -1027,8 +1027,8 @@ static void WriteChipROM(UINT8 chipID, UINT8 chipNum, UINT8 memID,
 	return;
 }
 
-static void WriteChipRAM(UINT8 chipID, UINT8 chipNum,
-						 UINT32 dataOfs, UINT32 dataSize, const UINT8* data)
+static void WriteChipRAM(uint8_t chipID, uint8_t chipNum,
+						 uint32_t dataOfs, uint32_t dataSize, const uint8_t* data)
 {
 	VGM_CHIPDEV* cDev;
 	
@@ -1038,13 +1038,13 @@ static void WriteChipRAM(UINT8 chipID, UINT8 chipNum,
 	return;
 }
 
-static const UINT8 VGM_CMDLEN[0x10] =
+static const uint8_t VGM_CMDLEN[0x10] =
 {	0x01, 0x01, 0x01, 0x02, 0x03, 0x03, 0x00, 0x01,
 	0x01, 0x00, 0x03, 0x03, 0x04, 0x04, 0x05, 0x05};
 typedef struct
 {
-	UINT8 chipID;
-	UINT8 memIdx;
+	uint8_t chipID;
+	uint8_t memIdx;
 } VGM_ROMDUMP_IDS;
 static const VGM_ROMDUMP_IDS VGMROM_CHIPS[0x14] =
 {	{0x04, 0x00},	// SegaPCM
@@ -1080,8 +1080,8 @@ static const VGM_ROMDUMP_IDS VGMRAM_CHIPS2[0x02] =
 
 typedef struct
 {
-	UINT8 chipID;
-	UINT8 cmdType;
+	uint8_t chipID;
+	uint8_t cmdType;
 } VGM_CMDTYPES;
 #define CMDTYPE_DUMMY		0x00
 #define CMDTYPE_R_D8		0x01	// Register + Data (8-bit)
@@ -1198,9 +1198,9 @@ static const VGM_CMDTYPES VGM_CMDS_E0[0x10] =
 	{0xFF,	CMDTYPE_DUMMY},		// EF [unused]
 };
 
-static UINT8 RF5C_Bank[2] = {0x00, 0x00};
+static uint8_t RF5C_Bank[2] = {0x00, 0x00};
 
-static void DoRAMOfsPatches(UINT8 chipID, UINT8 chipNum, UINT32* dataOfs, UINT32* dataSize)
+static void DoRAMOfsPatches(uint8_t chipID, uint8_t chipNum, uint32_t* dataOfs, uint32_t* dataSize)
 {
 	switch(chipID)
 	{
@@ -1215,9 +1215,9 @@ static void DoRAMOfsPatches(UINT8 chipID, UINT8 chipNum, UINT32* dataOfs, UINT32
 	return;
 }
 
-static UINT32 DoVgmCommand(UINT8 cmd, const UINT8* data)
+static uint32_t DoVgmCommand(uint8_t cmd, const uint8_t* data)
 {
-	UINT8 chipID;
+	uint8_t chipID;
 	
 	if (cmd >= 0x70 && cmd <= 0x7F)
 	{
@@ -1226,7 +1226,7 @@ static UINT32 DoVgmCommand(UINT8 cmd, const UINT8* data)
 	}
 	else if (cmd >= 0x80 && cmd <= 0x8F)
 	{
-		UINT8 data = PCMBank[0x00].data[ym2612_pcmBnkPos];
+		uint8_t data = PCMBank[0x00].data[ym2612_pcmBnkPos];
 		SendChipCommand_RegData8(DEVID_YM2612, 0x00, 0x00, 0x2A, data);
 		ym2612_pcmBnkPos ++;
 		VGMSmplPos += (cmd & 0x0F);
@@ -1265,11 +1265,11 @@ static UINT32 DoVgmCommand(UINT8 cmd, const UINT8* data)
 		return 0x00;	// terminate
 	case 0x67:
 		{
-			UINT32 dblkLen;
-			UINT8 dblkType;
-			UINT32 memSize;
-			UINT32 dataOfs;
-			UINT32 dataSize;
+			uint32_t dblkLen;
+			uint8_t dblkType;
+			uint32_t memSize;
+			uint32_t dataOfs;
+			uint32_t dataSize;
 			const VGM_ROMDUMP_IDS* romChip;
 			
 			dblkType = data[0x02];
@@ -1288,8 +1288,8 @@ static UINT32 DoVgmCommand(UINT8 cmd, const UINT8* data)
 				else
 				{
 					VGM_PCM_BANK* pcmBnk = &PCMBank[dblkType & 0x3F];
-					UINT32 dataLen = dblkLen;
-					const UINT8* dataPtr = &data[0x07];
+					uint32_t dataLen = dblkLen;
+					const uint8_t* dataPtr = &data[0x07];
 					PCM_CDB_INF dbCI;
 					
 					if (dblkType & 0x40)
@@ -1302,14 +1302,14 @@ static UINT32 DoVgmCommand(UINT8 cmd, const UINT8* data)
 					if (pcmBnk->bankCount >= pcmBnk->bankAlloc)
 					{
 						pcmBnk->bankAlloc += 0x10;
-						pcmBnk->bankOfs = (UINT32*)realloc(pcmBnk->bankOfs, pcmBnk->bankAlloc * sizeof(UINT32));
-						pcmBnk->bankSize = (UINT32*)realloc(pcmBnk->bankSize, pcmBnk->bankAlloc * sizeof(UINT32));
+						pcmBnk->bankOfs = (uint32_t*)realloc(pcmBnk->bankOfs, pcmBnk->bankAlloc * sizeof(uint32_t));
+						pcmBnk->bankSize = (uint32_t*)realloc(pcmBnk->bankSize, pcmBnk->bankAlloc * sizeof(uint32_t));
 					}
 					pcmBnk->bankOfs[pcmBnk->bankCount] = pcmBnk->dataSize;
 					pcmBnk->bankSize[pcmBnk->bankCount] = dataLen;
 					pcmBnk->bankCount ++;
 					
-					pcmBnk->data = (UINT8*)realloc(pcmBnk->data, pcmBnk->dataSize + dataLen);
+					pcmBnk->data = (uint8_t*)realloc(pcmBnk->data, pcmBnk->dataSize + dataLen);
 					if (dblkType & 0x40)
 					{
 						DecompressDataBlk(dataLen, &pcmBnk->data[pcmBnk->dataSize],
@@ -1383,10 +1383,10 @@ static UINT32 DoVgmCommand(UINT8 cmd, const UINT8* data)
 		if (data[0x01] < DACSTRM_COUNT)
 		{
 			VGM_DACSTRM* dacStrm = &DACStreams[data[0x01]];
-			UINT8 chipType = data[0x02] & 0x7F;
-			UINT8 chipID = (data[0x02] & 0x80) >> 7;
+			uint8_t chipType = data[0x02] & 0x7F;
+			uint8_t chipID = (data[0x02] & 0x80) >> 7;
 			VGM_CHIPDEV* destChip = &VGMChips[chipType][chipID];
-			UINT16 chipCmd = (data[0x03] << 8) | (data[0x04] << 0);
+			uint16_t chipCmd = (data[0x03] << 8) | (data[0x04] << 0);
 			daccontrol_setup_chip(dacStrm->defInf.dataPtr, &destChip->defInf, chipType, chipCmd);
 		}
 		return 0x05;
@@ -1404,7 +1404,7 @@ static UINT32 DoVgmCommand(UINT8 cmd, const UINT8* data)
 		if (data[0x01] < DACSTRM_COUNT)
 		{
 			VGM_DACSTRM* dacStrm = &DACStreams[data[0x01]];
-			UINT32 freq = (data[0x02] << 0) | (data[0x03] << 8) | (data[0x04] << 16) | (data[0x05] << 24);
+			uint32_t freq = (data[0x02] << 0) | (data[0x03] << 8) | (data[0x04] << 16) | (data[0x05] << 24);
 			daccontrol_set_frequency(dacStrm->defInf.dataPtr, freq);
 		}
 		return 0x06;
@@ -1412,8 +1412,8 @@ static UINT32 DoVgmCommand(UINT8 cmd, const UINT8* data)
 		if (data[0x01] < DACSTRM_COUNT)
 		{
 			VGM_DACSTRM* dacStrm = &DACStreams[data[0x01]];
-			UINT32 startOfs = (data[0x02] << 0) | (data[0x03] << 8) | (data[0x04] << 16) | (data[0x05] << 24);
-			UINT32 soundLen = (data[0x07] << 0) | (data[0x08] << 8) | (data[0x09] << 16) | (data[0x0A] << 24);
+			uint32_t startOfs = (data[0x02] << 0) | (data[0x03] << 8) | (data[0x04] << 16) | (data[0x05] << 24);
+			uint32_t soundLen = (data[0x07] << 0) | (data[0x08] << 8) | (data[0x09] << 16) | (data[0x0A] << 24);
 			daccontrol_start(dacStrm->defInf.dataPtr, startOfs, data[0x06], soundLen);
 		}
 		return 0x0B;
@@ -1434,10 +1434,10 @@ static UINT32 DoVgmCommand(UINT8 cmd, const UINT8* data)
 		{
 			VGM_DACSTRM* dacStrm = &DACStreams[data[0x01]];
 			VGM_PCM_BANK* pcmBnk = &PCMBank[dacStrm->bankID];
-			UINT16 sndID = (data[0x02] << 0) | (data[0x03] << 8);
-			UINT32 startOfs = pcmBnk->bankOfs[sndID];
-			UINT32 soundLen = pcmBnk->bankSize[sndID];
-			UINT8 flags = DCTRL_LMODE_BYTES |
+			uint16_t sndID = (data[0x02] << 0) | (data[0x03] << 8);
+			uint32_t startOfs = pcmBnk->bankOfs[sndID];
+			uint32_t soundLen = pcmBnk->bankSize[sndID];
+			uint8_t flags = DCTRL_LMODE_BYTES |
 						((data[0x04] & 0x10) << 0) |	// Reverse Mode
 						((data[0x04] & 0x01) << 7);		// Looping
 			daccontrol_start(dacStrm->defInf.dataPtr, startOfs, flags, soundLen);
@@ -1498,7 +1498,7 @@ static UINT32 DoVgmCommand(UINT8 cmd, const UINT8* data)
 			break;
 		case CMDTYPE_O16_D8:	// Offset (16-bit) + Data (8-bit)
 			{
-				UINT16 ofs;
+				uint16_t ofs;
 				
 				chipID = (data[0x01] & 0x80) >> 7;
 				ofs = ((data[0x01] & 0x7F) << 8) | ((data[0x02]) << 0);
@@ -1507,7 +1507,7 @@ static UINT32 DoVgmCommand(UINT8 cmd, const UINT8* data)
 			break;
 		case CMDTYPE_O8_D16:
 			{
-				UINT16 value;
+				uint16_t value;
 				
 				chipID = (data[0x01] & 0x80) >> 7;
 				value = (data[0x02] << 0) | (data[0x03] << 8);
@@ -1516,8 +1516,8 @@ static UINT32 DoVgmCommand(UINT8 cmd, const UINT8* data)
 			break;
 		case CMDTYPE_O16_D16:
 			{
-				UINT16 ofs;
-				UINT16 value;
+				uint16_t ofs;
+				uint16_t value;
 				
 				chipID = (data[0x01] & 0x80) >> 7;
 				ofs = ((data[0x01] & 0x7F) << 8) | ((data[0x02]) << 0);
@@ -1532,7 +1532,7 @@ static UINT32 DoVgmCommand(UINT8 cmd, const UINT8* data)
 		case CMDTYPE_SPCM_MEM:	// SegaPCM Memory Write
 		case CMDTYPE_RF5C_MEM:	// RF5Cxx Memory Write
 			{
-				UINT16 memOfs;
+				uint16_t memOfs;
 				memOfs = (data[0x01] << 0) | (data[0x02] << 8);
 				if (cmdType.cmdType == CMDTYPE_SPCM_MEM)
 				{
@@ -1544,8 +1544,8 @@ static UINT32 DoVgmCommand(UINT8 cmd, const UINT8* data)
 			break;
 		case CMDTYPE_PWM_REG:	// PWM register write (4-bit offset, 12-bit data)
 			{
-				UINT8 ofs;
-				UINT16 value;
+				uint8_t ofs;
+				uint16_t value;
 				
 				ofs = (data[0x01] & 0xF0) >> 4;
 				value = ((data[0x01] & 0x0F) << 8) | ((data[0x02]) << 0);
@@ -1555,7 +1555,7 @@ static UINT32 DoVgmCommand(UINT8 cmd, const UINT8* data)
 		case CMDTYPE_QSOUND:
 			if (VGMChips[cmdType.chipID][chipID].writeD16 != NULL)
 			{
-				UINT16 value;
+				uint16_t value;
 				
 				value = (data[0x01] << 8) | (data[0x02] << 0);
 				SendChipCommand_Data16(cmdType.chipID, chipID, data[0x03], value);
@@ -1573,7 +1573,7 @@ static UINT32 DoVgmCommand(UINT8 cmd, const UINT8* data)
 			break;
 		case CMDTYPE_NES_REG:	// Offset (8-bit) + Data (8-bit)
 			{
-				UINT8 ofs;
+				uint8_t ofs;
 				
 				chipID = (data[0x01] & 0x80) >> 7;
 				ofs = data[0x01] & 0x7F;
@@ -1587,7 +1587,7 @@ static UINT32 DoVgmCommand(UINT8 cmd, const UINT8* data)
 			break;
 		case CMDTYPE_YMW_BANK:
 			{
-				UINT8 bankmask;
+				uint8_t bankmask;
 				
 				chipID = (data[0x01] & 0x80) >> 7;
 				bankmask = data[0x01] & 0x03;
@@ -1613,7 +1613,7 @@ static UINT32 DoVgmCommand(UINT8 cmd, const UINT8* data)
 			break;
 		case CMDTYPE_RF5C_REG:	// Offset (8-bit) + Data (8-bit)
 			{
-				UINT8 ofs;
+				uint8_t ofs;
 				
 				chipID = (data[0x01] & 0x80) >> 7;
 				ofs = data[0x01] & 0x7F;
@@ -1622,7 +1622,7 @@ static UINT32 DoVgmCommand(UINT8 cmd, const UINT8* data)
 				// RF5C68 bank patch
 				if (ofs == 0x07 && ! (data[0x02] & 0x40))
 				{
-					UINT8 cID = (cmdType.chipID == 0x10) ? 1 : 0;
+					uint8_t cID = (cmdType.chipID == 0x10) ? 1 : 0;
 					RF5C_Bank[cID] = data[0x02] & 0x0F;
 				}
 			}
@@ -1632,9 +1632,9 @@ static UINT32 DoVgmCommand(UINT8 cmd, const UINT8* data)
 	return VGM_CMDLEN[cmd >> 4];
 }
 
-static void ReadVGMFile(UINT32 samples)
+static void ReadVGMFile(uint32_t samples)
 {
-	UINT32 cmdLen;
+	uint32_t cmdLen;
 	
 	if (! VGMPos)
 		return;

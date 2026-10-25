@@ -15,9 +15,9 @@ namespace
 	constexpr double kCounterWalk = 32.0;
 	constexpr double kCounterRange = 4096.0;
 
-	constexpr std::uint32_t kDefaultClock = 8000000;
+	constexpr uint32_t kDefaultClock = 8000000;
 
-	double frequencyOf (std::uint32_t clock, std::uint16_t step)
+	double frequencyOf (uint32_t clock, uint16_t step)
 	{
 		// steps per sample = 32 / (4096 - step); the core's sample rate is clock / 128
 		const double remaining = kCounterRange - (double) step;
@@ -34,19 +34,19 @@ struct K007232Decoder::Impl
 {
 	struct Voice
 	{
-		std::uint8_t regs[6] = { 0, 0, 0, 0, 0, 0 };
-		std::uint16_t step = 0;
+		uint8_t regs[6] = { 0, 0, 0, 0, 0, 0 };
+		uint16_t step = 0;
 		bool keyed = false;
 	};
 
 	/** Both voices share the formula, so one table serves them. */
 	struct Table final : NoteTable
 	{
-		std::uint32_t clock = kDefaultClock;
+		uint32_t clock = kDefaultClock;
 
-		int noteFor (std::uint32_t period, int, int* finePitch) const override
+		int noteFor (uint32_t period, int, int* finePitch) const override
 		{
-			const double hz = frequencyOf (clock, (std::uint16_t) period);
+			const double hz = frequencyOf (clock, (uint16_t) period);
 			if (hz <= 0.0 || hz > 4186.0)		// past MIDI's ceiling: a drum, not a dropped channel
 			{
 				if (finePitch != nullptr)
@@ -70,7 +70,7 @@ K007232Decoder::~K007232Decoder() = default;
 
 void K007232Decoder::reset (const ChipConfig& config)
 {
-	[[maybe_unused]] const std::uint32_t clock = config.clockHz;
+	[[maybe_unused]] const uint32_t clock = config.clockHz;
 	[[maybe_unused]] const double sampleRate = config.timeBaseHz;
 	(void) sampleRate;
 	impl = std::make_unique<Impl>();
@@ -94,20 +94,20 @@ void K007232Decoder::write (const RegisterWrite& write)
 	case 0x00:		// pitch, low byte
 	case 0x01:		// pitch, high byte - the low nibble is the step's top bits
 	{
-		const std::uint8_t low = voice.regs[0];
-		const std::uint8_t high = voice.regs[1];
-		const std::uint8_t mode = (std::uint8_t) ((high >> 4) & 0x03);
+		const uint8_t low = voice.regs[0];
+		const uint8_t high = voice.regs[1];
+		const uint8_t mode = (uint8_t) ((high >> 4) & 0x03);
 
 		// only the normal twelve-bit mode is real; the core keeps the other two as placeholders and
 		// falls back to the same arithmetic, so this mirrors it rather than inventing behaviour
-		voice.step = (std::uint16_t) (((high & 0x0F) << 8) | low);
+		voice.step = (uint16_t) (((high & 0x0F) << 8) | low);
 		if (mode == 0x01)
 		{
-			voice.step = (std::uint16_t) ((256 - low) << 4);
+			voice.step = (uint16_t) ((256 - low) << 4);
 		}
 		else if (mode == 0x02)
 		{
-			voice.step = (std::uint16_t) ((16 - (high & 0x0F)) << 8);
+			voice.step = (uint16_t) ((16 - (high & 0x0F)) << 8);
 		}
 		break;
 	}
@@ -122,7 +122,7 @@ void K007232Decoder::write (const RegisterWrite& write)
 	}
 }
 
-void K007232Decoder::advance (std::uint32_t)
+void K007232Decoder::advance (uint32_t)
 {
 	// the writes carry every boundary; nothing to step
 }

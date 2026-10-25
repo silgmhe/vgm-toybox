@@ -66,19 +66,19 @@
 #include "../RatioCntr.h"
 #include "k053260.h"
 
-static void k053260_update(void* param, UINT32 samples, DEV_SMPL **outputs);
-static UINT8 device_start_k053260(const DEV_GEN_CFG* cfg, DEV_INFO* retDevInf);
+static void k053260_update(void* param, uint32_t samples, DEV_SMPL **outputs);
+static uint8_t device_start_k053260(const DEV_GEN_CFG* cfg, DEV_INFO* retDevInf);
 static void device_stop_k053260(void* chip);
 static void device_reset_k053260(void* chip);
 
-static UINT8 k053260_main_read(void* chip, UINT8 offset);
-static void k053260_main_write(void* chip, UINT8 offset, UINT8 data);
-static UINT8 k053260_read(void* chip, UINT8 offset);
-static void k053260_write(void* chip, UINT8 offset, UINT8 data);
+static uint8_t k053260_main_read(void* chip, uint8_t offset);
+static void k053260_main_write(void* chip, uint8_t offset, uint8_t data);
+static uint8_t k053260_read(void* chip, uint8_t offset);
+static void k053260_write(void* chip, uint8_t offset, uint8_t data);
 
-static void k053260_alloc_rom(void* chip, UINT32 memsize);
-static void k053260_write_rom(void *chip, UINT32 offset, UINT32 length, const UINT8* data);
-static void k053260_set_mute_mask(void* chip, UINT32 MuteMask);
+static void k053260_alloc_rom(void* chip, uint32_t memsize);
+static void k053260_write_rom(void *chip, uint32_t offset, uint32_t length, const uint8_t* data);
+static void k053260_set_mute_mask(void* chip, uint32_t MuteMask);
 static void k053260_set_log_cb(void* chip, DEVCB_LOG func, void* param);
 
 
@@ -115,7 +115,7 @@ static const char* DeviceName(const DEV_GEN_CFG* devCfg)
 	return "K053260";
 }
 
-static UINT16 DeviceChannels(const DEV_GEN_CFG* devCfg)
+static uint16_t DeviceChannels(const DEV_GEN_CFG* devCfg)
 {
 	return 4;
 }
@@ -175,39 +175,39 @@ typedef struct
 	k053260_state *device;
 
 	// live state
-	UINT32 position;
-	INT32  pan_volume[2];
-	UINT16 counter;
-	INT8   output;
-	UINT8  playing;
+	uint32_t position;
+	int32_t  pan_volume[2];
+	uint16_t counter;
+	int8_t   output;
+	uint8_t  playing;
 
 	// per voice registers
-	UINT32 start;
-	UINT16 length;
-	UINT16 pitch;
-	UINT8  volume;
+	uint32_t start;
+	uint16_t length;
+	uint16_t pitch;
+	uint8_t  volume;
 
 	// bit packed registers
-	UINT8  pan;
-	UINT8  loop;
-	UINT8  kadpcm;
-	UINT8  reverse;
-	UINT8  Muted;
+	uint8_t  pan;
+	uint8_t  loop;
+	uint8_t  kadpcm;
+	uint8_t  reverse;
+	uint8_t  Muted;
 } KDSC_Voice;
 
 INLINE void KDSC_voice_start(KDSC_Voice* voice, k053260_state *device);
 INLINE void KDSC_voice_reset(KDSC_Voice* voice);
-INLINE void KDSC_set_register(KDSC_Voice* voice, UINT8 offset, UINT8 data);
-INLINE void KDSC_set_loop(KDSC_Voice* voice, UINT8 data);
-INLINE void KDSC_set_kadpcm(KDSC_Voice* voice, UINT8 data);
-INLINE void KDSC_set_reverse(KDSC_Voice* voice, UINT8 data);
-INLINE void KDSC_set_pan(KDSC_Voice* voice, UINT8 data);
+INLINE void KDSC_set_register(KDSC_Voice* voice, uint8_t offset, uint8_t data);
+INLINE void KDSC_set_loop(KDSC_Voice* voice, uint8_t data);
+INLINE void KDSC_set_kadpcm(KDSC_Voice* voice, uint8_t data);
+INLINE void KDSC_set_reverse(KDSC_Voice* voice, uint8_t data);
+INLINE void KDSC_set_pan(KDSC_Voice* voice, uint8_t data);
 INLINE void KDSC_update_pan_volume(KDSC_Voice* voice);
 INLINE void KDSC_key_on(k053260_state* info, KDSC_Voice* voice);
 INLINE void KDSC_key_off(KDSC_Voice* voice);
-INLINE void KDSC_play(KDSC_Voice* voice, DEV_SMPL *outputs, UINT16 cycles);
-INLINE UINT8 KDSC_read_rom(KDSC_Voice* voice);
-INLINE UINT8 k053260_rom_data(k053260_state* info, UINT32 offs);
+INLINE void KDSC_play(KDSC_Voice* voice, DEV_SMPL *outputs, uint16_t cycles);
+INLINE uint8_t KDSC_read_rom(KDSC_Voice* voice);
+INLINE uint8_t k053260_rom_data(k053260_state* info, uint32_t offs);
 
 struct _k053260_state
 {
@@ -215,15 +215,15 @@ struct _k053260_state
 	DEV_LOGGER logger;
 	
 	// live state
-	UINT8           portdata[4];
-	UINT8           keyon;
-	UINT8           mode;
+	uint8_t           portdata[4];
+	uint8_t           keyon;
+	uint8_t           mode;
 
 	KDSC_Voice      voice[4];
 
-	UINT8           *rom;
-	UINT32          rom_size;
-	UINT32          rom_mask;
+	uint8_t           *rom;
+	uint32_t          rom_size;
+	uint32_t          rom_mask;
 
 	RATIO_CNTR      cycleCntr;
 };
@@ -232,10 +232,10 @@ struct _k053260_state
 //  device_start - device-specific startup
 //-------------------------------------------------
 
-static UINT8 device_start_k053260(const DEV_GEN_CFG* cfg, DEV_INFO* retDevInf)
+static uint8_t device_start_k053260(const DEV_GEN_CFG* cfg, DEV_INFO* retDevInf)
 {
 	k053260_state *info;
-	UINT32 rate;
+	uint32_t rate;
 	int i;
 
 	info = (k053260_state *)calloc(1, sizeof(k053260_state));
@@ -296,7 +296,7 @@ static void device_reset_k053260(void* chip)
 }
 
 
-static UINT8 k053260_main_read(void* chip, UINT8 offset)
+static uint8_t k053260_main_read(void* chip, uint8_t offset)
 {
 	k053260_state *info = (k053260_state *)chip;
 
@@ -305,7 +305,7 @@ static UINT8 k053260_main_read(void* chip, UINT8 offset)
 }
 
 
-static void k053260_main_write(void* chip, UINT8 offset, UINT8 data)
+static void k053260_main_write(void* chip, uint8_t offset, uint8_t data)
 {
 	k053260_state *info = (k053260_state *)chip;
 
@@ -314,10 +314,10 @@ static void k053260_main_write(void* chip, UINT8 offset, UINT8 data)
 }
 
 
-static UINT8 k053260_read(void* chip, UINT8 offset)
+static uint8_t k053260_read(void* chip, uint8_t offset)
 {
 	k053260_state *info = (k053260_state *)chip;
-	UINT8 ret;
+	uint8_t ret;
 	int i;
 
 	offset &= 0x3f;
@@ -349,7 +349,7 @@ static UINT8 k053260_read(void* chip, UINT8 offset)
 }
 
 
-static void k053260_write(void* chip, UINT8 offset, UINT8 data)
+static void k053260_write(void* chip, uint8_t offset, uint8_t data)
 {
 	k053260_state *info = (k053260_state *)chip;
 	int i;
@@ -376,7 +376,7 @@ static void k053260_write(void* chip, UINT8 offset, UINT8 data)
 
 		case 0x28: // key on/off and reverse
 		{
-			UINT8 rising_edge = data & ~info->keyon;
+			uint8_t rising_edge = data & ~info->keyon;
 
 			for (i = 0; i < 4; i++)
 			{
@@ -437,21 +437,21 @@ static void k053260_write(void* chip, UINT8 offset, UINT8 data)
 //  sound_stream_update - handle a stream update
 //-------------------------------------------------
 
-static void k053260_update(void* param, UINT32 samples, DEV_SMPL **outputs)
+static void k053260_update(void* param, uint32_t samples, DEV_SMPL **outputs)
 {
 	k053260_state *info = (k053260_state *)param;
 
 	if ((info->mode & 2) && info->rom != NULL)
 	{
-		UINT32 i, j;
+		uint32_t i, j;
 
 		for (j = 0; j < samples; j++)
 		{
 			DEV_SMPL buffer[2] = {0, 0};
-			UINT16 cycles;
+			uint16_t cycles;
 
 			RC_STEP(&info->cycleCntr);
-			cycles = (UINT16)RC_GET_VAL(&info->cycleCntr);
+			cycles = (uint16_t)RC_GET_VAL(&info->cycleCntr);
 			RC_MASK(&info->cycleCntr);
 
 			for ( i = 0; i < 4; i++ )
@@ -500,7 +500,7 @@ INLINE void KDSC_voice_reset(KDSC_Voice* voice)
 	KDSC_update_pan_volume(voice);
 }
 
-INLINE void KDSC_set_register(KDSC_Voice* voice, UINT8 offset, UINT8 data)
+INLINE void KDSC_set_register(KDSC_Voice* voice, uint8_t offset, uint8_t data)
 {
 	switch (offset & 0x7)
 	{
@@ -532,22 +532,22 @@ INLINE void KDSC_set_register(KDSC_Voice* voice, UINT8 offset, UINT8 data)
 	}
 }
 
-INLINE void KDSC_set_loop(KDSC_Voice* voice, UINT8 data)
+INLINE void KDSC_set_loop(KDSC_Voice* voice, uint8_t data)
 {
 	voice->loop = data;
 }
 
-INLINE void KDSC_set_kadpcm(KDSC_Voice* voice, UINT8 data)
+INLINE void KDSC_set_kadpcm(KDSC_Voice* voice, uint8_t data)
 {
 	voice->kadpcm = data;
 }
 
-INLINE void KDSC_set_reverse(KDSC_Voice* voice, UINT8 data)
+INLINE void KDSC_set_reverse(KDSC_Voice* voice, uint8_t data)
 {
 	voice->reverse = data;
 }
 
-INLINE void KDSC_set_pan(KDSC_Voice* voice, UINT8 data)
+INLINE void KDSC_set_pan(KDSC_Voice* voice, uint8_t data)
 {
 	voice->pan = data & 0x7;
 	KDSC_update_pan_volume(voice);
@@ -579,7 +579,7 @@ INLINE void KDSC_key_off(KDSC_Voice* voice)
 	voice->playing = 0;
 }
 
-INLINE void KDSC_play(KDSC_Voice* voice, DEV_SMPL *outputs, UINT16 cycles)
+INLINE void KDSC_play(KDSC_Voice* voice, DEV_SMPL *outputs, uint16_t cycles)
 {
 	if (voice->counter == 0xFFFF)	// "force update"?
 		voice->counter = 0x1000;
@@ -588,12 +588,12 @@ INLINE void KDSC_play(KDSC_Voice* voice, DEV_SMPL *outputs, UINT16 cycles)
 
 	while (voice->counter >= 0x1000)
 	{
-		INT32 bytepos;
-		UINT8 romdata;
+		int32_t bytepos;
+		uint8_t romdata;
 
 		voice->counter = voice->counter - 0x1000 + voice->pitch;
 
-		bytepos = (INT32)(++voice->position >> (voice->kadpcm ? 1 : 0));
+		bytepos = (int32_t)(++voice->position >> (voice->kadpcm ? 1 : 0));
 		/*
 		Yes, _pre_increment. Playback must start 1 byte position after the
 		start address written to the register, or else ADPCM sounds will
@@ -621,7 +621,7 @@ INLINE void KDSC_play(KDSC_Voice* voice, DEV_SMPL *outputs, UINT16 cycles)
 
 		if (voice->kadpcm)
 		{
-			static const INT8 kadpcm_table[] = {0,1,2,4,8,16,32,64,-128,-64,-32,-16,-8,-4,-2,-1};
+			static const int8_t kadpcm_table[] = {0,1,2,4,8,16,32,64,-128,-64,-32,-16,-8,-4,-2,-1};
 			if (voice->position & 1) romdata >>= 4; // decode low nybble, then high nybble
 			voice->output += kadpcm_table[romdata & 0xf];
 		}
@@ -635,28 +635,28 @@ INLINE void KDSC_play(KDSC_Voice* voice, DEV_SMPL *outputs, UINT16 cycles)
 	outputs[1] += (voice->output * voice->pan_volume[1]) >> 15;
 }
 
-INLINE UINT8 KDSC_read_rom(KDSC_Voice* voice)
+INLINE uint8_t KDSC_read_rom(KDSC_Voice* voice)
 {
-	UINT32 offs = voice->start + voice->position;
+	uint32_t offs = voice->start + voice->position;
 
 	voice->position = (voice->position + 1) & 0xffff;
 
 	return k053260_rom_data(voice->device, offs);
 }
 
-INLINE UINT8 k053260_rom_data(k053260_state* info, UINT32 offs)
+INLINE uint8_t k053260_rom_data(k053260_state* info, uint32_t offs)
 {
 	return info->rom[offs & info->rom_mask];
 }
 
-static void k053260_alloc_rom(void* chip, UINT32 memsize)
+static void k053260_alloc_rom(void* chip, uint32_t memsize)
 {
 	k053260_state *info = (k053260_state *)chip;
 	
 	if (info->rom_size == memsize)
 		return;
 	
-	info->rom = (UINT8*)realloc(info->rom, memsize);
+	info->rom = (uint8_t*)realloc(info->rom, memsize);
 	info->rom_size = memsize;
 	info->rom_mask = pow2_mask(memsize);
 	memset(info->rom, 0xFF, memsize);
@@ -664,7 +664,7 @@ static void k053260_alloc_rom(void* chip, UINT32 memsize)
 	return;
 }
 
-static void k053260_write_rom(void *chip, UINT32 offset, UINT32 length, const UINT8* data)
+static void k053260_write_rom(void *chip, uint32_t offset, uint32_t length, const uint8_t* data)
 {
 	k053260_state *info = (k053260_state *)chip;
 	
@@ -679,10 +679,10 @@ static void k053260_write_rom(void *chip, UINT32 offset, UINT32 length, const UI
 }
 
 
-static void k053260_set_mute_mask(void* chip, UINT32 MuteMask)
+static void k053260_set_mute_mask(void* chip, uint32_t MuteMask)
 {
 	k053260_state *info = (k053260_state *)chip;
-	UINT8 CurChn;
+	uint8_t CurChn;
 	
 	for (CurChn = 0; CurChn < 4; CurChn ++)
 		info->voice[CurChn].Muted = (MuteMask >> CurChn) & 0x01;

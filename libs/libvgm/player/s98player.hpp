@@ -18,20 +18,20 @@
 
 struct S98_HEADER
 {
-	UINT8 fileVer;
-	UINT32 tickMult;	// [v1] tick timing numerator
-	UINT32 tickDiv;		// [v2] tick timing denumerator
-	UINT32 compression;	// [v1: 0 - no compression, >0 - size of uncompressed data] [v2: ??] [v3: must be 0]
-	UINT32 tagOfs;		// [v1/2: song title file offset] [v3: tag data file offset]
-	UINT32 dataOfs;		// play data file offset
-	UINT32 loopOfs;		// loop file offset
+	uint8_t fileVer;
+	uint32_t tickMult;	// [v1] tick timing numerator
+	uint32_t tickDiv;		// [v2] tick timing denumerator
+	uint32_t compression;	// [v1: 0 - no compression, >0 - size of uncompressed data] [v2: ??] [v3: must be 0]
+	uint32_t tagOfs;		// [v1/2: song title file offset] [v3: tag data file offset]
+	uint32_t dataOfs;		// play data file offset
+	uint32_t loopOfs;		// loop file offset
 };
 struct S98_DEVICE
 {
-	UINT32 devType;
-	UINT32 clock;
-	UINT32 pan;			// [v2: reserved] [v3: pan setting]
-	UINT32 app_spec;	// [v2: application-specific] [v3: reserved]
+	uint32_t devType;
+	uint32_t clock;
+	uint32_t pan;			// [v2: reserved] [v3: pan setting]
+	uint32_t app_spec;	// [v2: application-specific] [v3: reserved]
 };
 struct S98_PLAY_OPTIONS
 {
@@ -44,7 +44,7 @@ class S98Player : public PlayerBase
 private:
 	struct DevCfgBuffer
 	{
-		std::vector<UINT8> data;
+		std::vector<uint8_t> data;
 	};
 	struct DEVLOG_CB_DATA
 	{
@@ -55,7 +55,7 @@ private:
 	{
 		VGM_BASEDEV base;
 		size_t optID;
-		std::vector<UINT8> cfg;
+		std::vector<uint8_t> cfg;
 		DEVFUNC_WRITE_A8D8 write;
 		DEVLOG_CB_DATA logCbData;
 	};
@@ -69,72 +69,72 @@ public:
 	S98Player();
 	~S98Player();
 	
-	UINT32 GetPlayerType(void) const;
+	uint32_t GetPlayerType(void) const;
 	const char* GetPlayerName(void) const;
-	static UINT8 PlayerCanLoadFile(DATA_LOADER *dataLoader);
-	UINT8 CanLoadFile(DATA_LOADER *dataLoader) const;
-	UINT8 LoadFile(DATA_LOADER *dataLoader);
-	UINT8 UnloadFile(void);
+	static uint8_t PlayerCanLoadFile(DATA_LOADER *dataLoader);
+	uint8_t CanLoadFile(DATA_LOADER *dataLoader) const;
+	uint8_t LoadFile(DATA_LOADER *dataLoader);
+	uint8_t UnloadFile(void);
 	const S98_HEADER* GetFileHeader(void) const;
 	
 	const char* const* GetTags(void);
-	UINT8 GetSongInfo(PLR_SONG_INFO& songInf);
-	UINT8 GetSongDeviceInfo(std::vector<PLR_DEV_INFO>& devInfList) const;
-	UINT8 SetDeviceOptions(UINT32 id, const PLR_DEV_OPTS& devOpts);
-	UINT8 GetDeviceOptions(UINT32 id, PLR_DEV_OPTS& devOpts) const;
-	UINT8 SetDeviceMuting(UINT32 id, const PLR_MUTE_OPTS& muteOpts);
-	UINT8 GetDeviceMuting(UINT32 id, PLR_MUTE_OPTS& muteOpts) const;
-	UINT8 SetPlayerOptions(const S98_PLAY_OPTIONS& playOpts);
-	UINT8 GetPlayerOptions(S98_PLAY_OPTIONS& playOpts) const;
+	uint8_t GetSongInfo(PLR_SONG_INFO& songInf);
+	uint8_t GetSongDeviceInfo(std::vector<PLR_DEV_INFO>& devInfList) const;
+	uint8_t SetDeviceOptions(uint32_t id, const PLR_DEV_OPTS& devOpts);
+	uint8_t GetDeviceOptions(uint32_t id, PLR_DEV_OPTS& devOpts) const;
+	uint8_t SetDeviceMuting(uint32_t id, const PLR_MUTE_OPTS& muteOpts);
+	uint8_t GetDeviceMuting(uint32_t id, PLR_MUTE_OPTS& muteOpts) const;
+	uint8_t SetPlayerOptions(const S98_PLAY_OPTIONS& playOpts);
+	uint8_t GetPlayerOptions(S98_PLAY_OPTIONS& playOpts) const;
 	
-	//UINT32 GetSampleRate(void) const;
-	UINT8 SetSampleRate(UINT32 sampleRate);
+	//uint32_t GetSampleRate(void) const;
+	uint8_t SetSampleRate(uint32_t sampleRate);
 	double GetPlaybackSpeed(void) const;
-	UINT8 SetPlaybackSpeed(double speed);
+	uint8_t SetPlaybackSpeed(double speed);
 	//void SetEventCallback(PLAYER_EVENT_CB cbFunc, void* cbParam);
-	UINT32 Tick2Sample(UINT32 ticks) const;
-	UINT32 Sample2Tick(UINT32 samples) const;
-	double Tick2Second(UINT32 ticks) const;
-	//double Sample2Second(UINT32 samples) const;
+	uint32_t Tick2Sample(uint32_t ticks) const;
+	uint32_t Sample2Tick(uint32_t samples) const;
+	double Tick2Second(uint32_t ticks) const;
+	//double Sample2Second(uint32_t samples) const;
 	
-	UINT8 GetState(void) const;
-	UINT32 GetCurPos(UINT8 unit) const;
-	UINT32 GetCurLoop(void) const;
-	UINT32 GetTotalTicks(void) const;	// get time for playing once in ticks
-	UINT32 GetLoopTicks(void) const;	// get time for one loop in ticks
-	//UINT32 GetTotalPlayTicks(UINT32 numLoops) const;	// get time for playing + looping (without fading)
+	uint8_t GetState(void) const;
+	uint32_t GetCurPos(uint8_t unit) const;
+	uint32_t GetCurLoop(void) const;
+	uint32_t GetTotalTicks(void) const;	// get time for playing once in ticks
+	uint32_t GetLoopTicks(void) const;	// get time for one loop in ticks
+	//uint32_t GetTotalPlayTicks(uint32_t numLoops) const;	// get time for playing + looping (without fading)
 	
-	UINT8 Start(void);
-	UINT8 Stop(void);
-	UINT8 Reset(void);
-	UINT8 Seek(UINT8 unit, UINT32 pos);
-	UINT32 Render(UINT32 smplCnt, WAVE_32BS* data);
+	uint8_t Start(void);
+	uint8_t Stop(void);
+	uint8_t Reset(void);
+	uint8_t Seek(uint8_t unit, uint32_t pos);
+	uint32_t Render(uint32_t smplCnt, WAVE_32BS* data);
 	
 private:
 	size_t GetDeviceInstance(size_t id) const;
-	size_t DeviceID2OptionID(UINT32 id) const;
+	size_t DeviceID2OptionID(uint32_t id) const;
 	void RefreshMuting(S98_CHIPDEV& chipDev, const PLR_MUTE_OPTS& muteOpts);
 	void RefreshPanning(S98_CHIPDEV& chipDev, const PLR_PAN_OPTS& panOpts);
 	
 	void CalcSongLength(void);
-	UINT8 LoadTags(void);
+	uint8_t LoadTags(void);
 	std::string GetUTF8String(const char* startPtr, const char* endPtr);
-	UINT8 ParsePSFTags(const std::string& tagData);
-	UINT32 ReadVarInt(UINT32& filePos);
+	uint8_t ParsePSFTags(const std::string& tagData);
+	uint32_t ReadVarInt(uint32_t& filePos);
 	
 	void RefreshTSRates(void);
 	
-	static void PlayerLogCB(void* userParam, void* source, UINT8 level, const char* message);
-	static void SndEmuLogCB(void* userParam, void* source, UINT8 level, const char* message);
+	static void PlayerLogCB(void* userParam, void* source, uint8_t level, const char* message);
+	static void SndEmuLogCB(void* userParam, void* source, uint8_t level, const char* message);
 	
 	void GenerateDeviceConfig(void);
 	static void DeviceLinkCallback(void* userParam, VGM_BASEDEV* cDev, DEVLINK_INFO* dLink);
-	UINT8 SeekToTick(UINT32 tick);
-	UINT8 SeekToFilePos(UINT32 pos);
-	void ParseFile(UINT32 ticks);
+	uint8_t SeekToTick(uint32_t tick);
+	uint8_t SeekToFilePos(uint32_t pos);
+	void ParseFile(uint32_t ticks);
 	void HandleEOF(void);
 	void DoCommand(void);
-	void DoRegWrite(UINT8 deviceID, UINT8 port, UINT8 reg, UINT8 data);
+	void DoRegWrite(uint8_t deviceID, uint8_t port, uint8_t reg, uint8_t data);
 	
 	enum
 	{
@@ -144,24 +144,24 @@ private:
 	CPCONV* _cpcSJIS;	// ShiftJIS -> UTF-8 codepage conversion
 	DEV_LOGGER _logger;
 	DATA_LOADER *_dLoad;
-	const UINT8* _fileData;	// data pointer for quick access, equals _dLoad->GetFileData().data()
+	const uint8_t* _fileData;	// data pointer for quick access, equals _dLoad->GetFileData().data()
 	
 	S98_HEADER _fileHdr;
 	std::vector<S98_DEVICE> _devHdrs;
 	std::vector<DevCfgBuffer> _devCfgs;
-	UINT32 _totalTicks;
-	UINT32 _loopTick;
+	uint32_t _totalTicks;
+	uint32_t _loopTick;
 	std::map<std::string, std::string> _tagData;
 	std::vector<const char*> _tagList;
 	
-	//UINT32 _outSmplRate;
+	//uint32_t _outSmplRate;
 	
 	// tick/sample conversion rates
-	UINT64 _tsMult;
-	UINT64 _tsDiv;
-	UINT64 _ttMult;
-	UINT64 _lastTsMult;
-	UINT64 _lastTsDiv;
+	uint64_t _tsMult;
+	uint64_t _tsDiv;
+	uint64_t _ttMult;
+	uint64_t _lastTsMult;
+	uint64_t _lastTsDiv;
 	
 	static const DEV_ID _OPT_DEV_LIST[_OPT_DEV_COUNT];	// list of configurable libvgm devices
 	
@@ -172,15 +172,15 @@ private:
 	std::vector<std::string> _devNames;
 	size_t _optDevMap[_OPT_DEV_COUNT * 2];	// maps _devOpts vector index to _devices vector
 	
-	UINT32 _filePos;
-	UINT32 _fileTick;
-	UINT32 _playTick;
-	UINT32 _playSmpl;
-	UINT32 _curLoop;
-	UINT32 _lastLoopTick;
+	uint32_t _filePos;
+	uint32_t _fileTick;
+	uint32_t _playTick;
+	uint32_t _playSmpl;
+	uint32_t _curLoop;
+	uint32_t _lastLoopTick;
 	
-	UINT8 _playState;
-	UINT8 _psTrigger;	// used to temporarily trigger special commands
+	uint8_t _playState;
+	uint8_t _psTrigger;	// used to temporarily trigger special commands
 	//PLAYER_EVENT_CB _eventCbFunc;
 	//void* _eventCbParam;
 };

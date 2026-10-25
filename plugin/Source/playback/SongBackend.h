@@ -44,10 +44,10 @@ namespace toybox::playback
 {
 
 /** Opaque handle of a sound device inside the loaded song. Was libvgm's `PLR_DEV_INFO::id`. */
-using DeviceId = std::uint32_t;
+using DeviceId = uint32_t;
 
 /** Opaque handle of one track (a channel of a device, or a whole device). */
-using TrackId = std::uint32_t;
+using TrackId = uint32_t;
 
 /** The song image, owned by the core and shared by every player of the song. */
 struct SongMemory

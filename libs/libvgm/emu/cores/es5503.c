@@ -51,17 +51,17 @@
 #include "es5503.h"
 
 
-static void es5503_w(void *info, UINT8 offset, UINT8 data);
-static UINT8 es5503_r(void *info, UINT8 offset);
+static void es5503_w(void *info, uint8_t offset, uint8_t data);
+static uint8_t es5503_r(void *info, uint8_t offset);
 
-static void es5503_pcm_update(void *param, UINT32 samples, DEV_SMPL **outputs);
-static UINT8 device_start_es5503(const DEV_GEN_CFG* cfg, DEV_INFO* retDevInf);
+static void es5503_pcm_update(void *param, uint32_t samples, DEV_SMPL **outputs);
+static uint8_t device_start_es5503(const DEV_GEN_CFG* cfg, DEV_INFO* retDevInf);
 static void device_stop_es5503(void *info);
 static void device_reset_es5503(void *info);
 
-static void es5503_write_ram(void *info, UINT32 offset, UINT32 length, const UINT8* data);
+static void es5503_write_ram(void *info, uint32_t offset, uint32_t length, const uint8_t* data);
 
-static void es5503_set_mute_mask(void *info, UINT32 MuteMask);
+static void es5503_set_mute_mask(void *info, uint32_t MuteMask);
 static void es5503_set_srchg_cb(void *info, DEVCB_SRATE_CHG CallbackFunc, void* DataPtr);
 
 
@@ -97,7 +97,7 @@ static const char* DeviceName(const DEV_GEN_CFG* devCfg)
 	return "ES5503";
 }
 
-static UINT16 DeviceChannels(const DEV_GEN_CFG* devCfg)
+static uint16_t DeviceChannels(const DEV_GEN_CFG* devCfg)
 {
 	return 32;
 }
@@ -136,57 +136,57 @@ enum
 
 typedef struct
 {
-	UINT16 freq;
-	UINT16 wtsize;
-	UINT8  control;
-	UINT8  vol;
-	UINT8  data;
-	UINT32 wavetblpointer;
-	UINT8  wavetblsize;
-	UINT8  resolution;
+	uint16_t freq;
+	uint16_t wtsize;
+	uint8_t  control;
+	uint8_t  vol;
+	uint8_t  data;
+	uint32_t wavetblpointer;
+	uint8_t  wavetblsize;
+	uint8_t  resolution;
 
-	UINT32 accumulator;
-	UINT8  irqpend;
+	uint32_t accumulator;
+	uint8_t  irqpend;
 	
-	UINT8  Muted;
+	uint8_t  Muted;
 } ES5503Osc;
 
 typedef struct
 {
 	DEV_DATA _devData;
 	
-	UINT32 dramsize;
-	UINT8 *docram;
+	uint32_t dramsize;
+	uint8_t *docram;
 
-	void (*irq_func)(void *, UINT8);	// IRQ callback
+	void (*irq_func)(void *, uint8_t);	// IRQ callback
 	void *irq_param;
 
-	UINT8 (*adc_func)(void *, UINT8);	// callback for the 5503's built-in analog to digital converter
+	uint8_t (*adc_func)(void *, uint8_t);	// callback for the 5503's built-in analog to digital converter
 	void *adc_param;
 
 	ES5503Osc oscillators[32];
 
-	UINT8 oscsenabled;      // # of oscillators enabled
-	UINT8 rege0;            // contents of register 0xe0
+	uint8_t oscsenabled;      // # of oscillators enabled
+	uint8_t rege0;            // contents of register 0xe0
 
-	UINT8 channel_strobe;
+	uint8_t channel_strobe;
 
-	UINT32 clock;
-	UINT8 output_channels;
-	UINT8 outchn_mask;
-	UINT32 output_rate;
+	uint32_t clock;
+	uint8_t output_channels;
+	uint8_t outchn_mask;
+	uint32_t output_rate;
 	
 	DEVCB_SRATE_CHG SmpRateFunc;
 	void* SmpRateData;
 } ES5503Chip;
 
 // useful constants
-static const UINT16 wavesizes[8] = { 256, 512, 1024, 2048, 4096, 8192, 16384, 32768 };
-static const UINT32 wavemasks[8] = { 0x1ff00, 0x1fe00, 0x1fc00, 0x1f800, 0x1f000, 0x1e000, 0x1c000, 0x18000 };
-static const UINT32 accmasks[8]  = { 0xff, 0x1ff, 0x3ff, 0x7ff, 0xfff, 0x1fff, 0x3fff, 0x7fff };
+static const uint16_t wavesizes[8] = { 256, 512, 1024, 2048, 4096, 8192, 16384, 32768 };
+static const uint32_t wavemasks[8] = { 0x1ff00, 0x1fe00, 0x1fc00, 0x1f800, 0x1f000, 0x1e000, 0x1c000, 0x18000 };
+static const uint32_t accmasks[8]  = { 0xff, 0x1ff, 0x3ff, 0x7ff, 0xfff, 0x1fff, 0x3fff, 0x7fff };
 static const int    resshifts[8] = { 9, 10, 11, 12, 13, 14, 15, 16 };
 
-INLINE UINT32 es5503_get_sample_rate(ES5503Chip *chip)
+INLINE uint32_t es5503_get_sample_rate(ES5503Chip *chip)
 {
 	return (chip->clock / 8) / (chip->oscsenabled + 2);
 }
@@ -195,7 +195,7 @@ INLINE UINT32 es5503_get_sample_rate(ES5503Chip *chip)
 // chip = chip ptr
 // onum = oscillator #
 // type = 1 for 0 found in sample data, 0 for hit end of table size
-static void es5503_halt_osc(ES5503Chip *chip, int onum, int type, UINT32 *accumulator, int resshift)
+static void es5503_halt_osc(ES5503Chip *chip, int onum, int type, uint32_t *accumulator, int resshift)
 {
 	ES5503Osc *pOsc = &chip->oscillators[onum];
 	ES5503Osc *pPartner = &chip->oscillators[onum^1];
@@ -226,7 +226,7 @@ static void es5503_halt_osc(ES5503Chip *chip, int onum, int type, UINT32 *accumu
 	}
 	else    // preserve the relative phase of the oscillator when looping
 	{
-		UINT16 wtsize = pOsc->wtsize - 1;
+		uint16_t wtsize = pOsc->wtsize - 1;
 		*accumulator -= (wtsize << resshift);
 	}
 
@@ -243,7 +243,7 @@ static void es5503_halt_osc(ES5503Chip *chip, int onum, int type, UINT32 *accumu
 		if ((partnerMode == MODE_SWAP) && ((onum & 1)==0))
 		{
 			// preserve the phase in this case too
-			UINT16 wtsize = pOsc->wtsize - 1;
+			uint16_t wtsize = pOsc->wtsize - 1;
 			*accumulator -= (wtsize << resshift);
 			pOsc->control &= ~1;
 		}
@@ -258,13 +258,13 @@ static void es5503_halt_osc(ES5503Chip *chip, int onum, int type, UINT32 *accumu
 	}
 }
 
-static void es5503_pcm_update(void *param, UINT32 samples, DEV_SMPL **outputs)
+static void es5503_pcm_update(void *param, uint32_t samples, DEV_SMPL **outputs)
 {
-	UINT8 osc;
-	UINT32 snum;
-	UINT32 ramptr;
+	uint8_t osc;
+	uint32_t snum;
+	uint32_t ramptr;
 	ES5503Chip *chip = (ES5503Chip *)param;
-	UINT8 chnsStereo, chan;
+	uint8_t chnsStereo, chan;
 
 	memset(outputs[0], 0, samples * sizeof(DEV_SMPL));
 	memset(outputs[1], 0, samples * sizeof(DEV_SMPL));
@@ -280,12 +280,12 @@ static void es5503_pcm_update(void *param, UINT32 samples, DEV_SMPL **outputs)
 
 			if (!(pOsc->control & 1) && ! pOsc->Muted)
 			{
-				UINT32 wtptr = pOsc->wavetblpointer & wavemasks[pOsc->wavetblsize];
-				UINT32 altram;
-				UINT16 wtsize = pOsc->wtsize - 1;
-				UINT8 chnMask = (pOsc->control >> 4) & 0x0F;
+				uint32_t wtptr = pOsc->wavetblpointer & wavemasks[pOsc->wavetblsize];
+				uint32_t altram;
+				uint16_t wtsize = pOsc->wtsize - 1;
+				uint8_t chnMask = (pOsc->control >> 4) & 0x0F;
 				int resshift = resshifts[pOsc->resolution] - pOsc->wavetblsize;
-				UINT32 sizemask = accmasks[pOsc->wavetblsize];
+				uint32_t sizemask = accmasks[pOsc->wavetblsize];
 				const int mode = (pOsc->control>>1) & 3;
 
 				chnMask &= chip->outchn_mask;
@@ -304,10 +304,10 @@ static void es5503_pcm_update(void *param, UINT32 samples, DEV_SMPL **outputs)
 				}
 				else
 				{
-					INT32 outData;
+					int32_t outData;
 					if (mode != MODE_SYNCAM)
 					{
-						outData = (pOsc->data - 0x80) * (INT16)pOsc->vol;
+						outData = (pOsc->data - 0x80) * (int16_t)pOsc->vol;
 					}
 					else
 					{
@@ -326,7 +326,7 @@ static void es5503_pcm_update(void *param, UINT32 samples, DEV_SMPL **outputs)
 						}
 						else    // hard sync, both oscillators play?
 						{
-							outData = (pOsc->data - 0x80) * (INT16)pOsc->vol;
+							outData = (pOsc->data - 0x80) * (int16_t)pOsc->vol;
 						}
 					}
 
@@ -358,7 +358,7 @@ static void es5503_pcm_update(void *param, UINT32 samples, DEV_SMPL **outputs)
 }
 
 
-static UINT8 device_start_es5503(const DEV_GEN_CFG* cfg, DEV_INFO* retDevInf)
+static uint8_t device_start_es5503(const DEV_GEN_CFG* cfg, DEV_INFO* retDevInf)
 {
 	ES5503Chip *chip;
 
@@ -372,13 +372,13 @@ static UINT8 device_start_es5503(const DEV_GEN_CFG* cfg, DEV_INFO* retDevInf)
 	chip->adc_param = NULL;
 	
 	chip->dramsize = 0x20000;	// 128 KB
-	chip->docram = (UINT8*)malloc(chip->dramsize);
+	chip->docram = (uint8_t*)malloc(chip->dramsize);
 	chip->clock = cfg->clock;
 
 	chip->output_channels = cfg->flags;
 	if (! chip->output_channels)
 		chip->output_channels = 1;
-	chip->outchn_mask = (UINT8)pow2_mask(chip->output_channels);
+	chip->outchn_mask = (uint8_t)pow2_mask(chip->output_channels);
 
 	chip->oscsenabled = 1;
 	chip->output_rate = es5503_get_sample_rate(chip);
@@ -437,15 +437,15 @@ static void device_reset_es5503(void *info)
 }
 
 
-static UINT8 es5503_r(void *info, UINT8 offset)
+static uint8_t es5503_r(void *info, uint8_t offset)
 {
-	UINT8 retval;
+	uint8_t retval;
 	int i;
 	ES5503Chip *chip = (ES5503Chip *)info;
 
 	if (offset < 0xe0)
 	{
-		UINT8 osc = offset & 0x1f;
+		uint8_t osc = offset & 0x1f;
 
 		switch(offset & 0xe0)
 		{
@@ -531,7 +531,7 @@ static UINT8 es5503_r(void *info, UINT8 offset)
 	return 0;
 }
 
-static void es5503_w(void *info, UINT8 offset, UINT8 data)
+static void es5503_w(void *info, uint8_t offset, uint8_t data)
 {
 	ES5503Chip *chip = (ES5503Chip *)info;
 
@@ -610,7 +610,7 @@ static void es5503_w(void *info, UINT8 offset, UINT8 data)
 	}
 }
 
-static void es5503_write_ram(void *info, UINT32 offset, UINT32 length, const UINT8* data)
+static void es5503_write_ram(void *info, uint32_t offset, uint32_t length, const uint8_t* data)
 {
 	ES5503Chip *chip = (ES5503Chip *)info;
 	
@@ -624,10 +624,10 @@ static void es5503_write_ram(void *info, UINT32 offset, UINT32 length, const UIN
 	return;
 }
 
-static void es5503_set_mute_mask(void *info, UINT32 MuteMask)
+static void es5503_set_mute_mask(void *info, uint32_t MuteMask)
 {
 	ES5503Chip *chip = (ES5503Chip *)info;
-	UINT8 CurChn;
+	uint8_t CurChn;
 	
 	for (CurChn = 0; CurChn < 32; CurChn ++)
 		chip->oscillators[CurChn].Muted = (MuteMask >> CurChn) & 0x01;

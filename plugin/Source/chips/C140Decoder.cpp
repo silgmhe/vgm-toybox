@@ -12,7 +12,7 @@ namespace toybox::chips
 namespace
 {
 	// System 2 boards run the C140 at 8 MHz; the header clock is used when it is there.
-	constexpr std::uint32_t kDefaultClock = 8000000;
+	constexpr uint32_t kDefaultClock = 8000000;
 
 	// c140.c: the sample pointer advances by `frequency * clock / 288` bytes a second, and the
 	// VGM's 16-bit frequency is multiplied by that in 16.16 (`pbase = clock / 288 / sampleRate`).
@@ -27,9 +27,9 @@ namespace
 	// depend on a measurement that a wrong window shifts by a constant.
 	constexpr double kRootRate = 8000.0;
 
-	constexpr std::uint8_t kModeMulaw = 0x08;
-	constexpr std::uint8_t kModeLoop = 0x10;
-	constexpr std::uint8_t kModeKeyOn = 0x80;
+	constexpr uint8_t kModeMulaw = 0x08;
+	constexpr uint8_t kModeLoop = 0x10;
+	constexpr uint8_t kModeKeyOn = 0x80;
 
 	/** The length of one cycle of a recorded sample, in bytes.
 
@@ -41,7 +41,7 @@ namespace
 
 		Returns 0 for a sample whose period does not stand out (a drum, noise, a one-shot with no
 		loop), which the caller reads as "use the root rate". */
-	double estimateSamplePeriod (const std::uint8_t* sample, std::size_t size,
+	double estimateSamplePeriod (const uint8_t* sample, std::size_t size,
 								 std::size_t loopOffset, std::size_t loopLength)
 	{
 		if (sample == nullptr)
@@ -63,7 +63,7 @@ namespace
 		explicit C140NoteTable (double clock)
 			: bytesPerSecondPerStep (clock / kClockDivisor) {}
 
-		int noteFor (std::uint32_t period, int, int* finePitch) const override
+		int noteFor (uint32_t period, int, int* finePitch) const override
 		{
 			return quantisePlaybackRate ((double) period * bytesPerSecondPerStep, kRootRate, finePitch);
 		}
@@ -77,57 +77,57 @@ struct C140Decoder::Impl
 {
 	struct Channel
 	{
-		std::uint8_t volumeRight = 0;	// +0
-		std::uint8_t volumeLeft = 0;	// +1
-		std::uint8_t freqHi = 0;		// +2
-		std::uint8_t freqLo = 0;		// +3
-		std::uint8_t bank = 0;			// +4
-		std::uint8_t mode = 0;			// +5: 0x08 mu-law, 0x10 loop, 0x80 key on
-		std::uint8_t startHi = 0;		// +6
-		std::uint8_t startLo = 0;		// +7
-		std::uint8_t endHi = 0;			// +8
-		std::uint8_t endLo = 0;			// +9
-		std::uint8_t loopHi = 0;		// +A
-		std::uint8_t loopLo = 0;		// +B
+		uint8_t volumeRight = 0;	// +0
+		uint8_t volumeLeft = 0;	// +1
+		uint8_t freqHi = 0;		// +2
+		uint8_t freqLo = 0;		// +3
+		uint8_t bank = 0;			// +4
+		uint8_t mode = 0;			// +5: 0x08 mu-law, 0x10 loop, 0x80 key on
+		uint8_t startHi = 0;		// +6
+		uint8_t startLo = 0;		// +7
+		uint8_t endHi = 0;			// +8
+		uint8_t endLo = 0;			// +9
+		uint8_t loopHi = 0;		// +A
+		uint8_t loopLo = 0;		// +B
 
 		// latched at key-on, where the core copies start/end into the voice
 		bool keyed = false;
-		std::uint32_t keyOns = 0;		// monotonic: a retrigger at the same pitch is a new note
-		std::uint32_t gateEnd = 0;		// when a non-looping sample reaches its end
+		uint32_t keyOns = 0;		// monotonic: a retrigger at the same pitch is a new note
+		uint32_t gateEnd = 0;		// when a non-looping sample reaches its end
 		double samplePeriodBytes = 0.0;	// the latched sample's cycle length; 0 = use the root rate
 	};
 
 	Channel channels[numChannels];
-	std::uint32_t now = 0;
+	uint32_t now = 0;
 	double clock = (double) kDefaultClock;
 	double streamRate = 44100.0;
-	std::vector<std::uint8_t> rom;					// the song's 0x8D blocks, one byte per address
+	std::vector<uint8_t> rom;					// the song's 0x8D blocks, one byte per address
 	Banking banking = Banking::system2;				// how a voice's bank/address reaches that ROM
-	std::map<std::uint64_t, double> periodCache;	// sample description -> cycle length
+	std::map<uint64_t, double> periodCache;	// sample description -> cycle length
 	std::vector<std::unique_ptr<C140NoteTable>> tables;
 
-	std::uint32_t startOf (const Channel& channel) const
+	uint32_t startOf (const Channel& channel) const
 	{
-		return ((std::uint32_t) channel.startHi << 8) | channel.startLo;
+		return ((uint32_t) channel.startHi << 8) | channel.startLo;
 	}
 
-	std::uint32_t endOf (const Channel& channel) const
+	uint32_t endOf (const Channel& channel) const
 	{
-		return ((std::uint32_t) channel.endHi << 8) | channel.endLo;
+		return ((uint32_t) channel.endHi << 8) | channel.endLo;
 	}
 
-	std::uint32_t loopOf (const Channel& channel) const
+	uint32_t loopOf (const Channel& channel) const
 	{
-		return ((std::uint32_t) channel.loopHi << 8) | channel.loopLo;
+		return ((uint32_t) channel.loopHi << 8) | channel.loopLo;
 	}
 
 	/** The ROM offset a voice's bank and address point at - libvgm's `find_sample()` (c140.c),
 		which is where the board's wiring lives. The registers only carry eight bits of bank, so
 		on System 2 the address is folded into 19 bits: without that fold a one-megabyte ROM has
 		no bank 0x14 and every sample of the song comes out unmeasurable. */
-	std::uint32_t sampleOffset (std::uint32_t address, std::uint8_t bank) const
+	uint32_t sampleOffset (uint32_t address, uint8_t bank) const
 	{
-		const std::uint32_t adrs = ((std::uint32_t) bank << 16) + address;
+		const uint32_t adrs = ((uint32_t) bank << 16) + address;
 		switch (banking)
 		{
 		case Banking::system21:
@@ -151,25 +151,25 @@ struct C140Decoder::Impl
 		correlation window needs, does the same. */
 	double samplePeriodFor (const Channel& channel)
 	{
-		const std::uint32_t start = startOf (channel);
-		const std::uint32_t end = endOf (channel);
-		const std::uint32_t loop = loopOf (channel);
+		const uint32_t start = startOf (channel);
+		const uint32_t end = endOf (channel);
+		const uint32_t loop = loopOf (channel);
 		if (rom.empty() || end <= start || (channel.mode & kModeMulaw) != 0)
 		{
 			return 0.0;
 		}
 
-		const std::uint64_t key = ((std::uint64_t) channel.bank << 48) | ((std::uint64_t) start << 32)
-								  | ((std::uint64_t) end << 16) | (std::uint64_t) loop;
+		const uint64_t key = ((uint64_t) channel.bank << 48) | ((uint64_t) start << 32)
+								  | ((uint64_t) end << 16) | (uint64_t) loop;
 		const auto cached = periodCache.find (key);
 		if (cached != periodCache.end())
 		{
 			return cached->second;
 		}
 
-		const std::uint32_t address = sampleOffset (start, channel.bank);
+		const uint32_t address = sampleOffset (start, channel.bank);
 		double period = 0.0;
-		if (address < (std::uint64_t) rom.size())
+		if (address < (uint64_t) rom.size())
 		{
 			const std::size_t size = std::min<std::size_t> ((std::size_t) (end - start),
 															rom.size() - (std::size_t) address);
@@ -183,9 +183,9 @@ struct C140Decoder::Impl
 		return period;
 	}
 
-	static std::uint32_t frequencyOf (const Channel& channel)
+	static uint32_t frequencyOf (const Channel& channel)
 	{
-		return ((std::uint32_t) channel.freqHi << 8) | channel.freqLo;
+		return ((uint32_t) channel.freqHi << 8) | channel.freqLo;
 	}
 
 	/** How long a non-looping voice lasts, in stream samples.
@@ -194,11 +194,11 @@ struct C140Decoder::Impl
 		sample's own size divided by the rate the chip advances at. A voice with no frequency is
 		skipped by the core entirely (`if (frequency == 0) continue;`) and an end at or below the
 		start trips the stop on the first sample: both are silence, not a note. */
-	std::uint32_t durationOf (const Channel& channel) const
+	uint32_t durationOf (const Channel& channel) const
 	{
-		const std::uint32_t start = startOf (channel);
-		const std::uint32_t end = endOf (channel);
-		const std::uint32_t frequency = frequencyOf (channel);
+		const uint32_t start = startOf (channel);
+		const uint32_t end = endOf (channel);
+		const uint32_t frequency = frequencyOf (channel);
 		if (end <= start || frequency == 0)
 		{
 			return 0;
@@ -206,10 +206,10 @@ struct C140Decoder::Impl
 
 		const double bytesPerSecond = (double) frequency * clock / kClockDivisor;
 		const double samples = (double) (end - start) / bytesPerSecond * streamRate;
-		return (std::uint32_t) std::llround (std::min (samples, 1.0e9));
+		return (uint32_t) std::llround (std::min (samples, 1.0e9));
 	}
 
-	void keyWrite (int channel, std::uint8_t value, std::uint32_t sampleTime)
+	void keyWrite (int channel, uint8_t value, uint32_t sampleTime)
 	{
 		Channel& voice = channels[channel];
 		voice.mode = value;
@@ -264,11 +264,11 @@ C140Decoder::~C140Decoder() = default;
 
 void C140Decoder::reset (const ChipConfig& config)
 {
-	[[maybe_unused]] const std::uint32_t clock = config.clockHz;
+	[[maybe_unused]] const uint32_t clock = config.clockHz;
 	[[maybe_unused]] const double sampleRate = config.timeBaseHz;
 	// the ROM and its banking belong to the song, not to the clock: a reset only changes the rate
 	// the chip runs at, so both are carried over instead of being dropped with the voices
-	std::vector<std::uint8_t> rom = impl != nullptr ? std::move (impl->rom) : std::vector<std::uint8_t>();
+	std::vector<uint8_t> rom = impl != nullptr ? std::move (impl->rom) : std::vector<uint8_t>();
 	const Banking banking = impl != nullptr ? impl->banking : Banking::system2;
 
 	impl = std::make_unique<Impl>();
@@ -285,14 +285,14 @@ void C140Decoder::reset (const ChipConfig& config)
 	}
 }
 
-C140Decoder::Banking C140Decoder::bankingFromHeaderByte (std::uint8_t headerByte)
+C140Decoder::Banking C140Decoder::bankingFromHeaderByte (uint8_t headerByte)
 {
 	switch (headerByte)
 	{
-	case (std::uint8_t) Banking::system21:
+	case (uint8_t) Banking::system21:
 		return Banking::system21;
 
-	case (std::uint8_t) Banking::linear:
+	case (uint8_t) Banking::linear:
 		return Banking::linear;
 
 	default:
@@ -304,7 +304,7 @@ C140Decoder::Banking C140Decoder::bankingFromHeaderByte (std::uint8_t headerByte
 	}
 }
 
-void C140Decoder::setRom (std::vector<std::uint8_t> rom, Banking newBanking)
+void C140Decoder::setRom (std::vector<uint8_t> rom, Banking newBanking)
 {
 	impl->rom = std::move (rom);
 	impl->banking = newBanking;
@@ -375,7 +375,7 @@ void C140Decoder::write (const RegisterWrite& w)
 	}
 }
 
-void C140Decoder::advance (std::uint32_t sampleTime)
+void C140Decoder::advance (uint32_t sampleTime)
 {
 	impl->now = sampleTime;
 

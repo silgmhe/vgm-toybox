@@ -86,9 +86,9 @@ namespace xgm
 
   }
 
-  INT32 NES_APU::calc_sqr (int i, UINT32 clocks)
+  int32_t NES_APU::calc_sqr (int i, uint32_t clocks)
   {
-    static const INT16 sqrtbl[4][16] = {
+    static const int16_t sqrtbl[4][16] = {
       {0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
       {0, 0, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
       {0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0},
@@ -102,7 +102,7 @@ namespace xgm
         scounter[i] += freq[i] + 1;
     }
 
-    INT32 ret = 0;
+    int32_t ret = 0;
     if (length_counter[i] > 0 &&
         freq[i] >= 8 &&
         sfreq[i] < 0x800
@@ -115,7 +115,7 @@ namespace xgm
     return ret;
   }
 
-  bool NES_APU::Read (UINT32 adr, UINT32 & val, UINT32 id)
+  bool NES_APU::Read (uint32_t adr, uint32_t & val, uint32_t id)
   {
     if (0x4000 <= adr && adr < 0x4008)
     {
@@ -131,26 +131,26 @@ namespace xgm
       return false;
   }
 
-  void NES_APU::Tick (UINT32 clocks)
+  void NES_APU::Tick (uint32_t clocks)
   {
     out[0] = calc_sqr(0, clocks);
     out[1] = calc_sqr(1, clocks);
   }
 
   // 生成される波形の振幅は0-8191
-  UINT32 NES_APU::Render (INT32 b[2])
+  uint32_t NES_APU::Render (int32_t b[2])
   {
     out[0] = (mask & 1) ? 0 : out[0];
     out[1] = (mask & 2) ? 0 : out[1];
 
-    INT32 m[2];
+    int32_t m[2];
 
     if(option[OPT_NONLINEAR_MIXER])
     {
-        INT32 voltage = square_table[out[0] + out[1]];
+        int32_t voltage = square_table[out[0] + out[1]];
         m[0] = out[0] << 6;
         m[1] = out[1] << 6;
-        INT32 ref = m[0] + m[1];
+        int32_t ref = m[0] + m[1];
         if (ref > 0)
         {
             m[0] = (m[0] * voltage) / ref;
@@ -191,7 +191,7 @@ namespace xgm
 
     square_table[0] = 0;
     for(int i=1;i<32;i++) 
-        square_table[i]=(INT32)((8192.0*95.88)/(8128.0/i+100));
+        square_table[i]=(int32_t)((8192.0*95.88)/(8128.0/i+100));
 
     square_linear = square_table[15]; // match linear scale to one full volume square of nonlinear
 
@@ -267,7 +267,7 @@ namespace xgm
     rate = r ? r : DEFAULT_RATE;
   }
 
-  void NES_APU::SetStereoMix(int trk, xgm::INT16 mixl, xgm::INT16 mixr)
+  void NES_APU::SetStereoMix(int trk, int16_t mixl, int16_t mixr)
   {
       if (trk < 0) return;
       if (trk > 1) return;
@@ -296,11 +296,11 @@ namespace xgm
     return &trkinfo[trk];
   }
 
-  bool NES_APU::Write (UINT32 adr, UINT32 val, UINT32 id)
+  bool NES_APU::Write (uint32_t adr, uint32_t val, uint32_t id)
   {
     int ch;
 
-    static const UINT8 length_table[32] = {
+    static const uint8_t length_table[32] = {
         0x0A, 0xFE,
         0x14, 0x02,
         0x28, 0x04,
@@ -398,22 +398,22 @@ namespace xgm
     return false;
   }
 
-  UINT32 NES_APU::RenderChannels (INT32* dest, int stride, int maxChannels)
+  uint32_t NES_APU::RenderChannels (int32_t* dest, int stride, int maxChannels)
   {
     // Same arithmetic as Render(), but each square is left in its own slot so the caller can mix
     // them separately. Render() is called first so the mask is applied exactly once and to the
     // same values.
-    INT32 mixed[2];
+    int32_t mixed[2];
     Render (mixed);
 
-    INT32 m[2];
+    int32_t m[2];
 
     if(option[OPT_NONLINEAR_MIXER])
     {
-        INT32 voltage = square_table[out[0] + out[1]];
+        int32_t voltage = square_table[out[0] + out[1]];
         m[0] = out[0] << 6;
         m[1] = out[1] << 6;
-        INT32 ref = m[0] + m[1];
+        int32_t ref = m[0] + m[1];
         if (ref > 0)
         {
             m[0] = (m[0] * voltage) / ref;

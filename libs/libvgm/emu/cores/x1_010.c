@@ -66,18 +66,18 @@ Registers:
 #include "x1_010.h"
 
 
-static void seta_update(void *param, UINT32 samples, DEV_SMPL **outputs);
-static UINT8 device_start_x1_010(const DEV_GEN_CFG* cfg, DEV_INFO* retDevInf);
+static void seta_update(void *param, uint32_t samples, DEV_SMPL **outputs);
+static uint8_t device_start_x1_010(const DEV_GEN_CFG* cfg, DEV_INFO* retDevInf);
 static void device_stop_x1_010(void *chip);
 static void device_reset_x1_010(void *chip);
 
-static UINT8 seta_sound_r(void *chip, UINT16 offset);
-static void seta_sound_w(void *chip, UINT16 offset, UINT8 data);
+static uint8_t seta_sound_r(void *chip, uint16_t offset);
+static void seta_sound_w(void *chip, uint16_t offset, uint8_t data);
 
-static void x1_010_alloc_rom(void* info, UINT32 memsize);
-static void x1_010_write_rom(void *chip, UINT32 offset, UINT32 length, const UINT8* data);
+static void x1_010_alloc_rom(void* info, uint32_t memsize);
+static void x1_010_write_rom(void *chip, uint32_t offset, uint32_t length, const uint8_t* data);
 
-static void x1_010_set_mute_mask(void *chip, UINT32 MuteMask);
+static void x1_010_set_mute_mask(void *chip, uint32_t MuteMask);
 static void x1_010_set_log_cb(void *chip, DEVCB_LOG func, void* param);
 
 
@@ -114,7 +114,7 @@ static const char* DeviceName(const DEV_GEN_CFG* devCfg)
 	return "X1-010";
 }
 
-static UINT16 DeviceChannels(const DEV_GEN_CFG* devCfg)
+static uint16_t DeviceChannels(const DEV_GEN_CFG* devCfg)
 {
 	return 16;
 }
@@ -154,19 +154,19 @@ const DEV_DECL sndDev_X1_010 =
 #define SETA_NUM_CHANNELS 16
 
 //#define FREQ_BASE_BITS          8                 // Frequency fixed decimal shift bits
-#define FREQ_BASE_BITS        11                // using UINT32, 20 bits (1 MB) of address space -> 32-20=12 bits left, -1 for position overflow checking
+#define FREQ_BASE_BITS        11                // using uint32_t, 20 bits (1 MB) of address space -> 32-20=12 bits left, -1 for position overflow checking
 #define ENV_BASE_BITS        16                 // wave form envelope fixed decimal shift bits
 #define VOL_BASE    (2*32*256/30)               // Volume base
 
 /* this structure defines the parameters for a channel */
 typedef struct {
-	UINT8   status;
-	UINT8   volume;                     //        volume / wave form no.
-	UINT8   frequency;                  //     frequency / pitch lo
-	UINT8   pitch_hi;                   //      reserved / pitch hi
-	UINT8   start;                      // start address / envelope time
-	UINT8   end;                        //   end address / envelope no.
-	UINT8   reserve[2];
+	uint8_t   status;
+	uint8_t   volume;                     //        volume / wave form no.
+	uint8_t   frequency;                  //     frequency / pitch lo
+	uint8_t   pitch_hi;                   //      reserved / pitch hi
+	uint8_t   start;                      // start address / envelope time
+	uint8_t   end;                        //   end address / envelope no.
+	uint8_t   reserve[2];
 } X1_010_CHANNEL;
 
 typedef struct _x1_010_state x1_010_state;
@@ -176,35 +176,35 @@ struct _x1_010_state
 	DEV_LOGGER logger;
 	
 	/* Variables only used here */
-	UINT32 ROMSize;
-	UINT8* rom;                             // ROM
-	UINT32 rate;                            // Output sampling rate (Hz)
-//	UINT16 adr;                             // address
-//	UINT8 sound_enable;                     // sound output enable/disable
-	UINT8   reg[0x2000];                    // X1-010 Register & wave form area
-//	UINT8   HI_WORD_BUF[0x2000];            // X1-010 16bit access ram check avoidance work
-	UINT32  smp_offset[SETA_NUM_CHANNELS];
-	UINT32  env_offset[SETA_NUM_CHANNELS];
+	uint32_t ROMSize;
+	uint8_t* rom;                             // ROM
+	uint32_t rate;                            // Output sampling rate (Hz)
+//	uint16_t adr;                             // address
+//	uint8_t sound_enable;                     // sound output enable/disable
+	uint8_t   reg[0x2000];                    // X1-010 Register & wave form area
+//	uint8_t   HI_WORD_BUF[0x2000];            // X1-010 16bit access ram check avoidance work
+	uint32_t  smp_offset[SETA_NUM_CHANNELS];
+	uint32_t  env_offset[SETA_NUM_CHANNELS];
 
-	UINT32 base_clock;
+	uint32_t base_clock;
 
-	UINT8 Muted[SETA_NUM_CHANNELS];
+	uint8_t Muted[SETA_NUM_CHANNELS];
 };
 
 
 /*--------------------------------------------------------------
  generate sound to the mix buffer
 --------------------------------------------------------------*/
-static void seta_update(void *param, UINT32 samples, DEV_SMPL **outputs)
+static void seta_update(void *param, uint32_t samples, DEV_SMPL **outputs)
 {
 	x1_010_state *info = (x1_010_state *)param;
 	X1_010_CHANNEL  *reg;
-	UINT32  ch;
-	UINT32  i;
+	uint32_t  ch;
+	uint32_t  i;
 	int     volL, volR, freq, div;
-	INT8    *start, *end, data;
-	UINT8   *env;
-	UINT32  smp_offs, smp_step, env_offs, env_step, delta;
+	int8_t    *start, *end, data;
+	uint8_t   *env;
+	uint32_t  smp_offs, smp_step, env_offs, env_step, delta;
 	DEV_SMPL *bufL = outputs[0];
 	DEV_SMPL *bufR = outputs[1];
 
@@ -221,8 +221,8 @@ static void seta_update(void *param, UINT32 samples, DEV_SMPL **outputs)
 		if( (reg->status&1) != 0 && ! info->Muted[ch]) {        // Key On
 			div = (reg->status&0x80) ? 1 : 0;
 			if( (reg->status&2) == 0 ) {                        // PCM sampling
-				start    = (INT8 *)(info->rom + reg->start*0x1000);
-				end      = (INT8 *)(info->rom + (0x100-reg->end)*0x1000);
+				start    = (int8_t *)(info->rom + reg->start*0x1000);
+				end      = (int8_t *)(info->rom + (0x100-reg->end)*0x1000);
 				volL     = ((reg->volume>>4)&0xf)*VOL_BASE;
 				volR     = ((reg->volume>>0)&0xf)*VOL_BASE;
 				smp_offs = info->smp_offset[ch];
@@ -230,7 +230,7 @@ static void seta_update(void *param, UINT32 samples, DEV_SMPL **outputs)
 				// Meta Fox does write the frequency register, but this is a hack to make it "work" with the current setup
 				// This is broken for Arbalester (it writes 8), but that'll be fixed later.
 				if( freq == 0 ) freq = 4;
-				smp_step = (UINT32)((float)info->base_clock/8192.0f
+				smp_step = (uint32_t)((float)info->base_clock/8192.0f
 							*freq*(1<<FREQ_BASE_BITS)/(float)info->rate+0.5f);
 				if( smp_offs == 0 && VERBOSE_SOUND ) {
 					emu_logf(&info->logger, DEVLOG_TRACE, "Play sample %p - %p, channel %X volume %d:%d freq %X step %X offset %X\n",
@@ -250,14 +250,14 @@ static void seta_update(void *param, UINT32 samples, DEV_SMPL **outputs)
 				}
 				info->smp_offset[ch] = smp_offs;
 			} else {                                            // Wave form
-				start    = (INT8 *)&(info->reg[reg->volume*128+0x1000]);
+				start    = (int8_t *)&(info->reg[reg->volume*128+0x1000]);
 				smp_offs = info->smp_offset[ch];
 				freq     = ((reg->pitch_hi<<8)+reg->frequency)>>div;
-				smp_step = (UINT32)((float)info->base_clock/128.0/1024.0/4.0*freq*(1<<FREQ_BASE_BITS)/(float)info->rate+0.5f);
+				smp_step = (uint32_t)((float)info->base_clock/128.0/1024.0/4.0*freq*(1<<FREQ_BASE_BITS)/(float)info->rate+0.5f);
 
-				env      = (UINT8 *)&(info->reg[reg->end*128]);
+				env      = (uint8_t *)&(info->reg[reg->end*128]);
 				env_offs = info->env_offset[ch];
-				env_step = (UINT32)((float)info->base_clock/128.0/1024.0/4.0*reg->start*(1<<ENV_BASE_BITS)/(float)info->rate+0.5f);
+				env_step = (uint32_t)((float)info->base_clock/128.0/1024.0/4.0*reg->start*(1<<ENV_BASE_BITS)/(float)info->rate+0.5f);
 				/* Print some more debug info */
 				if( smp_offs == 0 && VERBOSE_SOUND ) {
 					emu_logf(&info->logger, DEVLOG_TRACE, "Play waveform %X, channel %X volume %X freq %4X step %X offset %X\n",
@@ -289,7 +289,7 @@ static void seta_update(void *param, UINT32 samples, DEV_SMPL **outputs)
 
 
 
-static UINT8 device_start_x1_010(const DEV_GEN_CFG* cfg, DEV_INFO* retDevInf)
+static uint8_t device_start_x1_010(const DEV_GEN_CFG* cfg, DEV_INFO* retDevInf)
 {
 	x1_010_state *info;
 
@@ -331,29 +331,29 @@ static void device_reset_x1_010(void *chip)
 	
 	memset(info->reg, 0, 0x2000);
 //	memset(HI_WORD_BUF, 0, sizeof(m_HI_WORD_BUF));
-	memset(info->smp_offset, 0, SETA_NUM_CHANNELS * sizeof(UINT32));
-	memset(info->env_offset, 0, SETA_NUM_CHANNELS * sizeof(UINT32));
+	memset(info->smp_offset, 0, SETA_NUM_CHANNELS * sizeof(uint32_t));
+	memset(info->env_offset, 0, SETA_NUM_CHANNELS * sizeof(uint32_t));
 	
 	return;
 }
 
 
 #if 0
-static void x1_010_enable_w(void *chip, UINT8 data)
+static void x1_010_enable_w(void *chip, uint8_t data)
 {
 	x1_010_state *info = (x1_010_state *)chip;
 	info->sound_enable = data;
 }
 #endif
 
-static UINT8 seta_sound_r(void *chip, UINT16 offset)
+static uint8_t seta_sound_r(void *chip, uint16_t offset)
 {
 	x1_010_state *info = (x1_010_state *)chip;
 	//offset ^= info->adr;
 	return info->reg[offset];
 }
 
-static void seta_sound_w(void *chip, UINT16 offset, UINT8 data)
+static void seta_sound_w(void *chip, uint16_t offset, uint8_t data)
 {
 	x1_010_state *info = (x1_010_state *)chip;
 	int channel, reg;
@@ -371,21 +371,21 @@ static void seta_sound_w(void *chip, UINT16 offset, UINT8 data)
 	info->reg[offset] = data;
 }
 
-static void x1_010_alloc_rom(void* chip, UINT32 memsize)
+static void x1_010_alloc_rom(void* chip, uint32_t memsize)
 {
 	x1_010_state *info = (x1_010_state *)chip;
 	
 	if (info->ROMSize == memsize)
 		return;
 	
-	info->rom = (UINT8*)realloc(info->rom, memsize);
+	info->rom = (uint8_t*)realloc(info->rom, memsize);
 	info->ROMSize = memsize;
 	memset(info->rom, 0xFF, memsize);
 	
 	return;
 }
 
-static void x1_010_write_rom(void *chip, UINT32 offset, UINT32 length, const UINT8* data)
+static void x1_010_write_rom(void *chip, uint32_t offset, uint32_t length, const uint8_t* data)
 {
 	x1_010_state *info = (x1_010_state *)chip;
 	
@@ -400,10 +400,10 @@ static void x1_010_write_rom(void *chip, UINT32 offset, UINT32 length, const UIN
 }
 
 
-static void x1_010_set_mute_mask(void *chip, UINT32 MuteMask)
+static void x1_010_set_mute_mask(void *chip, uint32_t MuteMask)
 {
 	x1_010_state *info = (x1_010_state *)chip;
-	UINT8 CurChn;
+	uint8_t CurChn;
 	
 	for (CurChn = 0; CurChn < SETA_NUM_CHANNELS; CurChn ++)
 		info->Muted[CurChn] = (MuteMask >> CurChn) & 0x01;

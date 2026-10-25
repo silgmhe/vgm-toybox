@@ -37,7 +37,7 @@ namespace xgm
      * @param id  デバイス識別情報．一つのデバイスが複数のIOをサポートする時など
      * @return 成功時 true 失敗時 false
      */
-    virtual bool Write (UINT32 adr, UINT32 val, UINT32 id=0)=0;
+    virtual bool Write (uint32_t adr, uint32_t val, uint32_t id=0)=0;
 
     /**
      * デバイスから読み込み
@@ -46,7 +46,7 @@ namespace xgm
      * @param val 読み出した値を受け取る変数．
      * @return 成功時 true 失敗時 false
      */
-    virtual bool Read (UINT32 adr, UINT32 & val, UINT32 id=0)=0;
+    virtual bool Read (uint32_t adr, uint32_t & val, uint32_t id=0)=0;
 
     /**
      * 各種オプションを設定する(もしあれば)
@@ -68,7 +68,7 @@ namespace xgm
      * b[0]が左チャンネル，b[1]が右チャンネルの音声データ．
      * @return 合成したデータのサイズ．1ならモノラル．2ならステレオ．0は合成失敗．
      */
-    virtual UINT32 Render (INT32 b[2]) = 0;
+    virtual uint32_t Render (int32_t b[2]) = 0;
 
     // When seeking, this replaces Render
     virtual void Skip () {}
@@ -77,7 +77,7 @@ namespace xgm
      *  chip update/operation is now bound to CPU clocks
      *  Render() now simply mixes and outputs sound
      */
-    virtual void Tick (UINT32 clocks) {}
+    virtual void Tick (uint32_t clocks) {}
     virtual ~IRenderable() {};
   };
 
@@ -90,7 +90,7 @@ namespace xgm
     /**
      * Soundchip clocked by M2 (NTSC = ~1.789MHz)
      */
-    virtual void Tick (UINT32 clocks) = 0;
+    virtual void Tick (uint32_t clocks) = 0;
 
     /**
      * チップの動作クロックを設定
@@ -120,7 +120,7 @@ namespace xgm
      *     0 = nil
      *    <0 = inverted
      */
-    virtual void SetStereoMix(int trk, xgm::INT16 mixl, xgm::INT16 mixr) = 0;
+    virtual void SetStereoMix(int trk, int16_t mixl, int16_t mixr) = 0;
 
     /**
      * Track info for keyboard view.
@@ -186,7 +186,7 @@ namespace xgm
      * 呼び出し順序は，デバイスが取り付けられた順序に等しい．
      * </P>
      */
-    bool Write (UINT32 adr, UINT32 val, UINT32 id=0)
+    bool Write (uint32_t adr, uint32_t val, uint32_t id=0)
     {
       bool ret = false;
       std::vector < IDevice * >::iterator it;
@@ -205,10 +205,10 @@ namespace xgm
      * 返り値の論理和．
      * </P>
      */
-    bool Read (UINT32 adr, UINT32 & val, UINT32 id=0)
+    bool Read (uint32_t adr, uint32_t & val, uint32_t id=0)
     {
       bool ret = false;
-      UINT32 vtmp = 0;
+      uint32_t vtmp = 0;
       std::vector < IDevice * >::iterator it;
 
       val = 0;
@@ -245,7 +245,7 @@ namespace xgm
      * Writeに成功したデバイスが見つかった時点で終了．
      * </P>
      */
-    bool Write (UINT32 adr, UINT32 val, UINT32 id=0)
+    bool Write (uint32_t adr, uint32_t val, uint32_t id=0)
     {
       std::vector < IDevice * >::iterator it;
       for (it = vd.begin (); it != vd.end (); it++)
@@ -263,7 +263,7 @@ namespace xgm
      * Readに成功したデバイスが見つかった時点で終了．
      * </P>
      */
-    bool Read (UINT32 adr, UINT32 & val, UINT32 id=0)
+    bool Read (uint32_t adr, uint32_t & val, uint32_t id=0)
     {
       std::vector < IDevice * >::iterator it;
       val = 0;

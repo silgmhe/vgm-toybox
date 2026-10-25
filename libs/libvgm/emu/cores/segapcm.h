@@ -17,8 +17,8 @@ typedef struct segapcm_config
 {
 	DEV_GEN_CFG _genCfg;
 	
-	UINT8 bnkshift;
-	UINT8 bnkmask;
+	uint8_t bnkshift;
+	uint8_t bnkmask;
 } SEGAPCM_CFG;
 
 extern const DEV_DECL sndDev_SegaPCM;

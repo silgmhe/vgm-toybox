@@ -22,7 +22,7 @@ namespace toybox::formats::nsf
 {
 
 /** The extra sound hardware a driver wants, as the header's chip byte declares it. */
-enum class NsfChip : std::uint8_t
+enum class NsfChip : uint8_t
 {
 	none = 0x00,
 	vrc6 = 0x01,
@@ -61,22 +61,22 @@ struct NsfFile
 	int version = 0;
 	int totalSongs = 0;
 	int startSong = 1;				// one-based in the file, kept as written
-	std::uint16_t loadAddress = 0x8000;
-	std::uint16_t initAddress = 0x8000;
-	std::uint16_t playAddress = 0x0000;
+	uint16_t loadAddress = 0x8000;
+	uint16_t initAddress = 0x8000;
+	uint16_t playAddress = 0x0000;
 	std::string name;
 	std::string artist;
 	std::string copyright;
 
 	/** Play call period in microseconds; the lowest bit of the NTSC word is the PAL flag. */
-	std::uint16_t ntscSpeed = 0;
-	std::uint16_t palSpeed = 0;
-	std::uint8_t chipFlags = 0;			// 0x7A
-	std::uint8_t extraChipFlags = 0;	// 0x7B, the NSF 2.0 extension
-	std::array<std::uint8_t, 8> bankSwitch {};
+	uint16_t ntscSpeed = 0;
+	uint16_t palSpeed = 0;
+	uint8_t chipFlags = 0;			// 0x7A
+	uint8_t extraChipFlags = 0;	// 0x7B, the NSF 2.0 extension
+	std::array<uint8_t, 8> bankSwitch {};
 
 	/** The program and its data, from the end of the header to the end of the file. */
-	std::vector<std::uint8_t> rom;
+	std::vector<uint8_t> rom;
 
 	/** FNV-1a over `rom`, computed once when the image is read. It is what the DPCM sample-slot
 		cache keys on: a backend can be rebuilt while a song is open, so the file itself is not a

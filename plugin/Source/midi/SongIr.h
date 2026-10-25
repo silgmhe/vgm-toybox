@@ -77,8 +77,8 @@ struct ChipSlot
 {
 	ChipKind kind = ChipKind::unknown;
 	int instance = 0;
-	std::uint32_t clockHz = 0;
-	std::uint32_t flags = 0;
+	uint32_t clockHz = 0;
+	uint32_t flags = 0;
 };
 
 /** A ROM or RAM block the song carries.
@@ -93,10 +93,10 @@ struct ChipSlot
 struct RomBlock
 {
 	int memoryType = 0;			// the loader's numbering; each chip interprets its own
-	std::uint32_t romSize = 0;	// bytes of the ROM this block belongs to (ROM blocks only)
-	std::uint32_t romOffset = 0;	// where in that ROM the payload belongs (ROM blocks only)
-	std::uint32_t ramOffset = 0;	// where in the chip's own RAM (RAM blocks only)
-	const std::uint8_t* data = nullptr;
+	uint32_t romSize = 0;	// bytes of the ROM this block belongs to (ROM blocks only)
+	uint32_t romOffset = 0;	// where in that ROM the payload belongs (ROM blocks only)
+	uint32_t ramOffset = 0;	// where in the chip's own RAM (RAM blocks only)
+	const uint8_t* data = nullptr;
 	std::size_t size = 0;
 
 	/** True when the block addresses the chip's RAM rather than a ROM image. */
@@ -127,7 +127,7 @@ struct SongIr
 	std::vector<ChipSlot> chips;
 	std::vector<chips::RegisterWrite> writes;
 	std::vector<RomBlock> roms;
-	std::uint32_t totalTicks = 0;
+	uint32_t totalTicks = 0;
 };
 
 /** A format's entry point: bytes in, IR out.

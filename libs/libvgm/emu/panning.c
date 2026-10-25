@@ -25,7 +25,7 @@
 // Set the panning values for the two stereo channels (L,R)
 // for a position -256..0..256 L..C..R
 //-----------------------------------------------------------------
-void Panning_Calculate(INT32 channels[2], INT16 position)
+void Panning_Calculate(int32_t channels[2], int16_t position)
 {
 	if ( position > RANGE / 2 )
 		position = RANGE / 2;
@@ -38,15 +38,15 @@ void Panning_Calculate(INT32 channels[2], INT16 position)
 	// left is equivalent to right with position = range - position
 	// position is in the range 0 .. RANGE
 	// RANGE / 2 = centre, result = 1.0f
-	channels[1] = (INT32)( sin((double)position * POS_MULT) * M_SQRT2 * PANNING_NORMAL );
+	channels[1] = (int32_t)( sin((double)position * POS_MULT) * M_SQRT2 * PANNING_NORMAL );
 	position = RANGE - position;
-	channels[0] = (INT32)( sin((double)position * POS_MULT) * M_SQRT2 * PANNING_NORMAL );
+	channels[0] = (int32_t)( sin((double)position * POS_MULT) * M_SQRT2 * PANNING_NORMAL );
 }
 
 //-----------------------------------------------------------------
 // Reset the panning values to the centre position
 //-----------------------------------------------------------------
-void Panning_Centre(INT32 channels[2])
+void Panning_Centre(int32_t channels[2])
 {
 	channels[0] = channels[1] = PANNING_NORMAL;
 }

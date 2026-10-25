@@ -17,7 +17,7 @@ namespace toybox::backends::libvgm
 namespace
 {
 	/** The emulation core is reported as a four character code - show it as text. */
-	juce::String fccToString (UINT32 code)
+	juce::String fccToString (uint32_t code)
 	{
 		const auto fcc = (const char*) &code;
 		juce::String result;
@@ -36,7 +36,7 @@ namespace
 		their parent's options), so they never become tracks of their own. */
 	bool isTrackDevice (const PLR_DEV_INFO& info)
 	{
-		return info.parentIdx == (UINT32) -1;
+		return info.parentIdx == (uint32_t) -1;
 	}
 
 	/** What the MIDI decoder will be able to do for one channel of a device. This is deliberately
@@ -468,12 +468,12 @@ SongDescription describeSong (LibvgmTrackPlayer* probe)
 	pBase->GetSongDeviceInfo (devices);
 	result.devices = devices;
 
-	std::map<UINT32, int> instancesByType;
+	std::map<uint32_t, int> instancesByType;
 	for (const auto& device : devices)
 	{
 		if (isTrackDevice (device))
 		{
-			++instancesByType[(UINT32) device.type];
+			++instancesByType[(uint32_t) device.type];
 		}
 	}
 
@@ -542,7 +542,7 @@ SongDescription describeSong (LibvgmTrackPlayer* probe)
 			const char* deviceName = SndEmu_GetDevName (device.type, 0x01, device.devCfg);
 			return (deviceName != nullptr) ? juce::String (deviceName) : juce::String ("Device");
 		}();
-		if (instancesByType[(UINT32) device.type] > 1)
+		if (instancesByType[(uint32_t) device.type] > 1)
 		{
 			const int instanceNumber = (device.instance == 0xFFFF) ? 1 : (int) device.instance + 1;
 			groupName << " #" << instanceNumber;
@@ -591,7 +591,7 @@ SongDescription describeSong (LibvgmTrackPlayer* probe)
 
 		for (const auto& child : devices)
 		{
-			if (child.parentIdx != (UINT32) headIndex
+			if (child.parentIdx != (uint32_t) headIndex
 				|| linkedDeviceKindFor (child.type) != LinkedDeviceKind::extraVoices)
 			{
 				continue;

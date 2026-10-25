@@ -47,18 +47,18 @@
 
 struct DRO_HEADER
 {
-	UINT16 verMajor;
-	UINT16 verMinor;
-	UINT32 dataSize;	// in bytes
-	UINT32 lengthMS;
-	UINT8 hwType;
-	UINT8 format;
-	UINT8 compression;
-	UINT8 cmdDlyShort;
-	UINT8 cmdDlyLong;
-	UINT8 regCmdCnt;
-	UINT8 regCmdMap[0x80];
-	UINT32 dataOfs;
+	uint16_t verMajor;
+	uint16_t verMinor;
+	uint32_t dataSize;	// in bytes
+	uint32_t lengthMS;
+	uint8_t hwType;
+	uint8_t format;
+	uint8_t compression;
+	uint8_t cmdDlyShort;
+	uint8_t cmdDlyLong;
+	uint8_t regCmdCnt;
+	uint8_t regCmdMap[0x80];
+	uint32_t dataOfs;
 };
 
 // DRO v2 often incorrectly specify DualOPL2 instead of OPL3
@@ -69,7 +69,7 @@ struct DRO_HEADER
 struct DRO_PLAY_OPTIONS
 {
 	PLR_GEN_OPTS genOpts;
-	UINT8 v2opl3Mode;	// DRO v2 DualOPL2 -> OPL3 fixes
+	uint8_t v2opl3Mode;	// DRO v2 DualOPL2 -> OPL3 fixes
 };
 
 
@@ -93,49 +93,49 @@ public:
 	DROPlayer();
 	~DROPlayer();
 	
-	UINT32 GetPlayerType(void) const;
+	uint32_t GetPlayerType(void) const;
 	const char* GetPlayerName(void) const;
-	static UINT8 PlayerCanLoadFile(DATA_LOADER *dataLoader);
-	UINT8 CanLoadFile(DATA_LOADER *dataLoader) const;
-	UINT8 LoadFile(DATA_LOADER *dataLoader);
-	UINT8 UnloadFile(void);
+	static uint8_t PlayerCanLoadFile(DATA_LOADER *dataLoader);
+	uint8_t CanLoadFile(DATA_LOADER *dataLoader) const;
+	uint8_t LoadFile(DATA_LOADER *dataLoader);
+	uint8_t UnloadFile(void);
 	const DRO_HEADER* GetFileHeader(void) const;
 	
 	const char* const* GetTags(void);
-	UINT8 GetSongInfo(PLR_SONG_INFO& songInf);
-	UINT8 GetSongDeviceInfo(std::vector<PLR_DEV_INFO>& devInfList) const;
-	UINT8 SetDeviceOptions(UINT32 id, const PLR_DEV_OPTS& devOpts);
-	UINT8 GetDeviceOptions(UINT32 id, PLR_DEV_OPTS& devOpts) const;
-	UINT8 SetDeviceMuting(UINT32 id, const PLR_MUTE_OPTS& muteOpts);
-	UINT8 GetDeviceMuting(UINT32 id, PLR_MUTE_OPTS& muteOpts) const;
-	UINT8 SetPlayerOptions(const DRO_PLAY_OPTIONS& playOpts);
-	UINT8 GetPlayerOptions(DRO_PLAY_OPTIONS& playOpts) const;
+	uint8_t GetSongInfo(PLR_SONG_INFO& songInf);
+	uint8_t GetSongDeviceInfo(std::vector<PLR_DEV_INFO>& devInfList) const;
+	uint8_t SetDeviceOptions(uint32_t id, const PLR_DEV_OPTS& devOpts);
+	uint8_t GetDeviceOptions(uint32_t id, PLR_DEV_OPTS& devOpts) const;
+	uint8_t SetDeviceMuting(uint32_t id, const PLR_MUTE_OPTS& muteOpts);
+	uint8_t GetDeviceMuting(uint32_t id, PLR_MUTE_OPTS& muteOpts) const;
+	uint8_t SetPlayerOptions(const DRO_PLAY_OPTIONS& playOpts);
+	uint8_t GetPlayerOptions(DRO_PLAY_OPTIONS& playOpts) const;
 	
-	//UINT32 GetSampleRate(void) const;
-	UINT8 SetSampleRate(UINT32 sampleRate);
+	//uint32_t GetSampleRate(void) const;
+	uint8_t SetSampleRate(uint32_t sampleRate);
 	double GetPlaybackSpeed(void) const;
-	UINT8 SetPlaybackSpeed(double speed);
+	uint8_t SetPlaybackSpeed(double speed);
 	//void SetEventCallback(PLAYER_EVENT_CB cbFunc, void* cbParam);
-	UINT32 Tick2Sample(UINT32 ticks) const;
-	UINT32 Sample2Tick(UINT32 samples) const;
-	double Tick2Second(UINT32 ticks) const;
-	//double Sample2Second(UINT32 samples) const;
+	uint32_t Tick2Sample(uint32_t ticks) const;
+	uint32_t Sample2Tick(uint32_t samples) const;
+	double Tick2Second(uint32_t ticks) const;
+	//double Sample2Second(uint32_t samples) const;
 	
-	UINT8 GetState(void) const;
-	UINT32 GetCurPos(UINT8 unit) const;
-	UINT32 GetCurLoop(void) const;
-	UINT32 GetTotalTicks(void) const;	// get time for playing once in ticks
-	UINT32 GetLoopTicks(void) const;	// get time for one loop in ticks
-	//UINT32 GetTotalPlayTicks(UINT32 numLoops) const;	// get time for playing + looping (without fading)
+	uint8_t GetState(void) const;
+	uint32_t GetCurPos(uint8_t unit) const;
+	uint32_t GetCurLoop(void) const;
+	uint32_t GetTotalTicks(void) const;	// get time for playing once in ticks
+	uint32_t GetLoopTicks(void) const;	// get time for one loop in ticks
+	//uint32_t GetTotalPlayTicks(uint32_t numLoops) const;	// get time for playing + looping (without fading)
 	
-	UINT8 Start(void);
-	UINT8 Stop(void);
-	UINT8 Reset(void);
-	UINT8 Seek(UINT8 unit, UINT32 pos);
-	UINT32 Render(UINT32 smplCnt, WAVE_32BS* data);
+	uint8_t Start(void);
+	uint8_t Stop(void);
+	uint8_t Reset(void);
+	uint8_t Seek(uint8_t unit, uint32_t pos);
+	uint32_t Render(uint32_t smplCnt, WAVE_32BS* data);
 	
 private:
-	size_t DeviceID2OptionID(UINT32 id) const;
+	size_t DeviceID2OptionID(uint32_t id) const;
 	void RefreshMuting(DRO_CHIPDEV& chipDev, const PLR_MUTE_OPTS& muteOpts);
 	void RefreshPanning(DRO_CHIPDEV& chipDev, const PLR_PAN_OPTS& panOpts);
 	
@@ -143,45 +143,45 @@ private:
 
 	void RefreshTSRates(void);
 	
-	static void PlayerLogCB(void* userParam, void* source, UINT8 level, const char* message);
-	static void SndEmuLogCB(void* userParam, void* source, UINT8 level, const char* message);
+	static void PlayerLogCB(void* userParam, void* source, uint8_t level, const char* message);
+	static void SndEmuLogCB(void* userParam, void* source, uint8_t level, const char* message);
 	
 	void GenerateDeviceConfig(void);
-	UINT8 SeekToTick(UINT32 tick);
-	UINT8 SeekToFilePos(UINT32 pos);
-	void ParseFile(UINT32 ticks);
+	uint8_t SeekToTick(uint32_t tick);
+	uint8_t SeekToFilePos(uint32_t pos);
+	void ParseFile(uint32_t ticks);
 	void DoCommand_v1(void);
 	void DoCommand_v2(void);
 	void DoFileEnd(void);
-	void WriteReg(UINT8 port, UINT8 reg, UINT8 data);
+	void WriteReg(uint8_t port, uint8_t reg, uint8_t data);
 	
 	DEV_LOGGER _logger;
 	DATA_LOADER* _dLoad;
-	const UINT8* _fileData;	// data pointer for quick access, equals _dLoad->GetFileData().data()
+	const uint8_t* _fileData;	// data pointer for quick access, equals _dLoad->GetFileData().data()
 	
 	DRO_HEADER _fileHdr;
 	std::vector<DEV_ID> _devTypes;
-	std::vector<UINT8> _devPanning;
+	std::vector<uint8_t> _devPanning;
 	std::vector<DEV_GEN_CFG> _devCfgs;
-	UINT8 _realHwType;
-	UINT8 _portShift;	// 0 for OPL2 (1 port per chip), 1 for OPL3 (2 ports per chip)
-	UINT8 _portMask;	// (1 << _portShift) - 1
-	UINT32 _tickFreq;
-	UINT32 _totalTicks;
+	uint8_t _realHwType;
+	uint8_t _portShift;	// 0 for OPL2 (1 port per chip), 1 for OPL3 (2 ports per chip)
+	uint8_t _portMask;	// (1 << _portShift) - 1
+	uint32_t _tickFreq;
+	uint32_t _totalTicks;
 	
 	// information about the initialization block (ends with first delay)
-	UINT32 _initBlkEndOfs;	// offset of end of init. block (for special fixes)
+	uint32_t _initBlkEndOfs;	// offset of end of init. block (for special fixes)
 	std::vector<bool> _initRegSet;	// registers set during init. block
-	UINT8 _initOPL3Enable;	// value of OPL3 enable register set during init. block
+	uint8_t _initOPL3Enable;	// value of OPL3 enable register set during init. block
 	
-	//UINT32 _outSmplRate;
+	//uint32_t _outSmplRate;
 	
 	// tick/sample conversion rates
-	UINT64 _tsMult;
-	UINT64 _tsDiv;
-	UINT64 _ttMult;
-	UINT64 _lastTsMult;
-	UINT64 _lastTsDiv;
+	uint64_t _tsMult;
+	uint64_t _tsDiv;
+	uint64_t _ttMult;
+	uint64_t _lastTsMult;
+	uint64_t _lastTsDiv;
 	
 	DRO_PLAY_OPTIONS _playOpts;
 	PLR_DEV_OPTS _devOpts[3];	// 0 = 1st OPL2, 1 = 2nd OPL2, 2 = 1st OPL3
@@ -189,14 +189,14 @@ private:
 	std::vector<std::string> _devNames;
 	size_t _optDevMap[3];	// maps _devOpts vector index to _devices vector
 	
-	UINT32 _filePos;
-	UINT32 _fileTick;
-	UINT32 _playTick;
-	UINT32 _playSmpl;
+	uint32_t _filePos;
+	uint32_t _fileTick;
+	uint32_t _playTick;
+	uint32_t _playSmpl;
 	
-	UINT8 _playState;
-	UINT8 _psTrigger;	// used to temporarily trigger special commands
-	UINT8 _selPort;		// currently selected OPL chip (for DRO v1)
+	uint8_t _playState;
+	uint8_t _psTrigger;	// used to temporarily trigger special commands
+	uint8_t _selPort;		// currently selected OPL chip (for DRO v1)
 	//PLAYER_EVENT_CB _eventCbFunc;
 	//void* _eventCbParam;
 };

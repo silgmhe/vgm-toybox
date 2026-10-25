@@ -50,16 +50,16 @@
 #include "c6280_mame.h"
 
 
-static void c6280mame_w(void *chip, UINT8 offset, UINT8 data);
-static UINT8 c6280mame_r(void* chip, UINT8 offset);
+static void c6280mame_w(void *chip, uint8_t offset, uint8_t data);
+static uint8_t c6280mame_r(void* chip, uint8_t offset);
 
-static void c6280mame_update(void* param, UINT32 samples, DEV_SMPL **outputs);
-static UINT8 device_start_c6280_mame(const DEV_GEN_CFG* cfg, DEV_INFO* retDevInf);
-static void* device_start_c6280mame(UINT32 clock, UINT32 rate);
+static void c6280mame_update(void* param, uint32_t samples, DEV_SMPL **outputs);
+static uint8_t device_start_c6280_mame(const DEV_GEN_CFG* cfg, DEV_INFO* retDevInf);
+static void* device_start_c6280mame(uint32_t clock, uint32_t rate);
 static void device_stop_c6280mame(void* chip);
 static void device_reset_c6280mame(void* chip);
 
-static void c6280mame_set_mute_mask(void* chip, UINT32 MuteMask);
+static void c6280mame_set_mute_mask(void* chip, uint32_t MuteMask);
 
 
 static DEVDEF_RWFUNC devFunc[] =
@@ -90,30 +90,30 @@ DEV_DEF devDef_C6280_MAME =
 
 
 typedef struct {
-	UINT16 frequency;
-	UINT8 control;
-	UINT8 balance;
-	UINT8 waveform[32];
-	UINT8 index;
-	INT16 dda;
-	UINT8 noise_control;
-	UINT32 noise_counter;
-	UINT32 noise_seed;
-	UINT32 counter;
-	UINT8 Muted;
+	uint16_t frequency;
+	uint8_t control;
+	uint8_t balance;
+	uint8_t waveform[32];
+	uint8_t index;
+	int16_t dda;
+	uint8_t noise_control;
+	uint32_t noise_counter;
+	uint32_t noise_seed;
+	uint32_t counter;
+	uint8_t Muted;
 } t_channel;
 
 typedef struct {
 	DEV_DATA _devData;
 	
-	UINT8 select;
-	UINT8 balance;
-	UINT8 lfo_frequency;
-	UINT8 lfo_control;
+	uint8_t select;
+	uint8_t balance;
+	uint8_t lfo_frequency;
+	uint8_t lfo_control;
 	t_channel channel[8];	// is 8, because: p->select = data & 0x07;
-	INT16 volume_table[32];
-	UINT32 noise_freq_tab[32];
-	UINT32 wave_freq_tab[4096];
+	int16_t volume_table[32];
+	uint32_t noise_freq_tab[32];
+	uint32_t wave_freq_tab[4096];
 } c6280_t;
 
 
@@ -132,14 +132,14 @@ static void c6280_calculate_clocks(c6280_t *p, double clk, double rate)
 	for (i = 0; i < 4096; i += 1)
 	{
 		step = ((clk / rate) * 4096) / (i+1);
-		p->wave_freq_tab[(1 + i) & 0xFFF] = (UINT32)step;
+		p->wave_freq_tab[(1 + i) & 0xFFF] = (uint32_t)step;
 	}
 
 	/* Make noise frequency table */
 	for (i = 0; i < 32; i += 1)
 	{
 		step = ((clk / rate) * 32) / (i+1);
-		p->noise_freq_tab[i] = (UINT32)step;
+		p->noise_freq_tab[i] = (uint32_t)step;
 	}
 }
 
@@ -188,7 +188,7 @@ static void c6280_calculate_clocks(c6280_t *p, double clk, double rate)
        ------11 4 bit Shift Addition
 */
 
-static void c6280mame_w(void *chip, UINT8 offset, UINT8 data)
+static void c6280mame_w(void *chip, uint8_t offset, uint8_t data)
 {
 	c6280_t *p = (c6280_t *)chip;
 	t_channel *chan = &p->channel[p->select];
@@ -268,20 +268,20 @@ static void c6280mame_w(void *chip, UINT8 offset, UINT8 data)
 }
 
 
-static void c6280mame_update(void* param, UINT32 samples, DEV_SMPL **outputs)
+static void c6280mame_update(void* param, uint32_t samples, DEV_SMPL **outputs)
 {
-	static const UINT8 scale_tab[16] =
+	static const uint8_t scale_tab[16] =
 	{
 		0x00, 0x03, 0x05, 0x07, 0x09, 0x0b, 0x0d, 0x0f,
 		0x10, 0x13, 0x15, 0x17, 0x19, 0x1b, 0x1d, 0x1f
 	};
 
 	int ch;
-	UINT32 i;
+	uint32_t i;
 	c6280_t *p = (c6280_t *)param;
 
-	UINT8 lmal = scale_tab[(p->balance >> 4) & 0x0F];
-	UINT8 rmal = scale_tab[(p->balance >> 0) & 0x0F];
+	uint8_t lmal = scale_tab[(p->balance >> 4) & 0x0F];
+	uint8_t rmal = scale_tab[(p->balance >> 0) & 0x0F];
 
 	/* Clear buffer */
 	memset(outputs[0], 0x00, samples * sizeof(DEV_SMPL));
@@ -293,10 +293,10 @@ static void c6280mame_update(void* param, UINT32 samples, DEV_SMPL **outputs)
 		if((p->channel[ch].control & 0x80) && ! p->channel[ch].Muted)
 		{
 			t_channel* chan = &p->channel[ch];
-			UINT8 lal = scale_tab[(chan->balance >> 4) & 0x0F];
-			UINT8 ral = scale_tab[(chan->balance >> 0) & 0x0F];
-			UINT8 al  = chan->control & 0x1F;
-			INT16 vll, vlr;
+			uint8_t lal = scale_tab[(chan->balance >> 4) & 0x0F];
+			uint8_t ral = scale_tab[(chan->balance >> 0) & 0x0F];
+			uint8_t al  = chan->control & 0x1F;
+			int16_t vll, vlr;
 
 			// verified from both patent and manual
 			vll = (0x1f - lmal) + (0x1f - al) + (0x1f - lal);
@@ -312,16 +312,16 @@ static void c6280mame_update(void* param, UINT32 samples, DEV_SMPL **outputs)
 			if ((ch >= 4) && (chan->noise_control & 0x80))
 			{
 				/* Noise mode */
-				UINT32 step = p->noise_freq_tab[(chan->noise_control & 0x1F) ^ 0x1F];
+				uint32_t step = p->noise_freq_tab[(chan->noise_control & 0x1F) ^ 0x1F];
 				for(i = 0; i < samples; i++)
 				{
-					INT16 data = (chan->noise_seed & 1) ? 0x1F : 0;
+					int16_t data = (chan->noise_seed & 1) ? 0x1F : 0;
 					chan->noise_counter += step;
 					if(chan->noise_counter >= 0x800)
 					{
-						UINT32 seed = chan->noise_seed;
+						uint32_t seed = chan->noise_seed;
 						// based on Charles MacDonald's research
-						UINT32 feedback = ((seed) ^ (seed >> 1) ^ (seed >> 11) ^ (seed >> 12) ^ (seed >> 17)) & 1;
+						uint32_t feedback = ((seed) ^ (seed >> 1) ^ (seed >> 11) ^ (seed >> 12) ^ (seed >> 17)) & 1;
 						chan->noise_seed = (chan->noise_seed >> 1) ^ (feedback << 17);
 					}
 					chan->noise_counter &= 0x7FF;
@@ -347,12 +347,12 @@ static void c6280mame_update(void* param, UINT32 samples, DEV_SMPL **outputs)
 						/* Waveform mode with LFO */
 						t_channel* lfo_srcchan = &p->channel[1];
 						t_channel* lfo_dstchan = &p->channel[0];
-						UINT16 lfo_step = lfo_srcchan->frequency;
+						uint16_t lfo_step = lfo_srcchan->frequency;
 						for (i = 0; i < samples; i++)
 						{
-							UINT32 step = lfo_dstchan->frequency;
-							UINT8 offset;
-							INT16 data;
+							uint32_t step = lfo_dstchan->frequency;
+							uint8_t offset;
+							int16_t data;
 							if (p->lfo_control & 0x80) // reset LFO
 							{
 								lfo_srcchan->counter = 0;
@@ -360,7 +360,7 @@ static void c6280mame_update(void* param, UINT32 samples, DEV_SMPL **outputs)
 							else
 							{
 								int lfooffset = (lfo_srcchan->counter >> 12) & 0x1F;
-								INT16 lfo_data = lfo_srcchan->waveform[lfooffset];
+								int16_t lfo_data = lfo_srcchan->waveform[lfooffset];
 								lfo_srcchan->counter += p->wave_freq_tab[(lfo_step * p->lfo_frequency) & 0xfff]; // verified from manual
 								lfo_srcchan->counter &= 0x1FFFF;
 								lfo_srcchan->index = (lfo_srcchan->counter >> 12) & 0x1F;
@@ -379,11 +379,11 @@ static void c6280mame_update(void* param, UINT32 samples, DEV_SMPL **outputs)
 				else
 				{
 					/* Waveform mode */
-					UINT32 step = p->wave_freq_tab[chan->frequency];
+					uint32_t step = p->wave_freq_tab[chan->frequency];
 					for (i = 0; i < samples; i++)
 					{
-						UINT8 offset = (chan->counter >> 12) & 0x1F;
-						INT16 data = chan->waveform[offset];
+						uint8_t offset = (chan->counter >> 12) & 0x1F;
+						int16_t data = chan->waveform[offset];
 						chan->counter += step;
 						chan->counter &= 0x1FFFF;
 						chan->index = (chan->counter >> 12) & 0x1F;
@@ -401,11 +401,11 @@ static void c6280mame_update(void* param, UINT32 samples, DEV_SMPL **outputs)
 /* MAME specific code                                                       */
 /*--------------------------------------------------------------------------*/
 
-static UINT8 device_start_c6280_mame(const DEV_GEN_CFG* cfg, DEV_INFO* retDevInf)
+static uint8_t device_start_c6280_mame(const DEV_GEN_CFG* cfg, DEV_INFO* retDevInf)
 {
 	void* chip;
 	DEV_DATA* devData;
-	UINT32 rate;
+	uint32_t rate;
 	
 	rate = cfg->clock / 16;
 	SRATE_CUSTOM_HIGHEST(cfg->srMode, rate, cfg->smplRate);
@@ -420,7 +420,7 @@ static UINT8 device_start_c6280_mame(const DEV_GEN_CFG* cfg, DEV_INFO* retDevInf
 	return 0x00;
 }
 
-static void* device_start_c6280mame(UINT32 clock, UINT32 rate)
+static void* device_start_c6280mame(uint32_t clock, uint32_t rate)
 {
 	c6280_t *info;
 	int i;
@@ -439,7 +439,7 @@ static void* device_start_c6280mame(UINT32 clock, UINT32 rate)
 	step = 48.0 / 32.0;
 	for (i = 0; i < 31; i++)
 	{
-		info->volume_table[i] = (UINT16)level;
+		info->volume_table[i] = (uint16_t)level;
 		level /= pow(10.0, step / 20.0);
 	}
 	info->volume_table[31] = 0;
@@ -461,7 +461,7 @@ static void device_stop_c6280mame(void* chip)
 static void device_reset_c6280mame(void* chip)
 {
 	c6280_t *info = (c6280_t *)chip;
-	UINT8 CurChn;
+	uint8_t CurChn;
 	t_channel* TempChn;
 	
 	info->select = 0x00;
@@ -488,7 +488,7 @@ static void device_reset_c6280mame(void* chip)
 	return;
 }
 
-static UINT8 c6280mame_r(void* chip, UINT8 offset)
+static uint8_t c6280mame_r(void* chip, uint8_t offset)
 {
 	c6280_t *info = (c6280_t *)chip;
 	//return m_cpudevice->io_get_buffer();
@@ -498,10 +498,10 @@ static UINT8 c6280mame_r(void* chip, UINT8 offset)
 }
 
 
-static void c6280mame_set_mute_mask(void* chip, UINT32 MuteMask)
+static void c6280mame_set_mute_mask(void* chip, uint32_t MuteMask)
 {
 	c6280_t *info = (c6280_t *)chip;
-	UINT8 CurChn;
+	uint8_t CurChn;
 	
 	for (CurChn = 0; CurChn < 6; CurChn ++)
 		info->channel[CurChn].Muted = (MuteMask >> CurChn) & 0x01;

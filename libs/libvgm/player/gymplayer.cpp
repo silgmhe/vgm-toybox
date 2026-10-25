@@ -19,15 +19,15 @@
 #include "../emu/logging.h"
 
 
-INLINE UINT32 ReadLE32(const UINT8* data)
+INLINE uint32_t ReadLE32(const uint8_t* data)
 {
 	return	(data[0x03] << 24) | (data[0x02] << 16) |
 			(data[0x01] <<  8) | (data[0x00] <<  0);
 }
 
-INLINE void SaveDeviceConfig(std::vector<UINT8>& dst, const void* srcData, size_t srcLen)
+INLINE void SaveDeviceConfig(std::vector<uint8_t>& dst, const void* srcData, size_t srcLen)
 {
-	const UINT8* srcPtr = (const UINT8*)srcData;
+	const uint8_t* srcPtr = (const uint8_t*)srcData;
 	dst.assign(srcPtr, srcPtr + srcLen);
 	return;
 }
@@ -43,7 +43,7 @@ GYMPlayer::GYMPlayer() :
 	_psTrigger(0x00)
 {
 	size_t curDev;
-	UINT8 retVal;
+	uint8_t retVal;
 	
 	dev_logger_set(&_logger, this, GYMPlayer::PlayerLogCB, NULL);
 
@@ -75,7 +75,7 @@ GYMPlayer::~GYMPlayer()
 		CPConv_Deinit(_cpc1252);
 }
 
-UINT32 GYMPlayer::GetPlayerType(void) const
+uint32_t GYMPlayer::GetPlayerType(void) const
 {
 	return FCC_GYM;
 }
@@ -85,7 +85,7 @@ const char* GYMPlayer::GetPlayerName(void) const
 	return "GYM";
 }
 
-/*static*/ UINT8 GYMPlayer::PlayerCanLoadFile(DATA_LOADER *dataLoader)
+/*static*/ uint8_t GYMPlayer::PlayerCanLoadFile(DATA_LOADER *dataLoader)
 {
 	DataLoader_ReadUntil(dataLoader, 0x04);
 	if (DataLoader_GetSize(dataLoader) < 0x04)
@@ -98,18 +98,18 @@ const char* GYMPlayer::GetPlayerName(void) const
 	return 0xF0;	// invalid file
 }
 
-UINT8 GYMPlayer::CanLoadFile(DATA_LOADER *dataLoader) const
+uint8_t GYMPlayer::CanLoadFile(DATA_LOADER *dataLoader) const
 {
 	return this->PlayerCanLoadFile(dataLoader);
 }
 
-/*static*/ bool GYMPlayer::CheckRawGYMFile(UINT32 dataLen, const UINT8* data)
+/*static*/ bool GYMPlayer::CheckRawGYMFile(uint32_t dataLen, const uint8_t* data)
 {
-	UINT32 filePos;
+	uint32_t filePos;
 	bool fileEnd;
-	UINT8 curCmd;
-	UINT8 curReg;
-	UINT8 doPSGFreq2nd;
+	uint8_t curCmd;
+	uint8_t curReg;
+	uint8_t doPSGFreq2nd;
 	
 	fileEnd = false;
 	filePos = 0x00;
@@ -176,7 +176,7 @@ UINT8 GYMPlayer::CanLoadFile(DATA_LOADER *dataLoader) const
 	return true;
 }
 
-UINT8 GYMPlayer::LoadFile(DATA_LOADER *dataLoader)
+uint8_t GYMPlayer::LoadFile(DATA_LOADER *dataLoader)
 {
 	_dLoad = NULL;
 	DataLoader_ReadUntil(dataLoader,0x1AC);	// try to read the full GYMX header
@@ -210,7 +210,7 @@ UINT8 GYMPlayer::LoadFile(DATA_LOADER *dataLoader)
 	
 	if (_fileHdr.uncomprSize > 0)
 	{
-		UINT8 retVal = DecompressZlibData();
+		uint8_t retVal = DecompressZlibData();
 		if (retVal & 0x80)
 			return 0xFF;	// decompression error
 	}
@@ -221,7 +221,7 @@ UINT8 GYMPlayer::LoadFile(DATA_LOADER *dataLoader)
 	return 0x00;
 }
 
-UINT8 GYMPlayer::DecompressZlibData(void)
+uint8_t GYMPlayer::DecompressZlibData(void)
 {
 	z_stream zStream;
 	int ret;
@@ -251,15 +251,15 @@ UINT8 GYMPlayer::DecompressZlibData(void)
 	inflateEnd(&zStream);
 	
 	_fileData = &_decFData[0];
-	_fileLen = (UINT32)_decFData.size();
+	_fileLen = (uint32_t)_decFData.size();
 	return (ret == Z_OK || ret == Z_STREAM_END) ? 0x00 : 0x01;
 }
 
 void GYMPlayer::CalcSongLength(void)
 {
-	UINT32 filePos;
+	uint32_t filePos;
 	bool fileEnd;
-	UINT8 curCmd;
+	uint8_t curCmd;
 	
 	_totalTicks = 0;
 	_loopOfs = 0;
@@ -294,7 +294,7 @@ void GYMPlayer::CalcSongLength(void)
 	return;
 }
 
-UINT8 GYMPlayer::LoadTags(void)
+uint8_t GYMPlayer::LoadTags(void)
 {
 	_tagData.clear();
 	_tagList.clear();
@@ -341,7 +341,7 @@ std::string GYMPlayer::GetUTF8String(const char* startPtr, const char* endPtr)
 		size_t convSize = 0;
 		char* convData = NULL;
 		std::string result;
-		UINT8 retVal;
+		uint8_t retVal;
 		
 		retVal = CPConv_StrConvert(_cpc1252, &convSize, &convData, endPtr - startPtr, startPtr);
 		
@@ -354,7 +354,7 @@ std::string GYMPlayer::GetUTF8String(const char* startPtr, const char* endPtr)
 	return std::string(startPtr, endPtr);
 }
 
-UINT8 GYMPlayer::UnloadFile(void)
+uint8_t GYMPlayer::UnloadFile(void)
 {
 	if (_playState & PLAYSTATE_PLAY)
 		return 0xFF;
@@ -362,7 +362,7 @@ UINT8 GYMPlayer::UnloadFile(void)
 	_playState = 0x00;
 	_dLoad = NULL;
 	_fileData = NULL;
-	_decFData = std::vector<UINT8>();	// free allocated memory
+	_decFData = std::vector<uint8_t>();	// free allocated memory
 	_fileHdr.hasHeader = 0;
 	_fileHdr.dataOfs = 0x00;
 	_devices.clear();
@@ -380,7 +380,7 @@ const char* const* GYMPlayer::GetTags(void)
 	return &_tagList[0];
 }
 
-UINT8 GYMPlayer::GetSongInfo(PLR_SONG_INFO& songInf)
+uint8_t GYMPlayer::GetSongInfo(PLR_SONG_INFO& songInf)
 {
 	if (_dLoad == NULL)
 		return 0xFF;
@@ -391,14 +391,14 @@ UINT8 GYMPlayer::GetSongInfo(PLR_SONG_INFO& songInf)
 	songInf.tickRateMul = 1;
 	songInf.tickRateDiv = _tickFreq;
 	songInf.songLen = GetTotalTicks();
-	songInf.loopTick = _loopOfs ? GetLoopTicks() : (UINT32)-1;
+	songInf.loopTick = _loopOfs ? GetLoopTicks() : (uint32_t)-1;
 	songInf.volGain = 0x10000;
-	songInf.deviceCnt = (UINT32)_devCfgs.size();
+	songInf.deviceCnt = (uint32_t)_devCfgs.size();
 	
 	return 0x00;
 }
 
-UINT8 GYMPlayer::GetSongDeviceInfo(std::vector<PLR_DEV_INFO>& devInfList) const
+uint8_t GYMPlayer::GetSongDeviceInfo(std::vector<PLR_DEV_INFO>& devInfList) const
 {
 	if (_dLoad == NULL)
 		return 0xFF;
@@ -413,8 +413,8 @@ UINT8 GYMPlayer::GetSongDeviceInfo(std::vector<PLR_DEV_INFO>& devInfList) const
 		PLR_DEV_INFO devInf;
 		memset(&devInf, 0x00, sizeof(PLR_DEV_INFO));
 		
-		devInf.id = (UINT32)curDev;
-		devInf.parentIdx = (UINT32)-1;
+		devInf.id = (uint32_t)curDev;
+		devInf.parentIdx = (uint32_t)-1;
 		devInf.type = _devCfgs[curDev].type;
 		devInf.instance = 0;
 		devInf.devCfg = devCfg;
@@ -441,10 +441,10 @@ UINT8 GYMPlayer::GetSongDeviceInfo(std::vector<PLR_DEV_INFO>& devInfList) const
 		return 0x00;	// returned data based on file header
 }
 
-size_t GYMPlayer::DeviceID2OptionID(UINT32 id) const
+size_t GYMPlayer::DeviceID2OptionID(uint32_t id) const
 {
 	DEV_ID type;
-	UINT8 instance;
+	uint8_t instance;
 	
 	if (id & 0x80000000)
 	{
@@ -486,14 +486,14 @@ void GYMPlayer::RefreshPanning(GYM_CHIPDEV& chipDev, const PLR_PAN_OPTS& panOpts
 	if (devInf->dataPtr == NULL)
 		return;
 	DEVFUNC_PANALL funcPan = NULL;
-	UINT8 retVal = SndEmu_GetDeviceFunc(devInf->devDef, RWF_CHN_PAN | RWF_WRITE, DEVRW_ALL, 0, (void**)&funcPan);
+	uint8_t retVal = SndEmu_GetDeviceFunc(devInf->devDef, RWF_CHN_PAN | RWF_WRITE, DEVRW_ALL, 0, (void**)&funcPan);
 	if (retVal != EERR_NOT_FOUND && funcPan != NULL)
 		funcPan(devInf->dataPtr, &panOpts.chnPan[0][0]);
 	
 	return;
 }
 
-UINT8 GYMPlayer::SetDeviceOptions(UINT32 id, const PLR_DEV_OPTS& devOpts)
+uint8_t GYMPlayer::SetDeviceOptions(uint32_t id, const PLR_DEV_OPTS& devOpts)
 {
 	size_t optID = DeviceID2OptionID(id);
 	if (optID == (size_t)-1)
@@ -507,7 +507,7 @@ UINT8 GYMPlayer::SetDeviceOptions(UINT32 id, const PLR_DEV_OPTS& devOpts)
 	return 0x00;
 }
 
-UINT8 GYMPlayer::GetDeviceOptions(UINT32 id, PLR_DEV_OPTS& devOpts) const
+uint8_t GYMPlayer::GetDeviceOptions(uint32_t id, PLR_DEV_OPTS& devOpts) const
 {
 	size_t optID = DeviceID2OptionID(id);
 	if (optID == (size_t)-1)
@@ -517,7 +517,7 @@ UINT8 GYMPlayer::GetDeviceOptions(UINT32 id, PLR_DEV_OPTS& devOpts) const
 	return 0x00;
 }
 
-UINT8 GYMPlayer::SetDeviceMuting(UINT32 id, const PLR_MUTE_OPTS& muteOpts)
+uint8_t GYMPlayer::SetDeviceMuting(uint32_t id, const PLR_MUTE_OPTS& muteOpts)
 {
 	size_t optID = DeviceID2OptionID(id);
 	if (optID == (size_t)-1)
@@ -531,7 +531,7 @@ UINT8 GYMPlayer::SetDeviceMuting(UINT32 id, const PLR_MUTE_OPTS& muteOpts)
 	return 0x00;
 }
 
-UINT8 GYMPlayer::GetDeviceMuting(UINT32 id, PLR_MUTE_OPTS& muteOpts) const
+uint8_t GYMPlayer::GetDeviceMuting(uint32_t id, PLR_MUTE_OPTS& muteOpts) const
 {
 	size_t optID = DeviceID2OptionID(id);
 	if (optID == (size_t)-1)
@@ -541,19 +541,19 @@ UINT8 GYMPlayer::GetDeviceMuting(UINT32 id, PLR_MUTE_OPTS& muteOpts) const
 	return 0x00;
 }
 
-UINT8 GYMPlayer::SetPlayerOptions(const GYM_PLAY_OPTIONS& playOpts)
+uint8_t GYMPlayer::SetPlayerOptions(const GYM_PLAY_OPTIONS& playOpts)
 {
 	_playOpts = playOpts;
 	return 0x00;
 }
 
-UINT8 GYMPlayer::GetPlayerOptions(GYM_PLAY_OPTIONS& playOpts) const
+uint8_t GYMPlayer::GetPlayerOptions(GYM_PLAY_OPTIONS& playOpts) const
 {
 	playOpts = _playOpts;
 	return 0x00;
 }
 
-UINT8 GYMPlayer::SetSampleRate(UINT32 sampleRate)
+uint8_t GYMPlayer::SetSampleRate(uint32_t sampleRate)
 {
 	if (_playState & PLAYSTATE_PLAY)
 		return 0x01;	// can't set during playback
@@ -567,9 +567,9 @@ double GYMPlayer::GetPlaybackSpeed(void) const
 	return _playOpts.genOpts.pbSpeed / (double)0x10000;
 }
 
-UINT8 GYMPlayer::SetPlaybackSpeed(double speed)
+uint8_t GYMPlayer::SetPlaybackSpeed(double speed)
 {
-	_playOpts.genOpts.pbSpeed = (UINT32)(0x10000 * speed);
+	_playOpts.genOpts.pbSpeed = (uint32_t)(0x10000 * speed);
 	RefreshTSRates();
 	return 0x00;
 }
@@ -589,40 +589,40 @@ void GYMPlayer::RefreshTSRates(void)
 	    _tsDiv != _lastTsDiv)
 	{
 		if (_lastTsMult && _lastTsDiv)	// the order * / * / is required to avoid overflow
-			_playSmpl = (UINT32)(_playSmpl * _lastTsDiv / _lastTsMult * _tsMult / _tsDiv);
+			_playSmpl = (uint32_t)(_playSmpl * _lastTsDiv / _lastTsMult * _tsMult / _tsDiv);
 		_lastTsMult = _tsMult;
 		_lastTsDiv = _tsDiv;
 	}
 	return;
 }
 
-UINT32 GYMPlayer::Tick2Sample(UINT32 ticks) const
+uint32_t GYMPlayer::Tick2Sample(uint32_t ticks) const
 {
-	if (ticks == (UINT32)-1)
+	if (ticks == (uint32_t)-1)
 		return -1;
-	return (UINT32)(ticks * _tsMult / _tsDiv);
+	return (uint32_t)(ticks * _tsMult / _tsDiv);
 }
 
-UINT32 GYMPlayer::Sample2Tick(UINT32 samples) const
+uint32_t GYMPlayer::Sample2Tick(uint32_t samples) const
 {
-	if (samples == (UINT32)-1)
+	if (samples == (uint32_t)-1)
 		return -1;
-	return (UINT32)(samples * _tsDiv / _tsMult);
+	return (uint32_t)(samples * _tsDiv / _tsMult);
 }
 
-double GYMPlayer::Tick2Second(UINT32 ticks) const
+double GYMPlayer::Tick2Second(uint32_t ticks) const
 {
-	if (ticks == (UINT32)-1)
+	if (ticks == (uint32_t)-1)
 		return -1.0;
-	return (INT64)(ticks * _ttMult) / (double)(INT64)_tsDiv;
+	return (int64_t)(ticks * _ttMult) / (double)(int64_t)_tsDiv;
 }
 
-UINT8 GYMPlayer::GetState(void) const
+uint8_t GYMPlayer::GetState(void) const
 {
 	return _playState;
 }
 
-UINT32 GYMPlayer::GetCurPos(UINT8 unit) const
+uint32_t GYMPlayer::GetCurPos(uint8_t unit) const
 {
 	switch(unit)
 	{
@@ -634,21 +634,21 @@ UINT32 GYMPlayer::GetCurPos(UINT8 unit) const
 		return _playSmpl;
 	case PLAYPOS_COMMAND:
 	default:
-		return (UINT32)-1;
+		return (uint32_t)-1;
 	}
 }
 
-UINT32 GYMPlayer::GetCurLoop(void) const
+uint32_t GYMPlayer::GetCurLoop(void) const
 {
 	return _curLoop;
 }
 
-UINT32 GYMPlayer::GetTotalTicks(void) const
+uint32_t GYMPlayer::GetTotalTicks(void) const
 {
 	return _totalTicks;
 }
 
-UINT32 GYMPlayer::GetLoopTicks(void) const
+uint32_t GYMPlayer::GetLoopTicks(void) const
 {
 	if (! _loopOfs)
 		return 0;
@@ -656,7 +656,7 @@ UINT32 GYMPlayer::GetLoopTicks(void) const
 		return _totalTicks - _fileHdr.loopFrame;
 }
 
-/*static*/ void GYMPlayer::PlayerLogCB(void* userParam, void* source, UINT8 level, const char* message)
+/*static*/ void GYMPlayer::PlayerLogCB(void* userParam, void* source, uint8_t level, const char* message)
 {
 	GYMPlayer* player = (GYMPlayer*)source;
 	if (player->_logCbFunc == NULL)
@@ -665,7 +665,7 @@ UINT32 GYMPlayer::GetLoopTicks(void) const
 	return;
 }
 
-/*static*/ void GYMPlayer::SndEmuLogCB(void* userParam, void* source, UINT8 level, const char* message)
+/*static*/ void GYMPlayer::SndEmuLogCB(void* userParam, void* source, uint8_t level, const char* message)
 {
 	DEVLOG_CB_DATA* cbData = (DEVLOG_CB_DATA*)userParam;
 	GYMPlayer* player = cbData->player;
@@ -713,10 +713,10 @@ void GYMPlayer::GenerateDeviceConfig(void)
 	return;
 }
 
-UINT8 GYMPlayer::Start(void)
+uint8_t GYMPlayer::Start(void)
 {
 	size_t curDev;
-	UINT8 retVal;
+	uint8_t retVal;
 	
 	for (curDev = 0; curDev < 2; curDev ++)
 		_optDevMap[curDev] = (size_t)-1;
@@ -732,7 +732,7 @@ UINT8 GYMPlayer::Start(void)
 		
 		cDev->base.defInf.dataPtr = NULL;
 		cDev->base.linkDev = NULL;
-		cDev->optID = DeviceID2OptionID((UINT32)curDev);
+		cDev->optID = DeviceID2OptionID((uint32_t)curDev);
 		
 		devOpts = (cDev->optID != (size_t)-1) ? &_devOpts[cDev->optID] : NULL;
 		devCfg->emuCore = (devOpts != NULL) ? devOpts->emuCore[0] : 0x00;
@@ -767,7 +767,7 @@ UINT8 GYMPlayer::Start(void)
 		
 		for (clDev = &cDev->base; clDev != NULL; clDev = clDev->linkDev)
 		{
-			UINT8 resmplMode = (devOpts != NULL) ? devOpts->resmplMode : RSMODE_LINEAR;
+			uint8_t resmplMode = (devOpts != NULL) ? devOpts->resmplMode : RSMODE_LINEAR;
 			Resmpl_SetVals(&clDev->resmpl, resmplMode, _devCfgs[curDev].volume, _outSmplRate);
 			Resmpl_DevConnect(&clDev->resmpl, &clDev->defInf);
 			Resmpl_Init(&clDev->resmpl);
@@ -782,7 +782,7 @@ UINT8 GYMPlayer::Start(void)
 	return 0x00;
 }
 
-UINT8 GYMPlayer::Stop(void)
+uint8_t GYMPlayer::Stop(void)
 {
 	size_t curDev;
 	
@@ -800,7 +800,7 @@ UINT8 GYMPlayer::Stop(void)
 	return 0x00;
 }
 
-UINT8 GYMPlayer::Reset(void)
+uint8_t GYMPlayer::Reset(void)
 {
 	size_t curDev;
 	
@@ -814,9 +814,9 @@ UINT8 GYMPlayer::Reset(void)
 	_lastLoopTick = 0;
 	
 	_pcmBuffer.resize(_outSmplRate / 30);	// that's the buffer size in YMAMP
-	_pcmBaseTick = (UINT32)-1;
+	_pcmBaseTick = (uint32_t)-1;
 	_pcmInPos = 0x00;
-	_pcmOutPos = (UINT32)-1;
+	_pcmOutPos = (uint32_t)-1;
 
 	RefreshTSRates();	
 
@@ -837,7 +837,7 @@ UINT8 GYMPlayer::Reset(void)
 	return 0x00;
 }
 
-UINT8 GYMPlayer::Seek(UINT8 unit, UINT32 pos)
+uint8_t GYMPlayer::Seek(uint8_t unit, uint32_t pos)
 {
 	switch(unit)
 	{
@@ -860,7 +860,7 @@ UINT8 GYMPlayer::Seek(UINT8 unit, UINT32 pos)
 	}
 }
 
-UINT8 GYMPlayer::SeekToTick(UINT32 tick)
+uint8_t GYMPlayer::SeekToTick(uint32_t tick)
 {
 	_playState |= PLAYSTATE_SEEK;
 	if (tick > _playTick)
@@ -870,7 +870,7 @@ UINT8 GYMPlayer::SeekToTick(UINT32 tick)
 	return 0x00;
 }
 
-UINT8 GYMPlayer::SeekToFilePos(UINT32 pos)
+uint8_t GYMPlayer::SeekToFilePos(uint32_t pos)
 {
 	_playState |= PLAYSTATE_SEEK;
 	while(_filePos <= pos && ! (_playState & PLAYSTATE_END))
@@ -882,16 +882,16 @@ UINT8 GYMPlayer::SeekToFilePos(UINT32 pos)
 	return 0x00;
 }
 
-UINT32 GYMPlayer::Render(UINT32 smplCnt, WAVE_32BS* data)
+uint32_t GYMPlayer::Render(uint32_t smplCnt, WAVE_32BS* data)
 {
-	UINT32 curSmpl;
-	UINT32 smplFileTick;
-	UINT32 maxSmpl;
-	INT32 smplStep;	// might be negative due to rounding errors in Tick2Sample
+	uint32_t curSmpl;
+	uint32_t smplFileTick;
+	uint32_t maxSmpl;
+	int32_t smplStep;	// might be negative due to rounding errors in Tick2Sample
 	size_t curDev;
-	UINT32 pcmLastBase = (UINT32)-1;
-	UINT32 pcmSmplStart = 0;
-	UINT32 pcmSmplLen = 1;
+	uint32_t pcmLastBase = (uint32_t)-1;
+	uint32_t pcmSmplStart = 0;
+	uint32_t pcmSmplLen = 1;
 	
 	// Note: use do {} while(), so that "smplCnt == 0" can be used to process until reaching the next sample.
 	curSmpl = 0;
@@ -906,7 +906,7 @@ UINT32 GYMPlayer::Render(UINT32 smplCnt, WAVE_32BS* data)
 		// reduce sample steps to 1 when PCM is active
 		if (smplStep < 1 || _pcmInPos > 0)
 			smplStep = 1;	// must render at least 1 sample in order to advance
-		if ((UINT32)smplStep > smplCnt - curSmpl)
+		if ((uint32_t)smplStep > smplCnt - curSmpl)
 			smplStep = smplCnt - curSmpl;
 		
 		if (_pcmInPos > 0)
@@ -919,7 +919,7 @@ UINT32 GYMPlayer::Render(UINT32 smplCnt, WAVE_32BS* data)
 				pcmSmplStart = Tick2Sample(_pcmBaseTick);
 				pcmSmplLen = Tick2Sample(_pcmBaseTick + 1) - pcmSmplStart;
 			}
-			UINT32 pcmIdx = (_playSmpl - pcmSmplStart) * _pcmInPos / pcmSmplLen;
+			uint32_t pcmIdx = (_playSmpl - pcmSmplStart) * _pcmInPos / pcmSmplLen;
 			if (pcmIdx != _pcmOutPos)
 			{
 				GYM_CHIPDEV* cDev = &_devices[0];
@@ -938,7 +938,7 @@ UINT32 GYMPlayer::Render(UINT32 smplCnt, WAVE_32BS* data)
 		for (curDev = 0; curDev < _devices.size(); curDev ++)
 		{
 			GYM_CHIPDEV* cDev = &_devices[curDev];
-			UINT8 disable = (cDev->optID != (size_t)-1) ? _devOpts[cDev->optID].muteOpts.disable : 0x00;
+			uint8_t disable = (cDev->optID != (size_t)-1) ? _devOpts[cDev->optID].muteOpts.disable : 0x00;
 			VGM_BASEDEV* clDev;
 			
 			for (clDev = &cDev->base; clDev != NULL; clDev = clDev->linkDev, disable >>= 1)
@@ -959,7 +959,7 @@ UINT32 GYMPlayer::Render(UINT32 smplCnt, WAVE_32BS* data)
 	return curSmpl;
 }
 
-void GYMPlayer::ParseFile(UINT32 ticks)
+void GYMPlayer::ParseFile(uint32_t ticks)
 {
 	_playTick += ticks;
 	if (_playState & PLAYSTATE_END)
@@ -979,7 +979,7 @@ void GYMPlayer::DoCommand(void)
 		return;
 	}
 	
-	UINT8 curCmd;
+	uint8_t curCmd;
 	
 	curCmd = _fileData[_filePos];
 	_filePos ++;
@@ -991,9 +991,9 @@ void GYMPlayer::DoCommand(void)
 	case 0x01:	// write to YM2612 port 0
 	case 0x02:	// write to YM2612 port 1
 		{
-			UINT8 port = curCmd - 0x01;
-			UINT8 reg = _fileData[_filePos + 0x00];
-			UINT8 data = _fileData[_filePos + 0x01];
+			uint8_t port = curCmd - 0x01;
+			uint8_t reg = _fileData[_filePos + 0x00];
+			uint8_t data = _fileData[_filePos + 0x01];
 			_filePos += 0x02;
 			
 			if (port == 0 && reg == 0x2A)
@@ -1005,7 +1005,7 @@ void GYMPlayer::DoCommand(void)
 				{
 					_pcmBaseTick = _fileTick;
 					_pcmInPos = 0;
-					_pcmOutPos = (UINT32)-1;
+					_pcmOutPos = (uint32_t)-1;
 				}
 				if (_pcmInPos < _pcmBuffer.size())
 				{
@@ -1030,9 +1030,9 @@ void GYMPlayer::DoCommand(void)
 				// Thus we apply the following patches, in order to be able to play back GYMs without glitches:
 				// - "reg A4" only -> send "reg A4", then "reg A0" (with data from cache)
 				// - "reg A0" only -> send "reg A4" (with data from cache), then "reg A0"
-				UINT8 cacheReg = (port << 4) | (reg & 0x0F);
-				UINT8 isLatch = (reg & 0x04);
-				UINT8 latchID = (reg & 0x08) >> 3;
+				uint8_t cacheReg = (port << 4) | (reg & 0x0F);
+				uint8_t isLatch = (reg & 0x04);
+				uint8_t latchID = (reg & 0x08) >> 3;
 				_ymFreqRegs[cacheReg] = data;
 				
 				if (isLatch)
@@ -1078,7 +1078,7 @@ void GYMPlayer::DoCommand(void)
 		return;
 	case 0x03:	// write to PSG
 		{
-			UINT8 data = _fileData[_filePos + 0x00];
+			uint8_t data = _fileData[_filePos + 0x00];
 			_filePos += 0x01;
 			
 			GYM_CHIPDEV* cDev = &_devices[1];
@@ -1099,7 +1099,7 @@ void GYMPlayer::DoCommand(void)
 
 void GYMPlayer::DoFileEnd(void)
 {
-	UINT8 doLoop = (_loopOfs != 0);
+	uint8_t doLoop = (_loopOfs != 0);
 	
 	if (_playState & PLAYSTATE_SEEK)	// recalculate playSmpl to fix state when triggering callbacks
 		_playSmpl = Tick2Sample(_fileTick);	// Note: fileTick results in more accurate position
@@ -1120,7 +1120,7 @@ void GYMPlayer::DoFileEnd(void)
 		_curLoop ++;
 		if (_eventCbFunc != NULL)
 		{
-			UINT8 retVal;
+			uint8_t retVal;
 			
 			retVal = _eventCbFunc(this, _eventCbParam, PLREVT_LOOP, &_curLoop);
 			if (retVal == 0x01)	// "stop" signal?

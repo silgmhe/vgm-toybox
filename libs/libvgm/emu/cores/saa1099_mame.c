@@ -79,17 +79,17 @@
 #include "saa1099_mame.h"
 
 
-static void saa1099m_write(void *info, UINT8 offset, UINT8 data);
-static void saa1099_control_w(void *info, UINT8 data);
-static void saa1099_data_w(void *info, UINT8 data);
+static void saa1099m_write(void *info, uint8_t offset, uint8_t data);
+static void saa1099_control_w(void *info, uint8_t data);
+static void saa1099_data_w(void *info, uint8_t data);
 
-static void saa1099m_update(void *param, UINT32 samples, DEV_SMPL **outputs);
-static UINT8 device_start_saa1099_mame(const DEV_GEN_CFG* cfg, DEV_INFO* retDevInf);
-static void* saa1099m_create(UINT32 clock, UINT32 sampleRate);
+static void saa1099m_update(void *param, uint32_t samples, DEV_SMPL **outputs);
+static uint8_t device_start_saa1099_mame(const DEV_GEN_CFG* cfg, DEV_INFO* retDevInf);
+static void* saa1099m_create(uint32_t clock, uint32_t sampleRate);
 static void saa1099m_destroy(void *info);
 static void saa1099m_reset(void *info);
 
-static void saa1099m_set_mute_mask(void *info, UINT32 MuteMask);
+static void saa1099m_set_mute_mask(void *info, uint32_t MuteMask);
 static void saa1099m_set_log_cb(void* info, DEVCB_LOG func, void* param);
 
 
@@ -124,18 +124,18 @@ DEV_DEF devDef_SAA1099_MAME =
 
 struct saa1099_channel
 {
-	UINT8 frequency;        /* frequency (0x00..0xff) */
-	UINT8 freq_enable;      /* frequency enable */
-	UINT8 noise_enable;     /* noise enable */
-	UINT8 octave;           /* octave (0x00..0x07) */
-	INT32 amplitude[2];     /* amplitude (0x00..0x0f) */
-	UINT8 envelope[2];      /* envelope (0x00..0x0f or 0x10 == off) */
+	uint8_t frequency;        /* frequency (0x00..0xff) */
+	uint8_t freq_enable;      /* frequency enable */
+	uint8_t noise_enable;     /* noise enable */
+	uint8_t octave;           /* octave (0x00..0x07) */
+	int32_t amplitude[2];     /* amplitude (0x00..0x0f) */
+	uint8_t envelope[2];      /* envelope (0x00..0x0f or 0x10 == off) */
 
 	/* vars to simulate the square wave */
 	double counter;
 	double freq;
-	UINT8 level;
-	UINT8 Muted;
+	uint8_t level;
+	uint8_t Muted;
 };
 
 struct saa1099_noise
@@ -143,7 +143,7 @@ struct saa1099_noise
 	/* vars to simulate the noise generator output */
 	double counter;
 	double freq;
-	UINT32 level;                   /* noise polynomal shifter */
+	uint32_t level;                   /* noise polynomal shifter */
 };
 
 typedef struct _saa1099_state saa1099_state;
@@ -152,30 +152,30 @@ struct _saa1099_state
 	DEV_DATA _devData;
 	DEV_LOGGER logger;
 	
-	UINT8 noise_params[2];          /* noise generators parameters */
-	UINT8 env_enable[2];            /* envelope generators enable */
-	UINT8 env_reverse_right[2];     /* envelope reversed for right channel */
-	UINT8 env_mode[2];              /* envelope generators mode */
-	UINT8 env_bits[2];              /* non zero = 3 bits resolution */
-	UINT8 env_clock[2];             /* envelope clock mode (non-zero external) */
-	UINT8 env_step[2];              /* current envelope step */
-	UINT8 all_ch_enable;            /* all channels enable */
-	UINT8 sync_state;               /* sync all channels */
-	UINT8 selected_reg;             /* selected register */
+	uint8_t noise_params[2];          /* noise generators parameters */
+	uint8_t env_enable[2];            /* envelope generators enable */
+	uint8_t env_reverse_right[2];     /* envelope reversed for right channel */
+	uint8_t env_mode[2];              /* envelope generators mode */
+	uint8_t env_bits[2];              /* non zero = 3 bits resolution */
+	uint8_t env_clock[2];             /* envelope clock mode (non-zero external) */
+	uint8_t env_step[2];              /* current envelope step */
+	uint8_t all_ch_enable;            /* all channels enable */
+	uint8_t sync_state;               /* sync all channels */
+	uint8_t selected_reg;             /* selected register */
 	struct saa1099_channel channels[6]; /* channels */
 	struct saa1099_noise noise[2];  /* noise generators */
 	double sample_rate;
-	INT32 master_clock;
+	int32_t master_clock;
 };
 
-static const INT32 amplitude_lookup[16] = {
+static const int32_t amplitude_lookup[16] = {
 	 0*32768/16,  1*32768/16,  2*32768/16,  3*32768/16,
 	 4*32768/16,  5*32768/16,  6*32768/16,  7*32768/16,
 	 8*32768/16,  9*32768/16, 10*32768/16, 11*32768/16,
 	12*32768/16, 13*32768/16, 14*32768/16, 15*32768/16
 };
 
-static const UINT8 envelope[8][64] = {
+static const uint8_t envelope[8][64] = {
 	/* zero amplitude */
 	{ 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
 	  0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
@@ -223,7 +223,7 @@ static void saa1099_envelope_w(saa1099_state *saa, int ch)
 {
 	if (saa->env_enable[ch])
 	{
-		UINT8 step, mode, mask, envval;
+		uint8_t step, mode, mask, envval;
 		mode = saa->env_mode[ch];
 		/* step from 0..63 and then loop in steps 32..63 */
 		step = saa->env_step[ch] =
@@ -256,11 +256,11 @@ static void saa1099_envelope_w(saa1099_state *saa, int ch)
 }
 
 
-static void saa1099m_update(void *param, UINT32 samples, DEV_SMPL **outputs)
+static void saa1099m_update(void *param, uint32_t samples, DEV_SMPL **outputs)
 {
 	saa1099_state *saa = (saa1099_state *)param;
-	UINT32 j, ch;
-	INT32 clk2div512;
+	uint32_t j, ch;
+	int32_t clk2div512;
 
 	/* if the channels are disabled we're done */
 	if (!saa->all_ch_enable)
@@ -379,11 +379,11 @@ static void saa1099m_update(void *param, UINT32 samples, DEV_SMPL **outputs)
 
 
 
-static UINT8 device_start_saa1099_mame(const DEV_GEN_CFG* cfg, DEV_INFO* retDevInf)
+static uint8_t device_start_saa1099_mame(const DEV_GEN_CFG* cfg, DEV_INFO* retDevInf)
 {
 	void* chip;
 	DEV_DATA* devData;
-	UINT32 rate;
+	uint32_t rate;
 	
 	rate = cfg->clock / 128;	// /128 seems right based on the highest noise frequency
 	SRATE_CUSTOM_HIGHEST(cfg->srMode, rate, cfg->smplRate);
@@ -398,7 +398,7 @@ static UINT8 device_start_saa1099_mame(const DEV_GEN_CFG* cfg, DEV_INFO* retDevI
 	return 0x00;
 }
 
-static void* saa1099m_create(UINT32 clock, UINT32 sampleRate)
+static void* saa1099m_create(uint32_t clock, uint32_t sampleRate)
 {
 	saa1099_state *saa;
 
@@ -428,7 +428,7 @@ static void saa1099m_reset(void *info)
 {
 	saa1099_state *saa = (saa1099_state *)info;
 	struct saa1099_channel *saach;
-	UINT8 CurChn;
+	uint8_t CurChn;
 
 	for (CurChn = 0; CurChn < 6; CurChn ++)
 	{
@@ -467,7 +467,7 @@ static void saa1099m_reset(void *info)
 	return;
 }
 
-static void saa1099m_write(void *info, UINT8 offset, UINT8 data)
+static void saa1099m_write(void *info, uint8_t offset, uint8_t data)
 {
 	if (offset & 1)
 		saa1099_control_w(info, data);
@@ -475,7 +475,7 @@ static void saa1099m_write(void *info, UINT8 offset, UINT8 data)
 		saa1099_data_w(info, data);
 }
 
-static void saa1099_control_w(void *info, UINT8 data)
+static void saa1099_control_w(void *info, uint8_t data)
 {
 	saa1099_state *saa = (saa1099_state *)info;
 
@@ -496,10 +496,10 @@ static void saa1099_control_w(void *info, UINT8 data)
 	}
 }
 
-static void saa1099_data_w(void *info, UINT8 data)
+static void saa1099_data_w(void *info, uint8_t data)
 {
 	saa1099_state *saa = (saa1099_state *)info;
-	UINT8 reg = saa->selected_reg;
+	uint8_t reg = saa->selected_reg;
 	int ch;
 
 	switch (reg)
@@ -579,10 +579,10 @@ static void saa1099_data_w(void *info, UINT8 data)
 }
 
 
-static void saa1099m_set_mute_mask(void *info, UINT32 MuteMask)
+static void saa1099m_set_mute_mask(void *info, uint32_t MuteMask)
 {
 	saa1099_state *saa = (saa1099_state *)info;
-	UINT8 CurChn;
+	uint8_t CurChn;
 	
 	for (CurChn = 0; CurChn < 6; CurChn ++)
 		saa->channels[CurChn].Muted = (MuteMask >> CurChn) & 0x01;

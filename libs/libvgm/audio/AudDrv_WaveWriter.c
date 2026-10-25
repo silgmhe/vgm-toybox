@@ -16,13 +16,13 @@
 #pragma pack(1)
 typedef struct
 {
-	UINT16 wFormatTag;
-	UINT16 nChannels;
-	UINT32 nSamplesPerSec;
-	UINT32 nAvgBytesPerSec;
-	UINT16 nBlockAlign;
-	UINT16 wBitsPerSample;
-	//UINT16 cbSize;	// not required for WAVE_FORMAT_PCM
+	uint16_t wFormatTag;
+	uint16_t nChannels;
+	uint32_t nSamplesPerSec;
+	uint32_t nAvgBytesPerSec;
+	uint16_t nBlockAlign;
+	uint16_t wBitsPerSample;
+	//uint16_t cbSize;	// not required for WAVE_FORMAT_PCM
 } WAVEFORMAT;	// from MSDN Help
 #pragma pack()
 
@@ -32,41 +32,41 @@ typedef struct
 typedef struct _wave_writer_driver
 {
 	void* audDrvPtr;
-	UINT8 devState;	// 0 - not running, 1 - running, 2 - terminating
+	uint8_t devState;	// 0 - not running, 1 - running, 2 - terminating
 	
 	char* fileName;
 	FILE* hFile;
 	WAVEFORMAT waveFmt;
 	
-	UINT32 hdrSize;
-	UINT32 wrtDataBytes;
+	uint32_t hdrSize;
+	uint32_t wrtDataBytes;
 } DRV_WAV_WRT;
 
 
-UINT8 WavWrt_IsAvailable(void);
-UINT8 WavWrt_Init(void);
-UINT8 WavWrt_Deinit(void);
+uint8_t WavWrt_IsAvailable(void);
+uint8_t WavWrt_Init(void);
+uint8_t WavWrt_Deinit(void);
 const AUDIO_DEV_LIST* WavWrt_GetDeviceList(void);
 AUDIO_OPTS* WavWrt_GetDefaultOpts(void);
 
-UINT8 WavWrt_Create(void** retDrvObj);
-UINT8 WavWrt_Destroy(void* drvObj);
-UINT8 WavWrt_SetFileName(void* drvObj, const char* fileName);
+uint8_t WavWrt_Create(void** retDrvObj);
+uint8_t WavWrt_Destroy(void* drvObj);
+uint8_t WavWrt_SetFileName(void* drvObj, const char* fileName);
 const char* WavWrt_GetFileName(void* drvObj);
 
-UINT8 WavWrt_Start(void* drvObj, UINT32 deviceID, AUDIO_OPTS* options, void* audDrvParam);
-UINT8 WavWrt_Stop(void* drvObj);
-UINT8 WavWrt_PauseResume(void* drvObj);
+uint8_t WavWrt_Start(void* drvObj, uint32_t deviceID, AUDIO_OPTS* options, void* audDrvParam);
+uint8_t WavWrt_Stop(void* drvObj);
+uint8_t WavWrt_PauseResume(void* drvObj);
 
-UINT8 WavWrt_SetCallback(void* drvObj, AUDFUNC_FILLBUF FillBufCallback, void* userParam);
-UINT32 WavWrt_GetBufferSize(void* drvObj);
-UINT8 WavWrt_IsBusy(void* drvObj);
-UINT8 WavWrt_WriteData(void* drvObj, UINT32 dataSize, void* data);
-UINT32 WavWrt_GetLatency(void* drvObj);
+uint8_t WavWrt_SetCallback(void* drvObj, AUDFUNC_FILLBUF FillBufCallback, void* userParam);
+uint32_t WavWrt_GetBufferSize(void* drvObj);
+uint8_t WavWrt_IsBusy(void* drvObj);
+uint8_t WavWrt_WriteData(void* drvObj, uint32_t dataSize, void* data);
+uint32_t WavWrt_GetLatency(void* drvObj);
 
-INLINE size_t fputLE16(UINT16 Value, FILE* hFile);
-INLINE size_t fputLE32(UINT32 Value, FILE* hFile);
-INLINE size_t fputBE32(UINT32 Value, FILE* hFile);
+INLINE size_t fputLE16(uint16_t Value, FILE* hFile);
+INLINE size_t fputLE32(uint32_t Value, FILE* hFile);
+INLINE size_t fputBE32(uint32_t Value, FILE* hFile);
 
 
 AUDIO_DRV audDrv_WaveWrt =
@@ -92,15 +92,15 @@ static char* wavOutDevNames[1] = {"Wave Writer"};
 static AUDIO_OPTS defOptions;
 static AUDIO_DEV_LIST deviceList;
 
-static UINT8 isInit = 0;
-static UINT32 activeDrivers;
+static uint8_t isInit = 0;
+static uint32_t activeDrivers;
 
-UINT8 WavWrt_IsAvailable(void)
+uint8_t WavWrt_IsAvailable(void)
 {
 	return 1;
 }
 
-UINT8 WavWrt_Init(void)
+uint8_t WavWrt_Init(void)
 {
 	if (isInit)
 		return AERR_WASDONE;
@@ -123,7 +123,7 @@ UINT8 WavWrt_Init(void)
 	return AERR_OK;
 }
 
-UINT8 WavWrt_Deinit(void)
+uint8_t WavWrt_Deinit(void)
 {
 	if (! isInit)
 		return AERR_WASDONE;
@@ -147,7 +147,7 @@ AUDIO_OPTS* WavWrt_GetDefaultOpts(void)
 }
 
 
-UINT8 WavWrt_Create(void** retDrvObj)
+uint8_t WavWrt_Create(void** retDrvObj)
 {
 	DRV_WAV_WRT* drv;
 	
@@ -162,7 +162,7 @@ UINT8 WavWrt_Create(void** retDrvObj)
 	return AERR_OK;
 }
 
-UINT8 WavWrt_Destroy(void* drvObj)
+uint8_t WavWrt_Destroy(void* drvObj)
 {
 	DRV_WAV_WRT* drv = (DRV_WAV_WRT*)drvObj;
 	
@@ -178,7 +178,7 @@ UINT8 WavWrt_Destroy(void* drvObj)
 	return AERR_OK;
 }
 
-UINT8 WavWrt_SetFileName(void* drvObj, const char* fileName)
+uint8_t WavWrt_SetFileName(void* drvObj, const char* fileName)
 {
 	DRV_WAV_WRT* drv = (DRV_WAV_WRT*)drvObj;
 	
@@ -196,10 +196,10 @@ const char* WavWrt_GetFileName(void* drvObj)
 	return drv->fileName;
 }
 
-UINT8 WavWrt_Start(void* drvObj, UINT32 deviceID, AUDIO_OPTS* options, void* audDrvParam)
+uint8_t WavWrt_Start(void* drvObj, uint32_t deviceID, AUDIO_OPTS* options, void* audDrvParam)
 {
 	DRV_WAV_WRT* drv = (DRV_WAV_WRT*)drvObj;
-	UINT32 DataLen;
+	uint32_t DataLen;
 	
 	if (drv->devState != 0)
 		return AERR_WASDONE;	// already running
@@ -254,10 +254,10 @@ UINT8 WavWrt_Start(void* drvObj, UINT32 deviceID, AUDIO_OPTS* options, void* aud
 	return AERR_OK;
 }
 
-UINT8 WavWrt_Stop(void* drvObj)
+uint8_t WavWrt_Stop(void* drvObj)
 {
 	DRV_WAV_WRT* drv = (DRV_WAV_WRT*)drvObj;
-	UINT32 riffLen;
+	uint32_t riffLen;
 	
 	if (drv->devState != 1)
 		return AERR_NOT_OPEN;
@@ -277,36 +277,36 @@ UINT8 WavWrt_Stop(void* drvObj)
 	return AERR_OK;
 }
 
-UINT8 WavWrt_PauseResume(void* drvObj)
+uint8_t WavWrt_PauseResume(void* drvObj)
 {
 	return AERR_NO_SUPPORT;
 }
 
 
-UINT8 WavWrt_SetCallback(void* drvObj, AUDFUNC_FILLBUF FillBufCallback, void* userParam)
+uint8_t WavWrt_SetCallback(void* drvObj, AUDFUNC_FILLBUF FillBufCallback, void* userParam)
 {
 	return AERR_NO_SUPPORT;
 }
 
-UINT32 WavWrt_GetBufferSize(void* drvObj)
+uint32_t WavWrt_GetBufferSize(void* drvObj)
 {
 	return 0;
 }
 
-UINT8 WavWrt_IsBusy(void* drvObj)
+uint8_t WavWrt_IsBusy(void* drvObj)
 {
 	return AERR_OK;
 }
 
-UINT8 WavWrt_WriteData(void* drvObj, UINT32 dataSize, void* data)
+uint8_t WavWrt_WriteData(void* drvObj, uint32_t dataSize, void* data)
 {
 	DRV_WAV_WRT* drv = (DRV_WAV_WRT*)drvObj;
-	UINT32 wrtBytes;
+	uint32_t wrtBytes;
 	
 	if (drv->hFile == NULL)
 		return AERR_NOT_OPEN;
 	
-	wrtBytes = (UINT32)fwrite(data, 0x01, dataSize, drv->hFile);
+	wrtBytes = (uint32_t)fwrite(data, 0x01, dataSize, drv->hFile);
 	if (! wrtBytes)
 		return AERR_FILE_ERR;
 	drv->wrtDataBytes += wrtBytes;
@@ -314,18 +314,18 @@ UINT8 WavWrt_WriteData(void* drvObj, UINT32 dataSize, void* data)
 	return AERR_OK;
 }
 
-UINT32 WavWrt_GetLatency(void* drvObj)
+uint32_t WavWrt_GetLatency(void* drvObj)
 {
 	return 0;
 }
 
 
-INLINE size_t fputLE16(UINT16 Value, FILE* hFile)
+INLINE size_t fputLE16(uint16_t Value, FILE* hFile)
 {
 #ifndef VGM_BIG_ENDIAN
 	return fwrite(&Value, 0x02, 1, hFile);
 #else
-	UINT8 dataArr[0x02];
+	uint8_t dataArr[0x02];
 	
 	dataArr[0x00] = (Value & 0x00FF) >>  0;
 	dataArr[0x01] = (Value & 0xFF00) >>  8;
@@ -333,12 +333,12 @@ INLINE size_t fputLE16(UINT16 Value, FILE* hFile)
 #endif
 }
 
-INLINE size_t fputLE32(UINT32 Value, FILE* hFile)
+INLINE size_t fputLE32(uint32_t Value, FILE* hFile)
 {
 #ifndef VGM_BIG_ENDIAN
 	return fwrite(&Value, 0x04, 1, hFile);
 #else
-	UINT8 dataArr[0x04];
+	uint8_t dataArr[0x04];
 	
 	dataArr[0x00] = (Value & 0x000000FF) >>  0;
 	dataArr[0x01] = (Value & 0x0000FF00) >>  8;
@@ -348,10 +348,10 @@ INLINE size_t fputLE32(UINT32 Value, FILE* hFile)
 #endif
 }
 
-INLINE size_t fputBE32(UINT32 Value, FILE* hFile)
+INLINE size_t fputBE32(uint32_t Value, FILE* hFile)
 {
 #ifndef VGM_BIG_ENDIAN
-	UINT8 dataArr[0x04];
+	uint8_t dataArr[0x04];
 	
 	dataArr[0x00] = (Value & 0xFF000000) >> 24;
 	dataArr[0x01] = (Value & 0x00FF0000) >> 16;

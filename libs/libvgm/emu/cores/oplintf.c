@@ -26,11 +26,11 @@
 #endif
 
 
-static UINT8 device_start_ym3812_mame(const DEV_GEN_CFG* cfg, DEV_INFO* retDevInf);
-static UINT8 device_start_ym3812_adlibemu(const DEV_GEN_CFG* cfg, DEV_INFO* retDevInf);
-static UINT8 device_start_ym3526(const DEV_GEN_CFG* cfg, DEV_INFO* retDevInf);
-static UINT8 device_start_y8950(const DEV_GEN_CFG* cfg, DEV_INFO* retDevInf);
-static UINT8 device_start_ym3812_nuked(const DEV_GEN_CFG* cfg, DEV_INFO* retDevInf);
+static uint8_t device_start_ym3812_mame(const DEV_GEN_CFG* cfg, DEV_INFO* retDevInf);
+static uint8_t device_start_ym3812_adlibemu(const DEV_GEN_CFG* cfg, DEV_INFO* retDevInf);
+static uint8_t device_start_ym3526(const DEV_GEN_CFG* cfg, DEV_INFO* retDevInf);
+static uint8_t device_start_y8950(const DEV_GEN_CFG* cfg, DEV_INFO* retDevInf);
+static uint8_t device_start_ym3812_nuked(const DEV_GEN_CFG* cfg, DEV_INFO* retDevInf);
 
 
 
@@ -118,7 +118,7 @@ static DEV_DEF devDef3812_Nuked =
 
 #if defined(SNDDEV_YM3812) || defined(SNDDEV_YM3526)
 #define DEV_CHN_COUNT	14
-static UINT16 DeviceChannels(const DEV_GEN_CFG* devCfg)
+static uint16_t DeviceChannels(const DEV_GEN_CFG* devCfg)
 {
 	return DEV_CHN_COUNT;
 }
@@ -250,7 +250,7 @@ static const char* DeviceName_Y8950(const DEV_GEN_CFG* devCfg)
 }
 
 #define DEV_CHN_COUNT_Y8950	15
-static UINT16 DeviceChannels_Y8950(const DEV_GEN_CFG* devCfg)
+static uint16_t DeviceChannels_Y8950(const DEV_GEN_CFG* devCfg)
 {
 	return DEV_CHN_COUNT_Y8950;
 }
@@ -282,11 +282,11 @@ const DEV_DECL sndDev_Y8950 =
 
 
 #ifdef EC_YM3812_MAME
-static UINT8 device_start_ym3812_mame(const DEV_GEN_CFG* cfg, DEV_INFO* retDevInf)
+static uint8_t device_start_ym3812_mame(const DEV_GEN_CFG* cfg, DEV_INFO* retDevInf)
 {
 	void* chip;
 	DEV_DATA* devData;
-	UINT32 rate;
+	uint32_t rate;
 	
 	rate = cfg->clock / 72;
 	SRATE_CUSTOM_HIGHEST(cfg->srMode, rate, cfg->smplRate);
@@ -308,11 +308,11 @@ static UINT8 device_start_ym3812_mame(const DEV_GEN_CFG* cfg, DEV_INFO* retDevIn
 #endif	// EC_YM3812_MAME
 
 #ifdef EC_YM3812_ADLIBEMU
-static UINT8 device_start_ym3812_adlibemu(const DEV_GEN_CFG* cfg, DEV_INFO* retDevInf)
+static uint8_t device_start_ym3812_adlibemu(const DEV_GEN_CFG* cfg, DEV_INFO* retDevInf)
 {
 	void* chip;
 	DEV_DATA* devData;
-	UINT32 rate;
+	uint32_t rate;
 	
 	rate = cfg->clock / 72;
 	SRATE_CUSTOM_HIGHEST(cfg->srMode, rate, cfg->smplRate);
@@ -329,11 +329,11 @@ static UINT8 device_start_ym3812_adlibemu(const DEV_GEN_CFG* cfg, DEV_INFO* retD
 #endif	// EC_YM3812_ADLIBEMU
 
 #ifdef EC_YM3812_NUKED
-static UINT8 device_start_ym3812_nuked(const DEV_GEN_CFG* cfg, DEV_INFO* retDevInf)
+static uint8_t device_start_ym3812_nuked(const DEV_GEN_CFG* cfg, DEV_INFO* retDevInf)
 {
 	void* chip;
 	DEV_DATA* devData;
-	UINT32 rate;
+	uint32_t rate;
 	
 	rate = cfg->clock / 72;
 	SRATE_CUSTOM_HIGHEST(cfg->srMode, rate, cfg->smplRate);
@@ -354,11 +354,11 @@ static UINT8 device_start_ym3812_nuked(const DEV_GEN_CFG* cfg, DEV_INFO* retDevI
 
 
 #ifdef SNDDEV_YM3526
-static UINT8 device_start_ym3526(const DEV_GEN_CFG* cfg, DEV_INFO* retDevInf)
+static uint8_t device_start_ym3526(const DEV_GEN_CFG* cfg, DEV_INFO* retDevInf)
 {
 	void* chip;
 	DEV_DATA* devData;
-	UINT32 rate;
+	uint32_t rate;
 	
 	rate = cfg->clock / 72;
 	SRATE_CUSTOM_HIGHEST(cfg->srMode, rate, cfg->smplRate);
@@ -381,11 +381,11 @@ static UINT8 device_start_ym3526(const DEV_GEN_CFG* cfg, DEV_INFO* retDevInf)
 
 
 #ifdef SNDDEV_Y8950
-static UINT8 device_start_y8950(const DEV_GEN_CFG* cfg, DEV_INFO* retDevInf)
+static uint8_t device_start_y8950(const DEV_GEN_CFG* cfg, DEV_INFO* retDevInf)
 {
 	void* chip;
 	DEV_DATA* devData;
-	UINT32 rate;
+	uint32_t rate;
 	
 	rate = cfg->clock / 72;
 	SRATE_CUSTOM_HIGHEST(cfg->srMode, rate, cfg->smplRate);

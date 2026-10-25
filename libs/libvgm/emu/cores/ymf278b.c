@@ -111,22 +111,22 @@
 
 typedef struct _YMF278BChip YMF278BChip;
 
-static void ymf278b_pcm_update(void *info, UINT32 samples, DEV_SMPL** outputs);
+static void ymf278b_pcm_update(void *info, uint32_t samples, DEV_SMPL** outputs);
 static void refresh_opl3_volume(YMF278BChip* chip);
 static void init_opl3_devinfo(DEV_INFO* devInf, const DEV_GEN_CFG* baseCfg);
-static UINT8 device_start_ymf278b(const DEV_GEN_CFG* cfg, DEV_INFO* retDevInf);
+static uint8_t device_start_ymf278b(const DEV_GEN_CFG* cfg, DEV_INFO* retDevInf);
 static void device_stop_ymf278b(void *info);
 static void device_reset_ymf278b(void *info);
-static UINT8 device_ymf278b_link_opl3(void* param, UINT8 linkID, const DEV_INFO* defInfOPL3);
+static uint8_t device_ymf278b_link_opl3(void* param, uint8_t linkID, const DEV_INFO* defInfOPL3);
 
-static UINT8 ymf278b_r(void *info, UINT8 offset);
-static void ymf278b_w(void *info, UINT8 offset, UINT8 data);
-static void ymf278b_alloc_rom(void* info, UINT32 memsize);
-static void ymf278b_alloc_ram(void* info, UINT32 memsize);
-static void ymf278b_write_rom(void *info, UINT32 offset, UINT32 length, const UINT8* data);
-static void ymf278b_write_ram(void *info, UINT32 offset, UINT32 length, const UINT8* data);
+static uint8_t ymf278b_r(void *info, uint8_t offset);
+static void ymf278b_w(void *info, uint8_t offset, uint8_t data);
+static void ymf278b_alloc_rom(void* info, uint32_t memsize);
+static void ymf278b_alloc_ram(void* info, uint32_t memsize);
+static void ymf278b_write_rom(void *info, uint32_t offset, uint32_t length, const uint8_t* data);
+static void ymf278b_write_ram(void *info, uint32_t offset, uint32_t length, const uint8_t* data);
 
-static void ymf278b_set_mute_mask(void *info, UINT32 MuteMask);
+static void ymf278b_set_mute_mask(void *info, uint32_t MuteMask);
 static void ymf278b_set_log_cb(void *info, DEVCB_LOG func, void* param);
 
 
@@ -165,7 +165,7 @@ static const char* DeviceName(const DEV_GEN_CFG* devCfg)
 	return "YMF278B";
 }
 
-static UINT16 DeviceChannels(const DEV_GEN_CFG* devCfg)
+static uint16_t DeviceChannels(const DEV_GEN_CFG* devCfg)
 {
 	return 24;
 }
@@ -199,44 +199,44 @@ const DEV_DECL sndDev_YMF278B =
 
 typedef struct
 {
-	UINT32 startaddr;
-	UINT16 loopaddr;
-	UINT16 endaddr;	// Note: stored in 2s complement (0x0000 = 0, 0x0001 = -65535, 0xFFFF = -1)
-	UINT32 step;	// fixed-point frequency step
+	uint32_t startaddr;
+	uint16_t loopaddr;
+	uint16_t endaddr;	// Note: stored in 2s complement (0x0000 = 0, 0x0001 = -65535, 0xFFFF = -1)
+	uint32_t step;	// fixed-point frequency step
 					// invariant: step == calcStep(OCT, FN)
-	UINT32 stepptr;	// fixed-point pointer into the sample
-	UINT16 pos;
+	uint32_t stepptr;	// fixed-point pointer into the sample
+	uint16_t pos;
 
-	INT16 env_vol;
+	int16_t env_vol;
 
-	UINT32 lfo_cnt;	// LFO state counter
+	uint32_t lfo_cnt;	// LFO state counter
 
-	INT16 DL;
-	UINT16 wave;	// wavetable number
-	UINT16 FN;		// f-number         TODO store 'FN | 1024'?
-	INT8 OCT;		// octave [-8..+7]
-	UINT8 PRVB;		// pseudo-reverb
-	UINT8 LD;		// level direct
-	UINT8 TLdest;	// destination total level
-	UINT8 TL;		// total level
-	UINT8 pan;		// panpot
-	UINT8 keyon;	// slot keyed on
-	UINT8 DAMP;
-	UINT8 lfo;		// LFO
-	UINT8 vib;		// vibrato
-	UINT8 AM;		// AM level
-	UINT8 AR;
-	UINT8 D1R;
-	UINT8 D2R;
-	UINT8 RC;		// rate correction
-	UINT8 RR;
+	int16_t DL;
+	uint16_t wave;	// wavetable number
+	uint16_t FN;		// f-number         TODO store 'FN | 1024'?
+	int8_t OCT;		// octave [-8..+7]
+	uint8_t PRVB;		// pseudo-reverb
+	uint8_t LD;		// level direct
+	uint8_t TLdest;	// destination total level
+	uint8_t TL;		// total level
+	uint8_t pan;		// panpot
+	uint8_t keyon;	// slot keyed on
+	uint8_t DAMP;
+	uint8_t lfo;		// LFO
+	uint8_t vib;		// vibrato
+	uint8_t AM;		// AM level
+	uint8_t AR;
+	uint8_t D1R;
+	uint8_t D2R;
+	uint8_t RC;		// rate correction
+	uint8_t RR;
 
-	UINT8 bits;		// width of the samples
+	uint8_t bits;		// width of the samples
 
-	UINT8 state;	// envelope generator state
-	UINT8 lfo_active;
+	uint8_t state;	// envelope generator state
+	uint8_t lfo_active;
 
-	UINT8 Muted;
+	uint8_t Muted;
 } YMF278BSlot;
 
 typedef struct
@@ -254,34 +254,34 @@ struct _YMF278BChip
 	YMF278BSlot slots[24];
 
 	/** Global envelope generator counter. */
-	UINT32 eg_cnt;
-	UINT32 tl_int_cnt;
-	UINT8 tl_int_step;	// modulo 3 counter
+	uint32_t eg_cnt;
+	uint32_t tl_int_cnt;
+	uint8_t tl_int_step;	// modulo 3 counter
 
-	UINT32 memadr;
+	uint32_t memadr;
 
-	INT32 fm_l, fm_r;
-	INT32 pcm_l, pcm_r;
+	int32_t fm_l, fm_r;
+	int32_t pcm_l, pcm_r;
 
-	UINT32 ROMSize;
-	UINT8 *rom;
-	UINT32 RAMSize;
-	UINT8 *ram;
-	UINT32 clock;
+	uint32_t ROMSize;
+	uint8_t *rom;
+	uint32_t RAMSize;
+	uint8_t *ram;
+	uint32_t clock;
 
-	UINT8 regs[0x100];
+	uint8_t regs[0x100];
 
-	UINT8 exp;
+	uint8_t exp;
 
-	UINT8 port_AB, port_C, lastport;
+	uint8_t port_AB, port_C, lastport;
 
-	UINT8 last_fm_data;
+	uint8_t last_fm_data;
 	OPL3FM fm;
 };
 
-INLINE UINT8* ymf278b_getMemPtr(YMF278BChip* chip, UINT32 address);
-INLINE UINT8 ymf278b_readMem(YMF278BChip* chip, UINT32 address);
-INLINE void ymf278b_writeMem(YMF278BChip* chip, UINT32 address, UINT8 value);
+INLINE uint8_t* ymf278b_getMemPtr(YMF278BChip* chip, uint32_t address);
+INLINE uint8_t ymf278b_readMem(YMF278BChip* chip, uint32_t address);
+INLINE void ymf278b_writeMem(YMF278BChip* chip, uint32_t address, uint8_t value);
 
 
 // envelope output entries
@@ -305,32 +305,32 @@ INLINE void ymf278b_writeMem(YMF278BChip* chip, UINT32 address, UINT8 value);
 #define EG_OFF	0
 
 // Pan values, units are -3dB, i.e. 8.
-static const INT32 pan_left[16]  = {
+static const int32_t pan_left[16]  = {
 	0, 8, 16, 24, 32, 40, 48, 255, 255,   0,  0,  0,  0,  0,  0, 0
 };
-static const INT32 pan_right[16] = {
+static const int32_t pan_right[16] = {
 	0, 0,  0,  0,  0,  0,  0,   0, 255, 255, 48, 40, 32, 24, 16, 8
 };
 
 // Mixing levels, units are -3dB
-static const INT32 mix_level[8] = {
+static const int32_t mix_level[8] = {
 	0, 8, 16, 24, 32, 40, 48, 255
 };
 
 // Precalculated attenuation values
-static INT32 vol_tab[ENV_LEN];
+static int32_t vol_tab[ENV_LEN];
 
 // decay level table (3dB per step)
 // 0 - 15: 0, 3, 6, 9,12,15,18,21,24,27,30,33,36,39,42,93 (dB)
-#define SC(db) (INT16)(db / 3 * 0x20)
-static const INT16 dl_tab[16] = {
+#define SC(db) (int16_t)(db / 3 * 0x20)
+static const int16_t dl_tab[16] = {
  SC( 0), SC( 3), SC( 6), SC( 9), SC(12), SC(15), SC(18), SC(21),
  SC(24), SC(27), SC(30), SC(33), SC(36), SC(39), SC(42), SC(93)
 };
 #undef SC
 
 #define RATE_STEPS	8
-static const UINT8 eg_inc[15 * RATE_STEPS] = {
+static const uint8_t eg_inc[15 * RATE_STEPS] = {
 //cycle:0  1   2  3   4  5   6  7
 	0, 1,  0, 1,  0, 1,  0, 1, //  0  rates 00..12 0 (increment by 0 or 1)
 	0, 1,  0, 1,  1, 1,  0, 1, //  1  rates 00..12 1
@@ -353,7 +353,7 @@ static const UINT8 eg_inc[15 * RATE_STEPS] = {
 };
 
 #define O(a) ((a) * RATE_STEPS)
-static const UINT8 eg_rate_select[64] = {
+static const uint8_t eg_rate_select[64] = {
 	O(14),O(14),O(14),O(14),
 	O( 0),O( 1),O( 2),O( 3),
 	O( 0),O( 1),O( 2),O( 3),
@@ -377,7 +377,7 @@ static const UINT8 eg_rate_select[64] = {
 // shift 12,   11,   10,   9,   8,   7,   6,  5,  4,  3,  2,  1,  0,  0,  0,  0
 // mask  4095, 2047, 1023, 511, 255, 127, 63, 31, 15, 7,  3,  1,  0,  0,  0,  0
 #define O(a) (a)
-static const UINT8 eg_rate_shift[64] = {
+static const uint8_t eg_rate_shift[64] = {
 	O(12),O(12),O(12),O(12),
 	O(11),O(11),O(11),O(11),
 	O(10),O(10),O(10),O(10),
@@ -399,8 +399,8 @@ static const UINT8 eg_rate_shift[64] = {
 
 
 // number of steps the LFO counter advances per sample
-#define O(a) (UINT32)(LFO_PERIOD * a / 44100.0 + 0.5)	// LFO frequency (Hz) -> LFO counter steps per sample
-static const UINT32 lfo_period[8] = {
+#define O(a) (uint32_t)(LFO_PERIOD * a / 44100.0 + 0.5)	// LFO frequency (Hz) -> LFO counter steps per sample
+static const uint32_t lfo_period[8] = {
 	O(0.168),	// step:  1, period: 262144 samples
 	O(2.019),	// step: 12, period:  21845 samples
 	O(3.196),	// step: 19, period:  13797 samples
@@ -415,7 +415,7 @@ static const UINT32 lfo_period[8] = {
 
 // formula used by Yamaha docs:
 //	vib_depth_cents(x) = (log2(0x400 + x) - 10) * 1200
-static const INT16 vib_depth[8] = {
+static const int16_t vib_depth[8] = {
 	0,	//  0.000 cents
 	2,	//  3.378 cents
 	3,	//  5.065 cents
@@ -433,7 +433,7 @@ static const INT16 vib_depth[8] = {
 //	Thus the maximum attenuation with x=0x80 is (0x7F * 0x80) >> 7 = 0x7F.
 // reversed formula:
 //	am_depth(db) = round(db / 6.0 * 0x40) + 1
-static const UINT8 am_depth[8] = {
+static const uint8_t am_depth[8] = {
 	0x00,	//  0.000 db
 	0x14,	//  1.781 db
 	0x20,	//  2.906 db
@@ -445,13 +445,13 @@ static const UINT8 am_depth[8] = {
 };
 
 
-static UINT8 tablesInit = 0;
+static uint8_t tablesInit = 0;
 
 // Sign extend a 4-bit value to 8-bit int
 // require: x in range [0..15]
-INLINE INT8 sign_extend_4(UINT8 x)
+INLINE int8_t sign_extend_4(uint8_t x)
 {
-	return ((INT8)x ^ 8) - 8;
+	return ((int8_t)x ^ 8) - 8;
 }
 
 // Params: oct in [-8 ..   +7]
@@ -460,7 +460,7 @@ INLINE INT8 sign_extend_4(UINT8 x)
 //    ((fn | 1024) + vib) << (5 + oct)
 // Though in this formula the shift can go over a negative distance (in that
 // case we should shift in the other direction).
-INLINE UINT32 calcStep(INT8 oct, UINT16 fn, INT16 vib)
+INLINE uint32_t calcStep(int8_t oct, uint16_t fn, int16_t vib)
 {
 	if (oct == -8)
 	{
@@ -468,7 +468,7 @@ INLINE UINT32 calcStep(INT8 oct, UINT16 fn, INT16 vib)
 	}
 	else
 	{
-		UINT32 t = (fn + 1024 + vib) << (8 + oct); // use '+' iso '|' (generates slightly better code)
+		uint32_t t = (fn + 1024 + vib) << (8 + oct); // use '+' iso '|' (generates slightly better code)
 		return t >> 3; // was shifted 3 positions too far
 	}
 }
@@ -492,7 +492,7 @@ static void ymf278b_slot_reset(YMF278BSlot* slot)
 	slot->pos = 0;
 }
 
-INLINE UINT8 ymf278b_slot_compute_rate(YMF278BSlot* slot, int val)
+INLINE uint8_t ymf278b_slot_compute_rate(YMF278BSlot* slot, int val)
 {
 	int res;
 	
@@ -518,10 +518,10 @@ INLINE UINT8 ymf278b_slot_compute_rate(YMF278BSlot* slot, int val)
 	else if (res > 63)
 		res = 63;
 	
-	return (UINT8)res;
+	return (uint8_t)res;
 }
 
-INLINE UINT8 ymf278b_slot_compute_decay_rate(YMF278BSlot* slot, int val)
+INLINE uint8_t ymf278b_slot_compute_decay_rate(YMF278BSlot* slot, int val)
 {
 	if (slot->DAMP)
 	{
@@ -557,14 +557,14 @@ INLINE UINT8 ymf278b_slot_compute_decay_rate(YMF278BSlot* slot, int val)
 	return ymf278b_slot_compute_rate(slot, val);
 }
 
-INLINE INT16 ymf278b_slot_compute_vib(YMF278BSlot* slot)
+INLINE int16_t ymf278b_slot_compute_vib(YMF278BSlot* slot)
 {
 	// verified via hardware recording:
 	//  With LFO speed 0 (period 262144 samples), each vibrato step takes 4096 samples.
 	//  -> 64 steps total
 	//  Also, with vibrato depth 7 (80 cents) and an F-Num of 0x400, the final F-Nums are:
 	//  0x400 .. 0x43C, 0x43C .. 0x400, 0x400 .. 0x3C4, 0x3C4 .. 0x400
-	INT16 lfo_fm = (INT16)(slot->lfo_cnt / (LFO_PERIOD / 0x40));
+	int16_t lfo_fm = (int16_t)(slot->lfo_cnt / (LFO_PERIOD / 0x40));
 	// results in +0x00..+0x0F, +0x0F..+0x00, -0x00..-0x0F, -0x0F..-0x00
 	if (lfo_fm & 0x10)
 		lfo_fm ^= 0x1F;
@@ -574,12 +574,12 @@ INLINE INT16 ymf278b_slot_compute_vib(YMF278BSlot* slot)
 	return (lfo_fm * vib_depth[slot->vib]) / 12;
 }
 
-INLINE UINT16 ymf278b_slot_compute_am(YMF278BSlot* slot)
+INLINE uint16_t ymf278b_slot_compute_am(YMF278BSlot* slot)
 {
 	// verified via hardware recording:
 	//  With LFO speed 0 (period 262144 samples), each tremolo step takes 1024 samples.
 	//  -> 256 steps total
-	UINT16 lfo_am = (UINT16)(slot->lfo_cnt / (LFO_PERIOD / 0x100));
+	uint16_t lfo_am = (uint16_t)(slot->lfo_cnt / (LFO_PERIOD / 0x100));
 	// results in 0x00..0x7F, 0x7F..0x00
 	if (lfo_am & 0x80)
 		lfo_am ^= 0xFF;
@@ -629,9 +629,9 @@ static void ymf278b_advance(YMF278BChip* chip)
 {
 	YMF278BSlot* op;
 	int i;
-	UINT8 rate;
-	UINT8 shift;
-	UINT8 select;
+	uint8_t rate;
+	uint8_t shift;
+	uint8_t select;
 	
 	chip->tl_int_cnt ++;
 	if (chip->tl_int_cnt >= 9)
@@ -726,13 +726,13 @@ static void ymf278b_advance(YMF278BChip* chip)
 	}
 }
 
-INLINE INT16 ymf278b_getSample(YMF278BChip* chip, YMF278BSlot* slot, UINT16 pos)
+INLINE int16_t ymf278b_getSample(YMF278BChip* chip, YMF278BSlot* slot, uint16_t pos)
 {
 	// TODO How does this behave when R#2 bit 0 = 1?
 	//      As-if read returns 0xff? (Like for CPU memory reads.) Or is
 	//      sound generation blocked at some higher level?
-	INT16 sample;
-	UINT32 addr;
+	int16_t sample;
+	uint32_t addr;
 	
 	switch (slot->bits)
 	{
@@ -761,13 +761,13 @@ INLINE INT16 ymf278b_getSample(YMF278BChip* chip, YMF278BSlot* slot, UINT16 pos)
 	return sample;
 }
 
-INLINE INT16 ymf278b_nextPos(YMF278BSlot* slot, UINT16 pos, UINT16 step)
+INLINE int16_t ymf278b_nextPos(YMF278BSlot* slot, uint16_t pos, uint16_t step)
 {
 	// If there is a 4-sample loop and you advance 12 samples per step,
 	// it may exceed the end offset.
 	// This is abused by the "Lizard Star" song to generate noise at 0:52. -Valley Bell
 	pos += step;
-	if ((UINT32)pos + slot->endaddr >= 0x10000)	// check position >= (negated) end address
+	if ((uint32_t)pos + slot->endaddr >= 0x10000)	// check position >= (negated) end address
 		pos = pos + slot->endaddr + slot->loopaddr;	// This is how the actual chip does it.
 	return pos;
 }
@@ -784,13 +784,13 @@ static int ymf278b_anyActive(YMF278BChip* chip)
 	return 0;
 }
 
-static void ymf278b_pcm_update(void *info, UINT32 samples, DEV_SMPL** outputs)
+static void ymf278b_pcm_update(void *info, uint32_t samples, DEV_SMPL** outputs)
 {
 	YMF278BChip* chip = (YMF278BChip *)info;
 	int i;
-	UINT32 j;
-	INT32 vl;
-	INT32 vr;
+	uint32_t j;
+	int32_t vl;
+	int32_t vr;
 	
 	memset(outputs[0], 0, samples * sizeof(DEV_SMPL));
 	memset(outputs[1], 0, samples * sizeof(DEV_SMPL));
@@ -809,12 +809,12 @@ static void ymf278b_pcm_update(void *info, UINT32 samples, DEV_SMPL** outputs)
 		for (i = 0; i < 24; i ++)
 		{
 			YMF278BSlot* sl;
-			INT16 sample;
-			INT32 smplOut;
-			UINT16 envVol;
-			INT32 volLeft;
-			INT32 volRight;
-			UINT32 step;
+			int16_t sample;
+			int32_t smplOut;
+			uint16_t envVol;
+			int32_t volLeft;
+			int32_t volRight;
+			uint32_t step;
 			
 			sl = &chip->slots[i];
 			if (sl->state == EG_OFF || sl->Muted)
@@ -833,7 +833,7 @@ static void ymf278b_pcm_update(void *info, UINT32 samples, DEV_SMPL** outputs)
 			// A volume of -60 db or lower results in silence. (value 0x280..0x3FF).
 			// Recordings from actual hardware indicate, that TL level and envelope level are applied separately.
 			// Each of them is clipped to silence below -60 db, but TL+envelope might result in a lower volume. -Valley Bell
-			envVol = (UINT16)sl->env_vol;
+			envVol = (uint16_t)sl->env_vol;
 			if (sl->lfo_active && sl->AM)
 				envVol += ymf278b_slot_compute_am(sl);
 			if (envVol >= MAX_ATT_INDEX)
@@ -871,7 +871,7 @@ static void ymf278b_pcm_update(void *info, UINT32 samples, DEV_SMPL** outputs)
 
 INLINE void ymf278b_keyOnHelper(YMF278BChip* chip, YMF278BSlot* slot)
 {
-	UINT8 rate;
+	uint8_t rate;
 
 	// Unlike FM, the envelope level is reset. (And it makes sense, because you restart the sample.)
 	slot->env_vol = MAX_ATT_INDEX;
@@ -888,7 +888,7 @@ INLINE void ymf278b_keyOnHelper(YMF278BChip* chip, YMF278BSlot* slot)
 	slot->pos = 0;
 }
 
-static void ymf278b_A_w(YMF278BChip *chip, UINT8 reg, UINT8 data)
+static void ymf278b_A_w(YMF278BChip *chip, uint8_t reg, uint8_t data)
 {
 	switch(reg)
 	{
@@ -905,7 +905,7 @@ static void ymf278b_A_w(YMF278BChip *chip, UINT8 reg, UINT8 data)
 				chip->current_irq = 0;
 			else
 			{
-				UINT8 old_enable = chip->enable;
+				uint8_t old_enable = chip->enable;
 				chip->enable = data;
 				chip->current_irq &= ~data;
 				if((old_enable ^ data) & 1)
@@ -921,7 +921,7 @@ static void ymf278b_A_w(YMF278BChip *chip, UINT8 reg, UINT8 data)
 	}
 }
 
-static void ymf278b_B_w(YMF278BChip *chip, UINT8 reg, UINT8 data)
+static void ymf278b_B_w(YMF278BChip *chip, uint8_t reg, uint8_t data)
 {
 	switch(reg)
 	{
@@ -934,16 +934,16 @@ static void ymf278b_B_w(YMF278BChip *chip, UINT8 reg, UINT8 data)
 	}
 }
 
-static void ymf278b_C_w(YMF278BChip* chip, UINT8 reg, UINT8 data)
+static void ymf278b_C_w(YMF278BChip* chip, uint8_t reg, uint8_t data)
 {
 	// Handle slot registers specifically
 	if (reg >= 0x08 && reg <= 0xF7)
 	{
 		int snum = (reg - 8) % 24;
 		YMF278BSlot* slot = &chip->slots[snum];
-		UINT8 wavetblhdr;
-		UINT32 base;
-		UINT8* buf;
+		uint8_t wavetblhdr;
+		uint32_t base;
+		uint8_t* buf;
 		int i;
 		
 		switch((reg - 8) / 24)
@@ -1132,10 +1132,10 @@ static void ymf278b_C_w(YMF278BChip* chip, UINT8 reg, UINT8 data)
 	chip->regs[reg] = data;
 }
 
-static UINT8 ymf278b_readReg(YMF278BChip* chip, UINT8 reg)
+static uint8_t ymf278b_readReg(YMF278BChip* chip, uint8_t reg)
 {
 	// no need to call updateStream(time)
-	UINT8 result;
+	uint8_t result;
 	switch(reg)
 	{
 	case 2: // 3 upper bits are device ID
@@ -1165,9 +1165,9 @@ static UINT8 ymf278b_readReg(YMF278BChip* chip, UINT8 reg)
 	return result;
 }
 
-static UINT8 ymf278b_readStatus(YMF278BChip* chip)
+static uint8_t ymf278b_readStatus(YMF278BChip* chip)
 {
-	UINT8 result = 0;
+	uint8_t result = 0;
 	//if (time < busyTime)
 	//	result |= 0x01;
 	//if (time < loadTime)
@@ -1175,10 +1175,10 @@ static UINT8 ymf278b_readStatus(YMF278BChip* chip)
 	return result;
 }
 
-static UINT8 ymf278b_r(void *info, UINT8 offset)
+static uint8_t ymf278b_r(void *info, uint8_t offset)
 {
 	YMF278BChip *chip = (YMF278BChip *)info;
-	UINT8 ret = 0;
+	uint8_t ret = 0;
 
 	switch (offset)
 	{
@@ -1186,7 +1186,7 @@ static UINT8 ymf278b_r(void *info, UINT8 offset)
 		case 0:
 		{
 			// bits 0 and 1 are only valid if NEW2 is set
-			//UINT8 newbits = 0;
+			//uint8_t newbits = 0;
 			//if (chip->exp & 2)
 			//	newbits = (chip->status_ld << 1) | chip->status_busy;
 
@@ -1220,7 +1220,7 @@ static UINT8 ymf278b_r(void *info, UINT8 offset)
 	return ret;
 }
 
-static void ymf278b_w(void *info, UINT8 offset, UINT8 data)
+static void ymf278b_w(void *info, uint8_t offset, uint8_t data)
 {
 	YMF278BChip *chip = (YMF278BChip *)info;
 
@@ -1307,7 +1307,7 @@ static void ymf278b_w(void *info, UINT8 offset, UINT8 data)
 // (For completeness) MoonSound also has 2MB ROM (YRW801), /CE of this ROM is
 // connected to YMF278 /MCS0. In both mode=0 and mode=1 this signal is active
 // for the region 0x000000-0x1FFFFF. (But this routine does not handle ROM).
-static UINT32 ymf278b_getRamAddress(YMF278BChip* chip, UINT32 addr)
+static uint32_t ymf278b_getRamAddress(YMF278BChip* chip, uint32_t addr)
 {
 	if (chip->regs[2] & 2) {
 		// Normally MoonSound is used in 'memory access mode = 0'. But
@@ -1337,7 +1337,7 @@ static UINT32 ymf278b_getRamAddress(YMF278BChip* chip, UINT32 addr)
 				break;
 			}
 		} else {
-			return (UINT32)-1; // unmapped
+			return (uint32_t)-1; // unmapped
 		}
 	}
 	if (chip->RAMSize == 640 * 1024) {
@@ -1352,7 +1352,7 @@ static UINT32 ymf278b_getRamAddress(YMF278BChip* chip, UINT32 addr)
 	return addr;
 }
 
-INLINE UINT8* ymf278b_getMemPtr(YMF278BChip* chip, UINT32 address)
+INLINE uint8_t* ymf278b_getMemPtr(YMF278BChip* chip, uint32_t address)
 {
 	address &= 0x3FFFFF;
 	if (address < chip->ROMSize)
@@ -1364,7 +1364,7 @@ INLINE UINT8* ymf278b_getMemPtr(YMF278BChip* chip, UINT32 address)
 		return NULL;
 }
 
-INLINE UINT8 ymf278b_readMem(YMF278BChip* chip, UINT32 address)
+INLINE uint8_t ymf278b_readMem(YMF278BChip* chip, uint32_t address)
 {
 	// Verified on real YMF278: address space wraps at 4MB.
 	address &= 0x3FFFFF;
@@ -1377,7 +1377,7 @@ INLINE UINT8 ymf278b_readMem(YMF278BChip* chip, UINT32 address)
 		return 0xFF; // TODO check
 }
 
-INLINE void ymf278b_writeMem(YMF278BChip* chip, UINT32 address, UINT8 value)
+INLINE void ymf278b_writeMem(YMF278BChip* chip, uint32_t address, uint8_t value)
 {
 	address &= 0x3FFFFF;
 	if (address < chip->ROMSize)
@@ -1390,7 +1390,7 @@ INLINE void ymf278b_writeMem(YMF278BChip* chip, UINT32 address, UINT8 value)
 	return;
 }
 
-static void opl3dummy_write(void* param, UINT8 address, UINT8 data)
+static void opl3dummy_write(void* param, uint8_t address, uint8_t data)
 {
 	return;
 }
@@ -1403,7 +1403,7 @@ static void opl3dummy_reset(void* param)
 #define OPL4FM_VOL_BALANCE	0x100	// 0x100 = 100%
 static void refresh_opl3_volume(YMF278BChip* chip)
 {
-	INT32 volL, volR;
+	int32_t volL, volR;
 	
 	if (chip->fm.setVol == NULL)
 		return;
@@ -1438,11 +1438,11 @@ static void init_opl3_devinfo(DEV_INFO* devInf, const DEV_GEN_CFG* baseCfg)
 	return;
 }
 
-static UINT8 device_start_ymf278b(const DEV_GEN_CFG* cfg, DEV_INFO* retDevInf)
+static uint8_t device_start_ymf278b(const DEV_GEN_CFG* cfg, DEV_INFO* retDevInf)
 {
 	YMF278BChip *chip;
-	UINT32 rate;
-	UINT32 i;
+	uint32_t rate;
+	uint32_t i;
 
 	chip = (YMF278BChip *)calloc(1, sizeof(YMF278BChip));
 	if (chip == NULL)
@@ -1529,9 +1529,9 @@ static void device_reset_ymf278b(void *info)
 	refresh_opl3_volume(chip);
 }
 
-static UINT8 get_opl3_funcs(const DEV_DEF* devDef, OPL3FM* retFuncs, DEV_LOGGER* logger)
+static uint8_t get_opl3_funcs(const DEV_DEF* devDef, OPL3FM* retFuncs, DEV_LOGGER* logger)
 {
-	UINT8 retVal;
+	uint8_t retVal;
 	
 	retVal = SndEmu_GetDeviceFunc(devDef, RWF_REGISTER | RWF_WRITE, DEVRW_A8D8, 0, (void**)&retFuncs->write);
 	if (retVal)
@@ -1550,10 +1550,10 @@ static UINT8 get_opl3_funcs(const DEV_DEF* devDef, OPL3FM* retFuncs, DEV_LOGGER*
 	return 0x00;
 }
 
-static UINT8 device_ymf278b_link_opl3(void* param, UINT8 linkID, const DEV_INFO* defInfOPL3)
+static uint8_t device_ymf278b_link_opl3(void* param, uint8_t linkID, const DEV_INFO* defInfOPL3)
 {
 	YMF278BChip* chip = (YMF278BChip *)param;
-	UINT8 retVal;
+	uint8_t retVal;
 	
 	if (linkID != LINKDEV_OPL3)
 		return EERR_UNK_DEVICE;
@@ -1576,35 +1576,35 @@ static UINT8 device_ymf278b_link_opl3(void* param, UINT8 linkID, const DEV_INFO*
 	return retVal;
 }
 
-static void ymf278b_alloc_rom(void* info, UINT32 memsize)
+static void ymf278b_alloc_rom(void* info, uint32_t memsize)
 {
 	YMF278BChip *chip = (YMF278BChip *)info;
 	
 	if (chip->ROMSize == memsize)
 		return;
 	
-	chip->rom = (UINT8*)realloc(chip->rom, memsize);
+	chip->rom = (uint8_t*)realloc(chip->rom, memsize);
 	chip->ROMSize = memsize;
 	memset(chip->rom, 0xFF, memsize);
 	
 	return;
 }
 
-static void ymf278b_alloc_ram(void* info, UINT32 memsize)
+static void ymf278b_alloc_ram(void* info, uint32_t memsize)
 {
 	YMF278BChip *chip = (YMF278BChip *)info;
 	
 	if (chip->RAMSize == memsize)
 		return;
 	
-	chip->ram = (UINT8*)realloc(chip->ram, memsize);
+	chip->ram = (uint8_t*)realloc(chip->ram, memsize);
 	chip->RAMSize = memsize;
 	memset(chip->ram, 0, chip->RAMSize);
 	
 	return;
 }
 
-static void ymf278b_write_rom(void *info, UINT32 offset, UINT32 length, const UINT8* data)
+static void ymf278b_write_rom(void *info, uint32_t offset, uint32_t length, const uint8_t* data)
 {
 	YMF278BChip *chip = (YMF278BChip *)info;
 	
@@ -1618,7 +1618,7 @@ static void ymf278b_write_rom(void *info, UINT32 offset, UINT32 length, const UI
 	return;
 }
 
-static void ymf278b_write_ram(void *info, UINT32 offset, UINT32 length, const UINT8* data)
+static void ymf278b_write_ram(void *info, uint32_t offset, uint32_t length, const uint8_t* data)
 {
 	YMF278BChip *chip = (YMF278BChip *)info;
 	
@@ -1633,10 +1633,10 @@ static void ymf278b_write_ram(void *info, UINT32 offset, UINT32 length, const UI
 }
 
 
-static void ymf278b_set_mute_mask(void *info, UINT32 MuteMask)
+static void ymf278b_set_mute_mask(void *info, uint32_t MuteMask)
 {
 	YMF278BChip *chip = (YMF278BChip *)info;
-	UINT8 CurChn;
+	uint8_t CurChn;
 	
 	for (CurChn = 0; CurChn < 24; CurChn ++)
 		chip->slots[CurChn].Muted = (MuteMask >> CurChn) & 0x01;

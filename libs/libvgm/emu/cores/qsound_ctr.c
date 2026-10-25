@@ -23,76 +23,76 @@
 #define CLAMP(x, low, high)  (((x) > (high)) ? (high) : (((x) < (low)) ? (low) : (x)))
 
 struct qsound_voice {
-	UINT16 bank;
-	INT16 addr; // top word is the sample address
-	UINT16 phase;
-	UINT16 rate;
-	INT16 loop_len;
-	INT16 end_addr;
-	INT16 volume;
-	INT16 echo;
+	uint16_t bank;
+	int16_t addr; // top word is the sample address
+	uint16_t phase;
+	uint16_t rate;
+	int16_t loop_len;
+	int16_t end_addr;
+	int16_t volume;
+	int16_t echo;
 };
 
 struct qsound_adpcm {
-	UINT16 start_addr;
-	UINT16 end_addr;
-	UINT16 bank;
-	INT16 volume;
-	UINT16 flag;
-	INT16 cur_vol;
-	INT16 step_size;
-	UINT16 cur_addr;
+	uint16_t start_addr;
+	uint16_t end_addr;
+	uint16_t bank;
+	int16_t volume;
+	uint16_t flag;
+	int16_t cur_vol;
+	int16_t step_size;
+	uint16_t cur_addr;
 };
 
 // Q1 Filter
 struct qsound_fir {
 	int tap_count;	// usually 95
 	int delay_pos;
-	INT16 table_pos;
-	INT16 taps[95];
-	INT16 delay_line[95];
+	int16_t table_pos;
+	int16_t taps[95];
+	int16_t delay_line[95];
 };
 
 // Delay line
 struct qsound_delay {
-	INT16 delay;
-	INT16 volume;
-	INT16 write_pos;
-	INT16 read_pos;
-	INT16 delay_line[51];
+	int16_t delay;
+	int16_t volume;
+	int16_t write_pos;
+	int16_t read_pos;
+	int16_t delay_line[51];
 };
 
 struct qsound_echo {
-	UINT16 end_pos;
+	uint16_t end_pos;
 	
-	INT16 feedback;
-	INT16 length;
-	INT16 last_sample;
-	INT16 delay_line[1024];
-	INT16 delay_pos;
+	int16_t feedback;
+	int16_t length;
+	int16_t last_sample;
+	int16_t delay_line[1024];
+	int16_t delay_pos;
 };
 
 struct qsound_chip {
 
 	DEV_DATA _devData;
 	
-	UINT8* romData;
-	UINT32 romSize;
-	UINT32 romMask;
-	UINT32 muteMask;
+	uint8_t* romData;
+	uint32_t romSize;
+	uint32_t romMask;
+	uint32_t muteMask;
 	
 	// ==================================================== //
 
-	UINT16 data_latch;
-	INT16 out[2];
+	uint16_t data_latch;
+	int16_t out[2];
 
-	INT16 pan_tables[2][2][98];
+	int16_t pan_tables[2][2][98];
 
 	struct qsound_voice voice[16];
 	struct qsound_adpcm adpcm[3];
 
-	UINT16 voice_pan[16+3];
-	INT16 voice_output[16+3];
+	uint16_t voice_pan[16+3];
+	int16_t voice_output[16+3];
 
 	struct qsound_echo echo;
 
@@ -102,17 +102,17 @@ struct qsound_chip {
 	struct qsound_delay wet[2];
 	struct qsound_delay dry[2];
 
-	UINT16 state;
-	UINT16 next_state;
+	uint16_t state;
+	uint16_t next_state;
 
-	UINT16 delay_update;
+	uint16_t delay_update;
 
 	int state_counter;
-	UINT8 ready_flag;
+	uint8_t ready_flag;
 
-	UINT8 opt_nowait;
+	uint8_t opt_nowait;
 
-	UINT16 *register_map[256];
+	uint16_t *register_map[256];
 };
 
 static void init_pan_tables(struct qsound_chip *chip);
@@ -125,30 +125,30 @@ static void state_refresh_filter_1(struct qsound_chip *chip);
 static void state_refresh_filter_2(struct qsound_chip *chip);
 static void state_normal_update(struct qsound_chip *chip);
 
-INLINE INT16 get_sample(struct qsound_chip *chip, UINT16 bank,UINT16 address);
-INLINE const INT16* get_filter_table(struct qsound_chip *chip, UINT16 offset);
-INLINE INT16 pcm_update(struct qsound_chip *chip, int voice_no, INT32 *echo_out);
+INLINE int16_t get_sample(struct qsound_chip *chip, uint16_t bank,uint16_t address);
+INLINE const int16_t* get_filter_table(struct qsound_chip *chip, uint16_t offset);
+INLINE int16_t pcm_update(struct qsound_chip *chip, int voice_no, int32_t *echo_out);
 INLINE void adpcm_update(struct qsound_chip *chip, int voice_no, int nibble);
-INLINE INT16 echo(struct qsound_echo *r,INT32 input);
-INLINE INT32 fir(struct qsound_fir *f, INT16 input);
-INLINE INT32 delay(struct qsound_delay *d, INT32 input);
+INLINE int16_t echo(struct qsound_echo *r,int32_t input);
+INLINE int32_t fir(struct qsound_fir *f, int16_t input);
+INLINE int32_t delay(struct qsound_delay *d, int32_t input);
 INLINE void delay_update(struct qsound_delay *d);
 
 // ****************************************************************************
 
-static void qsoundc_update(void* param, UINT32 samples, DEV_SMPL** outputs);
-static UINT8 device_start_qsound_ctr(const DEV_GEN_CFG* cfg, DEV_INFO* retDevInf);
+static void qsoundc_update(void* param, uint32_t samples, DEV_SMPL** outputs);
+static uint8_t device_start_qsound_ctr(const DEV_GEN_CFG* cfg, DEV_INFO* retDevInf);
 static void device_stop_qsound_ctr(void* info);
 static void device_reset_qsound_ctr(void* info);
 
-static UINT8 qsoundc_r(void* info, UINT8 offset);
-static void qsoundc_w(void* info, UINT8 offset, UINT8 data);
-static void qsoundc_write_data(void* info, UINT8 address, UINT16 data);
+static uint8_t qsoundc_r(void* info, uint8_t offset);
+static void qsoundc_w(void* info, uint8_t offset, uint8_t data);
+static void qsoundc_write_data(void* info, uint8_t address, uint16_t data);
 
-static void qsoundc_alloc_rom(void* info, UINT32 memsize);
-static void qsoundc_write_rom(void* info, UINT32 offset, UINT32 length, const UINT8* data);
-static void qsoundc_set_options(void* info, UINT32 options);
-static void qsoundc_set_mute_mask(void* info, UINT32 MuteMask);
+static void qsoundc_alloc_rom(void* info, uint32_t memsize);
+static void qsoundc_write_rom(void* info, uint32_t offset, uint32_t length, const uint8_t* data);
+static void qsoundc_set_options(void* info, uint32_t options);
+static void qsoundc_set_mute_mask(void* info, uint32_t MuteMask);
 
 static DEVDEF_RWFUNC devFunc[] =
 {
@@ -179,7 +179,7 @@ DEV_DEF devDef_QSound_ctr =
 	devFunc,	// rwFuncs
 };
 
-static UINT8 device_start_qsound_ctr(const DEV_GEN_CFG* cfg, DEV_INFO* retDevInf)
+static uint8_t device_start_qsound_ctr(const DEV_GEN_CFG* cfg, DEV_INFO* retDevInf)
 {
 	struct qsound_chip* chip;
 	
@@ -225,14 +225,14 @@ static void device_reset_qsound_ctr(void* info)
 	return;
 }
 
-static UINT8 qsoundc_r(void* info, UINT8 offset)
+static uint8_t qsoundc_r(void* info, uint8_t offset)
 {
 	struct qsound_chip* chip = (struct qsound_chip*)info;
 	
 	return chip->ready_flag;
 }
 
-static void qsoundc_w(void* info, UINT8 offset, UINT8 data)
+static void qsoundc_w(void* info, uint8_t offset, uint8_t data)
 {
 	struct qsound_chip* chip = (struct qsound_chip*)info;
 	
@@ -254,10 +254,10 @@ static void qsoundc_w(void* info, UINT8 offset, UINT8 data)
 	return;
 }
 
-static void qsoundc_write_data(void* info, UINT8 address, UINT16 data)
+static void qsoundc_write_data(void* info, uint8_t address, uint16_t data)
 {
 	struct qsound_chip* chip = (struct qsound_chip*)info;
-	UINT16 *destination;
+	uint16_t *destination;
 
 	if (! chip->ready_flag && chip->opt_nowait)
 		update_flush(chip);
@@ -270,10 +270,10 @@ static void qsoundc_write_data(void* info, UINT8 address, UINT16 data)
 	return;
 }
 
-static void qsoundc_update(void* param, UINT32 samples, DEV_SMPL** outputs)
+static void qsoundc_update(void* param, uint32_t samples, DEV_SMPL** outputs)
 {
 	struct qsound_chip* chip = (struct qsound_chip*)param;
-	UINT32 curSmpl;
+	uint32_t curSmpl;
 	
 	if (chip->romData == NULL)
 	{
@@ -292,14 +292,14 @@ static void qsoundc_update(void* param, UINT32 samples, DEV_SMPL** outputs)
 	return;
 }
 
-static void qsoundc_alloc_rom(void* info, UINT32 memsize)
+static void qsoundc_alloc_rom(void* info, uint32_t memsize)
 {
 	struct qsound_chip* chip = (struct qsound_chip*)info;
 	
 	if (chip->romSize == memsize)
 		return;
 	
-	chip->romData = (UINT8*)realloc(chip->romData, memsize);
+	chip->romData = (uint8_t*)realloc(chip->romData, memsize);
 	chip->romSize = memsize;
 	chip->romMask = pow2_mask(memsize);
 	memset(chip->romData, 0xFF, memsize);
@@ -307,7 +307,7 @@ static void qsoundc_alloc_rom(void* info, UINT32 memsize)
 	return;
 }
 
-static void qsoundc_write_rom(void* info, UINT32 offset, UINT32 length, const UINT8* data)
+static void qsoundc_write_rom(void* info, uint32_t offset, uint32_t length, const uint8_t* data)
 {
 	struct qsound_chip* chip = (struct qsound_chip*)info;
 	
@@ -321,7 +321,7 @@ static void qsoundc_write_rom(void* info, UINT32 offset, UINT32 length, const UI
 	return;
 }
 
-static void qsoundc_set_options(void* info, UINT32 options)
+static void qsoundc_set_options(void* info, uint32_t options)
 {
 	struct qsound_chip* chip = (struct qsound_chip*)info;
 
@@ -330,7 +330,7 @@ static void qsoundc_set_options(void* info, UINT32 options)
 	return;
 }
 
-static void qsoundc_set_mute_mask(void* info, UINT32 MuteMask)
+static void qsoundc_set_mute_mask(void* info, uint32_t MuteMask)
 {
 	struct qsound_chip* chip = (struct qsound_chip*)info;
 	
@@ -341,7 +341,7 @@ static void qsoundc_set_mute_mask(void* info, UINT32 MuteMask)
 
 // ============================================================================
 
-static const INT16 qsound_dry_mix_table[33] = {
+static const int16_t qsound_dry_mix_table[33] = {
 	-16384,-16384,-16384,-16384,-16384,-16384,-16384,-16384,
 	-16384,-16384,-16384,-16384,-16384,-16384,-16384,-16384,
 	-16384,-14746,-13107,-11633,-10486,-9175,-8520,-7209,
@@ -349,7 +349,7 @@ static const INT16 qsound_dry_mix_table[33] = {
 	0
 };
 
-static const INT16 qsound_wet_mix_table[33] = {
+static const int16_t qsound_wet_mix_table[33] = {
 	0,-1638,-1966,-2458,-2949,-3441,-4096,-4669,
 	-4915,-5120,-5489,-6144,-7537,-8831,-9339,-9830,
 	-10240,-10322,-10486,-10568,-10650,-11796,-12288,-12288,
@@ -357,7 +357,7 @@ static const INT16 qsound_wet_mix_table[33] = {
 	-16384
 };
 
-static const INT16 qsound_linear_mix_table[33] = {
+static const int16_t qsound_linear_mix_table[33] = {
 	-16379,-16338,-16257,-16135,-15973,-15772,-15531,-15251,
 	-14934,-14580,-14189,-13763,-13303,-12810,-12284,-11729,
 	-11729,-11144,-10531,-9893,-9229,-8543,-7836,-7109,
@@ -365,7 +365,7 @@ static const INT16 qsound_linear_mix_table[33] = {
 	0
 };
 
-static const INT16 qsound_filter_data[5][95] = {
+static const int16_t qsound_filter_data[5][95] = {
 	{	// d53 - 0
 		0,0,0,6,44,-24,-53,-10,59,-40,-27,1,39,-27,56,127,174,36,-13,49,
 		212,142,143,-73,-20,66,-108,-117,-399,-265,-392,-569,-473,-71,95,-319,-218,-230,331,638,
@@ -403,7 +403,7 @@ static const INT16 qsound_filter_data[5][95] = {
 	}
 };
 
-static const INT16 qsound_filter_data2[209] = {
+static const int16_t qsound_filter_data2[209] = {
 	// f2e - following 95 values used for "disable output" filter
 	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
 	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
@@ -423,7 +423,7 @@ static const INT16 qsound_filter_data2[209] = {
 	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
 };
 
-static const INT16 adpcm_step_table[16] = {
+static const int16_t adpcm_step_table[16] = {
 	154, 154, 128, 102, 77, 58, 58, 58,
 	58, 58, 58, 58, 77, 102, 128, 154
 };
@@ -473,52 +473,52 @@ static void init_register_map(struct qsound_chip *chip)
 	// PCM registers
 	for(i=0;i<16;i++) // PCM voices
 	{
-		chip->register_map[(i<<3)+0] = (UINT16*)&chip->voice[(i+1)%16].bank; // Bank applies to the next channel
-		chip->register_map[(i<<3)+1] = (UINT16*)&chip->voice[i].addr; // Current sample position and start position.
-		chip->register_map[(i<<3)+2] = (UINT16*)&chip->voice[i].rate; // 4.12 fixed point decimal.
-		chip->register_map[(i<<3)+3] = (UINT16*)&chip->voice[i].phase;
-		chip->register_map[(i<<3)+4] = (UINT16*)&chip->voice[i].loop_len;
-		chip->register_map[(i<<3)+5] = (UINT16*)&chip->voice[i].end_addr;
-		chip->register_map[(i<<3)+6] = (UINT16*)&chip->voice[i].volume;
+		chip->register_map[(i<<3)+0] = (uint16_t*)&chip->voice[(i+1)%16].bank; // Bank applies to the next channel
+		chip->register_map[(i<<3)+1] = (uint16_t*)&chip->voice[i].addr; // Current sample position and start position.
+		chip->register_map[(i<<3)+2] = (uint16_t*)&chip->voice[i].rate; // 4.12 fixed point decimal.
+		chip->register_map[(i<<3)+3] = (uint16_t*)&chip->voice[i].phase;
+		chip->register_map[(i<<3)+4] = (uint16_t*)&chip->voice[i].loop_len;
+		chip->register_map[(i<<3)+5] = (uint16_t*)&chip->voice[i].end_addr;
+		chip->register_map[(i<<3)+6] = (uint16_t*)&chip->voice[i].volume;
 		chip->register_map[(i<<3)+7] = NULL;	// unused
-		chip->register_map[i+0x80] = (UINT16*)&chip->voice_pan[i];
-		chip->register_map[i+0xba] = (UINT16*)&chip->voice[i].echo;
+		chip->register_map[i+0x80] = (uint16_t*)&chip->voice_pan[i];
+		chip->register_map[i+0xba] = (uint16_t*)&chip->voice[i].echo;
 	}
 	
 	// ADPCM registers
 	for(i=0;i<3;i++) // ADPCM voices
 	{
 		// ADPCM sample rate is fixed to 8khz. (one channel is updated every third sample)
-		chip->register_map[(i<<2)+0xca] = (UINT16*)&chip->adpcm[i].start_addr;
-		chip->register_map[(i<<2)+0xcb] = (UINT16*)&chip->adpcm[i].end_addr;
-		chip->register_map[(i<<2)+0xcc] = (UINT16*)&chip->adpcm[i].bank;
-		chip->register_map[(i<<2)+0xcd] = (UINT16*)&chip->adpcm[i].volume;
-		chip->register_map[i+0xd6] = (UINT16*)&chip->adpcm[i].flag; // non-zero to start ADPCM playback
-		chip->register_map[i+0x90] = (UINT16*)&chip->voice_pan[16+i];
+		chip->register_map[(i<<2)+0xca] = (uint16_t*)&chip->adpcm[i].start_addr;
+		chip->register_map[(i<<2)+0xcb] = (uint16_t*)&chip->adpcm[i].end_addr;
+		chip->register_map[(i<<2)+0xcc] = (uint16_t*)&chip->adpcm[i].bank;
+		chip->register_map[(i<<2)+0xcd] = (uint16_t*)&chip->adpcm[i].volume;
+		chip->register_map[i+0xd6] = (uint16_t*)&chip->adpcm[i].flag; // non-zero to start ADPCM playback
+		chip->register_map[i+0x90] = (uint16_t*)&chip->voice_pan[16+i];
 	}
 	
 	// QSound registers
-	chip->register_map[0x93] = (UINT16*)&chip->echo.feedback;
-	chip->register_map[0xd9] = (UINT16*)&chip->echo.end_pos;
-	chip->register_map[0xe2] = (UINT16*)&chip->delay_update; // non-zero to update delays
-	chip->register_map[0xe3] = (UINT16*)&chip->next_state;
+	chip->register_map[0x93] = (uint16_t*)&chip->echo.feedback;
+	chip->register_map[0xd9] = (uint16_t*)&chip->echo.end_pos;
+	chip->register_map[0xe2] = (uint16_t*)&chip->delay_update; // non-zero to update delays
+	chip->register_map[0xe3] = (uint16_t*)&chip->next_state;
 	for(i=0;i<2;i++)  // left, right
 	{
 		// Wet
-		chip->register_map[(i<<1)+0xda] = (UINT16*)&chip->filter[i].table_pos;
-		chip->register_map[(i<<1)+0xde] = (UINT16*)&chip->wet[i].delay;
-		chip->register_map[(i<<1)+0xe4] = (UINT16*)&chip->wet[i].volume;
+		chip->register_map[(i<<1)+0xda] = (uint16_t*)&chip->filter[i].table_pos;
+		chip->register_map[(i<<1)+0xde] = (uint16_t*)&chip->wet[i].delay;
+		chip->register_map[(i<<1)+0xe4] = (uint16_t*)&chip->wet[i].volume;
 		// Dry
-		chip->register_map[(i<<1)+0xdb] = (UINT16*)&chip->alt_filter[i].table_pos;
-		chip->register_map[(i<<1)+0xdf] = (UINT16*)&chip->dry[i].delay;
-		chip->register_map[(i<<1)+0xe5] = (UINT16*)&chip->dry[i].volume;
+		chip->register_map[(i<<1)+0xdb] = (uint16_t*)&chip->alt_filter[i].table_pos;
+		chip->register_map[(i<<1)+0xdf] = (uint16_t*)&chip->dry[i].delay;
+		chip->register_map[(i<<1)+0xe5] = (uint16_t*)&chip->dry[i].volume;
 	}
 }
 
-INLINE INT16 get_sample(struct qsound_chip *chip, UINT16 bank,UINT16 address)
+INLINE int16_t get_sample(struct qsound_chip *chip, uint16_t bank,uint16_t address)
 {
-	UINT32 rom_addr;
-	UINT8 sample_data;
+	uint32_t rom_addr;
+	uint8_t sample_data;
 
 	if (! chip->romMask)
 		return 0;	// no ROM loaded
@@ -533,10 +533,10 @@ INLINE INT16 get_sample(struct qsound_chip *chip, UINT16 bank,UINT16 address)
 	
 	sample_data = chip->romData[rom_addr];
 	
-	return (INT16)(sample_data << 8);
+	return (int16_t)(sample_data << 8);
 }
 
-INLINE const INT16* get_filter_table(struct qsound_chip *chip, UINT16 offset)
+INLINE const int16_t* get_filter_table(struct qsound_chip *chip, uint16_t offset)
 {
 	int index;
 	
@@ -664,7 +664,7 @@ static void state_init(struct qsound_chip *chip)
 // Updates filter parameters for mode 1
 static void state_refresh_filter_1(struct qsound_chip *chip)
 {
-	const INT16 *table;
+	const int16_t *table;
 	int ch;
 	
 	for(ch=0; ch<2; ch++)
@@ -674,7 +674,7 @@ static void state_refresh_filter_1(struct qsound_chip *chip)
 	
 		table = get_filter_table(chip,chip->filter[ch].table_pos);
 		if (table != NULL)
-			memcpy(chip->filter[ch].taps, table, 95 * sizeof(INT16));
+			memcpy(chip->filter[ch].taps, table, 95 * sizeof(int16_t));
 	}
 	
 	chip->state = chip->next_state = STATE_NORMAL1;
@@ -683,7 +683,7 @@ static void state_refresh_filter_1(struct qsound_chip *chip)
 // Updates filter parameters for mode 2
 static void state_refresh_filter_2(struct qsound_chip *chip)
 {
-	const INT16 *table;
+	const int16_t *table;
 	int ch;
 	
 	for(ch=0; ch<2; ch++)
@@ -693,14 +693,14 @@ static void state_refresh_filter_2(struct qsound_chip *chip)
 	
 		table = get_filter_table(chip,chip->filter[ch].table_pos);
 		if (table != NULL)
-			memcpy(chip->filter[ch].taps, table, 45 * sizeof(INT16));
+			memcpy(chip->filter[ch].taps, table, 45 * sizeof(int16_t));
 		
 		chip->alt_filter[ch].delay_pos = 0;
 		chip->alt_filter[ch].tap_count = 44;
 	
 		table = get_filter_table(chip,chip->alt_filter[ch].table_pos);
 		if (table != NULL)
-			memcpy(chip->alt_filter[ch].taps, table, 44 * sizeof(INT16));
+			memcpy(chip->alt_filter[ch].taps, table, 44 * sizeof(int16_t));
 	}
 	
 	chip->state = chip->next_state = STATE_NORMAL2;
@@ -708,11 +708,11 @@ static void state_refresh_filter_2(struct qsound_chip *chip)
 
 // Updates a PCM voice. There are 16 voices, each are updated every sample
 // with full rate and volume control.
-INLINE INT16 pcm_update(struct qsound_chip *chip, int voice_no, INT32 *echo_out)
+INLINE int16_t pcm_update(struct qsound_chip *chip, int voice_no, int32_t *echo_out)
 {
 	struct qsound_voice *v = &chip->voice[voice_no];
-	INT32 new_phase;
-	INT16 output;
+	int32_t new_phase;
+	int16_t output;
 	
 	if (chip->muteMask & (1<<voice_no))
 		return 0;
@@ -745,8 +745,8 @@ INLINE void adpcm_update(struct qsound_chip *chip, int voice_no, int nibble)
 {
 	struct qsound_adpcm *v = &chip->adpcm[voice_no];
 
-	INT32 delta;
-	INT8 step;
+	int32_t delta;
+	int8_t step;
 
 	if (chip->muteMask & (1<<(16+voice_no)))
 	{
@@ -797,12 +797,12 @@ INLINE void adpcm_update(struct qsound_chip *chip, int voice_no, int nibble)
 
 // The echo effect is pretty simple. A moving average filter is used on
 // the output from the delay line to smooth samples over time. 
-INLINE INT16 echo(struct qsound_echo *r,INT32 input)
+INLINE int16_t echo(struct qsound_echo *r,int32_t input)
 {
 	// get average of last 2 samples from the delay line
-	INT32 new_sample;
-	INT32 old_sample = r->delay_line[r->delay_pos];
-	INT32 last_sample = r->last_sample;
+	int32_t new_sample;
+	int32_t old_sample = r->delay_line[r->delay_pos];
+	int32_t last_sample = r->last_sample;
 	
 	r->last_sample = old_sample;
 	old_sample = (old_sample+last_sample) >> 1;
@@ -821,8 +821,8 @@ INLINE INT16 echo(struct qsound_echo *r,INT32 input)
 static void state_normal_update(struct qsound_chip *chip)
 {
 	int v, ch;
-	INT32 echo_input = 0;
-	INT16 echo_output;
+	int32_t echo_input = 0;
+	int16_t echo_output;
 	
 	chip->ready_flag = 0x80;
 
@@ -848,13 +848,13 @@ static void state_normal_update(struct qsound_chip *chip)
 	{
 		// Echo is output on the unfiltered component of the left channel and
 		// the filtered component of the right channel.
-		INT32 wet = (ch == 1) ? echo_output<<14 : 0;
-		INT32 dry = (ch == 0) ? echo_output<<14 : 0;
-		INT32 output = 0;
+		int32_t wet = (ch == 1) ? echo_output<<14 : 0;
+		int32_t dry = (ch == 0) ? echo_output<<14 : 0;
+		int32_t output = 0;
 		
 		for(v=0; v<19; v++)
 		{
-			UINT16 pan_index = chip->voice_pan[v]-0x110;
+			uint16_t pan_index = chip->voice_pan[v]-0x110;
 			if(pan_index > 97)
 				pan_index = 97;
 			
@@ -900,9 +900,9 @@ static void state_normal_update(struct qsound_chip *chip)
 }
 
 // Apply the FIR filter used as the Q1 transfer function
-INLINE INT32 fir(struct qsound_fir *f, INT16 input)
+INLINE int32_t fir(struct qsound_fir *f, int16_t input)
 {
-	INT32 output = 0, tap = 0;
+	int32_t output = 0, tap = 0;
 	
 	for(; tap < (f->tap_count-1); tap++)
 	{
@@ -922,9 +922,9 @@ INLINE INT32 fir(struct qsound_fir *f, INT16 input)
 }
 
 // Apply delay line and component volume
-INLINE INT32 delay(struct qsound_delay *d, INT32 input)
+INLINE int32_t delay(struct qsound_delay *d, int32_t input)
 {
-	INT32 output;
+	int32_t output;
 	
 	d->delay_line[d->write_pos++] = input>>16;
 	if(d->write_pos >= 51)
@@ -940,7 +940,7 @@ INLINE INT32 delay(struct qsound_delay *d, INT32 input)
 // Update the delay read position to match new delay length
 INLINE void delay_update(struct qsound_delay *d)
 {
-	INT16 new_read_pos = (d->write_pos - d->delay) % 51;
+	int16_t new_read_pos = (d->write_pos - d->delay) % 51;
 	if(new_read_pos < 0)
 		new_read_pos += 51;
 	

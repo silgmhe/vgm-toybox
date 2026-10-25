@@ -12,16 +12,16 @@ extern "C"
 
 
 #ifdef AUDDRV_WAVEWRITE
-UINT8 WavWrt_SetFileName(void* drvObj, const char* fileName);
+uint8_t WavWrt_SetFileName(void* drvObj, const char* fileName);
 const char* WavWrt_GetFileName(void* drvObj);
 #endif
 
 #ifdef AUDDRV_DSOUND
-UINT8 DSound_SetHWnd(void* drvObj, HWND hWnd);
+uint8_t DSound_SetHWnd(void* drvObj, HWND hWnd);
 #endif
 
 #ifdef AUDDRV_PULSE
-UINT8 Pulse_SetStreamDesc(void* drvObj, const char* fileName);
+uint8_t Pulse_SetStreamDesc(void* drvObj, const char* fileName);
 const char* Pulse_GetStreamDesc(void* drvObj);
 #endif
 

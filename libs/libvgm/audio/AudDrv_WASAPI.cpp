@@ -31,13 +31,13 @@
 typedef struct _wasapi_driver
 {
 	void* audDrvPtr;
-	volatile UINT8 devState;	// 0 - not running, 1 - running, 2 - terminating
-	UINT16 dummy;	// [for alignment purposes]
+	volatile uint8_t devState;	// 0 - not running, 1 - running, 2 - terminating
+	uint16_t dummy;	// [for alignment purposes]
 	
 	WAVEFORMATEX waveFmt;
-	UINT32 bufSmpls;
-	UINT32 bufSize;
-	UINT32 bufCount;
+	uint32_t bufSmpls;
+	uint32_t bufSize;
+	uint32_t bufCount;
 	
 	IMMDeviceEnumerator* devEnum;
 	IMMDevice* audDev;
@@ -50,30 +50,30 @@ typedef struct _wasapi_driver
 	void* userParam;
 	AUDFUNC_FILLBUF FillBuffer;
 	
-	UINT32 bufFrmCount;
+	uint32_t bufFrmCount;
 } DRV_WASAPI;
 
 
-EXT_C UINT8 WASAPI_IsAvailable(void);
-EXT_C UINT8 WASAPI_Init(void);
-EXT_C UINT8 WASAPI_Deinit(void);
+EXT_C uint8_t WASAPI_IsAvailable(void);
+EXT_C uint8_t WASAPI_Init(void);
+EXT_C uint8_t WASAPI_Deinit(void);
 EXT_C const AUDIO_DEV_LIST* WASAPI_GetDeviceList(void);
 EXT_C AUDIO_OPTS* WASAPI_GetDefaultOpts(void);
 
-EXT_C UINT8 WASAPI_Create(void** retDrvObj);
-EXT_C UINT8 WASAPI_Destroy(void* drvObj);
-EXT_C UINT8 WASAPI_Start(void* drvObj, UINT32 deviceID, AUDIO_OPTS* options, void* audDrvParam);
-EXT_C UINT8 WASAPI_Stop(void* drvObj);
-EXT_C UINT8 WASAPI_Pause(void* drvObj);
-EXT_C UINT8 WASAPI_Resume(void* drvObj);
+EXT_C uint8_t WASAPI_Create(void** retDrvObj);
+EXT_C uint8_t WASAPI_Destroy(void* drvObj);
+EXT_C uint8_t WASAPI_Start(void* drvObj, uint32_t deviceID, AUDIO_OPTS* options, void* audDrvParam);
+EXT_C uint8_t WASAPI_Stop(void* drvObj);
+EXT_C uint8_t WASAPI_Pause(void* drvObj);
+EXT_C uint8_t WASAPI_Resume(void* drvObj);
 
-EXT_C UINT8 WASAPI_SetCallback(void* drvObj, AUDFUNC_FILLBUF FillBufCallback, void* userParam);
-EXT_C UINT32 WASAPI_GetBufferSize(void* drvObj);
-static UINT32 GetFreeSamples(DRV_WASAPI* drv);
-EXT_C UINT8 WASAPI_IsBusy(void* drvObj);
-EXT_C UINT8 WASAPI_WriteData(void* drvObj, UINT32 dataSize, void* data);
+EXT_C uint8_t WASAPI_SetCallback(void* drvObj, AUDFUNC_FILLBUF FillBufCallback, void* userParam);
+EXT_C uint32_t WASAPI_GetBufferSize(void* drvObj);
+static uint32_t GetFreeSamples(DRV_WASAPI* drv);
+EXT_C uint8_t WASAPI_IsBusy(void* drvObj);
+EXT_C uint8_t WASAPI_WriteData(void* drvObj, uint32_t dataSize, void* data);
 
-EXT_C UINT32 WASAPI_GetLatency(void* drvObj);
+EXT_C uint32_t WASAPI_GetLatency(void* drvObj);
 static void WasapiThread(void* Arg);
 
 
@@ -109,14 +109,14 @@ static AUDIO_OPTS defOptions;
 static AUDIO_DEV_LIST deviceList;
 static wchar_t** devListIDs;
 
-static UINT8 isInit = 0;
-static UINT32 activeDrivers;
+static uint8_t isInit = 0;
+static uint32_t activeDrivers;
 
-UINT8 WASAPI_IsAvailable(void)
+uint8_t WASAPI_IsAvailable(void)
 {
 	HRESULT retVal;
 	IMMDeviceEnumerator* devEnum;
-	UINT8 resVal;
+	uint8_t resVal;
 	
 	resVal = 0;
 	retVal = CoInitializeEx(NULL, COINIT_MULTITHREADED);
@@ -135,12 +135,12 @@ UINT8 WASAPI_IsAvailable(void)
 	return resVal;
 }
 
-UINT8 WASAPI_Init(void)
+uint8_t WASAPI_Init(void)
 {
 	HRESULT retVal;
 	UINT devCount;
-	UINT32 curDev;
-	UINT32 devLstID;
+	uint32_t curDev;
+	uint32_t devLstID;
 	size_t devNameSize;
 	IMMDeviceEnumerator* devEnum;
 	IMMDeviceCollection* devList;
@@ -234,16 +234,16 @@ UINT8 WASAPI_Init(void)
 			if (retVal == S_OK)
 			{
 				defOptions.sampleRate = mixFmt->nSamplesPerSec;
-				defOptions.numChannels = (UINT8)mixFmt->nChannels;
+				defOptions.numChannels = (uint8_t)mixFmt->nChannels;
 				if (mixFmt->wFormatTag == WAVE_FORMAT_PCM)
 				{
-					defOptions.numBitsPerSmpl = (UINT8)mixFmt->wBitsPerSample;
+					defOptions.numBitsPerSmpl = (uint8_t)mixFmt->wBitsPerSample;
 				}
 				else if (mixFmt->wFormatTag == WAVE_FORMAT_EXTENSIBLE)
 				{
 					mixFmtX = (WAVEFORMATEXTENSIBLE*)mixFmt;
 					if (mixFmtX->SubFormat == KSDATAFORMAT_SUBTYPE_PCM)
-						defOptions.numBitsPerSmpl = (UINT8)mixFmt->wBitsPerSample;
+						defOptions.numBitsPerSmpl = (uint8_t)mixFmt->wBitsPerSample;
 				}
 				CoTaskMemFree(mixFmt);	mixFmt = NULL;
 			}
@@ -260,9 +260,9 @@ UINT8 WASAPI_Init(void)
 	return AERR_OK;
 }
 
-UINT8 WASAPI_Deinit(void)
+uint8_t WASAPI_Deinit(void)
 {
-	UINT32 curDev;
+	uint32_t curDev;
 	
 	if (! isInit)
 		return AERR_WASDONE;
@@ -293,10 +293,10 @@ AUDIO_OPTS* WASAPI_GetDefaultOpts(void)
 }
 
 
-UINT8 WASAPI_Create(void** retDrvObj)
+uint8_t WASAPI_Create(void** retDrvObj)
 {
 	DRV_WASAPI* drv;
-	UINT8 retVal8;
+	uint8_t retVal8;
 	
 	drv = (DRV_WASAPI*)malloc(sizeof(DRV_WASAPI));
 	drv->devState = 0;
@@ -325,7 +325,7 @@ UINT8 WASAPI_Create(void** retDrvObj)
 	return AERR_OK;
 }
 
-UINT8 WASAPI_Destroy(void* drvObj)
+uint8_t WASAPI_Destroy(void* drvObj)
 {
 	DRV_WASAPI* drv = (DRV_WASAPI*)drvObj;
 	
@@ -347,14 +347,14 @@ UINT8 WASAPI_Destroy(void* drvObj)
 	return AERR_OK;
 }
 
-UINT8 WASAPI_Start(void* drvObj, UINT32 deviceID, AUDIO_OPTS* options, void* audDrvParam)
+uint8_t WASAPI_Start(void* drvObj, uint32_t deviceID, AUDIO_OPTS* options, void* audDrvParam)
 {
 	DRV_WASAPI* drv = (DRV_WASAPI*)drvObj;
-	UINT64 tempInt64;
+	uint64_t tempInt64;
 	REFERENCE_TIME bufTime;
-	UINT8 errVal;
+	uint8_t errVal;
 	HRESULT retVal;
-	UINT8 retVal8;
+	uint8_t retVal8;
 #ifdef NDEBUG
 	HANDLE hWinThr;
 	BOOL retValB;
@@ -376,8 +376,8 @@ UINT8 WASAPI_Start(void* drvObj, UINT32 deviceID, AUDIO_OPTS* options, void* aud
 	drv->waveFmt.nAvgBytesPerSec = drv->waveFmt.nSamplesPerSec * drv->waveFmt.nBlockAlign;
 	drv->waveFmt.cbSize = 0;
 	
-	tempInt64 = (UINT64)options->sampleRate * options->usecPerBuf;
-	drv->bufSmpls = (UINT32)((tempInt64 + 500000) / 1000000);
+	tempInt64 = (uint64_t)options->sampleRate * options->usecPerBuf;
+	drv->bufSmpls = (uint32_t)((tempInt64 + 500000) / 1000000);
 	drv->bufSize = drv->waveFmt.nBlockAlign * drv->bufSmpls;
 	drv->bufCount = options->numBuffers ? options->numBuffers : 10;
 	// REFERENCE_TIME uses 100-ns steps
@@ -454,7 +454,7 @@ StartErr_DevEnum:
 	return errVal;
 }
 
-UINT8 WASAPI_Stop(void* drvObj)
+uint8_t WASAPI_Stop(void* drvObj)
 {
 	DRV_WASAPI* drv = (DRV_WASAPI*)drvObj;
 	HRESULT retVal;
@@ -480,7 +480,7 @@ UINT8 WASAPI_Stop(void* drvObj)
 	return AERR_OK;
 }
 
-UINT8 WASAPI_Pause(void* drvObj)
+uint8_t WASAPI_Pause(void* drvObj)
 {
 	DRV_WASAPI* drv = (DRV_WASAPI*)drvObj;
 	HRESULT retVal;
@@ -492,7 +492,7 @@ UINT8 WASAPI_Pause(void* drvObj)
 	return (retVal == S_OK || retVal == S_FALSE) ? AERR_OK : 0xFF;
 }
 
-UINT8 WASAPI_Resume(void* drvObj)
+uint8_t WASAPI_Resume(void* drvObj)
 {
 	DRV_WASAPI* drv = (DRV_WASAPI*)drvObj;
 	HRESULT retVal;
@@ -505,7 +505,7 @@ UINT8 WASAPI_Resume(void* drvObj)
 }
 
 
-UINT8 WASAPI_SetCallback(void* drvObj, AUDFUNC_FILLBUF FillBufCallback, void* userParam)
+uint8_t WASAPI_SetCallback(void* drvObj, AUDFUNC_FILLBUF FillBufCallback, void* userParam)
 {
 	DRV_WASAPI* drv = (DRV_WASAPI*)drvObj;
 	
@@ -517,14 +517,14 @@ UINT8 WASAPI_SetCallback(void* drvObj, AUDFUNC_FILLBUF FillBufCallback, void* us
 	return AERR_OK;
 }
 
-UINT32 WASAPI_GetBufferSize(void* drvObj)
+uint32_t WASAPI_GetBufferSize(void* drvObj)
 {
 	DRV_WASAPI* drv = (DRV_WASAPI*)drvObj;
 	
 	return drv->bufSize;
 }
 
-static UINT32 GetFreeSamples(DRV_WASAPI* drv)
+static uint32_t GetFreeSamples(DRV_WASAPI* drv)
 {
 	HRESULT retVal;
 	UINT paddSmpls;
@@ -536,10 +536,10 @@ static UINT32 GetFreeSamples(DRV_WASAPI* drv)
 	return drv->bufFrmCount - paddSmpls;
 }
 
-UINT8 WASAPI_IsBusy(void* drvObj)
+uint8_t WASAPI_IsBusy(void* drvObj)
 {
 	DRV_WASAPI* drv = (DRV_WASAPI*)drvObj;
-	UINT32 freeSmpls;
+	uint32_t freeSmpls;
 	
 	if (drv->FillBuffer != NULL)
 		return AERR_BAD_MODE;
@@ -548,10 +548,10 @@ UINT8 WASAPI_IsBusy(void* drvObj)
 	return (freeSmpls >= drv->bufSmpls) ? AERR_OK : AERR_BUSY;
 }
 
-UINT8 WASAPI_WriteData(void* drvObj, UINT32 dataSize, void* data)
+uint8_t WASAPI_WriteData(void* drvObj, uint32_t dataSize, void* data)
 {
 	DRV_WASAPI* drv = (DRV_WASAPI*)drvObj;
-	UINT32 dataSmpls;
+	uint32_t dataSmpls;
 	HRESULT retVal;
 	BYTE* bufData;
 	
@@ -574,7 +574,7 @@ UINT8 WASAPI_WriteData(void* drvObj, UINT32 dataSize, void* data)
 }
 
 
-UINT32 WASAPI_GetLatency(void* drvObj)
+uint32_t WASAPI_GetLatency(void* drvObj)
 {
 	DRV_WASAPI* drv = (DRV_WASAPI*)drvObj;
 	REFERENCE_TIME latencyTime;
@@ -584,15 +584,15 @@ UINT32 WASAPI_GetLatency(void* drvObj)
 	if (retVal != S_OK)
 		return 0;
 	
-	return (UINT32)((latencyTime + 5000) / 10000);	// 100 ns steps -> 1 ms steps
+	return (uint32_t)((latencyTime + 5000) / 10000);	// 100 ns steps -> 1 ms steps
 }
 
 static void WasapiThread(void* Arg)
 {
 	DRV_WASAPI* drv = (DRV_WASAPI*)Arg;
-	UINT32 didBuffers;	// number of processed buffers
-	UINT32 wrtBytes;
-	UINT32 wrtSmpls;
+	uint32_t didBuffers;	// number of processed buffers
+	uint32_t wrtBytes;
+	uint32_t wrtSmpls;
 	HRESULT retVal;
 	BYTE* bufData;
 	

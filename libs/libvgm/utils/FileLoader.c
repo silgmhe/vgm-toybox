@@ -24,11 +24,11 @@ enum
 
 typedef struct _file_loader FILE_LOADER;
 
-typedef UINT8 (*FLOAD_GENERIC)(FILE_LOADER *loader);
-typedef UINT32 (*FLOAD_READ)(FILE_LOADER *loader, UINT8 *buffer, UINT32 numBytes);
-typedef UINT8 (*FLOAD_SEEK)(FILE_LOADER *loader, UINT32 offset, UINT8 whence);
-typedef INT32 (*FLOAD_TELL)(FILE_LOADER *loader);
-typedef UINT32 (*FLOAD_LENGTH)(FILE_LOADER *loader);
+typedef uint8_t (*FLOAD_GENERIC)(FILE_LOADER *loader);
+typedef uint32_t (*FLOAD_READ)(FILE_LOADER *loader, uint8_t *buffer, uint32_t numBytes);
+typedef uint8_t (*FLOAD_SEEK)(FILE_LOADER *loader, uint32_t offset, uint8_t whence);
+typedef int32_t (*FLOAD_TELL)(FILE_LOADER *loader);
+typedef uint32_t (*FLOAD_LENGTH)(FILE_LOADER *loader);
 
 typedef union _loader_handles
 {
@@ -38,8 +38,8 @@ typedef union _loader_handles
 
 struct _file_loader
 {
-	UINT8 modeCompr;
-	UINT32 bytesTotal;
+	uint8_t modeCompr;
+	uint32_t bytesTotal;
 	LOADER_HANDLES hLoad;
 	char *fileName;
 #if HAVE_FILELOADER_W
@@ -54,41 +54,41 @@ struct _file_loader
 };
 
 
-static UINT8 FileLoader_dopen(void *context);
-static UINT32 FileLoader_dread(void *context, UINT8 *buffer, UINT32 numBytes);
-static UINT8 FileLoader_dseek(void *context, UINT32 offset, UINT8 whence);
-static UINT8 FileLoader_dclose(void *context);
-static INT32 FileLoader_dtell(void *context);
-static UINT32 FileLoader_dlength(void *context);
-static UINT8 FileLoader_deof(void *context);
+static uint8_t FileLoader_dopen(void *context);
+static uint32_t FileLoader_dread(void *context, uint8_t *buffer, uint32_t numBytes);
+static uint8_t FileLoader_dseek(void *context, uint32_t offset, uint8_t whence);
+static uint8_t FileLoader_dclose(void *context);
+static int32_t FileLoader_dtell(void *context);
+static uint32_t FileLoader_dlength(void *context);
+static uint8_t FileLoader_deof(void *context);
 
-static UINT32 FileLoader_ReadRaw(FILE_LOADER *loader, UINT8 *buffer, UINT32 numBytes);
-static UINT8 FileLoader_SeekRaw(FILE_LOADER *loader, UINT32 offset, UINT8 whence);
-static UINT8 FileLoader_CloseRaw(FILE_LOADER *loader);
-static INT32 FileLoader_TellRaw(FILE_LOADER *loader);
-static UINT8 FileLoader_EofRaw(FILE_LOADER *loader);
+static uint32_t FileLoader_ReadRaw(FILE_LOADER *loader, uint8_t *buffer, uint32_t numBytes);
+static uint8_t FileLoader_SeekRaw(FILE_LOADER *loader, uint32_t offset, uint8_t whence);
+static uint8_t FileLoader_CloseRaw(FILE_LOADER *loader);
+static int32_t FileLoader_TellRaw(FILE_LOADER *loader);
+static uint8_t FileLoader_EofRaw(FILE_LOADER *loader);
 
-static UINT32 FileLoader_ReadGZ(FILE_LOADER *loader, UINT8 *buffer, UINT32 numBytes);
-static UINT8 FileLoader_SeekGZ(FILE_LOADER *loader, UINT32 offset, UINT8 whence);
-static UINT8 FileLoader_CloseGZ(FILE_LOADER *loader);
-static INT32 FileLoader_TellGZ(FILE_LOADER *loader);
-static UINT8 FileLoader_EofGZ(FILE_LOADER *loader);
+static uint32_t FileLoader_ReadGZ(FILE_LOADER *loader, uint8_t *buffer, uint32_t numBytes);
+static uint8_t FileLoader_SeekGZ(FILE_LOADER *loader, uint32_t offset, uint8_t whence);
+static uint8_t FileLoader_CloseGZ(FILE_LOADER *loader);
+static int32_t FileLoader_TellGZ(FILE_LOADER *loader);
+static uint8_t FileLoader_EofGZ(FILE_LOADER *loader);
 
 //DATA_LOADER *FileLoader_Init(const char *fileName);
 //DATA_LOADER *FileLoader_InitW(const wchar_t *fileName);
 static void FileLoader_dfree(void *context);
 
 
-INLINE UINT32 ReadLE32(const UINT8 *data)
+INLINE uint32_t ReadLE32(const uint8_t *data)
 {
 	return	(data[0x03] << 24) | (data[0x02] << 16) |
 			(data[0x01] <<  8) | (data[0x00] <<  0);
 }
 
-static UINT8 FileLoader_dopen(void *context)
+static uint8_t FileLoader_dopen(void *context)
 {
 	FILE_LOADER *loader = (FILE_LOADER *)context;
-	UINT8 fileHdr[4];
+	uint8_t fileHdr[4];
 	size_t readBytes;
 
 #if HAVE_FILELOADER_W
@@ -105,11 +105,11 @@ static UINT8 FileLoader_dopen(void *context)
 
 	if (fileHdr[0] == 31 && fileHdr[1] == 139)	// check for .gz file header
 	{
-		UINT8 sizeBuffer[4];
+		uint8_t sizeBuffer[4];
 		fseek(loader->hLoad.hFileRaw, -4, SEEK_END);
 		readBytes = fread(sizeBuffer, 0x04, 1, loader->hLoad.hFileRaw);
 		loader->bytesTotal = (readBytes > 0) ? ReadLE32(sizeBuffer) : 0;
-		if (loader->bytesTotal < (UINT32)ftell(loader->hLoad.hFileRaw) / 2)	// catch "decompressed size too small"
+		if (loader->bytesTotal < (uint32_t)ftell(loader->hLoad.hFileRaw) / 2)	// catch "decompressed size too small"
 			loader->bytesTotal = 0;
 		fclose(loader->hLoad.hFileRaw);
 		loader->hLoad.hFileRaw = NULL;
@@ -145,95 +145,95 @@ static UINT8 FileLoader_dopen(void *context)
 	return 0x00;
 }
 
-static UINT32 FileLoader_dread(void *context, UINT8 *buffer, UINT32 numBytes)
+static uint32_t FileLoader_dread(void *context, uint8_t *buffer, uint32_t numBytes)
 {
 	FILE_LOADER *loader = (FILE_LOADER *)context;
 	return loader->Read(loader, buffer, numBytes);
 }
 
-static UINT8 FileLoader_dseek(void *context, UINT32 offset, UINT8 whence)
+static uint8_t FileLoader_dseek(void *context, uint32_t offset, uint8_t whence)
 {
 	FILE_LOADER *loader = (FILE_LOADER *)context;
 	return loader->Seek(loader, offset, whence);
 }
 
-static UINT8 FileLoader_dclose(void *context)
+static uint8_t FileLoader_dclose(void *context)
 {
 	FILE_LOADER *loader = (FILE_LOADER *)context;
 	return loader->Close(loader);
 }
 
-static INT32 FileLoader_dtell(void *context)
+static int32_t FileLoader_dtell(void *context)
 {
 	FILE_LOADER *loader = (FILE_LOADER *)context;
 	return loader->Tell(loader);
 }
 
-static UINT32 FileLoader_dlength(void *context)
+static uint32_t FileLoader_dlength(void *context)
 {
 	FILE_LOADER *loader = (FILE_LOADER *)context;
 	return loader->bytesTotal;
 }
 
-static UINT8 FileLoader_deof(void *context)
+static uint8_t FileLoader_deof(void *context)
 {
 	FILE_LOADER *loader = (FILE_LOADER *)context;
 	return loader->Eof(loader);
 }
 
 
-static UINT32 FileLoader_ReadRaw(FILE_LOADER *loader, UINT8 *buffer, UINT32 numBytes)
+static uint32_t FileLoader_ReadRaw(FILE_LOADER *loader, uint8_t *buffer, uint32_t numBytes)
 {
 	return fread(buffer, 0x01, numBytes, loader->hLoad.hFileRaw);
 }
 
-static UINT8 FileLoader_SeekRaw(FILE_LOADER *loader, UINT32 offset, UINT8 whence)
+static uint8_t FileLoader_SeekRaw(FILE_LOADER *loader, uint32_t offset, uint8_t whence)
 {
-	return (UINT8)fseek(loader->hLoad.hFileRaw, offset, whence);
+	return (uint8_t)fseek(loader->hLoad.hFileRaw, offset, whence);
 }
 
-static UINT8 FileLoader_CloseRaw(FILE_LOADER *loader)
+static uint8_t FileLoader_CloseRaw(FILE_LOADER *loader)
 {
 	fclose(loader->hLoad.hFileRaw);
 	loader->hLoad.hFileRaw = NULL;
 	return 0x00;
 }
 
-static INT32 FileLoader_TellRaw(FILE_LOADER *loader)
+static int32_t FileLoader_TellRaw(FILE_LOADER *loader)
 {
 	return ftell(loader->hLoad.hFileRaw);
 }
 
-static UINT8 FileLoader_EofRaw(FILE_LOADER *loader)
+static uint8_t FileLoader_EofRaw(FILE_LOADER *loader)
 {
 	return feof(loader->hLoad.hFileRaw);
 }
 
 
-static UINT32 FileLoader_ReadGZ(FILE_LOADER *loader, UINT8 *buffer, UINT32 numBytes)
+static uint32_t FileLoader_ReadGZ(FILE_LOADER *loader, uint8_t *buffer, uint32_t numBytes)
 {
 	return gzread(loader->hLoad.hFileGZ, buffer, numBytes);
 }
 
-static UINT8 FileLoader_SeekGZ(FILE_LOADER *loader, UINT32 offset, UINT8 whence)
+static uint8_t FileLoader_SeekGZ(FILE_LOADER *loader, uint32_t offset, uint8_t whence)
 {
 	if(whence == SEEK_END) return 0;
 	return (gzseek(loader->hLoad.hFileGZ, offset, whence) == -1) ? 0x01 : 0x00;
 }
 
-static UINT8 FileLoader_CloseGZ(FILE_LOADER *loader)
+static uint8_t FileLoader_CloseGZ(FILE_LOADER *loader)
 {
 	gzclose(loader->hLoad.hFileGZ);
 	loader->hLoad.hFileGZ = NULL;
 	return 0x00;
 }
 
-static INT32 FileLoader_TellGZ(FILE_LOADER *loader)
+static int32_t FileLoader_TellGZ(FILE_LOADER *loader)
 {
 	return gztell(loader->hLoad.hFileGZ);
 }
 
-static UINT8 FileLoader_EofGZ(FILE_LOADER *loader)
+static uint8_t FileLoader_EofGZ(FILE_LOADER *loader)
 {
 	return gzeof(loader->hLoad.hFileGZ);
 }

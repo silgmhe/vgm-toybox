@@ -99,22 +99,22 @@
 typedef struct pokey_device pokey_device;
 typedef struct pokey_channel pokey_channel;
 
-static void pokey_update(void *, UINT32 samples, DEV_SMPL **outputs);
-static UINT8 pokey_read(pokey_device *, UINT8 offset);
-static void pokey_write(pokey_device *, UINT8 offset, UINT8 data);
-static UINT8 device_start_pokey(const DEV_GEN_CFG *, DEV_INFO *);
+static void pokey_update(void *, uint32_t samples, DEV_SMPL **outputs);
+static uint8_t pokey_read(pokey_device *, uint8_t offset);
+static void pokey_write(pokey_device *, uint8_t offset, uint8_t data);
+static uint8_t device_start_pokey(const DEV_GEN_CFG *, DEV_INFO *);
 static void device_stop_pokey(void *);
 static void device_reset_pokey(void *);
-static void pokey_set_mute_mask(void *, UINT32 mutes);
+static void pokey_set_mute_mask(void *, uint32_t mutes);
 
 static void pokey_step_one_clock(pokey_device *);
-static void pokey_sid_w(pokey_device *d, UINT8 state);
+static void pokey_sid_w(pokey_device *d, uint8_t state);
 INLINE void pokey_process_channel(pokey_device *d, int ch);
 
 static void pokey_potgo(pokey_device *d);
 static void pokey_vol_init(pokey_device *d);
-static void poly_init_4_5(UINT32 *poly, int size);
-static void poly_init_9_17(UINT32 *poly, int size);
+static void poly_init_4_5(uint32_t *poly, int size);
+static void poly_init_9_17(uint32_t *poly, int size);
 
 static DEVDEF_RWFUNC devFunc[] =
 {
@@ -147,7 +147,7 @@ static const char* DeviceName(const DEV_GEN_CFG* devCfg)
 	return "Pokey";
 }
 
-static UINT16 DeviceChannels(const DEV_GEN_CFG* devCfg)
+static uint16_t DeviceChannels(const DEV_GEN_CFG* devCfg)
 {
 	return 4;
 }
@@ -271,13 +271,13 @@ enum output_type
 struct pokey_channel
 {
 	pokey_device *m_parent;
-	UINT8 m_INTMask;
-	UINT8 m_AUDF;           // AUDFx (D200, D202, D204, D206)
-	UINT8 m_AUDC;           // AUDCx (D201, D203, D205, D207)
-	INT32 m_borrow_cnt;     // borrow counter
-	INT32 m_counter;        // channel counter
-	UINT8 m_output;         // channel output signal (1 active, 0 inactive)
-	UINT8 m_filter_sample;  // high-pass filter sample
+	uint8_t m_INTMask;
+	uint8_t m_AUDF;           // AUDFx (D200, D202, D204, D206)
+	uint8_t m_AUDC;           // AUDCx (D201, D203, D205, D207)
+	int32_t m_borrow_cnt;     // borrow counter
+	int32_t m_counter;        // channel counter
+	uint8_t m_output;         // channel output signal (1 active, 0 inactive)
+	uint8_t m_filter_sample;  // high-pass filter sample
 };
 
 /* static constexpr int POKEY_CHANNELS = 4; */
@@ -286,49 +286,49 @@ struct pokey_channel
 struct pokey_device
 {
 	DEV_DATA _devData;
-	UINT8 m_muted[POKEY_CHANNELS];
+	uint8_t m_muted[POKEY_CHANNELS];
 
 	pokey_channel m_channel[POKEY_CHANNELS];
 
-	UINT32 m_out_raw;         /* raw output */
-	UINT8 m_old_raw_inval;    /* true: recalc m_out_raw required */
+	uint32_t m_out_raw;         /* raw output */
+	uint8_t m_old_raw_inval;    /* true: recalc m_out_raw required */
 	double m_out_filter;      /* filtered output */
 
-	INT32 m_clock_cnt[3];     /* clock counters */
-	UINT32 m_p4;              /* poly4 index */
-	UINT32 m_p5;              /* poly5 index */
-	UINT32 m_p9;              /* poly9 index */
-	UINT32 m_p17;             /* poly17 index */
+	int32_t m_clock_cnt[3];     /* clock counters */
+	uint32_t m_p4;              /* poly4 index */
+	uint32_t m_p5;              /* poly5 index */
+	uint32_t m_p9;              /* poly9 index */
+	uint32_t m_p17;             /* poly17 index */
 
-	UINT8 m_POTx[8];          /* POTx   (R/D200-D207) */
-	UINT8 m_AUDCTL;           /* AUDCTL (W/D208) */
-	UINT8 m_ALLPOT;           /* ALLPOT (R/D208) */
-	UINT8 m_KBCODE;           /* KBCODE (R/D209) */
-	UINT8 m_SERIN;            /* SERIN  (R/D20D) */
-	UINT8 m_SEROUT;           /* SEROUT (W/D20D) */
-	UINT8 m_IRQST;            /* IRQST  (R/D20E) */
-	UINT8 m_IRQEN;            /* IRQEN  (W/D20E) */
-	UINT8 m_SKSTAT;           /* SKSTAT (R/D20F) */
-	UINT8 m_SKCTL;            /* SKCTL  (W/D20F) */
+	uint8_t m_POTx[8];          /* POTx   (R/D200-D207) */
+	uint8_t m_AUDCTL;           /* AUDCTL (W/D208) */
+	uint8_t m_ALLPOT;           /* ALLPOT (R/D208) */
+	uint8_t m_KBCODE;           /* KBCODE (R/D209) */
+	uint8_t m_SERIN;            /* SERIN  (R/D20D) */
+	uint8_t m_SEROUT;           /* SEROUT (W/D20D) */
+	uint8_t m_IRQST;            /* IRQST  (R/D20E) */
+	uint8_t m_IRQEN;            /* IRQEN  (W/D20E) */
+	uint8_t m_SKSTAT;           /* SKSTAT (R/D20F) */
+	uint8_t m_SKCTL;            /* SKCTL  (W/D20F) */
 
-	UINT8 m_pot_counter;
-	UINT8 m_kbd_cnt;
-	UINT8 m_kbd_latch;
-	UINT8 m_kbd_state;
+	uint8_t m_pot_counter;
+	uint8_t m_kbd_cnt;
+	uint8_t m_kbd_latch;
+	uint8_t m_kbd_state;
 
-	UINT16 m_serin_shift;
-	UINT16 m_serout_shift;
-	UINT8 m_ser_iclk;
-	UINT8 m_ser_oclk;
-	UINT8 m_serout_full;
-	UINT8 m_sod_twotone;
+	uint16_t m_serin_shift;
+	uint16_t m_serout_shift;
+	uint8_t m_ser_iclk;
+	uint8_t m_ser_oclk;
+	uint8_t m_serout_full;
+	uint8_t m_sod_twotone;
 
 	double m_clock_period;
 
-	UINT32 m_poly4[0x0f];
-	UINT32 m_poly5[0x1f];
-	UINT32 m_poly9[0x1ff];
-	UINT32 m_poly17[0x1ffff];
+	uint32_t m_poly4[0x0f];
+	uint32_t m_poly5[0x1f];
+	uint32_t m_poly9[0x1ff];
+	uint32_t m_poly17[0x1ffff];
 	double m_voltab[0x10000];
 
 	enum output_type m_output_type;
@@ -483,10 +483,10 @@ static void set_output_discrete(pokey_device *d)
 //**************************************************************************
 //  LIVE DEVICE
 //**************************************************************************
-static void pokey_set_mute_mask(void *info, UINT32 mask)
+static void pokey_set_mute_mask(void *info, uint32_t mask)
 {
 	pokey_device *d = (pokey_device *)info;
-	UINT8 ch;
+	uint8_t ch;
 	for(ch = 0; ch < POKEY_CHANNELS; ch++) {
 		d->m_muted[ch] = (mask >> ch) & 0x01;
 	}
@@ -498,7 +498,7 @@ static void device_stop_pokey(void *info)
 	free(d);
 }
 
-static UINT8 device_start_pokey(const DEV_GEN_CFG* cfg, DEV_INFO* retDevInf)
+static uint8_t device_start_pokey(const DEV_GEN_CFG* cfg, DEV_INFO* retDevInf)
 {
 	pokey_device *d = NULL;
 
@@ -644,8 +644,8 @@ static void pokey_step_keyboard(pokey_device *d)
 	//if (!d->m_keyboard_r.isnull())
 	if (0)
 	{
-		//UINT8 ret = m_keyboard_r(d->m_kbd_cnt);
-		UINT8 ret = 0xFF;
+		//uint8_t ret = m_keyboard_r(d->m_kbd_cnt);
+		uint8_t ret = 0xFF;
 
 		switch (d->m_kbd_cnt)
 		{
@@ -758,15 +758,15 @@ static void pokey_step_pot(pokey_device *d)
 
 static void pokey_step_one_clock(pokey_device *d)
 {
-	UINT8 toggle_iclk = 0;
-	UINT8 toggle_oclk = 0;
+	uint8_t toggle_iclk = 0;
+	uint8_t toggle_oclk = 0;
 
 	if (d->m_SKCTL & SK_RESET)
 	{
 		/* Clocks only count if we are not in a reset */
 		int clock_triggered[3] = {1,0,0};
 		int base_clock;
-		UINT8 async_reset;
+		uint8_t async_reset;
 
 		/* polynom pointers */
 		if (++d->m_p4 == 0x0000f)
@@ -939,7 +939,7 @@ static void pokey_step_one_clock(pokey_device *d)
 
 	if (d->m_old_raw_inval)
 	{
-		UINT32 sum = 0;
+		uint32_t sum = 0;
 		int ch;
 		for (ch = 0; ch < 4; ch++)
 		{
@@ -978,10 +978,10 @@ static void pokey_step_one_clock(pokey_device *d)
 //  our sound stream
 //-------------------------------------------------
 
-void pokey_update(void *info, UINT32 samples, DEV_SMPL **outputs)
+void pokey_update(void *info, uint32_t samples, DEV_SMPL **outputs)
 {
 	pokey_device *d = (pokey_device *)info;
-	UINT32 sampindex;
+	uint32_t sampindex;
 
 	for(sampindex = 0; sampindex < samples; sampindex++)
 	{
@@ -989,7 +989,7 @@ void pokey_update(void *info, UINT32 samples, DEV_SMPL **outputs)
 
 		if (d->m_output_type == LEGACY_LINEAR)
 		{
-			INT32 out = 0;
+			int32_t out = 0;
 			int i;
 			for (i = 0; i < 4; i++)
 				out += ((d->m_out_raw >> (4*i)) & 0x0f);
@@ -1063,7 +1063,7 @@ void pokey_update(void *info, UINT32 samples, DEV_SMPL **outputs)
 //  read - memory interface for reading the active status
 //-------------------------------------------------
 
-UINT8 pokey_read(pokey_device *d, UINT8 offset)
+uint8_t pokey_read(pokey_device *d, uint8_t offset)
 {
 	int data, pot;
 
@@ -1155,7 +1155,7 @@ UINT8 pokey_read(pokey_device *d, UINT8 offset)
 //  write - memory interface for write
 //-------------------------------------------------
 
-void pokey_write(pokey_device *d, UINT8 offset, UINT8 data)
+void pokey_write(pokey_device *d, uint8_t offset, uint8_t data)
 {
 	/* determine which address was changed */
 	switch (offset & 15)
@@ -1337,7 +1337,7 @@ void pokey_write(pokey_device *d, UINT8 offset, UINT8 data)
 
 }
 
-static void pokey_sid_w(pokey_device *d, UINT8 state)
+static void pokey_sid_w(pokey_device *d, uint8_t state)
 {
 	// Note: all bits in SKSTAT are negated
 	if (state)
@@ -1453,12 +1453,12 @@ static void pokey_vol_init(pokey_device *d)
 
 }
 
-static void poly_init_4_5(UINT32 *poly, int size)
+static void poly_init_4_5(uint32_t *poly, int size)
 {
 	//LOG_POLY("poly %d\n", size);
 
 	int mask = (1 << size) - 1;
-	UINT32 lfsr = 0;
+	uint32_t lfsr = 0;
 
 	int const xorbit = size - 1;
 	int i;
@@ -1471,12 +1471,12 @@ static void poly_init_4_5(UINT32 *poly, int size)
 	}
 }
 
-static void poly_init_9_17(UINT32 *poly, int size)
+static void poly_init_9_17(uint32_t *poly, int size)
 {
 	//LOG_RAND("rand %d\n", size);
 
 	int mask = (1 << size) - 1;
-	UINT32 lfsr = mask;
+	uint32_t lfsr = mask;
 	int i;
 
 	if (size == 17)
@@ -1484,8 +1484,8 @@ static void poly_init_9_17(UINT32 *poly, int size)
 		for (i = 0; i < mask; i++)
 		{
 			// calculate next bit @ 7
-			const UINT32 in8 = ((lfsr >> 8) & 1) ^ ((lfsr >> 13) & 1);
-			const UINT32 in = (lfsr & 1);
+			const uint32_t in8 = ((lfsr >> 8) & 1) ^ ((lfsr >> 13) & 1);
+			const uint32_t in = (lfsr & 1);
 			lfsr = lfsr >> 1;
 			lfsr = (lfsr & 0xff7f) | (in8 << 7);
 			lfsr = (in << 16) | lfsr;
@@ -1499,7 +1499,7 @@ static void poly_init_9_17(UINT32 *poly, int size)
 		for (i = 0; i < mask; i++)
 		{
 			// calculate next bit
-			const UINT32 in = ((lfsr >> 0) & 1) ^ ((lfsr >> 5) & 1);
+			const uint32_t in = ((lfsr >> 0) & 1) ^ ((lfsr >> 5) & 1);
 			lfsr = lfsr >> 1;
 			lfsr = (in << 8) | lfsr;
 			*poly = lfsr;

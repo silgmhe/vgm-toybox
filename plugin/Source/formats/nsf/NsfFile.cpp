@@ -12,9 +12,9 @@ namespace toybox::formats::nsf
 namespace
 {
 
-std::uint16_t readLE16 (const std::uint8_t* p)
+uint16_t readLE16 (const uint8_t* p)
 {
-	return (std::uint16_t) ((std::uint16_t) p[0] | ((std::uint16_t) p[1] << 8));
+	return (uint16_t) ((uint16_t) p[0] | ((uint16_t) p[1] << 8));
 }
 
 /** The name fields are fixed-length and not necessarily terminated. Trailing spaces are part of the
@@ -95,7 +95,7 @@ std::string decodeTextField (const std::string& raw)
 
 } // namespace
 
-std::string readField (const std::uint8_t* p, std::size_t length)
+std::string readField (const uint8_t* p, std::size_t length)
 {
 	std::string out;
 	out.reserve (length);
@@ -153,7 +153,7 @@ double NsfFile::framesPerSecond (void) const
 {
 	// The speed is the length of one play call in microseconds, and the format steals its lowest
 	// bit as the PAL flag - real speeds are round numbers of microseconds, so the bit is free.
-	const std::uint32_t speed = (std::uint32_t) (ntscSpeed & ~1u);
+	const uint32_t speed = (uint32_t) (ntscSpeed & ~1u);
 
 	if (speed != 0)
 	{
@@ -173,7 +173,7 @@ bool NsfFile::parse (const void* data, std::size_t size, NsfFile& out, std::stri
 		return false;
 	}
 
-	const auto* bytes = static_cast<const std::uint8_t*> (data);
+	const auto* bytes = static_cast<const uint8_t*> (data);
 
 	if (std::memcmp (bytes, "NESM", 4) != 0)
 	{
@@ -191,7 +191,7 @@ bool NsfFile::parse (const void* data, std::size_t size, NsfFile& out, std::stri
 	// documented shorthand for $8000. Treating version 1 as if it stored a size instead - and
 	// hard-coding $8000 - relocates every file that declares anything else, which is how a driver
 	// at $8AFF ended up executing the bytes that live at $8000.
-	const std::uint16_t declaredLoad = readLE16 (bytes + offsetLoadAddress);
+	const uint16_t declaredLoad = readLE16 (bytes + offsetLoadAddress);
 	file.loadAddress = declaredLoad != 0 ? declaredLoad : 0x8000;
 
 	file.initAddress = readLE16 (bytes + offsetInitAddress);
@@ -217,7 +217,7 @@ bool NsfFile::parse (const void* data, std::size_t size, NsfFile& out, std::stri
 	// a backend being rebuilt, and its bytes are the only one that does.
 	std::size_t hash = (std::size_t) 1469598103934665603ull;
 
-	for (std::uint8_t byte : file.rom)
+	for (uint8_t byte : file.rom)
 	{
 		hash ^= (std::size_t) byte;
 		hash *= (std::size_t) 1099511628211ull;

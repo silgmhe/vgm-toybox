@@ -16,19 +16,19 @@ namespace xgm
   public:
     virtual IDeviceInfo *Clone()=0;
     // 現在の出力値をそのまま返す
-    virtual INT32 GetOutput()=0;
+    virtual int32_t GetOutput()=0;
     // 周波数をHzで返す
     virtual double GetFreqHz()=0;
     // 周波数をデバイス依存値で返す．
-    virtual UINT32 GetFreq()=0;
+    virtual uint32_t GetFreq()=0;
     // 音量を返す
-    virtual INT32 GetVolume()=0;
+    virtual int32_t GetVolume()=0;
     // 音量の最大値を返す
-    virtual INT32 GetMaxVolume()=0;
+    virtual int32_t GetMaxVolume()=0;
     // 発音中ならtrue OFFならfalse
     virtual bool GetKeyStatus()=0;
     // トーン番号
-    virtual INT32 GetTone()=0;
+    virtual int32_t GetTone()=0;
 
     // 周波数をノート番号に変換．0x60がo4c 0は無効
     static int GetNote(double freq)
@@ -105,21 +105,21 @@ namespace xgm
   class TrackInfoBasic : public ITrackInfo
   {
   public:
-    INT32 output;
-    INT32 volume;
-    INT32 max_volume;
-    UINT32 _freq;
+    int32_t output;
+    int32_t volume;
+    int32_t max_volume;
+    uint32_t _freq;
     double freq;
     bool key;
-    INT32 tone;
+    int32_t tone;
     virtual IDeviceInfo *Clone(){ return new TrackInfoBasic(*this); }
-    virtual INT32 GetOutput(){ return output; }
+    virtual int32_t GetOutput(){ return output; }
     virtual double GetFreqHz(){ return freq; }
-    virtual UINT32 GetFreq(){ return _freq; }
+    virtual uint32_t GetFreq(){ return _freq; }
     virtual bool GetKeyStatus(){ return key; }
-    virtual INT32 GetVolume(){ return volume; }
-    virtual INT32 GetMaxVolume(){ return max_volume; }
-    virtual INT32 GetTone(){ return tone; };
+    virtual int32_t GetVolume(){ return volume; }
+    virtual int32_t GetMaxVolume(){ return max_volume; }
+    virtual int32_t GetTone(){ return tone; };
   };
 
 }// namespace xgm

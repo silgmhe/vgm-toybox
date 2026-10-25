@@ -21,21 +21,21 @@
 
 #define LINKDEV_SSG	0x00
 
-static UINT8 get_ssg_funcs(const DEV_DEF* devDef, ssg_callbacks* retFuncs);
-static AY8910_CFG* get_ssg_config(const DEV_GEN_CFG* cfg, UINT32 clockDiv, UINT8 ssgType);
-static void init_ssg_devinfo(DEV_INFO* devInf, const DEV_GEN_CFG* baseCfg, UINT8 clockDiv, UINT8 ssgType);
+static uint8_t get_ssg_funcs(const DEV_DEF* devDef, ssg_callbacks* retFuncs);
+static AY8910_CFG* get_ssg_config(const DEV_GEN_CFG* cfg, uint32_t clockDiv, uint8_t ssgType);
+static void init_ssg_devinfo(DEV_INFO* devInf, const DEV_GEN_CFG* baseCfg, uint8_t clockDiv, uint8_t ssgType);
 
-static UINT8 device_start_ym2203(const DEV_GEN_CFG* cfg, DEV_INFO* retDevInf);
+static uint8_t device_start_ym2203(const DEV_GEN_CFG* cfg, DEV_INFO* retDevInf);
 static void device_stop_ym2203(void* param);
-static UINT8 device_ym2203_link_ssg(void* param, UINT8 linkID, const DEV_INFO* defInfSSG);
+static uint8_t device_ym2203_link_ssg(void* param, uint8_t linkID, const DEV_INFO* defInfSSG);
 
-static UINT8 device_start_ym2608(const DEV_GEN_CFG* cfg, DEV_INFO* retDevInf);
+static uint8_t device_start_ym2608(const DEV_GEN_CFG* cfg, DEV_INFO* retDevInf);
 static void device_stop_ym2608(void* param);
-static UINT8 device_ym2608_link_ssg(void* param, UINT8 linkID, const DEV_INFO* defInfSSG);
+static uint8_t device_ym2608_link_ssg(void* param, uint8_t linkID, const DEV_INFO* defInfSSG);
 
-static UINT8 device_start_ym2610(const DEV_GEN_CFG* cfg, DEV_INFO* retDevInf);
+static uint8_t device_start_ym2610(const DEV_GEN_CFG* cfg, DEV_INFO* retDevInf);
 static void device_stop_ym2610(void* param);
-static UINT8 device_ym2610_link_ssg(void* param, UINT8 linkID, const DEV_INFO* defInfSSG);
+static uint8_t device_ym2610_link_ssg(void* param, uint8_t linkID, const DEV_INFO* defInfSSG);
 
 
 typedef struct _opn_info
@@ -87,7 +87,7 @@ static const char* DeviceName_YM2203(const DEV_GEN_CFG* devCfg)
 }
 
 #define DEV_CHN_COUNT_YM2203	3
-static UINT16 DeviceChannels_YM2203(const DEV_GEN_CFG* devCfg)
+static uint16_t DeviceChannels_YM2203(const DEV_GEN_CFG* devCfg)
 {
 	return DEV_CHN_COUNT_YM2203;
 }
@@ -146,7 +146,7 @@ static const char* DeviceName_YM2608(const DEV_GEN_CFG* devCfg)
 }
 
 #define DEV_CHN_COUNT_YM2608	13
-static UINT16 DeviceChannels_YM2608(const DEV_GEN_CFG* devCfg)
+static uint16_t DeviceChannels_YM2608(const DEV_GEN_CFG* devCfg)
 {
 	return DEV_CHN_COUNT_YM2608;
 }
@@ -233,7 +233,7 @@ static const char* DeviceName_YM2610(const DEV_GEN_CFG* devCfg)
 }
 
 #define DEV_CHN_COUNT_YM2610	13
-static UINT16 DeviceChannels_YM2610(const DEV_GEN_CFG* devCfg)
+static uint16_t DeviceChannels_YM2610(const DEV_GEN_CFG* devCfg)
 {
 	return DEV_CHN_COUNT_YM2610;
 }
@@ -266,9 +266,9 @@ const DEV_DECL sndDev_YM2610 =
 #endif	// SNDDEV_YM2610
 
 
-static UINT8 get_ssg_funcs(const DEV_DEF* devDef, ssg_callbacks* retFuncs)
+static uint8_t get_ssg_funcs(const DEV_DEF* devDef, ssg_callbacks* retFuncs)
 {
-	UINT8 retVal;
+	uint8_t retVal;
 	
 	retVal = SndEmu_GetDeviceFunc(devDef, RWF_REGISTER | RWF_WRITE, DEVRW_A8D8, 0, (void**)&retFuncs->write);
 	if (retVal)
@@ -286,7 +286,7 @@ static UINT8 get_ssg_funcs(const DEV_DEF* devDef, ssg_callbacks* retFuncs)
 	return 0x00;
 }
 
-static AY8910_CFG* get_ssg_config(const DEV_GEN_CFG* cfg, UINT32 clockDiv, UINT8 ssgType)
+static AY8910_CFG* get_ssg_config(const DEV_GEN_CFG* cfg, uint32_t clockDiv, uint8_t ssgType)
 {
 	AY8910_CFG* ssgCfg;
 	
@@ -301,7 +301,7 @@ static AY8910_CFG* get_ssg_config(const DEV_GEN_CFG* cfg, UINT32 clockDiv, UINT8
 	return ssgCfg;
 }
 
-static void init_ssg_devinfo(DEV_INFO* devInf, const DEV_GEN_CFG* baseCfg, UINT8 clockDiv, UINT8 ssgType)
+static void init_ssg_devinfo(DEV_INFO* devInf, const DEV_GEN_CFG* baseCfg, uint8_t clockDiv, uint8_t ssgType)
 {
 	DEVLINK_INFO* devLink;
 	
@@ -316,11 +316,11 @@ static void init_ssg_devinfo(DEV_INFO* devInf, const DEV_GEN_CFG* baseCfg, UINT8
 }
 
 #ifdef SNDDEV_YM2203
-static UINT8 device_start_ym2203(const DEV_GEN_CFG* cfg, DEV_INFO* retDevInf)
+static uint8_t device_start_ym2203(const DEV_GEN_CFG* cfg, DEV_INFO* retDevInf)
 {
 	OPN_INF* info;
 	DEV_DATA* devData;
-	UINT32 rate;
+	uint32_t rate;
 	
 	rate = cfg->clock / 72;
 	SRATE_CUSTOM_HIGHEST(cfg->srMode, rate, cfg->smplRate);
@@ -347,10 +347,10 @@ static void device_stop_ym2203(void* param)
 	return;
 }
 
-static UINT8 device_ym2203_link_ssg(void* param, UINT8 linkID, const DEV_INFO* defInfSSG)
+static uint8_t device_ym2203_link_ssg(void* param, uint8_t linkID, const DEV_INFO* defInfSSG)
 {
 	ssg_callbacks ssgfunc;
-	UINT8 retVal;
+	uint8_t retVal;
 	
 	if (linkID != LINKDEV_SSG)
 		return EERR_UNK_DEVICE;
@@ -371,11 +371,11 @@ static UINT8 device_ym2203_link_ssg(void* param, UINT8 linkID, const DEV_INFO* d
 #endif	// SNDDEV_YM2203
 
 #ifdef SNDDEV_YM2608
-static UINT8 device_start_ym2608(const DEV_GEN_CFG* cfg, DEV_INFO* retDevInf)
+static uint8_t device_start_ym2608(const DEV_GEN_CFG* cfg, DEV_INFO* retDevInf)
 {
 	OPN_INF* info;
 	DEV_DATA* devData;
-	UINT32 rate;
+	uint32_t rate;
 	
 	rate = cfg->clock / 2 / 72;
 	SRATE_CUSTOM_HIGHEST(cfg->srMode, rate, cfg->smplRate);
@@ -402,10 +402,10 @@ static void device_stop_ym2608(void* param)
 	return;
 }
 
-static UINT8 device_ym2608_link_ssg(void* param, UINT8 linkID, const DEV_INFO* defInfSSG)
+static uint8_t device_ym2608_link_ssg(void* param, uint8_t linkID, const DEV_INFO* defInfSSG)
 {
 	ssg_callbacks ssgfunc;
-	UINT8 retVal;
+	uint8_t retVal;
 	
 	if (linkID != LINKDEV_SSG)
 		return EERR_UNK_DEVICE;
@@ -426,11 +426,11 @@ static UINT8 device_ym2608_link_ssg(void* param, UINT8 linkID, const DEV_INFO* d
 #endif	// SNDDEV_YM2608
 
 #ifdef SNDDEV_YM2610
-static UINT8 device_start_ym2610(const DEV_GEN_CFG* cfg, DEV_INFO* retDevInf)
+static uint8_t device_start_ym2610(const DEV_GEN_CFG* cfg, DEV_INFO* retDevInf)
 {
 	OPN_INF* info;
 	DEV_DATA* devData;
-	UINT32 rate;
+	uint32_t rate;
 	const DEV_DEF* devDefPtr;
 	
 	rate = cfg->clock / 2 / 72;
@@ -459,10 +459,10 @@ static void device_stop_ym2610(void* param)
 	return;
 }
 
-static UINT8 device_ym2610_link_ssg(void* param, UINT8 linkID, const DEV_INFO* defInfSSG)
+static uint8_t device_ym2610_link_ssg(void* param, uint8_t linkID, const DEV_INFO* defInfSSG)
 {
 	ssg_callbacks ssgfunc;
-	UINT8 retVal;
+	uint8_t retVal;
 	
 	if (linkID != LINKDEV_SSG)
 		return EERR_UNK_DEVICE;

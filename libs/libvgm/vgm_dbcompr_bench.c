@@ -8,15 +8,15 @@
 #include "vgm/dblk_compr.h"
 
 
-INLINE UINT32 GetSysTimeMS(void);
-static UINT8 DecompressDataBlk_Old(UINT32 OutDataLen, UINT8* OutData, UINT32 InDataLen, const UINT8* InData, const PCM_COMPR_TBL* comprTbl);
-static void CompressDataBlk_Old(UINT32 outLen, UINT8* outData, UINT32 inLen, const UINT8* inData, PCM_CMP_INF* ComprTbl);
-UINT16 DataBlkCompr_GetIntSize(void);
+INLINE uint32_t GetSysTimeMS(void);
+static uint8_t DecompressDataBlk_Old(uint32_t OutDataLen, uint8_t* OutData, uint32_t InDataLen, const uint8_t* InData, const PCM_COMPR_TBL* comprTbl);
+static void CompressDataBlk_Old(uint32_t outLen, uint8_t* outData, uint32_t inLen, const uint8_t* inData, PCM_CMP_INF* ComprTbl);
+uint16_t DataBlkCompr_GetIntSize(void);
 
 // ---- Benchmarks ----
 // 256 MB of input data
-//	8-bit version: decompressed from 3 -> 8 bits (fits into UINT8)
-//	16-bit version: decompressed from 5 -> 12 bits (fits into UINT16)
+//	8-bit version: decompressed from 3 -> 8 bits (fits into uint8_t)
+//	16-bit version: decompressed from 5 -> 12 bits (fits into uint16_t)
 // All algorithms were executed once for warm up, then 4x for benchmarking.
 //
 //									FUINT8/FUINT16 bits
@@ -52,16 +52,16 @@ UINT16 DataBlkCompr_GetIntSize(void);
 
 typedef struct
 {
-	UINT8 comprType;
-	UINT8 subType;
-	UINT8 bits;
-	UINT8 canCompr;
+	uint8_t comprType;
+	uint8_t subType;
+	uint8_t bits;
+	uint8_t canCompr;
 } BENCH_LIST;
 
 #define BENCH_SIZE		256	// compressed data size in MB
 #define BENCH_WARM_REP	1	// number of times for warm up
 #define BENCH_REPEAT	4	// number of times the benchmark is repeated
-static UINT32 dblk_benchTime;
+static uint32_t dblk_benchTime;
 
 #define BENCHLIST_COUNT	6
 static BENCH_LIST benchList[BENCHLIST_COUNT] =
@@ -76,13 +76,13 @@ static BENCH_LIST benchList[BENCHLIST_COUNT] =
 static const char* TEXT_COMPR[] = {"Bit-Packing", "DPCM"};
 static const char* TEXT_CMP_BPK[] = {"copy", "shift", "LUT"};
 
-static UINT8 verbosity = 0;
+static uint8_t verbosity = 0;
 // write 00s (best-case scenario for BitPack/LUT)
-//static UINT8 bytePattern = 0x00;
+//static uint8_t bytePattern = 0x00;
 // write alternating bits (average-case scenario for BitPack/LUT)
-static UINT8 bytePattern = 0xA5;
+static uint8_t bytePattern = 0xA5;
 
-static void GenerateComprStr(char* buffer, UINT8 comprType, UINT8 subType, UINT8 bits)
+static void GenerateComprStr(char* buffer, uint8_t comprType, uint8_t subType, uint8_t bits)
 {
 	const char** SUB_STRS = NULL;
 	
@@ -99,7 +99,7 @@ static void GenerateComprStr(char* buffer, UINT8 comprType, UINT8 subType, UINT8
 
 int main(int argc, char* argv[])
 {
-	UINT8 DPCMTbl[0x20] =
+	uint8_t DPCMTbl[0x20] =
 	{
 		0x00, 0x01, 0x02, 0x04, 0x08, 0x10, 0x20, 0x40,
 		0x80,-0x01,-0x02,-0x04,-0x08,-0x10,-0x20,-0x40,
@@ -113,33 +113,33 @@ int main(int argc, char* argv[])
 	PCM_CMP_INF* cmpInf8 = &cdbInf8.cmprInfo;
 	PCM_CMP_INF* cmpInf16 = &cdbInf16.cmprInfo;
 	
-	UINT16 bitsFU8;
-	UINT16 bitsFU16;
+	uint16_t bitsFU8;
+	uint16_t bitsFU16;
 	
 	// DecompressDataBlk Benchmark
-	UINT32 dataLen;
-	UINT8* data;
-	UINT32 dataLenRaw;
-	UINT8* dataRaw;
-	UINT32 decLen;
-	UINT8* decData;
-	UINT32 repCntr;
-	UINT32 curBench;
-	UINT32 curBT;
+	uint32_t dataLen;
+	uint8_t* data;
+	uint32_t dataLenRaw;
+	uint8_t* dataRaw;
+	uint32_t decLen;
+	uint8_t* decData;
+	uint32_t repCntr;
+	uint32_t curBench;
+	uint32_t curBT;
 	// Bit 0 (01): 0 - old, 1 - new
 	// Bit 1 (02): 0 - decompress, 1 - compress
-	UINT32 benchTime[4 * BENCHLIST_COUNT];	// Bit Packing (copy)
+	uint32_t benchTime[4 * BENCHLIST_COUNT];	// Bit Packing (copy)
 	BENCH_LIST* tempBL;
 	PCM_CDB_INF* tempCDB;
 	PCM_CMP_INF* tempCInf;
-	UINT32 startTime;
+	uint32_t startTime;
 	char comprStr[0x20];
 	
 	/*{
-		UINT8 cmpTbl8[0x10] = {0x00, 0x01, 0x02, 0x04, 0x08, 0x10, 0x20, 0x40, 0x80, 0xC0, 0xE0, 0xF0, 0xF8, 0xFC, 0xFE, 0xFF};
-		UINT8 decTbl8[0x100];
-		UINT16 cmpTbl16[0x10] = {0x000, 0x040, 0x080, 0x0C0, 0x100, 0x140, 0x180, 0x1C0, 0x200, 0x300, 0x380, 0x3C0, 0x3E0, 0x3F0, 0x3F8, 0x400};
-		UINT16 decTbl16[0x400];
+		uint8_t cmpTbl8[0x10] = {0x00, 0x01, 0x02, 0x04, 0x08, 0x10, 0x20, 0x40, 0x80, 0xC0, 0xE0, 0xF0, 0xF8, 0xFC, 0xFE, 0xFF};
+		uint8_t decTbl8[0x100];
+		uint16_t cmpTbl16[0x10] = {0x000, 0x040, 0x080, 0x0C0, 0x100, 0x140, 0x180, 0x1C0, 0x200, 0x300, 0x380, 0x3C0, 0x3E0, 0x3F0, 0x3F8, 0x400};
+		uint16_t decTbl16[0x400];
 		GenerateReverseLUT_8(0x100, decTbl8, 0x10, cmpTbl8);
 		GenerateReverseLUT_16(0x400, decTbl16, 0x10, cmpTbl16);
 		getchar();
@@ -155,11 +155,11 @@ int main(int argc, char* argv[])
 	decLen = (cdbInf8.decmpLen < cdbInf16.decmpLen) ? cdbInf16.decmpLen : cdbInf8.decmpLen;
 	
 	dataLen = 0x0A + dataLenRaw;	// including VGM data block header
-	data = (UINT8*)malloc(dataLen);
+	data = (uint8_t*)malloc(dataLen);
 	dataRaw = &data[0x0A];
 	memset(data, 0x00, 0x0A);
 	memset(dataRaw, bytePattern, dataLenRaw);
-	decData = (UINT8*)malloc(decLen);
+	decData = (uint8_t*)malloc(decLen);
 	
 	if (verbosity >= 1)
 	{
@@ -263,7 +263,7 @@ int main(int argc, char* argv[])
 	return 0;
 }
 
-INLINE UINT32 GetSysTimeMS(void)
+INLINE uint32_t GetSysTimeMS(void)
 {
 #ifdef WIN32
 	return GetTickCount();
@@ -279,22 +279,22 @@ void compression_test(void)
 	PCM_CMP_INF* cmpInf8 = &cdbInf8.cmprInfo;
 	PCM_CMP_INF* cmpInf16 = &cdbInf16.cmprInfo;
 	
-	UINT32 uncLen;
-	UINT8* uncData;
-	UINT32 cmpLen;
-	UINT8* cmpData;
+	uint32_t uncLen;
+	uint8_t* uncData;
+	uint32_t cmpLen;
+	uint8_t* cmpData;
 	FILE* hFile;
 	
 	hFile = fopen("demofiles/32XSample_Celtic.raw", "rb");
 	fseek(hFile, 0, SEEK_END);
 	uncLen = ftell(hFile);
 	fseek(hFile, 0, SEEK_SET);
-	uncData = (UINT8*)malloc(uncLen);
+	uncData = (uint8_t*)malloc(uncLen);
 	fread(uncData, 1, uncLen, hFile);
 	fclose(hFile);	hFile = NULL;
 	
 	cmpLen = BPACK_SIZE_CMP(uncLen, cmpInf16->bitsCmp, cmpInf16->bitsDec) * 2;
-	cmpData = (UINT8*)malloc(cmpLen);
+	cmpData = (uint8_t*)malloc(cmpLen);
 	
 	CompressDataBlk_Old(cmpLen, cmpData, uncLen, uncData, cmpInf16);
 	hFile = fopen("demofiles/32XSample_Celtic_old.cmp", "wb");
@@ -302,7 +302,7 @@ void compression_test(void)
 	fclose(hFile);	hFile = NULL;
 	free(cmpData);
 	
-	cmpData = (UINT8*)malloc(cmpLen);
+	cmpData = (uint8_t*)malloc(cmpLen);
 	CompressDataBlk(cmpLen, cmpData, uncLen, uncData, cmpInf16);
 	hFile = fopen("demofiles/32XSample_Celtic_new.cmp", "wb");
 	fwrite(cmpData, 1, cmpLen, hFile);
@@ -316,38 +316,38 @@ void compression_test(void)
 #define FUINT8	unsigned int
 #define FUINT16	unsigned int
 
-INLINE UINT16 ReadLE16(const UINT8* Data)
+INLINE uint16_t ReadLE16(const uint8_t* Data)
 {
 	// read 16-Bit Word (Little Endian/Intel Byte Order)
 	return (Data[0x01] << 8) | (Data[0x00] << 0);
 }
 
-INLINE UINT32 ReadLE32(const UINT8* Data)
+INLINE uint32_t ReadLE32(const uint8_t* Data)
 {
 	// read 32-Bit Word (Little Endian/Intel Byte Order)
 	return	(Data[0x03] << 24) | (Data[0x02] << 16) |
 			(Data[0x01] <<  8) | (Data[0x00] <<  0);
 }
 
-static UINT8 DecompressDataBlk_Old(UINT32 outLen, UINT8* outData, UINT32 inLen, const UINT8* inData, const PCM_COMPR_TBL* comprTbl)
+static uint8_t DecompressDataBlk_Old(uint32_t outLen, uint8_t* outData, uint32_t inLen, const uint8_t* inData, const PCM_COMPR_TBL* comprTbl)
 {
-	UINT8 comprType;
-	UINT8 bitsDec;
+	uint8_t comprType;
+	uint8_t bitsDec;
 	FUINT8 bitsCmp;
-	UINT8 cmpSubType;
-	UINT16 addVal;
-	const UINT8* inPos;
-	const UINT8* inDataEnd;
-	UINT8* outPos;
-	const UINT8* outDataEnd;
+	uint8_t cmpSubType;
+	uint16_t addVal;
+	const uint8_t* inPos;
+	const uint8_t* inDataEnd;
+	uint8_t* outPos;
+	const uint8_t* outDataEnd;
 	FUINT16 inVal;
 	FUINT16 outVal;
 	FUINT8 valSize;
 	FUINT8 inShift;
 	FUINT8 outShift;
-	UINT8* ent1B;
-	UINT16* ent2B;
-	UINT32 Time;
+	uint8_t* ent1B;
+	uint16_t* ent2B;
+	uint32_t Time;
 	
 	// ReadBits Variables
 	FUINT8 bitsToRead;
@@ -357,11 +357,11 @@ static UINT8 DecompressDataBlk_Old(UINT32 outLen, UINT8* outData, UINT32 inLen, 
 	FUINT8 outBit;
 	
 	// Variables for DPCM
-	UINT16 OutMask;
+	uint16_t OutMask;
 	
 	comprType = inData[0x00];
 	//*outLen = ReadLE32(&inData[0x01]);
-	//*retOutData = (UINT8*)realloc(*retOutData, *outLen);
+	//*retOutData = (uint8_t*)realloc(*retOutData, *outLen);
 	//outData = *retOutData;
 	
 	Time = GetSysTimeMS();
@@ -445,7 +445,7 @@ static UINT8 DecompressDataBlk_Old(UINT32 outLen, UINT8* outData, UINT32 inLen, 
 #ifdef VGM_LITTLE_ENDIAN
 					outVal = ent2B[inVal];
 #else
-					outVal = ReadLE16((UINT8*)&ent2B[inVal]);
+					outVal = ReadLE16((uint8_t*)&ent2B[inVal]);
 #endif
 					break;
 				}
@@ -455,19 +455,19 @@ static UINT8 DecompressDataBlk_Old(UINT32 outLen, UINT8* outData, UINT32 inLen, 
 #ifdef VGM_LITTLE_ENDIAN
 			//memcpy(outPos, &outVal, valSize);
 			if (valSize == 0x01)
-				*((UINT8*)outPos) = (UINT8)outVal;
+				*((uint8_t*)outPos) = (uint8_t)outVal;
 			else //if (valSize == 0x02)
-				*((UINT16*)outPos) = (UINT16)outVal;
+				*((uint16_t*)outPos) = (uint16_t)outVal;
 #else
 			if (valSize == 0x01)
 			{
-				*outPos = (UINT8)outVal;
+				*outPos = (uint8_t)outVal;
 			}
 			else //if (valSize == 0x02)
 			{
 				// save explicitly in Little Endian
-				outPos[0x00] = (UINT8)((outVal & 0x00FF) >> 0);
-				outPos[0x01] = (UINT8)((outVal & 0xFF00) >> 8);
+				outPos[0x00] = (uint8_t)((outVal & 0x00FF) >> 0);
+				outPos[0x01] = (uint8_t)((outVal & 0xFF00) >> 8);
 			}
 #endif
 		}
@@ -535,20 +535,20 @@ static UINT8 DecompressDataBlk_Old(UINT32 outLen, UINT8* outData, UINT32 inLen, 
 				addVal = ent1B[inVal];
 				outVal += addVal;
 				outVal &= OutMask;
-				*((UINT8*)outPos) = (UINT8)outVal;
+				*((uint8_t*)outPos) = (uint8_t)outVal;
 				break;
 			case 0x02:
 #ifdef VGM_LITTLE_ENDIAN
 				addVal = ent2B[inVal];
 				outVal += addVal;
 				outVal &= OutMask;
-				*((UINT16*)outPos) = (UINT16)outVal;
+				*((uint16_t*)outPos) = (uint16_t)outVal;
 #else
-				addVal = ReadLE16((UINT8*)&ent2B[inVal]);
+				addVal = ReadLE16((uint8_t*)&ent2B[inVal]);
 				outVal += addVal;
 				outVal &= OutMask;
-				outPos[0x00] = (UINT8)((outVal & 0x00FF) >> 0);
-				outPos[0x01] = (UINT8)((outVal & 0xFF00) >> 8);
+				outPos[0x00] = (uint8_t)((outVal & 0x00FF) >> 0);
+				outPos[0x01] = (uint8_t)((outVal & 0xFF00) >> 8);
 #endif
 				break;
 			}
@@ -564,14 +564,14 @@ static UINT8 DecompressDataBlk_Old(UINT32 outLen, UINT8* outData, UINT32 inLen, 
 }
 
 // Notes: writes outData[outLen] = 0x00 when finishing with 0 bits left
-INLINE void WriteBits(UINT8* Data, UINT32* Pos, UINT8* BitPos, UINT16 Value, UINT8 BitsToWrite)
+INLINE void WriteBits(uint8_t* Data, uint32_t* Pos, uint8_t* BitPos, uint16_t Value, uint8_t BitsToWrite)
 {
-	UINT8 BitWriteVal;
-	UINT32 OutPos;
-	UINT8 InVal;
-	UINT8 BitMask;
-	UINT8 OutShift;
-	UINT8 InBit;
+	uint8_t BitWriteVal;
+	uint32_t OutPos;
+	uint8_t InVal;
+	uint8_t BitMask;
+	uint8_t OutShift;
+	uint8_t InBit;
 	
 	OutPos = *Pos;
 	OutShift = *BitPos;
@@ -602,23 +602,23 @@ INLINE void WriteBits(UINT8* Data, UINT32* Pos, UINT8* BitPos, UINT16 Value, UIN
 	return;
 }
 
-static void CompressDataBlk_Old(UINT32 outLen, UINT8* outData, UINT32 inLen, const UINT8* inData, PCM_CMP_INF* ComprTbl)
+static void CompressDataBlk_Old(uint32_t outLen, uint8_t* outData, uint32_t inLen, const uint8_t* inData, PCM_CMP_INF* ComprTbl)
 {
-	UINT8 valSize;
+	uint8_t valSize;
 	
-	UINT32 CurPos;
-	UINT8* DstBuf;
-	UINT32 DstPos;
-	UINT16 SrcVal;
-	UINT16 DstVal = 0x0000;
-	UINT32 CurEnt = 0;
-	UINT16 BitMask;
-	UINT16 AddVal;
-	UINT8 BitShift;
-	const UINT8* Ent1B;
-	const UINT16* Ent2B;
-	UINT8 DstShift;
-	UINT32 Time;
+	uint32_t CurPos;
+	uint8_t* DstBuf;
+	uint32_t DstPos;
+	uint16_t SrcVal;
+	uint16_t DstVal = 0x0000;
+	uint32_t CurEnt = 0;
+	uint16_t BitMask;
+	uint16_t AddVal;
+	uint8_t BitShift;
+	const uint8_t* Ent1B;
+	const uint16_t* Ent2B;
+	uint8_t DstShift;
+	uint32_t Time;
 	
 	valSize = (ComprTbl->bitsDec + 7) / 8;
 	
@@ -671,7 +671,7 @@ static void CompressDataBlk_Old(UINT32 outLen, UINT8* outData, UINT32 inLen, con
 				}
 				break;
 			}
-			DstVal = (UINT16)CurEnt;
+			DstVal = (uint16_t)CurEnt;
 			break;
 		}
 		

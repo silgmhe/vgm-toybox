@@ -12,7 +12,7 @@ void EchoUnit::Reset()
      16,  8,  4,  2,
   };
   eidx = 0;
-  memset(echo_buf,0,sizeof(INT32)*(1<<17));
+  memset(echo_buf,0,sizeof(int32_t)*(1<<17));
   for(int i=0; i<16; i++) h[i] = hdef[i];
   lpf.SetParam(4700,100);
   lpf.Reset();
@@ -27,9 +27,9 @@ void EchoUnit::SetRate(double rate)
   hpf.SetRate(rate);
 }
 
-inline xgm::UINT32 EchoUnit::FastRender(xgm::INT32 b[2])
+inline uint32_t EchoUnit::FastRender(int32_t b[2])
 {
-  INT32 buf[2];
+  int32_t buf[2];
 
   int tmp = eidx;
   for(int i=0; i<16; i++) 
@@ -49,13 +49,13 @@ inline xgm::UINT32 EchoUnit::FastRender(xgm::INT32 b[2])
   return 2;
 }
 
-void xgm::EchoUnit::Tick(UINT32 clocks)
+void xgm::EchoUnit::Tick(uint32_t clocks)
 {
   lpf.Tick(clocks);
   //hpf.Tick(clocks); // hpf has no sub-renderable
 }
 
-xgm::UINT32 EchoUnit::Render(xgm::INT32 b[2])
+uint32_t EchoUnit::Render(int32_t b[2])
 {
   return FastRender(b);
 }

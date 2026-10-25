@@ -11,8 +11,8 @@ typedef struct msm5205_config
 {
 	DEV_GEN_CFG _genCfg;
 
-	UINT8 prescaler;	// prescaler, bit 0 = S1, bit 1 = S2
-	UINT8 adpcmBits;	// bits per ADPCM sample (3, 4), 0 = default (4)
+	uint8_t prescaler;	// prescaler, bit 0 = S1, bit 1 = S2
+	uint8_t adpcmBits;	// bits per ADPCM sample (3, 4), 0 = default (4)
 } MSM5205_CFG;
 
 extern const DEV_DECL sndDev_MSM5205;

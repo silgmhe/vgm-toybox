@@ -9,8 +9,8 @@
 
 void SetupLinkedDevices(VGM_BASEDEV* cBaseDev, SETUPLINKDEV_CB devCfgCB, void* cbUserParam)
 {
-	UINT32 curLDev;
-	UINT8 retVal;
+	uint32_t curLDev;
+	uint8_t retVal;
 	VGM_BASEDEV* cParent;
 	
 	if (cBaseDev->defInf.linkDevCount == 0 || cBaseDev->defInf.devDef->LinkDevice == NULL)
@@ -50,7 +50,7 @@ void SetupLinkedDevices(VGM_BASEDEV* cBaseDev, SETUPLINKDEV_CB devCfgCB, void* c
 	return;
 }
 
-void FreeDeviceTree(VGM_BASEDEV* cBaseDev, UINT8 freeBase)
+void FreeDeviceTree(VGM_BASEDEV* cBaseDev, uint8_t freeBase)
 {
 	VGM_BASEDEV* cDevCur;
 	VGM_BASEDEV* cDevOld;

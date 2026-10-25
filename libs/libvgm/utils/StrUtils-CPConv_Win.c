@@ -101,7 +101,7 @@ static UINT GetCodepageFromStr(const char* codepageName)
 	return (UINT)codepageID;
 }
 
-UINT8 CPConv_Init(CPCONV** retCPC, const char* cpFrom, const char* cpTo)
+uint8_t CPConv_Init(CPCONV** retCPC, const char* cpFrom, const char* cpTo)
 {
 	CPCONV* cpc;
 	
@@ -138,12 +138,12 @@ void CPConv_Deinit(CPCONV* cpc)
 	return;
 }
 
-UINT8 CPConv_StrConvert(CPCONV* cpc, size_t* outSize, char** outStr, size_t inSize, const char* inStr)
+uint8_t CPConv_StrConvert(CPCONV* cpc, size_t* outSize, char** outStr, size_t inSize, const char* inStr)
 {
 	int wcBufSize;
 	wchar_t* wcBuf;
 	const wchar_t* wcStr;
-	UINT8 canAlloc;
+	uint8_t canAlloc;
 	
 	if (inSize == 0)
 	{

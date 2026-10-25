@@ -14,18 +14,18 @@
 
 typedef struct _wsa_state wsa_state;
 
-static UINT8 ws_audio_init(const DEV_GEN_CFG* cfg, DEV_INFO* retDevInf);
+static uint8_t ws_audio_init(const DEV_GEN_CFG* cfg, DEV_INFO* retDevInf);
 static void ws_audio_reset(void* info);
 static void ws_audio_done(void* info);
-static void ws_audio_update(void* info, UINT32 length, DEV_SMPL** buffer);
-static void ws_audio_port_write(void* info, UINT8 port, UINT8 value);
-static UINT8 ws_audio_port_read(void* info, UINT8 port);
+static void ws_audio_update(void* info, uint32_t length, DEV_SMPL** buffer);
+static void ws_audio_port_write(void* info, uint8_t port, uint8_t value);
+static uint8_t ws_audio_port_read(void* info, uint8_t port);
 static void ws_audio_process(wsa_state* chip);
 static void ws_audio_sounddma(wsa_state* chip);
-static void ws_write_ram_byte(void* info, UINT16 offset, UINT8 value);
-static UINT8 ws_read_ram_byte(void* info, UINT16 offset);
-static void ws_set_mute_mask(void* info, UINT32 MuteMask);
-static UINT32 ws_get_mute_mask(void* info);
+static void ws_write_ram_byte(void* info, uint16_t offset, uint8_t value);
+static uint8_t ws_read_ram_byte(void* info, uint16_t offset);
+static void ws_set_mute_mask(void* info, uint32_t MuteMask);
+static uint32_t ws_get_mute_mask(void* info);
 
 
 static DEVDEF_RWFUNC devFunc[] =
@@ -62,7 +62,7 @@ static const char* DeviceName(const DEV_GEN_CFG* devCfg)
 	return "WonderSwan";
 }
 
-static UINT16 DeviceChannels(const DEV_GEN_CFG* devCfg)
+static uint16_t DeviceChannels(const DEV_GEN_CFG* devCfg)
 {
 	return 4;
 }
@@ -91,7 +91,7 @@ const DEV_DECL sndDev_WSwan =
 };
 
 
-typedef UINT8	byte;
+typedef uint8_t	byte;
 #include "ws_initialIo.h"
 
 #define SNDP	chip->ws_ioRam[0x80]
@@ -127,17 +127,17 @@ typedef UINT8	byte;
 // 16KHz = 0.75HBlank = 192cycles間隔
 // 20KHz = 0.60HBlank = 154cycles間隔
 // 24KHz = 0.50HBlank = 128cycles間隔
-static const UINT16 DMACycles[4] = { 256, 192, 154, 128 };
+static const uint16_t DMACycles[4] = { 256, 192, 154, 128 };
 
 typedef struct
 {
-	UINT16 wave;
-	UINT8 lvol;
-	UINT8 rvol;
-	UINT32 offset;
-	UINT32 delta;
-	UINT8 pos;
-	UINT8 Muted;
+	uint16_t wave;
+	uint8_t lvol;
+	uint8_t rvol;
+	uint32_t offset;
+	uint32_t delta;
+	uint8_t pos;
+	uint8_t Muted;
 } WS_AUDIO;
 
 struct _wsa_state
@@ -146,28 +146,28 @@ struct _wsa_state
 	
 	WS_AUDIO ws_audio[4];
 	RATIO_CNTR HBlankTmr;
-	INT16	SweepTime;
-	INT8	SweepStep;
-	INT16	SweepCount;
-	UINT16	SweepFreq;
-	UINT8	NoiseType;
-	UINT32	NoiseRng;
-	UINT16	MainVolume;
-	UINT8	PCMVolumeLeft;
-	UINT8	PCMVolumeRight;
+	int16_t	SweepTime;
+	int8_t	SweepStep;
+	int16_t	SweepCount;
+	uint16_t	SweepFreq;
+	uint8_t	NoiseType;
+	uint32_t	NoiseRng;
+	uint16_t	MainVolume;
+	uint8_t	PCMVolumeLeft;
+	uint8_t	PCMVolumeRight;
 	
-	UINT8	 ws_ioRam[0x100];
-	UINT8	*ws_internalRam;
+	uint8_t	 ws_ioRam[0x100];
+	uint8_t	*ws_internalRam;
 	
-	UINT32	clock;
-	UINT32	smplrate;
+	uint32_t	clock;
+	uint32_t	smplrate;
 	float	ratemul;
 };
 
 #define DEFAULT_CLOCK	3072000
 
 
-static UINT8 ws_audio_init(const DEV_GEN_CFG* cfg, DEV_INFO* retDevInf)
+static uint8_t ws_audio_init(const DEV_GEN_CFG* cfg, DEV_INFO* retDevInf)
 {
 	wsa_state* chip;
 	
@@ -176,7 +176,7 @@ static UINT8 ws_audio_init(const DEV_GEN_CFG* cfg, DEV_INFO* retDevInf)
 		return 0xFF;
 	
 	// actual size is 64 KB, but the audio chip can only access 16 KB
-	chip->ws_internalRam = (UINT8*)malloc(0x4000);
+	chip->ws_internalRam = (uint8_t*)malloc(0x4000);
 	
 	chip->clock = cfg->clock;
 	// According to http://daifukkat.su/docs/wsman/, the headphone DAC update is (clock / 128)
@@ -199,7 +199,7 @@ static UINT8 ws_audio_init(const DEV_GEN_CFG* cfg, DEV_INFO* retDevInf)
 static void ws_audio_reset(void* info)
 {
 	wsa_state* chip = (wsa_state*)info;
-	UINT32 muteMask;
+	uint32_t muteMask;
 	int i;
 	
 	muteMask = ws_get_mute_mask(chip);
@@ -230,21 +230,21 @@ static void ws_audio_done(void* info)
 	return;
 }
 
-static void ws_audio_update(void* info, UINT32 length, DEV_SMPL** buffer)
+static void ws_audio_update(void* info, uint32_t length, DEV_SMPL** buffer)
 {
 	wsa_state* chip = (wsa_state*)info;
 	DEV_SMPL* bufL;
 	DEV_SMPL* bufR;
-	UINT32 i;
-	UINT8 ch, cnt;
-	INT16 w;	// could fit into INT8
+	uint32_t i;
+	uint8_t ch, cnt;
+	int16_t w;	// could fit into int8_t
 	DEV_SMPL l, r;
 
 	bufL = buffer[0];
 	bufR = buffer[1];
 	for (i=0; i<length; i++)
 	{
-		UINT32 swpCount;
+		uint32_t swpCount;
 		
 		RC_STEP(&chip->HBlankTmr);
 		for (swpCount = RC_GET_VAL(&chip->HBlankTmr); swpCount > 0; swpCount --)
@@ -274,7 +274,7 @@ static void ws_audio_update(void* info, UINT32 length, DEV_SMPL** buffer)
 
 					//OSWANの擬似乱数の処理と同等のつもり
 #define BIT(n) (1<<n)
-					static const UINT32 noise_mask[8] =
+					static const uint32_t noise_mask[8] =
 					{
 						BIT(0)|BIT(1),
 						BIT(0)|BIT(1)|BIT(4)|BIT(5),
@@ -286,7 +286,7 @@ static void ws_audio_update(void* info, UINT32 length, DEV_SMPL** buffer)
 						BIT(0)|BIT(2)|BIT(3)|BIT(4)
 					};
 
-					static const UINT32 noise_bit[8] =
+					static const uint32_t noise_bit[8] =
 					{
 						BIT(15),
 						BIT(14),
@@ -298,7 +298,7 @@ static void ws_audio_update(void* info, UINT32 length, DEV_SMPL** buffer)
 						BIT(8)
 					};
 
-					UINT32 Masked, XorReg;
+					uint32_t Masked, XorReg;
 
 					chip->ws_audio[ch].offset += chip->ws_audio[ch].delta;
 					cnt = chip->ws_audio[ch].offset>>16;
@@ -353,10 +353,10 @@ static void ws_audio_update(void* info, UINT32 length, DEV_SMPL** buffer)
 	}
 }
 
-static void ws_audio_port_write(void* info, UINT8 port, UINT8 value)
+static void ws_audio_port_write(void* info, uint8_t port, uint8_t value)
 {
 	wsa_state* chip = (wsa_state*)info;
-	UINT16 i;
+	uint16_t i;
 	float freq;
 
 	chip->ws_ioRam[port]=value;
@@ -369,37 +369,37 @@ static void ws_audio_port_write(void* info, UINT8 port, UINT8 value)
 	// →つまり、0xFFFF の時だけ音を出さないってことだろうか。
 	//   でも、0x07FF の時も音を出さないけど、ノイズだけ音を出すのかも。
 	case 0x80:
-	case 0x81:	i=(((UINT16)chip->ws_ioRam[0x81])<<8)+((UINT16)chip->ws_ioRam[0x80]);
+	case 0x81:	i=(((uint16_t)chip->ws_ioRam[0x81])<<8)+((uint16_t)chip->ws_ioRam[0x80]);
 				if (i == 0xffff)
 					freq = 0;
 				else
 					freq = 1.0f/(2048-(i&0x7ff));
-				chip->ws_audio[0].delta = (UINT32)(freq * chip->ratemul);
+				chip->ws_audio[0].delta = (uint32_t)(freq * chip->ratemul);
 				break;
 	case 0x82:
-	case 0x83:	i=(((UINT16)chip->ws_ioRam[0x83])<<8)+((UINT16)chip->ws_ioRam[0x82]);
+	case 0x83:	i=(((uint16_t)chip->ws_ioRam[0x83])<<8)+((uint16_t)chip->ws_ioRam[0x82]);
 				if (i == 0xffff)
 					freq = 0;
 				else
 					freq = 1.0f/(2048-(i&0x7ff));
-				chip->ws_audio[1].delta = (UINT32)(freq * chip->ratemul);
+				chip->ws_audio[1].delta = (uint32_t)(freq * chip->ratemul);
 				break;
 	case 0x84:
-	case 0x85:	i=(((UINT16)chip->ws_ioRam[0x85])<<8)+((UINT16)chip->ws_ioRam[0x84]);
+	case 0x85:	i=(((uint16_t)chip->ws_ioRam[0x85])<<8)+((uint16_t)chip->ws_ioRam[0x84]);
 				chip->SweepFreq = i;
 				if (i == 0xffff)
 					freq = 0;
 				else
 					freq = 1.0f/(2048-(i&0x7ff));
-				chip->ws_audio[2].delta = (UINT32)(freq * chip->ratemul);
+				chip->ws_audio[2].delta = (uint32_t)(freq * chip->ratemul);
 				break;
 	case 0x86:
-	case 0x87:	i=(((UINT16)chip->ws_ioRam[0x87])<<8)+((UINT16)chip->ws_ioRam[0x86]);
+	case 0x87:	i=(((uint16_t)chip->ws_ioRam[0x87])<<8)+((uint16_t)chip->ws_ioRam[0x86]);
 				if (i == 0xffff)
 					freq = 0;
 				else
 					freq = 1.0f/(2048-(i&0x7ff));
-				chip->ws_audio[3].delta = (UINT32)(freq * chip->ratemul);
+				chip->ws_audio[3].delta = (uint32_t)(freq * chip->ratemul);
 				break;
 	case 0x88:
 				chip->ws_audio[0].lvol = (value>>4)&0xf;
@@ -418,7 +418,7 @@ static void ws_audio_port_write(void* info, UINT8 port, UINT8 value)
 				chip->ws_audio[3].rvol = value&0xf;
 				break;
 	case 0x8C:
-				chip->SweepStep = (INT8)value;
+				chip->SweepStep = (int8_t)value;
 				break;
 	case 0x8D:
 				//Sweepの間隔は 1/375[s] = 2.666..[ms]
@@ -428,7 +428,7 @@ static void ws_audio_port_write(void* info, UINT8 port, UINT8 value)
 				//これを HBlank (256cycles) の間隔で言うと、
 				//　8192/256 = 32
 				//なので、32[HBlank]*(n+1) 間隔となる
-				chip->SweepTime = (((INT16)value)+1)<<5;
+				chip->SweepTime = (((int16_t)value)+1)<<5;
 				chip->SweepCount = chip->SweepTime;
 				break;
 	case 0x8E:
@@ -436,7 +436,7 @@ static void ws_audio_port_write(void* info, UINT8 port, UINT8 value)
 				if (value&8) chip->NoiseRng = 1;	//ノイズカウンターリセット
 				break;
 	case 0x8F:
-				chip->ws_audio[0].wave = (UINT16)value<<6;
+				chip->ws_audio[0].wave = (uint16_t)value<<6;
 				chip->ws_audio[1].wave = chip->ws_audio[0].wave + 0x10;
 				chip->ws_audio[2].wave = chip->ws_audio[1].wave + 0x10;
 				chip->ws_audio[3].wave = chip->ws_audio[2].wave + 0x10;
@@ -462,7 +462,7 @@ static void ws_audio_port_write(void* info, UINT8 port, UINT8 value)
 	}
 }
 
-static UINT8 ws_audio_port_read(void* info, UINT8 port)
+static uint8_t ws_audio_port_read(void* info, uint8_t port)
 {
 	wsa_state* chip = (wsa_state*)info;
 	return (chip->ws_ioRam[port]);
@@ -483,7 +483,7 @@ static void ws_audio_process(wsa_state* chip)
 			chip->SweepFreq &= 0x7FF;
 
 			freq = 1.0f/(2048-chip->SweepFreq);
-			chip->ws_audio[2].delta = (UINT32)(freq * chip->ratemul);
+			chip->ws_audio[2].delta = (uint32_t)(freq * chip->ratemul);
 		}
 		chip->SweepCount--;
 	}
@@ -491,8 +491,8 @@ static void ws_audio_process(wsa_state* chip)
 
 static void ws_audio_sounddma(wsa_state* chip)
 {
-	UINT16 i;
-	UINT32 j;
+	uint16_t i;
+	uint32_t j;
 	byte b;
 
 	if ((SDMACTL&0x88)==0x80)
@@ -523,7 +523,7 @@ static void ws_audio_sounddma(wsa_state* chip)
 	}
 }
 
-static void ws_write_ram_byte(void* info, UINT16 offset, UINT8 value)
+static void ws_write_ram_byte(void* info, uint16_t offset, uint8_t value)
 {
 	wsa_state* chip = (wsa_state*)info;
 	
@@ -532,17 +532,17 @@ static void ws_write_ram_byte(void* info, UINT16 offset, UINT8 value)
 	return;
 }
 
-static UINT8 ws_read_ram_byte(void* info, UINT16 offset)
+static uint8_t ws_read_ram_byte(void* info, uint16_t offset)
 {
 	wsa_state* chip = (wsa_state*)info;
 	
 	return chip->ws_internalRam[offset & 0x3FFF];
 }
 
-static void ws_set_mute_mask(void* info, UINT32 MuteMask)
+static void ws_set_mute_mask(void* info, uint32_t MuteMask)
 {
 	wsa_state* chip = (wsa_state*)info;
-	UINT8 CurChn;
+	uint8_t CurChn;
 	
 	for (CurChn = 0; CurChn < 4; CurChn ++)
 		chip->ws_audio[CurChn].Muted = (MuteMask >> CurChn) & 0x01;
@@ -550,11 +550,11 @@ static void ws_set_mute_mask(void* info, UINT32 MuteMask)
 	return;
 }
 
-static UINT32 ws_get_mute_mask(void* info)
+static uint32_t ws_get_mute_mask(void* info)
 {
 	wsa_state* chip = (wsa_state*)info;
-	UINT32 muteMask;
-	UINT8 CurChn;
+	uint32_t muteMask;
+	uint8_t CurChn;
 	
 	muteMask = 0x00;
 	for (CurChn = 0; CurChn < 4; CurChn ++)

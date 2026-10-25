@@ -6,21 +6,21 @@ namespace toybox::backends::libvgm
 {
 namespace
 {
-	std::uint16_t readLe16 (const std::uint8_t* p)
+	uint16_t readLe16 (const uint8_t* p)
 	{
-		return (std::uint16_t) ((std::uint16_t) p[0] | ((std::uint16_t) p[1] << 8));
+		return (uint16_t) ((uint16_t) p[0] | ((uint16_t) p[1] << 8));
 	}
 
-	std::uint32_t readLe32 (const std::uint8_t* p)
+	uint32_t readLe32 (const uint8_t* p)
 	{
-		return (std::uint32_t) p[0] | ((std::uint32_t) p[1] << 8) | ((std::uint32_t) p[2] << 16)
-			   | ((std::uint32_t) p[3] << 24);
+		return (uint32_t) p[0] | ((uint32_t) p[1] << 8) | ((uint32_t) p[2] << 16)
+			   | ((uint32_t) p[3] << 24);
 	}
 
 	/** Length of one command in the stream, header byte included. Command lengths are taken
 		from libvgm's VGM command table: a wrong length desynchronises the whole stream, so the
 		rarely used commands are listed too. */
-	int commandLength (std::uint8_t cmd, const std::uint8_t* data, std::size_t remaining)
+	int commandLength (uint8_t cmd, const uint8_t* data, std::size_t remaining)
 	{
 		switch (cmd)
 		{
@@ -87,21 +87,21 @@ namespace
 	}
 
 	/** Commands whose address byte carries the second-chip flag in bit 7. */
-	bool splitsAddressByte (std::uint8_t cmd)
+	bool splitsAddressByte (uint8_t cmd)
 	{
 		return cmd == 0xB0 || cmd == 0xB1 || cmd == 0xB3 || cmd == 0xB4
 			   || cmd == 0xB9 || cmd == 0xBB || cmd == 0xBC || cmd == 0xBD;
 	}
 
 	/** The WonderSwan keeps its sound registers at 0x80..: the command stores them from 0x00. */
-	std::uint8_t registerAddress (std::uint8_t cmd, std::uint8_t offset)
+	uint8_t registerAddress (uint8_t cmd, uint8_t offset)
 	{
-		return (cmd == 0xBC) ? (std::uint8_t) (0x80 + offset) : offset;
+		return (cmd == 0xBC) ? (uint8_t) (0x80 + offset) : offset;
 	}
 }
 
 VgmCommandReader::VgmCommandReader (const void* image, std::size_t imageSize)
-	: data (static_cast<const std::uint8_t*> (image)), size (imageSize)
+	: data (static_cast<const uint8_t*> (image)), size (imageSize)
 {
 	if (! readHeader())
 	{
@@ -116,8 +116,8 @@ bool VgmCommandReader::readHeader (void)
 		return false;
 	}
 
-	std::uint32_t dataOffset = 0x40;
-	const std::uint32_t relativeData = readLe32 (data + 0x34);
+	uint32_t dataOffset = 0x40;
+	const uint32_t relativeData = readLe32 (data + 0x34);
 	if (relativeData != 0)
 	{
 		dataOffset = 0x34 + relativeData;
@@ -132,10 +132,10 @@ bool VgmCommandReader::readHeader (void)
 
 	// like libvgm: the GD3 tag sits between the command stream and the EOF offset, so the
 	// command stream ends there (parsing the tag as commands would desync)
-	const std::uint32_t relativeGd3 = readLe32 (data + 0x14);
+	const uint32_t relativeGd3 = readLe32 (data + 0x14);
 	if (relativeGd3 != 0)
 	{
-		const std::uint32_t gd3Offset = 0x14 + relativeGd3;
+		const uint32_t gd3Offset = 0x14 + relativeGd3;
 		if (gd3Offset >= dataOffset && gd3Offset < end)
 		{
 			end = gd3Offset;
@@ -159,7 +159,7 @@ bool VgmCommandReader::readHeader (void)
 	return true;
 }
 
-bool VgmCommandReader::readBankByte (std::uint8_t& value)
+bool VgmCommandReader::readBankByte (uint8_t& value)
 {
 	std::size_t offset = bankPosition;
 	for (const auto& segment : pcmBank)
@@ -191,7 +191,7 @@ bool VgmCommandReader::next (VgmCommand& command)
 		return false;
 	}
 
-	const std::uint8_t cmd = data[position];
+	const uint8_t cmd = data[position];
 	const int length = commandLength (cmd, data + position, end - position);
 	if (length <= 0 || position + (std::size_t) length > end)
 	{
@@ -228,8 +228,8 @@ bool VgmCommandReader::next (VgmCommand& command)
 		// from. Bank 0 is type 0x00, and type 0x80 lands in the same bank in libvgm - the bit that
 		// differs only says the data came from a ROM, and such a block spends its first eight
 		// payload bytes on the ROM size and offset, so the samples start after them.
-		const std::uint8_t type = data[position + 2];
-		const std::uint32_t blockSize = readLe32 (data + position + 3) & 0x7FFFFFFFu;
+		const uint8_t type = data[position + 2];
+		const uint32_t blockSize = readLe32 (data + position + 3) & 0x7FFFFFFFu;
 		// libvgm switches on `type & 0xC0`: 0x80-0xBF upload a ROM (with an eight-byte size and
 		// offset header), 0xC0-0xFF write a chip's own RAM (with the address instead). Bit 7 alone
 		// is not the ROM flag - every RAM type has it set too, and reading an 0xE1 block as a ROM
@@ -249,7 +249,7 @@ bool VgmCommandReader::next (VgmCommand& command)
 		block.romSize = isRom ? readLe32 (data + position + 7) : 0;
 		block.romOffset = isRom ? readLe32 (data + position + 11) : 0;
 		block.ramOffset = isRam ? ((addressSize == 4u) ? readLe32 (data + position + 7)
-													   : (std::uint32_t) readLe16 (data + position + 7))
+													   : (uint32_t) readLe16 (data + position + 7))
 								: 0;
 		block.data = data + position + 7 + headerSize;
 		block.size = payloadSize;
@@ -268,7 +268,7 @@ bool VgmCommandReader::next (VgmCommand& command)
 	default:
 		if (cmd >= 0x70 && cmd <= 0x7F)
 		{
-			sampleTime += (std::uint32_t) (cmd & 0x0F) + 1;
+			sampleTime += (uint32_t) (cmd & 0x0F) + 1;
 			command.kind = VgmCommand::Kind::wait;
 		}
 		else if (cmd >= 0x80 && cmd <= 0x8F)
@@ -278,8 +278,8 @@ bool VgmCommandReader::next (VgmCommand& command)
 			// wait is the *only* thing carrying time in a DAC stream - it used to be dropped here,
 			// which shortened every Mega Drive song by all of it (Green Hill Zone: 31.5 s of 52.9 s)
 			// and made the MIDI run ahead of the audio until the sequence ended.
-			std::uint8_t sample = 0;
-			const std::uint32_t wait = (std::uint32_t) (cmd & 0x0F);
+			uint8_t sample = 0;
+			const uint32_t wait = (uint32_t) (cmd & 0x0F);
 			if (! readBankByte (sample))
 			{
 				sampleTime += wait;
@@ -311,11 +311,11 @@ bool VgmCommandReader::next (VgmCommand& command)
 			// X1-010: the register offset is 16-bit and big-endian (libvgm's Cmd_Ofs16_Data8), so
 			// the high byte travels in `port` - the only free byte on the command - and the decoder
 			// puts the address back together. Offsets above 0x7F are envelope and wavetable data.
-			const std::uint16_t offset = (std::uint16_t) (((std::uint16_t) data[position + 1] << 8)
-														  | (std::uint16_t) data[position + 2]);
+			const uint16_t offset = (uint16_t) (((uint16_t) data[position + 1] << 8)
+														  | (uint16_t) data[position + 2]);
 			command.kind = VgmCommand::Kind::registerWrite;
-			command.port = (std::uint8_t) ((offset >> 8) & 0x7F);
-			command.addr = (std::uint8_t) (offset & 0xFF);
+			command.port = (uint8_t) ((offset >> 8) & 0x7F);
+			command.addr = (uint8_t) (offset & 0xFF);
 			command.data = data[position + 3];
 		}
 		else if (cmd == 0xD0)
@@ -354,7 +354,7 @@ bool VgmCommandReader::next (VgmCommand& command)
 			// libvgm's Cmd_Port_Ofs8_Data8. The register space is the chip's own: 0x00-0xDF for the
 			// thirty-two oscillators, 0xE0-0xE2 for the three global registers.
 			command.kind = VgmCommand::Kind::registerWrite;
-			command.port = (std::uint8_t) (data[position + 1] & 0x01);
+			command.port = (uint8_t) (data[position + 1] & 0x01);
 			command.addr = data[position + 2];
 			command.data = data[position + 3];
 		}
@@ -374,11 +374,11 @@ bool VgmCommandReader::next (VgmCommand& command)
 			// C140: the same 16-bit big-endian offset as the X1-010, and the same split - bit 7 of
 			// the first byte picks the chip, the rest is the high byte of the address. The voices
 			// are the low 0x180 of it, so the decoder needs both halves.
-			const std::uint16_t offset = (std::uint16_t) (((std::uint16_t) data[position + 1] << 8)
-														  | (std::uint16_t) data[position + 2]);
+			const uint16_t offset = (uint16_t) (((uint16_t) data[position + 1] << 8)
+														  | (uint16_t) data[position + 2]);
 			command.kind = VgmCommand::Kind::registerWrite;
-			command.port = (std::uint8_t) ((offset >> 8) & 0xFF);
-			command.addr = (std::uint8_t) (offset & 0xFF);
+			command.port = (uint8_t) ((offset >> 8) & 0xFF);
+			command.addr = (uint8_t) (offset & 0xFF);
 			command.data = data[position + 3];
 		}
 		else if (cmd == 0xE1)
@@ -387,11 +387,11 @@ bool VgmCommandReader::next (VgmCommand& command)
 			// where the register write is a whole word. Bit 15 of the offset picks the second chip
 			// and the rest is the offset, so the high byte travels in `port` as the C140's does;
 			// the value's two halves go in `data` (high) and `data2` (low).
-			const std::uint16_t offset = (std::uint16_t) (((std::uint16_t) data[position + 1] << 8)
-														  | (std::uint16_t) data[position + 2]);
+			const uint16_t offset = (uint16_t) (((uint16_t) data[position + 1] << 8)
+														  | (uint16_t) data[position + 2]);
 			command.kind = VgmCommand::Kind::registerWrite;
-			command.port = (std::uint8_t) ((offset >> 8) & 0xFF);
-			command.addr = (std::uint8_t) (offset & 0xFF);
+			command.port = (uint8_t) ((offset >> 8) & 0xFF);
+			command.addr = (uint8_t) (offset & 0xFF);
 			command.data = data[position + 3];
 			command.data2 = data[position + 4];
 		}
@@ -411,10 +411,10 @@ bool VgmCommandReader::next (VgmCommand& command)
 			// K051649 (SCC): the command carries both bytes of one SCC access, and libvgm hands
 			// the chip two writes - the latch at register "a" and the value at "a + 1". Mirroring
 			// that here keeps the decoded notes aligned with what the audio engine plays.
-			const std::uint8_t addrByte = data[position + 1];
+			const uint8_t addrByte = data[position + 1];
 			command.kind = VgmCommand::Kind::registerWritePair;
-			command.port = (std::uint8_t) (addrByte >> 7);
-			command.addr = (std::uint8_t) ((addrByte & 0x7F) << 1);
+			command.port = (uint8_t) (addrByte >> 7);
+			command.addr = (uint8_t) ((addrByte & 0x7F) << 1);
 			command.data = data[position + 2];
 			command.data2 = data[position + 3];
 		}
@@ -432,8 +432,8 @@ bool VgmCommandReader::next (VgmCommand& command)
 			// command does - and leaving it in `addr` made those writes look like register 0x80+,
 			// which the decoder drops because a voice owns only six registers.
 			command.kind = VgmCommand::Kind::registerWrite;
-			command.port = (std::uint8_t) (data[position + 1] >> 7);
-			command.addr = (std::uint8_t) (data[position + 1] & 0x7F);
+			command.port = (uint8_t) (data[position + 1] >> 7);
+			command.addr = (uint8_t) (data[position + 1] & 0x7F);
 			command.data = data[position + 2];
 		}
 		else if (cmd == 0xA0)
@@ -443,8 +443,8 @@ bool VgmCommandReader::next (VgmCommand& command)
 			// a two-chip song look like register 0x84, which the decoder drops - the chip was
 			// audible and produced no notes at all.
 			command.kind = VgmCommand::Kind::registerWrite;
-			command.port = (std::uint8_t) (data[position + 1] >> 7);
-			command.addr = (std::uint8_t) (data[position + 1] & 0x7F);
+			command.port = (uint8_t) (data[position + 1] >> 7);
+			command.addr = (uint8_t) (data[position + 1] & 0x7F);
 			command.data = data[position + 2];
 		}
 		else if (cmd == 0xC7)
@@ -453,10 +453,10 @@ bool VgmCommandReader::next (VgmCommand& command)
 			// with bit 15 selecting the second chip. Reading it little endian turned offset 0x0001 into 0x0100,
 			// which is why an earlier dump put every write on channel 0.
 			command.kind = VgmCommand::Kind::registerWrite;
-			const std::uint16_t offset = (std::uint16_t) (((std::uint16_t) data[position + 1] << 8) | data[position + 2]);
-			command.port = (std::uint8_t) (offset >> 15);
-			command.addr = (std::uint8_t) (offset & 0x7F);
-			command.addr = (std::uint8_t) (offset & 0xFF);
+			const uint16_t offset = (uint16_t) (((uint16_t) data[position + 1] << 8) | data[position + 2]);
+			command.port = (uint8_t) (offset >> 15);
+			command.addr = (uint8_t) (offset & 0x7F);
+			command.addr = (uint8_t) (offset & 0xFF);
 			command.data = data[position + 3];
 		}
 		else if (cmd == 0xB5)
@@ -483,9 +483,9 @@ bool VgmCommandReader::next (VgmCommand& command)
 			// byte. That makes `data` twelve bits wide, which the register file here does not have,
 			// so the high nibble travels in `value2` the way the C352's word does.
 			command.kind = VgmCommand::Kind::registerWrite;
-			command.port = (std::uint8_t) (data[position + 1] >> 4);
+			command.port = (uint8_t) (data[position + 1] >> 4);
 			command.addr = command.port;
-			command.data2 = (std::uint8_t) (data[position + 1] & 0x0F);
+			command.data2 = (uint8_t) (data[position + 1] & 0x0F);
 			command.data = data[position + 2];
 		}
 		else if (cmd == 0xB8)
@@ -493,19 +493,19 @@ bool VgmCommandReader::next (VgmCommand& command)
 			// OKIM6295: bit 7 of the offset byte names the second chip of a pair (`Cmd_OKIM6295_Reg`,
 			// libvgm's `ofs = fData[1] & 0x7F`), so it travels in `port` like the OPN's second port.
 			command.kind = VgmCommand::Kind::registerWrite;
-			command.port = (std::uint8_t) (data[position + 1] >> 7);
-			command.addr = (std::uint8_t) (data[position + 1] & 0x7F);
+			command.port = (uint8_t) (data[position + 1] >> 7);
+			command.addr = (uint8_t) (data[position + 1] & 0x7F);
 			command.data = data[position + 2];
 		}
 		else if (length == 3 && ((cmd >= 0x50 && cmd <= 0x5F) || (cmd >= 0xA0 && cmd <= 0xBF)))
 		{
-			const std::uint8_t addrByte = data[position + 1];
+			const uint8_t addrByte = data[position + 1];
 			command.kind = VgmCommand::Kind::registerWrite;
 			command.data = data[position + 2];
 			if (splitsAddressByte (cmd))
 			{
-				command.port = (std::uint8_t) (addrByte >> 7);
-				command.addr = registerAddress (cmd, (std::uint8_t) (addrByte & 0x7F));
+				command.port = (uint8_t) (addrByte >> 7);
+				command.addr = registerAddress (cmd, (uint8_t) (addrByte & 0x7F));
 			}
 			else
 			{

@@ -18,7 +18,7 @@ namespace
 			clock = chipClock > 0.0 ? chipClock : 3579545.0;
 		}
 
-		int noteFor (std::uint32_t period, int, int* finePitch) const override
+		int noteFor (uint32_t period, int, int* finePitch) const override
 		{
 			const int kc = (int) ((period >> 6) & 0x7F);
 			const int kf = (int) (period & 0x3F);
@@ -66,7 +66,7 @@ OpmDecoder::~OpmDecoder() = default;
 
 void OpmDecoder::reset (const ChipConfig& config)
 {
-	[[maybe_unused]] const std::uint32_t clock = config.clockHz;
+	[[maybe_unused]] const uint32_t clock = config.clockHz;
 	[[maybe_unused]] const double sampleRate = config.timeBaseHz;
 	*impl = Impl();
 	impl->table.setClock ((double) clock);
@@ -74,7 +74,7 @@ void OpmDecoder::reset (const ChipConfig& config)
 
 void OpmDecoder::write (const RegisterWrite& write)
 {
-	const std::uint8_t reg = write.reg;
+	const uint8_t reg = write.reg;
 
 	if (reg == 0x08)
 	{
@@ -98,7 +98,7 @@ void OpmDecoder::write (const RegisterWrite& write)
 	}
 }
 
-void OpmDecoder::advance (std::uint32_t)
+void OpmDecoder::advance (uint32_t)
 {
 	// OPM notes end on the key register, not on a timer.
 }
@@ -119,7 +119,7 @@ ChannelState OpmDecoder::channelState (int channel) const
 	const Impl::Channel& voice = impl->channels[channel];
 	state.present = true;
 	state.gate = voice.keyed && voice.havePitch;
-	state.period = (std::uint32_t) ((voice.kc << 6) | voice.kf);
+	state.period = (uint32_t) ((voice.kc << 6) | voice.kf);
 	state.volume = 15;
 	return state;
 }

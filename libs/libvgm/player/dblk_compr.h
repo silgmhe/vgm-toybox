@@ -11,15 +11,15 @@ extern "C"
 
 typedef struct _pcm_compression_table
 {
-	UINT8 comprType;
-	UINT8 cmpSubType;
-	UINT8 bitsDec;
-	UINT8 bitsCmp;
-	UINT16 valueCount;
+	uint8_t comprType;
+	uint8_t cmpSubType;
+	uint8_t bitsDec;
+	uint8_t bitsCmp;
+	uint16_t valueCount;
 	union
 	{
-		UINT8* d8;
-		UINT16* d16;	// note: stored in Native Endian
+		uint8_t* d8;
+		uint16_t* d16;	// note: stored in Native Endian
 	} values;
 } PCM_COMPR_TBL;
 
@@ -28,19 +28,19 @@ typedef struct _compression_parameters
 	// Compression Types:
 	//	00 - bit packing
 	//	01 - Delta-PCM
-	UINT8 comprType;
-	UINT8 subType;	// compression sub-type
-	UINT8 bitsDec;	// bits per value (decompressed)
-	UINT8 bitsCmp;	// bits per value (compressed)
-	UINT16 baseVal;
+	uint8_t comprType;
+	uint8_t subType;	// compression sub-type
+	uint8_t bitsDec;	// bits per value (decompressed)
+	uint8_t bitsCmp;	// bits per value (compressed)
+	uint16_t baseVal;
 	const PCM_COMPR_TBL* comprTbl;
 } PCM_CMP_INF;
 
 typedef struct _pcm_compr_datablk_info
 {
 	// general data
-	UINT32 hdrSize;		// number of bytes taken by the compression header in the VGM *1
-	UINT32 decmpLen;	// size of decompressed data *2
+	uint32_t hdrSize;		// number of bytes taken by the compression header in the VGM *1
+	uint32_t decmpLen;	// size of decompressed data *2
 	// *1 written by Read/WriteComprDataBlkHdr
 	// *2 set by ReadComprDataBlkHdr, read by WriteComprDataBlkHdr
 	
@@ -50,27 +50,27 @@ typedef struct _pcm_compr_datablk_info
 
 // small functions to help calculating data sizes
 // Bit Packing/DPCM:
-INLINE UINT32 BPACK_SIZE_CMP(UINT32 sizeDec, UINT32 bitsCmp, UINT32 bitsDec)
+INLINE uint32_t BPACK_SIZE_CMP(uint32_t sizeDec, uint32_t bitsCmp, uint32_t bitsDec)
 {
-	UINT32 byteBits = (bitsDec + 7) & ~7;
-	return (UINT32)(((UINT64)sizeDec * bitsCmp + 7) / byteBits);
+	uint32_t byteBits = (bitsDec + 7) & ~7;
+	return (uint32_t)(((uint64_t)sizeDec * bitsCmp + 7) / byteBits);
 }
 
-INLINE UINT32 BPACK_SIZE_DEC(UINT32 sizeCmp, UINT32 bitsCmp, UINT32 bitsDec)
+INLINE uint32_t BPACK_SIZE_DEC(uint32_t sizeCmp, uint32_t bitsCmp, uint32_t bitsDec)
 {
-	UINT32 byteBits = (bitsDec + 7) & ~7;
-	return (UINT32)((UINT64)sizeCmp * byteBits / bitsCmp);
+	uint32_t byteBits = (bitsDec + 7) & ~7;
+	return (uint32_t)((uint64_t)sizeCmp * byteBits / bitsCmp);
 }
 
-UINT8 ReadComprDataBlkHdr(UINT32 inLen, const UINT8* inData, PCM_CDB_INF* retCdbInf);
-UINT8 WriteComprDataBlkHdr(UINT32 outLen, UINT8* outData, PCM_CDB_INF* cdbInf);
-UINT8 DecompressDataBlk(UINT32 outLen, UINT8* outData, UINT32 inLen, const UINT8* inData, const PCM_CMP_INF* cmprInfo);
-UINT8 DecompressDataBlk_VGM(UINT32* outLen, UINT8** retOutData, UINT32 inLen, const UINT8* inData, const PCM_COMPR_TBL* comprTbl);
-UINT8 CompressDataBlk(UINT32 outLen, UINT8* outData, UINT32 inLen, const UINT8* inData, const PCM_CMP_INF* cmprInfo);
-void ReadPCMComprTable(UINT32 dataSize, const UINT8* data, PCM_COMPR_TBL* comprTbl);
-UINT32 WriteCompressionTable(UINT32 dataSize, UINT8* data, PCM_COMPR_TBL* comprTbl);
-void GenerateReverseLUT_8(UINT16 dstLen, UINT8* dstLUT, UINT16 srcLen, const UINT8* srcLUT);
-void GenerateReverseLUT_16(UINT32 dstLen, UINT16* dstLUT, UINT32 srcLen, const UINT16* srcLUT);
+uint8_t ReadComprDataBlkHdr(uint32_t inLen, const uint8_t* inData, PCM_CDB_INF* retCdbInf);
+uint8_t WriteComprDataBlkHdr(uint32_t outLen, uint8_t* outData, PCM_CDB_INF* cdbInf);
+uint8_t DecompressDataBlk(uint32_t outLen, uint8_t* outData, uint32_t inLen, const uint8_t* inData, const PCM_CMP_INF* cmprInfo);
+uint8_t DecompressDataBlk_VGM(uint32_t* outLen, uint8_t** retOutData, uint32_t inLen, const uint8_t* inData, const PCM_COMPR_TBL* comprTbl);
+uint8_t CompressDataBlk(uint32_t outLen, uint8_t* outData, uint32_t inLen, const uint8_t* inData, const PCM_CMP_INF* cmprInfo);
+void ReadPCMComprTable(uint32_t dataSize, const uint8_t* data, PCM_COMPR_TBL* comprTbl);
+uint32_t WriteCompressionTable(uint32_t dataSize, uint8_t* data, PCM_COMPR_TBL* comprTbl);
+void GenerateReverseLUT_8(uint16_t dstLen, uint8_t* dstLUT, uint16_t srcLen, const uint8_t* srcLUT);
+void GenerateReverseLUT_16(uint32_t dstLen, uint16_t* dstLUT, uint32_t srcLen, const uint16_t* srcLUT);
 
 #ifdef __cplusplus
 }

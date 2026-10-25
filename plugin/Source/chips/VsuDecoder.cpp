@@ -15,12 +15,12 @@ namespace
 	constexpr double kDividerRange = 2048.0;
 
 	/** The clock to assume when the VGM header carries none for this chip. */
-	constexpr std::uint32_t kDefaultClock = 5370000;
+	constexpr uint32_t kDefaultClock = 5370000;
 
 	/** The sixth voice is an LFSR noise source, not a wavetable voice. */
 	constexpr int kNoiseChannel = 5;
 
-	double frequencyOf (std::uint32_t clock, std::uint16_t freq)
+	double frequencyOf (uint32_t clock, uint16_t freq)
 	{
 		const double remaining = kDividerRange - (double) (freq & 0x7FF);
 		if (remaining <= 0.0)
@@ -36,7 +36,7 @@ struct VsuDecoder::Impl
 {
 	struct Voice
 	{
-		std::uint16_t freq = 0;			// eleven bits: low byte at 0x2, top three at 0x3
+		uint16_t freq = 0;			// eleven bits: low byte at 0x2, top three at 0x3
 		bool keyed = false;
 		int waveform = 0;
 		int envelope = 0;
@@ -45,11 +45,11 @@ struct VsuDecoder::Impl
 	/** All six voices share one formula, so one table serves them. */
 	struct Table final : NoteTable
 	{
-		std::uint32_t clock = kDefaultClock;
+		uint32_t clock = kDefaultClock;
 
-		int noteFor (std::uint32_t period, int, int* finePitch) const override
+		int noteFor (uint32_t period, int, int* finePitch) const override
 		{
-			const double hz = frequencyOf (clock, (std::uint16_t) period);
+			const double hz = frequencyOf (clock, (uint16_t) period);
 			if (hz <= 0.0 || hz > 4186.0)
 			{
 				// past MIDI's ceiling - a noise-rate divider, reported as a trigger rather than dropped
@@ -74,7 +74,7 @@ VsuDecoder::~VsuDecoder() = default;
 
 void VsuDecoder::reset (const ChipConfig& config)
 {
-	[[maybe_unused]] const std::uint32_t clock = config.clockHz;
+	[[maybe_unused]] const uint32_t clock = config.clockHz;
 	[[maybe_unused]] const double sampleRate = config.timeBaseHz;
 	(void) sampleRate;
 	impl = std::make_unique<Impl>();
@@ -104,10 +104,10 @@ void VsuDecoder::write (const RegisterWrite& write)
 		state.keyed = (write.value & 0x80) != 0;
 		break;
 	case 0x2:		// frequency, low eight bits
-		state.freq = (std::uint16_t) ((state.freq & 0x700) | write.value);
+		state.freq = (uint16_t) ((state.freq & 0x700) | write.value);
 		break;
 	case 0x3:		// frequency, high three bits
-		state.freq = (std::uint16_t) ((state.freq & 0x0FF) | ((write.value & 0x07) << 8));
+		state.freq = (uint16_t) ((state.freq & 0x0FF) | ((write.value & 0x07) << 8));
 		break;
 	case 0x4:		// envelope control - level, not pitch
 		state.envelope = write.value;
@@ -120,7 +120,7 @@ void VsuDecoder::write (const RegisterWrite& write)
 	}
 }
 
-void VsuDecoder::advance (std::uint32_t)
+void VsuDecoder::advance (uint32_t)
 {
 	// every boundary comes from a write; there is no envelope to step
 }

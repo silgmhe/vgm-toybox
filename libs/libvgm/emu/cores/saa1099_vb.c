@@ -35,22 +35,22 @@ typedef struct saa_envelope_generator SAA_ENV_GEN;
 typedef struct saa_channel SAA_CHN;
 typedef struct saa_chip SAA_CHIP;
 
-static UINT8 device_start_saa1099_vb(const DEV_GEN_CFG* cfg, DEV_INFO* retDevInf);
-static void* saa1099v_create(UINT32 clock, UINT32 sampleRate);
+static uint8_t device_start_saa1099_vb(const DEV_GEN_CFG* cfg, DEV_INFO* retDevInf);
+static void* saa1099v_create(uint32_t clock, uint32_t sampleRate);
 static void saa1099v_destroy(void* info);
 static void saa1099v_reset(void* info);
-static void saa1099v_set_mute_mask(void* info, UINT32 MuteMask);
+static void saa1099v_set_mute_mask(void* info, uint32_t MuteMask);
 
-static void saa1099v_write(void* info, UINT8 offset, UINT8 data);
-static void saa_write_addr(void* info, UINT8 data);
-static void saa_write_data(void* info, UINT8 data);
+static void saa1099v_write(void* info, uint8_t offset, uint8_t data);
+static void saa_write_addr(void* info, uint8_t data);
+static void saa_write_data(void* info, uint8_t data);
 
 INLINE void saa_freq_gen_reset(SAA_FREQ_GEN* fgen);
-INLINE void saa_freq_gen_step(SAA_FREQ_GEN* fgen, UINT16 inc);
-static void saa_envgen_load(SAA_CHIP* saa, UINT8 genID);
+INLINE void saa_freq_gen_step(SAA_FREQ_GEN* fgen, uint16_t inc);
+static void saa_envgen_load(SAA_CHIP* saa, uint8_t genID);
 static void saa_envgen_step(SAA_ENV_GEN* saaEGen);
-static void saa_advance(SAA_CHIP* saa, UINT32 steps);
-static void saa1099v_update(void* param, UINT32 samples, DEV_SMPL** outputs);
+static void saa_advance(SAA_CHIP* saa, uint32_t steps);
+static void saa1099v_update(void* param, uint32_t samples, DEV_SMPL** outputs);
 
 
 static DEVDEF_RWFUNC devFunc[] =
@@ -81,47 +81,47 @@ DEV_DEF devDef_SAA1099_VB =
 
 struct saa_frequency_generator
 {
-	INT16 cntr;
-	INT16 limit;
-	UINT8 state;
-	UINT8 trigger;
+	int16_t cntr;
+	int16_t limit;
+	uint8_t state;
+	uint8_t trigger;
 };
 
 struct saa_noise_generator
 {
-	UINT8 mode;
-	UINT32 state;
+	uint8_t mode;
+	uint32_t state;
 	SAA_FREQ_GEN fgen;
 };
 
 struct saa_envelope_generator
 {
-	UINT8 enable;
-	UINT8 reload;
-	UINT8 extClock;
-	UINT8 step;
-	UINT8 wave;
-	UINT8 invert;
+	uint8_t enable;
+	uint8_t reload;
+	uint8_t extClock;
+	uint8_t step;
+	uint8_t wave;
+	uint8_t invert;
 	
-	UINT8 pos;	// position in envelope array
-	UINT8 flags;
-	UINT8 volL;	// envelope volume (left)
-	UINT8 volR;	// envelope volume (right)
+	uint8_t pos;	// position in envelope array
+	uint8_t flags;
+	uint8_t volL;	// envelope volume (left)
+	uint8_t volR;	// envelope volume (right)
 };
 
 struct saa_channel
 {
-	UINT8 volL;
-	UINT8 volR;
-	UINT8 freq;
-	UINT8 oct;
-	UINT8 toneOn;
-	UINT8 noiseOn;
+	uint8_t volL;
+	uint8_t volR;
+	uint8_t freq;
+	uint8_t oct;
+	uint8_t toneOn;
+	uint8_t noiseOn;
 	
 	SAA_FREQ_GEN fgen;
-	UINT8 state;	// tone state
+	uint8_t state;	// tone state
 	
-	UINT8 muted;
+	uint8_t muted;
 };
 
 struct saa_chip
@@ -132,22 +132,22 @@ struct saa_chip
 	SAA_NOISE_GEN noise[2];
 	SAA_ENV_GEN env[2];
 	
-	UINT8 allOn;
-	UINT8 fgReset;	// frequency generator reset
-	UINT8 curAddr;
+	uint8_t allOn;
+	uint8_t fgReset;	// frequency generator reset
+	uint8_t curAddr;
 	
-	UINT8 regs[0x20];
+	uint8_t regs[0x20];
 	
 	DEV_SMPL volTbl[0x10];
 	
 	RATIO_CNTR stepCntr;
-	UINT32 sampleRate;
-	UINT32 clock;
+	uint32_t sampleRate;
+	uint32_t clock;
 };
 
 #define ENV_LOAD	0x80	// load buffered commands after processing this
 #define ENV_STAY	0x40	// stay at this envelope value (don't loop)
-static const UINT8 saa_envelopes[8][32] =
+static const uint8_t saa_envelopes[8][32] =
 {
 	{	// zero amplitude
 	0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0|ENV_LOAD|ENV_STAY,
@@ -183,11 +183,11 @@ static const UINT8 saa_envelopes[8][32] =
 	}
 };
 
-static UINT8 device_start_saa1099_vb(const DEV_GEN_CFG* cfg, DEV_INFO* retDevInf)
+static uint8_t device_start_saa1099_vb(const DEV_GEN_CFG* cfg, DEV_INFO* retDevInf)
 {
 	void* chip;
 	DEV_DATA* devData;
-	UINT32 rate;
+	uint32_t rate;
 	
 	rate = cfg->clock / 128;
 	SRATE_CUSTOM_HIGHEST(cfg->srMode, rate, cfg->smplRate);
@@ -202,10 +202,10 @@ static UINT8 device_start_saa1099_vb(const DEV_GEN_CFG* cfg, DEV_INFO* retDevInf
 	return 0x00;
 }
 
-static void* saa1099v_create(UINT32 clock, UINT32 sampleRate)
+static void* saa1099v_create(uint32_t clock, uint32_t sampleRate)
 {
 	SAA_CHIP* saa;
-	UINT8 curVol;
+	uint8_t curVol;
 	
 	saa = (SAA_CHIP*)calloc(1, sizeof(SAA_CHIP));
 	if (saa == NULL)
@@ -236,7 +236,7 @@ static void saa1099v_reset(void* info)
 {
 	SAA_CHIP* saa = (SAA_CHIP*)info;
 	SAA_CHN* saaCh;
-	UINT8 curChn;
+	uint8_t curChn;
 	
 	RC_RESET(&saa->stepCntr);
 	
@@ -273,10 +273,10 @@ static void saa1099v_reset(void* info)
 	return;
 }
 
-static void saa1099v_set_mute_mask(void* info, UINT32 MuteMask)
+static void saa1099v_set_mute_mask(void* info, uint32_t MuteMask)
 {
 	SAA_CHIP* saa = (SAA_CHIP*)info;
-	UINT8 curChn;
+	uint8_t curChn;
 	
 	for (curChn = 0; curChn < 6; curChn ++)
 		saa->channels[curChn].muted = (MuteMask >> curChn) & 0x01;
@@ -284,7 +284,7 @@ static void saa1099v_set_mute_mask(void* info, UINT32 MuteMask)
 	return;
 }
 
-static void saa1099v_write(void* info, UINT8 offset, UINT8 data)
+static void saa1099v_write(void* info, uint8_t offset, uint8_t data)
 {
 	if (offset & 0x01)
 		saa_write_addr(info, data);
@@ -292,7 +292,7 @@ static void saa1099v_write(void* info, UINT8 offset, UINT8 data)
 		saa_write_data(info, data);
 }
 
-static void saa_write_addr(void* info, UINT8 data)
+static void saa_write_addr(void* info, uint8_t data)
 {
 	SAA_CHIP* saa = (SAA_CHIP*)info;
 	
@@ -312,11 +312,11 @@ static void saa_write_addr(void* info, UINT8 data)
 	return;
 }
 
-static void saa_write_data(void* info, UINT8 data)
+static void saa_write_data(void* info, uint8_t data)
 {
 	SAA_CHIP* saa = (SAA_CHIP*)info;
-	UINT8 curChn;
-	UINT8 prevState;
+	uint8_t curChn;
+	uint8_t prevState;
 	
 	saa->regs[saa->curAddr] = data;
 	switch(saa->curAddr)
@@ -419,7 +419,7 @@ INLINE void saa_freq_gen_reset(SAA_FREQ_GEN* fgen)
 	return;
 }
 
-INLINE void saa_freq_gen_step(SAA_FREQ_GEN* fgen, UINT16 inc)
+INLINE void saa_freq_gen_step(SAA_FREQ_GEN* fgen, uint16_t inc)
 {
 	fgen->cntr -= inc;
 	fgen->trigger = (fgen->cntr < 0x000);	// trigger on underflow
@@ -433,12 +433,12 @@ INLINE void saa_freq_gen_step(SAA_FREQ_GEN* fgen, UINT16 inc)
 }
 
 #define FREQGEN_FALL_EDGE(fgen)	( (fgen).trigger && ! (fgen).state )
-static void saa_advance(SAA_CHIP* saa, UINT32 steps)
+static void saa_advance(SAA_CHIP* saa, uint32_t steps)
 {
 	SAA_CHN* saaCh;
 	SAA_NOISE_GEN* saaNGen;
 	SAA_ENV_GEN* saaEGen;
-	UINT8 curChn;
+	uint8_t curChn;
 	
 	for (; steps > 0; steps --)
 	{
@@ -458,7 +458,7 @@ static void saa_advance(SAA_CHIP* saa, UINT32 steps)
 		// run noise generators, process noise channels
 		for (curChn = 0; curChn < 2; curChn ++)
 		{
-			UINT16 inc;
+			uint16_t inc;
 			
 			saaNGen = &saa->noise[curChn];
 			saaCh = &saa->channels[curChn * 3 + 0];
@@ -499,10 +499,10 @@ static void saa_advance(SAA_CHIP* saa, UINT32 steps)
 	return;
 }
 
-static void saa_envgen_load(SAA_CHIP* saa, UINT8 genID)
+static void saa_envgen_load(SAA_CHIP* saa, uint8_t genID)
 {
 	SAA_ENV_GEN* saaEGen = &saa->env[genID];
-	UINT8 data = saa->regs[0x18 | genID];
+	uint8_t data = saa->regs[0x18 | genID];
 	
 	saaEGen->extClock = (data >> 5) & 0x01;
 	saaEGen->wave = (data >> 1) & 0x07;
@@ -521,7 +521,7 @@ static void saa_envgen_load(SAA_CHIP* saa, UINT8 genID)
 
 static void saa_envgen_step(SAA_ENV_GEN* saaEGen)
 {
-	UINT8 wdata;
+	uint8_t wdata;
 	
 	if (! saaEGen->enable)
 		return;
@@ -552,14 +552,14 @@ static void saa_envgen_step(SAA_ENV_GEN* saaEGen)
 	return;
 }
 
-static void saa1099v_update(void* param, UINT32 samples, DEV_SMPL** outputs)
+static void saa1099v_update(void* param, uint32_t samples, DEV_SMPL** outputs)
 {
 	SAA_CHIP* saa = (SAA_CHIP*)param;
 	SAA_CHN* saaCh;
-	UINT32 curSmpl;
-	UINT8 curChn;
-	UINT8 neChn;	// noise/envelope channel
-	UINT8 noDCremove;
+	uint32_t curSmpl;
+	uint8_t curChn;
+	uint8_t neChn;	// noise/envelope channel
+	uint8_t noDCremove;
 	DEV_SMPL outState;
 	DEV_SMPL outVolL;
 	DEV_SMPL outVolR;

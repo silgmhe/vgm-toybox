@@ -13,7 +13,7 @@ extern "C"
 typedef struct _waveform_32bit_stereo WAVE_32BS;
 typedef struct _resampling_state RESMPL_STATE;
 
-typedef void (*RESAMPLER_FUNC)(RESMPL_STATE* CAA, UINT32 length, WAVE_32BS* retSample);
+typedef void (*RESAMPLER_FUNC)(RESMPL_STATE* CAA, uint32_t length, WAVE_32BS* retSample);
 
 struct _waveform_32bit_stereo
 {
@@ -26,20 +26,20 @@ struct _waveform_32bit_stereo
 #define RSMODE_LUP_NDWN	0x02	// nearest-neighbour downsampling, interpolation upsampling
 struct _resampling_state
 {
-	UINT32 smpRateSrc;
-	UINT32 smpRateDst;
-	INT16 volumeL;
-	INT16 volumeR;
-	UINT8 resampleMode;	// see RSMODE_ constants
+	uint32_t smpRateSrc;
+	uint32_t smpRateDst;
+	int16_t volumeL;
+	int16_t volumeR;
+	uint8_t resampleMode;	// see RSMODE_ constants
 	RESAMPLER_FUNC resampler;
 	DEVFUNC_UPDATE StreamUpdate;
 	void* su_DataPtr;
-	UINT32 smpP;		// Current Sample (Playback Rate)
-	UINT32 smpLast;		// Sample Number Last
-	UINT32 smpNext;		// Sample Number Next
+	uint32_t smpP;		// Current Sample (Playback Rate)
+	uint32_t smpLast;		// Sample Number Last
+	uint32_t smpNext;		// Sample Number Next
 	WAVE_32BS lSmpl;	// Last Sample
 	WAVE_32BS nSmpl;	// Next Sample
-	UINT32 smplBufSize;
+	uint32_t smplBufSize;
 	DEV_SMPL* smplBufs[2];
 };
 
@@ -59,7 +59,7 @@ void Resmpl_DevConnect(RESMPL_STATE* CAA, const DEV_INFO* devInf);
  * @param volume volume gain applied during resampling process, 8.8 fixed point, 0x100 equals 100%
  * @param destSampleRate sample rate of the output stream
  */
-void Resmpl_SetVals(RESMPL_STATE* CAA, UINT8 resampleMode, UINT16 volume, UINT32 destSampleRate);
+void Resmpl_SetVals(RESMPL_STATE* CAA, uint8_t resampleMode, uint16_t volume, uint32_t destSampleRate);
 
 // ---- resampler main functions ----
 /**
@@ -79,7 +79,7 @@ void Resmpl_Deinit(RESMPL_STATE* CAA);
  *
  * @param CAA resampler whose input sample rate is changed
  */
-void Resmpl_ChangeRate(void* DataPtr, UINT32 newSmplRate);
+void Resmpl_ChangeRate(void* DataPtr, uint32_t newSmplRate);
 /**
  * @brief Request and resample input data in order to render samples into the output buffer.
  *
@@ -87,7 +87,7 @@ void Resmpl_ChangeRate(void* DataPtr, UINT32 newSmplRate);
  * @param samples number of output samples to be rendered
  * @param smplBuffer buffer for output data
  */
-void Resmpl_Execute(RESMPL_STATE* CAA, UINT32 samples, WAVE_32BS* smplBuffer);
+void Resmpl_Execute(RESMPL_STATE* CAA, uint32_t samples, WAVE_32BS* smplBuffer);
 
 #ifdef __cplusplus
 }

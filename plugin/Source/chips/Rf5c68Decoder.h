@@ -72,11 +72,11 @@ public:
 
 	void reset (const ChipConfig& config) override;
 	void write (const RegisterWrite& write) override;
-	void advance (std::uint32_t sampleTime) override;
+	void advance (uint32_t sampleTime) override;
 
 	/** The chip's 64 KB of sample RAM - the song's PCM bank assembled in order. Without it the pitch
 		path has nothing to measure, so every voice stays the C4 trigger. Kept across `reset()`. */
-	void setRam (std::vector<std::uint8_t> ram);
+	void setRam (std::vector<uint8_t> ram);
 
 	int channelCount() const override { return channelCount_; }
 	ChannelState channelState (int channel) const override;

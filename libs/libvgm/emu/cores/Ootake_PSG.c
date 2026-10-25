@@ -88,11 +88,9 @@ DEV_DEF devDef_C6280_Ootake =
 };
 
 
-typedef UINT8	Uint8;
-typedef INT16	Sint16;
-typedef INT32	Sint32;
-typedef UINT32	Uint32;
-typedef UINT8	BOOL;
+// These were uint8_t/int16_t/int32_t/uint32_t, the aliases stdtype.h no longer defines. BOOL stays: it is
+// this core's boolean, paired with TRUE and FALSE below, not another name for a width.
+typedef uint8_t	BOOL;
 #define TRUE	1
 #define	FALSE	0
 
@@ -153,7 +151,7 @@ typedef UINT8	BOOL;
 
 	  float から出力形式に変換するのはＡＰＵの仕事とする。
 
-	[2004.4.28] やっぱり Sint32 で実装することにした(微小な値は無視する)。
+	[2004.4.28] やっぱり int32_t で実装することにした(微小な値は無視する)。
 
 	  ＣＰＵとＰＳＧは同じＩＣにパッケージしてあるのだが、
 	実際にはＰＳＧはＣＰＵの１／２のクロックで動作すると考えて良いようだ。
@@ -239,22 +237,22 @@ typedef UINT8	BOOL;
 
 typedef struct
 {
-	Uint32		frq;
+	uint32_t		frq;
 	BOOL		bOn;
 	BOOL		bDDA;
-	Uint32		volume;
-	Uint32		volumeL;
-	Uint32		volumeR;
-	Sint32		outVolumeL;
-	Sint32		outVolumeR;
-	Sint32		wave[32];
-	Uint32		waveIndex;
-	Sint32		ddaSample;
-	Uint32		phase;
-	Uint32		deltaPhase;
+	uint32_t		volume;
+	uint32_t		volumeL;
+	uint32_t		volumeR;
+	int32_t		outVolumeL;
+	int32_t		outVolumeR;
+	int32_t		wave[32];
+	uint32_t		waveIndex;
+	int32_t		ddaSample;
+	uint32_t		phase;
+	uint32_t		deltaPhase;
 	BOOL		bNoiseOn;
-	Uint32		noiseFrq;
-	Uint32		deltaNoisePhase;
+	uint32_t		noiseFrq;
+	uint32_t		deltaNoisePhase;
 } PSG;
 
 typedef struct
@@ -266,29 +264,29 @@ typedef struct
 	double RESMPL_RATE;
 
 	PSG			Psg[8];				// 6, 7 is unused
-	Sint32		DdaFadeOutL[8]; //Kitao追加
-	Sint32		DdaFadeOutR[8]; //Kitao追加
-	Uint32		Channel;				// 0 - 5;
-	Uint32		MainVolumeL;			// 0 - 15
-	Uint32		MainVolumeR;			// 0 - 15
-	Uint32		LfoFrq;
+	int32_t		DdaFadeOutL[8]; //Kitao追加
+	int32_t		DdaFadeOutR[8]; //Kitao追加
+	uint32_t		Channel;				// 0 - 5;
+	uint32_t		MainVolumeL;			// 0 - 15
+	uint32_t		MainVolumeR;			// 0 - 15
+	uint32_t		LfoFrq;
 	BOOL		bLfoOn; //v1.59から非使用。過去verのステートロードのために残してある。
-	Uint32		LfoCtrl;
-	Uint32		LfoShift; //v1.59から非使用。過去verのステートロードのために残してある。
-	Sint32		PsgVolumeEffect;	// = 0;//Kitao追加
+	uint32_t		LfoCtrl;
+	uint32_t		LfoShift; //v1.59から非使用。過去verのステートロードのために残してある。
+	int32_t		PsgVolumeEffect;	// = 0;//Kitao追加
 	double		Volume;	// = 0;//Kitao追加
 	double		VOL;	// = 0.0;//Kitao追加。v1.08
 	BOOL		bPsgMute[8];//Kitao追加。v1.29
 	BOOL		bWaveReset[8]; //v2.81追加
 
-	Uint8		Port[16];				// for debug purpose
+	uint8_t		Port[16];				// for debug purpose
 
 	BOOL		bHoneyInTheSky; //はにいいんざすかいパッチ用。v2.60
 } huc6280_state;
 
 static BOOL			_bTblInit = FALSE;
-static Sint32		_VolumeTable[92];
-static Sint32		_NoiseTable[32768];
+static int32_t		_VolumeTable[92];
+static int32_t		_NoiseTable[32768];
 
 //Kitao更新。v1.10。キュー処理をここに統合して高速化。
 /*
@@ -327,13 +325,13 @@ static Sint32		_NoiseTable[32768];
 
 typedef struct		//Kitao更新。clockは非使用とした。v1.61からステートセーブのサイズを減らすために変数上からもカット。
 {
-	Uint8			reg;					// 0-15
-	Uint8			data;					// written data
+	uint8_t			reg;					// 0-15
+	uint8_t			data;					// written data
 } ApuQueue;
 
 static ApuQueue				_Queue[APUQUEUE_SIZE];
-static Uint32				_QueueWriteIndex;
-static Uint32				_QueueReadIndex;
+static uint32_t				_QueueWriteIndex;
+static uint32_t				_QueueReadIndex;
 #endif
 
 
@@ -350,7 +348,7 @@ create_volume_table()
 	for (i = 1; i <= 91; i++)
 	{
 		v = 91 - i;
-		_VolumeTable[i] = (Sint32)(32768.0 * pow(10.0, v * VOL_TABLE_DECLINE / 20.0)); //VOL_TABLE_DECLINE。小さくしすぎると音が平面的な傾向に。ソルジャーブレイドで調整。v1.46。
+		_VolumeTable[i] = (int32_t)(32768.0 * pow(10.0, v * VOL_TABLE_DECLINE / 20.0)); //VOL_TABLE_DECLINE。小さくしすぎると音が平面的な傾向に。ソルジャーブレイドで調整。v1.46。
 	}
 }
 
@@ -359,11 +357,11 @@ create_volume_table()
 static void
 create_noise_table()
 {
-	Sint32	i;
-	Uint32	bit0;
-	Uint32	bit1;
-	Uint32	bit14;
-	Uint32	reg = 0x100;
+	int32_t	i;
+	uint32_t	bit0;
+	uint32_t	bit1;
+	uint32_t	bit14;
+	uint32_t	reg = 0x100;
 
 	for (i = 0; i < 32768; i++)
 	{
@@ -385,11 +383,11 @@ create_noise_table()
 INLINE void
 write_reg(
 	huc6280_state* info,
-	Uint8		reg,
-	Uint8		data)
+	uint8_t		reg,
+	uint8_t		data)
 {
-	Uint32	i;
-	Uint32	frq;//Kitao追加
+	uint32_t	i;
+	uint32_t	frq;//Kitao追加
 	PSG*	PSGChn;
 
 	info->Port[reg & 15] = data;
@@ -426,7 +424,7 @@ write_reg(
 			//Kitao更新。update_frequencyは、速度アップのためサブルーチンにせず直接実行するようにした。
 			frq = (PSGChn->frq - 1) & 0xFFF;
 			if (frq)
-				PSGChn->deltaPhase = (Uint32)((double)(65536.0 * 256.0 * 8.0 * info->RESMPL_RATE) / (double)frq +0.5); //Kitao更新。速度アップのためfrq以外は定数計算にした。精度向上のため、先に値の小さいOVERSAMPLE_RATEのほうで割るようにした。+0.5は四捨五入で精度アップ。プチノイズ軽減のため。
+				PSGChn->deltaPhase = (uint32_t)((double)(65536.0 * 256.0 * 8.0 * info->RESMPL_RATE) / (double)frq +0.5); //Kitao更新。速度アップのためfrq以外は定数計算にした。精度向上のため、先に値の小さいOVERSAMPLE_RATEのほうで割るようにした。+0.5は四捨五入で精度アップ。プチノイズ軽減のため。
 			else
 				PSGChn->deltaPhase = 0;
 			break;
@@ -438,7 +436,7 @@ write_reg(
 			//Kitao更新。update_frequencyは、速度アップのためサブルーチンにせず直接実行するようにした。
 			frq = (PSGChn->frq - 1) & 0xFFF;
 			if (frq)
-				PSGChn->deltaPhase = (Uint32)((double)(65536.0 * 256.0 * 8.0 * info->RESMPL_RATE) / (double)frq +0.5); //Kitao更新。速度アップのためfrq以外は定数計算にした。精度向上のため、先に値の小さいOVERSAMPLE_RATEのほうで割るようにした。+0.5は四捨五入で精度アップ。プチノイズ軽減のため。
+				PSGChn->deltaPhase = (uint32_t)((double)(65536.0 * 256.0 * 8.0 * info->RESMPL_RATE) / (double)frq +0.5); //Kitao更新。速度アップのためfrq以外は定数計算にした。精度向上のため、先に値の小さいOVERSAMPLE_RATEのほうで割るようにした。+0.5は四捨五入で精度アップ。プチノイズ軽減のため。
 			else
 				PSGChn->deltaPhase = 0;
 			break;
@@ -462,9 +460,9 @@ write_reg(
 			if ((PSGChn->bDDA)&&((data & 0x40)==0)) //DDAからWAVEへ切り替わるとき or DDAから消音するとき
 			{
 				//Kitao追加。DDAはいきなり消音すると目立つノイズが載るのでフェードアウトする。
-				info->DdaFadeOutL[info->Channel] = (Sint32)((double)(PSGChn->ddaSample * PSGChn->outVolumeL) *
+				info->DdaFadeOutL[info->Channel] = (int32_t)((double)(PSGChn->ddaSample * PSGChn->outVolumeL) *
 															((1 + (1 >> 3) + (1 >> 4) + (1 >> 5) + (1 >> 7) + (1 >> 12) + (1 >> 14) + (1 >> 15)) * SAMPLE_FADE_DECLINE)); //元の音量。v2.65更新
-				info->DdaFadeOutR[info->Channel] = (Sint32)((double)(PSGChn->ddaSample * PSGChn->outVolumeR) *
+				info->DdaFadeOutR[info->Channel] = (int32_t)((double)(PSGChn->ddaSample * PSGChn->outVolumeR) *
 															((1 + (1 >> 3) + (1 >> 4) + (1 >> 5) + (1 >> 7) + (1 >> 12) + (1 >> 14) + (1 >> 15)) * SAMPLE_FADE_DECLINE));
 			}
 			PSGChn->bDDA = ((data & 0x40) != 0);
@@ -536,7 +534,7 @@ write_reg(
 			else
 			{
 				// reload waveform while playing - fixes games from the "Fire Pro Wrestling" series -Valley Bell
-				Uint32 waveIndex = PSGChn->phase >> 27;
+				uint32_t waveIndex = PSGChn->phase >> 27;
 				PSGChn->wave[waveIndex] = 17 - data;
 			}
 
@@ -556,9 +554,9 @@ write_reg(
 				PSGChn->bNoiseOn = ((data & 0x80) != 0);
 				PSGChn->noiseFrq = 0x1F - (data & 0x1F);
 				if (PSGChn->noiseFrq == 0)
-					PSGChn->deltaNoisePhase = (Uint32)((double)(2048.0 * info->RESMPL_RATE) +0.5); //Kitao更新
+					PSGChn->deltaNoisePhase = (uint32_t)((double)(2048.0 * info->RESMPL_RATE) +0.5); //Kitao更新
 				else
-					PSGChn->deltaNoisePhase = (Uint32)((double)(2048.0 * info->RESMPL_RATE) / (double)PSGChn->noiseFrq +0.5); //Kitao更新
+					PSGChn->deltaNoisePhase = (uint32_t)((double)(2048.0 * info->RESMPL_RATE) / (double)PSGChn->noiseFrq +0.5); //Kitao更新
 			}
 			break;
 
@@ -608,17 +606,17 @@ set_VOL(huc6280_state* info)
 INLINE void
 inc_phase(
 	huc6280_state* info,
-	Sint32		i)
+	int32_t		i)
 {
-	Sint32		lfo;
+	int32_t		lfo;
 
 	if ((i==0)&&(info->LfoCtrl>0))
 	{
 		//_LfoCtrlが1のときに0回シフト(そのまま)で、はにいいんざすかいが実機の音に近い。
 		//_LfoCtrlが3のときに4回シフトで、フラッシュハイダースが実機の音に近い。
 		lfo = info->Psg[1].wave[info->Psg[1].phase >> 27] << ((info->LfoCtrl-1) << 1); //v1.60更新
-		info->Psg[0].phase += (Uint32)((double)(65536.0 * 256.0 * 8.0 * info->RESMPL_RATE) / (double)(info->Psg[0].frq + lfo) +0.5);
-		info->Psg[1].phase += (Uint32)((double)(65536.0 * 256.0 * 8.0 * info->RESMPL_RATE) / (double)(info->Psg[1].frq * info->LfoFrq) +0.5); //v1.60更新
+		info->Psg[0].phase += (uint32_t)((double)(65536.0 * 256.0 * 8.0 * info->RESMPL_RATE) / (double)(info->Psg[0].frq + lfo) +0.5);
+		info->Psg[1].phase += (uint32_t)((double)(65536.0 * 256.0 * 8.0 * info->RESMPL_RATE) / (double)(info->Psg[1].frq * info->LfoFrq) +0.5); //v1.60更新
 	}
 	else
 		info->Psg[i].phase += info->Psg[i].deltaPhase;
@@ -631,17 +629,17 @@ inc_phase(
 static void
 OPSG_Mix(
 	void*		chip,
-	UINT32		nSample,	// 書き出すサンプル数
-	DEV_SMPL**	pDst)		// 出力先バッファ //Kitao更新。PSG専用バッファにしたためSint16に。
+	uint32_t		nSample,	// 書き出すサンプル数
+	DEV_SMPL**	pDst)		// 出力先バッファ //Kitao更新。PSG専用バッファにしたためint16_tに。
 {
 	huc6280_state* info = (huc6280_state*)chip;
 	PSG*		PSGChn;
-	Sint32		i;
-	Uint32		j;
-	Sint32		sample; //Kitao追加
-	Sint32		sampleAllL; //Kitao追加。6chぶんのサンプルを足していくためのバッファ。精度を維持するために必要。6chぶん合計が終わった後に、これをSint16に変換して書き込むようにした。
-	Sint32		sampleAllR; //Kitao追加。上のＲチャンネル用
-	Sint32		smp; //Kitao追加。DDA音量,ノイズ音量計算用
+	int32_t		i;
+	uint32_t		j;
+	int32_t		sample; //Kitao追加
+	int32_t		sampleAllL; //Kitao追加。6chぶんのサンプルを足していくためのバッファ。精度を維持するために必要。6chぶん合計が終わった後に、これをint16_tに変換して書き込むようにした。
+	int32_t		sampleAllR; //Kitao追加。上のＲチャンネル用
+	int32_t		smp; //Kitao追加。DDA音量,ノイズ音量計算用
 	DEV_SMPL*	bufL = pDst[0];
 	DEV_SMPL*	bufR = pDst[1];
 
@@ -658,10 +656,10 @@ OPSG_Mix(
 				if (PSGChn->bDDA)
 				{
 					smp = PSGChn->ddaSample * PSGChn->outVolumeL;
-					//smp = PSGChn->ddaSample * PSGChn->outVolumeL * (Sint32)OVERSAMPLE_RATE; //オーバーサンプリング用
+					//smp = PSGChn->ddaSample * PSGChn->outVolumeL * (int32_t)OVERSAMPLE_RATE; //オーバーサンプリング用
 					sampleAllL += smp + (smp >> 3) + (smp >> 4) + (smp >> 5) + (smp >> 7) + (smp >> 12) + (smp >> 14) + (smp >> 15); //Kitao更新。サンプリング音の音量を実機並みに調整。v2.39,v2.40,v2.62,v2.65再調整した。
 					smp = PSGChn->ddaSample * PSGChn->outVolumeR;
-					//smp = PSGChn->ddaSample * PSGChn->outVolumeR * (Sint32)OVERSAMPLE_RATE; //オーバーサンプリング用
+					//smp = PSGChn->ddaSample * PSGChn->outVolumeR * (int32_t)OVERSAMPLE_RATE; //オーバーサンプリング用
 					sampleAllR += smp + (smp >> 3) + (smp >> 4) + (smp >> 5) + (smp >> 7) + (smp >> 12) + (smp >> 14) + (smp >> 15); //Kitao更新。サンプリング音の音量を実機並みに調整。v2.39,v2.40,v2.62,v2.65再調整した。
 				}
 				else if (PSGChn->bNoiseOn)
@@ -771,11 +769,11 @@ psg_reset(huc6280_state* info)
 }
 
 
-static UINT8 device_start_c6280_ootake(const DEV_GEN_CFG* cfg, DEV_INFO* retDevInf)
+static uint8_t device_start_c6280_ootake(const DEV_GEN_CFG* cfg, DEV_INFO* retDevInf)
 {
 	void* chip;
 	DEV_DATA* devData;
-	UINT32 rate;
+	uint32_t rate;
 	
 	rate = cfg->clock / 16;
 	SRATE_CUSTOM_HIGHEST(cfg->srMode, rate, cfg->smplRate);
@@ -799,8 +797,8 @@ static UINT8 device_start_c6280_ootake(const DEV_GEN_CFG* cfg, DEV_INFO* retDevI
 -----------------------------------------------------------------------------*/
 static void*
 OPSG_Init(
-	UINT32		clock,
-	UINT32		sampleRate)
+	uint32_t		clock,
+	uint32_t		sampleRate)
 {
 	huc6280_state* info;
 	
@@ -852,15 +850,15 @@ OPSG_Deinit(void* chip)
 	[Read]
 		ＰＳＧポートの読み出しに対する動作を記述します。
 -----------------------------------------------------------------------------*/
-static UINT8
+static uint8_t
 OPSG_Read(
 	void*	chip,
-	UINT8	regNum)
+	uint8_t	regNum)
 {
 	huc6280_state* info = (huc6280_state*)chip;
 	
 	if (regNum == 0)
-		return (UINT8)info->Channel;
+		return (uint8_t)info->Channel;
 
 	return info->Port[regNum & 15];
 }
@@ -873,8 +871,8 @@ OPSG_Read(
 static void
 OPSG_Write(
 	void*		chip,
-	UINT8		regNum,
-	UINT8		data)
+	uint8_t		regNum,
+	uint8_t		data)
 {
 	huc6280_state* info = (huc6280_state*)chip;
 	
@@ -886,7 +884,7 @@ OPSG_Write(
 		//PRINTF("PSG Queue Over!"); // キューが満タン
 		return;
 	}
-	_Queue[_QueueWriteIndex].reg   = (Uint8)(regNum & 15);
+	_Queue[_QueueWriteIndex].reg   = (uint8_t)(regNum & 15);
 	_Queue[_QueueWriteIndex].data  = data;
 	_QueueWriteIndex++; //Kitao更新
 	_QueueWriteIndex &= APUQUEUE_SIZE-1; //Kitao更新
@@ -920,8 +918,8 @@ OPSG_ResetVolumeReg(void* chip)
 static void
 OPSG_SetMutePsgChannel(
 	void*	chip,
-	UINT8	num,
-	UINT8	bMute)
+	uint8_t	num,
+	uint8_t	bMute)
 {
 	huc6280_state* info = (huc6280_state*)chip;
 	
@@ -933,9 +931,9 @@ OPSG_SetMutePsgChannel(
 	}
 }
 
-static void OPSG_SetMuteMask(void* chip, UINT32 MuteMask)
+static void OPSG_SetMuteMask(void* chip, uint32_t MuteMask)
 {
-	Uint8 CurChn;
+	uint8_t CurChn;
 	
 	for (CurChn = 0; CurChn < N_CHANNEL; CurChn ++)
 		OPSG_SetMutePsgChannel(chip, CurChn, (MuteMask >> CurChn) & 0x01);
@@ -944,10 +942,10 @@ static void OPSG_SetMuteMask(void* chip, UINT32 MuteMask)
 }
 
 //Kitao追加
-static UINT8
+static uint8_t
 OPSG_GetMutePsgChannel(
 	void*	chip,
-	UINT8	num)
+	uint8_t	num)
 {
 	huc6280_state* info = (huc6280_state*)chip;
 	
@@ -958,7 +956,7 @@ OPSG_GetMutePsgChannel(
 static void
 OPSG_SetHoneyInTheSky(
 	void*	chip,
-	UINT8	bHoneyInTheSky)
+	uint8_t	bHoneyInTheSky)
 {
 	huc6280_state* info = (huc6280_state*)chip;
 	

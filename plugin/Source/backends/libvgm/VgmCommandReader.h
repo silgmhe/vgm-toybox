@@ -32,14 +32,14 @@ struct VgmCommand
 	};
 
 	Kind kind = Kind::ignored;
-	std::uint8_t command = 0;		// the raw VGM command byte
-	std::uint8_t port = 0;			// 0 / 1 - the second chip of a pair (bit 7 of the address byte);
+	uint8_t command = 0;		// the raw VGM command byte
+	uint8_t port = 0;			// 0 / 1 - the second chip of a pair (bit 7 of the address byte);
 									// for 0xC8 (X1-010) it carries the high byte of the 16-bit offset
-	std::uint8_t addr = 0;			// register / index byte
-	std::uint8_t data = 0;			// value byte
-	std::uint8_t data2 = 0;			// second value byte of a pair write; for 0xE1 (C352) the
+	uint8_t addr = 0;			// register / index byte
+	uint8_t data = 0;			// value byte
+	uint8_t data2 = 0;			// second value byte of a pair write; for 0xE1 (C352) the
 									// low byte of the 16-bit value, `data` being the high one
-	std::uint32_t sampleTime = 0;	// absolute position of the command, in 44100 Hz samples
+	uint32_t sampleTime = 0;	// absolute position of the command, in 44100 Hz samples
 };
 
 /** One 0x67 data block, still where it sits in the image.
@@ -51,13 +51,13 @@ struct VgmCommand
 	rate divided by the sample's own cycle length, and that length is only in these bytes. */
 struct VgmDataBlock
 {
-	std::uint8_t type = 0;			// the block's type byte, the ROM flag (0x80) included
-	std::uint32_t romSize = 0;		// bytes of the ROM the block belongs to (ROM blocks only)
-	std::uint32_t romOffset = 0;	// where in that ROM the payload belongs (ROM blocks only)
-	std::uint32_t ramOffset = 0;	// ...and where in the chip's RAM (0xC0-0xFF blocks, which
+	uint8_t type = 0;			// the block's type byte, the ROM flag (0x80) included
+	uint32_t romSize = 0;		// bytes of the ROM the block belongs to (ROM blocks only)
+	uint32_t romOffset = 0;	// where in that ROM the payload belongs (ROM blocks only)
+	uint32_t ramOffset = 0;	// ...and where in the chip's RAM (0xC0-0xFF blocks, which
 									// libvgm's `_VGM_RAM_CHIPS` table names: 16-bit address below
 									// 0xE0, 32-bit from 0xE0)
-	const std::uint8_t* data = nullptr;
+	const uint8_t* data = nullptr;
 	std::size_t size = 0;			// payload bytes, the ROM header and the RAM address not counted
 };
 
@@ -77,7 +77,7 @@ public:
 	/** The clock after everything read so far, in 44100 Hz samples. A whole stream read through
 		ends on the header's total, which is the length the engine plays - so a difference here is
 		a difference between MIDI time and audio time. */
-	std::uint32_t timeSamples (void) const { return sampleTime; }
+	uint32_t timeSamples (void) const { return sampleTime; }
 
 	/** Every 0x67 block the stream read so far, in stream order. The bytes stay in the image, so
 		this is cheap; a caller that needs a chip's ROM assembles it from the blocks it recognises. */
@@ -90,32 +90,32 @@ public:
 		reaches that far (VGM 1.61 and later); an older file has a command there, so the answer
 		is the format's default, 0x00 (Namco System 2), rather than whatever byte happens to sit
 		at that offset. */
-	std::uint8_t c140Banking (void) const { return c140BankingType; }
+	uint8_t c140Banking (void) const { return c140BankingType; }
 
 private:
 	/** One 0x67 data block that belongs to the YM2612 PCM bank. The bytes stay where they are in
 		the image; the bank is the blocks in the order they were read, which is what 0x8n consumes. */
 	struct BankSegment
 	{
-		const std::uint8_t* data = nullptr;
+		const uint8_t* data = nullptr;
 		std::size_t size = 0;
 	};
 
 	bool readHeader (void);
 
 	/** Hands out the next byte of the PCM bank, or false once the bank is used up. */
-	bool readBankByte (std::uint8_t& value);
+	bool readBankByte (uint8_t& value);
 
-	const std::uint8_t* data = nullptr;
+	const uint8_t* data = nullptr;
 	std::size_t size = 0;
 	std::size_t position = 0;
 	std::size_t end = 0;
-	std::uint32_t sampleTime = 0;
+	uint32_t sampleTime = 0;
 
 	std::vector<BankSegment> pcmBank;
 	std::size_t bankPosition = 0;
 	std::vector<VgmDataBlock> blocks;
-	std::uint8_t c140BankingType = 0x00;		// System 2, the format's default
+	uint8_t c140BankingType = 0x00;		// System 2, the format's default
 
 	// 0x8n is one byte that stands for two commands; the second one waits here until the caller
 	// asks for it, so a stream that ends right after a 0x8n still reports its wait.

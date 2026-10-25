@@ -10,38 +10,38 @@ extern "C"
 
 typedef struct _audio_options
 {
-	UINT32 sampleRate;
-	UINT8 numChannels;
-	UINT8 numBitsPerSmpl;
+	uint32_t sampleRate;
+	uint8_t numChannels;
+	uint8_t numBitsPerSmpl;
 	
-	UINT32 usecPerBuf;
-	UINT32 numBuffers;
+	uint32_t usecPerBuf;
+	uint32_t numBuffers;
 } AUDIO_OPTS;
 
 typedef struct _audio_device_list
 {
-	UINT32 devCount;
+	uint32_t devCount;
 	char** devNames;
 } AUDIO_DEV_LIST;
 
 
-typedef UINT32 (*AUDFUNC_FILLBUF)(void* drvStruct, void* userParam, UINT32 bufSize, void* data);
+typedef uint32_t (*AUDFUNC_FILLBUF)(void* drvStruct, void* userParam, uint32_t bufSize, void* data);
 
-typedef UINT8 (*AUDFUNC_COMMON)(void);
+typedef uint8_t (*AUDFUNC_COMMON)(void);
 typedef const AUDIO_DEV_LIST* (*AUDFUNC_DEVLIST)(void);
 typedef AUDIO_OPTS* (*AUDFUNC_DEFOPTS)(void);
-typedef UINT8 (*AUDFUNC_DRVCOMMON)(void* drvObj);
-typedef UINT8 (*AUDFUNC_DRVCREATE)(void** retDrvObj);
-typedef UINT8 (*AUDFUNC_DRVSTART)(void* drvObj, UINT32 deviceID, AUDIO_OPTS* options, void* audDrvParam);
-typedef UINT32 (*AUDFUNC_DRVRET32)(void* drvObj);
-typedef UINT8 (*AUDFUNC_DRVSETCB)(void* drvObj, AUDFUNC_FILLBUF FillBufCallback, void* userParam);
-typedef UINT8 (*AUDFUNC_DRVWRTDATA)(void* drvObj, UINT32 dataSize, void* data);
+typedef uint8_t (*AUDFUNC_DRVCOMMON)(void* drvObj);
+typedef uint8_t (*AUDFUNC_DRVCREATE)(void** retDrvObj);
+typedef uint8_t (*AUDFUNC_DRVSTART)(void* drvObj, uint32_t deviceID, AUDIO_OPTS* options, void* audDrvParam);
+typedef uint32_t (*AUDFUNC_DRVRET32)(void* drvObj);
+typedef uint8_t (*AUDFUNC_DRVSETCB)(void* drvObj, AUDFUNC_FILLBUF FillBufCallback, void* userParam);
+typedef uint8_t (*AUDFUNC_DRVWRTDATA)(void* drvObj, uint32_t dataSize, void* data);
 
 
 typedef struct _audio_driver_info
 {
-	UINT8 drvType;
-	UINT8 drvSig;
+	uint8_t drvType;
+	uint8_t drvSig;
 	const char* drvName;
 } AUDDRV_INFO;
 typedef struct _audio_driver

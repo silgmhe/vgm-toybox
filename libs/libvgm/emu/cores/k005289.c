@@ -62,27 +62,27 @@ typedef struct _k005289_state {
     DEV_DATA _devData;
     
     struct {
-        UINT16 pitch;
-        UINT16 freq;
-        UINT8 volume;
-        UINT8 waveform;
-        INT16 counter;
-        UINT8 addr;
+        uint16_t pitch;
+        uint16_t freq;
+        uint8_t volume;
+        uint8_t waveform;
+        int16_t counter;
+        uint8_t addr;
     } voice[2];
     
-    UINT8 prom[PROM_SIZE]; // Internal PROM storage
-    UINT32 clock;
-    UINT32 rate;
-    UINT8 mute_mask;
+    uint8_t prom[PROM_SIZE]; // Internal PROM storage
+    uint32_t clock;
+    uint32_t rate;
+    uint8_t mute_mask;
 } k005289_state;
 
-static void k005289_update(void* param, UINT32 samples, DEV_SMPL** outputs);
-static UINT8 device_start_k005289(const DEV_GEN_CFG* cfg, DEV_INFO* retDevInf);
+static void k005289_update(void* param, uint32_t samples, DEV_SMPL** outputs);
+static uint8_t device_start_k005289(const DEV_GEN_CFG* cfg, DEV_INFO* retDevInf);
 static void device_stop_k005289(void* chip);
 static void device_reset_k005289(void* chip);
-static void k005289_set_mute_mask(void* chip, UINT32 mute_mask);
-static void k005289_write(void* chip, UINT8 address, UINT16 data);
-static void k005289_write_prom(void *info, UINT32 offset, UINT32 length, const UINT8* data);
+static void k005289_set_mute_mask(void* chip, uint32_t mute_mask);
+static void k005289_write(void* chip, uint8_t address, uint16_t data);
+static void k005289_write_prom(void *info, uint32_t offset, uint32_t length, const uint8_t* data);
 
 // Add PROM write handler
 static DEVDEF_RWFUNC devFunc[] = {
@@ -114,7 +114,7 @@ static const char* DeviceName(const DEV_GEN_CFG* devCfg)
 	return "K005289";
 }
 
-static UINT16 DeviceChannels(const DEV_GEN_CFG* devCfg)
+static uint16_t DeviceChannels(const DEV_GEN_CFG* devCfg)
 {
 	return 2;
 }
@@ -143,7 +143,7 @@ const DEV_DECL sndDev_K005289 =
 };
 
 // Device start with internal PROM
-static UINT8 device_start_k005289(const DEV_GEN_CFG* cfg, DEV_INFO* retDevInf) {
+static uint8_t device_start_k005289(const DEV_GEN_CFG* cfg, DEV_INFO* retDevInf) {
     k005289_state* info = calloc(1, sizeof(k005289_state));
     if (!info) return 0xFF;
     
@@ -171,19 +171,19 @@ static void device_reset_k005289(void* chip) {
 }
 
 // Modified update function using internal PROM
-static void k005289_update(void* param, UINT32 samples, DEV_SMPL** outputs) {
+static void k005289_update(void* param, uint32_t samples, DEV_SMPL** outputs) {
     k005289_state* info = (k005289_state*)param;
     DEV_SMPL* buffer = outputs[0];
     DEV_SMPL* buffer2 = outputs[1];
-    UINT32 i;
+    uint32_t i;
     
     for (i = 0; i < samples; i++) {
-        INT32 mix = 0;
+        int32_t mix = 0;
         int ch;
         
         for (ch = 0; ch < 2; ch++) {
-            UINT16 prom_addr;
-            INT8 sample;
+            uint16_t prom_addr;
+            int8_t sample;
             
             if (info->mute_mask & (1 << ch)) continue;
             
@@ -205,7 +205,7 @@ static void k005289_update(void* param, UINT32 samples, DEV_SMPL** outputs) {
 }
 
 // Write handlers
-static void k005289_write(void* chip, UINT8 address, UINT16 data) {
+static void k005289_write(void* chip, uint8_t address, uint16_t data) {
     k005289_state* info = (k005289_state*)chip;
     int ch = address & 1; // Channel select
 
@@ -233,12 +233,12 @@ static void k005289_write(void* chip, UINT8 address, UINT16 data) {
 }
 
 // Mute mask
-static void k005289_set_mute_mask(void* chip, UINT32 mute_mask) {
+static void k005289_set_mute_mask(void* chip, uint32_t mute_mask) {
     k005289_state* info = (k005289_state*)chip;
     info->mute_mask = mute_mask & 0x03;
 }
 
-static void k005289_write_prom(void *info, UINT32 offset, UINT32 length, const UINT8* data)
+static void k005289_write_prom(void *info, uint32_t offset, uint32_t length, const uint8_t* data)
 {
     k005289_state *chip = (k005289_state *)info;
     

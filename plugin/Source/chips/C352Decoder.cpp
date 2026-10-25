@@ -14,7 +14,7 @@ namespace
 {
 	// System 22 / System 23 boards run the C352 at 12.288 MHz (42.67 kHz at clock / 288); the
 	// header clock is used whenever it is there.
-	constexpr std::uint32_t kDefaultClock = 12288000;
+	constexpr uint32_t kDefaultClock = 12288000;
 
 	// c352.c: the voice counter is 16.16 and gains `frequency` every output sample, and the output
 	// runs at `clock / 288`. Dividing by 288 * 65536 turns the register and the clock into bytes a
@@ -30,15 +30,15 @@ namespace
 	// fixed number, and it is an argument of quantisePlaybackRate() so the settings can override it.
 	constexpr double kRootRateDivisor = 576.0;
 
-	constexpr std::uint16_t kFlagKeyOn = 0x4000;
-	constexpr std::uint16_t kFlagKeyOff = 0x2000;
-	constexpr std::uint16_t kFlagLoop = 0x0002;
-	constexpr std::uint16_t kFlagMuLaw = 0x0008;
-	constexpr std::uint16_t kFlagNoise = 0x0010;
+	constexpr uint16_t kFlagKeyOn = 0x4000;
+	constexpr uint16_t kFlagKeyOff = 0x2000;
+	constexpr uint16_t kFlagLoop = 0x0002;
+	constexpr uint16_t kFlagMuLaw = 0x0008;
+	constexpr uint16_t kFlagNoise = 0x0010;
 
 	// the flags a sample's measurement depends on: mu-law bytes are decoded first, and the loop bit
 	// decides which part of the sample is analysed
-	constexpr std::uint16_t kMeasurementFlags = (std::uint16_t) (kFlagLoop | kFlagMuLaw | kFlagNoise);
+	constexpr uint16_t kMeasurementFlags = (uint16_t) (kFlagLoop | kFlagMuLaw | kFlagNoise);
 
 	/** The longest loop that is taken to be one cycle of a wavetable when the correlation finds no
 		period in it.
@@ -56,14 +56,14 @@ namespace
 		addressed as a power-of-two buffer, so an address past the end wraps instead of reading
 		elsewhere. Measured addresses are masked the same way, or a sample that wraps would be
 		measured on bytes the chip never plays. */
-	std::uint32_t pow2Mask (std::size_t size)
+	uint32_t pow2Mask (std::size_t size)
 	{
 		if (size == 0)
 		{
 			return 0;
 		}
 
-		std::uint32_t mask = (std::uint32_t) (size - 1);
+		uint32_t mask = (uint32_t) (size - 1);
 		mask |= mask >> 1;
 		mask |= mask >> 2;
 		mask |= mask >> 4;
@@ -75,37 +75,37 @@ namespace
 	/** c352.c's mu-law decode table (`device_start_c352`): an 8-bit mu-law byte is a sign and a
 		logarithmic magnitude, so it is decoded before being correlated - the period would survive
 		either way, but the measurement's peak is cleaner on the linear values. */
-	void buildMuLawTable (std::int16_t* table)
+	void buildMuLawTable (int16_t* table)
 	{
-		std::int16_t level = 0;
+		int16_t level = 0;
 		for (int i = 0; i < 128; ++i)
 		{
-			table[i] = (std::int16_t) (level << 5);
+			table[i] = (int16_t) (level << 5);
 			if (i < 16)
 			{
-				level = (std::int16_t) (level + 1);
+				level = (int16_t) (level + 1);
 			}
 			else if (i < 24)
 			{
-				level = (std::int16_t) (level + 2);
+				level = (int16_t) (level + 2);
 			}
 			else if (i < 48)
 			{
-				level = (std::int16_t) (level + 4);
+				level = (int16_t) (level + 4);
 			}
 			else if (i < 100)
 			{
-				level = (std::int16_t) (level + 8);
+				level = (int16_t) (level + 8);
 			}
 			else
 			{
-				level = (std::int16_t) (level + 16);
+				level = (int16_t) (level + 16);
 			}
 		}
 
 		for (int i = 128; i < 256; ++i)
 		{
-			table[i] = (std::int16_t) ((~table[i - 128]) & ~0x1F);
+			table[i] = (int16_t) ((~table[i - 128]) & ~0x1F);
 		}
 	}
 
@@ -123,7 +123,7 @@ namespace
 		/** L1 only: the transposition the rate register asks for against the chip's reference rate.
 			The sample's own root is `rootCentsFromCycle()` beside it (design doc section 14), applied
 			by the user's setting rather than baked into the mapping. */
-		int noteFor (std::uint32_t period, int, int* finePitch) const override
+		int noteFor (uint32_t period, int, int* finePitch) const override
 		{
 			return quantisePlaybackRate ((double) period * bytesPerSecondPerStep, rootRate, finePitch);
 		}
@@ -139,11 +139,11 @@ namespace
 		"no period" rather than being retried on every key-on. */
 	struct SampleKey
 	{
-		std::uint16_t bank;
-		std::uint16_t start;
-		std::uint16_t end;
-		std::uint16_t loop;
-		std::uint16_t flags;		// only kMeasurementFlags
+		uint16_t bank;
+		uint16_t start;
+		uint16_t end;
+		uint16_t loop;
+		uint16_t flags;		// only kMeasurementFlags
 
 		bool operator< (const SampleKey& other) const
 		{
@@ -157,29 +157,29 @@ struct C352Decoder::Impl
 {
 	struct Voice
 	{
-		std::uint16_t volumeFront = 0;	// +0: high byte left, low byte right
-		std::uint16_t volumeRear = 0;	// +1: the same for the rear pair
-		std::uint16_t frequency = 0;	// +2
-		std::uint16_t flags = 0;		// +3
-		std::uint16_t bank = 0;			// +4
-		std::uint16_t start = 0;		// +5
-		std::uint16_t end = 0;			// +6
-		std::uint16_t loop = 0;			// +7
+		uint16_t volumeFront = 0;	// +0: high byte left, low byte right
+		uint16_t volumeRear = 0;	// +1: the same for the rear pair
+		uint16_t frequency = 0;	// +2
+		uint16_t flags = 0;		// +3
+		uint16_t bank = 0;			// +4
+		uint16_t start = 0;		// +5
+		uint16_t end = 0;			// +6
+		uint16_t loop = 0;			// +7
 
 		// latched at the execute write, where the core copies the start address into the pointer
 		bool keyed = false;
-		std::uint32_t keyOns = 0;		// monotonic: a retrigger at the same pitch is a new note
-		std::uint32_t gateEnd = 0;		// when a non-looping sample reaches its end
+		uint32_t keyOns = 0;		// monotonic: a retrigger at the same pitch is a new note
+		uint32_t gateEnd = 0;		// when a non-looping sample reaches its end
 		double cycleLength = 0.0;		// the latched sample's own period; 0 = use the root rate
 	};
 
 	Voice voices[numChannels];
-	std::uint32_t now = 0;
+	uint32_t now = 0;
 	double clock = (double) kDefaultClock;
 	double streamRate = 44100.0;
-	std::vector<std::uint8_t> rom;			// the song's 0x92 blocks, one byte per address
-	std::uint32_t romMask = 0;				// the power-of-two window the core addresses inside
-	std::int16_t muLaw[256] = {};
+	std::vector<uint8_t> rom;			// the song's 0x92 blocks, one byte per address
+	uint32_t romMask = 0;				// the power-of-two window the core addresses inside
+	int16_t muLaw[256] = {};
 	std::map<SampleKey, double> cycleCache;
 	std::vector<std::unique_ptr<C352NoteTable>> tables;
 
@@ -196,7 +196,7 @@ struct C352Decoder::Impl
 		16.16 counter over, so no byte is ever fetched and the voice is silence; an end at or
 		below the start is not a sample the format's drivers write, and treating it as silence is
 		better than inventing a length from a wrapped pointer. */
-	std::uint32_t durationOf (const Voice& voice) const
+	uint32_t durationOf (const Voice& voice) const
 	{
 		if (loops (voice) || voice.end <= voice.start || voice.frequency == 0)
 		{
@@ -207,7 +207,7 @@ struct C352Decoder::Impl
 		// (c352.c, C352_fetch_sample), so both ends of the region are part of it
 		const double bytesPerSecond = (double) voice.frequency * clock / kClockDivisor;
 		const double samples = (double) (voice.end - voice.start + 1) / bytesPerSecond * streamRate;
-		return (std::uint32_t) std::llround (std::min (samples, 1.0e9));
+		return (uint32_t) std::llround (std::min (samples, 1.0e9));
 	}
 
 	/** The cycle length of the sample the voice is about to play, measured once per sample.
@@ -229,7 +229,7 @@ struct C352Decoder::Impl
 		}
 
 		const SampleKey key { voice.bank, voice.start, voice.end, voice.loop,
-							  (std::uint16_t) (voice.flags & kMeasurementFlags) };
+							  (uint16_t) (voice.flags & kMeasurementFlags) };
 		const auto cached = cycleCache.find (key);
 		if (cached != cycleCache.end())
 		{
@@ -239,15 +239,15 @@ struct C352Decoder::Impl
 		// `wave_end` is played - the core fetches the byte and only then checks for the end - so the
 		// region and the loop run to it inclusively. One byte matters: a sixteen-byte wavetable
 		// cycle is a semitone away from a fifteen-byte one.
-		const std::uint32_t address = ((std::uint32_t) voice.bank << 16) | voice.start;
+		const uint32_t address = ((uint32_t) voice.bank << 16) | voice.start;
 		const std::size_t size = (std::size_t) (voice.end - voice.start) + 1;
 		std::vector<double> waveform (size);
 		for (std::size_t i = 0; i < size; ++i)
 		{
-			const std::uint32_t index = (address + (std::uint32_t) i) & romMask;
-			const std::uint8_t byte = (index < rom.size()) ? rom[index] : 0;
+			const uint32_t index = (address + (uint32_t) i) & romMask;
+			const uint8_t byte = (index < rom.size()) ? rom[index] : 0;
 			waveform[i] = (voice.flags & kFlagMuLaw) != 0 ? (double) muLaw[byte]
-														 : (double) (std::int8_t) byte;
+														 : (double) (int8_t) byte;
 		}
 
 		std::size_t loopOffset = 0;
@@ -272,20 +272,20 @@ struct C352Decoder::Impl
 		changes state, which is why both edges are read from the flag register here and not from the
 		write that set the flag. The request bit is cleared afterwards, the way the core clears it:
 		a second execute write with no new flag write must do nothing. */
-	void execute (std::uint32_t sampleTime)
+	void execute (uint32_t sampleTime)
 	{
 		for (auto& voice : voices)
 		{
 			if ((voice.flags & kFlagKeyOn) != 0)
 			{
-				voice.flags = (std::uint16_t) (voice.flags & ~kFlagKeyOn);
+				voice.flags = (uint16_t) (voice.flags & ~kFlagKeyOn);
 				voice.keyed = true;
 				voice.gateEnd = sampleTime + durationOf (voice);
 				voice.cycleLength = cycleFor (voice);
 			}
 			else if ((voice.flags & kFlagKeyOff) != 0)
 			{
-				voice.flags = (std::uint16_t) (voice.flags & ~kFlagKeyOff);
+				voice.flags = (uint16_t) (voice.flags & ~kFlagKeyOff);
 				voice.keyed = false;
 				voice.gateEnd = 0;
 			}
@@ -328,12 +328,12 @@ C352Decoder::~C352Decoder() = default;
 
 void C352Decoder::reset (const ChipConfig& config)
 {
-	[[maybe_unused]] const std::uint32_t clock = config.clockHz;
+	[[maybe_unused]] const uint32_t clock = config.clockHz;
 	[[maybe_unused]] const double sampleRate = config.timeBaseHz;
 	// the ROM belongs to the song, not to the clock: a reset only changes the rate the chip runs
 	// at, so it is carried over instead of being dropped with the voices
-	std::vector<std::uint8_t> rom = impl != nullptr ? std::move (impl->rom) : std::vector<std::uint8_t>();
-	const std::uint32_t romMask = impl != nullptr ? impl->romMask : 0u;
+	std::vector<uint8_t> rom = impl != nullptr ? std::move (impl->rom) : std::vector<uint8_t>();
+	const uint32_t romMask = impl != nullptr ? impl->romMask : 0u;
 
 	impl = std::make_unique<Impl>();
 	impl->clock = (clock > 100000) ? (double) clock : (double) kDefaultClock;
@@ -348,7 +348,7 @@ void C352Decoder::reset (const ChipConfig& config)
 	}
 }
 
-void C352Decoder::setRom (std::vector<std::uint8_t> rom)
+void C352Decoder::setRom (std::vector<uint8_t> rom)
 {
 	impl->romMask = pow2Mask (rom.size());
 	impl->rom = std::move (rom);
@@ -359,8 +359,8 @@ void C352Decoder::write (const RegisterWrite& w)
 {
 	// the VGM command carries a 16-bit offset and a 16-bit value, both big-endian; the reader puts
 	// the reader packs the value's two big-endian halves into one word (ChipTypes.h)
-	const std::uint16_t offset = (std::uint16_t) (((std::uint16_t) (w.port & 0x7F) << 8) | w.reg);
-	const std::uint16_t value = w.value;
+	const uint16_t offset = (uint16_t) (((uint16_t) (w.port & 0x7F) << 8) | w.reg);
+	const uint16_t value = w.value;
 
 	if (offset >= 0x100)
 	{
@@ -407,7 +407,7 @@ void C352Decoder::write (const RegisterWrite& w)
 	}
 }
 
-void C352Decoder::advance (std::uint32_t sampleTime)
+void C352Decoder::advance (uint32_t sampleTime)
 {
 	impl->now = sampleTime;
 

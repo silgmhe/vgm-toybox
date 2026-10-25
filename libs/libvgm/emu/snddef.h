@@ -4,7 +4,7 @@
 #include "../stdtype.h"
 
 // DEV_SMPL is used to represent a single sample in a sound stream
-typedef INT32 DEV_SMPL;
+typedef int32_t DEV_SMPL;
 
 // generic device data structure
 // MUST be the first variable included in all device-specifc structures

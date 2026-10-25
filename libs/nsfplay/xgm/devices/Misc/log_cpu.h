@@ -18,29 +18,29 @@ public:
 
     // IDevice virtuals
     virtual void Reset ();
-    virtual bool Write (UINT32 adr, UINT32 val, UINT32 id=0);
-    virtual bool Read (UINT32 adr, UINT32 & val, UINT32 id=0);
+    virtual bool Write (uint32_t adr, uint32_t val, uint32_t id=0);
+    virtual bool Read (uint32_t adr, uint32_t & val, uint32_t id=0);
     virtual void SetOption (int id, int val);
 
     // CPULogger specific
     int GetLogLevel () const;
-    void SetSoundchip (UINT8 soundchip_);
+    void SetSoundchip (uint8_t soundchip_);
     void SetFilename (const char * filename_);
     void Begin (const char* title);
-    void Init (UINT8 reg_a, UINT8 reg_x);
+    void Init (uint8_t reg_a, uint8_t reg_x);
     void Play ();
     void SetCPU (NES_CPU* c);
     void SetNSF (NSF* n);
 
 protected:
     int log_level;
-    UINT8 soundchip;
+    uint8_t soundchip;
     FILE* file;
     char* filename;
-    UINT32 frame_count;
+    uint32_t frame_count;
 	NES_CPU* cpu;
     NSF* nsf;
-    UINT8 bank[8];
+    uint8_t bank[8];
 };
 
 }

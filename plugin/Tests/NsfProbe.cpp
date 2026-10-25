@@ -140,7 +140,7 @@ int main (int argc, char** argv)
 		// Same forced chip as --chips: the corpus declares no expansion, and the point of this
 		// mode is to exercise the export path.
 		auto forced = file;
-		forced.chipFlags |= (std::uint8_t) toybox::formats::nsf::NsfChip::n163;
+		forced.chipFlags |= (uint8_t) toybox::formats::nsf::NsfChip::n163;
 
 		toybox::backends::nsf::NsfPlayer player (forced, 44100.0);
 		player.start ();
@@ -186,7 +186,7 @@ int main (int argc, char** argv)
 
 		if (forced.chip () == toybox::formats::nsf::NsfChip::none)
 		{
-			forced.chipFlags |= (std::uint8_t) toybox::formats::nsf::NsfChip::n163;
+			forced.chipFlags |= (uint8_t) toybox::formats::nsf::NsfChip::n163;
 		}
 
 		toybox::backends::nsf::NsfPlayer player (forced, 44100.0);
@@ -280,7 +280,7 @@ int main (int argc, char** argv)
 
 	{
 		const auto& hist = player.pcHistogram ();
-		std::vector<std::pair<std::uint32_t, int>> top;
+		std::vector<std::pair<uint32_t, int>> top;
 
 		for (int page = 0; page < 256; ++page)
 		{

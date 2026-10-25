@@ -6,7 +6,7 @@ namespace toybox::chips
 {
 namespace
 {
-	constexpr std::uint32_t kDefaultClock = 1789773;
+	constexpr uint32_t kDefaultClock = 1789773;
 
 	/** A tone channel toggles every 8 clocks per divider step and needs two steps per wave, so
 		the frequency is clock / (16 * period). */
@@ -15,7 +15,7 @@ namespace
 	public:
 		explicit AyToneTable (double clock) : clock (clock) {}
 
-		int noteFor (std::uint32_t period, int, int* finePitch) const override
+		int noteFor (uint32_t period, int, int* finePitch) const override
 		{
 			if (period == 0)
 			{
@@ -32,7 +32,7 @@ namespace
 
 struct Ay8910Decoder::Impl
 {
-	std::uint8_t regs[16] = {};
+	uint8_t regs[16] = {};
 	double clock = (double) kDefaultClock;
 	std::unique_ptr<AyToneTable> table;
 };
@@ -46,7 +46,7 @@ Ay8910Decoder::~Ay8910Decoder() = default;
 
 void Ay8910Decoder::reset (const ChipConfig& config)
 {
-	[[maybe_unused]] const std::uint32_t clock = config.clockHz;
+	[[maybe_unused]] const uint32_t clock = config.clockHz;
 	[[maybe_unused]] const double sampleRate = config.timeBaseHz;
 	(void) sampleRate;		// no timers: the registers are the whole state
 
@@ -64,7 +64,7 @@ void Ay8910Decoder::write (const RegisterWrite& w)
 	}
 }
 
-void Ay8910Decoder::advance (std::uint32_t sampleTime)
+void Ay8910Decoder::advance (uint32_t sampleTime)
 {
 	(void) sampleTime;		// no timers
 }
@@ -78,13 +78,13 @@ ChannelState Ay8910Decoder::channelState (int channel) const
 		return state;
 	}
 
-	const std::uint8_t amplitude = impl->regs[0x08 + channel];
+	const uint8_t amplitude = impl->regs[0x08 + channel];
 	const bool toneEnabled = (impl->regs[0x07] & (1 << channel)) == 0;
 	const bool envelope = (amplitude & 0x10) != 0;
 
 	state.present = true;
-	state.period = (std::uint32_t) impl->regs[channel * 2]
-				   | ((std::uint32_t) (impl->regs[channel * 2 + 1] & 0x0F) << 8);
+	state.period = (uint32_t) impl->regs[channel * 2]
+				   | ((uint32_t) (impl->regs[channel * 2 + 1] & 0x0F) << 8);
 	state.volume = envelope ? 15 : (amplitude & 0x0F);
 	state.gate = toneEnabled && (envelope || state.volume > 0);
 

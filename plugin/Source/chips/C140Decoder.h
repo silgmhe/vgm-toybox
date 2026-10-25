@@ -102,7 +102,7 @@ public:
 
 	void reset (const ChipConfig& config) override;
 	void write (const RegisterWrite& write) override;
-	void advance (std::uint32_t sampleTime) override;
+	void advance (uint32_t sampleTime) override;
 
 	/** Which board's address arithmetic turns a voice's bank and address into a ROM offset.
 
@@ -117,7 +117,7 @@ public:
 
 		The values are libvgm's (`c140.h`); the ASIC 219 (0x02) is a different chip that libvgm
 		plays through `DEVID_C219`, so this decoder never sees it. */
-	enum class Banking : std::uint8_t
+	enum class Banking : uint8_t
 	{
 		system2 = 0x00,
 		system21 = 0x01,
@@ -127,7 +127,7 @@ public:
 	/** The banking a VGM header's byte 0x96 names: 0x01 and 0x03 are their own mappings, and
 		every other value - 0x00, the ASIC 219's 0x02, a byte that is not a header field at all -
 		gets System 2, which is what libvgm's own default does. */
-	static Banking bankingFromHeaderByte (std::uint8_t headerByte);
+	static Banking bankingFromHeaderByte (uint8_t headerByte);
 
 	/** Hands the chip's sample ROM to the decoder - the song's 0x8D data blocks assembled at
 		their own offsets, one byte per address - together with the banking that turns a voice's
@@ -145,7 +145,7 @@ public:
 
 		The ROM and the banking survive a `reset()`: only the clock and the stream rate change
 		there, and both belong to the song rather than to the run. */
-	void setRom (std::vector<std::uint8_t> rom, Banking banking = Banking::system2);
+	void setRom (std::vector<uint8_t> rom, Banking banking = Banking::system2);
 
 	int channelCount() const override { return channelCount_; }
 	ChannelState channelState (int channel) const override;

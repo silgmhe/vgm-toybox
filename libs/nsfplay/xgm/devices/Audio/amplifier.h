@@ -29,13 +29,13 @@ namespace xgm
       target = p;
     }
 
-    void Tick (UINT32 clocks)
+    void Tick (uint32_t clocks)
     {
       assert (target);
       target->Tick(clocks);
     }
 
-    UINT32 Render (INT32 b[2])
+    uint32_t Render (int32_t b[2])
     {
       assert (target);
       if (mute)

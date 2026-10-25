@@ -12,12 +12,12 @@ namespace
 	constexpr int kChannels = 4;
 
 	/** The Lynx runs MIKEY from the 16 MHz system clock. */
-	constexpr std::uint32_t kDefaultClock = 16000000;
+	constexpr uint32_t kDefaultClock = 16000000;
 
 	/** `2^(shift + 4)` master clocks per timer tick - mikey.c:355. */
 	constexpr int kTicksShift = 4;
 
-	double frequencyOf (std::uint32_t clock, int backup, int shift)
+	double frequencyOf (uint32_t clock, int backup, int shift)
 	{
 		const double ticks = std::pow (2.0, (double) (shift + kTicksShift));
 		const double divisor = 2.0 * (double) (backup + 1) * ticks;
@@ -38,9 +38,9 @@ struct MikeyDecoder::Impl
 
 	struct Table final : NoteTable
 	{
-		std::uint32_t clock = kDefaultClock;
+		uint32_t clock = kDefaultClock;
 
-		int noteFor (std::uint32_t period, int, int* finePitch) const override
+		int noteFor (uint32_t period, int, int* finePitch) const override
 		{
 			const int backup = (int) (period & 0xFF);
 			const int shift = (int) ((period >> 8) & 0x07);
@@ -70,7 +70,7 @@ MikeyDecoder::~MikeyDecoder() = default;
 
 void MikeyDecoder::reset (const ChipConfig& config)
 {
-	[[maybe_unused]] const std::uint32_t clock = config.clockHz;
+	[[maybe_unused]] const uint32_t clock = config.clockHz;
 	[[maybe_unused]] const double sampleRate = config.timeBaseHz;
 	impl = std::make_unique<Impl>();
 	impl->table.clock = clock > 0 ? clock : kDefaultClock;
@@ -111,7 +111,7 @@ void MikeyDecoder::write (const RegisterWrite& write)
 	}
 }
 
-void MikeyDecoder::advance (std::uint32_t)
+void MikeyDecoder::advance (uint32_t)
 {
 }
 
@@ -127,7 +127,7 @@ ChannelState MikeyDecoder::channelState (int channel) const
 	state.present = true;
 	state.gate = voice.volume > 0 && voice.backup > 0;
 	state.volume = state.gate ? (voice.volume > 15 ? 15 : voice.volume) : 0;
-	state.period = (std::uint32_t) ((voice.shift << 8) | (voice.backup & 0xFF));
+	state.period = (uint32_t) ((voice.shift << 8) | (voice.backup & 0xFF));
 
 	if (! state.gate)
 	{

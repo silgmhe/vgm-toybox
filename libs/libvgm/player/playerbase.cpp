@@ -20,7 +20,7 @@ PlayerBase::~PlayerBase()
 {
 }
 
-UINT32 PlayerBase::GetPlayerType(void) const
+uint32_t PlayerBase::GetPlayerType(void) const
 {
 	return 0x00000000;
 }
@@ -30,17 +30,17 @@ const char* PlayerBase::GetPlayerName(void) const
 	return "";
 }
 
-/*static*/ UINT8 PlayerBase::PlayerCanLoadFile(DATA_LOADER *dataLoader)
+/*static*/ uint8_t PlayerBase::PlayerCanLoadFile(DATA_LOADER *dataLoader)
 {
 	return 0xFF;
 }
 
-UINT8 PlayerBase::CanLoadFile(DATA_LOADER *dataLoader) const
+uint8_t PlayerBase::CanLoadFile(DATA_LOADER *dataLoader) const
 {
 	return this->PlayerCanLoadFile(dataLoader);
 }
 
-/*static*/ UINT8 PlayerBase::InitDeviceOptions(PLR_DEV_OPTS& devOpts)
+/*static*/ uint8_t PlayerBase::InitDeviceOptions(PLR_DEV_OPTS& devOpts)
 {
 	devOpts.emuCore[0] = 0x00;
 	devOpts.emuCore[1] = 0x00;
@@ -55,12 +55,12 @@ UINT8 PlayerBase::CanLoadFile(DATA_LOADER *dataLoader) const
 	return 0x00;
 }
 
-UINT32 PlayerBase::GetSampleRate(void) const
+uint32_t PlayerBase::GetSampleRate(void) const
 {
 	return _outSmplRate;
 }
 
-UINT8 PlayerBase::SetSampleRate(UINT32 sampleRate)
+uint8_t PlayerBase::SetSampleRate(uint32_t sampleRate)
 {
 	_outSmplRate = sampleRate;
 	return 0x00;
@@ -71,12 +71,12 @@ double PlayerBase::GetPlaybackSpeed(void) const
 	return -1;	// not implemented
 }
 
-UINT8 PlayerBase::SetPlaybackSpeed(double speed)
+uint8_t PlayerBase::SetPlaybackSpeed(double speed)
 {
 	return 0xFF;	// not implemented
 }
 
-void PlayerBase::SetUserDevices(const DEV_DECL** userDevList, UINT8 devStartOpts)
+void PlayerBase::SetUserDevices(const DEV_DECL** userDevList, uint8_t devStartOpts)
 {
 	_userDevList = userDevList;
 	_devStartOpts = devStartOpts;
@@ -108,16 +108,16 @@ void PlayerBase::SetLogCallback(PLAYER_LOG_CB cbFunc, void* cbParam)
 	return;
 }
 
-double PlayerBase::Sample2Second(UINT32 samples) const
+double PlayerBase::Sample2Second(uint32_t samples) const
 {
-	if (samples == (UINT32)-1)
+	if (samples == (uint32_t)-1)
 		return -1.0;
 	return samples / (double)_outSmplRate;
 }
 
-UINT32 PlayerBase::GetTotalPlayTicks(UINT32 numLoops) const
+uint32_t PlayerBase::GetTotalPlayTicks(uint32_t numLoops) const
 {
 	if (numLoops == 0 && GetLoopTicks() > 0)
-		return (UINT32)-1;
+		return (uint32_t)-1;
 	return GetTotalTicks() + GetLoopTicks() * (numLoops - 1);
 }

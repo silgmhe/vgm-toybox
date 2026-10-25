@@ -9,15 +9,15 @@ namespace toybox::chips
 {
 namespace
 {
-	constexpr std::uint32_t kDefaultClock = 3072000;	// the WonderSwan's 3.072 MHz crystal
+	constexpr uint32_t kDefaultClock = 3072000;	// the WonderSwan's 3.072 MHz crystal
 
 	// The period field is 11 bits wide, so the two cases without a divider - the noise generator
 	// and the voice stream - are flagged in the bits above it, as on the HuC6280.
-	constexpr std::uint32_t kNoiseFlag = 0x1000;
-	constexpr std::uint32_t kVoiceFlag = 0x2000;
+	constexpr uint32_t kNoiseFlag = 0x1000;
+	constexpr uint32_t kVoiceFlag = 0x2000;
 
 	constexpr int kVoiceNote = 60;					// trigger marker, not the sample's pitch
-	constexpr std::uint32_t kVoiceLength = 4410;	// 100 ms at 44.1 kHz
+	constexpr uint32_t kVoiceLength = 4410;	// 100 ms at 44.1 kHz
 
 	/** Wave: the core steps the 32-entry waveform once every 32 * (2048 - frequency) clocks, so
 		one cycle takes 32 steps and frequency 0 is the lowest pitch rather than the highest.
@@ -30,7 +30,7 @@ namespace
 	public:
 		explicit WswanTable (double clock) : clock (clock) {}
 
-		int noteFor (std::uint32_t period, int, int* finePitch) const override
+		int noteFor (uint32_t period, int, int* finePitch) const override
 		{
 			if ((period & kVoiceFlag) != 0)
 			{
@@ -51,13 +51,13 @@ namespace
 		}
 
 	private:
-		double toneHz (std::uint32_t frequency) const
+		double toneHz (uint32_t frequency) const
 		{
 			const double divider = 2048.0 - (double) frequency;
 			return clock / (32.0 * std::max (divider, 1.0));
 		}
 
-		int noiseNote (std::uint32_t frequency, int* finePitch) const
+		int noiseNote (uint32_t frequency, int* finePitch) const
 		{
 			if (finePitch != nullptr)
 			{
@@ -81,20 +81,20 @@ struct WswanDecoder::Impl
 {
 	struct Channel
 	{
-		std::uint16_t frequency = 0x07FF;	// the chip powers up at 0x07FF, which is not silence
-		std::uint8_t left = 0;
-		std::uint8_t right = 0;
+		uint16_t frequency = 0x07FF;	// the chip powers up at 0x07FF, which is not silence
+		uint8_t left = 0;
+		uint8_t right = 0;
 	};
 
 	Channel channels[4];
-	std::uint8_t mode = 0;				// 0x90: per-channel enable, voice, sweep, noise
-	std::uint8_t pcmVolume = 0;			// 0x94
-	std::int8_t sweepStep = 0;			// 0x8C, signed: it counts up or down
-	std::uint32_t sweepInterval = 1;	// 0x8D, in samples
-	std::uint16_t sweepPeriod = 0;		// where the sweep unit currently is
-	std::uint32_t sweepNext = 0;
-	std::uint32_t voiceEnd = 0;
-	std::uint32_t now = 0;
+	uint8_t mode = 0;				// 0x90: per-channel enable, voice, sweep, noise
+	uint8_t pcmVolume = 0;			// 0x94
+	int8_t sweepStep = 0;			// 0x8C, signed: it counts up or down
+	uint32_t sweepInterval = 1;	// 0x8D, in samples
+	uint16_t sweepPeriod = 0;		// where the sweep unit currently is
+	uint32_t sweepNext = 0;
+	uint32_t voiceEnd = 0;
+	uint32_t now = 0;
 	double clock = (double) kDefaultClock;
 	double sampleRate = 44100.0;
 	std::unique_ptr<WswanTable> table;
@@ -113,7 +113,7 @@ WswanDecoder::~WswanDecoder() = default;
 
 void WswanDecoder::reset (const ChipConfig& config)
 {
-	[[maybe_unused]] const std::uint32_t clock = config.clockHz;
+	[[maybe_unused]] const uint32_t clock = config.clockHz;
 	[[maybe_unused]] const double sampleRate = config.timeBaseHz;
 	impl = std::make_unique<Impl>();
 
@@ -125,13 +125,13 @@ void WswanDecoder::reset (const ChipConfig& config)
 	setSweepTime (0x1F, 0);		// the value the chip powers up with
 }
 
-void WswanDecoder::setSweepTime (std::uint8_t value, std::uint32_t sampleTime)
+void WswanDecoder::setSweepTime (uint8_t value, uint32_t sampleTime)
 {
 	// one tick every (n + 1) sweep units, a unit being 32 HBlanks of 256 clocks each
-	const double hblanks = (double) (((std::uint32_t) value + 1u) * 32u + 1u);
+	const double hblanks = (double) (((uint32_t) value + 1u) * 32u + 1u);
 	const double samples = hblanks * 256.0 * impl->sampleRate / impl->clock;
 
-	impl->sweepInterval = std::max<std::uint32_t> (1u, (std::uint32_t) std::lround (samples));
+	impl->sweepInterval = std::max<uint32_t> (1u, (uint32_t) std::lround (samples));
 	impl->sweepNext = sampleTime + impl->sweepInterval;
 }
 
@@ -159,42 +159,42 @@ void WswanDecoder::write (const RegisterWrite& w)
 	//   0x90                   control: per-channel enable, channel 2 sweep, voice mode
 	//   0x94                   PCM volume for the voice stream
 	case 0x80:
-		channel0.frequency = (std::uint16_t) ((channel0.frequency & 0xFF00) | w.value);
+		channel0.frequency = (uint16_t) ((channel0.frequency & 0xFF00) | w.value);
 		break;
 	case 0x81:
-		channel0.frequency = (std::uint16_t) ((channel0.frequency & 0x00FF)
-											 | ((std::uint16_t) w.value << 8));
+		channel0.frequency = (uint16_t) ((channel0.frequency & 0x00FF)
+											 | ((uint16_t) w.value << 8));
 		break;
 	case 0x82:
-		channel1.frequency = (std::uint16_t) ((channel1.frequency & 0xFF00) | w.value);
+		channel1.frequency = (uint16_t) ((channel1.frequency & 0xFF00) | w.value);
 		break;
 	case 0x83:
-		channel1.frequency = (std::uint16_t) ((channel1.frequency & 0x00FF)
-											 | ((std::uint16_t) w.value << 8));
+		channel1.frequency = (uint16_t) ((channel1.frequency & 0x00FF)
+											 | ((uint16_t) w.value << 8));
 		break;
 	case 0x84:
-		channel2.frequency = (std::uint16_t) ((channel2.frequency & 0xFF00) | w.value);
+		channel2.frequency = (uint16_t) ((channel2.frequency & 0xFF00) | w.value);
 		impl->sweepPeriod = channel2.frequency;
 		break;
 	case 0x85:
-		channel2.frequency = (std::uint16_t) ((channel2.frequency & 0x00FF)
-											 | ((std::uint16_t) w.value << 8));
+		channel2.frequency = (uint16_t) ((channel2.frequency & 0x00FF)
+											 | ((uint16_t) w.value << 8));
 		impl->sweepPeriod = channel2.frequency;
 		break;
 	case 0x86:
-		channel3.frequency = (std::uint16_t) ((channel3.frequency & 0xFF00) | w.value);
+		channel3.frequency = (uint16_t) ((channel3.frequency & 0xFF00) | w.value);
 		break;
 	case 0x87:
-		channel3.frequency = (std::uint16_t) ((channel3.frequency & 0x00FF)
-											 | ((std::uint16_t) w.value << 8));
+		channel3.frequency = (uint16_t) ((channel3.frequency & 0x00FF)
+											 | ((uint16_t) w.value << 8));
 		break;
 	case 0x88:
 	case 0x8A:
 	case 0x8B:
 	{
 		Impl::Channel& current = impl->channels[w.reg - 0x88];
-		current.left = (std::uint8_t) ((w.value >> 4) & 0x0F);
-		current.right = (std::uint8_t) (w.value & 0x0F);
+		current.left = (uint8_t) ((w.value >> 4) & 0x0F);
+		current.right = (uint8_t) (w.value & 0x0F);
 		break;
 	}
 	case 0x89:
@@ -207,7 +207,7 @@ void WswanDecoder::write (const RegisterWrite& w)
 		}
 		break;
 	case 0x8C:
-		impl->sweepStep = (std::int8_t) w.value;
+		impl->sweepStep = (int8_t) w.value;
 		break;
 	case 0x8D:
 		setSweepTime (w.value, w.sampleTime);
@@ -218,7 +218,7 @@ void WswanDecoder::write (const RegisterWrite& w)
 		break;		// waveform base address: the shape does not change the note
 	case 0x90:
 	{
-		const std::uint8_t previous = impl->mode;
+		const uint8_t previous = impl->mode;
 		impl->mode = w.value;
 
 		if ((previous & 0x20) == 0 && (w.value & 0x20) != 0)
@@ -240,7 +240,7 @@ void WswanDecoder::write (const RegisterWrite& w)
 	}
 }
 
-void WswanDecoder::stepSweep (std::uint32_t sampleTime)
+void WswanDecoder::stepSweep (uint32_t sampleTime)
 {
 	if (! impl->sweepRunning() || sampleTime < impl->sweepNext)
 	{
@@ -249,14 +249,14 @@ void WswanDecoder::stepSweep (std::uint32_t sampleTime)
 
 	// every step that falls into the elapsed span, applied at once: between two polls only the
 	// resulting pitch can be observed
-	const std::uint32_t steps = (sampleTime - impl->sweepNext) / impl->sweepInterval + 1u;
+	const uint32_t steps = (sampleTime - impl->sweepNext) / impl->sweepInterval + 1u;
 	const int value = (int) impl->sweepPeriod + (int) impl->sweepStep * (int) steps;
 
-	impl->sweepPeriod = (std::uint16_t) (value & 0x07FF);
+	impl->sweepPeriod = (uint16_t) (value & 0x07FF);
 	impl->sweepNext += steps * impl->sweepInterval;
 }
 
-void WswanDecoder::advance (std::uint32_t sampleTime)
+void WswanDecoder::advance (uint32_t sampleTime)
 {
 	impl->now = sampleTime;
 	stepSweep (sampleTime);
@@ -301,9 +301,9 @@ ChannelState WswanDecoder::channelState (int channel) const
 	// 0xFFFF is the one value the core treats as silence on a tone channel
 	const bool silent = current.frequency == 0xFFFF && ! (channel == WswanDecoder::channel2
 														  && impl->sweepRunning());
-	const std::uint32_t period = (channel == WswanDecoder::channel2 && impl->sweepRunning())
-									 ? (std::uint32_t) (impl->sweepPeriod & 0x07FF)
-									 : (std::uint32_t) (current.frequency & 0x07FF);
+	const uint32_t period = (channel == WswanDecoder::channel2 && impl->sweepRunning())
+									 ? (uint32_t) (impl->sweepPeriod & 0x07FF)
+									 : (uint32_t) (current.frequency & 0x07FF);
 
 	state.gate = enabled && volume > 0 && ! silent;
 	state.period = period;
