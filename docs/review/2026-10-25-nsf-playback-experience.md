@@ -102,6 +102,12 @@ virtual const MidiSequence* getMidiSequence (void) const { return nullptr; }
 - [x] harness 验证：NSF 条带显示 Not available，VGM 条带仍为 Off（可选）
 
 ### 阶段 1：混音缺失（P3）
+
+**已完成：FDS**（e3509aa）——芯片实例、总线转发 $4023/$4040-、轨道、495 字节测试资源，RMS 0.11196。
+
+**已回退：三角波的“静音归零”**（32e8bd0）。为了让静音读数为 0，把关闭的三角波输出改成 0，结果每次起音都从 0 跳到相位电平——**音头 click**，而硬件是保持 DAC 电平、由输出电容去直流。教训：不要在芯片核里“清理”硬件本身就有的行为；去直流要放在输出边界，且要处理启动瞬态（逐通道阻断会改变独奏平衡，引擎级阻断会带来 150 ms 的噗声）。
+
+**待做：MMC5、FME7**
 - [ ] captureState 之外先补渲染：FDS / MMC5 建轨道，FME7 实现 RenderChannels
 - [ ] 三份最小 NSF 测试资源（手写 6502 INIT/PLAY）：FDS、MMC5、FME7
 - [ ] 每份资源断言“该芯片的轨道必须有声”（RMS > 阈值），而不是只断言“有轨道”
