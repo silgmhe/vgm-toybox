@@ -1096,6 +1096,7 @@ void PlaybackEngine::installSong (LoadedSong&& built)
 	// The chips card is only offered when the backend can honour it, and every load path passes
 	// through here - buildSong is static and cannot record it itself.
 	chipsMuteable.store (song != nullptr && song->getCapabilities ().canMuteChips);
+	midiEmittable.store (song != nullptr && song->getCapabilities ().canEmitMidi);
 
 	trackPlayers = std::move (built.players);
 	playerCount.store ((int) trackPlayers.size ());

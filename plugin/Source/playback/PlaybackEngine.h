@@ -128,6 +128,10 @@ public:
 		can, because a checkbox that changes nothing is worse than no checkbox. */
 	bool canMuteChips (void) const { return chipsMuteable.load(); }
 
+	/** Whether the loaded song has a MIDI sequence at all. The mixer asks before offering a MIDI
+		channel: a track's capability describes its voice, not whether anything can be sent. */
+	bool canEmitMidi (void) const { return midiEmittable.load(); }
+
 	bool isLoaded (void) const { return loaded; }
 	bool isPlaying (void) const { return playing.load(); }
 	/** Whether the last local transport action was pause rather than stop or load. The button
@@ -591,6 +595,7 @@ private:
 	std::array<DcBlockState, playback::kOutputBusCount> dcBlockStates {};
 
 	std::atomic<bool> chipsMuteable { false };
+	std::atomic<bool> midiEmittable { false };
 	std::atomic<bool> masterMuted { false };
 	std::atomic<std::uint64_t> connectedBuses { 1 };
 	static_assert (playback::kOutputBusCount <= 64,

@@ -141,7 +141,11 @@ void MixerPanel::rebuildStrips (void)
 		strip->onSoloChanged = [this, index] (bool soloed) { engine.setTrackSolo (index, soloed); };
 		strip->onOutputChanged = [this, index] (playback::OutputTarget target) { engine.setTrackOutput (index, target); };
 		strip->onMidiChannelChanged = [this, index] (int channel) { engine.setTrackMidiChannel (index, channel); };
-		strip->setMidiState (engine.getTrackMidiChannel (i), tracks[i].midiCapability);
+		// A backend without a sequence offers no MIDI, whatever a track's voice could do: the
+		// capability describes the voice, this describes what the song can send.
+		strip->setMidiState (engine.getTrackMidiChannel (i),
+							 engine.canEmitMidi () ? tracks[i].midiCapability
+												   : playback::MidiCapability::unavailable);
 
 		strips.add (strip);
 		holder.addAndMakeVisible (strip);
@@ -293,7 +297,9 @@ void MixerPanel::refreshValues (void)
 									engine.isTrackMuted (i), engine.isTrackSoloed (i),
 									meterLeft[i], meterRight[i],
 									deviceIsMuted (chips, tracks[i].deviceId) ? 0.45f : 1.0f);
-		strips[(int) i]->setMidiState (engine.getTrackMidiChannel (i), tracks[i].midiCapability);
+		strips[(int) i]->setMidiState (engine.getTrackMidiChannel (i),
+									   engine.canEmitMidi () ? tracks[i].midiCapability
+															 : playback::MidiCapability::unavailable);
 
 		if (routesChanged || strips[(int) i]->getShownOutput() != engine.getTrackOutput (i))
 		{

@@ -149,7 +149,13 @@ public:
 		};
 
 		for (const char* name : apuNames) { addTrack (name, "2A03", true, 0); }
-		for (const char* name : dmcNames) { addTrack (name, "2A03", false, 0); }
+
+		// The triangle has a period register and a wavetable: it has a pitch, unlike the noise and
+		// the delta channel that share its object. Calling it unavailable kept the one 2A03 voice a
+		// bass line is written for out of every MIDI menu.
+		addTrack (dmcNames[0], "2A03", true, 0);
+		addTrack (dmcNames[1], "2A03", false, 0);
+		addTrack (dmcNames[2], "2A03", false, 0);
 
 		switch (file.chip ())
 		{

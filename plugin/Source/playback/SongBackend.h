@@ -125,6 +125,10 @@ struct BackendCapabilities
 	bool canFade = false;				// the fadeSeconds of setTimeline() is honoured
 	bool hasLoopPoint = false;			// the song carries a loop point (the seek bar marker)
 	bool canMuteChips = false;			// setChipAudible() works (the chips card)
+
+	/** The backend produces a MIDI sequence at all. Off for a backend that emulates rather than
+		reads registers - offering a MIDI channel there would promise notes nothing can send. */
+	bool canEmitMidi = false;
 	IsolationMode isolation = IsolationMode::none;
 	bool rendersAtHostRate = false;		// the backend can render at any host sample rate
 	double nativeSampleRate = 0.0;		// its own rate when it cannot (0 = does not care)

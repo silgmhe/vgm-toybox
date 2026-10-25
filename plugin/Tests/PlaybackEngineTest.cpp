@@ -666,6 +666,34 @@ int main (int argc, char* argv[])
 				 plain.rms, mixed.rms, sumDifference);
 	check (sumDifference < 0.5, "the unity-gain sum matches the plain mix (< 0.5 dB)");
 
+	// Whether the song can send MIDI at all is a property of the backend, and the mixer asks it
+	// before offering a channel: a track's capability describes its voice, not what can be sent.
+	{
+		const juce::String extension = inputFile.getFileExtension().toLowerCase();
+		const bool expectsMidi = (extension == ".vgm" || extension == ".vgz");
+
+		std::printf ("    canEmitMidi %s (expected %s for %s)\\n",
+					 engine.canEmitMidi () ? "yes" : "no",
+					 expectsMidi ? "yes" : "no", extension.toRawUTF8 ());
+
+		check (engine.canEmitMidi () == expectsMidi, "the backend's MIDI capability matches the format");
+
+		if (extension == ".nsf")
+		{
+			// The triangle is a wavetable with a period register - the one 2A03 voice a bass line is
+			// written for - and was grouped with the noise and the DPCM channel as if it had no pitch.
+			for (const auto& track : tracks)
+			{
+				if (track.name == "Triangle")
+				{
+					check (track.midiCapability == toybox::playback::MidiCapability::melodic,
+						   "the 2A03 triangle is a pitched voice");
+					break;
+				}
+			}
+		}
+	}
+
 	// --- [3b] a linked voice set does not leak into the parent's tracks -----------------------
 	if (inputFile.getFileName() == "ym2608.vgm")
 	{
@@ -1594,10 +1622,16 @@ int main (int argc, char* argv[])
 					++knownGaps;
 					mark = "  <- no MIDI output for this channel (design doc 11.2)";
 				}
-				else
+				else if (engine.canEmitMidi ())
 				{
 					++missingNotes;
 					mark = "  <- AUDIBLE BUT SILENT IN MIDI";
+				}
+				else
+				{
+					// This format has no MIDI sequence at all: every track is silent over MIDI, and
+					// repeating that twenty times would drown the one line that matters.
+					mark = "  <- no MIDI sequence for this format";
 				}
 			}
 

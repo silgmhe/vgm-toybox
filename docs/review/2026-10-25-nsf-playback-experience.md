@@ -2,7 +2,7 @@
 
 日期：2026-10-25
 分支：`feat/nsf-playback`
-状态：**分析完成，方案待确认**（第三节的决策点未定，先不动代码）
+状态：**决策已确认，阶段 0 已完成**（2026-10-25；顺序见第 3 节）
 
 ## 1. 结论摘要
 
@@ -78,9 +78,9 @@ virtual const MidiSequence* getMidiSequence (void) const { return nullptr; }
 
 代码注释（第 705-707 行）称“FME7 的歌仍走一轨一播放器路径”，但 `getCapabilities()`（`NsfBackend.cpp:201`）对全部文件返回 `multiInstance`，注释已与实现不符。
 
-## 3. 决策点（待确认）
+## 3. 决策（2026-10-25 已确认）
 
-**D1. NSF 的 MIDI 走哪条路？**
+**D1. NSF 的 MIDI 走哪条路？→ 选 B（离线预演 + 懒加载）。** 引擎的 MIDI 是“按位置查已算好的序列”，运行期生成会把音符边界检测搬进音频线程；预演只跑 CPU、不渲染音频，按 5 ms 采样即可，且只在用户第一次给某条 NSF 轨指定 MIDI 通道时触发。在此之前先做阶段 0 的诚实性修正。
 
 | 方案 | 做法 | 精度 | 成本 | 风险 |
 |---|---|---|---|---|
@@ -88,40 +88,34 @@ virtual const MidiSequence* getMidiSequence (void) const { return nullptr; }
 | B 离线预演 | 加载时静音快跑全曲，记录通道状态 → 生成 `MidiSequence`，复用现有发送路径 | 同上 | 中高（需实测 180 s 曲的预演耗时） | 与 VGM 架构一致，seek 后仍准确 |
 | C 暂不支持 | 隐藏 NSF 所有 MIDI 框，只保留能力标记 | — | 很小 | 诚实但少一功能 |
 
-**D2. 可视化范围**：四颗扩展芯片一次做完，还是先做 FDS（带波形）+ VRC6？
+**D2. 可视化范围 → 五颗一次做完，表驱动。** 顺序按性价比 FDS → VRC6 → MMC5 → FME7 → VRC7；加芯片应该只加一行表项，而不是第五次打开同一个 switch。
 
-**D3. 是否顺带修 P3**（FDS/MMC5 无轨道、FME7 无逐通道渲染）？不修的话，新画出来的轨可能没有声音。
+**D3. 修 P3，且提前到可视化之前。** 可视化的价值是“看得见的等于听得见的”；先画再发现没声音是最坏顺序。缺的三份测试样本由我们写最小 6502 INIT/PLAY 生成，不依赖外部文件。
 
-## 4. 任务清单
+## 4. 任务清单（按确认后的顺序）
 
-### 阶段 0：诚实性（不依赖任何决策）
-- [ ] `Triangle` 改为 `melodic`；`Noise` / `DMC` 保持 `unavailable`
-- [ ] 界面：后端没有 MIDI 序列时，不显示可用的 MIDI 选择框（或显示为禁用并带说明）
-- [ ] 测试：断言 NSF 的 Triangle 能力为 melodic；断言无序列时 UI 不给 MIDI 框
+### 阶段 0：诚实性 —— ✅ 已完成（提交 eat/nsf-playback 上）
+- [x] Triangle 改为 melodic；Noise / DMC 保持 unavailable
+- [x] BackendCapabilities::canEmitMidi + 引擎 canEmitMidi()；混音器据此决定是否提供 MIDI 通道
+- [x] 测试：NSF 的 Triangle 能力为 melodic；canEmitMidi 与格式一致（.vgm/.vgz 为真，.nsf 为假）
+- [x] 诊断输出区分“格式无 MIDI 序列”与“该通道漏了音符”
+- [x] harness 验证：NSF 条带显示 Not available，VGM 条带仍为 Off（可选）
 
-### 阶段 1：可视化（P2）
-- [ ] `captureState` 补 VRC6 三轨（方波/方波/锯齿）
-- [ ] 补 VRC7 六轨（stored 形状）
-- [ ] 补 FDS 一轨（带 `wave[64]`，与 N163 同路径）
-- [ ] 补 MMC5 两轨（方波，duty）
-- [ ] 补 FME7 五轨（方波 ×3 + 噪声 ×2）
-- [ ] 每颗芯片的轨道名与 VGM 侧命名保持一致（`Square n` / `Saw Wave` / `FM n`）
-- [ ] 键盘视图截图：每颗芯片至少一张，逐轨独奏确认行与声音对应
+### 阶段 1：混音缺失（P3）
+- [ ] captureState 之外先补渲染：FDS / MMC5 建轨道，FME7 实现 RenderChannels
+- [ ] 三份最小 NSF 测试资源（手写 6502 INIT/PLAY）：FDS、MMC5、FME7
+- [ ] 每份资源断言“该芯片的轨道必须有声”（RMS > 阈值），而不是只断言“有轨道”
 
-### 阶段 2：MIDI（P1，取决于 D1）
-- [ ] 若选 A：引擎增加“从状态快照生成 MIDI”的通道，NSF 后端声明支持
-- [ ] 若选 B：加载期预演 + `MidiSequence` 生成，复用 `emitMidiForBlock`
-- [ ] 若选 C：只做阶段 0 的第二条
+### 阶段 2：可视化（P2）
+- [ ] captureState 改成表驱动：一颗芯片一条表项（名称、起止轨、shape）
+- [ ] VRC6 三轨 / VRC7 六轨 / FDS 一轨（带 wave[64]）/ MMC5 两轨 / FME7 五轨
+- [ ] 轨道名与 VGM 侧一致（Square n / Saw Wave / FM n）
+- [ ] 每个芯片至少一张键盘视图截图，逐轨独奏确认行与声音对应
+
+### 阶段 3：MIDI（P1，方案 B）
+- [ ] 懒加载预演：第一次指定 MIDI 通道时，在工作线程跑一遍 CPU（5 ms 采样），生成 MidiSequence
+- [ ] 预演耗时实测（至少一首 180 s 曲），结果写进本节
 - [ ] 测试：三轨各出一个音符，音高与通道频率一致
-
-### 阶段 3：混音缺失（P3，取决于 D3）
-- [ ] FDS/MMC5 建轨道
-- [ ] FME7 实现 `RenderChannels`
-- [ ] 三条新路径各加一个端到端断言（有音轨必须出声）
-
-### 测试资源缺口
-- 现有 `test_file/nsf`：`1983.nsf`（纯 2A03）、`Entry025.nsf`（纯 2A03）、`Entry080.nsf`（VRC6）、`fod_snowburnb.nsf`（VRC6）、`fod_hopeless.nsf`（N163）
-- **缺**：FDS、MMC5、FME7、VRC7 的样本 → 需要外部提供，或写一个最小 6502 驱动生成 NSF（工作量另计）
 
 ## 5. 验收标准
 
