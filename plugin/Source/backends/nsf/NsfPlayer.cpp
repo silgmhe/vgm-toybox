@@ -88,6 +88,13 @@ NsfPlayer::NsfPlayer (const formats::nsf::NsfFile& image, double sampleRate)
 		fds->SetRate (rate);
 	}
 
+	if (chip == formats::nsf::NsfChip::mmc5)
+	{
+		mmc5 = std::make_unique<xgm::NES_MMC5> ();
+		mmc5->SetClock (clock);
+		mmc5->SetRate (rate);
+	}
+
 	dmc->SetMemory (bus.get ());
 	dmc->SetAPU (apu.get ());
 	dmc->SetCPU (cpu.get ());
@@ -180,6 +187,13 @@ void NsfPlayer::writeSound (std::uint16_t address, std::uint8_t value)
 		return;
 	}
 
+	// The MMC5's audio lives in the CPU's own address space, $5000-$5015.
+	if (mmc5 && address >= 0x5000 && address <= 0x5015)
+	{
+		mmc5->Write (address, value);
+		return;
+	}
+
 	// The FDS answers $4023 (its master I/O switch) and its register file at $4040-$408A,
 	// which includes the 64-byte wavetable at $4040-$407F.
 	if (fds && (address == 0x4023 || (address >= 0x4040 && address <= 0x408A)))
@@ -199,7 +213,7 @@ void NsfPlayer::writeSound (std::uint16_t address, std::uint8_t value)
 bool NsfPlayer::hasExpansion (void) const
 {
 	return vrc6 != nullptr || vrc7 != nullptr || n106 != nullptr || fme7 != nullptr
-		   || fds != nullptr;
+		   || fds != nullptr || mmc5 != nullptr;
 }
 
 int NsfPlayer::render (float* left, float* right, int frames)
@@ -239,13 +253,13 @@ int NsfPlayer::render (float* left, float* right, int frames)
 			const auto clocks = (UINT32) (std::max) (0, executed);
 			apu->Tick (clocks);
 			dmc->Tick (clocks);
-
 			if (vrc6) { vrc6->Tick (clocks); }
 			if (vrc7) { vrc7->Tick (clocks); }
 			if (n106) { n106->Tick (clocks); }
 			if (fme7) { fme7->Tick (clocks); }
-		if (fds) { fds->Tick (clocks); }
 			if (fds) { fds->Tick (clocks); }
+			if (mmc5) { mmc5->Tick (clocks); }
+
 		}
 
 		INT32 a[2] = { 0, 0 };
@@ -273,6 +287,7 @@ int NsfPlayer::render (float* left, float* right, int frames)
 		addChip (n106.get ());
 		addChip (fme7.get ());
 		addChip (fds.get ());
+		addChip (mmc5.get ());
 
 		const auto mix = [&] (int channel, float& out)
 		{
@@ -359,11 +374,13 @@ bool NsfPlayer::seekTo (double seconds)
 		dmc->TickFrameSequence (clocks);
 		apu->Tick (clocks);
 		dmc->Tick (clocks);
-
 		if (vrc6) { vrc6->Tick (clocks); }
 		if (vrc7) { vrc7->Tick (clocks); }
 		if (n106) { n106->Tick (clocks); }
 		if (fme7) { fme7->Tick (clocks); }
+		if (fds) { fds->Tick (clocks); }
+		if (mmc5) { mmc5->Tick (clocks); }
+
 
 		clocksRun += (std::uint64_t) (std::max) (0, executed);
 	}
@@ -668,7 +685,8 @@ void NsfPlayer::applyMasks (void)
 	if (vrc6) { vrc6->SetMask (maskFor (5, 3, ! chipAudible[1])); }
 	if (n106) { n106->SetMask (maskFor (5, 8, ! chipAudible[1])); }
 	if (vrc7) { vrc7->SetMask (maskFor (5, 6, ! chipAudible[1])); }
-	if (fme7) { fme7->SetMask (maskFor (5, 5, ! chipAudible[1])); }
+	if (fme7) { fme7->SetMask (maskFor (5, 3, ! chipAudible[1])); }	// three tones; noise is a mode
+	if (mmc5) { mmc5->SetMask (maskFor (5, 3, ! chipAudible[1])); }
 	if (fds) { fds->SetMask (maskFor (5, 1, ! chipAudible[1])); }
 }
 
@@ -697,11 +715,13 @@ int NsfPlayer::renderChannels (float* const* dest, int channelCount, int frames)
 			dmc->TickFrameSequence (tick);
 			apu->Tick (tick);
 			dmc->Tick (tick);
-
 			if (vrc6) { vrc6->Tick (tick); }
 			if (vrc7) { vrc7->Tick (tick); }
 			if (n106) { n106->Tick (tick); }
 			if (fme7) { fme7->Tick (tick); }
+			if (fds) { fds->Tick (tick); }
+			if (mmc5) { mmc5->Tick (tick); }
+
 		}
 
 		INT32 squares[4] = { 0, 0, 0, 0 };
@@ -730,6 +750,8 @@ int NsfPlayer::renderChannels (float* const* dest, int channelCount, int frames)
 		if (vrc6) { vrc6->RenderChannels (expansion, 2, 3); }
 		if (n106) { n106->RenderChannels (expansion, 2, 8); }
 		if (vrc7) { vrc7->RenderChannels (expansion, 2, 6); }
+		if (mmc5) { mmc5->RenderChannels (expansion, 2, 3); }
+		if (fme7) { fme7->RenderChannels (expansion, 2, 3); }
 
 		// The FDS is one voice: its whole output is its single channel.
 		if (fds)

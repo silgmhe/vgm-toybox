@@ -184,7 +184,9 @@ public:
 				break;
 
 			case formats::nsf::NsfChip::fme7:
-				for (int i = 0; i < 5; ++i)
+				// Three, not five: the S5B has three tone channels, and the noise and the envelope
+				// are modes of those channels rather than voices with an output of their own.
+				for (int i = 0; i < 3; ++i)
 				{
 					addTrack (juce::String ("Square " + juce::String (i + 1)).toRawUTF8 (), "S5B", true, 1);
 				}

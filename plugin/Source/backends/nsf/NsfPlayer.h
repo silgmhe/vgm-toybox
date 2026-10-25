@@ -11,6 +11,7 @@
 #include "xgm/devices/Sound/nes_dmc.h"
 #include "xgm/devices/Sound/nes_fds.h"
 #include "xgm/devices/Sound/nes_fme7.h"
+#include "xgm/devices/Sound/nes_mmc5.h"
 #include "xgm/devices/Sound/nes_n106.h"
 #include "xgm/devices/Sound/nes_vrc6.h"
 #include "xgm/devices/Sound/nes_vrc7.h"
@@ -137,6 +138,7 @@ private:
 	std::unique_ptr<xgm::NES_N106> n106;
 	std::unique_ptr<xgm::NES_FDS> fds;
 	std::unique_ptr<xgm::NES_FME7> fme7;
+	std::unique_ptr<xgm::NES_MMC5> mmc5;
 };
 
 } // namespace toybox::backends::nsf
