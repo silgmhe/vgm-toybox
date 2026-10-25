@@ -1,5 +1,7 @@
 #include "backends/nsf/NsfBus.h"
 
+#include <cstdint>
+
 namespace toybox::backends::nsf
 {
 
@@ -14,7 +16,7 @@ namespace
 	driver's init or play returned. The rest of the program is NSFPlay's own - it saves A/X/Y and
 	masks the NMI so an INIT that never returns still leaves the machine usable.
 */
-const UINT8 kPlayerProgram[] =
+const std::uint8_t kPlayerProgram[] =
 {
 	0x20, 0x1E, 0x41,				// $4100 JSR $411E   (operand patched by run_from)
 	0x4C, 0x03, 0x41,				// $4103 JMP $4103   (the breakpoint)
@@ -59,11 +61,11 @@ void NsfBus::load (void)
 	// SetImage clears the whole 64 KB before copying, so anything written before it is lost - the
 	// trampoline in particular. It goes in afterwards, every time.
 	resetBanks ();
-	SetImage (const_cast<UINT8*> (file.rom.data()), file.loadAddress, (UINT32) file.rom.size());
-	SetReserved (kPlayerProgram, (UINT32) sizeof (kPlayerProgram));
+	SetImage (const_cast<std::uint8_t*> (file.rom.data()), file.loadAddress, (std::uint32_t) file.rom.size());
+	SetReserved (kPlayerProgram, (std::uint32_t) sizeof (kPlayerProgram));
 }
 
-bool NsfBus::Read (UINT32 adr, UINT32& val, UINT32 id)
+bool NsfBus::Read (std::uint32_t adr, std::uint32_t& val, std::uint32_t id)
 {
 	if (banked && adr >= 0x8000 && adr <= 0xFFFF)
 	{
@@ -82,7 +84,7 @@ bool NsfBus::Read (UINT32 adr, UINT32& val, UINT32 id)
 	return xgm::NES_MEM::Read (adr, val, id);
 }
 
-bool NsfBus::Write (UINT32 adr, UINT32 val, UINT32 id)
+bool NsfBus::Write (std::uint32_t adr, std::uint32_t val, std::uint32_t id)
 {
 
 	if (adr == 0x0211)

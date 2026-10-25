@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdint>
 #include <deque>
 #include <mutex>
 #include <string>
@@ -567,9 +568,9 @@ int NsfPlayer::render (float* left, float* right, int frames)
 
 			// Envelopes and length counters live here; Tick() alone leaves every note at the level
 			// it was given.
-			dmc->TickFrameSequence ((UINT32) (std::max) (0, executed));
+			dmc->TickFrameSequence ((std::uint32_t) (std::max) (0, executed));
 
-			const auto clocks = (UINT32) (std::max) (0, executed);
+			const auto clocks = (std::uint32_t) (std::max) (0, executed);
 			apu->Tick (clocks);
 			dmc->Tick (clocks);
 			if (vrc6) { vrc6->Tick (clocks); }
@@ -587,12 +588,12 @@ int NsfPlayer::render (float* left, float* right, int frames)
 			sampleDirty = false;
 		}
 
-		INT32 a[2] = { 0, 0 };
-		INT32 d[2] = { 0, 0 };
+		std::int32_t a[2] = { 0, 0 };
+		std::int32_t d[2] = { 0, 0 };
 		apu->Render (a);
 		dmc->Render (d);
 
-		INT32 extra[2] = { 0, 0 };
+		std::int32_t extra[2] = { 0, 0 };
 
 		const auto addChip = [&extra] (xgm::ISoundChip* chip)
 		{
@@ -601,7 +602,7 @@ int NsfPlayer::render (float* left, float* right, int frames)
 				return;
 			}
 
-			INT32 out[2] = { 0, 0 };
+			std::int32_t out[2] = { 0, 0 };
 			chip->Render (out);
 			extra[0] += out[0];
 			extra[1] += out[1];
@@ -694,7 +695,7 @@ bool NsfPlayer::seekTo (double seconds)
 		const int step = (int) (remaining < (std::uint64_t) clocksPerStep ? remaining
 																		 : (std::uint64_t) clocksPerStep);
 		const int executed = cpu->Exec (step);
-		const auto clocks = (UINT32) (std::max) (0, executed);
+		const auto clocks = (std::uint32_t) (std::max) (0, executed);
 
 		dmc->TickFrameSequence (clocks);
 		apu->Tick (clocks);
@@ -1237,7 +1238,7 @@ int NsfPlayer::renderChannels (float* const* dest, int channelCount, int frames)
 			const int executed = cpu->Exec (clocks);
 			cpuClockRest -= (double) executed;
 
-			const auto tick = (UINT32) (std::max) (0, executed);
+			const auto tick = (std::uint32_t) (std::max) (0, executed);
 			dmc->TickFrameSequence (tick);
 			apu->Tick (tick);
 			dmc->Tick (tick);
@@ -1250,8 +1251,8 @@ int NsfPlayer::renderChannels (float* const* dest, int channelCount, int frames)
 
 		}
 
-		INT32 squares[4] = { 0, 0, 0, 0 };
-		INT32 tnd[6] = { 0, 0, 0, 0, 0, 0 };
+		std::int32_t squares[4] = { 0, 0, 0, 0 };
+		std::int32_t tnd[6] = { 0, 0, 0, 0, 0, 0 };
 
 		apu->RenderChannels (squares, 2, 2);
 		dmc->RenderChannels (tnd, 2, 3);
@@ -1271,7 +1272,7 @@ int NsfPlayer::renderChannels (float* const* dest, int channelCount, int frames)
 		// The expansion's channels, in the order the track list uses. FME7 has no RenderChannels
 		// yet, so a song that declares one keeps its 2A03 tracks and leaves the rest silent here -
 		// which is why those songs still take the one-player-per-track path in the backend.
-		INT32 expansion[16] = {};
+		std::int32_t expansion[16] = {};
 
 		if (vrc6) { vrc6->RenderChannels (expansion, 2, 3); }
 		if (n106) { n106->RenderChannels (expansion, 2, 8); }
@@ -1282,7 +1283,7 @@ int NsfPlayer::renderChannels (float* const* dest, int channelCount, int frames)
 		// The FDS is one voice: its whole output is its single channel.
 		if (fds)
 		{
-			INT32 one[2] = { 0, 0 };
+			std::int32_t one[2] = { 0, 0 };
 			fds->Render (one);
 			expansion[0] = one[0];
 			expansion[1] = one[1];

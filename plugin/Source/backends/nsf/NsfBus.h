@@ -27,8 +27,8 @@ class NsfBus : public xgm::NES_MEM
 public:
 	explicit NsfBus (const formats::nsf::NsfFile& file);
 
-	bool Read (UINT32 adr, UINT32& val, UINT32 id = 0) override;
-	bool Write (UINT32 adr, UINT32 val, UINT32 id = 0) override;
+	bool Read (std::uint32_t adr, std::uint32_t& val, std::uint32_t id = 0) override;
+	bool Write (std::uint32_t adr, std::uint32_t val, std::uint32_t id = 0) override;
 
 	/** Where sound-register writes go. Set by the player, which owns the chips. */
 	std::function<void (std::uint16_t, std::uint8_t)> onSoundWrite;
