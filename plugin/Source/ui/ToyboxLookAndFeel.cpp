@@ -83,6 +83,12 @@ void ToyboxLookAndFeel::refresh (void)
 	setColour (juce::PopupMenu::highlightedBackgroundColourId,	theme::accent());
 	setColour (juce::PopupMenu::highlightedTextColourId,		theme::onAccent());
 
+	// One look for every scroll bar: the mixer had a blue one from the colour scheme and the
+	// keyboard a grey one from its own panel, which read as two different widgets.
+	setColour (juce::ScrollBar::thumbColourId,			theme::scrollBarThumb());
+	setColour (juce::ScrollBar::trackColourId,			theme::scrollBarTrack());
+	setColour (juce::ScrollBar::backgroundColourId,	juce::Colours::transparentBlack);
+
 	setColour (juce::Slider::backgroundColourId,				theme::track());
 	setColour (juce::Slider::trackColourId,						theme::accent());
 	setColour (juce::Slider::thumbColourId,						theme::controlFaceTop());

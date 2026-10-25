@@ -107,8 +107,7 @@ int contentViewIndex (ContentView view)
 	The mute and solo buttons are not this panel's state: they call into the engine's own track
 	mute, so the mixer and this view cannot disagree about what is silent.
 */
-class ContentSlot::KeyboardPanel : public juce::Component,
-								 private juce::ScrollBar::Listener
+class ContentSlot::KeyboardPanel : public juce::Component
 {
 public:
 	KeyboardPanel (toybox::PlaybackEngine& engineToUse, juce::String& statusToUse)
@@ -122,19 +121,6 @@ public:
 		setComponentID ("view.keyboard");
 
 		addAndMakeVisible (exportButton);
-
-		// The rows scroll with the wheel and the arrows, but nothing said how much of the list was
-		// left; the mixer has had a bar since it first overflowed.
-		verticalBar.setAutoHide (false);
-
-		// Palette colours: the default light scheme's thumb is a pale grey on a white card,
-		// which is there and cannot be seen. The track is faint, so the bar reads as part of the
-		// card rather than as another control.
-		verticalBar.setColour (juce::ScrollBar::thumbColourId, theme::secondaryText ().withAlpha (0.30f));
-		verticalBar.setColour (juce::ScrollBar::trackColourId, theme::track ().withAlpha (0.45f));
-		
-		verticalBar.addListener (this);
-		addAndMakeVisible (verticalBar);
 	}
 
 	/** Back to the default window: a new song has its own range and no manual shift. */
@@ -186,6 +172,10 @@ public:
 			observedMin = observedMin < 0 ? channel.note : juce::jmin (observedMin, channel.note);
 			observedMax = observedMax < 0 ? channel.note : juce::jmax (observedMax, channel.note);
 		}
+		// A new snapshot can bring a channel the last one did not have, which changes how tall the
+		// content is. Rebuilt here rather than in paint(), which only draws what it is given.
+		relayout ();
+
 	}
 
 	void refreshLanguage (void)
@@ -269,6 +259,8 @@ public:
 			}
 		}
 
+		paintScrollBar (g);
+
 		// A fade along the bottom when there is more to scroll: without it the last row is cut in
 		// half by the card's edge, which reads as a layout fault rather than as "keep going".
 		const int visible = juce::jmax (0, getHeight () - kHeader);
@@ -291,29 +283,11 @@ public:
 		// Tail to tail with the card, above the fade at the bottom: a thumb that ran into the fade
 		// would look like part of it.
 		// Inside the card's right edge, in the column every row reserves for it.
-		verticalBar.setBounds (getWidth () - metrics.cardInset - kScrollBarGap - kScrollBarWidth,
-							   kHeader + kScrollBarGap,
-							   kScrollBarWidth,
-							   juce::jmax (0, getHeight () - kHeader - kBottomFade));
-
-		clampScroll ();
-		relayout ();
-		syncScrollBar ();
-		repaint ();
-	}
-
-	void scrollBarMoved (juce::ScrollBar*, double newRangeStart) override
-	{
-		if (updatingScrollBar)
-		{
-			return;
-		}
-
-		scrollOffset = juce::roundToInt (newRangeStart);
 		clampScroll ();
 		relayout ();
 		repaint ();
 	}
+
 
 	void mouseDown (const juce::MouseEvent& event) override
 	{
@@ -482,7 +456,6 @@ public:
 		scrollOffset -= (int) std::lround (wheel.deltaY * (float) metrics.rowHeight * 3.0f);
 		clampScroll ();
 		relayout ();
-		syncScrollBar ();
 		repaint ();
 	}
 
@@ -511,16 +484,41 @@ private:
 	}
 
 	/** Pushes the content height into the bar without the bar pushing it back. */
-	void syncScrollBar (void)
+
+	/** The card's scroll bar, drawn rather than built.
+
+		A juce::ScrollBar is a child component, and as a child of this panel it could not be made to
+		paint: visible in the component tree, bounds inside the card, and not one coloured pixel on
+		screen. Ten lines of drawing take the palette's colours like everything else and cannot end
+		up behind the rows.
+	*/
+	void paintScrollBar (juce::Graphics& g)
 	{
 		const int visible = juce::jmax (1, getHeight () - kHeader);
 
-		verticalBar.setVisible (contentHeight > visible);
+		if (contentHeight <= visible)
+		{
+			return;
+		}
 
-		const juce::ScopedValueSetter<bool> guard (updatingScrollBar, true);
+		const juce::Rectangle<int> track (getWidth () - metrics.cardInset - kScrollBarGap - kScrollBarWidth,
+										  kHeader + kScrollBarGap,
+										  kScrollBarWidth,
+										  juce::jmax (0, getHeight () - kHeader - kBottomFade));
 
-		verticalBar.setRangeLimits (0.0, juce::jmax (1, contentHeight));
-		verticalBar.setCurrentRange (scrollOffset, juce::jmax (1, visible));
+		g.setColour (theme::scrollBarTrack ());
+		g.fillRoundedRectangle (track.toFloat (), 5.0f);
+
+		const float thumbHeight = juce::jmax (24.0f, (float) track.getHeight () * (float) visible
+														 / (float) contentHeight);
+		const float travel = (float) track.getHeight () - thumbHeight;
+		const float position = (float) scrollOffset / (float) juce::jmax (1, contentHeight - visible);
+
+		g.setColour (theme::scrollBarThumb ());
+		g.fillRoundedRectangle ({ (float) track.getX (),
+								  (float) track.getY () + travel * juce::jlimit (0.0f, 1.0f, position),
+								  (float) track.getWidth (),
+								  thumbHeight }, 5.0f);
 	}
 
 	void clampScroll (void)
@@ -980,8 +978,6 @@ private:
 	toybox::playback::ChipStateSnapshot snapshot;
 	std::vector<Row> rows;
 
-	juce::ScrollBar verticalBar { true };
-	bool updatingScrollBar = false;
 
 	int scrollOffset = 0;
 	int contentHeight = 0;

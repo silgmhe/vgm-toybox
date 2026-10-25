@@ -44,7 +44,9 @@ static const Palette kLight
 	/* keyBed            */ juce::Colour (0xffd9d9e2),
 	/* keyWhite          */ juce::Colour (0xffffffff),
 	/* keyBlack          */ juce::Colour (0xff4b4b54),
-	/* edgeFade          */ juce::Colour (0x33000000)
+	/* edgeFade          */ juce::Colour (0x33000000),
+	/* scrollBarThumb    */ juce::Colour (0xff0a84ff),
+	/* scrollBarTrack    */ juce::Colour (0xffe9e9ef),
 };
 
 /** The dark palette, after One Dark.
@@ -100,7 +102,9 @@ static const Palette kDark
 	/* keyBed            */ juce::Colour (0xff1f242c),
 	/* keyWhite          */ juce::Colour (0xff39404b),
 	/* keyBlack          */ juce::Colour (0xff737b89),
-	/* edgeFade          */ juce::Colour (0x66000000)
+	/* edgeFade          */ juce::Colour (0x66000000),
+	/* scrollBarThumb    */ juce::Colour (0xff61afef),
+	/* scrollBarTrack    */ juce::Colour (0xff343a44),
 };
 
 /** Message thread only (see setTheme), so this needs no lock: nothing else reads it. */
