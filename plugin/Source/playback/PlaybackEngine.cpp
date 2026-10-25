@@ -1971,7 +1971,7 @@ void PlaybackEngine::finaliseMasterBus (const playback::OutputBusBuffers* buses,
 
 void PlaybackEngine::applyOutputVolume (const playback::OutputBusBuffers* buses, int busCount, int numSamples)
 {
-	if (dcBlockEnabled.load())
+	if (dcBlockEnabled.load ())
 	{
 		applyDcBlock (buses, busCount, numSamples);
 	}

@@ -217,10 +217,11 @@ namespace xgm
       }
     }
 
-    // The phase keeps its position when the channel is silenced - that is what the hardware DAC
-    // does - but its level is not reported: a held level is a DC offset, and every mixer here is
-    // DC coupled, so a triangle that never played measured 0.147 rms on its own track.
-    return sounding ? tritbl[tphase] : 0;
+    // The hardware holds the DAC level while the channel is silenced, and the console's output
+    // capacitor removes the resulting offset. Keep the hardware here: zeroing the level made every
+    // note-on a step from 0 to the held value, which is audible as a click. NsfPlayer removes the
+    // offset continuously instead, which is what a capacitor does.
+    return tritbl[tphase];
   }
 
   // ノイズチャンネルの計算 戻り値は0-127

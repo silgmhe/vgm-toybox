@@ -596,6 +596,7 @@ private:
 
 	std::atomic<bool> chipsMuteable { false };
 	std::atomic<bool> midiEmittable { false };
+	bool backendNeedsDcBlock = false;
 	std::atomic<bool> masterMuted { false };
 	std::atomic<std::uint64_t> connectedBuses { 1 };
 	static_assert (playback::kOutputBusCount <= 64,
