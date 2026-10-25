@@ -337,8 +337,13 @@ target_compile_definitions(VGMToybox PUBLIC
 # --- NSFPlay's device cores ---
 # The library is defined where its sources live (libs/nsfplay), so another checkout can build it
 # without this file knowing which translation units it needs.
+# The second argument is the *binary* directory, and it was written as /nsfplay - an absolute
+# path at the root of the drive. Windows quietly created it where the drive letter points, so
+# every local build worked and left its object files outside the tree; Linux and macOS cannot
+# write to /, and CI failed in the generate step with "Cannot open file for write:
+# /nsfplay/cmake_install.cmake". Relative to this file's binary directory is what was meant.
 add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/../libs/nsfplay
-				 /nsfplay
+				 ${CMAKE_CURRENT_BINARY_DIR}/nsfplay
 				 EXCLUDE_FROM_ALL)
 
 target_link_libraries(VGMToybox PRIVATE
