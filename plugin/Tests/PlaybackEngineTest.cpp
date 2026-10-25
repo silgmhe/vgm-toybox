@@ -694,6 +694,37 @@ int main (int argc, char* argv[])
 		}
 	}
 
+	// --- [3c] the FDS is a voice the player has to have instantiated ---------------------------
+	if (inputFile.getFileName() == "fds_song.nsf")
+	{
+		// The asset's INIT writes the FDS wavetable and one frequency; nothing else sounds. Before
+		// the chip existed in the player, and before the bus forwarded /-, this file
+		// was five silent tracks and a mix that was not quite silent.
+		std::printf ("[3c] the FDS voice reaches its track\\n");
+
+		for (size_t i = 0; i < tracks.size(); ++i)
+		{
+			for (size_t j = 0; j < tracks.size(); ++j)
+			{
+				engine.setTrackMute (j, j != i);
+			}
+
+			engine.setPositionSeconds (0.0);
+			engine.play ();
+			const auto solo = renderSeconds (engine, 0.25, sampleRate, blockSize);
+
+			if (tracks[i].name == "FDS")
+			{
+				check (solo.rms > 0.01, "the FDS track carries the tone the file writes");
+			}
+		}
+
+		for (size_t j = 0; j < tracks.size(); ++j)
+		{
+			engine.setTrackMute (j, false);
+		}
+	}
+
 	// --- [3b] a linked voice set does not leak into the parent's tracks -----------------------
 	if (inputFile.getFileName() == "ym2608.vgm")
 	{

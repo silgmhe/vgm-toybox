@@ -9,6 +9,7 @@
 #include "xgm/devices/CPU/nes_cpu.h"
 #include "xgm/devices/Sound/nes_apu.h"
 #include "xgm/devices/Sound/nes_dmc.h"
+#include "xgm/devices/Sound/nes_fds.h"
 #include "xgm/devices/Sound/nes_fme7.h"
 #include "xgm/devices/Sound/nes_n106.h"
 #include "xgm/devices/Sound/nes_vrc6.h"
@@ -134,6 +135,7 @@ private:
 	std::unique_ptr<xgm::NES_VRC6> vrc6;
 	std::unique_ptr<xgm::NES_VRC7> vrc7;
 	std::unique_ptr<xgm::NES_N106> n106;
+	std::unique_ptr<xgm::NES_FDS> fds;
 	std::unique_ptr<xgm::NES_FME7> fme7;
 };
 

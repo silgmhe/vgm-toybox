@@ -179,6 +179,10 @@ public:
 				}
 				break;
 
+			case formats::nsf::NsfChip::fds:
+				addTrack ("FDS", "FDS", true, 1);
+				break;
+
 			case formats::nsf::NsfChip::fme7:
 				for (int i = 0; i < 5; ++i)
 				{

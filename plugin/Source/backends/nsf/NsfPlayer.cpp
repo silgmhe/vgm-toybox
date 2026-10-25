@@ -81,6 +81,13 @@ NsfPlayer::NsfPlayer (const formats::nsf::NsfFile& image, double sampleRate)
 		fme7->SetRate (rate);
 	}
 
+	if (chip == formats::nsf::NsfChip::fds)
+	{
+		fds = std::make_unique<xgm::NES_FDS> ();
+		fds->SetClock (clock);
+		fds->SetRate (rate);
+	}
+
 	dmc->SetMemory (bus.get ());
 	dmc->SetAPU (apu.get ());
 	dmc->SetCPU (cpu.get ());
@@ -173,6 +180,14 @@ void NsfPlayer::writeSound (std::uint16_t address, std::uint8_t value)
 		return;
 	}
 
+	// The FDS answers $4023 (its master I/O switch) and its register file at $4040-$408A,
+	// which includes the 64-byte wavetable at $4040-$407F.
+	if (fds && (address == 0x4023 || (address >= 0x4040 && address <= 0x408A)))
+	{
+		fds->Write (address, value);
+		return;
+	}
+
 	if (address == 0x4017)
 	{
 		// The frame counter register is shared: the APU sequences on it and the DMC's IRQ does too.
@@ -183,7 +198,8 @@ void NsfPlayer::writeSound (std::uint16_t address, std::uint8_t value)
 
 bool NsfPlayer::hasExpansion (void) const
 {
-	return vrc6 != nullptr || vrc7 != nullptr || n106 != nullptr || fme7 != nullptr;
+	return vrc6 != nullptr || vrc7 != nullptr || n106 != nullptr || fme7 != nullptr
+		   || fds != nullptr;
 }
 
 int NsfPlayer::render (float* left, float* right, int frames)
@@ -228,6 +244,8 @@ int NsfPlayer::render (float* left, float* right, int frames)
 			if (vrc7) { vrc7->Tick (clocks); }
 			if (n106) { n106->Tick (clocks); }
 			if (fme7) { fme7->Tick (clocks); }
+		if (fds) { fds->Tick (clocks); }
+			if (fds) { fds->Tick (clocks); }
 		}
 
 		INT32 a[2] = { 0, 0 };
@@ -254,6 +272,7 @@ int NsfPlayer::render (float* left, float* right, int frames)
 		addChip (vrc7.get ());
 		addChip (n106.get ());
 		addChip (fme7.get ());
+		addChip (fds.get ());
 
 		const auto mix = [&] (int channel, float& out)
 		{
@@ -650,6 +669,7 @@ void NsfPlayer::applyMasks (void)
 	if (n106) { n106->SetMask (maskFor (5, 8, ! chipAudible[1])); }
 	if (vrc7) { vrc7->SetMask (maskFor (5, 6, ! chipAudible[1])); }
 	if (fme7) { fme7->SetMask (maskFor (5, 5, ! chipAudible[1])); }
+	if (fds) { fds->SetMask (maskFor (5, 1, ! chipAudible[1])); }
 }
 
 int NsfPlayer::renderChannels (float* const* dest, int channelCount, int frames)
@@ -710,6 +730,15 @@ int NsfPlayer::renderChannels (float* const* dest, int channelCount, int frames)
 		if (vrc6) { vrc6->RenderChannels (expansion, 2, 3); }
 		if (n106) { n106->RenderChannels (expansion, 2, 8); }
 		if (vrc7) { vrc7->RenderChannels (expansion, 2, 6); }
+
+		// The FDS is one voice: its whole output is its single channel.
+		if (fds)
+		{
+			INT32 one[2] = { 0, 0 };
+			fds->Render (one);
+			expansion[0] = one[0];
+			expansion[1] = one[1];
+		}
 
 		for (int c = 5; c < channelCount; ++c)
 		{

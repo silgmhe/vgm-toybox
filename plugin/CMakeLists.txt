@@ -672,7 +672,7 @@ endif()
 # PlaybackEngineTest: a build could break the AY mixer mask, the OPL4 second bank or the YM2610 ADPCM
 # trigger and every ctest entry stayed green, because no test ever loaded those files. Each one now
 # asserts the notes its generator writes down, so they belong in the suite.
-foreach(_toybox_asset psg opl4 ym2610 ym2608 fm_alg0)
+foreach(_toybox_asset psg opl4 ym2610 ym2608 fm_alg0 fds_song)
 	set(_toybox_asset_song "${CMAKE_CURRENT_SOURCE_DIR}/Tests/assets/${_toybox_asset}.vgm")
 	if(EXISTS "${_toybox_asset_song}")
 		add_test(NAME "engine.${_toybox_asset}" COMMAND vgm_mixer_test "${_toybox_asset_song}" 3)
