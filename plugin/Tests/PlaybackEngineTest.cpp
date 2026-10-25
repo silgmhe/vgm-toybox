@@ -459,10 +459,18 @@ int main (int argc, char* argv[])
 
 	bool notesOnly = false;
 	bool pitchReport = false;
+	bool trackReport = false;
+	double reportStart = 0.0;
 	for (int i = 2; i < argc; ++i)
 	{
 		notesOnly = notesOnly || (juce::String (argv[i]) == "--notes");
 		pitchReport = pitchReport || (juce::String (argv[i]) == "--pitch-report");
+		trackReport = trackReport || (juce::String (argv[i]) == "--tracks");
+
+		if (juce::String (argv[i]) == "--at" && i + 1 < argc)
+		{
+			reportStart = std::atof (argv[i + 1]);
+		}
 	}
 
 	const juce::File inputFile { juce::String (argv[1]) };
@@ -519,6 +527,105 @@ int main (int argc, char* argv[])
 	engine.setLoopCount (1);
 	engine.setFadeSeconds (0.0);
 	engine.play();
+
+	// --- [1b] per-track report (diagnostic: --tracks) ------------------------------------------
+	if (trackReport)
+	{
+		// The application runs the mixer path; a bare engine object does not. Without this the
+		// per-track numbers describe the plain player, which is one device and no isolation.
+		engine.setMixerEnabled (true);
+
+		const auto& layout = engine.getTracks ();
+
+		std::printf ("\n=== %d tracks\n", (int) layout.size ());
+
+		for (size_t i = 0; i < layout.size (); ++i)
+		{
+			std::printf ("  %2d  %-26s group=%-8s ch=%3d iso=%d\n",
+						 (int) i,
+						 layout[i].name.toRawUTF8 (),
+						 layout[i].groupName.toRawUTF8 (),
+						 layout[i].channelIndex,
+						 layout[i].isolatable ? 1 : 0);
+		}
+
+		// The whole mix, then each track alone: a track whose energy matches the mix while the
+		// others are muted is not isolated at all, whatever its name says.
+		const auto rmsOf = [] (const RenderedBuffer& buffer)
+		{
+			double sum = 0.0;
+
+			for (float value : buffer.left)
+			{
+				sum += (double) value * (double) value;
+			}
+
+			return buffer.left.empty () ? 0.0 : std::sqrt (sum / (double) buffer.left.size ());
+		};
+
+		engine.setPositionSeconds (reportStart);
+		engine.play ();
+
+		// The seek runs on a worker; without waiting, a report "at 45 s" is quietly a report at 0.
+		for (int wait = 0; wait < 200 && engine.getPositionSeconds () + 0.5 < reportStart; ++wait)
+		{
+			juce::Thread::sleep (5);
+		}
+
+		const double mixRms = rmsOf (renderSeconds (engine, seconds, sampleRate, blockSize));
+		std::printf ("\n  full mix rms = %.5f\n", mixRms);
+
+		// Everything muted must be silence. If it is not, the gain stage is not being applied at
+		// all and the per-track numbers below mean nothing.
+		for (size_t j = 0; j < layout.size (); ++j)
+		{
+			engine.setTrackMute (j, true);
+		}
+
+		engine.setPositionSeconds (0.0);
+		engine.play ();
+		std::printf ("  all muted  rms = %.5f   (mixer=%d, tracks=%d)\n\n",
+					 rmsOf (renderSeconds (engine, seconds, sampleRate, blockSize)),
+					 engine.isMixerEnabled () ? 1 : 0,
+					 (int) engine.getTracks ().size ());
+
+		for (size_t j = 0; j < layout.size (); ++j)
+		{
+			engine.setTrackMute (j, false);
+		}
+
+		for (size_t i = 0; i < layout.size (); ++i)
+		{
+			for (size_t j = 0; j < layout.size (); ++j)
+			{
+				engine.setTrackMute (j, j != i);
+			}
+
+			engine.setPositionSeconds (reportStart);
+			engine.play ();
+
+			// The seek runs on a worker; without waiting, a report "at 45 s" is quietly a report at 0.
+			for (int wait = 0; wait < 200 && engine.getPositionSeconds () + 0.5 < reportStart; ++wait)
+			{
+				juce::Thread::sleep (5);
+			}
+
+			const double rms = rmsOf (renderSeconds (engine, seconds, sampleRate, blockSize));
+
+			std::printf ("  %2d %-26s rms=%8.5f  %5.1f%% of mix\n",
+						 (int) i,
+						 layout[i].name.toRawUTF8 (),
+						 rms,
+						 mixRms > 0.0 ? 100.0 * rms / mixRms : 0.0);
+		}
+
+		for (size_t j = 0; j < layout.size (); ++j)
+		{
+			engine.setTrackMute (j, false);
+		}
+
+		return 0;
+	}
 
 	// --- [2] the plain player render (reference) --------------------------------------------
 	std::printf ("[2] rendering %.2f s in plain player mode\n", renderLength);
