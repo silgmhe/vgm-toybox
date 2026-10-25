@@ -362,21 +362,33 @@ void SettingsStore::setAudioDcBlock (bool shouldRemove)
 	}
 }
 
+int SettingsStore::getNumericSetting (const NumericSetting& setting) const
+{
+	const int stored = file != nullptr ? file->getIntValue (setting.key, setting.defaultValue)
+									   : setting.defaultValue;
+
+	return juce::jlimit (setting.minimum, setting.maximum, stored);
+}
+
+void SettingsStore::setNumericSetting (const NumericSetting& setting, int value)
+{
+	if (file != nullptr)
+	{
+		file->setValue (setting.key, juce::jlimit (setting.minimum, setting.maximum, value));
+	}
+}
+
 int SettingsStore::getKeyboardNoteHoldMs (void) const
 {
-	const int stored = file != nullptr ? file->getIntValue (kKeyboardNoteHoldKey, toybox::settings::keyboard::defaultNoteHoldMs)
-									   : toybox::settings::keyboard::defaultNoteHoldMs;
-
-	return juce::jlimit (toybox::settings::keyboard::minNoteHoldMs, toybox::settings::keyboard::maxNoteHoldMs, stored);
+	const auto* setting = numericSetting ("keyboard.noteHoldMs");
+	return setting != nullptr ? getNumericSetting (*setting) : keyboard::defaultNoteHoldMs;
 }
 
 void SettingsStore::setKeyboardNoteHoldMs (int milliseconds)
 {
-	if (file != nullptr)
+	if (const auto* setting = numericSetting ("keyboard.noteHoldMs"))
 	{
-		file->setValue (kKeyboardNoteHoldKey,
-						juce::jlimit (toybox::settings::keyboard::minNoteHoldMs,
-									  toybox::settings::keyboard::maxNoteHoldMs, milliseconds));
+		setNumericSetting (*setting, milliseconds);
 	}
 }
 
@@ -444,21 +456,29 @@ void SettingsStore::setNsfOutputGainDb (int decibels)
 int SettingsStore::getMidiPitchBendRange (void) const
 {
 	// Absent - a fresh install, or a file from before this setting existed - means 12: the wide
-	// range most software synths ship with, and the one the MIDI page recommends. Values outside
-	// what the engine can encode read back clamped, so a hand-edited file cannot break playback.
-	return juce::jlimit (playback::minPitchBendRange, playback::maxPitchBendRange,
-						 file->getIntValue (kMidiBendRangeKey, playback::defaultPitchBendRange));
+	// range most software synths ship with. The bounds come from the descriptor, which takes them
+	// from the sequencer that has to obey them.
+	const auto* setting = numericSetting ("midi.pitchBendRange");
+	return setting != nullptr ? getNumericSetting (*setting) : playback::defaultPitchBendRange;
 }
 
 void SettingsStore::setMidiPitchBendRange (int semitones)
 {
-	const int clamped = juce::jlimit (playback::minPitchBendRange, playback::maxPitchBendRange, semitones);
+	const auto* setting = numericSetting ("midi.pitchBendRange");
+
+	if (setting == nullptr)
+	{
+		return;
+	}
+
+	const int clamped = juce::jlimit (setting->minimum, setting->maximum, semitones);
+
 	if (clamped == getMidiPitchBendRange())
 	{
 		return;
 	}
 
-	file->setValue (kMidiBendRangeKey, clamped);
+	setNumericSetting (*setting, clamped);
 	lastErrorMessage = file->saveIfNeeded() ? juce::String() : writeErrorFor (settingsFile());
 
 	broadcastChange();

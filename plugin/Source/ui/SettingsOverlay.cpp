@@ -7,6 +7,7 @@
 #include "UiFont.h"
 #include "playback/MidiSequence.h"
 #include "settings/KeyboardSettings.h"
+#include "settings/NumericSettings.h"
 #include "settings/NsfSettings.h"
 
 #include <algorithm>
@@ -782,10 +783,11 @@ KeyboardSettingsPage::KeyboardSettingsPage (void)
 	holdSlider.setComponentID ("settings.keyboard.noteHold");
 	holdSlider.setSliderStyle (juce::Slider::LinearHorizontal);
 	holdSlider.setTextBoxStyle (juce::Slider::TextBoxRight, false, 76, 22);
-	holdSlider.setRange ((double) toybox::settings::keyboard::minNoteHoldMs,
-						 (double) toybox::settings::keyboard::maxNoteHoldMs,
-						 (double) toybox::settings::keyboard::noteHoldStepMs);
-	holdSlider.setTextValueSuffix (" ms");
+	if (const auto* hold = toybox::settings::numericSetting ("keyboard.noteHoldMs"))
+	{
+		holdSlider.setRange ((double) hold->minimum, (double) hold->maximum, (double) hold->step);
+		holdSlider.setTextValueSuffix (hold->suffix);
+	}
 	holdSlider.onValueChange = [this]
 	{
 		toybox::settings::SettingsStore::getInstance ()
@@ -888,7 +890,10 @@ void KeyboardSettingsPage::refreshLanguage (void)
 {
 	startCaption.setText (i18n::tr ("settings.keyboard.startNote"), juce::dontSendNotification);
 	startNote.changeItemText (1, i18n::tr ("settings.keyboard.startAuto"));
-	holdCaption.setText (i18n::tr ("settings.keyboard.noteHold"), juce::dontSendNotification);
+	if (const auto* hold = toybox::settings::numericSetting ("keyboard.noteHoldMs"))
+	{
+		holdCaption.setText (i18n::tr (hold->labelKey), juce::dontSendNotification);
+	}
 	middleCaption.setText (i18n::tr ("settings.keyboard.middleC"), juce::dontSendNotification);
 	caption.setText (i18n::tr ("settings.keyboard.rangeHints"), juce::dontSendNotification);
 	rangeHints.setButtonText (i18n::tr ("settings.keyboard.rangeHintsOn"));

@@ -236,6 +236,8 @@ target_sources(VGMToybox PRIVATE
 	Source/i18n/LanguageManager.cpp
 	Source/i18n/LanguagePack.cpp
 	Source/settings/SettingsStore.cpp
+	Source/settings/NumericSettings.cpp
+	Source/settings/NumericSettings.cpp
 	Source/ui/CardComponent.cpp
 	Source/ui/ChannelStrip.cpp
 	Source/ui/ChipPanel.cpp
@@ -361,6 +363,7 @@ add_executable(vgm_mixer_test EXCLUDE_FROM_ALL
 	Source/playback/DawSync.cpp
 	Source/playback/SessionState.cpp
 	Source/settings/SettingsStore.cpp
+	Source/settings/NumericSettings.cpp
 	Source/chips/GbcApuDecoder.cpp
 	Source/chips/HuC6280Decoder.cpp
 	Source/chips/K051649Decoder.cpp
@@ -511,6 +514,7 @@ add_executable(vgm_core_test EXCLUDE_FROM_ALL
 	Source/i18n/LanguageManager.cpp
 	Source/i18n/LanguagePack.cpp
 	Source/settings/SettingsStore.cpp
+	Source/settings/NumericSettings.cpp
 	Source/Standalone/TrayController.cpp
 	Source/Standalone/TrayMenu.cpp
 )
