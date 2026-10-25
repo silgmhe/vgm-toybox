@@ -325,6 +325,11 @@ namespace
 		std::int64_t blockStartSample = 0;			// set by the render loop below
 		double rms = 0.0;							// the audio of the same render (both channels)
 
+		/** The same audio with its mean removed. A channel that is silent but parks its DAC on a
+			constant reads as loud by `rms` - the 2A03's triangle does exactly that once its length
+			counter runs out - so "is this track making sound" has to be asked of this one. */
+		double acRms = 0.0;
+
 	};
 
 	/** Renders `seconds` with the MIDI sink attached and measures the audio in the same pass.
@@ -343,6 +348,7 @@ namespace
 		toybox::playback::OutputBusBuffers buses[1] = { { blockL.data(), blockR.data() } };
 
 		double sumOfSquares = 0.0;
+		double sum = 0.0;
 		std::int64_t sampleCount = 0;
 
 		while (rendered < totalSamples && ! engine.isFinished())
@@ -356,13 +362,21 @@ namespace
 			{
 				sumOfSquares += (double) blockL[(size_t) i] * (double) blockL[(size_t) i]
 								+ (double) blockR[(size_t) i] * (double) blockR[(size_t) i];
+				sum += (double) blockL[(size_t) i] + (double) blockR[(size_t) i];
 				++sampleCount;
 			}
 
 			rendered += blockSize;
 		}
 
-		recorder.rms = (sampleCount > 0) ? std::sqrt (sumOfSquares / (double) (2 * sampleCount)) : 0.0;
+		const double samples = (double) (2 * sampleCount);
+		recorder.rms = (sampleCount > 0) ? std::sqrt (sumOfSquares / samples) : 0.0;
+
+		const double mean = (sampleCount > 0) ? sum / samples : 0.0;
+		recorder.acRms = (sampleCount > 0)
+							 ? std::sqrt (std::max (0.0, sumOfSquares / samples - mean * mean))
+							 : 0.0;
+
 		return recorder;
 	}
 
@@ -690,9 +704,12 @@ int main (int argc, char* argv[])
 
 	// Whether the song can send MIDI at all is a property of the backend, and the mixer asks it
 	// before offering a channel: a track's capability describes its voice, not what can be sent.
+	//
+	// An NSF can now answer yes, and by a different route than a VGM: there is no register stream
+	// to read, so the sequence comes from running the driver once with the output discarded.
 	{
 		const juce::String extension = inputFile.getFileExtension().toLowerCase();
-		const bool expectsMidi = (extension == ".vgm" || extension == ".vgz");
+		const bool expectsMidi = (extension == ".vgm" || extension == ".vgz" || extension == ".nsf");
 
 		std::printf ("    canEmitMidi %s (expected %s for %s)\\n",
 					 engine.canEmitMidi () ? "yes" : "no",
@@ -1822,7 +1839,9 @@ int main (int argc, char* argv[])
 			engine.setTrackSolo ((int) i, false);
 			engine.setTrackMidiChannel (i, 0);
 
-			probes[i].audible = probe.rms > audibleFloor;
+			// acRms, not rms: a channel silent but resting on a constant reads as loud otherwise,
+			// and the 2A03's triangle does exactly that when its length counter has run out.
+			probes[i].audible = probe.acRms > audibleFloor;
 			probes[i].notes = (int) probe.notesOn (1).size();
 			for (size_t e = 0; e < probe.events.size() && e < probe.blockStarts.size(); ++e)
 			{
@@ -1874,6 +1893,44 @@ int main (int argc, char* argv[])
 					 audibleTracks, (int) tracks.size(), audibleTracks - knownGaps);
 		check (audibleTracks > 0, "the song's opening has audible tracks to compare against");
 		check (! hasMidiDecoder || missingNotes == 0, "every track that makes sound also produces MIDI notes");
+
+		// The pitches, not just the count: a note that arrives but carries the wrong number is
+		// worse than none, and the two assets here have known answers. Square 3 of the VRC6 file
+		// is A4, its ramp A3 - the same two numbers --chips prints for those rows.
+		if (inputFile.getFileName() == "vrc6_song.nsf")
+		{
+			check (probes[5].ons.size() == 1 && probes[5].ons[0].note == 69,
+				   "the VRC6 pulse reaches the port as A4");
+			check (probes[7].ons.size() == 1 && probes[7].ons[0].note == 57,
+				   "and its ramp as A3");
+		}
+
+		// The two sample voices answer with notes of their own, and this is the check that those
+		// notes reach the port: the noise channel's sixteen periods live in 43..58, a DPCM slot
+		// starts at 60. An empty set passes - a file whose noise is silent has nothing to send.
+		//
+		// Both mappings belong to the NSF path, and so do rows 3 and 4: a VGM's noise channel goes
+		// out on the GM drum keys its decoder picked (38..48), and a VGM with fewer than five
+		// tracks has no row 4 at all - reading one there crashed four suites before this moved
+		// inside the condition.
+		if (inputFile.getFileExtension().equalsIgnoreCase (".nsf") && probes.size () >= 5)
+		{
+			bool noiseInRange = true;
+			bool sampleInRange = true;
+
+			for (const auto& on : probes[3].ons)
+			{
+				noiseInRange = noiseInRange && on.note >= 43 && on.note <= 58;
+			}
+
+			for (const auto& on : probes[4].ons)
+			{
+				sampleInRange = sampleInRange && on.note >= 60;
+			}
+
+			check (noiseInRange, "every noise note the port sends is inside the sixteen periods' range");
+			check (sampleInRange, "and every DPCM note is a sample slot, not a pitch");
+		}
 
 		// The generated algorithm-0 asset exists for this one sentence: its only carrier is
 		// operator 4, whose total level is the register the decoder used to misread. Silence in MIDI

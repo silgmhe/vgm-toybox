@@ -228,6 +228,23 @@ public:
 	const playback::SongInfo& getInfo (void) const override { return info_; }
 	const std::vector<playback::TrackInfo>& getTracks (void) const override { return tracks_; }
 
+	const playback::MidiSequence* getMidiSequence (void) const override
+	{
+		// Built on first ask, and only once per file: the scan behind it is cached on the file's
+		// bytes, so a second backend opening the same song gets the stream back without walking
+		// it again. A player is created here rather than borrowed from a track player because
+		// those are built later, and because what this needs is the product of the scan, not a
+		// running emulation.
+		if (midiSequence == nullptr)
+		{
+			NsfPlayer probe (file, 44100.0);
+			probe.start ();
+			midiSequence = probe.shareMidiSequence ();
+		}
+
+		return midiSequence.get ();
+	}
+
 	playback::BackendCapabilities getCapabilities (void) const override
 	{
 		playback::BackendCapabilities caps;
@@ -244,6 +261,11 @@ public:
 		// Every chip the emulation renders can be silenced on its own: the core mutes per output
 		// bit, and setChipAudible() turns a whole group of those bits off at once.
 		caps.canMuteChips = true;
+
+		// An NSF has no register stream to read - it is a program - so the sequence comes from
+		// running that program once with the output thrown away. That pass is the same one that
+		// numbers the DPCM samples, and it is cached on the file's bytes.
+		caps.canEmitMidi = true;
 		return caps;
 	}
 
@@ -313,6 +335,10 @@ private:
 	double length = 180.0;
 	bool expansionPresent = false;
 	int blockSize = 512;
+
+	/** Filled the first time the engine asks for the stream; mutable because getMidiSequence()
+		is const and the ask is what builds it. */
+	mutable std::shared_ptr<const playback::MidiSequence> midiSequence;
 };
 
 } // namespace

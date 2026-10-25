@@ -20,6 +20,11 @@ namespace
 constexpr double kNtscClock = 1789772.727272727;
 constexpr double kPalClock = 1662607.0;
 
+/** The shortest note the scan records: one NES frame. A DPCM hit can be over in three
+	milliseconds, and a note-off stamped at the same instant as its note-on is a note MIDI
+	receivers drop - which would silence exactly the drums a DPCM track is for. */
+constexpr double kMinimumNoteSeconds = 1.0 / 60.0;
+
 /** DPCM sample slots per song, keyed by the file's content hash and its start song.
 
 	A backend is rebuilt several times while one song is open - switching the mixer on, seeking -
@@ -27,8 +32,17 @@ constexpr double kPalClock = 1662607.0;
 	that, and the scan costs about half a second, so it is kept here rather than on whichever file
 	object the current backend happens to own.
 */
+/** What one pass over the song produces: the note each DPCM sample slot was given, and every
+	note the song plays. Both come out of the same walk, and both are facts about the file rather
+	than about a player - which is why they are cached together. */
+struct ScanResult
+{
+	std::unordered_map<int, int> sampleNotes;
+	std::shared_ptr<const playback::MidiSequence> midiSequence;
+};
+
 std::mutex sampleSlotMutex;
-std::unordered_map<std::size_t, std::unordered_map<int, int>> sampleSlotCache;
+std::unordered_map<std::size_t, ScanResult> sampleSlotCache;
 constexpr std::size_t kSampleSlotCacheLimit = 16;
 
 } // namespace
@@ -136,7 +150,8 @@ void NsfPlayer::start (void)
 
 			if (found != sampleSlotCache.end ())
 			{
-				sampleNotes = found->second;
+				sampleNotes = found->second.sampleNotes;
+				midiSequence = found->second.midiSequence;
 				cached = true;
 			}
 		}
@@ -152,7 +167,7 @@ void NsfPlayer::start (void)
 				sampleSlotCache.clear ();
 			}
 
-			sampleSlotCache[key] = sampleNotes;
+			sampleSlotCache[key] = ScanResult { sampleNotes, midiSequence };
 		}
 	}
 
@@ -207,7 +222,10 @@ void NsfPlayer::scanSampleChannels (double seconds)
 		return;
 	}
 
-	const int block = 1024;
+	// 256 samples is 5.8 ms: the notes this scan records land within a sixth of a NES frame of
+	// where the driver played them. 1024 was enough for the sample slots, which change once per
+	// bar, but a drum hit placed 23 ms late is audible.
+	const int block = 256;
 	const int total = (int) (seconds * rate);
 
 	std::vector<float> left ((std::size_t) block, 0.0f);
@@ -216,15 +234,97 @@ void NsfPlayer::scanSampleChannels (double seconds)
 	scanning = true;
 	sampleDirty = false;		// nothing is a sample until the driver has written $4010 or $4012
 
+	// The note each row was last seen playing, and when that note started. A drum can begin and
+	// end inside one block, and a note-off stamped at the same instant as its note-on is a note
+	// many receivers drop.
+	const std::size_t rows = (std::size_t) (std::max) (1, channelCount ());
+	std::vector<int> lastNote (rows, -1);
+	std::vector<double> noteOnTime (rows, 0.0);
+	std::vector<playback::MidiEvent> events;
+
 	for (int done = 0; done < total; done += block)
 	{
 		// The output is thrown away. Rendering is the only way to advance the CPU by the schedule
 		// the player already keeps, and it is cheap: the emulation runs about fifteen times
 		// faster than the audio it produces.
 		render (left.data (), right.data (), block);
+
+		// The same reading the keyboard gets, minus the waveforms: this runs thirty thousand
+		// times and nothing here draws.
+		playback::ChipStateSnapshot snapshot;
+		captureState (snapshot, false);
+
+		const double time = (double) (done + block) / rate;
+
+		for (const auto& channel : snapshot.channels)
+		{
+			const int index = channel.trackIndex;
+
+			if (index < 0 || (std::size_t) index >= rows)
+			{
+				continue;
+			}
+
+			const std::size_t row = (std::size_t) index;
+			const int note = (channel.active && channel.note >= 0) ? channel.note : -1;
+
+			if (note == lastNote[row])
+			{
+				continue;
+			}
+
+			if (lastNote[row] >= 0)
+			{
+				playback::MidiEvent off;
+				off.timeSeconds = (std::max) (time, noteOnTime[row] + kMinimumNoteSeconds);
+				off.type = playback::MidiEventType::noteOff;
+				off.data1 = (std::uint8_t) lastNote[row];
+				off.sourceTrack = (std::uint32_t) index;
+				events.push_back (off);
+			}
+
+			if (note >= 0)
+			{
+				playback::MidiEvent on;
+				on.timeSeconds = time;
+				on.type = playback::MidiEventType::noteOn;
+				on.data1 = (std::uint8_t) note;
+				on.data2 = (std::uint8_t) (std::clamp) ((int) std::lround ((double) channel.volume * 127.0),
+														1, 127);
+				on.sourceTrack = (std::uint32_t) index;
+				events.push_back (on);
+
+				noteOnTime[row] = time;
+			}
+
+			lastNote[row] = note;
+		}
 	}
 
 	scanning = false;
+
+	// The minimum-length rule can push a note-off past events recorded after it, and the engine
+	// walks this list with lower_bound - time order is the one thing it requires.
+	std::stable_sort (events.begin (), events.end (),
+					  [] (const playback::MidiEvent& a, const playback::MidiEvent& b)
+					  {
+						  return a.timeSeconds < b.timeSeconds;
+					  });
+
+	auto sequence = std::make_shared<playback::MidiSequence> ();
+	sequence->events = std::move (events);
+
+	// No loop point: the NSF header has a field for one and almost nothing fills it, so guessing
+	// would put the loop in the wrong bar. -1 leaves it to the length the user configured.
+	sequence->loopStartSeconds = -1.0;
+	sequence->loopEndSeconds = -1.0;
+
+	midiSequence = std::move (sequence);
+}
+
+std::shared_ptr<const playback::MidiSequence> NsfPlayer::shareMidiSequence (void) const
+{
+	return midiSequence;
 }
 
 void NsfPlayer::observeDpcmSample (void)
@@ -600,7 +700,7 @@ namespace
 	constexpr float kN163SampleMaximum = 15.0f;
 }
 
-bool NsfPlayer::captureState (playback::ChipStateSnapshot& snapshot) const
+bool NsfPlayer::captureState (playback::ChipStateSnapshot& snapshot, bool includeWaves) const
 {
 	snapshot.chips.clear ();
 	snapshot.channels.clear ();
@@ -845,7 +945,7 @@ bool NsfPlayer::captureState (playback::ChipStateSnapshot& snapshot) const
 		const std::size_t index = snapshot.channels.size ();
 		addChannel ("FDS", "FDS", kFirstExpansionTrack + 0, kShapeStored, kNoDuty, info);
 
-		if (info != nullptr && snapshot.channels.size () > index)
+		if (info != nullptr && includeWaves && snapshot.channels.size () > index)
 		{
 			auto& state = snapshot.channels[index];
 			state.wave.reserve (64);
@@ -902,7 +1002,7 @@ bool NsfPlayer::captureState (playback::ChipStateSnapshot& snapshot) const
 
 		const int length = (std::clamp) (info->wavelen, 0, kN163MaximumWaveLength);
 
-		if (length > 0)
+		if (length > 0 && includeWaves)
 		{
 			state.wave.reserve ((std::size_t) length);
 

@@ -276,14 +276,42 @@ ctest 42/42（新增 engine.fds_song / vrc6_song / vrc7_song / mmc5_song / fme7_
 - [x] 轨道名与 VGM 侧一致（Square n / Saw Wave / FM n）
 - [ ] 键盘视图逐轨独奏的人工确认（需在 UI 里看一遍）
 
-### 阶段 3：MIDI（P1，方案 B）
+### 阶段 3：MIDI（P1，方案 B，已完成）
 
-**预扫已经落地**（见 2.5）：`NsfPlayer::scanSampleChannels` 就是这条路线要的那一遍 CPU，
-实测 180 秒约 0.7 秒，缓存在内容哈希上。剩下的是把同一次扫描的音符抽出来。
+NSF 没有寄存器流可读——它是一个 6502 程序——所以序列只能来自**把程序跑一遍**。这一遍就是
+2.5 里为编号 DPCM 采样已经付过的那次扫描，音符是顺带的产物。
 
-- [x] 预演耗时实测：180 秒音频 737–826 ms（含音频渲染），纯 CPU 更快
-- [ ] 扫描时同时产出 MidiSequence（现在只建 DPCM 槽位表）
-- [ ] 测试：三轨各出一个音符，音高与通道频率一致
+`NsfPlayer::scanSampleChannels` 每 **256 采样**（5.8 ms）读一次全部轨道的 `note`/`volume`，
+比较出变化点，写成 `MidiEvent`。256 而不是原来的 1024，是因为 23 ms 的鼓点抖动在 120 BPM 的
+十六分音符（125 ms）上能听出来。
+
+几条规则，都在代码里写明了理由：
+
+| 情况 | 处理 |
+|---|---|
+| `note` 变化（含 -1 ↔ 有效） | noteOff 旧的 + noteOn 新的，同一 block 内成对 |
+| 音符短于 1/60 秒 | noteOff 推到 noteOn + 1/60；接收方会丢掉零长度音符，而 DPCM 的样本只有几毫秒 |
+| 力度 | `volume × 127`，不产生 CC |
+| 音序 | 最小长度规则会把 noteOff 推到后面，末尾统一 `stable_sort`（引擎用 `lower_bound` 扫） |
+| 长度 | 180 秒，与扫描窗口和默认曲长一致 |
+| loop | 不填。NSF 头有这个字段，几乎没有文件用，猜一个只会把循环点放错小节 |
+
+**两个寄存器级的事实**：`volume` 对噪声/DPCM 不可靠（一个是一次性写入的寄存器，一个是 DAC），
+所以沿用 `captureState` 里已经放宽过的判定；`active` 对 DPCM 也放宽过（DAC 有值即活跃），
+这让 DPCM 的音符由 `GetOutput()` 的起落自然切分，实测 `apu_percussion.nsf` 一秒内得到 5 个
+音符，而不是一个永不结束的音。
+
+**缓存与 DPCM 槽位表合并**成一个 `ScanResult`（`sampleNotes` + `shared_ptr<const MidiSequence>`），
+仍按文件内容哈希。`NsfSongInstance::getMidiSequence()` 首次被问时才建一个 `NsfPlayer probe`
+跑扫描——缓存命中后这一步只是查表。
+
+**副作用**：`NsfBackend` 的 `canEmitMidi` 打开后，测试里「有声的轨必须产生 MIDI 音符」这条
+第一次真正对 NSF 生效，随即暴露 `recordMidi` 用原始 RMS 判断「有声」——2A03 的三角波在
+length counter 归零后停在直流上，读数是 0.147 而实际无声。改用去均值能量后才问对问题。
+
+- [x] 预演耗时实测：180 秒音频约 0.7 秒（含渲染）
+- [x] 扫描时同时产出 MidiSequence
+- [x] 测试：VRC6 的 A4/A3 逐音比对，噪声落 43–58，DPCM 从 60 起
 
 ## 5. 验收标准
 

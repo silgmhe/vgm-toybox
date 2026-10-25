@@ -1,6 +1,7 @@
 #pragma once
 
 #include "playback/ChipState.h"
+#include "playback/MidiSequence.h"
 #include <array>
 #include <cstdint>
 #include <memory>
@@ -106,9 +107,13 @@ public:
 	/** Silences a whole chip. 0 is the 2A03 (both of its objects), 1 the expansion. */
 	void setChipAudible (int device, bool audible);
 
-	/** Fills what the chips can report: N163 for now, because it is the only chip in this core
-		that exposes per-channel state including the waveform it is reading. */
-	bool captureState (playback::ChipStateSnapshot& snapshot) const;
+	/** Fills what the chips can report: the five 2A03 voices and every row of whichever
+		expansion chip the file declares.
+
+		`includeWaves` off skips the waveform copies an FDS or N163 row carries. The preset scan
+		reads this tens of thousands of times and never draws anything, and those copies are the
+		bulk of the cost - 64 floats for the FDS, up to 256 for each of the N163's eight rows. */
+	bool captureState (playback::ChipStateSnapshot& snapshot, bool includeWaves = true) const;
 
 	/** Scales the output. The NES mix table leaves a lot of headroom - five four-bit channels never
 		approach full scale - so a file played back unamplified sits eight to twelve decibels below a
@@ -128,6 +133,18 @@ public:
 
 	std::uint64_t soundWrites (void) const;
 	double positionSeconds (void) const;
+
+	/** The MIDI stream the preset scan produced, or null when the scan has not run.
+
+		The scan that numbers the DPCM samples already walks the whole song; recording the note
+		changes on the way costs almost nothing extra, and it is what the mixer's MIDI column
+		needs. Null is the honest answer before start(): nothing has been read yet.
+
+		Shared rather than borrowed because it outlives the player it came from: the backend holds
+		on to it, and a player that handed out a raw pointer would leave that pointer dangling the
+		moment the player that scanned the file goes away.
+	*/
+	std::shared_ptr<const playback::MidiSequence> shareMidiSequence (void) const;
 
 private:
 	void resetToStart (void);
@@ -172,6 +189,11 @@ private:
 		note a sample has cannot change while the song plays. */
 	std::unordered_map<int, int> sampleNotes;
 	int nextSampleNote = 60;			// MIDI 60: the octave FamiStudio starts allocating from
+
+	/** The other product of that same pass: every note the song plays, in time order. Shared
+		because the scan is cached and every player built from this file gets the same stream. */
+	std::shared_ptr<const playback::MidiSequence> midiSequence;
+
 	bool prescanDisabled = false;
 	bool scanning = false;
 	bool sampleDirty = false;			// a whole slot has been written since the last look
