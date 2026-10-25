@@ -183,16 +183,33 @@ void drawMelodyGlyph (juce::Graphics& g, juce::Rectangle<float> iconArea, juce::
 	}
 }
 
-void drawDiscreteGlyph (juce::Graphics& g, juce::Rectangle<float> iconArea, juce::Colour colour)
+void drawDrumGlyph (juce::Graphics& g, juce::Rectangle<float> iconArea, juce::Colour colour)
 {
-	// A note that is really a slot, so the mark is both marks: the keyboard says it has a pitch,
-	// the burst says it is struck rather than held. Stacked rather than side by side - at fifteen
-	// pixels, two half-width glyphs would each be a barcode.
-	const float gap = juce::jmax (1.0f, iconArea.getHeight() * 0.12f);
-	const float keyboardHeight = (iconArea.getHeight() - gap) * 0.58f;
+	// A drum, not a stacked pair of the other marks. At the ten pixels a strip badge allows, a
+	// keyboard above a burst turned into two grey smudges; one shape with a clear silhouette reads
+	// at half that size. The head line is what makes it a drum rather than a box.
+	const float width = iconArea.getWidth ();
+	const float height = iconArea.getHeight ();
+	const float lineWidth = juce::jmax (1.1f, width * 0.10f);
 
-	drawMelodyGlyph (g, iconArea.withHeight (keyboardHeight), colour);
-	drawSampleGlyph (g, iconArea.withTrimmedTop (keyboardHeight + gap), colour);
+	const auto shell = juce::Rectangle<float> (iconArea.getX () + width * 0.13f,
+											   iconArea.getY () + height * 0.20f,
+											   width * 0.74f,
+											   height * 0.46f);
+
+	g.setColour (colour);
+	g.fillRoundedRectangle (shell, height * 0.14f);
+
+	g.setColour (colour.contrasting (0.55f));
+	g.fillRect (juce::Rectangle<float> (shell.getX () + width * 0.10f, shell.getY () + height * 0.09f,
+										shell.getWidth () - width * 0.20f, lineWidth));
+
+	// Two legs, angled out from under the shell.
+	g.setColour (colour);
+	g.drawLine (shell.getX () + width * 0.16f, shell.getBottom (),
+				iconArea.getX () + width * 0.05f, iconArea.getBottom () - height * 0.04f, lineWidth);
+	g.drawLine (shell.getRight () - width * 0.16f, shell.getBottom (),
+				iconArea.getRight () - width * 0.05f, iconArea.getBottom () - height * 0.04f, lineWidth);
 }
 
 void drawSampleGlyph (juce::Graphics& g, juce::Rectangle<float> iconArea, juce::Colour colour)

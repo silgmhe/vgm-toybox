@@ -60,6 +60,12 @@ void MidiCapabilityBadge::paint (juce::Graphics& g)
 	case playback::MidiCapability::melodic:
 		drawMelodyGlyph (g, area, theme::secondaryText());
 		break;
+	case playback::MidiCapability::discrete:
+		// A fixed set of notes: the noise channel's sixteen periods, a DPCM sample's slots. Both
+		// are percussion in practice, and a drum says that faster than a keyboard with a burst
+		// underneath it did at this size.
+		drawDrumGlyph (g, area, theme::secondaryText());
+		break;
 	case playback::MidiCapability::oneShot:
 		drawSampleGlyph (g, area, theme::secondaryText());
 		break;
