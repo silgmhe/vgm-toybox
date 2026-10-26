@@ -23,55 +23,43 @@ namespace
 	constexpr int kIdleRefreshHz = 10;
 
 	// --- paint accounting ------------------------------------------------------------------
-	// Off unless TOYBOX_PAINT_STATS=1 is in the environment.
+	// Temporary probe, and deliberately not behind an environment variable: the first attempt put
+	// it behind one, and a GUI binary launched from Explorer inherits whatever the shell had at
+	// logon, so nothing appeared. It now always counts and always reports into the status line,
+	// where it cannot be missed.
 	//
-	// "Is this window repainting while nothing moves?" cannot be answered by reading the code:
-	// every repaint call in the refresh path is conditional, so the answer ought to be no, and a
-	// GPU reading that says otherwise is either the compositor's or somebody's. One counter
-	// settles which, in one run, without a profiler.
-	//
-	//   set TOYBOX_PAINT_STATS=1
-	//   build\...\VGMToybox.exe
-	//
-	// A line every ten seconds says how many times this window was asked to paint. Zero while
-	// idle means the cost is in the present path, not in the drawing; ten or fifteen a second
-	// means something in refreshUi() is repainting unconditionally. See
+	// "Is this window repainting while nothing moves?" cannot be answered by reading the code: every
+	// repaint call in the refresh path is conditional, so the answer ought to be no, and a GPU
+	// reading that says otherwise is either the compositor's or somebody's. One counter settles
+	// which, in one run, without a profiler. See
 	// docs/issue/2026-10-26-why-the-window-costs-gpu-at-rest.md.
-	bool paintStatsEnabled (void)
-	{
-		static const bool enabled =
-			juce::SystemStats::getEnvironmentVariable ("TOYBOX_PAINT_STATS", {}) == "1";
-		return enabled;
-	}
+	//
+	// To remove: this block, the fetch_add in paint(), the call in timerCallback(), paintReport in
+	// the header and the two lines in updateStatusLine().
+	constexpr double kPaintReportSeconds = 5.0;
 
 	std::atomic<int> editorPaints { 0 };
 	std::atomic<double> lastPaintReportMs { 0.0 };
 
-	void reportPaintStats (void)
+	/** How many paints since the last report, as a string to show - empty when it is not time. */
+	juce::String takePaintReport (void)
 	{
-		if (! paintStatsEnabled ())
-		{
-			return;
-		}
-
 		const double now = juce::Time::getMillisecondCounterHiRes ();
 
-		if (now - lastPaintReportMs.load (std::memory_order_relaxed) < 10000.0)
+		if (now - lastPaintReportMs.load (std::memory_order_relaxed) < kPaintReportSeconds * 1000.0)
 		{
-			return;
+			return {};
 		}
 
 		lastPaintReportMs.store (now, std::memory_order_relaxed);
 
-		const auto line = "editor " + juce::String (editorPaints.exchange (0)) + " paint(s) in 10 s";
+		const auto count = editorPaints.exchange (0);
+		const auto line = juce::String (count) + " paints / "
+						+ juce::String (kPaintReportSeconds, 0) + " s";
+
 		juce::Logger::writeToLog ("VGMToybox paint stats: " + line);
 
-		// A file as well as the log: the standalone build is a GUI subsystem binary on Windows, so
-		// there is no console for stderr to reach and OutputDebugString needs a viewer running.
-		// %TEMP%\vgmtoybox-paint.log is openable by anyone.
-		juce::File::getSpecialLocation (juce::File::tempDirectory)
-			.getChildFile ("vgmtoybox-paint.log")
-			.appendText (juce::Time::getCurrentTime ().toString (true, true) + "  " + line + "\n");
+		return line;
 	}
 
 	// What the stored mode means as a palette. "Follow system" is asked at the moment it is needed,
@@ -328,10 +316,7 @@ void ToyboxAudioProcessorEditor::lookAndFeelChanged (void)
 
 void ToyboxAudioProcessorEditor::paint (juce::Graphics& g)
 {
-	if (paintStatsEnabled ())
-	{
-		editorPaints.fetch_add (1, std::memory_order_relaxed);
-	}
+	editorPaints.fetch_add (1, std::memory_order_relaxed);
 
 	// a faint vertical gradient gives the window some depth
 	g.setGradientFill (juce::ColourGradient (theme::windowTop(), 0.0f, 0.0f,
@@ -750,8 +735,11 @@ void ToyboxAudioProcessorEditor::timerCallback (void)
 
 	refreshUi();
 
-	// Only does anything with TOYBOX_PAINT_STATS=1 - see the note at the top of this file.
-	reportPaintStats();
+	// Temporary - see the note at the top of this file.
+	if (auto report = takePaintReport(); report.isNotEmpty())
+	{
+		paintReport = report;
+	}
 }
 
 void ToyboxAudioProcessorEditor::refreshUi (void)
@@ -830,6 +818,13 @@ void ToyboxAudioProcessorEditor::updateStatusLine (void)
 	{
 		status << "   " << formatTime (engine.getPositionSeconds())
 			   << " / " << formatTime (engine.getDurationSeconds());
+	}
+
+	// Temporary probe: read this off the running window while it sits idle. Change it every five
+	// seconds, so it repaints about as often as a clock - not enough to matter.
+	if (paintReport.isNotEmpty())
+	{
+		status << "   [" << paintReport << "]";
 	}
 
 	statusLabel.setColour (juce::Label::textColourId, hasProblem ? theme::error() : theme::secondaryText());

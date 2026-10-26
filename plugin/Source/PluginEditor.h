@@ -112,6 +112,12 @@ private:
 
 	juce::TextButton openButton { "Open file..." };
 	juce::Label statusLabel;
+
+	/** Temporary: the paint count, shown in the status line so it can be read off the window
+		itself. Set from the refresh timer once every ten seconds, which is why showing it costs
+		nothing worth measuring. Remove with the rest of the probe - see
+		docs/issue/2026-10-26-why-the-window-costs-gpu-at-rest.md. */
+	juce::String paintReport;
 	toybox::ui::ViewStack viewStack;	// holds the pages; exactly one of them is visible
 	toybox::ui::PlayView* playView = nullptr;	// the page, so the View menu can ask it what it shows
 	toybox::ui::DropHintOverlay dropHint;
