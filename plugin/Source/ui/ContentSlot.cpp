@@ -149,6 +149,24 @@ public:
 	void setSnapshot (const toybox::playback::ChipStateSnapshot& snapshotToUse)
 	{
 		snapshot = snapshotToUse;
+		afterSnapshot ();
+	}
+
+	/** The same, for a snapshot the caller is finished with.
+
+		The engine already copies the shared state once under its lock; copying it a second time here,
+		thirty times a second, meant two deep copies of every channel's name and cycle per frame.
+		The panel keeps it from here on, so the caller's copy is dead weight.
+	*/
+	void setSnapshot (toybox::playback::ChipStateSnapshot&& snapshotToUse)
+	{
+		snapshot = std::move (snapshotToUse);
+		afterSnapshot ();
+	}
+
+	/** Everything both setSnapshot overloads do once the copy is in place. */
+	void afterSnapshot (void)
+	{
 
 		// A chip's period register holds its last value, and a fast passage has gaps between notes
 		// shorter than a display frame. Holding the last note for a configurable moment keeps a row
@@ -1313,9 +1331,11 @@ void ContentSlot::timerCallback (void)
 		return;
 	}
 
-	keyboardPanel->setSnapshot (snapshot);
-
+	// Read before the move - it is this copy that is being handed over, and after the move it is
+	// empty. The panel does not need the number handed to it: it has the channels.
 	const int rows = (int) snapshot.channels.size ();
+
+	keyboardPanel->setSnapshot (std::move (snapshot));
 
 	if (rows != lastChannelCount)
 	{
