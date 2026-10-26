@@ -6,6 +6,8 @@
 #include "ui/SoftShadow.h"
 #include "ui/Theme.h"
 
+#include <atomic>
+
 using namespace toybox;
 using namespace toybox::ui;
 
@@ -19,6 +21,58 @@ namespace
 	// moves the timer only refreshes state at a low rate - there is nothing to repaint then.
 	constexpr int kPlayingRefreshHz = 15;
 	constexpr int kIdleRefreshHz = 10;
+
+	// --- paint accounting ------------------------------------------------------------------
+	// Off unless TOYBOX_PAINT_STATS=1 is in the environment.
+	//
+	// "Is this window repainting while nothing moves?" cannot be answered by reading the code:
+	// every repaint call in the refresh path is conditional, so the answer ought to be no, and a
+	// GPU reading that says otherwise is either the compositor's or somebody's. One counter
+	// settles which, in one run, without a profiler.
+	//
+	//   set TOYBOX_PAINT_STATS=1
+	//   build\...\VGMToybox.exe
+	//
+	// A line every ten seconds says how many times this window was asked to paint. Zero while
+	// idle means the cost is in the present path, not in the drawing; ten or fifteen a second
+	// means something in refreshUi() is repainting unconditionally. See
+	// docs/issue/2026-10-26-why-the-window-costs-gpu-at-rest.md.
+	bool paintStatsEnabled (void)
+	{
+		static const bool enabled =
+			juce::SystemStats::getEnvironmentVariable ("TOYBOX_PAINT_STATS", {}) == "1";
+		return enabled;
+	}
+
+	std::atomic<int> editorPaints { 0 };
+	std::atomic<double> lastPaintReportMs { 0.0 };
+
+	void reportPaintStats (void)
+	{
+		if (! paintStatsEnabled ())
+		{
+			return;
+		}
+
+		const double now = juce::Time::getMillisecondCounterHiRes ();
+
+		if (now - lastPaintReportMs.load (std::memory_order_relaxed) < 10000.0)
+		{
+			return;
+		}
+
+		lastPaintReportMs.store (now, std::memory_order_relaxed);
+
+		const auto line = "editor " + juce::String (editorPaints.exchange (0)) + " paint(s) in 10 s";
+		juce::Logger::writeToLog ("VGMToybox paint stats: " + line);
+
+		// A file as well as the log: the standalone build is a GUI subsystem binary on Windows, so
+		// there is no console for stderr to reach and OutputDebugString needs a viewer running.
+		// %TEMP%\vgmtoybox-paint.log is openable by anyone.
+		juce::File::getSpecialLocation (juce::File::tempDirectory)
+			.getChildFile ("vgmtoybox-paint.log")
+			.appendText (juce::Time::getCurrentTime ().toString (true, true) + "  " + line + "\n");
+	}
 
 	// What the stored mode means as a palette. "Follow system" is asked at the moment it is needed,
 	// so it keeps meaning "whichever the desktop is on now" (ui/Theme.h) - and the mapping lives
@@ -274,6 +328,11 @@ void ToyboxAudioProcessorEditor::lookAndFeelChanged (void)
 
 void ToyboxAudioProcessorEditor::paint (juce::Graphics& g)
 {
+	if (paintStatsEnabled ())
+	{
+		editorPaints.fetch_add (1, std::memory_order_relaxed);
+	}
+
 	// a faint vertical gradient gives the window some depth
 	g.setGradientFill (juce::ColourGradient (theme::windowTop(), 0.0f, 0.0f,
 											 theme::windowBottom(), 0.0f, (float) getHeight(), false));
@@ -690,6 +749,9 @@ void ToyboxAudioProcessorEditor::timerCallback (void)
 	}
 
 	refreshUi();
+
+	// Only does anything with TOYBOX_PAINT_STATS=1 - see the note at the top of this file.
+	reportPaintStats();
 }
 
 void ToyboxAudioProcessorEditor::refreshUi (void)
