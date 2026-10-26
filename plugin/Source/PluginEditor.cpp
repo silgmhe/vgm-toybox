@@ -340,10 +340,35 @@ void ToyboxAudioProcessorEditor::paint (juce::Graphics& g)
 								 std::memory_order_relaxed);
 	}
 
-	// a faint vertical gradient gives the window some depth
-	g.setGradientFill (juce::ColourGradient (theme::windowTop(), 0.0f, 0.0f,
-											 theme::windowBottom(), 0.0f, (float) getHeight(), false));
-	g.fillRect (getLocalBounds());
+	// A faint vertical gradient gives the window some depth - rendered once into an image rather
+	// than interpolated across the dirty area on every refresh. See the note on `backdrop` in the
+	// header for why that difference shows up at 4K and not at 1500 by 900.
+	const auto top = theme::windowTop();
+
+	if (! backdrop.isValid ()
+		|| backdropWidth != getWidth ()
+		|| backdropHeight != getHeight ()
+		|| backdropTop != top.getARGB ())
+	{
+		backdrop = juce::Image (juce::Image::ARGB, juce::jmax (1, getWidth ()),
+								juce::jmax (1, getHeight ()), true);
+
+		{
+			juce::Graphics target (backdrop);
+			target.setGradientFill (juce::ColourGradient (top, 0.0f, 0.0f,
+														  theme::windowBottom (), 0.0f,
+														  (float) getHeight (), false));
+			target.fillRect (target.getClipBounds ());
+		}
+
+		backdropWidth = getWidth ();
+		backdropHeight = getHeight ();
+		backdropTop = top.getARGB ();
+	}
+
+	// drawImageAt, not drawImage: no resampling, one to one, and the clip still applies so only
+	// the dirty area is composited.
+	g.drawImageAt (backdrop, 0, 0);
 
 	// The page's card shadows are painted here, not by the page: a shadow reaches outside the card
 	// it belongs to, and a page's bounds end where its cards do - painted there, every shadow was

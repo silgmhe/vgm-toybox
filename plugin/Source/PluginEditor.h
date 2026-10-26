@@ -118,6 +118,22 @@ private:
 		nothing worth measuring. Remove with the rest of the probe - see
 		docs/issue/2026-10-26-why-the-window-costs-gpu-at-rest.md. */
 	juce::String paintReport;
+
+	/** The window's own background, rendered once per size and palette.
+
+		paint() used to open by filling a vertical colour gradient across getLocalBounds(), every
+		time it was called - and it is called at the refresh rate, over whatever dirty area the last
+		change produced. A gradient fill is per-pixel interpolation; a blit of an image that already
+		holds it is not. At 4K with a two-megapixel dirty area and thirty refreshes a second that is
+		sixty megapixels of interpolation a second for a picture that never changes.
+
+		Rebuilt when the size changes or the palette does, which is what the two keys are for.
+	*/
+	juce::Image backdrop;
+	int backdropWidth = 0;
+	int backdropHeight = 0;
+	juce::uint32 backdropTop = 0;
+
 	toybox::ui::ViewStack viewStack;	// holds the pages; exactly one of them is visible
 	toybox::ui::PlayView* playView = nullptr;	// the page, so the View menu can ask it what it shows
 	toybox::ui::DropHintOverlay dropHint;
