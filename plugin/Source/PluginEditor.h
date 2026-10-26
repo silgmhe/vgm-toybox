@@ -119,6 +119,11 @@ private:
 		docs/issue/2026-10-26-why-the-window-costs-gpu-at-rest.md. */
 	juce::String paintReport;
 
+	/** Whether to count paints and print the count. Read from the settings on every refresh tick
+		rather than per paint, so a change takes effect within a tenth of a second. See
+		SettingsStore::getPaintStats(). */
+	bool paintStats = false;
+
 	/** The window's own background, rendered once per size and palette.
 
 		paint() used to open by filling a vertical colour gradient across getLocalBounds(), every

@@ -107,6 +107,8 @@ language: English
 "settings.general.closeToTrayWarning" = "! Desktop without a system tray? No icon will appear, and a closed window can only be recovered by quitting the process.";
 "settings.general.explanation" = "How the application starts, and where these settings live.";
 "settings.general.openFolder" = "Open folder";
+"settings.general.paintStats" = "Show paint statistics in the status line";
+"settings.general.paintStatsTooltip" = "How many times the window repainted, and how much area each repaint covered. Diagnostics for a GPU reading that looks wrong - it costs a counter per repaint and a number in the status line.";
 "settings.general.restoreDefaults" = "Restore defaults";
 "settings.general.restoreLastSong" = "Reopen the last song at startup";
 "settings.general.restoreLastSongHint" = "Launching the application loads the song it last had open, paused at the start. File > Close Song forgets it.";

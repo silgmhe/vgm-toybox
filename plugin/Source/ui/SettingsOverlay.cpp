@@ -410,6 +410,15 @@ GeneralSettingsPage::GeneralSettingsPage (void)
 	addAndMakeVisible (reuseWindowHint);
    #endif
 
+	// Not standalone-only: the status line is in both builds, and so is the question this answers.
+	paintStatsButton.setComponentID ("settings.general.paintStats");
+	paintStatsButton.onClick = [this]
+	{
+		toybox::settings::SettingsStore::getInstance().setPaintStats (paintStatsButton.getToggleState());
+		refresh();
+	};
+	addAndMakeVisible (paintStatsButton);
+
 	// The standalone reopens the song it had loaded when it last quit (restoreLastSongIfNeeded()
 	// in Source/PluginEditor.cpp; the value lives in SettingsStore). A plugin takes its song from
 	// the host's project, so it never gets this row: there is no "last time the app was open".
@@ -513,6 +522,9 @@ void GeneralSettingsPage::refreshLanguage (void)
 							 juce::dontSendNotification);
    #endif
 
+	paintStatsButton.setButtonText (i18n::tr ("settings.general.paintStats"));
+	paintStatsButton.setTooltip (i18n::tr ("settings.general.paintStatsTooltip"));
+
 	if (toybox::standalone::available())
 	{
 		restoreLastSongButton.setButtonText (i18n::tr ("settings.general.restoreLastSong"));
@@ -542,6 +554,8 @@ void GeneralSettingsPage::refreshLanguage (void)
 void GeneralSettingsPage::refresh (void)
 {
 	auto& store = toybox::settings::SettingsStore::getInstance();
+
+	paintStatsButton.setToggleState (store.getPaintStats(), juce::dontSendNotification);
 
    #if JUCE_WINDOWS
 	// Stored, not read back from anything else: a second launch reads the file before any window
@@ -602,6 +616,9 @@ void GeneralSettingsPage::resized (void)
 		area.removeFromTop (theme::cardGap);
 	   #endif
 	}
+
+	paintStatsButton.setBounds (area.removeFromTop (24));
+	area.removeFromTop (theme::cardGap);
 
 	fileCaption.setBounds (area.removeFromTop (16));
 	pathLabel.setBounds (area.removeFromTop (20));

@@ -195,6 +195,18 @@ public:
 	/** Stores the range (clamped to what the engine can encode) and tells every listener. */
 	void setMidiPitchBendRange (int semitones);
 
+	/** Whether the status line shows how often the window repainted, and over how much area.
+
+		A diagnostic, not a preference: it answered "is this window repainting while nothing moves",
+		which no amount of reading the code could settle, and it is the first thing to reach for the
+		next time the GPU reading looks wrong. Off by default because the answer is printed into the
+		status line where a user would see it.
+	*/
+	bool getPaintStats (void) const;
+
+	/** Stores the switch, writes it, and tells every listener, like the other preferences. */
+	void setPaintStats (bool shouldReport);
+
 	/** Whether the chips' fine pitch becomes pitch bend at all. Off: notes keep their nearest
 		semitone and no bend message is sent - for an instrument that ignores RPN and cannot be
 		matched, or for a MIDI monitor that should show plain notes. Default on. */

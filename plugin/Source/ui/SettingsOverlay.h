@@ -119,6 +119,11 @@ private:
 	juce::Label closeToTrayHint;
 	juce::Label closeToTrayWarning;
 
+	// "Show paint statistics": a diagnostic rather than a preference, and it lives here so the
+	// next time the GPU reading looks wrong the answer is one click away instead of one branch
+	// away - see SettingsStore::getPaintStats().
+	juce::ToggleButton paintStatsButton;
+
 	juce::Label fileCaption;	// "Settings file"
 	juce::Label pathLabel;		// the path itself, read-only
 	juce::TextButton openFolderButton;

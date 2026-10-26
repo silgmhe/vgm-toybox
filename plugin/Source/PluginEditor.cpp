@@ -49,8 +49,13 @@ namespace
 		times a second over small rectangles is nothing, sixteen times a second over the whole window
 		is a GPU reading - and the two look identical in a count alone.
 	*/
-	juce::String takePaintReport (void)
+	juce::String takePaintReport (bool enabled)
 	{
+		if (! enabled)
+		{
+			return {};
+		}
+
 		const double now = juce::Time::getMillisecondCounterHiRes ();
 
 		if (now - lastPaintReportMs.load (std::memory_order_relaxed) < kPaintReportSeconds * 1000.0)
@@ -331,9 +336,10 @@ void ToyboxAudioProcessorEditor::lookAndFeelChanged (void)
 
 void ToyboxAudioProcessorEditor::paint (juce::Graphics& g)
 {
-	editorPaints.fetch_add (1, std::memory_order_relaxed);
-
+	if (paintStats)
 	{
+		editorPaints.fetch_add (1, std::memory_order_relaxed);
+
 		const auto clip = g.getClipBounds ();
 		paintedPixels.fetch_add ((long long) juce::jmax (0, clip.getWidth ())
 									 * (long long) juce::jmax (0, clip.getHeight ()),
@@ -782,10 +788,18 @@ void ToyboxAudioProcessorEditor::timerCallback (void)
 
 	refreshUi();
 
-	// Temporary - see the note at the top of this file.
-	if (auto report = takePaintReport(); report.isNotEmpty())
+	// The diagnostic - see SettingsStore::getPaintStats(). Read on the tick rather than per paint
+	// so a change in the settings page takes effect within a tenth of a second, and so the switch
+	// costs one property read per tick instead of one per repaint.
+	paintStats = settings::SettingsStore::getInstance().getPaintStats();
+
+	if (auto report = takePaintReport(paintStats); report.isNotEmpty())
 	{
 		paintReport = report;
+	}
+	else if (! paintStats)
+	{
+		paintReport.clear();
 	}
 }
 
