@@ -1,6 +1,7 @@
 #pragma once
 
 #include "KeyboardRowLayout.h"
+#include "SoftShadow.h"
 
 #include "playback/ChipState.h"
 
@@ -53,6 +54,27 @@ struct WavePathCache
 	bool valid = false;
 };
 
+/** Everything one row's painter carries from one frame to the next.
+
+	Both members exist for the same reason and it is the one written up in
+	docs/issue/2026-10-26-keyboard-view-gpu-cost.md: the view repaints at 30 Hz, and almost none of
+	what it paints has changed since the last time. The waveform is a function of three register
+	values; the row's card shadow is a function of its rectangle and the palette. Neither is a
+	function of the clock.
+*/
+struct RowPaintCache
+{
+	WavePathCache wave;
+	ShadowImage tileShadow;
+
+	/** The keyboard bed's shadow. Per row, not shared: the bed is as wide as the keys that fit the
+		column, and two rows can differ by a whole key when the columns are not all the same width.
+		A single image would then be rebuilt for every row, every frame - the cost this is here to
+		remove.
+	*/
+	ShadowImage bedShadow;
+};
+
 /** One channel: its card, its name, its mute and solo, its note, its waveform, its keys and its
 	meter. The keys come from `paintKeys`; everything else is drawn here. */
 void paintChannelRow (juce::Graphics& g,
@@ -63,7 +85,7 @@ void paintChannelRow (juce::Graphics& g,
 					  int octaveShift,
 					  RowHover hover,
 					  const KeyPainter& paintKeys,
-					  WavePathCache& waveCache);
+					  RowPaintCache& cache);
 
 /** Mute and solo, drawn with the mixer's own face and colours: mute fills red, solo amber, and a
 	toggled one carries the matching glow. Anything else would make the two views look like

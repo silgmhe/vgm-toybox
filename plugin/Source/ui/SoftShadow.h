@@ -48,4 +48,81 @@ inline void drawCardShadow (juce::Graphics& g, juce::Rectangle<float> area)
 	drawSoftShadow (g, area, theme::cardRadius, theme::cardKeyShadow(), theme::cardKeyBlur, { 0, theme::cardKeyOffsetY });
 }
 
+/** A shadow rendered once into an image, for surfaces that repaint every frame.
+
+	`DropShadow::drawForPath` allocates an image and runs a 2D convolution each time it is called.
+	That is the right price for a static card - it is paid when the window changes - but the
+	keyboard view repaints all thirteen of its rows thirty times a second whether anything moved or
+	not, which is twenty-six convolutions per frame, and the guard in `drawSoftShadow()` cannot help:
+	it skips the blur only when the repaint lies *inside* the shape, and repainting everything means
+	the clip is the whole panel.
+
+	This keeps the blurred result and blits it. The pixels are the same ones - the image is produced
+	by the same call, on a transparent surface the size of the shadow's reach, and composited where
+	it would have been drawn.
+
+	One per shadow, owned by whoever paints. Rebuilt when the shape moves, resizes, or the palette
+	changes the colour.
+*/
+struct ShadowImage
+{
+	juce::Image image;
+	juce::Rectangle<int> area;
+	juce::uint32 colour = 0;
+	int blur = 0;
+	juce::Point<int> offset;
+
+	/** False until something has been rendered, and after clear(). */
+	bool valid = false;
+
+	void clear (void)
+	{
+		valid = false;
+		image = juce::Image ();
+	}
+};
+
+inline void drawCachedShadow (juce::Graphics& g, ShadowImage& cache,
+							  juce::Rectangle<float> shape, float cornerRadius,
+							  juce::Colour colour, int blurRadius, juce::Point<int> offset)
+{
+	const int reach = blurRadius + juce::jmax (std::abs (offset.x), std::abs (offset.y)) + 2;
+	const auto bounds = shape.toNearestInt ().expanded (reach);
+
+	// Same reason as the uncached version: a repaint that cannot show any of this should not pay
+	// for the blit either.
+	if (! bounds.intersects (g.getClipBounds ()))
+	{
+		return;
+	}
+
+	const bool stale = ! cache.valid
+					|| cache.area != bounds
+					|| cache.colour != colour.getARGB ()
+					|| cache.blur != blurRadius
+					|| cache.offset != offset;
+
+	if (stale)
+	{
+		cache.image = juce::Image (juce::Image::ARGB,
+								   juce::jmax (1, bounds.getWidth ()),
+								   juce::jmax (1, bounds.getHeight ()), true);
+
+		{
+			juce::Graphics target (cache.image);
+			drawSoftShadow (target,
+							shape.translated (-(float) bounds.getX (), -(float) bounds.getY ()),
+							cornerRadius, colour, blurRadius, offset);
+		}
+
+		cache.area = bounds;
+		cache.colour = colour.getARGB ();
+		cache.blur = blurRadius;
+		cache.offset = offset;
+		cache.valid = true;
+	}
+
+	g.drawImageAt (cache.image, bounds.getX (), bounds.getY ());
+}
+
 } // namespace toybox::ui

@@ -60,17 +60,21 @@ void paintChannelRow (juce::Graphics& g,
 					  int octaveShift,
 					  RowHover hover,
 					  const KeyPainter& paintKeys,
-					  WavePathCache& waveCache)
+					  RowPaintCache& cache)
 {
 	const bool audible = channel.active && channel.volume > kSilenceLevel;
 
 	// A tile per row, with its shadow drawn through the same helper the cards use - a real
 	// gaussian blur, not a second rectangle pretending to be one. The shadow stays inside the
 	// row's own height, so nothing gets cut off.
+	//
+	// Through the cache, though: this row is repainted thirty times a second and its shadow is a
+	// function of its rectangle and the palette, never of the audio. Twenty-six real blurs per
+	// frame is what the GPU report was about.
 	const auto tile = row.area.reduced (0, 2).toFloat ();
 
-	drawSoftShadow (g, tile, theme::buttonRadius, theme::cardKeyShadow (), kTileShadowBlur,
-					juce::Point<int> (0, kTileShadowOffsetY));
+	drawCachedShadow (g, cache.tileShadow, tile, theme::buttonRadius, theme::cardKeyShadow (),
+					  kTileShadowBlur, juce::Point<int> (0, kTileShadowOffsetY));
 
 	g.setColour (theme::track ().withAlpha (kTileTintAlpha));
 	g.fillRoundedRectangle (tile, theme::buttonRadius);
@@ -102,7 +106,7 @@ void paintChannelRow (juce::Graphics& g,
 					juce::Justification::centred, false);
 	}
 
-	paintWave (g, row.wave, channel, waveCache);
+	paintWave (g, row.wave, channel, cache.wave);
 
 	if (paintKeys != nullptr)
 	{

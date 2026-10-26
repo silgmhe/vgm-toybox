@@ -243,9 +243,9 @@ public:
 
 		const int octaveShift = octaveShiftForNaming ();
 
-		if (waveCaches.size () < snapshot.channels.size ())
+		if (rowCaches.size () < snapshot.channels.size ())
 		{
-			waveCaches.resize (snapshot.channels.size ());
+			rowCaches.resize (snapshot.channels.size ());
 		}
 
 		for (const auto& row : rows)
@@ -274,14 +274,15 @@ public:
 				hover.mute = (hoveredRowChannel == row.channel && hoveredRowMute);
 				hover.solo = (hoveredRowChannel == row.channel && ! hoveredRowMute);
 
-				// One cache per channel, sized to the snapshot below. The waveform of a channel
-				// whose shape comes from its registers is rebuilt only when one of them moves.
-				keyboard::WavePathCache& waveCache = waveCaches[(std::size_t) row.channel];
+				// One cache per channel, sized to the snapshot below: the derived waveform, the
+				// row's shadow and its keyboard bed's shadow, none of which change while the song
+				// plays at a steady level.
+				keyboard::RowPaintCache& cache = rowCaches[(std::size_t) row.channel];
 
 				keyboard::paintChannelRow (g, row, channel, muted, soloed, octaveShift, hover,
-										   [this] (juce::Graphics& graphics, juce::Rectangle<int> area, int note)
-										   { paintKeyboard (graphics, area, note); },
-										   waveCache);
+										   [this, &cache] (juce::Graphics& graphics, juce::Rectangle<int> area, int note)
+										   { paintKeyboard (graphics, area, note, cache.bedShadow); },
+										   cache);
 			}
 		}
 
@@ -729,8 +730,12 @@ private:
 		return keyboard::canShift (lastSpan, direction);
 	}
 
-	/** A fixed-width keyboard starting at the span's base note, with the sounding key lit. */
-	void paintKeyboard (juce::Graphics& g, juce::Rectangle<int> area, int note)
+	/** A fixed-width keyboard starting at the span's base note, with the sounding key lit.
+
+		`bedShadow` is the row's cache for the bed's drop shadow - the keys themselves are rebuilt
+		every frame (the lit one moves), the shadow behind them is not.
+	*/
+	void paintKeyboard (juce::Graphics& g, juce::Rectangle<int> area, int note, ShadowImage& bedShadow)
 	{
 		if (area.getWidth () < 60 || area.getHeight () < 12)
 		{
@@ -756,7 +761,7 @@ private:
 										  juce::jmin (keysWidth, (float) area.getWidth ()),
 										  (float) area.getHeight ());
 
-		drawSoftShadow (g, bed, 5.0f, theme::cardKeyShadow (), 5, juce::Point<int> (0, 1));
+		drawCachedShadow (g, bedShadow, bed, 5.0f, theme::cardKeyShadow (), 5, juce::Point<int> (0, 1));
 
 		g.setColour (theme::keyBed ());
 		g.fillRoundedRectangle (bed, 5.0f);
@@ -1052,9 +1057,10 @@ private:
 	toybox::playback::ChipStateSnapshot snapshot;
 	std::vector<Row> rows;
 
-	/** One waveform path per channel, kept across frames - see WavePathCache. Grown to the channel
-		count when a snapshot arrives, never shrunk: the entries cost a Path each, not a picture. */
-	std::vector<keyboard::WavePathCache> waveCaches;
+	/** One per channel, kept across frames: the derived waveform, the row's card shadow and its
+		keyboard bed's shadow. Grown to the channel count when a snapshot arrives, never shrunk.
+		See RowPaintCache - and docs/issue/2026-10-26-keyboard-view-gpu-cost.md for why. */
+	std::vector<keyboard::RowPaintCache> rowCaches;
 
 
 	int scrollOffset = 0;
