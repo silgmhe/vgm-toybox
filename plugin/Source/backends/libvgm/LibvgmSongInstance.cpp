@@ -136,11 +136,20 @@ namespace
 																   ? playback::MidiCapability::oneShot
 																   : playback::MidiCapability::unavailable);
 		case DEVID_AY8910:
-			// Nothing in this backend decodes the SSG: the chip is emulated, mixed and isolated, but
-			// no register read turns into a note. Claiming melodic made the engine promise MIDI that
-			// never arrived, which a test caught as "audible but silent in MIDI" - the honest answer
-			// is that the capability is not there yet.
-			return playback::MidiCapability::unavailable;
+			// Three melodic channels. The comment here used to say that nothing in this backend
+			// decodes the SSG, which was true when it was written and stopped being true at cbaf588,
+			// where Ay8910Decoder arrived - a decoder whose own header names this chip and its
+			// clones, and which computes pitch from the twelve-bit tone divider. The capability was
+			// never revisited, so the three channels were offered as unavailable while their notes
+			// came out all along: ay8910.vgm plays A4, C5 and E5 and all three were discarded by the
+			// mixer for want of a route.
+			//
+			// A linked SSG does not come through here: one behind an OPN chip is numbered after the
+			// parent's channels and is caught by isSsgChannel() above. A standalone chip is a device
+			// of its own, and its channels are 0..2 like any other three-channel part.
+			return (channelIndex >= 0 && channelIndex < kSsgChannels)
+					   ? playback::MidiCapability::melodic
+					   : playback::MidiCapability::unavailable;
 		case DEVID_SN76496:
 			return (channelIndex >= 0 && channelIndex < 3) ? playback::MidiCapability::melodic
 														   : (channelIndex == 3

@@ -1025,6 +1025,34 @@ int main (int argc, char* argv[])
 		check (loudestFm < 0.001, "no FM track carries the SSG");
 	}
 
+	// --- [3c] a standalone AY: the capability its decoder always deserved -------------------------
+	if (inputFile.getFileName() == "ay8910.vgm")
+	{
+		// An SSG behind an OPN chip reaches midiCapabilityFor() through isSsgChannel(), which counts
+		// channels after the parent's. A standalone AY is a device of its own, so it goes through the
+		// DEVID_AY8910 branch instead - the branch that said "nothing in this backend decodes the SSG"
+		// long after Ay8910Decoder had arrived, because nothing in this folder was a standalone AY
+		// file and the two never contradicted each other.
+		std::printf ("[3c] a standalone AY is offered as melodic MIDI\n");
+
+		int melodic = 0;
+
+		for (const auto& track : tracks)
+		{
+			if (track.midiCapability == toybox::playback::MidiCapability::melodic)
+			{
+				++melodic;
+			}
+		}
+
+		check (tracks.size() == 3, "the AY has three tracks, one per tone channel");
+		check (melodic == 3, "all three are offered as melodic, not unavailable");
+
+		// The notes are the other half of the promise, and the probe at the end of this file checks
+		// them for every asset: a channel marked melodic that makes sound without notes fails there.
+		// Kept apart so this section names the broken half when one of them goes.
+	}
+
 	// --- [4] the tracks stay in sync (seek / loop / end) ------------------------------------
 	std::printf ("[4] track sync\n");
 	const auto maxTrackSpread = [&engine]
