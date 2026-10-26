@@ -106,4 +106,35 @@ int clampScroll (int scrollOffset, int contentHeight, int viewportHeight)
 	return juce::jlimit (0, juce::jmax (0, contentHeight - viewportHeight), scrollOffset);
 }
 
+RowChange compareRow (const RowSignature& before, const RowSignature& after, bool carriesOwnCycle)
+{
+	RowChange change;
+
+	// note == -2 is the never-painted state: a default-constructed signature has it, and no real
+	// note does (it is a MIDI number). It reaches this branch before anything else can say "no".
+	if (before.note == -2
+		|| before.muted != after.muted
+		|| before.soloed != after.soloed
+		|| before.active != after.active
+		|| before.analysing != after.analysing
+		|| (before.volumeStep == 0) != (after.volumeStep == 0))
+	{
+		change.wholeRow = true;
+		return change;
+	}
+
+	change.note = before.note != after.note;
+	change.meter = before.volumeStep != after.volumeStep;
+
+	// A channel carrying the core's own cycle is drawn from it every frame, and its contents can
+	// change while its size stays the same - so its waveform is never skipped.
+	change.wave = carriesOwnCycle
+				|| before.waveKind != after.waveKind
+				|| before.dutyStep != after.dutyStep
+				|| before.shapeParameter != after.shapeParameter
+				|| before.waveSize != after.waveSize;
+
+	return change;
+}
+
 } // namespace toybox::ui::keyboard

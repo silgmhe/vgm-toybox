@@ -9,9 +9,10 @@
 
 	Checks: the octave a note is named in, the note of a given white key, how many octaves a column
 	is worth, that the span never describes a key past the top of the MIDI range, that it always
-	ends on a white key, and that a shift is refused exactly when it would lose keys.
+	ends on a white key, that a shift is refused exactly when it would lose keys, and - last - which
+	columns a new snapshot forces to be repainted.
 
-	Run: <build dir>/plugin/vgm_ui_test
+	Run: <build dir>/plugin/vgm_keyboard_test
 */
 
 #include <cstdio>
@@ -330,6 +331,128 @@ void testScrollClamping (void)
 
 } // namespace
 
+/* Which columns a new snapshot forces to be redrawn.
+
+	This is the decision that decides how much of the GPU's work happens, and its failure mode is
+	the quiet one: a column that stops updating never throws, never fails a build, and looks fine
+	until somebody notices a note frozen at its old value. Inside the panel it could only be
+	observed by playing a song; out here it is nine assertions.
+*/
+void testRowChangeDecision (void)
+{
+	// Two identical signatures: nothing has moved, so nothing is drawn. This is the state most
+	// frames of a held note are in, and it is what makes the panel cost nothing at rest.
+	{
+		keyboard::RowSignature steady;
+		steady.note = 60;
+		steady.volumeStep = 128;
+		steady.waveKind = 2;
+		steady.dutyStep = 32;
+		steady.shapeParameter = 1;
+		steady.waveSize = 16;
+
+		check (! keyboard::compareRow (steady, steady, false).any (),
+			   "an unchanged row needs no repaint at all");
+	}
+
+	// A default signature has note == -2, which no real note is: that is the never-painted state.
+	{
+		const keyboard::RowSignature never;
+		keyboard::RowSignature first;
+		first.note = 60;
+
+		check (keyboard::compareRow (never, first, false).wholeRow,
+			   "a row that has never been painted is repainted whole");
+	}
+
+	// A note moving repaints the note cell and the keys, and nothing else - not the meter, not the
+	// waveform, not the card behind them.
+	{
+		keyboard::RowSignature before;
+		before.note = 60;
+		before.volumeStep = 128;
+
+		auto after = before;
+		after.note = 64;
+
+		const auto change = keyboard::compareRow (before, after, false);
+		check (change.note, "a new note repaints the note column");
+		check (! change.wave && ! change.meter && ! change.wholeRow,
+			   "and leaves the waveform, the meter and the card alone");
+	}
+
+	// The level moving repaints the meter only.
+	{
+		keyboard::RowSignature before;
+		before.note = 60;
+		before.volumeStep = 128;
+
+		auto after = before;
+		after.volumeStep = 200;
+
+		const auto change = keyboard::compareRow (before, after, false);
+		check (change.meter && ! change.note && ! change.wave,
+			   "a new level repaints the meter column");
+	}
+
+	// Crossing silence is not a meter change: the name column is drawn in the primary colour when
+	// the row is audible and the secondary one when it is not, so the whole row has to be redrawn.
+	{
+		keyboard::RowSignature before;
+		before.note = 60;
+		before.volumeStep = 0;
+
+		auto after = before;
+		after.volumeStep = 3;
+
+		check (keyboard::compareRow (before, after, false).wholeRow,
+			   "crossing the silence threshold repaints the whole row, not just the meter");
+	}
+
+	// Mute and solo are whole-row facts: the button, its glow and the name's colour all change.
+	{
+		keyboard::RowSignature before;
+		before.note = 60;
+		before.volumeStep = 128;
+
+		auto after = before;
+		after.muted = true;
+
+		check (keyboard::compareRow (before, after, false).wholeRow,
+			   "toggling mute repaints the whole row");
+	}
+
+	// A register moving repaints the waveform.
+	{
+		keyboard::RowSignature before;
+		before.note = 60;
+		before.waveKind = 2;
+
+		auto after = before;
+		after.waveKind = 3;
+
+		check (keyboard::compareRow (before, after, false).wave,
+			   "a new wave shape repaints the waveform column");
+	}
+
+	// A channel carrying the core's own cycle is never skipped: its contents can change while its
+	// size stays the same, so no comparison of the signature can rule it out.
+	{
+		keyboard::RowSignature steady;
+		steady.note = 60;
+
+		check (keyboard::compareRow (steady, steady, true).wave,
+			   "a channel with its own cycle repaints its waveform every time");
+	}
+
+	// The quantisation is shared with WavePathCache, so "one step" means the same thing to both.
+	check (keyboard::dutySteps (0.0f) == 0, "duty 0 is step 0");
+	check (keyboard::dutySteps (0.5f) == 32, "and half is 32");
+	check (keyboard::dutySteps (1.0f) == 64, "duty 1 is step 64");
+	check (keyboard::volumeSteps (0.0f) == 0 && keyboard::volumeSteps (1.0f) == 255,
+		   "volume spans 0 to 255");
+}
+
 int main (void)
 {
 	std::printf ("keyboard layout and wave shapes\n");
@@ -341,6 +464,7 @@ int main (void)
 	testWaveShapes ();
 	testRowLayout ();
 	testScrollClamping ();
+	testRowChangeDecision ();
 
 	std::printf ("%s\n", toybox::test::failures() == 0 ? "all checks passed" : "FAILURES");
 

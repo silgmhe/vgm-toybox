@@ -69,17 +69,12 @@ struct ShadowImage
 	juce::Image image;
 	juce::Rectangle<int> area;
 	juce::uint32 colour = 0;
+	float radius = -1.0f;
 	int blur = 0;
 	juce::Point<int> offset;
 
-	/** False until something has been rendered, and after clear(). */
+	/** False until something has been rendered. */
 	bool valid = false;
-
-	void clear (void)
-	{
-		valid = false;
-		image = juce::Image ();
-	}
 };
 
 inline void drawCachedShadow (juce::Graphics& g, ShadowImage& cache,
@@ -96,9 +91,14 @@ inline void drawCachedShadow (juce::Graphics& g, ShadowImage& cache,
 		return;
 	}
 
+	// Every argument that reaches the drawing is in the key. cornerRadius looks like the one that
+	// could be left out - each ShadowImage currently serves a single call site with a fixed radius
+	// - but that is a property of the callers, not of this function, and this function is a
+	// header-only helper anyone can call.
 	const bool stale = ! cache.valid
 					|| cache.area != bounds
 					|| cache.colour != colour.getARGB ()
+					|| cache.radius != cornerRadius
 					|| cache.blur != blurRadius
 					|| cache.offset != offset;
 
@@ -117,6 +117,7 @@ inline void drawCachedShadow (juce::Graphics& g, ShadowImage& cache,
 
 		cache.area = bounds;
 		cache.colour = colour.getARGB ();
+		cache.radius = cornerRadius;
 		cache.blur = blurRadius;
 		cache.offset = offset;
 		cache.valid = true;

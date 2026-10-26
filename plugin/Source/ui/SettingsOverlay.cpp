@@ -24,9 +24,9 @@ namespace
 	// The height is a floor rather than a fixed size: the panel shrinks with the window (see
 	// panelBounds), and the General page needs the fifth row - the tray switch - to fit at the
 	// window's own minimum height.
-	// Grown from 640 by 500 when the General page gained the refresh-rate row: five switch rows, a
-	// slider with its caption, and the path block beneath them no longer fit without pushing the
-	// footer buttons into each other.
+	// Grown from 640 by 500 when both pages gained a row: General has five switches and the path
+	// block, and Keyboard carries five settings of its own. At the smaller height the footer
+	// buttons were pushed into each other.
 	constexpr int kPanelWidth = 720;
 	constexpr int kPanelHeight = 560;
 	constexpr int kPanelPadding = 18;
@@ -422,8 +422,6 @@ GeneralSettingsPage::GeneralSettingsPage (void)
 	};
 	addAndMakeVisible (paintStatsButton);
 
-	// The refresh rate used to be here; it belongs to the Keyboard page and moved there.
-
 	// The standalone reopens the song it had loaded when it last quit (restoreLastSongIfNeeded()
 	// in Source/PluginEditor.cpp; the value lives in SettingsStore). A plugin takes its song from
 	// the host's project, so it never gets this row: there is no "last time the app was open".
@@ -529,7 +527,6 @@ void GeneralSettingsPage::refreshLanguage (void)
 
 	paintStatsButton.setButtonText (i18n::tr ("settings.general.paintStats"));
 	paintStatsButton.setTooltip (i18n::tr ("settings.general.paintStatsTooltip"));
-
 
 	if (toybox::standalone::available())
 	{
@@ -843,9 +840,14 @@ KeyboardSettingsPage::KeyboardSettingsPage (void)
 	{
 		return juce::String ((int) std::lround (value)) + " Hz";
 	};
-	refreshSlider.valueFromTextFunction = [] (const juce::String& text)
+	// A box with no digits in it - typed over, or cleared on the way to a new number - keeps the
+	// value it had. Reading it as zero would be silently clamped up to the minimum, which looks
+	// like the slider jumping to 10 for no reason.
+	refreshSlider.valueFromTextFunction = [this] (const juce::String& text)
 	{
-		return text.retainCharacters ("0123456789").getDoubleValue ();
+		const auto digits = text.retainCharacters ("0123456789");
+
+		return digits.isEmpty () ? refreshSlider.getValue () : digits.getDoubleValue ();
 	};
 	refreshSlider.onValueChange = [this]
 	{

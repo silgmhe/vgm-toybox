@@ -241,8 +241,8 @@ void paintWave (juce::Graphics& g, juce::Rectangle<int> area,
 	// parameters recorded, and only needs the dash repainted.
 	const bool stale = cache.waveKind < 0
 					|| cache.waveKind != channel.waveKind
-					|| cache.duty != channel.duty
-					|| cache.shape != channel.shapeParameter
+					|| cache.dutyStep != dutySteps (channel.duty)
+					|| cache.shapeParameter != channel.shapeParameter
 					|| cache.width != area.getWidth ()
 					|| cache.height != area.getHeight ();
 
@@ -263,8 +263,8 @@ void paintWave (juce::Graphics& g, juce::Rectangle<int> area,
 		}
 
 		cache.waveKind = channel.waveKind;
-		cache.duty = channel.duty;
-		cache.shape = channel.shapeParameter;
+		cache.dutyStep = dutySteps (channel.duty);
+		cache.shapeParameter = channel.shapeParameter;
 		cache.width = area.getWidth ();
 		cache.height = area.getHeight ();
 	}

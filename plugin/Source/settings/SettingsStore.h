@@ -210,9 +210,9 @@ public:
 	/** How often the Keyboard page redraws, in Hz.
 
 		The one setting here that trades picture against cost directly: every refresh repaints what
-		changed, and at 4K that is real work. 30 is the default this view always used; 10 is enough
-		for a slow passage and 60 matches a display. Clamped on read and on write, so a hand-edited
-		file cannot ask for 500.
+		changed, and at 4K that is real work. 10 is enough for a slow passage, 60 matches a display,
+		and the default is stated once, below. Clamped on read and on write, so a hand-edited file
+		cannot ask for 500.
 	*/
 	int getRefreshHz (void) const;
 

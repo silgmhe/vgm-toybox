@@ -44,9 +44,16 @@ struct RowHover
 struct WavePathCache
 {
 	juce::Path path;
+
+	// The same steps the repaint decision compares, from the same functions (keyboard::dutySteps).
+	// They used to be the raw floats here and the steps there, which meant the two caches had
+	// different ideas of what "the duty changed" means: a change too small to repaint the column
+	// could still have rebuilt the path, and one that repainted it could have reused a path the
+	// finer comparison thought was still current.
 	int waveKind = -1;
-	float duty = -1.0f;
-	float shape = 0.0f;
+	int dutyStep = -1;
+	int shapeParameter = -1;
+
 	int width = 0;
 	int height = 0;
 
@@ -57,10 +64,10 @@ struct WavePathCache
 /** Everything one row's painter carries from one frame to the next.
 
 	Both members exist for the same reason and it is the one written up in
-	docs/issue/2026-10-26-keyboard-view-gpu-cost.md: the view repaints at 30 Hz, and almost none of
-	what it paints has changed since the last time. The waveform is a function of three register
-	values; the row's card shadow is a function of its rectangle and the palette. Neither is a
-	function of the clock.
+	docs/issue/2026-10-26-keyboard-view-gpu-cost.md: the view repaints many times a second, and
+	almost none of what it paints has changed since the last time. The waveform is a function of
+	three register values; the row's card shadow is a function of its rectangle and the palette.
+	Neither is a function of the clock - which is why the rate being a setting now costs nothing.
 */
 struct RowPaintCache
 {

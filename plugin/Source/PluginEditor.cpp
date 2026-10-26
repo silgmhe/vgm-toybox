@@ -23,64 +23,9 @@ namespace
 	constexpr int kIdleRefreshHz = 10;
 
 	// --- paint accounting ------------------------------------------------------------------
-	// Temporary probe, and deliberately not behind an environment variable: the first attempt put
-	// it behind one, and a GUI binary launched from Explorer inherits whatever the shell had at
-	// logon, so nothing appeared. It now always counts and always reports into the status line,
-	// where it cannot be missed.
-	//
-	// "Is this window repainting while nothing moves?" cannot be answered by reading the code: every
-	// repaint call in the refresh path is conditional, so the answer ought to be no, and a GPU
-	// reading that says otherwise is either the compositor's or somebody's. One counter settles
-	// which, in one run, without a profiler. See
-	// docs/issue/2026-10-26-why-the-window-costs-gpu-at-rest.md.
-	//
-	// To remove: this block, the fetch_add in paint(), the call in timerCallback(), paintReport in
-	// the header and the two lines in updateStatusLine().
+
+	/** How often the diagnostic in the status line refreshes itself. */
 	constexpr double kPaintReportSeconds = 5.0;
-
-	std::atomic<int> editorPaints { 0 };
-	std::atomic<long long> paintedPixels { 0 };
-	std::atomic<double> lastPaintReportMs { 0.0 };
-
-	/** Paints and the area they covered since the last report, as a string to show.
-
-		The area is the half that matters. A paint count says how often the window was asked to
-		draw; a paint count multiplied by the size of its clip says how much drawing that was. Sixteen
-		times a second over small rectangles is nothing, sixteen times a second over the whole window
-		is a GPU reading - and the two look identical in a count alone.
-	*/
-	juce::String takePaintReport (bool enabled)
-	{
-		if (! enabled)
-		{
-			return {};
-		}
-
-		const double now = juce::Time::getMillisecondCounterHiRes ();
-
-		if (now - lastPaintReportMs.load (std::memory_order_relaxed) < kPaintReportSeconds * 1000.0)
-		{
-			return {};
-		}
-
-		lastPaintReportMs.store (now, std::memory_order_relaxed);
-
-		const auto count = editorPaints.exchange (0);
-		const auto pixels = paintedPixels.exchange (0);
-
-		auto line = juce::String (count) + " paints / " + juce::String (kPaintReportSeconds, 0) + " s";
-
-		if (count > 0)
-		{
-			// In megapixels, to one decimal: small enough to read in a status line.
-			const double averageMegapixels = ((double) pixels / (double) count) / 1000000.0;
-			line << ", avg " << juce::String (averageMegapixels, 1) << " Mpx";
-		}
-
-		juce::Logger::writeToLog ("VGMToybox paint stats: " + line);
-
-		return line;
-	}
 
 	// What the stored mode means as a palette. "Follow system" is asked at the moment it is needed,
 	// so it keeps meaning "whichever the desktop is on now" (ui/Theme.h) - and the mapping lives
@@ -334,6 +279,41 @@ void ToyboxAudioProcessorEditor::lookAndFeelChanged (void)
 //==============================================================================
 // painting / layout
 
+juce::String ToyboxAudioProcessorEditor::takePaintReport (bool enabled)
+{
+	// The switch is the caller's: when it is off paint() does not increment the counters at all,
+	// so there is nothing to report and nothing to reset.
+	if (! enabled)
+	{
+		return {};
+	}
+
+	const double now = juce::Time::getMillisecondCounterHiRes ();
+
+	if (now - lastPaintReportMs.load (std::memory_order_relaxed) < kPaintReportSeconds * 1000.0)
+	{
+		return {};
+	}
+
+	lastPaintReportMs.store (now, std::memory_order_relaxed);
+
+	const auto count = editorPaints.exchange (0);
+	const auto pixels = paintedPixels.exchange (0);
+
+	auto line = juce::String (count) + " paints / " + juce::String (kPaintReportSeconds, 0) + " s";
+
+	if (count > 0)
+	{
+		// In megapixels, to one decimal: small enough to read in a status line.
+		const double averageMegapixels = ((double) pixels / (double) count) / 1000000.0;
+		line << ", avg " << juce::String (averageMegapixels, 1) << " Mpx";
+	}
+
+	juce::Logger::writeToLog ("VGMToybox paint stats: " + line);
+
+	return line;
+}
+
 void ToyboxAudioProcessorEditor::paint (juce::Graphics& g)
 {
 	if (paintStats)
@@ -350,11 +330,16 @@ void ToyboxAudioProcessorEditor::paint (juce::Graphics& g)
 	// than interpolated across the dirty area on every refresh. See the note on `backdrop` in the
 	// header for why that difference shows up at 4K and not at 1500 by 900.
 	const auto top = theme::windowTop();
+	const auto bottom = theme::windowBottom();
 
+	// Both ends of the gradient are in the key, because the image holds both. Keying on the top
+	// alone would be right as long as every palette change moves both - which is true today and is
+	// a property of the palettes, not of this code.
 	if (! backdrop.isValid ()
 		|| backdropWidth != getWidth ()
 		|| backdropHeight != getHeight ()
-		|| backdropTop != top.getARGB ())
+		|| backdropTop != top.getARGB ()
+		|| backdropBottom != bottom.getARGB ())
 	{
 		backdrop = juce::Image (juce::Image::ARGB, juce::jmax (1, getWidth ()),
 								juce::jmax (1, getHeight ()), true);
@@ -362,7 +347,7 @@ void ToyboxAudioProcessorEditor::paint (juce::Graphics& g)
 		{
 			juce::Graphics target (backdrop);
 			target.setGradientFill (juce::ColourGradient (top, 0.0f, 0.0f,
-														  theme::windowBottom (), 0.0f,
+														  bottom, 0.0f,
 														  (float) getHeight (), false));
 			target.fillRect (target.getClipBounds ());
 		}
@@ -370,6 +355,7 @@ void ToyboxAudioProcessorEditor::paint (juce::Graphics& g)
 		backdropWidth = getWidth ();
 		backdropHeight = getHeight ();
 		backdropTop = top.getARGB ();
+		backdropBottom = bottom.getARGB ();
 	}
 
 	// drawImageAt, not drawImage: no resampling, one to one, and the clip still applies so only
@@ -881,8 +867,8 @@ void ToyboxAudioProcessorEditor::updateStatusLine (void)
 			   << " / " << formatTime (engine.getDurationSeconds());
 	}
 
-	// Temporary probe: read this off the running window while it sits idle. Change it every five
-	// seconds, so it repaints about as often as a clock - not enough to matter.
+	// The diagnostic, when its switch is on: how often this window repainted and over how much
+	// area. Updated every few seconds, so showing it repaints about as often as a clock.
 	if (paintReport.isNotEmpty())
 	{
 		status << "   [" << paintReport << "]";

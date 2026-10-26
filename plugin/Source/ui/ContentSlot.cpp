@@ -235,103 +235,82 @@ public:
 
 	/** Repaints only the rows whose appearance changed since the last snapshot.
 
-		The panel used to be repainted whole, thirty times a second, whatever had moved. A note held
-		for a second changes nothing at all, and a chord changes two or three rows out of thirteen -
-		but all thirteen were redrawn, keys, text, gradients and all.
+		The panel used to be repainted whole, whatever had moved. A note held for a second changes
+		nothing at all, and a chord changes two or three rows out of thirteen - but all thirteen
+		were redrawn, keys, text, gradients and all.
 
-		Everything a row's painting depends on is in RowSignature. A row that compares equal is left
-		alone; the shadow it casts lies inside the reach the changed rows are expanded by, so the
-		neighbour it might bleed onto is repainted by that neighbour's own dirt.
+		`painted` is indexed by channel rather than by row. It used to be parallel to `rows`, which
+		was only true as long as nothing moved them: scrolling rebuilds `rows` from a different
+		offset, so row i becomes a different channel afterwards and the comparison would have been
+		against the wrong row's past. A channel's index does not move when the view does.
+
+		The decision itself is keyboard::compareRow(), out in KeyboardRowLayout, where a test can
+		call it with two values and no window at all.
 	*/
 	void repaintChangedRows (void)
 	{
-		if (painted.size () != rows.size ())
+		const auto count = snapshot.channels.size ();
+
+		if (painted.size () != count)
 		{
-			painted.assign (rows.size (), RowSignature {});
+			painted.assign (count, keyboard::RowSignature {});
 			repaint ();
 			return;
 		}
 
-		for (std::size_t i = 0; i < rows.size (); ++i)
+		for (const auto& row : rows)
 		{
-			const auto& row = rows[i];
-
-			if (row.header || row.channel < 0 || (std::size_t) row.channel >= snapshot.channels.size ())
+			if (row.header || row.channel < 0 || (std::size_t) row.channel >= count)
 			{
 				continue;
 			}
 
 			const auto& channel = snapshot.channels[(std::size_t) row.channel];
 
-			const bool muted = channel.trackIndex >= 0
-							   && engine.isTrackMuted ((std::size_t) channel.trackIndex);
-			const bool soloed = channel.trackIndex >= 0
-								&& engine.isTrackSoloed ((std::size_t) channel.trackIndex);
-
-			RowSignature now;
+			keyboard::RowSignature now;
 			now.active = channel.active;
 			now.analysing = channel.analysing;
-			now.muted = muted;
-			now.soloed = soloed;
+			now.muted = channel.trackIndex >= 0
+					 && engine.isTrackMuted ((std::size_t) channel.trackIndex);
+			now.soloed = channel.trackIndex >= 0
+					  && engine.isTrackSoloed ((std::size_t) channel.trackIndex);
 			now.note = channel.note;
-			now.volumeStep = (int) std::lround (juce::jlimit (0.0f, 1.0f, channel.volume) * 255.0f);
+			now.volumeStep = keyboard::volumeSteps (channel.volume);
 			now.waveKind = channel.waveKind;
-			now.dutyStep = (int) std::lround (juce::jlimit (0.0f, 1.0f, channel.duty) * 64.0f);
+			now.dutyStep = keyboard::dutySteps (channel.duty);
 			now.shapeParameter = channel.shapeParameter;
 			now.waveSize = channel.wave.size ();
 
-			const auto& prev = painted[i];
+			auto& before = painted[(std::size_t) row.channel];
+			const auto change = keyboard::compareRow (before, now, ! channel.wave.empty ());
 
-			// Whole-row changes: the card behind, its shadow, the name, the two buttons. A row that
-			// has never been painted has note == -2, which lands here too.
-			// The last clause is not about the note: the name column is drawn in the primary colour
-			// when the row is audible and the secondary one when it is not, and audible is
-			// active && volume above silence. Crossing that threshold changes a column this row is
-			// not otherwise going to repaint.
-			if (prev.note == -2
-				|| prev.muted != now.muted
-				|| prev.soloed != now.soloed
-				|| prev.active != now.active
-				|| prev.analysing != now.analysing
-				|| (prev.volumeStep == 0) != (now.volumeStep == 0))
+			if (! change.any ())
 			{
-				painted[i] = now;
+				continue;
+			}
+
+			before = now;
+
+			if (change.wholeRow)
+			{
 				repaint (row.area.expanded (kRowReach));
 				continue;
 			}
 
-			// A channel carrying the core's own cycle is drawn from it every frame, and its contents
-			// can change while its size stays the same - so its waveform is never skipped.
-			const bool waveChanged = ! channel.wave.empty ()
-								  || prev.waveKind != now.waveKind
-								  || prev.dutyStep != now.dutyStep
-								  || prev.shapeParameter != now.shapeParameter
-								  || prev.waveSize != now.waveSize;
-
-			const bool noteChanged = prev.note != now.note;
-			const bool meterChanged = prev.volumeStep != now.volumeStep;
-
-			if (! waveChanged && ! noteChanged && ! meterChanged)
-			{
-				continue;
-			}
-
-			painted[i] = now;
-
 			// Column by column, not row by row: the note cell and the keys are where a note shows
 			// up, and the other four columns of this row have not moved.
-			if (noteChanged)
+			if (change.note)
 			{
 				repaint (row.note.expanded (kColumnReach));
 				repaint (row.keys.expanded (kColumnReach));
 			}
 
-			if (waveChanged)
+			if (change.wave)
 			{
 				repaint (row.wave.expanded (kColumnReach));
 			}
 
-			if (meterChanged)
+			if (change.meter)
 			{
 				repaint (row.meter.expanded (kColumnReach));
 			}
@@ -1218,36 +1197,13 @@ private:
 		See RowPaintCache - and docs/issue/2026-10-26-keyboard-view-gpu-cost.md for why. */
 	std::vector<keyboard::RowPaintCache> rowCaches;
 
-	/** What one row looked like the last time it was painted: everything paintChannelRow() reads,
-		and nothing else.
+	/** What each channel looked like the last time it was painted.
 
-		The quantisation is deliberate. A float volume compared exactly would differ in the last bit
-		most frames and repaint the row anyway, which is the cost this exists to avoid; the meter is
-		96 px wide, so an eighth of a percent is beneath what anyone can see. Duty is quantised to
-		1/64 - finer than the narrowest step any chip here offers.
+		Indexed by channel, not by row - see the note in repaintChangedRows(). The type itself is
+		keyboard::RowSignature, out in KeyboardRowLayout with the comparison that reads it, so the
+		decision can be tested without a window.
 	*/
-	struct RowSignature
-	{
-		// The row as a whole. These change only when the user does something - a click on M or S,
-		// or the song starting and stopping - so they cost a whole-row repaint, shadow included.
-		bool active = false;
-		bool analysing = false;
-		bool muted = false;
-		bool soloed = false;
-
-		// The columns that move while a song plays. Compared apart from the above because each one
-		// owns a rectangle of its own: a note moving repaints the note cell and the keys, not the
-		// row's name, its buttons, its waveform, its meter and the card behind all of them.
-		int note = -2;
-		int volumeStep = -1;
-		int waveKind = -1;
-		int dutyStep = -1;
-		int shapeParameter = -1;
-		std::size_t waveSize = 0;
-	};
-
-	/** Parallel to `rows` - a header's entry is unused and never compared. */
-	std::vector<RowSignature> painted;
+	std::vector<keyboard::RowSignature> painted;
 
 
 	int scrollOffset = 0;
