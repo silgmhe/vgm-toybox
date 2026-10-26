@@ -39,9 +39,16 @@ namespace
 	constexpr double kPaintReportSeconds = 5.0;
 
 	std::atomic<int> editorPaints { 0 };
+	std::atomic<long long> paintedPixels { 0 };
 	std::atomic<double> lastPaintReportMs { 0.0 };
 
-	/** How many paints since the last report, as a string to show - empty when it is not time. */
+	/** Paints and the area they covered since the last report, as a string to show.
+
+		The area is the half that matters. A paint count says how often the window was asked to
+		draw; a paint count multiplied by the size of its clip says how much drawing that was. Sixteen
+		times a second over small rectangles is nothing, sixteen times a second over the whole window
+		is a GPU reading - and the two look identical in a count alone.
+	*/
 	juce::String takePaintReport (void)
 	{
 		const double now = juce::Time::getMillisecondCounterHiRes ();
@@ -54,8 +61,16 @@ namespace
 		lastPaintReportMs.store (now, std::memory_order_relaxed);
 
 		const auto count = editorPaints.exchange (0);
-		const auto line = juce::String (count) + " paints / "
-						+ juce::String (kPaintReportSeconds, 0) + " s";
+		const auto pixels = paintedPixels.exchange (0);
+
+		auto line = juce::String (count) + " paints / " + juce::String (kPaintReportSeconds, 0) + " s";
+
+		if (count > 0)
+		{
+			// In megapixels, to one decimal: small enough to read in a status line.
+			const double averageMegapixels = ((double) pixels / (double) count) / 1000000.0;
+			line << ", avg " << juce::String (averageMegapixels, 1) << " Mpx";
+		}
 
 		juce::Logger::writeToLog ("VGMToybox paint stats: " + line);
 
@@ -317,6 +332,13 @@ void ToyboxAudioProcessorEditor::lookAndFeelChanged (void)
 void ToyboxAudioProcessorEditor::paint (juce::Graphics& g)
 {
 	editorPaints.fetch_add (1, std::memory_order_relaxed);
+
+	{
+		const auto clip = g.getClipBounds ();
+		paintedPixels.fetch_add ((long long) juce::jmax (0, clip.getWidth ())
+									 * (long long) juce::jmax (0, clip.getHeight ()),
+								 std::memory_order_relaxed);
+	}
 
 	// a faint vertical gradient gives the window some depth
 	g.setGradientFill (juce::ColourGradient (theme::windowTop(), 0.0f, 0.0f,
