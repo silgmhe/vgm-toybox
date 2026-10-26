@@ -23,7 +23,6 @@ namespace
 {
 	constexpr int kInset = 20;
 	constexpr int kHeader = 44;
-	constexpr int kRefreshHz = 30;
 
 	/** How far a row's paint can land outside the row's own rectangle.
 
@@ -1366,7 +1365,10 @@ ContentSlot::ContentSlot (toybox::PlaybackEngine& engineToUse)
 	addChildComponent (*keyboardPanel);
 	addChildComponent (*scopePanel);
 
-	startTimerHz (kRefreshHz);
+	// The rate is a setting now (SettingsStore::getRefreshHz): every refresh repaints what changed
+	// on this page, and at 4K that is work worth letting the user trade against smoothness.
+	refreshHz = settings::SettingsStore::getInstance ().getRefreshHz ();
+	startTimerHz (refreshHz);
 }
 
 ContentSlot::~ContentSlot (void)
@@ -1464,6 +1466,18 @@ void ContentSlot::resized (void)
 
 void ContentSlot::timerCallback (void)
 {
+	// Before the early return: the setting can change while another page is on screen, and a rate
+	// that only took effect on the next visit would look like the setting had not worked.
+	{
+		const int wanted = settings::SettingsStore::getInstance ().getRefreshHz ();
+
+		if (wanted != refreshHz)
+		{
+			refreshHz = wanted;
+			startTimerHz (refreshHz);
+		}
+	}
+
 	if (current != ContentView::keyboard || ! keyboardPanel->isVisible ())
 	{
 		return;

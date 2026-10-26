@@ -87,6 +87,10 @@ private:
 	playback::ChipStateSnapshot snapshot;
 	int lastChannelCount = -1;
 
+	/** The rate the refresh timer currently runs at, read from the settings and re-read on every
+		tick (see timerCallback). Zero until the constructor has asked. */
+	int refreshHz = 0;
+
 	std::unique_ptr<MixerPanel> mixer;
 	std::unique_ptr<KeyboardPanel> keyboardPanel;
 	std::unique_ptr<ScopePanel> scopePanel;

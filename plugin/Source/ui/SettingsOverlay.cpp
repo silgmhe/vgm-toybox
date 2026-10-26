@@ -24,8 +24,11 @@ namespace
 	// The height is a floor rather than a fixed size: the panel shrinks with the window (see
 	// panelBounds), and the General page needs the fifth row - the tray switch - to fit at the
 	// window's own minimum height.
-	constexpr int kPanelWidth = 640;
-	constexpr int kPanelHeight = 500;
+	// Grown from 640 by 500 when the General page gained the refresh-rate row: five switch rows, a
+	// slider with its caption, and the path block beneath them no longer fit without pushing the
+	// footer buttons into each other.
+	constexpr int kPanelWidth = 720;
+	constexpr int kPanelHeight = 560;
 	constexpr int kPanelPadding = 18;
 	constexpr int kTitleHeight = 22;
 	constexpr int kTitleGap = 12;
@@ -419,6 +422,32 @@ GeneralSettingsPage::GeneralSettingsPage (void)
 	};
 	addAndMakeVisible (paintStatsButton);
 
+	refreshHzCaption.setComponentID ("settings.general.refreshHzCaption");
+	refreshHzCaption.setFont (juce::Font (juce::FontOptions (13.0f)));
+	addAndMakeVisible (refreshHzCaption);
+
+	refreshHzSlider.setComponentID ("settings.general.refreshHz");
+	refreshHzSlider.setSliderStyle (juce::Slider::LinearHorizontal);
+	refreshHzSlider.setTextBoxStyle (juce::Slider::TextBoxRight, false, 64, 22);
+	refreshHzSlider.setRange ((double) toybox::settings::SettingsStore::minRefreshHz,
+							  (double) toybox::settings::SettingsStore::maxRefreshHz, 1.0);
+	// The text is written out rather than left to the slider's own formatting: with a step of 1 and
+	// a range of 10 to 60, the automatic path still printed 30.000000, and setNumDecimalPlacesToDisplay
+	// did not change it. A rate is a whole number of hertz and should read as one.
+	refreshHzSlider.textFromValueFunction = [] (double value)
+	{
+		return juce::String ((int) std::lround (value)) + " Hz";
+	};
+	refreshHzSlider.valueFromTextFunction = [] (const juce::String& text)
+	{
+		return text.retainCharacters ("0123456789").getDoubleValue ();
+	};
+	refreshHzSlider.onValueChange = [this]
+	{
+		toybox::settings::SettingsStore::getInstance().setRefreshHz ((int) refreshHzSlider.getValue());
+	};
+	addAndMakeVisible (refreshHzSlider);
+
 	// The standalone reopens the song it had loaded when it last quit (restoreLastSongIfNeeded()
 	// in Source/PluginEditor.cpp; the value lives in SettingsStore). A plugin takes its song from
 	// the host's project, so it never gets this row: there is no "last time the app was open".
@@ -525,6 +554,9 @@ void GeneralSettingsPage::refreshLanguage (void)
 	paintStatsButton.setButtonText (i18n::tr ("settings.general.paintStats"));
 	paintStatsButton.setTooltip (i18n::tr ("settings.general.paintStatsTooltip"));
 
+	refreshHzCaption.setText (i18n::tr ("settings.general.refreshHz"), juce::dontSendNotification);
+	refreshHzSlider.setTooltip (i18n::tr ("settings.general.refreshHzTooltip"));
+
 	if (toybox::standalone::available())
 	{
 		restoreLastSongButton.setButtonText (i18n::tr ("settings.general.restoreLastSong"));
@@ -556,6 +588,7 @@ void GeneralSettingsPage::refresh (void)
 	auto& store = toybox::settings::SettingsStore::getInstance();
 
 	paintStatsButton.setToggleState (store.getPaintStats(), juce::dontSendNotification);
+	refreshHzSlider.setValue ((double) store.getRefreshHz(), juce::dontSendNotification);
 
    #if JUCE_WINDOWS
 	// Stored, not read back from anything else: a second launch reads the file before any window
@@ -620,6 +653,10 @@ void GeneralSettingsPage::resized (void)
 	paintStatsButton.setBounds (area.removeFromTop (24));
 	area.removeFromTop (theme::cardGap);
 
+	refreshHzCaption.setBounds (area.removeFromTop (18));
+	refreshHzSlider.setBounds (area.removeFromTop (24));
+	area.removeFromTop (theme::cardGap);
+
 	fileCaption.setBounds (area.removeFromTop (16));
 	pathLabel.setBounds (area.removeFromTop (20));
 
@@ -640,6 +677,7 @@ void GeneralSettingsPage::lookAndFeelChanged (void)
 	// The caption is an explanation and the error line is a warning; the path itself is read, so
 	// it takes the LookAndFeel's primary text colour and needs nothing said about it here. The
 	// reuse note is a read value like the path; its hint is the explanation.
+	refreshHzCaption.setColour (juce::Label::textColourId, theme::secondaryText());
 	fileCaption.setColour (juce::Label::textColourId, theme::secondaryText());
 	reuseWindowHint.setColour (juce::Label::textColourId, theme::secondaryText());
 	reuseWindowNote.setColour (juce::Label::textColourId, theme::primaryText());

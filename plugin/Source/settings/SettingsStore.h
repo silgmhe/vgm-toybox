@@ -207,6 +207,23 @@ public:
 	/** Stores the switch, writes it, and tells every listener, like the other preferences. */
 	void setPaintStats (bool shouldReport);
 
+	/** How often the Keyboard page redraws, in Hz.
+
+		The one setting here that trades picture against cost directly: every refresh repaints what
+		changed, and at 4K that is real work. 30 is the default this view always used; 10 is enough
+		for a slow passage and 60 matches a display. Clamped on read and on write, so a hand-edited
+		file cannot ask for 500.
+	*/
+	int getRefreshHz (void) const;
+
+	/** Stores it, writes it, and tells every listener. */
+	void setRefreshHz (int hz);
+
+	/** The range the setting accepts, and the value used when nothing is stored. */
+	static constexpr int minRefreshHz = 10;
+	static constexpr int maxRefreshHz = 60;
+	static constexpr int defaultRefreshHz = 30;
+
 	/** Whether the chips' fine pitch becomes pitch bend at all. Off: notes keep their nearest
 		semitone and no bend message is sent - for an instrument that ignores RPN and cannot be
 		matched, or for a MIDI monitor that should show plain notes. Default on. */

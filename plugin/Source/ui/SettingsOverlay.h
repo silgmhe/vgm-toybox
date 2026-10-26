@@ -124,6 +124,12 @@ private:
 	// away - see SettingsStore::getPaintStats().
 	juce::ToggleButton paintStatsButton;
 
+	// "Refresh rate": how often the Keyboard page redraws. The one setting that trades picture
+	// against cost directly - see SettingsStore::getRefreshHz(). The slider carries its own
+	// numeric box, and the caption above it says what the number means.
+	juce::Label refreshHzCaption;
+	juce::Slider refreshHzSlider;
+
 	juce::Label fileCaption;	// "Settings file"
 	juce::Label pathLabel;		// the path itself, read-only
 	juce::TextButton openFolderButton;
