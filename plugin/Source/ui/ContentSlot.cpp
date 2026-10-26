@@ -34,6 +34,13 @@ namespace
 	*/
 	constexpr int kRowReach = 24;
 
+	/** How far a single column's paint can reach outside its own rectangle.
+
+		Only the lit key's note disc casts anything (blur 2, offset 1), and the row's card shadow is
+		painted by the whole-row path, so this is small - three pixels of slack, not twenty-four.
+	*/
+	constexpr int kColumnReach = 6;
+
 	// The row's own measurements live in KeyboardRowLayout: thirteen columns that have to fit
 	// a card are arithmetic, and arithmetic belongs where a test can call it.
 	keyboard::RowMetrics metrics;
@@ -240,9 +247,6 @@ public:
 			return;
 		}
 
-		juce::Rectangle<int> dirty;
-		bool any = false;
-
 		for (std::size_t i = 0; i < rows.size (); ++i)
 		{
 			const auto& row = rows[i];
@@ -271,23 +275,61 @@ public:
 			now.shapeParameter = channel.shapeParameter;
 			now.waveSize = channel.wave.size ();
 
+			const auto& prev = painted[i];
+
+			// Whole-row changes: the card behind, its shadow, the name, the two buttons. A row that
+			// has never been painted has note == -2, which lands here too.
+			// The last clause is not about the note: the name column is drawn in the primary colour
+			// when the row is audible and the secondary one when it is not, and audible is
+			// active && volume above silence. Crossing that threshold changes a column this row is
+			// not otherwise going to repaint.
+			if (prev.note == -2
+				|| prev.muted != now.muted
+				|| prev.soloed != now.soloed
+				|| prev.active != now.active
+				|| prev.analysing != now.analysing
+				|| (prev.volumeStep == 0) != (now.volumeStep == 0))
+			{
+				painted[i] = now;
+				repaint (row.area.expanded (kRowReach));
+				continue;
+			}
+
 			// A channel carrying the core's own cycle is drawn from it every frame, and its contents
-			// can change while its size stays the same - so those rows are never skipped.
-			if (now == painted[i] && channel.wave.empty ())
+			// can change while its size stays the same - so its waveform is never skipped.
+			const bool waveChanged = ! channel.wave.empty ()
+								  || prev.waveKind != now.waveKind
+								  || prev.dutyStep != now.dutyStep
+								  || prev.shapeParameter != now.shapeParameter
+								  || prev.waveSize != now.waveSize;
+
+			const bool noteChanged = prev.note != now.note;
+			const bool meterChanged = prev.volumeStep != now.volumeStep;
+
+			if (! waveChanged && ! noteChanged && ! meterChanged)
 			{
 				continue;
 			}
 
 			painted[i] = now;
 
-			const auto area = row.area.expanded (kRowReach);
-			dirty = any ? dirty.getUnion (area) : area;
-			any = true;
-		}
+			// Column by column, not row by row: the note cell and the keys are where a note shows
+			// up, and the other four columns of this row have not moved.
+			if (noteChanged)
+			{
+				repaint (row.note.expanded (kColumnReach));
+				repaint (row.keys.expanded (kColumnReach));
+			}
 
-		if (any)
-		{
-			repaint (dirty);
+			if (waveChanged)
+			{
+				repaint (row.wave.expanded (kColumnReach));
+			}
+
+			if (meterChanged)
+			{
+				repaint (row.meter.expanded (kColumnReach));
+			}
 		}
 	}
 
@@ -1178,30 +1220,22 @@ private:
 	*/
 	struct RowSignature
 	{
+		// The row as a whole. These change only when the user does something - a click on M or S,
+		// or the song starting and stopping - so they cost a whole-row repaint, shadow included.
 		bool active = false;
 		bool analysing = false;
 		bool muted = false;
 		bool soloed = false;
+
+		// The columns that move while a song plays. Compared apart from the above because each one
+		// owns a rectangle of its own: a note moving repaints the note cell and the keys, not the
+		// row's name, its buttons, its waveform, its meter and the card behind all of them.
 		int note = -2;
 		int volumeStep = -1;
 		int waveKind = -1;
 		int dutyStep = -1;
 		int shapeParameter = -1;
 		std::size_t waveSize = 0;
-
-		bool operator== (const RowSignature& other) const
-		{
-			return active == other.active
-				&& analysing == other.analysing
-				&& muted == other.muted
-				&& soloed == other.soloed
-				&& note == other.note
-				&& volumeStep == other.volumeStep
-				&& waveKind == other.waveKind
-				&& dutyStep == other.dutyStep
-				&& shapeParameter == other.shapeParameter
-				&& waveSize == other.waveSize;
-		}
 	};
 
 	/** Parallel to `rows` - a header's entry is unused and never compared. */
