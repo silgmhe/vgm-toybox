@@ -699,7 +699,7 @@ endif()
 # (docs/memo/2026-10-25-nsf-dc-offset.md) - so registering them failed tests that had nothing to do
 # with these chips. That comparison now measures the signal's own energy with the offset taken out,
 # which is the question it meant to ask, and all five pass.
-foreach(_toybox_asset psg opl4 ym2610 ym2608 fm_alg0
+foreach(_toybox_asset psg opl4 ym2610 ym2608 fm_alg0 ay8910
 		fds_song vrc6_song vrc7_song mmc5_song fme7_song apu_percussion n163_song)
 	set(_toybox_asset_song "${CMAKE_CURRENT_SOURCE_DIR}/Tests/assets/${_toybox_asset}.vgm")
 	if(NOT EXISTS "${_toybox_asset_song}")
