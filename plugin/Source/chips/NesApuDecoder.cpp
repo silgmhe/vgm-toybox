@@ -17,6 +17,10 @@ namespace
 		sees it as "halt", the envelope generator as "loop". Both are the same flag, which is why
 		the two assignments below use the same constant.
 	*/
+	/** Each pulse owns four consecutive registers, so the channel is the register's low two bits
+		and the register inside the channel is the high bits counted from 0x00. */
+	constexpr uint8_t kPulseChannelMask = 0x03;
+
 	constexpr uint8_t kDutyShift = 6;
 	constexpr uint8_t kDutyMask = 0x03;
 	constexpr uint8_t kLengthHalt = 0x20;
@@ -206,7 +210,7 @@ void NesApuDecoder::write (const RegisterWrite& w)
 	if (reg >= 0x00 && reg <= 0x07)
 	{
 		Pulse& pulse = impl->pulses[(reg >> 2) & 1];
-		switch (reg & 0x03)
+		switch (reg & kPulseChannelMask)
 		{
 		case 0:
 			pulse.duty = (value >> kDutyShift) & kDutyMask;
