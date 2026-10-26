@@ -16,6 +16,29 @@ namespace
 	constexpr uint32_t kRhythmGate = 4410;		// 100 ms at 44.1 kHz
 	constexpr uint32_t kAdpcmGate = 5292;		// 120 ms
 
+	/** The OPL register map groups its channels in runs of nine: 0x10..0x18 carry each channel's
+		frequency low byte, 0x20..0x28 the same channel's block and F-number high bit, 0xB0..0xB8
+		its key-on and feedback. So a channel index is the register minus the run's base, and the
+		run length is what bounds a write to "the first nine channels only". */
+	constexpr uint8_t kFnumLowBase = 0x10;
+	constexpr uint8_t kBlockBase = 0x20;
+	constexpr uint8_t kKeyOnBase = 0xB0;
+	constexpr uint8_t kChannelRun = 9;
+
+	/** The frequency is nine bits: eight in the low register and the ninth above the block. */
+	constexpr uint16_t kFnumHighBit = 0x100;
+	constexpr uint16_t kFnumLowMask = 0x0FF;
+	constexpr int kFnumHighShift = 8;
+
+	/** OPL3 widens the frequency to ten bits, so its high register carries two of them. */
+	constexpr uint8_t kFnumHighOneBit = 0x01;
+	constexpr uint8_t kFnumHighTwoBits = 0x03;
+
+	/** A register operand is five bits wide, and Delta-T's start bit sits in the top of its own
+		control byte. */
+	constexpr uint8_t kOperandMask = 0x1F;
+	constexpr uint8_t kDeltaTStart = 0x80;
+
 	class OplNoteTable final : public NoteTable
 	{
 	public:
@@ -130,7 +153,7 @@ struct OplDecoder::Impl
 			}
 		}
 
-		const uint8_t bits = (uint8_t) (data & 0x1F);
+		const uint8_t bits = (uint8_t) (data & kOperandMask);
 		const uint8_t rising = (uint8_t) (bits & (uint8_t) ~rhythmBits);
 		for (int i = 0; i < 5; ++i)
 		{
@@ -196,7 +219,7 @@ void OplDecoder::write (const RegisterWrite& write)
 	if (impl->adpcm && port == 0 && reg == 0x07)
 	{
 		// Delta-T: bit 7 starts the sample; the unit ends it on its own.
-		if ((write.value & 0x80) != 0 && impl->deltaT.end <= time)
+		if ((write.value & kDeltaTStart) != 0 && impl->deltaT.end <= time)
 		{
 			impl->deltaT.end = time + kAdpcmGate;
 		}
@@ -205,23 +228,23 @@ void OplDecoder::write (const RegisterWrite& write)
 
 	if (impl->variant == Variant::opll)
 	{
-		if (reg >= 0x10 && reg < 0x19)
+		if (reg >= kFnumLowBase && reg < kFnumLowBase + kChannelRun)
 		{
-			Impl::Channel& voice = impl->channels[reg - 0x10];
-			voice.fnum = (voice.fnum & 0x100) | (int) write.value;
+			Impl::Channel& voice = impl->channels[reg - kFnumLowBase];
+			voice.fnum = (voice.fnum & kFnumHighBit) | (int) write.value;
 			return;
 		}
 
-		if (reg >= 0x20 && reg < 0x29)
+		if (reg >= kBlockBase && reg < kBlockBase + kChannelRun)
 		{
-			const int channel = reg - 0x20;
+			const int channel = reg - kBlockBase;
 			if (impl->rhythmEnabled && channel >= 6)
 			{
 				return;		// borrowed by the rhythm instruments
 			}
 
 			Impl::Channel& voice = impl->channels[channel];
-			voice.fnum = (voice.fnum & 0x0FF) | ((int) (write.value & 0x01) << 8);
+			voice.fnum = (voice.fnum & kFnumLowMask) | ((int) (write.value & kFnumHighOneBit) << kFnumHighShift);
 			voice.block = (int) ((write.value >> 1) & 0x07);
 			voice.keyed = (write.value & 0x10) != 0;
 			return;
@@ -261,7 +284,7 @@ void OplDecoder::write (const RegisterWrite& write)
 		}
 
 		Impl::Channel& voice = impl->channels[channel];
-		voice.fnum = (voice.fnum & 0x0FF) | ((int) (write.value & 0x03) << 8);
+		voice.fnum = (voice.fnum & kFnumLowMask) | ((int) (write.value & kFnumHighTwoBits) << kFnumHighShift);
 		voice.block = (int) ((write.value >> 2) & 0x07);
 		voice.keyed = (write.value & 0x20) != 0;
 		return;

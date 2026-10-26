@@ -16,6 +16,15 @@ namespace
 	constexpr int kSlots = kBanks * kSlotsPerBank;
 
 	constexpr int kOneShotNote = 60;
+
+	/** A pitch word packs three fields: the twelve-bit FNS at the bottom, a four-bit multiple
+		above it, and the block in the high nibble of whichever byte holds FNS's top four bits.
+		The core keeps them in one value and reads them with shifts of 12 and 4, which is where
+		these numbers come from - they are field positions, not magic. */
+	constexpr uint32_t kFnsMask = 0x0FFF;
+	constexpr int kMultipleShift = 12;
+	constexpr uint32_t kMultipleMask = 0x0F;
+	constexpr uint32_t kBlockMask = 0x0F;
 	constexpr uint32_t kOneShotPeriod = 0x80000000u;
 
 	// A PCM slot has no length register that means anything in time (start/end/loop are sample
@@ -85,14 +94,14 @@ namespace
 				return kOneShotNote;
 			}
 
-			const uint32_t fns = period & 0x0FFFu;
+			const uint32_t fns = period & kFnsMask;
 			if (fns == 0)
 			{
 				return -1;		// a phase increment of zero is silence, not a very low note
 			}
 
-			const int multiple = (int) ((period >> 12) & 0x0Fu);
-			const double hz = nativeRate * (double) fns * kPowTable[block & 0x0F]
+			const int multiple = (int) ((period >> kMultipleShift) & kMultipleMask);
+			const double hz = nativeRate * (double) fns * kPowTable[block & kBlockMask]
 								 * kMultipleTable[multiple] / kStepDivisor;
 			return quantiseFrequency (hz, finePitch);
 		}
