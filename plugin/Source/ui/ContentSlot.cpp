@@ -136,6 +136,12 @@ public:
 		exportButton.onClick = [this] { if (onExport) { onExport (); } };
 		setComponentID ("view.keyboard");
 
+		// paint() fills the whole rectangle with the card colour, so nothing underneath shows
+		// through and the parent does not have to be redrawn behind it. The panel is inset by two
+		// pixels inside a card whose corners are rounder than that, which is the one thing to look
+		// at: a square fill can reach into the corner arcs. See the note in paint().
+		setOpaque (true);
+
 		// The real thing, so its hover and drag behaviour come from the same look and feel the
 		// mixer's bar uses. An earlier attempt at this did not paint, and the reason was not the
 		// component: it was being shown and hidden from inside paint(), and toggling a child's
@@ -346,6 +352,12 @@ public:
 
 	void paint (juce::Graphics& g) override
 	{
+		// Opaque, so this is the panel's own background rather than something showing through it.
+		// It used to draw nothing here and let ContentSlot's rounded card be the backdrop, which
+		// meant every repaint of this panel repainted the card underneath it as well - a rounded
+		// fill across the whole slot, with its antialiased corners, thirty times a second.
+		g.fillAll (theme::card ());
+
 		auto header = getLocalBounds ().reduced (kInset, 0).removeFromTop (kHeader);
 
 		g.setColour (theme::primaryText ());
