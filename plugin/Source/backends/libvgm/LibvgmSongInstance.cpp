@@ -9,6 +9,7 @@
 
 #include "LibvgmVgz.h"
 #include "MidiSequenceBuilder.h"
+#include "midi/ChipPlans.h"
 #include "settings/SettingsStore.h"
 
 namespace toybox::backends::libvgm
@@ -40,262 +41,98 @@ namespace
 	}
 
 	/** What the MIDI decoder will be able to do for one channel of a device. This is deliberately
-		kept here, next to the device enumeration: the UI and the engine see only the capability. */
+	/** Which MIDI chip a libvgm device id names.
+
+		This is the seam SongIr.h describes: the MIDI side knows `ChipKind` and nothing about file
+		formats, and every backend translates its own numbering once - here, for VGM. Two ids can
+		name one kind (the 219 ASIC is a cut-down C140 and reports through the same decoder), and a
+		device with no pitch at all maps to `unknown`, whose plan is empty.
+
+		This switch is a translation, not a table: the left-hand values belong to libvgm and exist
+		nowhere else in this project, so there is nothing for the two sides to drift apart into.
+	*/
+	midi::ChipKind chipKindForDevice (uint32_t deviceId)
+	{
+		using midi::ChipKind;
+
+		switch (deviceId)
+		{
+		case DEVID_AY8910:      return ChipKind::ay8910;
+		case DEVID_SN76496:     return ChipKind::sn76489;
+		case DEVID_SAA1099:     return ChipKind::saa1099;
+		case DEVID_POKEY:       return ChipKind::pokey;
+		case DEVID_YM2413:      return ChipKind::ym2413;
+		case DEVID_YM3812:      return ChipKind::ym3812;
+		case DEVID_YM3526:      return ChipKind::ym3526;
+		case DEVID_Y8950:       return ChipKind::y8950;
+		case DEVID_YMF262:      return ChipKind::ymf262;
+		case DEVID_YMF278B:     return ChipKind::ymf278b;
+		case DEVID_YM2612:      return ChipKind::ym2612;
+		case DEVID_YM2203:      return ChipKind::ym2203;
+		case DEVID_YM2608:      return ChipKind::ym2608;
+		case DEVID_YM2610:      return ChipKind::ym2610;
+		case DEVID_YM2151:      return ChipKind::ym2151;
+		case DEVID_YMF271:      return ChipKind::ymf271;
+		case DEVID_YMZ280B:     return ChipKind::ymz280b;
+		case DEVID_C140:        return ChipKind::c140;
+		case DEVID_C219:        return ChipKind::c140;      // the 219 ASIC is a cut-down C140
+		case DEVID_C352:        return ChipKind::c352;
+		case DEVID_ES5503:      return ChipKind::es5503;
+		case DEVID_GA20:        return ChipKind::ga20;
+		case DEVID_K053260:     return ChipKind::k053260;
+		case DEVID_K054539:     return ChipKind::k054539;
+		case DEVID_YMW258:      return ChipKind::multiPcm;
+		case DEVID_MSM6295:     return ChipKind::okim6295;
+		case DEVID_QSOUND:      return ChipKind::qsound;
+		case DEVID_RF5C68:      return ChipKind::rf5c68;
+		case DEVID_SEGAPCM:     return ChipKind::segapcm;
+		case DEVID_GB_DMG:      return ChipKind::gameBoy;
+		case DEVID_C6280:       return ChipKind::huc6280;
+		case DEVID_K005289:     return ChipKind::k005289;
+		case DEVID_K007232:     return ChipKind::k007232;
+		case DEVID_K051649:     return ChipKind::k051649;
+		case DEVID_MIKEY:       return ChipKind::mikey;
+		case DEVID_MSM5232:     return ChipKind::msm5232;
+		case DEVID_NES_APU:     return ChipKind::nesApu;
+		case DEVID_VBOY_VSU:    return ChipKind::vsu;
+		case DEVID_WSWAN:       return ChipKind::wonderswan;
+		case DEVID_X1_010:      return ChipKind::x1_010;
+
+		// 32X PWM, MSM6258 and uPD7759 have no pitch to report at all. The reasoning is kept in
+		// docs/issue; here it is enough that `unknown` carries an empty plan.
+		default:                return ChipKind::unknown;
+		}
+	}
+
+	/** What the MIDI decoder will be able to do for one channel of a device.
+
+		The answer comes from midi/ChipPlans, which is keyed on the chip's kind rather than on
+		libvgm's device id. That is what this function needed. Capability used to be a 255-line
+		switch over `DEVID_*`, and adding Ay8910Decoder left its entry saying "nothing in this
+		backend decodes the SSG" - the table and the decoders were keyed on different vocabularies,
+		so nothing connected them. Now a chip whose decoder exists is one edit away from a plan,
+		and a test holds every plan to the promise its decoder makes.
+	*/
 	playback::MidiCapability midiCapabilityFor (const PLR_DEV_INFO& device, int channelIndex)
 	{
-		const auto type = device.type;
-		/** Whether this channel is one of the linked SSG's: they are numbered after the parent's
-		channels, which is where the layout puts their tracks. */
-	const auto isSsgChannel = [] (const PLR_DEV_INFO& parent, int channel)
-	{
-		const int first = channelCountOf (parent);
-		return channel >= first && channel < first + kSsgChannels;
-	};
-
-	const auto fmChannel = [channelIndex] (int count)
+		if (channelIndex < 0)
 		{
-			return channelIndex >= 0 && channelIndex < count ? playback::MidiCapability::melodic
-															 : playback::MidiCapability::unavailable;
-		};
-
-		switch (type)
-		{
-		case DEVID_YM2610:
-			if (channelIndex < 0)
-			{
-				return playback::MidiCapability::unavailable;
-			}
-			if (channelIndex < 6)
-			{
-				// The non-B variant only emits CH[1], CH[2], CH[4], CH[5].
-				const bool isB = device.devCfg != nullptr && (device.devCfg->flags & 0x01) != 0;
-				return (isB || (channelIndex != 0 && channelIndex != 3))
-						   ? playback::MidiCapability::melodic
-						   : playback::MidiCapability::unavailable;
-			}
-			// 6-11 are ADPCM-A (a trigger with no pitch of its own), 12 is ADPCM-B, whose DELTA-N
-			// is a pitch register - the same one the reference implementation turns into a note
-			// (`form/KB/OPN/frmYM2610.cs` -> `searchYM2608Adpcm`), so it is melodic without needing
-			// the sample to be measurable.
-			if (isSsgChannel (device, channelIndex))
-			{
-				return playback::MidiCapability::melodic;
-			}
-
-			return (channelIndex == 12) ? playback::MidiCapability::melodic
-										: (channelIndex < 12 ? playback::MidiCapability::oneShot
-															 : playback::MidiCapability::unavailable);
-		case DEVID_YM2608:
-			if (channelIndex < 6)
-			{
-				return playback::MidiCapability::melodic;
-			}
-			// the same split as the YM2610: ADPCM-A triggers, ADPCM-B carries a pitch, and the SSG
-			// follows the parent's channels
-			if (isSsgChannel (device, channelIndex))
-			{
-				return playback::MidiCapability::melodic;
-			}
-
-			return (channelIndex == 12) ? playback::MidiCapability::melodic
-										: (channelIndex < 12 ? playback::MidiCapability::oneShot
-															 : playback::MidiCapability::unavailable);
-		case DEVID_YM2612:
-			return (channelIndex == 6) ? playback::MidiCapability::oneShot : fmChannel (6);
-		case DEVID_YM2203:
-			// its SSG is numbered after the three FM channels
-			return isSsgChannel (device, channelIndex) ? playback::MidiCapability::melodic
-													   : fmChannel (3);
-		case DEVID_YM2151:
-			return fmChannel (8);
-		case DEVID_YMF271:
-			// twelve groups, and a group is FM or PCM depending on the sync mode the song writes.
-			// The mode is runtime state, so the strip keeps the default: the PCM groups then just
-			// report their one-shot notes on a channel the UI calls melodic.
-			return fmChannel (12);
-		case DEVID_YM2413:
-			return (channelIndex >= 0 && channelIndex < 9) ? playback::MidiCapability::melodic
-														   : (channelIndex < 14
-																  ? playback::MidiCapability::oneShot
-																  : playback::MidiCapability::unavailable);
-		case DEVID_YM3526:
-		case DEVID_YM3812:
-			return (channelIndex >= 0 && channelIndex < 9) ? playback::MidiCapability::melodic
-														   : (channelIndex < 14
-																  ? playback::MidiCapability::oneShot
-																  : playback::MidiCapability::unavailable);
-		case DEVID_Y8950:	// 9 melodic, 5 rhythm, and the Delta-T ADPCM channel on top
-			return (channelIndex >= 0 && channelIndex < 9) ? playback::MidiCapability::melodic
-														   : (channelIndex < 15
-																  ? playback::MidiCapability::oneShot
-																  : playback::MidiCapability::unavailable);
-		case DEVID_YMF262:
-		case DEVID_YMF278B:	// its FM half is an OPL3; the wavetable half is not decoded
-			return (channelIndex >= 0 && channelIndex < 18) ? playback::MidiCapability::melodic
-															: (channelIndex < 23
-																   ? playback::MidiCapability::oneShot
-																   : playback::MidiCapability::unavailable);
-		case DEVID_AY8910:
-			// Three melodic channels. The comment here used to say that nothing in this backend
-			// decodes the SSG, which was true when it was written and stopped being true at cbaf588,
-			// where Ay8910Decoder arrived - a decoder whose own header names this chip and its
-			// clones, and which computes pitch from the twelve-bit tone divider. The capability was
-			// never revisited, so the three channels were offered as unavailable while their notes
-			// came out all along: ay8910.vgm plays A4, C5 and E5 and all three were discarded by the
-			// mixer for want of a route.
-			//
-			// A linked SSG does not come through here: one behind an OPN chip is numbered after the
-			// parent's channels and is caught by isSsgChannel() above. A standalone chip is a device
-			// of its own, and its channels are 0..2 like any other three-channel part.
-			return (channelIndex >= 0 && channelIndex < kSsgChannels)
-					   ? playback::MidiCapability::melodic
-					   : playback::MidiCapability::unavailable;
-		case DEVID_SN76496:
-			return (channelIndex >= 0 && channelIndex < 3) ? playback::MidiCapability::melodic
-														   : (channelIndex == 3
-																  ? playback::MidiCapability::oneShot
-																  : playback::MidiCapability::unavailable);
-		case DEVID_RF5C68:	// also RF5C164 / RF5C105
-			// Eight PCM voices with a step register and the sample in the chip's own RAM, so the note
-			// is the step against the chip's rate (one byte per sample) and its own octave comes from
-			// the measured cycle - section 14 of the design doc. A voice whose sample has no period
-			// still reports its C4 trigger, so the capability stays melodic.
-			return fmChannel (8);
-		case DEVID_VBOY_VSU:
-			// Five wavetable voices (clock / (32 * (2048 - freq))) plus one noise voice, which reports
-			// an unpitched trigger.
-			return fmChannel (6);
-		case DEVID_K007232:
-			// Two PCM voices with a step register: clock / (4 * (4096 - step)) is exact, so both are
-			// melodic without a root layer.
-			return fmChannel (2);
-		case DEVID_MIKEY:
-			// Four timer-driven square waves: the reload value and the clock shift give the pitch
-			// exactly, so all four channels are melodic.
-			return fmChannel (4);
-		case DEVID_YMW258:
-			// Twenty-eight sampled voices. The register pair is a ratio against unity, so every channel is
-			// melodic with the usual caveat that the absolute octave comes from the sample's own rate.
-			return fmChannel (28);
-		case DEVID_MSM5232:
-			// Eight tone generators whose register is a key index into an 88-entry ROM: the note is the
-			// index itself, so all eight are melodic (a value of 0xD8 or more is the noise mode).
-			return fmChannel (8);
-		case DEVID_K005289:
-			// Two wavetable voices on a 32-step PROM: the pitch is clock / (32 * (freq + 1)), exact from
-			// the register, so both channels are melodic.
-			return fmChannel (2);
-		case DEVID_C219:
-			// Namco's 219 ASIC (NA-1/NA-2): a cut-down C140 with sixteen PCM voices rather than
-			// twenty-four. Same register layout, so `chips/C140Decoder` reports its notes.
-			return fmChannel (16);
-		case DEVID_MSM6295:
-			// Four ADPCM voices at one fixed DAC rate (`clock / 165`): there is no pitch register,
-			// so a note can only come from the sample's own cycle - the ES5503's case, and likewise
-			// melodic, with a sample that has no period reporting its C4 trigger.
-			return fmChannel (4);
-		// Three chips are deliberately *not* represented, and they are named here so that the
-		// absence reads as a decision rather than an oversight (design doc section 13, 2026-10-22):
-		//
-		//   PWM (32X)  - a streaming DAC. What VGM logs as "register writes" is the audio itself
-		//                (`0xB2` to the left/right/mono output registers); the cycle register sets
-		//                the DAC's sample rate, not a pitch. There is no note event to report.
-		//   OKIM6258   - the same shape: `0x01` is a data port fed byte by byte, `0x0C` only
-		//                selects a sample-rate divider. No start address, no sample number.
-		//   uPD7759    - a speech synthesiser. A start edge plus a sample number is a real event,
-		//                but the chip has no pitch at all, so the best a MIDI note could say is
-		//                "a C4 happened" - which turns speech into an instrument.
-		//
-		// A MIDI note needs a pitch; these three have none, so the honest output is nothing.
-		case DEVID_32X_PWM:
-		case DEVID_MSM6258:
-		case DEVID_uPD7759:
-			return playback::MidiCapability::unavailable;
-		case DEVID_YMZ280B:
-			// Eight PCM voices. Their pitch register is a playback rate, not a note, so the decoder
-			// reports one-shot triggers; see chips/Ymz280bDecoder.h and M4 in the design doc.
-			return (channelIndex >= 0 && channelIndex < 8) ? playback::MidiCapability::oneShot
-														   : playback::MidiCapability::unavailable;
-		case DEVID_C140:
-			// Twenty-four sampled voices. Their frequency register is a playback rate rather than a
-			// note, so the note comes from that rate and the ROM's root rate (chips/Pitch.h); the
-			// end address gives the voice a length, which is what makes it melodic and not a
-			// one-shot guess. A zero-volume voice reports nothing, the same way the chip is silent.
-			return fmChannel (24);
-		case DEVID_C352:
-			// Thirty-two sampled voices, the C140's closest relative: the frequency register is a
-			// playback rate, the note comes from that rate and the ROM sample's own cycle length,
-			// and the length comes from the end address or from a key-off. Its key-on is a write
-			// of its own (offset 0x202), which is why the decoder cannot report a note at the flag
-			// write - but the promise is the same one the C140 makes: melodic, not a trigger.
-			return fmChannel (32);
-		case DEVID_QSOUND:
-			// Sixteen sampled voices plus three ADPCM ones. There is no key bit: a voice sounds
-			// while its rate and volume are non-zero and the driver keys a note by writing the rate
-			// from zero, so the decoder keys on that edge and gates on the same condition. The
-			// drums share these voices, and an unmeasurable sample is the C4 trigger.
-			return fmChannel (19);
-		case DEVID_K054539:
-			// Eight sampled voices, 8-bit PCM / 16-bit PCM / 4-bit DPCM, with a 24-bit pitch and a
-			// volume register that attenuates. A sample ends on a marker byte, so a non-looping
-			// note has an exact length and no gate guess; the drums share these eight voices with
-			// the music, and the decoder reports an unmeasurable sample as a C4 trigger.
-			return fmChannel (8);
-		case DEVID_K053260:
-			// Four sampled voices, and the first chip whose note length is a register: a
-			// non-looping voice lasts `length` bytes at its pitch, so a note needs no gate guess and
-			// no end address. The drums on these boards share the four voices with the music; the
-			// decoder marks an unmeasurable sample as a C4 trigger rather than inventing a pitch, so
-			// the capability stays melodic - a voice can be either.
-			return fmChannel (4);
-		case DEVID_SEGAPCM:
-			// Sixteen voices playing 8-bit PCM. The registers are the playback state - current
-			// address, pitch, end address, volumes and one control bit - and the boards put drums
-			// and melody on the same voices, so the decoder decides per key-on and a drum still
-			// reports its C4 trigger.
-			return fmChannel (16);
-		case DEVID_GA20:
-			// Four voices playing 8-bit PCM, a rate divider and a sample that ends on a 0x00 byte.
-			// These boards (R-Type, Undercover Cops) put drums and melody on the same four voices,
-			// and one voice can play both inside one song - the decoder decides per key-on from the
-			// sample it latched, so the capability stays melodic and a drum still reports a note.
-			return fmChannel (4);
-		case DEVID_ES5503:
-			// Thirty-two wavetable oscillators (the Ensoniq DOC). Each one walks a table it points
-			// at, and its note is that table's repeat rate: the frequency register is a real pitch
-			// once it is divided by the table's own cycle length, which the decoder measures from
-			// the chip's RAM. A one-shot table with no period - a drum - still reports its C4
-			// trigger, so the capability stays melodic; a looping table always has a pitch.
-			return fmChannel (32);
-		case DEVID_X1_010:
-			// Sixteen channels, and the same channel is either a wavetable voice or a PCM player
-			// depending on one status bit. The capability is static, so it states what the channel
-			// can be at its best - a wavetable voice with a real pitch. A PCM hit still reports a
-			// note (the decoder gives it the one-shot marker), so the promise holds in both modes.
-			return fmChannel (16);
-		case DEVID_NES_APU:
-			return (channelIndex >= 0 && channelIndex < 3) ? playback::MidiCapability::melodic
-														   : (channelIndex < 5
-																  ? playback::MidiCapability::oneShot
-																  : playback::MidiCapability::unavailable);
-		case DEVID_GB_DMG:
-			return (channelIndex >= 0 && channelIndex < 3) ? playback::MidiCapability::melodic
-														   : (channelIndex == 3
-																  ? playback::MidiCapability::oneShot
-																  : playback::MidiCapability::unavailable);
-		case DEVID_C6280:		// six wavetable channels, the noise generator shared with the last two
-			return fmChannel (6);
-		case DEVID_K051649:		// SCC1 / SCC+: five wavetable channels, no noise
-			return fmChannel (5);
-		case DEVID_SAA1099:		// six square channels; the noise and envelope generators feed them
-			return fmChannel (6);
-		case DEVID_POKEY:		// four dividers; a joined pair is one voice, handled by the decoder
-			return fmChannel (4);
-		case DEVID_WSWAN:		// four waveform channels; noise and the voice stream ride on them
-			return fmChannel (4);
-		default:
 			return playback::MidiCapability::unavailable;
 		}
+
+		// The one device whose plan depends on a configuration bit rather than on its kind: the
+		// non-B YM2610 leaves channels 0 and 3 unwired. Everything else - including the SSG an OPN
+		// chip links behind itself, which libvgm numbers after the parent's channels - is a run of
+		// channels, and lives in the table.
+		if (device.type == DEVID_YM2610 && channelIndex < 6)
+		{
+			const bool isB = device.devCfg != nullptr && (device.devCfg->flags & 0x01) != 0;
+			return (isB || (channelIndex != 0 && channelIndex != 3))
+					   ? playback::MidiCapability::melodic
+					   : playback::MidiCapability::unavailable;
+		}
+
+		return midi::channelPlanFor (chipKindForDevice (device.type)).at (channelIndex);
 	}
 }
 

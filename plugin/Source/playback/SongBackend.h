@@ -8,6 +8,7 @@
 
 #include <juce_core/juce_core.h>
 
+#include "midi/MidiCapability.h"
 #include "playback/MidiSequence.h"
 #include "playback/ChipState.h"
 
@@ -67,16 +68,9 @@ struct ChipInfo
 	DeviceId deviceId {};
 };
 
-/** What MIDI output can be derived from a mixer track. */
-enum class MidiCapability
-{
-	unavailable,	// no MIDI decoder for this chip/channel yet
-	melodic,		// the channel has a note and pitch (FM, PSG, square, ...)
-	discrete,		// a note, but only from a fixed set of them - the noise channel's sixteen
-					// periods, the slots a song gives its DPCM samples. The note is real enough
-					// to play and to build a drum kit on, and carries no pitch to slide.
-	oneShot			// the channel can only trigger a fixed note (ADPCM, DAC, ...)
-};
+// MidiCapability now lives in midi/MidiCapability.h: it describes what a decoder can produce, and
+// a capability table has to be testable without a window. Declared in this namespace, so every
+// use of `playback::MidiCapability` reads the same.
 
 /** One mixer track: a channel of a device, or the whole device when it cannot be split. */
 struct TrackInfo

@@ -12,6 +12,8 @@
 #include <cstdio>
 #include <vector>
 
+#include "midi/ChipPlans.h"
+
 #include "chips/Ay8910Decoder.h"
 #include "chips/C140Decoder.h"
 #include "chips/C352Decoder.h"
@@ -4388,13 +4390,72 @@ namespace
 			   "a Sega PCM sample with no period is the C4 drum trigger");
 	}
 
-	int main (void)
+	/* The capability table: what each chip promises its MIDI output will do.
+
+	This is the check the AY bug needed and nothing had. A decoder arrived, the table was keyed on
+	something else, and the two disagreed for a year without a single failure - because the only
+	question anyone asked was whether the channel makes sound, and a channel marked unavailable is
+	exempt from that question.
+
+	The table is keyed on the vocabulary the decoders use now, so this can assert that every kind
+	with a decoder promises something on at least one channel.
+*/
+void testChipPlans (void)
+{
+	using toybox::midi::ChipKind;
+	using toybox::playback::MidiCapability;
+
+	const int last = (int) ChipKind::x1_010;
+	int checked = 0;
+
+	// Every kind in the vocabulary, so a chip added without a plan fails here rather than in a
+	// mixer that silently refuses to route it.
+	for (int raw = 1; raw <= last; ++raw)
+	{
+		const auto plan = toybox::midi::channelPlanFor ((ChipKind) raw);
+
+		bool promises = false;
+
+		for (int channel = 0; channel < 32 && ! promises; ++channel)
+		{
+			promises = plan.at (channel) != MidiCapability::unavailable;
+		}
+
+		check (promises, "every chip with a decoder promises notes on some channel");
+		++checked;
+	}
+
+	check (checked == last, "and the loop visited every kind in the vocabulary");
+
+	// The shapes the table has to express. AY is the one that was wrong; the two OPN parts are why
+	// there is a third field at all.
+	const auto ay = toybox::midi::channelPlanFor (ChipKind::ay8910);
+	check (ay.at (0) == MidiCapability::melodic && ay.at (2) == MidiCapability::melodic
+			   && ay.at (3) == MidiCapability::unavailable,
+		   "an AY is three melodic channels and nothing else");
+
+	const auto opna = toybox::midi::channelPlanFor (ChipKind::ym2608);
+	check (opna.at (0) == MidiCapability::melodic, "OPNA's FM channels are melodic");
+	check (opna.at (6) == MidiCapability::oneShot, "its ADPCM-A channels only trigger");
+	check (opna.at (12) == MidiCapability::melodic, "ADPCM-B carries a pitch");
+	check (opna.at (13) == MidiCapability::melodic && opna.at (15) == MidiCapability::melodic,
+		   "and the SSG behind it is melodic again, after the triggers");
+
+	check (toybox::midi::channelPlanFor (ChipKind::unknown).at (0) == MidiCapability::unavailable,
+		   "an unknown chip promises nothing");
+}
+
+int main (void)
 {
 	std::printf ("chip decoder test\n");
 
 	// Isolated settings: a decoder test reads none, but the store must never open this machine's
 	// own file from a test either (see TestSettings.h for the failure that taught us).
 	const toybox::test::ScopedSettingsDirectory settings;
+
+	// First, because it is the cheapest thing here and because a table that promises nothing for a
+	// chip whose decoder exists makes every test below describe a promise nobody can reach.
+	testChipPlans();
 
 	testPulseNote();
 	testPitchChange();
