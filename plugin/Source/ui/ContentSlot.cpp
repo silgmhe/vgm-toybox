@@ -226,9 +226,11 @@ public:
 						juce::Justification::centredRight, false);
 		}
 
-		relayout ();
-
-
+		// No relayout() here. It is already called by resized() and by setSnapshot(), which are the
+		// two things that can change what the rows are; calling it again on every paint meant the
+		// whole row rectangle list was rebuilt twice per frame - once into `rows` for this paint, and
+		// once more sixty milliseconds later. Drawing also had the side effect of changing what it
+		// would draw next.
 		if (snapshot.channels.empty ())
 		{
 			paintEmptyState (g);
@@ -241,6 +243,11 @@ public:
 
 		const int octaveShift = octaveShiftForNaming ();
 
+		if (waveCaches.size () < snapshot.channels.size ())
+		{
+			waveCaches.resize (snapshot.channels.size ());
+		}
+
 		for (const auto& row : rows)
 		{
 			if (row.area.getBottom () < kHeader || row.area.getY () > getHeight ())
@@ -250,11 +257,10 @@ public:
 
 			if (row.header)
 			{
-				const int count = (int) std::count_if (snapshot.channels.begin (), snapshot.channels.end (),
-													  [&row] (const auto& channel)
-													  { return juce::String (channel.chipName) == row.title; });
-
-				keyboard::paintGroupHeader (g, row, count);
+				// row.chipCount was counted when the rows were built. This used to run a count_if
+				// over every channel, per header, per frame - and built a juce::String per
+				// comparison to do it.
+				keyboard::paintGroupHeader (g, row, row.chipCount);
 			}
 			else
 			{
@@ -268,9 +274,14 @@ public:
 				hover.mute = (hoveredRowChannel == row.channel && hoveredRowMute);
 				hover.solo = (hoveredRowChannel == row.channel && ! hoveredRowMute);
 
+				// One cache per channel, sized to the snapshot below. The waveform of a channel
+				// whose shape comes from its registers is rebuilt only when one of them moves.
+				keyboard::WavePathCache& waveCache = waveCaches[(std::size_t) row.channel];
+
 				keyboard::paintChannelRow (g, row, channel, muted, soloed, octaveShift, hover,
 										   [this] (juce::Graphics& graphics, juce::Rectangle<int> area, int note)
-										   { paintKeyboard (graphics, area, note); });
+										   { paintKeyboard (graphics, area, note); },
+										   waveCache);
 			}
 		}
 
@@ -1040,6 +1051,10 @@ private:
 	toybox::PlaybackEngine& engine;
 	toybox::playback::ChipStateSnapshot snapshot;
 	std::vector<Row> rows;
+
+	/** One waveform path per channel, kept across frames - see WavePathCache. Grown to the channel
+		count when a snapshot arrives, never shrunk: the entries cost a Path each, not a picture. */
+	std::vector<keyboard::WavePathCache> waveCaches;
 
 
 	int scrollOffset = 0;

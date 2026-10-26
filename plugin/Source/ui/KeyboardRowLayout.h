@@ -54,6 +54,14 @@ struct Row
 	juce::String title;
 	int channel = -1;
 
+	/** How many channels the header above them stands for. Zero on a channel row.
+
+		Counted while the rows are built rather than while they are drawn: the panel used to run a
+		count_if over every channel for every visible header, once per frame at 30 Hz, constructing a
+		juce::String per comparison - for a number that cannot change until the song does.
+	*/
+	int chipCount = 0;
+
 	juce::Rectangle<int> area, name, mute, solo, note, wave, keys, meter;
 };
 

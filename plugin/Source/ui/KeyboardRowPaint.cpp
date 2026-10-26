@@ -59,7 +59,8 @@ void paintChannelRow (juce::Graphics& g,
 					  bool soloed,
 					  int octaveShift,
 					  RowHover hover,
-					  const KeyPainter& paintKeys)
+					  const KeyPainter& paintKeys,
+					  WavePathCache& waveCache)
 {
 	const bool audible = channel.active && channel.volume > kSilenceLevel;
 
@@ -101,7 +102,7 @@ void paintChannelRow (juce::Graphics& g,
 					juce::Justification::centred, false);
 	}
 
-	paintWave (g, row.wave, channel);
+	paintWave (g, row.wave, channel, waveCache);
 
 	if (paintKeys != nullptr)
 	{
@@ -133,8 +134,48 @@ void paintToggle (juce::Graphics& g, juce::Rectangle<int> area,
 	g.drawText (letter, area, juce::Justification::centred, false);
 }
 
+namespace
+{
+	/** Draws one cycle across `area`. Out of paintWave() so the cached and the direct paths build
+		their line the same way - the two used to be one loop, and a second copy of it would be the
+		place where they stop agreeing. */
+	void buildCyclePath (juce::Path& path, juce::Rectangle<int> area, const std::vector<float>& cycle)
+	{
+		path.clear ();
+
+		const auto count = (int) cycle.size ();
+		const float half = (float) area.getHeight () * 0.5f - 2.0f;
+		const float span = (float) area.getWidth () / (float) count;
+
+		for (int i = 0; i < count; ++i)
+		{
+			const float level = juce::jlimit (-1.0f, 1.0f, cycle[(std::size_t) i]);
+			const float y = (float) area.getCentreY () - level * half;
+			const float x0 = (float) area.getX () + span * (float) i;
+
+			if (i == 0)
+			{
+				path.startNewSubPath (x0, y);
+			}
+			else
+			{
+				path.lineTo (x0, y);
+			}
+
+			path.lineTo (x0 + span, y);
+		}
+	}
+
+	void paintNoCycle (juce::Graphics& g, juce::Rectangle<int> area)
+	{
+		g.setColour (theme::secondaryText ());
+		g.setFont (juce::Font (juce::FontOptions (10.5f)));
+		g.drawText ("-", area, juce::Justification::centred, false);
+	}
+}
+
 void paintWave (juce::Graphics& g, juce::Rectangle<int> area,
-				const playback::ChannelState& channel)
+				const playback::ChannelState& channel, WavePathCache& cache)
 {
 	const auto window = area.toFloat ();
 
@@ -158,46 +199,67 @@ void paintWave (juce::Graphics& g, juce::Rectangle<int> area,
 
 	area = area.reduced (kCycleInsetX, kCycleInsetY);
 
-	std::vector<float> cycle = channel.wave;
-
-	if (cycle.empty ())
+	// A cycle the snapshot carries is the core's own and changes as it plays, so it is drawn as
+	// given. The one derived from the registers is a function of three values and the window's
+	// size - and it was being rebuilt thirty times a second anyway: a vector copy, a fresh
+	// juce::Path and a stroke, for a line that had not moved.
+	if (! channel.wave.empty ())
 	{
-		cycle = waveform::cycleFor (channel.waveKind, channel.duty, channel.shapeParameter);
-	}
+		if (channel.wave.size () < 2)
+		{
+			paintNoCycle (g, area);
+			return;
+		}
 
-	if (cycle.size () < 2)
-	{
-		g.setColour (theme::secondaryText ());
-		g.setFont (juce::Font (juce::FontOptions (10.5f)));
-		g.drawText ("-", area, juce::Justification::centred, false);
+		juce::Path path;
+		buildCyclePath (path, area, channel.wave);
+
+		g.setColour (theme::accent ().withAlpha (channel.active ? 0.9f : 0.35f));
+		g.strokePath (path, juce::PathStrokeType (1.0f));
 		return;
 	}
 
-	juce::Path path;
-	const auto count = (int) cycle.size ();
-	const float half = (float) area.getHeight () * 0.5f - 2.0f;
-	const float span = (float) area.getWidth () / (float) count;
+	// waveKind is the sentinel: -1 means nothing has been built for this row yet, which is not the
+	// same as "built, and there was nothing to build" - that case has valid == false with the
+	// parameters recorded, and only needs the dash repainted.
+	const bool stale = cache.waveKind < 0
+					|| cache.waveKind != channel.waveKind
+					|| cache.duty != channel.duty
+					|| cache.shape != channel.shapeParameter
+					|| cache.width != area.getWidth ()
+					|| cache.height != area.getHeight ();
 
-	for (int i = 0; i < count; ++i)
+	if (stale)
 	{
-		const float level = juce::jlimit (-1.0f, 1.0f, cycle[(std::size_t) i]);
-		const float y = (float) area.getCentreY () - level * half;
-		const float x0 = (float) area.getX () + span * (float) i;
+		const auto cycle = waveform::cycleFor (channel.waveKind, channel.duty, channel.shapeParameter);
 
-		if (i == 0)
+		cache.valid = false;
+
+		if (cycle.size () >= 2)
 		{
-			path.startNewSubPath (x0, y);
+			buildCyclePath (cache.path, area, cycle);
+			cache.valid = true;
 		}
 		else
 		{
-			path.lineTo (x0, y);
+			cache.path.clear ();
 		}
 
-		path.lineTo (x0 + span, y);
+		cache.waveKind = channel.waveKind;
+		cache.duty = channel.duty;
+		cache.shape = channel.shapeParameter;
+		cache.width = area.getWidth ();
+		cache.height = area.getHeight ();
+	}
+
+	if (! cache.valid)
+	{
+		paintNoCycle (g, area);
+		return;
 	}
 
 	g.setColour (theme::accent ().withAlpha (channel.active ? 0.9f : 0.35f));
-	g.strokePath (path, juce::PathStrokeType (1.0f));
+	g.strokePath (cache.path, juce::PathStrokeType (1.0f));
 }
 
 void paintMeter (juce::Graphics& g, juce::Rectangle<int> area,

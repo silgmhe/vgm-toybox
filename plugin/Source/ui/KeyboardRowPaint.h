@@ -30,6 +30,29 @@ struct RowHover
 	bool solo = false;
 };
 
+/** One channel's waveform, kept from one frame to the next.
+
+	A channel whose snapshot carries no cycle of its own has its shape derived from three register
+	values and the size of the window - and those change when the chip is programmed, not thirty
+	times a second. The panel used to rebuild it every frame anyway: a vector copy, a fresh
+	juce::Path and a stroke, for a line that had not moved.
+
+	One of these per channel, owned by whoever paints. A channel that *does* carry a cycle (the
+	snapshot's own, which changes as the core plays) is drawn as given and never cached here.
+*/
+struct WavePathCache
+{
+	juce::Path path;
+	int waveKind = -1;
+	float duty = -1.0f;
+	float shape = 0.0f;
+	int width = 0;
+	int height = 0;
+
+	/** True when `path` holds something worth stroking. Parameters already recorded either way. */
+	bool valid = false;
+};
+
 /** One channel: its card, its name, its mute and solo, its note, its waveform, its keys and its
 	meter. The keys come from `paintKeys`; everything else is drawn here. */
 void paintChannelRow (juce::Graphics& g,
@@ -39,7 +62,8 @@ void paintChannelRow (juce::Graphics& g,
 					  bool soloed,
 					  int octaveShift,
 					  RowHover hover,
-					  const KeyPainter& paintKeys);
+					  const KeyPainter& paintKeys,
+					  WavePathCache& waveCache);
 
 /** Mute and solo, drawn with the mixer's own face and colours: mute fills red, solo amber, and a
 	toggled one carries the matching glow. Anything else would make the two views look like
@@ -49,7 +73,7 @@ void paintToggle (juce::Graphics& g, juce::Rectangle<int> area,
 
 /** The waveform column: a rounded window over the card, a hairline, and the cycle inside it. */
 void paintWave (juce::Graphics& g, juce::Rectangle<int> area,
-				const playback::ChannelState& channel);
+				const playback::ChannelState& channel, WavePathCache& cache);
 
 /** The note's velocity, not its loudness - see the comment on the implementation. */
 void paintMeter (juce::Graphics& g, juce::Rectangle<int> area,

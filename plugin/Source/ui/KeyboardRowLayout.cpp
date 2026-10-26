@@ -33,6 +33,15 @@ Layout layoutRows (const std::vector<std::string>& chipNames,
 			Row header;
 			header.header = true;
 			header.title = chip;
+
+			// How many channels this chip has. Counted here, where the run of names is already being
+			// walked, rather than once per frame in paint(): the answer cannot change until the song
+			// does, and the panel was rebuilding a juce::String per comparison to get it.
+			for (std::size_t j = i; j < chipNames.size () && chipNames[j] == chipNames[i]; ++j)
+			{
+				++header.chipCount;
+			}
+
 			header.area = { cardX, y, cardWidth, metrics.groupHeader };
 			layout.rows.push_back (header);
 
