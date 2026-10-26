@@ -140,22 +140,27 @@ void paintToggle (juce::Graphics& g, juce::Rectangle<int> area,
 
 namespace
 {
-	/** Draws one cycle across `area`. Out of paintWave() so the cached and the direct paths build
-		their line the same way - the two used to be one loop, and a second copy of it would be the
-		place where they stop agreeing. */
-	void buildCyclePath (juce::Path& path, juce::Rectangle<int> area, const std::vector<float>& cycle)
+	/** Builds one cycle's line in coordinates local to its window - origin at the top left, no
+		knowledge of where the window is on screen.
+
+		That distinction is the whole point. When this took a rectangle it wrote absolute positions
+		into the path, and the cache key was the window's size - so scrolling the list moved the
+		window, the size stayed the same, the cache was still thought good, and the line was stroked
+		at the row's previous height. Two lines per row, one of them forty pixels below the other.
+	*/
+	void buildCyclePath (juce::Path& path, int width, int height, const std::vector<float>& cycle)
 	{
 		path.clear ();
 
 		const auto count = (int) cycle.size ();
-		const float half = (float) area.getHeight () * 0.5f - 2.0f;
-		const float span = (float) area.getWidth () / (float) count;
+		const float half = (float) height * 0.5f - 2.0f;
+		const float span = (float) width / (float) count;
 
 		for (int i = 0; i < count; ++i)
 		{
 			const float level = juce::jlimit (-1.0f, 1.0f, cycle[(std::size_t) i]);
-			const float y = (float) area.getCentreY () - level * half;
-			const float x0 = (float) area.getX () + span * (float) i;
+			const float y = (float) height * 0.5f - level * half;
+			const float x0 = span * (float) i;
 
 			if (i == 0)
 			{
@@ -168,6 +173,14 @@ namespace
 
 			path.lineTo (x0 + span, y);
 		}
+	}
+
+	/** Strokes a cycle built by buildCyclePath() where `area` says it belongs. */
+	void strokeCycle (juce::Graphics& g, const juce::Path& path, juce::Rectangle<int> area)
+	{
+		juce::Graphics::ScopedSaveState saved (g);
+		g.addTransform (juce::AffineTransform::translation ((float) area.getX (), (float) area.getY ()));
+		g.strokePath (path, juce::PathStrokeType (1.0f));
 	}
 
 	void paintNoCycle (juce::Graphics& g, juce::Rectangle<int> area)
@@ -216,10 +229,10 @@ void paintWave (juce::Graphics& g, juce::Rectangle<int> area,
 		}
 
 		juce::Path path;
-		buildCyclePath (path, area, channel.wave);
+		buildCyclePath (path, area.getWidth (), area.getHeight (), channel.wave);
 
 		g.setColour (theme::accent ().withAlpha (channel.active ? 0.9f : 0.35f));
-		g.strokePath (path, juce::PathStrokeType (1.0f));
+		strokeCycle (g, path, area);
 		return;
 	}
 
@@ -241,7 +254,7 @@ void paintWave (juce::Graphics& g, juce::Rectangle<int> area,
 
 		if (cycle.size () >= 2)
 		{
-			buildCyclePath (cache.path, area, cycle);
+			buildCyclePath (cache.path, area.getWidth (), area.getHeight (), cycle);
 			cache.valid = true;
 		}
 		else
@@ -263,7 +276,7 @@ void paintWave (juce::Graphics& g, juce::Rectangle<int> area,
 	}
 
 	g.setColour (theme::accent ().withAlpha (channel.active ? 0.9f : 0.35f));
-	g.strokePath (cache.path, juce::PathStrokeType (1.0f));
+	strokeCycle (g, cache.path, area);
 }
 
 void paintMeter (juce::Graphics& g, juce::Rectangle<int> area,
