@@ -6,6 +6,8 @@
 #include "ui/SoftShadow.h"
 #include "ui/Theme.h"
 
+#include <atomic>
+
 using namespace toybox;
 using namespace toybox::ui;
 
@@ -19,6 +21,11 @@ namespace
 	// moves the timer only refreshes state at a low rate - there is nothing to repaint then.
 	constexpr int kPlayingRefreshHz = 15;
 	constexpr int kIdleRefreshHz = 10;
+
+	// --- paint accounting ------------------------------------------------------------------
+
+	/** How often the diagnostic in the status line refreshes itself. */
+	constexpr double kPaintReportSeconds = 5.0;
 
 	// What the stored mode means as a palette. "Follow system" is asked at the moment it is needed,
 	// so it keeps meaning "whichever the desktop is on now" (ui/Theme.h) - and the mapping lives
@@ -272,12 +279,88 @@ void ToyboxAudioProcessorEditor::lookAndFeelChanged (void)
 //==============================================================================
 // painting / layout
 
+juce::String ToyboxAudioProcessorEditor::takePaintReport (bool enabled)
+{
+	// The switch is the caller's: when it is off paint() does not increment the counters at all,
+	// so there is nothing to report and nothing to reset.
+	if (! enabled)
+	{
+		return {};
+	}
+
+	const double now = juce::Time::getMillisecondCounterHiRes ();
+
+	if (now - lastPaintReportMs.load (std::memory_order_relaxed) < kPaintReportSeconds * 1000.0)
+	{
+		return {};
+	}
+
+	lastPaintReportMs.store (now, std::memory_order_relaxed);
+
+	const auto count = editorPaints.exchange (0);
+	const auto pixels = paintedPixels.exchange (0);
+
+	auto line = juce::String (count) + " paints / " + juce::String (kPaintReportSeconds, 0) + " s";
+
+	if (count > 0)
+	{
+		// In megapixels, to one decimal: small enough to read in a status line.
+		const double averageMegapixels = ((double) pixels / (double) count) / 1000000.0;
+		line << ", avg " << juce::String (averageMegapixels, 1) << " Mpx";
+	}
+
+	juce::Logger::writeToLog ("VGMToybox paint stats: " + line);
+
+	return line;
+}
+
 void ToyboxAudioProcessorEditor::paint (juce::Graphics& g)
 {
-	// a faint vertical gradient gives the window some depth
-	g.setGradientFill (juce::ColourGradient (theme::windowTop(), 0.0f, 0.0f,
-											 theme::windowBottom(), 0.0f, (float) getHeight(), false));
-	g.fillRect (getLocalBounds());
+	if (paintStats)
+	{
+		editorPaints.fetch_add (1, std::memory_order_relaxed);
+
+		const auto clip = g.getClipBounds ();
+		paintedPixels.fetch_add ((long long) juce::jmax (0, clip.getWidth ())
+									 * (long long) juce::jmax (0, clip.getHeight ()),
+								 std::memory_order_relaxed);
+	}
+
+	// A faint vertical gradient gives the window some depth - rendered once into an image rather
+	// than interpolated across the dirty area on every refresh. See the note on `backdrop` in the
+	// header for why that difference shows up at 4K and not at 1500 by 900.
+	const auto top = theme::windowTop();
+	const auto bottom = theme::windowBottom();
+
+	// Both ends of the gradient are in the key, because the image holds both. Keying on the top
+	// alone would be right as long as every palette change moves both - which is true today and is
+	// a property of the palettes, not of this code.
+	if (! backdrop.isValid ()
+		|| backdropWidth != getWidth ()
+		|| backdropHeight != getHeight ()
+		|| backdropTop != top.getARGB ()
+		|| backdropBottom != bottom.getARGB ())
+	{
+		backdrop = juce::Image (juce::Image::ARGB, juce::jmax (1, getWidth ()),
+								juce::jmax (1, getHeight ()), true);
+
+		{
+			juce::Graphics target (backdrop);
+			target.setGradientFill (juce::ColourGradient (top, 0.0f, 0.0f,
+														  bottom, 0.0f,
+														  (float) getHeight (), false));
+			target.fillRect (target.getClipBounds ());
+		}
+
+		backdropWidth = getWidth ();
+		backdropHeight = getHeight ();
+		backdropTop = top.getARGB ();
+		backdropBottom = bottom.getARGB ();
+	}
+
+	// drawImageAt, not drawImage: no resampling, one to one, and the clip still applies so only
+	// the dirty area is composited.
+	g.drawImageAt (backdrop, 0, 0);
 
 	// The page's card shadows are painted here, not by the page: a shadow reaches outside the card
 	// it belongs to, and a page's bounds end where its cards do - painted there, every shadow was
@@ -690,6 +773,20 @@ void ToyboxAudioProcessorEditor::timerCallback (void)
 	}
 
 	refreshUi();
+
+	// The diagnostic - see SettingsStore::getPaintStats(). Read on the tick rather than per paint
+	// so a change in the settings page takes effect within a tenth of a second, and so the switch
+	// costs one property read per tick instead of one per repaint.
+	paintStats = settings::SettingsStore::getInstance().getPaintStats();
+
+	if (auto report = takePaintReport(paintStats); report.isNotEmpty())
+	{
+		paintReport = report;
+	}
+	else if (! paintStats)
+	{
+		paintReport.clear();
+	}
 }
 
 void ToyboxAudioProcessorEditor::refreshUi (void)
@@ -768,6 +865,13 @@ void ToyboxAudioProcessorEditor::updateStatusLine (void)
 	{
 		status << "   " << formatTime (engine.getPositionSeconds())
 			   << " / " << formatTime (engine.getDurationSeconds());
+	}
+
+	// The diagnostic, when its switch is on: how often this window repainted and over how much
+	// area. Updated every few seconds, so showing it repaints about as often as a clock.
+	if (paintReport.isNotEmpty())
+	{
+		status << "   [" << paintReport << "]";
 	}
 
 	statusLabel.setColour (juce::Label::textColourId, hasProblem ? theme::error() : theme::secondaryText());

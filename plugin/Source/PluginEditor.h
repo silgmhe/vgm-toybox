@@ -2,6 +2,8 @@
 
 #include <juce_audio_processors/juce_audio_processors.h>
 
+#include <atomic>
+
 #include "PluginProcessor.h"
 #include "ui/AboutOverlay.h"
 #include "ui/DropHintOverlay.h"
@@ -112,6 +114,51 @@ private:
 
 	juce::TextButton openButton { "Open file..." };
 	juce::Label statusLabel;
+
+	/** What the status line prints when the paint diagnostic is on, empty when it is off. */
+
+	juce::String paintReport;
+
+	/** Whether to count paints and print the count. Read from the settings on every refresh tick
+		rather than per paint, so a change takes effect within a tenth of a second. See
+		SettingsStore::getPaintStats(). */
+	bool paintStats = false;
+
+	/** The counters behind paintReport.
+
+		Members rather than file-scope statics: a plugin can be instantiated on several tracks at
+		once, and each editor should report its own window rather than the sum of everyone's.
+	*/
+	std::atomic<int> editorPaints { 0 };
+	std::atomic<long long> paintedPixels { 0 };
+	std::atomic<double> lastPaintReportMs { 0.0 };
+
+	/** Paints and the area they covered since the last report - empty when it is not time yet, or
+		when the diagnostic is off.
+
+		The area is the half that matters. A count says how often the window was asked to draw; a
+		count multiplied by the size of its clip says how much drawing that was. Repeated small
+		rectangles and repeated whole windows are indistinguishable in a count alone.
+	*/
+	juce::String takePaintReport (bool enabled);
+
+	/** The window's own background, rendered once per size and palette.
+
+		paint() used to open by filling a vertical colour gradient across getLocalBounds(), every
+		time it was called - and it is called at the refresh rate, over whatever dirty area the last
+		change produced. A gradient fill is per-pixel interpolation; a blit of an image that already
+		holds it is not. At 4K with a two-megapixel dirty area and fifteen refreshes a second that
+		is thirty megapixels of interpolation a second for a picture that never changes.
+
+		Rebuilt when the size changes or either end of the gradient does - both ends, because the
+		image holds both.
+	*/
+	juce::Image backdrop;
+	int backdropWidth = 0;
+	int backdropHeight = 0;
+	juce::uint32 backdropTop = 0;
+	juce::uint32 backdropBottom = 0;
+
 	toybox::ui::ViewStack viewStack;	// holds the pages; exactly one of them is visible
 	toybox::ui::PlayView* playView = nullptr;	// the page, so the View menu can ask it what it shows
 	toybox::ui::DropHintOverlay dropHint;

@@ -31,6 +31,13 @@ namespace
 	constexpr const char* kReuseWindowKey = "standalone.reuseWindow";
 	constexpr const char* kRestoreLastSongKey = "standalone.restoreLastSong";
 	constexpr const char* kCloseToTrayKey = "standalone.closeToTray";
+
+	/** Off by default: it puts a number in the status line, which is not something a person who
+		did not ask for it should have to look at. */
+	constexpr const char* kPaintStatsKey = "diagnostics.paintStats";
+
+	/** The Keyboard page's redraw rate. Absent means 15 - see SettingsStore::defaultRefreshHz. */
+	constexpr const char* kRefreshHzKey = "ui.refreshHz";
 	constexpr const char* kLastSongKey = "standalone.lastSong";
 	constexpr const char* kNsfDurationKey = "nsf.durationSeconds";
 constexpr const char* kNsfOutputGainKey = "nsf.outputGainDb";
@@ -238,6 +245,44 @@ void SettingsStore::setLanguageSelection (const juce::String& id, const juce::St
 
 void SettingsStore::notifyChanged (void)
 {
+	broadcastChange();
+}
+
+bool SettingsStore::getPaintStats (void) const
+{
+	// Off unless asked for. The probe exists because "is this window repainting while nothing
+	// moves" could not be answered by reading the code, and it will be asked again; but a window
+	// that prints a counter into its status line without being asked to is a window with a bug.
+	return file->getBoolValue (kPaintStatsKey, false);
+}
+
+void SettingsStore::setPaintStats (bool shouldReport)
+{
+	if (shouldReport == getPaintStats())
+	{
+		return;
+	}
+
+	file->setValue (kPaintStatsKey, shouldReport);
+	broadcastChange();
+}
+
+int SettingsStore::getRefreshHz (void) const
+{
+	return juce::jlimit (SettingsStore::minRefreshHz, SettingsStore::maxRefreshHz,
+						 file->getIntValue (kRefreshHzKey, SettingsStore::defaultRefreshHz));
+}
+
+void SettingsStore::setRefreshHz (int hz)
+{
+	const int clamped = juce::jlimit (SettingsStore::minRefreshHz, SettingsStore::maxRefreshHz, hz);
+
+	if (clamped == getRefreshHz())
+	{
+		return;
+	}
+
+	file->setValue (kRefreshHzKey, clamped);
 	broadcastChange();
 }
 

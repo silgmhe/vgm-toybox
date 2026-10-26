@@ -24,8 +24,11 @@ namespace
 	// The height is a floor rather than a fixed size: the panel shrinks with the window (see
 	// panelBounds), and the General page needs the fifth row - the tray switch - to fit at the
 	// window's own minimum height.
-	constexpr int kPanelWidth = 640;
-	constexpr int kPanelHeight = 500;
+	// Grown from 640 by 500 when both pages gained a row: General has five switches and the path
+	// block, and Keyboard carries five settings of its own. At the smaller height the footer
+	// buttons were pushed into each other.
+	constexpr int kPanelWidth = 720;
+	constexpr int kPanelHeight = 560;
 	constexpr int kPanelPadding = 18;
 	constexpr int kTitleHeight = 22;
 	constexpr int kTitleGap = 12;
@@ -410,6 +413,15 @@ GeneralSettingsPage::GeneralSettingsPage (void)
 	addAndMakeVisible (reuseWindowHint);
    #endif
 
+	// Not standalone-only: the status line is in both builds, and so is the question this answers.
+	paintStatsButton.setComponentID ("settings.general.paintStats");
+	paintStatsButton.onClick = [this]
+	{
+		toybox::settings::SettingsStore::getInstance().setPaintStats (paintStatsButton.getToggleState());
+		refresh();
+	};
+	addAndMakeVisible (paintStatsButton);
+
 	// The standalone reopens the song it had loaded when it last quit (restoreLastSongIfNeeded()
 	// in Source/PluginEditor.cpp; the value lives in SettingsStore). A plugin takes its song from
 	// the host's project, so it never gets this row: there is no "last time the app was open".
@@ -513,6 +525,9 @@ void GeneralSettingsPage::refreshLanguage (void)
 							 juce::dontSendNotification);
    #endif
 
+	paintStatsButton.setButtonText (i18n::tr ("settings.general.paintStats"));
+	paintStatsButton.setTooltip (i18n::tr ("settings.general.paintStatsTooltip"));
+
 	if (toybox::standalone::available())
 	{
 		restoreLastSongButton.setButtonText (i18n::tr ("settings.general.restoreLastSong"));
@@ -542,6 +557,8 @@ void GeneralSettingsPage::refreshLanguage (void)
 void GeneralSettingsPage::refresh (void)
 {
 	auto& store = toybox::settings::SettingsStore::getInstance();
+
+	paintStatsButton.setToggleState (store.getPaintStats(), juce::dontSendNotification);
 
    #if JUCE_WINDOWS
 	// Stored, not read back from anything else: a second launch reads the file before any window
@@ -602,6 +619,9 @@ void GeneralSettingsPage::resized (void)
 		area.removeFromTop (theme::cardGap);
 	   #endif
 	}
+
+	paintStatsButton.setBounds (area.removeFromTop (24));
+	area.removeFromTop (theme::cardGap);
 
 	fileCaption.setBounds (area.removeFromTop (16));
 	pathLabel.setBounds (area.removeFromTop (20));
@@ -803,6 +823,39 @@ KeyboardSettingsPage::KeyboardSettingsPage (void)
 	};
 	addAndMakeVisible (rangeHints);
 
+	// The refresh rate belongs on this page rather than in General: it is a property of this view,
+	// and it is the only setting here that trades picture against cost. The text is written out
+	// rather than left to the slider: with a step of 1 the automatic formatting still printed
+	// 30.000000, and setNumDecimalPlacesToDisplay did not change it.
+	refreshCaption.setFont (juce::Font (juce::FontOptions (12.5f)));
+	refreshCaption.setJustificationType (juce::Justification::centredLeft);
+	addAndMakeVisible (refreshCaption);
+
+	refreshSlider.setComponentID ("settings.keyboard.refreshHz");
+	refreshSlider.setSliderStyle (juce::Slider::LinearHorizontal);
+	refreshSlider.setTextBoxStyle (juce::Slider::TextBoxRight, false, 76, 22);
+	refreshSlider.setRange ((double) toybox::settings::SettingsStore::minRefreshHz,
+							(double) toybox::settings::SettingsStore::maxRefreshHz, 1.0);
+	refreshSlider.textFromValueFunction = [] (double value)
+	{
+		return juce::String ((int) std::lround (value)) + " Hz";
+	};
+	// A box with no digits in it - typed over, or cleared on the way to a new number - keeps the
+	// value it had. Reading it as zero would be silently clamped up to the minimum, which looks
+	// like the slider jumping to 10 for no reason.
+	refreshSlider.valueFromTextFunction = [this] (const juce::String& text)
+	{
+		const auto digits = text.retainCharacters ("0123456789");
+
+		return digits.isEmpty () ? refreshSlider.getValue () : digits.getDoubleValue ();
+	};
+	refreshSlider.onValueChange = [this]
+	{
+		toybox::settings::SettingsStore::getInstance ()
+			.setRefreshHz ((int) std::lround (refreshSlider.getValue ()));
+	};
+	addAndMakeVisible (refreshSlider);
+
 	hint.setFont (juce::Font (juce::FontOptions (12.5f)));
 	hint.setJustificationType (juce::Justification::topLeft);
 	addAndMakeVisible (hint);
@@ -838,6 +891,9 @@ void KeyboardSettingsPage::refresh (void)
 
 	rangeHints.setToggleState (toybox::settings::SettingsStore::getInstance ().getKeyboardRangeHints (),
 							   juce::dontSendNotification);
+
+	refreshSlider.setValue ((double) toybox::settings::SettingsStore::getInstance ().getRefreshHz (),
+							juce::dontSendNotification);
 }
 
 void KeyboardSettingsPage::paint (juce::Graphics& g)
@@ -877,6 +933,13 @@ void KeyboardSettingsPage::resized (void)
 	auto middleRow = area.removeFromTop (kFooterHeight);
 	middleC.setBounds (middleRow.removeFromLeft (juce::jmin (120, middleRow.getWidth ())));
 
+	area.removeFromTop (12);
+	refreshCaption.setBounds (area.removeFromTop (18));
+	area.removeFromTop (4);
+
+	auto refreshRow = area.removeFromTop (kFooterHeight);
+	refreshSlider.setBounds (refreshRow.removeFromLeft (juce::jmin (320, refreshRow.getWidth ())));
+
 	area.removeFromTop (6);
 	hint.setBounds (area.removeFromTop (72));
 }
@@ -898,6 +961,9 @@ void KeyboardSettingsPage::refreshLanguage (void)
 	caption.setText (i18n::tr ("settings.keyboard.rangeHints"), juce::dontSendNotification);
 	rangeHints.setButtonText (i18n::tr ("settings.keyboard.rangeHintsOn"));
 	hint.setText (i18n::tr ("settings.keyboard.rangeHintsHint"), juce::dontSendNotification);
+
+	refreshCaption.setText (i18n::tr ("settings.keyboard.refreshHz"), juce::dontSendNotification);
+	refreshSlider.setTooltip (i18n::tr ("settings.keyboard.refreshHzTooltip"));
 	repaint ();
 }
 

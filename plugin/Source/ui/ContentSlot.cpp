@@ -23,7 +23,22 @@ namespace
 {
 	constexpr int kInset = 20;
 	constexpr int kHeader = 44;
-	constexpr int kRefreshHz = 30;
+
+	/** How far a row's paint can land outside the row's own rectangle.
+
+		The card shadow reaches blur 6 plus a 2 px offset, the keyboard bed's blur 5 plus 1, and the
+		lit key's note disc blur 2 plus 1. Twenty-four covers all three with room, and is used for
+		two things: deciding whether a dirty rectangle needs this row drawn at all, and how far to
+		expand a row that changed when asking for the repaint.
+	*/
+	constexpr int kRowReach = 24;
+
+	/** How far a single column's paint can reach outside its own rectangle.
+
+		Only the lit key's note disc casts anything (blur 2, offset 1), and the row's card shadow is
+		painted by the whole-row path, so this is small - three pixels of slack, not twenty-four.
+	*/
+	constexpr int kColumnReach = 6;
 
 	// The row's own measurements live in KeyboardRowLayout: thirteen columns that have to fit
 	// a card are arithmetic, and arithmetic belongs where a test can call it.
@@ -121,6 +136,12 @@ public:
 		exportButton.onClick = [this] { if (onExport) { onExport (); } };
 		setComponentID ("view.keyboard");
 
+		// paint() fills the whole rectangle with the card colour, so nothing underneath shows
+		// through and the parent does not have to be redrawn behind it. The panel is inset by two
+		// pixels inside a card whose corners are rounder than that, which is the one thing to look
+		// at: a square fill can reach into the corner arcs. See the note in paint().
+		setOpaque (true);
+
 		// The real thing, so its hover and drag behaviour come from the same look and feel the
 		// mixer's bar uses. An earlier attempt at this did not paint, and the reason was not the
 		// component: it was being shown and hidden from inside paint(), and toggling a child's
@@ -149,6 +170,24 @@ public:
 	void setSnapshot (const toybox::playback::ChipStateSnapshot& snapshotToUse)
 	{
 		snapshot = snapshotToUse;
+		afterSnapshot ();
+	}
+
+	/** The same, for a snapshot the caller is finished with.
+
+		The engine already copies the shared state once under its lock; copying it a second time here,
+		thirty times a second, meant two deep copies of every channel's name and cycle per frame.
+		The panel keeps it from here on, so the caller's copy is dead weight.
+	*/
+	void setSnapshot (toybox::playback::ChipStateSnapshot&& snapshotToUse)
+	{
+		snapshot = std::move (snapshotToUse);
+		afterSnapshot ();
+	}
+
+	/** Everything both setSnapshot overloads do once the copy is in place. */
+	void afterSnapshot (void)
+	{
 
 		// A chip's period register holds its last value, and a fast passage has gaps between notes
 		// shorter than a display frame. Holding the last note for a configurable moment keeps a row
@@ -191,6 +230,91 @@ public:
 		// content is. Rebuilt here rather than in paint(), which only draws what it is given.
 		relayout ();
 		syncScrollBar ();
+		repaintChangedRows ();
+	}
+
+	/** Repaints only the rows whose appearance changed since the last snapshot.
+
+		The panel used to be repainted whole, whatever had moved. A note held for a second changes
+		nothing at all, and a chord changes two or three rows out of thirteen - but all thirteen
+		were redrawn, keys, text, gradients and all.
+
+		`painted` is indexed by channel rather than by row. It used to be parallel to `rows`, which
+		was only true as long as nothing moved them: scrolling rebuilds `rows` from a different
+		offset, so row i becomes a different channel afterwards and the comparison would have been
+		against the wrong row's past. A channel's index does not move when the view does.
+
+		The decision itself is keyboard::compareRow(), out in KeyboardRowLayout, where a test can
+		call it with two values and no window at all.
+	*/
+	void repaintChangedRows (void)
+	{
+		const auto count = snapshot.channels.size ();
+
+		if (painted.size () != count)
+		{
+			painted.assign (count, keyboard::RowSignature {});
+			repaint ();
+			return;
+		}
+
+		for (const auto& row : rows)
+		{
+			if (row.header || row.channel < 0 || (std::size_t) row.channel >= count)
+			{
+				continue;
+			}
+
+			const auto& channel = snapshot.channels[(std::size_t) row.channel];
+
+			keyboard::RowSignature now;
+			now.active = channel.active;
+			now.analysing = channel.analysing;
+			now.muted = channel.trackIndex >= 0
+					 && engine.isTrackMuted ((std::size_t) channel.trackIndex);
+			now.soloed = channel.trackIndex >= 0
+					  && engine.isTrackSoloed ((std::size_t) channel.trackIndex);
+			now.note = channel.note;
+			now.volumeStep = keyboard::volumeSteps (channel.volume);
+			now.waveKind = channel.waveKind;
+			now.dutyStep = keyboard::dutySteps (channel.duty);
+			now.shapeParameter = channel.shapeParameter;
+			now.waveSize = channel.wave.size ();
+
+			auto& before = painted[(std::size_t) row.channel];
+			const auto change = keyboard::compareRow (before, now, ! channel.wave.empty ());
+
+			if (! change.any ())
+			{
+				continue;
+			}
+
+			before = now;
+
+			if (change.wholeRow)
+			{
+				repaint (row.area.expanded (kRowReach));
+				continue;
+			}
+
+			// Column by column, not row by row: the note cell and the keys are where a note shows
+			// up, and the other four columns of this row have not moved.
+			if (change.note)
+			{
+				repaint (row.note.expanded (kColumnReach));
+				repaint (row.keys.expanded (kColumnReach));
+			}
+
+			if (change.wave)
+			{
+				repaint (row.wave.expanded (kColumnReach));
+			}
+
+			if (change.meter)
+			{
+				repaint (row.meter.expanded (kColumnReach));
+			}
+		}
 	}
 
 	void refreshLanguage (void)
@@ -207,6 +331,12 @@ public:
 
 	void paint (juce::Graphics& g) override
 	{
+		// Opaque, so this is the panel's own background rather than something showing through it.
+		// It used to draw nothing here and let ContentSlot's rounded card be the backdrop, which
+		// meant every repaint of this panel repainted the card underneath it as well - a rounded
+		// fill across the whole slot, with its antialiased corners, thirty times a second.
+		g.fillAll (theme::card ());
+
 		auto header = getLocalBounds ().reduced (kInset, 0).removeFromTop (kHeader);
 
 		g.setColour (theme::primaryText ());
@@ -226,9 +356,11 @@ public:
 						juce::Justification::centredRight, false);
 		}
 
-		relayout ();
-
-
+		// No relayout() here. It is already called by resized() and by setSnapshot(), which are the
+		// two things that can change what the rows are; calling it again on every paint meant the
+		// whole row rectangle list was rebuilt twice per frame - once into `rows` for this paint, and
+		// once more sixty milliseconds later. Drawing also had the side effect of changing what it
+		// would draw next.
 		if (snapshot.channels.empty ())
 		{
 			paintEmptyState (g);
@@ -241,6 +373,11 @@ public:
 
 		const int octaveShift = octaveShiftForNaming ();
 
+		if (rowCaches.size () < snapshot.channels.size ())
+		{
+			rowCaches.resize (snapshot.channels.size ());
+		}
+
 		for (const auto& row : rows)
 		{
 			if (row.area.getBottom () < kHeader || row.area.getY () > getHeight ())
@@ -248,13 +385,20 @@ public:
 				continue;
 			}
 
+			// A row's shadows reach past its own rectangle, so a clip that merely touches the margin
+			// still needs the row drawn; one that misses it entirely does not. Without this, a
+			// repaint of one row would walk all thirteen and let the Graphics clip discard the rest.
+			if (! row.area.expanded (kRowReach).intersects (g.getClipBounds ()))
+			{
+				continue;
+			}
+
 			if (row.header)
 			{
-				const int count = (int) std::count_if (snapshot.channels.begin (), snapshot.channels.end (),
-													  [&row] (const auto& channel)
-													  { return juce::String (channel.chipName) == row.title; });
-
-				keyboard::paintGroupHeader (g, row, count);
+				// row.chipCount was counted when the rows were built. This used to run a count_if
+				// over every channel, per header, per frame - and built a juce::String per
+				// comparison to do it.
+				keyboard::paintGroupHeader (g, row, row.chipCount);
 			}
 			else
 			{
@@ -268,9 +412,15 @@ public:
 				hover.mute = (hoveredRowChannel == row.channel && hoveredRowMute);
 				hover.solo = (hoveredRowChannel == row.channel && ! hoveredRowMute);
 
+				// One cache per channel, sized to the snapshot below: the derived waveform, the
+				// row's shadow and its keyboard bed's shadow, none of which change while the song
+				// plays at a steady level.
+				keyboard::RowPaintCache& cache = rowCaches[(std::size_t) row.channel];
+
 				keyboard::paintChannelRow (g, row, channel, muted, soloed, octaveShift, hover,
-										   [this] (juce::Graphics& graphics, juce::Rectangle<int> area, int note)
-										   { paintKeyboard (graphics, area, note); });
+										   [this, &cache] (juce::Graphics& graphics, juce::Rectangle<int> area, int note)
+										   { paintKeyboard (graphics, area, note, cache.bedShadow); },
+										   cache);
 			}
 		}
 
@@ -718,8 +868,12 @@ private:
 		return keyboard::canShift (lastSpan, direction);
 	}
 
-	/** A fixed-width keyboard starting at the span's base note, with the sounding key lit. */
-	void paintKeyboard (juce::Graphics& g, juce::Rectangle<int> area, int note)
+	/** A fixed-width keyboard starting at the span's base note, with the sounding key lit.
+
+		`bedShadow` is the row's cache for the bed's drop shadow - the keys themselves are rebuilt
+		every frame (the lit one moves), the shadow behind them is not.
+	*/
+	void paintKeyboard (juce::Graphics& g, juce::Rectangle<int> area, int note, ShadowImage& bedShadow)
 	{
 		if (area.getWidth () < 60 || area.getHeight () < 12)
 		{
@@ -745,7 +899,7 @@ private:
 										  juce::jmin (keysWidth, (float) area.getWidth ()),
 										  (float) area.getHeight ());
 
-		drawSoftShadow (g, bed, 5.0f, theme::cardKeyShadow (), 5, juce::Point<int> (0, 1));
+		drawCachedShadow (g, bedShadow, bed, 5.0f, theme::cardKeyShadow (), 5, juce::Point<int> (0, 1));
 
 		g.setColour (theme::keyBed ());
 		g.fillRoundedRectangle (bed, 5.0f);
@@ -802,8 +956,9 @@ private:
 				// The note this key is playing sits on a disc of its own rather than being painted
 				// straight onto the key. The key is already the accent colour, so the label cannot
 				// be - a disc in the palette's on-accent colour with the accent in it keeps the two
-				// apart on the light and the dark palette alike, and the shadow lifts it off the
-				// key the way the octave arrows sit above theirs.
+				// apart on the light and the dark palette alike. It used to carry a drop shadow to
+				// lift it off the key; the hairline below does that job for nothing, and the shadow
+				// was the last gaussian blur in a repaint that runs at the view's own rate.
 				//
 				// White keys get the disc in the lower third (the black key above covers the top),
 				// black keys in the middle. Both are sized to the key, so a narrow black key gets a
@@ -817,12 +972,8 @@ private:
 																  : face.getY () + face.getHeight () * 0.68f);
 					const auto disc = juce::Rectangle<float> (diameter, diameter).withCentre (centre);
 
-					juce::Path discPath;
-					discPath.addEllipse (disc);
-
-					juce::DropShadow (theme::shadowTint ().withAlpha (0.32f), 2, { 0, 1 })
-						.drawForPath (g, discPath);
-
+					// No drop shadow - see the note above. The hairline is what separates the disc
+					// from the key now, and it costs one stroke instead of a blur.
 					// Same disc as the off-keyboard label, and for the same reason: white on the
 					// light palette, a mid grey on the dark one, never the on-accent black.
 					g.setColour (theme::keyWhite ());
@@ -1041,6 +1192,19 @@ private:
 	toybox::playback::ChipStateSnapshot snapshot;
 	std::vector<Row> rows;
 
+	/** One per channel, kept across frames: the derived waveform, the row's card shadow and its
+		keyboard bed's shadow. Grown to the channel count when a snapshot arrives, never shrunk.
+		See RowPaintCache - and docs/issue/2026-10-26-keyboard-view-gpu-cost.md for why. */
+	std::vector<keyboard::RowPaintCache> rowCaches;
+
+	/** What each channel looked like the last time it was painted.
+
+		Indexed by channel, not by row - see the note in repaintChangedRows(). The type itself is
+		keyboard::RowSignature, out in KeyboardRowLayout with the comparison that reads it, so the
+		decision can be tested without a window.
+	*/
+	std::vector<keyboard::RowSignature> painted;
+
 
 	int scrollOffset = 0;
 	int contentHeight = 0;
@@ -1166,7 +1330,10 @@ ContentSlot::ContentSlot (toybox::PlaybackEngine& engineToUse)
 	addChildComponent (*keyboardPanel);
 	addChildComponent (*scopePanel);
 
-	startTimerHz (kRefreshHz);
+	// The rate is a setting now (SettingsStore::getRefreshHz): every refresh repaints what changed
+	// on this page, and at 4K that is work worth letting the user trade against smoothness.
+	refreshHz = settings::SettingsStore::getInstance ().getRefreshHz ();
+	startTimerHz (refreshHz);
 }
 
 ContentSlot::~ContentSlot (void)
@@ -1264,6 +1431,18 @@ void ContentSlot::resized (void)
 
 void ContentSlot::timerCallback (void)
 {
+	// Before the early return: the setting can change while another page is on screen, and a rate
+	// that only took effect on the next visit would look like the setting had not worked.
+	{
+		const int wanted = settings::SettingsStore::getInstance ().getRefreshHz ();
+
+		if (wanted != refreshHz)
+		{
+			refreshHz = wanted;
+			startTimerHz (refreshHz);
+		}
+	}
+
 	if (current != ContentView::keyboard || ! keyboardPanel->isVisible ())
 	{
 		return;
@@ -1292,9 +1471,11 @@ void ContentSlot::timerCallback (void)
 		return;
 	}
 
-	keyboardPanel->setSnapshot (snapshot);
-
+	// Read before the move - it is this copy that is being handed over, and after the move it is
+	// empty. The panel does not need the number handed to it: it has the channels.
 	const int rows = (int) snapshot.channels.size ();
+
+	keyboardPanel->setSnapshot (std::move (snapshot));
 
 	if (rows != lastChannelCount)
 	{
@@ -1302,8 +1483,8 @@ void ContentSlot::timerCallback (void)
 		keyboardPanel->resized ();
 	}
 
-	if (isShowing ())
-	{
-		keyboardPanel->repaint ();
-	}
+	// No blanket repaint() here any more - setSnapshot() asked for the rows that changed and
+	// nothing else. A frame in which no row moved now draws nothing at all, which is the state
+	// most frames are in: a sustained note does not redraw thirteen keyboards thirty times a
+	// second. resized() above still repaints everything, but only when the channel count moved.
 }

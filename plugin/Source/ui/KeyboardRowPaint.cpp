@@ -59,17 +59,22 @@ void paintChannelRow (juce::Graphics& g,
 					  bool soloed,
 					  int octaveShift,
 					  RowHover hover,
-					  const KeyPainter& paintKeys)
+					  const KeyPainter& paintKeys,
+					  RowPaintCache& cache)
 {
 	const bool audible = channel.active && channel.volume > kSilenceLevel;
 
 	// A tile per row, with its shadow drawn through the same helper the cards use - a real
 	// gaussian blur, not a second rectangle pretending to be one. The shadow stays inside the
 	// row's own height, so nothing gets cut off.
+	//
+	// Through the cache, though: this row is repainted thirty times a second and its shadow is a
+	// function of its rectangle and the palette, never of the audio. Twenty-six real blurs per
+	// frame is what the GPU report was about.
 	const auto tile = row.area.reduced (0, 2).toFloat ();
 
-	drawSoftShadow (g, tile, theme::buttonRadius, theme::cardKeyShadow (), kTileShadowBlur,
-					juce::Point<int> (0, kTileShadowOffsetY));
+	drawCachedShadow (g, cache.tileShadow, tile, theme::buttonRadius, theme::cardKeyShadow (),
+					  kTileShadowBlur, juce::Point<int> (0, kTileShadowOffsetY));
 
 	g.setColour (theme::track ().withAlpha (kTileTintAlpha));
 	g.fillRoundedRectangle (tile, theme::buttonRadius);
@@ -101,7 +106,7 @@ void paintChannelRow (juce::Graphics& g,
 					juce::Justification::centred, false);
 	}
 
-	paintWave (g, row.wave, channel);
+	paintWave (g, row.wave, channel, cache.wave);
 
 	if (paintKeys != nullptr)
 	{
@@ -133,8 +138,61 @@ void paintToggle (juce::Graphics& g, juce::Rectangle<int> area,
 	g.drawText (letter, area, juce::Justification::centred, false);
 }
 
+namespace
+{
+	/** Builds one cycle's line in coordinates local to its window - origin at the top left, no
+		knowledge of where the window is on screen.
+
+		That distinction is the whole point. When this took a rectangle it wrote absolute positions
+		into the path, and the cache key was the window's size - so scrolling the list moved the
+		window, the size stayed the same, the cache was still thought good, and the line was stroked
+		at the row's previous height. Two lines per row, one of them forty pixels below the other.
+	*/
+	void buildCyclePath (juce::Path& path, int width, int height, const std::vector<float>& cycle)
+	{
+		path.clear ();
+
+		const auto count = (int) cycle.size ();
+		const float half = (float) height * 0.5f - 2.0f;
+		const float span = (float) width / (float) count;
+
+		for (int i = 0; i < count; ++i)
+		{
+			const float level = juce::jlimit (-1.0f, 1.0f, cycle[(std::size_t) i]);
+			const float y = (float) height * 0.5f - level * half;
+			const float x0 = span * (float) i;
+
+			if (i == 0)
+			{
+				path.startNewSubPath (x0, y);
+			}
+			else
+			{
+				path.lineTo (x0, y);
+			}
+
+			path.lineTo (x0 + span, y);
+		}
+	}
+
+	/** Strokes a cycle built by buildCyclePath() where `area` says it belongs. */
+	void strokeCycle (juce::Graphics& g, const juce::Path& path, juce::Rectangle<int> area)
+	{
+		juce::Graphics::ScopedSaveState saved (g);
+		g.addTransform (juce::AffineTransform::translation ((float) area.getX (), (float) area.getY ()));
+		g.strokePath (path, juce::PathStrokeType (1.0f));
+	}
+
+	void paintNoCycle (juce::Graphics& g, juce::Rectangle<int> area)
+	{
+		g.setColour (theme::secondaryText ());
+		g.setFont (juce::Font (juce::FontOptions (10.5f)));
+		g.drawText ("-", area, juce::Justification::centred, false);
+	}
+}
+
 void paintWave (juce::Graphics& g, juce::Rectangle<int> area,
-				const playback::ChannelState& channel)
+				const playback::ChannelState& channel, WavePathCache& cache)
 {
 	const auto window = area.toFloat ();
 
@@ -158,46 +216,67 @@ void paintWave (juce::Graphics& g, juce::Rectangle<int> area,
 
 	area = area.reduced (kCycleInsetX, kCycleInsetY);
 
-	std::vector<float> cycle = channel.wave;
-
-	if (cycle.empty ())
+	// A cycle the snapshot carries is the core's own and changes as it plays, so it is drawn as
+	// given. The one derived from the registers is a function of three values and the window's
+	// size - and it was being rebuilt thirty times a second anyway: a vector copy, a fresh
+	// juce::Path and a stroke, for a line that had not moved.
+	if (! channel.wave.empty ())
 	{
-		cycle = waveform::cycleFor (channel.waveKind, channel.duty, channel.shapeParameter);
-	}
+		if (channel.wave.size () < 2)
+		{
+			paintNoCycle (g, area);
+			return;
+		}
 
-	if (cycle.size () < 2)
-	{
-		g.setColour (theme::secondaryText ());
-		g.setFont (juce::Font (juce::FontOptions (10.5f)));
-		g.drawText ("-", area, juce::Justification::centred, false);
+		juce::Path path;
+		buildCyclePath (path, area.getWidth (), area.getHeight (), channel.wave);
+
+		g.setColour (theme::accent ().withAlpha (channel.active ? 0.9f : 0.35f));
+		strokeCycle (g, path, area);
 		return;
 	}
 
-	juce::Path path;
-	const auto count = (int) cycle.size ();
-	const float half = (float) area.getHeight () * 0.5f - 2.0f;
-	const float span = (float) area.getWidth () / (float) count;
+	// waveKind is the sentinel: -1 means nothing has been built for this row yet, which is not the
+	// same as "built, and there was nothing to build" - that case has valid == false with the
+	// parameters recorded, and only needs the dash repainted.
+	const bool stale = cache.waveKind < 0
+					|| cache.waveKind != channel.waveKind
+					|| cache.dutyStep != dutySteps (channel.duty)
+					|| cache.shapeParameter != channel.shapeParameter
+					|| cache.width != area.getWidth ()
+					|| cache.height != area.getHeight ();
 
-	for (int i = 0; i < count; ++i)
+	if (stale)
 	{
-		const float level = juce::jlimit (-1.0f, 1.0f, cycle[(std::size_t) i]);
-		const float y = (float) area.getCentreY () - level * half;
-		const float x0 = (float) area.getX () + span * (float) i;
+		const auto cycle = waveform::cycleFor (channel.waveKind, channel.duty, channel.shapeParameter);
 
-		if (i == 0)
+		cache.valid = false;
+
+		if (cycle.size () >= 2)
 		{
-			path.startNewSubPath (x0, y);
+			buildCyclePath (cache.path, area.getWidth (), area.getHeight (), cycle);
+			cache.valid = true;
 		}
 		else
 		{
-			path.lineTo (x0, y);
+			cache.path.clear ();
 		}
 
-		path.lineTo (x0 + span, y);
+		cache.waveKind = channel.waveKind;
+		cache.dutyStep = dutySteps (channel.duty);
+		cache.shapeParameter = channel.shapeParameter;
+		cache.width = area.getWidth ();
+		cache.height = area.getHeight ();
+	}
+
+	if (! cache.valid)
+	{
+		paintNoCycle (g, area);
+		return;
 	}
 
 	g.setColour (theme::accent ().withAlpha (channel.active ? 0.9f : 0.35f));
-	g.strokePath (path, juce::PathStrokeType (1.0f));
+	strokeCycle (g, cache.path, area);
 }
 
 void paintMeter (juce::Graphics& g, juce::Rectangle<int> area,
