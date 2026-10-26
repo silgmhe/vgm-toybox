@@ -965,8 +965,9 @@ private:
 				// The note this key is playing sits on a disc of its own rather than being painted
 				// straight onto the key. The key is already the accent colour, so the label cannot
 				// be - a disc in the palette's on-accent colour with the accent in it keeps the two
-				// apart on the light and the dark palette alike, and the shadow lifts it off the
-				// key the way the octave arrows sit above theirs.
+				// apart on the light and the dark palette alike. It used to carry a drop shadow to
+				// lift it off the key; the hairline below does that job for nothing, and the shadow
+				// was the last gaussian blur in a repaint that runs at the view's own rate.
 				//
 				// White keys get the disc in the lower third (the black key above covers the top),
 				// black keys in the middle. Both are sized to the key, so a narrow black key gets a
@@ -980,12 +981,8 @@ private:
 																  : face.getY () + face.getHeight () * 0.68f);
 					const auto disc = juce::Rectangle<float> (diameter, diameter).withCentre (centre);
 
-					juce::Path discPath;
-					discPath.addEllipse (disc);
-
-					juce::DropShadow (theme::shadowTint ().withAlpha (0.32f), 2, { 0, 1 })
-						.drawForPath (g, discPath);
-
+					// No drop shadow - see the note above. The hairline is what separates the disc
+					// from the key now, and it costs one stroke instead of a blur.
 					// Same disc as the off-keyboard label, and for the same reason: white on the
 					// light palette, a mid grey on the dark one, never the on-accent black.
 					g.setColour (theme::keyWhite ());
