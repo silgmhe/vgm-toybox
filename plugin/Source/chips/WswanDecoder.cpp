@@ -19,6 +19,18 @@ namespace
 	constexpr int kVoiceNote = 60;					// trigger marker, not the sample's pitch
 	constexpr uint32_t kVoiceLength = 4410;	// 100 ms at 44.1 kHz
 
+	/** Register 0x90's enable byte: the noise channel in bit 7, the sweep unit in bit 6 and the
+		voice DMA in bit 5, with the four tone channels in the low bits, which this decoder reads
+		as a group rather than one at a time. */
+	constexpr uint8_t kModeNoiseEnable = 0x80;
+	constexpr uint8_t kModeSweepEnable = 0x40;
+	constexpr uint8_t kModeVoiceEnable = 0x20;
+
+	/** A channel's frequency register is 11 bits wide. The flags above are the top bits of the
+		same 16-bit word, which is why 0x1000 and 0x2000 are period flags rather than a second
+		register - and why a period read has to mask them off first. */
+	constexpr uint32_t kFrequencyMask = 0x07FF;
+
 	/** Wave: the core steps the 32-entry waveform once every 32 * (2048 - frequency) clocks, so
 		one cycle takes 32 steps and frequency 0 is the lowest pitch rather than the highest.
 
@@ -44,10 +56,10 @@ namespace
 
 			if ((period & kNoiseFlag) != 0)
 			{
-				return noiseNote (period & 0x07FF, finePitch);
+				return noiseNote (period & kFrequencyMask, finePitch);
 			}
 
-			return quantiseFrequency (toneHz (period & 0x07FF), finePitch);
+			return quantiseFrequency (toneHz (period & kFrequencyMask), finePitch);
 		}
 
 	private:
@@ -81,7 +93,7 @@ struct WswanDecoder::Impl
 {
 	struct Channel
 	{
-		uint16_t frequency = 0x07FF;	// the chip powers up at 0x07FF, which is not silence
+		uint16_t frequency = kFrequencyMask;	// the chip powers up at 0x07FF, which is not silence
 		uint8_t left = 0;
 		uint8_t right = 0;
 	};
@@ -99,9 +111,9 @@ struct WswanDecoder::Impl
 	double sampleRate = 44100.0;
 	std::unique_ptr<WswanTable> table;
 
-	bool sweepRunning (void) const { return sweepStep != 0 && (mode & 0x40) != 0; }
-	bool voiceRunning (void) const { return (mode & 0x20) != 0; }
-	bool noiseRunning (void) const { return (mode & 0x80) != 0; }
+	bool sweepRunning (void) const { return sweepStep != 0 && (mode & kModeSweepEnable) != 0; }
+	bool voiceRunning (void) const { return (mode & kModeVoiceEnable) != 0; }
+	bool noiseRunning (void) const { return (mode & kModeNoiseEnable) != 0; }
 };
 
 WswanDecoder::WswanDecoder() : impl (std::make_unique<Impl>())

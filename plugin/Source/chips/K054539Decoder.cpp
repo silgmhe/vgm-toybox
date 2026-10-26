@@ -26,6 +26,27 @@ namespace
 	constexpr uint16_t kKeyOnRegister = 0x214;
 	constexpr uint16_t kKeyOffRegister = 0x215;
 	constexpr uint16_t kControlRegister = 0x22F;
+
+	/** A channel owns 0x20 bytes of the register space, so the channel index is the offset divided
+		by that and the register inside it is the offset masked. The chip's own key registers sit
+		outside every channel block, at 0x214/0x215, which is why the switch masks instead of
+		trusting the caller to have already done it. */
+	constexpr uint16_t kChannelRegisterStride = 0x20;
+	constexpr uint16_t kChannelRegisterMask = 0x1F;
+	constexpr uint16_t kRegisterSpace = 0x100;	// channels only; the key registers are above it
+
+	/** The three addresses - pitch, loop and start - are 24 bits wide and written a byte at a
+		time, so each write replaces one byte and keeps the other two. The masks are complements,
+		not three independent fields: what a mask keeps is the whole point of it. */
+	constexpr uint32_t kKeepUpperTwoBytes = 0xFFFF00u;	// writing the low byte
+	constexpr uint32_t kKeepOuterBytes = 0xFF00FFu;		// writing the middle byte
+	constexpr uint32_t kKeepLowerTwoBytes = 0x00FFFFu;	// writing the high byte
+	constexpr int kMiddleByteShift = 8;
+	constexpr int kHighByteShift = 16;
+
+	/** The sample stream is four-bit values, and the core stores two per byte low half first. */
+	constexpr uint8_t kNibbleMask = 0x0F;
+	constexpr int kNibbleShift = 4;
 	constexpr uint8_t kControlPcmEnable = 0x01;
 
 	// The formats the type register selects (`base2[0] & 0xc` in the core).
@@ -179,7 +200,7 @@ struct K054539Decoder::Impl
 			// the core doubles the position for 4-bit samples, so the low nibble of a byte comes
 			// first and the address advances once per two steps
 			const uint8_t byte = romByte (start + (uint32_t) (index / 2));
-			return (double) ((index % 2 == 0) ? (byte & 0x0F) : (byte >> 4));
+			return (double) ((index % 2 == 0) ? (byte & kNibbleMask) : (byte >> kNibbleShift));
 		}
 
 		return (double) (int8_t) romByte (start + (uint32_t) index);
@@ -426,9 +447,9 @@ void K054539Decoder::write (const RegisterWrite& w)
 	const uint16_t offset = (uint16_t) (((uint16_t) w.port << 8) | w.reg);
 	const uint8_t value = w.value;
 
-	if (offset < 0x100)
+	if (offset < kRegisterSpace)
 	{
-		const int channel = (int) (offset / 0x20);
+		const int channel = (int) (offset / kChannelRegisterStride);
 		Impl::Voice& voice = impl->voices[channel];
 
 		// A voice owns 0x20 bytes; the offsets inside them carry the fields, three bytes at a time
@@ -439,16 +460,16 @@ void K054539Decoder::write (const RegisterWrite& w)
 		//   0x08..0x0A  loop address, low, middle, high
 		//   0x0C..0x0E  start address, same three-byte pattern
 		//   0x22        key-on and loop flags (outside the 0x1F block this switch masks)
-		switch (offset & 0x1F)
+		switch (offset & kChannelRegisterMask)
 		{
 		case 0x00:		// pitch, low byte
-			voice.pitch = (voice.pitch & 0xFFFF00u) | value;
+			voice.pitch = (voice.pitch & kKeepUpperTwoBytes) | value;
 			break;
 		case 0x01:		// pitch, middle byte
-			voice.pitch = (voice.pitch & 0xFF00FFu) | ((uint32_t) value << 8);
+			voice.pitch = (voice.pitch & kKeepOuterBytes) | ((uint32_t) value << kMiddleByteShift);
 			break;
 		case 0x02:		// pitch, high byte
-			voice.pitch = (voice.pitch & 0x00FFFFu) | ((uint32_t) value << 16);
+			voice.pitch = (voice.pitch & kKeepLowerTwoBytes) | ((uint32_t) value << kHighByteShift);
 			break;
 		case 0x03:
 			voice.volume = value;
@@ -460,22 +481,22 @@ void K054539Decoder::write (const RegisterWrite& w)
 			voice.pan = value;
 			break;
 		case 0x08:		// loop address, low byte
-			voice.loopAddress = (voice.loopAddress & 0xFFFF00u) | value;
+			voice.loopAddress = (voice.loopAddress & kKeepUpperTwoBytes) | value;
 			break;
 		case 0x09:
-			voice.loopAddress = (voice.loopAddress & 0xFF00FFu) | ((uint32_t) value << 8);
+			voice.loopAddress = (voice.loopAddress & kKeepOuterBytes) | ((uint32_t) value << kMiddleByteShift);
 			break;
 		case 0x0A:
-			voice.loopAddress = (voice.loopAddress & 0x00FFFFu) | ((uint32_t) value << 16);
+			voice.loopAddress = (voice.loopAddress & kKeepLowerTwoBytes) | ((uint32_t) value << kHighByteShift);
 			break;
 		case 0x0C:		// start, low byte - and the chip's live position
-			voice.start = (voice.start & 0xFFFF00u) | value;
+			voice.start = (voice.start & kKeepUpperTwoBytes) | value;
 			break;
 		case 0x0D:
-			voice.start = (voice.start & 0xFF00FFu) | ((uint32_t) value << 8);
+			voice.start = (voice.start & kKeepOuterBytes) | ((uint32_t) value << kMiddleByteShift);
 			break;
 		case 0x0E:
-			voice.start = (voice.start & 0x00FFFFu) | ((uint32_t) value << 16);
+			voice.start = (voice.start & kKeepLowerTwoBytes) | ((uint32_t) value << kHighByteShift);
 			break;
 		default:
 			break;
