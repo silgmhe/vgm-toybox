@@ -857,6 +857,22 @@ private:
 		// The typeface check has to name a family the platform chose, not a fixed one: the point
 		// is that the default Font resolves to the system UI face, and that spelling differs.
 		const auto wanted = tokens[4] == "@systemUI" ? toybox::ui::fonts::systemUiFamily() : tokens[4];
+
+		// An empty @systemUI is an answer, not a failure to find one. UiFont.cpp returns empty when
+		// the platform's name is not one the font system can resolve, and the panel then leaves
+		// JUCE's default alone - which is the whole fix for the KDE window that came up with no
+		// glyphs on it. There is no name to compare against in that case, so what is asserted is
+		// the thing that actually broke: that the text is drawn with some face at all.
+		// fieldOf() returns empty for a Font whose typeface does not resolve, which is why this
+		// is the same question the blank window would have failed.
+		if (tokens[4] == "@systemUI" && tokens[3] == "==" && wanted.isEmpty())
+		{
+			report (actual.isNotEmpty (), tokens[1] + "." + tokens[2]
+						+ " resolves to some face   (was: "
+						+ (actual.isEmpty () ? "nothing" : actual) + ")");
+			return;
+		}
+
 		const bool ok = fieldMatches (actual, tokens[3], wanted);
 
 		report (ok, tokens[1] + "." + tokens[2] + " " + tokens[3] + " '" + wanted
