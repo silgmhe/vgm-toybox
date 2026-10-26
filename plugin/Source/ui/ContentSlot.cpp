@@ -25,6 +25,15 @@ namespace
 	constexpr int kHeader = 44;
 	constexpr int kRefreshHz = 30;
 
+	/** How far a row's paint can land outside the row's own rectangle.
+
+		The card shadow reaches blur 6 plus a 2 px offset, the keyboard bed's blur 5 plus 1, and the
+		lit key's note disc blur 2 plus 1. Twenty-four covers all three with room, and is used for
+		two things: deciding whether a dirty rectangle needs this row drawn at all, and how far to
+		expand a row that changed when asking for the repaint.
+	*/
+	constexpr int kRowReach = 24;
+
 	// The row's own measurements live in KeyboardRowLayout: thirteen columns that have to fit
 	// a card are arithmetic, and arithmetic belongs where a test can call it.
 	keyboard::RowMetrics metrics;
@@ -209,6 +218,77 @@ public:
 		// content is. Rebuilt here rather than in paint(), which only draws what it is given.
 		relayout ();
 		syncScrollBar ();
+		repaintChangedRows ();
+	}
+
+	/** Repaints only the rows whose appearance changed since the last snapshot.
+
+		The panel used to be repainted whole, thirty times a second, whatever had moved. A note held
+		for a second changes nothing at all, and a chord changes two or three rows out of thirteen -
+		but all thirteen were redrawn, keys, text, gradients and all.
+
+		Everything a row's painting depends on is in RowSignature. A row that compares equal is left
+		alone; the shadow it casts lies inside the reach the changed rows are expanded by, so the
+		neighbour it might bleed onto is repainted by that neighbour's own dirt.
+	*/
+	void repaintChangedRows (void)
+	{
+		if (painted.size () != rows.size ())
+		{
+			painted.assign (rows.size (), RowSignature {});
+			repaint ();
+			return;
+		}
+
+		juce::Rectangle<int> dirty;
+		bool any = false;
+
+		for (std::size_t i = 0; i < rows.size (); ++i)
+		{
+			const auto& row = rows[i];
+
+			if (row.header || row.channel < 0 || (std::size_t) row.channel >= snapshot.channels.size ())
+			{
+				continue;
+			}
+
+			const auto& channel = snapshot.channels[(std::size_t) row.channel];
+
+			const bool muted = channel.trackIndex >= 0
+							   && engine.isTrackMuted ((std::size_t) channel.trackIndex);
+			const bool soloed = channel.trackIndex >= 0
+								&& engine.isTrackSoloed ((std::size_t) channel.trackIndex);
+
+			RowSignature now;
+			now.active = channel.active;
+			now.analysing = channel.analysing;
+			now.muted = muted;
+			now.soloed = soloed;
+			now.note = channel.note;
+			now.volumeStep = (int) std::lround (juce::jlimit (0.0f, 1.0f, channel.volume) * 255.0f);
+			now.waveKind = channel.waveKind;
+			now.dutyStep = (int) std::lround (juce::jlimit (0.0f, 1.0f, channel.duty) * 64.0f);
+			now.shapeParameter = channel.shapeParameter;
+			now.waveSize = channel.wave.size ();
+
+			// A channel carrying the core's own cycle is drawn from it every frame, and its contents
+			// can change while its size stays the same - so those rows are never skipped.
+			if (now == painted[i] && channel.wave.empty ())
+			{
+				continue;
+			}
+
+			painted[i] = now;
+
+			const auto area = row.area.expanded (kRowReach);
+			dirty = any ? dirty.getUnion (area) : area;
+			any = true;
+		}
+
+		if (any)
+		{
+			repaint (dirty);
+		}
 	}
 
 	void refreshLanguage (void)
@@ -269,6 +349,14 @@ public:
 		for (const auto& row : rows)
 		{
 			if (row.area.getBottom () < kHeader || row.area.getY () > getHeight ())
+			{
+				continue;
+			}
+
+			// A row's shadows reach past its own rectangle, so a clip that merely touches the margin
+			// still needs the row drawn; one that misses it entirely does not. Without this, a
+			// repaint of one row would walk all thirteen and let the Graphics clip discard the rest.
+			if (! row.area.expanded (kRowReach).intersects (g.getClipBounds ()))
 			{
 				continue;
 			}
@@ -1080,6 +1168,45 @@ private:
 		See RowPaintCache - and docs/issue/2026-10-26-keyboard-view-gpu-cost.md for why. */
 	std::vector<keyboard::RowPaintCache> rowCaches;
 
+	/** What one row looked like the last time it was painted: everything paintChannelRow() reads,
+		and nothing else.
+
+		The quantisation is deliberate. A float volume compared exactly would differ in the last bit
+		most frames and repaint the row anyway, which is the cost this exists to avoid; the meter is
+		96 px wide, so an eighth of a percent is beneath what anyone can see. Duty is quantised to
+		1/64 - finer than the narrowest step any chip here offers.
+	*/
+	struct RowSignature
+	{
+		bool active = false;
+		bool analysing = false;
+		bool muted = false;
+		bool soloed = false;
+		int note = -2;
+		int volumeStep = -1;
+		int waveKind = -1;
+		int dutyStep = -1;
+		int shapeParameter = -1;
+		std::size_t waveSize = 0;
+
+		bool operator== (const RowSignature& other) const
+		{
+			return active == other.active
+				&& analysing == other.analysing
+				&& muted == other.muted
+				&& soloed == other.soloed
+				&& note == other.note
+				&& volumeStep == other.volumeStep
+				&& waveKind == other.waveKind
+				&& dutyStep == other.dutyStep
+				&& shapeParameter == other.shapeParameter
+				&& waveSize == other.waveSize;
+		}
+	};
+
+	/** Parallel to `rows` - a header's entry is unused and never compared. */
+	std::vector<RowSignature> painted;
+
 
 	int scrollOffset = 0;
 	int contentHeight = 0;
@@ -1343,8 +1470,8 @@ void ContentSlot::timerCallback (void)
 		keyboardPanel->resized ();
 	}
 
-	if (isShowing ())
-	{
-		keyboardPanel->repaint ();
-	}
+	// No blanket repaint() here any more - setSnapshot() asked for the rows that changed and
+	// nothing else. A frame in which no row moved now draws nothing at all, which is the state
+	// most frames are in: a sustained note does not redraw thirteen keyboards thirty times a
+	// second. resized() above still repaints everything, but only when the channel count moved.
 }
