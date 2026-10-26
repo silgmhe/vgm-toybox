@@ -27,6 +27,15 @@ namespace
 
 	constexpr uint32_t kRamBytes = 64 * 1024;
 
+	/** The chip's RAM is addressed with sixteen bits, so a sample read masks to that: the
+		registers above hold the bank and the loop point, not the address. */
+	constexpr uint32_t kRamAddressMask = 0xFFFF;
+
+	/** Register 0x07 splits into two flags: bit 6 selects which channel the low registers
+		address, bit 7 is the master enable that a reset clears. */
+	constexpr uint8_t kBankSelectBit = 0x40;
+	constexpr uint8_t kMasterEnableBit = 0x80;
+
 	// A sample ends at a 0xFF byte; one that never reaches one is treated as open-ended rather than
 	// scanned through the whole RAM.
 	constexpr uint32_t kMaxSampleScan = kRamBytes;
@@ -86,7 +95,7 @@ struct Rf5c68Decoder::Impl
 			return 0xFF;		// no RAM reads as "end of sample", which is what the chip hears
 		}
 
-		return ram[address & 0xFFFF];
+		return ram[address & kRamAddressMask];
 	}
 
 	/** The chip's own sample rate: `clock / 384`, and the rate one byte per sample would play at. */
@@ -367,8 +376,8 @@ void Rf5c68Decoder::write (const RegisterWrite& w)
 	if (offset == 0x07)
 	{
 		// bit 6 selects the channel the low registers address, bit 7 is the output switch
-		impl->master = (w.value & 0x80) != 0;
-		if ((w.value & 0x40) != 0)
+		impl->master = (w.value & kMasterEnableBit) != 0;
+		if ((w.value & kBankSelectBit) != 0)
 		{
 			impl->bank = (uint8_t) (w.value & 0x07);
 		}
