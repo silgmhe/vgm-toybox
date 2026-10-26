@@ -26,6 +26,30 @@ namespace
 	// A period is a lag where the waveform's correlation dips below this, and the period is the
 	// peak that follows it - a steady tone anti-correlates at half its cycle, noise never dips.
 	constexpr double kPeriodTrough = -0.5;
+
+	/** An oscillator register block is 0x20 bytes: the low five bits of an offset are the
+		oscillator, and 0xE0 upward are the chip-wide registers that sit past all thirty-two. */
+	constexpr uint32_t kOscillatorIndexMask = 0x1F;
+
+	/** The size register's low three bits index a table of powers of two, so the table length is
+		256 << index in bytes - the value itself is not the length. */
+	constexpr uint8_t kSizeIndexMask = 0x07;
+
+	/** The control register packs three things: the halt bit in bit 0, the mode in bits 2-1, and
+		the rest. A cleared halt bit on a register that had it set is the key-on edge, which is why
+		the two tests below read the same bit on the old and the new value. */
+	constexpr uint8_t kHaltBit = 0x01;
+	constexpr int kModeShift = 1;
+	constexpr uint8_t kModeMask = 0x03;
+
+	/** 0xE1's operand: the number of oscillators the chip runs is `(value >> 1) + 1` - five bits
+		plus one, because zero would be a chip that renders nothing. */
+	constexpr int kOscillatorCountShift = 1;
+	constexpr uint8_t kOscillatorCountMask = 0x1F;
+
+	/** Sample data is unsigned bytes around a centre of 0x80; every other width in this project is
+		signed, which is why the conversion is written out rather than cast. */
+	constexpr int kSampleBias = 0x80;
 	constexpr double kPeriodPeak = 0.5;
 
 	// Table sizes and their pointer masks, straight out of es5503.c (`wavesizes` / `wavemasks`).
@@ -225,7 +249,7 @@ struct Es5503Decoder::Impl
 				std::vector<double> waveform (window);
 				for (uint32_t i = 0; i < window; ++i)
 				{
-					waveform[i] = (double) ((int) byteAt (base + offset + i) - 0x80);
+					waveform[i] = (double) ((int) byteAt (base + offset + i) - kSampleBias);
 				}
 
 				cycle = bestPeriod (waveform);
@@ -238,7 +262,7 @@ struct Es5503Decoder::Impl
 
 	uint32_t tableBase (const Oscillator& oscillator) const
 	{
-		const int index = oscillator.sizeIndex & 0x07;
+		const int index = oscillator.sizeIndex & kSizeIndexMask;
 		return oscillator.tablePointer & kTableMasks[index];
 	}
 
@@ -246,10 +270,10 @@ struct Es5503Decoder::Impl
 	{
 		++oscillator.keyOns;
 
-		const int sizeIndex = oscillator.sizeIndex & 0x07;
+		const int sizeIndex = oscillator.sizeIndex & kSizeIndexMask;
 		const uint32_t base = tableBase (oscillator);
 		const uint32_t length = kTableSizes[sizeIndex];
-		const int mode = (oscillator.control >> 1) & 0x03;
+		const int mode = (oscillator.control >> kModeShift) & kModeMask;
 
 		double cycle = measuredCycle (base, sizeIndex);
 		if (cycle <= 0.0 && (mode == modeFree || mode == modeSyncAm))
@@ -284,16 +308,16 @@ struct Es5503Decoder::Impl
 		core sets it itself (`es5503_halt_osc`). */
 	void writeControl (Oscillator& oscillator, uint8_t value, uint32_t time)
 	{
-		const bool wasHalted = (oscillator.control & 0x01) != 0;
+		const bool wasHalted = (oscillator.control & kHaltBit) != 0;
 		oscillator.control = value;
 
-		if (wasHalted && (value & 0x01) == 0)
+		if (wasHalted && (value & kHaltBit) == 0)
 		{
 			keyOn (oscillator, time);
 			return;
 		}
 
-		if ((value & 0x01) != 0)
+		if ((value & kHaltBit) != 0)
 		{
 			oscillator.keyed = false;		// the halt bit: the note ends here
 			oscillator.gateEnd = 0;
@@ -407,13 +431,13 @@ void Es5503Decoder::write (const RegisterWrite& write)
 		if (offset == 0xE1)
 		{
 			// `(value >> 1) + 1` oscillators; the rate the whole chip runs at changes with it
-			impl->enabledOscillators = (int) ((write.value >> 1) & 0x1F) + 1;
+			impl->enabledOscillators = (int) ((write.value >> kOscillatorCountShift) & kOscillatorCountMask) + 1;
 		}
 
 		return;		// 0xE0 / 0xE2 are read-only
 	}
 
-	const int channel = offset & 0x1F;
+	const int channel = offset & kOscillatorIndexMask;
 	Impl::Oscillator& oscillator = impl->oscillators[channel];
 
 	switch (offset & 0xE0)
