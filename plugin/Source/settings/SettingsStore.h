@@ -219,10 +219,14 @@ public:
 	/** Stores it, writes it, and tells every listener. */
 	void setRefreshHz (int hz);
 
-	/** The range the setting accepts, and the value used when nothing is stored. */
+	/** The range the setting accepts, and the value used when nothing is stored.
+
+		15 rather than the 30 this view used to hard-code: measured by the user as smooth enough for
+		the keys and meters, and half the work of 30 at any window size.
+	*/
 	static constexpr int minRefreshHz = 10;
 	static constexpr int maxRefreshHz = 60;
-	static constexpr int defaultRefreshHz = 30;
+	static constexpr int defaultRefreshHz = 15;
 
 	/** Whether the chips' fine pitch becomes pitch bend at all. Off: notes keep their nearest
 		semitone and no bend message is sent - for an instrument that ignores RPN and cannot be

@@ -36,7 +36,7 @@ namespace
 		did not ask for it should have to look at. */
 	constexpr const char* kPaintStatsKey = "diagnostics.paintStats";
 
-	/** The Keyboard page's redraw rate. Absent means 30, which is what the view always used. */
+	/** The Keyboard page's redraw rate. Absent means 15 - see SettingsStore::defaultRefreshHz. */
 	constexpr const char* kRefreshHzKey = "ui.refreshHz";
 	constexpr const char* kLastSongKey = "standalone.lastSong";
 	constexpr const char* kNsfDurationKey = "nsf.durationSeconds";

@@ -108,8 +108,8 @@ language: English
 "settings.general.explanation" = "How the application starts, and where these settings live.";
 "settings.general.openFolder" = "Open folder";
 "settings.general.paintStats" = "Show paint statistics in the status line";
-"settings.general.refreshHz" = "Keyboard refresh rate";
-"settings.general.refreshHzTooltip" = "How many times a second the keyboard view redraws. Higher is smoother and costs more GPU; 30 is what it has always used.";
+"settings.keyboard.refreshHz" = "Refresh rate";
+"settings.keyboard.refreshHzTooltip" = "How many times a second this view redraws. Higher is smoother and costs more GPU; 15 is the default and enough for the keys and the meters.";
 "settings.general.paintStatsTooltip" = "How many times the window repainted, and how much area each repaint covered. Diagnostics for a GPU reading that looks wrong - it costs a counter per repaint and a number in the status line.";
 "settings.general.restoreDefaults" = "Restore defaults";
 "settings.general.restoreLastSong" = "Reopen the last song at startup";

@@ -422,31 +422,7 @@ GeneralSettingsPage::GeneralSettingsPage (void)
 	};
 	addAndMakeVisible (paintStatsButton);
 
-	refreshHzCaption.setComponentID ("settings.general.refreshHzCaption");
-	refreshHzCaption.setFont (juce::Font (juce::FontOptions (13.0f)));
-	addAndMakeVisible (refreshHzCaption);
-
-	refreshHzSlider.setComponentID ("settings.general.refreshHz");
-	refreshHzSlider.setSliderStyle (juce::Slider::LinearHorizontal);
-	refreshHzSlider.setTextBoxStyle (juce::Slider::TextBoxRight, false, 64, 22);
-	refreshHzSlider.setRange ((double) toybox::settings::SettingsStore::minRefreshHz,
-							  (double) toybox::settings::SettingsStore::maxRefreshHz, 1.0);
-	// The text is written out rather than left to the slider's own formatting: with a step of 1 and
-	// a range of 10 to 60, the automatic path still printed 30.000000, and setNumDecimalPlacesToDisplay
-	// did not change it. A rate is a whole number of hertz and should read as one.
-	refreshHzSlider.textFromValueFunction = [] (double value)
-	{
-		return juce::String ((int) std::lround (value)) + " Hz";
-	};
-	refreshHzSlider.valueFromTextFunction = [] (const juce::String& text)
-	{
-		return text.retainCharacters ("0123456789").getDoubleValue ();
-	};
-	refreshHzSlider.onValueChange = [this]
-	{
-		toybox::settings::SettingsStore::getInstance().setRefreshHz ((int) refreshHzSlider.getValue());
-	};
-	addAndMakeVisible (refreshHzSlider);
+	// The refresh rate used to be here; it belongs to the Keyboard page and moved there.
 
 	// The standalone reopens the song it had loaded when it last quit (restoreLastSongIfNeeded()
 	// in Source/PluginEditor.cpp; the value lives in SettingsStore). A plugin takes its song from
@@ -554,8 +530,6 @@ void GeneralSettingsPage::refreshLanguage (void)
 	paintStatsButton.setButtonText (i18n::tr ("settings.general.paintStats"));
 	paintStatsButton.setTooltip (i18n::tr ("settings.general.paintStatsTooltip"));
 
-	refreshHzCaption.setText (i18n::tr ("settings.general.refreshHz"), juce::dontSendNotification);
-	refreshHzSlider.setTooltip (i18n::tr ("settings.general.refreshHzTooltip"));
 
 	if (toybox::standalone::available())
 	{
@@ -588,7 +562,6 @@ void GeneralSettingsPage::refresh (void)
 	auto& store = toybox::settings::SettingsStore::getInstance();
 
 	paintStatsButton.setToggleState (store.getPaintStats(), juce::dontSendNotification);
-	refreshHzSlider.setValue ((double) store.getRefreshHz(), juce::dontSendNotification);
 
    #if JUCE_WINDOWS
 	// Stored, not read back from anything else: a second launch reads the file before any window
@@ -653,10 +626,6 @@ void GeneralSettingsPage::resized (void)
 	paintStatsButton.setBounds (area.removeFromTop (24));
 	area.removeFromTop (theme::cardGap);
 
-	refreshHzCaption.setBounds (area.removeFromTop (18));
-	refreshHzSlider.setBounds (area.removeFromTop (24));
-	area.removeFromTop (theme::cardGap);
-
 	fileCaption.setBounds (area.removeFromTop (16));
 	pathLabel.setBounds (area.removeFromTop (20));
 
@@ -677,7 +646,6 @@ void GeneralSettingsPage::lookAndFeelChanged (void)
 	// The caption is an explanation and the error line is a warning; the path itself is read, so
 	// it takes the LookAndFeel's primary text colour and needs nothing said about it here. The
 	// reuse note is a read value like the path; its hint is the explanation.
-	refreshHzCaption.setColour (juce::Label::textColourId, theme::secondaryText());
 	fileCaption.setColour (juce::Label::textColourId, theme::secondaryText());
 	reuseWindowHint.setColour (juce::Label::textColourId, theme::secondaryText());
 	reuseWindowNote.setColour (juce::Label::textColourId, theme::primaryText());
@@ -858,6 +826,34 @@ KeyboardSettingsPage::KeyboardSettingsPage (void)
 	};
 	addAndMakeVisible (rangeHints);
 
+	// The refresh rate belongs on this page rather than in General: it is a property of this view,
+	// and it is the only setting here that trades picture against cost. The text is written out
+	// rather than left to the slider: with a step of 1 the automatic formatting still printed
+	// 30.000000, and setNumDecimalPlacesToDisplay did not change it.
+	refreshCaption.setFont (juce::Font (juce::FontOptions (12.5f)));
+	refreshCaption.setJustificationType (juce::Justification::centredLeft);
+	addAndMakeVisible (refreshCaption);
+
+	refreshSlider.setComponentID ("settings.keyboard.refreshHz");
+	refreshSlider.setSliderStyle (juce::Slider::LinearHorizontal);
+	refreshSlider.setTextBoxStyle (juce::Slider::TextBoxRight, false, 76, 22);
+	refreshSlider.setRange ((double) toybox::settings::SettingsStore::minRefreshHz,
+							(double) toybox::settings::SettingsStore::maxRefreshHz, 1.0);
+	refreshSlider.textFromValueFunction = [] (double value)
+	{
+		return juce::String ((int) std::lround (value)) + " Hz";
+	};
+	refreshSlider.valueFromTextFunction = [] (const juce::String& text)
+	{
+		return text.retainCharacters ("0123456789").getDoubleValue ();
+	};
+	refreshSlider.onValueChange = [this]
+	{
+		toybox::settings::SettingsStore::getInstance ()
+			.setRefreshHz ((int) std::lround (refreshSlider.getValue ()));
+	};
+	addAndMakeVisible (refreshSlider);
+
 	hint.setFont (juce::Font (juce::FontOptions (12.5f)));
 	hint.setJustificationType (juce::Justification::topLeft);
 	addAndMakeVisible (hint);
@@ -893,6 +889,9 @@ void KeyboardSettingsPage::refresh (void)
 
 	rangeHints.setToggleState (toybox::settings::SettingsStore::getInstance ().getKeyboardRangeHints (),
 							   juce::dontSendNotification);
+
+	refreshSlider.setValue ((double) toybox::settings::SettingsStore::getInstance ().getRefreshHz (),
+							juce::dontSendNotification);
 }
 
 void KeyboardSettingsPage::paint (juce::Graphics& g)
@@ -932,6 +931,13 @@ void KeyboardSettingsPage::resized (void)
 	auto middleRow = area.removeFromTop (kFooterHeight);
 	middleC.setBounds (middleRow.removeFromLeft (juce::jmin (120, middleRow.getWidth ())));
 
+	area.removeFromTop (12);
+	refreshCaption.setBounds (area.removeFromTop (18));
+	area.removeFromTop (4);
+
+	auto refreshRow = area.removeFromTop (kFooterHeight);
+	refreshSlider.setBounds (refreshRow.removeFromLeft (juce::jmin (320, refreshRow.getWidth ())));
+
 	area.removeFromTop (6);
 	hint.setBounds (area.removeFromTop (72));
 }
@@ -953,6 +959,9 @@ void KeyboardSettingsPage::refreshLanguage (void)
 	caption.setText (i18n::tr ("settings.keyboard.rangeHints"), juce::dontSendNotification);
 	rangeHints.setButtonText (i18n::tr ("settings.keyboard.rangeHintsOn"));
 	hint.setText (i18n::tr ("settings.keyboard.rangeHintsHint"), juce::dontSendNotification);
+
+	refreshCaption.setText (i18n::tr ("settings.keyboard.refreshHz"), juce::dontSendNotification);
+	refreshSlider.setTooltip (i18n::tr ("settings.keyboard.refreshHzTooltip"));
 	repaint ();
 }
 
