@@ -40,19 +40,19 @@ namespace
 	constexpr const char* kRefreshHzKey = "ui.refreshHz";
 	constexpr const char* kLastSongKey = "standalone.lastSong";
 	constexpr const char* kNsfDurationKey = "nsf.durationSeconds";
-constexpr const char* kNsfOutputGainKey = "nsf.outputGainDb";
-constexpr const char* kContentViewKey = "ui.view";
-constexpr const char* kKeyboardRangeHintsKey = "keyboard.rangeHints";
-constexpr const char* kKeyboardStartNoteKey = "keyboard.startNote";
-constexpr const char* kKeyboardNoteHoldKey = "keyboard.noteHoldMs";
-constexpr const char* kKeyboardMiddleCKey = "keyboard.middleCOctave";
-constexpr const char* kMidiBendRangeKey = "midi.pitchBendRange";
+	constexpr const char* kNsfOutputGainKey = "nsf.outputGainDb";
+	constexpr const char* kContentViewKey = "ui.view";
+	constexpr const char* kKeyboardRangeHintsKey = "keyboard.rangeHints";
+	constexpr const char* kKeyboardStartNoteKey = "keyboard.startNote";
+	constexpr const char* kKeyboardNoteHoldKey = "keyboard.noteHoldMs";
+	constexpr const char* kKeyboardMiddleCKey = "keyboard.middleCOctave";
+	constexpr const char* kMidiBendRangeKey = "midi.pitchBendRange";
 	constexpr const char* kMidiBendEnabledKey = "midi.pitchBendEnabled";
 
-// The sample's own root, added to the transposition the registers ask for. Off by default: the
-// root is an inference from the sample's bytes, and a wrong one shifts a whole song by a constant
-// (design doc section 15).
-constexpr const char* kMidiSampleRootKey = "pitch.useSampleRoot";
+	// The sample's own root, added to the transposition the registers ask for. Off by default: the
+	// root is an inference from the sample's bytes, and a wrong one shifts a whole song by a constant
+	// (design doc section 15).
+	constexpr const char* kMidiSampleRootKey = "pitch.useSampleRoot";
 
 	juce::String writeErrorFor (const juce::File& file)
 	{
