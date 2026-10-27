@@ -1358,27 +1358,35 @@ int main (int argc, char* argv[])
 	engine.setMixerEnabled (false);
 	engine.setPositionSeconds (0.0);
 	engine.play();
-	const auto backToPlain = renderSeconds (engine, renderLength, sampleRate, blockSize);
+	const auto mixerOffMuted = renderSeconds (engine, renderLength, sampleRate, blockSize);
 
-	// `plainAgain`, not `plain`: both sides get the same seek history, which is the rule this file
-	// states for itself a hundred lines up. `plain` came from a fresh start and this render comes
-	// after a rewind, and libvgm's seek warm-up is not the same as a cold start - measured at 0.99
-	// of the fresh level on wswan but 0.70 on k053260, so a comparison across the two histories
-	// measures the warm-up, not the mixer.
-	const double backToPlainRatio = (plainAgain.rms > 0.0) ? backToPlain.rms / plainAgain.rms : 0.0;
-	std::printf ("    mixer off -> rms %.4f vs plain-after-seek %.4f (ratio %.3f)\n",
-				 backToPlain.rms, plainAgain.rms, backToPlainRatio);
-
-	// What the check is for is that the strip settings stop applying - a muted track must not
-	// silence the plain player, a gain of 0.5 must not halve it. Both of those would give a ratio
-	// far below the 0.9 here; ordinary warm-up noise stays well above it.
-	check (backToPlain.rms > 0.001 && backToPlainRatio > 0.9,
-		   "switching the mixer off restores the plain mix");
-
+	// The reference is this same player with the mutes cleared, so both sides are "mixer off,
+	// after a rebuild, after a rewind".
+	//
+	// Comparing against a mixer-on render - which is what this used to do, first against `plain`
+	// and then against `plainAgain` - compares two rebuilds instead. A rebuild is not as
+	// repeatable as it looks: setMixerEnabled() calls rebuildPlayers(), which re-initialises the
+	// emulation, and on the windows-arm runner the two levels came out at 0.873 of each other
+	// where x64 gives 0.995. That number is a property of the initialisation under load, not of
+	// the mixer, and no threshold separates it from a real leak.
 	for (size_t i = 0; i < tracks.size(); ++i)
 	{
 		engine.setTrackMute (i, false);
 	}
+
+	engine.setPositionSeconds (0.0);
+	engine.play();
+	const auto mixerOffPlain = renderSeconds (engine, renderLength, sampleRate, blockSize);
+
+	const double mixerOffRatio = (mixerOffPlain.rms > 0.0) ? mixerOffMuted.rms / mixerOffPlain.rms : 0.0;
+	std::printf ("    mixer off -> rms %.4f muted, %.4f not (ratio %.3f)\n",
+				 mixerOffMuted.rms, mixerOffPlain.rms, mixerOffRatio);
+
+	// What the check is for is that the strip settings stop applying once the mixer is off. A
+	// leaked mute gives zero and a leaked gain 0.5; both sit far below the 0.9 here, and two
+	// renders that differ only by a rewind sit far above it.
+	check (mixerOffMuted.rms > 0.001 && mixerOffRatio > 0.9,
+		   "switching the mixer off makes the strip settings stop applying");
 
 	// --- [9] the two volume stages (mixer master, then the output volume) -------------------
 	std::printf ("[9] volume stages\n");
