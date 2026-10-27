@@ -15,6 +15,16 @@ namespace
 	// rate travels in this bit, above the 8-bit frequency register.
 	constexpr uint32_t kNoiseFlag = 0x100;
 
+	/** An amplitude register holds two four-bit outputs - left in the high nibble, right in the
+		low - and this decoder reports the louder of the two, because a mono track cannot show
+		both. The register's low three bits name the channel it belongs to. */
+	constexpr uint8_t kOutputNibbleMask = 0x0F;
+	constexpr int kOutputNibbleShift = 4;
+	constexpr uint8_t kChannelIndexMask = 0x07;
+
+	/** The noise generators' rate is two bits, one per generator, in the low half of 0x16. */
+	constexpr uint32_t kNoiseRateMask = 0x03;
+
 	/** The core works at clock / 256 and toggles a channel every (511 - frequency) / 2^octave of
 		those samples, which is half a wave: the output is clock * 2^octave / (512 * (511 - f)).
 
@@ -34,7 +44,7 @@ namespace
 					*finePitch = 0;
 				}
 
-				return kDrumBaseKey + (int) (period & 0x03) * 2;
+				return kDrumBaseKey + (int) (period & kNoiseRateMask) * 2;
 			}
 
 			if (period > 255)
@@ -89,7 +99,7 @@ void Saa1099Decoder::reset (const ChipConfig& config)
 
 void Saa1099Decoder::write (const RegisterWrite& w)
 {
-	const int channel = w.reg & 0x07;
+	const int channel = w.reg & kChannelIndexMask;
 
 	switch (w.reg)
 	{
@@ -110,7 +120,7 @@ void Saa1099Decoder::write (const RegisterWrite& w)
 	case 0x04:
 	case 0x05:
 		// left and right nibbles are separate outputs; the louder one is the channel's volume
-		impl->amplitude[channel] = (uint8_t) std::max (w.value & 0x0F, (w.value >> 4) & 0x0F);
+		impl->amplitude[channel] = (uint8_t) std::max (w.value & kOutputNibbleMask, (w.value >> kOutputNibbleShift) & kOutputNibbleMask);
 		break;
 	case 0x08:
 	case 0x09:

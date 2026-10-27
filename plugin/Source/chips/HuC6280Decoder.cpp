@@ -16,6 +16,15 @@ namespace
 	// 12 bits cannot hold the frequency and a marker at the same time.
 	constexpr uint32_t kNoiseFlag = 0x1000;
 
+	/** The channel-select register's low three bits name the channel that the next four writes
+		address, and the low four bits of an offset are the register inside that block - the chip
+		has one register file shared by six channels rather than six files. */
+	constexpr uint8_t kChannelSelectMask = 0x07;
+	constexpr uint8_t kRegisterIndexMask = 0x0F;
+
+	/** The noise channel's rate is five bits, and its period index is what the drum table reads. */
+	constexpr uint32_t kNoiseRateMask = 0x1F;
+
 	/** Wave: the core steps the wavetable once every 4096 counter ticks with a step of
 		(clock / rate) * 4096 / f, so one step lasts f / clock seconds and the 32 steps of the
 		wavetable one cycle: frequency = clock / (32 * f). Register 0 lands in the table's slot for
@@ -34,7 +43,7 @@ namespace
 		{
 			if ((period & kNoiseFlag) != 0)
 			{
-				return noiseNote (period & 0x1F, finePitch);
+				return noiseNote (period & kNoiseRateMask, finePitch);
 			}
 
 			const double divider = (period == 0) ? 4096.0 : (double) period;
@@ -78,7 +87,7 @@ struct HuC6280Decoder::Impl
 	double clock = (double) kDefaultClock;
 	std::unique_ptr<HuC6280Table> table;
 
-	Channel& selected (void) { return channels[select & 0x07]; }
+	Channel& selected (void) { return channels[select & kChannelSelectMask]; }
 };
 
 HuC6280Decoder::HuC6280Decoder() : impl (std::make_unique<Impl>())
@@ -105,7 +114,7 @@ void HuC6280Decoder::write (const RegisterWrite& w)
 {
 	Impl::Channel& channel = impl->selected();
 
-	switch (w.reg & 0x0F)
+	switch (w.reg & kRegisterIndexMask)
 	{
 	// The HuC6280's six registers, by offset:
 	//

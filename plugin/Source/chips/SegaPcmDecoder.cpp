@@ -24,6 +24,22 @@ namespace
 	constexpr double kReferenceRate = 8000.0;
 	constexpr std::size_t kMeasurementUnits = 2048;
 
+	/** Sample data is unsigned bytes around 0x80, as on every chip of this generation. */
+	constexpr int kSampleBias = 0x80;
+
+	/** The control byte's bit 1 is the loop flag, and it is inverted: a cleared bit loops. */
+	constexpr uint8_t kLoopFlag = 0x02;
+
+	/** A volume register is seven bits of level; the top bit is the channel's own gate. */
+	constexpr uint8_t kVolumeMask = 0x7F;
+
+	/** The command's offset byte splits into the window (bit 7) and, inside it, eight registers
+		per channel: three bits pick the register, four pick the channel. */
+	constexpr uint8_t kHighWindowBit = 0x80;
+	constexpr uint8_t kOffsetMask = 0x7F;
+	constexpr int kChannelShift = 3;
+	constexpr uint8_t kRegisterInWindowMask = 0x07;
+
 	/** The mask the ROM is folded with: the chip addresses `bank | (addr >> 8)` into a power-of-two
 		buffer, so a sample that runs off the end wraps rather than reading elsewhere. */
 	uint32_t pow2Mask (std::size_t size)
@@ -165,7 +181,7 @@ struct SegaPcmDecoder::Impl
 		std::vector<double> waveform (window);
 		for (uint32_t i = 0; i < window; ++i)
 		{
-			waveform[i] = (double) ((int) byteAt (start + begin + i) - 0x80);
+			waveform[i] = (double) ((int) byteAt (start + begin + i) - kSampleBias);
 		}
 
 		const double cycle = estimateCycleLength (waveform, 0, 0);
@@ -179,7 +195,7 @@ struct SegaPcmDecoder::Impl
 		++voice.keyOns;
 		voice.latchStart = startOf (voice);
 		voice.latchEnd = endOf (voice);
-		voice.loops = (voice.control & 0x02) == 0;
+		voice.loops = (voice.control & kLoopFlag) == 0;
 
 		voice.cycleLength = cycleFor (voice.latchStart, voice.latchEnd - voice.latchStart);
 		voice.melodic = false;
@@ -206,7 +222,7 @@ struct SegaPcmDecoder::Impl
 
 	int volumeOf (const Voice& voice) const
 	{
-		const int level = std::max<int> (voice.volumeLeft & 0x7F, voice.volumeRight & 0x7F);
+		const int level = std::max<int> (voice.volumeLeft & kVolumeMask, voice.volumeRight & kVolumeMask);
 		return (level * 127 + 63) / 127;
 	}
 
@@ -262,8 +278,8 @@ void SegaPcmDecoder::write (const RegisterWrite& write)
 	// the command addresses the chip's register RAM: 8n + 0..7 is the low window, 0x80 + 8n + 0..7
 	// the current address and control
 	const uint16_t offset = (uint16_t) (((uint16_t) write.port << 8) | write.reg);
-	const bool highWindow = (offset & 0x80) != 0;
-	const int channel = (int) ((offset & 0x7F) >> 3);
+	const bool highWindow = (offset & kHighWindowBit) != 0;
+	const int channel = (int) ((offset & kOffsetMask) >> kChannelShift);
 	if (channel < 0 || channel >= (int) SegaPcmDecoder::numChannels)
 	{
 		return;
@@ -272,7 +288,7 @@ void SegaPcmDecoder::write (const RegisterWrite& write)
 	Impl::Voice& voice = impl->voices[channel];
 	if (! highWindow)
 	{
-		switch (offset & 0x07)
+		switch (offset & kRegisterInWindowMask)
 		{
 		// One voice's eight registers; the start address is not among them, because it comes from
 		// the command's address byte and is latched above. What the offsets mean:
@@ -292,7 +308,7 @@ void SegaPcmDecoder::write (const RegisterWrite& write)
 		return;
 	}
 
-	switch (offset & 0x07)
+	switch (offset & kRegisterInWindowMask)
 	{
 	case 0x04:
 	case 0x05:

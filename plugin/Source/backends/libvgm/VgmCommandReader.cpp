@@ -24,12 +24,22 @@ namespace
 	{
 		switch (cmd)
 		{
+		// Two bytes: a header and one operand. 0x30..0x3F and 0x40..0x4E are the reserved block
+		// VGM defined before it had anything to put there, and 0x4F is the Game Gear's stereo
+		// switch - both predate 1.5 and still appear in old files. 0x50 is the SN76489's single
+		// register byte.
 		case 0x30: case 0x31: case 0x32: case 0x33: case 0x34: case 0x35:
 		case 0x36: case 0x37: case 0x38: case 0x39: case 0x3A: case 0x3B:
 		case 0x3C: case 0x3D: case 0x3E: case 0x3F:
 		case 0x4F:
 		case 0x50:
 			return 2;
+		// Three bytes: a header and two operands, which is the shape of every chip register write
+		// that takes an address and a value. The ranges are the chips, in the order VGM assigned
+		// them: 0x51..0x5F covers YM2413, YM2612, YM2151, YM2203, YM2608, YM2610, YM3812, YM3526,
+		// Y8950, YMF262, YMF278B, YMF271 and YMZ280B; 0xA0..0xAF is the AY8910; 0xB0..0xBF is
+		// RF5C68, PWM, OKIM6295 and the DAC stream's write port. 0x61 is a wait of n samples - a
+		// three-byte command because n is 16 bits, unlike the fixed waits below.
 		case 0x40: case 0x41: case 0x42: case 0x43: case 0x44: case 0x45:
 		case 0x46: case 0x47: case 0x48: case 0x49: case 0x4A: case 0x4B:
 		case 0x4C: case 0x4D: case 0x4E:
@@ -44,6 +54,10 @@ namespace
 		case 0xBC: case 0xBD: case 0xBE: case 0xBF:
 		case 0x61:
 			return 3;
+		// One byte: no operand at all, the whole command in the header. 0x62 and 0x63 are the
+		// fixed waits of 735 and 882 samples - one frame at 60 and at 50 Hz, which is why they
+		// exist as commands rather than as a 0x61 with a constant; 0x66 ends the stream; and
+		// 0x70..0x7F wait n+1 samples, the short form for the common case.
 		case 0x62: case 0x63:
 		case 0x66:
 		case 0x70: case 0x71: case 0x72: case 0x73:
@@ -56,11 +70,19 @@ namespace
 			return remaining >= 7 ? 7 + (int) (readLe32 (data + 3) & 0x7FFFFFFFu)
 								  : (int) remaining;
 		case 0x68:
+			// PCM RAM write: chipless in the sense that it names no device, it carries a chip id,
+			// a read/write flag, a 32-bit address and a byte of data.
 			return 12;
+		// The YM2612's DAC stream: one sample byte, with the wait in the low nibble of the header
+		// itself - so the command is a single byte and the time it consumes is implicit.
 		case 0x80: case 0x81: case 0x82: case 0x83: case 0x84: case 0x85:
 		case 0x86: case 0x87: case 0x88: case 0x89: case 0x8A: case 0x8B:
 		case 0x8C: case 0x8D: case 0x8E: case 0x8F:
 			return 1;
+		// Four bytes: the register writes that take a 16-bit address and a byte, which is the
+		// sampled chips rather than the FM ones - Sega PCM (0xC0), RF5C68 (0xC1), RF5C164 (0xC2),
+		// PWM (0xC3), OKIM6295 (0xC4), K051649 (0xC5), K054539 (0xC6), C140 (0xC7) and the rest
+		// of the block.
 		case 0xC0: case 0xC1: case 0xC2: case 0xC3: case 0xC4: case 0xC5:
 		case 0xC6: case 0xC7: case 0xC8: case 0xC9: case 0xCA: case 0xCB:
 		case 0xCC: case 0xCD: case 0xCE: case 0xCF:
@@ -68,20 +90,26 @@ namespace
 		case 0xD6: case 0xD7: case 0xD8: case 0xD9: case 0xDA: case 0xDB:
 		case 0xDC: case 0xDD: case 0xDE: case 0xDF:
 			return 4;
-		case 0x90: case 0x91:
-		case 0x95:
-		case 0xE0: case 0xE1:
+		// DAC stream control, where the length follows what the command carries.
+		case 0x90: case 0x91:		// setup and set-data: a stream id and three fields
+		case 0x95:					// start, short form: a stream id and a 32-bit block index
+		case 0xE0: case 0xE1:		// YM2612 PCM data offset, and the reserved slot after it
 			return 5;
-		case 0x92:
+		case 0x92:					// set frequency: a stream id and a 32-bit frequency
 			return 6;
-		case 0x93:
+		case 0x93:					// start: stream id, bank, 32-bit offset, length mode, 32-bit length
 			return 11;
-		case 0x94:
+		case 0x94:					// stop: a stream id, nothing else
 			return 2;
+		// The reserved tail of the DAC-stream block.
 		case 0x96: case 0x97: case 0x98: case 0x99: case 0x9A: case 0x9B:
 		case 0x9C: case 0x9D: case 0x9E: case 0x9F:
 			return 1;
 		default:
+			// Everything from 0xE2 up is reserved, and libvgm's table gives the reserved range a
+			// five-byte slot so a file written against a later revision still steps over it
+			// instead of walking into it. Anything below that was never defined by the format at
+			// all, and one byte is the only length that cannot swallow the command after it.
 			return cmd >= 0xE2 ? 5 : 1;
 		}
 	}
@@ -268,6 +296,9 @@ bool VgmCommandReader::next (VgmCommand& command)
 	default:
 		if (cmd >= 0x70 && cmd <= 0x7F)
 		{
+			// The short wait: n+1 samples, n in the low nibble. The +1 is why the range starts at
+			// one sample rather than zero - a command that waited nothing would do nothing, and
+			// VGM spends its command space on operations instead.
 			sampleTime += (uint32_t) (cmd & 0x0F) + 1;
 			command.kind = VgmCommand::Kind::wait;
 		}

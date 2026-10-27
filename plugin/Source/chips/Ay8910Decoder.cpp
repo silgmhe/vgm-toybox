@@ -8,6 +8,22 @@ namespace
 {
 	constexpr uint32_t kDefaultClock = 1789773;
 
+	/** The register file, named where the reads below reach into it by position.
+
+		Layout: 0x00/0x01 hold channel A's 12-bit divider - low byte first, then the high nibble in
+		the low half of the second byte - and B and C follow in pairs, so a channel's pair starts at
+		`channel * 2`. 0x07 is the mixer, where a cleared bit *enables* the matching tone (an
+		inverted flag, which is why the test below reads `== 0`). 0x08..0x0A are the three
+		amplitudes: bit 4 hands the channel to the envelope generator, and the low nibble is the
+		level, 0x0F being full scale.
+	*/
+	constexpr uint8_t kMixerRegister = 0x07;
+	constexpr uint8_t kFirstAmplitudeRegister = 0x08;
+	constexpr uint8_t kEnvelopeFlag = 0x10;		// bit 4 of an amplitude register
+	constexpr uint8_t kLevelMask = 0x0F;		// the low nibble of the same byte
+	constexpr uint8_t kDividerHighMask = 0x0F;	// the divider is 12 bits: 8 below, 4 above
+	constexpr int kMaxLevel = 15;
+
 	/** A tone channel toggles every 8 clocks per divider step and needs two steps per wave, so
 		the frequency is clock / (16 * period). */
 	class AyToneTable final : public NoteTable
@@ -78,14 +94,14 @@ ChannelState Ay8910Decoder::channelState (int channel) const
 		return state;
 	}
 
-	const uint8_t amplitude = impl->regs[0x08 + channel];
-	const bool toneEnabled = (impl->regs[0x07] & (1 << channel)) == 0;
-	const bool envelope = (amplitude & 0x10) != 0;
+	const uint8_t amplitude = impl->regs[kFirstAmplitudeRegister + channel];
+	const bool toneEnabled = (impl->regs[kMixerRegister] & (1 << channel)) == 0;
+	const bool envelope = (amplitude & kEnvelopeFlag) != 0;
 
 	state.present = true;
 	state.period = (uint32_t) impl->regs[channel * 2]
-				   | ((uint32_t) (impl->regs[channel * 2 + 1] & 0x0F) << 8);
-	state.volume = envelope ? 15 : (amplitude & 0x0F);
+				   | ((uint32_t) (impl->regs[channel * 2 + 1] & kDividerHighMask) << 8);
+	state.volume = envelope ? kMaxLevel : (amplitude & kLevelMask);
 	state.gate = toneEnabled && (envelope || state.volume > 0);
 
 	return state;

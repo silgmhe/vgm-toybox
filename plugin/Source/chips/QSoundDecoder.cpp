@@ -36,6 +36,25 @@ namespace
 	constexpr int kHighestMelodicNote = 108;		// C8: above this a "period" is an artifact
 	constexpr std::size_t kMeasurementUnits = 8192;
 
+	/** A bank register's top bit says which half of the address space it points at: set means
+		sample data, clear means the DSP program ROM, which this decoder never reads. The low 15
+		bits are the bank number itself, and a bank is 64 KB, so the byte offset is the two of them
+		together. */
+	constexpr uint16_t kSampleBankFlag = 0x8000;
+	constexpr uint16_t kBankIndexMask = 0x7FFF;
+	constexpr int kBankToByteShift = 16;
+
+	/** A voice's address inside its bank is 16 bits: the mask is what a sample key keeps when the
+		length arithmetic below wraps past the end of the bank. */
+	constexpr uint32_t kInBankAddressMask = 0xFFFF;
+
+	/** The ADPCM stream is four-bit values, high nibble first. */
+	constexpr uint8_t kNibbleMask = 0x0F;
+	constexpr int kNibbleShift = 4;
+
+	/** QSound's own register file is 0x80 bytes; the PCM voice block sits above it. */
+	constexpr uint16_t kDspRegisterSpace = 0x80;
+
 	// adpcm_step_table from qsound_ctr.c, indexed by 8 + the signed nibble.
 	constexpr int kAdpcmStepTable[16] = { 154, 154, 128, 102, 77, 58, 58, 58,
 										  58, 58, 58, 58, 77, 102, 128, 154 };
@@ -169,12 +188,12 @@ struct QSoundDecoder::Impl
 		program ROM (bank bit 15 clear). */
 	int sampleAt (uint16_t bank, uint16_t address) const
 	{
-		if (rom.empty() || (bank & 0x8000) == 0)
+		if (rom.empty() || (bank & kSampleBankFlag) == 0)
 		{
 			return 0;
 		}
 
-		return (int) (int8_t) romByte ((((uint32_t) (bank & 0x7FFF)) << 16) | address);
+		return (int) (int8_t) romByte ((((uint32_t) (bank & kBankIndexMask)) << kBankToByteShift) | address);
 	}
 
 	double unitsPerSecond (const PcmVoice& voice) const
@@ -189,7 +208,7 @@ struct QSoundDecoder::Impl
 
 	uint32_t pcmAddressOf (const PcmVoice& voice) const
 	{
-		return (((uint32_t) (voice.bank & 0x7FFF)) << 16) | voice.addr;
+		return (((uint32_t) (voice.bank & kBankIndexMask)) << kBankToByteShift) | voice.addr;
 	}
 
 	/** The bytes a sample covers inside its 64 KB bank.
@@ -237,7 +256,7 @@ struct QSoundDecoder::Impl
 			return 0.0;
 		}
 
-		const uint32_t start = voice.latchStart & 0xFFFF;
+		const uint32_t start = voice.latchStart & kInBankAddressMask;
 		const uint32_t end = (uint16_t) voice.end;
 		const uint32_t loopLength = (voice.loopLength > 0) ? (uint32_t) voice.loopLength : 0;
 		const uint32_t bank = voice.bank;
@@ -247,11 +266,11 @@ struct QSoundDecoder::Impl
 		uint32_t length = total;
 		if (loopLength > 0 && loopLength <= total)
 		{
-			offset = (end - loopLength) & 0xFFFF;
+			offset = (end - loopLength) & kInBankAddressMask;
 			length = loopLength;
 		}
 
-		const SampleKey key { ((bank & 0x7FFF) << 16) | offset, length, loopLength > 0 ? 1 : 0 };
+		const SampleKey key { ((bank & kBankIndexMask) << kBankToByteShift) | offset, length, loopLength > 0 ? 1 : 0 };
 		const auto cached = cycleCache.find (key);
 		if (cached != cycleCache.end())
 		{
@@ -279,7 +298,7 @@ struct QSoundDecoder::Impl
 			return 0.0;
 		}
 
-		const SampleKey key { ((voice.bank & 0x7FFF) << 16) | voice.latchStart,
+		const SampleKey key { ((voice.bank & kBankIndexMask) << kBankToByteShift) | voice.latchStart,
 							  voice.latchEnd - voice.latchStart, 0 };
 		const auto cached = cycleCache.find (key);
 		if (cached != cycleCache.end())
@@ -300,7 +319,7 @@ struct QSoundDecoder::Impl
 			for (int half = 0; half < 2; ++half)
 			{
 				// top nibble first, then bottom; each is a signed four-bit step
-				const int nibble = (half == 0) ? ((byte >> 4) & 0x0F) : (byte & 0x0F);
+				const int nibble = (half == 0) ? ((byte >> kNibbleShift) & kNibbleMask) : (byte & kNibbleMask);
 				const int step = (nibble >= 8) ? (nibble - 16) : nibble;
 
 				double delta = (double) (((1 + std::abs (step << 1)) * stepSize) >> 1);
@@ -463,7 +482,7 @@ void QSoundDecoder::write (const RegisterWrite& w)
 	const uint16_t value = w.value;
 	const uint8_t offset = w.reg;
 
-	if (offset < 0x80)
+	if (offset < kDspRegisterSpace)
 	{
 		const int channel = (int) (offset >> 3);
 		Impl::PcmVoice& voice = impl->pcm[channel];

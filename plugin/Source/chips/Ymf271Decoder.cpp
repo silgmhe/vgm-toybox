@@ -16,6 +16,22 @@ namespace
 	constexpr int kSlots = kBanks * kSlotsPerBank;
 
 	constexpr int kOneShotNote = 60;
+
+	/** A pitch word packs three fields: the twelve-bit FNS at the bottom, a four-bit multiple
+		above it, and the block in the high nibble of whichever byte holds FNS's top four bits.
+		The core keeps them in one value and reads them with shifts of 12 and 4, which is where
+		these numbers come from - they are field positions, not magic. */
+	constexpr uint32_t kFnsMask = 0x0FFF;
+	constexpr int kMultipleShift = 12;
+	constexpr uint32_t kMultipleMask = 0x0F;
+	constexpr uint32_t kBlockMask = 0x0F;
+
+	/** The algorithm index is as wide as the bank type needs: four bits on the four-operator
+		banks, two on the two-operator ones, three on the three-operator. Masking is all these
+		numbers do - the tables themselves are indexed by the result. */
+	constexpr uint8_t kAlgorithmMask4 = 0x0F;
+	constexpr uint8_t kAlgorithmMask2 = 0x03;
+	constexpr uint8_t kAlgorithmMask3 = 0x07;
 	constexpr uint32_t kOneShotPeriod = 0x80000000u;
 
 	// A PCM slot has no length register that means anything in time (start/end/loop are sample
@@ -51,17 +67,17 @@ namespace
 		switch (sync)
 		{
 		case 0:
-			return ((kCarriers4[algorithm & 0x0F] >> bank) & 1) != 0;
+			return ((kCarriers4[algorithm & kAlgorithmMask4] >> bank) & 1) != 0;
 
 		case 1:
 		{
 			// pair A is banks 0/2, pair B is banks 1/3, each pair answering to its own alg
 			const int local = bank >> 1;
-			return ((kCarriers2[algorithm & 0x03] >> local) & 1) != 0;
+			return ((kCarriers2[algorithm & kAlgorithmMask2] >> local) & 1) != 0;
 		}
 
 		case 2:
-			return bank < 3 && ((kCarriers3[algorithm & 0x07] >> bank) & 1) != 0;
+			return bank < 3 && ((kCarriers3[algorithm & kAlgorithmMask3] >> bank) & 1) != 0;
 
 		default:
 			return false;
@@ -85,14 +101,14 @@ namespace
 				return kOneShotNote;
 			}
 
-			const uint32_t fns = period & 0x0FFFu;
+			const uint32_t fns = period & kFnsMask;
 			if (fns == 0)
 			{
 				return -1;		// a phase increment of zero is silence, not a very low note
 			}
 
-			const int multiple = (int) ((period >> 12) & 0x0Fu);
-			const double hz = nativeRate * (double) fns * kPowTable[block & 0x0F]
+			const int multiple = (int) ((period >> kMultipleShift) & kMultipleMask);
+			const double hz = nativeRate * (double) fns * kPowTable[block & kBlockMask]
 								 * kMultipleTable[multiple] / kStepDivisor;
 			return quantiseFrequency (hz, finePitch);
 		}

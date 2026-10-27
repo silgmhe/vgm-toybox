@@ -9,6 +9,44 @@ namespace toybox::chips
 {
 namespace
 {
+	/** $4000/$4004, the pulse control register, packs four fields: the duty cycle in bits 7-6, a
+		length-counter halt in bit 5, the constant-volume flag in bit 4, and the low nibble holding
+		either the envelope period or the volume itself.
+
+		Bit 5 has two names because the hardware has one bit and two readers: the length counter
+		sees it as "halt", the envelope generator as "loop". Both are the same flag, which is why
+		the two assignments below use the same constant.
+	*/
+	/** Each pulse owns four consecutive registers, so the channel is the register's low two bits
+		and the register inside the channel is the high bits counted from 0x00. */
+	constexpr uint8_t kPulseChannelMask = 0x03;
+
+	constexpr uint8_t kDutyShift = 6;
+	constexpr uint8_t kDutyMask = 0x03;
+	constexpr uint8_t kLengthHalt = 0x20;
+	constexpr uint8_t kConstantVolume = 0x10;
+	constexpr uint8_t kVolumeMask = 0x0F;
+
+	/** $4001/$4005, the sweep unit: enable in bit 7, the divider period in bits 6-4, the direction
+		in bit 3 and the shift in the low three. */
+	constexpr uint8_t kSweepEnable = 0x80;
+	constexpr int kSweepPeriodShift = 4;
+	constexpr uint8_t kSweepPeriodMask = 0x07;
+	constexpr uint8_t kSweepNegate = 0x08;
+	constexpr uint8_t kSweepShiftMask = 0x07;
+
+	/** The timer is 11 bits across two registers: the low byte in $4002, and the top three bits in
+		$4003 above the length index. So a low-byte write keeps what 0x700 held and a high-byte
+		write keeps what 0x0FF held - the masks are complements, not two independent fields. */
+	constexpr uint16_t kTimerLowKept = 0x0700;
+	constexpr uint16_t kTimerHighKept = 0x00FF;
+	constexpr int kTimerHighShift = 8;
+	constexpr uint8_t kTimerHighField = 0x07;
+
+	/** $4003 carries the 5-bit length index above the timer's top three bits. */
+	constexpr int kLengthIndexShift = 3;
+	constexpr uint8_t kLengthIndexMask = 0x1F;
+
 	/** Pulse and triangle: frequency = cpu / (divider * (period + 1)). */
 	class NesPeriodTable final : public NoteTable
 	{
@@ -172,28 +210,28 @@ void NesApuDecoder::write (const RegisterWrite& w)
 	if (reg >= 0x00 && reg <= 0x07)
 	{
 		Pulse& pulse = impl->pulses[(reg >> 2) & 1];
-		switch (reg & 0x03)
+		switch (reg & kPulseChannelMask)
 		{
 		case 0:
-			pulse.duty = (value >> 6) & 0x03;
-			pulse.envelope.loop = (value & 0x20) != 0;
-			pulse.envelope.constant = (value & 0x10) != 0;
-			pulse.envelope.volume = value & 0x0F;
-			pulse.length.halt = (value & 0x20) != 0;
+			pulse.duty = (value >> kDutyShift) & kDutyMask;
+			pulse.envelope.loop = (value & kLengthHalt) != 0;
+			pulse.envelope.constant = (value & kConstantVolume) != 0;
+			pulse.envelope.volume = value & kVolumeMask;
+			pulse.length.halt = (value & kLengthHalt) != 0;
 			break;
 		case 1:
-			pulse.sweep.enabled = (value & 0x80) != 0;
-			pulse.sweep.period = (value >> 4) & 0x07;
-			pulse.sweep.negate = (value & 0x08) != 0;
-			pulse.sweep.shift = value & 0x07;
+			pulse.sweep.enabled = (value & kSweepEnable) != 0;
+			pulse.sweep.period = (value >> kSweepPeriodShift) & kSweepPeriodMask;
+			pulse.sweep.negate = (value & kSweepNegate) != 0;
+			pulse.sweep.shift = value & kSweepShiftMask;
 			pulse.sweep.reload = true;
 			break;
 		case 2:
-			pulse.timerPeriod = (pulse.timerPeriod & 0x700) | value;
+			pulse.timerPeriod = (pulse.timerPeriod & kTimerLowKept) | value;
 			break;
 		case 3:
-			pulse.timerPeriod = (pulse.timerPeriod & 0x0FF) | ((value & 0x07) << 8);
-			pulse.length.value = kLengthTable[(value >> 3) & 0x1F];
+			pulse.timerPeriod = (pulse.timerPeriod & kTimerHighKept) | ((value & kTimerHighField) << kTimerHighShift);
+			pulse.length.value = kLengthTable[(value >> kLengthIndexShift) & kLengthIndexMask];
 			pulse.envelope.start = true;
 			pulse.sweep.reload = true;
 			break;
@@ -230,14 +268,14 @@ void NesApuDecoder::write (const RegisterWrite& w)
 		break;
 	case 0x0B:
 		impl->tri.timerPeriod = (impl->tri.timerPeriod & 0x0FF) | ((value & 0x07) << 8);
-		impl->tri.length.value = kLengthTable[(value >> 3) & 0x1F];
+		impl->tri.length.value = kLengthTable[(value >> kLengthIndexShift) & kLengthIndexMask];
 		impl->tri.reloadFlag = true;
 		break;
 	case 0x0C:
-		impl->noiseChannel.envelope.loop = (value & 0x20) != 0;
-		impl->noiseChannel.envelope.constant = (value & 0x10) != 0;
-		impl->noiseChannel.envelope.volume = value & 0x0F;
-		impl->noiseChannel.length.halt = (value & 0x20) != 0;
+		impl->noiseChannel.envelope.loop = (value & kLengthHalt) != 0;
+		impl->noiseChannel.envelope.constant = (value & kConstantVolume) != 0;
+		impl->noiseChannel.envelope.volume = value & kVolumeMask;
+		impl->noiseChannel.length.halt = (value & kLengthHalt) != 0;
 		break;
 	case 0x0E:
 		impl->noiseChannel.mode = (value & 0x80) != 0;
@@ -245,7 +283,7 @@ void NesApuDecoder::write (const RegisterWrite& w)
 		impl->noiseChannel.timerPeriod = kNoisePeriods[impl->noiseChannel.periodIndex];
 		break;
 	case 0x0F:
-		impl->noiseChannel.length.value = kLengthTable[(value >> 3) & 0x1F];
+		impl->noiseChannel.length.value = kLengthTable[(value >> kLengthIndexShift) & kLengthIndexMask];
 		impl->noiseChannel.envelope.start = true;
 		break;
 	case 0x10:

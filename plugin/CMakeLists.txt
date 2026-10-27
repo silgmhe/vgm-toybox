@@ -220,6 +220,7 @@ target_sources(VGMToybox PRIVATE
 	Source/chips/Sn76489Decoder.cpp
 	Source/chips/OpmDecoder.cpp
 	Source/chips/OpnDecoder.cpp
+	Source/midi/ChipPlans.cpp
 	Source/backends/BuiltInBackends.cpp
 	Source/backends/libvgm/LibvgmBackend.cpp
 	Source/backends/libvgm/MidiSequenceBuilder.cpp
@@ -400,6 +401,7 @@ add_executable(vgm_mixer_test EXCLUDE_FROM_ALL
 	Source/chips/Sn76489Decoder.cpp
 	Source/chips/OpmDecoder.cpp
 	Source/chips/OpnDecoder.cpp
+	Source/midi/ChipPlans.cpp
 	Source/backends/BuiltInBackends.cpp
 	Source/backends/nsf/NsfBackend.cpp
 	Source/backends/nsf/NsfPlayer.cpp
@@ -487,6 +489,11 @@ add_executable(vgm_chip_test EXCLUDE_FROM_ALL
 	Source/chips/OpmDecoder.cpp
 	Source/chips/OpnDecoder.cpp
 )
+# The capability table is chip data with no window and no audio device behind it, which is why it
+# can be tested here: the whole point of moving it out of a libvgm switch was that a table nobody
+# can call is a table nobody can check.
+target_sources(vgm_chip_test PRIVATE Source/midi/ChipPlans.cpp)
+
 target_include_directories(vgm_chip_test PRIVATE Source)
 # the chips sources are C++17 (nested namespaces, std::clamp); the plugin target gets the same
 # standard from JUCE's own flags, this target has no JUCE

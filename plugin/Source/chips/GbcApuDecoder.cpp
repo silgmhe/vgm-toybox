@@ -13,6 +13,11 @@ namespace
 	constexpr double kFrameCycles = 8192.0;
 	constexpr uint32_t kDefaultClock = 4194304;
 
+	/** The frequency register counts *down* from this: the divider reloads with `2048 - value`,
+		which is why a larger register value is a higher note and the tables below read
+		`kFrequencyRegisterModulus - period`. */
+	constexpr double kFrequencyRegisterModulus = 2048.0;
+
 	/** Pulse and wave: frequency = clock / (divider * (2048 - register)). The pulse channels
 		divide the clock by 32, the wave channel by 64 - the same register is an octave lower
 		there, which is why the divider lives in the table and not in the decoder. */
@@ -28,7 +33,7 @@ namespace
 				return -1;
 			}
 
-			const double divisor = 2048.0 - (double) period;
+			const double divisor = kFrequencyRegisterModulus - (double) period;
 			return quantiseFrequency (cpuClock / (divider * divisor), finePitch);
 		}
 
@@ -36,6 +41,35 @@ namespace
 		double cpuClock;
 		double divider;
 	};
+
+	/** NR43, the noise register: the clock shift in the high nibble and the dividing ratio in the
+		low three bits. A ratio of zero means a divisor of 8 rather than 16 * 0, which is why the
+		table starts at half the step of every ratio above it. */
+	constexpr uint32_t kNoiseShiftMask = 0x0F;
+	constexpr int kNoiseShiftPosition = 4;
+	constexpr uint32_t kNoiseRatioMask = 0x07;
+	constexpr double kNoiseBaseClock = 262144.0;	// the APU clock halved, which is what noise counts
+
+	/** NRx2, the envelope register: initial volume in the high nibble, direction in bit 3, sweep
+		period in the low three bits. Bit 3 is also part of the DAC's gate - the converter is on
+		while any of bits 7..3 is set - which is why the enable test reads 0xF8 and not the
+		direction bit alone. */
+	constexpr uint8_t kEnvelopeVolumeShift = 4;
+	constexpr uint8_t kEnvelopeVolumeMask = 0x0F;
+	constexpr uint8_t kEnvelopeIncrease = 0x08;
+	constexpr uint8_t kEnvelopePeriodMask = 0x07;
+	constexpr uint8_t kEnvelopeDacMask = 0xF8;
+
+	/** NR10, the sweep register, which uses the same two bit positions as the envelope for a
+		different purpose: bit 3 is the direction of the sweep (a falling pitch when set) and the
+		low three are how far it steps. Same values, different meanings - which is why they are
+		not shared with the envelope's. */
+	constexpr uint8_t kSweepNegate = 0x08;
+	constexpr uint8_t kSweepShiftMask = 0x07;
+
+	/** NR43's bit 3 picks the noise width - 15 bits when clear, 7 when set - and sits above the
+		ratio the noise table reads. */
+	constexpr uint8_t kNoiseWidthMode = 0x08;
 
 	/** The noise channel has no pitch: its shift/divisor pair is mapped onto GM drum keys, the
 		way the 2A03's 16 period indices are. Each step of the shift halves the frequency, so the
@@ -50,10 +84,10 @@ namespace
 				*finePitch = 0;
 			}
 
-			const int shift = (int) ((period >> 4) & 0x0F);
-			const int code = (int) (period & 0x07);
+			const int shift = (int) ((period >> kNoiseShiftPosition) & kNoiseShiftMask);
+			const int code = (int) (period & kNoiseRatioMask);
 			const double divisor = (code == 0) ? 8.0 : 16.0 * (double) code;	// 8, 16 ... 112
-			const double hz = 262144.0 / (divisor * std::exp2 ((double) shift));
+			const double hz = kNoiseBaseClock / (divisor * std::exp2 ((double) shift));
 			const double octaves = std::log2 (32768.0 / std::max (hz, 0.001));
 			const long bucket = std::lround (octaves * 10.0 / 19.0);
 			const int level = (int) std::clamp<long> (bucket, 0, 10);
@@ -133,10 +167,10 @@ struct GbcApuDecoder::Impl
 
 	void writeEnvelope (Envelope& envelope, uint8_t value)
 	{
-		envelope.initialVolume = (value >> 4) & 0x0F;
-		envelope.increase = (value & 0x08) != 0;
-		envelope.period = value & 0x07;
-		envelope.dacEnabled = (value & 0xF8) != 0;
+		envelope.initialVolume = (value >> kEnvelopeVolumeShift) & kEnvelopeVolumeMask;
+		envelope.increase = (value & kEnvelopeIncrease) != 0;
+		envelope.period = value & kEnvelopePeriodMask;
+		envelope.dacEnabled = (value & kEnvelopeDacMask) != 0;
 		if (! envelope.dacEnabled)
 		{
 			envelope.volume = 0;
@@ -410,8 +444,8 @@ void GbcApuDecoder::write (const RegisterWrite& w)
 	{
 	case 0x00:
 		impl->pulses[0].sweepPeriod = (value >> 4) & 0x07;
-		impl->pulses[0].sweepNegate = (value & 0x08) != 0;
-		impl->pulses[0].sweepShift = value & 0x07;
+		impl->pulses[0].sweepNegate = (value & kSweepNegate) != 0;
+		impl->pulses[0].sweepShift = value & kSweepShiftMask;
 		impl->pulses[0].sweepEnabled = (value & 0x7F) != 0;
 		break;
 	case 0x0A:
@@ -441,9 +475,9 @@ void GbcApuDecoder::write (const RegisterWrite& w)
 		impl->writeEnvelope (impl->noiseChannel.envelope, value);
 		break;
 	case 0x12:
-		impl->noiseChannel.shift = (value >> 4) & 0x0F;
-		impl->noiseChannel.widthMode = (value & 0x08) != 0;
-		impl->noiseChannel.divisorCode = value & 0x07;
+		impl->noiseChannel.shift = (value >> kEnvelopeVolumeShift) & kEnvelopeVolumeMask;
+		impl->noiseChannel.widthMode = (value & kNoiseWidthMode) != 0;
+		impl->noiseChannel.divisorCode = value & kNoiseRatioMask;
 		break;
 	case 0x13:
 		impl->noiseChannel.lengthEnable = (value & 0x40) != 0;

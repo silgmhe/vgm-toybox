@@ -24,6 +24,24 @@ namespace
 	constexpr uint16_t kAdpcmBReferenceDelta = 0x4000;
 	constexpr uint32_t kOneShotPeriod = 0x80000000u;
 
+	/** The key-on register (0x28) packs its operand. The channel is in the low two bits; bit 2
+		says "all four operators" and exists only on the six-channel parts; the high nibble names
+		which operators are keyed. Channel 3 is not a key register at all - the FM numbering skips
+		it - which is why the channel mask is read before anything else. */
+	constexpr uint8_t kKeyChannelMask = 0x03;
+	constexpr uint8_t kKeyAllOperators = 0x04;
+	constexpr uint8_t kKeyOperatorMask = 0xF0;
+
+	/** The ADPCM registers that hold an address are 16 bits wide and written a byte at a time:
+		each write replaces one half and keeps whatever the other already held. */
+	constexpr uint16_t kLowByteMask = 0x00FF;
+	constexpr uint16_t kHighByteMask = 0xFF00;
+	constexpr int kHighByteShift = 8;
+
+	/** ADPCM sample data is a stream of four-bit values, high nibble first. */
+	constexpr uint8_t kNibbleMask = 0x0F;
+	constexpr int kNibbleShift = 4;
+
 	/** One bit per operator that reaches the output, in register order (0x30, 0x34, 0x38, 0x3C).
 		Taken from the core's own per-algorithm early-out: algorithms 0-3 have a single carrier,
 		4 has two, 5 and 6 have three, and 7 sums all four. */
@@ -157,21 +175,26 @@ struct OpnDecoder::Impl
 		bool active = false;
 	};
 
-	/** ADPCM-B: the one sampled voice with a real pitch register (DELTA-N), an end address and a
-		repeat bit. Everything the note needs is latched when the control register's start bit goes
-		up, because the driver rewrites start/end/delta for the next sample before the next start. */
+	/** ADPCM-B: the one sampled voice with a real pitch register (DELTA-N) and an end address.
+		Everything the note needs is latched when the control register's start bit goes up, because
+		the driver rewrites start/end/delta for the next sample before the next start.
+
+		The control register's repeat bit (0x40) is not modelled. A looping sample is ended at its
+		end address like a one-shot, so a sustained loop reports one note per start rather than one
+		held note - which is what a MIDI note needs here anyway: the pitch comes from DELTA-N and
+		does not change across the loop. Modelled when a set is found whose loops differ in pitch
+		from their attack.
+	*/
 	struct AdpcmB
 	{
 		uint16_t startReg = 0;
 		uint16_t endReg = 0;
 		uint16_t delta = 0;
-		uint8_t control = 0;
 		uint8_t level = 0xFF;
 
 		uint32_t latchStart = 0;
 		uint32_t latchEnd = 0;
 		bool active = false;
-		bool repeat = false;
 		uint32_t gateEnd = 0;
 		double cycleLength = 0.0;
 		bool melodic = false;
@@ -310,7 +333,7 @@ struct OpnDecoder::Impl
 			const int byte = adpcmBByte (start + (uint32_t) i);
 			for (int half = 0; half < 2; ++half)
 			{
-				const int nibble = (half == 0) ? ((byte >> 4) & 0x0F) : (byte & 0x0F);
+				const int nibble = (half == 0) ? ((byte >> kNibbleShift) & kNibbleMask) : (byte & kNibbleMask);
 				accumulator += (double) (kAdpcmBStepB1[nibble] * step / 8);
 				accumulator = std::clamp (accumulator, -32768.0, 32767.0);
 				waveform.push_back (accumulator);
@@ -329,7 +352,6 @@ struct OpnDecoder::Impl
 		AdpcmB& voice = adpcmB;
 		voice.latchStart = adpcmBAddress (voice.startReg);
 		voice.latchEnd = adpcmBAddress (voice.endReg) + ((1u << adpcmBShift()) - 1u);
-		voice.repeat = (voice.control & 0x10) != 0;
 		voice.active = true;
 		++voice.keyOns;
 
@@ -381,22 +403,22 @@ struct OpnDecoder::Impl
 			keyAdpcmB (value);
 			break;
 		case 0x02:
-			adpcmB.startReg = (uint16_t) ((adpcmB.startReg & 0xFF00) | value);
+			adpcmB.startReg = (uint16_t) ((adpcmB.startReg & kHighByteMask) | value);
 			break;
 		case 0x03:
-			adpcmB.startReg = (uint16_t) ((adpcmB.startReg & 0x00FF) | (value << 8));
+			adpcmB.startReg = (uint16_t) ((adpcmB.startReg & kLowByteMask) | (value << kHighByteShift));
 			break;
 		case 0x04:
-			adpcmB.endReg = (uint16_t) ((adpcmB.endReg & 0xFF00) | value);
+			adpcmB.endReg = (uint16_t) ((adpcmB.endReg & kHighByteMask) | value);
 			break;
 		case 0x05:
-			adpcmB.endReg = (uint16_t) ((adpcmB.endReg & 0x00FF) | (value << 8));
+			adpcmB.endReg = (uint16_t) ((adpcmB.endReg & kLowByteMask) | (value << kHighByteShift));
 			break;
 		case 0x09:
-			adpcmB.delta = (uint16_t) ((adpcmB.delta & 0xFF00) | value);
+			adpcmB.delta = (uint16_t) ((adpcmB.delta & kHighByteMask) | value);
 			break;
 		case 0x0A:
-			adpcmB.delta = (uint16_t) ((adpcmB.delta & 0x00FF) | (value << 8));
+			adpcmB.delta = (uint16_t) ((adpcmB.delta & kLowByteMask) | (value << kHighByteShift));
 			break;
 		case 0x0B:
 			adpcmB.level = value;
@@ -412,13 +434,13 @@ struct OpnDecoder::Impl
 
 	void keyEvent (uint8_t data)
 	{
-		int channel = (int) (data & 0x03);
+		int channel = (int) (data & kKeyChannelMask);
 		if (channel == 3)
 		{
 			return;		// 0x28 with channel 3 is not a key register
 		}
 
-		if (sixChannel && (data & 0x04) != 0)
+		if (sixChannel && (data & kKeyAllOperators) != 0)
 		{
 			channel += 3;
 		}
@@ -430,7 +452,7 @@ struct OpnDecoder::Impl
 
 		// Bits 4-7 are the operator mask; a zero mask is the key-off. A partial mask that does
 		// not include a carrier is silent, which channelState() deals with.
-		channels[channel].keyed = (data & 0xF0) != 0;
+		channels[channel].keyed = (data & kKeyOperatorMask) != 0;
 	}
 
 	void keyAdpcmA (uint32_t time, uint8_t data)
@@ -452,7 +474,6 @@ struct OpnDecoder::Impl
 	{
 		// Bit 7 starts the sample and reloads the address, so a write with it on is a key-on even
 		// when the voice was already sounding; bit 0 resets the unit.
-		adpcmB.control = data;
 		if ((data & 0x80) != 0)
 		{
 			startAdpcmB();

@@ -25,6 +25,23 @@ namespace
 
 	constexpr uint8_t kKeyMaskOffset = 0x28;
 	constexpr uint8_t kLoopModeOffset = 0x2A;
+
+	/** A register offset is six bits, and the channel blocks start at 0x08 with eight bytes
+		each - so a channel is (offset - 8) / 8 and the register inside it is the low three. */
+	constexpr uint8_t kRegisterOffsetMask = 0x3F;
+	constexpr uint8_t kChannelBlockBase = 0x08;
+	constexpr uint8_t kChannelBlockSize = 8;
+
+	/** A pitch register is twelve bits, written low byte then the high nibble; the length is the
+		full sixteen. */
+	constexpr uint16_t kPitchHighMask = 0x0F00;
+	constexpr uint16_t kPitchLowMask = 0x00FF;
+	constexpr int kPitchHighShift = 8;
+	constexpr uint16_t kLengthHighMask = 0xFF00;
+
+	/** Sample data is four-bit values, high nibble first. */
+	constexpr uint8_t kNibbleMask = 0x0F;
+	constexpr int kNibbleShift = 4;
 	constexpr uint8_t kPanLowOffset = 0x2C;
 	constexpr uint8_t kPanHighOffset = 0x2D;
 	constexpr uint8_t kControlOffset = 0x2F;
@@ -212,7 +229,7 @@ struct K053260Decoder::Impl
 			for (std::size_t i = 0; i < waveform.size(); ++i)
 			{
 				const uint8_t byte = romByte (begin + (uint32_t) (i / 2));
-				const int nibble = (i % 2 == 0) ? (byte & 0x0F) : (byte >> 4);
+				const int nibble = (i % 2 == 0) ? (byte & kNibbleMask) : (byte >> kNibbleShift);
 				accumulator += (double) kKadpcmTable[nibble];
 				waveform[i] = accumulator;
 			}
@@ -314,24 +331,24 @@ void K053260Decoder::setRom (std::vector<uint8_t> rom)
 
 void K053260Decoder::write (const RegisterWrite& w)
 {
-	const uint8_t offset = (uint8_t) (w.reg & 0x3F);
+	const uint8_t offset = (uint8_t) (w.reg & kRegisterOffsetMask);
 	const uint8_t value = w.value;
 
-	if (offset >= 0x08 && offset <= 0x27)
+	if (offset >= kChannelBlockBase && offset <= kChannelBlockBase + 4 * kChannelBlockSize - 1)
 	{
-		const int channel = (int) ((offset - 0x08) / 8);
+		const int channel = (int) ((offset - kChannelBlockBase) / kChannelBlockSize);
 		Impl::Voice& voice = impl->voices[channel];
 
 		switch (offset & 7)
 		{
 		case 0:		// pitch, low eight bits
-			voice.pitch = (uint16_t) ((voice.pitch & 0x0F00) | value);
+			voice.pitch = (uint16_t) ((voice.pitch & kPitchHighMask) | value);
 			break;
 		case 1:		// pitch, high four bits
-			voice.pitch = (uint16_t) ((voice.pitch & 0x00FF) | ((value << 8) & 0x0F00));
+			voice.pitch = (uint16_t) ((voice.pitch & kPitchLowMask) | ((value << kPitchHighShift) & kPitchHighMask));
 			break;
 		case 2:		// length, low eight bits
-			voice.length = (uint16_t) ((voice.length & 0xFF00) | value);
+			voice.length = (uint16_t) ((voice.length & kLengthHighMask) | value);
 			break;
 		case 3:		// length, high eight bits
 			voice.length = (uint16_t) ((voice.length & 0x00FF) | (value << 8));
