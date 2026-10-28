@@ -6,6 +6,7 @@
 #include <cmath>
 #include <cstdint>
 #include <fstream>
+#include <map>
 #include <vector>
 
 namespace toybox::playback
@@ -26,38 +27,40 @@ namespace
 		out.push_back ((uint8_t) ((value >> 8) & 0xFF));
 	}
 
-	/** `cycle` stretched to `samples`, linearly, wrapping at the end.
+	/** `cycle` stretched to `samples` by repeating each source sample.
 
-		Linear rather than nearest-neighbour: a wavetable is read back as a line, and a 32-step
-		staircase stretched to 2048 would keep all of its stair edges as high-frequency content
-		that the shape never had. Linear interpolation smooths those edges away and leaves the
-		corners of a square wave where they were.
+		Nearest-neighbour rather than linear, and that is the whole point: the chip quantises, the
+		panel draws those quantisation steps, and a wavetable is meant to be the shape that was
+		seen. Linear interpolation was the first attempt here and it turned a thirty-two-step
+		staircase into a smooth ramp - a shape the hardware never produced.
 
-		The wrap matters. Without it the interpolation between the last sample and the first - the
-		step a periodic shape cannot avoid - would be skipped, and a square wave whose duty puts
-		the edge there would come out with a ramp joining its two extremes.
+		Integer division keeps this exact for every length that divides 2048, and still lands on a
+		step boundary for the ones that do not.
 	*/
-	std::vector<float> resample (const std::vector<float>& cycle, std::size_t samples)
+	std::vector<float> nearest (const std::vector<float>& cycle, std::size_t samples)
 	{
 		std::vector<float> out;
 		out.reserve (samples);
 
 		const auto size = cycle.size ();
-		const auto last = (std::size_t) (size - 1);
 
 		for (std::size_t i = 0; i < samples; ++i)
 		{
-			// Position in source samples, as a fraction so the wrap is a modulo on indices.
-			const double position = (double) i * (double) size / (double) samples;
-			const auto index = (std::size_t) position;
-			const auto fraction = (float) (position - (double) index);
+			out.push_back (cycle[(i * size) / samples]);
+		}
 
-			const auto next = (index >= last) ? (std::size_t) 0 : index + 1;
+		return out;
+	}
 
-			const float a = cycle[std::min (index, last)];
-			const float b = cycle[std::min (next, last)];
+	/** `cycle` repeated `periods` times, unchanged - a loop for a sampler, not a shape. */
+	std::vector<float> repeated (const std::vector<float>& cycle, int periods)
+	{
+		std::vector<float> out;
+		out.reserve (cycle.size () * (std::size_t) std::max (1, periods));
 
-			out.push_back (a + (b - a) * fraction);
+		for (int period = 0; period < periods; ++period)
+		{
+			out.insert (out.end (), cycle.begin (), cycle.end ());
 		}
 
 		return out;
@@ -80,7 +83,8 @@ bool hasPeriodicShape (const ChannelState& channel)
 		   && cycleOf (channel).size () >= 2;
 }
 
-bool writeCycleWav (const ChannelState& channel, const std::string& path)
+bool writeCycleWav (const ChannelState& channel, const std::string& path,
+					ExportMode mode, double seconds)
 {
 	if (path.empty ())
 	{
@@ -94,10 +98,28 @@ bool writeCycleWav (const ChannelState& channel, const std::string& path)
 		return false;
 	}
 
-	const auto shape = resample (cycle, kWavetableSamples);
+	std::vector<float> samples;
+	auto sampleRate = (uint32_t) kWavetableRate;
 
-	const auto sampleRate = (uint32_t) kWavetableRate;
-	const auto dataBytes = (uint32_t) shape.size () * 2u;
+	if (mode == ExportMode::single)
+	{
+		samples = nearest (cycle, kWavetableSamples);
+	}
+	else
+	{
+		// One period is 1 / kReferenceHz of a second, so the rate follows from the cycle's own
+		// length and the requested duration decides how many periods fit. 256 samples - the
+		// longest table any backend here produces - works out to 112 kHz, inside what a sampler
+		// will take; nothing longer exists to push it over.
+		sampleRate = (uint32_t) std::lround (kReferenceHz * (double) cycle.size ());
+
+		const auto duration = (std::clamp) (seconds, 0.1, 10.0);
+		const auto periods = std::max (1, (int) std::lround (duration * kReferenceHz));
+
+		samples = repeated (cycle, periods);
+	}
+
+	const auto dataBytes = (uint32_t) samples.size () * 2u;
 
 	std::vector<uint8_t> header;
 	header.reserve (44);
@@ -125,7 +147,7 @@ bool writeCycleWav (const ChannelState& channel, const std::string& path)
 
 	file.write (reinterpret_cast<const char*> (header.data ()), (std::streamsize) header.size ());
 
-	for (const float sample : shape)
+	for (const float sample : samples)
 	{
 		const float value = (std::clamp) (sample, -1.0f, 1.0f);
 		const auto pcm = (int16_t) std::lround (value * 32000.0f);
@@ -146,10 +168,17 @@ std::string legalFileName (const std::string& name)
 	{
 		switch (c)
 		{
+		// A space is legal everywhere and awkward everywhere: it survives a copy into a shell, a
+		// URL and a sampler's file list only if the reader remembers to quote it.
+		case ' ':
+			out.push_back ('-');
+			break;
+
 		case '/': case '\\': case ':': case '*': case '?':
 		case '"': case '<': case '>': case '|':
 			out.push_back ('_');
 			break;
+
 		default:
 			out.push_back (c);
 			break;
@@ -157,20 +186,28 @@ std::string legalFileName (const std::string& name)
 	}
 
 	// Windows refuses a name ending in a space or a dot, and leading spaces read as an accident.
-	const auto first = out.find_first_not_of (" .");
-	const auto last = out.find_last_not_of (" .");
+	// The hyphen is in both sets because a space became one a few lines up: without it, a name
+	// that started as "  Wave 8  " keeps the two hyphens its leading spaces turned into.
+	const auto first = out.find_first_not_of (" .-");
+	const auto last = out.find_last_not_of (" .-");
 
 	out = (first == std::string::npos) ? std::string () : out.substr (first, last - first + 1);
 
 	return out.empty () ? std::string ("unnamed") : out;
 }
 
-ExportOutcome exportWavetables (const ChipStateSnapshot& snapshot, const std::string& folder)
+ExportOutcome exportWavetables (const ChipStateSnapshot& snapshot, const std::string& folder,
+								ExportMode mode, double seconds)
 {
 	ExportOutcome outcome;
 	outcome.channelsSeen = (int) snapshot.channels.size ();
 
 	const auto base = folder.empty () ? std::string (".") : folder;
+
+	// A name that repeats gets a suffix rather than overwriting its neighbour. The row number this
+	// used to append guaranteed uniqueness, and it cost every name a second digit that meant
+	// nothing to a reader - "2A03_Pulse 1_1.wav".
+	std::map<std::string, int> used;
 
 	for (std::size_t i = 0; i < snapshot.channels.size (); ++i)
 	{
@@ -182,10 +219,19 @@ ExportOutcome exportWavetables (const ChipStateSnapshot& snapshot, const std::st
 			continue;
 		}
 
-		const auto name = legalFileName (channel.chipName + "_" + channel.name
-										 + "_" + std::to_string (i + 1)) + ".wav";
+		auto stem = legalFileName (channel.chipName) + "_" + legalFileName (channel.name);
 
-		if (writeCycleWav (channel, base + "/" + name))
+		if (stem.size () > 180)
+		{
+			// Most filesystems stop at 255 bytes for the whole name; the suffix and extension
+			// need room to land.
+			stem.resize (180);
+		}
+
+		const auto seen = ++used[stem];
+		const auto name = stem + (seen > 1 ? "_" + std::to_string (seen) : "") + ".wav";
+
+		if (writeCycleWav (channel, base + "/" + name, mode, seconds))
 		{
 			++outcome.written;
 		}

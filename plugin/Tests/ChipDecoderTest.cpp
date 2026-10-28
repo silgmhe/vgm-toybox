@@ -4525,9 +4525,9 @@ void testWaveExport (void)
 	check (hasPeriodicShape (stored), "and it is a period");
 
 	// --- names ---------------------------------------------------------------------------------
-	check (legalFileName ("2A03/Pulse 1") == "2A03_Pulse 1",
-		   "the characters a filename cannot carry become underscores, spaces stay");
-	check (legalFileName ("  Wave 8  ") == "Wave 8", "leading and trailing spaces go");
+	check (legalFileName ("2A03/Pulse 1") == "2A03_Pulse-1",
+		   "illegal characters become underscores and spaces become hyphens");
+	check (legalFileName ("  Wave 8  ") == "Wave-8", "leading and trailing spaces go");
 	check (legalFileName ("...") == "unnamed", "a name that is only dots still produces something");
 
 	// --- the whole export, as the window drives it ---------------------------------------------
@@ -4569,13 +4569,100 @@ void testWaveExport (void)
 		check (outcome.skippedSample == 1, "skipping the one whose shape is a recording");
 		check (outcome.failed == 0, "with nothing failing");
 
-		check (std::filesystem::exists (folder + "/2A03_Pulse 1_1.wav"),
-			   "the first file is named for its chip, its channel and its row");
-		check (std::filesystem::exists (folder + "/N163_Wave 8_2.wav"), "and so is the second");
+		check (std::filesystem::exists (folder + "/2A03_Pulse-1.wav"),
+			   "the first file is named for its chip and its channel, with no row number");
+		check (std::filesystem::exists (folder + "/N163_Wave-8.wav"), "and so is the second");
 
 		// The same 44 + 2048 * 2 as the single-file check above, so the pair cannot drift.
-		check (std::filesystem::file_size (folder + "/2A03_Pulse 1_1.wav") == 44 + 2048 * 2,
+		check (std::filesystem::file_size (folder + "/2A03_Pulse-1.wav") == 44 + 2048 * 2,
 			   "and each is one period");
+
+		// --- the samples repeat, they are not interpolated -------------------------------------
+		//
+		// The chip quantises and the panel draws those steps; a wavetable has to match. Linear
+		// interpolation was the first attempt here, and it turned a thirty-two-step staircase into
+		// a ramp - a shape the hardware never produced.
+		{
+			const std::string single = "__wave_single.wav";
+			writeCycleWav (first, single, ExportMode::single, 2.0);
+
+			std::FILE* file = std::fopen (single.c_str (), "rb");
+
+			check (file != nullptr, "the single-period file can be read back");
+
+			if (file != nullptr)
+			{
+				std::fseek (file, 44, SEEK_SET);
+
+				const auto readSample = [file] () -> int
+				{
+					const int low = std::fgetc (file);
+					const int high = std::fgetc (file);
+
+					if (low == EOF || high == EOF)
+					{
+						return 0;
+					}
+
+					return (int) (int16_t) ((uint16_t) low | ((uint16_t) high << 8));
+				};
+
+				const int firstSample = readSample ();
+				bool allEqual = true;
+
+				for (int i = 1; i < 64; ++i)
+				{
+					if (readSample () != firstSample)
+					{
+						allEqual = false;
+					}
+				}
+
+				std::fclose (file);
+
+				// 2048 samples from a 32-point cycle is 64 repeats of each, so the first 64 samples
+				// are one source sample - which is what "no interpolation" looks like in a file.
+				check (allEqual, "each source sample is repeated, not interpolated");
+			}
+
+			std::remove (single.c_str ());
+		}
+
+		// --- the looped mode --------------------------------------------------------------------
+		{
+			const std::string looped = "__wave_looped.wav";
+
+			// A 32-point cycle at A4 is one period in 1/440 s: rate 14080, and one second holds
+			// 440 periods.
+			writeCycleWav (first, looped, ExportMode::looped, 1.0);
+
+			check (std::filesystem::exists (looped), "the looped file is written");
+			check (std::filesystem::file_size (looped) == 44 + 440 * 32 * 2,
+				   "one second at A4 is 440 periods of the source cycle");
+
+			std::FILE* file = std::fopen (looped.c_str (), "rb");
+
+			check (file != nullptr, "and it can be read back");
+
+			if (file != nullptr)
+			{
+				unsigned char header[44] = {};
+				const auto read = std::fread (header, 1, sizeof (header), file);
+				std::fclose (file);
+
+				check (read == sizeof (header), "with a header");
+
+				const auto u32 = [&header] (int at)
+				{
+					return (uint32_t) header[at] | ((uint32_t) header[at + 1] << 8)
+						   | ((uint32_t) header[at + 2] << 16) | ((uint32_t) header[at + 3] << 24);
+				};
+
+				check (u32 (24) == 14080u, "and its rate is 440 times the cycle length");
+			}
+
+			std::remove (looped.c_str ());
+		}
 
 		std::filesystem::remove_all (folder);
 	}

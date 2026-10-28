@@ -27,11 +27,33 @@ std::vector<float> cycleOf (const ChannelState& channel);
 */
 bool hasPeriodicShape (const ChannelState& channel);
 
-/** The rate every exported wavetable is written at. */
+/** The rate a single-period wavetable is written at. */
 constexpr int kWavetableRate = 44100;
 
-/** The length every exported wavetable is resampled to. */
+/** The length a single-period wavetable is resampled to. */
 constexpr std::size_t kWavetableSamples = 2048;
+
+/** The pitch a looped export is written at, so every file plays at concert pitch whatever note the
+	channel was playing when it was captured.
+
+	440 rather than the channel's own frequency: a set of loops all at A4 can be compared, layered
+	and tuned against each other, and a channel whose frequency is unknown - which is most of them
+	when the transport is paused - still produces something that sounds like a note.
+*/
+constexpr double kReferenceHz = 440.0;
+
+/** How a file is written, because the two destinations want opposite things. */
+enum class ExportMode
+{
+	/** One period: what a wavetable synth reads. The rate is fixed and the shape is resampled to
+		kWavetableSamples, because those synths take the whole file as one cycle at any rate. */
+	single,
+
+	/** The cycle repeated at kReferenceHz: what a sampler reads. The rate is derived from the
+		cycle's own length so that looping reproduces the pitch, and the length is the user's
+		choice in seconds. */
+	looped
+};
 
 /** Writes one cycle of `channel` as a wavetable a modern synth can load.
 
@@ -39,21 +61,20 @@ constexpr std::size_t kWavetableSamples = 2048;
 	period and resample it to whatever length they use internally, so what they need is a single
 	cycle at a known rate - not the note that was playing.
 
-	That is the opposite of what this wrote before, and both differences matter. The rate used to be
-	`frequency * length`, chosen so that looping the file reproduced the original pitch; a rate
-	derived from the note makes the file's pitch a property of the song rather than of the shape.
-	And the cycle was repeated sixteen times so a sampler would not reject a 32-sample file - but
-	sixteen periods in the file read as a wave that oscillates sixteen times per cycle.
-
-	So: one period, kWavetableSamples samples, kWavetableRate, linear interpolation, wrapping at the
-	end so the last sample meets the first.
+	The samples are written by repeating each source sample rather than interpolating between them,
+	which keeps a staircase a staircase. The chip quantises - the 2A03's triangle is thirty-two
+	levels, and that is audible - and smoothing it into a ramp would be drawing a shape the hardware
+	never produced. Linear interpolation was the first attempt here and it made exactly that
+	mistake: the panel showed steps and the file showed a smooth slope.
 */
-bool writeCycleWav (const ChannelState& channel, const std::string& path);
+bool writeCycleWav (const ChannelState& channel, const std::string& path,
+					ExportMode mode = ExportMode::single, double seconds = 2.0);
 
-/** `name` with the characters a filename cannot carry replaced by underscores.
+/** `name` as a filename: spaces become hyphens, and the characters a filesystem cannot carry
+	become underscores.
 
 	Its own function rather than juce::File::createLegalFileName so that the export can be tested
-	without JUCE - and so that the rule is written down in one place: what is illegal on Windows is
+	without JUCE, and so that the rule is written down in one place: what is illegal on Windows is
 	illegal here, because a wav that cannot be written there is not a wav.
 */
 std::string legalFileName (const std::string& name);
@@ -74,10 +95,12 @@ struct ExportOutcome
 
 /** Writes every periodic channel in `snapshot` into `folder`, which must already exist.
 
-	Named `<chip>_<channel>_<index>.wav`, the index one-based and in snapshot order, so that two
-	chips in one song - which both have a "Pulse 1" - do not collide and a file can be traced back
-	to the row it came from.
+	Named `<chip>_<channel>.wav`, so that two chips in one song - which both have a "Pulse 1" - do
+	not collide. A name that would repeat within one export gets `_2`, `_3` on the end rather than
+	losing the file: the row number that used to guarantee uniqueness made every name carry two
+	numbers, and one of them was never the one a reader wanted.
 */
-ExportOutcome exportWavetables (const ChipStateSnapshot& snapshot, const std::string& folder);
+ExportOutcome exportWavetables (const ChipStateSnapshot& snapshot, const std::string& folder,
+								ExportMode mode = ExportMode::single, double seconds = 2.0);
 
 } // namespace toybox::playback
