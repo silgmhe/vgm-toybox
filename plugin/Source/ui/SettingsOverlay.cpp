@@ -42,6 +42,40 @@ namespace
 	// glyphs horizontally; the page has the room, the General page does not.
 	constexpr int kTwoLineHeadingHeight = 64;
 
+	/** Colours for a slider's value box.
+
+		The box is a Label the slider creates from its own LookAndFeel colours when setTextBoxStyle()
+		runs, and it keeps that copy for good. If the look and feel was built before the theme was
+		known, the copy is white - white text on a white card, invisible until a theme switch
+		rebuilds it. That is the reported symptom exactly: numbers missing on a light theme until
+		someone switches away and back, and visible when the box is being edited because the editor
+		draws with its own colours.
+
+		Only one page used to do this, so only that page was safe. Every page with a value box does
+		it now, at construction and again whenever the look and feel changes.
+	*/
+	void colourSliderTextBox (juce::Slider& slider)
+	{
+		slider.setColour (juce::Slider::textBoxTextColourId, theme::primaryText());
+		slider.setColour (juce::Slider::textBoxBackgroundColourId, theme::card());
+		slider.setColour (juce::Slider::textBoxOutlineColourId, theme::border());
+		slider.setColour (juce::Slider::textBoxHighlightColourId, theme::accent().withAlpha (0.25f));
+	}
+
+	/** Every slider under `parent`, coloured. Recursive because the pages nest their rows. */
+	void colourSlidersIn (juce::Component& parent)
+	{
+		for (auto* child : parent.getChildren ())
+		{
+			if (auto* slider = dynamic_cast<juce::Slider*> (child))
+			{
+				colourSliderTextBox (*slider);
+			}
+
+			colourSlidersIn (*child);
+		}
+	}
+
 	/** How tall `text` needs to be at `width`, so a hint can be given the lines it needs.
 
 		A fixed height is right for one sentence in one language and wrong elsewhere: the MIDI page's
@@ -685,6 +719,7 @@ NesSettingsPage::NesSettingsPage (void)
 	secondsSlider.setComponentID ("settings.nes.duration");
 	secondsSlider.setSliderStyle (juce::Slider::LinearHorizontal);
 	secondsSlider.setTextBoxStyle (juce::Slider::TextBoxRight, false, 68, 22);
+	colourSliderTextBox (secondsSlider);
 	secondsSlider.setRange ((double) toybox::settings::nsf::minDurationSeconds,
 						   (double) toybox::settings::nsf::maxDurationSeconds,
 						   (double) toybox::settings::nsf::durationStepSeconds);
@@ -703,6 +738,7 @@ NesSettingsPage::NesSettingsPage (void)
 	gainSlider.setComponentID ("settings.nes.outputGain");
 	gainSlider.setSliderStyle (juce::Slider::LinearHorizontal);
 	gainSlider.setTextBoxStyle (juce::Slider::TextBoxRight, false, 68, 22);
+	colourSliderTextBox (gainSlider);
 	gainSlider.setRange ((double) toybox::settings::nsf::minOutputGainDb,
 						(double) toybox::settings::nsf::maxOutputGainDb,
 						(double) toybox::settings::nsf::outputGainStepDb);
@@ -824,6 +860,7 @@ KeyboardSettingsPage::KeyboardSettingsPage (void)
 	holdSlider.setComponentID ("settings.keyboard.noteHold");
 	holdSlider.setSliderStyle (juce::Slider::LinearHorizontal);
 	holdSlider.setTextBoxStyle (juce::Slider::TextBoxRight, false, 76, 22);
+	colourSliderTextBox (holdSlider);
 	if (const auto* hold = toybox::settings::numericSetting ("keyboard.noteHoldMs"))
 	{
 		holdSlider.setRange ((double) hold->minimum, (double) hold->maximum, (double) hold->step);
@@ -855,6 +892,7 @@ KeyboardSettingsPage::KeyboardSettingsPage (void)
 	refreshSlider.setComponentID ("settings.keyboard.refreshHz");
 	refreshSlider.setSliderStyle (juce::Slider::LinearHorizontal);
 	refreshSlider.setTextBoxStyle (juce::Slider::TextBoxRight, false, 76, 22);
+	colourSliderTextBox (refreshSlider);
 	refreshSlider.setRange ((double) toybox::settings::SettingsStore::minRefreshHz,
 							(double) toybox::settings::SettingsStore::maxRefreshHz, 1.0);
 	refreshSlider.textFromValueFunction = [] (double value)
@@ -1326,6 +1364,7 @@ MidiSettingsPage::MidiSettingsPage (void)
 	rangeSlider.setComponentID ("settings.midi.range");
 	rangeSlider.setSliderStyle (juce::Slider::LinearHorizontal);
 	rangeSlider.setTextBoxStyle (juce::Slider::TextBoxRight, false, 68, 22);
+	colourSliderTextBox (rangeSlider);
 	rangeSlider.setRange ((double) playback::minPitchBendRange,
 						  (double) playback::maxPitchBendRange, 1.0);
 	rangeSlider.onValueChange = [this]
@@ -1459,15 +1498,11 @@ void MidiSettingsPage::lookAndFeelChanged (void)
 	rangeCaption.setColour (juce::Label::textColourId, theme::secondaryText());
 	rangeHint.setColour (juce::Label::textColourId, theme::secondaryText());
 
-	// The number field's colours have to be set on the slider itself: the box's label copies them
-	// when it is created, and the box is recreated whenever the LookAndFeel changes - so a page
-	// that only relied on the LookAndFeel's own defaults drew an empty box here (measured).
-	rangeSlider.setColour (juce::Slider::textBoxTextColourId, theme::primaryText());
-	// Opaque on purpose: createSliderTextBox() copies this into the editor shown while typing and
-	// forces the alpha to 1, so a transparent black would become a black box with dark text.
-	rangeSlider.setColour (juce::Slider::textBoxBackgroundColourId, theme::card());
-	rangeSlider.setColour (juce::Slider::textBoxOutlineColourId, theme::border());
-	rangeSlider.setColour (juce::Slider::textBoxHighlightColourId, theme::accent().withAlpha (0.25f));
+	// This is the page that first met the problem: its number field drew an empty box because the
+	// slider's label had copied white text from a look and feel built before the theme was known.
+	// The fix stayed local to this page for a while, which is why the keyboard page's two fields
+	// kept doing it. colourSliderTextBox() is shared now.
+	colourSliderTextBox (rangeSlider);
 
 	rootHint.setColour (juce::Label::textColourId, theme::secondaryText());
 	}
@@ -1720,6 +1755,11 @@ void SettingsOverlay::lookAndFeelChanged (void)
 	// the row fills would paint over the sidebar card behind them
 	tree.setColour (juce::TreeView::oddItemsColourId, juce::Colours::transparentBlack);
 	tree.setColour (juce::TreeView::evenItemsColourId, juce::Colours::transparentBlack);
+
+	// And the value boxes, for the same reason: each one holds a copy of the colours its slider
+	// read when it was built. Walking them all here means a page added later is covered without
+	// anyone remembering to colour its fields.
+	colourSlidersIn (*this);
 }
 
 void SettingsOverlay::mouseDown (const juce::MouseEvent& event)
