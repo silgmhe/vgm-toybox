@@ -200,7 +200,7 @@ AppearanceSettingsPage::AppearanceSettingsPage (void)
 
 	fontHint.setFont (juce::Font (juce::FontOptions (12.5f)));
 	fontHint.setJustificationType (juce::Justification::topLeft);
-	fontHint.setMinimumHorizontalScale (0.8f);
+	fontHint.setMinimumHorizontalScale (1.0f);
 
 	restartLabel.setFont (juce::Font (juce::FontOptions (12.0f)));
 	restartLabel.setJustificationType (juce::Justification::centredLeft);
@@ -411,7 +411,7 @@ GeneralSettingsPage::GeneralSettingsPage (void)
 	reuseWindowHint.setComponentID ("settings.general.reuseWindowHint");
 	reuseWindowHint.setFont (juce::Font (juce::FontOptions (12.0f)));
 	reuseWindowHint.setJustificationType (juce::Justification::topLeft);
-	reuseWindowHint.setMinimumHorizontalScale (0.75f);
+	reuseWindowHint.setMinimumHorizontalScale (1.0f);
 	addAndMakeVisible (reuseWindowHint);
    #endif
 
@@ -441,7 +441,7 @@ GeneralSettingsPage::GeneralSettingsPage (void)
 		restoreLastSongHint.setComponentID ("settings.general.restoreLastSongHint");
 		restoreLastSongHint.setFont (juce::Font (juce::FontOptions (12.0f)));
 		restoreLastSongHint.setJustificationType (juce::Justification::topLeft);
-		restoreLastSongHint.setMinimumHorizontalScale (0.75f);
+		restoreLastSongHint.setMinimumHorizontalScale (1.0f);
 		addAndMakeVisible (restoreLastSongHint);
 
 		closeToTrayButton.setComponentID ("settings.general.closeToTray");
@@ -456,7 +456,7 @@ GeneralSettingsPage::GeneralSettingsPage (void)
 		closeToTrayHint.setComponentID ("settings.general.closeToTrayHint");
 		closeToTrayHint.setFont (juce::Font (juce::FontOptions (12.0f)));
 		closeToTrayHint.setJustificationType (juce::Justification::topLeft);
-		closeToTrayHint.setMinimumHorizontalScale (0.75f);
+		closeToTrayHint.setMinimumHorizontalScale (1.0f);
 		addAndMakeVisible (closeToTrayHint);
 
 	   #if JUCE_LINUX
@@ -466,7 +466,7 @@ GeneralSettingsPage::GeneralSettingsPage (void)
 		closeToTrayWarning.setComponentID ("settings.general.closeToTrayWarning");
 		closeToTrayWarning.setFont (juce::Font (juce::FontOptions (12.0f, juce::Font::bold)));
 		closeToTrayWarning.setJustificationType (juce::Justification::topLeft);
-		closeToTrayWarning.setMinimumHorizontalScale (0.75f);
+		closeToTrayWarning.setMinimumHorizontalScale (1.0f);
 		addAndMakeVisible (closeToTrayWarning);
 	   #endif
 	}
@@ -479,7 +479,7 @@ GeneralSettingsPage::GeneralSettingsPage (void)
 	pathLabel.setJustificationType (juce::Justification::centredLeft);
 	// A path is longer than any panel this window will ever have, and it is the one label here
 	// whose whole content matters, so it shrinks instead of being cut off with an ellipsis.
-	pathLabel.setMinimumHorizontalScale (0.6f);
+	pathLabel.setMinimumHorizontalScale (1.0f);
 
 	openFolderButton.setComponentID ("settings.general.openFolder");
 	openFolderButton.onClick = []
@@ -697,7 +697,7 @@ NesSettingsPage::NesSettingsPage (void)
 
 	hint.setFont (juce::Font (juce::FontOptions (12.5f)));
 	hint.setJustificationType (juce::Justification::topLeft);
-	hint.setMinimumHorizontalScale (0.8f);
+	hint.setMinimumHorizontalScale (1.0f);
 	addAndMakeVisible (hint);
 
 	refreshLanguage ();
@@ -976,7 +976,7 @@ AudioSettingsPage::AudioSettingsPage (void)
 	deviceLabel.setJustificationType (juce::Justification::centredLeft);
 	// A driver names a device as long as it likes ("Speakers (Realtek(R) Audio)"), and this is the
 	// one line on the page worth reading, so it shrinks rather than being cut off.
-	deviceLabel.setMinimumHorizontalScale (0.7f);
+	deviceLabel.setMinimumHorizontalScale (1.0f);
 
 	settingsButton.setComponentID ("settings.audio.open");
 	settingsButton.onClick = []
@@ -997,7 +997,7 @@ AudioSettingsPage::AudioSettingsPage (void)
 	hintLabel.setComponentID ("settings.audio.hint");
 	hintLabel.setFont (juce::Font (juce::FontOptions (12.0f)));
 	hintLabel.setJustificationType (juce::Justification::topLeft);
-	hintLabel.setMinimumHorizontalScale (0.75f);
+	hintLabel.setMinimumHorizontalScale (1.0f);
 
 	addAndMakeVisible (deviceLabel);
 	addAndMakeVisible (settingsButton);
@@ -1111,19 +1111,19 @@ LanguageSettingsPage::LanguageSettingsPage (void)
 	sourceLabel.setComponentID ("settings.language.source");
 	sourceLabel.setFont (juce::Font (juce::FontOptions (13.0f)));
 	sourceLabel.setJustificationType (juce::Justification::centredLeft);
-	sourceLabel.setMinimumHorizontalScale (0.7f);
+	sourceLabel.setMinimumHorizontalScale (1.0f);
 	addAndMakeVisible (sourceLabel);
 
 	detailLabel.setComponentID ("settings.language.detail");
 	detailLabel.setFont (juce::Font (juce::FontOptions (12.0f)));
 	detailLabel.setJustificationType (juce::Justification::centredLeft);
-	detailLabel.setMinimumHorizontalScale (0.75f);
+	detailLabel.setMinimumHorizontalScale (1.0f);
 	addAndMakeVisible (detailLabel);
 
 	warningsLabel.setComponentID ("settings.language.warnings");
 	warningsLabel.setFont (juce::Font (juce::FontOptions (12.0f)));
 	warningsLabel.setJustificationType (juce::Justification::topLeft);
-	warningsLabel.setMinimumHorizontalScale (0.75f);
+	warningsLabel.setMinimumHorizontalScale (1.0f);
 	addAndMakeVisible (warningsLabel);
 
 	openFolderButton.setComponentID ("settings.language.openFolder");
@@ -1297,7 +1297,7 @@ MidiSettingsPage::MidiSettingsPage (void)
 
 	bendHint.setFont (juce::Font (juce::FontOptions (12.5f)));
 	bendHint.setJustificationType (juce::Justification::topLeft);
-	bendHint.setMinimumHorizontalScale (0.8f);
+	bendHint.setMinimumHorizontalScale (1.0f);
 	addAndMakeVisible (bendHint);
 
 	rangeCaption.setFont (juce::Font (juce::FontOptions (12.5f)));
@@ -1319,7 +1319,7 @@ MidiSettingsPage::MidiSettingsPage (void)
 
 	rangeHint.setFont (juce::Font (juce::FontOptions (12.5f)));
 	rangeHint.setJustificationType (juce::Justification::topLeft);
-	rangeHint.setMinimumHorizontalScale (0.8f);
+	rangeHint.setMinimumHorizontalScale (1.0f);
 	addAndMakeVisible (rangeHint);
 
 	rootButton.setComponentID ("settings.midi.sampleRoot");
@@ -1346,7 +1346,7 @@ MidiSettingsPage::MidiSettingsPage (void)
 
 	rootHint.setFont (juce::Font (juce::FontOptions (12.5f)));
 	rootHint.setJustificationType (juce::Justification::topLeft);
-	rootHint.setMinimumHorizontalScale (0.8f);
+	rootHint.setMinimumHorizontalScale (1.0f);
 	addAndMakeVisible (rootHint);
 
 	refreshLanguage();

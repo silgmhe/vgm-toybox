@@ -874,7 +874,10 @@ list(SORT _toybox_scripts)
 # A script that only takes screenshots asserts nothing, so registering it as a test would report a
 # pass for work nobody checked - the sort of green that hides a regression. They stay in the
 # repository as tooling (`vgm_app_test <script>` by hand), just not in ctest.
-set(_toybox_shot_scripts "keyboard-shot")
+# Every script that only takes pictures. The list had drifted to one entry while two more were
+# being registered as tests: they pass, because a script with no assertions passes, so nothing
+# pointed out that ctest was spending a run on something that asserts nothing.
+set(_toybox_shot_scripts "keyboard-shot;export-options-shot;mixer-glow-shot;settings-shot")
 
 foreach(_script_file IN LISTS _toybox_scripts)
 	get_filename_component(_script_name "${_script_file}" NAME_WE)
