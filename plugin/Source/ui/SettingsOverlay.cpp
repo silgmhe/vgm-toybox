@@ -57,9 +57,11 @@ namespace
 
 		g.setColour (theme::secondaryText());
 		g.setFont (juce::Font (juce::FontOptions (12.5f)));
-		// A fitted text with a floor: if a translation ever outgrows even the reserved lines,
-		// it is clipped rather than compressed into unreadable glyphs.
-		g.drawFittedText (explanation, area, juce::Justification::centredLeft, maximumLines, 0.85f);
+		// A fitted text with no narrowing at all: if a translation ever outgrows even the
+		// reserved lines, the type is scaled down evenly rather than pressed together. 0.85 was
+		// the old floor and it bought a line at the cost of visibly thinner glyphs - which is the
+		// same trade, just smaller.
+		g.drawFittedText (explanation, area, juce::Justification::centredLeft, maximumLines, 1.0f);
 	}
 
 	/** Where the controls go: under the heading, both pages starting at the same place. */
@@ -1279,7 +1281,7 @@ void CircleHelpButton::paintButton (juce::Graphics& g, bool isMouseOver, bool is
 	g.drawEllipse (bounds, 1.0f);
 
 	g.setFont (juce::Font (juce::FontOptions (10.5f, juce::Font::bold)));
-	g.drawFittedText ("?", getLocalBounds(), juce::Justification::centred, 1);
+	g.drawFittedText ("?", getLocalBounds(), juce::Justification::centred, 1, 1.0f);
 }
 
 MidiSettingsPage::MidiSettingsPage (void)

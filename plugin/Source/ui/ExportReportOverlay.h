@@ -83,7 +83,7 @@ public:
 
 		g.setFont (juce::Font (juce::FontOptions (13.5f)));
 		g.drawFittedText (summaryLine(), inner.removeFromTop (20),
-						  juce::Justification::centredLeft, 1);
+						  juce::Justification::centredLeft, 1, 1.0f);
 
 		if (shown.written > 0 && shown.folder.getFullPathName().isNotEmpty())
 		{
@@ -92,7 +92,7 @@ public:
 			g.setColour (theme::secondaryText());
 			g.setFont (juce::Font (juce::FontOptions (12.5f)));
 			g.drawFittedText (shown.folder.getFullPathName(), inner.removeFromTop (34),
-							  juce::Justification::topLeft, 2);
+							  juce::Justification::topLeft, 2, 1.0f);
 		}
 
 		const auto skipped = skippedLine();
@@ -104,7 +104,7 @@ public:
 			g.setColour (theme::secondaryText());
 			g.setFont (juce::Font (juce::FontOptions (12.5f)));
 			g.drawFittedText (skipped, inner.removeFromTop (46),
-							  juce::Justification::topLeft, 3);
+							  juce::Justification::topLeft, 3, 1.0f);
 		}
 
 		const auto failed = failedLine();
@@ -118,7 +118,7 @@ public:
 			g.setColour (theme::error());
 			g.setFont (juce::Font (juce::FontOptions (12.5f)));
 			g.drawFittedText (failed, inner.removeFromTop (32),
-							  juce::Justification::topLeft, 2);
+							  juce::Justification::topLeft, 2, 1.0f);
 		}
 
 		// What the export actually looked at. Without it a report of zero is ambiguous, and the
@@ -130,7 +130,7 @@ public:
 			g.setColour (theme::secondaryText());
 			g.setFont (juce::Font (juce::FontOptions (11.5f)));
 			g.drawFittedText (i18n::tr ("export.seen", juce::String (shown.channelsSeen)),
-							  inner.removeFromTop (18), juce::Justification::topLeft, 1);
+							  inner.removeFromTop (18), juce::Justification::topLeft, 1, 1.0f);
 		}
 	}
 

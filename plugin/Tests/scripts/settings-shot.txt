@@ -1,0 +1,22 @@
+# A screenshot of the settings panel.
+#
+# The point is the heading: its explanation is drawn with a line budget and, until now, a horizontal
+# squeeze that let a longer sentence fit the budget by narrowing the glyphs. Several pages reserve a
+# second line for exactly that reason; the pages that reserve one are the ones this checks.
+#
+# It opens on the Appearance page, which is the first one and needs no sidebar click to reach -
+# clicking a sidebar page from here would need the audio hooks in the first line of a script, and
+# that mechanism belongs to settings-pages.txt rather than to a screenshot.
+#
+# Run:  build\plugin\vgm_app_test plugin\Tests\scripts\settings-shot.txt
+# Output: build\shots\settings-appearance.png
+
+size 1500 900
+
+menu invoke options.settings
+
+tick
+
+sleep 200
+
+shot build/shots/settings-appearance.png
