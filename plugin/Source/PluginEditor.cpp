@@ -143,6 +143,7 @@ ToyboxAudioProcessorEditor::ToyboxAudioProcessorEditor (ToyboxAudioProcessor& p)
 		ExportOptions options;
 		options.looped = store.getExportLooped ();
 		options.seconds = store.getExportSeconds ();
+		options.bits = store.getExportBits ();
 
 		exportOptionsOverlay.setOptions (options);
 		exportOptionsOverlay.setBounds (getLocalBounds ());
@@ -158,6 +159,7 @@ ToyboxAudioProcessorEditor::ToyboxAudioProcessorEditor (ToyboxAudioProcessor& p)
 		auto& store = settings::SettingsStore::getInstance ();
 		store.setExportLooped (options.looped);
 		store.setExportSeconds (options.seconds);
+		store.setExportBits (options.bits);
 
 		exportOptionsOverlay.setVisible (false);
 

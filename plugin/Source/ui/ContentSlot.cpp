@@ -1371,7 +1371,8 @@ void ContentSlot::beginExport (const ExportOptions& options)
 
 			const auto outcome = playback::exportWavetables (drawn,
 															 report.folder.getFullPathName ().toStdString (),
-															 mode, (double) options.seconds);
+															 mode, (double) options.seconds,
+															 options.bits);
 
 			report.written = outcome.written;
 			report.skippedSample = outcome.skippedSample;

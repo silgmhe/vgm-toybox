@@ -240,6 +240,14 @@ public:
 	int getExportSeconds (void) const;
 	void setExportSeconds (int seconds);
 
+	/** The quantisation depth the export applies: zero for the chip's own, one to sixteen otherwise. */
+	int getExportBits (void) const;
+	void setExportBits (int bits);
+
+	static constexpr int minExportBits = 0;
+	static constexpr int maxExportBits = 16;
+	static constexpr int defaultExportBits = 0;
+
 	/** The range the length accepts, and the value used when nothing is stored. */
 	static constexpr int minExportSeconds = 1;
 	static constexpr int maxExportSeconds = 10;

@@ -235,7 +235,10 @@ language: English
 	"export.noChannels" = "Nothing was written: the panel is not receiving channel state at all.";
 	"export.seen" = "Channels in the snapshot: {0}";
 	"export.options.title" = "Export wavetables";
-	"export.options.single" = "Single cycle - for a wavetable synth (Serum)";
+	"export.options.single" = "Single cycle - for a wavetable synth";
+	"export.options.bits" = "Depth";
+	"export.options.nativeBits" = "Use the chip's own depth";
+	"export.options.bitsHint" = "Extra quantisation on the way out. The chip's own depth is what the hardware produces - one bit for a pulse, four for a triangle - and forcing less makes the steps coarse enough to survive a wavetable synth's resampling.";
 	"export.options.looped" = "Looped - for a sampler, at A4";
 	"export.options.seconds" = "Length";
 	"export.options.cancel" = "Cancel";

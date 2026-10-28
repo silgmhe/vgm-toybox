@@ -231,7 +231,10 @@ language: 简体中文
 	"export.noChannels" = "没有写入任何文件：面板根本没有收到通道数据。";
 	"export.seen" = "快照中的通道数：{0}";
 	"export.options.title" = "导出波表";
-	"export.options.single" = "单周期 - 给波表合成器（Serum）";
+	"export.options.single" = "单周期 - 给波表合成器";
+	"export.options.bits" = "位深";
+	"export.options.nativeBits" = "按芯片实际位深";
+	"export.options.bitsHint" = "导出时额外做一次量化。芯片本身只有几级——脉冲 1 位、三角 4 位——压得更低能让台阶粗到经得起波表合成器的重采样。";
 	"export.options.looped" = "多周期 - 给采样器，A4 音高";
 	"export.options.seconds" = "时长";
 	"export.options.cancel" = "取消";

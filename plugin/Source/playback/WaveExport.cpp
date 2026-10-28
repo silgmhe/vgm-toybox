@@ -83,8 +83,38 @@ bool hasPeriodicShape (const ChannelState& channel)
 		   && cycleOf (channel).size () >= 2;
 }
 
+int nativeBits (int waveKind)
+{
+	switch ((waveform::Kind) waveKind)
+	{
+	case waveform::Kind::pulse:		return 1;	// two levels, and no more
+	case waveform::Kind::noise:		return 1;
+	case waveform::Kind::triangle:	return 4;	// the counter runs to thirty-two, so sixteen steps
+	case waveform::Kind::saw:		return 4;	// the VRC6's ramp is a four-bit counter
+	case waveform::Kind::stored:	return 6;	// FDS is six bits, N163 four - six loses nothing
+	case waveform::Kind::delta:		return 16;	// a mark, not a sample; nothing to snap
+	case waveform::Kind::fm:		return 16;	// an analogue sum, which has no steps at all
+	default:						return 16;
+	}
+}
+
+float quantiseSample (float value, int bits)
+{
+	const auto clamped = std::clamp (bits, 1, kMaxBits);
+
+	// `steps` is the number of intervals, so a one-bit shape has one and lands on two levels.
+	// Scaling through 0..1 rather than -1..1 keeps the rounding symmetric at both rails: a value
+	// that is already at +1 stays there instead of being rounded past it.
+	const auto steps = (float) ((1 << clamped) - 1);
+
+	const auto scaled = (std::clamp) (value, -1.0f, 1.0f) * 0.5f + 0.5f;
+	const auto snapped = std::round (scaled * steps) / steps;
+
+	return snapped * 2.0f - 1.0f;
+}
+
 bool writeCycleWav (const ChannelState& channel, const std::string& path,
-					ExportMode mode, double seconds)
+					ExportMode mode, double seconds, int bits)
 {
 	if (path.empty ())
 	{
@@ -147,9 +177,16 @@ bool writeCycleWav (const ChannelState& channel, const std::string& path,
 
 	file.write (reinterpret_cast<const char*> (header.data ()), (std::streamsize) header.size ());
 
+	// Whatever the chip produced is what gets written unless the user asked for a depth; a shape
+	// that is already four bits is unchanged by "native", and forced to something coarser by a
+	// number. The file itself stays sixteen-bit either way - the quantisation is a property of the
+	// samples, not of the container.
+	const auto depth = (bits == kNativeBits) ? nativeBits (channel.waveKind)
+											 : std::clamp (bits, 1, kMaxBits);
+
 	for (const float sample : samples)
 	{
-		const float value = (std::clamp) (sample, -1.0f, 1.0f);
+		const float value = quantiseSample (sample, depth);
 		const auto pcm = (int16_t) std::lround (value * 32000.0f);
 
 		const char bytes[2] = { (char) (pcm & 0xFF), (char) ((pcm >> 8) & 0xFF) };
@@ -197,7 +234,7 @@ std::string legalFileName (const std::string& name)
 }
 
 ExportOutcome exportWavetables (const ChipStateSnapshot& snapshot, const std::string& folder,
-								ExportMode mode, double seconds)
+								ExportMode mode, double seconds, int bits)
 {
 	ExportOutcome outcome;
 	outcome.channelsSeen = (int) snapshot.channels.size ();
@@ -231,7 +268,7 @@ ExportOutcome exportWavetables (const ChipStateSnapshot& snapshot, const std::st
 		const auto seen = ++used[stem];
 		const auto name = stem + (seen > 1 ? "_" + std::to_string (seen) : "") + ".wav";
 
-		if (writeCycleWav (channel, base + "/" + name, mode, seconds))
+		if (writeCycleWav (channel, base + "/" + name, mode, seconds, bits))
 		{
 			++outcome.written;
 		}

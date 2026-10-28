@@ -4530,6 +4530,31 @@ void testWaveExport (void)
 	check (legalFileName ("  Wave 8  ") == "Wave-8", "leading and trailing spaces go");
 	check (legalFileName ("...") == "unnamed", "a name that is only dots still produces something");
 
+	// --- depth ---------------------------------------------------------------------------------
+	{
+		check (nativeBits ((int) waveform::Kind::pulse) == 1, "a pulse is one bit on the chip");
+		check (nativeBits ((int) waveform::Kind::triangle) == 4, "a triangle is four");
+		check (nativeBits ((int) waveform::Kind::saw) == 4, "the VRC6 ramp is four");
+		check (nativeBits ((int) waveform::Kind::stored) == 6, "the widest stored table here is six");
+		check (nativeBits ((int) waveform::Kind::fm) == 16, "an FM voice has no steps to snap");
+
+		// One bit is two levels and the threshold sits at the centre, so anything above zero goes
+		// to the top rail and anything below to the bottom.
+		check (std::abs (quantiseSample (0.9f, 1) - 1.0f) < 0.001f, "one bit puts 0.9 at the top");
+		check (std::abs (quantiseSample (-0.9f, 1) + 1.0f) < 0.001f, "and -0.9 at the bottom");
+		check (std::abs (quantiseSample (0.1f, 1) - 1.0f) < 0.001f, "and 0.1 up with it");
+
+		// Four bits is fifteen intervals: whatever comes out has to sit on one of them.
+		const auto fourBit = quantiseSample (0.5f, 4);
+		const auto level = (fourBit + 1.0f) * 0.5f * 15.0f;
+
+		check (std::abs (level - std::round (level)) < 0.001f, "four bits lands on a fifteenth");
+
+		// Sixteen bits is 65535 intervals, which is beneath anything measurable here.
+		check (std::abs (quantiseSample (0.12345f, 16) - 0.12345f) < 0.001f,
+			   "sixteen bits is transparent");
+	}
+
 	// --- the whole export, as the window drives it ---------------------------------------------
 	//
 	// One call, a snapshot in and counts out. This is the shape that reported "nothing was

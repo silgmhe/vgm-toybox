@@ -16,19 +16,28 @@ namespace toybox::ui
 	`looped` is not a format but a destination: one period is what a wavetable synth reads, and a
 	loop at concert pitch is what a sampler reads. They are different files of different lengths at
 	different rates, so the choice has to be made before anything is written.
+
+	`bits` is the quantisation applied on the way out. Zero - `kNativeBits` in the exporter - means
+	"whatever this chip produces"; anything from one to sixteen forces that depth on every channel.
 */
 struct ExportOptions
 {
 	bool looped = false;
 	int seconds = 2;
+	int bits = 0;
 };
 
 /**
 	The window that asks what to export, drawn over the whole window like the settings panel.
 
-	It exists because the two destinations cannot be inferred: the same channel wants one period for
-	Serum and two seconds of looping for a sampler, and nothing in the snapshot says which the user
-	means. Remembering the last choice in the settings store means the window is usually one click.
+	It exists because neither the destination nor the depth can be inferred: the same channel wants
+	one period for a wavetable synth and two seconds of looping for a sampler, and a shape the chip
+	made at four bits is worth exporting at four bits or at one, depending on what the user is
+	after. Remembering the last choice means the window is usually one click.
+
+	The layout is computed once, in resized(), and paint() reads the rectangles it stored. It used
+	to recompute the same offsets from hard-coded numbers, and the two drifted: the duration field
+	sat on top of the hint text because one of them counted a gap the other did not.
 */
 class ExportOptionsOverlay : public juce::Component
 {
@@ -45,25 +54,46 @@ public:
 		loopedButton.onClick = [this] { refreshEnabled (); };
 		addAndMakeVisible (loopedButton);
 
-		secondsCaption.setFont (juce::Font (juce::FontOptions (12.5f)));
-		secondsCaption.setJustificationType (juce::Justification::centredLeft);
-		addAndMakeVisible (secondsCaption);
-
-		secondsSlider.setComponentID ("export.options.seconds");
-		secondsSlider.setSliderStyle (juce::Slider::LinearHorizontal);
-		secondsSlider.setTextBoxStyle (juce::Slider::TextBoxRight, false, 56, 22);
-		secondsSlider.setRange (1.0, 10.0, 1.0);
-		secondsSlider.textFromValueFunction = [] (double value)
+		const auto setUpRow = [] (juce::Label& caption, juce::Slider& slider,
+								  double low, double high, double step, const juce::String& suffix)
 		{
-			return juce::String ((int) std::lround (value)) + " s";
+			caption.setFont (juce::Font (juce::FontOptions (12.5f)));
+			caption.setJustificationType (juce::Justification::centredLeft);
+
+			slider.setSliderStyle (juce::Slider::LinearHorizontal);
+			slider.setTextBoxStyle (juce::Slider::TextBoxRight, false, 56, 22);
+			slider.setRange (low, high, step);
+			slider.textFromValueFunction = [suffix] (double value)
+			{
+				return juce::String ((int) std::lround (value)) + suffix;
+			};
 		};
+
+		setUpRow (secondsCaption, secondsSlider, 1.0, 10.0, 1.0, " s");
+		secondsSlider.setComponentID ("export.options.seconds");
 		secondsSlider.valueFromTextFunction = [this] (const juce::String& text)
 		{
 			const auto digits = text.retainCharacters ("0123456789");
 
 			return digits.isEmpty () ? secondsSlider.getValue () : digits.getDoubleValue ();
 		};
+		addAndMakeVisible (secondsCaption);
 		addAndMakeVisible (secondsSlider);
+
+		setUpRow (bitsCaption, bitsSlider, 1.0, 16.0, 1.0, " bit");
+		bitsSlider.setComponentID ("export.options.bits");
+		bitsSlider.valueFromTextFunction = [this] (const juce::String& text)
+		{
+			const auto digits = text.retainCharacters ("0123456789");
+
+			return digits.isEmpty () ? bitsSlider.getValue () : digits.getDoubleValue ();
+		};
+		addAndMakeVisible (bitsCaption);
+		addAndMakeVisible (bitsSlider);
+
+		nativeBitsButton.setComponentID ("export.options.nativeBits");
+		nativeBitsButton.onClick = [this] { refreshEnabled (); };
+		addAndMakeVisible (nativeBitsButton);
 
 		cancelButton.setComponentID ("export.options.cancel");
 		cancelButton.onClick = [this] { if (onCancel != nullptr) { onCancel (); } };
@@ -77,18 +107,28 @@ public:
 				ExportOptions options;
 				options.looped = loopedButton.getToggleState ();
 				options.seconds = (int) std::lround (secondsSlider.getValue ());
+				options.bits = nativeBitsButton.getToggleState ()
+								   ? 0
+								   : (int) std::lround (bitsSlider.getValue ());
+
 				onConfirm (options);
 			}
 		};
 		addAndMakeVisible (confirmButton);
 	}
 
-	/** Fills the controls from the remembered choice. */
+	/** Fills the controls from the remembered choice. Zero bits means "the chip's own depth". */
 	void setOptions (const ExportOptions& options)
 	{
 		loopedButton.setToggleState (options.looped, juce::dontSendNotification);
 		singleButton.setToggleState (! options.looped, juce::dontSendNotification);
+
 		secondsSlider.setValue ((double) options.seconds, juce::dontSendNotification);
+
+		const bool native = options.bits <= 0;
+
+		nativeBitsButton.setToggleState (native, juce::dontSendNotification);
+		bitsSlider.setValue ((double) (native ? 4 : options.bits), juce::dontSendNotification);
 
 		refreshEnabled ();
 		refreshLanguage ();
@@ -99,8 +139,14 @@ public:
 		singleButton.setButtonText (i18n::tr ("export.options.single"));
 		loopedButton.setButtonText (i18n::tr ("export.options.looped"));
 		secondsCaption.setText (i18n::tr ("export.options.seconds"), juce::dontSendNotification);
+		bitsCaption.setText (i18n::tr ("export.options.bits"), juce::dontSendNotification);
+		nativeBitsButton.setButtonText (i18n::tr ("export.options.nativeBits"));
 		cancelButton.setButtonText (i18n::tr ("export.options.cancel"));
 		confirmButton.setButtonText (i18n::tr ("export.options.confirm"));
+
+		// The strings changed, so the two painted blocks have to be redrawn; their rectangles
+		// belong to resized() and are not touched here.
+		repaint ();
 	}
 
 	void paint (juce::Graphics& g) override
@@ -114,20 +160,18 @@ public:
 		g.setColour (theme::cardBorder ());
 		g.drawRoundedRectangle (panel.toFloat ().reduced (0.5f), theme::buttonRadius, 1.0f);
 
-		auto inner = panel.reduced (24, 22);
-
 		g.setColour (theme::primaryText ());
 		g.setFont (juce::Font (juce::FontOptions (18.0f, juce::Font::bold)));
-		g.drawText (i18n::tr ("export.options.title"), inner.removeFromTop (26),
+		g.drawText (i18n::tr ("export.options.title"), titleArea,
 					juce::Justification::centredLeft, false);
 
-		// The two sentences that say which destination each choice is for. A user who has never
-		// imported a wavetable has no way to tell "single cycle" from "looped" otherwise.
-		inner.removeFromTop (26 + 6 + 26 + 10);
-
+		// Both hint areas come from resized(), so they cannot drift from the controls above them.
 		g.setColour (theme::secondaryText ());
 		g.setFont (juce::Font (juce::FontOptions (11.5f)));
-		g.drawFittedText (i18n::tr ("export.options.hint"), inner.removeFromTop (44),
+		g.drawFittedText (i18n::tr ("export.options.hint"), modeHintArea,
+						  juce::Justification::topLeft, 3);
+
+		g.drawFittedText (i18n::tr ("export.options.bitsHint"), bitsHintArea,
 						  juce::Justification::topLeft, 3);
 	}
 
@@ -136,21 +180,34 @@ public:
 		const auto panel = panelBounds ();
 		auto inner = panel.reduced (24, 22);
 
-		inner.removeFromTop (26);			// title
-		inner.removeFromTop (8);
+		auto footer = inner.removeFromBottom (28);
+		inner.removeFromBottom (10);
 
-		singleButton.setBounds (inner.removeFromTop (26));
-		inner.removeFromTop (4);
-		loopedButton.setBounds (inner.removeFromTop (26));
-
+		titleArea = inner.removeFromTop (26);
 		inner.removeFromTop (10);
 
-		auto secondsRow = inner.removeFromTop (26);
-		secondsCaption.setBounds (secondsRow.removeFromLeft (80));
-		secondsSlider.setBounds (secondsRow.removeFromLeft (juce::jmin (260, secondsRow.getWidth ())));
+		singleButton.setBounds (inner.removeFromTop (24));
+		inner.removeFromTop (4);
+		loopedButton.setBounds (inner.removeFromTop (24));
+		inner.removeFromTop (12);
 
-		inner = panel.reduced (24, 22);
-		auto footer = panel.reduced (24, 22).removeFromBottom (28);
+		auto secondsRow = inner.removeFromTop (24);
+		secondsCaption.setBounds (secondsRow.removeFromLeft (64));
+		secondsSlider.setBounds (secondsRow.removeFromLeft (juce::jmin (300, secondsRow.getWidth ())));
+		inner.removeFromTop (8);
+
+		modeHintArea = inner.removeFromTop (34);
+		inner.removeFromTop (10);
+
+		auto bitsRow = inner.removeFromTop (24);
+		bitsCaption.setBounds (bitsRow.removeFromLeft (64));
+		bitsSlider.setBounds (bitsRow.removeFromLeft (juce::jmin (300, bitsRow.getWidth ())));
+		inner.removeFromTop (8);
+
+		nativeBitsButton.setBounds (inner.removeFromTop (22));
+		inner.removeFromTop (6);
+
+		bitsHintArea = inner.removeFromTop (34);
 
 		confirmButton.setBounds (footer.removeFromRight (88));
 		footer.removeFromRight (8);
@@ -182,25 +239,40 @@ public:
 private:
 	void refreshEnabled (void)
 	{
-		// The length only means something for a loop; a single period is one period at any
-		// duration. Greyed rather than hidden, so the window does not change shape between modes.
-		secondsSlider.setEnabled (loopedButton.getToggleState ());
-		secondsCaption.setEnabled (loopedButton.getToggleState ());
+		// The length only means something for a loop, and the depth only means something when it is
+		// not being taken from the chip. Both are greyed rather than hidden, so the window does not
+		// change shape under the pointer.
+		const bool looped = loopedButton.getToggleState ();
+		const bool custom = ! nativeBitsButton.getToggleState ();
+
+		secondsSlider.setEnabled (looped);
+		secondsCaption.setEnabled (looped);
+
+		bitsSlider.setEnabled (custom);
+		bitsCaption.setEnabled (custom);
 	}
 
 	juce::Rectangle<int> panelBounds (void) const
 	{
-		const int width = juce::jmin (480, getWidth () - 60);
-		const int height = juce::jmin (340, getHeight () - 60);
-		return getLocalBounds ().withSizeKeepingCentre (juce::jmax (320, width), juce::jmax (280, height));
+		const int width = juce::jmin (500, getWidth () - 60);
+		const int height = juce::jmin (440, getHeight () - 60);
+		return getLocalBounds ().withSizeKeepingCentre (juce::jmax (340, width), juce::jmax (360, height));
 	}
 
 	juce::ToggleButton singleButton;
 	juce::ToggleButton loopedButton;
 	juce::Label secondsCaption;
 	juce::Slider secondsSlider;
+	juce::Label bitsCaption;
+	juce::Slider bitsSlider;
+	juce::ToggleButton nativeBitsButton;
 	juce::TextButton cancelButton;
 	juce::TextButton confirmButton;
+
+	// Filled by resized(), read by paint(): one layout, computed once.
+	juce::Rectangle<int> titleArea;
+	juce::Rectangle<int> modeHintArea;
+	juce::Rectangle<int> bitsHintArea;
 
 	JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (ExportOptionsOverlay)
 };

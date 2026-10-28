@@ -27,6 +27,24 @@ std::vector<float> cycleOf (const ChannelState& channel);
 */
 bool hasPeriodicShape (const ChannelState& channel);
 
+/** How many bits the chip itself produces for this kind of shape, as a count of bits.
+
+	Not a preference and not a guess: the 2A03's pulse is a single bit, its triangle counts to
+	thirty-two and is therefore four, the VRC6's saw is a four-bit counter, and an FM voice is an
+	analogue sum that has no steps at all. A stored table is six, the widest any backend here
+	supplies (FDS); N163's four bits fit inside that without losing anything.
+*/
+int nativeBits (int waveKind);
+
+/** `value` snapped to `bits` levels across -1..1.
+
+	Sixteen bits is 32768 steps and changes nothing anyone can hear; one bit is a square wave no
+	matter what came in. The interesting settings are in between, and they are the point: a wavetable
+	synth resamples and band-limits what it is given, and a shape with four or eight steps has
+	edges coarse enough to survive that.
+*/
+float quantiseSample (float value, int bits);
+
 /** The rate a single-period wavetable is written at. */
 constexpr int kWavetableRate = 44100;
 
@@ -41,6 +59,10 @@ constexpr std::size_t kWavetableSamples = 2048;
 	when the transport is paused - still produces something that sounds like a note.
 */
 constexpr double kReferenceHz = 440.0;
+
+/** The quantisation choices the export window offers. */
+constexpr int kNativeBits = 0;		// what the chip produces, per channel
+constexpr int kMaxBits = 16;
 
 /** How a file is written, because the two destinations want opposite things. */
 enum class ExportMode
@@ -57,18 +79,18 @@ enum class ExportMode
 
 /** Writes one cycle of `channel` as a wavetable a modern synth can load.
 
-	A wavetable is a shape, not a recording. Serum and its neighbours take the whole file as one
-	period and resample it to whatever length they use internally, so what they need is a single
-	cycle at a known rate - not the note that was playing.
-
 	The samples are written by repeating each source sample rather than interpolating between them,
-	which keeps a staircase a staircase. The chip quantises - the 2A03's triangle is thirty-two
-	levels, and that is audible - and smoothing it into a ramp would be drawing a shape the hardware
-	never produced. Linear interpolation was the first attempt here and it made exactly that
-	mistake: the panel showed steps and the file showed a smooth slope.
+	which keeps a staircase a staircase: the chip quantises, the panel draws those steps, and
+	smoothing them into a ramp would be drawing a shape the hardware never produced.
+
+	`bits` is the quantisation to apply on the way out, on top of whatever the shape already has.
+	kNativeBits means "whatever this chip produces" - which for most shapes is no change at all,
+	since the source is already that coarse - and any other value forces every channel to that depth,
+	including the ones the chip made finer.
 */
 bool writeCycleWav (const ChannelState& channel, const std::string& path,
-					ExportMode mode = ExportMode::single, double seconds = 2.0);
+					ExportMode mode = ExportMode::single, double seconds = 2.0,
+					int bits = kNativeBits);
 
 /** `name` as a filename: spaces become hyphens, and the characters a filesystem cannot carry
 	become underscores.
@@ -97,10 +119,13 @@ struct ExportOutcome
 
 	Named `<chip>_<channel>.wav`, so that two chips in one song - which both have a "Pulse 1" - do
 	not collide. A name that would repeat within one export gets `_2`, `_3` on the end rather than
-	losing the file: the row number that used to guarantee uniqueness made every name carry two
-	numbers, and one of them was never the one a reader wanted.
+	losing the file.
+
+	`bits` goes through to writeCycleWav() per channel: kNativeBits asks each shape for its own
+	depth, anything else forces one depth on all of them.
 */
 ExportOutcome exportWavetables (const ChipStateSnapshot& snapshot, const std::string& folder,
-								ExportMode mode = ExportMode::single, double seconds = 2.0);
+								ExportMode mode = ExportMode::single, double seconds = 2.0,
+								int bits = kNativeBits);
 
 } // namespace toybox::playback

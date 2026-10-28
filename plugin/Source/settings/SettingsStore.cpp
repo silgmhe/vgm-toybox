@@ -39,6 +39,7 @@ namespace
 	/** The export window's two remembered choices: the mode and the length. */
 	constexpr const char* kExportLoopedKey = "export.looped";
 	constexpr const char* kExportSecondsKey = "export.seconds";
+	constexpr const char* kExportBitsKey = "export.bits";
 
 	/** The Keyboard page's redraw rate. Absent means 15 - see SettingsStore::defaultRefreshHz. */
 	constexpr const char* kRefreshHzKey = "ui.refreshHz";
@@ -303,6 +304,26 @@ void SettingsStore::setExportSeconds (int seconds)
 	}
 
 	file->setValue (kExportSecondsKey, clamped);
+	broadcastChange ();
+}
+
+int SettingsStore::getExportBits (void) const
+{
+	const auto stored = file->getIntValue (kExportBitsKey, defaultExportBits);
+
+	return juce::jlimit (minExportBits, maxExportBits, stored);
+}
+
+void SettingsStore::setExportBits (int bits)
+{
+	const int clamped = juce::jlimit (minExportBits, maxExportBits, bits);
+
+	if (clamped == getExportBits ())
+	{
+		return;
+	}
+
+	file->setValue (kExportBitsKey, clamped);
 	broadcastChange ();
 }
 
