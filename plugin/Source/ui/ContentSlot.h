@@ -13,6 +13,11 @@ namespace toybox::ui
 {
 
 class MixerPanel;
+class ExportReportOverlay;
+
+/** What an export did - see ExportReportOverlay.h. Declared rather than included so this header
+	stays as light as it is; the definition is needed only where the report is built. */
+struct ExportReport;
 
 /** What the rectangle above the transport is showing. */
 enum class ContentView
@@ -81,6 +86,9 @@ private:
 
 	void timerCallback (void) override;
 
+	/** Shows what an export did, over the whole slot. */
+	void showExportReport (const ExportReport& report);
+
 	toybox::PlaybackEngine& engine;
 	ContentView current = ContentView::mixer;
 
@@ -97,6 +105,10 @@ private:
 
 	std::unique_ptr<juce::FileChooser> waveChooser;
 	juce::String exportStatus;
+
+	/** What the last export did, shown over the whole slot. Built on first use rather than in the
+		constructor, because most sessions never export. */
+	std::unique_ptr<ExportReportOverlay> exportOverlay;
 
 	JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (ContentSlot)
 };

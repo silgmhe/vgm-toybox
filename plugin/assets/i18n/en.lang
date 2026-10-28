@@ -225,8 +225,14 @@ language: English
 		"visualiser.keyboard" = "Keyboard";
 	"visualiser.keyboardUnavailable" = "This format does not report per-channel state yet.";
 	"visualiser.keyboardUnsupported" = "The channels of this chip cannot be shown yet.";
-	"visualiser.export" = "Export waves";
+	"visualiser.export" = "Export wavetables";
 	"visualiser.exportEmpty" = "Nothing to export yet.";
+	"export.title" = "Wavetables exported";
+	"export.written" = "{0} written to";
+	"export.skippedSample" = "{0} sampled channel(s) left out: a sample is a recording with no period, and its export comes later.";
+	"export.failed" = "{0} could not be written.";
+	"export.none" = "Nothing was written: this view has no waveform to export yet.";
+	"export.close" = "Close";
 "visualiser.scope" = "Waveform";
 "settings.nes" = "NSF";
 "settings.nes.duration" = "Song length";

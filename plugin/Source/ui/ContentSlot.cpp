@@ -1,6 +1,7 @@
 #include "ContentSlot.h"
 
 #include "ButtonPaint.h"
+#include "ExportReportOverlay.h"
 #include "MixerPanel.h"
 #include "KeyboardLayout.h"
 #include "KeyboardRowLayout.h"
@@ -1279,6 +1280,7 @@ ContentSlot::ContentSlot (toybox::PlaybackEngine& engineToUse)
 		{
 			exportStatus = toybox::i18n::tr ("visualiser.exportEmpty");
 			keyboardPanel->repaint ();
+			showExportReport (ExportReport {});
 			return;
 		}
 
@@ -1290,14 +1292,32 @@ ContentSlot::ContentSlot (toybox::PlaybackEngine& engineToUse)
 								  | juce::FileBrowserComponent::canSelectDirectories,
 								  [this] (const juce::FileChooser& chooser)
 		{
-			const auto folder = chooser.getResult ();
+			const auto parent = chooser.getResult ();
 
-			if (folder == juce::File () || ! folder.isDirectory ())
+			if (parent == juce::File () || ! parent.isDirectory ())
 			{
 				return;
 			}
 
-			int written = 0;
+			// One folder per song. Exporting two songs into the same directory interleaved their
+			// files, and a name like "Pulse 1 3.wav" says nothing about which song it came from.
+			//
+			// A plugin instance may have been handed its song through the host rather than a file
+			// the engine knows, so the name can be empty; the folder still needs one.
+			const auto songName = engine.getFile ().getFileNameWithoutExtension ();
+			const auto folderName = songName.isNotEmpty () ? songName : juce::String ("wavetables");
+
+			ExportReport report;
+			report.folder = parent.getChildFile (juce::File::createLegalFileName (folderName));
+
+			if (! report.folder.createDirectory ().wasOk ())
+			{
+				// Nothing was written, and saying so per channel is the honest count: every row
+				// this export had is one it could not place.
+				report.failed = (int) snapshot.channels.size ();
+				showExportReport (report);
+				return;
+			}
 
 			for (std::size_t i = 0; i < snapshot.channels.size (); ++i)
 			{
@@ -1306,23 +1326,35 @@ ContentSlot::ContentSlot (toybox::PlaybackEngine& engineToUse)
 				// Everything the panel can draw, not only the channels whose shape arrives as data.
 				// This used to test `channel.wave`, which only FDS and N163 ever fill - so a
 				// 2A03 or VRC6 song exported nothing at all, and the button looked broken.
+				//
+				// A sampled row is the other side of that line: its mark is synthesised from the
+				// sample's identity rather than from sample data, so writing it would produce a
+				// wavetable describing nothing. Those want a PCM export, which is not built yet.
 				if (! playback::hasPeriodicShape (channel))
 				{
+					++report.skippedSample;
 					continue;
 				}
 
-				const auto name = juce::File::createLegalFileName (juce::String (channel.name)
-																   + " " + juce::String ((int) i + 1))
+				const auto name = juce::File::createLegalFileName (juce::String (channel.chipName)
+																   + "_" + juce::String (channel.name)
+																   + "_" + juce::String ((int) i + 1))
 								  + ".wav";
 
-				if (playback::writeCycleWav (channel, folder.getChildFile (name).getFullPathName ().toStdString ()))
+				if (playback::writeCycleWav (channel, report.folder.getChildFile (name).getFullPathName ().toStdString ()))
 				{
-					++written;
+					++report.written;
+				}
+				else
+				{
+					++report.failed;
 				}
 			}
 
-			exportStatus = juce::String (written) + " WAV";
+			exportStatus = juce::String (report.written) + " WAV";
 			keyboardPanel->repaint ();
+
+			showExportReport (report);
 		});
 	};
 
@@ -1377,11 +1409,29 @@ void ContentSlot::refresh (void)
 	}
 }
 
+void ContentSlot::showExportReport (const ExportReport& report)
+{
+	// Built on first use: most sessions never export, and this is a whole-window child.
+	if (exportOverlay == nullptr)
+	{
+		exportOverlay = std::make_unique<ExportReportOverlay> ();
+		exportOverlay->onClose = [this] { exportOverlay->setVisible (false); };
+		addChildComponent (*exportOverlay);
+	}
+
+	exportOverlay->setReport (report);
+	exportOverlay->setBounds (getLocalBounds ());
+	exportOverlay->setVisible (true);
+	exportOverlay->toFront (false);
+	exportOverlay->grabKeyboardFocus ();		// so escape works without clicking first
+}
+
 void ContentSlot::refreshLanguage (void)
 {
 	if (mixer != nullptr) { mixer->refreshLanguage (); }
 	if (keyboardPanel != nullptr) { keyboardPanel->refreshLanguage (); }
 	if (scopePanel != nullptr) { scopePanel->repaint (); }
+	if (exportOverlay != nullptr) { exportOverlay->refreshLanguage (); }
 }
 
 void ContentSlot::songChanged (void)
@@ -1429,6 +1479,7 @@ void ContentSlot::resized (void)
 	if (mixer != nullptr) { mixer->setBounds (getLocalBounds ()); }
 	if (keyboardPanel != nullptr) { keyboardPanel->setBounds (inner); }
 	if (scopePanel != nullptr) { scopePanel->setBounds (inner); }
+	if (exportOverlay != nullptr) { exportOverlay->setBounds (getLocalBounds ()); }
 }
 
 void ContentSlot::timerCallback (void)

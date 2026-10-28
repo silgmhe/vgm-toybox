@@ -223,6 +223,12 @@ language: 简体中文
 	"visualiser.keyboardUnsupported" = "该芯片的逐通道状态尚未支持。";
 	"visualiser.export" = "导出波表";
 	"visualiser.exportEmpty" = "当前没有可导出的波形。";
+	"export.title" = "波表已导出";
+	"export.written" = "已写入 {0} 个文件到";
+	"export.skippedSample" = "{0} 个采样通道已跳过：采样是一段录音，没有周期，这部分导出稍后单独提供。";
+	"export.failed" = "{0} 个文件写入失败。";
+	"export.none" = "没有写入任何文件：这个视图当前没有可导出的波形。";
+	"export.close" = "关闭";
 "visualiser.scope" = "波形";
 "settings.nes" = "NSF";
 "settings.nes.duration" = "歌曲长度";
