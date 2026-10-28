@@ -7,9 +7,11 @@
 //   cmake --build <build dir> --target vgm_chip_test
 //   <build dir>/plugin/vgm_chip_test
 
+#include <algorithm>
 #include <cmath>
 #include <cstdint>
 #include <cstdio>
+#include <cstring>
 #include <filesystem>
 #include <vector>
 
@@ -4488,7 +4490,7 @@ void testWaveExport (void)
 		std::fclose (file);
 
 		check (headerRead == sizeof (header), "the header is 44 bytes");
-		check (size == 44 + (long) kWavetableSamples * 2L,
+		check (size == 44 + (long) kWavetableSamples * 4L,
 			   "the file holds one period and not sixteen");
 
 		const auto u32 = [&header] (int at)
@@ -4502,7 +4504,8 @@ void testWaveExport (void)
 		check (header[36] == 'd' && header[37] == 'a' && header[38] == 't' && header[39] == 'a',
 			   "and carries a data chunk");
 		check (u32 (24) == (uint32_t) kWavetableRate, "the rate is 44100, not the note's frequency");
-		check (u32 (40) == (uint32_t) kWavetableSamples * 2u, "the data chunk is 2048 samples");
+		check (u32 (40) == (uint32_t) kWavetableSamples * 4u, "the data chunk is 2048 float samples");
+		check (header[20] == 3, "and its format is IEEE float, which is what a wavetable is");
 
 		std::remove (path);
 	}
@@ -4599,7 +4602,7 @@ void testWaveExport (void)
 		check (std::filesystem::exists (folder + "/N163_Wave-8.wav"), "and so is the second");
 
 		// The same 44 + 2048 * 2 as the single-file check above, so the pair cannot drift.
-		check (std::filesystem::file_size (folder + "/2A03_Pulse-1.wav") == 44 + 2048 * 2,
+		check (std::filesystem::file_size (folder + "/2A03_Pulse-1.wav") == 44 + 2048 * 4,
 			   "and each is one period");
 
 		// --- the samples repeat, they are not interpolated -------------------------------------
@@ -4619,20 +4622,28 @@ void testWaveExport (void)
 			{
 				std::fseek (file, 44, SEEK_SET);
 
-				const auto readSample = [file] () -> int
+				const auto readSample = [file] () -> float
 				{
-					const int low = std::fgetc (file);
-					const int high = std::fgetc (file);
+					const int b0 = std::fgetc (file);
+					const int b1 = std::fgetc (file);
+					const int b2 = std::fgetc (file);
+					const int b3 = std::fgetc (file);
 
-					if (low == EOF || high == EOF)
+					if (b0 == EOF || b1 == EOF || b2 == EOF || b3 == EOF)
 					{
-						return 0;
+						return 0.0f;
 					}
 
-					return (int) (int16_t) ((uint16_t) low | ((uint16_t) high << 8));
+					const uint32_t bits = (uint32_t) b0 | ((uint32_t) b1 << 8)
+										  | ((uint32_t) b2 << 16) | ((uint32_t) b3 << 24);
+
+					float value = 0.0f;
+					std::memcpy (&value, &bits, sizeof (value));
+
+					return value;
 				};
 
-				const int firstSample = readSample ();
+				const float firstSample = readSample ();
 				bool allEqual = true;
 
 				for (int i = 1; i < 64; ++i)
@@ -4653,6 +4664,70 @@ void testWaveExport (void)
 			std::remove (single.c_str ());
 		}
 
+		// --- the shape a wavetable synth expects ------------------------------------------------
+		//
+		// A reference wavetable shipped by such a synth measures like this: 2048 float samples at
+		// 44100, values on -1 .. 1, seventeen distinct levels for a four-bit triangle, each level
+		// held for 2048/32 = 64 samples. This asserts the same three facts about ours, because the
+		// first version wrote sixteen-bit PCM and the steps were lost in the container.
+		{
+			const std::string shaped = "__wave_shaped.wav";
+
+			ChannelState triangle;
+			triangle.chipName = "2A03";
+			triangle.name = "Triangle";
+			triangle.waveKind = (int) waveform::Kind::triangle;
+
+			check (writeCycleWav (triangle, shaped, ExportMode::single, 2.0, 4),
+				   "a four-bit single period writes");
+
+			std::FILE* file = std::fopen (shaped.c_str (), "rb");
+
+			check (file != nullptr, "and can be read back");
+
+			if (file != nullptr)
+			{
+				std::fseek (file, 44, SEEK_SET);
+
+				std::vector<float> levels;
+
+				for (int i = 0; i < (int) kWavetableSamples; ++i)
+				{
+					const int b0 = std::fgetc (file);
+					const int b1 = std::fgetc (file);
+					const int b2 = std::fgetc (file);
+					const int b3 = std::fgetc (file);
+
+					const uint32_t bits = (uint32_t) b0 | ((uint32_t) b1 << 8)
+										  | ((uint32_t) b2 << 16) | ((uint32_t) b3 << 24);
+
+					float value = 0.0f;
+					std::memcpy (&value, &bits, sizeof (value));
+
+					levels.push_back (value);
+				}
+
+				std::fclose (file);
+
+				std::sort (levels.begin (), levels.end ());
+				levels.erase (std::unique (levels.begin (), levels.end ()), levels.end ());
+
+				// Four bits is sixteen intervals, so seventeen values at most - and that is the
+				// ceiling, not the count. The 2A03's triangle runs its counter from fifteen down to
+				// zero and back, which is sixteen levels with no centre among them, so a four-bit
+				// triangle lands on sixteen of the seventeen. A reference wavetable of the same name
+				// has seventeen because whatever made it stepped through zero as well.
+				check (levels.size () <= 17, "four bits cannot produce more than seventeen levels");
+				check (levels.size () >= 8, "and a triangle is far from a square");
+
+				check (std::abs (levels.front () + 1.0f) < 0.001f
+						   && std::abs (levels.back () - 1.0f) < 0.001f,
+					   "and they span the full -1 to 1");
+			}
+
+			std::remove (shaped.c_str ());
+		}
+
 		// --- the looped mode --------------------------------------------------------------------
 		{
 			const std::string looped = "__wave_looped.wav";
@@ -4662,7 +4737,7 @@ void testWaveExport (void)
 			writeCycleWav (first, looped, ExportMode::looped, 1.0);
 
 			check (std::filesystem::exists (looped), "the looped file is written");
-			check (std::filesystem::file_size (looped) == 44 + 440 * 32 * 2,
+			check (std::filesystem::file_size (looped) == 44 + 440 * 32 * 4,
 				   "one second at A4 is 440 periods of the source cycle");
 
 			std::FILE* file = std::fopen (looped.c_str (), "rb");

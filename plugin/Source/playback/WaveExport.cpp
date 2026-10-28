@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
+#include <cstring>
 #include <fstream>
 #include <map>
 #include <vector>
@@ -149,7 +150,14 @@ bool writeCycleWav (const ChannelState& channel, const std::string& path,
 		samples = repeated (cycle, periods);
 	}
 
-	const auto dataBytes = (uint32_t) samples.size () * 2u;
+	// Four bytes per sample, because these are thirty-two-bit floats.
+	//
+	// The first version wrote sixteen-bit PCM, which is a legal wav and the wrong container for this:
+	// a reference wavetable from a wavetable synth is float32 - its fmt chunk carries format tag 3 -
+	// and quantising to seventeen levels only reads as steps if the values are the levels. Rounded
+	// into an integer scale they are the same shape with a different ruler, and the synth rescales
+	// what it is handed.
+	const auto dataBytes = (uint32_t) samples.size () * 4u;
 
 	std::vector<uint8_t> header;
 	header.reserve (44);
@@ -159,12 +167,12 @@ bool writeCycleWav (const ChannelState& channel, const std::string& path,
 	header.insert (header.end (), { 'W', 'A', 'V', 'E' });
 	header.insert (header.end (), { 'f', 'm', 't', ' ' });
 	put32 (header, 16u);					// PCM chunk size
-	put16 (header, 1u);						// PCM
+	put16 (header, 3u);						// IEEE float
 	put16 (header, 1u);						// mono
 	put32 (header, sampleRate);
-	put32 (header, sampleRate * 2u);		// byte rate
-	put16 (header, 2u);						// block align
-	put16 (header, 16u);					// bits per sample
+	put32 (header, sampleRate * 4u);		// byte rate
+	put16 (header, 4u);						// block align
+	put16 (header, 32u);					// bits per sample
 	header.insert (header.end (), { 'd', 'a', 't', 'a' });
 	put32 (header, dataBytes);
 
@@ -175,7 +183,8 @@ bool writeCycleWav (const ChannelState& channel, const std::string& path,
 		return false;
 	}
 
-	file.write (reinterpret_cast<const char*> (header.data ()), (std::streamsize) header.size ());
+	std::vector<uint8_t> fileBytes = header;
+	fileBytes.reserve (header.size () + dataBytes);
 
 	// Whatever the chip produced is what gets written unless the user asked for a depth; a shape
 	// that is already four bits is unchanged by "native", and forced to something coarser by a
@@ -186,12 +195,19 @@ bool writeCycleWav (const ChannelState& channel, const std::string& path,
 
 	for (const float sample : samples)
 	{
+		// The value goes straight out: a float wav has no scale to lose the levels on, and the
+		// reference file's levels sit exactly on -1, -0.875, ... 1.0.
 		const float value = quantiseSample (sample, depth);
-		const auto pcm = (int16_t) std::lround (value * 32000.0f);
 
-		const char bytes[2] = { (char) (pcm & 0xFF), (char) ((pcm >> 8) & 0xFF) };
-		file.write (bytes, 2);
+		uint32_t bits = 0;
+		static_assert (sizeof (float) == sizeof (uint32_t), "a float is four bytes here");
+
+		std::memcpy (&bits, &value, sizeof (bits));
+		put32 (fileBytes, bits);
 	}
+
+	file.write (reinterpret_cast<const char*> (fileBytes.data ()),
+				(std::streamsize) fileBytes.size ());
 
 	return file.good ();
 }
