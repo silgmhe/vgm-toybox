@@ -14,8 +14,7 @@ namespace toybox::playback
 	The core's own `wave` when the backend supplies one, otherwise the shape its registers describe -
 	which is the same synthesis the panel draws with, so the file and the picture cannot disagree.
 	They did until this existed: the exporter required a non-empty `wave` and skipped everything
-	else, and only FDS and N163 ever supply one. Every channel on every other chip was drawn on
-	screen and refused on export.
+	else, and only FDS and N163 ever supply one.
 */
 std::vector<float> cycleOf (const ChannelState& channel);
 
@@ -24,8 +23,7 @@ std::vector<float> cycleOf (const ChannelState& channel);
 	A stored table or a synthesised shape is; a sampled channel is not. The panel draws a mark for a
 	DPCM or ADPCM row rather than its data - WaveShape synthesises that mark from the sample's
 	identity, deliberately, so two samples in one song look different - and a mark is not a
-	waveform. Those channels want a PCM export, which does not exist yet, so the caller skips them
-	instead of writing a wavetable that describes nothing.
+	waveform. Those channels want a PCM export, which does not exist yet.
 */
 bool hasPeriodicShape (const ChannelState& channel);
 
@@ -49,11 +47,37 @@ constexpr std::size_t kWavetableSamples = 2048;
 
 	So: one period, kWavetableSamples samples, kWavetableRate, linear interpolation, wrapping at the
 	end so the last sample meets the first.
-
-	This writes shapes. A DPCM or ADPCM channel's sample is a recording - a start, an end, and no
-	period - and belongs to a different entry point that does not exist yet. Callers are expected to
-	skip those channels; writeCycleWav() writes whatever cycle it is given.
 */
 bool writeCycleWav (const ChannelState& channel, const std::string& path);
+
+/** `name` with the characters a filename cannot carry replaced by underscores.
+
+	Its own function rather than juce::File::createLegalFileName so that the export can be tested
+	without JUCE - and so that the rule is written down in one place: what is illegal on Windows is
+	illegal here, because a wav that cannot be written there is not a wav.
+*/
+std::string legalFileName (const std::string& name);
+
+/** What an export did.
+
+	`channelsSeen` is the one that matters when nothing was written, and it exists because "0
+	written" was ambiguous twice: a snapshot with no channels and a snapshot whose every channel
+	failed both report zero, and the difference is the whole diagnosis.
+*/
+struct ExportOutcome
+{
+	int channelsSeen = 0;
+	int written = 0;
+	int skippedSample = 0;
+	int failed = 0;
+};
+
+/** Writes every periodic channel in `snapshot` into `folder`, which must already exist.
+
+	Named `<chip>_<channel>_<index>.wav`, the index one-based and in snapshot order, so that two
+	chips in one song - which both have a "Pulse 1" - do not collide and a file can be traced back
+	to the row it came from.
+*/
+ExportOutcome exportWavetables (const ChipStateSnapshot& snapshot, const std::string& folder);
 
 } // namespace toybox::playback

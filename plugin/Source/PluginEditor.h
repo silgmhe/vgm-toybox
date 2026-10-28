@@ -6,6 +6,7 @@
 
 #include "PluginProcessor.h"
 #include "ui/AboutOverlay.h"
+#include "ui/ExportReportOverlay.h"
 #include "ui/DropHintOverlay.h"
 #include "ui/EditorCommands.h"
 #include "ui/MainMenu.h"
@@ -164,6 +165,7 @@ private:
 	toybox::ui::DropHintOverlay dropHint;
 	toybox::ui::AboutOverlay aboutOverlay;		// in-window, so it can never block the application
 	toybox::ui::SettingsOverlay settingsOverlay;	// the same, for Options > Settings
+	toybox::ui::ExportReportOverlay exportOverlay;	// and for "what the export did"
 
 	juce::TooltipWindow tooltipWindow { this, 650 };	// declared last: destroyed first
 

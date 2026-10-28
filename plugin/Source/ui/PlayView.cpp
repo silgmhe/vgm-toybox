@@ -19,6 +19,14 @@ PlayView::PlayView (toybox::PlaybackEngine& playback, bool syncAvailable)
 	// hidden until a file with sound chips is loaded (ChipPanel::rebuild sets the visibility)
 	addChildComponent (chipPanel);
 	addAndMakeVisible (contentSlot);
+
+	contentSlot.onExportReport = [this] (const ExportReport& report)
+	{
+		if (onExportReport != nullptr)
+		{
+			onExportReport (report);
+		}
+	};
 }
 
 void PlayView::setContentView (ContentView view)

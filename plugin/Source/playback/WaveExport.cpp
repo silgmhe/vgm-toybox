@@ -137,4 +137,65 @@ bool writeCycleWav (const ChannelState& channel, const std::string& path)
 	return file.good ();
 }
 
+std::string legalFileName (const std::string& name)
+{
+	std::string out;
+	out.reserve (name.size ());
+
+	for (const char c : name)
+	{
+		switch (c)
+		{
+		case '/': case '\\': case ':': case '*': case '?':
+		case '"': case '<': case '>': case '|':
+			out.push_back ('_');
+			break;
+		default:
+			out.push_back (c);
+			break;
+		}
+	}
+
+	// Windows refuses a name ending in a space or a dot, and leading spaces read as an accident.
+	const auto first = out.find_first_not_of (" .");
+	const auto last = out.find_last_not_of (" .");
+
+	out = (first == std::string::npos) ? std::string () : out.substr (first, last - first + 1);
+
+	return out.empty () ? std::string ("unnamed") : out;
+}
+
+ExportOutcome exportWavetables (const ChipStateSnapshot& snapshot, const std::string& folder)
+{
+	ExportOutcome outcome;
+	outcome.channelsSeen = (int) snapshot.channels.size ();
+
+	const auto base = folder.empty () ? std::string (".") : folder;
+
+	for (std::size_t i = 0; i < snapshot.channels.size (); ++i)
+	{
+		const auto& channel = snapshot.channels[(std::size_t) i];
+
+		if (! hasPeriodicShape (channel))
+		{
+			++outcome.skippedSample;
+			continue;
+		}
+
+		const auto name = legalFileName (channel.chipName + "_" + channel.name
+										 + "_" + std::to_string (i + 1)) + ".wav";
+
+		if (writeCycleWav (channel, base + "/" + name))
+		{
+			++outcome.written;
+		}
+		else
+		{
+			++outcome.failed;
+		}
+	}
+
+	return outcome;
+}
+
 } // namespace toybox::playback

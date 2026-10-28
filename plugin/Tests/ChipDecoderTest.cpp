@@ -10,6 +10,7 @@
 #include <cmath>
 #include <cstdint>
 #include <cstdio>
+#include <filesystem>
 #include <vector>
 
 #include "midi/ChipPlans.h"
@@ -4522,6 +4523,62 @@ void testWaveExport (void)
 
 	check (cycleOf (stored).size () == 4, "a stored table is used as given");
 	check (hasPeriodicShape (stored), "and it is a period");
+
+	// --- names ---------------------------------------------------------------------------------
+	check (legalFileName ("2A03/Pulse 1") == "2A03_Pulse 1",
+		   "the characters a filename cannot carry become underscores, spaces stay");
+	check (legalFileName ("  Wave 8  ") == "Wave 8", "leading and trailing spaces go");
+	check (legalFileName ("...") == "unnamed", "a name that is only dots still produces something");
+
+	// --- the whole export, as the window drives it ---------------------------------------------
+	//
+	// One call, a snapshot in and counts out. This is the shape that reported "nothing was
+	// written" over a full screen twice - both times because the loop that walked the channels
+	// took its bound from one object and its elements from another. There is no loop to get wrong
+	// now, and this asserts the counts a panel would show.
+	{
+		const std::string folder = "__wave_export_dir";
+
+		std::filesystem::remove_all (folder);
+		std::filesystem::create_directories (folder);
+
+		toybox::playback::ChipStateSnapshot snapshot;
+
+		toybox::playback::ChannelState first;
+		first.chipName = "2A03";
+		first.name = "Pulse 1";
+		first.waveKind = (int) waveform::Kind::pulse;
+		first.duty = 0.5f;
+
+		toybox::playback::ChannelState second;
+		second.chipName = "N163";
+		second.name = "Wave 8";
+		second.waveKind = (int) waveform::Kind::triangle;
+
+		toybox::playback::ChannelState third;
+		third.chipName = "2A03";
+		third.name = "DPCM";
+		third.waveKind = (int) waveform::Kind::delta;
+
+		snapshot.channels = { first, second, third };
+
+		const auto outcome = exportWavetables (snapshot, folder);
+
+		check (outcome.channelsSeen == 3, "the export saw every channel in the snapshot");
+		check (outcome.written == 2, "and wrote the two that have a period");
+		check (outcome.skippedSample == 1, "skipping the one whose shape is a recording");
+		check (outcome.failed == 0, "with nothing failing");
+
+		check (std::filesystem::exists (folder + "/2A03_Pulse 1_1.wav"),
+			   "the first file is named for its chip, its channel and its row");
+		check (std::filesystem::exists (folder + "/N163_Wave 8_2.wav"), "and so is the second");
+
+		// The same 44 + 2048 * 2 as the single-file check above, so the pair cannot drift.
+		check (std::filesystem::file_size (folder + "/2A03_Pulse 1_1.wav") == 44 + 2048 * 2,
+			   "and each is one period");
+
+		std::filesystem::remove_all (folder);
+	}
 }
 
 int main (void)

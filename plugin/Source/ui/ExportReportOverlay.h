@@ -11,9 +11,15 @@
 namespace toybox::ui
 {
 
-/** What an export did, so the panel that reports it does not read the filesystem back. */
+/** What an export did, so the panel that reports it does not read the filesystem back.
+
+	`channelsSeen` is the field that earns its place in a bug report: "0 written" means one thing
+	when the snapshot had no channels and another when every channel failed to save, and the
+	message that only said "nothing was written" cost two rounds of guessing.
+*/
 struct ExportReport
 {
+	int channelsSeen = 0;
 	int written = 0;
 	int skippedSample = 0;		// rows whose shape is a recording rather than a period
 	int failed = 0;
@@ -27,10 +33,9 @@ struct ExportReport
 	cannot reliably show, and its modal state blocks the application even when the box never
 	appears. A child component has no peer and no modal state, so nothing can get stuck.
 
-	It exists because the export used to report itself as "3 WAV" in the status line. That number
-	could not distinguish "three written" from "nothing was a waveform" - which is exactly what the
-	report it replaced said when it wrote no files at all - and the counts that matter, that some
-	rows are recordings and some could not be written, had nowhere to go.
+	It is a child of the editor rather than of the page that starts the export, so the whole window
+	dims - the same as the settings panel. Dimming only the keyboard card made the message look like
+	part of that card, and left the rest of the interface looking live while it was blocked.
 */
 class ExportReportOverlay : public juce::Component
 {
@@ -115,6 +120,18 @@ public:
 			g.drawFittedText (failed, inner.removeFromTop (32),
 							  juce::Justification::topLeft, 2);
 		}
+
+		// What the export actually looked at. Without it a report of zero is ambiguous, and the
+		// last two rounds of this were spent asking which of the two zeroes it was.
+		if (shown.written == 0)
+		{
+			inner.removeFromTop (8);
+
+			g.setColour (theme::secondaryText());
+			g.setFont (juce::Font (juce::FontOptions (11.5f)));
+			g.drawFittedText (i18n::tr ("export.seen", juce::String (shown.channelsSeen)),
+							  inner.removeFromTop (18), juce::Justification::topLeft, 1);
+		}
 	}
 
 	void resized (void) override
@@ -148,7 +165,7 @@ private:
 	juce::Rectangle<int> panelBounds (void) const
 	{
 		const int width = juce::jmin (480, getWidth() - 60);
-		const int height = juce::jmin (300, getHeight() - 60);
+		const int height = juce::jmin (320, getHeight() - 60);
 		return getLocalBounds().withSizeKeepingCentre (juce::jmax (320, width), juce::jmax (240, height));
 	}
 
@@ -156,7 +173,10 @@ private:
 	{
 		if (shown.written == 0)
 		{
-			return i18n::tr ("export.none");
+			// Two different failures, two different sentences. The panel receiving nothing and the
+			// panel receiving channels that could not be written are not the same bug, and the
+			// message that did not say which is why this code was "fixed" twice without effect.
+			return i18n::tr (shown.channelsSeen == 0 ? "export.noChannels" : "export.none");
 		}
 
 		return i18n::tr ("export.written", juce::String (shown.written));

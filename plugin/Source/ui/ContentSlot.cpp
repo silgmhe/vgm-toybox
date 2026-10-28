@@ -126,8 +126,8 @@ class ContentSlot::KeyboardPanel : public juce::Component,
 								   private juce::ScrollBar::Listener
 {
 public:
-	KeyboardPanel (toybox::PlaybackEngine& engineToUse, juce::String& statusToUse)
-		: engine (engineToUse), exportStatus (statusToUse)
+	explicit KeyboardPanel (toybox::PlaybackEngine& engineToUse)
+		: engine (engineToUse)
 	{
 		// No colours set here on purpose: the button is drawn by the application's look and feel,
 		// which asks the palette. Overriding them once in the constructor is why this button kept
@@ -355,14 +355,6 @@ public:
 		// The window controls live in the header so they never scroll away, and to the left of the
 		// export button so they sit where this page keeps its other actions.
 		paintShiftControls (g, header.withTrimmedTop (8).withHeight (26));
-
-		if (exportStatus.isNotEmpty ())
-		{
-			g.setColour (theme::secondaryText ());
-			g.setFont (juce::Font (juce::FontOptions (11.5f)));
-			g.drawText (exportStatus, header.withTrimmedRight (124),
-						juce::Justification::centredRight, false);
-		}
 
 		// No relayout() here. It is already called by resized() and by setSnapshot(), which are the
 		// two things that can change what the rows are; calling it again on every paint meant the
@@ -1254,7 +1246,6 @@ private:
 	bool hoveredRowMute = false;
 	bool lastPointerWasOverControl = false;
 
-	juce::String& exportStatus;
 	juce::TextButton exportButton { "export" };
 };
 
@@ -1277,23 +1268,23 @@ ContentSlot::ContentSlot (toybox::PlaybackEngine& engineToUse)
 {
 	mixer = std::make_unique<MixerPanel> (engine);
 
-	keyboardPanel = std::make_unique<KeyboardPanel> (engine, exportStatus);
+	keyboardPanel = std::make_unique<KeyboardPanel> (engine);
 	keyboardPanel->onExport = [this]
 	{
 		// The export lives with the panel that owns the waves, but the file chooser is the
 		// slot's: one chooser per page rather than one per view.
 		//
-		// Read from the panel, not from this slot. timerCallback() moves the slot's snapshot into
-		// the panel every frame, so the slot's copy is empty by the time this runs - which is why
-		// asking for an export of a screen full of waveforms reported that there was nothing to
-		// export. The panel's copy is also the one on screen, so the files match the picture.
-		const int writable = (int) keyboardPanel->drawnSnapshot ().channels.size ();
-
-		if (writable == 0)
+		// Read from the panel, never from this slot. timerCallback() moves the slot's snapshot
+		// into the panel every frame, so the slot's copy is empty by the time anything here runs
+		// - which is what made an export of a screen full of waveforms report that there was
+		// nothing to export.
+		if (keyboardPanel->drawnSnapshot ().channels.empty ())
 		{
-			exportStatus = toybox::i18n::tr ("visualiser.exportEmpty");
-			keyboardPanel->repaint ();
-			showExportReport (ExportReport {});
+			if (onExportReport != nullptr)
+			{
+				onExportReport (ExportReport {});
+			}
+
 			return;
 		}
 
@@ -1312,10 +1303,6 @@ ContentSlot::ContentSlot (toybox::PlaybackEngine& engineToUse)
 				return;
 			}
 
-			// The panel's copy, taken here rather than outside this lambda: a nested lambda captures
-			// nothing implicitly, and this is the one the picture was drawn from.
-			const auto& channels = keyboardPanel->drawnSnapshot ().channels;
-
 			// One folder per song. Exporting two songs into the same directory interleaved their
 			// files, and a name like "Pulse 1 3.wav" says nothing about which song it came from.
 			//
@@ -1327,51 +1314,35 @@ ContentSlot::ContentSlot (toybox::PlaybackEngine& engineToUse)
 			ExportReport report;
 			report.folder = parent.getChildFile (juce::File::createLegalFileName (folderName));
 
-			if (! report.folder.createDirectory ().wasOk ())
+			// Taken again inside this lambda: a nested lambda captures nothing implicitly, and the
+			// outer reference would be a dangling one if it did.
+			const auto& drawn = keyboardPanel->drawnSnapshot ();
+
+			report.channelsSeen = (int) drawn.channels.size ();
+
+			if (report.folder.createDirectory ().wasOk ())
 			{
-				// Nothing was written, and saying so per channel is the honest count: every row
-				// this export had is one it could not place.
-				report.failed = (int) channels.size ();
-				showExportReport (report);
-				return;
+				// The loop that used to live here asked the slot for its channel count and then
+				// indexed the panel's array, so it ran zero times on a full screen. It is one
+				// function now, and the function is tested.
+				const auto outcome = playback::exportWavetables (drawn,
+																 report.folder.getFullPathName ().toStdString ());
+
+				report.written = outcome.written;
+				report.skippedSample = outcome.skippedSample;
+				report.failed = outcome.failed;
+			}
+			else
+			{
+				// Nothing could be placed, and saying so per channel is the honest count: every
+				// row this export had is one it could not write.
+				report.failed = report.channelsSeen;
 			}
 
-			for (std::size_t i = 0; i < snapshot.channels.size (); ++i)
+			if (onExportReport != nullptr)
 			{
-				const auto& channel = channels[i];
-
-				// Everything the panel can draw, not only the channels whose shape arrives as data.
-				// This used to test `channel.wave`, which only FDS and N163 ever fill - so a
-				// 2A03 or VRC6 song exported nothing at all, and the button looked broken.
-				//
-				// A sampled row is the other side of that line: its mark is synthesised from the
-				// sample's identity rather than from sample data, so writing it would produce a
-				// wavetable describing nothing. Those want a PCM export, which is not built yet.
-				if (! playback::hasPeriodicShape (channel))
-				{
-					++report.skippedSample;
-					continue;
-				}
-
-				const auto name = juce::File::createLegalFileName (juce::String (channel.chipName)
-																   + "_" + juce::String (channel.name)
-																   + "_" + juce::String ((int) i + 1))
-								  + ".wav";
-
-				if (playback::writeCycleWav (channel, report.folder.getChildFile (name).getFullPathName ().toStdString ()))
-				{
-					++report.written;
-				}
-				else
-				{
-					++report.failed;
-				}
+				onExportReport (report);
 			}
-
-			exportStatus = juce::String (report.written) + " WAV";
-			keyboardPanel->repaint ();
-
-			showExportReport (report);
 		});
 	};
 
@@ -1426,29 +1397,11 @@ void ContentSlot::refresh (void)
 	}
 }
 
-void ContentSlot::showExportReport (const ExportReport& report)
-{
-	// Built on first use: most sessions never export, and this is a whole-window child.
-	if (exportOverlay == nullptr)
-	{
-		exportOverlay = std::make_unique<ExportReportOverlay> ();
-		exportOverlay->onClose = [this] { exportOverlay->setVisible (false); };
-		addChildComponent (*exportOverlay);
-	}
-
-	exportOverlay->setReport (report);
-	exportOverlay->setBounds (getLocalBounds ());
-	exportOverlay->setVisible (true);
-	exportOverlay->toFront (false);
-	exportOverlay->grabKeyboardFocus ();		// so escape works without clicking first
-}
-
 void ContentSlot::refreshLanguage (void)
 {
 	if (mixer != nullptr) { mixer->refreshLanguage (); }
 	if (keyboardPanel != nullptr) { keyboardPanel->refreshLanguage (); }
 	if (scopePanel != nullptr) { scopePanel->repaint (); }
-	if (exportOverlay != nullptr) { exportOverlay->refreshLanguage (); }
 }
 
 void ContentSlot::songChanged (void)
@@ -1459,7 +1412,6 @@ void ContentSlot::songChanged (void)
 	snapshot.channels.clear ();
 	snapshot.valid = false;
 	lastChannelCount = -1;
-	exportStatus.clear ();
 
 	if (keyboardPanel != nullptr)
 	{
@@ -1496,7 +1448,6 @@ void ContentSlot::resized (void)
 	if (mixer != nullptr) { mixer->setBounds (getLocalBounds ()); }
 	if (keyboardPanel != nullptr) { keyboardPanel->setBounds (inner); }
 	if (scopePanel != nullptr) { scopePanel->setBounds (inner); }
-	if (exportOverlay != nullptr) { exportOverlay->setBounds (getLocalBounds ()); }
 }
 
 void ContentSlot::timerCallback (void)
