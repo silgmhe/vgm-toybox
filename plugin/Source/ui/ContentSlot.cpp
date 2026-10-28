@@ -185,6 +185,14 @@ public:
 		afterSnapshot ();
 	}
 
+	/** The snapshot this panel is drawing.
+
+		The slot moves its own copy in here every frame - that is what the rvalue overload above
+		bought - so by the time a FileChooser comes back, the slot's copy is empty. The exporter
+		used to read the slot's, and reported "nothing to export" over a screen full of waveforms.
+	*/
+	const toybox::playback::ChipStateSnapshot& drawnSnapshot (void) const { return snapshot; }
+
 	/** Everything both setSnapshot overloads do once the copy is in place. */
 	void afterSnapshot (void)
 	{
@@ -1274,7 +1282,12 @@ ContentSlot::ContentSlot (toybox::PlaybackEngine& engineToUse)
 	{
 		// The export lives with the panel that owns the waves, but the file chooser is the
 		// slot's: one chooser per page rather than one per view.
-		const int writable = (int) snapshot.channels.size ();
+		//
+		// Read from the panel, not from this slot. timerCallback() moves the slot's snapshot into
+		// the panel every frame, so the slot's copy is empty by the time this runs - which is why
+		// asking for an export of a screen full of waveforms reported that there was nothing to
+		// export. The panel's copy is also the one on screen, so the files match the picture.
+		const int writable = (int) keyboardPanel->drawnSnapshot ().channels.size ();
 
 		if (writable == 0)
 		{
@@ -1299,6 +1312,10 @@ ContentSlot::ContentSlot (toybox::PlaybackEngine& engineToUse)
 				return;
 			}
 
+			// The panel's copy, taken here rather than outside this lambda: a nested lambda captures
+			// nothing implicitly, and this is the one the picture was drawn from.
+			const auto& channels = keyboardPanel->drawnSnapshot ().channels;
+
 			// One folder per song. Exporting two songs into the same directory interleaved their
 			// files, and a name like "Pulse 1 3.wav" says nothing about which song it came from.
 			//
@@ -1314,14 +1331,14 @@ ContentSlot::ContentSlot (toybox::PlaybackEngine& engineToUse)
 			{
 				// Nothing was written, and saying so per channel is the honest count: every row
 				// this export had is one it could not place.
-				report.failed = (int) snapshot.channels.size ();
+				report.failed = (int) channels.size ();
 				showExportReport (report);
 				return;
 			}
 
 			for (std::size_t i = 0; i < snapshot.channels.size (); ++i)
 			{
-				const auto& channel = snapshot.channels[i];
+				const auto& channel = channels[i];
 
 				// Everything the panel can draw, not only the channels whose shape arrives as data.
 				// This used to test `channel.wave`, which only FDS and N163 ever fill - so a
