@@ -4555,9 +4555,13 @@ void testWaveExport (void)
 
 		check (std::abs (level - std::round (level)) < 0.001f, "four bits lands on a fifteenth");
 
-		// Sixteen bits is 65535 intervals, which is beneath anything measurable here.
+		// Sixteen bits is 65535 intervals and thirty-two is four billion; both are beneath the
+		// precision of a float, so neither changes a value anyone can measure. Thirty-two also
+		// exercises the shift that used to be undefined at this depth.
 		check (std::abs (quantiseSample (0.12345f, 16) - 0.12345f) < 0.001f,
 			   "sixteen bits is transparent");
+		check (std::abs (quantiseSample (0.12345f, 32) - 0.12345f) < 0.001f,
+			   "and thirty-two is as well");
 	}
 
 	// --- the whole export, as the window drives it ---------------------------------------------

@@ -245,7 +245,7 @@ public:
 	void setExportBits (int bits);
 
 	static constexpr int minExportBits = 0;
-	static constexpr int maxExportBits = 16;
+	static constexpr int maxExportBits = 32;
 	static constexpr int defaultExportBits = 0;
 
 	/** The range the length accepts, and the value used when nothing is stored. */

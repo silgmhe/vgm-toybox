@@ -63,7 +63,7 @@ public:
 		secondsSlider.setComponentID ("export.options.seconds");
 		secondsValue.setComponentID ("export.options.secondsValue");
 
-		setUpRow (bitsCaption, bitsSlider, bitsValue, 1.0, 16.0);
+		setUpRow (bitsCaption, bitsSlider, bitsValue, 1.0, 32.0);
 		bitsSlider.setComponentID ("export.options.bits");
 		bitsValue.setComponentID ("export.options.bitsValue");
 

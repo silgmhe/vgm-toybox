@@ -62,7 +62,12 @@ constexpr double kReferenceHz = 440.0;
 
 /** The quantisation choices the export window offers. */
 constexpr int kNativeBits = 0;		// what the chip produces, per channel
-constexpr int kMaxBits = 16;
+/** The widest depth the window offers.
+
+	Thirty-two is what a float sample can hold and what the file already is, so it is the last
+	setting that still means something: past that the quantiser has nothing left to snap.
+*/
+constexpr int kMaxBits = 32;
 
 /** How a file is written, because the two destinations want opposite things. */
 enum class ExportMode

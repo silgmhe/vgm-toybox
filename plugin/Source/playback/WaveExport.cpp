@@ -149,12 +149,15 @@ float quantiseSample (float value, int bits)
 	// `steps` is the number of intervals, so a one-bit shape has one and lands on two levels.
 	// Scaling through 0..1 rather than -1..1 keeps the rounding symmetric at both rails: a value
 	// that is already at +1 stays there instead of being rounded past it.
-	const auto steps = (float) ((1 << clamped) - 1);
+	//
+	// ldexp rather than `1 << clamped`: at thirty-two bits that shift is undefined, and a double
+	// has the fifty-three bits of mantissa this needs to land exactly on 2^32 - 1.
+	const auto steps = std::ldexp (1.0, clamped) - 1.0;
 
-	const auto scaled = (std::clamp) (value, -1.0f, 1.0f) * 0.5f + 0.5f;
+	const auto scaled = (double) (std::clamp) (value, -1.0f, 1.0f) * 0.5 + 0.5;
 	const auto snapped = std::round (scaled * steps) / steps;
 
-	return snapped * 2.0f - 1.0f;
+	return (float) (snapped * 2.0 - 1.0);
 }
 
 bool writeCycleWav (const ChannelState& channel, const std::string& path,
