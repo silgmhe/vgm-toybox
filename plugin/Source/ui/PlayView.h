@@ -49,6 +49,12 @@ public:
 	*/
 	std::function<void (const ExportReport&)> onExportReport;
 
+	/** The same shape for the two steps before it: this page asks the editor for the options
+		window, and the editor calls beginExport() back with the answer. */
+	std::function<void ()> onExportOptions;
+
+	void beginExport (const ExportOptions& options);
+
 	/** Which panel the content area is showing. The View menu and its Ctrl+1..3 map to this. */
 	void setContentView (ContentView view);
 	ContentView getContentView (void) const;

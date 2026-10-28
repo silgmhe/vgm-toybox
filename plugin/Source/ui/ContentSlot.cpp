@@ -1,6 +1,7 @@
 #include "ContentSlot.h"
 
 #include "ButtonPaint.h"
+#include "ExportOptionsOverlay.h"
 #include "ExportReportOverlay.h"
 #include "MixerPanel.h"
 #include "KeyboardLayout.h"
@@ -1271,13 +1272,8 @@ ContentSlot::ContentSlot (toybox::PlaybackEngine& engineToUse)
 	keyboardPanel = std::make_unique<KeyboardPanel> (engine);
 	keyboardPanel->onExport = [this]
 	{
-		// The export lives with the panel that owns the waves, but the file chooser is the
-		// slot's: one chooser per page rather than one per view.
-		//
-		// Read from the panel, never from this slot. timerCallback() moves the slot's snapshot
-		// into the panel every frame, so the slot's copy is empty by the time anything here runs
-		// - which is what made an export of a screen full of waveforms report that there was
-		// nothing to export.
+		// Two steps now: ask what to write, then choose where. The window that asks belongs to the
+		// editor, so all this does is request it - beginExport() is called back with the answer.
 		if (keyboardPanel->drawnSnapshot ().channels.empty ())
 		{
 			if (onExportReport != nullptr)
@@ -1288,62 +1284,10 @@ ContentSlot::ContentSlot (toybox::PlaybackEngine& engineToUse)
 			return;
 		}
 
-		waveChooser = std::make_unique<juce::FileChooser> (toybox::i18n::tr ("visualiser.export"),
-														   juce::File::getSpecialLocation (juce::File::userDesktopDirectory),
-														   juce::String (), true);
-
-		waveChooser->launchAsync (juce::FileBrowserComponent::openMode
-								  | juce::FileBrowserComponent::canSelectDirectories,
-								  [this] (const juce::FileChooser& chooser)
+		if (onExportOptions != nullptr)
 		{
-			const auto parent = chooser.getResult ();
-
-			if (parent == juce::File () || ! parent.isDirectory ())
-			{
-				return;
-			}
-
-			// One folder per song. Exporting two songs into the same directory interleaved their
-			// files, and a name like "Pulse 1 3.wav" says nothing about which song it came from.
-			//
-			// A plugin instance may have been handed its song through the host rather than a file
-			// the engine knows, so the name can be empty; the folder still needs one.
-			const auto songName = engine.getFile ().getFileNameWithoutExtension ();
-			const auto folderName = songName.isNotEmpty () ? songName : juce::String ("wavetables");
-
-			ExportReport report;
-			report.folder = parent.getChildFile (juce::File::createLegalFileName (folderName));
-
-			// Taken again inside this lambda: a nested lambda captures nothing implicitly, and the
-			// outer reference would be a dangling one if it did.
-			const auto& drawn = keyboardPanel->drawnSnapshot ();
-
-			report.channelsSeen = (int) drawn.channels.size ();
-
-			if (report.folder.createDirectory ().wasOk ())
-			{
-				// The loop that used to live here asked the slot for its channel count and then
-				// indexed the panel's array, so it ran zero times on a full screen. It is one
-				// function now, and the function is tested.
-				const auto outcome = playback::exportWavetables (drawn,
-																 report.folder.getFullPathName ().toStdString ());
-
-				report.written = outcome.written;
-				report.skippedSample = outcome.skippedSample;
-				report.failed = outcome.failed;
-			}
-			else
-			{
-				// Nothing could be placed, and saying so per channel is the honest count: every
-				// row this export had is one it could not write.
-				report.failed = report.channelsSeen;
-			}
-
-			if (onExportReport != nullptr)
-			{
-				onExportReport (report);
-			}
-		});
+			onExportOptions ();
+		}
 	};
 
 	scopePanel = std::make_unique<ScopePanel> ();
@@ -1387,6 +1331,62 @@ void ContentSlot::setView (ContentView view)
 
 	resized ();
 	repaint ();
+}
+
+void ContentSlot::beginExport (const ExportOptions& options)
+{
+	waveChooser = std::make_unique<juce::FileChooser> (toybox::i18n::tr ("visualiser.export"),
+													   juce::File::getSpecialLocation (juce::File::userDesktopDirectory),
+													   juce::String (), true);
+
+	waveChooser->launchAsync (juce::FileBrowserComponent::openMode
+							  | juce::FileBrowserComponent::canSelectDirectories,
+							  [this, options] (const juce::FileChooser& chooser)
+	{
+		const auto parent = chooser.getResult ();
+
+		if (parent == juce::File () || ! parent.isDirectory ())
+		{
+			return;
+		}
+
+		// One folder per song. Exporting two songs into one directory interleaved their files, and
+		// a name like "Pulse 1.wav" says nothing about which song it came from.
+		//
+		// A plugin instance may have been handed its song through the host rather than a file the
+		// engine knows, so the name can be empty; the folder still needs one.
+		const auto songName = engine.getFile ().getFileNameWithoutExtension ();
+		const auto folderName = songName.isNotEmpty () ? songName : juce::String ("wavetables");
+
+		ExportReport report;
+		report.folder = parent.getChildFile (juce::File::createLegalFileName (folderName));
+
+		const auto& drawn = keyboardPanel->drawnSnapshot ();
+
+		report.channelsSeen = (int) drawn.channels.size ();
+
+		if (report.folder.createDirectory ().wasOk ())
+		{
+			const auto mode = options.looped ? playback::ExportMode::looped : playback::ExportMode::single;
+
+			const auto outcome = playback::exportWavetables (drawn,
+															 report.folder.getFullPathName ().toStdString (),
+															 mode, (double) options.seconds);
+
+			report.written = outcome.written;
+			report.skippedSample = outcome.skippedSample;
+			report.failed = outcome.failed;
+		}
+		else
+		{
+			report.failed = report.channelsSeen;
+		}
+
+		if (onExportReport != nullptr)
+		{
+			onExportReport (report);
+		}
+	});
 }
 
 void ContentSlot::refresh (void)

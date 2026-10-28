@@ -19,6 +19,9 @@ class MixerPanel;
 	stays as light as it is; the definition is needed only where the report is built. */
 struct ExportReport;
 
+/** What the user chose before an export started - see ExportOptionsOverlay.h. */
+struct ExportOptions;
+
 /** What the rectangle above the transport is showing. */
 enum class ContentView
 {
@@ -76,6 +79,14 @@ public:
 		blocked. Same shape as the settings panel, which covers the window.
 	*/
 	std::function<void (const ExportReport&)> onExportReport;
+
+	/** Called when the export button is pressed, to ask what to write. The window that asks lives
+		with the editor, for the same reason the report does. */
+	std::function<void ()> onExportOptions;
+
+	/** Starts the export with the options the user chose - called back by the editor once its
+		options window has been confirmed. */
+	void beginExport (const ExportOptions& options);
 	ContentView getView (void) const { return current; }
 
 	void refresh (void);

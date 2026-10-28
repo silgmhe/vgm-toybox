@@ -230,6 +230,13 @@ language: 简体中文
 	"export.none" = "没有写入任何文件。";
 	"export.noChannels" = "没有写入任何文件：面板根本没有收到通道数据。";
 	"export.seen" = "快照中的通道数：{0}";
+	"export.options.title" = "导出波表";
+	"export.options.single" = "单周期 - 给波表合成器（Serum）";
+	"export.options.looped" = "多周期 - 给采样器，A4 音高";
+	"export.options.seconds" = "时长";
+	"export.options.cancel" = "取消";
+	"export.options.confirm" = "导出";
+	"export.options.hint" = "单周期是波表合成器读的形式：按你按下的音符演奏这个形状。多周期是采样器读的形式：它自带音高，这里一律写成 A4，不管那个通道原本在奏什么。";
 	"export.close" = "关闭";
 "visualiser.scope" = "波形";
 "settings.nes" = "NSF";

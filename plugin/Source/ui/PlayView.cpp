@@ -27,6 +27,19 @@ PlayView::PlayView (toybox::PlaybackEngine& playback, bool syncAvailable)
 			onExportReport (report);
 		}
 	};
+
+	contentSlot.onExportOptions = [this]
+	{
+		if (onExportOptions != nullptr)
+		{
+			onExportOptions ();
+		}
+	};
+}
+
+void PlayView::beginExport (const ExportOptions& options)
+{
+	contentSlot.beginExport (options);
 }
 
 void PlayView::setContentView (ContentView view)

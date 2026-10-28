@@ -234,6 +234,13 @@ language: English
 	"export.none" = "Nothing was written.";
 	"export.noChannels" = "Nothing was written: the panel is not receiving channel state at all.";
 	"export.seen" = "Channels in the snapshot: {0}";
+	"export.options.title" = "Export wavetables";
+	"export.options.single" = "Single cycle - for a wavetable synth (Serum)";
+	"export.options.looped" = "Looped - for a sampler, at A4";
+	"export.options.seconds" = "Length";
+	"export.options.cancel" = "Cancel";
+	"export.options.confirm" = "Export";
+	"export.options.hint" = "A single cycle is what a wavetable synth reads: it plays the shape at whatever note you press. A loop is what a sampler reads: it has a pitch, and these are written at A4 whatever the channel was playing.";
 	"export.close" = "Close";
 "visualiser.scope" = "Waveform";
 "settings.nes" = "NSF";
