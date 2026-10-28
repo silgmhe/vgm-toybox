@@ -121,6 +121,11 @@ public:
 		confirmButton.setButtonText (i18n::tr ("export.options.confirm"));
 
 		refreshValues ();
+
+		// The sentences just changed length, so the rectangles they are drawn into have to be
+		// recomputed - resized() measures the new text, and a component whose bounds did not
+		// change does not get that call on its own.
+		resized ();
 		repaint ();
 	}
 
@@ -140,23 +145,30 @@ public:
 		g.drawText (i18n::tr ("export.options.title"), titleArea,
 					juce::Justification::centredLeft, false);
 
-		// Both hint areas come from resized(), so they cannot drift from the controls above them.
-		// Six lines allowed and enough height for four: drawFittedText shrinks the type to make the
-		// text fit the lines it is given, which is what squashed these paragraphs into a smeared
-		// horizontal band. Room to wrap is the fix - the point is that it reads.
+		// Both hint areas come from resized(), and so does their height, so they cannot drift from
+		// the controls above them or from the length of the sentence.
+		//
+		// The last argument is the one that was missing: drawFittedText's horizontal scale is
+		// unlimited by default, and it reaches for that before it wraps. A paragraph that did not
+		// fit the height it was given came out as one very narrow line - legible as an outline,
+		// unreadable as a sentence. Refusing to narrow the glyphs leaves wrapping as the only
+		// option, which is what the extra height below buys room for.
 		g.setColour (theme::secondaryText ());
-		g.setFont (juce::Font (juce::FontOptions (12.5f)));
+		g.setFont (juce::Font (juce::FontOptions (kHintFontHeight)));
 		g.drawFittedText (i18n::tr ("export.options.hint"), modeHintArea,
-						  juce::Justification::topLeft, 6);
+						  juce::Justification::topLeft, 100, 1.0f);
 
 		g.drawFittedText (i18n::tr ("export.options.bitsHint"), bitsHintArea,
-						  juce::Justification::topLeft, 6);
+						  juce::Justification::topLeft, 100, 1.0f);
 	}
 
 	void resized (void) override
 	{
 		const auto panel = panelBounds ();
 		auto inner = panel.reduced (24, 22);
+
+		// The width the paragraphs are measured against, which is the width they are drawn in.
+		const int textWidth = inner.getWidth ();
 
 		auto footer = inner.removeFromBottom (28);
 		inner.removeFromBottom (10);
@@ -175,9 +187,9 @@ public:
 		secondsSlider.setBounds (secondsRow.reduced (8, 0));
 		inner.removeFromTop (8);
 
-		// Heights chosen so the paragraphs wrap rather than shrink: the first is the longer of the
-		// two, and at 12.5 points it wants three lines at this width.
-		modeHintArea = inner.removeFromTop (56);
+		// Measured, not guessed: the two sentences are of different lengths, and they are of
+		// different lengths again in another language. A fixed budget fits one of the four.
+		modeHintArea = inner.removeFromTop (textHeight (i18n::tr ("export.options.hint"), textWidth));
 		inner.removeFromTop (12);
 
 		auto bitsRow = inner.removeFromTop (24);
@@ -189,7 +201,7 @@ public:
 		nativeBitsButton.setBounds (inner.removeFromTop (22));
 		inner.removeFromTop (8);
 
-		bitsHintArea = inner.removeFromTop (44);
+		bitsHintArea = inner.removeFromTop (textHeight (i18n::tr ("export.options.bitsHint"), textWidth));
 
 		confirmButton.setBounds (footer.removeFromRight (88));
 		footer.removeFromRight (8);
@@ -268,13 +280,50 @@ private:
 		bitsValue.setEnabled (custom);
 	}
 
+	/** The size both paragraphs are drawn at, and the size they are measured at - one number, or
+		the measurement describes a sentence nobody sees. */
+	static constexpr float kHintFontHeight = 12.5f;
+
+	/** How tall a paragraph needs to be at `width`, measured rather than guessed.
+
+		A fixed height is only correct for one sentence in one language, and this window has two
+		sentences in two: the Chinese one is noticeably longer than the English one, and whichever
+		budget was picked fitted one and left the other to be squeezed into the space.
+	*/
+	static int textHeight (const juce::String& text, int width)
+	{
+		juce::AttributedString block;
+		block.setFont (juce::Font (juce::FontOptions (kHintFontHeight)));
+		block.setJustification (juce::Justification::topLeft);
+		block.append (text);
+
+		juce::TextLayout layout;
+		layout.createLayout (block, (float) juce::jmax (1, width));
+
+		return (int) std::ceil (layout.getHeight ());
+	}
+
 	juce::Rectangle<int> panelBounds (void) const
 	{
-		// Wider than the report window: both paragraphs sit on one line of controls, and a narrow
-		// column turns every one of them into four short lines.
-		const int width = juce::jmin (560, getWidth () - 60);
-		const int height = juce::jmin (460, getHeight () - 60);
-		return getLocalBounds ().withSizeKeepingCentre (juce::jmax (360, width), juce::jmax (400, height));
+		// Wider than the report window: a narrow column turns both paragraphs into four short
+		// lines each. The height is the sum of what the contents need, so that a longer sentence
+		// makes the window taller instead of making the text cramped.
+		const int width = juce::jlimit (360, 560, getWidth () - 60);
+		const int textWidth = width - 48;
+
+		const int content = 26 + 10							// title and the gap under it
+						  + 24 + 4 + 24 + 12				// the two choices
+						  + 24 + 8							// duration row
+						  + textHeight (i18n::tr ("export.options.hint"), textWidth) + 12
+						  + 24 + 8							// depth row
+						  + 22 + 8							// the chip's own depth
+						  + textHeight (i18n::tr ("export.options.bitsHint"), textWidth)
+						  + 10 + 28;						// gap, then the buttons
+
+		const int height = juce::jlimit (300, 700, content + 44);
+		const int ceiling = juce::jmax (240, getHeight () - 60);
+
+		return getLocalBounds ().withSizeKeepingCentre (width, juce::jmin (height, ceiling));
 	}
 
 	juce::ToggleButton singleButton;
