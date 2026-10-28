@@ -5,7 +5,6 @@
 #include "KeyboardLayout.h"
 #include "KeyboardRowLayout.h"
 #include "KeyboardRowPaint.h"
-#include "WaveShape.h"
 #include "Theme.h"
 #include "i18n/LanguageManager.h"
 #include "playback/PlaybackEngine.h"

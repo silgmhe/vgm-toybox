@@ -3,7 +3,7 @@
 #include <cmath>
 #include <cstdint>
 
-namespace toybox::ui::waveform
+namespace toybox::playback::waveform
 {
 
 namespace
@@ -173,4 +173,4 @@ std::vector<float> cycleFor (int waveKind, float duty, int shapeParameter)
 	return cycle;
 }
 
-} // namespace toybox::ui::waveform
+} // namespace toybox::playback::waveform

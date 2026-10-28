@@ -5,7 +5,7 @@
 #include "i18n/LanguageManager.h"
 #include "SoftShadow.h"
 #include "Theme.h"
-#include "WaveShape.h"
+#include "playback/WaveShape.h"
 
 namespace toybox::ui::keyboard
 {
@@ -248,7 +248,7 @@ void paintWave (juce::Graphics& g, juce::Rectangle<int> area,
 
 	if (stale)
 	{
-		const auto cycle = waveform::cycleFor (channel.waveKind, channel.duty, channel.shapeParameter);
+		const auto cycle = playback::waveform::cycleFor (channel.waveKind, channel.duty, channel.shapeParameter);
 
 		cache.valid = false;
 

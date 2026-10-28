@@ -2,7 +2,7 @@
 
 #include <vector>
 
-namespace toybox::ui::waveform
+namespace toybox::playback::waveform
 {
 
 /** How a channel makes its shape, as the backend describes it (see playback/ChipState.h).
@@ -35,4 +35,4 @@ enum class Kind
 */
 std::vector<float> cycleFor (int waveKind, float duty, int shapeParameter = 0);
 
-} // namespace toybox::ui::waveform
+} // namespace toybox::playback::waveform

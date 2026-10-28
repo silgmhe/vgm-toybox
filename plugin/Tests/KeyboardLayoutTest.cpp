@@ -19,7 +19,7 @@
 
 #include "ui/KeyboardLayout.h"
 #include "ui/KeyboardRowLayout.h"
-#include "ui/WaveShape.h"
+#include "playback/WaveShape.h"
 #include "TestSupport.h"
 
 using namespace toybox::ui;
@@ -121,7 +121,7 @@ void testShifts (void)
 
 void testWaveShapes (void)
 {
-	using namespace toybox::ui::waveform;
+	using namespace toybox::playback::waveform;
 
 	// A pulse is high for its duty and low for the rest; the width is clamped so neither half
 	// disappears, which would draw a flat line.
