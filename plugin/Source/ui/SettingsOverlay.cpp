@@ -41,6 +41,25 @@ namespace
 	// the page width. Its heading reserves a second line instead of letting JUCE squash the
 	// glyphs horizontally; the page has the room, the General page does not.
 	constexpr int kTwoLineHeadingHeight = 64;
+
+	/** How tall `text` needs to be at `width`, so a hint can be given the lines it needs.
+
+		A fixed height is right for one sentence in one language and wrong elsewhere: the MIDI page's
+		root hint is three lines in Chinese and four in English at this width, and thirty-two pixels
+		took two and ended the rest in an ellipsis.
+	*/
+	int wrappedHeight (const juce::String& text, const juce::Font& font, int width)
+	{
+		juce::AttributedString block;
+		block.setFont (font);
+		block.setJustification (juce::Justification::topLeft);
+		block.append (text);
+
+		juce::TextLayout layout;
+		layout.createLayout (block, (float) juce::jmax (1, width));
+
+		return (int) std::ceil (layout.getHeight ());
+	}
 	constexpr int kThemeChoiceGroup = 1;	// one radio group per page, so any number will do
 
 	/** The heading both pages start with: what the page is, then what it does. */
@@ -1425,7 +1444,13 @@ void MidiSettingsPage::resized (void)
 	rootHelp.setBounds (rootRow.removeFromLeft (16).withSizeKeepingCentre (16, 16));
 
 	area.removeFromTop (2);
-	rootHint.setBounds (area.removeFromTop (32));	// room for two lines on a narrow page
+
+	// Measured rather than budgeted. Thirty-two pixels was "room for two lines", and this hint is
+	// three lines in Chinese: the third was replaced by an ellipsis, which is a worse outcome than
+	// the two lines the budget was for.
+	rootHint.setBounds (area.removeFromTop (juce::jmax (18, wrappedHeight (rootHint.getText (),
+																			 rootHint.getFont (),
+																			 area.getWidth ()))));
 }
 
 void MidiSettingsPage::lookAndFeelChanged (void)
