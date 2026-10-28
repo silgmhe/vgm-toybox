@@ -53,6 +53,49 @@ namespace
 		return out;
 	}
 
+	/** The depth above which the horizontal steps stop being the shape and start being a defect.
+
+		Eight is where a wavetable stops being a picture of a quantised counter: at or below it the
+		platforms are what the chip's four bits look like, and above it they are a thirty-two-step
+		artefact sitting on top of a sixteen-bit signal - the loudest thing in the file, and the only
+		thing in it.
+	*/
+	constexpr int kStaircaseBits = 8;
+
+	/** `cycle` stretched to `samples` by interpolating between neighbours.
+
+		The other half of the staircase decision: a shape drawn at thirty-two points has thirty-two
+		platforms if each point is repeated, and a smooth line if it is not. Which one is wanted
+		depends on the depth being asked for, and writeCycleWav picks - see kStaircaseBits.
+
+		The interpolation wraps at the end, so the step between the last sample and the first is
+		spread across the boundary the way every other step is.
+	*/
+	std::vector<float> linear (const std::vector<float>& cycle, std::size_t samples)
+	{
+		std::vector<float> out;
+		out.reserve (samples);
+
+		const auto size = cycle.size ();
+		const auto last = (std::size_t) (size - 1);
+
+		for (std::size_t i = 0; i < samples; ++i)
+		{
+			const double position = (double) i * (double) size / (double) samples;
+			const auto index = (std::size_t) position;
+			const auto fraction = (float) (position - (double) index);
+
+			const auto next = (index >= last) ? (std::size_t) 0 : index + 1;
+
+			const float a = cycle[std::min (index, last)];
+			const float b = cycle[std::min (next, last)];
+
+			out.push_back (a + (b - a) * fraction);
+		}
+
+		return out;
+	}
+
 	/** `cycle` repeated `periods` times, unchanged - a loop for a sampler, not a shape. */
 	std::vector<float> repeated (const std::vector<float>& cycle, int periods)
 	{
@@ -129,12 +172,27 @@ bool writeCycleWav (const ChannelState& channel, const std::string& path,
 		return false;
 	}
 
+	// Whatever the chip produced is what gets written unless the user asked for a depth.
+	const auto depth = (bits == kNativeBits) ? nativeBits (channel.waveKind)
+											 : std::clamp (bits, 1, kMaxBits);
+
 	std::vector<float> samples;
 	auto sampleRate = (uint32_t) kWavetableRate;
 
 	if (mode == ExportMode::single)
 	{
-		samples = nearest (cycle, kWavetableSamples);
+		// Two different things are being asked for, and they are both about steps.
+		//
+		// At or below kStaircaseBits the user wants the coarse shape: the chip's own quantisation
+		// is the point, and holding each source sample is what makes the steps square - a
+		// thirty-two-point cycle becomes thirty-two platforms, which is what the reference
+		// wavetable does.
+		//
+		// Above it the same platforms are no longer the shape but a defect: at sixteen bits the
+		// vertical resolution is finer than the ear and the horizontal one is the loudest thing in
+		// the file. Interpolating is what "sixteen bits" means here.
+		samples = (depth > kStaircaseBits) ? linear (cycle, kWavetableSamples)
+										   : nearest (cycle, kWavetableSamples);
 	}
 	else
 	{
@@ -220,13 +278,6 @@ bool writeCycleWav (const ChannelState& channel, const std::string& path,
 
 	std::vector<uint8_t> fileBytes = header;
 	fileBytes.reserve (header.size () + dataBytes);
-
-	// Whatever the chip produced is what gets written unless the user asked for a depth; a shape
-	// that is already four bits is unchanged by "native", and forced to something coarser by a
-	// number. The file itself stays sixteen-bit either way - the quantisation is a property of the
-	// samples, not of the container.
-	const auto depth = (bits == kNativeBits) ? nativeBits (channel.waveKind)
-											 : std::clamp (bits, 1, kMaxBits);
 
 	for (const float sample : samples)
 	{

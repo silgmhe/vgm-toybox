@@ -4731,6 +4731,80 @@ void testWaveExport (void)
 			std::remove (shaped.c_str ());
 		}
 
+		// --- depth decides whether the steps are the shape or a defect ---------------------------
+		//
+		// Below eight bits the platforms are the point: a four-bit counter really does hold each
+		// level. Above it the same platforms are a thirty-two-step artefact on a sixteen-bit
+		// signal, so the cycle is interpolated instead. Both files are one period of the same
+		// triangle; only the horizontal treatment differs.
+		{
+			ChannelState triangle;
+			triangle.chipName = "2A03";
+			triangle.name = "Triangle";
+			triangle.waveKind = (int) waveform::Kind::triangle;
+
+			const auto readHead = [] (const std::string& file, std::vector<float>& out)
+			{
+				std::FILE* handle = std::fopen (file.c_str (), "rb");
+
+				if (handle == nullptr)
+				{
+					return false;
+				}
+
+				std::fseek (handle, 100, SEEK_SET);
+
+				for (int i = 0; i < 64; ++i)
+				{
+					const int b0 = std::fgetc (handle);
+					const int b1 = std::fgetc (handle);
+					const int b2 = std::fgetc (handle);
+					const int b3 = std::fgetc (handle);
+
+					const uint32_t bits = (uint32_t) b0 | ((uint32_t) b1 << 8)
+										  | ((uint32_t) b2 << 16) | ((uint32_t) b3 << 24);
+
+					float value = 0.0f;
+					std::memcpy (&value, &bits, sizeof (value));
+					out.push_back (value);
+				}
+
+				std::fclose (handle);
+				return true;
+			};
+
+			const auto allEqual = [] (const std::vector<float>& values)
+			{
+				for (std::size_t i = 1; i < values.size (); ++i)
+				{
+					if (values[i] != values[0])
+					{
+						return false;
+					}
+				}
+
+				return true;
+			};
+
+			const std::string coarse = "__wave_4bit.wav";
+			const std::string fine = "__wave_16bit.wav";
+
+			writeCycleWav (triangle, coarse, ExportMode::single, 2.0, 4);
+			writeCycleWav (triangle, fine, ExportMode::single, 2.0, 16);
+
+			std::vector<float> coarseHead;
+			std::vector<float> fineHead;
+
+			check (readHead (coarse, coarseHead), "the four-bit file reads back");
+			check (readHead (fine, fineHead), "and so does the sixteen-bit one");
+
+			check (allEqual (coarseHead), "four bits holds each level for a platform");
+			check (! allEqual (fineHead), "sixteen bits interpolates instead of holding");
+
+			std::remove (coarse.c_str ());
+			std::remove (fine.c_str ());
+		}
+
 		// --- the marker a wavetable synth reads -------------------------------------------------
 		//
 		// Dragging a file onto the oscillator is refused as a multi-cycle import unless it carries
