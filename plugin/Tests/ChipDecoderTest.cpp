@@ -14,6 +14,9 @@
 
 #include "midi/ChipPlans.h"
 
+#include "playback/WaveExport.h"
+#include "playback/WaveShape.h"
+
 #include "chips/Ay8910Decoder.h"
 #include "chips/C140Decoder.h"
 #include "chips/C352Decoder.h"
@@ -4445,6 +4448,82 @@ void testChipPlans (void)
 		   "an unknown chip promises nothing");
 }
 
+/* The wavetable writer: one period, at the length and rate a synth expects.
+
+	This replaced a writer that repeated the cycle sixteen times and set the sample rate from the
+	note being played, so that a sampler looping the file reproduced the original pitch. Both were
+	right for a sampler and wrong for a wavetable: Serum reads the whole file as one period, so
+	sixteen copies read as a wave that oscillates sixteen times per cycle, and a rate derived from
+	the note makes the file's pitch a property of the song rather than of the shape.
+*/
+void testWaveExport (void)
+{
+	using namespace toybox::playback;
+
+	const char* path = "__wave_export_test.wav";
+
+	// A synthesised shape: the registers describe it, and `wave` is empty - which is the case this
+	// export used to skip, on every chip except FDS and N163.
+	ChannelState pulse;
+	pulse.waveKind = (int) waveform::Kind::pulse;
+	pulse.duty = 0.25f;
+
+	check (hasPeriodicShape (pulse), "a pulse is a period even with an empty wave array");
+	check (cycleOf (pulse).size () == 32, "its cycle is the synthesiser's 32 points");
+
+	check (writeCycleWav (pulse, path), "the wavetable writes");
+
+	std::FILE* file = std::fopen (path, "rb");
+
+	check (file != nullptr, "the written file can be opened");
+
+	if (file != nullptr)
+	{
+		unsigned char header[44] = {};
+		const auto headerRead = std::fread (header, 1, sizeof (header), file);
+
+		std::fseek (file, 0, SEEK_END);
+		const auto size = (long) std::ftell (file);
+		std::fclose (file);
+
+		check (headerRead == sizeof (header), "the header is 44 bytes");
+		check (size == 44 + (long) kWavetableSamples * 2L,
+			   "the file holds one period and not sixteen");
+
+		const auto u32 = [&header] (int at)
+		{
+			return (uint32_t) header[at] | ((uint32_t) header[at + 1] << 8)
+				   | ((uint32_t) header[at + 2] << 16) | ((uint32_t) header[at + 3] << 24);
+		};
+
+		check (header[0] == 'R' && header[1] == 'I' && header[2] == 'F' && header[3] == 'F',
+			   "the file starts with RIFF");
+		check (header[36] == 'd' && header[37] == 'a' && header[38] == 't' && header[39] == 'a',
+			   "and carries a data chunk");
+		check (u32 (24) == (uint32_t) kWavetableRate, "the rate is 44100, not the note's frequency");
+		check (u32 (40) == (uint32_t) kWavetableSamples * 2u, "the data chunk is 2048 samples");
+
+		std::remove (path);
+	}
+
+	// A sampled channel is a recording with a start and an end, so it is not a wavetable. Its row
+	// is drawn from a synthesised mark rather than from sample data, which is why exporting it
+	// would write a picture of nothing.
+	ChannelState dpcm;
+	dpcm.waveKind = (int) waveform::Kind::delta;
+	dpcm.shapeParameter = 3;
+
+	check (! hasPeriodicShape (dpcm), "a DPCM row is not exported as a wavetable");
+
+	// A channel carrying its own table is written from that table, not from a synthesis.
+	ChannelState stored;
+	stored.waveKind = (int) waveform::Kind::stored;
+	stored.wave = { -1.0f, 1.0f, -1.0f, 1.0f };
+
+	check (cycleOf (stored).size () == 4, "a stored table is used as given");
+	check (hasPeriodicShape (stored), "and it is a period");
+}
+
 int main (void)
 {
 	std::printf ("chip decoder test\n");
@@ -4456,6 +4535,8 @@ int main (void)
 	// First, because it is the cheapest thing here and because a table that promises nothing for a
 	// chip whose decoder exists makes every test below describe a promise nobody can reach.
 	testChipPlans();
+
+	testWaveExport();
 
 	testPulseNote();
 	testPitchChange();

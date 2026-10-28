@@ -1,5 +1,7 @@
 #include "WaveExport.h"
 
+#include "WaveShape.h"
+
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
@@ -23,36 +25,79 @@ namespace
 		out.push_back ((uint8_t) (value & 0xFF));
 		out.push_back ((uint8_t) ((value >> 8) & 0xFF));
 	}
+
+	/** `cycle` stretched to `samples`, linearly, wrapping at the end.
+
+		Linear rather than nearest-neighbour: a wavetable is read back as a line, and a 32-step
+		staircase stretched to 2048 would keep all of its stair edges as high-frequency content
+		that the shape never had. Linear interpolation smooths those edges away and leaves the
+		corners of a square wave where they were.
+
+		The wrap matters. Without it the interpolation between the last sample and the first - the
+		step a periodic shape cannot avoid - would be skipped, and a square wave whose duty puts
+		the edge there would come out with a ramp joining its two extremes.
+	*/
+	std::vector<float> resample (const std::vector<float>& cycle, std::size_t samples)
+	{
+		std::vector<float> out;
+		out.reserve (samples);
+
+		const auto size = cycle.size ();
+		const auto last = (std::size_t) (size - 1);
+
+		for (std::size_t i = 0; i < samples; ++i)
+		{
+			// Position in source samples, as a fraction so the wrap is a modulo on indices.
+			const double position = (double) i * (double) size / (double) samples;
+			const auto index = (std::size_t) position;
+			const auto fraction = (float) (position - (double) index);
+
+			const auto next = (index >= last) ? (std::size_t) 0 : index + 1;
+
+			const float a = cycle[std::min (index, last)];
+			const float b = cycle[std::min (next, last)];
+
+			out.push_back (a + (b - a) * fraction);
+		}
+
+		return out;
+	}
 }
 
-bool writeCycleWav (const ChannelState& channel, const std::string& path, int repeats)
+std::vector<float> cycleOf (const ChannelState& channel)
 {
-	if (channel.wave.size () < 2 || path.empty ())
+	if (channel.wave.size () >= 2)
+	{
+		return channel.wave;
+	}
+
+	return waveform::cycleFor (channel.waveKind, channel.duty, channel.shapeParameter);
+}
+
+bool hasPeriodicShape (const ChannelState& channel)
+{
+	return channel.waveKind != (int) waveform::Kind::delta
+		   && cycleOf (channel).size () >= 2;
+}
+
+bool writeCycleWav (const ChannelState& channel, const std::string& path)
+{
+	if (path.empty ())
 	{
 		return false;
 	}
 
-	const int cycleLength = (int) channel.wave.size ();
-	const int copies = std::max (1, repeats);
-	const int frames = cycleLength * copies;
+	const auto cycle = cycleOf (channel);
 
-	// The rate that makes the cycle sound at the note it was playing. Outside 4 kHz..192 kHz a
-	// sampler will refuse it or resample it into something unrecognisable, so the file falls back
-	// to a plain 44100 and becomes a shape rather than a note.
-	double rate = 44100.0;
-
-	if (channel.frequency > 0.0f)
+	if (cycle.size () < 2)
 	{
-		const double natural = (double) channel.frequency * (double) cycleLength;
-
-		if (natural >= 4000.0 && natural <= 192000.0)
-		{
-			rate = natural;
-		}
+		return false;
 	}
 
-	const auto sampleRate = (uint32_t) std::lround (rate);
-	const uint32_t dataBytes = (uint32_t) frames * 2u;
+	const auto shape = resample (cycle, kWavetableSamples);
+
+	const auto sampleRate = (uint32_t) kWavetableRate;
+	const auto dataBytes = (uint32_t) shape.size () * 2u;
 
 	std::vector<uint8_t> header;
 	header.reserve (44);
@@ -80,16 +125,13 @@ bool writeCycleWav (const ChannelState& channel, const std::string& path, int re
 
 	file.write (reinterpret_cast<const char*> (header.data ()), (std::streamsize) header.size ());
 
-	for (int copy = 0; copy < copies; ++copy)
+	for (const float sample : shape)
 	{
-		for (int i = 0; i < cycleLength; ++i)
-		{
-			const float value = (std::clamp) (channel.wave[(std::size_t) i], -1.0f, 1.0f);
-			const auto pcm = (int16_t) std::lround (value * 32000.0f);
+		const float value = (std::clamp) (sample, -1.0f, 1.0f);
+		const auto pcm = (int16_t) std::lround (value * 32000.0f);
 
-			const char bytes[2] = { (char) (pcm & 0xFF), (char) ((pcm >> 8) & 0xFF) };
-			file.write (bytes, 2);
-		}
+		const char bytes[2] = { (char) (pcm & 0xFF), (char) ((pcm >> 8) & 0xFF) };
+		file.write (bytes, 2);
 	}
 
 	return file.good ();

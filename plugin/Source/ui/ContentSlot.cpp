@@ -1303,7 +1303,10 @@ ContentSlot::ContentSlot (toybox::PlaybackEngine& engineToUse)
 			{
 				const auto& channel = snapshot.channels[i];
 
-				if (channel.wave.size () < 2)
+				// Everything the panel can draw, not only the channels whose shape arrives as data.
+				// This used to test `channel.wave`, which only FDS and N163 ever fill - so a
+				// 2A03 or VRC6 song exported nothing at all, and the button looked broken.
+				if (! playback::hasPeriodicShape (channel))
 				{
 					continue;
 				}

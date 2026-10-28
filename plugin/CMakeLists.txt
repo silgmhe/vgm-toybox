@@ -453,6 +453,8 @@ target_include_directories(vgm_nsf_test PRIVATE Source)
 target_compile_features(vgm_nsf_test PRIVATE cxx_std_17)
 
 add_executable(vgm_chip_test EXCLUDE_FROM_ALL
+	Source/playback/WaveExport.cpp
+	Source/playback/WaveShape.cpp
 	Source/backends/libvgm/VgmCommandReader.cpp
 	Source/formats/vgm/VgmSongLoader.cpp
 	Tests/ChipDecoderTest.cpp
