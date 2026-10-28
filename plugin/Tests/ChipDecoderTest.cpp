@@ -4482,15 +4482,17 @@ void testWaveExport (void)
 
 	if (file != nullptr)
 	{
-		unsigned char header[44] = {};
+		// A hundred bytes, not forty-four: the data chunk sits behind the marker chunk now, and a
+		// buffer that stops at the fmt chunk cannot see it.
+		unsigned char header[100] = {};
 		const auto headerRead = std::fread (header, 1, sizeof (header), file);
 
 		std::fseek (file, 0, SEEK_END);
 		const auto size = (long) std::ftell (file);
 		std::fclose (file);
 
-		check (headerRead == sizeof (header), "the header is 44 bytes");
-		check (size == 44 + (long) kWavetableSamples * 4L,
+		check (headerRead == sizeof (header), "the header is 100 bytes");
+		check (size == 100 + (long) kWavetableSamples * 4L,
 			   "the file holds one period and not sixteen");
 
 		const auto u32 = [&header] (int at)
@@ -4501,10 +4503,10 @@ void testWaveExport (void)
 
 		check (header[0] == 'R' && header[1] == 'I' && header[2] == 'F' && header[3] == 'F',
 			   "the file starts with RIFF");
-		check (header[36] == 'd' && header[37] == 'a' && header[38] == 't' && header[39] == 'a',
-			   "and carries a data chunk");
+		check (header[92] == 'd' && header[93] == 'a' && header[94] == 't' && header[95] == 'a',
+			   "and carries a data chunk, after the marker");
 		check (u32 (24) == (uint32_t) kWavetableRate, "the rate is 44100, not the note's frequency");
-		check (u32 (40) == (uint32_t) kWavetableSamples * 4u, "the data chunk is 2048 float samples");
+		check (u32 (96) == (uint32_t) kWavetableSamples * 4u, "the data chunk is 2048 float samples");
 		check (header[20] == 3, "and its format is IEEE float, which is what a wavetable is");
 
 		std::remove (path);
@@ -4602,7 +4604,7 @@ void testWaveExport (void)
 		check (std::filesystem::exists (folder + "/N163_Wave-8.wav"), "and so is the second");
 
 		// The same 44 + 2048 * 2 as the single-file check above, so the pair cannot drift.
-		check (std::filesystem::file_size (folder + "/2A03_Pulse-1.wav") == 44 + 2048 * 4,
+		check (std::filesystem::file_size (folder + "/2A03_Pulse-1.wav") == 100 + 2048 * 4,
 			   "and each is one period");
 
 		// --- the samples repeat, they are not interpolated -------------------------------------
@@ -4620,7 +4622,8 @@ void testWaveExport (void)
 
 			if (file != nullptr)
 			{
-				std::fseek (file, 44, SEEK_SET);
+				// Past RIFF, the fmt chunk and the marker chunk: 100 bytes.
+				std::fseek (file, 100, SEEK_SET);
 
 				const auto readSample = [file] () -> float
 				{
@@ -4687,7 +4690,7 @@ void testWaveExport (void)
 
 			if (file != nullptr)
 			{
-				std::fseek (file, 44, SEEK_SET);
+				std::fseek (file, 100, SEEK_SET);
 
 				std::vector<float> levels;
 
@@ -4726,6 +4729,46 @@ void testWaveExport (void)
 			}
 
 			std::remove (shaped.c_str ());
+		}
+
+		// --- the marker a wavetable synth reads -------------------------------------------------
+		//
+		// Dragging a file onto the oscillator is refused as a multi-cycle import unless it carries
+		// this chunk; dragging it into the Wavetable Editor works either way. The format was read
+		// off a reference file: "<!>" then the samples per cycle, then a byte count and a signature.
+		{
+			const std::string tagged = "__wave_tagged.wav";
+			writeCycleWav (first, tagged, ExportMode::single, 2.0, 4);
+
+			std::FILE* file = std::fopen (tagged.c_str (), "rb");
+
+			check (file != nullptr, "a tagged single cycle can be read back");
+
+			if (file != nullptr)
+			{
+				unsigned char header[100] = {};
+				const auto read = std::fread (header, 1, sizeof (header), file);
+				std::fclose (file);
+
+				check (read == sizeof (header), "with a 100-byte header");
+
+				// "clm " at 36: RIFF(12) then the fmt chunk (8 + 16), and the marker's body starts
+				// at 44 and runs 48 bytes, ending where "data" begins.
+				check (header[36] == 'c' && header[37] == 'l' && header[38] == 'm' && header[39] == ' ',
+					   "the marker chunk is there");
+
+				const uint32_t size = (uint32_t) header[40] | ((uint32_t) header[41] << 8)
+									  | ((uint32_t) header[42] << 16) | ((uint32_t) header[43] << 24);
+
+				check (size == 48u, "and it is forty-eight bytes long");
+
+				const std::string marker (reinterpret_cast<const char*> (header + 44), size);
+
+				check (marker.rfind ("<!>2048 ", 0) == 0,
+					   "and it starts by naming the samples per cycle");
+			}
+
+			std::remove (tagged.c_str ());
 		}
 
 		// --- the looped mode --------------------------------------------------------------------

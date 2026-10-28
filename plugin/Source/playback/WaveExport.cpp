@@ -159,20 +159,55 @@ bool writeCycleWav (const ChannelState& channel, const std::string& path,
 	// what it is handed.
 	const auto dataBytes = (uint32_t) samples.size () * 4u;
 
+	// Chunks, then the RIFF wrapper around them. A single-cycle file carries one extra: the marker
+	// a wavetable synth writes to say "this is one period", without which dragging it onto the
+	// oscillator is refused as a multi-cycle import. Its format is plain ASCII and was read off a
+	// reference file - "<!>" followed by the samples per cycle.
+	std::vector<uint8_t> fmtChunk;
+	{
+		put32 (fmtChunk, 16u);				// chunk size
+		put16 (fmtChunk, 3u);				// IEEE float
+		put16 (fmtChunk, 1u);				// mono
+		put32 (fmtChunk, sampleRate);
+		put32 (fmtChunk, sampleRate * 4u);	// byte rate
+		put16 (fmtChunk, 4u);				// block align
+		put16 (fmtChunk, 32u);				// bits per sample
+	}
+
+	std::vector<uint8_t> clmChunk;
+
+	if (mode == ExportMode::single)
+	{
+		const auto marker = "<!>" + std::to_string (kWavetableSamples)
+							+ " 00000000 wavetable (www.xferrecords.com)";
+
+		put32 (clmChunk, (uint32_t) marker.size ());
+		clmChunk.insert (clmChunk.end (), marker.begin (), marker.end ());
+	}
+
 	std::vector<uint8_t> header;
-	header.reserve (44);
+	header.reserve (44 + clmChunk.size ());
+
+	// "WAVE", then each chunk's eight-byte header plus its body: fmt always, clm only for a single
+	// cycle, data always.
+	const auto bodyBytes = 4u
+						   + 8u + (uint32_t) fmtChunk.size ()
+						   + (clmChunk.empty () ? 0u : 8u + (uint32_t) clmChunk.size ())
+						   + 8u + dataBytes;
 
 	header.insert (header.end (), { 'R', 'I', 'F', 'F' });
-	put32 (header, 36u + dataBytes);
+	put32 (header, bodyBytes);
 	header.insert (header.end (), { 'W', 'A', 'V', 'E' });
+
 	header.insert (header.end (), { 'f', 'm', 't', ' ' });
-	put32 (header, 16u);					// PCM chunk size
-	put16 (header, 3u);						// IEEE float
-	put16 (header, 1u);						// mono
-	put32 (header, sampleRate);
-	put32 (header, sampleRate * 4u);		// byte rate
-	put16 (header, 4u);						// block align
-	put16 (header, 32u);					// bits per sample
+	header.insert (header.end (), fmtChunk.begin (), fmtChunk.end ());
+
+	if (! clmChunk.empty ())
+	{
+		header.insert (header.end (), { 'c', 'l', 'm', ' ' });
+		header.insert (header.end (), clmChunk.begin (), clmChunk.end ());
+	}
+
 	header.insert (header.end (), { 'd', 'a', 't', 'a' });
 	put32 (header, dataBytes);
 
