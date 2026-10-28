@@ -133,6 +133,7 @@ public:
 		// No colours set here on purpose: the button is drawn by the application's look and feel,
 		// which asks the palette. Overriding them once in the constructor is why this button kept
 		// its old colours after a theme change.
+		exportButton.setComponentID ("view.keyboard.export");
 		exportButton.setButtonText (toybox::i18n::tr ("visualiser.export"));
 		exportButton.onClick = [this] { if (onExport) { onExport (); } };
 		setComponentID ("view.keyboard");

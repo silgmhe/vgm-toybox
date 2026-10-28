@@ -32,12 +32,17 @@ struct ExportOptions
 
 	It exists because neither the destination nor the depth can be inferred: the same channel wants
 	one period for a wavetable synth and two seconds of looping for a sampler, and a shape the chip
-	made at four bits is worth exporting at four bits or at one, depending on what the user is
-	after. Remembering the last choice means the window is usually one click.
+	made at four bits is worth exporting at four bits or at one, depending on what the user is after.
 
-	The layout is computed once, in resized(), and paint() reads the rectangles it stored. It used
-	to recompute the same offsets from hard-coded numbers, and the two drifted: the duration field
-	sat on top of the hint text because one of them counted a gap the other did not.
+	Two things here are deliberate and were both wrong first.
+
+	The layout is computed once, in resized(), and paint() reads the rectangles it stored. It used to
+	recompute the same offsets from hard-coded numbers, and the two drifted: the duration field sat
+	on top of the hint text because one counted a gap the other did not.
+
+	The value beside each slider is a Label, not the slider's own text box. With this look and feel
+	the box came up empty - both with a textFromValueFunction and with setTextValueSuffix - and a
+	slider whose number cannot be read is a slider you cannot use.
 */
 class ExportOptionsOverlay : public juce::Component
 {
@@ -54,42 +59,13 @@ public:
 		loopedButton.onClick = [this] { refreshEnabled (); };
 		addAndMakeVisible (loopedButton);
 
-		const auto setUpRow = [] (juce::Label& caption, juce::Slider& slider,
-								  double low, double high, double step, const juce::String& suffix)
-		{
-			caption.setFont (juce::Font (juce::FontOptions (12.5f)));
-			caption.setJustificationType (juce::Justification::centredLeft);
-
-			slider.setSliderStyle (juce::Slider::LinearHorizontal);
-			slider.setTextBoxStyle (juce::Slider::TextBoxRight, false, 56, 22);
-			slider.setRange (low, high, step);
-			slider.textFromValueFunction = [suffix] (double value)
-			{
-				return juce::String ((int) std::lround (value)) + suffix;
-			};
-		};
-
-		setUpRow (secondsCaption, secondsSlider, 1.0, 10.0, 1.0, " s");
+		setUpRow (secondsCaption, secondsSlider, secondsValue, 1.0, 10.0);
 		secondsSlider.setComponentID ("export.options.seconds");
-		secondsSlider.valueFromTextFunction = [this] (const juce::String& text)
-		{
-			const auto digits = text.retainCharacters ("0123456789");
+		secondsValue.setComponentID ("export.options.secondsValue");
 
-			return digits.isEmpty () ? secondsSlider.getValue () : digits.getDoubleValue ();
-		};
-		addAndMakeVisible (secondsCaption);
-		addAndMakeVisible (secondsSlider);
-
-		setUpRow (bitsCaption, bitsSlider, 1.0, 16.0, 1.0, " bit");
+		setUpRow (bitsCaption, bitsSlider, bitsValue, 1.0, 16.0);
 		bitsSlider.setComponentID ("export.options.bits");
-		bitsSlider.valueFromTextFunction = [this] (const juce::String& text)
-		{
-			const auto digits = text.retainCharacters ("0123456789");
-
-			return digits.isEmpty () ? bitsSlider.getValue () : digits.getDoubleValue ();
-		};
-		addAndMakeVisible (bitsCaption);
-		addAndMakeVisible (bitsSlider);
+		bitsValue.setComponentID ("export.options.bitsValue");
 
 		nativeBitsButton.setComponentID ("export.options.nativeBits");
 		nativeBitsButton.onClick = [this] { refreshEnabled (); };
@@ -123,13 +99,13 @@ public:
 		loopedButton.setToggleState (options.looped, juce::dontSendNotification);
 		singleButton.setToggleState (! options.looped, juce::dontSendNotification);
 
-		secondsSlider.setValue ((double) options.seconds, juce::dontSendNotification);
-
 		const bool native = options.bits <= 0;
 
+		secondsSlider.setValue ((double) options.seconds, juce::dontSendNotification);
 		nativeBitsButton.setToggleState (native, juce::dontSendNotification);
 		bitsSlider.setValue ((double) (native ? 4 : options.bits), juce::dontSendNotification);
 
+		refreshValues ();
 		refreshEnabled ();
 		refreshLanguage ();
 	}
@@ -144,8 +120,7 @@ public:
 		cancelButton.setButtonText (i18n::tr ("export.options.cancel"));
 		confirmButton.setButtonText (i18n::tr ("export.options.confirm"));
 
-		// The strings changed, so the two painted blocks have to be redrawn; their rectangles
-		// belong to resized() and are not touched here.
+		refreshValues ();
 		repaint ();
 	}
 
@@ -166,13 +141,16 @@ public:
 					juce::Justification::centredLeft, false);
 
 		// Both hint areas come from resized(), so they cannot drift from the controls above them.
+		// Six lines allowed and enough height for four: drawFittedText shrinks the type to make the
+		// text fit the lines it is given, which is what squashed these paragraphs into a smeared
+		// horizontal band. Room to wrap is the fix - the point is that it reads.
 		g.setColour (theme::secondaryText ());
-		g.setFont (juce::Font (juce::FontOptions (11.5f)));
+		g.setFont (juce::Font (juce::FontOptions (12.5f)));
 		g.drawFittedText (i18n::tr ("export.options.hint"), modeHintArea,
-						  juce::Justification::topLeft, 3);
+						  juce::Justification::topLeft, 6);
 
 		g.drawFittedText (i18n::tr ("export.options.bitsHint"), bitsHintArea,
-						  juce::Justification::topLeft, 3);
+						  juce::Justification::topLeft, 6);
 	}
 
 	void resized (void) override
@@ -193,21 +171,25 @@ public:
 
 		auto secondsRow = inner.removeFromTop (24);
 		secondsCaption.setBounds (secondsRow.removeFromLeft (64));
-		secondsSlider.setBounds (secondsRow.removeFromLeft (juce::jmin (300, secondsRow.getWidth ())));
+		secondsValue.setBounds (secondsRow.removeFromRight (56));
+		secondsSlider.setBounds (secondsRow.reduced (8, 0));
 		inner.removeFromTop (8);
 
-		modeHintArea = inner.removeFromTop (34);
-		inner.removeFromTop (10);
+		// Heights chosen so the paragraphs wrap rather than shrink: the first is the longer of the
+		// two, and at 12.5 points it wants three lines at this width.
+		modeHintArea = inner.removeFromTop (56);
+		inner.removeFromTop (12);
 
 		auto bitsRow = inner.removeFromTop (24);
 		bitsCaption.setBounds (bitsRow.removeFromLeft (64));
-		bitsSlider.setBounds (bitsRow.removeFromLeft (juce::jmin (300, bitsRow.getWidth ())));
+		bitsValue.setBounds (bitsRow.removeFromRight (56));
+		bitsSlider.setBounds (bitsRow.reduced (8, 0));
 		inner.removeFromTop (8);
 
 		nativeBitsButton.setBounds (inner.removeFromTop (22));
-		inner.removeFromTop (6);
+		inner.removeFromTop (8);
 
-		bitsHintArea = inner.removeFromTop (34);
+		bitsHintArea = inner.removeFromTop (44);
 
 		confirmButton.setBounds (footer.removeFromRight (88));
 		footer.removeFromRight (8);
@@ -237,6 +219,38 @@ public:
 	std::function<void ()> onCancel;
 
 private:
+	/** Wires one row: caption on the left, slider across, value on the right.
+
+		The slider has no text box of its own - the value is a Label beside it, because this look and
+		feel left the built-in box blank.
+	*/
+	void setUpRow (juce::Label& caption, juce::Slider& slider, juce::Label& value,
+				   double low, double high)
+	{
+		caption.setFont (juce::Font (juce::FontOptions (12.5f)));
+		caption.setJustificationType (juce::Justification::centredLeft);
+		addAndMakeVisible (caption);
+
+		slider.setSliderStyle (juce::Slider::LinearHorizontal);
+		slider.setTextBoxStyle (juce::Slider::NoTextBox, false, 0, 0);
+		slider.setRange (low, high, 1.0);
+		slider.onValueChange = [this] { refreshValues (); };
+		addAndMakeVisible (slider);
+
+		value.setFont (juce::Font (juce::FontOptions (13.0f)));
+		value.setJustificationType (juce::Justification::centredLeft);
+		addAndMakeVisible (value);
+	}
+
+	void refreshValues (void)
+	{
+		secondsValue.setText (juce::String ((int) std::lround (secondsSlider.getValue ())) + " s",
+							  juce::dontSendNotification);
+
+		bitsValue.setText (juce::String ((int) std::lround (bitsSlider.getValue ())) + " bit",
+						   juce::dontSendNotification);
+	}
+
 	void refreshEnabled (void)
 	{
 		// The length only means something for a loop, and the depth only means something when it is
@@ -247,24 +261,30 @@ private:
 
 		secondsSlider.setEnabled (looped);
 		secondsCaption.setEnabled (looped);
+		secondsValue.setEnabled (looped);
 
 		bitsSlider.setEnabled (custom);
 		bitsCaption.setEnabled (custom);
+		bitsValue.setEnabled (custom);
 	}
 
 	juce::Rectangle<int> panelBounds (void) const
 	{
-		const int width = juce::jmin (500, getWidth () - 60);
-		const int height = juce::jmin (440, getHeight () - 60);
-		return getLocalBounds ().withSizeKeepingCentre (juce::jmax (340, width), juce::jmax (360, height));
+		// Wider than the report window: both paragraphs sit on one line of controls, and a narrow
+		// column turns every one of them into four short lines.
+		const int width = juce::jmin (560, getWidth () - 60);
+		const int height = juce::jmin (460, getHeight () - 60);
+		return getLocalBounds ().withSizeKeepingCentre (juce::jmax (360, width), juce::jmax (400, height));
 	}
 
 	juce::ToggleButton singleButton;
 	juce::ToggleButton loopedButton;
 	juce::Label secondsCaption;
 	juce::Slider secondsSlider;
+	juce::Label secondsValue;
 	juce::Label bitsCaption;
 	juce::Slider bitsSlider;
+	juce::Label bitsValue;
 	juce::ToggleButton nativeBitsButton;
 	juce::TextButton cancelButton;
 	juce::TextButton confirmButton;
