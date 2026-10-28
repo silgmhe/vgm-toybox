@@ -114,6 +114,30 @@ namespace xgm
       return NULL;
   }
 
+  bool NES_VRC7::GetFmParameters (int trk, int& multiple, int& level, int& waveform, int& feedback)
+  {
+    if (opll == nullptr || trk < 0 || trk >= 6)
+    {
+      return false;
+    }
+
+    // Slot 2n is the modulator and 2n+1 the carrier, which is how OPLL_update lays them out.
+    const OPLL_PATCH* modulator = opll->slot[trk * 2].patch;
+    const OPLL_PATCH* carrier = opll->slot[trk * 2 + 1].patch;
+
+    if (modulator == nullptr || carrier == nullptr)
+    {
+      return false;
+    }
+
+    multiple = (int) modulator->ML;
+    level = (int) modulator->TL;
+    waveform = (int) carrier->WS;
+    feedback = (int) carrier->FB;
+
+    return true;
+  }
+
   bool NES_VRC7::Write (uint32_t adr, uint32_t val, uint32_t id)
   {
     if (adr == 0x9010)

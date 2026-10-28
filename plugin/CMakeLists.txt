@@ -185,6 +185,7 @@ target_sources(VGMToybox PRIVATE
 	Source/playback/BackendRegistry.cpp
 	Source/playback/PlaybackEngine.cpp
 	Source/playback/WaveExport.cpp
+	Source/playback/WaveShape.cpp
 	Source/playback/DawSync.cpp
 	Source/playback/HostClockSource.cpp
 	Source/playback/SessionState.cpp
@@ -365,6 +366,7 @@ add_executable(vgm_mixer_test EXCLUDE_FROM_ALL
 	Source/playback/BackendRegistry.cpp
 	Source/playback/PlaybackEngine.cpp
 	Source/playback/WaveExport.cpp
+	Source/playback/WaveShape.cpp
 	Source/playback/DawSync.cpp
 	Source/playback/SessionState.cpp
 	Source/settings/SettingsStore.cpp
@@ -428,6 +430,7 @@ add_executable(vgm_nsf_probe EXCLUDE_FROM_ALL
 	Source/backends/nsf/NsfBus.cpp
 	Source/backends/nsf/NsfPlayer.cpp
 	Source/playback/WaveExport.cpp
+	Source/playback/WaveShape.cpp
 )
 target_link_libraries(vgm_nsf_probe PRIVATE nsfplay_core)
 target_include_directories(vgm_nsf_probe PRIVATE Source)
@@ -527,6 +530,7 @@ add_executable(vgm_core_test EXCLUDE_FROM_ALL
 	Source/playback/BackendRegistry.cpp
 	Source/playback/PlaybackEngine.cpp
 	Source/playback/WaveExport.cpp
+	Source/playback/WaveShape.cpp
 	Source/playback/DawSync.cpp
 	Source/playback/HostClockSource.cpp
 	Source/playback/SessionState.cpp

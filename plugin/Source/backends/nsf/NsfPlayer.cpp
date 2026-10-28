@@ -10,6 +10,7 @@
 
 #include "backends/nsf/NsfBus.h"
 #include "backends/nsf/NsfChannelNaming.h"
+#include "playback/WaveShape.h"
 
 namespace toybox::backends::nsf
 {
@@ -1060,12 +1061,26 @@ bool NsfPlayer::captureState (playback::ChipStateSnapshot& snapshot, bool includ
 	if (vrc7 != nullptr)
 	{
 		// Six FM voices. There is no waveform to read - the chip computes its own - so the panel
-		// synthesises one from the shape kind, and the instrument number is what identifies it.
+		// synthesises one from the shape kind. The four numbers that make one patch look unlike
+		// the next live inside the emulator's slot array, which is why they are asked for here
+		// rather than derived from the registers ChannelState already carries.
 		for (int i = 0; i < kVrc7Channels; ++i)
 		{
 			const std::string name = "FM " + std::to_string (i + 1);
-			addChannel (name.c_str (), "VRC7", kFirstExpansionTrack + i, kShapeFm, kNoDuty,
-						vrc7->GetTrackInfo (i));
+			const auto index = addChannel (name.c_str (), "VRC7", kFirstExpansionTrack + i, kShapeFm,
+										   kNoDuty, vrc7->GetTrackInfo (i));
+
+			int multiple = 0;
+			int level = 0;
+			int waveSelect = 0;
+			int feedback = 0;
+
+			if (vrc7->GetFmParameters (i, multiple, level, waveSelect, feedback)
+				&& index < snapshot.channels.size ())
+			{
+				snapshot.channels[index].shapeParameter
+					= playback::waveform::packFm (multiple, level, waveSelect, feedback);
+			}
 		}
 	}
 

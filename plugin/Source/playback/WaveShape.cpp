@@ -149,16 +149,72 @@ std::vector<float> cycleFor (int waveKind, float duty, int shapeParameter)
 
 		case Kind::fm:
 		{
-			// A carrier with its phase modulated by a second operator - the outline of what a
-			// two-operator voice does, not a cycle any one instrument produces. An FM patch has
-			// no waveform to read, so drawing the modulator's mark on the carrier is the honest
-			// sketch: it shows that the shape belongs to the patch, not to the chip.
-			const double twoPi = 6.283185307179586;
+			// A two-operator voice, computed from the four numbers the chip reports rather than
+			// from a fixed formula. It used to be `sin(phase + 1.4 * sin(2 * phase))` - a real FM
+			// expression with a hard-coded depth and ratio, so every VRC7 channel in every song
+			// drew the same curve and none of them was the sound being played.
+			//
+			// The modulator drives the carrier's phase. Its own phase advances at `ratio` times
+			// the carrier's, and its output is added to itself scaled by `feedback`, which is how
+			// a feedback operator turns a sine into something closer to a saw.
+			constexpr double pi = 3.14159265358979323846;
+			constexpr double twoPi = 2.0 * pi;
+
+			const int multiple = fmMultiple (shapeParameter);
+			const int level = fmLevel (shapeParameter);
+			const int waveform = fmWaveform (shapeParameter);
+			const int feedback = fmFeedback (shapeParameter);
+
+			// ML is a table, not a ratio: index 0 is half speed and the rest climb to fifteen times.
+			static constexpr double kMultiple[16] = {
+				0.5, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 10.0, 12.0, 12.0, 15.0, 15.0
+			};
+
+			const double ratio = kMultiple[multiple];
+
+			// TL attenuates in 0.75 dB steps, so eight steps is 6 dB: the modulator's amplitude
+			// halves every eight. That amplitude is the modulation index, in radians.
+			const double modIndex = twoPi * std::pow (2.0, -(double) level / 8.0);
+
+			// The shape only repeats when both operators are back where they started, which takes
+			// two carrier periods when the modulator runs at half speed.
+			const int units = (ratio < 1.0) ? 2 : 1;
+
+			// Seven steps of feedback is enough to reach a saw, hence the multiplier.
+			const double feedbackAmount = (double) feedback / 7.0 * 1.5;
+
+			double modOutput = 0.0;
 
 			for (int i = 0; i < pointsPerCycle; ++i)
 			{
-				const double phase = twoPi * (double) i / (double) pointsPerCycle;
-				cycle.push_back ((float) std::sin (phase + 1.4 * std::sin (2.0 * phase)) * 0.85f);
+				const double t = (double) i / (double) pointsPerCycle;
+
+				modOutput = std::sin (twoPi * (double) units * ratio * t + feedbackAmount * modOutput);
+
+				const double carrierPhase = twoPi * (double) units * t + modIndex * modOutput;
+				const double sine = std::sin (carrierPhase);
+
+				double carrier = sine;
+
+				switch (waveform)
+				{
+				case 1:		// half sine: the negative half of the carrier is clamped away
+					carrier = (sine > 0.0) ? sine : 0.0;
+					break;
+
+				case 2:		// absolute sine: the negative half folded up
+					carrier = std::fabs (sine);
+					break;
+
+				case 3:		// pulse sine: the first quarter of the positive half, and nothing else
+					carrier = (sine > 0.0 && std::fmod (carrierPhase, twoPi) < pi * 0.5) ? sine : 0.0;
+					break;
+
+				default:	// full sine
+					break;
+				}
+
+				cycle.push_back ((float) (carrier * 0.85));
 			}
 
 			break;

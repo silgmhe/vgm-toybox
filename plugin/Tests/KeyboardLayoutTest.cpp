@@ -19,6 +19,8 @@
 
 #include "ui/KeyboardLayout.h"
 #include "ui/KeyboardRowLayout.h"
+#include <cmath>
+
 #include "playback/WaveShape.h"
 #include "TestSupport.h"
 
@@ -145,6 +147,48 @@ void testWaveShapes (void)
 		check (tri.front () < -0.99f, "it starts at the bottom");
 		check (tri[15] > 0.9f, "reaches the top half way through");
 		check (tri.back () < -0.99f, "and returns to the bottom");
+	}
+
+	// FM is computed from the patch now, not from one formula with a fixed depth and ratio.
+	// Every voice in every song used to draw the same curve, which said nothing about the sound
+	// being played - and the parameters were not even reaching this function.
+	{
+		// Packing round-trips, or a curve would be drawn from the wrong numbers.
+		const int packed = packFm (3, 40, 2, 6);
+		check (fmMultiple (packed) == 3, "the multiple survives packing");
+		check (fmLevel (packed) == 40, "so does the level");
+		check (fmWaveform (packed) == 2, "and the waveform");
+		check (fmFeedback (packed) == 6, "and the feedback");
+
+		// The level is the modulation index: a loud modulator bends the carrier far harder than
+		// a quiet one, so the two curves cannot agree.
+		const auto quiet = cycleFor ((int) Kind::fm, 0.5f, packFm (1, 60, 0, 0));
+		const auto bright = cycleFor ((int) Kind::fm, 0.5f, packFm (1, 0, 0, 0));
+
+		check (quiet.size () == 32, "an FM cycle is thirty-two steps");
+
+		float widest = 0.0f;
+
+		for (std::size_t i = 0; i < quiet.size () && i < bright.size (); ++i)
+		{
+			const float distance = std::abs (bright[i] - quiet[i]);
+
+			if (distance > widest)
+			{
+				widest = distance;
+			}
+		}
+
+		check (widest > 0.2f, "a deep patch and a shallow one draw different curves");
+
+		// And the shape is a function of the parameters, not of the channel that reported them.
+		const auto again = cycleFor ((int) Kind::fm, 0.5f, packFm (1, 0, 0, 0));
+		check (again == bright, "the same patch draws the same curve");
+
+		// The modulator runs at the multiple: at half speed the voice needs two carrier periods
+		// before it repeats, which is why this differs from the ratio-one case at all.
+		const auto halfSpeed = cycleFor ((int) Kind::fm, 0.5f, packFm (0, 24, 0, 0));
+		check (halfSpeed != quiet, "half-speed modulation is its own shape");
 	}
 
 	// Noise is deterministic: two calls agree, and the values are the two rails.

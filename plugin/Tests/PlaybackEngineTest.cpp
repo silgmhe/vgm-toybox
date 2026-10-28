@@ -21,6 +21,7 @@
 	  // the linked-device policy: the isolation and the MIDI capability both read it
 #include "backends/libvgm/LibvgmMuteIsolation.h"
 #include "playback/ChipState.h"
+#include "playback/WaveShape.h"
 #include <algorithm>
 	  #include <cmath>
 	  #include <cstdint>
@@ -910,6 +911,13 @@ int main (int argc, char* argv[])
 		std::printf ("[3d] the file's chips describe themselves\n");
 
 		check (described, "the player fills in a snapshot for this file");
+
+		// No assertion here about the FM rows' shapeParameter. The mapping from a patch to a curve
+		// is covered where it lives (vgm_keyboard_test asserts that two patches draw two curves);
+		// the step before it, GetFmParameters reading opll->slot[], has no logic to get wrong. What
+		// this file could add is that a patch reaches the snapshot at all - and this song loads one
+		// patch into one channel, so the only thing it could assert is "some row has a non-zero
+		// parameter", which is not worth an assertion that would go quiet the day it broke.
 		check (snapshot.chips.size () == 2, "the chip list holds the 2A03 and the expansion");
 
 		int expansionRows = 0;
