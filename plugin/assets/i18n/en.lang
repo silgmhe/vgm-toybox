@@ -238,7 +238,7 @@ language: English
 	"export.options.single" = "Single cycle - for a wavetable synth";
 	"export.options.bits" = "Depth";
 	"export.options.nativeBits" = "Use the chip's own depth";
-	"export.options.bitsHint" = "Extra quantisation on the way out. The chip's own depth is what the hardware produces - one bit for a pulse, four for a triangle - and forcing less makes the steps coarse enough to survive a wavetable synth's resampling. Above eight bits the cycle is interpolated instead, so a high setting gives a smooth line rather than platforms.";
+	"export.options.bitsHint" = "Extra quantisation on the way out. The chip's own depth is what the hardware produces - one bit for a pulse, four for a triangle - and forcing less makes the steps coarse enough to survive a wavetable synth's resampling. The depth only sets how many levels: the cycle's own steps are kept at every setting.";
 	"export.options.looped" = "Looped - for a sampler, at A4";
 	"export.options.seconds" = "Length";
 	"export.options.cancel" = "Cancel";

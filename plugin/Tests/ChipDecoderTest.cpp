@@ -4735,12 +4735,12 @@ void testWaveExport (void)
 			std::remove (shaped.c_str ());
 		}
 
-		// --- depth decides whether the steps are the shape or a defect ---------------------------
+		// --- depth is vertical only --------------------------------------------------------------
 		//
-		// Below eight bits the platforms are the point: a four-bit counter really does hold each
-		// level. Above it the same platforms are a thirty-two-step artefact on a sixteen-bit
-		// signal, so the cycle is interpolated instead. Both files are one period of the same
-		// triangle; only the horizontal treatment differs.
+		// Both files are one period of the same triangle at the same rate; the only difference is
+		// how many levels the quantiser offers. Neither of them interpolates: a four-bit counter
+		// really does hold each level, and so does a sixteen-bit one - the platform is what the
+		// chip's counter does, not an artefact of its being coarse.
 		{
 			ChannelState triangle;
 			triangle.chipName = "2A03";
@@ -4803,7 +4803,7 @@ void testWaveExport (void)
 			check (readHead (fine, fineHead), "and so does the sixteen-bit one");
 
 			check (allEqual (coarseHead), "four bits holds each level for a platform");
-			check (! allEqual (fineHead), "sixteen bits interpolates instead of holding");
+			check (allEqual (fineHead), "and sixteen bits holds the platform too");
 
 			std::remove (coarse.c_str ());
 			std::remove (fine.c_str ());

@@ -32,8 +32,10 @@ namespace
 
 		Nearest-neighbour rather than linear, and that is the whole point: the chip quantises, the
 		panel draws those quantisation steps, and a wavetable is meant to be the shape that was
-		seen. Linear interpolation was the first attempt here and it turned a thirty-two-step
-		staircase into a smooth ramp - a shape the hardware never produced.
+		seen. Interpolation has been tried here twice - once from the start, and once only above
+		eight bits - and both times it turned a thirty-two-step staircase into a smooth ramp, which
+		is a shape the hardware never produced. Depth belongs to the vertical axis; holding a sample
+		belongs to the horizontal one, and neither decides the other.
 
 		Integer division keeps this exact for every length that divides 2048, and still lands on a
 		step boundary for the ones that do not.
@@ -48,49 +50,6 @@ namespace
 		for (std::size_t i = 0; i < samples; ++i)
 		{
 			out.push_back (cycle[(i * size) / samples]);
-		}
-
-		return out;
-	}
-
-	/** The depth above which the horizontal steps stop being the shape and start being a defect.
-
-		Eight is where a wavetable stops being a picture of a quantised counter: at or below it the
-		platforms are what the chip's four bits look like, and above it they are a thirty-two-step
-		artefact sitting on top of a sixteen-bit signal - the loudest thing in the file, and the only
-		thing in it.
-	*/
-	constexpr int kStaircaseBits = 8;
-
-	/** `cycle` stretched to `samples` by interpolating between neighbours.
-
-		The other half of the staircase decision: a shape drawn at thirty-two points has thirty-two
-		platforms if each point is repeated, and a smooth line if it is not. Which one is wanted
-		depends on the depth being asked for, and writeCycleWav picks - see kStaircaseBits.
-
-		The interpolation wraps at the end, so the step between the last sample and the first is
-		spread across the boundary the way every other step is.
-	*/
-	std::vector<float> linear (const std::vector<float>& cycle, std::size_t samples)
-	{
-		std::vector<float> out;
-		out.reserve (samples);
-
-		const auto size = cycle.size ();
-		const auto last = (std::size_t) (size - 1);
-
-		for (std::size_t i = 0; i < samples; ++i)
-		{
-			const double position = (double) i * (double) size / (double) samples;
-			const auto index = (std::size_t) position;
-			const auto fraction = (float) (position - (double) index);
-
-			const auto next = (index >= last) ? (std::size_t) 0 : index + 1;
-
-			const float a = cycle[std::min (index, last)];
-			const float b = cycle[std::min (next, last)];
-
-			out.push_back (a + (b - a) * fraction);
 		}
 
 		return out;
@@ -184,18 +143,15 @@ bool writeCycleWav (const ChannelState& channel, const std::string& path,
 
 	if (mode == ExportMode::single)
 	{
-		// Two different things are being asked for, and they are both about steps.
+		// Every source sample is held, at every depth: a thirty-two-point cycle becomes thirty-two
+		// platforms however many levels sit on them. That is the shape the chip's counter produces
+		// and the shape the panel draws, and a reference wavetable of the same wave contains.
 		//
-		// At or below kStaircaseBits the user wants the coarse shape: the chip's own quantisation
-		// is the point, and holding each source sample is what makes the steps square - a
-		// thirty-two-point cycle becomes thirty-two platforms, which is what the reference
-		// wavetable does.
-		//
-		// Above it the same platforms are no longer the shape but a defect: at sixteen bits the
-		// vertical resolution is finer than the ear and the horizontal one is the loudest thing in
-		// the file. Interpolating is what "sixteen bits" means here.
-		samples = (depth > kStaircaseBits) ? linear (cycle, kWavetableSamples)
-										   : nearest (cycle, kWavetableSamples);
+		// Depth is a vertical property only. An earlier version interpolated above eight bits, on
+		// the argument that a thirty-two-step platform is an artefact once the levels are fine -
+		// but that replaced the shape with a ramp the hardware never produced, which is a larger
+		// change than the one it was trying to fix.
+		samples = nearest (cycle, kWavetableSamples);
 	}
 	else
 	{
