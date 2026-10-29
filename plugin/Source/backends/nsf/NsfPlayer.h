@@ -225,6 +225,12 @@ public:
 	/** Diagnostics: how many times the DMC's DAC was written, which is where a drum's decay is. */
 	uint32_t dacWriteCount (void) const;
 
+	/** Diagnostics: the distinct $4012 pages written, copied into `out`, at most `max` of them.
+
+		A sample longer than 241 bytes has to be played in pieces and the pieces are named by
+		walking that register; one page repeated means the driver is replaying one piece. */
+	uint32_t dpcmPages (uint8_t* out, uint32_t max) const;
+
 private:
 	/** Takes a finished scan into this player. Called from start() and, while waiting, from
 		render() - the latter on the audio thread, which is why the handle hands back a shared_ptr

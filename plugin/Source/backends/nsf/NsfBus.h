@@ -109,6 +109,17 @@ public:
 	uint32_t dacWrites = 0;
 	uint8_t dacValue = 0;
 
+	/** Every distinct $4012 page seen, in order, with how many times each was written.
+
+		Diagnostics for one question: a sample longer than 241 bytes - the most $4013 can ask for -
+		has to be played in pieces, and the pieces are named by walking this register. If only one
+		page is ever written, the driver is repeating one piece and the rest of the image is never
+		asked for; if several are, the pieces are there to be joined.
+	*/
+	std::array<uint8_t, 16> pagesSeen {};
+	uint32_t pageCount = 0;
+	uint32_t pageWrites = 0;
+
 	/** Puts the program in place and installs the six-byte entry trampoline at $4100.
 		The order matters: the image is cleared first, the trampoline after. */
 	void load (void);

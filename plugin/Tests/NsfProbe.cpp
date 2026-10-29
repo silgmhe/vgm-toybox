@@ -157,6 +157,21 @@ int main (int argc, char** argv)
 		std::printf ("  DPCM samples started: %u, DAC writes: %u\n",
 					 (unsigned) player.dpcmStartCount (), (unsigned) player.dacWriteCount ());
 
+		uint8_t pages[16] = {};
+		const auto pageCount = player.dpcmPages (pages, 16);
+
+		if (pageCount > 0)
+		{
+			std::printf ("  $4012 pages (addresses):");
+
+			for (uint32_t i = 0; i < pageCount; ++i)
+			{
+				std::printf (" $%04X", (unsigned) (0xC000u + pages[i] * 64u));
+			}
+
+			std::printf ("\n");
+		}
+
 		int written = 0;
 
 		for (std::size_t i = 0; i < snapshot.channels.size (); ++i)

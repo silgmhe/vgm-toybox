@@ -195,6 +195,19 @@ bool NsfBus::Write (uint32_t adr, uint32_t val, uint32_t id)
 		else if (adr == 0x4012)
 		{
 			pendingDpcmPage = (uint8_t) (val & 0xFF);
+			++pageWrites;
+
+			bool known = false;
+
+			for (uint32_t i = 0; i < pageCount; ++i)
+			{
+				known = known || pagesSeen[i] == pendingDpcmPage;
+			}
+
+			if (! known && pageCount < pagesSeen.size ())
+			{
+				pagesSeen[pageCount++] = pendingDpcmPage;
+			}
 		}
 		else if (adr == 0x4013)
 		{

@@ -267,6 +267,23 @@ uint32_t NsfPlayer::dacWriteCount (void) const
 	return bus != nullptr ? bus->dacWrites : 0;
 }
 
+uint32_t NsfPlayer::dpcmPages (uint8_t* out, uint32_t max) const
+{
+	if (bus == nullptr || out == nullptr)
+	{
+		return 0;
+	}
+
+	const auto count = (std::min) (max, bus->pageCount);
+
+	for (uint32_t i = 0; i < count; ++i)
+	{
+		out[i] = bus->pagesSeen[i];
+	}
+
+	return count;
+}
+
 void NsfPlayer::resetToStart (void)
 {
 	rendered = 0;
