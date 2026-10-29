@@ -70,6 +70,8 @@ void NsfBus::load (void)
 	dpcm = DpcmSelection ();
 	pendingDpcmPage = 0;
 	pendingDpcmLength = 0;
+	pendingDpcmRate = 0;
+	pendingDpcmLoop = false;
 	dpcmEnabled = false;
 }
 
@@ -174,7 +176,15 @@ bool NsfBus::Write (uint32_t adr, uint32_t val, uint32_t id)
 		//
 		// Latched on the write that starts the sample rather than on the register writes: a driver
 		// may point $4012/$4013 at the next sample while the current one is still playing.
-		if (adr == 0x4012)
+		if (adr == 0x4010)
+		{
+			// The rate index and the loop bit. Remembered with the rest because a driver is free
+			// to restore this register after a hit, and then the register describes the next
+			// sample rather than the one being heard.
+			pendingDpcmRate = (uint8_t) (val & 0x0F);
+			pendingDpcmLoop = (val & 0x40) != 0;
+		}
+		else if (adr == 0x4012)
 		{
 			pendingDpcmPage = (uint8_t) (val & 0xFF);
 		}
@@ -195,7 +205,10 @@ bool NsfBus::Write (uint32_t adr, uint32_t val, uint32_t id)
 			{
 				dpcm.start = (uint16_t) (0xC000u + (uint32_t) pendingDpcmPage * 64u);
 				dpcm.length = (uint16_t) ((uint32_t) pendingDpcmLength * 16u + 1u);
+				dpcm.rateIndex = pendingDpcmRate;
+				dpcm.loop = pendingDpcmLoop;
 				dpcm.valid = true;
+				++dpcmStarts;
 			}
 
 			dpcmEnabled = enabled;

@@ -33,6 +33,28 @@ constexpr double kMinimumNoteSeconds = 1.0 / 60.0;
 	at it, rare enough that the check costs nothing on the blocks in between. */
 constexpr uint64_t kScanPollIntervalSamples = 4096;
 
+/** The rate a DPCM sample is read at, from its own rate index.
+
+	Not from the track info: that answers with whatever the register holds when it is asked, and a
+	driver is free to put the register back after a hit. The song this was measured against reported
+	the top of the table - 33144 Hz, 46 ms - for a sample it plays at the eighth, and 46 ms is
+	exactly why it sounded like a click instead of a kick.
+
+	`cycles` is what the chip counts per bit, so the rate is the CPU clock divided by it.
+*/
+float dpcmRate (uint8_t index, bool pal)
+{
+	static constexpr int ntsc[16] = { 428, 380, 340, 320, 286, 254, 226, 214,
+									  190, 160, 142, 128, 106, 84, 72, 54 };
+	static constexpr int palCycles[16] = { 398, 354, 316, 298, 276, 236, 210, 198,
+										   176, 148, 132, 118, 98, 78, 66, 50 };
+
+	const double clock = pal ? kPalClock : kNtscClock;
+	const auto cycles = pal ? palCycles[index & 0x0F] : ntsc[index & 0x0F];
+
+	return (float) (clock / (double) cycles);
+}
+
 /** The DPCM sample at `start`, integrated into -1..1.
 
 	A DPCM byte is not a sample, it is eight one-bit steps: each bit means "up two" or "down two"
@@ -926,7 +948,7 @@ bool NsfPlayer::captureState (playback::ChipStateSnapshot& snapshot, bool includ
 				// milliseconds.
 				if (bus != nullptr && bus->dpcm.valid)
 				{
-					state.sampleRate = state.frequency;
+					state.sampleRate = dpcmRate (bus->dpcm.rateIndex, file.isPal ());
 
 					if (dpcmWaveStart != bus->dpcm.start || dpcmWaveLength != bus->dpcm.length)
 					{

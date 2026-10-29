@@ -280,6 +280,16 @@ int main (void)
 		bus.Read (0xC1C0, cpuSaw);
 		check (bus.peek (0xC1C0) == (uint8_t) (cpuSaw & 0xFF),
 			   "peek answers what the CPU would have been given");
+
+		// The rate travels with the rest, and it has to: the same 193 bytes are 46 ms at the top of
+		// the table and 370 ms at the bottom, which is the difference between a click and a kick.
+		bus.Write (0x4015, 0x00);
+		bus.Write (0x4010, 0x48);			// rate 8, loop on, irq off
+		bus.Write (0x4012, 0x0B);
+		bus.Write (0x4013, 0x0C);
+		bus.Write (0x4015, 0x10);
+		check (bus.dpcm.rateIndex == 8, "the rate index is latched with the address");
+		check (bus.dpcm.loop, "and so is the loop bit");
 	}
 
 	{

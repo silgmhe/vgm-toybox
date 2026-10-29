@@ -75,10 +75,17 @@ public:
 	{
 		uint16_t start = 0;		// absolute CPU address: $C000 + page * 64
 		uint16_t length = 0;	// bytes: (register & 0x0F) * 16 + 1
+		uint8_t rateIndex = 0;	// $4010 bits 0..3, which pick the read rate
+		bool loop = false;		// $4010 bit 6
 		bool valid = false;
 	};
 
 	DpcmSelection dpcm;
+
+	/** How many times the enable bit has started a sample. Diagnostics: a hit that sounds longer
+		than one sample can be described by a driver that retriggers it, and the count is what tells
+		that apart from a sample that really is longer. */
+	uint32_t dpcmStarts = 0;
 
 	/** Puts the program in place and installs the six-byte entry trampoline at $4100.
 		The order matters: the image is cleared first, the trampoline after. */
@@ -99,6 +106,8 @@ private:
 	*/
 	uint8_t pendingDpcmPage = 0;
 	uint8_t pendingDpcmLength = 0;
+	uint8_t pendingDpcmRate = 0;
+	bool pendingDpcmLoop = false;
 
 	/** Whether the last $4015 write left the DPCM enable set, so the next one can tell a start from
 		a write that merely mentions it.
