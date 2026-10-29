@@ -78,6 +78,17 @@ public:
 		uint8_t rateIndex = 0;	// $4010 bits 0..3, which pick the read rate
 		bool loop = false;		// $4010 bit 6
 		bool valid = false;
+
+		/** The bytes as they stood at the moment the sample started.
+
+			Copied here rather than read when someone asks for them, because the window $C000 lives
+			in is a bank the driver owns: it can point that window at something else the instant the
+			hit is over, and a later read then describes whatever the driver put there instead. What
+			that reads as is noise with no envelope - the shape of code, not of a drum.
+
+			193 is the longest length the register can name.
+		*/
+		std::array<uint8_t, 193> bytes {};
 	};
 
 	DpcmSelection dpcm;
@@ -86,6 +97,15 @@ public:
 		than one sample can be described by a driver that retriggers it, and the count is what tells
 		that apart from a sample that really is longer. */
 	uint32_t dpcmStarts = 0;
+
+	/** Writes to $4011, the DMC's DAC, and the value it holds.
+
+		This is how a NES drum gets its decay: the sample data is a stream of fixed-size steps with
+		no envelope of its own, and the volume comes from the driver walking the DAC down while the
+		sample plays. A sample exported without it is the drum without its shape.
+	*/
+	uint32_t dacWrites = 0;
+	uint8_t dacValue = 0;
 
 	/** Puts the program in place and installs the six-byte entry trampoline at $4100.
 		The order matters: the image is cleared first, the trampoline after. */

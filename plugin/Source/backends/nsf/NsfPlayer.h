@@ -222,6 +222,9 @@ public:
 		only declared here. */
 	uint32_t dpcmStartCount (void) const;
 
+	/** Diagnostics: how many times the DMC's DAC was written, which is where a drum's decay is. */
+	uint32_t dacWriteCount (void) const;
+
 private:
 	/** Takes a finished scan into this player. Called from start() and, while waiting, from
 		render() - the latter on the audio thread, which is why the handle hands back a shared_ptr
@@ -265,6 +268,7 @@ private:
 	mutable std::vector<float> dpcmWave;
 	mutable uint16_t dpcmWaveStart = 0;
 	mutable uint16_t dpcmWaveLength = 0;
+	mutable uint32_t dpcmWaveStarts = 0;
 
 	std::unique_ptr<NsfBus> bus;
 	std::unique_ptr<xgm::NES_CPU> cpu;

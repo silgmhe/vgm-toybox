@@ -154,7 +154,8 @@ int main (int argc, char** argv)
 		// Forty-six seconds of song. How many times the DPCM started is what separates "one short
 		// sample" from "one short sample played again and again", and the two look identical in a
 		// single capture.
-		std::printf ("  DPCM samples started: %u\n", (unsigned) player.dpcmStartCount ());
+		std::printf ("  DPCM samples started: %u, DAC writes: %u\n",
+					 (unsigned) player.dpcmStartCount (), (unsigned) player.dacWriteCount ());
 
 		int written = 0;
 

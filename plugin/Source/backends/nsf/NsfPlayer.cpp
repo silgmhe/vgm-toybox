@@ -64,7 +64,7 @@ float dpcmRate (uint8_t index, bool pal)
 	The level is the chip's seven-bit DAC, so it is clamped to -128..127 and scaled by 128 rather
 	than by 127: the range is asymmetrical and a symmetric divisor would flatten the positive rail.
 */
-std::vector<float> decodeDpcm (const NsfBus& bus, uint16_t start, uint16_t length)
+std::vector<float> decodeDpcm (const std::array<uint8_t, 193>& bytes, uint16_t length)
 {
 	std::vector<float> out;
 	out.reserve ((std::size_t) length * 8u);
@@ -73,11 +73,7 @@ std::vector<float> decodeDpcm (const NsfBus& bus, uint16_t start, uint16_t lengt
 
 	for (uint32_t i = 0; i < length; ++i)
 	{
-		// The chip wraps a sample that runs past $FFFF back into $8000, so the walk is taken modulo
-		// the addressable half rather than the whole space.
-		const auto address = (uint16_t) (0x8000u + ((uint32_t) (start - 0x8000u) + i) % 0x8000u);
-
-		const auto byte = bus.peek (address);
+		const auto byte = bytes[(std::size_t) i];
 
 		for (int bit = 7; bit >= 0; --bit)
 		{
@@ -266,6 +262,11 @@ uint32_t NsfPlayer::dpcmStartCount (void) const
 	return bus != nullptr ? bus->dpcmStarts : 0;
 }
 
+uint32_t NsfPlayer::dacWriteCount (void) const
+{
+	return bus != nullptr ? bus->dacWrites : 0;
+}
+
 void NsfPlayer::resetToStart (void)
 {
 	rendered = 0;
@@ -281,6 +282,7 @@ void NsfPlayer::resetToStart (void)
 	dpcmWave.clear ();
 	dpcmWaveStart = 0;
 	dpcmWaveLength = 0;
+	dpcmWaveStarts = 0;
 
 	// Order matters, and each step was paid for once already:
 	//   1. the image, then the trampoline (SetImage clears the 64 KB it lives in);
@@ -955,11 +957,16 @@ bool NsfPlayer::captureState (playback::ChipStateSnapshot& snapshot, bool includ
 				{
 					state.sampleRate = dpcmRate (bus->dpcm.rateIndex, file.isPal ());
 
-					if (dpcmWaveStart != bus->dpcm.start || dpcmWaveLength != bus->dpcm.length)
+					if (dpcmWaveStart != bus->dpcm.start || dpcmWaveLength != bus->dpcm.length
+						|| dpcmWaveStarts != bus->dpcmStarts)
 					{
-						dpcmWave = decodeDpcm (*bus, bus->dpcm.start, bus->dpcm.length);
+						// Keyed on the start count as well as the selection, because the same
+						// address played twice reads different bytes if the driver moved the bank in
+						// between - and a cache that answered the first one would hide exactly that.
+						dpcmWave = decodeDpcm (bus->dpcm.bytes, bus->dpcm.length);
 						dpcmWaveStart = bus->dpcm.start;
 						dpcmWaveLength = bus->dpcm.length;
+						dpcmWaveStarts = bus->dpcmStarts;
 					}
 
 					state.wave = dpcmWave;

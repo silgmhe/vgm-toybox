@@ -176,7 +176,15 @@ bool NsfBus::Write (uint32_t adr, uint32_t val, uint32_t id)
 		//
 		// Latched on the write that starts the sample rather than on the register writes: a driver
 		// may point $4012/$4013 at the next sample while the current one is still playing.
-		if (adr == 0x4010)
+		if (adr == 0x4011)
+		{
+			// The DMC's DAC, written directly. A drum's decay lives here rather than in the sample:
+			// the data is a stream of equal steps and the shape comes from the driver walking this
+			// register down as the hit plays.
+			++dacWrites;
+			dacValue = (uint8_t) (val & 0x7F);
+		}
+		else if (adr == 0x4010)
 		{
 			// The rate index and the loop bit. Remembered with the rest because a driver is free
 			// to restore this register after a hit, and then the register describes the next
@@ -209,6 +217,18 @@ bool NsfBus::Write (uint32_t adr, uint32_t val, uint32_t id)
 				dpcm.loop = pendingDpcmLoop;
 				dpcm.valid = true;
 				++dpcmStarts;
+
+				// The bytes, taken now while the bank window still points at the sample. Reading
+				// them later would describe whatever the driver pointed that window at afterwards,
+				// which is a picture of the code rather than of the drum - and it is the same
+				// address, the same length and the same rate, so nothing else gives it away.
+				for (uint16_t i = 0; i < dpcm.length; ++i)
+				{
+					const auto address =
+						(uint16_t) (0x8000u + ((uint32_t) (dpcm.start - 0x8000u) + i) % 0x8000u);
+
+					dpcm.bytes[i] = peek (address);
+				}
 			}
 
 			dpcmEnabled = enabled;
