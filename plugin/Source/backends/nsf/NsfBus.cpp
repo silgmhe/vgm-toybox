@@ -70,6 +70,7 @@ void NsfBus::load (void)
 	dpcm = DpcmSelection ();
 	pendingDpcmPage = 0;
 	pendingDpcmLength = 0;
+	dpcmEnabled = false;
 }
 
 uint8_t NsfBus::peek (uint16_t address) const
@@ -182,11 +183,22 @@ bool NsfBus::Write (uint32_t adr, uint32_t val, uint32_t id)
 			// Only the low four bits reach the chip; the length is counted in sixteen-byte units.
 			pendingDpcmLength = (uint8_t) (val & 0x0F);
 		}
-		else if (adr == 0x4015 && (val & 0x10) != 0)
+		else if (adr == 0x4015)
 		{
-			dpcm.start = (uint16_t) (0xC000u + (uint32_t) pendingDpcmPage * 64u);
-			dpcm.length = (uint16_t) ((uint32_t) pendingDpcmLength * 16u + 1u);
-			dpcm.valid = true;
+			const bool enabled = (val & 0x10) != 0;
+
+			// Only the edge starts a sample, which is what the hardware does. A driver that keeps
+			// the bit set and writes $4015 every frame for the pulse channels would otherwise
+			// latch again on each of those writes, and what it latched would be the registers as
+			// they happened to stand - which is a page of silence rather than the drum.
+			if (enabled && ! dpcmEnabled)
+			{
+				dpcm.start = (uint16_t) (0xC000u + (uint32_t) pendingDpcmPage * 64u);
+				dpcm.length = (uint16_t) ((uint32_t) pendingDpcmLength * 16u + 1u);
+				dpcm.valid = true;
+			}
+
+			dpcmEnabled = enabled;
 		}
 
 		// The registers are the music, whichever chip owns them. They leave the map here rather

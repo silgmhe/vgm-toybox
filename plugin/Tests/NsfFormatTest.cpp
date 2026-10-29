@@ -259,11 +259,20 @@ int main (void)
 		// Only the low four bits of the length reach the chip, and the page register's upper half is
 		// not a page at all - a driver that writes a byte with bits set above them still plays a
 		// seventeen-byte sample at $C1C0.
+		bus.Write (0x4015, 0x00);			// stops it, which is what arms the next one
 		bus.Write (0x4012, 0x07);
 		bus.Write (0x4013, 0xF1);
 		bus.Write (0x4015, 0x10);
 		check (bus.dpcm.start == 0xC1C0 && bus.dpcm.length == 17,
 			   "and the upper bits of both registers are dropped");
+
+		// Only the 0 -> 1 edge starts a sample. The failure this catches is the one this song had:
+		// a driver that leaves the bit set and writes $4015 for the pulse channels every frame
+		// latched the registers on every one of those writes, and the pair it caught was a page of
+		// silence rather than the drum.
+		bus.Write (0x4012, 0x09);
+		bus.Write (0x4015, 0x10);
+		check (bus.dpcm.start == 0xC1C0, "a set bit written again latches nothing new");
 
 		// The byte a sample is drawn from has to be the byte the CPU would read: same bank mapping,
 		// same image. peek() takes the same path by construction, so this checks that it does.

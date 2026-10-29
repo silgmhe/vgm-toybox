@@ -99,6 +99,15 @@ private:
 	*/
 	uint8_t pendingDpcmPage = 0;
 	uint8_t pendingDpcmLength = 0;
+
+	/** Whether the last $4015 write left the DPCM enable set, so the next one can tell a start from
+		a write that merely mentions it.
+
+		Only the 0 -> 1 edge begins a sample. A driver that keeps the bit set and writes $4015 for
+		the pulse channels every frame would otherwise latch on every one of those writes, and the
+		pair it latched would be whatever the registers happened to hold at that moment.
+	*/
+	bool dpcmEnabled = false;
 };
 
 } // namespace toybox::backends::nsf
