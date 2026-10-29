@@ -157,18 +157,29 @@ int main (int argc, char** argv)
 		{
 			const auto& channel = snapshot.channels[i];
 
+			// Printed rather than passed over: "the row has no data" and "the row was never looked
+			// at" are different faults, and a list that omits both cannot tell them apart.
 			if (channel.wave.size () < 2)
 			{
+				std::printf ("  (none) %s %s kind=%d rate=%.1f\n", channel.chipName.c_str (),
+							 channel.name.c_str (), channel.waveKind, (double) channel.sampleRate);
 				continue;
 			}
 
 			const auto path = directory + "/wave" + std::to_string (i + 1) + ".wav";
 
-			if (toybox::playback::writeCycleWav (channel, path))
+			// The same dispatch the exporter uses: a channel carrying a sample is audio, not a
+			// wavetable, and writing it as one is what this probe is here to make visible.
+			const bool ok = channel.sampleRate > 0.0f
+							  ? toybox::playback::writeSampleWav (channel, path)
+							  : toybox::playback::writeCycleWav (channel, path);
+
+			if (ok)
 			{
 				++written;
-				std::printf ("  %s  cycle=%d freq=%.1f Hz\n", path.c_str (),
-							 (int) channel.wave.size (), (double) channel.frequency);
+				std::printf ("  %s  cycle=%d freq=%.1f Hz rate=%.1f\n", path.c_str (),
+							 (int) channel.wave.size (), (double) channel.frequency,
+							 (double) channel.sampleRate);
 			}
 		}
 
