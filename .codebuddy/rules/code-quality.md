@@ -120,6 +120,31 @@ Select-String -Path plugin\Source -Pattern '\.wave =|\.wave\.push'
 
 案例：`docs/memo/2026-10-28-the-shell-a-move-leaves-behind.md`
 
+## 12. 一个寄存器的宽度，去实现里读，不要凭记忆截位
+
+`$4013` 在真机 2A03 上只有低四位有效。但这一支援的播放核心和 FamiStudio 用的 NotSoFatso 都按八位算：
+
+```cpp
+// libs/nsfplay/xgm/devices/Sound/nes_dmc.cpp:622
+dlength = (len_reg << 4) + 1;      // len_reg = val & 0xff
+
+// reference/FamiStudio/ThirdParty/NotSoFatso/NSF_Core.cpp:321
+mWave_TND.nDMCLength = (v << 4) + 1;
+```
+
+`& 0x0F` 于是把 689 字节的军鼓切成 177——**那正好是底鼓的长度**。
+
+**这就是它四轮没被识破的原因：177 不是错数，是另一个声音的正确长度。** 用户说「军鼓不对」，波形"像但不是"，而每个环节单独看都自洽。
+
+**规则：**
+
+1. **写掩码之前，先在"被模拟的那份代码"里 grep 这个寄存器**，看它取几位。规格记忆和实现冲突时，跟实现。
+2. **一个数对不上，先问"它是不是别人的"**。自洽的错值比明显的错值更难发现。
+3. **固定缓冲的大小从取值范围推**（`241`、`4081`），不从观测值推。把某首歌算出的 `193` 写进 `std::array`，就是把越界写进类型定义。
+4. **断言里只写"应当"，观测值先打印出来看**。曾经把 `length == 17` 和"upper bits are dropped"写进断言，等于给错误上了锁——`ctest` 一直是绿的，而功能是坏的。
+
+案例：`docs/memo/2026-10-30-the-register-width-nobody-checked.md`
+
 ## 检查清单（提交前自问）
 
 - [ ] 三个月后的我，能否只看函数名就说出它做什么？
@@ -134,3 +159,6 @@ Select-String -Path plugin\Source -Pattern '\.wave =|\.wave\.push'
 - [ ] 这条断言的容差，是否小于它本该抓住的缺陷？
 - [ ] 我读的这个成员，是否可能已经被 move 走或 clear 掉？
 - [ ] 界面能看见的数据，我这一处读的是同一个对象吗？
+- [ ] 我截的位宽，是否在**被模拟的那份代码**里确认过，而不是凭规格记忆？
+- [ ] 固定缓冲的大小，是从取值范围推的，还是从某次观测值推的？
+- [ ] 这条断言写的是"应当"，还是我观测到的现状？
