@@ -101,6 +101,98 @@ int nativeBits (int waveKind)
 	}
 }
 
+namespace
+{
+	/** A RIFF file of thirty-two-bit floats.
+
+		`marker` is written as the `clm ` chunk when it is not empty, and it is the only thing that
+		separates the two destinations: a wavetable carries it so a synth can read the file as one
+		cycle, and a sample carries none so the same synth reads it as audio.
+
+		Four bytes per sample, because these are floats. The first version wrote sixteen-bit PCM,
+		which is a legal wav and the wrong container: a reference wavetable from a wavetable synth
+		is float32 - its fmt chunk carries format tag 3 - and quantising to seventeen levels only
+		reads as steps if the values are the levels. Rounded into an integer scale they are the same
+		shape with a different ruler, and the synth rescales what it is handed.
+	*/
+	bool writeFloat32Wav (const std::string& path, const std::vector<float>& samples,
+						  uint32_t sampleRate, const std::string& marker)
+	{
+		const auto dataBytes = (uint32_t) samples.size () * 4u;
+
+		std::vector<uint8_t> fmtChunk;
+		{
+			put32 (fmtChunk, 16u);				// chunk size
+			put16 (fmtChunk, 3u);				// IEEE float
+			put16 (fmtChunk, 1u);				// mono
+			put32 (fmtChunk, sampleRate);
+			put32 (fmtChunk, sampleRate * 4u);	// byte rate
+			put16 (fmtChunk, 4u);				// block align
+			put16 (fmtChunk, 32u);				// bits per sample
+		}
+
+		std::vector<uint8_t> clmChunk;
+
+		if (! marker.empty ())
+		{
+			put32 (clmChunk, (uint32_t) marker.size ());
+			clmChunk.insert (clmChunk.end (), marker.begin (), marker.end ());
+		}
+
+		std::vector<uint8_t> header;
+		header.reserve (44 + clmChunk.size ());
+
+		// "WAVE", then each chunk's eight-byte header plus its body: fmt always, clm only when
+		// there is a marker, data always.
+		const auto bodyBytes = 4u
+							   + 8u + (uint32_t) fmtChunk.size ()
+							   + (clmChunk.empty () ? 0u : 8u + (uint32_t) clmChunk.size ())
+							   + 8u + dataBytes;
+
+		header.insert (header.end (), { 'R', 'I', 'F', 'F' });
+		put32 (header, bodyBytes);
+		header.insert (header.end (), { 'W', 'A', 'V', 'E' });
+
+		header.insert (header.end (), { 'f', 'm', 't', ' ' });
+		header.insert (header.end (), fmtChunk.begin (), fmtChunk.end ());
+
+		if (! clmChunk.empty ())
+		{
+			header.insert (header.end (), { 'c', 'l', 'm', ' ' });
+			header.insert (header.end (), clmChunk.begin (), clmChunk.end ());
+		}
+
+		header.insert (header.end (), { 'd', 'a', 't', 'a' });
+		put32 (header, dataBytes);
+
+		std::ofstream file (path, std::ios::binary | std::ios::trunc);
+
+		if (! file)
+		{
+			return false;
+		}
+
+		std::vector<uint8_t> fileBytes = header;
+		fileBytes.reserve (header.size () + dataBytes);
+
+		for (const float sample : samples)
+		{
+			// The value goes straight out: a float wav has no scale to lose the levels on, and the
+			// reference file's levels sit exactly on -1, -0.875, ... 1.0.
+			uint32_t bits = 0;
+			static_assert (sizeof (float) == sizeof (uint32_t), "a float is four bytes here");
+
+			std::memcpy (&bits, &sample, sizeof (bits));
+			put32 (fileBytes, bits);
+		}
+
+		file.write (reinterpret_cast<const char*> (fileBytes.data ()),
+					(std::streamsize) fileBytes.size ());
+
+		return file.good ();
+	}
+} // namespace
+
 float quantiseSample (float value, int bits)
 {
 	const auto clamped = std::clamp (bits, 1, kMaxBits);
@@ -167,94 +259,37 @@ bool writeCycleWav (const ChannelState& channel, const std::string& path,
 		samples = repeated (cycle, periods);
 	}
 
-	// Four bytes per sample, because these are thirty-two-bit floats.
-	//
-	// The first version wrote sixteen-bit PCM, which is a legal wav and the wrong container for this:
-	// a reference wavetable from a wavetable synth is float32 - its fmt chunk carries format tag 3 -
-	// and quantising to seventeen levels only reads as steps if the values are the levels. Rounded
-	// into an integer scale they are the same shape with a different ruler, and the synth rescales
-	// what it is handed.
-	const auto dataBytes = (uint32_t) samples.size () * 4u;
-
-	// Chunks, then the RIFF wrapper around them. A single-cycle file carries one extra: the marker
-	// a wavetable synth writes to say "this is one period", without which dragging it onto the
-	// oscillator is refused as a multi-cycle import. Its format is plain ASCII and was read off a
-	// reference file - "<!>" followed by the samples per cycle.
-	std::vector<uint8_t> fmtChunk;
+	// Depth is applied here rather than inside the writer: the writer's job is the container, and a
+	// sample file wants the same bytes whatever depth produced them.
+	for (auto& sample : samples)
 	{
-		put32 (fmtChunk, 16u);				// chunk size
-		put16 (fmtChunk, 3u);				// IEEE float
-		put16 (fmtChunk, 1u);				// mono
-		put32 (fmtChunk, sampleRate);
-		put32 (fmtChunk, sampleRate * 4u);	// byte rate
-		put16 (fmtChunk, 4u);				// block align
-		put16 (fmtChunk, 32u);				// bits per sample
+		sample = quantiseSample (sample, depth);
 	}
 
-	std::vector<uint8_t> clmChunk;
+	// The one-period marker, for the destination that reads one period. Its format is plain ASCII
+	// and was read off a reference file - "<!>" followed by the samples per cycle - and without it
+	// a wavetable synth treats the file as an ordinary short recording and refuses to import it
+	// onto the oscillator. A looped file is audio and gets none.
+	const auto marker = (mode == ExportMode::single)
+						  ? "<!>" + std::to_string (kWavetableSamples)
+								+ " 00000000 wavetable (www.xferrecords.com)"
+						  : std::string ();
 
-	if (mode == ExportMode::single)
-	{
-		const auto marker = "<!>" + std::to_string (kWavetableSamples)
-							+ " 00000000 wavetable (www.xferrecords.com)";
+	return writeFloat32Wav (path, samples, sampleRate, marker);
+}
 
-		put32 (clmChunk, (uint32_t) marker.size ());
-		clmChunk.insert (clmChunk.end (), marker.begin (), marker.end ());
-	}
-
-	std::vector<uint8_t> header;
-	header.reserve (44 + clmChunk.size ());
-
-	// "WAVE", then each chunk's eight-byte header plus its body: fmt always, clm only for a single
-	// cycle, data always.
-	const auto bodyBytes = 4u
-						   + 8u + (uint32_t) fmtChunk.size ()
-						   + (clmChunk.empty () ? 0u : 8u + (uint32_t) clmChunk.size ())
-						   + 8u + dataBytes;
-
-	header.insert (header.end (), { 'R', 'I', 'F', 'F' });
-	put32 (header, bodyBytes);
-	header.insert (header.end (), { 'W', 'A', 'V', 'E' });
-
-	header.insert (header.end (), { 'f', 'm', 't', ' ' });
-	header.insert (header.end (), fmtChunk.begin (), fmtChunk.end ());
-
-	if (! clmChunk.empty ())
-	{
-		header.insert (header.end (), { 'c', 'l', 'm', ' ' });
-		header.insert (header.end (), clmChunk.begin (), clmChunk.end ());
-	}
-
-	header.insert (header.end (), { 'd', 'a', 't', 'a' });
-	put32 (header, dataBytes);
-
-	std::ofstream file (path, std::ios::binary | std::ios::trunc);
-
-	if (! file)
+bool writeSampleWav (const ChannelState& channel, const std::string& path)
+{
+	if (path.empty () || channel.wave.size () < 2 || channel.sampleRate <= 0.0f)
 	{
 		return false;
 	}
 
-	std::vector<uint8_t> fileBytes = header;
-	fileBytes.reserve (header.size () + dataBytes);
+	// The rate the chip reads the bytes at, not a wavetable's fixed 44100: a drum sampled at
+	// 11 kHz and written as 44 kHz is the same drum three octaves down and four times too long.
+	const auto rate = (uint32_t) std::lround (channel.sampleRate);
 
-	for (const float sample : samples)
-	{
-		// The value goes straight out: a float wav has no scale to lose the levels on, and the
-		// reference file's levels sit exactly on -1, -0.875, ... 1.0.
-		const float value = quantiseSample (sample, depth);
-
-		uint32_t bits = 0;
-		static_assert (sizeof (float) == sizeof (uint32_t), "a float is four bytes here");
-
-		std::memcpy (&bits, &value, sizeof (bits));
-		put32 (fileBytes, bits);
-	}
-
-	file.write (reinterpret_cast<const char*> (fileBytes.data ()),
-				(std::streamsize) fileBytes.size ());
-
-	return file.good ();
+	return writeFloat32Wav (path, channel.wave, rate, std::string ());
 }
 
 std::string legalFileName (const std::string& name)
@@ -311,7 +346,16 @@ ExportOutcome exportWavetables (const ChipStateSnapshot& snapshot, const std::st
 	{
 		const auto& channel = snapshot.channels[(std::size_t) i];
 
-		if (! hasPeriodicShape (channel))
+		// A channel that carries a sample is a recording, not a shape, and it goes out as audio at
+		// the rate the chip reads it - in both modes, because repeating a drum hit is not a
+		// wavetable and a period of one is not a period either.
+		//
+		// This used to fall through to skippedSample: hasPeriodicShape() is right that a sample is
+		// not a period, and the note there says "those channels want a PCM export, which does not
+		// exist yet". This is that export.
+		const bool isSample = channel.sampleRate > 0.0f && channel.wave.size () >= 2;
+
+		if (! isSample && ! hasPeriodicShape (channel))
 		{
 			++outcome.skippedSample;
 			continue;
@@ -329,7 +373,12 @@ ExportOutcome exportWavetables (const ChipStateSnapshot& snapshot, const std::st
 		const auto seen = ++used[stem];
 		const auto name = stem + (seen > 1 ? "_" + std::to_string (seen) : "") + ".wav";
 
-		if (writeCycleWav (channel, base + "/" + name, mode, seconds, bits))
+		const auto path = base + "/" + name;
+
+		const bool ok = isSample ? writeSampleWav (channel, path)
+								 : writeCycleWav (channel, path, mode, seconds, bits);
+
+		if (ok)
 		{
 			++outcome.written;
 		}

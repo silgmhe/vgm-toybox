@@ -15,15 +15,21 @@ namespace toybox::playback
 	which is the same synthesis the panel draws with, so the file and the picture cannot disagree.
 	They did until this existed: the exporter required a non-empty `wave` and skipped everything
 	else, and only FDS and N163 ever supply one.
+
+	A DPCM channel supplies one too now, and that is why this is not the function to ask whether a
+	channel is a wavetable - see hasPeriodicShape().
 */
 std::vector<float> cycleOf (const ChannelState& channel);
 
 /** Whether this channel's shape is a period at all.
 
-	A stored table or a synthesised shape is; a sampled channel is not. The panel draws a mark for a
-	DPCM or ADPCM row rather than its data - WaveShape synthesises that mark from the sample's
-	identity, deliberately, so two samples in one song look different - and a mark is not a
-	waveform. Those channels want a PCM export, which does not exist yet.
+	A stored table or a synthesised shape is; a sampled channel is not. Those go through
+	writeSampleWav() instead, with no marker and at their own rate.
+
+	The panel still draws a mark for a sampled row when no data was captured - WaveShape synthesises
+	it from the sample's identity so two samples look different. That mark is not a waveform, which
+	is the other half of why this distinction exists: MMC5's PCM has no bank to read and never gets
+	real data, so it keeps the mark and keeps being skipped here.
 */
 bool hasPeriodicShape (const ChannelState& channel);
 
@@ -96,6 +102,17 @@ enum class ExportMode
 bool writeCycleWav (const ChannelState& channel, const std::string& path,
 					ExportMode mode = ExportMode::single, double seconds = 2.0,
 					int bits = kNativeBits);
+
+/** Writes `channel`'s sample as ordinary audio, which is what it is.
+
+	A DPCM hit is a moment, not a period. Writing it with the one-cycle marker would tell a
+	wavetable synth that 2048 points of it repeat, and it would loop the hit at a pitch nothing
+	plays it at. So there is no marker, no resampling and no quantisation: the bytes the chip reads,
+	at the rate it reads them, in the container every audio import understands.
+
+	Fails when the channel carries no sample - a synthesised shape has nothing to write here.
+*/
+bool writeSampleWav (const ChannelState& channel, const std::string& path);
 
 /** `name` as a filename: spaces become hyphens, and the characters a filesystem cannot carry
 	become underscores.

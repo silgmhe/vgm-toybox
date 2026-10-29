@@ -237,6 +237,40 @@ int main (void)
 		bus.Read (0x4103, value);
 		check (first && value == 0x4C, "the player trampoline survives the image load");
 		check (writes == 1, "and installing it writes no sound register");
+
+		// --- what the DPCM's registers said when the sample started -------------------------------
+		//
+		// Nothing on the chip reports the length back: NES_DMC hands out the address and the rate
+		// through its track info and stops there, and a file written from a sample has to know where
+		// it ends. So the bus remembers the three writes and latches them at the one that starts the
+		// sample - a driver is free to point $4012 and $4013 at the next sample while the current
+		// one is still playing, and the registers would then describe something nobody hears.
+		check (! bus.dpcm.valid, "nothing is latched before a sample starts");
+
+		bus.Write (0x4012, 0x03);
+		bus.Write (0x4013, 0x02);
+		check (! bus.dpcm.valid, "and pointing at one does not start it either");
+
+		bus.Write (0x4015, 0x10);
+		check (bus.dpcm.valid, "the write that starts the sample latches it");
+		check (bus.dpcm.start == 0xC0C0, "at $C000 plus the page, sixty-four bytes each");
+		check (bus.dpcm.length == 33, "with the length in sixteen-byte units, plus that one byte");
+
+		// Only the low four bits of the length reach the chip, and the page register's upper half is
+		// not a page at all - a driver that writes a byte with bits set above them still plays a
+		// seventeen-byte sample at $C1C0.
+		bus.Write (0x4012, 0x07);
+		bus.Write (0x4013, 0xF1);
+		bus.Write (0x4015, 0x10);
+		check (bus.dpcm.start == 0xC1C0 && bus.dpcm.length == 17,
+			   "and the upper bits of both registers are dropped");
+
+		// The byte a sample is drawn from has to be the byte the CPU would read: same bank mapping,
+		// same image. peek() takes the same path by construction, so this checks that it does.
+		uint32_t cpuSaw = 0;
+		bus.Read (0xC1C0, cpuSaw);
+		check (bus.peek (0xC1C0) == (uint8_t) (cpuSaw & 0xFF),
+			   "peek answers what the CPU would have been given");
 	}
 
 	{

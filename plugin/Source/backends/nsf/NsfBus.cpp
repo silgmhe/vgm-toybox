@@ -63,6 +63,24 @@ void NsfBus::load (void)
 	resetBanks ();
 	SetImage (const_cast<uint8_t*> (file.rom.data()), file.loadAddress, (uint32_t) file.rom.size());
 	SetReserved (kPlayerProgram, (uint32_t) sizeof (kPlayerProgram));
+
+	// A restart is a new song as far as a sample is concerned: the previous selection describes
+	// bytes the driver is about to overwrite in its own image, and showing them would be showing
+	// the last song's drum on the first frame of this one.
+	dpcm = DpcmSelection ();
+	pendingDpcmPage = 0;
+	pendingDpcmLength = 0;
+}
+
+uint8_t NsfBus::peek (uint16_t address) const
+{
+	uint32_t value = 0;
+
+	// Read() stores nothing - it maps a bank or asks the image - so the cast describes the shape of
+	// the interface rather than escaping const. Every counter on this class is bumped by Write().
+	const_cast<NsfBus*> (this)->Read (address, value, 0);
+
+	return (uint8_t) (value & 0xFF);
 }
 
 bool NsfBus::Read (uint32_t adr, uint32_t& val, uint32_t id)
@@ -149,6 +167,28 @@ bool NsfBus::Write (uint32_t adr, uint32_t val, uint32_t id)
 
 	if (expansion || (adr >= 0x4000 && adr <= 0x4017))
 	{
+		// The DPCM's three registers, remembered because nothing on the chip reports them back.
+		// NES_DMC hands out the address and the rate through its track info but not the length,
+		// and a file written from the sample needs the length to know where it ends.
+		//
+		// Latched on the write that starts the sample rather than on the register writes: a driver
+		// may point $4012/$4013 at the next sample while the current one is still playing.
+		if (adr == 0x4012)
+		{
+			pendingDpcmPage = (uint8_t) (val & 0xFF);
+		}
+		else if (adr == 0x4013)
+		{
+			// Only the low four bits reach the chip; the length is counted in sixteen-byte units.
+			pendingDpcmLength = (uint8_t) (val & 0x0F);
+		}
+		else if (adr == 0x4015 && (val & 0x10) != 0)
+		{
+			dpcm.start = (uint16_t) (0xC000u + (uint32_t) pendingDpcmPage * 64u);
+			dpcm.length = (uint16_t) ((uint32_t) pendingDpcmLength * 16u + 1u);
+			dpcm.valid = true;
+		}
+
 		// The registers are the music, whichever chip owns them. They leave the map here rather
 		// than being stored - and an expansion write has to leave it too, or the chip is created,
 		// ticked, mixed and never told anything.

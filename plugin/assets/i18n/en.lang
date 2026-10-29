@@ -229,7 +229,7 @@ language: English
 	"visualiser.exportEmpty" = "Nothing to export yet.";
 	"export.title" = "Wavetables exported";
 	"export.written" = "{0} written to";
-	"export.skippedSample" = "{0} sampled channel(s) left out: a sample is a recording with no period, and its export comes later.";
+	"export.skippedSample" = "{0} sampled channel(s) left out: no sample data was captured for them.";
 	"export.failed" = "{0} could not be written.";
 	"export.none" = "Nothing was written.";
 	"export.noChannels" = "Nothing was written: the panel is not receiving channel state at all.";

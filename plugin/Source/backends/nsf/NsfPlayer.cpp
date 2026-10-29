@@ -33,6 +33,42 @@ constexpr double kMinimumNoteSeconds = 1.0 / 60.0;
 	at it, rare enough that the check costs nothing on the blocks in between. */
 constexpr uint64_t kScanPollIntervalSamples = 4096;
 
+/** The DPCM sample at `start`, integrated into -1..1.
+
+	A DPCM byte is not a sample, it is eight one-bit steps: each bit means "up two" or "down two"
+	and the level is their running sum. Skipping the integration would draw the steps themselves,
+	which look like noise no matter what the sample sounds like - the opposite of the point.
+
+	The level is the chip's seven-bit DAC, so it is clamped to -128..127 and scaled by 128 rather
+	than by 127: the range is asymmetrical and a symmetric divisor would flatten the positive rail.
+*/
+std::vector<float> decodeDpcm (const NsfBus& bus, uint16_t start, uint16_t length)
+{
+	std::vector<float> out;
+	out.reserve ((std::size_t) length * 8u);
+
+	int level = 0;
+
+	for (uint32_t i = 0; i < length; ++i)
+	{
+		// The chip wraps a sample that runs past $FFFF back into $8000, so the walk is taken modulo
+		// the addressable half rather than the whole space.
+		const auto address = (uint16_t) (0x8000u + ((uint32_t) (start - 0x8000u) + i) % 0x8000u);
+
+		const auto byte = bus.peek (address);
+
+		for (int bit = 7; bit >= 0; --bit)
+		{
+			level += ((byte >> bit) & 1u) != 0 ? 2 : -2;
+			level = (std::clamp) (level, -128, 127);
+
+			out.push_back ((float) level / 128.0f);
+		}
+	}
+
+	return out;
+}
+
 /** MIDI's top velocity. The walk records a channel's level as 0..1, so this is the one place
 	where the two scales meet. */
 constexpr double kMaxMidiVelocity = 127.0;
@@ -211,6 +247,13 @@ void NsfPlayer::resetToStart (void)
 	pcPages.fill (0);
 	sampleRateWritten = false;
 	sampleAddrWritten = false;
+
+	// The cache describes bytes in the image that is about to be replaced. Both fields go to values
+	// no real selection can hold - a sample never starts below $C000 and is never empty - so the
+	// first capture after a restart decodes instead of matching the previous song's drum.
+	dpcmWave.clear ();
+	dpcmWaveStart = 0;
+	dpcmWaveLength = 0;
 
 	// Order matters, and each step was paid for once already:
 	//   1. the image, then the trampoline (SetImage clears the 64 KB it lives in);
@@ -872,6 +915,28 @@ bool NsfPlayer::captureState (playback::ChipStateSnapshot& snapshot, bool includ
 				// The slot's identity, spread so that address and rate each move the drawing -
 				// a sample played at two speeds is two marks, as it is two notes.
 				state.shapeParameter = (tone << 4) ^ (rate * 7919);
+
+				// The bytes the sample actually holds, so the row shows the drum rather than a
+				// stand-in for it. `sampleRate` carries the rate they are read at - a file of them
+				// has to declare it or it plays at the wrong pitch - and it is taken here because
+				// `frequency` is cleared for this channel a few lines below.
+				//
+				// Kept when the sample ends: the row is a record of the last hit, and blanking it
+				// would leave an empty column for most of a drum line, where every hit lasts a few
+				// milliseconds.
+				if (bus != nullptr && bus->dpcm.valid)
+				{
+					state.sampleRate = state.frequency;
+
+					if (dpcmWaveStart != bus->dpcm.start || dpcmWaveLength != bus->dpcm.length)
+					{
+						dpcmWave = decodeDpcm (*bus, bus->dpcm.start, bus->dpcm.length);
+						dpcmWaveStart = bus->dpcm.start;
+						dpcmWaveLength = bus->dpcm.length;
+					}
+
+					state.wave = dpcmWave;
+				}
 			}
 			else
 			{

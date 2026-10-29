@@ -248,6 +248,17 @@ private:
 	double cpuClockRest = 0.0;
 	uint64_t rendered = 0;
 
+	/** The last DPCM sample decoded, and what it was decoded from.
+
+		Cached rather than decoded per frame because captureState() runs on the audio thread: a
+		sample is up to 241 bytes of integration, which is not much once, and is waste at fifteen
+		frames a second while the same bytes are being re-read. The pair below is the whole key -
+		a sample does not change while it plays.
+	*/
+	mutable std::vector<float> dpcmWave;
+	mutable uint16_t dpcmWaveStart = 0;
+	mutable uint16_t dpcmWaveLength = 0;
+
 	std::unique_ptr<NsfBus> bus;
 	std::unique_ptr<xgm::NES_CPU> cpu;
 	std::unique_ptr<xgm::NES_APU> apu;

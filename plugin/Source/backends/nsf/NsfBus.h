@@ -57,6 +57,29 @@ public:
 		\/\ for N163, \/\ for FME7. */
 	std::array<uint32_t, 4> expansionSignature {};
 
+	/** One byte of the address space, for readers that only look.
+
+		Read() is the CPU's own access and takes a non-const bus; the display must not perturb the
+		bank mapping or the write counters, and both are only touched by Write(), so the distinction
+		here is about intent rather than about what happens to the object.
+	*/
+	uint8_t peek (uint16_t address) const;
+
+	/** The DPCM sample the last start selected.
+
+		Latched at the write that starts it rather than read off the registers afterwards: a driver
+		is free to write the next sample's address and length while the current one is still playing,
+		and the register would then describe a sample nobody is hearing.
+	*/
+	struct DpcmSelection
+	{
+		uint16_t start = 0;		// absolute CPU address: $C000 + page * 64
+		uint16_t length = 0;	// bytes: (register & 0x0F) * 16 + 1
+		bool valid = false;
+	};
+
+	DpcmSelection dpcm;
+
 	/** Puts the program in place and installs the six-byte entry trampoline at $4100.
 		The order matters: the image is cleared first, the trampoline after. */
 	void load (void);
@@ -68,6 +91,14 @@ private:
 	const formats::nsf::NsfFile& file;
 	bool banked = false;
 	std::array<uint8_t, 8> banks {};
+
+	/** What the last $4012 and $4013 wrote, waiting for the $4015 write that starts the sample.
+
+		Two separate registers and one event: a driver writes the page, then the length, then flips
+		the enable bit, and only at that third write does the pair describe something that plays.
+	*/
+	uint8_t pendingDpcmPage = 0;
+	uint8_t pendingDpcmLength = 0;
 };
 
 } // namespace toybox::backends::nsf

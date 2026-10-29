@@ -225,7 +225,7 @@ language: 简体中文
 	"visualiser.exportEmpty" = "当前没有可导出的波形。";
 	"export.title" = "波表已导出";
 	"export.written" = "已写入 {0} 个文件到";
-	"export.skippedSample" = "{0} 个采样通道已跳过：采样是一段录音，没有周期，这部分导出稍后单独提供。";
+	"export.skippedSample" = "{0} 个采样通道未导出：没有取到它们的采样数据。";
 	"export.failed" = "{0} 个文件写入失败。";
 	"export.none" = "没有写入任何文件。";
 	"export.noChannels" = "没有写入任何文件：面板根本没有收到通道数据。";

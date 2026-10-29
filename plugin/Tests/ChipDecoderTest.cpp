@@ -4611,6 +4611,102 @@ void testWaveExport (void)
 		check (std::filesystem::file_size (folder + "/2A03_Pulse-1.wav") == 100 + 2048 * 4,
 			   "and each is one period");
 
+		// --- a channel that carries a sample is written as audio ---------------------------------
+		//
+		// The marker says "this file is one period". A DPCM hit is not one: written with the
+		// marker, a synth loops the hit at a pitch nothing plays it at. So no marker, no
+		// resampling and no quantisation - the bytes at the rate the chip reads them.
+		{
+			toybox::playback::ChannelState sampled = third;
+			sampled.sampleRate = 11186.1f;
+			sampled.wave = { 0.0f, 0.25f, -0.25f, 0.5f, -0.5f, 0.125f, -0.125f, 0.0f };
+
+			toybox::playback::ChipStateSnapshot one;
+			one.valid = true;
+			one.channels = { sampled };
+
+			const auto only = exportWavetables (one, folder);
+
+			check (only.written == 1, "a channel that carries a sample is written");
+			check (only.skippedSample == 0, "and is not counted among the ones that cannot be");
+
+			const auto written = folder + "/2A03_DPCM.wav";
+
+			check (std::filesystem::exists (written), "under its chip and channel name");
+			check (std::filesystem::file_size (written) == 44 + 8 * 4,
+				   "with a plain forty-four byte header and no marker");
+
+			std::FILE* file = std::fopen (written.c_str (), "rb");
+
+			check (file != nullptr, "and can be read back");
+
+			if (file != nullptr)
+			{
+				unsigned char header[44] = {};
+				const auto read = std::fread (header, 1, sizeof (header), file);
+
+				check (read == sizeof (header), "the header is forty-four bytes");
+
+				const auto rate = (uint32_t) header[24] | ((uint32_t) header[25] << 8)
+								  | ((uint32_t) header[26] << 16) | ((uint32_t) header[27] << 24);
+
+				// Not the wavetable's fixed 44100: a drum sampled at 11 kHz and written as 44 kHz is
+				// the same drum three octaves down and four times too long.
+				check (rate == 11186u, "at the rate the chip is reading it");
+
+				// "data" straight after fmt. A clm chunk would sit here, and its absence is what
+				// makes a synth treat the file as audio rather than as one cycle.
+				check (header[36] == 'd' && header[37] == 'a' && header[38] == 't'
+						   && header[39] == 'a',
+					   "no marker sits between the format and the samples");
+
+				// The second value rather than the first: the first is zero, and a read that failed
+				// also answers zero, so it could not tell success from failure.
+				std::fseek (file, 44 + 4, SEEK_SET);
+
+				int b0 = std::fgetc (file);
+				int b1 = std::fgetc (file);
+				int b2 = std::fgetc (file);
+				int b3 = std::fgetc (file);
+
+				float firstSample = 0.0f;
+
+				if (b0 != EOF && b1 != EOF && b2 != EOF && b3 != EOF)
+				{
+					const uint32_t bits = (uint32_t) b0 | ((uint32_t) b1 << 8)
+										| ((uint32_t) b2 << 16) | ((uint32_t) b3 << 24);
+
+					std::memcpy (&firstSample, &bits, sizeof (firstSample));
+				}
+
+				// The second value, because the first is zero and could be a failed read.
+				check (std::abs (firstSample - 0.25f) < 0.0001f,
+					   "and the values are what went in, at their own precision");
+
+				std::fclose (file);
+			}
+
+			std::remove (written.c_str ());
+		}
+
+		// --- a sampled channel with nothing behind it is still skipped ----------------------------
+		//
+		// MMC5's PCM writes its sample a byte at a time and has no bank to read, so it keeps the
+		// synthesised mark and there is no data to write.
+		{
+			toybox::playback::ChannelState mark = third;
+			mark.sampleRate = 0.0f;
+
+			toybox::playback::ChipStateSnapshot one;
+			one.valid = true;
+			one.channels = { mark };
+
+			const auto only = exportWavetables (one, folder);
+
+			check (only.skippedSample == 1, "a sample with nothing behind it is skipped");
+			check (only.written == 0, "and nothing is written for it");
+		}
+
 		// --- the samples repeat, they are not interpolated -------------------------------------
 		//
 		// The chip quantises and the panel draws those steps; a wavetable has to match. Linear

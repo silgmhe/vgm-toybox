@@ -35,6 +35,15 @@ struct ChannelState
 	*/
 	bool analysing = false;
 	float frequency = 0.0f;				// Hz, 0 when unknown
+
+	/** For a channel that plays from a sample bank: the rate its bytes are read at, which is also
+		the rate a file of them has to declare. Zero when this channel's shape is not a sample.
+
+		Separate from `frequency` rather than sharing it: that field is a pitch and is cleared for
+		the channels whose note is a numbering rather than a frequency, the DPCM among them, so a
+		sample's rate has nowhere to live there.
+	*/
+	float sampleRate = 0.0f;
 	float volume = 0.0f;				// 0..1, normalised against the chip's own maximum
 
 	/** One period of the channel's waveform, values in -1..1. Empty for chips that generate
