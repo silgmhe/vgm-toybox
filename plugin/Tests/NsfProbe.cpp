@@ -146,7 +146,9 @@ int main (int argc, char** argv)
 		player.start ();
 
 		std::vector<float> l (1024, 0.0f), r (1024, 0.0f);
-		for (int i = 0; i < 2000; ++i) { player.render (l.data (), r.data (), 1024); }
+		// Long enough to reach the drums in a slow song: forty-six seconds missed every DPCM hit in
+		// the one this was reported from, which read as "the song has none".
+		for (int i = 0; i < 8000; ++i) { player.render (l.data (), r.data (), 1024); }
 
 		toybox::playback::ChipStateSnapshot snapshot;
 		player.captureState (snapshot);
