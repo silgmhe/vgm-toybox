@@ -64,7 +64,7 @@ float dpcmRate (uint8_t index, bool pal)
 	The level is the chip's seven-bit DAC, so it is clamped to -128..127 and scaled by 128 rather
 	than by 127: the range is asymmetrical and a symmetric divisor would flatten the positive rail.
 */
-std::vector<float> decodeDpcm (const std::array<uint8_t, 193>& bytes, uint16_t length)
+std::vector<float> decodeDpcm (const std::array<uint8_t, 241>& bytes, uint16_t length)
 {
 	std::vector<float> out;
 	out.reserve ((std::size_t) length * 8u);

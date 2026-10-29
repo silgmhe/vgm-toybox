@@ -86,9 +86,11 @@ public:
 			hit is over, and a later read then describes whatever the driver put there instead. What
 			that reads as is noise with no envelope - the shape of code, not of a drum.
 
-			193 is the longest length the register can name.
+			241 is the longest length the register can name: its low four bits count sixteen-byte
+			units, so (15 * 16) + 1. Sizing this at 193 - the value this song uses - wrote past the
+			end on any song that asks for the last three steps, and took the process down with it.
 		*/
-		std::array<uint8_t, 193> bytes {};
+		std::array<uint8_t, 241> bytes {};
 	};
 
 	DpcmSelection dpcm;
