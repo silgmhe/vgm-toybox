@@ -196,18 +196,6 @@ bool NsfBus::Write (uint32_t adr, uint32_t val, uint32_t id)
 		{
 			pendingDpcmPage = (uint8_t) (val & 0xFF);
 			++pageWrites;
-
-			bool known = false;
-
-			for (uint32_t i = 0; i < pageCount; ++i)
-			{
-				known = known || pagesSeen[i] == pendingDpcmPage;
-			}
-
-			if (! known && pageCount < pagesSeen.size ())
-			{
-				pagesSeen[pageCount++] = pendingDpcmPage;
-			}
 		}
 		else if (adr == 0x4013)
 		{
@@ -230,6 +218,22 @@ bool NsfBus::Write (uint32_t adr, uint32_t val, uint32_t id)
 				dpcm.loop = pendingDpcmLoop;
 				dpcm.valid = true;
 				++dpcmStarts;
+
+				// Recorded here rather than on every $4012 write: a driver prepares the next
+				// sample's address before it starts it, and an address that was written and never
+				// started is not a sample. This list is what the boundaries are read off, so an
+				// entry that never played would cut a real sample short.
+				bool known = false;
+
+				for (uint32_t i = 0; i < pageCount; ++i)
+				{
+					known = known || pagesSeen[i] == pendingDpcmPage;
+				}
+
+				if (! known && pageCount < pagesSeen.size ())
+				{
+					pagesSeen[pageCount++] = pendingDpcmPage;
+				}
 
 				// The bytes, taken now while the bank window still points at the sample. Reading
 				// them later would describe whatever the driver pointed that window at afterwards,
