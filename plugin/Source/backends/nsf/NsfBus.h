@@ -79,18 +79,20 @@ public:
 		bool loop = false;		// $4010 bit 6
 		bool valid = false;
 
-		/** The bytes as they stood at the moment the sample started.
+		/** The bytes as they stood at the moment the sample started, from `start` onwards.
 
 			Copied here rather than read when someone asks for them, because the window $C000 lives
 			in is a bank the driver owns: it can point that window at something else the instant the
 			hit is over, and a later read then describes whatever the driver put there instead. What
 			that reads as is noise with no envelope - the shape of code, not of a drum.
 
-			241 is the longest length the register can name: its low four bits count sixteen-byte
-			units, so (15 * 16) + 1. Sizing this at 193 - the value this song uses - wrote past the
-			end on any song that asks for the last three steps, and took the process down with it.
+			One window, four kilobytes, because a sample is not bounded by $4013. That register names
+			one playback and holds four bits, so it tops out at 241 bytes; the samples in this format
+			are 320 and 512, played in pieces if played whole at all. Where one ends is the address of
+			the next, which is only known once the song has been running - so the bytes are taken
+			generously and the end is worked out later.
 		*/
-		std::array<uint8_t, 241> bytes {};
+		std::array<uint8_t, 4096> bytes {};
 	};
 
 	DpcmSelection dpcm;

@@ -235,7 +235,11 @@ bool NsfBus::Write (uint32_t adr, uint32_t val, uint32_t id)
 				// them later would describe whatever the driver pointed that window at afterwards,
 				// which is a picture of the code rather than of the drum - and it is the same
 				// address, the same length and the same rate, so nothing else gives it away.
-				for (uint16_t i = 0; i < dpcm.length; ++i)
+				//
+				// A whole window rather than `dpcm.length`: that register caps at 241 bytes, and the
+				// samples here are longer than that. Where the copy ends is decided later, by the
+				// next sample's address.
+				for (std::size_t i = 0; i < dpcm.bytes.size (); ++i)
 				{
 					const auto address =
 						(uint16_t) (0x8000u + ((uint32_t) (dpcm.start - 0x8000u) + i) % 0x8000u);
