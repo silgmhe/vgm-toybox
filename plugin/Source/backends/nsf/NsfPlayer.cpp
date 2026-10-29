@@ -261,6 +261,11 @@ void NsfPlayer::scanSong (void)
 	scanSampleChannels (scanSeconds);
 }
 
+uint32_t NsfPlayer::dpcmStartCount (void) const
+{
+	return bus != nullptr ? bus->dpcmStarts : 0;
+}
+
 void NsfPlayer::resetToStart (void)
 {
 	rendered = 0;

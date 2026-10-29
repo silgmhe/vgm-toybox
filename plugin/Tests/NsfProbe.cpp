@@ -146,10 +146,15 @@ int main (int argc, char** argv)
 		player.start ();
 
 		std::vector<float> l (1024, 0.0f), r (1024, 0.0f);
-		for (int i = 0; i < 200; ++i) { player.render (l.data (), r.data (), 1024); }
+		for (int i = 0; i < 2000; ++i) { player.render (l.data (), r.data (), 1024); }
 
 		toybox::playback::ChipStateSnapshot snapshot;
 		player.captureState (snapshot);
+
+		// Forty-six seconds of song. How many times the DPCM started is what separates "one short
+		// sample" from "one short sample played again and again", and the two look identical in a
+		// single capture.
+		std::printf ("  DPCM samples started: %u\n", (unsigned) player.dpcmStartCount ());
 
 		int written = 0;
 

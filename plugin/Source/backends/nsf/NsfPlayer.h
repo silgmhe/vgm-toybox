@@ -215,6 +215,13 @@ public:
 	/** True while this player is playing a song whose scan has not landed yet. */
 	bool isAnalysing (void) const { return analysing.load (std::memory_order_relaxed); }
 
+	/** Diagnostics: how many DPCM samples have started since the song began.
+
+		A hit that sounds longer than one sample can be one sample retriggered, and this is what
+		tells that apart from a sample that really is longer. Defined in the .cpp because NsfBus is
+		only declared here. */
+	uint32_t dpcmStartCount (void) const;
+
 private:
 	/** Takes a finished scan into this player. Called from start() and, while waiting, from
 		render() - the latter on the audio thread, which is why the handle hands back a shared_ptr
