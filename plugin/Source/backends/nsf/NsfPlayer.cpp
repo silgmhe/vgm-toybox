@@ -293,21 +293,12 @@ uint16_t NsfPlayer::dpcmSampleLength (uint16_t start) const
 		return 0;
 	}
 
-	// To the next address the driver pointed $4012 at, or the end of the window. $4013 cannot
-	// answer this: it names one playback, four bits, at most 241 bytes, and the samples here are
-	// 320 and 512. The next sample's address is the boundary, which is why the pages have to be
-	// collected while the song plays instead of read from a register.
-	auto length = (uint16_t) bus->dpcm.bytes.size ();
-
-	for (uint32_t i = 0; i < bus->pageCount; ++i)
-	{
-		const auto address = (uint16_t) (0xC000u + (uint32_t) bus->pagesSeen[i] * 64u);
-
-		if (address > start)
-		{
-			length = (std::min) (length, (uint16_t) (address - start));
-		}
-	}
+	// $4013 as the core reads it: eight bits, sixteen bytes each, plus the padding byte. Not a
+	// boundary search - the register already names the whole sample, and a driver that packs two
+	// samples back to back makes the distance between their addresses unrelated to either length.
+	//
+	// Capped at the window, which is how wide the copy is.
+	auto length = (std::min) (bus->dpcm.length, (uint16_t) bus->dpcm.bytes.size ());
 
 	length = trimFiller (bus->dpcm.bytes, length);
 

@@ -199,8 +199,13 @@ bool NsfBus::Write (uint32_t adr, uint32_t val, uint32_t id)
 		}
 		else if (adr == 0x4013)
 		{
-			// Only the low four bits reach the chip; the length is counted in sixteen-byte units.
-			pendingDpcmLength = (uint8_t) (val & 0x0F);
+			// All eight bits, which is what the chip this emulates uses: the core computes
+			// `dlength = (len_reg << 4) + 1` from the full register, so a driver that writes
+			// 0x2B asks for 689 bytes. Reading only the low four bits - the real 2A03's width -
+			// cut every sample longer than 241 bytes down to a quarter and made a snare look like
+			// a click. NotSoFatso does the same thing, which is why FamiStudio and the player
+			// disagreed with the exporter.
+			pendingDpcmLength = (uint8_t) (val & 0xFF);
 		}
 		else if (adr == 0x4015)
 		{
@@ -213,6 +218,10 @@ bool NsfBus::Write (uint32_t adr, uint32_t val, uint32_t id)
 			if (enabled && ! dpcmEnabled)
 			{
 				dpcm.start = (uint16_t) (0xC000u + (uint32_t) pendingDpcmPage * 64u);
+
+				// Eight bits of length, sixteen bytes each, plus the one padding byte: the same
+				// arithmetic the core does at nes_dmc.cpp:622 and NotSoFatso at NSF_Core.cpp:321.
+				// 4081 is the largest it can name, and the copy is a 4KB window, so it fits.
 				dpcm.length = (uint16_t) ((uint32_t) pendingDpcmLength * 16u + 1u);
 				dpcm.rateIndex = pendingDpcmRate;
 				dpcm.loop = pendingDpcmLoop;

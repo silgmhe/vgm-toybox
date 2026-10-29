@@ -256,15 +256,19 @@ int main (void)
 		check (bus.dpcm.start == 0xC0C0, "at $C000 plus the page, sixty-four bytes each");
 		check (bus.dpcm.length == 33, "with the length in sixteen-byte units, plus that one byte");
 
-		// Only the low four bits of the length reach the chip, and the page register's upper half is
-		// not a page at all - a driver that writes a byte with bits set above them still plays a
-		// seventeen-byte sample at $C1C0.
+		// All eight bits of the length register count, which is what the core does -
+		// `dlength = (len_reg << 4) + 1` from the full byte - and what NotSoFatso does at
+		// NSF_Core.cpp:321. 0x2B is 689 bytes, and a snare really is that long.
+		//
+		// Reading only the low four bits, the real 2A03's width, is what made a 689-byte sample
+		// come out as 177: a snare that sounded like a click. The address register is different -
+		// it is `$C000 | (value << 6)`, so its top two bits fall off by construction.
 		bus.Write (0x4015, 0x00);			// stops it, which is what arms the next one
 		bus.Write (0x4012, 0x07);
-		bus.Write (0x4013, 0xF1);
+		bus.Write (0x4013, 0x2B);
 		bus.Write (0x4015, 0x10);
-		check (bus.dpcm.start == 0xC1C0 && bus.dpcm.length == 17,
-			   "and the upper bits of both registers are dropped");
+		check (bus.dpcm.start == 0xC1C0, "the address is $C000 plus the page");
+		check (bus.dpcm.length == 689, "and the length counts all eight bits of its register");
 
 		// Only the 0 -> 1 edge starts a sample. The failure this catches is the one this song had:
 		// a driver that leaves the bit set and writes $4015 for the pulse channels every frame
