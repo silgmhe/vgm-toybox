@@ -215,6 +215,27 @@ public:
 	/** True while this player is playing a song whose scan has not landed yet. */
 	bool isAnalysing (void) const { return analysing.load (std::memory_order_relaxed); }
 
+	/** How many DPCM samples have started since the song began. Probe only.
+
+		A hit that sounds longer than one sample can be one sample retriggered, and this is what
+		tells that apart from a sample that really is longer. Defined in the .cpp because NsfBus is
+		only declared here.
+	*/
+	uint32_t dpcmStartCount (void) const;
+
+	/** How many times the DMC's DAC was written - the one place a drum's decay could come from.
+
+		Probe only: measured twice on the songs here, both times two writes, so no sample needs it.
+	*/
+	uint32_t dacWriteCount (void) const;
+
+	/** The distinct $4012 pages that started a sample, copied into `out`, at most `max` of them.
+
+		Probe only. It answers "how many samples does this song have" and "does the driver ever
+		point at the one I am hearing", which are the two questions a mismatched export raises.
+	*/
+	uint32_t dpcmPages (uint8_t* out, uint32_t max) const;
+
 private:
 	/** Takes a finished scan into this player. Called from start() and, while waiting, from
 		render() - the latter on the audio thread, which is why the handle hands back a shared_ptr
@@ -247,6 +268,22 @@ private:
 	std::array<uint32_t, 256> pcPages {};
 	double cpuClockRest = 0.0;
 	uint64_t rendered = 0;
+
+	/** The last DPCM sample decoded, and what it was decoded from.
+
+		Cached rather than decoded per frame because captureState() runs on the audio thread: a
+		sample is up to 241 bytes of integration, which is not much once, and is waste at fifteen
+		frames a second while the same bytes are being re-read. The pair below is the whole key -
+		a sample does not change while it plays.
+	*/
+	mutable std::vector<float> dpcmWave;
+	mutable uint16_t dpcmWaveStart = 0;
+	mutable uint16_t dpcmWaveLength = 0;
+	mutable uint32_t dpcmWaveStarts = 0;
+
+	/** How many bytes of the copy are this sample: the register's length, less the filler that
+		follows the data and the padding byte the formula adds. The arithmetic is in DpcmSample.h. */
+	uint16_t dpcmSampleLength (void) const;
 
 	std::unique_ptr<NsfBus> bus;
 	std::unique_ptr<xgm::NES_CPU> cpu;

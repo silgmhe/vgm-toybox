@@ -146,10 +146,70 @@ int main (int argc, char** argv)
 		player.start ();
 
 		std::vector<float> l (1024, 0.0f), r (1024, 0.0f);
-		for (int i = 0; i < 200; ++i) { player.render (l.data (), r.data (), 1024); }
+		// Long enough to reach the drums in a slow song: forty-six seconds missed every DPCM hit in
+		// the one this was reported from, which read as "the song has none".
+		//
+		// Checked every eleven seconds rather than once at the end, so that each sample's first
+		// appearance can be dated. "This song has four samples" and "FamiStudio lists two" are both
+		// true if its import runs a fixed length of music and the other two first sound later.
+		uint8_t seen[16] = {};
+		uint32_t seenCount = 0;
+
+		for (int block = 0; block < 8000; ++block)
+		{
+			player.render (l.data (), r.data (), 1024);
+
+			if (block % 500 != 0)
+			{
+				continue;
+			}
+
+			uint8_t pages[16] = {};
+			const auto count = player.dpcmPages (pages, 16);
+
+			for (uint32_t i = 0; i < count; ++i)
+			{
+				bool known = false;
+
+				for (uint32_t j = 0; j < seenCount; ++j)
+				{
+					known = known || seen[j] == pages[i];
+				}
+
+				if (! known && seenCount < 16)
+				{
+					seen[seenCount++] = pages[i];
+
+					std::printf ("  $%04X first appears at %.0f s\n",
+								 (unsigned) (0xC000u + pages[i] * 64u),
+								 (double) (block + 1) * 1024.0 / 44100.0);
+				}
+			}
+		}
 
 		toybox::playback::ChipStateSnapshot snapshot;
 		player.captureState (snapshot);
+
+		// Forty-six seconds of song. How many times the DPCM started is what separates "one short
+		// sample" from "one short sample played again and again", and the two look identical in a
+		// single capture.
+		std::printf ("  DPCM samples started: %u, DAC writes: %u\n",
+					 (unsigned) player.dpcmStartCount (), (unsigned) player.dacWriteCount ());
+
+		uint8_t pages[16] = {};
+		const auto pageCount = player.dpcmPages (pages, 16);
+
+		if (pageCount > 0)
+		{
+			std::printf ("  $4012 pages (addresses):");
+
+			for (uint32_t i = 0; i < pageCount; ++i)
+			{
+				std::printf (" $%04X", (unsigned) (0xC000u + pages[i] * 64u));
+			}
+
+			std::printf ("\n");
+		}
 
 		int written = 0;
 
@@ -157,18 +217,30 @@ int main (int argc, char** argv)
 		{
 			const auto& channel = snapshot.channels[i];
 
+			// Printed rather than passed over: "the row has no data" and "the row was never looked
+			// at" are different faults, and a list that omits both cannot tell them apart.
 			if (channel.wave.size () < 2)
 			{
+				std::printf ("  (none) %s %s kind=%d rate=%.1f\n", channel.chipName.c_str (),
+							 channel.name.c_str (), channel.waveKind, (double) channel.sampleRate);
 				continue;
 			}
 
 			const auto path = directory + "/wave" + std::to_string (i + 1) + ".wav";
 
-			if (toybox::playback::writeCycleWav (channel, path))
+			// The same dispatch the exporter uses, through the same predicate: a channel carrying a
+			// sample is audio, not a wavetable, and writing it as one is what this probe is here to
+			// make visible.
+			const bool ok = toybox::playback::isSampledChannel (channel)
+						  ? toybox::playback::writeSampleWav (channel, path)
+						  : toybox::playback::writeCycleWav (channel, path);
+
+			if (ok)
 			{
 				++written;
-				std::printf ("  %s  cycle=%d freq=%.1f Hz\n", path.c_str (),
-							 (int) channel.wave.size (), (double) channel.frequency);
+				std::printf ("  %s  cycle=%d freq=%.1f Hz rate=%.1f\n", path.c_str (),
+							 (int) channel.wave.size (), (double) channel.frequency,
+							 (double) channel.sampleRate);
 			}
 		}
 

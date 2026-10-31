@@ -5,7 +5,7 @@
 #include "i18n/LanguageManager.h"
 #include "SoftShadow.h"
 #include "Theme.h"
-#include "WaveShape.h"
+#include "playback/WaveShape.h"
 
 namespace toybox::ui::keyboard
 {
@@ -140,6 +140,14 @@ void paintToggle (juce::Graphics& g, juce::Rectangle<int> area,
 
 namespace
 {
+	/** How many points a row draws, whatever the cycle's own length is.
+
+		A stored table is at most 256, so this only bites on samples: a DPCM hit is up to 32648
+		points and the window is about a hundred and twenty pixels wide, where that many segments
+		overlap into a smear. The file keeps every point - this decides only what a row can show.
+	*/
+	constexpr std::size_t kDisplayPoints = 128;
+
 	/** Builds one cycle's line in coordinates local to its window - origin at the top left, no
 		knowledge of where the window is on screen.
 
@@ -229,7 +237,8 @@ void paintWave (juce::Graphics& g, juce::Rectangle<int> area,
 		}
 
 		juce::Path path;
-		buildCyclePath (path, area.getWidth (), area.getHeight (), channel.wave);
+		buildCyclePath (path, area.getWidth (), area.getHeight (),
+						playback::waveform::decimateForDisplay (channel.wave, kDisplayPoints));
 
 		g.setColour (theme::accent ().withAlpha (channel.active ? 0.9f : 0.35f));
 		strokeCycle (g, path, area);
@@ -248,7 +257,7 @@ void paintWave (juce::Graphics& g, juce::Rectangle<int> area,
 
 	if (stale)
 	{
-		const auto cycle = waveform::cycleFor (channel.waveKind, channel.duty, channel.shapeParameter);
+		const auto cycle = playback::waveform::cycleFor (channel.waveKind, channel.duty, channel.shapeParameter);
 
 		cache.valid = false;
 

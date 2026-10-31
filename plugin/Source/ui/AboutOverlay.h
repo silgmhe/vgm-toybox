@@ -119,13 +119,13 @@ public:
 		g.setColour (theme::primaryText());
 		g.setFont (juce::Font (juce::FontOptions (13.0f)));
 		g.drawFittedText (i18n::tr ("about.description"),
-						  inner.removeFromTop (18), juce::Justification::centredLeft, 1);
+						  inner.removeFromTop (18), juce::Justification::centredLeft, 1, 1.0f);
 		inner.removeFromTop (10);
 
 		g.setColour (theme::secondaryText());
 		g.setFont (juce::Font (juce::FontOptions (12.5f)));
 		g.drawFittedText (i18n::tr ("about.credit"),
-						  inner.removeFromTop (18), juce::Justification::centredLeft, 2);
+						  inner.removeFromTop (34), juce::Justification::centredLeft, 2, 1.0f);
 		inner.removeFromTop (10);
 
 		g.setColour (theme::secondaryText());
@@ -179,8 +179,8 @@ private:
 	juce::Rectangle<int> panelBounds (void) const
 	{
 		const int width = juce::jmin (470, getWidth() - 60);
-		const int height = juce::jmin (262, getHeight() - 60);
-		return getLocalBounds().withSizeKeepingCentre (juce::jmax (300, width), juce::jmax (238, height));
+		const int height = juce::jmin (280, getHeight() - 60);
+		return getLocalBounds().withSizeKeepingCentre (juce::jmax (300, width), juce::jmax (256, height));
 	}
 
 	void dismiss (void)

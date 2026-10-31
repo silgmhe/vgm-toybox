@@ -7,6 +7,8 @@
 #include "TransportPanel.h"
 #include "View.h"
 
+#include <functional>
+
 #include "i18n/LanguageManager.h"
 
 namespace toybox { class PlaybackEngine; }
@@ -38,6 +40,20 @@ public:
 	void refreshLanguage (void) override;
 	void songChanged (void) override;
 	bool handleKey (const juce::KeyPress& key) override;
+
+	/** Forwarded from the content slot: what the last export did.
+
+		The window that reports it belongs to the editor rather than to this page - a report that
+		dimmed only the keyboard card read as part of the card and left the rest of the window
+		looking live while it was blocked.
+	*/
+	std::function<void (const ExportReport&)> onExportReport;
+
+	/** The same shape for the two steps before it: this page asks the editor for the options
+		window, and the editor calls beginExport() back with the answer. */
+	std::function<void ()> onExportOptions;
+
+	void beginExport (const ExportOptions& options);
 
 	/** Which panel the content area is showing. The View menu and its Ctrl+1..3 map to this. */
 	void setContentView (ContentView view);

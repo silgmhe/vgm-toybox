@@ -228,6 +228,31 @@ public:
 	static constexpr int maxRefreshHz = 60;
 	static constexpr int defaultRefreshHz = 15;
 
+	/** Whether the Keyboard page's export writes looped files, and how long they are.
+
+		Two settings rather than one: the mode and the length are separate decisions, and a sampler
+		user changes the seconds and keeps the mode. Both are remembered so that opening the export
+		window again shows what was chosen last time.
+	*/
+	bool getExportLooped (void) const;
+	void setExportLooped (bool looped);
+
+	int getExportSeconds (void) const;
+	void setExportSeconds (int seconds);
+
+	/** The quantisation depth the export applies: zero for the chip's own, one to sixteen otherwise. */
+	int getExportBits (void) const;
+	void setExportBits (int bits);
+
+	static constexpr int minExportBits = 0;
+	static constexpr int maxExportBits = 32;
+	static constexpr int defaultExportBits = 0;
+
+	/** The range the length accepts, and the value used when nothing is stored. */
+	static constexpr int minExportSeconds = 1;
+	static constexpr int maxExportSeconds = 10;
+	static constexpr int defaultExportSeconds = 2;
+
 	/** Whether the chips' fine pitch becomes pitch bend at all. Off: notes keep their nearest
 		semitone and no bend message is sent - for an instrument that ignores RPN and cannot be
 		matched, or for a MIDI monitor that should show plain notes. Default on. */

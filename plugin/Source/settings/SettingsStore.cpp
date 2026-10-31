@@ -36,6 +36,11 @@ namespace
 		did not ask for it should have to look at. */
 	constexpr const char* kPaintStatsKey = "diagnostics.paintStats";
 
+	/** The export window's two remembered choices: the mode and the length. */
+	constexpr const char* kExportLoopedKey = "export.looped";
+	constexpr const char* kExportSecondsKey = "export.seconds";
+	constexpr const char* kExportBitsKey = "export.bits";
+
 	/** The Keyboard page's redraw rate. Absent means 15 - see SettingsStore::defaultRefreshHz. */
 	constexpr const char* kRefreshHzKey = "ui.refreshHz";
 	constexpr const char* kLastSongKey = "standalone.lastSong";
@@ -265,6 +270,61 @@ void SettingsStore::setPaintStats (bool shouldReport)
 
 	file->setValue (kPaintStatsKey, shouldReport);
 	broadcastChange();
+}
+
+bool SettingsStore::getExportLooped (void) const
+{
+	return file->getBoolValue (kExportLoopedKey, false);
+}
+
+void SettingsStore::setExportLooped (bool looped)
+{
+	if (looped == getExportLooped ())
+	{
+		return;
+	}
+
+	file->setValue (kExportLoopedKey, looped);
+	broadcastChange ();
+}
+
+int SettingsStore::getExportSeconds (void) const
+{
+	return juce::jlimit (minExportSeconds, maxExportSeconds,
+						 file->getIntValue (kExportSecondsKey, defaultExportSeconds));
+}
+
+void SettingsStore::setExportSeconds (int seconds)
+{
+	const int clamped = juce::jlimit (minExportSeconds, maxExportSeconds, seconds);
+
+	if (clamped == getExportSeconds ())
+	{
+		return;
+	}
+
+	file->setValue (kExportSecondsKey, clamped);
+	broadcastChange ();
+}
+
+int SettingsStore::getExportBits (void) const
+{
+	const auto stored = file->getIntValue (kExportBitsKey, defaultExportBits);
+
+	return juce::jlimit (minExportBits, maxExportBits, stored);
+}
+
+void SettingsStore::setExportBits (int bits)
+{
+	const int clamped = juce::jlimit (minExportBits, maxExportBits, bits);
+
+	if (clamped == getExportBits ())
+	{
+		return;
+	}
+
+	file->setValue (kExportBitsKey, clamped);
+	broadcastChange ();
 }
 
 int SettingsStore::getRefreshHz (void) const

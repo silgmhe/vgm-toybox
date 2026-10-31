@@ -63,6 +63,27 @@ void NsfBus::load (void)
 	resetBanks ();
 	SetImage (const_cast<uint8_t*> (file.rom.data()), file.loadAddress, (uint32_t) file.rom.size());
 	SetReserved (kPlayerProgram, (uint32_t) sizeof (kPlayerProgram));
+
+	// A restart is a new song as far as a sample is concerned: the previous selection describes
+	// bytes the driver is about to overwrite in its own image, and showing them would be showing
+	// the last song's drum on the first frame of this one.
+	dpcm = DpcmSelection ();
+	pendingDpcmPage = 0;
+	pendingDpcmLength = 0;
+	pendingDpcmRate = 0;
+	pendingDpcmLoop = false;
+	dpcmEnabled = false;
+}
+
+uint8_t NsfBus::peek (uint16_t address)
+{
+	uint32_t value = 0;
+
+	// The CPU's own access, so a sample is read through the same bank mapping the driver set. It
+	// stores nothing; every counter on this class is bumped by Write().
+	Read (address, value, 0);
+
+	return (uint8_t) (value & 0xFF);
 }
 
 bool NsfBus::Read (uint32_t adr, uint32_t& val, uint32_t id)
@@ -140,8 +161,8 @@ bool NsfBus::Write (uint32_t adr, uint32_t val, uint32_t id)
 
 	else if (adr == 0x4023 || (adr >= 0x4040 && adr <= 0x408A))
 	{
-		// The FDS keeps its register file - wavetable included - at - rather than in an
-		// expansion window, and its master switch at . Not counted in expansionWrites: that
+		// The FDS keeps its register file - wavetable included - at $4040-$408A rather than in an
+		// expansion window, and its master switch at $4023. Not counted in expansionWrites: that
 		// tally is what detectUndeclaredChip reads, and the FDS declares itself in the header.
 		expansion = true;
 	}
@@ -149,6 +170,98 @@ bool NsfBus::Write (uint32_t adr, uint32_t val, uint32_t id)
 
 	if (expansion || (adr >= 0x4000 && adr <= 0x4017))
 	{
+		// The DPCM's three registers, remembered because nothing on the chip reports them back.
+		// NES_DMC hands out the address and the rate through its track info but not the length,
+		// and a file written from the sample needs the length to know where it ends.
+		//
+		// Latched on the write that starts the sample rather than on the register writes: a driver
+		// may point $4012/$4013 at the next sample while the current one is still playing.
+		if (adr == 0x4011)
+		{
+			// The DMC's DAC, written directly - the one place a drum's decay could come from, since
+			// the data itself is a stream of equal steps. Counted so the probe can answer whether a
+			// song uses it; the value is not kept, because nothing reads it back.
+			++dacWrites;
+		}
+		else if (adr == 0x4010)
+		{
+			// The rate index and the loop bit. Remembered with the rest because a driver is free
+			// to restore this register after a hit, and then the register describes the next
+			// sample rather than the one being heard.
+			pendingDpcmRate = (uint8_t) (val & 0x0F);
+			pendingDpcmLoop = (val & 0x40) != 0;
+		}
+		else if (adr == 0x4012)
+		{
+			pendingDpcmPage = (uint8_t) (val & 0xFF);
+		}
+		else if (adr == 0x4013)
+		{
+			// All eight bits, which is what the chip this emulates uses: the core computes
+			// `dlength = (len_reg << 4) + 1` from the full register, so a driver that writes
+			// 0x2B asks for 689 bytes. Reading only the low four bits - the real 2A03's width -
+			// cut every sample longer than 241 bytes down to a quarter and made a snare look like
+			// a click. NotSoFatso does the same thing, which is why FamiStudio and the player
+			// disagreed with the exporter.
+			pendingDpcmLength = (uint8_t) (val & 0xFF);
+		}
+		else if (adr == 0x4015)
+		{
+			const bool enabled = (val & 0x10) != 0;
+
+			// Only the edge starts a sample, which is what the hardware does. A driver that keeps
+			// the bit set and writes $4015 every frame for the pulse channels would otherwise
+			// latch again on each of those writes, and what it latched would be the registers as
+			// they happened to stand - which is a page of silence rather than the drum.
+			if (enabled && ! dpcmEnabled)
+			{
+				dpcm.start = (uint16_t) (0xC000u + (uint32_t) pendingDpcmPage * 64u);
+
+				// Eight bits of length, sixteen bytes each, plus the one padding byte: the same
+				// arithmetic the core does at nes_dmc.cpp:622 and NotSoFatso at NSF_Core.cpp:321.
+				// 4081 is the largest it can name, and the copy is a 4KB window, so it fits.
+				dpcm.length = (uint16_t) ((uint32_t) pendingDpcmLength * 16u + 1u);
+				dpcm.rateIndex = pendingDpcmRate;
+				dpcm.loop = pendingDpcmLoop;
+				dpcm.valid = true;
+				++dpcmStarts;
+
+				// Recorded here rather than on every $4012 write: a driver prepares the next
+				// sample's address before it starts it, and an address that was written and never
+				// started is not a sample. It was the boundary search's input once - an entry that
+				// never played cut a real sample short - and the probe still reads it.
+				bool known = false;
+
+				for (uint32_t i = 0; i < pageCount; ++i)
+				{
+					known = known || pagesSeen[i] == pendingDpcmPage;
+				}
+
+				if (! known && pageCount < pagesSeen.size ())
+				{
+					pagesSeen[pageCount++] = pendingDpcmPage;
+				}
+
+				// The bytes, taken now while the bank window still points at the sample. Reading
+				// them later would describe whatever the driver pointed that window at afterwards,
+				// which is a picture of the code rather than of the drum - and it is the same
+				// address, the same length and the same rate, so nothing else gives it away.
+				//
+				// A whole window rather than `dpcm.length`: that register caps at 241 bytes, and the
+				// samples here are longer than that. Where the copy ends is decided later, by the
+				// next sample's address.
+				for (std::size_t i = 0; i < dpcm.bytes.size (); ++i)
+				{
+					const auto address =
+						(uint16_t) (0x8000u + ((uint32_t) (dpcm.start - 0x8000u) + i) % 0x8000u);
+
+					dpcm.bytes[i] = peek (address);
+				}
+			}
+
+			dpcmEnabled = enabled;
+		}
+
 		// The registers are the music, whichever chip owns them. They leave the map here rather
 		// than being stored - and an expansion write has to leave it too, or the chip is created,
 		// ticked, mixed and never told anything.

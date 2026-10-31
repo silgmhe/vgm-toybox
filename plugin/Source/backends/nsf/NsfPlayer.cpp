@@ -8,8 +8,10 @@
 #include <string>
 #include <unordered_map>
 
+#include "backends/nsf/DpcmSample.h"
 #include "backends/nsf/NsfBus.h"
 #include "backends/nsf/NsfChannelNaming.h"
+#include "playback/WaveShape.h"
 
 namespace toybox::backends::nsf
 {
@@ -31,6 +33,28 @@ constexpr double kMinimumNoteSeconds = 1.0 / 60.0;
 	44.1 kHz. Frequent enough that the DPCM row's label clears while the user is still looking
 	at it, rare enough that the check costs nothing on the blocks in between. */
 constexpr uint64_t kScanPollIntervalSamples = 4096;
+
+/** The rate a DPCM sample is read at, from its own rate index.
+
+	Not from the track info: that answers with whatever the register holds when it is asked, and a
+	driver is free to put the register back after a hit. The song this was measured against reported
+	the top of the table - 33144 Hz, 46 ms - for a sample it plays at the eighth, and 46 ms is
+	exactly why it sounded like a click instead of a kick.
+
+	`cycles` is what the chip counts per bit, so the rate is the CPU clock divided by it.
+*/
+float dpcmRate (uint8_t index, bool pal)
+{
+	static constexpr int ntsc[16] = { 428, 380, 340, 320, 286, 254, 226, 214,
+									  190, 160, 142, 128, 106, 84, 72, 54 };
+	static constexpr int palCycles[16] = { 398, 354, 316, 298, 276, 236, 210, 198,
+										   176, 148, 132, 118, 98, 78, 66, 50 };
+
+	const double clock = pal ? kPalClock : kNtscClock;
+	const auto cycles = pal ? palCycles[index & 0x0F] : ntsc[index & 0x0F];
+
+	return (float) (clock / (double) cycles);
+}
 
 /** MIDI's top velocity. The walk records a channel's level as 0..1, so this is the one place
 	where the two scales meet. */
@@ -202,6 +226,49 @@ void NsfPlayer::scanSong (void)
 	scanSampleChannels (scanSeconds);
 }
 
+uint32_t NsfPlayer::dpcmStartCount (void) const
+{
+	return bus != nullptr ? bus->dpcmStarts : 0;
+}
+
+uint32_t NsfPlayer::dacWriteCount (void) const
+{
+	return bus != nullptr ? bus->dacWrites : 0;
+}
+
+uint16_t NsfPlayer::dpcmSampleLength (void) const
+{
+	if (bus == nullptr)
+	{
+		return 0;
+	}
+
+	// $4013 as the core reads it, capped at the copy. The cap is arithmetic hygiene rather than a
+	// real bound: eight bits of length are 4081 bytes and the window is 4096, so no register that
+	// survived its write can reach it.
+	const auto length = (std::min) ((std::size_t) bus->dpcm.length, bus->dpcm.bytes.size ());
+
+	// Filler and the padding byte live in DpcmSample.h, where a test can call them.
+	return (uint16_t) dpcm::finalLength (length, bus->dpcm.bytes.data ());
+}
+
+uint32_t NsfPlayer::dpcmPages (uint8_t* out, uint32_t max) const
+{
+	if (bus == nullptr || out == nullptr)
+	{
+		return 0;
+	}
+
+	const auto count = (std::min) (max, bus->pageCount);
+
+	for (uint32_t i = 0; i < count; ++i)
+	{
+		out[i] = bus->pagesSeen[i];
+	}
+
+	return count;
+}
+
 void NsfPlayer::resetToStart (void)
 {
 	rendered = 0;
@@ -210,6 +277,14 @@ void NsfPlayer::resetToStart (void)
 	pcPages.fill (0);
 	sampleRateWritten = false;
 	sampleAddrWritten = false;
+
+	// The cache describes bytes in the image that is about to be replaced. Both fields go to values
+	// no real selection can hold - a sample never starts below $C000 and is never empty - so the
+	// first capture after a restart decodes instead of matching the previous song's drum.
+	dpcmWave.clear ();
+	dpcmWaveStart = 0;
+	dpcmWaveLength = 0;
+	dpcmWaveStarts = 0;
 
 	// Order matters, and each step was paid for once already:
 	//   1. the image, then the trampoline (SetImage clears the 64 KB it lives in);
@@ -871,6 +946,41 @@ bool NsfPlayer::captureState (playback::ChipStateSnapshot& snapshot, bool includ
 				// The slot's identity, spread so that address and rate each move the drawing -
 				// a sample played at two speeds is two marks, as it is two notes.
 				state.shapeParameter = (tone << 4) ^ (rate * 7919);
+
+				// The bytes the sample actually holds, so the row shows the drum rather than a
+				// stand-in for it. `sampleRate` carries the rate they are read at - a file of them
+				// has to declare it or it plays at the wrong pitch - and it is taken here because
+				// `frequency` is cleared for this channel a few lines below.
+				//
+				// Kept when the sample ends: the row is a record of the last hit, and blanking it
+				// would leave an empty column for most of a drum line, where every hit lasts a few
+				// milliseconds.
+				if (bus != nullptr && bus->dpcm.valid)
+				{
+					state.sampleRate = dpcmRate (bus->dpcm.rateIndex, file.isPal ());
+
+					const auto length = dpcmSampleLength ();
+
+					// Keyed on the start count as well as the selection: the same address played
+					// twice reads different bytes if the driver moved the bank in between, and no
+					// register shows that - only the copy taken at each start does.
+					if (dpcmWaveStart != bus->dpcm.start || dpcmWaveLength != length
+						|| dpcmWaveStarts != bus->dpcmStarts)
+					{
+						dpcmWave = dpcm::decode (bus->dpcm.bytes.data (), length);
+						dpcmWaveStart = bus->dpcm.start;
+						dpcmWaveLength = length;
+						dpcmWaveStarts = bus->dpcmStarts;
+					}
+
+					// A copy per frame, and the only one available: `wave` is a value type and every
+					// other consumer of a snapshot expects to own what it was handed. It costs
+					// 130 KB at worst, fifteen times a second, on the audio thread - the price of
+					// keeping the snapshot a value. Revisit if captureState() is ever called per
+					// block instead of per frame, or if a sample can reach the 4081-byte ceiling
+					// with something else also copying snapshots.
+					state.wave = dpcmWave;
+				}
 			}
 			else
 			{
@@ -1060,12 +1170,26 @@ bool NsfPlayer::captureState (playback::ChipStateSnapshot& snapshot, bool includ
 	if (vrc7 != nullptr)
 	{
 		// Six FM voices. There is no waveform to read - the chip computes its own - so the panel
-		// synthesises one from the shape kind, and the instrument number is what identifies it.
+		// synthesises one from the shape kind. The four numbers that make one patch look unlike
+		// the next live inside the emulator's slot array, which is why they are asked for here
+		// rather than derived from the registers ChannelState already carries.
 		for (int i = 0; i < kVrc7Channels; ++i)
 		{
 			const std::string name = "FM " + std::to_string (i + 1);
-			addChannel (name.c_str (), "VRC7", kFirstExpansionTrack + i, kShapeFm, kNoDuty,
-						vrc7->GetTrackInfo (i));
+			const auto index = addChannel (name.c_str (), "VRC7", kFirstExpansionTrack + i, kShapeFm,
+										   kNoDuty, vrc7->GetTrackInfo (i));
+
+			int multiple = 0;
+			int level = 0;
+			int waveSelect = 0;
+			int feedback = 0;
+
+			if (vrc7->GetFmParameters (i, multiple, level, waveSelect, feedback)
+				&& index < snapshot.channels.size ())
+			{
+				snapshot.channels[index].shapeParameter
+					= playback::waveform::packFm (multiple, level, waveSelect, feedback);
+			}
 		}
 	}
 

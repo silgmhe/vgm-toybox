@@ -1,0 +1,35 @@
+# Screenshots of the two settings pages whose explanations were the last to be squeezed.
+#
+# The MIDI page's root hint is the longest sentence in the panel and was budgeted two lines for
+# three; the Keyboard page's hint is shorter than the height it is given and was still compressed,
+# because its Label never set a floor and the default is none.
+#
+# Run:  build\plugin\vgm_app_test plugin\Tests\scripts\settings-shot.txt
+# Output: build\shots\settings-midi.png, build\shots\settings-keyboard.png
+
+size 1500 900
+
+menu invoke options.settings
+
+tick
+
+sleep 200
+
+# Rows in the sidebar, counting from zero: MIDI is the fourth.
+select settings.tree 3
+
+tick
+
+sleep 200
+
+shot build/shots/settings-midi.png
+
+# And Keyboard is the sixth. Its page is not built when the harness has no audio hooks, which is
+# what the first line of settings-pages.txt is for - but this script needs neither.
+select settings.tree 5
+
+tick
+
+sleep 200
+
+shot build/shots/settings-keyboard.png

@@ -122,6 +122,52 @@ ToyboxAudioProcessorEditor::ToyboxAudioProcessorEditor (ToyboxAudioProcessor& p)
 	// up there without a line of menu code.
 	auto* playPage = new PlayView (engine, processor.wrapperType != juce::AudioProcessor::wrapperType_Standalone);
 	playView = playPage;
+
+	playPage->onExportReport = [this] (const toybox::ui::ExportReport& report)
+	{
+		// Only one overlay at a time: an export report while Settings is up would sit behind it.
+		settingsOverlay.setVisible (false);
+		aboutOverlay.setVisible (false);
+
+		exportOverlay.setReport (report);
+		exportOverlay.setBounds (getLocalBounds ());
+		exportOverlay.setVisible (true);
+		exportOverlay.toFront (false);
+		exportOverlay.grabKeyboardFocus ();		// so escape works without clicking first
+	};
+
+	playPage->onExportOptions = [this]
+	{
+		const auto& store = settings::SettingsStore::getInstance ();
+
+		ExportOptions options;
+		options.looped = store.getExportLooped ();
+		options.seconds = store.getExportSeconds ();
+		options.bits = store.getExportBits ();
+
+		exportOptionsOverlay.setOptions (options);
+		exportOptionsOverlay.setBounds (getLocalBounds ());
+		exportOptionsOverlay.setVisible (true);
+		exportOptionsOverlay.toFront (false);
+		exportOptionsOverlay.grabKeyboardFocus ();
+	};
+
+	exportOptionsOverlay.onConfirm = [this] (const toybox::ui::ExportOptions& options)
+	{
+		// Remembered so the next export is one click: the mode rarely changes between songs, and
+		// the length almost never does.
+		auto& store = settings::SettingsStore::getInstance ();
+		store.setExportLooped (options.looped);
+		store.setExportSeconds (options.seconds);
+		store.setExportBits (options.bits);
+
+		exportOptionsOverlay.setVisible (false);
+
+		if (playView != nullptr)
+		{
+			playView->beginExport (options);
+		}
+	};
 	viewStack.addView (playPage);
 
 	// Whatever the user was looking at last time; the design's default is the mixer.
@@ -167,6 +213,16 @@ ToyboxAudioProcessorEditor::ToyboxAudioProcessorEditor (ToyboxAudioProcessor& p)
 	// a dialog of its own did to this application
 	addChildComponent (aboutOverlay);
 	aboutOverlay.onClose = [this] { aboutOverlay.setVisible (false); };
+
+	// What an export did. A child of the window rather than of the keyboard card, so the
+	// whole interface dims behind it - the same as Settings, and for the same reason: a
+	// message that darkens one card reads as part of that card and leaves everything else
+	// looking live while it is blocked.
+	addChildComponent (exportOverlay);
+	exportOverlay.onClose = [this] { exportOverlay.setVisible (false); };
+
+	addChildComponent (exportOptionsOverlay);
+	exportOptionsOverlay.onCancel = [this] { exportOptionsOverlay.setVisible (false); };
 
 	// Options > Settings, the same shape as the About box and for the same reason. The two are
 	// never up together (showSettings/showAbout hide the other one), so the order they are added
@@ -254,6 +310,8 @@ void ToyboxAudioProcessorEditor::changeListenerCallback (juce::ChangeBroadcaster
 	viewStack.refreshLanguage();
 	dropHint.refreshLanguage();
 	aboutOverlay.refreshLanguage();
+	exportOverlay.refreshLanguage();
+	exportOptionsOverlay.refreshLanguage();
 	settingsOverlay.refreshLanguage();
 
 	// Both halves are needed and neither implies the other: the broadcast re-reads every colour
@@ -402,6 +460,16 @@ void ToyboxAudioProcessorEditor::resized (void)
 	if (aboutOverlay.isVisible())
 	{
 		aboutOverlay.setBounds (getLocalBounds());
+	}
+
+	if (exportOverlay.isVisible())
+	{
+		exportOverlay.setBounds (getLocalBounds());
+	}
+
+	if (exportOptionsOverlay.isVisible())
+	{
+		exportOptionsOverlay.setBounds (getLocalBounds());
 	}
 
 	if (settingsOverlay.isVisible())

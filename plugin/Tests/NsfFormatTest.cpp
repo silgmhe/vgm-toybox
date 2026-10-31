@@ -6,6 +6,7 @@
     produces silence, not a crash, several layers later.
 */
 
+#include <cmath>
 #include <cstdio>
 #include <cstring>
 #include <string>
@@ -14,7 +15,10 @@
 #include <juce_core/juce_core.h>
 
 #include "TestSupport.h"
+#include "backends/nsf/DpcmSample.h"
 #include "backends/nsf/NsfBus.h"
+#include "backends/nsf/NsfPlayer.h"
+#include "playback/WaveShape.h"
 #include "formats/nsf/NsfFile.h"
 #include "xgm/devices/Sound/nes_apu.h"
 #include "xgm/devices/Sound/nes_dmc.h"
@@ -237,6 +241,130 @@ int main (void)
 		bus.Read (0x4103, value);
 		check (first && value == 0x4C, "the player trampoline survives the image load");
 		check (writes == 1, "and installing it writes no sound register");
+
+		// --- what the DPCM's registers said when the sample started -------------------------------
+		//
+		// Nothing on the chip reports the length back: NES_DMC hands out the address and the rate
+		// through its track info and stops there, and a file written from a sample has to know where
+		// it ends. So the bus remembers the three writes and latches them at the one that starts the
+		// sample - a driver is free to point $4012 and $4013 at the next sample while the current
+		// one is still playing, and the registers would then describe something nobody hears.
+		check (! bus.dpcm.valid, "nothing is latched before a sample starts");
+
+		bus.Write (0x4012, 0x03);
+		bus.Write (0x4013, 0x02);
+		check (! bus.dpcm.valid, "and pointing at one does not start it either");
+
+		bus.Write (0x4015, 0x10);
+		check (bus.dpcm.valid, "the write that starts the sample latches it");
+		check (bus.dpcm.start == 0xC0C0, "at $C000 plus the page, sixty-four bytes each");
+		check (bus.dpcm.length == 33, "with the length in sixteen-byte units, plus that one byte");
+
+		// All eight bits of the length register count, which is what the core does -
+		// `dlength = (len_reg << 4) + 1` from the full byte - and what NotSoFatso does at
+		// NSF_Core.cpp:321. 0x2B is 689 bytes, and a snare really is that long.
+		//
+		// Reading only the low four bits, the real 2A03's width, is what made a 689-byte sample
+		// come out as 177: a snare that sounded like a click. The address register is different -
+		// it is `$C000 | (value << 6)`, so its top two bits fall off by construction.
+		bus.Write (0x4015, 0x00);			// stops it, which is what arms the next one
+		bus.Write (0x4012, 0x07);
+		bus.Write (0x4013, 0x2B);
+		bus.Write (0x4015, 0x10);
+		check (bus.dpcm.start == 0xC1C0, "the address is $C000 plus the page");
+		check (bus.dpcm.length == 689, "and the length counts all eight bits of its register");
+
+		// Only the 0 -> 1 edge starts a sample. The failure this catches is the one this song had:
+		// a driver that leaves the bit set and writes $4015 for the pulse channels every frame
+		// latched the registers on every one of those writes, and the pair it caught was a page of
+		// silence rather than the drum.
+		bus.Write (0x4012, 0x09);
+		bus.Write (0x4015, 0x10);
+		check (bus.dpcm.start == 0xC1C0, "a set bit written again latches nothing new");
+
+		// The byte a sample is drawn from has to be the byte the CPU would read: same bank mapping,
+		// same image. peek() takes the same path by construction, so this checks that it does.
+		uint32_t cpuSaw = 0;
+		bus.Read (0xC1C0, cpuSaw);
+		check (bus.peek (0xC1C0) == (uint8_t) (cpuSaw & 0xFF),
+			   "peek answers what the CPU would have been given");
+
+		// The rate travels with the rest, and it has to: the same 193 bytes are 46 ms at the top of
+		// the table and 370 ms at the bottom, which is the difference between a click and a kick.
+		bus.Write (0x4015, 0x00);
+		bus.Write (0x4010, 0x48);			// rate 8, loop on, irq off
+		bus.Write (0x4012, 0x0B);
+		bus.Write (0x4013, 0x0C);
+		bus.Write (0x4015, 0x10);
+		check (bus.dpcm.rateIndex == 8, "the rate index is latched with the address");
+		check (bus.dpcm.loop, "and so is the loop bit");
+	}
+
+	{
+		// --- from a register's value to the bytes a file holds ---------------------------------
+		//
+		// Three steps with no test until now, and every error this feature has had was in one of
+		// them: a length read four bits wide, a tail that kept its filler, a padding byte counted
+		// as data. Each was found by comparing an exported file against one FamiStudio produced,
+		// which is a slow way to learn that a number is off by one.
+		//
+		// The numbers below are rungs of a ladder rather than observations of one song: 4081 is the
+		// register's own ceiling, and no file here reaches it.
+		using namespace toybox::backends::nsf;
+
+		check (dpcm::lengthFromRegister (0x00) == 1, "an empty length register still asks for one byte");
+		check (dpcm::lengthFromRegister (0x0C) == 193, "twelve units plus the padding byte");
+		check (dpcm::lengthFromRegister (0xFF) == dpcm::kMaxBytes,
+			   "and the ceiling comes from the register, not from a song");
+
+		// Filler in all four shapes it takes here: silence in DPCM, and the two unwritten patterns.
+		const uint8_t trailing[] = { 0x12, 0x34, 0x00, 0x55, 0xAA, 0xFF };
+		check (dpcm::trimFiller (trailing, 6) == 2, "trailing filler is not part of the sample");
+		check (dpcm::trimFiller (trailing, 2) == 2, "and a tail without any is left alone");
+
+		const uint8_t silence[] = { 0x55, 0xAA, 0x00 };
+		check (dpcm::trimFiller (silence, 3) == 0, "a sample of nothing trims to nothing");
+
+		check (dpcm::trimFiller (trailing, 0) == 0, "an empty sample stays empty");
+		check (dpcm::trimFiller (nullptr, 8) == 0, "and no buffer is not a crash");
+
+		// The padding byte. 321 is 16*20+1, so its last byte is the one the formula added.
+		check (dpcm::dropPaddingByte (321) == 320, "a length on 16k+1 loses the padding byte");
+		check (dpcm::dropPaddingByte (320) == 320, "and a length that only lands near it keeps every byte");
+		check (dpcm::dropPaddingByte (1) == 0, "one byte is the padding byte and nothing else");
+		check (dpcm::dropPaddingByte (0) == 0, "and an empty sample cannot go below empty");
+
+		// Both steps on the shape Entry080's first sample has: 320 bytes of data, then filler, with
+		// the register describing one byte more than the file holds.
+		std::vector<uint8_t> padded (321, 0x00);
+
+		for (std::size_t i = 0; i < 320; ++i)
+		{
+			padded[i] = (uint8_t) (i * 7u + 3u);
+		}
+
+		check (dpcm::finalLength (321, padded.data ()) == 320,
+			   "filler first, then the padding byte, is what the file holds");
+
+		// The integration. Alternating bits walk nowhere, which is why 0xAA and 0x55 are silence,
+		// and eight ones in a row climb by exactly eight steps of two.
+		const uint8_t alternating[] = { 0x55 };
+		const auto flat = dpcm::decode (alternating, 1);
+
+		check (flat.size () == 8, "eight steps per byte");
+		check (std::abs (flat[0] + 0.015625f) < 0.0001f, "the first step down is two of a hundred and twenty-eight");
+
+		const uint8_t upward[] = { 0xFF };
+		const auto rising = dpcm::decode (upward, 1);
+
+		check (std::abs (rising[7] - 0.125f) < 0.0001f, "eight steps up leave the level at sixteen");
+
+		// The rail is seven bits and asymmetrical: clamping at 127 rather than 128 is what keeps
+		// the top of a loud sample from folding, and the divisor matches the range.
+		std::vector<uint8_t> loud (9, 0xFF);
+		const auto clamped = dpcm::decode (loud.data (), loud.size ());
+
+		check (std::abs (clamped.back () - 127.0f / 128.0f) < 0.0001f, "and the level stops at the positive rail");
 	}
 
 	{
@@ -301,6 +429,115 @@ int main (void)
 	}
 
 
+
+#if defined (TOYBOX_TEST_DPCM_SONG)
+
+	{
+		// --- the same question, asked of a real song -------------------------------------------
+		//
+		// The arithmetic above is checked with made-up bytes. This walks the whole path on a file:
+		// dpcm_two_samples.nsf starts a 320-byte sample at $D200 twelve seconds in, and a 512-byte
+		// one at $D380 thirty-five seconds in - the lengths FamiStudio exports for the same song.
+		//
+		// Four separate faults once hid behind those two numbers: a length read four bits wide, a
+		// tail that kept its filler, a padding byte counted as data, and a boundary taken from the
+		// wrong register. Every one of them was found by comparing an exported file by hand,
+		// because the tests stopped at the arithmetic and this path was only ever walked by a probe
+		// someone remembered to run.
+		std::FILE* asset = std::fopen (TOYBOX_TEST_DPCM_SONG, "rb");
+
+		check (asset != nullptr, "the DPCM asset opens");
+
+		if (asset != nullptr)
+		{
+			std::fseek (asset, 0, SEEK_END);
+			const auto size = (std::size_t) std::ftell (asset);
+			std::fseek (asset, 0, SEEK_SET);
+
+			std::vector<uint8_t> bytes (size);
+			const auto read = std::fread (bytes.data (), 1, size, asset);
+			std::fclose (asset);
+
+			check (read == size, "and reads whole");
+
+			toybox::formats::nsf::NsfFile song;
+			std::string error;
+
+			check (toybox::formats::nsf::NsfFile::parse (bytes.data (), bytes.size (), song, error),
+				   "and parses as an NSF");
+
+			toybox::backends::nsf::NsfPlayer player (song, 44100.0);
+			player.start ();
+
+			std::vector<float> left (1024, 0.0f), right (1024, 0.0f);
+
+			const auto sampleBytes = [] (const toybox::playback::ChipStateSnapshot& snapshot)
+			{
+				for (const auto& channel : snapshot.channels)
+				{
+					if (channel.waveKind == (int) toybox::playback::waveform::Kind::delta)
+					{
+						return channel.wave.size () / 8u;
+					}
+				}
+
+				return (std::size_t) 0;
+			};
+
+			// Sampled once a second across forty seconds, collecting every distinct length rather
+			// than reading whatever happens to be current at the end. The two samples start twelve
+			// and thirty-five seconds in, so a single capture describes one of them and says
+			// nothing about the other - which is exactly the mistake this feature kept making.
+			std::vector<std::size_t> lengths;
+
+			for (int block = 0; block < 1722; ++block)
+			{
+				player.render (left.data (), right.data (), 1024);
+
+				if (block % 43 != 0)		// about once a second at 44.1 kHz
+				{
+					continue;
+				}
+
+				toybox::playback::ChipStateSnapshot snapshot;
+				player.captureState (snapshot);
+
+				const auto bytes = sampleBytes (snapshot);
+
+				if (bytes == 0)
+				{
+					continue;
+				}
+
+				bool known = false;
+
+				for (const auto seen : lengths)
+				{
+					known = known || seen == bytes;
+				}
+
+				if (! known)
+				{
+					lengths.push_back (bytes);
+				}
+			}
+
+			bool has320 = false;
+			bool has512 = false;
+
+			for (const auto bytes : lengths)
+			{
+				has320 = has320 || bytes == 320;
+				has512 = has512 || bytes == 512;
+			}
+
+			check (has320, "the song has a 320-byte sample");
+			check (has512, "and a 512-byte one");
+			check (lengths.size () == 2, "and no others");
+		}
+	}
+
+#endif
 
 	std::printf ("\nResult    : %s\n", toybox::test::failures() == 0 ? "all checks passed" : "FAILURES");
 

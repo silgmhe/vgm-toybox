@@ -4,6 +4,7 @@
 
 #include <juce_gui_basics/juce_gui_basics.h>
 
+#include <functional>
 #include <memory>
 #include <vector>
 
@@ -13,6 +14,13 @@ namespace toybox::ui
 {
 
 class MixerPanel;
+
+/** What an export did - see ExportReportOverlay.h. Declared rather than included so this header
+	stays as light as it is; the definition is needed only where the report is built. */
+struct ExportReport;
+
+/** What the user chose before an export started - see ExportOptionsOverlay.h. */
+struct ExportOptions;
 
 /** What the rectangle above the transport is showing. */
 enum class ContentView
@@ -63,6 +71,22 @@ public:
 	~ContentSlot (void) override;
 
 	void setView (ContentView view);
+
+	/** Called when an export finishes, with what it did.
+
+		The editor owns the window that reports it, not this slot: a report dimming only this card
+		read as part of the card, and left the rest of the interface looking live while it was
+		blocked. Same shape as the settings panel, which covers the window.
+	*/
+	std::function<void (const ExportReport&)> onExportReport;
+
+	/** Called when the export button is pressed, to ask what to write. The window that asks lives
+		with the editor, for the same reason the report does. */
+	std::function<void ()> onExportOptions;
+
+	/** Starts the export with the options the user chose - called back by the editor once its
+		options window has been confirmed. */
+	void beginExport (const ExportOptions& options);
 	ContentView getView (void) const { return current; }
 
 	void refresh (void);
@@ -96,7 +120,6 @@ private:
 	std::unique_ptr<ScopePanel> scopePanel;
 
 	std::unique_ptr<juce::FileChooser> waveChooser;
-	juce::String exportStatus;
 
 	JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (ContentSlot)
 };

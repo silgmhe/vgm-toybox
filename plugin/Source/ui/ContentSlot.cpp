@@ -1,11 +1,12 @@
 #include "ContentSlot.h"
 
 #include "ButtonPaint.h"
+#include "ExportOptionsOverlay.h"
+#include "ExportReportOverlay.h"
 #include "MixerPanel.h"
 #include "KeyboardLayout.h"
 #include "KeyboardRowLayout.h"
 #include "KeyboardRowPaint.h"
-#include "WaveShape.h"
 #include "Theme.h"
 #include "i18n/LanguageManager.h"
 #include "playback/PlaybackEngine.h"
@@ -126,12 +127,13 @@ class ContentSlot::KeyboardPanel : public juce::Component,
 								   private juce::ScrollBar::Listener
 {
 public:
-	KeyboardPanel (toybox::PlaybackEngine& engineToUse, juce::String& statusToUse)
-		: engine (engineToUse), exportStatus (statusToUse)
+	explicit KeyboardPanel (toybox::PlaybackEngine& engineToUse)
+		: engine (engineToUse)
 	{
 		// No colours set here on purpose: the button is drawn by the application's look and feel,
 		// which asks the palette. Overriding them once in the constructor is why this button kept
 		// its old colours after a theme change.
+		exportButton.setComponentID ("view.keyboard.export");
 		exportButton.setButtonText (toybox::i18n::tr ("visualiser.export"));
 		exportButton.onClick = [this] { if (onExport) { onExport (); } };
 		setComponentID ("view.keyboard");
@@ -184,6 +186,14 @@ public:
 		snapshot = std::move (snapshotToUse);
 		afterSnapshot ();
 	}
+
+	/** The snapshot this panel is drawing.
+
+		The slot moves its own copy in here every frame - that is what the rvalue overload above
+		bought - so by the time a FileChooser comes back, the slot's copy is empty. The exporter
+		used to read the slot's, and reported "nothing to export" over a screen full of waveforms.
+	*/
+	const toybox::playback::ChipStateSnapshot& drawnSnapshot (void) const { return snapshot; }
 
 	/** Everything both setSnapshot overloads do once the copy is in place. */
 	void afterSnapshot (void)
@@ -347,14 +357,6 @@ public:
 		// The window controls live in the header so they never scroll away, and to the left of the
 		// export button so they sit where this page keeps its other actions.
 		paintShiftControls (g, header.withTrimmedTop (8).withHeight (26));
-
-		if (exportStatus.isNotEmpty ())
-		{
-			g.setColour (theme::secondaryText ());
-			g.setFont (juce::Font (juce::FontOptions (11.5f)));
-			g.drawText (exportStatus, header.withTrimmedRight (124),
-						juce::Justification::centredRight, false);
-		}
 
 		// No relayout() here. It is already called by resized() and by setSnapshot(), which are the
 		// two things that can change what the rows are; calling it again on every paint meant the
@@ -1246,7 +1248,6 @@ private:
 	bool hoveredRowMute = false;
 	bool lastPointerWasOverControl = false;
 
-	juce::String& exportStatus;
 	juce::TextButton exportButton { "export" };
 };
 
@@ -1269,59 +1270,25 @@ ContentSlot::ContentSlot (toybox::PlaybackEngine& engineToUse)
 {
 	mixer = std::make_unique<MixerPanel> (engine);
 
-	keyboardPanel = std::make_unique<KeyboardPanel> (engine, exportStatus);
+	keyboardPanel = std::make_unique<KeyboardPanel> (engine);
 	keyboardPanel->onExport = [this]
 	{
-		// The export lives with the panel that owns the waves, but the file chooser is the
-		// slot's: one chooser per page rather than one per view.
-		const int writable = (int) snapshot.channels.size ();
-
-		if (writable == 0)
+		// Two steps now: ask what to write, then choose where. The window that asks belongs to the
+		// editor, so all this does is request it - beginExport() is called back with the answer.
+		if (keyboardPanel->drawnSnapshot ().channels.empty ())
 		{
-			exportStatus = toybox::i18n::tr ("visualiser.exportEmpty");
-			keyboardPanel->repaint ();
+			if (onExportReport != nullptr)
+			{
+				onExportReport (ExportReport {});
+			}
+
 			return;
 		}
 
-		waveChooser = std::make_unique<juce::FileChooser> (toybox::i18n::tr ("visualiser.export"),
-														   juce::File::getSpecialLocation (juce::File::userDesktopDirectory),
-														   juce::String (), true);
-
-		waveChooser->launchAsync (juce::FileBrowserComponent::openMode
-								  | juce::FileBrowserComponent::canSelectDirectories,
-								  [this] (const juce::FileChooser& chooser)
+		if (onExportOptions != nullptr)
 		{
-			const auto folder = chooser.getResult ();
-
-			if (folder == juce::File () || ! folder.isDirectory ())
-			{
-				return;
-			}
-
-			int written = 0;
-
-			for (std::size_t i = 0; i < snapshot.channels.size (); ++i)
-			{
-				const auto& channel = snapshot.channels[i];
-
-				if (channel.wave.size () < 2)
-				{
-					continue;
-				}
-
-				const auto name = juce::File::createLegalFileName (juce::String (channel.name)
-																   + " " + juce::String ((int) i + 1))
-								  + ".wav";
-
-				if (playback::writeCycleWav (channel, folder.getChildFile (name).getFullPathName ().toStdString ()))
-				{
-					++written;
-				}
-			}
-
-			exportStatus = juce::String (written) + " WAV";
-			keyboardPanel->repaint ();
-		});
+			onExportOptions ();
+		}
 	};
 
 	scopePanel = std::make_unique<ScopePanel> ();
@@ -1367,6 +1334,63 @@ void ContentSlot::setView (ContentView view)
 	repaint ();
 }
 
+void ContentSlot::beginExport (const ExportOptions& options)
+{
+	waveChooser = std::make_unique<juce::FileChooser> (toybox::i18n::tr ("visualiser.export"),
+													   juce::File::getSpecialLocation (juce::File::userDesktopDirectory),
+													   juce::String (), true);
+
+	waveChooser->launchAsync (juce::FileBrowserComponent::openMode
+							  | juce::FileBrowserComponent::canSelectDirectories,
+							  [this, options] (const juce::FileChooser& chooser)
+	{
+		const auto parent = chooser.getResult ();
+
+		if (parent == juce::File () || ! parent.isDirectory ())
+		{
+			return;
+		}
+
+		// One folder per song. Exporting two songs into one directory interleaved their files, and
+		// a name like "Pulse 1.wav" says nothing about which song it came from.
+		//
+		// A plugin instance may have been handed its song through the host rather than a file the
+		// engine knows, so the name can be empty; the folder still needs one.
+		const auto songName = engine.getFile ().getFileNameWithoutExtension ();
+		const auto folderName = songName.isNotEmpty () ? songName : juce::String ("wavetables");
+
+		ExportReport report;
+		report.folder = parent.getChildFile (juce::File::createLegalFileName (folderName));
+
+		const auto& drawn = keyboardPanel->drawnSnapshot ();
+
+		report.channelsSeen = (int) drawn.channels.size ();
+
+		if (report.folder.createDirectory ().wasOk ())
+		{
+			const auto mode = options.looped ? playback::ExportMode::looped : playback::ExportMode::single;
+
+			const auto outcome = playback::exportWavetables (drawn,
+															 report.folder.getFullPathName ().toStdString (),
+															 mode, (double) options.seconds,
+															 options.bits);
+
+			report.written = outcome.written;
+			report.skippedSample = outcome.skippedSample;
+			report.failed = outcome.failed;
+		}
+		else
+		{
+			report.failed = report.channelsSeen;
+		}
+
+		if (onExportReport != nullptr)
+		{
+			onExportReport (report);
+		}
+	});
+}
+
 void ContentSlot::refresh (void)
 {
 	if (mixer != nullptr)
@@ -1390,7 +1414,6 @@ void ContentSlot::songChanged (void)
 	snapshot.channels.clear ();
 	snapshot.valid = false;
 	lastChannelCount = -1;
-	exportStatus.clear ();
 
 	if (keyboardPanel != nullptr)
 	{

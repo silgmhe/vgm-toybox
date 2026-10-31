@@ -407,14 +407,32 @@ void ToyboxLookAndFeel::positionComboBoxText (juce::ComboBox& box, juce::Label& 
 
 void ToyboxLookAndFeel::drawLabel (juce::Graphics& g, juce::Label& label)
 {
-	if (! wantsCompactComboText (label) || label.isBeingEdited())
+	// A slider's value box is a Label owned by the slider, and the slider fills it in through
+	// updateText() on its own schedule. Drawing it here emptied both value boxes on the keyboard
+	// page - "120 ms" and "15 Hz" came out as blank rectangles - so the base implementation keeps
+	// them. They are numbers in a box sized for numbers; nothing there needs wrapping.
+	if (label.isBeingEdited() || dynamic_cast<juce::Slider*> (label.getParentComponent ()) != nullptr)
 	{
 		juce::LookAndFeel_V2::drawLabel (g, label);
 		return;
 	}
 
-	// The same drawing as LookAndFeel_V2::drawLabel, but with the compact text and no horizontal
-	// squeezing. It is kept local so every other Label still takes JUCE's implementation.
+	// Every Label in this window is drawn here rather than by LookAndFeel_V2, and the only
+	// difference is the last argument below.
+	//
+	// The base implementation passes `label.getMinimumHorizontalScale()` straight through, and that
+	// property defaults to zero - no floor at all. So a sentence that does not fit the height it
+	// was given is narrowed until it does, and comes out as one line of compressed glyphs. Fifteen
+	// labels in the settings panel had floors set by hand (0.6 to 0.8), each added to make one
+	// sentence fit; the ones nobody remembered were still being squeezed, which is why the keyboard
+	// page's hint stayed compressed after that pass.
+	//
+	// Chasing call sites cannot work here: the property is optional and its absence is the problem.
+	// Applying it where every Label passes through can. Done by drawing rather than by setting the
+	// property - setMinimumHorizontalScale() repaints, and repainting from inside paint is a loop.
+	const auto drawn = wantsCompactComboText (label) ? compactComboText (label.getText())
+													 : label.getText();
+
 	g.fillAll (label.findColour (juce::Label::backgroundColourId));
 
 	const float alpha = label.isEnabled() ? 1.0f : 0.5f;
@@ -423,7 +441,7 @@ void ToyboxLookAndFeel::drawLabel (juce::Graphics& g, juce::Label& label)
 	g.setFont (font);
 
 	const auto textArea = getLabelBorderSize (label).subtractedFrom (label.getLocalBounds());
-	g.drawFittedText (compactComboText (label.getText()), textArea, label.getJustificationType(),
+	g.drawFittedText (drawn, textArea, label.getJustificationType(),
 					  juce::jmax (1, (int) ((float) textArea.getHeight() / font.getHeight())),
 					  1.0f);
 

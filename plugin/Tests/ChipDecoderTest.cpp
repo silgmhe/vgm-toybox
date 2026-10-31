@@ -7,12 +7,18 @@
 //   cmake --build <build dir> --target vgm_chip_test
 //   <build dir>/plugin/vgm_chip_test
 
+#include <algorithm>
 #include <cmath>
 #include <cstdint>
 #include <cstdio>
+#include <cstring>
+#include <filesystem>
 #include <vector>
 
 #include "midi/ChipPlans.h"
+
+#include "playback/WaveExport.h"
+#include "playback/WaveShape.h"
 
 #include "chips/Ay8910Decoder.h"
 #include "chips/C140Decoder.h"
@@ -4445,6 +4451,588 @@ void testChipPlans (void)
 		   "an unknown chip promises nothing");
 }
 
+/* The wavetable writer: one period, at the length and rate a synth expects.
+
+	This replaced a writer that repeated the cycle sixteen times and set the sample rate from the
+	note being played, so that a sampler looping the file reproduced the original pitch. Both were
+	right for a sampler and wrong for a wavetable: Serum reads the whole file as one period, so
+	sixteen copies read as a wave that oscillates sixteen times per cycle, and a rate derived from
+	the note makes the file's pitch a property of the song rather than of the shape.
+*/
+void testWaveExport (void)
+{
+	using namespace toybox::playback;
+
+	const char* path = "__wave_export_test.wav";
+
+	// A synthesised shape: the registers describe it, and `wave` is empty - which is the case this
+	// export used to skip, on every chip except FDS and N163.
+	ChannelState pulse;
+	pulse.waveKind = (int) waveform::Kind::pulse;
+	pulse.duty = 0.25f;
+
+	check (hasPeriodicShape (pulse), "a pulse is a period even with an empty wave array");
+	check (cycleOf (pulse).size () == 32, "its cycle is the synthesiser's 32 points");
+
+	check (writeCycleWav (pulse, path), "the wavetable writes");
+
+	std::FILE* file = std::fopen (path, "rb");
+
+	check (file != nullptr, "the written file can be opened");
+
+	if (file != nullptr)
+	{
+		// A hundred bytes, not forty-four: the data chunk sits behind the marker chunk now, and a
+		// buffer that stops at the fmt chunk cannot see it.
+		unsigned char header[100] = {};
+		const auto headerRead = std::fread (header, 1, sizeof (header), file);
+
+		std::fseek (file, 0, SEEK_END);
+		const auto size = (long) std::ftell (file);
+		std::fclose (file);
+
+		check (headerRead == sizeof (header), "the header is 100 bytes");
+		check (size == 100 + (long) kWavetableSamples * 4L,
+			   "the file holds one period and not sixteen");
+
+		const auto u32 = [&header] (int at)
+		{
+			return (uint32_t) header[at] | ((uint32_t) header[at + 1] << 8)
+				   | ((uint32_t) header[at + 2] << 16) | ((uint32_t) header[at + 3] << 24);
+		};
+
+		check (header[0] == 'R' && header[1] == 'I' && header[2] == 'F' && header[3] == 'F',
+			   "the file starts with RIFF");
+		check (header[92] == 'd' && header[93] == 'a' && header[94] == 't' && header[95] == 'a',
+			   "and carries a data chunk, after the marker");
+		check (u32 (24) == (uint32_t) kWavetableRate, "the rate is 44100, not the note's frequency");
+		check (u32 (96) == (uint32_t) kWavetableSamples * 4u, "the data chunk is 2048 float samples");
+		check (header[20] == 3, "and its format is IEEE float, which is what a wavetable is");
+
+		std::remove (path);
+	}
+
+	// A sampled channel is a recording with a start and an end, so it is not a wavetable. Its row
+	// is drawn from a synthesised mark rather than from sample data, which is why exporting it
+	// would write a picture of nothing.
+	ChannelState dpcm;
+	dpcm.waveKind = (int) waveform::Kind::delta;
+	dpcm.shapeParameter = 3;
+
+	check (! hasPeriodicShape (dpcm), "a DPCM row is not exported as a wavetable");
+
+	// A channel carrying its own table is written from that table, not from a synthesis.
+	ChannelState stored;
+	stored.waveKind = (int) waveform::Kind::stored;
+	stored.wave = { -1.0f, 1.0f, -1.0f, 1.0f };
+
+	check (cycleOf (stored).size () == 4, "a stored table is used as given");
+	check (hasPeriodicShape (stored), "and it is a period");
+
+	// --- what a row shows of a sample -----------------------------------------------------------
+	//
+	// A DPCM sample is up to 32648 points and a row is about a hundred and twenty pixels wide, so
+	// the drawing reduces it. The reduction keeps the extreme of each bucket rather than every nth
+	// value, because a drum's attack is one or two points wide and a fixed stride walks past it -
+	// two hits differing only in their first millisecond would then draw the same line.
+	{
+		const std::vector<float> small { 0.0f, 0.5f, -0.5f };
+		check (waveform::decimateForDisplay (small, 128).size () == 3,
+			   "a cycle shorter than the limit is left alone");
+
+		std::vector<float> wide (1000, 0.0f);
+		wide[500] = 1.0f;
+
+		const auto reduced = waveform::decimateForDisplay (wide, 100);
+
+		check (reduced.size () == 100, "a longer one is reduced to the limit");
+
+		auto tallest = 0.0f;
+
+		for (const auto value : reduced)
+		{
+			tallest = (std::max) (tallest, std::abs (value));
+		}
+
+		check (std::abs (tallest - 1.0f) < 0.0001f,
+			   "and the one point that differs survives, wherever it falls");
+
+		// The bucket keeps the value furthest from zero, not the first one it meets.
+		std::vector<float> bipolar (200, 0.0f);
+		bipolar[10] = 0.25f;
+		bipolar[11] = -0.75f;
+
+		const auto kept = waveform::decimateForDisplay (bipolar, 20);
+
+		auto deepest = 0.0f;
+
+		for (const auto value : kept)
+		{
+			deepest = (std::min) (deepest, value);
+		}
+
+		check (std::abs (deepest + 0.75f) < 0.0001f, "the larger excursion wins over the earlier one");
+
+		check (waveform::decimateForDisplay (wide, 0).size () == 1000,
+			   "a limit of zero is not a crash and not a truncation");
+	}
+
+	// --- names ---------------------------------------------------------------------------------
+	check (legalFileName ("2A03/Pulse 1") == "2A03_Pulse-1",
+		   "illegal characters become underscores and spaces become hyphens");
+	check (legalFileName ("  Wave 8  ") == "Wave-8", "leading and trailing spaces go");
+	check (legalFileName ("...") == "unnamed", "a name that is only dots still produces something");
+
+	// --- depth ---------------------------------------------------------------------------------
+	{
+		check (nativeBits ((int) waveform::Kind::pulse) == 1, "a pulse is one bit on the chip");
+		check (nativeBits ((int) waveform::Kind::triangle) == 4, "a triangle is four");
+		check (nativeBits ((int) waveform::Kind::saw) == 4, "the VRC6 ramp is four");
+		check (nativeBits ((int) waveform::Kind::stored) == 6, "the widest stored table here is six");
+		check (nativeBits ((int) waveform::Kind::fm) == 16, "an FM voice has no steps to snap");
+
+		// One bit is two levels and the threshold sits at the centre, so anything above zero goes
+		// to the top rail and anything below to the bottom.
+		check (std::abs (quantiseSample (0.9f, 1) - 1.0f) < 0.001f, "one bit puts 0.9 at the top");
+		check (std::abs (quantiseSample (-0.9f, 1) + 1.0f) < 0.001f, "and -0.9 at the bottom");
+		check (std::abs (quantiseSample (0.1f, 1) - 1.0f) < 0.001f, "and 0.1 up with it");
+
+		// Four bits is fifteen intervals: whatever comes out has to sit on one of them.
+		const auto fourBit = quantiseSample (0.5f, 4);
+		const auto level = (fourBit + 1.0f) * 0.5f * 15.0f;
+
+		check (std::abs (level - std::round (level)) < 0.001f, "four bits lands on a fifteenth");
+
+		// Sixteen bits is 65535 intervals and thirty-two is four billion; both are beneath the
+		// precision of a float, so neither changes a value anyone can measure. Thirty-two also
+		// exercises the shift that used to be undefined at this depth.
+		check (std::abs (quantiseSample (0.12345f, 16) - 0.12345f) < 0.001f,
+			   "sixteen bits is transparent");
+		check (std::abs (quantiseSample (0.12345f, 32) - 0.12345f) < 0.001f,
+			   "and thirty-two is as well");
+	}
+
+	// --- the whole export, as the window drives it ---------------------------------------------
+	//
+	// One call, a snapshot in and counts out. This is the shape that reported "nothing was
+	// written" over a full screen twice - both times because the loop that walked the channels
+	// took its bound from one object and its elements from another. There is no loop to get wrong
+	// now, and this asserts the counts a panel would show.
+	{
+		const std::string folder = "__wave_export_dir";
+
+		std::filesystem::remove_all (folder);
+		std::filesystem::create_directories (folder);
+
+		toybox::playback::ChipStateSnapshot snapshot;
+
+		toybox::playback::ChannelState first;
+		first.chipName = "2A03";
+		first.name = "Pulse 1";
+		first.waveKind = (int) waveform::Kind::pulse;
+		first.duty = 0.5f;
+
+		toybox::playback::ChannelState second;
+		second.chipName = "N163";
+		second.name = "Wave 8";
+		second.waveKind = (int) waveform::Kind::triangle;
+
+		toybox::playback::ChannelState third;
+		third.chipName = "2A03";
+		third.name = "DPCM";
+		third.waveKind = (int) waveform::Kind::delta;
+
+		snapshot.channels = { first, second, third };
+
+		const auto outcome = exportWavetables (snapshot, folder);
+
+		check (outcome.channelsSeen == 3, "the export saw every channel in the snapshot");
+		check (outcome.written == 2, "and wrote the two that have a period");
+		check (outcome.skippedSample == 1, "skipping the one whose shape is a recording");
+		check (outcome.failed == 0, "with nothing failing");
+
+		check (std::filesystem::exists (folder + "/2A03_Pulse-1.wav"),
+			   "the first file is named for its chip and its channel, with no row number");
+		check (std::filesystem::exists (folder + "/N163_Wave-8.wav"), "and so is the second");
+
+		// The same 44 + 2048 * 2 as the single-file check above, so the pair cannot drift.
+		check (std::filesystem::file_size (folder + "/2A03_Pulse-1.wav") == 100 + 2048 * 4,
+			   "and each is one period");
+
+		// --- a channel that carries a sample is written as audio ---------------------------------
+		//
+		// The marker says "this file is one period". A DPCM hit is not one: written with the
+		// marker, a synth loops the hit at a pitch nothing plays it at. So no marker, no
+		// resampling and no quantisation - the bytes at the rate the chip reads them.
+		{
+			toybox::playback::ChannelState sampled = third;
+			sampled.sampleRate = 11186.1f;
+			sampled.wave = { 0.0f, 0.25f, -0.25f, 0.5f, -0.5f, 0.125f, -0.125f, 0.0f };
+
+			toybox::playback::ChipStateSnapshot one;
+			one.valid = true;
+			one.channels = { sampled };
+
+			const auto only = exportWavetables (one, folder);
+
+			check (only.written == 1, "a channel that carries a sample is written");
+			check (only.skippedSample == 0, "and is not counted among the ones that cannot be");
+
+			const auto written = folder + "/2A03_DPCM.wav";
+
+			check (std::filesystem::exists (written), "under its chip and channel name");
+			check (std::filesystem::file_size (written) == 44 + 8 * 4,
+				   "with a plain forty-four byte header and no marker");
+
+			std::FILE* file = std::fopen (written.c_str (), "rb");
+
+			check (file != nullptr, "and can be read back");
+
+			if (file != nullptr)
+			{
+				unsigned char header[44] = {};
+				const auto read = std::fread (header, 1, sizeof (header), file);
+
+				check (read == sizeof (header), "the header is forty-four bytes");
+
+				const auto rate = (uint32_t) header[24] | ((uint32_t) header[25] << 8)
+								  | ((uint32_t) header[26] << 16) | ((uint32_t) header[27] << 24);
+
+				// Not the wavetable's fixed 44100: a drum sampled at 11 kHz and written as 44 kHz is
+				// the same drum three octaves down and four times too long.
+				check (rate == 11186u, "at the rate the chip is reading it");
+
+				// "data" straight after fmt. A clm chunk would sit here, and its absence is what
+				// makes a synth treat the file as audio rather than as one cycle.
+				check (header[36] == 'd' && header[37] == 'a' && header[38] == 't'
+						   && header[39] == 'a',
+					   "no marker sits between the format and the samples");
+
+				// The second value rather than the first: the first is zero, and a read that failed
+				// also answers zero, so it could not tell success from failure.
+				std::fseek (file, 44 + 4, SEEK_SET);
+
+				int b0 = std::fgetc (file);
+				int b1 = std::fgetc (file);
+				int b2 = std::fgetc (file);
+				int b3 = std::fgetc (file);
+
+				float firstSample = 0.0f;
+
+				if (b0 != EOF && b1 != EOF && b2 != EOF && b3 != EOF)
+				{
+					const uint32_t bits = (uint32_t) b0 | ((uint32_t) b1 << 8)
+										| ((uint32_t) b2 << 16) | ((uint32_t) b3 << 24);
+
+					std::memcpy (&firstSample, &bits, sizeof (firstSample));
+				}
+
+				// The second value, because the first is zero and could be a failed read.
+				check (std::abs (firstSample - 0.25f) < 0.0001f,
+					   "and the values are what went in, at their own precision");
+
+				std::fclose (file);
+			}
+
+			std::remove (written.c_str ());
+		}
+
+		// --- a sampled channel with nothing behind it is still skipped ----------------------------
+		//
+		// MMC5's PCM writes its sample a byte at a time and has no bank to read, so it keeps the
+		// synthesised mark and there is no data to write.
+		{
+			toybox::playback::ChannelState mark = third;
+			mark.sampleRate = 0.0f;
+
+			toybox::playback::ChipStateSnapshot one;
+			one.valid = true;
+			one.channels = { mark };
+
+			const auto only = exportWavetables (one, folder);
+
+			check (only.skippedSample == 1, "a sample with nothing behind it is skipped");
+			check (only.written == 0, "and nothing is written for it");
+		}
+
+		// --- the samples repeat, they are not interpolated -------------------------------------
+		//
+		// The chip quantises and the panel draws those steps; a wavetable has to match. Linear
+		// interpolation was the first attempt here, and it turned a thirty-two-step staircase into
+		// a ramp - a shape the hardware never produced.
+		{
+			const std::string single = "__wave_single.wav";
+			writeCycleWav (first, single, ExportMode::single, 2.0);
+
+			std::FILE* file = std::fopen (single.c_str (), "rb");
+
+			check (file != nullptr, "the single-period file can be read back");
+
+			if (file != nullptr)
+			{
+				// Past RIFF, the fmt chunk and the marker chunk: 100 bytes.
+				std::fseek (file, 100, SEEK_SET);
+
+				const auto readSample = [file] () -> float
+				{
+					const int b0 = std::fgetc (file);
+					const int b1 = std::fgetc (file);
+					const int b2 = std::fgetc (file);
+					const int b3 = std::fgetc (file);
+
+					if (b0 == EOF || b1 == EOF || b2 == EOF || b3 == EOF)
+					{
+						return 0.0f;
+					}
+
+					const uint32_t bits = (uint32_t) b0 | ((uint32_t) b1 << 8)
+										  | ((uint32_t) b2 << 16) | ((uint32_t) b3 << 24);
+
+					float value = 0.0f;
+					std::memcpy (&value, &bits, sizeof (value));
+
+					return value;
+				};
+
+				const float firstSample = readSample ();
+				bool allEqual = true;
+
+				for (int i = 1; i < 64; ++i)
+				{
+					if (readSample () != firstSample)
+					{
+						allEqual = false;
+					}
+				}
+
+				std::fclose (file);
+
+				// 2048 samples from a 32-point cycle is 64 repeats of each, so the first 64 samples
+				// are one source sample - which is what "no interpolation" looks like in a file.
+				check (allEqual, "each source sample is repeated, not interpolated");
+			}
+
+			std::remove (single.c_str ());
+		}
+
+		// --- the shape a wavetable synth expects ------------------------------------------------
+		//
+		// A reference wavetable shipped by such a synth measures like this: 2048 float samples at
+		// 44100, values on -1 .. 1, seventeen distinct levels for a four-bit triangle, each level
+		// held for 2048/32 = 64 samples. This asserts the same three facts about ours, because the
+		// first version wrote sixteen-bit PCM and the steps were lost in the container.
+		{
+			const std::string shaped = "__wave_shaped.wav";
+
+			ChannelState triangle;
+			triangle.chipName = "2A03";
+			triangle.name = "Triangle";
+			triangle.waveKind = (int) waveform::Kind::triangle;
+
+			check (writeCycleWav (triangle, shaped, ExportMode::single, 2.0, 4),
+				   "a four-bit single period writes");
+
+			std::FILE* file = std::fopen (shaped.c_str (), "rb");
+
+			check (file != nullptr, "and can be read back");
+
+			if (file != nullptr)
+			{
+				std::fseek (file, 100, SEEK_SET);
+
+				std::vector<float> levels;
+
+				for (int i = 0; i < (int) kWavetableSamples; ++i)
+				{
+					const int b0 = std::fgetc (file);
+					const int b1 = std::fgetc (file);
+					const int b2 = std::fgetc (file);
+					const int b3 = std::fgetc (file);
+
+					const uint32_t bits = (uint32_t) b0 | ((uint32_t) b1 << 8)
+										  | ((uint32_t) b2 << 16) | ((uint32_t) b3 << 24);
+
+					float value = 0.0f;
+					std::memcpy (&value, &bits, sizeof (value));
+
+					levels.push_back (value);
+				}
+
+				std::fclose (file);
+
+				std::sort (levels.begin (), levels.end ());
+				levels.erase (std::unique (levels.begin (), levels.end ()), levels.end ());
+
+				// Four bits is sixteen intervals, so seventeen values at most - and that is the
+				// ceiling, not the count. The 2A03's triangle runs its counter from fifteen down to
+				// zero and back, which is sixteen levels with no centre among them, so a four-bit
+				// triangle lands on sixteen of the seventeen. A reference wavetable of the same name
+				// has seventeen because whatever made it stepped through zero as well.
+				check (levels.size () <= 17, "four bits cannot produce more than seventeen levels");
+				check (levels.size () >= 8, "and a triangle is far from a square");
+
+				check (std::abs (levels.front () + 1.0f) < 0.001f
+						   && std::abs (levels.back () - 1.0f) < 0.001f,
+					   "and they span the full -1 to 1");
+			}
+
+			std::remove (shaped.c_str ());
+		}
+
+		// --- depth is vertical only --------------------------------------------------------------
+		//
+		// Both files are one period of the same triangle at the same rate; the only difference is
+		// how many levels the quantiser offers. Neither of them interpolates: a four-bit counter
+		// really does hold each level, and so does a sixteen-bit one - the platform is what the
+		// chip's counter does, not an artefact of its being coarse.
+		{
+			ChannelState triangle;
+			triangle.chipName = "2A03";
+			triangle.name = "Triangle";
+			triangle.waveKind = (int) waveform::Kind::triangle;
+
+			const auto readHead = [] (const std::string& file, std::vector<float>& out)
+			{
+				std::FILE* handle = std::fopen (file.c_str (), "rb");
+
+				if (handle == nullptr)
+				{
+					return false;
+				}
+
+				std::fseek (handle, 100, SEEK_SET);
+
+				for (int i = 0; i < 64; ++i)
+				{
+					const int b0 = std::fgetc (handle);
+					const int b1 = std::fgetc (handle);
+					const int b2 = std::fgetc (handle);
+					const int b3 = std::fgetc (handle);
+
+					const uint32_t bits = (uint32_t) b0 | ((uint32_t) b1 << 8)
+										  | ((uint32_t) b2 << 16) | ((uint32_t) b3 << 24);
+
+					float value = 0.0f;
+					std::memcpy (&value, &bits, sizeof (value));
+					out.push_back (value);
+				}
+
+				std::fclose (handle);
+				return true;
+			};
+
+			const auto allEqual = [] (const std::vector<float>& values)
+			{
+				for (std::size_t i = 1; i < values.size (); ++i)
+				{
+					if (values[i] != values[0])
+					{
+						return false;
+					}
+				}
+
+				return true;
+			};
+
+			const std::string coarse = "__wave_4bit.wav";
+			const std::string fine = "__wave_16bit.wav";
+
+			writeCycleWav (triangle, coarse, ExportMode::single, 2.0, 4);
+			writeCycleWav (triangle, fine, ExportMode::single, 2.0, 16);
+
+			std::vector<float> coarseHead;
+			std::vector<float> fineHead;
+
+			check (readHead (coarse, coarseHead), "the four-bit file reads back");
+			check (readHead (fine, fineHead), "and so does the sixteen-bit one");
+
+			check (allEqual (coarseHead), "four bits holds each level for a platform");
+			check (allEqual (fineHead), "and sixteen bits holds the platform too");
+
+			std::remove (coarse.c_str ());
+			std::remove (fine.c_str ());
+		}
+
+		// --- the marker a wavetable synth reads -------------------------------------------------
+		//
+		// Dragging a file onto the oscillator is refused as a multi-cycle import unless it carries
+		// this chunk; dragging it into the Wavetable Editor works either way. The format was read
+		// off a reference file: "<!>" then the samples per cycle, then a byte count and a signature.
+		{
+			const std::string tagged = "__wave_tagged.wav";
+			writeCycleWav (first, tagged, ExportMode::single, 2.0, 4);
+
+			std::FILE* file = std::fopen (tagged.c_str (), "rb");
+
+			check (file != nullptr, "a tagged single cycle can be read back");
+
+			if (file != nullptr)
+			{
+				unsigned char header[100] = {};
+				const auto read = std::fread (header, 1, sizeof (header), file);
+				std::fclose (file);
+
+				check (read == sizeof (header), "with a 100-byte header");
+
+				// "clm " at 36: RIFF(12) then the fmt chunk (8 + 16), and the marker's body starts
+				// at 44 and runs 48 bytes, ending where "data" begins.
+				check (header[36] == 'c' && header[37] == 'l' && header[38] == 'm' && header[39] == ' ',
+					   "the marker chunk is there");
+
+				const uint32_t size = (uint32_t) header[40] | ((uint32_t) header[41] << 8)
+									  | ((uint32_t) header[42] << 16) | ((uint32_t) header[43] << 24);
+
+				check (size == 48u, "and it is forty-eight bytes long");
+
+				const std::string marker (reinterpret_cast<const char*> (header + 44), size);
+
+				check (marker.rfind ("<!>2048 ", 0) == 0,
+					   "and it starts by naming the samples per cycle");
+			}
+
+			std::remove (tagged.c_str ());
+		}
+
+		// --- the looped mode --------------------------------------------------------------------
+		{
+			const std::string looped = "__wave_looped.wav";
+
+			// A 32-point cycle at A4 is one period in 1/440 s: rate 14080, and one second holds
+			// 440 periods.
+			writeCycleWav (first, looped, ExportMode::looped, 1.0);
+
+			check (std::filesystem::exists (looped), "the looped file is written");
+			check (std::filesystem::file_size (looped) == 44 + 440 * 32 * 4,
+				   "one second at A4 is 440 periods of the source cycle");
+
+			std::FILE* file = std::fopen (looped.c_str (), "rb");
+
+			check (file != nullptr, "and it can be read back");
+
+			if (file != nullptr)
+			{
+				unsigned char header[44] = {};
+				const auto read = std::fread (header, 1, sizeof (header), file);
+				std::fclose (file);
+
+				check (read == sizeof (header), "with a header");
+
+				const auto u32 = [&header] (int at)
+				{
+					return (uint32_t) header[at] | ((uint32_t) header[at + 1] << 8)
+						   | ((uint32_t) header[at + 2] << 16) | ((uint32_t) header[at + 3] << 24);
+				};
+
+				check (u32 (24) == 14080u, "and its rate is 440 times the cycle length");
+			}
+
+			std::remove (looped.c_str ());
+		}
+
+		std::filesystem::remove_all (folder);
+	}
+}
+
 int main (void)
 {
 	std::printf ("chip decoder test\n");
@@ -4456,6 +5044,8 @@ int main (void)
 	// First, because it is the cheapest thing here and because a table that promises nothing for a
 	// chip whose decoder exists makes every test below describe a promise nobody can reach.
 	testChipPlans();
+
+	testWaveExport();
 
 	testPulseNote();
 	testPitchChange();

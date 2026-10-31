@@ -1,0 +1,35 @@
+# A screenshot of the export options window.
+#
+# The window opens from the keyboard page's export button, and stops there: nothing is written until
+# it is confirmed, and the folder chooser after that cannot be driven from here. So this photographs
+# the layout - which is the part that had a bug: the duration field drew on top of the hint text,
+# because paint() and resized() counted the same offsets differently.
+#
+# Run:  build\plugin\vgm_app_test plugin\Tests\scripts\export-options-shot.txt
+# Output: build\shots\export-options.png
+
+size 1500 900
+
+load test_file/nsf/fod_hopeless.nsf
+tick
+
+menu invoke view.keyboard
+tick
+
+sleep 400
+
+engine play
+
+host 0.1 playing
+host 0.2 playing
+host 0.3 playing
+host 0.4 playing
+host 0.5 playing
+
+sleep 300
+
+click view.keyboard.export
+
+sleep 200
+
+shot build/shots/export-options.png

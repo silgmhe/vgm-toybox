@@ -38,6 +38,11 @@ namespace xgm
 
   // Added for VGMToybox: the 6 channels Render() sums, kept apart.
   uint32_t RenderChannels (int32_t* dest, int stride, int maxChannels);
+
+  // Added for VGMToybox: the two operators of one channel, as the chip is actually playing
+  // them. The panel used to draw a fixed FM curve for every voice; these four numbers are
+  // what make one patch look different from the next.
+  bool GetFmParameters (int trk, int& multiple, int& level, int& waveform, int& feedback);
     virtual bool Read (uint32_t adr, uint32_t & val, uint32_t id=0);
     virtual bool Write (uint32_t adr, uint32_t val, uint32_t id=0);
     virtual void UseAllChannels (bool b);

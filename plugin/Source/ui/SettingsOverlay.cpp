@@ -41,6 +41,59 @@ namespace
 	// the page width. Its heading reserves a second line instead of letting JUCE squash the
 	// glyphs horizontally; the page has the room, the General page does not.
 	constexpr int kTwoLineHeadingHeight = 64;
+
+	/** Colours for a slider's value box.
+
+		The box is a Label the slider creates from its own LookAndFeel colours when setTextBoxStyle()
+		runs, and it keeps that copy for good. If the look and feel was built before the theme was
+		known, the copy is white - white text on a white card, invisible until a theme switch
+		rebuilds it. That is the reported symptom exactly: numbers missing on a light theme until
+		someone switches away and back, and visible when the box is being edited because the editor
+		draws with its own colours.
+
+		Only one page used to do this, so only that page was safe. Every page with a value box does
+		it now, at construction and again whenever the look and feel changes.
+	*/
+	void colourSliderTextBox (juce::Slider& slider)
+	{
+		slider.setColour (juce::Slider::textBoxTextColourId, theme::primaryText());
+		slider.setColour (juce::Slider::textBoxBackgroundColourId, theme::card());
+		slider.setColour (juce::Slider::textBoxOutlineColourId, theme::border());
+		slider.setColour (juce::Slider::textBoxHighlightColourId, theme::accent().withAlpha (0.25f));
+	}
+
+	/** Every slider under `parent`, coloured. Recursive because the pages nest their rows. */
+	void colourSlidersIn (juce::Component& parent)
+	{
+		for (auto* child : parent.getChildren ())
+		{
+			if (auto* slider = dynamic_cast<juce::Slider*> (child))
+			{
+				colourSliderTextBox (*slider);
+			}
+
+			colourSlidersIn (*child);
+		}
+	}
+
+	/** How tall `text` needs to be at `width`, so a hint can be given the lines it needs.
+
+		A fixed height is right for one sentence in one language and wrong elsewhere: the MIDI page's
+		root hint is three lines in Chinese and four in English at this width, and thirty-two pixels
+		took two and ended the rest in an ellipsis.
+	*/
+	int wrappedHeight (const juce::String& text, const juce::Font& font, int width)
+	{
+		juce::AttributedString block;
+		block.setFont (font);
+		block.setJustification (juce::Justification::topLeft);
+		block.append (text);
+
+		juce::TextLayout layout;
+		layout.createLayout (block, (float) juce::jmax (1, width));
+
+		return (int) std::ceil (layout.getHeight ());
+	}
 	constexpr int kThemeChoiceGroup = 1;	// one radio group per page, so any number will do
 
 	/** The heading both pages start with: what the page is, then what it does. */
@@ -57,9 +110,11 @@ namespace
 
 		g.setColour (theme::secondaryText());
 		g.setFont (juce::Font (juce::FontOptions (12.5f)));
-		// A fitted text with a floor: if a translation ever outgrows even the reserved lines,
-		// it is clipped rather than compressed into unreadable glyphs.
-		g.drawFittedText (explanation, area, juce::Justification::centredLeft, maximumLines, 0.85f);
+		// A fitted text with no narrowing at all: if a translation ever outgrows even the
+		// reserved lines, the type is scaled down evenly rather than pressed together. 0.85 was
+		// the old floor and it bought a line at the cost of visibly thinner glyphs - which is the
+		// same trade, just smaller.
+		g.drawFittedText (explanation, area, juce::Justification::centredLeft, maximumLines, 1.0f);
 	}
 
 	/** Where the controls go: under the heading, both pages starting at the same place. */
@@ -198,7 +253,7 @@ AppearanceSettingsPage::AppearanceSettingsPage (void)
 
 	fontHint.setFont (juce::Font (juce::FontOptions (12.5f)));
 	fontHint.setJustificationType (juce::Justification::topLeft);
-	fontHint.setMinimumHorizontalScale (0.8f);
+	fontHint.setMinimumHorizontalScale (1.0f);
 
 	restartLabel.setFont (juce::Font (juce::FontOptions (12.0f)));
 	restartLabel.setJustificationType (juce::Justification::centredLeft);
@@ -409,7 +464,7 @@ GeneralSettingsPage::GeneralSettingsPage (void)
 	reuseWindowHint.setComponentID ("settings.general.reuseWindowHint");
 	reuseWindowHint.setFont (juce::Font (juce::FontOptions (12.0f)));
 	reuseWindowHint.setJustificationType (juce::Justification::topLeft);
-	reuseWindowHint.setMinimumHorizontalScale (0.75f);
+	reuseWindowHint.setMinimumHorizontalScale (1.0f);
 	addAndMakeVisible (reuseWindowHint);
    #endif
 
@@ -439,7 +494,7 @@ GeneralSettingsPage::GeneralSettingsPage (void)
 		restoreLastSongHint.setComponentID ("settings.general.restoreLastSongHint");
 		restoreLastSongHint.setFont (juce::Font (juce::FontOptions (12.0f)));
 		restoreLastSongHint.setJustificationType (juce::Justification::topLeft);
-		restoreLastSongHint.setMinimumHorizontalScale (0.75f);
+		restoreLastSongHint.setMinimumHorizontalScale (1.0f);
 		addAndMakeVisible (restoreLastSongHint);
 
 		closeToTrayButton.setComponentID ("settings.general.closeToTray");
@@ -454,7 +509,7 @@ GeneralSettingsPage::GeneralSettingsPage (void)
 		closeToTrayHint.setComponentID ("settings.general.closeToTrayHint");
 		closeToTrayHint.setFont (juce::Font (juce::FontOptions (12.0f)));
 		closeToTrayHint.setJustificationType (juce::Justification::topLeft);
-		closeToTrayHint.setMinimumHorizontalScale (0.75f);
+		closeToTrayHint.setMinimumHorizontalScale (1.0f);
 		addAndMakeVisible (closeToTrayHint);
 
 	   #if JUCE_LINUX
@@ -464,7 +519,7 @@ GeneralSettingsPage::GeneralSettingsPage (void)
 		closeToTrayWarning.setComponentID ("settings.general.closeToTrayWarning");
 		closeToTrayWarning.setFont (juce::Font (juce::FontOptions (12.0f, juce::Font::bold)));
 		closeToTrayWarning.setJustificationType (juce::Justification::topLeft);
-		closeToTrayWarning.setMinimumHorizontalScale (0.75f);
+		closeToTrayWarning.setMinimumHorizontalScale (1.0f);
 		addAndMakeVisible (closeToTrayWarning);
 	   #endif
 	}
@@ -477,7 +532,7 @@ GeneralSettingsPage::GeneralSettingsPage (void)
 	pathLabel.setJustificationType (juce::Justification::centredLeft);
 	// A path is longer than any panel this window will ever have, and it is the one label here
 	// whose whole content matters, so it shrinks instead of being cut off with an ellipsis.
-	pathLabel.setMinimumHorizontalScale (0.6f);
+	pathLabel.setMinimumHorizontalScale (1.0f);
 
 	openFolderButton.setComponentID ("settings.general.openFolder");
 	openFolderButton.onClick = []
@@ -664,6 +719,7 @@ NesSettingsPage::NesSettingsPage (void)
 	secondsSlider.setComponentID ("settings.nes.duration");
 	secondsSlider.setSliderStyle (juce::Slider::LinearHorizontal);
 	secondsSlider.setTextBoxStyle (juce::Slider::TextBoxRight, false, 68, 22);
+	colourSliderTextBox (secondsSlider);
 	secondsSlider.setRange ((double) toybox::settings::nsf::minDurationSeconds,
 						   (double) toybox::settings::nsf::maxDurationSeconds,
 						   (double) toybox::settings::nsf::durationStepSeconds);
@@ -682,6 +738,7 @@ NesSettingsPage::NesSettingsPage (void)
 	gainSlider.setComponentID ("settings.nes.outputGain");
 	gainSlider.setSliderStyle (juce::Slider::LinearHorizontal);
 	gainSlider.setTextBoxStyle (juce::Slider::TextBoxRight, false, 68, 22);
+	colourSliderTextBox (gainSlider);
 	gainSlider.setRange ((double) toybox::settings::nsf::minOutputGainDb,
 						(double) toybox::settings::nsf::maxOutputGainDb,
 						(double) toybox::settings::nsf::outputGainStepDb);
@@ -695,7 +752,7 @@ NesSettingsPage::NesSettingsPage (void)
 
 	hint.setFont (juce::Font (juce::FontOptions (12.5f)));
 	hint.setJustificationType (juce::Justification::topLeft);
-	hint.setMinimumHorizontalScale (0.8f);
+	hint.setMinimumHorizontalScale (1.0f);
 	addAndMakeVisible (hint);
 
 	refreshLanguage ();
@@ -803,6 +860,7 @@ KeyboardSettingsPage::KeyboardSettingsPage (void)
 	holdSlider.setComponentID ("settings.keyboard.noteHold");
 	holdSlider.setSliderStyle (juce::Slider::LinearHorizontal);
 	holdSlider.setTextBoxStyle (juce::Slider::TextBoxRight, false, 76, 22);
+	colourSliderTextBox (holdSlider);
 	if (const auto* hold = toybox::settings::numericSetting ("keyboard.noteHoldMs"))
 	{
 		holdSlider.setRange ((double) hold->minimum, (double) hold->maximum, (double) hold->step);
@@ -834,6 +892,7 @@ KeyboardSettingsPage::KeyboardSettingsPage (void)
 	refreshSlider.setComponentID ("settings.keyboard.refreshHz");
 	refreshSlider.setSliderStyle (juce::Slider::LinearHorizontal);
 	refreshSlider.setTextBoxStyle (juce::Slider::TextBoxRight, false, 76, 22);
+	colourSliderTextBox (refreshSlider);
 	refreshSlider.setRange ((double) toybox::settings::SettingsStore::minRefreshHz,
 							(double) toybox::settings::SettingsStore::maxRefreshHz, 1.0);
 	refreshSlider.textFromValueFunction = [] (double value)
@@ -974,7 +1033,7 @@ AudioSettingsPage::AudioSettingsPage (void)
 	deviceLabel.setJustificationType (juce::Justification::centredLeft);
 	// A driver names a device as long as it likes ("Speakers (Realtek(R) Audio)"), and this is the
 	// one line on the page worth reading, so it shrinks rather than being cut off.
-	deviceLabel.setMinimumHorizontalScale (0.7f);
+	deviceLabel.setMinimumHorizontalScale (1.0f);
 
 	settingsButton.setComponentID ("settings.audio.open");
 	settingsButton.onClick = []
@@ -995,7 +1054,7 @@ AudioSettingsPage::AudioSettingsPage (void)
 	hintLabel.setComponentID ("settings.audio.hint");
 	hintLabel.setFont (juce::Font (juce::FontOptions (12.0f)));
 	hintLabel.setJustificationType (juce::Justification::topLeft);
-	hintLabel.setMinimumHorizontalScale (0.75f);
+	hintLabel.setMinimumHorizontalScale (1.0f);
 
 	addAndMakeVisible (deviceLabel);
 	addAndMakeVisible (settingsButton);
@@ -1109,19 +1168,19 @@ LanguageSettingsPage::LanguageSettingsPage (void)
 	sourceLabel.setComponentID ("settings.language.source");
 	sourceLabel.setFont (juce::Font (juce::FontOptions (13.0f)));
 	sourceLabel.setJustificationType (juce::Justification::centredLeft);
-	sourceLabel.setMinimumHorizontalScale (0.7f);
+	sourceLabel.setMinimumHorizontalScale (1.0f);
 	addAndMakeVisible (sourceLabel);
 
 	detailLabel.setComponentID ("settings.language.detail");
 	detailLabel.setFont (juce::Font (juce::FontOptions (12.0f)));
 	detailLabel.setJustificationType (juce::Justification::centredLeft);
-	detailLabel.setMinimumHorizontalScale (0.75f);
+	detailLabel.setMinimumHorizontalScale (1.0f);
 	addAndMakeVisible (detailLabel);
 
 	warningsLabel.setComponentID ("settings.language.warnings");
 	warningsLabel.setFont (juce::Font (juce::FontOptions (12.0f)));
 	warningsLabel.setJustificationType (juce::Justification::topLeft);
-	warningsLabel.setMinimumHorizontalScale (0.75f);
+	warningsLabel.setMinimumHorizontalScale (1.0f);
 	addAndMakeVisible (warningsLabel);
 
 	openFolderButton.setComponentID ("settings.language.openFolder");
@@ -1279,7 +1338,7 @@ void CircleHelpButton::paintButton (juce::Graphics& g, bool isMouseOver, bool is
 	g.drawEllipse (bounds, 1.0f);
 
 	g.setFont (juce::Font (juce::FontOptions (10.5f, juce::Font::bold)));
-	g.drawFittedText ("?", getLocalBounds(), juce::Justification::centred, 1);
+	g.drawFittedText ("?", getLocalBounds(), juce::Justification::centred, 1, 1.0f);
 }
 
 MidiSettingsPage::MidiSettingsPage (void)
@@ -1295,7 +1354,7 @@ MidiSettingsPage::MidiSettingsPage (void)
 
 	bendHint.setFont (juce::Font (juce::FontOptions (12.5f)));
 	bendHint.setJustificationType (juce::Justification::topLeft);
-	bendHint.setMinimumHorizontalScale (0.8f);
+	bendHint.setMinimumHorizontalScale (1.0f);
 	addAndMakeVisible (bendHint);
 
 	rangeCaption.setFont (juce::Font (juce::FontOptions (12.5f)));
@@ -1305,6 +1364,7 @@ MidiSettingsPage::MidiSettingsPage (void)
 	rangeSlider.setComponentID ("settings.midi.range");
 	rangeSlider.setSliderStyle (juce::Slider::LinearHorizontal);
 	rangeSlider.setTextBoxStyle (juce::Slider::TextBoxRight, false, 68, 22);
+	colourSliderTextBox (rangeSlider);
 	rangeSlider.setRange ((double) playback::minPitchBendRange,
 						  (double) playback::maxPitchBendRange, 1.0);
 	rangeSlider.onValueChange = [this]
@@ -1317,7 +1377,7 @@ MidiSettingsPage::MidiSettingsPage (void)
 
 	rangeHint.setFont (juce::Font (juce::FontOptions (12.5f)));
 	rangeHint.setJustificationType (juce::Justification::topLeft);
-	rangeHint.setMinimumHorizontalScale (0.8f);
+	rangeHint.setMinimumHorizontalScale (1.0f);
 	addAndMakeVisible (rangeHint);
 
 	rootButton.setComponentID ("settings.midi.sampleRoot");
@@ -1344,7 +1404,7 @@ MidiSettingsPage::MidiSettingsPage (void)
 
 	rootHint.setFont (juce::Font (juce::FontOptions (12.5f)));
 	rootHint.setJustificationType (juce::Justification::topLeft);
-	rootHint.setMinimumHorizontalScale (0.8f);
+	rootHint.setMinimumHorizontalScale (1.0f);
 	addAndMakeVisible (rootHint);
 
 	refreshLanguage();
@@ -1423,7 +1483,13 @@ void MidiSettingsPage::resized (void)
 	rootHelp.setBounds (rootRow.removeFromLeft (16).withSizeKeepingCentre (16, 16));
 
 	area.removeFromTop (2);
-	rootHint.setBounds (area.removeFromTop (32));	// room for two lines on a narrow page
+
+	// Measured rather than budgeted. Thirty-two pixels was "room for two lines", and this hint is
+	// three lines in Chinese: the third was replaced by an ellipsis, which is a worse outcome than
+	// the two lines the budget was for.
+	rootHint.setBounds (area.removeFromTop (juce::jmax (18, wrappedHeight (rootHint.getText (),
+																			 rootHint.getFont (),
+																			 area.getWidth ()))));
 }
 
 void MidiSettingsPage::lookAndFeelChanged (void)
@@ -1432,15 +1498,11 @@ void MidiSettingsPage::lookAndFeelChanged (void)
 	rangeCaption.setColour (juce::Label::textColourId, theme::secondaryText());
 	rangeHint.setColour (juce::Label::textColourId, theme::secondaryText());
 
-	// The number field's colours have to be set on the slider itself: the box's label copies them
-	// when it is created, and the box is recreated whenever the LookAndFeel changes - so a page
-	// that only relied on the LookAndFeel's own defaults drew an empty box here (measured).
-	rangeSlider.setColour (juce::Slider::textBoxTextColourId, theme::primaryText());
-	// Opaque on purpose: createSliderTextBox() copies this into the editor shown while typing and
-	// forces the alpha to 1, so a transparent black would become a black box with dark text.
-	rangeSlider.setColour (juce::Slider::textBoxBackgroundColourId, theme::card());
-	rangeSlider.setColour (juce::Slider::textBoxOutlineColourId, theme::border());
-	rangeSlider.setColour (juce::Slider::textBoxHighlightColourId, theme::accent().withAlpha (0.25f));
+	// This is the page that first met the problem: its number field drew an empty box because the
+	// slider's label had copied white text from a look and feel built before the theme was known.
+	// The fix stayed local to this page for a while, which is why the keyboard page's two fields
+	// kept doing it. colourSliderTextBox() is shared now.
+	colourSliderTextBox (rangeSlider);
 
 	rootHint.setColour (juce::Label::textColourId, theme::secondaryText());
 	}
@@ -1693,6 +1755,11 @@ void SettingsOverlay::lookAndFeelChanged (void)
 	// the row fills would paint over the sidebar card behind them
 	tree.setColour (juce::TreeView::oddItemsColourId, juce::Colours::transparentBlack);
 	tree.setColour (juce::TreeView::evenItemsColourId, juce::Colours::transparentBlack);
+
+	// And the value boxes, for the same reason: each one holds a copy of the colours its slider
+	// read when it was built. Walking them all here means a page added later is covered without
+	// anyone remembering to colour its fields.
+	colourSlidersIn (*this);
 }
 
 void SettingsOverlay::mouseDown (const juce::MouseEvent& event)

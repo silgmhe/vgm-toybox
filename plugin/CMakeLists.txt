@@ -185,6 +185,7 @@ target_sources(VGMToybox PRIVATE
 	Source/playback/BackendRegistry.cpp
 	Source/playback/PlaybackEngine.cpp
 	Source/playback/WaveExport.cpp
+	Source/playback/WaveShape.cpp
 	Source/playback/DawSync.cpp
 	Source/playback/HostClockSource.cpp
 	Source/playback/SessionState.cpp
@@ -232,6 +233,7 @@ target_sources(VGMToybox PRIVATE
 	Source/backends/nsf/NsfBackend.cpp
 	Source/backends/nsf/NsfPlayer.cpp
 	Source/backends/nsf/NsfBus.cpp
+	Source/backends/nsf/DpcmSample.cpp
 	Source/formats/nsf/NsfFile.cpp
 	Source/i18n/LanguageManager.cpp
 	Source/i18n/LanguagePack.cpp
@@ -258,7 +260,7 @@ target_sources(VGMToybox PRIVATE
 	Source/ui/KeyboardLayout.cpp
 	Source/ui/KeyboardRowLayout.cpp
 	Source/ui/KeyboardRowPaint.cpp
-	Source/ui/WaveShape.cpp
+	Source/playback/WaveShape.cpp
 )
 
 target_include_directories(VGMToybox PRIVATE Source)
@@ -365,6 +367,7 @@ add_executable(vgm_mixer_test EXCLUDE_FROM_ALL
 	Source/playback/BackendRegistry.cpp
 	Source/playback/PlaybackEngine.cpp
 	Source/playback/WaveExport.cpp
+	Source/playback/WaveShape.cpp
 	Source/playback/DawSync.cpp
 	Source/playback/SessionState.cpp
 	Source/settings/SettingsStore.cpp
@@ -406,6 +409,7 @@ add_executable(vgm_mixer_test EXCLUDE_FROM_ALL
 	Source/backends/nsf/NsfBackend.cpp
 	Source/backends/nsf/NsfPlayer.cpp
 	Source/backends/nsf/NsfBus.cpp
+	Source/backends/nsf/DpcmSample.cpp
 	Source/formats/nsf/NsfFile.cpp
 	Source/backends/libvgm/LibvgmBackend.cpp
 	Source/backends/libvgm/MidiSequenceBuilder.cpp
@@ -426,8 +430,10 @@ add_executable(vgm_nsf_probe EXCLUDE_FROM_ALL
 	Tests/NsfProbe.cpp
 	Source/formats/nsf/NsfFile.cpp
 	Source/backends/nsf/NsfBus.cpp
+	Source/backends/nsf/DpcmSample.cpp
 	Source/backends/nsf/NsfPlayer.cpp
 	Source/playback/WaveExport.cpp
+	Source/playback/WaveShape.cpp
 )
 target_link_libraries(vgm_nsf_probe PRIVATE nsfplay_core)
 target_include_directories(vgm_nsf_probe PRIVATE Source)
@@ -437,6 +443,9 @@ add_executable(vgm_nsf_test EXCLUDE_FROM_ALL
 	Tests/NsfFormatTest.cpp
 	Source/formats/nsf/NsfFile.cpp
 	Source/backends/nsf/NsfBus.cpp
+	Source/backends/nsf/DpcmSample.cpp
+	Source/backends/nsf/NsfPlayer.cpp
+	Source/playback/WaveShape.cpp
 )
 target_link_libraries(vgm_nsf_test PRIVATE nsfplay_core juce::juce_core juce::juce_recommended_config_flags)
 
@@ -452,7 +461,18 @@ endif ()
 target_include_directories(vgm_nsf_test PRIVATE Source)
 target_compile_features(vgm_nsf_test PRIVATE cxx_std_17)
 
+# The end-to-end DPCM check needs a song that plays samples at two different points, so that the
+# length of one and then the other can be read back. Passed as a definition rather than as a
+# command-line argument because this test predates the registered console tests and has no argv
+# convention of its own; the path is resolved at configure time, so a CI runner's checkout works.
+set(_toybox_dpcm_song "${CMAKE_CURRENT_SOURCE_DIR}/Tests/assets/song/dpcm_two_samples.nsf")
+if (EXISTS "${_toybox_dpcm_song}")
+	target_compile_definitions(vgm_nsf_test PRIVATE TOYBOX_TEST_DPCM_SONG="${_toybox_dpcm_song}")
+endif()
+
 add_executable(vgm_chip_test EXCLUDE_FROM_ALL
+	Source/playback/WaveExport.cpp
+	Source/playback/WaveShape.cpp
 	Source/backends/libvgm/VgmCommandReader.cpp
 	Source/formats/vgm/VgmSongLoader.cpp
 	Tests/ChipDecoderTest.cpp
@@ -525,6 +545,7 @@ add_executable(vgm_core_test EXCLUDE_FROM_ALL
 	Source/playback/BackendRegistry.cpp
 	Source/playback/PlaybackEngine.cpp
 	Source/playback/WaveExport.cpp
+	Source/playback/WaveShape.cpp
 	Source/playback/DawSync.cpp
 	Source/playback/HostClockSource.cpp
 	Source/playback/SessionState.cpp
@@ -653,7 +674,7 @@ add_executable(vgm_keyboard_test EXCLUDE_FROM_ALL
 	Tests/KeyboardLayoutTest.cpp
 	Source/ui/KeyboardLayout.cpp
 	Source/ui/KeyboardRowLayout.cpp
-	Source/ui/WaveShape.cpp
+	Source/playback/WaveShape.cpp
 )
 target_include_directories(vgm_keyboard_test PRIVATE Source)
 target_compile_definitions(vgm_keyboard_test PRIVATE ${TOYBOX_JUCE_DEFINITIONS})
@@ -868,7 +889,10 @@ list(SORT _toybox_scripts)
 # A script that only takes screenshots asserts nothing, so registering it as a test would report a
 # pass for work nobody checked - the sort of green that hides a regression. They stay in the
 # repository as tooling (`vgm_app_test <script>` by hand), just not in ctest.
-set(_toybox_shot_scripts "keyboard-shot")
+# Every script that only takes pictures. The list had drifted to one entry while two more were
+# being registered as tests: they pass, because a script with no assertions passes, so nothing
+# pointed out that ctest was spending a run on something that asserts nothing.
+set(_toybox_shot_scripts "keyboard-shot;export-options-shot;mixer-glow-shot;settings-shot")
 
 foreach(_script_file IN LISTS _toybox_scripts)
 	get_filename_component(_script_name "${_script_file}" NAME_WE)
