@@ -262,9 +262,8 @@ std::vector<playback::DecodedSample> NsfPlayer::dpcmSamples (void) const
 {
 	std::vector<playback::DecodedSample> out;
 
-	// The scan's list first: it walked the whole song. This player's own list is what the user has
-	// reached so far - a shorter answer to the same question, and the reason an export used to
-	// depend on how long the song had been playing.
+	// The scan's list first; why it exists is in ScanResult::samples. This player's own list is
+	// the fallback, for the window between opening a file and the walk finishing.
 	std::shared_ptr<const ScanResult> scanned;
 
 	{
