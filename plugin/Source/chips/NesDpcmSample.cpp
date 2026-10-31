@@ -1,8 +1,8 @@
-#include "DpcmSample.h"
+#include "NesDpcmSample.h"
 
 #include <algorithm>
 
-namespace toybox::backends::nsf::dpcm
+namespace toybox::chips::dpcm
 {
 
 std::size_t lengthFromRegister (uint8_t value)
@@ -90,4 +90,4 @@ double rate (uint8_t index, bool pal)
 	return clock / (double) cycles;
 }
 
-} // namespace toybox::backends::nsf::dpcm
+} // namespace toybox::chips::dpcm

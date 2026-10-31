@@ -9,7 +9,7 @@
 #include <string>
 #include <unordered_map>
 
-#include "backends/nsf/DpcmSample.h"
+#include "chips/NesDpcmSample.h"
 #include "backends/nsf/NsfBus.h"
 #include "backends/nsf/NsfChannelNaming.h"
 #include "playback/WaveShape.h"
@@ -46,8 +46,8 @@ constexpr uint64_t kScanPollIntervalSamples = 4096;
 */
 float dpcmRate (uint8_t index, bool pal)
 {
-	// The table lives in DpcmSample.h, where the VGM front end reaches it as well: one 2A03, one
-	// set of cycle counts, and a second copy would be one more place to keep in step.
+	// The table lives with the chip decoders, where the VGM front end reaches it as well: one 2A03,
+	// one set of cycle counts, and a second copy would be one more place to keep in step.
 	return (float) dpcm::rate (index, pal);
 }
 
@@ -254,7 +254,7 @@ uint16_t NsfPlayer::dpcmSampleLength (void) const
 	// survived its write can reach it.
 	const auto length = (std::min) ((std::size_t) bus->dpcm.length, bus->dpcm.bytes.size ());
 
-	// Filler and the padding byte live in DpcmSample.h, where a test can call them.
+	// Filler and the padding byte live in NesDpcmSample.h, where a test can call them.
 	return (uint16_t) dpcm::finalLength (length, bus->dpcm.bytes.data ());
 }
 

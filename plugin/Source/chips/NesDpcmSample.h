@@ -7,17 +7,22 @@
 
 /** The DMC's sample format, as arithmetic that can be called.
 
-	These three steps used to live in NsfPlayer's anonymous namespace, where nothing outside could
-	reach them and nothing could assert them. Every error this feature has had so far was in one of
-	them - a length read four bits wide, a tail that kept its filler, a padding byte counted as
-	data - and each one was found by comparing an exported file against the one FamiStudio produced,
-	which is a slow way to learn that a number is off by one.
+	Here rather than under a backend because two of them read this chip: an NSF hands the registers
+	over directly and a VGM records the same writes as commands, and both need the same three
+	steps. A copy under each would be two tables to keep in step - which is how the four-bit length
+	survived here for four rounds in the first place.
+
+	These steps used to live in NsfPlayer's anonymous namespace, where nothing outside could reach
+	them and nothing could assert them. Every error this feature has had so far was in one of them -
+	a length read four bits wide, a tail that kept its filler, a padding byte counted as data - and
+	each one was found by comparing an exported file against the one FamiStudio produced, which is a
+	slow way to learn that a number is off by one.
 
 	The bounds come from the register rather than from any song. $4013 counts sixteen-byte units
 	across eight bits and adds one, so 4081 bytes is the most it can name; the samples in the test
 	files are 176, 320, 512 and 688, and none of those is the bound.
 */
-namespace toybox::backends::nsf::dpcm
+namespace toybox::chips::dpcm
 {
 
 /** The longest sample the length register can name: (0xFF * 16) + 1. */

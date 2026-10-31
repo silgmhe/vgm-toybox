@@ -10,7 +10,7 @@
 #include <mutex>
 #include <unordered_map>
 
-#include "backends/nsf/DpcmSample.h"
+#include "chips/NesDpcmSample.h"
 #include "formats/nsf/NsfFile.h"
 #include "xgm/devices/CPU/nes_cpu.h"
 #include "xgm/devices/Sound/nes_apu.h"
@@ -24,6 +24,9 @@
 
 namespace toybox::backends::nsf
 {
+
+/** The chip's sample arithmetic, which lives beside the decoders rather than in this backend. */
+namespace dpcm = toybox::chips::dpcm;
 
 class NsfBus;
 
@@ -312,7 +315,7 @@ private:
 	mutable uint32_t dpcmWaveStarts = 0;
 
 	/** How many bytes of the copy are this sample: the register's length, less the filler that
-		follows the data and the padding byte the formula adds. The arithmetic is in DpcmSample.h. */
+		follows the data and the padding byte the formula adds. The arithmetic is in NesDpcmSample.h. */
 	uint16_t dpcmSampleLength (void) const;
 
 	std::unique_ptr<NsfBus> bus;

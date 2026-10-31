@@ -6,19 +6,14 @@
 #include <string>
 
 #include "VgmCommandReader.h"
-#include "backends/nsf/DpcmSample.h"
+#include "chips/NesDpcmSample.h"
 
 namespace toybox::backends::libvgm
 {
 
-/** The 2A03's arithmetic, which the NSF front end owns today.
-
-	Both front ends read the same chip, so the tables and the integration are one thing rather
-	than two - but the module sits under `backends/nsf/` because that is where it was written.
-	It belongs beside the chip decoders instead; moving it is a rename and four source lists,
-	and it is on the list rather than done here so this change stays about the VGM path.
-*/
-namespace dpcm = toybox::backends::nsf::dpcm;
+/** The 2A03's arithmetic, which lives beside the chip decoders and is reachable from either
+	front end. */
+namespace dpcm = toybox::chips::dpcm;
 
 namespace
 {

@@ -15,7 +15,7 @@
 #include <juce_core/juce_core.h>
 
 #include "TestSupport.h"
-#include "backends/nsf/DpcmSample.h"
+#include "chips/NesDpcmSample.h"
 #include "backends/nsf/NsfBus.h"
 #include "backends/nsf/NsfPlayer.h"
 #include "playback/WaveShape.h"

@@ -4,7 +4,7 @@
 #include <cstdint>
 #include <functional>
 
-#include "backends/nsf/DpcmSample.h"
+#include "chips/NesDpcmSample.h"
 #include "formats/nsf/NsfFile.h"
 #include "xgm/devices/Memory/nes_mem.h"
 
@@ -22,6 +22,9 @@
 */
 namespace toybox::backends::nsf
 {
+
+/** The chip's sample arithmetic, which lives beside the decoders rather than in this backend. */
+namespace dpcm = toybox::chips::dpcm;
 
 class NsfBus : public xgm::NES_MEM
 {
