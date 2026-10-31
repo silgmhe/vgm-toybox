@@ -2,6 +2,7 @@
 
 #include "playback/ChipState.h"
 #include "playback/MidiSequence.h"
+#include "playback/WaveExport.h"
 #include <array>
 #include <atomic>
 #include <cstdint>
@@ -9,6 +10,7 @@
 #include <mutex>
 #include <unordered_map>
 
+#include "chips/NesDpcmSample.h"
 #include "formats/nsf/NsfFile.h"
 #include "xgm/devices/CPU/nes_cpu.h"
 #include "xgm/devices/Sound/nes_apu.h"
@@ -23,6 +25,9 @@
 namespace toybox::backends::nsf
 {
 
+/** The chip's sample arithmetic, which lives beside the decoders rather than in this backend. */
+namespace dpcm = toybox::chips::dpcm;
+
 class NsfBus;
 
 /** What one pass over a song produces: the note each DPCM sample slot was given, and every note
@@ -31,6 +36,15 @@ struct ScanResult
 {
 	std::unordered_map<int, int> sampleNotes;
 	std::shared_ptr<const playback::MidiSequence> midiSequence;
+
+	/** Every DPCM sample the walk started, with the bytes the window held at that moment.
+
+		Carried here because the walk runs on a player of its own: its Bus is gone by the time
+		anyone exports, and the playback player has only seen the samples the user happened to
+		reach. "All of the song's samples" is a question about the whole song, so it has to be
+		answered by the pass that reads the whole song.
+	*/
+	std::vector<dpcm::CapturedSample> samples;
 };
 
 /** One song's scan, shared by the object that runs it and the object that plays it.
@@ -94,7 +108,13 @@ public:
 
 	/** How much of the song the sample scan covers. Past this point a sample that has never been
 		heard gets no note rather than a made-up one. */
-	static constexpr double scanSeconds = 180.0;
+	/** How much of the song the note walk reads, when nobody says otherwise.
+
+		The caller passes its own length now - the walk covers the song, and "the song" is whatever
+		the backend reports as its duration. This stays as the answer for a caller that has no
+		opinion, and as documentation of the number that used to be hard-coded twice.
+	*/
+	static constexpr double kDefaultScanSeconds = 180.0;
 
 	/** Skips that scan. For a probe that only wants the write counters: the scan costs more than
 		everything else about opening a song put together. */
@@ -206,7 +226,9 @@ public:
 		result is published into this player's handle, so the player rendering audio picks it up
 		on its next look.
 	*/
-	void scanSong (void);
+	/** `seconds` is the song's length as the backend reports it: the walk reads all of it, so the
+		sample list it publishes covers everything the song plays rather than a fixed three minutes. */
+	void scanSong (double seconds = kDefaultScanSeconds);
 
 	/** Asks the scan to stop early. Checked once per block; a scan that has been asked to stop
 		still publishes whatever it had, because partial numbering beats none. */
@@ -236,11 +258,22 @@ public:
 	*/
 	uint32_t dpcmPages (uint8_t* out, uint32_t max) const;
 
+	/** Every distinct DPCM sample the song has started, decoded and ready to be written.
+
+		Handed back by value rather than by reference: the list grows on the audio thread while an
+		export walks it, and a pointer into it would be read in the middle of a write. Each entry
+		carries the length after trimming and the rate the sample plays at, so the writer needs to
+		know nothing about the NES.
+	*/
+	std::vector<playback::DecodedSample> dpcmSamples (void) const;
+
 private:
 	/** Takes a finished scan into this player. Called from start() and, while waiting, from
 		render() - the latter on the audio thread, which is why the handle hands back a shared_ptr
 		rather than making the caller hold a lock. */
-	void applyScan (const ScanResult& scan);
+	/** Takes the scan's answer. Shared rather than copied: its sample list is up to 64 KB, and
+		this runs on the audio thread. */
+	void applyScan (std::shared_ptr<const ScanResult> scan);
 
 	void resetToStart (void);
 	void scanSampleChannels (double seconds);
@@ -282,7 +315,7 @@ private:
 	mutable uint32_t dpcmWaveStarts = 0;
 
 	/** How many bytes of the copy are this sample: the register's length, less the filler that
-		follows the data and the padding byte the formula adds. The arithmetic is in DpcmSample.h. */
+		follows the data and the padding byte the formula adds. The arithmetic is in NesDpcmSample.h. */
 	uint16_t dpcmSampleLength (void) const;
 
 	std::unique_ptr<NsfBus> bus;
@@ -295,6 +328,15 @@ private:
 	std::unique_ptr<xgm::NES_FDS> fds;
 	std::unique_ptr<xgm::NES_FME7> fme7;
 	std::unique_ptr<xgm::NES_MMC5> mmc5;
+
+	/** The scan's answer, once it has arrived. Written on the audio thread, read by an export.
+
+		Guarded by `scanResultMutex` rather than made atomic: it changes once per song, so the lock
+		never contends, and the alternative - a shared_ptr assignment racing a shared_ptr read - is
+		the kind of thing that works until it does not.
+	*/
+	std::shared_ptr<const ScanResult> appliedScan;
+	mutable std::mutex scanResultMutex;
 
 	/** The DPCM scan. `sampleNotes` is built by one pass over the song and then only read, so the
 		note a sample has cannot change while the song plays. */

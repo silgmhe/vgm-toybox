@@ -371,6 +371,7 @@ private:
 		else if (command == "menu") { commandMenu (tokens); }
 		else if (command == "host") { commandHost (tokens); }
 		else if (command == "engine") { commandEngine (tokens); }
+		else if (command == "samples") { commandSamples (tokens); }
 		else if (command == "tick") { commandTick (); }
 		else if (command == "shot") { commandShot (tokens); }
 		else if (command == "size") { commandSize (tokens); }
@@ -704,6 +705,42 @@ private:
 
 	/** A transport command from outside the window, like the tray menu's: it must reach the same
 		state the buttons read, not a copy that only the button handlers update. */
+	/** What the export would write: every sample the song starts, with the name it would get.
+
+		With a count, this asserts instead of reporting: a command that only prints is a screenshot
+		with extra steps, and the VGM path had nothing else looking at it.
+	*/
+	void commandSamples (const juce::StringArray& tokens)
+	{
+		const auto list = processor.getEngine().currentSamples();
+
+		std::printf ("  %d sample(s)\n", (int) list.size());
+
+		for (const auto& sample : list)
+		{
+			std::printf ("    %-22s %8.1f Hz  %6d points\n",
+						 sample.name.c_str(), sample.rate, (int) sample.values.size());
+		}
+
+		if (tokens.size() < 2)
+		{
+			report (true, "samples");
+			return;
+		}
+
+		const auto expected = (std::size_t) tokens[1].getIntValue();
+
+		// The name matters as much as the count: a sample cut at the wrong offset still counts as
+		// one, and this list is the only place a test can see the address and the length together.
+		report (list.size() == expected, "samples == " + tokens[1]);
+
+		if (tokens.size() >= 3 && ! list.empty())
+		{
+			report (juce::String (list.front().name) == tokens[2],
+					"the first sample is " + tokens[2]);
+		}
+	}
+
 	void commandEngine (const juce::StringArray& tokens)
 	{
 		if (tokens.size() < 2)

@@ -15,7 +15,7 @@
 #include <juce_core/juce_core.h>
 
 #include "TestSupport.h"
-#include "backends/nsf/DpcmSample.h"
+#include "chips/NesDpcmSample.h"
 #include "backends/nsf/NsfBus.h"
 #include "backends/nsf/NsfPlayer.h"
 #include "playback/WaveShape.h"
@@ -471,69 +471,74 @@ int main (void)
 
 			std::vector<float> left (1024, 0.0f), right (1024, 0.0f);
 
-			const auto sampleBytes = [] (const toybox::playback::ChipStateSnapshot& snapshot)
-			{
-				for (const auto& channel : snapshot.channels)
-				{
-					if (channel.waveKind == (int) toybox::playback::waveform::Kind::delta)
-					{
-						return channel.wave.size () / 8u;
-					}
-				}
-
-				return (std::size_t) 0;
-			};
-
-			// Sampled once a second across forty seconds, collecting every distinct length rather
-			// than reading whatever happens to be current at the end. The two samples start twelve
-			// and thirty-five seconds in, so a single capture describes one of them and says
-			// nothing about the other - which is exactly the mistake this feature kept making.
-			std::vector<std::size_t> lengths;
-
+			// Forty seconds, long enough for both samples to have started.
 			for (int block = 0; block < 1722; ++block)
 			{
 				player.render (left.data (), right.data (), 1024);
-
-				if (block % 43 != 0)		// about once a second at 44.1 kHz
-				{
-					continue;
-				}
-
-				toybox::playback::ChipStateSnapshot snapshot;
-				player.captureState (snapshot);
-
-				const auto bytes = sampleBytes (snapshot);
-
-				if (bytes == 0)
-				{
-					continue;
-				}
-
-				bool known = false;
-
-				for (const auto seen : lengths)
-				{
-					known = known || seen == bytes;
-				}
-
-				if (! known)
-				{
-					lengths.push_back (bytes);
-				}
 			}
 
-			bool has320 = false;
-			bool has512 = false;
+			// The list an export walks: distinct samples, in the order they first played, already
+			// trimmed and decoded. Reading "whatever is playing now" would describe one of the two
+			// and say nothing about the other - the mistake this feature kept making in review.
+			const auto samples = player.dpcmSamples ();
 
-			for (const auto bytes : lengths)
+			check (samples.size () == 2, "the song has two DPCM samples");
+
+			if (samples.size () == 2)
 			{
-				has320 = has320 || bytes == 320;
-				has512 = has512 || bytes == 512;
+				check (samples[0].name == "dpcm_D200_320",
+					   "the first is the 320-byte sample at $D200");
+				check (samples[1].name == "dpcm_D380_512",
+					   "and the second the 512-byte one at $D380");
+				check (samples[0].values.size () == 320u * 8u, "eight points per byte of the sample");
+				check (samples[0].rate > 33000.0 && samples[0].rate < 33400.0,
+					   "at the rate the sample's own register names");
+
+				// And the writer, into a folder of its own: two files whose sizes are the header
+				// plus eight points per byte at four bytes a point. This is the path File > Export
+				// takes, minus the folder picker.
+				const auto folder = juce::File::getSpecialLocation (juce::File::tempDirectory)
+										.getChildFile ("vgmtoybox-dpcm-"
+													   + juce::String (juce::Random::getSystemRandom().nextInt (100000)));
+				const auto made = folder.createDirectory ();
+
+				check (made.wasOk (), "a temporary folder for the export");
+
+				if (made.wasOk ())
+				{
+					const auto written = toybox::playback::writeSamples (
+						samples, folder.getFullPathName ().toStdString ());
+
+					check (written == 2, "both samples were written");
+
+					const auto first = folder.getChildFile ("dpcm_D200_320.wav");
+					const auto second = folder.getChildFile ("dpcm_D380_512.wav");
+
+					check (first.existsAsFile (), "the 320-byte sample is a file with its own name");
+					check (second.existsAsFile (), "and the 512-byte one too");
+
+					check (first.getSize () == 44 + 320 * 8 * 4,
+						   "and its size is the header plus eight points per byte");
+
+					folder.deleteRecursively ();
+				}
 			}
 
-			check (has320, "the song has a 320-byte sample");
-			check (has512, "and a 512-byte one");
-			check (lengths.size () == 2, "and no others");
+			// And the path the export actually leans on: walk the song, then ask. Nothing has
+			// played, so the player's own list is empty - what comes back is the scan's, which is
+			// the whole song's. Before this, the answer depended on how long the user had listened.
+			{
+				toybox::backends::nsf::NsfPlayer scanner (song, 44100.0);
+				auto handle = std::make_shared<toybox::backends::nsf::ScanHandle> ();
+				scanner.setScanHandle (handle);
+				scanner.scanSong ();
+
+				const auto walked = scanner.dpcmSamples ();
+
+				check (walked.size () == 2, "walking the song finds both samples without playing");
+				check (walked.size () == 2 && walked[0].name == "dpcm_D200_320",
+					   "and names them the same way the playing list does");
+			}
 		}
 	}
 

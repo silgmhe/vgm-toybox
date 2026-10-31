@@ -1,6 +1,7 @@
 #pragma once
 
 #include <atomic>
+#include <memory>
 #include <utility>
 #include <vector>
 
@@ -41,6 +42,17 @@ public:
 	/** The track list of the song; setTrackAudible() looks the track up in it. */
 	void setTrackList (const std::vector<playback::TrackInfo>* trackList) { tracks = trackList; }
 
+	/** The songs's DPCM samples, taken once by the song instance that owns this player.
+
+		Handed in rather than collected here: a VGM says what it starts in its command stream, so
+		one walk answers for every player, and each of them walking it again would be the same
+		answer at N times the cost.
+	*/
+	void setSamples (std::shared_ptr<const std::vector<playback::DecodedSample>> list)
+	{
+		sampleList = std::move (list);
+	}
+
 	// --- playback::ITrackPlayer ---------------------------------------------------
 	void start (void) override;
 	void pause (void) override;
@@ -51,6 +63,10 @@ public:
 	int render (float* left, float* right, int numSamples) override;
 	double positionSeconds (void) override;
 	bool isFinished (void) const override { return finished.load(); }
+
+	/** The song's DPCM samples, as the song instance collected them. Empty for a file with no
+		data blocks, which is a file that carries no sample bytes at all. */
+	std::vector<playback::DecodedSample> samples (void) const override;
 
 	/** Metadata access for the song instance that owns this player as its probe. */
 	PlayerA& player (void) { return playerEngine; }
@@ -80,6 +96,10 @@ private:
 	std::vector<std::pair<playback::DeviceId, bool>> chipAudible;
 	const std::vector<playback::TrackInfo>* tracks = nullptr;
 	std::atomic<bool> finished { false };
+
+	/** Empty until the song instance fills it; shared because every player of one song sees the
+		same list and none of them owns it. */
+	std::shared_ptr<const std::vector<playback::DecodedSample>> sampleList;
 
 	JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (LibvgmTrackPlayer)
 };

@@ -49,6 +49,12 @@ public:
 		return player.captureState (snapshot);
 	}
 
+	/** The song's own DPCM samples rather than this player's current one - see NsfPlayer. */
+	std::vector<playback::DecodedSample> samples (void) const override
+	{
+		return player.dpcmSamples ();
+	}
+
 	void setOutputGain (float linear) override
 	{
 		// The player already defaults to +8 dB; this is how the settings page overrides it.
@@ -424,7 +430,10 @@ private:
 			NsfPlayer probe (file, rate);
 			probe.setScanHandle (scanHandle);
 			probe.setScanCancelFlag (&cancelScan);
-			probe.scanSong ();
+			// The whole song, as long as this backend says it is. A sample that first sounds in
+			// the last bar is still a sample of this song, and the export's list comes out of this
+			// walk rather than out of whatever the user has played.
+			probe.scanSong (length);
 
 			adoptFromHandle ();
 		}

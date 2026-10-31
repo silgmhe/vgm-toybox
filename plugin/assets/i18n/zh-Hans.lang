@@ -30,6 +30,8 @@ language: 简体中文
 "menu.file" = "文件";
 "menu.file.close" = "关闭歌曲";
 "menu.file.exit" = "退出";
+"menu.file.export" = "导出";
+"menu.file.export.samples" = "所有 DPCM 采样...";
 "menu.file.open" = "打开歌曲...";
 "menu.help" = "帮助";
 "menu.help.about" = "关于 VGMToybox...";

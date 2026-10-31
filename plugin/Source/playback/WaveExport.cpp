@@ -396,4 +396,39 @@ ExportOutcome exportWavetables (const ChipStateSnapshot& snapshot, const std::st
 	return outcome;
 }
 
+bool writeWavFile (const std::string& path, const std::vector<float>& values, double rate)
+{
+	// A rate that rounds to zero would make a file no decoder can place on a timeline. It cannot
+	// happen from a backend that fills `rate` correctly, and it is cheaper to refuse than to write
+	// a WAV whose fmt chunk says 0 Hz.
+	if (rate < 0.5)
+	{
+		return false;
+	}
+
+	return writeFloat32Wav (path, values, (uint32_t) std::lround (rate), std::string ());
+}
+
+int writeSamples (const std::vector<DecodedSample>& samples, const std::string& folder)
+{
+	int written = 0;
+
+	for (const auto& sample : samples)
+	{
+		if (sample.values.empty ())
+		{
+			continue;
+		}
+
+		const auto path = folder + "/" + legalFileName (sample.name) + ".wav";
+
+		if (writeWavFile (path, sample.values, sample.rate))
+		{
+			++written;
+		}
+	}
+
+	return written;
+}
+
 } // namespace toybox::playback

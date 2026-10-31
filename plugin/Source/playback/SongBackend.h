@@ -11,6 +11,7 @@
 #include "midi/MidiCapability.h"
 #include "playback/MidiSequence.h"
 #include "playback/ChipState.h"
+#include "playback/WaveExport.h"
 
 /**
 	The playback backend port - the standard every format engine (libvgm today, an SNES/SPC
@@ -160,6 +161,18 @@ public:
 	/** Fills a snapshot of the chips' live state for display. Backends that cannot describe their
 		chips leave it untouched and return false - a panel that shows nothing is better than one
 		that shows invented numbers. */
+	/** Every distinct sample the song has started, decoded and ready to be written.
+
+		Empty when the format has no samples to speak of - a wavetable chip has shapes, and a song
+		that has not reached its samples yet has none - rather than a flag the caller has to ask
+		twice. The NES backend fills it from its DPCM list; a PCM chip's backend would fill the
+		same one, which is why this returns a value the writer understands rather than bytes.
+
+		Called from the message thread while the audio thread is running, so an implementation
+		copies rather than hands back a reference.
+	*/
+	virtual std::vector<DecodedSample> samples (void) const { return {}; }
+
 	virtual bool captureState (ChipStateSnapshot& snapshot) const
 	{
 		juce::ignoreUnused (snapshot);

@@ -86,6 +86,7 @@ ToyboxAudioProcessorEditor::ToyboxAudioProcessorEditor (ToyboxAudioProcessor& p)
 	// The menu entries route through the same table rather than carrying a second body: one
 	// command, one action, however it is reached.
 	menu.onOpenSong = [this] { commands.perform ("file.open"); };
+	menu.onExportSamples = [this] { exportSamples (); };
 	menu.onCloseSong = [this] { closeSong(); };
 	menu.onQuit = [] { juce::JUCEApplicationBase::quit(); };
 	menu.onAbout = [this] { showAbout(); };
@@ -125,15 +126,7 @@ ToyboxAudioProcessorEditor::ToyboxAudioProcessorEditor (ToyboxAudioProcessor& p)
 
 	playPage->onExportReport = [this] (const toybox::ui::ExportReport& report)
 	{
-		// Only one overlay at a time: an export report while Settings is up would sit behind it.
-		settingsOverlay.setVisible (false);
-		aboutOverlay.setVisible (false);
-
-		exportOverlay.setReport (report);
-		exportOverlay.setBounds (getLocalBounds ());
-		exportOverlay.setVisible (true);
-		exportOverlay.toFront (false);
-		exportOverlay.grabKeyboardFocus ();		// so escape works without clicking first
+		showExportReport (report);
 	};
 
 	playPage->onExportOptions = [this]
@@ -592,6 +585,62 @@ void ToyboxAudioProcessorEditor::openFileChooser (void)
 									  loadFile (result);
 								  }
 							  });
+}
+
+void ToyboxAudioProcessorEditor::showExportReport (const toybox::ui::ExportReport& report)
+{
+	// Only one overlay at a time: an export report while Settings is up would sit behind it.
+	settingsOverlay.setVisible (false);
+	aboutOverlay.setVisible (false);
+
+	exportOverlay.setReport (report);
+	exportOverlay.setBounds (getLocalBounds ());
+	exportOverlay.setVisible (true);
+	exportOverlay.toFront (false);
+	exportOverlay.grabKeyboardFocus ();		// so escape works without clicking first
+}
+
+void ToyboxAudioProcessorEditor::exportSamples (void)
+{
+	// Taken here rather than inside the chooser's callback: the audio thread is still starting
+	// samples, and a later copy would be a different list from the one the count describes.
+	auto samples = processor.getEngine().currentSamples();
+
+	toybox::ui::ExportReport found;
+	found.samples = true;
+	found.channelsSeen = (int) samples.size();
+
+	if (samples.empty())
+	{
+		showExportReport (found);
+		return;
+	}
+
+	sampleChooser = std::make_unique<juce::FileChooser> (toybox::i18n::tr ("export.samples.title"),
+														 juce::File::getSpecialLocation (juce::File::userMusicDirectory),
+														 juce::String());
+
+	sampleChooser->launchAsync (juce::FileBrowserComponent::openMode
+									| juce::FileBrowserComponent::canSelectDirectories,
+								[this, samples] (const juce::FileChooser& chooser)
+								{
+									const auto folder = chooser.getResult();
+
+									if (folder == juce::File())
+									{
+										return;
+									}
+
+									toybox::ui::ExportReport done;
+									done.samples = true;
+									done.channelsSeen = (int) samples.size();
+									done.folder = folder;
+									done.written = toybox::playback::writeSamples (
+										samples, folder.getFullPathName().toStdString());
+									done.failed = done.channelsSeen - done.written;
+
+									showExportReport (done);
+								});
 }
 
 void ToyboxAudioProcessorEditor::loadFile (const juce::File& file, bool startPlaying)

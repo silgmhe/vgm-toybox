@@ -1,0 +1,16 @@
+# The VGM path's only automated check.
+#
+# The five samples this song starts, and the address each is cut from. Everything here comes out of
+# the file's own 0x67 blocks and its $4012/$4013 writes - no playthrough, no scan.
+#
+# Before this script existed the VGM path was verified by running the `samples` command and reading
+# five lines, which proved it worked once and proved nothing about the next change. Three separate
+# mistakes in the command-length table were found that way: the third produced a plausible one
+# sample instead of five, and no test went red.
+
+size 900 700
+
+load plugin/Tests/assets/song/dpcm_five_samples.vgz
+tick
+
+samples 5 dpcm_C000_1008

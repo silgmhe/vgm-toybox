@@ -4,6 +4,7 @@
 #include <cstdint>
 #include <functional>
 
+#include "chips/NesDpcmSample.h"
 #include "formats/nsf/NsfFile.h"
 #include "xgm/devices/Memory/nes_mem.h"
 
@@ -21,6 +22,9 @@
 */
 namespace toybox::backends::nsf
 {
+
+/** The chip's sample arithmetic, which lives beside the decoders rather than in this backend. */
+namespace dpcm = toybox::chips::dpcm;
 
 class NsfBus : public xgm::NES_MEM
 {
@@ -126,6 +130,21 @@ public:
 	*/
 	std::array<uint8_t, 16> pagesSeen {};
 	uint32_t pageCount = 0;
+
+	/** How many distinct samples are kept. Sixteen windows is 64 KB of resident memory, which is
+		a song's worth - a file that starts more than this is re-pointing one window rather than
+		carrying sixteen samples.
+	*/
+	static constexpr std::size_t kMaxSamples = 16;
+
+	/** The distinct samples started so far, in the order they first played.
+
+		Grown by Write() on the audio thread and read by the exporter on another, so it is a plain
+		array and a counter rather than a vector: the writer fills the entry before it raises the
+		count, and the count only ever rises, which is enough for a reader that takes a copy.
+	*/
+	std::array<dpcm::CapturedSample, kMaxSamples> samples {};
+	uint32_t sampleCount = 0;
 
 	/** Puts the program in place and installs the six-byte entry trampoline at $4100.
 		The order matters: the image is cleared first, the trampoline after. */

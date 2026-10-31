@@ -403,4 +403,11 @@ uint8_t LibvgmTrackPlayer::handleEvent (uint8_t evtType, void* /*evtParam*/)
 	return 0x00;
 }
 
+std::vector<playback::DecodedSample> LibvgmTrackPlayer::samples (void) const
+{
+	// A copy rather than a reference: the list is shared and the caller may keep it past this
+	// player's life (an export dialog holds it while the song keeps playing).
+	return sampleList != nullptr ? *sampleList : std::vector<playback::DecodedSample> ();
+}
+
 } // namespace toybox::backends::libvgm

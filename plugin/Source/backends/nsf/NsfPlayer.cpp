@@ -2,13 +2,14 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdio>
 #include <cstdint>
 #include <deque>
 #include <mutex>
 #include <string>
 #include <unordered_map>
 
-#include "backends/nsf/DpcmSample.h"
+#include "chips/NesDpcmSample.h"
 #include "backends/nsf/NsfBus.h"
 #include "backends/nsf/NsfChannelNaming.h"
 #include "playback/WaveShape.h"
@@ -45,15 +46,9 @@ constexpr uint64_t kScanPollIntervalSamples = 4096;
 */
 float dpcmRate (uint8_t index, bool pal)
 {
-	static constexpr int ntsc[16] = { 428, 380, 340, 320, 286, 254, 226, 214,
-									  190, 160, 142, 128, 106, 84, 72, 54 };
-	static constexpr int palCycles[16] = { 398, 354, 316, 298, 276, 236, 210, 198,
-										   176, 148, 132, 118, 98, 78, 66, 50 };
-
-	const double clock = pal ? kPalClock : kNtscClock;
-	const auto cycles = pal ? palCycles[index & 0x0F] : ntsc[index & 0x0F];
-
-	return (float) (clock / (double) cycles);
+	// The table lives with the chip decoders, where the VGM front end reaches it as well: one 2A03,
+	// one set of cycle counts, and a second copy would be one more place to keep in step.
+	return (float) dpcm::rate (index, pal);
 }
 
 /** MIDI's top velocity. The walk records a channel's level as 0..1, so this is the one place
@@ -178,7 +173,7 @@ void NsfPlayer::start (void)
 	{
 		if (auto scan = scanHandle != nullptr ? scanHandle->snapshot () : nullptr)
 		{
-			applyScan (*scan);
+			applyScan (std::move (scan));
 		}
 		else
 		{
@@ -190,10 +185,21 @@ void NsfPlayer::start (void)
 	resetToStart ();
 }
 
-void NsfPlayer::applyScan (const ScanResult& scan)
+void NsfPlayer::applyScan (std::shared_ptr<const ScanResult> scan)
 {
-	sampleNotes = scan.sampleNotes;
-	midiSequence = scan.midiSequence;
+	if (scan == nullptr)
+	{
+		return;
+	}
+
+	sampleNotes = scan->sampleNotes;
+	midiSequence = scan->midiSequence;
+
+	{
+		const std::lock_guard<std::mutex> guard (scanResultMutex);
+		appliedScan = std::move (scan);
+	}
+
 	analysing.store (false, std::memory_order_relaxed);
 }
 
@@ -213,7 +219,7 @@ bool NsfPlayer::adoptCachedScan (const formats::nsf::NsfFile& file, ScanHandle& 
 	return true;
 }
 
-void NsfPlayer::scanSong (void)
+void NsfPlayer::scanSong (double seconds)
 {
 	// Another backend may have walked this file already. Reopening a file is common, and the
 	// answer does not depend on who asks, so a second walk is spent time for the same result.
@@ -223,7 +229,7 @@ void NsfPlayer::scanSong (void)
 	}
 
 	resetToStart ();
-	scanSampleChannels (scanSeconds);
+	scanSampleChannels (seconds > 0.0 ? seconds : kDefaultScanSeconds);
 }
 
 uint32_t NsfPlayer::dpcmStartCount (void) const
@@ -248,8 +254,61 @@ uint16_t NsfPlayer::dpcmSampleLength (void) const
 	// survived its write can reach it.
 	const auto length = (std::min) ((std::size_t) bus->dpcm.length, bus->dpcm.bytes.size ());
 
-	// Filler and the padding byte live in DpcmSample.h, where a test can call them.
+	// Filler and the padding byte live in NesDpcmSample.h, where a test can call them.
 	return (uint16_t) dpcm::finalLength (length, bus->dpcm.bytes.data ());
+}
+
+std::vector<playback::DecodedSample> NsfPlayer::dpcmSamples (void) const
+{
+	std::vector<playback::DecodedSample> out;
+
+	// The scan's list first; why it exists is in ScanResult::samples. This player's own list is
+	// the fallback, for the window between opening a file and the walk finishing.
+	std::shared_ptr<const ScanResult> scanned;
+
+	{
+		const std::lock_guard<std::mutex> guard (scanResultMutex);
+		scanned = appliedScan;
+	}
+
+	std::vector<dpcm::CapturedSample> collected;
+
+	if (scanned != nullptr && ! scanned->samples.empty ())
+	{
+		collected = scanned->samples;
+	}
+	else if (bus != nullptr)
+	{
+		// No scan yet: the song is still being read, and what is playing is all there is.
+		const auto count = (std::min) (bus->sampleCount, (uint32_t) bus->samples.size ());
+
+		for (uint32_t i = 0; i < count; ++i)
+		{
+			collected.push_back (bus->samples[i]);
+		}
+	}
+
+	for (const auto& kept : collected)
+	{
+		const auto length = dpcm::finalLength (kept.length, kept.bytes.data ());
+
+		char address[8] = {};
+		std::snprintf (address, sizeof (address), "%04X", (unsigned) kept.start);
+
+		playback::DecodedSample entry;
+		entry.name = std::string ("dpcm_") + address + "_" + std::to_string ((unsigned long) length);
+		entry.values = dpcm::decode (kept.bytes.data (), length);
+		entry.rate = (double) dpcmRate (kept.rateIndex, file.isPal ());
+
+		// A sample that trims to nothing is one the driver started on silence, and a zero-length
+		// WAV would be a file the user opens to find nothing in it.
+		if (! entry.values.empty ())
+		{
+			out.push_back (std::move (entry));
+		}
+	}
+
+	return out;
 }
 
 uint32_t NsfPlayer::dpcmPages (uint8_t* out, uint32_t max) const
@@ -434,7 +493,23 @@ void NsfPlayer::scanSampleChannels (double seconds)
 	// Published twice, to two different audiences. The handle is how this song's other player
 	// hears about it - it asked on its own clock and will not ask again; the cache is how the
 	// next session avoids walking the same file a second time.
-	auto result = std::make_shared<const ScanResult> (ScanResult { sampleNotes, midiSequence });
+	// The samples the walk started, carried out with the rest of the answer. This is the only
+	// moment they can be taken: the walk's own Bus is local to the scanning player, and the
+	// playback player has seen only what the user happened to reach.
+	std::vector<dpcm::CapturedSample> found;
+
+	if (bus != nullptr)
+	{
+		const auto kept = (std::min) (bus->sampleCount, (uint32_t) bus->samples.size ());
+
+		for (uint32_t i = 0; i < kept; ++i)
+		{
+			found.push_back (bus->samples[i]);
+		}
+	}
+
+	auto result = std::make_shared<const ScanResult> (ScanResult { sampleNotes, midiSequence,
+																   std::move (found) });
 
 	if (scanHandle != nullptr)
 	{
@@ -614,7 +689,7 @@ int NsfPlayer::render (float* left, float* right, int frames)
 	{
 		if (auto scan = scanHandle != nullptr ? scanHandle->snapshot () : nullptr)
 		{
-			applyScan (*scan);
+			applyScan (std::move (scan));
 		}
 	}
 

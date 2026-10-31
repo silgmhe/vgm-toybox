@@ -34,6 +34,8 @@ language: English
 "menu.file" = "File";
 "menu.file.close" = "Close Song";
 "menu.file.exit" = "Exit";
+"menu.file.export" = "Export";
+"menu.file.export.samples" = "All DPCM Samples...";
 "menu.file.open" = "Open Song...";
 "menu.help" = "Help";
 "menu.help.about" = "About VGMToybox...";
