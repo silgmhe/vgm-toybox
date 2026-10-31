@@ -74,7 +74,7 @@ public:
 	struct DpcmSelection
 	{
 		uint16_t start = 0;		// absolute CPU address: $C000 + page * 64
-		uint16_t length = 0;	// bytes: (register & 0x0F) * 16 + 1
+		uint16_t length = 0;	// bytes: (register * 16) + 1, up to 4081
 		uint8_t rateIndex = 0;	// $4010 bits 0..3, which pick the read rate
 		bool loop = false;		// $4010 bit 6
 		bool valid = false;
@@ -86,11 +86,11 @@ public:
 			hit is over, and a later read then describes whatever the driver put there instead. What
 			that reads as is noise with no envelope - the shape of code, not of a drum.
 
-			One window, four kilobytes, because a sample is not bounded by $4013. That register names
-			one playback and holds four bits, so it tops out at 241 bytes; the samples in this format
-			are 320 and 512, played in pieces if played whole at all. Where one ends is the address of
-			the next, which is only known once the song has been running - so the bytes are taken
-			generously and the end is worked out later.
+			A whole window, four kilobytes, because that is the reach of the register that names a
+			sample: eight bits counting sixteen-byte units, plus the padding byte, comes to 4081.
+			Sized from that range and not from the length any one song happens to ask for - 193 was
+			one of those, and it wrote past the end of this array on the first song that asked for
+			more.
 		*/
 		std::array<uint8_t, 4096> bytes {};
 	};

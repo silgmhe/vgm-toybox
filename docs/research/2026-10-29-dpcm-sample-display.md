@@ -4,6 +4,7 @@
 - **对象**：`plugin/Source/playback/WaveShape.cpp`、`backends/nsf/`、`backends/libvgm/`、`chips/`
 - **目的**：判断"波表展示当前音符触发的那个采样"是否可行，以及 NSF 与 VGM 两条路径的差距
 - **相关**：`2026-10-19-midi-output-and-visualisation.md`
+- **后续更正（2026-10-31）**：4.2 的长度最初按四位写，而播放核心与 NotSoFatso 都按八位算，已改正；同时补上当时还不知道的两步收尾——尾部填充要裁、公式里的 `+1` 是每个采样自带的 padding 字节。原因见 `docs/memo/2026-10-30-the-register-width-nobody-checked.md`。
 
 ## 1. 结论
 
@@ -81,7 +82,7 @@ NSF 文件即 ROM 镜像，**采样必定存在**，不存在"文件没带"的�
 | 量 | 来源 |
 |---|---|
 | 起始地址 | `$4012` 页号 → `$C000 + tone * 64` |
-| 长度 | `$4013` → `(reg & 0x0F) * 16 + 1` 字节 |
+| 长度 | `$4013` → `reg * 16 + 1` 字节，最大 4081；再裁掉尾部填充与那个 padding 字节 |
 
 **字节不是波形，是增量。** 每字节 8 个 1-bit delta，1 → `+2`、0 → `-2`（7-bit 域），**必须积分**才是 PCM。这与 `Kind::delta` 的语义一致。
 
@@ -91,7 +92,7 @@ NSF 文件即 ROM 镜像，**采样必定存在**，不存在"文件没带"的�
 
 1. `NsfPlayer` 的 `kShapeDelta` 分支（`NsfPlayer.cpp:860`）读 `[$C000+tone*64, +len)`，积分后填 `state.wave`
 2. `cycleFor` 的 `delta` 分支保留为无数据时的兜底（MMC5 PCM 就还需要它）
-3. 断言：`wave` 非空、长度等于 `$4013` 推出值、导出值与 ROM 字节的积分一致
+3. 断言：`wave` 非空、长度等于 `$4013` 推出值裁掉填充后的结果、导出值与 ROM 字节的积分一致
 
 **MMC5 的 PCM 不受益**：它是驱动实时写 `$5011`，没有 sample bank，仍然是合成图形。
 

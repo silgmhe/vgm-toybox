@@ -55,19 +55,13 @@ float dpcmRate (uint8_t index, bool pal)
 	return (float) (clock / (double) cycles);
 }
 
-/** The DPCM sample at `start`, integrated into -1..1.
+/** Where a sample stops being data: `length` with the filler that follows it removed.
 
-	A DPCM byte is not a sample, it is eight one-bit steps: each bit means "up two" or "down two"
-	and the level is their running sum. Skipping the integration would draw the steps themselves,
-	which look like noise no matter what the sample sounds like - the opposite of the point.
-
-	The level is the chip's seven-bit DAC, so it is clamped to -128..127 and scaled by 128 rather
-	than by 127: the range is asymmetrical and a symmetric divisor would flatten the positive rail.
+	0x55 and 0xAA are silence in DPCM - every bit alternates, so the level walks nowhere - and
+	0x00 and 0xFF are what an unwritten region holds. A sample ends where they begin.
 */
 uint16_t trimFiller (const std::array<uint8_t, 4096>& bytes, uint16_t length)
 {
-	// 0x55 and 0xAA are silence in DPCM - every bit alternates, so the level walks nowhere - and
-	// 0x00 and 0xFF are what an unwritten region holds. A sample ends where they begin.
 	while (length > 0)
 	{
 		const auto byte = bytes[(std::size_t) (length - 1)];
@@ -83,6 +77,15 @@ uint16_t trimFiller (const std::array<uint8_t, 4096>& bytes, uint16_t length)
 	return length;
 }
 
+/** The sample's bytes, integrated into -1..1.
+
+	A DPCM byte is not a sample, it is eight one-bit steps: each bit means "up two" or "down two"
+	and the level is their running sum. Skipping the integration would draw the steps themselves,
+	which look like noise no matter what the sample sounds like - the opposite of the point.
+
+	The level is the chip's seven-bit DAC, so it is clamped to -128..127 and scaled by 128 rather
+	than by 127: the range is asymmetrical and a symmetric divisor would flatten the positive rail.
+*/
 std::vector<float> decodeDpcm (const std::array<uint8_t, 4096>& bytes, uint16_t length)
 {
 	std::vector<float> out;
