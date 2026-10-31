@@ -523,6 +523,22 @@ int main (void)
 					folder.deleteRecursively ();
 				}
 			}
+
+			// And the path the export actually leans on: walk the song, then ask. Nothing has
+			// played, so the player's own list is empty - what comes back is the scan's, which is
+			// the whole song's. Before this, the answer depended on how long the user had listened.
+			{
+				toybox::backends::nsf::NsfPlayer scanner (song, 44100.0);
+				auto handle = std::make_shared<toybox::backends::nsf::ScanHandle> ();
+				scanner.setScanHandle (handle);
+				scanner.scanSong ();
+
+				const auto walked = scanner.dpcmSamples ();
+
+				check (walked.size () == 2, "walking the song finds both samples without playing");
+				check (walked.size () == 2 && walked[0].name == "dpcm_D200_320",
+					   "and names them the same way the playing list does");
+			}
 		}
 	}
 

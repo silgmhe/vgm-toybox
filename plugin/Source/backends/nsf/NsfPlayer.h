@@ -10,6 +10,7 @@
 #include <mutex>
 #include <unordered_map>
 
+#include "backends/nsf/DpcmSample.h"
 #include "formats/nsf/NsfFile.h"
 #include "xgm/devices/CPU/nes_cpu.h"
 #include "xgm/devices/Sound/nes_apu.h"
@@ -32,6 +33,15 @@ struct ScanResult
 {
 	std::unordered_map<int, int> sampleNotes;
 	std::shared_ptr<const playback::MidiSequence> midiSequence;
+
+	/** Every DPCM sample the walk started, with the bytes the window held at that moment.
+
+		Carried here because the walk runs on a player of its own: its Bus is gone by the time
+		anyone exports, and the playback player has only seen the samples the user happened to
+		reach. "All of the song's samples" is a question about the whole song, so it has to be
+		answered by the pass that reads the whole song.
+	*/
+	std::vector<dpcm::CapturedSample> samples;
 };
 
 /** One song's scan, shared by the object that runs it and the object that plays it.
@@ -250,7 +260,9 @@ private:
 	/** Takes a finished scan into this player. Called from start() and, while waiting, from
 		render() - the latter on the audio thread, which is why the handle hands back a shared_ptr
 		rather than making the caller hold a lock. */
-	void applyScan (const ScanResult& scan);
+	/** Takes the scan's answer. Shared rather than copied: its sample list is up to 64 KB, and
+		this runs on the audio thread. */
+	void applyScan (std::shared_ptr<const ScanResult> scan);
 
 	void resetToStart (void);
 	void scanSampleChannels (double seconds);
@@ -305,6 +317,15 @@ private:
 	std::unique_ptr<xgm::NES_FDS> fds;
 	std::unique_ptr<xgm::NES_FME7> fme7;
 	std::unique_ptr<xgm::NES_MMC5> mmc5;
+
+	/** The scan's answer, once it has arrived. Written on the audio thread, read by an export.
+
+		Guarded by `scanResultMutex` rather than made atomic: it changes once per song, so the lock
+		never contends, and the alternative - a shared_ptr assignment racing a shared_ptr read - is
+		the kind of thing that works until it does not.
+	*/
+	std::shared_ptr<const ScanResult> appliedScan;
+	mutable std::mutex scanResultMutex;
 
 	/** The DPCM scan. `sampleNotes` is built by one pass over the song and then only read, so the
 		note a sample has cannot change while the song plays. */

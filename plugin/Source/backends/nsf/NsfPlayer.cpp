@@ -179,7 +179,7 @@ void NsfPlayer::start (void)
 	{
 		if (auto scan = scanHandle != nullptr ? scanHandle->snapshot () : nullptr)
 		{
-			applyScan (*scan);
+			applyScan (std::move (scan));
 		}
 		else
 		{
@@ -191,10 +191,21 @@ void NsfPlayer::start (void)
 	resetToStart ();
 }
 
-void NsfPlayer::applyScan (const ScanResult& scan)
+void NsfPlayer::applyScan (std::shared_ptr<const ScanResult> scan)
 {
-	sampleNotes = scan.sampleNotes;
-	midiSequence = scan.midiSequence;
+	if (scan == nullptr)
+	{
+		return;
+	}
+
+	sampleNotes = scan->sampleNotes;
+	midiSequence = scan->midiSequence;
+
+	{
+		const std::lock_guard<std::mutex> guard (scanResultMutex);
+		appliedScan = std::move (scan);
+	}
+
 	analysing.store (false, std::memory_order_relaxed);
 }
 
@@ -257,16 +268,35 @@ std::vector<playback::DecodedSample> NsfPlayer::dpcmSamples (void) const
 {
 	std::vector<playback::DecodedSample> out;
 
-	if (bus == nullptr)
+	// The scan's list first: it walked the whole song. This player's own list is what the user has
+	// reached so far - a shorter answer to the same question, and the reason an export used to
+	// depend on how long the song had been playing.
+	std::shared_ptr<const ScanResult> scanned;
+
 	{
-		return out;
+		const std::lock_guard<std::mutex> guard (scanResultMutex);
+		scanned = appliedScan;
 	}
 
-	const auto count = (std::min) (bus->sampleCount, (uint32_t) bus->samples.size ());
+	std::vector<dpcm::CapturedSample> collected;
 
-	for (uint32_t i = 0; i < count; ++i)
+	if (scanned != nullptr && ! scanned->samples.empty ())
 	{
-		const auto& kept = bus->samples[i];
+		collected = scanned->samples;
+	}
+	else if (bus != nullptr)
+	{
+		// No scan yet: the song is still being read, and what is playing is all there is.
+		const auto count = (std::min) (bus->sampleCount, (uint32_t) bus->samples.size ());
+
+		for (uint32_t i = 0; i < count; ++i)
+		{
+			collected.push_back (bus->samples[i]);
+		}
+	}
+
+	for (const auto& kept : collected)
+	{
 		const auto length = dpcm::finalLength (kept.length, kept.bytes.data ());
 
 		char address[8] = {};
@@ -470,7 +500,23 @@ void NsfPlayer::scanSampleChannels (double seconds)
 	// Published twice, to two different audiences. The handle is how this song's other player
 	// hears about it - it asked on its own clock and will not ask again; the cache is how the
 	// next session avoids walking the same file a second time.
-	auto result = std::make_shared<const ScanResult> (ScanResult { sampleNotes, midiSequence });
+	// The samples the walk started, carried out with the rest of the answer. This is the only
+	// moment they can be taken: the walk's own Bus is local to the scanning player, and the
+	// playback player has seen only what the user happened to reach.
+	std::vector<dpcm::CapturedSample> found;
+
+	if (bus != nullptr)
+	{
+		const auto kept = (std::min) (bus->sampleCount, (uint32_t) bus->samples.size ());
+
+		for (uint32_t i = 0; i < kept; ++i)
+		{
+			found.push_back (bus->samples[i]);
+		}
+	}
+
+	auto result = std::make_shared<const ScanResult> (ScanResult { sampleNotes, midiSequence,
+																   std::move (found) });
 
 	if (scanHandle != nullptr)
 	{
@@ -650,7 +696,7 @@ int NsfPlayer::render (float* left, float* right, int frames)
 	{
 		if (auto scan = scanHandle != nullptr ? scanHandle->snapshot () : nullptr)
 		{
-			applyScan (*scan);
+			applyScan (std::move (scan));
 		}
 	}
 

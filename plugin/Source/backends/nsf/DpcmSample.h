@@ -1,5 +1,6 @@
 #pragma once
 
+#include <array>
 #include <cstddef>
 #include <cstdint>
 #include <vector>
@@ -21,6 +22,23 @@ namespace toybox::backends::nsf::dpcm
 
 /** The longest sample the length register can name: (0xFF * 16) + 1. */
 constexpr std::size_t kMaxBytes = 4081;
+
+/** One sample the chip read, kept with the bytes it read at that moment.
+
+	A copy rather than an address, because the bank window belongs to the driver: the same address
+	read later describes whatever it points at by then, and the address, the length and the rate
+	would all still match - which is what makes that failure mode silent.
+
+	The window is a whole bank rather than `length`, because the register's length may be longer
+	than the sample and the tail is trimmed later.
+*/
+struct CapturedSample
+{
+	std::uint16_t start = 0;
+	std::uint16_t length = 0;		// as the register names it; trim before use
+	std::uint8_t rateIndex = 0;
+	std::array<std::uint8_t, 4096> bytes {};
+};
 
 /** What a written `$4013` asks for, in bytes. */
 std::size_t lengthFromRegister (uint8_t value);
