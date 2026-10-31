@@ -444,6 +444,8 @@ add_executable(vgm_nsf_test EXCLUDE_FROM_ALL
 	Source/formats/nsf/NsfFile.cpp
 	Source/backends/nsf/NsfBus.cpp
 	Source/backends/nsf/DpcmSample.cpp
+	Source/backends/nsf/NsfPlayer.cpp
+	Source/playback/WaveShape.cpp
 )
 target_link_libraries(vgm_nsf_test PRIVATE nsfplay_core juce::juce_core juce::juce_recommended_config_flags)
 
@@ -458,6 +460,15 @@ if (NOT WIN32)
 endif ()
 target_include_directories(vgm_nsf_test PRIVATE Source)
 target_compile_features(vgm_nsf_test PRIVATE cxx_std_17)
+
+# The end-to-end DPCM check needs a song that plays samples at two different points, so that the
+# length of one and then the other can be read back. Passed as a definition rather than as a
+# command-line argument because this test predates the registered console tests and has no argv
+# convention of its own; the path is resolved at configure time, so a CI runner's checkout works.
+set(_toybox_dpcm_song "${CMAKE_CURRENT_SOURCE_DIR}/Tests/assets/song/dpcm_two_samples.nsf")
+if (EXISTS "${_toybox_dpcm_song}")
+	target_compile_definitions(vgm_nsf_test PRIVATE TOYBOX_TEST_DPCM_SONG="${_toybox_dpcm_song}")
+endif()
 
 add_executable(vgm_chip_test EXCLUDE_FROM_ALL
 	Source/playback/WaveExport.cpp

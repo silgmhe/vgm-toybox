@@ -17,6 +17,8 @@
 #include "TestSupport.h"
 #include "backends/nsf/DpcmSample.h"
 #include "backends/nsf/NsfBus.h"
+#include "backends/nsf/NsfPlayer.h"
+#include "playback/WaveShape.h"
 #include "formats/nsf/NsfFile.h"
 #include "xgm/devices/Sound/nes_apu.h"
 #include "xgm/devices/Sound/nes_dmc.h"
@@ -427,6 +429,115 @@ int main (void)
 	}
 
 
+
+#if defined (TOYBOX_TEST_DPCM_SONG)
+
+	{
+		// --- the same question, asked of a real song -------------------------------------------
+		//
+		// The arithmetic above is checked with made-up bytes. This walks the whole path on a file:
+		// dpcm_two_samples.nsf starts a 320-byte sample at $D200 twelve seconds in, and a 512-byte
+		// one at $D380 thirty-five seconds in - the lengths FamiStudio exports for the same song.
+		//
+		// Four separate faults once hid behind those two numbers: a length read four bits wide, a
+		// tail that kept its filler, a padding byte counted as data, and a boundary taken from the
+		// wrong register. Every one of them was found by comparing an exported file by hand,
+		// because the tests stopped at the arithmetic and this path was only ever walked by a probe
+		// someone remembered to run.
+		std::FILE* asset = std::fopen (TOYBOX_TEST_DPCM_SONG, "rb");
+
+		check (asset != nullptr, "the DPCM asset opens");
+
+		if (asset != nullptr)
+		{
+			std::fseek (asset, 0, SEEK_END);
+			const auto size = (std::size_t) std::ftell (asset);
+			std::fseek (asset, 0, SEEK_SET);
+
+			std::vector<uint8_t> bytes (size);
+			const auto read = std::fread (bytes.data (), 1, size, asset);
+			std::fclose (asset);
+
+			check (read == size, "and reads whole");
+
+			toybox::formats::nsf::NsfFile song;
+			std::string error;
+
+			check (toybox::formats::nsf::NsfFile::parse (bytes.data (), bytes.size (), song, error),
+				   "and parses as an NSF");
+
+			toybox::backends::nsf::NsfPlayer player (song, 44100.0);
+			player.start ();
+
+			std::vector<float> left (1024, 0.0f), right (1024, 0.0f);
+
+			const auto sampleBytes = [] (const toybox::playback::ChipStateSnapshot& snapshot)
+			{
+				for (const auto& channel : snapshot.channels)
+				{
+					if (channel.waveKind == (int) toybox::playback::waveform::Kind::delta)
+					{
+						return channel.wave.size () / 8u;
+					}
+				}
+
+				return (std::size_t) 0;
+			};
+
+			// Sampled once a second across forty seconds, collecting every distinct length rather
+			// than reading whatever happens to be current at the end. The two samples start twelve
+			// and thirty-five seconds in, so a single capture describes one of them and says
+			// nothing about the other - which is exactly the mistake this feature kept making.
+			std::vector<std::size_t> lengths;
+
+			for (int block = 0; block < 1722; ++block)
+			{
+				player.render (left.data (), right.data (), 1024);
+
+				if (block % 43 != 0)		// about once a second at 44.1 kHz
+				{
+					continue;
+				}
+
+				toybox::playback::ChipStateSnapshot snapshot;
+				player.captureState (snapshot);
+
+				const auto bytes = sampleBytes (snapshot);
+
+				if (bytes == 0)
+				{
+					continue;
+				}
+
+				bool known = false;
+
+				for (const auto seen : lengths)
+				{
+					known = known || seen == bytes;
+				}
+
+				if (! known)
+				{
+					lengths.push_back (bytes);
+				}
+			}
+
+			bool has320 = false;
+			bool has512 = false;
+
+			for (const auto bytes : lengths)
+			{
+				has320 = has320 || bytes == 320;
+				has512 = has512 || bytes == 512;
+			}
+
+			check (has320, "the song has a 320-byte sample");
+			check (has512, "and a 512-byte one");
+			check (lengths.size () == 2, "and no others");
+		}
+	}
+
+#endif
 
 	std::printf ("\nResult    : %s\n", toybox::test::failures() == 0 ? "all checks passed" : "FAILURES");
 
