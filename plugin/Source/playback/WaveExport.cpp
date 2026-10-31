@@ -278,9 +278,14 @@ bool writeCycleWav (const ChannelState& channel, const std::string& path,
 	return writeFloat32Wav (path, samples, sampleRate, marker);
 }
 
+bool isSampledChannel (const ChannelState& channel)
+{
+	return channel.sampleRate > 0.0f && channel.wave.size () >= 2;
+}
+
 bool writeSampleWav (const ChannelState& channel, const std::string& path)
 {
-	if (path.empty () || channel.wave.size () < 2 || channel.sampleRate <= 0.0f)
+	if (path.empty () || ! isSampledChannel (channel))
 	{
 		return false;
 	}
@@ -353,7 +358,7 @@ ExportOutcome exportWavetables (const ChipStateSnapshot& snapshot, const std::st
 		// This used to fall through to skippedSample: hasPeriodicShape() is right that a sample is
 		// not a period, and the note there says "those channels want a PCM export, which does not
 		// exist yet". This is that export.
-		const bool isSample = channel.sampleRate > 0.0f && channel.wave.size () >= 2;
+		const bool isSample = isSampledChannel (channel);
 
 		if (! isSample && ! hasPeriodicShape (channel))
 		{

@@ -103,6 +103,19 @@ bool writeCycleWav (const ChannelState& channel, const std::string& path,
 					ExportMode mode = ExportMode::single, double seconds = 2.0,
 					int bits = kNativeBits);
 
+/** Whether this channel carries a sample rather than a shape.
+
+	A sampled channel is written as audio at the rate its bytes are read, in both modes; everything
+	else is written as one period. The two conditions are the pair a backend fills together - the
+	rate says the shape is bytes and the wave says there are bytes - and both are needed: a channel
+	whose sample has not been captured yet has neither.
+
+	One definition, because there were two: the exporter decided with it and the sample writer
+	checked it again in the negative, so a change to either would have let a file pass the first
+	gate and fail the second, silently.
+*/
+bool isSampledChannel (const ChannelState& channel);
+
 /** Writes `channel`'s sample as ordinary audio, which is what it is.
 
 	A DPCM hit is a moment, not a period. Writing it with the one-cycle marker would tell a

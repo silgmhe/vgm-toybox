@@ -191,11 +191,12 @@ int main (int argc, char** argv)
 
 			const auto path = directory + "/wave" + std::to_string (i + 1) + ".wav";
 
-			// The same dispatch the exporter uses: a channel carrying a sample is audio, not a
-			// wavetable, and writing it as one is what this probe is here to make visible.
-			const bool ok = channel.sampleRate > 0.0f
-							  ? toybox::playback::writeSampleWav (channel, path)
-							  : toybox::playback::writeCycleWav (channel, path);
+			// The same dispatch the exporter uses, through the same predicate: a channel carrying a
+			// sample is audio, not a wavetable, and writing it as one is what this probe is here to
+			// make visible.
+			const bool ok = toybox::playback::isSampledChannel (channel)
+						  ? toybox::playback::writeSampleWav (channel, path)
+						  : toybox::playback::writeCycleWav (channel, path);
 
 			if (ok)
 			{

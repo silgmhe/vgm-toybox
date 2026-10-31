@@ -1,6 +1,8 @@
 #include "WaveShape.h"
 
+#include <algorithm>
 #include <cmath>
+#include <cstddef>
 #include <cstdint>
 
 namespace toybox::playback::waveform
@@ -227,6 +229,37 @@ std::vector<float> cycleFor (int waveKind, float duty, int shapeParameter)
 	}
 
 	return cycle;
+}
+
+std::vector<float> decimateForDisplay (const std::vector<float>& values, std::size_t limit)
+{
+	if (limit == 0 || values.size () <= limit)
+	{
+		return values;
+	}
+
+	std::vector<float> out;
+	out.reserve (limit);
+
+	for (std::size_t i = 0; i < limit; ++i)
+	{
+		const auto begin = values.size () * i / limit;
+		const auto end = (std::max) (begin + 1, values.size () * (i + 1) / limit);
+
+		auto extreme = values[begin];
+
+		for (auto j = begin + 1; j < end; ++j)
+		{
+			if (std::abs (values[j]) > std::abs (extreme))
+			{
+				extreme = values[j];
+			}
+		}
+
+		out.push_back (extreme);
+	}
+
+	return out;
 }
 
 } // namespace toybox::playback::waveform

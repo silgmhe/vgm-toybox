@@ -973,6 +973,12 @@ bool NsfPlayer::captureState (playback::ChipStateSnapshot& snapshot, bool includ
 						dpcmWaveStarts = bus->dpcmStarts;
 					}
 
+					// A copy per frame, and the only one available: `wave` is a value type and every
+					// other consumer of a snapshot expects to own what it was handed. It costs
+					// 130 KB at worst, fifteen times a second, on the audio thread - the price of
+					// keeping the snapshot a value. Revisit if captureState() is ever called per
+					// block instead of per frame, or if a sample can reach the 4081-byte ceiling
+					// with something else also copying snapshots.
 					state.wave = dpcmWave;
 				}
 			}

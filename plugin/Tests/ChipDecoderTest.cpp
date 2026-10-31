@@ -4529,6 +4529,54 @@ void testWaveExport (void)
 	check (cycleOf (stored).size () == 4, "a stored table is used as given");
 	check (hasPeriodicShape (stored), "and it is a period");
 
+	// --- what a row shows of a sample -----------------------------------------------------------
+	//
+	// A DPCM sample is up to 32648 points and a row is about a hundred and twenty pixels wide, so
+	// the drawing reduces it. The reduction keeps the extreme of each bucket rather than every nth
+	// value, because a drum's attack is one or two points wide and a fixed stride walks past it -
+	// two hits differing only in their first millisecond would then draw the same line.
+	{
+		const std::vector<float> small { 0.0f, 0.5f, -0.5f };
+		check (waveform::decimateForDisplay (small, 128).size () == 3,
+			   "a cycle shorter than the limit is left alone");
+
+		std::vector<float> wide (1000, 0.0f);
+		wide[500] = 1.0f;
+
+		const auto reduced = waveform::decimateForDisplay (wide, 100);
+
+		check (reduced.size () == 100, "a longer one is reduced to the limit");
+
+		auto tallest = 0.0f;
+
+		for (const auto value : reduced)
+		{
+			tallest = (std::max) (tallest, std::abs (value));
+		}
+
+		check (std::abs (tallest - 1.0f) < 0.0001f,
+			   "and the one point that differs survives, wherever it falls");
+
+		// The bucket keeps the value furthest from zero, not the first one it meets.
+		std::vector<float> bipolar (200, 0.0f);
+		bipolar[10] = 0.25f;
+		bipolar[11] = -0.75f;
+
+		const auto kept = waveform::decimateForDisplay (bipolar, 20);
+
+		auto deepest = 0.0f;
+
+		for (const auto value : kept)
+		{
+			deepest = (std::min) (deepest, value);
+		}
+
+		check (std::abs (deepest + 0.75f) < 0.0001f, "the larger excursion wins over the earlier one");
+
+		check (waveform::decimateForDisplay (wide, 0).size () == 1000,
+			   "a limit of zero is not a crash and not a truncation");
+	}
+
 	// --- names ---------------------------------------------------------------------------------
 	check (legalFileName ("2A03/Pulse 1") == "2A03_Pulse-1",
 		   "illegal characters become underscores and spaces become hyphens");

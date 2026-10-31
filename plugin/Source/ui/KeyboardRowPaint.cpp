@@ -140,6 +140,14 @@ void paintToggle (juce::Graphics& g, juce::Rectangle<int> area,
 
 namespace
 {
+	/** How many points a row draws, whatever the cycle's own length is.
+
+		A stored table is at most 256, so this only bites on samples: a DPCM hit is up to 32648
+		points and the window is about a hundred and twenty pixels wide, where that many segments
+		overlap into a smear. The file keeps every point - this decides only what a row can show.
+	*/
+	constexpr std::size_t kDisplayPoints = 128;
+
 	/** Builds one cycle's line in coordinates local to its window - origin at the top left, no
 		knowledge of where the window is on screen.
 
@@ -148,51 +156,6 @@ namespace
 		window, the size stayed the same, the cache was still thought good, and the line was stroked
 		at the row's previous height. Two lines per row, one of them forty pixels below the other.
 	*/
-	/** How many points a row draws, whatever the cycle's own length is.
-
-		A stored table is at most 256, so this only bites on samples: a DPCM hit is up to 1928 points
-		and the window is about a hundred and twenty pixels wide, where that many segments overlap
-		into a smear. The file keeps every sample - this decides only what a row can show.
-	*/
-	constexpr std::size_t kDisplayPoints = 128;
-
-	/** `values` reduced to at most `limit` points, keeping the extreme of each bucket.
-
-		The extreme rather than every nth value: a drum's attack is one or two samples wide, and a
-		fixed stride drops it - two hits differing only in their first millisecond would draw the
-		same line. The value furthest from zero in each bucket keeps the spike that tells them apart.
-	*/
-	std::vector<float> decimateForDisplay (const std::vector<float>& values, std::size_t limit)
-	{
-		if (values.size () <= limit)
-		{
-			return values;
-		}
-
-		std::vector<float> out;
-		out.reserve (limit);
-
-		for (std::size_t i = 0; i < limit; ++i)
-		{
-			const auto begin = values.size () * i / limit;
-			const auto end = (std::max) (begin + 1, values.size () * (i + 1) / limit);
-
-			auto extreme = values[begin];
-
-			for (auto j = begin + 1; j < end; ++j)
-			{
-				if (std::abs (values[j]) > std::abs (extreme))
-				{
-					extreme = values[j];
-				}
-			}
-
-			out.push_back (extreme);
-		}
-
-		return out;
-	}
-
 	void buildCyclePath (juce::Path& path, int width, int height, const std::vector<float>& cycle)
 	{
 		path.clear ();
@@ -275,7 +238,7 @@ void paintWave (juce::Graphics& g, juce::Rectangle<int> area,
 
 		juce::Path path;
 		buildCyclePath (path, area.getWidth (), area.getHeight (),
-						decimateForDisplay (channel.wave, kDisplayPoints));
+						playback::waveform::decimateForDisplay (channel.wave, kDisplayPoints));
 
 		g.setColour (theme::accent ().withAlpha (channel.active ? 0.9f : 0.35f));
 		strokeCycle (g, path, area);

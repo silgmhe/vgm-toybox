@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstddef>
 #include <vector>
 
 namespace toybox::playback::waveform
@@ -57,5 +58,17 @@ constexpr int fmMultiple (int packed) { return packed & 0xF; }
 constexpr int fmLevel (int packed) { return (packed >> 4) & 0x3F; }
 constexpr int fmWaveform (int packed) { return (packed >> 10) & 0x3; }
 constexpr int fmFeedback (int packed) { return (packed >> 12) & 0x7; }
+
+/** `values` reduced to at most `limit` points, keeping the extreme of each bucket.
+
+	The extreme rather than every nth value: a drum's attack is one or two samples wide, and a fixed
+	stride drops it - two hits differing only in their first millisecond would draw the same line.
+	The value furthest from zero in each bucket keeps the spike that tells them apart.
+
+	A stored table is at most 256 points, so this only bites on samples: a DPCM hit is up to 32648
+	points and a row is about a hundred and twenty pixels wide, where that many segments overlap
+	into a smear. The file a channel exports keeps every point; this decides only what a row shows.
+*/
+std::vector<float> decimateForDisplay (const std::vector<float>& values, std::size_t limit);
 
 } // namespace toybox::playback::waveform
