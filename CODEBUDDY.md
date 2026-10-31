@@ -114,6 +114,29 @@ build/plugin/vgm_core_test
 
 Linux build dependencies: `zlib1g-dev`, and for the audio drivers `libasound2-dev` / `libpulse-dev` / `libao-dev`; `libdbus-1-dev` for MPRIS media controls. MSVC needs no extra packages. `libs/inih` and `libs/wingetopt` are still on disk but nothing builds them any more - they served the command-line player.
 
+## Releasing
+
+**A tag publishes nothing unless the project version says the same thing.** `release.yml` compares
+`refs/tags/v*` against `project(vgmtoybox VERSION x.y.z)` in `CMakeLists.txt` and exits 1 on a
+mismatch - deliberately, because a release called v0.6 whose plugin reports 0.5 is worse than a
+failed release. The number is a compile-time constant: `JucePlugin_VersionString` fills the About
+window, the standalone's `getApplicationVersion`, and the plugin's own metadata.
+
+The order matters, and it is the only order that works:
+
+1. `CMakeLists.txt`: `project(vgmtoybox VERSION x.y.z ...)` - the version about to be released
+2. Commit, push master, let the build check go green
+3. `git tag -a vx.y.z -F <release-notes.txt>` on that commit, then `git push origin vx.y.z`
+
+**Tagging first and fixing the number afterwards costs a forced tag update**, because the tag points
+at a tree that still reports the old version - re-running the workflow cannot succeed however many
+times it is retried. That is what happened to `v0.8.0`: the number stayed at 0.7.0, `check-tag`
+failed, and `package-desktop` and `release` were skipped by `needs`.
+
+The release notes are the tag message, not a file in the repository; there is no CHANGELOG. Read
+them back with `git cat-file tag vx.y.z` if a tag has to be rebuilt - a PowerShell pipe mangles the
+blank line that separates the header from the message, so do it with a script rather than inline.
+
 ## Architecture
 
 ### Two layers, built in a single CMake tree
