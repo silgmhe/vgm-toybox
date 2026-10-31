@@ -1,5 +1,7 @@
 #include "LibvgmSongInstance.h"
 
+#include "NesDpcmBank.h"
+
 #include "LibvgmMuteIsolation.h"
 
 #include <map>
@@ -191,6 +193,13 @@ bool LibvgmSongInstance::prepare (double hostSampleRate, int newMaxBlockSize, ju
 			track.midiCapability = playback::MidiCapability::unavailable;
 		}
 	}
+	// The samples this song starts, taken from the same bytes the players load. A VGM says what it
+	// plays in its command stream, so this is one walk with no emulation - unlike the NSF path,
+	// which has to run the song to find out.
+	dpcmSamples = std::make_shared<const std::vector<playback::DecodedSample>> (
+		collectNesDpcmSamples (playerMemory.data, playerMemory.size));
+
+	probe->setSamples (dpcmSamples);
 	probe->setTrackList (&tracks);	// setTrackAudible() resolves the track through this list
 	refreshTimelineFacts();
 	return true;
@@ -493,6 +502,7 @@ std::unique_ptr<playback::ITrackPlayer> LibvgmSongInstance::createPlayer (juce::
 	}
 
 	player->setTimeline (loopCount, fadeSeconds);
+	player->setSamples (dpcmSamples);
 	player->setTrackList (&tracks);
 	return player;
 }

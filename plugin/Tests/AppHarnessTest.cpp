@@ -371,6 +371,7 @@ private:
 		else if (command == "menu") { commandMenu (tokens); }
 		else if (command == "host") { commandHost (tokens); }
 		else if (command == "engine") { commandEngine (tokens); }
+		else if (command == "samples") { commandSamples (); }
 		else if (command == "tick") { commandTick (); }
 		else if (command == "shot") { commandShot (tokens); }
 		else if (command == "size") { commandSize (tokens); }
@@ -704,6 +705,22 @@ private:
 
 	/** A transport command from outside the window, like the tray menu's: it must reach the same
 		state the buttons read, not a copy that only the button handlers update. */
+	/** What the export would write: every sample the song starts, with the name it would get. */
+	void commandSamples (void)
+	{
+		const auto list = processor.getEngine().currentSamples();
+
+		std::printf ("  %d sample(s)\n", (int) list.size());
+
+		for (const auto& sample : list)
+		{
+			std::printf ("    %-22s %8.1f Hz  %6d points\n",
+						 sample.name.c_str(), sample.rate, (int) sample.values.size());
+		}
+
+		report (true, "samples");
+	}
+
 	void commandEngine (const juce::StringArray& tokens)
 	{
 		if (tokens.size() < 2)

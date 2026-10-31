@@ -46,15 +46,9 @@ constexpr uint64_t kScanPollIntervalSamples = 4096;
 */
 float dpcmRate (uint8_t index, bool pal)
 {
-	static constexpr int ntsc[16] = { 428, 380, 340, 320, 286, 254, 226, 214,
-									  190, 160, 142, 128, 106, 84, 72, 54 };
-	static constexpr int palCycles[16] = { 398, 354, 316, 298, 276, 236, 210, 198,
-										   176, 148, 132, 118, 98, 78, 66, 50 };
-
-	const double clock = pal ? kPalClock : kNtscClock;
-	const auto cycles = pal ? palCycles[index & 0x0F] : ntsc[index & 0x0F];
-
-	return (float) (clock / (double) cycles);
+	// The table lives in DpcmSample.h, where the VGM front end reaches it as well: one 2A03, one
+	// set of cycle counts, and a second copy would be one more place to keep in step.
+	return (float) dpcm::rate (index, pal);
 }
 
 /** MIDI's top velocity. The walk records a channel's level as 0..1, so this is the one place

@@ -70,4 +70,24 @@ std::vector<float> decode (const uint8_t* bytes, std::size_t length)
 	return out;
 }
 
+double rate (uint8_t index, bool pal)
+{
+	// Cycles per bit, one entry per rate index. A larger number is a slower sample, which is why
+	// the table descends: index 0 is the fastest the chip can read.
+	static constexpr int ntsc[16] = { 428, 380, 340, 320, 286, 254, 226, 214,
+									  190, 160, 142, 128, 106,  84,  72,  54 };
+	static constexpr int palCycles[16] = { 398, 354, 316, 298, 276, 236, 210, 198,
+										   176, 148, 132, 118,  98,  78,  66,  50 };
+
+	// The CPU clock the sample is measured against, not the audio rate: DPCM reads one bit per
+	// these cycles whatever the mixer is doing.
+	static constexpr double kNtscClock = 1789772.7272727273;
+	static constexpr double kPalClock = 1662607.0;
+
+	const double clock = pal ? kPalClock : kNtscClock;
+	const auto cycles = pal ? palCycles[index & 0x0F] : ntsc[index & 0x0F];
+
+	return clock / (double) cycles;
+}
+
 } // namespace toybox::backends::nsf::dpcm

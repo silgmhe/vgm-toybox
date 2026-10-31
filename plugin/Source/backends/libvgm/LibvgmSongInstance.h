@@ -60,6 +60,13 @@ private:
 	std::vector<PLR_DEV_INFO> deviceInfo;
 	std::unique_ptr<playback::MidiSequence> midiSequence;
 
+	/** The 2A03's DPCM samples, collected once in prepare() from the image the players load.
+
+		Shared by every player of the song rather than collected per player: it is a property of
+		the file, and a VGM states it in its command stream, so one walk answers for all of them.
+	*/
+	std::shared_ptr<const std::vector<playback::DecodedSample>> dpcmSamples;
+
 	JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (LibvgmSongInstance)
 };
 

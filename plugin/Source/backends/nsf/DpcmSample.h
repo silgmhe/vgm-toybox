@@ -70,4 +70,12 @@ std::size_t finalLength (std::size_t length, const uint8_t* bytes);
 */
 std::vector<float> decode (const uint8_t* bytes, std::size_t length);
 
+/** How many points a second a sample plays at, from the index in `$4010`.
+
+	Shared by both 2A03 front ends: an NSF hands the register over directly, and a VGM records the
+	same write as a `0xB4` command. The table is the chip's, not a file's, so it lives here rather
+	than in either backend - a second copy would be one more place to keep in step.
+*/
+double rate (uint8_t index, bool pal);
+
 } // namespace toybox::backends::nsf::dpcm

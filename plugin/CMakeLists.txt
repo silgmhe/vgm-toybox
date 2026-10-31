@@ -229,6 +229,7 @@ target_sources(VGMToybox PRIVATE
 	Source/formats/vgm/VgmSongLoader.cpp
 	Source/backends/libvgm/LibvgmSongInstance.cpp
 	Source/backends/libvgm/LibvgmTrackPlayer.cpp
+	Source/backends/libvgm/NesDpcmBank.cpp
 	Source/backends/libvgm/LibvgmVgz.cpp
 	Source/backends/nsf/NsfBackend.cpp
 	Source/backends/nsf/NsfPlayer.cpp
@@ -417,6 +418,7 @@ add_executable(vgm_mixer_test EXCLUDE_FROM_ALL
 	Source/formats/vgm/VgmSongLoader.cpp
 	Source/backends/libvgm/LibvgmSongInstance.cpp
 	Source/backends/libvgm/LibvgmTrackPlayer.cpp
+	Source/backends/libvgm/NesDpcmBank.cpp
 	Source/backends/libvgm/LibvgmVgz.cpp
 )
 # --- console test for the chip decoders (not built by default) ---
