@@ -22,6 +22,9 @@ struct MenuEntry
 	bool enabled = true;
 	bool separatorBefore = false;
 	std::function<void (void)> action;
+
+	/** A submenu's items. Empty for a leaf entry; an entry that has them carries no action. */
+	std::vector<MenuEntry> children;
 };
 
 /** One top-level menu and its entries. */
@@ -72,6 +75,9 @@ public:
 	/** Called with the index of the page the user picked (into `viewNames`). */
 	std::function<void (int)> onSelectView;
 
+	/** File > Export > ... - writes files, and owns the folder picker and the errors that follow. */
+	std::function<void (void)> onExportSamples;
+
 	/** The pages, in menu order - filled from the window's ViewStack. */
 	juce::StringArray viewNames;
 
@@ -102,6 +108,21 @@ public:
 		open.key = keyFor ("file.open");
 		open.action = onOpenSong;
 		file.entries.push_back (std::move (open));
+
+		// Export as a submenu rather than three top-level entries: these all write files somewhere,
+		// and the File menu already carries open/close/exit. It sits above Close because it is
+		// about the song, not about the window.
+		MenuEntry exportMenu;
+		exportMenu.id = "file.export";
+		exportMenu.label = i18n::tr ("menu.file.export");
+
+		MenuEntry exportSamples;
+		exportSamples.id = "file.export.samples";
+		exportSamples.label = i18n::tr ("menu.file.export.samples");
+		exportSamples.action = onExportSamples;
+		exportMenu.children.push_back (std::move (exportSamples));
+
+		file.entries.push_back (std::move (exportMenu));
 
 		if (standalone)
 		{
@@ -221,34 +242,7 @@ public:
 		for (const auto& group : buildGroups())
 		{
 			text << group.title << juce::newLine;
-
-			for (const auto& entry : group.entries)
-			{
-				text << "  " << entry.id.paddedRight (' ', 24)
-					 << entry.label.paddedRight (' ', 22);
-
-				const auto shortcut = EditorCommands::describe (entry.key);
-
-		if (shortcut.isNotEmpty())
-				{
-					text << shortcut.paddedRight (' ', 10);
-				}
-				else
-				{
-					text << juce::String().paddedRight (' ', 10);
-				}
-
-				if (entry.checked)
-				{
-					text << "checked ";
-				}
-				if (! entry.enabled)
-				{
-					text << "disabled";
-				}
-
-				text << juce::newLine;
-			}
+			describeEntries (group.entries, 2, text);
 		}
 
 		return text;
@@ -263,13 +257,9 @@ public:
 	{
 		for (const auto& group : buildGroups())
 		{
-			for (const auto& entry : group.entries)
+			if (findIn (group.entries, id, out))
 			{
-				if (entry.id == id)
-				{
-					out = entry;
-					return true;
-				}
+				return true;
 			}
 		}
 
@@ -319,6 +309,12 @@ public:
 				menu.addSeparator();
 			}
 
+			if (! entry.children.empty())
+			{
+				menu.addSubMenu (entry.label, renderEntries (entry.children), entry.enabled);
+				continue;
+			}
+
 			auto action = entry.action;
 			juce::PopupMenu::Item item { entry.label };
 			item.isTicked = entry.checked;
@@ -334,6 +330,87 @@ public:
 	void menuItemSelected (int, int) override {}	// every item carries its own action
 
 private:
+	/** One line per entry, recursing into a submenu with four more spaces.
+
+		The harness reads `menu.<id> checked == true`, and an id inside a submenu is the same kind of
+		thing as one at the top: the indentation is the only difference, so a reader can see which
+		items belong to which branch.
+	*/
+	static void describeEntries (const std::vector<MenuEntry>& entries, int indent, juce::String& text)
+	{
+		for (const auto& entry : entries)
+		{
+			text << juce::String::repeatedString (" ", indent)
+				 << entry.id.paddedRight (' ', 24)
+				 << entry.label.paddedRight (' ', 22)
+				 << EditorCommands::describe (entry.key).paddedRight (' ', 10);
+
+			if (entry.checked)
+			{
+				text << "checked ";
+			}
+
+			if (! entry.enabled)
+			{
+				text << "disabled";
+			}
+
+			text << juce::newLine;
+
+			describeEntries (entry.children, indent + 4, text);
+		}
+	}
+
+	/** The entry with this id anywhere in the tree, into `out`. */
+	static bool findIn (const std::vector<MenuEntry>& entries, const juce::String& id, MenuEntry& out)
+	{
+		for (const auto& entry : entries)
+		{
+			if (entry.id == id)
+			{
+				out = entry;
+				return true;
+			}
+
+			if (findIn (entry.children, id, out))
+			{
+				return true;
+			}
+		}
+
+		return false;
+	}
+
+	/** A submenu's items rendered for JUCE - the same shape as one level of getMenuForIndex(). */
+	static juce::PopupMenu renderEntries (const std::vector<MenuEntry>& entries)
+	{
+		juce::PopupMenu menu;
+
+		for (const auto& entry : entries)
+		{
+			if (entry.separatorBefore)
+			{
+				menu.addSeparator();
+			}
+
+			if (! entry.children.empty())
+			{
+				menu.addSubMenu (entry.label, renderEntries (entry.children), entry.enabled);
+				continue;
+			}
+
+			auto action = entry.action;
+			juce::PopupMenu::Item item { entry.label };
+			item.isTicked = entry.checked;
+			item.isEnabled = entry.enabled;
+			item.shortcutKeyDescription = EditorCommands::describe (entry.key);
+			item.action = [action] { if (action != nullptr) action(); };
+			menu.addItem (item);
+		}
+
+		return menu;
+	}
+
 	/** The accelerator of the command with this id; empty when there is none (or no table). */
 	juce::KeyPress keyFor (const juce::String& id) const
 	{

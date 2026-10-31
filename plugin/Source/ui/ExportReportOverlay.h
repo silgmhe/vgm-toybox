@@ -24,6 +24,14 @@ struct ExportReport
 	int skippedSample = 0;		// rows whose shape is a recording rather than a period
 	int failed = 0;
 	juce::File folder;
+
+	/** True when the numbers count samples rather than channels.
+
+		Two exports share this overlay because they are the same report to the user - what was
+		written, where, and what was not - but "channels in the snapshot" is the wrong sentence over
+		a list of DPCM samples, and a heading that says "wavetables" over five sample files is worse.
+	*/
+	bool samples = false;
 };
 
 /**
@@ -76,7 +84,7 @@ public:
 
 		g.setColour (theme::primaryText());
 		g.setFont (juce::Font (juce::FontOptions (18.0f, juce::Font::bold)));
-		g.drawText (i18n::tr ("export.title"), inner.removeFromTop (26),
+		g.drawText (i18n::tr (shown.samples ? "export.samples.title" : "export.title"), inner.removeFromTop (26),
 					juce::Justification::centredLeft, false);
 
 		inner.removeFromTop (12);
@@ -129,7 +137,7 @@ public:
 
 			g.setColour (theme::secondaryText());
 			g.setFont (juce::Font (juce::FontOptions (11.5f)));
-			g.drawFittedText (i18n::tr ("export.seen", juce::String (shown.channelsSeen)),
+			g.drawFittedText (i18n::tr (shown.samples ? "export.samples.seen" : "export.seen", juce::String (shown.channelsSeen)),
 							  inner.removeFromTop (18), juce::Justification::topLeft, 1, 1.0f);
 		}
 	}
@@ -176,7 +184,7 @@ private:
 			// Two different failures, two different sentences. The panel receiving nothing and the
 			// panel receiving channels that could not be written are not the same bug, and the
 			// message that did not say which is why this code was "fixed" twice without effect.
-			return i18n::tr (shown.channelsSeen == 0 ? "export.noChannels" : "export.none");
+			return i18n::tr (shown.channelsSeen == 0 ? (shown.samples ? "export.samples.none" : "export.noChannels") : "export.none");
 		}
 
 		return i18n::tr ("export.written", juce::String (shown.written));

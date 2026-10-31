@@ -446,6 +446,7 @@ add_executable(vgm_nsf_test EXCLUDE_FROM_ALL
 	Source/backends/nsf/DpcmSample.cpp
 	Source/backends/nsf/NsfPlayer.cpp
 	Source/playback/WaveShape.cpp
+	Source/playback/WaveExport.cpp
 )
 target_link_libraries(vgm_nsf_test PRIVATE nsfplay_core juce::juce_core juce::juce_recommended_config_flags)
 

@@ -171,6 +171,25 @@ public:
 		(The song facts the mapping needs stay private: they are read by followDawTransport() under
 		the same lock that writes them, and a public copy would invite reading them without it.) */
 	playback::DawSync& getDawSync (void) { return dawSync; }
+
+	/** Every sample the open song has started, decoded and ready to be written.
+
+		Data rather than a player: a pointer out of here would dangle the moment the next song
+		installs, and the caller only ever wanted the list. Every player in a per-track build runs
+		the whole song and differs only in which channel it lets through, so the first one's list
+		is the song's.
+	*/
+	std::vector<playback::DecodedSample> currentSamples (void)
+	{
+		const juce::ScopedLock guard (lock);
+
+		if (trackPlayers.empty() || trackPlayers.front() == nullptr)
+		{
+			return {};
+		}
+
+		return trackPlayers.front()->samples();
+	}
 	float getMasterVolume (void) const { return masterVolume.load(); }
 
 	/** Copies the most recent output for display - the waveform of what is being heard - with the

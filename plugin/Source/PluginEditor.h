@@ -172,6 +172,15 @@ private:
 	juce::TooltipWindow tooltipWindow { this, 650 };	// declared last: destroyed first
 
 	std::unique_ptr<juce::FileChooser> fileChooser;
+
+	/** File > Export > All DPCM Samples: the folder picker, kept alive while it is open. */
+	std::unique_ptr<juce::FileChooser> sampleChooser;
+
+	/** Every sample the song started, written into a folder the user picks. */
+	void exportSamples (void);
+
+	/** Puts an export report on screen - the one place the overlay is shown, for both exports. */
+	void showExportReport (const toybox::ui::ExportReport& report);
 	juce::String lastError;
 	/** What the engine said about the song on the previous refresh: a host can hand a project to
 		an instance whose window is already open, and the pages that only exist with a song are

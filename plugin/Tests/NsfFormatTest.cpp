@@ -493,6 +493,35 @@ int main (void)
 				check (samples[0].values.size () == 320u * 8u, "eight points per byte of the sample");
 				check (samples[0].rate > 33000.0 && samples[0].rate < 33400.0,
 					   "at the rate the sample's own register names");
+
+				// And the writer, into a folder of its own: two files whose sizes are the header
+				// plus eight points per byte at four bytes a point. This is the path File > Export
+				// takes, minus the folder picker.
+				const auto folder = juce::File::getSpecialLocation (juce::File::tempDirectory)
+										.getChildFile ("vgmtoybox-dpcm-"
+													   + juce::String (juce::Random::getSystemRandom().nextInt (100000)));
+				const auto made = folder.createDirectory ();
+
+				check (made.wasOk (), "a temporary folder for the export");
+
+				if (made.wasOk ())
+				{
+					const auto written = toybox::playback::writeSamples (
+						samples, folder.getFullPathName ().toStdString ());
+
+					check (written == 2, "both samples were written");
+
+					const auto first = folder.getChildFile ("dpcm_D200_320.wav");
+					const auto second = folder.getChildFile ("dpcm_D380_512.wav");
+
+					check (first.existsAsFile (), "the 320-byte sample is a file with its own name");
+					check (second.existsAsFile (), "and the 512-byte one too");
+
+					check (first.getSize () == 44 + 320 * 8 * 4,
+						   "and its size is the header plus eight points per byte");
+
+					folder.deleteRecursively ();
+				}
 			}
 		}
 	}

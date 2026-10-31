@@ -49,6 +49,12 @@ public:
 		return player.captureState (snapshot);
 	}
 
+	/** The song's own DPCM samples rather than this player's current one - see NsfPlayer. */
+	std::vector<playback::DecodedSample> samples (void) const override
+	{
+		return player.dpcmSamples ();
+	}
+
 	void setOutputGain (float linear) override
 	{
 		// The player already defaults to +8 dB; this is how the settings page overrides it.

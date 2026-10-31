@@ -34,6 +34,8 @@ language: English
 "menu.file" = "File";
 "menu.file.close" = "Close Song";
 "menu.file.exit" = "Exit";
+"menu.file.export" = "Export";
+"menu.file.export.samples" = "All DPCM Samples...";
 "menu.file.open" = "Open Song...";
 "menu.help" = "Help";
 "menu.help.about" = "About VGMToybox...";
@@ -227,13 +229,21 @@ language: English
 	"visualiser.keyboardUnsupported" = "The channels of this chip cannot be shown yet.";
 	"visualiser.export" = "Export wavetables";
 	"visualiser.exportEmpty" = "Nothing to export yet.";
-	"export.title" = "Wavetables exported";
-	"export.written" = "{0} written to";
-	"export.skippedSample" = "{0} sampled channel(s) left out: no sample data was captured for them.";
-	"export.failed" = "{0} could not be written.";
-	"export.none" = "Nothing was written.";
+	"export.title" = "Wavetables exported";
+
+	"export.written" = "{0} written to";
+
+	"export.skippedSample" = "{0} sampled channel(s) left out: no sample data was captured for them.";
+
+	"export.failed" = "{0} could not be written.";
+
+	"export.none" = "Nothing was written.";
+
 	"export.noChannels" = "Nothing was written: the panel is not receiving channel state at all.";
-	"export.seen" = "Channels in the snapshot: {0}";
+	"export.samples.none" = "Nothing was written: this song has not started any samples yet.";
+"export.samples.seen" = "Samples the song started: {0}";
+"export.samples.title" = "Samples exported";
+"export.seen" = "Channels in the snapshot: {0}";
 	"export.options.title" = "Export wavetables";
 	"export.options.single" = "Single cycle - for a wavetable synth";
 	"export.options.bits" = "Depth";
@@ -244,7 +254,8 @@ language: English
 	"export.options.cancel" = "Cancel";
 	"export.options.confirm" = "Export";
 	"export.options.hint" = "A single cycle is what a wavetable synth reads: it plays the shape at whatever note you press. A loop is what a sampler reads: it has a pitch, and these are written at A4 whatever the channel was playing.";
-	"export.close" = "Close";
+	"export.close" = "Close";
+
 "visualiser.scope" = "Waveform";
 "settings.nes" = "NSF";
 "settings.nes.duration" = "Song length";
