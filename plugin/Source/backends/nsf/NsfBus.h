@@ -52,9 +52,9 @@ public:
 	std::array<uint32_t, 4> expansionWrites {};
 
 	/** Writes to the addresses that only a real driver of that chip touches, as opposed to any
-		write that merely falls inside the range. This is what the detection judges by: \
-		\-\ for VRC6 (control and pitch of the first pulse), \/\ for VRC7,
-		\/\ for N163, \/\ for FME7. */
+		write that merely falls inside the range. This is what the detection judges by, and one
+		register per chip is enough: $9000-$9003 for VRC6 (control and pitch of the first pulse),
+		$9010 or $9030 for VRC7, $4800 or $F800 for N163, $C000 or $E000 for FME7. */
 	std::array<uint32_t, 4> expansionSignature {};
 
 	/** One byte of the address space, for readers that only look.

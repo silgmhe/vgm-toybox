@@ -161,8 +161,8 @@ bool NsfBus::Write (uint32_t adr, uint32_t val, uint32_t id)
 
 	else if (adr == 0x4023 || (adr >= 0x4040 && adr <= 0x408A))
 	{
-		// The FDS keeps its register file - wavetable included - at - rather than in an
-		// expansion window, and its master switch at . Not counted in expansionWrites: that
+		// The FDS keeps its register file - wavetable included - at $4040-$408A rather than in an
+		// expansion window, and its master switch at $4023. Not counted in expansionWrites: that
 		// tally is what detectUndeclaredChip reads, and the FDS declares itself in the header.
 		expansion = true;
 	}
