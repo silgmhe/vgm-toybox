@@ -4,6 +4,7 @@
 
 #include "LibvgmMuteIsolation.h"
 
+#include <algorithm>
 #include <map>
 
 #include "emu/SoundDevs.h"
@@ -196,8 +197,18 @@ bool LibvgmSongInstance::prepare (double hostSampleRate, int newMaxBlockSize, ju
 	// The samples this song starts, taken from the same bytes the players load. A VGM says what it
 	// plays in its command stream, so this is one walk with no emulation - unlike the NSF path,
 	// which has to run the song to find out.
-	dpcmSamples = std::make_shared<const std::vector<playback::DecodedSample>> (
-		collectNesDpcmSamples (playerMemory.data, playerMemory.size));
+	//
+	// Only when the file actually has a 2A03: the walk reads the whole command stream, and for a
+	// file built on other chips that read can only come back empty. `enumerate()` above has
+	// already filled deviceInfo.
+	const bool hasNes = std::any_of (deviceInfo.begin (), deviceInfo.end (),
+									 [] (const PLR_DEV_INFO& device) { return device.type == DEVID_NES_APU; });
+
+	if (hasNes)
+	{
+		dpcmSamples = std::make_shared<const std::vector<playback::DecodedSample>> (
+			collectNesDpcmSamples (playerMemory.data, playerMemory.size));
+	}
 
 	probe->setSamples (dpcmSamples);
 	probe->setTrackList (&tracks);	// setTrackAudible() resolves the track through this list
