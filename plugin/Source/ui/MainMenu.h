@@ -295,36 +295,16 @@ public:
 	juce::PopupMenu getMenuForIndex (int index, const juce::String&) override
 	{
 		const auto groups = buildGroups();
-		juce::PopupMenu menu;
 
 		if (! juce::isPositiveAndBelow (index, groups.size()))
 		{
-			return menu;
+			return juce::PopupMenu();
 		}
 
-		for (const auto& entry : groups[(size_t) index].entries)
-		{
-			if (entry.separatorBefore)
-			{
-				menu.addSeparator();
-			}
-
-			if (! entry.children.empty())
-			{
-				menu.addSubMenu (entry.label, renderEntries (entry.children), entry.enabled);
-				continue;
-			}
-
-			auto action = entry.action;
-			juce::PopupMenu::Item item { entry.label };
-			item.isTicked = entry.checked;
-			item.isEnabled = entry.enabled;
-			item.shortcutKeyDescription = EditorCommands::describe (entry.key);
-			item.action = [action] { if (action != nullptr) action(); };
-			menu.addItem (item);
-		}
-
-		return menu;
+		// One renderer for both levels. There used to be a second copy of this loop here, and the
+		// submenu branch called the shared one - so a new property on a menu entry had to be added
+		// in two places, and forgetting one only showed when a submenu was opened.
+		return renderEntries (groups[(size_t) index].entries);
 	}
 
 	void menuItemSelected (int, int) override {}	// every item carries its own action
