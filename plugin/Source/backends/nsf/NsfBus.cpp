@@ -75,13 +75,13 @@ void NsfBus::load (void)
 	dpcmEnabled = false;
 }
 
-uint8_t NsfBus::peek (uint16_t address) const
+uint8_t NsfBus::peek (uint16_t address)
 {
 	uint32_t value = 0;
 
-	// Read() stores nothing - it maps a bank or asks the image - so the cast describes the shape of
-	// the interface rather than escaping const. Every counter on this class is bumped by Write().
-	const_cast<NsfBus*> (this)->Read (address, value, 0);
+	// The CPU's own access, so a sample is read through the same bank mapping the driver set. It
+	// stores nothing; every counter on this class is bumped by Write().
+	Read (address, value, 0);
 
 	return (uint8_t) (value & 0xFF);
 }

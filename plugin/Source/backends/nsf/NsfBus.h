@@ -57,13 +57,13 @@ public:
 		$9010 or $9030 for VRC7, $4800 or $F800 for N163, $C000 or $E000 for FME7. */
 	std::array<uint32_t, 4> expansionSignature {};
 
-	/** One byte of the address space, for readers that only look.
+	/** One byte of the address space, along the same path the CPU would take.
 
-		Read() is the CPU's own access and takes a non-const bus; the display must not perturb the
-		bank mapping or the write counters, and both are only touched by Write(), so the distinction
-		here is about intent rather than about what happens to the object.
+		Not const, because Read() is not: the base class maps a bank on read, and a wrapper that
+		promised not to would have to cast the promise away again. It does not write, so nothing
+		observable changes - but the signature is honest about which function it is calling.
 	*/
-	uint8_t peek (uint16_t address) const;
+	uint8_t peek (uint16_t address);
 
 	/** The DPCM sample the last start selected.
 
