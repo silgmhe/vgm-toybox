@@ -961,18 +961,16 @@ bool NsfPlayer::captureState (playback::ChipStateSnapshot& snapshot, bool includ
 
 					const auto length = dpcmSampleLength ();
 
-					// Keyed on the start count as well as the selection, because the same address
-					// played twice reads different bytes if the driver moved the bank in between -
-					// and keyed on the page count, because the length is "to the next sample" and
-					// that boundary is unknown until the driver has pointed at the next one.
+					// Keyed on the start count as well as the selection: the same address played
+					// twice reads different bytes if the driver moved the bank in between, and no
+					// register shows that - only the copy taken at each start does.
 					if (dpcmWaveStart != bus->dpcm.start || dpcmWaveLength != length
-						|| dpcmWaveStarts != bus->dpcmStarts || dpcmWavePages != bus->pageCount)
+						|| dpcmWaveStarts != bus->dpcmStarts)
 					{
 						dpcmWave = dpcm::decode (bus->dpcm.bytes.data (), length);
 						dpcmWaveStart = bus->dpcm.start;
 						dpcmWaveLength = length;
 						dpcmWaveStarts = bus->dpcmStarts;
-						dpcmWavePages = bus->pageCount;
 					}
 
 					state.wave = dpcmWave;

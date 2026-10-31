@@ -178,11 +178,10 @@ bool NsfBus::Write (uint32_t adr, uint32_t val, uint32_t id)
 		// may point $4012/$4013 at the next sample while the current one is still playing.
 		if (adr == 0x4011)
 		{
-			// The DMC's DAC, written directly. A drum's decay lives here rather than in the sample:
-			// the data is a stream of equal steps and the shape comes from the driver walking this
-			// register down as the hit plays.
+			// The DMC's DAC, written directly - the one place a drum's decay could come from, since
+			// the data itself is a stream of equal steps. Counted so the probe can answer whether a
+			// song uses it; the value is not kept, because nothing reads it back.
 			++dacWrites;
-			dacValue = (uint8_t) (val & 0x7F);
 		}
 		else if (adr == 0x4010)
 		{
@@ -195,7 +194,6 @@ bool NsfBus::Write (uint32_t adr, uint32_t val, uint32_t id)
 		else if (adr == 0x4012)
 		{
 			pendingDpcmPage = (uint8_t) (val & 0xFF);
-			++pageWrites;
 		}
 		else if (adr == 0x4013)
 		{
@@ -230,8 +228,8 @@ bool NsfBus::Write (uint32_t adr, uint32_t val, uint32_t id)
 
 				// Recorded here rather than on every $4012 write: a driver prepares the next
 				// sample's address before it starts it, and an address that was written and never
-				// started is not a sample. This list is what the boundaries are read off, so an
-				// entry that never played would cut a real sample short.
+				// started is not a sample. It was the boundary search's input once - an entry that
+				// never played cut a real sample short - and the probe still reads it.
 				bool known = false;
 
 				for (uint32_t i = 0; i < pageCount; ++i)

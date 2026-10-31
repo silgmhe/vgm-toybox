@@ -215,20 +215,25 @@ public:
 	/** True while this player is playing a song whose scan has not landed yet. */
 	bool isAnalysing (void) const { return analysing.load (std::memory_order_relaxed); }
 
-	/** Diagnostics: how many DPCM samples have started since the song began.
+	/** How many DPCM samples have started since the song began. Probe only.
 
 		A hit that sounds longer than one sample can be one sample retriggered, and this is what
 		tells that apart from a sample that really is longer. Defined in the .cpp because NsfBus is
-		only declared here. */
+		only declared here.
+	*/
 	uint32_t dpcmStartCount (void) const;
 
-	/** Diagnostics: how many times the DMC's DAC was written, which is where a drum's decay is. */
+	/** How many times the DMC's DAC was written - the one place a drum's decay could come from.
+
+		Probe only: measured twice on the songs here, both times two writes, so no sample needs it.
+	*/
 	uint32_t dacWriteCount (void) const;
 
-	/** Diagnostics: the distinct $4012 pages written, copied into `out`, at most `max` of them.
+	/** The distinct $4012 pages that started a sample, copied into `out`, at most `max` of them.
 
-		A sample longer than 241 bytes has to be played in pieces and the pieces are named by
-		walking that register; one page repeated means the driver is replaying one piece. */
+		Probe only. It answers "how many samples does this song have" and "does the driver ever
+		point at the one I am hearing", which are the two questions a mismatched export raises.
+	*/
 	uint32_t dpcmPages (uint8_t* out, uint32_t max) const;
 
 private:
@@ -275,7 +280,6 @@ private:
 	mutable uint16_t dpcmWaveStart = 0;
 	mutable uint16_t dpcmWaveLength = 0;
 	mutable uint32_t dpcmWaveStarts = 0;
-	mutable uint32_t dpcmWavePages = 0;
 
 	/** How many bytes of the copy are this sample: the register's length, less the filler that
 		follows the data and the padding byte the formula adds. The arithmetic is in DpcmSample.h. */

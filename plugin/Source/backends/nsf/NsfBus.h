@@ -97,30 +97,35 @@ public:
 
 	DpcmSelection dpcm;
 
-	/** How many times the enable bit has started a sample. Diagnostics: a hit that sounds longer
-		than one sample can be described by a driver that retriggers it, and the count is what tells
-		that apart from a sample that really is longer. */
+	/** How many samples have started since the load.
+
+		A drum that sounds longer than one sample can be a driver retriggering it, and this count is
+		what tells that apart from a sample that really is longer. It is also half of the wave
+		cache's key: the same address played twice reads different bytes if the driver moved the bank
+		in between, and only the count distinguishes the two plays.
+	*/
 	uint32_t dpcmStarts = 0;
 
-	/** Writes to $4011, the DMC's DAC, and the value it holds.
+	/** Writes to $4011, the DMC's DAC.
 
-		This is how a NES drum gets its decay: the sample data is a stream of fixed-size steps with
-		no envelope of its own, and the volume comes from the driver walking the DAC down while the
-		sample plays. A sample exported without it is the drum without its shape.
+		This is where a NES drum's decay could live - the data is a stream of fixed-size steps with
+		no envelope of its own, so the volume would come from the driver walking the DAC down while
+		the sample plays. Measured on the songs here: two writes each, so it is not used that way and
+		a sample exported without it loses nothing.
+
+		Kept as a probe counter, because that measurement is the only way to know, and the next song
+		that sounds wrong will ask the same question.
 	*/
 	uint32_t dacWrites = 0;
-	uint8_t dacValue = 0;
 
-	/** Every distinct $4012 page seen, in order, with how many times each was written.
+	/** Every distinct $4012 page that actually started a sample, in order.
 
-		Diagnostics for one question: a sample longer than 241 bytes - the most $4013 can ask for -
-		has to be played in pieces, and the pieces are named by walking this register. If only one
-		page is ever written, the driver is repeating one piece and the rest of the image is never
-		asked for; if several are, the pieces are there to be joined.
+		Read by the probe, and by nothing else: where a sample ends is the register's answer now,
+		rather than the distance to the next page. It stays because it is how "this song has one
+		sample" and "this song has four" were told apart, and that question will come back.
 	*/
 	std::array<uint8_t, 16> pagesSeen {};
 	uint32_t pageCount = 0;
-	uint32_t pageWrites = 0;
 
 	/** Puts the program in place and installs the six-byte entry trampoline at $4100.
 		The order matters: the image is cleared first, the trampoline after. */
