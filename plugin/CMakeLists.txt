@@ -233,6 +233,7 @@ target_sources(VGMToybox PRIVATE
 	Source/backends/nsf/NsfBackend.cpp
 	Source/backends/nsf/NsfPlayer.cpp
 	Source/backends/nsf/NsfBus.cpp
+	Source/backends/nsf/DpcmSample.cpp
 	Source/formats/nsf/NsfFile.cpp
 	Source/i18n/LanguageManager.cpp
 	Source/i18n/LanguagePack.cpp
@@ -408,6 +409,7 @@ add_executable(vgm_mixer_test EXCLUDE_FROM_ALL
 	Source/backends/nsf/NsfBackend.cpp
 	Source/backends/nsf/NsfPlayer.cpp
 	Source/backends/nsf/NsfBus.cpp
+	Source/backends/nsf/DpcmSample.cpp
 	Source/formats/nsf/NsfFile.cpp
 	Source/backends/libvgm/LibvgmBackend.cpp
 	Source/backends/libvgm/MidiSequenceBuilder.cpp
@@ -428,6 +430,7 @@ add_executable(vgm_nsf_probe EXCLUDE_FROM_ALL
 	Tests/NsfProbe.cpp
 	Source/formats/nsf/NsfFile.cpp
 	Source/backends/nsf/NsfBus.cpp
+	Source/backends/nsf/DpcmSample.cpp
 	Source/backends/nsf/NsfPlayer.cpp
 	Source/playback/WaveExport.cpp
 	Source/playback/WaveShape.cpp
@@ -440,6 +443,7 @@ add_executable(vgm_nsf_test EXCLUDE_FROM_ALL
 	Tests/NsfFormatTest.cpp
 	Source/formats/nsf/NsfFile.cpp
 	Source/backends/nsf/NsfBus.cpp
+	Source/backends/nsf/DpcmSample.cpp
 )
 target_link_libraries(vgm_nsf_test PRIVATE nsfplay_core juce::juce_core juce::juce_recommended_config_flags)
 

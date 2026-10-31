@@ -6,6 +6,7 @@
     produces silence, not a crash, several layers later.
 */
 
+#include <cmath>
 #include <cstdio>
 #include <cstring>
 #include <string>
@@ -14,6 +15,7 @@
 #include <juce_core/juce_core.h>
 
 #include "TestSupport.h"
+#include "backends/nsf/DpcmSample.h"
 #include "backends/nsf/NsfBus.h"
 #include "formats/nsf/NsfFile.h"
 #include "xgm/devices/Sound/nes_apu.h"
@@ -294,6 +296,73 @@ int main (void)
 		bus.Write (0x4015, 0x10);
 		check (bus.dpcm.rateIndex == 8, "the rate index is latched with the address");
 		check (bus.dpcm.loop, "and so is the loop bit");
+	}
+
+	{
+		// --- from a register's value to the bytes a file holds ---------------------------------
+		//
+		// Three steps with no test until now, and every error this feature has had was in one of
+		// them: a length read four bits wide, a tail that kept its filler, a padding byte counted
+		// as data. Each was found by comparing an exported file against one FamiStudio produced,
+		// which is a slow way to learn that a number is off by one.
+		//
+		// The numbers below are rungs of a ladder rather than observations of one song: 4081 is the
+		// register's own ceiling, and no file here reaches it.
+		using namespace toybox::backends::nsf;
+
+		check (dpcm::lengthFromRegister (0x00) == 1, "an empty length register still asks for one byte");
+		check (dpcm::lengthFromRegister (0x0C) == 193, "twelve units plus the padding byte");
+		check (dpcm::lengthFromRegister (0xFF) == dpcm::kMaxBytes,
+			   "and the ceiling comes from the register, not from a song");
+
+		// Filler in all four shapes it takes here: silence in DPCM, and the two unwritten patterns.
+		const uint8_t trailing[] = { 0x12, 0x34, 0x00, 0x55, 0xAA, 0xFF };
+		check (dpcm::trimFiller (trailing, 6) == 2, "trailing filler is not part of the sample");
+		check (dpcm::trimFiller (trailing, 2) == 2, "and a tail without any is left alone");
+
+		const uint8_t silence[] = { 0x55, 0xAA, 0x00 };
+		check (dpcm::trimFiller (silence, 3) == 0, "a sample of nothing trims to nothing");
+
+		check (dpcm::trimFiller (trailing, 0) == 0, "an empty sample stays empty");
+		check (dpcm::trimFiller (nullptr, 8) == 0, "and no buffer is not a crash");
+
+		// The padding byte. 321 is 16*20+1, so its last byte is the one the formula added.
+		check (dpcm::dropPaddingByte (321) == 320, "a length on 16k+1 loses the padding byte");
+		check (dpcm::dropPaddingByte (320) == 320, "and a length that only lands near it keeps every byte");
+		check (dpcm::dropPaddingByte (1) == 0, "one byte is the padding byte and nothing else");
+		check (dpcm::dropPaddingByte (0) == 0, "and an empty sample cannot go below empty");
+
+		// Both steps on the shape Entry080's first sample has: 320 bytes of data, then filler, with
+		// the register describing one byte more than the file holds.
+		std::vector<uint8_t> padded (321, 0x00);
+
+		for (std::size_t i = 0; i < 320; ++i)
+		{
+			padded[i] = (uint8_t) (i * 7u + 3u);
+		}
+
+		check (dpcm::finalLength (321, padded.data ()) == 320,
+			   "filler first, then the padding byte, is what the file holds");
+
+		// The integration. Alternating bits walk nowhere, which is why 0xAA and 0x55 are silence,
+		// and eight ones in a row climb by exactly eight steps of two.
+		const uint8_t alternating[] = { 0x55 };
+		const auto flat = dpcm::decode (alternating, 1);
+
+		check (flat.size () == 8, "eight steps per byte");
+		check (std::abs (flat[0] + 0.015625f) < 0.0001f, "the first step down is two of a hundred and twenty-eight");
+
+		const uint8_t upward[] = { 0xFF };
+		const auto rising = dpcm::decode (upward, 1);
+
+		check (std::abs (rising[7] - 0.125f) < 0.0001f, "eight steps up leave the level at sixteen");
+
+		// The rail is seven bits and asymmetrical: clamping at 127 rather than 128 is what keeps
+		// the top of a loud sample from folding, and the divisor matches the range.
+		std::vector<uint8_t> loud (9, 0xFF);
+		const auto clamped = dpcm::decode (loud.data (), loud.size ());
+
+		check (std::abs (clamped.back () - 127.0f / 128.0f) < 0.0001f, "and the level stops at the positive rail");
 	}
 
 	{

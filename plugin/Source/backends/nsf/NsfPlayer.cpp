@@ -8,6 +8,7 @@
 #include <string>
 #include <unordered_map>
 
+#include "backends/nsf/DpcmSample.h"
 #include "backends/nsf/NsfBus.h"
 #include "backends/nsf/NsfChannelNaming.h"
 #include "playback/WaveShape.h"
@@ -53,60 +54,6 @@ float dpcmRate (uint8_t index, bool pal)
 	const auto cycles = pal ? palCycles[index & 0x0F] : ntsc[index & 0x0F];
 
 	return (float) (clock / (double) cycles);
-}
-
-/** Where a sample stops being data: `length` with the filler that follows it removed.
-
-	0x55 and 0xAA are silence in DPCM - every bit alternates, so the level walks nowhere - and
-	0x00 and 0xFF are what an unwritten region holds. A sample ends where they begin.
-*/
-uint16_t trimFiller (const std::array<uint8_t, 4096>& bytes, uint16_t length)
-{
-	while (length > 0)
-	{
-		const auto byte = bytes[(std::size_t) (length - 1)];
-
-		if (byte != 0x00 && byte != 0x55 && byte != 0xAA && byte != 0xFF)
-		{
-			break;
-		}
-
-		--length;
-	}
-
-	return length;
-}
-
-/** The sample's bytes, integrated into -1..1.
-
-	A DPCM byte is not a sample, it is eight one-bit steps: each bit means "up two" or "down two"
-	and the level is their running sum. Skipping the integration would draw the steps themselves,
-	which look like noise no matter what the sample sounds like - the opposite of the point.
-
-	The level is the chip's seven-bit DAC, so it is clamped to -128..127 and scaled by 128 rather
-	than by 127: the range is asymmetrical and a symmetric divisor would flatten the positive rail.
-*/
-std::vector<float> decodeDpcm (const std::array<uint8_t, 4096>& bytes, uint16_t length)
-{
-	std::vector<float> out;
-	out.reserve ((std::size_t) length * 8u);
-
-	int level = 0;
-
-	for (uint32_t i = 0; i < length; ++i)
-	{
-		const auto byte = bytes[(std::size_t) i];
-
-		for (int bit = 7; bit >= 0; --bit)
-		{
-			level += ((byte >> bit) & 1u) != 0 ? 2 : -2;
-			level = (std::clamp) (level, -128, 127);
-
-			out.push_back ((float) level / 128.0f);
-		}
-	}
-
-	return out;
 }
 
 /** MIDI's top velocity. The walk records a channel's level as 0..1, so this is the one place
@@ -289,32 +236,20 @@ uint32_t NsfPlayer::dacWriteCount (void) const
 	return bus != nullptr ? bus->dacWrites : 0;
 }
 
-uint16_t NsfPlayer::dpcmSampleLength (uint16_t start) const
+uint16_t NsfPlayer::dpcmSampleLength (void) const
 {
 	if (bus == nullptr)
 	{
 		return 0;
 	}
 
-	// $4013 as the core reads it: eight bits, sixteen bytes each, plus the padding byte. Not a
-	// boundary search - the register already names the whole sample, and a driver that packs two
-	// samples back to back makes the distance between their addresses unrelated to either length.
-	//
-	// Capped at the window, which is how wide the copy is.
-	auto length = (std::min) (bus->dpcm.length, (uint16_t) bus->dpcm.bytes.size ());
+	// $4013 as the core reads it, capped at the copy. The cap is arithmetic hygiene rather than a
+	// real bound: eight bits of length are 4081 bytes and the window is 4096, so no register that
+	// survived its write can reach it.
+	const auto length = (std::min) ((std::size_t) bus->dpcm.length, bus->dpcm.bytes.size ());
 
-	length = trimFiller (bus->dpcm.bytes, length);
-
-	// $4013 counts sixteen-byte units and adds one, so a length that lands on 16k+1 carries the
-	// padding byte the hardware appends to every sample - 0xF0 in the images here, 0x00 in others.
-	// It is data in the register's terms and padding in the song's, and FamiStudio drops it for
-	// the same reason. A sample that genuinely ends at 16k+1 loses one byte; none do here.
-	if ((length & 0x0F) == 1)
-	{
-		--length;
-	}
-
-	return length;
+	// Filler and the padding byte live in DpcmSample.h, where a test can call them.
+	return (uint16_t) dpcm::finalLength (length, bus->dpcm.bytes.data ());
 }
 
 uint32_t NsfPlayer::dpcmPages (uint8_t* out, uint32_t max) const
@@ -1024,7 +959,7 @@ bool NsfPlayer::captureState (playback::ChipStateSnapshot& snapshot, bool includ
 				{
 					state.sampleRate = dpcmRate (bus->dpcm.rateIndex, file.isPal ());
 
-					const auto length = dpcmSampleLength (bus->dpcm.start);
+					const auto length = dpcmSampleLength ();
 
 					// Keyed on the start count as well as the selection, because the same address
 					// played twice reads different bytes if the driver moved the bank in between -
@@ -1033,7 +968,7 @@ bool NsfPlayer::captureState (playback::ChipStateSnapshot& snapshot, bool includ
 					if (dpcmWaveStart != bus->dpcm.start || dpcmWaveLength != length
 						|| dpcmWaveStarts != bus->dpcmStarts || dpcmWavePages != bus->pageCount)
 					{
-						dpcmWave = decodeDpcm (bus->dpcm.bytes, length);
+						dpcmWave = dpcm::decode (bus->dpcm.bytes.data (), length);
 						dpcmWaveStart = bus->dpcm.start;
 						dpcmWaveLength = length;
 						dpcmWaveStarts = bus->dpcmStarts;

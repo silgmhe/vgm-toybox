@@ -277,9 +277,9 @@ private:
 	mutable uint32_t dpcmWaveStarts = 0;
 	mutable uint32_t dpcmWavePages = 0;
 
-	/** How long the sample at `start` is: to the next address the driver pointed $4012 at, with
-		trailing filler removed. Not $4013 - see the comment in the definition. */
-	uint16_t dpcmSampleLength (uint16_t start) const;
+	/** How many bytes of the copy are this sample: the register's length, less the filler that
+		follows the data and the padding byte the formula adds. The arithmetic is in DpcmSample.h. */
+	uint16_t dpcmSampleLength (void) const;
 
 	std::unique_ptr<NsfBus> bus;
 	std::unique_ptr<xgm::NES_CPU> cpu;
