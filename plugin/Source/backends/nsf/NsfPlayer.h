@@ -105,7 +105,13 @@ public:
 
 	/** How much of the song the sample scan covers. Past this point a sample that has never been
 		heard gets no note rather than a made-up one. */
-	static constexpr double scanSeconds = 180.0;
+	/** How much of the song the note walk reads, when nobody says otherwise.
+
+		The caller passes its own length now - the walk covers the song, and "the song" is whatever
+		the backend reports as its duration. This stays as the answer for a caller that has no
+		opinion, and as documentation of the number that used to be hard-coded twice.
+	*/
+	static constexpr double kDefaultScanSeconds = 180.0;
 
 	/** Skips that scan. For a probe that only wants the write counters: the scan costs more than
 		everything else about opening a song put together. */
@@ -217,7 +223,9 @@ public:
 		result is published into this player's handle, so the player rendering audio picks it up
 		on its next look.
 	*/
-	void scanSong (void);
+	/** `seconds` is the song's length as the backend reports it: the walk reads all of it, so the
+		sample list it publishes covers everything the song plays rather than a fixed three minutes. */
+	void scanSong (double seconds = kDefaultScanSeconds);
 
 	/** Asks the scan to stop early. Checked once per block; a scan that has been asked to stop
 		still publishes whatever it had, because partial numbering beats none. */

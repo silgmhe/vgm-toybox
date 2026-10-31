@@ -225,7 +225,7 @@ bool NsfPlayer::adoptCachedScan (const formats::nsf::NsfFile& file, ScanHandle& 
 	return true;
 }
 
-void NsfPlayer::scanSong (void)
+void NsfPlayer::scanSong (double seconds)
 {
 	// Another backend may have walked this file already. Reopening a file is common, and the
 	// answer does not depend on who asks, so a second walk is spent time for the same result.
@@ -235,7 +235,7 @@ void NsfPlayer::scanSong (void)
 	}
 
 	resetToStart ();
-	scanSampleChannels (scanSeconds);
+	scanSampleChannels (seconds > 0.0 ? seconds : kDefaultScanSeconds);
 }
 
 uint32_t NsfPlayer::dpcmStartCount (void) const

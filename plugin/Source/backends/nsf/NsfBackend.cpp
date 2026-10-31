@@ -430,7 +430,10 @@ private:
 			NsfPlayer probe (file, rate);
 			probe.setScanHandle (scanHandle);
 			probe.setScanCancelFlag (&cancelScan);
-			probe.scanSong ();
+			// The whole song, as long as this backend says it is. A sample that first sounds in
+			// the last bar is still a sample of this song, and the export's list comes out of this
+			// walk rather than out of whatever the user has played.
+			probe.scanSong (length);
 
 			adoptFromHandle ();
 		}
