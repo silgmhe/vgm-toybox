@@ -471,69 +471,29 @@ int main (void)
 
 			std::vector<float> left (1024, 0.0f), right (1024, 0.0f);
 
-			const auto sampleBytes = [] (const toybox::playback::ChipStateSnapshot& snapshot)
-			{
-				for (const auto& channel : snapshot.channels)
-				{
-					if (channel.waveKind == (int) toybox::playback::waveform::Kind::delta)
-					{
-						return channel.wave.size () / 8u;
-					}
-				}
-
-				return (std::size_t) 0;
-			};
-
-			// Sampled once a second across forty seconds, collecting every distinct length rather
-			// than reading whatever happens to be current at the end. The two samples start twelve
-			// and thirty-five seconds in, so a single capture describes one of them and says
-			// nothing about the other - which is exactly the mistake this feature kept making.
-			std::vector<std::size_t> lengths;
-
+			// Forty seconds, long enough for both samples to have started.
 			for (int block = 0; block < 1722; ++block)
 			{
 				player.render (left.data (), right.data (), 1024);
-
-				if (block % 43 != 0)		// about once a second at 44.1 kHz
-				{
-					continue;
-				}
-
-				toybox::playback::ChipStateSnapshot snapshot;
-				player.captureState (snapshot);
-
-				const auto bytes = sampleBytes (snapshot);
-
-				if (bytes == 0)
-				{
-					continue;
-				}
-
-				bool known = false;
-
-				for (const auto seen : lengths)
-				{
-					known = known || seen == bytes;
-				}
-
-				if (! known)
-				{
-					lengths.push_back (bytes);
-				}
 			}
 
-			bool has320 = false;
-			bool has512 = false;
+			// The list an export walks: distinct samples, in the order they first played, already
+			// trimmed and decoded. Reading "whatever is playing now" would describe one of the two
+			// and say nothing about the other - the mistake this feature kept making in review.
+			const auto samples = player.dpcmSamples ();
 
-			for (const auto bytes : lengths)
+			check (samples.size () == 2, "the song has two DPCM samples");
+
+			if (samples.size () == 2)
 			{
-				has320 = has320 || bytes == 320;
-				has512 = has512 || bytes == 512;
+				check (samples[0].name == "dpcm_D200_320",
+					   "the first is the 320-byte sample at $D200");
+				check (samples[1].name == "dpcm_D380_512",
+					   "and the second the 512-byte one at $D380");
+				check (samples[0].values.size () == 320u * 8u, "eight points per byte of the sample");
+				check (samples[0].rate > 33000.0 && samples[0].rate < 33400.0,
+					   "at the rate the sample's own register names");
 			}
-
-			check (has320, "the song has a 320-byte sample");
-			check (has512, "and a 512-byte one");
-			check (lengths.size () == 2, "and no others");
 		}
 	}
 

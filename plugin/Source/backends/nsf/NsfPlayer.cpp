@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdio>
 #include <cstdint>
 #include <deque>
 #include <mutex>
@@ -250,6 +251,41 @@ uint16_t NsfPlayer::dpcmSampleLength (void) const
 
 	// Filler and the padding byte live in DpcmSample.h, where a test can call them.
 	return (uint16_t) dpcm::finalLength (length, bus->dpcm.bytes.data ());
+}
+
+std::vector<playback::DecodedSample> NsfPlayer::dpcmSamples (void) const
+{
+	std::vector<playback::DecodedSample> out;
+
+	if (bus == nullptr)
+	{
+		return out;
+	}
+
+	const auto count = (std::min) (bus->sampleCount, (uint32_t) bus->samples.size ());
+
+	for (uint32_t i = 0; i < count; ++i)
+	{
+		const auto& kept = bus->samples[i];
+		const auto length = dpcm::finalLength (kept.length, kept.bytes.data ());
+
+		char address[8] = {};
+		std::snprintf (address, sizeof (address), "%04X", (unsigned) kept.start);
+
+		playback::DecodedSample entry;
+		entry.name = std::string ("dpcm_") + address + "_" + std::to_string ((unsigned long) length);
+		entry.values = dpcm::decode (kept.bytes.data (), length);
+		entry.rate = (double) dpcmRate (kept.rateIndex, file.isPal ());
+
+		// A sample that trims to nothing is one the driver started on silence, and a zero-length
+		// WAV would be a file the user opens to find nothing in it.
+		if (! entry.values.empty ())
+		{
+			out.push_back (std::move (entry));
+		}
+	}
+
+	return out;
 }
 
 uint32_t NsfPlayer::dpcmPages (uint8_t* out, uint32_t max) const

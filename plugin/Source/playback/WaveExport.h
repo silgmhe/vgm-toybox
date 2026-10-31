@@ -163,4 +163,32 @@ ExportOutcome exportWavetables (const ChipStateSnapshot& snapshot, const std::st
 								ExportMode mode = ExportMode::single, double seconds = 2.0,
 								int bits = kNativeBits);
 
+/** One decoded sample, ready to be written: its levels, the rate they play at, and its name.
+
+	Levels rather than bytes, because the encoding is the backend's business - the DPCM decoder
+	lives with the NES backend, and a PCM chip's would live with its own. What is shared is the
+	container, the naming, and the place the files go.
+*/
+struct DecodedSample
+{
+	std::string name;			// without the extension
+	std::vector<float> values;
+	double rate = 0.0;
+};
+
+/** Writes one sample as a float32 mono WAV at `rate`, with no `clm ` marker.
+
+	The container writeSampleWav() produces, for a caller that already has levels rather than a
+	ChannelState to decode.
+*/
+bool writeWavFile (const std::string& path, const std::vector<float>& values, double rate);
+
+/** Writes every sample into `folder`, named `<name>.wav`, returning how many were written.
+
+	One file failing to open is counted as not written and the rest still go: a bad name should not
+	cost the export its other four. Names pass through legalFileName(), so an address like `$C0C0`
+	becomes one hyphen-separated token rather than a path.
+*/
+int writeSamples (const std::vector<DecodedSample>& samples, const std::string& folder);
+
 } // namespace toybox::playback

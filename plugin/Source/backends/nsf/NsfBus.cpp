@@ -257,6 +257,26 @@ bool NsfBus::Write (uint32_t adr, uint32_t val, uint32_t id)
 
 					dpcm.bytes[i] = peek (address);
 				}
+
+				// The same bytes again, kept per sample rather than per moment, because "export
+				// every DPCM sample" is a different question from "what is playing now": the
+				// second one has an answer that expires, the first one does not.
+				bool kept = false;
+
+				for (uint32_t i = 0; i < sampleCount; ++i)
+				{
+					kept = kept || samples[i].start == dpcm.start;
+				}
+
+				if (! kept && sampleCount < samples.size ())
+				{
+					auto& entry = samples[sampleCount++];
+
+					entry.start = dpcm.start;
+					entry.length = dpcm.length;
+					entry.rateIndex = dpcm.rateIndex;
+					entry.bytes = dpcm.bytes;
+				}
 			}
 
 			dpcmEnabled = enabled;

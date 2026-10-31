@@ -127,6 +127,35 @@ public:
 	std::array<uint8_t, 16> pagesSeen {};
 	uint32_t pageCount = 0;
 
+	/** One distinct sample, kept whole at the moment it started.
+
+		The window is a copy rather than an address because the bank is the driver's to change: by
+		the time anyone asks, `$C000` may point at something else entirely, and the bytes would
+		describe the code rather than the drum.
+	*/
+	struct DpcmSample
+	{
+		uint16_t start = 0;
+		uint16_t length = 0;		// as the register names it; the tail still needs trimming
+		uint8_t rateIndex = 0;
+		std::array<uint8_t, 4096> bytes {};
+	};
+
+	/** How many distinct samples are kept. Sixteen windows is 64 KB of resident memory, which is
+		a song's worth - a file that starts more than this is re-pointing one window rather than
+		carrying sixteen samples.
+	*/
+	static constexpr std::size_t kMaxSamples = 16;
+
+	/** The distinct samples started so far, in the order they first played.
+
+		Grown by Write() on the audio thread and read by the exporter on another, so it is a plain
+		array and a counter rather than a vector: the writer fills the entry before it raises the
+		count, and the count only ever rises, which is enough for a reader that takes a copy.
+	*/
+	std::array<DpcmSample, kMaxSamples> samples {};
+	uint32_t sampleCount = 0;
+
 	/** Puts the program in place and installs the six-byte entry trampoline at $4100.
 		The order matters: the image is cleared first, the trampoline after. */
 	void load (void);

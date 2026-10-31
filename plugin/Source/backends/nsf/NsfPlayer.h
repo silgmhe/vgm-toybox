@@ -2,6 +2,7 @@
 
 #include "playback/ChipState.h"
 #include "playback/MidiSequence.h"
+#include "playback/WaveExport.h"
 #include <array>
 #include <atomic>
 #include <cstdint>
@@ -235,6 +236,15 @@ public:
 		point at the one I am hearing", which are the two questions a mismatched export raises.
 	*/
 	uint32_t dpcmPages (uint8_t* out, uint32_t max) const;
+
+	/** Every distinct DPCM sample the song has started, decoded and ready to be written.
+
+		Handed back by value rather than by reference: the list grows on the audio thread while an
+		export walks it, and a pointer into it would be read in the middle of a write. Each entry
+		carries the length after trimming and the rate the sample plays at, so the writer needs to
+		know nothing about the NES.
+	*/
+	std::vector<playback::DecodedSample> dpcmSamples (void) const;
 
 private:
 	/** Takes a finished scan into this player. Called from start() and, while waiting, from
