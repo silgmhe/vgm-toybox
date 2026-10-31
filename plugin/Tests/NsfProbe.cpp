@@ -148,7 +148,44 @@ int main (int argc, char** argv)
 		std::vector<float> l (1024, 0.0f), r (1024, 0.0f);
 		// Long enough to reach the drums in a slow song: forty-six seconds missed every DPCM hit in
 		// the one this was reported from, which read as "the song has none".
-		for (int i = 0; i < 8000; ++i) { player.render (l.data (), r.data (), 1024); }
+		//
+		// Checked every eleven seconds rather than once at the end, so that each sample's first
+		// appearance can be dated. "This song has four samples" and "FamiStudio lists two" are both
+		// true if its import runs a fixed length of music and the other two first sound later.
+		uint8_t seen[16] = {};
+		uint32_t seenCount = 0;
+
+		for (int block = 0; block < 8000; ++block)
+		{
+			player.render (l.data (), r.data (), 1024);
+
+			if (block % 500 != 0)
+			{
+				continue;
+			}
+
+			uint8_t pages[16] = {};
+			const auto count = player.dpcmPages (pages, 16);
+
+			for (uint32_t i = 0; i < count; ++i)
+			{
+				bool known = false;
+
+				for (uint32_t j = 0; j < seenCount; ++j)
+				{
+					known = known || seen[j] == pages[i];
+				}
+
+				if (! known && seenCount < 16)
+				{
+					seen[seenCount++] = pages[i];
+
+					std::printf ("  $%04X first appears at %.0f s\n",
+								 (unsigned) (0xC000u + pages[i] * 64u),
+								 (double) (block + 1) * 1024.0 / 44100.0);
+				}
+			}
+		}
 
 		toybox::playback::ChipStateSnapshot snapshot;
 		player.captureState (snapshot);
