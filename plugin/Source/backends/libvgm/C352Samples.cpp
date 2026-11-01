@@ -1,6 +1,7 @@
-#include "C352Samples.h"
+﻿#include "C352Samples.h"
 
 #include <algorithm>
+#include <cstdint>
 #include <cstdio>
 
 #include "ChipMemoryAssembly.h"
@@ -32,13 +33,17 @@ namespace
 	/** Not a recording at all: this voice feeds back a shift register. */
 	constexpr uint16_t kFlagNoise = 0x0010;
 
-	/** The clock divider the chip's reference rate comes from (`kRootRateDivisor` in the decoder). */
+	/** Bytes per second per unit of the frequency register (`kClockDivisor` in the decoder). */
+	constexpr double kBytesPerStepDivisor = 18874368.0;
+
+	/** The rate at frequency 0x8000, used only when a voice never wrote its frequency register. */
 	constexpr double kRootRateDivisor = 576.0;
 	constexpr double kFallbackClock = 12288000.0;
 
 	struct Voice
 	{
 		uint16_t flags = 0;
+		uint32_t frequency = 0;
 		uint32_t bank = 0;
 		uint32_t start = 0;
 		uint32_t end = 0;
@@ -68,6 +73,7 @@ std::vector<playback::DecodedSample> collectC352Samples (const midi::SongIr& ir)
 		}
 	}
 
+	const double bytesPerStep = clock / kBytesPerStepDivisor;
 	const double referenceRate = clock / kRootRateDivisor;
 
 	Voice voices[kVoices];
@@ -123,12 +129,18 @@ std::vector<playback::DecodedSample> collectC352Samples (const midi::SongIr& ir)
 				const std::size_t length =
 					(std::min) ((std::size_t) (voice.end - voice.start) + 1, rom.size () - address);
 
+				// The rate this voice reads its bytes at - not the chip's reference rate. A voice
+				// an octave below the reference reads at half speed, and writing the file at the
+				// reference would make it play back twice as fast and an octave up.
+				const double rate = (voice.frequency > 0) ? (double) voice.frequency * bytesPerStep
+														  : referenceRate;
+
 				char name[32] = {};
 				std::snprintf (name, sizeof (name), "c352_%06X_%u", (unsigned) address,
 							   (unsigned) length);
 
 				collector.add (((uint64_t) address << 32) | length, name, rom.data () + address,
-							   length, SampleFormat::pcm8Signed, referenceRate);
+							   length, SampleFormat::pcm8Signed, rate);
 			}
 
 			continue;
@@ -145,6 +157,7 @@ std::vector<playback::DecodedSample> collectC352Samples (const midi::SongIr& ir)
 
 		switch (offset & 7)
 		{
+		case 2: voice.frequency = write.value; break;
 		case 3: voice.flags = (uint16_t) write.value; break;
 		case 4: voice.bank = write.value; break;
 		case 5: voice.start = write.value; break;

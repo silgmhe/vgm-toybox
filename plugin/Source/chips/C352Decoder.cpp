@@ -1,4 +1,4 @@
-#include "C352Decoder.h"
+﻿#include "C352Decoder.h"
 
 #include <algorithm>
 #include <cmath>
@@ -181,6 +181,11 @@ struct C352Decoder::Impl
 	uint32_t romMask = 0;				// the power-of-two window the core addresses inside
 	int16_t muLaw[256] = {};
 	std::map<SampleKey, double> cycleCache;
+
+	/** Decoded levels per sample, keyed by where it starts and how long it is - not by voice, because
+		two voices on one drum are one picture, and twenty-four voices taking turns would otherwise
+		re-decode everything every frame. */
+	std::map<uint64_t, std::shared_ptr<const std::vector<float>>> waveCache;
 	std::vector<std::unique_ptr<C352NoteTable>> tables;
 
 	static bool loops (const Voice& voice)
@@ -457,6 +462,53 @@ ChannelState C352Decoder::channelState (int channel) const
 	state.transposeCents = pitch.transposeCents;
 	state.rootCents = pitch.rootCents;
 	state.pitchSource = pitch.source;
+
+	// The bytes this voice is playing, so the row can draw the sample rather than a placeholder.
+	//
+	// mu-law and noise voices report the rate and no wave: the first is logarithmically coded, so a
+	// level per byte would be a shape the chip cannot make, and the second is a shift register
+	// rather than a recording. The same half-answer the DPCM channel gives when a file carries
+	// registers but not memory.
+	if (! impl->rom.empty () && (voice.flags & (kFlagMuLaw | kFlagNoise)) == 0
+		&& voice.end >= voice.start)
+	{
+		const uint32_t address = (voice.bank << 16) | voice.start;
+
+		if (address < impl->rom.size ())
+		{
+			// `wave_end` is played: the core fetches the byte and only then checks for the end.
+			const std::size_t length = std::min<std::size_t> (
+				(std::size_t) (voice.end - voice.start) + 1, impl->rom.size () - address);
+
+			if (length > 1)
+			{
+				const uint64_t key = ((uint64_t) address << 32) | (uint64_t) length;
+				const auto found = impl->waveCache.find (key);
+
+				if (found != impl->waveCache.end ())
+				{
+					state.wave = found->second;
+				}
+				else
+				{
+					auto wave = std::make_shared<std::vector<float>> ();
+					wave->reserve (length);
+
+					for (std::size_t i = 0; i < length; ++i)
+					{
+						wave->push_back ((float) (int8_t) impl->rom[address + i] / 128.0f);
+					}
+
+					state.wave = std::move (wave);
+					impl->waveCache.emplace (key, state.wave);
+				}
+			}
+		}
+	}
+
+	// The same bytes-per-second that `describeSamplePitch` above divides by the cycle to reach a
+	// pitch; a dragged-out file declares it directly, because a file has no cycle to divide by.
+	state.sampleRate = (float) ((double) voice.frequency * impl->clock / kClockDivisor);
 
 	return state;
 }

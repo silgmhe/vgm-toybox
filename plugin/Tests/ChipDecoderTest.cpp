@@ -5438,6 +5438,55 @@ void testWaveExport (void)
 			   "and a second hit of it adds nothing");
 	}
 
+	/** The C352's wave, once an image and a frequency are in place. */
+	void testC352WaveFromRom (void)
+	{
+		using namespace toybox;
+
+		std::printf ("  the C352's wave\n");
+
+		chips::C352Decoder decoder;
+		decoder.reset (chips::ChipConfig { 12288000, 20000.0 });
+
+		std::vector<uint8_t> rom (0x200, 0);
+
+		for (int i = 0; i < 64; ++i)
+		{
+			rom[0x100 + (std::size_t) i] = (uint8_t) (0x10 + (i % 16) * 7);
+		}
+
+		const chips::ChipMemory memory { &rom, 0 };
+		decoder.attachMemory (memory);
+
+		const auto write = [&decoder] (uint16_t offset, uint16_t value)
+		{
+			chips::RegisterWrite w {};
+			w.port = (uint8_t) ((offset >> 8) & 0x7F);
+			w.reg = (uint8_t) (offset & 0xFF);
+			w.value = value;
+			decoder.write (w);
+		};
+
+		write (0x02, 0x8000);		// frequency: the reference rate
+		write (0x04, 0x00);
+		write (0x05, 0x0100);
+		write (0x06, 0x013F);
+		write (0x03, 0x4000);
+		write (0x0202, 0);
+
+		const auto state = decoder.channelState (0);
+
+		check (state.wave != nullptr, "an attached ROM gives the voice its bytes");
+		check (state.wave != nullptr && state.wave->size () == 64, "as long as start..end");
+		check (state.sampleRate > 0.0f, "and the rate travels with it");
+
+		// mu-law: bytes, but not levels.
+		write (0x03, 0x4008);
+		write (0x0202, 0);
+		check (decoder.channelState (0).wave == nullptr,
+			   "a mu-law sample reports no wave rather than a wrong one");
+	}
+
 	/** What the export finds in a C352 song.
 
 		Key-on here is a flags bit that the execute write acts on, not a write of its own, so this is
@@ -5848,6 +5897,7 @@ int main (void)
 	testC140System2BankIsFolded();
 	testC140WaveFromRom();
 	testC140SampleCollection();
+	testC352WaveFromRom();
 	testC352SampleCollection();
 	testDisplayColumns();
 
