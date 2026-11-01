@@ -302,9 +302,26 @@ MIDI 输出是**一次性把整首歌解析完**（`buildMidiSequence` 是纯函
 
 **③ "只显示某条轨"要不要做？**
 
-现在这条路拿到的是**整首歌的全部通道**（§4.3）。引擎的 track 隔离是按设备静音的，**和通道不是一对一**（一颗芯片的 8 个通道可能属于同一轨，也可能被拆开——**这一点我没查清**）。
+**已查清，这一条不是问题。** 写本文时以为 track 与通道的对应关系是模糊的，实际不是：
 
-**如果不做，键盘页会显示所有芯片的所有通道**，与 NSF 页（只有一颗芯片）观感一致。**如果要做，需要先弄清 `SongIr::chips` 与引擎 `TrackInfo` 的对应关系。**
+```cpp
+// playback/SongBackend.h:77
+struct TrackInfo
+{
+    DeviceId deviceId;
+    int deviceIndex = 0;      // devices are numbered in song order
+    int channelIndex = -1;    // -1 = the whole device (it cannot be isolated any further)
+    ...
+};
+```
+
+libvgm 后端**已经是"一个通道一条 track"**（`LibvgmSongInstance.cpp:419-431`），联动芯片的通道号接在父芯片之后（同文件 L471）。**所以它和 `IChipDecoder::channelState(i)` 是同一套编号。**
+
+而且 `playback::ChannelState::trackIndex` 的用途不是过滤显示，是**让这一行可以 Mute/Solo**（`ChipState.h:70` 的注释：`A panel needs this to offer mute and solo`）。
+
+**结论：不需要决策。填上 `trackIndex`，键盘页照常显示全部通道，与 NSF 一致；Mixer 静音某条轨时，键盘页那一行跟着暗。**
+
+**同一件事的另一半**：分轨隔离不会让可视化只看到一条轨。静音是 libvgm 在**播放**时做的，而这条读的是**文件**（§4.3）。
 
 **④ 示波器和键盘页用同一份快照吗？**
 
