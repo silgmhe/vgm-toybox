@@ -347,20 +347,20 @@ void paintWave (juce::Graphics& g, juce::Rectangle<int> area,
 
 		g.setColour (theme::accent ().withAlpha (channel.active ? 0.9f : 0.35f));
 
-		// Two shapes, decided by what the wave *is* rather than by how long it happens to be.
+		// Two shapes, and it takes two questions to choose between them.
 		//
-		// A wavetable holds one level per point until the next point replaces it, so it is a
-		// staircase. Drawing it as a ribbon would give each column no height to fill - a table of
-		// sixty-four points in a hundred and twenty-eight columns has one point per two columns -
-		// and the row would collapse to a one-pixel line sloping between corners, a shape the
-		// hardware never makes.
+		// `sampleRate` is the first: it is set by the chips that play recorded bytes and by no
+		// wavetable chip, and the export uses it for the same distinction. That much says "this is
+		// a recording" - but it is not enough on its own, and believing it was is how an N163 table
+		// came out as a fine diagonal line: a table is also a `wave`, sixty-four points of one, and
+		// filling it left every column with no height to give.
 		//
-		// A recorded sample is a stream of levels, thousands of them, so each column stands for a
-		// slice and carries its range. Filled, that is the sample's shape from attack to decay.
+		// So the second question is whether the points fit the row one per column. A table's do,
+		// and each point is the level the hardware holds until the next - a staircase. A recording
+		// has thousands, so a column stands for a slice, carries its range, and is filled: the
+		// sample's shape from attack to decay.
 		//
-		// `sampleRate` is the flag for "this channel plays recorded bytes": it is set by the two
-		// chips that decode samples and by no wavetable chip, and it is what the export uses for the
-		// same distinction. Length would not do - a short DPCM hit is shorter than an N163 table.
+		// Neither question alone covers both cases, which is why both are asked.
 		const bool recorded = channel.sampleRate > 0.0f;
 
 		if (recorded && values.size () > kDisplayPoints)
