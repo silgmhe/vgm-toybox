@@ -543,6 +543,11 @@ ChannelState NesApuDecoder::channelState (int channel) const
 	case noise:
 		state.gate = impl->noiseActive();
 		state.period = (uint32_t) impl->noiseChannel.periodIndex;
+
+		// The period here is an index, and index 0 is the slowest rate rather than "silent": this
+		// channel has a pitch at all sixteen settings. Says so, because a zero period otherwise
+		// reads as no pitch at all and the row comes out blank.
+		state.hasPitch = true;
 		state.volume = impl->effectiveVolume (impl->noiseChannel.envelope);
 		state.patch = impl->noiseChannel.mode ? 1 : 0;
 		break;

@@ -182,6 +182,16 @@ struct ChannelState
 	*/
 	float sampleRate = 0.0f;
 
+	/** Whether the decoder can name this channel's pitch even when its period field reads zero.
+
+		Most chips treat period 0 as "nothing is playing", and the conversion skips the note table
+		for them. The 2A03's noise channel is the case that breaks that rule: its period field is an
+		index into a sixteen-entry table, and zero is a legal entry - the lowest noise rate. Without
+		this flag the row was blank for the slowest setting of a channel that has a pitch at every
+		setting.
+	*/
+	bool hasPitch = false;
+
 	/** Which recorded sample this channel is playing, or zero.
 
 		A number the chip's own registers produce - for the 2A03, its page and length - so a caller

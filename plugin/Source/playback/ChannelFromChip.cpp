@@ -128,7 +128,7 @@ ChannelState channelFromChip (const chips::ChannelState& chipState,
 	{
 		state.frequency = (float) chipState.hz;
 	}
-	else if (chipState.period != 0 || chipState.block != 0)
+	else if (chipState.hasPitch || chipState.period != 0 || chipState.block != 0)
 	{
 		int finePitch = 0;
 		const int note = noteTable.noteFor (chipState.period, chipState.block, &finePitch);

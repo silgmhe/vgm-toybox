@@ -5190,6 +5190,49 @@ void testWaveExport (void)
 		check (! after.released, "and the decoder does not decide how long it stays drawn");
 	}
 
+	/** The 2A03's noise channel at its slowest rate.
+
+		Its period field is an index into sixteen rates, not a period: zero means the slowest, not
+		"silent". The conversion skipped the note table whenever the period read zero, so the row
+		was blank at exactly that setting - the one setting a reader would most likely test, since
+		it is where a noise channel spends its time in a bass-and-drum pattern.
+	*/
+	void testNesNoisePitch (void)
+	{
+		using namespace toybox::playback;
+
+		std::printf ("  the 2A03's noise channel\n");
+
+		using toybox::chips::ChipConfig;
+		using toybox::chips::NesApuDecoder;
+		using toybox::chips::RegisterWrite;
+
+		NesApuDecoder decoder;
+		decoder.reset (ChipConfig { 1789773, 44100.0 });
+
+		const auto write = [&decoder] (uint8_t reg, uint8_t value)
+		{
+			decoder.write (RegisterWrite { 0, reg, value, 0, 0 });
+		};
+
+		write (0x0C, 0x0F);		// constant volume, no envelope
+		write (0x0E, 0x00);		// period index 0: the slowest rate
+		write (0x15, 0x08);		// enable the noise channel
+
+		const auto noise = decoder.channelState (3);
+
+		check (noise.hasPitch, "the noise channel has a pitch at every period index");
+		check (noise.period == 0, "and index 0 is a legal one, not an absence");
+
+		ChipShapeHints hints;
+		hints.waveKind = (int) waveform::Kind::noise;
+
+		const auto row = channelFromChip (noise, decoder.noteTable (3), hints, "2A03", "Noise");
+
+		// 38 is D2, the first entry of the noise table.
+		check (row.note == 38, "so the slowest noise rate reads as a note");
+	}
+
 	void testChannelFromChip (void)
 	{
 		using namespace toybox::playback;
@@ -5618,6 +5661,7 @@ int main (void)
 	testChannelKindShapes();
 	testOplPatchRegisters();
 	testNesDpcmSampleIdentity();
+	testNesNoisePitch();
 	testChannelFromChip();
 
 	std::printf ("Result    : %s\n", failures == 0 ? "PASS" : "FAILURES");
