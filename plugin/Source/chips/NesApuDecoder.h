@@ -40,6 +40,19 @@ public:
 	ChannelKind channelKind (int channel) const override;
 	bool isDrum (int channel) const override { return channel == noise || channel == dmc; }
 
+	/** The CPU address space, so the DPCM channel can read the bytes `$4012` and `$4013` name.
+
+		The image is a RAM block (0xC2): its payload lands at the address the block header gives, so
+		the decoder indexes it with a real 6502 address. 64 KB is the whole space and also what the
+		assembler needs as its limit - `$4012` names a page inside `$C000..$FFFF` directly.
+
+		Without an image the channel still reports its read rate, because that comes from `$4010`;
+		what it cannot report is a waveform, and it says so by leaving `wave` null.
+	*/
+	static constexpr ChipRequirements kRequirements { 1789773u, true, 0xC2, 64u << 10, true, false };
+
+	void attachMemory (const ChipMemory& memory) override;
+
 private:
 	struct Envelope
 	{

@@ -41,8 +41,9 @@ public:
 		// A constructor rather than aggregate initialisation: `std::type_index` has no default, so
 		// the members cannot carry initialisers and still form an aggregate.
 		Instance (std::type_index decoderClass, uint32_t id, const PLR_DEV_INFO* dev,
-				  chips::IChipDecoder* dec, uint32_t clk)
-			: type (decoderClass), deviceId (id), device (dev), decoder (dec), clock (clk)
+				  chips::IChipDecoder* dec, uint32_t clk, std::vector<uint8_t> mem, uint8_t bank)
+			: type (decoderClass), deviceId (id), device (dev), decoder (dec), clock (clk),
+			  image (std::move (mem)), banking (bank)
 		{
 		}
 
@@ -51,6 +52,11 @@ public:
 		const PLR_DEV_INFO* device;
 		chips::IChipDecoder* decoder;
 		uint32_t clock;		// kept for reset(): a rewind must not fall back to the chip's default
+
+		/** What `attachMemory` was given. Kept because `reset` rebuilds the decoder's state, image
+			included - and a rewind that forgot to put it back would silently lose every sample. */
+		std::vector<uint8_t> image;
+		uint8_t banking = 0;
 	};
 
 	VgmReplayer (std::shared_ptr<const midi::SongIr> song, const std::vector<PLR_DEV_INFO>& devices);

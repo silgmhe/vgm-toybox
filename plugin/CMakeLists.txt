@@ -486,6 +486,7 @@ add_executable(vgm_chip_test EXCLUDE_FROM_ALL
 	Source/playback/WaveShape.cpp
 	Source/backends/libvgm/VgmCommandReader.cpp
 	Source/formats/vgm/VgmSongLoader.cpp
+	Source/chips/NesDpcmSample.cpp
 	Tests/ChipDecoderTest.cpp
 	Source/chips/GbcApuDecoder.cpp
 	Source/chips/HuC6280Decoder.cpp

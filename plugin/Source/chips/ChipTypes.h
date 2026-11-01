@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+#include <memory>
 #include <vector>
 
 namespace toybox::chips
@@ -161,6 +162,25 @@ struct ChannelState
 	int fmLevel = 0;		// the modulator's total level, 0..63 (attenuation, 0 is loudest)
 	int fmWaveform = 0;		// the carrier's waveform select, 0..3 (OPM/OPL only; OPN has one sine)
 	int fmFeedback = 0;		// the carrier's self-feedback, 0..7
+
+	/** One period of the channel's waveform, values in -1..1, or null when the chip generates its
+		shape instead of reading one.
+
+		Shared rather than held by value, for the same reason as `playback::ChannelState::wave`: the
+		audio thread asks every channel of every chip for its state once per frame, and a sampled
+		channel's wave is tens of kilobytes. The decoder keeps one copy and hands out a reference;
+		nothing is allocated unless the sample itself changes.
+	*/
+	std::shared_ptr<const std::vector<float>> wave;
+
+	/** For a channel that plays recorded bytes: how many of them it reads per second. Zero for the
+		rest.
+
+		Not `hz`. A sample's read rate says how fast its bytes go by, and its pitch is that rate
+		divided by one cycle of whatever those bytes happen to contain - which is why a drum has a
+		rate and no note.
+	*/
+	float sampleRate = 0.0f;
 
 	/** Monotonic count of key-on events on this channel, for the chips that have one.
 

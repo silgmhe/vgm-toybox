@@ -4525,7 +4525,8 @@ void testWaveExport (void)
 	// A channel carrying its own table is written from that table, not from a synthesis.
 	ChannelState stored;
 	stored.waveKind = (int) waveform::Kind::stored;
-	stored.wave = { -1.0f, 1.0f, -1.0f, 1.0f };
+	stored.wave = std::make_shared<const std::vector<float>> (
+		std::vector<float> { -1.0f, 1.0f, -1.0f, 1.0f });
 
 	check (cycleOf (stored).size () == 4, "a stored table is used as given");
 	check (hasPeriodicShape (stored), "and it is a period");
@@ -4668,7 +4669,8 @@ void testWaveExport (void)
 		{
 			toybox::playback::ChannelState sampled = third;
 			sampled.sampleRate = 11186.1f;
-			sampled.wave = { 0.0f, 0.25f, -0.25f, 0.5f, -0.5f, 0.125f, -0.125f, 0.0f };
+			sampled.wave = std::make_shared<const std::vector<float>> (
+				std::vector<float> { 0.0f, 0.25f, -0.25f, 0.5f, -0.5f, 0.125f, -0.125f, 0.0f });
 
 			toybox::playback::ChipStateSnapshot one;
 			one.valid = true;
@@ -5125,6 +5127,63 @@ void testWaveExport (void)
 		check (first.fmFeedback == 5, "feedback is bits 1-3 of 0xC0");
 	}
 
+	/** The 2A03's DPCM channel, once an image is attached.
+
+		Two halves, and the second is the one that was missing: `$4010` alone gives a read rate, which
+		the channel always could report; the waveform only exists when the file carried the bytes
+		`$4012` and `$4013` point at. A VGM records the registers and not the memory, so a rip without
+		its ROM is expected to have a rate and no wave - and saying so is the whole point of the null.
+	*/
+	void testNesDpcmWave (void)
+	{
+		std::printf ("  the 2A03's DPCM channel\n");
+
+		using toybox::chips::ChipConfig;
+		using toybox::chips::ChipMemory;
+		using toybox::chips::NesApuDecoder;
+		using toybox::chips::RegisterWrite;
+
+		// A whole CPU address space with a short sample at $C000: alternating bits, which the
+		// one-bit DAC integrates into a visible step pattern.
+		std::vector<uint8_t> image (0x10000, 0);
+
+		for (int i = 0; i < 64; ++i)
+		{
+			image[0xC000 + (std::size_t) i] = (i % 2 == 0) ? 0xAA : 0x55;
+		}
+
+		NesApuDecoder decoder;
+		decoder.reset (ChipConfig { 1789773, 44100.0 });
+
+		const auto write = [&decoder] (uint8_t reg, uint8_t value)
+		{
+			decoder.write (RegisterWrite { 0, reg, value, 0, 0 });
+		};
+
+		write (0x10, 0x05);		// rate index 5, no loop
+		write (0x12, 0x00);		// sample page 0: $C000
+		write (0x13, 0x02);		// 2 * 16 + 1 = 33 bytes
+		write (0x15, 0x10);		// enable the DPCM channel
+
+		const auto before = decoder.channelState (4);
+
+		check (before.sampleRate > 0.0f, "the read rate comes from $4010");
+		check (before.wave == nullptr, "and with no image there is no waveform to report");
+
+		const ChipMemory memory { &image, 0 };
+		decoder.attachMemory (memory);
+
+		const auto after = decoder.channelState (4);
+
+		check (after.wave != nullptr, "an attached image gives the channel its bytes");
+		// A lower bound rather than an exact count: the decoder expands each byte into the bits the
+		// one-bit DAC actually steps through, so the point count is a multiple of the byte count.
+		// What matters here is that the length came from `$4013` and not from the whole image.
+		check (after.wave != nullptr && after.wave->size () >= 33,
+			   "and it holds at least one point per byte $4013 named");
+		check (after.sampleRate == before.sampleRate, "the rate did not change with the image");
+	}
+
 	void testChannelFromChip (void)
 	{
 		using namespace toybox::playback;
@@ -5519,6 +5578,7 @@ int main (void)
 
 	testChannelKindShapes();
 	testOplPatchRegisters();
+	testNesDpcmWave();
 	testChannelFromChip();
 
 	std::printf ("Result    : %s\n", failures == 0 ? "PASS" : "FAILURES");

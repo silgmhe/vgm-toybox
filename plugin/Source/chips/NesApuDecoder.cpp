@@ -3,12 +3,17 @@
 #include <algorithm>
 #include <cmath>
 
+#include "NesDpcmSample.h"
 #include "Pitch.h"
 
 namespace toybox::chips
 {
 namespace
 {
+	/** Where the 2A03's DPCM reads from: `$4012` names a page inside this window, which is the
+		same base the VGM sample collector uses. */
+	constexpr uint32_t kDpcmBase = 0xC000;
+
 	/** $4000/$4004, the pulse control register, packs four fields: the duty cycle in bits 7-6, a
 		length-counter halt in bit 5, the constant-volume flag in bit 4, and the low nibble holding
 		either the envelope period or the volume itself.
@@ -122,6 +127,30 @@ struct NesApuDecoder::Impl
 	int dpcmRateIndex = 0;
 	bool dpcmLoop = false;
 
+	/** `$4012`, the sample's page inside `$C000..$FFFF`: six bits, sixty-four bytes each. */
+	uint8_t dpcmPage = 0;
+
+	/** What `$4013` last asked for. `dpcmBytes` counts down as the sample plays, so the length the
+		wave was decoded from is this one - keying the cache on the countdown would re-decode the
+		same bytes on every frame. */
+	int dpcmLength = 0;
+
+	/** The CPU address space, when the file uploaded one. A VGM records `$4012` and `$4013` but
+		not the bytes they point at unless the rip carried its ROM; without it the channel still
+		reports its read rate and leaves the waveform unknown. */
+	std::vector<uint8_t> image;
+
+	/** The decoded wave, and what it was decoded from. Rebuilt only when the driver starts a
+		different sample - decoding up to 4081 bytes per frame would put that work on the audio
+		thread for a value that had not moved. */
+	mutable std::shared_ptr<const std::vector<float>> dpcmWave;
+	mutable uint32_t dpcmWaveStart = 0xFFFFFFFFu;
+	mutable int dpcmWaveLength = -1;
+
+	/** PAL runs the frame sequencer slower, which changes the DPCM's byte rate and nothing else
+		here. Latched at reset from the clock the device reported. */
+	bool pal = false;
+
 	double cpuClock = 1789773.0;
 	double sampleRate = 44100.0;
 	double frameStep = 7457.0;		// samples between frame sequencer clocks
@@ -188,6 +217,7 @@ void NesApuDecoder::reset (const ChipConfig& config)
 	// the sequencer is clocked every 7457 (NTSC) / 8313 (PAL) CPU cycles - converted to samples
 	const bool pal = impl->cpuClock < 1700000.0;
 	impl->frameStep = (pal ? 8313.0 : 7457.0) * impl->sampleRate / impl->cpuClock;
+	impl->pal = pal;
 
 	impl->pulseTable = std::make_unique<NesPeriodTable> (impl->cpuClock, 16.0);
 	impl->triangleTable = std::make_unique<NesPeriodTable> (impl->cpuClock, 32.0);
@@ -198,6 +228,22 @@ void NesApuDecoder::reset (const ChipConfig& config)
 	impl->pulses[1].envelope.loop = true;
 	impl->noiseChannel.envelope.loop = true;
 	impl->tri.linearCounter = 0;
+}
+
+void NesApuDecoder::attachMemory (const ChipMemory& memory)
+{
+	if (memory.bytes == nullptr || memory.bytes->empty ())
+	{
+		return;
+	}
+
+	impl->image = *memory.bytes;
+
+	// What was decoded came from the previous image. The addresses still mean something, the bytes
+	// behind them do not, so the cache is dropped rather than compared.
+	impl->dpcmWave.reset ();
+	impl->dpcmWaveStart = 0xFFFFFFFFu;
+	impl->dpcmWaveLength = -1;
 }
 
 void NesApuDecoder::write (const RegisterWrite& w)
@@ -293,9 +339,14 @@ void NesApuDecoder::write (const RegisterWrite& w)
 	case 0x11:
 		break;	// direct load: the DPCM output level, not a note
 	case 0x12:
-		break;	// sample address, only meaningful with a full CPU model
+		// The sample's page. Kept even when no image was uploaded: the address is what a later
+		// frame will use once the file's blocks have been read, and a driver often sets it well
+		// before it enables the channel.
+		impl->dpcmPage = (uint8_t) (value & 0x3F);
+		break;
 	case 0x13:
-		impl->dpcmBytes = (value == 0) ? 1 : ((int) value * 16 + 1);
+		impl->dpcmLength = (value == 0) ? 1 : ((int) value * 16 + 1);
+		impl->dpcmBytes = impl->dpcmLength;
 		break;
 	case 0x15:
 	{
@@ -520,10 +571,39 @@ ChannelState NesApuDecoder::channelState (int channel) const
 		state.patch = impl->noiseChannel.mode ? 1 : 0;
 		break;
 	case dmc:
+	{
 		state.gate = impl->dpcmEnabled && impl->dpcmBytes > 0;
 		state.period = 0;
 		state.volume = 15;
+
+		// How fast the byte stream is clocked out, from `$4010`. This is a rate, not a pitch: the
+		// pitch would be this rate over one cycle of whatever the bytes contain, and a drum has no
+		// such cycle - which is why `hz` stays zero and the row draws a sample rather than a note.
+		state.sampleRate = (float) dpcm::rate ((uint8_t) impl->dpcmRateIndex, impl->pal);
+
+		// The bytes themselves, when the file supplied them. A VGM records `$4012` and `$4013` but
+		// not the memory they point at unless the rip carried its ROM; without an image the row
+		// keeps its rate and reports no waveform, which is the honest half-answer.
+		const uint32_t start = kDpcmBase + (uint32_t) impl->dpcmPage * 64u;
+		const int length = impl->dpcmLength;
+
+		if (length > 0 && ! impl->image.empty ()
+			&& start + (uint32_t) length <= impl->image.size ())
+		{
+			if (impl->dpcmWave == nullptr || impl->dpcmWaveStart != start
+				|| impl->dpcmWaveLength != length)
+			{
+				impl->dpcmWave = std::make_shared<const std::vector<float>> (
+					dpcm::decode (impl->image.data () + start, (std::size_t) length));
+				impl->dpcmWaveStart = start;
+				impl->dpcmWaveLength = length;
+			}
+
+			state.wave = impl->dpcmWave;
+		}
+
 		break;
+	}
 	default:
 		state.present = false;
 		break;

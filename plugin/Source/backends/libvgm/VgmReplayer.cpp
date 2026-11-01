@@ -85,10 +85,12 @@ void VgmReplayer::adoptNewBuffers (void)
 			// sampled chip measures nothing: the C352's pitch is its rate divided by a cycle length
 			// that only exists in the ROM, so an empty image puts every voice at C9 - a number that
 			// looks like a note and belongs to no sound.
+			std::vector<uint8_t> image;
+			uint8_t banking = 0;
+
 			if (requirements.hasMemory && song != nullptr)
 			{
-				uint8_t banking = 0;
-				auto image = memory::forRequirements (*song, requirements, banking);
+				image = memory::forRequirements (*song, requirements, banking);
 
 				if (! image.empty ())
 				{
@@ -97,10 +99,10 @@ void VgmReplayer::adoptNewBuffers (void)
 					attached.banking = banking;
 					decoder->attachMemory (attached);	// the decoder copies what it needs
 				}
-
 			}
 
-			live.push_back (Instance { type, deviceId, device, decoder.get (), clock });
+			live.push_back (Instance { type, deviceId, device, decoder.get (), clock,
+									   std::move (image), banking });
 			owned.push_back (std::move (decoder));
 		}
 	}
@@ -184,6 +186,17 @@ void VgmReplayer::rewind (void)
 		// back to its own default when the clock is unknown, and that default is not this device's,
 		// so a rewind would quietly retune every chip that reports one.
 		instance.decoder->reset (chips::ChipConfig { instance.clock, tickRate () });
+
+		// `reset` rebuilds the decoder, so the image it was given is gone with the old state. A
+		// rewind that left it out would make every sample unreadable from the second pass on -
+		// and the rows would keep their notes, because those come from the registers.
+		if (! instance.image.empty ())
+		{
+			chips::ChipMemory attached;
+			attached.bytes = &instance.image;
+			attached.banking = instance.banking;
+			instance.decoder->attachMemory (attached);
+		}
 	}
 
 	router.clearWrites ();

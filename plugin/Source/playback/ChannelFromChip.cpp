@@ -98,6 +98,11 @@ ChannelState channelFromChip (const chips::ChannelState& chipState,
 	state.waveKind = hints.waveKind;
 	state.duty = hints.duty;
 
+	// Both travel as they are: the decoder already owns the wave behind a shared pointer, so this
+	// is a reference count rather than a copy, and a rate is a value the chip states.
+	state.wave = chipState.wave;
+	state.sampleRate = chipState.sampleRate;
+
 	if (hints.patchIsDuty)
 	{
 		// Four widths, in the order the chips number them: 12.5, 25, 50 and 75 percent. A patch
