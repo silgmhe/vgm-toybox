@@ -1,4 +1,4 @@
-# libvgm 的逐通道可视化：设计
+﻿# libvgm 的逐通道可视化：设计
 
 > 前置：`docs/research/2026-11-01-libvgm-visualisation-survey.md`（哪些能拿、哪些拿不到）。
 > 分支：`feature/libvgm-visualisation`。
@@ -301,7 +301,8 @@ track.channelIndex = channelIndex;    // 联动芯片的通道号接在父芯片
 1. **FM 的波形是"这一个音色"的静态曲线**，不反映 LFO 与包络——`cycleFor` 只画一个周期。
 2. **VGM 里没有通道概念**。通道是解码器从寄存器推出来的；某个驱动用非常规方式写寄存器时，行会显示得不准，而这种不准**不会报错**。
 3. **性能未实测**：音频线程里跑 30 个解码器，每个 block 喂几条写。NSF 那边只喂一个核，这里多 30 倍。**第一次跑起来要量**，如果掉音，第一刀砍波形计算（ADR-006）。
-4. **每个采样芯片各写一份收集流程**：`NesDpcmBank` 与 `C140Samples` 已经是近似副本，剩下 9 颗采样、8 颗波表会继续复制。**这是本支最大的一笔结构债**，见 `docs/memo/2026-11-01-code-review-libvgm-visualisation.md` 问题 4。
+4. **每个采样芯片各写一份收集流程**：`NesDpcmBank` 与 `C140Samples` 已经是近似副本，剩下 9 颗采样、8 颗波表会继续复制。**这是本支最大的一笔结构债**，见 `docs/memo/2026-11-01-code-review-libvgm-visualisation.md` 问题 4。
+5. **一行的画法取决于数据形状，不是有没有数据**：录制（`sampleRate > 0`）画填充带，波表与合成画阶梯。判据为什么是这样、以及它被改坏过三次的过程，见 `docs/memo/2026-11-01-what-a-waveform-row-is-a-picture-of.md`。
 
 ## 10. 实施顺序
 
