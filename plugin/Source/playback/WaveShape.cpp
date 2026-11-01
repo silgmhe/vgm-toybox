@@ -231,11 +231,21 @@ std::vector<float> cycleFor (int waveKind, float duty, int shapeParameter)
 	return cycle;
 }
 
-std::vector<float> decimateForDisplay (const std::vector<float>& values, std::size_t limit)
+std::vector<float> decimateForDisplay (const std::vector<float>& values, std::size_t limit,
+									   std::size_t count)
 {
-	if (limit == 0 || values.size () <= limit)
+	const std::size_t n = (std::min) ((std::size_t) count, values.size ());
+
+	if (n == 0)
 	{
-		return values;
+		return {};
+	}
+
+	// A limit of zero means "do not decimate", not "return nothing" - it predates the count
+	// parameter and the caller that passes it expects the whole wave back.
+	if (limit == 0 || n <= limit)
+	{
+		return std::vector<float> (values.begin (), values.begin () + (std::ptrdiff_t) n);
 	}
 
 	std::vector<float> out;
@@ -243,8 +253,8 @@ std::vector<float> decimateForDisplay (const std::vector<float>& values, std::si
 
 	for (std::size_t i = 0; i < limit; ++i)
 	{
-		const auto begin = values.size () * i / limit;
-		const auto end = (std::max) (begin + 1, values.size () * (i + 1) / limit);
+		const auto begin = n * i / limit;
+		const auto end = (std::max) (begin + 1, n * (i + 1) / limit);
 
 		auto extreme = values[begin];
 
@@ -260,6 +270,11 @@ std::vector<float> decimateForDisplay (const std::vector<float>& values, std::si
 	}
 
 	return out;
+}
+
+std::vector<float> decimateForDisplay (const std::vector<float>& values, std::size_t limit)
+{
+	return decimateForDisplay (values, limit, values.size ());
 }
 
 } // namespace toybox::playback::waveform

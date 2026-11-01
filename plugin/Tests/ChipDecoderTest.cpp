@@ -2399,6 +2399,21 @@ namespace
 		check (state.wave != nullptr && state.wave->size () == 64,
 			   "the wave is as long as start..end");
 
+		// And how much of it repeats. The row draws this much and not the whole sample: a recorded
+		// sample is thousands of points and a row has room for about a hundred and twenty, so
+		// downsampling all of it by peak would draw the envelope - no period visible at all.
+		check (state.cycleBytes > 0.0f, "and how much of it makes one cycle");
+
+		{
+			// The same decision, end to end: a thousand-point sample, a hundred and twenty-eight
+			// pixels, one cycle of sixty-four points. Sixty-four points fit, so nothing is
+			// decimated and the shape is a waveform rather than an envelope.
+			const std::vector<float> whole (1000, 0.25f);
+			const auto shown = toybox::playback::waveform::decimateForDisplay (whole, 128, 64);
+
+			check (shown.size () == 64, "one cycle is drawn without being downsampled");
+		}
+
 		// The same voice with the mu-law bit set: bytes, but not levels.
 		write (0x05, 0x88);		// mu-law, key on
 		check (decoder.channelState (0).wave == nullptr,

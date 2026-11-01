@@ -102,6 +102,7 @@ ChannelState channelFromChip (const chips::ChannelState& chipState,
 	// is a reference count rather than a copy, and a rate is a value the chip states.
 	state.wave = chipState.wave;
 	state.sampleRate = chipState.sampleRate;
+	state.cycleBytes = chipState.cycleBytes;
 
 	if (hints.patchIsDuty)
 	{

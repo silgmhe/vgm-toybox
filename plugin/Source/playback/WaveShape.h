@@ -71,4 +71,14 @@ constexpr int fmFeedback (int packed) { return (packed >> 12) & 0x7; }
 */
 std::vector<float> decimateForDisplay (const std::vector<float>& values, std::size_t limit);
 
+	/** The same, over the first `count` points only.
+
+		A recorded sample can be thousands of points long while a row has room for a hundred or so.
+		Downsampling all of it by peak draws the sample's envelope - a shape that rises and falls and
+		contains no period at all. One cycle is what a waveform view is a picture of, and this is how
+		a caller says where one ends. Nothing is copied but the result.
+	*/
+	std::vector<float> decimateForDisplay (const std::vector<float>& values, std::size_t limit,
+										   std::size_t count);
+
 } // namespace toybox::playback::waveform

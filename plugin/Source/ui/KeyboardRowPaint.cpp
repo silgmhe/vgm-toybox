@@ -257,8 +257,19 @@ void paintWave (juce::Graphics& g, juce::Rectangle<int> area,
 		}
 
 		juce::Path path;
+
+		// One cycle of it, when the chip can say where a cycle ends. A recorded sample can be
+		// thousands of points and this row has about a hundred and twenty: downsampling the whole
+		// thing by peak draws its envelope - a shape with no period in it at all, which reads as a
+		// broken display rather than as a sample.
+		const std::size_t count = (channel.cycleBytes >= 2.0f
+								   && (std::size_t) channel.cycleBytes < channel.waveValues ().size ())
+								  ? (std::size_t) channel.cycleBytes
+								  : channel.waveValues ().size ();
+
 		buildCyclePath (path, area.getWidth (), area.getHeight (),
-						playback::waveform::decimateForDisplay (channel.waveValues (), kDisplayPoints));
+						playback::waveform::decimateForDisplay (channel.waveValues (), kDisplayPoints,
+															   count));
 
 		g.setColour (theme::accent ().withAlpha (channel.active ? 0.9f : 0.35f));
 		strokeCycle (g, path, area);

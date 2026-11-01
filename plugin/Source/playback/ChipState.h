@@ -45,6 +45,20 @@ struct ChannelState
 		sample's rate has nowhere to live there.
 	*/
 	float sampleRate = 0.0f;
+
+	/** How many sample points make one cycle of this channel's wave, or zero when unknown.
+
+		It matters because `wave` holds the whole recorded sample, which can be thousands of points,
+		while a waveform display has room for a couple of hundred. Downsampling all of it by peak
+		would draw the sample's envelope - a shape that rises and falls but contains no period at
+		all, which is what the C140 rows looked like before this existed. One cycle is what a
+		waveform view is actually a picture of.
+
+		Zero means "draw what there is": the DPCM's drums are short enough that the whole sample is
+		the picture, and a chip that cannot measure a cycle says so by leaving this alone.
+	*/
+	float cycleBytes = 0.0f;
+
 	float volume = 0.0f;				// 0..1, normalised against the chip's own maximum
 
 	/** One period of the channel's waveform, values in -1..1. Null for chips that generate their

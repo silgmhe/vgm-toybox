@@ -182,6 +182,15 @@ struct ChannelState
 	*/
 	float sampleRate = 0.0f;
 
+	/** How many of those bytes make one cycle, or zero when the chip cannot measure one.
+
+		Carried separately from `wave` because the two answer different questions: the wave is the
+		whole recorded sample, and a cycle is the part of it that repeats. A waveform display has
+		room for one cycle and not for several thousand bytes - see
+		`playback::ChannelState::cycleBytes`.
+	*/
+	float cycleBytes = 0.0f;
+
 	/** How many times this channel has been keyed, for display only.
 
 		Separate from `keyOns`, which the note extractor uses to cut one note into two: changing what
