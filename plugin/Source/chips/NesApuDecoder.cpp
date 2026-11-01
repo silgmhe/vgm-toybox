@@ -585,18 +585,29 @@ ChannelState NesApuDecoder::channelState (int channel) const
 		// not the memory they point at unless the rip carried its ROM; without an image the row
 		// keeps its rate and reports no waveform, which is the honest half-answer.
 		const uint32_t start = kDpcmBase + (uint32_t) impl->dpcmPage * 64u;
-		const int length = impl->dpcmLength;
 
-		if (length > 0 && ! impl->image.empty ()
-			&& start + (uint32_t) length <= impl->image.size ())
+		if (impl->image.empty () || start >= impl->image.size ())
+		{
+			break;
+		}
+
+		// `$4013` is what the driver asked for, and a driver rounds up: the length is sixteen bytes
+		// plus one, so the tail of a sample that does not fill its last block is padding. Drawn as
+		// it stands, the row shows that padding as part of the sound - the same trap the NSF path
+		// avoids with this same function.
+		const std::size_t available = impl->image.size () - start;
+		const std::size_t requested = (std::min) ((std::size_t) impl->dpcmLength, available);
+		const std::size_t length = dpcm::finalLength (requested, impl->image.data () + start);
+
+		if (length > 0)
 		{
 			if (impl->dpcmWave == nullptr || impl->dpcmWaveStart != start
-				|| impl->dpcmWaveLength != length)
+				|| impl->dpcmWaveLength != (int) length)
 			{
 				impl->dpcmWave = std::make_shared<const std::vector<float>> (
-					dpcm::decode (impl->image.data () + start, (std::size_t) length));
+					dpcm::decode (impl->image.data () + start, length));
 				impl->dpcmWaveStart = start;
-				impl->dpcmWaveLength = length;
+				impl->dpcmWaveLength = (int) length;
 			}
 
 			state.wave = impl->dpcmWave;

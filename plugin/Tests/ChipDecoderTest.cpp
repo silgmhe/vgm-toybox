@@ -5143,13 +5143,14 @@ void testWaveExport (void)
 		using toybox::chips::NesApuDecoder;
 		using toybox::chips::RegisterWrite;
 
-		// A whole CPU address space with a short sample at $C000: alternating bits, which the
-		// one-bit DAC integrates into a visible step pattern.
+		// A whole CPU address space with a short sample at $C000. The bytes deliberately avoid
+		// 0x00, 0x55, 0xAA and 0xFF: those are what a driver pads an unused tail with, and
+		// `finalLength` strips them - a sample made of them measures as empty, correctly.
 		std::vector<uint8_t> image (0x10000, 0);
 
 		for (int i = 0; i < 64; ++i)
 		{
-			image[0xC000 + (std::size_t) i] = (i % 2 == 0) ? 0xAA : 0x55;
+			image[0xC000 + (std::size_t) i] = (uint8_t) (0x10 + (i % 16) * 7);
 		}
 
 		NesApuDecoder decoder;
@@ -5176,10 +5177,11 @@ void testWaveExport (void)
 		const auto after = decoder.channelState (4);
 
 		check (after.wave != nullptr, "an attached image gives the channel its bytes");
-		// A lower bound rather than an exact count: the decoder expands each byte into the bits the
-		// one-bit DAC actually steps through, so the point count is a multiple of the byte count.
-		// What matters here is that the length came from `$4013` and not from the whole image.
-		check (after.wave != nullptr && after.wave->size () >= 33,
+		// A lower bound rather than an exact count, for two reasons: the decoder expands each byte
+		// into the bits the one-bit DAC steps through, and `finalLength` drops the padding byte
+		// that `$4013`'s sixteen-plus-one arithmetic leaves at the end. What matters is that the
+		// length came from `$4013` and not from the whole image.
+		check (after.wave != nullptr && after.wave->size () >= 32,
 			   "and it holds at least one point per byte $4013 named");
 		check (after.sampleRate == before.sampleRate, "the rate did not change with the image");
 	}
