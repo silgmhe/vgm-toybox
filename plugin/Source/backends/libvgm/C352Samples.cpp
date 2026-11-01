@@ -133,6 +133,14 @@ std::vector<playback::DecodedSample> collectC352Samples (const midi::SongIr& ir)
 				// keeps a second execute from collecting the same voice again.
 				voices[i].flags = (uint16_t) (voice.flags & ~kFlagKeyOn);
 
+				// Noise is not a recording, so it is skipped. mu-law also is one, and the display
+				// now decodes it with the decoder's own `muLaw[]` table - but this collector still
+				// skips it, because that table is private to `C352Decoder`.
+				//
+				// Known inconsistency, written down rather than left to be discovered: export a
+				// mu-law voice and the folder is missing a file the row can draw. The fix is to move
+				// `buildMuLawTable` into a shared header and give `SampleFormat` a `mulaw8` value;
+				// it is not done here because it touches both call sites and neither is broken.
 				if ((voice.flags & (kFlagMuLaw | kFlagNoise)) != 0 || voice.end < voice.start)
 				{
 					continue;

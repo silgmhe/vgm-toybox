@@ -5480,11 +5480,13 @@ void testWaveExport (void)
 		check (state.wave != nullptr && state.wave->size () == 64, "as long as start..end");
 		check (state.sampleRate > 0.0f, "and the rate travels with it");
 
-		// mu-law: bytes, but not levels.
+		// mu-law: still a recording, and still decodable - `muLaw[]` expands the logarithm the same
+		// way `cycleFor` does. Skipping these voices was the reason four rows drew nothing while
+		// their piano keys lit up.
 		write (0x03, 0x4008);
 		write (0x0202, 0);
-		check (decoder.channelState (0).wave == nullptr,
-			   "a mu-law sample reports no wave rather than a wrong one");
+		check (decoder.channelState (0).wave != nullptr,
+			   "a mu-law sample is decoded rather than skipped");
 	}
 
 	/** What the export finds in a C352 song.

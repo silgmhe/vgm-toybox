@@ -469,8 +469,7 @@ ChannelState C352Decoder::channelState (int channel) const
 	// level per byte would be a shape the chip cannot make, and the second is a shift register
 	// rather than a recording. The same half-answer the DPCM channel gives when a file carries
 	// registers but not memory.
-	if (! impl->rom.empty () && (voice.flags & (kFlagMuLaw | kFlagNoise)) == 0
-		&& voice.end >= voice.start)
+	if (! impl->rom.empty () && (voice.flags & kFlagNoise) == 0 && voice.end >= voice.start)
 	{
 		const uint32_t address = (voice.bank << 16) | voice.start;
 
@@ -496,7 +495,12 @@ ChannelState C352Decoder::channelState (int channel) const
 
 					for (std::size_t i = 0; i < length; ++i)
 					{
-						wave->push_back ((float) (int8_t) impl->rom[address + i] / 128.0f);
+					// mu-law is not a level: the byte is a logarithm and muLaw[] is its expansion, the same
+					// table cycleFor measures with. Skipping these voices entirely was wrong - they are real
+					// recordings, and the rows that showed nothing were the ones playing them.
+					const bool mulaw = (voice.flags & kFlagMuLaw) != 0;
+					wave->push_back ((float) (mulaw ? impl->muLaw[impl->rom[address + i]]
+														   : (int16_t) (int8_t) impl->rom[address + i]) / 32768.0f);
 					}
 
 					state.wave = std::move (wave);
