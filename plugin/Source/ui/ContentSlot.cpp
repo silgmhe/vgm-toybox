@@ -212,6 +212,10 @@ public:
 		// A chip's period register holds its last value, and a fast passage has gaps between notes
 		// shorter than a display frame. Holding the last note for a configurable moment keeps a row
 		// from blinking; it is what the note-off delay in the settings page changes.
+		//
+		// This is the only place that decides how long a note stays visible. A backend that also
+		// held one - by answering `released` for a drum, say - would be a second answer to the same
+		// question, and the setting would stop meaning anything for that channel.
 		const int holdMs = toybox::settings::SettingsStore::getInstance ().getKeyboardNoteHoldMs ();
 		const double now = juce::Time::getMillisecondCounterHiRes ();
 

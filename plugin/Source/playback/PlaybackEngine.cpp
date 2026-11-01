@@ -1485,6 +1485,11 @@ void PlaybackEngine::render (const playback::OutputBusBuffers* buses, int numBus
 	{
 		// try_lock on this side too: if the message thread happens to be copying the previous
 		// snapshot, losing one frame of display is free; waiting for it would drop a block.
+		//
+		// Free for a sustaining note, which is what most of this file assumes. Not free for a drum:
+		// a hit lasts five to twenty milliseconds, so a skipped block can hold the whole of it and
+		// the row never lights. That is why the players count hits rather than sampling them - see
+		// `LibvgmTrackPlayer::pendingHits` and docs/memo/2026-11-01-visualisation-traps.md.
 		std::unique_lock<std::mutex> guard (stateMutex, std::try_to_lock);
 
 		if (guard.owns_lock () && ! trackPlayers.empty () && trackPlayers[0] != nullptr)
