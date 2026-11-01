@@ -254,6 +254,16 @@ struct DecodedSample
 	std::string name;			// without the extension
 	std::vector<float> values;
 	double rate = 0.0;
+
+	/** Which sample this is, in the same terms the chip's registers use.
+
+		Here so a caller that watches a channel play - rather than a file being exported - can tell
+		what it is hearing. The alternative was to rebuild the bytes from the chip's memory at
+		display time, which is a second reading of the same data and can disagree with this one.
+
+		Zero means the producer did not name it, which is every non-DPCM sample bank today.
+	*/
+	uint32_t sampleId = 0;
 };
 
 /** Writes one sample as a float32 mono WAV at `rate`, with no `clm ` marker.

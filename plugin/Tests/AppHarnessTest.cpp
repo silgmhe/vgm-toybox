@@ -722,6 +722,25 @@ private:
 						 sample.name.c_str(), sample.rate, (int) sample.values.size());
 		}
 
+		// Every collected sample names itself, and no two names are the same. The display looks a
+		// playing channel up by this number: a zero would make a sample unreachable, and a duplicate
+		// would make two different drums share one waveform - which looks like a mapping that works.
+		bool named = true;
+		bool distinct = true;
+
+		for (std::size_t i = 0; i < list.size(); ++i)
+		{
+			named = named && list[i].sampleId != 0;
+
+			for (std::size_t j = i + 1; j < list.size(); ++j)
+			{
+				distinct = distinct && list[i].sampleId != list[j].sampleId;
+			}
+		}
+
+		report (named, "every sample names itself");
+		report (distinct, "and no two share a name");
+
 		if (tokens.size() < 2)
 		{
 			report (true, "samples");

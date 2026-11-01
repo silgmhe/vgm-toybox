@@ -200,6 +200,13 @@ std::vector<playback::DecodedSample> collectNesDpcmSamples (const void* vgm, std
 		entry.values = dpcm::decode (bytes.data (), trimmed);
 		entry.rate = dpcm::rate (sample.rateIndex, pal);
 
+		// The same arithmetic the decoder uses to name the sample it is playing: the page `$4012`
+		// names, and the length `$4013` asked for before trimming. Both sides have to agree or the
+		// display will look for a sample that is not in this list - and would then show nothing,
+		// which is at least honest, or the wrong one, which is not.
+		entry.sampleId = (((std::uint32_t) sample.address - kDpcmBase) / 64u) << 16
+						 | (std::uint32_t) sample.length;
+
 		out.push_back (std::move (entry));
 	}
 
