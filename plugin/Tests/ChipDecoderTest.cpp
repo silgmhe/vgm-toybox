@@ -5243,6 +5243,39 @@ void testWaveExport (void)
 		check (row.note == 38, "so the slowest noise rate reads as a note");
 	}
 
+	/** A pulse channel's hits.
+
+		Loading the length counter is the only way this chip starts a channel sounding, so it is the
+		key-on - and a driver holding one note rewrites it every frame. Counted for the display, where
+		a gate reading can fall between two snapshots and lose the note entirely.
+	*/
+	void testNesPulseHitCount (void)
+	{
+		std::printf ("  the 2A03's pulse hit count\n");
+
+		using toybox::chips::ChipConfig;
+		using toybox::chips::NesApuDecoder;
+		using toybox::chips::RegisterWrite;
+
+		NesApuDecoder decoder;
+		decoder.reset (ChipConfig { 1789773, 44100.0 });
+
+		const auto write = [&decoder] (uint8_t reg, uint8_t value)
+		{
+			decoder.write (RegisterWrite { 0, reg, value, 0, 0 });
+		};
+
+		write (0x00, 0x0F);		// constant volume, duty 0
+		write (0x02, 0x40);		// timer low
+		write (0x03, 0x08);		// length load: the key-on
+
+		check (decoder.channelState (0).hitCount == 1, "loading the length counter counts as a hit");
+
+		write (0x03, 0x08);		// the same write again, as a driver holding a note does
+		check (decoder.channelState (0).hitCount == 2,
+			   "and every load counts - which is what a held note looks like from here");
+	}
+
 	void testChannelFromChip (void)
 	{
 		using namespace toybox::playback;
@@ -5672,6 +5705,7 @@ int main (void)
 	testOplPatchRegisters();
 	testNesDpcmSampleIdentity();
 	testNesNoisePitch();
+	testNesPulseHitCount();
 	testChannelFromChip();
 
 	std::printf ("Result    : %s\n", failures == 0 ? "PASS" : "FAILURES");

@@ -264,6 +264,11 @@ void NesApuDecoder::write (const RegisterWrite& w)
 			pulse.length.value = kLengthTable[(value >> kLengthIndexShift) & kLengthIndexMask];
 			pulse.envelope.start = true;
 			pulse.sweep.reload = true;
+
+			// Loading the length counter is the only thing that starts a pulse channel sounding, so
+			// it is this channel's key-on. Counted for the display, not for the note extractor: a
+			// driver that rewrites this every frame is holding one note, not retriggering it.
+			++pulse.hits;
 			break;
 		default:
 			break;
@@ -559,6 +564,7 @@ ChannelState NesApuDecoder::channelState (int channel) const
 		state.period = (uint32_t) pulse.timerPeriod;
 		state.volume = impl->effectiveVolume (pulse.envelope);
 		state.patch = pulse.duty;
+		state.hitCount = pulse.hits;
 		break;
 	}
 	case triangle:

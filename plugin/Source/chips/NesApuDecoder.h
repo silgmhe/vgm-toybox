@@ -86,6 +86,10 @@ private:
 		int duty = 0;
 		int timer = 0;
 		bool muted = false;			// sweep silenced it (target period out of range)
+
+		/** Length-counter loads, which are this chip's only key-on. Reported as `hitCount` for the
+			display: a hit lasts milliseconds and a snapshot can miss it entirely. */
+		uint32_t hits = 0;
 	};
 
 	struct Triangle
