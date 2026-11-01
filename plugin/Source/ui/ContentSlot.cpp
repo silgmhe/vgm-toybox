@@ -501,6 +501,9 @@ public:
 
 	void mouseDown (const juce::MouseEvent& event) override
 	{
+		// A press begins a gesture, so whatever the last one produced is behind us.
+		dragHandled = false;
+
 		const auto point = event.getPosition ();
 
 		if (shiftLeftRect.contains (point)) { shiftOctaves (-1); return; }
@@ -694,15 +697,15 @@ public:
 		}
 	}
 
-	/** The waveform under the pointer can be carried out of the window as a wavetable.
+	/** Carries the waveform under the pointer out of the window.
 
-		Written to disk first and handed over second: performExternalDragDropOfFiles gives the path
-		to the operating system immediately, so a synthesiser that opens a file which is not there
-		yet reports an error nobody can act on.
+		The gesture only: how far a press has to travel before it counts as one. Making the file and
+		handing it over belong to startWaveDrag, which is also where the reason that order matters is
+		written down once.
 	*/
 	void mouseDrag (const juce::MouseEvent& event) override
 	{
-		if (hoveredWaveChannel < 0 || event.getDistanceFromDragStart () < kWaveDragThreshold)
+		if (dragHandled || hoveredWaveChannel < 0 || event.getDistanceFromDragStart () < kWaveDragThreshold)
 		{
 			return;
 		}
@@ -1375,6 +1378,14 @@ private:
 				return juce::File (folder).getChildFile (candidate).existsAsFile ();
 			});
 
+		// An empty name means every candidate it tried was taken. Writing to "folder/" would be
+		// writing to the directory itself, and the gesture has failed either way.
+		if (name.empty ())
+		{
+			if (onDragFailed != nullptr) { onDragFailed (); }
+			return;
+		}
+
 		const auto path = folder + "/" + name;
 
 		if (toybox::playback::writeChannelShape (state, path) != toybox::playback::ShapeWrite::written)
@@ -1383,8 +1394,16 @@ private:
 			return;
 		}
 
-		juce::DragAndDropContainer::performExternalDragDropOfFiles (
-			juce::StringArray (juce::String (path)), false, this);
+		// Marked before the handover rather than after: this call blocks for the length of the drag,
+		// so the usual case never reaches the next line. A platform that refuses returns at once -
+		// and then every further mouse move would write another file for the same gesture.
+		dragHandled = true;
+
+		if (! juce::DragAndDropContainer::performExternalDragDropOfFiles (
+				juce::StringArray (juce::String (path)), false, this))
+		{
+			if (onDragFailed != nullptr) { onDragFailed (); }
+		}
 	}
 
 	/** Which row's waveform the pointer is over, or -1.
@@ -1394,6 +1413,11 @@ private:
 		here decides whether a drag can start.
 	*/
 	int hoveredWaveChannel = -1;
+
+	/** Set once this press has produced whatever it was going to produce. A platform that refuses
+		an external drag returns from it immediately, and without this every mouse move after that
+		would write a file of its own until the button came up. */
+	bool dragHandled = false;
 
 	juce::TextButton exportButton { "export" };
 };
