@@ -438,6 +438,33 @@ void LibvgmTrackPlayer::setReplaySource (std::shared_ptr<const midi::SongIr> ir,
 	replayDevices = devices;
 }
 
+int LibvgmTrackPlayer::trackFor (uint32_t deviceId, int channel) const
+{
+	if (tracks == nullptr)
+	{
+		return -1;
+	}
+
+	for (std::size_t i = 0; i < tracks->size (); ++i)
+	{
+		const auto& track = (*tracks)[i];
+
+		if (track.deviceId != deviceId)
+		{
+			continue;
+		}
+
+		// A whole-device track (channelIndex -1) owns every channel of that device: the core the
+		// song picked cannot isolate its voices, so there is nothing finer to point at.
+		if (track.channelIndex < 0 || track.channelIndex == channel)
+		{
+			return (int) i;
+		}
+	}
+
+	return -1;
+}
+
 bool LibvgmTrackPlayer::captureState (playback::ChipStateSnapshot& snapshot) const
 {
 	if (replayIr == nullptr || replayIr->writes.empty ())
@@ -518,8 +545,14 @@ bool LibvgmTrackPlayer::captureState (playback::ChipStateSnapshot& snapshot) con
 				channelName = "Ch " + std::to_string (channel + 1);
 			}
 
-			snapshot.channels.push_back (playback::channelFromChip (
-				chipState, instance.decoder->noteTable (channel), hints, chipName, channelName));
+			auto state = playback::channelFromChip (
+				chipState, instance.decoder->noteTable (channel), hints, chipName, channelName);
+
+			// Set here rather than inside the conversion: which engine track a channel belongs to is
+			// a fact about this runtime, not about the chip, and the conversion has no engine to ask.
+			state.trackIndex = trackFor (instance.deviceId, channel);
+
+			snapshot.channels.push_back (std::move (state));
 		}
 	}
 

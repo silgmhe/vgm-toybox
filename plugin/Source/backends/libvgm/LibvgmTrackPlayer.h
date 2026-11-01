@@ -96,6 +96,13 @@ private:
 	uint8_t handleEvent (uint8_t evtType, void* evtParam);
 
 	void unload (void);
+
+	/** The engine track a device channel belongs to, or -1.
+
+		The panel offers mute and solo on a row only when this says where to send them, and the
+		engine owns that state - a second copy here would drift from the mixer's.
+	*/
+	int trackFor (uint32_t deviceId, int channel) const;
 	void applyMuting (uint32_t deviceId, const PLR_MUTE_OPTS& muteOpts);
 	/** Rebuilds the whole mute configuration from the isolated track and the chip mute states. */
 	void applyIsolation (void);
