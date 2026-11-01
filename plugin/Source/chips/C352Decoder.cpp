@@ -20,6 +20,20 @@ namespace
 	// runs at `clock / 288`. Dividing by 288 * 65536 turns the register and the clock into bytes a
 	// second - the same divisor the C140 uses, because both chips advance a sample pointer the same
 	// way.
+	/** How many bytes `start..end` covers, in the chip's wrapping address window.
+
+		Not `end - start + 1`: the core compares a position that only ever moves forward against
+		the low sixteen bits of `end`, so an endpoint below the start means the sample runs off the
+		end of its sixty-four-kilobyte window and continues at the bottom - not that the voice is
+		broken. Subtracting anyway underflowed to nearly sixty-five thousand, which either drew the
+		wrong bytes or, where the caller guarded on `end >= start`, drew nothing at all.
+	*/
+	std::size_t ioLength (uint32_t start, uint32_t end)
+	{
+		return (end >= start) ? (std::size_t) (end - start) + 1
+							  : (std::size_t) (0x10000u - start + end) + 1;
+	}
+
 	constexpr double kClockDivisor = 18874368.0;
 
 	// The rate a C352 sample ROM is taken to play at its recorded pitch when its own cycle cannot
@@ -216,7 +230,7 @@ struct C352Decoder::Impl
 		// the core fetches the byte at `wave_end` and only then decides the sample is over
 		// (c352.c, C352_fetch_sample), so both ends of the region are part of it
 		const double bytesPerSecond = (double) voice.frequency * clock / kClockDivisor;
-		const double samples = (double) (voice.end - voice.start + 1) / bytesPerSecond * streamRate;
+		const double samples = (double) ioLength (voice.start, voice.end) / bytesPerSecond * streamRate;
 		return (uint32_t) std::llround (std::min (samples, 1.0e9));
 	}
 
@@ -250,7 +264,7 @@ struct C352Decoder::Impl
 		// region and the loop run to it inclusively. One byte matters: a sixteen-byte wavetable
 		// cycle is a semitone away from a fifteen-byte one.
 		const uint32_t address = ((uint32_t) voice.bank << 16) | voice.start;
-		const std::size_t size = (std::size_t) (voice.end - voice.start) + 1;
+		const std::size_t size = ioLength (voice.start, voice.end);
 		std::vector<double> waveform (size);
 		for (std::size_t i = 0; i < size; ++i)
 		{
@@ -470,10 +484,15 @@ ChannelState C352Decoder::channelState (int channel) const
 
 	// The bytes this voice is playing, so the row can draw the sample rather than a placeholder.
 	//
-	// mu-law and noise voices report the rate and no wave: the first is logarithmically coded, so a
-	// level per byte would be a shape the chip cannot make, and the second is a shift register
-	// rather than a recording. The same half-answer the DPCM channel gives when a file carries
-	// registers but not memory.
+	// Three kinds of source, and each is drawn from what the chip actually produces:
+	//
+	//   noise    the LFSR sequence, which is what reaches the DAC - not a recording, but not nothing
+	//   mu-law   the bytes expanded through `muLaw[]`, the same table `cycleFor` measures with
+	//   linear   the bytes themselves, eight-bit signed
+	//
+	// mu-law and noise were both skipped at first, on the grounds that neither is a recording. They
+	// are not - but the rows that showed nothing were exactly the ones playing them, and "this
+	// format is not handled" is not the same answer as "there is no sound here".
 	if ((voice.flags & kFlagNoise) != 0)
 	{
 		// Not a recording, but not nothing either: the chip feeds its LFSR to the DAC and that is what
@@ -495,15 +514,23 @@ ChannelState C352Decoder::channelState (int channel) const
 
 		state.wave = impl->noiseWave;
 	}
-	else if (! impl->rom.empty () && voice.end >= voice.start)
+	else if (! impl->rom.empty ())
 	{
 		const uint32_t address = (voice.bank << 16) | voice.start;
+
+		// The length, and it is not `end - start` when the endpoint is below the start.
+		//
+		// The core compares `pos` - a position that only ever moves forward - against the low
+		// sixteen bits of `wave_end`, so an endpoint below the start does not mean "broken": it
+		// means the sample runs off the end of its sixty-four-kilobyte window and wraps. With
+		// `end - start + 1` that case underflowed, the guard below skipped the voice, and the rows
+		// playing those samples were exactly the ones with a note and no wave.
+		const std::size_t span = ioLength (voice.start, voice.end);
 
 		if (address < impl->rom.size ())
 		{
 			// `wave_end` is played: the core fetches the byte and only then checks for the end.
-			const std::size_t length = std::min<std::size_t> (
-				(std::size_t) (voice.end - voice.start) + 1, impl->rom.size () - address);
+			const std::size_t length = (std::min) (span, impl->rom.size () - address);
 
 			if (length > 1)
 			{

@@ -5510,6 +5510,56 @@ void testWaveExport (void)
 		check (varied, "and it is not a flat line");
 	}
 
+	/** A C352 sample whose endpoint is below its start.
+
+		Not a broken voice: the position register only moves forward and the core compares its low
+		sixteen bits against the endpoint, so the sample runs off the top of its window and continues
+		at the bottom. Subtracting anyway underflowed, and the guard that skipped the case was why
+		some rows had a note and no wave at all.
+	*/
+	void testC352WrappingSample (void)
+	{
+		using namespace toybox;
+
+		std::printf ("  the C352's wrapping sample\n");
+
+		chips::C352Decoder decoder;
+		decoder.reset (chips::ChipConfig { 12288000, 20000.0 });
+
+		// Big enough to hold the window's top and the wrapped tail.
+		std::vector<uint8_t> rom (0x11000, 0);
+
+		for (int i = 0; i < 64; ++i)
+		{
+			rom[0xFFC0 + (std::size_t) i] = (uint8_t) (0x10 + (i % 16) * 7);
+		}
+
+		const chips::ChipMemory memory { &rom, 0 };
+		decoder.attachMemory (memory);
+
+		const auto write = [&decoder] (uint16_t offset, uint16_t value)
+		{
+			chips::RegisterWrite w {};
+			w.port = (uint8_t) ((offset >> 8) & 0x7F);
+			w.reg = (uint8_t) (offset & 0xFF);
+			w.value = value;
+			decoder.write (w);
+		};
+
+		write (0x02, 0x8000);
+		write (0x04, 0x00);
+		write (0x05, 0xFFC0);		// start near the top of the window
+		write (0x06, 0x003F);		// end below the start: wraps
+		write (0x03, 0x4000);
+		write (0x0202, 0);
+
+		const auto state = decoder.channelState (0);
+
+		check (state.wave != nullptr, "an endpoint below the start still names a sample");
+		check (state.wave != nullptr && state.wave->size () == 128,
+			   "of the length that wraps to the top of the window");
+	}
+
 	/** What the export finds in a C352 song.
 
 		Key-on here is a flags bit that the execute write acts on, not a write of its own, so this is
@@ -5921,6 +5971,7 @@ int main (void)
 	testC140WaveFromRom();
 	testC140SampleCollection();
 	testC352WaveFromRom();
+	testC352WrappingSample();
 	testC352SampleCollection();
 	testDisplayColumns();
 
