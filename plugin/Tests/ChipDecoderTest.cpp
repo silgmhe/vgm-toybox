@@ -5087,6 +5087,44 @@ void testWaveExport (void)
 		}
 	};
 
+	/** The OPL's patch registers are addressed by slot, and the slot order is not 0,1,2,3.
+
+		This is the one test that can tell a correct table from a plausible one: 0x20 is slot 0
+		(channel 0's modulator) and 0x21 is slot 2 (channel 1's). Reading the register index as a
+		channel number puts both on channel 0 and yields a patch that looks entirely reasonable -
+		which is why it would never be noticed from a screenshot.
+	*/
+	void testOplPatchRegisters (void)
+	{
+		std::printf ("  the OPL patch registers\n");
+
+		using toybox::chips::ChipConfig;
+		using toybox::chips::OplDecoder;
+		using toybox::chips::RegisterWrite;
+
+		OplDecoder decoder;
+		decoder.reset (ChipConfig { 3579545, 44100.0 });
+
+		const auto write = [&decoder] (uint8_t reg, uint16_t value)
+		{
+			decoder.write (RegisterWrite { 0, reg, value, 0, 0 });
+		};
+
+		write (0x20, 0x03);		// slot 0: channel 0's modulator multiplier
+		write (0x21, 0x07);		// slot 2: channel 1's, not channel 0's again
+		write (0x40, 10);		// slot 0: its total level
+		write (0xC0, 0x0A);		// channel 0: feedback in bits 1-3
+
+		const auto first = decoder.channelState (0);
+		const auto second = decoder.channelState (1);
+
+		check (first.fmKnown, "an OPL2 channel reports a patch it can read");
+		check (first.fmMultiple == 3, "slot 0 is channel 0's modulator");
+		check (second.fmMultiple == 7, "and slot 2 is channel 1's - not channel 0's twice");
+		check (first.fmLevel == 10, "the total level is six bits, the packed form's own range");
+		check (first.fmFeedback == 5, "feedback is bits 1-3 of 0xC0");
+	}
+
 	void testChannelFromChip (void)
 	{
 		using namespace toybox::playback;
@@ -5451,6 +5489,7 @@ int main (void)
 	testSegaPcmPercussion();
 
 	testChannelKindShapes();
+	testOplPatchRegisters();
 	testChannelFromChip();
 
 	std::printf ("Result    : %s\n", failures == 0 ? "PASS" : "FAILURES");

@@ -25,6 +25,21 @@ namespace
 	constexpr uint8_t kKeyOnBase = 0xB0;
 	constexpr uint8_t kChannelRun = 9;
 
+	/** Which operator a 0x20-range register addresses, indexed by the register's low five bits.
+
+		Taken from libvgm's own OPL core (libs/libvgm/emu/cores/fmopl.c:284), not from the register
+		map by eye: the sequence is 0,2,4 / 1,3,5 / ... so that operators 0 and 1 belong to channel 0
+		and 2 and 3 to channel 1 - even numbers are the modulators. Treating the register index as a
+		channel number would read a neighbour's multiplier and draw a patch that belongs to another
+		instrument, with nothing to indicate it. */
+	constexpr int kOperatorOfRegister[32] =
+	{
+		 0,  2,  4,  1,  3,  5, -1, -1,
+		 6,  8, 10,  7,  9, 11, -1, -1,
+		12, 14, 16, 13, 15, 17, -1, -1,
+		-1, -1, -1, -1, -1, -1, -1, -1
+	};
+
 	/** The frequency is nine bits: eight in the low register and the ninth above the block. */
 	constexpr uint16_t kFnumHighBit = 0x100;
 	constexpr uint16_t kFnumLowMask = 0x0FF;
@@ -82,6 +97,16 @@ struct OplDecoder::Impl
 		int fnum = 0;
 		int block = 0;
 		bool keyed = false;
+
+		/** The patch, for the display only, and only on the variants that have registers for it.
+
+			The OPLL (YM2413) plays pre-set instruments selected by a number; there is no multiplier
+			or total level to read, so its channels leave `fmKnown` false and draw the generic sine.
+			That is not a gap to fill later - the chip genuinely does not say. */
+		int multiple = 1;		// 0x20 + slot, low four bits, of the modulator
+		uint8_t totalLevel = 0x3F;	// 0x40 + slot, low six bits, of the modulator
+		int feedback = 0;		// 0xC0 + channel, bits 1-3
+		int waveform = 0;		// 0xE0 + slot, low two bits (OPL3; OPL2 has one sine)
 	};
 
 	/** A level-triggered hit: the rising edge sets the end time, the chip itself ends it. */
@@ -267,6 +292,65 @@ void OplDecoder::write (const RegisterWrite& write)
 		return;
 	}
 
+	// The patch registers are addressed by slot, not by channel, and only the modulator is kept:
+	// it is the operator whose ratio and level make this sound unlike its neighbour.
+	const bool twoBanks = impl->twoBanks;
+	const auto modulatorChannel = [twoBanks, port] (uint8_t patchRegister) -> int
+	{
+		const int op = kOperatorOfRegister[patchRegister & 0x1F];
+		if (op < 0 || (op & 1) != 0)
+		{
+			return -1;		// an unused window, or the carrier
+		}
+
+		return (twoBanks ? port * 9 : 0) + op / 2;
+	};
+
+	// 0x20-0x35: AM/VIB/EG/KSR/MULTI, the multiplier in the low four bits. The range stops at 0x36
+	// because that is where the eighteen slots end - `kOperatorOfRegister` is indexed by
+	// `reg & 0x1F`, so a wider range would fold 0x38 back onto slot 0x18 and write channel 6's
+	// multiplier from a register the chip does not define.
+	if (reg >= 0x20 && reg < 0x36)
+	{
+		const int channel = modulatorChannel (reg);
+		if (channel >= 0)
+		{
+			impl->channels[channel].multiple = (int) (write.value & 0x0F);
+		}
+		return;
+	}
+
+	// 0x40-0x55: KSL and total level, six bits of attenuation
+	if (reg >= 0x40 && reg < 0x56)
+	{
+		const int channel = modulatorChannel (reg);
+		if (channel >= 0)
+		{
+			impl->channels[channel].totalLevel = (uint8_t) (write.value & 0x3F);
+		}
+		return;
+	}
+
+	// 0xC0-0xC8: feedback in bits 1-3, connection in bit 0
+	if (reg >= 0xC0 && reg < 0xC9)
+	{
+		const int channel = (impl->twoBanks ? port * 9 : 0) + (reg - 0xC0);
+		impl->channels[channel].feedback = (int) ((write.value >> 1) & 0x07);
+		return;
+	}
+
+	// 0xE0-0xF5: the operator's waveform select, same eighteen slots. OPL2 has no such register -
+	// the write is harmless and never read - while OPL3 uses it for four choices.
+	if (reg >= 0xE0 && reg < 0xF6)
+	{
+		const int channel = modulatorChannel (reg);
+		if (channel >= 0)
+		{
+			impl->channels[channel].waveform = (int) (write.value & 0x03);
+		}
+		return;
+	}
+
 	if (reg >= 0xA0 && reg < 0xA9)
 	{
 		const int channel = (impl->twoBanks ? port * 9 : 0) + (reg - 0xA0);
@@ -323,6 +407,19 @@ ChannelState OplDecoder::channelState (int channel) const
 		state.block = voice.block;
 		state.gate = voice.keyed;
 		state.volume = 15;
+
+		// The OPLL has no per-operator registers - its instruments are pre-sets chosen by number -
+		// so it says nothing rather than saying "multiplier 1, level 0", which is a patch that
+		// belongs to some other chip.
+		if (impl->variant != Variant::opll)
+		{
+			state.fmKnown = true;
+			state.fmMultiple = voice.multiple;
+			state.fmLevel = voice.totalLevel;		// already 0..63, the packed form's range
+			state.fmFeedback = voice.feedback;
+			state.fmWaveform = voice.waveform;
+		}
+
 		return state;
 	}
 
