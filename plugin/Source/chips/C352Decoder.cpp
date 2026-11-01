@@ -259,6 +259,16 @@ struct C352Decoder::Impl
 		}
 
 		double cycle = estimateCycleLength (waveform, loopOffset, loopLength);
+
+		// The fallback only covers a loop short enough to be one cycle. Past that the correlation
+		// has to have found a period, and when it does not the answer is 0 - which means "this
+		// voice's pitch cannot be named", not "no sample".
+		//
+		// That is not hypothetical: a Namco System 22 rip has loops of 607 bytes that measure as no
+		// period, and those voices now show an empty note. A multi-cycle loop could in principle be
+		// divided by its period count, but that needs a decision about where a period ends, and
+		// guessing one would put an octave error into a row that currently only says "unknown".
+		// See docs/memo/2026-11-01-the-rate-that-was-not-a-frequency.md, section 7.
 		if (cycle <= 0.0 && loopLength > 0 && loopLength <= kSingleCycleBytes)
 		{
 			cycle = (double) loopLength;		// a wavetable driver loops exactly one cycle

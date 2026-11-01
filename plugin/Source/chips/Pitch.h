@@ -260,6 +260,9 @@ inline SampledPitch describeSamplePitch (double rate, double referenceRate, doub
 	// A sample whose cycle could not be measured has no frequency to report. Answering with the
 	// rate would be a number in the shape of a pitch that belongs to no sound, which is worse than
 	// an empty cell: the row still shows its volume and its shape, and only the note is missing.
+	//
+	// How this was found, and why only one chip made it obvious:
+	// docs/memo/2026-11-01-the-rate-that-was-not-a-frequency.md
 	pitch.hz = (cycleLength > 0.0) ? rate / cycleLength : 0.0;
 	pitch.transposeCents = transpositionCents (rate, referenceRate);
 	pitch.rootCents = rootCentsFromCycle (cycleLength, referenceRate);
