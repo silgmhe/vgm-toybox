@@ -138,21 +138,6 @@ private:
 	std::vector<PLR_DEV_INFO> replayDevices;
 	mutable std::unique_ptr<VgmReplayer> replayer;
 
-	/** Which note each DPCM sample is given, keyed by the chip's own sample identity.
-
-		Built once from the whole song, because the mapping is a property of the song rather than of
-		a moment: a drum has no pitch, so the only way to tell one hit from another on a note grid is
-		to give each sample a note of its own. FamiStudio calls this a DPCM sample mapping; the NSF
-		path builds the same table from its tone-and-rate pairs.
-
-		Numbered from middle C upwards in the order the samples first play. Not measured: a drum's
-		waveform has no cycle to divide by, so a hierarchy of "which sample" is the honest thing to
-		show, and a note number is the only thing the grid can hold.
-	*/
-	std::map<uint32_t, int> dpcmNotes;
-
-	void buildDpcmNotes (const midi::SongIr& ir);
-
 	/** What the display draws for each DPCM sample: the bytes the export collected, and the rate it
 		declares.
 
@@ -165,8 +150,6 @@ private:
 		std::shared_ptr<const std::vector<float>> wave;
 		float rate = 0.0f;
 	};
-
-	mutable std::map<uint32_t, DpcmLookup> dpcmSamples;
 
 	/** A hit that happened between two snapshots.
 
@@ -181,14 +164,40 @@ private:
 		int blocksLeft = 0;
 	};
 
-	/** Keyed by device and channel. Kept for a few blocks after the hit so at least one snapshot
-		carries it; how long it then stays visible is the panel's decision, not this one. */
-	mutable std::map<uint32_t, PendingHit> pendingHits;
+	/** Everything this player remembers about samples between frames.
 
-	/** The last hit count seen per channel, for noticing that a new one happened. */
-	mutable std::map<uint32_t, uint32_t> lastHits;
+		Four tables that only ever make sense together: which note a sample identity is given, the
+		levels behind it, the hits that no snapshot has carried yet, and the counts those hits were
+		noticed from. Kept in one place so that the player reads as "replay plus a ledger" rather
+		than as a class with five maps of its own - the review's problem 8, first step.
+	*/
+	struct Ledger
+	{
+		/** Which note each sample is given, keyed by the chip's own sample identity.
 
-	/** Fills `dpcmSamples` for one identity, or leaves it absent when the collector never saw it. */
+			Built once from the whole song, because the mapping is a property of the song rather than
+			of a moment: a drum has no pitch, so the only way to tell one hit from another on a note
+			grid is to give each sample a note of its own. Numbered from middle C upwards in the order
+			the samples first play.
+		*/
+		std::map<uint32_t, int> notes;
+
+		/** Decoded levels per identity, filled on first use and shared from then on. */
+		mutable std::map<uint32_t, DpcmLookup> samples;
+
+		/** Keyed by device and channel. Kept for a few blocks after the hit so at least one
+			snapshot carries it; how long it then stays visible is the panel's decision. */
+		mutable std::map<uint32_t, PendingHit> pending;
+
+		/** The last hit count seen per channel, for noticing that a new one happened. */
+		mutable std::map<uint32_t, uint32_t> lastHits;
+	};
+
+	mutable Ledger ledger;
+
+	void buildDpcmNotes (const midi::SongIr& ir);
+
+	/** Fills `ledger.samples` for one identity, or leaves it absent when the collector never saw it. */
 	const DpcmLookup* lookupDpcmSample (uint32_t sampleId) const;
 
 	/** Set by a seek or a loop point, consumed by the next captureState. A counter rather than a

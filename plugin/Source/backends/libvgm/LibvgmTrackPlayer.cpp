@@ -1,4 +1,4 @@
-#include "LibvgmTrackPlayer.h"
+﻿#include "LibvgmTrackPlayer.h"
 
 #include "player/droplayer.hpp"
 #include "player/gymplayer.hpp"
@@ -463,8 +463,8 @@ const LibvgmTrackPlayer::DpcmLookup* LibvgmTrackPlayer::lookupDpcmSample (uint32
 		return nullptr;
 	}
 
-	const auto cached = dpcmSamples.find (sampleId);
-	if (cached != dpcmSamples.end ())
+	const auto cached = ledger.samples.find (sampleId);
+	if (cached != ledger.samples.end ())
 	{
 		return &cached->second;
 	}
@@ -485,7 +485,7 @@ const LibvgmTrackPlayer::DpcmLookup* LibvgmTrackPlayer::lookupDpcmSample (uint32
 		entry.wave = std::make_shared<const std::vector<float>> (sample.values);
 		entry.rate = (float) sample.rate;
 
-		return &dpcmSamples.emplace (sampleId, std::move (entry)).first->second;
+		return &ledger.samples.emplace (sampleId, std::move (entry)).first->second;
 	}
 
 	// Not an error: the collector and the decoder name samples with the same arithmetic, so a miss
@@ -496,7 +496,7 @@ const LibvgmTrackPlayer::DpcmLookup* LibvgmTrackPlayer::lookupDpcmSample (uint32
 
 void LibvgmTrackPlayer::buildDpcmNotes (const midi::SongIr& ir)
 {
-	dpcmNotes.clear ();
+	ledger.notes.clear ();
 
 	// A sample is named by the two registers that point at it, and a hit happens when `$4015`
 	// enables the channel with both already written. Scanning the song's writes in order keeps the
@@ -538,9 +538,9 @@ void LibvgmTrackPlayer::buildDpcmNotes (const midi::SongIr& ir)
 		// Same identity the decoder reports: page and length, not the bytes.
 		const uint32_t id = ((uint32_t) page << 16) | (uint32_t) length;
 
-		if (dpcmNotes.find (id) == dpcmNotes.end () && nextNote <= 127)
+		if (ledger.notes.find (id) == ledger.notes.end () && nextNote <= 127)
 		{
-			dpcmNotes[id] = nextNote++;
+			ledger.notes[id] = nextNote++;
 		}
 	}
 }
@@ -673,9 +673,9 @@ bool LibvgmTrackPlayer::captureState (playback::ChipStateSnapshot& snapshot) con
 			// single moment, and the mapping only exists across the whole file.
 			if (chipState.sampleId != 0)
 			{
-				const auto found = dpcmNotes.find (chipState.sampleId);
+				const auto found = ledger.notes.find (chipState.sampleId);
 
-				if (found != dpcmNotes.end ())
+				if (found != ledger.notes.end ())
 				{
 					state.note = found->second;
 					state.frequency = 440.0f * std::pow (2.0f, (float) (state.note - 69) / 12.0f);
@@ -695,13 +695,13 @@ bool LibvgmTrackPlayer::captureState (playback::ChipStateSnapshot& snapshot) con
 			// that lasts milliseconds. Held here until a snapshot has carried it.
 			const uint32_t hitKey = (instance.deviceId << 8) ^ (uint32_t) channel;
 
-			if (chipState.hitCount != lastHits[hitKey])
+			if (chipState.hitCount != ledger.lastHits[hitKey])
 			{
-				lastHits[hitKey] = chipState.hitCount;
-				pendingHits[hitKey] = PendingHit { state.note, kHitBlocks };
+				ledger.lastHits[hitKey] = chipState.hitCount;
+				ledger.pending[hitKey] = PendingHit { state.note, kHitBlocks };
 			}
 
-			auto& hit = pendingHits[hitKey];
+			auto& hit = ledger.pending[hitKey];
 
 			if (! state.active && hit.blocksLeft > 0)
 			{
