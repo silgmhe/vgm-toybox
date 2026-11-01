@@ -186,6 +186,11 @@ struct C352Decoder::Impl
 		two voices on one drum are one picture, and twenty-four voices taking turns would otherwise
 		re-decode everything every frame. */
 	std::map<uint64_t, std::shared_ptr<const std::vector<float>>> waveCache;
+
+	/** The noise generator's own shape, built once: a 16-bit LFSR with taps 0xfff6 seeded at
+		0x1234, which is what c352.c runs. A noise voice plays this instead of recorded bytes, so a
+		row that draws nothing says it is broken rather than that it is noise. */
+	std::shared_ptr<const std::vector<float>> noiseWave;
 	std::vector<std::unique_ptr<C352NoteTable>> tables;
 
 	static bool loops (const Voice& voice)
@@ -469,7 +474,28 @@ ChannelState C352Decoder::channelState (int channel) const
 	// level per byte would be a shape the chip cannot make, and the second is a shift register
 	// rather than a recording. The same half-answer the DPCM channel gives when a file carries
 	// registers but not memory.
-	if (! impl->rom.empty () && (voice.flags & kFlagNoise) == 0 && voice.end >= voice.start)
+	if ((voice.flags & kFlagNoise) != 0)
+	{
+		// Not a recording, but not nothing either: the chip feeds its LFSR to the DAC and that is what
+		// is heard. Built once and shared, because the sequence is the same for every noise voice.
+		if (impl->noiseWave == nullptr)
+		{
+			auto wave = std::make_shared<std::vector<float>> ();
+			wave->reserve (64);
+			auto random = (uint16_t) 0x1234;
+
+			for (int i = 0; i < 64; ++i)
+			{
+				random = (uint16_t) ((random >> 1) ^ ((-(random & 1)) & 0xfff6));
+				wave->push_back ((float) (int16_t) random / 32768.0f);
+			}
+
+			impl->noiseWave = std::move (wave);
+		}
+
+		state.wave = impl->noiseWave;
+	}
+	else if (! impl->rom.empty () && voice.end >= voice.start)
 	{
 		const uint32_t address = (voice.bank << 16) | voice.start;
 

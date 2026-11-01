@@ -5487,6 +5487,27 @@ void testWaveExport (void)
 		write (0x0202, 0);
 		check (decoder.channelState (0).wave != nullptr,
 			   "a mu-law sample is decoded rather than skipped");
+
+		// noise: not a recording, but not nothing either - the chip feeds its LFSR to the DAC, and a
+		// row that drew nothing for it said the channel was broken rather than that it is noise.
+		write (0x03, 0x4010);
+		write (0x0202, 0);
+
+		const auto noisy = decoder.channelState (0);
+
+		check (noisy.wave != nullptr, "a noise voice draws the generator's own shape");
+
+		bool varied = false;
+
+		if (noisy.wave != nullptr)
+		{
+			for (std::size_t i = 1; i < noisy.wave->size (); ++i)
+			{
+				varied = varied || (*noisy.wave)[i] != (*noisy.wave)[0];
+			}
+		}
+
+		check (varied, "and it is not a flat line");
 	}
 
 	/** What the export finds in a C352 song.
