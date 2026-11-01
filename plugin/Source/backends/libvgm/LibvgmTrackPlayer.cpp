@@ -16,6 +16,18 @@
 
 namespace toybox::backends::libvgm
 {
+	namespace
+	{
+		/** How many audio blocks a hit is kept available to the panel.
+
+			A block is the engine's 512 samples, about twelve milliseconds, and the panel reads once
+			per display frame - so this has to outlast one frame plus a skipped capture. Sixteen
+			blocks is roughly a fifth of a second: long enough that no hit is missed, short enough
+			that a row does not stay lit on its own.
+		*/
+		constexpr int kHitBlocks = 16;
+	}
+
 
 namespace
 {
@@ -677,6 +689,31 @@ bool LibvgmTrackPlayer::captureState (playback::ChipStateSnapshot& snapshot) con
 					state.wave = sample->wave;
 					state.sampleRate = sample->rate;
 				}
+			}
+
+			// A hit is an event, and a snapshot is a sample: the two do not line up for anything
+			// that lasts milliseconds. Held here until a snapshot has carried it.
+			const uint32_t hitKey = (instance.deviceId << 8) ^ (uint32_t) channel;
+
+			if (chipState.hitCount != lastHits[hitKey])
+			{
+				lastHits[hitKey] = chipState.hitCount;
+				pendingHits[hitKey] = PendingHit { state.note, kHitBlocks };
+			}
+
+			auto& hit = pendingHits[hitKey];
+
+			if (! state.active && hit.blocksLeft > 0)
+			{
+				state.active = true;
+
+				if (hit.note >= 0)
+				{
+					state.note = hit.note;
+					state.frequency = 440.0f * std::pow (2.0f, (float) (state.note - 69) / 12.0f);
+				}
+
+				--hit.blocksLeft;
 			}
 
 			snapshot.channels.push_back (std::move (state));

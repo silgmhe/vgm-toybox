@@ -168,6 +168,26 @@ private:
 
 	mutable std::map<uint32_t, DpcmLookup> dpcmSamples;
 
+	/** A hit that happened between two snapshots.
+
+		The capture samples the chip once per audio block and skips a block outright when the panel
+		is reading the previous snapshot - which the engine's own comment calls free, and is free for
+		a sustaining note. A drum hit lasts five to twenty milliseconds, so one skipped block can
+		hold the whole hit and the row never lights.
+	*/
+	struct PendingHit
+	{
+		int note = -1;
+		int blocksLeft = 0;
+	};
+
+	/** Keyed by device and channel. Kept for a few blocks after the hit so at least one snapshot
+		carries it; how long it then stays visible is the panel's decision, not this one. */
+	mutable std::map<uint32_t, PendingHit> pendingHits;
+
+	/** The last hit count seen per channel, for noticing that a new one happened. */
+	mutable std::map<uint32_t, uint32_t> lastHits;
+
 	/** Fills `dpcmSamples` for one identity, or leaves it absent when the collector never saw it. */
 	const DpcmLookup* lookupDpcmSample (uint32_t sampleId) const;
 

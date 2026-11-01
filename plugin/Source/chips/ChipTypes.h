@@ -182,6 +182,18 @@ struct ChannelState
 	*/
 	float sampleRate = 0.0f;
 
+	/** How many times this channel has been keyed, for display only.
+
+		Separate from `keyOns`, which the note extractor uses to cut one note into two: changing what
+		that count means changes the MIDI output. This one is read by nobody else, so a decoder can
+		report it without moving a single note.
+
+		It exists because a hit is an event and a snapshot is a sample. A drum sounds for five to
+		twenty milliseconds and the display can skip a whole block, so a gate reading misses hits
+		that a count cannot: the count says "something happened since you asked last".
+	*/
+	uint32_t hitCount = 0;
+
 	/** Whether the decoder can name this channel's pitch even when its period field reads zero.
 
 		Most chips treat period 0 as "nothing is playing", and the conversion skips the note table

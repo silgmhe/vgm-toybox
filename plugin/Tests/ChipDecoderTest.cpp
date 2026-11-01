@@ -5163,6 +5163,10 @@ void testWaveExport (void)
 		// hits of one drum share it and two different samples do not.
 		check (state.sampleId == ((0u << 16) | 33u), "the sample is named by its page and its length");
 
+		// Counted rather than sampled: a hit that lasts milliseconds can fall inside a block the
+		// display never looked at. Not `keyOns`, which the note extractor cuts notes with.
+		check (state.hitCount == 1, "the enable edge counts as one hit");
+
 		// And the bytes are not read here. The export's collection already has them; a second
 		// reading was what drew a flat line for a drum that exported correctly.
 		check (state.wave == nullptr, "and it leaves the bytes to whoever collected them");
@@ -5217,10 +5221,16 @@ void testWaveExport (void)
 
 		write (0x0C, 0x0F);		// constant volume, no envelope
 		write (0x0E, 0x00);		// period index 0: the slowest rate
+		write (0x0F, 0x08);		// load the length counter: what makes the channel sound
 		write (0x15, 0x08);		// enable the noise channel
+
+		// The edge is noticed while advancing, after the sequencer has run - the noise channel has
+		// no key-on register, only a length counter being loaded while enabled.
+		decoder.advance (2000u);
 
 		const auto noise = decoder.channelState (3);
 
+		check (noise.hitCount == 1, "the gate going true counts as one hit");
 		check (noise.hasPitch, "the noise channel has a pitch at every period index");
 		check (noise.period == 0, "and index 0 is a legal one, not an absence");
 

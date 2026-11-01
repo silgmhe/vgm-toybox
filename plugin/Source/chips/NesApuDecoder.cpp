@@ -139,6 +139,16 @@ struct NesApuDecoder::Impl
 		here. Latched at reset from the clock the device reported. */
 	bool pal = false;
 
+	/** Key-on counts for the two percussion channels, reported as `hitCount`.
+
+		Not `keyOns`: the note extractor cuts a note in two when that count moves, so raising it here
+		would change the MIDI output. These are for the display alone - a hit that lasts
+		milliseconds can fall between two snapshots, and a count is what survives that.
+	*/
+	uint32_t dpcmHits = 0;
+	uint32_t noiseHits = 0;
+	bool noiseWasSounding = false;
+
 	double cpuClock = 1789773.0;
 	double sampleRate = 44100.0;
 	double frameStep = 7457.0;		// samples between frame sequencer clocks
@@ -352,6 +362,11 @@ void NesApuDecoder::write (const RegisterWrite& w)
 		{
 			impl->dpcmBytes = 0;
 		}
+		else if ((wasEnabled & 0x10) == 0)
+		{
+			// The rising edge is the hit - the same edge the sample collector records on.
+			++impl->dpcmHits;
+		}
 
 
 		break;
@@ -399,6 +414,18 @@ void NesApuDecoder::advance (uint32_t sampleTime)
 		impl->frameAccumulator -= impl->frameStep;
 		stepFrameSequencer();
 	}
+
+	// The noise channel has no key-on register: a hit is its length counter being loaded while the
+	// channel is enabled, which reads as the gate going true. Counted after the sequencer ran, so
+	// the edge is the one this block ended with.
+	const bool noiseSounding = impl->noiseActive ();
+
+	if (noiseSounding && ! impl->noiseWasSounding)
+	{
+		++impl->noiseHits;
+	}
+
+	impl->noiseWasSounding = noiseSounding;
 }
 
 void NesApuDecoder::stepFrameSequencer (void)
@@ -548,6 +575,7 @@ ChannelState NesApuDecoder::channelState (int channel) const
 		// channel has a pitch at all sixteen settings. Says so, because a zero period otherwise
 		// reads as no pitch at all and the row comes out blank.
 		state.hasPitch = true;
+		state.hitCount = impl->noiseHits;
 		state.volume = impl->effectiveVolume (impl->noiseChannel.envelope);
 		state.patch = impl->noiseChannel.mode ? 1 : 0;
 		break;
@@ -556,6 +584,7 @@ ChannelState NesApuDecoder::channelState (int channel) const
 		state.gate = impl->dpcmEnabled && impl->dpcmBytes > 0;
 		state.period = 0;
 		state.volume = 15;
+		state.hitCount = impl->dpcmHits;
 
 		// Nothing is held here on purpose. The panel already keeps the last hit for as long as the
 		// keyboard page's note-off delay says, and it does that for every channel the same way
