@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include "Theme.h"
 
@@ -93,7 +93,7 @@ public:
 	{
 		// the scrim: dims everything behind the panel and makes the whole window a "click to go
 		// back" area, the same idea as the drag & drop hint
-		g.fillAll (juce::Colours::black.withAlpha (0.35f));
+		g.fillAll (theme::scrim ());
 
 		const auto panel = panelBounds();
 		g.setColour (theme::card());

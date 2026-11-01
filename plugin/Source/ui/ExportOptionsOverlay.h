@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include "Theme.h"
 
@@ -131,7 +131,7 @@ public:
 
 	void paint (juce::Graphics& g) override
 	{
-		g.fillAll (juce::Colours::black.withAlpha (0.35f));
+		g.fillAll (theme::scrim ());
 
 		const auto panel = panelBounds ();
 

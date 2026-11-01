@@ -60,6 +60,8 @@ struct Palette
 	// both palettes) or `cardBorder` (invisible on a white card).
 	juce::Colour groupFrame;
 
+
+
 	// Tooltips float over everything, so they are not card-coloured in either palette.
 	juce::Colour tooltipBackground;
 

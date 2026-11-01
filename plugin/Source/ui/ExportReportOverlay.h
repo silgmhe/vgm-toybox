@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include "Theme.h"
 
@@ -70,7 +70,7 @@ public:
 	void paint (juce::Graphics& g) override
 	{
 		// The scrim: dims what is behind and makes the rest of the window a "click to go back" area.
-		g.fillAll (juce::Colours::black.withAlpha (0.35f));
+		g.fillAll (theme::scrim ());
 
 		const auto panel = panelBounds();
 
