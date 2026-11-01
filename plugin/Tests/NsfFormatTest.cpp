@@ -565,7 +565,10 @@ int main (void)
 			pulse.name = "Pulse 1";
 			pulse.chipName = "2A03";
 			pulse.waveKind = 2;				// pulse: a period the panel draws from duty
-			pulse.wave = { -1.0f, -1.0f, 1.0f, 1.0f };
+			// The wave is shared rather than held by value, so a test that supplies one owns it the
+			// same way a decoder does.
+			pulse.wave = std::make_shared<const std::vector<float>> (
+				std::vector<float> { -1.0f, -1.0f, 1.0f, 1.0f });
 
 			check (toybox::playback::hasSomethingToWrite (pulse),
 				   "a pulse channel has something to write");

@@ -243,9 +243,9 @@ void paintWave (juce::Graphics& g, juce::Rectangle<int> area,
 	// given. The one derived from the registers is a function of three values and the window's
 	// size - and it was being rebuilt thirty times a second anyway: a vector copy, a fresh
 	// juce::Path and a stroke, for a line that had not moved.
-	if (! channel.wave.empty ())
+	if (! channel.waveValues ().empty ())
 	{
-		if (channel.wave.size () < 2)
+		if (channel.waveValues ().size () < 2)
 		{
 			paintNoCycle (g, area);
 			return;
@@ -253,7 +253,7 @@ void paintWave (juce::Graphics& g, juce::Rectangle<int> area,
 
 		juce::Path path;
 		buildCyclePath (path, area.getWidth (), area.getHeight (),
-						playback::waveform::decimateForDisplay (channel.wave, kDisplayPoints));
+						playback::waveform::decimateForDisplay (channel.waveValues (), kDisplayPoints));
 
 		g.setColour (theme::accent ().withAlpha (channel.active ? 0.9f : 0.35f));
 		strokeCycle (g, path, area);

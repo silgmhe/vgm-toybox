@@ -340,7 +340,7 @@ void NsfPlayer::resetToStart (void)
 	// The cache describes bytes in the image that is about to be replaced. Both fields go to values
 	// no real selection can hold - a sample never starts below $C000 and is never empty - so the
 	// first capture after a restart decodes instead of matching the previous song's drum.
-	dpcmWave.clear ();
+	dpcmWave.reset ();
 	dpcmWaveStart = 0;
 	dpcmWaveLength = 0;
 	dpcmWaveStarts = 0;
@@ -1042,18 +1042,16 @@ bool NsfPlayer::captureState (playback::ChipStateSnapshot& snapshot, bool includ
 					if (dpcmWaveStart != bus->dpcm.start || dpcmWaveLength != length
 						|| dpcmWaveStarts != bus->dpcmStarts)
 					{
-						dpcmWave = dpcm::decode (bus->dpcm.bytes.data (), length);
+						dpcmWave = std::make_shared<const std::vector<float>> (
+							dpcm::decode (bus->dpcm.bytes.data (), length));
 						dpcmWaveStart = bus->dpcm.start;
 						dpcmWaveLength = length;
 						dpcmWaveStarts = bus->dpcmStarts;
 					}
 
-					// A copy per frame, and the only one available: `wave` is a value type and every
-					// other consumer of a snapshot expects to own what it was handed. It costs
-					// 130 KB at worst, fifteen times a second, on the audio thread - the price of
-					// keeping the snapshot a value. Revisit if captureState() is ever called per
-					// block instead of per frame, or if a sample can reach the 4081-byte ceiling
-					// with something else also copying snapshots.
+					// The same shared wave the cache holds: no copy here at all. It is rebuilt only
+					// when the sample or its rate changes, so a snapshot costs one reference count
+					// rather than up to 4081 floats per frame.
 					state.wave = dpcmWave;
 				}
 			}
@@ -1233,12 +1231,15 @@ bool NsfPlayer::captureState (playback::ChipStateSnapshot& snapshot, bool includ
 		if (info != nullptr && includeWaves && snapshot.channels.size () > index)
 		{
 			auto& state = snapshot.channels[index];
-			state.wave.reserve (64);
+			auto wave = std::make_shared<std::vector<float>> ();
+			wave->reserve (64);
 
 			for (int i = 0; i < 64; ++i)
 			{
-				state.wave.push_back ((float) (std::clamp) ((int) info->wave[i], 0, 63) / 31.5f - 1.0f);
+				wave->push_back ((float) (std::clamp) ((int) info->wave[i], 0, 63) / 31.5f - 1.0f);
 			}
+
+			state.wave = std::move (wave);
 		}
 	}
 
@@ -1303,13 +1304,16 @@ bool NsfPlayer::captureState (playback::ChipStateSnapshot& snapshot, bool includ
 
 		if (length > 0 && includeWaves)
 		{
-			state.wave.reserve ((std::size_t) length);
+			auto wave = std::make_shared<std::vector<float>> ();
+			wave->reserve ((std::size_t) length);
 
 			// The chip stores four-bit samples; -1..1 is what every panel wants to draw.
 			for (int i = 0; i < length; ++i)
 			{
-				state.wave.push_back ((float) info->wave[i] / kN163SampleMaximum * 2.0f - 1.0f);
+				wave->push_back ((float) info->wave[i] / kN163SampleMaximum * 2.0f - 1.0f);
 			}
+
+			state.wave = std::move (wave);
 		}
 
 		snapshot.channels.push_back (std::move (state));

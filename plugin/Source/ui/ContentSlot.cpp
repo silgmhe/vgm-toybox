@@ -299,10 +299,10 @@ public:
 			now.waveKind = channel.waveKind;
 			now.dutyStep = keyboard::dutySteps (channel.duty);
 			now.shapeParameter = channel.shapeParameter;
-			now.waveSize = channel.wave.size ();
+			now.waveSize = channel.waveValues ().size ();
 
 			auto& before = painted[(std::size_t) row.channel];
-			const auto change = keyboard::compareRow (before, now, ! channel.wave.empty ());
+			const auto change = keyboard::compareRow (before, now, ! channel.waveValues ().empty ());
 
 			if (! change.any ())
 			{

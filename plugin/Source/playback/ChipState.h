@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cmath>
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -46,9 +47,31 @@ struct ChannelState
 	float sampleRate = 0.0f;
 	float volume = 0.0f;				// 0..1, normalised against the chip's own maximum
 
-	/** One period of the channel's waveform, values in -1..1. Empty for chips that generate
-		their shape rather than read it from memory - the display synthesises those. */
-	std::vector<float> wave;
+	/** One period of the channel's waveform, values in -1..1. Null for chips that generate their
+		shape rather than read it from memory - the display synthesises those from `waveKind`.
+
+		Shared rather than held by value: a sampled channel's wave can be tens of kilobytes, and a
+		snapshot is taken sixty times a second for every channel of every chip. Copying it into
+		each snapshot would allocate and copy that much per frame. The decoder owns one copy for
+		the lifetime of the state it describes, and the snapshot carries a reference to it.
+
+		The pointer is to `const` on purpose: a consumer that could write through it would be able
+		to change what a decoder believes about its own sample.
+	*/
+	std::shared_ptr<const std::vector<float>> wave;
+
+	/** The wave as a reference, empty when the channel has none.
+
+		Every reader wants the values, not the pointer, and every one of them would otherwise write
+		the same null check. Returning a reference to a shared empty vector keeps the call sites
+		reading as if the member were still a value.
+	*/
+	const std::vector<float>& waveValues (void) const
+	{
+		static const std::vector<float> none;
+
+		return wave != nullptr ? *wave : none;
+	}
 
 	/** How the channel makes its shape, so a panel can draw it without knowing the chip:
 		0 none, 1 stored table, 2 pulse, 3 triangle, 4 noise, 5 delta, 6 saw, 7 FM. */

@@ -309,7 +309,11 @@ private:
 		frames a second while the same bytes are being re-read. The pair below is the whole key -
 		a sample does not change while it plays.
 	*/
-	mutable std::vector<float> dpcmWave;
+	/** Held behind a shared pointer so a snapshot can carry it without copying: the wave is up to
+		4081 bytes and the snapshot is taken per frame, which is what made the old value-typed
+		version expensive. Rebuilt only when the sample or the rate changes, and then shared by
+		every snapshot until it does. */
+	mutable std::shared_ptr<const std::vector<float>> dpcmWave;
 	mutable uint16_t dpcmWaveStart = 0;
 	mutable uint16_t dpcmWaveLength = 0;
 	mutable uint32_t dpcmWaveStarts = 0;

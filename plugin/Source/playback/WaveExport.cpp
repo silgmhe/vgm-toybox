@@ -76,9 +76,9 @@ namespace
 
 std::vector<float> cycleOf (const ChannelState& channel)
 {
-	if (channel.wave.size () >= 2)
+	if (channel.waveValues ().size () >= 2)
 	{
-		return channel.wave;
+		return channel.waveValues ();
 	}
 
 	return waveform::cycleFor (channel.waveKind, channel.duty, channel.shapeParameter);
@@ -284,7 +284,7 @@ bool writeCycleWav (const ChannelState& channel, const std::string& path,
 
 bool isSampledChannel (const ChannelState& channel)
 {
-	return channel.sampleRate > 0.0f && channel.wave.size () >= 2;
+	return channel.sampleRate > 0.0f && channel.waveValues ().size () >= 2;
 }
 
 bool writeSampleWav (const ChannelState& channel, const std::string& path)
@@ -298,7 +298,7 @@ bool writeSampleWav (const ChannelState& channel, const std::string& path)
 	// 11 kHz and written as 44 kHz is the same drum three octaves down and four times too long.
 	const auto rate = (uint32_t) std::lround (channel.sampleRate);
 
-	return writeFloat32Wav (path, channel.wave, rate, std::string ());
+	return writeFloat32Wav (path, channel.waveValues (), rate, std::string ());
 }
 
 std::string legalFileName (const std::string& name)
