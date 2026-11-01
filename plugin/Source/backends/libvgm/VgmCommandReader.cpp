@@ -93,7 +93,8 @@ namespace
 		// DAC stream control, where the length follows what the command carries.
 		case 0x90: case 0x91:		// setup and set-data: a stream id and three fields
 		case 0x95:					// start, short form: a stream id and a 32-bit block index
-		case 0xE0: case 0xE1:		// YM2612 PCM data offset, and the reserved slot after it
+		case 0xE0:					// YM2612 PCM data offset
+		case 0xE1:					// C352: a 16-bit offset and a 16-bit value
 			return 5;
 		case 0x92:					// set frequency: a stream id and a 32-bit frequency
 			return 6;
@@ -348,6 +349,24 @@ bool VgmCommandReader::next (VgmCommand& command)
 			command.port = (uint8_t) ((offset >> 8) & 0x7F);
 			command.addr = (uint8_t) (offset & 0xFF);
 			command.data = data[position + 3];
+		}
+		else if (cmd == 0xE1)
+		{
+			// C352: a 16-bit offset and a 16-bit value, both big-endian. The offset's high byte
+			// goes in `port` whole, because its bit 7 is the second chip of a pair and the loader
+			// splits the two; `data` and `data2` are the value's halves.
+			//
+			// This command used to carry no operands at all here - it was grouped with 0xE0 and
+			// given a length but no fields - so every C352 write arrived as offset 0, value 0. The
+			// voices still played in libvgm and the rows still appeared, which is why it went
+			// unnoticed: what was lost was the execute register at 0x202, and with it every
+			// sample's measured cycle length. The pitch then fell back to the rate alone, and the
+			// C352 reported C9.
+			command.kind = VgmCommand::Kind::registerWrite;
+			command.port = data[position + 1];
+			command.addr = data[position + 2];
+			command.data = data[position + 3];
+			command.data2 = data[position + 4];
 		}
 		else if (cmd == 0xD0)
 		{
