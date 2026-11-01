@@ -261,5 +261,10 @@ language: 简体中文
 	"settings.keyboard.middleC" = "中央 C 记作";
 	"settings.keyboard.explanation" = "键盘视图画什么。八度范围随窗口宽度自动调整；箭头则是一项选择。";
 	"settings.keyboard" = "键盘";
+"settings.export" = "导出";
+"settings.export.explanation" = "导出会留下什么，以及怎么处理它。";
+"settings.export.cleanup" = "启动时清理拖拽导出缓存";
+"settings.export.retention" = "删除早于此时长的文件：";
+"settings.export.hint" = "从键盘页拖出波表时，会在系统临时目录写入一个 wav 供合成器读取。默认不清理：一个已经拖出、但还没导入的文件，恰恰是清理最该避开的。";
 	"settings.keyboard.startAuto" = "跟随歌曲";
 	"settings.keyboard.startNote" = "起始音";

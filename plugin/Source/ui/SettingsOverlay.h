@@ -265,6 +265,37 @@ private:
 };
 
 /**
+	What the export leaves behind.
+
+	One group so far: the cache of wavetables dragged out of the keyboard page. Off by default and
+	the default is the point - deleting a file somebody made is worse than keeping a few megabytes,
+	and a wavetable dragged out but not yet imported is exactly what a cleaner eats first.
+
+	Its own page rather than another row on General: this is about exporting, and the next export
+	preference that arrives should land here instead of making General longer.
+*/
+class ExportSettingsPage : public View
+{
+public:
+	ExportSettingsPage (void);
+
+	juce::String getViewId (void) const override { return "settings-export"; }
+	juce::String getViewName (void) const override { return i18n::tr ("settings.export"); }
+
+	void refresh (void) override;
+	void paint (juce::Graphics& g) override;
+	void resized (void) override;
+	void lookAndFeelChanged (void) override;
+	void refreshLanguage (void) override;
+
+private:
+	juce::ToggleButton cleanupSwitch;
+	juce::Label retentionCaption;
+	juce::Slider retentionSlider;
+	juce::Label hint;
+};
+
+/**
 	What the keyboard draws.
 
 	The octave count follows the window width and is not a setting - a keyboard that does not fit
@@ -456,6 +487,7 @@ private:
 	NesSettingsPage* nesPage = nullptr;				// owned by `pages`
 	MidiSettingsPage* midiPage = nullptr;				// owned by `pages`
 	KeyboardSettingsPage* keyboardPage = nullptr;	// owned by `pages`
+	ExportSettingsPage* exportPage = nullptr;		// owned by `pages`
 	AudioSettingsPage* audioPage = nullptr;				// owned by `pages`; null in a plugin build
 
 	juce::TextButton closeButton;

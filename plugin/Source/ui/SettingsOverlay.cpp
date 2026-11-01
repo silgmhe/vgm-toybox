@@ -6,6 +6,7 @@
 #include "Standalone/StandaloneHooks.h"
 #include "UiFont.h"
 #include "playback/MidiSequence.h"
+#include "settings/ExportSettings.h"
 #include "settings/KeyboardSettings.h"
 #include "settings/NumericSettings.h"
 #include "settings/NsfSettings.h"
@@ -198,7 +199,8 @@ namespace
 		midiPageIndex = 3,
 		nesPageIndex = 4,
 		keyboardPageIndex = 5,
-		audioPageIndex = 6
+		exportPageIndex = 6,
+		audioPageIndex = 7
 	};
 }
 
@@ -808,6 +810,95 @@ void NesSettingsPage::resized (void)
 void NesSettingsPage::lookAndFeelChanged (void)
 {
 	repaint ();
+}
+
+//==============================================================================
+// Export
+
+ExportSettingsPage::ExportSettingsPage (void)
+{
+	cleanupSwitch.setComponentID ("settings.export.cleanup");
+	cleanupSwitch.onClick = [this]
+	{
+		toybox::settings::SettingsStore::getInstance ()
+			.setDragCleanupEnabled (cleanupSwitch.getToggleState ());
+		refresh ();
+	};
+	addAndMakeVisible (cleanupSwitch);
+
+	retentionCaption.setFont (juce::Font (juce::FontOptions (12.5f)));
+	retentionCaption.setJustificationType (juce::Justification::centredLeft);
+	addAndMakeVisible (retentionCaption);
+
+	retentionSlider.setComponentID ("settings.export.retention");
+	retentionSlider.setSliderStyle (juce::Slider::LinearHorizontal);
+	retentionSlider.setTextBoxStyle (juce::Slider::TextBoxRight, false, 68, 22);
+	colourSliderTextBox (retentionSlider);
+	retentionSlider.setRange ((double) toybox::settings::exporting::minRetentionHours,
+							  (double) toybox::settings::exporting::maxRetentionHours, 1.0);
+	retentionSlider.onValueChange = [this]
+	{
+		toybox::settings::SettingsStore::getInstance ()
+			.setDragRetentionHours ((int) std::lround (retentionSlider.getValue ()));
+		refresh ();
+	};
+	addAndMakeVisible (retentionSlider);
+
+	hint.setFont (juce::Font (juce::FontOptions (12.5f)));
+	hint.setJustificationType (juce::Justification::topLeft);
+	hint.setMinimumHorizontalScale (1.0f);
+	addAndMakeVisible (hint);
+
+	refreshLanguage ();
+	lookAndFeelChanged ();
+	refresh ();
+}
+
+void ExportSettingsPage::refreshLanguage (void)
+{
+	cleanupSwitch.setButtonText (i18n::tr ("settings.export.cleanup"));
+	retentionCaption.setText (i18n::tr ("settings.export.retention"), juce::dontSendNotification);
+	hint.setText (i18n::tr ("settings.export.hint"), juce::dontSendNotification);
+	repaint ();
+}
+
+void ExportSettingsPage::refresh (void)
+{
+	auto& store = toybox::settings::SettingsStore::getInstance ();
+
+	cleanupSwitch.setToggleState (store.getDragCleanupEnabled (), juce::dontSendNotification);
+	retentionSlider.setValue ((double) store.getDragRetentionHours (), juce::dontSendNotification);
+
+	// The retention means nothing while the switch is off, and a live-looking control next to a
+	// feature that does nothing invites the question of why changing it changes nothing.
+	retentionSlider.setEnabled (store.getDragCleanupEnabled ());
+}
+
+void ExportSettingsPage::paint (juce::Graphics& g)
+{
+	paintHeading (g, i18n::tr ("settings.export"),
+				  i18n::tr ("settings.export.explanation"), getLocalBounds ());
+}
+
+void ExportSettingsPage::resized (void)
+{
+	auto area = pageContent (getLocalBounds ());
+
+	cleanupSwitch.setBounds (area.removeFromTop (24));
+	area.removeFromTop (12);
+
+	retentionCaption.setBounds (area.removeFromTop (18));
+	retentionSlider.setBounds (area.removeFromTop (24).withWidth (juce::jmin (360, area.getWidth ())));
+	area.removeFromTop (12);
+
+	hint.setBounds (area.removeFromTop (56));
+}
+
+void ExportSettingsPage::lookAndFeelChanged (void)
+{
+	// The switch and the slider take the LookAndFeel's own colours (card face, accent while on,
+	// primary text), which is the point of them - see AppearanceSettingsPage for the same note.
+	colourSliderTextBox (retentionSlider);
 }
 
 KeyboardSettingsPage::KeyboardSettingsPage (void)
@@ -1542,6 +1633,11 @@ SettingsOverlay::SettingsOverlay (void)
 	rootItem->addSubItem (new CategoryItem ("keyboard", i18n::tr ("settings.keyboard"), keyboardPageIndex,
 										   [this] (int page) { pages.setCurrentView (page); }));
 
+	// The export page follows the keyboard one in the sidebar because that is where the wavetables
+	// it is about are dragged from.
+	rootItem->addSubItem (new CategoryItem ("export", i18n::tr ("settings.export"), exportPageIndex,
+										   [this] (int page) { pages.setCurrentView (page); }));
+
 	// Audio only where there is an audio device to choose between: the standalone application says
 	// so through Source/Standalone/StandaloneHooks.h, and in a plugin the host owns the device. The
 	// row goes in with the page, so the sidebar cannot offer a page that was never created.
@@ -1564,6 +1660,7 @@ SettingsOverlay::SettingsOverlay (void)
 	midiPage = new MidiSettingsPage();
 	nesPage = new NesSettingsPage();
 	keyboardPage = new KeyboardSettingsPage();
+	exportPage = new ExportSettingsPage();
 	// Forwarded rather than handled here: only the window owns an engine, and reloading a song at
 	// the position it was at is what makes the switch take effect.
 	midiPage->onSampleRootChanged = [this]
@@ -1579,12 +1676,14 @@ SettingsOverlay::SettingsOverlay (void)
 	midiPage->setComponentID ("settings.page.midi");
 	nesPage->setComponentID ("settings.page.nes");
 	keyboardPage->setComponentID ("settings.page.keyboard");
+	exportPage->setComponentID ("settings.page.export");
 	pages.addView (appearancePage);
 	pages.addView (generalPage);
 	pages.addView (languagePage);
 	pages.addView (midiPage);
 	pages.addView (nesPage);
 	pages.addView (keyboardPage);
+	pages.addView (exportPage);		// the index the sidebar row carries is exportPageIndex
 
 	if (hasAudio)
 	{
