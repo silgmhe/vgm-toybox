@@ -7,6 +7,7 @@
 #include <cstring>
 #include <map>
 
+#include "ChipMemoryAssembly.h"
 #include "ChipWriteRouter.h"
 #include "VgmCommandReader.h"
 #include "formats/vgm/VgmSongLoader.h"
@@ -160,7 +161,7 @@ namespace
 			// is flushed through its own entry point: it also splits ports and drums.
 			flushOpn (router.decoder<chips::OpnDecoder> ().writes.empty()
 						  ? std::vector<uint8_t>()
-						  : assembleRom (ir, 0x82, 16 * 1024 * 1024, true),
+						  : memory::rom (ir, 0x82, 16 * 1024 * 1024, true),
 					  lastSampleTime);
 			flushSsg (ir, lastSampleTime);
 			flushGb (lastSampleTime);
@@ -485,29 +486,21 @@ namespace
 		{
 			constexpr auto requirements = Decoder::kRequirements;
 
-			// A block below 0x40 is a PCM bank (concatenated by type), a RAM block writes at an
-			// address, a ROM block declares the size of the whole image - three shapes, and the
-			// type in the file is what distinguishes them (VGM's own numbering).
+			// The three block shapes and which one a chip wants live in memory::forRequirements, so
+			// that the display's replay builds the same image this does.
 			std::vector<uint8_t> image;
 			chips::ChipMemory memory;
-			if (requirements.hasMemory && ! buffer.writes.empty())
-			{
-				if (requirements.memoryType < 0x40)
-				{
-					image = assemblePcmBank (ir, requirements.memoryType, requirements.memoryBytes);
-				}
-				else if (requirements.memoryIsRam)
-				{
-					image = assembleRam (ir, requirements.memoryType, requirements.memoryBytes);
-				}
-				else
-				{
-					image = assembleRom (ir, requirements.memoryType, requirements.memoryBytes,
-										 requirements.clipToContent);
-				}
 
-				memory.bytes = &image;
-				memory.banking = c140BankingOf (ir);
+			if (! buffer.writes.empty())
+			{
+				uint8_t banking = 0;
+				image = memory::forRequirements (ir, requirements, banking);
+
+				if (! image.empty())
+				{
+					memory.bytes = &image;
+					memory.banking = banking;
+				}
 			}
 
 			for (auto& entry : buffer.writes)
@@ -568,111 +561,6 @@ namespace
 			only exists in these bytes. See chips/C140Decoder.h and chips/C352Decoder.h for the
 			measurement (shared through chips/Pitch.h) and the reason it cannot be skipped. */
 		/** The C140's ROM banking travels in the slot's flags, the way the header byte did before. */
-		static uint8_t c140BankingOf (const midi::SongIr& ir)
-		{
-			for (const auto& slot : ir.chips)
-			{
-				if (slot.kind == midi::ChipKind::c140)
-				{
-					return (uint8_t) slot.flags;
-				}
-			}
-
-			return 0;
-		}
-
-		static std::vector<uint8_t> assembleRom (const midi::SongIr& ir,
-													  uint8_t type,
-													  std::size_t maxRomBytes,
-													  bool clipToContent = false)
-		{
-			// The declared size is what the chip can address; the content is what a mask is built
-			// from. They differ on the Neo Geo: the header says 8 MB but only 2.8 MB of blocks are
-			// present, so libvgm masks the ADPCM-B address with 4 MB and the driver's 0x6B9000 is
-			// really 0x2B9000, inside its block. Clipping to the content reproduces that.
-			std::size_t romSize = 0;
-			for (const auto& block : ir.roms)
-			{
-				if (block.memoryType != type)
-				{
-					continue;
-				}
-
-				const std::size_t end = (std::size_t) block.romOffset + block.size;
-				romSize = std::max (romSize, clipToContent ? end : (std::size_t) block.romSize);
-			}
-
-			std::vector<uint8_t> rom;
-			romSize = std::min (romSize, maxRomBytes);
-			if (romSize == 0)
-			{
-				return rom;
-			}
-
-			rom.assign (romSize, 0);
-			for (const auto& block : ir.roms)
-			{
-				if (block.memoryType != type || block.romOffset >= rom.size())
-				{
-					continue;
-				}
-
-				const std::size_t count = std::min (block.size, rom.size() - block.romOffset);
-				std::memcpy (rom.data() + block.romOffset, block.data, count);
-			}
-
-			return rom;
-		}
-
-		/** Assembles a PCM bank - a `0x67` block of type 0x00-0x3F, which carries its bytes outright
-			(no ROM header, no address: the blocks of one type concatenate in stream order).
-
-			The RF5C164's samples live there, as type 0x02; a bank larger than the chip's RAM is cut at
-			the chip's limit, because everything past it is unreachable anyway. */
-		static std::vector<uint8_t> assemblePcmBank (const midi::SongIr& ir,
-														  uint8_t type,
-														  std::size_t maxBytes)
-		{
-			std::vector<uint8_t> bank;
-			for (const auto& block : ir.roms)
-			{
-				if (block.memoryType != type || bank.size() >= maxBytes)
-				{
-					continue;
-				}
-
-				const std::size_t count = std::min (block.size, maxBytes - bank.size());
-				bank.insert (bank.end(), block.data, block.data + count);
-			}
-
-			return bank;
-		}
-
-		/** Assembles a chip's RAM image from the stream's RAM writes (0xE1 is the ES5503's).
-
-			Unlike a ROM block, a RAM block carries no size for the whole memory - it names the
-			address to write at and nothing else - so the image is `maxRamBytes` of zeroes with every
-			block copied to its own address. A gap stays zero, which is also what the chip reads
-			there, and a table that lives in one measures as "no period". */
-		static std::vector<uint8_t> assembleRam (const midi::SongIr& ir,
-													  uint8_t type,
-													  std::size_t maxRamBytes)
-		{
-			std::vector<uint8_t> ram (maxRamBytes, 0);
-			for (const auto& block : ir.roms)
-			{
-				if (block.memoryType != type || block.ramOffset >= ram.size())
-				{
-					continue;
-				}
-
-				const std::size_t count = std::min (block.size, ram.size() - block.ramOffset);
-				std::memcpy (ram.data() + block.ramOffset, block.data, count);
-			}
-
-			return ram;
-		}
-
 		int trackFor (const PLR_DEV_INFO* device, int channel) const
 		{
 			if (device == nullptr)

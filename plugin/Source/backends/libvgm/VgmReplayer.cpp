@@ -2,6 +2,8 @@
 
 #include <algorithm>
 
+#include "ChipMemoryAssembly.h"
+
 #include "chips/Ay8910Decoder.h"
 #include "chips/GbcApuDecoder.h"
 #include "chips/NesApuDecoder.h"
@@ -74,10 +76,25 @@ void VgmReplayer::adoptNewBuffers (void)
 									   ? device->devCfg->clock
 									   : requirements.fallbackClock;
 
-			// No memory image yet. The first version draws every channel's shape from its kind, and
-			// a sampled chip needs its ROM before a note means anything - see
-			// docs/desgin/libvgm-visualisation.md, limitation 1.
 			decoder->reset (chips::ChipConfig { clock, tickRate () });
+
+			// The song's own blocks, assembled the way the MIDI path assembles them. Without this a
+			// sampled chip measures nothing: the C352's pitch is its rate divided by a cycle length
+			// that only exists in the ROM, so an empty image puts every voice at C9 - a number that
+			// looks like a note and belongs to no sound.
+			if (requirements.hasMemory && song != nullptr)
+			{
+				uint8_t banking = 0;
+				auto image = memory::forRequirements (*song, requirements, banking);
+
+				if (! image.empty ())
+				{
+					chips::ChipMemory attached;
+					attached.bytes = &image;
+					attached.banking = banking;
+					decoder->attachMemory (attached);	// the decoder copies what it needs
+				}
+			}
 
 			live.push_back (Instance { type, deviceId, device, decoder.get (), clock });
 			owned.push_back (std::move (decoder));

@@ -225,6 +225,7 @@ target_sources(VGMToybox PRIVATE
 	Source/midi/ChipPlans.cpp
 	Source/backends/BuiltInBackends.cpp
 	Source/backends/libvgm/LibvgmBackend.cpp
+	Source/backends/libvgm/ChipMemoryAssembly.cpp
 	Source/backends/libvgm/ChipWriteRouter.cpp
 	Source/backends/libvgm/MidiSequenceBuilder.cpp
 	Source/backends/libvgm/VgmCommandReader.cpp
@@ -416,6 +417,7 @@ add_executable(vgm_mixer_test EXCLUDE_FROM_ALL
 	Source/chips/NesDpcmSample.cpp
 	Source/formats/nsf/NsfFile.cpp
 	Source/backends/libvgm/LibvgmBackend.cpp
+	Source/backends/libvgm/ChipMemoryAssembly.cpp
 	Source/backends/libvgm/ChipWriteRouter.cpp
 	Source/backends/libvgm/MidiSequenceBuilder.cpp
 	Source/backends/libvgm/VgmCommandReader.cpp
