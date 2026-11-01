@@ -238,8 +238,9 @@ std::vector<Column> decimateForDisplay (const std::vector<float>& values, std::s
 		return {};
 	}
 
-	// A limit of zero means "do not decimate", not "return nothing": the caller that passes it
-	// wants the whole wave back, one column per point.
+	// A limit of zero is guarded rather than meaningful: no caller passes one, and the only thing a
+	// divisor of zero could do here is divide by it. The branch that matters is the second - a wave
+	// shorter than the row becomes one column per point, which is what a wavetable is.
 	if (limit == 0 || values.size () <= limit)
 	{
 		std::vector<Column> out;
