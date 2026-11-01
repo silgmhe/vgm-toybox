@@ -6,6 +6,7 @@
 #include <tuple>
 #include <vector>
 
+#include "C352Address.h"
 #include "Pitch.h"
 
 namespace toybox::chips
@@ -20,20 +21,6 @@ namespace
 	// runs at `clock / 288`. Dividing by 288 * 65536 turns the register and the clock into bytes a
 	// second - the same divisor the C140 uses, because both chips advance a sample pointer the same
 	// way.
-	/** How many bytes `start..end` covers, in the chip's wrapping address window.
-
-		Not `end - start + 1`: the core compares a position that only ever moves forward against
-		the low sixteen bits of `end`, so an endpoint below the start means the sample runs off the
-		end of its sixty-four-kilobyte window and continues at the bottom - not that the voice is
-		broken. Subtracting anyway underflowed to nearly sixty-five thousand, which either drew the
-		wrong bytes or, where the caller guarded on `end >= start`, drew nothing at all.
-	*/
-	std::size_t ioLength (uint32_t start, uint32_t end)
-	{
-		return (end >= start) ? (std::size_t) (end - start) + 1
-							  : (std::size_t) (0x10000u - start + end) + 1;
-	}
-
 	constexpr double kClockDivisor = 18874368.0;
 
 	// The rate a C352 sample ROM is taken to play at its recorded pitch when its own cycle cannot
@@ -230,7 +217,7 @@ struct C352Decoder::Impl
 		// the core fetches the byte at `wave_end` and only then decides the sample is over
 		// (c352.c, C352_fetch_sample), so both ends of the region are part of it
 		const double bytesPerSecond = (double) voice.frequency * clock / kClockDivisor;
-		const double samples = (double) ioLength (voice.start, voice.end) / bytesPerSecond * streamRate;
+		const double samples = (double) c352SampleLength (voice.start, voice.end) / bytesPerSecond * streamRate;
 		return (uint32_t) std::llround (std::min (samples, 1.0e9));
 	}
 
@@ -264,7 +251,7 @@ struct C352Decoder::Impl
 		// region and the loop run to it inclusively. One byte matters: a sixteen-byte wavetable
 		// cycle is a semitone away from a fifteen-byte one.
 		const uint32_t address = ((uint32_t) voice.bank << 16) | voice.start;
-		const std::size_t size = ioLength (voice.start, voice.end);
+		const std::size_t size = c352SampleLength (voice.start, voice.end);
 		std::vector<double> waveform (size);
 		for (std::size_t i = 0; i < size; ++i)
 		{
@@ -525,7 +512,7 @@ ChannelState C352Decoder::channelState (int channel) const
 		// means the sample runs off the end of its sixty-four-kilobyte window and wraps. With
 		// `end - start + 1` that case underflowed, the guard below skipped the voice, and the rows
 		// playing those samples were exactly the ones with a note and no wave.
-		const std::size_t span = ioLength (voice.start, voice.end);
+		const std::size_t span = c352SampleLength (voice.start, voice.end);
 
 		if (address < impl->rom.size ())
 		{

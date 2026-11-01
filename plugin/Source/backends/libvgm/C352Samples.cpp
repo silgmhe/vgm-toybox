@@ -6,6 +6,7 @@
 #include <map>
 
 #include "ChipMemoryAssembly.h"
+#include "chips/C352Address.h"
 #include "SampleCollector.h"
 #include "midi/SongIr.h"
 
@@ -141,7 +142,7 @@ std::vector<playback::DecodedSample> collectC352Samples (const midi::SongIr& ir)
 				// mu-law voice and the folder is missing a file the row can draw. The fix is to move
 				// `buildMuLawTable` into a shared header and give `SampleFormat` a `mulaw8` value;
 				// it is not done here because it touches both call sites and neither is broken.
-				if ((voice.flags & (kFlagMuLaw | kFlagNoise)) != 0 || voice.end < voice.start)
+				if ((voice.flags & (kFlagMuLaw | kFlagNoise)) != 0)
 				{
 					continue;
 				}
@@ -155,8 +156,9 @@ std::vector<playback::DecodedSample> collectC352Samples (const midi::SongIr& ir)
 
 				// `wave_end` is played: the core fetches the byte and only then checks for the end,
 				// so the region is inclusive on both sides.
-				const std::size_t length =
-					(std::min) ((std::size_t) (voice.end - voice.start) + 1, rom.size () - address);
+				// A wrapped sample is as long as the window allows - see `chips/C352Address.h`.
+				const std::size_t length = (std::min) (chips::c352SampleLength (voice.start, voice.end),
+														  rom.size () - address);
 
 				hits.push_back (Hit { address, length, voice.keyOnFrequency > 0 ? voice.keyOnFrequency : voice.frequency });
 			}
