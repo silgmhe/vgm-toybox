@@ -6,9 +6,11 @@
     produces silence, not a crash, several layers later.
 */
 
+#include <chrono>
 #include <cmath>
 #include <cstdio>
 #include <cstring>
+#include <filesystem>
 #include <string>
 #include <vector>
 
@@ -543,6 +545,141 @@ int main (void)
 	}
 
 #endif
+
+	// writeChannelShape: one channel, three answers. The drag feature refused to start on
+	// `nothingToWrite` and offered to explain `failed`, which is why they are separate answers
+	// rather than a bool.
+	{
+		const auto folder = juce::File::getSpecialLocation (juce::File::tempDirectory)
+								.getChildFile ("vgmtoybox-shape-"
+											   + juce::String (juce::Random::getSystemRandom().nextInt (100000)));
+		const auto made = folder.createDirectory ();
+
+		check (made.wasOk (), "a folder for the shape writer");
+
+		if (made.wasOk ())
+		{
+			const auto path = folder.getChildFile ("probe.wav").getFullPathName ().toStdString ();
+
+			toybox::playback::ChannelState pulse;
+			pulse.name = "Pulse 1";
+			pulse.chipName = "2A03";
+			pulse.waveKind = 2;				// pulse: a period the panel draws from duty
+			pulse.wave = { -1.0f, -1.0f, 1.0f, 1.0f };
+
+			check (toybox::playback::hasSomethingToWrite (pulse),
+				   "a pulse channel has something to write");
+			check (toybox::playback::writeChannelShape (pulse, path)
+					   == toybox::playback::ShapeWrite::written,
+				   "and writing it succeeds");
+
+			// The same channel with a rate is a recording: the rate is what makes it bytes.
+			auto sampled = pulse;
+			sampled.waveKind = 5;			// delta
+			sampled.sampleRate = 33143.9f;
+
+			check (toybox::playback::writeChannelShape (sampled, path)
+					   == toybox::playback::ShapeWrite::written,
+				   "a sampled channel is written as audio");
+
+			toybox::playback::ChannelState empty;
+			empty.name = "PCM";
+			empty.chipName = "MMC5";
+
+			check (! toybox::playback::hasSomethingToWrite (empty),
+				   "a channel with no kind and no bytes has nothing");
+			check (toybox::playback::writeChannelShape (empty, path)
+					   == toybox::playback::ShapeWrite::nothingToWrite,
+				   "and writing it says so rather than reporting a failure");
+
+			folder.deleteRecursively ();
+		}
+	}
+
+	// The drag cache's names: a timestamp a person can read, and a suffix rather than an overwrite
+	// when two drags land inside one second.
+	{
+		std::tm when = {};
+		when.tm_year = 126;			// 2026, counted from 1900
+		when.tm_mon = 10;			// November, counted from zero
+		when.tm_mday = 1;
+		when.tm_hour = 8;
+		when.tm_min = 23;
+		when.tm_sec = 56;
+
+		std::vector<std::string> taken;
+
+		const auto exists = [&taken] (const std::string& name)
+		{
+			return std::find (taken.begin (), taken.end (), name) != taken.end ();
+		};
+
+		const auto first = toybox::playback::dragExportName ("2A03_Pulse 1", when, exists);
+		check (first == "2A03_Pulse 1_2026_1101_082356.wav",
+			   "the name carries a timestamp a person can read");
+
+		taken.push_back (first);
+
+		const auto second = toybox::playback::dragExportName ("2A03_Pulse 1", when, exists);
+		check (second == "2A03_Pulse 1_2026_1101_082356-2.wav",
+			   "a second drag in the same second takes a suffix instead of the first file");
+
+		taken.push_back (second);
+
+		check (toybox::playback::dragExportName ("2A03_Pulse 1", when, exists)
+				   == "2A03_Pulse 1_2026_1101_082356-3.wav",
+			   "and the third numbers again");
+
+		check (toybox::playback::dragExportName ("N163_Wave 8", when, exists)
+				   == "N163_Wave 8_2026_1101_082356.wav",
+			   "a different channel keeps the plain name");
+
+		// The loop stops at a bound rather than at infinity, so there is a case where every name it
+		// tried was taken. That has to answer "none" rather than hand back a name that exists: the
+		// caller would write over a file the user still has.
+		const auto full = [] (const std::string&) { return true; };
+
+		check (toybox::playback::dragExportName ("2A03_Pulse 1", when, full).empty (),
+			   "when no name is free the answer is no name");
+	}
+
+	// The cleaner: old wavs go, recent wavs stay, and nothing that is not a wav is touched. The
+	// last of those is the one that matters - this runs against a temp folder.
+	{
+		const auto folder = juce::File::getSpecialLocation (juce::File::tempDirectory)
+								.getChildFile ("vgmtoybox-cache-"
+											   + juce::String (juce::Random::getSystemRandom().nextInt (100000)));
+
+		check (folder.createDirectory ().wasOk (), "a folder that stands in for the cache");
+
+		const auto oldFile = folder.getChildFile ("old.wav");
+		const auto newFile = folder.getChildFile ("new.wav");
+		const auto other = folder.getChildFile ("notes.txt");
+
+		oldFile.create ();
+		newFile.create ();
+		other.create ();
+
+		namespace fs = std::filesystem;
+
+		const auto now = fs::file_time_type::clock::now ();
+
+		// Timestamps are set rather than waited for. Same clock as the cleaner uses, which is what
+		// makes this deterministic: a wall clock would make "five hours ago" depend on the machine.
+		fs::last_write_time (fs::path (oldFile.getFullPathName ().toRawUTF8 ()), now - std::chrono::hours (5));
+		fs::last_write_time (fs::path (newFile.getFullPathName ().toRawUTF8 ()), now - std::chrono::hours (1));
+		fs::last_write_time (fs::path (other.getFullPathName ().toRawUTF8 ()), now - std::chrono::hours (5));
+
+		const auto removed = toybox::playback::clearDragCache (
+			folder.getFullPathName ().toStdString (), 3.0 * 3600.0);
+
+		check (removed == 1, "the cleaner removes only the wav past its retention");
+		check (! oldFile.existsAsFile (), "the five-hour-old wav is gone");
+		check (newFile.existsAsFile (), "the one-hour-old wav is kept");
+		check (other.existsAsFile (), "and a file that is not a wav is never touched");
+
+		folder.deleteRecursively ();
+	}
 
 	std::printf ("\nResult    : %s\n", toybox::test::failures() == 0 ? "all checks passed" : "FAILURES");
 

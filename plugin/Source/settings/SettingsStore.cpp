@@ -1,3 +1,4 @@
+#include "ExportSettings.h"
 #include "KeyboardSettings.h"
 #include "NsfSettings.h"
 #include "SettingsStore.h"
@@ -45,6 +46,8 @@ namespace
 	constexpr const char* kRefreshHzKey = "ui.refreshHz";
 	constexpr const char* kLastSongKey = "standalone.lastSong";
 	constexpr const char* kNsfDurationKey = "nsf.durationSeconds";
+	constexpr const char* kDragCleanupKey = "export.dragCleanup";
+	constexpr const char* kDragRetentionKey = "export.dragRetentionHours";
 	constexpr const char* kNsfOutputGainKey = "nsf.outputGainDb";
 	constexpr const char* kContentViewKey = "ui.view";
 	constexpr const char* kKeyboardRangeHintsKey = "keyboard.rangeHints";
@@ -432,6 +435,46 @@ void SettingsStore::setNsfDurationSeconds (int seconds)
 	}
 
 	file->setValue (kNsfDurationKey, clamped);
+	lastErrorMessage = file->saveIfNeeded() ? juce::String() : writeErrorFor (settingsFile());
+}
+
+bool SettingsStore::getDragCleanupEnabled (void) const
+{
+	return file->getBoolValue (kDragCleanupKey, toybox::settings::exporting::defaultCleanupEnabled);
+}
+
+void SettingsStore::setDragCleanupEnabled (bool enabled)
+{
+	if (enabled == getDragCleanupEnabled())
+	{
+		return;
+	}
+
+	file->setValue (kDragCleanupKey, enabled);
+	lastErrorMessage = file->saveIfNeeded() ? juce::String() : writeErrorFor (settingsFile());
+}
+
+int SettingsStore::getDragRetentionHours (void) const
+{
+	// Clamped on read like every other number here: a hand-edited file must not be able to ask
+	// the cleaner for "delete everything" or for a retention measured in years.
+	return juce::jlimit (toybox::settings::exporting::minRetentionHours,
+						 toybox::settings::exporting::maxRetentionHours,
+						 file->getIntValue (kDragRetentionKey,
+											toybox::settings::exporting::defaultRetentionHours));
+}
+
+void SettingsStore::setDragRetentionHours (int hours)
+{
+	const int clamped = juce::jlimit (toybox::settings::exporting::minRetentionHours,
+									  toybox::settings::exporting::maxRetentionHours, hours);
+
+	if (clamped == getDragRetentionHours())
+	{
+		return;
+	}
+
+	file->setValue (kDragRetentionKey, clamped);
 	lastErrorMessage = file->saveIfNeeded() ? juce::String() : writeErrorFor (settingsFile());
 }
 

@@ -3,6 +3,8 @@
 #include "playback/ChipState.h"
 
 #include <cstddef>
+#include <ctime>
+#include <functional>
 #include <string>
 #include <vector>
 
@@ -116,6 +118,43 @@ bool writeCycleWav (const ChannelState& channel, const std::string& path,
 */
 bool isSampledChannel (const ChannelState& channel);
 
+/** Whether this channel would produce a file at all.
+
+	Separate from writeChannelShape because the answer is needed before a name is chosen: the batch
+	export numbers repeated names in the order it meets them, and a channel that writes nothing must
+	not consume a number. It did once - a skipped channel took `_2` and the real file behind it got
+	`_3`, with both still written under names that looked right.
+*/
+bool hasSomethingToWrite (const ChannelState& channel);
+
+/** What happened when one channel was written out. */
+enum class ShapeWrite
+{
+	written,		// the file is on disk
+
+	/** The channel has nothing to write: not a sample, and not a period either - MMC5's PCM before
+		anything was captured, a channel the backend never filled. Not an error, and the difference
+		between this and `failed` is the whole diagnosis when a count comes back short. */
+	nothingToWrite,
+
+	failed			// it had something and the write did not land
+};
+
+/** Writes one channel as whatever it is: a sample as audio, a period as a wavetable.
+
+	The three answers are the reason this exists next to writeCycleWav rather than on top of it:
+	the batch export has to tell "nothing to write" from "tried and failed" to report both, and a
+	drag has to refuse to start on the first while offering to explain the second. Deciding that in
+	two places is how the two exports drift - and this branch has been wrong before, in the
+	direction of skipping every channel except FDS and N163.
+
+	`bits` only concerns periods. A sample's depth is its own encoding; quantising it is a different
+	operation and not one anybody asked for.
+*/
+ShapeWrite writeChannelShape (const ChannelState& channel, const std::string& path,
+							  ExportMode mode = ExportMode::single, double seconds = 2.0,
+							  int bits = kNativeBits);
+
 /** Writes `channel`'s sample as ordinary audio, which is what it is.
 
 	A DPCM hit is a moment, not a period. Writing it with the one-cycle marker would tell a
@@ -162,6 +201,47 @@ struct ExportOutcome
 ExportOutcome exportWavetables (const ChipStateSnapshot& snapshot, const std::string& folder,
 								ExportMode mode = ExportMode::single, double seconds = 2.0,
 								int bits = kNativeBits);
+
+/** A filename for a wavetable dragged out of the window: `<stem>_<YYYY_MMDD_HHMMSS>.wav`.
+
+	The timestamp is to the second, because two drags inside one second is a thing a hand can do
+	and a name has to survive it: a repeat takes `-2`, then `-3`. It is also the only record of when
+	the file was made that survives a copy, which the cache cleaner ends up caring about.
+
+	`local` is passed in rather than read from the clock, and `exists` rather than the filesystem,
+	because that is the whole of what this function needs from the outside - and both of those are
+	what make it a function a test can call.
+
+	`stem` comes from the channel (`<chip>_<channel>`), so `2A03_Pulse 1` and `N163_Wave 8` do not
+	collide when both are dragged into the same synthesiser.
+*/
+std::string dragExportName (const std::string& stem, const std::tm& local,
+							const std::function<bool (const std::string&)>& exists);
+
+/** Where dragged wavetables are written: `<temp>/VGMToybox/drag-export`.
+
+	A folder of our own rather than the temp root, so the cleaner can be narrow: it deletes only
+	what is in here, and "is this one of ours" needs no parsing of a name.
+
+	Not created here. The first drag creates it, and a start-up that finds no folder cleans nothing
+	- which is the right answer for a fresh install.
+*/
+std::string dragExportFolder (void);
+
+/** Deletes the `.wav` files in `folder` that have not been touched for `retentionSeconds`.
+
+	Returns how many went. A folder that does not exist is not an error and removes nothing: the
+	cache directory is created by the first drag, so the first start-up after an install finds none.
+
+	Only `.wav`, only this level, and no recursion. The folder belongs to us, but a path computed
+	wrongly should not turn into "emptied the temp directory" - which is the sort of thing a
+	cleaner is one bug away from, and the reason this one is deliberately narrow.
+
+	Age comes from the filesystem's own clock rather than the wall clock: a machine whose date was
+	changed does not make the whole cache look expired, and it is the one comparison a test can
+	arrange without waiting an hour.
+*/
+int clearDragCache (const std::string& folder, double retentionSeconds);
 
 /** One decoded sample, ready to be written: its levels, the rate they play at, and its name.
 

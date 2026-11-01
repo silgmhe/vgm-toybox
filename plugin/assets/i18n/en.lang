@@ -229,6 +229,9 @@ language: English
 	"visualiser.keyboardUnsupported" = "The channels of this chip cannot be shown yet.";
 	"visualiser.export" = "Export wavetables";
 	"visualiser.exportEmpty" = "Nothing to export yet.";
+"visualiser.dragHint" = "Drag into a wavetable synth";
+"visualiser.dragFailed.title" = "Could not write the wavetable";
+"visualiser.dragFailed.body" = "The temporary file for this drag could not be created. Check that the system temp folder is writable, then try again.";
 	"export.title" = "Wavetables exported";
 	"export.written" = "{0} written to";
 	"export.skippedSample" = "{0} sampled channel(s) left out: no sample data was captured for them.";
@@ -262,5 +265,10 @@ language: English
 	"settings.keyboard.middleC" = "Middle C is";
 	"settings.keyboard.explanation" = "What the keyboard draws. The octave range follows the window width; the arrow is a choice.";
 	"settings.keyboard" = "Keyboard";
+"settings.export" = "Export";
+"settings.export.explanation" = "What exporting leaves behind, and what to do about it.";
+"settings.export.cleanup" = "Clear the drag cache when the application starts";
+"settings.export.retention" = "Remove files older than:";
+"settings.export.hint" = "Dragging a wavetable out of the keyboard page writes a wav to the system temp folder, for the synthesiser to read. Off by default: a file dragged out but not yet imported is exactly what a cleaner would remove first.";
 	"settings.keyboard.startAuto" = "Follow the song";
 	"settings.keyboard.startNote" = "Lowest key";

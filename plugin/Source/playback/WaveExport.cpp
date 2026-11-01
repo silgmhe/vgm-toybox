@@ -3,11 +3,15 @@
 #include "WaveShape.h"
 
 #include <algorithm>
+#include <chrono>
 #include <cmath>
 #include <cstdint>
+#include <cstdio>
 #include <cstring>
+#include <filesystem>
 #include <fstream>
 #include <map>
+#include <system_error>
 #include <vector>
 
 namespace toybox::playback
@@ -334,6 +338,151 @@ std::string legalFileName (const std::string& name)
 	return out.empty () ? std::string ("unnamed") : out;
 }
 
+bool hasSomethingToWrite (const ChannelState& channel)
+{
+	// A sample is one thing and a period is another, and a channel has one or the other. Neither
+	// means no file: MMC5's PCM before anything was captured is the case that reaches here most.
+	return isSampledChannel (channel) || hasPeriodicShape (channel);
+}
+
+std::string dragExportFolder (void)
+{
+	namespace fs = std::filesystem;
+
+	std::error_code ec;
+	const auto root = fs::temp_directory_path (ec);
+
+	// An empty string rather than a guess: a caller with nowhere to write says so, instead of
+	// writing into the working directory - which for a plugin build is the host's, not ours.
+	if (ec || root.empty ())
+	{
+		return {};
+	}
+
+	return (root / "VGMToybox" / "drag-export").string ();
+}
+
+int clearDragCache (const std::string& folder, double retentionSeconds)
+{
+	namespace fs = std::filesystem;
+
+	if (folder.empty ())
+	{
+		return 0;
+	}
+
+	std::error_code ec;
+
+	if (! fs::is_directory (folder, ec))
+	{
+		return 0;
+	}
+
+	const auto retention = std::chrono::duration_cast<fs::file_time_type::duration> (
+		std::chrono::duration<double> (std::max (0.0, retentionSeconds)));
+
+	const auto now = fs::file_time_type::clock::now ();
+
+	// Collected first, removed after: removing while a directory iterator is walking it is safe on
+	// both platforms this ships to, but it is the kind of safe that depends on a paragraph of the
+	// standard rather than on the code saying what it means.
+	std::vector<fs::path> doomed;
+
+	for (fs::directory_iterator it (folder, ec), end; ! ec && it != end; it.increment (ec))
+	{
+		std::error_code entryError;
+
+		if (! it->is_regular_file (entryError) || entryError)
+		{
+			continue;
+		}
+
+		if (it->path ().extension () != ".wav")
+		{
+			continue;
+		}
+
+		const auto written = fs::last_write_time (it->path (), entryError);
+
+		if (entryError)
+		{
+			continue;
+		}
+
+		// A file stamped in the future is one copied in with its timestamps kept; counting that as
+		// infinitely old would delete something that arrived a moment ago.
+		if (written <= now && now - written > retention)
+		{
+			doomed.push_back (it->path ());
+		}
+	}
+
+	int removed = 0;
+
+	for (const auto& path : doomed)
+	{
+		std::error_code removeError;
+
+		if (fs::remove (path, removeError))
+		{
+			++removed;
+		}
+	}
+
+	return removed;
+}
+
+std::string dragExportName (const std::string& stem, const std::tm& local,
+							const std::function<bool (const std::string&)>& exists)
+{
+	// Seconds, not milliseconds: a name a person can read and a file a person can find. Two drags
+	// inside one second are handled by the suffix, not by more digits.
+	char stamp[32] = {};
+	std::snprintf (stamp, sizeof (stamp), "%04d_%02d%02d_%02d%02d%02d",
+				   local.tm_year + 1900, local.tm_mon + 1, local.tm_mday,
+				   local.tm_hour, local.tm_min, local.tm_sec);
+
+	const auto base = stem + "_" + stamp;
+
+	auto candidate = base + ".wav";
+
+	// Every pass makes a name that did not exist a moment ago, so this ends as soon as the
+	// filesystem agrees. The bound is there because `exists` is a caller's function and could answer
+	// about something else entirely - but reaching it means no name was free, and returning one that
+	// was not would overwrite a file the user still has. An empty answer says so instead.
+	for (int n = 2; exists (candidate); ++n)
+	{
+		if (n > 999)
+		{
+			return {};
+		}
+
+		candidate = base + "-" + std::to_string (n) + ".wav";
+	}
+
+	return candidate;
+}
+
+ShapeWrite writeChannelShape (const ChannelState& channel, const std::string& path,
+							  ExportMode mode, double seconds, int bits)
+{
+	if (! hasSomethingToWrite (channel))
+	{
+		return ShapeWrite::nothingToWrite;
+	}
+
+	// A channel that carries a sample is a recording, not a shape, and it goes out as audio at the
+	// rate the chip reads it - in both modes, because repeating a drum hit is not a wavetable and a
+	// period of one is not a period either.
+	if (isSampledChannel (channel))
+	{
+		return writeSampleWav (channel, path) ? ShapeWrite::written : ShapeWrite::failed;
+	}
+
+	return writeCycleWav (channel, path, mode, seconds, bits) ? ShapeWrite::written
+															  : ShapeWrite::failed;
+}
+
 ExportOutcome exportWavetables (const ChipStateSnapshot& snapshot, const std::string& folder,
 								ExportMode mode, double seconds, int bits)
 {
@@ -351,16 +500,9 @@ ExportOutcome exportWavetables (const ChipStateSnapshot& snapshot, const std::st
 	{
 		const auto& channel = snapshot.channels[(std::size_t) i];
 
-		// A channel that carries a sample is a recording, not a shape, and it goes out as audio at
-		// the rate the chip reads it - in both modes, because repeating a drum hit is not a
-		// wavetable and a period of one is not a period either.
-		//
-		// This used to fall through to skippedSample: hasPeriodicShape() is right that a sample is
-		// not a period, and the note there says "those channels want a PCM export, which does not
-		// exist yet". This is that export.
-		const bool isSample = isSampledChannel (channel);
-
-		if (! isSample && ! hasPeriodicShape (channel))
+		// Before the name, not after: a channel that writes nothing must not take a number and push
+		// the file behind it to `_2`.
+		if (! hasSomethingToWrite (channel))
 		{
 			++outcome.skippedSample;
 			continue;
@@ -380,10 +522,9 @@ ExportOutcome exportWavetables (const ChipStateSnapshot& snapshot, const std::st
 
 		const auto path = base + "/" + name;
 
-		const bool ok = isSample ? writeSampleWav (channel, path)
-								 : writeCycleWav (channel, path, mode, seconds, bits);
-
-		if (ok)
+		// `nothingToWrite` cannot happen here: the check above already took that branch, which is
+		// what keeps it from taking a name on the way out.
+		if (writeChannelShape (channel, path, mode, seconds, bits) == ShapeWrite::written)
 		{
 			++outcome.written;
 		}

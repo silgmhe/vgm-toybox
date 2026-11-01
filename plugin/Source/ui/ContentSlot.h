@@ -84,6 +84,10 @@ public:
 		with the editor, for the same reason the report does. */
 	std::function<void ()> onExportOptions;
 
+	/** A wavetable drag could not produce its file. The editor owns the window that says so, which
+		is the same division as the export report above. */
+	std::function<void ()> onSampleDragFailed;
+
 	/** Starts the export with the options the user chose - called back by the editor once its
 		options window has been confirmed. */
 	void beginExport (const ExportOptions& options);

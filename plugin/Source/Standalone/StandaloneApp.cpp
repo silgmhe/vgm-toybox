@@ -15,6 +15,8 @@
 #include "PluginProcessor.h"
 #include "Standalone/StandaloneHooks.h"
 #include "Standalone/TrayController.h"
+#include "playback/WaveExport.h"
+#include "settings/SettingsStore.h"
 #include "Standalone/TrayIcon.h"
 #include "playback/BackendRegistry.h"
 #include "playback/StartupSong.h"
@@ -235,6 +237,24 @@ public:
 
 	void initialise (const juce::String&) override
 	{
+		// The drag cache is a folder we wrote and nobody else reads. Clearing it is a background
+		// job because a start-up should not wait on a directory listing for an answer that never
+		// changes what the window does next.
+		//
+		// Detached rather than joined: it deletes files and owns nothing, so a process that exits
+		// mid-sweep loses nothing - and waiting for it would put a disk walk in front of the
+		// window appearing.
+		if (toybox::settings::SettingsStore::getInstance ().getDragCleanupEnabled ())
+		{
+			const auto hours = toybox::settings::SettingsStore::getInstance ().getDragRetentionHours ();
+
+			std::thread ([hours]
+			{
+				toybox::playback::clearDragCache (toybox::playback::dragExportFolder (),
+												  (double) hours * 3600.0);
+			}).detach ();
+		}
+
 		// Only the instance that is actually starting touches the state file. In particular a
 		// second launch that just hands its song to the running window must not migrate the old
 		// file while the first instance still owns it.

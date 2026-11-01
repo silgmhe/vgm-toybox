@@ -91,6 +91,7 @@ void paintChannelRow (juce::Graphics& g,
 					  bool soloed,
 					  int octaveShift,
 					  RowHover hover,
+					  bool waveHovered,
 					  const KeyPainter& paintKeys,
 					  RowPaintCache& cache);
 
@@ -100,9 +101,17 @@ void paintChannelRow (juce::Graphics& g,
 void paintToggle (juce::Graphics& g, juce::Rectangle<int> area,
 				  const char* letter, bool on, bool mute, bool hovered);
 
-/** The waveform column: a rounded window over the card, a hairline, and the cycle inside it. */
+/** The waveform column: a rounded window over the card, a hairline, and the cycle inside it.
+
+	`hovered` draws the window in the accent with a ring outside it, which is how the view says
+	"this one can be dragged out". It is a parameter rather than something worked out from the
+	channel because only the panel knows where the pointer is - and the cache in `cache` is keyed on
+	the shape, not on where the pointer sits, so a hover change repaints two strokes and rebuilds
+	nothing.
+*/
 void paintWave (juce::Graphics& g, juce::Rectangle<int> area,
-				const playback::ChannelState& channel, WavePathCache& cache);
+				const playback::ChannelState& channel, WavePathCache& cache,
+				bool hovered = false);
 
 /** The note's velocity, not its loudness - see the comment on the implementation. */
 void paintMeter (juce::Graphics& g, juce::Rectangle<int> area,

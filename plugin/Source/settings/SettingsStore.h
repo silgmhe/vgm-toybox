@@ -158,6 +158,14 @@ public:
 	int getNsfDurationSeconds (void) const;
 	void setNsfDurationSeconds (int seconds);
 
+	/** Whether the drag-export cache is cleared when the application starts. Off by default. */
+	bool getDragCleanupEnabled (void) const;
+	void setDragCleanupEnabled (bool enabled);
+
+	/** How old a dragged wavetable has to be before the start-up cleaner removes it, in hours. */
+	int getDragRetentionHours (void) const;
+	void setDragRetentionHours (int hours);
+
 	/** Output gain for the NES, in decibels. The mix table leaves a lot of headroom, so a file
 		played unamplified sits well below a VGM of the same music. Applied to the NES only. */
 	/** Which panel the playback page was showing: 0 mixer, 1 chip state, 2 oscilloscope. */
