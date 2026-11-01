@@ -446,11 +446,17 @@ std::string dragExportName (const std::string& stem, const std::tm& local,
 
 	auto candidate = base + ".wav";
 
-	// Bounded: every pass makes a name that did not exist a moment ago, so this ends as soon as the
-	// filesystem agrees. The bound is there in case `exists` answers about something else, which
-	// would otherwise turn one drag into an infinite loop.
-	for (int n = 2; n <= 999 && exists (candidate); ++n)
+	// Every pass makes a name that did not exist a moment ago, so this ends as soon as the
+	// filesystem agrees. The bound is there because `exists` is a caller's function and could answer
+	// about something else entirely - but reaching it means no name was free, and returning one that
+	// was not would overwrite a file the user still has. An empty answer says so instead.
+	for (int n = 2; exists (candidate); ++n)
 	{
+		if (n > 999)
+		{
+			return {};
+		}
+
 		candidate = base + "-" + std::to_string (n) + ".wav";
 	}
 

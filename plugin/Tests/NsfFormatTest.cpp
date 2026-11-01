@@ -633,6 +633,14 @@ int main (void)
 		check (toybox::playback::dragExportName ("N163_Wave 8", when, exists)
 				   == "N163_Wave 8_2026_1101_082356.wav",
 			   "a different channel keeps the plain name");
+
+		// The loop stops at a bound rather than at infinity, so there is a case where every name it
+		// tried was taken. That has to answer "none" rather than hand back a name that exists: the
+		// caller would write over a file the user still has.
+		const auto full = [] (const std::string&) { return true; };
+
+		check (toybox::playback::dragExportName ("2A03_Pulse 1", when, full).empty (),
+			   "when no name is free the answer is no name");
 	}
 
 	// The cleaner: old wavs go, recent wavs stay, and nothing that is not a wav is touched. The
