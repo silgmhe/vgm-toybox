@@ -343,21 +343,38 @@ void paintWave (juce::Graphics& g, juce::Rectangle<int> area,
 		}
 
 		juce::Path path;
-
-		// One cycle of it, when the chip can say where a cycle ends. A recorded sample can be
-		// thousands of points and this row has about a hundred and twenty: downsampling the whole
-		// thing by peak draws its envelope - a shape with no period in it at all, which reads as a
-		// broken display rather than as a sample.
-		// The whole sample, downsampled to the row's width. A recorded sample can be tens of
-		// thousands of points, and what a row should show of it is its shape from attack to decay -
-		// the envelope included, because that envelope *is* the sample. Picking one cycle out of it
-		// showed a waveform and said nothing about the sound: a drum and a sustained note came out
-		// looking the same.
-		buildFilledPath (path, area.getWidth (), area.getHeight (),
-						playback::waveform::decimateForDisplay (channel.waveValues (), kDisplayPoints));
+		const auto& values = channel.waveValues ();
 
 		g.setColour (theme::accent ().withAlpha (channel.active ? 0.9f : 0.35f));
-		fillCycle (g, path, area);
+
+		// Two shapes, decided by what the wave *is* rather than by how long it happens to be.
+		//
+		// A wavetable holds one level per point until the next point replaces it, so it is a
+		// staircase. Drawing it as a ribbon would give each column no height to fill - a table of
+		// sixty-four points in a hundred and twenty-eight columns has one point per two columns -
+		// and the row would collapse to a one-pixel line sloping between corners, a shape the
+		// hardware never makes.
+		//
+		// A recorded sample is a stream of levels, thousands of them, so each column stands for a
+		// slice and carries its range. Filled, that is the sample's shape from attack to decay.
+		//
+		// `sampleRate` is the flag for "this channel plays recorded bytes": it is set by the two
+		// chips that decode samples and by no wavetable chip, and it is what the export uses for the
+		// same distinction. Length would not do - a short DPCM hit is shorter than an N163 table.
+		const bool recorded = channel.sampleRate > 0.0f;
+
+		if (recorded && values.size () > kDisplayPoints)
+		{
+			buildFilledPath (path, area.getWidth (), area.getHeight (),
+							 playback::waveform::decimateForDisplay (values, kDisplayPoints));
+			fillCycle (g, path, area);
+		}
+		else
+		{
+			buildStepPath (path, area.getWidth (), area.getHeight (), values);
+			strokeCycle (g, path, area);
+		}
+
 		return;
 	}
 
