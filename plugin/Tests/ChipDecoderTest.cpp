@@ -5178,6 +5178,15 @@ void testWaveExport (void)
 		write (0x12, 0x80);
 		check (decoder.channelState (4).sampleId == ((0x80u << 16) | 49u),
 			   "a page above 0x3F is still its own page, not zero");
+
+		// A drum hit lasts milliseconds. Once the bytes run out the row must keep drawing the last
+		// one: a percussion column that went dark between hits would read as an idle channel for
+		// most of the song, which is the same reason the NSF path keeps its row.
+		decoder.advance (100000u);
+
+		const auto after = decoder.channelState (4);
+		check (! after.gate, "the sample has finished");
+		check (after.released, "and the row keeps showing the last hit");
 	}
 
 	void testChannelFromChip (void)

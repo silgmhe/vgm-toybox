@@ -127,8 +127,17 @@ struct NesApuDecoder::Impl
 	int dpcmRateIndex = 0;
 	bool dpcmLoop = false;
 
-	/** `$4012`, the sample's page inside `$C000..$FFFF`: six bits, sixty-four bytes each. */
+	/** `$4012`, the sample's page inside `$C000..$FFFF`: eight bits, sixty-four bytes each. */
 	uint8_t dpcmPage = 0;
+
+	/** Set when the channel is first keyed, and never cleared until a reset.
+
+		A drum hit lasts tens of milliseconds; a row that went out as soon as it finished would be
+		dark for most of a drum line, and the column would read as "this channel does nothing here".
+		The NSF path settled this the same way - its row is a record of the last hit - so the two
+		backends agree about what a percussion row shows.
+	*/
+	bool dpcmHeld = false;
 
 	/** What `$4013` last asked for. `dpcmBytes` counts down as the sample plays, so the length the
 		wave was decoded from is this one - keying the cache on the countdown would re-decode the
@@ -352,6 +361,12 @@ void NesApuDecoder::write (const RegisterWrite& w)
 		{
 			impl->dpcmBytes = 0;
 		}
+		else
+		{
+			// Keyed at least once: the row now has something to record, and keeps recording it
+			// after the bytes run out. See `dpcmHeld`.
+			impl->dpcmHeld = true;
+		}
 
 		break;
 	}
@@ -550,6 +565,11 @@ ChannelState NesApuDecoder::channelState (int channel) const
 		state.gate = impl->dpcmEnabled && impl->dpcmBytes > 0;
 		state.period = 0;
 		state.volume = 15;
+
+		// Held after the sample ends, so the row keeps showing the last hit rather than blinking
+		// between them. `released` is the field that means "not sounding but still worth drawing" -
+		// borrowed from the note-off case, which is the same shape of statement.
+		state.released = impl->dpcmHeld;
 
 		// How fast the byte stream is clocked out, from `$4010`. This is a rate, not a pitch: the
 		// pitch would be this rate over one cycle of whatever the bytes contain, and a drum has no
