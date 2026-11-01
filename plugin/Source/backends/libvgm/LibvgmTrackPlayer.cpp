@@ -452,29 +452,30 @@ void LibvgmTrackPlayer::setReplaySource (std::shared_ptr<const midi::SongIr> ir,
 
 	if (replayIr != nullptr)
 	{
-		buildDpcmNotes (*replayIr);
+		ledger.buildNotes (*replayIr);
 	}
 }
 
-const LibvgmTrackPlayer::DpcmLookup* LibvgmTrackPlayer::lookupDpcmSample (uint32_t sampleId) const
+const LibvgmTrackPlayer::DpcmLookup* LibvgmTrackPlayer::Ledger::lookup (
+	uint32_t sampleId, const std::vector<playback::DecodedSample>* collection) const
 {
 	if (sampleId == 0)
 	{
 		return nullptr;
 	}
 
-	const auto cached = ledger.samples.find (sampleId);
-	if (cached != ledger.samples.end ())
+	const auto cached = samples.find (sampleId);
+	if (cached != samples.end ())
 	{
 		return &cached->second;
 	}
 
-	if (sampleList == nullptr)
+	if (collection == nullptr)
 	{
 		return nullptr;
 	}
 
-	for (const auto& sample : *sampleList)
+	for (const auto& sample : *collection)
 	{
 		if (sample.sampleId != sampleId)
 		{
@@ -485,7 +486,7 @@ const LibvgmTrackPlayer::DpcmLookup* LibvgmTrackPlayer::lookupDpcmSample (uint32
 		entry.wave = std::make_shared<const std::vector<float>> (sample.values);
 		entry.rate = (float) sample.rate;
 
-		return &ledger.samples.emplace (sampleId, std::move (entry)).first->second;
+		return &samples.emplace (sampleId, std::move (entry)).first->second;
 	}
 
 	// Not an error: the collector and the decoder name samples with the same arithmetic, so a miss
@@ -494,9 +495,9 @@ const LibvgmTrackPlayer::DpcmLookup* LibvgmTrackPlayer::lookupDpcmSample (uint32
 	return nullptr;
 }
 
-void LibvgmTrackPlayer::buildDpcmNotes (const midi::SongIr& ir)
+void LibvgmTrackPlayer::Ledger::buildNotes (const midi::SongIr& ir)
 {
-	ledger.notes.clear ();
+	notes.clear ();
 
 	// A sample is named by the two registers that point at it, and a hit happens when `$4015`
 	// enables the channel with both already written. Scanning the song's writes in order keeps the
@@ -538,9 +539,9 @@ void LibvgmTrackPlayer::buildDpcmNotes (const midi::SongIr& ir)
 		// Same identity the decoder reports: page and length, not the bytes.
 		const uint32_t id = ((uint32_t) page << 16) | (uint32_t) length;
 
-		if (ledger.notes.find (id) == ledger.notes.end () && nextNote <= 127)
+		if (notes.find (id) == notes.end () && nextNote <= 127)
 		{
-			ledger.notes[id] = nextNote++;
+			notes[id] = nextNote++;
 		}
 	}
 }
@@ -684,7 +685,7 @@ bool LibvgmTrackPlayer::captureState (playback::ChipStateSnapshot& snapshot) con
 				// The bytes come from the same collection the export writes, not from a second
 				// reading of the chip's memory. That second reading is what drew a flat line while
 				// the same file exported correctly; one source, one answer.
-				if (const auto* sample = lookupDpcmSample (chipState.sampleId))
+				if (const auto* sample = ledger.lookup (chipState.sampleId, sampleList.get ()))
 				{
 					state.wave = sample->wave;
 					state.sampleRate = sample->rate;

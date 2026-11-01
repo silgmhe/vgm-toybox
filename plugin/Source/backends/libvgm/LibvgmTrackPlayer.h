@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include <atomic>
 #include <map>
@@ -191,14 +191,26 @@ private:
 
 		/** The last hit count seen per channel, for noticing that a new one happened. */
 		mutable std::map<uint32_t, uint32_t> lastHits;
+
+		/** Fills `notes` from the whole song: one note per distinct sample, from middle C up.
+
+			A property of the song rather than of a moment, which is why it is built once at load
+			rather than per frame - a drum has no pitch, so "which sample" is the only thing a note
+			grid can be told, and that answer needs the whole file.
+		*/
+		void buildNotes (const midi::SongIr& ir);
+
+		/** The levels behind one identity, decoded on first use from the export's collection.
+
+			`nullptr` when the collector never saw this sample - a file that carried registers but
+			not the memory they point at. The row then keeps its rate and draws no wave, which is the
+			truth about that hit rather than a placeholder that looks like a sound.
+		*/
+		const DpcmLookup* lookup (uint32_t sampleId,
+								  const std::vector<playback::DecodedSample>* collection) const;
 	};
 
 	mutable Ledger ledger;
-
-	void buildDpcmNotes (const midi::SongIr& ir);
-
-	/** Fills `ledger.samples` for one identity, or leaves it absent when the collector never saw it. */
-	const DpcmLookup* lookupDpcmSample (uint32_t sampleId) const;
 
 	/** Set by a seek or a loop point, consumed by the next captureState. A counter rather than a
 		flag: two seeks between two frames must not become one rewind and a position that never
