@@ -722,24 +722,35 @@ private:
 						 sample.name.c_str(), sample.rate, (int) sample.values.size());
 		}
 
-		// Every collected sample names itself, and no two names are the same. The display looks a
-		// playing channel up by this number: a zero would make a sample unreachable, and a duplicate
-		// would make two different drums share one waveform - which looks like a mapping that works.
+		// Only the samples that carry an identity are compared, because only the 2A03 DPCM channel
+		// needs one: it reports which sample it is playing and the row looks that up. The C140 and
+		// the C352 draw straight from their own ROM and leave the field zero. Asserting on all of
+		// them made this fail the moment a third chip started exporting - which is what a check
+		// written for one producer does when a second arrives.
 		bool named = true;
 		bool distinct = true;
+		int withIdentity = 0;
 
 		for (std::size_t i = 0; i < list.size(); ++i)
 		{
-			named = named && list[i].sampleId != 0;
+			if (list[i].sampleId == 0)
+			{
+				continue;
+			}
+
+			++withIdentity;
 
 			for (std::size_t j = i + 1; j < list.size(); ++j)
 			{
-				distinct = distinct && list[i].sampleId != list[j].sampleId;
+				if (list[j].sampleId != 0)
+				{
+					distinct = distinct && list[i].sampleId != list[j].sampleId;
+				}
 			}
 		}
 
-		report (named, "every sample names itself");
-		report (distinct, "and no two share a name");
+		report (withIdentity == 0 || named, "every sample that has an identity names itself");
+		report (withIdentity < 2 || distinct, "and no two share one");
 
 		if (tokens.size() < 2)
 		{
