@@ -251,7 +251,16 @@ inline SampledPitch describeSamplePitch (double rate, double referenceRate, doub
 		return pitch;		// a drum: no layers, the caller reports the C4 trigger
 	}
 
-	pitch.hz = rate;
+	// Bytes per second over bytes per cycle. `rate` is how fast the chip reads the sample, not the
+	// frequency it sounds at: dividing by the cycle's own length is what turns one into the other,
+	// and it is the same division `rootCentsFromCycle` performs for the root. Without it every
+	// sampled chip reports its read rate as a pitch - the C352, whose rate register is sixteen bits
+	// wide, came out at C9.
+	//
+	// A sample whose cycle could not be measured has no frequency to report. Answering with the
+	// rate would be a number in the shape of a pitch that belongs to no sound, which is worse than
+	// an empty cell: the row still shows its volume and its shape, and only the note is missing.
+	pitch.hz = (cycleLength > 0.0) ? rate / cycleLength : 0.0;
 	pitch.transposeCents = transpositionCents (rate, referenceRate);
 	pitch.rootCents = rootCentsFromCycle (cycleLength, referenceRate);
 	pitch.source = (pitch.rootCents != 0) ? PitchSource::sampleInferred
