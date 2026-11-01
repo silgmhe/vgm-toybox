@@ -2,9 +2,9 @@
 
 #include <algorithm>
 #include <cstdio>
-#include <cstring>
 #include <map>
 
+#include "ChipMemoryAssembly.h"
 #include "midi/SongIr.h"
 
 namespace toybox::backends::libvgm
@@ -45,34 +45,6 @@ namespace
 		}
 	}
 
-	std::vector<uint8_t> assembleRom (const midi::SongIr& ir)
-	{
-		std::size_t size = 0;
-
-		for (const auto& block : ir.roms)
-		{
-			if (block.memoryType == kRomType)
-			{
-				size = (std::max) (size, (std::size_t) block.romOffset + block.size);
-			}
-		}
-
-		std::vector<uint8_t> rom (size, 0);
-
-		for (const auto& block : ir.roms)
-		{
-			if (block.memoryType != kRomType || block.romOffset >= rom.size ())
-			{
-				continue;
-			}
-
-			const std::size_t count = (std::min) (block.size, rom.size () - block.romOffset);
-			std::memcpy (rom.data () + block.romOffset, block.data, count);
-		}
-
-		return rom;
-	}
-
 	struct Voice
 	{
 		uint8_t bank = 0;
@@ -86,7 +58,13 @@ std::vector<playback::DecodedSample> collectC140Samples (const midi::SongIr& ir)
 {
 	std::vector<playback::DecodedSample> out;
 
-	const std::vector<uint8_t> rom = assembleRom (ir);
+	// The assembler the MIDI path uses, rather than a second one here: it was extracted for exactly
+	// this job, and a copy would drift from it without anything failing.
+	//
+	// `clipToContent` is true because the C140's blocks declare no size of their own - the image is
+	// as long as the highest block reaches - and 16 MB is its whole address space, which is also the
+	// ceiling this needs.
+	const std::vector<uint8_t> rom = memory::rom (ir, kRomType, 16u << 20, true);
 
 	if (rom.empty ())
 	{

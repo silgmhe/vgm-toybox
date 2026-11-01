@@ -479,9 +479,7 @@ ChannelState C140Decoder::channelState (int channel) const
 	// to write a WAV that plays at the right speed.
 	state.sampleRate = (float) rate;
 
-	// And how much of the wave repeats. A display has room for one cycle and the sample can be
-	// thousands of bytes, so without this the row draws the envelope of the whole sample instead.
-	state.cycleBytes = (float) voice.samplePeriodBytes;
+
 
 	return state;
 }

@@ -491,6 +491,7 @@ add_executable(vgm_chip_test EXCLUDE_FROM_ALL
 	Source/formats/vgm/VgmSongLoader.cpp
 	Source/chips/NesDpcmSample.cpp
 	Source/backends/libvgm/C140Samples.cpp
+	Source/backends/libvgm/ChipMemoryAssembly.cpp
 	Tests/ChipDecoderTest.cpp
 	Source/chips/GbcApuDecoder.cpp
 	Source/chips/HuC6280Decoder.cpp
