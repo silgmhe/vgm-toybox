@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cstdint>
 #include <cstdio>
+#include <map>
 
 #include "ChipMemoryAssembly.h"
 #include "SampleCollector.h"
@@ -13,10 +14,6 @@ namespace toybox::backends::libvgm
 namespace
 {
 	constexpr int kVoices = 32;
-
-	/** Eight registers per voice, one offset each: two volumes, frequency, flags, bank, start, end,
-		loop. The offsets are the low three bits of the register number. */
-	constexpr int kRegistersPerVoice = 8;
 
 	/** The C352's sample ROM, as VGM calls it. */
 	constexpr uint8_t kRomType = 0x92;
@@ -44,9 +41,20 @@ namespace
 	{
 		uint16_t flags = 0;
 		uint32_t frequency = 0;
+		/** The frequency register at the moment the key-on bit was set, which is what the voice starts
+			at; a slide changes the register afterwards and the execute reads the changed value. */
+		uint32_t keyOnFrequency = 0;
 		uint32_t bank = 0;
 		uint32_t start = 0;
 		uint32_t end = 0;
+	};
+
+	/** One voice starting one sample, before de-duplication. */
+	struct Hit
+	{
+		uint32_t address = 0;
+		std::size_t length = 0;
+		uint32_t frequency = 0;
 	};
 }
 
@@ -77,6 +85,19 @@ std::vector<playback::DecodedSample> collectC352Samples (const midi::SongIr& ir)
 	const double referenceRate = clock / kRootRateDivisor;
 
 	Voice voices[kVoices];
+
+	// Collected first, decided afterwards.
+	//
+	// One sample is often played by several voices at several pitch registers - a drum tuned per
+	// hit, a vocal phrase bent up and down - and the rate a file should declare is not whichever
+	// voice happened to touch it first. The lowest of them is a bent-down note, and writing the file
+	// at that rate makes it play back slow and an octave low; that is exactly what an earlier version
+	// did, and it was heard.
+	//
+	// The highest is the closest thing to the pitch the sample was recorded at, because pitch
+	// registers bend downward far more often than up. It is an inference, but a defensible one, and
+	// it beats "whichever came first" by not depending on the order of a stream.
+	std::vector<Hit> hits;
 
 	for (const auto& write : ir.writes)
 	{
@@ -129,18 +150,7 @@ std::vector<playback::DecodedSample> collectC352Samples (const midi::SongIr& ir)
 				const std::size_t length =
 					(std::min) ((std::size_t) (voice.end - voice.start) + 1, rom.size () - address);
 
-				// The rate this voice reads its bytes at - not the chip's reference rate. A voice
-				// an octave below the reference reads at half speed, and writing the file at the
-				// reference would make it play back twice as fast and an octave up.
-				const double rate = (voice.frequency > 0) ? (double) voice.frequency * bytesPerStep
-														  : referenceRate;
-
-				char name[32] = {};
-				std::snprintf (name, sizeof (name), "c352_%06X_%u", (unsigned) address,
-							   (unsigned) length);
-
-				collector.add (((uint64_t) address << 32) | length, name, rom.data () + address,
-							   length, SampleFormat::pcm8Signed, rate);
+				hits.push_back (Hit { address, length, voice.keyOnFrequency > 0 ? voice.keyOnFrequency : voice.frequency });
 			}
 
 			continue;
@@ -158,12 +168,45 @@ std::vector<playback::DecodedSample> collectC352Samples (const midi::SongIr& ir)
 		switch (offset & 7)
 		{
 		case 2: voice.frequency = write.value; break;
-		case 3: voice.flags = (uint16_t) write.value; break;
+		case 3:
+			voice.flags = (uint16_t) write.value;
+
+			// The bit arriving is the voice starting, so this is the pitch it starts at.
+			if ((voice.flags & kFlagKeyOn) != 0)
+			{
+				voice.keyOnFrequency = voice.frequency;
+			}
+
+			break;
 		case 4: voice.bank = write.value; break;
 		case 5: voice.start = write.value; break;
 		case 6: voice.end = write.value; break;
 		default: break;
 		}
+	}
+
+	std::map<uint64_t, uint32_t> highestFrequency;
+
+	for (const auto& hit : hits)
+	{
+		const uint64_t key = ((uint64_t) hit.address << 32) | hit.length;
+		auto& highest = highestFrequency[key];
+
+		highest = (std::max) (highest, hit.frequency);
+	}
+
+	for (const auto& hit : hits)
+	{
+		const uint64_t key = ((uint64_t) hit.address << 32) | hit.length;
+		const uint32_t frequency = highestFrequency[key];
+		const double rate = (frequency > 0) ? (double) frequency * bytesPerStep : referenceRate;
+
+		char name[32] = {};
+		std::snprintf (name, sizeof (name), "c352_%06X_%u", (unsigned) hit.address,
+					   (unsigned) hit.length);
+
+		collector.add (key, name, rom.data () + hit.address, hit.length,
+					   SampleFormat::pcm8Signed, rate);
 	}
 
 	return collector.take ();
