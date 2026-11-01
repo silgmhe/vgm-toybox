@@ -16,6 +16,7 @@
 #include <algorithm>
 #include <cstdio>
 #include <cmath>
+#include <ctime>
 #include <functional>
 
 using namespace toybox::ui;
@@ -40,6 +41,14 @@ namespace
 		painted by the whole-row path, so this is small - three pixels of slack, not twenty-four.
 	*/
 	constexpr int kColumnReach = 6;
+
+	/** How far the pointer travels before a press on a waveform becomes a drag.
+
+		JUCE applies a threshold of its own before mouseDrag arrives, but it counts from the press
+		and this one is about intent: the waveform is 88x26, so a couple of pixels is a shaky hand
+		rather than a decision to carry something out of the window.
+	*/
+	constexpr int kWaveDragThreshold = 5;
 
 	// The row's own measurements live in KeyboardRowLayout: thirteen columns that have to fit
 	// a card are arithmetic, and arithmetic belongs where a test can call it.
@@ -124,6 +133,7 @@ int contentViewIndex (ContentView view)
 	mute, so the mixer and this view cannot disagree about what is silent.
 */
 class ContentSlot::KeyboardPanel : public juce::Component,
+								   public juce::TooltipClient,
 								   private juce::ScrollBar::Listener
 {
 public:
@@ -420,6 +430,7 @@ public:
 				keyboard::RowPaintCache& cache = rowCaches[(std::size_t) row.channel];
 
 				keyboard::paintChannelRow (g, row, channel, muted, soloed, octaveShift, hover,
+										   hoveredWaveChannel == row.channel,
 										   [this, &cache] (juce::Graphics& graphics, juce::Rectangle<int> area, int note)
 										   { paintKeyboard (graphics, area, note, cache.bedShadow); },
 										   cache);
@@ -564,6 +575,7 @@ public:
 
 		int rowChannel = -1;
 		bool rowMute = false;
+		int waveChannel = -1;
 
 		if (hovered < 0)
 		{
@@ -576,17 +588,39 @@ public:
 
 				if (row.mute.contains (point)) { rowChannel = row.channel; rowMute = true;  break; }
 				if (row.solo.contains (point)) { rowChannel = row.channel; rowMute = false; break; }
+
+				// The waveform is a drag source only when it has something to write. Asking here
+				// rather than at the drop is what keeps the cursor and the highlight honest: a
+				// channel with no shape looks inert because it is.
+				if (row.wave.contains (point))
+				{
+					const bool hasData = row.channel >= 0
+										 && (std::size_t) row.channel < snapshot.channels.size ()
+										 && toybox::playback::hasSomethingToWrite (
+												snapshot.channels[(std::size_t) row.channel]);
+
+					if (hasData)
+					{
+						waveChannel = row.channel;
+					}
+
+					break;
+				}
 			}
 		}
 
 
-		const bool pointer = hovered >= 0 || rowChannel >= 0;
+		const bool pointer = hovered >= 0 || rowChannel >= 0 || waveChannel >= 0;
 
 		if (pointer != lastPointerWasOverControl)
 		{
 			lastPointerWasOverControl = pointer;
-			setMouseCursor (pointer ? juce::MouseCursor::PointingHandCursor
-									: juce::MouseCursor::NormalCursor);
+
+			// A hand that is mid-drag rather than a pointing finger: the waveform is something you
+			// carry out of the window, not something you click.
+			setMouseCursor (waveChannel >= 0 ? juce::MouseCursor::DraggingHandCursor
+											 : (pointer ? juce::MouseCursor::PointingHandCursor
+														: juce::MouseCursor::NormalCursor));
 		}
 
 		if (hovered != hoveredControl)
@@ -617,13 +651,36 @@ public:
 
 			if (hoveredRowChannel >= 0) { repaintRow (hoveredRowChannel); }
 		}
+
+		if (waveChannel != hoveredWaveChannel)
+		{
+			// Two rows only, and expanded: the hover ring is drawn outside the window's own
+			// rectangle, so repainting the rectangle alone would leave half of it behind.
+			const auto repaintWave = [this] (int channel)
+			{
+				for (const auto& row : rows)
+				{
+					if (! row.header && row.channel == channel)
+					{
+						repaint (row.wave.expanded (kColumnReach));
+					}
+				}
+			};
+
+			if (hoveredWaveChannel >= 0) { repaintWave (hoveredWaveChannel); }
+
+			hoveredWaveChannel = waveChannel;
+
+			if (hoveredWaveChannel >= 0) { repaintWave (hoveredWaveChannel); }
+		}
 	}
 
 	void mouseExit (const juce::MouseEvent&) override
 	{
-		if (hoveredRowChannel >= 0)
+		if (hoveredRowChannel >= 0 || hoveredWaveChannel >= 0)
 		{
 			hoveredRowChannel = -1;
+			hoveredWaveChannel = -1;
 			repaint ();
 
 			lastPointerWasOverControl = false;
@@ -635,6 +692,29 @@ public:
 			hoveredControl = -1;
 			repaint (getLocalBounds ().withHeight (kHeader));
 		}
+	}
+
+	/** The waveform under the pointer can be carried out of the window as a wavetable.
+
+		Written to disk first and handed over second: performExternalDragDropOfFiles gives the path
+		to the operating system immediately, so a synthesiser that opens a file which is not there
+		yet reports an error nobody can act on.
+	*/
+	void mouseDrag (const juce::MouseEvent& event) override
+	{
+		if (hoveredWaveChannel < 0 || event.getDistanceFromDragStart () < kWaveDragThreshold)
+		{
+			return;
+		}
+
+		startWaveDrag (hoveredWaveChannel);
+	}
+
+	/** What the pointer is over, for TooltipWindow - which asks this before it asks for a tooltip
+		at all, so an empty answer costs nothing. */
+	juce::String getTooltip (void) override
+	{
+		return hoveredWaveChannel >= 0 ? i18n::tr ("visualiser.dragHint") : juce::String ();
 	}
 
 	void mouseWheelMove (const juce::MouseEvent& event, const juce::MouseWheelDetails& wheel) override
@@ -660,6 +740,9 @@ public:
 	}
 
 	std::function<void ()> onExport;
+
+	/** A drag that could not produce a file: nowhere to write, or the write failed. */
+	std::function<void ()> onDragFailed;
 
 private:
 	using Row = keyboard::Row;
@@ -1248,6 +1331,70 @@ private:
 	bool hoveredRowMute = false;
 	bool lastPointerWasOverControl = false;
 
+	/** Writes one channel's shape into the drag cache and hands the file to the operating system.
+
+		The write comes first and its result is checked: a drag that starts with a missing file is
+		one the drop target cannot report usefully, and the user would see a synthesiser complain
+		about a path instead of this window saying what went wrong.
+	*/
+	void startWaveDrag (int channel)
+	{
+		if (channel < 0 || (std::size_t) channel >= snapshot.channels.size ())
+		{
+			return;
+		}
+
+		const auto& state = snapshot.channels[(std::size_t) channel];
+		const auto folder = toybox::playback::dragExportFolder ();
+
+		// Made on demand: a start-up that created it would leave an empty folder for everyone who
+		// never drags anything, and the first drag has to make it anyway.
+		if (folder.empty () || ! juce::File (folder).createDirectory ().wasOk ())
+		{
+			if (onDragFailed != nullptr) { onDragFailed (); }
+			return;
+		}
+
+		const auto stem = toybox::playback::legalFileName (state.chipName) + "_"
+						+ toybox::playback::legalFileName (state.name);
+
+		const auto now = juce::Time::getCurrentTime ();
+
+		// std::tm counts years from 1900 and months from zero; juce::Time returns both from one.
+		std::tm local = {};
+		local.tm_year = now.getYear () - 1900;
+		local.tm_mon = now.getMonth () - 1;
+		local.tm_mday = now.getDayOfMonth ();
+		local.tm_hour = now.getHours ();
+		local.tm_min = now.getMinutes ();
+		local.tm_sec = now.getSeconds ();
+
+		const auto name = toybox::playback::dragExportName (stem, local,
+			[&folder] (const std::string& candidate)
+			{
+				return juce::File (folder).getChildFile (candidate).existsAsFile ();
+			});
+
+		const auto path = folder + "/" + name;
+
+		if (toybox::playback::writeChannelShape (state, path) != toybox::playback::ShapeWrite::written)
+		{
+			if (onDragFailed != nullptr) { onDragFailed (); }
+			return;
+		}
+
+		juce::DragAndDropContainer::performExternalDragDropOfFiles (
+			juce::StringArray (juce::String (path)), false, this);
+	}
+
+	/** Which row's waveform the pointer is over, or -1.
+
+		Separate from `hoveredRowChannel` rather than folded into it: the two are never both set -
+		the buttons and the waveform do not overlap - but they mean different things, and the hover
+		here decides whether a drag can start.
+	*/
+	int hoveredWaveChannel = -1;
+
 	juce::TextButton exportButton { "export" };
 };
 
@@ -1288,6 +1435,14 @@ ContentSlot::ContentSlot (toybox::PlaybackEngine& engineToUse)
 		if (onExportOptions != nullptr)
 		{
 			onExportOptions ();
+		}
+	};
+
+	keyboardPanel->onDragFailed = [this]
+	{
+		if (onSampleDragFailed != nullptr)
+		{
+			onSampleDragFailed ();
 		}
 	};
 

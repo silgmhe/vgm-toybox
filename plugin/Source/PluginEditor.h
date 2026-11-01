@@ -8,6 +8,7 @@
 #include "ui/AboutOverlay.h"
 #include "ui/ExportOptionsOverlay.h"
 #include "ui/ExportReportOverlay.h"
+#include "ui/MessageBoxOverlay.h"
 #include "ui/DropHintOverlay.h"
 #include "ui/EditorCommands.h"
 #include "ui/MainMenu.h"
@@ -168,6 +169,7 @@ private:
 	toybox::ui::SettingsOverlay settingsOverlay;	// the same, for Options > Settings
 	toybox::ui::ExportOptionsOverlay exportOptionsOverlay;	// and for "what to write"
 	toybox::ui::ExportReportOverlay exportOverlay;	// and for "what the export did"
+	toybox::ui::MessageBoxOverlay dragFailedOverlay;	// and for a drag that could not write its file
 
 	juce::TooltipWindow tooltipWindow { this, 650 };	// declared last: destroyed first
 
@@ -181,6 +183,9 @@ private:
 
 	/** Puts an export report on screen - the one place the overlay is shown, for both exports. */
 	void showExportReport (const toybox::ui::ExportReport& report);
+
+	/** Says a wavetable could not be written out for dragging. */
+	void showDragFailure (void);
 	juce::String lastError;
 	/** What the engine said about the song on the previous refresh: a host can hand a project to
 		an instance whose window is already open, and the pages that only exist with a song are

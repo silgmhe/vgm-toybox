@@ -129,6 +129,8 @@ ToyboxAudioProcessorEditor::ToyboxAudioProcessorEditor (ToyboxAudioProcessor& p)
 		showExportReport (report);
 	};
 
+	playPage->onSampleDragFailed = [this] { showDragFailure (); };
+
 	playPage->onExportOptions = [this]
 	{
 		const auto& store = settings::SettingsStore::getInstance ();
@@ -216,6 +218,11 @@ ToyboxAudioProcessorEditor::ToyboxAudioProcessorEditor (ToyboxAudioProcessor& p)
 
 	addChildComponent (exportOptionsOverlay);
 	exportOptionsOverlay.onCancel = [this] { exportOptionsOverlay.setVisible (false); };
+
+	// A wavetable drag that could not write its file. A child of the window for the same reason
+	// the two above are: one card dimming would read as part of that card.
+	addChildComponent (dragFailedOverlay);
+	dragFailedOverlay.onDismiss = [this] { dragFailedOverlay.setVisible (false); };
 
 	// Options > Settings, the same shape as the About box and for the same reason. The two are
 	// never up together (showSettings/showAbout hide the other one), so the order they are added
@@ -460,6 +467,11 @@ void ToyboxAudioProcessorEditor::resized (void)
 		exportOverlay.setBounds (getLocalBounds());
 	}
 
+	if (dragFailedOverlay.isVisible())
+	{
+		dragFailedOverlay.setBounds (getLocalBounds());
+	}
+
 	if (exportOptionsOverlay.isVisible())
 	{
 		exportOptionsOverlay.setBounds (getLocalBounds());
@@ -598,6 +610,22 @@ void ToyboxAudioProcessorEditor::showExportReport (const toybox::ui::ExportRepor
 	exportOverlay.setVisible (true);
 	exportOverlay.toFront (false);
 	exportOverlay.grabKeyboardFocus ();		// so escape works without clicking first
+}
+
+void ToyboxAudioProcessorEditor::showDragFailure (void)
+{
+	// Same rule as the export report: one overlay at a time, or this would sit behind Settings.
+	settingsOverlay.setVisible (false);
+	aboutOverlay.setVisible (false);
+	exportOverlay.setVisible (false);
+
+	dragFailedOverlay.setMessage ({ toybox::i18n::tr ("visualiser.dragFailed.title"),
+									toybox::i18n::tr ("visualiser.dragFailed.body"),
+									juce::String () });
+	dragFailedOverlay.setBounds (getLocalBounds ());
+	dragFailedOverlay.setVisible (true);
+	dragFailedOverlay.toFront (false);
+	dragFailedOverlay.grabKeyboardFocus ();
 }
 
 void ToyboxAudioProcessorEditor::exportSamples (void)

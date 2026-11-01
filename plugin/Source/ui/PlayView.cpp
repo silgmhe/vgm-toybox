@@ -28,6 +28,14 @@ PlayView::PlayView (toybox::PlaybackEngine& playback, bool syncAvailable)
 		}
 	};
 
+	contentSlot.onSampleDragFailed = [this]
+	{
+		if (onSampleDragFailed != nullptr)
+		{
+			onSampleDragFailed ();
+		}
+	};
+
 	contentSlot.onExportOptions = [this]
 	{
 		if (onExportOptions != nullptr)

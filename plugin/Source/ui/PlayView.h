@@ -53,6 +53,9 @@ public:
 		window, and the editor calls beginExport() back with the answer. */
 	std::function<void ()> onExportOptions;
 
+	/** A wavetable drag could not write its file; the editor owns the window that says so. */
+	std::function<void ()> onSampleDragFailed;
+
 	void beginExport (const ExportOptions& options);
 
 	/** Which panel the content area is showing. The View menu and its Ctrl+1..3 map to this. */

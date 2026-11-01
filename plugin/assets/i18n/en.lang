@@ -229,6 +229,9 @@ language: English
 	"visualiser.keyboardUnsupported" = "The channels of this chip cannot be shown yet.";
 	"visualiser.export" = "Export wavetables";
 	"visualiser.exportEmpty" = "Nothing to export yet.";
+"visualiser.dragHint" = "Drag into a wavetable synth";
+"visualiser.dragFailed.title" = "Could not write the wavetable";
+"visualiser.dragFailed.body" = "The temporary file for this drag could not be created. Check that the system temp folder is writable, then try again.";
 	"export.title" = "Wavetables exported";
 	"export.written" = "{0} written to";
 	"export.skippedSample" = "{0} sampled channel(s) left out: no sample data was captured for them.";

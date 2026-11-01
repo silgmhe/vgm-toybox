@@ -59,6 +59,7 @@ void paintChannelRow (juce::Graphics& g,
 					  bool soloed,
 					  int octaveShift,
 					  RowHover hover,
+					  bool waveHovered,
 					  const KeyPainter& paintKeys,
 					  RowPaintCache& cache)
 {
@@ -106,7 +107,7 @@ void paintChannelRow (juce::Graphics& g,
 					juce::Justification::centred, false);
 	}
 
-	paintWave (g, row.wave, channel, cache.wave);
+	paintWave (g, row.wave, channel, cache.wave, waveHovered);
 
 	if (paintKeys != nullptr)
 	{
@@ -200,7 +201,7 @@ namespace
 }
 
 void paintWave (juce::Graphics& g, juce::Rectangle<int> area,
-				const playback::ChannelState& channel, WavePathCache& cache)
+				const playback::ChannelState& channel, WavePathCache& cache, bool hovered)
 {
 	const auto window = area.toFloat ();
 
@@ -219,8 +220,22 @@ void paintWave (juce::Graphics& g, juce::Rectangle<int> area,
 		g.fillRoundedRectangle (window, kWindowRadius);
 	}
 
-	g.setColour (theme::cardBorder ().withAlpha (0.7f));
-	g.drawRoundedRectangle (window.reduced (0.5f), kWindowRadius, 1.0f);
+	// Two strokes rather than a blur: a ring outside the window in the accent at low alpha, then the
+	// hairline in the accent itself. It reads as a glow at this size and costs nothing per frame -
+	// a SoftShadow tile per row would be an image to build and blit for a hover state.
+	if (hovered)
+	{
+		g.setColour (theme::accent ().withAlpha (0.30f));
+		g.drawRoundedRectangle (window.expanded (1.5f), kWindowRadius + 1.5f, 2.5f);
+
+		g.setColour (theme::accent ());
+		g.drawRoundedRectangle (window.reduced (0.5f), kWindowRadius, 1.5f);
+	}
+	else
+	{
+		g.setColour (theme::cardBorder ().withAlpha (0.7f));
+		g.drawRoundedRectangle (window.reduced (0.5f), kWindowRadius, 1.0f);
+	}
 
 	area = area.reduced (kCycleInsetX, kCycleInsetY);
 
