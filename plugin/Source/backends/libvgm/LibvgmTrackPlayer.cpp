@@ -444,6 +444,44 @@ void LibvgmTrackPlayer::setReplaySource (std::shared_ptr<const midi::SongIr> ir,
 	}
 }
 
+const LibvgmTrackPlayer::DpcmLookup* LibvgmTrackPlayer::lookupDpcmSample (uint32_t sampleId) const
+{
+	if (sampleId == 0)
+	{
+		return nullptr;
+	}
+
+	const auto cached = dpcmSamples.find (sampleId);
+	if (cached != dpcmSamples.end ())
+	{
+		return &cached->second;
+	}
+
+	if (sampleList == nullptr)
+	{
+		return nullptr;
+	}
+
+	for (const auto& sample : *sampleList)
+	{
+		if (sample.sampleId != sampleId)
+		{
+			continue;
+		}
+
+		DpcmLookup entry;
+		entry.wave = std::make_shared<const std::vector<float>> (sample.values);
+		entry.rate = (float) sample.rate;
+
+		return &dpcmSamples.emplace (sampleId, std::move (entry)).first->second;
+	}
+
+	// Not an error: the collector and the decoder name samples with the same arithmetic, so a miss
+	// means this hit's bytes were never collected - a file that carried no ROM for them. The row
+	// then draws the rate and no wave, which is the truth about that hit.
+	return nullptr;
+}
+
 void LibvgmTrackPlayer::buildDpcmNotes (const midi::SongIr& ir)
 {
 	dpcmNotes.clear ();
@@ -629,6 +667,15 @@ bool LibvgmTrackPlayer::captureState (playback::ChipStateSnapshot& snapshot) con
 				{
 					state.note = found->second;
 					state.frequency = 440.0f * std::pow (2.0f, (float) (state.note - 69) / 12.0f);
+				}
+
+				// The bytes come from the same collection the export writes, not from a second
+				// reading of the chip's memory. That second reading is what drew a flat line while
+				// the same file exported correctly; one source, one answer.
+				if (const auto* sample = lookupDpcmSample (chipState.sampleId))
+				{
+					state.wave = sample->wave;
+					state.sampleRate = sample->rate;
 				}
 			}
 

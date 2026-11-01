@@ -153,6 +153,24 @@ private:
 
 	void buildDpcmNotes (const midi::SongIr& ir);
 
+	/** What the display draws for each DPCM sample: the bytes the export collected, and the rate it
+		declares.
+
+		Cached by sample identity because the row asks sixty times a second and the list holds a few
+		tens of kilobytes of levels - and because the two must not be taken from different sources.
+		The rate here is the one an exported WAV of the same sample would carry.
+	*/
+	struct DpcmLookup
+	{
+		std::shared_ptr<const std::vector<float>> wave;
+		float rate = 0.0f;
+	};
+
+	mutable std::map<uint32_t, DpcmLookup> dpcmSamples;
+
+	/** Fills `dpcmSamples` for one identity, or leaves it absent when the collector never saw it. */
+	const DpcmLookup* lookupDpcmSample (uint32_t sampleId) const;
+
 	/** Set by a seek or a loop point, consumed by the next captureState. A counter rather than a
 		flag: two seeks between two frames must not become one rewind and a position that never
 		arrives. */
