@@ -2407,16 +2407,6 @@ namespace
 		// downsampling all of it by peak would draw the envelope - no period visible at all.
 		check (state.cycleBytes > 0.0f, "and how much of it makes one cycle");
 
-		{
-			// The same decision, end to end: a thousand-point sample, a hundred and twenty-eight
-			// pixels, one cycle of sixty-four points. Sixty-four points fit, so nothing is
-			// decimated and the shape is a waveform rather than an envelope.
-			const std::vector<float> whole (1000, 0.25f);
-			const auto shown = toybox::playback::waveform::decimateForDisplay (whole, 128, 64);
-
-			check (shown.size () == 64, "one cycle is drawn without being downsampled");
-		}
-
 		// The same voice with the mu-law bit set: bytes, but not levels.
 		write (0x05, 0x88);		// mu-law, key on
 		check (decoder.channelState (0).wave == nullptr,
@@ -4630,15 +4620,16 @@ void testWaveExport (void)
 
 		auto tallest = 0.0f;
 
-		for (const auto value : reduced)
+		for (const auto& column : reduced)
 		{
-			tallest = (std::max) (tallest, std::abs (value));
+			tallest = (std::max) (tallest, (std::max) (std::abs (column.max), std::abs (column.min)));
 		}
 
 		check (std::abs (tallest - 1.0f) < 0.0001f,
 			   "and the one point that differs survives, wherever it falls");
 
-		// The bucket keeps the value furthest from zero, not the first one it meets.
+		// A bucket keeps the range it spanned, not the first value it met: the deepest excursion and
+		// the highest one both reach the column.
 		std::vector<float> bipolar (200, 0.0f);
 		bipolar[10] = 0.25f;
 		bipolar[11] = -0.75f;
@@ -4647,9 +4638,9 @@ void testWaveExport (void)
 
 		auto deepest = 0.0f;
 
-		for (const auto value : kept)
+		for (const auto& column : kept)
 		{
-			deepest = (std::min) (deepest, value);
+			deepest = (std::min) (deepest, column.min);
 		}
 
 		check (std::abs (deepest + 0.75f) < 0.0001f, "the larger excursion wins over the earlier one");
@@ -5362,25 +5353,34 @@ void testWaveExport (void)
 		offset zero those rows were flat lines while the channel played, which reads as a broken
 		display rather than as a sample with a quiet head.
 	*/
-	void testDisplayWindow (void)
+	void testDisplayColumns (void)
 	{
-		std::printf ("  the window a row draws\n");
+		std::printf ("  the columns a row draws\n");
 
-		// A hundred points of silence, then a hundred of signal.
-		std::vector<float> wave (200, 0.0f);
+		// A thousand points of a sine whose period is shorter than a bucket, so every column spans
+		// a real part of a cycle. Slower than that and the columns inside one period barely change,
+		// which measures the sine rather than the reducer.
+		std::vector<float> wave (1000);
 
-		for (int i = 100; i < 200; ++i)
+		for (int i = 0; i < 1000; ++i)
 		{
-			wave[(std::size_t) i] = 0.5f;
+			wave[(std::size_t) i] = (float) std::sin ((double) i * 0.5) * 0.5f;
 		}
 
-		check (toybox::playback::waveform::bestWindowStart (wave, 50) == 100,
-			   "the loudest window is the one with the signal in it");
+		const auto columns = toybox::playback::waveform::decimateForDisplay (wave, 128);
 
-		const auto shown = toybox::playback::waveform::decimateForDisplay (wave, 128, 50, 100);
+		check (columns.size () == 128, "one column per pixel");
 
-		check (shown.size () == 50, "and it is drawn from there, not from zero");
-		check (! shown.empty () && shown.front () == 0.5f, "so the row is not a flat line");
+		// Each column carries the range its slice spanned, not one value from it. That range is
+		// what a filled row draws, and it is the difference between a sampler's ribbon and a line.
+		bool spanned = false;
+
+		for (const auto& column : columns)
+		{
+			spanned = spanned || (column.max - column.min) > 0.2f;
+		}
+
+		check (spanned, "and a column is a range, not a single value");
 	}
 
 	/** What the sample export finds in a C140 song.
@@ -5789,7 +5789,7 @@ int main (void)
 	testC140System2BankIsFolded();
 	testC140WaveFromRom();
 	testC140SampleCollection();
-	testDisplayWindow();
+	testDisplayColumns();
 
 	testC352Note();
 	testC352KeyOnIsTheExecuteWrite();

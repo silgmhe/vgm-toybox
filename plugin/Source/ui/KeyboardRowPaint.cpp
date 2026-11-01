@@ -162,39 +162,73 @@ namespace
 		window, the size stayed the same, the cache was still thought good, and the line was stroked
 		at the row's previous height. Two lines per row, one of them forty pixels below the other.
 	*/
-	void buildCyclePath (juce::Path& path, int width, int height, const std::vector<float>& cycle)
+	/** One column wide per pixel, filled between its quietest and loudest point.
+
+		A filled column is how a sampler draws a sample: the ribbon is the range the sound swung
+		through in that pixel, so a decay narrows and a sustain stays wide. Drawn as a line through
+		the peaks instead, the same data reads as a thin squiggle and the size is lost.
+	*/
+	void buildCyclePath (juce::Path& path, int width, int height,
+						 const std::vector<playback::waveform::Column>& columns)
 	{
 		path.clear ();
 
-		const auto count = (int) cycle.size ();
+		const auto count = (int) columns.size ();
+
+		if (count == 0)
+		{
+			return;
+		}
+
 		const float half = (float) height * 0.5f - 2.0f;
 		const float span = (float) width / (float) count;
 
+		const auto yOf = [height, half] (float level)
+		{
+			return (float) height * 0.5f - juce::jlimit (-1.0f, 1.0f, level) * half;
+		};
+
+		// The upper edge, left to right.
 		for (int i = 0; i < count; ++i)
 		{
-			const float level = juce::jlimit (-1.0f, 1.0f, cycle[(std::size_t) i]);
-			const float y = (float) height * 0.5f - level * half;
-			const float x0 = span * (float) i;
+			const float x = span * (float) i;
 
 			if (i == 0)
 			{
-				path.startNewSubPath (x0, y);
+				path.startNewSubPath (x, yOf (columns[(std::size_t) i].max));
 			}
 			else
 			{
-				path.lineTo (x0, y);
+				path.lineTo (x, yOf (columns[(std::size_t) i].max));
 			}
-
-			path.lineTo (x0 + span, y);
 		}
+
+		// And the lower edge back, so the fill closes on itself. A column whose two values are the
+		// same - one point of a stored table, or a sample that did not move - has no height to fill,
+		// so it is given a pixel: the row would otherwise show nothing where the wave is flat.
+		for (int i = count - 1; i >= 0; --i)
+		{
+			const float top = yOf (columns[(std::size_t) i].max);
+			const float bottom = (std::max) (yOf (columns[(std::size_t) i].min), top + 1.0f);
+
+			path.lineTo (span * (float) i, bottom);
+		}
+
+		path.closeSubPath ();
 	}
 
 	/** Strokes a cycle built by buildCyclePath() where `area` says it belongs. */
-	void strokeCycle (juce::Graphics& g, const juce::Path& path, juce::Rectangle<int> area)
+	/** Fills the ribbon the wave traced, rather than drawing its outline.
+
+		The path arrives closed - an upper edge and a lower one - because a recorded sample has a
+		range in every pixel and not a single value. Stroking it would draw the outline of the
+		ribbon, which is a thin line with a fill-shaped hole in it.
+	*/
+	void fillCycle (juce::Graphics& g, const juce::Path& path, juce::Rectangle<int> area)
 	{
 		juce::Graphics::ScopedSaveState saved (g);
 		g.addTransform (juce::AffineTransform::translation ((float) area.getX (), (float) area.getY ()));
-		g.strokePath (path, juce::PathStrokeType (1.0f));
+		g.fillPath (path);
 	}
 
 	void paintNoCycle (juce::Graphics& g, juce::Rectangle<int> area)
@@ -262,22 +296,16 @@ void paintWave (juce::Graphics& g, juce::Rectangle<int> area,
 		// thousands of points and this row has about a hundred and twenty: downsampling the whole
 		// thing by peak draws its envelope - a shape with no period in it at all, which reads as a
 		// broken display rather than as a sample.
-		const auto& values = channel.waveValues ();
-		const std::size_t count = (channel.cycleBytes >= 2.0f
-								   && (std::size_t) channel.cycleBytes < values.size ())
-								  ? (std::size_t) channel.cycleBytes
-								  : values.size ();
-
-		// Where that cycle begins is not zero. A sample's attack is not always at its start, and a
-		// C140 voice's start address is where the driver pointed rather than where the sound is -
-		// so a row drawn from offset zero came out as a flat line while the channel played.
-		const std::size_t start = playback::waveform::bestWindowStart (values, count);
-
+		// The whole sample, downsampled to the row's width. A recorded sample can be tens of
+		// thousands of points, and what a row should show of it is its shape from attack to decay -
+		// the envelope included, because that envelope *is* the sample. Picking one cycle out of it
+		// showed a waveform and said nothing about the sound: a drum and a sustained note came out
+		// looking the same.
 		buildCyclePath (path, area.getWidth (), area.getHeight (),
-						playback::waveform::decimateForDisplay (values, kDisplayPoints, count, start));
+						playback::waveform::decimateForDisplay (channel.waveValues (), kDisplayPoints));
 
 		g.setColour (theme::accent ().withAlpha (channel.active ? 0.9f : 0.35f));
-		strokeCycle (g, path, area);
+		fillCycle (g, path, area);
 		return;
 	}
 
@@ -299,7 +327,10 @@ void paintWave (juce::Graphics& g, juce::Rectangle<int> area,
 
 		if (cycle.size () >= 2)
 		{
-			buildCyclePath (cache.path, area.getWidth (), area.getHeight (), cycle);
+			// A synthesised cycle is a value per point, not a range, so each column has no span -
+			// `buildCyclePath` gives those a pixel of height so the line stays visible.
+			buildCyclePath (cache.path, area.getWidth (), area.getHeight (),
+							playback::waveform::decimateForDisplay (cycle, 0));
 			cache.valid = true;
 		}
 		else
@@ -321,7 +352,7 @@ void paintWave (juce::Graphics& g, juce::Rectangle<int> area,
 	}
 
 	g.setColour (theme::accent ().withAlpha (channel.active ? 0.9f : 0.35f));
-	strokeCycle (g, cache.path, area);
+	fillCycle (g, cache.path, area);
 }
 
 void paintMeter (juce::Graphics& g, juce::Rectangle<int> area,

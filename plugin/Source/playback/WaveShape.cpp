@@ -231,81 +231,48 @@ std::vector<float> cycleFor (int waveKind, float duty, int shapeParameter)
 	return cycle;
 }
 
-std::size_t bestWindowStart (const std::vector<float>& values, std::size_t count)
+std::vector<Column> decimateForDisplay (const std::vector<float>& values, std::size_t limit)
 {
-	if (count == 0 || values.size () <= count)
-	{
-		return 0;
-	}
-
-	std::size_t best = 0;
-	double bestEnergy = -1.0;
-
-	for (std::size_t start = 0; start + count <= values.size (); start += count)
-	{
-		double energy = 0.0;
-
-		for (std::size_t i = 0; i < count; ++i)
-		{
-			energy += std::abs (values[start + i]);
-		}
-
-		if (energy > bestEnergy)
-		{
-			bestEnergy = energy;
-			best = start;
-		}
-	}
-
-	return best;
-}
-
-std::vector<float> decimateForDisplay (const std::vector<float>& values, std::size_t limit,
-									   std::size_t count, std::size_t start)
-{
-	const std::size_t from = (std::min) (start, values.size ());
-	const std::size_t n = (std::min) ((std::size_t) count, values.size () - from);
-
-	if (n == 0)
+	if (values.empty ())
 	{
 		return {};
 	}
 
-	// A limit of zero means "do not decimate", not "return nothing" - it predates the count
-	// parameter and the caller that passes it expects the whole wave back.
-	if (limit == 0 || n <= limit)
+	// A limit of zero means "do not decimate", not "return nothing": the caller that passes it
+	// wants the whole wave back, one column per point.
+	if (limit == 0 || values.size () <= limit)
 	{
-		return std::vector<float> (values.begin () + (std::ptrdiff_t) from,
-								   values.begin () + (std::ptrdiff_t) (from + n));
+		std::vector<Column> out;
+		out.reserve (values.size ());
+
+		for (const auto value : values)
+		{
+			out.push_back (Column { value, value });
+		}
+
+		return out;
 	}
 
-	std::vector<float> out;
+	std::vector<Column> out;
 	out.reserve (limit);
 
 	for (std::size_t i = 0; i < limit; ++i)
 	{
-		const auto begin = from + n * i / limit;
-		const auto end = (std::max) (begin + 1, from + n * (i + 1) / limit);
+		const auto begin = values.size () * i / limit;
+		const auto end = (std::max) (begin + 1, values.size () * (i + 1) / limit);
 
-		auto extreme = values[begin];
+		Column column { values[begin], values[begin] };
 
 		for (auto j = begin + 1; j < end; ++j)
 		{
-			if (std::abs (values[j]) > std::abs (extreme))
-			{
-				extreme = values[j];
-			}
+			column.min = (std::min) (column.min, values[j]);
+			column.max = (std::max) (column.max, values[j]);
 		}
 
-		out.push_back (extreme);
+		out.push_back (column);
 	}
 
 	return out;
-}
-
-std::vector<float> decimateForDisplay (const std::vector<float>& values, std::size_t limit)
-{
-	return decimateForDisplay (values, limit, values.size ());
 }
 
 } // namespace toybox::playback::waveform
