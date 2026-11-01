@@ -1,4 +1,4 @@
-# Code review：`feature/libvgm-visualisation`
+﻿# Code review：`feature/libvgm-visualisation`
 
 > 按 `.codebuddy/rules/code-quality.md` 逐条体检。范围：`master..HEAD`，38 个提交，46 文件，
 > +4998 / −1095。结论先说：**分层是干净的，问题集中在"填了一半的字段"和"每颗芯片各写一遍"。**
@@ -24,7 +24,7 @@
 
 ## 二、问题清单
 
-### 1. `cycleBytes` 是一个没人读的字段（§5）
+### 1. `cycleBytes` 是一个没人读的字段（§5）—— **已处理** `dba8d5a`
 
 ```
 ChipTypes.h:190        字段声明
@@ -38,7 +38,7 @@ KeyboardRowPaint.cpp   ← 不读
 
 **建议**：删三处声明 + 一处填写 + 一处转交，并在 `C352Decoder` 里同样检查（它的 `cycleBytes` 是另一个同名的局部变量，需区分）。
 
-### 2. `C140Samples::assembleRom` 与 `memory::rom` 重复（§3 §5）
+### 2. `C140Samples::assembleRom` 与 `memory::rom` 重复（§3 §5）—— **已处理** `dba8d5a`
 
 ```cpp
 // C140Samples.cpp:48 —— 私有副本
@@ -52,7 +52,7 @@ std::vector<uint8_t> memory::rom (const midi::SongIr&, uint8_t type, std::size_t
 
 **建议**：`collectC140Samples` 直接调 `memory::rom(ir, 0x8D, 16u << 20, false)`。
 
-### 3. C140 的寻址算法两份（§3）
+### 3. C140 的寻址算法两份（§3）—— **已处理** `45ec11a`
 
 ```cpp
 // C140Decoder.cpp —— 私有
@@ -66,7 +66,7 @@ uint32_t romOffset (uint32_t address, uint8_t bank, uint8_t banking)
 
 **建议**：提到 `chips/C140Address.h`（或 `ChipMemoryAssembly`）里，两边都用。**代价小，收益是消除一个静默分叉点。**
 
-### 4. 每颗采样芯片都要复制一套收集流程（§4）
+### 4. 每颗采样芯片都要复制一套收集流程（§4）—— **已处理** `ef4e2b0`
 
 `NesDpcmBank.cpp` 和 `C140Samples.cpp` 的结构几乎相同：
 
@@ -78,7 +78,7 @@ uint32_t romOffset (uint32_t address, uint8_t bank, uint8_t banking)
 
 **建议**：抽一个 `SampleCollector`（或 `collectSamples(ir, ChipKind)` + 每芯片一个 `SampleLocator` 回调），把"遍历/去重/命名"共用，每颗芯片只提供"从寄存器算地址"和"块类型"。**这是本支最大的一笔结构性债**，越晚还越贵。
 
-### 5. `sampleRate` / `wave` 只有两颗芯片填（§11 后半）
+### 5. `sampleRate` / `wave` 只有两颗芯片填（§11 后半）—— **已处理**（表已进设计文档 §9.1）`c9e4df3`
 
 ```
 填 state.wave：  VsuDecoder（局部用途）、C140Decoder、NesApuDecoder（经 LibvgmTrackPlayer）
@@ -90,7 +90,7 @@ uint32_t romOffset (uint32_t address, uint8_t bank, uint8_t banking)
 
 **建议**：在 `docs/desgin/libvgm-visualisation.md` 的 §9 维护一张表，列出每颗芯片的 `wave` / `sampleRate` 状态。
 
-### 6. 三处遮罩用 `juce::Colours::black`（§7）
+### 6. 三处遮罩用 `juce::Colours::black`（§7）—— **已处理** `bdaadef`
 
 ```
 AboutOverlay.h:96          g.fillAll (juce::Colours::black.withAlpha (0.35f));
@@ -102,7 +102,7 @@ ExportReportOverlay.h:73   同上
 
 **建议**：单独一个提交处理，不夹带在功能里。
 
-### 7. 两次踩中 §11 的"顺序依赖"
+### 7. 两次踩中 §11 的"顺序依赖" —— **已处理** `71c46ec`
 
 - `71c46ec`：`songIr` 在样本收集之后才赋值，收集器读到 null，导出报"没有采样"
 - 同一个提交里：`hasC140` 问的是 `deviceInfo`（`DEVID_*`），而收集器遍历的是 `SongIr::chips`（`ChipKind`）——**两个编号系统，问错了一个**
@@ -135,7 +135,7 @@ ui/KeyboardRowPaint        只画收到的值，不知道芯片名
 
 **在变坏的部分**：
 
-`LibvgmTrackPlayer` 现在持有 5 个 map：
+`LibvgmTrackPlayer` 曾持有 5 个 map：
 
 ```
 dpcmNotes      sampleId → 音符
@@ -147,7 +147,9 @@ lastHits       通道 → 上次的计数
 
 **它是一个"回放 + 样本表 + 命中累积 + 波形缓存"的合并类。** 目前还能读，但它已经同时承担四件事——**下一次再加功能时，应该先拆**（至少把"样本表 + 缓存"移出去成 `DpcmLookup`）。
 
-## 五、建议的处理顺序
+## 五、处理结果
+
+**七条问题全部已还。** 下表保留原始估时，便于对照；实际提交见第二节各条标题后。
 
 | 优先级 | 事项 | 代价 |
 |---|---|---|
@@ -157,9 +159,9 @@ lastHits       通道 → 上次的计数
 | **近期** | §9 的芯片状态表（问题 5） | 半小时 |
 | **下一个芯片之前** | 抽 `SampleCollector`（问题 4） | 半天，越晚越贵 |
 | **独立提交** | 遮罩黑进主题（问题 6） | 一刻钟 |
-| **计划中** | 拆 `LibvgmTrackPlayer`（问题 8） | 半天 |
+| **计划中** | 拆 `LibvgmTrackPlayer`（问题 8） | 半天 —— 已还 `1078253` + `e906f6e` |
 
-**问题 4 是唯一一件"现在不做、以后会变成六份重复"的事。** 其余要么十分钟，要么可以排。
+**问题 4 是唯一一件""现在不做、以后会变成六份重复""的事**，所以它最先还 —— 现在第三颗芯片只需写自己的寄存器解析，去重、解码、命名都是现成的。
 
 ## 六、`46/46` 覆盖了什么、没覆盖什么
 
