@@ -5,6 +5,7 @@
 #include <map>
 #include <vector>
 
+#include "C140Address.h"
 #include "Pitch.h"
 
 namespace toybox::chips
@@ -134,22 +135,6 @@ struct C140Decoder::Impl
 		which is where the board's wiring lives. The registers only carry eight bits of bank, so
 		on System 2 the address is folded into 19 bits: without that fold a one-megabyte ROM has
 		no bank 0x14 and every sample of the song comes out unmeasurable. */
-	uint32_t sampleOffset (uint32_t address, uint8_t bank) const
-	{
-		const uint32_t adrs = ((uint32_t) bank << 16) + address;
-		switch (banking)
-		{
-		case Banking::system21:
-			return ((adrs & 0x300000u) >> 1) + (adrs & 0x7FFFFu);
-
-		case Banking::linear:
-			return adrs;
-
-		case Banking::system2:
-		default:
-			return ((adrs & 0x200000u) >> 2) | (adrs & 0x7FFFFu);
-		}
-	}
 
 	/** The cycle length of the sample the voice is about to play, measured once per sample.
 
@@ -176,7 +161,7 @@ struct C140Decoder::Impl
 			return cached->second;
 		}
 
-		const uint32_t address = sampleOffset (start, channel.bank);
+		const uint32_t address = c140SampleOffset (start, channel.bank, (uint8_t) banking);
 		double period = 0.0;
 		if (address < (uint64_t) rom.size())
 		{
@@ -437,7 +422,7 @@ ChannelState C140Decoder::channelState (int channel) const
 
 		if (end > start)
 		{
-			const std::size_t offset = impl->sampleOffset (start, voice.bank);
+			const std::size_t offset = c140SampleOffset (start, voice.bank, (uint8_t) impl->banking);
 
 			if (offset < impl->rom.size ())
 			{

@@ -5,6 +5,7 @@
 #include <map>
 
 #include "ChipMemoryAssembly.h"
+#include "chips/C140Address.h"
 #include "midi/SongIr.h"
 
 namespace toybox::backends::libvgm
@@ -23,27 +24,6 @@ namespace
 	/** The chip's reference rate, the one its pitch is measured against. A per-voice rate exists
 		but belongs to the moment, not to the sample. */
 	constexpr double kReferenceRate = 8000.0;
-
-	/** libvgm's `find_sample()` (c140.c), copied deliberately rather than shared: the decoder keeps
-		this arithmetic private, and a second reader that drifted from it would address different
-		bytes than the voice actually plays. The tests compare the two paths on one ROM. */
-	uint32_t romOffset (uint32_t address, uint8_t bank, uint8_t banking)
-	{
-		const uint32_t adrs = ((uint32_t) bank << 16) + address;
-
-		switch (banking)
-		{
-		case 0x01:		// system21
-			return ((adrs & 0x300000u) >> 1) + (adrs & 0x7FFFFu);
-
-		case 0x03:		// linear
-			return adrs;
-
-		case 0x00:		// system2, and the default
-		default:
-			return ((adrs & 0x200000u) >> 2) | (adrs & 0x7FFFFu);
-		}
-	}
 
 	struct Voice
 	{
@@ -127,7 +107,7 @@ std::vector<playback::DecodedSample> collectC140Samples (const midi::SongIr& ir)
 			continue;
 		}
 
-		const uint32_t offset = romOffset (voice.start, voice.bank, banking);
+		const uint32_t offset = chips::c140SampleOffset (voice.start, voice.bank, banking);
 
 		if (offset >= rom.size ())
 		{
