@@ -1,6 +1,7 @@
 #pragma once
 
 #include <atomic>
+#include <map>
 #include <memory>
 #include <utility>
 #include <vector>
@@ -136,6 +137,21 @@ private:
 	std::shared_ptr<const midi::SongIr> replayIr;
 	std::vector<PLR_DEV_INFO> replayDevices;
 	mutable std::unique_ptr<VgmReplayer> replayer;
+
+	/** Which note each DPCM sample is given, keyed by the chip's own sample identity.
+
+		Built once from the whole song, because the mapping is a property of the song rather than of
+		a moment: a drum has no pitch, so the only way to tell one hit from another on a note grid is
+		to give each sample a note of its own. FamiStudio calls this a DPCM sample mapping; the NSF
+		path builds the same table from its tone-and-rate pairs.
+
+		Numbered from middle C upwards in the order the samples first play. Not measured: a drum's
+		waveform has no cycle to divide by, so a hierarchy of "which sample" is the honest thing to
+		show, and a note number is the only thing the grid can hold.
+	*/
+	std::map<uint32_t, int> dpcmNotes;
+
+	void buildDpcmNotes (const midi::SongIr& ir);
 
 	/** Set by a seek or a loop point, consumed by the next captureState. A counter rather than a
 		flag: two seeks between two frames must not become one rewind and a position that never

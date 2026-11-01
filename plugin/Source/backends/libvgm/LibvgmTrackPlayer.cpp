@@ -10,6 +10,7 @@
 #include "emu/SoundDevs.h"
 
 #include <algorithm>
+#include <cmath>
 
 #include "playback/ChannelFromChip.h"
 
@@ -436,6 +437,62 @@ void LibvgmTrackPlayer::setReplaySource (std::shared_ptr<const midi::SongIr> ir,
 {
 	replayIr = std::move (ir);
 	replayDevices = devices;
+
+	if (replayIr != nullptr)
+	{
+		buildDpcmNotes (*replayIr);
+	}
+}
+
+void LibvgmTrackPlayer::buildDpcmNotes (const midi::SongIr& ir)
+{
+	dpcmNotes.clear ();
+
+	// A sample is named by the two registers that point at it, and a hit happens when `$4015`
+	// enables the channel with both already written. Scanning the song's writes in order keeps the
+	// three together - the registers may be written on different frames, which is why this waits
+	// for the enable instead of recording on the address.
+	uint8_t page = 0;
+	int length = 0;
+	int nextNote = 60;		// middle C: the note a drum part is written at
+
+	for (const auto& write : ir.writes)
+	{
+		if (write.deviceId >= ir.chips.size ()
+			|| ir.chips[write.deviceId].kind != midi::ChipKind::nesApu)
+		{
+			continue;
+		}
+
+		// The 2A03's registers are the low five bits of the address the stream carries.
+		const uint8_t reg = (uint8_t) (write.reg & 0x1F);
+		const uint8_t value = (uint8_t) write.value;
+
+		if (reg == 0x12)
+		{
+			page = (uint8_t) (value & 0x3F);
+			continue;
+		}
+
+		if (reg == 0x13)
+		{
+			length = (value == 0) ? 1 : ((int) value * 16 + 1);
+			continue;
+		}
+
+		if (reg != 0x15 || (value & 0x10) == 0)
+		{
+			continue;
+		}
+
+		// Same identity the decoder reports: page and length, not the bytes.
+		const uint32_t id = ((uint32_t) page << 16) | (uint32_t) length;
+
+		if (dpcmNotes.find (id) == dpcmNotes.end () && nextNote <= 127)
+		{
+			dpcmNotes[id] = nextNote++;
+		}
+	}
 }
 
 int LibvgmTrackPlayer::trackFor (uint32_t deviceId, int channel) const
@@ -559,6 +616,21 @@ bool LibvgmTrackPlayer::captureState (playback::ChipStateSnapshot& snapshot) con
 			// Set here rather than inside the conversion: which engine track a channel belongs to is
 			// a fact about this runtime, not about the chip, and the conversion has no engine to ask.
 			state.trackIndex = trackFor (instance.deviceId, channel);
+
+			// And so is this: which sample is playing is the chip's answer, but what note that
+			// sample gets is the song's. Without it every drum hit shares the one trigger note and
+			// the grid cannot say which hit it was - the conversion sees a single channel at a
+			// single moment, and the mapping only exists across the whole file.
+			if (chipState.sampleId != 0)
+			{
+				const auto found = dpcmNotes.find (chipState.sampleId);
+
+				if (found != dpcmNotes.end ())
+				{
+					state.note = found->second;
+					state.frequency = 440.0f * std::pow (2.0f, (float) (state.note - 69) / 12.0f);
+				}
+			}
 
 			snapshot.channels.push_back (std::move (state));
 		}

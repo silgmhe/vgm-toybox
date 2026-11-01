@@ -5184,6 +5184,15 @@ void testWaveExport (void)
 		check (after.wave != nullptr && after.wave->size () >= 32,
 			   "and it holds at least one point per byte $4013 named");
 		check (after.sampleRate == before.sampleRate, "the rate did not change with the image");
+
+		// The identity a caller with the whole song keys its note table on: page and length, so two
+		// hits of one drum share it and two different samples do not.
+		check (after.sampleId == ((0u << 16) | 33u), "the sample is named by its page and its length");
+
+		write (0x12, 0x05);		// a different page: $C140
+		write (0x13, 0x03);		// and a different length
+		check (decoder.channelState (4).sampleId == ((5u << 16) | 49u),
+			   "and a different sample has a different name");
 	}
 
 	void testChannelFromChip (void)

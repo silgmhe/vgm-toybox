@@ -182,6 +182,18 @@ struct ChannelState
 	*/
 	float sampleRate = 0.0f;
 
+	/** Which recorded sample this channel is playing, or zero.
+
+		A number the chip's own registers produce - for the 2A03, its page and length - so a caller
+		can tell one sample from another without reading the bytes. It means nothing outside the chip
+		that filled it; what it is for is a lookup key, and the table belongs to whoever knows the
+		whole song.
+
+		This is what lets a drum row be told apart rather than merely placed. Notes alone cannot do
+		it: a drum has no pitch, so two different hits would otherwise have to share one number.
+	*/
+	uint32_t sampleId = 0;
+
 	/** Monotonic count of key-on events on this channel, for the chips that have one.
 
 		A driver that retriggers a voice at the same pitch - a bass line repeating a note, a drum

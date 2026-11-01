@@ -599,6 +599,11 @@ ChannelState NesApuDecoder::channelState (int channel) const
 		const std::size_t requested = (std::min) ((std::size_t) impl->dpcmLength, available);
 		const std::size_t length = dpcm::finalLength (requested, impl->image.data () + start);
 
+		// The sample's identity, not its bytes: page and length together name one recording, and two
+		// hits of the same drum share it. Exposed so a caller with the whole song can map each one
+		// to a note - a drum has no pitch of its own to tell them apart.
+		state.sampleId = ((uint32_t) impl->dpcmPage << 16) | (uint32_t) impl->dpcmLength;
+
 		if (length > 0)
 		{
 			if (impl->dpcmWave == nullptr || impl->dpcmWaveStart != start
