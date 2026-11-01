@@ -498,9 +498,17 @@ ChannelState C352Decoder::channelState (int channel) const
 					// mu-law is not a level: the byte is a logarithm and muLaw[] is its expansion, the same
 					// table cycleFor measures with. Skipping these voices entirely was wrong - they are real
 					// recordings, and the rows that showed nothing were the ones playing them.
-					const bool mulaw = (voice.flags & kFlagMuLaw) != 0;
-					wave->push_back ((float) (mulaw ? impl->muLaw[impl->rom[address + i]]
-														   : (int16_t) (int8_t) impl->rom[address + i]) / 32768.0f);
+					// Two different widths, and they must not share a divisor: the table holds
+					// sixteen-bit levels, a linear byte holds eight. Dividing both by 32768 flattened
+					// every ordinary voice into a straight line, which is the state this replaces.
+					if ((voice.flags & kFlagMuLaw) != 0)
+					{
+						wave->push_back ((float) impl->muLaw[impl->rom[address + i]] / 32768.0f);
+					}
+					else
+					{
+						wave->push_back ((float) (int8_t) impl->rom[address + i] / 128.0f);
+					}
 					}
 
 					state.wave = std::move (wave);
