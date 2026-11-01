@@ -206,8 +206,38 @@ bool LibvgmSongInstance::prepare (double hostSampleRate, int newMaxBlockSize, ju
 	const bool hasNes = std::any_of (deviceInfo.begin (), deviceInfo.end (),
 									 [] (const PLR_DEV_INFO& device) { return device.type == DEVID_NES_APU; });
 
-	const bool hasC140 = std::any_of (deviceInfo.begin (), deviceInfo.end (),
-									  [] (const PLR_DEV_INFO& device) { return device.type == DEVID_C140; });
+
+
+	// The same walk the MIDI path makes, kept because the display needs it while the song plays.
+	// Failure leaves it null and the panel draws nothing, which is the same answer that path gives
+	// for a file it cannot read.
+	//
+	// Read before the sample collection below, and that order is load-bearing: the C140 collector
+	// walks the parsed writes, so asking it before this has run finds nothing and reports a song
+	// with no samples - which is exactly what a file whose samples are all C140 looked like.
+	{
+		midi::SongIr parsed;
+		std::string error;
+
+		formats::vgm::VgmSongLoader loader;
+		if (loader.load (playerMemory.data, playerMemory.size, parsed, error))
+		{
+			songIr = std::make_shared<const midi::SongIr> (std::move (parsed));
+		}
+
+	}
+
+	// Asked of the parsed song rather than of `deviceInfo`, and the difference matters: `deviceInfo`
+	// is what libvgm's own enumerator reported, and a Namco System 2 rip does not answer DEVID_C140
+	// there - the board is a C219. The collector walks `chips` and `writes`, so the question that
+	// decides whether to call it has to be asked of those same two lists, or the answer can be "no"
+	// for a file whose rows are drawing waves right now.
+	const bool hasC140 = songIr != nullptr
+						 && std::any_of (songIr->chips.begin (), songIr->chips.end (),
+										 [] (const midi::ChipSlot& slot)
+										 {
+											 return slot.kind == midi::ChipKind::c140;
+										 });
 
 	// One list, because the menu exports one folder: which chip a sample came from is in its name.
 	// Each collector only looks at its own chip's writes, so a file with both gets both.
@@ -230,21 +260,6 @@ bool LibvgmSongInstance::prepare (double hostSampleRate, int newMaxBlockSize, ju
 	{
 		dpcmSamples = std::make_shared<const std::vector<playback::DecodedSample>> (
 			std::move (collected));
-	}
-
-	// The same walk the MIDI path makes, kept because the display needs it while the song plays.
-	// Failure leaves it null and the panel draws nothing, which is the same answer that path gives
-	// for a file it cannot read.
-	{
-		midi::SongIr parsed;
-		std::string error;
-
-		formats::vgm::VgmSongLoader loader;
-		if (loader.load (playerMemory.data, playerMemory.size, parsed, error))
-		{
-			songIr = std::make_shared<const midi::SongIr> (std::move (parsed));
-		}
-
 	}
 
 	probe->setSamples (dpcmSamples);
