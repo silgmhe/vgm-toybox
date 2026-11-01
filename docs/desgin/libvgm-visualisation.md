@@ -101,29 +101,36 @@ private:
 
 ## 3. 新增②：翻译层
 
-**位置**：`plugin/Source/backends/libvgm/ChipStateTranslation.h/.cpp`（纯函数，无 JUCE 组件依赖）
+**位置**：`plugin/Source/playback/ChannelFromChip.h/.cpp`
+
+**为什么不在 `backends/libvgm/`**（本文件初稿写的位置）：这一层只依赖 `chips::ChannelState` 和 `playback::ChannelState`，和 libvgm 没有任何关系；放在后端目录里会让 `vgm_chip_test` 去链接 libvgm，而那个测试的价值正在于**不链接**。依赖方向也支持放在 `playback/`——`playback/PlaybackEngine.cpp:12` 已经在 include `chips/ChipTypes.h`，而 `chips/` 一次都没有反向引用。
 
 ```cpp
-/** The displayable state of one channel, given what its decoder knows. */
-playback::ChannelState describeChannel (const ChannelDescription& description,
-                                        const chips::ChannelState& chipState);
+/** The shape a channel kind makes, in `waveform::Kind` terms. */
+int waveKindForChannelKind (chips::ChannelKind kind);
+
+/** One channel's state, translated for display. */
+ChannelState channelFromChip (const chips::ChannelState& chipState,
+                              const chips::NoteTable& noteTable,
+                              const ChipShapeHints& hints,
+                              std::string chipName,
+                              std::string channelName);
 ```
 
-`ChannelDescription` 是每颗芯片**一次**写好的静态信息：
+`ChipShapeHints` 是每颗芯片**一次**写好的静态信息：
 
 ```cpp
-struct ChannelDescription
+struct ChipShapeHints
 {
-    const char* chipName;        // "YM2612"、"2A03"
-    const char* channelName;     // "FM 3"、"Pulse 1"（不带编号时由调用方补）
-    int waveKind;                // playback::waveform::Kind
-    float duty;                  // 0.5 for the ones that ignore it
-    bool nameNeedsNumber;        // "Pulse 1" 里的 1 是编号，不是名字的一部分
-    float volumeScale;           // 15.0f for the 4-bit chips
+    int waveKind = 0;          // playback::waveform::Kind，以 int 存放（ChannelState 就是这个类型）
+    float duty = 0.5f;         // 除 pulse 外都被忽略
+    int volumeMaximum = 15;    // chips::ChannelState::volume 的上限，多数芯片是 4 位
 };
 ```
 
-**每个芯片一张 `ChannelDescription` 表**，加芯片就是加一行。
+**每颗芯片一行 `ChipShapeHints`**，加芯片就是加一行。
+
+**`noteTable` 为什么是参数而不是从解码器问**：`chips::ChannelState` 只带 `period`/`block`（period 阵营）或 `hz`（frequency 阵营），而 period 变成 Hz 必须经芯片自己的表——同一个 period 在 CPU 分频和 FM 上完全不是一个音。表由解码器提供（`IChipDecoder::noteTable`），转换层只是用它。
 
 ### 3.1 `ChannelKind` → `waveKind`
 
@@ -150,7 +157,7 @@ struct ChannelDescription
 | FM | 音色号 | 忽略（形状来自算子参数） |
 | 采样 | 样本号 | `shapeParameter` |
 
-**这张表就是"每芯片几行"的地方**，也是 `describeChannel` 唯一需要分支的地方。
+**这张表就是"每芯片几行"的地方**，也是 `channelFromChip` 唯一需要分支的地方。
 
 ## 4. 新增③：FM 的算子参数
 
@@ -181,7 +188,7 @@ state.shapeParameter = playback::waveform::packFm (chipState.fmMultiple, chipSta
 
 ### 5.1 通道名
 
-`chipName` 来自 `ChannelDescription`；同型号两片时带序号：
+`chipName` 来自 `ChipShapeHints` 之外的一张名称表（第 5 步）；同型号两片时带序号：
 
 ```cpp
 // LibvgmSongInstance.cpp:413 已有同样的写法
@@ -245,8 +252,8 @@ track.channelIndex = channelIndex;    // 联动芯片的通道号接在父芯片
 |---|---|
 | `VgmReplayer::advanceTo()` | 给定 `SongIr`（手工构造），推到一个时刻，断言 `channelState` 的 period/gate |
 | `VgmReplayer::rewind()` | 推进、rewind、再推进到同一时刻，两次状态相同 |
-| `describeChannel()` | 每个 `ChannelKind` 一条，断言 `waveKind`/`duty`/`volume` |
-| `ChannelKind` → `waveKind` 表 | **穷举 34 个值**，没有一个落到 `none`（除非它本来就是未知） |
+| `channelFromChip()` | 每个 `ChannelKind` 一条，断言 `waveKind`/`duty`/`volume` |
+| `ChannelKind` → `waveKind` 表 | **按整数值穷举**（`unknown` 之前每一个都必须有答案），不能用手写列表——列表漏一个值不会有任何提示 |
 | FM 参数打包 | `packFm` 往返 |
 
 **最后一条值得单独写**：用 `switch` 而不是查表，编译器会对未覆盖的枚举值报警；表漏一个值不会有任何提示。
@@ -285,7 +292,7 @@ track.channelIndex = channelIndex;    // 联动芯片的通道号接在父芯片
 
 | 步 | 内容 | 能验什么 |
 |---|---|---|
-| **1** | `ChannelKind` → `waveKind` 表 + `describeChannel()` + 测试 | 单元测试，不接 UI |
+| **1** | `ChannelKind` → `waveKind` 表 + `channelFromChip()` + 测试 | 单元测试，不接 UI |
 | **2** | `VgmReplayer`（游标、rewind、喂写）+ 测试 | 单元测试，手工构造 IR |
 | **3** | 三个 FM 解码器加四个字段 + 打包 | 单元测试 + MIDI 的 46/46 不变 |
 | **4** | 接到 `LibvgmTrackPlayer::captureState`（含 loop/seek） | **你手工看键盘页** |

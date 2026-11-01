@@ -17,6 +17,7 @@
 
 #include "midi/ChipPlans.h"
 
+#include "playback/ChannelFromChip.h"
 #include "playback/WaveExport.h"
 #include "playback/WaveShape.h"
 
@@ -5033,6 +5034,190 @@ void testWaveExport (void)
 	}
 }
 
+	/** Every kind of channel a decoder can report, with the shape a row draws for it.
+
+		Walked by integer value rather than from a hand-written list: a list is exactly the thing
+		this test exists to replace, since a chip added to the enum would be missing from the list and
+		from the check along with it. `unknown` is the last enumerator, so everything below it is a
+		kind that must have an answer.
+	*/
+	void testChannelKindShapes (void)
+	{
+		using namespace toybox::playback;
+
+		std::printf ("  channel kinds to shapes\n");
+
+		for (int value = 0; value < (int) toybox::chips::ChannelKind::unknown; ++value)
+		{
+			const auto kind = (toybox::chips::ChannelKind) value;
+			const int shape = waveKindForChannelKind (kind);
+
+			check (shape != (int) toybox::playback::waveform::Kind::none,
+				   ("kind " + std::to_string (value) + " has a shape to draw").c_str ());
+		}
+
+		// A sample of each answer, so the loop above cannot pass by returning one value for all.
+		using toybox::chips::ChannelKind;
+		using Kind = toybox::playback::waveform::Kind;
+
+		check (waveKindForChannelKind (ChannelKind::nesPulse) == (int) Kind::pulse, "2A03 pulse is a square");
+		check (waveKindForChannelKind (ChannelKind::nesTriangle) == (int) Kind::triangle, "2A03 triangle is a ramp");
+		check (waveKindForChannelKind (ChannelKind::nesNoise) == (int) Kind::noise, "2A03 noise is an LFSR");
+		check (waveKindForChannelKind (ChannelKind::nesDmc) == (int) Kind::delta, "2A03 DPCM is a stepped sample");
+		check (waveKindForChannelKind (ChannelKind::vrc6Saw) == (int) Kind::saw, "VRC6 saw is its own shape");
+		check (waveKindForChannelKind (ChannelKind::fm) == (int) Kind::fm, "an FM voice is a patch, not a kind");
+		check (waveKindForChannelKind (ChannelKind::fdsWave) == (int) Kind::stored, "FDS reads its shape from memory");
+		check (waveKindForChannelKind (ChannelKind::c140Pcm) == (int) Kind::stored, "and so does a sample player");
+		check (waveKindForChannelKind (ChannelKind::ayEnvelope) == (int) Kind::pulse,
+			   "AY's envelope channel is a square wearing a volume envelope");
+		check (waveKindForChannelKind (ChannelKind::unknown) == (int) Kind::none, "an unknown kind draws nothing");
+	}
+
+	/** A note table that answers whatever the test needs, so the conversion can be checked without
+		a chip. */
+	struct FixedNoteTable final : toybox::chips::NoteTable
+	{
+		int note = 69;			// A4
+		int finePitch = 0;
+
+		int noteFor (uint32_t, int, int* fine) const override
+		{
+			*fine = finePitch;
+			return note;
+		}
+	};
+
+	void testChannelFromChip (void)
+	{
+		using namespace toybox::playback;
+
+		std::printf ("  chip state to displayable state\n");
+
+		using toybox::chips::ChannelState;
+		using Kind = toybox::playback::waveform::Kind;
+
+		const FixedNoteTable table;
+
+		toybox::playback::ChipShapeHints hints;
+		hints.waveKind = (int) Kind::pulse;
+		hints.duty = 0.25f;
+
+		{
+			ChannelState chip;
+			chip.present = false;
+
+			const auto state = channelFromChip (chip, table, hints, "YM2612", "FM 3");
+
+			// A channel the chip does not have: the names are still handed back, because they name
+			// the slot rather than a sound, but nothing else is claimed about it.
+			check (! state.active, "an absent channel is not active");
+			check (state.note == -1, "and has no note");
+			check (state.chipName == "YM2612", "the chip name survives");
+		}
+
+		{
+			ChannelState chip;
+			chip.present = true;
+			chip.gate = true;
+			chip.volume = 15;
+			chip.hz = 440.0;
+
+			const auto state = channelFromChip (chip, table, hints, "2A03", "Pulse 1");
+
+			check (state.active, "a keyed channel is active");
+			check (state.note == 69, "and its note comes from the frequency it reports");
+			check (state.frequency > 439.0f && state.frequency < 441.0f, "at the frequency given");
+			check (state.volume > 0.99f, "a full volume register is a full bar");
+			check (state.waveKind == (int) Kind::pulse, "the shape comes from the hints");
+			check (state.duty == 0.25f, "and so does the duty");
+		}
+
+		{
+			// Key off, envelope still running. Drawing it as silent would make an FM voice blink out
+			// the moment the key came up, which reads as a dropped frame rather than as a release.
+			ChannelState chip;
+			chip.present = true;
+			chip.gate = false;
+			chip.released = true;
+			chip.hz = 440.0;
+
+			const auto state = channelFromChip (chip, table, hints, "YM2612", "FM 1");
+
+			check (state.active, "a releasing channel is still drawn as sounding");
+		}
+
+		{
+			// The period camp: no hz, so the chip's own table has to place it.
+			ChannelState chip;
+			chip.present = true;
+			chip.gate = true;
+			chip.period = 0x2A4;
+			chip.block = 4;
+
+			const auto state = channelFromChip (chip, table, hints, "YM2612", "FM 1");
+
+			check (state.note == 69, "a period is placed by the chip's own table");
+			check (state.frequency > 439.0f && state.frequency < 441.0f, "and becomes a frequency");
+		}
+
+		{
+			// A period the table cannot place. Not an error: a chip asked for a pitch outside its
+			// range, and the row says so instead of guessing an octave.
+			FixedNoteTable outOfRange;
+			outOfRange.note = -1;
+
+			ChannelState chip;
+			chip.present = true;
+			chip.gate = true;
+			chip.period = 1;
+			chip.block = 0;
+
+			const auto state = channelFromChip (chip, outOfRange, hints, "SN76489", "Ch 1");
+
+			check (state.note == -1, "an unplaceable period leaves the note empty");
+			check (state.frequency == 0.0f, "and claims no frequency");
+		}
+
+		{
+			ChannelState chip;
+			chip.present = true;
+			chip.gate = true;
+			chip.hz = 440.0;
+
+			chip.volume = 0;
+			check (channelFromChip (chip, table, hints, "x", "y").volume == 0.0f, "a zero volume register is an empty bar");
+
+			chip.volume = 7;
+			const auto half = channelFromChip (chip, table, hints, "x", "y").volume;
+			check (half > 0.45f && half < 0.49f, "and seven of fifteen is just under half");
+
+			// Clamped rather than overflowing: a decoder that reports more than its own stated
+			// maximum is a bug, but a bar twice its height is a worse way to find out.
+			chip.volume = 40;
+			check (channelFromChip (chip, table, hints, "x", "y").volume == 1.0f, "an over-range volume is clamped");
+		}
+
+		{
+			// `patch` means a different thing per family, so only the kinds that read it as one
+			// number get it. A pulse channel's patch is its duty, which the hints already carry.
+			ChannelState chip;
+			chip.present = true;
+			chip.gate = true;
+			chip.hz = 440.0;
+			chip.patch = 12;
+
+			auto noiseHints = hints;
+			noiseHints.waveKind = (int) Kind::noise;
+			check (channelFromChip (chip, table, noiseHints, "2A03", "Noise").shapeParameter == 12,
+				   "a noise channel's patch is its period");
+
+			auto pulseHints = hints;
+			pulseHints.waveKind = (int) Kind::pulse;
+			check (channelFromChip (chip, table, pulseHints, "2A03", "Pulse 1").shapeParameter == 0,
+				   "a pulse channel keeps the duty instead of the patch");
+		}
+	}
+
 int main (void)
 {
 	std::printf ("chip decoder test\n");
@@ -5238,6 +5423,9 @@ int main (void)
 	testSegaPcmPitchIsAStep();
 	testSegaPcmKeyOff();
 	testSegaPcmPercussion();
+
+	testChannelKindShapes();
+	testChannelFromChip();
 
 	std::printf ("Result    : %s\n", failures == 0 ? "PASS" : "FAILURES");
 	return failures == 0 ? 0 : 1;

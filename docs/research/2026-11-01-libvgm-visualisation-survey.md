@@ -143,7 +143,7 @@ struct ChannelState
 | `frequency` | `hz`（或 `period` 经 `noteTable()` 换算） | 一行 |
 | `note` | `noteForFrequency(hz)`（`ChipState.h:87` 已有） | 一行 |
 | `volume` | `volume / 15.0f` | 一行 |
-| **`waveKind`** | **`ChannelKind` 34 个值 → 8 种形状** | **一张表** |
+| **`waveKind`** | **`ChannelKind` 40 个值 → 8 种形状** | **一张表** |
 | **`duty`** | **`patch`**（脉冲类的 patch 就是 duty） | **每芯片一行** |
 | **`shapeParameter`** | **噪声的 period、DPCM 的样本身份** | **每芯片一行** |
 | **`wave`** | **只有 `stored` 类需要** | **见 §3** |
@@ -154,7 +154,7 @@ struct ChannelState
 
 ### 2.2 `ChannelKind` → `waveKind` 的映射是自然的
 
-`chips::ChannelKind`（`ChipTypes.h:20`）有 34 个值，但**它们本来就在描述形状**：
+`chips::ChannelKind`（`ChipTypes.h:20`）有 40 个值，但**它们本来就在描述形状**：
 
 | 形状 | `ChannelKind` 里的例子 | `playback::waveform::Kind` |
 |---|---|---|
