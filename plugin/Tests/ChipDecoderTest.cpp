@@ -5134,24 +5134,13 @@ void testWaveExport (void)
 		`$4012` and `$4013` point at. A VGM records the registers and not the memory, so a rip without
 		its ROM is expected to have a rate and no wave - and saying so is the whole point of the null.
 	*/
-	void testNesDpcmWave (void)
+	void testNesDpcmSampleIdentity (void)
 	{
 		std::printf ("  the 2A03's DPCM channel\n");
 
 		using toybox::chips::ChipConfig;
-		using toybox::chips::ChipMemory;
 		using toybox::chips::NesApuDecoder;
 		using toybox::chips::RegisterWrite;
-
-		// A whole CPU address space with a short sample at $C000. The bytes deliberately avoid
-		// 0x00, 0x55, 0xAA and 0xFF: those are what a driver pads an unused tail with, and
-		// `finalLength` strips them - a sample made of them measures as empty, correctly.
-		std::vector<uint8_t> image (0x10000, 0);
-
-		for (int i = 0; i < 64; ++i)
-		{
-			image[0xC000 + (std::size_t) i] = (uint8_t) (0x10 + (i % 16) * 7);
-		}
 
 		NesApuDecoder decoder;
 		decoder.reset (ChipConfig { 1789773, 44100.0 });
@@ -5166,28 +5155,17 @@ void testWaveExport (void)
 		write (0x13, 0x02);		// 2 * 16 + 1 = 33 bytes
 		write (0x15, 0x10);		// enable the DPCM channel
 
-		const auto before = decoder.channelState (4);
+		const auto state = decoder.channelState (4);
 
-		check (before.sampleRate > 0.0f, "the read rate comes from $4010");
-		check (before.wave == nullptr, "and with no image there is no waveform to report");
-
-		const ChipMemory memory { &image, 0 };
-		decoder.attachMemory (memory);
-
-		const auto after = decoder.channelState (4);
-
-		check (after.wave != nullptr, "an attached image gives the channel its bytes");
-		// A lower bound rather than an exact count, for two reasons: the decoder expands each byte
-		// into the bits the one-bit DAC steps through, and `finalLength` drops the padding byte
-		// that `$4013`'s sixteen-plus-one arithmetic leaves at the end. What matters is that the
-		// length came from `$4013` and not from the whole image.
-		check (after.wave != nullptr && after.wave->size () >= 32,
-			   "and it holds at least one point per byte $4013 named");
-		check (after.sampleRate == before.sampleRate, "the rate did not change with the image");
+		check (state.sampleRate > 0.0f, "the read rate comes from $4010");
 
 		// The identity a caller with the whole song keys its note table on: page and length, so two
 		// hits of one drum share it and two different samples do not.
-		check (after.sampleId == ((0u << 16) | 33u), "the sample is named by its page and its length");
+		check (state.sampleId == ((0u << 16) | 33u), "the sample is named by its page and its length");
+
+		// And the bytes are not read here. The export's collection already has them; a second
+		// reading was what drew a flat line for a drum that exported correctly.
+		check (state.wave == nullptr, "and it leaves the bytes to whoever collected them");
 
 		write (0x12, 0x05);		// a different page: $C140
 		write (0x13, 0x03);		// and a different length
@@ -5622,7 +5600,7 @@ int main (void)
 
 	testChannelKindShapes();
 	testOplPatchRegisters();
-	testNesDpcmWave();
+	testNesDpcmSampleIdentity();
 	testChannelFromChip();
 
 	std::printf ("Result    : %s\n", failures == 0 ? "PASS" : "FAILURES");

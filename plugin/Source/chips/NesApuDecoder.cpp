@@ -135,18 +135,6 @@ struct NesApuDecoder::Impl
 		same bytes on every frame. */
 	int dpcmLength = 0;
 
-	/** The CPU address space, when the file uploaded one. A VGM records `$4012` and `$4013` but
-		not the bytes they point at unless the rip carried its ROM; without it the channel still
-		reports its read rate and leaves the waveform unknown. */
-	std::vector<uint8_t> image;
-
-	/** The decoded wave, and what it was decoded from. Rebuilt only when the driver starts a
-		different sample - decoding up to 4081 bytes per frame would put that work on the audio
-		thread for a value that had not moved. */
-	mutable std::shared_ptr<const std::vector<float>> dpcmWave;
-	mutable uint32_t dpcmWaveStart = 0xFFFFFFFFu;
-	mutable int dpcmWaveLength = -1;
-
 	/** PAL runs the frame sequencer slower, which changes the DPCM's byte rate and nothing else
 		here. Latched at reset from the clock the device reported. */
 	bool pal = false;
@@ -230,21 +218,7 @@ void NesApuDecoder::reset (const ChipConfig& config)
 	impl->tri.linearCounter = 0;
 }
 
-void NesApuDecoder::attachMemory (const ChipMemory& memory)
-{
-	if (memory.bytes == nullptr || memory.bytes->empty ())
-	{
-		return;
-	}
 
-	impl->image = *memory.bytes;
-
-	// What was decoded came from the previous image. The addresses still mean something, the bytes
-	// behind them do not, so the cache is dropped rather than compared.
-	impl->dpcmWave.reset ();
-	impl->dpcmWaveStart = 0xFFFFFFFFu;
-	impl->dpcmWaveLength = -1;
-}
 
 void NesApuDecoder::write (const RegisterWrite& w)
 {
@@ -581,42 +555,11 @@ ChannelState NesApuDecoder::channelState (int channel) const
 		// such cycle - which is why `hz` stays zero and the row draws a sample rather than a note.
 		state.sampleRate = (float) dpcm::rate ((uint8_t) impl->dpcmRateIndex, impl->pal);
 
-		// The bytes themselves, when the file supplied them. A VGM records `$4012` and `$4013` but
-		// not the memory they point at unless the rip carried its ROM; without an image the row
-		// keeps its rate and reports no waveform, which is the honest half-answer.
-		const uint32_t start = kDpcmBase + (uint32_t) impl->dpcmPage * 64u;
-
-		if (impl->image.empty () || start >= impl->image.size ())
-		{
-			break;
-		}
-
-		// `$4013` is what the driver asked for, and a driver rounds up: the length is sixteen bytes
-		// plus one, so the tail of a sample that does not fill its last block is padding. Drawn as
-		// it stands, the row shows that padding as part of the sound - the same trap the NSF path
-		// avoids with this same function.
-		const std::size_t available = impl->image.size () - start;
-		const std::size_t requested = (std::min) ((std::size_t) impl->dpcmLength, available);
-		const std::size_t length = dpcm::finalLength (requested, impl->image.data () + start);
-
-		// The sample's identity, not its bytes: page and length together name one recording, and two
-		// hits of the same drum share it. Exposed so a caller with the whole song can map each one
-		// to a note - a drum has no pitch of its own to tell them apart.
+		// The sample's identity, not its bytes: the page `$4012` names and the length `$4013` asked
+		// for, which together name one recording. Two hits of the same drum share it; two different
+		// samples do not. The caller looks the bytes up - see the note on `kRequirements` in the
+		// header for why the decoder does not read them itself.
 		state.sampleId = ((uint32_t) impl->dpcmPage << 16) | (uint32_t) impl->dpcmLength;
-
-		if (length > 0)
-		{
-			if (impl->dpcmWave == nullptr || impl->dpcmWaveStart != start
-				|| impl->dpcmWaveLength != (int) length)
-			{
-				impl->dpcmWave = std::make_shared<const std::vector<float>> (
-					dpcm::decode (impl->image.data () + start, length));
-				impl->dpcmWaveStart = start;
-				impl->dpcmWaveLength = (int) length;
-			}
-
-			state.wave = impl->dpcmWave;
-		}
 
 		break;
 	}

@@ -40,18 +40,15 @@ public:
 	ChannelKind channelKind (int channel) const override;
 	bool isDrum (int channel) const override { return channel == noise || channel == dmc; }
 
-	/** The CPU address space, so the DPCM channel can read the bytes `$4012` and `$4013` name.
+	/** This chip reads no memory through the decoder interface.
 
-		The image is a RAM block (0xC2): its payload lands at the address the block header gives, so
-		the decoder indexes it with a real 6502 address. 64 KB is the whole space and also what the
-		assembler needs as its limit - `$4012` names a page inside `$C000..$FFFF` directly.
+		The DPCM channel reports which sample it is playing - `$4012` and `$4013` - and leaves the
+		bytes to whoever collected them. That collection already exists for the export, from the
+		same command stream; a second reading inside the decoder was a second answer, and the two
+		disagreed: the export wrote the drum correctly while the row drew a flat line for it.
 
-		Without an image the channel still reports its read rate, because that comes from `$4010`;
-		what it cannot report is a waveform, and it says so by leaving `wave` null.
+		So the decoder names the sample and the caller looks it up. One source, one answer.
 	*/
-	static constexpr ChipRequirements kRequirements { 1789773u, true, 0xC2, 64u << 10, true, false };
-
-	void attachMemory (const ChipMemory& memory) override;
 
 private:
 	struct Envelope
