@@ -1602,24 +1602,37 @@ namespace
 		Here a page is one row, and the row's position in this table is its index. The three orders
 		that used to have to agree cannot disagree any more: they are this table.
 	*/
+	/** A page made the one way all of them are made.
+
+		A function rather than eight lambdas because the bodies would be identical, and returning an
+		owning pointer rather than a raw one so that the row's answer has an owner from the moment it
+		exists - the stack takes it over a few lines later, and between those two points there used
+		to be a window where a raw pointer was nobody's.
+	*/
+	template <typename PageType>
+	std::unique_ptr<View> makePage (void)
+	{
+		return std::unique_ptr<View> (new PageType ());
+	}
+
 	struct PageSpec
 	{
 		const char* id;			// the tree item's identity, and the component id's suffix
 		const char* titleKey;	// the i18n key, and the only place a page's name is written
-		View* (*make) (void);
+		std::unique_ptr<View> (*make) (void);
 		bool standaloneOnly;	// a plugin build has no audio device to choose between
 	};
 
 	const PageSpec kPages[] =
 	{
-		{ "appearance", "settings.appearance", [] { return (View*) new AppearanceSettingsPage (); }, false },
-		{ "general",    "settings.general",    [] { return (View*) new GeneralSettingsPage (); },    false },
-		{ "language",   "settings.language",   [] { return (View*) new LanguageSettingsPage (); },   false },
-		{ "midi",       "settings.midi",       [] { return (View*) new MidiSettingsPage (); },       false },
-		{ "nes",        "settings.nes",        [] { return (View*) new NesSettingsPage (); },        false },
-		{ "keyboard",   "settings.keyboard",   [] { return (View*) new KeyboardSettingsPage (); },   false },
-		{ "export",     "settings.export",     [] { return (View*) new ExportSettingsPage (); },     false },
-		{ "audio",      "settings.audio",      [] { return (View*) new AudioSettingsPage (); },      true  },
+		{ "appearance", "settings.appearance", &makePage<AppearanceSettingsPage>, false },
+		{ "general",    "settings.general",    &makePage<GeneralSettingsPage>,    false },
+		{ "language",   "settings.language",   &makePage<LanguageSettingsPage>,   false },
+		{ "midi",       "settings.midi",       &makePage<MidiSettingsPage>,       false },
+		{ "nes",        "settings.nes",        &makePage<NesSettingsPage>,        false },
+		{ "keyboard",   "settings.keyboard",   &makePage<KeyboardSettingsPage>,   false },
+		{ "export",     "settings.export",     &makePage<ExportSettingsPage>,     false },
+		{ "audio",      "settings.audio",      &makePage<AudioSettingsPage>,      true  },
 	};
 
 	constexpr int kPageCount = (int) (sizeof (kPages) / sizeof (kPages[0]));
@@ -1658,12 +1671,8 @@ SettingsOverlay::SettingsOverlay (void)
 			continue;
 		}
 
-		auto* view = spec.make ();
+		auto view = spec.make ();
 		view->setComponentID (juce::String ("settings.page.") + spec.id);
-		pages.addView (view);
-
-		rootItem->addSubItem (new CategoryItem (spec.id, spec.titleKey, pages.getNumViews () - 1,
-											   [this] (int page) { pages.setCurrentView (page); }));
 
 		// The one page that answers back: its sample-root switch changes the note numbers, so the
 		// answer has to come back here rather than stay inside the page. Forwarded rather than
@@ -1671,9 +1680,9 @@ SettingsOverlay::SettingsOverlay (void)
 		// is what makes the switch take effect.
 		//
 		// Recognised by type because that is what it is, not by a column in the table: wiring needs
-		// `this`, and the table is static. The pointer is local - nothing reads it again once the
-		// callback is in place, which is why there is no member for it any more.
-		if (auto* midi = dynamic_cast<MidiSettingsPage*> (view))
+		// `this`, and the table is static. Done before the handover, while the pointer is still
+		// ours - after it, reaching the page again would mean asking the stack.
+		if (auto* midi = dynamic_cast<MidiSettingsPage*> (view.get ()))
 		{
 			midi->onSampleRootChanged = [this]
 			{
@@ -1683,6 +1692,13 @@ SettingsOverlay::SettingsOverlay (void)
 				}
 			};
 		}
+
+		// The handover, at one visible point: before this line the local owns it, after it the
+		// stack does. There is no moment in between when it belongs to nobody.
+		pages.addView (view.release ());
+
+		rootItem->addSubItem (new CategoryItem (spec.id, spec.titleKey, pages.getNumViews () - 1,
+											   [this] (int page) { pages.setCurrentView (page); }));
 	}
 
 	tree.setRootItem (rootItem.get());
