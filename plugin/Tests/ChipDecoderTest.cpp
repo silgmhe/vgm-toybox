@@ -2344,6 +2344,67 @@ namespace
 			   "8448 bytes a second against the 8 kHz root is C#4 without a ROM");
 	}
 
+	/** The C140's sample bytes, once an image is attached.
+
+		Same halves as the 2A03: the rate comes from the registers alone, and the waveform only
+		exists when the file carried the ROM the sample lives in. A mu-law voice reports the rate
+		and no wave, because its bytes are logarithmically coded and drawing them as levels would
+		show a shape the chip never makes.
+	*/
+	void testC140WaveFromRom (void)
+	{
+		std::printf ("  the C140's sample bytes\n");
+
+		using toybox::chips::C140Decoder;
+		using toybox::chips::ChipConfig;
+		using toybox::chips::ChipMemory;
+		using toybox::chips::RegisterWrite;
+
+		// One megabyte with a distinguishable sample at the System 2 fold of bank 0x14.
+		std::vector<uint8_t> rom (0x100000, 0);
+		const uint32_t offset = 0x495C0;
+
+		for (int i = 0; i < 64; ++i)
+		{
+			rom[offset + (std::size_t) i] = (uint8_t) (0x10 + (i % 16) * 7);
+		}
+
+		C140Decoder decoder;
+		decoder.reset (ChipConfig { 8000000, 20000.0 });
+
+		const ChipMemory memory { &rom, 0 };
+		decoder.attachMemory (memory);
+
+		const auto write = [&decoder] (uint8_t reg, uint8_t value)
+		{
+			decoder.write (RegisterWrite { 0, reg, value, 0, 0 });
+		};
+
+		// voice 0: bank 0x14, start 0x95C0, end 0x9600 - forty-eight bytes of the sample
+		write (0x00, 0xFF);
+		write (0x02, 0x02);		// frequency high - without it the rate is zero
+		write (0x03, 0x00);		// frequency low
+		write (0x04, 0x14);
+		write (0x05, 0x00);		// linear PCM, no loop
+		write (0x06, 0x95);
+		write (0x07, 0xC0);
+		write (0x08, 0x96);
+		write (0x09, 0x00);
+		write (0x05, 0x80);		// key on
+
+		const auto state = decoder.channelState (0);
+
+		check (state.sampleRate > 0.0f, "the rate comes from the registers");
+		check (state.wave != nullptr, "and an attached ROM gives the voice its bytes");
+		check (state.wave != nullptr && state.wave->size () == 64,
+			   "the wave is as long as start..end");
+
+		// The same voice with the mu-law bit set: bytes, but not levels.
+		write (0x05, 0x88);		// mu-law, key on
+		check (decoder.channelState (0).wave == nullptr,
+			   "a mu-law sample reports no wave rather than a wrong one");
+	}
+
 	/** The bank register is folded into the ROM, not appended to it. A System 2 voice is bank 0x14
 		with address 0x95C0, which is ROM offset 0x495C0 - not 0x1495C0, which a one-megabyte ROM
 		does not have. Getting this wrong makes every sample unmeasurable and the song falls back
@@ -5621,6 +5682,7 @@ int main (void)
 	testC140WithoutRomKeepsTheRootRate();
 	testC140NoisySampleFallsBackToTheRootRate();
 	testC140System2BankIsFolded();
+	testC140WaveFromRom();
 
 	testC352Note();
 	testC352KeyOnIsTheExecuteWrite();

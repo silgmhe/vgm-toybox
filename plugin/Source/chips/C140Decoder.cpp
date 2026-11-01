@@ -104,6 +104,15 @@ struct C140Decoder::Impl
 	std::vector<uint8_t> rom;					// the song's 0x8D blocks, one byte per address
 	Banking banking = Banking::system2;				// how a voice's bank/address reaches that ROM
 	std::map<uint64_t, double> periodCache;	// sample description -> cycle length
+
+	/** Decoded PCM per sample, keyed by where it starts and how long it is.
+
+		A map rather than one slot because the chip has twenty-four voices playing different samples
+		at once: a single cache would be overwritten by each voice in turn and re-decode all of them
+		every frame. Keyed by the sample rather than by the channel so two voices on one drum share
+		one copy.
+	*/
+	std::map<uint64_t, std::shared_ptr<const std::vector<float>>> waveCache;
 	std::vector<std::unique_ptr<C140NoteTable>> tables;
 
 	uint32_t startOf (const Channel& channel) const
@@ -415,6 +424,60 @@ ChannelState C140Decoder::channelState (int channel) const
 	state.transposeCents = pitch.transposeCents;
 	state.rootCents = pitch.rootCents;
 	state.pitchSource = pitch.source;
+
+	// The bytes themselves, so the row can show what the voice is playing rather than a placeholder.
+	//
+	// mu-law is not a level: those samples are logarithmically coded, and drawing their bytes as
+	// PCM would show a shape the chip never makes. They keep the rate and report no wave, which is
+	// the same half-answer the DPCM channel gives when a file carries registers but no memory.
+	if (! impl->rom.empty () && (voice.mode & kModeMulaw) == 0)
+	{
+		const uint32_t start = ((uint32_t) voice.startHi << 8) | voice.startLo;
+		const uint32_t end = ((uint32_t) voice.endHi << 8) | voice.endLo;
+
+		if (end > start)
+		{
+			const std::size_t offset = impl->sampleOffset (start, voice.bank);
+
+			if (offset < impl->rom.size ())
+			{
+				const std::size_t available = impl->rom.size () - offset;
+				const std::size_t length = (std::min) ((std::size_t) (end - start), available);
+
+				if (length > 1)
+				{
+					const uint64_t key = ((uint64_t) offset << 32) | (uint64_t) length;
+					const auto found = impl->waveCache.find (key);
+
+					if (found != impl->waveCache.end ())
+					{
+						state.wave = found->second;
+					}
+					else
+					{
+						// Eight-bit signed samples, which is what this chip stores: the register
+						// comments call the mode's 0x08 bit mu-law, so the absence of that bit means
+						// the bytes are plain PCM.
+						auto wave = std::make_shared<std::vector<float>> ();
+						wave->reserve (length);
+
+						for (std::size_t i = 0; i < length; ++i)
+						{
+							wave->push_back ((float) (int8_t) impl->rom[offset + i] / 128.0f);
+						}
+
+						state.wave = std::move (wave);
+						impl->waveCache.emplace (key, state.wave);
+					}
+				}
+			}
+		}
+	}
+
+	// Bytes per second, not a pitch: the note is that rate over the sample's own cycle, which is
+	// what `describeSamplePitch` above works out. A panel that drags this row out needs the rate
+	// to write a WAV that plays at the right speed.
+	state.sampleRate = (float) rate;
 
 	return state;
 }
