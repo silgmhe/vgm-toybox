@@ -1,4 +1,4 @@
-#include "KeyboardRowPaint.h"
+﻿#include "KeyboardRowPaint.h"
 
 #include "ButtonPaint.h"
 #include "KeyboardLayout.h"
@@ -168,7 +168,7 @@ namespace
 		through in that pixel, so a decay narrows and a sustain stays wide. Drawn as a line through
 		the peaks instead, the same data reads as a thin squiggle and the size is lost.
 	*/
-	void buildCyclePath (juce::Path& path, int width, int height,
+	void buildFilledPath (juce::Path& path, int width, int height,
 						 const std::vector<playback::waveform::Column>& columns)
 	{
 		path.clear ();
@@ -217,18 +217,70 @@ namespace
 		path.closeSubPath ();
 	}
 
-	/** Strokes a cycle built by buildCyclePath() where `area` says it belongs. */
-	/** Fills the ribbon the wave traced, rather than drawing its outline.
+	/** Fills the ribbon a recorded sample traced, rather than drawing its outline.
 
-		The path arrives closed - an upper edge and a lower one - because a recorded sample has a
-		range in every pixel and not a single value. Stroking it would draw the outline of the
-		ribbon, which is a thin line with a fill-shaped hole in it.
+		The path arrives closed - an upper edge and a lower one - because a sample has a range in
+		every pixel and not a single value. Stroking it would draw the outline of the ribbon, which is
+		a thin line with a fill-shaped hole in it.
 	*/
 	void fillCycle (juce::Graphics& g, const juce::Path& path, juce::Rectangle<int> area)
 	{
 		juce::Graphics::ScopedSaveState saved (g);
 		g.addTransform (juce::AffineTransform::translation ((float) area.getX (), (float) area.getY ()));
 		g.fillPath (path);
+	}
+
+	/** Draws a synthesised cycle as steps, one horizontal span per point.
+
+		A generated waveform holds a value for a whole sample period and then jumps - the 2A03's pulse
+		output really is a staircase, not a line through its corners. Joining the corners would draw a
+		shape the chip never produces, and the difference is visible: a triangle wave read as steps
+		has flat tops where the real one has them, and read as a line it has none.
+
+		Kept separate from `buildFilledPath` because the two answer different questions: a recorded
+		sample has a range inside each pixel and is filled, a synthesised one has a single value and
+		is stepped.
+	*/
+	void buildStepPath (juce::Path& path, int width, int height, const std::vector<float>& cycle)
+	{
+		path.clear ();
+
+		const auto count = (int) cycle.size ();
+
+		if (count == 0)
+		{
+			return;
+		}
+
+		const float half = (float) height * 0.5f - 2.0f;
+		const float span = (float) width / (float) count;
+
+		for (int i = 0; i < count; ++i)
+		{
+			const float level = juce::jlimit (-1.0f, 1.0f, cycle[(std::size_t) i]);
+			const float y = (float) height * 0.5f - level * half;
+			const float x0 = span * (float) i;
+
+			if (i == 0)
+			{
+				path.startNewSubPath (x0, y);
+			}
+			else
+			{
+				path.lineTo (x0, y);
+			}
+
+			// The horizontal span is what makes it a step rather than a corner.
+			path.lineTo (x0 + span, y);
+		}
+	}
+
+	/** Strokes a stepped cycle where `area` says it belongs. */
+	void strokeCycle (juce::Graphics& g, const juce::Path& path, juce::Rectangle<int> area)
+	{
+		juce::Graphics::ScopedSaveState saved (g);
+		g.addTransform (juce::AffineTransform::translation ((float) area.getX (), (float) area.getY ()));
+		g.strokePath (path, juce::PathStrokeType (1.0f));
 	}
 
 	void paintNoCycle (juce::Graphics& g, juce::Rectangle<int> area)
@@ -301,7 +353,7 @@ void paintWave (juce::Graphics& g, juce::Rectangle<int> area,
 		// the envelope included, because that envelope *is* the sample. Picking one cycle out of it
 		// showed a waveform and said nothing about the sound: a drum and a sustained note came out
 		// looking the same.
-		buildCyclePath (path, area.getWidth (), area.getHeight (),
+		buildFilledPath (path, area.getWidth (), area.getHeight (),
 						playback::waveform::decimateForDisplay (channel.waveValues (), kDisplayPoints));
 
 		g.setColour (theme::accent ().withAlpha (channel.active ? 0.9f : 0.35f));
@@ -327,10 +379,10 @@ void paintWave (juce::Graphics& g, juce::Rectangle<int> area,
 
 		if (cycle.size () >= 2)
 		{
-			// A synthesised cycle is a value per point, not a range, so each column has no span -
-			// `buildCyclePath` gives those a pixel of height so the line stays visible.
-			buildCyclePath (cache.path, area.getWidth (), area.getHeight (),
-							playback::waveform::decimateForDisplay (cycle, 0));
+			// A generated wave is a value per sample period and then a jump, so it is drawn as steps.
+			// Filling it would be a ribbon the size of one pixel, and joining the corners would draw
+			// a slope where the chip holds flat - both say something untrue about the shape.
+			buildStepPath (cache.path, area.getWidth (), area.getHeight (), cycle);
 			cache.valid = true;
 		}
 		else
@@ -352,7 +404,9 @@ void paintWave (juce::Graphics& g, juce::Rectangle<int> area,
 	}
 
 	g.setColour (theme::accent ().withAlpha (channel.active ? 0.9f : 0.35f));
-	fillCycle (g, cache.path, area);
+
+	// A stepped path is an outline, so it is stroked; the filled ribbon above is the other case.
+	strokeCycle (g, cache.path, area);
 }
 
 void paintMeter (juce::Graphics& g, juce::Rectangle<int> area,
