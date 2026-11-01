@@ -137,11 +137,16 @@ namespace
 	class CategoryItem : public juce::TreeViewItem
 	{
 	public:
-		CategoryItem (const juce::String& itemId, const juce::String& nameToShow, int pageIndex,
+		CategoryItem (const juce::String& itemId, const juce::String& nameKey, int pageIndex,
 					  std::function<void (int)> onPicked)
-			: id (itemId), name (nameToShow), page (pageIndex), picked (std::move (onPicked))
+			: id (itemId), titleKey (nameKey), page (pageIndex), picked (std::move (onPicked))
 		{
+			refreshLabel ();
 		}
+
+		/** The row's text, asked for again rather than stored: the key is what the row knows, and
+			the language it is showing can change under it. */
+		void refreshLabel (void) { setLabel (i18n::tr (titleKey)); }
 
 		bool canBeSelected (void) const override { return page >= 0; }
 		bool mightContainSubItems (void) override { return page < 0; }
@@ -179,29 +184,12 @@ namespace
 
 	private:
 		juce::String id;
+		juce::String titleKey;		// the i18n key, not the text: see refreshLabel()
 		juce::String name;
 		int page;
 		std::function<void (int)> picked;
 	};
 
-	/**
-		The sidebar's pages, in the order the stack holds them.
-
-		Written once and used by both the row and `addView`: with the numbers typed twice they can
-		drift, and a page inserted between two others would open its neighbour with nothing to show
-		for it. The constructor asserts the two lists ended up the same length.
-	*/
-	enum PageIndex
-	{
-		appearancePageIndex = 0,
-		generalPageIndex = 1,
-		languagePageIndex = 2,
-		midiPageIndex = 3,
-		nesPageIndex = 4,
-		keyboardPageIndex = 5,
-		exportPageIndex = 6,
-		audioPageIndex = 7
-	};
 }
 
 //==============================================================================
@@ -1599,6 +1587,45 @@ void MidiSettingsPage::lookAndFeelChanged (void)
 	}
 
 //==============================================================================
+// The pages, in the order the sidebar and the stack hold them
+
+namespace
+{
+	/** One settings page, described once.
+
+		Adding a page used to be seven edits: the index enum, a member pointer, the `new`, the
+		`addView`, the sidebar row, a case in the language switch and a line in the refresh loop.
+		Two of those were forgotten the last time one was added - the sidebar label of two pages
+		stopped following the interface language, and nothing noticed, because nothing checks a
+		label.
+
+		Here a page is one row, and the row's position in this table is its index. The three orders
+		that used to have to agree cannot disagree any more: they are this table.
+	*/
+	struct PageSpec
+	{
+		const char* id;			// the tree item's identity, and the component id's suffix
+		const char* titleKey;	// the i18n key, and the only place a page's name is written
+		View* (*make) (void);
+		bool standaloneOnly;	// a plugin build has no audio device to choose between
+	};
+
+	const PageSpec kPages[] =
+	{
+		{ "appearance", "settings.appearance", [] { return (View*) new AppearanceSettingsPage (); }, false },
+		{ "general",    "settings.general",    [] { return (View*) new GeneralSettingsPage (); },    false },
+		{ "language",   "settings.language",   [] { return (View*) new LanguageSettingsPage (); },   false },
+		{ "midi",       "settings.midi",       [] { return (View*) new MidiSettingsPage (); },       false },
+		{ "nes",        "settings.nes",        [] { return (View*) new NesSettingsPage (); },        false },
+		{ "keyboard",   "settings.keyboard",   [] { return (View*) new KeyboardSettingsPage (); },   false },
+		{ "export",     "settings.export",     [] { return (View*) new ExportSettingsPage (); },     false },
+		{ "audio",      "settings.audio",      [] { return (View*) new AudioSettingsPage (); },      true  },
+	};
+
+	constexpr int kPageCount = (int) (sizeof (kPages) / sizeof (kPages[0]));
+}
+
+//==============================================================================
 // The overlay
 
 SettingsOverlay::SettingsOverlay (void)
@@ -1614,87 +1641,49 @@ SettingsOverlay::SettingsOverlay (void)
 	// list of a few pages wants
 	tree.setOpenCloseButtonsVisible (false);
 
-	rootItem = std::make_unique<CategoryItem> ("root", i18n::tr ("settings"), -1, nullptr);
-	rootItem->addSubItem (new CategoryItem ("appearance", i18n::tr ("settings.appearance"),
-										   appearancePageIndex,
-										   [this] (int page) { pages.setCurrentView (page); }));
-	rootItem->addSubItem (new CategoryItem ("general", i18n::tr ("settings.general"), generalPageIndex,
-										   [this] (int page) { pages.setCurrentView (page); }));
-	rootItem->addSubItem (new CategoryItem ("language", i18n::tr ("settings.language"), languagePageIndex,
-										   [this] (int page) { pages.setCurrentView (page); }));
-	// The MIDI page sits with the other pages rather than in the mixer: the bend range describes
-	// the instrument the MIDI goes to, which is not something a per-song strip can own.
-	rootItem->addSubItem (new CategoryItem ("midi", i18n::tr ("settings.midi"), midiPageIndex,
-										   [this] (int page) { pages.setCurrentView (page); }));
+	rootItem = std::make_unique<CategoryItem> ("root", "settings", -1, nullptr);
 
-	rootItem->addSubItem (new CategoryItem ("nes", i18n::tr ("settings.nes"), nesPageIndex,
-										   [this] (int page) { pages.setCurrentView (page); }));
+	// One pass for all three: the table knows the order, and every page is made, stacked and
+	// labelled from the same row. A plugin build has no audio device to choose between, so a page
+	// marked standalone-only simply is not there - and because the index a row carries is the
+	// stack's own, skipping one cannot shift the pages after it.
+	const bool hasAudio = toybox::standalone::available ();
 
-	rootItem->addSubItem (new CategoryItem ("keyboard", i18n::tr ("settings.keyboard"), keyboardPageIndex,
-										   [this] (int page) { pages.setCurrentView (page); }));
-
-	// The export page follows the keyboard one in the sidebar because that is where the wavetables
-	// it is about are dragged from.
-	rootItem->addSubItem (new CategoryItem ("export", i18n::tr ("settings.export"), exportPageIndex,
-										   [this] (int page) { pages.setCurrentView (page); }));
-
-	// Audio only where there is an audio device to choose between: the standalone application says
-	// so through Source/Standalone/StandaloneHooks.h, and in a plugin the host owns the device. The
-	// row goes in with the page, so the sidebar cannot offer a page that was never created.
-	const bool hasAudio = toybox::standalone::available();
-
-	if (hasAudio)
+	for (int i = 0; i < kPageCount; ++i)
 	{
-		rootItem->addSubItem (new CategoryItem ("audio", i18n::tr ("settings.audio"), audioPageIndex,
+		const auto& spec = kPages[i];
+
+		if (spec.standaloneOnly && ! hasAudio)
+		{
+			continue;
+		}
+
+		auto* view = spec.make ();
+		view->setComponentID (juce::String ("settings.page.") + spec.id);
+		pages.addView (view);
+
+		rootItem->addSubItem (new CategoryItem (spec.id, spec.titleKey, pages.getNumViews () - 1,
 											   [this] (int page) { pages.setCurrentView (page); }));
+
+		// The one page this window keeps hold of: its sample-root switch changes the note numbers,
+		// so the answer has to come back here rather than stay inside the page. Forwarded rather
+		// than handled - only the window owns an engine, and reloading a song at the position it
+		// was at is what makes the switch take effect.
+		if (auto* midi = dynamic_cast<MidiSettingsPage*> (view))
+		{
+			midiPage = midi;
+			midiPage->onSampleRootChanged = [this]
+			{
+				if (onSampleRootChanged != nullptr)
+				{
+					onSampleRootChanged();
+				}
+			};
+		}
 	}
 
 	tree.setRootItem (rootItem.get());
 	addAndMakeVisible (tree);
-
-	// The pages are the window's own page container, so a settings page is written exactly like
-	// the play or the mixer page.
-	appearancePage = new AppearanceSettingsPage();
-	generalPage = new GeneralSettingsPage();
-	languagePage = new LanguageSettingsPage();
-	midiPage = new MidiSettingsPage();
-	nesPage = new NesSettingsPage();
-	keyboardPage = new KeyboardSettingsPage();
-	exportPage = new ExportSettingsPage();
-	// Forwarded rather than handled here: only the window owns an engine, and reloading a song at
-	// the position it was at is what makes the switch take effect.
-	midiPage->onSampleRootChanged = [this]
-	{
-		if (onSampleRootChanged != nullptr)
-		{
-			onSampleRootChanged();
-		}
-	};
-	appearancePage->setComponentID ("settings.page.appearance");
-	generalPage->setComponentID ("settings.page.general");
-	languagePage->setComponentID ("settings.page.language");
-	midiPage->setComponentID ("settings.page.midi");
-	nesPage->setComponentID ("settings.page.nes");
-	keyboardPage->setComponentID ("settings.page.keyboard");
-	exportPage->setComponentID ("settings.page.export");
-	pages.addView (appearancePage);
-	pages.addView (generalPage);
-	pages.addView (languagePage);
-	pages.addView (midiPage);
-	pages.addView (nesPage);
-	pages.addView (keyboardPage);
-	pages.addView (exportPage);		// the index the sidebar row carries is exportPageIndex
-
-	if (hasAudio)
-	{
-		audioPage = new AudioSettingsPage();
-		audioPage->setComponentID ("settings.page.audio");
-		pages.addView (audioPage);
-	}
-
-	// The indices the rows carry and the order the stack holds are two lists that have to agree;
-	// a page inserted between two others would otherwise open its neighbour, silently.
-	jassert (pages.getNumViews() == (hasAudio ? audioPageIndex : keyboardPageIndex) + 1);
 
 	addAndMakeVisible (pages);
 
@@ -1715,30 +1704,17 @@ void SettingsOverlay::refreshLanguage (void)
 
 	if (auto* root = dynamic_cast<CategoryItem*> (rootItem.get()))
 	{
-		root->setLabel (i18n::tr ("settings"));
+		root->refreshLabel ();
 	}
 
+	// Every row, each asking for its own label. The switch that stood here listed the pages by
+	// index and was missing two of them, so those two stopped following the interface language -
+	// and nothing said so, because a wrong label is not an error to anything but a reader.
 	for (int i = 0; i < rootItem->getNumSubItems(); ++i)
 	{
-		auto* row = dynamic_cast<CategoryItem*> (rootItem->getSubItem (i));
-
-		if (row == nullptr)
+		if (auto* row = dynamic_cast<CategoryItem*> (rootItem->getSubItem (i)))
 		{
-			continue;
-		}
-
-		switch (row->getPageIndex())
-		{
-			case appearancePageIndex:
-				row->setLabel (i18n::tr ("settings.appearance"));
-				break;
-			case generalPageIndex:	row->setLabel (i18n::tr ("settings.general")); break;
-			case languagePageIndex:	row->setLabel (i18n::tr ("settings.language")); break;
-			case midiPageIndex:		row->setLabel (i18n::tr ("settings.midi")); break;
-
-	case keyboardPageIndex:	row->setLabel (i18n::tr ("settings.keyboard")); break;
-			case audioPageIndex:	row->setLabel (i18n::tr ("settings.audio")); break;
-			default: break;
+			row->refreshLabel ();
 		}
 	}
 
@@ -1748,14 +1724,9 @@ void SettingsOverlay::refreshLanguage (void)
 
 void SettingsOverlay::refreshFromStore (void)
 {
-	appearancePage->refresh();
-	generalPage->refresh();
-	languagePage->refresh();
-	midiPage->refresh();
-
-	if (audioPage != nullptr)
+	for (int i = 0; i < pages.getNumViews(); ++i)
 	{
-		audioPage->refresh();
+		pages.getView (i)->refresh ();
 	}
 
 	// The sidebar shows which page is up. Set here rather than only from a click in the tree,
