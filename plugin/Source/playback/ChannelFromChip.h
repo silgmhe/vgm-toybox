@@ -27,6 +27,14 @@ struct ChipShapeHints
 	/** Ignored by every kind except `pulse`. */
 	float duty = 0.5f;
 
+	/** Whether the chip itself calls this channel percussion.
+
+		Not inferable from `hz`: a noise channel has a period and therefore a pitch, and the MIDI
+		path writes it as the note it is. A sampled drum does not - its rate over an unmeasurable
+		cycle says nothing - so it is the one that needs a note chosen for it rather than read.
+	*/
+	bool isDrum = false;
+
 	/** Whether `patch` is a duty index rather than a waveform number.
 
 		True for the chips whose pulse channel selects one of four widths by a two-bit register -

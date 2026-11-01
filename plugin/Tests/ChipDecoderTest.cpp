@@ -5317,6 +5317,39 @@ void testWaveExport (void)
 		}
 
 		{
+			// A sampled drum: no frequency to read, so it keeps the note a drum part is written
+			// at. Without this the row stands outside the note grid with an empty cell, which
+			// reads as "this channel is broken" rather than "this channel has no pitch".
+			ChannelState chip;
+			chip.present = true;
+			chip.gate = true;
+			chip.sampleRate = 11186.0f;
+
+			auto drumHints = hints;
+			drumHints.waveKind = (int) Kind::delta;
+			drumHints.isDrum = true;
+
+			const auto drum = channelFromChip (chip, table, drumHints, "2A03", "DPCM");
+
+			check (drum.note == 60, "a sample with no measurable pitch reports the C4 trigger");
+			check (drum.frequency > 261.0f && drum.frequency < 262.0f, "at middle C");
+
+			// And a channel that is percussion but does have a pitch keeps its own note: a noise
+			// channel's period is a real number.
+			ChannelState noiseChip;
+			noiseChip.present = true;
+			noiseChip.gate = true;
+			noiseChip.hz = 440.0;
+
+			auto noiseHints = hints;
+			noiseHints.waveKind = (int) Kind::noise;
+			noiseHints.isDrum = true;
+
+			check (channelFromChip (noiseChip, table, noiseHints, "2A03", "Noise").note == 69,
+				   "a percussion channel with a readable pitch keeps it");
+		}
+
+		{
 			// An FM channel carries a packed patch - but only when the decoder actually read one.
 			// "Multiple 0, level 0, no feedback" is a legitimate patch, so the flag is what
 			// separates "this sound" from "this decoder has not been taught to read it yet".

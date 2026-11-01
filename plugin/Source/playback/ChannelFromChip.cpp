@@ -141,6 +141,20 @@ ChannelState channelFromChip (const chips::ChannelState& chipState,
 
 	state.note = noteForFrequency (state.frequency);
 
+	// A percussion channel whose pitch cannot be read keeps the note a drum part is written at.
+	// This is the same answer the MIDI path gives these channels - `describeSamplePitch` returns no
+	// layers for one and says the caller reports the C4 trigger - and it is what lets a sample row
+	// take part in the note grid instead of standing outside it with an empty cell.
+	//
+	// Only when the pitch is genuinely missing. A noise channel is percussion too, but its period
+	// is a real number and the row shows the note it makes, which is why this asks about the empty
+	// frequency rather than about `isDrum`.
+	if (state.note < 0 && hints.isDrum)
+	{
+		state.note = 60;
+		state.frequency = 261.63f;
+	}
+
 	// `volume` arrives in the chip's own units and leaves normalised, because the row draws it as
 	// a bar of unknown length otherwise.
 	if (hints.volumeMaximum > 0)
