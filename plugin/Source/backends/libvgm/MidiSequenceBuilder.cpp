@@ -7,6 +7,7 @@
 #include <cstring>
 #include <map>
 
+#include "ChipWriteRouter.h"
 #include "VgmCommandReader.h"
 #include "formats/vgm/VgmSongLoader.h"
 #include "midi/NoteStream.h"
@@ -57,102 +58,53 @@ namespace
 		return ((uint64_t) device << 8) | (uint64_t) (channel & 0xFF);
 	}
 
-	uint64_t typeInstanceKey (DEV_ID type, int instance)
-	{
-		return ((uint64_t) type << 16) | (uint64_t) (instance & 0xFFFF);
-	}
-
-	/** One decoder's queued writes, type-erased so the builder can hold them by decoder type.
-
-		The key is the decoder class rather than the chip kind on purpose: six OPL devices share
-		`OplDecoder` and four OPN devices share `OpnDecoder`, so a kind-keyed table would run two
-		decoders where the chip is one - fewer notes, no error, the hardest kind of bug to see. */
-	struct DecoderBufferBase
-	{
-		virtual ~DecoderBufferBase() = default;
-	};
-
-	template <typename Decoder>
-	struct ChipBuffer final : DecoderBufferBase
-	{
-		void queue (const PLR_DEV_INFO* device, uint8_t reg, uint16_t value,
-					uint32_t sampleTime, uint8_t port = 0)
-		{
-			if (device == nullptr)
-			{
-				return;
-			}
-
-			chips::RegisterWrite write;
-			write.deviceId = device->id;
-			write.reg = reg;
-			write.value = value;
-			write.port = port;
-			write.sampleTime = sampleTime;
-			writes[device->id].push_back (write);
-			devices[device->id] = device;
-		}
-
-		/** The SCC command carries a latch and the value that follows it: the chip sees two writes,
-			and so does the decoder. */
-		void queuePair (const PLR_DEV_INFO* device, uint8_t reg, uint8_t latch,
-						uint8_t value, uint32_t sampleTime, uint8_t port)
-		{
-			queue (device, reg, latch, sampleTime, port);
-			queue (device, (uint8_t) (reg | 1), value, sampleTime, port);
-		}
-
-		std::map<uint32_t, std::vector<chips::RegisterWrite>> writes;
-		std::map<uint32_t, const PLR_DEV_INFO*> devices;
-	};
-
-	/** The decoders this build can run, created on first use and owned for the song's lifetime.
-
-		Adding a chip is a value in `ChipKind`, a `case` in `Builder::dispatch` and a decoder in
-		`chips/` - nothing here has to be extended, which is the point of the registry. */
-	class DecoderRegistry
-	{
-	public:
-		template <typename Decoder>
-		ChipBuffer<Decoder>& decoder (void)
-		{
-			const auto key = std::type_index (typeid (Decoder));
-			const auto found = buffers.find (key);
-			if (found != buffers.end())
-			{
-				return static_cast<ChipBuffer<Decoder>&> (*found->second);
-			}
-
-			auto created = std::make_unique<ChipBuffer<Decoder>>();
-			auto* raw = created.get();
-			buffers.emplace (key, std::move (created));
-			return *raw;
-		}
-
-	private:
-		std::map<std::type_index, std::unique_ptr<DecoderBufferBase>> buffers;
-	};
-
 	class Builder
 	{
 	public:
 		Builder (const std::vector<PLR_DEV_INFO>& deviceList,
 				 const std::vector<playback::TrackInfo>& trackList, bool transposeBySampleRoot)
-			: devices (deviceList), tracks (trackList), useSampleRoot (transposeBySampleRoot)
+			: router (deviceList), tracks (trackList), useSampleRoot (transposeBySampleRoot)
 		{
-			for (const auto& device : devices)
+			// The three chips that keep a buffer of their own keep it here rather than in the
+			// router: the reason they are separate is that their notes need the whole song before
+			// they mean anything, and that is this layer's concern. The router only says which
+			// writes cannot go through the registry.
+			router.onNesWrite = [this] (const PLR_DEV_INFO* device, uint8_t reg, uint8_t value, uint32_t time)
 			{
-				if (device.parentIdx != (uint32_t) -1)
+				if (device == nullptr)
 				{
-					continue;
+					return;
 				}
 
-				deviceByType[typeInstanceKey (device.type, device.instance)] = &device;
-				if (deviceByType.count (typeInstanceKey (device.type, 0)) == 0)
+				chips::RegisterWrite write;
+				write.deviceId = device->id;
+				write.reg = reg;
+				write.value = value;
+				write.sampleTime = time;
+				nesWrites[device->id].push_back (write);
+				nesDevices[device->id] = device;
+			};
+
+			router.onGbWrite = [this] (const PLR_DEV_INFO* device, uint8_t reg, uint8_t value, uint32_t time)
+			{
+				if (device == nullptr)
 				{
-					deviceByType[typeInstanceKey (device.type, 0)] = &device;
+					return;
 				}
-			}
+
+				chips::RegisterWrite write;
+				write.deviceId = device->id;
+				write.reg = reg;
+				write.value = value;
+				write.sampleTime = time;
+				gbWrites[device->id].push_back (write);
+				gbDevices[device->id] = device;
+			};
+
+			router.onSsgWrite = [this] (const PLR_DEV_INFO* device, uint8_t reg, uint8_t value, uint32_t time)
+			{
+				ssgWrites.queue (device, reg, value, time, 0);
+			};
 
 			for (std::size_t i = 0; i < tracks.size(); ++i)
 			{
@@ -206,7 +158,7 @@ namespace
 			flushNes (lastSampleTime);
 			// ADPCM-B's pitch only exists in its DELTA-T ROM (block 0x82), which is why the OPN family
 			// is flushed through its own entry point: it also splits ports and drums.
-			flushOpn (decoders.decoder<chips::OpnDecoder> ().writes.empty()
+			flushOpn (router.decoder<chips::OpnDecoder> ().writes.empty()
 						  ? std::vector<uint8_t>()
 						  : assembleRom (ir, 0x82, 16 * 1024 * 1024, true),
 					  lastSampleTime);
@@ -214,33 +166,33 @@ namespace
 			flushGb (lastSampleTime);
 			flushOpl (lastSampleTime);
 
-			flushDecoded (decoders.decoder<chips::OpmDecoder> (), ir, lastSampleTime);
-			flushDecoded (decoders.decoder<chips::HuC6280Decoder> (), ir, lastSampleTime);
-			flushDecoded (decoders.decoder<chips::K051649Decoder> (), ir, lastSampleTime);
-			flushDecoded (decoders.decoder<chips::Saa1099Decoder> (), ir, lastSampleTime);
-			flushDecoded (decoders.decoder<chips::PokeyDecoder> (), ir, lastSampleTime);
-			flushDecoded (decoders.decoder<chips::WswanDecoder> (), ir, lastSampleTime);
-			flushDecoded (decoders.decoder<chips::Sn76489Decoder> (), ir, lastSampleTime);
-			flushDecoded (decoders.decoder<chips::Ay8910Decoder> (), ir, lastSampleTime);
-			flushDecoded (decoders.decoder<chips::Rf5c68Decoder> (), ir, lastSampleTime);
-			flushDecoded (decoders.decoder<chips::K007232Decoder> (), ir, lastSampleTime);
-			flushDecoded (decoders.decoder<chips::VsuDecoder> (), ir, lastSampleTime);
-			flushDecoded (decoders.decoder<chips::K005289Decoder> (), ir, lastSampleTime);
-			flushDecoded (decoders.decoder<chips::Msm5232Decoder> (), ir, lastSampleTime);
-			flushDecoded (decoders.decoder<chips::MultiPcmDecoder> (), ir, lastSampleTime);
-			flushDecoded (decoders.decoder<chips::MikeyDecoder> (), ir, lastSampleTime);
-			flushDecoded (decoders.decoder<chips::Okim6295Decoder> (), ir, lastSampleTime);
-			flushDecoded (decoders.decoder<chips::X1_010Decoder> (), ir, lastSampleTime);
-			flushDecoded (decoders.decoder<chips::C140Decoder> (), ir, lastSampleTime);
-			flushDecoded (decoders.decoder<chips::C352Decoder> (), ir, lastSampleTime);
-			flushDecoded (decoders.decoder<chips::K053260Decoder> (), ir, lastSampleTime);
-			flushDecoded (decoders.decoder<chips::K054539Decoder> (), ir, lastSampleTime);
-			flushDecoded (decoders.decoder<chips::QSoundDecoder> (), ir, lastSampleTime);
-			flushDecoded (decoders.decoder<chips::Ga20Decoder> (), ir, lastSampleTime);
-			flushDecoded (decoders.decoder<chips::SegaPcmDecoder> (), ir, lastSampleTime);
-			flushDecoded (decoders.decoder<chips::Es5503Decoder> (), ir, lastSampleTime);
-			flushDecoded (decoders.decoder<chips::Ymf271Decoder> (), ir, lastSampleTime);
-			flushDecoded (decoders.decoder<chips::Ymz280bDecoder> (), ir, lastSampleTime);
+			flushDecoded (router.decoder<chips::OpmDecoder> (), ir, lastSampleTime);
+			flushDecoded (router.decoder<chips::HuC6280Decoder> (), ir, lastSampleTime);
+			flushDecoded (router.decoder<chips::K051649Decoder> (), ir, lastSampleTime);
+			flushDecoded (router.decoder<chips::Saa1099Decoder> (), ir, lastSampleTime);
+			flushDecoded (router.decoder<chips::PokeyDecoder> (), ir, lastSampleTime);
+			flushDecoded (router.decoder<chips::WswanDecoder> (), ir, lastSampleTime);
+			flushDecoded (router.decoder<chips::Sn76489Decoder> (), ir, lastSampleTime);
+			flushDecoded (router.decoder<chips::Ay8910Decoder> (), ir, lastSampleTime);
+			flushDecoded (router.decoder<chips::Rf5c68Decoder> (), ir, lastSampleTime);
+			flushDecoded (router.decoder<chips::K007232Decoder> (), ir, lastSampleTime);
+			flushDecoded (router.decoder<chips::VsuDecoder> (), ir, lastSampleTime);
+			flushDecoded (router.decoder<chips::K005289Decoder> (), ir, lastSampleTime);
+			flushDecoded (router.decoder<chips::Msm5232Decoder> (), ir, lastSampleTime);
+			flushDecoded (router.decoder<chips::MultiPcmDecoder> (), ir, lastSampleTime);
+			flushDecoded (router.decoder<chips::MikeyDecoder> (), ir, lastSampleTime);
+			flushDecoded (router.decoder<chips::Okim6295Decoder> (), ir, lastSampleTime);
+			flushDecoded (router.decoder<chips::X1_010Decoder> (), ir, lastSampleTime);
+			flushDecoded (router.decoder<chips::C140Decoder> (), ir, lastSampleTime);
+			flushDecoded (router.decoder<chips::C352Decoder> (), ir, lastSampleTime);
+			flushDecoded (router.decoder<chips::K053260Decoder> (), ir, lastSampleTime);
+			flushDecoded (router.decoder<chips::K054539Decoder> (), ir, lastSampleTime);
+			flushDecoded (router.decoder<chips::QSoundDecoder> (), ir, lastSampleTime);
+			flushDecoded (router.decoder<chips::Ga20Decoder> (), ir, lastSampleTime);
+			flushDecoded (router.decoder<chips::SegaPcmDecoder> (), ir, lastSampleTime);
+			flushDecoded (router.decoder<chips::Es5503Decoder> (), ir, lastSampleTime);
+			flushDecoded (router.decoder<chips::Ymf271Decoder> (), ir, lastSampleTime);
+			flushDecoded (router.decoder<chips::Ymz280bDecoder> (), ir, lastSampleTime);
 
 			return std::move (stream);
 		}
@@ -253,170 +205,10 @@ namespace
 			device is the cut-down one, and the two RF5C variants share a libvgm id. Those are facts
 			about the devices this runtime started, which is exactly what this layer knows and the
 			format layer does not. */
+
 		void dispatch (const midi::SongIr& ir, const chips::RegisterWrite& w)
 		{
-			const auto& slot = ir.chips[w.deviceId];
-			const int instance = slot.instance;
-			const auto port = (uint8_t) w.port;
-			const auto reg = w.reg;
-			const auto value = w.value;
-			const auto time = w.sampleTime;
-
-			switch (slot.kind)
-			{
-			case midi::ChipKind::sn76489:
-				decoders.decoder<chips::Sn76489Decoder> ().queue (deviceFor (DEVID_SN76496, instance), reg, value, time);
-				break;
-			case midi::ChipKind::ym2413:
-				decoders.decoder<chips::OplDecoder> ().queue (deviceFor (DEVID_YM2413, instance), reg, value, time);
-				break;
-			case midi::ChipKind::ym3812:
-				decoders.decoder<chips::OplDecoder> ().queue (deviceFor (DEVID_YM3812, instance), reg, value, time);
-				break;
-			case midi::ChipKind::ym3526:
-				decoders.decoder<chips::OplDecoder> ().queue (deviceFor (DEVID_YM3526, instance), reg, value, time);
-				break;
-			case midi::ChipKind::y8950:
-				decoders.decoder<chips::OplDecoder> ().queue (deviceFor (DEVID_Y8950, instance), reg, value, time);
-				break;
-			case midi::ChipKind::ymf262:
-				decoders.decoder<chips::OplDecoder> ().queue (deviceFor (DEVID_YMF262, instance), reg, value, time, port);
-				break;
-			case midi::ChipKind::ymf278b:
-				decoders.decoder<chips::OplDecoder> ().queue (deviceFor (DEVID_YMF278B, instance), reg, value, time, port);
-				break;
-			case midi::ChipKind::ym2612:
-				decoders.decoder<chips::OpnDecoder> ().queue (deviceFor (DEVID_YM2612, instance), reg, value, time, port);
-				break;
-			// The SSG behind an OPN chip answers registers 0x00..0x0F on port 0; the rest of that port
-			// is the FM half. Two decoders, because they are two voice sets: three square channels
-			// with their own clock (half the chip's on the YM2608 and YM2610, the full clock on the
-			// YM2203) and their own numbering - which is why their notes belong on tracks after the
-			// FM ones and not on top of them.
-			case midi::ChipKind::ym2203:
-				queueOpn (DEVID_YM2203, instance, reg, value, time, port);
-				break;
-			case midi::ChipKind::ym2608:
-				queueOpn (DEVID_YM2608, instance, reg, value, time, port);
-				break;
-			case midi::ChipKind::ym2610:
-				queueOpn (DEVID_YM2610, instance, reg, value, time, port);
-				break;
-			case midi::ChipKind::ym2151:
-				decoders.decoder<chips::OpmDecoder> ().queue (deviceFor (DEVID_YM2151, instance), reg, value, time);
-				break;
-			case midi::ChipKind::ymf271:
-				decoders.decoder<chips::Ymf271Decoder> ().queue (deviceFor (DEVID_YMF271, instance), reg, value, time, port);
-				break;
-			case midi::ChipKind::ymz280b:
-				decoders.decoder<chips::Ymz280bDecoder> ().queue (deviceFor (DEVID_YMZ280B, instance), reg, value, time);
-				break;
-			case midi::ChipKind::ay8910:
-				decoders.decoder<chips::Ay8910Decoder> ().queue (deviceFor (DEVID_AY8910, instance), reg, value, time);
-				break;
-			case midi::ChipKind::gameBoy:
-				queueGbWrite (deviceFor (DEVID_GB_DMG, instance), reg, value, time);
-				break;
-			case midi::ChipKind::nesApu:
-				queueNesWrite (deviceFor (DEVID_NES_APU, instance), reg, value, time);
-				break;
-			case midi::ChipKind::huc6280:
-				decoders.decoder<chips::HuC6280Decoder> ().queue (deviceFor (DEVID_C6280, instance), reg, value, time);
-				break;
-			case midi::ChipKind::k051649:
-				decoders.decoder<chips::K051649Decoder> ().queue (deviceFor (DEVID_K051649, instance), reg, value, time, port);
-				break;
-			case midi::ChipKind::k053260:
-				decoders.decoder<chips::K053260Decoder> ().queue (deviceFor (DEVID_K053260, instance), reg, value, time);
-				break;
-			case midi::ChipKind::k054539:
-				decoders.decoder<chips::K054539Decoder> ().queue (deviceFor (DEVID_K054539, instance), reg, value, time, port);
-				break;
-			case midi::ChipKind::c140:
-			{
-				// the 219 ASIC answers the same command; the runtime may only have started that one
-				const PLR_DEV_INFO* device = deviceFor (DEVID_C140, instance);
-				decoders.decoder<chips::C140Decoder> ().queue (device != nullptr ? device : deviceFor (DEVID_C219, 0),
-							reg, value, time, port);
-				break;
-			}
-			case midi::ChipKind::c352:
-				decoders.decoder<chips::C352Decoder> ().queue (deviceFor (DEVID_C352, instance), reg, value, time, port);
-				break;
-			case midi::ChipKind::qsound:
-				decoders.decoder<chips::QSoundDecoder> ().queue (deviceFor (DEVID_QSOUND, instance), reg, value, time);
-				break;
-			case midi::ChipKind::ga20:
-				decoders.decoder<chips::Ga20Decoder> ().queue (deviceFor (DEVID_GA20, instance), reg, value, time);
-				break;
-			case midi::ChipKind::es5503:
-				decoders.decoder<chips::Es5503Decoder> ().queue (deviceFor (DEVID_ES5503, instance), reg, value, time);
-				break;
-			case midi::ChipKind::rf5c68:
-				decoders.decoder<chips::Rf5c68Decoder> ().queue (rf5cDeviceFor (false, instance), reg, value, time);
-				break;
-			case midi::ChipKind::rf5c164:
-				decoders.decoder<chips::Rf5c68Decoder> ().queue (rf5cDeviceFor (true, instance), reg, value, time);
-				break;
-			case midi::ChipKind::segapcm:
-				decoders.decoder<chips::SegaPcmDecoder> ().queue (deviceFor (DEVID_SEGAPCM, instance), reg, value, time, port);
-				break;
-			case midi::ChipKind::okim6295:
-				decoders.decoder<chips::Okim6295Decoder> ().queue (deviceFor (DEVID_MSM6295, instance), reg, value, time);
-				break;
-			case midi::ChipKind::saa1099:
-				decoders.decoder<chips::Saa1099Decoder> ().queue (deviceFor (DEVID_SAA1099, instance), reg, value, time);
-				break;
-			case midi::ChipKind::pokey:
-				decoders.decoder<chips::PokeyDecoder> ().queue (deviceFor (DEVID_POKEY, instance), reg, value, time);
-				break;
-			case midi::ChipKind::x1_010:
-				decoders.decoder<chips::X1_010Decoder> ().queue (deviceFor (DEVID_X1_010, instance), reg, value, time, port);
-				break;
-			case midi::ChipKind::wonderswan:
-				decoders.decoder<chips::WswanDecoder> ().queue (deviceFor (DEVID_WSWAN, instance), reg, value, time);
-				break;
-			case midi::ChipKind::multiPcm:
-				decoders.decoder<chips::MultiPcmDecoder> ().queue (deviceFor (DEVID_YMW258, instance), reg, value, time);
-				break;
-			case midi::ChipKind::mikey:
-				decoders.decoder<chips::MikeyDecoder> ().queue (deviceFor (DEVID_MIKEY, instance), reg, value, time);
-				break;
-			case midi::ChipKind::k005289:
-				decoders.decoder<chips::K005289Decoder> ().queue (deviceFor (DEVID_K005289, instance), reg, value, time);
-				break;
-			case midi::ChipKind::k007232:
-				decoders.decoder<chips::K007232Decoder> ().queue (deviceFor (DEVID_K007232, instance), reg, value, time);
-				break;
-			case midi::ChipKind::msm5232:
-				decoders.decoder<chips::Msm5232Decoder> ().queue (deviceFor (DEVID_MSM5232, instance), reg, value, time);
-				break;
-			case midi::ChipKind::vsu:
-				decoders.decoder<chips::VsuDecoder> ().queue (deviceFor (DEVID_VBOY_VSU, instance), reg, value, time);
-				break;
-			default:
-				break;
-			}
-		}
-
-		/** Buffers one 2A03 register write. The chip's notes cannot be read off a single write:
-			they end when the length counter or the envelope says so, which only the decoder's own
-			frame sequencer knows. */
-		void queueNesWrite (const PLR_DEV_INFO* device, uint8_t reg, uint8_t value,
-							uint32_t sampleTime)
-		{
-			if (device == nullptr)
-			{
-				return;
-			}
-
-			chips::RegisterWrite write;
-			write.deviceId = device->id;
-			write.reg = reg;
-			write.value = value;
-			write.sampleTime = sampleTime;
-			nesWrites[device->id].push_back (write);
-			nesDevices[device->id] = device;
+			router.route (ir, w);
 		}
 
 		/** B -> MIDI. The track is already resolved on every note, so nothing here knows a device,
@@ -511,23 +303,6 @@ namespace
 			}
 		}
 
-		/** Splits one OPN register write between the FM decoder and the linked SSG's. */
-		void queueOpn (DEV_ID type, int instance, uint8_t reg, uint16_t value,
-					   uint32_t time, uint8_t port)
-		{
-			const PLR_DEV_INFO* device = deviceFor (type, instance);
-
-			constexpr uint8_t kLastSsgRegister = 0x0F;	// 0x00..0x0F are the AY's file
-
-			if (port == 0 && reg <= kLastSsgRegister)
-			{
-				ssgWrites.queue (device, reg, static_cast<uint8_t> (value), time, 0);
-				return;
-			}
-
-			decoders.decoder<chips::OpnDecoder> ().queue (device, reg, value, time, port);
-		}
-
 		/** The SSG behind an OPN chip: its own buffer, its own clock divisor, and its notes shifted
 			past the FM channels because that is where its tracks are. */
 		void flushSsg (const midi::SongIr& ir, uint32_t totalSamples)
@@ -590,10 +365,10 @@ namespace
 			before the key-on, ADPCM start bits and the DAC's 0x2A stream. */
 		void flushOpn (const std::vector<uint8_t>& adpcmBRom, uint32_t totalSamples)
 		{
-			for (auto& entry : decoders.decoder<chips::OpnDecoder> ().writes)
+			for (auto& entry : router.decoder<chips::OpnDecoder> ().writes)
 			{
-				const auto device = decoders.decoder<chips::OpnDecoder> ().devices.find (entry.first);
-				if (device == decoders.decoder<chips::OpnDecoder> ().devices.end() || device->second == nullptr)
+				const auto device = router.decoder<chips::OpnDecoder> ().devices.find (entry.first);
+				if (device == router.decoder<chips::OpnDecoder> ().devices.end() || device->second == nullptr)
 				{
 					continue;
 				}
@@ -630,8 +405,8 @@ namespace
 								  chips::extractPerformance (decoder, entry.second, totalSamples));
 			}
 
-			decoders.decoder<chips::OpnDecoder> ().writes.clear();
-			decoders.decoder<chips::OpnDecoder> ().devices.clear();
+			router.decoder<chips::OpnDecoder> ().writes.clear();
+			router.decoder<chips::OpnDecoder> ().devices.clear();
 		}
 
 		/** Which OPL the device is. Only the Y8950 carries Delta-T, an OPL2 with a sample
@@ -657,10 +432,10 @@ namespace
 			rhythm mode borrows channels as it is entered, so the whole stream is needed. */
 		void flushOpl (uint32_t totalSamples)
 		{
-			for (auto& entry : decoders.decoder<chips::OplDecoder> ().writes)
+			for (auto& entry : router.decoder<chips::OplDecoder> ().writes)
 			{
-				const auto device = decoders.decoder<chips::OplDecoder> ().devices.find (entry.first);
-				if (device == decoders.decoder<chips::OplDecoder> ().devices.end() || device->second == nullptr)
+				const auto device = router.decoder<chips::OplDecoder> ().devices.find (entry.first);
+				if (device == router.decoder<chips::OplDecoder> ().devices.end() || device->second == nullptr)
 				{
 					continue;
 				}
@@ -690,8 +465,8 @@ namespace
 								  chips::extractPerformance (decoder, entry.second, totalSamples));
 			}
 
-			decoders.decoder<chips::OplDecoder> ().writes.clear();
-			decoders.decoder<chips::OplDecoder> ().devices.clear();
+			router.decoder<chips::OplDecoder> ().writes.clear();
+			router.decoder<chips::OplDecoder> ().devices.clear();
 		}
 
 		/** What a decoder is reading: a chip that stands alone, or the voice set linked behind one.
@@ -898,39 +673,6 @@ namespace
 			return ram;
 		}
 
-		const PLR_DEV_INFO* deviceFor (DEV_ID type, int instance) const
-		{
-			const auto exact = deviceByType.find (typeInstanceKey (type, instance));
-			if (exact != deviceByType.end())
-			{
-				return exact->second;
-			}
-
-			const auto first = deviceByType.find (typeInstanceKey (type, 0));
-			return first == deviceByType.end() ? nullptr : first->second;
-		}
-
-		// Both the RF5C68 and the RF5C164 report DEVID_RF5C68; only the config flags tell them
-		// apart, so 0xB0/0xB1 writes must find the matching variant, not just the first one.
-		const PLR_DEV_INFO* rf5cDeviceFor (bool is164, int instance) const
-		{
-			for (const auto& device : devices)
-			{
-				if (device.parentIdx != (uint32_t) -1 || device.type != DEVID_RF5C68
-					|| device.instance != instance || device.devCfg == nullptr)
-				{
-					continue;
-				}
-
-				if (((device.devCfg->flags & 0x01) != 0) == is164)
-				{
-					return &device;
-				}
-			}
-
-			return deviceFor (DEVID_RF5C68, instance);
-		}
-
 		int trackFor (const PLR_DEV_INFO* device, int channel) const
 		{
 			if (device == nullptr)
@@ -995,26 +737,6 @@ namespace
 			events.push_back (event);
 		}
 
-		/** Buffers one DMG APU register write. A Game Boy note is not a register write either: the
-			length counters, the envelopes and the sweep run off the chip's frame sequencer, which
-			only the decoder models, so the stream is decoded once it has been read. */
-		void queueGbWrite (const PLR_DEV_INFO* device, uint8_t reg, uint8_t value,
-						   uint32_t sampleTime)
-		{
-			if (device == nullptr)
-			{
-				return;
-			}
-
-			chips::RegisterWrite write;
-			write.deviceId = device->id;
-			write.reg = reg;
-			write.value = value;
-			write.sampleTime = sampleTime;
-			gbWrites[device->id].push_back (write);
-			gbDevices[device->id] = device;
-		}
-
 		void flushGb (uint32_t totalSamples)
 		{
 			for (auto& entry : gbWrites)
@@ -1043,9 +765,12 @@ namespace
 
 		/** YM2608: ADPCM-A on port 0 registers 0x10..0x1F, ADPCM-B on port 1 0x00..0x0F,
 			everything else is the normal OPN FM register file. */
-		const std::vector<PLR_DEV_INFO>& devices;
+		/** Where each write goes. Shared with the visualisation's replay: the mapping from a chip
+			kind to a decoder and a device is knowledge, not a preference, and two copies of it would
+			drift into "one row looks merely wrong". */
+		ChipWriteRouter router;
+
 		const std::vector<playback::TrackInfo>& tracks;
-		std::map<uint64_t, const PLR_DEV_INFO*> deviceByType;
 		std::map<uint64_t, int> trackByDeviceChannel;
 
 		// 2A03 writes, kept until the stream ends so the decoder can run its frame sequencer
@@ -1093,8 +818,7 @@ namespace
 		// The ES5503 is a wavetable chip: a voice walks a table it points at, so the note depends on
 		// the table's own cycle length (measured from the RAM its 0xE1 blocks upload) as well as on
 		// the frequency register - and its key is the falling edge of a halt bit
-		// every decoder this song needs, created the first time a write names one
-		DecoderRegistry decoders;
+
 
 	/** The SSG behind an OPN chip: same decoder as a standalone AY, different clock and numbering. */
 	ChipBuffer<chips::Ay8910Decoder> ssgWrites;
