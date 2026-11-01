@@ -98,30 +98,6 @@ void VgmReplayer::adoptNewBuffers (void)
 					decoder->attachMemory (attached);	// the decoder copies what it needs
 				}
 
-				{
-					static int logged = 0;
-
-					if (logged < 6)
-					{
-						++logged;
-
-						int blocks = 0;
-						for (const auto& block : song->roms)
-						{
-							if (block.memoryType == requirements.memoryType)
-							{
-								++blocks;
-							}
-						}
-
-						const char* temp = std::getenv ("TEMP");
-						std::ofstream log ((temp != nullptr ? std::string (temp) : std::string ("."))
-											   + "/vgtoybox-visualiser-dbg.txt",
-										   std::ios::app);
-						log << "mem type=" << (int) requirements.memoryType << " blocks=" << blocks
-							<< " image=" << image.size () << "\n";
-					}
-				}
 			}
 
 			live.push_back (Instance { type, deviceId, device, decoder.get (), clock });
