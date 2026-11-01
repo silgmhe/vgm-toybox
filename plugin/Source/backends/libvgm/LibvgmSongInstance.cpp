@@ -223,6 +223,7 @@ bool LibvgmSongInstance::prepare (double hostSampleRate, int newMaxBlockSize, ju
 		{
 			songIr = std::make_shared<const midi::SongIr> (std::move (parsed));
 		}
+
 	}
 
 	probe->setSamples (dpcmSamples);

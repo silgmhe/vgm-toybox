@@ -27,6 +27,14 @@ struct ChipShapeHints
 	/** Ignored by every kind except `pulse`. */
 	float duty = 0.5f;
 
+	/** Whether `patch` is a duty index rather than a waveform number.
+
+		True for the chips whose pulse channel selects one of four widths by a two-bit register -
+		the 2A03, the DMG, the VRC6 and the MMC5 - and false for the ones that are always square
+		(AY, SAA1099, POKEY) or whose patch means something else entirely. The four widths are
+		12.5, 25, 50 and 75 percent, in the order every one of those chips numbers them. */
+	bool patchIsDuty = false;
+
 	/** The largest value `chips::ChannelState::volume` can hold on this chip. Most are 4-bit and
 		use 15; a chip with a wider attenuation register says so here rather than in the decoder. */
 	int volumeMaximum = 15;

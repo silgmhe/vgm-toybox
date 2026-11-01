@@ -530,11 +530,18 @@ bool LibvgmTrackPlayer::captureState (playback::ChipStateSnapshot& snapshot) con
 				continue;
 			}
 
-			playback::ChipShapeHints hints;
-			hints.waveKind = playback::waveKindForChannelKind (instance.decoder->channelKind (channel));
+			const auto kind = instance.decoder->channelKind (channel);
 
-			// `duty` and `volumeMaximum` keep their defaults: this version draws the shape a kind
-			// implies, and a per-chip duty table is a later commit.
+			playback::ChipShapeHints hints;
+			hints.waveKind = playback::waveKindForChannelKind (kind);
+
+			// The chips that select a pulse width by a two-bit register. The others are always
+			// square, and their `patch` means something else - a noise period, a sample number -
+			// so reading it as a duty here would draw a shape the chip does not make.
+			hints.patchIsDuty = (kind == chips::ChannelKind::nesPulse
+								 || kind == chips::ChannelKind::gbPulse
+								 || kind == chips::ChannelKind::vrc6Pulse
+								 || kind == chips::ChannelKind::mmc5Pulse);
 			std::string channelName;
 			if (channelNames != nullptr && channelNames[channel] != nullptr)
 			{

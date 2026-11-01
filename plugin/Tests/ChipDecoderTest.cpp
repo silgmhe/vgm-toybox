@@ -5280,6 +5280,35 @@ void testWaveExport (void)
 			check (channelFromChip (chip, table, fmHints, "YM2608", "FM 1").shapeParameter == 0,
 				   "an unread patch leaves the generic sine alone");
 		}
+
+		{
+			// A pulse channel whose `patch` is a duty index - the 2A03's two-bit register.
+			ChannelState chip;
+			chip.present = true;
+			chip.gate = true;
+			chip.hz = 440.0;
+
+			auto dutyHints = hints;
+			dutyHints.patchIsDuty = true;
+
+			chip.patch = 0;
+			check (channelFromChip (chip, table, dutyHints, "2A03", "Pulse 1").duty == 0.125f,
+				   "patch 0 is the narrowest pulse");
+
+			chip.patch = 2;
+			check (channelFromChip (chip, table, dutyHints, "2A03", "Pulse 1").duty == 0.5f,
+				   "patch 2 is square");
+
+			chip.patch = 3;
+			check (channelFromChip (chip, table, dutyHints, "2A03", "Pulse 1").duty == 0.75f,
+				   "and patch 3 the widest");
+
+			// A decoder that read a register the chip does not have. Square is the least
+			// misleading answer: it is a width the chip can make.
+			chip.patch = 9;
+			check (channelFromChip (chip, table, dutyHints, "2A03", "Pulse 1").duty == 0.5f,
+				   "an out-of-range patch falls back to square");
+		}
 	}
 
 int main (void)

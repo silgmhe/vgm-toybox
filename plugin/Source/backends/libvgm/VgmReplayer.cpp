@@ -2,6 +2,10 @@
 
 #include <algorithm>
 
+#include "chips/Ay8910Decoder.h"
+#include "chips/GbcApuDecoder.h"
+#include "chips/NesApuDecoder.h"
+
 namespace toybox::backends::libvgm
 {
 
@@ -9,6 +13,27 @@ VgmReplayer::VgmReplayer (std::shared_ptr<const midi::SongIr> ir,
 						   const std::vector<PLR_DEV_INFO>& devices)
 	: song (std::move (ir)), router (devices)
 {
+	// The three chips whose writes the router hands to a callback rather than queueing itself. The
+	// MIDI path keeps them apart because a note's length only exists once the whole song has been
+	// read; a display wants "what is this channel doing now", so here they simply join the registry
+	// like every other chip and get an instance the same way.
+	//
+	// Leaving these unset is not a slow path - it is a silent one: the router drops the write, no
+	// buffer is ever created for the chip, and the page shows nothing while the music plays.
+	router.onNesWrite = [this] (const PLR_DEV_INFO* device, uint8_t reg, uint8_t value, uint32_t time)
+	{
+		router.decoder<chips::NesApuDecoder> ().queue (device, reg, value, time);
+	};
+
+	router.onGbWrite = [this] (const PLR_DEV_INFO* device, uint8_t reg, uint8_t value, uint32_t time)
+	{
+		router.decoder<chips::GbcApuDecoder> ().queue (device, reg, value, time);
+	};
+
+	router.onSsgWrite = [this] (const PLR_DEV_INFO* device, uint8_t reg, uint8_t value, uint32_t time)
+	{
+		router.decoder<chips::Ay8910Decoder> ().queue (device, reg, value, time);
+	};
 }
 
 double VgmReplayer::tickRate (void) const

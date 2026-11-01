@@ -98,6 +98,15 @@ ChannelState channelFromChip (const chips::ChannelState& chipState,
 	state.waveKind = hints.waveKind;
 	state.duty = hints.duty;
 
+	if (hints.patchIsDuty)
+	{
+		// Four widths, in the order the chips number them: 12.5, 25, 50 and 75 percent. A patch
+		// outside the range comes from a decoder that read a register the chip does not have; the
+		// middle width is the least misleading answer to that.
+		static constexpr float kDutyOfPatch[4] = { 0.125f, 0.25f, 0.5f, 0.75f };
+		state.duty = kDutyOfPatch[(chipState.patch < 0 || chipState.patch > 3) ? 2 : chipState.patch];
+	}
+
 	if (! chipState.present)
 	{
 		return state;		// a channel the chip does not have: no name to give it either
