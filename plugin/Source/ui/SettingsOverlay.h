@@ -481,14 +481,13 @@ private:
 	juce::TreeView tree;	// after the items: the tree has to go first (it does not own them)
 
 	ViewStack pages;
-	AppearanceSettingsPage* appearancePage = nullptr;	// owned by `pages`
-	GeneralSettingsPage* generalPage = nullptr;			// owned by `pages`
-	LanguageSettingsPage* languagePage = nullptr;		// owned by `pages`
-	NesSettingsPage* nesPage = nullptr;				// owned by `pages`
-	MidiSettingsPage* midiPage = nullptr;				// owned by `pages`
-	KeyboardSettingsPage* keyboardPage = nullptr;	// owned by `pages`
-	ExportSettingsPage* exportPage = nullptr;		// owned by `pages`
-	AudioSettingsPage* audioPage = nullptr;				// owned by `pages`; null in a plugin build
+
+	/** The one page this window talks to directly: its sample-root switch changes the note numbers,
+		so the answer has to come back here. Every other page is reached through `pages`.
+
+		There used to be a pointer per page, and six of them were only read once a language change
+		or a refresh came round - which the table below now iterates instead. */
+	MidiSettingsPage* midiPage = nullptr;	// owned by `pages`
 
 	juce::TextButton closeButton;
 
