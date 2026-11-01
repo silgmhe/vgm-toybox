@@ -1665,14 +1665,17 @@ SettingsOverlay::SettingsOverlay (void)
 		rootItem->addSubItem (new CategoryItem (spec.id, spec.titleKey, pages.getNumViews () - 1,
 											   [this] (int page) { pages.setCurrentView (page); }));
 
-		// The one page this window keeps hold of: its sample-root switch changes the note numbers,
-		// so the answer has to come back here rather than stay inside the page. Forwarded rather
-		// than handled - only the window owns an engine, and reloading a song at the position it
-		// was at is what makes the switch take effect.
+		// The one page that answers back: its sample-root switch changes the note numbers, so the
+		// answer has to come back here rather than stay inside the page. Forwarded rather than
+		// handled - only the window owns an engine, and reloading a song at the position it was at
+		// is what makes the switch take effect.
+		//
+		// Recognised by type because that is what it is, not by a column in the table: wiring needs
+		// `this`, and the table is static. The pointer is local - nothing reads it again once the
+		// callback is in place, which is why there is no member for it any more.
 		if (auto* midi = dynamic_cast<MidiSettingsPage*> (view))
 		{
-			midiPage = midi;
-			midiPage->onSampleRootChanged = [this]
+			midi->onSampleRootChanged = [this]
 			{
 				if (onSampleRootChanged != nullptr)
 				{

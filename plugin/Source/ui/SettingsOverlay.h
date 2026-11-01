@@ -482,13 +482,6 @@ private:
 
 	ViewStack pages;
 
-	/** The one page this window talks to directly: its sample-root switch changes the note numbers,
-		so the answer has to come back here. Every other page is reached through `pages`.
-
-		There used to be a pointer per page, and six of them were only read once a language change
-		or a refresh came round - which the table below now iterates instead. */
-	MidiSettingsPage* midiPage = nullptr;	// owned by `pages`
-
 	juce::TextButton closeButton;
 
 	JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (SettingsOverlay)
