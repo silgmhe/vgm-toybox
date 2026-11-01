@@ -1,4 +1,6 @@
-#include "NesDpcmBank.h"
+﻿#include "NesDpcmBank.h"
+
+#include "SampleCollector.h"
 
 #include <algorithm>
 #include <cstdint>
@@ -55,11 +57,11 @@ namespace
 
 std::vector<playback::DecodedSample> collectNesDpcmSamples (const void* vgm, std::size_t size)
 {
-	std::vector<playback::DecodedSample> out;
+	SampleCollector collector;
 
 	if (vgm == nullptr || size == 0)
 	{
-		return out;
+		return {};
 	}
 
 	VgmCommandReader reader (vgm, size);
@@ -116,7 +118,7 @@ std::vector<playback::DecodedSample> collectNesDpcmSamples (const void* vgm, std
 
 	if (starts.empty ())
 	{
-		return out;
+		return {};
 	}
 
 	// The image, assembled from the data blocks. Read after the walk rather than during it: the
@@ -195,22 +197,20 @@ std::vector<playback::DecodedSample> collectNesDpcmSamples (const void* vgm, std
 		char address[8] = {};
 		std::snprintf (address, sizeof (address), "%04X", (unsigned) sample.address);
 
-		playback::DecodedSample entry;
-		entry.name = std::string ("dpcm_") + address + "_" + std::to_string ((unsigned long) trimmed);
-		entry.values = dpcm::decode (bytes.data (), trimmed);
-		entry.rate = dpcm::rate (sample.rateIndex, pal);
-
 		// The same arithmetic the decoder uses to name the sample it is playing: the page `$4012`
 		// names, and the length `$4013` asked for before trimming. Both sides have to agree or the
 		// display will look for a sample that is not in this list - and would then show nothing,
 		// which is at least honest, or the wrong one, which is not.
-		entry.sampleId = (((std::uint32_t) sample.address - kDpcmBase) / 64u) << 16
-						 | (std::uint32_t) sample.length;
+		const std::uint32_t sampleId = (((std::uint32_t) sample.address - kDpcmBase) / 64u) << 16
+									   | (std::uint32_t) sample.length;
 
-		out.push_back (std::move (entry));
+		collector.add (((std::uint64_t) sample.address << 32) | trimmed,
+					   std::string ("dpcm_") + address + "_" + std::to_string ((unsigned long) trimmed),
+					   bytes.data (), trimmed, SampleFormat::nesDelta,
+					   dpcm::rate (sample.rateIndex, pal), sampleId);
 	}
 
-	return out;
+	return collector.take ();
 }
 
 } // namespace toybox::backends::libvgm

@@ -1,10 +1,10 @@
-#include "C140Samples.h"
+﻿#include "C140Samples.h"
 
 #include <algorithm>
 #include <cstdio>
-#include <map>
 
 #include "ChipMemoryAssembly.h"
+#include "SampleCollector.h"
 #include "chips/C140Address.h"
 #include "midi/SongIr.h"
 
@@ -36,7 +36,7 @@ namespace
 
 std::vector<playback::DecodedSample> collectC140Samples (const midi::SongIr& ir)
 {
-	std::vector<playback::DecodedSample> out;
+	SampleCollector collector;
 
 	// The assembler the MIDI path uses, rather than a second one here: it was extracted for exactly
 	// this job, and a copy would drift from it without anything failing.
@@ -48,7 +48,7 @@ std::vector<playback::DecodedSample> collectC140Samples (const midi::SongIr& ir)
 
 	if (rom.empty ())
 	{
-		return out;
+		return {};
 	}
 
 	uint8_t banking = 0x00;		// system2, which is also what an unread header means
@@ -62,7 +62,6 @@ std::vector<playback::DecodedSample> collectC140Samples (const midi::SongIr& ir)
 	}
 
 	Voice voices[kVoices];
-	std::map<uint32_t, bool> seen;
 
 	for (const auto& write : ir.writes)
 	{
@@ -123,32 +122,14 @@ std::vector<playback::DecodedSample> collectC140Samples (const midi::SongIr& ir)
 		}
 
 		// One entry per sample, not per voice: two voices on the same drum are one file.
-		const uint32_t key = (offset << 8) ^ (uint32_t) count;
-
-		if (! seen.emplace (key, true).second)
-		{
-			continue;
-		}
-
 		char name[32] = {};
 		std::snprintf (name, sizeof (name), "c140_%05X_%u", (unsigned) offset, (unsigned) count);
 
-		playback::DecodedSample sample;
-		sample.name = name;
-		sample.values.reserve (count);
-
-		// Eight-bit signed samples, which is what this chip stores.
-		for (std::size_t i = 0; i < count; ++i)
-		{
-			sample.values.push_back ((float) (int8_t) rom[offset + i] / 128.0f);
-		}
-
-		sample.rate = kReferenceRate;
-
-		out.push_back (std::move (sample));
+		collector.add (((uint64_t) offset << 32) | count, name, rom.data () + offset, count,
+					   SampleFormat::pcm8Signed, kReferenceRate);
 	}
 
-	return out;
+	return collector.take ();
 }
 
 } // namespace toybox::backends::libvgm

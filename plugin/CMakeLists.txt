@@ -1,4 +1,4 @@
-#### VGMToybox JUCE plugin (VST3 + Standalone) ####
+﻿#### VGMToybox JUCE plugin (VST3 + Standalone) ####
 # Builds the GUI/plugin front-end of VGMToybox. The audio rendering is done by the same libvgm
 # libraries that the command-line player uses (vgm-player/vgm-emu/vgm-utils, no audio drivers).
 
@@ -226,6 +226,7 @@ target_sources(VGMToybox PRIVATE
 	Source/backends/BuiltInBackends.cpp
 	Source/backends/libvgm/LibvgmBackend.cpp
 	Source/backends/libvgm/C140Samples.cpp
+	Source/backends/libvgm/SampleCollector.cpp
 	Source/backends/libvgm/ChipMemoryAssembly.cpp
 	Source/backends/libvgm/ChipWriteRouter.cpp
 	Source/backends/libvgm/MidiSequenceBuilder.cpp
@@ -419,6 +420,7 @@ add_executable(vgm_mixer_test EXCLUDE_FROM_ALL
 	Source/formats/nsf/NsfFile.cpp
 	Source/backends/libvgm/LibvgmBackend.cpp
 	Source/backends/libvgm/C140Samples.cpp
+	Source/backends/libvgm/SampleCollector.cpp
 	Source/backends/libvgm/ChipMemoryAssembly.cpp
 	Source/backends/libvgm/ChipWriteRouter.cpp
 	Source/backends/libvgm/MidiSequenceBuilder.cpp
@@ -429,6 +431,7 @@ add_executable(vgm_mixer_test EXCLUDE_FROM_ALL
 	Source/backends/libvgm/LibvgmTrackPlayer.cpp
 	Source/backends/libvgm/NesDpcmBank.cpp
 	Source/backends/libvgm/C140Samples.cpp
+	Source/backends/libvgm/SampleCollector.cpp
 	Source/backends/libvgm/LibvgmVgz.cpp
 )
 # --- console test for the chip decoders (not built by default) ---
@@ -491,6 +494,7 @@ add_executable(vgm_chip_test EXCLUDE_FROM_ALL
 	Source/formats/vgm/VgmSongLoader.cpp
 	Source/chips/NesDpcmSample.cpp
 	Source/backends/libvgm/C140Samples.cpp
+	Source/backends/libvgm/SampleCollector.cpp
 	Source/backends/libvgm/ChipMemoryAssembly.cpp
 	Tests/ChipDecoderTest.cpp
 	Source/chips/GbcApuDecoder.cpp
