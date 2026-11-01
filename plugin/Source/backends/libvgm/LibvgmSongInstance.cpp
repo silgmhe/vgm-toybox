@@ -1,5 +1,6 @@
 #include "LibvgmSongInstance.h"
 
+#include "C140Samples.h"
 #include "NesDpcmBank.h"
 
 #include "LibvgmMuteIsolation.h"
@@ -205,10 +206,30 @@ bool LibvgmSongInstance::prepare (double hostSampleRate, int newMaxBlockSize, ju
 	const bool hasNes = std::any_of (deviceInfo.begin (), deviceInfo.end (),
 									 [] (const PLR_DEV_INFO& device) { return device.type == DEVID_NES_APU; });
 
+	const bool hasC140 = std::any_of (deviceInfo.begin (), deviceInfo.end (),
+									  [] (const PLR_DEV_INFO& device) { return device.type == DEVID_C140; });
+
+	// One list, because the menu exports one folder: which chip a sample came from is in its name.
+	// Each collector only looks at its own chip's writes, so a file with both gets both.
+	std::vector<playback::DecodedSample> collected;
+
 	if (hasNes)
 	{
+		collected = collectNesDpcmSamples (playerMemory.data, playerMemory.size);
+	}
+
+	if (hasC140 && songIr != nullptr)
+	{
+		for (auto& sample : collectC140Samples (*songIr))
+		{
+			collected.push_back (std::move (sample));
+		}
+	}
+
+	if (! collected.empty ())
+	{
 		dpcmSamples = std::make_shared<const std::vector<playback::DecodedSample>> (
-			collectNesDpcmSamples (playerMemory.data, playerMemory.size));
+			std::move (collected));
 	}
 
 	// The same walk the MIDI path makes, kept because the display needs it while the song plays.

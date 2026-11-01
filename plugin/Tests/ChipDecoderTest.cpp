@@ -16,6 +16,9 @@
 #include <vector>
 
 #include "midi/ChipPlans.h"
+#include "midi/SongIr.h"
+
+#include "backends/libvgm/C140Samples.h"
 
 #include "playback/ChannelFromChip.h"
 #include "playback/WaveExport.h"
@@ -5352,6 +5355,65 @@ void testWaveExport (void)
 			   "and every load counts - which is what a held note looks like from here");
 	}
 
+	/** What the sample export finds in a C140 song.
+
+		The export walks the writes rather than playing the file, so this is a statement about the
+		walk: one keyed voice naming one sample yields one entry, as long as start..end, at the
+		chip's reference rate.
+	*/
+	void testC140SampleCollection (void)
+	{
+		using namespace toybox;
+
+		std::printf ("  the C140's sample list\n");
+
+		midi::SongIr ir;
+
+		midi::ChipSlot slot;
+		slot.kind = midi::ChipKind::c140;
+		slot.flags = 0x03;		// linear banking: the address is the ROM offset
+		ir.chips.push_back (slot);
+
+		std::vector<uint8_t> rom (256, 0);
+
+		for (int i = 0; i < 64; ++i)
+		{
+			rom[0x40 + (std::size_t) i] = (uint8_t) (0x10 + (i % 16) * 7);
+		}
+
+		midi::RomBlock block;
+		block.memoryType = 0x8D;
+		block.romSize = (uint32_t) rom.size ();
+		block.romOffset = 0;
+		block.data = rom.data ();
+		block.size = rom.size ();
+		ir.roms.push_back (block);
+
+		const auto write = [&ir] (uint8_t reg, uint8_t value)
+		{
+			ir.writes.push_back (RegisterWrite { 0, reg, value, 0, 0 });
+		};
+
+		write (0x04, 0x00);		// bank
+		write (0x06, 0x00);		// start high
+		write (0x07, 0x40);		// start low: 0x0040
+		write (0x08, 0x00);		// end high
+		write (0x09, 0x80);		// end low: 0x0080
+		write (0x05, 0x80);		// key on
+
+		const auto samples = toybox::backends::libvgm::collectC140Samples (ir);
+
+		check (samples.size () == 1, "one keyed voice names one sample");
+		check (! samples.empty () && samples[0].values.size () == 64,
+			   "as long as start..end");
+		check (! samples.empty () && samples[0].rate > 0.0, "at the chip's reference rate");
+
+		// Keying the same sample again is still one entry: two voices on one drum are one file.
+		write (0x05, 0x80);
+		check (toybox::backends::libvgm::collectC140Samples (ir).size () == 1,
+			   "and a second hit of it adds nothing");
+	}
+
 	void testChannelFromChip (void)
 	{
 		using namespace toybox::playback;
@@ -5698,6 +5760,7 @@ int main (void)
 	testC140NoisySampleFallsBackToTheRootRate();
 	testC140System2BankIsFolded();
 	testC140WaveFromRom();
+	testC140SampleCollection();
 
 	testC352Note();
 	testC352KeyOnIsTheExecuteWrite();
