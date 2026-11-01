@@ -1,4 +1,4 @@
-// Chip-level tests: register writes in, notes out - no libvgm, no JUCE, no audio device.
+﻿// Chip-level tests: register writes in, notes out - no libvgm, no JUCE, no audio device.
 //
 // This is the layer the rest of the MIDI path trusts: if the 2A03 decoder says A4 lasts one
 // second, the encoder will emit exactly that. Nothing here listens to a chip; every expectation
@@ -19,6 +19,7 @@
 #include "midi/SongIr.h"
 
 #include "backends/libvgm/C140Samples.h"
+#include "backends/libvgm/C352Samples.h"
 
 #include "playback/ChannelFromChip.h"
 #include "playback/WaveExport.h"
@@ -5437,6 +5438,69 @@ void testWaveExport (void)
 			   "and a second hit of it adds nothing");
 	}
 
+	/** What the export finds in a C352 song.
+
+		Key-on here is a flags bit that the execute write acts on, not a write of its own, so this is
+		as much a statement about the sweep as about the address arithmetic: one keyed voice, one
+		sample, running to its end inclusively.
+	*/
+	void testC352SampleCollection (void)
+	{
+		using namespace toybox;
+
+		std::printf ("  the C352's sample list\n");
+
+		midi::SongIr ir;
+
+		midi::ChipSlot slot;
+		slot.kind = midi::ChipKind::c352;
+		slot.clockHz = 12288000;
+		ir.chips.push_back (slot);
+
+		std::vector<uint8_t> rom (0x200, 0);
+
+		for (int i = 0; i < 64; ++i)
+		{
+			rom[0x100 + (std::size_t) i] = (uint8_t) (0x10 + (i % 16) * 7);
+		}
+
+		midi::RomBlock block;
+		block.memoryType = 0x92;
+		block.romSize = (uint32_t) rom.size ();
+		block.romOffset = 0;
+		block.data = rom.data ();
+		block.size = rom.size ();
+		ir.roms.push_back (block);
+
+		const auto write = [&ir] (uint16_t offset, uint16_t value)
+		{
+			RegisterWrite w;
+			w.deviceId = 0;
+			w.port = (uint8_t) ((offset >> 8) & 0x7F);
+			w.reg = (uint8_t) (offset & 0xFF);
+			w.value = value;
+			ir.writes.push_back (w);
+		};
+
+		write (0x04, 0x00);			// bank
+		write (0x05, 0x0100);		// start
+		write (0x06, 0x013F);		// end
+		write (0x03, 0x4000);		// key on
+		write (0x0202, 0);			// execute
+
+		const auto samples = backends::libvgm::collectC352Samples (ir);
+
+		check (samples.size () == 1, "one keyed voice names one sample");
+		check (! samples.empty () && samples[0].values.size () == 64,
+			   "and it runs to its end inclusively");
+
+		// The same voice keyed again is still one file.
+		write (0x03, 0x4000);
+		write (0x0202, 0);
+		check (backends::libvgm::collectC352Samples (ir).size () == 1,
+			   "and a second hit of it adds nothing");
+	}
+
 	void testChannelFromChip (void)
 	{
 		using namespace toybox::playback;
@@ -5784,6 +5848,7 @@ int main (void)
 	testC140System2BankIsFolded();
 	testC140WaveFromRom();
 	testC140SampleCollection();
+	testC352SampleCollection();
 	testDisplayColumns();
 
 	testC352Note();
