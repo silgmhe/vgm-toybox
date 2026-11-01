@@ -111,7 +111,12 @@ void paintChannelRow (juce::Graphics& g,
 
 	if (paintKeys != nullptr)
 	{
-		paintKeys (g, row.keys, channel.note);
+		// A lit key means "this note is sounding", the same thing the waveform's colour means and
+		// the same thing `audible` above decides. Passing the note alone kept the key lit after the
+		// sound had stopped, because a decoder's pitch registers go on holding their last value -
+		// most visibly on a drum, whose note comes from the song's sample table rather than from a
+		// register that ever clears.
+		paintKeys (g, row.keys, audible ? channel.note : -1);
 	}
 
 	paintMeter (g, row.meter, channel);
