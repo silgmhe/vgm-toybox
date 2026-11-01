@@ -140,6 +140,28 @@ struct ChannelState
 
 	PitchSource pitchSource = PitchSource::unpitched;
 
+	/** The four numbers that make an FM voice look unlike the next one.
+
+		Here rather than as a virtual on `IChipDecoder` because exactly three decoders fill them (OPN,
+		OPM, OPL) and the other twenty-seven would each owe an empty implementation. A display-only
+		consumer reads them; nothing in the note path does, which is why they are not part of
+		`pitchFieldsOf` or the sanity check.
+
+		The MIDI output does not need them - a MIDI note has no timbre. They exist so a keyboard row
+		can draw the patch instead of a generic sine, and they are packed into `shapeParameter` by
+		`waveform::packFm` at the boundary. See docs/desgin/libvgm-visualisation.md, section 4. */
+	/** Whether the four numbers below describe this channel's patch.
+
+		Not inferable from the numbers: `fmMultiple == 0` is a legal multiplier, so zero cannot mean
+		"unread". A decoder that does not fill them leaves this false, and the display draws its
+		generic FM shape rather than a patch made of defaults - which would look like a real one. */
+	bool fmKnown = false;
+
+	int fmMultiple = 0;		// the modulator's frequency multiple, 0..15
+	int fmLevel = 0;		// the modulator's total level, 0..63 (attenuation, 0 is loudest)
+	int fmWaveform = 0;		// the carrier's waveform select, 0..3 (OPM/OPL only; OPN has one sine)
+	int fmFeedback = 0;		// the carrier's self-feedback, 0..7
+
 	/** Monotonic count of key-on events on this channel, for the chips that have one.
 
 		A driver that retriggers a voice at the same pitch - a bass line repeating a note, a drum

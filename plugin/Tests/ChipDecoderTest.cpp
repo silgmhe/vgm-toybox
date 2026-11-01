@@ -5216,6 +5216,32 @@ void testWaveExport (void)
 			check (channelFromChip (chip, table, pulseHints, "2A03", "Pulse 1").shapeParameter == 0,
 				   "a pulse channel keeps the duty instead of the patch");
 		}
+
+		{
+			// An FM channel carries a packed patch - but only when the decoder actually read one.
+			// "Multiple 0, level 0, no feedback" is a legitimate patch, so the flag is what
+			// separates "this sound" from "this decoder has not been taught to read it yet".
+			ChannelState chip;
+			chip.present = true;
+			chip.gate = true;
+			chip.hz = 440.0;
+			chip.fmMultiple = 3;
+			chip.fmLevel = 10;
+			chip.fmWaveform = 1;
+			chip.fmFeedback = 5;
+
+			auto fmHints = hints;
+			fmHints.waveKind = (int) Kind::fm;
+
+			chip.fmKnown = true;
+			check (channelFromChip (chip, table, fmHints, "YM2612", "FM 1").shapeParameter
+					   == toybox::playback::waveform::packFm (3, 10, 1, 5),
+				   "a read patch is packed for the drawing");
+
+			chip.fmKnown = false;
+			check (channelFromChip (chip, table, fmHints, "YM2608", "FM 1").shapeParameter == 0,
+				   "an unread patch leaves the generic sine alone");
+		}
 	}
 
 int main (void)

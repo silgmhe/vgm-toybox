@@ -165,6 +165,17 @@ struct OpnDecoder::Impl
 		bool keyed = false;
 		bool present = true;
 		uint8_t totalLevel[4] = { 0x7F, 0x7F, 0x7F, 0x7F };
+
+		/** 0x30-0x3F: the frequency multiplier of each operator, four per channel.
+
+			Kept for the display rather than for the pitch: the channel's own f-number already says
+			what the note is, and the multiplier only decides what the patch sounds like. Operator 1
+			is the modulator on every algorithm but 7, where all four run in parallel - there the
+			first operator is still the one whose ratio says the most about the patch. */
+		int multiple[4] = { 1, 1, 1, 1 };
+
+		/** 0xB0 bits 3-5: how hard the first operator feeds back into itself. */
+		int feedback = 0;
 	};
 
 	/** One one-shot channel: the write starts it, its own end time stops it. `active` keeps the
@@ -623,6 +634,25 @@ void OpnDecoder::write (const RegisterWrite& write)
 	// other way round - swapping them sends each operator's level to a stranger's channel and
 	// leaves the real carrier at the silent default (FM5 of a YM2612 song then played but had
 	// no note: the channel's carriers still read 0x7F).
+	// 0x30-0x3F: DT and MULTI, four operators per channel. Only the multiplier is kept - the
+	// detune is a few cents and moves nothing a row can draw.
+	if ((reg & 0xF0) == 0x30)
+	{
+		if ((reg & 0x03) == 3)
+		{
+			return;
+		}
+
+		const int channel = (int) (reg & 0x03) + port * 3;
+		if (channel >= impl->fmCount)
+		{
+			return;
+		}
+
+		impl->channels[channel].multiple[(reg >> 2) & 0x03] = (int) (write.value & 0x0F);
+		return;
+	}
+
 	if ((reg & 0xF0) == 0x40)
 	{
 		if ((reg & 0x03) == 3)
@@ -670,7 +700,9 @@ void OpnDecoder::write (const RegisterWrite& write)
 		const int channel = (int) (reg & 0x03) + port * 3;
 		if (channel < impl->fmCount)
 		{
-			impl->channels[channel].algorithm = (int) (write.value & 0x07);
+			Impl::Channel& state = impl->channels[channel];
+			state.algorithm = (int) (write.value & 0x07);
+			state.feedback = (int) ((write.value >> 3) & 0x07);
 		}
 	}
 }
@@ -712,6 +744,16 @@ ChannelState OpnDecoder::channelState (int channel) const
 		const bool dacOwnsChannel = channel == 5 && impl->dacEnabled;
 		state.gate = voice.keyed && level < 0x7F && ! dacOwnsChannel;
 		state.volume = 15 - (level * 15) / 127;
+
+		// The patch, for the display only. Operator 1's ratio and level, the channel's feedback,
+		// and no waveform select - the OPN's operators have one sine each, unlike the OPM's four.
+		// The total level is 0..127 here and 0..63 in the packed form (waveform::packFm), so it is
+		// scaled rather than truncated.
+		state.fmKnown = true;
+		state.fmMultiple = voice.multiple[1];
+		state.fmLevel = (voice.totalLevel[1] * 63) / 127;
+		state.fmFeedback = voice.feedback;
+		state.fmWaveform = 0;
 		return state;
 	}
 

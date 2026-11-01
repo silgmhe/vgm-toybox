@@ -51,6 +51,17 @@ struct OpmDecoder::Impl
 		int kf = 0;
 		bool havePitch = false;
 		bool keyed = false;
+
+		/** The patch, for the display only - the note comes from kc/kf above.
+
+			Operator addresses on this chip advance by eight and the channel is the low three bits
+			(`0x40 + op*8 + ch`), where the OPN puts the operator in the same nibble as the channel
+			(`0x40 + op*4 + ch`). Guessing one layout from the other silently reads the wrong
+			operator's registers. */
+		int multiple[4] = { 1, 1, 1, 1 };		// 0x40-0x5F, low four bits
+		uint8_t totalLevel[4] = { 0x7F, 0x7F, 0x7F, 0x7F };	// 0x60-0x7F, seven bits
+		int algorithm = 0;		// 0x20-0x27, low three bits
+		int feedback = 0;		// 0x20-0x27, bits 3-5
 	};
 
 	Channel channels[kChannels];
@@ -95,6 +106,34 @@ void OpmDecoder::write (const RegisterWrite& write)
 	if (reg >= 0x30 && reg < 0x38)
 	{
 		impl->channels[reg & 0x07].kf = (write.value >> 2) & 0x3F;
+		return;
+	}
+
+	// 0x20-0x27: feedback in bits 3-5, connection (the algorithm that decides which operators
+	// reach the output) in the low three. The pan bits above them change the stereo image only.
+	if (reg >= 0x20 && reg < 0x28)
+	{
+		Impl::Channel& channel = impl->channels[reg & 0x07];
+		channel.algorithm = (int) (write.value & 0x07);
+		channel.feedback = (int) ((write.value >> 3) & 0x07);
+		return;
+	}
+
+	// 0x40-0x5F: DT1 in the high nibble, MULTI in the low four.
+	if (reg >= 0x40 && reg < 0x60)
+	{
+		const int channel = reg & 0x07;
+		const int op = (reg >> 3) & 0x03;
+		impl->channels[channel].multiple[op] = (int) (write.value & 0x0F);
+		return;
+	}
+
+	// 0x60-0x7F: total level, seven bits of attenuation.
+	if (reg >= 0x60 && reg < 0x80)
+	{
+		const int channel = reg & 0x07;
+		const int op = (reg >> 3) & 0x03;
+		impl->channels[channel].totalLevel[op] = (uint8_t) (write.value & 0x7F);
 	}
 }
 
@@ -121,6 +160,14 @@ ChannelState OpmDecoder::channelState (int channel) const
 	state.gate = voice.keyed && voice.havePitch;
 	state.period = (uint32_t) ((voice.kc << 6) | voice.kf);
 	state.volume = 15;
+
+	// The patch, for the display only. Operator 1 is the modulator on every algorithm but 7, and
+	// the YM2151's operators have one waveform each, so `fmWaveform` stays zero.
+	state.fmKnown = true;
+	state.fmMultiple = voice.multiple[1];
+	state.fmLevel = (voice.totalLevel[1] * 63) / 127;
+	state.fmFeedback = voice.feedback;
+	state.fmWaveform = 0;
 	return state;
 }
 

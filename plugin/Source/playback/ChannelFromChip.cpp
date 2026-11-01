@@ -138,9 +138,20 @@ ChannelState channelFromChip (const chips::ChannelState& chipState,
 	// `patch` means a different thing on every chip family - a duty on a pulse channel, a sample
 	// number on a PCM one - so only the kinds that read it as one number get it. The chips whose
 	// patch is a duty say so through `hints.duty`; the rest carry it as the shape's parameter.
-	if (hints.waveKind == (int) waveform::Kind::noise
-		|| hints.waveKind == (int) waveform::Kind::stored
-		|| hints.waveKind == (int) waveform::Kind::delta)
+	if (hints.waveKind == (int) waveform::Kind::fm)
+	{
+		// Packed only when the decoder says it read the patch. An FM channel whose operator
+		// registers were never parsed would otherwise be drawn as "multiple 0, level 0, no
+		// feedback" - a real patch that belongs to some other sound. Zero leaves cycleFor() on its
+		// generic sine, which is the honest answer to "this one is not known".
+		state.shapeParameter = chipState.fmKnown
+								   ? waveform::packFm (chipState.fmMultiple, chipState.fmLevel,
+													   chipState.fmWaveform, chipState.fmFeedback)
+								   : 0;
+	}
+	else if (hints.waveKind == (int) waveform::Kind::noise
+			 || hints.waveKind == (int) waveform::Kind::stored
+			 || hints.waveKind == (int) waveform::Kind::delta)
 	{
 		state.shapeParameter = chipState.patch;
 	}
