@@ -64,6 +64,11 @@ ChipWriteRouter::ChipWriteRouter (const std::vector<PLR_DEV_INFO>& deviceList)
 	}
 }
 
+std::vector<DecoderBufferBase*> ChipWriteRouter::buffers (void)
+{
+	return decoders.buffers ();
+}
+
 const PLR_DEV_INFO* ChipWriteRouter::deviceFor (DEV_ID type, int instance) const
 {
 	const auto exact = deviceByType.find (typeInstanceKey (type, instance));

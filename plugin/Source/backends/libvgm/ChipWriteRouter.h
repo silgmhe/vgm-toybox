@@ -25,6 +25,17 @@ namespace toybox::backends::libvgm
 struct DecoderBufferBase
 {
 	virtual ~DecoderBufferBase() = default;
+
+	/** Which decoder class this buffer holds. A caller that needs an instance per device keys its
+		own map on this rather than on the chip kind, because four OPN devices share one decoder. */
+	virtual std::type_index decoderType (void) const = 0;
+
+	/** A fresh decoder of this buffer's class, owned by the caller. */
+	virtual std::unique_ptr<chips::IChipDecoder> makeDecoder (void) const = 0;
+
+	/** What the decoder needs besides its registers: the clock to assume when the device reports
+		none, whether it wants a memory image, and where that image comes from. */
+	virtual chips::ChipRequirements requirements (void) const = 0;
 };
 
 template <typename Decoder>
@@ -59,6 +70,15 @@ struct ChipBuffer final : DecoderBufferBase
 
 	std::map<uint32_t, std::vector<chips::RegisterWrite>> writes;
 	std::map<uint32_t, const PLR_DEV_INFO*> devices;
+
+	std::type_index decoderType (void) const override { return std::type_index (typeid (Decoder)); }
+
+	std::unique_ptr<chips::IChipDecoder> makeDecoder (void) const override
+	{
+		return std::make_unique<Decoder> ();
+	}
+
+	chips::ChipRequirements requirements (void) const override { return Decoder::kRequirements; }
 };
 
 /** The decoders this build can run, created on first use and owned for the router's lifetime.
@@ -73,20 +93,33 @@ public:
 	ChipBuffer<Decoder>& decoder (void)
 	{
 		const auto key = std::type_index (typeid (Decoder));
-		const auto found = buffers.find (key);
-		if (found != buffers.end())
+		const auto found = storage.find (key);
+		if (found != storage.end())
 		{
 			return static_cast<ChipBuffer<Decoder>&> (*found->second);
 		}
 
 		auto created = std::make_unique<ChipBuffer<Decoder>> ();
 		auto* raw = created.get ();
-		buffers.emplace (key, std::move (created));
+		storage.emplace (key, std::move (created));
 		return *raw;
 	}
 
+	std::vector<DecoderBufferBase*> buffers (void)
+	{
+		std::vector<DecoderBufferBase*> all;
+		all.reserve (storage.size ());
+
+		for (auto& entry : storage)
+		{
+			all.push_back (entry.second.get ());
+		}
+
+		return all;
+	}
+
 private:
-	std::map<std::type_index, std::unique_ptr<DecoderBufferBase>> buffers;
+	std::map<std::type_index, std::unique_ptr<DecoderBufferBase>> storage;
 };
 
 /** Routes one register write to the decoder that owns its chip.
@@ -132,6 +165,14 @@ public:
 	/** The device a libvgm type and instance number name, or the first of that type when the exact
 		instance did not start. Null when the song has no such chip. */
 	const PLR_DEV_INFO* deviceFor (DEV_ID type, int instance) const;
+
+	/** Every buffer that has been created, in no particular order.
+
+		For a caller that drives decoders directly - the visualisation's replay - rather than letting
+		the note extractor consume them: it walks these, takes the writes each has queued, and feeds
+		its own long-lived instances. Without this it would have to repeat the kind-to-decoder
+		`switch` that `route` owns, which is the thing this class exists to prevent. */
+	std::vector<DecoderBufferBase*> buffers (void);
 
 private:
 	/** Both the RF5C68 and the RF5C164 report DEVID_RF5C68; only the config flags tell them apart,
