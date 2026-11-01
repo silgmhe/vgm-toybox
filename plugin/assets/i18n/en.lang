@@ -35,7 +35,7 @@ language: English
 "menu.file.close" = "Close Song";
 "menu.file.exit" = "Exit";
 "menu.file.export" = "Export";
-"menu.file.export.samples" = "All DPCM Samples...";
+"menu.file.export.samples" = "All PCM Samples...";
 "menu.file.open" = "Open Song...";
 "menu.help" = "Help";
 "menu.help.about" = "About VGMToybox...";
@@ -232,11 +232,19 @@ language: English
 "visualiser.dragHint" = "Drag into a wavetable synth";
 "visualiser.dragFailed.title" = "Could not write the wavetable";
 "visualiser.dragFailed.body" = "The temporary file for this drag could not be created. Check that the system temp folder is writable, then try again.";
-	"export.title" = "Wavetables exported";
-	"export.written" = "{0} written to";
-	"export.skippedSample" = "{0} sampled channel(s) left out: no sample data was captured for them.";
-	"export.failed" = "{0} could not be written.";
-	"export.none" = "Nothing was written.";
+	"export.title" = "Wavetables exported";
+
+	"export.written" = "{0} written to";
+
+	"export.skippedSample" = "{0} sampled channel(s) left out: no sample data was captured for them.";
+
+	"export.failed" = "{0} could not be written.";
+
+	"export.none" = "Nothing was written.";
+"export.samples.title" = "Samples exported";
+"export.samples.seen" = "Samples found: {0}";
+"export.samples.none" = "This file has no samples to export. Only the NES DPCM samples are collected so far - the other chips are being wired in, and their waves can already be dragged out of a row.";
+
 	"export.noChannels" = "Nothing was written: the panel is not receiving channel state at all.";
 	"export.seen" = "Channels in the snapshot: {0}";
 	"export.options.title" = "Export wavetables";
@@ -249,7 +257,8 @@ language: English
 	"export.options.cancel" = "Cancel";
 	"export.options.confirm" = "Export";
 	"export.options.hint" = "A single cycle is what a wavetable synth reads: it plays the shape at whatever note you press. A loop is what a sampler reads: it has a pitch, and these are written at A4 whatever the channel was playing.";
-	"export.close" = "Close";
+	"export.close" = "Close";
+
 "visualiser.scope" = "Waveform";
 "settings.nes" = "NSF";
 "settings.nes.duration" = "Song length";
