@@ -13,6 +13,8 @@
 
 #include "playback/SongBackend.h"
 
+#include "VgmReplayer.h"
+
 namespace toybox::backends::libvgm
 {
 
@@ -53,6 +55,16 @@ public:
 		sampleList = std::move (list);
 	}
 
+	/** The parsed song and the devices it started, for the display.
+
+		Handed in rather than parsed here, for the same reason `setSamples` is: one parse answers for
+		every player of the song, and each of them walking it again would be the same answer at N
+		times the cost. A null song leaves `captureState` returning false, which is what the panel
+		reads as "this backend has nothing to say".
+	*/
+	void setReplaySource (std::shared_ptr<const midi::SongIr> ir,
+						  const std::vector<PLR_DEV_INFO>& devices);
+
 	// --- playback::ITrackPlayer ---------------------------------------------------
 	void start (void) override;
 	void pause (void) override;
@@ -63,6 +75,14 @@ public:
 	int render (float* left, float* right, int numSamples) override;
 	double positionSeconds (void) override;
 	bool isFinished (void) const override { return finished.load(); }
+
+	/** What the chips are doing, for the keyboard page.
+
+		Audio thread, called after render(): the replayer is advanced to the position render() just
+		reached, and its decoders are read. Nothing is locked - the replayer is this player's alone,
+		and `captureState` is the only thing that touches it.
+	*/
+	bool captureState (playback::ChipStateSnapshot& snapshot) const override;
 
 	/** The song's DPCM samples, as the song instance collected them. Empty for a file with no
 		data blocks, which is a file that carries no sample bytes at all. */
@@ -100,6 +120,25 @@ private:
 	/** Empty until the song instance fills it; shared because every player of one song sees the
 		same list and none of them owns it. */
 	std::shared_ptr<const std::vector<playback::DecodedSample>> sampleList;
+
+	// --- the display path ---------------------------------------------------------
+	// All of it `mutable` because captureState is const by contract and has to advance the replayer
+	// to the position render() reached. Nothing here is shared with another thread: the engine calls
+	// captureState on the audio thread, after render, and this player owns the state.
+
+	std::shared_ptr<const midi::SongIr> replayIr;
+	std::vector<PLR_DEV_INFO> replayDevices;
+	mutable std::unique_ptr<VgmReplayer> replayer;
+
+	/** Set by a seek or a loop point, consumed by the next captureState. A counter rather than a
+		flag: two seeks between two frames must not become one rewind and a position that never
+		arrives. */
+	mutable std::atomic<bool> pendingRewind { false };
+
+	/** Where render() left the song, in seconds. Written on the audio thread in render(),
+		read in captureState() - which is the same thread, so this is for the compiler rather than
+		for a race. */
+	mutable std::atomic<double> lastPosition { 0.0 };
 
 	JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (LibvgmTrackPlayer)
 };

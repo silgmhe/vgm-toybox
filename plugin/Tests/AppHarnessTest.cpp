@@ -753,6 +753,33 @@ private:
 		if (action == "play") { processor.getEngine().play(); }
 		else if (action == "pause") { processor.getEngine().pause(); }
 		else if (action == "stop") { processor.getEngine().stop(); }
+		else if (action == "render")
+		{
+			// Audio as the host would deliver it. `tick` only repaints, so anything that lives in
+			// the render path - a chip snapshot among them - never runs without this. The block
+			// size is the harness's own, not the host's, so a script says how many blocks it wants
+			// rather than how many samples.
+			const int blocks = tokens.size() > 2 ? juce::jmax (1, tokens[2].getIntValue()) : 1;
+			constexpr int kBlockSize = 512;
+
+			juce::AudioBuffer<float> buffer (2, kBlockSize);
+			juce::MidiBuffer noMidi;
+
+			// The window asks for a snapshot while the keyboard page is up; a script may be running
+			// without a window at all, so the request is made here too - otherwise the capture path
+			// is skipped and the snapshot stays empty for a reason that has nothing to do with the
+			// backend.
+			processor.getEngine().setStateCaptureWanted (true);
+
+			for (int i = 0; i < blocks; ++i)
+			{
+				buffer.clear();
+				processor.processBlock (buffer, noMidi);
+			}
+
+			report (true, "engine render " + juce::String (blocks) + " blocks");
+			return;
+		}
 		else
 		{
 			report (false, "engine: unknown action '" + tokens[1] + "'");

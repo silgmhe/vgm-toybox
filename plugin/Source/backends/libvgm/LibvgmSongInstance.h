@@ -6,6 +6,7 @@
 #include <juce_core/juce_core.h>
 
 #include "playback/SongBackend.h"
+#include "midi/SongIr.h"
 
 #include "LibvgmTrackPlayer.h"
 
@@ -66,6 +67,15 @@ private:
 		the file, and a VGM states it in its command stream, so one walk answers for all of them.
 	*/
 	std::shared_ptr<const std::vector<playback::DecodedSample>> dpcmSamples;
+
+	/** The song parsed into register writes, shared by every player for the same reason.
+
+		The display needs it while the song plays, and parsing per frame would be the same walk sixty
+		times a second. One parse at load: `RegisterWrite` is twelve bytes, so a long rip of a few
+		hundred thousand writes is a few megabytes - that figure comes from the struct's size and an
+		estimate of the write count, not from a measurement of a particular file.
+	*/
+	std::shared_ptr<const midi::SongIr> songIr;
 
 	JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (LibvgmSongInstance)
 };

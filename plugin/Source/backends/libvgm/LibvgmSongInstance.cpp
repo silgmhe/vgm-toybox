@@ -12,6 +12,7 @@
 
 #include "LibvgmVgz.h"
 #include "MidiSequenceBuilder.h"
+#include "formats/vgm/VgmSongLoader.h"
 #include "midi/ChipPlans.h"
 #include "settings/SettingsStore.h"
 
@@ -210,7 +211,22 @@ bool LibvgmSongInstance::prepare (double hostSampleRate, int newMaxBlockSize, ju
 			collectNesDpcmSamples (playerMemory.data, playerMemory.size));
 	}
 
+	// The same walk the MIDI path makes, kept because the display needs it while the song plays.
+	// Failure leaves it null and the panel draws nothing, which is the same answer that path gives
+	// for a file it cannot read.
+	{
+		midi::SongIr parsed;
+		std::string error;
+
+		formats::vgm::VgmSongLoader loader;
+		if (loader.load (playerMemory.data, playerMemory.size, parsed, error))
+		{
+			songIr = std::make_shared<const midi::SongIr> (std::move (parsed));
+		}
+	}
+
 	probe->setSamples (dpcmSamples);
+	probe->setReplaySource (songIr, deviceInfo);
 	probe->setTrackList (&tracks);	// setTrackAudible() resolves the track through this list
 	refreshTimelineFacts();
 	return true;
@@ -514,6 +530,7 @@ std::unique_ptr<playback::ITrackPlayer> LibvgmSongInstance::createPlayer (juce::
 
 	player->setTimeline (loopCount, fadeSeconds);
 	player->setSamples (dpcmSamples);
+	player->setReplaySource (songIr, deviceInfo);
 	player->setTrackList (&tracks);
 	return player;
 }

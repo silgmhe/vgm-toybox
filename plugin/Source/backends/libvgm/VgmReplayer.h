@@ -21,17 +21,16 @@ namespace toybox::backends::libvgm
 
 	The MIDI builder reads the entire stream before it makes a single note, because a note's length
 	only exists after the song has ended. A display cannot do that: it needs the state *now*, and
-	re-parsing on every frame is the same work sixty times a second. So this holds one decoder per
-	(decoder class, device) for the song's lifetime and feeds it only the writes it has passed.
+	re-parsing on every frame is the same work sixty times a second. So the song is parsed once into
+	a `SongIr` and this walks it, handing each decoder only the writes it has passed.
 
-	Two facts shape the type. Decoders are per *device*, not per class: four OPN devices share one
-	decoder class and must not share an instance, or channel 3 of one chip and channel 3 of the next
-	would be the same voice. And the routing is the router's, not this class's - which chip a write
-	belongs to and which decoder answers it is exactly the question `ChipWriteRouter` exists to
-	answer once.
+	Two facts shape the type. Decoders are per *device*, not per class: four OPN chips share one
+	decoder class and must not share an instance, or channel 3 of one song's YM2612 would be the same
+	voice as channel 3 of the next. And the routing is the router's - which chip a write belongs to
+	and which decoder answers it is exactly the question `ChipWriteRouter` exists to answer once.
 
-	Message-thread only, except where a caller says otherwise: `advanceTo` is written to run on the
-	audio thread inside `captureState`, where it touches nothing shared.
+	Audio thread. `advanceTo` allocates only when a device appears that it has not seen before, which
+	is the first frame after a song is opened; after that it is a walk over two maps.
 */
 class VgmReplayer
 {
@@ -39,47 +38,56 @@ public:
 	/** One decoder instance, and the device it is the state of. */
 	struct Instance
 	{
+		// A constructor rather than aggregate initialisation: `std::type_index` has no default, so
+		// the members cannot carry initialisers and still form an aggregate.
+		Instance (std::type_index decoderClass, uint32_t id, const PLR_DEV_INFO* dev,
+				  chips::IChipDecoder* dec, uint32_t clk)
+			: type (decoderClass), deviceId (id), device (dev), decoder (dec), clock (clk)
+		{
+		}
+
 		std::type_index type;
-		uint32_t deviceId = chips::kNoDevice;
-		const PLR_DEV_INFO* device = nullptr;
-		chips::IChipDecoder* decoder = nullptr;
-		uint32_t clock = 0;		// kept for reset(): a rewind must not fall back to the chip's default
+		uint32_t deviceId;
+		const PLR_DEV_INFO* device;
+		chips::IChipDecoder* decoder;
+		uint32_t clock;		// kept for reset(): a rewind must not fall back to the chip's default
 	};
 
-	VgmReplayer (const std::vector<PLR_DEV_INFO>& devices, double tickRate);
+	VgmReplayer (std::shared_ptr<const midi::SongIr> song, const std::vector<PLR_DEV_INFO>& devices);
 
-	/** Feeds every write up to `sampleTime` and moves the decoders to it.
+	/** Routes and feeds every write up to `sampleTime`, then moves the decoders to it.
 
-		Writes are consumed as they are fed, so a second call with the same time does nothing. Going
-		backwards is not supported - `rewind()` is the way to start over, and the caller knows when
-		that is right (a loop, a seek) while this class does not.
+		Writes are consumed as they are fed, so a second call at the same position does nothing.
+		Going backwards is not supported - `rewind()` is the way to start over, and the caller knows
+		when that is right (a loop, a seek) while this class does not.
 	*/
 	void advanceTo (uint32_t sampleTime);
 
-	/** Back to the start of the song: every decoder reset, every queued write forgotten.
+	/** Back to the start of the song: every decoder reset, every queued write dropped, the cursor
+		back at the first write.
 
 		The alternative - leaving the decoders as they are and letting the cursor wrap - is what
-		produces a snapshot that describes the position before a loop point while the music plays the
-		one after it.
+		produces a snapshot describing the position before a loop point while the music plays the one
+		after it.
 	*/
 	void rewind (void);
 
 	/** The live instances, for a caller that reads `channelState` from each. */
 	const std::vector<Instance>& instances (void) const { return live; }
 
-	/** Where the decoders have been fed up to, in the song's own tick units. */
-	uint32_t position (void) const { return fedTo; }
+	/** The unit `advanceTo` takes, from the song's loader. */
+	double tickRate (void) const;
 
 private:
-	/** Creates an instance for any buffer that has appeared since the last call. */
+	/** Creates an instance for any device the router has delivered writes for since the last call. */
 	void adoptNewBuffers (void);
 
+	std::shared_ptr<const midi::SongIr> song;
 	ChipWriteRouter router;
-	double tickRate = 44100.0;
+	std::size_t nextWrite = 0;
+
 	std::vector<Instance> live;
 	std::vector<std::unique_ptr<chips::IChipDecoder>> owned;
-	uint32_t fedTo = 0;
-	bool started = false;
 };
 
 } // namespace toybox::backends::libvgm

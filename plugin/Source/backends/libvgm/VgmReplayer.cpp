@@ -5,9 +5,15 @@
 namespace toybox::backends::libvgm
 {
 
-VgmReplayer::VgmReplayer (const std::vector<PLR_DEV_INFO>& devices, double rate)
-	: router (devices), tickRate (rate > 0.0 ? rate : 44100.0)
+VgmReplayer::VgmReplayer (std::shared_ptr<const midi::SongIr> ir,
+						   const std::vector<PLR_DEV_INFO>& devices)
+	: song (std::move (ir)), router (devices)
 {
+}
+
+double VgmReplayer::tickRate (void) const
+{
+	return song != nullptr && song->tickRate > 0.0 ? song->tickRate : 44100.0;
 }
 
 void VgmReplayer::adoptNewBuffers (void)
@@ -16,9 +22,7 @@ void VgmReplayer::adoptNewBuffers (void)
 	{
 		const auto type = buffer->decoderType ();
 
-		// A device the router has already delivered writes for. One instance per device: the same
-		// decoder class drives four OPN chips and must not be one object between them.
-		for (const auto& entry : buffer->devices)
+		for (const auto& entry : buffer->deviceTable ())
 		{
 			const auto deviceId = entry.first;
 
@@ -45,19 +49,12 @@ void VgmReplayer::adoptNewBuffers (void)
 									   ? device->devCfg->clock
 									   : requirements.fallbackClock;
 
-			// No memory image yet. The first version of the visualisation draws every channel's
-			// shape from its kind, and the sampled chips need their ROM before a note means
-			// anything - see docs/desgin/libvgm-visualisation.md, limitation 1.
-			decoder->reset (chips::ChipConfig { clock, tickRate });
+			// No memory image yet. The first version draws every channel's shape from its kind, and
+			// a sampled chip needs its ROM before a note means anything - see
+			// docs/desgin/libvgm-visualisation.md, limitation 1.
+			decoder->reset (chips::ChipConfig { clock, tickRate () });
 
-			Instance instance;
-			instance.type = type;
-			instance.deviceId = deviceId;
-			instance.device = device;
-			instance.decoder = decoder.get ();
-			instance.clock = clock;
-
-			live.push_back (instance);
+			live.push_back (Instance { type, deviceId, device, decoder.get (), clock });
 			owned.push_back (std::move (decoder));
 		}
 	}
@@ -65,13 +62,33 @@ void VgmReplayer::adoptNewBuffers (void)
 
 void VgmReplayer::advanceTo (uint32_t sampleTime)
 {
+	if (song == nullptr)
+	{
+		return;
+	}
+
+	// Route first: the router decides which decoder a write belongs to and queues it there. Doing it
+	// here rather than in the caller keeps the cursor and the queue in one place - the two have to
+	// agree, and a caller that stopped routing halfway would leave the decoders behind silently.
+	for (; nextWrite < song->writes.size (); ++nextWrite)
+	{
+		const auto& write = song->writes[nextWrite];
+
+		if (write.sampleTime > sampleTime)
+		{
+			break;
+		}
+
+		router.route (*song, write);
+	}
+
 	adoptNewBuffers ();
 
 	for (auto* buffer : router.buffers())
 	{
 		const auto type = buffer->decoderType ();
 
-		for (auto& entry : buffer->writes)
+		for (auto& entry : buffer->pendingWrites ())
 		{
 			auto& writes = entry.second;
 
@@ -81,7 +98,7 @@ void VgmReplayer::advanceTo (uint32_t sampleTime)
 												 return instance.type == type && instance.deviceId == deviceId;
 											 });
 
-			if (found == live.end() || found->decoder == nullptr)
+			if (found == live.end () || found->decoder == nullptr)
 			{
 				continue;		// a device with no decoder: its writes are still ours to drop
 			}
@@ -108,26 +125,23 @@ void VgmReplayer::advanceTo (uint32_t sampleTime)
 			writes.erase (writes.begin (), writes.begin () + (std::ptrdiff_t) consumed);
 		}
 	}
-
-	fedTo = sampleTime;
-	started = true;
 }
 
 void VgmReplayer::rewind (void)
 {
-	// Every decoder goes back to its reset state, and every write that has been fed is dropped by
-	// the caller's own queue - this class cannot un-feed what it has already written.
-	//
-	// The clock comes from the instance rather than being left at zero: a decoder's reset falls back
-	// to its own default when the clock is unknown, and that default is not this device's clock, so
-	// a rewind would quietly retune every chip that reports one.
+	// Every decoder goes back to its reset state, and every write that has been routed but not fed
+	// is dropped: leaving them queued would feed the end of the song's writes into a decoder that
+	// has just been put back at the start.
 	for (auto& instance : live)
 	{
-		instance.decoder->reset (chips::ChipConfig { instance.clock, tickRate });
+		// The clock comes from the instance rather than being left at zero: a decoder's reset falls
+		// back to its own default when the clock is unknown, and that default is not this device's,
+		// so a rewind would quietly retune every chip that reports one.
+		instance.decoder->reset (chips::ChipConfig { instance.clock, tickRate () });
 	}
 
-	fedTo = 0;
-	started = false;
+	router.clearWrites ();
+	nextWrite = 0;
 }
 
 } // namespace toybox::backends::libvgm

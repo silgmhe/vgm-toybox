@@ -183,6 +183,7 @@ target_sources(VGMToybox PRIVATE
 	Source/PluginProcessor.cpp
 	Source/PluginEditor.cpp
 	Source/playback/BackendRegistry.cpp
+	Source/playback/ChannelFromChip.cpp
 	Source/playback/PlaybackEngine.cpp
 	Source/playback/WaveExport.cpp
 	Source/playback/WaveShape.cpp

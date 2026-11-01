@@ -4,6 +4,7 @@
 #include <functional>
 #include <map>
 #include <memory>
+#include <type_traits>
 #include <typeindex>
 #include <vector>
 
@@ -11,6 +12,7 @@
 #include "player/playera.hpp"
 
 #include "chips/ChipTypes.h"
+#include "chips/IChipDecoder.h"
 #include "midi/SongIr.h"
 
 namespace toybox::backends::libvgm
@@ -22,6 +24,26 @@ namespace toybox::backends::libvgm
 	`OplDecoder` and four OPN devices share `OpnDecoder`, so a kind-keyed table would run two
 	decoders where the chip is one - fewer notes, no error, the hardest kind of bug to see.
 */
+namespace detail
+{
+	/** Whether a decoder states what it needs besides its registers.
+
+		Twenty-seven do; the rest - OPL, OPN, OPM, the PSGs - read no memory at all and have no
+		`kRequirements` to name. Asking unconditionally would make those five a compile error, and
+		giving them an empty one would say "this chip needs nothing" in the same words as "nobody
+		wrote it down".
+	*/
+	template <typename Decoder, typename = void>
+	struct HasRequirements : std::false_type
+	{
+	};
+
+	template <typename Decoder>
+	struct HasRequirements<Decoder, std::void_t<decltype (Decoder::kRequirements)>> : std::true_type
+	{
+	};
+}
+
 struct DecoderBufferBase
 {
 	virtual ~DecoderBufferBase() = default;
@@ -36,6 +58,17 @@ struct DecoderBufferBase
 	/** What the decoder needs besides its registers: the clock to assume when the device reports
 		none, whether it wants a memory image, and where that image comes from. */
 	virtual chips::ChipRequirements requirements (void) const = 0;
+
+	/** Drops the queued writes. The device table stays: it is what says an instance already exists
+		for a device, and clearing it would make a rewind build a second one. */
+	virtual void clearWrites (void) = 0;
+
+	/** The devices this buffer has been given writes for. A caller that keeps one decoder per
+		device reads this to learn which devices to make one for. */
+	virtual const std::map<uint32_t, const PLR_DEV_INFO*>& deviceTable (void) const = 0;
+
+	/** The writes still waiting to be fed, per device, in stream order. */
+	virtual std::map<uint32_t, std::vector<chips::RegisterWrite>>& pendingWrites (void) = 0;
 };
 
 template <typename Decoder>
@@ -78,7 +111,23 @@ struct ChipBuffer final : DecoderBufferBase
 		return std::make_unique<Decoder> ();
 	}
 
-	chips::ChipRequirements requirements (void) const override { return Decoder::kRequirements; }
+	chips::ChipRequirements requirements (void) const override
+	{
+		if constexpr (detail::HasRequirements<Decoder>::value)
+		{
+			return Decoder::kRequirements;
+		}
+		else
+		{
+			return {};		// this chip reads no memory, so it needs no image and no fallback clock
+		}
+	}
+
+	void clearWrites (void) override { writes.clear (); }
+
+	const std::map<uint32_t, const PLR_DEV_INFO*>& deviceTable (void) const override { return devices; }
+
+	std::map<uint32_t, std::vector<chips::RegisterWrite>>& pendingWrites (void) override { return writes; }
 };
 
 /** The decoders this build can run, created on first use and owned for the router's lifetime.
@@ -173,6 +222,12 @@ public:
 		its own long-lived instances. Without this it would have to repeat the kind-to-decoder
 		`switch` that `route` owns, which is the thing this class exists to prevent. */
 	std::vector<DecoderBufferBase*> buffers (void);
+
+	/** Drops every queued write, keeping the buffers and their decoder types.
+
+		For a rewind: the decoders have just been reset, and a write routed before the loop point
+		must not arrive after it. */
+	void clearWrites (void);
 
 private:
 	/** Both the RF5C68 and the RF5C164 report DEVID_RF5C68; only the config flags tell them apart,

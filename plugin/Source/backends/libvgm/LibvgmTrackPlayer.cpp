@@ -9,6 +9,10 @@
 #include "LibvgmMuteIsolation.h"
 #include "emu/SoundDevs.h"
 
+#include <algorithm>
+
+#include "playback/ChannelFromChip.h"
+
 namespace toybox::backends::libvgm
 {
 
@@ -140,6 +144,11 @@ bool LibvgmTrackPlayer::seekSeconds (double seconds)
 
 	playerEngine.Seek (PLAYPOS_SAMPLE, (uint32_t) (juce::jmax (0.0, seconds) * sampleRate));
 	finished = false;
+
+	// The decoders describe the position before the jump. Marked rather than rewound here: this is
+	// the message thread and the replayer belongs to the audio thread, which will do it before it
+	// captures the next frame.
+	pendingRewind.store (true, std::memory_order_relaxed);
 	return true;
 }
 
@@ -385,6 +394,10 @@ int LibvgmTrackPlayer::render (float* left, float* right, int numSamples)
 		right[i] = (float) renderBuffer[(size_t) i].R * kInt32ToFloat;
 	}
 
+	// For captureState, which is const and so cannot ask the player itself. Same thread, one call
+	// later - the engine renders a block and then captures, inside the same lock.
+	lastPosition.store (positionSeconds (), std::memory_order_relaxed);
+
 	return outSamples;
 }
 
@@ -400,6 +413,14 @@ uint8_t LibvgmTrackPlayer::handleEvent (uint8_t evtType, void* /*evtParam*/)
 	{
 		finished = true;	// the engine stops rendering after this block
 	}
+	else if (evtType == PLREVT_LOOP)
+	{
+		// The song went back to its loop point, so the decoders have to as well: their registers
+		// still describe the position before the jump, and a snapshot taken now would show the
+		// state of the previous pass while the music plays the next one.
+		pendingRewind.store (true, std::memory_order_relaxed);
+	}
+
 	return 0x00;
 }
 
@@ -408,6 +429,101 @@ std::vector<playback::DecodedSample> LibvgmTrackPlayer::samples (void) const
 	// A copy rather than a reference: the list is shared and the caller may keep it past this
 	// player's life (an export dialog holds it while the song keeps playing).
 	return sampleList != nullptr ? *sampleList : std::vector<playback::DecodedSample> ();
+}
+
+void LibvgmTrackPlayer::setReplaySource (std::shared_ptr<const midi::SongIr> ir,
+										 const std::vector<PLR_DEV_INFO>& devices)
+{
+	replayIr = std::move (ir);
+	replayDevices = devices;
+}
+
+bool LibvgmTrackPlayer::captureState (playback::ChipStateSnapshot& snapshot) const
+{
+	if (replayIr == nullptr || replayIr->writes.empty ())
+	{
+		return false;		// nothing to describe; the panel drawing nothing is the honest answer
+	}
+
+	if (replayer == nullptr)
+	{
+		replayer = std::make_unique<VgmReplayer> (replayIr, replayDevices);
+	}
+
+	if (pendingRewind.exchange (false, std::memory_order_relaxed))
+	{
+		replayer->rewind ();
+	}
+
+	const double seconds = lastPosition.load (std::memory_order_relaxed);
+	const auto samples = (uint32_t) std::max (0.0, seconds * replayer->tickRate ());
+
+	replayer->advanceTo (samples);
+
+	snapshot.chips.clear ();
+	snapshot.channels.clear ();
+	snapshot.positionSeconds = seconds;
+	snapshot.valid = true;
+
+	for (const auto& instance : replayer->instances ())
+	{
+		const auto* device = instance.device;
+		const bool hasDeclaration = device != nullptr && device->devDecl != nullptr;
+
+		std::string chipName = "Chip";
+
+		if (hasDeclaration && device->devDecl->name != nullptr)
+		{
+			if (const char* name = device->devDecl->name (device->devCfg))
+			{
+				chipName = name;
+			}
+		}
+
+		// The chip list says what is playing here even when a channel cannot be described, so it is
+		// filled once per chip rather than once per device.
+		if (std::find (snapshot.chips.begin (), snapshot.chips.end (), chipName) == snapshot.chips.end ())
+		{
+			snapshot.chips.push_back (chipName);
+		}
+
+		const char* const* channelNames
+			= (hasDeclaration && device->devDecl->channelNames != nullptr)
+				  ? device->devDecl->channelNames (device->devCfg)
+				  : nullptr;
+
+		const int count = instance.decoder->channelCount ();
+
+		for (int channel = 0; channel < count; ++channel)
+		{
+			const auto chipState = instance.decoder->channelState (channel);
+
+			if (! chipState.present)
+			{
+				continue;
+			}
+
+			playback::ChipShapeHints hints;
+			hints.waveKind = playback::waveKindForChannelKind (instance.decoder->channelKind (channel));
+
+			// `duty` and `volumeMaximum` keep their defaults: this version draws the shape a kind
+			// implies, and a per-chip duty table is a later commit.
+			std::string channelName;
+			if (channelNames != nullptr && channelNames[channel] != nullptr)
+			{
+				channelName = channelNames[channel];
+			}
+			else
+			{
+				channelName = "Ch " + std::to_string (channel + 1);
+			}
+
+			snapshot.channels.push_back (playback::channelFromChip (
+				chipState, instance.decoder->noteTable (channel), hints, chipName, channelName));
+		}
+	}
+
+	return true;
 }
 
 } // namespace toybox::backends::libvgm
