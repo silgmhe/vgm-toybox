@@ -262,14 +262,19 @@ void paintWave (juce::Graphics& g, juce::Rectangle<int> area,
 		// thousands of points and this row has about a hundred and twenty: downsampling the whole
 		// thing by peak draws its envelope - a shape with no period in it at all, which reads as a
 		// broken display rather than as a sample.
+		const auto& values = channel.waveValues ();
 		const std::size_t count = (channel.cycleBytes >= 2.0f
-								   && (std::size_t) channel.cycleBytes < channel.waveValues ().size ())
+								   && (std::size_t) channel.cycleBytes < values.size ())
 								  ? (std::size_t) channel.cycleBytes
-								  : channel.waveValues ().size ();
+								  : values.size ();
+
+		// Where that cycle begins is not zero. A sample's attack is not always at its start, and a
+		// C140 voice's start address is where the driver pointed rather than where the sound is -
+		// so a row drawn from offset zero came out as a flat line while the channel played.
+		const std::size_t start = playback::waveform::bestWindowStart (values, count);
 
 		buildCyclePath (path, area.getWidth (), area.getHeight (),
-						playback::waveform::decimateForDisplay (channel.waveValues (), kDisplayPoints,
-															   count));
+						playback::waveform::decimateForDisplay (values, kDisplayPoints, count, start));
 
 		g.setColour (theme::accent ().withAlpha (channel.active ? 0.9f : 0.35f));
 		strokeCycle (g, path, area);

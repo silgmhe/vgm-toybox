@@ -231,10 +231,40 @@ std::vector<float> cycleFor (int waveKind, float duty, int shapeParameter)
 	return cycle;
 }
 
-std::vector<float> decimateForDisplay (const std::vector<float>& values, std::size_t limit,
-									   std::size_t count)
+std::size_t bestWindowStart (const std::vector<float>& values, std::size_t count)
 {
-	const std::size_t n = (std::min) ((std::size_t) count, values.size ());
+	if (count == 0 || values.size () <= count)
+	{
+		return 0;
+	}
+
+	std::size_t best = 0;
+	double bestEnergy = -1.0;
+
+	for (std::size_t start = 0; start + count <= values.size (); start += count)
+	{
+		double energy = 0.0;
+
+		for (std::size_t i = 0; i < count; ++i)
+		{
+			energy += std::abs (values[start + i]);
+		}
+
+		if (energy > bestEnergy)
+		{
+			bestEnergy = energy;
+			best = start;
+		}
+	}
+
+	return best;
+}
+
+std::vector<float> decimateForDisplay (const std::vector<float>& values, std::size_t limit,
+									   std::size_t count, std::size_t start)
+{
+	const std::size_t from = (std::min) (start, values.size ());
+	const std::size_t n = (std::min) ((std::size_t) count, values.size () - from);
 
 	if (n == 0)
 	{
@@ -245,7 +275,8 @@ std::vector<float> decimateForDisplay (const std::vector<float>& values, std::si
 	// parameter and the caller that passes it expects the whole wave back.
 	if (limit == 0 || n <= limit)
 	{
-		return std::vector<float> (values.begin (), values.begin () + (std::ptrdiff_t) n);
+		return std::vector<float> (values.begin () + (std::ptrdiff_t) from,
+								   values.begin () + (std::ptrdiff_t) (from + n));
 	}
 
 	std::vector<float> out;
@@ -253,8 +284,8 @@ std::vector<float> decimateForDisplay (const std::vector<float>& values, std::si
 
 	for (std::size_t i = 0; i < limit; ++i)
 	{
-		const auto begin = n * i / limit;
-		const auto end = (std::max) (begin + 1, n * (i + 1) / limit);
+		const auto begin = from + n * i / limit;
+		const auto end = (std::max) (begin + 1, from + n * (i + 1) / limit);
 
 		auto extreme = values[begin];
 

@@ -79,6 +79,18 @@ std::vector<float> decimateForDisplay (const std::vector<float>& values, std::si
 		a caller says where one ends. Nothing is copied but the result.
 	*/
 	std::vector<float> decimateForDisplay (const std::vector<float>& values, std::size_t limit,
-										   std::size_t count);
+										   std::size_t count, std::size_t start = 0);
+
+	/** Where the loudest window of `count` points begins, or zero when the whole sample fits.
+
+		A cycle taken from the front of a sample is often its silence: an instrument's attack is not
+		always at offset zero, and a C140 voice's start address is where the driver pointed, not
+		where the sound begins. Rows drawn from there come out as a flat line while the channel is
+		plainly playing.
+
+		Windows are stepped without overlap, which makes this one pass over the sample rather than a
+		search, and it runs once per row per frame.
+	*/
+	std::size_t bestWindowStart (const std::vector<float>& values, std::size_t count);
 
 } // namespace toybox::playback::waveform

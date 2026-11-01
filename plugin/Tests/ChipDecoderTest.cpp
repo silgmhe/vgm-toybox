@@ -5355,6 +5355,34 @@ void testWaveExport (void)
 			   "and every load counts - which is what a held note looks like from here");
 	}
 
+	/** Which part of a recorded sample a row draws.
+
+		A sample's sounding part is not always at its start: a C140 voice's address is where the
+		driver pointed, and several of them point at a run of silence before the attack. Drawn from
+		offset zero those rows were flat lines while the channel played, which reads as a broken
+		display rather than as a sample with a quiet head.
+	*/
+	void testDisplayWindow (void)
+	{
+		std::printf ("  the window a row draws\n");
+
+		// A hundred points of silence, then a hundred of signal.
+		std::vector<float> wave (200, 0.0f);
+
+		for (int i = 100; i < 200; ++i)
+		{
+			wave[(std::size_t) i] = 0.5f;
+		}
+
+		check (toybox::playback::waveform::bestWindowStart (wave, 50) == 100,
+			   "the loudest window is the one with the signal in it");
+
+		const auto shown = toybox::playback::waveform::decimateForDisplay (wave, 128, 50, 100);
+
+		check (shown.size () == 50, "and it is drawn from there, not from zero");
+		check (! shown.empty () && shown.front () == 0.5f, "so the row is not a flat line");
+	}
+
 	/** What the sample export finds in a C140 song.
 
 		The export walks the writes rather than playing the file, so this is a statement about the
@@ -5761,6 +5789,7 @@ int main (void)
 	testC140System2BankIsFolded();
 	testC140WaveFromRom();
 	testC140SampleCollection();
+	testDisplayWindow();
 
 	testC352Note();
 	testC352KeyOnIsTheExecuteWrite();
