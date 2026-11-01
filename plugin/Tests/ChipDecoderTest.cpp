@@ -5171,6 +5171,13 @@ void testWaveExport (void)
 		write (0x13, 0x03);		// and a different length
 		check (decoder.channelState (4).sampleId == ((5u << 16) | 49u),
 			   "and a different sample has a different name");
+
+		// The page register is eight bits wide. Masking it to six turned 0x80 into 0 and gave the
+		// sample a name the collector never used - the row then drew a synthesised shape, which
+		// looked like a waveform and never changed.
+		write (0x12, 0x80);
+		check (decoder.channelState (4).sampleId == ((0x80u << 16) | 49u),
+			   "a page above 0x3F is still its own page, not zero");
 	}
 
 	void testChannelFromChip (void)

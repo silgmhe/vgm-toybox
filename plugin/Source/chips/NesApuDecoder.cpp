@@ -313,10 +313,11 @@ void NesApuDecoder::write (const RegisterWrite& w)
 	case 0x11:
 		break;	// direct load: the DPCM output level, not a note
 	case 0x12:
-		// The sample's page. Kept even when no image was uploaded: the address is what a later
-		// frame will use once the file's blocks have been read, and a driver often sets it well
-		// before it enables the channel.
-		impl->dpcmPage = (uint8_t) (value & 0x3F);
+		// The sample's page, and it is all eight bits: the address is `$C000 + value * 64`, so the
+		// register reaches the whole `$C000..$FFFF` window. Masking it to six bits - which is what
+		// this did first - turns a page of 0x80 into 0, and the sample then has a name the collector
+		// does not know: the row falls back to a synthesised shape and stops changing.
+		impl->dpcmPage = value;
 		break;
 	case 0x13:
 		impl->dpcmLength = (value == 0) ? 1 : ((int) value * 16 + 1);
