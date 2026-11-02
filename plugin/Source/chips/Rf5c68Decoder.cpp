@@ -1,4 +1,4 @@
-#include "Rf5c68Decoder.h"
+﻿#include "Rf5c68Decoder.h"
 
 #include <algorithm>
 #include <cmath>
@@ -7,6 +7,7 @@
 #include <vector>
 
 #include "Pitch.h"
+#include "Rf5c68Hit.h"
 
 namespace toybox::chips
 {
@@ -515,7 +516,12 @@ ChannelState Rf5c68Decoder::channelState (int channel) const
 		}
 	}
 
-	const std::size_t length = (limit > start) ? (std::size_t) (limit - start) : 0;
+	const std::size_t span = (limit > start) ? (std::size_t) (limit - start) : 0;
+
+	// One hit, not the whole slot - the slot holds many hits back to back. The export asks the same
+	// function, so a row and the file it drags out are the same bytes.
+	const std::size_t length = rf5c68HitLength (start, span,
+															  [this] (std::uint32_t a) { return impl->byteAt (a); });
 
 	if (length > 1)
 	{

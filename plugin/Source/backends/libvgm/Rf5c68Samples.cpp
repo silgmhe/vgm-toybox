@@ -7,6 +7,7 @@
 #include <utility>
 
 #include "ChipMemoryAssembly.h"
+#include "chips/Rf5c68Hit.h"
 #include "SampleCollector.h"
 #include "midi/SongIr.h"
 
@@ -185,14 +186,37 @@ std::vector<playback::DecodedSample> collectRf5cSamples (const midi::SongIr& ir)
 		}
 	}
 
-	// One entry per address, taking the highest step the drivers asked for: a drum retuned per hit
-	// is one sample played at several pitches, and the file declares the fastest of them.
+	// One entry per address. The rate is the **most frequent** step, not the highest: these slots
+	// are triggered hundreds of times at many pitches (299 hits on one, steps 619..2503), so any
+	// single choice is a transposition, and the one the driver uses most is the least surprising.
+	std::map<uint32_t, std::map<uint16_t, int>> histograms;
 	std::map<uint32_t, uint16_t> byAddress;
 
 	for (const auto& hit : hits)
 	{
-		uint16_t& highest = byAddress[hit.address];
-		highest = (std::max) (highest, hit.step);
+		++histograms[hit.address][hit.step];
+
+		uint16_t& chosen = byAddress[hit.address];
+
+		if (chosen == 0)
+		{
+			chosen = hit.step;
+		}
+	}
+
+	for (auto& entry : byAddress)
+	{
+		const auto& histogram = histograms[entry.first];
+		int best = 0;
+
+		for (const auto& step : histogram)
+		{
+			if (step.second > best)
+			{
+				best = step.second;
+				entry.second = step.first;
+			}
+		}
 	}
 
 	for (auto current = byAddress.begin (); current != byAddress.end (); ++current)
@@ -203,7 +227,9 @@ std::vector<playback::DecodedSample> collectRf5cSamples (const midi::SongIr& ir)
 		// The region runs to the next sample's start, or to the top of RAM for the last one. This
 		// is the bank's slot boundary, not a terminator: see the note above `collect`.
 		const uint32_t limit = (next != byAddress.end ()) ? next->first : (uint32_t) ram.size ();
-		const std::size_t length = (limit > address) ? (std::size_t) (limit - address) : 0;
+		const std::size_t span = (limit > address) ? (std::size_t) (limit - address) : 0;
+		const std::size_t length = chips::rf5c68HitLength (address, span,
+														  [&ram] (uint32_t a) { return ram[a]; });
 
 		if (length < 2)
 		{
