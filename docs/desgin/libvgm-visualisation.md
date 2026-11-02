@@ -296,7 +296,7 @@ track.channelIndex = channelIndex;    // 联动芯片的通道号接在父芯片
 | 采样 | K053260，8 位 PCM | ✓ | ✓ | ✓ `collectK053260Samples` |
 | 采样 | K053260，KADPCM | ✓ | — | ✓ `collectK053260Samples` |
 | 采样 | K054539，8 位 / 16 位 PCM 与 4 位 DPCM | ✓ | ✓ | ✓ `collectK054539Samples` |
-| 采样 | **RF5C68 / RF5C164** | — | — | — |
+| 采样 | RF5C68 / RF5C164 | ✓ | ✓ | ✓ `collectRf5cSamples` |
 | 采样 | **GA20**（Y8950 的 ADPCM 半） | — | — | — |
 | 采样 | **OKIM6295** | — | — | — |
 | 采样 | **SegaPCM** | — | — | — |

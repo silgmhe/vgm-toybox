@@ -82,6 +82,10 @@ struct Rf5c68Decoder::Impl
 	std::vector<uint8_t> ram;
 	std::map<uint32_t, double> cycleCache;
 
+	/** Decoded levels per sample, keyed by where it starts and how long it runs - not by channel,
+		because two channels taking turns on one drum share the same bytes. */
+	std::map<std::pair<uint32_t, uint32_t>, std::shared_ptr<const std::vector<float>>> waveCache;
+
 	double clockRate = (double) kDefaultClock;
 	double outRate = 44100.0;
 	uint8_t bank = 0;			// 0x07 bit 6: which channel 0x00-0x06 address
@@ -95,7 +99,14 @@ struct Rf5c68Decoder::Impl
 			return 0xFF;		// no RAM reads as "end of sample", which is what the chip hears
 		}
 
-		return ram[address & kRamAddressMask];
+		// The core reads `data[(addr >> 11) & 0xffff]`, so an address past the top wraps to the
+		// bottom - Sonic CD's samples rely on that, because what stops them is the 0xFF padding
+		// at address 0. The `ram.size()` test is not in the core and is not a behaviour change:
+		// a full 64 KB image always passes it, and a shorter one (a rip that uploaded less) would
+		// otherwise index past the end of the vector.
+		const uint32_t index = address & kRamAddressMask;
+
+		return (index < ram.size()) ? ram[index] : 0xFF;
 	}
 
 	/** The chip's own sample rate: `clock / 384`, and the rate one byte per sample would play at. */
@@ -441,6 +452,49 @@ ChannelState Rf5c68Decoder::channelState (int channel) const
 	state.transposeCents = pitch.transposeCents;
 	state.rootCents = pitch.rootCents;
 	state.pitchSource = pitch.source;
+
+	// The same bytes-per-second that the pitch above divides by the cycle; a dragged-out file
+	// declares it directly, because a file has no cycle to divide by.
+	state.sampleRate = (float) impl->bytesPerSecond (voice);
+
+	// The bytes this voice is playing, so the row can draw the sample rather than a placeholder.
+	//
+	// `latchStart` is the byte address recorded at the key-on (`0x06` is in 256-byte units, and
+	// `keyOn` shifts it into an address). Reading the register instead would be the same value
+	// today, but the latch is what the length and the cycle measurement already use.
+	//
+	// The length is not a register on this chip either: a sample ends at a `0xFF` data byte, and
+	// `lengthOf` is the scan that finds it. It already exists because the duration needed it.
+	//
+	// No guard on `enabled`: a released voice still has a sample worth drawing, and a row that
+	// blanks the moment the driver clears its bit is a row that flickers.
+	const uint32_t start = voice.latchStart;
+	const std::size_t length = impl->lengthOf (start);
+
+	if (length > 1)
+	{
+		const auto key = std::make_pair (start, (uint32_t) length);
+		const auto found = impl->waveCache.find (key);
+
+		if (found != impl->waveCache.end ())
+		{
+			state.wave = found->second;
+		}
+		else
+		{
+			auto wave = std::make_shared<std::vector<float>> ();
+			wave->resize (length);
+
+			// Eight-bit signed, which is what the chip feeds its DAC: one byte per level.
+			for (std::size_t i = 0; i < length; ++i)
+			{
+				(*wave)[i] = (float) (int8_t) impl->byteAt (start + (uint32_t) i) / 128.0f;
+			}
+
+			state.wave = std::move (wave);
+			impl->waveCache.emplace (key, state.wave);
+		}
+	}
 
 	return state;
 }

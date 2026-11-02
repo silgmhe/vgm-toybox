@@ -21,6 +21,7 @@
 #include "backends/libvgm/C140Samples.h"
 #include "backends/libvgm/C352Samples.h"
 #include "backends/libvgm/QSoundSamples.h"
+#include "backends/libvgm/Rf5c68Samples.h"
 #include "backends/libvgm/K053260Samples.h"
 #include "backends/libvgm/K054539Samples.h"
 
@@ -5936,6 +5937,83 @@ void testWaveExport (void)
 		check (highest > 0.5f && lowest < -0.5f, "and the alternating nibbles swing both ways");
 	}
 
+	/** What the export finds in an RF5C68 / RF5C164 song.
+
+		Two things here are unlike every other sampled chip in this branch. The bytes arrive as a
+		**PCM bank** (`0x67` blocks of type `0x02`), not a ROM block - a collector that asked for a
+		ROM would find nothing. And the key-on is inverted: a *cleared* bit in the mask at `0x08`
+		enables a channel, so enabling is a falling edge in the byte every other chip treats as
+		"on".
+	*/
+	void testRf5cSampleCollection (void)
+	{
+		using namespace toybox;
+
+		std::printf ("  the RF5C68's sample list\n");
+
+		midi::SongIr ir;
+
+		midi::ChipSlot slot;
+		slot.kind = midi::ChipKind::rf5c164;
+		slot.clockHz = 12500000;
+		ir.chips.push_back (slot);
+
+		std::vector<uint8_t> bank (0x400, 0);
+
+		// Sixteen levels, then the 0xFF that ends the sample.
+		for (int i = 0; i < 16; ++i)
+		{
+			bank[0x200 + (std::size_t) i] = (uint8_t) (0x10 + i);
+		}
+
+		bank[0x210] = 0xFF;
+
+		midi::RomBlock block;
+		block.memoryType = 0x02;
+		block.romSize = (uint32_t) bank.size ();
+		block.romOffset = 0;
+		block.data = bank.data ();
+		block.size = bank.size ();
+		ir.roms.push_back (block);
+
+		const auto write = [&ir] (uint8_t offset, uint16_t value)
+		{
+			RegisterWrite w;
+			w.deviceId = 0;
+			w.port = 0;
+			w.reg = offset;
+			w.value = value;
+			ir.writes.push_back (w);
+		};
+
+		write (0x07, 0xC0);			// bit 7 master on, bit 6 selects channel 0
+		write (0x06, 0x02);			// start 0x0200: the register counts 256-byte units
+		write (0x02, 0x00);
+		write (0x03, 0x08);			// step 0x0800, one byte per chip sample
+		write (0x08, 0xFE);			// channel 0's bit cleared - that is what enables it
+
+		const auto samples = backends::libvgm::collectRf5cSamples (ir);
+
+		check (samples.size () == 1, "a cleared mask bit names a sample");
+		check (! samples.empty () && samples[0].values.size () == 16,
+			   "of the length up to its 0xFF terminator");
+
+		// 0x0800 / 2048 = one byte per chip sample, and the chip runs at 12500000 / 384.
+		check (! samples.empty () && std::abs (samples[0].rate - 32552.0) < 5.0,
+			   "at the rate its step register asks for");
+
+		// The same mask written again is not a second key-on: the bit was already clear.
+		write (0x08, 0xFE);
+		check (backends::libvgm::collectRf5cSamples (ir).size () == 1,
+			   "and the same mask written again starts nothing new");
+
+		// Setting the bit clears the channel; clearing it again is a new note.
+		write (0x08, 0xFF);
+		write (0x08, 0xFE);
+		check (backends::libvgm::collectRf5cSamples (ir).size () == 1,
+			   "while a release and a re-enable is still one file");
+	}
+
 	/** What the export finds in a QSound song.
 
 		Three of the chip's quirks are load-bearing here and each has its own assertion: the bank
@@ -6433,6 +6511,7 @@ int main (void)
 	testK053260Kadpcm();
 	testK053260SampleCollection();
 	testQSoundAdpcm();
+	testRf5cSampleCollection();
 	testQSoundSampleCollection();
 	testC352SampleCollection();
 	testDisplayColumns();
