@@ -5695,6 +5695,73 @@ void testWaveExport (void)
 		check (peak > 0.9f, "normalised to its own peak, so the row has a shape");
 	}
 
+	/** The K053260's KADPCM, which no song here starts.
+
+		Built from registers rather than from a file, because there is no file: `0x2A`'s high nibble
+		is never set in the only K053260 song in `test_file`, and neither are its loop bits.
+
+		What can be checked is the one thing that separates this format from the K054539's: index 8 of
+		the table is -128 here and 0 there. A nibble of 8 has to move the level, and with the wrong
+		table it would hold it - a sample that stays flat, which is exactly the failure that was
+		reported on the other chip.
+	*/
+	void testK053260Kadpcm (void)
+	{
+		using namespace toybox;
+
+		std::printf ("  the K053260's KADPCM\n");
+
+		midi::SongIr ir;
+
+		midi::ChipSlot slot;
+		slot.kind = midi::ChipKind::k053260;
+		slot.clockHz = 3579545;
+		ir.chips.push_back (slot);
+
+		std::vector<uint8_t> rom (0x1000, 0);
+
+		// The core's first fetch is the byte after the start address, so the data begins at 0x101.
+		rom[0x101] = 0x88;			// two nibbles of 8: two full downward steps
+		rom[0x102] = 0x00;
+
+		midi::RomBlock block;
+		block.memoryType = 0x8E;
+		block.romSize = (uint32_t) rom.size ();
+		block.romOffset = 0;
+		block.data = rom.data ();
+		block.size = rom.size ();
+		ir.roms.push_back (block);
+
+		const auto write = [&ir] (uint8_t offset, uint16_t value)
+		{
+			RegisterWrite w;
+			w.deviceId = 0;
+			w.port = 0;
+			w.reg = offset;
+			w.value = value;
+			ir.writes.push_back (w);
+		};
+
+		write (0x08, 0x00);
+		write (0x09, 0x0F);			// pitch 0x0F00
+		write (0x0A, 0x04);			// length four bytes: eight nibbles
+		write (0x0B, 0x00);
+		write (0x0C, 0x00);
+		write (0x0D, 0x01);			// start 0x0100, so the data is at 0x0101
+		write (0x0E, 0x00);
+		write (0x2A, 0x10);			// KADPCM, voice 0
+		write (0x28, 0x01);			// key on
+
+		const auto samples = backends::libvgm::collectK053260Samples (ir);
+
+		check (samples.size () == 1, "a KADPCM voice is exported rather than skipped");
+		check (! samples.empty () && samples[0].values.size () == 8,
+			   "two levels per byte, as the format does");
+
+		check (! samples.empty () && samples[0].values[1] < 0.0f,
+			   "and its table's -128 moves the level, where the K054539's 0 would hold it");
+	}
+
 	/** What the export finds in a K053260 song.
 
 		The first chip whose length is a register rather than an end address, and the first whose
@@ -5772,9 +5839,11 @@ void testWaveExport (void)
 		check (backends::libvgm::collectK053260Samples (ir).size () == 1,
 			   "and the same mask written again starts nothing new");
 
-		// KADPCM: four-bit deltas, and `SampleFormat` has no value for them. Packing the bytes off
-		// as eight-bit levels would produce noise that looks like a waveform.
+		// KADPCM is exported too, through its own table rather than this one - the negative case
+		// (that the two tables are not interchangeable) lives in `testK053260Kadpcm`.
 		ir.writes.clear ();
+		write (0x08, 0x00);
+		write (0x09, 0x0F);			// pitch, which a voice needs before it counts
 		write (0x0A, 0x20);
 		write (0x0B, 0x00);
 		write (0x0C, 0x00);
@@ -5783,8 +5852,8 @@ void testWaveExport (void)
 		write (0x2A, 0x10);			// KADPCM, voice 0
 		write (0x28, 0x01);
 
-		check (backends::libvgm::collectK053260Samples (ir).empty (),
-			   "and a KADPCM voice is not exported as eight-bit levels");
+		check (backends::libvgm::collectK053260Samples (ir).size () == 1,
+			   "and a KADPCM voice is exported rather than skipped");
 	}
 
 	/** What the export finds in a QSound song.
@@ -6281,6 +6350,7 @@ int main (void)
 	testC352WaveFromRom();
 	testC352WrappingSample();
 	testK054539SampleCollection();
+	testK053260Kadpcm();
 	testK053260SampleCollection();
 	testQSoundSampleCollection();
 	testC352SampleCollection();

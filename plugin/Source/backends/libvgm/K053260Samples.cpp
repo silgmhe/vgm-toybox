@@ -1,4 +1,4 @@
-#include "K053260Samples.h"
+﻿#include "K053260Samples.h"
 
 #include <algorithm>
 #include <cstdint>
@@ -51,6 +51,7 @@ namespace
 		uint32_t start = 0;
 		std::size_t length = 0;
 		uint32_t pitch = 0;
+		bool kadpcm = false;
 	};
 }
 
@@ -84,9 +85,7 @@ std::vector<playback::DecodedSample> collectK053260Samples (const midi::SongIr& 
 
 	const auto collect = [&] (const Voice& voice)
 	{
-		// KADPCM is four-bit deltas; `SampleFormat` has no value for it, and handing the packed
-		// bytes to an eight-bit decoder would produce noise that looks like a waveform.
-		if (voice.kadpcm || voice.length <= 1)
+		if (voice.length <= 1)
 		{
 			return;
 		}
@@ -107,7 +106,7 @@ std::vector<playback::DecodedSample> collectK053260Samples (const midi::SongIr& 
 			return;
 		}
 
-		hits.push_back (Hit { voice.start, length, voice.pitch });
+		hits.push_back (Hit { voice.start, length, voice.pitch, voice.kadpcm });
 	};
 
 	for (const auto& write : ir.writes)
@@ -179,7 +178,8 @@ std::vector<playback::DecodedSample> collectK053260Samples (const midi::SongIr& 
 
 	for (const auto& hit : hits)
 	{
-		const uint64_t key = ((uint64_t) hit.start << 32) | hit.length;
+		const uint64_t key = ((uint64_t) hit.start << 32) | ((uint64_t) hit.length << 1)
+						   | (hit.kadpcm ? 1 : 0);
 		auto& highest = highestPitch[key];
 
 		highest = (std::max) (highest, hit.pitch);
@@ -187,7 +187,8 @@ std::vector<playback::DecodedSample> collectK053260Samples (const midi::SongIr& 
 
 	for (const auto& hit : hits)
 	{
-		const uint64_t key = ((uint64_t) hit.start << 32) | hit.length;
+		const uint64_t key = ((uint64_t) hit.start << 32) | ((uint64_t) hit.length << 1)
+						   | (hit.kadpcm ? 1 : 0);
 		const uint32_t pitch = highestPitch[key];
 		const double rate = (double) pitch * clock / kPitchDivisor;
 		const uint32_t begin = hit.start + 1;
@@ -197,7 +198,7 @@ std::vector<playback::DecodedSample> collectK053260Samples (const midi::SongIr& 
 					   (unsigned) hit.length);
 
 		collector.add (key, name, rom.data () + begin, hit.length,
-					   SampleFormat::pcm8Signed, rate);
+					   hit.kadpcm ? SampleFormat::kadpcm4 : SampleFormat::pcm8Signed, rate);
 	}
 
 	return collector.take ();
