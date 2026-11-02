@@ -178,6 +178,11 @@ struct QSoundDecoder::Impl
 	std::map<SampleKey, double> cycleCache;
 	std::vector<std::unique_ptr<QSoundNoteTable>> tables;
 
+	/** Decoded levels per sample, keyed by where it starts and how long it is - not by voice,
+		because a drum kit on one voice is several samples and sixteen voices taking turns would
+		otherwise re-decode everything every frame. */
+	std::map<uint64_t, std::shared_ptr<const std::vector<float>>> waveCache;
+
 	uint8_t romByte (uint32_t address) const
 	{
 		const uint32_t index = address & romMask;
@@ -657,6 +662,48 @@ ChannelState QSoundDecoder::channelState (int channel) const
 		state.transposeCents = pitch.transposeCents;
 		state.rootCents = pitch.rootCents;
 		state.pitchSource = pitch.source;
+
+		// The same bytes-per-second that the pitch above divides by the cycle; a dragged-out file
+		// declares it directly, because a file has no cycle to divide by.
+		state.sampleRate = (float) impl->unitsPerSecond (voice);
+
+		// The bytes this voice is playing, so the row can draw the sample rather than a placeholder.
+		//
+		// `latchStart` and not `addr`. The core advances `addr` every output sample - it is the
+		// play position, not a start register - so reading it here would draw a window that slides
+		// with the note, and near the end of a sample a very short one. `latchStart` is recorded on
+		// the rising edge that keys the note, which is also what `durationOf` measures against.
+		//
+		// The bank gate is the chip's own: `get_sample` refuses a bank without bit 15, because the
+		// bit says "this is sample ROM and not the DSP program".
+		const uint32_t start = voice.latchStart & kInBankAddressMask;
+		const std::size_t length = Impl::bankLength (start, (uint16_t) voice.end);
+
+		if (length > 1 && (voice.bank & kSampleBankFlag) != 0)
+		{
+			const uint32_t address = ((uint32_t) (voice.bank & kBankIndexMask) << kBankToByteShift) | start;
+			const uint64_t key = ((uint64_t) address << 32) | (uint64_t) length;
+			const auto found = impl->waveCache.find (key);
+
+			if (found != impl->waveCache.end ())
+			{
+				state.wave = found->second;
+			}
+			else
+			{
+				auto wave = std::make_shared<std::vector<float>> ();
+				wave->reserve (length);
+
+				// Eight-bit signed, which is what `sampleAt` returns: one byte per level.
+				for (std::size_t i = 0; i < length; ++i)
+				{
+					wave->push_back ((float) impl->sampleAt (voice.bank, (uint16_t) (start + i)) / 128.0f);
+				}
+
+				state.wave = std::move (wave);
+				impl->waveCache.emplace (key, state.wave);
+			}
+		}
 	}
 	else
 	{

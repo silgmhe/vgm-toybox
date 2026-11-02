@@ -20,6 +20,7 @@
 
 #include "backends/libvgm/C140Samples.h"
 #include "backends/libvgm/C352Samples.h"
+#include "backends/libvgm/QSoundSamples.h"
 
 #include "playback/ChannelFromChip.h"
 #include "playback/WaveExport.h"
@@ -5560,6 +5561,87 @@ void testWaveExport (void)
 			   "of the length that wraps to the top of the window");
 	}
 
+	/** What the export finds in a QSound song.
+
+		Three of the chip's quirks are load-bearing here and each has its own assertion: the bank
+		register belongs to the *next* voice, the start address is the play position rather than a
+		separate register, and an endpoint below the start wraps through the bottom of the bank
+		instead of being empty.
+	*/
+	void testQSoundSampleCollection (void)
+	{
+		using namespace toybox;
+
+		std::printf ("  the QSound's sample list\n");
+
+		midi::SongIr ir;
+
+		midi::ChipSlot slot;
+		slot.kind = midi::ChipKind::qsound;
+		slot.clockHz = 60000000;
+		ir.chips.push_back (slot);
+
+		std::vector<uint8_t> rom (0x11000, 0);
+
+		for (int i = 0; i < 64; ++i)
+		{
+			rom[0xFFC0 + (std::size_t) i] = (uint8_t) (0x10 + (i % 16) * 7);
+		}
+
+		midi::RomBlock block;
+		block.memoryType = 0x8F;
+		block.romSize = (uint32_t) rom.size ();
+		block.romOffset = 0;
+		block.data = rom.data ();
+		block.size = rom.size ();
+		ir.roms.push_back (block);
+
+		const auto write = [&ir] (uint8_t offset, uint16_t value)
+		{
+			RegisterWrite w;
+			w.deviceId = 0;
+			w.port = 0;
+			w.reg = offset;
+			w.value = value;
+			ir.writes.push_back (w);
+		};
+
+		// Voice 0's bank is written through voice 15's register row: `(i << 3) + 0` addresses
+		// `voice[(i + 1) % 16]`, so 15 << 3 = 0x78 is the only way to reach voice 0's bank.
+		write (0x78, 0x8000);		// bank 0, bit 15 set: sample ROM rather than DSP program
+		write (0x01, 0x0100);		// start, and the play position
+		write (0x05, 0x0140);		// end, exclusive
+		write (0x06, 0x1000);		// volume
+		write (0x02, 0x1000);		// rate 1.0 - this rising edge is what keys the note
+
+		const auto samples = backends::libvgm::collectQSoundSamples (ir);
+
+		check (samples.size () == 1, "the bank written through the previous voice still names a sample");
+		check (! samples.empty () && samples[0].values.size () == 64,
+			   "running from its start up to but not including its end");
+		check (! samples.empty () && std::abs (samples[0].rate - 24038.0) < 1.0,
+			   "at the rate its register asks for");
+
+		// The same voice started again is still one file.
+		write (0x06, 0x1000);
+		write (0x02, 0x1000);
+		check (backends::libvgm::collectQSoundSamples (ir).size () == 1,
+			   "and a second start of it adds nothing");
+
+		// An endpoint below the start runs past the top of the bank and continues at the bottom.
+		ir.writes.clear ();
+		write (0x78, 0x8000);
+		write (0x01, 0xFFC0);
+		write (0x05, 0x0040);
+		write (0x06, 0x1000);
+		write (0x02, 0x1000);
+
+		const auto wrapped = backends::libvgm::collectQSoundSamples (ir);
+
+		check (! wrapped.empty () && wrapped[0].values.size () == 128,
+			   "and an endpoint below the start wraps to the bottom of the bank");
+	}
+
 	/** What the export finds in a C352 song.
 
 		Key-on here is a flags bit that the execute write acts on, not a write of its own, so this is
@@ -5972,6 +6054,7 @@ int main (void)
 	testC140SampleCollection();
 	testC352WaveFromRom();
 	testC352WrappingSample();
+	testQSoundSampleCollection();
 	testC352SampleCollection();
 	testDisplayColumns();
 

@@ -2,6 +2,7 @@
 
 #include "C140Samples.h"
 #include "C352Samples.h"
+#include "QSoundSamples.h"
 #include "NesDpcmBank.h"
 
 #include "LibvgmMuteIsolation.h"
@@ -267,6 +268,21 @@ bool LibvgmSongInstance::prepare (double hostSampleRate, int newMaxBlockSize, ju
 	if (hasC352 && songIr != nullptr)
 	{
 		for (auto& sample : collectC352Samples (*songIr))
+		{
+			collected.push_back (std::move (sample));
+		}
+	}
+
+	const bool hasQSound = songIr != nullptr
+						&& std::any_of (songIr->chips.begin (), songIr->chips.end (),
+										[] (const midi::ChipSlot& slot)
+										{
+											return slot.kind == midi::ChipKind::qsound;
+										});
+
+	if (hasQSound && songIr != nullptr)
+	{
+		for (auto& sample : collectQSoundSamples (*songIr))
 		{
 			collected.push_back (std::move (sample));
 		}
