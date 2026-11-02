@@ -1,4 +1,4 @@
-#include "K054539Samples.h"
+﻿#include "K054539Samples.h"
 
 #include <algorithm>
 #include <cstdint>
@@ -67,10 +67,21 @@ namespace
 	bool isSixteenBit (uint8_t type) { return type == kTypeSixteenBit; }
 	bool isFourBit (uint8_t type) { return type == kTypeFourBit; }
 
-	/** How many bytes one unit occupies. Four-bit is half a byte, rounded up by the caller. */
+	/** How many bytes one scan step covers. Four-bit is one byte for two nibbles, which is why the scan walks bytes in every format and `units` counts them the same way. */
 	std::size_t bytesPerUnit (uint8_t type)
 	{
 		return isSixteenBit (type) ? 2 : 1;
+	}
+
+	/** What the collector needs to know to turn this voice's bytes into levels. */
+	SampleFormat sampleFormatFor (uint8_t type)
+	{
+		if (isSixteenBit (type))
+		{
+			return SampleFormat::pcm16Signed;
+		}
+
+		return isFourBit (type) ? SampleFormat::dpcm4 : SampleFormat::pcm8Signed;
 	}
 }
 
@@ -151,8 +162,7 @@ std::vector<playback::DecodedSample> collectK054539Samples (const midi::SongIr& 
 
 	const auto collect = [&] (const Voice& voice)
 	{
-		// Four-bit DPCM is deltas, and `SampleFormat` has no value for them.
-		if (isFourBit (voice.type) || voice.pitch == 0)
+		if (voice.pitch == 0)
 		{
 			return;
 		}
@@ -269,6 +279,10 @@ std::vector<playback::DecodedSample> collectK054539Samples (const midi::SongIr& 
 		const uint64_t key = ((uint64_t) hit.start << 32) | ((uint64_t) hit.units << 8) | hit.type;
 		const uint32_t pitch = highestPitch[key];
 		const double rate = (double) pitch * clock / kStepDivisor;
+		// The scan walks bytes in every format - two nibbles share one for four-bit - so `units` is
+		// already a byte count for it and `bytesPerUnit` is 1. Dividing by two here would export
+		// half of a four-bit sample, which is a waveform that ends early rather than one that looks
+		// wrong.
 		const std::size_t bytes = hit.units * bytesPerUnit (hit.type);
 
 		if (hit.start >= rom.size () || bytes > rom.size () - hit.start)
@@ -281,7 +295,7 @@ std::vector<playback::DecodedSample> collectK054539Samples (const midi::SongIr& 
 					   (unsigned) bytes);
 
 		collector.add (key, name, rom.data () + hit.start, bytes,
-					   isSixteenBit (hit.type) ? SampleFormat::pcm16Signed : SampleFormat::pcm8Signed,
+					   sampleFormatFor (hit.type),
 					   rate);
 	}
 

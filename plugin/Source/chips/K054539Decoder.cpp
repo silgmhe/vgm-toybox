@@ -629,13 +629,26 @@ ChannelState K054539Decoder::channelState (int channel) const
 				{
 					// Nibbles are deltas and only the running sum is a waveform; `kDpcmTable` is in
 					// this file because the pitch measurement needed the same sum.
+					//
+					// The sum is then normalised to its own peak, not to the sixteen-bit full scale.
+					// Its steps are small - the largest is 64 - so a few hundred units of travel is
+					// an ordinary sample, and dividing that by 32768 leaves every four-bit voice flat
+					// against the centre line: drawn, but nothing scaled to be seen. This is why the
+					// K053260's KADPCM already normalises the same way.
 					double accumulator = 0.0;
+					float peak = 1.0f;
 
 					for (std::size_t i = 0; i < units; ++i)
 					{
 						accumulator += (double) kDpcmTable[(int) impl->fetchUnit (voice.latchStart, voice.type, i)];
 						accumulator = std::clamp (accumulator, -32768.0, 32767.0);
-						(*wave)[i] = (float) (accumulator / 32768.0);
+						(*wave)[i] = (float) accumulator;
+						peak = (std::max) (peak, std::abs ((*wave)[i]));
+					}
+
+					for (float& level : *wave)
+					{
+						level /= peak;
 					}
 				}
 				else

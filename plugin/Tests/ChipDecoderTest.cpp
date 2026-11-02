@@ -5660,16 +5660,39 @@ void testWaveExport (void)
 		check (! wide.empty () && wide[0].values.size () == 8,
 			   "and a sixteen-bit voice is scanned in words, not bytes");
 
-		// Four-bit DPCM is deltas, and `SampleFormat` has no value for them.
+		// Four-bit DPCM at 0x000300: eight bytes of nibbles, then the 0x88 marker.
+		for (int i = 0; i < 8; ++i)
+		{
+			rom[0x300 + (std::size_t) i] = 0x12;
+		}
+		rom[0x308] = 0x88;
+
 		ir.writes.clear ();
+		write (0x00, 0x00);
+		write (0x01, 0x00);
+		write (0x02, 0x01);			// pitch, which a voice needs before it counts
 		write (0x0C, 0x00);
-		write (0x0D, 0x01);
+		write (0x0D, 0x03);
 		write (0x0E, 0x00);
 		write (0x200, 0x08);		// type: four-bit
 		write (0x214, 0x01);
 
-		check (backends::libvgm::collectK054539Samples (ir).empty (),
-			   "and a four-bit DPCM voice is not exported as levels");
+		const auto narrow = backends::libvgm::collectK054539Samples (ir);
+
+		check (! narrow.empty () && narrow[0].values.size () == 16,
+			   "and a four-bit voice expands to two levels per byte");
+
+		// The running sum is normalised to its own peak. Dividing it by the sixteen-bit full scale
+		// instead left every four-bit voice flat against the centre line - drawn, but with nothing
+		// scaled to be seen, which is what the drum rows were reported as.
+		float peak = 0.0f;
+
+		for (const float level : narrow.empty () ? std::vector<float> () : narrow[0].values)
+		{
+			peak = (std::max) (peak, std::abs (level));
+		}
+
+		check (peak > 0.9f, "normalised to its own peak, so the row has a shape");
 	}
 
 	/** What the export finds in a K053260 song.
