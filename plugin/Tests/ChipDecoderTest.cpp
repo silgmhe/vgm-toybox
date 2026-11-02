@@ -22,6 +22,7 @@
 #include "backends/libvgm/C352Samples.h"
 #include "backends/libvgm/QSoundSamples.h"
 #include "backends/libvgm/K053260Samples.h"
+#include "backends/libvgm/K054539Samples.h"
 
 #include "playback/ChannelFromChip.h"
 #include "playback/WaveExport.h"
@@ -5562,6 +5563,115 @@ void testWaveExport (void)
 			   "of the length that wraps to the top of the window");
 	}
 
+	/** What the export finds in a K054539 song.
+
+		The fourth way these chips name a sample: no length and no end address, a marker instead. The
+		scan is exact because the ROM is here - but `0x80` is also a legal data value, so a sample
+		whose data happens to contain it ends early, on the hardware too. That is the format, not a
+		bug in the scan.
+	*/
+	void testK054539SampleCollection (void)
+	{
+		using namespace toybox;
+
+		std::printf ("  the K054539's sample list\n");
+
+		midi::SongIr ir;
+
+		midi::ChipSlot slot;
+		slot.kind = midi::ChipKind::k054539;
+		slot.clockHz = 18432000;
+		ir.chips.push_back (slot);
+
+		std::vector<uint8_t> rom (0x1000, 0);
+
+		// Eight-bit at 0x100: sixteen levels, then the marker.
+		for (int i = 0; i < 16; ++i)
+		{
+			rom[0x100 + (std::size_t) i] = (uint8_t) (0x10 + i);
+		}
+		rom[0x110] = 0x80;
+
+		// Sixteen-bit at 0x200: eight words, then 0x8000 little endian.
+		for (int i = 0; i < 8; ++i)
+		{
+			rom[0x200 + (std::size_t) i * 2] = (uint8_t) (0x10 + i);
+			rom[0x201 + (std::size_t) i * 2] = 0x01;
+		}
+		rom[0x210] = 0x00;
+		rom[0x211] = 0x80;
+
+		midi::RomBlock block;
+		block.memoryType = 0x8C;
+		block.romSize = (uint32_t) rom.size ();
+		block.romOffset = 0;
+		block.data = rom.data ();
+		block.size = rom.size ();
+		ir.roms.push_back (block);
+
+		const auto write = [&ir] (uint16_t offset, uint16_t value)
+		{
+			RegisterWrite w;
+			w.deviceId = 0;
+			w.port = (uint8_t) ((offset >> 8) & 0x7F);
+			w.reg = (uint8_t) (offset & 0xFF);
+			w.value = value;
+			ir.writes.push_back (w);
+		};
+
+		// voice 0: eight-bit, pitch 0x010000 (one unit per output sample), start 0x000100
+		write (0x00, 0x00);
+		write (0x01, 0x00);
+		write (0x02, 0x01);
+		write (0x0C, 0x00);
+		write (0x0D, 0x01);
+		write (0x0E, 0x00);
+		write (0x200, 0x00);		// type: eight-bit
+		write (0x214, 0x01);		// key-on: voice 0
+
+		const auto samples = backends::libvgm::collectK054539Samples (ir);
+
+		check (samples.size () == 1, "the key-on mask names one sample");
+		check (! samples.empty () && samples[0].values.size () == 16,
+			   "of the length up to its end marker");
+
+		// 0x010000 / 65536 = one unit per output sample, at 18432000 / 384.
+		check (! samples.empty () && std::abs (samples[0].rate - 48000.0) < 5.0,
+			   "at the rate its pitch register asks for");
+
+		// The same mask written again has no rising edge.
+		write (0x214, 0x01);
+		check (backends::libvgm::collectK054539Samples (ir).size () == 1,
+			   "and the same mask written again starts nothing new");
+
+		// voice 1: sixteen-bit at 0x000200, which the scan must walk two bytes at a time.
+		ir.writes.clear ();
+		write (0x20, 0x00);
+		write (0x21, 0x00);
+		write (0x22, 0x01);
+		write (0x2C, 0x00);
+		write (0x2D, 0x02);
+		write (0x2E, 0x00);
+		write (0x202, 0x04);		// type: sixteen-bit
+		write (0x214, 0x02);		// key-on: voice 1
+
+		const auto wide = backends::libvgm::collectK054539Samples (ir);
+
+		check (! wide.empty () && wide[0].values.size () == 8,
+			   "and a sixteen-bit voice is scanned in words, not bytes");
+
+		// Four-bit DPCM is deltas, and `SampleFormat` has no value for them.
+		ir.writes.clear ();
+		write (0x0C, 0x00);
+		write (0x0D, 0x01);
+		write (0x0E, 0x00);
+		write (0x200, 0x08);		// type: four-bit
+		write (0x214, 0x01);
+
+		check (backends::libvgm::collectK054539Samples (ir).empty (),
+			   "and a four-bit DPCM voice is not exported as levels");
+	}
+
 	/** What the export finds in a K053260 song.
 
 		The first chip whose length is a register rather than an end address, and the first whose
@@ -6147,6 +6257,7 @@ int main (void)
 	testC140SampleCollection();
 	testC352WaveFromRom();
 	testC352WrappingSample();
+	testK054539SampleCollection();
 	testK053260SampleCollection();
 	testQSoundSampleCollection();
 	testC352SampleCollection();

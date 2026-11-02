@@ -171,6 +171,10 @@ struct K054539Decoder::Impl
 	uint8_t mode = 0;				// 0x22F: bit 0 gates all sound, as in the core
 	std::map<SampleKey, double> cycleCache;
 	std::map<std::pair<uint32_t, uint8_t>, std::size_t> lengthCache;
+
+	/** Decoded levels per sample, keyed by where it starts and its format - not by voice, and not by
+		the loop registers, because looping repeats bytes a row already shows. */
+	std::map<std::pair<uint32_t, uint8_t>, std::shared_ptr<const std::vector<float>>> waveCache;
 	std::vector<std::unique_ptr<K054539NoteTable>> tables;
 
 	uint8_t romByte (uint32_t address) const
@@ -588,6 +592,77 @@ ChannelState K054539Decoder::channelState (int channel) const
 	state.transposeCents = pitch.transposeCents;
 	state.rootCents = pitch.rootCents;
 	state.pitchSource = pitch.source;
+
+	// The same units-per-second that the pitch above divides by the cycle; a dragged-out file
+	// declares it directly, because a file has no cycle to divide by. "Units" rather than bytes:
+	// a unit is a byte, a sixteen-bit word or a nibble depending on the voice's format.
+	state.sampleRate = (float) impl->unitsPerSecond (voice);
+
+	// The bytes this voice is playing, so the row can draw the sample rather than a placeholder.
+	//
+	// `latchStart` and not `start`: the core writes the live position back into the start registers
+	// every output sample, so the register holds where the voice has got to, not where it began. The
+	// value is latched on key-on, which is the same moment the core latches its own pointer.
+	//
+	// The length is not a register either - a sample ends on a marker (`0x80`, `0x8000` or `0x88`),
+	// and `sampleUnits` is what scans for it. That scan already exists because a non-looping note's
+	// duration needs it.
+	if (! impl->rom.empty () && voice.pitch != 0)
+	{
+		const auto key = std::make_pair (voice.latchStart, voice.type);
+		const auto found = impl->waveCache.find (key);
+
+		if (found != impl->waveCache.end ())
+		{
+			state.wave = found->second;
+		}
+		else
+		{
+			const std::size_t units = impl->sampleUnits (voice.latchStart, voice.type);
+
+			if (units > 1)
+			{
+				auto wave = std::make_shared<std::vector<float>> ();
+				wave->resize (units);
+
+				if (impl->isFourBit (voice.type))
+				{
+					// Nibbles are deltas and only the running sum is a waveform; `kDpcmTable` is in
+					// this file because the pitch measurement needed the same sum.
+					double accumulator = 0.0;
+
+					for (std::size_t i = 0; i < units; ++i)
+					{
+						accumulator += (double) kDpcmTable[(int) impl->fetchUnit (voice.latchStart, voice.type, i)];
+						accumulator = std::clamp (accumulator, -32768.0, 32767.0);
+						(*wave)[i] = (float) (accumulator / 32768.0);
+					}
+				}
+				else
+				{
+					// Eight-bit is -128..127, sixteen-bit is -32768..32767: two full scales, and one
+					// divisor for both would flatten the first into a line.
+					const float scale = impl->isSixteenBit (voice.type) ? 32768.0f : 128.0f;
+
+					for (std::size_t i = 0; i < units; ++i)
+					{
+						(*wave)[i] = (float) (impl->fetchUnit (voice.latchStart, voice.type, i) / (double) scale);
+					}
+				}
+
+				// A reversed voice plays its bytes backwards, so the picture of what it plays is the
+				// sample backwards. The cycle measurement ignores this - reversing does not change a
+				// period.
+				if (voice.reverse)
+				{
+					std::reverse (wave->begin (), wave->end ());
+				}
+
+				state.wave = std::move (wave);
+				impl->waveCache.emplace (key, state.wave);
+			}
+		}
+	}
 
 	return state;
 }

@@ -14,6 +14,7 @@ namespace toybox::backends::libvgm
 	enum class SampleFormat
 	{
 		pcm8Signed,		// one signed byte per level, -128..127
+		pcm16Signed,	// two little-endian bytes per level, -32768..32767
 		nesDelta,		// the 2A03's one-bit deltas, expanded by `dpcm::decode`
 	};
 

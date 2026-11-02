@@ -28,6 +28,26 @@ void SampleCollector::add (uint64_t key, const std::string& name, const uint8_t*
 		// The 2A03 expands each byte into the eight one-bit steps the DAC takes.
 		sample.values = chips::dpcm::decode (bytes, length);
 	}
+	else if (format == SampleFormat::pcm16Signed)
+	{
+		// Little endian, and the length is in bytes: half as many levels as bytes. A region with
+		// fewer than two levels is not a waveform, and `length < 2` above does not cover that.
+		const std::size_t count = length / 2;
+
+		if (count < 2)
+		{
+			return;
+		}
+
+		sample.values.reserve (count);
+
+		for (std::size_t i = 0; i < count; ++i)
+		{
+			const int16_t level = (int16_t) ((uint16_t) bytes[i * 2]
+										  | ((uint16_t) bytes[i * 2 + 1] << 8));
+			sample.values.push_back ((float) level / 32768.0f);
+		}
+	}
 	else
 	{
 		sample.values.reserve (length);
