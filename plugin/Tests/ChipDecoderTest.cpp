@@ -5992,11 +5992,22 @@ void testWaveExport (void)
 		write (0x03, 0x08);			// step 0x0800, one byte per chip sample
 		write (0x08, 0xFE);			// channel 0's bit cleared - that is what enables it
 
+		// A second channel at 0x0300, so the first one's region has a neighbour to end at.
+		write (0x07, 0xC1);			// select channel 1
+		write (0x06, 0x03);
+		write (0x02, 0x00);
+		write (0x03, 0x08);
+		write (0x08, 0xFC);			// clear bits 0 and 1: both channels on
+
 		const auto samples = backends::libvgm::collectRf5cSamples (ir);
 
-		check (samples.size () == 1, "a cleared mask bit names a sample");
-		check (! samples.empty () && samples[0].values.size () == 16,
-			   "of the length up to its 0xFF terminator");
+		check (samples.size () == 2, "a cleared mask bit names a sample");
+
+		// Not a scan to a 0xFF: on this chip a sample runs to the next start, which is the bank's
+		// slot boundary. `0x0200` to `0x0300` is the same 256 bytes as `0x0300` to the top of the
+		// 0x400-byte image.
+		check (! samples.empty () && samples[0].values.size () == 256,
+			   "as long as the bank slot its start begins");
 
 		// 0x0800 / 2048 = one byte per chip sample, and the chip runs at 12500000 / 384.
 		check (! samples.empty () && std::abs (samples[0].rate - 32552.0) < 5.0,
@@ -6004,13 +6015,14 @@ void testWaveExport (void)
 
 		// The same mask written again is not a second key-on: the bit was already clear.
 		write (0x08, 0xFE);
-		check (backends::libvgm::collectRf5cSamples (ir).size () == 1,
+		check (backends::libvgm::collectRf5cSamples (ir).size () == 2,
 			   "and the same mask written again starts nothing new");
 
-		// Setting the bit clears the channel; clearing it again is a new note.
+		// Setting the bit clears the channels; clearing it again is a new note at the same address,
+		// which is still one file.
 		write (0x08, 0xFF);
-		write (0x08, 0xFE);
-		check (backends::libvgm::collectRf5cSamples (ir).size () == 1,
+		write (0x08, 0xFC);
+		check (backends::libvgm::collectRf5cSamples (ir).size () == 2,
 			   "while a release and a re-enable is still one file");
 	}
 

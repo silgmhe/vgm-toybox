@@ -86,6 +86,29 @@ struct Rf5c68Decoder::Impl
 		because two channels taking turns on one drum share the same bytes. */
 	std::map<std::pair<uint32_t, uint32_t>, std::shared_ptr<const std::vector<float>>> waveCache;
 
+	/** `lengthOf` keyed by start, **including the zero that means "no terminator"**.
+
+		That zero is the part that matters. Without the cache, a sample whose scan finds nothing is
+		re-scanned on every call - and `channelState` is called once per row per frame, so eight
+		channels scanning sixty-four kilobytes at sixty frames is thirty million byte reads a second
+		on the UI thread. It also never wrote a wave, because a length of zero takes the early exit,
+		so there was nothing to cache even indirectly. This is what made a Sonic CD track take seconds
+		to open.
+	*/
+	std::map<uint32_t, uint32_t> lengthCache;
+
+	uint32_t lengthAt (uint32_t start)
+	{
+		const auto found = lengthCache.find (start);
+
+		if (found != lengthCache.end())
+		{
+			return found->second;
+		}
+
+		return lengthCache.emplace (start, lengthOf (start)).first->second;
+	}
+
 	double clockRate = (double) kDefaultClock;
 	double outRate = 44100.0;
 	uint8_t bank = 0;			// 0x07 bit 6: which channel 0x00-0x06 address
@@ -356,6 +379,9 @@ void Rf5c68Decoder::setRam (std::vector<uint8_t> ram)
 {
 	impl->ram = std::move (ram);
 	impl->cycleCache.clear();
+	// The bytes changed underneath every cached answer, lengths and pictures both.
+	impl->lengthCache.clear();
+	impl->waveCache.clear();
 }
 
 void Rf5c68Decoder::write (const RegisterWrite& w)
@@ -469,7 +495,7 @@ ChannelState Rf5c68Decoder::channelState (int channel) const
 	// No guard on `enabled`: a released voice still has a sample worth drawing, and a row that
 	// blanks the moment the driver clears its bit is a row that flickers.
 	const uint32_t start = voice.latchStart;
-	const std::size_t length = impl->lengthOf (start);
+	const std::size_t length = impl->lengthAt (start);
 
 	if (length > 1)
 	{
