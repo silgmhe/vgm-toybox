@@ -284,19 +284,32 @@ track.channelIndex = channelIndex;    // 联动芯片的通道号接在父芯片
 
 `wave` 与 `sampleRate` 是"画不画得出真波形、拖不拖得出来"的两个字段。**只有显式填了它们的解码器才有真波形**；其余的画占位，拖拽被拒绝（`writeChannelShape` 返回 `nothingToWrite`）。
 
+**这张表按 `SongIr.h` 的 `ChipKind` 逐项列出，不按记忆或上一版抄。** 上一版漏了四颗采样芯片（RF5C164、YMZ280B、MultiPCM、K007232）和一颗波表（ES5503），还把 `FDS`、`N163` 写进了 VGM 行——那两颗不在 `ChipKind` 里，由 NSF 后端加载，见本节末。
+
 | 类别 | 芯片 | `wave` | `sampleRate` | 整曲导出 |
 |---|---|---|---|---|
 | 采样 | 2A03 DPCM | ✓ | ✓ | ✓ `collectNesDpcmSamples` |
 | 采样 | C140 / C219 | ✓ | ✓ | ✓ `collectC140Samples` |
 | 采样 | C352 | ✓ | ✓ | ✓ `collectC352Samples` |
 | 采样 | QSound，16 个 PCM voice | ✓ | ✓ | ✓ `collectQSoundSamples` |
-| 采样 | QSound，3 个 ADPCM voice | — | ✓ | — 见 §9.3 |
+| 采样 | QSound，3 个 ADPCM voice | ✓ | ✓ | ✓ `collectQSoundSamples` |
 | 采样 | K053260，8 位 PCM | ✓ | ✓ | ✓ `collectK053260Samples` |
-| 采样 | K053260，KADPCM | ✓ | — | — 见 §9.3 |
+| 采样 | K053260，KADPCM | ✓ | — | ✓ `collectK053260Samples` |
 | 采样 | K054539，8 位 / 16 位 PCM 与 4 位 DPCM | ✓ | ✓ | ✓ `collectK054539Samples` |
-| 采样 | RF5C68、GA20、OKIM6295、SegaPCM、OPN-ADPCM、ADPCM-drum | — | — | — |
+| 采样 | **RF5C68 / RF5C164** | — | — | — |
+| 采样 | **GA20**（Y8950 的 ADPCM 半） | — | — | — |
+| 采样 | **OKIM6295** | — | — | — |
+| 采样 | **SegaPCM** | — | — | — |
+| 采样 | **YMZ280B** | — | — | — |
+| 采样 | **MultiPCM**（YMW258） | — | — | — |
+| 采样 | **K007232** | — | — | — |
+| 采样 | **OPN-ADPCM**（YM2608 / YM2610） | — | — | — |
+| 采样 | **Y8950-ADPCM / ADPCM-drum** | — | — | — |
 | 波表 | VSU | ✓（局部） | — | — |
-| 波表 | FDS、N163、HuC6280、SCC、X1-010、WS、RF5C-wavetable | — | — | — |
+| 波表 | **ES5503**（自述为 wavetable 而非 sample player） | — | — | — |
+| 波表 | HuC6280、SCC（K051649）、X1-010、WonderSwan、Game Boy 波表、Mikey、MSM5232、NES APU、K005289 | — | — | — |
+
+**不在本表的两类**：PSG 与 FM（AY、SN76489、SAA1099、POKEY、OPL 系、OPN 系、OPM、OPX 等）本来就用 `cycleFor` 画阶梯，不经过 `state.wave`；`FDS` 与 `N163` 由 NSF 后端（`NsfBackend` / `NsfBus`）加载，没有对应的 `ChipKind`，要单独处理。
 
 **填一颗芯片的代价**：`attachMemory` 的通道已经通了（`407c0b1`），每颗只需把"寄存器 → 字节区间"翻译出来挂到 `state.wave`。**C140 那次约 50 行**，其余同量级。
 
@@ -307,48 +320,38 @@ track.channelIndex = channelIndex;    // 联动芯片的通道号接在父芯片
 1. **FM 的波形是"这一个音色"的静态曲线**，不反映 LFO 与包络——`cycleFor` 只画一个周期。
 2. **VGM 里没有通道概念**。通道是解码器从寄存器推出来的；某个驱动用非常规方式写寄存器时，行会显示得不准，而这种不准**不会报错**。
 3. **性能未实测**：音频线程里跑 30 个解码器，每个 block 喂几条写。NSF 那边只喂一个核，这里多 30 倍。**第一次跑起来要量**，如果掉音，第一刀砍波形计算（ADR-006）。
-4. **每个采样芯片各写一份收集流程**：`NesDpcmBank` 与 `C140Samples` 已经是近似副本，剩下 8 颗采样、8 颗波表会继续复制。**这是本支最大的一笔结构债**，见 `docs/memo/2026-11-01-code-review-libvgm-visualisation.md` 问题 4。**`ef4e2b0` 之后这笔债已还**：去重、解码、命名、缓存进了 `SampleCollector`，一颗芯片现在只剩"它的寄存器怎么指样本"。C352 与 QSound 都是这样接的，各约 150 行，其中一半是注释。
+4. **每个采样芯片各写一份收集流程**：`NesDpcmBank` 与 `C140Samples` 已经是近似副本，剩下 9 项采样、11 项波表会继续复制。**这是本支最大的一笔结构债**，见 `docs/memo/2026-11-01-code-review-libvgm-visualisation.md` 问题 4。**`ef4e2b0` 之后这笔债已还**：去重、解码、命名、缓存进了 `SampleCollector`，一颗芯片现在只剩"它的寄存器怎么指样本"。C352 与 QSound 都是这样接的，各约 150 行，其中一半是注释。
 
 5. **一行的画法取决于数据形状，不是有没有数据**：录制（`sampleRate > 0`）画填充带，波表与合成画阶梯。判据为什么是这样、以及它被改坏过三次的过程，见 `docs/memo/2026-11-01-what-a-waveform-row-is-a-picture-of.md`。
 
-### 9.3 待办：QSound 的 3 个 ADPCM voice
+### 9.3 已关闭：QSound 的 3 个 ADPCM voice（`7240d49`）
 
-**状态**：未做，故意留着。`channelState` 给它们 `sampleRate`（固定时钟 `clock / 2 / 1248 / 3`），但 `wave` 是空的；`collectQSoundSamples` 完全不读它们。
+**曾记的障碍**：没有能验证的曲子。`01 QSound Logo` 的 6757 条 `0xC4` 里，ADPCM 参数寄存器写了 5 次、启动 `0xD6`–`0xD8` **0 次**。
 
-**技术上的代价是明确的**，不是障碍：
+**关闭的方式不是找到曲子，而是自己造一个**：`tools/make_qsound_adpcm_probe.ps1` 生成 454 字节的 VGM——256 字节 ROM（`0x88`/`0x77` 交替，4 位字段能给出的最大摆幅）、四个 ADPCM 参数、启动标志、两秒等待。载入后得到 `qsound_adpcm_000010_128`：128 字节、256 个电平、约 8 kHz（ADPCM 的固定率，不是音高寄存器）。
 
-- 寄存器是独立的一块（`0xCA`–`0xD5` 三个 voice 各四个字段，`0xD6+n` 启动），不经过 PCM 的 `(i<<3)` 布局
-- 格式不同：一个字节是**两个 4 位增量**，而 `SampleFormat` 目前只有 `pcm8Signed` 与 `nesDelta`。要加一个 `adpcm4` 值和一个解码循环，照 `qsound_ctr.c` 的 `adpcm_update`（含 step size 表）
+**这证明了整条链路**：header、数据块、寄存器、启动、切字节、解码、命名。**没有证明的**是解出的形状与硬件一致——生成样本没有对照渲染。
 
-**真正的障碍是没有能验证的曲子**。`test_file` 里唯一的 QSound 文件 `01 QSound Logo.vgz`，6757 条 `0xC4` 命令里：
+**格式要点**：和两个 Konami 的 4 位格式都不同，它的步长是随信号涨落的自适应值（`adpcm_update` 的 `step_size`，表有 16 项按 `8 + step` 索引），所以同一个 nibble 在不同位置代表不同距离。另外**高 nibble 在前**（两个 Konami 格式都是低的在前）。
 
-```
-ADPCM 参数寄存器 0xCA-0xD5    5 次    ← 初始化时填过一轮
-ADPCM 启动       0xD6-0xD8    0 次    ← 从未启动
-```
+**探针本身不入库**（`test_file/` 被忽略），脚本入库。
 
-**没有一首曲子能让它出声。** 那样的解码器只能证明"编译过、没崩"，证明不了解出来的波形对不对——**看起来完成，其实没有**。
+### 9.4 已关闭：K053260 的 KADPCM 导出（`1a77f00`）
 
-**做的条件**：拿到一首确实用 QSound ADPCM 的曲子（Street Fighter II、Vampire Savior、Dungeons & Dragons 系列的驱动都用过），然后按上面两条写，并加一条断言"启动后切出的长度与 `endAddress - startAddress` 一致"。
+**曾记的**：显示已做、导出未做，只差一个 `SampleFormat` 值；**并且这里写着"验证素材现成"——那是错的。**
 
-**不要**因为"这是硬件的一部分"就补上：这一支已经有一次（C352 的 mu-law）是"格式没处理"被当成"这里没有数据"，那是 bug；这一次反过来，**是明知有数据但没有验证手段，记成待办比写一个测不了的解码器诚实**。
+**关闭时查证**：`01 The Declaration of War` 里 `0x2A` 一次都没写，KADPCM 与 loop 位都从未设置，而它是 `test_file` 里唯一的 K053260 文件。**没有曲子能让它出声，和 §9.3 一样。**
 
-### 9.4 待办：K053260 的 KADPCM 导出
-
-**状态**：显示已做，导出未做。和 §9.3 相反——那一个连解码器都没有，这一个只差最后一步。
-
-解码器为了测音高已经把 nibble 积分成波形（`kKadpcmTable` 就在 `K053260Decoder.cpp` 里），所以行能画。导出缺的只是一个 `SampleFormat` 值。
-
-**`dpcm4` 不能复用**，因为两张增量表的数值行为不同：
+**做法**：加 `SampleFormat::kadpcm4`。两张表的差别只有一项，而这一项决定不能共用：
 
 ```
 kKadpcmTable  第 8 项是 -128     ← 单步最大，累加会冲出 16 位，必须 clamp
 kDpcmTable    第 8 项是   0      ← 累加有界，不需要
 ```
 
-**做法**：加 `SampleFormat::kadpcm4`，表用 `kKadpcmTable`，累加时 `clamp` 到 ±32768，再按峰值归一化（和 `dpcm4` 一样——**峰值归一化对两种都是对的，除 16 位满量程对两种都是错的**，见 `docs/memo/2026-11-02-a-row-that-was-drawn-and-could-not-be-seen.md`）。
+**验证方式改成构造断言**：八个 nibble 全是 `8` 时必须向负方向移动；用错表则不动。**这是这个分支里"一个断言比一个对照音频更能说明问题"的那一类。**
 
-**验证素材现成**：`test_file/K053260/01 The Declaration of War` 里有 KADPCM voice，导出后可以和 `.rendered.wav` 对比。
+**仍未验证的**：解出的形状是否与硬件一致。能证明的是寄存器读对、字节切对、解码器跑通、速率来自芯片而不是编的。
 
 ## 10. 实施顺序
 
