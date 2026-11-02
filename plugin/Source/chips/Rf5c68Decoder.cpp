@@ -293,7 +293,7 @@ struct Rf5c68Decoder::Impl
 
 		const uint32_t loopAddress = (uint32_t) channel.loopStart << 8;
 		const bool diesAtTheEnd = byteAt (loopAddress) == 0xFF;
-		const uint32_t length = lengthOf (channel.latchStart);
+		const uint32_t length = lengthAt (channel.latchStart);
 		if (length == 0)
 		{
 			// no RAM (or no sample at that address): nothing tells the note's length, so it gets the
@@ -495,7 +495,27 @@ ChannelState Rf5c68Decoder::channelState (int channel) const
 	// No guard on `enabled`: a released voice still has a sample worth drawing, and a row that
 	// blanks the moment the driver clears its bit is a row that flickers.
 	const uint32_t start = voice.latchStart;
-	const std::size_t length = impl->lengthAt (start);
+
+	// The region runs to the **next channel's start**, not to a `0xFF`. The export learned this
+	// first (`Rf5c68Samples.cpp` has the long note) and the row has to agree with it, or the same
+	// sample comes out at two different lengths depending on which button was pressed.
+	//
+	// On these tracks the six starts are 0x2000, 0x4000, ... - eight kilobytes apart, which is the
+	// bank's slot size. Scanning for a terminator instead found nothing (the samples contain no
+	// 0xFF) and ran to the top of RAM, five times over.
+	uint32_t limit = (uint32_t) impl->ram.size ();
+
+	for (const auto& other : impl->channels)
+	{
+		const uint32_t candidate = (uint32_t) other.start << 8;
+
+		if (candidate > start && candidate < limit)
+		{
+			limit = candidate;
+		}
+	}
+
+	const std::size_t length = (limit > start) ? (std::size_t) (limit - start) : 0;
 
 	if (length > 1)
 	{
