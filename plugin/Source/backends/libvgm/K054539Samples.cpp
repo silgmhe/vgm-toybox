@@ -73,7 +73,12 @@ namespace
 		return isSixteenBit (type) ? 2 : 1;
 	}
 
-	/** What the collector needs to know to turn this voice's bytes into levels. */
+	/** What the collector needs to know to turn this voice's bytes into levels.
+
+		Three formats, three decoders, and no default that could pass for one of them: a voice whose
+		type byte says nothing recognisable is read as eight-bit, which is what the chip does with an
+		undefined value too.
+	*/
 	SampleFormat sampleFormatFor (uint8_t type)
 	{
 		if (isSixteenBit (type))

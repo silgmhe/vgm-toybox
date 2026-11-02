@@ -291,7 +291,10 @@ track.channelIndex = channelIndex;    // 联动芯片的通道号接在父芯片
 | 采样 | C352 | ✓ | ✓ | ✓ `collectC352Samples` |
 | 采样 | QSound，16 个 PCM voice | ✓ | ✓ | ✓ `collectQSoundSamples` |
 | 采样 | QSound，3 个 ADPCM voice | — | ✓ | — 见 §9.3 |
-| 采样 | K053260、K054539、RF5C68、GA20、OKIM6295、SegaPCM、OPN-ADPCM、ADPCM-drum | — | — | — |
+| 采样 | K053260，8 位 PCM | ✓ | ✓ | ✓ `collectK053260Samples` |
+| 采样 | K053260，KADPCM | ✓ | — | — 见 §9.3 |
+| 采样 | K054539，8 位 / 16 位 PCM 与 4 位 DPCM | ✓ | ✓ | ✓ `collectK054539Samples` |
+| 采样 | RF5C68、GA20、OKIM6295、SegaPCM、OPN-ADPCM、ADPCM-drum | — | — | — |
 | 波表 | VSU | ✓（局部） | — | — |
 | 波表 | FDS、N163、HuC6280、SCC、X1-010、WS、RF5C-wavetable | — | — | — |
 
@@ -329,6 +332,23 @@ ADPCM 启动       0xD6-0xD8    0 次    ← 从未启动
 **做的条件**：拿到一首确实用 QSound ADPCM 的曲子（Street Fighter II、Vampire Savior、Dungeons & Dragons 系列的驱动都用过），然后按上面两条写，并加一条断言"启动后切出的长度与 `endAddress - startAddress` 一致"。
 
 **不要**因为"这是硬件的一部分"就补上：这一支已经有一次（C352 的 mu-law）是"格式没处理"被当成"这里没有数据"，那是 bug；这一次反过来，**是明知有数据但没有验证手段，记成待办比写一个测不了的解码器诚实**。
+
+### 9.4 待办：K053260 的 KADPCM 导出
+
+**状态**：显示已做，导出未做。和 §9.3 相反——那一个连解码器都没有，这一个只差最后一步。
+
+解码器为了测音高已经把 nibble 积分成波形（`kKadpcmTable` 就在 `K053260Decoder.cpp` 里），所以行能画。导出缺的只是一个 `SampleFormat` 值。
+
+**`dpcm4` 不能复用**，因为两张增量表的数值行为不同：
+
+```
+kKadpcmTable  第 8 项是 -128     ← 单步最大，累加会冲出 16 位，必须 clamp
+kDpcmTable    第 8 项是   0      ← 累加有界，不需要
+```
+
+**做法**：加 `SampleFormat::kadpcm4`，表用 `kKadpcmTable`，累加时 `clamp` 到 ±32768，再按峰值归一化（和 `dpcm4` 一样——**峰值归一化对两种都是对的，除 16 位满量程对两种都是错的**，见 `docs/memo/2026-11-02-a-row-that-was-drawn-and-could-not-be-seen.md`）。
+
+**验证素材现成**：`test_file/K053260/01 The Declaration of War` 里有 KADPCM voice，导出后可以和 `.rendered.wav` 对比。
 
 ## 10. 实施顺序
 
