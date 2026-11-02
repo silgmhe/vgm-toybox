@@ -155,6 +155,10 @@ struct K053260Decoder::Impl
 	std::map<SampleKey, double> cycleCache;
 	std::vector<std::unique_ptr<K053260NoteTable>> tables;
 
+	/** Decoded levels per sample, keyed the same way the cycle measurement is - the same four
+		registers say which sample, and two voices taking turns on one drum share the picture. */
+	std::map<SampleKey, std::shared_ptr<const std::vector<float>>> waveCache;
+
 	/** How many fetch units a sample holds: one byte each for PCM, two nibbles each for KADPCM. */
 	double fetchUnits (const Voice& voice) const
 	{
@@ -459,6 +463,86 @@ ChannelState K053260Decoder::channelState (int channel) const
 	state.transposeCents = pitch.transposeCents;
 	state.rootCents = pitch.rootCents;
 	state.pitchSource = pitch.source;
+
+	// The same bytes-per-second that the pitch above divides by the cycle; a dragged-out file
+	// declares it directly, because a file has no cycle to divide by.
+	state.sampleRate = (float) ((double) voice.pitch * impl->clock / kPitchDivisor);
+
+	// The bytes this voice is playing, so the row can draw the sample rather than a placeholder.
+	//
+	// `start + 1`, because the core's first fetch is the byte after the start address
+	// (`KDSC_play` pre-increments) - the same offset `cycleFor` measures from. One byte early would
+	// put a step in front of every sample, which is a thing that looks almost right.
+	//
+	// KADPCM is integrated before it is drawn for the same reason it is integrated before it is
+	// measured: the nibbles are deltas, and only the running sum is a waveform. That table lives in
+	// this file because the pitch needed it, which is why this chip's ADPCM can be drawn while the
+	// QSound's cannot.
+	if (! impl->rom.empty () && voice.length > 1)
+	{
+		const SampleKey key { voice.start, voice.length, voice.kadpcm, voice.reverse };
+		const auto found = impl->waveCache.find (key);
+
+		if (found != impl->waveCache.end ())
+		{
+			state.wave = found->second;
+		}
+		else
+		{
+			auto wave = std::make_shared<std::vector<float>> ();
+			const uint32_t begin = voice.start + 1;
+
+			if (! voice.kadpcm)
+			{
+				wave->resize (voice.length);
+
+				for (std::size_t i = 0; i < wave->size (); ++i)
+				{
+					(*wave)[i] = (float) (int8_t) impl->romByte (begin + (uint32_t) i) / 128.0f;
+				}
+			}
+			else
+			{
+				// Low nibble first: the core shifts the byte down when its position is odd.
+				wave->resize ((std::size_t) impl->fetchUnits (voice));
+
+				int accumulator = 0;
+
+				for (std::size_t i = 0; i < wave->size (); ++i)
+				{
+					const uint8_t byte = impl->romByte (begin + (uint32_t) (i / 2));
+					const int nibble = (i % 2 == 0) ? (byte & kNibbleMask) : (byte >> kNibbleShift);
+					accumulator += kKadpcmTable[nibble];
+					(*wave)[i] = (float) accumulator;
+				}
+
+				// The sum has no fixed full scale - it wanders with the sample - so the shape is
+				// normalised to its own peak. Nothing is lost: the row draws a shape, not a level.
+				float peak = 1.0f;
+
+				for (const float level : *wave)
+				{
+					peak = (std::max) (peak, std::abs (level));
+				}
+
+				for (float& level : *wave)
+				{
+					level /= peak;
+				}
+			}
+
+			// A reverse voice plays its bytes backwards, so the picture of what it plays is the
+			// sample backwards. The cycle measurement ignores this, because reversing a waveform
+			// does not change its period.
+			if (voice.reverse)
+			{
+				std::reverse (wave->begin (), wave->end ());
+			}
+
+			state.wave = std::move (wave);
+			impl->waveCache.emplace (key, state.wave);
+		}
+	}
 
 	return state;
 }

@@ -21,6 +21,7 @@
 #include "backends/libvgm/C140Samples.h"
 #include "backends/libvgm/C352Samples.h"
 #include "backends/libvgm/QSoundSamples.h"
+#include "backends/libvgm/K053260Samples.h"
 
 #include "playback/ChannelFromChip.h"
 #include "playback/WaveExport.h"
@@ -5561,6 +5562,98 @@ void testWaveExport (void)
 			   "of the length that wraps to the top of the window");
 	}
 
+	/** What the export finds in a K053260 song.
+
+		The first chip whose length is a register rather than an end address, and the first whose
+		start is off by one: the core fetches the byte *after* the start address, so a correct-looking
+		export of a wrong region is one byte away from this one.
+	*/
+	void testK053260SampleCollection (void)
+	{
+		using namespace toybox;
+
+		std::printf ("  the K053260's sample list\n");
+
+		midi::SongIr ir;
+
+		midi::ChipSlot slot;
+		slot.kind = midi::ChipKind::k053260;
+		slot.clockHz = 3579545;
+		ir.chips.push_back (slot);
+
+		std::vector<uint8_t> rom (0x1000, 0);
+
+		// A ramp rather than a constant, so a one-byte shift shows up as a different first value
+		// instead of the same picture with different words describing it.
+		for (int i = 0; i < 64; ++i)
+		{
+			rom[0x100 + (std::size_t) i] = (uint8_t) (0x10 + i);
+		}
+
+		midi::RomBlock block;
+		block.memoryType = 0x8E;
+		block.romSize = (uint32_t) rom.size ();
+		block.romOffset = 0;
+		block.data = rom.data ();
+		block.size = rom.size ();
+		ir.roms.push_back (block);
+
+		const auto write = [&ir] (uint8_t offset, uint16_t value)
+		{
+			RegisterWrite w;
+			w.deviceId = 0;
+			w.port = 0;
+			w.reg = offset;
+			w.value = value;
+			ir.writes.push_back (w);
+		};
+
+		// voice 0: pitch 0x0F00 (the register keeps twelve bits), length 32, start 0x0100
+		write (0x08, 0x00);
+		write (0x09, 0x0F);
+		write (0x0A, 0x20);
+		write (0x0B, 0x00);
+		write (0x0C, 0x00);
+		write (0x0D, 0x01);
+		write (0x0E, 0x00);
+		write (0x0F, 0x70);
+		write (0x28, 0x01);			// key-on mask: voice 0
+
+		const auto samples = backends::libvgm::collectK053260Samples (ir);
+
+		check (samples.size () == 1, "the key-on mask names one sample");
+		check (! samples.empty () && samples[0].values.size () == 32,
+			   "of the length the register asks for");
+
+		// 0x101, not 0x100: the core's first fetch is the byte after the start address.
+		check (! samples.empty ()
+				   && std::abs (samples[0].values[0] - (float) (int8_t) 0x11 / 128.0f) < 0.001f,
+			   "read from one byte past the start address");
+
+		// 0x0F00 * 3579545 / 262144 = 52433.
+		check (! samples.empty () && std::abs (samples[0].rate - 52433.0) < 5.0,
+			   "at the rate its pitch register asks for");
+
+		// The drivers write the same mask once per voice, so the second write has no rising edge.
+		write (0x28, 0x01);
+		check (backends::libvgm::collectK053260Samples (ir).size () == 1,
+			   "and the same mask written again starts nothing new");
+
+		// KADPCM: four-bit deltas, and `SampleFormat` has no value for them. Packing the bytes off
+		// as eight-bit levels would produce noise that looks like a waveform.
+		ir.writes.clear ();
+		write (0x0A, 0x20);
+		write (0x0B, 0x00);
+		write (0x0C, 0x00);
+		write (0x0D, 0x01);
+		write (0x0E, 0x00);
+		write (0x2A, 0x10);			// KADPCM, voice 0
+		write (0x28, 0x01);
+
+		check (backends::libvgm::collectK053260Samples (ir).empty (),
+			   "and a KADPCM voice is not exported as eight-bit levels");
+	}
+
 	/** What the export finds in a QSound song.
 
 		Three of the chip's quirks are load-bearing here and each has its own assertion: the bank
@@ -6054,6 +6147,7 @@ int main (void)
 	testC140SampleCollection();
 	testC352WaveFromRom();
 	testC352WrappingSample();
+	testK053260SampleCollection();
 	testQSoundSampleCollection();
 	testC352SampleCollection();
 	testDisplayColumns();
