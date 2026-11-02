@@ -17,6 +17,7 @@ namespace toybox::backends::libvgm
 		pcm16Signed,	// two little-endian bytes per level, -32768..32767
 		dpcm4,			// four-bit deltas, two per byte, low nibble first, summed and peak-normalised
 		kadpcm4,		// the same shape, but its table's eighth entry is -128 rather than 0
+		qsoundAdpcm,	// adaptive step size: the QSound's own, nothing like the two above
 		nesDelta,		// the 2A03's one-bit deltas, expanded by `dpcm::decode`
 	};
 

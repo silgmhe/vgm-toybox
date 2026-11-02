@@ -98,6 +98,62 @@ void SampleCollector::add (uint64_t key, const std::string& name, const uint8_t*
 			level /= peak;
 		}
 	}
+	else if (format == SampleFormat::qsoundAdpcm)
+	{
+		// The QSound's adaptive delta, from `adpcm_update` in qsound_ctr.c. Not a table of fixed
+		// steps like the two four-bit formats above: each nibble's size is scaled by a running
+		// `step_size` that grows and shrinks with the signal, which is what makes this one a
+		// compressor rather than a lookup.
+		//
+		// A byte carries two nibbles and the *high* one comes first - the opposite of both Konami
+		// formats - and only the low nibble advances the address.
+		static constexpr int kStepTable[16] =
+			{ 154, 154, 128, 102, 77, 58, 58, 58, 58, 58, 58, 58, 77, 102, 128, 154 };
+
+		sample.values.reserve (length * 2);
+
+		int stepSize = 10;
+		int accumulator = 0;
+
+		for (std::size_t i = 0; i < length; ++i)
+		{
+			const uint8_t byte = bytes[i];
+
+			// High nibble first, then low - and both are signed four-bit values.
+			const int nibbles[2] = { (int) ((int8_t) (byte & 0xF0) >> 4),
+									 (int) ((int8_t) (byte << 4) >> 4) };
+
+			for (const int nibble : nibbles)
+			{
+				// delta = (0.5 + abs(step)) * step_size, negated when the step is not positive.
+				int delta = ((1 + std::abs (nibble * 2)) * stepSize) >> 1;
+
+				if (nibble <= 0)
+				{
+					delta = -delta;
+				}
+
+				accumulator = (std::min) ((std::max) (accumulator + delta, -32768), 32767);
+				sample.values.push_back ((float) accumulator);
+
+				stepSize = (kStepTable[8 + nibble] * stepSize) >> 6;
+				stepSize = (std::min) ((std::max) (stepSize, 1), 2000);
+			}
+		}
+
+		// Normalised to its own peak, like the two four-bit formats and for the same reason.
+		float peak = 1.0f;
+
+		for (const float level : sample.values)
+		{
+			peak = (std::max) (peak, std::abs (level));
+		}
+
+		for (float& level : sample.values)
+		{
+			level /= peak;
+		}
+	}
 	else
 	{
 		sample.values.reserve (length);

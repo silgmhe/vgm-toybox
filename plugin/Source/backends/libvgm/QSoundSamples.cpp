@@ -1,4 +1,4 @@
-#include "QSoundSamples.h"
+﻿#include "QSoundSamples.h"
 
 #include <algorithm>
 #include <cstdint>
@@ -30,6 +30,9 @@ namespace
 	*/
 	constexpr int kVoices = 16;
 
+	/** The ADPCM voices, whose registers sit in their own block above the PCM ones. */
+	constexpr int kAdpcmVoices = 3;
+
 	/** The QSound's sample ROM, as VGM calls it (`QSoundDecoder::kRequirements`). */
 	constexpr uint8_t kRomType = 0x8F;
 
@@ -41,6 +44,9 @@ namespace
 	/** `rate` is 4.12 fixed point over the chip's own sample clock, which is `clock / 2 / 1248`. */
 	constexpr double kRateDivisor = 4096.0 * 2.0 * 1248.0;
 	constexpr double kOutputDivisor = 2.0 * 1248.0;
+
+	/** The ADPCM voices are updated one at a time, so each runs at a third of the output rate. */
+	constexpr double kAdpcmClockDivisor = kOutputDivisor * 3.0;
 
 	/** Bit 15 of a bank: the samples live above the DSP program ROM, and the core refuses a bank
 		without it. */
@@ -81,12 +87,29 @@ namespace
 		bool keyed = false;
 	};
 
+	/** The three ADPCM voices: four registers each from 0xCA, and a start flag at 0xD6+n.
+
+		`bank` carries the same bit 15 gate the PCM voices use - the samples live above the DSP
+		program, and the core returns silence for a bank without it.
+	*/
+	struct AdpcmVoice
+	{
+		uint32_t start = 0;
+		uint32_t end = 0;
+		uint32_t bank = 0;
+		uint32_t volume = 0;
+
+		/** Set while the start flag is non-zero, so one write of it is one sample. */
+		bool keyed = false;
+	};
+
 	/** One voice starting one sample, before de-duplication. */
 	struct Hit
 	{
 		uint32_t address = 0;
 		std::size_t length = 0;
 		uint32_t rate = 0;
+		bool adpcm = false;
 	};
 }
 
@@ -114,6 +137,7 @@ std::vector<playback::DecodedSample> collectQSoundSamples (const midi::SongIr& i
 	const double sampleRate = clock / kOutputDivisor;
 
 	Voice voices[kVoices];
+	AdpcmVoice adpcm[kAdpcmVoices];
 
 	// Collected first, decided afterwards, for the same reason the C352 collector does it: one
 	// sample is often played by several voices at several rates - a drum tuned per hit - and the
@@ -138,7 +162,28 @@ std::vector<playback::DecodedSample> collectQSoundSamples (const midi::SongIr& i
 			return;
 		}
 
-		hits.push_back (Hit { address, length, voice.rate });
+		hits.push_back (Hit { address, length, voice.rate, false });
+	};
+
+	/** Records an ADPCM sample when its start flag is written. */
+	const auto collectAdpcm = [&] (const AdpcmVoice& voice)
+	{
+		if ((voice.bank & kSampleBankFlag) == 0 || voice.end <= voice.start)
+		{
+			return;
+		}
+
+		const uint32_t address = ((voice.bank & kBankIndexMask) << kBankToByteShift)
+							   | (voice.start & 0xFFFF);
+		const std::size_t length = (std::size_t) (voice.end - voice.start);
+
+		if (length <= 1 || address >= rom.size ())
+		{
+			return;
+		}
+
+		hits.push_back (Hit { address, (std::min) (length, rom.size () - address),
+							  (uint32_t) clock, true });
 	};
 
 	for (const auto& write : ir.writes)
@@ -152,6 +197,47 @@ std::vector<playback::DecodedSample> collectQSoundSamples (const midi::SongIr& i
 		// QSound's command carries its register offset in one byte, which the reader stores in
 		// `reg` - there is no page half, unlike the C352's sixteen-bit offsets.
 		const uint8_t offset = write.reg;
+
+		// The three ADPCM voices: four registers each from 0xCA, and a start flag one byte apart
+		// from 0xD6. The flag is what starts one, and only its rising edge counts - the core
+		// consumes it on the next sample it processes.
+		if (offset >= 0xCA && offset <= 0xD5)
+		{
+			const int index = (int) ((offset - 0xCA) / 4);
+
+			if (index < kAdpcmVoices)
+			{
+				AdpcmVoice& voice = adpcm[index];
+
+				switch ((offset - 0xCA) % 4)
+				{
+				case 0: voice.start = write.value; break;
+				case 1: voice.end = write.value; break;
+				case 2: voice.bank = write.value; break;
+				case 3: voice.volume = write.value; break;
+				default: break;
+				}
+			}
+
+			continue;
+		}
+
+		if (offset >= 0xD6 && offset <= 0xD8)
+		{
+			const int index = (int) (offset - 0xD6);
+
+			if (index < kAdpcmVoices)
+			{
+				if (write.value != 0 && ! adpcm[index].keyed)
+				{
+					collectAdpcm (adpcm[index]);
+				}
+
+				adpcm[index].keyed = (write.value != 0);
+			}
+
+			continue;
+		}
 
 		if (offset >= 0x80)
 		{
@@ -226,7 +312,7 @@ std::vector<playback::DecodedSample> collectQSoundSamples (const midi::SongIr& i
 
 	for (const auto& hit : hits)
 	{
-		const uint64_t key = ((uint64_t) hit.address << 32) | hit.length;
+		const uint64_t key = ((uint64_t) hit.address << 32) | ((uint64_t) hit.length << 1) | (hit.adpcm ? 1 : 0);
 		auto& highest = highestRate[key];
 
 		highest = (std::max) (highest, hit.rate);
@@ -234,16 +320,21 @@ std::vector<playback::DecodedSample> collectQSoundSamples (const midi::SongIr& i
 
 	for (const auto& hit : hits)
 	{
-		const uint64_t key = ((uint64_t) hit.address << 32) | hit.length;
+		const uint64_t key = ((uint64_t) hit.address << 32) | ((uint64_t) hit.length << 1) | (hit.adpcm ? 1 : 0);
 		const uint32_t rateRegister = highestRate[key];
-		const double rate = (double) rateRegister / 4096.0 * sampleRate;
+
+		// An ADPCM voice has no pitch register: it runs at a third of the output rate, which is why
+		// the clock travels on the hit rather than a register value.
+		const double rate = hit.adpcm
+			? (double) hit.rate / kAdpcmClockDivisor
+			: (double) rateRegister / 4096.0 * sampleRate;
 
 		char name[32] = {};
-		std::snprintf (name, sizeof (name), "qsound_%06X_%u", (unsigned) hit.address,
-					   (unsigned) hit.length);
+		std::snprintf (name, sizeof (name), "qsound_%s%06X_%u", hit.adpcm ? "adpcm_" : "",
+					   (unsigned) hit.address, (unsigned) hit.length);
 
 		collector.add (key, name, rom.data () + hit.address, hit.length,
-					   SampleFormat::pcm8Signed, rate);
+					   hit.adpcm ? SampleFormat::qsoundAdpcm : SampleFormat::pcm8Signed, rate);
 	}
 
 	return collector.take ();

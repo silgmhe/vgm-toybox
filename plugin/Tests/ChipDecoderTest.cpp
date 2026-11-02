@@ -5856,6 +5856,86 @@ void testWaveExport (void)
 			   "and a KADPCM voice is exported rather than skipped");
 	}
 
+	/** The QSound's ADPCM, which no song here starts.
+
+		Built from registers for the same reason the K053260's KADPCM was: the start flag at 0xD6 never
+		appears in `01 QSound Logo`, and that is the only QSound file in `test_file`. `99 ADPCM
+		probe.vgm` is generated for a manual check; this is the assertion that runs in the suite.
+
+		What makes this format worth its own decoder: the step size is not a table lookup but a running
+		value that grows and shrinks with the signal, so the same nibble means a different distance
+		depending on what came before it.
+	*/
+	void testQSoundAdpcm (void)
+	{
+		using namespace toybox;
+
+		std::printf ("  the QSound's ADPCM\n");
+
+		midi::SongIr ir;
+
+		midi::ChipSlot slot;
+		slot.kind = midi::ChipKind::qsound;
+		slot.clockHz = 40000000;
+		ir.chips.push_back (slot);
+
+		std::vector<uint8_t> rom (256, 0);
+
+		// -8 and +7 alternating: the widest swings the format has, so the decoded shape has to move
+		// rather than drift.
+		for (std::size_t i = 0; i < rom.size (); ++i)
+		{
+			rom[i] = (i % 2 == 0) ? 0x88 : 0x77;
+		}
+
+		midi::RomBlock block;
+		block.memoryType = 0x8F;
+		block.romSize = (uint32_t) rom.size ();
+		block.romOffset = 0;
+		block.data = rom.data ();
+		block.size = rom.size ();
+		ir.roms.push_back (block);
+
+		const auto write = [&ir] (uint8_t offset, uint16_t value)
+		{
+			RegisterWrite w;
+			w.deviceId = 0;
+			w.port = 0;
+			w.reg = offset;
+			w.value = value;
+			ir.writes.push_back (w);
+		};
+
+		write (0xCA, 0x0010);		// start
+		write (0xCB, 0x0090);		// end
+		write (0xCC, 0x8000);		// bank, with the sample-ROM bit
+		write (0xCD, 0x7FFF);		// volume
+		write (0xD6, 0x0001);		// start flag: this is the write that keys it
+
+		const auto samples = backends::libvgm::collectQSoundSamples (ir);
+
+		check (samples.size () == 1, "an ADPCM voice is exported rather than skipped");
+		check (! samples.empty () && samples[0].values.size () == 256,
+			   "two levels per byte, high nibble first");
+
+		// If the adaptive step were skipped and the nibbles read as fixed steps, the shape would
+		// still move; what it would not do is match the chip. The rate is the check that survives:
+		// an ADPCM voice has no pitch register and runs at a third of the output rate.
+		check (! samples.empty () && std::abs (samples[0].rate - 5342.0) < 20.0,
+			   "at the chip's fixed ADPCM rate, not a pitch register");
+
+		float lowest = 0.0f;
+		float highest = 0.0f;
+
+		for (const float level : samples.empty () ? std::vector<float> () : samples[0].values)
+		{
+			lowest = (std::min) (lowest, level);
+			highest = (std::max) (highest, level);
+		}
+
+		check (highest > 0.5f && lowest < -0.5f, "and the alternating nibbles swing both ways");
+	}
+
 	/** What the export finds in a QSound song.
 
 		Three of the chip's quirks are load-bearing here and each has its own assertion: the bank
@@ -6352,6 +6432,7 @@ int main (void)
 	testK054539SampleCollection();
 	testK053260Kadpcm();
 	testK053260SampleCollection();
+	testQSoundAdpcm();
 	testQSoundSampleCollection();
 	testC352SampleCollection();
 	testDisplayColumns();
