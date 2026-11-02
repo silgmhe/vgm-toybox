@@ -6009,6 +6009,12 @@ void testWaveExport (void)
 		check (! samples.empty () && samples[0].values.size () == 256,
 			   "as long as the bank slot its start begins");
 
+		// Sign and magnitude, not two's complement. `0x10` is -16/128 on this chip (`0x00..0x7F`
+		// runs 0..-127); read as two's complement it would be +16/128 and the two halves of the
+		// waveform would be mirrored against each other.
+		check (! samples.empty () && std::abs (samples[0].values[0] + (16.0f / 128.0f)) < 0.001f,
+			   "and read as sign and magnitude, not two's complement");
+
 		// 0x0800 / 2048 = one byte per chip sample, and the chip runs at 12500000 / 384.
 		check (! samples.empty () && std::abs (samples[0].rate - 32552.0) < 5.0,
 			   "at the rate its step register asks for");

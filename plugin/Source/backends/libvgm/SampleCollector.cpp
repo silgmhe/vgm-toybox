@@ -154,6 +154,26 @@ void SampleCollector::add (uint64_t key, const std::string& name, const uint8_t*
 			level /= peak;
 		}
 	}
+	else if (format == SampleFormat::signMagnitude8)
+	{
+		// Not two's complement, which is what every other eight-bit chip here uses.
+		//
+		// `rf5c68.c:159` does `if (sample & 0x80) out += sample & 0x7f; else out -= sample;` -
+		// bit 7 is a sign and the low seven bits are the distance from zero. So 0x80..0xFF runs
+		// 0..+127 and 0x00..0x7F runs 0..-127, with silence at both ends and nothing in between.
+		//
+		// Reading it as two's complement mirrors the two halves and shifts the positive one down
+		// by 128, which is not a phase flip - it collapses every sample into a buzz while the bytes
+		// themselves are perfectly good. That is what the first export of these tracks sounded like.
+		sample.values.reserve (length);
+
+		for (std::size_t i = 0; i < length; ++i)
+		{
+			const uint8_t byte = bytes[i];
+			const float magnitude = (float) (byte & 0x7F) / 128.0f;
+			sample.values.push_back ((byte & 0x80) ? magnitude : -magnitude);
+		}
+	}
 	else
 	{
 		sample.values.reserve (length);

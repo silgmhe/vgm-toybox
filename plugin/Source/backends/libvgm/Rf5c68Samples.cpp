@@ -219,7 +219,7 @@ std::vector<playback::DecodedSample> collectRf5cSamples (const midi::SongIr& ir)
 		char name[32] = {};
 		std::snprintf (name, sizeof (name), "rf5c_%06X_%u", (unsigned) address, (unsigned) length);
 
-		collector.add (key, name, ram.data () + address, length, SampleFormat::pcm8Signed, rate);
+		collector.add (key, name, ram.data () + address, length, SampleFormat::signMagnitude8, rate);
 	}
 
 	return collector.take ();

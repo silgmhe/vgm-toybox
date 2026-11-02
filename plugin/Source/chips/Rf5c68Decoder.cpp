@@ -511,10 +511,17 @@ ChannelState Rf5c68Decoder::channelState (int channel) const
 			auto wave = std::make_shared<std::vector<float>> ();
 			wave->resize (length);
 
-			// Eight-bit signed, which is what the chip feeds its DAC: one byte per level.
+			// **Sign and magnitude, not two's complement.** `rf5c68.c:159` reads
+			// `if (sample & 0x80) out += sample & 0x7f; else out -= sample;`, so bit 7 is a sign
+			// and the low seven bits are the distance from zero: 0x80..0xFF is 0..+127, 0x00..0x7F
+			// is 0..-127. Casting to `int8_t` instead folds the two halves together and shifts the
+			// positive one down by 128, which draws a dense buzz over bytes that are a clean
+			// waveform - the same mistake the export had, in the same file's other reader.
 			for (std::size_t i = 0; i < length; ++i)
 			{
-				(*wave)[i] = (float) (int8_t) impl->byteAt (start + (uint32_t) i) / 128.0f;
+				const uint8_t byte = impl->byteAt (start + (uint32_t) i);
+				const float magnitude = (float) (byte & 0x7F) / 128.0f;
+				(*wave)[i] = (byte & 0x80) ? magnitude : -magnitude;
 			}
 
 			state.wave = std::move (wave);
