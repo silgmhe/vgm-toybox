@@ -13,8 +13,21 @@ namespace toybox::backends::libvgm
 {
 namespace
 {
-	/** PCM voices. The three ADPCM voices are a separate register block and a different format, and
-		nothing here reads them. */
+	/** PCM voices, and only these.
+
+		The three ADPCM voices are a separate register block (`0xCA`-`0xD5`, started by `0xD6+n`) in a
+		different format - one byte carries two four-bit deltas, not one level - so exporting them
+		needs `SampleFormat` to grow a value and a decoder. That part is a known amount of work, not
+		a reason to skip it.
+
+		What is a reason: there is no song to check the result against. On `01 QSound Logo`, the one
+		QSound file in `test_file`, the drivers write the ADPCM parameter registers five times and
+		start a voice zero times. A decoder written without a file that plays it can be shown to
+		compile and to not crash; it cannot be shown to be right, and this branch has already spent
+		eight guesses on a chip whose data was there all along (see
+		`docs/memo/2026-11-02-eight-guesses-before-a-wrapped-window.md`). Left as a written-down debt:
+		the design document's §9.3 has the conditions for doing it.
+	*/
 	constexpr int kVoices = 16;
 
 	/** The QSound's sample ROM, as VGM calls it (`QSoundDecoder::kRequirements`). */

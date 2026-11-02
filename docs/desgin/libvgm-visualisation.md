@@ -288,7 +288,10 @@ track.channelIndex = channelIndex;    // 联动芯片的通道号接在父芯片
 |---|---|---|---|---|
 | 采样 | 2A03 DPCM | ✓ | ✓ | ✓ `collectNesDpcmSamples` |
 | 采样 | C140 / C219 | ✓ | ✓ | ✓ `collectC140Samples` |
-| 采样 | C352、QSound、K053260、K054539、RF5C68、GA20、OKIM6295、SegaPCM、OPN-ADPCM、ADPCM-drum | — | — | — |
+| 采样 | C352 | ✓ | ✓ | ✓ `collectC352Samples` |
+| 采样 | QSound，16 个 PCM voice | ✓ | ✓ | ✓ `collectQSoundSamples` |
+| 采样 | QSound，3 个 ADPCM voice | — | ✓ | — 见 §9.3 |
+| 采样 | K053260、K054539、RF5C68、GA20、OKIM6295、SegaPCM、OPN-ADPCM、ADPCM-drum | — | — | — |
 | 波表 | VSU | ✓（局部） | — | — |
 | 波表 | FDS、N163、HuC6280、SCC、X1-010、WS、RF5C-wavetable | — | — | — |
 
@@ -301,8 +304,31 @@ track.channelIndex = channelIndex;    // 联动芯片的通道号接在父芯片
 1. **FM 的波形是"这一个音色"的静态曲线**，不反映 LFO 与包络——`cycleFor` 只画一个周期。
 2. **VGM 里没有通道概念**。通道是解码器从寄存器推出来的；某个驱动用非常规方式写寄存器时，行会显示得不准，而这种不准**不会报错**。
 3. **性能未实测**：音频线程里跑 30 个解码器，每个 block 喂几条写。NSF 那边只喂一个核，这里多 30 倍。**第一次跑起来要量**，如果掉音，第一刀砍波形计算（ADR-006）。
-4. **每个采样芯片各写一份收集流程**：`NesDpcmBank` 与 `C140Samples` 已经是近似副本，剩下 9 颗采样、8 颗波表会继续复制。**这是本支最大的一笔结构债**，见 `docs/memo/2026-11-01-code-review-libvgm-visualisation.md` 问题 4。
+4. **每个采样芯片各写一份收集流程**：`NesDpcmBank` 与 `C140Samples` 已经是近似副本，剩下 8 颗采样、8 颗波表会继续复制。**这是本支最大的一笔结构债**，见 `docs/memo/2026-11-01-code-review-libvgm-visualisation.md` 问题 4。**`ef4e2b0` 之后这笔债已还**：去重、解码、命名、缓存进了 `SampleCollector`，一颗芯片现在只剩"它的寄存器怎么指样本"。C352 与 QSound 都是这样接的，各约 150 行，其中一半是注释。
+
 5. **一行的画法取决于数据形状，不是有没有数据**：录制（`sampleRate > 0`）画填充带，波表与合成画阶梯。判据为什么是这样、以及它被改坏过三次的过程，见 `docs/memo/2026-11-01-what-a-waveform-row-is-a-picture-of.md`。
+
+### 9.3 待办：QSound 的 3 个 ADPCM voice
+
+**状态**：未做，故意留着。`channelState` 给它们 `sampleRate`（固定时钟 `clock / 2 / 1248 / 3`），但 `wave` 是空的；`collectQSoundSamples` 完全不读它们。
+
+**技术上的代价是明确的**，不是障碍：
+
+- 寄存器是独立的一块（`0xCA`–`0xD5` 三个 voice 各四个字段，`0xD6+n` 启动），不经过 PCM 的 `(i<<3)` 布局
+- 格式不同：一个字节是**两个 4 位增量**，而 `SampleFormat` 目前只有 `pcm8Signed` 与 `nesDelta`。要加一个 `adpcm4` 值和一个解码循环，照 `qsound_ctr.c` 的 `adpcm_update`（含 step size 表）
+
+**真正的障碍是没有能验证的曲子**。`test_file` 里唯一的 QSound 文件 `01 QSound Logo.vgz`，6757 条 `0xC4` 命令里：
+
+```
+ADPCM 参数寄存器 0xCA-0xD5    5 次    ← 初始化时填过一轮
+ADPCM 启动       0xD6-0xD8    0 次    ← 从未启动
+```
+
+**没有一首曲子能让它出声。** 那样的解码器只能证明"编译过、没崩"，证明不了解出来的波形对不对——**看起来完成，其实没有**。
+
+**做的条件**：拿到一首确实用 QSound ADPCM 的曲子（Street Fighter II、Vampire Savior、Dungeons & Dragons 系列的驱动都用过），然后按上面两条写，并加一条断言"启动后切出的长度与 `endAddress - startAddress` 一致"。
+
+**不要**因为"这是硬件的一部分"就补上：这一支已经有一次（C352 的 mu-law）是"格式没处理"被当成"这里没有数据"，那是 bug；这一次反过来，**是明知有数据但没有验证手段，记成待办比写一个测不了的解码器诚实**。
 
 ## 10. 实施顺序
 

@@ -707,6 +707,11 @@ ChannelState QSoundDecoder::channelState (int channel) const
 	}
 	else
 	{
+		// No `wave` for these, and it is not an oversight. Their bytes are four-bit deltas rather
+		// than levels, so drawing them needs the ADPCM step table; and no file in `test_file` starts
+		// one, so a decoder here could be shown to run and never to be right. The rate is reported
+		// anyway, because it is fixed and known. `QSoundSamples.cpp` has the longer note and the
+		// design document's §9.3 has the conditions for finishing it.
 		const Impl::AdpcmVoice& voice = impl->adpcm[channel - (int) kPcmVoices];
 		state.gate = impl->isAdpcmSounding (channel - (int) kPcmVoices);
 		state.period = 1;		// its clock is fixed, the note table knows the rate
