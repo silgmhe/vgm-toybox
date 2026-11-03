@@ -98,10 +98,13 @@ struct RomBlock
 	uint32_t ramOffset = 0;	// where in the chip's own RAM (RAM blocks only)
 	const uint8_t* data = nullptr;
 	std::size_t size = 0;
+	uint32_t streamOrder = 0;	// position in the source file, same counter as the writes. A RAM
+								// block matters at the moment the stream reaches it - before
+								// that the bytes it overwrites are still the old ones.
 
 	/** True when the block addresses the chip's RAM rather than a ROM image. */
 	bool isRam = false;
-};
+	};
 
 /** A song reduced to "which chips, which register writes, which memory" - no format left in it.
 

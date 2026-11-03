@@ -24,6 +24,13 @@ namespace toybox::backends::libvgm
 		One thing is unlike any of the others: the bytes are not a ROM block but a **PCM bank**
 		(`0x67` blocks of type `0x02`), assembled by `memory::pcmBank` - the same function the runtime
 		feeds `setRam` from. A collector that asked for a plain ROM would find nothing.
+
+		And a second thing, which took much longer to notice: **that bank is only the load-time
+		state.** A `0x67` block of type `0xC1` is a RAM write - a 16-bit address and the bytes that
+		belong there, applied at the block's position in the command stream. Sonic CD's driver
+		streams 512-byte pages into the first four kilobytes throughout the song (106 of them on one
+		track), and a collector that ignores them exports the initial contents while the chip plays
+		the rewritten ones. Every "the export is not what I hear" report on this chip was that.
 	*/
 	std::vector<playback::DecodedSample> collectRf5cSamples (const midi::SongIr& ir);
 }

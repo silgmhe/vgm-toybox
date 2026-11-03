@@ -1,9 +1,12 @@
 ﻿#include "Rf5c68Samples.h"
 
 #include <algorithm>
+#include <cstddef>
 #include <cstdint>
+#include <cstring>
 #include <cstdio>
 #include <map>
+#include <set>
 #include <utility>
 
 #include "ChipMemoryAssembly.h"
@@ -22,6 +25,9 @@ namespace
 
 	/** A PCM bank in VGM: blocks below 0x40 concatenate, no header. */
 	constexpr uint8_t kPcmBankType = 0x02;
+
+	/** A RAM write in VGM: 0xC0-0xDF carry a 16-bit address and the bytes that belong there. */
+	constexpr uint8_t kRamBlockType = 0xC1;
 
 	constexpr double kFallbackClock = 12500000.0;
 
@@ -47,6 +53,11 @@ namespace
 		uint32_t address = 0;
 		std::size_t length = 0;
 		uint16_t step = 0;
+		uint64_t hash = 0;		// of the bytes as they were at this key-on: the same address can
+								// hold different samples at different times, and only the content
+								// tells them apart
+		std::vector<uint8_t> bytes;	// copied only the first time a hash appears - the export must
+									// have the bytes *as they were*, and the RAM keeps moving
 	};
 }
 
@@ -55,8 +66,9 @@ std::vector<playback::DecodedSample> collectRf5cSamples (const midi::SongIr& ir)
 	SampleCollector collector;
 
 	// A PCM bank, not a ROM block: `0x67` blocks of type 0x02, concatenated in stream order. The
-	// runtime hands the decoder the same image through `setRam`.
-	const std::vector<uint8_t> ram = memory::pcmBank (ir, kPcmBankType, kRamBytes);
+	// runtime hands the decoder the same image through `setRam`. **This is only the state at load
+	// time** - see the merge below for what changes during the song.
+	std::vector<uint8_t> ram = memory::pcmBank (ir, kPcmBankType, kRamBytes);
 
 	if (ram.empty ())
 	{
@@ -94,6 +106,9 @@ std::vector<playback::DecodedSample> collectRf5cSamples (const midi::SongIr& ir)
 
 	std::vector<Hit> hits;
 
+	/** Which contents have already been copied, so a repeat key-on costs a hash and nothing else. */
+	std::set<uint64_t> seenContents;
+
 	/** Records that a channel started at an address; the length is settled afterwards.
 
 		Scanning to a `0xFF` is the wrong way to size a sample here, and the first version of this
@@ -117,19 +132,107 @@ std::vector<playback::DecodedSample> collectRf5cSamples (const midi::SongIr& ir)
 			return;
 		}
 
-		// A start that lands on the 0xFF padding is a channel the driver never gave a sample to.
-		// Address 0 of these rips is exactly that, and treating it as one produced a 57 KB file of
-		// silence plus a row that could never draw.
+		// A start that lands on the 0xFF padding is a page nobody uploaded yet - or a channel the
+		// driver never gave a sample to. Either way there is nothing here to hand to a listener.
 		if (ram[address] == 0xFF)
 		{
 			return;
 		}
 
-		hits.push_back (Hit { address, 0, voice.step });
+		// To the first `0xFF` inside the slot, or the whole slot when there is none. This covers
+		// both shapes the bank has: a streamed page ends where the next un-uploaded page begins
+		// (it is still `0xFF` padding), and a slot-length sample contains no `0xFF` at all, so it
+		// keeps the eight kilobytes `kSlotBytes` gives it.
+		const uint32_t limit = (std::min) (address + chips::Rf5c68Decoder::kSlotBytes,
+										   (uint32_t) ram.size ());
+		std::size_t length = limit - address;
+
+		for (std::size_t i = 0; address + i < limit; ++i)
+		{
+			if (ram[address + i] == 0xFF)
+			{
+				length = i;
+				break;
+			}
+		}
+
+		if (length < 2)
+		{
+			return;
+		}
+
+		// The bytes as they are *now*. The same address holds different samples at different
+		// moments on a streaming driver, so the key-on's content is the only identity a sample has.
+		uint64_t hash = 1469598103934665603ull ^ (uint64_t) address;
+
+		for (std::size_t i = 0; i < length; ++i)
+		{
+			hash ^= ram[address + i];
+			hash *= 1099511628211ull;
+		}
+
+		hits.push_back (Hit { address, length, voice.step, hash, {} });
+
+		// The bytes travel with the first hit of each content: a slot triggered three hundred
+		// times would otherwise copy eight kilobytes three hundred times over, all of them the
+		// same eight kilobytes.
+		if (seenContents.insert (hash).second)
+		{
+			hits.back ().bytes.assign (ram.begin () + address, ram.begin () + address + length);
+		}
 	};
 
-	for (const auto& write : ir.writes)
+	// The chip's RAM is not the load-time image for the whole song. A `0x67` block of type 0xC1 is
+	// a **RAM write** (libvgm's `case 0xC0`, `Cmd_DataBlock`): a 16-bit address and the bytes that
+	// go there, applied at the block's position in the command stream. On `01 - Palmtree Panic
+	// Zone Past` there are 106 of them, all inside the first four kilobytes - the driver streams
+	// 512-byte pages into that region and plays them, which is why the load-time image showed
+	// padding where the piano actually was.
+	//
+	// Skipping them was the bug behind every report on this chip: the export handed back the
+	// initial contents while the chip played the rewritten ones.
+	std::vector<const midi::RomBlock*> ramWrites;
+
+	for (const auto& block : ir.roms)
 	{
+		if (block.memoryType == kRamBlockType)
+		{
+			ramWrites.push_back (&block);
+		}
+	}
+
+	const auto applyRam = [&ram] (const midi::RomBlock& block)
+	{
+		if (block.ramOffset >= ram.size () || block.size == 0)
+		{
+			return;
+		}
+
+		const std::size_t count = (std::min) (block.size, ram.size () - block.ramOffset);
+		std::memcpy (ram.data () + block.ramOffset, block.data, count);
+	};
+
+	// One pass over the writes and the RAM blocks together, ordered by `streamOrder` - the file's
+	// own sequence, not the clock. A block and the key-on that plays it share a `sampleTime`
+	// (nothing waits between an upload and the note that uses it), so time cannot put them in
+	// order; the position in the file can, and both carry it.
+	std::size_t writeIndex = 0;
+	std::size_t blockIndex = 0;
+
+	while (writeIndex < ir.writes.size () || blockIndex < ramWrites.size ())
+	{
+		const bool doWrite = (blockIndex >= ramWrites.size ())
+						  || (writeIndex < ir.writes.size ()
+							  && ir.writes[writeIndex].streamOrder < ramWrites[blockIndex]->streamOrder);
+
+		if (! doWrite)
+		{
+			applyRam (*ramWrites[blockIndex++]);
+			continue;
+		}
+
+		const auto& write = ir.writes[writeIndex++];
+
 		if (write.deviceId >= ir.chips.size ())
 		{
 			continue;
@@ -189,77 +292,81 @@ std::vector<playback::DecodedSample> collectRf5cSamples (const midi::SongIr& ir)
 		}
 	}
 
-	// One entry per address. The rate is the **most frequent** step, not the highest: these slots
-	// are triggered hundreds of times at many pitches (299 hits on one, steps 619..2503), so any
-	// single choice is a transposition, and the one the driver uses most is the least surprising.
-	std::map<uint32_t, std::map<uint16_t, int>> histograms;
-	std::map<uint32_t, uint16_t> byAddress;
+	// One file per distinct **content**, not per address: a streamed page is a different sample
+	// every time the driver rewrites it, and the bytes a key-on found are the only identity it has.
+	//
+	// The rate is the **most frequent** step within that content, not the highest: a slot is
+	// triggered hundreds of times at many pitches (299 hits on one, steps 619..2503), so any single
+	// choice is a transposition, and the one the driver uses most is the least surprising.
+	std::map<uint64_t, std::map<uint16_t, int>> histograms;
+	std::map<uint64_t, const Hit*> byContent;
 
 	for (const auto& hit : hits)
 	{
-		++histograms[hit.address][hit.step];
+		++histograms[hit.hash][hit.step];
 
-		uint16_t& chosen = byAddress[hit.address];
-
-		if (chosen == 0)
+		if (! hit.bytes.empty ())
 		{
-			chosen = hit.step;
+			byContent.emplace (hit.hash, &hit);
 		}
 	}
 
-	for (auto& entry : byAddress)
-	{
-		const auto& histogram = histograms[entry.first];
-		int best = 0;
+	// The same address can hold several contents over a song; the second one onwards gets a
+	// version suffix so the files do not overwrite each other.
+	//
+	// Emission walks the addresses in order rather than the hashes: a caller listing the files sees
+	// them sorted the way the bank is, and a test that says "the first file is the one at 0x0200"
+	// stays true.
+	std::vector<const Hit*> ordered;
 
-		for (const auto& step : histogram)
+	for (const auto& entry : byContent)
+	{
+		ordered.push_back (entry.second);
+	}
+
+	std::sort (ordered.begin (), ordered.end (),
+			   [] (const Hit* a, const Hit* b) { return a->address < b->address; });
+
+	std::map<std::pair<uint32_t, std::size_t>, int> versions;
+
+	for (const Hit* hitPointer : ordered)
+	{
+		const Hit& hit = *hitPointer;
+
+		const auto& histogram = histograms[hit.hash];
+		int best = 0;
+		uint16_t step = hit.step;
+
+		for (const auto& candidate : histogram)
 		{
-			if (step.second > best)
+			if (candidate.second > best)
 			{
-				best = step.second;
-				entry.second = step.first;
+				best = candidate.second;
+				step = candidate.first;
 			}
 		}
-	}
-
-	for (auto current = byAddress.begin (); current != byAddress.end (); ++current)
-	{
-		const uint32_t address = current->first;
-		const auto next = std::next (current);
-
-		// **A fixed slot, not "the next start".** The bank is divided into 8 KB slots and a sample
-		// occupies one of them, whether or not anything else follows.
-		//
-		// Taking the next start as the end looked right while every slot happened to be occupied. It
-		// is not: this rip's driver sets starts at 0x2000, 0x4000, 0x6000, 0x8000, 0xA000 and 0xE000
-		// and leaves 0xC000 unused, so the 0xA000 region ran to 0xE000 - sixteen kilobytes, the
-		// piano and the drums after it in one file. That is what "Ch6 is a piano but exports a drum
-		// loop" was.
-		const uint32_t nextStart = (next != byAddress.end ()) ? next->first : (uint32_t) ram.size ();
-		const uint32_t limit = (std::min) (address + chips::Rf5c68Decoder::kSlotBytes,
-										   (std::min) (nextStart, (uint32_t) ram.size ()));
-		const std::size_t span = (limit > address) ? (std::size_t) (limit - address) : 0;
-
-		// The whole slot, matching `channelState`. The cut at the first quiet stretch was withdrawn:
-		// `0x2000`'s envelope repeats every ~1536 bytes without decaying, so that "silence" is a
-		// trough inside the sound, not the gap between two of them. See the decoder's note.
-		const std::size_t length = span;
-
-		if (length < 2)
-		{
-			continue;
-		}
-
-		const uint64_t key = ((uint64_t) address << 32) | length;
 
 		// `step * (clock/384) / 2048` bytes a second - the same arithmetic the decoder's
 		// `bytesPerSecond` does.
-		const double rate = (double) current->second * clock / kOutputDivisor / kStepPerByte;
+		const double rate = (double) step * clock / kOutputDivisor / kStepPerByte;
 
-		char name[32] = {};
-		std::snprintf (name, sizeof (name), "rf5c_%06X_%u", (unsigned) address, (unsigned) length);
+		const int version = ++versions[std::make_pair (hit.address, hit.length)];
 
-		collector.add (key, name, ram.data () + address, length, SampleFormat::signMagnitude8, rate);
+		char name[40] = {};
+
+		if (version == 1)
+		{
+			std::snprintf (name, sizeof (name), "rf5c_%06X_%u", (unsigned) hit.address,
+						   (unsigned) hit.length);
+		}
+		else
+		{
+			std::snprintf (name, sizeof (name), "rf5c_%06X_%u_v%d", (unsigned) hit.address,
+						   (unsigned) hit.length, version);
+		}
+
+		collector.add (hit.hash, name, hit.bytes.data (), hit.length,
+					   SampleFormat::signMagnitude8, rate);
 	}
 
 	return collector.take ();

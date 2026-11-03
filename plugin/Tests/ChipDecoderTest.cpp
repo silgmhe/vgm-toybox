@@ -6003,11 +6003,17 @@ void testWaveExport (void)
 
 		check (samples.size () == 2, "a cleared mask bit names a sample");
 
-		// Not a scan to a 0xFF: on this chip a sample runs to the next start, which is the bank's
-		// slot boundary. `0x0200` to `0x0300` is the same 256 bytes as `0x0300` to the top of the
-		// 0x400-byte image.
-		check (! samples.empty () && samples[0].values.size () == 256,
-			   "as long as the bank slot its start begins");
+		// To the first `0xFF` inside the slot, or the whole slot when there is none. The first
+		// voice's region has a marker at `0x0210`, so it stops there - sixteen bytes, which is
+		// what the chip itself would play before jumping to its loop point.
+		check (! samples.empty () && samples[0].values.size () == 16,
+			   "as long as the first 0xFF inside its slot, as the chip plays it");
+
+		// The second voice's region has no marker, so it runs to the top of the image - the
+		// streamed pages of a real rip end exactly this way, where the next un-uploaded page is
+		// still `0xFF` padding.
+		check (samples.size () == 2 && samples[1].values.size () == 256,
+			   "and without a marker, to the top of the image");
 
 		// Sign and magnitude, not two's complement. `0x10` is -16/128 on this chip (`0x00..0x7F`
 		// runs 0..-127); read as two's complement it would be +16/128 and the two halves of the

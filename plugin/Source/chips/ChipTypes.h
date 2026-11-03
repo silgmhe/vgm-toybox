@@ -79,7 +79,10 @@ struct RegisterWrite
 	uint16_t value = 0;		// the whole register word; byte-wide chips use the low byte
 	uint8_t port = 0;			// second port / second chip of a pair
 	uint32_t sampleTime = 0;
-};
+	uint32_t streamOrder = 0;	// position in the source file, counted per command. Two events
+								// can share a `sampleTime` - nothing waits between a RAM upload
+								// and the key-on that plays it - so time alone cannot order them.
+	};
 
 /** What a decoder needs to know to start: the chip's clock, and the unit of the timestamps it will be told.
 

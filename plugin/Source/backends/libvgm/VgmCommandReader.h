@@ -40,7 +40,10 @@ struct VgmCommand
 	uint8_t data2 = 0;			// second value byte of a pair write; for 0xE1 (C352) the
 									// low byte of the 16-bit value, `data` being the high one
 	uint32_t sampleTime = 0;	// absolute position of the command, in 44100 Hz samples
-};
+	uint32_t streamOrder = 0;	// position in the file, counted per command. Two events can share a
+								// `sampleTime` - nothing waits between a RAM upload and the key-on
+								// that plays it - so time alone cannot put them in order. This can.
+	};
 
 /** One 0x67 data block, still where it sits in the image.
 
@@ -59,6 +62,9 @@ struct VgmDataBlock
 									// 0xE0, 32-bit from 0xE0)
 	const uint8_t* data = nullptr;
 	std::size_t size = 0;			// payload bytes, the ROM header and the RAM address not counted
+	uint32_t streamOrder = 0;	// position in the file, same counter as `VgmCommand::streamOrder`:
+								// a RAM block matters at the moment the stream reaches it, not
+								// from the start, and only this says which moment that was
 };
 
 /** Walks one uncompressed VGM image. The stream ends at the EOF offset, the GD3 tag or the
@@ -111,6 +117,7 @@ private:
 	std::size_t position = 0;
 	std::size_t end = 0;
 	uint32_t sampleTime = 0;
+	uint32_t streamOrder = 0;	// one counter for commands and data blocks both
 
 	std::vector<BankSegment> pcmBank;
 	std::size_t bankPosition = 0;

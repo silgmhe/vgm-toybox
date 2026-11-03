@@ -231,6 +231,10 @@ bool VgmCommandReader::next (VgmCommand& command)
 	command.command = cmd;
 	command.sampleTime = sampleTime;
 	command.kind = VgmCommand::Kind::ignored;
+	// One counter for the whole stream, and the data blocks share it: a `0x67` block is a
+	// command like any other, and what makes its position matter is that a chip's RAM changes
+	// *there* - a key-on before it plays the old bytes, one after it plays the new ones.
+	command.streamOrder = streamOrder++;
 
 	switch (cmd)
 	{
@@ -275,6 +279,7 @@ bool VgmCommandReader::next (VgmCommand& command)
 
 		VgmDataBlock block;
 		block.type = type;
+		block.streamOrder = command.streamOrder;
 		block.romSize = isRom ? readLe32 (data + position + 7) : 0;
 		block.romOffset = isRom ? readLe32 (data + position + 11) : 0;
 		block.ramOffset = isRam ? ((addressSize == 4u) ? readLe32 (data + position + 7)
@@ -329,6 +334,7 @@ bool VgmCommandReader::next (VgmCommand& command)
 			resume.command = cmd;
 			resume.kind = VgmCommand::Kind::wait;
 			resume.sampleTime = sampleTime;
+			resume.streamOrder = command.streamOrder;	// the second half of one command
 			hasResume = true;
 		}
 		else if (cmd == 0x50)

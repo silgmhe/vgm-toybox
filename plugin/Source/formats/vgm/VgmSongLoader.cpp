@@ -69,6 +69,7 @@ bool VgmSongLoader::load (const void* data, std::size_t size, midi::SongIr& out,
 	while (reader.next (command))
 	{
 		lastSampleTime = command.sampleTime;
+		const std::size_t writesBefore = out.writes.size ();
 
 		const auto port = (int) command.port;
 		const auto reg = command.addr;
@@ -176,6 +177,14 @@ bool VgmSongLoader::load (const void* data, std::size_t size, midi::SongIr& out,
 		default:
 			break;		// waits, data blocks and stream end are the reader's business
 		}
+
+		// Everything this one command emitted carries its position in the file. That is the only
+		// thing that can put a RAM block next to the key-on that plays it: the two share a
+		// sampleTime, because nothing waits between an upload and the note that uses it.
+		for (std::size_t i = writesBefore; i < out.writes.size (); ++i)
+		{
+			out.writes[i].streamOrder = command.streamOrder;
+		}
 	}
 
 	// The blocks travel as they arrived: which type means which memory, and how a chip folds it
@@ -191,6 +200,7 @@ bool VgmSongLoader::load (const void* data, std::size_t size, midi::SongIr& out,
 		rom.data = block.data;
 		rom.size = block.size;
 		rom.isRam = (block.type & 0xC0) == 0xC0;
+		rom.streamOrder = block.streamOrder;
 		out.roms.push_back (rom);
 	}
 
