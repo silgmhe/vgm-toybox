@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include <cstdint>
 #include <memory>
@@ -41,6 +41,17 @@ namespace toybox::chips
 class Rf5c68Decoder final : public IChipDecoder
 {
 public:
+	/** One sample slot, and both readers must agree on it.
+
+		The bank is divided into 8 KB slots and a sample occupies one of them - **whether or not
+		anything follows it**. A Sonic CD rip sets starts at 0x2000, 0x4000, 0x6000, 0x8000, 0xA000
+		and 0xE000, leaving 0xC000 empty; treating "the next start" as the end let the piano at
+		0xA000 run to 0xE000 and swallow the drums in between. That was reported as "this channel is
+		a piano but exports a drum loop", and the tell was a 16384-byte file where every other one was
+		8192.
+	*/
+	static constexpr uint32_t kSlotBytes = 0x2000;
+
 	enum Channel
 	{
 		channel0 = 0,

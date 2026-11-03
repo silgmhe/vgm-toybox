@@ -496,25 +496,10 @@ ChannelState Rf5c68Decoder::channelState (int channel) const
 	// blanks the moment the driver clears its bit is a row that flickers.
 	const uint32_t start = voice.latchStart;
 
-	// The region runs to the **next channel's start**, not to a `0xFF`. The export learned this
-	// first (`Rf5c68Samples.cpp` has the long note) and the row has to agree with it, or the same
-	// sample comes out at two different lengths depending on which button was pressed.
-	//
-	// On these tracks the six starts are 0x2000, 0x4000, ... - eight kilobytes apart, which is the
-	// bank's slot size. Scanning for a terminator instead found nothing (the samples contain no
-	// 0xFF) and ran to the top of RAM, five times over.
-	uint32_t limit = (uint32_t) impl->ram.size ();
-
-	for (const auto& other : impl->channels)
-	{
-		const uint32_t candidate = (uint32_t) other.start << 8;
-
-		if (candidate > start && candidate < limit)
-		{
-			limit = candidate;
-		}
-	}
-
+	// The region is one **fixed slot** - see `kSlotBytes`. Asking the other channels for the next
+	// start instead looked right only while every slot was occupied; this rip leaves 0xC000 empty,
+	// so the piano at 0xA000 ran into the drums at 0xC000 and a row drew two instruments.
+	const uint32_t limit = (std::min) (start + kSlotBytes, (uint32_t) impl->ram.size ());
 	const std::size_t span = (limit > start) ? (std::size_t) (limit - start) : 0;
 
 	// The **whole slot**, which is what the chip itself loops.

@@ -9,6 +9,7 @@
 #include "ChipMemoryAssembly.h"
 #include "SampleCollector.h"
 #include "midi/SongIr.h"
+#include "chips/Rf5c68Decoder.h"
 
 namespace toybox::backends::libvgm
 {
@@ -223,9 +224,17 @@ std::vector<playback::DecodedSample> collectRf5cSamples (const midi::SongIr& ir)
 		const uint32_t address = current->first;
 		const auto next = std::next (current);
 
-		// The region runs to the next sample's start, or to the top of RAM for the last one. This
-		// is the bank's slot boundary, not a terminator: see the note above `collect`.
-		const uint32_t limit = (next != byAddress.end ()) ? next->first : (uint32_t) ram.size ();
+		// **A fixed slot, not "the next start".** The bank is divided into 8 KB slots and a sample
+		// occupies one of them, whether or not anything else follows.
+		//
+		// Taking the next start as the end looked right while every slot happened to be occupied. It
+		// is not: this rip's driver sets starts at 0x2000, 0x4000, 0x6000, 0x8000, 0xA000 and 0xE000
+		// and leaves 0xC000 unused, so the 0xA000 region ran to 0xE000 - sixteen kilobytes, the
+		// piano and the drums after it in one file. That is what "Ch6 is a piano but exports a drum
+		// loop" was.
+		const uint32_t nextStart = (next != byAddress.end ()) ? next->first : (uint32_t) ram.size ();
+		const uint32_t limit = (std::min) (address + chips::Rf5c68Decoder::kSlotBytes,
+										   (std::min) (nextStart, (uint32_t) ram.size ()));
 		const std::size_t span = (limit > address) ? (std::size_t) (limit - address) : 0;
 
 		// The whole slot, matching `channelState`. The cut at the first quiet stretch was withdrawn:
