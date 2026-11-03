@@ -7,7 +7,6 @@
 #include <utility>
 
 #include "ChipMemoryAssembly.h"
-#include "chips/Rf5c68Hit.h"
 #include "SampleCollector.h"
 #include "midi/SongIr.h"
 
@@ -228,8 +227,11 @@ std::vector<playback::DecodedSample> collectRf5cSamples (const midi::SongIr& ir)
 		// is the bank's slot boundary, not a terminator: see the note above `collect`.
 		const uint32_t limit = (next != byAddress.end ()) ? next->first : (uint32_t) ram.size ();
 		const std::size_t span = (limit > address) ? (std::size_t) (limit - address) : 0;
-		const std::size_t length = chips::rf5c68HitLength (address, span,
-														  [&ram] (uint32_t a) { return ram[a]; });
+
+		// The whole slot, matching `channelState`. The cut at the first quiet stretch was withdrawn:
+		// `0x2000`'s envelope repeats every ~1536 bytes without decaying, so that "silence" is a
+		// trough inside the sound, not the gap between two of them. See the decoder's note.
+		const std::size_t length = span;
 
 		if (length < 2)
 		{

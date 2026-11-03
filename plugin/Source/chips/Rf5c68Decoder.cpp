@@ -7,7 +7,6 @@
 #include <vector>
 
 #include "Pitch.h"
-#include "Rf5c68Hit.h"
 
 namespace toybox::chips
 {
@@ -518,10 +517,20 @@ ChannelState Rf5c68Decoder::channelState (int channel) const
 
 	const std::size_t span = (limit > start) ? (std::size_t) (limit - start) : 0;
 
-	// One hit, not the whole slot - the slot holds many hits back to back. The export asks the same
-	// function, so a row and the file it drags out are the same bytes.
-	const std::size_t length = rf5c68HitLength (start, span,
-															  [this] (std::uint32_t a) { return impl->byteAt (a); });
+	// The **whole slot**, which is what the chip itself loops.
+	//
+	// A cut at the first quiet stretch was tried, on the theory that a slot holds several hits back
+	// to back. Measuring `0x2000`'s envelope says the loud sections all reach the same height and
+	// repeat every ~1536 bytes - a decay would fall away, and this does not. So the reading is
+	// either a sustained sound with deep modulation or a short pattern, and in both cases the
+	// "first silence" is a trough inside the sound rather than its end. Cutting there produced
+	// fragments that were reported as "closer to one instrument, but the waveform looks wrong".
+	//
+	// The region is therefore the slot, as the earlier slot-based export had it. What changed since
+	// that export is the **rate**: it used the fastest step the driver ever asked for, which played
+	// these samples about two and a half times too fast and is the likeliest reason the whole slot
+	// was heard as "a loop with several instruments".
+	const std::size_t length = span;
 
 	if (length > 1)
 	{
