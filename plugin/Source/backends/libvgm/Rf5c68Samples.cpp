@@ -155,6 +155,9 @@ std::vector<playback::DecodedSample> collectRf5cSamples (const midi::SongIr& ir)
 
 				if (on && ! voices[i].enabled)
 				{
+					// The step is latched here because the driver sets it **before** enabling:
+					// measured on `01 - Palmtree Panic Zone Past`, every note reports the same value
+					// on and off (657/657, 1108/1108), so reading it at the key-on is not a race.
 					collect (voices[i]);
 				}
 
