@@ -15,6 +15,7 @@ extern "C" DEV_DEF devDef_RF5C68_Gens;	// scd_pcm.c: the Gens core, taken direct
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
+#include <cstdint>
 #include <cstring>
 #include <vector>
 
@@ -308,6 +309,51 @@ std::vector<uint8_t> ramImage (const juce::File& file)
 	}
 
 	return ram;
+}
+
+/** Writes mono float samples as a 16-bit PCM wav.
+
+	The point is a file someone can listen to. Every number in this branch has been argued about at
+	least twice; a wav of what the engine actually rendered settles "what does this channel sound
+	like" without an instrument in between.
+*/
+bool writeWav (const juce::File& file, const std::vector<float>& mono, double rate)
+{
+	if (file.existsAsFile ())
+	{
+		file.deleteFile ();
+	}
+
+	juce::FileOutputStream out (file);
+
+	if (! out.openedOk ())
+	{
+		return false;
+	}
+
+	const uint32_t dataBytes = (uint32_t) mono.size () * 2u;
+	const uint32_t rate32 = (uint32_t) rate;
+
+	out.write ("RIFF", 4);
+	out.writeInt ((int) (36u + dataBytes));
+	out.write ("WAVEfmt ", 8);
+	out.writeInt (16);					// fmt chunk size
+	out.writeShort (1);					// PCM
+	out.writeShort (1);					// mono
+	out.writeInt ((int) rate32);
+	out.writeInt ((int) (rate32 * 2u));	// byte rate
+	out.writeShort (2);					// block align
+	out.writeShort (16);				// bits
+	out.write ("data", 4);
+	out.writeInt ((int) dataBytes);
+
+	for (const auto sample : mono)
+	{
+		const auto scaled = (int) juce::jlimit (-32768.0f, 32767.0f, sample * 32767.0f);
+		out.writeShort ((short) scaled);
+	}
+
+	return true;
 }
 
 /** Loudness in `bins` equal slices, normalised so the shape - not the gain - is what is compared. */
@@ -752,6 +798,13 @@ int main (int argc, char** argv)
 		toybox::playback::ChipStateSnapshot snapshot;
 		engine.captureChipState (snapshot);
 
+		// A listenable artifact, next to the numbers.
+		{
+			char name[64] = {};
+			std::snprintf (name, sizeof (name), "build/render_ch%d.wav", (int) track + 1);
+			writeWav (juce::File::getCurrentWorkingDirectory ().getChildFile (name), audio, kSampleRate);
+		}
+
 		const NoteWindow note = firstNote (audio);
 
 		const toybox::playback::ChannelState* channel = nullptr;
@@ -918,6 +971,12 @@ int main (int argc, char** argv)
 					std::printf ("     0x8000 : period %d bytes -> %.1f Hz at %.0f B/s (r=%.2f)\n",
 								 bestLag, (bestLag > 0) ? kSlotRate / (double) bestLag : 0.0,
 								 kSlotRate, best);
+
+					// The same bytes as the export, so the two files can be compared by ear: one is
+					// what the engine rendered, the other what the row would hand back.
+					std::vector<float> exported (level.begin (), level.end ());
+					writeWav (juce::File::getCurrentWorkingDirectory ().getChildFile ("build/slot_8000.wav"),
+							  exported, kSlotRate);
 				}
 			}
 
