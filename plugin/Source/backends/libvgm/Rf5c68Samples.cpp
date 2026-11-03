@@ -149,6 +149,9 @@ std::vector<playback::DecodedSample> collectRf5cSamples (const midi::SongIr& ir)
 
 	std::vector<Hit> hits;
 
+	// TEMP: what the first notes of 0x8000 look like - gate in bytes, and the step they used.
+	std::vector<std::pair<std::size_t, uint16_t>> probeHits;
+
 	/** Which contents have already been copied, so a repeat key-on costs a hash and nothing else. */
 	std::set<std::pair<uint32_t, std::size_t>> seenContents;
 
@@ -221,6 +224,12 @@ std::vector<playback::DecodedSample> collectRf5cSamples (const midi::SongIr& ir)
 		const std::size_t bucket = ((length + kLengthBucket - 1) / kLengthBucket) * kLengthBucket;
 
 		hits.push_back (Hit { address, length, voice.armedStep, hash, {}, bucket });
+
+		// TEMP
+		if (address == 0x8000u && probeHits.size () < 12)
+		{
+			probeHits.emplace_back (length, voice.armedStep);
+		}
 
 		if (seenContents.insert (std::make_pair (address, bucket)).second)
 		{
@@ -379,7 +388,25 @@ std::vector<playback::DecodedSample> collectRf5cSamples (const midi::SongIr& ir)
 		std::map<uint16_t, int> steps;
 	};
 
+	// The stream ends with notes still open - the last note of every channel at least. A released
+	// voice has its end and is collected now; a voice still enabled has no measured end and is
+	// collected by `collect`'s own fallback (the whole slot).
+	for (int i = 0; i < kChannels; ++i)
+	{
+		if (voices[i].released)
+		{
+			collect (voices[i], voices[i].releasedAt);
+		}
+		else if (voices[i].enabled)
+		{
+			collect (voices[i], voices[i].enabledAt);
+		}
+	}
+
 	std::map<uint32_t, std::map<std::size_t, Group>> byAddress;
+
+	/** The bucket each address met first: its first note, which is the one that presents the sample. */
+	std::map<uint32_t, std::size_t> firstBucket;
 
 	for (const auto& hit : hits)
 	{
@@ -391,22 +418,28 @@ std::vector<playback::DecodedSample> collectRf5cSamples (const midi::SongIr& ir)
 		{
 			group.first = &hit;
 		}
+
+		firstBucket.emplace (hit.address, hit.bucket);
 	}
 
 	// Sorted by address, so a caller listing the files sees the bank in order and a test that says
 	// "the first file is the one at 0x0200" stays true.
 	for (const auto& address : byAddress)
 	{
-		const Group* chosen = nullptr;
 
-		for (const auto& bucket : address.second)
-		{
-			// Ties go to the longer bucket: a little more of the sound rather than a cut in it.
-			if (chosen == nullptr || bucket.second.count > chosen->count)
-			{
-				chosen = &bucket.second;
-			}
-		}
+		// **The first note this address is heard in**, not the most common one and not the longest.
+		//
+		// A sample is designed to be heard from its start, and the first time it appears is the one
+		// that plays it as written. Measured on `01 - Palmtree Panic Zone Past`, `0x8000`'s first
+		// note is 5186 bytes at 10443 Hz - 0.497 s, against 0.491 s for that channel rendered by
+		// the emulator. The most common length there is 1294 bytes, a quarter of it, and a piano cut
+		// to a quarter of its length is what was reported as "it sounds like a hi-hat"; the longest
+		// is the whole 8 KB slot, which is the buffer rather than the note.
+		const auto wanted = firstBucket.find (address.first);
+		const auto bucket = (wanted != firstBucket.end ()) ? address.second.find (wanted->second)
+														  : address.second.end ();
+
+		const Group* chosen = (bucket != address.second.end ()) ? &bucket->second : nullptr;
 
 		if (chosen == nullptr || chosen->first == nullptr)
 		{
