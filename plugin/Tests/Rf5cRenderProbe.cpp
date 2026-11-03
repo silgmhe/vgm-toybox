@@ -499,26 +499,46 @@ int main (int argc, char** argv)
 			continue;
 		}
 
-		for (size_t other = 0; other < tracks.size (); ++other)
+		/** Renders one track, isolated by solo or by muting the others.
+
+			**Two paths on purpose.** Solo and mute reach the same mixer through different calls, and
+			one of them may not be applying the single-channel mask at all: a track rendered under
+			solo came out six seconds long and at the loudest peak of the song, which is what the whole
+			mix looks like, while another came out as a single quiet note. If the two paths disagree,
+			the isolation is the bug and every "this channel sounds like X" report on this chip has
+			been about the wrong channel.
+		*/
+		const auto renderTrack = [&] (bool bySolo) -> std::vector<float>
 		{
-			engine.setTrackSolo (other, other == track);
-		}
+			for (size_t other = 0; other < tracks.size (); ++other)
+			{
+				engine.setTrackSolo (other, bySolo && other == track);
+				engine.setTrackMute (other, ! bySolo && other != track);
+			}
 
-		engine.setPositionSeconds (0.0);
-		engine.play ();
+			engine.setPositionSeconds (0.0);
+			engine.play ();
 
-		const std::vector<float> audio = renderSeconds (engine, seconds);
+			auto rendered = renderSeconds (engine, seconds);
 
-		// Before stop(), which tears the players down and takes every row's state with them.
+			engine.stop ();
+
+			for (size_t other = 0; other < tracks.size (); ++other)
+			{
+				engine.setTrackSolo (other, false);
+				engine.setTrackMute (other, false);
+			}
+
+			return rendered;
+		};
+
+		const std::vector<float> audio = renderTrack (true);
+		const std::vector<float> muted = renderTrack (false);
+
+		// Before stop() tears the players down - which it has already done - the snapshot is taken
+		// from the last published block by the audio thread, so it is read while playing instead.
 		toybox::playback::ChipStateSnapshot snapshot;
 		engine.captureChipState (snapshot);
-
-		engine.stop ();
-
-		for (size_t other = 0; other < tracks.size (); ++other)
-		{
-			engine.setTrackSolo (other, false);
-		}
 
 		const NoteWindow note = firstNote (audio);
 
@@ -532,9 +552,21 @@ int main (int argc, char** argv)
 			}
 		}
 
-		std::printf ("\n[%2d] %-20s\n", (int) track, tracks[track].name.toRawUTF8 ());
-		std::printf ("     state  : %d channels, %d chips\n",
-					 (int) snapshot.channels.size (), (int) snapshot.chips.size ());
+		std::printf ("\n[%2d] %-20s device=%u channel=%d isolatable=%d\n",
+					 (int) track, tracks[track].name.toRawUTF8 (),
+					 (unsigned) tracks[track].deviceId, (int) tracks[track].channelIndex,
+					 tracks[track].isolatable ? 1 : 0);
+
+		{
+			const NoteWindow byMute = firstNote (muted);
+
+			std::printf ("     solo   : %.3f s, peak %.3f, %.0f cross/s\n",
+						 (double) note.length / kSampleRate, note.peak,
+						 crossingRate (audio, note.start, juce::jmax (1, note.length)));
+			std::printf ("     mute   : %.3f s, peak %.3f, %.0f cross/s\n",
+						 (double) byMute.length / kSampleRate, byMute.peak,
+						 crossingRate (muted, byMute.start, juce::jmax (1, byMute.length)));
+		}
 
 		if (note.length <= 0)
 		{
