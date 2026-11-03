@@ -372,6 +372,53 @@ std::vector<double> envelopeOfBytes (const uint8_t* bytes, int count, int bins)
 	return envelope;
 }
 
+/** Sign changes per second - the cheapest way to tell a tone from noise.
+
+	A hi-hat is broadband: it crosses zero thousands of times a second and its waveform looks like
+	noise at any rate. A piano or a bass crosses at roughly twice its fundamental and looks smooth.
+	The number does not depend on the rate the bytes are read at in the way a waveform comparison
+	does, which is why it can settle "is this slot the same instrument" without knowing the rate.
+*/
+double crossingRate (const std::vector<float>& samples, int from, int count)
+{
+	int crossings = 0;
+
+	for (int i = from + 1; i < from + count && i < (int) samples.size (); ++i)
+	{
+		if ((samples[(size_t) i] >= 0.0f) != (samples[(size_t) (i - 1)] >= 0.0f))
+		{
+			++crossings;
+		}
+	}
+
+	const double seconds = (double) count / (double) kSampleRate;
+
+	return (seconds > 0.0) ? (double) crossings / seconds : 0.0;
+}
+
+/** The same for sign-magnitude bytes, at a nominal rate - the shape, not the speed. */
+double crossingRateOfBytes (const uint8_t* bytes, int count)
+{
+	int crossings = 0;
+	bool previous = (bytes[0] & 0x80) != 0;
+
+	for (int i = 1; i < count; ++i)
+	{
+		const bool current = (bytes[i] & 0x80) != 0;
+
+		if (current != previous)
+		{
+			++crossings;
+		}
+
+		previous = current;
+	}
+
+	// Per byte rather than per second: the rate is exactly what is in doubt, so the answer is
+	// reported as "sign changes in N bytes" and compared with the render's own period.
+	return (double) crossings / (double) count;
+}
+
 /** Pearson correlation of two envelopes: 1 is the same shape, 0 unrelated, -1 inverted. */
 double shapeScore (const std::vector<double>& a, const std::vector<double>& b)
 {
@@ -537,6 +584,33 @@ int main (int argc, char** argv)
 
 			std::sort (matches.begin (), matches.end (),
 					   [] (const Match& a, const Match& b) { return a.r > b.r; });
+
+			// A tone crosses zero about twice per cycle; noise crosses far more often. Printing both
+			// sides says whether the bank holds anything tonal at all - and if it does not, no
+			// address mapping can explain a piano.
+			std::printf ("     tone   : render %.0f/s", crossingRate (audio, note.start, note.length));
+
+			for (uint32_t slot = 0; slot + 0x2000 <= ram.size (); slot += 0x2000)
+			{
+				const double perByte = crossingRateOfBytes (ram.data () + slot, 0x2000);
+
+				// Converted with the rate the shape search liked for this slot, so the two columns
+				// are in the same unit.
+				double rate = 0.0;
+
+				for (const auto& match : matches)
+				{
+					if (match.slot == slot)
+					{
+						rate = match.rate;
+						break;
+					}
+				}
+
+				std::printf ("  0x%04X %.0f/s", (unsigned) slot, perByte * rate);
+			}
+
+			std::printf ("\n");
 
 			std::printf ("     shape  :");
 
