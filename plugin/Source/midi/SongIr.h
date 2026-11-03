@@ -106,6 +106,22 @@ struct RomBlock
 	bool isRam = false;
 	};
 
+	/** One `0x68` command: a slice of a PCM bank copied into a chip's own RAM.
+
+	The bank alone does not say where its bytes belong. `0x68` does - it names a position inside
+	the bank, an address in the chip's memory, and a length - and the driver uses it to lay the
+	samples out where its channels start. A song using these cannot be read by assuming the bank
+	starts at address zero, which is what this branch assumed for a long time.
+	*/
+	struct RamCopy
+	{
+	uint8_t bankType = 0;	// which bank the bytes come from: 0x02 for the RF5C's
+	uint32_t bankPosition = 0;
+	uint32_t address = 0;	// in the chip's own memory
+	uint32_t length = 0;
+	uint32_t streamOrder = 0;	// position in the file, same counter as the writes
+	};
+
 /** A song reduced to "which chips, which register writes, which memory" - no format left in it.
 
 	`writes` use `chips::RegisterWrite`, where `deviceId` is the index of the chip in `chips`.
@@ -130,6 +146,10 @@ struct SongIr
 	std::vector<ChipSlot> chips;
 	std::vector<chips::RegisterWrite> writes;
 	std::vector<RomBlock> roms;
+
+	/** The `0x68` copies, in file order. Empty on a song that lays its banks out by uploading the
+		whole block at zero - and on every format that has no such command. */
+	std::vector<RamCopy> ramCopies;
 	uint32_t totalTicks = 0;
 };
 

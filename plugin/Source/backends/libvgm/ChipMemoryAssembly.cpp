@@ -1,6 +1,7 @@
-#include "ChipMemoryAssembly.h"
+﻿#include "ChipMemoryAssembly.h"
 
 #include <algorithm>
+#include <cstdio>
 #include <cstring>
 
 namespace toybox::backends::libvgm::memory
@@ -80,7 +81,50 @@ std::vector<uint8_t> pcmBank (const midi::SongIr& ir, uint8_t type, std::size_t 
 		bank.insert (bank.end(), block.data, block.data + count);
 	}
 
-	return bank;
+	// **A bank only has addresses once the `0x68` copies are applied.** The command names a slice of
+	// the bank, an address in the chip and a length, and the driver uses it to put each sample where
+	// its channels start. Assuming the bank begins at address zero - which is what this function did
+	// - gives an image the chip never had: on `01 - Palmtree Panic Zone Past` the emulator's memory
+	// at 0x8000 reads `80 80 80 80` where the bank's first kilobytes hold `99 19 83 97`.
+	std::vector<uint32_t> inRange;
+
+	for (const auto& copy : ir.ramCopies)
+	{
+		if (copy.bankType == type)
+		{
+			inRange.push_back (copy.length);
+		}
+	}
+
+	if (inRange.empty())
+	{
+		return bank;
+	}
+
+	// Sign-magnitude zero is 0x80, and it is what the chip reads as silence where nothing was
+	// copied. Zero would be a full-scale negative excursion.
+	std::vector<uint8_t> image (maxBytes, 0x80);
+
+	for (const auto& copy : ir.ramCopies)
+	{
+		if (copy.bankType != type || copy.address >= image.size())
+		{
+			continue;
+		}
+
+		if (copy.bankPosition >= bank.size())
+		{
+			continue;
+		}
+
+		const std::size_t count = std::min ({ (std::size_t) copy.length,
+										   bank.size() - copy.bankPosition,
+										   image.size() - copy.address });
+
+		std::memcpy (image.data() + copy.address, bank.data() + copy.bankPosition, count);
+	}
+
+	return image;
 }
 
 std::vector<uint8_t> ram (const midi::SongIr& ir, uint8_t type, std::size_t maxBytes)

@@ -204,6 +204,19 @@ bool VgmSongLoader::load (const void* data, std::size_t size, midi::SongIr& out,
 		out.roms.push_back (rom);
 	}
 
+	// The `0x68` copies travel too: without them a bank has no addresses, and a chip whose samples
+	// the driver lays out this way reads uninitialised memory instead of the song.
+	for (const auto& copy : reader.ramCopies())
+	{
+		midi::RamCopy entry;
+		entry.bankType = copy.bankType;
+		entry.bankPosition = copy.bankPosition;
+		entry.address = copy.address;
+		entry.length = copy.length;
+		entry.streamOrder = copy.streamOrder;
+		out.ramCopies.push_back (entry);
+	}
+
 	out.totalTicks = lastSampleTime;
 	return true;
 }

@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include <cstddef>
 #include <cstdint>
@@ -67,6 +67,21 @@ struct VgmDataBlock
 								// from the start, and only this says which moment that was
 };
 
+/** One `0x68` command: a slice of a bank copied into a chip's memory.
+
+	A bank on its own says nothing about where its bytes belong. This command names a position
+	inside the bank, an address in the chip, and a length - and the length is what makes it more
+	than the few bytes it looks like: a handful of these lay out an entire bank.
+*/
+struct VgmRamCopy
+{
+	uint8_t bankType = 0;
+	uint32_t bankPosition = 0;
+	uint32_t address = 0;
+	uint32_t length = 0;
+	uint32_t streamOrder = 0;
+};
+
 /** Walks one uncompressed VGM image. The stream ends at the EOF offset, the GD3 tag or the
 	0x66 command, whichever comes first - the same boundaries libvgm uses. */
 class VgmCommandReader
@@ -87,6 +102,9 @@ public:
 
 	/** Every 0x67 block the stream read so far, in stream order. The bytes stay in the image, so
 		this is cheap; a caller that needs a chip's ROM assembles it from the blocks it recognises. */
+	/** The `0x68` copies, in file order: which slice of which bank went where in a chip's memory. */
+	const std::vector<VgmRamCopy>& ramCopies (void) const { return copies; }
+
 	const std::vector<VgmDataBlock>& dataBlocks (void) const { return blocks; }
 
 	/** The C140's ROM banking, from the header's byte 0x96 - the same field libvgm hands to the
@@ -122,6 +140,7 @@ private:
 	std::vector<BankSegment> pcmBank;
 	std::size_t bankPosition = 0;
 	std::vector<VgmDataBlock> blocks;
+	std::vector<VgmRamCopy> copies;
 	uint8_t c140BankingType = 0x00;		// System 2, the format's default
 
 	// 0x8n is one byte that stands for two commands; the second one waits here until the caller

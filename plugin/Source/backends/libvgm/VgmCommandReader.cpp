@@ -1,4 +1,4 @@
-#include "VgmCommandReader.h"
+﻿#include "VgmCommandReader.h"
 
 #include <cstring>
 
@@ -11,7 +11,12 @@ namespace
 		return (uint16_t) ((uint16_t) p[0] | ((uint16_t) p[1] << 8));
 	}
 
-	uint32_t readLe32 (const uint8_t* p)
+	uint32_t readLe24 (const uint8_t* p)
+{
+	return (uint32_t) p[0] | ((uint32_t) p[1] << 8) | ((uint32_t) p[2] << 16);
+}
+
+uint32_t readLe32 (const uint8_t* p)
 	{
 		return (uint32_t) p[0] | ((uint32_t) p[1] << 8) | ((uint32_t) p[2] << 16)
 			   | ((uint32_t) p[3] << 24);
@@ -295,6 +300,25 @@ bool VgmCommandReader::next (VgmCommand& command)
 		}
 		break;
 	}
+	case 0x68:
+		// **PCM RAM write**: a slice of a bank copied into a chip's own memory at an address the
+		// command names. Three 24-bit fields follow the bank id - position in the bank, address in
+		// the chip, length - and the length is what makes this more than the handful of bytes it
+		// looks like: a few of these lay out a whole bank.
+		//
+		// Ignoring them was why the RF5C's memory never matched the file: the bank alone says
+		// nothing about where its bytes belong.
+		{
+			VgmRamCopy copy;
+			copy.bankType = (uint8_t) (data[position + 1] & 0x7F);
+			copy.bankPosition = readLe24 (data + position + 2);
+			copy.address = readLe24 (data + position + 5);
+			copy.length = readLe24 (data + position + 8);
+			copy.streamOrder = command.streamOrder;
+			copies.push_back (copy);
+		}
+		break;
+
 	case 0xE0:
 		// "Set YM2612 PCM data offset": the stream skips to a position in the bank it built.
 		bankPosition = readLe32 (data + position + 1);
