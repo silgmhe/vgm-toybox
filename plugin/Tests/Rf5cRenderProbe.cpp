@@ -526,9 +526,9 @@ int runCoreProbe (const juce::File& file, const std::vector<uint8_t>& ram)
 			std::printf ("\ncalibration (0xC0/0x40 alternating, step 2048):");
 			for (int i = 0; i < 8; ++i)
 			{
-				std::printf (" %.3f", (double) l[(size_t) i] / 2147483648.0);
+				std::printf (" %d", (int) l[(size_t) i]);
 			}
-			std::printf ("  <- expect about +0.5 -0.5 +0.5 -0.5 ...\n");
+			std::printf ("  <- expect alternating signs of equal size (the core is not int32-scaled)\n");
 
 			// Which core actually started, next to the one being pumped: if these differ, every
 			// "the chip is silent" reading is a reading of the wrong structure.
@@ -594,6 +594,9 @@ int runCoreProbe (const juce::File& file, const std::vector<uint8_t>& ram)
 	writeReg (info.dataPtr, 0x06, 0x80);			// start 0x8000, in 256-byte units
 	writeReg (info.dataPtr, 0x02, (uint8_t) (657 & 0xFF));
 	writeReg (info.dataPtr, 0x03, (uint8_t) (657 >> 8));
+	writeReg (info.dataPtr, 0x01, 0xFF);			// pan 15/15 - without it the multipliers stay zero
+	writeReg (info.dataPtr, 0x00, 0x7F);			// envelope, full scale
+	writeReg (info.dataPtr, 0x00, 0x7F);			// again, after pan (see the note above)
 	writeReg (info.dataPtr, 0x08, (uint8_t) ~(1u << 4));
 
 	const int blocks = 64;
@@ -614,7 +617,7 @@ int runCoreProbe (const juce::File& file, const std::vector<uint8_t>& ram)
 
 		for (int i = 0; i < blockSize; ++i)
 		{
-			const double v = (double) left[(size_t) i] / 2147483648.0;
+			const double v = (double) left[(size_t) i];
 			mono.push_back ((float) v);
 			peak = juce::jmax (peak, std::abs (v));
 
@@ -634,14 +637,14 @@ int runCoreProbe (const juce::File& file, const std::vector<uint8_t>& ram)
 	std::printf ("\n   image at 0x8000: %02X %02X %02X %02X\n",
 				 ram[0x8000], ram[0x8001], ram[0x8002], ram[0x8003]);
 
-	std::printf ("\ncore alone: %d samples (%.3f s), peak %.4f, %.0f crossings/s\n",
+	std::printf ("\ncore alone: %d samples (%.3f s), peak %.0f (raw), %.0f crossings/s\n",
 				 (int) mono.size (), seconds, peak, (double) crossings / seconds);
 
 	// The first sixteen output samples, so a silent chip and a quiet one are told apart.
 	std::printf ("   first samples:");
 	for (int i = 0; i < 16 && i < (int) mono.size (); ++i)
 	{
-		std::printf (" %.4f", mono[(size_t) i]);
+		std::printf (" %.0f", mono[(size_t) i]);
 	}
 	std::printf ("\n");
 
