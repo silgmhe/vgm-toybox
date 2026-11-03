@@ -1,11 +1,15 @@
 ﻿#include <juce_core/juce_core.h>
 
+#include "backends/libvgm/LibvgmVgz.h"
+#include "backends/libvgm/VgmCommandReader.h"
 #include "playback/ChipState.h"
 #include "playback/PlaybackEngine.h"
 
+#include <algorithm>
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
+#include <cstring>
 #include <vector>
 
 /**
@@ -238,6 +242,97 @@ ExportShape shapeOf (const toybox::playback::ChannelState& channel)
 
 	return shape;
 }
+
+/** The sixty-four kilobytes the chip addresses, from the `0x02` blocks of the file. */
+std::vector<uint8_t> ramImage (const juce::File& file)
+{
+	juce::MemoryBlock raw;
+
+	if (! file.loadFileAsData (raw))
+	{
+		return {};
+	}
+
+	// The plugin's own inflater: the probe must not grow a dependency the plugin lacks.
+	juce::MemoryBlock plain;
+
+	if (! toybox::backends::libvgm::flattenCompressedImage (raw.getData (), raw.getSize (), plain))
+	{
+		return {};
+	}
+
+	const auto* begin = static_cast<const uint8_t*> (plain.getData());
+	std::vector<uint8_t> image (begin, begin + plain.getSize ());
+
+	if (image.size () < 0x40)
+	{
+		return {};
+	}
+
+	toybox::backends::libvgm::VgmCommandReader reader (image.data (), image.size ());
+	toybox::backends::libvgm::VgmCommand command;
+
+	while (reader.next (command))
+	{
+	}
+
+	// The bank, positionally: every `0x02` block appended, exactly as `memory::pcmBank` does.
+	std::vector<uint8_t> ram (64 * 1024, 0xFF);
+	size_t at = 0;
+
+	for (const auto& block : reader.dataBlocks())
+	{
+		if (block.type != 0x02)
+		{
+			continue;
+		}
+
+		const size_t count = juce::jmin (block.size, ram.size () - at);
+
+		if (count == 0)
+		{
+			break;
+		}
+
+		std::memcpy (ram.data () + at, block.data, count);
+		at += count;
+	}
+
+	return ram;
+}
+
+/** How much of `slot` played at `byteRate` looks like the rendered window. */
+double correlate (const std::vector<float>& rendered, int start, int length,
+				  const uint8_t* slot, int available, double byteRate)
+{
+	const double bytesPerSample = byteRate / (double) kSampleRate;
+	const int span = juce::jmin (length, 8192);
+
+	double num = 0.0;
+	double d1 = 0.0;
+	double d2 = 0.0;
+
+	for (int i = 0; i < span; i += 4)
+	{
+		const size_t index = (size_t) ((double) i * bytesPerSample);
+
+		if (index >= (size_t) available)
+		{
+			break;
+		}
+
+		const uint8_t byte = slot[index];
+		const double level = (byte & 0x80) ? (double) (byte & 0x7F) / 128.0
+										   : -(double) (byte & 0x7F) / 128.0;
+		const double sample = rendered[(size_t) (start + i)];
+
+		num += sample * level;
+		d1 += sample * sample;
+		d2 += level * level;
+	}
+
+	return (d1 > 0.0 && d2 > 0.0) ? num / std::sqrt (d1 * d2) : 0.0;
+}
 } // namespace
 
 int main (int argc, char** argv)
@@ -265,6 +360,9 @@ int main (int argc, char** argv)
 	const auto& tracks = engine.getTracks ();
 	const int wanted = (argc > 2) ? std::atoi (argv[2]) : -1;
 	const double seconds = (argc > 3) ? std::atof (argv[3]) : 4.0;
+	const std::vector<uint8_t> ram = ramImage (juce::File (juce::String (argv[1])));
+
+	std::printf ("ram    : %d bytes\n", (int) ram.size ());
 
 	std::printf ("song: %s   tracks: %d   rendered: %.1f s\n", argv[1], (int) tracks.size (), seconds);
 
@@ -323,6 +421,47 @@ int main (int argc, char** argv)
 						 note.peak, note.pitch);
 		}
 
+		if (note.length > 0 && ! ram.empty ())
+		{
+			// **Which slot, at which rate, is the sound that just came out of the speaker.**
+			// The register arguments have been wrong three times; this asks the bytes directly.
+			//
+			// **Known limitation, and it makes the numbers below useless as a verdict**: a periodic
+			// signal decorrelates completely once the rate is off by more than about one percent over
+			// the window (thirty-six cycles of a 71 Hz tone in half a second), and this grid steps in
+			// tens of percent. Every r here is therefore near zero whether or not the bytes are right.
+			// What it does show is which slots are not obviously unrelated; a rate has to be found by
+			// measuring a period, not by searching a grid this coarse.
+			static const double kRates[] = { 2000, 3000, 4000, 5000, 6500, 8000, 10000, 12500,
+											 15000, 18000, 22000, 26000, 30000, 32552 };
+
+			struct Match { double r; uint32_t slot; double rate; };
+			std::vector<Match> matches;
+
+			for (uint32_t slot = 0; slot + 0x2000 <= ram.size (); slot += 0x2000)
+			{
+				for (double rate : kRates)
+				{
+					matches.push_back ({ correlate (audio, note.start, note.length,
+													ram.data () + slot, 0x2000, rate),
+										 slot, rate });
+				}
+			}
+
+			std::sort (matches.begin (), matches.end (),
+					   [] (const Match& a, const Match& b) { return a.r > b.r; });
+
+			std::printf ("     best   :");
+
+			for (int i = 0; i < 3 && i < (int) matches.size (); ++i)
+			{
+				std::printf ("  0x%04X@%.0fHz r=%.2f", (unsigned) matches[(size_t) i].slot,
+							 matches[(size_t) i].rate, matches[(size_t) i].r);
+			}
+
+			std::printf ("\n");
+		}
+
 		if (channel == nullptr)
 		{
 			std::printf ("     export : no state\n");
@@ -354,6 +493,7 @@ int main (int argc, char** argv)
 			std::printf ("     length : render %.3f s vs export %.3f s (ratio %.2f)\n",
 						 renderedSeconds, exportSeconds, exportSeconds / renderedSeconds);
 		}
+
 	}
 
 	std::printf ("\n");
