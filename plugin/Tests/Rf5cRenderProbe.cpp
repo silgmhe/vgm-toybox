@@ -519,6 +519,18 @@ int main (int argc, char** argv)
 			engine.setPositionSeconds (0.0);
 			engine.play ();
 
+			// Read back what the engine kept, before the render: a rebuild triggered by the seek
+			// would drop the flag, and then the mix is the whole song rather than this track.
+			if (bySolo)
+			{
+				const size_t other = (track == 0) ? 1 : 0;
+
+				std::printf ("     before : soloed=%d other-soloed=%d other-muted=%d\n",
+							 engine.isTrackSoloed (track) ? 1 : 0,
+							 (tracks.size () > 1 && engine.isTrackSoloed (other)) ? 1 : 0,
+							 (tracks.size () > 1 && engine.isTrackMuted (other)) ? 1 : 0);
+			}
+
 			auto rendered = renderSeconds (engine, seconds);
 
 			engine.stop ();
@@ -560,9 +572,12 @@ int main (int argc, char** argv)
 		{
 			const NoteWindow byMute = firstNote (muted);
 
-			std::printf ("     solo   : %.3f s, peak %.3f, %.0f cross/s\n",
+			std::printf ("     solo   : %.3f s, peak %.3f, %.0f cross/s  [soloed=%d other-also-soloed=%d other-muted=%d]\n",
 						 (double) note.length / kSampleRate, note.peak,
-						 crossingRate (audio, note.start, juce::jmax (1, note.length)));
+						 crossingRate (audio, note.start, juce::jmax (1, note.length)),
+						 engine.isTrackSoloed (track) ? 1 : 0,
+						 (tracks.size () > 1 && engine.isTrackSoloed (track == 0 ? 1 : 0)) ? 1 : 0,
+						 (tracks.size () > 1 && engine.isTrackMuted (track == 0 ? 1 : 0)) ? 1 : 0);
 			std::printf ("     mute   : %.3f s, peak %.3f, %.0f cross/s\n",
 						 (double) byMute.length / kSampleRate, byMute.peak,
 						 crossingRate (muted, byMute.start, juce::jmax (1, byMute.length)));
@@ -692,6 +707,40 @@ int main (int argc, char** argv)
 						 renderedSeconds, exportSeconds, exportSeconds / renderedSeconds);
 		}
 
+	}
+
+	// **Does muting do anything at all?** A track whose voice was never given a start is silent
+	// whether or not the mixer isolates it, so "Ch7 is quiet" proves nothing. Muting every track and
+	// rendering asks the question where there is no second reason for silence: if the bus is not
+	// quiet, the per-track measurements above are measurements of the whole song and every
+	// conclusion drawn from them has to be thrown away.
+	{
+		for (size_t other = 0; other < tracks.size (); ++other)
+		{
+			engine.setTrackMute (other, true);
+		}
+
+		engine.setPositionSeconds (0.0);
+		engine.play ();
+
+		const std::vector<float> allMuted = renderSeconds (engine, 2.0);
+
+		engine.stop ();
+
+		for (size_t other = 0; other < tracks.size (); ++other)
+		{
+			engine.setTrackMute (other, false);
+		}
+
+		double peak = 0.0;
+
+		for (const auto sample : allMuted)
+		{
+			peak = juce::jmax (peak, (double) std::abs (sample));
+		}
+
+		std::printf ("\nall tracks muted: %d samples, peak %.4f %s\n", (int) allMuted.size (), peak,
+					 (peak > 0.001) ? "<- MUTE IS NOT APPLIED" : "(silent, so muting works)");
 	}
 
 	std::printf ("\n");
