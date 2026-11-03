@@ -478,6 +478,69 @@ double shapeScore (const std::vector<double>& a, const std::vector<double>& b)
 */
 int runCoreProbe (const juce::File& file, const std::vector<uint8_t>& ram)
 {
+	// **Calibration first, and with a waveform whose answer is known by hand.** The harness has to
+	// be able to say "the chip is silent" rather than "my harness is silent", and the way to earn
+	// that is to make it reproduce something predictable: `0xC0` is +0.5 and `0x40` is -0.5 in
+	// sign-magnitude, so alternating the two and stepping one byte per output sample must come out
+	// as a square wave at half of full scale.
+	{
+		DEV_GEN_CFG cfg = {};
+		cfg.emuCore = devDef_RF5C68_Gens.coreID;
+		cfg.srMode = DEVRI_SRMODE_NATIVE;
+		cfg.flags = 1;
+		cfg.clock = 12500000;
+		cfg.smplRate = 48000;
+
+		DEV_INFO info = {};
+
+		if (SndEmu_Start2 (DEVID_RF5C68, &cfg, &info, nullptr, 0) == 0x00 && info.dataPtr != nullptr)
+		{
+			DEVFUNC_WRITE_A8D8 w = nullptr;
+			DEVFUNC_WRITE_A16D8 m = nullptr;
+			SndEmu_GetDeviceFunc (info.devDef, RWF_REGISTER | RWF_WRITE, DEVRW_A8D8, 0, (void**) &w);
+			SndEmu_GetDeviceFunc (info.devDef, RWF_MEMORY | RWF_WRITE, DEVRW_A16D8, 0, (void**) &m);
+
+			for (uint32_t i = 0; i < 0x10000; ++i)
+			{
+				m (info.dataPtr, (uint16_t) i, ((i & 1u) != 0) ? 0x40 : 0xC0);
+			}
+
+			w (info.dataPtr, 0x07, 0xC0);			// master on, channel 0
+			w (info.dataPtr, 0x06, 0x00);			// start 0x0000
+			w (info.dataPtr, 0x04, 0x00);			// loop 0x0000
+			w (info.dataPtr, 0x05, 0x00);
+			w (info.dataPtr, 0x02, 0x00);			// step 0x0800 = one byte per output sample
+			w (info.dataPtr, 0x03, 0x08);
+			// Pan **before** envelope: the core recomputes its per-side multipliers when the envelope is
+			// written, so an envelope written first against pan 0 stays at zero. With either left at zero the
+			// core multiplies its output by zero, which reads as silence.
+			w (info.dataPtr, 0x01, 0xFF);			// pan 15/15
+			w (info.dataPtr, 0x00, 0x7F);			// envelope: full scale
+			w (info.dataPtr, 0x00, 0x7F);			// again, now that pan is set
+			w (info.dataPtr, 0x08, 0xFE);			// channel 0 on
+
+			std::vector<int32_t> l (16), r (16);
+			DEV_SMPL* out[2] = { l.data (), r.data () };
+			devDef_RF5C68_Gens.Update (info.dataPtr, 16, out);
+
+			std::printf ("\ncalibration (0xC0/0x40 alternating, step 2048):");
+			for (int i = 0; i < 8; ++i)
+			{
+				std::printf (" %.3f", (double) l[(size_t) i] / 2147483648.0);
+			}
+			std::printf ("  <- expect about +0.5 -0.5 +0.5 -0.5 ...\n");
+
+			// Which core actually started, next to the one being pumped: if these differ, every
+			// "the chip is silent" reading is a reading of the wrong structure.
+			std::printf ("   core started: id=0x%X | pumped: id=0x%X | same=%d\n",
+						 (unsigned) info.devDef->coreID,
+						 (unsigned) devDef_RF5C68_Gens.coreID,
+						 (info.devDef == &devDef_RF5C68_Gens) ? 1 : 0);
+
+			SndEmu_Stop (&info);
+		}
+	}
+
 	DEV_GEN_CFG cfg = {};
 	// Forced, not left to the device: this probe pumps the core with `devDef_RF5C68_Gens.Update`, and
 	// if the device started the MAME core instead, that call would be reading another core's state -
