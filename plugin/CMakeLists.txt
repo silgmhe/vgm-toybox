@@ -666,6 +666,9 @@ target_compile_definitions(vgm_rf5c_probe PRIVATE
 	TOYBOX_OUTPUT_BUSES=${TOYBOX_OUTPUT_BUSES}
 	JUCE_STANDALONE_APPLICATION=1
 	TOYBOX_TEST_BUILD=1)
+target_include_directories(vgm_rf5c_probe PRIVATE
+	${CMAKE_CURRENT_SOURCE_DIR}/../libs/libvgm)
+
 target_link_libraries(vgm_rf5c_probe PRIVATE
 	VGMToybox
 	juce::juce_audio_utils

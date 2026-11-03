@@ -2,6 +2,12 @@
 
 #include "backends/libvgm/LibvgmVgz.h"
 #include "backends/libvgm/VgmCommandReader.h"
+
+#include "emu/EmuStructs.h"
+#include "emu/SoundDevs.h"
+#include "emu/SoundEmu.h"
+
+extern "C" DEV_DEF devDef_RF5C68_Gens;	// scd_pcm.c: the Gens core, taken directly
 #include "playback/ChipState.h"
 #include "playback/PlaybackEngine.h"
 
@@ -461,6 +467,125 @@ double shapeScore (const std::vector<double>& a, const std::vector<double>& b)
 }
 } // namespace
 
+/**
+ * Drives the GENS RF5C164 core by itself: no player, no mixer, no mute masks.
+
+	Everything this branch measured went through the engine, and the engine kept producing results
+	that contradicted the core's own memory. This path removes every layer between the bytes and the
+	output: give the chip our 64 KB image and one note's registers, ask it for half a second of audio,
+	and look at what comes out. If the core plays the sample, the image is right and the engine is the
+	thing to look at; if it plays silence, the image is wrong and no amount of engine work will fix it.
+*/
+int runCoreProbe (const juce::File& file, const std::vector<uint8_t>& ram)
+{
+	DEV_GEN_CFG cfg = {};
+	// Forced, not left to the device: this probe pumps the core with `devDef_RF5C68_Gens.Update`, and
+	// if the device started the MAME core instead, that call would be reading another core's state -
+	// which produces silence rather than an error, and would have been read as "the image is empty".
+	cfg.emuCore = devDef_RF5C68_Gens.coreID;
+	cfg.srMode = DEVRI_SRMODE_NATIVE;
+	cfg.flags = 1;				// RF5C164
+	cfg.clock = 12500000;
+	cfg.smplRate = 48000;
+
+	DEV_INFO info = {};
+
+	if (SndEmu_Start2 (DEVID_RF5C68, &cfg, &info, nullptr, 0) != 0x00 || info.dataPtr == nullptr)
+	{
+		std::printf ("core did not start\n");
+		return 1;
+	}
+
+	DEVFUNC_WRITE_A8D8 writeReg = nullptr;
+	DEVFUNC_WRITE_A16D8 writeMem = nullptr;
+	DEVFUNC_WRITE_BLOCK writeBlock = nullptr;
+	DEVFUNC_UPDATE update = nullptr;
+
+	SndEmu_GetDeviceFunc (info.devDef, RWF_REGISTER | RWF_WRITE, DEVRW_A8D8, 0, (void**) &writeReg);
+	SndEmu_GetDeviceFunc (info.devDef, RWF_MEMORY | RWF_WRITE, DEVRW_A16D8, 0, (void**) &writeMem);
+	SndEmu_GetDeviceFunc (info.devDef, RWF_MEMORY | RWF_WRITE, DEVRW_BLOCK, 0, (void**) &writeBlock);
+	update = devDef_RF5C68_Gens.Update;
+
+	if (writeReg == nullptr || writeMem == nullptr || update == nullptr)
+	{
+		std::printf ("core has no register/memory/update function\n");
+		SndEmu_Stop (&info);
+		return 1;
+	}
+
+	// Our image, through the same entry the player uses for a bank.
+	if (writeBlock != nullptr && ! ram.empty ())
+	{
+		writeBlock (info.dataPtr, 0, (uint32_t) ram.size (), ram.data ());
+	}
+	else
+	{
+		for (uint32_t offset = 0; offset < ram.size (); ++offset)
+		{
+			writeMem (info.dataPtr, (uint16_t) offset, ram[offset]);
+		}
+	}
+
+	// One note on voice 4, the way the song does it: start 0x8000, step 657, bit 4 cleared.
+	writeReg (info.dataPtr, 0x07, 0xC4);			// master on, select channel 4
+	writeReg (info.dataPtr, 0x06, 0x80);			// start 0x8000, in 256-byte units
+	writeReg (info.dataPtr, 0x02, (uint8_t) (657 & 0xFF));
+	writeReg (info.dataPtr, 0x03, (uint8_t) (657 >> 8));
+	writeReg (info.dataPtr, 0x08, (uint8_t) ~(1u << 4));
+
+	const int blocks = 64;
+	const int blockSize = 512;
+	std::vector<int32_t> left ((size_t) blockSize), right ((size_t) blockSize);
+	DEV_SMPL* outputs[2] = { left.data (), right.data () };
+
+	double peak = 0.0;
+	int crossings = 0;
+	double previous = 0.0;
+	std::vector<float> mono;
+
+	for (int b = 0; b < blocks; ++b)
+	{
+		std::fill (left.begin (), left.end (), 0);
+		std::fill (right.begin (), right.end (), 0);
+		update (info.dataPtr, blockSize, outputs);
+
+		for (int i = 0; i < blockSize; ++i)
+		{
+			const double v = (double) left[(size_t) i] / 2147483648.0;
+			mono.push_back ((float) v);
+			peak = juce::jmax (peak, std::abs (v));
+
+			if ((v >= 0.0) != (previous >= 0.0))
+			{
+				++crossings;
+			}
+
+			previous = v;
+		}
+	}
+
+	const double seconds = (double) mono.size () / 48000.0;
+
+	// What the core was actually given, next to what came out: silence from an image that holds a
+	// sample at that address means this harness is wrong, not the image.
+	std::printf ("\n   image at 0x8000: %02X %02X %02X %02X\n",
+				 ram[0x8000], ram[0x8001], ram[0x8002], ram[0x8003]);
+
+	std::printf ("\ncore alone: %d samples (%.3f s), peak %.4f, %.0f crossings/s\n",
+				 (int) mono.size (), seconds, peak, (double) crossings / seconds);
+
+	// The first sixteen output samples, so a silent chip and a quiet one are told apart.
+	std::printf ("   first samples:");
+	for (int i = 0; i < 16 && i < (int) mono.size (); ++i)
+	{
+		std::printf (" %.4f", mono[(size_t) i]);
+	}
+	std::printf ("\n");
+
+	SndEmu_Stop (&info);
+	return 0;
+}
+
 int main (int argc, char** argv)
 {
 	if (argc < 2)
@@ -489,6 +614,12 @@ int main (int argc, char** argv)
 	const std::vector<uint8_t> ram = ramImage (juce::File (juce::String (argv[1])));
 
 	std::printf ("ram    : %d bytes\n", (int) ram.size ());
+
+	// -2 asks for the core on its own: no player, no mixer, no mute masks.
+	if (wanted == -2)
+	{
+		return runCoreProbe (juce::File (juce::String (argv[1])), ram);
+	}
 
 	std::printf ("song: %s   tracks: %d   rendered: %.1f s\n", argv[1], (int) tracks.size (), seconds);
 
