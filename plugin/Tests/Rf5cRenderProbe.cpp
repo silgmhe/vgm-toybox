@@ -168,7 +168,10 @@ NoteWindow firstNote (const std::vector<float>& samples)
 		{
 			last = w;
 		}
-		else if (w - last >= 3)
+		// Sixty-four milliseconds of quiet ends a note. Three windows (16 ms) was too eager: a
+		// percussive channel retriggered every 124 ms came out as one 491 ms note, and the export was
+		// then blamed for being a quarter of its length.
+		else if (w - last >= 12)
 		{
 			break;
 		}

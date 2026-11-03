@@ -43,6 +43,14 @@ namespace
 	/** `sampleTime`'s unit, which is what turns a gate into seconds. */
 	constexpr double kStreamRate = 44100.0;
 
+	/** How long a release may last and still be part of the same note.
+
+		The driver rewrites the whole `0x08` mask between notes and drops a voice's bit on the way, so
+		one note arrives as several enable/release pairs. Twenty milliseconds is longer than that
+		rewrite and shorter than the gap between two notes of one channel in these rips.
+	*/
+	constexpr double kContinuation = 0.020;
+
 	/** Notes are compared by length rounded up to this, so a few bytes of gate jitter do not make
 	 *  a new file. A hundred and twenty-eight bytes is 12 ms at 10 kHz - finer than the difference
 	 *  between two notes of one instrument, coarser than the jitter between two presses. */
@@ -65,6 +73,18 @@ namespace
 		uint32_t enabledAt = 0;
 		uint8_t armedStart = 0;
 		uint16_t armedStep = 0;
+
+		/** When this voice was last released, so a re-enable within a few milliseconds can be
+			treated as the same note rather than a new one.
+
+			The driver rewrites the whole `0x08` mask between notes, which drops this voice's bit to
+			zero and back. Measured against the emulator, channel 5's note lasts 0.491 s while the
+			gates between those toggles add up to 0.124 s - four fragments of one note, and the
+			export was handing back the first fragment: a piano cut to a quarter of its length, which
+			is exactly what "it sounds like a hi-hat" is.
+		*/
+		uint32_t releasedAt = 0;
+		bool released = false;
 	};
 
 	/** One voice starting one sample, before de-duplication. */
@@ -287,14 +307,31 @@ std::vector<playback::DecodedSample> collectRf5cSamples (const midi::SongIr& ir)
 					// The step is latched here because the driver sets it **before** enabling:
 					// measured on `01 - Palmtree Panic Zone Past`, every note reports the same value
 					// on and off (657/657, 1108/1108), so reading it at the key-on is not a race.
-					voices[i].armedStart = voices[i].start;
-					voices[i].armedStep = voices[i].step;
-					voices[i].enabledAt = write.sampleTime;
+					//
+					// **The release does not end a note by itself.** The driver rewrites the whole
+					// mask between notes and drops this voice's bit on the way, so one note arrives
+					// as several enable/release pairs; collecting at each release exported the first
+					// fragment, which is a piano cut to a quarter of its length - "it sounds like a
+					// hi-hat". A release that is picked up again within `kContinuation` continues the
+					// note; one that is not ends it, and it is collected here, at its real end.
+					if (voices[i].released
+						&& (write.sampleTime - voices[i].releasedAt) > (uint32_t) (kContinuation * kStreamRate))
+					{
+						collect (voices[i], voices[i].releasedAt);
+					}
+
+					if (! voices[i].released
+						|| (write.sampleTime - voices[i].releasedAt) > (uint32_t) (kContinuation * kStreamRate))
+					{
+						voices[i].armedStart = voices[i].start;
+						voices[i].armedStep = voices[i].step;
+						voices[i].enabledAt = write.sampleTime;
+					}
 				}
 				else if (! on && voices[i].enabled)
 				{
-					// Measured at the release, because a note's length only exists once it is over.
-					collect (voices[i], write.sampleTime);
+					voices[i].releasedAt = write.sampleTime;
+					voices[i].released = true;
 				}
 
 				voices[i].enabled = on;
