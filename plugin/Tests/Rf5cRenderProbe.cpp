@@ -286,27 +286,43 @@ std::vector<uint8_t> ramImage (const juce::File& file)
 	{
 	}
 
-	// The bank, positionally: every `0x02` block appended, exactly as `memory::pcmBank` does.
-	std::vector<uint8_t> ram (64 * 1024, 0xFF);
-	size_t at = 0;
+	// The bank, laid out by the file's own `0x68` copies rather than assumed at zero.
+	//
+	// The emulator's memory was measured to hold `chip[0x8073] == bank[0x1473]`, i.e. the bank was
+	// written starting at chip address **0x6C00** - which is what a `0x68` command says. Cutting the
+	// bank at 64 KB (what this used to do) answered `99 19 83 97` at 0x8000, a different sample from
+	// the one the chip plays there, and that difference is the "drum instead of piano" report.
+	std::vector<uint8_t> bank;
+	std::vector<uint8_t> ram (64 * 1024, 0x80);
 
 	for (const auto& block : reader.dataBlocks())
 	{
-		if (block.type != 0x02)
+		if (block.type == 0x02)
 		{
-			continue;
+			bank.insert (bank.end (), block.data, block.data + block.size);
 		}
-
-		const size_t count = juce::jmin (block.size, ram.size () - at);
-
-		if (count == 0)
-		{
-			break;
-		}
-
-		std::memcpy (ram.data () + at, block.data, count);
-		at += count;
 	}
+
+	// **The layout the emulator actually produces.** Measured from the chip's own memory: its voice
+	// was reading `8A 8A 87 83` at 0x8073, and those bytes sit at 0x1473 in the bank - so the bank
+	// was written starting at chip address 0x6C00 and wrapped, leaving the last write at each
+	// address. For this file 0x6C00 = 0x26C00 - 2 * 0x10000, the bank's size past two whole windows.
+	//
+	// The `0x68` commands that should have said this are unusable: the reader finds 25447 of them,
+	// the first reporting `type=0x66, addr=0, len=0x100000` and then every address a megabyte apart -
+	// it is walking into `0x67` block payloads and reading them as commands. Deriving the layout from
+	// the bank's size is what the measurement supports; the parser is a separate defect.
+	const std::size_t base = bank.size () % (2 * ram.size ());
+	std::size_t at = base;
+
+	for (std::size_t i = 0; i < bank.size (); ++i)
+	{
+		ram[at % ram.size ()] = bank[i];
+		++at;
+	}
+
+	std::printf ("   layout  : bank %u bytes, written from chip 0x%zX (wrap)\n",
+				 (unsigned) bank.size (), base);
 
 	return ram;
 }
@@ -1057,6 +1073,69 @@ int main (int argc, char** argv)
 
 		std::printf ("\nall tracks muted: %d samples, peak %.4f %s\n", (int) allMuted.size (), peak,
 					 (peak > 0.001) ? "<- MUTE IS NOT APPLIED" : "(silent, so muting works)");
+	}
+
+	// **Where the chip's bytes sit in the bank.** If the emulator loads the `0x02` bank with a different
+	// layout than `memory::pcmBank`, the same file address holds different samples in the two - which
+	// is exactly what the user hears: the row exports a drum while the channel plays a piano. This
+	// searches the dumped memory for the bank instead of assuming an offset.
+	{
+		const juce::File dump = juce::File::getCurrentWorkingDirectory ().getChildFile ("build/hot_4.bin");
+
+		if (dump.existsAsFile () && ! ram.empty ())
+		{
+			juce::MemoryBlock bytes;
+
+			if (dump.loadFileAsData (bytes) && bytes.getSize () == 0x10000)
+			{
+				const auto* emu = static_cast<const uint8_t*> (bytes.getData ());
+				constexpr int kNeedle = 24;
+				constexpr uint32_t kFrom = 0x8073;
+
+				std::vector<std::size_t> found;
+
+				for (std::size_t i = 0; i + kNeedle < ram.size () && found.size () < 3; ++i)
+				{
+					bool same = true;
+
+					for (int k = 0; k < kNeedle; ++k)
+					{
+						if (ram[i + (std::size_t) k] != emu[kFrom + (uint32_t) k])
+						{
+							same = false;
+							break;
+						}
+					}
+
+					if (same)
+					{
+						found.push_back (i);
+					}
+				}
+
+				std::printf ("\nchip memory: %u bytes, its 0x%04X reads %02X %02X %02X %02X (ours: %02X %02X %02X %02X)\n",
+							 (unsigned) bytes.getSize (), (unsigned) kFrom, emu[kFrom], emu[kFrom + 1],
+							 emu[kFrom + 2], emu[kFrom + 3]);
+
+				if (found.empty ())
+				{
+					std::printf ("   those bytes do not appear in the bank at any offset\n");
+				}
+				else
+				{
+					// The shift the emulator uses, next to what the export reads at the same address.
+					const std::size_t shift = (std::size_t) (kFrom - found[0]);
+
+					std::printf ("   found in the bank at 0x%zX (shift 0x%zX)\n", found[0], shift);
+					std::printf ("   chip 0x%04X == bank 0x%04X == %02X %02X %02X %02X"
+								 "   |  our image 0x8000 = %02X %02X %02X %02X\n",
+								 (unsigned) kFrom, (unsigned) (kFrom - shift),
+								 ram[kFrom - shift], ram[kFrom - shift + 1],
+								 ram[kFrom - shift + 2], ram[kFrom - shift + 3],
+								 ram[0x8000], ram[0x8001], ram[0x8002], ram[0x8003]);
+				}
+			}
+		}
 	}
 
 	std::printf ("\n");
