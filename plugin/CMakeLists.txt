@@ -651,6 +651,25 @@ target_link_libraries(vgm_ui_test PRIVATE
 add_executable(vgm_app_test EXCLUDE_FROM_ALL
 	Tests/AppHarnessTest.cpp
 )
+
+# --- one channel rendered, next to the wave its row would export (not built by default) ---
+# The register-stream arguments about this chip have been wrong three times; this asks the emulator
+# instead. See Tests/Rf5cRenderProbe.cpp.
+#   cmake --build <build dir> --target vgm_rf5c_probe
+#   <build dir>/plugin/vgm_rf5c_probe <song> [trackIndex] [seconds]
+add_executable(vgm_rf5c_probe EXCLUDE_FROM_ALL
+	Tests/Rf5cRenderProbe.cpp
+)
+target_include_directories(vgm_rf5c_probe PRIVATE Source)
+target_compile_definitions(vgm_rf5c_probe PRIVATE
+	${TOYBOX_JUCE_DEFINITIONS}
+	TOYBOX_OUTPUT_BUSES=${TOYBOX_OUTPUT_BUSES}
+	JUCE_STANDALONE_APPLICATION=1
+	TOYBOX_TEST_BUILD=1)
+target_link_libraries(vgm_rf5c_probe PRIVATE
+	VGMToybox
+	juce::juce_audio_utils
+	juce::juce_recommended_config_flags)
 target_include_directories(vgm_app_test PRIVATE Source)
 # Every test executable builds with TOYBOX_TEST_BUILD, which makes SettingsStore refuse to open the
 # machine's own settings file (see SettingsStore::settingsDirectory). A test main that forgets to
