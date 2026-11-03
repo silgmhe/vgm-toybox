@@ -295,9 +295,12 @@ std::vector<playback::DecodedSample> collectRf5cSamples (const midi::SongIr& ir)
 	// One file per distinct **content**, not per address: a streamed page is a different sample
 	// every time the driver rewrites it, and the bytes a key-on found are the only identity it has.
 	//
-	// The rate is the **most frequent** step within that content, not the highest: a slot is
-	// triggered hundreds of times at many pitches (299 hits on one, steps 619..2503), so any single
-	// choice is a transposition, and the one the driver uses most is the least surprising.
+	// The rate is the **lowest** step that content is ever played at. A file has one playback rate
+	// and the driver uses a thirty-to-one range (one address runs 74..2224), so any single choice is
+	// a transposition; the lowest is the one closest to the sample's own pitch, because downward
+	// transposition below the recorded rate is the unusual case. Measured: the 0x8000 slot has a
+	// 14-byte period - 71.4 Hz at the lowest step, 746 Hz at the most frequent one - and a render of
+	// that channel's first note measures 71.5 Hz.
 	std::map<uint64_t, std::map<uint16_t, int>> histograms;
 	std::map<uint64_t, const Hit*> byContent;
 
@@ -333,18 +336,12 @@ std::vector<playback::DecodedSample> collectRf5cSamples (const midi::SongIr& ir)
 	{
 		const Hit& hit = *hitPointer;
 
+		// The **lowest** step this content is ever played at. See the note above the histograms:
+		// a file has one playback rate and the driver uses a thirty-to-one range, so the only
+		// non-arbitrary choice is the one closest to the sample's own pitch - and downward
+		// transposition below the recorded rate is the unusual case.
 		const auto& histogram = histograms[hit.hash];
-		int best = 0;
-		uint16_t step = hit.step;
-
-		for (const auto& candidate : histogram)
-		{
-			if (candidate.second > best)
-			{
-				best = candidate.second;
-				step = candidate.first;
-			}
-		}
+		const uint16_t step = histogram.empty () ? hit.step : histogram.begin ()->first;
 
 		// `step * (clock/384) / 2048` bytes a second - the same arithmetic the decoder's
 		// `bytesPerSecond` does.
