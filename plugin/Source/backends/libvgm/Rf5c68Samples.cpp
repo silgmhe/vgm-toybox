@@ -40,11 +40,31 @@ namespace
 	/** `0xFF` ends a sample; one that never reaches one is not countable. */
 	constexpr uint32_t kMaxSampleScan = kRamBytes;
 
+	/** `sampleTime`'s unit, which is what turns a gate into seconds. */
+	constexpr double kStreamRate = 44100.0;
+
+	/** Notes are compared by length rounded up to this, so a few bytes of gate jitter do not make
+	 *  a new file. A hundred and twenty-eight bytes is 12 ms at 10 kHz - finer than the difference
+	 *  between two notes of one instrument, coarser than the jitter between two presses. */
+	constexpr std::size_t kLengthBucket = 128;
+
 	struct Voice
 	{
 		uint8_t start = 0;			// 0x06, in 256-byte units
 		uint16_t step = 0;			// 0x02 / 0x03, the playback rate and the only pitch
 		bool enabled = false;
+
+		/** The state latched at the key-on, and when it happened.
+
+			A note's length is not in the data. It is the time the channel stayed on, times the byte
+			rate - and that is measurable against the emulator: `vgm_rf5c_probe` renders channel 5 of
+			`01 - Palmtree Panic Zone Past` as a note **0.49 s long**, while the whole 8 KB slot at the
+			rate the registers ask for is 0.78 s. The extra third of a second is the slot continuing
+			past the end of the note, which is what the file used to contain.
+		*/
+		uint32_t enabledAt = 0;
+		uint8_t armedStart = 0;
+		uint16_t armedStep = 0;
 	};
 
 	/** One voice starting one sample, before de-duplication. */
@@ -56,8 +76,11 @@ namespace
 		uint64_t hash = 0;		// of the bytes as they were at this key-on: the same address can
 								// hold different samples at different times, and only the content
 								// tells them apart
-		std::vector<uint8_t> bytes;	// copied only the first time a hash appears - the export must
+		std::vector<uint8_t> bytes;	// copied only the first time a bucket appears - the export must
 									// have the bytes *as they were*, and the RAM keeps moving
+		std::size_t bucket = 0;		// `length` rounded up to `kLengthBucket`: two notes of one
+									// instrument differ by a few bytes of gate time, so the exact
+									// length is what turned one file into 1395
 	};
 }
 
@@ -107,7 +130,7 @@ std::vector<playback::DecodedSample> collectRf5cSamples (const midi::SongIr& ir)
 	std::vector<Hit> hits;
 
 	/** Which contents have already been copied, so a repeat key-on costs a hash and nothing else. */
-	std::set<uint64_t> seenContents;
+	std::set<std::pair<uint32_t, std::size_t>> seenContents;
 
 	/** Records that a channel started at an address; the length is settled afterwards.
 
@@ -122,12 +145,12 @@ std::vector<playback::DecodedSample> collectRf5cSamples (const midi::SongIr& ir)
 		the bank's slot size, so a sample runs from its start to the next one. Deciding it after the
 		whole stream has been read is the only way to know the neighbour.
 	*/
-	const auto collect = [&] (const Voice& voice)
+	const auto collect = [&] (const Voice& voice, uint32_t now)
 	{
 		// `0x06` counts 256-byte units, so the address is the register shifted up.
-		const uint32_t address = (uint32_t) voice.start << 8;
+		const uint32_t address = (uint32_t) voice.armedStart << 8;
 
-		if (address >= ram.size () || voice.step == 0)
+		if (address >= ram.size () || voice.armedStep == 0)
 		{
 			return;
 		}
@@ -139,21 +162,22 @@ std::vector<playback::DecodedSample> collectRf5cSamples (const midi::SongIr& ir)
 			return;
 		}
 
-		// To the first `0xFF` inside the slot, or the whole slot when there is none. This covers
-		// both shapes the bank has: a streamed page ends where the next un-uploaded page begins
-		// (it is still `0xFF` padding), and a slot-length sample contains no `0xFF` at all, so it
-		// keeps the eight kilobytes `kSlotBytes` gives it.
 		const uint32_t limit = (std::min) (address + chips::Rf5c68Decoder::kSlotBytes,
 										   (uint32_t) ram.size ());
-		std::size_t length = limit - address;
 
-		for (std::size_t i = 0; address + i < limit; ++i)
+		// **The gate.** How long the channel stayed on, converted to bytes at the rate this note
+		// was played at. `sampleTime` counts 44.1 kHz samples.
+		const double byteRate = (double) voice.armedStep * clock / kOutputDivisor / kStepPerByte;
+		const double seconds = (double) (now - voice.enabledAt) / kStreamRate;
+		std::size_t length = (std::size_t) (seconds * byteRate);
+
+		length = (std::min) (length, (std::size_t) (limit - address));
+
+		// A note still sounding when the stream ends has no measured length; the slot is the only
+		// honest answer there, and it is also what a sampling driver loops.
+		if (seconds <= 0.0)
 		{
-			if (ram[address + i] == 0xFF)
-			{
-				length = i;
-				break;
-			}
+			length = limit - address;
 		}
 
 		if (length < 2)
@@ -161,8 +185,8 @@ std::vector<playback::DecodedSample> collectRf5cSamples (const midi::SongIr& ir)
 			return;
 		}
 
-		// The bytes as they are *now*. The same address holds different samples at different
-		// moments on a streaming driver, so the key-on's content is the only identity a sample has.
+		// The bytes as they are *now* - the same address holds different samples at different
+		// moments, so the moment of the note is what distinguishes one from another.
 		uint64_t hash = 1469598103934665603ull ^ (uint64_t) address;
 
 		for (std::size_t i = 0; i < length; ++i)
@@ -171,12 +195,14 @@ std::vector<playback::DecodedSample> collectRf5cSamples (const midi::SongIr& ir)
 			hash *= 1099511628211ull;
 		}
 
-		hits.push_back (Hit { address, length, voice.step, hash, {} });
+		// Lengths are bucketed before they are compared: two notes of one instrument differ by a
+		// few bytes of gate time (a MIDI rip is not metronomic), so exact lengths make every note a
+		// separate file - 1395 of them when this was first tried.
+		const std::size_t bucket = ((length + kLengthBucket - 1) / kLengthBucket) * kLengthBucket;
 
-		// The bytes travel with the first hit of each content: a slot triggered three hundred
-		// times would otherwise copy eight kilobytes three hundred times over, all of them the
-		// same eight kilobytes.
-		if (seenContents.insert (hash).second)
+		hits.push_back (Hit { address, length, voice.armedStep, hash, {}, bucket });
+
+		if (seenContents.insert (std::make_pair (address, bucket)).second)
 		{
 			hits.back ().bytes.assign (ram.begin () + address, ram.begin () + address + length);
 		}
@@ -261,7 +287,14 @@ std::vector<playback::DecodedSample> collectRf5cSamples (const midi::SongIr& ir)
 					// The step is latched here because the driver sets it **before** enabling:
 					// measured on `01 - Palmtree Panic Zone Past`, every note reports the same value
 					// on and off (657/657, 1108/1108), so reading it at the key-on is not a race.
-					collect (voices[i]);
+					voices[i].armedStart = voices[i].start;
+					voices[i].armedStep = voices[i].step;
+					voices[i].enabledAt = write.sampleTime;
+				}
+				else if (! on && voices[i].enabled)
+				{
+					// Measured at the release, because a note's length only exists once it is over.
+					collect (voices[i], write.sampleTime);
 				}
 
 				voices[i].enabled = on;
@@ -292,78 +325,84 @@ std::vector<playback::DecodedSample> collectRf5cSamples (const midi::SongIr& ir)
 		}
 	}
 
-	// One file per distinct **content**, not per address: a streamed page is a different sample
-	// every time the driver rewrites it, and the bytes a key-on found are the only identity it has.
+	// **One file per address, cut to the length that address is usually held for.**
 	//
-	// The rate is the **lowest** step that content is ever played at. A file has one playback rate
-	// and the driver uses a thirty-to-one range (one address runs 74..2224), so any single choice is
-	// a transposition; the lowest is the one closest to the sample's own pitch, because downward
-	// transposition below the recorded rate is the unusual case. Measured: the 0x8000 slot has a
-	// 14-byte period - 71.4 Hz at the lowest step, 746 Hz at the most frequent one - and a render of
-	// that channel's first note measures 71.5 Hz.
-	std::map<uint64_t, std::map<uint16_t, int>> histograms;
-	std::map<uint64_t, const Hit*> byContent;
+	// The slot is a buffer, not a sample: the driver keeps writing into the same eight kilobytes,
+	// so the whole slot is the note *plus* whatever follows it. Against a render of channel 5 on
+	// `01 - Palmtree Panic Zone Past`, the note is 0.49 s and the slot is 0.78 s - the extra third
+	// of a second is what made a bass sound like a loop of several instruments.
+	//
+	// Not one file per note either: every note of a channel lasts a few bytes longer or shorter
+	// than the last, so exact lengths made 1395 files. The gate is bucketed (`kLengthBucket`) and
+	// the most played bucket wins - one file per instrument, at the length it is heard for.
+	struct Group
+	{
+		const Hit* first = nullptr;
+		int count = 0;
+		std::map<uint16_t, int> steps;
+	};
+
+	std::map<uint32_t, std::map<std::size_t, Group>> byAddress;
 
 	for (const auto& hit : hits)
 	{
-		++histograms[hit.hash][hit.step];
+		Group& group = byAddress[hit.address][hit.bucket];
+		++group.count;
+		++group.steps[hit.step];
 
-		if (! hit.bytes.empty ())
+		if (group.first == nullptr && ! hit.bytes.empty ())
 		{
-			byContent.emplace (hit.hash, &hit);
+			group.first = &hit;
 		}
 	}
 
-	// The same address can hold several contents over a song; the second one onwards gets a
-	// version suffix so the files do not overwrite each other.
-	//
-	// Emission walks the addresses in order rather than the hashes: a caller listing the files sees
-	// them sorted the way the bank is, and a test that says "the first file is the one at 0x0200"
-	// stays true.
-	std::vector<const Hit*> ordered;
-
-	for (const auto& entry : byContent)
+	// Sorted by address, so a caller listing the files sees the bank in order and a test that says
+	// "the first file is the one at 0x0200" stays true.
+	for (const auto& address : byAddress)
 	{
-		ordered.push_back (entry.second);
-	}
+		const Group* chosen = nullptr;
 
-	std::sort (ordered.begin (), ordered.end (),
-			   [] (const Hit* a, const Hit* b) { return a->address < b->address; });
+		for (const auto& bucket : address.second)
+		{
+			// Ties go to the longer bucket: a little more of the sound rather than a cut in it.
+			if (chosen == nullptr || bucket.second.count > chosen->count)
+			{
+				chosen = &bucket.second;
+			}
+		}
 
-	std::map<std::pair<uint32_t, std::size_t>, int> versions;
+		if (chosen == nullptr || chosen->first == nullptr)
+		{
+			continue;
+		}
 
-	for (const Hit* hitPointer : ordered)
-	{
-		const Hit& hit = *hitPointer;
+		// The most frequent step within that bucket - the pitch this instrument is usually played
+		// at. A file has one rate and the driver transposes freely (one address runs 74..2224), so
+		// any single choice is a transposition and the commonest is the least surprising.
+		int best = 0;
+		uint16_t step = chosen->first->step;
 
-		// The **lowest** step this content is ever played at. See the note above the histograms:
-		// a file has one playback rate and the driver uses a thirty-to-one range, so the only
-		// non-arbitrary choice is the one closest to the sample's own pitch - and downward
-		// transposition below the recorded rate is the unusual case.
-		const auto& histogram = histograms[hit.hash];
-		const uint16_t step = histogram.empty () ? hit.step : histogram.begin ()->first;
+		for (const auto& candidate : chosen->steps)
+		{
+			if (candidate.second > best)
+			{
+				best = candidate.second;
+				step = candidate.first;
+			}
+		}
+
+		const Hit& hit = *chosen->first;
 
 		// `step * (clock/384) / 2048` bytes a second - the same arithmetic the decoder's
 		// `bytesPerSecond` does.
 		const double rate = (double) step * clock / kOutputDivisor / kStepPerByte;
 
-		const int version = ++versions[std::make_pair (hit.address, hit.length)];
-
 		char name[40] = {};
+		std::snprintf (name, sizeof (name), "rf5c_%06X_%u", (unsigned) hit.address,
+					   (unsigned) hit.length);
 
-		if (version == 1)
-		{
-			std::snprintf (name, sizeof (name), "rf5c_%06X_%u", (unsigned) hit.address,
-						   (unsigned) hit.length);
-		}
-		else
-		{
-			std::snprintf (name, sizeof (name), "rf5c_%06X_%u_v%d", (unsigned) hit.address,
-						   (unsigned) hit.length, version);
-		}
-
-		collector.add (hit.hash, name, hit.bytes.data (), hit.length,
-					   SampleFormat::signMagnitude8, rate);
+		collector.add (((uint64_t) hit.address << 32) ^ hit.bucket, name, hit.bytes.data (),
+					   hit.length, SampleFormat::signMagnitude8, rate);
 	}
 
 	return collector.take ();

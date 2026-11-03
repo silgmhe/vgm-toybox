@@ -5976,13 +5976,14 @@ void testWaveExport (void)
 		block.size = bank.size ();
 		ir.roms.push_back (block);
 
-		const auto write = [&ir] (uint8_t offset, uint16_t value)
+		const auto write = [&ir] (uint8_t offset, uint16_t value, uint32_t time = 0)
 		{
 			RegisterWrite w;
 			w.deviceId = 0;
 			w.port = 0;
 			w.reg = offset;
 			w.value = value;
+			w.sampleTime = time;
 			ir.writes.push_back (w);
 		};
 
@@ -5999,21 +6000,25 @@ void testWaveExport (void)
 		write (0x03, 0x08);
 		write (0x08, 0xFC);			// clear bits 0 and 1: both channels on
 
+		// A tenth of a second later the driver clears both again. **The release is where a note is
+		// collected**: its length is the time it stayed on, which does not exist before then.
+		write (0x08, 0xFF, 4410);
+
 		const auto samples = backends::libvgm::collectRf5cSamples (ir);
 
 		check (samples.size () == 2, "a cleared mask bit names a sample");
 
-		// To the first `0xFF` inside the slot, or the whole slot when there is none. The first
-		// voice's region has a marker at `0x0210`, so it stops there - sixteen bytes, which is
-		// what the chip itself would play before jumping to its loop point.
-		check (! samples.empty () && samples[0].values.size () == 16,
-			   "as long as the first 0xFF inside its slot, as the chip plays it");
+		// **The length comes from the gate**, not from the bytes: a note is as long as the channel
+		// stayed on, times the rate. This fixture writes no release and gives every write the same
+		// `sampleTime`, so the gate is zero and the whole slot stands in - which is also what a
+		// sampling driver loops when it holds a channel to the end of the stream.
+		check (! samples.empty () && samples[0].values.size () == 512,
+			   "as long as the slot it starts in, when no gate says otherwise");
 
-		// The second voice's region has no marker, so it runs to the top of the image - the
-		// streamed pages of a real rip end exactly this way, where the next un-uploaded page is
-		// still `0xFF` padding.
+		// The second voice runs to the top of the image for the same reason: its slot is the rest
+		// of the 0x400-byte fixture.
 		check (samples.size () == 2 && samples[1].values.size () == 256,
-			   "and without a marker, to the top of the image");
+			   "and its neighbour to the top of the image");
 
 		// Sign and magnitude, not two's complement. `0x10` is -16/128 on this chip (`0x00..0x7F`
 		// runs 0..-127); read as two's complement it would be +16/128 and the two halves of the
@@ -6026,16 +6031,25 @@ void testWaveExport (void)
 			   "at the rate its step register asks for");
 
 		// The same mask written again is not a second key-on: the bit was already clear.
-		write (0x08, 0xFE);
+		write (0x08, 0xFE, 4410);
 		check (backends::libvgm::collectRf5cSamples (ir).size () == 2,
 			   "and the same mask written again starts nothing new");
 
-		// Setting the bit clears the channels; clearing it again is a new note at the same address,
-		// which is still one file.
-		write (0x08, 0xFF);
-		write (0x08, 0xFC);
+		// Clearing the bits again is a new note at the same address and the same gate length, which
+		// is one file rather than a second one.
+		write (0x08, 0xFC, 8820);
+		write (0x08, 0xFF, 13230);
 		check (backends::libvgm::collectRf5cSamples (ir).size () == 2,
 			   "while a release and a re-enable is still one file");
+
+		// A gate that runs past the slot stops at the slot's end: at this rate a tenth of a second
+		// is already 3255 bytes and the fixture's slot is 512, so both notes clamp to the same
+		// length and stay one file. Clamping is the behaviour worth pinning - without it the export
+		// would read past the sample into whatever the next slot holds.
+		write (0x08, 0xFC, 13230);
+		write (0x08, 0xFF, 13230 + 44100);
+		check (backends::libvgm::collectRf5cSamples (ir).size () == 2,
+			   "and a gate longer than the slot stops at the slot's end");
 	}
 
 	/** What the export finds in a QSound song.
