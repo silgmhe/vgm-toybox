@@ -707,17 +707,20 @@ int main (int argc, char** argv)
 		*/
 		const auto renderTrack = [&] (bool bySolo) -> std::vector<float>
 		{
+			engine.setPositionSeconds (0.0);
+			engine.play ();
+
+			// **Set after `play()`, not before.** Starting the transport rebuilds the players, and
+			// the rebuild resets `soloCount` while the per-track flags survive: `isTrackSoloed` then
+			// returns true, the mixer's `anySolo` is false, and every unmuted track passes through.
+			// That is what made a "soloed" render six seconds of the whole song, and later a 0.49 s
+			// note from a chip whose memory is silence.
 			for (size_t other = 0; other < tracks.size (); ++other)
 			{
 				engine.setTrackSolo (other, bySolo && other == track);
 				engine.setTrackMute (other, ! bySolo && other != track);
 			}
 
-			engine.setPositionSeconds (0.0);
-			engine.play ();
-
-			// Read back what the engine kept, before the render: a rebuild triggered by the seek
-			// would drop the flag, and then the mix is the whole song rather than this track.
 			if (bySolo)
 			{
 				const size_t other = (track == 0) ? 1 : 0;
@@ -860,6 +863,63 @@ int main (int argc, char** argv)
 			}
 
 			std::printf ("\n");
+
+			// **The slot's own pitch, in the same units as the render's.**
+			//
+			// Autocorrelation over the bytes, in the byte domain, then divided into the rate they
+			// would be played at: a period of 146 bytes at 10442.7 B/s is 71.5 Hz, which is what the
+			// channel renders. This is the comparison that had never been made - the render was
+			// measured and the export was measured, but never by the same arithmetic, and the two
+			// numbers that disagreed (14 bytes against 71.5 Hz) came from two different scripts.
+			{
+				constexpr uint32_t kSlot = 0x8000;
+				constexpr double kSlotRate = 10442.7;
+
+				if (kSlot + 4096 <= ram.size ())
+				{
+					const uint8_t* bytes = ram.data () + kSlot;
+					const int count = 4096;
+
+					std::vector<double> level ((size_t) count);
+
+					for (int i = 0; i < count; ++i)
+					{
+						const double magnitude = (double) (bytes[i] & 0x7F) / 128.0;
+						level[(size_t) i] = ((bytes[i] & 0x80) != 0) ? magnitude : -magnitude;
+					}
+
+					double best = -2.0;
+					int bestLag = 0;
+
+					for (int lag = 8; lag < count / 2; ++lag)
+					{
+						double num = 0.0;
+						double d1 = 0.0;
+						double d2 = 0.0;
+
+						for (int i = 0; i + lag < count; ++i)
+						{
+							const double a = level[(size_t) i];
+							const double b = level[(size_t) (i + lag)];
+							num += a * b;
+							d1 += a * a;
+							d2 += b * b;
+						}
+
+						const double r = (d1 > 0.0 && d2 > 0.0) ? num / std::sqrt (d1 * d2) : 0.0;
+
+						if (r > best)
+						{
+							best = r;
+							bestLag = lag;
+						}
+					}
+
+					std::printf ("     0x8000 : period %d bytes -> %.1f Hz at %.0f B/s (r=%.2f)\n",
+								 bestLag, (bestLag > 0) ? kSlotRate / (double) bestLag : 0.0,
+								 kSlotRate, best);
+				}
+			}
 
 			if (! matches.empty () && matches[0].r > 0.9)
 			{
