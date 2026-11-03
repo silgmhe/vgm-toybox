@@ -301,34 +301,110 @@ std::vector<uint8_t> ramImage (const juce::File& file)
 	return ram;
 }
 
-/** How much of `slot` played at `byteRate` looks like the rendered window. */
-double correlate (const std::vector<float>& rendered, int start, int length,
-				  const uint8_t* slot, int available, double byteRate)
+/** Loudness in `bins` equal slices, normalised so the shape - not the gain - is what is compared. */
+std::vector<double> envelopeOf (const std::vector<float>& samples, int from, int count, int bins)
 {
-	const double bytesPerSample = byteRate / (double) kSampleRate;
-	const int span = juce::jmin (length, 8192);
+	std::vector<double> envelope ((size_t) bins, 0.0);
+	double loudest = 0.0;
+
+	for (int b = 0; b < bins; ++b)
+	{
+		const int begin = from + count * b / bins;
+		const int end = from + count * (b + 1) / bins;
+
+		double sum = 0.0;
+		int n = 0;
+
+		for (int i = begin; i < end && i < (int) samples.size (); ++i)
+		{
+			sum += (double) samples[(size_t) i] * samples[(size_t) i];
+			++n;
+		}
+
+		envelope[(size_t) b] = (n > 0) ? std::sqrt (sum / n) : 0.0;
+		loudest = juce::jmax (loudest, envelope[(size_t) b]);
+	}
+
+	if (loudest > 0.0)
+	{
+		for (auto& v : envelope)
+		{
+			v /= loudest;
+		}
+	}
+
+	return envelope;
+}
+
+/** The same shape, from sign-magnitude bytes. */
+std::vector<double> envelopeOfBytes (const uint8_t* bytes, int count, int bins)
+{
+	std::vector<double> envelope ((size_t) bins, 0.0);
+	double loudest = 0.0;
+
+	for (int b = 0; b < bins; ++b)
+	{
+		const int begin = count * b / bins;
+		const int end = count * (b + 1) / bins;
+
+		double sum = 0.0;
+		int n = 0;
+
+		for (int i = begin; i < end; ++i)
+		{
+			const double level = (double) (bytes[i] & 0x7F) / 128.0;
+			sum += level * level;
+			++n;
+		}
+
+		envelope[(size_t) b] = (n > 0) ? std::sqrt (sum / n) : 0.0;
+		loudest = juce::jmax (loudest, envelope[(size_t) b]);
+	}
+
+	if (loudest > 0.0)
+	{
+		for (auto& v : envelope)
+		{
+			v /= loudest;
+		}
+	}
+
+	return envelope;
+}
+
+/** Pearson correlation of two envelopes: 1 is the same shape, 0 unrelated, -1 inverted. */
+double shapeScore (const std::vector<double>& a, const std::vector<double>& b)
+{
+	const size_t n = juce::jmin (a.size (), b.size ());
+
+	if (n == 0)
+	{
+		return 0.0;
+	}
+
+	double meanA = 0.0;
+	double meanB = 0.0;
+
+	for (size_t i = 0; i < n; ++i)
+	{
+		meanA += a[i];
+		meanB += b[i];
+	}
+
+	meanA /= (double) n;
+	meanB /= (double) n;
 
 	double num = 0.0;
 	double d1 = 0.0;
 	double d2 = 0.0;
 
-	for (int i = 0; i < span; i += 4)
+	for (size_t i = 0; i < n; ++i)
 	{
-		const size_t index = (size_t) ((double) i * bytesPerSample);
-
-		if (index >= (size_t) available)
-		{
-			break;
-		}
-
-		const uint8_t byte = slot[index];
-		const double level = (byte & 0x80) ? (double) (byte & 0x7F) / 128.0
-										   : -(double) (byte & 0x7F) / 128.0;
-		const double sample = rendered[(size_t) (start + i)];
-
-		num += sample * level;
-		d1 += sample * sample;
-		d2 += level * level;
+		const double x = a[i] - meanA;
+		const double y = b[i] - meanB;
+		num += x * y;
+		d1 += x * x;
+		d2 += y * y;
 	}
 
 	return (d1 > 0.0 && d2 > 0.0) ? num / std::sqrt (d1 * d2) : 0.0;
@@ -438,28 +514,49 @@ int main (int argc, char** argv)
 			struct Match { double r; uint32_t slot; double rate; };
 			std::vector<Match> matches;
 
+			const std::vector<double> want = envelopeOf (audio, note.start, note.length, 32);
+			const double seconds = (double) note.length / (double) kSampleRate;
+
+			// **The shape, not the waveform.** A periodic signal decorrelates the moment the rate is
+			// off by a percent, so comparing samples only ever compared rates. The loudness envelope
+			// over the note is rate-blind: it says piano (attack, long decay) or drum (one burst) or
+			// loop (repeats) without caring how fast the bytes were read. The length that wins also
+			// gives the rate, because the note's duration is known: bytes / seconds.
+			static const int kSpans[] = { 256, 384, 512, 768, 1024, 1536, 2048, 3072, 4096, 6144, 8192 };
+
 			for (uint32_t slot = 0; slot + 0x2000 <= ram.size (); slot += 0x2000)
 			{
-				for (double rate : kRates)
+				for (int span : kSpans)
 				{
-					matches.push_back ({ correlate (audio, note.start, note.length,
-													ram.data () + slot, 0x2000, rate),
-										 slot, rate });
+					const std::vector<double> have = envelopeOfBytes (ram.data () + slot, span, 32);
+					const double score = shapeScore (want, have);
+
+					matches.push_back ({ score, slot, (double) span / seconds });
 				}
 			}
 
 			std::sort (matches.begin (), matches.end (),
 					   [] (const Match& a, const Match& b) { return a.r > b.r; });
 
-			std::printf ("     best   :");
+			std::printf ("     shape  :");
 
 			for (int i = 0; i < 3 && i < (int) matches.size (); ++i)
 			{
-				std::printf ("  0x%04X@%.0fHz r=%.2f", (unsigned) matches[(size_t) i].slot,
+				std::printf ("  0x%04X@%.0fB/s r=%.2f", (unsigned) matches[(size_t) i].slot,
 							 matches[(size_t) i].rate, matches[(size_t) i].r);
 			}
 
 			std::printf ("\n");
+
+			if (! matches.empty () && matches[0].r > 0.9)
+			{
+				std::printf ("     verdict: MATCH 0x%04X at %.0f bytes/s (%.3f s)\n",
+							 (unsigned) matches[0].slot, matches[0].rate, seconds);
+			}
+			else
+			{
+				std::printf ("     verdict: no slot matches this note\n");
+			}
 		}
 
 		if (channel == nullptr)
