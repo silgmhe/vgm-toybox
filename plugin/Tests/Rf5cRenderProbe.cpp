@@ -593,24 +593,16 @@ int main (int argc, char** argv)
 			// address mapping can explain a piano.
 			std::printf ("     tone   : render %.0f/s", crossingRate (audio, note.start, note.length));
 
+			// **One fixed rate for every slot**, so the column is comparable with the render. The
+			// first version multiplied each slot by whatever rate the shape search had liked for it,
+			// which made the numbers look like they measured the slot when they measured the guess.
+			constexpr double kCommonRate = 10442.7;
+
 			for (uint32_t slot = 0; slot + 0x2000 <= ram.size (); slot += 0x2000)
 			{
 				const double perByte = crossingRateOfBytes (ram.data () + slot, 0x2000);
 
-				// Converted with the rate the shape search liked for this slot, so the two columns
-				// are in the same unit.
-				double rate = 0.0;
-
-				for (const auto& match : matches)
-				{
-					if (match.slot == slot)
-					{
-						rate = match.rate;
-						break;
-					}
-				}
-
-				std::printf ("  0x%04X %.0f/s", (unsigned) slot, perByte * rate);
+				std::printf ("  0x%04X %.0f/s", (unsigned) slot, perByte * kCommonRate);
 			}
 
 			std::printf ("\n");
