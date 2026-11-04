@@ -12,22 +12,22 @@ namespace toybox::backends::libvgm
 {
 namespace
 {
-	constexpr int kVoices = 4;
-
 	/** The OKIM6295's ROM, as VGM calls it - the same type its `kRequirements` names, so the
 		image assembled here is the one the decoder was handed. */
 	constexpr uint8_t kRomType = 0x8B;
 
-	/** Its address space: eighteen bits of nibble address is 256 KB of bytes. */
+	/** Its address space: eighteen bits, which is 256 KB of bytes. */
 	constexpr std::size_t kMaxRomBytes = 256u << 10;
 
-	/** Six bytes per entry: three of start, three of stop, big-endian, at `command * 8`. */
+	/** Six bytes per entry: three of start, three of stop, big-endian, at `command * 8`.
+		Both fields are **byte** offsets - see `okim6295.c:535`: `base_offset = start`. */
 	constexpr uint32_t kTableStride = 8;
 
-	/** The oscillator divides by 165, or by 132 when the board's pin 7 is strapped high - the
-		same two constants the decoder uses. */
+	/** Only the low strap appears here, and only as a last resort: the rate normally arrives from
+		the device (`DEV_INFO::sampleRate`), which was started with the real strap. Guessing 165
+		when the board is 132 plays a sample 1.25x fast, which is exactly what this file did once.
+	*/
 	constexpr double kDivisorPin7Low = 165.0;
-	constexpr double kDivisorPin7High = 132.0;
 
 	constexpr uint32_t kDefaultClock = 1000000u;
 }
