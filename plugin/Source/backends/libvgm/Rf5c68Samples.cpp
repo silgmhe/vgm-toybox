@@ -149,9 +149,6 @@ std::vector<playback::DecodedSample> collectRf5cSamples (const midi::SongIr& ir)
 
 	std::vector<Hit> hits;
 
-	// TEMP: what the first notes of 0x8000 look like - gate in bytes, and the step they used.
-	std::vector<std::pair<std::size_t, uint16_t>> probeHits;
-
 	/** Which contents have already been copied, so a repeat key-on costs a hash and nothing else. */
 	std::set<std::pair<uint32_t, std::size_t>> seenContents;
 
@@ -190,6 +187,20 @@ std::vector<playback::DecodedSample> collectRf5cSamples (const midi::SongIr& ir)
 
 		// **The gate.** How long the channel stayed on, converted to bytes at the rate this note
 		// was played at. `sampleTime` counts 44.1 kHz samples.
+		//
+		// **The model is unverified, and this is deliberate.** It replaced "the whole slot" because
+		// that cut a bass note out of an eight-kilobyte buffer and sounded like a loop of several
+		// instruments; a gate is the more plausible shape. But the measurement behind it - one
+		// channel rendered and measured - was later shown to be measuring the whole mix, so what
+		// this now rests on is plausibility, not a comparison. Nothing about it was changed when
+		// that was discovered: replacing it with another guess would be a second unproven model,
+		// and the chip's own export row is shelved pending a measurement that can actually decide
+		// (docs/desgin/libvgm-visualisation.md §9.5).
+		//
+		// **What would decide it**: the same sample played at two different steps. The bytes are
+		// fixed, so a correct length is equal in both; a gate-derived length scales with the rate
+		// and answers two different lengths. If the driver re-streams pages per note that test is
+		// ambiguous - which is exactly why this is still open rather than reverted.
 		const double byteRate = (double) voice.armedStep * clock / kOutputDivisor / kStepPerByte;
 		const double seconds = (double) (now - voice.enabledAt) / kStreamRate;
 		std::size_t length = (std::size_t) (seconds * byteRate);
@@ -224,12 +235,6 @@ std::vector<playback::DecodedSample> collectRf5cSamples (const midi::SongIr& ir)
 		const std::size_t bucket = ((length + kLengthBucket - 1) / kLengthBucket) * kLengthBucket;
 
 		hits.push_back (Hit { address, length, voice.armedStep, hash, {}, bucket });
-
-		// TEMP
-		if (address == 0x8000u && probeHits.size () < 12)
-		{
-			probeHits.emplace_back (length, voice.armedStep);
-		}
 
 		if (seenContents.insert (std::make_pair (address, bucket)).second)
 		{
