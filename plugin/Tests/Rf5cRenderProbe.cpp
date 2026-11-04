@@ -313,16 +313,19 @@ std::vector<uint8_t> ramImage (const juce::File& file)
 	// it is walking into `0x67` block payloads and reading them as commands. Deriving the layout from
 	// the bank's size is what the measurement supports; the parser is a separate defect.
 	const std::size_t base = bank.size () % (2 * ram.size ());
-	std::size_t at = base;
 
-	for (std::size_t i = 0; i < bank.size (); ++i)
+	// **Written from `base` and cut at the top of the chip's memory - not wrapped.** The channel
+	// reads `bank[0x1473]` at chip 0x8073, which is `base + 0x1473`; a wraparound also fits that one
+	// address but then overwrites it with `bank[0x11473]`, and the emulator's byte there is the
+	// first one. Cutting is what matches.
+	for (std::size_t i = 0; i + base < ram.size () && i < bank.size (); ++i)
 	{
-		ram[at % ram.size ()] = bank[i];
-		++at;
+		ram[base + i] = bank[i];
 	}
 
-	std::printf ("   layout  : bank %u bytes, written from chip 0x%zX (wrap)\n",
-				 (unsigned) bank.size (), base);
+	std::printf ("   layout  : bank %u B from chip 0x%zX, copies %d; bank[0x1473]=%02X ours[0x8073]=%02X\n",
+				 (unsigned) bank.size (), base, (int) reader.ramCopies ().size (),
+				 (bank.size () > 0x1474) ? bank[0x1473] : 0, ram[0x8073]);
 
 	return ram;
 }
