@@ -351,17 +351,33 @@ bool LibvgmSongInstance::prepare (double hostSampleRate, int newMaxBlockSize, ju
 		// the file declares, and this song declares zero for its OKIM6295 - the player then picks
 		// its own clock, and a collector that guessed would export the sample at a rate the row
 		// never used. `VgmReplayer` resolves it the same way for the decoder, from `devCfg`.
+		// **The rate the device reports, not one computed here.** `okim6295.c` starts every
+		// device with `INIT_DEVINF(..., master_clock / divisor, ...)` and steps one nibble per
+		// output sample, so that number is the rate the render is actually played at - and it is
+		// the only one that already accounts for the board's pin 7 strap. Computing it here means
+		// guessing the strap, and guessing it wrong plays the export 1.25x fast.
+		double okimRate = 0.0;
 		uint32_t okimClock = 0;
 
 		for (const auto& device : deviceInfo)
 		{
-			if (device.type == DEVID_MSM6295 && device.devCfg != nullptr && device.devCfg->clock > 0)
+			if (device.type != DEVID_MSM6295)
+			{
+				continue;
+			}
+
+			if (device.smplRate > 0)
+			{
+				okimRate = (double) device.smplRate;	// 0 while the device is not running
+			}
+
+			if (device.devCfg != nullptr && device.devCfg->clock > 0)
 			{
 				okimClock = device.devCfg->clock;
 			}
 		}
 
-		for (auto& sample : collectOkim6295Samples (*songIr, okimClock))
+		for (auto& sample : collectOkim6295Samples (*songIr, okimRate, okimClock))
 		{
 			collected.push_back (std::move (sample));
 		}

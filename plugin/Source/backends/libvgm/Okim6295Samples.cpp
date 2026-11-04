@@ -33,7 +33,7 @@ namespace
 }
 
 std::vector<playback::DecodedSample> collectOkim6295Samples (const midi::SongIr& ir,
-															 uint32_t clockHz)
+															 double rateHz, uint32_t clockHz)
 {
 	SampleCollector collector;
 
@@ -44,15 +44,17 @@ std::vector<playback::DecodedSample> collectOkim6295Samples (const midi::SongIr&
 		return {};
 	}
 
-	// **The clock the device was started with, not the one the file declares.** A VGM may leave
-	// its chip clock at zero and let the player pick; when it does, `SongIr` has nothing and any
-	// fallback invented here is a different number from the one the row measured its rate with.
-	// Measured on `02 Repeated Tragedy`: the row said 12396.7 Hz, this said 12121.2 - the default
-	// 1 MHz against the player's 1022727, which is 2.3% flat, a third of a semitone.
+	// **The rate the device reports about itself, and nothing invented here.**
 	//
-	// So the caller passes what it resolved for the device (`VgmReplayer` reads
-	// `devCfg->clock`), and the only value used here is the one that arrives.
-	const uint32_t clock = (clockHz != 0) ? clockHz : kDefaultClock;
+	// `okim6295.c` starts the device with `INIT_DEVINF(..., master_clock / divisor, ...)` and steps
+	// one nibble per output sample, so that number is the rate the render is played at - and it is
+	// the only one that already accounts for the board's pin-7 strap. Two earlier versions of this
+	// file got it wrong twice over: it fell back to 1 MHz when the file declared no clock (2.3%
+	// flat), and it multiplied by two on the theory that a byte carries two levels. The second was
+	// the audible one - the export played at twice the render's speed.
+	const double levelRate = (rateHz > 0.0) ? rateHz
+											: (double) ((clockHz != 0) ? clockHz : kDefaultClock)
+												  / kDivisorPin7Low;
 
 	/** Per device instance: the command port is a two-byte handshake, so a voice start only means
 		something once a sample number is pending, and the pin 7 strap changes the rate for the
@@ -60,7 +62,6 @@ std::vector<playback::DecodedSample> collectOkim6295Samples (const midi::SongIr&
 	struct Instance
 	{
 		int pendingCommand = -1;
-		bool pin7High = false;
 	};
 
 	std::map<uint32_t, Instance> instances;
@@ -81,15 +82,9 @@ std::vector<playback::DecodedSample> collectOkim6295Samples (const midi::SongIr&
 		Instance& instance = instances[write.deviceId];
 		const uint8_t value = (uint8_t) write.value;
 
-		if (write.reg == 0x0C)
-		{
-			instance.pin7High = (value & 0x01) != 0;
-			continue;
-		}
-
 		if (write.reg != 0x00)
 		{
-			continue;	// the clock and bank registers do not name a sample
+			continue;	// the clock and pin-7 registers do not name a sample
 		}
 
 		if (instance.pendingCommand < 0)
@@ -149,11 +144,8 @@ std::vector<playback::DecodedSample> collectOkim6295Samples (const midi::SongIr&
 
 		const std::size_t length = (std::size_t) (lastByte - firstByte + 1);
 
-		// Two levels in every byte, so the rate a file has to declare is twice the byte rate.
-		const double byteRate = (double) clock / (instance.pin7High ? kDivisorPin7High
-																	: kDivisorPin7Low);
-		const double levelRate = byteRate * 2.0;
-
+		// One nibble per output sample, so the count and the rate are both in nibbles and neither
+		// carries a factor of two. The rate itself is the device's (`levelRate` above).
 		const uint32_t levels = (uint32_t) (length * 2);
 
 		char name[40] = {};

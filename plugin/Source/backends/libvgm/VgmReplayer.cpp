@@ -79,7 +79,12 @@ void VgmReplayer::adoptNewBuffers (void)
 									   ? device->devCfg->clock
 									   : requirements.fallbackClock;
 
-			decoder->reset (chips::ChipConfig { clock, tickRate () });
+			// The device's own rate travels with the config: a decoder whose sample rate is a clock
+			// divided by a board strap cannot know the strap, and the device was started with the
+			// answer. Zero for the devices that never asked for it.
+			const double deviceRate = (device != nullptr) ? (double) device->smplRate : 0.0;
+
+			decoder->reset (chips::ChipConfig { clock, tickRate (), 0, deviceRate });
 
 			// The song's own blocks, assembled the way the MIDI path assembles them. Without this a
 			// sampled chip measures nothing: the C352's pitch is its rate divided by a cycle length

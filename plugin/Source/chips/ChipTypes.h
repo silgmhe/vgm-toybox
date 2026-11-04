@@ -95,6 +95,15 @@ struct RegisterWrite
 		uint32_t clockHz = 0;			// 0 = unknown: the decoder falls back to its default
 		double timeBaseHz = 44100.0;	// the unit of RegisterWrite::sampleTime
 		uint32_t flags = 0;		// board / variant selection
+
+		/** The rate the emulated device reports for itself, when one is running.
+
+			Zero for every decoder that has no use for it. It exists because a clock plus a divider
+			is not always enough: the OKIM6295's divider is a board strap (132 or 165) that the file
+			may never mention, and guessing it plays a sample 1.25x off. The device starts with the
+			answer already in it, so a decoder that plays samples should prefer this to arithmetic.
+		*/
+		double deviceRateHz = 0.0;
 	};
 
 	/** Where a note's pitch came from - the honesty label the pitch model is built around.

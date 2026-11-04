@@ -1,4 +1,4 @@
-#include "Okim6295Decoder.h"
+﻿#include "Okim6295Decoder.h"
 
 #include <algorithm>
 #include <cmath>
@@ -75,6 +75,7 @@ namespace toybox::chips
 		uint32_t clock = 1000000;
 		uint32_t now = 0;
 		double outRate = 44100.0;
+		double deviceRate = 0.0;	// the device's reported rate; 0 when nothing told us
 		bool pin7High = false;
 		int pendingCommand = -1;
 		std::vector<uint8_t> rom;
@@ -88,6 +89,15 @@ namespace toybox::chips
 
 		double sampleRate (void) const
 		{
+			// **The device's own rate when there is one.** The divisor is a board strap - 132 or
+			// 165 - and a file that never writes register 0x0C says nothing about it. On
+			// `02 Repeated Tragedy` the strap is high: the device reports 7747 Hz, this arithmetic
+			// answered 6198, and every exported sample played 1.25x slow.
+			if (deviceRate > 0.0)
+			{
+				return deviceRate;
+			}
+
 			return (double) clock / (pin7High ? kDivisorPin7High : kDivisorPin7Low);
 		}
 
@@ -270,6 +280,7 @@ namespace toybox::chips
 	[[maybe_unused]] const double sampleRate = config.timeBaseHz;
 		impl = std::make_unique<Impl>();
 		impl->clock = clock > 0 ? clock : 1000000;
+		impl->deviceRate = config.deviceRateHz;
 		impl->outRate = sampleRate > 0.0 ? sampleRate : 44100.0;
 
 		for (int voice = 0; voice < kVoices; ++voice)
@@ -400,9 +411,11 @@ namespace toybox::chips
 			}
 		}
 
-		// One fixed rate for the chip, so this is the same for every voice: what a dragged-out file
-		// has to declare. The nibble stream is two samples per byte, hence the factor of two.
-		state.sampleRate = (float) (impl->sampleRate () * 2.0);
+		// **One fixed rate for the chip, and no factor of two.** `okim6295.c` starts the device at
+		// `master_clock / divisor` and steps one nibble per output sample, so that rate already
+		// counts nibbles - which are what `state.wave` holds. Multiplying by two here was this
+		// branch's own invention, and it played every exported sample at twice the render's speed.
+		state.sampleRate = (float) impl->sampleRate ();
 
 		return state;
 	}
