@@ -1,4 +1,26 @@
-﻿#include <juce_core/juce_core.h>
+﻿/**
+ *	RF5C164 measurement probe - **paused**, see `docs/memo/2026-11-04-the-sample-that-was-never-the-one-playing.md`.
+
+ *	Written to answer one question: does the sample the export hands back match the one the channel
+ *	plays. It never settled it. The last measurement showed the chip producing no output at all
+ *	while the engine rendered a note, which means one of the two sides was being measured wrong, and
+ *	every attempt to fix the export before that was resolved made something else worse.
+ *
+ *	Kept, not deleted, because three of its parts earned their place: the calibration (a hand-computed
+ *	square wave that must read `-3776 3776 -3776 3776`, so it can say "the chip is silent" instead of
+ *	"my harness is silent"), the `-2` mode that drives the Gens core with no player or mixer in the
+ *	way, and the note/pitch/envelope measurements all four comparison attempts were built on.
+ *
+ *	Build it explicitly - it is `EXCLUDE_FROM_ALL` and never ships:
+ *
+ *		cmake --build build --target vgm_rf5c_probe
+ *		vgm_rf5c_probe <song> -2      calibration + the core alone
+ *		vgm_rf5c_probe <song> -1 3.0  every track, solo and mute
+ *		vgm_rf5c_probe <song> 4 1.0   one track in detail
+ *
+ *	Nothing in the product calls it.
+ */
+#include <juce_core/juce_core.h>
 
 #include "backends/libvgm/LibvgmVgz.h"
 #include "backends/libvgm/VgmCommandReader.h"
