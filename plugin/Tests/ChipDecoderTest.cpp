@@ -3881,6 +3881,55 @@ namespace
 		check (notes.size() == 1 && notes[0].velocity < 40, "volume 15 is the quietest step");
 	}
 
+	/** **The row needs the bytes, not only the pitch.** This chip generates nothing: its shape comes
+		from a ROM table plus a delta codec, so a row that can draw it has to be handed the decoded
+		nibbles and the rate they are read at. Without this the family's rows are blank while the
+		channel is plainly audible, which is what the coverage table in the design doc calls "no
+		wave" and what the export refuses with `nothingToWrite`. */
+	void testOkim6295Wave (void)
+	{
+		std::vector<uint8_t> rom = okimRom (0x00);
+		for (std::size_t i = 0x200; i <= 0x2FF; ++i)
+		{
+			rom[i] = ((i - 0x200) % 16 < 8) ? 0x02 : 0x0E;
+		}
+
+		toybox::chips::Okim6295Decoder decoder;
+		decoder.reset (toybox::chips::ChipConfig { 1000000, 44100.0 });
+		decoder.setRom (rom);
+
+		decoder.write (toybox::chips::RegisterWrite { 0, 0, 0x80, 0, 0, 0 });	// sample 0
+		decoder.write (toybox::chips::RegisterWrite { 0, 0, 0x10, 0, 0, 0 });	// voice 0 starts
+
+		const auto state = decoder.channelState (0);
+
+		// 0x200..0x2FF is 0x100 bytes, and the codec packs two nibbles into each: one level per
+		// nibble, so the decoded wave is twice the byte count.
+		check (state.wave != nullptr && state.wave->size() == 512,
+			   "a sampled channel hands out one level per nibble of its sample");
+
+		if (state.wave == nullptr)
+		{
+			return;
+		}
+
+		bool inRange = true;
+		bool varies = false;
+
+		for (const float value : *state.wave)
+		{
+			inRange = inRange && value >= -1.0f && value <= 1.0f;
+			varies = varies || (value != state.wave->front());
+		}
+
+		check (inRange, "the decoded wave is normalised to -1..1");
+		check (varies, "the decoded wave is the sample, not a flat line");
+
+		// The chip runs at one fixed rate for every voice; the file a row drags out has to declare
+		// it, and a zero here is what makes an export play at the wrong speed.
+		check (state.sampleRate > 0.0f, "a sampled channel declares the rate its bytes are read at");
+	}
+
 	/** A sample with no period - the constant output of a zeroed ROM - is the C4 trigger. */
 	void testOkim6295Unpitched (void)
 	{
@@ -6618,6 +6667,7 @@ int main (void)
 	testK005289Notes();
 
 	testOkim6295Notes();
+	testOkim6295Wave();
 	testOkim6295FourthVoice();
 	testOkim6295Unpitched();
 

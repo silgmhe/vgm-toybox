@@ -2,7 +2,9 @@
 
 #include <algorithm>
 #include <cmath>
-#include <cstdio>`r`n#include <cstdlib>`r`n#include <cstring>
+#include <cstdio>
+#include <cstdlib>
+#include <cstring>
 
 #include "Pitch.h"
 
@@ -22,6 +24,13 @@ namespace toybox::chips
 		/** How much of a sample is decoded for the measurement, and the window it is measured in:
 			the same shape the RF5C164 uses, because an OKI sample also opens with an attack. */
 		constexpr uint32_t kScanNibbles = 4096;
+
+	// A sample's range is an 18-bit nibble address, so it can describe 256K nibbles. Decoding all of
+	// that to float would be a megabyte per sample, kept for the life of the song; the display draws
+	// a few thousand points at most, and a dragged-out file longer than this is not something a
+	// panel can meaningfully show. 64K nibbles is 32 KB of ROM - longer than any MSM6295 sample in
+	// the test set.
+	constexpr uint32_t kMaxWaveNibbles = 65536;
 		constexpr std::size_t kWindow = 512;
 		constexpr std::size_t kScanStep = 256;
 
@@ -78,6 +87,10 @@ namespace toybox::chips
 		int pendingCommand = -1;
 		std::vector<uint8_t> rom;
 		std::map<uint32_t, double> cycleCache;
+
+		/** Decoded samples, keyed by start nibble and length: the map is exact because the ROM
+			never changes, and two voices playing one drum share the entry. */
+		std::map<uint64_t, std::shared_ptr<const std::vector<float>>> waveCache;
 		Voice voices[kVoices];
 		std::vector<std::unique_ptr<NoteTableImpl>> tables;
 
@@ -375,6 +388,50 @@ namespace toybox::chips
 		state.transposeCents = 0;
 		state.rootCents = 0;
 		state.pitchSource = voice.melodic ? PitchSource::sampleInferred : PitchSource::unpitched;
+
+		// **The bytes this voice is playing, decoded.** The chip is a sample player: its shape comes
+		// from ROM, not from a register, so a row that wants to draw it has to be handed the decoded
+		// nibbles - there is nothing in the register state to synthesise it from.
+		//
+		// Keyed by the sample's own range rather than by the channel: two voices on one drum share a
+		// copy, and the ROM is immutable so the key is exact. The decode is the one `cycleFor` already
+		// runs for the pitch, so this adds a cache rather than a second decoder.
+		if (voice.playing && voice.start < voice.stop && ! impl->rom.empty())
+		{
+			const uint32_t nibbles = (std::min) (2u * (voice.stop - voice.start + 1), kMaxWaveNibbles);
+
+			if (nibbles > 1)
+			{
+				const uint64_t key = ((uint64_t) voice.start << 32) | (uint64_t) nibbles;
+				const auto found = impl->waveCache.find (key);
+
+				if (found != impl->waveCache.end())
+				{
+					state.wave = found->second;
+				}
+				else
+				{
+					const std::vector<double> decoded = impl->decode (voice.start, nibbles);
+
+					auto wave = std::make_shared<std::vector<float>> ();
+					wave->reserve (decoded.size ());
+
+					// The decoder's signal runs -2048..2047, which is the codec's own range rather
+					// than the sample's; the display wants -1..1.
+					for (const double value : decoded)
+					{
+						wave->push_back ((float) (value / 2048.0));
+					}
+
+					state.wave = std::move (wave);
+					impl->waveCache.emplace (key, state.wave);
+				}
+			}
+		}
+
+		// One fixed rate for the chip, so this is the same for every voice: what a dragged-out file
+		// has to declare. The nibble stream is two samples per byte, hence the factor of two.
+		state.sampleRate = (float) (impl->sampleRate () * 2.0);
 
 		return state;
 	}

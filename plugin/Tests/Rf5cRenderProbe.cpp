@@ -953,6 +953,16 @@ int main (int argc, char** argv)
 					 (unsigned) tracks[track].deviceId, (int) tracks[track].channelIndex,
 					 tracks[track].isolatable ? 1 : 0);
 
+		// What the decoder handed the row: a sampled channel draws these points, and the rate is
+		// what a dragged-out file has to declare. Zero points with a non-zero rate is a decoder
+		// that knows the sample exists but cannot reach its bytes.
+		if (channel != nullptr)
+		{
+			std::printf ("     wave   : %d points, rate %.0f Hz, active %d\n",
+						 (channel->wave != nullptr) ? (int) channel->wave->size () : 0,
+						 (double) channel->sampleRate, channel->active ? 1 : 0);
+		}
+
 		{
 			const NoteWindow byMute = firstNote (muted);
 
