@@ -1,22 +1,28 @@
 ﻿/**
- *	RF5C164 measurement probe - **paused**, see `docs/memo/2026-11-04-the-sample-that-was-never-the-one-playing.md`.
+ *	The measurement probe: what a channel renders, and what its row would hand back.
 
- *	Written to answer one question: does the sample the export hands back match the one the channel
- *	plays. It never settled it. The last measurement showed the chip producing no output at all
- *	while the engine rendered a note, which means one of the two sides was being measured wrong, and
- *	every attempt to fix the export before that was resolved made something else worse.
+ *	It began as an RF5C164 question - does the exported sample match the one the channel plays - and
+ *	that question is still open for that chip (`docs/memo/2026-11-04-the-sample-that-was-never-the-one-playing.md`).
+ *	It outlived the question, because the same four measurements keep answering for other chips:
  *
- *	Kept, not deleted, because three of its parts earned their place: the calibration (a hand-computed
- *	square wave that must read `-3776 3776 -3776 3776`, so it can say "the chip is silent" instead of
- *	"my harness is silent"), the `-2` mode that drives the Gens core with no player or mixer in the
- *	way, and the note/pitch/envelope measurements all four comparison attempts were built on.
+ *		-2   the core driven alone, with a calibration that must read `-3776 3776 -3776 3776`.
+ *		     Written because a harness that cannot prove it hears anything will report silence for a
+ *		     chip that is playing - which this one did, for a whole session.
+ *		-3   what capturing the display state costs the audio thread, on the same span twice.
+ *		-4   the rows as the UI would draw them, captured while playing: the wave each channel holds
+ *		     and the rate it declares. This is what a drag writes out.
+ *		<n>  one track in detail, or -1 for all of them: a render, its note, and how it compares with
+ *		     the slot the export would take.
+ *
+ *	`-4` is the one that settled the OKIM6295 export: the row held 3714 levels where the File menu
+ *	wrote 1858, and the two numbers came from different arithmetic on the same ROM table.
  *
  *	Build it explicitly - it is `EXCLUDE_FROM_ALL` and never ships:
  *
- *		cmake --build build --target vgm_rf5c_probe
- *		vgm_rf5c_probe <song> -2      calibration + the core alone
- *		vgm_rf5c_probe <song> -1 3.0  every track, solo and mute
- *		vgm_rf5c_probe <song> 4 1.0   one track in detail
+ *		cmake --build build --target vgm_render_probe
+ *		vgm_render_probe <song> -4 3.0
+ *		vgm_render_probe <song> -1 3.0
+ *		vgm_render_probe <song> 4 1.0
  *
  *	Nothing in the product calls it.
  */
@@ -52,7 +58,7 @@ extern "C" DEV_DEF devDef_RF5C68_Gens;	// scd_pcm.c: the Gens core, taken direct
  * actually came out - then measure the wave the drag export would write and put the two numbers
  * next to each other. If they disagree, the disagreement is a fact, not an inference.
  *
- *   build <dir>/plugin/vgm_rf5c_probe <song.vgm|vgz> [trackIndex] [seconds]
+ *   build <dir>/plugin/vgm_render_probe <song.vgm|vgz> [trackIndex] [seconds]
  *
  * `trackIndex` of -1 (the default) walks every track.
  */
@@ -822,6 +828,52 @@ int runPerf (toybox::PlaybackEngine& engine, double seconds)
 	return 0;
 }
 
+/**
+ *	The rows as the UI would draw them, captured **while playing**.
+
+	The per-track reports capture after `stop()`, and a stopped engine has no snapshot - which is
+	why their channel state comes back empty and every `wave` size reads zero. This plays, captures
+	inside playback, and prints what each channel is holding: the whole point is to compare that
+	against what the sample collector hands the File menu, because the two are separate producers of
+	"this channel's bytes" and a disagreement between them is invisible from either side alone.
+*/
+int runLiveRows (toybox::PlaybackEngine& engine, double seconds, int onlyTrack)
+{
+	engine.setStateCaptureWanted (true);
+	engine.setPositionSeconds (0.0);
+	engine.play ();
+
+	const auto audio = renderSeconds (engine, seconds);
+
+	toybox::playback::ChipStateSnapshot snapshot;
+	engine.captureChipState (snapshot);
+
+	const auto& tracks = engine.getTracks ();
+
+	std::printf ("  audio %d samples, snapshot valid=%d, %d channels\n",
+				 (int) audio.size (), snapshot.valid ? 1 : 0, (int) snapshot.channels.size ());
+
+	for (size_t i = 0; i < snapshot.channels.size (); ++i)
+	{
+		const auto& channel = snapshot.channels[i];
+
+		if (onlyTrack >= 0 && (int) i != onlyTrack)
+		{
+			continue;
+		}
+
+		const std::string name = (i < tracks.size ()) ? tracks[i].name.toStdString () : std::string ();
+
+		std::printf ("    [%2d] %-14s wave=%5d pts rate=%8.1f active=%d\n", (int) i, name.c_str (),
+					 (channel.wave != nullptr) ? (int) channel.wave->size () : 0,
+					 (double) channel.sampleRate, channel.active ? 1 : 0);
+	}
+
+	engine.stop ();
+	engine.setStateCaptureWanted (false);
+	return 0;
+}
+
 int main (int argc, char** argv)
 {
 	if (argc < 2)
@@ -862,6 +914,14 @@ int main (int argc, char** argv)
 	{
 		std::printf ("song: %s   tracks: %d   span: %.1f s\n", argv[1], (int) tracks.size (), seconds);
 		return runPerf (engine, seconds);
+	}
+
+	// -4 prints the rows captured while playing, which is what a drag would export.
+	if (wanted == -4)
+	{
+		const int only = (argc > 4) ? std::atoi (argv[4]) : -1;
+		std::printf ("song: %s   tracks: %d   at %.1f s\n", argv[1], (int) tracks.size (), seconds);
+		return runLiveRows (engine, seconds, only);
 	}
 
 	std::printf ("song: %s   tracks: %d   rendered: %.1f s\n", argv[1], (int) tracks.size (), seconds);

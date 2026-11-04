@@ -1,4 +1,4 @@
-# 一块从未被听到的采样
+﻿# 一块从未被听到的采样
 
 > RF5C164 的 Ch5：导出是慢放的鼓，实际听到是钢琴。为此查了整整一个分支，改了速率、长度、
 > 结束标记、bank 上传、地址映射，**每一次都有"决定性测量"支撑，每一次都被下一个测量推翻**。
@@ -135,7 +135,7 @@ DAC 流      →  不存在
 | dist | `2026-11-04 08:22:32`，6.6 MB，仅依赖系统 DLL |
 | 测试 | 46/46，芯片断言 PASS，02 曲 6 个样本、QSound 2 个 |
 | 工作区 | 干净；无 TEMP 诊断残留 |
-| 探针 | `vgm_rf5c_probe`，`EXCLUDE_FROM_ALL`，不进默认构建、不进 dist |
+| 探针 | `vgm_render_probe`，`EXCLUDE_FROM_ALL`，不进默认构建、不进 dist |
 
 **“搁置”的含义**：功能可运行，但**“导出字节 = 通道正在播的那一段”未获证明**。
 其余六颗采样芯片是逐颗对照渲染验证过的，这一颗没有，因此它不能计入已完成。
@@ -147,14 +147,14 @@ DAC 流      →  不存在
 
 ```powershell
 # 1. 校准（必须过）
-build\plugin\vgm_rf5c_probe.exe "test_file/RF5C164/01 - Palmtree Panic Zone Past.vgz" -2
+build\plugin\vgm_render_probe.exe "test_file/RF5C164/01 - Palmtree Panic Zone Past.vgz" -2
 #    期望 calibration: -3776 3776 -3776 3776
 
 # 2. 逐轨
-build\plugin\vgm_rf5c_probe.exe "test_file/RF5C164/01 - Palmtree Panic Zone Past.vgz" -1 3.0
+build\plugin\vgm_render_probe.exe "test_file/RF5C164/01 - Palmtree Panic Zone Past.vgz" -1 3.0
 
 # 3. 单轨详细
-build\plugin\vgm_rf5c_probe.exe "test_file/RF5C164/01 - Palmtree Panic Zone Past.vgz" 4 1.0
+build\plugin\vgm_render_probe.exe "test_file/RF5C164/01 - Palmtree Panic Zone Past.vgz" 4 1.0
 ```
 
 然后做 §5 的两侧同测。**在那之前不要改导出、长度或速率**——已经改过五次，没有一次

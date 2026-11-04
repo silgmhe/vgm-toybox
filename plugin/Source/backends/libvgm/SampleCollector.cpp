@@ -7,8 +7,7 @@ namespace toybox::backends::libvgm
 {
 
 void SampleCollector::add (uint64_t key, const std::string& name, const uint8_t* bytes,
-						   std::size_t length, SampleFormat format, double rate, uint32_t sampleId,
-						   int skipNibbles)
+						   std::size_t length, SampleFormat format, double rate, uint32_t sampleId)
 {
 	if (bytes == nullptr || length < 2)
 	{
@@ -185,18 +184,12 @@ void SampleCollector::add (uint64_t key, const std::string& name, const uint8_t*
 		//
 		// High nibble first, which is the chip's order and the opposite of the two Konami formats
 		// above. `length` counts bytes; a byte carries two levels.
-		// `skipNibbles` exists for this format alone: the chip's start address counts nibbles, so a
-		// sample can begin on the low half of a byte. Ignoring that would shift every level by one
-		// - a click at the start and a waveform one step out of phase with what the row draws.
-		const uint32_t available = (uint32_t) (length * 2);
-		const uint32_t skip = (uint32_t) (std::max (0, std::min (skipNibbles, (int) available)));
-
 		const std::vector<double> decoded = chips::okim::decode (
 			[&bytes, length] (uint32_t address)
 			{
 				return (address < length) ? bytes[address] : (uint8_t) 0xFF;
 			},
-			skip, available - skip);
+			0, (uint32_t) (length * 2));
 
 		float peak = 1.0f;
 

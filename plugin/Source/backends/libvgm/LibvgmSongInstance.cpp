@@ -347,7 +347,21 @@ bool LibvgmSongInstance::prepare (double hostSampleRate, int newMaxBlockSize, ju
 
 	if (hasOkim6295 && songIr != nullptr)
 	{
-		for (auto& sample : collectOkim6295Samples (*songIr))
+		// **The clock the device was actually started with.** `SongIr::ChipSlot::clockHz` is what
+		// the file declares, and this song declares zero for its OKIM6295 - the player then picks
+		// its own clock, and a collector that guessed would export the sample at a rate the row
+		// never used. `VgmReplayer` resolves it the same way for the decoder, from `devCfg`.
+		uint32_t okimClock = 0;
+
+		for (const auto& device : deviceInfo)
+		{
+			if (device.type == DEVID_MSM6295 && device.devCfg != nullptr && device.devCfg->clock > 0)
+			{
+				okimClock = device.devCfg->clock;
+			}
+		}
+
+		for (auto& sample : collectOkim6295Samples (*songIr, okimClock))
 		{
 			collected.push_back (std::move (sample));
 		}

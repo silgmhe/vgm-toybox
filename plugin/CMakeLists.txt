@@ -656,24 +656,25 @@ add_executable(vgm_app_test EXCLUDE_FROM_ALL
 	Tests/AppHarnessTest.cpp
 )
 
-# --- one channel rendered, next to the wave its row would export (not built by default) ---
-# The register-stream arguments about this chip have been wrong three times; this asks the emulator
-# instead. See Tests/Rf5cRenderProbe.cpp.
-#   cmake --build <build dir> --target vgm_rf5c_probe
-#   <build dir>/plugin/vgm_rf5c_probe <song> [trackIndex] [seconds]
-add_executable(vgm_rf5c_probe EXCLUDE_FROM_ALL
-	Tests/Rf5cRenderProbe.cpp
+# --- measures what a channel renders and what its row would export (not built by default) ---
+# Written for the RF5C164 and grown past it: it now answers for any song on the libvgm backend -
+# per-track renders, the core on its own, the cost of capturing state, and the rows as the UI would
+# draw them. See Tests/RenderProbe.cpp.
+#   cmake --build <build dir> --target vgm_render_probe
+#   <build dir>/plugin/vgm_render_probe <song> [trackIndex|-2|-3|-4] [seconds]
+add_executable(vgm_render_probe EXCLUDE_FROM_ALL
+	Tests/RenderProbe.cpp
 )
-target_include_directories(vgm_rf5c_probe PRIVATE Source)
-target_compile_definitions(vgm_rf5c_probe PRIVATE
+target_include_directories(vgm_render_probe PRIVATE Source)
+target_compile_definitions(vgm_render_probe PRIVATE
 	${TOYBOX_JUCE_DEFINITIONS}
 	TOYBOX_OUTPUT_BUSES=${TOYBOX_OUTPUT_BUSES}
 	JUCE_STANDALONE_APPLICATION=1
 	TOYBOX_TEST_BUILD=1)
-target_include_directories(vgm_rf5c_probe PRIVATE
+target_include_directories(vgm_render_probe PRIVATE
 	${CMAKE_CURRENT_SOURCE_DIR}/../libs/libvgm)
 
-target_link_libraries(vgm_rf5c_probe PRIVATE
+target_link_libraries(vgm_render_probe PRIVATE
 	VGMToybox
 	juce::juce_audio_utils
 	juce::juce_recommended_config_flags)

@@ -48,7 +48,7 @@ namespace toybox::backends::libvgm
 		*/
 		void add (uint64_t key, const std::string& name, const uint8_t* bytes,
 				  std::size_t length, SampleFormat format, double rate,
-				  uint32_t sampleId = 0, int skipNibbles = 0);
+				  uint32_t sampleId = 0);
 
 		/** The samples added so far, in the order they were first seen. */
 		std::vector<playback::DecodedSample> take (void);

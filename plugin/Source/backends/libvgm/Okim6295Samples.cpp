@@ -1,4 +1,4 @@
-#include "Okim6295Samples.h"
+﻿#include "Okim6295Samples.h"
 
 #include <algorithm>
 #include <cstdio>
@@ -32,7 +32,8 @@ namespace
 	constexpr uint32_t kDefaultClock = 1000000u;
 }
 
-std::vector<playback::DecodedSample> collectOkim6295Samples (const midi::SongIr& ir)
+std::vector<playback::DecodedSample> collectOkim6295Samples (const midi::SongIr& ir,
+															 uint32_t clockHz)
 {
 	SampleCollector collector;
 
@@ -43,20 +44,15 @@ std::vector<playback::DecodedSample> collectOkim6295Samples (const midi::SongIr&
 		return {};
 	}
 
-	uint32_t clock = 0;
-
-	for (const auto& slot : ir.chips)
-	{
-		if (slot.kind == midi::ChipKind::okim6295 && slot.clockHz != 0)
-		{
-			clock = slot.clockHz;
-		}
-	}
-
-	if (clock == 0)
-	{
-		clock = kDefaultClock;
-	}
+	// **The clock the device was started with, not the one the file declares.** A VGM may leave
+	// its chip clock at zero and let the player pick; when it does, `SongIr` has nothing and any
+	// fallback invented here is a different number from the one the row measured its rate with.
+	// Measured on `02 Repeated Tragedy`: the row said 12396.7 Hz, this said 12121.2 - the default
+	// 1 MHz against the player's 1022727, which is 2.3% flat, a third of a semitone.
+	//
+	// So the caller passes what it resolved for the device (`VgmReplayer` reads
+	// `devCfg->clock`), and the only value used here is the one that arrives.
+	const uint32_t clock = (clockHz != 0) ? clockHz : kDefaultClock;
 
 	/** Per device instance: the command port is a two-byte handshake, so a voice start only means
 		something once a sample number is pending, and the pin 7 strap changes the rate for the
@@ -135,10 +131,16 @@ std::vector<playback::DecodedSample> collectOkim6295Samples (const midi::SongIr&
 			continue;
 		}
 
-		// Both are nibble addresses. The export holds whole bytes, so it starts at the byte the
-		// sample starts in and skips the high nibble when the address is odd.
-		const uint32_t firstByte = start / 2;
-		const uint32_t lastByte = stop / 2;
+		// **These are byte addresses, and a sample is `stop - start + 1` bytes of them.**
+		//
+		// Read the other way - nibbles, so half as long - every exported sample comes out as the
+		// first half of what the row plays, and on `02 Repeated Tragedy` a kick that the ROM stores
+		// as two adjacent entries became four fragments. What settled it was the row: it decodes
+		// `2 * (stop - start + 1)` nibbles from `start`, and that is the sound the user hears and
+		// drags out. An export has to hand back the same recording the row does, so it uses the
+		// same arithmetic rather than its own reading of the table.
+		const uint32_t firstByte = start;
+		const uint32_t lastByte = stop;
 
 		if (lastByte < firstByte || lastByte >= rom.size ())
 		{
@@ -146,14 +148,13 @@ std::vector<playback::DecodedSample> collectOkim6295Samples (const midi::SongIr&
 		}
 
 		const std::size_t length = (std::size_t) (lastByte - firstByte + 1);
-		const int skipNibbles = (int) (start % 2);
 
 		// Two levels in every byte, so the rate a file has to declare is twice the byte rate.
 		const double byteRate = (double) clock / (instance.pin7High ? kDivisorPin7High
 																	: kDivisorPin7Low);
 		const double levelRate = byteRate * 2.0;
 
-		const uint32_t levels = (uint32_t) (length * 2) - (uint32_t) skipNibbles;
+		const uint32_t levels = (uint32_t) (length * 2);
 
 		char name[40] = {};
 		std::snprintf (name, sizeof (name), "okim_%03X_%u", (unsigned) command, (unsigned) levels);
@@ -161,8 +162,7 @@ std::vector<playback::DecodedSample> collectOkim6295Samples (const midi::SongIr&
 		// Keyed by command, not by voice or by moment: the ROM table is immutable, so a sample
 		// number names one recording for the whole song.
 		collector.add (((uint64_t) write.deviceId << 32) | (uint64_t) command, name,
-					   rom.data () + firstByte, length, SampleFormat::msm6295, levelRate, 0,
-					   skipNibbles);
+					   rom.data () + firstByte, length, SampleFormat::msm6295, levelRate);
 	}
 
 	return collector.take ();

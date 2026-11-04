@@ -24,5 +24,9 @@ namespace toybox::backends::libvgm
 		song writes register 0x0C with bit 0 set. Two levels share every byte, so the level rate is
 		twice the byte rate.
 	*/
-	std::vector<playback::DecodedSample> collectOkim6295Samples (const midi::SongIr& ir);
+	/** `clockHz` is the clock the device was started with, which is not always the one the file
+		declares: a VGM may leave it at zero and let the player choose. Pass zero only when nothing
+		resolved one, and the collector falls back to the chip's default. */
+	std::vector<playback::DecodedSample> collectOkim6295Samples (const midi::SongIr& ir,
+																 uint32_t clockHz);
 }

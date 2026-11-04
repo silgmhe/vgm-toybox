@@ -65,7 +65,7 @@ namespace
 		/** The state latched at the key-on, and when it happened.
 
 			A note's length is not in the data. It is the time the channel stayed on, times the byte
-			rate - and that is measurable against the emulator: `vgm_rf5c_probe` renders channel 5 of
+			rate - and that is measurable against the emulator: `vgm_render_probe` renders channel 5 of
 			`01 - Palmtree Panic Zone Past` as a note **0.49 s long**, while the whole 8 KB slot at the
 			rate the registers ask for is 0.78 s. The extra third of a second is the slot continuing
 			past the end of the note, which is what the file used to contain.
