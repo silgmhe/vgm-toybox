@@ -10,6 +10,90 @@
 namespace toybox::chips
 {
 
+/** The period, in measurements, of the repeating shape inside `waveform` - or 0 when it does not
+	repeat, which is what a drum is.
+
+	Five decoders now need the same answer (the ES5503, the GA20, the OKI, the RF5C and the K007232),
+	and four of them carry their own private copy. This is the OKI's, lifted verbatim so a new caller
+	does not become the fifth - the copies differ from each other only where they were edited.
+
+	`maxLag` bounds the search: half the buffer is the honest limit, and the caller may want less.
+	A period is only reported when the correlation first dips below -0.5 (so the peak is not the
+	zero-lag one) and then reaches 0.5, which is what keeps noise from answering "period 2".
+*/
+inline double bestPeriod (const std::vector<double>& waveform, std::size_t maxLag)
+{
+	const std::size_t size = waveform.size ();
+
+	if (size < 64 || maxLag < 2)
+	{
+		return 0.0;
+	}
+
+	double mean = 0.0;
+	for (const double sample : waveform)
+	{
+		mean += sample;
+	}
+
+	mean /= (double) size;
+
+	const std::size_t limit = std::min (size / 2, maxLag);
+
+	std::vector<double> correlation (limit + 1, 0.0);
+	bool sawTrough = false;
+	std::size_t troughLag = 0;
+	double best = 0.0;
+
+	for (std::size_t lag = 2; lag <= limit; ++lag)
+	{
+		double product = 0.0;
+		double energyA = 0.0;
+		double energyB = 0.0;
+
+		for (std::size_t i = 0; i + lag < size; ++i)
+		{
+			const double a = waveform[i] - mean;
+			const double b = waveform[i + lag] - mean;
+			product += a * b;
+			energyA += a * a;
+			energyB += b * b;
+		}
+
+		if (energyA <= 0.0 || energyB <= 0.0)
+		{
+			continue;
+		}
+
+		correlation[lag] = product / std::sqrt (energyA * energyB);
+
+		if (! sawTrough)
+		{
+			sawTrough = correlation[lag] <= -0.5;
+			troughLag = lag;
+		}
+		else
+		{
+			best = std::max (best, correlation[lag]);
+		}
+	}
+
+	if (! sawTrough || best < 0.5)
+	{
+		return 0.0;
+	}
+
+	for (std::size_t lag = troughLag; lag <= limit; ++lag)
+	{
+		if (correlation[lag] >= best * 0.9 && correlation[lag] >= 0.5)
+		{
+			return (double) lag;
+		}
+	}
+
+	return 0.0;
+}
+
 /** Turns a frequency into the nearest MIDI note plus the distance from it in cents.
 
 	Every decoder's note table ends up with a frequency - the chip's dividers differ, the reference

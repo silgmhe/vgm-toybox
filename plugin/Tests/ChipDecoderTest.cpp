@@ -3941,6 +3941,65 @@ namespace
 			   "the bank register picks the window: 0x20010 is not 0x00010");
 	}
 
+	/** **The rate a sample is read at is not its pitch.** `frequencyOf` answers bytes per second, and
+		reporting that as a frequency put every K007232 row at MIDI 123-135 - three octaves above the
+		keyboard's top note, so the rows had nowhere to be drawn. The pitch is the rate divided by the
+		period *measured* inside the sample; a drum has no period and therefore no note. */
+	void testK007232Pitch (void)
+	{
+		std::vector<uint8_t> rom (0x400, 0x40);
+
+		// A 32-byte cycle: sixteen high then sixteen low, repeated past the 64 samples `bestPeriod`
+		// needs before it will answer at all.
+		for (std::size_t i = 0; i < 0x200; ++i)
+		{
+			rom[i] = ((i % 32) < 16) ? 0x60 : 0x20;
+		}
+
+		rom[0x200] = 0x80;		// the terminator, one cycle-boundary past the data
+
+		toybox::chips::K007232Decoder decoder;
+		decoder.reset (toybox::chips::ChipConfig { 8000000, 44100.0 });
+		decoder.setRom (rom);
+
+		decoder.write (toybox::chips::RegisterWrite { 0, 0x00, 0x00, 0, 0, 0 });
+		decoder.write (toybox::chips::RegisterWrite { 0, 0x01, 0x0F, 0, 0, 0 });	// step 0x0F00
+		decoder.write (toybox::chips::RegisterWrite { 0, 0x02, 0x00, 0, 0, 0 });
+		decoder.write (toybox::chips::RegisterWrite { 0, 0x03, 0x00, 0, 0, 0 });
+		decoder.write (toybox::chips::RegisterWrite { 0, 0x04, 0x00, 0, 0, 0 });
+
+		const auto state = decoder.channelState (0);
+
+		// 7812.5 bytes per second over a 32-byte cycle is 244 Hz, whatever the byte rate says.
+		check (state.hz > 200.0 && state.hz < 300.0,
+			   "the pitch is the byte rate divided by the measured cycle, not the byte rate");
+
+		check (state.pitchSource == toybox::chips::PitchSource::sampleInferred,
+			   "a measured pitch is labelled as measured");
+
+		// The same chip reading bytes that never repeat is a drum: no cycle, no note.
+		std::vector<uint8_t> noise (0x400, 0x40);
+		for (std::size_t i = 0; i < 0x200; ++i)
+		{
+			noise[i] = (uint8_t) (0x40 + ((i * 37 + (i * i) / 7) % 60) - 30);
+		}
+
+		noise[0x200] = 0x80;
+
+		toybox::chips::K007232Decoder drums;
+		drums.reset (toybox::chips::ChipConfig { 8000000, 44100.0 });
+		drums.setRom (noise);
+
+		drums.write (toybox::chips::RegisterWrite { 0, 0x00, 0x00, 0, 0, 0 });
+		drums.write (toybox::chips::RegisterWrite { 0, 0x01, 0x0F, 0, 0, 0 });
+		drums.write (toybox::chips::RegisterWrite { 0, 0x02, 0x00, 0, 0, 0 });
+		drums.write (toybox::chips::RegisterWrite { 0, 0x03, 0x00, 0, 0, 0 });
+		drums.write (toybox::chips::RegisterWrite { 0, 0x04, 0x00, 0, 0, 0 });
+
+		check (drums.channelState (0).hz == 0.0,
+			   "a sample with no repeating shape has no pitch, rather than the rate it is read at");
+	}
+
 	/** **The row needs the bytes, not only the pitch.** This chip generates nothing: its shape comes
 		from a ROM table plus a delta codec, so a row that can draw it has to be handed the decoded
 		nibbles and the rate they are read at. Without this the family's rows are blank while the
@@ -6729,6 +6788,7 @@ int main (void)
 	testOkim6295Notes();
 	testOkim6295Wave();
 	testK007232Wave();
+	testK007232Pitch();
 	testOkim6295FourthVoice();
 	testOkim6295Unpitched();
 

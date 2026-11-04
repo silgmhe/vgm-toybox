@@ -45,9 +45,12 @@ namespace toybox::chips
 	of the same image - measured as `0x14=1, 0x15=3` on `02 Title Demo`, matching the ROM blocks at
 	0x20000 and 0x60000.
 
-	The pitch comes from `step`, not from the bytes, which makes this `registerExact` with no root
-	layer - but the *rate* a file has to declare is per note, because the chip has no single sample
-	rate: `(clock / 128) * 32 / (0x1000 - step)` bytes per second. */
+	**Rate and pitch are two different numbers here, and confusing them was a defect.** `step` sets
+	how fast the bytes are consumed - `(clock / 128) * 32 / (0x1000 - step)` per second - and that is
+	the rate a file has to declare, per note, because the chip has no single sample rate. The *pitch*
+	is that rate divided by the period **measured inside the sample** (`Pitch.h`'s `bestPeriod`),
+	which is what makes this `sampleInferred`: reporting the rate directly put every row at MIDI
+	123-135, three octaves above the top of the keyboard. A drum has no period, so it has no note. */
 class K007232Decoder final : public IChipDecoder
 {
 public:

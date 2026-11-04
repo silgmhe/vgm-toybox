@@ -20,6 +20,12 @@ namespace
 
 	constexpr uint32_t kDefaultClock = 8000000;
 
+	/** How far into a sample the period search looks, and how coarsely: the OKI's numbers. Enough
+		to see a repeat in any real sample, small enough to stay off the audio thread's budget. */
+	constexpr uint32_t kScanBytes = 4096;
+	constexpr std::size_t kScanStep = 256;
+	constexpr std::size_t kWindow = 512;
+
 	double frequencyOf (uint32_t clock, uint16_t step)
 	{
 		// steps per sample = 32 / (4096 - step); the core's sample rate is clock / 128
@@ -87,6 +93,63 @@ struct K007232Decoder::Impl
 	uint32_t addressOf (const Voice& voice) const
 	{
 		return ((uint32_t) voice.bank << 17) + (voice.start & 0x1FFFFu);
+	}
+
+	/** Cycles measured, keyed by bank and start: the ROM never changes, so the key is exact. */
+	mutable std::map<uint64_t, double> cycleCache;
+
+	/** **The sample's period in bytes** - what the pitch is, and what `step` on its own is not.
+	 *
+	 *	`frequencyOf` answers bytes per second, and this chip's rows were reporting that as a
+	 *	frequency: 9943 to 29829 Hz on the test songs, i.e. MIDI 123 to 135, three octaves above the
+	 *	keyboard's top note of 83. Nothing was wrong with the keyboard - the row was not describing a
+	 *	pitch at all. A sampled chip knows its playback rate and has to *measure* the wave inside it,
+	 *	which is what the OKI, the ESP5503 and the RF5C all do.
+	 *
+	 *	A drum has no period; that is 0 and reads as no note, which is the right answer for one.
+	 */
+	double cycleFor (const Voice& voice) const
+	{
+		const uint64_t key = ((uint64_t) voice.bank << 17) | (uint64_t) voice.start;
+		const auto cached = cycleCache.find (key);
+
+		if (cached != cycleCache.end())
+		{
+			return cached->second;
+		}
+
+		std::vector<double> values;
+		values.reserve (kScanBytes);
+
+		const uint32_t base = addressOf (voice);
+
+		for (uint32_t i = 0; i < kScanBytes; ++i)
+		{
+			const uint32_t at = base + i;
+
+			if (at >= rom.size() || (rom[at] & 0x80u) != 0)
+			{
+				break;
+			}
+
+			values.push_back ((double) ((int) (rom[at] & 0x7Fu) - 0x40));
+		}
+
+		double cycle = 0.0;
+
+		// The same scan the OKI uses: slide a window along the sample, because a drum's opening
+		// transient does not repeat but its body may.
+		for (std::size_t offset = 0; cycle <= 0.0 && offset + 64 <= values.size();
+			 offset += kScanStep)
+		{
+			const std::size_t length = std::min<std::size_t> (kWindow, values.size() - offset);
+			const std::vector<double> window (values.begin() + (long) offset,
+											  values.begin() + (long) (offset + length));
+			cycle = bestPeriod (window, kWindow / 2);
+		}
+
+		cycleCache.emplace (key, cycle);
+		return cycle;
 	}
 
 	/** The bytes a voice is playing, decoded to -1..1.
@@ -249,8 +312,15 @@ ChannelState K007232Decoder::channelState (int channel) const
 	state.period = voice.step;
 	state.gate = voice.keyed && voice.step > 0;
 	state.volume = state.gate ? 15 : 0;
-	state.hz = state.gate ? frequencyOf (impl->table.clock, voice.step) : 0.0;
-	state.pitchSource = state.gate ? PitchSource::registerExact : PitchSource::unpitched;
+	// **The pitch is the sample's period, not the rate it is read at.** `frequencyOf` answers bytes
+	// per second; dividing by the measured cycle turns that into a frequency, which is what the
+	// keyboard draws and what the exported file's length already implies. Reporting the rate
+	// directly put every row at MIDI 123-135, above the top of the keyboard.
+	const double byteRate = frequencyOf (impl->table.clock, voice.step);
+	const double cycle = state.gate ? impl->cycleFor (voice) : 0.0;
+
+	state.hz = (cycle > 0.0) ? byteRate / cycle : 0.0;
+	state.pitchSource = (cycle > 0.0) ? PitchSource::sampleInferred : PitchSource::unpitched;
 
 	// **The bytes this voice is playing.** The chip generates nothing: a row that draws it needs the
 	// ROM decoded, and the sample's end lives in the data as a bit-7 marker rather than in a length

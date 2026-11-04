@@ -864,9 +864,10 @@ int runLiveRows (toybox::PlaybackEngine& engine, double seconds, int onlyTrack)
 
 		const std::string name = (i < tracks.size ()) ? tracks[i].name.toStdString () : std::string ();
 
-		std::printf ("    [%2d] %-14s wave=%5d pts rate=%8.1f active=%d\n", (int) i, name.c_str (),
-					 (channel.wave != nullptr) ? (int) channel.wave->size () : 0,
-					 (double) channel.sampleRate, channel.active ? 1 : 0);
+		std::printf ("    [%2d] %-14s wave=%5d pts rate=%8.1f note=%3d hz=%8.1f active=%d\n", (int) i,
+					 name.c_str (), (channel.wave != nullptr) ? (int) channel.wave->size () : 0,
+					 (double) channel.sampleRate, channel.note, (double) channel.frequency,
+					 channel.active ? 1 : 0);
 	}
 
 	engine.stop ();
