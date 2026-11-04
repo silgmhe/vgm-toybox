@@ -208,6 +208,29 @@ void SampleCollector::add (uint64_t key, const std::string& name, const uint8_t*
 			level /= peak;
 		}
 	}
+	else if (format == SampleFormat::k007232)
+	{
+		// **Seven-bit unsigned, `0x40` is silence, and the end is in the data.** `k007232.c:232`
+		// reads `(value & 0x7F) - 0x40`; `k007232.c:246` restarts the voice when a byte has bit 7
+		// set, so that byte is the terminator and never part of the sample. `length` is what the
+		// caller could show of the window; this stops earlier, at the marker.
+		sample.values.reserve (length);
+
+		for (std::size_t i = 0; i < length; ++i)
+		{
+			const uint8_t value = bytes[i];
+
+			if ((value & 0x80u) != 0)
+			{
+				break;
+			}
+
+			// Already -1..1: 0x00 is -1, 0x40 is 0, 0x7F is just under 1. No peak normalisation -
+			// unlike the delta formats, this one has an absolute scale and normalising would make
+			// a quiet sample as loud as a loud one.
+			sample.values.push_back ((float) ((int) (value & 0x7Fu) - 0x40) / 64.0f);
+		}
+	}
 	else
 	{
 		sample.values.reserve (length);

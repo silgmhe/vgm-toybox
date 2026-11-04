@@ -45,6 +45,7 @@
 #include "chips/Msm5232Decoder.h"
 #include "chips/K005289Decoder.h"
 #include "chips/VsuDecoder.h"
+#include "chips/K007232Decoder.h"
 #include "chips/Okim6295Decoder.h"
 #include "chips/Ga20Decoder.h"
 #include "chips/SegaPcmDecoder.h"
@@ -3881,6 +3882,65 @@ namespace
 		check (notes.size() == 1 && notes[0].velocity < 40, "volume 15 is the quietest step");
 	}
 
+	/** **A sample's length is in its last byte.** The K007232 has no length register: the voice
+		restarts at the first byte with bit 7 set, so an export that guessed a length - or took the
+		whole window - would append the next sample's opening to this one. */
+	void testK007232Wave (void)
+	{
+		std::vector<uint8_t> rom (0x30000, 0x40);
+
+		// Bank 0, start 0: three levels and a terminator.
+		rom[0x000] = 0x40;		//  0.0
+		rom[0x001] = 0x20;		// -0.5
+		rom[0x002] = 0x60;		// +0.5
+		rom[0x003] = 0x80;		// the marker, and not a level
+
+		// Bank 1, start 0x10: two levels, to prove the bank register is applied.
+		rom[0x20010] = 0x00;	// -1.0
+		rom[0x20011] = 0x7F;	// just under +1
+		rom[0x20012] = 0x90;	// the marker
+
+		toybox::chips::K007232Decoder decoder;
+		decoder.reset (toybox::chips::ChipConfig { 8000000, 44100.0 });
+		decoder.setRom (rom);
+
+		// Step 0x0F00: the low nibble of the high byte is the top of the twelve-bit step.
+		decoder.write (toybox::chips::RegisterWrite { 0, 0x00, 0x00, 0, 0, 0 });
+		decoder.write (toybox::chips::RegisterWrite { 0, 0x01, 0x0F, 0, 0, 0 });
+		decoder.write (toybox::chips::RegisterWrite { 0, 0x02, 0x00, 0, 0, 0 });
+		decoder.write (toybox::chips::RegisterWrite { 0, 0x03, 0x00, 0, 0, 0 });
+		decoder.write (toybox::chips::RegisterWrite { 0, 0x04, 0x00, 0, 0, 0 });	// key on
+
+		const auto state = decoder.channelState (0);
+
+		check (state.wave != nullptr && state.wave->size () == 3,
+			   "a sample ends at its bit-7 marker, which is not one of its levels");
+
+		if (state.wave != nullptr && state.wave->size () == 3)
+		{
+			check (std::abs ((*state.wave)[0]) < 1e-6f, "0x40 is silence, not a level below it");
+			check ((*state.wave)[1] < -0.49f && (*state.wave)[1] > -0.51f, "0x20 is -0.5");
+			check ((*state.wave)[2] > 0.49f && (*state.wave)[2] < 0.51f, "0x60 is +0.5");
+		}
+
+		// 8 MHz / 128 * 32 / (0x1000 - 0xF00) = 62500 * 32 / 256 = 7812.5 bytes per second.
+		check (std::abs (state.sampleRate - 7812.5f) < 1.0f,
+			   "the rate is the device's, scaled by the counter's walk for this step");
+
+		// The other voice reads bank 1: one image, a different window.
+		decoder.write (toybox::chips::RegisterWrite { 0, 0x15, 0x01, 0, 0, 0 });
+		decoder.write (toybox::chips::RegisterWrite { 0, 0x06, 0x00, 0, 0, 0 });
+		decoder.write (toybox::chips::RegisterWrite { 0, 0x07, 0x0F, 0, 0, 0 });
+		decoder.write (toybox::chips::RegisterWrite { 0, 0x08, 0x10, 0, 0, 0 });
+		decoder.write (toybox::chips::RegisterWrite { 0, 0x09, 0x00, 0, 0, 0 });
+		decoder.write (toybox::chips::RegisterWrite { 0, 0x0A, 0x00, 0, 0, 0 });
+
+		const auto second = decoder.channelState (1);
+
+		check (second.wave != nullptr && second.wave->size () == 2,
+			   "the bank register picks the window: 0x20010 is not 0x00010");
+	}
+
 	/** **The row needs the bytes, not only the pitch.** This chip generates nothing: its shape comes
 		from a ROM table plus a delta codec, so a row that can draw it has to be handed the decoded
 		nibbles and the rate they are read at. Without this the family's rows are blank while the
@@ -6668,6 +6728,7 @@ int main (void)
 
 	testOkim6295Notes();
 	testOkim6295Wave();
+	testK007232Wave();
 	testOkim6295FourthVoice();
 	testOkim6295Unpitched();
 

@@ -1,6 +1,9 @@
-#include "K007232Decoder.h"
+﻿#include "K007232Decoder.h"
 
 #include <cstdint>
+#include <map>
+#include <memory>
+#include <vector>
 
 #include "Pitch.h"
 
@@ -37,6 +40,12 @@ struct K007232Decoder::Impl
 		uint8_t regs[6] = { 0, 0, 0, 0, 0, 0 };
 		uint16_t step = 0;
 		bool keyed = false;
+
+		/** The seventeen-bit start address, latched from `regs[2..4]`. */
+		uint32_t start = 0;
+
+		/** `0x14`/`0x15`: the window this voice reads, shifted by seventeen bits. */
+		uint8_t bank = 0;
 	};
 
 	/** Both voices share the formula, so one table serves them. */
@@ -63,6 +72,66 @@ struct K007232Decoder::Impl
 
 	Table table;
 	Voice voices[2];
+	uint8_t loop = 0;
+
+	/** The ROM the voices read, copied by `setRom` because the assembler's image is per flush. */
+	std::vector<uint8_t> rom;
+
+	/** Decoded samples, keyed by bank and start. The ROM never changes, so the key is exact and
+		the two voices share an entry when they play the same sample from the same window.
+		`mutable` because `channelState` is const and the cache is a memo of a pure function of the
+		ROM - the same reason the OKI decoder keeps its own map. */
+	mutable std::map<uint64_t, std::shared_ptr<const std::vector<float>>> waveCache;
+
+	/** `k007232.c:224` - the voice reads `bank + (addr & 0x1FFFF)`, and stops when past the image. */
+	uint32_t addressOf (const Voice& voice) const
+	{
+		return ((uint32_t) voice.bank << 17) + (voice.start & 0x1FFFFu);
+	}
+
+	/** The bytes a voice is playing, decoded to -1..1.
+	 *
+	 *	Seven-bit unsigned with `0x40` as silence (`k007232.c:232`), and the sample ends at the first
+	 *	byte with **bit 7 set** (`k007232.c:246`) - the length is in the data, not in a register.
+	 */
+	std::shared_ptr<const std::vector<float>> decodeVoice (const Voice& voice) const
+	{
+		const uint64_t key = ((uint64_t) voice.bank << 32) | (uint64_t) voice.start;
+		const auto found = waveCache.find (key);
+
+		if (found != waveCache.end())
+		{
+			return found->second;
+		}
+
+		auto wave = std::make_shared<std::vector<float>>();
+
+		const uint32_t base = addressOf (voice);
+
+		// A window is 128K bytes and the terminator usually arrives long before that; the bound is
+		// only there so a ROM that never sets bit 7 cannot run away.
+		for (uint32_t i = 0; i < 0x20000u; ++i)
+		{
+			const uint32_t at = base + i;
+
+			if (at >= rom.size())
+			{
+				break;
+			}
+
+			const uint8_t value = rom[at];
+
+			if ((value & 0x80u) != 0)
+			{
+				break;		// the end marker, not part of the sample
+			}
+
+			wave->push_back ((float) ((int) (value & 0x7Fu) - 0x40) / 64.0f);
+		}
+
+		waveCache.emplace (key, wave);
+		return wave;
+	}
 };
 
 K007232Decoder::K007232Decoder() = default;
@@ -77,10 +146,39 @@ void K007232Decoder::reset (const ChipConfig& config)
 	impl->table.clock = clock > 0 ? clock : kDefaultClock;
 }
 
+void K007232Decoder::setRom (std::vector<uint8_t> rom)
+{
+	impl->rom = std::move (rom);
+	impl->waveCache.clear ();
+}
+
 void K007232Decoder::write (const RegisterWrite& write)
 {
-	if (impl == nullptr || write.reg >= 12)
+	if (impl == nullptr)
 	{
+		return;
+	}
+
+	// The board registers come after the twelve per-voice ones, and they are not decoration: the
+	// bank picks which 128 KB window of the image a voice reads, and without it the second voice of
+	// `02 Title Demo` would play the first voice's bytes.
+	if (write.reg >= 12)
+	{
+		switch (write.reg)
+		{
+		case 0x0D:
+			impl->loop = write.value;
+			break;
+
+		case 0x14:
+		case 0x15:
+			impl->voices[write.reg & 1].bank = write.value;
+			break;
+
+		default:
+			break;		// 0x0C is the external port, 0x10..0x13 the volumes: not modelled
+		}
+
 		return;
 	}
 
@@ -111,14 +209,25 @@ void K007232Decoder::write (const RegisterWrite& write)
 		}
 		break;
 	}
-	case 0x04:		// writing the start address is what starts a voice here: not one of the six rips ever
-		voice.keyed = true;		// writes the key register 0x05, so keying on that left every channel silent
+	case 0x02:		// start address, low
+	case 0x03:		// middle
+	case 0x04:		// high - only bit 0 is kept, the address is seventeen bits
+	{
+		// The core re-derives the address from all three bytes on any write to them
+		// (k007232.c:297), so a driver writing them low to high lands on the same value.
+		voice.start = ((uint32_t) (voice.regs[4] & 0x01) << 16)
+					| ((uint32_t) voice.regs[3] << 8) | (uint32_t) voice.regs[2];
+
+		// Writing the start address is what starts a voice here: not one of the six rips ever writes
+		// the key register, so keying on that alone left every channel silent.
+		voice.keyed = true;
 		break;
+	}
 	case 0x05:		// key on/off: bit 0 is the key, for the drivers that do use it
 		voice.keyed = (write.value & 0x01) != 0;
 		break;
 	default:
-		break;		// 0x02..0x04 are the start address, which the pitch does not use
+		break;
 	}
 }
 
@@ -142,6 +251,20 @@ ChannelState K007232Decoder::channelState (int channel) const
 	state.volume = state.gate ? 15 : 0;
 	state.hz = state.gate ? frequencyOf (impl->table.clock, voice.step) : 0.0;
 	state.pitchSource = state.gate ? PitchSource::registerExact : PitchSource::unpitched;
+
+	// **The bytes this voice is playing.** The chip generates nothing: a row that draws it needs the
+	// ROM decoded, and the sample's end lives in the data as a bit-7 marker rather than in a length
+	// register.
+	if (voice.keyed && ! impl->rom.empty())
+	{
+		state.wave = impl->decodeVoice (voice);
+	}
+
+	// **The rate, and it is per note.** This chip has no single sample rate: a voice consumes
+	// `(clock / 128) * 32 / (0x1000 - step)` bytes per second, so the same bytes dragged out of two
+	// notes are two different files. `frequencyOf` already computes exactly that number.
+	state.sampleRate = state.gate ? (float) frequencyOf (impl->table.clock, voice.step) : 0.0f;
+
 	return state;
 }
 

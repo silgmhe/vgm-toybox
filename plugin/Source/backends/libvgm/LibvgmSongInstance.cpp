@@ -2,6 +2,7 @@
 
 #include "C140Samples.h"
 #include "C352Samples.h"
+#include "K007232Samples.h"
 #include "Okim6295Samples.h"
 #include "QSoundSamples.h"
 #include "K053260Samples.h"
@@ -344,6 +345,33 @@ bool LibvgmSongInstance::prepare (double hostSampleRate, int newMaxBlockSize, ju
 										  {
 											  return slot.kind == midi::ChipKind::okim6295;
 										  });
+
+	const bool hasK007232 = songIr != nullptr
+						 && std::any_of (songIr->chips.begin (), songIr->chips.end (),
+										 [] (const midi::ChipSlot& slot)
+										 {
+											 return slot.kind == midi::ChipKind::k007232;
+										 });
+
+	if (hasK007232 && songIr != nullptr)
+	{
+		// The rate the device reports is `clock / 128`; the per-note factor comes from each voice's
+		// step, so only the chip's own half is resolved here.
+		double chipRate = 0.0;
+
+		for (const auto& device : deviceInfo)
+		{
+			if (device.type == DEVID_K007232 && device.smplRate > 0)
+			{
+				chipRate = (double) device.smplRate;
+			}
+		}
+
+		for (auto& sample : collectK007232Samples (*songIr, chipRate))
+		{
+			collected.push_back (std::move (sample));
+		}
+	}
 
 	if (hasOkim6295 && songIr != nullptr)
 	{
