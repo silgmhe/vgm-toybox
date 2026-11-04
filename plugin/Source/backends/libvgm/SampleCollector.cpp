@@ -1,12 +1,14 @@
 ﻿#include "SampleCollector.h"
 
 #include "chips/NesDpcmSample.h"
+#include "chips/Okim6295Codec.h"
 
 namespace toybox::backends::libvgm
 {
 
 void SampleCollector::add (uint64_t key, const std::string& name, const uint8_t* bytes,
-						   std::size_t length, SampleFormat format, double rate, uint32_t sampleId)
+						   std::size_t length, SampleFormat format, double rate, uint32_t sampleId,
+						   int skipNibbles)
 {
 	if (bytes == nullptr || length < 2)
 	{
@@ -172,6 +174,45 @@ void SampleCollector::add (uint64_t key, const std::string& name, const uint8_t*
 			const uint8_t byte = bytes[i];
 			const float magnitude = (float) (byte & 0x7F) / 128.0f;
 			sample.values.push_back ((byte & 0x80) ? magnitude : -magnitude);
+		}
+	}
+	else if (format == SampleFormat::msm6295)
+	{
+		// The OKI's delta codec, through the same header the decoder measures the sample's cycle
+		// with. Two independent implementations would let the exported file and the drawn row
+		// disagree, and both would still look like waveforms - the disagreement would never fail
+		// anything.
+		//
+		// High nibble first, which is the chip's order and the opposite of the two Konami formats
+		// above. `length` counts bytes; a byte carries two levels.
+		// `skipNibbles` exists for this format alone: the chip's start address counts nibbles, so a
+		// sample can begin on the low half of a byte. Ignoring that would shift every level by one
+		// - a click at the start and a waveform one step out of phase with what the row draws.
+		const uint32_t available = (uint32_t) (length * 2);
+		const uint32_t skip = (uint32_t) (std::max (0, std::min (skipNibbles, (int) available)));
+
+		const std::vector<double> decoded = chips::okim::decode (
+			[&bytes, length] (uint32_t address)
+			{
+				return (address < length) ? bytes[address] : (uint8_t) 0xFF;
+			},
+			skip, available - skip);
+
+		float peak = 1.0f;
+
+		sample.values.reserve (decoded.size ());
+
+		for (const double level : decoded)
+		{
+			sample.values.push_back ((float) (level / chips::okim::kFullScale));
+			peak = (std::max) (peak, std::abs (sample.values.back ()));
+		}
+
+		// Normalised to its own peak, like the other delta formats: the codec's accumulator has no
+		// absolute scale to trust, and a sample recorded quietly would otherwise export as silence.
+		for (float& level : sample.values)
+		{
+			level /= peak;
 		}
 	}
 	else

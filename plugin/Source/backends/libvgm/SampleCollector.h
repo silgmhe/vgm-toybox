@@ -20,6 +20,7 @@ namespace toybox::backends::libvgm
 		qsoundAdpcm,	// adaptive step size: the QSound's own, nothing like the two above
 		signMagnitude8,	// RF5C68/164: bit 7 is a sign, the low seven bits a magnitude
 		nesDelta,		// the 2A03's one-bit deltas, expanded by `dpcm::decode`
+		msm6295,		// the OKI's four-bit delta codec: a 49-step table, high nibble first
 	};
 
 	/** Accumulates one `DecodedSample` per distinct recording.
@@ -47,7 +48,7 @@ namespace toybox::backends::libvgm
 		*/
 		void add (uint64_t key, const std::string& name, const uint8_t* bytes,
 				  std::size_t length, SampleFormat format, double rate,
-				  uint32_t sampleId = 0);
+				  uint32_t sampleId = 0, int skipNibbles = 0);
 
 		/** The samples added so far, in the order they were first seen. */
 		std::vector<playback::DecodedSample> take (void);

@@ -2,6 +2,7 @@
 
 #include "C140Samples.h"
 #include "C352Samples.h"
+#include "Okim6295Samples.h"
 #include "QSoundSamples.h"
 #include "K053260Samples.h"
 #include "K054539Samples.h"
@@ -332,6 +333,21 @@ bool LibvgmSongInstance::prepare (double hostSampleRate, int newMaxBlockSize, ju
 	if (hasRf5c && songIr != nullptr)
 	{
 		for (auto& sample : collectRf5cSamples (*songIr))
+		{
+			collected.push_back (std::move (sample));
+		}
+	}
+
+	const bool hasOkim6295 = songIr != nullptr
+						  && std::any_of (songIr->chips.begin (), songIr->chips.end (),
+										  [] (const midi::ChipSlot& slot)
+										  {
+											  return slot.kind == midi::ChipKind::okim6295;
+										  });
+
+	if (hasOkim6295 && songIr != nullptr)
+	{
+		for (auto& sample : collectOkim6295Samples (*songIr))
 		{
 			collected.push_back (std::move (sample));
 		}
