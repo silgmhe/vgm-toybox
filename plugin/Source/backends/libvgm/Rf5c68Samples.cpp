@@ -256,15 +256,26 @@ std::vector<playback::DecodedSample> collectRf5cSamples (const midi::SongIr& ir)
 		}
 	}
 
-	const auto applyRam = [&ram] (const midi::RomBlock& block)
+	// **The RAM bank, which the write address has to be or-ed with.**
+	//
+	// libvgm does this in `DoRAMOfsPatches`: `dataOfs |= _rf5cBank[1][chipID] << 12`, and that
+	// register is set by `0x07` with bit 6 **clear** - `_rf5cBank[..] = value & 0x0F`. Our handler
+	// only ever read the bit-6-**set** form, where the low three bits select the channel, so every
+	// streamed page was written twelve bits too low. That is why a page the driver put in the 0x8000
+	// window came out of the export as whatever was at 0x0000, and why no slot ever matched.
+	uint8_t ramBank = 0;
+
+	const auto applyRam = [&ram, &ramBank] (const midi::RomBlock& block)
 	{
-		if (block.ramOffset >= ram.size () || block.size == 0)
+		const std::size_t address = (std::size_t) block.ramOffset | ((std::size_t) ramBank << 12);
+
+		if (address >= ram.size () || block.size == 0)
 		{
 			return;
 		}
 
-		const std::size_t count = (std::min) (block.size, ram.size () - block.ramOffset);
-		std::memcpy (ram.data () + block.ramOffset, block.data, count);
+		const std::size_t count = (std::min) (block.size, ram.size () - address);
+		std::memcpy (ram.data () + address, block.data, count);
 	};
 
 	// One pass over the writes and the RAM blocks together, ordered by `streamOrder` - the file's
@@ -349,12 +360,20 @@ std::vector<playback::DecodedSample> collectRf5cSamples (const midi::SongIr& ir)
 			continue;
 		}
 
-		// Bit 6 selects the channel the low registers address; bit 7 is the output switch.
+		// **Two different registers share `0x07`, and bit 6 says which one.** With bit 6 set the low
+		// three bits select the channel the low registers address; with bit 6 clear the low four
+		// bits are the RAM bank that every memory write is or-ed with (libvgm's `DoRAMOfsPatches`).
+		// Only the first form was handled here, so no write ever reached the window the driver put
+		// it in.
 		if (offset == 0x07)
 		{
 			if ((value & 0x40) != 0)
 			{
 				bank = (uint8_t) (value & 0x07);
+			}
+			else
+			{
+				ramBank = (uint8_t) (value & 0x0F);
 			}
 
 			continue;
