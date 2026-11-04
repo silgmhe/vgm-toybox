@@ -739,6 +739,89 @@ int runCoreProbe (const juce::File& file, const std::vector<uint8_t>& ram)
 	return 0;
 }
 
+/**
+ *	Real-time factor, with state capture on and with it off.
+
+	`captureState` runs on the audio thread on every block while the keyboard page is visible, and
+	it is not cheap: it advances the replayer cursor and asks every decoder in the song for its
+	channel state. The design doc has carried "performance not measured" since the first commit,
+	and it is the only item on that list that can turn a correct feature into a stuttering one.
+
+	Two passes over the same span, differing only in the capture flag, so the difference between
+	them is the cost being asked about. A factor well above 1 means the block budget is not at
+	risk; a factor near 1 means a busy machine will drop blocks.
+*/
+int runPerf (toybox::PlaybackEngine& engine, double seconds)
+{
+	const size_t total = (size_t) (seconds * kSampleRate);
+
+	std::vector<float> blockL ((size_t) kBlockSize), blockR ((size_t) kBlockSize);
+	toybox::playback::OutputBusBuffers buses[1] = { { blockL.data(), blockR.data() } };
+
+	// **Warm-up first, then alternate.** Comparing one pass against the next measures the caches:
+	// an earlier version of this ran capture-off and then capture-on and concluded that capturing
+	// made rendering faster. Three rounds each way, alternating, and the best of each is the CPU cost
+	// without the allocator and the cache still filling in.
+	const auto once = [&] (bool capture) -> double
+	{
+		engine.setStateCaptureWanted (capture);
+		engine.setPositionSeconds (0.0);
+		engine.play ();
+
+		size_t frames = 0;
+		size_t blocks = 0;
+
+		const auto start = juce::Time::getHighResolutionTicks ();
+
+		while (frames < total && ! engine.isFinished ())
+		{
+			std::fill (blockL.begin (), blockL.end (), 0.0f);
+			std::fill (blockR.begin (), blockR.end (), 0.0f);
+			engine.render (buses, 1, kBlockSize);
+			frames += (size_t) kBlockSize;
+			++blocks;
+		}
+
+		const auto stop = juce::Time::getHighResolutionTicks ();
+		const double wall = juce::Time::highResolutionTicksToSeconds (stop - start);
+
+		engine.stop ();
+		return wall;
+	};
+
+	once (true);		// allocations, JIT'd dispatch, first-touch pages - not measured
+
+	double bestWith = 1.0e9;
+	double bestWithout = 1.0e9;
+
+	for (int round = 0; round < 3; ++round)
+	{
+		bestWithout = juce::jmin (bestWithout, once (false));
+		bestWith = juce::jmin (bestWith, once (true));
+	}
+
+	const double audio = (double) total / kSampleRate;
+
+	for (int pass = 0; pass < 2; ++pass)
+	{
+		const bool capture = (pass == 1);
+		const double wall = capture ? bestWith : bestWithout;
+
+		std::printf ("  capture=%d  %.1f s audio in %.3f s wall  RTF %.1fx  %.1f us/block\n",
+					 capture ? 1 : 0, audio, wall, (wall > 0.0) ? audio / wall : 0.0,
+					 (wall > 0.0) ? wall * 1.0e6 / (audio * kSampleRate / kBlockSize) : 0.0);
+	}
+
+	if (bestWith > 0.0 && bestWithout > 0.0)
+	{
+		std::printf ("  capture costs %.2fx the render it sits on (%.1f%% of the block)\n",
+					 bestWith / bestWithout, 100.0 * (bestWith - bestWithout) / bestWith);
+	}
+
+	engine.setStateCaptureWanted (false);
+	return 0;
+}
+
 int main (int argc, char** argv)
 {
 	if (argc < 2)
@@ -772,6 +855,13 @@ int main (int argc, char** argv)
 	if (wanted == -2)
 	{
 		return runCoreProbe (juce::File (juce::String (argv[1])), ram);
+	}
+
+	// -3 asks what the display costs the audio thread, which the design doc has never measured.
+	if (wanted == -3)
+	{
+		std::printf ("song: %s   tracks: %d   span: %.1f s\n", argv[1], (int) tracks.size (), seconds);
+		return runPerf (engine, seconds);
 	}
 
 	std::printf ("song: %s   tracks: %d   rendered: %.1f s\n", argv[1], (int) tracks.size (), seconds);
