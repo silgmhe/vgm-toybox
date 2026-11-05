@@ -1,4 +1,4 @@
-#include "Ga20Decoder.h"
+﻿#include "Ga20Decoder.h"
 
 #include <algorithm>
 #include <cmath>
@@ -118,6 +118,49 @@ struct Ga20Decoder::Impl
 	std::map<uint32_t, double> cycleCache;
 	std::unique_ptr<Ga20NoteTable> tables[4];
 	uint32_t now = 0;
+
+	/** Decoded samples, keyed by start address. The ROM never changes and every GA20 in a song is
+		handed the same image, so the address alone names the recording - the K007232's key needed
+		the bank as well, this one has no bank to add. */
+	mutable std::map<uint32_t, std::shared_ptr<const std::vector<float>>> waveCache;
+
+	/** The bytes a voice is playing, decoded to -1..1.
+	 *
+	 *	`iremga20.c:177` reads `rom[pos] - 0x80` into an `int8_t`, so the data is **eight-bit
+	 *	unsigned with 0x80 as silence** - not the signed format `SampleFormat`'s default branch
+	 *	assumes. The end is a **0x00 byte** (`iremga20.c:174` stops playback on it), which is why the
+	 *	terminator is not a level here either, and why 0x00 shows up 52 times in a 50 KB ROM that a
+	 *	uniform 8-bit image would put there hundreds of times.
+	 */
+	std::shared_ptr<const std::vector<float>> waveFor (uint32_t start) const
+	{
+		const auto cached = waveCache.find (start);
+
+		if (cached != waveCache.end())
+		{
+			return cached->second;
+		}
+
+		auto wave = std::make_shared<std::vector<float>>();
+
+		if (! rom.empty())
+		{
+			for (uint32_t i = 0; i < kMaxSampleScan; ++i)
+			{
+				const uint8_t value = byteAt (start + i);
+
+				if (value == 0x00)
+				{
+					break;		// the end marker, and not a level
+				}
+
+				wave->push_back ((float) ((int) value - 0x80) / 128.0f);
+			}
+		}
+
+		waveCache.emplace (start, wave);
+		return wave;
+	}
 
 	uint8_t byteAt (uint32_t address) const
 	{
@@ -373,12 +416,26 @@ void Ga20Decoder::reset (const ChipConfig& config)
 	impl->romMask = mask;
 	impl->outRate = sampleRate > 0.0 ? sampleRate : 44100.0;
 
-	// The core's own sample rate is the chip clock divided by four (iremga20.c: INIT_DEVINF gets
+	// The core's own sample rate is the chip clock divided by four (iremga20.c: `INIT_DEVINF` gets
 	// `cfg->clock / 4`), and libvgm resamples that down to the output rate. `256 - rate` counts
 	// *those* samples, so the byte rate has the clock in it - unlike the GA20 of an old VGM with
 	// no clock field, where libvgm starts no device at all and the fallback only matters to the
 	// decoder.
-	impl->byteClock = (clock > 0) ? (double) clock / 4.0 : impl->outRate;
+	//
+	// **The device's own number when one is running**, which is the same thing here by
+	// construction but costs nothing and is the rule the OKIM6295 taught: a divider that lives on
+	// the board rather than in the file is not something to re-derive (`2 x 1.25 = 1.6` was two
+	// such derivations in a row). `kRequirements` names the same 3579545 fallback.
+	const double deviceRate = config.deviceRateHz;
+
+	if (deviceRate > 0.0)
+	{
+		impl->byteClock = deviceRate;
+	}
+	else
+	{
+		impl->byteClock = (clock > 0) ? (double) clock / 4.0 : impl->outRate;
+	}
 
 	for (int i = 0; i < (int) Ga20Decoder::numChannels; ++i)
 	{
@@ -394,6 +451,7 @@ void Ga20Decoder::setRom (std::vector<uint8_t> rom)
 	impl->rom = std::move (rom);
 	impl->lengthCache.clear();
 	impl->cycleCache.clear();
+	impl->waveCache.clear();
 }
 
 void Ga20Decoder::write (const RegisterWrite& write)
@@ -465,6 +523,19 @@ ChannelState Ga20Decoder::channelState (int channel) const
 	state.transposeCents = pitch.transposeCents;
 	state.rootCents = pitch.rootCents;
 	state.pitchSource = pitch.source;
+
+	// **The bytes this voice is playing.** The chip generates nothing: a row that draws it needs
+	// the ROM decoded, and the sample's end lives in the data as a 0x00 byte rather than in a
+	// length register - `end` (registers 2 and 3) is written by every driver and read by nobody.
+	if (voice.keyed && ! impl->rom.empty())
+	{
+		state.wave = impl->waveFor (voice.latchStart);
+	}
+
+	// **The rate a file has to declare**: one byte every `256 - rate` samples of the chip's own
+	// clock. `bytesPerSecond()` is the same number the note table divides by, so the file and the
+	// row cannot drift apart.
+	state.sampleRate = state.gate ? (float) impl->bytesPerSecond (voice) : 0.0f;
 
 	return state;
 }

@@ -208,6 +208,27 @@ void SampleCollector::add (uint64_t key, const std::string& name, const uint8_t*
 			level /= peak;
 		}
 	}
+	else if (format == SampleFormat::ga20)
+	{
+		// **Eight-bit unsigned with 0x80 as silence, and 0x00 as the end.** `iremga20.c:177` reads
+		// `rom[pos] - 0x80` into an `int8_t`; `iremga20.c:174` stops playback on a zero byte, so
+		// that byte is a terminator and not a level - the same shape as the K007232's bit-7 marker,
+		// with a different centre and a different marker value.
+		//
+		// No peak normalisation: the format has an absolute scale, and rescaling would make a quiet
+		// sample as loud as a loud one.
+		sample.values.reserve (length);
+
+		for (std::size_t i = 0; i < length; ++i)
+		{
+			if (bytes[i] == 0x00)
+			{
+				break;
+			}
+
+			sample.values.push_back ((float) ((int) bytes[i] - 0x80) / 128.0f);
+		}
+	}
 	else if (format == SampleFormat::k007232)
 	{
 		// **Seven-bit unsigned, `0x40` is silence, and the end is in the data.** `k007232.c:232`

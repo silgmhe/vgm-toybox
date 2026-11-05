@@ -226,6 +226,7 @@ target_sources(VGMToybox PRIVATE
 	Source/backends/BuiltInBackends.cpp
 	Source/backends/libvgm/LibvgmBackend.cpp
 	Source/backends/libvgm/C140Samples.cpp
+	Source/backends/libvgm/Ga20Samples.cpp
 	Source/backends/libvgm/K007232Samples.cpp
 	Source/backends/libvgm/Okim6295Samples.cpp
 	Source/backends/libvgm/SampleCollector.cpp
@@ -427,6 +428,7 @@ add_executable(vgm_mixer_test EXCLUDE_FROM_ALL
 	Source/formats/nsf/NsfFile.cpp
 	Source/backends/libvgm/LibvgmBackend.cpp
 	Source/backends/libvgm/C140Samples.cpp
+	Source/backends/libvgm/Ga20Samples.cpp
 	Source/backends/libvgm/K007232Samples.cpp
 	Source/backends/libvgm/Okim6295Samples.cpp
 	Source/backends/libvgm/SampleCollector.cpp
@@ -445,6 +447,7 @@ add_executable(vgm_mixer_test EXCLUDE_FROM_ALL
 	Source/backends/libvgm/LibvgmTrackPlayer.cpp
 	Source/backends/libvgm/NesDpcmBank.cpp
 	Source/backends/libvgm/C140Samples.cpp
+	Source/backends/libvgm/Ga20Samples.cpp
 	Source/backends/libvgm/K007232Samples.cpp
 	Source/backends/libvgm/Okim6295Samples.cpp
 	Source/backends/libvgm/SampleCollector.cpp
@@ -515,6 +518,7 @@ add_executable(vgm_chip_test EXCLUDE_FROM_ALL
 	Source/formats/vgm/VgmSongLoader.cpp
 	Source/chips/NesDpcmSample.cpp
 	Source/backends/libvgm/C140Samples.cpp
+	Source/backends/libvgm/Ga20Samples.cpp
 	Source/backends/libvgm/K007232Samples.cpp
 	Source/backends/libvgm/Okim6295Samples.cpp
 	Source/backends/libvgm/SampleCollector.cpp

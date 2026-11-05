@@ -22,6 +22,7 @@ namespace toybox::backends::libvgm
 		nesDelta,		// the 2A03's one-bit deltas, expanded by `dpcm::decode`
 		msm6295,		// the OKI's four-bit delta codec: a 49-step table, high nibble first
 		k007232,		// seven-bit unsigned around 0x40, and the sample ends at the first bit-7 byte
+		ga20,			// eight-bit unsigned around 0x80, and the sample ends at the first 0x00 byte
 	};
 
 	/** Accumulates one `DecodedSample` per distinct recording.

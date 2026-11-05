@@ -192,6 +192,21 @@ private:
 		/** The last hit count seen per channel, for noticing that a new one happened. */
 		mutable std::map<uint32_t, uint32_t> lastHits;
 
+		/** **The last sample each channel actually played**, keyed by device and channel.
+
+			Without it a row is blank whenever the chip is between samples, and that is most of the
+			time for anything short: a GA20 drum is two thousand bytes at 34 kHz, sixty milliseconds,
+			so the cell was empty far more often than not - and an empty cell cannot be dragged.
+
+			Held as a **pair**. A wave with no rate is not a sample a file can declare, and the
+			export's own test asks for both (`WaveExport::canExport`), so latching one without the
+			other would leave a cell that looks draggable and produces nothing.
+
+			Cleared on a seek and a load: after a jump, the last sample belongs to a position the
+			playhead has left, and dragging it out would hand back something that never played here.
+		*/
+		mutable std::map<uint32_t, DpcmLookup> lastPlayed;
+
 		/** Fills `notes` from the whole song: one note per distinct sample, from middle C up.
 
 			A property of the song rather than of a moment, which is why it is built once at load

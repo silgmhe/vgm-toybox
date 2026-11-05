@@ -2,6 +2,7 @@
 
 #include "C140Samples.h"
 #include "C352Samples.h"
+#include "Ga20Samples.h"
 #include "K007232Samples.h"
 #include "Okim6295Samples.h"
 #include "QSoundSamples.h"
@@ -352,6 +353,45 @@ bool LibvgmSongInstance::prepare (double hostSampleRate, int newMaxBlockSize, ju
 										 {
 											 return slot.kind == midi::ChipKind::k007232;
 										 });
+
+	const bool hasGa20 = songIr != nullptr
+					  && std::any_of (songIr->chips.begin (), songIr->chips.end (),
+									  [] (const midi::ChipSlot& slot)
+									  {
+										  return slot.kind == midi::ChipKind::ga20;
+									  });
+
+	if (hasGa20 && songIr != nullptr)
+	{
+		// The device's own rate is `clock / 4`, and the per-voice factor from the rate register is
+		// applied per sample. `slot.clockHz` is only the fallback for a song whose VGM declares no
+		// clock, which some do.
+		double ga20Rate = 0.0;
+		uint32_t ga20Clock = 0;
+
+		for (const auto& device : deviceInfo)
+		{
+			if (device.type != DEVID_GA20)
+			{
+				continue;
+			}
+
+			if (device.smplRate > 0)
+			{
+				ga20Rate = (double) device.smplRate;
+			}
+
+			if (device.devCfg != nullptr && device.devCfg->clock > 0)
+			{
+				ga20Clock = device.devCfg->clock;
+			}
+		}
+
+		for (auto& sample : collectGa20Samples (*songIr, ga20Rate, ga20Clock))
+		{
+			collected.push_back (std::move (sample));
+		}
+	}
 
 	if (hasK007232 && songIr != nullptr)
 	{

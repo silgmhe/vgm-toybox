@@ -1,4 +1,4 @@
-/*
+﻿/*
 	Console harness for the window - the runner of docs/desgin/testing-architecture.md.
 
 	It builds the real ToyboxAudioProcessor and ToyboxAudioProcessorEditor, lays them out at a real
@@ -50,6 +50,7 @@
 #include <juce_audio_processors/juce_audio_processors.h>
 
 #include "PluginEditor.h"
+#include "playback/ChipState.h"
 #include "PluginProcessor.h"
 #include "Standalone/StandaloneHooks.h"
 #include "i18n/LanguageManager.h"
@@ -892,6 +893,41 @@ private:
 			const auto actual = juce::String (processor.getEngine().getPositionSeconds(), 6);
 			report (fieldMatches (actual, tokens[3], tokens[4]),
 					"engine.position " + tokens[3] + " '" + tokens[4] + "'   (was: " + actual + ")");
+			return;
+		}
+
+		// `assert engine wave.<n> <op> <value>` is the waveform size the row would draw for channel
+		// `n` of the current snapshot.
+		//
+		// Written for one behaviour that is hard to see and easy to break: when a channel stops
+		// playing it keeps the last sample it played, so the cell stays draggable instead of going
+		// blank. A screenshot cannot check that - it depends on when the picture was taken - and the
+		// chips whose samples are short (a GA20 drum is sixty milliseconds) spend almost all their
+		// time between hits, so without the hold the cell is empty at nearly every moment worth
+		// capturing.
+		if (tokens[1] == "engine" && tokens[2].startsWith ("wave."))
+		{
+			const int channel = tokens[2].fromFirstOccurrenceOf (".", false, false).getIntValue ();
+
+			// The engine only keeps the display state alive while something is asking for it - the
+			// editor turns this on when the keyboard view opens, and a script has no editor page.
+			processor.getEngine ().setStateCaptureWanted (true);
+
+			toybox::playback::ChipStateSnapshot snapshot;
+			processor.getEngine ().captureChipState (snapshot);
+
+			int points = 0;
+
+			if (channel >= 0 && (std::size_t) channel < snapshot.channels.size ()
+				&& snapshot.channels[(std::size_t) channel].wave != nullptr)
+			{
+				points = (int) snapshot.channels[(std::size_t) channel].wave->size ();
+			}
+
+			report (fieldMatches (juce::String (points), tokens[3], tokens[4]),
+					"engine.wave." + juce::String (channel) + " " + tokens[3] + " '" + tokens[4]
+						+ "'   (was: " + juce::String (points) + " of "
+						+ juce::String ((int) snapshot.channels.size ()) + " channels)");
 			return;
 		}
 

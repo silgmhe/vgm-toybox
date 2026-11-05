@@ -297,7 +297,7 @@ track.channelIndex = channelIndex;    // 联动芯片的通道号接在父芯片
 | 采样 | K053260，KADPCM | ✓ | — | ✓ `collectK053260Samples` |
 | 采样 | K054539，8 位 / 16 位 PCM 与 4 位 DPCM | ✓ | ✓ | ✓ `collectK054539Samples` |
 | 采样 | RF5C68 / RF5C164 —— **搁置**，见 §9.5 | ✓ | ✓ | ✓ `collectRf5cSamples` |
-| 采样 | **GA20**（Y8950 的 ADPCM 半） | — | — | — |
+| 采样 | GA20 —— 见 §9.8 | ✓ | ✓ | ✓ `collectGa20Samples` |
 | 采样 | OKIM6295 —— 见 §9.6 | ✓ | ✓ | ✓ `collectOkim6295Samples` |
 | 采样 | **SegaPCM** | — | — | — |
 | 采样 | **YMZ280B** | — | — | — |
@@ -459,6 +459,31 @@ kDpcmTable    第 8 项是   0      ← 累加有界，不需要
 `bestPeriod()` 同时提到 `Pitch.h` 共享（此前 ES5503 / GA20 / OKI / RF5C 各有一份拷贝）。
 
 **完整记录**：`docs/memo/2026-11-05-k007232-the-length-in-the-data-and-the-rate-that-was-not-a-pitch.md`。
+
+### 9.8 已关闭：GA20（2026-11-05）
+
+三颗采样芯片里**芯片本身最省事**的一颗：没有采样表、没有 bank、没有压缩格式。要点只有两条，
+而且都是"结束符在数据里"的变体：
+
+- **`0x00` 即结束**（`iremga20.c:174`），该字节不发声；`0x00` 在 50 KB ROM 里出现 52 次，
+  正是一段一个
+- **8 位无符号、`0x80` 为中点**（`iremga20.c:177`），所以它需要自己的 `SampleFormat::ga20`，
+  不能落进默认的 `int8` 分支
+- 长度寄存器（2、3）**每个驱动都写、核心从不读**——按它切长度会全部错
+
+**真正的两个问题都在显示层**，不在芯片里：
+
+1. **探针把 `null` 与 `0 pts` 打印成同一个 `0`**，我据此误判"解码器没出波形"，还把 **YM2151**
+   的行当成了 GA20 的行。工具自身的歧义会制造假象，比没有诊断更贵。
+2. **通道空闲时格子空白、无法拖拽**——GA20 的采样只有 60 ms 量级，几乎全程都在空档。
+   修法是全芯片统一的：在 `LibvgmTrackPlayer::captureState` 锁存 **`(wave, rate)` 这一对**，
+   没有就回放上一次；`active` 不动，所以保持态画成暗色；跳转与换歌时清空。
+
+```
+t=15.0  [0] GA20 Ch1 wave=2126 pts rate=17209.3 active=0     ← 保持态，可拖拽
+```
+
+**完整记录**：`docs/memo/2026-11-05-ga20-a-zero-byte-that-means-stop-and-a-cell-that-went-blank.md`
 
 ## 10. 实施顺序
 

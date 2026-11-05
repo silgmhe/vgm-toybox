@@ -864,8 +864,20 @@ int runLiveRows (toybox::PlaybackEngine& engine, double seconds, int onlyTrack)
 
 		const std::string name = (i < tracks.size ()) ? tracks[i].name.toStdString () : std::string ();
 
-		std::printf ("    [%2d] %-14s wave=%5d pts rate=%8.1f note=%3d hz=%8.1f active=%d\n", (int) i,
-					 name.c_str (), (channel.wave != nullptr) ? (int) channel.wave->size () : 0,
+		// `null` and `0 pts` are different answers: one says the chip has no shape for this channel,
+		// the other says it has one and it came back empty - which is how a start address that lands
+		// on its own terminator looks, and the two were being printed identically.
+		const char* waveText = "null";
+
+		char waveBuffer[32] = {};
+		if (channel.wave != nullptr)
+		{
+			std::snprintf (waveBuffer, sizeof (waveBuffer), "%d pts", (int) channel.wave->size ());
+			waveText = waveBuffer;
+		}
+
+		std::printf ("    [%2d] %-10s %-8s wave=%8s rate=%8.1f note=%3d hz=%8.1f active=%d\n",
+					 (int) i, channel.chipName.c_str (), name.c_str (), waveText,
 					 (double) channel.sampleRate, channel.note, (double) channel.frequency,
 					 channel.active ? 1 : 0);
 	}

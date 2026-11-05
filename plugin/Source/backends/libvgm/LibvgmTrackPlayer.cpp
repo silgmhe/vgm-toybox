@@ -450,6 +450,9 @@ void LibvgmTrackPlayer::setReplaySource (std::shared_ptr<const midi::SongIr> ir,
 	replayIr = std::move (ir);
 	replayDevices = devices;
 
+	// A new song has played nothing yet: the remembered samples belong to the old one.
+	ledger.lastPlayed.clear ();
+
 	if (replayIr != nullptr)
 	{
 		ledger.buildNotes (*replayIr);
@@ -588,6 +591,10 @@ bool LibvgmTrackPlayer::captureState (playback::ChipStateSnapshot& snapshot) con
 	if (pendingRewind.exchange (false, std::memory_order_relaxed))
 	{
 		replayer->rewind ();
+
+		// The remembered samples belong to the position the playhead just left. Keeping them would
+		// offer a drag of something that never played here.
+		ledger.lastPlayed.clear ();
 	}
 
 	const double seconds = lastPosition.load (std::memory_order_relaxed);
@@ -695,6 +702,41 @@ bool LibvgmTrackPlayer::captureState (playback::ChipStateSnapshot& snapshot) con
 			// A hit is an event, and a snapshot is a sample: the two do not line up for anything
 			// that lasts milliseconds. Held here until a snapshot has carried it.
 			const uint32_t hitKey = (instance.deviceId << 8) ^ (uint32_t) channel;
+
+			// **One place, every sampled chip: keep the last sample a channel played.**
+			//
+			// A row draws what the chip reports *now*, and between samples that is nothing - which
+			// is most of the time for a short one. `11 Redtailed Cat`'s drums are two thousand bytes
+			// at 34 kHz, sixty milliseconds each, so the cell was empty far more often than not and
+			// there was nothing to drag. Latching it here rather than in each decoder means one rule
+			// for every chip, and the drag reads the same field and gets it for free.
+			//
+			// Both halves are kept together: a wave with a zero rate passes the eye and fails the
+			// export, which asks `sampleRate > 0` before it will write anything.
+			{
+				DpcmLookup& held = ledger.lastPlayed[hitKey];
+
+				const bool playing = state.wave != nullptr && state.wave->size () >= 2
+								  && state.sampleRate > 0.0f;
+
+				if (playing)
+				{
+					held.wave = state.wave;
+					held.rate = state.sampleRate;
+				}
+				else if (held.wave != nullptr)
+				{
+					// **The pair, or nothing.** A decoder that has keyed a voice but closed its gate
+					// reports a wave with a rate of zero - a cell that draws and cannot be dragged,
+					// because the export asks `sampleRate > 0` before it will write anything. Rather
+					// than let a half-pair through, the remembered one replaces it.
+					//
+					// Dim, not lit: `active` is left alone, so the row draws the remembered shape in
+					// the quiet colour and nothing pretends the channel is sounding.
+					state.wave = held.wave;
+					state.sampleRate = held.rate;
+				}
+			}
 
 			if (chipState.hitCount != ledger.lastHits[hitKey])
 			{
