@@ -36,6 +36,16 @@ namespace toybox::chips
 	averages that away - and the ROM it needs is the song's `0x93` data blocks assembled at their
 	own offsets.
 
+	**The bytes, for the row and the export.** `channelState` hands back the sample the voice
+	latched, decoded to -1..1, and the rate a file of it has to declare (`bytesPerSecond`). The
+	decode is one line and easy to get wrong in a way nothing reports: `iremga20.c:177` reads
+	`rom[pos] - 0x80` into an `int8_t`, so the data is **eight-bit unsigned with 0x80 as silence**,
+	not the signed format the default `SampleFormat` branch assumes. The end is the `0x00` marker,
+	which is therefore never a level - `Length` in `lengthOf` already counts bytes up to it, so the
+	wave is `[start, start + length)`. A second reading of the same ROM (the export's) uses the same
+	range and the same centre; `SampleFormat::ga20` exists so that agreement is structural rather
+	than a coincidence of two implementations.
+
 	**Percussion.** These boards put drums on the same four voices as the music, and one voice can
 	play both within a song - which is fine here, because the drum/melody decision is made per
 	key-on from the sample the voice latched, not per channel. A drum has no cycle to measure, so
@@ -87,8 +97,8 @@ public:
 	void advance (uint32_t sampleTime) override;
 
 	/** Hands the chip its sample ROM - the song's 0x93 data blocks assembled at their own offsets.
-		Without it no cycle can be measured and every voice stays the C4 trigger. The ROM survives a
-		`reset()`: it belongs to the song, not to the run. */
+		Without it no cycle can be measured (every voice stays the C4 trigger) and no waveform can be
+		drawn. The ROM survives a `reset()`: it belongs to the song, not to the run. */
 	void setRom (std::vector<uint8_t> rom);
 
 	int channelCount() const override { return (int) Ga20Decoder::numChannels; }

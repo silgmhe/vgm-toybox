@@ -166,10 +166,11 @@ private:
 
 	/** Everything this player remembers about samples between frames.
 
-		Four tables that only ever make sense together: which note a sample identity is given, the
-		levels behind it, the hits that no snapshot has carried yet, and the counts those hits were
-		noticed from. Kept in one place so that the player reads as "replay plus a ledger" rather
-		than as a class with five maps of its own - the review's problem 8, first step.
+		Five tables that only ever make sense together: which note a sample identity is given, the
+		levels behind it, the hits that no snapshot has carried yet, the counts those hits were
+		noticed from, and the last sample each channel played (so a row does not go blank between
+		them). Kept in one place so that the player reads as "replay plus a ledger" rather than as a
+		class with five maps of its own - the review's problem 8, first step.
 	*/
 	struct Ledger
 	{
