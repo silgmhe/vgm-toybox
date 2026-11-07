@@ -4331,6 +4331,10 @@ namespace
 			write.reg = reg;
 			write.value = value;
 			write.sampleTime = time;
+
+			// Port 1 is the channel-register half of the address space (`vsu.c:238`): the wave RAM
+			// below 0x100 shares the same low byte, so a write without this talks to the table.
+			write.port = 1;
 			writes.push_back (write);
 		};
 
@@ -4479,6 +4483,53 @@ namespace
 
 		check (banked.wave != nullptr && banked.wave->size () == 4 && (*banked.wave)[0] > 0.9f,
 			   "the bank register picks the window: 0x100200 is not 0x000200");
+	}
+
+	/** **A VSU row draws one cycle of a table it was never handed as memory, and the two halves of
+		the address space must not be confused.**
+
+		The wave comes in as register writes below 0x100 (`vsu.c:229`), while the channel registers
+		start at 0x100 and land on the same low byte. A decoder that cannot tell the halves apart
+		will read a wave byte as a control register - which is exactly what happens if the write's
+		`port` is dropped: the table upload keys a voice on and the rows go blank.
+	*/
+	void testVsuWave (void)
+	{
+		std::vector<uint8_t> ram;
+
+		toybox::chips::VsuDecoder decoder;
+		decoder.reset (toybox::chips::ChipConfig { 5000000, 44100.0 });
+
+		// Table 0: silence, the top level, and the bottom one. Port 0 is the wave half.
+		decoder.write (toybox::chips::RegisterWrite { 0, 0x00, 0x20, 0, 0, 0 });
+		decoder.write (toybox::chips::RegisterWrite { 0, 0x01, 0x3F, 0, 0, 0 });
+		decoder.write (toybox::chips::RegisterWrite { 0, 0x02, 0x00, 0, 0, 0 });
+
+		// The control register at 0x100 also arrives as reg 0x00 - port 1 tells them apart.
+		decoder.write (toybox::chips::RegisterWrite { 0, 0x06, 0x00, 1, 0, 0 });	// table 0
+		decoder.write (toybox::chips::RegisterWrite { 0, 0x02, 0x00, 1, 0, 0 });	// freq low
+		decoder.write (toybox::chips::RegisterWrite { 0, 0x03, 0x01, 1, 0, 0 });	// freq 0x100
+		decoder.write (toybox::chips::RegisterWrite { 0, 0x00, 0x80, 1, 0, 0 });	// key on
+
+		const auto state = decoder.channelState (0);
+
+		check (state.wave != nullptr && state.wave->size () == 32,
+			   "a wave file here is one cycle: thirty-two entries");
+
+		if (state.wave != nullptr && state.wave->size () == 32)
+		{
+			check (std::abs ((*state.wave)[0]) < 1e-6f, "0x20 is silence");
+			check ((*state.wave)[1] > 0.96f && (*state.wave)[1] < 0.97f, "0x3F is just short of +1");
+			check ((*state.wave)[2] < -0.99f, "0x00 is the bottom of the range");
+		}
+
+		// 2048 - 0x100 = 1792 clocks per entry, so the step rate is 5000000 / 1792.
+		check (std::abs (state.sampleRate - 2790.178f) < 1.0f,
+			   "the declared rate is the entry rate, thirty-two of which make the cycle");
+		check (std::abs (state.hz - 87.19f) < 0.1f, "and the note is that cycle rate");
+
+		// The wave upload must not have keyed the voice: that write was a level, not a control word.
+		check (state.gate, "the control write at port 1 is what keys the voice");
 	}
 
 	/** **The row needs the table's bytes, and the rate is the chip's own - which 0xE1 moves.**
@@ -6923,6 +6974,7 @@ int main (void)
 	testEs5503OscillatorCount();
 	testEs5503Wave();
 	testMultiPcmWave();
+	testVsuWave();
 
 	testSegaPcmNote();
 	testSegaPcmPitchIsAStep();

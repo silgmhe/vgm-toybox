@@ -287,7 +287,10 @@ void ChipWriteRouter::route (const midi::SongIr& ir, const chips::RegisterWrite&
 		decoders.decoder<chips::Msm5232Decoder> ().queue (deviceFor (DEVID_MSM5232, instance), reg, value, time);
 		break;
 	case midi::ChipKind::vsu:
-		decoders.decoder<chips::VsuDecoder> ().queue (deviceFor (DEVID_VBOY_VSU, instance), reg, value, time);
+		// `port` is not a second chip here: it says which half of the address space the write is
+		// in, and both halves end on the same low byte. Dropping it made every channel-register
+		// write look like a wave byte, so nothing ever keyed on and the rows went blank.
+		decoders.decoder<chips::VsuDecoder> ().queue (deviceFor (DEVID_VBOY_VSU, instance), reg, value, time, port);
 		break;
 	default:
 		break;

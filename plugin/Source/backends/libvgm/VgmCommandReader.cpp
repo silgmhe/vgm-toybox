@@ -525,11 +525,17 @@ bool VgmCommandReader::next (VgmCommand& command)
 			// VSU: Ofs16_Data8, and the offset is *big endian* (ReadBE16 in vgmplayer_cmdhandler.cpp),
 			// with bit 15 selecting the second chip. Reading it little endian turned offset 0x0001 into 0x0100,
 			// which is why an earlier dump put every write on channel 0.
+			//
+			// **The offset's bit 8 is kept in `data2`**, because it is the difference between the two
+			// halves of this chip's address space (`vsu.c:213-238` scales and masks to eleven bits):
+			// below 0x100 is the **wave RAM** - five tables of thirty-two bytes - and 0x100..0x17F is
+			// the channel registers. Both ends land on the same low byte, so a reader that kept only
+			// `addr` made a wave write at 0x10 look like channel 1's control register.
 			command.kind = VgmCommand::Kind::registerWrite;
 			const uint16_t offset = (uint16_t) (((uint16_t) data[position + 1] << 8) | data[position + 2]);
 			command.port = (uint8_t) (offset >> 15);
-			command.addr = (uint8_t) (offset & 0x7F);
 			command.addr = (uint8_t) (offset & 0xFF);
+			command.data2 = (uint8_t) ((offset >> 8) & 0x7F);
 			command.data = data[position + 3];
 		}
 		else if (cmd == 0xB5)

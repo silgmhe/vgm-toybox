@@ -208,6 +208,18 @@ void SampleCollector::add (uint64_t key, const std::string& name, const uint8_t*
 			level /= peak;
 		}
 	}
+	else if (format == SampleFormat::vsu6)
+	{
+		// **Six bits, silence at 0x20.** `vsu.c:229` stores `V & 0x3F`, and `vsu.c:402` subtracts
+		// 0x20 before mixing, so an entry is a signed level in -32..+31. No normalisation: the scale
+		// is absolute, and rescaling would make a quiet table as loud as a loud one.
+		sample.values.reserve (length);
+
+		for (std::size_t i = 0; i < length; ++i)
+		{
+			sample.values.push_back ((float) (((int) bytes[i] & 0x3F) - 0x20) / 32.0f);
+		}
+	}
 	else if (format == SampleFormat::ga20 || format == SampleFormat::es5503)
 	{
 		// **Eight-bit unsigned with 0x80 as silence, and 0x00 as the end.** `iremga20.c:177` reads

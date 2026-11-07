@@ -152,7 +152,9 @@ bool VgmSongLoader::load (const void* data, std::size_t size, midi::SongIr& out,
 		case 0xBD:	emit (ChipKind::saa1099, port, 0, reg, value, time); break;
 		case 0xBF:	emit (ChipKind::ga20, 0, 0, reg, value, time); break;
 		case 0xC0:	emit (ChipKind::segapcm, 0, port, reg, value, time); break;
-		case 0xC7:	emit (ChipKind::vsu, port, 0, reg, value, time); break;
+		case 0xC7:		// VSU: `port` carries which half of the address space the write is in
+			emit (ChipKind::vsu, port, (command.data2 != 0) ? 1 : 0, reg, value, time);
+			break;
 		case 0xC8:	emit (ChipKind::x1_010, 0, port, reg, value, time); break;
 		case 0xD5:	emit (ChipKind::es5503, port, 0, reg, value, time); break;
 

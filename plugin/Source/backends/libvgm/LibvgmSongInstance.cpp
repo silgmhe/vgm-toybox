@@ -5,6 +5,7 @@
 #include "Es5503Samples.h"
 #include "Ga20Samples.h"
 #include "K007232Samples.h"
+#include "VsuSamples.h"
 #include "MultiPcmSamples.h"
 #include "Okim6295Samples.h"
 #include "QSoundSamples.h"
@@ -348,6 +349,33 @@ bool LibvgmSongInstance::prepare (double hostSampleRate, int newMaxBlockSize, ju
 										  {
 											  return slot.kind == midi::ChipKind::okim6295;
 										  });
+
+	const bool hasVsu = songIr != nullptr
+					 && std::any_of (songIr->chips.begin (), songIr->chips.end (),
+									 [] (const midi::ChipSlot& slot)
+									 {
+										 return slot.kind == midi::ChipKind::vsu;
+									 });
+
+	if (hasVsu && songIr != nullptr)
+	{
+		// The clock is the whole model here: everything else comes from the write stream, because a
+		// VSU wave is register-written RAM rather than a ROM the assembler could supply.
+		uint32_t clock = 0;
+
+		for (const auto& device : deviceInfo)
+		{
+			if (device.type == DEVID_VBOY_VSU && device.devCfg != nullptr && device.devCfg->clock > 0)
+			{
+				clock = device.devCfg->clock;
+			}
+		}
+
+		for (auto& sample : collectVsuSamples (*songIr, clock))
+		{
+			collected.push_back (std::move (sample));
+		}
+	}
 
 	const bool hasEs5503 = songIr != nullptr
 						&& std::any_of (songIr->chips.begin (), songIr->chips.end (),
