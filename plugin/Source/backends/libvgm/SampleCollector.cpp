@@ -208,7 +208,7 @@ void SampleCollector::add (uint64_t key, const std::string& name, const uint8_t*
 			level /= peak;
 		}
 	}
-	else if (format == SampleFormat::ga20)
+	else if (format == SampleFormat::ga20 || format == SampleFormat::es5503)
 	{
 		// **Eight-bit unsigned with 0x80 as silence, and 0x00 as the end.** `iremga20.c:177` reads
 		// `rom[pos] - 0x80` into an `int8_t`; `iremga20.c:174` stops playback on a zero byte, so

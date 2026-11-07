@@ -2,6 +2,7 @@
 
 #include "C140Samples.h"
 #include "C352Samples.h"
+#include "Es5503Samples.h"
 #include "Ga20Samples.h"
 #include "K007232Samples.h"
 #include "Okim6295Samples.h"
@@ -346,6 +347,33 @@ bool LibvgmSongInstance::prepare (double hostSampleRate, int newMaxBlockSize, ju
 										  {
 											  return slot.kind == midi::ChipKind::okim6295;
 										  });
+
+	const bool hasEs5503 = songIr != nullptr
+						&& std::any_of (songIr->chips.begin (), songIr->chips.end (),
+												[] (const midi::ChipSlot& slot)
+												{
+													return slot.kind == midi::ChipKind::es5503;
+												});
+
+	if (hasEs5503 && songIr != nullptr)
+	{
+		// The clock is the only thing the collector needs: the DOC's own sample rate is derived from
+		// it per moment, because register 0xE1 moves it for every voice at once.
+		uint32_t clock = 0;
+
+		for (const auto& device : deviceInfo)
+		{
+			if (device.type == DEVID_ES5503 && device.devCfg != nullptr && device.devCfg->clock > 0)
+			{
+				clock = device.devCfg->clock;
+			}
+		}
+
+		for (auto& sample : collectEs5503Samples (*songIr, clock))
+		{
+			collected.push_back (std::move (sample));
+		}
+	}
 
 	const bool hasK007232 = songIr != nullptr
 						 && std::any_of (songIr->chips.begin (), songIr->chips.end (),

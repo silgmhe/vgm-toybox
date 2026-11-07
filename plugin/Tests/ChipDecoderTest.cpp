@@ -4404,6 +4404,52 @@ namespace
 		return ram;
 	}
 
+	/** **The row needs the table's bytes, and the rate is the chip's own - which 0xE1 moves.**
+
+		Two things this pins down. The table stops at its **0x00 marker**: `es5503.c:301` halts the
+		oscillator there whatever the mode, so that byte is not a level. And the rate a file has to
+		declare is `freq / 2^(9 + resolution - size)` bytes per *chip* sample - where the chip's own
+		sample rate depends on how many oscillators are enabled, so 0xE1 moves it for every voice.
+	*/
+	void testEs5503Wave (void)
+	{
+		std::vector<uint8_t> ram (0x900, 0x00);
+		ram[0x800] = 0x80;		//  0.0
+		ram[0x801] = 0x40;		// -0.5
+		ram[0x802] = 0xC0;		// +0.5
+		ram[0x803] = 0x00;		// the halt marker
+
+		toybox::chips::Es5503Decoder decoder;
+		decoder.reset (toybox::chips::ChipConfig { 7159090, 44100.0 });
+		decoder.setRam (ram);
+
+		decoder.write (toybox::chips::RegisterWrite { 0, 0xE1, 0x3E, 0, 0, 0 });	// 32 oscillators
+		decoder.write (toybox::chips::RegisterWrite { 0, 0x80, 0x08, 0, 0, 0 });	// pointer 0x0800
+		decoder.write (toybox::chips::RegisterWrite { 0, 0xC0, 0x00, 0, 0, 0 });	// 256 bytes, res 0
+		decoder.write (toybox::chips::RegisterWrite { 0, 0x00, 0x00, 0, 0, 0 });	// freq low
+		decoder.write (toybox::chips::RegisterWrite { 0, 0x20, 0x02, 0, 0, 0 });	// freq 0x0200
+		decoder.write (toybox::chips::RegisterWrite { 0, 0x40, 0xFF, 0, 0, 0 });	// volume
+		decoder.write (toybox::chips::RegisterWrite { 0, 0xA0, 0x01, 0, 0, 0 });	// halted
+		decoder.write (toybox::chips::RegisterWrite { 0, 0xA0, 0x00, 0, 0, 0 });	// key on
+
+		const auto state = decoder.channelState (0);
+
+		check (state.wave != nullptr && state.wave->size () == 3,
+			   "a DOC table ends at its 0x00 marker, which is not one of its levels");
+
+		if (state.wave != nullptr && state.wave->size () == 3)
+		{
+			check (std::abs ((*state.wave)[0]) < 1e-6f, "0x80 is silence");
+			check ((*state.wave)[1] < -0.49f && (*state.wave)[1] > -0.51f, "0x40 is -0.5");
+			check ((*state.wave)[2] > 0.49f && (*state.wave)[2] < 0.51f, "0xC0 is +0.5");
+		}
+
+		// 512 of frequency over a 512-count step is one byte per chip sample, and with thirty-two
+		// oscillators the chip runs at (7159090 / 8) / 34 = 26,320.2 samples a second.
+		check (std::abs (state.sampleRate - 26320.2f) < 1.0f,
+			   "the rate is the chip's own, and 0xE1 decides what the chip's is");
+	}
+
 	/** With thirty-two oscillators enabled the chip runs at (7159090/8)/34 = 26,320 samples a
 		second, and a 1024-byte table at frequency 8,000 is 8000 * 26320 / 512 / 1024 = 401.6 Hz -
 		G4. A decoder that read the table as ten times shorter, or that used the output rate as the
@@ -6798,6 +6844,7 @@ int main (void)
 	testEs5503OneShot();
 	testEs5503Percussion();
 	testEs5503OscillatorCount();
+	testEs5503Wave();
 
 	testSegaPcmNote();
 	testSegaPcmPitchIsAStep();

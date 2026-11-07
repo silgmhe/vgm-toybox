@@ -111,6 +111,10 @@ struct Es5503Decoder::Impl
 	double outRate = 44100.0;				// the rate the note times and gates are in
 	int enabledOscillators = 1;				// register 0xE1, 1..32
 	std::map<uint32_t, double> cycleCache;
+
+	/** Decoded tables, keyed by pointer and size. `mutable` because `channelState` is const and a
+		table is a pure function of the RAM, which does not change once the song has loaded. */
+	mutable std::map<uint32_t, std::shared_ptr<const std::vector<float>>> waveCache;
 	uint32_t now = 0;
 
 	uint8_t byteAt (uint32_t address) const
@@ -258,6 +262,50 @@ struct Es5503Decoder::Impl
 
 		cycleCache[key] = cycle;
 		return cycle;
+	}
+
+	/** The bytes a table holds, decoded to -1..1.
+
+		A DOC table is not a sample with a length register: the oscillator reads forward through it and
+		the core halts on the first **0x00** byte (`es5503.c:301`), whatever the mode, so that byte ends
+		the table the way it ends a GA20 sample. The rest of the table is the shape - one cycle or
+		several, which is why the pitch is measured separately.
+
+		The data is eight-bit unsigned around 0x80 (`es5503.c:310`: `(data - 0x80) * vol`), the same
+		convention as the GA20 and the reason `SampleFormat` needs a shared branch rather than the
+		default signed one.
+	*/
+	std::shared_ptr<const std::vector<float>> waveFor (uint32_t base, int sizeIndex) const
+	{
+		const uint32_t key = (base << 3) | (uint32_t) (sizeIndex & kSizeIndexMask);
+		const auto cached = waveCache.find (key);
+
+		if (cached != waveCache.end())
+		{
+			return cached->second;
+		}
+
+		auto wave = std::make_shared<std::vector<float>>();
+
+		if (! ram.empty())
+		{
+			const uint32_t length = kTableSizes[sizeIndex & kSizeIndexMask];
+
+			for (uint32_t i = 0; i < length; ++i)
+			{
+				const uint8_t value = byteAt (base + i);
+
+				if (value == 0x00)
+				{
+					break;		// the halt marker, and not a level
+				}
+
+				wave->push_back ((float) ((int) value - kSampleBias) / 128.0f);
+			}
+		}
+
+		waveCache.emplace (key, wave);
+		return wave;
 	}
 
 	uint32_t tableBase (const Oscillator& oscillator) const
@@ -514,6 +562,18 @@ ChannelState Es5503Decoder::channelState (int channel) const
 	state.transposeCents = 0;
 	state.rootCents = 0;
 	state.pitchSource = oscillator.melodic ? PitchSource::sampleInferred : PitchSource::unpitched;
+
+	// **The table, for the row and the export.** The chip generates nothing: a row that draws it needs
+	// the RAM decoded, and the table ends at its own 0x00 byte rather than at a length register.
+	if (oscillator.keyed && ! impl->ram.empty())
+	{
+		state.wave = impl->waveFor (impl->tableBase (oscillator), oscillator.sizeIndex);
+	}
+
+	// **The rate a file has to declare**: the bytes this oscillator walks per second, which is
+	// `freq / 2^(9 + resolution - size)` entries per chip sample - and the chip sample rate itself
+	// moves with the number of enabled oscillators (0xE1), so this is a per-moment number.
+	state.sampleRate = state.gate ? (float) impl->entriesPerSecond (oscillator) : 0.0f;
 
 	return state;
 }

@@ -23,6 +23,7 @@ namespace toybox::backends::libvgm
 		msm6295,		// the OKI's four-bit delta codec: a 49-step table, high nibble first
 		k007232,		// seven-bit unsigned around 0x40, and the sample ends at the first bit-7 byte
 		ga20,			// eight-bit unsigned around 0x80, and the sample ends at the first 0x00 byte
+		es5503,		// the same encoding: the DOC halts on 0x00 too (`es5503.c:301`)
 	};
 
 	/** Accumulates one `DecodedSample` per distinct recording.

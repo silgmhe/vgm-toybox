@@ -322,7 +322,7 @@ track.channelIndex = channelIndex;    // 联动芯片的通道号接在父芯片
 | 采样 | **OPN-ADPCM**（YM2608 / YM2610） | — | — | — |
 | 采样 | **Y8950-ADPCM / ADPCM-drum** | — | — | — |
 | 波表 | VSU | ✓（局部） | — | — |
-| 波表 | **ES5503**（自述为 wavetable 而非 sample player） | — | — | — |
+| 波表 | ES5503 —— 见 §9.9 | ✓ | ✓ | ✓ `collectEs5503Samples` |
 | 波表 | HuC6280、SCC（K051649）、X1-010、WonderSwan、Game Boy 波表、Mikey、MSM5232、NES APU、K005289 | — | — | — |
 
 **不在本表的两类**：PSG 与 FM（AY、SN76489、SAA1099、POKEY、OPL 系、OPN 系、OPM、OPX 等）本来就用 `cycleFor` 画阶梯，不经过 `state.wave`；`FDS` 与 `N163` 由 NSF 后端（`NsfBackend` / `NsfBus`）加载，没有对应的 `ChipKind`，要单独处理。
@@ -501,6 +501,39 @@ t=15.0  [0] GA20 Ch1 wave=2126 pts rate=17209.3 active=0     ← 保持态，可
 ```
 
 **完整记录**：`docs/memo/2026-11-05-ga20-a-zero-byte-that-means-stop-and-a-cell-that-went-blank.md`
+
+### 9.9 已关闭：ES5503（2026-11-07）
+
+**唯一一颗“波表”芯片，也是唯一一颗速率会被别的通道改变的芯片。**
+`es5503_get_sample_rate` 是 `(clock / 8) / (oscsenabled + 2)`，而 `oscsenabled` 由寄存器 0xE1
+控制——**一个通道开关，全芯片的音高一起变**。这决定了三件事：
+
+| 量 | 公式 | 来源 |
+|---|---|---|
+| 芯片采样率 | `(clock/8) / (enabled + 2)` | `es5503.c:189` |
+| 一个振荡器每芯片样本读多少字节 | `freq / 2^(9 + resolution - size)` | `es5503.c:287`、`resshifts` |
+| 音高 | 上者 ÷ 表内**实测**周期 | 表可以装多个周期（`testEs5503TableCycle`） |
+
+**数据格式与 GA20 相同**：8 位无符号、`0x80` 中点（`es5503.c:310`），且 **0x00 即停止**
+（`es5503.c:301`，任何模式）。因此导出侧新增的是 `SampleFormat::es5503` 这个名字，**解码实现与
+`ga20` 共用一个分支**——两份拷贝就是两次分叉的开头。
+
+**RAM 是加载期映像，不需要重放。** `0xE1` 属于 RAM 块（0xC0+），载荷以 **32 位地址**开头
+（不是 ROM 的 size/offset），`memory::ram` 已经按地址装配。实测三首曲子的块全部写在第一个
+`0xD5` 之前（首个 `0x67` 在 224 字节，首个 `0xD5` 在 5388），所以静态映像与芯片看到的一致。
+将来若遇到边播边写 RAM 的曲子，需要 RF5C164 那套按流序重放——解码器的 `attachMemory` 也表达不了，
+所以这是**已知限制**，不是这一颗引入的新缺陷。
+
+**验收**（三首，行与菜单逐项比对）：
+
+```
+01 Title Screen  4 个表   6682.9 – 361542.7 Hz
+02 Danger Nearby 1 个表   37835.3 Hz
+03 Game Over     1 个表   481937.0 Hz
+```
+
+每一个导出速率都在某个时刻的行里出现过（同样的点数、同样的赫兹）。`481937 Hz` 看着惊人，
+但它是 `enabled = 1` 时 `298295 Hz × 1.6 字节/样本` 的真实结果，行也这么报。
 
 ## 10. 实施顺序
 

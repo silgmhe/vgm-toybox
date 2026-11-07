@@ -59,6 +59,19 @@ namespace toybox::chips
 	period is a drum and reports the C4 trigger; a looping table always has a pitch, because the
 	table itself repeats. The MIDI channel is the oscillator, so a driver that writes the same
 	note to two oscillators (this one duplicates every voice into a pair) shows two tracks.
+
+	**The bytes and the rate, for the row and the export.** `channelState` hands back the table the
+	oscillator latched, decoded to -1..1, and the rate a file of it has to declare
+	(`entriesPerSecond`). Two details that a second reader would otherwise have to rediscover:
+
+	- The table ends at its **0x00** byte, not at the size register (`es5503.c:301` halts the
+	  oscillator there in every mode), and the data is **eight-bit unsigned around 0x80**
+	  (`es5503.c:310: (data - 0x80) * vol`) - the same encoding as the GA20, which is why the two
+	  share one `SampleFormat` branch.
+	- The rate is **not** the chip's rate: one oscillator walks `freq / 2^(9 + resolution - size)`
+	  bytes per chip sample, and the chip's own rate is `(clock / 8) / (enabledOscillators + 2)`.
+	  Register `0xE1` therefore moves every voice's pitch at once, and a per-note rate has to be
+	  read at the moment of the note rather than latched at load.
 	*/
 class Es5503Decoder final : public IChipDecoder
 {
