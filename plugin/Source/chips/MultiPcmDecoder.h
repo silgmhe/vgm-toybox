@@ -53,9 +53,14 @@ public:
 	MultiPcmDecoder (const MultiPcmDecoder&) = delete;
 	MultiPcmDecoder& operator= (const MultiPcmDecoder&) = delete;
 
-	/** The clock to assume when the song names none, and the ROM its samples live in. `0x89` is the
-		VGM block type for this chip; the blocks declare four megabytes and merge by their offsets.
-		The chip's own rate is `clock / 224` (multipcm.c:129). */
+	/** The clock to assume when the song names none, and the ROM its samples live in.
+
+		`0x89` is a **ROM** block type - the payload carries a declared size and an offset, not an
+		address, which is the opposite of the ES5503's `0xE1` and the reason the fifth field here is
+		`false` (ROM) rather than `true` (RAM). The blocks in these songs all declare four megabytes
+		and merge by their offsets. The chip's own rate is `clock / 224` (`multipcm.c:129`), which
+		the device overrides - see `reset`.
+	*/
 	static constexpr ChipRequirements kRequirements { 8000000u, true, 0x89, 4u << 20, false, false };
 
 	void attachMemory (const ChipMemory& memory) override

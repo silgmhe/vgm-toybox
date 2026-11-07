@@ -273,16 +273,16 @@ MultiPcmDecoder::~MultiPcmDecoder() = default;
 void MultiPcmDecoder::reset (const ChipConfig& config)
 {
 	const uint32_t clock = (config.clockHz != 0) ? config.clockHz : kDefaultClock;
-	const double sampleRate = config.timeBaseHz;
 
 	impl = std::make_unique<Impl>();
 
-	// The device's own rate when a device is running, the arithmetic otherwise: `multipcm.c:598`
-	// starts it at `clock / 224`, and libvgm reports exactly that through `smplRate`.
+	// **The device's own rate, not the division.** `multipcm.c:598` starts the chip at
+	// `clock / 224` = 35,714 Hz on an 8 MHz song, but the device libvgm actually runs reports
+	// 44,444 - and that is the rate the render used. The OKIM6295 taught this the hard way
+	// (two derivations, 1.6x together); the division stays as the fallback for a song whose
+	// device never started.
 	impl->chipRate = (config.deviceRateHz > 0.0) ? config.deviceRateHz
 												: (double) clock / kClockDivisor;
-
-	[[maybe_unused]] const double outRate = (sampleRate > 0.0) ? sampleRate : 44100.0;
 }
 
 void MultiPcmDecoder::setRom (std::vector<uint8_t> rom)
@@ -377,7 +377,13 @@ void MultiPcmDecoder::write (const RegisterWrite& write)
 	}
 	case 0x2:		// pitch, low eight bits
 		state.pitch = (uint16_t) ((state.pitch & 0x300) | write.value);
-		state.sampleIndex = (int) ((uint32_t) (state.sampleIndex & 0xFF) | ((uint32_t) (write.value & 0x01) << 8));
+
+		// **The sample index is nine bits and its top bit lives here.** The core reads the index as
+		// `regs[1] | ((regs[2] & 1) << 8)` (`multipcm.c:728`), so a driver with more than 256
+		// samples steers the high bit through the pitch's low register. Ignoring it caps every song
+		// at the first 256 entries, which is silent-wrong rather than loud-wrong.
+		state.sampleIndex = (int) ((uint32_t) (state.sampleIndex & 0xFF)
+								   | ((uint32_t) (write.value & 0x01) << 8));
 		break;
 	case 0x3:		// four-bit signed octave above a ten-bit pitch
 		state.octave = (int8_t) (uint8_t) (write.value >> 4);
@@ -399,6 +405,9 @@ void MultiPcmDecoder::write (const RegisterWrite& write)
 			impl->readMeta (state.sampleIndex, start, length, format);
 
 			state.base = impl->mappedBase (start);
+
+			// The count is a 16-bit negation, so 65,536 is expressible and is the ceiling - the same
+			// number the core's loop arithmetic works in (`multipcm.c:885-887`).
 			state.length = (length > 0x10000u) ? 0x10000u : length;
 			state.format = format;
 			state.cycle = impl->cycleFor (state.base, state.length);
