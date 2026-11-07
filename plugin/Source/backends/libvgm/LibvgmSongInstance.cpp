@@ -6,6 +6,7 @@
 #include "Ga20Samples.h"
 #include "K005289Samples.h"
 #include "MikeySamples.h"
+#include "Msm5232Samples.h"
 #include "K007232Samples.h"
 #include "VsuSamples.h"
 #include "MultiPcmSamples.h"
@@ -351,6 +352,23 @@ bool LibvgmSongInstance::prepare (double hostSampleRate, int newMaxBlockSize, ju
 										  {
 											  return slot.kind == midi::ChipKind::okim6295;
 										  });
+
+	const bool hasMsm5232 = songIr != nullptr
+						 && std::any_of (songIr->chips.begin (), songIr->chips.end (),
+										 [] (const midi::ChipSlot& slot)
+										 {
+											 return slot.kind == midi::ChipKind::msm5232;
+										 });
+
+	if (hasMsm5232 && songIr != nullptr)
+	{
+		// No memory and no clock: the shape comes from the pitch index and the group control, and
+		// the rate from the key the index names.
+		for (auto& sample : collectMsm5232Samples (*songIr, 0))
+		{
+			collected.push_back (std::move (sample));
+		}
+	}
 
 	const bool hasMikey = songIr != nullptr
 					   && std::any_of (songIr->chips.begin (), songIr->chips.end (),

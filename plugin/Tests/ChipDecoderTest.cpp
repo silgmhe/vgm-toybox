@@ -4322,6 +4322,16 @@ namespace
 	void testMsm5232Notes (void)
 	{
 		std::vector<toybox::chips::RegisterWrite> writes;
+
+		// **The group control comes first, and it is not decoration.** A voice feeds the taps its
+		// group enables; with none enabled the chip is silent however the voices are keyed, so a
+		// test that only keys one would now assert a note the hardware does not play.
+		toybox::chips::RegisterWrite control;
+		control.reg = 0x0C;
+		control.value = 0x0F;
+		control.sampleTime = 0;
+		writes.push_back (control);
+
 		toybox::chips::RegisterWrite write;
 		write.reg = 0x00;							// voice 0
 		write.value = (uint8_t) (0x80 | 48);	// gate, key A4
@@ -4504,6 +4514,60 @@ namespace
 
 		check (banked.wave != nullptr && banked.wave->size () == 4 && (*banked.wave)[0] > 0.9f,
 			   "the bank register picks the window: 0x100200 is not 0x000200");
+	}
+
+	/** **An MSM5232 voice emits the sum of the taps its group enables, and one period is
+		`2^(divider + 1)` ticks.**
+
+		The index is a key (`note = 21 + index`), so A4 is index 48 and needs no measurement. What
+		has to be right is the shape: four phase-aligned squares an octave apart, only the ones the
+		group control's low nibble enables, and a period set by the divider inside the pitch ROM.
+		INDEX 48's entry is `0x08FD`, so its divider is 4 and one period is 32 ticks.
+	*/
+	void testMsm5232Shape (void)
+	{
+		toybox::chips::Msm5232Decoder decoder;
+		decoder.reset (toybox::chips::ChipConfig { 2119040, 44100.0 });
+
+		decoder.write (toybox::chips::RegisterWrite { 0, 0x0C, 0x0F, 0, 0, 0 });	// group 1: all four taps
+		decoder.write (toybox::chips::RegisterWrite { 0, 0x00, 0x80 | 48, 0, 0, 0 });	// A4, gate on
+
+		const auto state = decoder.channelState (0);
+
+		check (std::abs (state.hz - 440.0f) < 0.5f, "index 48 is A4: the index is the key");
+		check (state.wave != nullptr && state.wave->size () == 32,
+			   "divider 4 makes one period thirty-two ticks");
+		check (std::abs (state.sampleRate - 14080.0f) < 1.0f, "and the rate is 440 Hz times 32 steps");
+		check (state.tableWave, "the export must treat it as a table, not a recording");
+
+		if (state.wave != nullptr && state.wave->size () >= 3)
+		{
+			// All four taps enabled and the counter starting at zero: every square is low, so the
+			// period opens at -4. The fastest tap (bit 1 here) is the first to rise, two ticks in -
+			// that is what makes the sum a staircase rather than a square.
+			check ((*state.wave)[0] < -3.9f, "the period opens with every tap low");
+			check ((*state.wave)[2] > (*state.wave)[0], "and the fastest tap rises first");
+		}
+
+		// A group that enables no tap is silent however its voices are keyed.
+		toybox::chips::Msm5232Decoder muted;
+		muted.reset (toybox::chips::ChipConfig { 2119040, 44100.0 });
+		muted.write (toybox::chips::RegisterWrite { 0, 0x0C, 0x00, 0, 0, 0 });
+		muted.write (toybox::chips::RegisterWrite { 0, 0x00, 0x80 | 48, 0, 0, 0 });
+
+		const auto silent = muted.channelState (0);
+
+		check (! silent.gate && silent.wave == nullptr, "no enabled tap, no sound and no shape");
+
+		// 0xD8 and above is the noise mode, not a high key.
+		toybox::chips::Msm5232Decoder noisy;
+		noisy.reset (toybox::chips::ChipConfig { 2119040, 44100.0 });
+		noisy.write (toybox::chips::RegisterWrite { 0, 0x0C, 0x0F, 0, 0, 0 });
+		noisy.write (toybox::chips::RegisterWrite { 0, 0x00, 0xD8, 0, 0, 0 });
+
+		const auto noise = noisy.channelState (0);
+
+		check (noise.gate && noise.wave == nullptr, "0xD8 is noise: it sounds and has no cycle");
 	}
 
 	/** **A K005289 voice sounds before its PROM arrives, and only gains a shape when it does.**
@@ -7044,6 +7108,7 @@ int main (void)
 	testMultiPcmWave();
 	testVsuWave();
 	testK005289Wave();
+	testMsm5232Shape();
 
 	testSegaPcmNote();
 	testSegaPcmPitchIsAStep();

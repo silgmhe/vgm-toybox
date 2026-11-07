@@ -23,7 +23,16 @@ namespace toybox::chips
 	which makes this chip register-exact, like the K005289: no root layer, no ROM of its own, and
 	the absolute octave is decided by the chip's table rather than by a measured cycle.
 
-	Registers 0x08..0x0F (attack/decay/release) only shape the envelope and are not read here. */
+	**The shape is a staircase, not a square.** A voice feeds four output taps - 16', 8', 4', 2' -
+	each a fifty-percent square taken from one bit of the same counter (msm5232.c:305-320), and the
+	group control's low nibble (`0x0C` / `0x0D`, msm5232.c:620-650) decides which of them the group
+	actually drives. All four are phase-aligned and an octave apart, so enabling several gives a
+	stepped wave whose period is `2^(divider + 1)` ticks; the divider comes from the pitch ROM entry.
+	A group that enables none of them is silent however its voices are keyed.
+
+	Registers 0x08..0x0B (attack/decay) shape the envelope and 0x10..0x1A the per-output volumes;
+	neither is read here. The envelope's level is not a register, so `volume` stays at full - this
+	chip's loudness lives on a capacitor, not in a field we can read. */
 class Msm5232Decoder final : public IChipDecoder
 {
 public:
