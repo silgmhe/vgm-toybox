@@ -103,6 +103,10 @@ ChannelState channelFromChip (const chips::ChannelState& chipState,
 	state.wave = chipState.wave;
 	state.sampleRate = chipState.sampleRate;
 
+	// A rate says how fast a thing is read, not what kind of thing it is: a wavetable walks its
+	// table per second too, and the export has to know which of the two it is holding.
+	state.tableWave = chipState.tableWave;
+
 	if (hints.patchIsDuty)
 	{
 		// Four widths, in the order the chips number them: 12.5, 25, 50 and 75 percent. A patch

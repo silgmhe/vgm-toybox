@@ -46,6 +46,14 @@ struct ChannelState
 	*/
 	float sampleRate = 0.0f;
 
+	/** **`wave` is one cycle of a table, not a recording.** A wavetable channel also declares a rate
+		(it walks its table at one), so `sampleRate > 0` alone cannot say which kind of thing this is
+		- and the export has to: a sample is written raw at its rate, a table is snapped to the
+		chip's depth and marked as one period. Without this flag a VSU table was exported as a
+		sample, which is why the depth setting appeared to do nothing.
+	*/
+	bool tableWave = false;
+
 	float volume = 0.0f;				// 0..1, normalised against the chip's own maximum
 
 	/** One period of the channel's waveform, values in -1..1. Null for chips that generate their

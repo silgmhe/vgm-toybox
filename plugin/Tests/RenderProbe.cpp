@@ -38,6 +38,7 @@
 extern "C" DEV_DEF devDef_RF5C68_Gens;	// scd_pcm.c: the Gens core, taken directly
 #include "playback/ChipState.h"
 #include "playback/PlaybackEngine.h"
+#include "playback/WaveExport.h"
 
 #include <algorithm>
 #include <cmath>
@@ -837,7 +838,8 @@ int runPerf (toybox::PlaybackEngine& engine, double seconds)
 	against what the sample collector hands the File menu, because the two are separate producers of
 	"this channel's bytes" and a disagreement between them is invisible from either side alone.
 */
-int runLiveRows (toybox::PlaybackEngine& engine, double seconds, int onlyTrack)
+int runLiveRows (toybox::PlaybackEngine& engine, double seconds, int onlyTrack,
+				 const char* exportFolder)
 {
 	engine.setStateCaptureWanted (true);
 	engine.setPositionSeconds (0.0);
@@ -852,6 +854,19 @@ int runLiveRows (toybox::PlaybackEngine& engine, double seconds, int onlyTrack)
 
 	std::printf ("  audio %d samples, snapshot valid=%d, %d channels\n",
 				 (int) audio.size (), snapshot.valid ? 1 : 0, (int) snapshot.channels.size ());
+
+	// **The fifth argument writes what the File menu would write.** Rows say what a channel holds;
+	// this says what leaves the program, and the two have disagreed before (a table exported as a
+	// sample because it declared a rate). Without a folder the behaviour is unchanged.
+	if (exportFolder != nullptr)
+	{
+		const auto outcome = toybox::playback::exportWavetables (
+			snapshot, exportFolder, toybox::playback::ExportMode::single, 1.0,
+			toybox::playback::kNativeBits);
+
+		std::printf ("  export: %d written, %d skipped, %d failed -> %s\n", outcome.written,
+					 outcome.skippedSample, outcome.failed, exportFolder);
+	}
 
 	for (size_t i = 0; i < snapshot.channels.size (); ++i)
 	{
@@ -929,12 +944,14 @@ int main (int argc, char** argv)
 		return runPerf (engine, seconds);
 	}
 
-	// -4 prints the rows captured while playing, which is what a drag would export.
+	// -4 prints the rows captured while playing, which is what a drag would export. A fifth
+	// argument names a folder and writes what the File menu would write there.
 	if (wanted == -4)
 	{
 		const int only = (argc > 4) ? std::atoi (argv[4]) : -1;
+		const char* exportFolder = (argc > 5) ? argv[5] : nullptr;
 		std::printf ("song: %s   tracks: %d   at %.1f s\n", argv[1], (int) tracks.size (), seconds);
-		return runLiveRows (engine, seconds, only);
+		return runLiveRows (engine, seconds, only, exportFolder);
 	}
 
 	std::printf ("song: %s   tracks: %d   rendered: %.1f s\n", argv[1], (int) tracks.size (), seconds);

@@ -247,6 +247,7 @@ ChannelState VsuDecoder::channelState (int channel) const
 	if (voice.ramAddress < kTables)
 	{
 		state.wave = impl->waveFor (voice.ramAddress);
+		state.tableWave = true;		// one cycle by definition, whatever rate it is walked at
 	}
 
 	state.sampleRate = (float) stepRateOf (impl->table.clock, voice.freq);

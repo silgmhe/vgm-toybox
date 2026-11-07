@@ -284,7 +284,11 @@ bool writeCycleWav (const ChannelState& channel, const std::string& path,
 
 bool isSampledChannel (const ChannelState& channel)
 {
-	return channel.sampleRate > 0.0f && channel.waveValues ().size () >= 2;
+	// **A declared rate is not enough to call something a sample.** A wavetable channel walks its
+	// table at one too, and treating it as a recording skipped the depth, the one-period marker and
+	// the repeat - the table went out as raw floats with the user's bit-depth setting ignored.
+	return channel.sampleRate > 0.0f && ! channel.tableWave
+		   && channel.waveValues ().size () >= 2;
 }
 
 bool writeSampleWav (const ChannelState& channel, const std::string& path)

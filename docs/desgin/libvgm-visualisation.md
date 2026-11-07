@@ -616,6 +616,29 @@ VGM 偏移 < 0x100 是波形 RAM（5×32），0x100..0x17F 是声道寄存器；
 
 **完整记录**：`docs/memo/2026-11-07-vsu-a-low-byte-that-two-address-spaces-share.md`
 
+#### 9.11.1 交付后修正：波表被当成了采样（2026-11-07）
+
+用户反馈：选“芯片自身的位深”导出时**没有阶梯感**。原因是**我把 VSU 从波表路径挤到了采样路径**：
+
+```
+isSampledChannel = sampleRate > 0 && wave.size() >= 2
+```
+
+VSU 报了 `sampleRate`（每秒走多少条目，这是对的），于是被判为采样 → 走 `writeSampleWav`：
+**不量化、无 `clm` 标记、`single/loop` 与位深全部失效**。文件变成 32 个浮点的“一段录音”，
+导入波表合成器后被当音频插值——看起来就是“平滑”的。
+
+**修法**：给 `chips::ChannelState` 加 `tableWave`（“这个 `wave` 按定义就是一个周期”），由 VSU
+置位，经 `ChannelFromChip` 传到 `playback::ChannelState`，`isSampledChannel` 增加
+`&& ! tableWave`。这是**声明语义**而不是猜：速率说明“读得多快”，不说明“是不是一段录音”。
+
+**验证**（探针新增第五个参数：`-4 <秒> -1 <目录>` 会写 File 菜单会写的文件）：
+
+```
+导出 VBoy-VSU_Ch-1.wav：fmt=float32、clm=“<!>2048”、2048 点、电平落在 2k/63−1 的六位网格上
+OKIM 对照：无 clm，仍是原始浮点采样 —— 采样路径未受影响
+```
+
 ## 10. 实施顺序
 
 五步，每步可独立提交、独立验证：

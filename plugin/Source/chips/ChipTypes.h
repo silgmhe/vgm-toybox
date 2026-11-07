@@ -131,6 +131,16 @@ struct ChannelState
 	bool present = false;			// the channel exists on this chip
 	bool gate = false;				// key on: the channel is producing sound
 	bool released = false;			// key off, but the envelope is still audible
+
+	/** **This channel's `wave` is one cycle by definition**, not a recording.
+
+		A wavetable chip states a rate because it walks its table at one - the VSU's
+		`clock / (2048 - freq)` entries per second - and until this flag existed, reporting that
+		rate made the export classify the channel as a *sample* and write it raw: no depth, no
+		one-period marker, no repeat. A table is a shape that happens to know how fast it is read,
+		so it has to go down the shape path even though the number beside it looks like a sample's.
+	*/
+	bool tableWave = false;
 	uint32_t period = 0;		// chip-native period / F-number (0 = silence)
 	int block = 0;					// FM octave
 	int volume = 0;					// 0..15, envelope already applied
