@@ -2,6 +2,7 @@
 
 #include <cstdint>
 #include <memory>
+#include <vector>
 
 #include "IChipDecoder.h"
 
@@ -21,15 +22,28 @@ namespace toybox::chips
 	  0x6  LFO frequency and pitch depth
 	  0x7  amplitude LFO size
 
-	The pitch arithmetic is unusual and completely linear: the core builds `freq_step_table[i] = rate
-	* (1024 + i) / 1024` (multipcm.c:671) and multiplies by `2^octave` (multipcm.c:314-324). So the
-	register pair is a **ratio**, not a frequency:
+	**The pitch is a ratio with an unusual octave origin.** `freq_step_table[i]` is
+	`rate * (1024 + i) / 1024` (multipcm.c:671) and the octave arrives as a shift of `octave - 1`
+	(multipcm.c:314-324), so
 
-		ratio = (1024 + pitch) / 1024 * 2^octave
+		playback rate = rate * (1024 + pitch) / 1024 * 2^(octave - 1)
 
-	and the note is that ratio against unity, which this decoder places at C4. The absolute octave
-	would need the sample's own rate from the ROM metadata, exactly as it does for the C140 - which is
-	why this is `registerExact` for the interval and a documented constant for the octave. */
+	with **octave 1 as unity**, not octave 0. Reading the register as `2^octave` - which this decoder
+	did before the ROM arrived - reports every note an octave high; the `-1` is the whole reason the
+	field is documented here.
+
+	**The ROM is a metadata table first.** The first 12 bytes of each sample index name where the
+	sample lives (multipcm.c:281-298): three big-endian bytes of start (bit 22 selects 12-bit packed
+	data, bits 20-21 are flags), two of loop point, and two of **the two's complement negation of the
+	length in samples**. A 28-voice song therefore knows every sample's length before it plays a
+	single one - unlike the GA20 and the DOC, whose samples end at a marker byte.
+
+	**Banking.** `0xC3` is not a chip register: libvgm turns it into writes to 0x10/0x11/0x12
+	(`VGMPlayer::Cmd_YMW_Bank`), and the core then remaps a sample's base address through those banks
+	(multipcm.c:733-743). The loader does the same, so this decoder sees ordinary register writes.
+	Without it the second half of a 2 MB image plays the first half's bytes - the K007232's bank
+	lesson, arriving as a VGM command instead of a register.
+*/
 class MultiPcmDecoder final : public IChipDecoder
 {
 public:
@@ -39,10 +53,18 @@ public:
 	MultiPcmDecoder (const MultiPcmDecoder&) = delete;
 	MultiPcmDecoder& operator= (const MultiPcmDecoder&) = delete;
 
-	/** What this chip needs besides its register writes: the clock to assume when the song names
-		none, and (for a sampled chip) the memory image its pitch is measured against. The assembler
-		asks instead of carrying a table of these. */
-	static constexpr ChipRequirements kRequirements { 8000000u };
+	/** The clock to assume when the song names none, and the ROM its samples live in. `0x89` is the
+		VGM block type for this chip; the blocks declare four megabytes and merge by their offsets.
+		The chip's own rate is `clock / 224` (multipcm.c:129). */
+	static constexpr ChipRequirements kRequirements { 8000000u, true, 0x89, 4u << 20, false, false };
+
+	void attachMemory (const ChipMemory& memory) override
+	{
+		if (memory.bytes != nullptr && ! memory.bytes->empty())
+		{
+			setRom (*memory.bytes);
+		}
+	}
 
 	void reset (const ChipConfig& config) override;
 	void write (const RegisterWrite& write) override;
@@ -52,6 +74,11 @@ public:
 	ChannelState channelState (int channel) const override;
 	const NoteTable& noteTable (int channel) const override;
 	ChannelKind channelKind (int channel) const override;
+
+	/** Hands the chip its sample ROM. Without it a voice has a ratio and no pitch, and a row has no
+		waveform: the metadata table is where the bytes, their length and their format live. The ROM
+		survives a `reset()` - it belongs to the song, not to the run. */
+	void setRom (std::vector<uint8_t> rom);
 
 private:
 	struct Impl;

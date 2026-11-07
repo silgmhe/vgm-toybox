@@ -46,6 +46,7 @@
 #include "chips/K005289Decoder.h"
 #include "chips/VsuDecoder.h"
 #include "chips/K007232Decoder.h"
+#include "chips/MultiPcmDecoder.h"
 #include "chips/Okim6295Decoder.h"
 #include "chips/Ga20Decoder.h"
 #include "chips/SegaPcmDecoder.h"
@@ -4404,6 +4405,82 @@ namespace
 		return ram;
 	}
 
+	/** **A MultiPCM sample's length is in a table, and its octave 1 is unity.**
+
+		Two facts that a decoder can get wrong without anything looking broken. The metadata entry
+		holds the length as its two's complement negation (`multipcm.c:289`), so a decoder that read
+		it as a plain count would play 65,532 samples of whatever came next. And the pitch's octave
+		field is shifted by `octave - 1` (`multipcm.c:314-324`): reading it as `2^octave` puts every
+		note an octave high - which is what this decoder did before the ROM arrived.
+	*/
+	void testMultiPcmWave (void)
+	{
+		std::vector<uint8_t> rom (0x90000, 0x00);
+
+		// Entry 1: start 0x000100, loop 0, length 4 (stored as 0x10000 - 4).
+		rom[12] = 0x00;
+		rom[13] = 0x01;
+		rom[14] = 0x00;
+		rom[15] = 0x00;
+		rom[16] = 0x00;
+		rom[17] = 0xFF;
+		rom[18] = 0xFC;
+
+		// Entry 2: start 0x100200 - above the 1 MB line with bit 19 clear, so bank0 applies.
+		rom[24] = 0x10;
+		rom[25] = 0x02;
+		rom[26] = 0x00;
+		rom[29] = 0xFF;
+		rom[30] = 0xFC;
+
+		rom[0x100] = 0x40;		// +0.5
+		rom[0x101] = 0xC0;		// -0.5
+		rom[0x102] = 0x20;		// +0.25
+		rom[0x103] = 0xE0;		// -0.25
+
+		rom[0x80200] = 0x7F;	// the banked window: entry 2 with bank0 = 0x80000
+
+		toybox::chips::MultiPcmDecoder decoder;
+		decoder.reset (toybox::chips::ChipConfig { 8000000, 44100.0, 0, 44444.0 });
+		decoder.setRom (rom);
+
+		decoder.write (toybox::chips::RegisterWrite { 0, 0x01, 0x00, 0, 0, 0 });	// voice 0
+		decoder.write (toybox::chips::RegisterWrite { 0, 0x02, 0x01, 0, 0, 0 });	// register: index
+		decoder.write (toybox::chips::RegisterWrite { 0, 0x00, 0x01, 0, 0, 0 });	// index 1
+		decoder.write (toybox::chips::RegisterWrite { 0, 0x02, 0x03, 0, 0, 0 });	// register: octave
+		decoder.write (toybox::chips::RegisterWrite { 0, 0x00, 0x10, 0, 0, 0 });	// octave 1, pitch 0
+		decoder.write (toybox::chips::RegisterWrite { 0, 0x02, 0x04, 0, 0, 0 });	// register: control
+		decoder.write (toybox::chips::RegisterWrite { 0, 0x00, 0x80, 0, 0, 0 });	// key on
+
+		const auto state = decoder.channelState (0);
+
+		check (state.wave != nullptr && state.wave->size () == 4,
+			   "the length comes from the metadata's negated count, not from a terminator");
+
+		if (state.wave != nullptr && state.wave->size () == 4)
+		{
+			check ((*state.wave)[0] > 0.49f && (*state.wave)[0] < 0.51f, "0x40 is +0.5");
+			check ((*state.wave)[1] < -0.49f && (*state.wave)[1] > -0.51f, "0xC0 is -0.5");
+		}
+
+		// Octave 1 with pitch 0 is unity, so the voice reads at the chip's own rate.
+		check (std::abs (state.sampleRate - 44444.0f) < 1.0f,
+			   "octave 1 is unity: the rate is the chip's, not twice it");
+
+		// Now the same voice on entry 2, which needs the bank register to reach.
+		decoder.write (toybox::chips::RegisterWrite { 0, 0x11, 0x01, 0, 0, 0 });	// bank0 = 0x80000
+		decoder.write (toybox::chips::RegisterWrite { 0, 0x02, 0x01, 0, 0, 0 });
+		decoder.write (toybox::chips::RegisterWrite { 0, 0x00, 0x02, 0, 0, 0 });	// index 2
+		decoder.write (toybox::chips::RegisterWrite { 0, 0x02, 0x04, 0, 0, 0 });
+		decoder.write (toybox::chips::RegisterWrite { 0, 0x00, 0x00, 0, 0, 0 });	// key off
+		decoder.write (toybox::chips::RegisterWrite { 0, 0x00, 0x80, 0, 0, 0 });	// key on again
+
+		const auto banked = decoder.channelState (0);
+
+		check (banked.wave != nullptr && banked.wave->size () == 4 && (*banked.wave)[0] > 0.9f,
+			   "the bank register picks the window: 0x100200 is not 0x000200");
+	}
+
 	/** **The row needs the table's bytes, and the rate is the chip's own - which 0xE1 moves.**
 
 		Two things this pins down. The table stops at its **0x00 marker**: `es5503.c:301` halts the
@@ -6845,6 +6922,7 @@ int main (void)
 	testEs5503Percussion();
 	testEs5503OscillatorCount();
 	testEs5503Wave();
+	testMultiPcmWave();
 
 	testSegaPcmNote();
 	testSegaPcmPitchIsAStep();

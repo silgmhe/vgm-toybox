@@ -119,6 +119,31 @@ bool VgmSongLoader::load (const void* data, std::size_t size, midi::SongIr& out,
 		case 0xB3:	emit (ChipKind::gameBoy, port, 0, reg, value, time); break;
 		case 0xB4:	emit (ChipKind::nesApu, port, 0, reg, value, time); break;
 		case 0xB5:	emit (ChipKind::multiPcm, 0, 0, reg, value, time); break;
+		case 0xC3:		// YMW258 bank select: the chip never sees this command, so the loader turns it into the
+		{				// register writes libvgm would have made (`VGMPlayer::Cmd_YMW_Bank`). Without this a
+						// sample in the second megabyte of the image plays the first megabyte's bytes.
+			const uint8_t bankMask = (uint8_t) (command.addr & 0x03);
+			const uint8_t bankValue = (uint8_t) command.data;
+
+			if (bankMask == 0x03 && (bankValue & 0x08) == 0)
+			{
+				emit (ChipKind::multiPcm, 0, 0, 0x10, (uint16_t) (bankValue / 0x10), time);
+			}
+			else
+			{
+				if ((bankMask & 0x02) != 0)
+				{
+					emit (ChipKind::multiPcm, 0, 0, 0x11, (uint16_t) (bankValue / 0x08), time);
+				}
+
+				if ((bankMask & 0x01) != 0)
+				{
+					emit (ChipKind::multiPcm, 0, 0, 0x12, (uint16_t) (bankValue / 0x08), time);
+				}
+			}
+
+			break;
+		}
 		case 0xB8:	emit (ChipKind::okim6295, port, 0, reg, value, time); break;
 		case 0xB9:	emit (ChipKind::huc6280, port, 0, reg, value, time); break;
 		case 0xBA:	emit (ChipKind::k053260, 0, 0, reg, value, time); break;

@@ -5,6 +5,7 @@
 #include "Es5503Samples.h"
 #include "Ga20Samples.h"
 #include "K007232Samples.h"
+#include "MultiPcmSamples.h"
 #include "Okim6295Samples.h"
 #include "QSoundSamples.h"
 #include "K053260Samples.h"
@@ -381,6 +382,46 @@ bool LibvgmSongInstance::prepare (double hostSampleRate, int newMaxBlockSize, ju
 										 {
 											 return slot.kind == midi::ChipKind::k007232;
 										 });
+
+	const bool hasMultiPcm = songIr != nullptr
+						   && std::any_of (songIr->chips.begin (), songIr->chips.end (),
+												[] (const midi::ChipSlot& slot)
+												{
+													return slot.kind == midi::ChipKind::multiPcm;
+												});
+
+	if (hasMultiPcm && songIr != nullptr)
+	{
+		// The device's own rate first, then the arithmetic: `multipcm.c:598` starts the chip at
+		// `clock / 224`, but libvgm reports the rate it actually runs the device at, and on these
+		// songs the two differ (44,444 Hz against 35,714) - the device's number is the one the
+		// render used, which is the rule the OKIM6295 taught.
+		uint32_t clock = 0;
+		double rate = 0.0;
+
+		for (const auto& device : deviceInfo)
+		{
+			if (device.type != DEVID_YMW258)
+			{
+				continue;
+			}
+
+			if (device.smplRate > 0)
+			{
+				rate = (double) device.smplRate;
+			}
+
+			if (device.devCfg != nullptr && device.devCfg->clock > 0)
+			{
+				clock = device.devCfg->clock;
+			}
+		}
+
+		for (auto& sample : collectMultiPcmSamples (*songIr, rate, clock))
+		{
+			collected.push_back (std::move (sample));
+		}
+	}
 
 	const bool hasGa20 = songIr != nullptr
 					  && std::any_of (songIr->chips.begin (), songIr->chips.end (),

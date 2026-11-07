@@ -410,6 +410,17 @@ bool VgmCommandReader::next (VgmCommand& command)
 			command.data = data[position + 1];
 			command.data2 = data[position + 2];
 		}
+		else if (cmd == 0xC3)
+		{
+			// YMW258 bank select: libvgm never hands this command to the chip - `Cmd_YMW_Bank` turns it
+			// into writes to 0x10/0x11/0x12 - so the loader has to make the same conversion. Byte 1
+			// carries the bank mask in its low two bits, byte 2 the bank number, byte 3 is ignored
+			// (`vgmplayer_cmdhandler.cpp`: `bankmask = fData[1] & 0x03`).
+			command.kind = VgmCommand::Kind::registerWrite;
+			command.addr = data[position + 1];
+			command.data = data[position + 2];
+			command.data2 = data[position + 3];
+		}
 		else if (cmd == 0xD5)
 		{
 			// ES5503: a port byte (the second chip of a pair), an 8-bit register and a value -
