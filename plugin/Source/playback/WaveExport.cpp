@@ -293,6 +293,11 @@ bool isSampledChannel (const ChannelState& channel)
 
 bool writeSampleWav (const ChannelState& channel, const std::string& path)
 {
+	// **A table must never reach this function.** Everything below writes the bytes as they are:
+	// no depth, no one-period marker, no repeat - correct for a recording, and the exact opposite
+	// of what a wavetable needs. The guard is `isSampledChannel`, which excludes `tableWave`; this
+	// note is here because the failure is invisible in the output (a legal wav of the right length)
+	// and shows up only as "the depth setting does nothing".
 	if (path.empty () || ! isSampledChannel (channel))
 	{
 		return false;
@@ -478,6 +483,10 @@ ShapeWrite writeChannelShape (const ChannelState& channel, const std::string& pa
 	// A channel that carries a sample is a recording, not a shape, and it goes out as audio at the
 	// rate the chip reads it - in both modes, because repeating a drum hit is not a wavetable and a
 	// period of one is not a period either.
+	//
+	// **"Carries a sample" is not "has a rate".** A wavetable reports one too (it walks its table
+	// per second), so the decision belongs to `isSampledChannel` and its `tableWave` exclusion - a
+	// table that reaches the branch below loses the depth and the marker, and looks merely smooth.
 	if (isSampledChannel (channel))
 	{
 		return writeSampleWav (channel, path) ? ShapeWrite::written : ShapeWrite::failed;

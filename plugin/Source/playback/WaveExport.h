@@ -108,9 +108,16 @@ bool writeCycleWav (const ChannelState& channel, const std::string& path,
 /** Whether this channel carries a sample rather than a shape.
 
 	A sampled channel is written as audio at the rate its bytes are read, in both modes; everything
-	else is written as one period. The two conditions are the pair a backend fills together - the
-	rate says the shape is bytes and the wave says there are bytes - and both are needed: a channel
-	whose sample has not been captured yet has neither.
+	else is written as one period. The pair a backend fills together - the rate says the shape is
+	bytes and the wave says there are bytes - is necessary and **not sufficient**: a wavetable also
+	declares a rate, because it walks its table per second, so `sampleRate > 0` alone cannot tell
+	the two apart.
+
+	**That is what `tableWave` is for**, and it is the one mistake this function has made: with only
+	the rate and the wave to go on, a VSU table was exported as a recording - raw floats at its
+	entry rate, no quantisation, no one-period marker - and a synth then read it as audio and
+	interpolated a shape that should have stayed stepped. The user's report was "the bit depth
+	setting does nothing", which is exactly what the wrong path looks like from outside.
 
 	One definition, because there were two: the exporter decided with it and the sample writer
 	checked it again in the negative, so a change to either would have let a file pass the first
