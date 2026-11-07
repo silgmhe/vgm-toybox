@@ -18,7 +18,8 @@ namespace
 		thirty-two bit address rather than a ROM size and offset. */
 	constexpr uint8_t kRamType = 0xE1;
 
-	/** The chip addresses 64 KB; the assembler's ceiling is what the decoder is handed as well. */
+	/** The address space the table mask reaches (`0x1F000` and below, so 128 KB), and the same
+		ceiling the decoder's `kRequirements` names - one image, two readers. */
 	constexpr std::size_t kMaxRamBytes = 128u << 10;
 
 	/** `es5503.c:184` - the size register's low three bits index this, so the value is not bytes. */

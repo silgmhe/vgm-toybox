@@ -24,7 +24,8 @@ namespace toybox::backends::libvgm
 		`(clock / 8) / (oscsenabled + 2)`, so the chip's own sample rate **moves with the number of
 		enabled oscillators** (register 0xE1). One oscillator reads `freq / 2^(9 + resolution - size)`
 		bytes per chip sample, so a voice's rate is that step times a rate that other voices can
-		change. `alive` below keeps 0xE1 in the walk for exactly that reason.
+		change. That is why the walk below keeps `0xE1` at all: it is not a detail of chip setup, it
+		is the other half of every playing voice's speed.
 
 		**The RAM is a load-time image.** These three songs upload every table before the first
 		register write (measured: the first 0x67 block sits at byte 224, the first 0xD5 at 5388), so

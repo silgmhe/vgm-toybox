@@ -82,8 +82,16 @@ public:
 	~Es5503Decoder() override;
 
 	/** What this chip needs besides its register writes: the clock to assume when the song names
-		none, and (for a sampled chip) the memory image its pitch is measured against. The assembler
-		asks instead of carrying a table of these. */
+		none, and the memory image its pitch is measured against. The assembler asks instead of
+		carrying a table of these.
+
+		**The fourth and fifth fields are the ones to read twice.** `0xE1` is a **RAM** block type,
+		not a ROM one - the block bytes start with a thirty-two bit address instead of a size and an
+		offset - and the `true` is what tells `forRequirements` to assemble it with `memory::ram`
+		rather than `memory::rom`. Reading a `0xE1` block as a ROM spends its first bytes on a header
+		that is really the address, which is the mistake this comment exists to prevent: the decoder
+		then measures tables out of a two-kilobyte image that holds none of them.
+	*/
 	static constexpr ChipRequirements kRequirements { 7159090u, true, 0xE1, 128u << 10, true, false };
 
 	void attachMemory (const ChipMemory& memory) override
@@ -99,8 +107,14 @@ public:
 	void advance (uint32_t sampleTime) override;
 
 	/** Hands the chip its 128 KB of wave RAM - the song's 0xE1 blocks assembled at their own
-		addresses. Without it no table can be measured: every voice stays the C4 trigger. The RAM
-		survives a `reset()`: it belongs to the song, not to the run. */
+		addresses. Without it no table can be measured (every voice stays the C4 trigger) and no
+		waveform can be drawn. The RAM survives a `reset()`: it belongs to the song, not to the run.
+
+		A `0x67` block of type `0xE1` is a **write at an address**, applied where the stream reaches
+		it. All three songs in `test_file/ES5503` upload every table before the first register write,
+		so one image covers the whole song; a driver that rewrote RAM during playback would need the
+		RF5C164 treatment (replay in stream order), which this interface cannot express yet.
+	*/
 	void setRam (std::vector<uint8_t> ram);
 
 	int channelCount() const override { return numChannels; }
