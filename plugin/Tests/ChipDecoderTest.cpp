@@ -4264,8 +4264,17 @@ namespace
 		check (ir.totalTicks == 0, "no wait commands means the stream ends at tick zero");
 	}
 
-	/** MIKEY: four timer-driven squares at `clock / (2 * (backup + 1) * 2^(shift + 4))`. */
+	/** **MIKEY: the divider is a step rate, and the note only exists once the pattern does.**
 
+		The old version of this test wrote volume, backup and CONTROL A and expected a note, because
+		the note table assumed the two-step pattern a plain square has. That assumption was wrong for
+		this chip and produced a constant bogus note (3937 Hz, note 107) on every idle frame. A
+		channel needs its **taps** before it has a cycle at all, and the fundamental is the step rate
+		divided by that cycle's length:
+
+			16 MHz / (125 * 2^7) = 1000 steps per second, and taps 0x07 gives a four-step cycle
+			-> 250 Hz, which is closest to B3
+	*/
 	void testMikeyNotes (void)
 	{
 		std::vector<toybox::chips::RegisterWrite> writes;
@@ -4279,24 +4288,36 @@ namespace
 		};
 
 		add (0x20, 0x0F);		// channel 0 volume
+		add (0x21, 0x07);		// FEEDBACK: taps whose cycle is four steps
 		add (0x24, 124);		// BACKUP: the reload value
 		add (0x25, 0x03);		// CONTROL A: clock shift 3
 
 		toybox::chips::MikeyDecoder decoder;
 		decoder.reset (toybox::chips::ChipConfig { 16000000, 44100.0 });
 
-		const auto performance = toybox::chips::extractPerformance (decoder, writes, 44100);
-		const auto& notes = performance.notes;
-
-		check (notes.size() == 1, "a Mikey backup write is one note");
-		if (notes.empty())
+		for (const auto& write : writes)
 		{
-			return;
+			decoder.write (write);
 		}
 
-		check (notes[0].logicalChannel == 0, "0x20 is the first audio channel");
-		// 16 MHz / (2 * 125 * 128) is 500 Hz, and 500 Hz is B4
-		check (notes[0].note == 71, "the timer arithmetic puts 500 Hz on B4");
+		const auto state = decoder.channelState (0);
+
+		check (state.wave != nullptr && state.wave->size () == 4,
+			   "taps 0x07 make a four-step cycle, so there is a wave to draw");
+		check (std::abs (state.sampleRate - 1000.0f) < 0.5f, "16 MHz / (125 * 2^7) is the step rate");
+		check (std::abs (state.hz - 250.0f) < 0.5f, "and four steps per cycle put it at 250 Hz");
+
+		// Without taps there is no cycle: volume and a divider alone must not invent a note.
+		toybox::chips::MikeyDecoder bare;
+		bare.reset (toybox::chips::ChipConfig { 16000000, 44100.0 });
+		bare.write (toybox::chips::RegisterWrite { 0, 0x20, 0x0F, 0, 0, 0 });
+		bare.write (toybox::chips::RegisterWrite { 0, 0x24, 124, 0, 0, 0 });
+		bare.write (toybox::chips::RegisterWrite { 0, 0x25, 0x03, 0, 0, 0 });
+
+		const auto silent = bare.channelState (0);
+
+		check (silent.wave == nullptr && silent.hz == 0.0,
+			   "no taps, no cycle: the row says unpitched instead of guessing a square");
 	}
 	void testMsm5232Notes (void)
 	{

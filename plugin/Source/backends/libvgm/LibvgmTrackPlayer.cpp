@@ -719,12 +719,19 @@ bool LibvgmTrackPlayer::captureState (playback::ChipStateSnapshot& snapshot) con
 				const bool playing = state.wave != nullptr && state.wave->size () >= 2
 								  && state.sampleRate > 0.0f;
 
+				// **A channel that is sounding without a wave is not a channel between samples.**
+				// A sampled voice goes quiet because its hit ended; a noise generator goes quiet
+				// with no shape at all, and it is loud the whole time. Handing it the previous
+				// tone's wave made a Mikey noise passage draw the melody's duty cycle - the row said
+				// "PWM" while the ear said "noise", and both were right about different frames.
+				const bool sounding = chipState.gate || chipState.released;
+
 				if (playing)
 				{
 					held.wave = state.wave;
 					held.rate = state.sampleRate;
 				}
-				else if (held.wave != nullptr)
+				else if (held.wave != nullptr && ! sounding)
 				{
 					// **The pair, or nothing.** A decoder that has keyed a voice but closed its gate
 					// reports a wave with a rate of zero - a cell that draws and cannot be dragged,

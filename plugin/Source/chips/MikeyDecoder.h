@@ -8,23 +8,36 @@
 namespace toybox::chips
 {
 
-/** The Atari Lynx's MIKEY: four audio channels, each a timer driving a square wave.
+/** The Atari Lynx's Mikey: four channels, each a timer and a shift register.
 
-	Eight registers per channel, `channel = address >> 3`, `register = address & 7` (mikey.c):
+	**It has no wave table.** What a channel emits is the recurrence in `MikeyPattern.h` - a square
+	whose polarity comes from a twelve-bit LFSR clocked by the timer - so the shape is a property of
+	(seed, taps, volume, integrate) rather than bytes the song uploaded. Two consequences:
 
-	  0x0  VOLCNTRL - signed volume, and bit 0x20 selects the integrate (feedback) mode
-	  0x1  FEEDBACK
-	  0x4  BACKUP   - the timer's reload value
-	  0x5  CONTROL A - bits 0-2 pick a clock shift, the rest enable counting and reloading
-	  0x6  COUNTER  - the live down-counter
+	- The row can draw a real cycle, but its length is the **LFSR period**: two steps for the
+	  alternating pattern a tone uses, seven for the taps these drivers pick, hundreds for noise.
+	  When the period is past `kMaxWavePoints` there is no shape to draw and the row says so.
+	- `hz` follows the period: `clock / ((backup + 1) * 2^(shift + 4))` is the **step rate**, and the
+	  fundamental is that divided by the number of steps in the cycle. A noise channel therefore has
+	  a very low "pitch" instead of a plausible-looking lie.
 
-	The timer is clocked once every `1 << (shift + 4)` master clocks (mikey.c:355,
-	`period = 1 << (mAudShift + 4)`), counts down to zero, reloads from BACKUP, and toggles the output -
-	so a cycle is two borrows:
+	The timer side, which the pitch comes from (`mikey.c:355`, `type` = `1 << (shift + 4)`):
 
-		frequency = clock / (2 * (backup + 1) * 2^(shift + 4))
+		stepRate = clock / ((backup + 1) * 2^(shift + 4))
 
-	Register-exact, like the K005289: no root layer and no sample. */
+	Registers, eight per channel at `0x20 + ch * 8` (`mikey.c:790-846`):
+
+	  0 VOLCNTRL  signed eight-bit level
+	  1 FEEDBACK  tap selector, bits 0-5, plus bits 6-7 shifted up to 7-8
+	  2 OUTPUT    written directly - a PCM channel would use this; none of the songs here do
+	  3 SHIFT     low eight bits of the register
+	  4 BACKUP    the timer's reload value
+	  5 CTRLA     bits 0-2 the clock shift, bit 5 integrate, bit 7 an extra tap
+	  6 COUNTER   the live count, not a configuration
+	  7 OTHER     control B in the low nibble, the register's top four bits in the high one
+
+	`0x20` in **CTRLA** is the integrate flag (`AC_ENABLE_INTEGRATE`, `mikey.c:372`); it is not a
+	bit of the volume register, which is a plain signed byte. */
 class MikeyDecoder final : public IChipDecoder
 {
 public:
@@ -35,8 +48,7 @@ public:
 	MikeyDecoder& operator= (const MikeyDecoder&) = delete;
 
 	/** What this chip needs besides its register writes: the clock to assume when the song names
-		none, and (for a sampled chip) the memory image its pitch is measured against. The assembler
-		asks instead of carrying a table of these. */
+		none. No memory: the shape is generated, not read. */
 	static constexpr ChipRequirements kRequirements { 16000000u };
 
 	void reset (const ChipConfig& config) override;

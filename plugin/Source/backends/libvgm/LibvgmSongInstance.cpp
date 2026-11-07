@@ -5,6 +5,7 @@
 #include "Es5503Samples.h"
 #include "Ga20Samples.h"
 #include "K005289Samples.h"
+#include "MikeySamples.h"
 #include "K007232Samples.h"
 #include "VsuSamples.h"
 #include "MultiPcmSamples.h"
@@ -350,6 +351,33 @@ bool LibvgmSongInstance::prepare (double hostSampleRate, int newMaxBlockSize, ju
 										  {
 											  return slot.kind == midi::ChipKind::okim6295;
 										  });
+
+	const bool hasMikey = songIr != nullptr
+					   && std::any_of (songIr->chips.begin (), songIr->chips.end (),
+									   [] (const midi::ChipSlot& slot)
+									   {
+										   return slot.kind == midi::ChipKind::mikey;
+									   });
+
+	if (hasMikey && songIr != nullptr)
+	{
+		// No memory: the patterns are generated from the register writes, so only the clock is
+		// resolved here.
+		uint32_t clock = 0;
+
+		for (const auto& device : deviceInfo)
+		{
+			if (device.type == DEVID_MIKEY && device.devCfg != nullptr && device.devCfg->clock > 0)
+			{
+				clock = device.devCfg->clock;
+			}
+		}
+
+		for (auto& sample : collectMikeySamples (*songIr, clock))
+		{
+			collected.push_back (std::move (sample));
+		}
+	}
 
 	const bool hasK005289 = songIr != nullptr
 						 && std::any_of (songIr->chips.begin (), songIr->chips.end (),
