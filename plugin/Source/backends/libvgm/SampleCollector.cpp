@@ -220,6 +220,18 @@ void SampleCollector::add (uint64_t key, const std::string& name, const uint8_t*
 			sample.values.push_back ((float) (((int) bytes[i] & 0x3F) - 0x20) / 32.0f);
 		}
 	}
+	else if (format == SampleFormat::prom4)
+	{
+		// **Four bits, silence at 8.** The K005289's PROM holds one level per byte (the block is
+		// already expanded) and the core subtracts 8 before mixing (`k005289.c:198`), so the value
+		// is a signed level in -8..+7 and the scale is eight.
+		sample.values.reserve (length);
+
+		for (std::size_t i = 0; i < length; ++i)
+		{
+			sample.values.push_back ((float) (((int) bytes[i] & 0x0F) - 8) / 8.0f);
+		}
+	}
 	else if (format == SampleFormat::ga20 || format == SampleFormat::es5503)
 	{
 		// **Eight-bit unsigned with 0x80 as silence, and 0x00 as the end.** `iremga20.c:177` reads

@@ -323,7 +323,8 @@ track.channelIndex = channelIndex;    // 联动芯片的通道号接在父芯片
 | 采样 | **Y8950-ADPCM / ADPCM-drum** | — | — | — |
 | 波表 | VSU —— 见 §9.11 | ✓ | ✓ | ✓ `collectVsuSamples` |
 | 波表 | ES5503 —— 见 §9.9 | ✓ | ✓ | ✓ `collectEs5503Samples` |
-| 波表 | HuC6280、SCC（K051649）、X1-010、WonderSwan、Game Boy 波表、Mikey、MSM5232、NES APU、K005289 | — | — | — |
+| 波表 | K005289 —— 见 §9.12 | ✓ | ✓ | ✓ `collectK005289Samples` |
+| 波表 | HuC6280、SCC（K051649）、X1-010、WonderSwan、Game Boy 波表、Mikey、MSM5232、NES APU | — | — | — |
 
 **不在本表的两类**：PSG 与 FM（AY、SN76489、SAA1099、POKEY、OPL 系、OPN 系、OPM、OPX 等）本来就用 `cycleFor` 画阶梯，不经过 `state.wave`；`FDS` 与 `N163` 由 NSF 后端（`NsfBackend` / `NsfBus`）加载，没有对应的 `ChipKind`，要单独处理。
 
@@ -640,6 +641,42 @@ VSU 报了 `sampleRate`（每秒走多少条目，这是对的），于是被判
 导出 VBoy-VSU_Ch-1.wav：fmt=float32、clm=“<!>2048”、2048 点、电平落在 2k/63−1 的六位网格上
 OKIM 对照：无 clm，仍是原始浮点采样 —— 采样路径未受影响
 ```
+
+### 9.12 已关闭：K005289（2026-11-07）
+
+**波表，但波形来自 PROM，而不是寄存器。** 两个声部各自从 512 字节的 PROM 里读：`prom[ch * 0x100 +
+waveform * 0x20 + step]`，每个条目**四位**，播放前 `- 8`（`k005289.c:195-198`）。控制寄存器的
+bits 5-7 只负责选八个波形中的一个。
+
+| 项 | 事实 | 出处 |
+|---|---|---|
+| 声道 | 2 | `k005289.c:184` |
+| 波形 | 2 × 8 × 32 × 4 位，静音在 0x08 | `k005289.c:59`、`198` |
+| 表选择 | 控制寄存器 bits 5-7 | `k005289.c:218` |
+| 音高 | `clock / (32 * (freq + 1))`，寄存器**取反**存入（`0xFFF - value`） | `k005289.c:224`、`190` |
+| 时钟 | 头部 **0xEC**，实测 3 579 545 | `_CHIPCLK_OFS` |
+| 数据块 | **0xC3**，**RAM** 类型、**16 位地址**、512 字节 | `_VGM_RAM_CHIPS`、`Cmd_DataBlock` |
+
+**0xC3 和 ES5503 的 0xE1 是同一类、不同宽度。** 两者都在 libvgm 的 RAM 表里，但 0xC3 属于
+`C0..DF`（16 位地址），0xE1 属于 `E0..FF`（32 位）。读取器本来就按 `addressSize` 分两支解析，
+所以这次没有动它——而 `ChipRequirements` 的第五个字段仍是 `true`（RAM），否则 512 字节会被当成
+一个带 size/offset 头的 ROM 块，落位就全错了。
+
+**音高是算出来的，因此没有 PROM 也照样响。** 这正是与采样芯片的区别：没有 `0xC3` 块时 `wave` 为
+空（行退回触发态），但 `hz` 仍在。所以 `state.wave` 与 `state.sampleRate` 只在拿到 PROM 后给出，
+`tableWave` 也只在有 shape 时置位。
+
+**验收**：
+
+```
+15 首 / 45 个样本，单曲 1–5 个；速率 8363 – 28185 Hz；零样本曲目 0
+04 BGM 1（34.69 s）：全曲每 0.5 秒扫行 → 21 个 (32 点, 速率) 组合，5 个导出项 5/5 命中
+```
+
+**交付后一次通过**（2026-11-07），用户听感确认。这一颗没有返工：三个量（表布局、音高取反、块类型）
+全部从核心源码取出，`0xC3` 的地址宽度也是先读了 `_VGM_RAM_CHIPS` 才动手。
+
+**完整记录**：`docs/memo/2026-11-07-k005289-a-prom-four-bits-deep-in-a-ram-block.md`
 
 ## 10. 实施顺序
 

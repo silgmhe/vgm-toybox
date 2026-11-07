@@ -4,6 +4,7 @@
 #include "C352Samples.h"
 #include "Es5503Samples.h"
 #include "Ga20Samples.h"
+#include "K005289Samples.h"
 #include "K007232Samples.h"
 #include "VsuSamples.h"
 #include "MultiPcmSamples.h"
@@ -349,6 +350,33 @@ bool LibvgmSongInstance::prepare (double hostSampleRate, int newMaxBlockSize, ju
 										  {
 											  return slot.kind == midi::ChipKind::okim6295;
 										  });
+
+	const bool hasK005289 = songIr != nullptr
+						 && std::any_of (songIr->chips.begin (), songIr->chips.end (),
+										 [] (const midi::ChipSlot& slot)
+										 {
+											 return slot.kind == midi::ChipKind::k005289;
+										 });
+
+	if (hasK005289 && songIr != nullptr)
+	{
+		// The PROM arrives as a `0xC3` RAM block and the clock comes from the header; the register
+		// stream only says which of the eight waveforms a voice plays.
+		uint32_t clock = 0;
+
+		for (const auto& device : deviceInfo)
+		{
+			if (device.type == DEVID_K005289 && device.devCfg != nullptr && device.devCfg->clock > 0)
+			{
+				clock = device.devCfg->clock;
+			}
+		}
+
+		for (auto& sample : collectK005289Samples (*songIr, clock))
+		{
+			collected.push_back (std::move (sample));
+		}
+	}
 
 	const bool hasVsu = songIr != nullptr
 					 && std::any_of (songIr->chips.begin (), songIr->chips.end (),

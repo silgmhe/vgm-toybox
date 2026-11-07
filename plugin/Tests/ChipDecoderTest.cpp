@@ -4485,6 +4485,53 @@ namespace
 			   "the bank register picks the window: 0x100200 is not 0x000200");
 	}
 
+	/** **A K005289 voice sounds before its PROM arrives, and only gains a shape when it does.**
+
+		The pitch here is arithmetic - `clock / (32 * (freq + 1))` - so a song without the `0xC3`
+		block still plays; what it loses is the waveform. That split is worth pinning because the
+		opposite assumption (no image, no note) would silently mute every voice of a file whose PROM
+		the assembler failed to place, and nothing would say so.
+	*/
+	void testK005289Wave (void)
+	{
+		// 512 bytes: two channels of eight waveforms of thirty-two four-bit steps (`k005289.c:59`).
+		std::vector<uint8_t> prom (0x200, 0);
+
+		prom[0] = 8;		// silence
+		prom[1] = 15;		// the top of the four-bit range
+		prom[2] = 0;		// and the bottom
+
+		toybox::chips::K005289Decoder decoder;
+		decoder.reset (toybox::chips::ChipConfig { 3579545, 44100.0 });
+
+		decoder.write (toybox::chips::RegisterWrite { 0, 0x00, 0x0A, 0, 0, 0 });	// volume 10, waveform 0
+		decoder.write (toybox::chips::RegisterWrite { 0, 0x02, 0xC00, 0, 0, 0 });	// LD: 0xFFF - 0xC00 = 0x3FF
+		decoder.write (toybox::chips::RegisterWrite { 0, 0x04, 0x00, 0, 0, 0 });	// TG: the key-on edge
+
+		const auto withoutProm = decoder.channelState (0);
+
+		check (withoutProm.wave == nullptr, "no PROM means no shape, not no note");
+		check (std::abs (withoutProm.hz - 109.24f) < 0.1f,
+			   "the divider is arithmetic: 3579545 / (32 * 1024)");
+
+		decoder.setProm (prom);
+		const auto state = decoder.channelState (0);
+
+		check (state.wave != nullptr && state.wave->size () == 32,
+			   "one cycle of the PROM is thirty-two steps");
+
+		if (state.wave != nullptr && state.wave->size () == 32)
+		{
+			check (std::abs ((*state.wave)[0]) < 1e-6f, "0x08 is silence");
+			check ((*state.wave)[1] > 0.87f && (*state.wave)[1] < 0.88f, "0x0F is just short of +1");
+			check ((*state.wave)[2] < -0.99f, "0x00 is the bottom of the four-bit range");
+		}
+
+		// 3579545 / 1024 entries per second, thirty-two of which make the cycle.
+		check (std::abs (state.sampleRate - 3495.6f) < 0.5f, "the rate is the entry rate");
+		check (state.tableWave, "and the export must treat it as a table, not a recording");
+	}
+
 	/** **A VSU row draws one cycle of a table it was never handed as memory, and the two halves of
 		the address space must not be confused.**
 
@@ -6975,6 +7022,7 @@ int main (void)
 	testEs5503Wave();
 	testMultiPcmWave();
 	testVsuWave();
+	testK005289Wave();
 
 	testSegaPcmNote();
 	testSegaPcmPitchIsAStep();

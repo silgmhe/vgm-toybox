@@ -1,6 +1,7 @@
 #include "K005289Decoder.h"
 
 #include <cstdint>
+#include <map>
 
 #include "Pitch.h"
 
@@ -12,11 +13,28 @@ namespace
 	constexpr double kStepsPerCycle = 32.0;
 
 	/** The clock to assume when the VGM header carries none for this chip. */
-	constexpr uint32_t kDefaultClock = 4000000;
+	constexpr uint32_t kDefaultClock = 3579545;
+
+	/** `2 * 0x100`: one 256-byte half per channel - eight waveforms of thirty-two steps
+		(`k005289.c:59`, `195-197`). */
+	constexpr int kPromBytes = 0x200;
+	constexpr int kHalfBytes = 0x100;
+	constexpr int kWaveformBytes = 32;
+	constexpr int kWaveforms = 8;
+
+	/** Four bits with `- 8` on the way out (`k005289.c:198`): -8..+7, so the scale is eight. */
+	constexpr int kWaveBias = 8;
+	constexpr float kWaveScale = 8.0f;
 
 	double frequencyOf (uint32_t clock, uint16_t divider)
 	{
 		return (double) clock / (kStepsPerCycle * ((double) divider + 1.0));
+	}
+
+	/** How many PROM entries a voice walks per second - the rate a one-cycle file declares. */
+	double stepRateOf (uint32_t clock, uint16_t divider)
+	{
+		return (double) clock / ((double) divider + 1.0);
 	}
 }
 
@@ -44,6 +62,57 @@ struct K005289Decoder::Impl
 
 	Table table;
 	Voice voices[2];
+
+	/** The song's PROM: 512 four-bit entries, or empty when the file carried none. */
+	std::vector<uint8_t> prom;
+
+	/** Decoded waveforms, keyed by their contents. A table is static once loaded, but the cache
+		makes a per-frame `channelState` allocation-free in the common case. */
+	mutable std::map<uint64_t, std::shared_ptr<const std::vector<float>>> waveCache;
+
+	bool hasProm() const { return prom.size () >= (std::size_t) kPromBytes; }
+
+	uint64_t hashOf (int channel, int waveform) const
+	{
+		uint64_t hash = 1469598103934665603ull;
+		const std::size_t base = (std::size_t) (channel * kHalfBytes + waveform * kWaveformBytes);
+
+		for (int i = 0; i < kWaveformBytes; ++i)
+		{
+			hash ^= (uint64_t) prom[base + (std::size_t) i];
+			hash *= 1099511628211ull;
+		}
+
+		return hash;
+	}
+
+	std::shared_ptr<const std::vector<float>> waveFor (int channel, int waveform) const
+	{
+		if (! hasProm () || waveform < 0 || waveform >= kWaveforms)
+		{
+			return nullptr;
+		}
+
+		const uint64_t key = hashOf (channel, waveform);
+		const auto cached = waveCache.find (key);
+
+		if (cached != waveCache.end())
+		{
+			return cached->second;
+		}
+
+		auto wave = std::make_shared<std::vector<float>> (kWaveformBytes);
+		const std::size_t base = (std::size_t) (channel * kHalfBytes + waveform * kWaveformBytes);
+
+		for (int i = 0; i < kWaveformBytes; ++i)
+		{
+			(*wave)[(std::size_t) i] =
+				(float) ((int) prom[base + (std::size_t) i] - kWaveBias) / kWaveScale;
+		}
+
+		waveCache.emplace (key, wave);
+		return wave;
+	}
 };
 
 K005289Decoder::K005289Decoder() = default;
@@ -51,11 +120,32 @@ K005289Decoder::~K005289Decoder() = default;
 
 void K005289Decoder::reset (const ChipConfig& config)
 {
-	[[maybe_unused]] const uint32_t clock = config.clockHz;
-	[[maybe_unused]] const double sampleRate = config.timeBaseHz;
-	(void) sampleRate;
+	const uint32_t clock = (config.clockHz != 0) ? config.clockHz : kDefaultClock;
+
+	// The PROM belongs to the song, not to the run: a rewind must not lose the image the file
+	// already supplied.
+	std::vector<uint8_t> prom;
+
+	if (impl != nullptr && impl->hasProm ())
+	{
+		prom = impl->prom;
+	}
+
 	impl = std::make_unique<Impl>();
-	impl->table.clock = clock > 0 ? clock : kDefaultClock;
+	impl->table.clock = clock;
+	impl->prom = std::move (prom);
+}
+
+void K005289Decoder::setProm (std::vector<uint8_t> prom)
+{
+	if (impl == nullptr)
+	{
+		impl = std::make_unique<Impl>();
+	}
+
+	prom.resize ((std::size_t) kPromBytes, 0);
+	impl->prom = std::move (prom);
+	impl->waveCache.clear ();
 }
 
 void K005289Decoder::write (const RegisterWrite& write)
@@ -108,8 +198,26 @@ ChannelState K005289Decoder::channelState (int channel) const
 	state.volume = voice.volume;
 	state.patch = voice.waveform;
 	state.period = voice.freq;
-	state.hz = state.gate ? frequencyOf (impl->table.clock, voice.freq) : 0.0;
-	state.pitchSource = state.gate ? PitchSource::registerExact : PitchSource::unpitched;
+
+	if (! state.gate)
+	{
+		return state;
+	}
+
+	state.hz = frequencyOf (impl->table.clock, voice.freq);
+	state.pitchSource = PitchSource::registerExact;
+
+	// **The shape and the rate a file of it needs.** One cycle of the waveform the control register
+	// names, and the entry rate - thirty-two of them make the cycle. A song without a `0xC3` block
+	// still sounds, so the row keeps its pitch and only the shape is missing.
+	state.wave = impl->waveFor (channel, voice.waveform);
+
+	if (state.wave != nullptr)
+	{
+		state.tableWave = true;
+		state.sampleRate = (float) stepRateOf (impl->table.clock, voice.freq);
+	}
+
 	return state;
 }
 
