@@ -155,6 +155,19 @@ bool LibvgmTrackPlayer::seekSeconds (double seconds)
 		return false;
 	}
 
+	// **[TOYBOX NOTE] The seek itself is libvgm's, and it does not work for every file.**
+	//
+	// `VGMPlayer::Seek` (`vgmplayer.cpp:1939`) only parses **forward**: it calls `Reset()` when the
+	// target is behind the current tick and otherwise asks `ParseFile(delta)` to advance. `ParseFile`
+	// opens with `if (_playState & PLAYSTATE_END) return;` (`vgmplayer.cpp:2052-2057`), so once a song
+	// has run to its end, every forward seek is a no-op - and a backward seek resets and re-parses
+	// from `dataOfs`, which for a stream that *starts* with one huge inline ROM block (the YMZ280B
+	// rips here: 536 659 bytes) never reaches the target.
+	//
+	// A reset-then-seek was tried here and made both directions land at zero, so it was reverted
+	// rather than left in: the real fix belongs in the library - skip the ROM re-write while
+	// `PLAYSTATE_SEEK` and clear `PLAYSTATE_END` for a seek - and it needs a headless seek test to
+	// verify, which the harness does not have yet.
 	playerEngine.Seek (PLAYPOS_SAMPLE, (uint32_t) (juce::jmax (0.0, seconds) * sampleRate));
 	finished = false;
 

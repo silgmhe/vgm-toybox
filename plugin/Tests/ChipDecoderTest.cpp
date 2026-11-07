@@ -1844,8 +1844,9 @@ namespace
 			Stream stream;
 			writeYmz (stream, 0, 0x02, 0xFF);		// total level, full
 			writeYmz (stream, 10, 0x01, 0x80);		// key on
+			writeYmz (stream, 12000, 0x01, 0x00);	// and the key-off that ends it
 
-			const auto notes = runYmz (stream, 12000);
+			const auto notes = runYmz (stream, 16000);
 
 			check (notes.size() == 1, "one YMZ280B key-on is one sample note");
 			if (notes.empty())
@@ -1856,7 +1857,12 @@ namespace
 			check (absoluteNote (notes[0]) == 60, "the sample is a C4 marker");
 			check (notes[0].logicalChannel == 0, "voice 0 is its own track");
 			check (notes[0].isDrum, "a PCM voice is a drum track");
-			check (distance (notes[0].endSample, 3528 + 10) <= 64, "the 80 ms gate ends the sample");
+
+			// **A voice lasts until it is told to stop.** The old model closed the gate on an 80 ms
+			// timer of our own invention; these rips stream one long sample per song, so the timer
+			// ended the note almost immediately and the row was blank for the rest of the song.
+			check (distance (notes[0].endSample, 12000) <= 64,
+				   "the note ends at the key-off, not on a timer");
 		}
 
 		/** Register 0x05 is the next voice up: (reg >> 2) & 7 picks the voice, so 0x04/0x05 are

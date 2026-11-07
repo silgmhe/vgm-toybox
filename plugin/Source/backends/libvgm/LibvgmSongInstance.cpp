@@ -7,6 +7,7 @@
 #include "K005289Samples.h"
 #include "MikeySamples.h"
 #include "Msm5232Samples.h"
+#include "Ymz280bSamples.h"
 #include "K007232Samples.h"
 #include "VsuSamples.h"
 #include "MultiPcmSamples.h"
@@ -352,6 +353,33 @@ bool LibvgmSongInstance::prepare (double hostSampleRate, int newMaxBlockSize, ju
 										  {
 											  return slot.kind == midi::ChipKind::okim6295;
 										  });
+
+	const bool hasYmz280b = songIr != nullptr
+						 && std::any_of (songIr->chips.begin (), songIr->chips.end (),
+										 [] (const midi::ChipSlot& slot)
+										 {
+											 return slot.kind == midi::ChipKind::ymz280b;
+										 });
+
+	if (hasYmz280b && songIr != nullptr)
+	{
+		// The sample ROM arrives as a `0x86` block and each voice names a range in nibbles; the
+		// clock only turns a voice's fnum into a rate.
+		uint32_t clock = 0;
+
+		for (const auto& device : deviceInfo)
+		{
+			if (device.type == DEVID_YMZ280B && device.devCfg != nullptr && device.devCfg->clock > 0)
+			{
+				clock = device.devCfg->clock;
+			}
+		}
+
+		for (auto& sample : collectYmz280bSamples (*songIr, clock))
+		{
+			collected.push_back (std::move (sample));
+		}
+	}
 
 	const bool hasMsm5232 = songIr != nullptr
 						 && std::any_of (songIr->chips.begin (), songIr->chips.end (),

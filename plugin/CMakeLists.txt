@@ -238,6 +238,7 @@ target_sources(VGMToybox PRIVATE
 	Source/backends/libvgm/K005289Samples.cpp
 	Source/backends/libvgm/MikeySamples.cpp
 	Source/backends/libvgm/Msm5232Samples.cpp
+	Source/backends/libvgm/Ymz280bSamples.cpp
 	Source/backends/libvgm/K054539Samples.cpp
 	Source/backends/libvgm/MultiPcmSamples.cpp
 	Source/backends/libvgm/Rf5c68Samples.cpp
@@ -446,6 +447,7 @@ add_executable(vgm_mixer_test EXCLUDE_FROM_ALL
 	Source/backends/libvgm/K005289Samples.cpp
 	Source/backends/libvgm/MikeySamples.cpp
 	Source/backends/libvgm/Msm5232Samples.cpp
+	Source/backends/libvgm/Ymz280bSamples.cpp
 	Source/backends/libvgm/K054539Samples.cpp
 	Source/backends/libvgm/MultiPcmSamples.cpp
 	Source/backends/libvgm/Rf5c68Samples.cpp
@@ -471,6 +473,7 @@ add_executable(vgm_mixer_test EXCLUDE_FROM_ALL
 	Source/backends/libvgm/K005289Samples.cpp
 	Source/backends/libvgm/MikeySamples.cpp
 	Source/backends/libvgm/Msm5232Samples.cpp
+	Source/backends/libvgm/Ymz280bSamples.cpp
 	Source/backends/libvgm/K054539Samples.cpp
 	Source/backends/libvgm/MultiPcmSamples.cpp
 	Source/backends/libvgm/Rf5c68Samples.cpp
@@ -548,6 +551,7 @@ add_executable(vgm_chip_test EXCLUDE_FROM_ALL
 	Source/backends/libvgm/K005289Samples.cpp
 	Source/backends/libvgm/MikeySamples.cpp
 	Source/backends/libvgm/Msm5232Samples.cpp
+	Source/backends/libvgm/Ymz280bSamples.cpp
 	Source/backends/libvgm/K054539Samples.cpp
 	Source/backends/libvgm/MultiPcmSamples.cpp
 	Source/backends/libvgm/Rf5c68Samples.cpp
