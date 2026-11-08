@@ -419,7 +419,8 @@ int main (int argc, char** argv)
 				std::printf (" %02X", (unsigned) player.peekRam (address));
 			}
 
-			std::printf ("\n");
+			std::printf ("  4015R=%llu last=%02X\n",
+						 (unsigned long long) player.statusReads (), (unsigned) player.lastStatus ());
 		}
 
 		for (int i = 0; i < frames; ++i)
