@@ -52,13 +52,33 @@ public:
 	explicit OpnDecoder (Variant variant = Variant::ym2612);
 	~OpnDecoder() override;
 
+	/** **How much the ADPCM-A voices can address: 16 MB.** A voice names its sample as
+		`((hi << 8) | lo) << 8`, so the page number spans the whole 24-bit space, and a rip may say so
+		in its block header and place the payload above the 8 MB line.
+
+		A named constant because **two** places need it and they used to be written twice: this file's
+		requirement (what the decoder receives) and the sample collector's cap (what the export scans).
+		Both said 8 MB; a song whose blocks sat above that line drew a staircase from a zero-filled
+		image and exported nothing - `docs/memo/2026-11-09-the-image-that-was-too-small.md`.
+	*/
+	static constexpr std::size_t kAdpcmAImageBytes = 16u << 20;
+
 	/** **The ADPCM-A image** (VGM block `0x82`). Six voices share one ROM and each names its own
 		start and end page, so a row can only draw a real shape once those bytes are here; the
 		Delta-T voice streams from the *other* block (`0x83`) and stays a note-only row.
 
 		The requirement is on the class rather than the variant because the buffer makes every OPN
-		decoder from one table - a YM2612 song simply has no `0x82` block and gets an empty image. */
-	static constexpr ChipRequirements kRequirements { 8000000u, true, 0x82, 8u << 20, false, false };
+		decoder from one table - a YM2612 song simply has no `0x82` block and gets an empty image.
+
+		**Sixteen megabytes, because that is what the start page addresses.** A voice names its sample
+		as `((hi << 8) | lo) << 8`, so the chip reaches 16 MB; some Neo Geo rips say so in the block
+		header and place their payload above the 8 MB line (`02 The Military System` has its three
+		ADPCM-A blocks at 0xA79600 and up). Sized at 8 MB, every one of those blocks was dropped for
+		being out of range: the decoder then read a buffer of zeros and drew a staircase on all six
+		rows while the export found no range inside the image and reported zero samples.
+	*/
+	static constexpr ChipRequirements kRequirements { 8000000u, true, 0x82, kAdpcmAImageBytes, false,
+													  false };
 
 	void reset (const ChipConfig& config) override;
 	void attachMemory (const ChipMemory& memory) override;

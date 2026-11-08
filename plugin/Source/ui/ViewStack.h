@@ -10,8 +10,12 @@ namespace toybox::ui
 
 	The stack owns its views and hands the visible one the whole area it was given - a view lays
 	itself out inside that. Switching pages, refreshing them and routing the keys nobody else
-	wanted is all it does, and the View menu in ui/MainMenu.h is built from `getViewNames()`, so a
-	new page shows up there without any menu code being touched.
+	wanted is all it does.
+
+	**It is not what the View menu lists.** That menu lists the content views inside the page
+	(Mixer/Keyboard/Oscilloscope), built from `contentViews()` in ui/ContentSlot.cpp. The two were
+	once confused here: a language change refilled the menu from this stack's page names - one page -
+	and the menu collapsed to a single entry until the window was reopened.
 
 	The first view added becomes the visible one. Views that are not on screen keep their bounds and
 	their state; they are still told about `songChanged()`, which is what keeps a page correct
@@ -50,18 +54,7 @@ public:
 	int getCurrentViewIndex (void) const { return current; }
 	View* getCurrentView (void) const { return views[current]; }
 
-	/** The page names, in menu order - what ui/MainMenu.h builds its View menu from. */
-	juce::StringArray getViewNames (void) const
-	{
-		juce::StringArray names;
-		for (const auto* view : views)
-		{
-			names.add (view->getViewName());
-		}
-		return names;
-	}
-
-	/** Stable ids in the same order as getViewNames(). */
+	/** Stable page ids in stack order - how the window tells which page is on screen. */
 	juce::StringArray getViewIds (void) const
 	{
 		juce::StringArray ids;
