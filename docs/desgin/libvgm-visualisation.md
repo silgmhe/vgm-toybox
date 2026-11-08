@@ -986,6 +986,34 @@ ADPCM-A 在**第二个寄存器端口**（YM2610 的 `0x59`、YM2608 的 `0x57`�
 
 **完整记录**：`docs/memo/2026-11-08-opn-adpcm-six-players-and-the-wrong-variant.md`
 
+### 9.18 键盘页的行与 Mixer 同源（2026-11-08）
+
+**一条行只该有一个身份来源。** 这个页面此前有两次枚举：Mixer 读 `describeSong` 建的 `tracks`，键盘页读 `replayer->instances()` 并用 `trackFor(deviceId, channel)` 翻译。凡是两边规则不同，行就错位，而错位会被误读成“这个芯片的可视化坏了”。
+
+四次补丁都失败在同一个前提上——**以为能用某个设备字段把主芯片和它的联动词道组区分开**。
+
+| 判据 | 为什么不成立 |
+|---|---|
+| `deviceId` | libvgm 给链接的 SSG **与其父相同的 id** |
+| `instance.device` 指针 | 两者是**同一个** `PLR_DEV_INFO` |
+| `channelCount` 改小 | 主机随之换名字表，出现重复 FM 行与 Solo 连体 |
+| 偏移量加减 | 一旦枚举顺序与建轨道顺序不同，就挪走别的设备的声道（Sega PSG 因此无可视化） |
+
+**现在的规则（三条，全部无芯片特例）**：
+
+1. **行的数量与顺序来自 `tracks`**：`capture` 结束后按轨道铺满，没有状态的轨道也给一行空行；
+2. **行名与分组名来自所属轨道**（`track.name` / `track.groupName`）——SSG 那三行曾显示成 `FM 1..3`，因为名字取自设备名字表，而链接设备与父共用这张表；
+3. **声道号的起点来自 `channelBases`**（`ChipVoiceLayout.h`）：只由各设备的声道数决定，主设备占 `0..n-1`，其后每个设备接在前一块之后。这是一个纯函数，`testChipVoiceBases` 覆盖 13/3、单设备、空块、等宽四种形态。
+
+**两个必须记住的坑**：
+
+- **实例是惰性创建的**：libvgm 只在第一次有命令写到某设备时才造实例。SSG 在首次发声前没有实例，于是它的三行曾经“迟到”，并在出现时把下面所有行推下三位。行既然由 `tracks` 铺满，这个问题就不再存在；
+- **`trackFor` 的整设备轨道不能当通配符**：`channelIndex < 0 || channelIndex == channel` 会让有整设备轨道的设备抢走同 id 的所有声道。精确匹配优先，整设备轨道只作兜底。
+
+**验收**：`07 Stage 2` 16 行（`FM 1..6 / ADPCM-A 1..6 / ADPCM-B / SSG 1..3`）与 Mixer 同名同序；SSG 行从第一帧存在；任意一行 Solo 只影响自己；Sega PCM、YMZ280B、C140、NES 行数不变；加载 250–350 ms；`46/46`。
+
+**过程记录**：`docs/memo/2026-11-08-keyboard-rows-rearchitecture-plan.md`
+
 ## 10. 实施顺序
 
 五步，每步可独立提交、独立验证：
