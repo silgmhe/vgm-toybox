@@ -514,6 +514,81 @@ namespace
 		}
 	}
 
+	/** **Delta-T gets a shape once its ROM arrives, and only then.**
+
+		The image reaches the decoder through `attachSecondaryMemory` (VGM `0x83` on the OPNB, `0x81` on
+		the OPNA) - before this the row was a note with nothing to draw, because only the ADPCM-A bank
+		was ever handed over. The assertions below are the two halves of that: a decoded wave with the
+		Delta-T clamp, and an empty row when no ROM was given.
+	*/
+	void testOpnAdpcmBShape (void)
+	{
+		using toybox::chips::ChipMemory;
+		using toybox::chips::OpnDecoder;
+		using toybox::chips::RegisterWrite;
+
+		// A page of nibbles that alternate sign, so the accumulator moves and the shape is not flat.
+		std::vector<uint8_t> rom (0x1000, 0x8Fu);
+
+		const auto playOnce = [] (OpnDecoder& decoder)
+		{
+			std::vector<RegisterWrite> writes;
+			const auto at = [&writes] (uint32_t time, uint8_t reg, uint8_t value)
+			{
+				RegisterWrite write;
+				write.sampleTime = time;
+				write.port = 0;			// Delta-T lives at 0x10..0x1F on the OPNB's first port
+				write.reg = reg;
+				write.value = value;
+				writes.push_back (write);
+			};
+
+			at (0, 0x12, 0x00);			// start address 0
+			at (0, 0x13, 0x00);
+			at (0, 0x14, 0x01);			// end address 1 (page) - a little over 256 bytes
+			at (0, 0x15, 0x00);
+			at (0, 0x19, 0x00);			// DELTA-N 0x4000: the rate a real driver writes
+			at (0, 0x1A, 0x40);
+			at (0, 0x10, 0x80);			// start
+
+			for (const auto& write : writes)
+			{
+				decoder.write (write);
+			}
+		};
+
+		{
+			OpnDecoder decoder (OpnDecoder::Variant::ym2610);
+			decoder.reset (toybox::chips::ChipConfig { kYmClock, 44100.0 });
+
+			ChipMemory attached;
+			attached.bytes = &rom;
+			attached.type = 0x83;		// the OPNB's Delta-T block
+			decoder.attachSecondaryMemory (attached);
+
+			playOnce (decoder);
+
+			const auto state = decoder.channelState (12);
+			check (state.present && state.wave != nullptr,
+				   "the Delta-T row draws a shape once its ROM is attached");
+			// start 0, end page 1: the chip reads (1 << 8) + 0xFF + 1 - 0 bytes, two values each.
+			check (state.wave != nullptr && state.wave->size () == 1022,
+				   "the shape is two values per byte of the range it names");
+			check (state.sampleRate > 0.0f, "and it states the rate DELTA-N asks for");
+		}
+
+		{
+			OpnDecoder decoder (OpnDecoder::Variant::ym2610);
+			decoder.reset (toybox::chips::ChipConfig { kYmClock, 44100.0 });
+
+			playOnce (decoder);
+
+			const auto state = decoder.channelState (12);
+			check (state.present && state.wave == nullptr,
+				   "without a ROM the row stays a note with nothing to draw");
+		}
+	}
+
 	/** ADPCM-A and ADPCM-B are one-shots: the control bit starts them, the chip ends them. The
 		decoder reports a pulse on the drum channel, not a held note. */
 	void testOpnaAdpcmOneShots (void)
@@ -7039,6 +7114,7 @@ int main (void){
 	testFmDacTakesOverChannelSix();
 	testOpnThreeChannels();
 	testOpnChannelFamilies();
+	testOpnAdpcmBShape();
 	testOpnaAdpcmOneShots();
 	testOpnAdpcmBPitch();
 	testOpnAdpcmBDeltaIsThePitch();

@@ -610,11 +610,42 @@ void OpnDecoder::reset (const ChipConfig& config)
 
 void OpnDecoder::attachMemory (const ChipMemory& memory)
 {
-	// **The ADPCM-A image** arrives as the requirement asked for it: one 8 MB bank that six voices
-	// page through. The mask rounds to the power of two, the way the core wraps an out-of-range
-	// address instead of reading zero.
+	if (memory.bytes == nullptr)
+	{
+		return;
+	}
+
+	// **A decoder that asked for more than one image may be handed either first.** The type says
+	// which; zero means "the one the requirement names first", which is the ADPCM-A bank for every
+	// caller that predates the Delta-T blocks.
+	if (memory.type == 0x83 || memory.type == 0x81)
+	{
+		setAdpcmBRom (*memory.bytes);
+		return;
+	}
+
+	// The ADPCM-A image: one bank the six voices page through. The mask rounds to the power of two,
+	// the way the core wraps an out-of-range address instead of reading zero.
 	impl->adpcmAMask = pow2Mask (memory.bytes->size ());
 	impl->adpcmARom = *memory.bytes;
+
+	// **On the OPNA the two families share the part.** Delta-T reads the same ROM as the six voices
+	// there, so a song that ships only `0x82` still has its Delta-T samples; the OPNB keeps them in a
+	// block of its own, which arrives through attachSecondaryMemory() below.
+	if (impl->variant == Variant::ym2608 && impl->adpcmBRom.empty ())
+	{
+		setAdpcmBRom (*memory.bytes);
+	}
+}
+
+void OpnDecoder::attachSecondaryMemory (const ChipMemory& memory)
+{
+	// The Delta-T image, whatever type carried it (0x83 on the OPNB, 0x81 on the OPNA). Both end in
+	// the same setter, so there is one rule for how it is masked and one cache to invalidate.
+	if (memory.bytes != nullptr && ! memory.bytes->empty ())
+	{
+		setAdpcmBRom (*memory.bytes);
+	}
 }
 
 void OpnDecoder::setAdpcmBRom (std::vector<uint8_t> rom)
@@ -962,6 +993,43 @@ ChannelState OpnDecoder::channelState (int channel) const
 	// channel plays loudly (0x1B is only written by drivers that attenuate), so gating on it
 	// silenced every one of them. The start bit and the end address decide whether it sounds.
 	state.gate = voice.active && (voice.gateEnd == 0 || impl->now < voice.gateEnd);
+
+	// **The shape is the bytes the start and end registers name**, decoded with the same Delta-T table
+	// the cycle estimate uses - clamped at 16 bits rather than wrapped, which is what separates Delta-T
+	// from the six ADPCM-A voices. Drawn only while the voice is gated, like those rows.
+	if (state.gate && ! impl->adpcmBRom.empty () && voice.latchEnd > voice.latchStart)
+	{
+		constexpr uint32_t kWindow = 4096;
+		const uint32_t length = (std::min) (voice.latchEnd - voice.latchStart, kWindow);
+
+		auto wave = std::make_shared<std::vector<float>> ();
+		wave->reserve (length * 2);
+
+		double accumulator = 0.0;
+		int step = kAdpcmBStepMin;
+
+		for (uint32_t i = 0; i < length; ++i)
+		{
+			const int byte = impl->adpcmBByte (voice.latchStart + i);
+
+			for (int half = 0; half < 2; ++half)
+			{
+				const int nibble = (half == 0) ? ((byte >> kNibbleShift) & kNibbleMask)
+											   : (byte & kNibbleMask);
+				accumulator += (double) (kAdpcmBStepB1[nibble] * step / 8);
+				accumulator = std::clamp (accumulator, -32768.0, 32767.0);
+				wave->push_back ((float) (accumulator / 32768.0));
+				step = std::clamp (step * kAdpcmBStepB2[nibble] / 64, kAdpcmBStepMin,
+								   kAdpcmBStepMax);
+			}
+		}
+
+		state.wave = wave;
+
+		// A sampled row states how fast it **plays**, not how fast it was recorded: DELTA-N is the rate
+		// here, and the keyboard draws these bytes at that speed.
+		state.sampleRate = (float) impl->adpcmBUnitsPerSecond (voice.delta);
+	}
 
 	// L1 from DELTA-N against the 8 kHz reference, L2 from the sample's own cycle: the sets name no
 	// recording rate, so the transposition is the only register-only statement and the root is what

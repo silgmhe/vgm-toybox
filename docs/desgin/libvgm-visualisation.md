@@ -990,10 +990,17 @@ ADPCM-A 在**第二个寄存器端口**（YM2610 的 `0x59`、YM2608 的 `0x57`�
 
 #### 9.17.5 已知简化
 
-- **ADPCM-B（Delta-T）没有接 ROM**：只在 MIDI 导出路径接了（`MidiSequenceBuilder`），可视化路径的
-  `attachMemory` 只填 `adpcmARom`。`02 The Military System` 的 `ADPCM-B` 因此是 `active=1` 而无波形，
-  说明"素材没用 DeltaT"只对 `04/07` 成立。接线的前提是让 `ChipMemory` 带上 block 类型——解码器现在
-  无法区分 `0x82` 与 `0x83`。
+- **~~ADPCM-B（Delta-T）没有接 ROM~~（已修）**：`ChipRequirements` 现在可以声明第二、第三个镜像
+  （`secondaryMemoryType` / `alternateMemoryType`），`ChipMemory` 带上来源 block 类型，`IChipDecoder`
+  多一个默认为空的 `attachSecondaryMemory()`。OPN 声明了两种编号——`0x83`（OPNB）与 `0x81`（OPNA），
+  replayer 把歌曲实际带的那个交过去；`attachMemory` 按类型分派，OPNA 上则退化为"与 ADPCM-A 共用同一
+  颗 ROM"（`setAdpcmBRom` 用同一份字节）。`channelState` 的 Delta-T 分支按 start/end 寄存器解码出
+  16 位钳位的波形，并把 `sampleRate` 设为 `DELTA-N` 的播放速率，因此行上显示的是真实形状而不是
+  空行。实测：`02 The Military System` 的 `ADPCM-B` 从 `wave = null` 变成 8192 点 @41 331 Hz；
+  `07 Stage 2` 也从空变成 8192 点 @38 9xx Hz；未启动的曲子（`YM2610B/01 A.D.1993`）仍是空行。
+
+  **仍有的边界**：波形窗口与 ADPCM-A 一样限 4096 字节（高 DELTA-N 下大约 0.1 秒），更长的样本只画
+  开头；**导出**仍只覆盖 ADPCM-A（`collectOpnAdpcmSamples` 只读 `0x82`），DeltaT 只进了可视化与 MIDI。
 - **~~ADPCM-B 行在个别曲目仍可能显示波形~~（已修）**：族的边界过去由算式决定——`channelState()`、
   `noteTable()`、`isDrum()` 三处各写一次 `fmCount + 6`。今天四种变体都带 6 个 FM，所以恰好正确；
   一旦出现"带采样但 FM 不是 6"的型号，Delta-T 行会被指到别的声道，`adpcmARegs[6]` 也会越界。
