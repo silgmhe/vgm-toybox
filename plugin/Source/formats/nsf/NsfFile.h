@@ -86,6 +86,15 @@ struct NsfFile
 	bool isPal (void) const { return (ntscSpeed & 1u) != 0; }
 	/** True when the program cannot be held in the 32 KB the address space gives it. */
 	bool isBanked (void) const;
+
+	/** **The song to start from, clamped to the file.** `requested` is 0-based and comes from a caller
+		that may know better than the header; a negative value or one past the end falls back to the
+		header's own choice (0 when that is outside the file too).
+
+		It lives on the image rather than in the backend because it is a property of what the header
+		says, and because that makes it assertable without building a player.
+	*/
+	int startSongFor (int requested) const;
 	double framesPerSecond (void) const;
 	/** The expansion chip the header declares.
 

@@ -115,6 +115,8 @@ public:
 		detectUndeclaredChip ();
 
 		info_.formatName = "NSF (NSFPlay core)";
+		info_.songCount = file.totalSongs > 0 ? file.totalSongs : 1;
+		info_.songIndex = file.startSong > 0 ? file.startSong - 1 : 0;
 
 		// The header has no length and the driver never ends, so the timeline comes from the
 		// setting: three minutes unless the user says otherwise.
@@ -472,6 +474,11 @@ std::unique_ptr<playback::ISongInstance> NsfBackend::open (const playback::SongM
 		errorMessage = juce::String (error);
 		return nullptr;
 	}
+
+	// **The track can be chosen from outside the file**, and the clamp lives on the image rather than
+	// here: the header names a default, and on some rips that default is a sound effect rather than a
+	// tune, but an out-of-range request must still land on a song that exists.
+	file.startSong = file.startSongFor (memory.songIndex) + 1;
 
 	// The image is copied because the core's memory block outlives the caller's buffer, and the
 	// players of a song read from the same copy.

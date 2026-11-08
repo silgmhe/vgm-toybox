@@ -1,4 +1,4 @@
-﻿/*
+/*
     The player, driven the way the backend will drive it.
 
     Prints the one number that decides whether the CPU, the bus and the trampoline are all correct
@@ -309,6 +309,14 @@ int main (int argc, char** argv)
 	const double seconds = argc > 2 ? std::atof (argv[2]) : 5.0;
 	const double rate = 44100.0;
 
+	// **A song other than the one the header names.** Some rips put a jingle or a voice clip at the
+	// start index and the music elsewhere; without this the probe can only report "the file's default
+	// track is silent", which is not the same finding.
+	if (const char* wanted = std::getenv ("NSF_SONG"))
+	{
+		file.startSong = (uint8_t) (std::max) (1, std::atoi (wanted));
+	}
+
 	toybox::backends::nsf::NsfPlayer player (file, rate);
 
 	/** **Every sound-register write, in order.** From the audio alone, "this driver writes nothing",
@@ -316,12 +324,33 @@ int main (int argc, char** argv)
 		the triangle held at a DC offset is what each of them produces. `NSF_TRACE=1` prints the list.
 	*/
 	int traced = 0;
+
+	// State of the frame-gap print, owned here rather than by `static` locals inside the callback: a
+	// probe that runs twice in one process would otherwise continue the previous run's numbering.
+	uint64_t previousClock = 0;
+	int framesSeen = 0;
+
 	const bool tracing = std::getenv ("NSF_TRACE") != nullptr;
 
 	if (tracing)
 	{
-		player.onSoundWriteForDiagnostics = [&traced] (uint16_t address, uint8_t value)
+		player.onSoundWriteForDiagnostics = [&traced, &player, &previousClock, &framesSeen]
+			(uint16_t address, uint8_t value)
 		{
+			// **The gap between two $4017 writes is one NSF frame as the core counts it** - 29780
+			// clocks on NTSC. A driver that goes idle and a core that runs the frame at the wrong
+			// length look the same from the registers; this number tells them apart. The leading
+			// zeroes are init's own writes, made before anything has been rendered.
+			if (address == 0x4017 && framesSeen < 6)
+			{
+				const auto now = player.executedClocks ();
+				std::printf ("[frame] $4017 after %llu clocks\n",
+							 (unsigned long long) (now - previousClock));
+
+				previousClock = now;
+				++framesSeen;
+			}
+
 			if (traced >= 240)
 			{
 				return;
@@ -334,6 +363,24 @@ int main (int argc, char** argv)
 
 	player.skipPrescan ();
 	player.start ();
+
+	if (tracing)
+	{
+		// **What the bus answers in the ROM window.** A driver that reads a pointer table up there and
+		// gets zeros goes idle without ever writing a register, which is exactly what the trace shows
+		// for this file. Printed next to the file's own bytes, a mismatch is visible at a glance.
+		for (uint16_t page : { 0x8000, 0x8800, 0x9000, 0xA000, 0xC000, 0xE000 })
+		{
+			std::printf ("[rom] $%04X:", (unsigned) page);
+
+			for (uint16_t offset = 0; offset < 16; ++offset)
+			{
+				std::printf (" %02X", (unsigned) player.peekRam ((uint16_t) (page + offset)));
+			}
+
+			std::printf ("\n");
+		}
+	}
 
 	if (tracing)
 	{
@@ -359,9 +406,29 @@ int main (int argc, char** argv)
 	const auto started = std::chrono::steady_clock::now();
 	auto nextReport = 44100LL;
 
+	int block = 0;
+
 	while (counted < total)
 	{
 		const int frames = player.render (left.data (), right.data (), 1024);
+
+		// **The engine's own state, every few blocks.** All five of its routines gate on
+		// $0601..$060D, so a page that never changes says the music was never loaded - as opposed to
+		// loaded and silent, which is what one DPCM hit at the start looks like.
+		if (tracing && (++block % 20) == 0 && block <= 400)
+		{
+			std::printf ("[ram] t=%.2fs:", (double) counted / rate);
+
+			for (uint16_t address = 0x0600; address <= 0x060F; ++address)
+			{
+				std::printf (" %02X", (unsigned) player.peekRam (address));
+			}
+
+			const auto status = player.statusReads ();
+
+			std::printf ("  4015R=%llu last=%02X\n",
+						 (unsigned long long) status.count, (unsigned) status.lastValue);
+		}
 
 		for (int i = 0; i < frames; ++i)
 		{
@@ -400,6 +467,12 @@ int main (int argc, char** argv)
 		}
 
 		std::sort (top.begin (), top.end (), [] (const auto& a, const auto& b) { return a.first > b.first; });
+
+		// **The level, not just the register traffic.** A driver can write every frame and still have the
+		// chips produce nothing: an expansion chip that never got enabled looks exactly like a silent
+		// song, and the peak tells the two apart in one run.
+		std::printf ("[level] peak=%.4f rms=%.4f\n", peak,
+					 counted > 0 ? std::sqrt (sumSquares / (double) counted) : 0.0);
 
 		std::printf ("PC pages:");
 		for (std::size_t i = 0; i < top.size () && i < 6; ++i)

@@ -31,6 +31,11 @@ public:
 		follow (see TransportPanel). */
 	explicit PlayView (toybox::PlaybackEngine& engine, bool syncAvailable = true);
 
+	/** **Reported upward when a song switch could not be built.** The panel owns the control, the window
+		owns the status line, so the message travels as a value rather than the panel reaching for it.
+	*/
+	std::function<void (const juce::String&)> onEngineError;
+
 	juce::String getViewId (void) const override { return "play"; }
 	juce::String getViewName (void) const override { return toybox::i18n::tr ("view.play"); }
 

@@ -10,7 +10,7 @@
 namespace toybox::ui
 {
 
-SongInfoPanel::SongInfoPanel (const toybox::PlaybackEngine& engineToUse)
+SongInfoPanel::SongInfoPanel (toybox::PlaybackEngine& engineToUse)
 	: engine (engineToUse)
 {
 	titleLabel.setFont (juce::Font (juce::FontOptions (18.0f, juce::Font::bold)));
@@ -27,6 +27,15 @@ SongInfoPanel::SongInfoPanel (const toybox::PlaybackEngine& engineToUse)
 	fileLabel.setJustificationType (juce::Justification::centredLeft);
 	addAndMakeVisible (fileLabel);
 
+	songLabel.setFont (juce::Font (juce::FontOptions (12.5f)));
+	songLabel.setJustificationType (juce::Justification::centredRight);
+	songLabel.setComponentID ("song.label");
+	addChildComponent (songLabel);
+
+	songBox.setComponentID ("song.selector");
+	songBox.onChange = [this] { switchToSelectedSong (); };
+	addChildComponent (songBox);		// refresh() shows it only for a file with more than one song
+
 	refresh();
 }
 
@@ -37,6 +46,7 @@ void SongInfoPanel::lookAndFeelChanged (void)
 	titleLabel.setColour (juce::Label::textColourId, theme::primaryText());
 	detailsLabel.setColour (juce::Label::textColourId, theme::secondaryText());
 	fileLabel.setColour (juce::Label::textColourId, theme::secondaryText());
+	songLabel.setColour (juce::Label::textColourId, theme::secondaryText());
 }
 
 void SongInfoPanel::refreshLanguage (void)
@@ -47,7 +57,16 @@ void SongInfoPanel::refreshLanguage (void)
 void SongInfoPanel::resized (void)
 {
 	auto inner = getLocalBounds().reduced (theme::cardPadding, 10);
-	titleLabel.setBounds (inner.removeFromTop (26));
+	auto titleRow = inner.removeFromTop (26);
+
+	// The selector sits at the end of the title row and takes nothing from the text when it is hidden.
+	if (songBox.isVisible ())
+	{
+		songBox.setBounds (titleRow.removeFromRight (96).reduced (0, 2));
+		songLabel.setBounds (titleRow.removeFromRight (46).reduced (0, 2));
+	}
+
+	titleLabel.setBounds (titleRow);
 	detailsLabel.setBounds (inner.removeFromTop (20));
 	fileLabel.setBounds (inner.removeFromTop (18));
 }
@@ -56,11 +75,49 @@ void SongInfoPanel::refresh (void)
 {
 	if (! engine.isLoaded())
 	{
+		if (songBox.isVisible () || songLabel.isVisible ())
+		{
+			// Relayout as well, or the title keeps the width the selector was reserving for it.
+			songBox.setVisible (false);
+			songLabel.setVisible (false);
+			resized ();
+		}
+
 		titleLabel.setText (i18n::tr ("song.noFile"), juce::dontSendNotification);
 		detailsLabel.setText ({}, juce::dontSendNotification);
 		fileLabel.setText (formatLoadHint(),
 						   juce::dontSendNotification);
 		return;
+	}
+
+	// **One entry per song, and nothing at all for a single-song format.** The list is rebuilt only when
+	// the count changes, so a playing song does not reset the user's open popup on every tick.
+	const int songCount = engine.getSongCount();
+
+	const bool wantsSelector = songCount > 1;
+
+	if (songBox.isVisible () != wantsSelector)
+	{
+		songBox.setVisible (wantsSelector);
+		songLabel.setVisible (wantsSelector);
+		resized ();
+	}
+
+	if (wantsSelector)
+	{
+		// Re-read every tick: a language change has to reach this label like every other one.
+		songLabel.setText (i18n::tr ("song.track"), juce::dontSendNotification);
+		if (songBox.getNumItems () != songCount)
+		{
+			songBox.clear (juce::dontSendNotification);
+
+			for (int index = 1; index <= songCount; ++index)
+			{
+				songBox.addItem (juce::String (index), index);
+			}
+		}
+
+		songBox.setSelectedId (engine.getSongIndex () + 1, juce::dontSendNotification);
 	}
 
 	const auto& file = engine.getFile();
@@ -89,6 +146,54 @@ void SongInfoPanel::refresh (void)
 	fileLabel.setText (file.getFileName() + "   -   " + formatTime (engine.getPositionSeconds())
 						   + " / " + formatTime (engine.getDurationSeconds()),
 					   juce::dontSendNotification);
+}
+
+void SongInfoPanel::switchToSelectedSong (void)
+{
+	if (! engine.isLoaded ())
+	{
+		return;
+	}
+
+	const int index = songBox.getSelectedId () - 1;
+
+	if (index < 0 || index == engine.getSongIndex ())
+	{
+		return;
+	}
+
+	// **Built on the load worker**, because a rebuild costs what a file open costs and the window has to
+	// keep drawing through it. The selection is set optimistically so the box shows the song being
+	// built; the callback puts it back if the build is refused or fails, so the control never claims a
+	// song that is not open.
+	songBox.setSelectedId (index + 1, juce::dontSendNotification);
+
+	juce::Component::SafePointer<SongInfoPanel> safe (this);
+
+	const bool accepted = engine.selectSongAsync (index, [safe] (bool ok, const juce::String& error)
+	{
+		if (safe == nullptr)
+		{
+			return;
+		}
+
+		if (ok)
+		{
+			return;
+		}
+
+		safe->songBox.setSelectedId (safe->engine.getSongIndex () + 1, juce::dontSendNotification);
+
+		if (safe->onSwitchFailure != nullptr)
+		{
+			safe->onSwitchFailure (error);
+		}
+	});
+
+	if (! accepted)
+	{
+		songBox.setSelectedId (engine.getSongIndex () + 1, juce::dontSendNotification);
+	}
 }
 
 } // namespace toybox::ui

@@ -15,6 +15,15 @@ PlayView::PlayView (toybox::PlaybackEngine& playback, bool syncAvailable)
 	  contentSlot (playback)
 {
 	addAndMakeVisible (songInfoPanel);
+
+	// The panel reports a refused or failed switch; the window decides how to say it.
+	songInfoPanel.onSwitchFailure = [this] (const juce::String& message)
+	{
+		if (onEngineError != nullptr)
+		{
+			onEngineError (message);
+		}
+	};
 	addAndMakeVisible (transportPanel);
 	// hidden until a file with sound chips is loaded (ChipPanel::rebuild sets the visibility)
 	addChildComponent (chipPanel);

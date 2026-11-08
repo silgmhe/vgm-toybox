@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 #include <cstddef>
 #include <cstdint>
@@ -57,6 +57,12 @@ struct SongMemory
 	const void* data = nullptr;
 	std::size_t size = 0;
 	juce::File file;				// for the extension check and for the UI
+
+	/** **Which song of a multi-song file to open**, or -1 for the one the header names. A backend that
+		has only one song ignores it; one that has many (NSF, GBS) uses it to start elsewhere - the
+		header's choice is a default, not the whole list.
+	*/
+	int songIndex = -1;
 
 	bool isValid (void) const { return data != nullptr && size > 0; }
 };
@@ -124,6 +130,13 @@ struct SongInfo
 	bool loopsForever = false;
 	std::map<juce::String, juce::String> tags;
 	std::vector<ChipInfo> chips;
+
+	/** **How many songs the file holds and which one is open.** A single-song format reports 1/0; an
+		NSF reports its own count, because the header's starting track is often not the one a listener
+		wants - some rips put a jingle or a bare sound effect there and the music elsewhere.
+	*/
+	int songCount = 1;
+	int songIndex = 0;
 };
 
 /** How a backend achieves "one instance per track". */

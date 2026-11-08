@@ -1,4 +1,4 @@
-﻿# libvgm 的逐通道可视化：设计
+# libvgm 的逐通道可视化：设计
 
 > 前置：`docs/research/2026-11-01-libvgm-visualisation-survey.md`（哪些能拿、哪些拿不到）。
 > 分支：`feature/libvgm-visualisation`。
@@ -1014,6 +1014,20 @@ ADPCM-A 在**第二个寄存器端口**（YM2610 的 `0x59`、YM2608 的 `0x57`�
 
 **过程记录**：`docs/memo/2026-11-08-keyboard-rows-rearchitecture-plan.md`
 
+### 9.19 NSF 播放：三个判据与两处默认值（2026-11-08）
+
+NSF 走的是自研后端（`backends/nsf`，核心来自 `libs/nsfplay`），与 libvgm 无关。当天修的三处故障都属于"判据来源错误"：
+
+**1. bank 判定不能看镜像大小。** `NsfFile::isBanked()` 曾写成 `rom.size() > 0x8000`。`Ai Senshi Nicol` 镜像 20 KB，头部 bank 表却是 `01 02 00 00 00 00 03 04`，`init=$D02B` 只有把 `$D000` 窗口映射到 bank 0 才访问得到；按大小判为线性后该地址落在镜像外，CPU 读到 0、落进零页（`pc=0002`），表现是"三角波直流、零写入"。现在与 NSFPlay / NotSoFatso 一致：**bank 表非零即 banked**。断言见 `NsfFormatTest`。
+
+**2. 默认曲目是"文件说的"，不是"用户想要的"。** `startSong` 只是默认值，有些 rip 把它指向一记音效（Super Mario USA 的 16，音乐在 1–14）。界面需要能选曲：`SongMemory::songIndex`（-1 = 用文件头的）→ `PlaybackEngine::selectSong()` → 信息卡下拉框（`song.selector`，仅 `songCount > 1` 时出现）。
+
+**3. 打开文件默认第 1 首。** 目标曲目是 `PlaybackEngine::loadImage()` 的**参数**（`loadFile` 与
+`loadFileAsync` 各传 0），不再有可变的成员——因此不存在"某条加载路径忘记重置"这种可能。切曲目走
+`selectSongAsync()`，在加载 worker 上重建，失败则停播并在状态行报出原因（与打开文件同一语义）。
+
+**测量优先。** 这三处都不是靠听感定位的，而是靠探针：写入序列、每声道峰值（`--check`）、输出电平（`[level]`）、帧周期（两次 `$4017` 之间的 CPU 时钟）。判据表与回归基线写在
+`docs/memo/2026-11-08-nsf-super-mario-usa-single-event.md` 第 12–14 节。
 ## 10. 实施顺序
 
 五步，每步可独立提交、独立验证：

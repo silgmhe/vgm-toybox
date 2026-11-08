@@ -102,7 +102,18 @@ bool NsfBus::Read (uint32_t adr, uint32_t& val, uint32_t id)
 		return true;
 	}
 
-	return xgm::NES_MEM::Read (adr, val, id);
+	const bool handled = xgm::NES_MEM::Read (adr, val, id);
+
+	// **The status register a driver polls.** A bus that answers zero here looks exactly like a chip
+	// with nothing running, and a driver waiting on it goes idle without ever writing a register - so
+	// the count and the last value are kept for the probe.
+	if (adr == 0x4015)
+	{
+		++statusReadCount;
+		lastStatusValue = (uint8_t) (val & 0xFF);
+	}
+
+	return handled;
 }
 
 bool NsfBus::Write (uint32_t adr, uint32_t val, uint32_t id)

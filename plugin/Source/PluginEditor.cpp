@@ -124,6 +124,15 @@ ToyboxAudioProcessorEditor::ToyboxAudioProcessorEditor (ToyboxAudioProcessor& p)
 	auto* playPage = new PlayView (engine, processor.wrapperType != juce::AudioProcessor::wrapperType_Standalone);
 	playView = playPage;
 
+	// A song switch that could not be built lands on the status line a failed load already uses.
+	playPage->onEngineError = [this] (const juce::String& message)
+	{
+		loadInFlight = false;
+		loadingName.clear();
+		lastError = message;
+		updateStatusLine();
+	};
+
 	playPage->onExportReport = [this] (const toybox::ui::ExportReport& report)
 	{
 		showExportReport (report);

@@ -684,6 +684,48 @@ int main (void)
 		folder.deleteRecursively ();
 	}
 
+	/**
+		**The bank table decides how the image is addressed, not its size.**
+
+		Ai Senshi Nicol is 20 KB of program with `init` at $D02B: that address exists only when the
+		$D000 window shows bank 0. Judging from the size alone mapped it linearly, the CPU read past
+		the end of the image and executed zero page - one DC level, no register writes at all. The
+		header says which it is, and that is what this asserts.
+	*/
+	{
+		auto plain = makeNsf ();
+		NsfFile linear;
+		std::string error;
+
+		check (NsfFile::parse (plain.data (), plain.size (), linear, error), "an image without banks parses");
+		check (! linear.isBanked (), "and is addressed linearly");
+
+		auto declared = makeNsf ();
+		declared[NsfFile::offsetBankSwitch] = 0x03;		// one window mapped, the rest unused
+
+		NsfFile banked;
+
+		check (NsfFile::parse (declared.data (), declared.size (), banked, error), "an image with a bank table parses");
+		check (banked.isBanked (), "a single declared window makes a 256-byte image banked");
+	}
+
+	/**
+		**Which song a request lands on.** The header names one, a caller may ask for another, and a
+		request outside the file has to fall back rather than index past the table the driver keeps.
+		This mapping lived in the backend until now, where only a player could reach it.
+	*/
+	{
+		auto image = makeNsf (1, 34, 16);
+		NsfFile chosen;
+		std::string error;
+
+		check (NsfFile::parse (image.data (), image.size (), chosen, error), "a 34-song image parses");
+		check (chosen.startSongFor (0) == 0, "a player may start at the first song");
+		check (chosen.startSongFor (33) == 33, "and at the last one");
+		check (chosen.startSongFor (34) == 15, "one past the end falls back to the header's choice");
+		check (chosen.startSongFor (-1) == 15, "so does a negative request");
+	}
+
 	std::printf ("\nResult    : %s\n", toybox::test::failures() == 0 ? "all checks passed" : "FAILURES");
 
 	return toybox::test::failures() == 0 ? 0 : 1;

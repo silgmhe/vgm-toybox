@@ -146,6 +146,7 @@ language: 简体中文
 "settings.theme.light" = "浅色";
 
 "song.noFile" = "未载入文件";
+"song.track" = "曲目";
 
 "status.finished" = "已结束";
 "status.loading" = "正在载入 {0}...";

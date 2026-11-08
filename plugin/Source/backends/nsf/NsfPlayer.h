@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 #include "playback/ChipState.h"
 #include "playback/MidiSequence.h"
@@ -111,6 +111,16 @@ public:
 		"its writes never leave the bus", which sound identical in the audio. */
 	std::function<void (uint16_t address, uint8_t value)> onSoundWriteForDiagnostics;
 	uint8_t peekRam (uint16_t address) const;
+	/** What the driver saw when it read $4015: how often, and the value the last read answered. The
+		second half is not optional - a count alone cannot tell "the register answers zero" from "the
+		driver never asked". */
+	struct StatusReads
+	{
+		uint64_t count = 0;
+		uint8_t lastValue = 0;
+	};
+
+	StatusReads statusReads (void) const;
 
 	/** How much of the song the sample scan covers. Past this point a sample that has never been
 		heard gets no note rather than a made-up one. */

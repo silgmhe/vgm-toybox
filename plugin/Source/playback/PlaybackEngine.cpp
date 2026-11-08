@@ -107,10 +107,99 @@ bool PlaybackEngine::loadFile (const juce::File& file, juce::String& errorMessag
 		return false;
 	}
 
-	return loadImage (std::move (data), file, true, errorMessage);
+	// **A new file starts at its first song.** Headers do name one, but on real rips that is often a
+	// jingle or a bare sound effect - the Super Mario USA NSF names track 16, which plays one DPCM and
+	// stops, while its music sits on 1-14. The selector lets a listener go anywhere from there, and the
+	// index is an argument here rather than a member so a second load path cannot forget it.
+	return loadImage (std::move (data), file, true, 0, errorMessage);
+}
+
+bool PlaybackEngine::selectSong (int index, juce::String& errorMessage)
+{
+	juce::MemoryBlock image;
+	juce::File file;
+	bool playing = false;
+
+	if (! takeSongForRebuild (index, image, file, playing, errorMessage))
+	{
+		return false;
+	}
+
+	// **A rebuild, not a read.** The same path a file open takes, so tracks, timeline and players stay
+	// consistent with each other; only the song the backend starts from changes. The synchronous form
+	// exists for tests and for a caller already off the message thread; the window uses the
+	// asynchronous one below, because a rebuild costs the same 200-odd milliseconds a file open does.
+	return loadImage (std::move (image), file, playing, index, errorMessage);
+}
+
+bool PlaybackEngine::selectSongAsync (int index, LoadCallback onDone)
+{
+	juce::MemoryBlock image;
+	juce::File file;
+	bool playing = false;
+	juce::String error;
+
+	if (! takeSongForRebuild (index, image, file, playing, error))
+	{
+		return false;
+	}
+
+	const BuildConfig config = makeBuildConfig (index);
+	const int generation = ++loadGeneration;
+	auto* const engine = this;
+	const auto lifetime = alive;
+
+	loadPool.addJob ([engine, lifetime, config, image = std::move (image), file, generation,
+					  playing, onDone = std::move (onDone)] () mutable
+	{
+		juce::String buildError;
+		LoadedSong built = buildSong (config, image, file, buildError);
+		const bool ok = built.song != nullptr;
+
+		juce::MessageManager::getInstance()->callAsync (
+			[engine, lifetime, generation, built = std::move (built), image = std::move (image),
+			 file, ok, buildError, playing, onDone = std::move (onDone)] () mutable
+			{
+				if (! lifetime->load ())
+				{
+					return;		// the engine is gone; the result is dropped
+				}
+
+				engine->finishLoad (generation, std::move (built), std::move (image), file, ok,
+									buildError, playing, onDone);
+			});
+	});
+
+	return true;
+}
+
+bool PlaybackEngine::takeSongForRebuild (int index, juce::MemoryBlock& image, juce::File& file,
+										 bool& playing, juce::String& errorMessage)
+{
+	if (index < 0 || index >= songCount)
+	{
+		// A single-song format lands here for any index but zero, which is what "returns false when
+		// the format has a single song" in the header means.
+		errorMessage = "No such song.";
+		return false;
+	}
+
+	const juce::ScopedLock sl (lock);
+	image = fileData;
+	file = currentFile;
+	playing = isPlaying ();
+
+	if (image.getSize() == 0)
+	{
+		errorMessage = "No song is loaded.";
+		return false;
+	}
+
+	return true;
 }
 
 bool PlaybackEngine::loadImage (juce::MemoryBlock image, const juce::File& file, bool startPlaying,
+								int song,
 								juce::String& errorMessage)
 {
 	// This is a request of its own: a load that is still building on the worker must not install
@@ -121,7 +210,7 @@ bool PlaybackEngine::loadImage (juce::MemoryBlock image, const juce::File& file,
 	// current song keeps playing while this happens - a failed load still stops playback in
 	// installLoaded(), exactly as it always has. The configuration is copied first so the build
 	// never reads a member render() can see - the same copy loadFileAsync() hands to its worker.
-	const BuildConfig config = makeBuildConfig();
+	const BuildConfig config = makeBuildConfig (song);
 	LoadedSong built = buildSong (config, image, file, errorMessage);
 
 	return installLoaded (std::move (built), std::move (image), file, startPlaying);
@@ -144,6 +233,8 @@ bool PlaybackEngine::installLoaded (LoadedSong&& built, juce::MemoryBlock&& imag
 	fileData = std::move (image);
 	currentFile = file;
 
+	recordSongs (built.song->getInfo ());
+
 	installSong (std::move (built));
 
 	positionSeconds = 0.0;
@@ -157,7 +248,9 @@ void PlaybackEngine::loadFileAsync (const juce::File& file, LoadCallback onDone,
 {
 	// Snapshot on the message thread: from here on the job only touches its own copies, so a
 	// sample-rate change, a mode switch or a close on the message thread cannot race the build.
-	const BuildConfig config = makeBuildConfig();
+	// **A new file opens at its first song**, and this snapshot carries it: the index is an argument to
+	// the build rather than a member the worker could read while the message thread writes it.
+	const BuildConfig config = makeBuildConfig (0);
 	const int generation = ++loadGeneration;
 	auto* const engine = this;
 	const auto lifetime = alive;
@@ -243,6 +336,16 @@ PlaybackEngine::BuildConfig PlaybackEngine::makeBuildConfig (void) const
 	config.mixerEnabled = mixerEnabled;
 	config.defaultRouting = defaultRouting;
 	config.chips = chips;
+
+	// A rebuild reopens the song that is playing, not the one the file's header names.
+	config.songIndex = currentSongIndex;
+	return config;
+}
+
+PlaybackEngine::BuildConfig PlaybackEngine::makeBuildConfig (int song) const
+{
+	BuildConfig config = makeBuildConfig ();
+	config.songIndex = song;
 	return config;
 }
 
@@ -344,7 +447,11 @@ bool PlaybackEngine::readState (const void* data, int sizeInBytes, juce::String&
 
 		// Restored stopped, deliberately: a host opening a project must not make sound on its own
 		// (the transport is not part of the state either - see writeState()).
-		if (! loadImage (state.songImage, juce::File (state.songName), false, errorMessage))
+		//
+		// **At the first song**, which is what this path did before the index became an argument: the
+		// saved state has no field for it, and a multi-song file restored into a jingle would be worse
+		// than one restored into its music.
+		if (! loadImage (state.songImage, juce::File (state.songName), false, 0, errorMessage))
 		{
 			return false;
 		}
@@ -980,6 +1087,7 @@ PlaybackEngine::LoadedSong PlaybackEngine::buildSong (const BuildConfig& config,
 	memory.data = image.getData();
 	memory.size = image.getSize();
 	memory.file = file;
+	memory.songIndex = config.songIndex;
 
 	// Compile-time registration (idempotent): the plugin ships its backends inside the same
 	// binary, so there is nothing to load at runtime (ADR-008).
@@ -1205,7 +1313,12 @@ void PlaybackEngine::rebuildPlayers (juce::String& errorMessage)
 		applyTrackIsolationTo (mixerEnabled, built.layout, built.players);
 		applyChipMutesTo (built.chips, built.players);
 
-		installSong (std::move (built));
+		if (built.song != nullptr)
+		{
+				recordSongs (built.song->getInfo ());
+		}
+
+	installSong (std::move (built));
 	}
 
 	if (position > 0.0)
@@ -1219,12 +1332,26 @@ void PlaybackEngine::rebuildPlayers (juce::String& errorMessage)
 	}
 }
 
+void PlaybackEngine::recordSongs (const playback::SongInfo& info)
+{
+	// One place decides what "how many songs, which one" means for an installed song, so the two
+	// install paths (a fresh build and a rebuild) cannot drift apart.
+	songCount = (std::max) (1, info.songCount);
+	currentSongIndex = info.songIndex > 0 ? info.songIndex : 0;
+}
+
 void PlaybackEngine::resetState (void)
 {
 	playing = false;
 	paused = false;
 	finished = false;
 	loaded = false;
+
+	// **Nothing is open, so nothing has songs.** Leaving these behind made getSongCount() describe the
+	// file that was just unloaded, and only the panel's own isLoaded() check kept the stale number off
+	// the screen - a caller reading it after unloadFile() would have believed it.
+	songCount = 1;
+	currentSongIndex = 0;
 
 	destroyPlayers();
 	song.reset();

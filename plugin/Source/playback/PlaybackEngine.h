@@ -67,10 +67,31 @@ public:
 	// --- message thread ---
 	/** Loads a song file and starts playback. Returns false and fills errorMessage on failure. */
 	bool loadFile (const juce::File& file, juce::String& errorMessage);
+
+	/** **Switches to another song of the same file** (NSF and other multi-song formats). The image is
+		already in memory, so this is a rebuild and not a read - and a rebuild costs what a file open
+		costs, which is why the window uses selectSongAsync() below.
+
+		Returns false when nothing is loaded, or when `index` is outside `0 .. getSongCount()-1`; a
+		single-song format therefore answers false for anything but zero.
+	*/
+	bool selectSong (int index, juce::String& errorMessage);
+
+	/** How many songs the open file holds, and which one is playing. Both are 1/0 for a single-song
+		format, so a caller can hide a selector that would have one entry.
+	*/
+	int getSongCount (void) const { return songCount; }
+	int getSongIndex (void) const { return currentSongIndex; }
 	void unloadFile (void);
 
 	/** Called on the message thread when an asynchronous load finishes. */
 	using LoadCallback = std::function<void (bool ok, const juce::String& errorMessage)>;
+
+	/** The same switch, built on the load worker so the window keeps drawing. `onDone` runs on the
+		message thread. Returns false only for the refusals above - the build itself reports through
+		the callback, and a failure leaves the current song playing.
+	*/
+	bool selectSongAsync (int index, LoadCallback onDone);
 
 	/** Loads `file` without doing the work on the calling thread (review M-1).
 
@@ -417,10 +438,19 @@ private:
 		bool mixerEnabled = true;
 		playback::DefaultRouting defaultRouting = playback::DefaultRouting::master;
 		std::vector<ChipEntry> chips;
+
+		/** Which song of a multi-song file to build. Every caller supplies it; the default only keeps a
+			path that forgets to at the first song rather than at whatever the header happens to name.
+		*/
+		int songIndex = 0;
 	};
 
-	/** Copies the live configuration into a BuildConfig. Message thread. */
+	/** Copies the live configuration into a BuildConfig, for a rebuild of the song that is playing.
+		Message thread. */
 	BuildConfig makeBuildConfig (void) const;
+
+	/** The same, for a build that targets a particular song. Message thread. */
+	BuildConfig makeBuildConfig (int song) const;
 
 	/** Builds a song from an image **without touching engine state**, so it needs no lock and can
 		run anywhere: it reads the passed configuration only and returns everything a load
@@ -436,6 +466,9 @@ private:
 
 	/** The message-thread half of loadFileAsync(): drops the result when a newer load has taken
 		over in the meantime, otherwise installs it and reports. */
+	/** Records how many songs the installed song has and which one it is. Message thread. */
+	void recordSongs (const playback::SongInfo& info);
+
 	void finishLoad (int generation, LoadedSong&& built, juce::MemoryBlock&& image,
 					 const juce::File& file, bool ok, const juce::String& errorMessage,
 					 bool startPlaying, const LoadCallback& onDone);
@@ -457,7 +490,13 @@ private:
 		installed with the swap rather than set afterwards, so a restored project cannot leak one
 		render block of sound before the transport is stopped again. */
 	bool loadImage (juce::MemoryBlock image, const juce::File& file, bool startPlaying,
-					juce::String& errorMessage);
+					int song, juce::String& errorMessage);
+
+	/** Checks `index` against the open file and copies the image the rebuild needs. Message thread;
+		shared by selectSong() and selectSongAsync() so both refuse for the same reasons.
+	*/
+	bool takeSongForRebuild (int index, juce::MemoryBlock& image, juce::File& file, bool& playing,
+							 juce::String& errorMessage);
 
 	/** The shared bodies: used both by buildSong() (on a song that is not installed yet) and by the
 		member functions below (on the installed one), which is why they take their state as
@@ -557,6 +596,8 @@ private:
 
 	juce::MemoryBlock fileData;			// the song image; the backend loads its players from it
 	juce::File currentFile;
+	int songCount = 1;					// songs in the open file (1 for every single-song format)
+	int currentSongIndex = 0;			// the song actually open, 0-based
 	std::vector<ChipEntry> chips;
 	std::map<juce::String, juce::String> tags;
 

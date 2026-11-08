@@ -1,4 +1,4 @@
-﻿#include "backends/nsf/NsfPlayer.h"
+#include "backends/nsf/NsfPlayer.h"
 
 #include <algorithm>
 #include <cmath>
@@ -808,6 +808,19 @@ uint32_t NsfPlayer::expansionSignature (int index) const
 uint64_t NsfPlayer::soundWrites (void) const
 {
 	return bus != nullptr ? bus->soundWriteCount : 0;
+}
+
+NsfPlayer::StatusReads NsfPlayer::statusReads (void) const
+{
+	StatusReads reads;
+
+	if (bus != nullptr)
+	{
+		reads.count = bus->statusReadCount;
+		reads.lastValue = bus->lastStatusValue;
+	}
+
+	return reads;
 }
 
 uint8_t NsfPlayer::peekRam (uint16_t address) const
