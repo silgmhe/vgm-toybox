@@ -687,6 +687,31 @@ bool LibvgmTrackPlayer::captureState (playback::ChipStateSnapshot& snapshot) con
 						  return a.decoder->channelCount () > b.decoder->channelCount ();
 					  });
 
+	// **One instance per device.** libvgm can hand the same device twice - the Mega Drive's PSG arrives
+	// as its own instance beside the YM2612's - and the mixer lists it once. Counting it twice made the
+	// block placement overshoot: the second copy's channels landed where no track exists, they fell out
+	// of the track scan, and the page showed a second `SEGA PSG` group at the bottom with the same four
+	// rows. The first instance of a device describes it; the rest are the same voices.
+	{
+		std::vector<std::pair<uint32_t, int>> seen;
+
+		instances.erase (std::remove_if (instances.begin (), instances.end (),
+										 [&seen] (const auto& instance)
+										 {
+											 const auto key = std::make_pair (instance.deviceId,
+																			  instance.decoder->channelCount ());
+
+											 if (std::find (seen.begin (), seen.end (), key) != seen.end ())
+											 {
+												 return true;
+											 }
+
+											 seen.push_back (key);
+											 return false;
+										 }),
+						 instances.end ());
+	}
+
 	std::vector<int> counts;
 	counts.reserve (instances.size ());
 
@@ -911,15 +936,9 @@ bool LibvgmTrackPlayer::captureState (playback::ChipStateSnapshot& snapshot) con
 			}
 		}
 
-		// Anything the track list does not describe stays last rather than vanishing.
-		for (const auto& state : snapshot.channels)
-		{
-			if (state.trackIndex < 0 || (std::size_t) state.trackIndex >= tracks->size ())
-			{
-				rows.push_back (state);
-			}
-		}
-
+		// **A state no track describes is a layout disagreement, not a row.** Appending it showed the
+		// same device twice - the second copy carries its own name, so the page grew a group that the
+		// mixer does not have. It is dropped here instead: one row per track, which is the contract.
 		snapshot.channels = std::move (rows);
 	}
 
