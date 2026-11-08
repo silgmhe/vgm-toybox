@@ -110,7 +110,7 @@ private:
 
 	/** The track that describes this device voice: the pair written by `describeSong`. A row that covers
 		the whole device (negative deviceChannel) answers for any channel of that device. */
-	int trackForVoice (playback::DeviceId sourceId, int deviceChannel) const;
+	int trackForVoice (uint16_t deviceType, int deviceChannel) const;
 	void applyMuting (uint32_t deviceId, const PLR_MUTE_OPTS& muteOpts);
 	/** Rebuilds the whole mute configuration from the isolated track and the chip mute states. */
 	void applyIsolation (void);

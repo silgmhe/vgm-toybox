@@ -594,7 +594,7 @@ void LibvgmTrackPlayer::Ledger::buildNotes (const midi::SongIr& ir)
 	}
 }
 
-int LibvgmTrackPlayer::trackForVoice (playback::DeviceId sourceId, int deviceChannel) const
+int LibvgmTrackPlayer::trackForVoice (uint16_t deviceType, int deviceChannel) const
 {
 	if (tracks == nullptr)
 	{
@@ -607,7 +607,7 @@ int LibvgmTrackPlayer::trackForVoice (playback::DeviceId sourceId, int deviceCha
 	{
 		const auto& track = (*tracks)[i];
 
-		if (track.sourceDeviceId != sourceId)
+		if (track.sourceDeviceType != deviceType)
 		{
 			continue;
 		}
@@ -777,7 +777,21 @@ bool LibvgmTrackPlayer::captureState (playback::ChipStateSnapshot& snapshot) con
 			// `deviceId` - `describeSong` creates them inside the head's loop - so filtering by id can
 			// never find them. That is the whole reason the SSG and PSG rows sat empty while the mixer,
 			// which does no such matching, drew them: it was not the block arithmetic at all.
-			state.trackIndex = trackForVoice (instance.deviceId, channel);
+			// **The YM2610's SSG arrives under the chip's own device entry.** libvgm lists it as a child
+			// device, so `describeSong` creates its three tracks with the child's type (AY8910) - but the
+			// writes reach the router under the parent, so the instance reports type YM2610 and the same
+			// id. Neither field separates them; what does is the voice count, which is the one piece of
+			// information the two devices do not share. This is the chip-specific rule the whole OPN
+			// family needed: three channels under a YM2610 is its SSG, and nothing else is.
+			uint16_t voiceType = (device != nullptr) ? (uint16_t) device->type : 0;
+
+			if (device != nullptr && device->type == DEVID_YM2610
+				&& instance.decoder->channelCount () == 3)
+			{
+				voiceType = DEVID_AY8910;
+			}
+
+			state.trackIndex = trackForVoice (voiceType, channel);
 
 			// **The name of a row is the name of the track it belongs to.** The chip's own table is
 			// not the same thing: a linked voice set shares its parent's table, so the SSG's three

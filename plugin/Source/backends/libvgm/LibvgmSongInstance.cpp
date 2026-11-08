@@ -926,7 +926,8 @@ SongDescription describeSong (LibvgmTrackPlayer* probe)
 																			const juce::String& name,
 																			bool trackIsolatable,
 																			playback::DeviceId sourceId,
-																			int deviceChannel)
+																			int deviceChannel,
+																			uint16_t sourceType)
 		{
 			playback::TrackInfo track;
 			track.id = (playback::TrackId) result.tracks.size();	// the handle the core passes back
@@ -936,6 +937,7 @@ SongDescription describeSong (LibvgmTrackPlayer* probe)
 			track.isolatable = trackIsolatable;
 			track.sourceDeviceId = sourceId;
 			track.deviceChannel = deviceChannel;
+			track.sourceDeviceType = sourceType;
 			track.name = name;
 			track.groupName = groupName;
 			track.midiCapability = midiCapabilityFor (device, channelIndex);
@@ -944,7 +946,7 @@ SongDescription describeSong (LibvgmTrackPlayer* probe)
 
 		if (! isolatable)
 		{
-			addTrack (-1, "All", false, device.id, -1);
+			addTrack (-1, "All", false, device.id, -1, device.type);
 		}
 		else
 		{
@@ -953,7 +955,7 @@ SongDescription describeSong (LibvgmTrackPlayer* probe)
 				const juce::String name = (channelNames != nullptr && channelNames[channel] != nullptr)
 											? juce::String (channelNames[channel])
 											: ("Ch " + juce::String (channel + 1));
-				addTrack (channel, name, true, device.id, channel);
+				addTrack (channel, name, true, device.id, channel, device.type);
 			}
 		}
 
@@ -979,7 +981,7 @@ SongDescription describeSong (LibvgmTrackPlayer* probe)
 			for (int channel = 0; channel < childChannels; ++channel)
 			{
 				addTrack (linkedBase + channel, "SSG " + juce::String (channel + 1), childIsolatable,
-						 child.id, channel);
+						 child.id, channel, child.type);
 			}
 
 			linkedBase += childChannels;
