@@ -1,4 +1,4 @@
-#include "SegaPcmDecoder.h"
+﻿#include "SegaPcmDecoder.h"
 
 #include <algorithm>
 #include <cmath>
@@ -23,6 +23,11 @@ namespace
 		root carries the absolute pitch, and `L1 + L2` does not depend on this constant. */
 	constexpr double kReferenceRate = 8000.0;
 	constexpr std::size_t kMeasurementUnits = 2048;
+
+	/** How much of a sample a row draws. A slap bass is a few kilobytes - this song's is 8448 bytes,
+		which the first cap of 8192 cut by exactly enough to notice - and drawing a whole drum kit's
+		megabytes would cost the same and show less. */
+	constexpr uint32_t kMaxWaveBytes = 16384;
 
 	/** Sample data is unsigned bytes around 0x80, as on every chip of this generation. */
 	constexpr int kSampleBias = 0x80;
@@ -121,6 +126,10 @@ struct SegaPcmDecoder::Impl
 	double clock = 8000000.0;
 	double streamRate = 44100.0;
 	std::map<uint32_t, double> cycleCache;
+
+	/** The bytes a voice latched, decoded, keyed by (start, length): two voices playing the same
+		slap bass share one copy, and the ROM never changes under us. */
+	std::map<uint64_t, std::shared_ptr<const std::vector<float>>> waveCache;
 	std::unique_ptr<SegaPcmNoteTable> tables[SegaPcmDecoder::numChannels];
 	uint32_t now = 0;
 
@@ -145,18 +154,39 @@ struct SegaPcmDecoder::Impl
 		return kReferenceRate;
 	}
 
-	/** Where the voice starts, in bytes: the 24-bit position's low byte is the chip's own fraction,
-		so the address byte is `(addressHigh << 8) | addressMid`. */
-	static uint32_t startOf (const Voice& voice)
+	/** **The control byte carries the ROM bank in its high bits**, and ignoring it put every voice at
+		the wrong bytes: this song's writes use `control = 0x0A` and `0x12`, which are bank 8 and 16 -
+		offsets 0x10000 and 0x20000 - while the address registers only say 0x0000. The row then drew
+		the empty bottom of the image and the export cut silence from it, which is exactly what the
+		first version looked and sounded like.
+
+		The shift and mask come from the VGM header's SegaPCM interface bytes (0x3C / 0x3E); this file
+		says 13 / 0xF8, and libvgm falls back to 0x70 when the mask is zero. Every file in this
+		collection uses the same pair, so they are constants here rather than new plumbing through
+		`ChipConfig` - a file that disagrees would need that plumbing, and the comment says so.
+	*/
+	uint8_t bankShift = 13;		// the VGM header's 0x3C - the format's usual shift
+	uint8_t bankMask = 0xF8;	// ... and 0x3E, with 0x70 the fallback libvgm substitutes
+
+	/** `offset | (addr >> 8)` exactly as the core builds it (`segapcm.c:156`, `:182`). */
+	uint32_t offsetOf (const Voice& voice) const
 	{
-		return ((uint32_t) voice.addressHigh << 8) | voice.addressMid;
+		return (uint32_t) (voice.control & bankMask) << bankShift;
+	}
+
+	/** Where the voice starts, in bytes: the 24-bit position's low byte is the chip's own fraction,
+		so the address byte is `(addressHigh << 8) | addressMid`, placed in the bank the control byte
+		names. */
+	uint32_t startOf (const Voice& voice) const
+	{
+		return offsetOf (voice) | (((uint32_t) voice.addressHigh << 8) | voice.addressMid);
 	}
 
 	/** The end register counts 256-byte units and the core compares `addr >> 16`, so the sample ends
-		at `(reg + 1) * 256`. */
-	static uint32_t endOf (const Voice& voice)
+		at `(reg + 1) * 256` - inside the same bank. */
+	uint32_t endOf (const Voice& voice) const
 	{
-		return (uint32_t) (voice.endReg + 1) << 8;
+		return offsetOf (voice) | ((uint32_t) (voice.endReg + 1) << 8);
 	}
 
 	double cycleFor (uint32_t start, uint32_t length)
@@ -257,6 +287,14 @@ void SegaPcmDecoder::reset (const ChipConfig& config)
 	impl->romMask = mask;
 	impl->clock = clock > 0 ? (double) clock : 8000000.0;
 	impl->streamRate = sampleRate > 0.0 ? sampleRate : 44100.0;
+
+	// The chip slot's flags carry the VGM header's SegaPCM banking (shift in the low byte, mask in
+	// the next); zero means the song said nothing and the format's pair stands.
+	if (config.flags != 0)
+	{
+		impl->bankShift = (uint8_t) (config.flags & 0xFF);
+		impl->bankMask = (uint8_t) ((config.flags >> 8) & 0xFF);
+	}
 
 	for (int i = 0; i < (int) SegaPcmDecoder::numChannels; ++i)
 	{
@@ -380,6 +418,47 @@ ChannelState SegaPcmDecoder::channelState (int channel) const
 	state.transposeCents = pitch.transposeCents;
 	state.rootCents = pitch.rootCents;
 	state.pitchSource = pitch.source;
+
+	// **The shape is in ROM, not in a register.** A voice latches its range at key-on
+	// (`latchStart..latchEnd`, in bytes), so the row can draw the actual recording; there is nothing
+	// in the register state to synthesise a shape from. `tableWave` stays false - this is a hit or
+	// a note being played, not a cycle to loop.
+	//
+	// The bank bits of the control register are not folded into `latchStart`: the chip places a
+	// sample at `(control & bankmask) << bankshift`, and every song in this collection leaves the
+	// bank at zero. A file that used one would draw the right length from the wrong address, which
+	// is visible as a shape that does not match the sound - fold the bank in here when one appears.
+	if (impl->sounding (voice) && voice.latchEnd > voice.latchStart && ! impl->rom.empty ())
+	{
+		const uint32_t length = (std::min) (voice.latchEnd - voice.latchStart, kMaxWaveBytes);
+		const uint64_t key = ((uint64_t) voice.latchStart << 32) | (uint64_t) length;
+		const auto found = impl->waveCache.find (key);
+
+		if (found != impl->waveCache.end ())
+		{
+			state.wave = found->second;
+		}
+		else
+		{
+			auto wave = std::make_shared<std::vector<float>> ();
+			wave->reserve (length);
+
+			for (uint32_t i = 0; i < length; ++i)
+			{
+				wave->push_back ((float) ((int) impl->byteAt (voice.latchStart + i) - kSampleBias) / 128.0f);
+			}
+
+			state.wave = wave;
+			impl->waveCache.emplace (key, state.wave);
+		}
+	}
+
+	// The rate the bytes are read at: one step of the 24-bit position is 1/256 of a byte, and the
+	// chip renders at `clock / 128` - so `pitch * clock / 32768` bytes a second.
+	if (voice.pitch != 0)
+	{
+		state.sampleRate = (float) impl->bytesPerSecond (voice);
+	}
 
 	return state;
 }

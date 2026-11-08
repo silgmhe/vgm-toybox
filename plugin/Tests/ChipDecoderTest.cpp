@@ -4522,6 +4522,70 @@ namespace
 			   "the bank register picks the window: 0x100200 is not 0x000200");
 	}
 
+	/** **A Sega PCM voice draws the bytes it latched, and its rate is the pitch register.**
+
+		The chip has no waveform generator: a row can only show the sample, so what has to be right
+		is the range (`start` from the address registers, `end` from `(endReg + 1) * 256`) and the
+		rate the bytes are read at (`pitch * clock / 32768`, one position step being 1/256 of a
+		byte at `clock / 128` samples a second).
+
+		Key-on is the control byte's bit 0 clearing - the core plays while it is clear
+		(`segapcm.c:154`) - and the RAM starts at 0xFF, so a driver's first clear starts the voice.
+	*/
+	void testSegaPcmSample (void)
+	{
+		std::vector<uint8_t> rom (0x1000);
+
+		for (std::size_t i = 0; i < rom.size (); ++i)
+		{
+			rom[i] = (uint8_t) (i & 0xFF);		// a sawtooth, so every byte differs
+		}
+
+		toybox::chips::SegaPcmDecoder decoder;
+		decoder.reset (toybox::chips::ChipConfig { 8000000, 44100.0 });
+		decoder.setRom (rom);
+
+		decoder.write (toybox::chips::RegisterWrite { 0, 0x02, 0x7F, 0, 0, 0 });	// volume left
+		decoder.write (toybox::chips::RegisterWrite { 0, 0x03, 0x7F, 0, 0, 0 });	// volume right
+		decoder.write (toybox::chips::RegisterWrite { 0, 0x06, 0x03, 0, 0, 0 });	// end: 4 * 256
+		decoder.write (toybox::chips::RegisterWrite { 0, 0x07, 128, 0, 0, 0 });		// pitch
+
+		// 0x0100: `0x84` is address bits 8-15 and `0x85` bits 16-23, and the chip fetches
+		// `rom[addr >> 8]` - so the byte address is `(high << 8) | mid`, and 0x0100 needs
+		// mid 0x00 with high 0x01.
+		decoder.write (toybox::chips::RegisterWrite { 0, 0x84, 0x00, 0x80, 0, 0 });
+		decoder.write (toybox::chips::RegisterWrite { 0, 0x85, 0x01, 0x80, 0, 0 });
+
+		// Clearing bit 0 of the control byte is the key-on (the reset value is 0xFF).
+		decoder.write (toybox::chips::RegisterWrite { 0, 0x86, 0x00, 0x80, 0, 0 });
+
+		const auto state = decoder.channelState (0);
+
+		check (state.gate, "the voice is playing after the enable bit clears");
+		check (state.wave != nullptr && state.wave->size () == 0x400 - 0x100,
+			   "the shape is the latched range, from the address to the end register");
+		check (std::abs (state.sampleRate - 31250.0f) < 1.0f,
+			   "pitch 128 at 8 MHz reads 31250 bytes a second");
+
+		if (state.wave != nullptr && state.wave->size () > 1)
+		{
+			check (std::abs ((*state.wave)[0] + 1.0f) < 1e-4f, "0x00 is the bottom of the scale");
+			check (std::abs ((*state.wave)[1] - ((1.0f - 128.0f) / 128.0f)) < 1e-4f,
+				   "and 0x80 is silence");
+		}
+
+		// The chip plays at one recording rate: transposition lives entirely in the pitch register.
+		toybox::chips::SegaPcmDecoder quiet;
+		quiet.reset (toybox::chips::ChipConfig { 8000000, 44100.0 });
+		quiet.setRom (rom);
+		quiet.write (toybox::chips::RegisterWrite { 0, 0x84, 0x01, 0x80, 0, 0 });
+		quiet.write (toybox::chips::RegisterWrite { 0, 0x85, 0x00, 0x80, 0, 0 });
+		quiet.write (toybox::chips::RegisterWrite { 0, 0x86, 0x00, 0x80, 0, 0 });
+
+		check (quiet.channelState (0).wave == nullptr,
+			   "a voice with both volumes at zero is not drawn as sounding");
+	}
+
 	/** **An MSM5232 voice emits the sum of the taps its group enables, and one period is
 		`2^(divider + 1)` ticks.**
 
@@ -7115,6 +7179,7 @@ int main (void)
 	testVsuWave();
 	testK005289Wave();
 	testMsm5232Shape();
+	testSegaPcmSample();
 
 	testSegaPcmNote();
 	testSegaPcmPitchIsAStep();

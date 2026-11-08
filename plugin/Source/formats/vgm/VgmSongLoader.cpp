@@ -151,7 +151,13 @@ bool VgmSongLoader::load (const void* data, std::size_t size, midi::SongIr& out,
 		case 0xBC:	emit (ChipKind::wonderswan, port, 0, reg, value, time); break;
 		case 0xBD:	emit (ChipKind::saa1099, port, 0, reg, value, time); break;
 		case 0xBF:	emit (ChipKind::ga20, 0, 0, reg, value, time); break;
-		case 0xC0:	emit (ChipKind::segapcm, 0, port, reg, value, time); break;
+		case 0xC0:
+		// The chip's banking travels with the slot: shift in the low byte, mask in the next, both
+		// from the header (this song and `03 Scene Select` disagree, and one pair read the other's
+		// voices out of the empty part of the image).
+		emit (ChipKind::segapcm, 0, port, reg, value, time,
+			  (uint32_t) reader.segaPcmBankShift () | ((uint32_t) reader.segaPcmBankMask () << 8));
+		break;
 		case 0xC7:		// VSU: `port` carries which half of the address space the write is in
 			emit (ChipKind::vsu, port, (command.data2 != 0) ? 1 : 0, reg, value, time);
 			break;

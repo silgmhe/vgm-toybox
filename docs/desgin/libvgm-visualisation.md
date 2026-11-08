@@ -316,7 +316,7 @@ track.channelIndex = channelIndex;    // 联动芯片的通道号接在父芯片
 | 采样 | RF5C68 / RF5C164 —— **搁置**，见 §9.5 | ✓ | ✓ | ✓ `collectRf5cSamples` |
 | 采样 | GA20 —— 见 §9.8 | ✓ | ✓ | ✓ `collectGa20Samples` |
 | 采样 | OKIM6295 —— 见 §9.6 | ✓ | ✓ | ✓ `collectOkim6295Samples` |
-| 采样 | **SegaPCM** | — | — | — |
+| 采样 | SegaPCM —— 见 §9.16 | ✓ | ✓ | ✓ `collectSegaPcmSamples` |
 | 采样 | YMZ280B —— 见 §9.15（seek 不支持，见 §9.15.3） | ✓ | ✓ | ✓ `collectYmz280bSamples` |
 | 采样 | MultiPCM（YMW258）—— 见 §9.10 | ✓ | ✓ | ✓ `collectMultiPcmSamples` |
 | 采样 | K007232 —— 见 §9.7 | ✓ | ✓ | ✓ `collectK007232Samples` |
@@ -845,6 +845,56 @@ VGM 不记录预测器状态，libvgm 也没有“从任意偏移恢复 ADPCM”
 **拒绝是唯一没有副作用的行为**。
 
 **完整记录**：`docs/memo/2026-11-08-ymz280b-a-stream-wearing-eight-voices.md`
+
+### 9.16 已关闭：SegaPCM（2026-11-08）
+
+**第五种采样形态：寄存器本身就是播放状态。** 十六个声部各八个寄存器，没有采样表也没有指令流：
+
+| 偏移 | 含义 |
+|---|---|
+| `8n+2` / `8n+3` | 左/右音量，七位 |
+| `8n+4` / `8n+5` | 循环地址，**256 字节为单位** |
+| `8n+6` | 结束地址，同样以 256 字节为单位；核心比较 `addr >> 16`，所以样本止于 `(reg+1) * 256` |
+| `8n+7` | 地址步进，每输出样本前进这么多（1/256 字节） |
+| `0x80+8n+4/5` | 当前地址 |
+| `0x80+8n+6` | **bit0 为 0 时播放**（写入 0 是 key-on）、bit1 禁止循环、**其余是 bank** |
+
+速率：核心以 `clock / 128` 渲染，位置步进是 1/256 字节，所以 `字节率 = pitch × clock / 32768`；
+`pitch = 128` 是半速。样本是 **0x80 中心的 8 位无符号**（`segapcm.c:182`），长度由结束地址给定——
+它与 GA20/ES5503 的“遇 0x00 结束”不同，因此新增了 `SampleFormat::pcm8Unsigned`。
+
+#### 9.16.1 bank 在控制字节里，而且每个文件不同
+
+这是这一颗唯一真正难的地方。取字节是：
+
+```c
+offset = (regs[0x86] & bankmask) << bankshift;    // 控制字节高位 = ROM 银行
+v = rom[offset | (addr >> 8)] - 0x80;
+```
+
+`bankmask` 与 `bankshift` 来自 **VGM 头 0x3E / 0x3C**，两首素材并不一致：
+
+| 文件 | 头 0x3C / 0x3E | 关键写入 | 正确起点 |
+|---|---|---|---|
+| `03 Scene Select` | 13 / 0xF8 | `ctrl = 0x0A`、`0x12` | `0x10000`、`0x20000` |
+| `01 Magical Sound Shower` | 12 / 0x00（0 意为默认 0x70） | `ctrl = 0xD2` | `0x5437C`（而非 `0x1A437C`） |
+
+第一版把 13 / 0xF8 写成常量，于是第二首的每个声部都算到 `0x1A437C`——超过 512 KB 的镜像，
+读到的是空区：**行是一条直线，导出 0 个**。第一首碰巧对，所以“有的对有的不对”。
+
+修法是把这一对参数一路带下去：读取器解析头部 → 加载器放进 `ChipSlot::flags`（低位 shift、
+次字节 mask）→ `VgmReplayer` 在 `reset` 时塞进 `ChipConfig::flags` → 解码器与收集器各自读取。
+缺任何一段，取值就退回默认，而默认只对其中一首成立。
+
+**验收**：
+
+```
+01 Magical Sound Shower  3 个样本（0x50951 / 0x5437C / 0x55830，均 16113.3 Hz，1–3.5 KB）
+03 Scene Select          6 个样本（含 15361.7 Hz / 8448 点的 Slap Bass）
+46/46 + 芯片断言 PASS
+```
+
+**完整记录**：`docs/memo/2026-11-08-segapcm-registers-are-the-playhead.md`
 
 ## 10. 实施顺序
 

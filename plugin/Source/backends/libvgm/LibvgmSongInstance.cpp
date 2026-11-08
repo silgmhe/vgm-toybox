@@ -7,6 +7,7 @@
 #include "K005289Samples.h"
 #include "MikeySamples.h"
 #include "Msm5232Samples.h"
+#include "SegaPcmSamples.h"
 #include "Ymz280bSamples.h"
 #include "K007232Samples.h"
 #include "VsuSamples.h"
@@ -353,6 +354,32 @@ bool LibvgmSongInstance::prepare (double hostSampleRate, int newMaxBlockSize, ju
 										  {
 											  return slot.kind == midi::ChipKind::okim6295;
 										  });
+
+	const bool hasSegaPcm = songIr != nullptr
+						&& std::any_of (songIr->chips.begin (), songIr->chips.end (),
+										[] (const midi::ChipSlot& slot)
+										{
+											return slot.kind == midi::ChipKind::segapcm;
+										});
+
+	if (hasSegaPcm && songIr != nullptr)
+	{
+		// The ROM arrives as a `0x80` block; the clock turns each voice's pitch into a byte rate.
+		uint32_t clock = 0;
+
+		for (const auto& device : deviceInfo)
+		{
+			if (device.type == DEVID_SEGAPCM && device.devCfg != nullptr && device.devCfg->clock > 0)
+			{
+				clock = device.devCfg->clock;
+			}
+		}
+
+		for (auto& sample : collectSegaPcmSamples (*songIr, clock))
+		{
+			collected.push_back (std::move (sample));
+		}
+	}
 
 	const bool hasYmz280b = songIr != nullptr
 						 && std::any_of (songIr->chips.begin (), songIr->chips.end (),

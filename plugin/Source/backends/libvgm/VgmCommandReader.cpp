@@ -189,6 +189,15 @@ bool VgmCommandReader::readHeader (void)
 		c140BankingType = data[0x96];
 	}
 
+	// The SegaPCM's banking, likewise a header field (0x3C / 0x3E) rather than a command. A zero
+	// mask means "the format's default", which is 0x70 - libvgm makes the same substitution, and a
+	// reader that took the zero literally would treat the whole control byte as bank.
+	if (dataOffset > 0x3E && size > 0x3E)
+	{
+		segaPcmShift = data[0x3C];
+		segaPcmMask = (data[0x3E] != 0) ? data[0x3E] : 0x70;
+	}
+
 	position = dataOffset;
 	return true;
 }

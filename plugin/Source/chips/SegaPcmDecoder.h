@@ -74,7 +74,10 @@ public:
 
 private:
 	struct Impl;
-	std::unique_ptr<Impl> impl;
+
+	/** Mutable because `channelState` caches the decoded window of the sample a voice latched:
+		a row that asks twice must not decode the same kilobytes twice. */
+	mutable std::unique_ptr<Impl> impl;
 };
 
 } // namespace toybox::chips

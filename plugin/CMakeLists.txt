@@ -232,6 +232,7 @@ target_sources(VGMToybox PRIVATE
 	Source/backends/libvgm/K007232Samples.cpp
 	Source/backends/libvgm/Okim6295Samples.cpp
 	Source/backends/libvgm/SampleCollector.cpp
+	Source/backends/libvgm/SegaPcmSamples.cpp
 	Source/backends/libvgm/C352Samples.cpp
 	Source/backends/libvgm/QSoundSamples.cpp
 	Source/backends/libvgm/K053260Samples.cpp
@@ -441,6 +442,7 @@ add_executable(vgm_mixer_test EXCLUDE_FROM_ALL
 	Source/backends/libvgm/K007232Samples.cpp
 	Source/backends/libvgm/Okim6295Samples.cpp
 	Source/backends/libvgm/SampleCollector.cpp
+	Source/backends/libvgm/SegaPcmSamples.cpp
 	Source/backends/libvgm/C352Samples.cpp
 	Source/backends/libvgm/QSoundSamples.cpp
 	Source/backends/libvgm/K053260Samples.cpp
@@ -467,6 +469,7 @@ add_executable(vgm_mixer_test EXCLUDE_FROM_ALL
 	Source/backends/libvgm/K007232Samples.cpp
 	Source/backends/libvgm/Okim6295Samples.cpp
 	Source/backends/libvgm/SampleCollector.cpp
+	Source/backends/libvgm/SegaPcmSamples.cpp
 	Source/backends/libvgm/C352Samples.cpp
 	Source/backends/libvgm/QSoundSamples.cpp
 	Source/backends/libvgm/K053260Samples.cpp
@@ -545,6 +548,7 @@ add_executable(vgm_chip_test EXCLUDE_FROM_ALL
 	Source/backends/libvgm/K007232Samples.cpp
 	Source/backends/libvgm/Okim6295Samples.cpp
 	Source/backends/libvgm/SampleCollector.cpp
+	Source/backends/libvgm/SegaPcmSamples.cpp
 	Source/backends/libvgm/C352Samples.cpp
 	Source/backends/libvgm/QSoundSamples.cpp
 	Source/backends/libvgm/K053260Samples.cpp

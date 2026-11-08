@@ -232,6 +232,19 @@ void SampleCollector::add (uint64_t key, const std::string& name, const uint8_t*
 			sample.values.push_back ((float) (((int) bytes[i] & 0x0F) - 8) / 8.0f);
 		}
 	}
+	else if (format == SampleFormat::pcm8Unsigned)
+	{
+		// **Eight bits, silence at 0x80, and no terminator.** GA20 and the ES5503 stop at a 0x00
+		// byte, which works because their samples end that way; the Sega PCM's do not - the length
+		// comes from the end-address register - so the caller's `length` is the only bound and a
+		// plain centred byte is the whole decode.
+		sample.values.reserve (length);
+
+		for (std::size_t i = 0; i < length; ++i)
+		{
+			sample.values.push_back ((float) (((int) bytes[i] - 0x80)) / 128.0f);
+		}
+	}
 	else if (format == SampleFormat::ga20 || format == SampleFormat::es5503)
 	{
 		// **Eight-bit unsigned with 0x80 as silence, and 0x00 as the end.** `iremga20.c:177` reads

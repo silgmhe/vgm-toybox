@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include <cstdint>
 #include <memory>
@@ -41,9 +41,10 @@ public:
 		// A constructor rather than aggregate initialisation: `std::type_index` has no default, so
 		// the members cannot carry initialisers and still form an aggregate.
 		Instance (std::type_index decoderClass, uint32_t id, const PLR_DEV_INFO* dev,
-				  chips::IChipDecoder* dec, uint32_t clk, std::vector<uint8_t> mem, uint8_t bank)
+				  chips::IChipDecoder* dec, uint32_t clk, std::vector<uint8_t> mem, uint8_t bank,
+				  uint32_t slotFlags = 0)
 			: type (decoderClass), deviceId (id), device (dev), decoder (dec), clock (clk),
-			  image (std::move (mem)), banking (bank)
+			  image (std::move (mem)), banking (bank), flags (slotFlags)
 		{
 		}
 
@@ -57,6 +58,10 @@ public:
 			included - and a rewind that forgot to put it back would silently lose every sample. */
 		std::vector<uint8_t> image;
 		uint8_t banking = 0;
+
+		/** The chip slot's flags: a header fact (the SegaPCM's bank shift and mask) that the
+			decoder needs at reset, and reset happens again on every rewind. */
+		uint32_t flags = 0;
 	};
 
 	VgmReplayer (std::shared_ptr<const midi::SongIr> song, const std::vector<PLR_DEV_INFO>& devices);

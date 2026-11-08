@@ -1,4 +1,4 @@
-#include "VgmReplayer.h"
+﻿#include "VgmReplayer.h"
 
 #include <algorithm>
 #include <cstdlib>
@@ -84,7 +84,24 @@ void VgmReplayer::adoptNewBuffers (void)
 			// answer. Zero for the devices that never asked for it.
 			const double deviceRate = (device != nullptr) ? (double) device->smplRate : 0.0;
 
-			decoder->reset (chips::ChipConfig { clock, tickRate (), 0, deviceRate });
+			// **The chip slot's flags reach the decoder here.** The SegaPCM's bank shift and mask
+			// live in the VGM header and the two songs in this collection disagree (13/0xF8 against
+			// 12/0x70); without them a decoder reads the right page out of the wrong bank, which
+			// draws a flat line and exports silence.
+			uint32_t slotFlags = 0;
+
+			if (song != nullptr)
+			{
+				for (const auto& slot : song->chips)
+				{
+					if (slot.kind == midi::ChipKind::segapcm)
+					{
+						slotFlags = slot.flags;
+					}
+				}
+			}
+
+			decoder->reset (chips::ChipConfig { clock, tickRate (), slotFlags, deviceRate });
 
 			// The song's own blocks, assembled the way the MIDI path assembles them. Without this a
 			// sampled chip measures nothing: the C352's pitch is its rate divided by a cycle length
@@ -107,7 +124,7 @@ void VgmReplayer::adoptNewBuffers (void)
 			}
 
 			live.push_back (Instance { type, deviceId, device, decoder.get (), clock,
-									   std::move (image), banking });
+									   std::move (image), banking, slotFlags });
 			owned.push_back (std::move (decoder));
 		}
 	}
@@ -205,7 +222,7 @@ void VgmReplayer::rewind (void)
 		// The clock comes from the instance rather than being left at zero: a decoder's reset falls
 		// back to its own default when the clock is unknown, and that default is not this device's,
 		// so a rewind would quietly retune every chip that reports one.
-		instance.decoder->reset (chips::ChipConfig { instance.clock, tickRate () });
+		instance.decoder->reset (chips::ChipConfig { instance.clock, tickRate (), instance.flags });
 
 		// `reset` rebuilds the decoder, so the image it was given is gone with the old state. A
 		// rewind that left it out would make every sample unreadable from the second pass on -

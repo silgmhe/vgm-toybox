@@ -116,6 +116,14 @@ public:
 		at that offset. */
 	uint8_t c140Banking (void) const { return c140BankingType; }
 
+	/** **The VGM header's SegaPCM banking, and files disagree.** Bytes 0x3C / 0x3E say how far the
+		control register's bank bits shift a ROM address and which of them are bank at all: the two
+		songs here use 13 / 0xF8 and 12 / 0x00 (a zero mask means the format's default, 0x70, which
+		is what libvgm substitutes). A decoder that assumed one pair read the other song's voices
+		from the empty part of the image, which drew a flat line and exported silence. */
+	uint8_t segaPcmBankShift (void) const { return segaPcmShift; }
+	uint8_t segaPcmBankMask (void) const { return segaPcmMask; }
+
 private:
 	/** One 0x67 data block that belongs to the YM2612 PCM bank. The bytes stay where they are in
 		the image; the bank is the blocks in the order they were read, which is what 0x8n consumes. */
@@ -142,6 +150,10 @@ private:
 	std::vector<VgmDataBlock> blocks;
 	std::vector<VgmRamCopy> copies;
 	uint8_t c140BankingType = 0x00;		// System 2, the format's default
+
+	/** Header 0x3C / 0x3E; the defaults are the pair one of the two files here carries. */
+	uint8_t segaPcmShift = 13;
+	uint8_t segaPcmMask = 0xF8;
 
 	// 0x8n is one byte that stands for two commands; the second one waits here until the caller
 	// asks for it, so a stream that ends right after a 0x8n still reports its wait.
