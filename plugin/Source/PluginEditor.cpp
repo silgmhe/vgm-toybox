@@ -178,32 +178,7 @@ ToyboxAudioProcessorEditor::ToyboxAudioProcessorEditor (ToyboxAudioProcessor& p)
 	playPage->setContentView (contentViewAt (settings::SettingsStore::getInstance ().getContentViewIndex ()));
 	addAndMakeVisible (viewStack);
 
-	// The View menu lists what the content area can show, not pages of the window: there is one
-	// page, and switching replaces the rectangle above the transport.
-	// Built from the registry, in its order: the ids a script invokes, the labels a user reads and
-	// the index the shortcut uses all come from one table now.
-	menu.viewNames.clear ();
-	menu.viewIds.clear ();
-
-	for (const auto& info : contentViews ())
-	{
-		menu.viewNames.add (i18n::tr (info.labelKey));
-		menu.viewIds.add (info.id);
-	}
-	// The tick asks the page what it is showing each time the menu is built, so it follows any
-	// switch - this menu, Ctrl+1..3, or a change made from code.
-	menu.getCurrentView = [this]
-	{
-		return playView != nullptr ? contentViewIndex (playView->getContentView ()) : 0;
-	};
-	menu.onSelectView = [this] (int index)
-	{
-		if (playView != nullptr)
-		{
-			playView->setContentView (contentViewAt (index));
-			settings::SettingsStore::getInstance ().setContentViewIndex (index);
-		}
-	};
+	rebuildViewMenu ();
 
 	// The pages are told what the engine holds right now: an editor can be created while a song is
 	// already loaded (a host reopening its window), and the chip card belongs to that song.
@@ -296,6 +271,40 @@ void ToyboxAudioProcessorEditor::applyPalette (void)
 	lookAndFeel.refresh();
 }
 
+void ToyboxAudioProcessorEditor::rebuildViewMenu (void)
+{
+	// **The View menu lists what the content area can show**, not the window's pages: there is one page,
+	// and switching replaces the rectangle above the transport. Built from the registry, in its order -
+	// the labels a user reads, the ids a script invokes and the index a shortcut uses all come from one
+	// table.
+	menu.viewNames.clear ();
+	menu.viewIds.clear ();
+
+	for (const auto& info : contentViews ())
+	{
+		menu.viewNames.add (i18n::tr (info.labelKey));
+		menu.viewIds.add (info.id);
+	}
+
+	// The tick asks the page what it is showing each time the menu is built, so it follows any switch -
+	// this menu, Ctrl+1..3, or a change made from code.
+	menu.getCurrentView = [this]
+	{
+		return playView != nullptr ? contentViewIndex (playView->getContentView ()) : 0;
+	};
+
+	menu.onSelectView = [this] (int index)
+	{
+		if (playView != nullptr)
+		{
+			playView->setContentView (contentViewAt (index));
+			settings::SettingsStore::getInstance ().setContentViewIndex (index);
+		}
+	};
+
+	menu.menuItemsChanged ();
+}
+
 void ToyboxAudioProcessorEditor::changeListenerCallback (juce::ChangeBroadcaster* source)
 {
 	if (source != &toybox::settings::SettingsStore::getInstance())
@@ -312,9 +321,10 @@ void ToyboxAudioProcessorEditor::changeListenerCallback (juce::ChangeBroadcaster
 	openButton.setButtonText (i18n::tr ("editor.open"));
 	openButton.setTooltip (formatOpenPrompt());
 
-	menu.viewNames = viewStack.getViewNames();
-	menu.viewIds = viewStack.getViewIds();
-	menu.menuItemsChanged();
+	// **The same build the constructor runs.** This used to assign `viewStack.getViewNames()`, which
+	// names the window's *pages* (one, "Play") rather than the content views the menu lists - so a
+	// language switch left the menu with a single entry until the window was reopened.
+	rebuildViewMenu();
 
 	viewStack.refreshLanguage();
 	dropHint.refreshLanguage();

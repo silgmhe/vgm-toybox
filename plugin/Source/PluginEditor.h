@@ -64,6 +64,13 @@ private:
 		coloured, and again whenever the settings broadcast arrives. */
 	void applyPalette (void);
 
+	/** Fills the View menu from the content-view registry, in its order. **The constructor and a
+		language change both call this** - they used to fill it from two different sources, and the
+		second one named the window's pages instead of the views, leaving a single entry after a
+		switch.
+	*/
+	void rebuildViewMenu (void);
+
 	bool isInterestedInFileDrag (const juce::StringArray& files) override;
 	void fileDragEnter (const juce::StringArray& files, int x, int y) override;
 	void fileDragExit (const juce::StringArray& files) override;

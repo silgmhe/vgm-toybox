@@ -44,3 +44,18 @@ sleep 60
 assert editor.open text contains Open
 assert menu.file.open label contains Open
 assert settings.language.source text contains Built-in
+
+# **The View menu keeps its entries across a language switch.** It is built from the content-view
+# registry; a switch used to refill it from the window's page names instead - one page - so it collapsed
+# to a single entry until the window was reopened.
+set settings.language.select 1
+sleep 60
+assert menu.view.mixer label contains 混音器
+assert menu.view.keyboard label contains 键盘
+assert menu.view.oscilloscope label contains 示波器
+
+set settings.language.select 0
+sleep 60
+assert menu.view.mixer label contains Mixer
+assert menu.view.keyboard label contains Keyboard
+assert menu.view.oscilloscope label contains Oscilloscope
