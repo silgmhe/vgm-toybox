@@ -26,6 +26,11 @@ public:
 	/** Re-reads the labels that come from the language pack. */
 	void refreshLanguage (void);
 
+	/** **Told when a switch could not be built.** The panel restores its own selection; saying why is
+		the window's business, so it goes out as a value and the panel owns no status line.
+	*/
+	std::function<void (const juce::String&)> onSwitchFailure;
+
 	/** Re-applies the label colours (see PluginEditor::lookAndFeelChanged for why this is
 		needed at all). */
 	void lookAndFeelChanged (void) override;

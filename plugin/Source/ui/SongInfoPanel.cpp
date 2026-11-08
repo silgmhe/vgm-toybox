@@ -75,8 +75,14 @@ void SongInfoPanel::refresh (void)
 {
 	if (! engine.isLoaded())
 	{
-		songBox.setVisible (false);
-		songLabel.setVisible (false);
+		if (songBox.isVisible () || songLabel.isVisible ())
+		{
+			// Relayout as well, or the title keeps the width the selector was reserving for it.
+			songBox.setVisible (false);
+			songLabel.setVisible (false);
+			resized ();
+		}
+
 		titleLabel.setText (i18n::tr ("song.noFile"), juce::dontSendNotification);
 		detailsLabel.setText ({}, juce::dontSendNotification);
 		fileLabel.setText (formatLoadHint(),
@@ -156,10 +162,35 @@ void SongInfoPanel::switchToSelectedSong (void)
 		return;
 	}
 
-	// A failed switch leaves the list where it was, so the control never claims a song that is not open.
-	juce::String error;
+	// **Built on the load worker**, because a rebuild costs what a file open costs and the window has to
+	// keep drawing through it. The selection is set optimistically so the box shows the song being
+	// built; the callback puts it back if the build is refused or fails, so the control never claims a
+	// song that is not open.
+	songBox.setSelectedId (index + 1, juce::dontSendNotification);
 
-	if (! engine.selectSong (index, error))
+	juce::Component::SafePointer<SongInfoPanel> safe (this);
+
+	const bool accepted = engine.selectSongAsync (index, [safe] (bool ok, const juce::String& error)
+	{
+		if (safe == nullptr)
+		{
+			return;
+		}
+
+		if (ok)
+		{
+			return;
+		}
+
+		safe->songBox.setSelectedId (safe->engine.getSongIndex () + 1, juce::dontSendNotification);
+
+		if (safe->onSwitchFailure != nullptr)
+		{
+			safe->onSwitchFailure (error);
+		}
+	});
+
+	if (! accepted)
 	{
 		songBox.setSelectedId (engine.getSongIndex () + 1, juce::dontSendNotification);
 	}
