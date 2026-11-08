@@ -1,4 +1,4 @@
-﻿// Chip-level tests: register writes in, notes out - no libvgm, no JUCE, no audio device.
+// Chip-level tests: register writes in, notes out - no libvgm, no JUCE, no audio device.
 //
 // This is the layer the rest of the MIDI path trusts: if the 2A03 decoder says A4 lasts one
 // second, the encoder will emit exactly that. Nothing here listens to a chip; every expectation
@@ -465,6 +465,53 @@ namespace
 			   "a YM2203 key-on stays inside its three channels");
 		check (notes.size() == 1 && absoluteNote (notes[0]) == 69,
 			   "the YM2203 shares the OPN f-number relation");
+	}
+
+	/** **Each variant's flat channel list, checked against the families it declares.**
+
+		The families used to be separated by arithmetic - `fmCount + 6` for the ADPCM-A block and the
+		same expression for the Delta-T row - which is only right while every variant with samples has
+		exactly six FM voices. A three-voice OPN would have pointed the Delta-T row at a channel that
+		does not exist and indexed `adpcmARegs[6]` past the array. These assertions state the table once
+		from the outside: the count per variant, and one sentinel per family.
+	*/
+	void testOpnChannelFamilies (void)
+	{
+		using toybox::chips::OpnDecoder;
+
+		const float drumRate = (float) (kYmClock / 432.0);
+
+		{
+			OpnDecoder ym2612 (OpnDecoder::Variant::ym2612);
+			ym2612.reset (toybox::chips::ChipConfig { kYmClock, 44100.0 });
+
+			check (ym2612.channelCount() == 7, "the YM2612 lists six FM voices and its DAC");
+			check (ym2612.channelState (6).present && ! ym2612.channelState (6).fmKnown,
+				   "the seventh row is the DAC, not an FM voice");
+		}
+
+		{
+			OpnDecoder ym2610 (OpnDecoder::Variant::ym2610);
+			ym2610.reset (toybox::chips::ChipConfig { kYmClock, 44100.0 });
+
+			check (ym2610.channelCount() == 13,
+				   "an OPNB lists six FM, six ADPCM-A and the Delta-T row");
+			check (! ym2610.channelState (6).fmKnown, "channel six is not an FM voice on an OPNB");
+			check (std::abs (ym2610.channelState (6).sampleRate - drumRate) < 1.0f,
+				   "the first ADPCM-A row carries the drum rate");
+			check (std::abs (ym2610.channelState (11).sampleRate - drumRate) < 1.0f,
+				   "the sixth ADPCM-A row is still ADPCM-A");
+			check (ym2610.channelState (12).sampleRate == 0.0f,
+				   "the Delta-T row is not an ADPCM-A row");
+		}
+
+		{
+			OpnDecoder ym2203 (OpnDecoder::Variant::ym2203);
+			ym2203.reset (toybox::chips::ChipConfig { kYmClock, 44100.0 });
+
+			check (ym2203.channelCount() == 3, "a three-voice OPN lists three rows");
+			check (! ym2203.channelState (3).present, "and no sample row past them");
+		}
 	}
 
 	/** ADPCM-A and ADPCM-B are one-shots: the control bit starts them, the chip ends them. The
@@ -6991,6 +7038,7 @@ int main (void){
 	testFmSecondPortIsASeparateChannel();
 	testFmDacTakesOverChannelSix();
 	testOpnThreeChannels();
+	testOpnChannelFamilies();
 	testOpnaAdpcmOneShots();
 	testOpnAdpcmBPitch();
 	testOpnAdpcmBDeltaIsThePitch();

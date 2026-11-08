@@ -1,6 +1,7 @@
-﻿#include "OpnDecoder.h"
+#include "OpnDecoder.h"
 
 #include <algorithm>
+#include <cassert>
 #include <cmath>
 #include <cstdint>
 #include <map>
@@ -227,10 +228,36 @@ struct OpnDecoder::Impl
 		uint32_t latchEnd = 0;
 	};
 
+	/** The largest counts the tables below hold. A `Layout` must stay inside them. */
+	static constexpr int kFmVoices = 6;
+	static constexpr int kAdpcmAVoices = 6;
+
+	/** **Where each voice family sits in the flat channel numbering the decoder reports.**
+
+		One table instead of arithmetic. The boundary used to be computed - `fmCount + 6` for ADPCM-A,
+		`fmCount + 6` again for the Delta-T row in `noteTable()` and `isDrum()` - which is only right
+		while every variant with samples has exactly six FM voices. A variant with three would have
+		read past `adpcmARegs[6]` and pointed the Delta-T row at somebody else's channel; nothing
+		divides those families today except this table, so they are stated once, here.
+	*/
+	struct Layout
+	{
+		int fm = 0;
+		int adpcmA = 0;
+		bool adpcmB = false;
+		bool dac = false;			// the YM2612's sixth channel is a DAC, not a voice
+
+		int count (void) const { return fm + adpcmA + (adpcmB ? 1 : 0) + (dac ? 1 : 0); }
+		/** The one Delta-T channel, or -1 when the variant has none. */
+		int adpcmBChannel (void) const { return adpcmB ? fm + adpcmA : -1; }
+		bool hasAdpcm (void) const { return adpcmA > 0 || adpcmB; }
+	};
+
 	Variant variant = Variant::ym2612;
-	Channel channels[6];
-	Pulse adpcmA[6];
-	AdpcmA adpcmARegs[6];
+	Layout layout;
+	Channel channels[kFmVoices];
+	Pulse adpcmA[kAdpcmAVoices];
+	AdpcmA adpcmARegs[kAdpcmAVoices];
 	std::vector<uint8_t> adpcmARom;
 	uint32_t adpcmAMask = 0;
 	AdpcmB adpcmB;
@@ -247,41 +274,36 @@ struct OpnDecoder::Impl
 	std::unique_ptr<OpnAdpcmBNoteTable> adpcmBTable;
 	OpnNoteTable table;
 
-	int fmCount = 6;
-	int channelCount = 7;
-	bool sixChannel = true;
+	int channelCount = 7;			// derived from `layout` by configure(); never set by hand
 
-	bool hasAdpcm (void) const
-	{
-		return variant == Variant::ym2608 || variant == Variant::ym2610
-			   || variant == Variant::ym2610b;
-	}
+	bool hasAdpcm (void) const { return layout.hasAdpcm (); }
 
 	void configure (void)
 	{
 		switch (variant)
 		{
 		case Variant::ym2203:
-			fmCount = 3;
-			sixChannel = false;
-			channelCount = 3;
+			layout = Layout { 3, 0, false, false };
 			break;
 
 		case Variant::ym2608:
 		case Variant::ym2610:
 		case Variant::ym2610b:
-			fmCount = 6;
-			sixChannel = true;
-			channelCount = 13;
+			layout = Layout { 6, 6, true, false };
 			break;
 
 		case Variant::ym2612:
 		default:
-			fmCount = 6;
-			sixChannel = true;
-			channelCount = 7;
+			layout = Layout { 6, 0, false, true };
 			break;
 		}
+
+		// The tables hold these counts; a layout that outgrew them would be a silent overrun rather
+		// than a compile error, so both halves are checked where the layout is chosen.
+		assert (layout.fm <= kFmVoices);
+		assert (layout.adpcmA <= kAdpcmAVoices);
+
+		channelCount = layout.count ();
 
 		if (variant == Variant::ym2610)
 		{
@@ -472,12 +494,12 @@ struct OpnDecoder::Impl
 			return;		// 0x28 with channel 3 is not a key register
 		}
 
-		if (sixChannel && (data & kKeyAllOperators) != 0)
+		if (layout.fm == 6 && (data & kKeyAllOperators) != 0)
 		{
 			channel += 3;
 		}
 
-		if (channel >= fmCount || ! channels[channel].present)
+		if (channel >= layout.fm || ! channels[channel].present)
 		{
 			return;
 		}
@@ -721,7 +743,7 @@ void OpnDecoder::write (const RegisterWrite& write)
 		}
 
 		const int channel = (int) (reg & 0x03) + port * 3;
-		if (channel >= impl->fmCount)
+		if (channel >= impl->layout.fm)
 		{
 			return;
 		}
@@ -738,7 +760,7 @@ void OpnDecoder::write (const RegisterWrite& write)
 		}
 
 		const int channel = (int) (reg & 0x03) + port * 3;
-		if (channel >= impl->fmCount)
+		if (channel >= impl->layout.fm)
 		{
 			return;
 		}
@@ -752,7 +774,7 @@ void OpnDecoder::write (const RegisterWrite& write)
 	if ((reg & 0xF0) == 0xA0 && (reg & 0x08) == 0)
 	{
 		const int channel = (int) (reg & 0x03) + port * 3;
-		if (channel >= impl->fmCount)
+		if (channel >= impl->layout.fm)
 		{
 			return;
 		}
@@ -775,7 +797,7 @@ void OpnDecoder::write (const RegisterWrite& write)
 	if ((reg & 0xF0) == 0xB0 && (reg & 0x04) == 0)
 	{
 		const int channel = (int) (reg & 0x03) + port * 3;
-		if (channel < impl->fmCount)
+		if (channel < impl->layout.fm)
 		{
 			Impl::Channel& state = impl->channels[channel];
 			state.algorithm = (int) (write.value & 0x07);
@@ -805,7 +827,7 @@ ChannelState OpnDecoder::channelState (int channel) const
 	}
 
 	const bool isDac = impl->variant == Variant::ym2612 && channel == 6;
-	if (channel < impl->fmCount)
+	if (channel < impl->layout.fm)
 	{
 		const Impl::Channel& voice = impl->channels[channel];
 		if (! voice.present)
@@ -849,12 +871,20 @@ ChannelState OpnDecoder::channelState (int channel) const
 		return state;
 	}
 
-	// **The last channel is ADPCM-B**, so the six ADPCM-A rows end one short of the count: a plain
-	// `fmCount + 6` also swallowed the Delta-T row on the variants whose FM section is short, and
-	// that row then drew a neighbour's sample.
-	if (channel >= impl->fmCount && channel < impl->channelCount - 1)
+	// **ADPCM-A is `layout.fm .. layout.fm + layout.adpcmA`**, and the Delta-T row is the one after
+	// that range - both named by the same table, so a variant with a shorter FM section cannot shift
+	// one family onto the other (a plain `fmCount + 6` did, and the Delta-T row then drew a
+	// neighbour's sample). The slot is inside the table by construction and checked anyway: the
+	// array is `kAdpcmAVoices` long.
+	if (channel >= impl->layout.fm && channel < impl->layout.fm + impl->layout.adpcmA)
 	{
-		const std::size_t slot = (std::size_t) (channel - impl->fmCount);
+		const std::size_t slot = (std::size_t) (channel - impl->layout.fm);
+
+		if (slot >= (std::size_t) Impl::kAdpcmAVoices)
+		{
+			return state;
+		}
+
 		const Impl::AdpcmA& regs = impl->adpcmARegs[slot];
 
 		state.period = kOneShotPeriod;
@@ -914,6 +944,14 @@ ChannelState OpnDecoder::channelState (int channel) const
 		return state;
 	}
 
+	// Everything below is the one Delta-T voice. A number the table does not give it is not a voice at
+	// all, and an empty row is the honest answer - falling through used to make any unclaimed channel
+	// report ADPCM-B's state.
+	if (impl->layout.adpcmBChannel () != channel)
+	{
+		return state;
+	}
+
 	// ADPCM-B is the one sampled voice with a pitch register: DELTA-N is the note, the level
 	// register the volume, and the start bit the gate
 	const Impl::AdpcmB& voice = impl->adpcmB;
@@ -941,7 +979,7 @@ ChannelState OpnDecoder::channelState (int channel) const
 
 const NoteTable& OpnDecoder::noteTable (int channel) const
 {
-	if (impl->adpcmBTable != nullptr && channel == impl->fmCount + 6)
+	if (impl->adpcmBTable != nullptr && channel == impl->layout.adpcmBChannel ())
 	{
 		return *impl->adpcmBTable;
 	}
@@ -951,7 +989,7 @@ const NoteTable& OpnDecoder::noteTable (int channel) const
 
 ChannelKind OpnDecoder::channelKind (int channel) const
 {
-	if (channel < impl->fmCount)
+	if (channel < impl->layout.fm)
 	{
 		return ChannelKind::fm;
 	}
@@ -961,13 +999,13 @@ ChannelKind OpnDecoder::channelKind (int channel) const
 
 bool OpnDecoder::isDrum (int channel) const
 {
-	if (channel < impl->fmCount)
+	if (channel < impl->layout.fm)
 	{
 		return false;
 	}
 
 	// ADPCM-A is a trigger; ADPCM-B is melodic when its sample has a period
-	return ! (channel == impl->fmCount + 6 && impl->adpcmB.melodic);
+	return ! (channel == impl->layout.adpcmBChannel () && impl->adpcmB.melodic);
 }
 
 } // namespace toybox::chips

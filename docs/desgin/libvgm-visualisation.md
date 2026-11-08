@@ -994,8 +994,13 @@ ADPCM-A 在**第二个寄存器端口**（YM2610 的 `0x59`、YM2608 的 `0x57`�
   `attachMemory` 只填 `adpcmARom`。`02 The Military System` 的 `ADPCM-B` 因此是 `active=1` 而无波形，
   说明"素材没用 DeltaT"只对 `04/07` 成立。接线的前提是让 `ChipMemory` 带上 block 类型——解码器现在
   无法区分 `0x82` 与 `0x83`。
-- **ADPCM-B 行在个别曲目仍可能显示波形**：ADPCM-A 行范围判断按 `fmCount..channelCount-1`
-  取，遇到 FM 声道数不为 6 的变体时会多算一行，未修完。
+- **~~ADPCM-B 行在个别曲目仍可能显示波形~~（已修）**：族的边界过去由算式决定——`channelState()`、
+  `noteTable()`、`isDrum()` 三处各写一次 `fmCount + 6`。今天四种变体都带 6 个 FM，所以恰好正确；
+  一旦出现"带采样但 FM 不是 6"的型号，Delta-T 行会被指到别的声道，`adpcmARegs[6]` 也会越界。
+  现在 `Impl::Layout { fm, adpcmA, adpcmB, dac }` 是唯一定义，`channelCount` 由它推出，ADPCM-A 槽位
+  按表夹紧；`testOpnChannelFamilies` 对 YM2612（7 行）、YM2203（3 行）、OPNA/OPNB（13 行）断言行数与
+  每个族各一条哨兵。实测行数不变：`07 Stage 2` 16、`02 The Military System` 16、`Green Hill Zone` 11、
+  `YM2610B/01 A.D.1993` 16。
 - 未做“内容指纹聚类”，因此同一记鼓的长短两版仍可能是两个文件。
 
 **完整记录**：`docs/memo/2026-11-08-opn-adpcm-six-players-and-the-wrong-variant.md`、
