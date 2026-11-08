@@ -160,35 +160,17 @@ bool LibvgmTrackPlayer::seekSeconds (double seconds)
 	// playhead moved while the audio did not (probe: identical RMS at 0 s, 5 s, 30 s). What the
 	// driver does to advance its stream is rewrite `start`, so a seek does the same thing - put the
 	// voice at the byte the target time corresponds to, then key it on again.
-	// **One section means there is nowhere to jump to.** A driver that never rewrote its start left
-	// the whole song as one continuous stretch, so any target would land on the same byte and the
-	// audio would not change - the honest answer is to decline, as before.
-	bool anySection = false;
-
-	for (const auto& voice : streamVoices)
-	{
-		if (voice.sections.size () > 1)
-		{
-			anySection = true;
-		}
-	}
-
-	if (! seekable && ! anySection)
-	{
-		return false;
-	}
-
+	// **Refuse, because every alternative measured worse.** libvgm's own seek replays register
+	// writes, and these drivers have none after their opening second, so the playhead moved while
+	// the audio repeated the opening. Repositioning the voice was tried twice: to an arbitrary byte
+	// (four-bit ADPCM carries a predictor the chip resets on key-on, so entering mid-sample plays
+	// noise) and then to the section starts the driver itself wrote (still noise on `06 Sonic
+	// Diver`, with the untouched stream audible underneath). Neither is acceptable, so a streamed
+	// song reports the seek as unsupported and the position stays where it is. `02 Spirit of Fang`
+	// already behaves this way, and the ear confirms it is the only clean outcome.
 	if (! seekable)
 	{
-		const uint32_t target = (uint32_t) (juce::jmax (0.0, seconds) * sampleRate);
-
-		playerEngine.Seek (PLAYPOS_SAMPLE, target);
-
-		repositionStream (target);
-
-		finished = false;
-		pendingRewind.store (true, std::memory_order_relaxed);
-		return true;
+		return false;
 	}
 
 	// **[TOYBOX NOTE] The seek itself is libvgm's, and it does not work for every file.**
