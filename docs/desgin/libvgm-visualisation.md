@@ -975,16 +975,31 @@ ADPCM-A 在**第二个寄存器端口**（YM2610 的 `0x59`、YM2608 的 `0x57`�
 与 Sega PCM 那轮同一种失败），所以加了 16 KB 上限；但计数只从 94 降到 90——剩下的区间在 ROM
 里彼此隔得很远、字节并不同，按“同一段录音”的标准不该合并。
 
-#### 9.17.4 已知简化
+#### 9.17.4 已修：镜像按**地址位宽**装，不是按观测值
 
-- **ADPCM-B（Delta-T）没有接 ROM**：这一版只覆盖 ADPCM-A。两首素材里 DeltaT 从未启动
-  （无 START 位、`DELTA-N = 0`），所以没有可验证对象；`0x83` 镜像与 `setAdpcmBRom` 都在，
-  但没有调用点。
+`02 The Military System` 的六行 `ADPCM-A` 全画同一道斜坡、导出 0 个采样，而 `04/07` 正常。原因是
+镜像上限写成了 **8 MB**（解码器要求与导出收集器各写一份），而这首的 `0x82` 块声明 **16 MB** 且把载荷
+放在 `0xA79600` 以上：`memory::rom` 裁到 8 MB 后逐块越界丢弃 → 解码器读全零 → 零 nibble 单调累加 =
+**确定性斜坡**；导出则因 `begin >= rom.size()` 一个区间都没收下。
+
+声道的起始地址是 `((hi << 8) | lo) << 8`，24 位页号 → 芯片能寻址 **16 MB**，这与块头的声明一致。
+现在 `OpnDecoder::kAdpcmAImageBytes` 是唯一定义，解码器与导出共用；实测 0 → 4 个采样，六行
+8192 / 3070 点 @18 518.5 Hz，`04/07` 仍是 90 / 83。
+
+**教训**：上限从取值范围推，不从"见过的最大文件"推；同一语义不要写两份。
+
+#### 9.17.5 已知简化
+
+- **ADPCM-B（Delta-T）没有接 ROM**：只在 MIDI 导出路径接了（`MidiSequenceBuilder`），可视化路径的
+  `attachMemory` 只填 `adpcmARom`。`02 The Military System` 的 `ADPCM-B` 因此是 `active=1` 而无波形，
+  说明"素材没用 DeltaT"只对 `04/07` 成立。接线的前提是让 `ChipMemory` 带上 block 类型——解码器现在
+  无法区分 `0x82` 与 `0x83`。
 - **ADPCM-B 行在个别曲目仍可能显示波形**：ADPCM-A 行范围判断按 `fmCount..channelCount-1`
   取，遇到 FM 声道数不为 6 的变体时会多算一行，未修完。
 - 未做“内容指纹聚类”，因此同一记鼓的长短两版仍可能是两个文件。
 
-**完整记录**：`docs/memo/2026-11-08-opn-adpcm-six-players-and-the-wrong-variant.md`
+**完整记录**：`docs/memo/2026-11-08-opn-adpcm-six-players-and-the-wrong-variant.md`、
+`docs/memo/2026-11-09-the-image-that-was-too-small.md`
 
 ### 9.18 键盘页的行与 Mixer 同源（2026-11-08）
 
