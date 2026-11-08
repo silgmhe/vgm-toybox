@@ -27,6 +27,11 @@ SongInfoPanel::SongInfoPanel (toybox::PlaybackEngine& engineToUse)
 	fileLabel.setJustificationType (juce::Justification::centredLeft);
 	addAndMakeVisible (fileLabel);
 
+	songLabel.setFont (juce::Font (juce::FontOptions (12.5f)));
+	songLabel.setJustificationType (juce::Justification::centredRight);
+	songLabel.setComponentID ("song.label");
+	addChildComponent (songLabel);
+
 	songBox.setComponentID ("song.selector");
 	songBox.onChange = [this] { switchToSelectedSong (); };
 	addChildComponent (songBox);		// refresh() shows it only for a file with more than one song
@@ -41,6 +46,7 @@ void SongInfoPanel::lookAndFeelChanged (void)
 	titleLabel.setColour (juce::Label::textColourId, theme::primaryText());
 	detailsLabel.setColour (juce::Label::textColourId, theme::secondaryText());
 	fileLabel.setColour (juce::Label::textColourId, theme::secondaryText());
+	songLabel.setColour (juce::Label::textColourId, theme::secondaryText());
 }
 
 void SongInfoPanel::refreshLanguage (void)
@@ -57,6 +63,7 @@ void SongInfoPanel::resized (void)
 	if (songBox.isVisible ())
 	{
 		songBox.setBounds (titleRow.removeFromRight (96).reduced (0, 2));
+		songLabel.setBounds (titleRow.removeFromRight (46).reduced (0, 2));
 	}
 
 	titleLabel.setBounds (titleRow);
@@ -69,6 +76,7 @@ void SongInfoPanel::refresh (void)
 	if (! engine.isLoaded())
 	{
 		songBox.setVisible (false);
+		songLabel.setVisible (false);
 		titleLabel.setText (i18n::tr ("song.noFile"), juce::dontSendNotification);
 		detailsLabel.setText ({}, juce::dontSendNotification);
 		fileLabel.setText (formatLoadHint(),
@@ -80,14 +88,19 @@ void SongInfoPanel::refresh (void)
 	// the count changes, so a playing song does not reset the user's open popup on every tick.
 	const int songCount = engine.getSongCount();
 
-	if (songBox.isVisible () != (songCount > 1))
+	const bool wantsSelector = songCount > 1;
+
+	if (songBox.isVisible () != wantsSelector)
 	{
-		songBox.setVisible (songCount > 1);
+		songBox.setVisible (wantsSelector);
+		songLabel.setVisible (wantsSelector);
 		resized ();
 	}
 
-	if (songCount > 1)
+	if (wantsSelector)
 	{
+		// Re-read every tick: a language change has to reach this label like every other one.
+		songLabel.setText (i18n::tr ("song.track"), juce::dontSendNotification);
 		if (songBox.getNumItems () != songCount)
 		{
 			songBox.clear (juce::dontSendNotification);

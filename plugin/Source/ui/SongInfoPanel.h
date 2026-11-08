@@ -43,6 +43,7 @@ private:
 		VGM or any other single-song format looks exactly as it did before.
 	*/
 	juce::ComboBox songBox;
+	juce::Label songLabel;			// "Song", from the language pack, left of the box
 
 	void switchToSelectedSong (void);
 

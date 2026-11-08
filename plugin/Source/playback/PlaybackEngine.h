@@ -572,7 +572,7 @@ private:
 
 	juce::MemoryBlock fileData;			// the song image; the backend loads its players from it
 	juce::File currentFile;
-	int songIndex = -1;					// which song a rebuild should open, -1 = the header's
+	int songIndex = 0;					// which song a rebuild should open (first, unless chosen)
 	int songCount = 1;					// songs in the open file (1 for every single-song format)
 	int currentSongIndex = 0;			// the song actually open, 0-based
 	std::vector<ChipEntry> chips;

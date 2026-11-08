@@ -108,9 +108,11 @@ bool PlaybackEngine::loadFile (const juce::File& file, juce::String& errorMessag
 	}
 
 	{
-		// A new file starts at the track its own header names; only selectSong() overrides that.
+		// **A new file starts at its first song.** Headers do name one, but on real rips that is often a
+		// jingle or a bare sound effect - the Super Mario USA NSF names track 16, which plays one DPCM
+		// and stops, while its music sits on 1-14. The selector lets a listener go anywhere from there.
 		const juce::ScopedLock sl (lock);
-		songIndex = -1;
+		songIndex = 0;
 	}
 
 	return loadImage (std::move (data), file, true, errorMessage);
@@ -197,6 +199,13 @@ void PlaybackEngine::loadFileAsync (const juce::File& file, LoadCallback onDone,
 {
 	// Snapshot on the message thread: from here on the job only touches its own copies, so a
 	// sample-rate change, a mode switch or a close on the message thread cannot race the build.
+	{
+		// **A new file opens at its first song**, and the snapshot below must already say so - it is
+		// taken here, before the worker runs. selectSong() is the only thing that moves this afterwards.
+		const juce::ScopedLock sl (lock);
+		songIndex = 0;
+	}
+
 	const BuildConfig config = makeBuildConfig();
 	const int generation = ++loadGeneration;
 	auto* const engine = this;

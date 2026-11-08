@@ -1,4 +1,4 @@
-id: en
+﻿id: en
 language: English
 
 // The reference pack: every key the application looks up lives here. A user translation may
@@ -150,6 +150,7 @@ language: English
 "settings.theme.light" = "Light";
 
 "song.noFile" = "No file loaded";
+"song.track" = "Song";
 
 "status.finished" = "Finished";
 "status.loading" = "Loading {0}...";
