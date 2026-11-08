@@ -272,11 +272,22 @@ struct OpnDecoder::Impl
 	uint32_t adpcmBMask = 0;
 	std::map<uint32_t, double> adpcmBCycleCache;
 
-	/** **The decoded Delta-T shapes, keyed by the range they cover.** Without this the shape was
-		rebuilt on every `channelState()` call, and the note extractor asks once per register write: on
-		`07 Stage 2` that decoded the same kilobytes ten thousand times and made loading take three and
-		a half seconds instead of a tenth of one. A song has a handful of samples, so the cap is small;
-		clearing it only costs a re-decode of the next shape. */
+	/** **The decoded Delta-T shapes, keyed by the range they cover.**
+
+		A shape is a function of three inputs and nothing else: `latchStart`, `latchEnd` and the ROM
+		bytes. The first two are latched at key-on and stay put until the next one, and the bytes only
+		change in `setAdpcmBRom()` - so for a given range the shape is an **invariant**, which is the
+		only reason caching it is sound rather than a guess.
+
+		It has to be cached because `channelState()` is not a per-frame call: the note extractor asks
+		once for **every register write**, and the snapshot asks for every channel of every block. On
+		`07 Stage 2` that decoded the same kilobytes tens of thousands of times - 3.7 seconds of loading
+		instead of 0.15. Cost here is per-call cost times call count, and the count is the amplifier.
+
+		Two invalidations, both cheap: `setAdpcmBRom()` clears it (the bytes the shapes came from are
+		gone), and 64 entries clear it wholesale - a song has a handful of samples, so exceeding that
+		means something is wrong, and re-decoding one shape is cheaper than keeping an LRU honest.
+	*/
 	std::map<uint64_t, std::shared_ptr<const std::vector<float>>> adpcmBShapes;
 	std::unique_ptr<OpnAdpcmBNoteTable> adpcmBTable;
 	OpnNoteTable table;
@@ -1012,6 +1023,11 @@ ChannelState OpnDecoder::channelState (int channel) const
 	// **The shape is the bytes the start and end registers name**, decoded with the same Delta-T table
 	// the cycle estimate uses - clamped at 16 bits rather than wrapped, which is what separates Delta-T
 	// from the six ADPCM-A voices. Drawn only while the voice is gated, like those rows.
+	//
+	// It is looked up rather than built, because this function is asked for a state far more often than
+	// a person looks at a row: once per register write by the note extractor and once per channel per
+	// block by the snapshot. The pair below covers every input the bytes depend on (a key-on latches
+	// them, `setAdpcmBRom()` clears the cache), so a hit is the same shape, not an approximation.
 	if (state.gate && ! impl->adpcmBRom.empty () && voice.latchEnd > voice.latchStart)
 	{
 		const uint64_t shapeKey = ((uint64_t) voice.latchStart << 32) | (uint64_t) voice.latchEnd;
