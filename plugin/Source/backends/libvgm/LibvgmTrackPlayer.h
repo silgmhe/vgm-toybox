@@ -141,12 +141,22 @@ private:
 		uint32_t start = 0;
 		uint32_t stop = 0;
 		uint8_t ctrl = 0;			// the control byte, for the re-key: loop/mode plus key-on
+
+		/** Every start the driver wrote, with the time it wrote it.
+
+			**A stream cannot be entered at an arbitrary byte.** Four-bit ADPCM carries a predictor
+			(`signal`, `step`) that the chip resets on key-on, so starting mid-sample plays noise
+			until it re-converges - which is exactly what the first version of this seek did. The
+			driver's own section starts are the points where the hardware began with a clean state, so
+			those are the only safe places to jump to.
+		*/
+		std::vector<std::pair<uint32_t, uint32_t>> sections;	// (sampleTime, start)
 	};
 
 	std::vector<StreamVoice> streamVoices;
 
-	/** Moves every streamed voice to `fraction` of its range and re-keys it. */
-	bool repositionStream (double fraction);
+	/** Re-keys every streamed voice at the section nearest before `targetSample`. */
+	bool repositionStream (uint32_t targetSample);
 	bool isolated = false;					// setTrackAudible() named a track
 	playback::TrackId myTrack {};
 	bool myTrackAudible = true;

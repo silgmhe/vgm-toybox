@@ -160,16 +160,31 @@ bool LibvgmTrackPlayer::seekSeconds (double seconds)
 	// playhead moved while the audio did not (probe: identical RMS at 0 s, 5 s, 30 s). What the
 	// driver does to advance its stream is rewrite `start`, so a seek does the same thing - put the
 	// voice at the byte the target time corresponds to, then key it on again.
+	// **One section means there is nowhere to jump to.** A driver that never rewrote its start left
+	// the whole song as one continuous stretch, so any target would land on the same byte and the
+	// audio would not change - the honest answer is to decline, as before.
+	bool anySection = false;
+
+	for (const auto& voice : streamVoices)
+	{
+		if (voice.sections.size () > 1)
+		{
+			anySection = true;
+		}
+	}
+
+	if (! seekable && ! anySection)
+	{
+		return false;
+	}
+
 	if (! seekable)
 	{
 		const uint32_t target = (uint32_t) (juce::jmax (0.0, seconds) * sampleRate);
 
 		playerEngine.Seek (PLAYPOS_SAMPLE, target);
 
-		const double duration = playerEngine.GetTotalTime (PLAYTIME_LOOP_INCL | PLAYTIME_TIME_PBK);
-		const double fraction = (duration > 0.0) ? juce::jlimit (0.0, 1.0, seconds / duration) : 0.0;
-
-		repositionStream (fraction);
+		repositionStream (target);
 
 		finished = false;
 		pendingRewind.store (true, std::memory_order_relaxed);
@@ -199,7 +214,7 @@ bool LibvgmTrackPlayer::seekSeconds (double seconds)
 	return true;
 }
 
-bool LibvgmTrackPlayer::repositionStream (double fraction)
+bool LibvgmTrackPlayer::repositionStream (uint32_t targetSample)
 {
 	VGMPlayer* vgm = dynamic_cast<VGMPlayer*> (playerEngine.GetPlayer ());
 
@@ -220,8 +235,19 @@ bool LibvgmTrackPlayer::repositionStream (double fraction)
 
 	for (const auto& voice : streamVoices)
 	{
-		const uint32_t span = voice.stop - voice.start;
-		const uint32_t start = voice.start + (uint32_t) ((double) span * fraction);
+		// **Snap to the section the driver had running at the target.** Entering at an arbitrary
+		// byte restarts the ADPCM predictor in the middle of a sample, which is noise until it
+		// re-converges; the driver's own starts are the points the hardware began cleanly.
+		uint32_t start = voice.start;
+
+		for (const auto& section : voice.sections)
+		{
+			if (section.first <= targetSample)
+			{
+				start = section.second;
+			}
+		}
+
 		const uint8_t base = (uint8_t) (voice.channel << 2);
 
 		// The start address is three registers, high to low, exactly as the driver writes it.
@@ -567,7 +593,10 @@ void LibvgmTrackPlayer::setReplaySource (std::shared_ptr<const midi::SongIr> ir,
 				case 0x01: voice.ctrl = write.value; break;
 				case 0x20: voice.start = (voice.start & 0x00FFFF) | ((uint32_t) write.value << 16); break;
 				case 0x40: voice.start = (voice.start & 0xFF00FF) | ((uint32_t) write.value << 8); break;
-				case 0x60: voice.start = (voice.start & 0xFFFF00) | (uint32_t) write.value; break;
+				case 0x60:
+					voice.start = (voice.start & 0xFFFF00) | (uint32_t) write.value;
+					voice.sections.emplace_back (write.sampleTime, voice.start);
+					break;
 				case 0x23: voice.stop = (voice.stop & 0x00FFFF) | ((uint32_t) write.value << 16); break;
 				case 0x43: voice.stop = (voice.stop & 0xFF00FF) | ((uint32_t) write.value << 8); break;
 				case 0x63: voice.stop = (voice.stop & 0xFFFF00) | (uint32_t) write.value; break;
