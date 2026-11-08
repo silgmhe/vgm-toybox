@@ -73,6 +73,12 @@ public:
 		the format has a single song.
 	*/
 	bool selectSong (int index, juce::String& errorMessage);
+
+	/** How many songs the open file holds, and which one is playing. Both are 1/0 for a single-song
+		format, so a caller can hide a selector that would have one entry.
+	*/
+	int getSongCount (void) const { return songCount; }
+	int getSongIndex (void) const { return currentSongIndex; }
 	void unloadFile (void);
 
 	/** Called on the message thread when an asynchronous load finishes. */
@@ -566,7 +572,9 @@ private:
 
 	juce::MemoryBlock fileData;			// the song image; the backend loads its players from it
 	juce::File currentFile;
-	int songIndex = -1;					// which song of a multi-song file is open
+	int songIndex = -1;					// which song a rebuild should open, -1 = the header's
+	int songCount = 1;					// songs in the open file (1 for every single-song format)
+	int currentSongIndex = 0;			// the song actually open, 0-based
 	std::vector<ChipEntry> chips;
 	std::map<juce::String, juce::String> tags;
 

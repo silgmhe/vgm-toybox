@@ -181,6 +181,9 @@ bool PlaybackEngine::installLoaded (LoadedSong&& built, juce::MemoryBlock&& imag
 	fileData = std::move (image);
 	currentFile = file;
 
+	songCount = (std::max) (1, built.song->getInfo ().songCount);
+	currentSongIndex = built.song->getInfo ().songIndex;
+
 	installSong (std::move (built));
 
 	positionSeconds = 0.0;
@@ -1244,7 +1247,13 @@ void PlaybackEngine::rebuildPlayers (juce::String& errorMessage)
 		applyTrackIsolationTo (mixerEnabled, built.layout, built.players);
 		applyChipMutesTo (built.chips, built.players);
 
-		installSong (std::move (built));
+		if (built.song != nullptr)
+		{
+			songCount = (std::max) (1, built.song->getInfo ().songCount);
+			currentSongIndex = built.song->getInfo ().songIndex;
+		}
+
+	installSong (std::move (built));
 	}
 
 	if (position > 0.0)

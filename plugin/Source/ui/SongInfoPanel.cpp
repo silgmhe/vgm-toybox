@@ -1,4 +1,4 @@
-#include "SongInfoPanel.h"
+﻿#include "SongInfoPanel.h"
 
 #include "Format.h"
 #include "Theme.h"
@@ -10,7 +10,7 @@
 namespace toybox::ui
 {
 
-SongInfoPanel::SongInfoPanel (const toybox::PlaybackEngine& engineToUse)
+SongInfoPanel::SongInfoPanel (toybox::PlaybackEngine& engineToUse)
 	: engine (engineToUse)
 {
 	titleLabel.setFont (juce::Font (juce::FontOptions (18.0f, juce::Font::bold)));
@@ -26,6 +26,10 @@ SongInfoPanel::SongInfoPanel (const toybox::PlaybackEngine& engineToUse)
 	lookAndFeelChanged();
 	fileLabel.setJustificationType (juce::Justification::centredLeft);
 	addAndMakeVisible (fileLabel);
+
+	songBox.setComponentID ("song.selector");
+	songBox.onChange = [this] { switchToSelectedSong (); };
+	addChildComponent (songBox);		// refresh() shows it only for a file with more than one song
 
 	refresh();
 }
@@ -47,7 +51,15 @@ void SongInfoPanel::refreshLanguage (void)
 void SongInfoPanel::resized (void)
 {
 	auto inner = getLocalBounds().reduced (theme::cardPadding, 10);
-	titleLabel.setBounds (inner.removeFromTop (26));
+	auto titleRow = inner.removeFromTop (26);
+
+	// The selector sits at the end of the title row and takes nothing from the text when it is hidden.
+	if (songBox.isVisible ())
+	{
+		songBox.setBounds (titleRow.removeFromRight (96).reduced (0, 2));
+	}
+
+	titleLabel.setBounds (titleRow);
 	detailsLabel.setBounds (inner.removeFromTop (20));
 	fileLabel.setBounds (inner.removeFromTop (18));
 }
@@ -56,11 +68,37 @@ void SongInfoPanel::refresh (void)
 {
 	if (! engine.isLoaded())
 	{
+		songBox.setVisible (false);
 		titleLabel.setText (i18n::tr ("song.noFile"), juce::dontSendNotification);
 		detailsLabel.setText ({}, juce::dontSendNotification);
 		fileLabel.setText (formatLoadHint(),
 						   juce::dontSendNotification);
 		return;
+	}
+
+	// **One entry per song, and nothing at all for a single-song format.** The list is rebuilt only when
+	// the count changes, so a playing song does not reset the user's open popup on every tick.
+	const int songCount = engine.getSongCount();
+
+	if (songBox.isVisible () != (songCount > 1))
+	{
+		songBox.setVisible (songCount > 1);
+		resized ();
+	}
+
+	if (songCount > 1)
+	{
+		if (songBox.getNumItems () != songCount)
+		{
+			songBox.clear (juce::dontSendNotification);
+
+			for (int index = 1; index <= songCount; ++index)
+			{
+				songBox.addItem (juce::String (index), index);
+			}
+		}
+
+		songBox.setSelectedId (engine.getSongIndex () + 1, juce::dontSendNotification);
 	}
 
 	const auto& file = engine.getFile();
@@ -89,6 +127,29 @@ void SongInfoPanel::refresh (void)
 	fileLabel.setText (file.getFileName() + "   -   " + formatTime (engine.getPositionSeconds())
 						   + " / " + formatTime (engine.getDurationSeconds()),
 					   juce::dontSendNotification);
+}
+
+void SongInfoPanel::switchToSelectedSong (void)
+{
+	if (! engine.isLoaded ())
+	{
+		return;
+	}
+
+	const int index = songBox.getSelectedId () - 1;
+
+	if (index < 0 || index == engine.getSongIndex ())
+	{
+		return;
+	}
+
+	// A failed switch leaves the list where it was, so the control never claims a song that is not open.
+	juce::String error;
+
+	if (! engine.selectSong (index, error))
+	{
+		songBox.setSelectedId (engine.getSongIndex () + 1, juce::dontSendNotification);
+	}
 }
 
 } // namespace toybox::ui

@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include "CardComponent.h"
 
@@ -18,7 +18,7 @@ public:
 	static constexpr int preferredHeight = 96;
 	static constexpr int minHeight = 70;
 
-	explicit SongInfoPanel (const toybox::PlaybackEngine& engineToUse);
+	explicit SongInfoPanel (toybox::PlaybackEngine& engineToUse);
 
 	/** Updates title, tags and the file/position line. */
 	void refresh (void);
@@ -33,11 +33,18 @@ public:
 private:
 	void resized (void) override;
 
-	const toybox::PlaybackEngine& engine;
+	toybox::PlaybackEngine& engine;
 
 	juce::Label titleLabel;
 	juce::Label detailsLabel;
 	juce::Label fileLabel;
+
+	/** **The song list of a multi-song file.** Hidden unless the file holds more than one, so a
+		VGM or any other single-song format looks exactly as it did before.
+	*/
+	juce::ComboBox songBox;
+
+	void switchToSelectedSong (void);
 
 	JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (SongInfoPanel)
 };
