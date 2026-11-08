@@ -1,4 +1,4 @@
-#include "OpnDecoder.h"
+﻿#include "OpnDecoder.h"
 
 #include <algorithm>
 #include <cmath>
@@ -212,9 +212,27 @@ struct OpnDecoder::Impl
 		uint32_t keyOns = 0;
 	};
 
+	/** **ADPCM-A is six sample players over one ROM**, each with its own start and end page. The
+		pulse alone says a hit happened; these registers say which bytes it read, which is what a row
+		has to draw. Port 1 offsets, from `fmopn.c`'s `FM_ADPCMAWrite`: 0x00 keys, 0x10+c/0x18+c start,
+		0x20+c/0x28+c end, 0x08+c level. */
+	struct AdpcmA
+	{
+		uint8_t startLow = 0;
+		uint8_t startHigh = 0;
+		uint8_t endLow = 0;
+		uint8_t endHigh = 0;
+		uint8_t level = 0x1F;
+		uint32_t latchStart = 0;
+		uint32_t latchEnd = 0;
+	};
+
 	Variant variant = Variant::ym2612;
 	Channel channels[6];
 	Pulse adpcmA[6];
+	AdpcmA adpcmARegs[6];
+	std::vector<uint8_t> adpcmARom;
+	uint32_t adpcmAMask = 0;
 	AdpcmB adpcmB;
 	Pulse dac;
 	uint32_t lastDacTrigger = 0;
@@ -267,9 +285,12 @@ struct OpnDecoder::Impl
 
 		if (variant == Variant::ym2610)
 		{
-			// the non-B OPNA only wires up channels 1, 2, 4 and 5
-			channels[0].present = false;
-			channels[3].present = false;
+			// **All six FM voices stay present.** The part is a YM2610 on paper - four FM voices,
+			// with 1 and 4 unwired - but libvgm emulates the YM2610B for both ids, and the music in
+			// these files was written for that one. Marking the two absent dropped their rows while
+			// the mixer kept a fader for each, so every row below described the voice above it.
+			channels[0].present = true;
+			channels[3].present = true;
 		}
 
 		// the table holds pointers into this object, so it has to outlive a reset, not be reset
@@ -547,14 +568,31 @@ void OpnDecoder::reset (const ChipConfig& config)
 	std::vector<uint8_t> rom = std::move (impl->adpcmBRom);
 	const uint32_t mask = impl->adpcmBMask;
 
+	// **Which OPN this is arrives with the config.** The router keeps one decoder buffer per class,
+	// so every OPN device was being built as the default YM2612: seven channels, no ADPCM rows at
+	// all. A YM2610 song then showed six FM channels and a DAC where it should have shown six FM,
+	// six ADPCM-A and one ADPCM-B. `flags` carries the variant as a small ordinal.
+	const Variant requested = (config.flags >= 1 && config.flags <= 5)
+								  ? (Variant) (config.flags - 1)
+								  : variant;
+
 	*impl = Impl();
-	impl->variant = variant;
+	impl->variant = requested;
 	impl->adpcmBRom = std::move (rom);
 	impl->adpcmBMask = mask;
 	impl->clock = clock > 0 ? (double) clock : 8000000.0;
 	impl->streamRate = sampleRate > 0.0 ? sampleRate : 44100.0;
 	impl->configure();
 	impl->table.setClock ((double) clock);
+}
+
+void OpnDecoder::attachMemory (const ChipMemory& memory)
+{
+	// **The ADPCM-A image** arrives as the requirement asked for it: one 8 MB bank that six voices
+	// page through. The mask rounds to the power of two, the way the core wraps an out-of-range
+	// address instead of reading zero.
+	impl->adpcmAMask = pow2Mask (memory.bytes->size ());
+	impl->adpcmARom = *memory.bytes;
 }
 
 void OpnDecoder::setAdpcmBRom (std::vector<uint8_t> rom)
@@ -614,10 +652,49 @@ void OpnDecoder::write (const RegisterWrite& write)
 	{
 		if (port == 1 && reg < 0x30)
 		{
+			const int slot = (int) (reg & 0x07);
+
 			if (reg == 0x00)
 			{
+				// **The ranges are latched at the key-on**, because the driver rewrites start and
+				// end for the next hit before the next start bit - the same reason ADPCM-B latches.
+				const bool allOff = (write.value & 0x80) != 0;
+
+				for (int channel = 0; channel < 6; ++channel)
+				{
+					if (allOff || (write.value & (1u << channel)) == 0)
+					{
+						continue;
+					}
+
+					Impl::AdpcmA& regs = impl->adpcmARegs[channel];
+					regs.latchStart = (((uint32_t) regs.startHigh << 8) | regs.startLow) << 8;
+					regs.latchEnd = ((((uint32_t) regs.endHigh << 8) | regs.endLow) << 8) + 0xFF;
+				}
+
 				impl->keyAdpcmA (write.sampleTime, write.value);
 			}
+			else if (reg >= 0x10 && reg <= 0x15)
+			{
+				impl->adpcmARegs[slot].startLow = (uint8_t) write.value;
+			}
+			else if (reg >= 0x18 && reg <= 0x1D)
+			{
+				impl->adpcmARegs[slot].startHigh = (uint8_t) write.value;
+			}
+			else if (reg >= 0x20 && reg <= 0x25)
+			{
+				impl->adpcmARegs[slot].endLow = (uint8_t) write.value;
+			}
+			else if (reg >= 0x28 && reg <= 0x2D)
+			{
+				impl->adpcmARegs[slot].endHigh = (uint8_t) write.value;
+			}
+			else if (reg >= 0x08 && reg <= 0x0D)
+			{
+				impl->adpcmARegs[slot].level = (uint8_t) (write.value & 0x1F);
+			}
+
 			return;
 		}
 
@@ -772,11 +849,68 @@ ChannelState OpnDecoder::channelState (int channel) const
 		return state;
 	}
 
-	if (channel < impl->fmCount + 6)
+	// **The last channel is ADPCM-B**, so the six ADPCM-A rows end one short of the count: a plain
+	// `fmCount + 6` also swallowed the Delta-T row on the variants whose FM section is short, and
+	// that row then drew a neighbour's sample.
+	if (channel >= impl->fmCount && channel < impl->channelCount - 1)
 	{
+		const std::size_t slot = (std::size_t) (channel - impl->fmCount);
+		const Impl::AdpcmA& regs = impl->adpcmARegs[slot];
+
 		state.period = kOneShotPeriod;
 		state.volume = 12;
-		state.gate = impl->now < impl->adpcmA[channel - impl->fmCount].end;
+		state.gate = impl->now < impl->adpcmA[slot].end;
+
+		// **The shape is the bytes the hit reads, decoded exactly as `fmopn.c` does.** A nibble
+		// picks a delta out of `steps[]` scaled by the running step, and the nibble's low three bits
+		// move the step by `step_inc`; the accumulator is **twelve bits and wraps** (unlike
+		// Delta-T, which clamps), which is what the MSM5205 heritage buys. High nibble first.
+		if (state.gate && ! impl->adpcmARom.empty () && regs.latchEnd > regs.latchStart)
+		{
+			static constexpr int stepTable[49] = {
+				16, 17, 19, 21, 23, 25, 28, 31, 34, 37, 41, 45, 50, 55, 60, 66, 73,
+				80, 88, 97, 107, 118, 130, 143, 157, 173, 190, 209, 230, 253, 279, 307,
+				337, 371, 408, 449, 494, 544, 598, 658, 724, 796, 876, 963, 1060, 1166,
+				1282, 1411, 1552
+			};
+			static constexpr int stepInc[8] = { -16, -16, -16, -16, 32, 80, 112, 144 };
+			constexpr uint32_t kWindow = 4096;
+
+			const uint32_t length = (std::min) (regs.latchEnd - regs.latchStart, kWindow);
+			auto wave = std::make_shared<std::vector<float>> ();
+			wave->reserve (length * 2);
+
+			int accumulator = 0;
+			int step = 0;
+
+			for (uint32_t i = 0; i < length; ++i)
+			{
+				const uint32_t index = (regs.latchStart + i) & impl->adpcmAMask;
+				const uint8_t byte = (index < impl->adpcmARom.size ()) ? impl->adpcmARom[index] : 0;
+
+				for (int half = 0; half < 2; ++half)
+				{
+					const int nibble = (half == 0) ? (byte >> 4) : (byte & 0x0F);
+					const int delta = (2 * (nibble & 7) + 1) * stepTable[step / 16] / 8;
+
+					accumulator = (accumulator + ((nibble & 8) != 0 ? -delta : delta)) & 0xFFF;
+					step = std::max (0, std::min (48 * 16, step + stepInc[nibble & 7]));
+
+					const int value = (accumulator & 0x800) != 0 ? (accumulator | ~0xFFF) : accumulator;
+					wave->push_back ((float) value / 2048.0f);
+				}
+			}
+
+			state.wave = wave;
+		}
+
+		// **One nibble every three DAC ticks.** The block has no pitch register, so the clock alone
+		// sets the rate - and `clock / 144` is too fast by exactly three: the core's own key-on path
+		// carries the figure as `(1<<ADPCM_SHIFT) * freqbase / 3.0` (the line it keeps commented out
+		// because the value is precomputed), and 8 MHz / 432 = 18.5 kHz is the rate Neo Geo ADPCM-A
+		// drums are recorded at. Reading them at 55.5 kHz made every drag-exported wave sound about
+		// nineteen semitones sharp, which is what the ear reported.
+		state.sampleRate = (float) (impl->clock / 432.0);
 		return state;
 	}
 

@@ -1,4 +1,4 @@
-#include "backends/nsf/NsfPlayer.h"
+﻿#include "backends/nsf/NsfPlayer.h"
 
 #include <algorithm>
 #include <cmath>
@@ -84,6 +84,11 @@ NsfPlayer::NsfPlayer (const formats::nsf::NsfFile& image, double sampleRate)
 	bus = std::make_unique<NsfBus> (file);
 	bus->onSoundWrite = [this] (uint16_t address, uint8_t value)
 	{
+		if (onSoundWriteForDiagnostics != nullptr)
+		{
+			onSoundWriteForDiagnostics (address, value);
+		}
+
 		writeSound (address, value);
 	};
 
@@ -803,6 +808,12 @@ uint32_t NsfPlayer::expansionSignature (int index) const
 uint64_t NsfPlayer::soundWrites (void) const
 {
 	return bus != nullptr ? bus->soundWriteCount : 0;
+}
+
+uint8_t NsfPlayer::peekRam (uint16_t address) const
+{
+	uint32_t value = 0;
+	return bus != nullptr && bus->Read (address, value) ? (uint8_t) (value & 0xFF) : 0;
 }
 
 double NsfPlayer::positionSeconds (void) const

@@ -724,8 +724,10 @@ namespace
 		sixChannel.reset (toybox::chips::ChipConfig { 8000000, 44100.0 });
 		const auto six = toybox::chips::extractNotes (sixChannel, stream.writes, 22050);
 
-		check (four.size() == 1 && four[0].logicalChannel == 1,
-			   "the four-channel OPNB drops channel 0");
+		// **libvgm emulates the YM2610B for both ids.** The plain part wires four FM voices, but the
+		// core models the six-voice revision and this music was written for it, so the decoder keeps
+		// all six: marking two absent took their rows away while the mixer kept a fader for each.
+		check (four.size() == 2, "the OPNB keys both channels, whichever revision");
 		check (six.size() == 2, "the B revision keys both channels");
 	}
 
@@ -6959,8 +6961,7 @@ void testWaveExport (void)
 		}
 	}
 
-int main (void)
-{
+int main (void){
 	std::printf ("chip decoder test\n");
 
 	// Isolated settings: a decoder test reads none, but the store must never open this machine's

@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include <cstddef>
 #include <cstdint>
@@ -84,6 +84,28 @@ struct TrackInfo
 	juce::String name;				// "Pulse 1" / "Ch 3" / "All"
 	juce::String groupName;			// the group header above the strip row (device name, "#2" ...)
 	MidiCapability midiCapability = MidiCapability::unavailable;
+
+	/** **Which device this row really belongs to, and which channel within it.**
+
+		`deviceId` is the device's public handle, and for a linked voice set that handle is its *parent's*
+		- the row is created inside the head's loop - so it cannot be used to find the voice.
+		`channelIndex` is the song-wide number and cannot be turned back into a device-local one either.
+
+		These two are written where both facts are still known (`describeSong`), so no reader has to infer
+		them from order or arithmetic. A negative `deviceChannel` means the row covers the whole device,
+		because the core cannot isolate it any further.
+
+		They sit at the end of the struct so the aggregate initialisers elsewhere keep their meaning.
+	*/
+	DeviceId sourceDeviceId {};
+	int deviceChannel = -1;
+
+	/** **The libvgm device type**, which is how a device is addressed at all. The id cannot always do it:
+		the YM2610's SSG is reported with its parent's id, so `(id, channel)` matched the FM voices and put
+		its three square waves on FM 1..3. Type plus channel names one voice; a song with two chips of the
+		same type is outside what this pairing can express.
+	*/
+	uint16_t sourceDeviceType = 0;
 };
 
 /** Metadata and timeline facts of an open song, in seconds. */

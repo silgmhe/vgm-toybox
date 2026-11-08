@@ -8,6 +8,7 @@
 #include "MikeySamples.h"
 #include "Msm5232Samples.h"
 #include "SegaPcmSamples.h"
+#include "OpnAdpcmSamples.h"
 #include "Ymz280bSamples.h"
 #include "K007232Samples.h"
 #include "VsuSamples.h"
@@ -376,6 +377,34 @@ bool LibvgmSongInstance::prepare (double hostSampleRate, int newMaxBlockSize, ju
 		}
 
 		for (auto& sample : collectSegaPcmSamples (*songIr, clock))
+		{
+			collected.push_back (std::move (sample));
+		}
+	}
+
+	const bool hasOpnAdpcm = songIr != nullptr
+							 && std::any_of (songIr->chips.begin (), songIr->chips.end (),
+											 [] (const midi::ChipSlot& slot)
+											 {
+												 return slot.kind == midi::ChipKind::ym2610
+													 || slot.kind == midi::ChipKind::ym2608;
+											 });
+
+	if (hasOpnAdpcm && songIr != nullptr)
+	{
+		// The six ADPCM-A voices share one `0x82` image; the clock turns a nibble into a rate.
+		uint32_t clock = 0;
+
+		for (const auto& device : deviceInfo)
+		{
+			if ((device.type == DEVID_YM2610 || device.type == DEVID_YM2608)
+				&& device.devCfg != nullptr && device.devCfg->clock > 0)
+			{
+				clock = device.devCfg->clock;
+			}
+		}
+
+		for (auto& sample : collectOpnAdpcmSamples (*songIr, clock))
 		{
 			collected.push_back (std::move (sample));
 		}
@@ -890,9 +919,15 @@ SongDescription describeSong (LibvgmTrackPlayer* probe)
 
 		const bool isolatable = isIsolatable (device);
 
+		// `sourceId` and `deviceChannel` are what identify the voice: `device.id` is the head's, which a
+		// linked voice set shares, and `channelIndex` is the song-wide number. Both are known here and
+		// nowhere downstream, so they are written down rather than reconstructed later.
 		const auto addTrack = [&result, &device, deviceIndex, &groupName] (int channelIndex,
-																		const juce::String& name,
-																		bool trackIsolatable)
+																			const juce::String& name,
+																			bool trackIsolatable,
+																			playback::DeviceId sourceId,
+																			int deviceChannel,
+																			uint16_t sourceType)
 		{
 			playback::TrackInfo track;
 			track.id = (playback::TrackId) result.tracks.size();	// the handle the core passes back
@@ -900,6 +935,9 @@ SongDescription describeSong (LibvgmTrackPlayer* probe)
 			track.deviceIndex = deviceIndex;
 			track.channelIndex = channelIndex;
 			track.isolatable = trackIsolatable;
+			track.sourceDeviceId = sourceId;
+			track.deviceChannel = deviceChannel;
+			track.sourceDeviceType = sourceType;
 			track.name = name;
 			track.groupName = groupName;
 			track.midiCapability = midiCapabilityFor (device, channelIndex);
@@ -908,7 +946,7 @@ SongDescription describeSong (LibvgmTrackPlayer* probe)
 
 		if (! isolatable)
 		{
-			addTrack (-1, "All", false);
+			addTrack (-1, "All", false, device.id, -1, device.type);
 		}
 		else
 		{
@@ -917,7 +955,7 @@ SongDescription describeSong (LibvgmTrackPlayer* probe)
 				const juce::String name = (channelNames != nullptr && channelNames[channel] != nullptr)
 											? juce::String (channelNames[channel])
 											: ("Ch " + juce::String (channel + 1));
-				addTrack (channel, name, true);
+				addTrack (channel, name, true, device.id, channel, device.type);
 			}
 		}
 
@@ -942,7 +980,8 @@ SongDescription describeSong (LibvgmTrackPlayer* probe)
 
 			for (int channel = 0; channel < childChannels; ++channel)
 			{
-				addTrack (linkedBase + channel, "SSG " + juce::String (channel + 1), childIsolatable);
+				addTrack (linkedBase + channel, "SSG " + juce::String (channel + 1), childIsolatable,
+						 child.id, channel, child.type);
 			}
 
 			linkedBase += childChannels;

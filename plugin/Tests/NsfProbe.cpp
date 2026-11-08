@@ -1,4 +1,4 @@
-/*
+﻿/*
     The player, driven the way the backend will drive it.
 
     Prints the one number that decides whether the CPU, the bus and the trampoline are all correct
@@ -219,7 +219,11 @@ int main (int argc, char** argv)
 
 			// Printed rather than passed over: "the row has no data" and "the row was never looked
 			// at" are different faults, and a list that omits both cannot tell them apart.
-			if (channel.wave.size () < 2)
+			// The snapshot references its shape since 24fada2; a null one means "nothing drawn",
+			// which is a different statement from a zero-length vector.
+			const std::size_t waveSize = channel.wave != nullptr ? channel.wave->size () : 0;
+
+			if (waveSize < 2)
 			{
 				std::printf ("  (none) %s %s kind=%d rate=%.1f\n", channel.chipName.c_str (),
 							 channel.name.c_str (), channel.waveKind, (double) channel.sampleRate);
@@ -239,7 +243,7 @@ int main (int argc, char** argv)
 			{
 				++written;
 				std::printf ("  %s  cycle=%d freq=%.1f Hz rate=%.1f\n", path.c_str (),
-							 (int) channel.wave.size (), (double) channel.frequency,
+							 (int) waveSize, (double) channel.frequency,
 							 (double) channel.sampleRate);
 			}
 		}
@@ -296,7 +300,7 @@ int main (int argc, char** argv)
 
 			std::printf ("  %-8s note=%3d vol=%.3f wave=%d duty=%-6s active=%d\n",
 						 channel.name.c_str (), channel.note, (double) channel.volume,
-						 (int) channel.wave.size (), duty, channel.active ? 1 : 0);
+						 (int) (channel.wave != nullptr ? channel.wave->size () : 0), duty, channel.active ? 1 : 0);
 		}
 
 		return 0;
@@ -306,7 +310,43 @@ int main (int argc, char** argv)
 	const double rate = 44100.0;
 
 	toybox::backends::nsf::NsfPlayer player (file, rate);
+
+	/** **Every sound-register write, in order.** From the audio alone, "this driver writes nothing",
+		"it writes the wrong registers" and "its writes never reach the chips" are the same silence -
+		the triangle held at a DC offset is what each of them produces. `NSF_TRACE=1` prints the list.
+	*/
+	int traced = 0;
+	const bool tracing = std::getenv ("NSF_TRACE") != nullptr;
+
+	if (tracing)
+	{
+		player.onSoundWriteForDiagnostics = [&traced] (uint16_t address, uint8_t value)
+		{
+			if (traced >= 240)
+			{
+				return;
+			}
+
+			++traced;
+			std::printf ("[apu] #%03d $%04X = %02X\n", traced, address, value);
+		};
+	}
+
+	player.skipPrescan ();
 	player.start ();
+
+	if (tracing)
+	{
+		// What the driver left in the page its own music engine reads: all five of its subroutines
+		// gate on $0601..$060D, so a page full of zeros says the engine was never armed.
+		std::printf ("[ram] $0600..$060F:");
+		for (uint16_t address = 0x0600; address <= 0x060F; ++address)
+		{
+			std::printf (" %02X", (unsigned) player.peekRam (address));
+		}
+
+		std::printf ("\n");
+	}
 
 	std::vector<float> left (1024, 0.0f);
 	std::vector<float> right (1024, 0.0f);

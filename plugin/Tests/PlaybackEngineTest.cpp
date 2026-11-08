@@ -1,4 +1,4 @@
-/*
+﻿/*
 	Console test for the mixer engine: renders a VGM/VGZ file offline - once through the plain
 	player, once through the per-channel mixer - writes the plain render to a WAV and checks the
 	mixer acceptance criteria:
@@ -945,7 +945,7 @@ int main (int argc, char* argv[])
 
 			if (channel.active)
 			{
-				rowsCanBeDrawn = rowsCanBeDrawn && (knownShape || ! channel.wave.empty ());
+				rowsCanBeDrawn = rowsCanBeDrawn && (knownShape || (channel.wave != nullptr && ! channel.wave->empty ()));
 			}
 
 			if (channel.active && channel.note >= 0)
@@ -956,7 +956,7 @@ int main (int argc, char* argv[])
 
 			std::printf ("      %-9s note=%3d vol=%.2f wave=%d kind=%d\n",
 						 channel.name.c_str (), channel.note, (double) channel.volume,
-						 (int) channel.wave.size (), channel.waveKind);
+						 (int) (channel.wave != nullptr ? channel.wave->size () : 0), channel.waveKind);
 		}
 
 		check (expansionRows == (int) tracks.size () - 5, "every expansion track has a row");

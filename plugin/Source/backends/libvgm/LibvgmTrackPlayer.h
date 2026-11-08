@@ -103,7 +103,14 @@ private:
 		The panel offers mute and solo on a row only when this says where to send them, and the
 		engine owns that state - a second copy here would drift from the mixer's.
 	*/
-	int trackFor (uint32_t deviceId, int channel) const;
+	/** The track that owns a channel number, or -1. **No device id is involved**: a linked voice set's
+		tracks are created with the *parent's* id (`describeSong` builds them inside the head's loop), so
+		matching on the id could never find them, while the number alone is unique across the song. */
+	int trackFor (int channel) const;
+
+	/** The track that describes this device voice: the pair written by `describeSong`. A row that covers
+		the whole device (negative deviceChannel) answers for any channel of that device. */
+	int trackForVoice (uint16_t deviceType, int deviceChannel) const;
 	void applyMuting (uint32_t deviceId, const PLR_MUTE_OPTS& muteOpts);
 	/** Rebuilds the whole mute configuration from the isolated track and the chip mute states. */
 	void applyIsolation (void);
