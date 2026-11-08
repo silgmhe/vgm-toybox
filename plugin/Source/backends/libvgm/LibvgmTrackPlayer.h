@@ -128,35 +128,6 @@ private:
 		while playing the opening is worse than refusing, so a seek on such a song is ignored.
 	*/
 	bool seekable = true;
-
-	/** One voice of a streamed sample player, as the song left it.
-
-		The hardware keeps how far it has read to itself; the only address a seek can move is the
-		voice's start, which is exactly what the driver itself rewrites as the stream advances. So a
-		seek here means "restart this voice at the byte the target time corresponds to".
-	*/
-	struct StreamVoice
-	{
-		int channel = 0;
-		uint32_t start = 0;
-		uint32_t stop = 0;
-		uint8_t ctrl = 0;			// the control byte, for the re-key: loop/mode plus key-on
-
-		/** Every start the driver wrote, with the time it wrote it.
-
-			**A stream cannot be entered at an arbitrary byte.** Four-bit ADPCM carries a predictor
-			(`signal`, `step`) that the chip resets on key-on, so starting mid-sample plays noise
-			until it re-converges - which is exactly what the first version of this seek did. The
-			driver's own section starts are the points where the hardware began with a clean state, so
-			those are the only safe places to jump to.
-		*/
-		std::vector<std::pair<uint32_t, uint32_t>> sections;	// (sampleTime, start)
-	};
-
-	std::vector<StreamVoice> streamVoices;
-
-	/** Re-keys every streamed voice at the section nearest before `targetSample`. */
-	bool repositionStream (uint32_t targetSample);
 	bool isolated = false;					// setTrackAudible() named a track
 	playback::TrackId myTrack {};
 	bool myTrackAudible = true;

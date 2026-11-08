@@ -1,4 +1,4 @@
-#ifndef __VGMPLAYER_HPP__
+﻿#ifndef __VGMPLAYER_HPP__
 #define __VGMPLAYER_HPP__
 
 #include "../stdtype.h"
@@ -150,17 +150,6 @@ public:
 	uint8_t UnloadFile(void);
 	const VGM_HEADER* GetFileHeader(void) const;
 
-	/** **[TOYBOX PATCH] Write one device register from outside the player.**
-
-		The YMZ280B rips in this project are a single long stream: the driver writes their registers
-		inside the first second and never again, so `Seek`'s replay of register writes lands on the
-		state the song started from and the audio does not move (measured: identical RMS at 0 s, 5 s
-		and 30 s). Repositioning such a voice can only be done by rewriting its start address and
-		keying it on again, which needs a register write from the player's owner - and `GetDevicePtr`
-		is private. This exposes exactly that one operation, resolving the device the same way the
-		command handlers do. Nothing in this class calls it.
-	*/
-	uint8_t WriteDeviceRegister(uint8_t chipType, uint8_t chipID, uint8_t reg, uint8_t value);
 	
 	const char* const* GetTags(void);
 	uint8_t GetSongInfo(PLR_SONG_INFO& songInf);

@@ -1,4 +1,4 @@
-#include <stdlib.h>
+﻿#include <stdlib.h>
 #include <string.h>
 #include <stdio.h>	// for snprintf()
 #include <math.h>	// for pow()
@@ -1992,22 +1992,6 @@ uint8_t VGMPlayer::SeekToFilePos(uint32_t pos)
 	}
 	_playState &= ~PLAYSTATE_SEEK;
 	
-	return 0x00;
-}
-
-// [TOYBOX PATCH] See the declaration in vgmplayer.hpp: one register write, with the device resolved
-// the same way the command handlers resolve it. It exists so the player's owner can reposition a
-// streamed sample voice - rewrite its start address, then key it on - which the seek path cannot do
-// from the write stream alone, because these drivers stop writing registers after their first second.
-uint8_t VGMPlayer::WriteDeviceRegister(uint8_t chipType, uint8_t chipID, uint8_t reg, uint8_t value)
-{
-	CHIP_DEVICE* cDev = GetDevicePtr(chipType, chipID);
-
-	if (cDev == NULL || cDev->write8 == NULL || cDev->base.defInf.dataPtr == NULL)
-		return 0x01;
-
-	cDev->write8(cDev->base.defInf.dataPtr, reg, value);
-
 	return 0x00;
 }
 
