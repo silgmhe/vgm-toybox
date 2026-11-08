@@ -687,40 +687,48 @@ bool LibvgmTrackPlayer::captureState (playback::ChipStateSnapshot& snapshot) con
 						  return a.decoder->channelCount () > b.decoder->channelCount ();
 					  });
 
-	// **One instance per device.** libvgm can hand the same device twice - the Mega Drive's PSG arrives
-	// as its own instance beside the YM2612's - and the mixer lists it once. Counting it twice made the
-	// block placement overshoot: the second copy's channels landed where no track exists, they fell out
-	// of the track scan, and the page showed a second `SEGA PSG` group at the bottom with the same four
-	// rows. The first instance of a device describes it; the rest are the same voices.
+	// **A device that arrives twice shares one block.** libvgm hands the Mega Drive's PSG over twice -
+	// once on its own, once beside the YM2612 - and the mixer lists it once. Counting both put the
+	// second copy's channels past the last track, so they fell out of the track scan and the page grew
+	// a second `SEGA PSG` group; skipping the copy instead threw away the states, because the instance
+	// carrying them is not always the first one. Both are kept, and they are placed on the same block.
+	auto blockOf = [&instances] (const std::size_t index)
 	{
-		std::vector<std::pair<uint32_t, int>> seen;
+		const auto key = std::make_pair (instances[index].deviceId,
+										 instances[index].decoder->channelCount ());
 
-		instances.erase (std::remove_if (instances.begin (), instances.end (),
-										 [&seen] (const auto& instance)
-										 {
-											 const auto key = std::make_pair (instance.deviceId,
-																			  instance.decoder->channelCount ());
+		for (std::size_t earlier = 0; earlier < index; ++earlier)
+		{
+			if (std::make_pair (instances[earlier].deviceId,
+								instances[earlier].decoder->channelCount ()) == key)
+			{
+				return earlier;
+			}
+		}
 
-											 if (std::find (seen.begin (), seen.end (), key) != seen.end ())
-											 {
-												 return true;
-											 }
+		return index;
+	};
 
-											 seen.push_back (key);
-											 return false;
-										 }),
-						 instances.end ());
-	}
+	std::vector<int> deviceBases;
 
-	std::vector<int> counts;
-	counts.reserve (instances.size ());
-
-	for (const auto& instance : instances)
 	{
-		counts.push_back (instance.decoder->channelCount ());
-	}
+		// Bases are handed out once per distinct device, in the order the instances appear.
+		std::vector<std::pair<uint32_t, int>> devices;
+		std::vector<int> counts;
 
-	const std::vector<int> bases = channelBases (counts);
+		for (const auto& instance : instances)
+		{
+			const auto key = std::make_pair (instance.deviceId, instance.decoder->channelCount ());
+
+			if (std::find (devices.begin (), devices.end (), key) == devices.end ())
+			{
+				devices.push_back (key);
+				counts.push_back (instance.decoder->channelCount ());
+			}
+		}
+
+		deviceBases = channelBases (counts);
+	}
 
 	for (std::size_t instanceIndex = 0; instanceIndex < instances.size (); ++instanceIndex)
 	{
@@ -789,7 +797,8 @@ bool LibvgmTrackPlayer::captureState (playback::ChipStateSnapshot& snapshot) con
 
 			// Set here rather than inside the conversion: which engine track a channel belongs to is
 			// a fact about this runtime, not about the chip, and the conversion has no engine to ask.
-			state.trackIndex = trackFor (instance.deviceId, bases[instanceIndex] + channel);
+			state.trackIndex = trackFor (instance.deviceId,
+										 deviceBases[blockOf (instanceIndex)] + channel);
 
 			// **The name of a row is the name of the track it belongs to.** The chip's own table is
 			// not the same thing: a linked voice set shares its parent's table, so the SSG's three
@@ -910,7 +919,12 @@ bool LibvgmTrackPlayer::captureState (playback::ChipStateSnapshot& snapshot) con
 
 		for (const auto& track : *tracks)
 		{
-			bool placed = false;
+			// **One row per track, and the fullest state wins.** A device that libvgm hands over twice
+			// produces two states for the same voice - one of them empty, and not always the same one -
+			// so choosing by track means choosing between them rather than emitting both. The score
+			// prefers a shape over a bare note, and a note over nothing.
+			const playback::ChannelState* best = nullptr;
+			int bestScore = -1;
 
 			for (const auto& state : snapshot.channels)
 			{
@@ -919,21 +933,30 @@ bool LibvgmTrackPlayer::captureState (playback::ChipStateSnapshot& snapshot) con
 					continue;
 				}
 
-				rows.push_back (state);
-				placed = true;
+				const int score = (state.wave != nullptr ? 4 : 0) + (state.active ? 2 : 0)
+								  + (state.note >= 0 ? 1 : 0);
+
+				if (score > bestScore)
+				{
+					bestScore = score;
+					best = &state;
+				}
 			}
 
-			if (! placed)
+			if (best != nullptr)
 			{
-				// A voice that has not sounded yet: a row with a name and nothing else, so the page
-				// does not gain and lose rows while the song plays.
-				playback::ChannelState empty;
-				empty.name = track.name.toStdString ();
-				empty.chipName = track.groupName.toStdString ();
-				empty.trackIndex = (int) track.id;
-				empty.note = -1;
-				rows.push_back (std::move (empty));
+				rows.push_back (*best);
+				continue;
 			}
+
+			// A voice that has not sounded yet: a row with a name and nothing else, so the page does
+			// not gain and lose rows while the song plays.
+			playback::ChannelState empty;
+			empty.name = track.name.toStdString ();
+			empty.chipName = track.groupName.toStdString ();
+			empty.trackIndex = (int) track.id;
+			empty.note = -1;
+			rows.push_back (std::move (empty));
 		}
 
 		// **A state no track describes is a layout disagreement, not a row.** Appending it showed the
