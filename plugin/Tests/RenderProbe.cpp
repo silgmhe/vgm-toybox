@@ -954,6 +954,41 @@ int main (int argc, char** argv)
 		return runLiveRows (engine, seconds, only, exportFolder);
 	}
 
+	// -5 <seconds>: seek, then say where the engine thinks it is. Without this the only way to tell
+	// "the seek jumped" from "it played from the start" was the ear - which cost a round trip per
+	// attempt on the YMZ280B files.
+	if (wanted == -5)
+	{
+		std::printf ("song: %s   seek -> %.1f s\n", argv[1], seconds);
+
+		engine.setPositionSeconds (seconds);
+		engine.play ();
+
+		const auto audio = renderSeconds (engine, 0.2);
+
+		// **The position is not the content.** A player can report the target and still be rendering
+		// the opening bars - which is exactly the complaint a seek bar cannot distinguish. RMS tells
+		// the two apart without ears, and differing between two targets means the audio moved too.
+		double energy = 0.0;
+
+		for (std::size_t i = 0; i < audio.size (); ++i)
+		{
+			const double sample = (double) audio[i];
+			energy += sample * sample;
+		}
+
+		const double rms = audio.empty () ? 0.0 : std::sqrt (energy / (double) audio.size ());
+
+		toybox::playback::ChipStateSnapshot snapshot;
+		engine.captureChipState (snapshot);
+
+		std::printf ("  engine %.2f s   snapshot %.2f s   channels %d   rms %.5f\n",
+					 engine.getPositionSeconds (), snapshot.positionSeconds,
+					 (int) snapshot.channels.size (), rms);
+
+		return 0;
+	}
+
 	std::printf ("song: %s   tracks: %d   rendered: %.1f s\n", argv[1], (int) tracks.size (), seconds);
 
 	for (size_t track = 0; track < tracks.size (); ++track)

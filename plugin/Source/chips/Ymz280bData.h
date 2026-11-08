@@ -46,11 +46,16 @@ namespace toybox::chips::ymz280b
 			int32_t signal = 0;
 			int32_t step = 0x7f;
 
+			// **`start` is a byte address, and the steps are nibbles inside those bytes.** The core
+			// keeps one counter and halves it (`ymz280b_read_memory(position / 2)`), which reads as
+			// "the addresses are nibbles" - they are not: measured against the file, start 0x3915D8
+			// indexes the payload directly (26 sign changes decoding from there), while halving it
+			// lands 1.9 MB before the block, in zeros, and an all-zero ADPCM run is a ramp - the
+			// smooth curve that looked like a wavetable but carried no signal.
 			for (uint32_t i = 0; i < steps; ++i)
 			{
-				const uint32_t position = start + i;
-				const std::size_t byte = (std::size_t) ((position / 2) % (uint32_t) rom.size ());
-				const int nibble = (rom[byte] >> ((~position & 1u) << 2)) & 0x0F;
+				const std::size_t byte = (std::size_t) ((start + i / 2) % (uint32_t) rom.size ());
+				const int nibble = (rom[byte] >> (((i & 1u) == 0) ? 4 : 0)) & 0x0F;
 
 				signal = (signal * 254) / 256 + (step * diffOf (nibble)) / 8;
 				signal = std::clamp (signal, -32768, 32767);

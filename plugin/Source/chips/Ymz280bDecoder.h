@@ -45,7 +45,7 @@ public:
 
 	/** What this chip needs besides its register writes: a clock to fall back on - and **the sample
 		ROM**, which block `0x86` carries with a size/offset header, so this is not a RAM upload. */
-		static constexpr ChipRequirements kRequirements { 16934400u, true, 0x86, 512u * 1024u, false, false };
+		static constexpr ChipRequirements kRequirements { 16934400u, true, 0x86, 8u * 1024u * 1024u, false, false };
 
 	void attachMemory (const ChipMemory& memory) override
 	{

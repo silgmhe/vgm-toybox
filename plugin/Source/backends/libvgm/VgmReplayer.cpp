@@ -178,6 +178,21 @@ void VgmReplayer::advanceTo (uint32_t sampleTime)
 			writes.erase (writes.begin (), writes.begin () + (std::ptrdiff_t) consumed);
 		}
 	}
+
+	// **[TOYBOX PATCH] Advance every decoder to the capture time, not just to the last write.**
+
+	// `advance()` used to be called only with a write's own `sampleTime` (the loop above), so a chip
+	// that needs the passage of time - the YMZ280B row shows the slice being read - froze as soon as
+	// the last write of a section had gone past: the probe measured the identical window at t=5 s and
+	// t=15 s, because `now` never moved again. The target time is known right here, so pass it on.
+	// Decoders that do not use `advance()` ignore it, which is most of them.
+	for (auto& instance : live)
+	{
+		if (instance.decoder != nullptr)
+		{
+			instance.decoder->advance (sampleTime);
+		}
+	}
 }
 
 void VgmReplayer::rewind (void)

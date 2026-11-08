@@ -2,6 +2,8 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdio>
+#include <cstdlib>
 #include <cstdint>
 #include <map>
 
@@ -71,7 +73,27 @@ struct Ymz280bDecoder::Impl
 	*/
 	uint32_t positionOf (const Voice& voice) const
 	{
-		return voice.start;
+		const double elapsed = (double) (now - voice.keyTime) / timeBase;
+		const double steps = elapsed * ymz280b::rateOf (clock, voice.fnum, voice.mode);
+		const uint32_t span = (voice.stop > voice.start) ? (voice.stop - voice.start) : 0;
+		uint32_t offset = (uint32_t) (steps > 0.0 ? steps : 0.0);
+
+		// **Advance inside the range, and only inside it.** The baseline (`keyTime`) is reset by
+		// every write that moves start or stop, so `elapsed` never spans two sections; clamping then
+		// keeps a slow or stalled driver from reading past the data into the zeros after it.
+		if (span != 0)
+		{
+			if (voice.looping && voice.loopEnd > voice.start && (voice.loopEnd - voice.start) <= span)
+			{
+				offset %= (voice.loopEnd - voice.start);
+			}
+			else if (offset > span)
+			{
+				offset = span;
+			}
+		}
+
+		return voice.start + offset;
 	}
 
 	/** One window of the ROM, decoded the way the chip plays it.
@@ -90,6 +112,26 @@ struct Ymz280bDecoder::Impl
 		}
 
 		ymz280b::decodeRange (rom, voice.mode, positionOf (voice), (uint32_t) kWindowSteps, out);
+
+		// **Normalised for the eye, not for the ear.** An ADPCM run started from zero state ramps up
+		// from silence, so the first 256 steps of a slice sit around a few hundredths of full scale -
+		// measured peaks of 0.047 on these rips, which draws as a flat line even though every one of
+		// those 256 steps is a different value. The file keeps the absolute level (the collector
+		// decodes from the range's own start), so nothing is lost where it matters.
+		float peak = 0.0f;
+
+		for (const float point : out)
+		{
+			peak = std::max (peak, std::fabs (point));
+		}
+
+		if (peak > 1.0e-4f)
+		{
+			for (auto& point : out)
+			{
+				point /= peak;
+			}
+		}
 	}
 };
 
@@ -109,6 +151,14 @@ void Ymz280bDecoder::reset (const ChipConfig& config)
 	impl->clock = (config.clockHz != 0) ? config.clockHz : kDefaultClock;
 	impl->timeBase = (config.timeBaseHz > 0.0) ? config.timeBaseHz : 44100.0;
 	impl->rom = std::move (rom);
+
+	if (std::getenv ("TOYBOX_YMZ_ROM") != nullptr)
+	{
+		std::size_t firstNonZero = impl->rom.size ();
+		for (std::size_t i = 0; i < impl->rom.size (); ++i) { if (impl->rom[i] != 0) { firstNonZero = i; break; } }
+		std::fprintf (stderr, "    YMZ rom size=%u firstNonZero=0x%X\n",
+					  (unsigned) impl->rom.size (), (unsigned) firstNonZero);
+	}
 }
 
 void Ymz280bDecoder::setRom (std::vector<uint8_t> rom)
@@ -119,6 +169,14 @@ void Ymz280bDecoder::setRom (std::vector<uint8_t> rom)
 	}
 
 	impl->rom = std::move (rom);
+
+	if (std::getenv ("TOYBOX_YMZ_ROM") != nullptr)
+	{
+		std::size_t firstNonZero = impl->rom.size ();
+		for (std::size_t i = 0; i < impl->rom.size (); ++i) { if (impl->rom[i] != 0) { firstNonZero = i; break; } }
+		std::fprintf (stderr, "    YMZ rom size=%u firstNonZero=0x%X\n",
+					  (unsigned) impl->rom.size (), (unsigned) firstNonZero);
+	}
 }
 
 void Ymz280bDecoder::write (const RegisterWrite& w)
@@ -165,6 +223,22 @@ void Ymz280bDecoder::write (const RegisterWrite& w)
 
 	const int index = (w.reg >> 2) & 7;
 	Impl::Voice& voice = impl->voices[index];
+
+	// **A write that moves the range also moves the position baseline.** The streamed drivers here
+	// rewrite start and stop as they feed the next section; without this the elapsed clock keeps
+	// counting from key-on and the estimate is immediately past the new range - which reads zeros
+	// and draws a flat line, the very symptom that took two rounds to chase down.
+	{
+		const int field = w.reg & 0xE3;
+		const bool isAddress = (field >= 0x20 && field <= 0x23)
+							   || (field >= 0x40 && field <= 0x43)
+							   || (field >= 0x60 && field <= 0x63);
+
+		if (isAddress)
+		{
+			voice.keyTime = w.sampleTime;
+		}
+	}
 
 	switch (w.reg & 0xE3)
 	{
@@ -259,6 +333,20 @@ ChannelState Ymz280bDecoder::channelState (int channel) const
 	}
 
 	Impl::Voice& voice = impl->voices[channel];
+
+	if (std::getenv ("TOYBOX_YMZ_STATE") != nullptr && channel == 0)
+	{
+		static int seen = 0;
+
+		if (seen++ % 60 == 0)
+		{
+			const std::size_t at = impl->rom.empty () ? 0 : (std::size_t) (voice.start % (uint32_t) impl->rom.size ());
+			std::fprintf (stderr, "    YMZ ch0 start=0x%X stop=0x%X mode=%d lvl=%d playing=%d size=%u rom[at]=0x%02X\n",
+						  (unsigned) voice.start, (unsigned) voice.stop, voice.mode, voice.level,
+						  voice.playing ? 1 : 0, (unsigned) impl->rom.size (),
+						  impl->rom.empty () ? 0xFF : impl->rom[at]);
+		}
+	}
 
 	state.present = true;
 	state.gate = voice.playing && voice.level > 0;

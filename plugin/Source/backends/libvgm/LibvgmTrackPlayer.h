@@ -118,6 +118,16 @@ private:
 	int loopCount = 1;
 	double fadeSeconds = 0.0;
 	bool loopsForever = false;				// the timeline reports an infinite runtime
+
+	/** **Whether a seek can mean anything for this song.**
+
+		A streamed sample player - the YMZ280B here - is driven by one long ROM stream, and the
+		driver writes its registers within the first second and then nothing. `VGMPlayer::Seek` moves
+		the tick and replays the writes, so it lands on the *same* chip state it started from: the
+		audio never changes (measured: identical RMS at 0 s, 5 s and 30 s). Reporting a new position
+		while playing the opening is worse than refusing, so a seek on such a song is ignored.
+	*/
+	bool seekable = true;
 	bool isolated = false;					// setTrackAudible() named a track
 	playback::TrackId myTrack {};
 	bool myTrackAudible = true;

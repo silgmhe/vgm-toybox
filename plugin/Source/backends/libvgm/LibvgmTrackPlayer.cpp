@@ -155,6 +155,15 @@ bool LibvgmTrackPlayer::seekSeconds (double seconds)
 		return false;
 	}
 
+	// **Decline rather than lie.** libvgm's seek replays register writes, and a streamed sample
+	// player has none after its opening second: the playhead would move while the audio did not
+	// (probe: identical RMS at 0 s, 5 s and 30 s on `03 Skull Fang`). Returning false leaves the
+	// position where it is, which is the truth until the chip can be repositioned by offset.
+	if (! seekable)
+	{
+		return false;
+	}
+
 	// **[TOYBOX NOTE] The seek itself is libvgm's, and it does not work for every file.**
 	//
 	// `VGMPlayer::Seek` (`vgmplayer.cpp:1939`) only parses **forward**: it calls `Reset()` when the
@@ -462,6 +471,23 @@ void LibvgmTrackPlayer::setReplaySource (std::shared_ptr<const midi::SongIr> ir,
 {
 	replayIr = std::move (ir);
 	replayDevices = devices;
+
+	// **A streamed sample player cannot be seeked**, because the song does not record how far into
+	// its ROM the chip has read - the driver writes its registers inside the first second and then
+	// leaves it running. Detect it once here, so `seekSeconds` can decline instead of moving the
+	// playhead while the audio keeps going from the start.
+	seekable = true;
+
+	if (replayIr != nullptr)
+	{
+		for (const auto& slot : replayIr->chips)
+		{
+			if (slot.kind == midi::ChipKind::ymz280b)
+			{
+				seekable = false;
+			}
+		}
+	}
 
 	// A new song has played nothing yet: the remembered samples belong to the old one.
 	ledger.lastPlayed.clear ();
