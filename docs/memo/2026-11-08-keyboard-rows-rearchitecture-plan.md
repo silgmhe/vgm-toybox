@@ -118,3 +118,6 @@ for (track : *tracks)  // channelIndex >= 0
 2. `channelBases` 之外保留“按声道数从多到少排序实例”这一步，让主设备领到 0 号块；等宽联动词道组沿用创建序。
 
 **仍未做**：§9.17.4 记录的 ADPCM-B 未接 ROM、其行可能借用 ADPCM-A 波形两条，本轮未触及。
+
+**后续修正（同日，最终形态）**：`channelBases`、按声道数排序、按 id 去重、`trackFor` 全部删除。它们都在猜“`instances()` 与 `tracks` 的顺序一致”，而这个前提不成立（Mega Drive 的 PSG 先被写、却排在 YM2612 之后，整体错位 4 行）。最终改为 `TrackInfo.sourceDeviceId` + `deviceChannel` 精确配对，见
+`docs/memo/2026-11-08-a-row-needs-an-identity.md`。

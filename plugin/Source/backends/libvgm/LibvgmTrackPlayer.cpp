@@ -695,22 +695,17 @@ bool LibvgmTrackPlayer::captureState (playback::ChipStateSnapshot& snapshot) con
 	snapshot.positionSeconds = seconds;
 	snapshot.valid = true;
 
-	// **Rows are numbered device by device**, exactly as `describeSong` numbers the tracks: the head
-	// device owns `0 .. n-1`, every device after it continues from the end of the previous block.
-	// `channelBases` does that placement from the block sizes alone, so a linked voice set can never be
-	// mistaken for its parent - libvgm reports the SSG with the parent's id *and* the parent's
-	// `PLR_DEV_INFO`, which is why every attempt to tell the two apart by a device field failed, and
-	// why the SSG's three channels used to be attached to FM 1..3.
-	//
-	// The walk is sorted widest-first so the head leads and its voice sets follow. Sizes are what
-	// distinguish them (thirteen against three on a YM2610); a linked set with as many channels as its
-	// parent keeps the order it was created in, which is the order the tracks were made in.
+	// **A voice is found by the pair `describeSong` wrote down, not by where it sits in a container.**
+	// `TrackInfo::sourceDeviceId` names the device a row really describes (a linked voice set keeps the
+	// child's id there, not its parent's) and `deviceChannel` names the channel inside it. Matching on
+	// that pair is what makes the walk order irrelevant: instances appear in the order commands reached
+	// them, tracks in the order the header lists devices, and those two orders differ - the Mega Drive's
+	// PSG is written first but listed after the YM2612, which shifted four rows.
 	auto instances = replayer->instances ();
 
-	// No ordering is imposed on the instances any more: each voice is found by the pair
-	// `(sourceDeviceId, deviceChannel)` that `describeSong` wrote down, so the order they are walked in
-	// cannot matter. It used to be sorted widest-first so the head led its voice set - which was right
-	// only while the track numbering happened to agree with that order.
+	// No ordering is imposed on the instances: the lookup above is by identity, so the order they are
+	// walked in cannot matter. A sort used to stand here - widest device first - which held only while
+	// the instance order happened to agree with the track numbering.
 	for (std::size_t instanceIndex = 0; instanceIndex < instances.size (); ++instanceIndex)
 	{
 		const auto& instance = instances[instanceIndex];
