@@ -919,9 +919,14 @@ SongDescription describeSong (LibvgmTrackPlayer* probe)
 
 		const bool isolatable = isIsolatable (device);
 
+		// `sourceId` and `deviceChannel` are what identify the voice: `device.id` is the head's, which a
+		// linked voice set shares, and `channelIndex` is the song-wide number. Both are known here and
+		// nowhere downstream, so they are written down rather than reconstructed later.
 		const auto addTrack = [&result, &device, deviceIndex, &groupName] (int channelIndex,
-																		const juce::String& name,
-																		bool trackIsolatable)
+																			const juce::String& name,
+																			bool trackIsolatable,
+																			playback::DeviceId sourceId,
+																			int deviceChannel)
 		{
 			playback::TrackInfo track;
 			track.id = (playback::TrackId) result.tracks.size();	// the handle the core passes back
@@ -929,6 +934,8 @@ SongDescription describeSong (LibvgmTrackPlayer* probe)
 			track.deviceIndex = deviceIndex;
 			track.channelIndex = channelIndex;
 			track.isolatable = trackIsolatable;
+			track.sourceDeviceId = sourceId;
+			track.deviceChannel = deviceChannel;
 			track.name = name;
 			track.groupName = groupName;
 			track.midiCapability = midiCapabilityFor (device, channelIndex);
@@ -937,7 +944,7 @@ SongDescription describeSong (LibvgmTrackPlayer* probe)
 
 		if (! isolatable)
 		{
-			addTrack (-1, "All", false);
+			addTrack (-1, "All", false, device.id, -1);
 		}
 		else
 		{
@@ -946,7 +953,7 @@ SongDescription describeSong (LibvgmTrackPlayer* probe)
 				const juce::String name = (channelNames != nullptr && channelNames[channel] != nullptr)
 											? juce::String (channelNames[channel])
 											: ("Ch " + juce::String (channel + 1));
-				addTrack (channel, name, true);
+				addTrack (channel, name, true, device.id, channel);
 			}
 		}
 
@@ -971,7 +978,8 @@ SongDescription describeSong (LibvgmTrackPlayer* probe)
 
 			for (int channel = 0; channel < childChannels; ++channel)
 			{
-				addTrack (linkedBase + channel, "SSG " + juce::String (channel + 1), childIsolatable);
+				addTrack (linkedBase + channel, "SSG " + juce::String (channel + 1), childIsolatable,
+						 child.id, channel);
 			}
 
 			linkedBase += childChannels;

@@ -7,7 +7,6 @@
 #include "utils/MemoryLoader.h"
 
 #include "LibvgmMuteIsolation.h"
-#include "ChipVoiceLayout.h"
 #include "emu/SoundDevs.h"
 
 #include <algorithm>
@@ -595,6 +594,38 @@ void LibvgmTrackPlayer::Ledger::buildNotes (const midi::SongIr& ir)
 	}
 }
 
+int LibvgmTrackPlayer::trackForVoice (playback::DeviceId sourceId, int deviceChannel) const
+{
+	if (tracks == nullptr)
+	{
+		return -1;
+	}
+
+	int wholeDevice = -1;
+
+	for (std::size_t i = 0; i < tracks->size (); ++i)
+	{
+		const auto& track = (*tracks)[i];
+
+		if (track.sourceDeviceId != sourceId)
+		{
+			continue;
+		}
+
+		if (track.deviceChannel == deviceChannel)
+		{
+			return (int) i;
+		}
+
+		if (track.deviceChannel < 0)
+		{
+			wholeDevice = (int) i;		// the core cannot isolate this device any further
+		}
+	}
+
+	return wholeDevice;
+}
+
 int LibvgmTrackPlayer::trackFor (int channel) const
 {
 	if (tracks == nullptr)
@@ -676,55 +707,10 @@ bool LibvgmTrackPlayer::captureState (playback::ChipStateSnapshot& snapshot) con
 	// parent keeps the order it was created in, which is the order the tracks were made in.
 	auto instances = replayer->instances ();
 
-	std::stable_sort (instances.begin (), instances.end (),
-					  [] (const auto& a, const auto& b)
-					  {
-						  return a.decoder->channelCount () > b.decoder->channelCount ();
-					  });
-
-	// **A device that arrives twice shares one block.** libvgm hands the Mega Drive's PSG over twice -
-	// once on its own, once beside the YM2612 - and the mixer lists it once. Counting both put the
-	// second copy's channels past the last track, so they fell out of the track scan and the page grew
-	// a second `SEGA PSG` group; skipping the copy instead threw away the states, because the instance
-	// carrying them is not always the first one. Both are kept, and they are placed on the same block.
-	auto blockOf = [&instances] (const std::size_t index)
-	{
-		const auto key = std::make_pair (instances[index].deviceId,
-										 instances[index].decoder->channelCount ());
-
-		for (std::size_t earlier = 0; earlier < index; ++earlier)
-		{
-			if (std::make_pair (instances[earlier].deviceId,
-								instances[earlier].decoder->channelCount ()) == key)
-			{
-				return earlier;
-			}
-		}
-
-		return index;
-	};
-
-	std::vector<int> deviceBases;
-
-	{
-		// Bases are handed out once per distinct device, in the order the instances appear.
-		std::vector<std::pair<uint32_t, int>> devices;
-		std::vector<int> counts;
-
-		for (const auto& instance : instances)
-		{
-			const auto key = std::make_pair (instance.deviceId, instance.decoder->channelCount ());
-
-			if (std::find (devices.begin (), devices.end (), key) == devices.end ())
-			{
-				devices.push_back (key);
-				counts.push_back (instance.decoder->channelCount ());
-			}
-		}
-
-		deviceBases = channelBases (counts);
-	}
-
+	// No ordering is imposed on the instances any more: each voice is found by the pair
+	// `(sourceDeviceId, deviceChannel)` that `describeSong` wrote down, so the order they are walked in
+	// cannot matter. It used to be sorted widest-first so the head led its voice set - which was right
+	// only while the track numbering happened to agree with that order.
 	for (std::size_t instanceIndex = 0; instanceIndex < instances.size (); ++instanceIndex)
 	{
 		const auto& instance = instances[instanceIndex];
@@ -796,7 +782,7 @@ bool LibvgmTrackPlayer::captureState (playback::ChipStateSnapshot& snapshot) con
 			// `deviceId` - `describeSong` creates them inside the head's loop - so filtering by id can
 			// never find them. That is the whole reason the SSG and PSG rows sat empty while the mixer,
 			// which does no such matching, drew them: it was not the block arithmetic at all.
-			state.trackIndex = trackFor (deviceBases[blockOf (instanceIndex)] + channel);
+			state.trackIndex = trackForVoice (instance.deviceId, channel);
 
 			// **The name of a row is the name of the track it belongs to.** The chip's own table is
 			// not the same thing: a linked voice set shares its parent's table, so the SSG's three

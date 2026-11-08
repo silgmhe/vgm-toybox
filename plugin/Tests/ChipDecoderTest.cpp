@@ -19,7 +19,6 @@
 #include "midi/SongIr.h"
 
 #include "backends/libvgm/C140Samples.h"
-#include "backends/libvgm/ChipVoiceLayout.h"
 #include "backends/libvgm/C352Samples.h"
 #include "backends/libvgm/QSoundSamples.h"
 #include "backends/libvgm/Rf5c68Samples.h"
@@ -6962,32 +6961,6 @@ void testWaveExport (void)
 		}
 	}
 
-/** **The numbering a linked voice set has to land on.**
-
-	The YM2610 is thirteen voices followed by a linked three-voice SSG, and libvgm reports both with the
-	same id and pointer - so the only thing that can place the SSG is the size of the block before it.
-	The three cases below are the ones that have broken in practice: a voice set narrower than its
-	parent, a device on its own, and an empty block that must not shift what follows.
-*/
-void testChipVoiceBases (void)
-{
-	using toybox::backends::libvgm::channelBases;
-
-	const auto opn = channelBases ({ 13, 3 });
-	check (opn.size() == 2 && opn[0] == 0, "the head device starts at zero");
-	check (opn[1] == 13, "a three-voice SSG starts after the parent's thirteen");
-
-	const auto single = channelBases ({ 16 });
-	check (single.size() == 1 && single[0] == 0, "a device on its own starts at zero");
-
-	const auto withEmpty = channelBases ({ 8, 0, 4 });
-	check (withEmpty.size() == 3 && withEmpty[2] == 8, "an empty block shifts nothing");
-
-	// Same count on both sides: the linked set is placed by order, not by size.
-	const auto twins = channelBases ({ 18, 18 });
-	check (twins[1] == 18, "an equally wide voice set still starts after its parent");
-}
-
 int main (void){
 	std::printf ("chip decoder test\n");
 
@@ -7220,7 +7193,6 @@ int main (void){
 	testNesNoisePitch();
 	testNesPulseHitCount();
 	testChannelFromChip();
-	testChipVoiceBases();
 
 	std::printf ("Result    : %s\n", failures == 0 ? "PASS" : "FAILURES");
 	return failures == 0 ? 0 : 1;

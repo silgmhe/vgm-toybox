@@ -84,6 +84,21 @@ struct TrackInfo
 	juce::String name;				// "Pulse 1" / "Ch 3" / "All"
 	juce::String groupName;			// the group header above the strip row (device name, "#2" ...)
 	MidiCapability midiCapability = MidiCapability::unavailable;
+
+	/** **Which device this row really belongs to, and which channel within it.**
+
+		`deviceId` is the device's public handle, and for a linked voice set that handle is its *parent's*
+		- the row is created inside the head's loop - so it cannot be used to find the voice.
+		`channelIndex` is the song-wide number and cannot be turned back into a device-local one either.
+
+		These two are written where both facts are still known (`describeSong`), so no reader has to infer
+		them from order or arithmetic. A negative `deviceChannel` means the row covers the whole device,
+		because the core cannot isolate it any further.
+
+		They sit at the end of the struct so the aggregate initialisers elsewhere keep their meaning.
+	*/
+	DeviceId sourceDeviceId {};
+	int deviceChannel = -1;
 };
 
 /** Metadata and timeline facts of an open song, in seconds. */

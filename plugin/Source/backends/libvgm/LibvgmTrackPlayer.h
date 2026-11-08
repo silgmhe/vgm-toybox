@@ -107,6 +107,10 @@ private:
 		tracks are created with the *parent's* id (`describeSong` builds them inside the head's loop), so
 		matching on the id could never find them, while the number alone is unique across the song. */
 	int trackFor (int channel) const;
+
+	/** The track that describes this device voice: the pair written by `describeSong`. A row that covers
+		the whole device (negative deviceChannel) answers for any channel of that device. */
+	int trackForVoice (playback::DeviceId sourceId, int deviceChannel) const;
 	void applyMuting (uint32_t deviceId, const PLR_MUTE_OPTS& muteOpts);
 	/** Rebuilds the whole mute configuration from the isolated track and the chip mute states. */
 	void applyIsolation (void);
