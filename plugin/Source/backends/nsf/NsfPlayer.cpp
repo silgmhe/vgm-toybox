@@ -1,4 +1,4 @@
-﻿#include "backends/nsf/NsfPlayer.h"
+#include "backends/nsf/NsfPlayer.h"
 
 #include <algorithm>
 #include <cmath>

@@ -1,4 +1,4 @@
-﻿#include "backends/nsf/NsfBus.h"
+#include "backends/nsf/NsfBus.h"
 
 #include <cstdint>
 

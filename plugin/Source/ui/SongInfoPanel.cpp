@@ -1,4 +1,4 @@
-﻿#include "SongInfoPanel.h"
+#include "SongInfoPanel.h"
 
 #include "Format.h"
 #include "Theme.h"

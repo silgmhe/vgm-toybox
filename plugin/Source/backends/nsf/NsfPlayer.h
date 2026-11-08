@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 #include "playback/ChipState.h"
 #include "playback/MidiSequence.h"

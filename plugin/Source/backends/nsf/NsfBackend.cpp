@@ -1,4 +1,4 @@
-﻿#include "backends/nsf/NsfBackend.h"
+#include "backends/nsf/NsfBackend.h"
 
 #include <atomic>
 #include <cstring>

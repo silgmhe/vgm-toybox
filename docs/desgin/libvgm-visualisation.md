@@ -1,4 +1,4 @@
-﻿# libvgm 的逐通道可视化：设计
+# libvgm 的逐通道可视化：设计
 
 > 前置：`docs/research/2026-11-01-libvgm-visualisation-survey.md`（哪些能拿、哪些拿不到）。
 > 分支：`feature/libvgm-visualisation`。

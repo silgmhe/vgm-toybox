@@ -1,4 +1,4 @@
-﻿/*
+/*
 	Console harness for the window - the runner of docs/desgin/testing-architecture.md.
 
 	It builds the real ToyboxAudioProcessor and ToyboxAudioProcessorEditor, lays them out at a real

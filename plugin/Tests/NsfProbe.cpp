@@ -1,4 +1,4 @@
-﻿/*
+/*
     The player, driven the way the backend will drive it.
 
     Prints the one number that decides whether the CPU, the bus and the trampoline are all correct
