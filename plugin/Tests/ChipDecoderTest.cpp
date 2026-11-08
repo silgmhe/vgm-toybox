@@ -575,6 +575,13 @@ namespace
 			check (state.wave != nullptr && state.wave->size () == 1022,
 				   "the shape is two values per byte of the range it names");
 			check (state.sampleRate > 0.0f, "and it states the rate DELTA-N asks for");
+
+			// **The shape is decoded once per range.** `channelState()` used to rebuild it on every
+			// call, and the note extractor asks once per register write: on `07 Stage 2` that decoded
+			// the same kilobytes ten thousand times and made loading take three and a half seconds.
+			// Identity, not equality, is what says the cache is doing its job.
+			check (decoder.channelState (12).wave == state.wave,
+				   "and the same range is not decoded twice");
 		}
 
 		{

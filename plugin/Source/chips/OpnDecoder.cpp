@@ -271,6 +271,13 @@ struct OpnDecoder::Impl
 	std::vector<uint8_t> adpcmBRom;
 	uint32_t adpcmBMask = 0;
 	std::map<uint32_t, double> adpcmBCycleCache;
+
+	/** **The decoded Delta-T shapes, keyed by the range they cover.** Without this the shape was
+		rebuilt on every `channelState()` call, and the note extractor asks once per register write: on
+		`07 Stage 2` that decoded the same kilobytes ten thousand times and made loading take three and
+		a half seconds instead of a tenth of one. A song has a handful of samples, so the cap is small;
+		clearing it only costs a re-decode of the next shape. */
+	std::map<uint64_t, std::shared_ptr<const std::vector<float>>> adpcmBShapes;
 	std::unique_ptr<OpnAdpcmBNoteTable> adpcmBTable;
 	OpnNoteTable table;
 
@@ -365,6 +372,7 @@ struct OpnDecoder::Impl
 		4-bit delta data, so it is decoded first - the period only exists in the running sum. */
 	double adpcmBCycleFor (uint32_t start)
 	{
+
 		if (adpcmBRom.empty())
 		{
 			return 0.0;
@@ -376,6 +384,8 @@ struct OpnDecoder::Impl
 			return cached->second;
 		}
 
+		// `estimateCycleLength()` looks at 2048 samples - 1024 bytes - and truncates anything longer, so
+		// decoding more than that only costs time: the answer is identical.
 		constexpr std::size_t kBytes = 4096;
 		std::vector<double> waveform;
 		waveform.reserve (kBytes * 2);
@@ -409,13 +419,17 @@ struct OpnDecoder::Impl
 		voice.active = true;
 		++voice.keyOns;
 
-		voice.cycleLength = adpcmBCycleFor (voice.latchStart);
-
 		// DELTA-N is a pitch register, so every keyed voice with a non-zero DELTA-N is melodic -
 		// the sample only decides whether a root correction can be added on top. Requiring a
 		// measurable period made the whole channel one-shot whenever the set's ROM was absent or
 		// its attack was noisy, which is what this used to do.
 		voice.melodic = voice.delta != 0;
+
+		// **Only a melodic voice reads the cycle.** Measuring it for a drum decodes a kilobyte and runs
+		// a lag sweep whose result nothing consults - DELTA-N zero returns a one-shot note before the
+		// number is ever read - and a Neo Geo track fires thousands of drums: on `07 Stage 2` that was
+		// three seconds of load time for a value that was thrown away.
+		voice.cycleLength = voice.melodic ? adpcmBCycleFor (voice.latchStart) : 0.0;
 		if (voice.melodic && voice.cycleLength > 0.0 && ! adpcmBRom.empty())
 		{
 			int fine = 0;
@@ -653,6 +667,7 @@ void OpnDecoder::setAdpcmBRom (std::vector<uint8_t> rom)
 	impl->adpcmBMask = pow2Mask (rom.size());
 	impl->adpcmBRom = std::move (rom);
 	impl->adpcmBCycleCache.clear();
+	impl->adpcmBShapes.clear();		// the shapes were decoded from the bytes that just changed
 }
 
 void OpnDecoder::write (const RegisterWrite& write)
@@ -999,32 +1014,45 @@ ChannelState OpnDecoder::channelState (int channel) const
 	// from the six ADPCM-A voices. Drawn only while the voice is gated, like those rows.
 	if (state.gate && ! impl->adpcmBRom.empty () && voice.latchEnd > voice.latchStart)
 	{
-		constexpr uint32_t kWindow = 4096;
-		const uint32_t length = (std::min) (voice.latchEnd - voice.latchStart, kWindow);
+		const uint64_t shapeKey = ((uint64_t) voice.latchStart << 32) | (uint64_t) voice.latchEnd;
+		auto cached = impl->adpcmBShapes.find (shapeKey);
 
-		auto wave = std::make_shared<std::vector<float>> ();
-		wave->reserve (length * 2);
-
-		double accumulator = 0.0;
-		int step = kAdpcmBStepMin;
-
-		for (uint32_t i = 0; i < length; ++i)
+		if (cached == impl->adpcmBShapes.end ())
 		{
-			const int byte = impl->adpcmBByte (voice.latchStart + i);
+			constexpr uint32_t kWindow = 4096;
+			const uint32_t length = (std::min) (voice.latchEnd - voice.latchStart, kWindow);
 
-			for (int half = 0; half < 2; ++half)
+			auto wave = std::make_shared<std::vector<float>> ();
+			wave->reserve (length * 2);
+
+			double accumulator = 0.0;
+			int step = kAdpcmBStepMin;
+
+			for (uint32_t i = 0; i < length; ++i)
 			{
-				const int nibble = (half == 0) ? ((byte >> kNibbleShift) & kNibbleMask)
-											   : (byte & kNibbleMask);
-				accumulator += (double) (kAdpcmBStepB1[nibble] * step / 8);
-				accumulator = std::clamp (accumulator, -32768.0, 32767.0);
-				wave->push_back ((float) (accumulator / 32768.0));
-				step = std::clamp (step * kAdpcmBStepB2[nibble] / 64, kAdpcmBStepMin,
-								   kAdpcmBStepMax);
+				const int byte = impl->adpcmBByte (voice.latchStart + i);
+
+				for (int half = 0; half < 2; ++half)
+				{
+					const int nibble = (half == 0) ? ((byte >> kNibbleShift) & kNibbleMask)
+												   : (byte & kNibbleMask);
+					accumulator += (double) (kAdpcmBStepB1[nibble] * step / 8);
+					accumulator = std::clamp (accumulator, -32768.0, 32767.0);
+					wave->push_back ((float) (accumulator / 32768.0));
+					step = std::clamp (step * kAdpcmBStepB2[nibble] / 64, kAdpcmBStepMin,
+									   kAdpcmBStepMax);
+				}
 			}
+
+			if (impl->adpcmBShapes.size () >= 64)
+			{
+				impl->adpcmBShapes.clear ();		// bounds a pathological song; costs one re-decode
+			}
+
+			cached = impl->adpcmBShapes.emplace (shapeKey, std::move (wave)).first;
 		}
 
-		state.wave = wave;
+		state.wave = cached->second;
 
 		// A sampled row states how fast it **plays**, not how fast it was recorded: DELTA-N is the rate
 		// here, and the keyboard draws these bytes at that speed.
