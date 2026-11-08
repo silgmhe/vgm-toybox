@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include <array>
 #include <cstdint>
@@ -39,6 +39,10 @@ public:
 
 	/** How many sound-register writes have been forwarded - the cheapest proof the driver ran. */
 	uint64_t soundWriteCount = 0;
+
+	/** Reads of $4015 and the last value answered: a driver that polls this and gets zero stops. */
+	uint64_t statusReadCount = 0;
+	uint8_t lastStatusValue = 0;
 
 	/** Writes into the $0200 page. A driver that decodes itself into RAM leaves its mark here;
 		zero of them means the decoder never ran, which is a different fault from "it ran and did

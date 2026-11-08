@@ -111,6 +111,8 @@ public:
 		"its writes never leave the bus", which sound identical in the audio. */
 	std::function<void (uint16_t address, uint8_t value)> onSoundWriteForDiagnostics;
 	uint8_t peekRam (uint16_t address) const;
+	uint64_t statusReads (void) const;
+	uint8_t lastStatus (void) const;
 
 	/** How much of the song the sample scan covers. Past this point a sample that has never been
 		heard gets no note rather than a made-up one. */

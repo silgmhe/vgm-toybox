@@ -328,8 +328,24 @@ int main (int argc, char** argv)
 
 	if (tracing)
 	{
-		player.onSoundWriteForDiagnostics = [&traced] (uint16_t address, uint8_t value)
+		player.onSoundWriteForDiagnostics = [&traced, &player] (uint16_t address, uint8_t value)
 		{
+			// **The gap between two $4017 writes is one NSF frame as the core counts it** - 29780
+			// clocks on NTSC. A driver that goes idle and a core that runs the frame at the wrong
+			// length look the same from the registers; this number tells them apart.
+			static uint64_t previousClock = 0;
+			static int framesSeen = 0;
+
+			if (address == 0x4017 && framesSeen < 6)
+			{
+				const auto now = player.executedClocks ();
+				std::printf ("[frame] $4017 after %llu clocks\n",
+							 (unsigned long long) (now - previousClock));
+
+				previousClock = now;
+				++framesSeen;
+			}
+
 			if (traced >= 240)
 			{
 				return;
