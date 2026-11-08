@@ -1,4 +1,4 @@
-﻿#include "OpnAdpcmSamples.h"
+#include "OpnAdpcmSamples.h"
 
 #include <algorithm>
 #include <cstdio>
@@ -8,6 +8,7 @@
 #include "ChipMemoryAssembly.h"
 #include "SampleCollector.h"
 #include "chips/ChipTypes.h"
+#include "chips/OpnDecoder.h"
 
 namespace toybox::backends::libvgm
 {
@@ -15,10 +16,6 @@ namespace
 {
 	/** ADPCM-A's image. `0x83` is the Delta-T block - swapping the two decodes drums as noise. */
 	constexpr uint8_t kRomType = 0x82;
-	// **Sixteen megabytes**: the start page addresses `((hi << 8) | lo) << 8`, and a rip may declare
-	// that in its block header and place the payload above the 8 MB line - which is where this cap
-	// used to drop it, leaving an image of zeros and an export of nothing.
-	constexpr std::size_t kMaxRomBytes = 16u << 20;
 	constexpr double kDefaultClock = 8000000.0;
 
 	struct Voice
@@ -42,7 +39,8 @@ std::vector<playback::DecodedSample> collectOpnAdpcmSamples (const midi::SongIr&
 {
 	SampleCollector collector;
 
-	const std::vector<uint8_t> rom = memory::rom (ir, kRomType, kMaxRomBytes, false);
+	const std::vector<uint8_t> rom = memory::rom (ir, kRomType, chips::OpnDecoder::kAdpcmAImageBytes,
+													false);
 
 	if (rom.empty ())
 	{
