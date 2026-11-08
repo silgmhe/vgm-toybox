@@ -461,6 +461,12 @@ int main (int argc, char** argv)
 
 		std::sort (top.begin (), top.end (), [] (const auto& a, const auto& b) { return a.first > b.first; });
 
+		// **The level, not just the register traffic.** A driver can write every frame and still have the
+		// chips produce nothing: an expansion chip that never got enabled looks exactly like a silent
+		// song, and the peak tells the two apart in one run.
+		std::printf ("[level] peak=%.4f rms=%.4f\n", peak,
+					 counted > 0 ? std::sqrt (sumSquares / (double) counted) : 0.0);
+
 		std::printf ("PC pages:");
 		for (std::size_t i = 0; i < top.size () && i < 6; ++i)
 		{
