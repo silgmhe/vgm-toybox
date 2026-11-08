@@ -373,6 +373,7 @@ private:
 		else if (command == "host") { commandHost (tokens); }
 		else if (command == "engine") { commandEngine (tokens); }
 		else if (command == "song") { commandSong (tokens); }
+	else if (command == "songasync") { commandSongAsync (tokens); }
 	else if (command == "samples") { commandSamples (tokens); }
 		else if (command == "tick") { commandTick (); }
 		else if (command == "shot") { commandShot (tokens); }
@@ -728,6 +729,52 @@ private:
 		report (ok, ok ? "song " + tokens[1] : "song: " + error);
 	}
 
+	/** **The switch the window actually uses**, exercised end to end: the result arrives through
+		`MessageManager::callAsync`, so the console has to pump the queue for it - which is also what
+		proves the callback is reachable outside the window.
+	*/
+	void commandSongAsync (const juce::StringArray& tokens)
+	{
+		if (tokens.size() < 2)
+		{
+			report (false, "songasync needs an index");
+			return;
+		}
+
+		bool completed = false;
+		bool built = false;
+		juce::String failure;
+
+		const bool accepted = processor.getEngine().selectSongAsync (
+			tokens[1].getIntValue () - 1,
+			[&completed, &built, &failure] (bool ok, const juce::String& error)
+			{
+				completed = true;
+				built = ok;
+				failure = error;
+			});
+
+		if (accepted)
+		{
+			juce::MessageManager::getInstance()->runDispatchLoopUntil (1000);
+		}
+
+		if (! accepted)
+		{
+			report (false, "songasync refused " + tokens[1]);
+			return;
+		}
+
+		if (! completed)
+		{
+			report (false, "songasync timed out");
+			return;
+		}
+
+		report (built, built ? "songasync " + juce::String (processor.getEngine().getSongIndex () + 1)
+							 : "songasync: " + failure);
+	}
+
 	void commandSamples (const juce::StringArray& tokens)
 	{
 		const auto list = processor.getEngine().currentSamples();
@@ -1048,6 +1095,7 @@ private:
 		std::printf ("    menu | menu invoke <entryId> | tick | shot <path.png> | size <w> <h>\n");
 		std::printf ("    host <seconds> [playing|stopped]   one process block with that host clock\n");
 		std::printf ("    engine <play|pause|stop>          a transport command from outside the buttons\n");
+		std::printf ("    song <n> | songasync <n>          switch song; the second uses the worker path\n");
 		std::printf ("    select <treeId> <row> | dump [<id>] | assert <id> <field> <op> <value> | sleep <ms>\n");
 		std::printf ("    fields: visible enabled checked text value typeface (components)\n");
 		std::printf ("            typeface is a Label/TextEditor; @systemUI resolves to the platform face\n");

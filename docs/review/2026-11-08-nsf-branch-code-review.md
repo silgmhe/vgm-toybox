@@ -213,6 +213,8 @@ PlaybackEngine.cpp:202-207   loadFileAsync()  { lock; songIndex = 0; }
 
 ## 八、整改状态（2026-11-08）
 
+**第一至七节描述的是整改前的代码**，其中的行号以当时为准；本节给出每一项的最终形态。
+
 | 项 | 状态 | 说明 |
 |---|---|---|
 | P0-1 同步重建 | 已修 | `selectSongAsync` 走 `loadPool`；面板乐观选中、失败拨回 |
@@ -230,6 +232,8 @@ PlaybackEngine.cpp:202-207   loadFileAsync()  { lock; songIndex = 0; }
 | S6 两处重复赋值 | 已修 | `recordSongs (const playback::SongInfo&)` |
 | S7 缺断言 | 已修 | 新增 `NsfFile::startSongFor()`，`NsfFormatTest` 四条断言覆盖首/末/越界/负数 |
 | S8 锁不一致 | 已说明 | 全部发生在消息线程；`takeSongForRebuild` 持锁只为复制镜像 |
+| S9 异步路径无验证 | 已补 | harness 新增 `songasync <n>`：`loadPool` → `callAsync` → 回填选择器，`songasync 5` 后控件显示 `5`，`99`/`0` 被拒 |
+| S10 文档与实现不符 | 已修 | §9.19 第 3 条与 NSF 备忘录的"两条加载路径都要重置"改为"曲目号是 `loadImage()` 的参数" |
 
 ### P0-4 的取舍
 

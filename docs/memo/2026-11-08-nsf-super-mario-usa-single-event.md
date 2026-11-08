@@ -5,7 +5,7 @@
 > | # | 现象 | 根因 | 修法 |
 > |---|---|---|---|
 > | 1 | Super Mario USA 只有一记 DPCM，三角波直流 | 文件头 `startSong = 16` 指向空壳曲目，音乐在 1–14；我们没有曲目选择 | `SongMemory::songIndex` + `PlaybackEngine::selectSong` + 信息卡下拉框 |
-> | 2 | 同上，但"为什么别人能播" | 他们从第 1 首开始；NSFPlay 系都遵守 `startSong` | 默认第一首（两条加载路径都重置） |
+> | 2 | 同上，但"为什么别人能播" | 他们从第 1 首开始；NSFPlay 系都遵守 `startSong` | 默认第一首（曲目号作为 `loadImage()` 的入参） |
 > | 3 | Ai Senshi Nicol 全曲静默、`pc=0002`、零写入 | `isBanked()` 只看镜像大小（20 KB），而头部 bank 表非零、`init=$D02B` 只能经 `$D000` 窗口访问 | 按头部 bank 表判定 banked |
 >
 > 三处的共同点：**判据必须来自文件或被模拟的实现，不能来自"看起来合理"的启发式**（大小、默认值、名字）。

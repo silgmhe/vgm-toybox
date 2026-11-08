@@ -1022,7 +1022,9 @@ NSF 走的是自研后端（`backends/nsf`，核心来自 `libs/nsfplay`），�
 
 **2. 默认曲目是"文件说的"，不是"用户想要的"。** `startSong` 只是默认值，有些 rip 把它指向一记音效（Super Mario USA 的 16，音乐在 1–14）。界面需要能选曲：`SongMemory::songIndex`（-1 = 用文件头的）→ `PlaybackEngine::selectSong()` → 信息卡下拉框（`song.selector`，仅 `songCount > 1` 时出现）。
 
-**3. 打开文件默认第 1 首。** 两条加载路径（`loadFile` 与 `loadFileAsync`）都必须在取构建快照前把 `songIndex` 置 0，否则异步路径会沿用上一次的值或 -1。
+**3. 打开文件默认第 1 首。** 目标曲目是 `PlaybackEngine::loadImage()` 的**参数**（`loadFile` 与
+`loadFileAsync` 各传 0），不再有可变的成员——因此不存在"某条加载路径忘记重置"这种可能。切曲目走
+`selectSongAsync()`，在加载 worker 上重建，失败则停播并在状态行报出原因（与打开文件同一语义）。
 
 **测量优先。** 这三处都不是靠听感定位的，而是靠探针：写入序列、每声道峰值（`--check`）、输出电平（`[level]`）、帧周期（两次 `$4017` 之间的 CPU 时钟）。判据表与回归基线写在
 `docs/memo/2026-11-08-nsf-super-mario-usa-single-event.md` 第 12–14 节。
