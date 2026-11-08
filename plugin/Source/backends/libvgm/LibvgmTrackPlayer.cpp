@@ -155,13 +155,25 @@ bool LibvgmTrackPlayer::seekSeconds (double seconds)
 		return false;
 	}
 
-	// **Decline rather than lie.** libvgm's seek replays register writes, and a streamed sample
-	// player has none after its opening second: the playhead would move while the audio did not
-	// (probe: identical RMS at 0 s, 5 s and 30 s on `03 Skull Fang`). Returning false leaves the
-	// position where it is, which is the truth until the chip can be repositioned by offset.
+	// **A streamed voice is moved by its start address, not by replaying writes.** libvgm's seek
+	// replays the register writes, and these drivers have none after their opening second: the
+	// playhead moved while the audio did not (probe: identical RMS at 0 s, 5 s, 30 s). What the
+	// driver does to advance its stream is rewrite `start`, so a seek does the same thing - put the
+	// voice at the byte the target time corresponds to, then key it on again.
 	if (! seekable)
 	{
-		return false;
+		const uint32_t target = (uint32_t) (juce::jmax (0.0, seconds) * sampleRate);
+
+		playerEngine.Seek (PLAYPOS_SAMPLE, target);
+
+		const double duration = playerEngine.GetTotalTime (PLAYTIME_LOOP_INCL | PLAYTIME_TIME_PBK);
+		const double fraction = (duration > 0.0) ? juce::jlimit (0.0, 1.0, seconds / duration) : 0.0;
+
+		repositionStream (fraction);
+
+		finished = false;
+		pendingRewind.store (true, std::memory_order_relaxed);
+		return true;
 	}
 
 	// **[TOYBOX NOTE] The seek itself is libvgm's, and it does not work for every file.**
@@ -184,6 +196,47 @@ bool LibvgmTrackPlayer::seekSeconds (double seconds)
 	// the message thread and the replayer belongs to the audio thread, which will do it before it
 	// captures the next frame.
 	pendingRewind.store (true, std::memory_order_relaxed);
+	return true;
+}
+
+bool LibvgmTrackPlayer::repositionStream (double fraction)
+{
+	VGMPlayer* vgm = dynamic_cast<VGMPlayer*> (playerEngine.GetPlayer ());
+
+	if (vgm == nullptr)
+	{
+		return false;
+	}
+
+	// YMZ280B's VGM chip type is 0x0F (`vgmplayer_cmdhandler.cpp:116`, command 0x5D).
+	const uint8_t chipType = 0x0F;
+	const uint8_t chipID = 0;
+
+	// **The enable has to be on for a re-key to start anything.** `0xFF` bit 7 is the global key-on
+	// enable (`ymz280b.c:993`), and a seek's replay can leave it cleared - the initial load sets it,
+	// but the replay may not reach that write before the target. Setting it again is what the driver
+	// itself does before its first key-on.
+	vgm->WriteDeviceRegister (chipType, chipID, 0xFF, 0xD0);
+
+	for (const auto& voice : streamVoices)
+	{
+		const uint32_t span = voice.stop - voice.start;
+		const uint32_t start = voice.start + (uint32_t) ((double) span * fraction);
+		const uint8_t base = (uint8_t) (voice.channel << 2);
+
+		// The start address is three registers, high to low, exactly as the driver writes it.
+		vgm->WriteDeviceRegister (chipType, chipID, (uint8_t) (base | 0x20), (uint8_t) (start >> 16));
+		vgm->WriteDeviceRegister (chipType, chipID, (uint8_t) (base | 0x40), (uint8_t) ((start >> 8) & 0xFF));
+		vgm->WriteDeviceRegister (chipType, chipID, (uint8_t) (base | 0x60), (uint8_t) (start & 0xFF));
+
+		// **The re-key is what makes it take effect.** Writing `start` alone changes where the next
+		// key-on will begin; the core keeps reading from its internal position. Clearing bit 7 and
+		// setting it again is the same edge the driver uses, and makes the core load `position` from
+		// `start` and reset its ADPCM state (ymz280b.c:842-848).
+		vgm->WriteDeviceRegister (chipType, chipID, (uint8_t) (base | 0x01), (uint8_t) (voice.ctrl & 0x7F));
+		vgm->WriteDeviceRegister (chipType, chipID, (uint8_t) (base | 0x01), (uint8_t) (voice.ctrl | 0x80));
+	}
+
 	return true;
 }
 
@@ -472,20 +525,66 @@ void LibvgmTrackPlayer::setReplaySource (std::shared_ptr<const midi::SongIr> ir,
 	replayIr = std::move (ir);
 	replayDevices = devices;
 
-	// **A streamed sample player cannot be seeked**, because the song does not record how far into
-	// its ROM the chip has read - the driver writes its registers inside the first second and then
-	// leaves it running. Detect it once here, so `seekSeconds` can decline instead of moving the
-	// playhead while the audio keeps going from the start.
+	// **A streamed sample player needs its own kind of seek.** The song never records how far into
+	// the ROM the chip has read - the driver writes its registers inside the first second and then
+	// leaves it running - so `Seek`'s replay lands on the opening state. What can be moved is the
+	// voice's start address, which is precisely what the driver itself rewrites as the stream
+	// advances; collect those here so `seekSeconds` can put a voice at the target's byte offset.
 	seekable = true;
+	streamVoices.clear ();
 
 	if (replayIr != nullptr)
 	{
+		bool hasStream = false;
+
 		for (const auto& slot : replayIr->chips)
 		{
 			if (slot.kind == midi::ChipKind::ymz280b)
 			{
-				seekable = false;
+				hasStream = true;
 			}
+		}
+
+		if (hasStream)
+		{
+			StreamVoice voices[8];
+
+			for (const auto& write : replayIr->writes)
+			{
+				if (write.deviceId >= replayIr->chips.size ()
+					|| replayIr->chips[write.deviceId].kind != midi::ChipKind::ymz280b
+					|| write.reg >= 0x80)
+				{
+					continue;
+				}
+
+				const int channel = (write.reg >> 2) & 7;
+				StreamVoice& voice = voices[channel];
+				voice.channel = channel;
+
+				switch (write.reg & 0xE3)
+				{
+				case 0x01: voice.ctrl = write.value; break;
+				case 0x20: voice.start = (voice.start & 0x00FFFF) | ((uint32_t) write.value << 16); break;
+				case 0x40: voice.start = (voice.start & 0xFF00FF) | ((uint32_t) write.value << 8); break;
+				case 0x60: voice.start = (voice.start & 0xFFFF00) | (uint32_t) write.value; break;
+				case 0x23: voice.stop = (voice.stop & 0x00FFFF) | ((uint32_t) write.value << 16); break;
+				case 0x43: voice.stop = (voice.stop & 0xFF00FF) | ((uint32_t) write.value << 8); break;
+				case 0x63: voice.stop = (voice.stop & 0xFFFF00) | (uint32_t) write.value; break;
+				default: break;
+				}
+			}
+
+			for (const auto& voice : voices)
+			{
+				if (voice.stop > voice.start)
+				{
+					streamVoices.push_back (voice);
+				}
+			}
+
+			// Only a song that has a stream loses the ordinary seek; everything else keeps it.
+			seekable = streamVoices.empty ();
 		}
 	}
 

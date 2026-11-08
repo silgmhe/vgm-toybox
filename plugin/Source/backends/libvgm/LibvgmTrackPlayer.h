@@ -128,6 +128,25 @@ private:
 		while playing the opening is worse than refusing, so a seek on such a song is ignored.
 	*/
 	bool seekable = true;
+
+	/** One voice of a streamed sample player, as the song left it.
+
+		The hardware keeps how far it has read to itself; the only address a seek can move is the
+		voice's start, which is exactly what the driver itself rewrites as the stream advances. So a
+		seek here means "restart this voice at the byte the target time corresponds to".
+	*/
+	struct StreamVoice
+	{
+		int channel = 0;
+		uint32_t start = 0;
+		uint32_t stop = 0;
+		uint8_t ctrl = 0;			// the control byte, for the re-key: loop/mode plus key-on
+	};
+
+	std::vector<StreamVoice> streamVoices;
+
+	/** Moves every streamed voice to `fraction` of its range and re-keys it. */
+	bool repositionStream (double fraction);
 	bool isolated = false;					// setTrackAudible() named a track
 	playback::TrackId myTrack {};
 	bool myTrackAudible = true;
