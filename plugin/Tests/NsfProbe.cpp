@@ -345,6 +345,24 @@ int main (int argc, char** argv)
 
 	if (tracing)
 	{
+		// **What the bus answers in the ROM window.** A driver that reads a pointer table up there and
+		// gets zeros goes idle without ever writing a register, which is exactly what the trace shows
+		// for this file. Printed next to the file's own bytes, a mismatch is visible at a glance.
+		for (uint16_t page : { 0x8000, 0x8800, 0x9000, 0xA000, 0xC000, 0xE000 })
+		{
+			std::printf ("[rom] $%04X:", (unsigned) page);
+
+			for (uint16_t offset = 0; offset < 16; ++offset)
+			{
+				std::printf (" %02X", (unsigned) player.peekRam ((uint16_t) (page + offset)));
+			}
+
+			std::printf ("\n");
+		}
+	}
+
+	if (tracing)
+	{
 		// What the driver left in the page its own music engine reads: all five of its subroutines
 		// gate on $0601..$060D, so a page full of zeros says the engine was never armed.
 		std::printf ("[ram] $0600..$060F:");
