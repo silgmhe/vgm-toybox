@@ -193,19 +193,36 @@ std::vector<playback::DecodedSample> collectYmz280bSamples (const midi::SongIr& 
 		}
 	}
 
-	// **The range the song actually streams, not the whole block and not every address.**
+	// **One file: the whole block, decoded once.**
 
-	// Three candidates, in the order of how much each one knows:
-	//
-	//   1. the addresses written **while the global key-on enable was on** - the ranges the song
-	//      really streams. `06 Sonic Diver` also writes a start during setup that points into
-	//      silence (0x394B61 reads 0x00 there, while the section that plays is 0x3BF6DA); a file cut
-	//      from that point opens with thousands of zero nibbles, and all-zero ADPCM does not decode
-	//      to silence - the integrator ramps to a constant and sits there, which is the DC offset
-	//      the ear reported at the head of the export;
-	//   2. every address the song wrote, for a driver that sets its ranges up *before* enabling the
-	//      key-on line (`01 Credit`, `02 Spirit of Fang`);
-	//   3. the block's own extent, for a song whose writes name nothing usable.
+	// These rips stream a song out of a single ROM block, and slicing that block by the addresses a
+	// driver happened to write is what produced DC: the union of those ranges can begin in a part of
+	// the image the song never plays (measured on `06 Sonic Diver`), and on `02 Spirit of Fang` it
+	// produced no range at all. The block **is** the content - the drivers just walk it - so decode
+	// all of it at the rate of the voice that reads it, and let the file be the track.
+	std::size_t first = rom.size ();
+	std::size_t last = 0;
+
+	for (std::size_t i = 0; i < rom.size (); ++i)
+	{
+		if (rom[i] != 0)
+		{
+			if (first == rom.size ())
+			{
+				first = i;
+			}
+
+			last = i;
+		}
+	}
+
+	if (first >= rom.size () || last <= first)
+	{
+		return collector.take ();
+	}
+
+	// The loudest voice sets the rate: every song here uses one voice, and a second file per rate
+	// would only duplicate the same bytes.
 	const Voice* widest = nullptr;
 
 	for (const auto& entry : voices)
@@ -221,46 +238,8 @@ std::vector<playback::DecodedSample> collectYmz280bSamples (const midi::SongIr& 
 		return collector.take ();
 	}
 
-	uint32_t begin = 0;
-	uint32_t span = 0;
-
-	if (widest->high > widest->low)
-	{
-		begin = widest->low;
-		span = widest->high - widest->low;
-	}
-	else if (widest->highAll > widest->lowAll)
-	{
-		begin = widest->lowAll;
-		span = widest->highAll - widest->lowAll;
-	}
-	else
-	{
-		std::size_t first = rom.size ();
-		std::size_t last = 0;
-
-		for (std::size_t i = 0; i < rom.size (); ++i)
-		{
-			if (rom[i] != 0)
-			{
-				if (first == rom.size ())
-				{
-					first = i;
-				}
-
-				last = i;
-			}
-		}
-
-		if (first >= rom.size () || last <= first)
-		{
-			return collector.take ();
-		}
-
-		begin = (uint32_t) first;
-		span = (uint32_t) (last + 1 - first);
-	}
-
+	const uint32_t begin = (uint32_t) first;
+	const uint32_t span = (uint32_t) (last + 1 - first);
 	const uint32_t steps = std::min (span * ((widest->mode == 1) ? 2u : 1u), kMaxSteps);
 	std::vector<float> points;
 
