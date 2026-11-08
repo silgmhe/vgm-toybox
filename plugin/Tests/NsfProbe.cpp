@@ -309,6 +309,14 @@ int main (int argc, char** argv)
 	const double seconds = argc > 2 ? std::atof (argv[2]) : 5.0;
 	const double rate = 44100.0;
 
+	// **A song other than the one the header names.** Some rips put a jingle or a voice clip at the
+	// start index and the music elsewhere; without this the probe can only report "the file's default
+	// track is silent", which is not the same finding.
+	if (const char* wanted = std::getenv ("NSF_SONG"))
+	{
+		file.startSong = (uint8_t) (std::max) (1, std::atoi (wanted));
+	}
+
 	toybox::backends::nsf::NsfPlayer player (file, rate);
 
 	/** **Every sound-register write, in order.** From the audio alone, "this driver writes nothing",
@@ -359,9 +367,26 @@ int main (int argc, char** argv)
 	const auto started = std::chrono::steady_clock::now();
 	auto nextReport = 44100LL;
 
+	int block = 0;
+
 	while (counted < total)
 	{
 		const int frames = player.render (left.data (), right.data (), 1024);
+
+		// **The engine's own state, every few blocks.** All five of its routines gate on
+		// $0601..$060D, so a page that never changes says the music was never loaded - as opposed to
+		// loaded and silent, which is what one DPCM hit at the start looks like.
+		if (tracing && (++block % 20) == 0 && block <= 400)
+		{
+			std::printf ("[ram] t=%.2fs:", (double) counted / rate);
+
+			for (uint16_t address = 0x0600; address <= 0x060F; ++address)
+			{
+				std::printf (" %02X", (unsigned) player.peekRam (address));
+			}
+
+			std::printf ("\n");
+		}
 
 		for (int i = 0; i < frames; ++i)
 		{
