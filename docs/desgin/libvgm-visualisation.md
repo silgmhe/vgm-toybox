@@ -999,8 +999,12 @@ ADPCM-A 在**第二个寄存器端口**（YM2610 的 `0x59`、YM2608 的 `0x57`�
   空行。实测：`02 The Military System` 的 `ADPCM-B` 从 `wave = null` 变成 8192 点 @41 331 Hz；
   `07 Stage 2` 也从空变成 8192 点 @38 9xx Hz；未启动的曲子（`YM2610B/01 A.D.1993`）仍是空行。
 
-  **仍有的边界**：波形窗口与 ADPCM-A 一样限 4096 字节（高 DELTA-N 下大约 0.1 秒），更长的样本只画
-  开头；**导出**仍只覆盖 ADPCM-A（`collectOpnAdpcmSamples` 只读 `0x82`），DeltaT 只进了可视化与 MIDI。
+  **仍有的边界**：画出来的只是样本的**前 4096 字节**（与 ADPCM-A 同一个 `kWindow`）。一个字节是两
+  个 nibble，也就是 8192 个采样，所以时间长度取决于播放速率：ADPCM-A 18 518.5 Hz → 约 **0.44 s**；
+  `07 Stage 2` 的 DeltaT 34 833 Hz → 约 **0.24 s**；`02 The Military System` 41 331 Hz → 约 0.20 s。
+  更长的样本只画开头——一行要的是形状，不是整段录音。**它不影响音符与音高**：那来自 DELTA-N 与周期
+  估计（后者同样只看 4096 字节）。**导出**仍只覆盖 ADPCM-A（`collectOpnAdpcmSamples` 只读 `0x82`），
+  DeltaT 只进了可视化与 MIDI。
 
   **性能（同日修）**：形状按 `(start, end)` 缓存。`channelState()` 每写一次寄存器就会被调用一次，未缓存时
   同一段字节在 `07 Stage 2` 上被解码上万次，加载从 ~150 ms 变成 **3.7 s**；缓存后 07 回到 149 ms、
