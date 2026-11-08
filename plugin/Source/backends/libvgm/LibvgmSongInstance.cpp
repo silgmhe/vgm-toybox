@@ -8,7 +8,6 @@
 #include "MikeySamples.h"
 #include "Msm5232Samples.h"
 #include "SegaPcmSamples.h"
-#include "OpnAdpcmSamples.h"
 #include "Ymz280bSamples.h"
 #include "K007232Samples.h"
 #include "VsuSamples.h"
@@ -377,34 +376,6 @@ bool LibvgmSongInstance::prepare (double hostSampleRate, int newMaxBlockSize, ju
 		}
 
 		for (auto& sample : collectSegaPcmSamples (*songIr, clock))
-		{
-			collected.push_back (std::move (sample));
-		}
-	}
-
-	const bool hasOpnAdpcm = songIr != nullptr
-							 && std::any_of (songIr->chips.begin (), songIr->chips.end (),
-											 [] (const midi::ChipSlot& slot)
-											 {
-												 return slot.kind == midi::ChipKind::ym2610
-													 || slot.kind == midi::ChipKind::ym2608;
-											 });
-
-	if (hasOpnAdpcm && songIr != nullptr)
-	{
-		// The six ADPCM-A voices share one `0x82` image; the clock turns a nibble into a rate.
-		uint32_t clock = 0;
-
-		for (const auto& device : deviceInfo)
-		{
-			if ((device.type == DEVID_YM2610 || device.type == DEVID_YM2608)
-				&& device.devCfg != nullptr && device.devCfg->clock > 0)
-			{
-				clock = device.devCfg->clock;
-			}
-		}
-
-		for (auto& sample : collectOpnAdpcmSamples (*songIr, clock))
 		{
 			collected.push_back (std::move (sample));
 		}

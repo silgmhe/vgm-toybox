@@ -6,7 +6,6 @@
 #include <string>
 
 #include "ChipMemoryAssembly.h"
-#include "emu/SoundDevs.h"
 
 #include "chips/Ay8910Decoder.h"
 #include "chips/GbcApuDecoder.h"
@@ -91,25 +90,7 @@ void VgmReplayer::adoptNewBuffers (void)
 			// draws a flat line and exports silence.
 			uint32_t slotFlags = 0;
 
-			// **An OPN device has to say which OPN it is.** Four devices share `OpnDecoder`, and the
-			// buffer makes its instances with the default constructor - the YM2612 layout of six FM
-			// plus a DAC channel. A YM2610 or YM2608 therefore reported seven channels where the
-			// chip has thirteen, and its ADPCM-A and ADPCM-B voices had no row at all: the notes
-			// were in the music, the table just never listed them. The variant travels as
-			// `ChipConfig::flags` (1 = ym2203, 2 = ym2608, 3 = ym2610, 4 = ym2610b, 5 = ym2612).
-			if (device != nullptr)
-			{
-				switch (device->type)
-				{
-				case DEVID_YM2203: slotFlags = 1; break;
-				case DEVID_YM2608: slotFlags = 2; break;
-				case DEVID_YM2610: slotFlags = 3; break;
-				case DEVID_YM2612: slotFlags = 5; break;
-				default: break;
-				}
-			}
-
-			if (slotFlags == 0 && song != nullptr)
+			if (song != nullptr)
 			{
 				for (const auto& slot : song->chips)
 				{

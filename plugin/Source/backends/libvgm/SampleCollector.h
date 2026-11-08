@@ -27,7 +27,6 @@ namespace toybox::backends::libvgm
 		vsu6,			// six-bit unsigned around 0x20: one cycle of thirty-two wave entries
 		prom4,			// four-bit unsigned around 0x08: the K005289's PROM, sixteen levels
 		pcm8Unsigned,	// eight-bit unsigned around 0x80, length given by the caller
-		adpcmA4,		// four-bit ADPCM-A (OPN): twelve-bit wrapping accumulator, high nibble first
 	};
 
 	/** Accumulates one `DecodedSample` per distinct recording.
