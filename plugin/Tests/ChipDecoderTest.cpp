@@ -1,4 +1,4 @@
-﻿// Chip-level tests: register writes in, notes out - no libvgm, no JUCE, no audio device.
+// Chip-level tests: register writes in, notes out - no libvgm, no JUCE, no audio device.
 //
 // This is the layer the rest of the MIDI path trusts: if the 2A03 decoder says A4 lasts one
 // second, the encoder will emit exactly that. Nothing here listens to a chip; every expectation
@@ -465,6 +465,135 @@ namespace
 			   "a YM2203 key-on stays inside its three channels");
 		check (notes.size() == 1 && absoluteNote (notes[0]) == 69,
 			   "the YM2203 shares the OPN f-number relation");
+	}
+
+	/** **Each variant's flat channel list, checked against the families it declares.**
+
+		The families used to be separated by arithmetic - `fmCount + 6` for the ADPCM-A block and the
+		same expression for the Delta-T row - which is only right while every variant with samples has
+		exactly six FM voices. A three-voice OPN would have pointed the Delta-T row at a channel that
+		does not exist and indexed `adpcmARegs[6]` past the array. These assertions state the table once
+		from the outside: the count per variant, and one sentinel per family.
+	*/
+	void testOpnChannelFamilies (void)
+	{
+		using toybox::chips::OpnDecoder;
+
+		const float drumRate = (float) (kYmClock / 432.0);
+
+		{
+			OpnDecoder ym2612 (OpnDecoder::Variant::ym2612);
+			ym2612.reset (toybox::chips::ChipConfig { kYmClock, 44100.0 });
+
+			check (ym2612.channelCount() == 7, "the YM2612 lists six FM voices and its DAC");
+			check (ym2612.channelState (6).present && ! ym2612.channelState (6).fmKnown,
+				   "the seventh row is the DAC, not an FM voice");
+		}
+
+		{
+			OpnDecoder ym2610 (OpnDecoder::Variant::ym2610);
+			ym2610.reset (toybox::chips::ChipConfig { kYmClock, 44100.0 });
+
+			check (ym2610.channelCount() == 13,
+				   "an OPNB lists six FM, six ADPCM-A and the Delta-T row");
+			check (! ym2610.channelState (6).fmKnown, "channel six is not an FM voice on an OPNB");
+			check (std::abs (ym2610.channelState (6).sampleRate - drumRate) < 1.0f,
+				   "the first ADPCM-A row carries the drum rate");
+			check (std::abs (ym2610.channelState (11).sampleRate - drumRate) < 1.0f,
+				   "the sixth ADPCM-A row is still ADPCM-A");
+			check (ym2610.channelState (12).sampleRate == 0.0f,
+				   "the Delta-T row is not an ADPCM-A row");
+		}
+
+		{
+			OpnDecoder ym2203 (OpnDecoder::Variant::ym2203);
+			ym2203.reset (toybox::chips::ChipConfig { kYmClock, 44100.0 });
+
+			check (ym2203.channelCount() == 3, "a three-voice OPN lists three rows");
+			check (! ym2203.channelState (3).present, "and no sample row past them");
+		}
+	}
+
+	/** **Delta-T gets a shape once its ROM arrives, and only then.**
+
+		The image reaches the decoder through `attachSecondaryMemory` (VGM `0x83` on the OPNB, `0x81` on
+		the OPNA) - before this the row was a note with nothing to draw, because only the ADPCM-A bank
+		was ever handed over. The assertions below are the two halves of that: a decoded wave with the
+		Delta-T clamp, and an empty row when no ROM was given.
+	*/
+	void testOpnAdpcmBShape (void)
+	{
+		using toybox::chips::ChipMemory;
+		using toybox::chips::OpnDecoder;
+		using toybox::chips::RegisterWrite;
+
+		// A page of nibbles that alternate sign, so the accumulator moves and the shape is not flat.
+		std::vector<uint8_t> rom (0x1000, 0x8Fu);
+
+		const auto playOnce = [] (OpnDecoder& decoder)
+		{
+			std::vector<RegisterWrite> writes;
+			const auto at = [&writes] (uint32_t time, uint8_t reg, uint8_t value)
+			{
+				RegisterWrite write;
+				write.sampleTime = time;
+				write.port = 0;			// Delta-T lives at 0x10..0x1F on the OPNB's first port
+				write.reg = reg;
+				write.value = value;
+				writes.push_back (write);
+			};
+
+			at (0, 0x12, 0x00);			// start address 0
+			at (0, 0x13, 0x00);
+			at (0, 0x14, 0x01);			// end address 1 (page) - a little over 256 bytes
+			at (0, 0x15, 0x00);
+			at (0, 0x19, 0x00);			// DELTA-N 0x4000: the rate a real driver writes
+			at (0, 0x1A, 0x40);
+			at (0, 0x10, 0x80);			// start
+
+			for (const auto& write : writes)
+			{
+				decoder.write (write);
+			}
+		};
+
+		{
+			OpnDecoder decoder (OpnDecoder::Variant::ym2610);
+			decoder.reset (toybox::chips::ChipConfig { kYmClock, 44100.0 });
+
+			ChipMemory attached;
+			attached.bytes = &rom;
+			attached.type = 0x83;		// the OPNB's Delta-T block
+			decoder.attachSecondaryMemory (attached);
+
+			playOnce (decoder);
+
+			const auto state = decoder.channelState (12);
+			check (state.present && state.wave != nullptr,
+				   "the Delta-T row draws a shape once its ROM is attached");
+			// start 0, end page 1: the chip reads (1 << 8) + 0xFF + 1 - 0 bytes, two values each.
+			check (state.wave != nullptr && state.wave->size () == 1022,
+				   "the shape is two values per byte of the range it names");
+			check (state.sampleRate > 0.0f, "and it states the rate DELTA-N asks for");
+
+			// **The shape is decoded once per range.** `channelState()` used to rebuild it on every
+			// call, and the note extractor asks once per register write: on `07 Stage 2` that decoded
+			// the same kilobytes ten thousand times and made loading take three and a half seconds.
+			// Identity, not equality, is what says the cache is doing its job.
+			check (decoder.channelState (12).wave == state.wave,
+				   "and the same range is not decoded twice");
+		}
+
+		{
+			OpnDecoder decoder (OpnDecoder::Variant::ym2610);
+			decoder.reset (toybox::chips::ChipConfig { kYmClock, 44100.0 });
+
+			playOnce (decoder);
+
+			const auto state = decoder.channelState (12);
+			check (state.present && state.wave == nullptr,
+				   "without a ROM the row stays a note with nothing to draw");
+		}
 	}
 
 	/** ADPCM-A and ADPCM-B are one-shots: the control bit starts them, the chip ends them. The
@@ -6991,6 +7120,8 @@ int main (void){
 	testFmSecondPortIsASeparateChannel();
 	testFmDacTakesOverChannelSix();
 	testOpnThreeChannels();
+	testOpnChannelFamilies();
+	testOpnAdpcmBShape();
 	testOpnaAdpcmOneShots();
 	testOpnAdpcmBPitch();
 	testOpnAdpcmBDeltaIsThePitch();

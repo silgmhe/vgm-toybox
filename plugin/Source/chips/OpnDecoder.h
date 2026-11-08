@@ -63,28 +63,31 @@ public:
 	*/
 	static constexpr std::size_t kAdpcmAImageBytes = 16u << 20;
 
-	/** **The ADPCM-A image** (VGM block `0x82`). Six voices share one ROM and each names its own
-		start and end page, so a row can only draw a real shape once those bytes are here; the
-		Delta-T voice streams from the *other* block (`0x83`) and stays a note-only row.
+	/** **The Delta-T image can address 16 MB too**: its start/end registers are 16-bit pages, shifted
+		by eight on the OPNB and by five on the OPNA - same reason as `kAdpcmAImageBytes`.
+	*/
+	static constexpr std::size_t kAdpcmBImageBytes = 16u << 20;
+
+	/** **The images this decoder wants.** `0x82` is the ADPCM-A ROM the six voices page through;
+		Delta-T reads a block of its own, and VGM numbers it per board (`0x83` on the OPNB, `0x81` on
+		the OPNA), so both types are named and the replayer hands over whichever the song carries.
 
 		The requirement is on the class rather than the variant because the buffer makes every OPN
-		decoder from one table - a YM2612 song simply has no `0x82` block and gets an empty image.
-
-		**Sixteen megabytes, because that is what the start page addresses.** A voice names its sample
-		as `((hi << 8) | lo) << 8`, so the chip reaches 16 MB; some Neo Geo rips say so in the block
-		header and place their payload above the 8 MB line (`02 The Military System` has its three
-		ADPCM-A blocks at 0xA79600 and up). Sized at 8 MB, every one of those blocks was dropped for
-		being out of range: the decoder then read a buffer of zeros and drew a staircase on all six
-		rows while the export found no range inside the image and reported zero samples.
+		decoder from one table - a YM2612 song has neither block and gets empty images.
 	*/
+
 	static constexpr ChipRequirements kRequirements { 8000000u, true, 0x82, kAdpcmAImageBytes, false,
-													  false };
+													  false,
+													  0x83, kAdpcmBImageBytes,	// OPNB Delta-T
+													  0x81, kAdpcmBImageBytes };	// OPNA Delta-T
 
 	void reset (const ChipConfig& config) override;
 	void attachMemory (const ChipMemory& memory) override;
+	void attachSecondaryMemory (const ChipMemory& memory) override;
 
-	/** The DELTA-T ROM (VGM block 0x82). Without it ADPCM-B has no sample to measure, and the
-		channel stays the C4 trigger it was before. */
+	/** The DELTA-T ROM (VGM block `0x83` on the OPNB, `0x81` on the OPNA, and on the OPNA the six
+		ADPCM-A voices read the same part). Without it ADPCM-B has no sample to measure, no shape to
+		draw, and the channel stays the C4 trigger it was before. */
 	void setAdpcmBRom (std::vector<uint8_t> rom);
 	void write (const RegisterWrite& write) override;
 	void advance (uint32_t sampleTime) override;

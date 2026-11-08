@@ -990,12 +990,31 @@ ADPCM-A 在**第二个寄存器端口**（YM2610 的 `0x59`、YM2608 的 `0x57`�
 
 #### 9.17.5 已知简化
 
-- **ADPCM-B（Delta-T）没有接 ROM**：只在 MIDI 导出路径接了（`MidiSequenceBuilder`），可视化路径的
-  `attachMemory` 只填 `adpcmARom`。`02 The Military System` 的 `ADPCM-B` 因此是 `active=1` 而无波形，
-  说明"素材没用 DeltaT"只对 `04/07` 成立。接线的前提是让 `ChipMemory` 带上 block 类型——解码器现在
-  无法区分 `0x82` 与 `0x83`。
-- **ADPCM-B 行在个别曲目仍可能显示波形**：ADPCM-A 行范围判断按 `fmCount..channelCount-1`
-  取，遇到 FM 声道数不为 6 的变体时会多算一行，未修完。
+- **~~ADPCM-B（Delta-T）没有接 ROM~~（已修）**：`ChipRequirements` 现在可以声明第二、第三个镜像
+  （`secondaryMemoryType` / `alternateMemoryType`），`ChipMemory` 带上来源 block 类型，`IChipDecoder`
+  多一个默认为空的 `attachSecondaryMemory()`。OPN 声明了两种编号——`0x83`（OPNB）与 `0x81`（OPNA），
+  replayer 把歌曲实际带的那个交过去；`attachMemory` 按类型分派，OPNA 上则退化为"与 ADPCM-A 共用同一
+  颗 ROM"（`setAdpcmBRom` 用同一份字节）。`channelState` 的 Delta-T 分支按 start/end 寄存器解码出
+  16 位钳位的波形，并把 `sampleRate` 设为 `DELTA-N` 的播放速率，因此行上显示的是真实形状而不是
+  空行。实测：`02 The Military System` 的 `ADPCM-B` 从 `wave = null` 变成 8192 点 @41 331 Hz；
+  `07 Stage 2` 也从空变成 8192 点 @38 9xx Hz；未启动的曲子（`YM2610B/01 A.D.1993`）仍是空行。
+
+  **仍有的边界**：波形窗口与 ADPCM-A 一样限 4096 字节（高 DELTA-N 下大约 0.1 秒），更长的样本只画
+  开头；**导出**仍只覆盖 ADPCM-A（`collectOpnAdpcmSamples` 只读 `0x82`），DeltaT 只进了可视化与 MIDI。
+
+  **性能（同日修）**：形状按 `(start, end)` 缓存。`channelState()` 每写一次寄存器就会被调用一次，未缓存时
+  同一段字节在 `07 Stage 2` 上被解码上万次，加载从 ~150 ms 变成 **3.7 s**；缓存后 07 回到 149 ms、
+  04 102 ms、`02 The Military System` 15 ms。缓存于 `setAdpcmBRom()` 清空（字节变了），超过 64 条整体
+  清空（一首歌只有几个样本）。另：曾试图把测周期窗口从 4096 字节缩到 1024（估计器只看 2048 个采样），
+  结果同一首的音符从 65 变成 85 —— **窗口会影响结果，不能当作免费优化**，所以窗口保持原样，只缓存结果。定位过程、原理与断言写法见
+  `docs/memo/2026-11-09-the-shape-that-was-decoded-once-too-often.md`。
+- **~~ADPCM-B 行在个别曲目仍可能显示波形~~（已修）**：族的边界过去由算式决定——`channelState()`、
+  `noteTable()`、`isDrum()` 三处各写一次 `fmCount + 6`。今天四种变体都带 6 个 FM，所以恰好正确；
+  一旦出现"带采样但 FM 不是 6"的型号，Delta-T 行会被指到别的声道，`adpcmARegs[6]` 也会越界。
+  现在 `Impl::Layout { fm, adpcmA, adpcmB, dac }` 是唯一定义，`channelCount` 由它推出，ADPCM-A 槽位
+  按表夹紧；`testOpnChannelFamilies` 对 YM2612（7 行）、YM2203（3 行）、OPNA/OPNB（13 行）断言行数与
+  每个族各一条哨兵。实测行数不变：`07 Stage 2` 16、`02 The Military System` 16、`Green Hill Zone` 11、
+  `YM2610B/01 A.D.1993` 16。
 - 未做“内容指纹聚类”，因此同一记鼓的长短两版仍可能是两个文件。
 
 **完整记录**：`docs/memo/2026-11-08-opn-adpcm-six-players-and-the-wrong-variant.md`、

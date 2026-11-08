@@ -27,7 +27,17 @@ struct ChipRequirements
 	bool memoryIsRam = false;			// RAM uploads concatenate; ROM blocks place at an offset
 	bool clipToContent = false;			// mask by what was sent rather than by the declared size
 
+	/** **A second and third image, for a chip whose voices do not share one.**
 
+		The OPN family is why: its ADPCM-A voices page through the `0x82` block, while Delta-T reads a
+		block of its own - `0x83` on the OPNB and `0x81` on the OPNA, because the two boards number
+		their sample ROMs differently. A chip names both types and the replayer hands over whichever the
+		song actually carries; a decoder that needs neither leaves them zero.
+	*/
+	uint8_t secondaryMemoryType = 0;
+	std::size_t secondaryMemoryBytes = 0;
+	uint8_t alternateMemoryType = 0;
+	std::size_t alternateMemoryBytes = 0;
 };
 
 /** The image the assembler built for a decoder, plus the board variant it was found in.
@@ -38,6 +48,10 @@ struct ChipMemory
 {
 	const std::vector<uint8_t>* bytes = nullptr;
 	uint8_t banking = 0;
+
+	/** The VGM block type this image was built from, so a decoder that asked for several can tell
+		them apart. Zero means "the one it asked for" - every single-image caller leaves it there. */
+	uint8_t type = 0;
 };
 
 /** A chip's register-level model.
@@ -82,6 +96,10 @@ public:
 	/** Hand over the image `kRequirements` asked for. Called once, before the first write.
 		The default ignores it, which is right for every chip that names a pitch from registers. */
 	virtual void attachMemory (const ChipMemory&) {}
+
+	/** The second or third image, for a decoder that asked for one. Called once per block the song
+		carries, before the first write; `ChipMemory::type` says which one it is. Default ignores it. */
+	virtual void attachSecondaryMemory (const ChipMemory&) {}
 };
 
 } // namespace toybox::chips

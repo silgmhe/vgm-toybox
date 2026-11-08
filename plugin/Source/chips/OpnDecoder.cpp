@@ -1,6 +1,7 @@
-﻿#include "OpnDecoder.h"
+#include "OpnDecoder.h"
 
 #include <algorithm>
+#include <cassert>
 #include <cmath>
 #include <cstdint>
 #include <map>
@@ -227,10 +228,36 @@ struct OpnDecoder::Impl
 		uint32_t latchEnd = 0;
 	};
 
+	/** The largest counts the tables below hold. A `Layout` must stay inside them. */
+	static constexpr int kFmVoices = 6;
+	static constexpr int kAdpcmAVoices = 6;
+
+	/** **Where each voice family sits in the flat channel numbering the decoder reports.**
+
+		One table instead of arithmetic. The boundary used to be computed - `fmCount + 6` for ADPCM-A,
+		`fmCount + 6` again for the Delta-T row in `noteTable()` and `isDrum()` - which is only right
+		while every variant with samples has exactly six FM voices. A variant with three would have
+		read past `adpcmARegs[6]` and pointed the Delta-T row at somebody else's channel; nothing
+		divides those families today except this table, so they are stated once, here.
+	*/
+	struct Layout
+	{
+		int fm = 0;
+		int adpcmA = 0;
+		bool adpcmB = false;
+		bool dac = false;			// the YM2612's sixth channel is a DAC, not a voice
+
+		int count (void) const { return fm + adpcmA + (adpcmB ? 1 : 0) + (dac ? 1 : 0); }
+		/** The one Delta-T channel, or -1 when the variant has none. */
+		int adpcmBChannel (void) const { return adpcmB ? fm + adpcmA : -1; }
+		bool hasAdpcm (void) const { return adpcmA > 0 || adpcmB; }
+	};
+
 	Variant variant = Variant::ym2612;
-	Channel channels[6];
-	Pulse adpcmA[6];
-	AdpcmA adpcmARegs[6];
+	Layout layout;
+	Channel channels[kFmVoices];
+	Pulse adpcmA[kAdpcmAVoices];
+	AdpcmA adpcmARegs[kAdpcmAVoices];
 	std::vector<uint8_t> adpcmARom;
 	uint32_t adpcmAMask = 0;
 	AdpcmB adpcmB;
@@ -244,44 +271,57 @@ struct OpnDecoder::Impl
 	std::vector<uint8_t> adpcmBRom;
 	uint32_t adpcmBMask = 0;
 	std::map<uint32_t, double> adpcmBCycleCache;
+
+	/** **The decoded Delta-T shapes, keyed by the range they cover.**
+
+		A shape is a function of three inputs and nothing else: `latchStart`, `latchEnd` and the ROM
+		bytes. The first two are latched at key-on and stay put until the next one, and the bytes only
+		change in `setAdpcmBRom()` - so for a given range the shape is an **invariant**, which is the
+		only reason caching it is sound rather than a guess.
+
+		It has to be cached because `channelState()` is not a per-frame call: the note extractor asks
+		once for **every register write**, and the snapshot asks for every channel of every block. On
+		`07 Stage 2` that decoded the same kilobytes tens of thousands of times - 3.7 seconds of loading
+		instead of 0.15. Cost here is per-call cost times call count, and the count is the amplifier.
+
+		Two invalidations, both cheap: `setAdpcmBRom()` clears it (the bytes the shapes came from are
+		gone), and 64 entries clear it wholesale - a song has a handful of samples, so exceeding that
+		means something is wrong, and re-decoding one shape is cheaper than keeping an LRU honest.
+	*/
+	std::map<uint64_t, std::shared_ptr<const std::vector<float>>> adpcmBShapes;
 	std::unique_ptr<OpnAdpcmBNoteTable> adpcmBTable;
 	OpnNoteTable table;
 
-	int fmCount = 6;
-	int channelCount = 7;
-	bool sixChannel = true;
+	int channelCount = 7;			// derived from `layout` by configure(); never set by hand
 
-	bool hasAdpcm (void) const
-	{
-		return variant == Variant::ym2608 || variant == Variant::ym2610
-			   || variant == Variant::ym2610b;
-	}
+	bool hasAdpcm (void) const { return layout.hasAdpcm (); }
 
 	void configure (void)
 	{
 		switch (variant)
 		{
 		case Variant::ym2203:
-			fmCount = 3;
-			sixChannel = false;
-			channelCount = 3;
+			layout = Layout { 3, 0, false, false };
 			break;
 
 		case Variant::ym2608:
 		case Variant::ym2610:
 		case Variant::ym2610b:
-			fmCount = 6;
-			sixChannel = true;
-			channelCount = 13;
+			layout = Layout { 6, 6, true, false };
 			break;
 
 		case Variant::ym2612:
 		default:
-			fmCount = 6;
-			sixChannel = true;
-			channelCount = 7;
+			layout = Layout { 6, 0, false, true };
 			break;
 		}
+
+		// The tables hold these counts; a layout that outgrew them would be a silent overrun rather
+		// than a compile error, so both halves are checked where the layout is chosen.
+		assert (layout.fm <= kFmVoices);
+		assert (layout.adpcmA <= kAdpcmAVoices);
+
+		channelCount = layout.count ();
 
 		if (variant == Variant::ym2610)
 		{
@@ -343,6 +383,7 @@ struct OpnDecoder::Impl
 		4-bit delta data, so it is decoded first - the period only exists in the running sum. */
 	double adpcmBCycleFor (uint32_t start)
 	{
+
 		if (adpcmBRom.empty())
 		{
 			return 0.0;
@@ -354,6 +395,8 @@ struct OpnDecoder::Impl
 			return cached->second;
 		}
 
+		// `estimateCycleLength()` looks at 2048 samples - 1024 bytes - and truncates anything longer, so
+		// decoding more than that only costs time: the answer is identical.
 		constexpr std::size_t kBytes = 4096;
 		std::vector<double> waveform;
 		waveform.reserve (kBytes * 2);
@@ -387,13 +430,17 @@ struct OpnDecoder::Impl
 		voice.active = true;
 		++voice.keyOns;
 
-		voice.cycleLength = adpcmBCycleFor (voice.latchStart);
-
 		// DELTA-N is a pitch register, so every keyed voice with a non-zero DELTA-N is melodic -
 		// the sample only decides whether a root correction can be added on top. Requiring a
 		// measurable period made the whole channel one-shot whenever the set's ROM was absent or
 		// its attack was noisy, which is what this used to do.
 		voice.melodic = voice.delta != 0;
+
+		// **Only a melodic voice reads the cycle.** Measuring it for a drum decodes a kilobyte and runs
+		// a lag sweep whose result nothing consults - DELTA-N zero returns a one-shot note before the
+		// number is ever read - and a Neo Geo track fires thousands of drums: on `07 Stage 2` that was
+		// three seconds of load time for a value that was thrown away.
+		voice.cycleLength = voice.melodic ? adpcmBCycleFor (voice.latchStart) : 0.0;
 		if (voice.melodic && voice.cycleLength > 0.0 && ! adpcmBRom.empty())
 		{
 			int fine = 0;
@@ -472,12 +519,12 @@ struct OpnDecoder::Impl
 			return;		// 0x28 with channel 3 is not a key register
 		}
 
-		if (sixChannel && (data & kKeyAllOperators) != 0)
+		if (layout.fm == 6 && (data & kKeyAllOperators) != 0)
 		{
 			channel += 3;
 		}
 
-		if (channel >= fmCount || ! channels[channel].present)
+		if (channel >= layout.fm || ! channels[channel].present)
 		{
 			return;
 		}
@@ -588,11 +635,42 @@ void OpnDecoder::reset (const ChipConfig& config)
 
 void OpnDecoder::attachMemory (const ChipMemory& memory)
 {
-	// **The ADPCM-A image** arrives as the requirement asked for it: one 8 MB bank that six voices
-	// page through. The mask rounds to the power of two, the way the core wraps an out-of-range
-	// address instead of reading zero.
+	if (memory.bytes == nullptr)
+	{
+		return;
+	}
+
+	// **A decoder that asked for more than one image may be handed either first.** The type says
+	// which; zero means "the one the requirement names first", which is the ADPCM-A bank for every
+	// caller that predates the Delta-T blocks.
+	if (memory.type == 0x83 || memory.type == 0x81)
+	{
+		setAdpcmBRom (*memory.bytes);
+		return;
+	}
+
+	// The ADPCM-A image: one bank the six voices page through. The mask rounds to the power of two,
+	// the way the core wraps an out-of-range address instead of reading zero.
 	impl->adpcmAMask = pow2Mask (memory.bytes->size ());
 	impl->adpcmARom = *memory.bytes;
+
+	// **On the OPNA the two families share the part.** Delta-T reads the same ROM as the six voices
+	// there, so a song that ships only `0x82` still has its Delta-T samples; the OPNB keeps them in a
+	// block of its own, which arrives through attachSecondaryMemory() below.
+	if (impl->variant == Variant::ym2608 && impl->adpcmBRom.empty ())
+	{
+		setAdpcmBRom (*memory.bytes);
+	}
+}
+
+void OpnDecoder::attachSecondaryMemory (const ChipMemory& memory)
+{
+	// The Delta-T image, whatever type carried it (0x83 on the OPNB, 0x81 on the OPNA). Both end in
+	// the same setter, so there is one rule for how it is masked and one cache to invalidate.
+	if (memory.bytes != nullptr && ! memory.bytes->empty ())
+	{
+		setAdpcmBRom (*memory.bytes);
+	}
 }
 
 void OpnDecoder::setAdpcmBRom (std::vector<uint8_t> rom)
@@ -600,6 +678,7 @@ void OpnDecoder::setAdpcmBRom (std::vector<uint8_t> rom)
 	impl->adpcmBMask = pow2Mask (rom.size());
 	impl->adpcmBRom = std::move (rom);
 	impl->adpcmBCycleCache.clear();
+	impl->adpcmBShapes.clear();		// the shapes were decoded from the bytes that just changed
 }
 
 void OpnDecoder::write (const RegisterWrite& write)
@@ -721,7 +800,7 @@ void OpnDecoder::write (const RegisterWrite& write)
 		}
 
 		const int channel = (int) (reg & 0x03) + port * 3;
-		if (channel >= impl->fmCount)
+		if (channel >= impl->layout.fm)
 		{
 			return;
 		}
@@ -738,7 +817,7 @@ void OpnDecoder::write (const RegisterWrite& write)
 		}
 
 		const int channel = (int) (reg & 0x03) + port * 3;
-		if (channel >= impl->fmCount)
+		if (channel >= impl->layout.fm)
 		{
 			return;
 		}
@@ -752,7 +831,7 @@ void OpnDecoder::write (const RegisterWrite& write)
 	if ((reg & 0xF0) == 0xA0 && (reg & 0x08) == 0)
 	{
 		const int channel = (int) (reg & 0x03) + port * 3;
-		if (channel >= impl->fmCount)
+		if (channel >= impl->layout.fm)
 		{
 			return;
 		}
@@ -775,7 +854,7 @@ void OpnDecoder::write (const RegisterWrite& write)
 	if ((reg & 0xF0) == 0xB0 && (reg & 0x04) == 0)
 	{
 		const int channel = (int) (reg & 0x03) + port * 3;
-		if (channel < impl->fmCount)
+		if (channel < impl->layout.fm)
 		{
 			Impl::Channel& state = impl->channels[channel];
 			state.algorithm = (int) (write.value & 0x07);
@@ -805,7 +884,7 @@ ChannelState OpnDecoder::channelState (int channel) const
 	}
 
 	const bool isDac = impl->variant == Variant::ym2612 && channel == 6;
-	if (channel < impl->fmCount)
+	if (channel < impl->layout.fm)
 	{
 		const Impl::Channel& voice = impl->channels[channel];
 		if (! voice.present)
@@ -849,12 +928,20 @@ ChannelState OpnDecoder::channelState (int channel) const
 		return state;
 	}
 
-	// **The last channel is ADPCM-B**, so the six ADPCM-A rows end one short of the count: a plain
-	// `fmCount + 6` also swallowed the Delta-T row on the variants whose FM section is short, and
-	// that row then drew a neighbour's sample.
-	if (channel >= impl->fmCount && channel < impl->channelCount - 1)
+	// **ADPCM-A is `layout.fm .. layout.fm + layout.adpcmA`**, and the Delta-T row is the one after
+	// that range - both named by the same table, so a variant with a shorter FM section cannot shift
+	// one family onto the other (a plain `fmCount + 6` did, and the Delta-T row then drew a
+	// neighbour's sample). The slot is inside the table by construction and checked anyway: the
+	// array is `kAdpcmAVoices` long.
+	if (channel >= impl->layout.fm && channel < impl->layout.fm + impl->layout.adpcmA)
 	{
-		const std::size_t slot = (std::size_t) (channel - impl->fmCount);
+		const std::size_t slot = (std::size_t) (channel - impl->layout.fm);
+
+		if (slot >= (std::size_t) Impl::kAdpcmAVoices)
+		{
+			return state;
+		}
+
 		const Impl::AdpcmA& regs = impl->adpcmARegs[slot];
 
 		state.period = kOneShotPeriod;
@@ -914,6 +1001,14 @@ ChannelState OpnDecoder::channelState (int channel) const
 		return state;
 	}
 
+	// Everything below is the one Delta-T voice. A number the table does not give it is not a voice at
+	// all, and an empty row is the honest answer - falling through used to make any unclaimed channel
+	// report ADPCM-B's state.
+	if (impl->layout.adpcmBChannel () != channel)
+	{
+		return state;
+	}
+
 	// ADPCM-B is the one sampled voice with a pitch register: DELTA-N is the note, the level
 	// register the volume, and the start bit the gate
 	const Impl::AdpcmB& voice = impl->adpcmB;
@@ -924,6 +1019,61 @@ ChannelState OpnDecoder::channelState (int channel) const
 	// channel plays loudly (0x1B is only written by drivers that attenuate), so gating on it
 	// silenced every one of them. The start bit and the end address decide whether it sounds.
 	state.gate = voice.active && (voice.gateEnd == 0 || impl->now < voice.gateEnd);
+
+	// **The shape is the bytes the start and end registers name**, decoded with the same Delta-T table
+	// the cycle estimate uses - clamped at 16 bits rather than wrapped, which is what separates Delta-T
+	// from the six ADPCM-A voices. Drawn only while the voice is gated, like those rows.
+	//
+	// It is looked up rather than built, because this function is asked for a state far more often than
+	// a person looks at a row: once per register write by the note extractor and once per channel per
+	// block by the snapshot. The pair below covers every input the bytes depend on (a key-on latches
+	// them, `setAdpcmBRom()` clears the cache), so a hit is the same shape, not an approximation.
+	if (state.gate && ! impl->adpcmBRom.empty () && voice.latchEnd > voice.latchStart)
+	{
+		const uint64_t shapeKey = ((uint64_t) voice.latchStart << 32) | (uint64_t) voice.latchEnd;
+		auto cached = impl->adpcmBShapes.find (shapeKey);
+
+		if (cached == impl->adpcmBShapes.end ())
+		{
+			constexpr uint32_t kWindow = 4096;
+			const uint32_t length = (std::min) (voice.latchEnd - voice.latchStart, kWindow);
+
+			auto wave = std::make_shared<std::vector<float>> ();
+			wave->reserve (length * 2);
+
+			double accumulator = 0.0;
+			int step = kAdpcmBStepMin;
+
+			for (uint32_t i = 0; i < length; ++i)
+			{
+				const int byte = impl->adpcmBByte (voice.latchStart + i);
+
+				for (int half = 0; half < 2; ++half)
+				{
+					const int nibble = (half == 0) ? ((byte >> kNibbleShift) & kNibbleMask)
+												   : (byte & kNibbleMask);
+					accumulator += (double) (kAdpcmBStepB1[nibble] * step / 8);
+					accumulator = std::clamp (accumulator, -32768.0, 32767.0);
+					wave->push_back ((float) (accumulator / 32768.0));
+					step = std::clamp (step * kAdpcmBStepB2[nibble] / 64, kAdpcmBStepMin,
+									   kAdpcmBStepMax);
+				}
+			}
+
+			if (impl->adpcmBShapes.size () >= 64)
+			{
+				impl->adpcmBShapes.clear ();		// bounds a pathological song; costs one re-decode
+			}
+
+			cached = impl->adpcmBShapes.emplace (shapeKey, std::move (wave)).first;
+		}
+
+		state.wave = cached->second;
+
+		// A sampled row states how fast it **plays**, not how fast it was recorded: DELTA-N is the rate
+		// here, and the keyboard draws these bytes at that speed.
+		state.sampleRate = (float) impl->adpcmBUnitsPerSecond (voice.delta);
+	}
 
 	// L1 from DELTA-N against the 8 kHz reference, L2 from the sample's own cycle: the sets name no
 	// recording rate, so the transposition is the only register-only statement and the root is what
@@ -941,7 +1091,7 @@ ChannelState OpnDecoder::channelState (int channel) const
 
 const NoteTable& OpnDecoder::noteTable (int channel) const
 {
-	if (impl->adpcmBTable != nullptr && channel == impl->fmCount + 6)
+	if (impl->adpcmBTable != nullptr && channel == impl->layout.adpcmBChannel ())
 	{
 		return *impl->adpcmBTable;
 	}
@@ -951,7 +1101,7 @@ const NoteTable& OpnDecoder::noteTable (int channel) const
 
 ChannelKind OpnDecoder::channelKind (int channel) const
 {
-	if (channel < impl->fmCount)
+	if (channel < impl->layout.fm)
 	{
 		return ChannelKind::fm;
 	}
@@ -961,13 +1111,13 @@ ChannelKind OpnDecoder::channelKind (int channel) const
 
 bool OpnDecoder::isDrum (int channel) const
 {
-	if (channel < impl->fmCount)
+	if (channel < impl->layout.fm)
 	{
 		return false;
 	}
 
 	// ADPCM-A is a trigger; ADPCM-B is melodic when its sample has a period
-	return ! (channel == impl->fmCount + 6 && impl->adpcmB.melodic);
+	return ! (channel == impl->layout.adpcmBChannel () && impl->adpcmB.melodic);
 }
 
 } // namespace toybox::chips

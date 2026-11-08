@@ -140,6 +140,36 @@ void VgmReplayer::adoptNewBuffers (void)
 					attached.banking = banking;
 					decoder->attachMemory (attached);	// the decoder copies what it needs
 				}
+
+				// **The images a decoder asked for beyond the first.** The OPN family wants its Delta-T
+				// ROM as well as the ADPCM-A bank, and VGM numbers that block per board (`0x83` on the
+				// OPNB, `0x81` on the OPNA) - so the decoder names both types and this serves whichever
+				// the song carries, tagged so the decoder can tell them apart.
+				const uint8_t extraTypes[2] = { requirements.secondaryMemoryType,
+												requirements.alternateMemoryType };
+				const std::size_t extraBytes[2] = { requirements.secondaryMemoryBytes,
+													requirements.alternateMemoryBytes };
+
+				for (int extra = 0; extra < 2; ++extra)
+				{
+					if (extraTypes[extra] == 0)
+					{
+						continue;
+					}
+
+					const std::vector<uint8_t> secondary = memory::rom (*song, extraTypes[extra],
+																		extraBytes[extra], false);
+
+					if (secondary.empty ())
+					{
+						continue;
+					}
+
+					chips::ChipMemory attached;
+					attached.bytes = &secondary;
+					attached.type = extraTypes[extra];
+					decoder->attachSecondaryMemory (attached);
+				}
 			}
 
 			live.push_back (Instance { type, deviceId, device, decoder.get (), clock,
