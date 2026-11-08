@@ -173,9 +173,25 @@ bool NsfFile::looksLikeNsf (const void* data, std::size_t size)
 
 bool NsfFile::isBanked (void) const
 {
-	// The address space holds 32 KB of program. Anything larger can only be reached by switching
-	// the windows the driver writes to $5FF8-$5FFB.
-	return rom.size() > 0x8000;
+	// **A declared bank table means banked, however small the image is.** Size alone is not the test:
+	// Ai Senshi Nicol's image is 20 KB, yet its driver's init lives at $D02B and is reachable only when
+	// the $D000 window shows bank 0. Mapped linearly that address falls past the end of the image, the
+	// CPU reads zero and lands in zero page - which is exactly how that file "played": one DC level and
+	// no register writes at all. NSFPlay and NotSoFatso both decide this from the header bytes.
+	if (rom.size () > 0x8000)
+	{
+		return true;
+	}
+
+	for (const auto bank : bankSwitch)
+	{
+		if (bank != 0)
+		{
+			return true;
+		}
+	}
+
+	return false;
 }
 
 double NsfFile::framesPerSecond (void) const

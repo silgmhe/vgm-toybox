@@ -200,3 +200,31 @@ $env:NSF_SONG='16'; build\plugin\vgm_nsf_probe.exe "<nsf>" 3
 在界面上提供**曲目选择**（多曲格式通用：NSF 34 首、其它格式同理），加载后允许切换并重新初始化。
 最小实现：后端暴露 `songCount` 与 `setSong(index)`，界面在标题旁放一个曲目控件。
 不建议"自动跳过空曲目"——那会掩盖文件本身的信息，也与规格不符。
+
+## 十一、又一个文件：`Ai Senshi Nicol`（FDS）—— bank 判定
+
+现象：所有 56 首都是"一个三角波直流偏置"，无音符、无音频；同一文件在 FamiStudio / MDPlayer 正常。
+
+测量（探针 `[level]` 与 `--check`）：
+
+```
+修复前  writes=0     peak=0.1470（≈三角波直流）   FDS 声道峰值 0.0000
+修复后  writes=270   peak=0.3530                FDS 声道峰值 0.0976
+```
+
+根因：`NsfFile::isBanked()` 原来只判断"镜像大于 32 KB"。这个文件镜像 20 KB，但头部的 bank 表非零
+（`01 02 00 00 00 00 03 04`），且 `init = $D02B` 只能通过 `$D000` 窗口映射到 bank 0 才访问得到。
+线性映射下该地址落在镜像之外 → 读到 0 → CPU 落进零页（`pc=0002`）、零写入。
+
+修法：与 NSFPlay / NotSoFatso 一致，**头部 bank 表非零即视为 banked**：
+
+```cpp
+if (rom.size () > 0x8000) return true;
+for (const auto bank : bankSwitch) if (bank != 0) return true;
+return false;
+```
+
+回归（本地 11 个 NSF 全部复测）：`1983` 2 秒峰值 0.2243 与改动前一致；`Bio Miracle` 0.3993、
+`Entry080` 0.4800、`Gimmick!` 0.4050 均未变化；`46/46` 通过。
+
+教训：**"文件小就一定线性"是错的**。bank 表是驱动与数据的约定，与镜像大小无关；判定要跟被模拟的实现。
