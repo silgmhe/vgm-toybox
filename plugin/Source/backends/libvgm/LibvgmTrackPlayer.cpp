@@ -873,6 +873,56 @@ bool LibvgmTrackPlayer::captureState (playback::ChipStateSnapshot& snapshot) con
 		}
 	}
 
+	// **A row exists because a track exists, not because the device was written to.** libvgm creates a
+	// device instance the first time a command addresses it, so a channel with nothing to say yet had
+	// no instance and no row: the SSG appeared only at its first note, and every row below it moved
+	// down by three when it did. Laying the rows out from `tracks` fixes the count before the first
+	// note; a track with no state keeps an empty row, which is what the mixer shows for it too.
+	if (tracks != nullptr)
+	{
+		std::vector<playback::ChannelState> rows;
+		rows.reserve (tracks->size () + snapshot.channels.size ());
+
+		for (const auto& track : *tracks)
+		{
+			bool placed = false;
+
+			for (const auto& state : snapshot.channels)
+			{
+				if (state.trackIndex != (int) track.id)
+				{
+					continue;
+				}
+
+				rows.push_back (state);
+				placed = true;
+			}
+
+			if (! placed)
+			{
+				// A voice that has not sounded yet: a row with a name and nothing else, so the page
+				// does not gain and lose rows while the song plays.
+				playback::ChannelState empty;
+				empty.name = track.name.toStdString ();
+				empty.chipName = track.groupName.toStdString ();
+				empty.trackIndex = (int) track.id;
+				empty.note = -1;
+				rows.push_back (std::move (empty));
+			}
+		}
+
+		// Anything the track list does not describe stays last rather than vanishing.
+		for (const auto& state : snapshot.channels)
+		{
+			if (state.trackIndex < 0 || (std::size_t) state.trackIndex >= tracks->size ())
+			{
+				rows.push_back (state);
+			}
+		}
+
+		snapshot.channels = std::move (rows);
+	}
+
 	return true;
 }
 
