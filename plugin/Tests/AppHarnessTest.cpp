@@ -372,7 +372,8 @@ private:
 		else if (command == "menu") { commandMenu (tokens); }
 		else if (command == "host") { commandHost (tokens); }
 		else if (command == "engine") { commandEngine (tokens); }
-		else if (command == "samples") { commandSamples (tokens); }
+		else if (command == "song") { commandSong (tokens); }
+	else if (command == "samples") { commandSamples (tokens); }
 		else if (command == "tick") { commandTick (); }
 		else if (command == "shot") { commandShot (tokens); }
 		else if (command == "size") { commandSize (tokens); }
@@ -711,6 +712,22 @@ private:
 		With a count, this asserts instead of reporting: a command that only prints is a screenshot
 		with extra steps, and the VGM path had nothing else looking at it.
 	*/
+	/** **Switches to another song of the same file**, which is what a multi-song format needs and what
+		the interface does not offer yet. Kept here so the engine path is testable without the window.
+	*/
+	void commandSong (const juce::StringArray& tokens)
+	{
+		if (tokens.size() < 2)
+		{
+			report (false, "song needs an index");
+			return;
+		}
+
+		juce::String error;
+		const bool ok = processor.getEngine().selectSong (tokens[1].getIntValue () - 1, error);
+		report (ok, ok ? "song " + tokens[1] : "song: " + error);
+	}
+
 	void commandSamples (const juce::StringArray& tokens)
 	{
 		const auto list = processor.getEngine().currentSamples();

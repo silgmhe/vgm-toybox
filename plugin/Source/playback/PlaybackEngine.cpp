@@ -1,4 +1,4 @@
-#include <cstdio>
+﻿#include <cstdio>
 #include "PlaybackEngine.h"
 
 #include <set>
@@ -107,7 +107,44 @@ bool PlaybackEngine::loadFile (const juce::File& file, juce::String& errorMessag
 		return false;
 	}
 
+	{
+		// A new file starts at the track its own header names; only selectSong() overrides that.
+		const juce::ScopedLock sl (lock);
+		songIndex = -1;
+	}
+
 	return loadImage (std::move (data), file, true, errorMessage);
+}
+
+bool PlaybackEngine::selectSong (int index, juce::String& errorMessage)
+{
+	if (index < 0)
+	{
+		errorMessage = "No such song.";
+		return false;
+	}
+
+	juce::MemoryBlock image;
+	juce::File file;
+	bool playing = false;
+
+	{
+		const juce::ScopedLock sl (lock);
+		image = fileData;
+		file = currentFile;
+		playing = isPlaying ();
+		songIndex = index;
+	}
+
+	if (image.getSize() == 0)
+	{
+		errorMessage = "No song is loaded.";
+		return false;
+	}
+
+	// **A rebuild, not a read.** The same path a file open takes, so tracks, timeline and players stay
+	// consistent with each other; only the song the backend starts from changes.
+	return loadImage (std::move (image), file, playing, errorMessage);
 }
 
 bool PlaybackEngine::loadImage (juce::MemoryBlock image, const juce::File& file, bool startPlaying,
@@ -243,6 +280,7 @@ PlaybackEngine::BuildConfig PlaybackEngine::makeBuildConfig (void) const
 	config.mixerEnabled = mixerEnabled;
 	config.defaultRouting = defaultRouting;
 	config.chips = chips;
+	config.songIndex = songIndex;
 	return config;
 }
 
@@ -980,6 +1018,7 @@ PlaybackEngine::LoadedSong PlaybackEngine::buildSong (const BuildConfig& config,
 	memory.data = image.getData();
 	memory.size = image.getSize();
 	memory.file = file;
+	memory.songIndex = config.songIndex;
 
 	// Compile-time registration (idempotent): the plugin ships its backends inside the same
 	// binary, so there is nothing to load at runtime (ADR-008).

@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include <array>
 #include <atomic>
@@ -67,6 +67,12 @@ public:
 	// --- message thread ---
 	/** Loads a song file and starts playback. Returns false and fills errorMessage on failure. */
 	bool loadFile (const juce::File& file, juce::String& errorMessage);
+
+	/** **Switches to another song of the same file** (NSF and other multi-song formats). The image is
+		already in memory, so this is a rebuild and not a read. Returns false when nothing is loaded or
+		the format has a single song.
+	*/
+	bool selectSong (int index, juce::String& errorMessage);
 	void unloadFile (void);
 
 	/** Called on the message thread when an asynchronous load finishes. */
@@ -417,6 +423,9 @@ private:
 		bool mixerEnabled = true;
 		playback::DefaultRouting defaultRouting = playback::DefaultRouting::master;
 		std::vector<ChipEntry> chips;
+
+		/** Which song of a multi-song file to build, or -1 for the one the header names. */
+		int songIndex = -1;
 	};
 
 	/** Copies the live configuration into a BuildConfig. Message thread. */
@@ -557,6 +566,7 @@ private:
 
 	juce::MemoryBlock fileData;			// the song image; the backend loads its players from it
 	juce::File currentFile;
+	int songIndex = -1;					// which song of a multi-song file is open
 	std::vector<ChipEntry> chips;
 	std::map<juce::String, juce::String> tags;
 
