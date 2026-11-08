@@ -324,18 +324,23 @@ int main (int argc, char** argv)
 		the triangle held at a DC offset is what each of them produces. `NSF_TRACE=1` prints the list.
 	*/
 	int traced = 0;
+
+	// State of the frame-gap print, owned here rather than by `static` locals inside the callback: a
+	// probe that runs twice in one process would otherwise continue the previous run's numbering.
+	uint64_t previousClock = 0;
+	int framesSeen = 0;
+
 	const bool tracing = std::getenv ("NSF_TRACE") != nullptr;
 
 	if (tracing)
 	{
-		player.onSoundWriteForDiagnostics = [&traced, &player] (uint16_t address, uint8_t value)
+		player.onSoundWriteForDiagnostics = [&traced, &player, &previousClock, &framesSeen]
+			(uint16_t address, uint8_t value)
 		{
 			// **The gap between two $4017 writes is one NSF frame as the core counts it** - 29780
 			// clocks on NTSC. A driver that goes idle and a core that runs the frame at the wrong
-			// length look the same from the registers; this number tells them apart.
-			static uint64_t previousClock = 0;
-			static int framesSeen = 0;
-
+			// length look the same from the registers; this number tells them apart. The leading
+			// zeroes are init's own writes, made before anything has been rendered.
 			if (address == 0x4017 && framesSeen < 6)
 			{
 				const auto now = player.executedClocks ();
@@ -419,8 +424,10 @@ int main (int argc, char** argv)
 				std::printf (" %02X", (unsigned) player.peekRam (address));
 			}
 
+			const auto status = player.statusReads ();
+
 			std::printf ("  4015R=%llu last=%02X\n",
-						 (unsigned long long) player.statusReads (), (unsigned) player.lastStatus ());
+						 (unsigned long long) status.count, (unsigned) status.lastValue);
 		}
 
 		for (int i = 0; i < frames; ++i)

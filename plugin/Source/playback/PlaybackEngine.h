@@ -466,6 +466,9 @@ private:
 
 	/** The message-thread half of loadFileAsync(): drops the result when a newer load has taken
 		over in the meantime, otherwise installs it and reports. */
+	/** Records how many songs the installed song has and which one it is. Message thread. */
+	void recordSongs (const playback::SongInfo& info);
+
 	void finishLoad (int generation, LoadedSong&& built, juce::MemoryBlock&& image,
 					 const juce::File& file, bool ok, const juce::String& errorMessage,
 					 bool startPlaying, const LoadCallback& onDone);

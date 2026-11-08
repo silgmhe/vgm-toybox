@@ -810,14 +810,17 @@ uint64_t NsfPlayer::soundWrites (void) const
 	return bus != nullptr ? bus->soundWriteCount : 0;
 }
 
-uint64_t NsfPlayer::statusReads (void) const
+NsfPlayer::StatusReads NsfPlayer::statusReads (void) const
 {
-	return bus != nullptr ? bus->statusReadCount : 0;
-}
+	StatusReads reads;
 
-uint8_t NsfPlayer::lastStatus (void) const
-{
-	return bus != nullptr ? bus->lastStatusValue : 0;
+	if (bus != nullptr)
+	{
+		reads.count = bus->statusReadCount;
+		reads.lastValue = bus->lastStatusValue;
+	}
+
+	return reads;
 }
 
 uint8_t NsfPlayer::peekRam (uint16_t address) const

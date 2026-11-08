@@ -709,6 +709,23 @@ int main (void)
 		check (banked.isBanked (), "a single declared window makes a 256-byte image banked");
 	}
 
+	/**
+		**Which song a request lands on.** The header names one, a caller may ask for another, and a
+		request outside the file has to fall back rather than index past the table the driver keeps.
+		This mapping lived in the backend until now, where only a player could reach it.
+	*/
+	{
+		auto image = makeNsf (1, 34, 16);
+		NsfFile chosen;
+		std::string error;
+
+		check (NsfFile::parse (image.data (), image.size (), chosen, error), "a 34-song image parses");
+		check (chosen.startSongFor (0) == 0, "a player may start at the first song");
+		check (chosen.startSongFor (33) == 33, "and at the last one");
+		check (chosen.startSongFor (34) == 15, "one past the end falls back to the header's choice");
+		check (chosen.startSongFor (-1) == 15, "so does a negative request");
+	}
+
 	std::printf ("\nResult    : %s\n", toybox::test::failures() == 0 ? "all checks passed" : "FAILURES");
 
 	return toybox::test::failures() == 0 ? 0 : 1;

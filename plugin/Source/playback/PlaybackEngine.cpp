@@ -233,8 +233,7 @@ bool PlaybackEngine::installLoaded (LoadedSong&& built, juce::MemoryBlock&& imag
 	fileData = std::move (image);
 	currentFile = file;
 
-	songCount = (std::max) (1, built.song->getInfo ().songCount);
-	currentSongIndex = built.song->getInfo ().songIndex;
+	recordSongs (built.song->getInfo ());
 
 	installSong (std::move (built));
 
@@ -1316,8 +1315,7 @@ void PlaybackEngine::rebuildPlayers (juce::String& errorMessage)
 
 		if (built.song != nullptr)
 		{
-			songCount = (std::max) (1, built.song->getInfo ().songCount);
-			currentSongIndex = built.song->getInfo ().songIndex;
+				recordSongs (built.song->getInfo ());
 		}
 
 	installSong (std::move (built));
@@ -1332,6 +1330,14 @@ void PlaybackEngine::rebuildPlayers (juce::String& errorMessage)
 	{
 		playing = false;	// stay where we were, paused or stopped
 	}
+}
+
+void PlaybackEngine::recordSongs (const playback::SongInfo& info)
+{
+	// One place decides what "how many songs, which one" means for an installed song, so the two
+	// install paths (a fresh build and a rebuild) cannot drift apart.
+	songCount = (std::max) (1, info.songCount);
+	currentSongIndex = info.songIndex > 0 ? info.songIndex : 0;
 }
 
 void PlaybackEngine::resetState (void)

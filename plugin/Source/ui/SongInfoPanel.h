@@ -11,6 +11,10 @@ namespace toybox::ui
 	The "song info" card: title, the most important tags and the file name with the play
 	position. Everything is pulled from the engine in refresh(), so the editor only has to
 	call that once per timer tick - there is no state pushed in from the outside.
+
+	**It is also the one card that changes the engine.** Picking a song rebuilds it on the load worker
+	(`PlaybackEngine::selectSongAsync`), which is why this panel holds a mutable reference and why the
+	rebuild's failure comes back as `onSwitchFailure` instead of being swallowed here.
 */
 class SongInfoPanel : public CardComponent
 {

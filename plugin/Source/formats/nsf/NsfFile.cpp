@@ -194,6 +194,20 @@ bool NsfFile::isBanked (void) const
 	return false;
 }
 
+int NsfFile::startSongFor (int requested) const
+{
+	if (requested >= 0 && requested < totalSongs)
+	{
+		return requested;
+	}
+
+	// The header's own choice, itself clamped: a file that claims more songs than it has, or none at
+	// all, still has to open somewhere rather than index past the table the driver keeps.
+	const int fromHeader = startSong > 0 ? startSong - 1 : 0;
+
+	return fromHeader < totalSongs ? fromHeader : 0;
+}
+
 double NsfFile::framesPerSecond (void) const
 {
 	// The speed is the length of one play call in microseconds, and the format steals its lowest
