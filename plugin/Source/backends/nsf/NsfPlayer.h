@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include "playback/ChipState.h"
 #include "playback/MidiSequence.h"
@@ -105,6 +105,12 @@ public:
 		that the CPU runs some fifteen times faster than the audio it produces.
 	*/
 	void start (void);
+
+	/** Diagnostics only: every sound-register write, and one byte of the running address space.
+		The player reads neither; vgm_nsf_probe uses them to tell "the driver writes nothing" from
+		"its writes never leave the bus", which sound identical in the audio. */
+	std::function<void (uint16_t address, uint8_t value)> onSoundWriteForDiagnostics;
+	uint8_t peekRam (uint16_t address) const;
 
 	/** How much of the song the sample scan covers. Past this point a sample that has never been
 		heard gets no note rather than a made-up one. */
