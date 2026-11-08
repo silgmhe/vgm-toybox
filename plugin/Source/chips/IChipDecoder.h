@@ -27,15 +27,7 @@ struct ChipRequirements
 	bool memoryIsRam = false;			// RAM uploads concatenate; ROM blocks place at an offset
 	bool clipToContent = false;			// mask by what was sent rather than by the declared size
 
-	/** **The block's payload ends at the offset it declares, rather than starting there.**
 
-		The YMZ280B rips in this collection are laid out that way: `dataOfs` 0x3AF638 while the voice
-		that plays the block stops at 0x3AF637 - one byte before it. Placing the payload at the offset
-		(as every other chip here does) leaves the played range outside the image, so every read
-		returns zero, which decodes to an ADPCM ramp: a smooth curve on the row and silence in the
-		exported file.
-	*/
-	bool romEndsAtOffset = false;
 };
 
 /** The image the assembler built for a decoder, plus the board variant it was found in.

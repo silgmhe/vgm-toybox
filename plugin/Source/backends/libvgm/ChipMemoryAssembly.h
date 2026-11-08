@@ -28,7 +28,7 @@ namespace toybox::backends::libvgm::memory
 uint8_t c140Banking (const midi::SongIr& ir);
 
 std::vector<uint8_t> rom (const midi::SongIr& ir, uint8_t type, std::size_t maxBytes,
-						  bool clipToContent, bool endsAtOffset = false);
+						  bool clipToContent);
 
 /** A `0x67` block of type 0x00-0x3F: bytes concatenate in stream order, no header and no address. */
 std::vector<uint8_t> pcmBank (const midi::SongIr& ir, uint8_t type, std::size_t maxBytes);

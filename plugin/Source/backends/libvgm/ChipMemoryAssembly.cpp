@@ -21,7 +21,7 @@ uint8_t c140Banking (const midi::SongIr& ir)
 }
 
 std::vector<uint8_t> rom (const midi::SongIr& ir, uint8_t type, std::size_t maxBytes,
-						  bool clipToContent, bool endsAtOffset)
+						  bool clipToContent)
 {
 	// The declared size is what the chip can address; the content is what a mask is built from. They
 	// differ on the Neo Geo: the header says 8 MB but only 2.8 MB of blocks are present, so libvgm
@@ -36,12 +36,7 @@ std::vector<uint8_t> rom (const midi::SongIr& ir, uint8_t type, std::size_t maxB
 			continue;
 		}
 
-		// **A block declared to end at its offset extends the image to that offset, not past it.**
-		// The YMZ280B rips here place the payload so that `dataOfs` is one byte after the last byte
-		// a voice plays (measured: stop 0x3AF637, dataOfs 0x3AF638).
-		const std::size_t end = endsAtOffset
-									? (std::size_t) block.romOffset
-									: (std::size_t) block.romOffset + block.size;
+		const std::size_t end = (std::size_t) block.romOffset + block.size;
 		romSize = std::max (romSize, clipToContent ? end : (std::size_t) block.romSize);
 	}
 
@@ -57,26 +52,13 @@ std::vector<uint8_t> rom (const midi::SongIr& ir, uint8_t type, std::size_t maxB
 
 	for (const auto& block : ir.roms)
 	{
-		if (block.memoryType != type)
+		if (block.memoryType != type || block.romOffset >= image.size())
 		{
 			continue;
 		}
 
-		// The destination is the offset, or the place the payload ends when the block is declared
-		// that way (`ChipRequirements::romEndsAtOffset`).
-		const std::size_t at = endsAtOffset
-								   ? (block.romOffset >= block.size
-										  ? (std::size_t) (block.romOffset - block.size)
-										  : 0)
-								   : (std::size_t) block.romOffset;
-
-		if (at >= image.size ())
-		{
-			continue;
-		}
-
-		const std::size_t count = std::min (block.size, image.size () - at);
-		std::memcpy (image.data () + at, block.data, count);
+		const std::size_t count = std::min (block.size, image.size() - block.romOffset);
+		std::memcpy (image.data() + block.romOffset, block.data, count);
 	}
 
 	return image;
@@ -187,7 +169,7 @@ std::vector<uint8_t> forRequirements (const midi::SongIr& ir,
 		return ram (ir, requirements.memoryType, requirements.memoryBytes);
 	}
 
-	return rom (ir, requirements.memoryType, requirements.memoryBytes, requirements.clipToContent, requirements.romEndsAtOffset);
+	return rom (ir, requirements.memoryType, requirements.memoryBytes, requirements.clipToContent);
 }
 
 } // namespace toybox::backends::libvgm::memory
