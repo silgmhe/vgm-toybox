@@ -1,10 +1,15 @@
-# 评审：NSF 分支（`fix/nsf-driver-init`）
+# NSF 曲目选择与 bank 判定分支评审
 
-评审对象：`feature/libvgm-visualisation..fix/nsf-driver-init`，12 个提交，18 个文件，+654/−20。
-参照：`.codebuddy/rules/code-quality.md`。
+**评审对象**：`feature/libvgm-visualisation..fix/nsf-driver-init`，12 个提交，18 文件 +654/−20
+**评审分支**：`fix/nsf-driver-init`
+**依据**：`.codebuddy/rules/code-quality.md`
+**方法**：读 diff 与关键函数，逐条对照规则取证（文件:行号）；功能面另用 `46/46`、芯片断言与
+三首素材的行数/加载时间复核。
 
-**结论：功能正确，但不能按现状合并。** 一处真实的 UI 线程卡顿、两处状态不一致、一处
+**结论（评审当时）：功能正确，但不能按现状合并。** 一处真实的 UI 线程卡顿、两处状态不一致、一处
 "写的时候图快"的编码事故（规则 §0 表格里点名的同一类）。
+
+> **整改状态见文末第八节**：P0-1…P0-7 与 S1、S2 已修，S3/S4/S5/S7 见该节的处置结论。
 
 ---
 
@@ -205,3 +210,36 @@ PlaybackEngine.cpp:202-207   loadFileAsync()  { lock; songIndex = 0; }
 | 截的位宽是否在实现里确认 | 不适用 |
 | 固定缓冲大小从取值范围推 | 不适用 |
 | 断言写的是"应当"还是观测现状 | 应当（`isBanked` 两条） |
+
+## 八、整改状态（2026-11-08）
+
+| 项 | 状态 | 说明 |
+|---|---|---|
+| P0-1 同步重建 | 已修 | `selectSongAsync` 走 `loadPool`；面板乐观选中、失败拨回 |
+| P0-2 BOM | 已修 | 16 文件按字节剥离，16 insertions / 16 deletions 只差编码 |
+| P0-3 `resetState` | 已修 | 复位 `songCount = 1` / `currentSongIndex = 0` |
+| P0-4 失败语义 | **按文件打开语义**（用户裁定） | 失败即停播并在状态行报错；未加"保持原曲"分支，理由见下 |
+| P0-5 双默认值 | 已修 | 成员删除，索引成为 `loadImage()` 参数；`BuildConfig::songIndex` 默认 0 |
+| P0-6 注释不符 | 已修 | `selectSong` 校验 `0 ≤ index < songCount`，注释与实现一致 |
+| P0-7 两处重置 | 已修 | 参数化后不再有重置点 |
+| S1 卸载不重排 | 已修 | 隐藏选择器后补 `resized()` |
+| S2 吞掉错误 | 已修 | `onSwitchFailure` → `PlayView::onEngineError` → 编辑器状态行 |
+| S3 诊断入口分散 | 已修 | 合成 `NsfPlayer::StatusReads { count, lastValue }` |
+| S4 lambda 内 `static` | 已修 | 改为 `main` 局部变量按引用捕获 |
+| S5 面板副作用未写明 | 已修 | 类注释写明"这是唯一会改引擎的卡片" |
+| S6 两处重复赋值 | 已修 | `recordSongs (const playback::SongInfo&)` |
+| S7 缺断言 | 已修 | 新增 `NsfFile::startSongFor()`，`NsfFormatTest` 四条断言覆盖首/末/越界/负数 |
+| S8 锁不一致 | 已说明 | 全部发生在消息线程；`takeSongForRebuild` 持锁只为复制镜像 |
+
+### P0-4 的取舍
+
+切曲目失败与打开文件失败**同样处理**：停止播放、在状态行报出原因、下拉框回到实际打开的曲目。
+没有为它增加"失败后保持原曲"的回滚分支——索引已在 `takeSongForRebuild` 校验过、镜像已在内存，
+这条路径的失败只可能来自后端自身错误，此时保留一个半坏的状态比停下来更危险；而给 `finishLoad`
+加第三种语义会让"加载失败意味着什么"变得不可预测。
+
+### 最终验收
+
+`46/46`、芯片断言、`07 Stage 2` 16 行、`02 Green Hill Zone` 11 行、`03 Scene Select` 24 行；
+NSF 显示 `Song [1]`（34 项）、VGM 隐藏两个控件；`song 1` / `34` 接受，`song 0` / `35` 拒绝；
+`vgm_nsf_test` 新增四条映射断言；加载 190–270 ms。
