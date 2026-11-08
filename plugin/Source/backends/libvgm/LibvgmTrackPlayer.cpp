@@ -595,7 +595,7 @@ void LibvgmTrackPlayer::Ledger::buildNotes (const midi::SongIr& ir)
 	}
 }
 
-int LibvgmTrackPlayer::trackFor (uint32_t deviceId, int channel) const
+int LibvgmTrackPlayer::trackFor (int channel) const
 {
 	if (tracks == nullptr)
 	{
@@ -607,11 +607,6 @@ int LibvgmTrackPlayer::trackFor (uint32_t deviceId, int channel) const
 	for (std::size_t i = 0; i < tracks->size (); ++i)
 	{
 		const auto& track = (*tracks)[i];
-
-		if (track.deviceId != deviceId)
-		{
-			continue;
-		}
 
 		// A whole-device track (channelIndex -1) owns every channel of that device: the core the
 		// song picked cannot isolate its voices, so there is nothing finer to point at.
@@ -797,8 +792,11 @@ bool LibvgmTrackPlayer::captureState (playback::ChipStateSnapshot& snapshot) con
 
 			// Set here rather than inside the conversion: which engine track a channel belongs to is
 			// a fact about this runtime, not about the chip, and the conversion has no engine to ask.
-			state.trackIndex = trackFor (instance.deviceId,
-										 deviceBases[blockOf (instanceIndex)] + channel);
+			// **Matched by number, not by device.** A linked voice set's tracks carry its parent's
+			// `deviceId` - `describeSong` creates them inside the head's loop - so filtering by id can
+			// never find them. That is the whole reason the SSG and PSG rows sat empty while the mixer,
+			// which does no such matching, drew them: it was not the block arithmetic at all.
+			state.trackIndex = trackFor (deviceBases[blockOf (instanceIndex)] + channel);
 
 			// **The name of a row is the name of the track it belongs to.** The chip's own table is
 			// not the same thing: a linked voice set shares its parent's table, so the SSG's three
