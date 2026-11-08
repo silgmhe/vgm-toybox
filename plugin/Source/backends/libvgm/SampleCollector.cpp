@@ -245,6 +245,40 @@ void SampleCollector::add (uint64_t key, const std::string& name, const uint8_t*
 			sample.values.push_back ((float) (((int) bytes[i] - 0x80)) / 128.0f);
 		}
 	}
+	else if (format == SampleFormat::adpcmA4)
+	{
+		// **ADPCM-A, exactly as `fmopn.c` runs it.** A nibble picks a delta out of `steps[]` scaled
+		// by the running step; its low three bits then move the step by `step_inc`. The accumulator
+		// is twelve bits and **wraps** (MSM5205 heritage), unlike Delta-T which clamps. One nibble
+		// is one sample, high nibble of a byte first.
+		static constexpr int stepTable[49] = {
+			16, 17, 19, 21, 23, 25, 28, 31, 34, 37, 41, 45, 50, 55, 60, 66, 73,
+			80, 88, 97, 107, 118, 130, 143, 157, 173, 190, 209, 230, 253, 279, 307,
+			337, 371, 408, 449, 494, 544, 598, 658, 724, 796, 876, 963, 1060, 1166,
+			1282, 1411, 1552
+		};
+		static constexpr int stepInc[8] = { -16, -16, -16, -16, 32, 80, 112, 144 };
+
+		int accumulator = 0;
+		int step = 0;
+
+		sample.values.reserve (length * 2);
+
+		for (std::size_t i = 0; i < length; ++i)
+		{
+			for (int half = 0; half < 2; ++half)
+			{
+				const int nibble = (half == 0) ? ((bytes[i] >> 4) & 0x0F) : (bytes[i] & 0x0F);
+				const int delta = (2 * (nibble & 7) + 1) * stepTable[step / 16] / 8;
+
+				accumulator = (accumulator + ((nibble & 8) != 0 ? -delta : delta)) & 0xFFF;
+				step = std::max (0, std::min (48 * 16, step + stepInc[nibble & 7]));
+
+				const int value = (accumulator & 0x800) != 0 ? (accumulator | ~0xFFF) : accumulator;
+				sample.values.push_back ((float) value / 2048.0f);
+			}
+		}
+	}
 	else if (format == SampleFormat::ga20 || format == SampleFormat::es5503)
 	{
 		// **Eight-bit unsigned with 0x80 as silence, and 0x00 as the end.** `iremga20.c:177` reads

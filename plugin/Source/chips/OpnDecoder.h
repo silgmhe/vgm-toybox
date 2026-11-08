@@ -52,7 +52,16 @@ public:
 	explicit OpnDecoder (Variant variant = Variant::ym2612);
 	~OpnDecoder() override;
 
+	/** **The ADPCM-A image** (VGM block `0x82`). Six voices share one ROM and each names its own
+		start and end page, so a row can only draw a real shape once those bytes are here; the
+		Delta-T voice streams from the *other* block (`0x83`) and stays a note-only row.
+
+		The requirement is on the class rather than the variant because the buffer makes every OPN
+		decoder from one table - a YM2612 song simply has no `0x82` block and gets an empty image. */
+	static constexpr ChipRequirements kRequirements { 8000000u, true, 0x82, 8u << 20, false, false };
+
 	void reset (const ChipConfig& config) override;
+	void attachMemory (const ChipMemory& memory) override;
 
 	/** The DELTA-T ROM (VGM block 0x82). Without it ADPCM-B has no sample to measure, and the
 		channel stays the C4 trigger it was before. */
