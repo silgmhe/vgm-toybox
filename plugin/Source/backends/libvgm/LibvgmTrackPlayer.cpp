@@ -766,6 +766,18 @@ bool LibvgmTrackPlayer::captureState (playback::ChipStateSnapshot& snapshot) con
 			// a fact about this runtime, not about the chip, and the conversion has no engine to ask.
 			state.trackIndex = trackFor (instance.deviceId, bases[instanceIndex] + channel);
 
+			// **The name of a row is the name of the track it belongs to.** The chip's own table is
+			// not the same thing: a linked voice set shares its parent's table, so the SSG's three
+			// channels were drawn as `FM 1..3` while the mixer called those same tracks `SSG 1..3`.
+			// Taking the name from the track removes the second naming rule instead of correcting it.
+			if (tracks != nullptr && state.trackIndex >= 0
+				&& (std::size_t) state.trackIndex < tracks->size ())
+			{
+				const auto& track = (*tracks)[(std::size_t) state.trackIndex];
+				state.name = track.name.toStdString ();
+				state.chipName = track.groupName.toStdString ();
+			}
+
 			// And so is this: which sample is playing is the chip's answer, but what note that
 			// sample gets is the song's. Without it every drum hit shares the one trigger note and
 			// the grid cannot say which hit it was - the conversion sees a single channel at a
