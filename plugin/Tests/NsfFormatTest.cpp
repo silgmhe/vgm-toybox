@@ -684,6 +684,31 @@ int main (void)
 		folder.deleteRecursively ();
 	}
 
+	/**
+		**The bank table decides how the image is addressed, not its size.**
+
+		Ai Senshi Nicol is 20 KB of program with `init` at $D02B: that address exists only when the
+		$D000 window shows bank 0. Judging from the size alone mapped it linearly, the CPU read past
+		the end of the image and executed zero page - one DC level, no register writes at all. The
+		header says which it is, and that is what this asserts.
+	*/
+	{
+		auto plain = makeNsf ();
+		NsfFile linear;
+		std::string error;
+
+		check (NsfFile::parse (plain.data (), plain.size (), linear, error), "an image without banks parses");
+		check (! linear.isBanked (), "and is addressed linearly");
+
+		auto declared = makeNsf ();
+		declared[NsfFile::offsetBankSwitch] = 0x03;		// one window mapped, the rest unused
+
+		NsfFile banked;
+
+		check (NsfFile::parse (declared.data (), declared.size (), banked, error), "an image with a bank table parses");
+		check (banked.isBanked (), "a single declared window makes a 256-byte image banked");
+	}
+
 	std::printf ("\nResult    : %s\n", toybox::test::failures() == 0 ? "all checks passed" : "FAILURES");
 
 	return toybox::test::failures() == 0 ? 0 : 1;
