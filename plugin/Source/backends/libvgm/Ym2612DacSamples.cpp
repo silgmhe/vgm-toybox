@@ -44,6 +44,17 @@ namespace
 		return hash ^ ((uint64_t) length << 40);
 	}
 
+	/** **Calibration against a known drum: 1.637.**
+
+		The median interval understates the rate a bank is played at - measured by the user, who compared
+		a snare from the song against the same snare in an exported PCM and found the file 1.637x too
+		long. The file's waits are quantised to whole ticks (2 here), and the drum bodies sit between
+		them; this factor is what that quantisation costs. It is a measurement, not a derivation: a song
+		whose drums disagree will need the factor revisited, and the number is stated once so that is a
+		one-line change rather than a re-investigation.
+	*/
+	constexpr double kDacRateCalibration = 1.637;
+
 	/** **The rate a drum runs at**, taken as the median interval that follows a non-silence byte.
 
 		Not the mean over the whole stream: a Mega Drive driver feeds silence at 1..2 ticks and drum
@@ -79,7 +90,7 @@ namespace
 		std::nth_element (intervals.begin (), intervals.begin () + middle, intervals.end ());
 
 		const uint32_t median = intervals[middle];
-		return median > 0 ? tickRate / (double) median : 0.0;
+		return median > 0 ? tickRate * kDacRateCalibration / (double) median : 0.0;
 	}
 }
 

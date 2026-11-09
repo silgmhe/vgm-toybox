@@ -10,7 +10,8 @@
 #
 # The rate is the **median interval that follows a loud byte**: the driver feeds silence at 1..2
 # ticks and drums at 5..6, so the stream's mean (13 799 Hz) matches neither, while the median over
-# the loud bytes is 2 ticks - 22 050 Hz here. That is where the drum bytes actually sit.
+# the loud bytes is 2 ticks - 22 050 Hz - and a calibration of 1.637 on top of it, measured by the
+# user against a known snare, gives 36 096 Hz.
 
 size 900 700
 
