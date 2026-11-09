@@ -395,31 +395,56 @@ struct OpnDecoder::Impl
 			return cached->second;
 		}
 
-		// `estimateCycleLength()` looks at 2048 samples - 1024 bytes - and truncates anything longer, so
-		// decoding more than that only costs time: the answer is identical.
-		constexpr std::size_t kBytes = 4096;
-		std::vector<double> waveform;
-		waveform.reserve (kBytes * 2);
+		// **Where to look for the period: behind the attack.** A percussive sample's first kilobyte is
+		// its attack - noise by construction - and the estimator finds no repetition there. On
+		// `04 Stage 1` that was 540 of 803 hits, more than half the song, and every one of them fell
+		// back to the register rate and sounded wrong; measuring one and two kilobytes further in finds
+		// the body's period (0x570100: nothing at 0, 127.30 at 1 KB, 126.99 at 2 KB).
+		//
+		// The window stays 4096 bytes: shortening it to the estimator's own 2048 samples changed the
+		// answer on `07 Stage 2` (note 65 became 85), so the length is part of the measurement and only
+		// the starting point is new here.
+		constexpr std::size_t kWindowBytes = 4096;
+		constexpr std::size_t kStride = 1024;
+		constexpr int kWindows = 3;
 
-		double accumulator = 0.0;
-		int step = kAdpcmBStepMin;
-		for (std::size_t i = 0; i < kBytes; ++i)
+		for (int window = 0; window < kWindows; ++window)
 		{
-			const int byte = adpcmBByte (start + (uint32_t) i);
-			for (int half = 0; half < 2; ++half)
+			const uint32_t from = start + (uint32_t) window * (uint32_t) kStride;
+			std::vector<double> waveform;
+			waveform.reserve (kWindowBytes * 2);
+
+			double accumulator = 0.0;
+			int step = kAdpcmBStepMin;
+
+			for (std::size_t i = 0; i < kWindowBytes; ++i)
 			{
-				const int nibble = (half == 0) ? ((byte >> kNibbleShift) & kNibbleMask) : (byte & kNibbleMask);
-				accumulator += (double) (kAdpcmBStepB1[nibble] * step / 8);
-				accumulator = std::clamp (accumulator, -32768.0, 32767.0);
-				waveform.push_back (accumulator);
-				step = std::clamp (step * kAdpcmBStepB2[nibble] / 64, kAdpcmBStepMin,
-								   kAdpcmBStepMax);
+				const int byte = adpcmBByte (from + (uint32_t) i);
+
+				for (int half = 0; half < 2; ++half)
+				{
+					const int nibble = (half == 0) ? ((byte >> kNibbleShift) & kNibbleMask)
+												   : (byte & kNibbleMask);
+					accumulator += (double) (kAdpcmBStepB1[nibble] * step / 8);
+					accumulator = std::clamp (accumulator, -32768.0, 32767.0);
+					waveform.push_back (accumulator);
+					step = std::clamp (step * kAdpcmBStepB2[nibble] / 64, kAdpcmBStepMin,
+									   kAdpcmBStepMax);
+				}
+			}
+
+			const double cycle = estimateCycleLength (waveform, 0, 0);
+
+			if (cycle > 0.0)
+			{
+				adpcmBCycleCache[start] = cycle;
+				return cycle;
 			}
 		}
 
-		const double cycle = estimateCycleLength (waveform, 0, 0);
-		adpcmBCycleCache[start] = cycle;
-		return cycle;
+		// Nothing repeats in any of the three windows: a drum with no pitch, or a ROM that is not here.
+		adpcmBCycleCache[start] = 0.0;
+		return 0.0;
 	}
 
 	void startAdpcmB (void)
