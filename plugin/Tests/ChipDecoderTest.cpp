@@ -445,6 +445,63 @@ namespace
 		check (withDac.empty(), "the DAC replaces channel 6 instead of adding notes");
 	}
 
+	/** **The DAC row draws a stream, not a sample it can point at.**
+
+		The YM2612's sixth channel takes one byte at a time at `0x2A` and has no ROM, so unlike every
+		other sampled chip here there is nothing to name: the row shows the recent past. The rate is
+		the spacing of the writes, because that is how the driver expresses a sample's pitch, and a
+		rate taken from the song's length would report the pauses as if they were part of the stream
+		(`02 Green Hill Zone`: 447 541 bytes, a 3.2-tick mean, 13.8 kHz - not the 8.5 kHz the whole
+		52.9 s would suggest).
+	*/
+	void testYm2612DacWindow (void)
+	{
+		using toybox::chips::OpnDecoder;
+		using toybox::chips::RegisterWrite;
+
+		OpnDecoder decoder (OpnDecoder::Variant::ym2612);
+		decoder.reset (toybox::chips::ChipConfig { kYmClock, 44100.0 });
+
+		const auto write = [&decoder] (uint32_t time, uint8_t reg, uint8_t value)
+		{
+			RegisterWrite w;
+			w.sampleTime = time;
+			w.port = 0;
+			w.reg = reg;
+			w.value = value;
+			decoder.write (w);
+		};
+
+		write (0, 0x2B, 0x80);			// DAC on
+
+		// 64 bytes, five ticks apart, from 0x80 upwards: the first level is zero, so a window that
+		// dropped the 0x80 bytes would start at 1/128 instead.
+		for (int i = 0; i < 64; ++i)
+		{
+			write ((uint32_t) i * 5, 0x2A, (uint8_t) (0x80 + i));
+		}
+
+		const auto state = decoder.channelState (6);
+
+		check (state.present && state.wave != nullptr && state.wave->size () == 64,
+			   "the DAC row draws the bytes the driver wrote, 0x80 included");
+		check (state.wave != nullptr && (*state.wave)[0] == 0.0f
+				   && std::abs ((*state.wave)[1] - 1.0f / 128.0f) < 1e-6f,
+			   "and they are unsigned bytes around 0x80");
+		check (state.sampleRate > 8800.0f && state.sampleRate < 8840.0f,
+			   "the rate is the spacing of the writes - 44100 / 5 here");
+
+		// A window, not a log: a longer stream keeps the most recent 4096 bytes.
+		for (int i = 0; i < 5000; ++i)
+		{
+			write (320 + (uint32_t) i * 5, 0x2A, (uint8_t) i);
+		}
+
+		const auto later = decoder.channelState (6);
+		check (later.wave != nullptr && later.wave->size () == 4096,
+			   "and it holds the most recent half second, not the whole song");
+	}
+
 	/** A three-channel OPN (YM2203) has no second port: register 0x28 with the port-select bit
 		set addresses channel 3 of a six-channel OPN, which this chip does not have, while the
 		low two bits still select one of its three. */
@@ -7229,6 +7286,7 @@ int main (void){
 	testFmPitchBendFollowsTheFnumber();
 	testFmSecondPortIsASeparateChannel();
 	testFmDacTakesOverChannelSix();
+	testYm2612DacWindow();
 	testOpnThreeChannels();
 	testOpnChannelFamilies();
 	testOpnAdpcmBShape();

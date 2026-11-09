@@ -10,6 +10,7 @@
 #include "SegaPcmSamples.h"
 #include "OpnAdpcmSamples.h"
 #include "OpnDeltaTSamples.h"
+#include "Ym2612DacSamples.h"
 #include "Ymz280bSamples.h"
 #include "K007232Samples.h"
 #include "VsuSamples.h"
@@ -414,6 +415,21 @@ bool LibvgmSongInstance::prepare (double hostSampleRate, int newMaxBlockSize, ju
 		// `0x81` on the OPNA) and a page size that differs per board, so the collector reads the IR's
 		// chip kinds rather than taking the one clock the ADPCM-A path needed.
 		for (auto& sample : collectOpnDeltaTSamples (*songIr, clock))
+		{
+			collected.push_back (std::move (sample));
+		}
+	}
+
+	const bool hasYm2612 = songIr != nullptr
+						   && std::any_of (songIr->chips.begin (), songIr->chips.end (),
+										   [] (const midi::ChipSlot& slot)
+										   { return slot.kind == midi::ChipKind::ym2612; });
+
+	if (hasYm2612 && songIr != nullptr)
+	{
+		// The DAC is fed one byte at a time, so there is no ROM to point at. What the file carries is
+		// the PCM block the driver streams from - or, when it has none, the pauses in the stream.
+		for (auto& sample : collectYm2612DacSamples (*songIr))
 		{
 			collected.push_back (std::move (sample));
 		}

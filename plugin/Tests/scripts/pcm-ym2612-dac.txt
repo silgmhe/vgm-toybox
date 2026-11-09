@@ -1,0 +1,19 @@
+# The YM2612's DAC channel reaches the sample export.
+#
+# This chip is the odd one out: the others name a range of a ROM with registers, while the YM2612 is
+# handed one byte at a time at 0x2A and the driver decides where those bytes came from. `02 Green
+# Hill Zone` carries them in a `0x67` block of type 0x00 - 13 132 bytes - which the file streams into
+# the DAC with `0x80-0x8F` commands and seeks into 228 times with `0xE0`.
+#
+# So the unit is the **bank**, not a hit: the file holds a loop of drum material, and splitting it by
+# silence was measured (>=32 silent bytes: three segments; >=64: one), i.e. there are no per-hit
+# boundaries to find. The rate is the mean interval between writes - 3.2 ticks here, 13 799 Hz - not
+# the song's length divided by its bytes, which would count the pauses as part of the stream.
+
+size 900 700
+
+load "test_file/sega_md/02 Green Hill Zone.vgz"
+tick
+
+samples 1
+sample-names ym2612dac_000000_0334C

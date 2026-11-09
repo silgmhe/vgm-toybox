@@ -258,6 +258,76 @@ struct OpnDecoder::Impl
 	uint32_t lastDacTrigger = 0;
 	bool dacTriggered = false;
 	bool dacEnabled = false;
+
+	/** **The DAC's last half second, in the order the driver wrote it.**
+
+		The YM2612's sixth channel is not a voice and has no ROM: its "sample" is whatever arrives at
+		register `0x2A`, one byte at a time. On a Mega Drive that is a continuous stream - `02 Green
+		Hill Zone` writes 447 541 bytes over 52.7 s - so a row can draw the recent past but cannot
+		point at a sample the way ADPCM-A does. 4096 bytes is about half a second at the 8.5 kHz those
+		streams run at.
+
+		The rate is measured, not assumed: the driver spaces its writes to express the sample's
+		pitch, and the same register range serves a 7 kHz drum and a 30 kHz one. `pushDac()` averages
+		the intervals so the row is drawn at the speed it is being played.
+	*/
+	struct DacWindow
+	{
+		static constexpr std::size_t kBytes = 4096;
+
+		uint8_t bytes[kBytes] = {};
+		std::size_t head = 0;			// where the next byte goes
+		std::size_t count = 0;			// bytes held, never more than kBytes
+		uint32_t lastTime = 0;
+		bool haveLast = false;
+		uint64_t ticks = 0;				// ticks between writes, for the rate
+		uint32_t intervals = 0;
+		bool dirty = false;
+	};
+
+	DacWindow dacWindow;
+	std::shared_ptr<const std::vector<float>> dacWave;
+
+	/** A pause is not an interval: above this many ticks the stream had stopped. 64 ticks is
+		1.45 ms at 44.1 kHz - above every dither step these drivers use (1..6) and below any gap
+		between two notes. */
+	static constexpr uint32_t kDacRateGap = 64;
+
+	void pushDac (uint32_t time, uint8_t data)
+	{
+		DacWindow& window = dacWindow;
+
+		window.bytes[window.head] = data;
+		window.head = (window.head + 1) % DacWindow::kBytes;
+
+		if (window.count < DacWindow::kBytes)
+		{
+			++window.count;
+		}
+
+		if (window.haveLast)
+		{
+			const uint32_t dt = time - window.lastTime;
+
+			if (dt > 0 && dt <= kDacRateGap)
+			{
+				window.ticks += dt;
+				++window.intervals;
+			}
+		}
+
+		window.lastTime = time;
+		window.haveLast = true;
+		window.dirty = true;
+	}
+
+	/** Bytes a second the stream is being written at, 0 until two writes have been seen. */
+	double dacBytesPerSecond (void) const
+	{
+		return (dacWindow.intervals > 0 && dacWindow.ticks > 0)
+			? streamRate * (double) dacWindow.intervals / (double) dacWindow.ticks
+			: 0.0;
+	}
 	uint32_t now = 0;
 	double clock = 8000000.0;
 	double streamRate = 44100.0;
@@ -580,7 +650,18 @@ struct OpnDecoder::Impl
 
 	void dacByte (uint32_t time, uint8_t data)
 	{
-		if (! dacEnabled || data == 0x80)
+		if (! dacEnabled)
+		{
+			return;
+		}
+
+		// **Every byte goes into the window, `0x80` included.** It is the silence the driver streams
+		// between hits; cutting it out would make a stream that pauses look like one that does not,
+		// and move the bytes around a decaying drum. The MIDI trigger below still ignores it, because
+		// a trigger is "something was played", not "a byte arrived".
+		pushDac (time, data);
+
+		if (data == 0x80)
 		{
 			return;
 		}
@@ -940,6 +1021,35 @@ ChannelState OpnDecoder::channelState (int channel) const
 		state.period = kOneShotPeriod;
 		state.volume = 12;		// a trigger marker, not a measured level
 		state.gate = impl->now < impl->dac.end;
+
+		// **What the row can draw is the recent past.** Unlike ADPCM-A there is no sample to point
+		// at: the driver writes the bytes itself, and where they came from (a `0x67` block, the Z80's
+		// RAM) is not in the register stream. The window is rebuilt only when a byte arrived, because
+		// the snapshot asks for this state once per block and the buffer changes at kilohertz rates.
+		if (impl->dacWindow.count > 0)
+		{
+			if (impl->dacWindow.dirty || impl->dacWave == nullptr)
+			{
+				const std::size_t held = impl->dacWindow.count;
+				const std::size_t from = (held < Impl::DacWindow::kBytes) ? 0 : impl->dacWindow.head;
+
+				auto wave = std::make_shared<std::vector<float>> ();
+				wave->reserve (held);
+
+				for (std::size_t i = 0; i < held; ++i)
+				{
+					const uint8_t byte = impl->dacWindow.bytes[(from + i) % Impl::DacWindow::kBytes];
+					wave->push_back ((float) (((int) byte - 0x80) / 128.0));
+				}
+
+				impl->dacWave = std::move (wave);
+				impl->dacWindow.dirty = false;
+			}
+
+			state.wave = impl->dacWave;
+			state.sampleRate = (float) impl->dacBytesPerSecond ();
+		}
+
 		return state;
 	}
 
