@@ -522,6 +522,19 @@ int main (void)
 					check (first.getSize () == 44 + 320 * 8 * 4,
 						   "and its size is the header plus eight points per byte");
 
+					// **The length limit is the writer's, not a chip's.** Every collector hands over
+					// levels and a rate, so one rule covers them all - and a file cut here is what
+					// keeps a driver's "end at the end of the ROM" from exporting a bank as a
+					// minute-long sample. One millisecond is shorter than both of these.
+					int truncated = 0;
+					const auto cut = toybox::playback::writeSamples (
+						samples, folder.getFullPathName ().toStdString (), 0.001, &truncated);
+
+					check (cut == 2 && truncated == 2,
+						   "a length limit cuts every file that exceeds it, and says how many");
+					check (first.getSize () < 44 + 320 * 8 * 4,
+						   "and the file on disk is shorter afterwards");
+
 					folder.deleteRecursively ();
 				}
 			}

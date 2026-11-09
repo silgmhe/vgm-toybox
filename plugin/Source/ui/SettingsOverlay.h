@@ -293,6 +293,11 @@ private:
 	juce::Label retentionCaption;
 	juce::Slider retentionSlider;
 	juce::Label hint;
+
+	/** The per-sample length limit, applied by the writer to every chip's samples. */
+	juce::Label sampleCaption;
+	juce::Slider sampleSlider;
+	juce::Label sampleHint;
 };
 
 /**

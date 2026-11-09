@@ -8,6 +8,7 @@
 #include <memory>
 #include <vector>
 
+#include "OpnAdpcmB.h"
 #include "Pitch.h"
 
 namespace toybox::chips
@@ -52,16 +53,8 @@ namespace
 	// Above C8 a "period" is an artifact, as on every other sampled player here.
 	constexpr int kHighestMelodicNote = 108;
 
-	/** The ADPCM-B nibble decoder from the core's ymdeltat.c: a 4-bit delta picks a step from
-		table B1 scaled by the current step size, and table B2 scales the step size for the next
-		nibble. The measured period comes from the running sum, exactly as the DPCM voices of the
-		K054539 do. */
-	constexpr int kAdpcmBStepB1[16] = { 1, 3, 5, 7, 9, 11, 13, 15,
-										-1, -3, -5, -7, -9, -11, -13, -15 };
-	constexpr int kAdpcmBStepB2[16] = { 57, 57, 57, 57, 77, 102, 128, 153,
-										57, 57, 57, 57, 77, 102, 128, 153 };
-	constexpr int kAdpcmBStepMin = 127;
-	constexpr int kAdpcmBStepMax = 24576;
+	// The nibble decoder and its tables live in `OpnAdpcmB.h`: the panel, the cycle estimate and the
+	// exporter all decode these bytes, and one copy of the tables is the point.
 
 	/** The chip masks its ROM address with the size rounded up to a power of two, the way the
 		QSound does - a ROM that is not a power of two therefore wraps rather than reads zero. */
@@ -349,7 +342,7 @@ struct OpnDecoder::Impl
 		on the YM2610 and 32-byte ones on the OPNA. */
 	int adpcmBShift (void) const
 	{
-		return (variant == Variant::ym2610 || variant == Variant::ym2610b) ? 8 : 5;
+		return addressShiftFor (variant);
 	}
 
 	uint32_t adpcmBAddress (uint16_t reg) const
@@ -415,7 +408,7 @@ struct OpnDecoder::Impl
 			waveform.reserve (kWindowBytes * 2);
 
 			double accumulator = 0.0;
-			int step = kAdpcmBStepMin;
+			int step = opn::deltaT::kStepMin;
 
 			for (std::size_t i = 0; i < kWindowBytes; ++i)
 			{
@@ -425,11 +418,7 @@ struct OpnDecoder::Impl
 				{
 					const int nibble = (half == 0) ? ((byte >> kNibbleShift) & kNibbleMask)
 												   : (byte & kNibbleMask);
-					accumulator += (double) (kAdpcmBStepB1[nibble] * step / 8);
-					accumulator = std::clamp (accumulator, -32768.0, 32767.0);
-					waveform.push_back (accumulator);
-					step = std::clamp (step * kAdpcmBStepB2[nibble] / 64, kAdpcmBStepMin,
-									   kAdpcmBStepMax);
+					waveform.push_back ((double) opn::deltaT::nextLevel (nibble, accumulator, step));
 				}
 			}
 
@@ -1062,13 +1051,17 @@ ChannelState OpnDecoder::channelState (int channel) const
 		if (cached == impl->adpcmBShapes.end ())
 		{
 			constexpr uint32_t kWindow = 4096;
-			const uint32_t length = (std::min) (voice.latchEnd - voice.latchStart, kWindow);
+			// **`latchEnd` is the last byte, so the range is one byte longer than the difference.**
+			// The difference was used until the exporter needed the same rule and made the missing
+			// byte visible: a start and end on the same page drew 255 bytes of a 256-byte page, and
+			// the file would have lost the same nibble.
+			const uint32_t length = (std::min) (voice.latchEnd - voice.latchStart + 1u, kWindow);
 
 			auto wave = std::make_shared<std::vector<float>> ();
 			wave->reserve (length * 2);
 
 			double accumulator = 0.0;
-			int step = kAdpcmBStepMin;
+			int step = opn::deltaT::kStepMin;
 
 			for (uint32_t i = 0; i < length; ++i)
 			{
@@ -1078,11 +1071,8 @@ ChannelState OpnDecoder::channelState (int channel) const
 				{
 					const int nibble = (half == 0) ? ((byte >> kNibbleShift) & kNibbleMask)
 												   : (byte & kNibbleMask);
-					accumulator += (double) (kAdpcmBStepB1[nibble] * step / 8);
-					accumulator = std::clamp (accumulator, -32768.0, 32767.0);
-					wave->push_back ((float) (accumulator / 32768.0));
-					step = std::clamp (step * kAdpcmBStepB2[nibble] / 64, kAdpcmBStepMin,
-									   kAdpcmBStepMax);
+					wave->push_back ((float) (opn::deltaT::nextLevel (nibble, accumulator, step)
+											  / 32768.0));
 				}
 			}
 

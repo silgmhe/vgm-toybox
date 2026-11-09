@@ -320,7 +320,7 @@ track.channelIndex = channelIndex;    // 联动芯片的通道号接在父芯片
 | 采样 | YMZ280B —— 见 §9.15（seek 不支持，见 §9.15.3） | ✓ | ✓ | ✓ `collectYmz280bSamples` |
 | 采样 | MultiPCM（YMW258）—— 见 §9.10 | ✓ | ✓ | ✓ `collectMultiPcmSamples` |
 | 采样 | K007232 —— 见 §9.7 | ✓ | ✓ | ✓ `collectK007232Samples` |
-| 采样 | **OPN-ADPCM**（YM2610/YM2608 的 ADPCM-A）—— 见 §9.17 | ✓ | — | ✓ `collectOpnAdpcmSamples` |
+| 采样 | **OPN-ADPCM**（ADPCM-A 与 ADPCM-B/Delta-T）—— 见 §9.17 | ✓ | — | ✓ `collectOpnAdpcmSamples` + `collectOpnDeltaTSamples` |
 | 采样 | **Y8950-ADPCM / ADPCM-drum** | — | — | — |
 | 波表 | VSU —— 见 §9.11 | ✓ | ✓ | ✓ `collectVsuSamples` |
 | 波表 | ES5503 —— 见 §9.9 | ✓ | ✓ | ✓ `collectEs5503Samples` |
@@ -1003,8 +1003,16 @@ ADPCM-A 在**第二个寄存器端口**（YM2610 的 `0x59`、YM2608 的 `0x57`�
   个 nibble，也就是 8192 个采样，所以时间长度取决于播放速率：ADPCM-A 18 518.5 Hz → 约 **0.44 s**；
   `07 Stage 2` 的 DeltaT 34 833 Hz → 约 **0.24 s**；`02 The Military System` 41 331 Hz → 约 0.20 s。
   更长的样本只画开头——一行要的是形状，不是整段录音。**它不影响音符与音高**：那来自 DELTA-N 与周期
-  估计（后者同样只看 4096 字节）。**导出**仍只覆盖 ADPCM-A（`collectOpnAdpcmSamples` 只读 `0x82`），
-  DeltaT 只进了可视化与 MIDI。
+  估计（后者同样只看 4096 字节）。
+
+  **导出（2026-11-09 补齐）**：`collectOpnDeltaTSamples` 把每段被 key-on 过的 DeltaT range 导出成一个
+  WAV，与 ADPCM-A 并列但有三处不同——地址页按变体移位（OPNB 8 / OPNA 5，`addressShiftFor()` 是唯
+  一规则）、块按变体取（`sampleBlocksFor()`）、**速率固定为参照 DELTA-N `0x4000`**（一份录音一份文
+  件；曲中的 DELTA-N 只是移调）。长度包含 `end` 指向的**最后一个字节**（画面与文件同时修正，一页 256
+  字节不再丢最后一个 nibble）。超过 30 秒的 range 视为 bank 直接跳过；Settings → 导出里的“单个采样的
+  最长时长”（默认 5 s，0 = 不限）在写文件时截断并在报告里给出数量——它是写入器的一条规则，因此对
+  所有芯片生效，改变后也无需重新加载。实测 `04 Stage 1` 的 115 个样本里 25 个来自 DeltaT，首个
+  `opndeltat_67B800_05200` @13 888.9 Hz。
 
   **MIDI 路径（同日修）**：`MidiSequenceBuilder` 过去把 `0x82` 写死当 DeltaT 镜像，而且每族只建一份，
   于是 OPNB 的周期是从 ADPCM-A 的字节量出来的 —— `rootCents` 因此是错的，MIDI 音符只在

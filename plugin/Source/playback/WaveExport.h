@@ -286,6 +286,13 @@ bool writeWavFile (const std::string& path, const std::vector<float>& values, do
 	cost the export its other four. Names pass through legalFileName(), so an address like `$C0C0`
 	becomes one hyphen-separated token rather than a path.
 */
-int writeSamples (const std::vector<DecodedSample>& samples, const std::string& folder);
+/** `maxSeconds` truncates each file to that length; 0 writes the whole sample.
+
+	The limit is applied **here** rather than in each collector: every chip's samples arrive as
+	levels and a rate, so one rule covers all of them (and the next chip) without any of them
+	knowing about the setting. `truncated`, when given, counts the files that were cut.
+*/
+int writeSamples (const std::vector<DecodedSample>& samples, const std::string& folder,
+				  double maxSeconds = 0.0, int* truncated = nullptr);
 
 } // namespace toybox::playback

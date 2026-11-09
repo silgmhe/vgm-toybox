@@ -1,0 +1,19 @@
+# Delta-T (OPN ADPCM-B) reaches the sample export.
+#
+# The OPN's two sample families are two blocks and two address page sizes: `0x82` with 256-byte pages
+# for ADPCM-A, `0x83` (OPNB) or `0x81` (OPNA) with 8-bit pages for Delta-T. The bug this guards
+# against is the one that made the root correction useless: a builder that answers one block for the
+# whole family. Here the question is whether the *export* sees the second family at all, at the right
+# address and the reference rate.
+#
+# `04 Stage 1` is an OPNB song; its Delta-T block sits at 0x83 and its first recording starts at
+# 0x67B800, 0x5200 bytes long. The rate is 13 888.9 Hz - DELTA-N 0x4000 at 8 MHz - because a file is
+# one recording, and the song's own DELTA-N is a transposition on top of that.
+
+size 900 700
+
+load "test_file/neo_geo/04 Stage 1.vgz"
+tick
+
+samples 115
+sample-names opndeltat_67B800_05200

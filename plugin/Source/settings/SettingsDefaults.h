@@ -123,6 +123,17 @@ constexpr int minExportSeconds = 1;
 constexpr int maxExportSeconds = 10;
 constexpr int defaultExportSeconds = 2;
 
+/** The longest a single exported sample may be, in seconds; 0 means no limit.
+
+	Five seconds is longer than any recording these chips are meant to hold (the longest ADPCM-A
+	range on `07 Stage 2` is 3.4 s) and far shorter than a driver's "end at the end of the ROM", which
+	is how a bank turns into a minute-long file. The limit is applied when the file is written, not
+	when the samples are collected: changing it takes effect on the next export instead of needing
+	the song to be loaded again. */
+constexpr int minSampleSeconds = 0;
+constexpr int maxSampleSeconds = 30;
+constexpr int defaultSampleSeconds = 5;
+
 /** How long a wavetable dragged out of the window stays in the cache, in hours.
 
 	Off by default, and the defaults are the point: deleting a file the user made is worse than

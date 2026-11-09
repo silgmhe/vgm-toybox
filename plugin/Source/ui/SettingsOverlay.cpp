@@ -830,6 +830,37 @@ ExportSettingsPage::ExportSettingsPage (void)
 	};
 	addAndMakeVisible (retentionSlider);
 
+	sampleCaption.setFont (juce::Font (juce::FontOptions (12.5f)));
+	sampleCaption.setJustificationType (juce::Justification::centredLeft);
+	addAndMakeVisible (sampleCaption);
+
+	sampleSlider.setComponentID ("settings.export.sampleLength");
+	sampleSlider.setSliderStyle (juce::Slider::LinearHorizontal);
+	sampleSlider.setTextBoxStyle (juce::Slider::TextBoxRight, false, 76, 22);
+	colourSliderTextBox (sampleSlider);
+	sampleSlider.setRange ((double) toybox::settings::exporting::minSampleSeconds,
+						  (double) toybox::settings::exporting::maxSampleSeconds, 1.0);
+	sampleSlider.textFromValueFunction = [] (double value)
+	{
+		if (value < 0.5)
+		{
+			return i18n::tr ("settings.export.samplesUnlimited");
+		}
+
+		return juce::String ((int) std::lround (value)) + " s";
+	};
+	sampleSlider.onValueChange = [this]
+	{
+		toybox::settings::SettingsStore::getInstance ()
+			.setExportSampleSeconds ((int) std::lround (sampleSlider.getValue ()));
+	};
+	addAndMakeVisible (sampleSlider);
+
+	sampleHint.setFont (juce::Font (juce::FontOptions (12.5f)));
+	sampleHint.setJustificationType (juce::Justification::topLeft);
+	sampleHint.setMinimumHorizontalScale (1.0f);
+	addAndMakeVisible (sampleHint);
+
 	hint.setFont (juce::Font (juce::FontOptions (12.5f)));
 	hint.setJustificationType (juce::Justification::topLeft);
 	hint.setMinimumHorizontalScale (1.0f);
@@ -845,6 +876,9 @@ void ExportSettingsPage::refreshLanguage (void)
 	cleanupSwitch.setButtonText (i18n::tr ("settings.export.cleanup"));
 	retentionCaption.setText (i18n::tr ("settings.export.retention"), juce::dontSendNotification);
 	hint.setText (i18n::tr ("settings.export.hint"), juce::dontSendNotification);
+	sampleCaption.setText (i18n::tr ("settings.export.sampleLength"), juce::dontSendNotification);
+	sampleHint.setText (i18n::tr ("settings.export.sampleLengthHint"), juce::dontSendNotification);
+	sampleSlider.updateText ();
 	repaint ();
 }
 
@@ -858,6 +892,7 @@ void ExportSettingsPage::refresh (void)
 	// The retention means nothing while the switch is off, and a live-looking control next to a
 	// feature that does nothing invites the question of why changing it changes nothing.
 	retentionSlider.setEnabled (store.getDragCleanupEnabled ());
+	sampleSlider.setValue ((double) store.getExportSampleSeconds (), juce::dontSendNotification);
 }
 
 void ExportSettingsPage::paint (juce::Graphics& g)
@@ -878,6 +913,11 @@ void ExportSettingsPage::resized (void)
 	area.removeFromTop (12);
 
 	hint.setBounds (area.removeFromTop (56));
+	area.removeFromTop (10);
+	sampleCaption.setBounds (area.removeFromTop (18));
+	sampleSlider.setBounds (area.removeFromTop (24).withWidth (juce::jmin (360, area.getWidth ())));
+	area.removeFromTop (6);
+	sampleHint.setBounds (area.removeFromTop (56));
 }
 
 void ExportSettingsPage::lookAndFeelChanged (void)
@@ -885,6 +925,7 @@ void ExportSettingsPage::lookAndFeelChanged (void)
 	// The switch and the slider take the LookAndFeel's own colours (card face, accent while on,
 	// primary text), which is the point of them - see AppearanceSettingsPage for the same note.
 	colourSliderTextBox (retentionSlider);
+	colourSliderTextBox (sampleSlider);
 }
 
 KeyboardSettingsPage::KeyboardSettingsPage (void)

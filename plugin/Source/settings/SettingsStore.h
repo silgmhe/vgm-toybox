@@ -256,6 +256,13 @@ public:
 	int getExportBits (void) const;
 	void setExportBits (int bits);
 
+	/** The longest a single exported sample may be, in seconds; 0 means no limit.
+
+		Applied by the writer, so it covers every collector (ADPCM-A, Delta-T, C140, ...) without any
+		of them knowing about it, and a change takes effect on the next export. */
+	int getExportSampleSeconds (void) const;
+	void setExportSampleSeconds (int seconds);
+
 	// Both ranges and both defaults live in `SettingsDefaults.h` (`settings::exporting`), beside
 	// every other preference default.
 

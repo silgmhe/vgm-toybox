@@ -563,7 +563,8 @@ bool writeWavFile (const std::string& path, const std::vector<float>& values, do
 	return writeFloat32Wav (path, values, (uint32_t) std::lround (rate), std::string ());
 }
 
-int writeSamples (const std::vector<DecodedSample>& samples, const std::string& folder)
+int writeSamples (const std::vector<DecodedSample>& samples, const std::string& folder,
+				  double maxSeconds, int* truncated)
 {
 	int written = 0;
 
@@ -574,9 +575,31 @@ int writeSamples (const std::vector<DecodedSample>& samples, const std::string& 
 			continue;
 		}
 
+		// **A sample that is a whole bank has to stop somewhere.** The driver's `end` register can
+		// point at the end of the ROM, and a minute-long "sample" is not a sample. Truncating here
+		// rather than in each collector gives every chip one rule, and changing the limit needs no
+		// reload: the levels are already decoded.
+		std::vector<float> values;
+
+		const double limit = (maxSeconds > 0.0 && sample.rate > 0.0) ? maxSeconds * sample.rate : 0.0;
+
+		if (limit >= 1.0 && (double) sample.values.size () > limit)
+		{
+			values.assign (sample.values.begin (), sample.values.begin () + (std::size_t) limit);
+
+			if (truncated != nullptr)
+			{
+				++*truncated;
+			}
+		}
+		else
+		{
+			values = sample.values;
+		}
+
 		const auto path = folder + "/" + legalFileName (sample.name) + ".wav";
 
-		if (writeWavFile (path, sample.values, sample.rate))
+		if (writeWavFile (path, values, sample.rate))
 		{
 			++written;
 		}

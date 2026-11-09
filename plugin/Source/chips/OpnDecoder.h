@@ -109,6 +109,28 @@ public:
 		}
 	}
 
+	/** **How far a Delta-T address register is shifted on this variant.**
+
+		The OPNB's start/end registers count 256-byte pages (shift 8); the OPNA's count 32-byte ones
+		(shift 5). The exporter needs the same rule to turn a latched pair into a byte range - a second
+		copy of `8` and `5` there would export a different sample than the panel draws the first time a
+		board's page size is changed. */
+	static constexpr int addressShiftFor (Variant variant)
+	{
+		switch (variant)
+		{
+		case Variant::ym2610:
+		case Variant::ym2610b:
+			return 8;
+
+		case Variant::ym2608:
+			return 5;
+
+		default:
+			return 0;
+		}
+	}
+
 	/** **The images this decoder wants.** `0x82` is the ADPCM-A ROM the six voices page through;
 		Delta-T reads a block of its own, and VGM numbers it per board (`0x83` on the OPNB, `0x81` on
 		the OPNA), so both types are named and the replayer hands over whichever the song carries.

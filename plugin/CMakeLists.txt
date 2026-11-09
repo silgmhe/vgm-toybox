@@ -1,4 +1,4 @@
-﻿#### VGMToybox JUCE plugin (VST3 + Standalone) ####
+#### VGMToybox JUCE plugin (VST3 + Standalone) ####
 # Builds the GUI/plugin front-end of VGMToybox. The audio rendering is done by the same libvgm
 # libraries that the command-line player uses (vgm-player/vgm-emu/vgm-utils, no audio drivers).
 
@@ -234,6 +234,7 @@ target_sources(VGMToybox PRIVATE
 	Source/backends/libvgm/SampleCollector.cpp
 	Source/backends/libvgm/SegaPcmSamples.cpp
 	Source/backends/libvgm/OpnAdpcmSamples.cpp
+        Source/backends/libvgm/OpnDeltaTSamples.cpp
 	Source/backends/libvgm/C352Samples.cpp
 	Source/backends/libvgm/QSoundSamples.cpp
 	Source/backends/libvgm/K053260Samples.cpp
@@ -445,6 +446,7 @@ add_executable(vgm_mixer_test EXCLUDE_FROM_ALL
 	Source/backends/libvgm/SampleCollector.cpp
 	Source/backends/libvgm/SegaPcmSamples.cpp
 	Source/backends/libvgm/OpnAdpcmSamples.cpp
+        Source/backends/libvgm/OpnDeltaTSamples.cpp
 	Source/backends/libvgm/C352Samples.cpp
 	Source/backends/libvgm/QSoundSamples.cpp
 	Source/backends/libvgm/K053260Samples.cpp
@@ -473,6 +475,7 @@ add_executable(vgm_mixer_test EXCLUDE_FROM_ALL
 	Source/backends/libvgm/SampleCollector.cpp
 	Source/backends/libvgm/SegaPcmSamples.cpp
 	Source/backends/libvgm/OpnAdpcmSamples.cpp
+        Source/backends/libvgm/OpnDeltaTSamples.cpp
 	Source/backends/libvgm/C352Samples.cpp
 	Source/backends/libvgm/QSoundSamples.cpp
 	Source/backends/libvgm/K053260Samples.cpp
@@ -553,6 +556,7 @@ add_executable(vgm_chip_test EXCLUDE_FROM_ALL
 	Source/backends/libvgm/SampleCollector.cpp
 	Source/backends/libvgm/SegaPcmSamples.cpp
 	Source/backends/libvgm/OpnAdpcmSamples.cpp
+        Source/backends/libvgm/OpnDeltaTSamples.cpp
 	Source/backends/libvgm/C352Samples.cpp
 	Source/backends/libvgm/QSoundSamples.cpp
 	Source/backends/libvgm/K053260Samples.cpp

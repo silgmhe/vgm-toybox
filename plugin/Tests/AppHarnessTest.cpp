@@ -375,6 +375,7 @@ private:
 		else if (command == "song") { commandSong (tokens); }
 	else if (command == "songasync") { commandSongAsync (tokens); }
 	else if (command == "samples") { commandSamples (tokens); }
+	else if (command == "sample-names") { commandSampleNames (tokens); }
 		else if (command == "tick") { commandTick (); }
 		else if (command == "shot") { commandShot (tokens); }
 		else if (command == "size") { commandSize (tokens); }
@@ -836,6 +837,32 @@ private:
 		}
 	}
 
+	/** Asserts that each argument appears in some collected sample's name.
+
+		`samples` checks the count and the *first* name; on a song whose list is a hundred entries long
+		the interesting question is whether one particular chip's samples are in it, and which address
+		they were cut from. This reaches the rest of the list without printing all of it.
+	*/
+	void commandSampleNames (const juce::StringArray& tokens)
+	{
+		const auto list = processor.getEngine().currentSamples ();
+
+		for (int i = 1; i < tokens.size (); ++i)
+		{
+			bool found = false;
+
+			for (const auto& sample : list)
+			{
+				if (juce::String (sample.name).contains (tokens[i]))
+				{
+					found = true;
+					break;
+				}
+			}
+
+			report (found, "a sample named " + tokens[i]);
+		}
+	}
 	void commandEngine (const juce::StringArray& tokens)
 	{
 		if (tokens.size() < 2)

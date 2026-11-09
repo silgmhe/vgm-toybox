@@ -1,4 +1,4 @@
-﻿#include "LibvgmSongInstance.h"
+#include "LibvgmSongInstance.h"
 
 #include "C140Samples.h"
 #include "C352Samples.h"
@@ -9,6 +9,7 @@
 #include "Msm5232Samples.h"
 #include "SegaPcmSamples.h"
 #include "OpnAdpcmSamples.h"
+#include "OpnDeltaTSamples.h"
 #include "Ymz280bSamples.h"
 #include "K007232Samples.h"
 #include "VsuSamples.h"
@@ -405,6 +406,14 @@ bool LibvgmSongInstance::prepare (double hostSampleRate, int newMaxBlockSize, ju
 		}
 
 		for (auto& sample : collectOpnAdpcmSamples (*songIr, clock))
+		{
+			collected.push_back (std::move (sample));
+		}
+
+		// **The other half of the same chip.** Delta-T takes a block of its own (`0x83` on the OPNB,
+		// `0x81` on the OPNA) and a page size that differs per board, so the collector reads the IR's
+		// chip kinds rather than taking the one clock the ADPCM-A path needed.
+		for (auto& sample : collectOpnDeltaTSamples (*songIr, clock))
 		{
 			collected.push_back (std::move (sample));
 		}

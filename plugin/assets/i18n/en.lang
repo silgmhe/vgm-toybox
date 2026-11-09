@@ -244,7 +244,7 @@ language: English
 	"export.none" = "Nothing was written.";
 "export.samples.title" = "Samples exported";
 "export.samples.seen" = "Samples found: {0}";
-"export.samples.none" = "This file has no samples to export. Only the NES DPCM samples are collected so far - the other chips are being wired in, and their waves can already be dragged out of a row.";
+"export.samples.none" = "This file has no samples to export. Only chips that keep their samples in a ROM are collected; the coverage table in the design doc lists which ones.";
 
 	"export.noChannels" = "Nothing was written: the panel is not receiving channel state at all.";
 	"export.seen" = "Channels in the snapshot: {0}";
@@ -280,5 +280,9 @@ language: English
 "settings.export.cleanup" = "Clear the drag cache when the application starts";
 "settings.export.retention" = "Remove files older than:";
 "settings.export.hint" = "Dragging a wavetable out of the keyboard page writes a wav to the system temp folder, for the synthesiser to read. Off by default: a file dragged out but not yet imported is exactly what a cleaner would remove first.";
+"settings.export.sampleLength" = "Longest exported sample";
+"settings.export.samplesUnlimited" = "No limit";
+"settings.export.sampleLengthHint" = "Longer samples are cut when the files are written; 0 keeps them whole. A driver's end register can point at the end of the ROM, which is how a bank becomes a minute-long file.";
+"export.samples.writtenTruncated" = "{0} sample(s) written, {1} cut at the length limit";
 	"settings.keyboard.startAuto" = "Follow the song";
 	"settings.keyboard.startNote" = "Lowest key";

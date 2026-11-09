@@ -78,3 +78,14 @@ toggle settings.midi.bend
 assert settings.midi.bend         checked == true
 assert settings.midi.range        enabled == true
 assert engine bend                == true
+
+# Row 6 is Export. The per-sample length limit is a writer setting, so it covers every chip's
+# samples without any collector knowing about it; here the question is only that the control exists,
+# starts at 5 seconds and survives a round trip through the store.
+select settings.tree 6
+assert settings.export.sampleLength  visible == true
+assert settings.export.sampleLength  value   ~= 5
+set settings.export.sampleLength 0
+assert settings.export.sampleLength  value   ~= 0
+set settings.export.sampleLength 5
+assert settings.export.sampleLength  value   ~= 5

@@ -240,7 +240,7 @@ language: 简体中文
 	"export.none" = "没有写入任何文件。";
 "export.samples.title" = "采样已导出";
 "export.samples.seen" = "找到的采样数：{0}";
-"export.samples.none" = "这个文件里没有可导出的采样。目前只收集 NES 的 DPCM 样本——其他芯片的样本还在逐步接进来，它们的波形可以在行里拖拽导出。";
+"export.samples.none" = "这个文件里没有可导出的采样。只有把采样放在 ROM 里的芯片才会被收集；具体覆盖见设计文档的表格。";
 
 	"export.noChannels" = "没有写入任何文件：面板根本没有收到通道数据。";
 	"export.seen" = "快照中的通道数：{0}";
@@ -276,5 +276,9 @@ language: 简体中文
 "settings.export.cleanup" = "启动时清理拖拽导出缓存";
 "settings.export.retention" = "删除早于此时长的文件：";
 "settings.export.hint" = "从键盘页拖出波表时，会在系统临时目录写入一个 wav 供合成器读取。默认不清理：一个已经拖出、但还没导入的文件，恰恰是清理最该避开的。";
+"settings.export.sampleLength" = "单个采样的最长时长";
+"settings.export.samplesUnlimited" = "不限制";
+"settings.export.sampleLengthHint" = "超过这个长度的采样在写文件时被截断；0 表示不限制。有些驱动的 end 寄存器会指向 ROM 末尾，这是“整块 bank 变成一个一分钟文件”的来源。";
+"export.samples.writtenTruncated" = "已写入 {0} 个采样，{1} 个因超长被截断";
 	"settings.keyboard.startAuto" = "跟随歌曲";
 	"settings.keyboard.startNote" = "起始音";

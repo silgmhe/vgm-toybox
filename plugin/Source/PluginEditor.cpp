@@ -683,7 +683,10 @@ void ToyboxAudioProcessorEditor::exportSamples (void)
 									done.channelsSeen = (int) samples.size();
 									done.folder = folder;
 									done.written = toybox::playback::writeSamples (
-										samples, folder.getFullPathName().toStdString());
+										samples, folder.getFullPathName().toStdString(),
+										(double) toybox::settings::SettingsStore::getInstance ()
+											.getExportSampleSeconds (),
+										&done.truncated);
 									done.failed = done.channelsSeen - done.written;
 
 									showExportReport (done);

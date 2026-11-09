@@ -1,7 +1,8 @@
-﻿#include "SampleCollector.h"
+#include "SampleCollector.h"
 
 #include "chips/NesDpcmSample.h"
 #include "chips/Okim6295Codec.h"
+#include "chips/OpnAdpcmB.h"
 
 namespace toybox::backends::libvgm
 {
@@ -278,6 +279,14 @@ void SampleCollector::add (uint64_t key, const std::string& name, const uint8_t*
 				sample.values.push_back ((float) value / 2048.0f);
 			}
 		}
+	}
+	else if (format == SampleFormat::adpcmB4)
+	{
+		// **Delta-T, decoded by the same function the panel and the root estimate use.** The
+		// format is one nibble per level, high nibble first, and the accumulator clamps at 16 bits
+		// instead of wrapping (that is ADPCM-A). A decoder that wrapped here produces a plausible
+		// waveform that is wrong on every loud sample, which is why there is one implementation.
+		toybox::chips::opn::deltaT::decode (bytes, length, sample.values);
 	}
 	else if (format == SampleFormat::ga20 || format == SampleFormat::es5503)
 	{

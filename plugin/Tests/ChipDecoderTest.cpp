@@ -63,6 +63,7 @@
 #include "chips/OplDecoder.h"
 #include "chips/OpmDecoder.h"
 #include "TestSettings.h"
+#include "chips/OpnAdpcmB.h"
 #include "chips/OpnDecoder.h"
 
 namespace
@@ -572,9 +573,24 @@ namespace
 			check (state.present && state.wave != nullptr,
 				   "the Delta-T row draws a shape once its ROM is attached");
 			// start 0, end page 1: the chip reads (1 << 8) + 0xFF + 1 - 0 bytes, two values each.
-			check (state.wave != nullptr && state.wave->size () == 1022,
-				   "the shape is two values per byte of the range it names");
+			check (state.wave != nullptr && state.wave->size () == 1024,
+				   "the shape is two values per byte of the range it names, last byte included");
 			check (state.sampleRate > 0.0f, "and it states the rate DELTA-N asks for");
+
+			// **The exporter decodes these bytes with the same function.** If it ever stops, the
+			// file and the picture disagree at the first loud nibble, and only a listener with both
+			// in front of him would notice; compare the whole shape instead.
+			std::vector<float> decoded;
+			toybox::chips::opn::deltaT::decode (rom.data (), 512, decoded);
+
+			bool same = state.wave != nullptr && state.wave->size () == decoded.size ();
+
+			for (std::size_t i = 0; same && i < decoded.size (); ++i)
+			{
+				same = std::abs ((*state.wave)[i] - decoded[i]) < 1e-6f;
+			}
+
+			check (same, "and the exporter's decoder produces the same levels as the panel");
 
 			// **The shape is decoded once per range.** `channelState()` used to rebuild it on every
 			// call, and the note extractor asks once per register write: on `07 Stage 2` that decoded

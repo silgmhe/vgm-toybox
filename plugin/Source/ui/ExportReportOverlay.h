@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 #include "Theme.h"
 
@@ -21,6 +21,7 @@ struct ExportReport
 {
 	int channelsSeen = 0;
 	int written = 0;
+	int truncated = 0;			// samples cut at the export length limit
 	int skippedSample = 0;		// rows whose shape is a recording rather than a period
 	int failed = 0;
 	juce::File folder;
@@ -185,6 +186,12 @@ private:
 			// panel receiving channels that could not be written are not the same bug, and the
 			// message that did not say which is why this code was "fixed" twice without effect.
 			return i18n::tr (shown.channelsSeen == 0 ? (shown.samples ? "export.samples.none" : "export.noChannels") : "export.none");
+		}
+
+		if (shown.samples && shown.truncated > 0)
+		{
+			return i18n::tr ("export.samples.writtenTruncated", juce::String (shown.written),
+							  juce::String (shown.truncated));
 		}
 
 		return i18n::tr ("export.written", juce::String (shown.written));

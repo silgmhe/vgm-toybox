@@ -28,6 +28,7 @@ namespace toybox::backends::libvgm
 		prom4,			// four-bit unsigned around 0x08: the K005289's PROM, sixteen levels
 		pcm8Unsigned,	// eight-bit unsigned around 0x80, length given by the caller
 		adpcmA4,		// four-bit ADPCM-A (OPN): twelve-bit wrapping accumulator, high nibble first
+		adpcmB4,		// four-bit Delta-T (OPN ADPCM-B): sixteen-bit clamped accumulator, high nibble first
 	};
 
 	/** Accumulates one `DecodedSample` per distinct recording.
