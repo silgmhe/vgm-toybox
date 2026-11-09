@@ -2,6 +2,7 @@
 
 #include "playback/ChipState.h"
 #include "playback/MidiSequence.h"
+#include "settings/SettingsDefaults.h"
 #include "playback/WaveExport.h"
 #include <array>
 #include <atomic>
@@ -130,7 +131,7 @@ public:
 		the backend reports as its duration. This stays as the answer for a caller that has no
 		opinion, and as documentation of the number that used to be hard-coded twice.
 	*/
-	static constexpr double kDefaultScanSeconds = 180.0;
+	static constexpr double kDefaultScanSeconds = (double) settings::nsf::defaultDurationSeconds;
 
 	/** Skips that scan. For a probe that only wants the write counters: the scan costs more than
 		everything else about opening a song put together. */

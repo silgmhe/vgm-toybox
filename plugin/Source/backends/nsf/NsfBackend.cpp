@@ -10,6 +10,7 @@
 #include "backends/nsf/NsfChannelNaming.h"
 #include "backends/nsf/NsfPlayer.h"
 #include "formats/nsf/NsfFile.h"
+#include "settings/SettingsDefaults.h"
 #include "settings/SettingsStore.h"
 
 namespace toybox::backends::nsf
@@ -20,7 +21,7 @@ namespace
 
 /** Three minutes, until the settings page has an answer. The header carries no length: an NSF's
 	driver loops until it is told to stop, so the user is the only source of a duration. */
-constexpr double kDefaultLengthSeconds = 180.0;
+constexpr double kDefaultLengthSeconds = (double) settings::nsf::defaultDurationSeconds;
 
 /** One rendered instance of the song. The emulation is the player's; this only adapts it. */
 class NsfTrackPlayer final : public playback::ITrackPlayer

@@ -1,6 +1,4 @@
-#include "ExportSettings.h"
-#include "KeyboardSettings.h"
-#include "NsfSettings.h"
+#include "SettingsDefaults.h"
 #include "SettingsStore.h"
 
 #include "playback/MidiSequence.h"	// the bend range limits the engine and the page share
@@ -42,7 +40,7 @@ namespace
 	constexpr const char* kExportSecondsKey = "export.seconds";
 	constexpr const char* kExportBitsKey = "export.bits";
 
-	/** The Keyboard page's redraw rate. Absent means 15 - see SettingsStore::defaultRefreshHz. */
+	/** The Keyboard page's redraw rate. Absent means `settings::window::defaultRefreshHz`. */
 	constexpr const char* kRefreshHzKey = "ui.refreshHz";
 	constexpr const char* kLastSongKey = "standalone.lastSong";
 	constexpr const char* kNsfDurationKey = "nsf.durationSeconds";
@@ -264,7 +262,7 @@ bool SettingsStore::getPaintStats (void) const
 	// Off unless asked for. The probe exists because "is this window repainting while nothing
 	// moves" could not be answered by reading the code, and it will be asked again; but a window
 	// that prints a counter into its status line without being asked to is a window with a bug.
-	return file->getBoolValue (kPaintStatsKey, false);
+	return file->getBoolValue (kPaintStatsKey, window::paintStats);
 }
 
 void SettingsStore::setPaintStats (bool shouldReport)
@@ -280,7 +278,7 @@ void SettingsStore::setPaintStats (bool shouldReport)
 
 bool SettingsStore::getExportLooped (void) const
 {
-	return file->getBoolValue (kExportLoopedKey, false);
+	return file->getBoolValue (kExportLoopedKey, exporting::looped);
 }
 
 void SettingsStore::setExportLooped (bool looped)
@@ -296,13 +294,13 @@ void SettingsStore::setExportLooped (bool looped)
 
 int SettingsStore::getExportSeconds (void) const
 {
-	return juce::jlimit (minExportSeconds, maxExportSeconds,
-						 file->getIntValue (kExportSecondsKey, defaultExportSeconds));
+	return juce::jlimit (exporting::minExportSeconds, exporting::maxExportSeconds,
+						 file->getIntValue (kExportSecondsKey, exporting::defaultExportSeconds));
 }
 
 void SettingsStore::setExportSeconds (int seconds)
 {
-	const int clamped = juce::jlimit (minExportSeconds, maxExportSeconds, seconds);
+	const int clamped = juce::jlimit (exporting::minExportSeconds, exporting::maxExportSeconds, seconds);
 
 	if (clamped == getExportSeconds ())
 	{
@@ -315,14 +313,14 @@ void SettingsStore::setExportSeconds (int seconds)
 
 int SettingsStore::getExportBits (void) const
 {
-	const auto stored = file->getIntValue (kExportBitsKey, defaultExportBits);
+	const auto stored = file->getIntValue (kExportBitsKey, exporting::defaultExportBits);
 
-	return juce::jlimit (minExportBits, maxExportBits, stored);
+	return juce::jlimit (exporting::minExportBits, exporting::maxExportBits, stored);
 }
 
 void SettingsStore::setExportBits (int bits)
 {
-	const int clamped = juce::jlimit (minExportBits, maxExportBits, bits);
+	const int clamped = juce::jlimit (exporting::minExportBits, exporting::maxExportBits, bits);
 
 	if (clamped == getExportBits ())
 	{
@@ -335,13 +333,13 @@ void SettingsStore::setExportBits (int bits)
 
 int SettingsStore::getRefreshHz (void) const
 {
-	return juce::jlimit (SettingsStore::minRefreshHz, SettingsStore::maxRefreshHz,
-						 file->getIntValue (kRefreshHzKey, SettingsStore::defaultRefreshHz));
+	return juce::jlimit (window::minRefreshHz, window::maxRefreshHz,
+						 file->getIntValue (kRefreshHzKey, window::defaultRefreshHz));
 }
 
 void SettingsStore::setRefreshHz (int hz)
 {
-	const int clamped = juce::jlimit (SettingsStore::minRefreshHz, SettingsStore::maxRefreshHz, hz);
+	const int clamped = juce::jlimit (window::minRefreshHz, window::maxRefreshHz, hz);
 
 	if (clamped == getRefreshHz())
 	{
@@ -356,7 +354,7 @@ bool SettingsStore::getReuseWindow (void) const
 {
 	// An absent value - a file from 0.2.x, or a fresh install - means on: the window that is
 	// already running is the one a double-clicked song should go to.
-	return file->getBoolValue (kReuseWindowKey, true);
+	return file->getBoolValue (kReuseWindowKey, window::reuseWindow);
 }
 
 void SettingsStore::setReuseWindow (bool shouldReuse)
@@ -379,7 +377,7 @@ bool SettingsStore::getRestoreLastSong (void) const
 {
 	// Absent - a file from before this switch existed, or a fresh install - means on: carrying on
 	// where the last session stopped is what launching the application should do.
-	return file->getBoolValue (kRestoreLastSongKey, true);
+	return file->getBoolValue (kRestoreLastSongKey, window::restoreLastSong);
 }
 
 void SettingsStore::setRestoreLastSong (bool shouldRestore)
@@ -399,7 +397,7 @@ bool SettingsStore::getCloseToTray (void) const
 {
 	// Absent - a fresh install, or a file from before this switch existed - means off: a process
 	// that outlives its window must be the user's request, not something a close quietly did.
-	return file->getBoolValue (kCloseToTrayKey, false);
+	return file->getBoolValue (kCloseToTrayKey, window::closeToTray);
 }
 
 void SettingsStore::setCloseToTray (bool shouldCloseToTray)
@@ -424,13 +422,13 @@ int SettingsStore::getNsfDurationSeconds (void) const
 	// Three minutes by default: an NSF header has no length, so the only honest source is a number
 	// the user can see and change. Clamped on read, like every other number here, so a hand-edited
 	// file cannot produce a seek bar that lies.
-	return juce::jlimit (toybox::settings::nsf::minDurationSeconds, toybox::settings::nsf::maxDurationSeconds,
-						 file->getIntValue (kNsfDurationKey, toybox::settings::nsf::defaultDurationSeconds));
+	return juce::jlimit (nsf::minDurationSeconds, nsf::maxDurationSeconds,
+						 file->getIntValue (kNsfDurationKey, nsf::defaultDurationSeconds));
 }
 
 void SettingsStore::setNsfDurationSeconds (int seconds)
 {
-	const int clamped = juce::jlimit (toybox::settings::nsf::minDurationSeconds, toybox::settings::nsf::maxDurationSeconds, seconds);
+	const int clamped = juce::jlimit (nsf::minDurationSeconds, nsf::maxDurationSeconds, seconds);
 
 	if (clamped == getNsfDurationSeconds())
 	{
@@ -443,7 +441,7 @@ void SettingsStore::setNsfDurationSeconds (int seconds)
 
 bool SettingsStore::getDragCleanupEnabled (void) const
 {
-	return file->getBoolValue (kDragCleanupKey, toybox::settings::exporting::defaultCleanupEnabled);
+	return file->getBoolValue (kDragCleanupKey, exporting::defaultCleanupEnabled);
 }
 
 void SettingsStore::setDragCleanupEnabled (bool enabled)
@@ -461,16 +459,16 @@ int SettingsStore::getDragRetentionHours (void) const
 {
 	// Clamped on read like every other number here: a hand-edited file must not be able to ask
 	// the cleaner for "delete everything" or for a retention measured in years.
-	return juce::jlimit (toybox::settings::exporting::minRetentionHours,
-						 toybox::settings::exporting::maxRetentionHours,
+	return juce::jlimit (exporting::minRetentionHours,
+						 exporting::maxRetentionHours,
 						 file->getIntValue (kDragRetentionKey,
-											toybox::settings::exporting::defaultRetentionHours));
+											exporting::defaultRetentionHours));
 }
 
 void SettingsStore::setDragRetentionHours (int hours)
 {
-	const int clamped = juce::jlimit (toybox::settings::exporting::minRetentionHours,
-									  toybox::settings::exporting::maxRetentionHours, hours);
+	const int clamped = juce::jlimit (exporting::minRetentionHours,
+									  exporting::maxRetentionHours, hours);
 
 	if (clamped == getDragRetentionHours())
 	{
@@ -483,11 +481,11 @@ void SettingsStore::setDragRetentionHours (int hours)
 
 int SettingsStore::getKeyboardMiddleCOctave (void) const
 {
-	const int stored = file != nullptr ? file->getIntValue (kKeyboardMiddleCKey, toybox::settings::keyboard::defaultMiddleCOctave)
-									   : toybox::settings::keyboard::defaultMiddleCOctave;
+	const int stored = file != nullptr ? file->getIntValue (kKeyboardMiddleCKey, keyboard::defaultMiddleCOctave)
+									   : keyboard::defaultMiddleCOctave;
 
-	return juce::jlimit (toybox::settings::keyboard::minMiddleCOctave,
-						 toybox::settings::keyboard::maxMiddleCOctave, stored);
+	return juce::jlimit (keyboard::minMiddleCOctave,
+						 keyboard::maxMiddleCOctave, stored);
 }
 
 void SettingsStore::setKeyboardMiddleCOctave (int octave)
@@ -495,14 +493,14 @@ void SettingsStore::setKeyboardMiddleCOctave (int octave)
 	if (file != nullptr)
 	{
 		file->setValue (kKeyboardMiddleCKey,
-						juce::jlimit (toybox::settings::keyboard::minMiddleCOctave,
-									  toybox::settings::keyboard::maxMiddleCOctave, octave));
+						juce::jlimit (keyboard::minMiddleCOctave,
+									  keyboard::maxMiddleCOctave, octave));
 	}
 }
 
 bool SettingsStore::getAudioDcBlock (void) const
 {
-	return file != nullptr && file->getBoolValue ("audio.dcBlock", false);
+	return file != nullptr && file->getBoolValue ("audio.dcBlock", audio::dcBlock);
 }
 
 void SettingsStore::setAudioDcBlock (bool shouldRemove)
@@ -545,7 +543,7 @@ void SettingsStore::setKeyboardNoteHoldMs (int milliseconds)
 
 int SettingsStore::getKeyboardStartNote (void) const
 {
-	const int stored = file != nullptr ? file->getIntValue (kKeyboardStartNoteKey, -1) : -1;
+	const int stored = file != nullptr ? file->getIntValue (kKeyboardStartNoteKey, keyboard::defaultStartNote) : keyboard::defaultStartNote;
 
 	return stored >= 0 && stored <= 108 ? stored : -1;
 }
@@ -560,7 +558,7 @@ void SettingsStore::setKeyboardStartNote (int note)
 
 bool SettingsStore::getKeyboardRangeHints (void) const
 {
-	return file != nullptr ? file->getBoolValue (kKeyboardRangeHintsKey, true) : true;
+	return file != nullptr ? file->getBoolValue (kKeyboardRangeHintsKey, keyboard::rangeHints) : keyboard::rangeHints;
 }
 
 void SettingsStore::setKeyboardRangeHints (bool shouldShow)
@@ -575,7 +573,7 @@ int SettingsStore::getContentViewIndex (void) const
 {
 	// No clamp here on purpose: the number of views belongs to the UI, and a copy of it in the
 	// settings layer is one more thing to forget when a fourth view is added. The reader clamps.
-	return file != nullptr ? file->getIntValue (kContentViewKey, 0) : 0;
+	return file != nullptr ? file->getIntValue (kContentViewKey, view::contentIndex) : view::contentIndex;
 }
 
 void SettingsStore::setContentViewIndex (int index)
@@ -588,13 +586,13 @@ void SettingsStore::setContentViewIndex (int index)
 
 int SettingsStore::getNsfOutputGainDb (void) const
 {
-	return file != nullptr ? juce::jlimit (toybox::settings::nsf::minOutputGainDb, toybox::settings::nsf::maxOutputGainDb, file->getIntValue (kNsfOutputGainKey, toybox::settings::nsf::defaultOutputGainDb))
-						   : toybox::settings::nsf::defaultOutputGainDb;
+	return file != nullptr ? juce::jlimit (nsf::minOutputGainDb, nsf::maxOutputGainDb, file->getIntValue (kNsfOutputGainKey, nsf::defaultOutputGainDb))
+						   : nsf::defaultOutputGainDb;
 }
 
 void SettingsStore::setNsfOutputGainDb (int decibels)
 {
-	const int clamped = juce::jlimit (toybox::settings::nsf::minOutputGainDb, toybox::settings::nsf::maxOutputGainDb, decibels);
+	const int clamped = juce::jlimit (nsf::minOutputGainDb, nsf::maxOutputGainDb, decibels);
 
 	if (file != nullptr && clamped != getNsfOutputGainDb ())
 	{
@@ -610,7 +608,7 @@ int SettingsStore::getMidiPitchBendRange (void) const
 	// range most software synths ship with. The bounds come from the descriptor, which takes them
 	// from the sequencer that has to obey them.
 	const auto* setting = numericSetting ("midi.pitchBendRange");
-	return setting != nullptr ? getNumericSetting (*setting) : playback::defaultPitchBendRange;
+	return setting != nullptr ? getNumericSetting (*setting) : midi::pitchBendRange;
 }
 
 void SettingsStore::setMidiPitchBendRange (int semitones)
@@ -639,7 +637,7 @@ bool SettingsStore::getMidiPitchBendEnabled (void) const
 {
 	// On by default: a chip with fine pitch (detune, vibrato, portamento) only reaches the
 	// instrument through the bend wheel, and leaving it off silently quantises every song.
-	return file->getBoolValue (kMidiBendEnabledKey, true);
+	return file->getBoolValue (kMidiBendEnabledKey, midi::pitchBendEnabled);
 }
 
 void SettingsStore::setMidiPitchBendEnabled (bool shouldSendBends)
@@ -657,7 +655,7 @@ void SettingsStore::setMidiPitchBendEnabled (bool shouldSendBends)
 
 bool SettingsStore::getTransposeBySampleRoot (void) const
 {
-	return file->getBoolValue (kMidiSampleRootKey, true);
+	return file->getBoolValue (kMidiSampleRootKey, midi::transposeBySampleRoot);
 }
 
 void SettingsStore::setTransposeBySampleRoot (bool shouldUseRoot)
@@ -739,7 +737,7 @@ bool SettingsStore::resetToDefaults (void)
 	file->setValue (kReuseWindowKey, true);
 	file->setValue (kRestoreLastSongKey, true);
 	file->setValue (kCloseToTrayKey, false);
-	file->setValue (kMidiBendRangeKey, playback::defaultPitchBendRange);
+	file->setValue (kMidiBendRangeKey, midi::pitchBendRange);
 	file->setValue (kMidiBendEnabledKey, true);
 
 	const bool saved = file->save();

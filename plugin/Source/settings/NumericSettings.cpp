@@ -1,6 +1,6 @@
 #include "NumericSettings.h"
 
-#include "KeyboardSettings.h"
+#include "SettingsDefaults.h"
 
 #include "playback/MidiSequence.h"
 
@@ -20,8 +20,8 @@ const std::vector<NumericSetting>& numericSettings (void)
 	static const std::vector<NumericSetting> table
 	{
 		{ "midi.pitchBendRange", "settings.midi.range", "settings.midi.rangeHint",
-		  playback::minPitchBendRange, playback::maxPitchBendRange, 1,
-		  playback::defaultPitchBendRange, "" },
+		  midi::minPitchBendRange, midi::maxPitchBendRange, 1,
+		  midi::pitchBendRange, "" },
 
 		{ "keyboard.noteHoldMs", "settings.keyboard.noteHold", "",
 		  keyboard::minNoteHoldMs, keyboard::maxNoteHoldMs, keyboard::noteHoldStepMs,

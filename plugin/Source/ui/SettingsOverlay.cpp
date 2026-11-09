@@ -6,10 +6,8 @@
 #include "Standalone/StandaloneHooks.h"
 #include "UiFont.h"
 #include "playback/MidiSequence.h"
-#include "settings/ExportSettings.h"
-#include "settings/KeyboardSettings.h"
 #include "settings/NumericSettings.h"
-#include "settings/NsfSettings.h"
+#include "settings/SettingsDefaults.h"
 
 #include <algorithm>
 #include <cmath>
@@ -972,8 +970,8 @@ KeyboardSettingsPage::KeyboardSettingsPage (void)
 	refreshSlider.setSliderStyle (juce::Slider::LinearHorizontal);
 	refreshSlider.setTextBoxStyle (juce::Slider::TextBoxRight, false, 76, 22);
 	colourSliderTextBox (refreshSlider);
-	refreshSlider.setRange ((double) toybox::settings::SettingsStore::minRefreshHz,
-							(double) toybox::settings::SettingsStore::maxRefreshHz, 1.0);
+	refreshSlider.setRange ((double) toybox::settings::window::minRefreshHz,
+							(double) toybox::settings::window::maxRefreshHz, 1.0);
 	refreshSlider.textFromValueFunction = [] (double value)
 	{
 		return juce::String ((int) std::lround (value)) + " Hz";
@@ -1444,8 +1442,8 @@ MidiSettingsPage::MidiSettingsPage (void)
 	rangeSlider.setSliderStyle (juce::Slider::LinearHorizontal);
 	rangeSlider.setTextBoxStyle (juce::Slider::TextBoxRight, false, 68, 22);
 	colourSliderTextBox (rangeSlider);
-	rangeSlider.setRange ((double) playback::minPitchBendRange,
-						  (double) playback::maxPitchBendRange, 1.0);
+	rangeSlider.setRange ((double) settings::midi::minPitchBendRange,
+						  (double) settings::midi::maxPitchBendRange, 1.0);
 	rangeSlider.onValueChange = [this]
 	{
 		toybox::settings::SettingsStore::getInstance()

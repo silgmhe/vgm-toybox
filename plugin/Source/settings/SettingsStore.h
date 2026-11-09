@@ -10,6 +10,12 @@ namespace toybox::settings
 /**
 	The user's preferences for the whole application, in one place.
 
+	**What is stored here is the key and the reader; the default value is in
+	`SettingsDefaults.h`.** Every preference's default, bounds and step live in that one table, so a
+	comment below that says "default on" is describing behaviour, not stating the number - the number
+	has one home. This split is deliberate: the store is the only thing that touches the file, the
+	table is the only thing that says what "unset" means, and neither duplicates the other.
+
 	They live in a file of our own under the platform's application data directory - in a
 	"VGMToybox" folder inside it, never in that directory's root, and never in the registry:
 
@@ -141,7 +147,10 @@ public:
 	/** Stores the switch, writes it, and tells every listener, like the other preferences. */
 	void setCloseToTray (bool shouldCloseToTray);
 
-	/** How far the receiving instrument bends, in semitones each way: 1..24, default 12.
+	/** How far the receiving instrument bends, in semitones each way: 1..24, default 2.
+
+		The bounds and the default are stated once, in `SettingsDefaults.h`
+		(`settings::midi`); this method is the reader.
 
 		This is the one fact about pitch bend that MIDI does not report - it lives in the
 		instrument, the host does not pass it on, and a wrong value bends by the wrong interval
@@ -227,14 +236,9 @@ public:
 	/** Stores it, writes it, and tells every listener. */
 	void setRefreshHz (int hz);
 
-	/** The range the setting accepts, and the value used when nothing is stored.
-
-		15 rather than the 30 this view used to hard-code: measured by the user as smooth enough for
-		the keys and meters, and half the work of 30 at any window size.
-	*/
-	static constexpr int minRefreshHz = 10;
-	static constexpr int maxRefreshHz = 60;
-	static constexpr int defaultRefreshHz = 15;
+	/** The range the setting accepts is in `SettingsDefaults.h` (`settings::window`), with every
+		other preference default. It is not repeated here: the store, the slider and the engine all
+		read the one table, and a class static was a second place to forget. */
 
 	/** Whether the Keyboard page's export writes looped files, and how long they are.
 
@@ -252,14 +256,8 @@ public:
 	int getExportBits (void) const;
 	void setExportBits (int bits);
 
-	static constexpr int minExportBits = 0;
-	static constexpr int maxExportBits = 32;
-	static constexpr int defaultExportBits = 0;
-
-	/** The range the length accepts, and the value used when nothing is stored. */
-	static constexpr int minExportSeconds = 1;
-	static constexpr int maxExportSeconds = 10;
-	static constexpr int defaultExportSeconds = 2;
+	// Both ranges and both defaults live in `SettingsDefaults.h` (`settings::exporting`), beside
+	// every other preference default.
 
 	/** Whether the chips' fine pitch becomes pitch bend at all. Off: notes keep their nearest
 		semitone and no bend message is sent - for an instrument that ignores RPN and cannot be
@@ -270,7 +268,7 @@ public:
 	void setMidiPitchBendEnabled (bool shouldSendBends);
 
 	/** Whether a sampled voice's note also carries the sample's own root, or only the transposition
-		the registers ask for. Off by default (design doc section 14).
+		the registers ask for. **On by default since 2026-11-09** (design doc section 14).
 
 		The transposition is `1200 * log2(rate / referenceRate)` - registers plus a documented
 		nominal rate - so it is always computable and its intervals are always right. The root is

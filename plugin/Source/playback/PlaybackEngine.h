@@ -341,7 +341,7 @@ public:
 		momentary mismatch. */
 	void setMidiPitchBendRange (int semitones)
 	{
-		midiPitchBendRange.store (juce::jlimit (playback::minPitchBendRange, playback::maxPitchBendRange,
+		midiPitchBendRange.store (juce::jlimit (settings::midi::minPitchBendRange, settings::midi::maxPitchBendRange,
 												semitones));
 	}
 	int getMidiPitchBendRange (void) const { return midiPitchBendRange.load(); }
@@ -563,8 +563,8 @@ private:
 	std::atomic<int> soloCount { 0 };
 	std::atomic<int> masterMidiChannel { 0 };	// 0 = Off, 1..16
 	std::atomic<int> midiResetGeneration { 0 };
-	std::atomic<int> midiPitchBendRange { playback::defaultPitchBendRange };
-	std::atomic<bool> midiPitchBendEnabled { true };
+	std::atomic<int> midiPitchBendRange { settings::midi::pitchBendRange };
+	std::atomic<bool> midiPitchBendEnabled { settings::midi::pitchBendEnabled };
 
 	/** Atomic because two threads write it: the message thread on load and unload, and the audio
 		thread when a song's stream arrives after it started playing - an NSF is scanned in the
@@ -573,7 +573,7 @@ private:
 	std::atomic<const playback::MidiSequence*> midiSequence { nullptr };
 	std::size_t midiCursor = 0;
 	int midiSeenGeneration = 0;
-	int midiSeenBendRange = playback::defaultPitchBendRange;	// audio-side copy of the two settings:
+	int midiSeenBendRange = settings::midi::pitchBendRange;	// audio-side copy of the two settings:
 	bool midiSeenBendEnabled = true;							// a change re-sends the RPN
 	uint32_t midiSeenChannels = 0;							// channels the RPN was last sent to
 	// Channels this engine has bent and not put back: a 0xE0 went out on them and nothing has

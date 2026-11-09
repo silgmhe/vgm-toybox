@@ -660,7 +660,7 @@ namespace
 			event.timeSeconds = time;
 			event.type = playback::MidiEventType::pitchBend;
 			event.bendCents = (int16_t) std::lround (
-				juce::jlimit (-(double) playback::maxPitchBendRange, (double) playback::maxPitchBendRange,
+				juce::jlimit (-(double) settings::midi::maxPitchBendRange, (double) settings::midi::maxPitchBendRange,
 							  semitones) * 100.0);
 			event.sourceTrack = tracks[(std::size_t) track].id;
 			events.push_back (event);

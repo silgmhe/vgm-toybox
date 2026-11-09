@@ -989,7 +989,7 @@ int main (int /*argc*/, char* /*argv*/[])
 	// recommends. Both ends of the accepted range are the encoder's, not the file's: a hand-edited
 	// value outside them must read back clamped, or playback would bend by a different amount than
 	// the encoder computed.
-	check (settings.getMidiPitchBendRange() == toybox::playback::defaultPitchBendRange,
+	check (settings.getMidiPitchBendRange() == toybox::settings::midi::pitchBendRange,
 		   "the bend range defaults to the wide 12 semitones");
 	check (settings.getMidiPitchBendEnabled(), "and bends are sent unless told otherwise");
 	settings.setMidiPitchBendRange (7);
@@ -998,12 +998,12 @@ int main (int /*argc*/, char* /*argv*/[])
 			   .contains ("midi.pitchBendRange"),
 		   "and it reaches the file");
 	settings.setMidiPitchBendRange (0);
-	check (settings.getMidiPitchBendRange() == toybox::playback::minPitchBendRange,
+	check (settings.getMidiPitchBendRange() == toybox::settings::midi::minPitchBendRange,
 		   "a range below the encoder's reads back clamped");
 	settings.setMidiPitchBendRange (99);
-	check (settings.getMidiPitchBendRange() == toybox::playback::maxPitchBendRange,
+	check (settings.getMidiPitchBendRange() == toybox::settings::midi::maxPitchBendRange,
 		   "and so does one above");
-	settings.setMidiPitchBendRange (toybox::playback::defaultPitchBendRange);
+	settings.setMidiPitchBendRange (toybox::settings::midi::pitchBendRange);
 
 	settings.setMidiPitchBendEnabled (false);
 	check (! settings.getMidiPitchBendEnabled(), "bends can be turned off");
@@ -1060,7 +1060,7 @@ int main (int /*argc*/, char* /*argv*/[])
 		   "and puts the font back to System UI");
 	check (settings.getFontFamily().isEmpty(), "and forgets the custom family");
 	check (settings.getRestoreLastSong(), "and turns the startup restore back on");
-	check (settings.getMidiPitchBendRange() == toybox::playback::defaultPitchBendRange,
+	check (settings.getMidiPitchBendRange() == toybox::settings::midi::pitchBendRange,
 		   "and puts the bend range back to 12");
 	check (settings.getMidiPitchBendEnabled(), "and bends back on");
 	check (settings.getLastSong().getFullPathName().isEmpty(),
