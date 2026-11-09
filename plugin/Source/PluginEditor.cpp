@@ -698,7 +698,6 @@ void ToyboxAudioProcessorEditor::loadFile (const juce::File& file, bool startPla
 	startupHandled = true;		// this load is the startup one, or a manual one that replaces it
 	loadInFlight = true;
 	loadingName = file.getFileName();
-	loadedFile = file;			// what `reloadForPitchChange()` loads again
 	lastError.clear();			// a new attempt clears the old failure, or it would hide "Loading"
 	updateStatusLine();
 
@@ -760,17 +759,52 @@ void ToyboxAudioProcessorEditor::loadFile (const juce::File& file, bool startPla
 void ToyboxAudioProcessorEditor::reloadForPitchChange (void)
 {
 	// The switch decides whether a sampled note carries its measured root, and that decision is
-	// baked into the note numbers when the sequence is built - there is nothing to re-send. Loading
-	// the song again is the same work the user used to do by hand, minus the manual step: the
-	// position is remembered here and restored by the load callback.
-	if (! engine.isLoaded() || ! loadedFile.existsAsFile())
+	// baked into the note numbers when the sequence is built - there is nothing to re-send.
+	//
+	// **Rebuilt from the image already in memory**, not by reading the file again: the file may have
+	// been dropped from a temporary folder, or moved, and turning the switch *off* used to do nothing
+	// when it no longer existed - the old, transposed sequence stayed. `selectSongAsync` runs the same
+	// build a load does, from the bytes the engine holds, on the worker.
+	if (! engine.isLoaded())
 	{
 		return;
 	}
 
-	pendingSeekSeconds = engine.getPositionSeconds();
-	pendingResume = engine.isPlaying();
-	loadFile (loadedFile, false);
+	const double position = engine.getPositionSeconds();
+	const bool wasPlaying = engine.isPlaying();
+	const int song = engine.getSongIndex();
+
+	juce::Component::SafePointer<ToyboxAudioProcessorEditor> safe (this);
+
+	const bool accepted = engine.selectSongAsync (song, [safe, position, wasPlaying]
+		(bool ok, const juce::String& error)
+		{
+			if (safe == nullptr)
+			{
+				return;
+			}
+
+			if (! ok)
+			{
+				safe->lastError = error;
+				safe->updateStatusLine();
+				return;
+			}
+
+			// The same position the listener was at, and the same transport state.
+			safe->engine.setPositionSeconds (position);
+
+			if (wasPlaying)
+			{
+				safe->engine.play();
+			}
+		});
+
+	if (! accepted)
+	{
+		lastError = "Could not rebuild the song for the new pitch setting.";
+		updateStatusLine();
+	}
 }
 
 void ToyboxAudioProcessorEditor::closeSong (void)

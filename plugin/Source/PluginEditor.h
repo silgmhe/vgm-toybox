@@ -203,9 +203,6 @@ private:
 	juce::File startupSong;			// what the application was launched with, if anything
 	bool startupHandled = false;
 
-	/** The song the engine holds, kept so `reloadForPitchChange()` can load it again. */
-	juce::File loadedFile;
-
 	/** Where a reload has to put the transport back, and whether it was running: negative means no
 		reload is pending. Consumed by the load callback, which is the only place that knows the new
 		sequence is in place. */
