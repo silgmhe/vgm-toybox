@@ -1010,10 +1010,16 @@ ADPCM-A 在**第二个寄存器端口**（YM2610 的 `0x59`、YM2608 的 `0x57`�
   于是 OPNB 的周期是从 ADPCM-A 的字节量出来的 —— `rootCents` 因此是错的，MIDI 音符只在
   `pitch.useSampleRoot` 开启时才看得出来。现在 `OpnDecoder::sampleBlocksFor(variant)` 是唯一答案
   （OPNB `0x83`；OPNA `0x81`，缺失时回退到两颗族共享的 `0x82`；YM2612/YM2203 无），`kRequirements`、
-  `MidiSequenceBuilder::flushOpn` 都引用同一组常量，镜像按**设备**取而不是按族。**默认行为不变**：
-  设置关闭时 MIDI 音符是 L1（DELTA-N 速率相对 8 kHz 参考），与 ROM 无关；开启后 ADPCM-B 才带上真实
-  根音修正。`testOpnDeltaTBlockChoice` 断言了 OPNB 不接受 `0x82`（波形与根音都为空）、OPNA 回退共享
-  ROM、YM2612 无 DeltaT 块。
+  `MidiSequenceBuilder::flushOpn` 都引用同一组常量，镜像按**设备**取而不是按族。
+
+  **两个缺陷叠加**才让开关"看起来没作用"：①块类型错（根音恒为 0）；②镜像按**内容末尾**裁剪
+  （`memory::rom(..., clipToContent = true)`），`07 Stage 2` 的 DeltaT 被裁到 6.96 MB，而寄存器地址到
+  `0x6B9000`，上方字节读成 0 → 周期测不出。现在与播放路径同一条规则（声明大小，不裁剪）。实测 07：
+  1287 个 ADPCM-B 音符里 **1097 个带根音**（−2630…−1444 音分），其余 190 个是鼓（无周期 → 0，按设计
+  保持 L1）。**默认行为不变**：设置关闭时 MIDI 音符是 L1（DELTA-N 速率相对 8 kHz 参考），与 ROM 无关；
+  开启后（`reloadForPitchChange()` 重载）ADPCM-B 带上每个 key-on 各自测得的根音。
+  `testOpnDeltaTBlockChoice` 断言了 OPNB 不接受 `0x82`（波形与根音都为空）、OPNA 回退共享 ROM、
+  YM2612 无 DeltaT 块。
 
   **性能（同日修）**：形状按 `(start, end)` 缓存。`channelState()` 每写一次寄存器就会被调用一次，未缓存时
   同一段字节在 `07 Stage 2` 上被解码上万次，加载从 ~150 ms 变成 **3.7 s**；缓存后 07 回到 149 ms、

@@ -411,8 +411,12 @@ namespace
 						continue;
 					}
 
+					// **The same rule the replayer uses**: the declared size, not the content's end.
+					// Clipped to the content, `07 Stage 2`'s Delta-T image came out 6.96 MB for blocks
+					// reaching 0x6B9000, so the bytes above it read as zero and every cycle measured 0 -
+					// which is why the root correction did nothing once the block type was fixed.
 					const std::vector<uint8_t> rom =
-						memory::rom (ir, type, chips::OpnDecoder::kAdpcmBImageBytes, true);
+						memory::rom (ir, type, chips::OpnDecoder::kAdpcmBImageBytes, false);
 
 					if (! rom.empty())
 					{
@@ -425,7 +429,7 @@ namespace
 				}
 
 				appendNotes (&info,
-								  chips::extractPerformance (decoder, entry.second, totalSamples));
+							  chips::extractPerformance (decoder, entry.second, totalSamples));
 			}
 
 			router.decoder<chips::OpnDecoder> ().writes.clear();

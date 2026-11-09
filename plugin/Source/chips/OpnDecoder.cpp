@@ -441,6 +441,7 @@ struct OpnDecoder::Impl
 		// number is ever read - and a Neo Geo track fires thousands of drums: on `07 Stage 2` that was
 		// three seconds of load time for a value that was thrown away.
 		voice.cycleLength = voice.melodic ? adpcmBCycleFor (voice.latchStart) : 0.0;
+
 		if (voice.melodic && voice.cycleLength > 0.0 && ! adpcmBRom.empty())
 		{
 			int fine = 0;
