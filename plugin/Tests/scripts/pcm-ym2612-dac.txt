@@ -5,17 +5,17 @@
 # Hill Zone` carries them in a `0x67` block of type 0x00 - 13 132 bytes - which the file streams into
 # the DAC with `0x80-0x8F` commands and seeks into 228 times with `0xE0`.
 #
-# The unit is the **hit**: a run of non-silence between two pauses of 2 ms or more. The bank alone is
-# not a sample - it holds the whole pattern, and splitting it by silence gives one 1.5 s segment -
-# but the *stream* separates: 428 hits, 11 distinct, the most repeated 95 times. Each file carries
-# its own rate (the mean interval inside it: 6.9..20 kHz, most around 7.9 kHz), because the driver
-# writes silence quickly and drums at the sample's own speed. The whole stream's mean would be
-# 13.8 kHz - 1.7x too fast for a drum body, which is what the first version exported.
+# **One file per song, not one per hit.** Cutting the stream at pauses was tried and rejected: it
+# produced eleven fragments from 3 ms to 165 ms, which are not the drums a listener would name.
+#
+# The rate is the **median interval that follows a loud byte**: the driver feeds silence at 1..2
+# ticks and drums at 5..6, so the stream's mean (13 799 Hz) matches neither, while the median over
+# the loud bytes is 2 ticks - 22 050 Hz here. That is where the drum bytes actually sit.
 
 size 900 700
 
 load "test_file/sega_md/02 Green Hill Zone.vgz"
 tick
 
-samples 11
-sample-names ym2612dac_00_0046F
+samples 1
+sample-names ym2612dac_000000_0334C
