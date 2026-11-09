@@ -643,7 +643,7 @@ void OpnDecoder::attachMemory (const ChipMemory& memory)
 	// **A decoder that asked for more than one image may be handed either first.** The type says
 	// which; zero means "the one the requirement names first", which is the ADPCM-A bank for every
 	// caller that predates the Delta-T blocks.
-	if (memory.type == 0x83 || memory.type == 0x81)
+	if (memory.type == kOpnbDeltaTBlock || memory.type == kOpnaDeltaTBlock)
 	{
 		setAdpcmBRom (*memory.bytes);
 		return;
