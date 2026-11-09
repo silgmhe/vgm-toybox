@@ -280,9 +280,17 @@ struct OpnDecoder::Impl
 		std::size_t count = 0;			// bytes held, never more than kBytes
 		uint32_t lastTime = 0;
 		bool haveLast = false;
-		uint64_t ticks = 0;				// ticks between writes, for the rate
-		uint32_t intervals = 0;
 		bool dirty = false;
+
+		/** **The rate is local.** A Mega Drive driver writes silence quickly and drum bytes at the
+			sample's own speed - on `02 Green Hill Zone` the whole-stream mean is 13.8 kHz while the
+			drum bodies run at 5.5 ticks, 8 kHz. A row drawn from the global mean would scroll past
+			the drum it is trying to show, so the last 256 intervals are kept and averaged. */
+		static constexpr std::size_t kRateWindow = 256;
+		uint16_t intervals[kRateWindow] = {};
+		std::size_t rateHead = 0;
+		std::size_t rateCount = 0;
+		uint32_t intervalSum = 0;
 	};
 
 	DacWindow dacWindow;
@@ -311,8 +319,19 @@ struct OpnDecoder::Impl
 
 			if (dt > 0 && dt <= kDacRateGap)
 			{
-				window.ticks += dt;
-				++window.intervals;
+				// A sliding sum: the oldest interval leaves the window as the new one arrives.
+				if (window.rateCount == DacWindow::kRateWindow)
+				{
+					window.intervalSum -= window.intervals[window.rateHead];
+				}
+				else
+				{
+					++window.rateCount;
+				}
+
+				window.intervals[window.rateHead] = (uint16_t) dt;
+				window.intervalSum += dt;
+				window.rateHead = (window.rateHead + 1) % DacWindow::kRateWindow;
 			}
 		}
 
@@ -321,11 +340,11 @@ struct OpnDecoder::Impl
 		window.dirty = true;
 	}
 
-	/** Bytes a second the stream is being written at, 0 until two writes have been seen. */
+	/** Bytes a second the stream is being written at *now*, 0 until two writes have been seen. */
 	double dacBytesPerSecond (void) const
 	{
-		return (dacWindow.intervals > 0 && dacWindow.ticks > 0)
-			? streamRate * (double) dacWindow.intervals / (double) dacWindow.ticks
+		return (dacWindow.rateCount > 0 && dacWindow.intervalSum > 0)
+			? streamRate * (double) dacWindow.rateCount / (double) dacWindow.intervalSum
 			: 0.0;
 	}
 	uint32_t now = 0;

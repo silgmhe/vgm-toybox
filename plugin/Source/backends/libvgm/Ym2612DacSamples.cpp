@@ -3,6 +3,8 @@
 #include <algorithm>
 #include <cstdint>
 #include <cstdio>
+#include <cstdlib>
+#include <map>
 #include <vector>
 
 #include "SampleCollector.h"
@@ -12,14 +14,31 @@ namespace toybox::backends::libvgm
 {
 namespace
 {
-	/** A pause that ends a run when the file carries no PCM block: 30 ms. Twelve times the longest
-		dither interval these drivers use (6 ticks) and shorter than any drum's decay. */
-	constexpr double kSilenceSeconds = 0.030;
+	/** **A pause this long ends a hit: 2 ms.** Measured on `02 Green Hill Zone`, where the stream is
+		447 541 bytes and the drums sit in bursts: 2 ms yields 428 hits and 11 distinct recordings
+		(the most repeated 95 times), while 8 ms merges them into 142 hits of which 6 are distinct,
+		and 1 ms shatters each drum into its own decay segments. Two milliseconds is above the gaps
+		inside a decaying drum and below the space between two hits. */
+	constexpr double kQuietSeconds = 0.002;
 
-	/** A driver that writes without ever pausing must not produce an unbounded file. The bank path
-		has its own cap; this one bounds the stream path. */
-	constexpr std::size_t kMaxRunBytes = 1u << 20;
-	constexpr std::size_t kMaxBankBytes = 4u << 20;
+	/** A byte this close to 0x80 is the DAC's silence. */
+	constexpr int kQuietLevel = 2;
+
+	/** A byte is "the same" as the one before it at this level of ear; used only to classify
+		silence, not to compare recordings. */
+	constexpr std::size_t kMinHitBytes = 16;
+	constexpr std::size_t kMaxHitBytes = 1u << 18;
+
+	struct Hit
+	{
+		uint32_t time = 0;
+		uint8_t value = 0;
+	};
+
+	bool isQuiet (uint8_t value)
+	{
+		return std::abs ((int) value - 0x80) <= kQuietLevel;
+	}
 
 	uint64_t contentHash (const uint8_t* bytes, std::size_t length, std::size_t device)
 	{
@@ -34,30 +53,43 @@ namespace
 		return hash ^ ((uint64_t) length << 40);
 	}
 
-	struct Hit
-	{
-		uint32_t time = 0;
-		uint8_t value = 0;
-	};
+	/** One recording: its bytes and the rate the driver wrote them at.
 
-	double rateOf (const std::vector<Hit>& hits, std::size_t from, std::size_t count, double tickRate)
+		The rate is the mean interval **inside** this hit. Pauses are excluded (>64 ticks), because a
+		number that averaged them would report the space between drums as part of the drum - the
+		mistake that made the whole bank's rate 13.8 kHz when its drum bodies run at 8 kHz. */
+	struct Run
 	{
+		std::vector<uint8_t> bytes;
 		uint64_t ticks = 0;
 		uint32_t intervals = 0;
+		uint32_t lastTime = 0;
+		bool haveLast = false;
 
-		for (std::size_t i = 1; i < count; ++i)
+		void add (uint32_t time, uint8_t value)
 		{
-			const uint32_t dt = hits[from + i].time - hits[from + i - 1].time;
+			bytes.push_back (value);
 
-			if (dt > 0 && dt <= 64)
+			if (haveLast)
 			{
-				ticks += dt;
-				++intervals;
+				const uint32_t dt = time - lastTime;
+
+				if (dt > 0 && dt <= 64)
+				{
+					ticks += dt;
+					++intervals;
+				}
 			}
+
+			lastTime = time;
+			haveLast = true;
 		}
 
-		return (intervals > 0 && ticks > 0) ? tickRate * (double) intervals / (double) ticks : 0.0;
-	}
+		double rate (double tickRate) const
+		{
+			return (intervals > 0 && ticks > 0) ? tickRate * (double) intervals / (double) ticks : 0.0;
+		}
+	};
 }
 
 std::vector<playback::DecodedSample> collectYm2612DacSamples (const midi::SongIr& ir)
@@ -74,28 +106,7 @@ std::vector<playback::DecodedSample> collectYm2612DacSamples (const midi::SongIr
 		}
 	}
 
-	// **One PCM block per file, not one per chip.** A 32X set has two YM2612s and both read the
-	// same `0x67` bank, so building it once is both cheaper and the truth.
-	std::vector<uint8_t> bank;
-
-	for (const auto& block : ir.roms)
-	{
-		if (bank.size () >= kMaxBankBytes)
-		{
-			break;
-		}
-
-		// Type 0x00 is the plain PCM block; 0x80 is the same bytes tagged as ROM, and the reader has
-		// already spent its eight-byte size/offset header.
-		if (block.isRam || block.data == nullptr
-			|| (block.memoryType != 0x00 && block.memoryType != 0x80))
-		{
-			continue;
-		}
-
-		const std::size_t count = (std::min) (block.size, kMaxBankBytes - bank.size ());
-		bank.insert (bank.end (), block.data, block.data + count);
-	}
+	const uint32_t quietTicks = (uint32_t) (ir.tickRate * kQuietSeconds);
 
 	for (std::size_t index = 0; index < ir.chips.size (); ++index)
 	{
@@ -116,69 +127,24 @@ std::vector<playback::DecodedSample> collectYm2612DacSamples (const midi::SongIr
 
 		if (hits.size () < 2)
 		{
-			continue;			// no stream, nothing to measure a rate from
-		}
-
-		if (! bank.empty ())
-		{
-			// **The bank is the sample.** The file carries a loop of drum material, not a table of
-			// one-shots: `02 Green Hill Zone`'s 13 132 bytes are played at 8 495 Hz and sought into
-			// 228 times at five offsets. Exporting the bank gives the material once; slicing it by
-			// silence was measured and produces one 1.55 s segment, i.e. no boundaries at all.
-			const double rate = rateOf (hits, 0, hits.size (), ir.tickRate);
-
-			if (rate <= 0.0)
-			{
-				continue;
-			}
-
-			char name[48] = {};
-
-			if (devices > 1)
-			{
-				std::snprintf (name, sizeof (name), "ym2612dac_%06X_%05X_d%u", 0u,
-							   (unsigned) bank.size (), (unsigned) index);
-			}
-			else
-			{
-				std::snprintf (name, sizeof (name), "ym2612dac_%06X_%05X", 0u,
-							   (unsigned) bank.size ());
-			}
-
-			collector.add (contentHash (bank.data (), bank.size (), index), name, bank.data (),
-						   bank.size (), SampleFormat::pcm8Unsigned, rate);
 			continue;
 		}
 
-		// **No block: the bytes came from the driver's own memory.** Then the only structure left is
-		// the pauses between hits, and a run between two of them is the closest thing to a sample
-		// this file has.
-		const uint32_t silenceTicks = (uint32_t) (ir.tickRate * kSilenceSeconds);
-		std::size_t start = 0;
+		// **A hit is a run of non-silence between two pauses.** The YM2612 has no length register,
+		// so this is the only boundary the file carries: the driver stops writing between drums and
+		// streams 0x80 while it waits. The quiet bytes are not part of the recording, and the pause
+		// is measured in ticks - a driver that writes silence quickly must not make every gap look
+		// short.
+		Run run;
+		uint64_t quiet = 0;
+		int emitted = 0;
+		std::map<uint64_t, bool> seen;
 
-		for (std::size_t i = 1; i <= hits.size (); ++i)
+		const auto close = [&] (void)
 		{
-			const bool cut = (i == hits.size ())
-							 || (hits[i].time - hits[i - 1].time >= silenceTicks);
-
-			if (! cut)
+			if (run.bytes.size () >= kMinHitBytes)
 			{
-				continue;
-			}
-
-			const std::size_t length = (std::min) (i - start, kMaxRunBytes);
-
-			if (length >= 16)
-			{
-				std::vector<uint8_t> bytes;
-				bytes.reserve (length);
-
-				for (std::size_t k = start; k < start + length; ++k)
-				{
-					bytes.push_back (hits[k].value);
-				}
-
-				const double rate = rateOf (hits, start, length, ir.tickRate);
+				const double rate = run.rate (ir.tickRate);
 
 				if (rate > 0.0)
 				{
@@ -186,22 +152,62 @@ std::vector<playback::DecodedSample> collectYm2612DacSamples (const midi::SongIr
 
 					if (devices > 1)
 					{
-						std::snprintf (name, sizeof (name), "ym2612dac_%06X_%05X_d%u",
-									   (unsigned) start, (unsigned) length, (unsigned) index);
+						std::snprintf (name, sizeof (name), "ym2612dac_%02u_%05X_d%u", (unsigned) emitted,
+									   (unsigned) run.bytes.size (), (unsigned) index);
 					}
 					else
 					{
-						std::snprintf (name, sizeof (name), "ym2612dac_%06X_%05X",
-									   (unsigned) start, (unsigned) length);
+						std::snprintf (name, sizeof (name), "ym2612dac_%02u_%05X", (unsigned) emitted,
+									   (unsigned) run.bytes.size ());
 					}
 
-					collector.add (contentHash (bytes.data (), bytes.size (), index), name,
-								   bytes.data (), bytes.size (), SampleFormat::pcm8Unsigned, rate);
+					const uint64_t key = contentHash (run.bytes.data (), run.bytes.size (), index);
+
+					if (seen.emplace (key, true).second)
+					{
+						collector.add (key, name, run.bytes.data (), run.bytes.size (),
+									   SampleFormat::pcm8Unsigned, rate);
+						++emitted;
+					}
 				}
 			}
 
-			start = i;
+			run = Run();
+		};
+
+		for (std::size_t i = 0; i < hits.size (); ++i)
+		{
+			const Hit& hit = hits[i];
+			const uint32_t dt = (i + 1 < hits.size ()) ? (hits[i + 1].time - hit.time) : 0;
+
+			if (isQuiet (hit.value))
+			{
+				if (! run.bytes.empty ())
+				{
+					quiet += dt;
+
+					if (quiet >= quietTicks)
+					{
+						close ();
+						quiet = 0;
+					}
+				}
+
+				continue;
+			}
+
+			// A loud byte after a pause starts the next hit; the run's own rate starts here.
+			quiet = 0;
+
+			if (run.bytes.size () >= kMaxHitBytes)
+			{
+				close ();
+			}
+
+			run.add (hit.time, hit.value);
 		}
+
+		close ();
 	}
 
 	return collector.take ();
