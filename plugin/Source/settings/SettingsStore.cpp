@@ -57,9 +57,12 @@ namespace
 	constexpr const char* kMidiBendRangeKey = "midi.pitchBendRange";
 	constexpr const char* kMidiBendEnabledKey = "midi.pitchBendEnabled";
 
-	// The sample's own root, added to the transposition the registers ask for. Off by default: the
-	// root is an inference from the sample's bytes, and a wrong one shifts a whole song by a constant
-	// (design doc section 15).
+	// The sample's own root, added to the transposition the registers ask for. **On by default since
+	// 2026-11-09**: without it a sampled voice is placed by the playback rate against an 8 kHz
+	// convention, which is an octave or two away from what the song sounds like; with it the octave
+	// follows the sample, and the measurement's own error is a constant the ear can forgive. The
+	// switch stays because the measurement is an inference - a wrong one moves a whole song by that
+	// constant (design doc section 15, memo of the same date).
 	constexpr const char* kMidiSampleRootKey = "pitch.useSampleRoot";
 
 	juce::String writeErrorFor (const juce::File& file)
@@ -654,7 +657,7 @@ void SettingsStore::setMidiPitchBendEnabled (bool shouldSendBends)
 
 bool SettingsStore::getTransposeBySampleRoot (void) const
 {
-	return file->getBoolValue (kMidiSampleRootKey, false);
+	return file->getBoolValue (kMidiSampleRootKey, true);
 }
 
 void SettingsStore::setTransposeBySampleRoot (bool shouldUseRoot)

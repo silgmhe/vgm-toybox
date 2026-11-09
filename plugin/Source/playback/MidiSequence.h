@@ -11,12 +11,19 @@ namespace toybox::playback
 /** The pitch-bend range the MIDI output assumes, in semitones each way.
 
 	Nothing in MIDI reports it: the range is a setting of the receiving instrument, changed with
-	RPN 0 or by hand, and the host does not pass it on. So the plugin carries it as a preference
-	(defaulting to the wide 12 most software synths use), scales every bend by it, and declares it
-	with RPN 0 whenever playback (re)starts - an instrument that honours RPN then follows the
-	setting, one that does not has to be set to the same value by hand. A mismatch is not a small
-	error: a 50 cent bend encoded for +/- 2 semitones plays as 3 semitones on a +/- 12 instrument. */
-inline constexpr int defaultPitchBendRange = 12;
+	RPN 0 or by hand, and the host does not pass it on. So the plugin carries it as a preference,
+	scales every bend by it, and declares it with RPN 0 whenever playback (re)starts - an instrument
+	that honours RPN then follows the setting, one that does not has to be set to the same value by
+	hand. A mismatch is not a small error: a 50 cent bend encoded for +/- 2 semitones plays as 3
+	semitones on a +/- 12 instrument.
+
+	**Two, because that is what these bends are for.** The MIDI here carries the chips' fine pitch -
+	the remainder a sampled note's rounding leaves, a vibrato, a slide - and nothing wider than a
+	semitone or two; what these songs do need is resolution. A 14-bit bend spends its 8192 positive
+	units over the range, so +/- 2 gives 4096 units per semitone where +/- 12 gives 682: the same
+	50 cents is 1024 units or 171, and the coarse one is audibly stepped. Widening the range is a
+	matter of matching the instrument, not of hearing more. */
+inline constexpr int defaultPitchBendRange = 2;
 inline constexpr int minPitchBendRange = 1;
 inline constexpr int maxPitchBendRange = 24;
 

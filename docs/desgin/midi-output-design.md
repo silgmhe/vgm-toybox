@@ -573,7 +573,7 @@ void render (const playback::OutputBusBuffers* buses, int numBuses, int numSampl
 
 14 位弯音值只有配合接收乐器的灵敏度才有意义，而 MIDI 没有查询它的消息。因此：
 
-- 引擎把“每侧半音数”当作输入（1..24，默认 12），用它换算每个弯音值；
+- 引擎把“每侧半音数”当作输入（1..24，默认 2——14 位弯音在 ±2 内每半音有 4096 级，`defaultPitchBendRange`），用它换算每个弯音值；
 - 演奏前（以及通道新投入使用、范围被改动时）向用到的通道发 **RPN 0**（CC101/100=0，CC6=半音数，CC38=0，随后 CC101/100=127 取消选择）——这是 General MIDI 音源读取的消息，支持 RPN 的音源会跟随；不认识 RPN 的音源按自己的固定范围解释，此时唯一能对齐的办法是让用户把两边都设成同一个值；
 - 关闭弯音后序列里的 pitch bend 事件被丢弃，音符落在最近的半音上，`0xE0` 一条都不发；
 - 设置存 `SettingsStore`（`settings.midi.*`），不进工程状态：它描述的是外部乐器，换工程不该改变它；`ToyboxAudioProcessor` 在构造时和 store 广播时把它交给引擎，这样宿主不打开窗口也能拿到正确的值；
@@ -942,7 +942,7 @@ A 类的 `refRate` 是文档常量，L1 即为绝对音高；B 类在默认模�
 | P0 | `Pitch.h` 加 L1 函数、`ChannelState`/`NoteEvent` 加字段、数据流贯通（**行为不变**） | `ctest` 全绿且 golden 输出逐字节不变 |
 | P1 | 7 颗 A 类芯片的音高改走 L1，移除音高路径上的周期测量 | **已完成 6 颗**（C140、C352、K053260、K054539、QSound、SegaPCM；ADPCM-B 判为 B 类，随 P2）。每颗的 `noteFor` 只剩 `quantisePlaybackRate(rate, refRate)`，`channelState` 用 `describeSamplePitch()` 填两层；单测改断言「L1 音符 + rootCents + 两者之和等于旧音高」（`absoluteNote()`），合成资产的期望值随之改成 L1 音符 |
 | P2 | GA20 / ES5503 / ADPCM-B 归位：GA20 与 ADPCM-B 用 8 kHz 折算的参照率走 L1（周期进 L2），ES5503 无 L1、整体来自实测周期 | **已完成**：`Ga20Decoder` 的 `noteFor` 只剩 `quantisePlaybackRate(rate, kSampleReferenceRate)`，ADPCM-B 同型（16,000 nibble/s），ES5503 保留 `quantiseFrequency(rate/cycle)` 并把来源标 `sampleInferred`；`ga20.vgm` 的期望由 67 改为 L1 的 58（`absoluteNote` 仍是 67）；ctest 31/31 |
-| P3 | 设置项 + UI 文案 + 持久化 | **已完成**：`SettingsStore` 的 `pitch.useSampleRoot`（默认 false）→ `buildMidiSequence(..., transposeBySampleRoot)` → `emitDecodedNotes()` 在开时把 `note` 移到 `note + round(rootCents/100)`，余下的音分并进该音符自带的那个 bend（之后颤音不受影响）；UI 在 Settings → MIDI 页加开关与说明（计算方式、可能不准、三条 one-shot 规则、重新加载生效）。实测 `k053260.vgm`：关 48、开 69，差值正是该采样的根音 |
+| P3 | 设置项 + UI 文案 + 持久化 | **已完成**：`SettingsStore` 的 `pitch.useSampleRoot`（默认 true，2026-11-09 起）→ `buildMidiSequence(..., transposeBySampleRoot)` → `emitDecodedNotes()` 在开时把 `note` 移到 `note + round(rootCents/100)`，余下的音分并进该音符自带的那个 bend（之后颤音不受影响）；UI 在 Settings → MIDI 页加开关与说明（计算方式、可能不准、三条 one-shot 规则、重新加载生效）。实测 `k053260.vgm`：关 48、开 69，差值正是该采样的根音 |
 | P4 | `vgm_mixer_test --pitch-report`、跨 rate 一致性进 ctest | **已完成**：报告按轨列出 notes / 寄存器精确 / 带根音 / one-shot / 根音种类数（数据来自 `MidiEvent` 新带的 `transposeCents`、`rootCents`、`pitchSource`，由 `PlaybackEngine::getPitchSummary()` 聚合）；`pitch.k053260` / `pitch.es5503` / `pitch.ga20` 进 ctest。跨 rate 一致性由 `testC140RootIsStableAcrossRates` 钉住：同一采样两倍速率 → 根音完全相同、移调正好 +1200。报告里「一条轨出现多个根音」只提示不判失败——那通常是同一路播了多个采样 |
 | P5 | 文档与决策记录 | **已完成**：§13 记下六条（寄存器优先、两层模型、参照率是每芯片常量、ES5503 无 L1、鼓仍 C4、根音覆盖留接口），§14 记录模型、每芯片表、三条 one-shot 规则与设置文案，CODEBUDDY.md 记下 `--pitch-report` 的用法 |
 
@@ -950,7 +950,7 @@ A 类的 `refRate` 是文档常量，L1 即为绝对音高；B 类在默认模�
 
 1. **跨半音边界的颤音会把一个音拆成两个**。提取器按「音符号变化」切分（`NoteExtractor` 的 `current.note == note`），所以一条持续音在振动 ±50 音分以上穿过半音线时会拆开；L1 的整体偏移让某些曲子恰好落到边界上（`qsound.vgm` 的滑音用例因此按“不重新键开”断言）。改进方向是把 ±1 半音的连续变化并进 pitch bend，属于提取器的后续工作。
 2. **B 类的默认八度是约定**。GA20/ADPCM-B 的 8 kHz、ES5503 的「实测周期即全体」都不是测量出来的录制率，跨曲稳定但不保证与听感同八度；要绝对八度就开根音。
-3. **根音只和测量窗一样好**。GA20 的滑音采样取第一个测出周期的 512 字节窗，测量误差直接变成整首的常量偏移——这是开关默认关闭的原因。
+3. **根音只和测量窗一样好**。GA20 的滑音采样取第一个测出周期的 512 字节窗，测量误差直接变成整首的常量偏移——这是开关保留（可关闭）的原因；默认已开，因为不开时整首采样声部会差一到两个八度，而可关才能对照与规避。
 4. **一个键开一个音**。采样内部的和弦/多复音不会被拆开；测不出稳定单一周期时判为 unpitched（C4），不发明音高。
 
 ## 15. 参考位置
