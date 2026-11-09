@@ -267,6 +267,10 @@ struct OpnDecoder::Impl
 		point at a sample the way ADPCM-A does. 4096 bytes is about half a second at the 8.5 kHz those
 		streams run at.
 
+		**The latch holds the last byte until the next write**, so silence is a stream of 0x80 rather than
+		an absence of writes - which is why the window keeps them and why the rate below excludes pauses
+		but not quiet bytes.
+
 		The rate is measured, not assumed: the driver spaces its writes to express the sample's
 		pitch, and the same register range serves a 7 kHz drum and a 30 kHz one. `pushDac()` averages
 		the intervals so the row is drawn at the speed it is being played.

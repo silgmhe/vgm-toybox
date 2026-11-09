@@ -329,7 +329,8 @@ bool VgmCommandReader::next (VgmCommand& command)
 		break;
 
 	case 0xE0:
-		// "Set YM2612 PCM data offset": the stream skips to a position in the bank it built.
+		// "Set YM2612 PCM data offset": the stream skips to a position in the bank it built. The distinct
+		// values of this offset are the driver's sample table - the only sample structure the file carries.
 		bankPosition = readLe32 (data + position + 1);
 		command.offset = bankPosition;
 		break;

@@ -31,6 +31,12 @@ namespace toybox::backends::libvgm
 
 	A song with no seeks (or no bank) falls back to one file for the whole bank or stream, at the mean
 	interval of its loud bytes.
+
+	**What the file cannot say**, recorded so the next reader does not go looking: which entry is a kick
+	and which a snare (offsets, not names), where an entry loops (the driver jumps back with no marker),
+	whether a rate was changed to transpose a drum (it only shows as a different region rate), and
+	whether a short entry is a stop-tone rather than a sample (Green Hill's 0x0000 is 96 bytes of it).
+	See `docs/memo/2026-11-10-the-dac-is-a-latch.md`.
 */
 std::vector<playback::DecodedSample> collectYm2612DacSamples (const midi::SongIr& ir);
 

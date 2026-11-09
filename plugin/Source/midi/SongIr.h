@@ -152,6 +152,11 @@ struct SongIr
 		The bank has no addresses of its own - it is one block of bytes - so this command is the only
 		record of where a driver starts playing, and its distinct offsets are that driver's sample
 		table. A chip that names ranges with registers does not need it; the YM2612 does.
+
+		**What it cannot say**: which entry is a kick and which a snare (the file has offsets, not
+		names), where an entry loops (the driver jumps back without a marker), or whether a rate was
+		changed to transpose a drum (that only shows up as a different region rate). Those belong to
+		the driver, and are not recoverable from the file - see the memo of 2026-11-10.
 	*/
 	struct DacSeek
 	{
