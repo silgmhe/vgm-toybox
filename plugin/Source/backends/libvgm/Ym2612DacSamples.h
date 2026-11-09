@@ -12,27 +12,25 @@ struct SongIr;
 namespace toybox::backends::libvgm
 {
 
-/** The YM2612's DAC material: the PCM bank the sixth channel plays, as one file.
+/** The YM2612's DAC material, one file per region the driver seeks to.
 
 	This chip is the odd one out among the sample players. The others name a range of a ROM with
 	registers; the YM2612 is handed one byte at a time at `0x2A`, and the driver decides where those
-	bytes came from - a `0x67` PCM block streamed by `0x80-0x8F`, or the Z80's own memory. The file
-	carries no sample table, only a stream of bytes with timings.
+	bytes came from - a `0x67` PCM block streamed by `0x80-0x8F`, or the Z80's own memory.
 
-	**One file, not one per hit.** Cutting the stream at pauses was tried and produced fragments
-	(3 ms to 165 ms, eleven of them on `02 Green Hill Zone`) that were not the drums a listener would
-	name; the boundaries belong to the driver, and the bank is the material the file actually carries.
+	**The bank is a table, not a sample.** A driver moves the read pointer with `0xE0`, and the
+	distinct offsets it uses are its sample table. Each entry is written at one fixed rate: measured
+	across four Sonic 1 songs, a visit to one offset averages 1.90 ticks and to another 5.47, and the
+	same offset never varies by more than 0.02 ticks between visits. A single rate for the whole song
+	therefore matched at best the half of the bank that happened to run at that rate - which is why a
+	per-song constant (13 799, then 22 050, then 22 050 x 1.637) never generalised.
 
-	**The rate is the median interval that follows a non-silence byte, times a calibration.** Not the
-	mean over the whole stream: the driver feeds silence at 1..2 ticks and drums at 5..6, so the two
-	differ by more than two to one, and a mean lands between them and matches neither. The median over
-	the loud bytes is 22 050 Hz on `02 Green Hill Zone` (2 ticks) - and it is still low, because the
-	file quantises its waits to whole ticks and a drum body sits between them: measured against a
-	known snare, the exported file is 1.637x too long, so the real rate is **36 096 Hz**. That factor
-	is a measurement, not a derivation (`kDacRateCalibration`), and it is stated once.
+	So: **one file per region**, starting at each `0xE0` offset and running to the next one; **rate =
+	the mean interval inside that region**. The mean, because the intervals are dithered - a stream
+	that wants 5.5 ticks arrives as 5 and 6, and a median would quantise it to 8 820.
 
-	The bytes are unsigned around `0x80` (`SampleFormat::pcm8Unsigned`), which is what the register
-	takes.
+	A song with no seeks (or no bank) falls back to one file for the whole bank or stream, at the mean
+	interval of its loud bytes.
 */
 std::vector<playback::DecodedSample> collectYm2612DacSamples (const midi::SongIr& ir);
 

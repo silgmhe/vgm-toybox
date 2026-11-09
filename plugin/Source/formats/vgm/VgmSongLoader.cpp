@@ -81,6 +81,7 @@ bool VgmSongLoader::load (const void* data, std::size_t size, midi::SongIr& out,
 		// --- PSG and FM, first chip ---------------------------------------------------------
 		case 0x50:	emit (ChipKind::sn76489, port, 0, reg, value, time); break;
 		case 0x51:	emit (ChipKind::ym2413, 0, 0, reg, value, time); break;
+		case 0xE0:	out.dacSeeks.push_back ({ command.offset, time }); break;
 		case 0x52:	emit (ChipKind::ym2612, 0, 0, reg, value, time); break;
 		case 0x53:	emit (ChipKind::ym2612, 0, 1, reg, value, time); break;		// port 1 of the pair
 		case 0x54:	emit (ChipKind::ym2151, 0, 0, reg, value, time); break;

@@ -1,4 +1,4 @@
-﻿#include "VgmCommandReader.h"
+#include "VgmCommandReader.h"
 
 #include <cstring>
 
@@ -331,6 +331,7 @@ bool VgmCommandReader::next (VgmCommand& command)
 	case 0xE0:
 		// "Set YM2612 PCM data offset": the stream skips to a position in the bank it built.
 		bankPosition = readLe32 (data + position + 1);
+		command.offset = bankPosition;
 		break;
 	default:
 		if (cmd >= 0x70 && cmd <= 0x7F)

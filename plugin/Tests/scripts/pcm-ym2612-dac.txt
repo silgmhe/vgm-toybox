@@ -2,21 +2,22 @@
 #
 # This chip is the odd one out: the others name a range of a ROM with registers, while the YM2612 is
 # handed one byte at a time at 0x2A and the driver decides where those bytes came from. `02 Green
-# Hill Zone` carries them in a `0x67` block of type 0x00 - 13 132 bytes - which the file streams into
-# the DAC with `0x80-0x8F` commands and seeks into 228 times with `0xE0`.
+# Hill Zone` carries them in a `0x67` block of type 0x00 - 13 132 bytes - streamed into the DAC with
+# `0x80-0x8F` and sought into with `0xE0`.
 #
-# **One file per song, not one per hit.** Cutting the stream at pauses was tried and rejected: it
-# produced eleven fragments from 3 ms to 165 ms, which are not the drums a listener would name.
+# **The unit is the region an `0xE0` seeks to.** The bank is not one sample: the driver's seek
+# offsets are its sample table, and each entry is written at one fixed rate. Measured on this song,
+# a visit to offset 0x1516 averages 1.90 ticks and to offset 0x32D8 5.47 - and neither varies by
+# more than 0.02 ticks between visits. A single rate for the song matched half of it at best.
 #
-# The rate is the **median interval that follows a loud byte**: the driver feeds silence at 1..2
-# ticks and drums at 5..6, so the stream's mean (13 799 Hz) matches neither, while the median over
-# the loud bytes is 2 ticks - 22 050 Hz - and a calibration of 1.637 on top of it, measured by the
-# user against a known snare, gives 36 096 Hz.
+# Five regions here: 0x000000 (8.0 kHz), 0x000060 (8.0 kHz), 0x001516 (23.2 kHz), 0x0023F8
+# (23.2 kHz), 0x0032D8 (8.1 kHz). The rate is the mean of the intervals in that region, because the
+# intervals are dithered - 5.5 ticks arrives as 5 and 6 - and a median would quantise it to 8 820.
 
 size 900 700
 
 load "test_file/sega_md/02 Green Hill Zone.vgz"
 tick
 
-samples 1
-sample-names ym2612dac_000000_0334C
+samples 5
+sample-names ym2612dac_001516_00EE2

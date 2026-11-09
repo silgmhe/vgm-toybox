@@ -147,9 +147,24 @@ struct SongIr
 	std::vector<chips::RegisterWrite> writes;
 	std::vector<RomBlock> roms;
 
+	/** A `0xE0`: the driver moved the YM2612's PCM read pointer.
+
+		The bank has no addresses of its own - it is one block of bytes - so this command is the only
+		record of where a driver starts playing, and its distinct offsets are that driver's sample
+		table. A chip that names ranges with registers does not need it; the YM2612 does.
+	*/
+	struct DacSeek
+	{
+		uint32_t offset = 0;
+		uint32_t sampleTime = 0;
+	};
+
 	/** The `0x68` copies, in file order. Empty on a song that lays its banks out by uploading the
 		whole block at zero - and on every format that has no such command. */
 	std::vector<RamCopy> ramCopies;
+
+	/** The YM2612 PCM seeks, in stream order. */
+	std::vector<DacSeek> dacSeeks;
 	uint32_t totalTicks = 0;
 };
 
