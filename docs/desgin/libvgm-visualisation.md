@@ -1006,6 +1006,15 @@ ADPCM-A 在**第二个寄存器端口**（YM2610 的 `0x59`、YM2608 的 `0x57`�
   估计（后者同样只看 4096 字节）。**导出**仍只覆盖 ADPCM-A（`collectOpnAdpcmSamples` 只读 `0x82`），
   DeltaT 只进了可视化与 MIDI。
 
+  **MIDI 路径（同日修）**：`MidiSequenceBuilder` 过去把 `0x82` 写死当 DeltaT 镜像，而且每族只建一份，
+  于是 OPNB 的周期是从 ADPCM-A 的字节量出来的 —— `rootCents` 因此是错的，MIDI 音符只在
+  `pitch.useSampleRoot` 开启时才看得出来。现在 `OpnDecoder::sampleBlocksFor(variant)` 是唯一答案
+  （OPNB `0x83`；OPNA `0x81`，缺失时回退到两颗族共享的 `0x82`；YM2612/YM2203 无），`kRequirements`、
+  `MidiSequenceBuilder::flushOpn` 都引用同一组常量，镜像按**设备**取而不是按族。**默认行为不变**：
+  设置关闭时 MIDI 音符是 L1（DELTA-N 速率相对 8 kHz 参考），与 ROM 无关；开启后 ADPCM-B 才带上真实
+  根音修正。`testOpnDeltaTBlockChoice` 断言了 OPNB 不接受 `0x82`（波形与根音都为空）、OPNA 回退共享
+  ROM、YM2612 无 DeltaT 块。
+
   **性能（同日修）**：形状按 `(start, end)` 缓存。`channelState()` 每写一次寄存器就会被调用一次，未缓存时
   同一段字节在 `07 Stage 2` 上被解码上万次，加载从 ~150 ms 变成 **3.7 s**；缓存后 07 回到 149 ms、
   04 102 ms、`02 The Military System` 15 ms。缓存于 `setAdpcmBRom()` 清空（字节变了），超过 64 条整体

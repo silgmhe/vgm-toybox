@@ -596,6 +596,100 @@ namespace
 		}
 	}
 
+	/** **A Delta-T ROM has to come from the Delta-T block.**
+
+		The decoder cannot tell the blocks apart by their contents - both are nibble streams - so the type
+		is the only thing that separates them, and a builder that guesses `0x82` for every variant measures
+		an OPNB's pitch from the ADPCM-A bytes. These assertions state the table from outside: which block
+		each variant uses, that the ADPCM-A image is not accepted as Delta-T on an OPNB, and that the OPNA
+		- whose two families share one part - does fall back to it.
+	*/
+	void testOpnDeltaTBlockChoice (void)
+	{
+		using toybox::chips::ChipMemory;
+		using toybox::chips::OpnDecoder;
+
+		const auto opnb = OpnDecoder::sampleBlocksFor (OpnDecoder::Variant::ym2610);
+		check (opnb.deltaT == 0x83 && opnb.deltaTFallback == 0,
+			   "an OPNB takes Delta-T from 0x83 and has nothing to fall back to");
+
+		const auto opna = OpnDecoder::sampleBlocksFor (OpnDecoder::Variant::ym2608);
+		check (opna.deltaT == 0x81 && opna.deltaTFallback == 0x82,
+			   "an OPNA takes 0x81, and the shared ADPCM-A block when that is all the song has");
+
+		const auto ym2612 = OpnDecoder::sampleBlocksFor (OpnDecoder::Variant::ym2612);
+		check (ym2612.deltaT == 0 && ym2612.deltaTFallback == 0,
+			   "a YM2612 has no Delta-T block at all");
+
+		std::vector<uint8_t> rom (0x1000, 0x8Fu);
+
+		// **The two boards put Delta-T in different windows**: the OPNB at port 0 / 0x10..0x1F, the OPNA
+		// at port 1 / 0x00..0x0F. A test that writes one layout to both would pass while proving
+		// nothing, which is how the MIDI builder's fixed block type survived this long.
+		const auto playedOnce = [] (OpnDecoder& decoder, int port, uint8_t base)
+		{
+			std::vector<toybox::chips::RegisterWrite> writes;
+			const auto at = [&writes, port, base] (uint8_t offset, uint8_t value)
+			{
+				toybox::chips::RegisterWrite write;
+				write.sampleTime = 0;
+				write.port = port;
+				write.reg = (uint8_t) (base + offset);
+				write.value = value;
+				writes.push_back (write);
+			};
+
+			at (0x02, 0x00);			// start address 0
+			at (0x03, 0x00);
+			at (0x04, 0x01);			// end address, one page
+			at (0x05, 0x00);
+			at (0x09, 0x00);			// DELTA-N 0x4000
+			at (0x0A, 0x40);
+			at (0x00, 0x80);			// start
+
+			for (const auto& write : writes)
+			{
+				decoder.write (write);
+			}
+		};
+
+		{
+			OpnDecoder decoder (OpnDecoder::Variant::ym2610);
+			decoder.reset (toybox::chips::ChipConfig { kYmClock, 44100.0 });
+
+			ChipMemory adpcmA;
+			adpcmA.bytes = &rom;
+			adpcmA.type = 0x82;			// the ADPCM-A block, offered as Delta-T by the old builder
+			decoder.attachMemory (adpcmA);
+
+			playedOnce (decoder, 0, 0x10);
+
+			check (decoder.channelState (12).wave == nullptr,
+				   "an OPNB does not take the ADPCM-A block as its Delta-T ROM");
+
+			// **What the MIDI setting has to work with.** Without a cycle there is no root, so the
+			// "transpose by the sample's root" option has nothing to move the note by - which is what
+			// the old fixed 0x82 image left it with on an OPNB.
+			check (decoder.channelState (12).rootCents == 0,
+				   "and no root comes with it, so the setting cannot correct the note");
+		}
+
+		{
+			OpnDecoder decoder (OpnDecoder::Variant::ym2608);
+			decoder.reset (toybox::chips::ChipConfig { kYmClock, 44100.0 });
+
+			ChipMemory adpcmA;
+			adpcmA.bytes = &rom;
+			adpcmA.type = 0x82;
+			decoder.attachMemory (adpcmA);
+
+			playedOnce (decoder, 1, 0x00);
+
+			check (decoder.channelState (12).wave != nullptr,
+				   "but an OPNA reads the same part for both families");
+		}
+	}
+
 	/** ADPCM-A and ADPCM-B are one-shots: the control bit starts them, the chip ends them. The
 		decoder reports a pulse on the drum channel, not a held note. */
 	void testOpnaAdpcmOneShots (void)
@@ -7122,6 +7216,7 @@ int main (void){
 	testOpnThreeChannels();
 	testOpnChannelFamilies();
 	testOpnAdpcmBShape();
+	testOpnDeltaTBlockChoice();
 	testOpnaAdpcmOneShots();
 	testOpnAdpcmBPitch();
 	testOpnAdpcmBDeltaIsThePitch();

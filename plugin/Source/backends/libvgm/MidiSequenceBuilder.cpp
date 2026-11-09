@@ -157,12 +157,10 @@ namespace
 			// equal timestamps the stable sort keeps whichever was appended first, so the flush order
 			// is part of the output.
 			flushNes (lastSampleTime);
-			// ADPCM-B's pitch only exists in its DELTA-T ROM (block 0x82), which is why the OPN family
-			// is flushed through its own entry point: it also splits ports and drums.
-			flushOpn (router.decoder<chips::OpnDecoder> ().writes.empty()
-						  ? std::vector<uint8_t>()
-						  : memory::rom (ir, 0x82, 16 * 1024 * 1024, true),
-					  lastSampleTime);
+			// ADPCM-B's pitch only exists in its DELTA-T ROM, which is why the OPN family is flushed
+			// through its own entry point: it also splits ports and drums, and the block that carries
+			// that ROM depends on the variant of each device.
+			flushOpn (ir, lastSampleTime);
 			flushSsg (ir, lastSampleTime);
 			flushGb (lastSampleTime);
 			flushOpl (lastSampleTime);
@@ -364,7 +362,7 @@ namespace
 		/** Decodes every OPN write once the stream is read. One pass per device, because the
 			decoder needs the whole register history: algorithm changes, a total level written
 			before the key-on, ADPCM start bits and the DAC's 0x2A stream. */
-		void flushOpn (const std::vector<uint8_t>& adpcmBRom, uint32_t totalSamples)
+		void flushOpn (const midi::SongIr& ir, uint32_t totalSamples)
 		{
 			for (auto& entry : router.decoder<chips::OpnDecoder> ().writes)
 			{
@@ -395,11 +393,35 @@ namespace
 												? info.devCfg->clock
 												: fallbackClock;
 
-				chips::OpnDecoder decoder (opnVariantFor (info));
+				const chips::OpnDecoder::Variant variant = opnVariantFor (info);
+				chips::OpnDecoder decoder (variant);
 				decoder.reset (chips::ChipConfig { clock, tickRate });
-				if (! adpcmBRom.empty())
+
+				// **Delta-T's ROM, chosen per device.** The OPNB keeps it in block 0x83; the OPNA in
+				// 0x81 and often ships only the ADPCM-A block, which its two families share. This used
+				// to be one image built from 0x82 for the whole family, so on an OPNB the sample's
+				// cycle - and with it the root correction - was measured from the wrong bytes.
+				const auto blocks = chips::OpnDecoder::sampleBlocksFor (variant);
+				const uint8_t types[2] = { blocks.deltaT, blocks.deltaTFallback };
+
+				for (const uint8_t type : types)
 				{
-					decoder.setAdpcmBRom (adpcmBRom);
+					if (type == 0)
+					{
+						continue;
+					}
+
+					const std::vector<uint8_t> rom =
+						memory::rom (ir, type, chips::OpnDecoder::kAdpcmBImageBytes, true);
+
+					if (! rom.empty())
+					{
+						chips::ChipMemory attached;
+						attached.bytes = &rom;
+						attached.type = type;
+						decoder.attachSecondaryMemory (attached);
+						break;
+					}
 				}
 
 				appendNotes (&info,

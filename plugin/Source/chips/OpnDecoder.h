@@ -68,6 +68,47 @@ public:
 	*/
 	static constexpr std::size_t kAdpcmBImageBytes = 16u << 20;
 
+	/** The VGM block types an OPN takes its samples from. Named because three readers ask which is
+		which: the requirements below, the replayer that serves them, and the MIDI builder, which builds
+		them per device. */
+	static constexpr uint8_t kAdpcmABlock = 0x82;
+	static constexpr uint8_t kOpnbDeltaTBlock = 0x83;
+	static constexpr uint8_t kOpnaDeltaTBlock = 0x81;
+
+	/** **Where a variant's Delta-T ROM lives, and what to fall back to.**
+
+		The OPNB keeps it in a block of its own (`0x83`). The OPNA numbers it `0x81`, but many rips ship
+		only the ADPCM-A block because on that board the two families read the same part - hence the
+		fallback. A variant with no Delta-T answers zeros.
+
+		One table, because two readers ask: the replayer (through `kRequirements`, which names both
+		types and lets whichever block the song carries arrive) and the MIDI builder, which has to build
+		the image per device, where the variant is known. **It used to answer `0x82` for every variant**,
+		so an OPNB's Delta-T pitch was measured from the ADPCM-A bytes - the note was off by the sample's
+		root, but only with the "transpose by sample root" setting on, which is why it went unnoticed.
+	*/
+	struct SampleBlocks
+	{
+		uint8_t deltaT = 0;			// the variant's Delta-T block, 0 when it has none
+		uint8_t deltaTFallback = 0;	// a second block to try (the OPNA's shared part), 0 = none
+	};
+
+	static constexpr SampleBlocks sampleBlocksFor (Variant variant)
+	{
+		switch (variant)
+		{
+		case Variant::ym2610:
+		case Variant::ym2610b:
+			return SampleBlocks { kOpnbDeltaTBlock, 0 };
+
+		case Variant::ym2608:
+			return SampleBlocks { kOpnaDeltaTBlock, kAdpcmABlock };
+
+		default:
+			return SampleBlocks {};
+		}
+	}
+
 	/** **The images this decoder wants.** `0x82` is the ADPCM-A ROM the six voices page through;
 		Delta-T reads a block of its own, and VGM numbers it per board (`0x83` on the OPNB, `0x81` on
 		the OPNA), so both types are named and the replayer hands over whichever the song carries.
@@ -76,10 +117,10 @@ public:
 		decoder from one table - a YM2612 song has neither block and gets empty images.
 	*/
 
-	static constexpr ChipRequirements kRequirements { 8000000u, true, 0x82, kAdpcmAImageBytes, false,
-													  false,
-													  0x83, kAdpcmBImageBytes,	// OPNB Delta-T
-													  0x81, kAdpcmBImageBytes };	// OPNA Delta-T
+	static constexpr ChipRequirements kRequirements { 8000000u, true, kAdpcmABlock, kAdpcmAImageBytes,
+													  false, false,
+													  kOpnbDeltaTBlock, kAdpcmBImageBytes,
+													  kOpnaDeltaTBlock, kAdpcmBImageBytes };
 
 	void reset (const ChipConfig& config) override;
 	void attachMemory (const ChipMemory& memory) override;
