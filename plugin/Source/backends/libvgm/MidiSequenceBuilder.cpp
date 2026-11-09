@@ -257,9 +257,24 @@ namespace
 				if (extra != rootRemainder.end())
 				{
 					cents += extra->second;
+					rootRemainder.erase (extra);		// handled; the pass below must not send it twice
 				}
 
 				pitchBend (track, (double) bend.sampleTime / tickRate, (double) cents / 100.0);
+			}
+
+			// **The remainder of the rounding has to be sent even when the sample has no bend of its
+			// own.** The note number is rounded to a semitone and the rest rides a bend; until now the
+			// remainder was only added to a bend event that happened to exist at that instant, so a
+			// plain sampled hit - no vibrato, nothing to bend - lost up to fifty cents silently. That is
+			// half a semitone, and with a borderline root measurement it is what "one note is off by
+			// about a semitone" turned out to be.
+			for (const auto& [key, cents] : rootRemainder)
+			{
+				if (cents != 0)
+				{
+					pitchBend (key.first, (double) key.second / tickRate, (double) cents / 100.0);
+				}
 			}
 
 			if (events.empty())
