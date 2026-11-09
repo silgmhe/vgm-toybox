@@ -102,8 +102,11 @@ public:
 		It also scans the song once, with the output thrown away, to number its DPCM samples. That
 		scan is what keeps a sample on one note: numbering them as they are first heard would make
 		the note depend on where playback started, and a seek to 0:30 would renumber the kit.
-		180 seconds of scan costs about 0.7 s - the whole reason it can be done here at all is
-		that the CPU runs some fifteen times faster than the audio it produces.
+
+		**The cost is about four milliseconds of CPU per second of music**, so it scales with whatever
+		duration the caller asks for - `settings::nsf::defaultDurationSeconds` unless it says otherwise.
+		That it can be done here at all is the CPU running some fifteen times faster than the audio it
+		produces; the number of seconds is no longer written down here, because it was the setting.
 	*/
 	void start (void);
 

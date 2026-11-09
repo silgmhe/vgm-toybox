@@ -19,8 +19,9 @@ namespace toybox::backends::nsf
 namespace
 {
 
-/** Three minutes, until the settings page has an answer. The header carries no length: an NSF's
-	driver loops until it is told to stop, so the user is the only source of a duration. */
+/** The stored default (`settings::nsf::defaultDurationSeconds`), for a caller that has not asked the
+	store. The header carries no length: an NSF's driver loops until it is told to stop, so the user
+	is the only source of a duration - the number itself is stated in `SettingsDefaults.h`. */
 constexpr double kDefaultLengthSeconds = (double) settings::nsf::defaultDurationSeconds;
 
 /** One rendered instance of the song. The emulation is the player's; this only adapts it. */

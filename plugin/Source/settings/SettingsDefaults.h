@@ -92,7 +92,7 @@ namespace nsf
 constexpr int minDurationSeconds = 10;
 constexpr int maxDurationSeconds = 600;
 constexpr int durationStepSeconds = 5;
-constexpr int defaultDurationSeconds = 180;
+constexpr int defaultDurationSeconds = 300;
 
 /** Output gain in decibels.
 

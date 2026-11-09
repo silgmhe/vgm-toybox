@@ -170,10 +170,11 @@ void NsfPlayer::start (void)
 {
 	resetToStart ();
 
-	// The whole-song pass does not happen here any more. It walks 180 seconds of music - 0.3 to
-	// 2.8 seconds of CPU depending on the expansion chip - and a file has to be playable before
-	// that finishes. The backend runs it on a thread of its own; this only picks up a result the
-	// song's handle already has, and says so when it does not.
+	// The whole-song pass does not happen here any more. It walks the song's whole length of music -
+	// a few seconds of CPU depending on the expansion chip, at roughly four milliseconds per second
+	// of music - and a file has to be playable before that finishes. The backend runs it on a thread
+	// of its own; this only picks up a result the song's handle already has, and says so when it
+	// does not.
 	if (! prescanDisabled)
 	{
 		if (auto scan = scanHandle != nullptr ? scanHandle->snapshot () : nullptr)
