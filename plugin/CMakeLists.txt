@@ -235,6 +235,7 @@ target_sources(VGMToybox PRIVATE
 	Source/backends/libvgm/SegaPcmSamples.cpp
 	Source/backends/libvgm/OpnAdpcmSamples.cpp
         Source/backends/libvgm/OpnDeltaTSamples.cpp
+        Source/backends/libvgm/Y8950Samples.cpp
         Source/backends/libvgm/Ym2612DacSamples.cpp
 	Source/backends/libvgm/C352Samples.cpp
 	Source/backends/libvgm/QSoundSamples.cpp
@@ -448,6 +449,7 @@ add_executable(vgm_mixer_test EXCLUDE_FROM_ALL
 	Source/backends/libvgm/SegaPcmSamples.cpp
 	Source/backends/libvgm/OpnAdpcmSamples.cpp
         Source/backends/libvgm/OpnDeltaTSamples.cpp
+        Source/backends/libvgm/Y8950Samples.cpp
         Source/backends/libvgm/Ym2612DacSamples.cpp
 	Source/backends/libvgm/C352Samples.cpp
 	Source/backends/libvgm/QSoundSamples.cpp
@@ -478,6 +480,7 @@ add_executable(vgm_mixer_test EXCLUDE_FROM_ALL
 	Source/backends/libvgm/SegaPcmSamples.cpp
 	Source/backends/libvgm/OpnAdpcmSamples.cpp
         Source/backends/libvgm/OpnDeltaTSamples.cpp
+        Source/backends/libvgm/Y8950Samples.cpp
         Source/backends/libvgm/Ym2612DacSamples.cpp
 	Source/backends/libvgm/C352Samples.cpp
 	Source/backends/libvgm/QSoundSamples.cpp
@@ -560,6 +563,7 @@ add_executable(vgm_chip_test EXCLUDE_FROM_ALL
 	Source/backends/libvgm/SegaPcmSamples.cpp
 	Source/backends/libvgm/OpnAdpcmSamples.cpp
         Source/backends/libvgm/OpnDeltaTSamples.cpp
+        Source/backends/libvgm/Y8950Samples.cpp
         Source/backends/libvgm/Ym2612DacSamples.cpp
 	Source/backends/libvgm/C352Samples.cpp
 	Source/backends/libvgm/QSoundSamples.cpp

@@ -502,6 +502,75 @@ namespace
 			   "and it holds the most recent half second, not the whole song");
 	}
 
+	/** **The Y8950's Delta-T row can point at a sample**, unlike the YM2612 DAC: two registers name
+		the range and one names the pitch, so the row draws the same bytes the exporter writes.
+
+		The rate is the OPL's own time base - `delta * clock / (72 * 65536)` - and not the OPN's 144.
+		`fmopl.c` sets `freqbase = (clock / 72) / rate` and `ymdeltat.c` consumes one nibble per
+		overflow, so the same DELTA-N on a 3.58 MHz Y8950 and an 8 MHz OPN is not the same pitch.
+	*/
+	void testY8950AdpcmRow (void)
+	{
+		using toybox::chips::ChipConfig;
+		using toybox::chips::ChipMemory;
+		using toybox::chips::OplDecoder;
+		using toybox::chips::RegisterWrite;
+
+		OplDecoder decoder (OplDecoder::Variant::opl2, false);
+		decoder.reset (ChipConfig { 3579545u, 44100.0, 1, 0.0 });	// flags bit 0 = Y8950
+
+		std::vector<uint8_t> rom (32768, 0);
+
+		for (std::size_t i = 0; i < rom.size (); ++i)
+		{
+			rom[i] = (uint8_t) ((i * 31 + 7) & 0xFF);
+		}
+
+		ChipMemory memory;
+		memory.bytes = &rom;
+		decoder.attachMemory (memory);
+
+		const auto write = [&decoder] (uint32_t time, uint8_t reg, uint8_t value)
+		{
+			RegisterWrite w;
+			w.sampleTime = time;
+			w.port = 0;
+			w.reg = reg;
+			w.value = value;
+			decoder.write (w);
+		};
+
+		write (0, 0x08, 0x00);		// four-byte pages: control2's low bits are 0
+		write (1, 0x09, 0x00);		// start page 0
+		write (2, 0x0A, 0x00);
+		write (3, 0x0B, 0xFF);		// stop page 1023 -> bytes 0..4095
+		write (4, 0x0C, 0x03);
+		write (5, 0x10, 0xF0);		// DELTA-N 0x51F0
+		write (6, 0x11, 0x51);
+		write (7, 0x07, 0xA0);		// start
+
+		const auto state = decoder.channelState (14);
+
+		check (state.present && state.wave != nullptr && state.wave->size () == 8192,
+			   "the Delta-T row draws two nibbles per byte of the range it names");
+		check (state.sampleRate > 15900.0f && state.sampleRate < 15930.0f,
+			   "at the OPL's own base: delta * clock / (72 * 65536)");
+
+		// **The exporter decodes these bytes with the same function**, so a value that differs here
+		// is a file that differs from the picture.
+		std::vector<float> expected;
+		toybox::chips::opn::deltaT::decode (rom.data (), 4096, expected);
+
+		bool same = state.wave != nullptr && state.wave->size () == expected.size ();
+
+		for (std::size_t i = 0; same && i < expected.size (); ++i)
+		{
+			same = std::abs ((*state.wave)[i] - expected[i]) < 1e-6f;
+		}
+
+		check (same, "and the exporter's decoder produces the same levels as the panel");
+	}
+
 	/** A three-channel OPN (YM2203) has no second port: register 0x28 with the port-select bit
 		set addresses channel 3 of a six-channel OPN, which this chip does not have, while the
 		low two bits still select one of its three. */
@@ -7287,6 +7356,7 @@ int main (void){
 	testFmSecondPortIsASeparateChannel();
 	testFmDacTakesOverChannelSix();
 	testYm2612DacWindow();
+	testY8950AdpcmRow();
 	testOpnThreeChannels();
 	testOpnChannelFamilies();
 	testOpnAdpcmBShape();

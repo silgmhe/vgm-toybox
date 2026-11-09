@@ -1,0 +1,20 @@
+# The Y8950's Delta-T samples reach the exporter.
+#
+# The OPL2 has no sample table in registers the way ADPCM-A does, but its Delta-T unit does name a
+# range: 0x09/0x0A and 0x0B/0x0C are the start and the **last page**, the page size comes from
+# control2 (0x08: 32 bytes, or 4 when its low bits are 0), and 0x10/0x11 are DELTA-N. The bytes come
+# from a `0x88` block - VGM's "Y8950 DELTA-T ROM data" - which the reader already turns into
+# `ir.roms`.
+#
+# `05 Impact 151` keys on 807 times and names five ranges of 4 KB each (0x0000, 0x1000, 0x2000,
+# 0x4000, 0x7000 - they tile the three ROM blocks exactly, which is what proves the four-byte page
+# size). DELTA-N is 0x51F0 and the clock is 3 579 545 Hz, so every file is
+# **20 976 * 3 579 545 / (72 * 65536) = 15 912.5 Hz** - the OPL's own base, not the OPN's 144.
+
+size 900 700
+
+load "test_file/Y8950-ADPCM/05 Impact 151.vgz"
+tick
+
+samples 5
+sample-names y8950adpcm_000000_01000

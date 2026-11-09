@@ -105,6 +105,10 @@ void VgmReplayer::adoptNewBuffers (void)
 				case DEVID_YM2608: slotFlags = 2; break;
 				case DEVID_YM2610: slotFlags = 3; break;
 				case DEVID_YM2612: slotFlags = 5; break;
+
+				// The OPL family shares one decoder, and only the Y8950 has a Delta-T unit: bit 0
+				// says so, which is what gives it a fifteenth row (and the ROM it draws from).
+				case DEVID_Y8950: slotFlags = 1; break;
 				default: break;
 				}
 			}

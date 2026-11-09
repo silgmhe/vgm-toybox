@@ -322,7 +322,7 @@ track.channelIndex = channelIndex;    // 联动芯片的通道号接在父芯片
 | 采样 | K007232 —— 见 §9.7 | ✓ | ✓ | ✓ `collectK007232Samples` |
 | 采样 | **OPN-ADPCM**（ADPCM-A 与 ADPCM-B/Delta-T）—— 见 §9.17 | ✓ | — | ✓ `collectOpnAdpcmSamples` + `collectOpnDeltaTSamples` |
 | 采样 | **YM2612 DAC**（第 6 通道的 `0x2A` 流）—— 见 §9.20 | ✓ | ✓ | ✓ `collectYm2612DacSamples` |
-| 采样 | **Y8950-ADPCM / ADPCM-drum** | — | — | — |
+| 采样 | **Y8950-ADPCM**（Delta-T，第 15 行）—— 见 §9.21 | ✓ | ✓ | ✓ `collectY8950Samples` |
 | 波表 | VSU —— 见 §9.11 | ✓ | ✓ | ✓ `collectVsuSamples` |
 | 波表 | ES5503 —— 见 §9.9 | ✓ | ✓ | ✓ `collectEs5503Samples` |
 | 波表 | K005289 —— 见 §9.12 | ✓ | ✓ | ✓ `collectK005289Samples` |
@@ -1158,3 +1158,31 @@ VGM 只记录四件相关的事：
 3. **移调**：驱动若为音高改变写入速度，只能表现为“这个区域速率不同”，原始录音速率无法还原；
 4. **静音入口**：Green Hill 的 `0x0000` 是 96 字节的停止用素材，所以 5 个区域只有 4 个出声；过滤阈值
    尚无数据支撑（该段只有 31% 落在 ±2 内），暂时保留。
+
+
+### 9.21 Y8950 的 Delta-T：OPL 也有采样播放器（2026-11-10）
+
+**它与 YM2612 的 DAC 相反：这里有一张表。** Y8950 是带采样播放器的 OPL2，第 15 个通道（通道号 14）
+由 `0x09/0x0A`（起始页）、`0x0B/0x0C`（**最后一页**）、`0x10/0x11`（DELTA-N）与 `0x07` bit 7（启动）
+共同描述；字节来自 `0x67` type `0x88` 块（VGM 的 “Y8950 DELTA-T ROM data”），reader 早已把它送进
+`ir.roms`，所以不需要新的文件解析。
+
+**页大小由 `0x08` 的低两位决定**（`ymdeltat.c` 的 `dram_rightshift[4] = {3,0,0,0}`）：默认 32 字节页，
+低两位为 0 时是 4 字节。`05 Impact 151` 写的是 `0x00`，于是五个区间（0x0000、0x1000、0x2000、0x4000、
+0x7000）**正好铺满三个 ROM 块**——这既是五个 4 KB 样本，也是页大小正确的证据。
+
+**速率是 OPL 的时间基，不是 OPN 的。** `fmopl.c` 的 `freqbase = (clock / 72) / rate`，`ymdeltat.c` 每
+跨过 16.16 累加器一次消耗一个 nibble，所以 `rate = delta × clock / (72 × 65536)`：3 579 545 Hz 与
+DELTA-N 0x51F0 得 **15 912.5 Hz**。OPN 的 Delta-T 用 144（它的 DELTA-T 跑在主时钟/2），把这个除数
+用到 Y8950 上会让每个文件只有一半速度。
+
+**导出**：`collectY8950Samples`，一段区间一个文件，名字 `y8950adpcm_%06X_%05X`，格式 `adpcmB4`（与
+OPN Delta-T 共享 B1/B2 表），30 s 上限再叠设置里的单样本上限。`05 Impact 151` 得到五个文件、每个
+8 192 点、15 912.5 Hz；807 次 key-on 里只有五个不同的 (start, stop, DELTA-N)。
+
+**可视化**：第 14 行不再只有脉冲，画区间的前 4 096 字节（8 192 点），`sampleRate` 同上。实时路径过去
+用默认构造的 `OplDecoder`（`adpcm = false`），这颗芯片因此根本没有第 15 行；现在 `DEVID_Y8950` 经
+`ChipConfig::flags` 的 bit 0 打开它，与 OPN 变体走同一条路。
+
+**没有做的**：控制 `0x80` 的 CPU 喂数据模式（本文件是 `0xA0`，外部内存）；`0x12` 音量不参与导出；
+循环位（`0x07` bit 4）只导第一遍。

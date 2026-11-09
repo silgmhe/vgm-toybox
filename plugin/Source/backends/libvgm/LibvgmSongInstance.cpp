@@ -10,6 +10,7 @@
 #include "SegaPcmSamples.h"
 #include "OpnAdpcmSamples.h"
 #include "OpnDeltaTSamples.h"
+#include "Y8950Samples.h"
 #include "Ym2612DacSamples.h"
 #include "Ymz280bSamples.h"
 #include "K007232Samples.h"
@@ -424,6 +425,21 @@ bool LibvgmSongInstance::prepare (double hostSampleRate, int newMaxBlockSize, ju
 						   && std::any_of (songIr->chips.begin (), songIr->chips.end (),
 										   [] (const midi::ChipSlot& slot)
 										   { return slot.kind == midi::ChipKind::ym2612; });
+
+	const bool hasY8950 = songIr != nullptr
+						  && std::any_of (songIr->chips.begin (), songIr->chips.end (),
+										  [] (const midi::ChipSlot& slot)
+										  { return slot.kind == midi::ChipKind::y8950; });
+
+	if (hasY8950)
+	{
+		// The OPL2's sample player: ranges named by registers, bytes from a `0x88` block. The
+		// header's own clock says which OPL part it is, so no device lookup is needed here.
+		for (auto& sample : collectY8950Samples (*songIr))
+		{
+			collected.push_back (std::move (sample));
+		}
+	}
 
 	if (hasYm2612 && songIr != nullptr)
 	{

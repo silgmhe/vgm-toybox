@@ -1,7 +1,12 @@
 #include "OplDecoder.h"
 
+#include <algorithm>
 #include <cmath>
 #include <cstdint>
+#include <utility>
+#include <vector>
+
+#include "OpnAdpcmB.h"
 
 #include "Pitch.h"
 
@@ -15,6 +20,11 @@ namespace
 
 	constexpr uint32_t kRhythmGate = 4410;		// 100 ms at 44.1 kHz
 	constexpr uint32_t kAdpcmGate = 5292;		// 120 ms
+
+	/** A row draws a shape, not a recording: the Y8950's ranges are 4 KB each on this collection
+		(8 192 nibbles), and a driver that points `stop` at the end of the ROM must not turn one row
+		into a 2 MB decode. Same ceiling the OPN's Delta-T panel uses. */
+	constexpr std::size_t kAdpcmWindowBytes = 4096;
 
 	/** The OPL register map groups its channels in runs of nine: 0x10..0x18 carry each channel's
 		frequency low byte, 0x20..0x28 the same channel's block and F-number high bit, 0xB0..0xB8
@@ -120,6 +130,68 @@ struct OplDecoder::Impl
 	Channel channels[18];
 	Pulse rhythm[5];
 	Pulse deltaT;
+
+	/** **The Y8950's Delta-T state**: a sample player rather than a modulator. The ROM has no
+		addresses of its own in VGM - `0x88` is one block - so the registers below are the whole map,
+		and they are what the panel and the exporter both read. */
+	std::vector<uint8_t> rom;
+	std::shared_ptr<const std::vector<float>> adpcmWave;
+	double clock = 3579545.0;
+	uint8_t adpcmMode = 0;		// 0x08: the low two bits pick the address granularity
+	uint8_t startLow = 0;
+	uint8_t startHigh = 0;
+	uint8_t stopLow = 0;
+	uint8_t stopHigh = 0;
+	uint16_t deltaN = 0;		// 0x10 / 0x11
+	uint8_t level = 0;			// 0x12
+
+	/** Delta-T's address shift, from the core's `ymdeltat.c`: a page is 32 bytes, and a control2 whose
+		low two bits are 0 selects a part with four-byte granularity (`dram_rightshift[0] = 3`). */
+	int adpcmShift (void) const
+	{
+		static constexpr int kDramRightShift[4] = { 3, 0, 0, 0 };
+		return 5 - kDramRightShift[adpcmMode & 3];
+	}
+
+	/** Nibbles a second the unit is clocked at: `delta * clock / (72 * 65536)`.
+
+		The **72**, not the 144 the OPN family uses. `fmopl.c` sets `freqbase = (clock / 72) / rate`
+		and `ymdeltat.c` consumes one nibble per overflow of the 16.16 accumulator, so a 3.58 MHz
+		Y8950 at DELTA-N 0x51F0 runs at 15 912 Hz while an 8 MHz OPN at 0x4000 runs at 13 889. Using
+		the OPN divisor here would export every Y8950 sample at half speed.
+	*/
+	double adpcmBytesPerSecond (void) const
+	{
+		return (double) deltaN * clock / (72.0 * 65536.0);
+	}
+
+	/** Decodes the range the registers name, once per key-on rather than once per snapshot. */
+	void latchAdpcm (void)
+	{
+		adpcmWave = nullptr;
+
+		if (deltaN == 0 || rom.empty ())
+		{
+			return;
+		}
+
+		const int shift = adpcmShift ();
+		const uint32_t start = (uint32_t) ((startHigh << 8) | startLow) << shift;
+		const uint32_t last = (((uint32_t) ((stopHigh << 8) | stopLow)) << shift)
+							  | ((1u << shift) - 1u);
+
+		if (last < start || start >= rom.size ())
+		{
+			return;
+		}
+
+		const std::size_t length = (std::min<std::size_t>) (last - start + 1u, rom.size () - start);
+		const std::size_t capped = (std::min<std::size_t>) (length, kAdpcmWindowBytes);
+
+		auto wave = std::make_shared<std::vector<float>> ();
+		opn::deltaT::decode (rom.data () + start, capped, *wave);
+		adpcmWave = std::move (wave);
+	}
 	uint8_t rhythmBits = 0;
 	bool rhythmEnabled = false;
 	uint32_t now = 0;
@@ -214,10 +286,16 @@ void OplDecoder::reset (const ChipConfig& config)
 	[[maybe_unused]] const uint32_t clock = config.clockHz;
 	[[maybe_unused]] const double sampleRate = config.timeBaseHz;
 	const Variant variant = impl->variant;
-	const bool adpcm = impl->adpcm;
+
+	// **The replayer makes decoders with the default constructor**, so the Y8950 has to say which
+	// OPL it is the same way the OPN family does: through `ChipConfig::flags` (bit 0 = Y8950, whose
+	// Delta-T unit gives the chip a fifteenth row). Without this the unit had no row at all - the
+	// notes were in the file and the table never listed them.
+	const bool adpcm = impl->adpcm || (config.flags & 1u) != 0;
 	*impl = Impl();
 	impl->variant = variant;
 	impl->adpcm = adpcm;
+	impl->clock = clock > 0 ? (double) clock : 3579545.0;
 	impl->configure();
 
 	switch (variant)
@@ -235,19 +313,58 @@ void OplDecoder::reset (const ChipConfig& config)
 	}
 }
 
+void OplDecoder::attachMemory (const ChipMemory& memory)
+{
+	if (memory.bytes != nullptr && ! memory.bytes->empty ())
+	{
+		impl->rom = *memory.bytes;
+	}
+}
+
 void OplDecoder::write (const RegisterWrite& write)
 {
 	const uint8_t reg = write.reg;
 	const int port = write.port != 0 ? 1 : 0;
 	const uint32_t time = write.sampleTime;
 
-	if (impl->adpcm && port == 0 && reg == 0x07)
+	if (impl->adpcm && port == 0 && reg >= 0x07 && reg <= 0x12)
 	{
-		// Delta-T: bit 7 starts the sample; the unit ends it on its own.
-		if ((write.value & kDeltaTStart) != 0 && impl->deltaT.end <= time)
+		// **Delta-T's whole register block, which is a sample player**: `0x08` picks the address
+		// granularity, `0x09/0x0A` and `0x0B/0x0C` the start and the last page, `0x10/0x11` the
+		// pitch and `0x12` the level. `0x07` bits 7 starts a sample; the unit ends it at the stop
+		// address, which the exporter reads instead of this pulse.
+		switch (reg)
 		{
-			impl->deltaT.end = time + kAdpcmGate;
+		case 0x07:
+			if ((write.value & kDeltaTStart) != 0)
+			{
+				if (impl->deltaT.end <= time)
+				{
+					impl->deltaT.end = time + kAdpcmGate;
+				}
+
+				impl->latchAdpcm ();
+			}
+			break;
+
+		case 0x08: impl->adpcmMode = write.value; break;
+		case 0x09: impl->startLow = write.value; break;
+		case 0x0A: impl->startHigh = write.value; break;
+		case 0x0B: impl->stopLow = write.value; break;
+		case 0x0C: impl->stopHigh = write.value; break;
+
+		case 0x10:
+			impl->deltaN = (uint16_t) ((impl->deltaN & 0xFF00u) | write.value);
+			break;
+
+		case 0x11:
+			impl->deltaN = (uint16_t) ((impl->deltaN & 0x00FFu) | ((uint16_t) write.value << 8));
+			break;
+
+		case 0x12: impl->level = write.value; break;
+		default: break;
 		}
+
 		return;
 	}
 
@@ -438,6 +555,15 @@ ChannelState OplDecoder::channelState (int channel) const
 		state.period = kOneShotPeriod;
 		state.volume = 12;
 		state.gate = impl->now < impl->deltaT.end;
+
+		// **The row can point at a sample, unlike the YM2612's DAC.** The range is named by two
+		// registers, so what the row draws is the same bytes the exporter writes; the rate is the
+		// pitch register over the OPL's own time base.
+		if (impl->adpcmWave != nullptr)
+		{
+			state.wave = impl->adpcmWave;
+			state.sampleRate = (float) impl->adpcmBytesPerSecond ();
+		}
 	}
 
 	return state;

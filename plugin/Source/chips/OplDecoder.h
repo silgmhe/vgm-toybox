@@ -55,6 +55,14 @@ public:
 	ChannelKind channelKind (int channel) const override;
 	bool isDrum (int channel) const override;
 
+	/** **The Y8950's Delta-T ROM, in a block of its own.** `0x88` is VGM's "Y8950 DELTA-T ROM data";
+		the unit addresses it as pages of 32 bytes (or 4, when control2 asks for a DRAM part), so an
+		image is at most `0x10000 << 5` = 2 MB. The fallback clock is the 3.58 MHz part the unit was
+		designed around - a song that names no clock still has to be measured against something. */
+	static constexpr ChipRequirements kRequirements { 3579545u, true, 0x88, 1u << 24, false, false };
+
+	void attachMemory (const ChipMemory& memory) override;
+
 private:
 	struct Impl;
 	std::unique_ptr<Impl> impl;
