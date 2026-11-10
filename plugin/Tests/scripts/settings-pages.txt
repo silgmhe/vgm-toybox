@@ -89,3 +89,13 @@ set settings.export.sampleLength 0
 assert settings.export.sampleLength  value   ~= 0
 set settings.export.sampleLength 5
 assert settings.export.sampleLength  value   ~= 5
+
+# Where a sample is timed. The host's rate is the default: a file written at the project's own
+# rate is played without resampling, and resampling is what smooths an 8-bit DAC's steps away.
+assert settings.export.sampleRate text contains "host"
+set settings.export.sampleRate 1
+assert settings.export.sampleRate text contains "44 100"
+set settings.export.sampleRate 4
+assert settings.export.sampleRate text contains "chip"
+set settings.export.sampleRate 0
+assert settings.export.sampleRate text contains "host"

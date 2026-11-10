@@ -72,6 +72,44 @@ namespace
 
 		return out;
 	}
+
+	/** **`values` held at `targetRate` - the same rule as `nearest`, on the other axis.**
+
+		A recording arrives at the rate the chip read its bytes: 8 to 23 kHz on a YM2612, 16 kHz on an
+		ADPCM unit. Written at that rate and dropped into a 44.1 or 48 kHz project, the host resamples
+		it on import, and that resampling is band-limited to the file's own Nyquist - which is exactly
+		where a zero-order hold puts its images. An 8-bit DAC's "grit" *is* those images, so a
+		rate-converted sample comes out smoother than the hardware was, and no bit depth brings it back.
+
+		Holding each level for a whole number of output samples keeps the edges inside the file, and a
+		file already at the project rate is played without conversion at all. Nearest neighbour, never
+		linear: `values[(i * n) / count]` repeats a level and never invents one between two.
+	*/
+	std::vector<float> heldAt (const std::vector<float>& values, double rate, double targetRate)
+	{
+		if (values.size () < 2 || rate <= 0.0 || targetRate <= 0.0
+			|| std::abs (targetRate - rate) < 0.5)
+		{
+			return values;
+		}
+
+		const auto count = (std::size_t) std::llround ((double) values.size () * targetRate / rate);
+
+		if (count < 2)
+		{
+			return values;
+		}
+
+		std::vector<float> out;
+		out.reserve (count);
+
+		for (std::size_t i = 0; i < count; ++i)
+		{
+			out.push_back (values[(i * values.size ()) / count]);
+		}
+
+		return out;
+	}
 }
 
 std::vector<float> cycleOf (const ChannelState& channel)
@@ -291,7 +329,7 @@ bool isSampledChannel (const ChannelState& channel)
 		   && channel.waveValues ().size () >= 2;
 }
 
-bool writeSampleWav (const ChannelState& channel, const std::string& path)
+bool writeSampleWav (const ChannelState& channel, const std::string& path, double targetRate)
 {
 	// **A table must never reach this function.** Everything below writes the bytes as they are:
 	// no depth, no one-period marker, no repeat - correct for a recording, and the exact opposite
@@ -305,9 +343,15 @@ bool writeSampleWav (const ChannelState& channel, const std::string& path)
 
 	// The rate the chip reads the bytes at, not a wavetable's fixed 44100: a drum sampled at
 	// 11 kHz and written as 44 kHz is the same drum three octaves down and four times too long.
-	const auto rate = (uint32_t) std::lround (channel.sampleRate);
+	//
+	// `targetRate` says where the file will be played. Holding the levels at the project's rate is
+	// what keeps the staircase: a file at its own 8..23 kHz is resampled on import and the images
+	// that make an 8-bit DAC sound like one are filtered away (see `heldAt`).
+	const auto source = (double) std::lround (channel.sampleRate);
+	const auto target = (targetRate > 0.0) ? targetRate : source;
+	const auto values = heldAt (channel.waveValues (), source, target);
 
-	return writeFloat32Wav (path, channel.waveValues (), rate, std::string ());
+	return writeFloat32Wav (path, values, (uint32_t) std::lround (target), std::string ());
 }
 
 std::string legalFileName (const std::string& name)
@@ -473,7 +517,7 @@ std::string dragExportName (const std::string& stem, const std::tm& local,
 }
 
 ShapeWrite writeChannelShape (const ChannelState& channel, const std::string& path,
-							  ExportMode mode, double seconds, int bits)
+							  ExportMode mode, double seconds, int bits, double targetRate)
 {
 	if (! hasSomethingToWrite (channel))
 	{
@@ -489,7 +533,8 @@ ShapeWrite writeChannelShape (const ChannelState& channel, const std::string& pa
 	// table that reaches the branch below loses the depth and the marker, and looks merely smooth.
 	if (isSampledChannel (channel))
 	{
-		return writeSampleWav (channel, path) ? ShapeWrite::written : ShapeWrite::failed;
+		return writeSampleWav (channel, path, targetRate) ? ShapeWrite::written
+														 : ShapeWrite::failed;
 	}
 
 	return writeCycleWav (channel, path, mode, seconds, bits) ? ShapeWrite::written
@@ -564,7 +609,7 @@ bool writeWavFile (const std::string& path, const std::vector<float>& values, do
 }
 
 int writeSamples (const std::vector<DecodedSample>& samples, const std::string& folder,
-				  double maxSeconds, int* truncated)
+				  double maxSeconds, int* truncated, double targetRate)
 {
 	int written = 0;
 
@@ -599,7 +644,12 @@ int writeSamples (const std::vector<DecodedSample>& samples, const std::string& 
 
 		const auto path = folder + "/" + legalFileName (sample.name) + ".wav";
 
-		if (writeWavFile (path, values, sample.rate))
+		// **The file may be written for a different rate than the chip read it at.** Holding the
+		// levels at the target keeps the staircase that a project's own resampling would smooth away.
+		const auto target = (targetRate > 0.0) ? targetRate : sample.rate;
+		const auto held = heldAt (values, sample.rate, target);
+
+		if (writeWavFile (path, held, target))
 		{
 			++written;
 		}

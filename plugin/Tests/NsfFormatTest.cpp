@@ -535,6 +535,59 @@ int main (void)
 					check (first.getSize () < 44 + 320 * 8 * 4,
 						   "and the file on disk is shorter afterwards");
 
+					// **A target rate holds the levels there instead of resampling later.** The same
+					// bytes written for a 44.1 kHz project: the file needs no conversion on import,
+					// which is what keeps an 8-bit DAC's staircase (and its high end) intact.
+					const auto heldFolder = folder.getChildFile ("held");
+
+					check (heldFolder.createDirectory ().wasOk (),
+						   "a second folder for the held export");
+
+					const auto held = toybox::playback::writeSamples (
+						samples, heldFolder.getFullPathName ().toStdString (), 0.0, nullptr, 44100.0);
+
+					check (held == 2, "both samples are written at the target rate too");
+
+					const auto heldFile = heldFolder.getChildFile ("dpcm_D200_320.wav");
+					const auto expectedPoints =
+						(juce::int64) std::llround (2560.0 * 44100.0 / samples[0].rate);
+
+					check (heldFile.getSize () == 44 + expectedPoints * 4,
+						   "and the file is the header plus one point per held step");
+
+					juce::FileInputStream stream (heldFile);
+					char header[44] = {};
+
+					check (stream.read (header, 44) == 44, "the held file has a header");
+
+					const auto headerRate = (uint32_t) (uint8_t) header[24]
+											| ((uint32_t) (uint8_t) header[25] << 8)
+											| ((uint32_t) (uint8_t) header[26] << 16)
+											| ((uint32_t) (uint8_t) header[27] << 24);
+
+					check (headerRate == 44100u,
+						   "and it declares the rate it was written for, not the chip's");
+
+					// The drag path is a second entry into the writer, and the two must not disagree:
+					// a drag that produced a different file from File > Export would be a bug the
+					// user hears rather than sees.
+					toybox::playback::ChannelState dragged;
+					dragged.wave = std::make_shared<const std::vector<float>> (
+						std::vector<float> { 0.0f, 0.5f, -0.5f, 0.0f });
+					dragged.sampleRate = 8000.0f;
+
+					const auto dragPath = heldFolder.getChildFile ("drag.wav");
+
+					check (toybox::playback::writeSampleWav (
+							   dragged, dragPath.getFullPathName ().toStdString (), 44100.0),
+						   "a single-channel drag is written at the target rate too");
+
+					const auto dragPoints =
+						(juce::int64) std::llround (4.0 * 44100.0 / (double) dragged.sampleRate);
+
+					check (dragPath.getSize () == 44 + dragPoints * 4,
+						   "and holds each level at that rate");
+
 					folder.deleteRecursively ();
 				}
 			}

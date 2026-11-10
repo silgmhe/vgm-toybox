@@ -861,6 +861,30 @@ ExportSettingsPage::ExportSettingsPage (void)
 	sampleHint.setMinimumHorizontalScale (1.0f);
 	addAndMakeVisible (sampleHint);
 
+	rateCaption.setFont (juce::Font (juce::FontOptions (12.5f)));
+	rateCaption.setJustificationType (juce::Justification::centredLeft);
+	addAndMakeVisible (rateCaption);
+
+	rateBox.setComponentID ("settings.export.sampleRate");
+	rateBox.onChange = [this]
+	{
+		// The order `refreshLanguage` fills the box with: host, 44.1, 48, 96, the chip's own.
+		static constexpr int kValues[] = { toybox::settings::exporting::sampleRateHost, 44100, 48000,
+										   96000, toybox::settings::exporting::sampleRateChip };
+		const auto index = rateBox.getSelectedItemIndex ();
+
+		if (index >= 0 && index < (int) (sizeof (kValues) / sizeof (kValues[0])))
+		{
+			toybox::settings::SettingsStore::getInstance ().setExportSampleRate (kValues[index]);
+		}
+	};
+	addAndMakeVisible (rateBox);
+
+	rateHint.setFont (juce::Font (juce::FontOptions (12.5f)));
+	rateHint.setJustificationType (juce::Justification::topLeft);
+	rateHint.setMinimumHorizontalScale (1.0f);
+	addAndMakeVisible (rateHint);
+
 	hint.setFont (juce::Font (juce::FontOptions (12.5f)));
 	hint.setJustificationType (juce::Justification::topLeft);
 	hint.setMinimumHorizontalScale (1.0f);
@@ -879,6 +903,20 @@ void ExportSettingsPage::refreshLanguage (void)
 	sampleCaption.setText (i18n::tr ("settings.export.sampleLength"), juce::dontSendNotification);
 	sampleHint.setText (i18n::tr ("settings.export.sampleLengthHint"), juce::dontSendNotification);
 	sampleSlider.updateText ();
+
+	rateCaption.setText (i18n::tr ("settings.export.sampleRate"), juce::dontSendNotification);
+	rateHint.setText (i18n::tr ("settings.export.sampleRateHint"), juce::dontSendNotification);
+
+	// Rebuilt rather than retitled: the numbers read the same in every language, and the two
+	// named entries are the only ones a translator touches.
+	rateBox.clear (juce::dontSendNotification);
+	rateBox.addItem (i18n::tr ("settings.export.sampleRateHost"), 1);
+	rateBox.addItem ("44 100 Hz", 2);
+	rateBox.addItem ("48 000 Hz", 3);
+	rateBox.addItem ("96 000 Hz", 4);
+	rateBox.addItem (i18n::tr ("settings.export.sampleRateChip"), 5);
+
+	selectExportRateItem ();
 	repaint ();
 }
 
@@ -893,6 +931,20 @@ void ExportSettingsPage::refresh (void)
 	// feature that does nothing invites the question of why changing it changes nothing.
 	retentionSlider.setEnabled (store.getDragCleanupEnabled ());
 	sampleSlider.setValue ((double) store.getExportSampleSeconds (), juce::dontSendNotification);
+
+	selectExportRateItem ();
+}
+
+void ExportSettingsPage::selectExportRateItem (void)
+{
+	const int rate = toybox::settings::SettingsStore::getInstance ().getExportSampleRate ();
+	const int id = (rate == toybox::settings::exporting::sampleRateChip) ? 5
+				 : (rate == 44100) ? 2
+				 : (rate == 48000) ? 3
+				 : (rate == 96000) ? 4
+								   : 1;
+
+	rateBox.setSelectedId (id, juce::dontSendNotification);
 }
 
 void ExportSettingsPage::paint (juce::Graphics& g)
@@ -918,6 +970,11 @@ void ExportSettingsPage::resized (void)
 	sampleSlider.setBounds (area.removeFromTop (24).withWidth (juce::jmin (360, area.getWidth ())));
 	area.removeFromTop (6);
 	sampleHint.setBounds (area.removeFromTop (56));
+	area.removeFromTop (10);
+	rateCaption.setBounds (area.removeFromTop (18));
+	rateBox.setBounds (area.removeFromTop (24).withWidth (juce::jmin (360, area.getWidth ())));
+	area.removeFromTop (6);
+	rateHint.setBounds (area.removeFromTop (56));
 }
 
 void ExportSettingsPage::lookAndFeelChanged (void)

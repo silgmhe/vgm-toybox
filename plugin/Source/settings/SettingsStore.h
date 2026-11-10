@@ -263,6 +263,17 @@ public:
 	int getExportSampleSeconds (void) const;
 	void setExportSampleSeconds (int seconds);
 
+	/** **The rate samples are written at**, as one of three answers.
+
+		`sampleRateChip` (-1) keeps the chip's own rate; `sampleRateHost` (0) holds each level at the
+		host's rate, so the file needs no conversion in the project it came from; 44100/48000/96000
+		pin it. `getExportSampleRateHz` resolves all three against the rate the host reported, with a
+		standalone default for the case where there is no host at all.
+	*/
+	int getExportSampleRate (void) const;
+	void setExportSampleRate (int rate);
+	double getExportSampleRateHz (double hostRate) const;
+
 	// Both ranges and both defaults live in `SettingsDefaults.h` (`settings::exporting`), beside
 	// every other preference default.
 

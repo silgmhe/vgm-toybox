@@ -298,6 +298,15 @@ private:
 	juce::Label sampleCaption;
 	juce::Slider sampleSlider;
 	juce::Label sampleHint;
+
+	/** **Where the exported wavs are timed.** The host's rate keeps an 8-bit DAC's staircase; the
+		chip's own rate keeps the truth and lets the DAW resample it. See `sampleRateHost`. */
+	juce::Label rateCaption;
+	juce::ComboBox rateBox;
+	juce::Label rateHint;
+
+	/** Puts the box on whatever the store says, without notifying back into the store. */
+	void selectExportRateItem (void);
 };
 
 /**

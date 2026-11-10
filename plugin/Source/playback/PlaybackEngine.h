@@ -111,6 +111,11 @@ public:
 	/** Sets the output sample rate / maximum block size (host sample rate). */
 	void prepare (double newSampleRate, int maxBlockSize);
 
+	/** **The rate the host asked for**, which is what the export holds samples at when the setting
+		says "follow the host": a file written at the project's own rate needs no conversion, and
+		conversion is what smooths an 8-bit DAC's staircase away. 44100 before anything is prepared. */
+	double outputSampleRate (void) const;
+
 	void play (void);
 	void pause (void);
 	void stop (void);

@@ -1392,7 +1392,15 @@ private:
 
 		const auto path = folder + "/" + name;
 
-		if (toybox::playback::writeChannelShape (state, path) != toybox::playback::ShapeWrite::written)
+		// **The same rate the batch export writes at**, resolved from the setting and the host: a
+		// drag that produced a different file from File > Export (same bytes, different header) would
+		// be a bug the user could hear rather than see.
+		const auto targetRate = toybox::settings::SettingsStore::getInstance ()
+									.getExportSampleRateHz (engine.outputSampleRate ());
+
+		if (toybox::playback::writeChannelShape (state, path, toybox::playback::ExportMode::single,
+												 2.0, toybox::playback::kNativeBits, targetRate)
+			!= toybox::playback::ShapeWrite::written)
 		{
 			if (onDragFailed != nullptr) { onDragFailed (); }
 			return;

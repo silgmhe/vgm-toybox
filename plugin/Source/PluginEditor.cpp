@@ -686,7 +686,9 @@ void ToyboxAudioProcessorEditor::exportSamples (void)
 										samples, folder.getFullPathName().toStdString(),
 										(double) toybox::settings::SettingsStore::getInstance ()
 											.getExportSampleSeconds (),
-										&done.truncated);
+										&done.truncated,
+										toybox::settings::SettingsStore::getInstance ()
+											.getExportSampleRateHz (processor.getSampleRate ()));
 									done.failed = done.channelsSeen - done.written;
 
 									showExportReport (done);

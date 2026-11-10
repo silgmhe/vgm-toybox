@@ -160,18 +160,24 @@ enum class ShapeWrite
 */
 ShapeWrite writeChannelShape (const ChannelState& channel, const std::string& path,
 							  ExportMode mode = ExportMode::single, double seconds = 2.0,
-							  int bits = kNativeBits);
+							  int bits = kNativeBits, double targetRate = 0.0);
 
 /** Writes `channel`'s sample as ordinary audio, which is what it is.
 
 	A DPCM hit is a moment, not a period. Writing it with the one-cycle marker would tell a
 	wavetable synth that 2048 points of it repeat, and it would loop the hit at a pitch nothing
-	plays it at. So there is no marker, no resampling and no quantisation: the bytes the chip reads,
-	at the rate it reads them, in the container every audio import understands.
+	plays it at. So there is no marker and no quantisation: the bytes the chip reads, at the rate it
+	reads them, in the container every audio import understands.
+
+	**`targetRate` holds the levels there instead.** 0 writes the sample at its own rate, which is
+	what a tracker or a sampler that reads the header wants. A host rate (44.1/48 kHz) repeats each
+	level for a whole number of samples, so the file carries the staircase a project at that rate
+	plays without resampling - and resampling is what turns an 8-bit DAC's steps into a smooth ramp.
+	See `heldAt` in WaveExport.cpp.
 
 	Fails when the channel carries no sample - a synthesised shape has nothing to write here.
 */
-bool writeSampleWav (const ChannelState& channel, const std::string& path);
+bool writeSampleWav (const ChannelState& channel, const std::string& path, double targetRate = 0.0);
 
 /** `name` as a filename: spaces become hyphens, and the characters a filesystem cannot carry
 	become underscores.
@@ -291,8 +297,12 @@ bool writeWavFile (const std::string& path, const std::vector<float>& values, do
 	The limit is applied **here** rather than in each collector: every chip's samples arrive as
 	levels and a rate, so one rule covers all of them (and the next chip) without any of them
 	knowing about the setting. `truncated`, when given, counts the files that were cut.
+
+	`targetRate` is where the files will be played: 0 writes every sample at the rate the chip read
+	it (the truth, and what a tracker wants), a rate holds each level there instead (`writeSampleWav`
+	explains why). It is applied after the length limit, so the limit keeps meaning seconds.
 */
 int writeSamples (const std::vector<DecodedSample>& samples, const std::string& folder,
-				  double maxSeconds = 0.0, int* truncated = nullptr);
+				  double maxSeconds = 0.0, int* truncated = nullptr, double targetRate = 0.0);
 
 } // namespace toybox::playback

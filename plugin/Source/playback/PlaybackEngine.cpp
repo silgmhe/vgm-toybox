@@ -47,6 +47,12 @@ PlaybackEngine::~PlaybackEngine (void)
 //==============================================================================
 // message thread
 
+double PlaybackEngine::outputSampleRate (void) const
+{
+	const juce::ScopedLock sl (lock);
+	return sampleRate;
+}
+
 void PlaybackEngine::prepare (double newSampleRate, int maxBlock)
 {
 	bool needsRebuild = false;

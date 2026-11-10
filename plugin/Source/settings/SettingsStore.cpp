@@ -40,6 +40,7 @@ namespace
 	constexpr const char* kExportSecondsKey = "export.seconds";
 	constexpr const char* kExportBitsKey = "export.bits";
 	constexpr const char* kExportSampleSecondsKey = "export.sampleSeconds";
+	constexpr const char* kExportSampleRateKey = "export.sampleRate";
 
 	/** The Keyboard page's redraw rate. Absent means `settings::window::defaultRefreshHz`. */
 	constexpr const char* kRefreshHzKey = "ui.refreshHz";
@@ -350,6 +351,54 @@ void SettingsStore::setExportSampleSeconds (int seconds)
 
 	file->setValue (kExportSampleSecondsKey, clamped);
 	broadcastChange ();
+}
+
+int SettingsStore::getExportSampleRate (void) const
+{
+	const int stored = file->getIntValue (kExportSampleRateKey, exporting::defaultSampleRate);
+
+	if (stored == exporting::sampleRateChip || stored == exporting::sampleRateHost)
+	{
+		return stored;
+	}
+
+	// Only the rates the page offers, so a hand-edited file cannot ask for 3 kHz and get a file
+	// nothing will open at the pitch it should.
+	return (stored == 44100 || stored == 48000 || stored == 96000) ? stored
+																  : exporting::defaultSampleRate;
+}
+
+void SettingsStore::setExportSampleRate (int rate)
+{
+	const int allowed = (rate == 44100 || rate == 48000 || rate == 96000) ? rate
+					   : (rate == exporting::sampleRateChip ? exporting::sampleRateChip
+														   : exporting::sampleRateHost);
+
+	if (allowed == getExportSampleRate ())
+	{
+		return;
+	}
+
+	file->setValue (kExportSampleRateKey, allowed);
+	broadcastChange ();
+}
+
+double SettingsStore::getExportSampleRateHz (double hostRate) const
+{
+	const int rate = getExportSampleRate ();
+
+	if (rate == exporting::sampleRateChip)
+	{
+		return 0.0;			// the writer's "at the rate the chip read the bytes"
+	}
+
+	if (rate > 0)
+	{
+		return (double) rate;
+	}
+
+	// No host rate means no host - a standalone with no device open yet, or a test.
+	return (hostRate > 0.0) ? hostRate : 44100.0;
 }
 
 int SettingsStore::getRefreshHz (void) const

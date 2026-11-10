@@ -283,6 +283,10 @@ language: English
 "settings.export.sampleLength" = "Longest exported sample";
 "settings.export.samplesUnlimited" = "No limit";
 "settings.export.sampleLengthHint" = "Longer samples are cut when the files are written; 0 keeps them whole. A driver's end register can point at the end of the ROM, which is how a bank becomes a minute-long file.";
+"settings.export.sampleRate" = "Export sample rate";
+"settings.export.sampleRateHost" = "Follow the host";
+"settings.export.sampleRateChip" = "The chip's own rate";
+"settings.export.sampleRateHint" = "A host rate keeps an 8-bit DAC's steps: the project plays the file without resampling. A file at the chip's own 8-23 kHz is resampled on import, and that smooths the steps away.";
 "export.samples.writtenTruncated" = "{0} sample(s) written, {1} cut at the length limit";
 	"settings.keyboard.startAuto" = "Follow the song";
 	"settings.keyboard.startNote" = "Lowest key";

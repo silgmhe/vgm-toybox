@@ -134,6 +134,19 @@ constexpr int minSampleSeconds = 0;
 constexpr int maxSampleSeconds = 30;
 constexpr int defaultSampleSeconds = 5;
 
+/** **The rate samples are written at.**
+
+	`sampleRateChip` keeps the rate the chip read the bytes at - the truth, and what a tracker
+	reads. `sampleRateHost` holds each level at the rate the project runs at, so a file dropped
+	into a 44.1/48 kHz session is played without resampling: resampling is band-limited to the
+	file's own Nyquist and smooths an 8-bit DAC's staircase away, which is the difference between
+	our wav and the same bytes in Furnace. 0 is the default because the export runs inside a host
+	and usually lands in that host's timeline.
+*/
+constexpr int sampleRateChip = -1;
+constexpr int sampleRateHost = 0;
+constexpr int defaultSampleRate = sampleRateHost;
+
 /** How long a wavetable dragged out of the window stays in the cache, in hours.
 
 	Off by default, and the defaults are the point: deleting a file the user made is worse than
