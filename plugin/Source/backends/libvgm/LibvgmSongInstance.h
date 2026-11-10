@@ -77,6 +77,15 @@ private:
 	*/
 	std::shared_ptr<const midi::SongIr> songIr;
 
+	/** **The YM2612 DAC's table, built once for the whole song.**
+
+		Eleven track players and the export all need the same hits, and building them costs a pass over
+		every `0x8n` byte (459 546 on `02 Green Hill Zone`). Built here, in `prepare()`, so each player
+		borrows it instead of rebuilding - that was about 200 ms of load time spent on tables nobody
+		read. Null for songs without a YM2612.
+	*/
+	std::shared_ptr<const dac::Table> dacTable;
+
 	JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (LibvgmSongInstance)
 };
 

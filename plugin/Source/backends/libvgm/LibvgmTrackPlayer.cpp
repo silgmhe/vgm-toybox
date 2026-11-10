@@ -483,51 +483,16 @@ namespace
 	constexpr std::size_t kDacDisplayPoints = 8192;
 }
 
-void LibvgmTrackPlayer::buildDacTable (void)
-{
-	dacBank.clear ();
-	dacRuns.clear ();
-	dacWaves.clear ();
-
-	if (replayIr == nullptr)
-	{
-		return;
-	}
-
-	dacTickRate = (uint32_t) std::llround (replayIr->tickRate > 0.0 ? replayIr->tickRate : 44100.0);
-
-	for (std::size_t device = 0; device < replayIr->chips.size (); ++device)
-	{
-		if (replayIr->chips[device].kind != midi::ChipKind::ym2612)
-		{
-			continue;
-		}
-
-		if (dacBank.empty ())
-		{
-			dacBank = dac::bankFor (*replayIr, 4u << 20);
-		}
-
-		// **One chip is the normal case.** `0xE0` names no chip in the format, and the loader only
-		// ever creates one YM2612 (`0x53` is its port 1, not a second chip), so the first device's
-		// table is the song's. A second one would need its own seeks, which do not exist.
-		if (dacRuns.empty ())
-		{
-			dacRuns = dac::runsFor (*replayIr, device, dacTickRate);
-		}
-	}
-}
-
 void LibvgmTrackPlayer::applyDacHit (playback::ChannelState& state, uint32_t samples) const
 {
-	if (dacRuns.empty () || dacBank.empty ())
+	if (dacTable == nullptr || dacTable->runs.empty () || dacTable->bank.empty ())
 	{
 		return;			// no table: the decoder's own window is the honest answer
 	}
 
 	// The lookup lives in the sampler header so a test can pin it without a song: "the hit that is
 	// playing, or the last one that played" is the whole rule, and it has one definition.
-	const dac::Run* foundRun = dac::hitAt (dacRuns, samples);
+	const dac::Run* foundRun = dac::hitAt (dacTable->runs, samples);
 
 	if (foundRun == nullptr)
 	{
@@ -536,8 +501,7 @@ void LibvgmTrackPlayer::applyDacHit (playback::ChannelState& state, uint32_t sam
 
 	const dac::Run& run = *foundRun;
 
-
-	if (run.start >= dacBank.size () || run.duration == 0)
+	if (run.start >= dacTable->bank.size () || run.duration == 0)
 	{
 		return;
 	}
@@ -547,7 +511,8 @@ void LibvgmTrackPlayer::applyDacHit (playback::ChannelState& state, uint32_t sam
 
 	if (found == dacWaves.end ())
 	{
-		const std::size_t length = (std::min<std::size_t>) (run.length, dacBank.size () - run.start);
+		const std::size_t length
+			= (std::min<std::size_t>) (run.length, dacTable->bank.size () - run.start);
 		const std::size_t capped = (std::min<std::size_t>) (length, kDacDisplayPoints);
 
 		auto wave = std::make_shared<std::vector<float>> ();
@@ -558,7 +523,7 @@ void LibvgmTrackPlayer::applyDacHit (playback::ChannelState& state, uint32_t sam
 			// A run longer than the row can draw is **sampled evenly**, not truncated: the shape of
 			// a long hit is its envelope, and drawing only the attack would read as a different drum.
 			const std::size_t index = (capped == length) ? i : (i * length) / capped;
-			wave->push_back ((float) (((int) dacBank[run.start + index] - 0x80) / 128.0));
+			wave->push_back ((float) (((int) dacTable->bank[run.start + index] - 0x80) / 128.0));
 		}
 
 		if (dacWaves.size () > 128)
@@ -572,18 +537,22 @@ void LibvgmTrackPlayer::applyDacHit (playback::ChannelState& state, uint32_t sam
 	}
 
 	state.wave = found->second;
-	state.sampleRate = (float) ((uint64_t) run.length * (uint64_t) dacTickRate / run.duration);
+	state.sampleRate
+		= (float) ((uint64_t) run.length * (uint64_t) dacTable->tickRate / run.duration);
 }
 
 void LibvgmTrackPlayer::setReplaySource (std::shared_ptr<const midi::SongIr> ir,
-										 const std::vector<PLR_DEV_INFO>& devices)
+										 const std::vector<PLR_DEV_INFO>& devices,
+										 std::shared_ptr<const dac::Table> table)
 {
 	replayIr = std::move (ir);
 	replayDevices = devices;
 
-	// The song's hits, from the same sampler the export runs: one definition of "a hit" for the
-	// file and the picture (see `buildDacTable`).
-	buildDacTable ();
+	// **The table is built once by the backend that owns the song**, not here: this call happens once
+	// per track player (a dozen of them), and building it meant a pass over every `0x8n` byte each
+	// time - about 200 ms of load time on `02 Green Hill Zone` for eleven tables nobody reads.
+	dacTable = std::move (table);
+	dacWaves.clear ();
 
 	// A streamed sample player cannot be seeked - see the note in seekSeconds.
 	seekable = true;

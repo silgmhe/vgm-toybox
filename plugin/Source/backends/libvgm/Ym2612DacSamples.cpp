@@ -9,6 +9,8 @@
 #include <vector>
 
 #include "SampleCollector.h"
+#include <memory>
+#include <memory>
 #include "Ym2612DacSampler.h"
 #include "midi/SongIr.h"
 
@@ -41,7 +43,8 @@ namespace
 	}
 }
 
-std::vector<playback::DecodedSample> collectYm2612DacSamples (const midi::SongIr& ir)
+std::vector<playback::DecodedSample> collectYm2612DacSamples (const midi::SongIr& ir,
+														  const dac::Table* table)
 {
 	SampleCollector collector;
 
@@ -60,16 +63,24 @@ std::vector<playback::DecodedSample> collectYm2612DacSamples (const midi::SongIr
 		return collector.take ();
 	}
 
-	// **One bank per song, not one per chip.** The bytes live in one `0x67` block; building it once
-	// is both cheaper and the truth.
-	const std::vector<uint8_t> bank = dac::bankFor (ir, kMaxBankBytes);
+	// **The table the song already built.** `LibvgmSongInstance` builds it once for the track players
+	// (and the row), and this pass only maps its runs to files - the scan over 459 546 writes would
+	// otherwise run a second time. A caller that has no table still gets the same answer: built here.
+	std::shared_ptr<const dac::Table> owned;
 
-	if (bank.empty ())
+	if (table == nullptr)
+	{
+		owned = dac::buildTable (ir, kMaxBankBytes);
+		table = owned.get ();
+	}
+
+	if (table == nullptr || table->bank.empty ())
 	{
 		return collector.take ();
 	}
 
-	const uint32_t tickRate = (uint32_t) std::llround (ir.tickRate > 0.0 ? ir.tickRate : 44100.0);
+	const std::vector<uint8_t>& bank = table->bank;
+	const uint32_t tickRate = table->tickRate;
 
 	for (std::size_t device = 0; device < ir.chips.size (); ++device)
 	{
@@ -78,9 +89,14 @@ std::vector<playback::DecodedSample> collectYm2612DacSamples (const midi::SongIr
 			continue;
 		}
 
-		// The boundaries, the lengths and the durations all come from the shared sampler: the row
-		// draws the same runs, so a change here can never make the file disagree with the picture.
-		const std::vector<dac::Run> runs = dac::runsFor (ir, device, tickRate);
+		// The table belongs to one chip: the one whose stream it was built from. A hypothetical
+		// second YM2612 would need its own, and the format carries no seek for it.
+		if (device != table->device)
+		{
+			continue;
+		}
+
+		const std::vector<dac::Run>& runs = table->runs;
 
 		// `(start, length)` names a sample: the same bytes played for the same run are one file,
 		// and its rate is the first one measured - the reference's rule, so the sets match.

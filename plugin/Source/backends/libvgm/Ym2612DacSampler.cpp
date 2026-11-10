@@ -1,7 +1,8 @@
 #include "Ym2612DacSampler.h"
 
 #include <algorithm>
-#include <utility>
+#include <cmath>
+#include <limits>
 
 #include "midi/SongIr.h"
 
@@ -9,29 +10,10 @@ namespace toybox::backends::libvgm::dac
 {
 namespace
 {
-	/** One thing that happened to the DAC: a seek, or a byte the stream delivered. */
-	struct Event
+	bool isStreamByte (const chips::RegisterWrite& write, std::size_t device)
 	{
-		uint32_t time = 0;
-		uint32_t order = 0;		// stream position, for two events at one instant
-		uint32_t offset = 0;	// seek only
-		bool seek = false;
-	};
-
-	bool wasEarlier (const Event& a, const Event& b)
-	{
-		if (a.time != b.time)
-		{
-			return a.time < b.time;
-		}
-
-		// A seek at the same instant comes first: the driver moves the pointer, then feeds it.
-		if (a.seek != b.seek)
-		{
-			return a.seek;
-		}
-
-		return a.order < b.order;
+		return (std::size_t) write.deviceId == device && write.port == 0 && write.reg == 0x2A
+			   && write.fromStream;
 	}
 }
 
@@ -63,53 +45,72 @@ std::vector<uint8_t> bankFor (const midi::SongIr& ir, std::size_t maxBytes)
 
 std::vector<Run> runsFor (const midi::SongIr& ir, std::size_t device, uint32_t tickRate)
 {
-	std::vector<Event> events;
-
-	for (const auto& write : ir.writes)
-	{
-		if ((std::size_t) write.deviceId == device && write.port == 0 && write.reg == 0x2A
-			&& write.fromStream)
-		{
-			Event event;
-			event.time = write.sampleTime;
-			event.order = write.streamOrder;
-			events.push_back (event);
-		}
-	}
-
-	for (const auto& seek : ir.dacSeeks)
-	{
-		Event event;
-		event.time = seek.sampleTime;
-		event.offset = seek.offset;
-		event.seek = true;
-		events.push_back (event);
-	}
-
-	if (events.empty ())
-	{
-		return {};
-	}
-
-	std::stable_sort (events.begin (), events.end (), wasEarlier);
-
 	Sampler sampler (tickRate);
 
-	for (const auto& event : events)
+	// **Two inputs, one timeline, one pass.** The `0x8n` writes and the `0xE0` seeks are both already
+	// in stream order, so merging them needs no event list and no sort. Building that list and
+	// sorting it cost 16 ms per call on `02 Green Hill Zone` (459 546 writes, a 7 MB temporary), and
+	// it was paid once per track player.
+	const auto& writes = ir.writes;
+	const auto& seeks = ir.dacSeeks;
+
+	std::size_t w = 0;
+	std::size_t s = 0;
+
+	for (;;)
 	{
-		if (event.seek)
+		while (w < writes.size () && ! isStreamByte (writes[w], device))
 		{
-			sampler.seek (event.time, event.offset);
+			++w;
+		}
+
+		const bool haveByte = w < writes.size ();
+		const bool haveSeek = s < seeks.size ();
+
+		if (! haveByte && ! haveSeek)
+		{
+			break;
+		}
+
+		const auto byteTime = haveByte ? writes[w].sampleTime : std::numeric_limits<uint32_t>::max ();
+		const auto seekTime = haveSeek ? seeks[s].sampleTime : std::numeric_limits<uint32_t>::max ();
+
+		// A seek at the same instant comes first: the driver moves the pointer, then feeds it. That is
+		// the order the sort used to produce, and the runs - and the exported names - depend on it.
+		if (haveSeek && seekTime <= byteTime)
+		{
+			sampler.seek (seekTime, seeks[s].offset);
+			++s;
 		}
 		else
 		{
-			sampler.byte (event.time);
+			sampler.byte (byteTime);
+			++w;
 		}
 	}
 
 	sampler.finish ();
 
 	return sampler.runs ();
+}
+
+std::shared_ptr<const Table> buildTable (const midi::SongIr& ir, std::size_t maxBankBytes)
+{
+	auto table = std::make_shared<Table> ();
+	table->tickRate = (uint32_t) std::llround (ir.tickRate > 0.0 ? ir.tickRate : 44100.0);
+	table->bank = bankFor (ir, maxBankBytes);
+
+	for (std::size_t device = 0; device < ir.chips.size (); ++device)
+	{
+		if (ir.chips[device].kind == midi::ChipKind::ym2612)
+		{
+			table->device = device;
+			table->runs = runsFor (ir, device, table->tickRate);
+			break;			// one YM2612: `0xE0` names no chip, and the loader creates one
+		}
+	}
+
+	return table;
 }
 
 } // namespace toybox::backends::libvgm::dac

@@ -65,8 +65,16 @@ public:
 		times the cost. A null song leaves `captureState` returning false, which is what the panel
 		reads as "this backend has nothing to say".
 	*/
+	/** Hands the player the song and its DAC table.
+
+		**The table is shared, not built here.** This is called once per track player - a dozen of
+		them - and building the table meant a pass over every `0x8n` byte and a sort, each time: on
+		`02 Green Hill Zone` (459 546 writes) that was about 200 ms of load time for eleven tables no
+		one ever read. The backend that owns the song builds it once.
+	*/
 	void setReplaySource (std::shared_ptr<const midi::SongIr> ir,
-						  const std::vector<PLR_DEV_INFO>& devices);
+						  const std::vector<PLR_DEV_INFO>& devices,
+						  std::shared_ptr<const dac::Table> table);
 
 	// --- playback::ITrackPlayer ---------------------------------------------------
 	void start (void) override;
@@ -110,14 +118,7 @@ private:
 		matching on the id could never find them, while the number alone is unique across the song. */
 	int trackFor (int channel) const;
 
-	/** **The YM2612 DAC's hits, built once per song from the same sampler the export uses.**
-
-		The row draws the hit the driver started, not a window of the stream: a hit is delimited by
-		`0xE0` and by pauses over 11.6 ms, and the decoder can see neither - it only receives bytes.
-		Building the table here, from `SongIr`, keeps one definition of a hit for the file and the
-		picture; `applyDacHit` turns the table into the row's `wave` and `sampleRate`.
-	*/
-	void buildDacTable (void);
+	/** Turns the song's DAC table into the row's `wave` and `sampleRate` for the hit at `samples`. */
 	void applyDacHit (playback::ChannelState& state, uint32_t samples) const;
 
 	/** The track that describes this device voice: the pair written by `describeSong`. A row that covers
@@ -133,13 +134,13 @@ private:
 	DATA_LOADER* dataLoader = nullptr;
 	std::vector<WAVE_32BS> renderBuffer;	// scratch buffer for the audio thread
 
-	/** The DAC table: the bank, the hits in play order, and the levels decoded so far.
+	/** The song's DAC table, borrowed from the backend, and the levels decoded so far.
 
 		`dacWaves` is mutable because `captureState` is const and the row asks for a shape while the
-		song plays; it is keyed by `(start, length)`, the same pair the export names a file with. */
-	std::vector<uint8_t> dacBank;
-	std::vector<dac::Run> dacRuns;
-	uint32_t dacTickRate = 44100;
+		song plays; it is keyed by `(start, length)`, the same pair the export names a file with. It
+		belongs to the player rather than the table because two players may be looking at the same
+		song from different positions. */
+	std::shared_ptr<const dac::Table> dacTable;
 	mutable std::map<std::pair<uint32_t, uint32_t>, std::shared_ptr<const std::vector<float>>>
 		dacWaves;
 

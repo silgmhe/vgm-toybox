@@ -9,6 +9,11 @@ namespace toybox::midi
 struct SongIr;
 }
 
+namespace toybox::backends::libvgm::dac
+{
+struct Table;
+}
+
 namespace toybox::backends::libvgm
 {
 
@@ -40,6 +45,7 @@ namespace toybox::backends::libvgm
 	See `docs/memo/2026-11-10-the-dac-is-a-latch.md` and
 	`docs/research/2026-11-10-vgm2fur-dac-runs.md`.
 */
-std::vector<playback::DecodedSample> collectYm2612DacSamples (const midi::SongIr& ir);
+std::vector<playback::DecodedSample> collectYm2612DacSamples (const midi::SongIr& ir,
+														  const dac::Table* table = nullptr);
 
 } // namespace toybox::backends::libvgm

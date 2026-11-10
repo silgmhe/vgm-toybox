@@ -445,10 +445,19 @@ bool LibvgmSongInstance::prepare (double hostSampleRate, int newMaxBlockSize, ju
 	{
 		// The DAC is fed one byte at a time, so there is no ROM to point at. What the file carries is
 		// the PCM block the driver streams from - or, when it has none, the pauses in the stream.
-		for (auto& sample : collectYm2612DacSamples (*songIr))
+		//
+		// **One table for the players and the export.** The scan over every stream byte (and the
+		// merge with the seeks) runs here, once; the eleven track players and the export borrow it.
+		dacTable = dac::buildTable (*songIr, 4u << 20);
+
+		for (auto& sample : collectYm2612DacSamples (*songIr, dacTable.get ()))
 		{
 			collected.push_back (std::move (sample));
 		}
+	}
+	else
+	{
+		dacTable.reset ();		// a song without a YM2612 has no table to borrow
 	}
 
 	const bool hasYmz280b = songIr != nullptr
@@ -754,7 +763,7 @@ bool LibvgmSongInstance::prepare (double hostSampleRate, int newMaxBlockSize, ju
 	}
 
 	probe->setSamples (dpcmSamples);
-	probe->setReplaySource (songIr, deviceInfo);
+	probe->setReplaySource (songIr, deviceInfo, dacTable);
 	probe->setTrackList (&tracks);	// setTrackAudible() resolves the track through this list
 	refreshTimelineFacts();
 	return true;
@@ -1068,7 +1077,7 @@ std::unique_ptr<playback::ITrackPlayer> LibvgmSongInstance::createPlayer (juce::
 
 	player->setTimeline (loopCount, fadeSeconds);
 	player->setSamples (dpcmSamples);
-	player->setReplaySource (songIr, deviceInfo);
+	player->setReplaySource (songIr, deviceInfo, dacTable);
 	player->setTrackList (&tracks);
 	return player;
 }

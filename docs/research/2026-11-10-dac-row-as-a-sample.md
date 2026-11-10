@@ -108,7 +108,8 @@ VGM ──► VgmCommandReader ──► SongIr { writes, dacSeeks }
 - 新建 `Ym2612DacSampler.{h,cpp}`：把导出器里的 Sampler 抽出来共享，`runsFor(ir, device, tickRate)`
   产出 `Run{beginTime, endTime, start, length, duration}`，`bankFor()` 产出 PCM 银行；导出器
   `Ym2612DacSamples.cpp` 改成调用它，行为不变（8 个样本、名字与速率全部一致）；
-- `LibvgmTrackPlayer::buildDacTable()` 在 `setReplaySource()` 里建表；`captureState()` 对 YM2612 的
+- `LibvgmSongInstance` 在 `prepare()` 里建**一次** `dac::Table`，`setReplaySource()` 把它交给每个
+  track player（见 `docs/research/2026-11-10-dac-load-cost.md`）；`captureState()` 对 YM2612 的
   第 6 通道调用 `applyDacHit()`：`dac::hitAt()` 取“此刻在播或最后一击”，懒解码波形（`(start,length)`
   缓存，超过 8 192 点均匀抽样），`sampleRate` 用该击的 `tickRate × length ÷ duration`；
 - 拖拽路径不变代码，因为它读的是同一份 `waveValues()`，于是自动与 `ym2612dac_*` 对齐；

@@ -1161,8 +1161,9 @@ VGM 只记录四件相关的事：
 `0x80`，转成有符号后与 `.fur` 的 `SMP2` 数据逐字节相同）。`02 Green Hill` 的八个样本与 `vgm2fur` 写进
 `.fur` 的样本一一对应（长度、速率、字节三项）；`0x0000` 的两个停止音（96 / 93 字节）照导，参考实现也照导。
 
-**可视化**：这一行画的是**当前这一击**，与导出同一份字节。载入时 `LibvgmTrackPlayer::buildDacTable` 用
-导出器同一个 Sampler 建 `Run{beginTime, endTime, start, length, duration}` 表；`captureState` 用
+**可视化**：这一行画的是**当前这一击**，与导出同一份字节。载入时 `LibvgmSongInstance` 用导出器同一个
+Sampler 建**一次** `dac::Table`（`Run{beginTime, endTime, start, length, duration}` + bank），11 个
+track player 与导出器共享这一张表（见 `docs/research/2026-11-10-dac-load-cost.md`）；`captureState` 用
 `dac::hitAt()` 查“此刻在播的那一击（播完则保持最后一击）”，把 `wave` 换成该击的字节、`sampleRate` 换成
 该击的速率（`tickRate × length ÷ duration`，与文件头同一个数）。波形懒解码并按 `(start,length)` 缓存，
 超过 **8 192 点**时按全段均匀抽样（不是只画开头）。拖拽因此也与 `ym2612dac_*` 一致——以前拖的是“最近

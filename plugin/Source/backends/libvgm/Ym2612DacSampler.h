@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cstdint>
+#include <memory>
 #include <cstddef>
 #include <vector>
 
@@ -159,6 +160,24 @@ private:
 	bool haveBase_ = false;
 	bool idle_ = true;
 };
+
+/** **A song's DAC table: the bank and the hits, built once and shared.**
+
+	It is built by whoever owns the song (`LibvgmSongInstance`) and handed to every track player and
+	to the export, because building it costs one pass over every `0x8n` byte - 459 546 of them on
+	`02 Green Hill Zone` - and there are a dozen track players. Built per player, that pass and its
+	sort cost about 200 ms of load time for nothing.
+*/
+struct Table
+{
+	uint32_t tickRate = 44100;
+	std::size_t device = 0;		// which chip slot the runs came from (the only YM2612, in practice)
+	std::vector<uint8_t> bank;
+	std::vector<Run> runs;		// that chip's hits; `0xE0` names no chip, and there is one
+};
+
+/** Builds the table in one pass over the song. */
+std::shared_ptr<const Table> buildTable (const midi::SongIr& ir, std::size_t maxBankBytes);
 
 /** **The hit that is playing at `samples`, or the last one that played before it.**
 
