@@ -226,6 +226,9 @@ private:
 	to the export, because building it costs one pass over every `0x8n` byte - 459 546 of them on
 	`02 Green Hill Zone` - and there are a dozen track players. Built per player, that pass and its
 	sort cost about 200 ms of load time for nothing.
+
+	It carries everything the three consumers need: the bank, the hits (with the sample number that
+	names both the note and the exported file), and the tick rate the rates are computed in.
 */
 struct Table
 {

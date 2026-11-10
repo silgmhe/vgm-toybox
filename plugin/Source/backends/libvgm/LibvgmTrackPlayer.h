@@ -118,7 +118,7 @@ private:
 		matching on the id could never find them, while the number alone is unique across the song. */
 	int trackFor (int channel) const;
 
-	/** Turns the song's DAC table into the row's `wave` and `sampleRate` for the hit at `samples`. */
+	/** Turns the song's DAC table into the row's `wave`, `sampleRate` and `note` for the hit at `samples`.\n\n\t\tThe note is the sample's number (C4 + index, see `dac::noteForSample`), not a pitch: one row\n\t\tcarries every drum, and a fixed C4 could not tell a kick from a snare. */
 	void applyDacHit (playback::ChannelState& state, uint32_t samples) const;
 
 	/** The track that describes this device voice: the pair written by `describeSong`. A row that covers

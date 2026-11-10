@@ -42,8 +42,17 @@ namespace toybox::backends::libvgm
 	and which a snare (offsets, not names), where an entry loops (the driver jumps back with no marker),
 	whether a rate was changed to transpose a drum (it only shows as a different run rate), and whether
 	a short run is a stop-tone rather than a sample (Green Hill's `0x0000` has 93- and 96-byte ones).
-	See `docs/memo/2026-11-10-the-dac-is-a-latch.md` and
-	`docs/research/2026-11-10-vgm2fur-dac-runs.md`.
+	**The file name carries the sample's number** - `ym2612dac_07_...` - and that number is the one the
+	row shows as a note (`dac::noteForSample`, C4 + the index). The payload is `pcm8Signed`, so it
+	matches a `.fur` sample byte for byte.
+
+	`table` is the song's shared table (`dac::buildTable`): passing it avoids a second scan over every
+	stream byte and guarantees the list matches the runs the row draws. Null builds one here, which is
+	what a caller outside the backend gets.
+
+	See `docs/memo/2026-11-10-the-dac-is-a-latch.md`,
+	`docs/research/2026-11-10-vgm2fur-dac-runs.md` and
+	`docs/desgin/ym2612-dac-visualisation-and-export.md`.
 */
 std::vector<playback::DecodedSample> collectYm2612DacSamples (const midi::SongIr& ir,
 														  const dac::Table* table = nullptr);
