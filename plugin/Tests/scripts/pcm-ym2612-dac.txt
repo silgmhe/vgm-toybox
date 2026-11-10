@@ -5,19 +5,26 @@
 # Hill Zone` carries them in a `0x67` block of type 0x00 - 13 132 bytes - streamed into the DAC with
 # `0x80-0x8F` and sought into with `0xE0`.
 #
-# **The unit is the region an `0xE0` seeks to.** The bank is not one sample: the driver's seek
-# offsets are its sample table, and each entry is written at one fixed rate. Measured on this song,
-# a visit to offset 0x1516 averages 1.90 ticks and to offset 0x32D8 5.47 - and neither varies by
-# more than 0.02 ticks between visits. A single rate for the song matched half of it at best.
+# **The unit is the hit the driver actually played**, not the region between two `0xE0` offsets: the
+# offsets are seek targets and the driver routinely plays straight through one into the next. A hit
+# ends at the next seek, or at a pause of 512 samples (11.6 ms) or more; its length is what was
+# played, and its rate is `tickRate * length / duration` over that run.
 #
-# Five regions here: 0x000000 (8.0 kHz), 0x000060 (8.0 kHz), 0x001516 (23.2 kHz), 0x0023F8
-# (23.2 kHz), 0x0032D8 (8.1 kHz). The rate is the mean of the intervals in that region, because the
-# intervals are dithered - 5.5 ticks arrives as 5 and 6 - and a median would quantise it to 8 820.
+# Eight hits here, matching the sample set the reference implementation (`vgm2fur`) writes into a
+# Furnace module, name for name and rate for rate:
+#
+#   00 0x000000 5398 @ 14 783    04 0x0032D8  116 @  8 018
+#   01 0x000000 1584 @  7 978    05 0x000000   96 @  8 301
+#   02 0x001516 3810 @ 23 105    06 0x000060 1488 @  7 981
+#   03 0x0023F8 3808 @ 23 128    07 0x000000   93 @  8 285
+#
+# 00 and 01 are one entry of the driver's table played for two different lengths, 05 and 07 are the
+# 96- and 93-byte stop tones - the reference exports them too, so this does.
 
 size 900 700
 
 load "test_file/sega_md/02 Green Hill Zone.vgz"
 tick
 
-samples 5
-sample-names ym2612dac_001516_00EE2
+samples 8
+sample-names ym2612dac_00_000000_01516

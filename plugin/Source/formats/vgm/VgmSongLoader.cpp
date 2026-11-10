@@ -53,7 +53,8 @@ bool VgmSongLoader::load (const void* data, std::size_t size, midi::SongIr& out,
 
 	const auto emit = [&out, &slotFor] (ChipKind kind, int instance, int port,
 										uint8_t reg, uint16_t value,
-										uint32_t time, uint32_t flags = 0)
+										uint32_t time, uint32_t flags = 0,
+										bool fromStream = false)
 	{
 		chips::RegisterWrite write;
 		write.deviceId = slotFor (kind, instance, flags);
@@ -61,6 +62,7 @@ bool VgmSongLoader::load (const void* data, std::size_t size, midi::SongIr& out,
 		write.value = value;
 		write.port = (uint8_t) port;
 		write.sampleTime = time;
+		write.fromStream = fromStream;
 		out.writes.push_back (write);
 	};
 
@@ -82,7 +84,7 @@ bool VgmSongLoader::load (const void* data, std::size_t size, midi::SongIr& out,
 		case 0x50:	emit (ChipKind::sn76489, port, 0, reg, value, time); break;
 		case 0x51:	emit (ChipKind::ym2413, 0, 0, reg, value, time); break;
 		case 0xE0:	out.dacSeeks.push_back ({ command.offset, time }); break;
-		case 0x52:	emit (ChipKind::ym2612, 0, 0, reg, value, time); break;
+		case 0x52:	emit (ChipKind::ym2612, 0, 0, reg, value, time, 0, command.fromDacStream); break;
 		case 0x53:	emit (ChipKind::ym2612, 0, 1, reg, value, time); break;		// port 1 of the pair
 		case 0x54:	emit (ChipKind::ym2151, 0, 0, reg, value, time); break;
 		case 0x55:	emit (ChipKind::ym2203, 0, 0, reg, value, time); break;

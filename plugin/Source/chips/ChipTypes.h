@@ -82,7 +82,14 @@ struct RegisterWrite
 	uint32_t streamOrder = 0;	// position in the source file, counted per command. Two events
 								// can share a `sampleTime` - nothing waits between a RAM upload
 								// and the key-on that plays it - so time alone cannot order them.
-	};
+
+	/** **Where this write came from**: a `0x8n` byte of the YM2612's DAC stream, or a `0x52 0x2A`
+		poke the driver made itself. Both arrive at register 0x2A with a time, and only the stream is
+		a sample - a poke is a stop, a volume step, or a one-off level. The sampler cuts runs by the
+		stream's own timing, so it has to be able to tell the two apart (`vgm2fur` ignores the pokes
+		outright, and this flag is what lets us do the same without losing them for the panel). */
+	bool fromStream = false;
+};
 
 /** What a decoder needs to know to start: the chip's clock, and the unit of the timestamps it will be told.
 

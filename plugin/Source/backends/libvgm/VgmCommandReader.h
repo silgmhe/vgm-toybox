@@ -39,9 +39,14 @@ struct VgmCommand
 	uint8_t data = 0;			// value byte
 	uint8_t data2 = 0;			// second value byte of a pair write; for 0xE1 (C352) the
 									// low byte of the 16-bit value, `data` being the high one
+	/** True when the command was built from a `0x8n` DAC byte rather than read as one. The loader
+		hangs these on a synthetic `0x52 0x2A` so every consumer sees ordinary register writes, and
+		this bit is the only thing that still says which of the two it was. */
+	bool fromDacStream = false;
+
 	uint32_t offset = 0;		// 0xE0: where the YM2612's PCM read pointer is sent. The bank has no
-							// addresses of its own, so this is the only record of where a driver
-							// starts playing a sample - and of how many samples it has.
+								// addresses of its own, so this is the only record of where a driver
+								// starts playing a sample - and of how many samples it has.
 	uint32_t sampleTime = 0;	// absolute position of the command, in 44100 Hz samples
 	uint32_t streamOrder = 0;	// position in the file, counted per command. Two events can share a
 								// `sampleTime` - nothing waits between a RAM upload and the key-on

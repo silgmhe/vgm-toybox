@@ -363,6 +363,7 @@ bool VgmCommandReader::next (VgmCommand& command)
 			command.kind = VgmCommand::Kind::registerWrite;
 			command.addr = 0x2A;		// the DAC sample register
 			command.data = sample;
+			command.fromDacStream = true;	// the only kind of 0x2A write that is a sample byte
 			sampleTime += wait;
 
 			resume = VgmCommand {};
