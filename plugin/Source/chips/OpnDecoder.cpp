@@ -1045,10 +1045,15 @@ ChannelState OpnDecoder::channelState (int channel) const
 		state.volume = 12;		// a trigger marker, not a measured level
 		state.gate = impl->now < impl->dac.end;
 
-		// **What the row can draw is the recent past.** Unlike ADPCM-A there is no sample to point
-		// at: the driver writes the bytes itself, and where they came from (a `0x67` block, the Z80's
-		// RAM) is not in the register stream. The window is rebuilt only when a byte arrived, because
-		// the snapshot asks for this state once per block and the buffer changes at kilohertz rates.
+		// **What the decoder can answer is the recent past.** Unlike ADPCM-A there is no sample to
+		// point at from here: the driver writes the bytes itself, and where they came from (a `0x67`
+		// block, the Z80's RAM) is not in the register stream. The window is rebuilt only when a byte
+		// arrived, because the snapshot asks for this state once per block and the buffer changes at
+		// kilohertz rates.
+		//
+		// The *row* prefers the driver's hit table (`LibvgmTrackPlayer::applyDacHit`), which needs
+		// `0xE0` and the export's sampler - neither is available at this layer. This window is what
+		// remains when there is no table (a song with no seeks and no bank), so it is still drawn.
 		if (impl->dacWindow.count > 0)
 		{
 			if (impl->dacWindow.dirty || impl->dacWave == nullptr)

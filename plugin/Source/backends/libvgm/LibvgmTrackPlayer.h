@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 #include <atomic>
 #include <map>
@@ -15,6 +15,8 @@
 #include "playback/SongBackend.h"
 
 #include "VgmReplayer.h"
+
+#include "Ym2612DacSampler.h"
 
 namespace toybox::backends::libvgm
 {
@@ -108,6 +110,16 @@ private:
 		matching on the id could never find them, while the number alone is unique across the song. */
 	int trackFor (int channel) const;
 
+	/** **The YM2612 DAC's hits, built once per song from the same sampler the export uses.**
+
+		The row draws the hit the driver started, not a window of the stream: a hit is delimited by
+		`0xE0` and by pauses over 11.6 ms, and the decoder can see neither - it only receives bytes.
+		Building the table here, from `SongIr`, keeps one definition of a hit for the file and the
+		picture; `applyDacHit` turns the table into the row's `wave` and `sampleRate`.
+	*/
+	void buildDacTable (void);
+	void applyDacHit (playback::ChannelState& state, uint32_t samples) const;
+
 	/** The track that describes this device voice: the pair written by `describeSong`. A row that covers
 		the whole device (negative deviceChannel) answers for any channel of that device. */
 	int trackForVoice (uint16_t deviceType, int deviceChannel) const;
@@ -120,6 +132,17 @@ private:
 	PlayerA playerEngine;
 	DATA_LOADER* dataLoader = nullptr;
 	std::vector<WAVE_32BS> renderBuffer;	// scratch buffer for the audio thread
+
+	/** The DAC table: the bank, the hits in play order, and the levels decoded so far.
+
+		`dacWaves` is mutable because `captureState` is const and the row asks for a shape while the
+		song plays; it is keyed by `(start, length)`, the same pair the export names a file with. */
+	std::vector<uint8_t> dacBank;
+	std::vector<dac::Run> dacRuns;
+	uint32_t dacTickRate = 44100;
+	mutable std::map<std::pair<uint32_t, uint32_t>, std::shared_ptr<const std::vector<float>>>
+		dacWaves;
+
 	double sampleRate = 44100.0;
 	int maxBlockSize = 512;
 	int loopCount = 1;

@@ -1,4 +1,4 @@
-﻿#include "LibvgmTrackPlayer.h"
+#include "LibvgmTrackPlayer.h"
 
 #include "player/droplayer.hpp"
 #include "player/gymplayer.hpp"
@@ -475,11 +475,115 @@ std::vector<playback::DecodedSample> LibvgmTrackPlayer::samples (void) const
 	return sampleList != nullptr ? *sampleList : std::vector<playback::DecodedSample> ();
 }
 
+namespace
+{
+	/** How many points a DAC row draws. The longest hit in the four Sonic files is 5 398 bytes and
+		the row paints 128 columns, so anything past 8 192 is decode cost with no picture to show for
+		it; the file still gets the whole run (`writeSamples` has its own, larger limits). */
+	constexpr std::size_t kDacDisplayPoints = 8192;
+}
+
+void LibvgmTrackPlayer::buildDacTable (void)
+{
+	dacBank.clear ();
+	dacRuns.clear ();
+	dacWaves.clear ();
+
+	if (replayIr == nullptr)
+	{
+		return;
+	}
+
+	dacTickRate = (uint32_t) std::llround (replayIr->tickRate > 0.0 ? replayIr->tickRate : 44100.0);
+
+	for (std::size_t device = 0; device < replayIr->chips.size (); ++device)
+	{
+		if (replayIr->chips[device].kind != midi::ChipKind::ym2612)
+		{
+			continue;
+		}
+
+		if (dacBank.empty ())
+		{
+			dacBank = dac::bankFor (*replayIr, 4u << 20);
+		}
+
+		// **One chip is the normal case.** `0xE0` names no chip in the format, and the loader only
+		// ever creates one YM2612 (`0x53` is its port 1, not a second chip), so the first device's
+		// table is the song's. A second one would need its own seeks, which do not exist.
+		if (dacRuns.empty ())
+		{
+			dacRuns = dac::runsFor (*replayIr, device, dacTickRate);
+		}
+	}
+}
+
+void LibvgmTrackPlayer::applyDacHit (playback::ChannelState& state, uint32_t samples) const
+{
+	if (dacRuns.empty () || dacBank.empty ())
+	{
+		return;			// no table: the decoder's own window is the honest answer
+	}
+
+	// The lookup lives in the sampler header so a test can pin it without a song: "the hit that is
+	// playing, or the last one that played" is the whole rule, and it has one definition.
+	const dac::Run* foundRun = dac::hitAt (dacRuns, samples);
+
+	if (foundRun == nullptr)
+	{
+		return;			// nothing has played yet
+	}
+
+	const dac::Run& run = *foundRun;
+
+
+	if (run.start >= dacBank.size () || run.duration == 0)
+	{
+		return;
+	}
+
+	const auto key = std::make_pair (run.start, run.length);
+	auto found = dacWaves.find (key);
+
+	if (found == dacWaves.end ())
+	{
+		const std::size_t length = (std::min<std::size_t>) (run.length, dacBank.size () - run.start);
+		const std::size_t capped = (std::min<std::size_t>) (length, kDacDisplayPoints);
+
+		auto wave = std::make_shared<std::vector<float>> ();
+		wave->reserve (capped);
+
+		for (std::size_t i = 0; i < capped; ++i)
+		{
+			// A run longer than the row can draw is **sampled evenly**, not truncated: the shape of
+			// a long hit is its envelope, and drawing only the attack would read as a different drum.
+			const std::size_t index = (capped == length) ? i : (i * length) / capped;
+			wave->push_back ((float) (((int) dacBank[run.start + index] - 0x80) / 128.0));
+		}
+
+		if (dacWaves.size () > 128)
+		{
+			// A driver with hundreds of distinct entries would grow this without bound; the table
+			// belongs to one song, so dropping it is cheap and cannot show the wrong shape.
+			dacWaves.clear ();
+		}
+
+		found = dacWaves.emplace (key, std::move (wave)).first;
+	}
+
+	state.wave = found->second;
+	state.sampleRate = (float) ((uint64_t) run.length * (uint64_t) dacTickRate / run.duration);
+}
+
 void LibvgmTrackPlayer::setReplaySource (std::shared_ptr<const midi::SongIr> ir,
 										 const std::vector<PLR_DEV_INFO>& devices)
 {
 	replayIr = std::move (ir);
 	replayDevices = devices;
+
+	// The song's hits, from the same sampler the export runs: one definition of "a hit" for the
+	// file and the picture (see `buildDacTable`).
+	buildDacTable ();
 
 	// A streamed sample player cannot be seeked - see the note in seekSeconds.
 	seekable = true;
@@ -736,6 +840,7 @@ bool LibvgmTrackPlayer::captureState (playback::ChipStateSnapshot& snapshot) con
 
 		const int count = instance.decoder->channelCount ();
 
+
 		for (int channel = 0; channel < count; ++channel)
 		{
 			const auto chipState = instance.decoder->channelState (channel);
@@ -770,6 +875,14 @@ bool LibvgmTrackPlayer::captureState (playback::ChipStateSnapshot& snapshot) con
 
 			auto state = playback::channelFromChip (
 				chipState, instance.decoder->noteTable (channel), hints, chipName, channelName);
+
+			// **The YM2612's DAC row answers for the hit, not for the stream.** The decoder can only
+			// see bytes arrive; which hit they belong to is a fact about the driver's table, built
+			// from `SongIr` (see `buildDacTable`). Channel 6 is the DAC on that chip.
+			if (device != nullptr && device->type == DEVID_YM2612 && channel == 6)
+			{
+				applyDacHit (state, samples);
+			}
 
 			// Set here rather than inside the conversion: which engine track a channel belongs to is
 			// a fact about this runtime, not about the chip, and the conversion has no engine to ask.

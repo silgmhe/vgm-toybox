@@ -18,6 +18,7 @@
 
 #include "TestSupport.h"
 #include "chips/NesDpcmSample.h"
+#include "backends/libvgm/Ym2612DacSampler.h"
 #include "backends/nsf/NsfBus.h"
 #include "backends/nsf/NsfPlayer.h"
 #include "playback/WaveShape.h"
@@ -790,6 +791,26 @@ int main (void)
 		check (chosen.startSongFor (33) == 33, "and at the last one");
 		check (chosen.startSongFor (34) == 15, "one past the end falls back to the header's choice");
 		check (chosen.startSongFor (-1) == 15, "so does a negative request");
+	}
+
+	/**
+		**Which DAC hit a row is showing.** The lookup is "the hit that is playing, or the last one that
+		played", and it is the only piece of the row's behaviour that is not a decode: the boundaries
+		come from the exporter's sampler, the bytes from the bank, and this decides between them.
+	*/
+	{
+		using toybox::backends::libvgm::dac::hitAt;
+		using toybox::backends::libvgm::dac::Run;
+
+		const std::vector<Run> runs = { Run { 100, 250, 0, 10, 150 },
+										Run { 400, 500, 100, 20, 100 } };
+
+		check (hitAt (runs, 50) == nullptr, "nothing has played before the first hit");
+		check (hitAt (runs, 150) == &runs[0], "the first hit is showing while it plays");
+		check (hitAt (runs, 300) == &runs[0],
+			   "and it stays after it ends - a stopped row keeps the drum it last played");
+		check (hitAt (runs, 450) == &runs[1], "the second hit takes over when it starts");
+		check (hitAt (runs, 9000) == &runs[1], "and the last one stays on screen at the end");
 	}
 
 	std::printf ("\nResult    : %s\n", toybox::test::failures() == 0 ? "all checks passed" : "FAILURES");
