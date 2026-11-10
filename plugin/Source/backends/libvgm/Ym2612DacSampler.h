@@ -2,6 +2,8 @@
 
 #include <algorithm>
 #include <cstdint>
+#include <map>
+#include <utility>
 #include <memory>
 #include <cstddef>
 #include <vector>
@@ -36,7 +38,64 @@ struct Run
 	uint32_t start = 0;			// bank offset
 	uint32_t length = 0;		// bytes played
 	uint32_t duration = 0;		// ticks spent playing, pauses shorter than 11.6 ms included
+
+	/** **Which sample this is**, 0-based in first-played order - the same number the export puts in
+		a file's name (`ym2612dac_07_...` is sample 7). `kNoSample` marks a run that never became a
+		file: shorter than two bytes, or past the end of the bank. */
+	uint16_t sample = 0xFFFF;
 };
+
+/** `Run::sample` for a run that is not a sample. */
+constexpr uint16_t kNoSample = 0xFFFF;
+
+/** **The note a DAC row shows for a sample: C4 plus its index, wrapping every five octaves.**
+
+	One row carries every drum, and a fixed C4 said nothing about which one was hit. The index is the
+	export's own numbering, so the note and the file name agree; the wrap keeps a song with more than
+	sixty entries inside the MIDI range and still distinguishable, at the cost of repeating a note
+	after sixty.
+*/
+constexpr int kDacNoteBase = 60;	// C4
+constexpr int kDacNoteSpan = 60;	// C4..B9
+
+inline int noteForSample (std::size_t sample)
+{
+	const auto index = (sample == (std::size_t) kNoSample) ? std::size_t (0) : sample;
+	return kDacNoteBase + (int) (index % (std::size_t) kDacNoteSpan);
+}
+
+/** Numbers the runs' `sample` fields in first-played order, deduplicated by `(start, length)`.
+
+	Inline because it is a pure vector walk, and because the test that pins the numbering should not
+	have to link the whole backend to see it.
+*/
+inline void assignSampleIndices (std::vector<Run>& runs, std::size_t bankSize)
+{
+	std::map<std::pair<uint32_t, uint32_t>, uint16_t> seen;
+
+	for (auto& run : runs)
+	{
+		run.sample = kNoSample;
+
+		if (run.start >= bankSize || run.length < 2)
+		{
+			continue;			// not a file: the export skips these too, so the numbers stay aligned
+		}
+
+		const auto key = std::make_pair (run.start, run.length);
+		const auto found = seen.find (key);
+
+		if (found != seen.end ())
+		{
+			run.sample = found->second;		// the same drum played again keeps its note
+			continue;
+		}
+
+		const auto index = (uint16_t) seen.size ();
+		seen.emplace (key, index);
+		run.sample = index;
+	}
+}
 
 /** **The sampler both the export and the panel use**, in ticks rather than seconds.
 

@@ -813,6 +813,35 @@ int main (void)
 		check (hitAt (runs, 9000) == &runs[1], "and the last one stays on screen at the end");
 	}
 
+	/**
+		**Which note a DAC sample gets.** The row used to say C4 for every hit, which cannot tell a
+		kick from a snare; the sample's index now names the note, and the index is the export's own
+		numbering so the note and the file name agree.
+	*/
+	{
+		using toybox::backends::libvgm::dac::assignSampleIndices;
+		using toybox::backends::libvgm::dac::kNoSample;
+		using toybox::backends::libvgm::dac::noteForSample;
+		using toybox::backends::libvgm::dac::Run;
+
+		std::vector<Run> runs = { Run { 0, 10, 0, 4, 10 },
+								  Run { 20, 30, 100, 4, 10 },
+								  Run { 40, 50, 0, 4, 10 },
+								  Run { 60, 70, 200, 1, 10 } };
+
+		assignSampleIndices (runs, 1000);
+
+		check (runs[0].sample == 0, "the first distinct run is sample 0");
+		check (runs[1].sample == 1, "a run at another offset is the next sample");
+		check (runs[2].sample == 0, "the same bytes played again keep their number");
+		check (runs[3].sample == kNoSample, "a run shorter than two bytes is not a sample");
+
+		check (noteForSample (0) == 60, "sample 0 is C4");
+		check (noteForSample (7) == 67, "sample 7 is G4");
+		check (noteForSample (60) == 60, "the numbering wraps after five octaves");
+		check (noteForSample (61) == 61, "and continues from C4 again");
+	}
+
 	std::printf ("\nResult    : %s\n", toybox::test::failures() == 0 ? "all checks passed" : "FAILURES");
 
 	return toybox::test::failures() == 0 ? 0 : 1;

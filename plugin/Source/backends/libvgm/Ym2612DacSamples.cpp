@@ -100,11 +100,19 @@ std::vector<playback::DecodedSample> collectYm2612DacSamples (const midi::SongIr
 
 		// `(start, length)` names a sample: the same bytes played for the same run are one file,
 		// and its rate is the first one measured - the reference's rule, so the sets match.
+		//
+		// **The number in the name comes from the table**, `assignSampleIndices`'s first-played
+		// order, because the row shows the same number as a note: a name and a note that disagreed
+		// would make the panel useless for telling one drum from another.
 		std::map<std::pair<uint32_t, uint32_t>, bool> seen;
-		unsigned number = 0;
 
 		for (const auto& run : runs)
 		{
+			if (run.sample == dac::kNoSample)
+			{
+				continue;			// the table already decided this run is not a sample
+			}
+
 			if (run.start >= bank.size ())
 			{
 				continue;
@@ -146,18 +154,17 @@ std::vector<playback::DecodedSample> collectYm2612DacSamples (const midi::SongIr
 
 			if (devices > 1)
 			{
-				std::snprintf (name, sizeof (name), "ym2612dac_%02u_%06X_%05X_d%u", number,
+				std::snprintf (name, sizeof (name), "ym2612dac_%02u_%06X_%05X_d%u", (unsigned) run.sample,
 							   (unsigned) run.start, (unsigned) length, (unsigned) device);
 			}
 			else
 			{
-				std::snprintf (name, sizeof (name), "ym2612dac_%02u_%06X_%05X", number,
+				std::snprintf (name, sizeof (name), "ym2612dac_%02u_%06X_%05X", (unsigned) run.sample,
 							   (unsigned) run.start, (unsigned) length);
 			}
 
 			collector.add (sampleKey (device, run.start, (uint32_t) length), name, bytes.data (),
 						   length, SampleFormat::pcm8Signed, (double) rate);
-			++number;
 		}
 	}
 

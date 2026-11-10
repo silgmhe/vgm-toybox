@@ -110,6 +110,8 @@ std::shared_ptr<const Table> buildTable (const midi::SongIr& ir, std::size_t max
 		}
 	}
 
+	assignSampleIndices (table->runs, table->bank.size ());
+
 	return table;
 }
 

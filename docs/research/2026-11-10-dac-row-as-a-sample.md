@@ -119,3 +119,18 @@ VGM ──► VgmCommandReader ──► SongIr { writes, dacSeeks }
 验证：`NsfFormatTest` 新增 `hitAt` 的 5 条断言（未开始 / 播放中 / 播完保持 / 下一击接管 / 末尾保持）；
 harness 实测：Green Hill 播放到约 0.32 s 时 `engine.wave.10 == 5398`（第一击），改前该行永远是 4 096
 点的滚动窗口。
+---
+
+## 8. 音名：C4 + 样本序号（2026-11-10）
+
+同一个 DAC 行装下所有鼓，恒定 C4 分不出底鼓与军鼓。现在：
+
+- **序号** = `dac::assignSampleIndices()` 按首次播放顺序给 `(start, length)` 编号，与导出文件名里的数字同源；
+- **音名** = `dac::noteForSample()`：`C4 + 序号`，每 60 个（五个八度，C4..B9）**取余**循环；
+- **行**：`LibvgmTrackPlayer::applyDacHit()` 覆盖 `state.note`/`state.frequency`；
+- **MIDI**：`MidiSequenceBuilder::flushOpn()` 对 YM2612 的第 7 通道（DAC）按 `hitAt()` 找到当前的击打再改写音名，
+  与行完全一致；
+- 导出文件名同样改用表里的序号（`run.sample`），三者（行、MIDI、文件）永远是同一个数。
+
+验证：`NsfFormatTest` 新增 8 条断言（序号去重/重复保持/过短不算，以及 0→C4、7→G4、60→C4 的循环）；导出仍是
+同样的 8 个名字与速率。

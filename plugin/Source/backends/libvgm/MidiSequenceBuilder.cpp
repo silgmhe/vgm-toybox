@@ -28,6 +28,7 @@
 #include "chips/SegaPcmDecoder.h"
 #include "chips/NesApuDecoder.h"
 #include "chips/NoteExtractor.h"
+#include "Ym2612DacSampler.h"
 #include "chips/OplDecoder.h"
 #include "chips/OpmDecoder.h"
 #include "chips/OpnDecoder.h"
@@ -149,6 +150,16 @@ namespace
 		midi::NoteStream inferNotes (const midi::SongIr& ir)
 		{
 			stream = midi::NoteStream {};
+
+			// **The DAC's samples, once.** Its notes are C4 + the sample index (see `flushOpn`), and
+			// that index is the one the export puts in a file name; the table is the only place it
+			// exists. Built here rather than per device because every decoder in this pass is
+			// created per device anyway and a YM2612 song has one.
+			const bool hasYm2612 = std::any_of (ir.chips.begin (), ir.chips.end (),
+											  [] (const midi::ChipSlot& slot)
+											  { return slot.kind == midi::ChipKind::ym2612; });
+
+			dacTable = hasYm2612 ? dac::buildTable (ir, 4u << 20) : nullptr;
 			stream.tickRate = tickRate;
 
 			const uint32_t lastSampleTime = ir.totalTicks;
@@ -443,8 +454,29 @@ namespace
 					}
 				}
 
-				appendNotes (&info,
-							  chips::extractPerformance (decoder, entry.second, totalSamples));
+				auto performance = chips::extractPerformance (decoder, entry.second, totalSamples);
+
+				// **The DAC's notes name the sample**, not a pitch: C4 plus the sample's index, the
+				// same number the keyboard row shows and the export puts in a file name. The decoder
+				// cannot know it - which hit a byte belongs to is a fact about the driver's table -
+				// so the mapping happens here, where the table is.
+				if (variant == chips::OpnDecoder::Variant::ym2612 && dacTable != nullptr)
+				{
+					for (auto& note : performance.notes)
+					{
+						if (note.logicalChannel != 6)
+						{
+							continue;		// the DAC is the YM2612's seventh channel
+						}
+
+						if (const dac::Run* run = dac::hitAt (dacTable->runs, note.startSample))
+						{
+							note.note = (uint8_t) dac::noteForSample (run->sample);
+						}
+					}
+				}
+
+				appendNotes (&info, performance);
 			}
 
 			router.decoder<chips::OpnDecoder> ().writes.clear();
@@ -698,6 +730,10 @@ namespace
 			kind to a decoder and a device is knowledge, not a preference, and two copies of it would
 			drift into "one row looks merely wrong". */
 		ChipWriteRouter router;
+
+	/** **The YM2612 DAC's table**, built once per song: its samples name the notes the DAC's row and
+		its MIDI events carry (see `flushOpn`). Null for a song without that chip. */
+	std::shared_ptr<const dac::Table> dacTable;
 
 		const std::vector<playback::TrackInfo>& tracks;
 		std::map<uint64_t, int> trackByDeviceChannel;

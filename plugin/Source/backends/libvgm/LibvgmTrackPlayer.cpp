@@ -539,6 +539,15 @@ void LibvgmTrackPlayer::applyDacHit (playback::ChannelState& state, uint32_t sam
 	state.wave = found->second;
 	state.sampleRate
 		= (float) ((uint64_t) run.length * (uint64_t) dacTable->tickRate / run.duration);
+
+	// **The note names the sample**, not a pitch: C4 plus its index, wrapping every five octaves.
+	// The index is the one the export puts in a file name, so the row and the file agree; a drum row
+	// that always said C4 could not tell a kick from a snare while transcribing, which is the row's
+	// whole purpose. `state.note` is what the piano roll draws, and the MIDI path applies the same
+	// rule in `MidiSequenceBuilder::flushOpn`.
+	const int note = dac::noteForSample (run.sample);
+	state.note = note;
+	state.frequency = 440.0f * std::pow (2.0f, (float) (note - 69) / 12.0f);
 }
 
 void LibvgmTrackPlayer::setReplaySource (std::shared_ptr<const midi::SongIr> ir,
