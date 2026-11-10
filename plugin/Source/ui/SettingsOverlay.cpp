@@ -865,6 +865,9 @@ ExportSettingsPage::ExportSettingsPage (void)
 	rateCaption.setJustificationType (juce::Justification::centredLeft);
 	addAndMakeVisible (rateCaption);
 
+	// **The one setting that changes what an exported wav sounds like in another application.**
+	// Its items are rebuilt in `refreshLanguage` rather than added here, and the numbers are
+	// literals there: the item ids are positional, so this table and that list must stay in step.
 	rateBox.setComponentID ("settings.export.sampleRate");
 	rateBox.onChange = [this]
 	{

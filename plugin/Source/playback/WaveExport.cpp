@@ -84,6 +84,12 @@ namespace
 		Holding each level for a whole number of output samples keeps the edges inside the file, and a
 		file already at the project rate is played without conversion at all. Nearest neighbour, never
 		linear: `values[(i * n) / count]` repeats a level and never invents one between two.
+
+		**Two limits worth knowing.** The step count is an integer, so an 8 kHz sample at 44.1 kHz holds
+		5.5 points per byte and the code alternates 5 and 6 - a 0.5-sample (11 us) jitter, inaudible but
+		not an exact zero-order hold. And this only helps when the target is the rate the file will be
+		played at: a project at another rate converts again and smooths the steps anyway, which is why
+		the setting defaults to "follow the host" rather than to a fixed rate.
 	*/
 	std::vector<float> heldAt (const std::vector<float>& values, double rate, double targetRate)
 	{

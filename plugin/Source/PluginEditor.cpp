@@ -682,6 +682,10 @@ void ToyboxAudioProcessorEditor::exportSamples (void)
 									done.samples = true;
 									done.channelsSeen = (int) samples.size();
 									done.folder = folder;
+									// **The rate the project runs at, not the chip's.** A file at the
+									// chip's own 8..23 kHz is resampled on import, and that resampling
+									// filters away the steps an 8-bit DAC is made of. The setting
+									// resolves to the host's rate by default; see `heldAt`.
 									done.written = toybox::playback::writeSamples (
 										samples, folder.getFullPathName().toStdString(),
 										(double) toybox::settings::SettingsStore::getInstance ()
