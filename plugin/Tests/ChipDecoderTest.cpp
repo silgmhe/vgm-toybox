@@ -1565,6 +1565,106 @@ namespace
 			   "the other channels keep their wave kind");
 	}
 
+	/** One SCC access as the loader hands it over: the latch (register number) on the even offset,
+		then the data on the odd one. `block` is the VGM port: 0/4 wave, 1 frequency, 2 volume, 3 key. */
+	void sccWrite (Stream& stream, uint32_t time, int block, uint8_t reg, uint8_t value)
+	{
+		stream.at (time, (uint8_t) ((block << 1) | 0), reg);
+		stream.at (time, (uint8_t) ((block << 1) | 1), value);
+	}
+
+	/** The row draws the channel's waveform RAM: thirty-two signed bytes walked at
+		`2 * clock / (f + 1)` steps a second. */
+	void testSccWaveTable (void)
+	{
+		constexpr uint32_t clock = 1789772;		// the MSX SCC clock these files carry
+
+		Stream stream;
+		for (int i = 0; i < 32; ++i)
+		{
+			sccWrite (stream, 0, 0, (uint8_t) i, (uint8_t) (i * 8 - 128));	// -128 .. +120
+		}
+		sccWrite (stream, 0, 1, 0x00, 254);		// ch0 frequency low
+		sccWrite (stream, 0, 1, 0x01, 0x00);	// high nibble
+		sccWrite (stream, 0, 2, 0x00, 0x0F);	// volume 15
+		sccWrite (stream, 0, 3, 0x00, 0x01);	// key on channel 0
+
+		toybox::chips::K051649Decoder decoder;
+		decoder.reset (toybox::chips::ChipConfig { clock, 44100.0, 0, 0.0 });
+
+		for (const auto& write : stream.writes)
+		{
+			decoder.write (write);
+		}
+
+		const auto state = decoder.channelState (0);
+
+		check (state.wave != nullptr && state.wave->size () == 32,
+			   "the SCC row carries the channel's thirty-two steps");
+		check (state.tableWave, "and says it is one cycle, not a recording");
+
+		if (state.wave != nullptr && state.wave->size () == 32)
+		{
+			check (std::abs ((*state.wave)[0] + 1.0f) < 1e-6f, "signed 0x80 is the bottom of the range");
+			check (std::abs ((*state.wave)[16]) < 1e-6f, "0x00 is the midpoint");
+			check (std::abs ((*state.wave)[31] - 0.9375f) < 1e-6f, "0x78 is just below full scale");
+		}
+
+		check (std::abs (state.sampleRate - (float) (2.0 * clock / 255.0)) < 2.0f,
+			   "and the rate is two clocks per step, the counter's own step rate");
+	}
+
+	/** SCC mode shares one table between channels 3 and 4: one write lands in both, whichever of the
+		two waveform ports it arrived on. */
+	void testSccSharedChannelFour (void)
+	{
+		Stream stream;
+		sccWrite (stream, 0, 0, 0x60, 0x40);		// channel 3/4 table, step 0
+		sccWrite (stream, 0, 4, 0x80, 0x80);		// the SCC+ half, still shared in SCC mode
+
+		toybox::chips::K051649Decoder decoder;
+		decoder.reset (toybox::chips::ChipConfig { 1789772, 44100.0, 0, 0.0 });
+
+		for (const auto& write : stream.writes)
+		{
+			decoder.write (write);
+		}
+
+		const auto three = decoder.channelState (3);
+		const auto four = decoder.channelState (4);
+
+		check (three.wave != nullptr && four.wave != nullptr, "both shared channels have a table");
+		check (three.wave == four.wave, "SCC mode draws channels 3 and 4 from the same bytes");
+		check (three.wave != nullptr && std::abs ((*three.wave)[0] + 1.0f) < 1e-6f,
+			   "the second write overwrote step 0 for both");
+	}
+
+	/** SCC+ gives channel 4 its own half, so the two channels stop sharing. */
+	void testSccPlusKeepsChannelFourSeparate (void)
+	{
+		Stream stream;
+		sccWrite (stream, 0, 0, 0x60, 0x40);		// channel 3, step 0
+		sccWrite (stream, 0, 0, 0x80, 0x80);		// channel 4, step 0 in SCC+ layout
+
+		toybox::chips::K051649Decoder decoder;
+		decoder.reset (toybox::chips::ChipConfig { 1789772, 44100.0, 1, 0.0 });	// flags bit 0 = SCC+
+
+		for (const auto& write : stream.writes)
+		{
+			decoder.write (write);
+		}
+
+		const auto three = decoder.channelState (3);
+		const auto four = decoder.channelState (4);
+
+		check (three.wave != nullptr && four.wave != nullptr, "both channels have a table");
+		check (three.wave != four.wave, "SCC+ keeps channel 4's table apart from channel 3's");
+		check (three.wave != nullptr && std::abs ((*three.wave)[0] - 0.5f) < 1e-6f,
+			   "channel 3 keeps its own step 0");
+		check (four.wave != nullptr && std::abs ((*four.wave)[0] + 1.0f) < 1e-6f,
+			   "and channel 4 keeps the byte written at 0x80");
+	}
+
 	// ---- K051649 / SCC ----
 
 	std::vector<NoteEvent> runScc (const Stream& stream, uint32_t totalSamples)
@@ -7495,6 +7595,9 @@ int main (void){
 	testC6280WaveTable();
 	testC6280WaveIndex();
 	testC6280NoiseKind();
+	testSccWaveTable();
+	testSccSharedChannelFour();
+	testSccPlusKeepsChannelFourSeparate();
 
 	testSccWaveNote();
 	testSccKeyMaskEndsTheNote();

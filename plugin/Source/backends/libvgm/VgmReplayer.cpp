@@ -109,6 +109,15 @@ void VgmReplayer::adoptNewBuffers (void)
 				// The OPL family shares one decoder, and only the Y8950 has a Delta-T unit: bit 0
 				// says so, which is what gives it a fifteenth row (and the ROM it draws from).
 				case DEVID_Y8950: slotFlags = 1; break;
+
+				// **SCC or SCC+.** The VGM clock field's bit 31 selects the second one, and the two
+				// address their waveform RAM differently: SCC shares one table between channels 3
+				// and 4, SCC+ gives channel 4 its own half. Without this flag an SCC+ song draws
+				// channel 4 with channel 3's shape.
+				case DEVID_K051649:
+					slotFlags = (device->devCfg != nullptr) ? (device->devCfg->flags & 1u) : 0u;
+					break;
+
 				default: break;
 				}
 			}

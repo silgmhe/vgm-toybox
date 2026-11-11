@@ -17,9 +17,15 @@ namespace toybox::chips
 	The core halts a channel whose frequency register is 8 or below (a divider of nine clocks or
 	less never completes a wave cycle), which is how "silence" starts here as well as a key-on.
 
-	Not modelled: the waveform RAM (a custom waveform can move the perceived octave, but the
-	period register still is the pitch) and the test register. SCC+ only changes where the wave
-	RAM lives, not the dividers, so one decoder serves both. */
+	The row draws the channel's **waveform RAM**: thirty-two signed 8-bit samples, walked at
+	`2 * clock / (f + 1)` steps a second (the tone is that over thirty-two). The two chips address
+	that RAM differently - SCC shares one table between channels 3 and 4, SCC+ gives channel 4 its
+	own half - so `modePlus`, from `ChipConfig::flags` bit 0, decides how a write is placed. The flag
+	is the VGM clock field's bit 31, the same bit libvgm reads to name the chip K052539.
+
+	Not modelled: the test register (it only gates writes, and its deform mode is not emulated by
+	the playback core either - so drawing a deformed table would disagree with the audio) and the
+	bus conflicts the core's own TODO lists. */
 class K051649Decoder final : public IChipDecoder
 {
 public:

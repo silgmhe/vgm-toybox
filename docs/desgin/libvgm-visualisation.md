@@ -329,7 +329,8 @@ track.channelIndex = channelIndex;    // 联动芯片的通道号接在父芯片
 | 波表 | Mikey —— 见 §9.13 | ✓ | ✓ | ✓ `collectMikeySamples` |
 | 波表 | MSM5232 —— 见 §9.14 | ✓ | ✓ | ✓ `collectMsm5232Samples` |
 | 波表 | **HuC6280**（6 通道，32 步 5 bit）—— 见 §9.23 | ✓ | ✓ | —（行与拖拽已有；整曲波表导出未做） |
-| 波表 | SCC（K051649）、X1-010、WonderSwan、Game Boy 波表、NES APU | — | — | — |
+| 波表 | **SCC / SCC+**（K051649 / K052539，5 通道 32 步 8 bit）—— 见 §9.24 | ✓ | ✓ | —（行与拖拽已有；整曲波表导出未做） |
+| 波表 | X1-010、WonderSwan、Game Boy 波表、NES APU | — | — | — |
 
 **不在本表的两类**：PSG 与 FM（AY、SN76489、SAA1099、POKEY、OPL 系、OPN 系、OPM、OPX 等）本来就用 `cycleFor` 画阶梯，不经过 `state.wave`；`FDS` 与 `N163` 由 NSF 后端（`NsfBackend` / `NsfBus`）加载，没有对应的 `ChipKind`，要单独处理。
 
@@ -1272,3 +1273,28 @@ tracker 才是对的。
 碰过 DDA 位、没有实际字节，所以这一类写被忽略，注释写在解码器的头文件里。
 
 **没有做的**：LFO（`0x08/0x09`，只调制通道 0）；整曲波表导出（行的拖拽与 “Export wavetables” 已可用）。
+### 9.24 SCC / SCC+ 的波表：32 步有符号 8 bit（2026-11-11）
+
+**一颗解码器、两个芯片。** K051649（SCC）与 K052539（SCC+）的差别只有波形 RAM 的布局：
+SCC 把 `0x60` 以上的地址**同时**写进通道 3 和通道 4（两者共用一张表），SCC+ 让通道 4 拥有
+`0x80-0x9F` 那半张独立表。标志来自 VGM 时钟字段的 **bit 31**（`vgmplayer.cpp:1270`），libvgm 用它命名
+芯片，我们把它经 `devCfg->flags` → `ChipConfig::flags` bit 0 传给解码器。
+
+**波形是有符号 8 位**（`int8_t waveram[32]`，核心 `k051649.c:141`），行解码成 `value / 128`
+（-1..+0.992，静音为 0），置 `tableWave = true`。
+
+**速率**：核心的计数器每输出样本加 `step = mclock·65536 / ((f+1)·rate/2)`，`rate = mclock/16`，
+于是每秒步数 = `2·clock/(f+1)`，音高是它的三十二分之一 = `clock/(16(f+1))`——与现有 `SccTable`
+同一个数，所以行与音符不会互相矛盾。
+
+**缓存**按 32 字节内容 hash（上限 64 张）。SCC 模式下通道 3/4 的字节相同，hash 相同，天然共用一次
+解码；SCC+ 模式下两者不同，各自有图。
+
+**test 寄存器的只读语义**也照抄了（`k051649.c:262-266`）：bit6 对两种芯片都冻结写入，bit7 只在 SCC
+模式冻结 `0x60` 以上的地址。
+
+**deform 不做**：SCC+ 的变形寄存器（port 5）会让波表在播放中旋转/漂移，但 libvgm 的核心并未模拟它
+（只存字节），七首测试曲目也没有一次写入——画一张“在变形”的表会和音频不一致，所以留作已知边界。
+
+**实测**：七首里四首是 SCC+（`01 Team Metal Slave`、`02 Bio Hazard Snatcher A/B`、`04 Squeak!!`，
+port 4 的写入全部落在 `0x80-0x9F`），三首是 SCC；时钟都是 1 789 772/3 Hz；没有 port 5 写入。
