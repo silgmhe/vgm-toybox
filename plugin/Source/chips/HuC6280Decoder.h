@@ -18,10 +18,15 @@ namespace toybox::chips
 	channel does; the switch can happen at any time, which is why the period carries a flag bit
 	instead of the channel owning two note tables.
 
+	The row draws the channel's **32-step table**, which the chip keeps per channel and walks at
+	`clock / f` steps a second; `0x06` is where those steps arrive (and, with DDA on, where a sample
+	level would arrive instead - that mode is not modelled, see below).
+
 	Not modelled, and why: the global and per-channel balance registers only scale left/right and
 	a MIDI note has no place for them; the LFO (0x08/0x09) modulates channel 0's frequency from
 	channel 1's waveform and would turn this into a second state machine; DDA mode (control bit 6)
-	streams samples instead of a tone, so the channel is reported as silent. */
+	streams samples through the same `0x06` register, so those writes are ignored rather than folded
+	into a table the chip is not walking. */
 class HuC6280Decoder final : public IChipDecoder
 {
 public:

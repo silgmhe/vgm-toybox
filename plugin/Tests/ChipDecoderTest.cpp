@@ -1462,6 +1462,109 @@ namespace
 		check (absoluteNote (notes[0]) == 69 && ! notes[0].isDrum, "the noise bit does nothing on channel 0");
 	}
 
+	/** The row draws the table the driver loaded, at the rate the counter walks it.
+
+		The chip's wavetable is thirty-two steps of five bits, unsigned and centred on 16; the tone is
+		that table walked at `clock / f` steps a second, which is why the note divides by `32 * f`.
+	*/
+	void testC6280WaveTable (void)
+	{
+		Stream stream;
+		stream.at (0, 0x00, 0x00);				// channel 0, still silent
+		for (int i = 0; i < 32; ++i)
+		{
+			stream.at (0, 0x06, (uint8_t) i);	// the table, loaded while the channel is off
+		}
+		stream.at (0, 0x02, 254);				// A4: 3579545 / (32 * 254) = 440.4 Hz
+		stream.at (0, 0x03, 0x00);
+		stream.at (0, 0x04, 0x9F);				// key on, volume 31
+
+		toybox::chips::HuC6280Decoder decoder;
+		decoder.reset (toybox::chips::ChipConfig { 3579545, 44100.0 });
+
+		for (const auto& write : stream.writes)
+		{
+			decoder.write (write);
+		}
+
+		const auto state = decoder.channelState (0);
+
+		check (state.wave != nullptr && state.wave->size () == 32,
+			   "the row carries the channel's thirty-two steps");
+		check (state.tableWave, "and says it is one cycle, not a recording");
+
+		if (state.wave != nullptr && state.wave->size () == 32)
+		{
+			check (std::abs ((*state.wave)[0] + 1.0f) < 1e-6f, "step 0 is the bottom of the range");
+			check (std::abs ((*state.wave)[16]) < 1e-6f, "step 16 is the midpoint, not full scale");
+			check (std::abs ((*state.wave)[31] - 0.9375f) < 1e-6f,
+				   "step 31 is one sixteenth below full scale");
+		}
+
+		check (std::abs (state.sampleRate - 3579545.0f / 254.0f) < 1.0f,
+			   "and the rate is clock / divider, the counter's own step rate");
+	}
+
+	/** Where the next `0x06` write lands: only a silent channel advances the index, and DDA off
+		resets it. Copying this is what keeps the row's shape aligned with what the chip plays. */
+	void testC6280WaveIndex (void)
+	{
+		Stream stream;
+		stream.at (0, 0x00, 0x00);
+		stream.at (0, 0x06, 0x00);				// silent: writes step 0, index -> 1
+		stream.at (0, 0x06, 0x00);				// step 1, index -> 2
+		stream.at (0, 0x06, 0x00);				// step 2, index -> 3
+		stream.at (0, 0x04, 0x9F);				// key on at index 3
+		stream.at (0, 0x06, 0x1F);				// keyed: rewrites step 3, does not advance
+		stream.at (0, 0x04, 0xC0);				// DDA on
+		stream.at (0, 0x04, 0x80);				// DDA off: index back to 0
+		stream.at (0, 0x06, 0x00);				// so this writes step 0 again
+
+		toybox::chips::HuC6280Decoder decoder;
+		decoder.reset (toybox::chips::ChipConfig { 3579545, 44100.0 });
+
+		for (const auto& write : stream.writes)
+		{
+			decoder.write (write);
+		}
+
+		const auto state = decoder.channelState (0);
+
+		check (state.wave != nullptr && state.wave->size () == 32, "the table is still there");
+
+		if (state.wave != nullptr && state.wave->size () == 32)
+		{
+			check (std::abs ((*state.wave)[0] + 1.0f) < 1e-6f,
+				   "DDA off put the pointer back, so the last write landed on step 0");
+			check (std::abs ((*state.wave)[3] - 0.9375f) < 1e-6f,
+				   "and the keyed write stayed on the step it was playing");
+		}
+	}
+
+	/** A channel switched to noise says so, keeps its drum key, and has no table to draw. */
+	void testC6280NoiseKind (void)
+	{
+		Stream stream;
+		stream.at (0, 0x00, 0x04);
+		stream.at (0, 0x04, 0x9F);
+		stream.at (0, 0x07, 0x9F);				// noise on, fastest rate
+
+		toybox::chips::HuC6280Decoder decoder;
+		decoder.reset (toybox::chips::ChipConfig { 3579545, 44100.0 });
+
+		for (const auto& write : stream.writes)
+		{
+			decoder.write (write);
+		}
+
+		check (decoder.channelKind (4) == toybox::chips::ChannelKind::c6280Noise,
+			   "channel 4 reports the noise generator, not a table");
+		check (decoder.isDrum (4), "and stays a drum track");
+		check (decoder.channelState (4).wave == nullptr, "with nothing for the row to draw as a table");
+		check (decoder.channelKind (0) == toybox::chips::ChannelKind::c6280Wave,
+			   "the other channels keep their wave kind");
+	}
+
 	// ---- K051649 / SCC ----
 
 	std::vector<NoteEvent> runScc (const Stream& stream, uint32_t totalSamples)
@@ -7389,6 +7492,9 @@ int main (void){
 	testC6280SelectsOneChannel();
 	testC6280NoiseIsADrum();
 	testC6280NoiseOnlyOnTheLastTwoChannels();
+	testC6280WaveTable();
+	testC6280WaveIndex();
+	testC6280NoiseKind();
 
 	testSccWaveNote();
 	testSccKeyMaskEndsTheNote();

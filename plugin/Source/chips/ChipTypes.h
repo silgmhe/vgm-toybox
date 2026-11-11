@@ -39,6 +39,7 @@ enum class ChannelKind
 	sn76489Square,
 	sn76489Noise,
 	c6280Wave,		// HuC6280: a 32-step wavetable channel, pitch from a 12-bit divider
+	c6280Noise,		// HuC6280: channels 4 and 5 switched to their LFSR generator
 	sccWave,		// K051649/SCC: the same idea at 16 clocks per sample
 	x1Wave,			// X1-010: a 128-byte wavetable stepped at clock * pitch / 2^26
 	c140Pcm,		// C140: a 16-bit playback rate over recorded samples, root rate in Pitch.h

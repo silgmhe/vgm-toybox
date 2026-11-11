@@ -37,6 +37,7 @@ int waveKindForChannelKind (chips::ChannelKind kind)
 		case ChannelKind::ayNoise:
 		case ChannelKind::sn76489Noise:
 		case ChannelKind::wsNoise:
+		case ChannelKind::c6280Noise:
 			return (int) Kind::noise;
 
 		case ChannelKind::nesDmc:

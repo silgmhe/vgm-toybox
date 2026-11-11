@@ -328,7 +328,8 @@ track.channelIndex = channelIndex;    // 联动芯片的通道号接在父芯片
 | 波表 | K005289 —— 见 §9.12 | ✓ | ✓ | ✓ `collectK005289Samples` |
 | 波表 | Mikey —— 见 §9.13 | ✓ | ✓ | ✓ `collectMikeySamples` |
 | 波表 | MSM5232 —— 见 §9.14 | ✓ | ✓ | ✓ `collectMsm5232Samples` |
-| 波表 | HuC6280、SCC（K051649）、X1-010、WonderSwan、Game Boy 波表、NES APU | — | — | — |
+| 波表 | **HuC6280**（6 通道，32 步 5 bit）—— 见 §9.23 | ✓ | ✓ | —（行与拖拽已有；整曲波表导出未做） |
+| 波表 | SCC（K051649）、X1-010、WonderSwan、Game Boy 波表、NES APU | — | — | — |
 
 **不在本表的两类**：PSG 与 FM（AY、SN76489、SAA1099、POKEY、OPL 系、OPN 系、OPM、OPX 等）本来就用 `cycleFor` 画阶梯，不经过 `state.wave`；`FDS` 与 `N163` 由 NSF 后端（`NsfBackend` / `NsfBus`）加载，没有对应的 `ChipKind`，要单独处理。
 
@@ -1247,3 +1248,27 @@ tracker 才是对的。
 
 **记录**：`docs/memo/2026-11-10-the-staircase-that-survives.md` —— 误判、镜像、实测数字、四项边界，
 以及以后判断“导出听着不对”的三问。
+### 9.23 HuC6280 的波表：32 步 5 bit（2026-11-11）
+
+**它是波表，不是采样。** 六个通道，每通道 32 个 5 bit 点，频率是一个 12 bit 分频；没有 ROM、没有区间。
+所以这一颗的“实现”是把寄存器流里的表解出来，而不是像 DAC/Y8950 那样定义击打边界。
+
+**索引的规则照抄核心**（`c6280_mame.c`）：`0x06` 写到当前 `index`，**只在通道未 key-on 时自增**，
+`0x04` 的 DDA 位 1→0 时 `index = 0`。驱动就是在关音时装载 32 个字节，然后 key-on；不照抄这条，
+画出来的表会整体错位一步。
+
+**速率**：核心的 `wave_freq_tab` 是 `((clk/rate) * 4096) / f`，计数器每跨 4096 走一步，于是每秒步数
+`clock / f`（`f == 0` 按 4096），音高是它的三十二分之一。行把 `sampleRate` 填成步数、`tableWave = true`
+（波表是一个周期，不是录音，导出才走 `nearest()` 那条路）。
+
+**形状与缓存**：5 bit 无符号、中点 16，解码为 `(v - 16) / 16`（-1..+0.9375）。`channelState` 每帧被
+六行各问一次，而驱动可能每帧重写一张表，所以按 32 字节内容 hash 缓存，上限 64 张（一首歌实际只有
+1–3 张不同的表）。
+
+**噪声**：`0x07` bit7 打开后，通道 4/5 换到 LFSR；`channelKind` 返回新增的 `c6280Noise`，行画噪声而不是
+一张它已经不再走的表，`isDrum` 保持不变。
+
+**DDA 不做**：`0x04` bit6 打开时 `0x06` 是采样电平（流），不是表的字节。四首测试曲目只在初始化里
+碰过 DDA 位、没有实际字节，所以这一类写被忽略，注释写在解码器的头文件里。
+
+**没有做的**：LFO（`0x08/0x09`，只调制通道 0）；整曲波表导出（行的拖拽与 “Export wavetables” 已可用）。
