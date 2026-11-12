@@ -1000,6 +1000,12 @@ private:
 		{
 			const int channel = tokens[2].fromFirstOccurrenceOf (".", false, false).getIntValue ();
 
+			// **`engine wave.<n>.peak` reads the row's highest sample, not its length.** A table
+			// that never arrived still has thirty-two points and draws as a flat line, so a size
+			// assertion cannot tell the two apart - the WonderSwan upload path passed one while
+			// every row was empty. `wave.<n>` stays the size, because that is what most checks mean.
+			const bool wantsPeak = tokens[2].endsWith (".peak");
+
 			// The engine only keeps the display state alive while something is asking for it - the
 			// editor turns this on when the keyboard view opens, and a script has no editor page.
 			processor.getEngine ().setStateCaptureWanted (true);
@@ -1008,16 +1014,38 @@ private:
 			processor.getEngine ().captureChipState (snapshot);
 
 			int points = 0;
+			const bool present = channel >= 0 && (std::size_t) channel < snapshot.channels.size ()
+								 && snapshot.channels[(std::size_t) channel].wave != nullptr;
 
-			if (channel >= 0 && (std::size_t) channel < snapshot.channels.size ()
-				&& snapshot.channels[(std::size_t) channel].wave != nullptr)
+			if (present)
 			{
 				points = (int) snapshot.channels[(std::size_t) channel].wave->size ();
 			}
 
-			report (fieldMatches (juce::String (points), tokens[3], tokens[4]),
-					"engine.wave." + juce::String (channel) + " " + tokens[3] + " '" + tokens[4]
-						+ "'   (was: " + juce::String (points) + " of "
+			juce::String actual;
+
+			if (wantsPeak)
+			{
+				float peak = -2.0f;		// below the range a wave can carry
+
+				if (present)
+				{
+					for (const float value : *snapshot.channels[(std::size_t) channel].wave)
+					{
+						peak = juce::jmax (peak, value);
+					}
+				}
+
+				actual = (peak < -1.5f) ? "none" : juce::String (peak, 3);
+			}
+			else
+			{
+				actual = juce::String (points);
+			}
+
+			report (fieldMatches (actual, tokens[3], tokens[4]),
+					"engine.wave." + juce::String (channel) + (wantsPeak ? ".peak " : " ")
+						+ tokens[3] + " '" + tokens[4] + "'   (was: " + actual + " of "
 						+ juce::String ((int) snapshot.channels.size ()) + " channels)");
 			return;
 		}

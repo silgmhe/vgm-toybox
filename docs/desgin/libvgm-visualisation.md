@@ -1339,6 +1339,12 @@ start/end 播 8 位有符号样本（鼓、语音）；波形模式走芯片内 
 | `VgmSongLoader` | `case 0xC6` → 发一条带 `isMemory` 的写 |
 | `chips::RegisterWrite` | 新增 `bool isMemory`——寄存器 `0x82` 与 RAM `0x0082` 数字相同，标志是唯一能分清的东西 |
 | `WswanDecoder` | 保存 16 KB 镜像，按基址取 16 字节、32 个半字节 |
+| `ChipWriteRouter` | WS 分支改为**原样入队**整条写入（见下）|
+
+**路由必须原样传递整条写入。** 这一步最初漏了：`ChipWriteRouter` 的 WS 分支按 `(reg, value, time)` 重建写入，
+把 `port`（地址高字节）与 `isMemory` 一起丢掉，于是上传从未落地、四行画成平线——而
+`engine wave.N == 32` **依然通过**，因为空表也有 32 点。现在 WS 分支走 `queue(device, const RegisterWrite&)`，
+harness 也补了 `engine wave.<n>.peak`（最高样本）：方波是 `0.875`，空表是 `-1`，两者不会再被混为一谈。
 
 **取样细节全部照抄 `ws_audio.c:339-344`**：两个半字节一字节，**偶数步取低半字节**、奇数步取高半字节，
 `(nibble - 8) / 8` 归一化（4 bit 以 8 为静音）。半字节顺序写反不会报错，只会把每对相邻步镜像——所以断言

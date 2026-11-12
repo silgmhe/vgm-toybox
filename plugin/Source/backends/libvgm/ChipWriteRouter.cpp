@@ -269,7 +269,9 @@ void ChipWriteRouter::route (const midi::SongIr& ir, const chips::RegisterWrite&
 		decoders.decoder<chips::X1_010Decoder> ().queue (deviceFor (DEVID_X1_010, instance), reg, value, time, port);
 		break;
 	case midi::ChipKind::wonderswan:
-		decoders.decoder<chips::WswanDecoder> ().queue (deviceFor (DEVID_WSWAN, instance), reg, value, time);
+		// As it arrived, not as `(reg, value, time)`: a `0xC6` byte is RAM and says so with
+		// `isMemory`, and its address lives in `port`/`reg` (`ChipWriteRouter.h`, `queue`).
+		decoders.decoder<chips::WswanDecoder> ().queue (deviceFor (DEVID_WSWAN, instance), w);
 		break;
 	case midi::ChipKind::multiPcm:
 		decoders.decoder<chips::MultiPcmDecoder> ().queue (deviceFor (DEVID_YMW258, instance), reg, value, time);

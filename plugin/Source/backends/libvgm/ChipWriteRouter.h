@@ -92,6 +92,26 @@ struct ChipBuffer final : DecoderBufferBase
 		devices[device->id] = device;
 	}
 
+	/** **A write that carries more than a register number**, queued as it arrived.
+
+		The WonderSwan's `0xC6` bytes put an address in `port`/`reg` and say so with `isMemory`;
+		rebuilding such a write from `(reg, value, time)` - which is what the register overload above
+		does - drops both fields, and the decoder then files a RAM byte as a register. Nothing
+		fails: the upload simply never lands, and a waveform row draws an empty table as a flat line.
+	*/
+	void queue (const PLR_DEV_INFO* device, const chips::RegisterWrite& source)
+	{
+		if (device == nullptr)
+		{
+			return;
+		}
+
+		chips::RegisterWrite write = source;
+		write.deviceId = device->id;
+		writes[device->id].push_back (write);
+		devices[device->id] = device;
+	}
+
 	/** The SCC command carries a latch and the value that follows it: the chip sees two writes,
 		and so does the decoder. */
 	void queuePair (const PLR_DEV_INFO* device, uint8_t reg, uint8_t latch,

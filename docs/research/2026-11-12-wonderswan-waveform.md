@@ -167,3 +167,23 @@ delta   = freq * ratemul，ratemul = clock * 65536 / smplrate，smplrate = clock
 验证：`testWswanWaveTable`（32 步、半字节顺序、端点值、`clock/(2048-f)`、+0x10 步长）、
 `testWswanMemoryIsNotARegister`（`0x0082` 不改音高）、`engine.wave.0..3 == 32` 在 harness 上通过，
 截图 `build/shots/ws-before.png` / `ws-after.png`。
+
+---
+
+## 10. 修复记录：路由把写入“重建”了（2026-11-12）
+
+第一版在 `01 The Prelude` 上看起来正常（四行都有 32 点），但 `07 Main Theme` 在 12 秒后四行全是平线。
+用探针查下来：`VgmSongLoader` 确实发出了 `0xC6`，**解码器的 `isMemory` 分支一次都没进**。
+
+原因是 `ChipWriteRouter` 的 WonderSwan 分支：
+
+```cpp
+device.queue (deviceFor (DEVID_WSWAN, instance), reg, value, time);   // port 与 isMemory 都没了
+```
+
+它按 `(reg, value, time)` **重建**写入，`queue` 的默认 `port = 0`，`isMemory` 更是没有；于是 RAM 字节被当成
+寄存器写（`reg=0x00` 落到 `switch` 的 `default`，静默丢弃）。改成 `queue (device, const RegisterWrite&)`
+原样入队后，12.47 秒的真实内容与解析结果一致（ch0/ch2 方波、ch1 自定义形状）。
+
+**为什么第一版的断言没抓住**：`engine wave.N == 32` 只比大小，**空表也是 32 点**。为此给 harness 增加了
+`engine wave.<n>.peak`，并新增 `plugin/Tests/scripts/wave-wonderswan.txt`：方波峰值 `0.875`，空表 `-1`。

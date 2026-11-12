@@ -1,0 +1,27 @@
+# The WonderSwan's waveform tables reach the row - and they are the song's bytes.
+#
+# The chip has no waveform registers: `0x8F` names a base in 64-byte units, the four tables sit
+# sixteen bytes apart from it in the 16 KB of internal RAM, and the driver uploads them through
+# `0xC6`. Every layer between the file and the decoder used to rebuild that write from
+# `(reg, value, time)`, which dropped both `port` (the address high byte) and `isMemory` - the
+# upload never landed and each row drew an empty table as a flat line.
+#
+# **A size assertion could not see that**: a table that never arrived still has thirty-two points.
+# The peak can - `01 The Prelude` loads a square wave, so the highest step is nibble 15 of 15,
+# `(15 - 8) / 8 = 0.875`, while a flat zero table's peak is -1.
+
+size 900 700
+
+load "test_file/Final_Fantasy_IV_(Bandai_WonderSwan_Color)/01 The Prelude.vgz"
+tick
+
+menu invoke view.keyboard
+tick
+
+engine play
+host 0.2 playing
+
+assert engine wave.0 == 32
+assert engine wave.0.peak == 0.875
+assert engine wave.3 == 32
+assert engine wave.3.peak == 0.875

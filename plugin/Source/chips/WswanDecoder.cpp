@@ -260,6 +260,7 @@ void WswanDecoder::write (const RegisterWrite& w)
 	{
 		const std::size_t address = (((std::size_t) w.port << 8) | (std::size_t) w.reg);
 
+
 		if (address < impl->ram.size ())
 		{
 			impl->ram[address] = (uint8_t) w.value;
