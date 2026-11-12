@@ -32,7 +32,6 @@ language: 简体中文
 "menu.file.exit" = "退出";
 "menu.file.export" = "导出";
 "menu.file.export.samples" = "所有 PCM 采样...";
-"menu.file.export.wavetables" = "所有波表...";
 "menu.file.open" = "打开歌曲...";
 "menu.help" = "帮助";
 "menu.help.about" = "关于 VGMToybox...";
@@ -242,9 +241,6 @@ language: 简体中文
 "export.samples.title" = "采样已导出";
 "export.samples.seen" = "找到的采样数：{0}";
 "export.samples.none" = "这个文件里没有可导出的采样。只有把采样放在 ROM 里的芯片才会被收集；具体覆盖见设计文档的表格。";
-"export.cycles.title" = "波表已导出";
-"export.cycles.seen" = "找到的波表数：{0}";
-"export.cycles.none" = "这个文件里没有可导出的波表。只有把波形表存在芯片里的芯片才会被收集；具体覆盖见设计文档的表格。";
 
 	"export.noChannels" = "没有写入任何文件：面板根本没有收到通道数据。";
 	"export.seen" = "快照中的通道数：{0}";

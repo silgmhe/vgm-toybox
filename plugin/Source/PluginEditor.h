@@ -188,9 +188,6 @@ private:
 	/** Every PCM sample the song started, written into a folder the user picks. */
 	void exportSamples (void);
 
-	/** Every wavetable the song used, written as one cycle per table. The counterpart of
-		`exportSamples`, and separate because a cycle and a recording are written differently. */
-	void exportWavetables (void);
 
 	/** **The song's own folder inside the one the user picked**, created on demand. Both exports
 		land in `chosen/<song title>/` rather than scattering files next to it. */

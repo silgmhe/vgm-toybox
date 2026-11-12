@@ -78,8 +78,6 @@ public:
 	/** File > Export > ... - writes files, and owns the folder picker and the errors that follow. */
 	std::function<void (void)> onExportSamples;
 
-	/** File > Export > All Wavetables: the same contract as `onExportSamples`, one cycle per table. */
-	std::function<void (void)> onExportWavetables;
 
 	/** The pages, in menu order - filled from the window's ViewStack. */
 	juce::StringArray viewNames;
@@ -124,12 +122,6 @@ public:
 		exportSamples.label = i18n::tr ("menu.file.export.samples");
 		exportSamples.action = onExportSamples;
 		exportMenu.children.push_back (std::move (exportSamples));
-
-		MenuEntry exportWavetables;
-		exportWavetables.id = "file.export.wavetables";
-		exportWavetables.label = i18n::tr ("menu.file.export.wavetables");
-		exportWavetables.action = onExportWavetables;
-		exportMenu.children.push_back (std::move (exportWavetables));
 
 		file.entries.push_back (std::move (exportMenu));
 

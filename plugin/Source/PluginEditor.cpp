@@ -87,7 +87,6 @@ ToyboxAudioProcessorEditor::ToyboxAudioProcessorEditor (ToyboxAudioProcessor& p)
 	// command, one action, however it is reached.
 	menu.onOpenSong = [this] { commands.perform ("file.open"); };
 	menu.onExportSamples = [this] { exportSamples (); };
-	menu.onExportWavetables = [this] { exportWavetables (); };
 	menu.onCloseSong = [this] { closeSong(); };
 	menu.onQuit = [] { juce::JUCEApplicationBase::quit(); };
 	menu.onAbout = [this] { showAbout(); };
@@ -665,16 +664,20 @@ void ToyboxAudioProcessorEditor::exportSamples (void)
 	// Taken here rather than inside the chooser's callback: the audio thread is still starting
 	// samples, and a later copy would be a different list from the one the count describes.
 	//
-	// **Recordings only.** The same list carries the wavetable cycles the collectors scan (VSU,
-	// ES5503, K005289, ...), and a cycle is not a sample - it has no duration, and holding it at
-	// the project's rate writes a short tone instead of a table. Those go to "All Wavetables".
-	auto samples = toybox::playback::recordsOnly (processor.getEngine().currentSamples());
+	// **One menu, two kinds of file, two writers.** The list a song hands over is recordings and
+	// wavetable cycles together; each is written the way its destination reads it - a recording at
+	// the project's rate (so the steps survive), a cycle as one period with the marker. Two nested
+	// menus were tried and dropped: only a handful of chips produce cycles, and a user who wants
+	// them is already in this export.
+	const auto all = processor.getEngine().currentSamples();
+	const auto records = toybox::playback::recordsOnly (all);
+	const auto cycles = toybox::playback::cyclesOnly (all);
 
 	toybox::ui::ExportReport found;
 	found.samples = true;
-	found.channelsSeen = (int) samples.size();
+	found.channelsSeen = (int) (records.size() + cycles.size());
 
-	if (samples.empty())
+	if (records.empty() && cycles.empty())
 	{
 		showExportReport (found);
 		return;
@@ -686,7 +689,7 @@ void ToyboxAudioProcessorEditor::exportSamples (void)
 
 	sampleChooser->launchAsync (juce::FileBrowserComponent::openMode
 									| juce::FileBrowserComponent::canSelectDirectories,
-								[this, samples] (const juce::FileChooser& chooser)
+								[this, records, cycles] (const juce::FileChooser& chooser)
 								{
 									const auto folder = chooser.getResult();
 
@@ -699,7 +702,7 @@ void ToyboxAudioProcessorEditor::exportSamples (void)
 
 									toybox::ui::ExportReport done;
 									done.samples = true;
-									done.channelsSeen = (int) samples.size();
+									done.channelsSeen = (int) (records.size() + cycles.size());
 									done.folder = target;
 
 									if (! target.createDirectory().wasOk())
@@ -714,72 +717,30 @@ void ToyboxAudioProcessorEditor::exportSamples (void)
 									// filters away the steps an 8-bit DAC is made of. The setting
 									// resolves to the host's rate by default; see `heldAt`.
 									done.written = toybox::playback::writeSamples (
-										samples, target.getFullPathName().toStdString(),
+										records, target.getFullPathName().toStdString(),
 										(double) toybox::settings::SettingsStore::getInstance ()
 											.getExportSampleSeconds (),
 										&done.truncated,
 										toybox::settings::SettingsStore::getInstance ()
 											.getExportSampleRateHz (processor.getSampleRate ()));
-									done.failed = done.channelsSeen - done.written;
 
-									showExportReport (done);
-								});
-}
-
-void ToyboxAudioProcessorEditor::exportWavetables (void)
-{
-	auto cycles = toybox::playback::cyclesOnly (processor.getEngine().currentSamples());
-
-	toybox::ui::ExportReport found;
-	found.cycles = true;
-	found.channelsSeen = (int) cycles.size();
-
-	if (cycles.empty())
-	{
-		showExportReport (found);
-		return;
-	}
-
-	sampleChooser = std::make_unique<juce::FileChooser> (toybox::i18n::tr ("export.cycles.title"),
-														 juce::File::getSpecialLocation (juce::File::userMusicDirectory),
-														 juce::String());
-
-	sampleChooser->launchAsync (juce::FileBrowserComponent::openMode
-									| juce::FileBrowserComponent::canSelectDirectories,
-								[this, cycles] (const juce::FileChooser& chooser)
-								{
-									const auto folder = chooser.getResult();
-
-									if (folder == juce::File())
+									// The keyboard page's own rules for the tables: one period, at
+									// the depth the chip produced, since these levels already are it.
+									if (! cycles.empty())
 									{
-										return;
+										const auto tables = toybox::playback::writeCycleSamples (
+											cycles, target.getFullPathName().toStdString(),
+											toybox::playback::ExportMode::single, 2.0,
+											toybox::playback::kNativeBits);
+
+										done.written += tables.written;
+										done.skippedSample += tables.skippedSample;
 									}
 
-									const auto target = exportFolder (folder);
-
-									toybox::ui::ExportReport done;
-									done.cycles = true;
-									done.channelsSeen = (int) cycles.size();
-									done.folder = target;
-
-									if (! target.createDirectory().wasOk())
-									{
-										done.failed = done.channelsSeen;
-										showExportReport (done);
-										return;
-									}
-
-									// The keyboard page's own rules: one cycle, at the depth the chip
-									// produced (the collectors already decoded it). A menu entry has no
-									// options overlay, so the defaults are the button's single-cycle ones.
-									const auto outcome = toybox::playback::writeCycleSamples (
-										cycles, target.getFullPathName().toStdString(),
-										toybox::playback::ExportMode::single, 2.0,
-										toybox::playback::kNativeBits);
-
-									done.written = outcome.written;
-									done.skippedSample = outcome.skippedSample;
-									done.failed = outcome.failed;
+									// Everything that was handed over is either written, skipped
+									// with a reason, or failed - the three numbers have to add up
+									// to `channelsSeen`, or the report is lying about one of them.
+									done.failed = done.channelsSeen - done.written - done.skippedSample;
 
 									showExportReport (done);
 								});

@@ -36,7 +36,6 @@ language: English
 "menu.file.exit" = "Exit";
 "menu.file.export" = "Export";
 "menu.file.export.samples" = "All PCM Samples...";
-"menu.file.export.wavetables" = "All Wavetables...";
 "menu.file.open" = "Open Song...";
 "menu.help" = "Help";
 "menu.help.about" = "About VGMToybox...";
@@ -246,9 +245,6 @@ language: English
 "export.samples.title" = "Samples exported";
 "export.samples.seen" = "Samples found: {0}";
 "export.samples.none" = "This file has no samples to export. Only chips that keep their samples in a ROM are collected; the coverage table in the design doc lists which ones.";
-"export.cycles.title" = "Wavetables exported";
-"export.cycles.seen" = "Wavetables found: {0}";
-"export.cycles.none" = "This file has no wavetables to export. Only chips that keep their tables inside the chip are collected; the coverage table in the design doc lists which ones.";
 
 	"export.noChannels" = "Nothing was written: the panel is not receiving channel state at all.";
 	"export.seen" = "Channels in the snapshot: {0}";

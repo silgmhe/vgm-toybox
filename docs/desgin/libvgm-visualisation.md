@@ -1388,25 +1388,24 @@ Wave 通道的波形则是芯片内的 16 字节 RAM（`0xFF30-0xFF3F`，在 `0x
 
 **实测**：`01 Title` 的 Wave 行从空白变成真实三角波；`wave.2 == 32` 且 `wave.2.peak == 0.875`，
 三条脉冲/噪声行的 `wave` 仍为 0（它们不需要表）。
-### 9.28 两条导出：PCM 采样与整曲波表（2026-11-12）
+### 9.28 一次导出，两种文件：录音与周期（2026-11-12）
 
-**在这之前，“Export samples”里混着两类东西。** `DecodedSample` 没有“这是周期还是录音”的标记，于是
-VSU、ES5503、K005289、Mikey、MSM5232 五个波表收集器产出的 32–256 点周期，和 C140、SegaPCM 的真实录音一起
-进了同一个列表，`writeSamples` 一律按宿主速率零阶保持——32 点的表被拉成几十毫秒的阶梯音，既不是样本，
-也不是波表。
+**先做过两个菜单，然后撤回了。** 分开的理由成立（周期没有时长，不该按宿主速率保持成阶梯音），但只有
+少数芯片产出周期，为它们单开一个菜单既少有人用，又让人在两处找文件。最终落在**一个菜单、两个写出器**：
 
 | 项 | 做法 |
 |---|---|
-| 标记 | `DecodedSample::isCycle`；五个波表收集器在 `collector.add(..., /*isCycle*/ true)` 里声明 |
-| PCM 导出 | `writeSamples` 跳过周期；`recordsOnly()` 供菜单取列表——**行为变更**：老用户点 “All PCM Samples” 不再得到那批 32 点文件 |
-| 波表导出 | 新菜单项 `file.export.wavetables`（All Wavetables…）→ `cyclesOnly()` → `writeCycleSamples()` |
-| 写出规则 | 与键盘页按钮**同一份实现**（`writeCycleFile`）：single 模式 2048 点、`<!>` 周期标记、深度按设置；`kNativeBits` 表示“不再次量化”，因为这些电平已经是芯片自己的深度 |
-| 落盘位置 | 两条导出都写进 `用户选的目录/<歌曲标题>/`（`exportFolder()`，标题取文件名去扩展名），不再是散在所选目录里 |
-| 报告 | `ExportReport::cycles`，overlay 用一组 `Labels` 选三种文案（快照 / 采样 / 波表），不再是两层三目 |
+| 标记 | `DecodedSample::isCycle`；五个波表收集器（VSU / ES5503 / K005289 / Mikey / MSM5232）声明为周期 |
+| 菜单 | 只有 **File > Export > All PCM Samples…**（`file.export.samples`） |
+| 写出 | 录音 → `writeSamples`（宿主速率零阶保持）；周期 → `writeCycleSamples`（一个 2048 点周期、`<!>` 标记、`kNativeBits` 不再量化） |
+| 落盘 | `所选目录/<歌曲标题>/`（`exportFolder()`），目录按需创建 |
+| 报告 | 两种文件的计数相加；失败数由 `总数 − 写出 − 跳过` 推出，三者必须自洽 |
 
-**仍未做**：HuC6280、SCC、X1-010 波表半、WonderSwan、Game Boy 五颗的收集器（见
-`docs/research/2026-11-12-wavetable-batch-export.md`）。在它们落地之前，All Wavetables 只覆盖已有的五颗
-波表芯片。
+`writeSamples` 仍然跳过周期、`writeCycleSamples` 仍然跳过录音——两个写出器各自只接受自己那种，编辑器
+负责把一份列表分两次交给它们。这样“顺便导出波表”不会把波表写成音频，也不必让用户知道有两种文件。
 
-**验证**：`testWavetableBatchExport`（拆分、PCM 导出跳过周期、波表导出一个 2048 点周期且与按钮同尺寸）、
-`assert menu.file.export.wavetables enabled`。
+**仍未做**：HuC6280、SCC、X1-010 波表半、WonderSwan、Game Boy 五颗的收集器
+（见 `docs/research/2026-11-12-wavetable-batch-export.md`）。
+
+**验证**：`testWavetableBatchExport`（拆分、两个写出器互不接受对方的输入、周期文件 2048 点与按钮同尺寸）、
+`assert menu.file.export.samples enabled`。
