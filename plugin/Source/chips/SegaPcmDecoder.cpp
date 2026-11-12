@@ -432,10 +432,16 @@ ChannelState SegaPcmDecoder::channelState (int channel) const
 	// registers-forensics.md` is where that was measured.
 	//
 	// `tableWave` stays false: this is a recording being played, not a cycle to loop.
+	//
+	// **A stopped voice keeps its window**, like every other sample player here: C140, K053260,
+	// MultiPCM and the X1-010's PCM half all draw the bytes their registers name whether or not the
+	// voice is still sounding, and a row that went blank the instant a drum ended would flicker on
+	// every hit. `latchEnd > latchStart` is what tells "was played once" from "never had a range" -
+	// the RAM starts at zero, so an untouched voice would otherwise draw 256 bytes of the ROM start.
 	const uint32_t windowStart = impl->startOf (voice);
 	const uint32_t windowEnd = impl->endOf (voice);
 
-	if (impl->sounding (voice) && windowEnd > windowStart && ! impl->rom.empty ())
+	if (voice.latchEnd > voice.latchStart && windowEnd > windowStart && ! impl->rom.empty ())
 	{
 		const uint32_t length = (std::min) (windowEnd - windowStart, kMaxWaveBytes);
 		const uint64_t key = ((uint64_t) windowStart << 32) | (uint64_t) length;

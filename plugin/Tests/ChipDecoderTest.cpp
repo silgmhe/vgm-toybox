@@ -5447,8 +5447,8 @@ namespace
 		quiet.write (toybox::chips::RegisterWrite { 0, 0x85, 0x00, 0x80, 0, 0 });
 		quiet.write (toybox::chips::RegisterWrite { 0, 0x86, 0x00, 0x80, 0, 0 });
 
-		check (quiet.channelState (0).wave == nullptr,
-			   "a voice with both volumes at zero is not drawn as sounding");
+		check (! quiet.channelState (0).gate,
+			   "a voice with both volumes at zero is not sounding");
 	}
 
 	/** **The row draws the window the registers name right now**, not the one the attack latched.
@@ -5490,7 +5490,7 @@ namespace
 		write (0x07, 128);
 		write (0x84, 0x7C, 0x80);	// middle byte of 0x437C
 		write (0x85, 0x43, 0x80);	// high byte
-		write (0x86, 0x00, 0x80);	// play
+		write (0x86, 0x02, 0x80);	// play with loop disabled, so the gate can close
 
 		const auto first = decoder.channelState (0);
 
@@ -5521,6 +5521,16 @@ namespace
 		}
 
 		check (second.gate, "seeking does not stop the voice");
+
+		// **The row keeps the last window after the voice stops**, which is what the other sample
+		// players here do (C140, K053260, MultiPCM, the X1-010's PCM half): a row that went blank
+		// the moment a drum ended would flicker on every hit.
+		decoder.advance (44100u * 4u);
+
+		const auto stopped = decoder.channelState (0);
+		check (! stopped.gate, "the voice has finished its bytes");
+		check (stopped.wave != nullptr && ! stopped.wave->empty (),
+			   "and the row still draws the window it was playing");
 	}
 
 	/** **An MSM5232 voice emits the sum of the taps its group enables, and one period is
