@@ -228,7 +228,7 @@ language: English
 		"visualiser.keyboard" = "Keyboard";
 	"visualiser.keyboardUnavailable" = "This format does not report per-channel state yet.";
 	"visualiser.keyboardUnsupported" = "The channels of this chip cannot be shown yet.";
-	"visualiser.export" = "Export wavetables";
+	"visualiser.export" = "Export snapshot";
 	"visualiser.exportEmpty" = "Nothing to export yet.";
 "visualiser.dragHint" = "Drag into a wavetable synth";
 "visualiser.dragFailed.title" = "Could not write the wavetable";
@@ -248,7 +248,7 @@ language: English
 
 	"export.noChannels" = "Nothing was written: the panel is not receiving channel state at all.";
 	"export.seen" = "Channels in the snapshot: {0}";
-	"export.options.title" = "Export wavetables";
+	"export.options.title" = "Export wavetable snapshot";
 	"export.options.single" = "Single cycle - for a wavetable synth";
 	"export.options.bits" = "Depth";
 	"export.options.nativeBits" = "Use the chip's own depth";

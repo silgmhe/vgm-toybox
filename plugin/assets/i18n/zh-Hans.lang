@@ -224,7 +224,7 @@ language: 简体中文
 		"visualiser.keyboard" = "键盘";
 	"visualiser.keyboardUnavailable" = "该格式暂未提供逐通道状态。";
 	"visualiser.keyboardUnsupported" = "该芯片的逐通道状态尚未支持。";
-	"visualiser.export" = "导出波表";
+	"visualiser.export" = "导出波表快照";
 	"visualiser.exportEmpty" = "当前没有可导出的波形。";
 "visualiser.dragHint" = "拖入波表合成器即可导入";
 "visualiser.dragFailed.title" = "无法写出波表";
@@ -244,7 +244,7 @@ language: 简体中文
 
 	"export.noChannels" = "没有写入任何文件：面板根本没有收到通道数据。";
 	"export.seen" = "快照中的通道数：{0}";
-	"export.options.title" = "导出波表";
+	"export.options.title" = "导出波表快照";
 	"export.options.single" = "单周期 - 给波表合成器";
 	"export.options.bits" = "位深";
 	"export.options.nativeBits" = "按芯片实际位深";
