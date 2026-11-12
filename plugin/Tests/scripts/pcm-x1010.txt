@@ -14,5 +14,5 @@ size 900 700
 load "test_file/X1-010/02 Stage 1.vgz"
 tick
 
-samples 7
+samples 11
 sample-names x1010_000000_02000

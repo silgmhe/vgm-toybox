@@ -1,0 +1,35 @@
+# The wavetable collectors reach the exporter - as cycles, in the same list as the recordings.
+#
+# Four chips that had none now scan their own write streams and hand over one entry per distinct
+# table: the HuC6280 (thirty-two 5-bit entries per channel, loaded through 0x06), the SCC (thirty-two
+# signed bytes through the 0xD2 latch), the WonderSwan (sixteen bytes of RAM through 0xC6, expanded to
+# one level per byte) and the Game Boy (the same, at 0xB3 offsets 0x20-0x2F, high nibble first).
+#
+# Each is a period, so each is written as one - `writeCycleSamples`, 2048 points with the loop marker -
+# while the PCM entries in the same folder keep their own rate. That split is what `isCycle` records,
+# and it is why one menu can carry both kinds without turning a table into audio.
+#
+# The counts are the songs' own vocabulary: a driver reuses a table across notes and rewrites it when
+# it changes instrument, and the collector files each distinct table once.
+
+size 900 700
+
+load "test_file/HuC6280/01 Magical Sound Shower.vgz"
+tick
+samples 13
+sample-names huc6280_171BB79DC8E18503
+
+load "test_file/SCC（K051649）/02 Bio Hazard Snatcher (Part A).vgz"
+tick
+samples 10
+sample-names scc_171BB79DC8E18503
+
+load "test_file/Final_Fantasy_IV_(Bandai_WonderSwan_Color)/01 The Prelude.vgz"
+tick
+samples 2
+sample-names wonderswan_A31E272015F12C43
+
+load "test_file/Game Boy DMG/01 Title.vgz"
+tick
+samples 3
+sample-names gb_FD7D8428BF7BEA2F

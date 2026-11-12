@@ -25,6 +25,7 @@ namespace toybox::backends::libvgm
 		ga20,			// eight-bit unsigned around 0x80, and the sample ends at the first 0x00 byte
 		es5503,		// the same encoding: the DOC halts on 0x00 too (`es5503.c:301`)
 		vsu6,			// six-bit unsigned around 0x20: one cycle of thirty-two wave entries
+		huc5,			// five-bit unsigned around 0x10: the HuC6280's thirty-two-entry table
 		prom4,			// four-bit unsigned around 0x08: the K005289's PROM, sixteen levels
 		pcm8Unsigned,	// eight-bit unsigned around 0x80, length given by the caller
 		adpcmA4,		// four-bit ADPCM-A (OPN): twelve-bit wrapping accumulator, high nibble first

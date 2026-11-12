@@ -196,3 +196,24 @@ sample-names <chip>_<hash 前缀>   # 首名固定
 **决定（2026-11-12，第二轮）**：两个菜单撤回了。保留 `isCycle` 与两个写出器，但菜单只有一个
 （All PCM Samples…），录音与周期一起导出，各自按自己的规则写进 `<歌曲标题>/`。理由是周期只出现在少数芯片上，
 单独一个菜单少有人用；而“顺便导出”只要不把周期写成音频就不会骗人。
+
+---
+
+## 9. 已实现（第二批：五颗收集器，2026-11-12）
+
+| 芯片 | 收集器 | 格式 | 速率 |
+|---|---|---|---|
+| HuC6280 | `collectHuC6280Samples` | `huc5`（新增：5 bit，中心 16） | `clock / f`（f=0 → 4096） |
+| SCC / SCC+ | `collectSccSamples` | `pcm8Signed` | `2·clock/(f+1)` |
+| X1-010 波表半 | `collectX1010WaveSamples` | `pcm8Signed`（128 字节） | `clock·pitch/524288` |
+| WonderSwan | `collectWonderswanSamples` | `prom4`（展开 32 电平，低半字节先行） | `clock/(2048−f)` |
+| Game Boy | `collectGameBoySamples` | `prom4`（展开 32 电平，高半字节先行） | `clock/(2·(2048−f))` |
+
+共同规则：key-on 边沿发射、按表内容去重、`isCycle = true`（因此走周期写出器）；SCC 的 SCC+ 布局从
+`devCfg->flags` 传入（IR 里没有这一位）。
+
+实测文件数：HuC6280 的 `01 Magical Sound Shower` 13 张、SCC 的 `02 Bio Hazard Snatcher (Part A)` 10 张、
+X1-010 的 `02 Stage 1` 4 张（加上 7 个 PCM 共 11）、WonderSwan 的 `01 The Prelude` 2 张、
+Game Boy 的 `01 Title` 3 张。
+
+`pcm-wavetables.txt` 与更新后的 `pcm-x1010.txt` 钉住这些数字与首名；53/53 通过。

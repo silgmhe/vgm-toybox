@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cstdio>
 #include <cstdint>
+#include <map>
 
 #include "ChipMemoryAssembly.h"
 #include "SampleCollector.h"
@@ -137,6 +138,140 @@ std::vector<playback::DecodedSample> collectX1010Samples (const midi::SongIr& ir
 		case 4: voice.startReg = (uint8_t) write.value; break;
 		case 5: voice.endReg = (uint8_t) write.value; break;
 		default: break;
+		}
+	}
+
+	return collector.take ();
+}
+
+namespace
+{
+	/** The wave half of the same chip: thirty-two tables of 128 signed bytes, in its own register
+		space at 0x1000-0x1FFF (`x1_010.c:44-46`), not in a `0x91` block. */
+	constexpr int kWaveTables = 32;
+	constexpr int kWaveTableBytes = 128;
+	constexpr int kWaveRamBase = 0x1000;
+	constexpr int kWaveRamBytes = kWaveTables * kWaveTableBytes;
+
+	/** One step is `clock * pitch / 2^26` seconds apart; the step rate is that over the table. */
+	constexpr double kStepDivisor = 524288.0;
+
+	uint64_t hashOfWave (const uint8_t* bytes)
+	{
+		uint64_t hash = 1469598103934665603ull;
+
+		for (int i = 0; i < kWaveTableBytes; ++i)
+		{
+			hash = (hash ^ (uint64_t) bytes[i]) * 1099511628211ull;
+		}
+
+		return hash;
+	}
+}
+
+std::vector<playback::DecodedSample> collectX1010WaveSamples (const midi::SongIr& ir,
+															 uint32_t clockHz)
+{
+	SampleCollector collector;
+
+	const double clock = (clockHz > 100000) ? (double) clockHz : kDefaultClock;
+
+	struct Voice
+	{
+		uint8_t status = 0;
+		uint8_t waveNo = 0;
+		uint8_t pitchLo = 0;
+		uint8_t pitchHi = 0;
+	};
+
+	struct Chip
+	{
+		uint8_t ram[kWaveRamBytes] = {};
+		Voice voices[kVoices];
+	};
+
+	std::map<uint32_t, Chip> chips;
+
+	const auto emit = [&] (Chip& chip, int channel)
+	{
+		const Voice& voice = chip.voices[channel];
+
+		// The divider flag halves the pitch as well as the note (`x1_010.c:222`).
+		const int pitch = ((((int) voice.pitchHi) << 8) | (int) voice.pitchLo)
+						  >> ((voice.status & 0x80) != 0 ? 1 : 0);
+
+		if (pitch <= 0)
+		{
+			return;
+		}
+
+		const int table = (int) (voice.waveNo % kWaveTables);
+		const uint8_t* bytes = chip.ram + table * kWaveTableBytes;
+		const uint64_t key = hashOfWave (bytes);
+
+		char name[40] = {};
+		std::snprintf (name, sizeof (name), "x1010wave_%08X%08X", (unsigned) (key >> 32),
+					   (unsigned) (key & 0xFFFFFFFFull));
+
+		collector.add (key, name, bytes, kWaveTableBytes, SampleFormat::pcm8Signed,
+					   clock * (double) pitch / kStepDivisor, 0, /*isCycle*/ true);
+	};
+
+	for (const auto& write : ir.writes)
+	{
+		if (write.deviceId >= ir.chips.size ()
+			|| ir.chips[write.deviceId].kind != midi::ChipKind::x1_010)
+		{
+			continue;
+		}
+
+		Chip& chip = chips[write.deviceId];
+
+		const int reg = ((int) write.port << 8) | (int) write.reg;
+
+		// The tables are uploaded through the same command, above the channel block.
+		if (reg >= kWaveRamBase && reg < kWaveRamBase + kWaveRamBytes)
+		{
+			chip.ram[reg - kWaveRamBase] = (uint8_t) write.value;
+			continue;
+		}
+
+		if (reg < 0 || reg >= 0x80)
+		{
+			continue;
+		}
+
+		const int channel = reg >> 3;
+		const int field = reg & 0x07;
+
+		if (channel >= kVoices)
+		{
+			continue;
+		}
+
+		Voice& voice = chip.voices[channel];
+
+		switch (field)
+		{
+		case 0:
+		{
+			const bool wasKeyed = (voice.status & 0x01) != 0;
+			voice.status = (uint8_t) write.value;
+
+			// Only a waveform-mode channel has a table; a PCM one plays the `0x91` image instead,
+			// and `collectX1010Samples` already has those.
+			if ((voice.status & 0x01) != 0 && ! wasKeyed && (voice.status & 0x02) != 0)
+			{
+				emit (chip, channel);
+			}
+
+			break;
+		}
+
+		case 1: voice.waveNo = (uint8_t) write.value; break;
+		case 2: voice.pitchLo = (uint8_t) write.value; break;
+		case 3: voice.pitchHi = (uint8_t) write.value; break;
+		default: break;			// 4/5 envelope in waveform mode
 		}
 	}
 

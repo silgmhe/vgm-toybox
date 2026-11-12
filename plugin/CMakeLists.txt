@@ -225,7 +225,11 @@ target_sources(VGMToybox PRIVATE
 	Source/midi/ChipPlans.cpp
 	Source/backends/BuiltInBackends.cpp
 	Source/backends/libvgm/LibvgmBackend.cpp
-	Source/backends/libvgm/X1010Samples.cpp
+	Source/backends/libvgm/GameBoySamples.cpp
+        Source/backends/libvgm/WonderswanSamples.cpp
+        Source/backends/libvgm/SccSamples.cpp
+        Source/backends/libvgm/HuC6280Samples.cpp
+        Source/backends/libvgm/X1010Samples.cpp
         Source/backends/libvgm/C140Samples.cpp
 	Source/backends/libvgm/Es5503Samples.cpp
 	Source/backends/libvgm/VsuSamples.cpp
@@ -441,7 +445,11 @@ add_executable(vgm_mixer_test EXCLUDE_FROM_ALL
 	Source/chips/NesDpcmSample.cpp
 	Source/formats/nsf/NsfFile.cpp
 	Source/backends/libvgm/LibvgmBackend.cpp
-	Source/backends/libvgm/X1010Samples.cpp
+	Source/backends/libvgm/GameBoySamples.cpp
+        Source/backends/libvgm/WonderswanSamples.cpp
+        Source/backends/libvgm/SccSamples.cpp
+        Source/backends/libvgm/HuC6280Samples.cpp
+        Source/backends/libvgm/X1010Samples.cpp
         Source/backends/libvgm/C140Samples.cpp
 	Source/backends/libvgm/Es5503Samples.cpp
 	Source/backends/libvgm/VsuSamples.cpp
@@ -474,7 +482,11 @@ add_executable(vgm_mixer_test EXCLUDE_FROM_ALL
 	Source/backends/libvgm/LibvgmSongInstance.cpp
 	Source/backends/libvgm/LibvgmTrackPlayer.cpp
 	Source/backends/libvgm/NesDpcmBank.cpp
-	Source/backends/libvgm/X1010Samples.cpp
+	Source/backends/libvgm/GameBoySamples.cpp
+        Source/backends/libvgm/WonderswanSamples.cpp
+        Source/backends/libvgm/SccSamples.cpp
+        Source/backends/libvgm/HuC6280Samples.cpp
+        Source/backends/libvgm/X1010Samples.cpp
         Source/backends/libvgm/C140Samples.cpp
 	Source/backends/libvgm/Es5503Samples.cpp
 	Source/backends/libvgm/VsuSamples.cpp
@@ -559,7 +571,11 @@ add_executable(vgm_chip_test EXCLUDE_FROM_ALL
 	Source/backends/libvgm/VgmCommandReader.cpp
 	Source/formats/vgm/VgmSongLoader.cpp
 	Source/chips/NesDpcmSample.cpp
-	Source/backends/libvgm/X1010Samples.cpp
+	Source/backends/libvgm/GameBoySamples.cpp
+        Source/backends/libvgm/WonderswanSamples.cpp
+        Source/backends/libvgm/SccSamples.cpp
+        Source/backends/libvgm/HuC6280Samples.cpp
+        Source/backends/libvgm/X1010Samples.cpp
         Source/backends/libvgm/C140Samples.cpp
 	Source/backends/libvgm/Es5503Samples.cpp
 	Source/backends/libvgm/VsuSamples.cpp

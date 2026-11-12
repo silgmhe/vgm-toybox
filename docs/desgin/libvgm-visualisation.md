@@ -331,11 +331,11 @@ All PCM Samples，周期进 All Wavetables（见 §9.28）。
 | 波表 | K005289 —— 见 §9.12 | ✓ | ✓ | ✓ `collectK005289Samples` |
 | 波表 | Mikey —— 见 §9.13 | ✓ | ✓ | ✓ `collectMikeySamples` |
 | 波表 | MSM5232 —— 见 §9.14 | ✓ | ✓ | ✓ `collectMsm5232Samples` |
-| 波表 | **HuC6280**（6 通道，32 步 5 bit）—— 见 §9.23 | ✓ | ✓ | —（行与拖拽已有；整曲波表导出未做） |
-| 波表 | **SCC / SCC+**（K051649 / K052539，5 通道 32 步 8 bit）—— 见 §9.24 | ✓ | ✓ | —（行与拖拽已有；整曲波表导出未做） |
-| 采样 + 波表 | **X1-010**（16 通道：PCM 样本 / 128 步波表）—— 见 §9.25 | ✓ | ✓ | ✓ `collectX1010Samples`（PCM 半）|
-| 波表 | **WonderSwan**（4 通道 32 步 4 bit，波形在 RAM 里）—— 见 §9.26 | ✓ | ✓ | —（行与拖拽已有；整曲波表导出未做） |
-| 波表 | **Game Boy 波表**（Wave 通道 32 步 4 bit）—— 见 §9.27 | ✓ | ✓ | —（行与拖拽已有；整曲波表导出未做） |
+| 波表 | **HuC6280**（6 通道，32 步 5 bit）—— 见 §9.23 | ✓ | ✓ | ✓ `collectHuC6280Samples` |
+| 波表 | **SCC / SCC+**（K051649 / K052539，5 通道 32 步 8 bit）—— 见 §9.24 | ✓ | ✓ | ✓ `collectSccSamples` |
+| 采样 + 波表 | **X1-010**（16 通道：PCM 样本 / 128 步波表）—— 见 §9.25 | ✓ | ✓ | ✓ `collectX1010Samples` + `collectX1010WaveSamples` |
+| 波表 | **WonderSwan**（4 通道 32 步 4 bit，波形在 RAM 里）—— 见 §9.26 | ✓ | ✓ | ✓ `collectWonderswanSamples` |
+| 波表 | **Game Boy 波表**（Wave 通道 32 步 4 bit）—— 见 §9.27 | ✓ | ✓ | ✓ `collectGameBoySamples` |
 | 合成 | NES APU（2A03）的两条脉冲、三角与噪声 —— 行的形状由 `waveKind` 合成，不是文件里的数据 | — | — | —（不需要：没有可导出的字节）|
 
 **不在本表的两类**：PSG 与 FM（AY、SN76489、SAA1099、POKEY、OPL 系、OPN 系、OPM、OPX 等）本来就用 `cycleFor` 画阶梯，不经过 `state.wave`；`FDS` 与 `N163` 由 NSF 后端（`NsfBackend` / `NsfBus`）加载，没有对应的 `ChipKind`，要单独处理。
@@ -1404,8 +1404,10 @@ Wave 通道的波形则是芯片内的 16 字节 RAM（`0xFF30-0xFF3F`，在 `0x
 `writeSamples` 仍然跳过周期、`writeCycleSamples` 仍然跳过录音——两个写出器各自只接受自己那种，编辑器
 负责把一份列表分两次交给它们。这样“顺便导出波表”不会把波表写成音频，也不必让用户知道有两种文件。
 
-**仍未做**：HuC6280、SCC、X1-010 波表半、WonderSwan、Game Boy 五颗的收集器
-（见 `docs/research/2026-11-12-wavetable-batch-export.md`）。
+**五颗收集器已补齐**（2026-11-12，同一轮）：`collectHuC6280Samples`（32×5 bit，`SampleFormat::huc5`）、
+`collectSccSamples`（32×8 bit，SCC+ 标志取自 `devCfg->flags`）、`collectX1010WaveSamples`（32 张 ×128 字节）、
+`collectWonderswanSamples` 与 `collectGameBoySamples`（16 字节展开成 32 个电平，`prom4`，半字节顺序各自保留）。
+它们都在 key-on 边沿发射、按内容去重，速率是各自的**步进率**。
 
 **验证**：`testWavetableBatchExport`（拆分、两个写出器互不接受对方的输入、周期文件 2048 点与按钮同尺寸）、
 `assert menu.file.export.samples enabled`。

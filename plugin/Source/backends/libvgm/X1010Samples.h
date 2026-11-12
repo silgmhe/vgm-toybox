@@ -26,4 +26,16 @@ namespace toybox::backends::libvgm
 		samples.
 	*/
 	std::vector<playback::DecodedSample> collectX1010Samples (const midi::SongIr& ir);
+
+	/** **Every wave table the X1-010's waveform channels played**, one file per distinct table.
+
+		The other half of the same chip: thirty-two tables of 128 signed bytes, uploaded into its own
+		register space at 0x1000-0x1FFF (not a ROM block), and read at `clock * pitch / 524288`
+		entries a second. A channel plays the table its `0x01` register names.
+
+		Named `x1010wave_...` rather than `x1010_...` so a folder holding both halves of one song
+		does not mix a drum with an oscillator.
+	*/
+	std::vector<playback::DecodedSample> collectX1010WaveSamples (const midi::SongIr& ir,
+																 uint32_t clockHz);
 }

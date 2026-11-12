@@ -223,6 +223,18 @@ void SampleCollector::add (uint64_t key, const std::string& name, const uint8_t*
 			sample.values.push_back ((float) (((int) bytes[i] & 0x3F) - 0x20) / 32.0f);
 		}
 	}
+	else if (format == SampleFormat::huc5)
+	{
+		// **Five bits, silence at 0x10.** `c6280_mame.c` stores `value & 0x1F`, and the core centres
+		// the table on sixteen, so an entry is a signed level in -16..+15. Absolute scale, like the
+		// VSU's: rescaling would make a quiet table as loud as a loud one.
+		sample.values.reserve (length);
+
+		for (std::size_t i = 0; i < length; ++i)
+		{
+			sample.values.push_back ((float) (((int) bytes[i] & 0x1F) - 0x10) / 16.0f);
+		}
+	}
 	else if (format == SampleFormat::prom4)
 	{
 		// **Four bits, silence at 8.** The K005289's PROM holds one level per byte (the block is

@@ -15,6 +15,10 @@
 #include "Ym2612DacSamples.h"
 #include "Ymz280bSamples.h"
 #include "K007232Samples.h"
+#include "GameBoySamples.h"
+#include "WonderswanSamples.h"
+#include "SccSamples.h"
+#include "HuC6280Samples.h"
 #include "VsuSamples.h"
 #include "MultiPcmSamples.h"
 #include "Okim6295Samples.h"
@@ -450,8 +454,24 @@ bool LibvgmSongInstance::prepare (double hostSampleRate, int newMaxBlockSize, ju
 	if (hasX1010)
 	{
 		// Two players in one chip: PCM channels name a start and an end in the `0x91` image, wave
-		// channels walk tables the driver uploaded. Only the PCM half has files to export.
+		// channels walk tables the driver uploaded. Both halves become files now - the PCM ones as
+		// recordings, the tables as cycles - and the writers tell them apart by `isCycle`.
 		for (auto& sample : collectX1010Samples (*songIr))
+		{
+			collected.push_back (std::move (sample));
+		}
+
+		uint32_t clock = 0;
+
+		for (const auto& device : deviceInfo)
+		{
+			if (device.type == DEVID_X1_010 && device.devCfg != nullptr && device.devCfg->clock > 0)
+			{
+				clock = device.devCfg->clock;
+			}
+		}
+
+		for (auto& sample : collectX1010WaveSamples (*songIr, clock))
 		{
 			collected.push_back (std::move (sample));
 		}
@@ -596,6 +616,124 @@ bool LibvgmSongInstance::prepare (double hostSampleRate, int newMaxBlockSize, ju
 		}
 
 		for (auto& sample : collectVsuSamples (*songIr, clock))
+		{
+			collected.push_back (std::move (sample));
+		}
+	}
+
+	const bool hasHuC6280 = songIr != nullptr
+						 && std::any_of (songIr->chips.begin (), songIr->chips.end (),
+										 [] (const midi::ChipSlot& slot)
+										 {
+											 return slot.kind == midi::ChipKind::huc6280;
+										 });
+
+	if (hasHuC6280 && songIr != nullptr)
+	{
+		// The same shape as the VSU: the tables are RAM the driver writes, so the clock is the only
+		// fact that has to come from outside the write stream.
+		uint32_t clock = 0;
+
+		for (const auto& device : deviceInfo)
+		{
+			if (device.type == DEVID_C6280 && device.devCfg != nullptr && device.devCfg->clock > 0)
+			{
+				clock = device.devCfg->clock;
+			}
+		}
+
+		for (auto& sample : collectHuC6280Samples (*songIr, clock))
+		{
+			collected.push_back (std::move (sample));
+		}
+	}
+
+	const bool hasScc = songIr != nullptr
+					 && std::any_of (songIr->chips.begin (), songIr->chips.end (),
+									 [] (const midi::ChipSlot& slot)
+									 {
+										 return slot.kind == midi::ChipKind::k051649;
+									 });
+
+	if (hasScc && songIr != nullptr)
+	{
+		// Two facts come from the device rather than the stream: the clock, and whether this is the
+		// K052539 layout. The second is the VGM clock field's bit 31, resolved by the player into
+		// `devCfg->flags` - the IR's `ChipSlot::flags` is zero for this chip.
+		uint32_t clock = 0;
+		bool plusMode = false;
+
+		for (const auto& device : deviceInfo)
+		{
+			if (device.type != DEVID_K051649)
+			{
+				continue;
+			}
+
+			if (device.devCfg != nullptr)
+			{
+				if (device.devCfg->clock > 0)
+				{
+					clock = device.devCfg->clock;
+				}
+
+				plusMode = (device.devCfg->flags & 1u) != 0;
+			}
+		}
+
+		for (auto& sample : collectSccSamples (*songIr, clock, plusMode))
+		{
+			collected.push_back (std::move (sample));
+		}
+	}
+
+	const bool hasWonderswan = songIr != nullptr
+							&& std::any_of (songIr->chips.begin (), songIr->chips.end (),
+											[] (const midi::ChipSlot& slot)
+											{
+												return slot.kind == midi::ChipKind::wonderswan;
+											});
+
+	if (hasWonderswan && songIr != nullptr)
+	{
+		// The tables are RAM the driver uploads (`0xC6`), so only the clock has to come from outside.
+		uint32_t clock = 0;
+
+		for (const auto& device : deviceInfo)
+		{
+			if (device.type == DEVID_WSWAN && device.devCfg != nullptr && device.devCfg->clock > 0)
+			{
+				clock = device.devCfg->clock;
+			}
+		}
+
+		for (auto& sample : collectWonderswanSamples (*songIr, clock))
+		{
+			collected.push_back (std::move (sample));
+		}
+	}
+
+	const bool hasGameBoy = songIr != nullptr
+						 && std::any_of (songIr->chips.begin (), songIr->chips.end (),
+										 [] (const midi::ChipSlot& slot)
+										 {
+											 return slot.kind == midi::ChipKind::gameBoy;
+										 });
+
+	if (hasGameBoy && songIr != nullptr)
+	{
+		// One table on this chip (the wave channel), sixteen bytes at 0xFF30-0xFF3F.
+		uint32_t clock = 0;
+
+		for (const auto& device : deviceInfo)
+		{
+			if (device.type == DEVID_GB_DMG && device.devCfg != nullptr && device.devCfg->clock > 0)
+			{
+				clock = device.devCfg->clock;
+			}
+		}
+
+		for (auto& sample : collectGameBoySamples (*songIr, clock))
 		{
 			collected.push_back (std::move (sample));
 		}
