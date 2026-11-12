@@ -1,5 +1,6 @@
 #include "LibvgmSongInstance.h"
 
+#include "X1010Samples.h"
 #include "C140Samples.h"
 #include "C352Samples.h"
 #include "Es5503Samples.h"
@@ -436,6 +437,21 @@ bool LibvgmSongInstance::prepare (double hostSampleRate, int newMaxBlockSize, ju
 		// The OPL2's sample player: ranges named by registers, bytes from a `0x88` block. The
 		// header's own clock says which OPL part it is, so no device lookup is needed here.
 		for (auto& sample : collectY8950Samples (*songIr))
+		{
+			collected.push_back (std::move (sample));
+		}
+	}
+
+	const bool hasX1010 = songIr != nullptr
+						 && std::any_of (songIr->chips.begin (), songIr->chips.end (),
+										 [] (const midi::ChipSlot& slot)
+										 { return slot.kind == midi::ChipKind::x1_010; });
+
+	if (hasX1010)
+	{
+		// Two players in one chip: PCM channels name a start and an end in the `0x91` image, wave
+		// channels walk tables the driver uploaded. Only the PCM half has files to export.
+		for (auto& sample : collectX1010Samples (*songIr))
 		{
 			collected.push_back (std::move (sample));
 		}

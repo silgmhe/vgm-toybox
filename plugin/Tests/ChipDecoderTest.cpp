@@ -1665,6 +1665,91 @@ namespace
 			   "and channel 4 keeps the byte written at 0x80");
 	}
 
+	// ---- X1-010 ----
+
+	/** **Two players in one chip.** A waveform channel walks one of thirty-two 128-step tables; a
+		PCM channel plays the bytes between the start and end pages of the `0x91` image. */
+	void testX1010WaveAndPcm (void)
+	{
+		constexpr uint32_t kClock = 16000000;
+
+		// Waveform: upload table 0, point channel 0 at it, pitch 0x0100, key on.
+		Stream wave;
+		for (int i = 0; i < 128; ++i)
+		{
+			wave.at (0, 0x10, (uint8_t) i, (uint8_t) (i * 2 - 128));	// offset 0x1000 + i
+		}
+		wave.at (0, 0x00, 0x01, 0x00);		// waveform number 0
+		wave.at (0, 0x00, 0x02, 0x00);		// pitch low
+		wave.at (0, 0x00, 0x03, 0x01);		// pitch high -> 0x0100
+		wave.at (0, 0x00, 0x00, 0x03);		// key on, waveform mode
+
+		toybox::chips::X1_010Decoder waveDecoder;
+		waveDecoder.reset (toybox::chips::ChipConfig { kClock, 44100.0 });
+
+		for (const auto& write : wave.writes)
+		{
+			waveDecoder.write (write);
+		}
+
+		const auto waveState = waveDecoder.channelState (0);
+
+		check (waveState.wave != nullptr && waveState.wave->size () == 128,
+			   "a waveform channel draws its 128 steps");
+		check (waveState.tableWave, "and says it is a cycle, not a recording");
+
+		if (waveState.wave != nullptr && waveState.wave->size () == 128)
+		{
+			check (std::abs ((*waveState.wave)[0] + 1.0f) < 1e-6f, "signed 0x80 is the bottom");
+			check (std::abs ((*waveState.wave)[64]) < 1e-6f, "0x00 is the midpoint");
+		}
+
+		check (std::abs (waveState.sampleRate - (float) (kClock * 256.0 / 524288.0)) < 1.0f,
+			   "and the rate is clock * pitch / 524288 steps a second");
+
+		// PCM: an 8 KB ROM, start page 0, end page 0xFE -> 0x2000, frequency 16 -> 31 250 Hz.
+		std::vector<uint8_t> rom (0x2000);
+
+		for (std::size_t i = 0; i < rom.size (); ++i)
+		{
+			rom[i] = (uint8_t) (i & 0xFF);
+		}
+
+		toybox::chips::ChipMemory memory;
+		memory.bytes = &rom;
+
+		Stream pcm;
+		pcm.at (0, 0x00, 0x04, 0x00);		// start page 0
+		pcm.at (0, 0x00, 0x05, 0xFE);		// end = (0x100 - 0xFE) << 12
+		pcm.at (0, 0x00, 0x02, 16);			// frequency 16
+		pcm.at (0, 0x00, 0x00, 0x01);		// key on, PCM mode
+
+		toybox::chips::X1_010Decoder pcmDecoder;
+		pcmDecoder.reset (toybox::chips::ChipConfig { kClock, 44100.0 });
+		pcmDecoder.attachMemory (memory);
+
+		for (const auto& write : pcm.writes)
+		{
+			pcmDecoder.write (write);
+		}
+
+		const auto pcmState = pcmDecoder.channelState (0);
+
+		check (pcmState.wave != nullptr && pcmState.wave->size () == rom.size (),
+			   "a PCM channel draws the bytes between start and end");
+		check (! pcmState.tableWave, "and says it is a recording");
+		check (pcmState.wave != nullptr && std::abs ((*pcmState.wave)[1] - (1.0f / 128.0f)) < 1e-6f,
+			   "with the ROM's own bytes, signed");
+		check (std::abs (pcmState.sampleRate - 31250.0f) < 1.0f,
+			   "and the rate is clock / 8192 * frequency");
+		check (pcmState.gate, "the sample is playing at the key-on edge");
+
+		// 8192 bytes at 31 250 Hz is 0.262 s = 11 562 ticks at 44.1 kHz.
+		pcmDecoder.advance (12000);
+		check (! pcmDecoder.channelState (0).gate,
+			   "and the gate closes at the sample's own duration, not after a fixed window");
+	}
+
 	// ---- K051649 / SCC ----
 
 	std::vector<NoteEvent> runScc (const Stream& stream, uint32_t totalSamples)
@@ -2355,12 +2440,16 @@ namespace
 			check (notes.size() == 1 && absoluteNote (notes[0]) == 57, "the divider flag drops the note an octave");
 		}
 
-		/** PCM mode: the same channel plays a sample, and the note is a C4 marker the decoder's
-			own 80 ms gate closes - a driver that never keys off still gets one hit. */
+		/** PCM mode: the same channel plays a sample, and the note is a C4 marker that ends where the
+			**registers** say the sample ends - `0x04` is the start and `0x05` the end page, so a driver
+			that never keys off still gets exactly one hit of the right length. */
 		void testX1PcmIsAOneShot (void)
 		{
 			Stream stream;
 			stream.at (0, 0x01, 0x77);			// PCM volume, both sides
+			stream.at (0, 0x04, 0x00);			// start page 0
+			stream.at (0, 0x05, 0xFF);			// end = (0x100 - 0xFF) << 12 = 0x1000 bytes
+			stream.at (0, 0x02, 16);			// 31 250 Hz, so 4 096 bytes are 5 780 ticks
 			stream.at (10, 0x00, 0x01);			// PCM mode + key on
 			stream.at (9000, 0x06, 0x00);		// a reserved write, only to move the clock on
 
@@ -2374,7 +2463,8 @@ namespace
 
 			check (absoluteNote (notes[0]) == 60, "the sample is a C4 marker");
 			check (notes[0].isDrum, "a PCM channel is a drum track");
-			check (distance (notes[0].endSample, 3528) <= 64, "the 80 ms gate ends the sample");
+			check (distance (notes[0].endSample, 10 + 5780) <= 64,
+				   "the gate ends where the sample's start and end pages say it does");
 		}
 
 		/** Offsets from 0x80 up are envelope and wavetable data: uploading a waveform must not
@@ -7598,6 +7688,7 @@ int main (void){
 	testSccWaveTable();
 	testSccSharedChannelFour();
 	testSccPlusKeepsChannelFourSeparate();
+	testX1010WaveAndPcm();
 
 	testSccWaveNote();
 	testSccKeyMaskEndsTheNote();

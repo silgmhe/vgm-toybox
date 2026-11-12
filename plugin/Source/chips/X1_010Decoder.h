@@ -18,15 +18,20 @@ namespace toybox::chips
 	  the core steps the table `clock * pitch / 2^26` times a second, which is where the note table
 	  below comes from. The envelope half of the chip (registers 0x80-0x0FFF, envelope time and
 	  number) is not modelled - it shapes the volume, not the note.
-	- **PCM mode** is a one-shot. The frequency register is a playback rate rather than a pitch,
-	  and nothing in the registers says where the sample ends, so the gate is a fixed 80 ms from
-	  the key-on edge - the same marker the OPN's ADPCM-A and the RF5C68 use. A driver that leaves
-	  the channel keyed on (the normal case) then still produces one note per hit.
+	- **PCM mode** is a one-shot from the song's 1 MB sample ROM: `0x04` is the start and `0x05` the
+	  end (both in 4 KB pages), and the frequency register is a playback rate rather than a pitch.
+	  The gate is therefore the sample's **own duration** - the core keys the channel off at the end
+	  address, and so does this decoder - rather than a fixed guess at it.
+
+	**The row draws whichever the channel is playing.** A waveform channel carries its 128-step
+	table (`tableWave` set: one cycle, exported as a shape); a PCM channel carries the ROM bytes
+	between start and end (no `tableWave`: a recording, exported at its own rate). The waveform RAM
+	and the envelope RAM share the chip's register space with the channel registers (0x1000-0x1FFF
+	and 0x80-0xFFF); the envelope only scales volume, so it is not kept.
 
 	Register layout (libs/libvgm/emu/cores/x1_010.c): eight registers per channel, channel `n` at
-	`8 * n`; offsets 0x80 and above are envelope and wavetable data and do not touch a channel. The
-	VGM command carries a 16-bit offset, which reaches this decoder as the write's `port` (high
-	byte) and `reg` (low byte). */
+	`8 * n`. The VGM command carries a 16-bit offset, which reaches this decoder as the write's
+	`port` (high byte) and `reg` (low byte). */
 class X1_010Decoder final : public IChipDecoder
 {
 public:
@@ -57,9 +62,10 @@ public:
 	/** What this chip needs besides its register writes: the clock to assume when the song names
 		none, and (for a sampled chip) the memory image its pitch is measured against. The assembler
 		asks instead of carrying a table of these. */
-	static constexpr ChipRequirements kRequirements { 16000000u };
+	static constexpr ChipRequirements kRequirements { 16000000u, true, 0x91, 1u << 20, false, false };
 
 	void reset (const ChipConfig& config) override;
+	void attachMemory (const ChipMemory& memory) override;
 	void write (const RegisterWrite& write) override;
 	void advance (uint32_t sampleTime) override;
 

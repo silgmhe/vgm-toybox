@@ -1,0 +1,18 @@
+# The X1-010's PCM samples reach the exporter.
+#
+# The chip is two players in one: sixteen channels, each either a PCM sample or a 128-step waveform
+# table, chosen by status bit 1. Only the PCM half has files - `0x04` is the start page and `0x05`
+# the end page, both in 4 KB units of the song's 1 MB `0x91` image, and `0x02` is the playback rate
+# (`clock / 8192` per step, on a 16 MHz part).
+#
+# `02 Stage 1` keys on 843 times and names seven ranges of 8 KB each - 0x0000, 0x2000, 0x4000, 0x6000,
+# 0x8000, 0xA000 and 0x10000 - at 31 250 Hz (frequency 16) except 0xA000, which plays at 68 359 Hz
+# (frequency 35). The waveform channels are deliberately absent: they walk tables, not samples.
+
+size 900 700
+
+load "test_file/X1-010/02 Stage 1.vgz"
+tick
+
+samples 7
+sample-names x1010_000000_02000

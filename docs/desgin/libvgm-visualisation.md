@@ -330,7 +330,8 @@ track.channelIndex = channelIndex;    // 联动芯片的通道号接在父芯片
 | 波表 | MSM5232 —— 见 §9.14 | ✓ | ✓ | ✓ `collectMsm5232Samples` |
 | 波表 | **HuC6280**（6 通道，32 步 5 bit）—— 见 §9.23 | ✓ | ✓ | —（行与拖拽已有；整曲波表导出未做） |
 | 波表 | **SCC / SCC+**（K051649 / K052539，5 通道 32 步 8 bit）—— 见 §9.24 | ✓ | ✓ | —（行与拖拽已有；整曲波表导出未做） |
-| 波表 | X1-010、WonderSwan、Game Boy 波表、NES APU | — | — | — |
+| 采样 + 波表 | **X1-010**（16 通道：PCM 样本 / 128 步波表）—— 见 §9.25 | ✓ | ✓ | ✓ `collectX1010Samples`（PCM 半）|
+| 波表 | WonderSwan、Game Boy 波表、NES APU | — | — | — |
 
 **不在本表的两类**：PSG 与 FM（AY、SN76489、SAA1099、POKEY、OPL 系、OPN 系、OPM、OPX 等）本来就用 `cycleFor` 画阶梯，不经过 `state.wave`；`FDS` 与 `N163` 由 NSF 后端（`NsfBackend` / `NsfBus`）加载，没有对应的 `ChipKind`，要单独处理。
 
@@ -1298,3 +1299,30 @@ SCC 把 `0x60` 以上的地址**同时**写进通道 3 和通道 4（两者共�
 
 **实测**：七首里四首是 SCC+（`01 Team Metal Slave`、`02 Bio Hazard Snatcher A/B`、`04 Squeak!!`，
 port 4 的写入全部落在 `0x80-0x9F`），三首是 SCC；时钟都是 1 789 772/3 Hz；没有 port 5 写入。
+### 9.25 X1-010：一颗芯片里的 PCM 与波表（2026-11-12）
+
+**十六个通道，每个通道由状态位 bit1 选一种乐器。** PCM 模式从歌曲的 1 MB `0x91` 镜像里按
+start/end 播 8 位有符号样本（鼓、语音）；波形模式走芯片内 4 KB 波形 RAM 的 32 张 128 字节表。
+所以这一颗的“实现”是两条路：
+
+| | PCM 通道 | 波形通道 |
+|---|---|---|
+| `wave` | `rom[start..end)`，`/128` | `waveRam[0x1000 + 号 × 128]`，128 点，`/128` |
+| `tableWave` | `false`（录音） | `true`（一个周期） |
+| `sampleRate` | `clock / 8192 × max(freq, 4)` | `clock × pitch / 524288`（步进率） |
+| 来源 | `0x04` start、`0x05` end（4 KB 页），`0x02` 速率 | 波形 RAM（`0xC8` 偏移 0x1000-0x1FFF） |
+
+**gate 改成真实时长。** 旧实现用固定 80 ms，因为注释认为“寄存器里没有结束位置”——实际 `0x05` 就是；
+现在 `时长 = (end − start) / rate`，与核心在结束地址 key off 的行为一致（MIDI 音符长度随之变准）。
+
+**两个上限。** 波形 RAM 是静态的（每首开头一次性写满 4 KB），按内容 hash 缓存即可；PCM 样本按
+`(start, length)` 缓存，超过 **262 144 点**只解码前面这一段——那是显示的内存护栏，不是偏好：
+文件导出另有 `settings.export.sampleSeconds`（0–30 s，默认 5）在写出时截断，两者互不替代。
+
+**包络 RAM（0x80–0xFFF）不保存**：16 张包络表只随时间缩放音量，不影响形状。
+
+**导出**：`collectX1010Samples` 在 key-on 边沿记下 `(start, end, freq)`，按 `(start, length)` 去重、
+首次速率胜出，输出 `x1010_%06X_%05X` 的 8 位有符号 WAV；波形通道不产生文件（它们是形状，不是样本）。
+
+**实测**：十三首的时钟都是 16 MHz；`02 Stage 1` 出 7 个文件（6 个 31 250 Hz、1 个 68 359 Hz），
+与寄存器统计一致。
