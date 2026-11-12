@@ -392,6 +392,21 @@ bool VgmCommandReader::next (VgmCommand& command)
 			command.addr = (uint8_t) (offset & 0xFF);
 			command.data = data[position + 3];
 		}
+		else if (cmd == 0xC6)
+		{
+			// **WonderSwan RAM.** This chip has no sample ROM and no register a waveform could be
+			// uploaded through: its thirty-two-step tables live in the 16 KB of internal RAM the
+			// sound hardware can see, and `0xC6` is one byte written into it (`Cmd_Ofs16_Data8`
+			// in libvgm). The address is big-endian and only fourteen bits of it exist, so `port`
+			// carries the high byte and `addr` the low one - and the write says it is memory, so
+			// a low address cannot be mistaken for a register by the decoder.
+			const uint16_t address = (uint16_t) ((((uint16_t) data[position + 1]) << 8)
+												 | (uint16_t) data[position + 2]);
+			command.kind = VgmCommand::Kind::memoryWrite;
+			command.port = (uint8_t) ((address >> 8) & 0x3F);
+			command.addr = (uint8_t) (address & 0xFF);
+			command.data = data[position + 3];
+		}
 		else if (cmd == 0xD0)
 		{
 			// YMF278B (OPL4): the address byte carries the chip in bit 7 and the port in the

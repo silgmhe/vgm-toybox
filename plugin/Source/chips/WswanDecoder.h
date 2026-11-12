@@ -25,9 +25,13 @@ namespace toybox::chips
 	Channel 2 has a sweep unit (0x8C step, 0x8D interval, 0x90 bit 6) that moves the pitch while no
 	register is written, which is why this decoder needs the sample rate and advance().
 
-	Not modelled, and why: the waveform RAM (the shape does not change which note sounds), the
-	master volume (0x91) and the PCM volume (0x94) beyond the voice marker's velocity, and the LFSR
-	tap selection (0x8E) beyond "this channel is noise". */
+	**The row draws the channel's waveform table.** It is not a register but the chip's own RAM:
+	`0x8F` names a base in 64-byte units, the four tables sit 16 bytes apart from it, and the driver
+	uploads them byte by byte through the `0xC6` memory write. So this decoder keeps the 16 KB image
+	and reads thirty-two 4-bit steps out of it, at `clock / (2048 - f)` steps a second.
+
+	Not modelled, and why: the master volume (0x91) and the PCM volume (0x94) beyond the voice
+	marker's velocity, and the LFSR tap selection (0x8E) beyond "this channel is noise". */
 class WswanDecoder final : public IChipDecoder
 {
 public:

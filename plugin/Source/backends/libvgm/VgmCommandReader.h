@@ -25,6 +25,8 @@ struct VgmCommand
 		registerWrite,	// addr/data carry the payload, port the second-chip flag
 		registerWritePair,	// K051649: addr is the even offset, data its value, data2 the byte
 							// the chip receives at addr | 1 (the VGM command carries both)
+		memoryWrite,		// WonderSwan: a byte written into the chip's RAM rather than into a
+							// register - port is the address's high byte, addr its low byte
 		wait,			// sampleTime is the command's own time; the clock has been advanced
 						// (0x61-0x63, 0x70-0x7F, and 0x80-0x8F - the YM2612 DAC stream's waits)
 		end,			// 0x66 - the caller should stop

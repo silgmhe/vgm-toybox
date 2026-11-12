@@ -52,9 +52,9 @@ bool VgmSongLoader::load (const void* data, std::size_t size, midi::SongIr& out,
 	};
 
 	const auto emit = [&out, &slotFor] (ChipKind kind, int instance, int port,
-										uint8_t reg, uint16_t value,
-										uint32_t time, uint32_t flags = 0,
-										bool fromStream = false)
+	uint8_t reg, uint16_t value,
+	uint32_t time, uint32_t flags = 0,
+	bool fromStream = false, bool isMemory = false)
 	{
 		chips::RegisterWrite write;
 		write.deviceId = slotFor (kind, instance, flags);
@@ -63,6 +63,7 @@ bool VgmSongLoader::load (const void* data, std::size_t size, midi::SongIr& out,
 		write.port = (uint8_t) port;
 		write.sampleTime = time;
 		write.fromStream = fromStream;
+		write.isMemory = isMemory;
 		out.writes.push_back (write);
 	};
 
@@ -152,6 +153,12 @@ bool VgmSongLoader::load (const void* data, std::size_t size, midi::SongIr& out,
 		case 0xBA:	emit (ChipKind::k053260, 0, 0, reg, value, time); break;
 		case 0xBB:	emit (ChipKind::pokey, port, 0, reg, value, time); break;
 		case 0xBC:	emit (ChipKind::wonderswan, port, 0, reg, value, time); break;
+		case 0xC6:
+			// **WonderSwan RAM, not a register.** The waveforms live in the chip's 16 KB of
+			// internal RAM and `0xC6` uploads one byte; `port`/`reg` are the address's two
+			// halves, and the write says it is memory so the decoder cannot read it as one.
+			emit (ChipKind::wonderswan, 0, port, reg, value, time, 0, false, true);
+			break;
 		case 0xBD:	emit (ChipKind::saa1099, port, 0, reg, value, time); break;
 		case 0xBF:	emit (ChipKind::ga20, 0, 0, reg, value, time); break;
 		case 0xC0:

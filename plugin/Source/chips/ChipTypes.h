@@ -90,6 +90,16 @@ struct RegisterWrite
 		stream's own timing, so it has to be able to tell the two apart (`vgm2fur` ignores the pokes
 		outright, and this flag is what lets us do the same without losing them for the panel). */
 	bool fromStream = false;
+
+	/** **A byte written into the chip's own RAM rather than into a register.**
+
+		Only the WonderSwan needs this: its waveform tables do not live in a register file at all, but
+		in the 16 KB of internal RAM the sound hardware can see, and the driver uploads them through
+		the same command stream. On that chip `port` and `reg` carry an address instead of a register
+		number, which is indistinguishable from a register write to 0x80-0x9F when the address is low -
+		so the space travels as its own flag rather than as a convention.
+	*/
+	bool isMemory = false;
 };
 
 /** What a decoder needs to know to start: the chip's clock, and the unit of the timestamps it will be told.

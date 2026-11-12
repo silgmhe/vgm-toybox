@@ -2197,7 +2197,109 @@ namespace
 			check (notes[0].channelKind == toybox::chips::ChannelKind::adpcmDrum, "the voice is a sample");
 		}
 
-		// ---- SN76489 ----
+		/** **A WonderSwan table lives in RAM, not in a register.** `0x8F` names the base in 64-byte
+		units, the four tables sit sixteen bytes apart, and `0xC6` uploads one byte at a time. Two
+		4-bit samples share a byte with the **low** nibble first, and a step is `(nibble - 8) / 8`. */
+	void testWswanWaveTable (void)
+	{
+		toybox::chips::WswanDecoder decoder;
+		decoder.reset (toybox::chips::ChipConfig { 3072000, 44100.0 });
+
+		const auto memory = [] (uint16_t address, uint8_t value)
+		{
+			toybox::chips::RegisterWrite write;
+			write.isMemory = true;			// a RAM byte, not a register with the same number
+			write.port = (uint8_t) (address >> 8);
+			write.reg = (uint8_t) (address & 0xFF);
+			write.value = value;
+			return write;
+		};
+
+		// Channel 0's table: low nibble 15, high nibble 0 - so step 0 is the top of the range and
+		// step 1 the bottom, which is the pair that tells the nibble order apart.
+		for (int i = 0; i < 16; ++i)
+		{
+			decoder.write (memory ((uint16_t) (0xC00 + i), (uint8_t) (15 | (i << 4))));
+		}
+
+		decoder.write (memory (0xC10, 0xFF));	// channel 1's first byte, for the +0x10 stride
+
+		toybox::chips::RegisterWrite write;
+		write.reg = 0x8F;
+		write.value = 0x30;						// 0x30 << 6 = 0xC00
+		decoder.write (write);
+
+		write.reg = 0x80;						// channel 0 pitch: 2048 - 1024 clocks a step
+		write.value = 0x00;
+		decoder.write (write);
+		write.reg = 0x81;
+		write.value = 0x04;
+		decoder.write (write);
+
+		write.reg = 0x88;						// channel 0 volume, both sides
+		write.value = 0x77;
+		decoder.write (write);
+
+		write.reg = 0x90;						// channel 0 on
+		write.value = 0x01;
+		decoder.write (write);
+
+		const auto first = decoder.channelState (0);
+		const auto second = decoder.channelState (1);
+
+		check (first.wave != nullptr && first.wave->size () == 32,
+			   "the row carries the channel's thirty-two steps");
+		check (first.tableWave, "and says it is one cycle, not a recording");
+
+		if (first.wave != nullptr && first.wave->size () == 32)
+		{
+			check (std::abs ((*first.wave)[0] - 0.875f) < 1e-6f,
+				   "an even step takes the low nibble");
+			check (std::abs ((*first.wave)[1] + 1.0f) < 1e-6f,
+				   "an odd step takes the high one - the pair is what pins the order");
+			check (std::abs ((*first.wave)[2] - 0.875f) < 1e-6f,
+				   "and the next byte starts the pair over");
+		}
+
+		check (std::abs (first.sampleRate - 3000.0f) < 1.0f,
+			   "the rate is clock / (2048 - f), the counter's own step rate");
+		check (second.wave != nullptr && std::abs ((*second.wave)[0] - 0.875f) < 1e-6f,
+			   "channel 1 reads its own sixteen bytes, 0x10 after channel 0's");
+	}
+
+	/** `0x0082` is a byte of RAM; `0x82` is channel 1's pitch low byte. The space flag is the only
+		thing that tells them apart - without it, uploading a table at a low address would retune a
+		channel instead of loading a shape. */
+	void testWswanMemoryIsNotARegister (void)
+	{
+		toybox::chips::WswanDecoder decoder;
+		decoder.reset (toybox::chips::ChipConfig { 3072000, 44100.0 });
+
+		Stream stream;
+		stream.at (0, 0x82, 0x00);
+		stream.at (0, 0x83, 0x04);			// channel 1: 1024 clocks a step
+		stream.at (0, 0x89, 0x77);			// channel 1 volume
+		stream.at (0, 0x90, 0x02);			// channel 1 on
+
+		for (const auto& write : stream.writes)
+		{
+			decoder.write (write);
+		}
+
+		check (decoder.channelState (1).period == 1024, "the pitch is set");
+
+		toybox::chips::RegisterWrite ram;
+		ram.isMemory = true;
+		ram.port = 0x00;
+		ram.reg = 0x82;
+		ram.value = 0xFF;
+		decoder.write (ram);
+
+		check (decoder.channelState (1).period == 1024,
+			   "a RAM byte at 0x0082 is not the pitch register it shares a number with");
+	}
+
+	// ---- SN76489 ----
 
 		std::vector<NoteEvent> runSn (const Stream& stream, uint32_t totalSamples,
 									  uint32_t clock = 3579545)
@@ -7713,6 +7815,8 @@ int main (void){
 	testWswanNoiseRatePicksTheDrumKey();
 	testWswanSweepMovesThePitch();
 	testWswanVoiceIsAOneShot();
+	testWswanWaveTable();
+	testWswanMemoryIsNotARegister();
 
 	testSnToneNote();
 	testSnDividerNeedsBothBytes();
