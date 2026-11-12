@@ -91,9 +91,13 @@ public:
 
 		inner.removeFromTop (12);
 
+		// **Three lines, not one.** The "nothing to export" sentence is a full sentence or two - it
+		// explains which chips are collected - and clipping it to a line left the user reading
+		// "Only chips that keep their samples in a ROM are..." with no way to see the rest. The
+		// panel grew by the same amount so nothing below moved into the footer.
 		g.setFont (juce::Font (juce::FontOptions (13.5f)));
-		g.drawFittedText (summaryLine(), inner.removeFromTop (20),
-						  juce::Justification::centredLeft, 1, 1.0f);
+		g.drawFittedText (summaryLine(), inner.removeFromTop (46),
+						  juce::Justification::topLeft, 3, 1.0f);
 
 		if (shown.written > 0 && shown.folder.getFullPathName().isNotEmpty())
 		{
@@ -175,7 +179,7 @@ private:
 	juce::Rectangle<int> panelBounds (void) const
 	{
 		const int width = juce::jmin (480, getWidth() - 60);
-		const int height = juce::jmin (320, getHeight() - 60);
+		const int height = juce::jmin (360, getHeight() - 60);	// 320 + the summary's extra lines
 		return getLocalBounds().withSizeKeepingCentre (juce::jmax (320, width), juce::jmax (240, height));
 	}
 
