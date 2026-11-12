@@ -85,6 +85,58 @@ std::vector<playback::DecodedSample> collectY8950Samples (const midi::SongIr& ir
 		// The same range is started dozens of times; the registers do not change between hits.
 		std::map<std::tuple<uint32_t, uint32_t, uint32_t>, bool> visited;
 
+		// **CPU-fed mode** (control 0x07 bit 5 clear): there is no ROM range, so the sample is the
+		// bytes the driver writes to 0x0F between START and the next control write. They are
+		// captured here and emitted as one file, named by content because they have no address.
+		std::vector<uint8_t> cpuBytes;
+		bool capturing = false;
+
+		const auto emitCpu = [&] (void)
+		{
+			if (cpuBytes.size () < 2 || delta == 0)
+			{
+				cpuBytes.clear ();
+				return;
+			}
+
+			const double rate = (double) delta * clock / (72.0 * 65536.0);
+
+			if (rate <= 0.0)
+			{
+				cpuBytes.clear ();
+				return;
+			}
+
+			uint64_t hash = 1469598103934665603ull;
+			hash = (hash ^ (uint64_t) index) * 1099511628211ull;
+
+			for (const uint8_t byte : cpuBytes)
+			{
+				hash = (hash ^ (uint64_t) byte) * 1099511628211ull;
+			}
+
+			hash ^= (uint64_t) cpuBytes.size () << 40;
+
+			char name[48] = {};
+
+			if (devices > 1)
+			{
+				std::snprintf (name, sizeof (name), "y8950adpcm_cpu_%08X%08X_d%u",
+							   (unsigned) (hash >> 32), (unsigned) (hash & 0xFFFFFFFFull),
+							   (unsigned) index);
+			}
+			else
+			{
+				std::snprintf (name, sizeof (name), "y8950adpcm_cpu_%08X%08X", (unsigned) (hash >> 32),
+							   (unsigned) (hash & 0xFFFFFFFFull));
+			}
+
+			collector.add (hash, name, cpuBytes.data (), cpuBytes.size (), SampleFormat::adpcmB4,
+						   rate);
+
+			cpuBytes.clear ();
+		};
+
 		for (const auto& write : ir.writes)
 		{
 			if ((std::size_t) write.deviceId != index || write.port != 0)
@@ -100,6 +152,14 @@ std::vector<playback::DecodedSample> collectY8950Samples (const midi::SongIr& ir
 			case 0x0B: stopLow = write.value; break;
 			case 0x0C: stopHigh = write.value; break;
 
+			case 0x0F:				// the ADPCM data port, used only in CPU-fed mode
+				if (capturing && cpuBytes.size () < (1u << 20))
+				{
+					cpuBytes.push_back ((uint8_t) write.value);
+				}
+
+				break;
+
 			case 0x10:
 				delta = (uint16_t) ((delta & 0xFF00u) | write.value);
 				break;
@@ -110,9 +170,25 @@ std::vector<playback::DecodedSample> collectY8950Samples (const midi::SongIr& ir
 
 			case 0x07:
 			{
-				if ((write.value & 0x80u) == 0 || delta == 0)
+				const bool startBit = (write.value & 0x80u) != 0;
+				const bool externalMemory = (write.value & 0x20u) != 0;
+
+				const bool wasCapturing = capturing;
+				capturing = startBit && ! externalMemory;
+
+				if (wasCapturing && ! capturing)
 				{
-					break;			// not a key-on, or a recalc/reset write
+					emitCpu ();		// START cleared, or the mode changed under us
+				}
+
+				if (capturing && ! wasCapturing)
+				{
+					cpuBytes.clear ();	// a new stream, not the previous hit's tail
+				}
+
+				if (capturing || ! startBit || delta == 0)
+				{
+					break;			// CPU-fed: nothing to find in the image; 0x0F fills it
 				}
 
 				const int shift = shiftFor (mode);
@@ -179,6 +255,13 @@ std::vector<playback::DecodedSample> collectY8950Samples (const midi::SongIr& ir
 			default:
 				break;
 			}
+		}
+
+		// A stream still open at the end of the song is a sample too: the driver's last hit may
+		// never be followed by a control write.
+		if (capturing)
+		{
+			emitCpu ();
 		}
 	}
 

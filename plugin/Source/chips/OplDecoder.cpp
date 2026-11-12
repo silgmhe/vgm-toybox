@@ -145,6 +145,16 @@ struct OplDecoder::Impl
 	uint16_t deltaN = 0;		// 0x10 / 0x11
 	uint8_t level = 0;			// 0x12
 
+	/** **CPU-fed Delta-T.** Control 0x07 bit 5 selects where the bytes come from: set means external
+		memory (the `0x88` image, addressed by the start/stop registers), **clear means the driver
+		writes them to 0x0F** and the unit synthesises as they arrive (`ymdeltat.c:169-171`).
+
+		There is no address in that mode, so the row shows what was written since START - the same
+		"buffer, no table" shape the YM2612 DAC row has, decoded through the same delta table.
+	*/
+	bool adpcmCpuMode = false;
+	std::vector<uint8_t> adpcmCpuBytes;
+
 	/** Delta-T's address shift, from the core's `ymdeltat.c`: a page is 32 bytes, and a control2 whose
 		low two bits are 0 selects a part with four-byte granularity (`dram_rightshift[0] = 3`). */
 	int adpcmShift (void) const
@@ -336,16 +346,59 @@ void OplDecoder::write (const RegisterWrite& write)
 		switch (reg)
 		{
 		case 0x07:
-			if ((write.value & kDeltaTStart) != 0)
+		{
+			// **Bit 5 says where the bytes are.** Clear: the driver writes them to 0x0F and the unit
+			// synthesises as they arrive; set: external memory, addressed by 0x09-0x0C.
+			const bool start = (write.value & kDeltaTStart) != 0;
+			const bool external = (write.value & 0x20) != 0;
+
+			impl->adpcmCpuMode = start && ! external;
+
+			if (start)
 			{
 				if (impl->deltaT.end <= time)
 				{
 					impl->deltaT.end = time + kAdpcmGate;
 				}
 
-				impl->latchAdpcm ();
+				if (impl->adpcmCpuMode)
+				{
+					// A new stream: the previous hit's bytes are not this one's.
+					impl->adpcmCpuBytes.clear ();
+					impl->adpcmWave = nullptr;
+				}
+				else
+				{
+					impl->latchAdpcm ();
+				}
 			}
+
 			break;
+		}
+
+		case 0x0F:
+		{
+			// The CPU-fed data port. Each byte is two nibbles and the row draws them as they land,
+			// re-decoding the buffer because the delta codec is stateful: there is no way to decode
+			// one more byte without the ones before it.
+			if (! impl->adpcmCpuMode || impl->adpcmCpuBytes.size () >= kAdpcmWindowBytes)
+			{
+				break;
+			}
+
+			impl->adpcmCpuBytes.push_back ((uint8_t) write.value);
+
+			auto wave = std::make_shared<std::vector<float>> ();
+			opn::deltaT::decode (impl->adpcmCpuBytes.data (), impl->adpcmCpuBytes.size (), *wave);
+			impl->adpcmWave = std::move (wave);
+
+			if (impl->deltaT.end <= time)
+			{
+				impl->deltaT.end = time + kAdpcmGate;
+			}
+
+			break;
+		}
 
 		case 0x08: impl->adpcmMode = write.value; break;
 		case 0x09: impl->startLow = write.value; break;

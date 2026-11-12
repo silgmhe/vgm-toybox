@@ -502,6 +502,55 @@ namespace
 			   "and it holds the most recent half second, not the whole song");
 	}
 
+	/** **The other memory mode: the driver writes the bytes.** Control 0x07 bit 5 clear selects
+		CPU-fed Delta-T - there is no ROM range, the data arrives on `0x0F` and the unit synthesises as
+		it lands (`ymdeltat.c:169-171`). The row shows that stream, decoded through the same table, so
+		a driver that never names an address still gets a shape.
+	*/
+	void testY8950CpuFedStream (void)
+	{
+		using toybox::chips::ChipConfig;
+		using toybox::chips::OplDecoder;
+		using toybox::chips::RegisterWrite;
+
+		OplDecoder decoder (OplDecoder::Variant::opl2, false);
+		decoder.reset (ChipConfig { 3579545u, 44100.0, 1, 0.0 });	// flags bit 0 = Y8950
+
+		const auto write = [&decoder] (uint32_t time, uint8_t reg, uint8_t value)
+		{
+			RegisterWrite w;
+			w.sampleTime = time;
+			w.port = 0;
+			w.reg = reg;
+			w.value = value;
+			decoder.write (w);
+		};
+
+		write (0, 0x10, 0xF0);		// DELTA-N 0x51F0 -> 15 912.5 Hz
+		write (1, 0x11, 0x51);
+		write (2, 0x07, 0x80);		// START with bit 5 clear: CPU-managed memory
+
+		check (decoder.channelState (14).wave == nullptr, "nothing to draw until a byte arrives");
+
+		for (int i = 0; i < 4; ++i)
+		{
+			write ((uint32_t) (3 + i), 0x0F, (uint8_t) (0x12 + i));
+		}
+
+		const auto state = decoder.channelState (14);
+
+		check (state.wave != nullptr && state.wave->size () == 8,
+			   "four bytes are eight nibbles on the row");
+		check (state.sampleRate > 15900.0f && state.sampleRate < 15930.0f,
+			   "at the same rate the external mode reports");
+		check (state.gate, "and the stream is sounding");
+
+		// A fresh START discards the previous stream rather than appending to it: the next hit is a
+		// different sample, even when the driver reuses the same registers.
+		write (10, 0x07, 0x80);
+		check (decoder.channelState (14).wave == nullptr, "a new stream starts empty again");
+	}
+
 	/** **The Y8950's Delta-T row can point at a sample**, unlike the YM2612 DAC: two registers name
 		the range and one names the pitch, so the row draws the same bytes the exporter writes.
 
@@ -7864,6 +7913,7 @@ int main (void){
 	testFmSecondPortIsASeparateChannel();
 	testFmDacTakesOverChannelSix();
 	testYm2612DacWindow();
+	testY8950CpuFedStream();
 	testY8950AdpcmRow();
 	testOpnThreeChannels();
 	testOpnChannelFamilies();
