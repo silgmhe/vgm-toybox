@@ -299,6 +299,9 @@ track.channelIndex = channelIndex;    // 联动芯片的通道号接在父芯片
 
 ### 9.1 采样与波表的覆盖状态
 
+**“整曲导出”一列落到两个菜单里，取决于收集器产出的是录音还是周期**：录音进 File > Export >
+All PCM Samples，周期进 All Wavetables（见 §9.28）。
+
 `wave` 与 `sampleRate` 是"画不画得出真波形、拖不拖得出来"的两个字段。**只有显式填了它们的解码器才有真波形**；其余的画占位，拖拽被拒绝（`writeChannelShape` 返回 `nothingToWrite`）。
 
 **这张表按 `SongIr.h` 的 `ChipKind` 逐项列出，不按记忆或上一版抄。** 上一版漏了四颗采样芯片（RF5C164、YMZ280B、MultiPCM、K007232）和一颗波表（ES5503），还把 `FDS`、`N163` 写进了 VGM 行——那两颗不在 `ChipKind` 里，由 NSF 后端加载，见本节末。
@@ -1385,3 +1388,25 @@ Wave 通道的波形则是芯片内的 16 字节 RAM（`0xFF30-0xFF3F`，在 `0x
 
 **实测**：`01 Title` 的 Wave 行从空白变成真实三角波；`wave.2 == 32` 且 `wave.2.peak == 0.875`，
 三条脉冲/噪声行的 `wave` 仍为 0（它们不需要表）。
+### 9.28 两条导出：PCM 采样与整曲波表（2026-11-12）
+
+**在这之前，“Export samples”里混着两类东西。** `DecodedSample` 没有“这是周期还是录音”的标记，于是
+VSU、ES5503、K005289、Mikey、MSM5232 五个波表收集器产出的 32–256 点周期，和 C140、SegaPCM 的真实录音一起
+进了同一个列表，`writeSamples` 一律按宿主速率零阶保持——32 点的表被拉成几十毫秒的阶梯音，既不是样本，
+也不是波表。
+
+| 项 | 做法 |
+|---|---|
+| 标记 | `DecodedSample::isCycle`；五个波表收集器在 `collector.add(..., /*isCycle*/ true)` 里声明 |
+| PCM 导出 | `writeSamples` 跳过周期；`recordsOnly()` 供菜单取列表——**行为变更**：老用户点 “All PCM Samples” 不再得到那批 32 点文件 |
+| 波表导出 | 新菜单项 `file.export.wavetables`（All Wavetables…）→ `cyclesOnly()` → `writeCycleSamples()` |
+| 写出规则 | 与键盘页按钮**同一份实现**（`writeCycleFile`）：single 模式 2048 点、`<!>` 周期标记、深度按设置；`kNativeBits` 表示“不再次量化”，因为这些电平已经是芯片自己的深度 |
+| 落盘位置 | 两条导出都写进 `用户选的目录/<歌曲标题>/`（`exportFolder()`，标题取文件名去扩展名），不再是散在所选目录里 |
+| 报告 | `ExportReport::cycles`，overlay 用一组 `Labels` 选三种文案（快照 / 采样 / 波表），不再是两层三目 |
+
+**仍未做**：HuC6280、SCC、X1-010 波表半、WonderSwan、Game Boy 五颗的收集器（见
+`docs/research/2026-11-12-wavetable-batch-export.md`）。在它们落地之前，All Wavetables 只覆盖已有的五颗
+波表芯片。
+
+**验证**：`testWavetableBatchExport`（拆分、PCM 导出跳过周期、波表导出一个 2048 点周期且与按钮同尺寸）、
+`assert menu.file.export.wavetables enabled`。

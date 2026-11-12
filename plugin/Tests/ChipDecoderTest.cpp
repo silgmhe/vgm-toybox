@@ -5889,6 +5889,64 @@ void testChipPlans (void)
 	sixteen copies read as a wave that oscillates sixteen times per cycle, and a rate derived from
 	the note makes the file's pitch a property of the song rather than of the shape.
 */
+/** **The two export lists are two lists.** A cycle has no duration, so it must not go through
+	`writeSamples`; a recording has one, so it must not go through `writeCycleSamples`. Both
+	failures are silent - each writes a legal wav of the wrong shape - which is why the filter and
+	the writer are pinned together here.
+*/
+void testWavetableBatchExport (void)
+{
+	using namespace toybox::playback;
+
+	DecodedSample record;
+	record.name = "__batch_record";
+	record.values = { 0.0f, 0.5f, -0.5f, 1.0f, 0.25f };
+	record.rate = 8000.0;
+
+	DecodedSample cycle;
+	cycle.name = "__batch_cycle";
+	cycle.values.assign (32, 0.25f);
+	cycle.values[0] = -0.5f;
+	cycle.rate = 2000.0;
+	cycle.isCycle = true;
+
+	const std::vector<DecodedSample> all { record, cycle };
+
+	check (recordsOnly (all).size () == 1, "the list splits: one recording");
+	check (cyclesOnly (all).size () == 1, "and one cycle");
+
+	const int records = writeSamples (all, ".", 0.0, nullptr, 0.0);
+	check (records == 1, "the PCM export writes the recording and leaves the cycle out");
+
+	const auto cycleFile = [] (const char* path)
+	{
+		std::FILE* file = std::fopen (path, "rb");
+
+		if (file == nullptr)
+		{
+			return -1L;
+		}
+
+		std::fseek (file, 0, SEEK_END);
+		const auto size = (long) std::ftell (file);
+		std::fclose (file);
+		return size;
+	};
+
+	check (cycleFile ("__batch_record.wav") > 0, "the recording is on disk");
+	check (cycleFile ("__batch_cycle.wav") < 0, "and the cycle was not written as audio");
+
+	const auto written = writeCycleSamples (all, ".", ExportMode::single, 2.0, kNativeBits);
+	check (written.written == 1 && written.skippedSample == 1,
+		   "the wavetable export writes only the cycle");
+
+	check (cycleFile ("__batch_cycle.wav") == 100 + (long) kWavetableSamples * 4L,
+		   "a cycle is one period at 2048 points, exactly what the button writes");
+
+	std::remove ("__batch_record.wav");
+	std::remove ("__batch_cycle.wav");
+}
+
 void testWaveExport (void)
 {
 	using namespace toybox::playback;
@@ -7786,6 +7844,7 @@ int main (void){
 	// chip whose decoder exists makes every test below describe a promise nobody can reach.
 	testChipPlans();
 
+	testWavetableBatchExport();
 	testWaveExport();
 
 	testPulseNote();

@@ -278,7 +278,7 @@ std::vector<playback::DecodedSample> collectEs5503Samples (const midi::SongIr& i
 		std::snprintf (name, sizeof (name), "es5503_%05X", (unsigned) (key >> 3));
 
 		collector.add (key, name, entry.bytes.data (), entry.length, SampleFormat::es5503,
-					   entry.rate);
+					   entry.rate, 0, /*isCycle*/ true);
 	}
 
 	return collector.take ();

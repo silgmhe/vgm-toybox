@@ -277,6 +277,16 @@ struct DecodedSample
 		Zero means the producer did not name it, which is every non-DPCM sample bank today.
 	*/
 	uint32_t sampleId = 0;
+
+	/** **A cycle, not a recording.**
+
+		Wavetable chips hand over one period of their oscillator - thirty-two entries on a VSU,
+		thirty-two on an SCC, up to 256 bytes on an ES5503 - and a period is not a sample: it has no
+		duration, it is meant to loop, and writing it as audio produces a short held tone instead of
+		a wavetable. `true` here is what keeps the two lists apart: "Export samples" writes the
+		recordings, "Export all wavetables" writes the cycles, each with its own rules.
+	*/
+	bool isCycle = false;
 };
 
 /** Writes one sample as a float32 mono WAV at `rate`, with no `clm ` marker.
@@ -304,5 +314,25 @@ bool writeWavFile (const std::string& path, const std::vector<float>& values, do
 */
 int writeSamples (const std::vector<DecodedSample>& samples, const std::string& folder,
 				  double maxSeconds = 0.0, int* truncated = nullptr, double targetRate = 0.0);
+
+/** The two lists the export menus work on: recordings for "All PCM Samples", cycles for "All
+	Wavetables". Splitting them here rather than in the editor keeps the rule in one place -
+	a `DecodedSample` says which it is with `isCycle`, and these are the only two readings of it.
+*/
+std::vector<DecodedSample> recordsOnly (const std::vector<DecodedSample>& samples);
+std::vector<DecodedSample> cyclesOnly (const std::vector<DecodedSample>& samples);
+
+/** **Writes every cycle in `samples` as a wavetable**, one file per table, into `folder`.
+
+	The counterpart of `writeSamples`, and deliberately not the same writer: a cycle is written
+	the way the keyboard page's button writes one - `nearest` to `kWavetableSamples` in single
+	mode, repeated in looped mode, at the depth asked for, with the one-period marker. Passing
+	`kNativeBits` keeps the collector's levels untouched (they are already the chip's own depth).
+
+	Recordings are skipped: they belong to `writeSamples`, and a drum written as a cycle would be
+	its first 2048 points stretched over one period.
+*/
+ExportOutcome writeCycleSamples (const std::vector<DecodedSample>& samples, const std::string& folder,
+								 ExportMode mode, double seconds, int bits);
 
 } // namespace toybox::playback

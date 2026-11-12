@@ -227,7 +227,7 @@ std::vector<playback::DecodedSample> collectMikeySamples (const midi::SongIr& ir
 					   (unsigned) (key & 0xFFFFFFFFull));
 
 		collector.add (key, name, entry.bytes.data (), entry.bytes.size (),
-					   SampleFormat::pcm8Signed, entry.rate);
+					   SampleFormat::pcm8Signed, entry.rate, 0, /*isCycle*/ true);
 	}
 
 	return collector.take ();

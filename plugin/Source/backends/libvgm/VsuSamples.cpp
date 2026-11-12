@@ -214,7 +214,7 @@ std::vector<playback::DecodedSample> collectVsuSamples (const midi::SongIr& ir, 
 					   (unsigned) (key & 0xFFFFFFFFull));
 
 		collector.add (key, name, entry.bytes.data (), entry.bytes.size (), SampleFormat::vsu6,
-					   entry.rate);
+					   entry.rate, 0, /*isCycle*/ true);
 	}
 
 	return collector.take ();

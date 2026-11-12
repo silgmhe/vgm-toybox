@@ -259,14 +259,78 @@ float quantiseSample (float value, int bits)
 	return (float) (snapped * 2.0 - 1.0);
 }
 
+namespace
+{
+	/** **The one place a cycle becomes a file.** Both the snapshot button (`writeCycleWav`, from a
+		`ChannelState`) and the whole-song export (`writeCycleSamples`, from a `DecodedSample`) land
+		here, so the depth, the repeat and the one-period marker cannot drift apart between them.
+
+		`depth <= 0` means "take the levels as they are": the collectors already decoded the chip's
+		own scale, and quantising again would turn a five-bit table into a coarser one.
+	*/
+	bool writeCycleFile (const std::string& path, const std::vector<float>& cycle,
+						 ExportMode mode, double seconds, int depth)
+	{
+		if (path.empty () || cycle.size () < 2)
+		{
+			return false;
+		}
+
+		std::vector<float> samples;
+		auto sampleRate = (uint32_t) kWavetableRate;
+
+		if (mode == ExportMode::single)
+		{
+			// Every source sample is held, at every depth: a thirty-two-point cycle becomes thirty-two
+			// platforms however many levels sit on them. That is the shape the chip's counter produces
+			// and the shape the panel draws, and a reference wavetable of the same wave contains.
+			//
+			// Depth is a vertical property only. An earlier version interpolated above eight bits, on
+			// the argument that a thirty-two-step platform is an artefact once the levels are fine -
+			// but that replaced the shape with a ramp the hardware never produced, which is a larger
+			// change than the one it was trying to fix.
+			samples = nearest (cycle, kWavetableSamples);
+		}
+		else
+		{
+			// One period is 1 / kReferenceHz of a second, so the rate follows from the cycle's own
+			// length and the requested duration decides how many periods fit. 256 samples - the
+			// longest table any backend here produces - works out to 112 kHz, inside what a sampler
+			// will take; nothing longer exists to push it over.
+			sampleRate = (uint32_t) std::lround (kReferenceHz * (double) cycle.size ());
+
+			const auto duration = (std::clamp) (seconds, 0.1, 10.0);
+			const auto periods = std::max (1, (int) std::lround (duration * kReferenceHz));
+
+			samples = repeated (cycle, periods);
+		}
+
+		// Depth is applied here rather than inside the writer: the writer's job is the container, and a
+		// sample file wants the same bytes whatever depth produced them.
+		if (depth > 0)
+		{
+			for (auto& sample : samples)
+			{
+				sample = quantiseSample (sample, depth);
+			}
+		}
+
+		// The one-period marker, for the destination that reads one period. Its format is plain ASCII
+		// and was read off a reference file - "<!>" followed by the samples per cycle - and without it
+		// a wavetable synth treats the file as an ordinary short recording and refuses to import it
+		// onto the oscillator. A looped file is audio and gets none.
+		const auto marker = (mode == ExportMode::single)
+							  ? "<!>" + std::to_string (kWavetableSamples)
+									+ " 00000000 wavetable (www.xferrecords.com)"
+							  : std::string ();
+
+		return writeFloat32Wav (path, samples, sampleRate, marker);
+	}
+}
+
 bool writeCycleWav (const ChannelState& channel, const std::string& path,
 					ExportMode mode, double seconds, int bits)
 {
-	if (path.empty ())
-	{
-		return false;
-	}
-
 	const auto cycle = cycleOf (channel);
 
 	if (cycle.size () < 2)
@@ -278,52 +342,7 @@ bool writeCycleWav (const ChannelState& channel, const std::string& path,
 	const auto depth = (bits == kNativeBits) ? nativeBits (channel.waveKind)
 											 : std::clamp (bits, 1, kMaxBits);
 
-	std::vector<float> samples;
-	auto sampleRate = (uint32_t) kWavetableRate;
-
-	if (mode == ExportMode::single)
-	{
-		// Every source sample is held, at every depth: a thirty-two-point cycle becomes thirty-two
-		// platforms however many levels sit on them. That is the shape the chip's counter produces
-		// and the shape the panel draws, and a reference wavetable of the same wave contains.
-		//
-		// Depth is a vertical property only. An earlier version interpolated above eight bits, on
-		// the argument that a thirty-two-step platform is an artefact once the levels are fine -
-		// but that replaced the shape with a ramp the hardware never produced, which is a larger
-		// change than the one it was trying to fix.
-		samples = nearest (cycle, kWavetableSamples);
-	}
-	else
-	{
-		// One period is 1 / kReferenceHz of a second, so the rate follows from the cycle's own
-		// length and the requested duration decides how many periods fit. 256 samples - the
-		// longest table any backend here produces - works out to 112 kHz, inside what a sampler
-		// will take; nothing longer exists to push it over.
-		sampleRate = (uint32_t) std::lround (kReferenceHz * (double) cycle.size ());
-
-		const auto duration = (std::clamp) (seconds, 0.1, 10.0);
-		const auto periods = std::max (1, (int) std::lround (duration * kReferenceHz));
-
-		samples = repeated (cycle, periods);
-	}
-
-	// Depth is applied here rather than inside the writer: the writer's job is the container, and a
-	// sample file wants the same bytes whatever depth produced them.
-	for (auto& sample : samples)
-	{
-		sample = quantiseSample (sample, depth);
-	}
-
-	// The one-period marker, for the destination that reads one period. Its format is plain ASCII
-	// and was read off a reference file - "<!>" followed by the samples per cycle - and without it
-	// a wavetable synth treats the file as an ordinary short recording and refuses to import it
-	// onto the oscillator. A looped file is audio and gets none.
-	const auto marker = (mode == ExportMode::single)
-						  ? "<!>" + std::to_string (kWavetableSamples)
-								+ " 00000000 wavetable (www.xferrecords.com)"
-						  : std::string ();
-
-	return writeFloat32Wav (path, samples, sampleRate, marker);
+	return writeCycleFile (path, cycle, mode, seconds, depth);
 }
 
 bool isSampledChannel (const ChannelState& channel)
@@ -621,6 +640,14 @@ int writeSamples (const std::vector<DecodedSample>& samples, const std::string& 
 
 	for (const auto& sample : samples)
 	{
+		// **This is the recording path.** A wavetable cycle has levels rather than a duration, and
+		// holding it at the host's rate would write a short tone instead of a table - wrong shape
+		// for a wavetable synth, wrong length for a sampler. Cycles go to `writeCycleSamples`.
+		if (sample.isCycle)
+		{
+			continue;
+		}
+
 		if (sample.values.empty ())
 		{
 			continue;
@@ -662,6 +689,73 @@ int writeSamples (const std::vector<DecodedSample>& samples, const std::string& 
 	}
 
 	return written;
+}
+
+std::vector<DecodedSample> recordsOnly (const std::vector<DecodedSample>& samples)
+{
+	std::vector<DecodedSample> out;
+	out.reserve (samples.size ());
+
+	for (const auto& sample : samples)
+	{
+		if (! sample.isCycle)
+		{
+			out.push_back (sample);
+		}
+	}
+
+	return out;
+}
+
+std::vector<DecodedSample> cyclesOnly (const std::vector<DecodedSample>& samples)
+{
+	std::vector<DecodedSample> out;
+	out.reserve (samples.size ());
+
+	for (const auto& sample : samples)
+	{
+		if (sample.isCycle)
+		{
+			out.push_back (sample);
+		}
+	}
+
+	return out;
+}
+
+ExportOutcome writeCycleSamples (const std::vector<DecodedSample>& samples, const std::string& folder,
+								 ExportMode mode, double seconds, int bits)
+{
+	ExportOutcome outcome;
+	outcome.channelsSeen = (int) samples.size ();
+
+	const auto base = folder.empty () ? std::string (".") : folder;
+
+	// `kNativeBits` means the chip's own depth. These levels already are the chip's own depth - the
+	// collector decoded them - so the file carries them unchanged rather than snapping them again.
+	const auto depth = (bits == kNativeBits) ? 0 : (std::clamp) (bits, 1, kMaxBits);
+
+	for (const auto& sample : samples)
+	{
+		if (! sample.isCycle || sample.values.size () < 2)
+		{
+			++outcome.skippedSample;
+			continue;
+		}
+
+		const auto path = base + "/" + legalFileName (sample.name) + ".wav";
+
+		if (writeCycleFile (path, sample.values, mode, seconds, depth))
+		{
+			++outcome.written;
+		}
+		else
+		{
+			++outcome.failed;
+		}
+	}
+
+	return outcome;
 }
 
 } // namespace toybox::playback

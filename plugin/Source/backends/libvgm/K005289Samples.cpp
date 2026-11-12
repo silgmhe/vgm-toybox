@@ -184,7 +184,7 @@ std::vector<playback::DecodedSample> collectK005289Samples (const midi::SongIr& 
 		// grid is unchanged by a sixty-three-step snap. Making it exact needs a per-channel native
 		// depth rather than one per kind, which is worth doing when something depends on the label.
 		collector.add (key, name, entry.bytes.data (), entry.bytes.size (),
-					   SampleFormat::prom4, entry.rate);
+					   SampleFormat::prom4, entry.rate, 0, /*isCycle*/ true);
 	}
 
 	return collector.take ();

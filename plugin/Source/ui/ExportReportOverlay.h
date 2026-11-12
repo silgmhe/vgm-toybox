@@ -33,6 +33,11 @@ struct ExportReport
 		a list of DPCM samples, and a heading that says "wavetables" over five sample files is worse.
 	*/
 	bool samples = false;
+
+	/** The third export: whole-song wavetables, where `channelsSeen` counts the tables collected
+		rather than channels or samples. Both flags false is the snapshot button, whose numbers
+		really are channels. */
+	bool cycles = false;
 };
 
 /**
@@ -85,7 +90,7 @@ public:
 
 		g.setColour (theme::primaryText());
 		g.setFont (juce::Font (juce::FontOptions (18.0f, juce::Font::bold)));
-		g.drawText (i18n::tr (shown.samples ? "export.samples.title" : "export.title"), inner.removeFromTop (26),
+		g.drawText (i18n::tr (labels ().title), inner.removeFromTop (26),
 					juce::Justification::centredLeft, false);
 
 		inner.removeFromTop (12);
@@ -138,7 +143,7 @@ public:
 
 			g.setColour (theme::secondaryText());
 			g.setFont (juce::Font (juce::FontOptions (11.5f)));
-			g.drawFittedText (i18n::tr (shown.samples ? "export.samples.seen" : "export.seen", juce::String (shown.channelsSeen)),
+			g.drawFittedText (i18n::tr (labels ().seen, juce::String (shown.channelsSeen)),
 							  inner.removeFromTop (18), juce::Justification::topLeft, 1, 1.0f);
 		}
 	}
@@ -171,6 +176,32 @@ public:
 	std::function<void ()> onClose;
 
 private:
+	/** **The three exports, one set of sentences.** The keys used to be two nested ternaries per
+		call site, which read as "samples or not" until a third export made that a lie; naming the
+		three here keeps each sentence in one place and the call sites plain.
+	*/
+	struct Labels
+	{
+		const char* title;
+		const char* seen;
+		const char* none;
+	};
+
+	Labels labels (void) const
+	{
+		if (shown.samples)
+		{
+			return { "export.samples.title", "export.samples.seen", "export.samples.none" };
+		}
+
+		if (shown.cycles)
+		{
+			return { "export.cycles.title", "export.cycles.seen", "export.cycles.none" };
+		}
+
+		return { "export.title", "export.seen", "export.noChannels" };
+	}
+
 	juce::Rectangle<int> panelBounds (void) const
 	{
 		const int width = juce::jmin (480, getWidth() - 60);
@@ -185,7 +216,7 @@ private:
 			// Two different failures, two different sentences. The panel receiving nothing and the
 			// panel receiving channels that could not be written are not the same bug, and the
 			// message that did not say which is why this code was "fixed" twice without effect.
-			return i18n::tr (shown.channelsSeen == 0 ? (shown.samples ? "export.samples.none" : "export.noChannels") : "export.none");
+			return i18n::tr (shown.channelsSeen == 0 ? labels ().none : "export.none");
 		}
 
 		if (shown.samples && shown.truncated > 0)

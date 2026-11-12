@@ -87,6 +87,7 @@ ToyboxAudioProcessorEditor::ToyboxAudioProcessorEditor (ToyboxAudioProcessor& p)
 	// command, one action, however it is reached.
 	menu.onOpenSong = [this] { commands.perform ("file.open"); };
 	menu.onExportSamples = [this] { exportSamples (); };
+	menu.onExportWavetables = [this] { exportWavetables (); };
 	menu.onCloseSong = [this] { closeSong(); };
 	menu.onQuit = [] { juce::JUCEApplicationBase::quit(); };
 	menu.onAbout = [this] { showAbout(); };
@@ -647,11 +648,27 @@ void ToyboxAudioProcessorEditor::showDragFailure (void)
 	dragFailedOverlay.grabKeyboardFocus ();
 }
 
+juce::File ToyboxAudioProcessorEditor::exportFolder (const juce::File& chosen)
+{
+	// **The song's title, not the archive's name with an extension.** "01 Title.vgz" exports into
+	// "01 Title/", which is what a person filing the result expects to see; the file name is the
+	// title for every archive in this collection, and a loader that has no title falls back to
+	// "song" rather than to the chosen folder itself.
+	const auto title = processor.getEngine ().getFile ().getFileNameWithoutExtension ();
+	const auto name = title.isNotEmpty () ? title : juce::String ("song");
+
+	return chosen.getChildFile (juce::File::createLegalFileName (name));
+}
+
 void ToyboxAudioProcessorEditor::exportSamples (void)
 {
 	// Taken here rather than inside the chooser's callback: the audio thread is still starting
 	// samples, and a later copy would be a different list from the one the count describes.
-	auto samples = processor.getEngine().currentSamples();
+	//
+	// **Recordings only.** The same list carries the wavetable cycles the collectors scan (VSU,
+	// ES5503, K005289, ...), and a cycle is not a sample - it has no duration, and holding it at
+	// the project's rate writes a short tone instead of a table. Those go to "All Wavetables".
+	auto samples = toybox::playback::recordsOnly (processor.getEngine().currentSamples());
 
 	toybox::ui::ExportReport found;
 	found.samples = true;
@@ -678,22 +695,91 @@ void ToyboxAudioProcessorEditor::exportSamples (void)
 										return;
 									}
 
+									const auto target = exportFolder (folder);
+
 									toybox::ui::ExportReport done;
 									done.samples = true;
 									done.channelsSeen = (int) samples.size();
-									done.folder = folder;
+									done.folder = target;
+
+									if (! target.createDirectory().wasOk())
+									{
+										done.failed = done.channelsSeen;
+										showExportReport (done);
+										return;
+									}
+
 									// **The rate the project runs at, not the chip's.** A file at the
 									// chip's own 8..23 kHz is resampled on import, and that resampling
 									// filters away the steps an 8-bit DAC is made of. The setting
 									// resolves to the host's rate by default; see `heldAt`.
 									done.written = toybox::playback::writeSamples (
-										samples, folder.getFullPathName().toStdString(),
+										samples, target.getFullPathName().toStdString(),
 										(double) toybox::settings::SettingsStore::getInstance ()
 											.getExportSampleSeconds (),
 										&done.truncated,
 										toybox::settings::SettingsStore::getInstance ()
 											.getExportSampleRateHz (processor.getSampleRate ()));
 									done.failed = done.channelsSeen - done.written;
+
+									showExportReport (done);
+								});
+}
+
+void ToyboxAudioProcessorEditor::exportWavetables (void)
+{
+	auto cycles = toybox::playback::cyclesOnly (processor.getEngine().currentSamples());
+
+	toybox::ui::ExportReport found;
+	found.cycles = true;
+	found.channelsSeen = (int) cycles.size();
+
+	if (cycles.empty())
+	{
+		showExportReport (found);
+		return;
+	}
+
+	sampleChooser = std::make_unique<juce::FileChooser> (toybox::i18n::tr ("export.cycles.title"),
+														 juce::File::getSpecialLocation (juce::File::userMusicDirectory),
+														 juce::String());
+
+	sampleChooser->launchAsync (juce::FileBrowserComponent::openMode
+									| juce::FileBrowserComponent::canSelectDirectories,
+								[this, cycles] (const juce::FileChooser& chooser)
+								{
+									const auto folder = chooser.getResult();
+
+									if (folder == juce::File())
+									{
+										return;
+									}
+
+									const auto target = exportFolder (folder);
+
+									toybox::ui::ExportReport done;
+									done.cycles = true;
+									done.channelsSeen = (int) cycles.size();
+									done.folder = target;
+
+									if (! target.createDirectory().wasOk())
+									{
+										done.failed = done.channelsSeen;
+										showExportReport (done);
+										return;
+									}
+
+									// The keyboard page's own rules: one cycle, at the depth the chip
+									// produced (the collectors already decoded it). A menu entry has no
+									// options overlay, so the defaults are the button's single-cycle ones.
+									const auto outcome = toybox::playback::writeCycleSamples (
+										cycles, target.getFullPathName().toStdString(),
+										toybox::playback::ExportMode::single, 2.0,
+										toybox::playback::kNativeBits);
+
+									done.written = outcome.written;
+									done.skippedSample = outcome.skippedSample;
+									done.failed = outcome.failed;
 
 									showExportReport (done);
 								});

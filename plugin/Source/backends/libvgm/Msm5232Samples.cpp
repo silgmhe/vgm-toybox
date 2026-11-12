@@ -163,7 +163,7 @@ std::vector<playback::DecodedSample> collectMsm5232Samples (const midi::SongIr& 
 					   (unsigned) (hash & 0xFFFFFFFFull));
 
 		collector.add (hash, name, entry.bytes.data (), entry.bytes.size (),
-					   SampleFormat::pcm8Signed, entry.rate);
+					   SampleFormat::pcm8Signed, entry.rate, 0, /*isCycle*/ true);
 	}
 
 	return collector.take ();

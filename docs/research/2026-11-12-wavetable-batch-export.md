@@ -172,3 +172,23 @@ sample-names <chip>_<hash 前缀>   # 首名固定
 ```
 
 文件名是内容 hash，脚本要先跑一次把实际值写进断言——与 `pcm-*` 脚本的做法一致。
+
+---
+
+## 8. 已实现（第一批：菜单与分流，2026-11-12）
+
+按讨论先做**基础设施**，五颗新收集器仍待做：
+
+- `DecodedSample::isCycle`；`SampleCollector::add(..., bool isCycle)`；VSU / ES5503 / K005289 / Mikey /
+  MSM5232 五个收集器标记为周期；
+- `writeSamples` 跳过周期，`recordsOnly()` / `cyclesOnly()` 提供两条列表；
+- 新菜单 **File > Export > All Wavetables…**（`file.export.wavetables`）→ `writeCycleSamples()`：与键盘页
+  按钮共用 `writeCycleFile`（2048 点单周期、`<!>` 标记、`kNativeBits` 不二次量化）；
+- 两条导出都落在 `所选目录/<歌曲标题>/`；
+- 报告新增 `cycles`，overlay 用一组标签选三种文案。
+
+**行为变更**：All PCM Samples 不再包含那五个波表收集器的 32 点文件——它们现在只在 All Wavetables 里出现，
+且是一个周期而不是保持到宿主速率的阶梯。`testWavetableBatchExport` 把这条差异钉住。
+
+**下一步**：HuC6280、SCC、X1-010 波表半、WonderSwan、Game Boy 五个收集器（§3–§5 已给出每颗的写入、
+速率、发射点与格式）。

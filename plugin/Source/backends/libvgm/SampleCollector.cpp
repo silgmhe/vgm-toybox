@@ -8,7 +8,8 @@ namespace toybox::backends::libvgm
 {
 
 void SampleCollector::add (uint64_t key, const std::string& name, const uint8_t* bytes,
-						   std::size_t length, SampleFormat format, double rate, uint32_t sampleId)
+						   std::size_t length, SampleFormat format, double rate, uint32_t sampleId,
+					   bool isCycle)
 {
 	if (bytes == nullptr || length < 2)
 	{
@@ -24,6 +25,7 @@ void SampleCollector::add (uint64_t key, const std::string& name, const uint8_t*
 	sample.name = name;
 	sample.rate = rate;
 	sample.sampleId = sampleId;
+	sample.isCycle = isCycle;
 
 	if (format == SampleFormat::nesDelta)
 	{

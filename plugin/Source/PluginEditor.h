@@ -185,8 +185,16 @@ private:
 	/** File > Export > All DPCM Samples: the folder picker, kept alive while it is open. */
 	std::unique_ptr<juce::FileChooser> sampleChooser;
 
-	/** Every sample the song started, written into a folder the user picks. */
+	/** Every PCM sample the song started, written into a folder the user picks. */
 	void exportSamples (void);
+
+	/** Every wavetable the song used, written as one cycle per table. The counterpart of
+		`exportSamples`, and separate because a cycle and a recording are written differently. */
+	void exportWavetables (void);
+
+	/** **The song's own folder inside the one the user picked**, created on demand. Both exports
+		land in `chosen/<song title>/` rather than scattering files next to it. */
+	juce::File exportFolder (const juce::File& chosen);
 
 	/** Puts an export report on screen - the one place the overlay is shown, for both exports. */
 	void showExportReport (const toybox::ui::ExportReport& report);
