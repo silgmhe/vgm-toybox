@@ -1,0 +1,27 @@
+# The Game Boy's wave channel reaches the row - and it is the song's own sixteen bytes.
+#
+# The pulses and the noise need nothing from a file to draw: their shapes are synthesised from duty
+# and period. The wave channel is the exception - its shape is the sixteen bytes at 0xFF30-0xFF3F,
+# which a `0xB3` carries as offsets 0x20-0x2F. The decoder keeps them, takes an **even** step from
+# the **high** nibble (the reverse of the WonderSwan) and normalises `(n - 8) / 8`.
+#
+# The size alone would pass on a table that never arrived - an empty one still has thirty-two
+# points - so the peak is what proves the upload landed: `01 Title` loads a shape whose highest step
+# is nibble 15, `(15 - 8) / 8 = 0.875`, while an empty table's peak is -1.
+
+size 900 700
+
+load "test_file/Game Boy DMG/01 Title.vgz"
+tick
+
+menu invoke view.keyboard
+tick
+
+engine play
+host 0.3 playing
+
+assert engine wave.2 == 32
+assert engine wave.2.peak == 0.875
+
+# The pulses stay synthesised, with no stored table of their own.
+assert engine wave.0 == 0

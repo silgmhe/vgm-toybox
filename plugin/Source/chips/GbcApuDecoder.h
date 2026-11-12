@@ -15,7 +15,10 @@ namespace toybox::chips
 	the chip silences the channel, not when the driver remembers to key it off.
 
 	The wave channel is a sample player, but a Game Boy driver streams its 32 samples at whatever
-	pitch the song needs, so it is decoded like a tone channel. */
+	pitch the song needs, so it is decoded like a tone channel. Its shape is the **sixteen bytes of
+	wave RAM** the driver uploads at `0xB3` offsets 0x20-0x2F: thirty-two 4-bit steps, the **high**
+	nibble first, walked at `clock / (2 * (2048 - f))` steps a second. The pulses and the noise need
+	none of this - their shapes are synthesised from duty and period. */
 class GbcApuDecoder final : public IChipDecoder
 {
 public:

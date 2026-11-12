@@ -1320,6 +1320,60 @@ namespace
 		check (notes[0].isDrum == false, "the wave channel is melodic");
 	}
 
+	/** **The wave channel's shape is RAM, not a register.** `0xB3` offsets 0x20-0x2F are the sixteen
+		bytes of 0xFF30-0xFF3F; two 4-bit steps share a byte and - the reverse of the WonderSwan - an
+		**even** step takes the **high** nibble. */
+	void testGbWaveTable (void)
+	{
+		toybox::chips::GbcApuDecoder decoder;
+		decoder.reset (toybox::chips::ChipConfig { kGbClock, 44100.0 });
+
+		toybox::chips::RegisterWrite write;
+		write.reg = 0x16;					// NR52: sound on
+		write.value = 0x80;
+		decoder.write (write);
+
+		// byte i = (i << 4) | (15 - i): step 0 is high nibble 0, step 1 low nibble 15
+		for (int i = 0; i < 16; ++i)
+		{
+			write.reg = (uint8_t) (0x20 + i);
+			write.value = (uint16_t) ((i << 4) | (15 - i));
+			decoder.write (write);
+		}
+
+		write.reg = 0x0A;					// NR30: wave DAC on
+		write.value = 0x80;
+		decoder.write (write);
+		write.reg = 0x0C;					// NR32: full volume
+		write.value = 0x20;
+		decoder.write (write);
+		write.reg = 0x0D;					// frequency 1024
+		write.value = 0x00;
+		decoder.write (write);
+		write.reg = 0x0E;
+		write.value = 0x84;					// trigger, frequency high 4
+		decoder.write (write);
+
+		const auto state = decoder.channelState (toybox::chips::GbcApuDecoder::wave);
+
+		check (state.wave != nullptr && state.wave->size () == 32,
+			   "the row carries the channel's thirty-two steps");
+		check (state.tableWave, "and says it is one cycle, not a recording");
+
+		if (state.wave != nullptr && state.wave->size () == 32)
+		{
+			check (std::abs ((*state.wave)[0] + 1.0f) < 1e-6f,
+				   "an even step takes the high nibble: 0 is the bottom of the range");
+			check (std::abs ((*state.wave)[1] - 0.875f) < 1e-6f,
+				   "and an odd step the low one: 15 is one step below full scale");
+			check (std::abs ((*state.wave)[2] + 0.875f) < 1e-6f,
+				   "the next byte continues the pair");
+		}
+
+		check (std::abs (state.sampleRate - (float) (kGbClock / (2.0 * 1024.0))) < 1.0f,
+			   "and the rate is clock / (2 * (2048 - f)), the counter's own step rate");
+	}
+
 	void testGbNoiseIsADrum (void)
 	{
 		Stream fast;
@@ -7777,6 +7831,7 @@ int main (void){
 	testGbLengthCounterEndsTheNote();
 	testGbEnvelopeDecaysTheNoteAway();
 	testGbWaveChannel();
+	testGbWaveTable();
 	testGbNoiseIsADrum();
 	testGbSilenceWithoutPower();
 

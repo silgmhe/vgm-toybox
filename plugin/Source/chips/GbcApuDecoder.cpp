@@ -2,6 +2,11 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdint>
+#include <map>
+#include <memory>
+#include <utility>
+#include <vector>
 
 #include "Pitch.h"
 
@@ -17,6 +22,40 @@ namespace
 		which is why a larger register value is a higher note and the tables below read
 		`kFrequencyRegisterModulus - period`. */
 	constexpr double kFrequencyRegisterModulus = 2048.0;
+
+	/** **The wave channel's thirty-two steps live in RAM**, not in a register: `0xFF30-0xFF3F`, which
+		is offset `0x20-0x2F` from the register block's base in a `0xB3` command. Two 4-bit samples
+		share a byte, and - the opposite of the WonderSwan - an **even** step takes the **high**
+		nibble (`gb_mame.c:990-997`). */
+	constexpr int kWaveBytes = 16;
+	constexpr int kWaveSteps = kWaveBytes * 2;
+	constexpr uint8_t kWaveRamOffset = 0x20;
+
+	/** A 4-bit sample is centred on 8 and the core makes it bipolar by subtracting 8
+		(`gb_mame.c:996`), so a decoded step is `(value - 8) / 8`. */
+	constexpr float kWaveCentre = 8.0f;
+
+	/** The counter ticks every **two** CPU cycles and the offset advances once per reload
+		(`gb_mame.c:962-1000`), so a step lasts `2 * (2048 - f)` clocks and the tone is that over
+		thirty-two steps - the `clock / (64 * (2048 - f))` the note table already reports. */
+	constexpr double kWaveCyclesPerStep = 2.0;
+
+	/** A cache with a bound: these files rewrite the table when they change instrument (fifteen to
+		forty-four shapes a song), so the decode has to be a hit. Each entry is 128 bytes. */
+	constexpr std::size_t kWaveCacheLimit = 64;
+
+	/** FNV-1a over the sixteen bytes. */
+	uint64_t hashOfWave (const uint8_t* bytes)
+	{
+		uint64_t hash = 1469598103934665603ull;
+
+		for (int i = 0; i < kWaveBytes; ++i)
+		{
+			hash = (hash ^ (uint64_t) bytes[i]) * 1099511628211ull;
+		}
+
+		return hash;
+	}
 
 	/** Pulse and wave: frequency = clock / (divider * (2048 - register)). The pulse channels
 		divide the clock by 32, the wave channel by 64 - the same register is an octave lower
@@ -164,6 +203,56 @@ struct GbcApuDecoder::Impl
 	std::unique_ptr<NoteTable> pulseTable;
 	std::unique_ptr<NoteTable> waveTable;
 	std::unique_ptr<NoteTable> noiseTable;
+
+	/** **The wave channel's own memory**, sixteen bytes the driver uploads at offsets 0x20-0x2F.
+
+		The panel needs it and the note does not, which is why it arrived later than the pitch: the
+		same 16 bytes are the whole shape, and a driver rewrites them whenever it changes instrument.
+	*/
+	uint8_t waveRam[kWaveBytes] = {};
+
+	/** Decoded tables keyed by their sixteen bytes. `mutable` because `channelState` is const and
+		the vector it hands out is immutable once decoded. */
+	mutable std::map<uint64_t, std::shared_ptr<const std::vector<float>>> waveCache;
+
+	/** **The thirty-two steps the wave channel walks**, read out of `waveRam`.
+
+		The nibble order is the core's (`gb_mame.c:990-997`) and it is the **reverse** of the
+		WonderSwan's: an even step takes the **high** nibble. Getting it backwards mirrors every
+		two-step pair - a shape that reads as slightly different rather than as an error, which is
+		why a test pins both steps of the first byte.
+	*/
+	std::shared_ptr<const std::vector<float>> waveFor (void) const
+	{
+		const uint64_t key = hashOfWave (waveRam);
+
+		const auto found = waveCache.find (key);
+
+		if (found != waveCache.end ())
+		{
+			return found->second;
+		}
+
+		auto wave = std::make_shared<std::vector<float>> ();
+		wave->reserve (kWaveSteps);
+
+		for (int step = 0; step < kWaveSteps; ++step)
+		{
+			const uint8_t byte = waveRam[step / 2];
+			const uint8_t nibble = (step % 2 == 0) ? (uint8_t) (byte >> 4) : (uint8_t) (byte & 0x0F);
+
+			wave->push_back (((float) nibble - kWaveCentre) / kWaveCentre);
+		}
+
+		if (waveCache.size () >= kWaveCacheLimit)
+		{
+			// A song's vocabulary is a few dozen shapes; a driver that writes a new one every frame
+			// must not grow this for the length of the song.
+			waveCache.clear ();
+		}
+
+		return waveCache.emplace (key, std::move (wave)).first->second;
+	}
 
 	void writeEnvelope (Envelope& envelope, uint8_t value)
 	{
@@ -504,7 +593,18 @@ void GbcApuDecoder::write (const RegisterWrite& w)
 		break;
 	}
 	default:
-		break;		// NR50/NR51 mixing, wave RAM: nothing a note needs
+		// **The wave RAM lives in the same block** at offsets 0x20-0x2F (0xFF30-0xFF3F). It changes
+		// no note, but it is the whole shape of the wave channel, so it is kept for the row.
+		//
+		// The DMG also has a write lock here: while the channel plays, a write only lands in the
+		// cycle the chip reads that byte (`gb_mame.c:278-303`). It is not mirrored - every driver in
+		// this collection stops the channel before uploading, which is the only reliable sequence on
+		// real hardware - so a file that did otherwise would show bytes the audio does not have.
+		if (w.reg >= kWaveRamOffset && w.reg < kWaveRamOffset + kWaveBytes)
+		{
+			impl->waveRam[w.reg - kWaveRamOffset] = (uint8_t) w.value;
+		}
+		break;		// NR50/NR51 mixing: nothing a note or a shape needs
 	}
 }
 
@@ -554,6 +654,19 @@ ChannelState GbcApuDecoder::channelState (int channel) const
 		state.period = (uint32_t) impl->wave.frequency;
 		state.volume = impl->waveVolume();
 		state.patch = 0;
+
+		// **The row draws the table the channel walks**, one cycle by definition, at the rate the
+		// counter steps it: `clock / (2 * (2048 - f))` a second, whose thirty-second is the
+		// `clock / (64 * (2048 - f))` tone the note table reports. Drawing a table even while the
+		// channel is silent is deliberate - a driver loads a shape before it triggers, and a row
+		// with nothing to drag is worse than a flat one.
+		state.wave = impl->waveFor ();
+		state.tableWave = true;
+		state.sampleRate
+			= (float) (impl->cpuClock
+					   / (kWaveCyclesPerStep
+						  * (kFrequencyRegisterModulus
+							 - (double) (impl->wave.frequency & 0x07FF))));
 		break;
 	case noise:
 		state.gate = impl->noiseAudible();
