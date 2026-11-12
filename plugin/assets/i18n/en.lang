@@ -230,7 +230,8 @@ language: English
 	"visualiser.keyboardUnsupported" = "The channels of this chip cannot be shown yet.";
 	"visualiser.export" = "Export snapshot";
 	"visualiser.exportEmpty" = "Nothing to export yet.";
-"visualiser.dragHint" = "Drag into a wavetable synth";
+"visualiser.dragHint.wave" = "Drag into a wavetable synth (Serum, Vital, ...) to load it; drop it on a folder to save the snapshot";
+"visualiser.dragHint.sample" = "Drag into a sampler to load it; drop it on a folder to save the sample";
 "visualiser.dragFailed.title" = "Could not write the wavetable";
 "visualiser.dragFailed.body" = "The temporary file for this drag could not be created. Check that the system temp folder is writable, then try again.";
 	"export.title" = "Wavetables exported";

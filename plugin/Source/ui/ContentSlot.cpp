@@ -721,7 +721,18 @@ public:
 		at all, so an empty answer costs nothing. */
 	juce::String getTooltip (void) override
 	{
-		return hoveredWaveChannel >= 0 ? i18n::tr ("visualiser.dragHint") : juce::String ();
+		if (hoveredWaveChannel < 0 || (std::size_t) hoveredWaveChannel >= snapshot.channels.size ())
+		{
+			return {};
+		}
+
+		// **Two destinations, two sentences.** A recorded sample goes into a sampler; a stored table
+		// or a synthesised period goes into a wavetable synth. `isSampledChannel` is the same test
+		// the export uses, so the hint cannot promise a drop that would be refused.
+		const bool sampled = playback::isSampledChannel (
+			snapshot.channels[(std::size_t) hoveredWaveChannel]);
+
+		return i18n::tr (sampled ? "visualiser.dragHint.sample" : "visualiser.dragHint.wave");
 	}
 
 	void mouseWheelMove (const juce::MouseEvent& event, const juce::MouseWheelDetails& wheel) override

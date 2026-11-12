@@ -226,7 +226,8 @@ language: 简体中文
 	"visualiser.keyboardUnsupported" = "该芯片的逐通道状态尚未支持。";
 	"visualiser.export" = "导出波表快照";
 	"visualiser.exportEmpty" = "当前没有可导出的波形。";
-"visualiser.dragHint" = "拖入波表合成器即可导入";
+"visualiser.dragHint.wave" = "拖到波表合成器（如 Serum、Vital 等）导入；拖到文件夹则保存波表快照";
+"visualiser.dragHint.sample" = "拖到采样器导入；拖到文件夹则保存采样快照";
 "visualiser.dragFailed.title" = "无法写出波表";
 "visualiser.dragFailed.body" = "这次拖拽所需的临时文件没能创建。请确认系统临时目录可写，然后重试。";
 	"export.title" = "波表已导出";
