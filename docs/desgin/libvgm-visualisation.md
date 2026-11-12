@@ -333,7 +333,7 @@ track.channelIndex = channelIndex;    // 联动芯片的通道号接在父芯片
 | 采样 + 波表 | **X1-010**（16 通道：PCM 样本 / 128 步波表）—— 见 §9.25 | ✓ | ✓ | ✓ `collectX1010Samples`（PCM 半）|
 | 波表 | **WonderSwan**（4 通道 32 步 4 bit，波形在 RAM 里）—— 见 §9.26 | ✓ | ✓ | —（行与拖拽已有；整曲波表导出未做） |
 | 波表 | **Game Boy 波表**（Wave 通道 32 步 4 bit）—— 见 §9.27 | ✓ | ✓ | —（行与拖拽已有；整曲波表导出未做） |
-| 波表 | NES APU | — | — | — |
+| 合成 | NES APU（2A03）的两条脉冲、三角与噪声 —— 行的形状由 `waveKind` 合成，不是文件里的数据 | — | — | —（不需要：没有可导出的字节）|
 
 **不在本表的两类**：PSG 与 FM（AY、SN76489、SAA1099、POKEY、OPL 系、OPN 系、OPM、OPX 等）本来就用 `cycleFor` 画阶梯，不经过 `state.wave`；`FDS` 与 `N163` 由 NSF 后端（`NsfBackend` / `NsfBus`）加载，没有对应的 `ChipKind`，要单独处理。
 
