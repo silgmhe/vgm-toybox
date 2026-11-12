@@ -101,3 +101,19 @@ python tools/segapcm_forensic.py "test_file/SEGAPCM/01 Magical Sound Shower.vgz"
 ```
 
 输出即第 2 节的序列；`--summary` 只打印计数。工具只读，不改 ROM、不改文件。
+
+## 7. 已实现（v1，2026-11-12）
+
+收集器改为“每次写 `0x86` 且 bit0=0 都算一次击打”，并在该写上锁存（`0x84/0x85` 是半个地址，
+不在此处取）。内容去重与 `pitch = 0` / 长度 < 2 字节的过滤照旧。
+
+| 文件 | v0 文件数 | v1 文件数 |
+|---|---|---|
+| `01 Magical Sound Shower` | 3 | **12** |
+| `03 Scene Select` | 6 | **14** |
+| `05 Magical Sound Shower (Extended)` | 3 | **12** |
+
+`plugin/Tests/scripts/pcm-segapcm.txt` 钉住 12 / 14 与首名。
+
+**v1 没做的**：解码器（行与 MIDI）仍以 1→0 为起音，重复击打看不见；寻址式重触发（起点非 256
+对齐）作为独立文件导出——留待 v2 决定。

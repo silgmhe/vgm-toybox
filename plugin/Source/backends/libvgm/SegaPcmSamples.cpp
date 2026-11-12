@@ -222,22 +222,23 @@ std::vector<playback::DecodedSample> collectSegaPcmSamples (const midi::SongIr& 
 
 		case 0x06:
 		{
-			// A clear after a set is a key-on; the core has no other edge.
-			const bool wasOff = (voice.control & 0x01) != 0;
+			// **Every write that leaves bit 0 clear is a hit, not just the falling edge.**
+
+			// The core has no edge at all: it rebuilds the address from 0x84/0x85 on every sample,
+			// so a driver that writes the start registers and then repeats the same control byte
+			// starts the voice again. `01 Magical Sound Shower` does exactly that - 7 583 writes
+			// with the bit clear and only 6 falling edges - and the edge-only rule filed 3 ranges
+			// where the stream names 12 (`docs/research/2026-11-12-segapcm-registers-forensics.md`).
+
+			// The latch needs the whole state, which is why it happens on this write and not on the
+			// address bytes: 0x84 and 0x85 arrive one at a time, and a hit taken between them would
+			// pair one sample's high byte with another's low one.
 			voice.control = write.value;
+			voice.keyed = (write.value & 0x01) == 0;
 
-			if ((write.value & 0x01) == 0 && wasOff)
+			if (voice.keyed && (voice.volumeLeft & 0x7F) + (voice.volumeRight & 0x7F) > 0)
 			{
-				voice.keyed = true;
-
-				if ((voice.volumeLeft & 0x7F) + (voice.volumeRight & 0x7F) > 0)
-				{
-					latch (voice, rateOf (voice));
-				}
-			}
-			else if ((write.value & 0x01) != 0)
-			{
-				voice.keyed = false;
+				latch (voice, rateOf (voice));
 			}
 
 			break;

@@ -1,0 +1,26 @@
+# Every distinct range a SegaPCM voice plays reaches the exporter.
+#
+# The chip has no key-on edge: `segapcm.c:154` plays while control bit 0 is clear, and the address is
+# rebuilt from `0x84/0x85` on every sample. A driver that rewrites the start registers and repeats
+# the same control byte therefore restarts the voice, and `01 Magical Sound Shower` does that 7 583
+# times while only 6 of those writes lower the bit from 1 to 0. Filing a range on the falling edge
+# alone found 3 of the 12 ranges the stream names.
+#
+# The rule is therefore "every write that leaves bit 0 clear", and the latch happens on that write
+# rather than on `0x84/0x85`: those two arrive one at a time, so a hit taken between them would pair
+# one sample's high byte with another's low byte.
+#
+# 03 Scene Select is a smaller song with the same shape: 7 files became 14, including six ranges in
+# the upper bank that the edge rule never saw.
+
+size 900 700
+
+load "test_file/SEGAPCM/01 Magical Sound Shower.vgz"
+tick
+samples 12
+sample-names segapcm_40090_00B70
+
+load "test_file/SEGAPCM/03 Scene Select.vgz"
+tick
+samples 14
+sample-names segapcm_00000_00D00
