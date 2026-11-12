@@ -117,3 +117,15 @@ python tools/segapcm_forensic.py "test_file/SEGAPCM/01 Magical Sound Shower.vgz"
 
 **v1 没做的**：解码器（行与 MIDI）仍以 1→0 为起音，重复击打看不见；寻址式重触发（起点非 256
 对齐）作为独立文件导出——留待 v2 决定。
+
+## 8. v2-a（2026-11-12）：行跟随当前窗口
+
+`SegaPcmDecoder::channelState()` 改为每次从 `startOf/endOf` 现算窗口，不再用击打锁存值；解码缓存
+键仍是 `(start, length)`。
+
+同时修掉一个**真 bug**：`0x84/0x85` 的判断用的是 `offset & 0x07`，两个寄存器都为真，`addressMid`
+只能从没人用的 `0x80` 取得值——0x437C 起的样本被画成 0x4300 起的副本。新断言
+`testSegaPcmWindowFollowsTheRegisters` 用“每 256 字节块一个值”的 ROM 把中字节和窗口跟随一起钉住。
+
+错误更正：本文早前按“8.2 秒”估算过击打密度，实际这首是 5:58（一个统计脚本没有累加等待时间）。
+7 583 次 control 写在 5:58 内约 21 次/秒，是正常的鼓点密度；结论不变。

@@ -5451,6 +5451,78 @@ namespace
 			   "a voice with both volumes at zero is not drawn as sounding");
 	}
 
+	/** **The row draws the window the registers name right now**, not the one the attack latched.
+
+		Two facts are pinned together here. `0x84` is the middle byte and `0x85` the high one - the
+		core builds `(0x85 << 16) | (0x84 << 8) | low` - and the driver in this collection rewrites
+		both while the voice plays, so a shape latched at key-on goes stale within a frame or two
+		(`docs/research/2026-11-12-segapcm-registers-forensics.md` measures it: 15 000 such writes in
+		one song).
+	*/
+	void testSegaPcmWindowFollowsTheRegisters (void)
+	{
+		constexpr uint32_t kRomBytes = 0x10000;
+
+		std::vector<uint8_t> rom (kRomBytes);
+
+		// One value per 256-byte block, so the first decoded sample says which block the row read.
+		for (std::size_t i = 0; i < rom.size (); ++i)
+		{
+			rom[i] = (uint8_t) ((i >> 8) & 0xFF);
+		}
+
+		toybox::chips::SegaPcmDecoder decoder;
+		decoder.reset (toybox::chips::ChipConfig { 8000000, 44100.0 });
+		decoder.setRom (rom);
+
+		const auto write = [&decoder] (uint8_t reg, uint8_t value, uint8_t port = 0)
+		{
+			toybox::chips::RegisterWrite w;
+			w.reg = reg;
+			w.value = value;
+			w.port = port;
+			decoder.write (w);
+		};
+
+		write (0x02, 0x7F);
+		write (0x03, 0x7F);
+		write (0x06, 0x54);			// end = (0x54 + 1) << 8 = 0x5500
+		write (0x07, 128);
+		write (0x84, 0x7C, 0x80);	// middle byte of 0x437C
+		write (0x85, 0x43, 0x80);	// high byte
+		write (0x86, 0x00, 0x80);	// play
+
+		const auto first = decoder.channelState (0);
+
+		check (first.wave != nullptr && first.wave->size () == 0x5500 - 0x437C,
+			   "the row covers the window the address registers name");
+
+		if (first.wave != nullptr && ! first.wave->empty ())
+		{
+			check (std::abs ((*first.wave)[0] - ((0x43 - 128) / 128.0f)) < 1e-4f,
+				   "and starts at 0x437C, not at 0x4300: the middle byte is honoured");
+		}
+
+		// The driver seeks while the voice plays; the row has to follow, or it draws a region the
+		// chip stopped reading a frame ago.
+		write (0x84, 0x00, 0x80);
+		write (0x85, 0x50, 0x80);
+		write (0x06, 0x60);			// end = 0x6100
+
+		const auto second = decoder.channelState (0);
+
+		check (second.wave != nullptr && second.wave->size () == 0x6100 - 0x5000,
+			   "a rewritten window changes the row's length");
+
+		if (second.wave != nullptr && ! second.wave->empty ())
+		{
+			check (std::abs ((*second.wave)[0] - ((0x50 - 128) / 128.0f)) < 1e-4f,
+				   "and its first sample comes from the new start");
+		}
+
+		check (second.gate, "seeking does not stop the voice");
+	}
+
 	/** **An MSM5232 voice emits the sum of the taps its group enables, and one period is
 		`2^(divider + 1)` ticks.**
 
@@ -8119,6 +8191,7 @@ int main (void){
 	testK005289Wave();
 	testMsm5232Shape();
 	testSegaPcmSample();
+	testSegaPcmWindowFollowsTheRegisters();
 
 	testSegaPcmNote();
 	testSegaPcmPitchIsAStep();

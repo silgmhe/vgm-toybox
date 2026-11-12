@@ -351,7 +351,12 @@ void SegaPcmDecoder::write (const RegisterWrite& write)
 	case 0x04:
 	case 0x05:
 	{
-		if (offset & 0x07)
+		// **0x84 is the middle byte and 0x85 the high one** - the core builds
+		// `(0x85 << 16) | (0x84 << 8) | low` (`segapcm.c:157`). Testing `offset & 0x07` instead
+		// of the low bit made both registers look like `addressHigh`, so `addressMid` only ever
+		// came from the unused 0x80 and a sample starting at 0x437C drew from 0x4300. The shape
+		// stayed plausible - a 256-byte-off copy of the same sample - which is why it survived.
+		if ((offset & 0x01) != 0)
 		{
 			voice.addressHigh = write.value;
 		}
@@ -419,19 +424,21 @@ ChannelState SegaPcmDecoder::channelState (int channel) const
 	state.rootCents = pitch.rootCents;
 	state.pitchSource = pitch.source;
 
-	// **The shape is in ROM, not in a register.** A voice latches its range at key-on
-	// (`latchStart..latchEnd`, in bytes), so the row can draw the actual recording; there is nothing
-	// in the register state to synthesise a shape from. `tableWave` stays false - this is a hit or
-	// a note being played, not a cycle to loop.
+	// **The window follows the registers, not the key-on.** The shape is in ROM - there is nothing
+	// in the register state to synthesise one from - but *which* bytes is a live fact: the drivers
+	// in this collection rebuild the current address while a voice plays (15 000 writes in
+	// `01 Magical Sound Shower`) and rewrite the end page too (5 000), so a window latched at the
+	// attack shows one region while the chip reads another. `docs/research/2026-11-12-segapcm-
+	// registers-forensics.md` is where that was measured.
 	//
-	// The bank bits of the control register are not folded into `latchStart`: the chip places a
-	// sample at `(control & bankmask) << bankshift`, and every song in this collection leaves the
-	// bank at zero. A file that used one would draw the right length from the wrong address, which
-	// is visible as a shape that does not match the sound - fold the bank in here when one appears.
-	if (impl->sounding (voice) && voice.latchEnd > voice.latchStart && ! impl->rom.empty ())
+	// `tableWave` stays false: this is a recording being played, not a cycle to loop.
+	const uint32_t windowStart = impl->startOf (voice);
+	const uint32_t windowEnd = impl->endOf (voice);
+
+	if (impl->sounding (voice) && windowEnd > windowStart && ! impl->rom.empty ())
 	{
-		const uint32_t length = (std::min) (voice.latchEnd - voice.latchStart, kMaxWaveBytes);
-		const uint64_t key = ((uint64_t) voice.latchStart << 32) | (uint64_t) length;
+		const uint32_t length = (std::min) (windowEnd - windowStart, kMaxWaveBytes);
+		const uint64_t key = ((uint64_t) windowStart << 32) | (uint64_t) length;
 		const auto found = impl->waveCache.find (key);
 
 		if (found != impl->waveCache.end ())
@@ -445,7 +452,7 @@ ChannelState SegaPcmDecoder::channelState (int channel) const
 
 			for (uint32_t i = 0; i < length; ++i)
 			{
-				wave->push_back ((float) ((int) impl->byteAt (voice.latchStart + i) - kSampleBias) / 128.0f);
+				wave->push_back ((float) ((int) impl->byteAt (windowStart + i) - kSampleBias) / 128.0f);
 			}
 
 			state.wave = wave;
