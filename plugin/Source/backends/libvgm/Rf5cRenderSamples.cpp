@@ -26,9 +26,13 @@ namespace
 		enough that a single cycle of a low note does not read as silence. */
 	constexpr std::size_t kWindow = (std::size_t) (kRenderRate / 50.0);
 
-	/** Two quiet windows end a burst - 40 ms, longer than the gap inside a drum roll and shorter than
-		the gap between two hits of one instrument in these rips. */
-	constexpr std::size_t kSilenceWindows = 2;
+	/** How much quiet ends a burst.
+
+		Six windows is 120 ms: measured against the render, a voice's hits of one instrument are closer
+		than that, and two different instruments are farther apart. Two windows (40 ms) split one
+		instrument into a dozen files; raising it too far glues a drum to the next note.
+	*/
+	constexpr std::size_t kSilenceWindows = 6;
 
 	/** A window sounds when it is above this fraction of the channel's loudest window. Relative,
 		because the chip's absolute scale is arbitrary: an absolute threshold either misses the quiet
