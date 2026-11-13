@@ -12,6 +12,10 @@ namespace toybox::chips
 {
 namespace
 {
+	/** How many played samples a row keeps: about a fifth of a second at 44.1 kHz, and the same order as
+		the DAC row's window, so a scrolling sample reads as a shape rather than a flicker. */
+	constexpr std::size_t kRingPoints = 8192;
+
 	// The clock of an RF5C164/68 when the VGM header does not say (Sonic CD's rips leave field 0x98
 	// at 0xFFFFFFFF). 12.5 MHz is what every board and libvgm's own default use.
 	constexpr uint32_t kDefaultClock = 12500000;
@@ -76,6 +80,17 @@ struct Rf5c68Decoder::Impl
 		bool melodic = false;
 		uint32_t gateEnd = 0;		// 0 when the sample loops
 		uint32_t keyOns = 0;
+
+		/** **What the voice has read**, in the order it read it.
+
+			The row used to draw the range the registers named - and on this chip that range is memory
+			the driver rewrites while the voice plays, so the shape on screen was the last thing
+			written rather than the thing heard. Keeping the bytes the head passed over is the same fix
+			the exporter needed, and the two now agree by construction.
+		*/
+		double head = 0.0;
+		uint32_t advancedAt = 0;
+		std::vector<float> ring;
 	};
 
 	Channel channels[numChannels];
@@ -453,6 +468,52 @@ void Rf5c68Decoder::write (const RegisterWrite& w)
 
 void Rf5c68Decoder::advance (uint32_t sampleTime)
 {
+	// **The head moves between register writes, and the row shows what it passed.** Same arithmetic
+	// as `Rf5cRenderSamples` uses to cut its bursts, so the picture and the file cannot disagree.
+	for (auto& channel : impl->channels)
+	{
+		if (! channel.keyed || channel.step == 0 || sampleTime <= channel.advancedAt)
+		{
+			channel.advancedAt = sampleTime;
+			continue;
+		}
+
+		// A voice's first advance after a key-on puts the head back where the driver pointed it.
+		if (channel.ring.empty (); channel.advancedAt == 0)
+		{
+			channel.head = (double) ((uint32_t) channel.start << 8);
+		}
+
+		const double rate = impl->bytesPerSecond (channel);
+		const std::size_t wanted = (std::size_t)
+			((double) (sampleTime - channel.advancedAt) * rate / impl->outRate);
+
+		for (std::size_t n = 0; n < wanted; ++n)
+		{
+			const uint8_t byte = impl->byteAt ((uint32_t) channel.head);
+
+			// `0xFF` is the chip's loop marker, so the head jumps to the loop address instead of
+			// walking into whatever follows the sample.
+			if (byte == 0xFF)
+			{
+				channel.head = (double) ((uint32_t) channel.loopStart << 8);
+				continue;
+			}
+
+			const int value = ((byte & 0x80) != 0) ? (int) (byte & 0x7F) : -(int) byte;
+			channel.ring.push_back ((float) value / 128.0f);
+
+			if (channel.ring.size () > kRingPoints)
+			{
+				channel.ring.erase (channel.ring.begin ());
+			}
+
+			channel.head += 1.0;
+		}
+
+		channel.advancedAt = sampleTime;
+	}
+
 	impl->now = sampleTime;
 }
 
@@ -482,6 +543,14 @@ ChannelState Rf5c68Decoder::channelState (int channel) const
 	// The same bytes-per-second that the pitch above divides by the cycle; a dragged-out file
 	// declares it directly, because a file has no cycle to divide by.
 	state.sampleRate = (float) impl->bytesPerSecond (voice);
+
+	// **What the voice has played**, drawn as it arrives. Falls back to the register range below while
+	// the head has nothing yet, which is what a freshly loaded song looks like.
+	if (! voice.ring.empty ())
+	{
+		state.wave = std::make_shared<std::vector<float>> (voice.ring);
+		return state;
+	}
 
 	// The bytes this voice is playing, so the row can draw the sample rather than a placeholder.
 	//
