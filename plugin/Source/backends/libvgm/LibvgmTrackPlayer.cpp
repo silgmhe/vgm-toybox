@@ -241,6 +241,23 @@ double LibvgmTrackPlayer::positionSeconds (void)
 												: (PLAYTIME_LOOP_INCL | PLAYTIME_TIME_PBK));
 }
 
+void LibvgmTrackPlayer::isolateRf5cChannel (int channel)
+{
+	// Every channel muted except one, on the RF5C device only: the same option a track uses to
+	// isolate its own channel, so the exporter and the mixer cannot drift apart on what "isolated"
+	// means.
+	for (const auto& device : replayDevices)
+	{
+		if (device.type != DEVID_RF5C68)
+		{
+			continue;
+		}
+
+		const PLR_MUTE_OPTS isolate = singleChannelMuteOptions (channel, true);
+		applyMuting (device.id, isolate);
+	}
+}
+
 void LibvgmTrackPlayer::applyMuting (uint32_t deviceId, const PLR_MUTE_OPTS& muteOpts)
 {
 	PlayerBase* pBase = playerEngine.GetPlayer();
