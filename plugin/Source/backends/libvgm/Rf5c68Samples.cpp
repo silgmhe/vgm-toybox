@@ -130,7 +130,7 @@ std::vector<playback::DecodedSample> collectRf5cSamples (const midi::SongIr& ir)
 
 	for (const auto& block : ir.roms)
 	{
-		if (block.memoryType == kPcmBankType; block.data != nullptr)
+		if (block.memoryType == kPcmBankType && block.data != nullptr)
 		{
 			bankBytes.insert (bankBytes.end (), block.data, block.data + block.size);
 		}
