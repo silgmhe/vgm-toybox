@@ -117,6 +117,10 @@ public:
 		exportMenu.id = "file.export";
 		exportMenu.label = i18n::tr ("menu.file.export");
 
+		// **The label says "PCM samples" but the action writes wavetable cycles too.** That is the
+		// one-menu decision, not an oversight: `PluginEditor::exportSamples` splits the song's list
+		// and hands each half to its own writer, and the caller's comment carries the reasoning and
+		// the date the rename was declined (`docs/memo/2026-11-13-the-export-that-writes-two-kinds.md`).
 		MenuEntry exportSamples;
 		exportSamples.id = "file.export.samples";
 		exportSamples.label = i18n::tr ("menu.file.export.samples");

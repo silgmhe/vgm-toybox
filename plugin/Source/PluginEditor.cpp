@@ -669,6 +669,17 @@ void ToyboxAudioProcessorEditor::exportSamples (void)
 	// the project's rate (so the steps survive), a cycle as one period with the marker. Two nested
 	// menus were tried and dropped: only a handful of chips produce cycles, and a user who wants
 	// them is already in this export.
+	//
+	// **The label still says "PCM samples", and that is a known, deliberate gap.** A chip with no
+	// stored table (NES APU, AY, the FM parts) contributes no cycles, so a user who reads the menu
+	// as "samples only" and then sees no wavetables for such a song has nothing to be surprised
+	// about - but a user who expects wavetables from a wavetable chip will not learn from this
+	// dialog that they were written alongside. Renaming the entry to "Samples and Wavetables" and
+	// splitting the report into two counts was designed and then dropped on 2026-11-13: the report
+	// already names the folder, both kinds land there, and the wording churn would touch every
+	// translation for a gain nobody has asked for yet. The decision and the trigger to revisit it
+	// are in `docs/memo/2026-11-13-the-export-that-writes-two-kinds.md` - read that before
+	// "fixing" the label.
 	const auto all = processor.getEngine().currentSamples();
 	const auto records = toybox::playback::recordsOnly (all);
 	const auto cycles = toybox::playback::cyclesOnly (all);
