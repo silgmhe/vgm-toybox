@@ -25,12 +25,13 @@
 #include "QSoundSamples.h"
 #include "K053260Samples.h"
 #include "K054539Samples.h"
-#include "Rf5c68Samples.h"
 #include "NesDpcmBank.h"
 
 #include "LibvgmMuteIsolation.h"
 
 #include <algorithm>
+#include <functional>
+#include <iterator>
 #include <map>
 
 #include "emu/SoundDevs.h"
@@ -252,222 +253,22 @@ bool LibvgmSongInstance::prepare (double hostSampleRate, int newMaxBlockSize, ju
 
 	}
 
-	// Asked of the parsed song rather than of `deviceInfo`, and the difference matters: `deviceInfo`
-	// is what libvgm's own enumerator reported, and a Namco System 2 rip does not answer DEVID_C140
-	// there - the board is a C219. The collector walks `chips` and `writes`, so the question that
-	// decides whether to call it has to be asked of those same two lists, or the answer can be "no"
-	// for a file whose rows are drawing waves right now.
-	const bool hasC140 = songIr != nullptr
-						 && std::any_of (songIr->chips.begin (), songIr->chips.end (),
-										 [] (const midi::ChipSlot& slot)
-										 {
-											 return slot.kind == midi::ChipKind::c140;
-										 });
-
 	// One list, because the menu exports one folder: which chip a sample came from is in its name.
 	// Each collector only looks at its own chip's writes, so a file with both gets both.
 	std::vector<playback::DecodedSample> collected;
 
+	// NES DPCM reads the song bytes directly, not the register stream, so it has its own signature
+	// and is not in the table below.
 	if (hasNes)
 	{
 		collected = collectNesDpcmSamples (playerMemory.data, playerMemory.size);
 	}
 
-	if (hasC140 && songIr != nullptr)
-	{
-		for (auto& sample : collectC140Samples (*songIr))
-		{
-			collected.push_back (std::move (sample));
-		}
-	}
-
-	const bool hasC352 = songIr != nullptr
-						 && std::any_of (songIr->chips.begin (), songIr->chips.end (),
-										 [] (const midi::ChipSlot& slot)
-										 {
-											 return slot.kind == midi::ChipKind::c352;
-										 });
-
-	if (hasC352 && songIr != nullptr)
-	{
-		for (auto& sample : collectC352Samples (*songIr))
-		{
-			collected.push_back (std::move (sample));
-		}
-	}
-
-	const bool hasQSound = songIr != nullptr
-						&& std::any_of (songIr->chips.begin (), songIr->chips.end (),
-										[] (const midi::ChipSlot& slot)
-										{
-											return slot.kind == midi::ChipKind::qsound;
-										});
-
-	if (hasQSound && songIr != nullptr)
-	{
-		for (auto& sample : collectQSoundSamples (*songIr))
-		{
-			collected.push_back (std::move (sample));
-		}
-	}
-
-	const bool hasK053260 = songIr != nullptr
-						 && std::any_of (songIr->chips.begin (), songIr->chips.end (),
-										 [] (const midi::ChipSlot& slot)
-										 {
-											 return slot.kind == midi::ChipKind::k053260;
-										 });
-
-	if (hasK053260 && songIr != nullptr)
-	{
-		for (auto& sample : collectK053260Samples (*songIr))
-		{
-			collected.push_back (std::move (sample));
-		}
-	}
-
-	const bool hasK054539 = songIr != nullptr
-						 && std::any_of (songIr->chips.begin (), songIr->chips.end (),
-										 [] (const midi::ChipSlot& slot)
-										 {
-											 return slot.kind == midi::ChipKind::k054539;
-										 });
-
-	if (hasK054539 && songIr != nullptr)
-	{
-		for (auto& sample : collectK054539Samples (*songIr))
-		{
-			collected.push_back (std::move (sample));
-		}
-	}
-
-	// **RF5C164 contributes no samples, on purpose.** Four attempts at an export model (slot window,
-	// window at the release, play-head bytes, recorded audio) each produced something plausible and
-	// each was heard as "not the instrument", because this chip's RAM is refilled *while* a voice
-	// reads it and the driver gates notes in tens of milliseconds. The row now shows the live trace
-	// instead (`Rf5c68Decoder::advance`), which needs no analysis and cannot disagree with the sound -
-	// and that is what was actually wanted from the export. `Rf5c68Samples.cpp` stays in the tree,
-	// uncalled, with its tests, as the record of the model; design 9.5.1 says why each one failed.
-
-	const bool hasOkim6295 = songIr != nullptr
-						  && std::any_of (songIr->chips.begin (), songIr->chips.end (),
-										  [] (const midi::ChipSlot& slot)
-										  {
-											  return slot.kind == midi::ChipKind::okim6295;
-										  });
-
-	const bool hasSegaPcm = songIr != nullptr
-						&& std::any_of (songIr->chips.begin (), songIr->chips.end (),
-										[] (const midi::ChipSlot& slot)
-										{
-											return slot.kind == midi::ChipKind::segapcm;
-										});
-
-	if (hasSegaPcm && songIr != nullptr)
-	{
-		// The ROM arrives as a `0x80` block; the clock turns each voice's pitch into a byte rate.
-		uint32_t clock = 0;
-
-		for (const auto& device : deviceInfo)
-		{
-			if (device.type == DEVID_SEGAPCM && device.devCfg != nullptr && device.devCfg->clock > 0)
-			{
-				clock = device.devCfg->clock;
-			}
-		}
-
-		for (auto& sample : collectSegaPcmSamples (*songIr, clock))
-		{
-			collected.push_back (std::move (sample));
-		}
-	}
-
-	const bool hasOpnAdpcm = songIr != nullptr
-							 && std::any_of (songIr->chips.begin (), songIr->chips.end (),
-											 [] (const midi::ChipSlot& slot)
-											 {
-												 return slot.kind == midi::ChipKind::ym2610
-													 || slot.kind == midi::ChipKind::ym2608;
-											 });
-
-	if (hasOpnAdpcm && songIr != nullptr)
-	{
-		// The six ADPCM-A voices share one `0x82` image; the clock turns a nibble into a rate.
-		uint32_t clock = 0;
-
-		for (const auto& device : deviceInfo)
-		{
-			if ((device.type == DEVID_YM2610 || device.type == DEVID_YM2608)
-				&& device.devCfg != nullptr && device.devCfg->clock > 0)
-			{
-				clock = device.devCfg->clock;
-			}
-		}
-
-		for (auto& sample : collectOpnAdpcmSamples (*songIr, clock))
-		{
-			collected.push_back (std::move (sample));
-		}
-
-		// **The other half of the same chip.** Delta-T takes a block of its own (`0x83` on the OPNB,
-		// `0x81` on the OPNA) and a page size that differs per board, so the collector reads the IR's
-		// chip kinds rather than taking the one clock the ADPCM-A path needed.
-		for (auto& sample : collectOpnDeltaTSamples (*songIr, clock))
-		{
-			collected.push_back (std::move (sample));
-		}
-	}
-
+	// YM2612's DAC block builds the table every track player and the export borrow, so it stays
+	// explicit: collecting and producing shared state are the same step here.
 	const bool hasYm2612 = songIr != nullptr
-						   && std::any_of (songIr->chips.begin (), songIr->chips.end (),
-										   [] (const midi::ChipSlot& slot)
-										   { return slot.kind == midi::ChipKind::ym2612; });
-
-	const bool hasY8950 = songIr != nullptr
-						  && std::any_of (songIr->chips.begin (), songIr->chips.end (),
-										  [] (const midi::ChipSlot& slot)
-										  { return slot.kind == midi::ChipKind::y8950; });
-
-	if (hasY8950)
-	{
-		// The OPL2's sample player: ranges named by registers, bytes from a `0x88` block. The
-		// header's own clock says which OPL part it is, so no device lookup is needed here.
-		for (auto& sample : collectY8950Samples (*songIr))
-		{
-			collected.push_back (std::move (sample));
-		}
-	}
-
-	const bool hasX1010 = songIr != nullptr
-						 && std::any_of (songIr->chips.begin (), songIr->chips.end (),
-										 [] (const midi::ChipSlot& slot)
-										 { return slot.kind == midi::ChipKind::x1_010; });
-
-	if (hasX1010)
-	{
-		// Two players in one chip: PCM channels name a start and an end in the `0x91` image, wave
-		// channels walk tables the driver uploaded. Both halves become files now - the PCM ones as
-		// recordings, the tables as cycles - and the writers tell them apart by `isCycle`.
-		for (auto& sample : collectX1010Samples (*songIr))
-		{
-			collected.push_back (std::move (sample));
-		}
-
-		uint32_t clock = 0;
-
-		for (const auto& device : deviceInfo)
-		{
-			if (device.type == DEVID_X1_010 && device.devCfg != nullptr && device.devCfg->clock > 0)
-			{
-				clock = device.devCfg->clock;
-			}
-		}
-
-		for (auto& sample : collectX1010WaveSamples (*songIr, clock))
-		{
-			collected.push_back (std::move (sample));
-		}
-	}
+		&& std::any_of (songIr->chips.begin (), songIr->chips.end (),
+						[] (const midi::ChipSlot& slot) { return slot.kind == midi::ChipKind::ym2612; });
 
 	if (hasYm2612 && songIr != nullptr)
 	{
@@ -488,419 +289,120 @@ bool LibvgmSongInstance::prepare (double hostSampleRate, int newMaxBlockSize, ju
 		dacTable.reset ();		// a song without a YM2612 has no table to borrow
 	}
 
-	const bool hasYmz280b = songIr != nullptr
-						 && std::any_of (songIr->chips.begin (), songIr->chips.end (),
-										 [] (const midi::ChipSlot& slot)
-										 {
-											 return slot.kind == midi::ChipKind::ymz280b;
-										 });
-
-	if (hasYmz280b && songIr != nullptr)
+	// **One table for the rest.** Each row pairs a chip kind with the collector that reads it; the
+	// "is this chip in the song" test and the move-into-`collected` loop appear once instead of
+	// nineteen times. The clock or rate a collector needs is resolved inside its row, because that is
+	// a fact about the chip - not about the dispatch.
+	//
+	// `irHas` asks the parsed song rather than `deviceInfo`, and the difference matters: a Namco
+	// System 2 rip does not answer DEVID_C140 in libvgm's own list (the board is a C219), so a
+	// question asked of `deviceInfo` would say "no" for a file whose rows are drawing waves now.
+	auto irHas = [] (const midi::SongIr& ir, midi::ChipKind kind)
 	{
-		// The sample ROM arrives as a `0x86` block and each voice names a range in nibbles; the
-		// clock only turns a voice's fnum into a rate.
-		uint32_t clock = 0;
-
+		return std::any_of (ir.chips.begin (), ir.chips.end (),
+							[kind] (const midi::ChipSlot& slot) { return slot.kind == kind; });
+	};
+	auto clockOf = [this] (uint16_t type) -> uint32_t
+	{
 		for (const auto& device : deviceInfo)
-		{
-			if (device.type == DEVID_YMZ280B && device.devCfg != nullptr && device.devCfg->clock > 0)
-			{
-				clock = device.devCfg->clock;
-			}
-		}
-
-		for (auto& sample : collectYmz280bSamples (*songIr, clock))
-		{
-			collected.push_back (std::move (sample));
-		}
-	}
-
-	const bool hasMsm5232 = songIr != nullptr
-						 && std::any_of (songIr->chips.begin (), songIr->chips.end (),
-										 [] (const midi::ChipSlot& slot)
-										 {
-											 return slot.kind == midi::ChipKind::msm5232;
-										 });
-
-	if (hasMsm5232 && songIr != nullptr)
+			if (device.type == type && device.devCfg != nullptr && device.devCfg->clock > 0)
+				return device.devCfg->clock;
+		return 0;
+	};
+	auto rateOf = [this] (uint16_t type) -> double
 	{
-		// No memory and no clock: the shape comes from the pitch index and the group control, and
-		// the rate from the key the index names.
-		for (auto& sample : collectMsm5232Samples (*songIr, 0))
-		{
-			collected.push_back (std::move (sample));
-		}
-	}
-
-	const bool hasMikey = songIr != nullptr
-					   && std::any_of (songIr->chips.begin (), songIr->chips.end (),
-									   [] (const midi::ChipSlot& slot)
-									   {
-										   return slot.kind == midi::ChipKind::mikey;
-									   });
-
-	if (hasMikey && songIr != nullptr)
-	{
-		// No memory: the patterns are generated from the register writes, so only the clock is
-		// resolved here.
-		uint32_t clock = 0;
-
 		for (const auto& device : deviceInfo)
-		{
-			if (device.type == DEVID_MIKEY && device.devCfg != nullptr && device.devCfg->clock > 0)
-			{
-				clock = device.devCfg->clock;
-			}
-		}
+			if (device.type == type && device.smplRate > 0)
+				return (double) device.smplRate;
+		return 0.0;
+	};
 
-		for (auto& sample : collectMikeySamples (*songIr, clock))
-		{
-			collected.push_back (std::move (sample));
-		}
-	}
-
-	const bool hasK005289 = songIr != nullptr
-						 && std::any_of (songIr->chips.begin (), songIr->chips.end (),
-										 [] (const midi::ChipSlot& slot)
-										 {
-											 return slot.kind == midi::ChipKind::k005289;
-										 });
-
-	if (hasK005289 && songIr != nullptr)
+	struct Row
 	{
-		// The PROM arrives as a `0xC3` RAM block and the clock comes from the header; the register
-		// stream only says which of the eight waveforms a voice plays.
-		uint32_t clock = 0;
-
-		for (const auto& device : deviceInfo)
-		{
-			if (device.type == DEVID_K005289 && device.devCfg != nullptr && device.devCfg->clock > 0)
-			{
-				clock = device.devCfg->clock;
-			}
-		}
-
-		for (auto& sample : collectK005289Samples (*songIr, clock))
-		{
-			collected.push_back (std::move (sample));
-		}
-	}
-
-	const bool hasVsu = songIr != nullptr
-					 && std::any_of (songIr->chips.begin (), songIr->chips.end (),
-									 [] (const midi::ChipSlot& slot)
-									 {
-										 return slot.kind == midi::ChipKind::vsu;
-									 });
-
-	if (hasVsu && songIr != nullptr)
+		midi::ChipKind kind;
+		std::function<std::vector<playback::DecodedSample> (const midi::SongIr&)> collect;
+	};
+	const Row rows[]
 	{
-		// The clock is the whole model here: everything else comes from the write stream, because a
-		// VSU wave is register-written RAM rather than a ROM the assembler could supply.
-		uint32_t clock = 0;
-
-		for (const auto& device : deviceInfo)
-		{
-			if (device.type == DEVID_VBOY_VSU && device.devCfg != nullptr && device.devCfg->clock > 0)
+		{ midi::ChipKind::c140,		[] (const midi::SongIr& ir) { return collectC140Samples (ir); } },
+		{ midi::ChipKind::c352,		[] (const midi::SongIr& ir) { return collectC352Samples (ir); } },
+		{ midi::ChipKind::qsound,	[] (const midi::SongIr& ir) { return collectQSoundSamples (ir); } },
+		{ midi::ChipKind::k053260,	[] (const midi::SongIr& ir) { return collectK053260Samples (ir); } },
+		{ midi::ChipKind::k054539,	[] (const midi::SongIr& ir) { return collectK054539Samples (ir); } },
+		// The ROM arrives as a `0x80` block; the clock turns each voice's pitch into a byte rate.
+		{ midi::ChipKind::segapcm,	[&] (const midi::SongIr& ir) { return collectSegaPcmSamples (ir, clockOf (DEVID_SEGAPCM)); } },
+		// The OPL2's sample player: ranges named by registers, bytes from a `0x88` block.
+		{ midi::ChipKind::y8950,	[] (const midi::SongIr& ir) { return collectY8950Samples (ir); } },
+		// Two players in one chip: PCM channels name a range in the `0x91` image, wave channels walk
+		// uploaded tables. Both become files - PCM as recordings, tables as cycles (`isCycle`).
+		{ midi::ChipKind::x1_010,	[&] (const midi::SongIr& ir)
 			{
-				clock = device.devCfg->clock;
-			}
-		}
+				auto out = collectX1010Samples (ir);
+				auto wave = collectX1010WaveSamples (ir, clockOf (DEVID_X1_010));
+				out.insert (out.end (), std::make_move_iterator (wave.begin ()),
+							std::make_move_iterator (wave.end ()));
+				return out;
+			} },
+		// The sample ROM arrives as a `0x86` block; the clock turns a voice's fnum into a rate.
+		{ midi::ChipKind::ymz280b,	[&] (const midi::SongIr& ir) { return collectYmz280bSamples (ir, clockOf (DEVID_YMZ280B)); } },
+		// No memory and no clock: the shape comes from the pitch index, the rate from the key.
+		{ midi::ChipKind::msm5232,	[] (const midi::SongIr& ir) { return collectMsm5232Samples (ir, 0); } },
+		{ midi::ChipKind::mikey,	[&] (const midi::SongIr& ir) { return collectMikeySamples (ir, clockOf (DEVID_MIKEY)); } },
+		// The PROM arrives as a `0xC3` RAM block; the stream only names which of eight waves plays.
+		{ midi::ChipKind::k005289,	[&] (const midi::SongIr& ir) { return collectK005289Samples (ir, clockOf (DEVID_K005289)); } },
+		{ midi::ChipKind::vsu,		[&] (const midi::SongIr& ir) { return collectVsuSamples (ir, clockOf (DEVID_VBOY_VSU)); } },
+		{ midi::ChipKind::huc6280,	[&] (const midi::SongIr& ir) { return collectHuC6280Samples (ir, clockOf (DEVID_C6280)); } },
+		// SCC: the clock plus the K052539 layout flag (VGM clock field bit 31 -> `devCfg->flags`).
+		{ midi::ChipKind::k051649,	[&] (const midi::SongIr& ir)
+			{
+				const uint32_t clock = clockOf (DEVID_K051649);
+				bool plusMode = false;
+				for (const auto& device : deviceInfo)
+					if (device.type == DEVID_K051649 && device.devCfg != nullptr)
+						plusMode = (device.devCfg->flags & 1u) != 0;
+				return collectSccSamples (ir, clock, plusMode);
+			} },
+		{ midi::ChipKind::wonderswan,	[&] (const midi::SongIr& ir) { return collectWonderswanSamples (ir, clockOf (DEVID_WSWAN)); } },
+		{ midi::ChipKind::gameBoy,	[&] (const midi::SongIr& ir) { return collectGameBoySamples (ir, clockOf (DEVID_GB_DMG)); } },
+		{ midi::ChipKind::es5503,	[&] (const midi::SongIr& ir) { return collectEs5503Samples (ir, clockOf (DEVID_ES5503)); } },
+		// The rate the device reports is the one the render used (OKIM6295 taught this rule); a clock
+		// computed here would guess the board's pin-7 strap and play 1.25x fast when wrong.
+		{ midi::ChipKind::k007232,	[&] (const midi::SongIr& ir) { return collectK007232Samples (ir, rateOf (DEVID_K007232)); } },
+		{ midi::ChipKind::multiPcm,	[&] (const midi::SongIr& ir) { return collectMultiPcmSamples (ir, rateOf (DEVID_YMW258), clockOf (DEVID_YMW258)); } },
+		{ midi::ChipKind::ga20,		[&] (const midi::SongIr& ir) { return collectGa20Samples (ir, rateOf (DEVID_GA20), clockOf (DEVID_GA20)); } },
+		{ midi::ChipKind::okim6295,	[&] (const midi::SongIr& ir) { return collectOkim6295Samples (ir, rateOf (DEVID_MSM6295), clockOf (DEVID_MSM6295)); } },
+	};
 
-		for (auto& sample : collectVsuSamples (*songIr, clock))
-		{
-			collected.push_back (std::move (sample));
-		}
-	}
-
-	const bool hasHuC6280 = songIr != nullptr
-						 && std::any_of (songIr->chips.begin (), songIr->chips.end (),
-										 [] (const midi::ChipSlot& slot)
-										 {
-											 return slot.kind == midi::ChipKind::huc6280;
-										 });
-
-	if (hasHuC6280 && songIr != nullptr)
+	for (const auto& row : rows)
 	{
-		// The same shape as the VSU: the tables are RAM the driver writes, so the clock is the only
-		// fact that has to come from outside the write stream.
-		uint32_t clock = 0;
-
-		for (const auto& device : deviceInfo)
+		if (songIr != nullptr && irHas (*songIr, row.kind))
 		{
-			if (device.type == DEVID_C6280 && device.devCfg != nullptr && device.devCfg->clock > 0)
+			for (auto& sample : row.collect (*songIr))
 			{
-				clock = device.devCfg->clock;
+				collected.push_back (std::move (sample));
 			}
-		}
-
-		for (auto& sample : collectHuC6280Samples (*songIr, clock))
-		{
-			collected.push_back (std::move (sample));
 		}
 	}
 
-	const bool hasScc = songIr != nullptr
-					 && std::any_of (songIr->chips.begin (), songIr->chips.end (),
-									 [] (const midi::ChipSlot& slot)
-									 {
-										 return slot.kind == midi::ChipKind::k051649;
-									 });
+	// **The OPN family is two chips and two collectors.** ADPCM-A and Delta-T share one `0x82`
+	// image but read it differently, and the song may carry a YM2610 or a YM2608 - either triggers
+	// both. The clock both need is the device's own; either board's value is correct.
+	const bool hasOpnAdpcm = songIr != nullptr
+		&& std::any_of (songIr->chips.begin (), songIr->chips.end (),
+						[] (const midi::ChipSlot& slot)
+						{ return slot.kind == midi::ChipKind::ym2610 || slot.kind == midi::ChipKind::ym2608; });
 
-	if (hasScc && songIr != nullptr)
+	if (hasOpnAdpcm && songIr != nullptr)
 	{
-		// Two facts come from the device rather than the stream: the clock, and whether this is the
-		// K052539 layout. The second is the VGM clock field's bit 31, resolved by the player into
-		// `devCfg->flags` - the IR's `ChipSlot::flags` is zero for this chip.
-		uint32_t clock = 0;
-		bool plusMode = false;
-
-		for (const auto& device : deviceInfo)
-		{
-			if (device.type != DEVID_K051649)
-			{
-				continue;
-			}
-
-			if (device.devCfg != nullptr)
-			{
-				if (device.devCfg->clock > 0)
-				{
-					clock = device.devCfg->clock;
-				}
-
-				plusMode = (device.devCfg->flags & 1u) != 0;
-			}
-		}
-
-		for (auto& sample : collectSccSamples (*songIr, clock, plusMode))
-		{
-			collected.push_back (std::move (sample));
-		}
+		const uint32_t clock = (std::max) (clockOf (DEVID_YM2610), clockOf (DEVID_YM2608));
+		for (auto& sample : collectOpnAdpcmSamples (*songIr, clock)) collected.push_back (std::move (sample));
+		// Delta-T takes a block of its own (`0x83` OPNB / `0x81` OPNA) and a per-board page size.
+		for (auto& sample : collectOpnDeltaTSamples (*songIr, clock)) collected.push_back (std::move (sample));
 	}
 
-	const bool hasWonderswan = songIr != nullptr
-							&& std::any_of (songIr->chips.begin (), songIr->chips.end (),
-											[] (const midi::ChipSlot& slot)
-											{
-												return slot.kind == midi::ChipKind::wonderswan;
-											});
-
-	if (hasWonderswan && songIr != nullptr)
-	{
-		// The tables are RAM the driver uploads (`0xC6`), so only the clock has to come from outside.
-		uint32_t clock = 0;
-
-		for (const auto& device : deviceInfo)
-		{
-			if (device.type == DEVID_WSWAN && device.devCfg != nullptr && device.devCfg->clock > 0)
-			{
-				clock = device.devCfg->clock;
-			}
-		}
-
-		for (auto& sample : collectWonderswanSamples (*songIr, clock))
-		{
-			collected.push_back (std::move (sample));
-		}
-	}
-
-	const bool hasGameBoy = songIr != nullptr
-						 && std::any_of (songIr->chips.begin (), songIr->chips.end (),
-										 [] (const midi::ChipSlot& slot)
-										 {
-											 return slot.kind == midi::ChipKind::gameBoy;
-										 });
-
-	if (hasGameBoy && songIr != nullptr)
-	{
-		// One table on this chip (the wave channel), sixteen bytes at 0xFF30-0xFF3F.
-		uint32_t clock = 0;
-
-		for (const auto& device : deviceInfo)
-		{
-			if (device.type == DEVID_GB_DMG && device.devCfg != nullptr && device.devCfg->clock > 0)
-			{
-				clock = device.devCfg->clock;
-			}
-		}
-
-		for (auto& sample : collectGameBoySamples (*songIr, clock))
-		{
-			collected.push_back (std::move (sample));
-		}
-	}
-
-	const bool hasEs5503 = songIr != nullptr
-						&& std::any_of (songIr->chips.begin (), songIr->chips.end (),
-												[] (const midi::ChipSlot& slot)
-												{
-													return slot.kind == midi::ChipKind::es5503;
-												});
-
-	if (hasEs5503 && songIr != nullptr)
-	{
-		// The clock is the only thing the collector needs: the DOC's own sample rate is derived from
-		// it per moment, because register 0xE1 moves it for every voice at once.
-		uint32_t clock = 0;
-
-		for (const auto& device : deviceInfo)
-		{
-			if (device.type == DEVID_ES5503 && device.devCfg != nullptr && device.devCfg->clock > 0)
-			{
-				clock = device.devCfg->clock;
-			}
-		}
-
-		for (auto& sample : collectEs5503Samples (*songIr, clock))
-		{
-			collected.push_back (std::move (sample));
-		}
-	}
-
-	const bool hasK007232 = songIr != nullptr
-						 && std::any_of (songIr->chips.begin (), songIr->chips.end (),
-										 [] (const midi::ChipSlot& slot)
-										 {
-											 return slot.kind == midi::ChipKind::k007232;
-										 });
-
-	const bool hasMultiPcm = songIr != nullptr
-						   && std::any_of (songIr->chips.begin (), songIr->chips.end (),
-												[] (const midi::ChipSlot& slot)
-												{
-													return slot.kind == midi::ChipKind::multiPcm;
-												});
-
-	if (hasMultiPcm && songIr != nullptr)
-	{
-		// The device's own rate first, then the arithmetic: `multipcm.c:598` starts the chip at
-		// `clock / 224`, but libvgm reports the rate it actually runs the device at, and on these
-		// songs the two differ (44,444 Hz against 35,714) - the device's number is the one the
-		// render used, which is the rule the OKIM6295 taught.
-		uint32_t clock = 0;
-		double rate = 0.0;
-
-		for (const auto& device : deviceInfo)
-		{
-			if (device.type != DEVID_YMW258)
-			{
-				continue;
-			}
-
-			if (device.smplRate > 0)
-			{
-				rate = (double) device.smplRate;
-			}
-
-			if (device.devCfg != nullptr && device.devCfg->clock > 0)
-			{
-				clock = device.devCfg->clock;
-			}
-		}
-
-		for (auto& sample : collectMultiPcmSamples (*songIr, rate, clock))
-		{
-			collected.push_back (std::move (sample));
-		}
-	}
-
-	const bool hasGa20 = songIr != nullptr
-					  && std::any_of (songIr->chips.begin (), songIr->chips.end (),
-									  [] (const midi::ChipSlot& slot)
-									  {
-										  return slot.kind == midi::ChipKind::ga20;
-									  });
-
-	if (hasGa20 && songIr != nullptr)
-	{
-		// The device's own rate is `clock / 4`, and the per-voice factor from the rate register is
-		// applied per sample. `slot.clockHz` is only the fallback for a song whose VGM declares no
-		// clock, which some do.
-		double ga20Rate = 0.0;
-		uint32_t ga20Clock = 0;
-
-		for (const auto& device : deviceInfo)
-		{
-			if (device.type != DEVID_GA20)
-			{
-				continue;
-			}
-
-			if (device.smplRate > 0)
-			{
-				ga20Rate = (double) device.smplRate;
-			}
-
-			if (device.devCfg != nullptr && device.devCfg->clock > 0)
-			{
-				ga20Clock = device.devCfg->clock;
-			}
-		}
-
-		for (auto& sample : collectGa20Samples (*songIr, ga20Rate, ga20Clock))
-		{
-			collected.push_back (std::move (sample));
-		}
-	}
-
-	if (hasK007232 && songIr != nullptr)
-	{
-		// The rate the device reports is `clock / 128`; the per-note factor comes from each voice's
-		// step, so only the chip's own half is resolved here.
-		double chipRate = 0.0;
-
-		for (const auto& device : deviceInfo)
-		{
-			if (device.type == DEVID_K007232 && device.smplRate > 0)
-			{
-				chipRate = (double) device.smplRate;
-			}
-		}
-
-		for (auto& sample : collectK007232Samples (*songIr, chipRate))
-		{
-			collected.push_back (std::move (sample));
-		}
-	}
-
-	if (hasOkim6295 && songIr != nullptr)
-	{
-		// **The clock the device was actually started with.** `SongIr::ChipSlot::clockHz` is what
-		// the file declares, and this song declares zero for its OKIM6295 - the player then picks
-		// its own clock, and a collector that guessed would export the sample at a rate the row
-		// never used. `VgmReplayer` resolves it the same way for the decoder, from `devCfg`.
-		// **The rate the device reports, not one computed here.** `okim6295.c` starts every
-		// device with `INIT_DEVINF(..., master_clock / divisor, ...)` and steps one nibble per
-		// output sample, so that number is the rate the render is actually played at - and it is
-		// the only one that already accounts for the board's pin 7 strap. Computing it here means
-		// guessing the strap, and guessing it wrong plays the export 1.25x fast.
-		double okimRate = 0.0;
-		uint32_t okimClock = 0;
-
-		for (const auto& device : deviceInfo)
-		{
-			if (device.type != DEVID_MSM6295)
-			{
-				continue;
-			}
-
-			if (device.smplRate > 0)
-			{
-				okimRate = (double) device.smplRate;	// 0 while the device is not running
-			}
-
-			if (device.devCfg != nullptr && device.devCfg->clock > 0)
-			{
-				okimClock = device.devCfg->clock;
-			}
-		}
-
-		for (auto& sample : collectOkim6295Samples (*songIr, okimRate, okimClock))
-		{
-			collected.push_back (std::move (sample));
-		}
-	}
+	// **RF5C164 contributes no samples, on purpose** - four export models each failed the ear, see
+	// design 9.5.2 and docs/research/2026-11-14-rf5c164-post-mortem.md. The collector stays in the
+	// tree as the record; this dispatch does not call it.
 
 	if (! collected.empty ())
 	{

@@ -193,9 +193,6 @@ public:
 		backends that do not need it. */
 	virtual void setOutputGain (float linear) { juce::ignoreUnused (linear); }
 
-	/** Fills a snapshot of the chips' live state for display. Backends that cannot describe their
-		chips leave it untouched and return false - a panel that shows nothing is better than one
-		that shows invented numbers. */
 	/** Every distinct sample the song has started, decoded and ready to be written.
 
 		Empty when the format has no samples to speak of - a wavetable chip has shapes, and a song
@@ -208,6 +205,13 @@ public:
 	*/
 	virtual std::vector<DecodedSample> samples (void) const { return {}; }
 
+	/** Fills a snapshot of the chips' live state for display. Backends that cannot describe their
+		chips leave it untouched and return false - a panel that shows nothing is better than one
+		that shows invented numbers.
+
+		This is the per-frame contract for the keyboard page and the mixer: the audio thread calls
+		it once per block, so an implementation copies rather than lending out live register arrays.
+	*/
 	virtual bool captureState (ChipStateSnapshot& snapshot) const
 	{
 		juce::ignoreUnused (snapshot);
@@ -220,9 +224,8 @@ public:
 	virtual int render (float* left, float* right, int numSamples) = 0;
 
 	/** Fills one buffer per track for the same block, for backends that can produce every track in
-		a single pass (IsolationMode::inPlaceChannelMix). Buffers holds 	rackCount stereo pairs,
-		each 
-umSamples frames long; the backend writes all of them or none.
+		a single pass (IsolationMode::inPlaceChannelMix). `buffers` holds `trackCount` stereo pairs,
+		each `numSamples` frames long; the backend writes all of them or none.
 
 		Returns the frames written, or 0 when it cannot render several tracks at once - the core then
 		falls back to one player per track, which is what every backend did before this existed.

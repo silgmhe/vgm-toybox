@@ -408,3 +408,23 @@ MIDI 发射是纯函数——输入（`MidiSequence`、块起点、帧数），�
 - **功能 1**：先写 `VoicePatch` + `IChipDecoder::capturePatch` + 只读的音色卡片；出声的 `IVoiceRig` 放在第二步。不要在没有值类型之前先接音频。
 - **功能 2**：把"时间"加进 `chips::ChannelState`（`noteAgeSamples` + `operators` + `channelTrace`），三个 FM 解码器填它；面板只画收到的数据。
 - **功能 3**：现在就可以先做的一件事是给 `SongMemory` 加 `companions`，并把 `inPlaceChannelMix` 这条路径补上第二个格式的验证——SPC 接进来时这两处若无准备，会成为第一批阻塞项。
+
+---
+
+## 十、整改状态（2026-11-14）
+
+合并前必须的三项已全部完成，外加两项应修项；`54/54`、芯片与 NSF 断言全绿，QSound 导出数与改前一致（2 个）。
+
+| # | 项 | 状态 | 验收 |
+|---|---|---|---|
+| H-1 | `SongBackend.h` captureState/samples 文档错位 | ✅ 已修 | `captureState` 顶着自己的说明；`samples` 顶着自己的三段 |
+| H-2 | `SongBackend.h` renderTracks 句子被切坏 | ✅ 已修 | `trackCount`/`numSamples` 恢复，无半词/制表符 |
+| H-3 | 26 个收集器分发改表驱动 | ✅ 已修 | `LibvgmSongInstance.cpp` −597/+100；`irHas`/`clockOf`/`rateOf` 收口；OPN/YM2612/NES 作为有理由的例外保留 |
+| M-1 | `.vgz` 解压上限 | ✅ 已修 | `LibvgmVgz.cpp` 加 `kMaxImageBytes = 64 MB`，与 `SessionState.cpp` 同一纪律 |
+| M-2 | 删 RF5C 死收集器与两条断言 | ✅ 已修 | 删 `Rf5c68Samples.{h,cpp}` + CMake 4 处 + 两条测试 + include；模型留在 `backup/` 与 `docs/research/…post-mortem.md` |
+| M-3 | `MidiEmitter` 抽出 | ⏳ 待做 | 下一次 MIDI 相关改动时合并 |
+| M-4 | 测试按芯片族拆分 | ⏳ 待做 | `ChipDecoderTest.cpp` 仍 6560 行 |
+| M-5 | `SampleSink` 收口命名/去重 | ⏳ 待做 | 26 个收集器仍各自实现 `hashOf`/`SampleFormat` |
+| L-1/L-2 | 工具头注释 + 文档纪律 | ⏳ 待做 | — |
+
+**H-3 的取舍说明**：OPN 家族（YM2610/YM2608，两个收集器、两种 ChipKind）与 YM2612 DAC（构建共享的 `dacTable`）没有进表——前者是"两 kind 触发两收集器"，后者是"收集即产生副作用"。两者各留一个显式块并在注释里写明理由，比硬塞进表里更可读。NES DPCM 因签名不同（字节+长度，非 IR）同理。

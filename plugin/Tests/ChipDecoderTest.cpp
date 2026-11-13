@@ -21,7 +21,6 @@
 #include "backends/libvgm/C140Samples.h"
 #include "backends/libvgm/C352Samples.h"
 #include "backends/libvgm/QSoundSamples.h"
-#include "backends/libvgm/Rf5c68Samples.h"
 #include "backends/libvgm/K053260Samples.h"
 #include "backends/libvgm/K054539Samples.h"
 
@@ -7486,186 +7485,6 @@ void testWaveExport (void)
 		check (highest > 0.5f && lowest < -0.5f, "and the alternating nibbles swing both ways");
 	}
 
-	/** What the export finds in an RF5C68 / RF5C164 song.
-
-		Two things here are unlike every other sampled chip in this branch. The bytes arrive as a
-		**PCM bank** (`0x67` blocks of type `0x02`), not a ROM block - a collector that asked for a
-		ROM would find nothing. And the key-on is inverted: a *cleared* bit in the mask at `0x08`
-		enables a channel, so enabling is a falling edge in the byte every other chip treats as
-		"on".
-	*/
-	void testRf5cSampleCollection (void)
-	{
-		using namespace toybox;
-
-		std::printf ("  the RF5C68's sample list\n");
-
-		midi::SongIr ir;
-
-		midi::ChipSlot slot;
-		slot.kind = midi::ChipKind::rf5c164;
-		slot.clockHz = 12500000;
-		ir.chips.push_back (slot);
-
-		std::vector<uint8_t> bank (0x400, 0);
-
-		// Sixteen levels, then the 0xFF that ends the sample.
-		for (int i = 0; i < 16; ++i)
-		{
-			bank[0x200 + (std::size_t) i] = (uint8_t) (0x10 + i);
-		}
-
-		bank[0x210] = 0xFF;
-
-		midi::RomBlock block;
-		block.memoryType = 0x02;
-		block.romSize = (uint32_t) bank.size ();
-		block.romOffset = 0;
-		block.data = bank.data ();
-		block.size = bank.size ();
-		ir.roms.push_back (block);
-
-		const auto write = [&ir] (uint8_t offset, uint16_t value, uint32_t time = 0)
-		{
-			RegisterWrite w;
-			w.deviceId = 0;
-			w.port = 0;
-			w.reg = offset;
-			w.value = value;
-			w.sampleTime = time;
-			ir.writes.push_back (w);
-		};
-
-		write (0x07, 0xC0);			// bit 7 master on, bit 6 selects channel 0
-		write (0x06, 0x02);			// start 0x0200: the register counts 256-byte units
-		write (0x02, 0x00);
-		write (0x03, 0x08);			// step 0x0800, one byte per chip sample
-		write (0x08, 0xFE);			// channel 0's bit cleared - that is what enables it
-
-		// A second channel at 0x0300, so the first one's region has a neighbour to end at.
-		write (0x07, 0xC1);			// select channel 1
-		write (0x06, 0x03);
-		write (0x02, 0x00);
-		write (0x03, 0x08);
-		write (0x08, 0xFC);			// clear bits 0 and 1: both channels on
-
-		// A tenth of a second later the driver clears both again. **The release is where a note is
-		// collected**: its length is the time it stayed on, which does not exist before then.
-		write (0x08, 0xFF, 4410);
-
-		const auto samples = backends::libvgm::collectRf5cSamples (ir);
-
-		check (samples.size () == 2, "a cleared mask bit names a sample");
-
-		// **The length comes from the gate**, not from the bytes: a note is as long as the channel
-		// stayed on, times the rate. This fixture writes no release and gives every write the same
-		// `sampleTime`, so the gate is zero and the whole slot stands in - which is also what a
-		// sampling driver loops when it holds a channel to the end of the stream.
-		check (! samples.empty () && samples[0].values.size () == 512,
-			   "as long as the slot it starts in, when no gate says otherwise");
-
-		// The second voice runs to the top of the image for the same reason: its slot is the rest
-		// of the 0x400-byte fixture.
-		check (samples.size () == 2 && samples[1].values.size () == 256,
-			   "and its neighbour to the top of the image");
-
-		// Sign and magnitude, not two's complement. `0x10` is -16/128 on this chip (`0x00..0x7F`
-		// runs 0..-127); read as two's complement it would be +16/128 and the two halves of the
-		// waveform would be mirrored against each other.
-		check (! samples.empty () && std::abs (samples[0].values[0] + (16.0f / 128.0f)) < 0.001f,
-			   "and read as sign and magnitude, not two's complement");
-
-		// 0x0800 / 2048 = one byte per chip sample, and the chip runs at 12500000 / 384.
-		check (! samples.empty () && std::abs (samples[0].rate - 32552.0) < 5.0,
-			   "at the rate its step register asks for");
-
-		// The same mask written again is not a second key-on: the bit was already clear.
-		write (0x08, 0xFE, 4410);
-		check (backends::libvgm::collectRf5cSamples (ir).size () == 2,
-			   "and the same mask written again starts nothing new");
-
-		// Clearing the bits again is a new note at the same address and the same gate length, which
-		// is one file rather than a second one.
-		write (0x08, 0xFC, 8820);
-		write (0x08, 0xFF, 13230);
-		check (backends::libvgm::collectRf5cSamples (ir).size () == 2,
-			   "while a release and a re-enable is still one file");
-
-		// A gate that runs past the slot stops at the slot's end: at this rate a tenth of a second
-		// is already 3255 bytes and the fixture's slot is 512, so both notes clamp to the same
-		// length and stay one file. Clamping is the behaviour worth pinning - without it the export
-		// would read past the sample into whatever the next slot holds.
-		write (0x08, 0xFC, 13230);
-		write (0x08, 0xFF, 13230 + 44100);
-		check (backends::libvgm::collectRf5cSamples (ir).size () == 2,
-			   "and a gate longer than the slot stops at the slot's end");
-	}
-
-	/** **A `0x68` copy is what the chip plays, not the bank it was copied from.**
-
-		A bank is only the load-time state. This rip streams 4 KB slices into the chip while the song
-		runs (`Cmd_PcmRamWrite`), and those slices are the bytes a note actually reads - the fixture
-		below makes them differ, so a collector that ignores the copies exports the wrong byte and
-		this check fails on it. The order matters too: the copy sits between the key-on and the
-		release, because a copy that arrives after the note ends is not part of that note.
-	*/
-	void testRf5cStreamedCopyReachesTheSample (void)
-	{
-		using namespace toybox;
-
-		std::vector<uint8_t> bank (0x400, 0x10);	// 0x10 is -16/128 on this chip
-		bank[0x000] = 0x40;						// +64/128: the byte the copy moves into place
-		bank[0x210] = 0xFF;						// the marker that ends the sample
-
-		midi::SongIr ir;
-
-		midi::ChipSlot slot;
-		slot.kind = midi::ChipKind::rf5c164;
-		slot.clockHz = 12500000;
-		ir.chips.push_back (slot);
-
-		midi::RomBlock block;
-		block.memoryType = 0x02;
-		block.romSize = (uint32_t) bank.size ();
-		block.romOffset = 0;
-		block.data = bank.data ();
-		block.size = bank.size ();
-		ir.roms.push_back (block);
-
-		midi::RamCopy copy;
-		copy.bankType = 0x02;
-		copy.bankPosition = 0x000;			// the byte the bank holds at 0x000
-		copy.address = 0x200;				// goes to the first byte of the sample
-		copy.length = 1;
-		copy.streamOrder = 2;
-		ir.ramCopies.push_back (copy);
-
-		const auto write = [&ir] (uint8_t offset, uint8_t value, uint32_t order,
-								  uint32_t time = 0)
-		{
-			RegisterWrite w;
-			w.deviceId = 0;
-			w.port = 0;
-			w.reg = offset;
-			w.value = value;
-			w.streamOrder = order;
-			w.sampleTime = time;
-			ir.writes.push_back (w);
-		};
-
-		write (0x07, 0xC0, 1);				// master on, channel 0 selected
-		write (0x06, 0x02, 1);				// start 0x0200
-		write (0x03, 0x08, 1);				// step 0x0800: one byte per chip sample
-		write (0x08, 0xFE, 1);				// channel 0's bit cleared - the key-on
-		write (0x08, 0xFF, 3, 4410);		// released a tenth of a second later, after the copy
-
-		const auto samples = backends::libvgm::collectRf5cSamples (ir);
-
-		check (! samples.empty () && ! samples[0].values.empty ()
-				   && std::abs (samples[0].values[0] + (0x40 / 128.0f)) < 0.001f,
-			   "the sample holds the byte the copy streamed in, not the bank's own");
-	}
-
 	/** What the export finds in a QSound song.
 
 		Three of the chip's quirks are load-bearing here and each has its own assertion: the bank
@@ -8179,8 +7998,6 @@ int main (void){
 	testK053260Kadpcm();
 	testK053260SampleCollection();
 	testQSoundAdpcm();
-	testRf5cSampleCollection();
-	testRf5cStreamedCopyReachesTheSample();
 	testQSoundSampleCollection();
 	testC352SampleCollection();
 	testDisplayColumns();
