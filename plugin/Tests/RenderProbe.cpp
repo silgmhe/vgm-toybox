@@ -960,6 +960,94 @@ int main (int argc, char** argv)
 	const auto& tracks = engine.getTracks ();
 	const int wanted = (argc > 2) ? std::atoi (argv[2]) : -1;
 	const double seconds = (argc > 3) ? std::atof (argv[3]) : 4.0;
+
+	if (wanted == -6)
+	{
+		// **The recorder check.** Solo one track, render it, and segment the *audio* by silence - the
+		// only boundary a listener can confirm. What the exporter needs is exactly this list: how long
+		// each audible stretch is, and how many of them a channel has.
+		const int channel = (argc > 3) ? std::atoi (argv[3]) : 0;
+		const double span = (argc > 4) ? std::atof (argv[4]) : 30.0;
+
+		if (channel < 0 || (std::size_t) channel >= tracks.size ())
+		{
+			std::printf ("  -6: no track %d (song has %d)\n", channel, (int) tracks.size ());
+			return 1;
+		}
+
+		engine.setPositionSeconds (0.0);
+		engine.play ();
+
+		for (std::size_t other = 0; other < tracks.size (); ++other)
+		{
+			engine.setTrackSolo (other, (int) other == channel);
+		}
+
+		const auto audio = renderSeconds (engine, span);
+		engine.stop ();
+
+		// Twenty-millisecond windows, and a window sounds when its level is above a quarter of the
+		// loudest one: the threshold is relative because the chip's own scale is arbitrary.
+		const std::size_t window = (std::size_t) (kSampleRate / 50);
+		std::vector<double> levels;
+
+		for (std::size_t start = 0; start + window <= audio.size (); start += window)
+		{
+			double sum = 0.0;
+
+			for (std::size_t i = 0; i < window; ++i)
+			{
+				const double value = audio[start + i];
+				sum += value * value;
+			}
+
+			levels.push_back (std::sqrt (sum / (double) window));
+		}
+
+		double loudest = 0.0;
+
+		for (const double level : levels)
+		{
+			loudest = std::max (loudest, level);
+		}
+
+		const double floorLevel = loudest * 0.25;
+		std::vector<std::pair<double, double>> segments;
+		bool inSegment = false;
+		double began = 0.0;
+
+		for (std::size_t i = 0; i < levels.size (); ++i)
+		{
+			const bool sounding = levels[i] > floorLevel;
+
+			if (sounding && ! inSegment)
+			{
+				inSegment = true;
+				began = (double) i * 0.02;
+			}
+			else if (! sounding && inSegment)
+			{
+				inSegment = false;
+				segments.emplace_back (began, (double) i * 0.02);
+			}
+		}
+
+		if (inSegment)
+		{
+			segments.emplace_back (began, (double) levels.size () * 0.02);
+		}
+
+		std::printf ("  track %d: %zu windows, %zu audible segments in %.1f s (floor %.5f, peak %.5f)\n",
+					 channel, levels.size (), segments.size (), span, floorLevel, loudest);
+
+		for (std::size_t i = 0; i < segments.size () && i < 12; ++i)
+		{
+			std::printf ("     [%2zu] %6.2f s .. %6.2f s   (%5.0f ms)\n", i, segments[i].first,
+						 segments[i].second, (segments[i].second - segments[i].first) * 1000.0);
+		}
+
+		return 0;
+	}
 	const std::vector<uint8_t> ram = ramImage (juce::File (juce::String (argv[1])));
 
 	std::printf ("ram    : %d bytes\n", (int) ram.size ());
