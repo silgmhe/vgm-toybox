@@ -1,6 +1,11 @@
 #!/usr/bin/env python3
 """**A read-only look at what an RF5C164 actually plays, byte by byte.**
 
+**Do not share code with the product parser** (`plugin/Source/backends/libvgm/VgmCommandReader.cpp`).
+This tool's value is being an independent implementation: when the two disagree, the product is the
+one to doubt first. Refactoring this to reuse the product's parser would make it agree by construction
+and destroy the only thing it is for.
+
 Design 9.5 shelved this chip because eleven attempts each looked decisive and each was overturned, and
 the last readings had the chip's RAM at 0x8000 holding `80 80 80 80` while our assembled image had
 `99 19 83 97`. That is not a paradox if the chip plays a *rolling buffer*: this file uploads 155 KB into

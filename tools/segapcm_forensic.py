@@ -1,6 +1,11 @@
 #!/usr/bin/env python3
 """**A read-only look at what a SegaPCM driver actually writes.**
 
+**Do not share code with the product parser** (`plugin/Source/backends/libvgm/VgmCommandReader.cpp`).
+This tool's value is being an independent implementation: when the two disagree, the product is the
+one to doubt first. Refactoring this to reuse the product's parser would make it agree by construction
+and destroy the only thing it is for.
+
 Design 9.16.2 asks for this before any model of the chip's start / loop / end is changed: the
 registers are the playhead, but which write belongs to which hit - and what `end` really points at -
 was never confirmed against the stream. So this prints the writes, in order, with the values the
