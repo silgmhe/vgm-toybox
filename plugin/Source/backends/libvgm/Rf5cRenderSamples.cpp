@@ -10,6 +10,8 @@
 #include <vector>
 
 #include "LibvgmTrackPlayer.h"
+#include "midi/SongIr.h"
+#include "player/playerbase.hpp"
 
 namespace toybox::backends::libvgm
 {
@@ -54,7 +56,9 @@ namespace
 	}
 
 	/** Renders one channel of the song on its own, at `kRenderRate`, mixed to mono. */
-	std::vector<float> renderChannel (const playback::SongMemory& memory, int channel)
+	std::vector<float> renderChannel (const playback::SongMemory& memory, int channel,
+									  std::shared_ptr<const midi::SongIr> ir,
+									  const std::vector<PLR_DEV_INFO>& devices)
 	{
 		LibvgmTrackPlayer player;
 		juce::String error;
@@ -66,10 +70,20 @@ namespace
 			return {};
 		}
 
-		// The mask is the whole point: measured on the chip itself (`none=3776, ch0-muted=0, all=0`),
-		// so what comes back is this voice and nothing else.
-		player.isolateRf5cChannel (channel);
+		// **The device list has to be handed in, or the isolation silently does nothing.** `replayDevices`
+		// is filled by `setReplaySource`, and a player that never received it isolates an empty list -
+		// which renders the whole mix while reporting success.
+		player.setReplaySource (std::move (ir), devices, nullptr);
+
+		// **After `start()`, not before.** Starting the transport rebuilds the players and their mute
+		// state, so an isolation applied first is discarded without a word - the same trap `RenderProbe`
+		// records for solo, and it cost an export round that looked like "isolation does not work".
 		player.start ();
+
+		if (! player.isolateRf5cChannel (channel))
+		{
+			return {};			// no RF5C device, no isolated render: say so by returning silence
+		}
 
 		std::vector<float> mono;
 		std::vector<float> left ((std::size_t) kBlock);
@@ -94,14 +108,16 @@ namespace
 	}
 }
 
-std::vector<playback::DecodedSample> renderRf5cSamples (const playback::SongMemory& memory)
+std::vector<playback::DecodedSample> renderRf5cSamples (const playback::SongMemory& memory,
+													   std::shared_ptr<const midi::SongIr> ir,
+													   const std::vector<PLR_DEV_INFO>& devices)
 {
 	std::vector<playback::DecodedSample> done;
 	std::map<uint64_t, bool> seen;
 
 	for (int channel = 0; channel < 8; ++channel)
 	{
-		const std::vector<float> mono = renderChannel (memory, channel);
+		const std::vector<float> mono = renderChannel (memory, channel, ir, devices);
 
 		if (mono.size () < kWindow * kMinimumWindows)
 		{

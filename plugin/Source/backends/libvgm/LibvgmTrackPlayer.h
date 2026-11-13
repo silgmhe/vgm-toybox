@@ -91,7 +91,7 @@ public:
 		way to reach it so far is the track isolation below. One public wrapper keeps the option
 		built in one place instead of a second copy in the exporter.
 	*/
-	void isolateRf5cChannel (int channel);
+	bool isolateRf5cChannel (int channel);
 	int render (float* left, float* right, int numSamples) override;
 	double positionSeconds (void) override;
 	bool isFinished (void) const override { return finished.load(); }

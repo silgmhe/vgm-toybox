@@ -2,6 +2,9 @@
 
 #include <vector>
 
+#include <memory>
+
+#include "player/playerbase.hpp"
 #include "playback/SongBackend.h"
 #include "playback/WaveExport.h"
 
@@ -45,5 +48,7 @@ namespace toybox::backends::libvgm
 
 		Costs one whole-song render per channel, so this is the slow path; it is also the honest one.
 	*/
-	std::vector<playback::DecodedSample> renderRf5cSamples (const playback::SongMemory& memory);
+	std::vector<playback::DecodedSample> renderRf5cSamples (const playback::SongMemory& memory,
+														   std::shared_ptr<const midi::SongIr> ir,
+														   const std::vector<PLR_DEV_INFO>& devices);
 }

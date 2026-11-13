@@ -354,7 +354,7 @@ bool LibvgmSongInstance::prepare (double hostSampleRate, int newMaxBlockSize, ju
 		// **Recorded from the chip's output, not reasoned from the register stream.** Eight whole-song
 		// renders, one per voice, isolated by the mute mask the core honours; the bursts are found on
 		// the waveform. The register route is kept in `collectRf5cSamples` and in `backup/`.
-		for (auto& sample : renderRf5cSamples (playerMemory))
+		for (auto& sample : renderRf5cSamples (playerMemory, songIr, deviceInfo))
 		{
 			collected.push_back (std::move (sample));
 		}
