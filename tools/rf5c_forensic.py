@@ -95,6 +95,7 @@ def main():
     print(f"=== {args.path.split('/')[-1].split(chr(92))[-1]}  version {version:04X}  data {pos:#x}")
 
     ram = bytearray(RAM_BYTES)
+    bank = bytearray()          # the player's copy of the 0x02 blocks, addressed by `0x68` copies
     voices = [Voice() for _ in range(8)]
     blocks = collections.Counter()
     pages = 0
@@ -123,8 +124,13 @@ def main():
             if kind == 0x02:
                 # The load-time PCM bank. 155 KB in this file; the chip's RAM keeps the first 64 KB,
                 # because `SCD_PCM_MemBlockWrite` clamps to `RAMSize` (`scd_pcm.c:454-457`).
+                #
+                # **The bank starts at +7, header included.** libvgm keeps type-0x02 blocks in a
+                # PCM bank (`Cmd_DataBlock`, `case 0x00`) whose bytes begin right after the seven-byte
+                # block header, so the eight 0xFF bytes at +7 are the bank's first eight - and a `0x68`
+                # copy from position 0 starts with them. Starting at +15 shifted every later copy.
                 payload = raw[pos + 7:pos + 7 + size]
-                ram[0:min(len(payload), RAM_BYTES)] = payload[:RAM_BYTES]
+                bank.extend(payload)
             elif kind == 0xC1:
                 # A page written while the song runs: a two-byte address, then the bytes.
                 # **The RAM bank is or-ed into every page address** - libvgm does it in
@@ -207,6 +213,29 @@ def main():
 
                     voices[i].enabled = on
 
+            continue
+
+        if cmd == 0x68:
+            # **The streaming copy.** `68 66 tt | pos(3) | addr(3) | len(3)` takes `len` bytes from the
+            # PCM bank at `pos` and writes them at `addr` (`vgmplayer_cmdhandler.cpp`,
+            # `Cmd_PcmRamWrite`). This is how 155 KB of samples reach a 64 KB RAM, and skipping it - as
+            # this tool did - leaves the image missing every page the song streams in.
+            position = raw[pos + 3] | (raw[pos + 4] << 8) | (raw[pos + 5] << 16)
+            address = raw[pos + 6] | (raw[pos + 7] << 8) | (raw[pos + 8] << 16)
+            length = raw[pos + 9] | (raw[pos + 10] << 8) | (raw[pos + 11] << 16)
+
+            if length == 0:
+                length = 0x1000000
+
+            address |= ram_bank << 12
+
+            for i in range(length):
+                if position + i >= len(bank) or address + i >= RAM_BYTES:
+                    break
+
+                ram[address + i] = bank[position + i]
+
+            pos += 12
             continue
 
         # Every other command: skip by its length.
