@@ -187,7 +187,13 @@ std::vector<playback::DecodedSample> collectRf5cSamples (const midi::SongIr& ir)
 					}
 
 					voice.bytes.push_back (byte);
-					voice.head += (double) voice.step / kStepPerByte;
+
+					// **One byte per byte.** The head consumes `rate` bytes a second, so each byte
+					// appended is the next byte of RAM - not a quarter of one. Stepping the head by
+					// `step / 2048` per appended byte read the same region four times over and then
+					// ran out of it, which is what made every export look like a small cut of
+					// something else.
+					voice.head += 1.0;
 				}
 			}
 
@@ -208,18 +214,11 @@ std::vector<playback::DecodedSample> collectRf5cSamples (const midi::SongIr& ir)
 
 		const uint32_t start = (uint32_t) voice.startPage << 8;
 
-		// **One file per instrument, not per press.** Two notes of one instrument differ by a few
-		// bytes of gate time and by whatever silence preceded them, so exact lengths and exact
-		// contents make every note a file; a length bucket collapses them.
-		const std::size_t bucket =
-			((voice.bytes.size () + kLengthBucket - 1) / kLengthBucket) * kLengthBucket;
-
-		if (! seen.insert (std::make_pair (start, bucket)).second)
-		{
-			voice.bytes.clear ();
-			return;
-		}
-
+		// **Duplicates are decided by content, not by address.** The driver pages fresh samples into the
+		// same window and restarts the voice there, so two notes at one address are usually two
+		// different sounds: keying on `(start, length)` collapsed this song to six files, which is
+		// far fewer than the song plays. The collector itself de-duplicates by the key it is given,
+		// so the hash is enough.
 		const uint64_t hash = hashOf (voice.bytes);
 
 		const double rate = (double) step * clock / kOutputDivisor / kStepPerByte;

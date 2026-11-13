@@ -624,6 +624,39 @@ int runCoreProbe (const juce::File& file, const std::vector<uint8_t>& ram)
 			}
 			std::printf ("  <- expect alternating signs of equal size (the core is not int32-scaled)\n");
 
+			// **Does the mute mask isolate a voice?** The plan is to record one channel's output at a
+			// time, and 9.5's notes record a probe whose solo and mute readings were identical - which
+			// would mean the mask never reached the chip. Three masks settle it: nothing muted, the one
+			// playing channel muted, and everything muted. The last two must be silent.
+			const auto peakWithMask = [&] (uint8_t mask)
+			{
+				std::vector<int32_t> ml (256), mr (256);
+				DEV_SMPL* mout[2] = { ml.data (), mr.data () };
+
+				if (info.devDef->SetMuteMask != nullptr)
+				{
+					info.devDef->SetMuteMask (info.dataPtr, mask);
+				}
+
+				info.devDef->Update (info.dataPtr, 256, mout);
+
+				int32_t peak = 0;
+
+				for (int i = 0; i < 256; ++i)
+				{
+					peak = std::max (peak, std::abs (ml[(size_t) i]));
+				}
+
+				return peak;
+			};
+
+			const int32_t allOn = peakWithMask (0x00);
+			const int32_t channelMuted = peakWithMask (0x01);
+			const int32_t allMuted = peakWithMask (0xFF);
+
+			std::printf ("   mute mask: none=%d ch0-muted=%d all=%d  <- the last two must be 0\n",
+						 (int) allOn, (int) channelMuted, (int) allMuted);
+
 			// Which core actually started, next to the one being pumped: if these differ, every
 			// "the chip is silent" reading is a reading of the wrong structure.
 			std::printf ("   core started: id=0x%X | pumped: id=0x%X | same=%d\n",
