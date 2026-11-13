@@ -10,7 +10,6 @@
 
 #include <string.h>
 #include <stdlib.h>
-#include <stdio.h>
 
 #include "../../stdtype.h"
 #include "../snddef.h"
@@ -93,62 +92,9 @@ struct pcm_chip_
 
 	uint32_t RAMSize;
 	uint8_t* RAM;
-
-	// **Per instance, not file-static.** A shared counter here is exactly the bug the 9.5 memo recorded:
-	// it printed one player and left the other eight invisible, which is how "the chip has zero output"
-	// survived a whole investigation.
-	float TraceOutRate;			// output samples a second, so the trace can count song time
-	double TraceElapsed;
-	uint8_t TraceDone;
 };
 
 #define PCM_STEP_SHIFT 11
-
-/* **A one-shot trace of what each voice is reading**, kept because design 9.5 was shelved on a question
-   only the voice can answer: the export was said to name the wrong bytes, and eleven attempts each
-   measured something other than the bytes under the play head.
-
-   `VGM_RF5C_TRACE=8` prints one line per channel the first time the song reaches 8 seconds (the value
-   is seconds, read once). Unset, this costs one comparison per buffer. The print goes to stdout, so it
-   is visible in `vgm_app_test` runs and harmless in the application. */
-static double trace_target = -1.0;
-static double trace_elapsed = 0.0;
-static int trace_done = 0;
-static int trace_ready = 0;
-
-static void trace_state(struct pcm_chip_* chip, uint32_t length)
-{
-	int i;
-
-	if (! trace_ready)
-	{
-		const char* value = getenv("VGM_RF5C_TRACE");
-
-		trace_ready = 1;
-		trace_target = (value != NULL) ? atof(value) : -1.0;
-	}
-
-	if (trace_target < 0.0 || trace_done)
-		return;
-
-	trace_elapsed += (double) length / (double) chip->Rate;
-
-	if (trace_elapsed < trace_target)
-		return;
-
-	trace_done = 1;
-
-	for (i = 0; i < 8; i++)
-	{
-		struct pcm_chan_* c = &chip->Channel[i];
-		uint32_t a = c->Addr >> PCM_STEP_SHIFT;
-
-		printf("RF5C %p ch=%d on=%d St=%04X Loop=%04X Step=%04X Addr=%05X ram=%02X %02X %02X %02X\n",
-			   (void*) chip, i, c->Enable, c->St_Addr, c->Loop_Addr, c->Step, a & 0xFFFF,
-			   chip->RAM[(a + 0) & 0xFFFF], chip->RAM[(a + 1) & 0xFFFF],
-			   chip->RAM[(a + 2) & 0xFFFF], chip->RAM[(a + 3) & 0xFFFF]);
-	}
-}
 
 
 static uint8_t device_start_rf5c68_gens(const DEV_GEN_CFG* cfg, DEV_INFO* retDevInf)
@@ -217,9 +163,6 @@ static void SCD_PCM_Reset(void* info)
 	memset(chip->RAM, 0x00, chip->RAMSize);
 	
 	chip->Enable = 0;
-	chip->TraceElapsed = 0.0;
-	chip->TraceDone = 0;
-	chip->TraceOutRate = 0.0f;
 	chip->Cur_Chan = 0;
 	chip->Bank = 0;
 	
@@ -254,7 +197,6 @@ static void SCD_PCM_Set_Rate(void* info, uint32_t Clock, uint32_t Rate)
 	
 	//chip->Rate = (float) (31.8f * 1024) / (float) Rate;
 	chip->Rate = ((float)Clock / 384.0f) / (float)Rate;
-	chip->TraceOutRate = ((float)Clock / 384.0f) / chip->Rate;
 	
 	for (i = 0; i < 8; i++)
 	{
@@ -419,10 +361,6 @@ static void SCD_PCM_Update(void* info, uint32_t Length, DEV_SMPL **buf)
 	memset(bufL, 0, Length * sizeof(DEV_SMPL));
 	memset(bufR, 0, Length * sizeof(DEV_SMPL));
 	
-	// The trace runs before the mute check: a chip that is silent is exactly when "what is it reading"
-	// matters, and the answer does not depend on `Enable`.
-	trace_state(chip, Length);
-
 	// if PCM disable, no sound
 	if (chip->RAM == NULL || !chip->Enable)
 		return;

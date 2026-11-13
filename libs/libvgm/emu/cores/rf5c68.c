@@ -5,12 +5,7 @@
 /*********************************************************/
 
 #include <stdlib.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-
-static double rf5c68_trace_target = -1.0;
-static int rf5c68_trace_ready = 0;	// for memset
+#include <string.h>	// for memset
 #include <stddef.h>	// for NULL
 
 #include "../../stdtype.h"
