@@ -29,17 +29,6 @@ namespace
 	constexpr int kControl = 0x04;
 	constexpr int kWaveRegister = 0x06;
 
-	uint64_t hashOf (const uint8_t* bytes)
-	{
-		uint64_t hash = 1469598103934665603ull;
-
-		for (int i = 0; i < kTableBytes; ++i)
-		{
-			hash = (hash ^ (uint64_t) bytes[i]) * 1099511628211ull;
-		}
-
-		return hash;
-	}
 
 	struct Chip
 	{
@@ -94,7 +83,7 @@ std::vector<playback::DecodedSample> collectHuC6280Samples (const midi::SongIr& 
 			return;
 		}
 
-		const uint64_t key = hashOf (chip.wave[channel]);
+		const uint64_t key = hashOf (chip.wave[channel], kTableBytes);
 
 		char name[32] = {};
 		std::snprintf (name, sizeof (name), "huc6280_%08X%08X", (unsigned) (key >> 32),

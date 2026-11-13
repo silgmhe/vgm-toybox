@@ -422,9 +422,9 @@ MIDI 发射是纯函数——输入（`MidiSequence`、块起点、帧数），�
 | H-3 | 26 个收集器分发改表驱动 | ✅ 已修 | `LibvgmSongInstance.cpp` −597/+100；`irHas`/`clockOf`/`rateOf` 收口；OPN/YM2612/NES 作为有理由的例外保留 |
 | M-1 | `.vgz` 解压上限 | ✅ 已修 | `LibvgmVgz.cpp` 加 `kMaxImageBytes = 64 MB`，与 `SessionState.cpp` 同一纪律 |
 | M-2 | 删 RF5C 死收集器与两条断言 | ✅ 已修 | 删 `Rf5c68Samples.{h,cpp}` + CMake 4 处 + 两条测试 + include；模型留在 `backup/` 与 `docs/research/…post-mortem.md` |
-| M-3 | `MidiEmitter` 抽出 | ⏳ 待做 | 下一次 MIDI 相关改动时合并 |
-| M-4 | 测试按芯片族拆分 | ⏳ 待做 | `ChipDecoderTest.cpp` 仍 6560 行 |
-| M-5 | `SampleSink` 收口命名/去重 | ⏳ 待做 | 26 个收集器仍各自实现 `hashOf`/`SampleFormat` |
+| M-3 | `MidiEmitter` 抽出 | ⏳ 延后（修正判断） | 评审原说"纯函数"，实际 `emitMidiForBlock` 读写 ~10 个引擎成员（cursor、弯音跟踪、通道路由、mixer 状态），**有状态**；抽出是设计改动而非机械提取，留待专门一轮 |
+| M-4 | 测试按芯片族拆分 | ⏳ 延后 | `ChipDecoderTest.cpp` 仍 6560 行；拆分是纯 churn 且有破坏绿测试套的风险，宜在加新芯片族时顺手做 |
+| M-5 | `SampleSink` 收口 | ✅ 已修（比评审写的小） | 已有 `SampleCollector` 收口去重/命名/格式；只剩 10 份本地 `hashOf`（FNV-1a 同常量）抄写，已收进 `SampleCollector`，删 10 份本地定义 |
 | L-1/L-2 | 工具头注释 + 文档纪律 | ✅ L-1 已修 | 两个取证工具头注明"不共享产品解析器"；L-2 作为评审清单项采纳（表格符号必须可 grep） |
 
 **H-3 的取舍说明**：OPN 家族（YM2610/YM2608，两个收集器、两种 ChipKind）与 YM2612 DAC（构建共享的 `dacTable`）没有进表——前者是"两 kind 触发两收集器"，后者是"收集即产生副作用"。两者各留一个显式块并在注释里写明理由，比硬塞进表里更可读。NES DPCM 因签名不同（字节+长度，非 IR）同理。

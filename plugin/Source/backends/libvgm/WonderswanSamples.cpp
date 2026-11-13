@@ -24,17 +24,6 @@ namespace
 	/** `0xFFFF` is the one frequency the core treats as silence on a tone channel. */
 	constexpr uint16_t kSilentFrequency = 0xFFFF;
 
-	uint64_t hashOf (const uint8_t* bytes)
-	{
-		uint64_t hash = 1469598103934665603ull;
-
-		for (int i = 0; i < kTableBytes; ++i)
-		{
-			hash = (hash ^ (uint64_t) bytes[i]) * 1099511628211ull;
-		}
-
-		return hash;
-	}
 
 	struct Chip
 	{
@@ -109,7 +98,7 @@ std::vector<playback::DecodedSample> collectWonderswanSamples (const midi::SongI
 			levels[step] = (step % 2 == 0) ? (uint8_t) (byte & 0x0F) : (uint8_t) (byte >> 4);
 		}
 
-		const uint64_t key = hashOf (levels);
+		const uint64_t key = hashOf (levels, kTableBytes);
 
 		char name[40] = {};
 		std::snprintf (name, sizeof (name), "wonderswan_%08X%08X", (unsigned) (key >> 32),

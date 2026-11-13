@@ -47,6 +47,18 @@ namespace toybox::backends::libvgm
 		address and the C140's after a twenty-bit one, and unifying the width would rename every file
 		an existing user has. A refactor that changes output is not a refactor (rules, §9).
 	*/
+
+	/** FNV-1a 64-bit over `bytes[0..length)`.
+
+		The content key a collector hands to `add()` when a sample's identity is its bytes rather than
+		an address - a wavetable's cycle, which two voices share. One implementation, because ten local
+		copies of the same FNV constants is ten places to drift on what "same content" means (§13).
+	*/
+	uint64_t hashOf (const uint8_t* bytes, std::size_t length);
+
+	/** Convenience for the collectors that hold a wave in a vector. */
+	uint64_t hashOf (const std::vector<uint8_t>& bytes);
+
 	class SampleCollector
 	{
 	public:

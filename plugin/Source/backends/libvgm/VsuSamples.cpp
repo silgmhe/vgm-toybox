@@ -34,18 +34,6 @@ namespace
 		return (double) clock / remaining;
 	}
 
-	uint64_t hashOf (const uint8_t* bytes)
-	{
-		uint64_t hash = 1469598103934665603ull;
-
-		for (int i = 0; i < kTableBytes; ++i)
-		{
-			hash ^= (uint64_t) bytes[i];
-			hash *= 1099511628211ull;
-		}
-
-		return hash;
-	}
 
 	struct Chip
 	{
@@ -110,7 +98,7 @@ std::vector<playback::DecodedSample> collectVsuSamples (const midi::SongIr& ir, 
 			return;
 		}
 
-		const uint64_t key = hashOf (chip.waveRam[table]);
+		const uint64_t key = hashOf (chip.waveRam[table], kTableBytes);
 		Pending& entry = pending[key];
 
 		if (entry.bytes.empty())

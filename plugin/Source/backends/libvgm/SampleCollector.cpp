@@ -7,6 +7,23 @@
 namespace toybox::backends::libvgm
 {
 
+uint64_t hashOf (const uint8_t* bytes, std::size_t length)
+{
+	uint64_t hash = 1469598103934665603ull;
+
+	for (std::size_t i = 0; i < length; ++i)
+	{
+		hash = (hash ^ (uint64_t) bytes[i]) * 1099511628211ull;
+	}
+
+	return hash;
+}
+
+uint64_t hashOf (const std::vector<uint8_t>& bytes)
+{
+	return hashOf (bytes.data (), bytes.size ());
+}
+
 void SampleCollector::add (uint64_t key, const std::string& name, const uint8_t* bytes,
 						   std::size_t length, SampleFormat format, double rate, uint32_t sampleId,
 					   bool isCycle)

@@ -156,17 +156,6 @@ namespace
 	/** One step is `clock * pitch / 2^26` seconds apart; the step rate is that over the table. */
 	constexpr double kStepDivisor = 524288.0;
 
-	uint64_t hashOfWave (const uint8_t* bytes)
-	{
-		uint64_t hash = 1469598103934665603ull;
-
-		for (int i = 0; i < kWaveTableBytes; ++i)
-		{
-			hash = (hash ^ (uint64_t) bytes[i]) * 1099511628211ull;
-		}
-
-		return hash;
-	}
 }
 
 std::vector<playback::DecodedSample> collectX1010WaveSamples (const midi::SongIr& ir,
@@ -207,7 +196,7 @@ std::vector<playback::DecodedSample> collectX1010WaveSamples (const midi::SongIr
 
 		const int table = (int) (voice.waveNo % kWaveTables);
 		const uint8_t* bytes = chip.ram + table * kWaveTableBytes;
-		const uint64_t key = hashOfWave (bytes);
+		const uint64_t key = hashOf (bytes, kWaveTableBytes);
 
 		char name[40] = {};
 		std::snprintf (name, sizeof (name), "x1010wave_%08X%08X", (unsigned) (key >> 32),

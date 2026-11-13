@@ -23,18 +23,6 @@ namespace
 		return 440.0 * std::pow (2.0, (double) (kFirstKey + index - 69) / 12.0);
 	}
 
-	uint64_t hashOf (const std::vector<uint8_t>& bytes)
-	{
-		uint64_t hash = 1469598103934665603ull;
-
-		for (const uint8_t byte : bytes)
-		{
-			hash ^= (uint64_t) byte;
-			hash *= 1099511628211ull;
-		}
-
-		return hash;
-	}
 
 	struct Pending
 	{

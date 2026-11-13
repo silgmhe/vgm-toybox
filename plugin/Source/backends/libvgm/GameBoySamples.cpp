@@ -17,17 +17,6 @@ namespace
 	constexpr int kWaveRamFirst = 0x20;		// 0xB3 offsets: 0xFF30 - 0xFF10
 	constexpr int kWaveRamLast = 0x2F;
 
-	uint64_t hashOf (const uint8_t* bytes)
-	{
-		uint64_t hash = 1469598103934665603ull;
-
-		for (int i = 0; i < kTableBytes; ++i)
-		{
-			hash = (hash ^ (uint64_t) bytes[i]) * 1099511628211ull;
-		}
-
-		return hash;
-	}
 
 	struct Chip
 	{
@@ -78,7 +67,7 @@ std::vector<playback::DecodedSample> collectGameBoySamples (const midi::SongIr& 
 			levels[step] = (step % 2 == 0) ? (uint8_t) (byte >> 4) : (uint8_t) (byte & 0x0F);
 		}
 
-		const uint64_t key = hashOf (levels);
+		const uint64_t key = hashOf (levels, kTableBytes);
 
 		char name[32] = {};
 		std::snprintf (name, sizeof (name), "gb_%08X%08X", (unsigned) (key >> 32),

@@ -29,18 +29,6 @@ namespace
 	/** The hash is over the pattern's **bytes**, which is what decides a file: two states that
 		quantise to the same steps produce the same shape, and a float's last bits are not a
 		difference anyone can hear. */
-	uint64_t hashOf (const std::vector<uint8_t>& bytes)
-	{
-		uint64_t hash = 1469598103934665603ull;
-
-		for (const uint8_t byte : bytes)
-		{
-			hash ^= (uint64_t) byte;
-			hash *= 1099511628211ull;
-		}
-
-		return hash;
-	}
 
 	struct Channel
 	{

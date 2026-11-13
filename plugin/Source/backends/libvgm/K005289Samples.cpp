@@ -30,18 +30,6 @@ namespace
 		return (double) clock / ((double) divider + 1.0);
 	}
 
-	uint64_t hashOf (const uint8_t* bytes)
-	{
-		uint64_t hash = 1469598103934665603ull;
-
-		for (int i = 0; i < kWaveformBytes; ++i)
-		{
-			hash ^= (uint64_t) bytes[i];
-			hash *= 1099511628211ull;
-		}
-
-		return hash;
-	}
 
 	struct Chip
 	{
@@ -117,7 +105,7 @@ std::vector<playback::DecodedSample> collectK005289Samples (const midi::SongIr& 
 		}
 
 		const uint8_t* bytes = prom.data () + channel * kHalfBytes + waveform * kWaveformBytes;
-		const uint64_t key = hashOf (bytes);
+		const uint64_t key = hashOf (bytes, kWaveformBytes);
 		Pending& entry = pending[key];
 
 		if (entry.bytes.empty())

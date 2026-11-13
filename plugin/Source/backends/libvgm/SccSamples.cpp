@@ -20,17 +20,6 @@ namespace
 	/** Addresses at or above this are channel 3/4's shared half in SCC mode (`k051649.c:268`). */
 	constexpr int kSharedTableStart = 0x60;
 
-	uint64_t hashOf (const uint8_t* bytes)
-	{
-		uint64_t hash = 1469598103934665603ull;
-
-		for (int i = 0; i < kTableBytes; ++i)
-		{
-			hash = (hash ^ (uint64_t) bytes[i]) * 1099511628211ull;
-		}
-
-		return hash;
-	}
 
 	struct Chip
 	{
@@ -82,7 +71,7 @@ std::vector<playback::DecodedSample> collectSccSamples (const midi::SongIr& ir, 
 			return;
 		}
 
-		const uint64_t key = hashOf (chip.wave[channel]);
+		const uint64_t key = hashOf (chip.wave[channel], kTableBytes);
 
 		char name[32] = {};
 		std::snprintf (name, sizeof (name), "scc_%08X%08X", (unsigned) (key >> 32),
