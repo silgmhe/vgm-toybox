@@ -341,21 +341,13 @@ bool LibvgmSongInstance::prepare (double hostSampleRate, int newMaxBlockSize, ju
 		}
 	}
 
-	const bool hasRf5c = songIr != nullptr
-					  && std::any_of (songIr->chips.begin (), songIr->chips.end (),
-									  [] (const midi::ChipSlot& slot)
-									  {
-										  return slot.kind == midi::ChipKind::rf5c68
-											  || slot.kind == midi::ChipKind::rf5c164;
-									  });
-
-	if (hasRf5c && songIr != nullptr)
-	{
-		for (auto& sample : collectRf5cSamples (*songIr))
-		{
-			collected.push_back (std::move (sample));
-		}
-	}
+	// **RF5C164 contributes no samples, on purpose.** Four attempts at an export model (slot window,
+	// window at the release, play-head bytes, recorded audio) each produced something plausible and
+	// each was heard as "not the instrument", because this chip's RAM is refilled *while* a voice
+	// reads it and the driver gates notes in tens of milliseconds. The row now shows the live trace
+	// instead (`Rf5c68Decoder::advance`), which needs no analysis and cannot disagree with the sound -
+	// and that is what was actually wanted from the export. `Rf5c68Samples.cpp` stays in the tree,
+	// uncalled, with its tests, as the record of the model; design 9.5.1 says why each one failed.
 
 	const bool hasOkim6295 = songIr != nullptr
 						  && std::any_of (songIr->chips.begin (), songIr->chips.end (),

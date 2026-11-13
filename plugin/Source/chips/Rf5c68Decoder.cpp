@@ -55,6 +55,13 @@ namespace
 
 	// A period is a lag whose correlation dips below the first value and peaks above the second: a
 	// steady tone anti-correlates at half its cycle, noise never dips.
+	/** How many played samples a row keeps: about a twentieth of a second at 44.1 kHz - short enough to
+		scroll at a readable speed, long enough that a drum's shape is still recognisable. */
+	constexpr std::size_t kRingPoints = 2048;
+
+	/** `0x02`/`0x03` count 1/2048 of a byte (`scd_pcm.c`'s `PCM_STEP_SHIFT`). */
+	constexpr double kStepPerByte = 2048.0;
+
 	constexpr double kPeriodTrough = -0.5;
 	constexpr double kPeriodPeak = 0.5;
 }
@@ -76,6 +83,18 @@ struct Rf5c68Decoder::Impl
 		bool melodic = false;
 		uint32_t gateEnd = 0;		// 0 when the sample loops
 		uint32_t keyOns = 0;
+
+		/** **What this voice has read since the key-on**, newest last.
+
+			The row used to draw a *slot*: a range of RAM picked when the note started. On this chip that
+			range is rewritten while the note plays - the driver streams pages into it - so the picture
+			was of memory at one moment, not of the sound. Keeping the bytes the play head passes gives a
+			rolling trace like the YM2612 DAC's row, and needs no analysis beforehand: the head moves one
+			step per output sample and whatever it reads goes on screen.
+		*/
+		double head = 0.0;
+		uint32_t advancedAt = 0;
+		std::vector<float> ring;
 	};
 
 	Channel channels[numChannels];
@@ -274,6 +293,12 @@ struct Rf5c68Decoder::Impl
 		++channel.keyOns;
 		channel.keyed = true;
 		channel.latchStart = (uint32_t) channel.start << 8;
+
+		// The trace starts over at the address the driver pointed at: the previous note's bytes are
+		// not this note's, and a row that carried them over would show one drum's tail under another.
+		channel.head = (double) channel.latchStart;
+		channel.advancedAt = time;
+		channel.ring.clear ();
 		channel.cycleLength = cycleFor (channel.latchStart);
 		channel.gateEnd = 0;
 
@@ -453,6 +478,53 @@ void Rf5c68Decoder::write (const RegisterWrite& w)
 
 void Rf5c68Decoder::advance (uint32_t sampleTime)
 {
+	// **One point per output sample, taken from wherever the head is.** `step` is the address advance
+	// per chip sample in 1/2048 byte units, so `step / 2048` bytes per sample is exactly what the core
+	// does (`rf5c68.c:163`); the noise floor of the picture is the chip's own resolution, not a guess.
+	for (auto& channel : impl->channels)
+	{
+		// The three ways a voice contributes nothing, spelled out rather than chained: the chained
+		// form lost its operators to a script edit once already, and a `;` there compiles into one
+		// statement that silently skips the whole walk.
+		const bool silent = (! channel.enabled) || (channel.step == 0) || (sampleTime <= channel.advancedAt);
+
+		if (silent)
+		{
+			channel.advancedAt = sampleTime;
+			continue;
+		}
+
+		const uint32_t elapsed = sampleTime - channel.advancedAt;
+		const double advance = (double) channel.step / kStepPerByte;
+
+		for (uint32_t i = 0; i < elapsed; ++i)
+		{
+			const uint8_t byte = impl->byteAt ((uint32_t) channel.head);
+
+			// `0xFF` is the chip's loop marker: playback jumps to the loop address, so the trace
+			// follows it instead of walking into whatever the driver left after the sample.
+			if (byte == 0xFF)
+			{
+				channel.head = (double) ((uint32_t) channel.loopStart << 8);
+				continue;
+			}
+
+			// Sign and magnitude (`rf5c68.c:159`): bit 7 is the sign and the low seven bits are the
+			// distance from zero, so 0x80..0xFF is 0..+1 and 0x00..0x7F is 0..-1.
+			const float magnitude = (float) (byte & 0x7F) / 128.0f;
+			channel.ring.push_back ((byte & 0x80) ? magnitude : -magnitude);
+
+			if (channel.ring.size () > kRingPoints)
+			{
+				channel.ring.erase (channel.ring.begin ());
+			}
+
+			channel.head += advance;
+		}
+
+		channel.advancedAt = sampleTime;
+	}
+
 	impl->now = sampleTime;
 }
 
@@ -482,6 +554,14 @@ ChannelState Rf5c68Decoder::channelState (int channel) const
 	// The same bytes-per-second that the pitch above divides by the cycle; a dragged-out file
 	// declares it directly, because a file has no cycle to divide by.
 	state.sampleRate = (float) impl->bytesPerSecond (voice);
+
+	// **The live trace, when there is one.** The slot picture below stays as the answer for a song
+	// that has not played yet - an empty ring means nothing has been read, not that the voice is idle.
+	if (! voice.ring.empty ())
+	{
+		state.wave = std::make_shared<std::vector<float>> (voice.ring);
+		return state;
+	}
 
 	// The bytes this voice is playing, so the row can draw the sample rather than a placeholder.
 	//
