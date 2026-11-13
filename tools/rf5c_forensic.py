@@ -101,6 +101,7 @@ def main():
     hits = []                       # (time, channel, start, length, rate, body)
     time = 0
     chip_channel = 0
+    ram_bank = 0
 
     def take_hit(channel, voice):
         start = (voice.start_page << 8) & (RAM_BYTES - 1)
@@ -126,7 +127,10 @@ def main():
                 ram[0:min(len(payload), RAM_BYTES)] = payload[:RAM_BYTES]
             elif kind == 0xC1:
                 # A page written while the song runs: a two-byte address, then the bytes.
-                address = struct.unpack_from('<H', raw, pos + 7)[0]
+                # **The RAM bank is or-ed into every page address** - libvgm does it in
+                # `DoRAMOfsPatches` (`dataOfs |= _rf5cBank[..] << 12`), and a tool that skips it
+                # builds an image whose bytes sit 4 KB away from the chip's.
+                address = struct.unpack_from('<H', raw, pos + 7)[0] | (ram_bank << 12)
                 payload = raw[pos + 9:pos + 7 + size]
                 pages += 1
 
@@ -170,6 +174,8 @@ def main():
             if offset == REG_CONTROL:
                 if (value & 0x40) != 0:
                     chip_channel = value & 0x07
+                else:
+                    ram_bank = value & 0x0F
 
                 continue
 

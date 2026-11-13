@@ -8,6 +8,7 @@
 /*                                                         */
 /***********************************************************/
 
+#include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
 
@@ -95,6 +96,18 @@ struct pcm_chip_
 };
 
 #define PCM_STEP_SHIFT 11
+
+/* **What each key-on actually points at**, for design 9.5. `VGM_RF5C_TRACE=1` prints the first 240
+   key-ons of every instance, with the address, the step and the bytes under it. The point is to compare
+   a *key-on* against the file-level timeline (`tools/rf5c_forensic.py`) rather than to measure energy,
+   because the eleven earlier attempts all measured energy and all disagreed with each other.
+
+   Deliberately a key-on print and not a timed one: there is no song clock inside the core, and every
+   attempt to reconstruct one introduced a rate assumption that could be wrong in the same direction as
+   the thing being tested. */
+static int rf5c_trace_ready = 0;
+static int rf5c_trace_on = 0;
+static int rf5c_trace_lines = 0;
 
 
 static uint8_t device_start_rf5c68_gens(const DEV_GEN_CFG* cfg, DEV_INFO* retDevInf)
@@ -322,9 +335,29 @@ static void SCD_PCM_Write_Reg(void* info, uint8_t Reg, uint8_t Data)
 					chan->Addr = chan->St_Addr << PCM_STEP_SHIFT;
 			}
 			
+			if (! rf5c_trace_ready)
+			{
+				rf5c_trace_ready = 1;
+				rf5c_trace_on = (getenv("VGM_RF5C_TRACE") != NULL);
+			}
+
 			for (i = 0; i < 8; i++)
 			{
-				chip->Channel[i].Enable = Data & (1 << i);
+				const uint8_t on = Data & (1 << i);
+
+				if (on && ! chip->Channel[i].Enable && rf5c_trace_on && rf5c_trace_lines < 240)
+				{
+					struct pcm_chan_* c = &chip->Channel[i];
+					const uint32_t a = c->St_Addr;		// already a byte address: `Addr = St_Addr << 11`
+
+					rf5c_trace_lines++;
+					printf("RF5C-K %p ch=%d St=%04X Loop=%04X Step=%04X ram=%02X %02X %02X %02X\n",
+						   (void*) chip, i, c->St_Addr, c->Loop_Addr, c->Step,
+						   chip->RAM[(a + 0) & 0xFFFF], chip->RAM[(a + 1) & 0xFFFF],
+						   chip->RAM[(a + 2) & 0xFFFF], chip->RAM[(a + 3) & 0xFFFF]);
+				}
+
+				chip->Channel[i].Enable = on;
 			}
 	}
 }
@@ -441,6 +474,9 @@ static uint8_t SCD_PCM_MemRead(void *info, uint16_t offset)
 
 static void SCD_PCM_MemWrite(void *info, uint16_t offset, uint8_t data)
 {
+	if (getenv("VGM_RF5C_TRACE") != NULL)
+		printf("RF5C-MW %p off=%04X val=%02X\n", (void*) info, offset, data);
+
 	struct pcm_chip_ *chip = (struct pcm_chip_ *)info;
 	offset &= 0x0FFF;
 	chip->RAM[chip->Bank | offset] = data;
@@ -448,6 +484,9 @@ static void SCD_PCM_MemWrite(void *info, uint16_t offset, uint8_t data)
 
 static void SCD_PCM_MemBlockWrite(void* info, uint32_t offset, uint32_t length, const uint8_t* data)
 {
+	if (getenv("VGM_RF5C_TRACE") != NULL)
+		printf("RF5C-B %p block off=%05X len=%u first=%02X\n", (void*) info, offset, length, data[0]);
+
 	struct pcm_chip_ *chip = (struct pcm_chip_ *)info;
 	
 	// offset is absolute here
