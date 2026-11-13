@@ -1,6 +1,7 @@
 ﻿#include "Rf5c68Decoder.h"
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <map>
 #include <memory>
@@ -55,13 +56,6 @@ namespace
 
 	// A period is a lag whose correlation dips below the first value and peaks above the second: a
 	// steady tone anti-correlates at half its cycle, noise never dips.
-	/** How many played samples a row keeps: about a twentieth of a second at 44.1 kHz - short enough to
-		scroll at a readable speed, long enough that a drum's shape is still recognisable. */
-	constexpr std::size_t kRingPoints = 2048;
-
-	/** `0x02`/`0x03` count 1/2048 of a byte (`scd_pcm.c`'s `PCM_STEP_SHIFT`). */
-	constexpr double kStepPerByte = 2048.0;
-
 	constexpr double kPeriodTrough = -0.5;
 	constexpr double kPeriodPeak = 0.5;
 }
@@ -84,17 +78,6 @@ struct Rf5c68Decoder::Impl
 		uint32_t gateEnd = 0;		// 0 when the sample loops
 		uint32_t keyOns = 0;
 
-		/** **What this voice has read since the key-on**, newest last.
-
-			The row used to draw a *slot*: a range of RAM picked when the note started. On this chip that
-			range is rewritten while the note plays - the driver streams pages into it - so the picture
-			was of memory at one moment, not of the sound. Keeping the bytes the play head passes gives a
-			rolling trace like the YM2612 DAC's row, and needs no analysis beforehand: the head moves one
-			step per output sample and whatever it reads goes on screen.
-		*/
-		double head = 0.0;
-		uint32_t advancedAt = 0;
-		std::vector<float> ring;
 	};
 
 	Channel channels[numChannels];
@@ -294,11 +277,6 @@ struct Rf5c68Decoder::Impl
 		channel.keyed = true;
 		channel.latchStart = (uint32_t) channel.start << 8;
 
-		// The trace starts over at the address the driver pointed at: the previous note's bytes are
-		// not this note's, and a row that carried them over would show one drum's tail under another.
-		channel.head = (double) channel.latchStart;
-		channel.advancedAt = time;
-		channel.ring.clear ();
 		channel.cycleLength = cycleFor (channel.latchStart);
 		channel.gateEnd = 0;
 
@@ -478,53 +456,11 @@ void Rf5c68Decoder::write (const RegisterWrite& w)
 
 void Rf5c68Decoder::advance (uint32_t sampleTime)
 {
-	// **One point per output sample, taken from wherever the head is.** `step` is the address advance
-	// per chip sample in 1/2048 byte units, so `step / 2048` bytes per sample is exactly what the core
-	// does (`rf5c68.c:163`); the noise floor of the picture is the chip's own resolution, not a guess.
-	for (auto& channel : impl->channels)
-	{
-		// The three ways a voice contributes nothing, spelled out rather than chained: the chained
-		// form lost its operators to a script edit once already, and a `;` there compiles into one
-		// statement that silently skips the whole walk.
-		const bool silent = (! channel.enabled) || (channel.step == 0) || (sampleTime <= channel.advancedAt);
-
-		if (silent)
-		{
-			channel.advancedAt = sampleTime;
-			continue;
-		}
-
-		const uint32_t elapsed = sampleTime - channel.advancedAt;
-		const double advance = (double) channel.step / kStepPerByte;
-
-		for (uint32_t i = 0; i < elapsed; ++i)
-		{
-			const uint8_t byte = impl->byteAt ((uint32_t) channel.head);
-
-			// `0xFF` is the chip's loop marker: playback jumps to the loop address, so the trace
-			// follows it instead of walking into whatever the driver left after the sample.
-			if (byte == 0xFF)
-			{
-				channel.head = (double) ((uint32_t) channel.loopStart << 8);
-				continue;
-			}
-
-			// Sign and magnitude (`rf5c68.c:159`): bit 7 is the sign and the low seven bits are the
-			// distance from zero, so 0x80..0xFF is 0..+1 and 0x00..0x7F is 0..-1.
-			const float magnitude = (float) (byte & 0x7F) / 128.0f;
-			channel.ring.push_back ((byte & 0x80) ? magnitude : -magnitude);
-
-			if (channel.ring.size () > kRingPoints)
-			{
-				channel.ring.erase (channel.ring.begin ());
-			}
-
-			channel.head += advance;
-		}
-
-		channel.advancedAt = sampleTime;
-	}
-
+	// **This chip draws no waveform, on purpose.** Its bytes live in a 64 KB RAM that the driver refills
+	// while a voice reads it, and four attempts at turning that into a picture (slot window, window at
+	// the release, play-head bytes, the player's own audio) were each heard as "that is another channel".
+	// Design 9.5.2 records the reasoning; the row keeps its note, its gate and its pitch, and makes no
+	// claim about what the sample looks like.
 	impl->now = sampleTime;
 }
 
@@ -555,79 +491,11 @@ ChannelState Rf5c68Decoder::channelState (int channel) const
 	// declares it directly, because a file has no cycle to divide by.
 	state.sampleRate = (float) impl->bytesPerSecond (voice);
 
-	// **The live trace, when there is one.** The slot picture below stays as the answer for a song
-	// that has not played yet - an empty ring means nothing has been read, not that the voice is idle.
-	if (! voice.ring.empty ())
-	{
-		state.wave = std::make_shared<std::vector<float>> (voice.ring);
-		return state;
-	}
-
-	// The bytes this voice is playing, so the row can draw the sample rather than a placeholder.
-	//
-	// `latchStart` is the byte address recorded at the key-on (`0x06` is in 256-byte units, and
-	// `keyOn` shifts it into an address). Reading the register instead would be the same value
-	// today, but the latch is what the length and the cycle measurement already use.
-	//
-	// The length is not a register on this chip either: a sample ends at a `0xFF` data byte, and
-	// `lengthOf` is the scan that finds it. It already exists because the duration needed it.
-	//
-	// No guard on `enabled`: a released voice still has a sample worth drawing, and a row that
-	// blanks the moment the driver clears its bit is a row that flickers.
-	const uint32_t start = voice.latchStart;
-
-	// The region is one **fixed slot** - see `kSlotBytes`. Asking the other channels for the next
-	// start instead looked right only while every slot was occupied; this rip leaves 0xC000 empty,
-	// so the piano at 0xA000 ran into the drums at 0xC000 and a row drew two instruments.
-	const uint32_t limit = (std::min) (start + kSlotBytes, (uint32_t) impl->ram.size ());
-	const std::size_t span = (limit > start) ? (std::size_t) (limit - start) : 0;
-
-	// The **whole slot**, which is what the chip itself loops.
-	//
-	// A cut at the first quiet stretch was tried, on the theory that a slot holds several hits back
-	// to back. Measuring `0x2000`'s envelope says the loud sections all reach the same height and
-	// repeat every ~1536 bytes - a decay would fall away, and this does not. So the reading is
-	// either a sustained sound with deep modulation or a short pattern, and in both cases the
-	// "first silence" is a trough inside the sound rather than its end. Cutting there produced
-	// fragments that were reported as "closer to one instrument, but the waveform looks wrong".
-	//
-	// The region is therefore the slot, as the earlier slot-based export had it. What changed since
-	// that export is the **rate**: it used the fastest step the driver ever asked for, which played
-	// these samples about two and a half times too fast and is the likeliest reason the whole slot
-	// was heard as "a loop with several instruments".
-	const std::size_t length = span;
-
-	if (length > 1)
-	{
-		const auto key = std::make_pair (start, (uint32_t) length);
-		const auto found = impl->waveCache.find (key);
-
-		if (found != impl->waveCache.end ())
-		{
-			state.wave = found->second;
-		}
-		else
-		{
-			auto wave = std::make_shared<std::vector<float>> ();
-			wave->resize (length);
-
-			// **Sign and magnitude, not two's complement.** `rf5c68.c:159` reads
-			// `if (sample & 0x80) out += sample & 0x7f; else out -= sample;`, so bit 7 is a sign
-			// and the low seven bits are the distance from zero: 0x80..0xFF is 0..+127, 0x00..0x7F
-			// is 0..-127. Casting to `int8_t` instead folds the two halves together and shifts the
-			// positive one down by 128, which draws a dense buzz over bytes that are a clean
-			// waveform - the same mistake the export had, in the same file's other reader.
-			for (std::size_t i = 0; i < length; ++i)
-			{
-				const uint8_t byte = impl->byteAt (start + (uint32_t) i);
-				const float magnitude = (float) (byte & 0x7F) / 128.0f;
-				(*wave)[i] = (byte & 0x80) ? magnitude : -magnitude;
-			}
-
-			state.wave = std::move (wave);
-			impl->waveCache.emplace (key, state.wave);
-		}
-	}
+	// **No waveform is drawn for this chip.** The row keeps its note, its gate and its pitch; what the
+	// sample looks like is left unanswered rather than answered wrongly. Four models tried (a fixed
+	// slot, the window at the release, the play head's bytes, the player's own audio) and each was
+	// heard as "that is another channel"; design 9.5.2 records why. The slot scan below the old code
+	// cost nothing to keep but also told nobody anything true, so it is gone with the rest.
 
 	return state;
 }
