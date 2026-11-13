@@ -346,26 +346,19 @@ std::vector<playback::DecodedSample> collectRf5cSamples (const midi::SongIr& ir)
 
 				if (on && ! voice.on)
 				{
-					// **A mask rewrite is not a retrigger.** The driver toggles every voice's bit on
-					// its way to writing the next one, so one note arrives as several on/off pairs;
-					// only a gap longer than `kContinuation` ends the previous one. Without this the
-					// song became 1629 files, one per fragment.
-					const bool continued = voice.released
-										   && (now - voice.releasedAt)
-												  <= (uint32_t) (kContinuation * kStreamRate);
-
-					if (voice.released && ! continued)
+					// **Every enable restarts the voice at `St_Addr`** (`scd_pcm.c:325-335`), and the
+					// segments here are tens of milliseconds apart, not microseconds - measured on
+					// this song: medians of 66-138 ms per channel, 200-400 segments each. So each
+					// enable is its own note, and gluing them together replays the attack every time,
+					// which is exactly the "choppy, and it sounds like another instrument" report.
+					if (voice.released || voice.playing)
 					{
 						finish (voice);
 					}
 
-					if (! continued)
-					{
-						voice.head = (double) ((uint32_t) voice.startPage << 8);
-						voice.bytes.clear ();
-						voice.noteStep = voice.step;
-					}
-
+					voice.head = (double) ((uint32_t) voice.startPage << 8);
+					voice.bytes.clear ();
+					voice.noteStep = voice.step;
 					voice.released = false;
 					voice.playing = true;
 					voice.advancedAt = now;
@@ -375,6 +368,7 @@ std::vector<playback::DecodedSample> collectRf5cSamples (const midi::SongIr& ir)
 					voice.playing = false;
 					voice.released = true;
 					voice.releasedAt = now;
+					finish (voice);
 				}
 
 				voice.on = on;
