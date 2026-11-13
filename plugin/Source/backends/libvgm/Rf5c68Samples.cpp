@@ -62,6 +62,14 @@ namespace
 		uint16_t step = 0;			// 0x02 / 0x03, the playback rate and the only pitch
 		bool enabled = false;
 
+		/** **What the voice has actually read so far.** The window is not the sample: the driver keeps
+			writing pages into the RAM under the play head, so the bytes a note consists of are the ones
+			the head passed over, in order - not the contents of a range at any single moment. */
+		bool playing = false;
+		double playhead = 0.0;
+		uint32_t advancedAt = 0;
+		std::vector<uint8_t> played;
+
 		/** The state latched at the key-on, and when it happened.
 
 			A note's length is not in the data. It is the time the channel stayed on, times the byte
@@ -183,6 +191,42 @@ std::vector<playback::DecodedSample> collectRf5cSamples (const midi::SongIr& ir)
 		the bank's slot size, so a sample runs from its start to the next one. Deciding it after the
 		whole stream has been read is the only way to know the neighbour.
 	*/
+	/** Walks every sounding voice's head forward to `now`, collecting the bytes it passes. */
+	const auto advance = [&] (uint32_t now)
+	{
+		for (int i = 0; i < kChannels; ++i)
+		{
+			Voice& voice = voices[i];
+
+			if (! voice.playing || voice.armedStep == 0 || now <= voice.advancedAt)
+			{
+				voice.advancedAt = now;
+				continue;
+			}
+
+			const double byteRate = (double) voice.armedStep * clock / kOutputDivisor / kStepPerByte;
+			const std::size_t wanted = (std::size_t) ((double) (now - voice.advancedAt) * byteRate / kStreamRate);
+
+			for (std::size_t step = 0; step < wanted && voice.played.size () < kMaxSampleScan; ++step)
+			{
+				const uint32_t index = (uint32_t) voice.playhead & 0xFFFFu;
+
+				// `0xFF` is the chip's loop marker: playback jumps to the loop address and what follows
+				// is the sustain, not the sample. Stopping here keeps one file to one attack.
+				if (ram[index] == 0xFF)
+				{
+					voice.playing = false;
+					break;
+				}
+
+				voice.played.push_back (ram[index]);
+				voice.playhead += (double) voice.armedStep / kStepPerByte;
+			}
+
+			voice.advancedAt = now;
+		}
+	};
+
 	const auto collect = [&] (const Voice& voice, uint32_t now)
 	{
 		// `0x06` counts 256-byte units, so the address is the register shifted up.
@@ -232,6 +276,14 @@ std::vector<playback::DecodedSample> collectRf5cSamples (const midi::SongIr& ir)
 			length = limit - address;
 		}
 
+		// **The head's own count is the truth.** A note that met the loop marker or the end of the
+		// stream stops earlier than the gate says, and padding it from the memory image would append
+		// bytes the voice never read - the same failure this change removes, in a smaller form.
+		if (! voice.played.empty ())
+		{
+			length = (std::min) (length, voice.played.size ());
+		}
+
 		if (length < 2)
 		{
 			return;
@@ -243,7 +295,9 @@ std::vector<playback::DecodedSample> collectRf5cSamples (const midi::SongIr& ir)
 
 		for (std::size_t i = 0; i < length; ++i)
 		{
-			hash ^= ram[address + i];
+			const uint8_t byte = (i < voice.played.size ()) ? voice.played[i] : ram[address + i];
+
+			hash ^= byte;
 			hash *= 1099511628211ull;
 		}
 
@@ -256,7 +310,14 @@ std::vector<playback::DecodedSample> collectRf5cSamples (const midi::SongIr& ir)
 
 		if (seenContents.insert (std::make_pair (address, bucket)).second)
 		{
-			hits.back ().bytes.assign (ram.begin () + address, ram.begin () + address + length);
+			if (voice.played.empty ())
+			{
+				hits.back ().bytes.assign (ram.begin () + address, ram.begin () + address + length);
+			}
+			else
+			{
+				hits.back ().bytes.assign (voice.played.begin (), voice.played.begin () + length);
+			}
 		}
 	};
 
@@ -386,6 +447,10 @@ std::vector<playback::DecodedSample> collectRf5cSamples (const midi::SongIr& ir)
 			continue;
 		}
 
+		// **The heads move between events, not inside them.** The bytes a voice reads depend on the RAM
+		// as it stands when it gets there, so the walk has to happen *before* this write changes it.
+		advance (write.sampleTime);
+
 		const uint8_t offset = write.reg;
 		const uint8_t value = (uint8_t) write.value;
 
@@ -421,12 +486,19 @@ std::vector<playback::DecodedSample> collectRf5cSamples (const midi::SongIr& ir)
 						voices[i].armedStart = voices[i].start;
 						voices[i].armedStep = voices[i].step;
 						voices[i].enabledAt = write.sampleTime;
+
+						// The head restarts, and the bytes of the previous note are not this one's.
+						voices[i].playing = true;
+						voices[i].playhead = (double) ((uint32_t) voices[i].start << 8);
+						voices[i].advancedAt = write.sampleTime;
+						voices[i].played.clear ();
 					}
 				}
 				else if (! on && voices[i].enabled)
 				{
 					voices[i].releasedAt = write.sampleTime;
 					voices[i].released = true;
+					voices[i].playing = false;
 				}
 
 				voices[i].enabled = on;
