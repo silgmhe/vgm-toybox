@@ -7601,6 +7601,71 @@ void testWaveExport (void)
 			   "and a gate longer than the slot stops at the slot's end");
 	}
 
+	/** **A `0x68` copy is what the chip plays, not the bank it was copied from.**
+
+		A bank is only the load-time state. This rip streams 4 KB slices into the chip while the song
+		runs (`Cmd_PcmRamWrite`), and those slices are the bytes a note actually reads - the fixture
+		below makes them differ, so a collector that ignores the copies exports the wrong byte and
+		this check fails on it. The order matters too: the copy sits between the key-on and the
+		release, because a copy that arrives after the note ends is not part of that note.
+	*/
+	void testRf5cStreamedCopyReachesTheSample (void)
+	{
+		using namespace toybox;
+
+		std::vector<uint8_t> bank (0x400, 0x10);	// 0x10 is -16/128 on this chip
+		bank[0x000] = 0x40;						// +64/128: the byte the copy moves into place
+		bank[0x210] = 0xFF;						// the marker that ends the sample
+
+		midi::SongIr ir;
+
+		midi::ChipSlot slot;
+		slot.kind = midi::ChipKind::rf5c164;
+		slot.clockHz = 12500000;
+		ir.chips.push_back (slot);
+
+		midi::RomBlock block;
+		block.memoryType = 0x02;
+		block.romSize = (uint32_t) bank.size ();
+		block.romOffset = 0;
+		block.data = bank.data ();
+		block.size = bank.size ();
+		ir.roms.push_back (block);
+
+		midi::RamCopy copy;
+		copy.bankType = 0x02;
+		copy.bankPosition = 0x000;			// the byte the bank holds at 0x000
+		copy.address = 0x200;				// goes to the first byte of the sample
+		copy.length = 1;
+		copy.streamOrder = 2;
+		ir.ramCopies.push_back (copy);
+
+		const auto write = [&ir] (uint8_t offset, uint8_t value, uint32_t order,
+								  uint32_t time = 0)
+		{
+			RegisterWrite w;
+			w.deviceId = 0;
+			w.port = 0;
+			w.reg = offset;
+			w.value = value;
+			w.streamOrder = order;
+			w.sampleTime = time;
+			ir.writes.push_back (w);
+		};
+
+		write (0x07, 0xC0, 1);				// master on, channel 0 selected
+		write (0x06, 0x02, 1);				// start 0x0200
+		write (0x03, 0x08, 1);				// step 0x0800: one byte per chip sample
+		write (0x08, 0xFE, 1);				// channel 0's bit cleared - the key-on
+		write (0x08, 0xFF, 3, 4410);		// released a tenth of a second later, after the copy
+
+		const auto samples = backends::libvgm::collectRf5cSamples (ir);
+
+		check (! samples.empty () && ! samples[0].values.empty ()
+				   && std::abs (samples[0].values[0] + (0x40 / 128.0f)) < 0.001f,
+			   "the sample holds the byte the copy streamed in, not the bank's own");
+	}
+
 	/** What the export finds in a QSound song.
 
 		Three of the chip's quirks are load-bearing here and each has its own assertion: the bank
@@ -8115,6 +8180,7 @@ int main (void){
 	testK053260SampleCollection();
 	testQSoundAdpcm();
 	testRf5cSampleCollection();
+	testRf5cStreamedCopyReachesTheSample();
 	testQSoundSampleCollection();
 	testC352SampleCollection();
 	testDisplayColumns();

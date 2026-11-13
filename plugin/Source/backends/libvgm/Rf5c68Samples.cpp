@@ -118,6 +118,24 @@ std::vector<playback::DecodedSample> collectRf5cSamples (const midi::SongIr& ir)
 		return collector.take ();
 	}
 
+	/** **The whole bank, which `pcmBank` truncates to 64 KB.**
+
+		A `0x68` command copies a slice of the bank into the chip at a chosen address
+		(`Cmd_PcmRamWrite`), and this rip's bank is 155 KB for a 64 KB RAM - so the slices past the
+		first 64 KB are exactly the part `pcmBank` cannot give. Without them the image keeps whatever
+		the load-time block left at a page the song later refills, which is why a key-on at 0x8000 used
+		to read `99 19 83 97` where the chip read `80 80 80 80`.
+	*/
+	std::vector<uint8_t> bankBytes;
+
+	for (const auto& block : ir.roms)
+	{
+		if (block.memoryType == kPcmBankType; block.data != nullptr)
+		{
+			bankBytes.insert (bankBytes.end (), block.data, block.data + block.size);
+		}
+	}
+
 	double clock = kFallbackClock;
 
 	for (const auto& slot : ir.chips)
@@ -261,6 +279,17 @@ std::vector<playback::DecodedSample> collectRf5cSamples (const midi::SongIr& ir)
 		}
 	}
 
+	/** The `0x68` copies of this bank, in file order - the other way bytes reach the chip. */
+	std::vector<const midi::RamCopy*> copies;
+
+	for (const auto& copy : ir.ramCopies)
+	{
+		if (copy.bankType == kPcmBankType)
+		{
+			copies.push_back (&copy);
+		}
+	}
+
 	// **The RAM bank, which the write address has to be or-ed with.**
 	//
 	// libvgm does this in `DoRAMOfsPatches`: `dataOfs |= _rf5cBank[1][chipID] << 12`, and that
@@ -269,6 +298,21 @@ std::vector<playback::DecodedSample> collectRf5cSamples (const midi::SongIr& ir)
 	// streamed page was written twelve bits too low. That is why a page the driver put in the 0x8000
 	// window came out of the export as whatever was at 0x0000, and why no slot ever matched.
 	uint8_t ramBank = 0;
+
+	const auto applyCopy = [&ram, &ramBank, &bankBytes] (const midi::RamCopy& copy)
+	{
+		const std::size_t address = (std::size_t) copy.address | ((std::size_t) ramBank << 12);
+
+		if (address >= ram.size () || copy.bankPosition >= bankBytes.size () || copy.length == 0)
+		{
+			return;
+		}
+
+		const std::size_t count = (std::min) ((std::size_t) copy.length,
+											  (std::min) (bankBytes.size () - copy.bankPosition,
+														  ram.size () - address));
+		std::memcpy (ram.data () + address, bankBytes.data () + copy.bankPosition, count);
+	};
 
 	const auto applyRam = [&ram, &ramBank] (const midi::RomBlock& block)
 	{
@@ -289,14 +333,40 @@ std::vector<playback::DecodedSample> collectRf5cSamples (const midi::SongIr& ir)
 	// order; the position in the file can, and both carry it.
 	std::size_t writeIndex = 0;
 	std::size_t blockIndex = 0;
+	std::size_t copyIndex = 0;
 
-	while (writeIndex < ir.writes.size () || blockIndex < ramWrites.size ())
+	// The end of a list is "after everything", so one comparison picks the next event. The index is
+	// tested **inside** each lambda: passing `writes[index].streamOrder` as an argument would read
+	// past the end of a finished list, which is how this crashed before it printed anything.
+	const auto nextWriteOrder = [&]
 	{
-		const bool doWrite = (blockIndex >= ramWrites.size ())
-						  || (writeIndex < ir.writes.size ()
-							  && ir.writes[writeIndex].streamOrder < ramWrites[blockIndex]->streamOrder);
+		return (writeIndex < ir.writes.size ()) ? ir.writes[writeIndex].streamOrder : UINT32_MAX;
+	};
 
-		if (! doWrite)
+	const auto nextBlockOrder = [&]
+	{
+		return (blockIndex < ramWrites.size ()) ? ramWrites[blockIndex]->streamOrder : UINT32_MAX;
+	};
+
+	const auto nextCopyOrder = [&]
+	{
+		return (copyIndex < copies.size ()) ? copies[copyIndex]->streamOrder : UINT32_MAX;
+	};
+
+	while (writeIndex < ir.writes.size () || blockIndex < ramWrites.size ()
+		   || copyIndex < copies.size ())
+	{
+		const uint32_t nextWrite = nextWriteOrder ();
+		const uint32_t nextBlock = nextBlockOrder ();
+		const uint32_t nextCopy = nextCopyOrder ();
+
+		if (nextCopy <= nextWrite && nextCopy <= nextBlock)
+		{
+			applyCopy (*copies[copyIndex++]);
+			continue;
+		}
+
+		if (nextBlock <= nextWrite)
 		{
 			applyRam (*ramWrites[blockIndex++]);
 			continue;
