@@ -34,7 +34,11 @@ namespace
 	// libvgm renders 24-bit samples internally and shifts them left by 8 bit when packing to
 	// 32-bit output, so full scale is +/- 2^31.
 	constexpr float kInt32ToFloat = 1.0f / 2147483648.0f;
-	constexpr int kBytesPerSample = 8;					// 32 bit * 2 channels
+	// How much of the track's own output a row keeps: twenty milliseconds at 44.1 kHz is enough for
+// the shape to read at a glance and short enough that it scrolls rather than smears.
+constexpr int kTracePoints = 1024;
+
+constexpr int kBytesPerSample = 8;					// 32 bit * 2 channels
 
 	// Players are constructed on the message thread - remember it, so the log callback can
 	// stay silent on the audio thread (building the strings or entering the logger allocates).
@@ -436,6 +440,18 @@ int LibvgmTrackPlayer::render (float* left, float* right, int numSamples)
 	{
 		left[i] = (float) renderBuffer[(size_t) i].L * kInt32ToFloat;
 		right[i] = (float) renderBuffer[(size_t) i].R * kInt32ToFloat;
+
+		// **This is the channel's own audio**, not an inference about it: every player runs the whole
+		// song with the other tracks muted, so what it renders is the voice its track isolates. The
+		// row can then draw what is heard instead of reconstructing it from the chip's memory - which
+		// is the mistake that made the RF5C164 picture show another channel's bytes.
+		trackTrace.push_back (0.5f * (left[i] + right[i]));
+	}
+
+	if ((int) trackTrace.size () > kTracePoints)
+	{
+		trackTrace.erase (trackTrace.begin (),
+						  trackTrace.begin () + ((int) trackTrace.size () - kTracePoints));
 	}
 
 	// For captureState, which is const and so cannot ask the player itself. Same thread, one call
@@ -821,11 +837,26 @@ bool LibvgmTrackPlayer::captureState (playback::ChipStateSnapshot& snapshot) con
 
 		for (int channel = 0; channel < count; ++channel)
 		{
-			const auto chipState = instance.decoder->channelState (channel);
+			auto chipState = instance.decoder->channelState (channel);
 
 			if (! chipState.present)
 			{
 				continue;
+			}
+
+			// **For a sample player the row is the audio.** The RF5C164 has no shape in its registers -
+			// the bytes are in RAM and *which* bytes is the question four export models got wrong - so
+			// the row takes the one thing that cannot be wrong: what this player rendered. Each player
+			// isolates its own track's channel, so this buffer is that voice alone.
+			// **Only the channel this track isolates.** The player renders one voice, but it still
+			// reports a row for every channel of the chip; handing the same trace to all eight showed
+			// one instrument on eight rows, which reads as "another channel" just as badly.
+			const playback::TrackInfo* track = findMyTrack ();
+
+			if (std::string (chipName).find ("RF5C") != std::string::npos && track != nullptr
+				&& (int) track->channelIndex == channel && trackTrace.size () >= 2)
+			{
+				chipState.wave = std::make_shared<std::vector<float>> (trackTrace);
 			}
 
 			const auto kind = instance.decoder->channelKind (channel);

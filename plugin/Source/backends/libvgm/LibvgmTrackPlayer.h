@@ -176,6 +176,14 @@ private:
 	// captureState on the audio thread, after render, and this player owns the state.
 
 	std::shared_ptr<const midi::SongIr> replayIr;
+	/** **The last milliseconds this player rendered**, which for a track build is one channel's audio.
+
+		Written on the audio thread in `render()`, read by `captureState()` one call later inside the same
+		lock. It is what the row draws for a sample chip: the heard signal, not a reading of the chip's
+		memory.
+	*/
+	std::vector<float> trackTrace;
+
 	std::vector<PLR_DEV_INFO> replayDevices;
 	mutable std::unique_ptr<VgmReplayer> replayer;
 
