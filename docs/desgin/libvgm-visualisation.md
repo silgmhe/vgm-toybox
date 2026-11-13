@@ -316,7 +316,7 @@ All PCM Samples，周期进 All Wavetables（见 §9.28）。
 | 采样 | K053260，8 位 PCM | ✓ | ✓ | ✓ `collectK053260Samples` |
 | 采样 | K053260，KADPCM | ✓ | — | ✓ `collectK053260Samples` |
 | 采样 | K054539，8 位 / 16 位 PCM 与 4 位 DPCM | ✓ | ✓ | ✓ `collectK054539Samples` |
-| 采样 | RF5C68 / RF5C164 —— **搁置**，见 §9.5 | ✓ | ✓ | ✓ `collectRf5cSamples` |
+| 采样 | RF5C68 / RF5C164 —— **搁置**，见 §9.5；**不导出、不画波形**，行只保留音符（§9.5.2） | — | — | —（2026-11-14 撤下）|
 | 采样 | GA20 —— 见 §9.8 | ✓ | ✓ | ✓ `collectGa20Samples` |
 | 采样 | OKIM6295 —— 见 §9.6 | ✓ | ✓ | ✓ `collectOkim6295Samples` |
 | 采样 | SegaPCM —— 见 §9.16；§9.16.2 的导出不全**已修 v1**（每次 control 写即击打） | ✓ | ✓ | ✓ `collectSegaPcmSamples` |
