@@ -2,10 +2,6 @@
 
 #include <vector>
 
-#include <memory>
-
-#include "player/playerbase.hpp"
-#include "playback/SongBackend.h"
 #include "playback/WaveExport.h"
 
 namespace toybox::midi
@@ -37,18 +33,4 @@ namespace toybox::backends::libvgm
 		the rewritten ones. Every "the export is not what I hear" report on this chip was that.
 	*/
 	std::vector<playback::DecodedSample> collectRf5cSamples (const midi::SongIr& ir);
-
-	/** **What the chip actually played, recorded from its output.**
-
-		Everything else in this file reasons from the register stream, and on this chip that reasoning was
-		wrong four times: the RAM is refilled while a voice plays, the same address holds different
-		samples, and the driver gates voices in bursts of tens of milliseconds. Recording the audio
-		side-steps all of it - the mask isolates one voice (measured: `none=3776, ch0-muted=0, all=0`),
-		and the bursts are found on the waveform, which is the only boundary a listener can confirm.
-
-		Costs one whole-song render per channel, so this is the slow path; it is also the honest one.
-	*/
-	std::vector<playback::DecodedSample> renderRf5cSamples (const playback::SongMemory& memory,
-														   std::shared_ptr<const midi::SongIr> ir,
-														   const std::vector<PLR_DEV_INFO>& devices);
 }

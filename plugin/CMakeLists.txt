@@ -252,8 +252,7 @@ target_sources(VGMToybox PRIVATE
 	Source/backends/libvgm/Ymz280bSamples.cpp
 	Source/backends/libvgm/K054539Samples.cpp
 	Source/backends/libvgm/MultiPcmSamples.cpp
-	Source/backends/libvgm/Rf5cRenderSamples.cpp
-        Source/backends/libvgm/Rf5c68Samples.cpp
+	Source/backends/libvgm/Rf5c68Samples.cpp
 	Source/backends/libvgm/ChipMemoryAssembly.cpp
 	Source/backends/libvgm/ChipWriteRouter.cpp
 	Source/backends/libvgm/MidiSequenceBuilder.cpp
@@ -473,8 +472,7 @@ add_executable(vgm_mixer_test EXCLUDE_FROM_ALL
 	Source/backends/libvgm/Ymz280bSamples.cpp
 	Source/backends/libvgm/K054539Samples.cpp
 	Source/backends/libvgm/MultiPcmSamples.cpp
-	Source/backends/libvgm/Rf5cRenderSamples.cpp
-        Source/backends/libvgm/Rf5c68Samples.cpp
+	Source/backends/libvgm/Rf5c68Samples.cpp
 	Source/backends/libvgm/ChipMemoryAssembly.cpp
 	Source/backends/libvgm/ChipWriteRouter.cpp
 	Source/backends/libvgm/MidiSequenceBuilder.cpp
@@ -511,8 +509,7 @@ add_executable(vgm_mixer_test EXCLUDE_FROM_ALL
 	Source/backends/libvgm/Ymz280bSamples.cpp
 	Source/backends/libvgm/K054539Samples.cpp
 	Source/backends/libvgm/MultiPcmSamples.cpp
-	Source/backends/libvgm/Rf5cRenderSamples.cpp
-        Source/backends/libvgm/Rf5c68Samples.cpp
+	Source/backends/libvgm/Rf5c68Samples.cpp
 	Source/backends/libvgm/LibvgmVgz.cpp
 )
 # --- console test for the chip decoders (not built by default) ---
@@ -601,8 +598,7 @@ add_executable(vgm_chip_test EXCLUDE_FROM_ALL
 	Source/backends/libvgm/Ymz280bSamples.cpp
 	Source/backends/libvgm/K054539Samples.cpp
 	Source/backends/libvgm/MultiPcmSamples.cpp
-	Source/backends/libvgm/Rf5cRenderSamples.cpp
-        Source/backends/libvgm/Rf5c68Samples.cpp
+	Source/backends/libvgm/Rf5c68Samples.cpp
 	Source/backends/libvgm/ChipMemoryAssembly.cpp
 	Tests/ChipDecoderTest.cpp
 	Source/chips/GbcApuDecoder.cpp

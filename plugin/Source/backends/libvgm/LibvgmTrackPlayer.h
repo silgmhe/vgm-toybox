@@ -83,15 +83,6 @@ public:
 	void setTimeline (int loopCount, double fadeSeconds) override;
 	void setTrackAudible (playback::TrackId track, bool audible) override;
 	void setChipAudible (playback::DeviceId device, bool audible) override;
-
-	/** Mutes every channel of the song's RF5C device except `channel`.
-
-		The export is moving to "record one voice's output", which needs exactly this: the core
-		honours the mask (measured on the chip itself: none=3776, ch0-muted=0, all=0), but the only
-		way to reach it so far is the track isolation below. One public wrapper keeps the option
-		built in one place instead of a second copy in the exporter.
-	*/
-	bool isolateRf5cChannel (int channel);
 	int render (float* left, float* right, int numSamples) override;
 	double positionSeconds (void) override;
 	bool isFinished (void) const override { return finished.load(); }
