@@ -187,13 +187,4 @@ constexpr int defaultRefreshHz = 15;
 
 } // namespace window
 
-namespace audio
-{
-
-/** Remove the DC offset an ADPCM accumulator leaves behind. Off by default: it costs a filter per
-	channel and the offset is not audible on its own. */
-constexpr bool dcBlock = false;
-
-} // namespace audio
-
 } // namespace toybox::settings

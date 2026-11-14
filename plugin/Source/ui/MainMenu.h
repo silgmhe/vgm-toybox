@@ -180,11 +180,157 @@ public:
 
 		groups.push_back (std::move (view));
 
+		// **Options mirrors the settings window's categories, in the order a user reaches for them.**
+		// The category *names* come from the same language pack, so someone who learned "MIDI" in
+		// the panel meets "MIDI" here rather than a second vocabulary. The *order* does not follow
+		// the panel: language is first, because a user who cannot read the interface needs it before
+		// anything else, and the one-off preferences sit below the things that get switched while
+		// listening.
+		//
+		// **Continuous settings are deliberately absent.** Bend range, note hold, refresh rate and
+		// the NES length/gain are sliders on their pages. A submenu of preset steps would be a second
+		// definition of the same range, and a value of 7 set in the panel would then tick nothing in
+		// the menu - the "two sets of data" this menu exists to avoid, in miniature.
+		//
+		// **Every action writes SettingsStore and nothing else.** The store broadcasts synchronously
+		// (SettingsStore::broadcastChange), PluginProcessor applies the engine half and PluginEditor
+		// the window half - so a menu item and its settings page stay two views of one value, and
+		// neither has to know the other exists.
 		MenuGroup options { i18n::tr ("menu.options"), {} };
+
+		auto& store = toybox::settings::SettingsStore::getInstance ();
+
+		// The one place a boolean becomes a menu item. The write re-reads the value instead of
+		// negating the tick captured above: a menu can stay open while something else changes it,
+		// and toggling the value from build time is how that goes wrong.
+		const auto addToggle = [] (MenuEntry& group, const juce::String& id,
+								   const juce::String& labelKey,
+								   std::function<bool (void)> read,
+								   std::function<void (bool)> write)
+		{
+			MenuEntry entry;
+			entry.id = id;
+			entry.label = i18n::tr (labelKey);
+			entry.checked = read ();
+			entry.action = [read, write] { write (! read ()); };
+
+			group.children.push_back (std::move (entry));
+		};
+
+		// --- language: first, and the only group whose items come from somewhere else ---
+		{
+			auto& languages = i18n::LanguageManager::getInstance ();
+			const auto available = languages.getAvailable ();
+			const auto currentId = languages.getCurrentId ();
+
+			MenuEntry language;
+			language.id = "options.language";
+			language.label = i18n::tr ("settings.language");
+
+			for (const auto& info : available)
+			{
+				MenuEntry entry;
+				entry.id = "options.language." + info.id;
+				entry.label = languages.getDisplayName (info);
+				entry.checked = (info.id == currentId);
+
+				// selectById is the single entry point - it loads the pack and writes the store. The
+				// settings page calls the same one; writing setLanguageSelection here instead would
+				// be the second writer.
+				entry.action = [id = info.id]
+				{
+					i18n::LanguageManager::getInstance ().selectById (id);
+				};
+
+				language.children.push_back (std::move (entry));
+			}
+
+			if (! language.children.empty ())
+			{
+				options.entries.push_back (std::move (language));
+			}
+		}
+
+		// --- MIDI ---
+		{
+			MenuEntry midi;
+			midi.id = "options.midi";
+			midi.label = i18n::tr ("settings.midi");
+
+			addToggle (midi, "options.midi.bend", "settings.midi.bend",
+					   [&store] { return store.getMidiPitchBendEnabled (); },
+					   [&store] (bool value) { store.setMidiPitchBendEnabled (value); });
+
+			addToggle (midi, "options.midi.sampleRoot", "settings.midi.sampleRoot",
+					   [&store] { return store.getTransposeBySampleRoot (); },
+					   [&store] (bool value) { store.setTransposeBySampleRoot (value); });
+
+			options.entries.push_back (std::move (midi));
+		}
+
+		// --- general: only the rows that exist in this build appear ---
+		{
+			MenuEntry general;
+			general.id = "options.general";
+			general.label = i18n::tr ("settings.general");
+
+		   #if JUCE_WINDOWS
+			// "Double-click a song reuses the window" is a real choice on Windows; macOS hands the
+			// document over whatever it says, and Linux has no hand-over to configure at all
+			// (SettingsOverlay's GeneralSettingsPage draws the same distinction).
+			addToggle (general, "options.general.reuseWindow", "settings.general.reuseWindow",
+					   [&store] { return store.getReuseWindow (); },
+					   [&store] (bool value) { store.setReuseWindow (value); });
+		   #endif
+
+			if (standalone)
+			{
+				addToggle (general, "options.general.restoreLastSong",
+						   "settings.general.restoreLastSong",
+						   [&store] { return store.getRestoreLastSong (); },
+						   [&store] (bool value) { store.setRestoreLastSong (value); });
+
+		   #if JUCE_WINDOWS
+				addToggle (general, "options.general.closeToTray",
+						   "settings.general.closeToTray",
+						   [&store] { return store.getCloseToTray (); },
+						   [&store] (bool value) { store.setCloseToTray (value); });
+		   #endif
+			}
+
+			// The only one of the four a plugin also has: the status line exists in both builds.
+			addToggle (general, "options.general.paintStats", "settings.general.paintStats",
+					   [&store] { return store.getPaintStats (); },
+					   [&store] (bool value) { store.setPaintStats (value); });
+
+			// A submenu that opens to a single row is one click for nothing: in a plugin build only
+			// the paint-stats switch survives, so it moves up to the top level there.
+			if (general.children.size () > 1)
+			{
+				options.entries.push_back (std::move (general));
+			}
+			else if (general.children.size () == 1)
+			{
+				options.entries.push_back (std::move (general.children.front ()));
+			}
+		}
+
+		// --- keyboard: one switch, so it stays at the top level ---
+		{
+			MenuEntry hints;
+			hints.id = "options.keyboard.rangeHints";
+			hints.label = i18n::tr ("settings.keyboard.rangeHints");
+			hints.checked = store.getKeyboardRangeHints ();
+			hints.action = [&store] { store.setKeyboardRangeHints (! store.getKeyboardRangeHints ()); };
+			options.entries.push_back (std::move (hints));
+		}
+
+		// --- the settings window, last and below a rule ---
 		MenuEntry settings;
 		settings.id = "options.settings";
 		settings.label = i18n::tr ("menu.options.settings");
 		settings.key = keyFor ("options.settings");
+		settings.separatorBefore = true;
 		settings.action = onSettings;
 		options.entries.push_back (std::move (settings));
 		groups.push_back (std::move (options));
@@ -325,8 +471,13 @@ private:
 	{
 		for (const auto& entry : entries)
 		{
+			// **32, and one space that is not padding.** The Options entries carry ids like
+			// `options.language.builtin:zh-Hans` (31 characters), which the old width of 24 ran
+			// straight into the label - an id and a label with no gap between them are one word to
+			// both a reader and a script. The extra literal space keeps the two apart even when an
+			// id does outgrow the column.
 			text << juce::String::repeatedString (" ", indent)
-				 << entry.id.paddedRight (' ', 24)
+				 << entry.id.paddedRight (' ', 32) << ' '
 				 << entry.label.paddedRight (' ', 22)
 				 << EditorCommands::describe (entry.key).paddedRight (' ', 10);
 
