@@ -47,6 +47,12 @@ void IconButton::paintButton (juce::Graphics& g, bool isMouseOverButton, bool is
 	const float inset = captioned ? 0.20f : (badged ? 0.09f : theme::iconInsetRatio);
 	auto glyphBox = shape.reduced (shape.getWidth() * inset, shape.getHeight() * inset);
 
+	// **The colour the face was just painted with.** The MIDI glyphs draw an overlay on top of another
+	// shape and pad it out with the surface behind them, so they need it; every other glyph ignores it.
+	// It is not exact while pressed (drawButtonFace darkens the fill for the press), and that is the
+	// trade taken: a slightly lighter square for the instant of a click, against losing the layering.
+	const auto faceFill = toggled ? face.fill : theme::buttonMaterial();
+
 	const auto captionArea = captioned ? glyphBox.removeFromBottom (kCaptionHeight).toNearestInt()
 									   : juce::Rectangle<int>();
 	const auto glyphArea = glyphBox;
@@ -103,15 +109,15 @@ void IconButton::paintButton (juce::Graphics& g, bool isMouseOverButton, bool is
 	}
 	else if (icon == Icon::midiSequential)
 	{
-		drawMidiSequentialGlyph (g, glyphArea, iconColour);
+		drawMidiSequentialGlyph (g, glyphArea, iconColour, faceFill);
 	}
 	else if (icon == Icon::midiAllToOne)
 	{
-		drawMidiAllToOneGlyph (g, glyphArea, iconColour);
+		drawMidiAllToOneGlyph (g, glyphArea, iconColour, faceFill);
 	}
 	else if (icon == Icon::midiOff)
 	{
-		drawMidiOffGlyph (g, glyphArea, iconColour);
+		drawMidiOffGlyph (g, glyphArea, iconColour, faceFill);
 	}
 	else
 	{

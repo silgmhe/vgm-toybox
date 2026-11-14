@@ -351,37 +351,30 @@ void drawMidiGlyph (juce::Graphics& g, juce::Rectangle<float> iconArea, juce::Co
 
 namespace
 {
-	/** The corner badge: the DIN mark, small, in the bottom-right corner.
+	/** How much of the box the overlay takes. The mark is the subject and gets the whole face; the
+		overlay is a subscript on its bottom-right corner. */
+	constexpr float kOverlayShare = 0.48f;
 
-		This is what says "MIDI". The arrows are the audio cluster's own language for what happens to
-		the signal, and the same arrows inside a second frame would otherwise be ambiguous - the
-		badge is the one part that is not shared with the audio glyphs.
-
-		**The same mark the channel menus show**, not a second drawing of it: `drawMidiGlyph` already
-		knows what the connector looks like, and it drops to three contacts below twelve pixels so the
-		dots stay apart. A separate ring-and-three-dots here was what made the badge read as a circle
-		with specks rather than as the MIDI plug everyone sees in the selector.
-	*/
-	void drawMidiBadge (juce::Graphics& g, juce::Rectangle<float> badgeArea, juce::Colour colour)
+	/** The corner the overlay sits in - the bottom-right `kOverlayShare` of the box. */
+	juce::Rectangle<float> overlayAreaOf (juce::Rectangle<float> iconArea)
 	{
-		drawMidiGlyph (g, badgeArea, colour);
-	}
-
-	/** How much of the glyph the badge takes. The main shape gets `1 - kBadgeShare` of the box, so
-		the two never overlap - the alternative was a badge drawn over the arrow's tail, which at
-		this size reads as a smudge rather than as a mark. */
-	constexpr float kBadgeShare = 0.42f;
-
-	juce::Rectangle<float> mainAreaOf (juce::Rectangle<float> iconArea)
-	{
-		const float trim = iconArea.getWidth() * kBadgeShare;
-		return iconArea.withTrimmedRight (trim).withTrimmedBottom (trim);
-	}
-
-	juce::Rectangle<float> badgeAreaOf (juce::Rectangle<float> iconArea)
-	{
-		const float size = iconArea.getWidth() * kBadgeShare;
+		const float size = iconArea.getWidth() * kOverlayShare;
 		return iconArea.removeFromRight (size).removeFromBottom (size);
+	}
+
+	/** A pad in the button's own colour under the overlay.
+
+		The overlay is drawn *on top of* the DIN mark, and both are thin lines in one colour: without
+		a pad the two read as a tangle rather than as two layers. The pad is the face the button
+		already has, so it disappears - except for the instant a press darkens that face, where a
+		slightly lighter square shows. That was judged better than giving up the layering.
+	*/
+	void drawOverlayPad (juce::Graphics& g, juce::Rectangle<float> overlayArea, juce::Colour backdrop)
+	{
+		// Just enough to separate the two layers: a pad that reaches past the overlay's own bounds
+		// cuts a visible square out of the ring, which reads as damage rather than as a layer.
+		g.setColour (backdrop);
+		g.fillRoundedRectangle (overlayArea.expanded (0.6f), 3.0f);
 	}
 
 	/** The standard "not this" mark: a ring with the diagonal through it. */
@@ -406,25 +399,44 @@ namespace
 		g.strokePath (slash, juce::PathStrokeType (lineWidth, juce::PathStrokeType::curved,
 												   juce::PathStrokeType::rounded));
 	}
+
+	/** The mark, filling most of the box - at this size it keeps all five contacts. */
+	void drawMidiMarkUnder (juce::Graphics& g, juce::Rectangle<float> iconArea, juce::Colour colour)
+	{
+		drawMidiGlyph (g, iconArea.reduced (iconArea.getWidth() * 0.10f), colour);
+	}
 }
 
-void drawMidiSequentialGlyph (juce::Graphics& g, juce::Rectangle<float> iconArea, juce::Colour colour)
+void drawMidiSequentialGlyph (juce::Graphics& g, juce::Rectangle<float> iconArea,
+							  juce::Colour colour, juce::Colour backdrop)
 {
-	// The audio cluster's fan-out, wearing the badge that says which protocol is being fanned.
-	drawSpreadOutputsGlyph (g, mainAreaOf (iconArea), colour);
-	drawMidiBadge (g, badgeAreaOf (iconArea), colour);
+	// The mark underneath says *which protocol*; the fan-out on top says what happens to the signal.
+	// Same order as the reference: the mark is the subject, the arrows are the overlay.
+	drawMidiMarkUnder (g, iconArea, colour);
+
+	const auto overlay = overlayAreaOf (iconArea);
+	drawOverlayPad (g, overlay, backdrop);
+	drawSpreadOutputsGlyph (g, overlay, colour);
 }
 
-void drawMidiAllToOneGlyph (juce::Graphics& g, juce::Rectangle<float> iconArea, juce::Colour colour)
+void drawMidiAllToOneGlyph (juce::Graphics& g, juce::Rectangle<float> iconArea,
+							juce::Colour colour, juce::Colour backdrop)
 {
-	drawMergeToMasterGlyph (g, mainAreaOf (iconArea), colour);
-	drawMidiBadge (g, badgeAreaOf (iconArea), colour);
+	drawMidiMarkUnder (g, iconArea, colour);
+
+	const auto overlay = overlayAreaOf (iconArea);
+	drawOverlayPad (g, overlay, backdrop);
+	drawMergeToMasterGlyph (g, overlay, colour);
 }
 
-void drawMidiOffGlyph (juce::Graphics& g, juce::Rectangle<float> iconArea, juce::Colour colour)
+void drawMidiOffGlyph (juce::Graphics& g, juce::Rectangle<float> iconArea,
+					   juce::Colour colour, juce::Colour backdrop)
 {
-	drawProhibitedGlyph (g, mainAreaOf (iconArea), colour);
-	drawMidiBadge (g, badgeAreaOf (iconArea), colour);
+	drawMidiMarkUnder (g, iconArea, colour);
+
+	const auto overlay = overlayAreaOf (iconArea);
+	drawOverlayPad (g, overlay, backdrop);
+	drawProhibitedGlyph (g, overlay, colour);
 }
 
 juce::Image midiGlyphImage (int pixels, juce::Colour colour)

@@ -59,12 +59,18 @@ void drawMidiGlyph (juce::Graphics& g, juce::Rectangle<float> iconArea, juce::Co
 	it into its icon column. */
 juce::Image midiGlyphImage (int pixels, juce::Colour colour);
 
-/** The three MIDI channeling schemes, as the mixer card's buttons draw them: the DIN ring (that is
-	what says "MIDI") with three contacts for "one channel each", one contact for "all on 1", and a
-	slash across it for "off". The ring is shared; only what is inside it changes, so the three read
-	as one family rather than as three unrelated glyphs. */
-void drawMidiSequentialGlyph (juce::Graphics& g, juce::Rectangle<float> iconArea, juce::Colour colour);
-void drawMidiAllToOneGlyph (juce::Graphics& g, juce::Rectangle<float> iconArea, juce::Colour colour);
-void drawMidiOffGlyph (juce::Graphics& g, juce::Rectangle<float> iconArea, juce::Colour colour);
+/** The three MIDI channeling schemes, as the mixer card's buttons draw them.
+
+	Each is **the DIN mark with an overlay on its bottom-right corner**: the mark says which protocol,
+	the overlay says what happens to the signal (the audio cluster's fan-out, its merge, or the
+	prohibited ring). The overlay is drawn on top, so `backdrop` - the button's own face colour - is
+	padded underneath it; without that, two sets of thin lines in one colour read as a tangle.
+*/
+void drawMidiSequentialGlyph (juce::Graphics& g, juce::Rectangle<float> iconArea, juce::Colour colour,
+							  juce::Colour backdrop);
+void drawMidiAllToOneGlyph (juce::Graphics& g, juce::Rectangle<float> iconArea, juce::Colour colour,
+							juce::Colour backdrop);
+void drawMidiOffGlyph (juce::Graphics& g, juce::Rectangle<float> iconArea, juce::Colour colour,
+					   juce::Colour backdrop);
 
 } // namespace toybox::ui
