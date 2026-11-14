@@ -319,13 +319,22 @@ void drawMidiGlyph (juce::Graphics& g, juce::Rectangle<float> iconArea, juce::Co
 	g.strokePath (ring, juce::PathStrokeType (lineWidth, juce::PathStrokeType::curved,
 											  juce::PathStrokeType::rounded));
 
-	// 180, 135, 90, 45, 0 degrees: the five contacts, left to right across the top half.
-	const float contactAngles[] = { 180.0f, 135.0f, 90.0f, 45.0f, 0.0f };
-	const float contactRadius = juce::jmax (1.0f, radius * 0.19f);
+	// 180, 135, 90, 45, 0 degrees: the contacts, left to right across the top half. The DIN has
+	// five; below about twelve pixels five dots merge into a line, so three are drawn instead -
+	// the ring and the notch are what still make it read as a connector at that size.
+	const float fiveAngles[] = { 180.0f, 135.0f, 90.0f, 45.0f, 0.0f };
+	const float threeAngles[] = { 180.0f, 90.0f, 0.0f };
+
+	const bool roomForFive = juce::jmin (width, height) >= 12.0f;
+	const int contactCount = roomForFive ? 5 : 3;
+	const float* contactAngles = roomForFive ? fiveAngles : threeAngles;
+
+	const float contactRadius = juce::jmax (0.7f, radius * 0.19f);
 	juce::Path contacts;
-	for (const float degrees : contactAngles)
+
+	for (int i = 0; i < contactCount; ++i)
 	{
-		const float radians = juce::degreesToRadians (degrees);
+		const float radians = juce::degreesToRadians (contactAngles[i]);
 		const float x = centreX + std::cos (radians) * radius * 0.58f;
 		const float y = centreY - std::sin (radians) * radius * 0.58f;
 		contacts.addEllipse (x - contactRadius, y - contactRadius, contactRadius * 2.0f,
@@ -333,8 +342,11 @@ void drawMidiGlyph (juce::Graphics& g, juce::Rectangle<float> iconArea, juce::Co
 	}
 	g.fillPath (contacts);
 
-	g.fillRect (centreX - radius * 0.32f, centreY + radius * 0.70f, radius * 0.64f,
-				radius * 0.22f);
+	// The alignment notch: the one detail that says "DIN connector" rather than "circle with dots".
+	// Its height has a floor of its own - at badge size radius * 0.24 is under a pixel, and a notch
+	// that cannot be seen leaves a ring that could be anything.
+	g.fillRect (centreX - radius * 0.36f, centreY + radius * 0.66f, radius * 0.72f,
+				juce::jmax (1.2f, radius * 0.24f));
 }
 
 namespace
@@ -345,39 +357,20 @@ namespace
 		the signal, and the same arrows inside a second frame would otherwise be ambiguous - the
 		badge is the one part that is not shared with the audio glyphs.
 
-		It is drawn where the main shape has been trimmed away rather than on top of it: at eight
-		pixels a ring over an arrow is a blob, and the ring has to read as a ring.
+		**The same mark the channel menus show**, not a second drawing of it: `drawMidiGlyph` already
+		knows what the connector looks like, and it drops to three contacts below twelve pixels so the
+		dots stay apart. A separate ring-and-three-dots here was what made the badge read as a circle
+		with specks rather than as the MIDI plug everyone sees in the selector.
 	*/
 	void drawMidiBadge (juce::Graphics& g, juce::Rectangle<float> badgeArea, juce::Colour colour)
 	{
-		g.setColour (colour);
-
-		const float lineWidth = juce::jmax (0.8f, badgeArea.getWidth() * 0.13f);
-		const float radius = juce::jmin (badgeArea.getWidth(), badgeArea.getHeight()) * 0.44f;
-		const float centreX = badgeArea.getCentreX();
-		const float centreY = badgeArea.getCentreY();
-
-		juce::Path ring;
-		ring.addEllipse (centreX - radius, centreY - radius, radius * 2.0f, radius * 2.0f);
-		g.strokePath (ring, juce::PathStrokeType (lineWidth, juce::PathStrokeType::curved,
-												  juce::PathStrokeType::rounded));
-
-		// Three contacts across the middle: the DIN's five do not fit at this size, and three is
-		// what makes the ring read as a connector rather than as a bullet point.
-		const float dot = juce::jmax (0.7f, radius * 0.22f);
-		const float spread = radius * 1.10f;
-
-		for (int i = 0; i < 3; ++i)
-		{
-			const float x = centreX - spread * 0.5f + spread * 0.5f * (float) i;
-			g.fillEllipse (x - dot, centreY - dot, dot * 2.0f, dot * 2.0f);
-		}
+		drawMidiGlyph (g, badgeArea, colour);
 	}
 
 	/** How much of the glyph the badge takes. The main shape gets `1 - kBadgeShare` of the box, so
 		the two never overlap - the alternative was a badge drawn over the arrow's tail, which at
 		this size reads as a smudge rather than as a mark. */
-	constexpr float kBadgeShare = 0.36f;
+	constexpr float kBadgeShare = 0.42f;
 
 	juce::Rectangle<float> mainAreaOf (juce::Rectangle<float> iconArea)
 	{

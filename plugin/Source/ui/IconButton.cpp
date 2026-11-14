@@ -44,7 +44,7 @@ void IconButton::paintButton (juce::Graphics& g, bool isMouseOverButton, bool is
 	const bool badged = (icon == Icon::midiSequential || icon == Icon::midiAllToOne
 						 || icon == Icon::midiOff);
 
-	const float inset = captioned ? 0.20f : (badged ? 0.12f : theme::iconInsetRatio);
+	const float inset = captioned ? 0.20f : (badged ? 0.09f : theme::iconInsetRatio);
 	auto glyphBox = shape.reduced (shape.getWidth() * inset, shape.getHeight() * inset);
 
 	const auto captionArea = captioned ? glyphBox.removeFromBottom (kCaptionHeight).toNearestInt()
