@@ -10,7 +10,7 @@
 load $VGM_TEST_SONG
 
 # it plays, and the page that owns the cards is the one on screen
-assert editor.status text contains "Playing"
+assert transport.status text contains "Playing"
 assert view.play visible == true
 
 # the chip card appeared, with one checkbox per chip (the song decides how many)
@@ -34,7 +34,7 @@ press enter
 # text, which is why the command exists)
 press space
 tick
-assert editor.status text contains "Paused"
+assert transport.status text contains "Paused"
 
 # The tray menu acts on the engine, not on the panel's buttons. The panel must still show Pause,
 # not fall through to Stop, because the engine is the one owner of the pause state.
@@ -43,7 +43,7 @@ tick
 assert btn.play checked == true
 engine pause
 tick
-assert editor.status text contains "Paused"
+assert transport.status text contains "Paused"
 assert btn.pause checked == true
 assert btn.stop checked == false
 
@@ -51,7 +51,7 @@ assert btn.stop checked == false
 # no menu ever opening. The song goes, the status line says so, and the page stays.
 menu invoke file.close
 tick
-assert editor.status text contains "No file"
+assert transport.status text contains "No file"
 assert view.play visible == true
 
 # the window still fits its contents after all of that

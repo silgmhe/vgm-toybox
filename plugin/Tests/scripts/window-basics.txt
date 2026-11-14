@@ -6,9 +6,8 @@
 
 # the chrome is always there
 assert editor.menubar visible == true
-assert editor.open    visible == true
-assert editor.status  visible == true
-assert editor.status  text contains "No file"
+assert transport.status  visible == true
+assert transport.status  text contains "No file"
 
 # One page, and it is the one on screen. The visualisation stopped being a page of its own when the
 # View menu started switching the rectangle above the transport instead.
@@ -24,7 +23,7 @@ assert btn.loop  visible == true
 # does nothing, and the status line still says so
 press space
 tick
-assert editor.status text contains "No file"
+assert transport.status text contains "No file"
 
 # Ctrl+2 and Ctrl+3 pick a content view - the accelerators the View menu advertises, driven through
 # the same keyPressed() the window itself uses. They no longer switch pages, so what moves is the

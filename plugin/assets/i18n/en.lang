@@ -24,7 +24,7 @@ language: English
 "editor.open" = "Open file...";
 
 "format.dropPrompt" = "Drop a {0} file here";
-"format.loadHint" = "Load a {0} file with the button above or drop one onto this window.";
+"format.loadHint" = "Load a {0} file from File > Open (Ctrl+O), or drop one onto this window.";
 "format.openPrompt" = "Open a {0} file";
 
 "language.builtinSuffix" = "built-in";
@@ -163,6 +163,7 @@ language: English
 "status.noFile" = "No file";
 "status.paused" = "Paused";
 "status.playing" = "Playing";
+"status.problem.title" = "That did not work";
 
 "sync.caption" = "SYNC";
 "sync.cueCaption" = "CUE";

@@ -54,6 +54,16 @@ public:
 	/** Re-applies every translated tooltip, accessible name and preset label. */
 	void refreshLanguage (void);
 
+	/** **The line that used to sit in the window's top row**: what the transport is doing and where
+		it is ("playing 0:07 / 5:00"). It lives here because that row is gone - the cards now start
+		below the menu bar - and because that sentence belongs beside the controls it describes.
+
+		**Errors are not shown here.** A failed load needs a title, a readable sentence and an
+		acknowledgement, which a one-line label at the end of a button row cannot give; those go to
+		the window's message box (PluginEditor::showMessage).
+	*/
+	void setStatus (const juce::String& text, bool isProblem);
+
 	/** Space key: with the start cursor on, stops (back to the cursor) while playing and
 		plays otherwise; with it off, toggles play/pause like a media player. */
 	void togglePlayStop (void);
@@ -133,6 +143,8 @@ private:
 	SyncedComboBox fadeBox;
 
 	StartMarkerDragArea startMarkerDragArea { *this };
+
+	juce::Label statusLabel;	// see setStatus() above - the row it sits in ends here
 
 	std::unique_ptr<ValueEntryOverlay> entryOverlay;	// created in the constructor, hidden
 

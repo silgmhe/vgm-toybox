@@ -11,7 +11,7 @@
 # instance has had its chance), and the load itself is asynchronous: sleep lets both run.
 sleep 500
 
-assert editor.status text contains "Paused"
+assert transport.status text contains "Paused"
 # The length of minimal.vgm, so this is the remembered song and not merely something paused
-assert editor.status text contains "0:06"
+assert transport.status text contains "0:06"
 assert engine position ~= 0

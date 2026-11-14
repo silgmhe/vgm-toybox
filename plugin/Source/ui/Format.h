@@ -37,7 +37,8 @@ inline juce::String formatExtensionListForHumans (void)
 	return playback::BackendRegistry::getInstance().getExtensionListText();
 }
 
-/** The file chooser's caption and the open button's tooltip. */
+/** The file chooser's caption. (It used to be the open button's tooltip as well; that button is
+	gone - File > Open is the way in.) */
 inline juce::String formatOpenPrompt (void)
 {
 	return i18n::tr ("format.openPrompt", formatExtensionListForHumans());

@@ -424,7 +424,7 @@ private:
 			// settle() is a plain Thread::sleep, which would leave that message unprocessed.
 			juce::MessageManager::getInstance()->runDispatchLoopUntil (25);
 
-			if (auto* label = findByID (editor, "editor.status"))
+			if (auto* label = findByID (editor, "transport.status"))
 			{
 				status = toybox::ui::snapshot::textOf (*label);
 			}

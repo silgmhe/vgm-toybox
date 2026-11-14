@@ -122,8 +122,9 @@ private:
 	toybox::ui::MainMenu menu;
 	juce::MenuBarComponent menuBar { &menu };
 
-	juce::TextButton openButton { "Open file..." };
-	juce::Label statusLabel;
+	// No open button and no status line here any more: the File menu, a file dropped on the window
+	// and the empty-state hint are the ways in, and the status line lives on the transport card
+	// (PlayView::setStatus). The row they shared was 36 px + a 10 px gap, all of it now cards.
 
 	/** What the status line prints when the paint diagnostic is on, empty when it is off. */
 
@@ -176,7 +177,10 @@ private:
 	toybox::ui::SettingsOverlay settingsOverlay;	// the same, for Options > Settings
 	toybox::ui::ExportOptionsOverlay exportOptionsOverlay;	// and for "what to write"
 	toybox::ui::ExportReportOverlay exportOverlay;	// and for "what the export did"
-	toybox::ui::MessageBoxOverlay dragFailedOverlay;	// and for a drag that could not write its file
+	// The window's one message box: a drag that could not write its file, or a song that could not
+	// be opened. `MessageBoxOverlay` is deliberately the only shape of dialog here - a title, a
+	// sentence and one way out - so neither caller has to grow its own.
+	toybox::ui::MessageBoxOverlay messageOverlay;
 
 	juce::TooltipWindow tooltipWindow { this, 650 };	// declared last: destroyed first
 
@@ -198,7 +202,22 @@ private:
 
 	/** Says a wavetable could not be written out for dragging. */
 	void showDragFailure (void);
+
+	/** Pushes the one-line transport status onto the card that shows it (PlayView::setStatus). */
+	void updateTransportStatus (const juce::String& text);
+
+	/** **The one place an error reaches the user as a dialog.** It used to be a line of text at the
+		right of the top row, which could not carry a title or a sentence - and that row is gone.
+
+		Guarded by `errorShown`: the timer calls updateStatusLine() ten times a second, and without
+		the comparison an error would re-open the box on every tick.
+	*/
+	void showMessage (const juce::String& title, const juce::String& body);
+
 	juce::String lastError;
+
+	/** The error already put in front of the user, so the same one is not shown twice. */
+	juce::String errorShown;
 	/** What the engine said about the song on the previous refresh: a host can hand a project to
 		an instance whose window is already open, and the pages that only exist with a song are
 		rebuilt on the transition (see refreshUi()). */

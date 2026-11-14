@@ -67,6 +67,15 @@ public:
 	void setContentView (ContentView view);
 	ContentView getContentView (void) const;
 
+	/** **What the transport is doing and where it is** - "playing 0:07 / 5:00".
+
+		The window used to carry this in a top row of its own; that row is gone (the cards now start
+		under the menu bar), and the line moved to the transport card, next to the controls it
+		describes. The window still owns the text - only it reads the engine's transport state - so it
+		pushes it in through here.
+	*/
+	void setStatus (const juce::String& text, bool isProblem);
+
 private:
 	/** The chip checkboxes belong to the song, so this runs whenever there is a different one.
 		It relayouts as well: the card can appear, disappear or change height. */

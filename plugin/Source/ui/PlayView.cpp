@@ -70,6 +70,11 @@ ContentView PlayView::getContentView (void) const
 	return contentSlot.getView ();
 }
 
+void PlayView::setStatus (const juce::String& text, bool isProblem)
+{
+	transportPanel.setStatus (text, isProblem);
+}
+
 void PlayView::paintCardShadows (juce::Graphics& g) const
 {
 	// The window paints these (see View::paintCardShadows): a shadow reaches outside its card, and
