@@ -10,7 +10,7 @@ class IconButton : public juce::Button
 {
 public:
 	enum class Icon { play, pause, stop, loop, playStart, sliders, spreadOutputs, mergeToMaster,
-					  sync, cue, dcBlock };
+					  sync, cue, dcBlock, midiSequential, midiAllToOne, midiOff };
 
 	/** `buttonId` is stable and independent of the language ("play", "spread-outputs"). The
 		accessible name is translated by the owner and can change at runtime; deriving the ID from

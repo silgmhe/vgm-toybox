@@ -1170,6 +1170,51 @@ int main (int argc, char* argv[])
 				 plainTime * 1000.0, mixerTime * 1000.0,
 				 (plainTime > 0.0) ? mixerTime / plainTime : 0.0, (int) tracks.size());
 
+	// --- [5.5] MIDI channeling ---------------------------------------------------------------
+	// Placed while the song is still loaded: the point of the test is that setting a scheme
+	// re-channels the song *already playing*, which is what keeps the card's buttons and the
+	// strips' selectors from disagreeing.
+	{
+		std::printf ("[5.5] MIDI channeling schemes\n");
+
+		using toybox::playback::DefaultMidiChanneling;
+
+		// The pure mapping first: it is the whole rule, and it must not need an engine to describe.
+		// The wrap at 16 is what a song with more tracks than channels depends on.
+		check (toybox::playback::midiChannelForTrack (DefaultMidiChanneling::off, 0) == 0
+				   && toybox::playback::midiChannelForTrack (DefaultMidiChanneling::off, 31) == 0,
+			   "the off scheme puts a track on no channel");
+
+		check (toybox::playback::midiChannelForTrack (DefaultMidiChanneling::sequential, 0) == 1
+				   && toybox::playback::midiChannelForTrack (DefaultMidiChanneling::sequential, 15) == 16
+				   && toybox::playback::midiChannelForTrack (DefaultMidiChanneling::sequential, 16) == 1,
+			   "the sequential scheme counts 1..16 and wraps back to 1");
+
+		check (toybox::playback::midiChannelForTrack (DefaultMidiChanneling::allToChannelOne, 7) == 1,
+			   "the all-to-one scheme gives every track channel 1");
+
+		const int midiTrackCount = (int) tracks.size();
+
+		engine.setDefaultMidiChanneling (DefaultMidiChanneling::sequential);
+
+		bool sequentialOk = true;
+		for (int i = 0; i < midiTrackCount; ++i)
+		{
+			sequentialOk = sequentialOk
+						   && engine.getTrackMidiChannel ((size_t) i) == (i % 16) + 1;
+		}
+		check (sequentialOk, "and setting it re-channels the song that is already loaded");
+
+		engine.setDefaultMidiChanneling (DefaultMidiChanneling::off);
+
+		bool offOk = true;
+		for (int i = 0; i < midiTrackCount; ++i)
+		{
+			offOk = offOk && engine.getTrackMidiChannel ((size_t) i) == 0;
+		}
+		check (offOk, "turning it back off silences every track again");
+	}
+
 	// --- [6] a sample rate change rebuilds the song (like a host restoring a session) -------
 	std::printf ("[6] re-preparing at 96 kHz\n");
 	engine.prepare (96000.0, blockSize);

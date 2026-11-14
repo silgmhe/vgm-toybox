@@ -59,4 +59,12 @@ void drawMidiGlyph (juce::Graphics& g, juce::Rectangle<float> iconArea, juce::Co
 	it into its icon column. */
 juce::Image midiGlyphImage (int pixels, juce::Colour colour);
 
+/** The three MIDI channeling schemes, as the mixer card's buttons draw them: the DIN ring (that is
+	what says "MIDI") with three contacts for "one channel each", one contact for "all on 1", and a
+	slash across it for "off". The ring is shared; only what is inside it changes, so the three read
+	as one family rather than as three unrelated glyphs. */
+void drawMidiSequentialGlyph (juce::Graphics& g, juce::Rectangle<float> iconArea, juce::Colour colour);
+void drawMidiAllToOneGlyph (juce::Graphics& g, juce::Rectangle<float> iconArea, juce::Colour colour);
+void drawMidiOffGlyph (juce::Graphics& g, juce::Rectangle<float> iconArea, juce::Colour colour);
+
 } // namespace toybox::ui

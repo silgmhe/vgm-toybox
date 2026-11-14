@@ -118,6 +118,15 @@ private:
 	IconButton spreadOutputsButton { "spread-outputs", "Spread outputs", IconButton::Icon::spreadOutputs };
 	IconButton mergeToMasterButton { "send-to-master", "Send to master", IconButton::Icon::mergeToMaster };
 
+	/** The MIDI channeling choices. **One choice, three faces** - see DefaultMidiChanneling: a track
+		is either off, on its own channel, or on channel 1, and two of those cannot both be true, so
+		these behave as a radio group rather than as three independent switches. */
+	IconButton midiSequentialButton { "midi-sequential", "MIDI: one channel per track",
+									  IconButton::Icon::midiSequential };
+	IconButton midiAllToOneButton { "midi-all-to-one", "MIDI: all tracks on channel 1",
+									IconButton::Icon::midiAllToOne };
+	IconButton midiOffButton { "midi-off", "MIDI: no output", IconButton::Icon::midiOff };
+
 	/** Every toggle in the header, in one place.
 
 		The card paints their glow, not the buttons - it has to reach outside their bounds - so the
@@ -126,8 +135,10 @@ private:
 		not switched on. This array is the row; anything added to it cannot be forgotten by the
 		painting code, because there is nothing there to forget.
 	*/
-	std::array<IconButton*, 4> headerToggles { &mixerToggle, &dcBlockButton,
-												&spreadOutputsButton, &mergeToMasterButton };
+	std::array<IconButton*, 7> headerToggles { &mixerToggle, &dcBlockButton,
+												&spreadOutputsButton, &mergeToMasterButton,
+												&midiSequentialButton, &midiAllToOneButton,
+												&midiOffButton };
 	StripViewport viewport { *this };
 	StripHolder holder;
 	juce::OwnedArray<ChannelStrip> strips;
@@ -146,9 +157,11 @@ private:
 	float masterPeakR = 0.0f;
 	juce::Rectangle<int> headerBounds;
 
-	/** The frame around the three audio switches, placed by resized() and painted by paintCardContent.
-		Nothing is a child of it: the buttons live on the card, and the frame is only a grouping. */
+	/** The frames around the audio and MIDI switch clusters, placed by resized() and painted by
+		paintCardContent. Nothing is a child of them: the buttons live on the card, and a frame is
+		only a grouping. */
 	juce::Rectangle<int> audioGroupBounds;
+	juce::Rectangle<int> midiGroupBounds;
 
 	JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (MixerPanel)
 };

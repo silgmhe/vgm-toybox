@@ -337,6 +337,80 @@ void drawMidiGlyph (juce::Graphics& g, juce::Rectangle<float> iconArea, juce::Co
 				radius * 0.22f);
 }
 
+namespace
+{
+	/** The DIN ring, with `contacts` dots inside it or a slash across it.
+
+		One place for the three channeling glyphs: the ring is the MIDI mark (the same shape
+		drawMidiGlyph draws at menu size), and only the inside changes - three contacts for "one
+		channel each", one for "all on 1", a slash for "off". Keeping the ring in one function is
+		what makes them read as a family at the thirteen pixels a 30 px button leaves.
+	*/
+	void drawMidiRing (juce::Graphics& g, juce::Rectangle<float> iconArea, juce::Colour colour,
+					   int contacts, bool slashed)
+	{
+		g.setColour (colour);
+
+		const float width = iconArea.getWidth ();
+		const float height = iconArea.getHeight ();
+		const float lineWidth = juce::jmax (1.0f, juce::jmin (width, height) * 0.09f);
+		const float radius = juce::jmin (width, height) * 0.44f;
+		const float centreX = iconArea.getCentreX ();
+		const float centreY = iconArea.getCentreY ();
+
+		juce::Path ring;
+		ring.addEllipse (centreX - radius, centreY - radius, radius * 2.0f, radius * 2.0f);
+		g.strokePath (ring, juce::PathStrokeType (lineWidth, juce::PathStrokeType::curved,
+												  juce::PathStrokeType::rounded));
+
+		if (slashed)
+		{
+			// bottom-left to top-right, inside the ring: the standard "not this"
+			juce::Path slash;
+			slash.startNewSubPath (centreX - radius * 0.72f, centreY + radius * 0.72f);
+			slash.lineTo (centreX + radius * 0.72f, centreY - radius * 0.72f);
+			g.strokePath (slash, juce::PathStrokeType (lineWidth, juce::PathStrokeType::curved,
+													   juce::PathStrokeType::rounded));
+			return;
+		}
+
+		// The contacts: one reads as "a single channel", three as "several", which is the whole
+		// difference between the two schemes.
+		const float dot = juce::jmax (1.0f, radius * 0.20f);
+
+		if (contacts <= 1)
+		{
+			g.fillEllipse (centreX - dot, centreY - dot, dot * 2.0f, dot * 2.0f);
+			return;
+		}
+
+		const float spread = radius * 1.10f;
+		const float step = spread / (float) (contacts - 1);
+		const float start = centreX - spread * 0.5f;
+
+		for (int i = 0; i < contacts; ++i)
+		{
+			const float x = start + step * (float) i;
+			g.fillEllipse (x - dot, centreY - dot, dot * 2.0f, dot * 2.0f);
+		}
+	}
+}
+
+void drawMidiSequentialGlyph (juce::Graphics& g, juce::Rectangle<float> iconArea, juce::Colour colour)
+{
+	drawMidiRing (g, iconArea, colour, 3, false);
+}
+
+void drawMidiAllToOneGlyph (juce::Graphics& g, juce::Rectangle<float> iconArea, juce::Colour colour)
+{
+	drawMidiRing (g, iconArea, colour, 1, false);
+}
+
+void drawMidiOffGlyph (juce::Graphics& g, juce::Rectangle<float> iconArea, juce::Colour colour)
+{
+	drawMidiRing (g, iconArea, colour, 0, true);
+}
+
 juce::Image midiGlyphImage (int pixels, juce::Colour colour)
 {
 	juce::Image image (juce::Image::ARGB, juce::jmax (8, pixels), juce::jmax (8, pixels), true);

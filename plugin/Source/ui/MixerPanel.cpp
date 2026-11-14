@@ -111,6 +111,33 @@ MixerPanel::MixerPanel (toybox::PlaybackEngine& engineToUse)
 	mergeToMasterButton.onClick = [this] { sendTrackOutputsToMaster(); };
 	addAndMakeVisible (mergeToMasterButton);
 
+	// **The MIDI choices are one choice.** Setting the scheme re-channels the song already loaded
+	// (PlaybackEngine::setDefaultMidiChanneling), so the strips' selectors follow immediately -
+	// a button that only changed the *next* load would look broken every time it was pressed.
+	const auto chooseMidi = [this] (playback::DefaultMidiChanneling mode)
+	{
+		engine.setDefaultMidiChanneling (mode);
+		refresh();
+	};
+
+	midiSequentialButton.onClick = [chooseMidi]
+	{
+		chooseMidi (playback::DefaultMidiChanneling::sequential);
+	};
+	midiAllToOneButton.onClick = [chooseMidi]
+	{
+		chooseMidi (playback::DefaultMidiChanneling::allToChannelOne);
+	};
+	midiOffButton.onClick = [chooseMidi]
+	{
+		chooseMidi (playback::DefaultMidiChanneling::off);
+	};
+
+	for (auto* button : { &midiSequentialButton, &midiAllToOneButton, &midiOffButton })
+	{
+		addAndMakeVisible (button);
+	}
+
 	addAndMakeVisible (viewport);
 	viewport.setViewedComponent (&holder, false);
 
@@ -134,6 +161,13 @@ void MixerPanel::refreshLanguage (void)
 	spreadOutputsButton.setTooltip (i18n::tr ("mixer.spreadTooltip"));
 	mergeToMasterButton.setName (i18n::tr ("mixer.mergeName"));
 	mergeToMasterButton.setTooltip (i18n::tr ("mixer.mergeTooltip"));
+
+	midiSequentialButton.setName (i18n::tr ("mixer.midiSequentialName"));
+	midiSequentialButton.setTooltip (i18n::tr ("mixer.midiSequentialTooltip"));
+	midiAllToOneButton.setName (i18n::tr ("mixer.midiAllToOneName"));
+	midiAllToOneButton.setTooltip (i18n::tr ("mixer.midiAllToOneTooltip"));
+	midiOffButton.setName (i18n::tr ("mixer.midiOffName"));
+	midiOffButton.setTooltip (i18n::tr ("mixer.midiOffTooltip"));
 
 	masterStrip.setStripName (i18n::tr ("mixer.master"));
 	masterStrip.refreshLanguage();
@@ -253,6 +287,30 @@ void MixerPanel::refreshValues (void)
 	{
 		mergeToMasterButton.setToggleState (! spreadDefault, juce::dontSendNotification);
 		repaint (buttonGlowBounds (mergeToMasterButton.getBounds()));
+	}
+
+	// The MIDI choices are one radio group for the same reason the routing pair is: exactly one
+	// scheme is in force, and the lit face is the one a newly loaded song would start with.
+	const auto midiMode = engine.getDefaultMidiChanneling();
+
+	const bool midiSequential = (midiMode == playback::DefaultMidiChanneling::sequential);
+	const bool midiAllToOne = (midiMode == playback::DefaultMidiChanneling::allToChannelOne);
+	const bool midiOff = (midiMode == playback::DefaultMidiChanneling::off);
+
+	if (midiSequentialButton.getToggleState() != midiSequential)
+	{
+		midiSequentialButton.setToggleState (midiSequential, juce::dontSendNotification);
+		repaint (buttonGlowBounds (midiSequentialButton.getBounds()));
+	}
+	if (midiAllToOneButton.getToggleState() != midiAllToOne)
+	{
+		midiAllToOneButton.setToggleState (midiAllToOne, juce::dontSendNotification);
+		repaint (buttonGlowBounds (midiAllToOneButton.getBounds()));
+	}
+	if (midiOffButton.getToggleState() != midiOff)
+	{
+		midiOffButton.setToggleState (midiOff, juce::dontSendNotification);
+		repaint (buttonGlowBounds (midiOffButton.getBounds()));
 	}
 
 	// A stopped (or paused) transport means silence, whatever the last rendered block left
@@ -397,6 +455,21 @@ void MixerPanel::resized (void)
 	mergeToMasterButton.setBounds (audioButtons.removeFromRight (kHeaderButtonSize));
 	audioButtons.removeFromRight (8);
 	dcBlockButton.setBounds (audioButtons.removeFromRight (kHeaderButtonSize));
+
+	// The MIDI cluster sits to the left of the audio one - both answer "how does the mix leave",
+	// and the one nearer the mixer toggle is the one about the mix itself.
+	remaining.removeFromRight (8);
+
+	auto midiBlock = remaining.removeFromRight (3 * kHeaderButtonSize + 2 * 8);
+	midiGroupBounds = midiBlock.expanded (kAudioFrameSidePadding, 0);
+
+	auto midiButtons = midiBlock.reduced (0, kAudioFramePadding);
+
+	midiOffButton.setBounds (midiButtons.removeFromRight (kHeaderButtonSize));
+	midiButtons.removeFromRight (8);
+	midiAllToOneButton.setBounds (midiButtons.removeFromRight (kHeaderButtonSize));
+	midiButtons.removeFromRight (8);
+	midiSequentialButton.setBounds (midiButtons.removeFromRight (kHeaderButtonSize));
 
 	// From the right: the card's scrollbar, then the master, then the scrolling rows. The bar is
 	// outside everything it scrolls - one bar for the whole mixer, at the card's edge.
@@ -553,6 +626,10 @@ void MixerPanel::paintCardContent (juce::Graphics& g)
 	// not by the box - and the nameplate is the one thing up there, cut into the dashes.
 	groupFrame::draw (g, audioGroupBounds.toFloat (), theme::cardRadius - 2.0f, theme::groupFrame ());
 	groupFrame::drawNameplate (g, i18n::tr ("mixer.audioNameplate"), audioGroupBounds,
+							   theme::secondaryText (), theme::card ());
+
+	groupFrame::draw (g, midiGroupBounds.toFloat (), theme::cardRadius - 2.0f, theme::groupFrame ());
+	groupFrame::drawNameplate (g, i18n::tr ("mixer.midiNameplate"), midiGroupBounds,
 							   theme::secondaryText (), theme::card ());
 
 	// No legend on the right any more. It said "MUTE / SOLO / GAIN / PAN", which described the

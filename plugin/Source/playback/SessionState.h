@@ -4,6 +4,7 @@
 
 #include <juce_core/juce_core.h>
 
+#include "playback/MidiRouting.h"
 #include "playback/OutputRouting.h"
 
 namespace toybox::playback
@@ -59,6 +60,7 @@ struct SessionState
 	OutputTarget masterOutput = 0;
 	int masterMidiChannel = 0;		// 0 = Off, 1..16
 	DefaultRouting defaultRouting = DefaultRouting::master;
+	DefaultMidiChanneling defaultMidiChanneling = DefaultMidiChanneling::off;
 
 	juce::String songName;			// file name only - the extension is what matters
 	juce::MemoryBlock songImage;	// the bytes as they were loaded (a .vgz stays packed)

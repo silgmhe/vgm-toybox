@@ -94,6 +94,18 @@ void IconButton::paintButton (juce::Graphics& g, bool isMouseOverButton, bool is
 	{
 		drawDcBlockGlyph (g, glyphArea, iconColour);
 	}
+	else if (icon == Icon::midiSequential)
+	{
+		drawMidiSequentialGlyph (g, glyphArea, iconColour);
+	}
+	else if (icon == Icon::midiAllToOne)
+	{
+		drawMidiAllToOneGlyph (g, glyphArea, iconColour);
+	}
+	else if (icon == Icon::midiOff)
+	{
+		drawMidiOffGlyph (g, glyphArea, iconColour);
+	}
 	else
 	{
 		drawRepeatGlyph (g, glyphArea, iconColour);

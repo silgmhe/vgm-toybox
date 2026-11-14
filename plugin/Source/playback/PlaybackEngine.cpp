@@ -341,6 +341,7 @@ PlaybackEngine::BuildConfig PlaybackEngine::makeBuildConfig (void) const
 	config.fadeSeconds = fadeSeconds;
 	config.mixerEnabled = mixerEnabled;
 	config.defaultRouting = defaultRouting;
+	config.defaultMidiChanneling = defaultMidiChanneling;
 	config.chips = chips;
 
 	// A rebuild reopens the song that is playing, not the one the file's header names.
@@ -442,6 +443,7 @@ bool PlaybackEngine::readState (const void* data, int sizeInBytes, juce::String&
 			fadeSeconds = state.fadeSeconds;
 			mixerEnabled = state.mixerEnabled;
 			defaultRouting = state.defaultRouting;
+			defaultMidiChanneling = state.defaultMidiChanneling;
 		}
 
 		setMixerMasterGain (state.mixerMasterGain);
@@ -471,6 +473,7 @@ bool PlaybackEngine::readState (const void* data, int sizeInBytes, juce::String&
 		setFadeSeconds (state.fadeSeconds);
 		setMixerEnabled (state.mixerEnabled);
 		setDefaultRouting (state.defaultRouting);
+		setDefaultMidiChanneling (state.defaultMidiChanneling);
 		setMixerMasterGain (state.mixerMasterGain);
 		setMasterVolume (state.volume);
 		setMasterMuted (state.masterMuted);
@@ -1049,6 +1052,22 @@ void PlaybackEngine::applyDefaultRouting (void)
 	applyRoutingTo (defaultRouting, tracks);
 }
 
+void PlaybackEngine::applyDefaultMidiChanneling (void)
+{
+	applyMidiChannelingTo (defaultMidiChanneling, tracks);
+}
+
+void PlaybackEngine::applyMidiChannelingTo (playback::DefaultMidiChanneling mode,
+											std::vector<std::unique_ptr<TrackState>>& tracks)
+{
+	// The scheme survives loading another song: buildSong() applies it to the fresh track states,
+	// the same way the audio routing does.
+	for (size_t i = 0; i < tracks.size (); ++i)
+	{
+		tracks[i]->midiChannel.store (playback::midiChannelForTrack (mode, (int) i));
+	}
+}
+
 void PlaybackEngine::applyRoutingTo (playback::DefaultRouting routing,
 									 std::vector<std::unique_ptr<TrackState>>& tracks)
 {
@@ -1159,6 +1178,10 @@ PlaybackEngine::LoadedSong PlaybackEngine::buildSong (const BuildConfig& config,
 	// A new song inherits the routing scheme the user picked with the mixer card's shortcut
 	// buttons - untouched, that is "everything to the master bus", the classic behaviour.
 	applyRoutingTo (config.defaultRouting, pending.tracks);
+
+	// The same for MIDI channels: the card's MIDI buttons decide what a new song starts on.
+	// Untouched, that is "off" - the silence a plugin should send until it is asked for notes.
+	applyMidiChannelingTo (config.defaultMidiChanneling, pending.tracks);
 
 	// One player per track when the backend can isolate them, a single un-isolated one otherwise
 	// (plain player mode always uses a single player).
@@ -1479,6 +1502,15 @@ void PlaybackEngine::setDefaultRouting (playback::DefaultRouting mode)
 	const juce::ScopedLock sl (lock);
 	defaultRouting = mode;
 	applyDefaultRouting();
+}
+
+void PlaybackEngine::setDefaultMidiChanneling (playback::DefaultMidiChanneling mode)
+{
+	// same shape as setDefaultRouting(): remember the choice for the next load, and re-channel
+	// what is playing now so the card's buttons and the strips cannot disagree
+	const juce::ScopedLock sl (lock);
+	defaultMidiChanneling = mode;
+	applyDefaultMidiChanneling();
 }
 
 bool PlaybackEngine::isAnalysing (void) const
