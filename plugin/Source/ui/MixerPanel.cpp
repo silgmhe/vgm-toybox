@@ -26,6 +26,12 @@ namespace
 	constexpr int kAudioFramePadding = 6;		// above and below the buttons
 	constexpr int kAudioFrameHeight = kHeaderButtonSize + 2 * kAudioFramePadding;
 
+	// **The gap between the two framed clusters, measured button-to-button.** Both frames reach
+	// kAudioFrameSidePadding past their buttons, so an 8 px button gap would leave the frames
+	// overlapping by exactly 8 - which is what it looked like. The visible gap between the dashes
+	// is the 8 at the end; the rest is the two frames' own reaching.
+	constexpr int kHeaderGroupGap = 2 * kAudioFrameSidePadding + 8;
+
 	// The header has to be taller than the buttons by the nameplate's overhang, or the "AUDIO"
 	// legend would be painted over the card's top edge. Everything below the header moves down by
 	// the same amount, which is why getCardInnerArea() is given this and not kHeaderButtonSize.
@@ -441,7 +447,9 @@ void MixerPanel::resized (void)
 	// how the mix leaves. It keeps its place at the very right, outside the dashes.
 	mixerToggle.setBounds (remaining.removeFromRight (kHeaderButtonSize)
 									.reduced (0, kAudioFramePadding));
-	remaining.removeFromRight (8);
+	// The audio frame reaches kAudioFrameSidePadding past its buttons, so this gap has to carry
+	// that as well or the frame's right edge lands on the toggle's left edge.
+	remaining.removeFromRight (kAudioFrameSidePadding + 8);
 
 	// One block for the three that are framed, so the frame and its buttons come from the same
 	// rectangle and cannot drift apart.
@@ -458,7 +466,7 @@ void MixerPanel::resized (void)
 
 	// The MIDI cluster sits to the left of the audio one - both answer "how does the mix leave",
 	// and the one nearer the mixer toggle is the one about the mix itself.
-	remaining.removeFromRight (8);
+	remaining.removeFromRight (kHeaderGroupGap);
 
 	auto midiBlock = remaining.removeFromRight (3 * kHeaderButtonSize + 2 * 8);
 	midiGroupBounds = midiBlock.expanded (kAudioFrameSidePadding, 0);
