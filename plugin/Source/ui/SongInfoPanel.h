@@ -1,6 +1,7 @@
 #pragma once
 
 #include "CardComponent.h"
+#include "SyncedComboBox.h"
 
 namespace toybox { class PlaybackEngine; }
 
@@ -51,8 +52,13 @@ private:
 	/** **The song list of a multi-song file.** Hidden unless the file holds more than one, so a
 		VGM or any other single-song format looks exactly as it did before.
 	*/
-	juce::ComboBox songBox;
+	SyncedComboBox songBox;
 	juce::Label songLabel;			// "Song", from the language pack, left of the box
+
+	/** True from the pick until the background build lands. A switch takes as long as a file open,
+		and `getSongIndex()` keeps reporting the old song the whole time - a grace window is not long
+		enough, so the box is left alone outright (see SyncedComboBox::holdOff). */
+	bool switchingSong = false;
 
 	void switchToSelectedSong (void);
 

@@ -312,8 +312,7 @@ TransportPanel::TransportPanel (toybox::PlaybackEngine& engineToUse, bool syncAv
 	};
 	addAndMakeVisible (fadeBox);
 
-	fadeBox.setSelectedId (transport::fadePresetIndex (engine.getFadeSeconds()) + 1,
-						   juce::dontSendNotification);
+	fadeBox.forceTo (transport::fadePresetIndex (engine.getFadeSeconds()) + 1);
 
 	refreshLanguage();
 }
@@ -346,7 +345,8 @@ void TransportPanel::refreshLanguage (void)
 
 	if (selectedLoop > 0)
 	{
-		loopBox.setSelectedId (selectedLoop, juce::dontSendNotification);
+		// the list was just rebuilt, so the selection is pinned rather than mirrored
+		loopBox.forceTo (selectedLoop);
 	}
 
 	const int selectedFade = fadeBox.getSelectedId();
@@ -359,7 +359,7 @@ void TransportPanel::refreshLanguage (void)
 
 	if (selectedFade > 0)
 	{
-		fadeBox.setSelectedId (selectedFade, juce::dontSendNotification);
+		fadeBox.forceTo (selectedFade);
 	}
 
 	if (syncGroup != nullptr)
@@ -708,9 +708,11 @@ void TransportPanel::refresh (void)
 		// reaches past the button bounds
 		repaint (buttonGlowBounds (loopButton.getBounds()));
 	}
+	// Mirrored through `syncTo`, not written outright: a pick that is still travelling must survive
+	// this tick, and the repaint is explicit here because setSelectedId() skips it (see below).
 	if (loopBox.getSelectedId() != loopId)
 	{
-		loopBox.setSelectedId (loopId, juce::dontSendNotification);
+		loopBox.syncTo (loopId);
 		loopBox.repaint();
 	}
 
@@ -718,7 +720,7 @@ void TransportPanel::refresh (void)
 	const int fadeId = transport::fadePresetIndex (engine.getFadeSeconds()) + 1;
 	if (fadeBox.getSelectedId() != fadeId)
 	{
-		fadeBox.setSelectedId (fadeId, juce::dontSendNotification);
+		fadeBox.syncTo (fadeId);
 		fadeBox.repaint();
 	}
 

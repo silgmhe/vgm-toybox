@@ -75,48 +75,6 @@ void MidiCapabilityBadge::paint (juce::Graphics& g)
 	}
 }
 
-void MidiChannelBox::showPopup (void)
-{
-	// Built here rather than by ComboBox::showPopup, for the one thing ComboBox cannot do: put an
-	// image in front of every item. Everything else stays the base class's - the item ids, the
-	// tick on the selected entry and the notification on a pick.
-	if (! isEnabled() || getNumItems() <= 0)
-	{
-		hidePopup();		// hand back the "a menu is open" state ComboBox set before calling us
-		return;
-	}
-
-	juce::StringArray channels;
-	for (int index = 1; index < getNumItems(); ++index)
-	{
-		channels.add (getItemText (index));
-	}
-
-	auto menu = makeMidiChannelMenu (getItemText (0), channels, getSelectedId(),
-									 midiGlyphImage (56, findColour (juce::PopupMenu::textColourId)));
-	menu.setLookAndFeel (&getLookAndFeel());
-
-	menu.showMenuAsync (juce::PopupMenu::Options()
-							.withTargetComponent (this)
-							.withMinimumWidth (getWidth())
-							.withStandardItemHeight (juce::jmax (18, getHeight() - 6)),
-						[safe = juce::Component::SafePointer<MidiChannelBox> (this)] (int result)
-						{
-							if (safe == nullptr)
-							{
-								return;
-							}
-
-							// the base class does this too: closing the menu has to release the
-							// "a menu is open" state, or the box stops opening its popup
-							safe->hidePopup();
-							if (result != 0)
-							{
-								safe->setSelectedId (result);
-							}
-						});
-}
-
 ChannelStrip::ChannelStrip (void)
 {
 	// the slider colours come from the theme (accent track, light handle)
@@ -189,6 +147,7 @@ ChannelStrip::ChannelStrip (void)
 	{
 		updateMidiTooltip();
 		const int channel = midiBox.getSelectedId() - 1;
+
 		if (channel >= 0 && onMidiChannelChanged != nullptr)
 		{
 			onMidiChannelChanged (channel);
@@ -196,6 +155,22 @@ ChannelStrip::ChannelStrip (void)
 	};
 	midiBox.getProperties().set (ToyboxLookAndFeel::compactComboTextProperty, true);
 	addAndMakeVisible (midiBox);
+
+	// The MIDI menu puts the DIN mark in front of every channel, which `ComboBox::addItem` has no way
+	// to express (it stores text only). Built on demand from the box's own items, so the item ids,
+	// the tick on the current channel and the `set ...` path the window scripts use stay the box's.
+	midiBox.makeMenu = [this] (int selectedItemId)
+	{
+		juce::StringArray channels;
+
+		for (int index = 1; index < midiBox.getNumItems (); ++index)
+		{
+			channels.add (midiBox.getItemText (index));
+		}
+
+		return makeMidiChannelMenu (midiBox.getItemText (0), channels, selectedItemId,
+									midiGlyphImage (56, findColour (juce::PopupMenu::textColourId)));
+	};
 
 	addChildComponent (capabilityBadge);
 
@@ -264,7 +239,7 @@ void ChannelStrip::refreshLanguage (void)
 
 		if (option.target == selected)
 		{
-			outputBox.setSelectedId ((int) i + 1, juce::dontSendNotification);
+			outputBox.forceTo ((int) i + 1);
 		}
 	}
 
@@ -337,14 +312,14 @@ void ChannelStrip::setOutputOptions (const std::vector<OutputOption>& options, p
 
 		if (option.target == selected)
 		{
-			outputBox.setSelectedId (itemId, juce::dontSendNotification);
+			outputBox.forceTo (itemId);
 			selectedSomething = true;
 		}
 	}
 
 	if (! selectedSomething && outputBox.getNumItems() > 0)
 	{
-		outputBox.setSelectedId (1, juce::dontSendNotification);
+		outputBox.forceTo (1);
 	}
 
 	updateOutputTooltip();
@@ -369,12 +344,13 @@ void ChannelStrip::updateOutputTooltip (void)
 void ChannelStrip::rebuildMidiItems (void)
 {
 	const int selected = juce::jlimit (0, 16, shownMidiChannel);
+
 	midiBox.clear (juce::dontSendNotification);
 
 	if (midiCapability == playback::MidiCapability::unavailable)
 	{
 		midiBox.addItem (i18n::tr ("mixer.midiUnavailable"), 1);
-		midiBox.setSelectedId (1, juce::dontSendNotification);
+		midiBox.forceTo (1);
 	}
 	else
 	{
@@ -386,7 +362,7 @@ void ChannelStrip::rebuildMidiItems (void)
 			midiBox.addItem (i18n::tr ("mixer.midiChannel", juce::String (channel)), channel + 1);
 		}
 
-		midiBox.setSelectedId (selected + 1, juce::dontSendNotification);
+		midiBox.forceTo (selected + 1);
 	}
 
 	updateMidiTooltip();
@@ -437,7 +413,10 @@ void ChannelStrip::setMidiState (int channel, playback::MidiCapability capabilit
 	else if (midiCapability != playback::MidiCapability::unavailable
 			 && midiBox.getSelectedId() != selected + 1)
 	{
-		midiBox.setSelectedId (selected + 1, juce::dontSendNotification);
+		// the box disagree, so a log entry here right after a pick means the engine never took the
+		// value the user chose.
+
+		midiBox.syncTo (selected + 1);
 		updateMidiTooltip();
 	}
 

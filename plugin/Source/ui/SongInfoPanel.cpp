@@ -34,6 +34,9 @@ SongInfoPanel::SongInfoPanel (toybox::PlaybackEngine& engineToUse)
 
 	songBox.setComponentID ("song.selector");
 	songBox.onChange = [this] { switchToSelectedSong (); };
+	// A switch builds in the background, and `getSongIndex()` keeps reporting the old song until it
+	// lands - no grace window covers that, so the box is held off outright while it runs.
+	songBox.holdOff = [this] { return switchingSong; };
 	addChildComponent (songBox);		// refresh() shows it only for a file with more than one song
 
 	refresh();
@@ -115,9 +118,17 @@ void SongInfoPanel::refresh (void)
 			{
 				songBox.addItem (juce::String (index), index);
 			}
-		}
 
-		songBox.setSelectedId (engine.getSongIndex () + 1, juce::dontSendNotification);
+			// A cleared box holds no selection at all, and `syncTo` could leave it that way for the
+			// length of a pick's grace window - a rebuilt list always ends pinned.
+			songBox.forceTo (engine.getSongIndex () + 1);
+		}
+		else
+		{
+			// Not an unconditional write any more: that is what used to undo a pick before its
+			// notification had been delivered (SyncedComboBox.h has the whole story).
+			songBox.syncTo (engine.getSongIndex () + 1);
+		}
 	}
 
 	const auto& file = engine.getFile();
@@ -164,9 +175,11 @@ void SongInfoPanel::switchToSelectedSong (void)
 
 	// **Built on the load worker**, because a rebuild costs what a file open costs and the window has to
 	// keep drawing through it. The selection is set optimistically so the box shows the song being
-	// built; the callback puts it back if the build is refused or fails, so the control never claims a
-	// song that is not open.
-	songBox.setSelectedId (index + 1, juce::dontSendNotification);
+	// built, and `switchingSong` holds the refresh timer off the box until the build lands - the
+	// engine still reports the *old* song throughout, so any mirroring before then would silently
+	// put the previous choice back (that is the whole of the "song selector does nothing" report).
+	switchingSong = true;
+	songBox.forceTo (index + 1);
 
 	juce::Component::SafePointer<SongInfoPanel> safe (this);
 
@@ -177,12 +190,16 @@ void SongInfoPanel::switchToSelectedSong (void)
 			return;
 		}
 
+		safe->switchingSong = false;
+
 		if (ok)
 		{
-			return;
+			return;		// the box already shows the song that has just been installed
 		}
 
-		safe->songBox.setSelectedId (safe->engine.getSongIndex () + 1, juce::dontSendNotification);
+		// Refused or failed: put the box back on the song that is actually open. Pinned rather than
+		// mirrored, because the pick's grace window is still open and would suppress the mirror.
+		safe->songBox.forceTo (safe->engine.getSongIndex () + 1);
 
 		if (safe->onSwitchFailure != nullptr)
 		{
@@ -192,7 +209,8 @@ void SongInfoPanel::switchToSelectedSong (void)
 
 	if (! accepted)
 	{
-		songBox.setSelectedId (engine.getSongIndex () + 1, juce::dontSendNotification);
+		switchingSong = false;
+		songBox.forceTo (engine.getSongIndex () + 1);
 	}
 }
 

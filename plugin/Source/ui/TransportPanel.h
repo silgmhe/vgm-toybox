@@ -2,6 +2,7 @@
 
 #include "CardComponent.h"
 #include "IconButton.h"
+#include "SyncedComboBox.h"
 
 #include <functional>
 #include <memory>
@@ -126,8 +127,10 @@ private:
 	IconButton cursorButton { "playback-start", "Playback start", IconButton::Icon::playStart };
 	juce::Slider positionSlider;
 	juce::Slider volumeSlider;
-	juce::ComboBox loopBox;
-	juce::ComboBox fadeBox;
+	// SyncedComboBox: the timer mirrors the engine into these, and a pick has to survive that
+	// mirroring (SyncedComboBox.h explains the race).
+	SyncedComboBox loopBox;
+	SyncedComboBox fadeBox;
 
 	StartMarkerDragArea startMarkerDragArea { *this };
 

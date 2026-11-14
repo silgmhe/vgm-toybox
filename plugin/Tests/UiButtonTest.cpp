@@ -34,6 +34,7 @@
 #include "ui/IconButton.h"
 #include "ui/Icons.h"
 #include "ui/MidiMenu.h"
+#include "ui/SyncedComboBox.h"
 #include "ui/Theme.h"
 
 #include "TestSettings.h"
@@ -420,6 +421,58 @@ namespace
 	}
 }
 
+/**
+	**The selector race, without a window.**
+
+	Every selector in the editor is mirrored from the engine by the editor's refresh timer. The bug
+	was that this mirror ran between a pick and the delivery of its queued notification, wrote back
+	the value the engine still held, and the user's choice vanished - "the dropdown sometimes does
+	nothing".
+
+	`SyncedComboBox` fixes it with two rules, and both are asserted here. The clock is injected, so a
+	grace window is stepped over rather than slept through, and no popup (a window) is needed.
+*/
+void checkTheSyncedCombo (void)
+{
+	juce::uint32 now = 1000;
+
+	SyncedComboBox box;
+	box.clock = [&now] { return now; };
+
+	for (int id = 1; id <= 3; ++id)
+	{
+		box.addItem ("item " + juce::String (id), id);
+	}
+
+	box.forceTo (1);
+	check (box.getSelectedId() == 1, "forceTo writes the selection");
+
+	// The pick: the box shows the new entry at once, the way the popup callback applies it.
+	box.noteUserPick (3);
+	check (box.getSelectedId() == 3, "a pick shows immediately");
+
+	// The refresh that used to undo it, arriving in the same instant.
+	box.syncTo (1);
+	check (box.getSelectedId() == 3, "a refresh right after a pick leaves the pick alone");
+
+	// Once the pick has landed, the mirror is what keeps the box true to the engine again.
+	now += SyncedComboBox::pickGraceMs;
+	box.syncTo (2);
+	check (box.getSelectedId() == 2, "after the grace window the engine's value wins again");
+
+	// An engine that produces its value asynchronously (a song switch builds in the background)
+	// vetoes the mirror outright - no grace window is long enough.
+	box.noteUserPick (1);
+	box.holdOff = [] { return true; };
+	now += SyncedComboBox::pickGraceMs * 4;
+	box.syncTo (3);
+	check (box.getSelectedId() == 1, "holdOff keeps the mirror off the box");
+
+	box.holdOff = nullptr;
+	box.syncTo (3);
+	check (box.getSelectedId() == 3, "and releasing it lets the mirror through");
+}
+
 int main()
 {
 	const juce::ScopedJuceInitialiser_GUI init;
@@ -435,6 +488,7 @@ int main()
 	checkTheWidget();
 	checkTheMidiGlyphs();
 	checkTheMidiMenu();
+	checkTheSyncedCombo();
 
 	std::printf ("Result    : %s\n", (toybox::test::failures() == 0) ? "all checks passed" : "FAILURES");
 	return (toybox::test::failures() == 0) ? 0 : 1;
