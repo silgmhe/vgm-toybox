@@ -1,6 +1,7 @@
 #include "MixerPanel.h"
 
 #include "ButtonPaint.h"
+#include "GroupFrame.h"
 #include "SoftShadow.h"
 #include "Theme.h"
 
@@ -15,6 +16,20 @@ namespace
 	// docs/desgin/ui-button-design.md §8.
 	constexpr int kHeaderButtonSize = 30;		// the same size as the keyboard's mute and solo, so the
 										// two views really do share one set of buttons
+
+	// **The three audio switches are one cluster, and they say so with a frame.** DC blocking and the
+	// two routing shortcuts are all "how the mix leaves the plugin"; the mixer toggle beside them is
+	// not (it is whether there is a mix at all), so it stays outside. The frame is the DAW SYNC
+	// cluster's (GroupFrame.h) - same dashes, same nameplate straddling the top edge - because two
+	// groupings in one editor should not look like two different ideas.
+	constexpr int kAudioFrameSidePadding = 8;	// left and right, inside the frame
+	constexpr int kAudioFramePadding = 6;		// above and below the buttons
+	constexpr int kAudioFrameHeight = kHeaderButtonSize + 2 * kAudioFramePadding;
+
+	// The header has to be taller than the buttons by the nameplate's overhang, or the "AUDIO"
+	// legend would be painted over the card's top edge. Everything below the header moves down by
+	// the same amount, which is why getCardInnerArea() is given this and not kHeaderButtonSize.
+	constexpr int kCardHeaderHeight = kAudioFrameHeight + groupFrame::nameplateOverhang;
 	constexpr int kGroupHeaderHeight = 16;		// painted above each row of strips
 	constexpr int kStripWidth = 88;				// meter + graduations + fader, see ChannelStrip
 	constexpr int kStripGap = 6;
@@ -356,18 +371,32 @@ void MixerPanel::resized (void)
 		return;		// the editor had no room for the card - keep the children as they are
 	}
 
-	headerBounds = getCardHeaderArea (kHeaderButtonSize);
-	auto inner = getCardInnerArea (kHeaderButtonSize);
+	headerBounds = getCardHeaderArea (kCardHeaderHeight);
+	auto inner = getCardInnerArea (kCardHeaderHeight);
 	inner.removeFromTop (4);
 
-	// the header's right edge: the mixer toggle, then the two routing shortcuts to its left
-	mixerToggle.setBounds (headerBounds.removeFromRight (kHeaderButtonSize));
-	headerBounds.removeFromRight (8);
-	spreadOutputsButton.setBounds (headerBounds.removeFromRight (kHeaderButtonSize));
-	headerBounds.removeFromRight (8);
-	mergeToMasterButton.setBounds (headerBounds.removeFromRight (kHeaderButtonSize));
-	headerBounds.removeFromRight (8);
-	dcBlockButton.setBounds (headerBounds.removeFromRight (kHeaderButtonSize));
+	// The header's right edge. The row hangs off the bottom of the header, leaving the nameplate's
+	// overhang as a strip above it, and the audio frame is the right-hand block of that row.
+	auto remaining = headerBounds.withTrimmedTop (groupFrame::nameplateOverhang);
+
+	// The mixer toggle is not part of the audio cluster: it says whether there is a mix at all, not
+	// how the mix leaves. It keeps its place at the very right, outside the dashes.
+	mixerToggle.setBounds (remaining.removeFromRight (kHeaderButtonSize)
+									.reduced (0, kAudioFramePadding));
+	remaining.removeFromRight (8);
+
+	// One block for the three that are framed, so the frame and its buttons come from the same
+	// rectangle and cannot drift apart.
+	auto audioBlock = remaining.removeFromRight (3 * kHeaderButtonSize + 2 * 8);
+	audioGroupBounds = audioBlock.expanded (kAudioFrameSidePadding, 0);
+
+	auto audioButtons = audioBlock.reduced (0, kAudioFramePadding);
+
+	spreadOutputsButton.setBounds (audioButtons.removeFromRight (kHeaderButtonSize));
+	audioButtons.removeFromRight (8);
+	mergeToMasterButton.setBounds (audioButtons.removeFromRight (kHeaderButtonSize));
+	audioButtons.removeFromRight (8);
+	dcBlockButton.setBounds (audioButtons.removeFromRight (kHeaderButtonSize));
 
 	// From the right: the card's scrollbar, then the master, then the scrolling rows. The bar is
 	// outside everything it scrolls - one bar for the whole mixer, at the card's edge.
@@ -519,11 +548,20 @@ void MixerPanel::paintCardContent (juce::Graphics& g)
 		}
 	}
 
+	// **The audio cluster's frame and its legend.** Same idiom as the DAW SYNC group: the frame never
+	// changes colour - whether a switch inside it is on is said by that switch's own face and glow,
+	// not by the box - and the nameplate is the one thing up there, cut into the dashes.
+	groupFrame::draw (g, audioGroupBounds.toFloat (), theme::cardRadius - 2.0f, theme::groupFrame ());
+	groupFrame::drawNameplate (g, i18n::tr ("mixer.audioNameplate"), audioGroupBounds,
+							   theme::secondaryText (), theme::card ());
+
 	// No legend on the right any more. It said "MUTE / SOLO / GAIN / PAN", which described the
 	// strip controls beside it - and by the time it read that, the row above held four toggles,
 	// one of which is a DC blocker and none of which is gain or pan. Every button carries its own
 	// tooltip, so the line that had to be kept in step with the row is simply gone.
-	paintCardHeaderRow (g, headerBounds, i18n::tr ("mixer.title"), {});
+	// The title is centred on the button row, not on the taller header the frame needs.
+	paintCardHeaderRow (g, headerBounds.withTrimmedTop (groupFrame::nameplateOverhang),
+						i18n::tr ("mixer.title"), {});
 }
 
 void MixerPanel::StripHolder::paint (juce::Graphics& g)

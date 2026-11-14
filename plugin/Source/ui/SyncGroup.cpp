@@ -1,6 +1,7 @@
 #include "SyncGroup.h"
 
 #include "ButtonPaint.h"
+#include "GroupFrame.h"
 #include "Icons.h"
 #include "Theme.h"
 
@@ -33,14 +34,7 @@ namespace
 	constexpr int kFrameTopPadding = 9;		// from the frame's top edge down to the controls
 	constexpr int kFrameBottomPadding = 3;
 
-	// 3 px dashes, 3 off: fine enough to read as a guide rather than as a border
-	constexpr float kFrameDash = 3.0f;
-	constexpr float kFrameGap = 3.0f;
 
-	// the nameplate: 8 px caps, tracked out, sitting on the frame's top edge
-	constexpr float kNameplateTracking = 0.5f;	// extra pixels between the glyphs
-	constexpr int kNameplatePadding = 6;		// left and right of the text, inside the gap
-	constexpr int kNameplateHeight = 10;		// the gap cut into the dashes behind the text
 
 	/** The offset as the knob's number shows it. It is the offset and nothing else: the cue always
 		exists, so the field has no "no cue" case to fall back to. */
@@ -50,80 +44,6 @@ namespace
 		return (shown > 0.0 ? "+" : "") + juce::String (shown, 1) + " ms";
 	}
 
-	/** The dashed frame around the group: 1 px dashes along a rounded rectangle, and nothing else -
-		no fill, no inner shadow, no bevelled edge. A recess has to argue that it is structure and
-		not a selection rectangle, and at this size that argument cannot be won; a dashed line only
-		ever means "these belong together", so it does not have to make it.
-
-		The dashes come from createDashedStroke() on the whole outline rather than from one
-		drawDashedLine() per side: only the stroked version dashes *around* the corners, and a
-		frame whose corners are solid reads as a rounded rectangle with dashed sides. */
-	void drawGroupFrame (juce::Graphics& g, juce::Rectangle<float> area, float radius,
-						 juce::Colour colour)
-	{
-		if (area.isEmpty())
-		{
-			return;
-		}
-
-		juce::Path outline;
-		outline.addRoundedRectangle (area.reduced (0.5f), radius);	// the 1 px stroke lands on the grid
-
-		const float dashes[] = { kFrameDash, kFrameGap };
-		juce::Path stroked;
-		juce::PathStrokeType (1.0f).createDashedStroke (stroked, outline, dashes, 2);
-
-		g.setColour (colour);
-		g.fillPath (stroked);
-	}
-
-	/** The nameplate of the group: 8 px bold caps, tracked out letter by letter, sitting *on* the
-		frame's top edge with the dashes erased behind it - the legend of a fieldset, and how a
-		frame that carries a name is drawn everywhere else.
-
-		The eraser is the card's own colour, not a plate: the dashes are the only thing up there,
-		and a raised plate would be a second surface inside a frame that deliberately has none.
-
-		The tracking is applied per glyph (JUCE has no letter-spacing option) and the whole line is
-		filled as one path, so it costs one fill and no text layout. */
-	void drawGroupNameplate (juce::Graphics& g, const juce::String& text, juce::Rectangle<int> frame,
-							 juce::Colour colour)
-	{
-		if (frame.isEmpty())
-		{
-			return;
-		}
-
-		const juce::Font font { juce::FontOptions (8.0f, juce::Font::bold) };
-
-		juce::GlyphArrangement glyphs;
-		glyphs.addLineOfText (font, text, 0.0f, 0.0f);	// baseline at y = 0
-		for (int i = 0; i < glyphs.getNumGlyphs(); ++i)
-		{
-			glyphs.getGlyph (i).moveBy (kNameplateTracking * (float) i, 0.0f);
-		}
-
-		juce::Path path;
-		glyphs.createPath (path);
-		const auto glyphBounds = path.getBounds();
-
-		// the gap in the dashes, centred on the frame
-		const int gapWidth = juce::jmin (frame.getWidth() - 2 * kFramePadding,
-										 (int) std::ceil (glyphBounds.getWidth()) + 2 * kNameplatePadding);
-		const juce::Rectangle<float> gap ((float) frame.getCentreX() - (float) gapWidth * 0.5f,
-										  (float) frame.getY() - (float) kNameplateHeight * 0.5f,
-										  (float) gapWidth, (float) kNameplateHeight);
-
-		g.setColour (theme::card());
-		g.fillRoundedRectangle (gap, 2.0f);
-
-		// Both axes centre the glyph box, not the baseline: "DAW SYNC" is all caps, so the box is
-		// the visible ink and centring it is what looks centred.
-		const auto shift = gap.getCentre() - glyphBounds.getCentre();
-
-		g.setColour (colour);
-		g.fillPath (path, juce::AffineTransform::translation (shift.x, shift.y));
-	}
 }
 
 SyncGroup::SyncGroup (toybox::PlaybackEngine& engineToUse)
@@ -217,12 +137,12 @@ int SyncGroup::frameHeight (void)
 
 int SyncGroup::nameplateOverhang (void)
 {
-	return kNameplateHeight / 2;
+	return groupFrame::nameplateOverhang;
 }
 
 juce::Rectangle<int> SyncGroup::frameBounds (void) const
 {
-	return getLocalBounds().withTrimmedTop (kNameplateHeight / 2);
+	return getLocalBounds().withTrimmedTop (groupFrame::nameplateOverhang);
 }
 
 void SyncGroup::resized (void)
@@ -262,11 +182,12 @@ void SyncGroup::paint (juce::Graphics& g)
 	}
 
 	// After the glow: the frame closes around the light instead of being tinted by it
-	drawGroupFrame (g, frame.toFloat(), frameRadius, theme::groupFrame());
+	groupFrame::draw (g, frame.toFloat (), frameRadius, theme::groupFrame ());
 
 	// the nameplate is the one thing in the group that does carry the state
-	drawGroupNameplate (g, i18n::tr ("sync.nameplate"), frame,
-						sync.isEnabled() ? theme::accent() : theme::secondaryText());
+	groupFrame::drawNameplate (g, i18n::tr ("sync.nameplate"), frame,
+							   sync.isEnabled() ? theme::accent() : theme::secondaryText(),
+							   theme::card ());
 }
 
 void SyncGroup::lookAndFeelChanged (void)

@@ -279,6 +279,7 @@ target_sources(VGMToybox PRIVATE
 	Source/ui/FontChooserDialog.cpp
 	Source/ui/IconButton.cpp
 	Source/ui/Icons.cpp
+	Source/ui/GroupFrame.cpp
 	Source/ui/MixerPanel.cpp
 	Source/ui/PlayView.cpp
 	Source/ui/SettingsOverlay.cpp

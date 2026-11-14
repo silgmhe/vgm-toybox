@@ -146,6 +146,10 @@ private:
 	float masterPeakR = 0.0f;
 	juce::Rectangle<int> headerBounds;
 
+	/** The frame around the three audio switches, placed by resized() and painted by paintCardContent.
+		Nothing is a child of it: the buttons live on the card, and the frame is only a grouping. */
+	juce::Rectangle<int> audioGroupBounds;
+
 	JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (MixerPanel)
 };
 

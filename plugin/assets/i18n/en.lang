@@ -48,6 +48,7 @@ language: English
 "menu.view" = "View";
 "menu.view.none" = "No pages yet";
 
+"mixer.audioNameplate" = "AUDIO";
 "mixer.gainTooltip" = "Gain (double-click: 100%)";
 "mixer.master" = "MASTER";
 "mixer.masterBus" = "Master";
