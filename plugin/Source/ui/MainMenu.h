@@ -303,26 +303,24 @@ public:
 					   [&store] { return store.getPaintStats (); },
 					   [&store] (bool value) { store.setPaintStats (value); });
 
-			// A submenu that opens to a single row is one click for nothing: in a plugin build only
-			// the paint-stats switch survives, so it moves up to the top level there.
-			if (general.children.size () > 1)
-			{
-				options.entries.push_back (std::move (general));
-			}
-			else if (general.children.size () == 1)
-			{
-				options.entries.push_back (std::move (general.children.front ()));
-			}
+			// **Every category is a submenu, even one holding a single switch.** The menu's shape is
+			// the settings window's shape; a group that flattens out when this build happens to have
+			// one row would be a shape that changes with the build, and the reader would have to
+			// learn it twice.
+			options.entries.push_back (std::move (general));
 		}
 
-		// --- keyboard: one switch, so it stays at the top level ---
+		// --- keyboard ---
 		{
-			MenuEntry hints;
-			hints.id = "options.keyboard.rangeHints";
-			hints.label = i18n::tr ("settings.keyboard.rangeHints");
-			hints.checked = store.getKeyboardRangeHints ();
-			hints.action = [&store] { store.setKeyboardRangeHints (! store.getKeyboardRangeHints ()); };
-			options.entries.push_back (std::move (hints));
+			MenuEntry keyboard;
+			keyboard.id = "options.keyboard";
+			keyboard.label = i18n::tr ("settings.keyboard");
+
+			addToggle (keyboard, "options.keyboard.rangeHints", "settings.keyboard.rangeHints",
+					   [&store] { return store.getKeyboardRangeHints (); },
+					   [&store] (bool value) { store.setKeyboardRangeHints (value); });
+
+			options.entries.push_back (std::move (keyboard));
 		}
 
 		// --- the settings window, last and below a rule ---
