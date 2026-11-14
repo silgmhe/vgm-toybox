@@ -1047,6 +1047,33 @@ foreach(_script_file IN LISTS _toybox_scripts)
 		continue()
 	endif()
 
+	# **A script that loads a song from `test_file/` can only run where that folder is.** It is
+	# not in the repository (.gitignore:123 excludes it), so CI has none of it and eight scripts
+	# failed on all three runners the first time this branch reached master - each one asserting
+	# an export count after a `load` that could not happen. The scripts stay as they are, because
+	# their value is the real rips (a generated asset would prove the exporter against synthetic
+	# bytes it was written to satisfy); they are simply not registered where their song is absent.
+	# The dependency is read out of the script itself, so adding one does not mean editing this file.
+	file(READ "${_script_file}" _script_text)
+	string(REGEX MATCHALL "test_file/[^\r\n\"]+" _script_local_songs "${_script_text}")
+
+	set(_script_missing_song "")
+	foreach(_script_local_song IN LISTS _script_local_songs)
+		string(STRIP "${_script_local_song}" _script_local_song)
+
+		# One level up: `plugin/` is the source dir, and the tests run from the repository root
+		# (WORKING_DIRECTORY below), which is where `test_file/` lives.
+		if(NOT EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/../${_script_local_song}")
+			set(_script_missing_song "${_script_local_song}")
+			break()
+		endif()
+	endforeach()
+
+	if(_script_missing_song)
+		message(STATUS "app.${_script_name}: needs ${_script_missing_song}, which is not in the repository - run it by hand")
+		continue()
+	endif()
+
 	toybox_console_test("app.${_script_name}" vgm_app_test "${_script_file}")
 
 	# The scripts name the assets they use from the repository root (`plugin/Tests/...`), and
