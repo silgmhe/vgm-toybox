@@ -386,6 +386,7 @@ void PlaybackEngine::writeState (juce::MemoryBlock& destData) const
 		state.masterOutput = masterOutput.load();
 		state.masterMidiChannel = masterMidiChannel.load();
 		state.defaultRouting = defaultRouting;
+		state.defaultMidiChanneling = defaultMidiChanneling;
 
 		// The name, not the path: a project has to open where the file never existed, and the
 		// extension is the one part of the name that still does something (it picks the backend).

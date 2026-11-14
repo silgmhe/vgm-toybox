@@ -1213,6 +1213,30 @@ int main (int argc, char* argv[])
 			offOk = offOk && engine.getTrackMidiChannel ((size_t) i) == 0;
 		}
 		check (offOk, "turning it back off silences every track again");
+
+		// **The round trip** - what a host does when it saves the project and reopens it. This is
+		// the assertion that was missing: `getStateInformation()` never copied the field into the
+		// state, so every project saved "off" whatever the card showed, and it looked exactly like
+		// "the setting does not persist" from inside a DAW.
+		{
+			engine.setDefaultMidiChanneling (DefaultMidiChanneling::sequential);
+
+			juce::MemoryBlock saved;
+			engine.writeState (saved);
+
+			engine.setDefaultMidiChanneling (DefaultMidiChanneling::off);
+
+			juce::String restoreError;
+			const bool restored = engine.readState (saved.getData (), (int) saved.getSize (),
+													restoreError);
+
+			check (restored
+					   && engine.getDefaultMidiChanneling () == DefaultMidiChanneling::sequential,
+				   "and it survives a save / reopen, which is what a host does");
+
+			// Leave the engine where the rest of the run expects it.
+			engine.setDefaultMidiChanneling (DefaultMidiChanneling::off);
+		}
 	}
 
 	// --- [6] a sample rate change rebuilds the song (like a host restoring a session) -------
