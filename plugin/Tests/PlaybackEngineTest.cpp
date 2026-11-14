@@ -1574,10 +1574,19 @@ int main (int argc, char* argv[])
 	// Pitch bend: a 14-bit value means nothing without the receiver's range, and MIDI never
 	// reports it - so the engine declares the preference (RPN 0, pitch bend sensitivity) on the
 	// channel it is about to play, before the first note. 12 semitones is the default.
-	check (! hasMidiDecoder
+	//
+	// **Only when bend is on**, because that is when the engine sends it: the bend switch governs
+	// whether bends are sent, and the RPN that declares their range rides with them. A session with
+	// bend off sends no RPN - it has no bend for the receiver to range. This check used to read
+	// "any MIDI output must carry the RPN", which predated the switch and failed every engine test
+	// once the switch shipped; it is now asked of the evidence the engine actually produces.
+	const bool bendOn = engine.isMidiPitchBendEnabled ();
+	const int declaredRange = engine.getMidiPitchBendRange ();
+	check (! hasMidiDecoder || ! bendOn
 		   || (routed.has (0xB0, 101, 0) && routed.has (0xB0, 100, 0)
-			   && routed.has (0xB0, 6, 12) && routed.has (0xB0, 38, 0)),
-		   "the bend range is declared as RPN 0 before the first note");
+			   && routed.has (0xB0, 6, (uint8_t) juce::jlimit (0, 127, declaredRange))
+			   && routed.has (0xB0, 38, 0)),
+		   "when bend is on, its range is declared as RPN 0 before the first note");
 
 	// ... and the switch is the whole difference: with bends off the output carries no 0xE0 at
 	// all, while the notes are unchanged. One message is allowed and expected on a song that does
@@ -2166,18 +2175,18 @@ int main (int argc, char* argv[])
 			// ends at its end address, voice 1 at the key-off. The pitches are the samples' own
 			// cycles (64 and 32 bytes at 28160 bytes a second), so they only come out right when
 			// the 0x92 block reached the decoder and the bank was folded into the address.
-			expectNote ("c352.vgm", { "C352", "Ch 1", 0, 0.00, 65 });
-			expectNote ("c352.vgm", { "C352", "Ch 1", 3, 0.60, 65 });
-			expectNote ("c352.vgm", { "C352", "Ch 2", 0, 0.00, 65 });
-			expectNote ("c352.vgm", { "C352", "Ch 2", 3, 0.60, 65 });
+			expectNote ("c352.vgm", { "C352", "Ch 1", 0, 0.00, 69 });
+			expectNote ("c352.vgm", { "C352", "Ch 1", 3, 0.60, 69 });
+			expectNote ("c352.vgm", { "C352", "Ch 2", 0, 0.00, 81 });
+			expectNote ("c352.vgm", { "C352", "Ch 2", 3, 0.60, 81 });
 		}
 		else if (asset == "qsound.vgm")
 		{
 			// The rate register is the key: writing it starts the voice, writing it back to zero
 			// stops it, and nothing else would have produced four notes. Voice 0's sample is
 			// periodic and has to be A4; voice 1's is noise, so it has to be the C4 drum trigger.
-			expectNote ("qsound.vgm", { "QSound", "PCM 1", 0, 0.00, 60 });
-			expectNote ("qsound.vgm", { "QSound", "PCM 1", 3, 0.60, 60 });
+			expectNote ("qsound.vgm", { "QSound", "PCM 1", 0, 0.00, 69 });
+			expectNote ("qsound.vgm", { "QSound", "PCM 1", 3, 0.60, 69 });
 			expectNote ("qsound.vgm", { "QSound", "PCM 2", 0, 0.00, 60 });
 			expectNote ("qsound.vgm", { "QSound", "PCM 2", 3, 0.60, 60 });
 		}
@@ -2187,8 +2196,8 @@ int main (int argc, char* argv[])
 			// has an 18-byte cycle at 7159 bytes a second - clock/4 divided by 256-131, the chip's
 			// own rate, not the output rate - so it has to be G4; voice 1 is noise and has to be the
 			// C4 drum trigger.
-			expectNote ("ga20.vgm", { "GA20", "Ch 1", 0, 0.00, 70 });
-			expectNote ("ga20.vgm", { "GA20", "Ch 1", 3, 0.60, 70 });
+			expectNote ("ga20.vgm", { "GA20", "Ch 1", 0, 0.00, 67 });
+			expectNote ("ga20.vgm", { "GA20", "Ch 1", 3, 0.60, 67 });
 			expectNote ("ga20.vgm", { "GA20", "Ch 2", 0, 0.00, 60 });
 			expectNote ("ga20.vgm", { "GA20", "Ch 2", 3, 0.60, 60 });
 		}
@@ -2208,8 +2217,8 @@ int main (int argc, char* argv[])
 			// The control byte starts the voice and ends it, and the end register bounds the
 			// sample. Voice 0's 16-byte cycle at pitch 29 has to be A3; voice 1 is noise and has to
 			// be the C4 drum trigger.
-			expectNote ("segapcm.vgm", { "Sega PCM", "Ch 1", 0, 0.00, 46 });
-			expectNote ("segapcm.vgm", { "Sega PCM", "Ch 1", 3, 0.60, 46 });
+			expectNote ("segapcm.vgm", { "Sega PCM", "Ch 1", 0, 0.00, 57 });
+			expectNote ("segapcm.vgm", { "Sega PCM", "Ch 1", 3, 0.60, 57 });
 			expectNote ("segapcm.vgm", { "Sega PCM", "Ch 2", 0, 0.00, 60 });
 			expectNote ("segapcm.vgm", { "Sega PCM", "Ch 2", 3, 0.60, 60 });
 		}
@@ -2219,8 +2228,8 @@ int main (int argc, char* argv[])
 			// 0x80 marker inside its own sample. Voice 0 is periodic and has to be A4; voice 1 is
 			// noise, which has no period, so it has to be the C4 drum trigger - a decoder that read
 			// its attenuation register as a level would send nothing at all.
-			expectNote ("k054539.vgm", { "K054539", "Ch 1", 0, 0.00, 63 });
-			expectNote ("k054539.vgm", { "K054539", "Ch 1", 3, 0.60, 63 });
+			expectNote ("k054539.vgm", { "K054539", "Ch 1", 0, 0.00, 69 });
+			expectNote ("k054539.vgm", { "K054539", "Ch 1", 3, 0.60, 69 });
 			expectNote ("k054539.vgm", { "K054539", "Ch 2", 0, 0.00, 60 });
 			expectNote ("k054539.vgm", { "K054539", "Ch 2", 3, 0.60, 60 });
 		}
@@ -2230,8 +2239,8 @@ int main (int argc, char* argv[])
 			// register ends its note without a key-off. Voice 0's sample is periodic and has to be
 			// A4; voice 1's is noise, which has no period, so it has to be the C4 drum trigger -
 			// the pitch a decoder would invent from a false correlation is the bug this checks.
-			expectNote ("k053260.vgm", { "K053260", "Ch 1", 0, 0.00, 48 });
-			expectNote ("k053260.vgm", { "K053260", "Ch 1", 3, 0.60, 48 });
+			expectNote ("k053260.vgm", { "K053260", "Ch 1", 0, 0.00, 69 });
+			expectNote ("k053260.vgm", { "K053260", "Ch 1", 3, 0.60, 69 });
 			expectNote ("k053260.vgm", { "K053260", "Ch 2", 0, 0.00, 60 });
 			expectNote ("k053260.vgm", { "K053260", "Ch 2", 3, 0.60, 60 });
 		}
@@ -2410,7 +2419,10 @@ int main (int argc, char* argv[])
 								 || (channel.duty > 0.0f && channel.duty <= 0.76f);
 
 				bool waveOk = true;
-				for (float sample : channel.wave)
+				// `wave` is a shared_ptr<const vector<float>> (ChipState.h), not a container itself, so
+				// the range-for goes over `waveValues()` - the accessor that dereferences it (and returns
+				// an empty vector when it is null, which a silent channel's is).
+				for (float sample : channel.waveValues ())
 				{
 					waveOk = waveOk && sample >= -1.0f && sample <= 1.0f;
 				}

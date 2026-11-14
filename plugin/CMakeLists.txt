@@ -397,6 +397,7 @@ endif ()
 add_executable(vgm_mixer_test EXCLUDE_FROM_ALL
 	Tests/PlaybackEngineTest.cpp
 	Source/playback/BackendRegistry.cpp
+	Source/playback/ChannelFromChip.cpp
 	Source/playback/PlaybackEngine.cpp
 	Source/playback/WaveExport.cpp
 	Source/playback/WaveShape.cpp
