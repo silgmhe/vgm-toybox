@@ -37,7 +37,14 @@ void IconButton::paintButton (juce::Graphics& g, bool isMouseOverButton, bool is
 	// caption. Without a caption this is the plain 0.28 inset every other icon button uses.
 	constexpr float kCaptionHeight = 8.0f;
 	const bool captioned = caption.isNotEmpty();
-	const float inset = captioned ? 0.20f : theme::iconInsetRatio;
+
+	// **The three MIDI glyphs need more of the face.** Each is an arrow (or the prohibited ring) with
+	// a DIN badge in the corner; at the usual inset the badge comes out four pixels wide, which is a
+	// smudge rather than a mark. Giving the pair the whole face is what makes the badge legible.
+	const bool badged = (icon == Icon::midiSequential || icon == Icon::midiAllToOne
+						 || icon == Icon::midiOff);
+
+	const float inset = captioned ? 0.20f : (badged ? 0.12f : theme::iconInsetRatio);
 	auto glyphBox = shape.reduced (shape.getWidth() * inset, shape.getHeight() * inset);
 
 	const auto captionArea = captioned ? glyphBox.removeFromBottom (kCaptionHeight).toNearestInt()

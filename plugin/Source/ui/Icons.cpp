@@ -339,76 +339,99 @@ void drawMidiGlyph (juce::Graphics& g, juce::Rectangle<float> iconArea, juce::Co
 
 namespace
 {
-	/** The DIN ring, with `contacts` dots inside it or a slash across it.
+	/** The corner badge: the DIN mark, small, in the bottom-right corner.
 
-		One place for the three channeling glyphs: the ring is the MIDI mark (the same shape
-		drawMidiGlyph draws at menu size), and only the inside changes - three contacts for "one
-		channel each", one for "all on 1", a slash for "off". Keeping the ring in one function is
-		what makes them read as a family at the thirteen pixels a 30 px button leaves.
+		This is what says "MIDI". The arrows are the audio cluster's own language for what happens to
+		the signal, and the same arrows inside a second frame would otherwise be ambiguous - the
+		badge is the one part that is not shared with the audio glyphs.
+
+		It is drawn where the main shape has been trimmed away rather than on top of it: at eight
+		pixels a ring over an arrow is a blob, and the ring has to read as a ring.
 	*/
-	void drawMidiRing (juce::Graphics& g, juce::Rectangle<float> iconArea, juce::Colour colour,
-					   int contacts, bool slashed)
+	void drawMidiBadge (juce::Graphics& g, juce::Rectangle<float> badgeArea, juce::Colour colour)
 	{
 		g.setColour (colour);
 
-		const float width = iconArea.getWidth ();
-		const float height = iconArea.getHeight ();
-		const float lineWidth = juce::jmax (1.0f, juce::jmin (width, height) * 0.09f);
-		const float radius = juce::jmin (width, height) * 0.44f;
-		const float centreX = iconArea.getCentreX ();
-		const float centreY = iconArea.getCentreY ();
+		const float lineWidth = juce::jmax (0.8f, badgeArea.getWidth() * 0.13f);
+		const float radius = juce::jmin (badgeArea.getWidth(), badgeArea.getHeight()) * 0.44f;
+		const float centreX = badgeArea.getCentreX();
+		const float centreY = badgeArea.getCentreY();
 
 		juce::Path ring;
 		ring.addEllipse (centreX - radius, centreY - radius, radius * 2.0f, radius * 2.0f);
 		g.strokePath (ring, juce::PathStrokeType (lineWidth, juce::PathStrokeType::curved,
 												  juce::PathStrokeType::rounded));
 
-		if (slashed)
-		{
-			// bottom-left to top-right, inside the ring: the standard "not this"
-			juce::Path slash;
-			slash.startNewSubPath (centreX - radius * 0.72f, centreY + radius * 0.72f);
-			slash.lineTo (centreX + radius * 0.72f, centreY - radius * 0.72f);
-			g.strokePath (slash, juce::PathStrokeType (lineWidth, juce::PathStrokeType::curved,
-													   juce::PathStrokeType::rounded));
-			return;
-		}
-
-		// The contacts: one reads as "a single channel", three as "several", which is the whole
-		// difference between the two schemes.
-		const float dot = juce::jmax (1.0f, radius * 0.20f);
-
-		if (contacts <= 1)
-		{
-			g.fillEllipse (centreX - dot, centreY - dot, dot * 2.0f, dot * 2.0f);
-			return;
-		}
-
+		// Three contacts across the middle: the DIN's five do not fit at this size, and three is
+		// what makes the ring read as a connector rather than as a bullet point.
+		const float dot = juce::jmax (0.7f, radius * 0.22f);
 		const float spread = radius * 1.10f;
-		const float step = spread / (float) (contacts - 1);
-		const float start = centreX - spread * 0.5f;
 
-		for (int i = 0; i < contacts; ++i)
+		for (int i = 0; i < 3; ++i)
 		{
-			const float x = start + step * (float) i;
+			const float x = centreX - spread * 0.5f + spread * 0.5f * (float) i;
 			g.fillEllipse (x - dot, centreY - dot, dot * 2.0f, dot * 2.0f);
 		}
+	}
+
+	/** How much of the glyph the badge takes. The main shape gets `1 - kBadgeShare` of the box, so
+		the two never overlap - the alternative was a badge drawn over the arrow's tail, which at
+		this size reads as a smudge rather than as a mark. */
+	constexpr float kBadgeShare = 0.36f;
+
+	juce::Rectangle<float> mainAreaOf (juce::Rectangle<float> iconArea)
+	{
+		const float trim = iconArea.getWidth() * kBadgeShare;
+		return iconArea.withTrimmedRight (trim).withTrimmedBottom (trim);
+	}
+
+	juce::Rectangle<float> badgeAreaOf (juce::Rectangle<float> iconArea)
+	{
+		const float size = iconArea.getWidth() * kBadgeShare;
+		return iconArea.removeFromRight (size).removeFromBottom (size);
+	}
+
+	/** The standard "not this" mark: a ring with the diagonal through it. */
+	void drawProhibitedGlyph (juce::Graphics& g, juce::Rectangle<float> iconArea, juce::Colour colour)
+	{
+		g.setColour (colour);
+
+		const float lineWidth = juce::jmax (1.0f, juce::jmin (iconArea.getWidth(),
+															 iconArea.getHeight()) * 0.13f);
+		const float radius = juce::jmin (iconArea.getWidth(), iconArea.getHeight()) * 0.46f;
+		const float centreX = iconArea.getCentreX();
+		const float centreY = iconArea.getCentreY();
+
+		juce::Path ring;
+		ring.addEllipse (centreX - radius, centreY - radius, radius * 2.0f, radius * 2.0f);
+		g.strokePath (ring, juce::PathStrokeType (lineWidth, juce::PathStrokeType::curved,
+												  juce::PathStrokeType::rounded));
+
+		juce::Path slash;
+		slash.startNewSubPath (centreX - radius * 0.70f, centreY + radius * 0.70f);
+		slash.lineTo (centreX + radius * 0.70f, centreY - radius * 0.70f);
+		g.strokePath (slash, juce::PathStrokeType (lineWidth, juce::PathStrokeType::curved,
+												   juce::PathStrokeType::rounded));
 	}
 }
 
 void drawMidiSequentialGlyph (juce::Graphics& g, juce::Rectangle<float> iconArea, juce::Colour colour)
 {
-	drawMidiRing (g, iconArea, colour, 3, false);
+	// The audio cluster's fan-out, wearing the badge that says which protocol is being fanned.
+	drawSpreadOutputsGlyph (g, mainAreaOf (iconArea), colour);
+	drawMidiBadge (g, badgeAreaOf (iconArea), colour);
 }
 
 void drawMidiAllToOneGlyph (juce::Graphics& g, juce::Rectangle<float> iconArea, juce::Colour colour)
 {
-	drawMidiRing (g, iconArea, colour, 1, false);
+	drawMergeToMasterGlyph (g, mainAreaOf (iconArea), colour);
+	drawMidiBadge (g, badgeAreaOf (iconArea), colour);
 }
 
 void drawMidiOffGlyph (juce::Graphics& g, juce::Rectangle<float> iconArea, juce::Colour colour)
 {
-	drawMidiRing (g, iconArea, colour, 0, true);
+	drawProhibitedGlyph (g, mainAreaOf (iconArea), colour);
+	drawMidiBadge (g, badgeAreaOf (iconArea), colour);
 }
 
 juce::Image midiGlyphImage (int pixels, juce::Colour colour)
