@@ -1237,6 +1237,37 @@ int main (int argc, char* argv[])
 			// Leave the engine where the rest of the run expects it.
 			engine.setDefaultMidiChanneling (DefaultMidiChanneling::off);
 		}
+
+		// **Switching schemes ends the notes that were already sounding.** The rule lives in
+		// `setTrackMidiChannel` - it bumps `midiResetGeneration`, and the next block answers that
+		// with the offs. A scheme setter that writes the channel atomics itself silently skips it
+		// and leaves those notes playing forever, which is what a "no MIDI output" press used to do.
+		{
+			engine.setDefaultMidiChanneling (DefaultMidiChanneling::sequential);
+			engine.setPositionSeconds (0.0);
+			engine.play();
+
+			const auto beforeSwitch = recordMidi (engine, 0.6, sampleRate, blockSize);
+
+			// A song whose backend emits no MIDI (or whose first second is silent) has nothing to
+			// end, so the check is asked only when a note is actually sounding - the same shape the
+			// chip-state section below uses.
+			if (beforeSwitch.notesStillSoundingAtEnd().empty())
+			{
+				std::printf ("      nothing was sounding at the switch, nothing to end\n");
+			}
+			else
+			{
+				engine.setDefaultMidiChanneling (DefaultMidiChanneling::allToChannelOne);
+				const auto afterSwitch = recordMidi (engine, 0.2, sampleRate, blockSize);
+
+				check (afterSwitch.count (0x80) > 0,
+					   "switching the scheme sends the offs for the notes it re-channelled");
+			}
+
+			engine.stop();
+			engine.setDefaultMidiChanneling (DefaultMidiChanneling::off);
+		}
 	}
 
 	// --- [6] a sample rate change rebuilds the song (like a host restoring a session) -------

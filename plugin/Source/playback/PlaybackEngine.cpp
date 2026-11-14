@@ -1055,14 +1055,25 @@ void PlaybackEngine::applyDefaultRouting (void)
 
 void PlaybackEngine::applyDefaultMidiChanneling (void)
 {
-	applyMidiChannelingTo (defaultMidiChanneling, tracks);
+	// **Per track, through the setter the strip selectors use.** That setter is where the rule
+	// lives: changing a channel bumps `midiResetGeneration`, which makes the next block send the
+	// offs for the notes that were sounding on the old channels. Writing the atomics directly here
+	// - what this did first - left those notes playing forever after the switch, and it was a
+	// second writer of the same rule (rules §13), which is exactly how the two paths drifted apart.
+	for (size_t i = 0; i < tracks.size (); ++i)
+	{
+		setTrackMidiChannel (i, playback::midiChannelForTrack (defaultMidiChanneling, (int) i));
+	}
 }
 
 void PlaybackEngine::applyMidiChannelingTo (playback::DefaultMidiChanneling mode,
 											std::vector<std::unique_ptr<TrackState>>& tracks)
 {
-	// The scheme survives loading another song: buildSong() applies it to the fresh track states,
-	// the same way the audio routing does.
+	// **For the track list buildSong() has just made**, which is why there is no
+	// `midiResetGeneration` bump here: a fresh track list has no sounding notes to end, and
+	// installSong() bumps it once for the whole new song. The path that acts on a song already
+	// playing is applyDefaultMidiChanneling(), and it goes through setTrackMidiChannel() precisely
+	// so the "channel changed, end the notes" rule is not written a second time.
 	for (size_t i = 0; i < tracks.size (); ++i)
 	{
 		tracks[i]->midiChannel.store (playback::midiChannelForTrack (mode, (int) i));
