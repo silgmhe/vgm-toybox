@@ -190,7 +190,7 @@ constexpr int defaultSustainMs = 1500;
 */
 constexpr int minReleaseMs = 1;
 constexpr int maxReleaseMs = 5000;
-constexpr int releaseStepMs = 50;
+constexpr int releaseStepMs = 1;
 constexpr int defaultReleaseMs = 100;
 
 /** **The note an export renders at, when the user asks for a fixed one.**
