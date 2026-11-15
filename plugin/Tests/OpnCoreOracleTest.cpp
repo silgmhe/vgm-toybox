@@ -364,6 +364,20 @@ void testNoteWaveform (void)
 	check (peak > 0.001, "and they are not all silence");
 	check (peak <= 1.0, "and stay inside the range the window draws");
 
+	// **It has to oscillate at the note, not at the envelope.** A 261 Hz note over this buffer is
+	// some hundreds of crossings; a waveform that came out as one slow swell - which is what a
+	// wrong sample rate or a wrong f-number produces - has a handful. Counting crossings is the
+	// only assertion here that can tell those apart.
+	int crossings = 0;
+	for (std::size_t i = 1; i < wave.size(); ++i)
+	{
+		if ((wave[i - 1] < 0.0f) != (wave[i] < 0.0f))
+		{
+			++crossings;
+		}
+	}
+	check (crossings > 100, "and it oscillates at the note, not at the envelope");
+
 	// The last tenth has to be quieter than the middle: the release stage is the thing the old
 	// one-cycle drawing could never show.
 	double tail = 0.0, middle = 0.0;

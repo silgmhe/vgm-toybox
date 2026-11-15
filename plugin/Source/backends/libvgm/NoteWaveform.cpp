@@ -148,16 +148,33 @@ std::vector<float> render (const VoicePatch& patch, double frequencyHz,
 
 	const auto fnumBits = (uint16_t) std::lround (std::clamp (fnum, 0.0, 2047.0));
 
-	core.write (port, (uint8_t) (0xA0 + channelInPort), (uint8_t) (fnumBits & 0xFF));
+	// **0xA4 before 0xA0, and the order is load-bearing.** The chip latches the whole f-number when
+	// 0xA0 is written: the low byte from that write and the high bits and block from whatever 0xA4
+	// last held. Writing 0xA0 first therefore locks in high = 0 and block = 0 - a frequency of a
+	// few hertz - and the 0xA4 that follows arrives too late to be counted. The result is a slow
+	// swell with no carrier, which is exactly what the first version of this drew.
 	core.write (port, (uint8_t) (0xA4 + channelInPort),
 				(uint8_t) (((fnumBits >> 8) & 0x07) | (block << 3)));
+	core.write (port, (uint8_t) (0xA0 + channelInPort), (uint8_t) (fnumBits & 0xFF));
 
-	// **Key on all four operators.** 0x28 does not carry a channel number from 0 to 5: it carries
-	// `(bank << 2) | slot`, so channels 3-5 are `0xF4`, `0xF5`, `0xF6` rather than `0xF3`, `0xF4`,
-	// `0xF5`. Writing the flat number keyed the wrong channel for everything past the second bank,
-	// which is why half the rows never moved.
-	const auto keyByte = (uint8_t) (0xF0 | (port << 2) | channelInPort);
-	core.write (0, 0x28, keyByte);
+	// **Key on the way a driver does it**, which is three writes and not one:
+	//
+	//  0x28 = 0x00 | channelKey    first, so the envelope starts from silence. A key-on over a
+	//                              voice that is still sounding resumes it at its current level,
+	//                              which for a freshly written patch is whatever the core's default
+	//                              was - often nothing.
+	//  0x28 = 0xF0 | channelKey    then, the actual key.
+	//  0xB4 = 0xC0                 and the pan, both sides. **The core starts with it closed**, so
+	//                              every note rendered without this line came out at zero.
+	//
+	// `channelKey` is `(bank << 2) | slot`, not a channel number from 0 to 5; the flat number keyed
+	// a neighbour for everything past the first bank. FamiStudio's EPSM channel state does exactly
+	// these three writes on a note trigger.
+	const auto channelKey = (uint8_t) ((port << 2) | channelInPort);
+
+	core.write (0, 0x28, channelKey);
+	core.write (0, 0x28, (uint8_t) (0xF0 | channelKey));
+	core.write (port, (uint8_t) (0xB4 + channelInPort), 0xC0);
 
 	const int cap = (int) std::lround (std::max (0.05, seconds) * rate);
 	const int releaseAt = std::min (cap - 1, (int) std::lround (kHoldSeconds * rate));
@@ -174,7 +191,7 @@ std::vector<float> render (const VoicePatch& patch, double frequencyHz,
 	{
 		if (! released && done >= releaseAt)
 		{
-			core.write (0, 0x28, (uint8_t) ((port << 2) | channelInPort));
+			core.write (0, 0x28, channelKey);
 			released = true;
 		}
 
