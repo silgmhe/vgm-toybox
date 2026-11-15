@@ -592,9 +592,28 @@ void ChannelStrip::paint (juce::Graphics& g)
 		}
 		else
 		{
-			// No room beside the mark at this width: the name keeps the whole row (and may shrink),
-			// and the mark stays at the edge rather than being drawn over the text.
-			g.drawText (stripName, nameBounds, juce::Justification::centred, true);
+			// **The name is too wide to leave the mark any room**, which at 88 px means about nine
+			// characters - `ADPCM-A 1` is one. Dropping the mark there was worse than shrinking the
+			// name: those are sample channels, the ones a reader most wants identified, and they
+			// were the only rows with no mark at all.
+			//
+			// So the mark takes the edge and the name centres in what is left. **The mark is one
+			// step smaller here** - 14 instead of 16, with a tighter gap - because the name is what
+			// carries the information: `ADPCM-A 1` cut down to `ADPCM` loses the number that tells
+			// six identical-looking sample channels apart, and that is worse than a smaller mark.
+			constexpr int kTightMark = 14;
+			constexpr int kTightGap = 3;
+
+			auto row = nameBounds;
+			const auto mark = row.removeFromLeft (kTightMark + kTightGap);
+
+			drawChannelGlyph (g, channelGlyphFor (channelKind),
+							  { (float) mark.getX (), (float) mark.getCentreY () - (float) kTightMark * 0.5f,
+								(float) kTightMark, (float) kTightMark },
+							  theme::primaryText ().withAlpha (0.75f));
+
+			row.removeFromLeft (kTightGap);
+			g.drawText (stripName, row, juce::Justification::centred, true);
 		}
 	}
 	else
