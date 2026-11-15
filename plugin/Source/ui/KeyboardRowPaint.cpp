@@ -100,10 +100,14 @@ void paintChannelRow (juce::Graphics& g,
 
 		const auto mark = nameArea.removeFromLeft (kMarkSize);
 
+		// **Not `ink`.** That follows the row's state - a silent channel's name is secondary grey -
+		// and a 1 px line in secondary grey on a light card is invisible, which read as "this row
+		// has no mark" for every channel that was not sounding. The mark keeps one colour of its
+		// own, the same one the mixer strips use.
 		drawChannelGlyph (g, channelGlyphFor (channel.channelKind),
 						  { (float) mark.getX (), (float) mark.getCentreY () - (float) kMarkSize * 0.5f,
 							(float) kMarkSize, (float) kMarkSize },
-						  ink);
+						  theme::primaryText ().withAlpha (0.75f));
 
 		nameArea.removeFromLeft (kMarkGap);
 	}
