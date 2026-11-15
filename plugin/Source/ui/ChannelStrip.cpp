@@ -4,6 +4,7 @@
 
 #include "ButtonPaint.h"
 #include "ChannelGlyphs.h"
+#include "ChannelNameLayout.h"
 #include "Icons.h"
 #include "MeterScale.h"
 #include "MidiMenu.h"
@@ -558,68 +559,30 @@ void ChannelStrip::paint (juce::Graphics& g)
 	g.setFont (juce::Font (juce::FontOptions (10.5f, juce::Font::bold)));
 	g.setColour (theme::primaryText());
 
-	// **The name is centred; the mark hangs off its left side.** The name's own centre is what the
-	// eye lines up down the column, so it stays where it was; the mark follows the text rather than
-	// the strip's edge. Measuring the text is what makes that possible - the mark has to know where
-	// the first letter starts.
-	if (channelKind != chips::ChannelKind::unknown)
-	{
-		constexpr int kMarkSize = 16;
-		constexpr int kMarkGap = 4;
+	// **The name is centred; the mark hangs off its left side.** Which of the three arrangements
+	// applies is decided by channelName::layOut - a pure function, because while this lived here
+	// the only way to know was to render a window and look, and the row was rewritten five times.
+	const bool hasMark = channelKind != chips::ChannelKind::unknown;
+	float textWidth = 0.0f;
 
+	if (hasMark)
+	{
 		const auto font = juce::Font (juce::FontOptions (10.5f, juce::Font::bold));
 
 		juce::GlyphArrangement arrangement;
 		arrangement.addLineOfText (font, stripName, 0.0f, 0.0f);
-		const float textWidth = arrangement.getBoundingBox (0, -1, true).getWidth ();
-
-		const float textStart = (float) nameBounds.getCentreX () - textWidth * 0.5f;
-		const float markX = textStart - (float) kMarkGap - (float) kMarkSize;
-
-		if (textWidth <= (float) nameBounds.getWidth () && markX >= (float) nameBounds.getX ())
-		{
-			drawChannelGlyph (g, channelGlyphFor (channelKind),
-							  { markX, (float) nameBounds.getCentreY () - (float) kMarkSize * 0.5f,
-								(float) kMarkSize, (float) kMarkSize },
-							  theme::primaryText ().withAlpha (0.75f));
-
-			// Drawn from the measured box, so the mark's anchor and the glyphs it sits beside come
-			// from the same number.
-			g.drawText (stripName,
-						juce::Rectangle<float> (textStart, (float) nameBounds.getY (),
-												textWidth + 2.0f, (float) nameBounds.getHeight ()),
-						juce::Justification::centredLeft, false);
-		}
-		else
-		{
-			// **The name is too wide to leave the mark any room**, which at 88 px means about nine
-			// characters - `ADPCM-A 1` is one. Dropping the mark there was worse than shrinking the
-			// name: those are sample channels, the ones a reader most wants identified, and they
-			// were the only rows with no mark at all.
-			//
-			// So the mark takes the edge and the name centres in what is left. **The mark is one
-			// step smaller here** - 14 instead of 16, with a tighter gap - because the name is what
-			// carries the information: `ADPCM-A 1` cut down to `ADPCM` loses the number that tells
-			// six identical-looking sample channels apart, and that is worse than a smaller mark.
-			constexpr int kTightMark = 14;
-			constexpr int kTightGap = 3;
-
-			auto row = nameBounds;
-			const auto mark = row.removeFromLeft (kTightMark + kTightGap);
-
-			drawChannelGlyph (g, channelGlyphFor (channelKind),
-							  { (float) mark.getX (), (float) mark.getCentreY () - (float) kTightMark * 0.5f,
-								(float) kTightMark, (float) kTightMark },
-							  theme::primaryText ().withAlpha (0.75f));
-
-			row.removeFromLeft (kTightGap);
-			g.drawText (stripName, row, juce::Justification::centred, true);
-		}
+		textWidth = arrangement.getBoundingBox (0, -1, true).getWidth ();
 	}
-	else
+
+	const auto nameLayout = channelName::layOut (nameBounds.toFloat (), textWidth, hasMark);
+
+	if (hasMark)
 	{
-		g.drawText (stripName, nameBounds, juce::Justification::centred, true);
+		drawChannelGlyph (g, channelGlyphFor (channelKind), nameLayout.mark,
+						  theme::primaryText ().withAlpha (0.75f));
 	}
+
+	g.drawText (stripName, nameLayout.text, nameLayout.justification, nameLayout.shrink);
 
 	drawMeter (g);
 	drawScale (g);

@@ -32,6 +32,7 @@
 
 #include "ui/ButtonPaint.h"
 #include "ui/ChannelGlyphs.h"
+#include "ui/ChannelNameLayout.h"
 #include "ui/IconButton.h"
 #include "ui/Icons.h"
 #include "ui/MidiMenu.h"
@@ -434,6 +435,102 @@ namespace
 	grace window is stepped over rather than slept through, and no popup (a window) is needed.
 */
 /**
+	**The three arrangements of a strip's name row**, as numbers instead of pixels.
+
+	The review's H-2: while this lived in `paint()` the only way to know which shape a name took was
+	to render a window and look, and the row was rewritten five times before it settled. The cases
+	below are the ones that actually bit - the boundary where the mark stops fitting, and
+	`ADPCM-A 1` at nine characters.
+
+	The arithmetic that decides it: the mark's left edge is `centreX - textWidth/2 - gap - size`, so
+	with a 76 px row and a 20 px mark-plus-gap it reaches the row's edge at `textWidth == 36`. That
+	number is what the boundary case below pins down.
+*/
+void checkChannelNameLayout (void)
+{
+	using namespace toybox::ui;
+
+	const juce::Rectangle<float> row { 0.0f, 0.0f, 76.0f, 22.0f };
+	const auto near = [] (float a, float b) { return std::abs (a - b) < 0.01f; };
+
+	// No mark: the name centres across the whole row, nothing shrinks.
+	{
+		const auto layout = channelName::layOut (row, 30.0f, false);
+
+		check (layout.mark.isEmpty (), "a row with no kind draws no mark");
+		check (layout.text == row, "and the name keeps the whole row");
+		check (layout.justification == juce::Justification::centred, "centred, as before");
+		check (! layout.shrink, "nothing to shrink");
+	}
+
+	// A short name: the mark hugs it, and the *name* stays where the eye expects it.
+	{
+		const auto layout = channelName::layOut (row, 30.0f, true);
+
+		check (near (layout.mark.getWidth (), (float) channelName::kMarkSize),
+			   "a name that fits gets the full-size mark");
+		check (near (layout.text.getX (), row.getCentreX () - 15.0f),
+			   "the name starts where its measured width says");
+		check (near (layout.mark.getRight () + (float) channelName::kMarkGap, layout.text.getX ()),
+			   "the mark's right edge is one gap from the first letter");
+		check (layout.justification == juce::Justification::centredLeft,
+			   "drawn from the measured box, not centred again");
+		check (! layout.shrink, "nothing to shrink");
+	}
+
+	// `ADPCM-A 1`: 55 px of text in 76 px of row leaves no room beside it.
+	{
+		const auto layout = channelName::layOut (row, 55.0f, true);
+
+		check (near (layout.mark.getWidth (), (float) channelName::kTightMark),
+			   "a long name gets the smaller mark");
+		check (layout.shrink, "and the name is allowed to shrink");
+		check (near (layout.text.getX (),
+					 row.getX () + (float) channelName::kTightMark + (float) channelName::kTightGap),
+			   "the name starts after the tighter mark and gap");
+	}
+
+	// The boundary: the mark's left edge lands exactly on the row's.
+	{
+		const float fits = row.getWidth ()
+						   - 2.0f * ((float) channelName::kMarkGap + (float) channelName::kMarkSize);
+		const auto layout = channelName::layOut (row, fits, true);
+
+		check (near (layout.mark.getX (), row.getX ()), "the exact fit keeps the full-size mark");
+		check (! layout.shrink, "and does not shrink");
+	}
+
+	// One pixel past it: the smaller mark takes over.
+	{
+		const float fits = row.getWidth ()
+						   - 2.0f * ((float) channelName::kMarkGap + (float) channelName::kMarkSize);
+		const auto layout = channelName::layOut (row, fits + 1.0f, true);
+
+		check (layout.shrink, "one pixel wider falls back");
+		check (near (layout.mark.getWidth (), (float) channelName::kTightMark), "to the smaller mark");
+	}
+}
+
+/**
+	**The seven marks, from the 41 kinds.** Two pairs must never merge: a C140 drum is a recording and
+	an SCC table is a cycle. Until this existed the only check was "load a song that uses that chip
+	and look at the strips", which is exactly what `code-quality.md` §7.5 says a mapping should not
+	need.
+*/
+void checkChannelGlyphMapping (void)
+{
+	using toybox::ui::ChannelGlyph;
+	using toybox::chips::ChannelKind;
+
+	check (channelGlyphFor (ChannelKind::c140Pcm) == ChannelGlyph::pcm, "a C140 drum is a recording");
+	check (channelGlyphFor (ChannelKind::sccWave) == ChannelGlyph::wavetable, "an SCC table is a cycle");
+	check (channelGlyphFor (ChannelKind::nesDmc) == ChannelGlyph::pcm, "the DMC counts as sampled");
+	check (channelGlyphFor (ChannelKind::vrc7Fm) == ChannelGlyph::fm, "the VRC7 is FM");
+	check (channelGlyphFor (ChannelKind::aySquare) == ChannelGlyph::pulse, "an AY tone is a square");
+	check (channelGlyphFor (ChannelKind::n163Wave) == ChannelGlyph::wavetable, "N163 is a wavetable");
+}
+
+/**
 	**The seven channel glyphs, at the two sizes they are actually drawn.**
 
 	Not an assertion: it writes `shots/channel-glyphs.png` so the shapes can be looked at. "Does a
@@ -565,6 +662,8 @@ int main()
 	checkTheMidiGlyphs();
 	checkTheMidiMenu();
 	checkTheSyncedCombo();
+	checkChannelNameLayout();
+	checkChannelGlyphMapping();
 	renderChannelGlyphSheet();
 
 	std::printf ("Result    : %s\n", (toybox::test::failures() == 0) ? "all checks passed" : "FAILURES");
