@@ -359,9 +359,10 @@ void testNoteWaveform (void)
 	{
 		peak = std::max (peak, (double) std::abs (sample));
 	}
-	// The chip's numbers are 16-bit and this patch has three modulators at -48 dB, so a real
-	// waveform here is quiet; what is being ruled out is silence, not a low level.
-	check (peak > 0.001, "and they are not all silence");
+	// **Normalised to its own peak**: the loudest sample sits at full scale, whatever the patch's
+	// absolute level was. A carrier at total level 48 is -36 dB by design and would draw as a flat
+	// line, so the renderer scales each note by 1/peak and leaves the ratios alone.
+	check (peak > 0.99, "and they are normalised to full scale");
 	check (peak <= 1.0, "and stay inside the range the window draws");
 
 	// **It has to oscillate at the note, not at the envelope.** A 261 Hz note over this buffer is

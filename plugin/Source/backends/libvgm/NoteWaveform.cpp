@@ -219,6 +219,28 @@ std::vector<float> render (const VoicePatch& patch, double frequencyHz,
 		done += count;
 	}
 
+	// **Normalised to its own peak.** The absolute level a patch produces is meaningless outside the
+	// song: a carrier at total level 48 is -36 dB by design, and a modulator at 0x7F is inaudible.
+	// Drawn at that level the window shows a flat line, and the exported file is a whisper - both
+	// correct and both useless. The shape is what is being shown, so the shape is what fills the
+	// range; the relative levels between the four operators, which is what makes the timbre, are
+	// untouched by a single gain.
+	float peak = 0.0f;
+	for (float sample : out)
+	{
+		peak = std::max (peak, std::abs (sample));
+	}
+
+	if (peak > 1.0e-6f)
+	{
+		const float gain = 1.0f / peak;
+
+		for (auto& sample : out)
+		{
+			sample *= gain;
+		}
+	}
+
 	return out;
 }
 
