@@ -23,8 +23,10 @@ constexpr uint32_t kClock = 7670453;
 */
 constexpr double kSamplesToFloat = 1.0 / 32768.0;
 
-/** How long a note is held before key-off. The release after it gets the rest of the buffer. */
-constexpr double kHoldSeconds = 0.6;
+/** How long a note is held before key-off. The release after it gets the rest of the buffer -
+	with a four-second buffer this leaves a second and a half for the tail, which is long enough to
+	see whether the patch releases slowly or snaps. */
+constexpr double kHoldSeconds = 2.5;
 
 /** One YM2612, alive for the length of one render.
 
@@ -89,9 +91,11 @@ double durationOf (const VoicePatch& patch)
 {
 	(void) patch;
 
-	// An upper bound rather than a prediction. The chip decides how long a note lasts, and
-	// `render()` stops when it goes quiet - this only sizes the buffer it may fill.
-	return 1.5;
+	// **Four seconds, regardless of the patch.** Guessing a length from the envelope was worse than
+	// useless: a driver-built timbre has `DR` at its fastest and does its decay by rewriting `TL`
+	// every frame, so the registers alone say "over in 30 ms" while the note lasts a second. Four
+	// seconds always contains one note, and a note that ends sooner simply leaves the rest quiet.
+	return 4.0;
 }
 
 std::vector<float> render (const VoicePatch& patch, double frequencyHz,
@@ -184,7 +188,6 @@ std::vector<float> render (const VoicePatch& patch, double frequencyHz,
 	std::vector<DEV_SMPL> right (512, 0);
 
 	int done = 0;
-	int quietRun = 0;
 	bool released = false;
 
 	while (done < cap)
@@ -202,21 +205,10 @@ std::vector<float> render (const VoicePatch& patch, double frequencyHz,
 		for (int i = 0; i < count; ++i)
 		{
 			const double value = ((double) left[(size_t) i] + (double) right[(size_t) i]) * 0.5;
-			const auto sample = (float) (value * kSamplesToFloat);
-			out[(size_t) (done + i)] = sample;
-
-			quietRun = (std::abs (sample) < 1.0e-4f) ? quietRun + 1 : 0;
+			out[(size_t) (done + i)] = (float) (value * kSamplesToFloat);
 		}
 
 		done += count;
-
-		// **Stop when the note has ended**, rather than padding every note to the buffer's length:
-		// that is what makes a blip short and a pad long without predicting either.
-		if (released && quietRun > (int) (rate * 0.02))
-		{
-			out.resize ((size_t) done);
-			break;
-		}
 	}
 
 	return out;
