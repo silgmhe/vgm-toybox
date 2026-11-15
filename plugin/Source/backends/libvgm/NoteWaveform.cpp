@@ -245,18 +245,21 @@ std::vector<float> render (const VoicePatch& patch, double frequencyHz,
 		}
 	}
 
-	// **Quantised to the DAC's own resolution, after the normalisation.**
+	// **Quantised to the core's own resolution, not to a number picked by eye.**
 	//
-	// The core hands out fourteen-bit values, and this is a nine-bit converter - the YM2612's DAC is
-	// signed eight bits. Rendering the wider number and drawing it as a float gives a curve that no
-	// chip ever produced: the stair-steps are the sound, and a smooth line is the one thing that
-	// makes the picture stop looking like the machine it came from.
+	// `fmopn` sums four operators into `out_fm`, each about `+/-0x1000`, so its samples carry
+	// fourteen bits of magnitude - that is what `DEV_SMPL` from this core means, and dividing by
+	// 32768 keeps every bit of it. An earlier version quantised to eight, on the reasoning that an
+	// eight-bit *converter* is the chip's signature; but the DAC's width is not the core's, and
+	// throwing away six bits of detail the hardware actually produced is a different sound, not a
+	// more authentic one.
 	//
-	// Eight bits of magnitude, done last so full scale stays full scale: `round(1.0 * 255) / 255` is
-	// exactly 1.0.
+	// The step is `2^13 - 1`, done after the normalisation so full scale stays full scale.
+	constexpr float kQuantiseSteps = 8191.0f;
+
 	for (auto& sample : out)
 	{
-		sample = std::round (sample * 255.0f) / 255.0f;
+		sample = std::round (sample * kQuantiseSteps) / kQuantiseSteps;
 	}
 
 	return out;
