@@ -951,11 +951,17 @@ bool LibvgmTrackPlayer::captureState (playback::ChipStateSnapshot& snapshot) con
 			if (state.voicePatch != nullptr && state.frequency > 0.0f)
 			{
 				NoteWaveEntry& entry = noteWaves[channel];
-				const double hz = (double) state.frequency;
+
+				// **A fixed pitch, not the note that happens to be playing.** Keyed on the playing
+				// note, a timbre that slides or vibratos re-rendered on almost every frame - and at
+				// the chip's own rate that is 424 KB and four milliseconds each time, thrown away as
+				// fast as it was made. What the row shows is the timbre, and a timbre is a shape: it
+				// has no pitch of its own until something plays it.
+				const auto& store = settings::SettingsStore::getInstance ();
+				const double hz = chips::noteWave::frequencyOf (store.getFmFixedNote ());
 
 				// Both lengths are settings, so both belong in the cache key: changing either has to
 				// invalidate every cached note, or the slider would appear to do nothing.
-				const auto& store = settings::SettingsStore::getInstance ();
 				const double sustain = (double) juce::jmax (1, store.getFmSustainMs ()) / 1000.0;
 				const double release = (double) juce::jmax (1, store.getFmReleaseMs ()) / 1000.0;
 				const bool normalise = store.getFmNormalise ();
