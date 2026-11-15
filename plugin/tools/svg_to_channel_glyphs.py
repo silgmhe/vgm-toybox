@@ -382,6 +382,10 @@ namespace toybox::ui
                 "\t{"]
     for _svg, function_name, enum_name in ICONS:
         dispatch.append(f"\tcase ChannelGlyph::{enum_name}:\tdraw_{function_name}Glyph (g, area, colour); break;")
+    # `none` is what familyOf() answers for a kind it does not know: a row with no mark at all,
+    # rather than a stand-in shape. Listed instead of a `default` so the switch stays exhaustive.
+    dispatch.append("\tcase ChannelGlyph::none:\tbreak;")
+
     dispatch.append("\t}")
     dispatch.append("}")
 

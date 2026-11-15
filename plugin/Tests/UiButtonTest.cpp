@@ -522,12 +522,12 @@ void checkChannelGlyphMapping (void)
 	using toybox::ui::ChannelGlyph;
 	using toybox::chips::ChannelKind;
 
-	check (channelGlyphFor (ChannelKind::c140Pcm) == ChannelGlyph::pcm, "a C140 drum is a recording");
-	check (channelGlyphFor (ChannelKind::sccWave) == ChannelGlyph::wavetable, "an SCC table is a cycle");
-	check (channelGlyphFor (ChannelKind::nesDmc) == ChannelGlyph::pcm, "the DMC counts as sampled");
-	check (channelGlyphFor (ChannelKind::vrc7Fm) == ChannelGlyph::fm, "the VRC7 is FM");
-	check (channelGlyphFor (ChannelKind::aySquare) == ChannelGlyph::pulse, "an AY tone is a square");
-	check (channelGlyphFor (ChannelKind::n163Wave) == ChannelGlyph::wavetable, "N163 is a wavetable");
+	check (toybox::chips::familyOf (ChannelKind::c140Pcm) == ChannelGlyph::pcm, "a C140 drum is a recording");
+	check (toybox::chips::familyOf (ChannelKind::sccWave) == ChannelGlyph::wavetable, "an SCC table is a cycle");
+	check (toybox::chips::familyOf (ChannelKind::nesDmc) == ChannelGlyph::pcm, "the DMC counts as sampled");
+	check (toybox::chips::familyOf (ChannelKind::vrc7Fm) == ChannelGlyph::fm, "the VRC7 is FM");
+	check (toybox::chips::familyOf (ChannelKind::aySquare) == ChannelGlyph::pulse, "an AY tone is a square");
+	check (toybox::chips::familyOf (ChannelKind::n163Wave) == ChannelGlyph::wavetable, "N163 is a wavetable");
 }
 
 /**

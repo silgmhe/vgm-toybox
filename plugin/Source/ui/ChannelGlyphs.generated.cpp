@@ -309,6 +309,7 @@ void drawChannelGlyph (juce::Graphics& g, ChannelGlyph glyph,
 	case ChannelGlyph::fm:	draw_fmGlyph (g, area, colour); break;
 	case ChannelGlyph::wavetable:	draw_wavetableGlyph (g, area, colour); break;
 	case ChannelGlyph::pcm:	draw_pcmGlyph (g, area, colour); break;
+	case ChannelGlyph::none:	break;
 	}
 }
 

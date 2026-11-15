@@ -104,7 +104,7 @@ void paintChannelRow (juce::Graphics& g,
 		// and a 1 px line in secondary grey on a light card is invisible, which read as "this row
 		// has no mark" for every channel that was not sounding. The mark keeps one colour of its
 		// own, the same one the mixer strips use.
-		drawChannelGlyph (g, channelGlyphFor (channel.channelKind),
+		drawChannelGlyph (g, chips::familyOf (channel.channelKind),
 						  { (float) mark.getX (), (float) mark.getCentreY () - (float) kMarkSize * 0.5f,
 							(float) kMarkSize, (float) kMarkSize },
 						  theme::primaryText ().withAlpha (0.75f));

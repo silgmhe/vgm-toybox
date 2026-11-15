@@ -356,6 +356,11 @@ constexpr ChannelFamily familyOf (ChannelKind kind);
 
 代价是要把现有两个 switch 的并集整理成一张 41 行的表——半天的活，换掉"以后每次加芯片都要记得两处"。
 
+> **已实施（2026-11-15）**：`chips::familyOf()` + `ChannelFamily`，两个 41 项 switch 合并为一张表；
+> `ChannelGlyph` 成为 `ChannelFamily` 的别名（生成代码零改动）。新增一颗芯片从 5 处（2 处静默）
+> 降到 3 处，且漏项会 `assert`。`vgm_chip_test` 一条断言未改而全部通过——41 项映射被整段重写，
+> 这是它没变的证据。详见 `docs/memo/2026-11-15-classify-the-kind-once.md`。
+
 ### 6.2 新增一条设置，现在要改几处
 
 | # | 位置 |

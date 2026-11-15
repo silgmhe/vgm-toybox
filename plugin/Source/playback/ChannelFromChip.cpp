@@ -10,79 +10,33 @@ namespace toybox::playback
 
 int waveKindForChannelKind (chips::ChannelKind kind)
 {
-	using chips::ChannelKind;
+	using chips::ChannelFamily;
 	using Kind = waveform::Kind;
 
-	switch (kind)
+	// **The one kind whose drawn shape is not its family.** The DMC classifies as `pcm` for the mark -
+	// one bit is still a recording - and draws as `delta`, the staircase it actually makes. Everything
+	// else falls out of `familyOf`, which is what keeps this function from being a second table.
+	if (kind == chips::ChannelKind::nesDmc)
 	{
-		// Square waves. AY's envelope channel is a square wave wearing a hardware volume
-		// envelope, so it draws as a pulse - the envelope decides how loud, not what shape.
-		case ChannelKind::nesPulse:
-		case ChannelKind::gbPulse:
-		case ChannelKind::vrc6Pulse:
-		case ChannelKind::mmc5Pulse:
-		case ChannelKind::aySquare:
-		case ChannelKind::ayEnvelope:
-		case ChannelKind::sn76489Square:
-		case ChannelKind::saaSquare:
-		case ChannelKind::pokeySquare:
-			return (int) Kind::pulse;
-
-		case ChannelKind::nesTriangle:
-			return (int) Kind::triangle;
-
-		// An LFSR: audible, but with no period to name.
-		case ChannelKind::nesNoise:
-		case ChannelKind::gbNoise:
-		case ChannelKind::ayNoise:
-		case ChannelKind::sn76489Noise:
-		case ChannelKind::wsNoise:
-		case ChannelKind::c6280Noise:
-			return (int) Kind::noise;
-
-		case ChannelKind::nesDmc:
-			return (int) Kind::delta;
-
-		case ChannelKind::vrc6Saw:
-			return (int) Kind::saw;
-
-		// Two operators, so the shape is the patch rather than a kind. The four numbers are
-		// packed into `shapeParameter`; see waveform::packFm.
-		case ChannelKind::vrc7Fm:
-		case ChannelKind::fm:
-		case ChannelKind::fmDrum:
-			return (int) Kind::fm;
-
-		// Everything that reads its shape from memory. `stored` says "the backend supplied the
-		// cycle" - and a chip in this list whose decoder cannot hand one over draws a placeholder
-		// rather than a lie (design document, section 3.1).
-		case ChannelKind::gbWave:
-		case ChannelKind::fdsWave:
-		case ChannelKind::n163Wave:
-		case ChannelKind::c6280Wave:
-		case ChannelKind::sccWave:
-		case ChannelKind::x1Wave:
-		case ChannelKind::wavetableWave:
-		case ChannelKind::wsWave:
-		case ChannelKind::rf5cPcm:
-		case ChannelKind::c140Pcm:
-		case ChannelKind::c352Pcm:
-		case ChannelKind::k053260Pcm:
-		case ChannelKind::k054539Pcm:
-		case ChannelKind::qsoundPcm:
-		case ChannelKind::ga20Pcm:
-		case ChannelKind::okimAdpcm:
-		case ChannelKind::segaPcm:
-		case ChannelKind::opnAdpcmB:
-		case ChannelKind::adpcmDrum:
-			return (int) Kind::stored;
-
-		case ChannelKind::unknown:
-			return (int) Kind::none;
+		return (int) Kind::delta;
 	}
 
-	// Only reachable if a decoder reports a kind added to the enum after this switch was written -
-	// which the compiler warns about, so it is a defensive answer rather than an expected one.
+	switch (chips::familyOf (kind))
+	{
+	case ChannelFamily::pulse:		return (int) Kind::pulse;
+	case ChannelFamily::triangle:	return (int) Kind::triangle;
+	case ChannelFamily::saw:		return (int) Kind::saw;
+	case ChannelFamily::noise:		return (int) Kind::noise;
+	case ChannelFamily::fm:			return (int) Kind::fm;
+
+	// Both read their shape out of memory, so both draw as `stored` - a chip whose decoder cannot
+	// hand a cycle over draws a placeholder rather than a lie (design document, section 3.1).
+	case ChannelFamily::wavetable:
+	case ChannelFamily::pcm:		return (int) Kind::stored;
+
+	case ChannelFamily::none:		break;
+	}
+
 	return (int) Kind::none;
 }
 

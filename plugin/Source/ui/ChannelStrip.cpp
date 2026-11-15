@@ -578,7 +578,7 @@ void ChannelStrip::paint (juce::Graphics& g)
 
 	if (hasMark)
 	{
-		drawChannelGlyph (g, channelGlyphFor (channelKind), nameLayout.mark,
+		drawChannelGlyph (g, chips::familyOf (channelKind), nameLayout.mark,
 						  theme::primaryText ().withAlpha (0.75f));
 	}
 
