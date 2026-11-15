@@ -16,7 +16,7 @@ namespace toybox::ui
 {
 namespace
 {
-	constexpr int kNameHeight = 24;	// 18 px type mark + 6 px of air (was 13, name only)
+	constexpr int kNameHeight = 22;	// 20 px type mark + 2 px of air (was 13, name only)
 	constexpr int kKnobHeight = 30;
 	// The M/S buttons share the full strip width; the height is the face (24, as before) plus the
 	// shadow room each button reserves (ButtonPaint.h).
@@ -555,7 +555,7 @@ void ChannelStrip::paint (juce::Graphics& g)
 		drawButtonGlow (g, soloButton.getBounds(), theme::soloGlow(), theme::compactGlowBlur);
 	}
 
-	g.setFont (juce::Font (juce::FontOptions (11.5f, juce::Font::bold)));
+	g.setFont (juce::Font (juce::FontOptions (10.5f, juce::Font::bold)));
 	g.setColour (theme::primaryText());
 
 	// **The name is centred; the mark hangs off its left side.** The name's own centre is what the
@@ -564,10 +564,10 @@ void ChannelStrip::paint (juce::Graphics& g)
 	// the first letter starts.
 	if (channelKind != chips::ChannelKind::unknown)
 	{
-		constexpr int kMarkSize = 18;
+		constexpr int kMarkSize = 16;
 		constexpr int kMarkGap = 4;
 
-		const auto font = juce::Font (juce::FontOptions (11.5f, juce::Font::bold));
+		const auto font = juce::Font (juce::FontOptions (10.5f, juce::Font::bold));
 
 		juce::GlyphArrangement arrangement;
 		arrangement.addLineOfText (font, stripName, 0.0f, 0.0f);
@@ -592,19 +592,9 @@ void ChannelStrip::paint (juce::Graphics& g)
 		}
 		else
 		{
-			// **The centred name already fills the row, so the mark has nowhere to hang.** Dropping it
-			// would be worse than the compromise: the mark goes to the edge and the name takes what is
-			// left, shrinking if it must. An 88 px strip holds about eight characters this way.
-			auto row = nameBounds;
-			const auto mark = row.removeFromLeft (kMarkSize + kMarkGap);
-
-			drawChannelGlyph (g, channelGlyphFor (channelKind),
-							  { (float) mark.getX (), (float) mark.getCentreY () - (float) kMarkSize * 0.5f,
-								(float) kMarkSize, (float) kMarkSize },
-							  theme::primaryText ().withAlpha (0.75f));
-
-			row.removeFromLeft (kMarkGap);
-			g.drawText (stripName, row, juce::Justification::centred, true);
+			// No room beside the mark at this width: the name keeps the whole row (and may shrink),
+			// and the mark stays at the edge rather than being drawn over the text.
+			g.drawText (stripName, nameBounds, juce::Justification::centred, true);
 		}
 	}
 	else
