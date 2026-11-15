@@ -686,24 +686,18 @@ chips::ChannelKind LibvgmTrackPlayer::channelKindFor (playback::DeviceId deviceI
 	}
 
 	// On demand, the way captureState() creates it: enumerateTracks() runs before a block has been
-	// rendered, but every device instance the map needs is already there.
-	if (replayer == nullptr)
-	{
-		replayer = std::make_unique<VgmReplayer> (replayIr, replayDevices);
-	}
-
 	// **The instances appear as their first command is replayed**, so asking at time zero answers
-	// with an empty list. The table is therefore built once, from a replayer pushed a few seconds in
-	// - far enough that every chip has been written at least once - and then rewound, which is where
-	// captureState() expects to find it. One pass, not one per track.
+	// with an empty list. The table is therefore built once, from a replayer of its own pushed a few
+	// seconds in, and thrown away - **not** the one captureState() drives, whose playhead must stay
+	// where the audio thread left it. One pass, not one per track.
 	if (! kindsCollected)
 	{
 		kindsCollected = true;
 
-		const auto reach = (uint32_t) (replayer->tickRate () * 2.0);
-		replayer->advanceTo (reach);
+		VgmReplayer probe (replayIr, replayDevices);
+		probe.advanceTo ((uint32_t) (probe.tickRate () * 2.0));
 
-		for (const auto& instance : replayer->instances ())
+		for (const auto& instance : probe.instances ())
 		{
 			if (instance.device == nullptr)
 			{
@@ -721,8 +715,6 @@ chips::ChannelKind LibvgmTrackPlayer::channelKindFor (playback::DeviceId deviceI
 
 			kindTable[instance.device->id] = std::move (kinds);
 		}
-
-		replayer->rewind ();
 	}
 
 	const auto found = kindTable.find ((uint32_t) deviceId);
