@@ -728,17 +728,7 @@ chips::ChannelKind LibvgmTrackPlayer::channelKindFor (playback::DeviceId deviceI
 
 	const auto found = kindTable.find ({ (uint32_t) deviceId, wantSsg });
 
-	// **A device with no entry was never written.** The replayer builds an instance when its first
-	// command is replayed, so a song whose first seconds leave the SSG alone has no SSG instance to
-	// ask - and the row went without a mark even though the track exists and the chip does too. Its
-	// three channels are squares by definition, which is the one thing worth answering here: a
-	// device's own kind does not depend on whether the song used it.
-	if (found == kindTable.end ())
-	{
-		return wantSsg ? chips::ChannelKind::aySquare : chips::ChannelKind::unknown;
-	}
-
-	if (deviceChannel >= (int) found->second.size ())
+	if (found == kindTable.end () || deviceChannel >= (int) found->second.size ())
 	{
 		return chips::ChannelKind::unknown;
 	}
