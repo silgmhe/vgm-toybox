@@ -177,10 +177,21 @@ namespace visualiser
 	Two seconds holds a note and its tail. The range is deliberately small: past five seconds the
 	strip is showing silence, and below half a second there is no room for a release.
 */
-constexpr int minNoteMs = 500;
-constexpr int maxNoteMs = 5000;
-constexpr int noteStepMs = 50;
-constexpr int defaultNoteMs = 2000;
+constexpr int minSustainMs = 500;
+constexpr int maxSustainMs = 10000;
+constexpr int sustainStepMs = 100;
+constexpr int defaultSustainMs = 2000;
+
+/** **How much tail to keep after the key comes up**, in milliseconds.
+
+	The patch does define a release rate, and its range is the problem: RR = 1 is a four-minute sweep
+	on this chip. A driver never writes that for a note it means to end, so the register describes a
+	sound nobody plays - the length is a preference instead, and this is its default.
+*/
+constexpr int minReleaseMs = 200;
+constexpr int maxReleaseMs = 5000;
+constexpr int releaseStepMs = 50;
+constexpr int defaultReleaseMs = 1000;
 
 /** **The note an export renders at, when the user asks for a fixed one.**
 

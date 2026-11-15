@@ -23,13 +23,7 @@ constexpr uint32_t kClock = 7670453;
 */
 constexpr double kSamplesToFloat = 1.0 / 32768.0;
 
-/** **The length of a rendered note, in seconds.**
-
-	Not derived from the envelope: see the comment where it is used. Four seconds holds a note and a
-	tail without holding the audio thread. It becomes a setting next, and nothing else changes when
-	it does.
-*/
-constexpr double kNoteSeconds = 4.0;
+// The two stage lengths live in chips/VoicePatch.h, where the exporter can reach them too.
 
 /** One YM2612, alive for the length of one render.
 
@@ -94,15 +88,12 @@ double durationOf (const VoicePatch& patch)
 {
 	(void) patch;
 
-	// **Four seconds, regardless of the patch.** Guessing a length from the envelope was worse than
-	// useless: a driver-built timbre has `DR` at its fastest and does its decay by rewriting `TL`
-	// every frame, so the registers alone say "over in 30 ms" while the note lasts a second. Four
-	// seconds always contains one note, and a note that ends sooner simply leaves the rest quiet.
-	return 4.0;
+	// The fallbacks, in the same place `render()` finds them: two stages, held and released.
+	return chips::kDefaultSustainSeconds + chips::kDefaultReleaseSeconds;
 }
 
 std::vector<float> render (const VoicePatch& patch, double frequencyHz,
-						   double seconds, double rate)
+						   double sustainSeconds, double releaseSeconds, double rate)
 {
 	if (patch.regs.empty () || frequencyHz <= 0.0)
 	{
@@ -183,26 +174,26 @@ std::vector<float> render (const VoicePatch& patch, double frequencyHz,
 	core.write (0, 0x28, (uint8_t) (0xF0 | channelKey));
 	core.write (port, (uint8_t) (0xB4 + channelInPort), 0xC0);
 
-	// **A fixed length, not the envelope's, and the envelope is why.**
-	//
-	// The rates are honest and unusable: on this chip a release code of 1 is a sweep of four
-	// minutes, and an attack code of 2 is two seconds - both real, both far longer than any sample a
-	// person would cut, and long enough to stall the audio thread while the buffer fills. A driver
-	// writing cheap music never uses those codes for a note it intends to end; it keys off, or it
-	// rewrites `TL`. Reading the intent out of the registers cannot work, so the length is a number.
-	//
-	// The number is a setting in waiting (`kNoteSeconds`); when it becomes one, a longer note gets a
-	// longer sample and nothing here changes shape.
-	if (seconds <= 0.0)
+	// **Two stages, both given, neither read from the patch.** The registers are honest and
+	// unusable: a release code of 1 is a sweep of four minutes on this chip, and the sustain is a
+	// level the envelope decays *through* rather than holds at, so it has no duration to read at
+	// all. How long to hold and how long a tail to keep are choices - the caller brings them, and
+	// the defaults stand in when it brings nothing.
+	if (sustainSeconds <= 0.0)
 	{
-		seconds = kNoteSeconds;
+		sustainSeconds = chips::kDefaultSustainSeconds;
 	}
 
-	const int cap = (int) std::lround (std::max (0.05, seconds) * rate);
+	if (releaseSeconds <= 0.0)
+	{
+		releaseSeconds = chips::kDefaultReleaseSeconds;
+	}
 
-	// Key off at 70%: long enough to show the sustain, short enough that the release is a visible
-	// part of the picture rather than a cliff at the edge.
-	const int releaseAt = std::min (cap - 1, (int) std::lround (seconds * 0.7 * rate));
+	const double total = sustainSeconds + releaseSeconds;
+	const int cap = (int) std::lround (std::max (0.05, total) * rate);
+
+	// Key off exactly where the sustain ends, so the tail is the release the caller asked for.
+	const int releaseAt = std::min (cap - 1, (int) std::lround (sustainSeconds * rate));
 
 	std::vector<float> out ((size_t) cap, 0.0f);
 	std::vector<DEV_SMPL> left (512, 0);

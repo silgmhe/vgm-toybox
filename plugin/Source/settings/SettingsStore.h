@@ -205,9 +205,13 @@ public:
 	int getKeyboardNoteHoldMs (void) const;
 	void setKeyboardNoteHoldMs (int milliseconds);
 
-	/** How long an FM note is rendered for, in milliseconds. */
-	int getFmNoteMs (void) const;
-	void setFmNoteMs (int milliseconds);
+	/** How long an FM note is held before the key comes up, in milliseconds. */
+	int getFmSustainMs (void) const;
+	void setFmSustainMs (int milliseconds);
+
+	/** How much tail to keep after the key, in milliseconds. */
+	int getFmReleaseMs (void) const;
+	void setFmReleaseMs (int milliseconds);
 
 	/** Whether an export renders at a pinned note rather than the one that was playing. */
 	bool getFmFixedNoteEnabled (void) const;

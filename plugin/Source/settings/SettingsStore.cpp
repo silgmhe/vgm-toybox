@@ -598,15 +598,29 @@ void SettingsStore::setKeyboardNoteHoldMs (int milliseconds)
 	}
 }
 
-int SettingsStore::getFmNoteMs (void) const
+int SettingsStore::getFmSustainMs (void) const
 {
-	const auto* setting = numericSetting ("visualiser.fmNoteMs");
-	return setting != nullptr ? getNumericSetting (*setting) : visualiser::defaultNoteMs;
+	const auto* setting = numericSetting ("visualiser.fmSustainMs");
+	return setting != nullptr ? getNumericSetting (*setting) : visualiser::defaultSustainMs;
 }
 
-void SettingsStore::setFmNoteMs (int milliseconds)
+void SettingsStore::setFmSustainMs (int milliseconds)
 {
-	if (const auto* setting = numericSetting ("visualiser.fmNoteMs"))
+	if (const auto* setting = numericSetting ("visualiser.fmSustainMs"))
+	{
+		setNumericSetting (*setting, milliseconds);
+	}
+}
+
+int SettingsStore::getFmReleaseMs (void) const
+{
+	const auto* setting = numericSetting ("visualiser.fmReleaseMs");
+	return setting != nullptr ? getNumericSetting (*setting) : visualiser::defaultReleaseMs;
+}
+
+void SettingsStore::setFmReleaseMs (int milliseconds)
+{
+	if (const auto* setting = numericSetting ("visualiser.fmReleaseMs"))
 	{
 		setNumericSetting (*setting, milliseconds);
 	}

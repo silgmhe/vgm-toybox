@@ -29,8 +29,14 @@ namespace toybox::chips::noteWave
 	exporter can reach it without including an engine header. */
 constexpr double kRenderRate = chips::kNoteRate;
 
+/** **A note in two stages**: `sustainSeconds` held, then `releaseSeconds` for the tail.
+
+	Both are preferences rather than properties of the patch - see `kDefaultSustainSeconds` for why
+	neither can be read from the registers. A value of 0 in either asks for the default.
+*/
 std::vector<float> render (const chips::VoicePatch& patch, double frequencyHz,
-						   double seconds = 0.0, double rate = 32000.0);
+						   double sustainSeconds = 0.0, double releaseSeconds = 0.0,
+						   double rate = 32000.0);
 
 /** The frequency of a MIDI note, equal temperament with A4 at 440. A convenience for callers
 	that think in notes - the generator itself takes Hz, because that is what a chip reports. */

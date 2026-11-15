@@ -57,6 +57,16 @@ enum class ChipModel : uint8_t
 */
 constexpr double kNoteRate = 8000.0;
 
+/** The two stages of a rendered note, in seconds. Both are settings; these are the fallbacks.
+
+	They are separate because they answer different questions. The sustain is how long the sound is
+	held before the key comes up - a choice, since the chip's "S" is a level and it decays through
+	it rather than holding. The release is the tail after the key, which the patch does define, but
+	its rate code reaches four minutes at RR = 1, so the length is capped here rather than read.
+*/
+constexpr double kDefaultSustainSeconds = 2.0;
+constexpr double kDefaultReleaseSeconds = 1.0;
+
 struct VoicePatch
 {
 	ChipModel model = ChipModel::unknown;

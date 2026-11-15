@@ -282,7 +282,8 @@ language: English
 	"settings.keyboard.noteHold" = "Note-off delay";
 
 "settings.visualiser" = "FM rendering";
-"settings.visualiser.fmNoteLength" = "FM note length";
+"settings.visualiser.fmSustainLength" = "Sustain length";
+"settings.visualiser.fmReleaseLength" = "Release length";
 "settings.visualiser.fmFixedNote" = "Render at note";
 "settings.visualiser.fmFixedNoteHint" = "The pitch an exported FM note is rendered at. Off: the note that was playing.";
 	"settings.keyboard.middleC" = "Middle C is";

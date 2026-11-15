@@ -351,7 +351,7 @@ void testNoteWaveform (void)
 	const double seconds = toybox::chips::noteWave::durationOf (serial);
 	check (seconds > 0.01 && seconds < 20.0, "a note has a plausible length");
 
-	const auto wave = toybox::chips::noteWave::render (serial, toybox::chips::noteWave::frequencyOf (60), seconds, 8000.0);
+	const auto wave = toybox::chips::noteWave::render (serial, toybox::chips::noteWave::frequencyOf (60), seconds, 1.0, 8000.0);
 	check (wave.size() > 100, "the note has samples to draw");
 
 	double peak = 0.0;
@@ -396,7 +396,7 @@ void testNoteWaveform (void)
 	check (middle > 1.0e-4, "and it made sound in the middle, so the tail is not silence by accident");
 
 	// Two algorithms, every other register identical: the drawing must be able to tell them apart.
-	const auto other = toybox::chips::noteWave::render (parallel, toybox::chips::noteWave::frequencyOf (60), seconds, 8000.0);
+	const auto other = toybox::chips::noteWave::render (parallel, toybox::chips::noteWave::frequencyOf (60), seconds, 1.0, 8000.0);
 	bool differs = other.size() != wave.size();
 	if (! differs)
 	{

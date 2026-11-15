@@ -953,19 +953,21 @@ bool LibvgmTrackPlayer::captureState (playback::ChipStateSnapshot& snapshot) con
 				NoteWaveEntry& entry = noteWaves[channel];
 				const double hz = (double) state.frequency;
 
-				// The length is a setting, so it belongs in the cache key: changing it has to
+				// Both lengths are settings, so both belong in the cache key: changing either has to
 				// invalidate every cached note, or the slider would appear to do nothing.
-				const double seconds = (double) juce::jmax (1, settings::SettingsStore::getInstance ()
-															   .getFmNoteMs ()) / 1000.0;
+				const auto& store = settings::SettingsStore::getInstance ();
+				const double sustain = (double) juce::jmax (1, store.getFmSustainMs ()) / 1000.0;
+				const double release = (double) juce::jmax (1, store.getFmReleaseMs ()) / 1000.0;
 
 				if (entry.wave == nullptr || entry.patch != state.voicePatch
-					|| entry.hz != hz || entry.seconds != seconds)
+					|| entry.hz != hz || entry.sustain != sustain || entry.release != release)
 				{
 					entry.patch = state.voicePatch;
 					entry.hz = hz;
-					entry.seconds = seconds;
+					entry.sustain = sustain;
+					entry.release = release;
 					entry.wave = std::make_shared<const std::vector<float>> (
-						chips::noteWave::render (*state.voicePatch, hz, seconds,
+						chips::noteWave::render (*state.voicePatch, hz, sustain, release,
 												 chips::noteWave::kRenderRate));
 				}
 
