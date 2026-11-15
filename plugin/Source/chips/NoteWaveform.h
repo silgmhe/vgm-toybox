@@ -24,6 +24,16 @@ namespace toybox::chips::noteWave
 	key-scaling, and detune is ignored because a few cents do not survive the pixel. It is for
 	drawing. When a voice rig has to make a sound, it uses the real emulator.
 */
+/** **The rate a rendered note is sampled at.**
+
+	Low on purpose: the window draws it at seventy pixels and the exporter writes it as a file, and
+	neither wants 44 100 points for a note whose whole point is its envelope. Shared as a constant
+	because the exporter has to declare the rate the samples were computed at - a file that says
+	44 100 about 8 000-rate samples plays four octaves high and five times too short, which is
+	exactly what the first version of this did.
+*/
+constexpr double kRenderRate = 8000.0;
+
 std::vector<float> render (const chips::VoicePatch& patch, double frequencyHz,
 						   double seconds = 0.0, double rate = 32000.0);
 

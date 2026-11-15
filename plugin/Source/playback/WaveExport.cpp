@@ -2,6 +2,7 @@
 
 #include "WaveShape.h"
 #include "WaveformSource.h"
+#include "chips/NoteWaveform.h"
 
 #include <algorithm>
 #include <chrono>
@@ -327,9 +328,47 @@ namespace
 	}
 }
 
+/** **A note is neither a cycle nor a recording.**
+
+	A cycle is repeated to fill the requested duration and its sample rate is *derived* from its
+	length. A recording carries the rate the chip read it at. A note already has its own duration -
+	one pass of the envelope - so both rules are wrong for it: repeating it plays the attack over
+	and over, and deriving a rate from three thousand samples puts it somewhere near 140 MHz, which
+	is a very short sound at a very high pitch. That was the first version's output.
+
+	So it is written once, at the rate it was computed.
+*/
+bool writeNoteFile (const ChannelState& channel, const std::string& path, int bits)
+{
+	if (channel.noteWaveform == nullptr || channel.noteWaveform->empty ())
+	{
+		return false;
+	}
+
+	const auto depth = (bits == kNativeBits) ? 16 : std::clamp (bits, 1, kMaxBits);
+	auto values = *channel.noteWaveform;
+
+	if (depth > 0)
+	{
+		for (auto& sample : values)
+		{
+			sample = quantiseSample (sample, depth);
+		}
+	}
+
+	return writeFloat32Wav (path, values, (uint32_t) std::lround (chips::noteWave::kRenderRate),
+							std::string ());
+}
+
 bool writeCycleWav (const ChannelState& channel, const std::string& path,
 					ExportMode mode, double seconds, int bits)
 {
+	// A computed note goes out as itself - see writeNoteFile for why the cycle rules do not apply.
+	if (channel.noteWaveform != nullptr && ! channel.noteWaveform->empty ())
+	{
+		return writeNoteFile (channel, path, bits);
+	}
+
 	const auto cycle = cycleOf (channel);
 
 	if (cycle.size () < 2)

@@ -1131,7 +1131,7 @@ ChannelState OpnDecoder::channelState (int channel) const
 			{
 				cache.voicePatch = std::make_shared<const chips::VoicePatch> (std::move (captured));
 				cache.wave = std::make_shared<const std::vector<float>> (
-					noteWave::render (*cache.voicePatch, state.hz, 0.0, 8000.0));
+					noteWave::render (*cache.voicePatch, state.hz, 0.0, noteWave::kRenderRate));
 			}
 			else
 			{
