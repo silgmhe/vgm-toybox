@@ -113,7 +113,6 @@ std::vector<float> render (const VoicePatch& patch, double frequencyHz,
 	const uint16_t first = patch.regs.front ().first;
 	const int channelInPort = (int) (first & 0x03);
 	const int port = (first & 0x100) ? 1 : 0;
-	const int chipChannel = port * 3 + channelInPort;
 
 	// **The three registers a bare core needs before it will make a sound.** A freshly started
 	// YM2612 has the LFO and the timers in whatever state the core's constructor leaves them, and
@@ -153,9 +152,12 @@ std::vector<float> render (const VoicePatch& patch, double frequencyHz,
 	core.write (port, (uint8_t) (0xA4 + channelInPort),
 				(uint8_t) (((fnumBits >> 8) & 0x07) | (block << 3)));
 
-	// Key on all four operators. The key register lives on the first port and carries the
-	// chip-wide channel number in its low three bits.
-	core.write (0, 0x28, (uint8_t) (0xF0 | chipChannel));
+	// **Key on all four operators.** 0x28 does not carry a channel number from 0 to 5: it carries
+	// `(bank << 2) | slot`, so channels 3-5 are `0xF4`, `0xF5`, `0xF6` rather than `0xF3`, `0xF4`,
+	// `0xF5`. Writing the flat number keyed the wrong channel for everything past the second bank,
+	// which is why half the rows never moved.
+	const auto keyByte = (uint8_t) (0xF0 | (port << 2) | channelInPort);
+	core.write (0, 0x28, keyByte);
 
 	const int cap = (int) std::lround (std::max (0.05, seconds) * rate);
 	const int releaseAt = std::min (cap - 1, (int) std::lround (kHoldSeconds * rate));
@@ -172,7 +174,7 @@ std::vector<float> render (const VoicePatch& patch, double frequencyHz,
 	{
 		if (! released && done >= releaseAt)
 		{
-			core.write (0, 0x28, (uint8_t) chipChannel);
+			core.write (0, 0x28, (uint8_t) ((port << 2) | channelInPort));
 			released = true;
 		}
 
