@@ -15,6 +15,30 @@ namespace
 /** The YM2612's clock, the Mega Drive's - the same one the decoder's note table assumes. */
 constexpr uint32_t kClock = 7670453;
 
+/** **The core that renders a model.** Not a property of the patch - the patch only names the chip -
+	so it lives with the other translation from a model to an emulator concept, and `fmOutputBits`
+	beside it in `chips/VoicePatch.h` states how wide each of these actually accumulates.
+
+	`unknown` falls back to the OPN: it is the chip this project has the most of, and a renderer that
+	refuses to draw anything is worse than one that draws the right shape at the wrong width.
+*/
+constexpr DEV_ID deviceIdFor (chips::ChipModel model)
+{
+	switch (model)
+	{
+	case chips::ChipModel::ym2608:		return DEVID_YM2608;
+	case chips::ChipModel::ym2610:		return DEVID_YM2610;
+	case chips::ChipModel::ym2151:		return DEVID_YM2151;
+	case chips::ChipModel::ym3812:		return DEVID_YM3812;
+
+	case chips::ChipModel::ym2612:
+	case chips::ChipModel::vrc7:
+	case chips::ChipModel::unknown:	break;
+	}
+
+	return DEVID_YM2612;
+}
+
 /** **Full scale for a `DEV_SMPL` straight from a chip core.**
 
 	Sixteen bits, not thirty-two: `VGMPlayer` shifts its output left by eight before handing it on,
@@ -37,7 +61,7 @@ struct Core
 	DEVFUNC_WRITE_A8D8 writeFn = nullptr;
 	bool ready = false;
 
-	explicit Core (double rate)
+	explicit Core (double rate, chips::ChipModel model)
 	{
 		DEV_GEN_CFG config {};
 		config.emuCore = 0;					// the default core: the one the plugin plays
@@ -46,7 +70,7 @@ struct Core
 		config.clock = kClock;
 		config.smplRate = (uint32_t) std::lround (rate);
 
-		ready = SndEmu_Start (DEVID_YM2612, &config, &info) == EERR_OK;
+		ready = SndEmu_Start (deviceIdFor (model), &config, &info) == EERR_OK;
 
 		if (ready)
 		{
@@ -100,7 +124,7 @@ std::vector<float> render (const VoicePatch& patch, double frequencyHz,
 		return {};
 	}
 
-	Core core (rate);
+	Core core (rate, patch.model);
 	if (! core.ready)
 	{
 		return {};
@@ -255,11 +279,12 @@ std::vector<float> render (const VoicePatch& patch, double frequencyHz,
 	// more authentic one.
 	//
 	// The step is `2^13 - 1`, done after the normalisation so full scale stays full scale.
-	constexpr float kQuantiseSteps = 8191.0f;
+	const int bits = chips::fmOutputBits (patch.model);
+	const float quantiseSteps = (float) ((1 << (std::clamp (bits, 2, 16) - 1)) - 1);
 
 	for (auto& sample : out)
 	{
-		sample = std::round (sample * kQuantiseSteps) / kQuantiseSteps;
+		sample = std::round (sample * quantiseSteps) / quantiseSteps;
 	}
 
 	return out;

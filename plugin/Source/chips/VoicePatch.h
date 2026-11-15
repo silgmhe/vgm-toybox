@@ -67,6 +67,35 @@ constexpr double kNoteRate = 8000.0;
 constexpr double kDefaultSustainSeconds = 2.0;
 constexpr double kDefaultReleaseSeconds = 1.0;
 
+/** **How many bits of magnitude a chip's FM core actually produces.**
+
+	Not the DAC's width. An eight-bit converter fed by a fourteen-bit sum still leaves all fourteen
+	bits in `DEV_SMPL`, and quantising to the converter discards detail the emulator produces - a
+	different sound, not a more authentic one.
+
+	The figures follow each core's own accumulation rather than a datasheet: `fmopn` sums four
+	operators of about `+/-0x1000` into `out_fm`, which is fourteen bits; the OPL and OPM cores
+	accumulate wider and use more of `DEV_SMPL`'s sixteen. Adding a chip means adding a line here
+	next to the model, which is why the table sits beside the enum instead of inside a renderer.
+*/
+constexpr int fmOutputBits (ChipModel model)
+{
+	switch (model)
+	{
+	case ChipModel::ym2612:
+	case ChipModel::ym2608:
+	case ChipModel::ym2610:		return 14;		// fmopn, one core for the whole OPN family
+
+	case ChipModel::ym2151:						// fmopm
+	case ChipModel::ym3812:						// fmopl
+	case ChipModel::vrc7:		return 16;
+
+	case ChipModel::unknown:	break;
+	}
+
+	return 16;
+}
+
 struct VoicePatch
 {
 	ChipModel model = ChipModel::unknown;
