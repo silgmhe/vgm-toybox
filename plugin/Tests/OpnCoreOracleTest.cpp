@@ -434,6 +434,16 @@ void testNoteWaveformInState (void)
 	{
 		check (state.noteWaveform->size() > 100,
 			   "the note has more than one cycle in it");
+
+		// **Not a flat line.** The first version reported 0 Hz here - `state.hz` was assigned past
+		// this branch's `return` - so a sine at zero hertz came out as a row of zeros, which is
+		// exactly what the window drew. Peak is the check that a pitch reached the generator.
+		double peak = 0.0;
+		for (float sample : *state.noteWaveform)
+		{
+			peak = std::max (peak, (double) std::abs (sample));
+		}
+		check (peak > 0.01, "and it is not a flat line: a pitch reached the generator");
 	}
 
 	// A second ask with nothing changed hands back the same buffer: the cache is what keeps the

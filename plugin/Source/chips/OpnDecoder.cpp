@@ -762,6 +762,8 @@ OpnDecoder::~OpnDecoder() = default;
 
 void OpnDecoder::reset (const ChipConfig& config)
 {
+	impl->clock = config.clockHz > 0 ? (double) config.clockHz : 7670453.0;
+
 	[[maybe_unused]] const uint32_t clock = config.clockHz;
 	[[maybe_unused]] const double sampleRate = config.timeBaseHz;
 	const Variant variant = impl->variant;
@@ -1099,9 +1101,23 @@ ChannelState OpnDecoder::channelState (int channel) const
 		state.fmFeedback = voice.feedback;
 		state.fmWaveform = 0;
 
+		// **The pitch this branch used to leave at zero.** `state.hz` was assigned further down,
+		// past this branch's `return`, so every FM row reported 0 Hz - which is why the note
+		// waveform came out as a flat line: a sine at zero hertz does not move.
+		const int octave = std::clamp (voice.block, 0, 7);
+		state.hz = (double) voice.fnum * impl->clock
+				   / (144.0 * std::exp2 (20.0 - (double) octave));
+
 		// **The whole note, so the window can draw more than one cycle.** Recomputed only when
 		// the note or the patch changed: eight thousand points at 8 kHz is about a third of a
 		// millisecond, which is nothing once and far too much thirteen times a frame.
+		// **No pitch, no work.** While a song is being scanned there is no note yet, and
+		// rendering eight thousand points for it would be spent before the user sees anything.
+		if (state.hz <= 0.0)
+		{
+			return state;
+		}
+
 		Impl::NoteCache& cache = impl->noteCache[channel];
 
 		if (! cache.valid || cache.note != (int) state.hz || cache.version != voice.patchVersion)
