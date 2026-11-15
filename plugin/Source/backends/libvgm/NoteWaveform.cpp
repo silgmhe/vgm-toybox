@@ -180,6 +180,14 @@ std::vector<float> render (const VoicePatch& patch, double frequencyHz,
 	core.write (0, 0x28, (uint8_t) (0xF0 | channelKey));
 	core.write (port, (uint8_t) (0xB4 + channelInPort), 0xC0);
 
+	// **A caller that passes zero asks for `durationOf()`.** This paragraph went missing in an edit
+	// and the clamp below turned the zero into its 50 ms floor - which is precisely the length every
+	// exported note came out at, and why `durationOf`'s four seconds were never reached.
+	if (seconds <= 0.0)
+	{
+		seconds = durationOf (patch);
+	}
+
 	const int cap = (int) std::lround (std::max (0.05, seconds) * rate);
 	const int releaseAt = std::min (cap - 1, (int) std::lround (kHoldSeconds * rate));
 
