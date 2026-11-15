@@ -1,10 +1,11 @@
 #pragma once
 
+#include <cmath>
 #include <vector>
 
-#include "chips/VoicePatch.h"
+#include "VoicePatch.h"
 
-namespace toybox::playback::noteWave
+namespace toybox::chips::noteWave
 {
 
 /** **One note, from key-on to silence**, as samples in -1..1.
@@ -23,10 +24,17 @@ namespace toybox::playback::noteWave
 	key-scaling, and detune is ignored because a few cents do not survive the pixel. It is for
 	drawing. When a voice rig has to make a sound, it uses the real emulator.
 */
-std::vector<float> render (const chips::VoicePatch& patch, int midiNote,
+std::vector<float> render (const chips::VoicePatch& patch, double frequencyHz,
 						   double seconds = 0.0, double rate = 32000.0);
 
-/** How long the envelope takes for this patch and note, in seconds. */
-double durationOf (const chips::VoicePatch& patch, int midiNote);
+/** The frequency of a MIDI note, equal temperament with A4 at 440. A convenience for callers
+	that think in notes - the generator itself takes Hz, because that is what a chip reports. */
+inline double frequencyOf (int midiNote)
+{
+	return 440.0 * std::pow (2.0, ((double) midiNote - 69.0) / 12.0);
+}
 
-} // namespace toybox::playback::noteWave
+/** How long the envelope takes for this patch, in seconds. */
+double durationOf (const chips::VoicePatch& patch);
+
+} // namespace toybox::chips::noteWave

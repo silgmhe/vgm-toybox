@@ -6,6 +6,7 @@
 #include <vector>
 
 #include "chips/ChipTypes.h"
+#include "chips/VoicePatch.h"
 
 namespace toybox::playback
 {
@@ -79,6 +80,22 @@ struct ChannelState
 		to change what a decoder believes about its own sample.
 	*/
 	std::shared_ptr<const std::vector<float>> wave;
+
+	/** **One note from key-on to silence**, for a voice that has to be computed rather than read.
+
+		Separate from `wave` on purpose. `wave` is one cycle of a table, or - with `sampleRate` - a
+		recording; this is neither. It is what a panel draws to show the envelope of a single note,
+		and what the exporter writes when someone drags an FM channel out.
+
+		`nullptr` for every chip with nothing to compute, which is most of them.
+	*/
+	std::shared_ptr<const std::vector<float>> noteWaveform;
+
+	/** **The registers behind this channel's voice**, shared rather than copied: 29 bytes on
+		every channel on every frame is not what a panel needs - it needs an identity that changes
+		when the patch does.
+	*/
+	std::shared_ptr<const chips::VoicePatch> voicePatch;
 
 	/** The wave as a reference, empty when the channel has none.
 

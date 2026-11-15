@@ -1,5 +1,7 @@
 #include "OpnDecoder.h"
 
+#include "NoteWaveform.h"
+
 #include <algorithm>
 #include <cassert>
 #include <cmath>
@@ -184,6 +186,10 @@ struct OpnDecoder::Impl
 		*/
 		uint8_t opPatch[7][4] = {};
 		uint8_t feedbackAlgorithm = 0;
+
+		/** Bumped by every write that touches the two above, so the note-waveform cache can tell
+			whether it is still current without comparing 29 bytes. */
+		uint32_t patchVersion = 0;
 	};
 
 	/** One one-shot channel: the write starts it, its own end time stops it. `active` keeps the
@@ -260,9 +266,25 @@ struct OpnDecoder::Impl
 		bool hasAdpcm (void) const { return adpcmA > 0 || adpcmB; }
 	};
 
+	/** **One channel's note waveform, cached.**
+
+		The panels ask for it every frame, and rendering eight thousand points of four-operator FM
+		per frame per channel would spend more time drawing than the song spends playing. Keyed on
+		the note and the patch version, which is everything `render()` reads.
+	*/
+	struct NoteCache
+	{
+		int note = -2;				// -2: never filled, and not a note either
+		uint32_t version = 0;
+		bool valid = false;
+		std::shared_ptr<const chips::VoicePatch> voicePatch;
+		std::shared_ptr<const std::vector<float>> wave;
+	};
+
 	Variant variant = Variant::ym2612;
 	Layout layout;
 	Channel channels[kFmVoices];
+	NoteCache noteCache[kFmVoices];
 	Pulse adpcmA[kAdpcmAVoices];
 	AdpcmA adpcmARegs[kAdpcmAVoices];
 	std::vector<uint8_t> adpcmARom;
@@ -941,6 +963,7 @@ void OpnDecoder::write (const RegisterWrite& write)
 		const int op = (int) ((reg >> 2) & 0x03);
 		impl->channels[channel].multiple[op] = (int) (write.value & 0x0F);
 		impl->channels[channel].opPatch[0][op] = (uint8_t) write.value;
+		++impl->channels[channel].patchVersion;
 		return;
 	}
 
@@ -960,6 +983,7 @@ void OpnDecoder::write (const RegisterWrite& write)
 		const int op = (int) ((reg >> 2) & 0x03);
 		impl->channels[channel].totalLevel[op] = write.value & 0x7F;
 		impl->channels[channel].opPatch[1][op] = (uint8_t) write.value;
+		++impl->channels[channel].patchVersion;
 		return;
 	}
 
@@ -984,6 +1008,7 @@ void OpnDecoder::write (const RegisterWrite& write)
 		}
 
 		impl->channels[channel].opPatch[(reg >> 4) - 3][(reg >> 2) & 0x03] = (uint8_t) write.value;
+		++impl->channels[channel].patchVersion;
 		return;
 	}
 
@@ -1021,6 +1046,7 @@ void OpnDecoder::write (const RegisterWrite& write)
 			state.algorithm = (int) (write.value & 0x07);
 			state.feedback = (int) ((write.value >> 3) & 0x07);
 			state.feedbackAlgorithm = (uint8_t) write.value;
+			++state.patchVersion;
 		}
 	}
 }
@@ -1072,6 +1098,35 @@ ChannelState OpnDecoder::channelState (int channel) const
 		state.fmLevel = (voice.totalLevel[1] * 63) / 127;
 		state.fmFeedback = voice.feedback;
 		state.fmWaveform = 0;
+
+		// **The whole note, so the window can draw more than one cycle.** Recomputed only when
+		// the note or the patch changed: eight thousand points at 8 kHz is about a third of a
+		// millisecond, which is nothing once and far too much thirteen times a frame.
+		Impl::NoteCache& cache = impl->noteCache[channel];
+
+		if (! cache.valid || cache.note != (int) state.hz || cache.version != voice.patchVersion)
+		{
+			cache.note = (int) state.hz;
+			cache.version = voice.patchVersion;
+			cache.valid = true;
+
+			chips::VoicePatch captured;
+			if (capturePatch (channel, captured))
+			{
+				cache.voicePatch = std::make_shared<const chips::VoicePatch> (std::move (captured));
+				cache.wave = std::make_shared<const std::vector<float>> (
+					noteWave::render (*cache.voicePatch, state.hz, 0.0, 8000.0));
+			}
+			else
+			{
+				cache.voicePatch = nullptr;
+				cache.wave = nullptr;
+			}
+		}
+
+		state.voicePatch = cache.voicePatch;
+		state.noteWaveform = cache.wave;
+
 		return state;
 	}
 

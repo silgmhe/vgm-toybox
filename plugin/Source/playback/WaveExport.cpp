@@ -1,6 +1,7 @@
 #include "WaveExport.h"
 
 #include "WaveShape.h"
+#include "WaveformSource.h"
 
 #include <algorithm>
 #include <chrono>
@@ -120,12 +121,10 @@ namespace
 
 std::vector<float> cycleOf (const ChannelState& channel)
 {
-	if (channel.waveValues ().size () >= 2)
-	{
-		return channel.waveValues ();
-	}
-
-	return waveform::cycleFor (channel.waveKind, channel.duty, channel.shapeParameter);
+	// **One function, two callers** - see WaveformSource.h. The window and this exporter must never
+	// disagree about what the channel's waveform is, and the way to guarantee that is to ask the
+	// same question in the same place rather than to keep two answers in step.
+	return waveformOf (channel);
 }
 
 bool hasPeriodicShape (const ChannelState& channel)

@@ -28,7 +28,7 @@
 
 #include "TestSettings.h"
 #include "chips/OpnDecoder.h"
-#include "playback/NoteWaveform.h"
+#include "chips/NoteWaveform.h"
 
 namespace
 {
@@ -348,10 +348,10 @@ void testNoteWaveform (void)
 	const auto serial = makePatch (0);
 	const auto parallel = makePatch (7);
 
-	const double seconds = toybox::playback::noteWave::durationOf (serial, 60);
+	const double seconds = toybox::chips::noteWave::durationOf (serial);
 	check (seconds > 0.01 && seconds < 20.0, "a note has a plausible length");
 
-	const auto wave = toybox::playback::noteWave::render (serial, 60, seconds, 8000.0);
+	const auto wave = toybox::chips::noteWave::render (serial, toybox::chips::noteWave::frequencyOf (60), seconds, 8000.0);
 	check (wave.size() > 100, "the note has samples to draw");
 
 	double peak = 0.0;
@@ -379,7 +379,7 @@ void testNoteWaveform (void)
 	check (middle > 0.0, "and it made sound in the middle, so the tail is not silence by accident");
 
 	// Two algorithms, every other register identical: the drawing must be able to tell them apart.
-	const auto other = toybox::playback::noteWave::render (parallel, 60, seconds, 8000.0);
+	const auto other = toybox::chips::noteWave::render (parallel, toybox::chips::noteWave::frequencyOf (60), seconds, 8000.0);
 	bool differs = other.size() != wave.size();
 	if (! differs)
 	{
@@ -393,6 +393,54 @@ void testNoteWaveform (void)
 		}
 	}
 	check (differs, "algorithm 0 and algorithm 7 do not draw the same waveform");
+}
+
+/** **The decoder hands a whole note to the panel**, not just the four numbers it used to.
+
+	The keyboard's window cannot be checked in this harness - it needs real playback to fill - so
+	the contract is checked where it is made: after a key-on, `channelState()` carries a patch and
+	a waveform with more than one cycle in it.
+*/
+void testNoteWaveformInState (void)
+{
+	OpnDecoder decoder;
+	decoder.reset (toybox::chips::ChipConfig { kClock, (double) kRate });
+
+	for (int op = 0; op < 4; ++op)
+	{
+		const uint8_t base = (uint8_t) (op << 2);
+		decoder.write ({ toybox::chips::kNoDevice, (uint8_t) (0x30 | base), 0x01, 0, 0 });
+		decoder.write ({ toybox::chips::kNoDevice, (uint8_t) (0x40 | base),
+						(uint16_t) (op == 3 ? 0x00 : 0x7F), 0, 0 });
+		decoder.write ({ toybox::chips::kNoDevice, (uint8_t) (0x50 | base), 0x1A, 0, 0 });
+		decoder.write ({ toybox::chips::kNoDevice, (uint8_t) (0x60 | base), 0x08, 0, 0 });
+		decoder.write ({ toybox::chips::kNoDevice, (uint8_t) (0x70 | base), 0x1F, 0, 0 });
+		decoder.write ({ toybox::chips::kNoDevice, (uint8_t) (0x80 | base), 0x0A, 0, 0 });
+	}
+
+	decoder.write ({ toybox::chips::kNoDevice, 0xA0, 0x1D, 0, 0 });
+	decoder.write ({ toybox::chips::kNoDevice, 0xA4, 0x22, 0, 0 });		// block 4, fnum high
+	decoder.write ({ toybox::chips::kNoDevice, 0xB0, 0x07, 0, 0 });
+	decoder.write ({ toybox::chips::kNoDevice, 0x28, 0xF0, 0, 0 });		// key on, all four
+
+	const auto state = decoder.channelState (0);
+
+	// `hz` is not asserted here: it is the note extractor's answer and its own tests cover it. What
+	// this one is about is the two new fields.
+	check (state.voicePatch != nullptr, "the patch behind the channel is handed out");
+	check (state.noteWaveform != nullptr, "and a whole note, not just a cycle");
+
+	if (state.noteWaveform != nullptr)
+	{
+		check (state.noteWaveform->size() > 100,
+			   "the note has more than one cycle in it");
+	}
+
+	// A second ask with nothing changed hands back the same buffer: the cache is what keeps the
+	// panels from rendering eight thousand points thirteen times a frame.
+	const auto again = decoder.channelState (0);
+	check (again.noteWaveform.get() == state.noteWaveform.get(),
+		   "the same patch and note reuse the same waveform");
 }
 
 int main()
@@ -450,6 +498,7 @@ int main()
 
 	testPatchCapture();
 	testNoteWaveform();
+	testNoteWaveformInState();
 
 	Tally tally;
 

@@ -53,6 +53,8 @@ ChannelState channelFromChip (const chips::ChannelState& chipState,
 	state.waveKind = hints.waveKind;
 	state.duty = hints.duty;
 	state.channelKind = hints.channelKind;
+	state.noteWaveform = chipState.noteWaveform;
+	state.voicePatch = chipState.voicePatch;
 
 	// Both travel as they are: the decoder already owns the wave behind a shared pointer, so this
 	// is a reference count rather than a copy, and a rate is a value the chip states.

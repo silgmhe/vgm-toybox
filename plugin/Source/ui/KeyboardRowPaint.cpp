@@ -362,16 +362,23 @@ void paintWave (juce::Graphics& g, juce::Rectangle<int> area,
 	// given. The one derived from the registers is a function of three values and the window's
 	// size - and it was being rebuilt thirty times a second anyway: a vector copy, a fresh
 	// juce::Path and a stroke, for a line that had not moved.
-	if (! channel.waveValues ().empty ())
+	// **A computed note draws the way a recording does** - one column per slice, filled - because
+	// it has the thing a cycle does not: a beginning and an end. FM channels used to fall through
+	// to the synthetic cycle at the bottom of this function and show one period on loop, so the
+	// envelope - the whole point of the shape - was never visible.
+	const bool wholeNote = channel.noteWaveform != nullptr && ! channel.noteWaveform->empty ();
+
+	if (wholeNote || ! channel.waveValues ().empty ())
 	{
-		if (channel.waveValues ().size () < 2)
+		const auto& values = wholeNote ? *channel.noteWaveform : channel.waveValues ();
+
+		if (values.size () < 2)
 		{
 			paintNoCycle (g, area);
 			return;
 		}
 
 		juce::Path path;
-		const auto& values = channel.waveValues ();
 
 		g.setColour (theme::accent ().withAlpha (channel.active ? 0.9f : 0.35f));
 
@@ -389,7 +396,7 @@ void paintWave (juce::Graphics& g, juce::Rectangle<int> area,
 		// sample's shape from attack to decay.
 		//
 		// Neither question alone covers both cases, which is why both are asked.
-		const bool recorded = channel.sampleRate > 0.0f;
+		const bool recorded = channel.sampleRate > 0.0f || wholeNote;
 
 		if (recorded && values.size () > kDisplayPoints)
 		{

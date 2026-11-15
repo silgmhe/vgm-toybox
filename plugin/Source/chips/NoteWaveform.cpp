@@ -1,9 +1,9 @@
-#include "playback/NoteWaveform.h"
+#include "NoteWaveform.h"
 
 #include <algorithm>
 #include <cmath>
 
-namespace toybox::playback::noteWave
+namespace toybox::chips::noteWave
 {
 namespace
 {
@@ -173,10 +173,8 @@ void advanceEnvelope (Operator& op, bool releasing, double sinceOn, double dt)
 
 } // namespace
 
-double durationOf (const chips::VoicePatch& patch, int midiNote)
+double durationOf (const chips::VoicePatch& patch)
 {
-	(void) midiNote;
-
 	Operator ops[4];
 	if (! readOperators (patch, ops))
 	{
@@ -197,7 +195,7 @@ double durationOf (const chips::VoicePatch& patch, int midiNote)
 	return longest;
 }
 
-std::vector<float> render (const chips::VoicePatch& patch, int midiNote,
+std::vector<float> render (const chips::VoicePatch& patch, double frequencyHz,
 						   double seconds, double rate)
 {
 	Operator ops[4];
@@ -208,13 +206,10 @@ std::vector<float> render (const chips::VoicePatch& patch, int midiNote,
 
 	if (seconds <= 0.0)
 	{
-		seconds = durationOf (patch, midiNote);
+		seconds = durationOf (patch);
 	}
 
 	const int count = std::max (2, (int) std::lround (seconds * rate));
-
-	// The note's frequency from its MIDI number, equal temperament with A4 at 440.
-	const double frequency = 440.0 * std::pow (2.0, ((double) midiNote - 69.0) / 12.0);
 
 	const int algorithm = (int) (regAt (patch, (uint8_t) (0xB0 | (patch.regs.empty () ? 0 : (patch.regs.front ().first & 0x03)))) & 0x07);
 	const Algorithm& wiring = kAlgorithms[std::clamp (algorithm, 0, 7)];
@@ -264,7 +259,7 @@ std::vector<float> render (const chips::VoicePatch& patch, int midiNote,
 				modulation = source.envelope * std::sin (source.phase) * kTwoPi;
 			}
 
-			o.phase += kTwoPi * frequency * o.multiple * dt;
+			o.phase += kTwoPi * frequencyHz * o.multiple * dt;
 
 			const double value = o.envelope * o.level * std::sin (o.phase + modulation);
 
@@ -280,4 +275,4 @@ std::vector<float> render (const chips::VoicePatch& patch, int midiNote,
 	return out;
 }
 
-} // namespace toybox::playback::noteWave
+} // namespace toybox::chips::noteWave

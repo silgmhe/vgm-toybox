@@ -5,6 +5,8 @@
 #include <memory>
 #include <vector>
 
+#include "VoicePatch.h"
+
 namespace toybox::chips
 {
 
@@ -160,6 +162,18 @@ struct ChannelState
 		so it has to go down the shape path even though the number beside it looks like a sample's.
 	*/
 	bool tableWave = false;
+
+	/** **One note from key-on to silence**, for a voice that has to be computed rather than read.
+
+		Separate from the one-cycle `wave` a wavetable reports: this is the whole envelope of a
+		single note, which is what a panel draws and what a drag-export writes. Null for every
+		chip with nothing to compute.
+	*/
+	std::shared_ptr<const std::vector<float>> noteWaveform;
+
+	/** The registers behind this channel's voice, for a caller that wants to replay it. */
+	std::shared_ptr<const VoicePatch> voicePatch;
+
 	uint32_t period = 0;		// chip-native period / F-number (0 = silence)
 	int block = 0;					// FM octave
 	int volume = 0;					// 0..15, envelope already applied
