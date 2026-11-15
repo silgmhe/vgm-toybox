@@ -677,7 +677,8 @@ void LibvgmTrackPlayer::Ledger::buildNotes (const midi::SongIr& ir)
 	}
 }
 
-chips::ChannelKind LibvgmTrackPlayer::channelKindFor (playback::DeviceId deviceId, int deviceChannel) const
+chips::ChannelKind LibvgmTrackPlayer::channelKindFor (playback::DeviceId deviceId, uint16_t sourceType,
+													   int deviceChannel) const
 {
 	// A whole-device row has no single channel, so no single kind either.
 	if (deviceChannel < 0 || replayIr == nullptr || replayDevices.empty ())
@@ -705,6 +706,8 @@ chips::ChannelKind LibvgmTrackPlayer::channelKindFor (playback::DeviceId deviceI
 			}
 
 			const int count = instance.decoder->channelCount ();
+			const bool isSsg = (instance.device->type == DEVID_YM2610 && count == 3);
+
 			std::vector<chips::ChannelKind> kinds;
 			kinds.reserve ((size_t) juce::jmax (0, count));
 
@@ -713,11 +716,17 @@ chips::ChannelKind LibvgmTrackPlayer::channelKindFor (playback::DeviceId deviceI
 				kinds.push_back (instance.decoder->channelKind (channel));
 			}
 
-			kindTable[instance.device->id] = std::move (kinds);
+			kindTable[{ instance.device->id, isSsg }] = std::move (kinds);
 		}
 	}
 
-	const auto found = kindTable.find ((uint32_t) deviceId);
+	// **The YM2610 answers with two instances under one handle.** Its SSG is a child device that
+	// libvgm reports with the parent's id *and* type, so the handle cannot separate them - three
+	// channels is what does, the same call captureState() makes at `voiceType`. A track whose
+	// `sourceDeviceType` is the AY is the SSG one.
+	const bool wantSsg = (sourceType == DEVID_AY8910);
+
+	const auto found = kindTable.find ({ (uint32_t) deviceId, wantSsg });
 
 	if (found == kindTable.end () || deviceChannel >= (int) found->second.size ())
 	{

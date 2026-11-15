@@ -420,7 +420,8 @@ bool LibvgmSongInstance::prepare (double hostSampleRate, int newMaxBlockSize, ju
 	// is free text from the driver, so the type has to come from the decoder.
 	for (auto& track : tracks)
 	{
-		track.channelKind = probe->channelKindFor (track.sourceDeviceId, track.deviceChannel);
+		track.channelKind = probe->channelKindFor (track.sourceDeviceId, track.sourceDeviceType,
+												   track.deviceChannel);
 	}
 
 	refreshTimelineFacts();
