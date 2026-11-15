@@ -1,11 +1,8 @@
 #pragma once
 
-#include <optional>
-
 #include <juce_graphics/juce_graphics.h>
 
 #include "chips/ChipTypes.h"
-#include "playback/ChipState.h"
 
 namespace toybox::ui
 {
@@ -111,34 +108,6 @@ inline ChannelGlyph channelGlyphFor (chips::ChannelKind kind)
 	}
 
 	return ChannelGlyph::pulse;		// unreachable; the switch is exhaustive
-}
-
-/** The same seven, read from the **per-frame channel state** instead of the static kind.
-
-	The keyboard rows are built from `ChannelState`, which carries the eight-value `waveKind` rather
-	than the 41-value `ChannelKind` - one value short of what the marks need, because `stored` covers
-	both. `tableWave` closes that gap: it says whether `wave` is one cycle of a table read out of
-	memory or a recording being played back, which is exactly the wavetable/sample difference this
-	enum exists to show. Without it a C140 drum drew as a wavetable.
-
-	`nullopt` when the channel generates nothing drawable (`waveKind == 0`).
-*/
-inline std::optional<ChannelGlyph> channelGlyphFor (const playback::ChannelState& state)
-{
-	switch (state.waveKind)
-	{
-	case 1:		// stored: a table, or a recording
-		return state.tableWave ? ChannelGlyph::wavetable : ChannelGlyph::pcm;
-	case 2:  return ChannelGlyph::pulse;
-	case 3:  return ChannelGlyph::triangle;
-	case 4:  return ChannelGlyph::noise;
-	case 5:  return ChannelGlyph::pcm;		// delta: the NES DMC counts as sampled
-	case 6:  return ChannelGlyph::saw;
-	case 7:  return ChannelGlyph::fm;
-	case 0:  break;
-	}
-
-	return std::nullopt;
 }
 
 /** Draws `glyph` inside `area`, stroked in `colour`.

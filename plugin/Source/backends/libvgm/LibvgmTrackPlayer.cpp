@@ -884,6 +884,7 @@ bool LibvgmTrackPlayer::captureState (playback::ChipStateSnapshot& snapshot) con
 
 			playback::ChipShapeHints hints;
 			hints.waveKind = playback::waveKindForChannelKind (kind);
+			hints.channelKind = kind;
 			hints.isDrum = instance.decoder->isDrum (channel);
 
 			// The chips that select a pulse width by a two-bit register. The others are always

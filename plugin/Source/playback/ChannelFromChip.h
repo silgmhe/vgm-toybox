@@ -24,6 +24,15 @@ struct ChipShapeHints
 	/** `waveform::Kind` as an int, because that is what `ChannelState::waveKind` carries. */
 	int waveKind = 0;
 
+	/** **The chip's own name for this channel**, carried through so the panels can draw the type
+		mark from the same value the mixer uses.
+
+		`waveKind` alone cannot answer it: it has eight values and merges wavetables with samples
+		into `stored`. `tableWave` distinguishes those two, but only because each decoder remembers
+		to set it - and the N163's does not, which is how a wavetable drew as a sample.
+	*/
+	chips::ChannelKind channelKind = chips::ChannelKind::unknown;
+
 	/** Ignored by every kind except `pulse`. */
 	float duty = 0.5f;
 

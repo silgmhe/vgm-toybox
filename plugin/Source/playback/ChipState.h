@@ -5,6 +5,8 @@
 #include <string>
 #include <vector>
 
+#include "chips/ChipTypes.h"
+
 namespace toybox::playback
 {
 
@@ -53,6 +55,15 @@ struct ChannelState
 		sample, which is why the depth setting appeared to do nothing.
 	*/
 	bool tableWave = false;
+
+	/** **The chip's own name for this channel**, for the type mark a panel draws beside its name.
+
+		waveKind and 	ableWave between them describe how to *draw* the shape, which is not the same
+		question as what the channel is: stored covers a C140 drum and an SCC table alike, and
+			ableWave only separates them while every decoder remembers to set it (the N163's did not).
+		This value comes straight from decoder->channelKind(), so it cannot drift.
+	*/
+	chips::ChannelKind channelKind = chips::ChannelKind::unknown;
 
 	float volume = 0.0f;				// 0..1, normalised against the chip's own maximum
 

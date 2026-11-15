@@ -93,14 +93,14 @@ void paintChannelRow (juce::Graphics& g,
 	// 16 px because these rows are shorter and the name has to keep its room.
 	auto nameArea = row.name;
 
-	if (const auto glyph = channelGlyphFor (channel))
+	if (channel.channelKind != chips::ChannelKind::unknown)
 	{
 		constexpr int kMarkSize = 14;
 		constexpr int kMarkGap = 4;
 
 		const auto mark = nameArea.removeFromLeft (kMarkSize);
 
-		drawChannelGlyph (g, *glyph,
+		drawChannelGlyph (g, channelGlyphFor (channel.channelKind),
 						  { (float) mark.getX (), (float) mark.getCentreY () - (float) kMarkSize * 0.5f,
 							(float) kMarkSize, (float) kMarkSize },
 						  ink);
