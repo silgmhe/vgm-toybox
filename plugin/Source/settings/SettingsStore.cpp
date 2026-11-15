@@ -600,13 +600,13 @@ void SettingsStore::setKeyboardNoteHoldMs (int milliseconds)
 
 int SettingsStore::getFmSustainMs (void) const
 {
-	const auto* setting = numericSetting ("visualiser.fmSustainMs");
-	return setting != nullptr ? getNumericSetting (*setting) : visualiser::defaultSustainMs;
+	const auto* setting = numericSetting ("fm.sustainMs");
+	return setting != nullptr ? getNumericSetting (*setting) : fm::defaultSustainMs;
 }
 
 void SettingsStore::setFmSustainMs (int milliseconds)
 {
-	if (const auto* setting = numericSetting ("visualiser.fmSustainMs"))
+	if (const auto* setting = numericSetting ("fm.sustainMs"))
 	{
 		setNumericSetting (*setting, milliseconds);
 	}
@@ -614,13 +614,13 @@ void SettingsStore::setFmSustainMs (int milliseconds)
 
 int SettingsStore::getFmReleaseMs (void) const
 {
-	const auto* setting = numericSetting ("visualiser.fmReleaseMs");
-	return setting != nullptr ? getNumericSetting (*setting) : visualiser::defaultReleaseMs;
+	const auto* setting = numericSetting ("fm.releaseMs");
+	return setting != nullptr ? getNumericSetting (*setting) : fm::defaultReleaseMs;
 }
 
 void SettingsStore::setFmReleaseMs (int milliseconds)
 {
-	if (const auto* setting = numericSetting ("visualiser.fmReleaseMs"))
+	if (const auto* setting = numericSetting ("fm.releaseMs"))
 	{
 		setNumericSetting (*setting, milliseconds);
 	}
@@ -628,42 +628,27 @@ void SettingsStore::setFmReleaseMs (int milliseconds)
 
 bool SettingsStore::getFmNormalise (void) const
 {
-	return file != nullptr ? file->getBoolValue ("visualiser.fmNormalise", visualiser::normalise)
-						   : visualiser::normalise;
+	return file != nullptr ? file->getBoolValue ("fm.normalise", fm::normalise)
+						   : fm::normalise;
 }
 
 void SettingsStore::setFmNormalise (bool shouldNormalise)
 {
 	if (file != nullptr)
 	{
-		file->setValue ("visualiser.fmNormalise", shouldNormalise);
-	}
-}
-
-bool SettingsStore::getFmFixedNoteEnabled (void) const
-{
-	return file != nullptr ? file->getBoolValue ("visualiser.fmFixedNoteEnabled",
-												  visualiser::fixedNoteEnabled)
-						   : visualiser::fixedNoteEnabled;
-}
-
-void SettingsStore::setFmFixedNoteEnabled (bool enabled)
-{
-	if (file != nullptr)
-	{
-		file->setValue ("visualiser.fmFixedNoteEnabled", enabled);
+		file->setValue ("fm.normalise", shouldNormalise);
 	}
 }
 
 int SettingsStore::getFmFixedNote (void) const
 {
-	const auto* setting = numericSetting ("visualiser.fmFixedNote");
-	return setting != nullptr ? getNumericSetting (*setting) : visualiser::defaultFixedNote;
+	const auto* setting = numericSetting ("fm.note");
+	return setting != nullptr ? getNumericSetting (*setting) : fm::defaultFixedNote;
 }
 
 void SettingsStore::setFmFixedNote (int note)
 {
-	if (const auto* setting = numericSetting ("visualiser.fmFixedNote"))
+	if (const auto* setting = numericSetting ("fm.note"))
 	{
 		setNumericSetting (*setting, note);
 	}

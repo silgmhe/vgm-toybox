@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 #include "Theme.h"
 
@@ -89,8 +89,8 @@ public:
 		addAndMakeVisible (fixedNoteButton);
 
 		setUpRow (fixedNoteCaption, fixedNoteSlider, fixedNoteValue,
-				  (double) settings::visualiser::minFixedNote,
-				  (double) settings::visualiser::maxFixedNote);
+				  (double) settings::fm::minFixedNote,
+				  (double) settings::fm::maxFixedNote);
 		fixedNoteSlider.setComponentID ("export.options.fixedNoteValue");
 		fixedNoteValue.setComponentID ("export.options.fixedNoteReadout");
 
@@ -137,7 +137,7 @@ public:
 		fixedNoteButton.setToggleState (options.fixedNote >= 0, juce::dontSendNotification);
 		fixedNoteSlider.setValue ((double) (options.fixedNote >= 0
 												? options.fixedNote
-												: settings::visualiser::defaultFixedNote),
+												: settings::fm::defaultFixedNote),
 								   juce::dontSendNotification);
 
 		refreshValues ();

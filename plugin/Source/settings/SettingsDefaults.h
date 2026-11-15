@@ -165,7 +165,7 @@ constexpr bool defaultCleanupEnabled = false;
 
 } // namespace exporting
 
-namespace visualiser
+namespace fm
 {
 
 /** **How long an FM note is rendered for**, in seconds.
@@ -209,12 +209,11 @@ constexpr int defaultReleaseMs = 1000;
 */
 constexpr bool normalise = false;
 
-constexpr bool fixedNoteEnabled = false;
 constexpr int minFixedNote = 21;
 constexpr int maxFixedNote = 108;
 constexpr int defaultFixedNote = 60;
 
-} // namespace visualiser
+} // namespace fm
 
 namespace window
 {

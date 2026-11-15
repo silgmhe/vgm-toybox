@@ -218,11 +218,7 @@ public:
 	bool getFmNormalise (void) const;
 	void setFmNormalise (bool shouldNormalise);
 
-	/** Whether an export renders at a pinned note rather than the one that was playing. */
-	bool getFmFixedNoteEnabled (void) const;
-	void setFmFixedNoteEnabled (bool enabled);
-
-	/** The MIDI note a pinned export renders at. */
+	/** The MIDI note every FM waveform is rendered at. */
 	int getFmFixedNote (void) const;
 	void setFmFixedNote (int note);
 

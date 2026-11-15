@@ -29,19 +29,19 @@ const std::vector<NumericSetting>& numericSettings (void)
 
 		// The two stages of a rendered FM note. Milliseconds rather than seconds so they sit in
 		// this table with the others instead of needing one of their own.
-		{ "visualiser.fmSustainMs", "settings.visualiser.fmSustainLength", "",
-		  visualiser::minSustainMs, visualiser::maxSustainMs, visualiser::sustainStepMs,
-		  visualiser::defaultSustainMs, " ms" },
+		{ "fm.sustainMs", "settings.visualiser.fmSustainLength", "",
+		  fm::minSustainMs, fm::maxSustainMs, fm::sustainStepMs,
+		  fm::defaultSustainMs, " ms" },
 
-		{ "visualiser.fmReleaseMs", "settings.visualiser.fmReleaseLength", "",
-		  visualiser::minReleaseMs, visualiser::maxReleaseMs, visualiser::releaseStepMs,
-		  visualiser::defaultReleaseMs, " ms" },
+		{ "fm.releaseMs", "settings.visualiser.fmReleaseLength", "",
+		  fm::minReleaseMs, fm::maxReleaseMs, fm::releaseStepMs,
+		  fm::defaultReleaseMs, " ms" },
 
 		// The note an export renders at when the user pins one. A piano's range, because the
 		// control exists to pick a playable note rather than to sweep the register.
-		{ "visualiser.fmFixedNote", "settings.visualiser.fmFixedNote", "",
-		  visualiser::minFixedNote, visualiser::maxFixedNote, 1,
-		  visualiser::defaultFixedNote, "" },
+		{ "fm.note", "settings.visualiser.fmFixedNote", "",
+		  fm::minFixedNote, fm::maxFixedNote, 1,
+		  fm::defaultFixedNote, "" },
 	};
 
 	return table;

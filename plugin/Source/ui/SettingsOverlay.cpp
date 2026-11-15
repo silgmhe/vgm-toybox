@@ -1236,9 +1236,9 @@ VisualiserSettingsPage::VisualiserSettingsPage (void)
 		addAndMakeVisible (slider);
 	};
 
-	setUpSlider (sustainSlider, "settings.visualiser.fmSustain", "visualiser.fmSustainMs",
+	setUpSlider (sustainSlider, "settings.visualiser.fmSustain", "fm.sustainMs",
 				 &toybox::settings::SettingsStore::setFmSustainMs);
-	setUpSlider (releaseSlider, "settings.visualiser.fmRelease", "visualiser.fmReleaseMs",
+	setUpSlider (releaseSlider, "settings.visualiser.fmRelease", "fm.releaseMs",
 				 &toybox::settings::SettingsStore::setFmReleaseMs);
 
 	normaliseButton.setComponentID ("settings.visualiser.fmNormalise");
@@ -1295,12 +1295,12 @@ void VisualiserSettingsPage::lookAndFeelChanged (void)
 
 void VisualiserSettingsPage::refreshLanguage (void)
 {
-	if (const auto* setting = toybox::settings::numericSetting ("visualiser.fmSustainMs"))
+	if (const auto* setting = toybox::settings::numericSetting ("fm.sustainMs"))
 	{
 		sustainCaption.setText (i18n::tr (setting->labelKey), juce::dontSendNotification);
 	}
 
-	if (const auto* setting = toybox::settings::numericSetting ("visualiser.fmReleaseMs"))
+	if (const auto* setting = toybox::settings::numericSetting ("fm.releaseMs"))
 	{
 		releaseCaption.setText (i18n::tr (setting->labelKey), juce::dontSendNotification);
 	}
