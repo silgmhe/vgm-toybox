@@ -165,6 +165,36 @@ constexpr bool defaultCleanupEnabled = false;
 
 } // namespace exporting
 
+namespace visualiser
+{
+
+/** **How long an FM note is rendered for**, in seconds.
+
+	Not derived from the envelope. The chip's rate codes reach a four-minute sweep at RR = 1, and a
+	driver never uses those codes for a note it means to end - so the registers describe a sound
+	nobody plays, and reading a length out of them gives an honest four minutes instead of a sample.
+
+	Two seconds holds a note and its tail. The range is deliberately small: past five seconds the
+	strip is showing silence, and below half a second there is no room for a release.
+*/
+constexpr int minNoteMs = 500;
+constexpr int maxNoteMs = 5000;
+constexpr int noteStepMs = 50;
+constexpr int defaultNoteMs = 2000;
+
+/** **The note an export renders at, when the user asks for a fixed one.**
+
+	Off by default: an export of the row that is playing should sound like that row, and switching
+	the pitch on is the deliberate act of asking for a different one. The range is a piano's - A0 to
+	C8 - because the point of the control is to pick a playable note, not to sweep the register.
+*/
+constexpr bool fixedNoteEnabled = false;
+constexpr int minFixedNote = 21;
+constexpr int maxFixedNote = 108;
+constexpr int defaultFixedNote = 60;
+
+} // namespace visualiser
+
 namespace window
 {
 

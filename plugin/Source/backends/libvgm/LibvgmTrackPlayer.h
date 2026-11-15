@@ -218,6 +218,7 @@ private:
 	{
 		std::shared_ptr<const chips::VoicePatch> patch;
 		double hz = 0.0;
+		double seconds = 0.0;		// part of the key: the setting can change under a cached note
 		std::shared_ptr<const std::vector<float>> wave;
 	};
 

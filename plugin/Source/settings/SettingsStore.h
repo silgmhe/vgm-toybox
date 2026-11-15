@@ -205,6 +205,18 @@ public:
 	int getKeyboardNoteHoldMs (void) const;
 	void setKeyboardNoteHoldMs (int milliseconds);
 
+	/** How long an FM note is rendered for, in milliseconds. */
+	int getFmNoteMs (void) const;
+	void setFmNoteMs (int milliseconds);
+
+	/** Whether an export renders at a pinned note rather than the one that was playing. */
+	bool getFmFixedNoteEnabled (void) const;
+	void setFmFixedNoteEnabled (bool enabled);
+
+	/** The MIDI note a pinned export renders at. */
+	int getFmFixedNote (void) const;
+	void setFmFixedNote (int note);
+
 	/** Stores the range (clamped to what the engine can encode) and tells every listener. */
 	void setMidiPitchBendRange (int semitones);
 

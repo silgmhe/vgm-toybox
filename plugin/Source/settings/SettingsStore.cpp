@@ -598,6 +598,49 @@ void SettingsStore::setKeyboardNoteHoldMs (int milliseconds)
 	}
 }
 
+int SettingsStore::getFmNoteMs (void) const
+{
+	const auto* setting = numericSetting ("visualiser.fmNoteMs");
+	return setting != nullptr ? getNumericSetting (*setting) : visualiser::defaultNoteMs;
+}
+
+void SettingsStore::setFmNoteMs (int milliseconds)
+{
+	if (const auto* setting = numericSetting ("visualiser.fmNoteMs"))
+	{
+		setNumericSetting (*setting, milliseconds);
+	}
+}
+
+bool SettingsStore::getFmFixedNoteEnabled (void) const
+{
+	return file != nullptr ? file->getBoolValue ("visualiser.fmFixedNoteEnabled",
+												  visualiser::fixedNoteEnabled)
+						   : visualiser::fixedNoteEnabled;
+}
+
+void SettingsStore::setFmFixedNoteEnabled (bool enabled)
+{
+	if (file != nullptr)
+	{
+		file->setValue ("visualiser.fmFixedNoteEnabled", enabled);
+	}
+}
+
+int SettingsStore::getFmFixedNote (void) const
+{
+	const auto* setting = numericSetting ("visualiser.fmFixedNote");
+	return setting != nullptr ? getNumericSetting (*setting) : visualiser::defaultFixedNote;
+}
+
+void SettingsStore::setFmFixedNote (int note)
+{
+	if (const auto* setting = numericSetting ("visualiser.fmFixedNote"))
+	{
+		setNumericSetting (*setting, note);
+	}
+}
+
 int SettingsStore::getKeyboardStartNote (void) const
 {
 	const int stored = file != nullptr ? file->getIntValue (kKeyboardStartNoteKey, keyboard::defaultStartNote) : keyboard::defaultStartNote;

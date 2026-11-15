@@ -26,6 +26,19 @@ const std::vector<NumericSetting>& numericSettings (void)
 		{ "keyboard.noteHoldMs", "settings.keyboard.noteHold", "",
 		  keyboard::minNoteHoldMs, keyboard::maxNoteHoldMs, keyboard::noteHoldStepMs,
 		  keyboard::defaultNoteHoldMs, " ms" },
+
+		// How long an FM note is rendered for. Milliseconds rather than seconds so it can sit in
+		// this table with the others instead of needing a table of its own - the settings page
+		// shows the number, and 50 ms steps are finer than anyone sets it by.
+		{ "visualiser.fmNoteMs", "settings.visualiser.fmNoteLength", "",
+		  visualiser::minNoteMs, visualiser::maxNoteMs, visualiser::noteStepMs,
+		  visualiser::defaultNoteMs, " ms" },
+
+		// The note an export renders at when the user pins one. A piano's range, because the
+		// control exists to pick a playable note rather than to sweep the register.
+		{ "visualiser.fmFixedNote", "settings.visualiser.fmFixedNote", "",
+		  visualiser::minFixedNote, visualiser::maxFixedNote, 1,
+		  visualiser::defaultFixedNote, "" },
 	};
 
 	return table;
