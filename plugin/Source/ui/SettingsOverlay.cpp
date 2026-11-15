@@ -1204,6 +1204,98 @@ void KeyboardSettingsPage::refreshLanguage (void)
 	repaint ();
 }
 
+VisualiserSettingsPage::VisualiserSettingsPage (void)
+{
+	for (auto* caption : { &sustainCaption, &releaseCaption, &hint })
+	{
+		caption->setFont (juce::Font (juce::FontOptions (12.5f)));
+		caption->setJustificationType (juce::Justification::centredLeft);
+		addAndMakeVisible (*caption);
+	}
+
+	auto setUpSlider = [this] (juce::Slider& slider, const char* componentId,
+							   const char* settingKey, void (toybox::settings::SettingsStore::*setter) (int))
+	{
+		slider.setComponentID (componentId);
+		slider.setSliderStyle (juce::Slider::LinearHorizontal);
+		slider.setTextBoxStyle (juce::Slider::TextBoxRight, false, 76, 22);
+		colourSliderTextBox (slider);
+
+		if (const auto* setting = toybox::settings::numericSetting (settingKey))
+		{
+			slider.setRange ((double) setting->minimum, (double) setting->maximum,
+							 (double) setting->step);
+			slider.setTextValueSuffix (setting->suffix);
+		}
+
+		slider.onValueChange = [this, &slider, setter]
+		{
+			(toybox::settings::SettingsStore::getInstance ().*setter) ((int) std::lround (slider.getValue ()));
+		};
+
+		addAndMakeVisible (slider);
+	};
+
+	setUpSlider (sustainSlider, "settings.visualiser.fmSustain", "visualiser.fmSustainMs",
+				 &toybox::settings::SettingsStore::setFmSustainMs);
+	setUpSlider (releaseSlider, "settings.visualiser.fmRelease", "visualiser.fmReleaseMs",
+				 &toybox::settings::SettingsStore::setFmReleaseMs);
+
+	refreshLanguage ();
+	refresh ();
+}
+
+void VisualiserSettingsPage::refresh (void)
+{
+	const auto& store = toybox::settings::SettingsStore::getInstance ();
+
+	sustainSlider.setValue ((double) store.getFmSustainMs (), juce::dontSendNotification);
+	releaseSlider.setValue ((double) store.getFmReleaseMs (), juce::dontSendNotification);
+}
+
+void VisualiserSettingsPage::paint (juce::Graphics& g)
+{
+	paintHeading (g, i18n::tr ("settings.visualiser"), i18n::tr ("settings.visualiser.explanation"),
+				  getLocalBounds (), kTwoLineHeadingHeight, 2);
+}
+
+void VisualiserSettingsPage::resized (void)
+{
+	auto area = pageContent (getLocalBounds (), kTwoLineHeadingHeight);
+
+	sustainCaption.setBounds (area.removeFromTop (18));
+	area.removeFromTop (4);
+	sustainSlider.setBounds (area.removeFromTop (kFooterHeight));
+	area.removeFromTop (14);
+
+	releaseCaption.setBounds (area.removeFromTop (18));
+	area.removeFromTop (4);
+	releaseSlider.setBounds (area.removeFromTop (kFooterHeight));
+	area.removeFromTop (14);
+
+	hint.setBounds (area.removeFromTop (60));
+}
+
+void VisualiserSettingsPage::lookAndFeelChanged (void)
+{
+	repaint ();
+}
+
+void VisualiserSettingsPage::refreshLanguage (void)
+{
+	if (const auto* setting = toybox::settings::numericSetting ("visualiser.fmSustainMs"))
+	{
+		sustainCaption.setText (i18n::tr (setting->labelKey), juce::dontSendNotification);
+	}
+
+	if (const auto* setting = toybox::settings::numericSetting ("visualiser.fmReleaseMs"))
+	{
+		releaseCaption.setText (i18n::tr (setting->labelKey), juce::dontSendNotification);
+	}
+
+	hint.setText (i18n::tr ("settings.visualiser.explanation"), juce::dontSendNotification);
+}
+
 AudioSettingsPage::AudioSettingsPage (void)
 {
 	deviceLabel.setComponentID ("settings.audio.device");
@@ -1714,6 +1806,7 @@ namespace
 		{ "midi",       "settings.midi",       &makePage<MidiSettingsPage>,       false },
 		{ "nes",        "settings.nes",        &makePage<NesSettingsPage>,        false },
 		{ "keyboard",   "settings.keyboard",   &makePage<KeyboardSettingsPage>,   false },
+		{ "visualiser", "settings.visualiser", &makePage<VisualiserSettingsPage>, false },
 		{ "export",     "settings.export",     &makePage<ExportSettingsPage>,     false },
 		{ "audio",      "settings.audio",      &makePage<AudioSettingsPage>,      true  },
 	};

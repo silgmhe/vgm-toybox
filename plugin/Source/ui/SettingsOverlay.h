@@ -345,6 +345,38 @@ private:
 	juce::Label hint;
 };
 
+/** **How an FM note is rendered for the waveform window and for an export.**
+
+	Two lengths, because they answer different questions: the sustain is how long the sound is held
+	before the key comes up - the chip's "S" is a level it decays through, so there is no duration to
+	read - and the release is how much tail to keep, where the register does say something but its
+	range reaches four minutes at RR = 1.
+
+	No controls here for the pinned export pitch: that belongs in the export dialog, where the person
+	choosing it is already deciding what the file should be.
+*/
+class VisualiserSettingsPage : public View
+{
+public:
+	VisualiserSettingsPage (void);
+
+	juce::String getViewId (void) const override { return "settings-visualiser"; }
+	juce::String getViewName (void) const override { return i18n::tr ("settings.visualiser"); }
+
+	void refresh (void) override;
+	void paint (juce::Graphics& g) override;
+	void resized (void) override;
+	void lookAndFeelChanged (void) override;
+	void refreshLanguage (void) override;
+
+private:
+	juce::Label sustainCaption;
+	juce::Slider sustainSlider;
+	juce::Label releaseCaption;
+	juce::Slider releaseSlider;
+	juce::Label hint;
+};
+
 class AudioSettingsPage : public View,
 						  private juce::Timer
 {
