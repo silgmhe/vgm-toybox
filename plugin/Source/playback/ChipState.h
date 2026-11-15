@@ -91,6 +91,12 @@ struct ChannelState
 	*/
 	std::shared_ptr<const std::vector<float>> noteWaveform;
 
+	/** **The rate `noteWaveform` was computed at.** It has to travel with the samples: a file that
+		declares 44 100 about samples rendered at 53 267 plays them slower and lower than the chip
+		did, and no part of the file says so.
+	*/
+	float noteWaveformRate = 0.0f;
+
 	/** **The registers behind this channel's voice**, shared rather than copied: 29 bytes on
 		every channel on every frame is not what a panel needs - it needs an identity that changes
 		when the patch does.

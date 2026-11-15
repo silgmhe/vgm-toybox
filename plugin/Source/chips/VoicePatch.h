@@ -96,6 +96,33 @@ constexpr int fmOutputBits (ChipModel model)
 	return 16;
 }
 
+/** **The rate a chip's FM channels actually produce samples at.**
+
+	`clock / 144` for the OPN family, straight out of `ym2612.c` (`Rate = Clock / 144`, with the 144
+	being 12 * prescale-6 * 2). Rendering slower than this and holding the samples back up to the
+	export rate is what gives a dragged file its wide horizontal steps - a real property of a real
+	chip, but not the one an eight-bit converter has.
+
+	The figures are the nominal clock divided by its divider; a song may name a different clock, and
+	the core is started with whatever the patch's chip is normally clocked at.
+*/
+constexpr double noteRateFor (ChipModel model)
+{
+	switch (model)
+	{
+	case ChipModel::ym2612:		return 7670453.0 / 144.0;		// 53 267 Hz, the Mega Drive
+	case ChipModel::ym2608:
+	case ChipModel::ym2610:		return 8000000.0 / 144.0;		// 55 556 Hz
+	case ChipModel::ym2151:		return 3579545.0 / 64.0;		// 55 930 Hz
+	case ChipModel::ym3812:		return 3579545.0 / 72.0;		// 49 716 Hz
+
+	case ChipModel::vrc7:
+	case ChipModel::unknown:	break;
+	}
+
+	return 7670453.0 / 144.0;		// the OPN, for the same reason `fmOutputBits` falls back to it
+}
+
 struct VoicePatch
 {
 	ChipModel model = ChipModel::unknown;

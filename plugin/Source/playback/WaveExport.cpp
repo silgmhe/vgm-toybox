@@ -361,7 +361,10 @@ bool writeNoteFile (const ChannelState& channel, const std::string& path, int bi
 	// rendered at 8 kHz is a staircase, and a player that interpolates it on import smooths the steps
 	// away: the thing that makes an eight-bit converter sound like one is the corners, and a filter
 	// takes exactly those. Writing the levels out at the play-back rate keeps them.
-	const auto source = chips::kNoteRate;
+	// The rate the note was actually rendered at, which is the chip's own unless something said
+	// otherwise. Falling back to `kNoteRate` would declare 8 000 about samples made at 53 267.
+	const auto source = (channel.noteWaveformRate > 0.0f) ? (double) channel.noteWaveformRate
+														  : chips::kNoteRate;
 	const auto target = (targetRate > 0.0) ? targetRate : source;
 	const auto held = heldAt (values, source, target);
 

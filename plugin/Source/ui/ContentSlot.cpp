@@ -1587,9 +1587,12 @@ void ContentSlot::beginExport (const ExportOptions& options)
 				// waveform of its own and no patch to re-render from.
 				if (channel.voicePatch != nullptr && channel.noteWaveform != nullptr)
 				{
+					// Rate 0 asks for the chip's own; the result carries it so the file can say so.
 					channel.noteWaveform = std::make_shared<const std::vector<float>> (
 						chips::noteWave::render (*channel.voicePatch, hz, sustain, release,
-												 chips::noteWave::kRenderRate, store.getFmNormalise ()));
+												 0.0, store.getFmNormalise ()));
+					channel.noteWaveformRate =
+						(float) chips::noteRateFor (channel.voicePatch->model);
 				}
 			}
 		}

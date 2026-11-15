@@ -969,12 +969,14 @@ bool LibvgmTrackPlayer::captureState (playback::ChipStateSnapshot& snapshot) con
 					entry.sustain = sustain;
 					entry.release = release;
 					entry.normalise = normalise;
+					// Rate 0 asks the renderer for the chip's own - see `noteRateFor`.
 					entry.wave = std::make_shared<const std::vector<float>> (
 						chips::noteWave::render (*state.voicePatch, hz, sustain, release,
-												 chips::noteWave::kRenderRate, normalise));
+												 0.0, normalise));
 				}
 
 				state.noteWaveform = entry.wave;
+				state.noteWaveformRate = (float) chips::noteRateFor (state.voicePatch->model);
 			}
 
 			// **The YM2612's DAC row answers for the hit, not for the stream.** The decoder can only

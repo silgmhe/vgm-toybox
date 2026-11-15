@@ -125,7 +125,13 @@ std::vector<float> render (const VoicePatch& patch, double frequencyHz,
 		return {};
 	}
 
-	Core core (rate, patch.model);
+	// **The chip's own rate unless the caller names one.** Rendering at 8 kHz and holding the samples
+	// up to the export rate is what made a dragged file look like it came from an eight-bit machine:
+	// five and a half samples of one level, then a step. At the chip's rate the steps are the
+	// converter's, which are the ones worth seeing.
+	const double renderRate = (rate > 0.0) ? rate : chips::noteRateFor (patch.model);
+
+	Core core (renderRate, patch.model);
 	if (! core.ready)
 	{
 		return {};
@@ -215,10 +221,10 @@ std::vector<float> render (const VoicePatch& patch, double frequencyHz,
 	}
 
 	const double total = sustainSeconds + releaseSeconds;
-	const int cap = (int) std::lround (std::max (0.05, total) * rate);
+	const int cap = (int) std::lround (std::max (0.05, total) * renderRate);
 
 	// Key off exactly where the sustain ends, so the tail is the release the caller asked for.
-	const int releaseAt = std::min (cap - 1, (int) std::lround (sustainSeconds * rate));
+	const int releaseAt = std::min (cap - 1, (int) std::lround (sustainSeconds * renderRate));
 
 	std::vector<float> out ((size_t) cap, 0.0f);
 	std::vector<DEV_SMPL> left (512, 0);
@@ -282,7 +288,8 @@ std::vector<float> render (const VoicePatch& patch, double frequencyHz,
 	// throwing away six bits of detail the hardware actually produced is a different sound, not a
 	// more authentic one.
 	//
-	// The step is `2^13 - 1`, done after the normalisation so full scale stays full scale.
+	// The step is `2^(bits-1) - 1` for whatever this patch's chip accumulates - fourteen for the
+	// OPN family, sixteen for OPL and OPM - and it is applied last, so full scale stays full scale.
 	const int bits = chips::fmOutputBits (patch.model);
 	const float quantiseSteps = (float) ((1 << (std::clamp (bits, 2, 16) - 1)) - 1);
 
