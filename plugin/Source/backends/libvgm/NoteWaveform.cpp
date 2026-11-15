@@ -241,6 +241,20 @@ std::vector<float> render (const VoicePatch& patch, double frequencyHz,
 		}
 	}
 
+	// **Quantised to the DAC's own resolution, after the normalisation.**
+	//
+	// The core hands out fourteen-bit values, and this is a nine-bit converter - the YM2612's DAC is
+	// signed eight bits. Rendering the wider number and drawing it as a float gives a curve that no
+	// chip ever produced: the stair-steps are the sound, and a smooth line is the one thing that
+	// makes the picture stop looking like the machine it came from.
+	//
+	// Eight bits of magnitude, done last so full scale stays full scale: `round(1.0 * 255) / 255` is
+	// exactly 1.0.
+	for (auto& sample : out)
+	{
+		sample = std::round (sample * 255.0f) / 255.0f;
+	}
+
 	return out;
 }
 

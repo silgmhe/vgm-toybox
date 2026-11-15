@@ -338,7 +338,8 @@ namespace
 
 	So it is written once, at the rate it was computed.
 */
-bool writeNoteFile (const ChannelState& channel, const std::string& path, int bits)
+bool writeNoteFile (const ChannelState& channel, const std::string& path, int bits,
+					double targetRate)
 {
 	if (channel.noteWaveform == nullptr || channel.noteWaveform->empty ())
 	{
@@ -356,17 +357,24 @@ bool writeNoteFile (const ChannelState& channel, const std::string& path, int bi
 		}
 	}
 
-	return writeFloat32Wav (path, values, (uint32_t) std::lround (chips::kNoteRate),
-							std::string ());
+	// **Held, not resampled** - the same rule `writeSampleWav` follows, for the same reason. A note
+	// rendered at 8 kHz is a staircase, and a player that interpolates it on import smooths the steps
+	// away: the thing that makes an eight-bit converter sound like one is the corners, and a filter
+	// takes exactly those. Writing the levels out at the play-back rate keeps them.
+	const auto source = chips::kNoteRate;
+	const auto target = (targetRate > 0.0) ? targetRate : source;
+	const auto held = heldAt (values, source, target);
+
+	return writeFloat32Wav (path, held, (uint32_t) std::lround (target), std::string ());
 }
 
 bool writeCycleWav (const ChannelState& channel, const std::string& path,
-					ExportMode mode, double seconds, int bits)
+					ExportMode mode, double seconds, int bits, double targetRate)
 {
 	// A computed note goes out as itself - see writeNoteFile for why the cycle rules do not apply.
 	if (channel.noteWaveform != nullptr && ! channel.noteWaveform->empty ())
 	{
-		return writeNoteFile (channel, path, bits);
+		return writeNoteFile (channel, path, bits, targetRate);
 	}
 
 	const auto cycle = cycleOf (channel);
@@ -600,8 +608,8 @@ ShapeWrite writeChannelShape (const ChannelState& channel, const std::string& pa
 														 : ShapeWrite::failed;
 	}
 
-	return writeCycleWav (channel, path, mode, seconds, bits) ? ShapeWrite::written
-															  : ShapeWrite::failed;
+	return writeCycleWav (channel, path, mode, seconds, bits, targetRate) ? ShapeWrite::written
+																		 : ShapeWrite::failed;
 }
 
 ExportOutcome exportWavetables (const ChipStateSnapshot& snapshot, const std::string& folder,
