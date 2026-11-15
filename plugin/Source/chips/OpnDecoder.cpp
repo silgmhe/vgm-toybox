@@ -274,7 +274,7 @@ struct OpnDecoder::Impl
 	*/
 	struct NoteCache
 	{
-		int note = -2;				// -2: never filled, and not a note either
+		double note = -1.0;			// negative: never filled, and not a note either
 		uint32_t version = 0;
 		bool valid = false;
 		std::shared_ptr<const chips::VoicePatch> voicePatch;
@@ -1108,43 +1108,28 @@ ChannelState OpnDecoder::channelState (int channel) const
 		state.hz = (double) voice.fnum * impl->clock
 				   / (144.0 * std::exp2 (20.0 - (double) octave));
 
-		// **The whole note, so the window can draw more than one cycle.** Recomputed only when
-		// the note or the patch changed: eight thousand points at 8 kHz is about a third of a
-		// millisecond, which is nothing once and far too much thirteen times a frame.
-		// **No pitch, no work.** While a song is being scanned there is no note yet, and
-		// rendering eight thousand points for it would be spent before the user sees anything.
-		if (state.hz <= 0.0)
-		{
-			return state;
-		}
-
+		// **`voicePatch` only - no rendering here.** This function runs while a song is scanned,
+		// once per channel per event; the note waveform is drawn on demand instead, through
+		// `noteWaveformFor()` (see IChipDecoder.h).
 		Impl::NoteCache& cache = impl->noteCache[channel];
 
-		if (! cache.valid || cache.note != (int) state.hz || cache.version != voice.patchVersion)
+		if (! cache.valid || cache.version != voice.patchVersion)
 		{
-			cache.note = (int) state.hz;
 			cache.version = voice.patchVersion;
 			cache.valid = true;
+			cache.wave = nullptr;		// the waveform, if any, is now stale
 
 			chips::VoicePatch captured;
-			if (capturePatch (channel, captured))
-			{
-				cache.voicePatch = std::make_shared<const chips::VoicePatch> (std::move (captured));
-				cache.wave = std::make_shared<const std::vector<float>> (
-					noteWave::render (*cache.voicePatch, state.hz, 0.0, noteWave::kRenderRate));
-			}
-			else
-			{
-				cache.voicePatch = nullptr;
-				cache.wave = nullptr;
-			}
+			cache.voicePatch = capturePatch (channel, captured)
+							   ? std::make_shared<const chips::VoicePatch> (std::move (captured))
+							   : nullptr;
 		}
 
 		state.voicePatch = cache.voicePatch;
-		state.noteWaveform = cache.wave;
 
 		return state;
-	}
+		}
+
 
 	if (! isDac && ! impl->hasAdpcm())
 	{
@@ -1407,6 +1392,36 @@ bool OpnDecoder::capturePatch (int channel, VoicePatch& out) const
 	out.regs.push_back ({ (uint8_t) (0xB0 | (channel & 0x03)), state.feedbackAlgorithm });
 
 	return true;
+}
+
+std::shared_ptr<const std::vector<float>> OpnDecoder::noteWaveformFor (int channel, double hz) const
+{
+	if (channel < 0 || channel >= impl->layout.fm || hz <= 0.0)
+	{
+		return nullptr;
+	}
+
+	const Impl::Channel& voice = impl->channels[channel];
+	Impl::NoteCache& cache = impl->noteCache[channel];
+
+	if (cache.wave != nullptr && cache.note == hz && cache.version == voice.patchVersion)
+	{
+		return cache.wave;
+	}
+
+	chips::VoicePatch captured;
+	if (! capturePatch (channel, captured))
+	{
+		return nullptr;
+	}
+
+	cache.note = hz;
+	cache.version = voice.patchVersion;
+	cache.voicePatch = std::make_shared<const chips::VoicePatch> (std::move (captured));
+	cache.wave = std::make_shared<const std::vector<float>> (
+		noteWave::render (*cache.voicePatch, hz, 0.0, noteWave::kRenderRate));
+
+	return cache.wave;
 }
 
 bool OpnDecoder::isDrum (int channel) const

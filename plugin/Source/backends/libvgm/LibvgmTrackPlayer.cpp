@@ -942,6 +942,13 @@ bool LibvgmTrackPlayer::captureState (playback::ChipStateSnapshot& snapshot) con
 			auto state = playback::channelFromChip (
 				chipState, instance.decoder->noteTable (channel), hints, chipName, channelName);
 
+			// **Rendered here, not in channelState()**: this runs while the keyboard page is on
+			// screen, and `channelState()` runs while a song is being scanned. See IChipDecoder.h.
+			if (instance.decoder != nullptr && state.frequency > 0.0f)
+			{
+				state.noteWaveform = instance.decoder->noteWaveformFor (channel, (double) state.frequency);
+			}
+
 			// **The YM2612's DAC row answers for the hit, not for the stream.** The decoder can only
 			// see bytes arrive; which hit they belong to is a fact about the driver's table, built
 			// from `SongIr` (see `buildDacTable`). Channel 6 is the DAC on that chip.

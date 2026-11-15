@@ -162,6 +162,7 @@ public:
 
 	/** The 29 patch registers of one channel, as the chip was given them. */
 	bool capturePatch (int channel, VoicePatch& out) const override;
+	std::shared_ptr<const std::vector<float>> noteWaveformFor (int channel, double hz) const override;
 	bool isDrum (int channel) const override;
 
 private:

@@ -428,18 +428,20 @@ void testNoteWaveformInState (void)
 	// `hz` is not asserted here: it is the note extractor's answer and its own tests cover it. What
 	// this one is about is the two new fields.
 	check (state.voicePatch != nullptr, "the patch behind the channel is handed out");
-	check (state.noteWaveform != nullptr, "and a whole note, not just a cycle");
+	check (state.noteWaveform == nullptr, "but no note is rendered while a song is scanned");
 
-	if (state.noteWaveform != nullptr)
+	const auto wave = decoder.noteWaveformFor (0, state.hz);
+	check (wave != nullptr, "a whole note is handed out when a panel asks for one");
+
+	if (wave != nullptr)
 	{
-		check (state.noteWaveform->size() > 100,
-			   "the note has more than one cycle in it");
+		check (wave->size() > 100, "the note has more than one cycle in it");
 
 		// **Not a flat line.** The first version reported 0 Hz here - `state.hz` was assigned past
 		// this branch's `return` - so a sine at zero hertz came out as a row of zeros, which is
 		// exactly what the window drew. Peak is the check that a pitch reached the generator.
 		double peak = 0.0;
-		for (float sample : *state.noteWaveform)
+		for (float sample : *wave)
 		{
 			peak = std::max (peak, (double) std::abs (sample));
 		}
@@ -448,9 +450,8 @@ void testNoteWaveformInState (void)
 
 	// A second ask with nothing changed hands back the same buffer: the cache is what keeps the
 	// panels from rendering eight thousand points thirteen times a frame.
-	const auto again = decoder.channelState (0);
-	check (again.noteWaveform.get() == state.noteWaveform.get(),
-		   "the same patch and note reuse the same waveform");
+	const auto again = decoder.noteWaveformFor (0, state.hz);
+	check (again.get() == wave.get(), "the same patch and note reuse the same waveform");
 }
 
 int main()

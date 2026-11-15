@@ -2,6 +2,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <memory>
 #include <vector>
 
 #include "ChipTypes.h"
@@ -101,6 +102,24 @@ public:
 		A sampled or wavetable chip has nothing to add here - its voice *is* the `wave` the
 		channel state already carries.
 	*/
+	/** **The whole note, for a caller that is about to draw it.**
+
+		Deliberately *not* part of `channelState()`. That call happens while a song is being scanned -
+		once per channel per event, hundred of times before the user sees anything - and rendering
+		eight thousand points of four-operator FM there made opening a file take seconds.
+
+		`hz` comes from the channel state rather than from the decoder, because the decoder has a
+		frequency and the caller is the one that knows which note it is drawing.
+
+		Default nullptr: nothing is computed unless a panel asks.
+	*/
+	virtual std::shared_ptr<const std::vector<float>> noteWaveformFor (int channel, double hz) const
+	{
+		(void) channel;
+		(void) hz;
+		return nullptr;
+	}
+
 	virtual bool capturePatch (int channel, VoicePatch& out) const
 	{
 		(void) channel;
