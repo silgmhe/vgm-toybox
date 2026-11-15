@@ -266,6 +266,55 @@ namespace
 	}
 }
 
+/** **What `capturePatch` hands out, checked against what was written in.**
+
+	Not compared with the core: this is a copy of the register values, so the only questions are
+	whether the copy is faithful and whether the addresses are the chip's own. The layout matters
+	as much as the values - a rig will write these back in order, and a wrong offset is a patch
+	that loads without complaint and sounds wrong.
+*/
+void testPatchCapture (void)
+{
+	OpnDecoder decoder;
+	decoder.reset (toybox::chips::ChipConfig { kClock, (double) kRate });
+
+	const uint8_t attacks[4] = { 0x1F, 0x12, 0x08, 0x00 };
+	const uint8_t decays[4] = { 0x0A, 0x0B, 0x0C, 0x0D };
+
+	for (int op = 0; op < 4; ++op)
+	{
+		decoder.write ({ toybox::chips::kNoDevice, (uint8_t) (0x50 + op * 4), attacks[op], 0, 0 });
+		decoder.write ({ toybox::chips::kNoDevice, (uint8_t) (0x60 + op * 4), decays[op], 0, 0 });
+	}
+
+	decoder.write ({ toybox::chips::kNoDevice, 0xB0, 0x3A, 0, 0 });
+
+	toybox::chips::VoicePatch patch;
+	check (decoder.capturePatch (0, patch), "the FM decoder serialises its voice");
+	check (patch.model == toybox::chips::ChipModel::ym2612, "and says which chip it is");
+	check (patch.regs.size() == 29, "29 registers: seven banks of four, plus 0xB0");
+
+	auto valueOf = [&patch] (uint8_t offset)
+	{
+		for (const auto& reg : patch.regs)
+		{
+			if (reg.first == offset)
+			{
+				return (int) reg.second;
+			}
+		}
+		return -1;
+	};
+
+	check (valueOf (0x50) == 0x1F, "operator 1's attack rate survives the round trip");
+	check (valueOf (0x54) == 0x12, "operator 2's too");
+	check (valueOf (0x5C) == 0x00, "operator 4's zero is a value, not a miss");
+	check (valueOf (0x60) == 0x0A, "and the decay bank");
+	check (valueOf (0xB0) == 0x3A, "the feedback and algorithm byte");
+
+	check (! decoder.capturePatch (6, patch), "the ADPCM channels have no patch");
+}
+
 int main()
 {
 	std::printf ("YM2612 decoder against libvgm's own core\n");
@@ -318,6 +367,8 @@ int main()
 		check (verdict.rms[0] >= kSilenceFloor, "0x4C is channel 0's operator 4: the chip sounds");
 		check (verdict.gate[0], "0x4C is channel 0's operator 4: the decoder agrees");
 	}
+
+	testPatchCapture();
 
 	Tally tally;
 

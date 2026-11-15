@@ -5,6 +5,7 @@
 #include <vector>
 
 #include "ChipTypes.h"
+#include "VoicePatch.h"
 
 namespace toybox::chips
 {
@@ -89,6 +90,23 @@ public:
 	virtual const NoteTable& noteTable (int channel) const = 0;
 
 	virtual ChannelKind channelKind (int channel) const = 0;
+
+	/** **The registers that make this channel's voice.**
+
+		Asked for by the panels that draw a whole note rather than a single cycle, and by anything
+		that wants to replay the voice later - the same value either way, so a picture and a sound
+		cannot disagree about what the patch is.
+
+		Default false: a decoder that cannot serialise its voice says so instead of inventing one.
+		A sampled or wavetable chip has nothing to add here - its voice *is* the `wave` the
+		channel state already carries.
+	*/
+	virtual bool capturePatch (int channel, VoicePatch& out) const
+	{
+		(void) channel;
+		(void) out;
+		return false;
+	}
 
 	/** True when the channel should be treated as a drum track (GM drum key mapping). */
 	virtual bool isDrum (int channel) const { return false; }

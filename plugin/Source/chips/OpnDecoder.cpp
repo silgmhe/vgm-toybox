@@ -170,6 +170,20 @@ struct OpnDecoder::Impl
 
 		/** 0xB0 bits 3-5: how hard the first operator feeds back into itself. */
 		int feedback = 0;
+
+		/** **The patch registers, kept raw.** `opPatch[bank - 3][operator]` holds 0x30..0x90
+			for each operator, and `feedbackAlgorithm` holds 0xB0.
+
+			Raw rather than decoded, because the two things that want them - a panel drawing a
+			whole note, and a voice rig replaying one - both need the bytes the chip was given,
+			not our reading of them. A decoded copy would be a second authority over the same
+			numbers, and those drift.
+
+			Written by `write()` whether or not anything reads them: this costs 29 bytes per
+			channel and does not touch the audio path at all.
+		*/
+		uint8_t opPatch[7][4] = {};
+		uint8_t feedbackAlgorithm = 0;
 	};
 
 	/** One one-shot channel: the write starts it, its own end time stops it. `active` keeps the
@@ -924,7 +938,9 @@ void OpnDecoder::write (const RegisterWrite& write)
 			return;
 		}
 
-		impl->channels[channel].multiple[(reg >> 2) & 0x03] = (int) (write.value & 0x0F);
+		const int op = (int) ((reg >> 2) & 0x03);
+		impl->channels[channel].multiple[op] = (int) (write.value & 0x0F);
+		impl->channels[channel].opPatch[0][op] = (uint8_t) write.value;
 		return;
 	}
 
@@ -941,7 +957,33 @@ void OpnDecoder::write (const RegisterWrite& write)
 			return;
 		}
 
-		impl->channels[channel].totalLevel[(reg >> 2) & 0x03] = write.value & 0x7F;
+		const int op = (int) ((reg >> 2) & 0x03);
+		impl->channels[channel].totalLevel[op] = write.value & 0x7F;
+		impl->channels[channel].opPatch[1][op] = (uint8_t) write.value;
+		return;
+	}
+
+	// 0x50-0x9F: the envelope and key scaling of each operator. **Nothing in the audio path
+	// reads these** - a note's length comes from the key register, not from AR or RR - but a panel
+	// drawing a whole note needs them, and so will a voice rig replaying one. Kept raw in the
+	// channel, which is why this branch only stores and returns.
+	//
+	// 0x30 (DT/MULT) and 0x40 (TL) are stored where they are parsed above; these five banks are
+	// AR (0x50), DR (0x60), SR (0x70), SL/RR (0x80) and SSG-EG (0x90).
+	if ((reg & 0xF0) >= 0x50 && (reg & 0xF0) <= 0x90)
+	{
+		if ((reg & 0x03) == 3)
+		{
+			return;
+		}
+
+		const int channel = (int) (reg & 0x03) + port * 3;
+		if (channel >= impl->layout.fm)
+		{
+			return;
+		}
+
+		impl->channels[channel].opPatch[(reg >> 4) - 3][(reg >> 2) & 0x03] = (uint8_t) write.value;
 		return;
 	}
 
@@ -978,6 +1020,7 @@ void OpnDecoder::write (const RegisterWrite& write)
 			Impl::Channel& state = impl->channels[channel];
 			state.algorithm = (int) (write.value & 0x07);
 			state.feedback = (int) ((write.value >> 3) & 0x07);
+			state.feedbackAlgorithm = (uint8_t) write.value;
 		}
 	}
 }
@@ -1261,6 +1304,38 @@ ChannelKind OpnDecoder::channelKind (int channel) const
 	}
 
 	return isDrum (channel) ? ChannelKind::adpcmDrum : ChannelKind::opnAdpcmB;
+}
+
+bool OpnDecoder::capturePatch (int channel, VoicePatch& out) const
+{
+	if (channel < 0 || channel >= impl->layout.fm)
+	{
+		return false;		// the ADPCM voices have register blocks of their own, not a patch
+	}
+
+	const Impl::Channel& state = impl->channels[channel];
+
+	out = VoicePatch {};
+	out.model = impl->variant == Variant::ym2612	? ChipModel::ym2612
+				: impl->variant == Variant::ym2608	? ChipModel::ym2608
+													: ChipModel::ym2610;
+
+	// Seven banks of four operators, addressed the way the chip itself does: the bank in the high
+	// nibble, then the operator in bits 2-3 and the channel's low two bits. Restoring the address
+	// rather than emitting a decoded struct is the whole point of `VoicePatch` - a rig can write
+	// these back without an encoder in between.
+	for (int op = 0; op < 4; ++op)
+	{
+		for (int bank = 3; bank <= 9; ++bank)
+		{
+			out.regs.push_back ({ (uint8_t) ((bank << 4) | (op << 2) | (channel & 0x03)),
+								  state.opPatch[bank - 3][op] });
+		}
+	}
+
+	out.regs.push_back ({ (uint8_t) (0xB0 | (channel & 0x03)), state.feedbackAlgorithm });
+
+	return true;
 }
 
 bool OpnDecoder::isDrum (int channel) const

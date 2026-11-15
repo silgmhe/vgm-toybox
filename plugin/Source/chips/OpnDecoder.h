@@ -159,6 +159,9 @@ public:
 	ChannelState channelState (int channel) const override;
 	const NoteTable& noteTable (int channel) const override;
 	ChannelKind channelKind (int channel) const override;
+
+	/** The 29 patch registers of one channel, as the chip was given them. */
+	bool capturePatch (int channel, VoicePatch& out) const override;
 	bool isDrum (int channel) const override;
 
 private:
