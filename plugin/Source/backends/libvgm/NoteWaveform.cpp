@@ -3,6 +3,8 @@
 #include <algorithm>
 #include <cmath>
 
+#include "chips/FmEnvelope.h"
+
 #include "emu/EmuStructs.h"
 #include "emu/SoundDevs.h"
 #include "emu/SoundEmu.h"
@@ -23,10 +25,17 @@ constexpr uint32_t kClock = 7670453;
 */
 constexpr double kSamplesToFloat = 1.0 / 32768.0;
 
-/** How long a note is held before key-off. The release after it gets the rest of the buffer -
-	with a four-second buffer this leaves a second and a half for the tail, which is long enough to
-	see whether the patch releases slowly or snaps. */
-constexpr double kHoldSeconds = 2.5;
+/** **The sustain stage's length, in seconds** - the one part of an envelope the chip cannot answer.
+
+	The chip's "S" is a *level*: it decays to it and then keeps decaying through it, so there is no
+	duration to read. How long to sit there while sampling the sound is a choice, and this is where
+	it lives until it becomes a setting.
+*/
+constexpr double kSustainSeconds = 3.0;
+
+/** The floor on a rendered note, so a patch whose rates all resolve to milliseconds still produces
+	something a person can hear and cut a sample from. */
+constexpr double kMinimumSeconds = 1.0;
 
 /** One YM2612, alive for the length of one render.
 
@@ -180,16 +189,56 @@ std::vector<float> render (const VoicePatch& patch, double frequencyHz,
 	core.write (0, 0x28, (uint8_t) (0xF0 | channelKey));
 	core.write (port, (uint8_t) (0xB4 + channelInPort), 0xC0);
 
-	// **A caller that passes zero asks for `durationOf()`.** This paragraph went missing in an edit
-	// and the clamp below turned the zero into its 50 ms floor - which is precisely the length every
-	// exported note came out at, and why `durationOf`'s four seconds were never reached.
+	// **The length comes from this patch's own envelope**, not from a fixed number: A, D and R are
+	// `sweepSeconds()` at this note's key scaling, and S is the one stage the chip cannot answer -
+	// it decays through the sustain rather than holding at it, so how long to sit there is the
+	// user's setting.
+	fm::NoteLength length;
+
+	auto registerAt = [&patch] (uint8_t offset) -> int
+	{
+		for (const auto& reg : patch.regs)
+		{
+			if ((reg.first & 0xFF) == offset)
+			{
+				return (int) reg.second;
+			}
+		}
+
+		return 0;
+	};
+
+	for (int op = 0; op < 4; ++op)
+	{
+		const auto base = (uint8_t) ((op << 2) | channelInPort);
+		const int ar = registerAt ((uint8_t) (0x50 | base));
+		const int dr = registerAt ((uint8_t) (0x60 | base));
+		const int rr = registerAt ((uint8_t) (0x80 | base));
+		const int ks = (ar >> 6) & 0x03;
+
+		length.attack = std::max (length.attack,
+								  fm::sweepSeconds (ar & 0x1F, block, (int) fnumBits, ks, rate));
+		length.decay = std::max (length.decay,
+								 fm::sweepSeconds (dr & 0x1F, block, (int) fnumBits, ks, rate));
+		length.release = std::max (length.release,
+								   fm::sweepSeconds (rr & 0x0F, block, (int) fnumBits, ks, rate));
+	}
+
+	length.sustain = kSustainSeconds;
+
+	// A caller may override the length outright; otherwise it is the envelope's, with a floor so a
+	// patch whose rates all come out at a few milliseconds still yields something a person can hear
+	// and cut a sample from.
 	if (seconds <= 0.0)
 	{
-		seconds = durationOf (patch);
+		seconds = std::max (kMinimumSeconds, length.total ());
 	}
 
 	const int cap = (int) std::lround (std::max (0.05, seconds) * rate);
-	const int releaseAt = std::min (cap - 1, (int) std::lround (kHoldSeconds * rate));
+
+	// Key off where the sustain stage ends, so the tail is the release the patch asked for.
+	const double sustainEnd = length.attack + length.decay + length.sustain;
+	const int releaseAt = std::min (cap - 1, (int) std::lround (sustainEnd * rate));
 
 	std::vector<float> out ((size_t) cap, 0.0f);
 	std::vector<DEV_SMPL> left (512, 0);
