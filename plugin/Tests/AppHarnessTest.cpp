@@ -56,7 +56,7 @@
 #include "i18n/LanguageManager.h"
 #include "settings/SettingsStore.h"
 #include "ui/UiFont.h"
-#include "ui/UiSnapshot.h"
+#include "UiSnapshot.h"
 
 namespace
 {
@@ -174,7 +174,7 @@ juce::String fieldOf (juce::Component& component, const juce::String& field)
 	}
 	if (field == "text")
 	{
-		return toybox::ui::snapshot::textOf (component);
+		return toybox::test::snapshot::textOf (component);
 	}
 	if (field == "typeface")
 	{
@@ -426,7 +426,7 @@ private:
 
 			if (auto* label = findByID (editor, "transport.status"))
 			{
-				status = toybox::ui::snapshot::textOf (*label);
+				status = toybox::test::snapshot::textOf (*label);
 			}
 
 			if (! status.startsWith ("Loading"))
@@ -616,7 +616,7 @@ private:
 		{
 			if (auto* component = findByID (editor, tokens[1]))
 			{
-				std::printf ("%s\n", toybox::ui::snapshot::line (*component).toRawUTF8());
+				std::printf ("%s", toybox::test::snapshot::dumpTree (*component).toRawUTF8());
 				report (true, "dump " + tokens[1]);
 			}
 			else
@@ -626,7 +626,7 @@ private:
 			return;
 		}
 
-		std::printf ("%s", toybox::ui::dumpComponentTree (editor).toRawUTF8());
+		std::printf ("%s", toybox::test::snapshot::dumpTree (editor).toRawUTF8());
 		report (true, "dump");
 	}
 
@@ -1426,10 +1426,10 @@ int main (int argc, char* argv[])
 
 	if (arguments.isEmpty())
 	{
-		const int count = toybox::ui::countComponents (editor);
+		const int count = toybox::test::snapshot::countComponents (editor);
 		std::printf ("=== the window without a window ===\n");
 		std::printf ("components: %d\n\n", count);
-		std::printf ("%s", toybox::ui::dumpComponentTree (editor).toRawUTF8());
+		std::printf ("%s", toybox::test::snapshot::dumpTree (editor).toRawUTF8());
 		return count > 0 ? 0 : 1;
 	}
 
@@ -1446,7 +1446,7 @@ int main (int argc, char* argv[])
 
 	if (dumpAfterScript)
 	{
-		std::printf ("%s", toybox::ui::dumpComponentTree (editor).toRawUTF8());
+		std::printf ("%s", toybox::test::snapshot::dumpTree (editor).toRawUTF8());
 	}
 
 	std::printf ("Result    : %s\n", (failures == 0) ? "all checks passed" : "FAILURES");
