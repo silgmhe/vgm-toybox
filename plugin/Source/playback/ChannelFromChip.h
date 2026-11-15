@@ -27,9 +27,11 @@ struct ChipShapeHints
 	/** **The chip's own name for this channel**, carried through so the panels can draw the type
 		mark from the same value the mixer uses.
 
-		`waveKind` alone cannot answer it: it has eight values and merges wavetables with samples
-		into `stored`. `tableWave` distinguishes those two, but only because each decoder remembers
-		to set it - and the N163's does not, which is how a wavetable drew as a sample.
+		`waveKind` alone cannot answer it: it has eight values and merges wavetables with samples into
+		`stored`. `tableWave` distinguishes those two, but it only exists to *veto* the sampled path
+		in WaveExport (a table must not be written as a recording) and is meaningless while
+		`sampleRate` is zero - the NSF player's N163 rows set neither, which is how a wavetable came
+		out with a sample's mark.
 	*/
 	chips::ChannelKind channelKind = chips::ChannelKind::unknown;
 
