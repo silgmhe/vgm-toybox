@@ -558,26 +558,59 @@ void ChannelStrip::paint (juce::Graphics& g)
 	g.setFont (juce::Font (juce::FontOptions (10.5f, juce::Font::bold)));
 	g.setColour (theme::primaryText());
 
-	// The type mark shares the name's line: 20 px at the left, the name centred in what is left.
-	// Without a kind nothing is taken out of the row and the name centres across the whole width,
-	// which is what the master strip and the whole-device rows get.
-	auto nameRow = nameBounds;
-
+	// **The mark and the name are one block, centred together.** The mark sits against the first
+	// letter rather than at the strip's edge, so the pair reads as a single label. Measuring the
+	// text is what allows that - drawText() cannot centre a group it cannot see.
 	if (channelKind != chips::ChannelKind::unknown)
 	{
 		constexpr int kMarkSize = 16;
 		constexpr int kMarkGap = 4;
 
-		const auto mark = nameRow.removeFromLeft (kMarkSize + kMarkGap);
-		drawChannelGlyph (g, channelGlyphFor (channelKind),
-						  { (float) mark.getX (), (float) mark.getCentreY () - kMarkSize * 0.5f,
-							(float) kMarkSize, (float) kMarkSize },
-						  theme::primaryText ().withAlpha (0.75f));
+		const auto font = juce::Font (juce::FontOptions (10.5f, juce::Font::bold));
 
-		nameRow.removeFromLeft (kMarkGap);
+		juce::GlyphArrangement arrangement;
+		arrangement.addLineOfText (font, stripName, 0.0f, 0.0f);
+		const float textWidth = arrangement.getBoundingBox (0, -1, true).getWidth ();
+
+		const float total = (float) kMarkSize + kMarkGap + textWidth;
+
+		if (total <= (float) nameBounds.getWidth ())
+		{
+			const float start = (float) nameBounds.getX ()
+								+ ((float) nameBounds.getWidth () - total) * 0.5f;
+
+			drawChannelGlyph (g, channelGlyphFor (channelKind),
+							  { start, (float) nameBounds.getCentreY () - kMarkSize * 0.5f,
+								(float) kMarkSize, (float) kMarkSize },
+							  theme::primaryText ().withAlpha (0.75f));
+
+			g.drawText (stripName,
+						juce::Rectangle<float> (start + (float) kMarkSize + kMarkGap,
+												(float) nameBounds.getY (),
+												textWidth + 2.0f,
+												(float) nameBounds.getHeight ()),
+						juce::Justification::centredLeft, false);
+		}
+		else
+		{
+			// Too long to sit beside the mark: pin the mark to the edge and let the name take what
+			// is left, which is the shape that cannot overflow.
+			auto row = nameBounds;
+			const auto mark = row.removeFromLeft (kMarkSize + kMarkGap);
+
+			drawChannelGlyph (g, channelGlyphFor (channelKind),
+							  { (float) mark.getX (), (float) mark.getCentreY () - kMarkSize * 0.5f,
+								(float) kMarkSize, (float) kMarkSize },
+							  theme::primaryText ().withAlpha (0.75f));
+
+			row.removeFromLeft (kMarkGap);
+			g.drawText (stripName, row, juce::Justification::centred, true);
+		}
 	}
-
-	g.drawText (stripName, nameRow, juce::Justification::centred, true);
+	else
+	{
+		g.drawText (stripName, nameBounds, juce::Justification::centred, true);
+	}
 
 	drawMeter (g);
 	drawScale (g);
