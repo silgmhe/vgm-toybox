@@ -2,7 +2,7 @@
 
 #include "WaveShape.h"
 #include "WaveformSource.h"
-#include "chips/NoteWaveform.h"
+#include "chips/VoicePatch.h"
 
 #include <algorithm>
 #include <chrono>
@@ -356,7 +356,7 @@ bool writeNoteFile (const ChannelState& channel, const std::string& path, int bi
 		}
 	}
 
-	return writeFloat32Wav (path, values, (uint32_t) std::lround (chips::noteWave::kRenderRate),
+	return writeFloat32Wav (path, values, (uint32_t) std::lround (chips::kNoteRate),
 							std::string ());
 }
 

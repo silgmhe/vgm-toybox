@@ -1,7 +1,5 @@
 #include "OpnDecoder.h"
 
-#include "NoteWaveform.h"
-
 #include <algorithm>
 #include <cassert>
 #include <cmath>
@@ -1380,48 +1378,25 @@ bool OpnDecoder::capturePatch (int channel, VoicePatch& out) const
 	// nibble, then the operator in bits 2-3 and the channel's low two bits. Restoring the address
 	// rather than emitting a decoded struct is the whole point of `VoicePatch` - a rig can write
 	// these back without an encoder in between.
+	//
+	// **The port is in bit 8.** Channels 3-5 live on the second port, and their register addresses
+	// repeat the low bits of channels 0-2; an offset that dropped the port would send channel 4's
+	// patch to channel 0, which is a patch that loads and sounds like somebody else's instrument.
+	const uint16_t portBit = (channel >= 3) ? 0x100u : 0x000u;
+	const uint16_t lowBits = (uint16_t) (channel % 3);
+
 	for (int op = 0; op < 4; ++op)
 	{
 		for (int bank = 3; bank <= 9; ++bank)
 		{
-			out.regs.push_back ({ (uint8_t) ((bank << 4) | (op << 2) | (channel & 0x03)),
+			out.regs.push_back ({ (uint16_t) (portBit | (bank << 4) | (op << 2) | lowBits),
 								  state.opPatch[bank - 3][op] });
 		}
 	}
 
-	out.regs.push_back ({ (uint8_t) (0xB0 | (channel & 0x03)), state.feedbackAlgorithm });
+	out.regs.push_back ({ (uint16_t) (portBit | 0xB0u | lowBits), state.feedbackAlgorithm });
 
 	return true;
-}
-
-std::shared_ptr<const std::vector<float>> OpnDecoder::noteWaveformFor (int channel, double hz) const
-{
-	if (channel < 0 || channel >= impl->layout.fm || hz <= 0.0)
-	{
-		return nullptr;
-	}
-
-	const Impl::Channel& voice = impl->channels[channel];
-	Impl::NoteCache& cache = impl->noteCache[channel];
-
-	if (cache.wave != nullptr && cache.note == hz && cache.version == voice.patchVersion)
-	{
-		return cache.wave;
-	}
-
-	chips::VoicePatch captured;
-	if (! capturePatch (channel, captured))
-	{
-		return nullptr;
-	}
-
-	cache.note = hz;
-	cache.version = voice.patchVersion;
-	cache.voicePatch = std::make_shared<const chips::VoicePatch> (std::move (captured));
-	cache.wave = std::make_shared<const std::vector<float>> (
-		noteWave::render (*cache.voicePatch, hz, 0.0, noteWave::kRenderRate));
-
-	return cache.wave;
 }
 
 bool OpnDecoder::isDrum (int channel) const

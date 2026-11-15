@@ -206,6 +206,23 @@ private:
 	//   one overwrite the other - which is exactly how the SSG's tracks drew with the FM mark.
 	mutable bool kindsCollected = false;
 
+	/** **The note waveform each channel is drawing**, computed from the chip core the plugin plays
+		through and keyed on the patch and the pitch.
+
+		It lives here rather than in the decoder because the decoder is in `chips/`, which may not
+		include an engine header - the build enforces that, and rightly: a decoder describes
+		registers, it does not make sound. The cache is what keeps the panels from rendering eight
+		thousand points thirteen times a frame.
+	*/
+	struct NoteWaveEntry
+	{
+		std::shared_ptr<const chips::VoicePatch> patch;
+		double hz = 0.0;
+		std::shared_ptr<const std::vector<float>> wave;
+	};
+
+	mutable std::map<int, NoteWaveEntry> noteWaves;
+
 	/** What the display draws for each DPCM sample: the bytes the export collected, and the rate it
 		declares.
 

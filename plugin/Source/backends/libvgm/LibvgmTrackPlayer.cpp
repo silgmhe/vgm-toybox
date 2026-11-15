@@ -14,6 +14,8 @@
 
 #include "playback/ChannelFromChip.h"
 
+#include "NoteWaveform.h"
+
 namespace toybox::backends::libvgm
 {
 	namespace
@@ -943,10 +945,22 @@ bool LibvgmTrackPlayer::captureState (playback::ChipStateSnapshot& snapshot) con
 				chipState, instance.decoder->noteTable (channel), hints, chipName, channelName);
 
 			// **Rendered here, not in channelState()**: this runs while the keyboard page is on
-			// screen, and `channelState()` runs while a song is being scanned. See IChipDecoder.h.
-			if (instance.decoder != nullptr && state.frequency > 0.0f)
+			// screen, and `channelState()` runs while a song is being scanned. The cache is keyed
+			// on the patch and the pitch, which is everything `render()` reads.
+			if (state.voicePatch != nullptr && state.frequency > 0.0f)
 			{
-				state.noteWaveform = instance.decoder->noteWaveformFor (channel, (double) state.frequency);
+				NoteWaveEntry& entry = noteWaves[channel];
+				const double hz = (double) state.frequency;
+
+				if (entry.wave == nullptr || entry.patch != state.voicePatch || entry.hz != hz)
+				{
+					entry.patch = state.voicePatch;
+					entry.hz = hz;
+					entry.wave = std::make_shared<const std::vector<float>> (
+						chips::noteWave::render (*state.voicePatch, hz, 0.0, chips::noteWave::kRenderRate));
+				}
+
+				state.noteWaveform = entry.wave;
 			}
 
 			// **The YM2612's DAC row answers for the hit, not for the stream.** The decoder can only

@@ -26,6 +26,11 @@ enum class ChipModel : uint8_t
 
 /** **The registers behind one channel's voice**, as the chip itself addresses them.
 
+	**Offsets are 16 bits because the chip has two ports.** The OPN's second port carries channels
+	3-5, and its registers are written with the port in bit 8. An 8-bit offset would make channel 4
+	indistinguishable from channel 0 - the low two bits of both are zero - which is a patch that
+	loads somewhere else.
+
 	`(offset, value)` pairs rather than a struct of named fields, and that is deliberate:
 
 	- it is what a replayer needs: `load()` writes them back in order, with no encoding step in
@@ -40,10 +45,22 @@ enum class ChipModel : uint8_t
 	`model` of `unknown` are the two ways of saying "no patch". A decoder that cannot serialise
 	its voice says so by returning false from `capturePatch()` rather than inventing one.
 */
+/** **The rate a computed note is sampled at.**
+
+	Low on purpose: the window draws it at seventy pixels and the exporter writes it as a file, and
+	neither wants 44 100 points for a note whose whole point is its envelope. It lives here rather
+	than beside the renderer because the *exporter* needs it too, and `playback/` may not include an
+	engine header - the build enforces that.
+
+	It has to be shared: a file that declares 44 100 over 8 000-rate samples plays four octaves high
+	and five times too short, which is exactly what the first export of a note sounded like.
+*/
+constexpr double kNoteRate = 8000.0;
+
 struct VoicePatch
 {
 	ChipModel model = ChipModel::unknown;
-	std::vector<std::pair<uint8_t, uint8_t>> regs;
+	std::vector<std::pair<uint16_t, uint16_t>> regs;
 };
 
 } // namespace toybox::chips

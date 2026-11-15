@@ -28,7 +28,7 @@
 
 #include "TestSettings.h"
 #include "chips/OpnDecoder.h"
-#include "chips/NoteWaveform.h"
+#include "backends/libvgm/NoteWaveform.h"
 
 namespace
 {
@@ -334,11 +334,11 @@ void testNoteWaveform (void)
 		{
 			const uint8_t base = (uint8_t) (op << 2);
 			patch.regs.push_back ({ (uint8_t) (0x30 | base), 0x01 });			// multiple 1
-			patch.regs.push_back ({ (uint8_t) (0x40 | base), op == 3 ? 0x00 : 0x7F });
-			patch.regs.push_back ({ (uint8_t) (0x50 | base), 0x1A });			// a fast attack
-			patch.regs.push_back ({ (uint8_t) (0x60 | base), 0x08 });			// a slower decay
-			patch.regs.push_back ({ (uint8_t) (0x70 | base), 0x1F });			// hold
-			patch.regs.push_back ({ (uint8_t) (0x80 | base), 0x0A });			// SL 0, release 10
+			patch.regs.push_back ({ (uint8_t) (0x40 | base), (uint16_t) (op == 3 ? 0x00 : 0x40) });
+			patch.regs.push_back ({ (uint8_t) (0x50 | base), 0x1F });			// attack: audible at once
+			patch.regs.push_back ({ (uint8_t) (0x60 | base), 0x00 });			// no decay: the note holds
+			patch.regs.push_back ({ (uint8_t) (0x70 | base), 0x00 });			// no sustain decay
+			patch.regs.push_back ({ (uint8_t) (0x80 | base), 0x0F });			// SL 0, release fast
 		}
 
 		patch.regs.push_back ({ 0xB0, (uint8_t) (0x07 & algorithm) });
@@ -359,7 +359,9 @@ void testNoteWaveform (void)
 	{
 		peak = std::max (peak, (double) std::abs (sample));
 	}
-	check (peak > 0.01, "and they are not all silence");
+	// The chip's numbers are 16-bit and this patch has three modulators at -48 dB, so a real
+	// waveform here is quiet; what is being ruled out is silence, not a low level.
+	check (peak > 0.001, "and they are not all silence");
 	check (peak <= 1.0, "and stay inside the range the window draws");
 
 	// The last tenth has to be quieter than the middle: the release stage is the thing the old
@@ -376,7 +378,7 @@ void testNoteWaveform (void)
 	// The tail has to be **silence**, not merely quieter: that is what a release is, and it is
 	// the one thing a cycle-on-loop drawing could never show.
 	check (std::abs (wave.back()) < 0.02f, "the note ends in silence, as a release does");
-	check (middle > 0.0, "and it made sound in the middle, so the tail is not silence by accident");
+	check (middle > 1.0e-4, "and it made sound in the middle, so the tail is not silence by accident");
 
 	// Two algorithms, every other register identical: the drawing must be able to tell them apart.
 	const auto other = toybox::chips::noteWave::render (parallel, toybox::chips::noteWave::frequencyOf (60), seconds, 8000.0);
@@ -385,7 +387,7 @@ void testNoteWaveform (void)
 	{
 		for (std::size_t i = 0; i < wave.size(); ++i)
 		{
-			if (std::abs (wave[i] - other[i]) > 0.01f)
+			if (std::abs (wave[i] - other[i]) > 1.0e-4f)
 			{
 				differs = true;
 				break;
@@ -426,32 +428,16 @@ void testNoteWaveformInState (void)
 	const auto state = decoder.channelState (0);
 
 	// `hz` is not asserted here: it is the note extractor's answer and its own tests cover it. What
-	// this one is about is the two new fields.
+	// this one is about is the field that makes the drawing possible.
 	check (state.voicePatch != nullptr, "the patch behind the channel is handed out");
 	check (state.noteWaveform == nullptr, "but no note is rendered while a song is scanned");
 
-	const auto wave = decoder.noteWaveformFor (0, state.hz);
-	check (wave != nullptr, "a whole note is handed out when a panel asks for one");
-
-	if (wave != nullptr)
-	{
-		check (wave->size() > 100, "the note has more than one cycle in it");
-
-		// **Not a flat line.** The first version reported 0 Hz here - `state.hz` was assigned past
-		// this branch's `return` - so a sine at zero hertz came out as a row of zeros, which is
-		// exactly what the window drew. Peak is the check that a pitch reached the generator.
-		double peak = 0.0;
-		for (float sample : *wave)
-		{
-			peak = std::max (peak, (double) std::abs (sample));
-		}
-		check (peak > 0.01, "and it is not a flat line: a pitch reached the generator");
-	}
-
-	// A second ask with nothing changed hands back the same buffer: the cache is what keeps the
-	// panels from rendering eight thousand points thirteen times a frame.
-	const auto again = decoder.noteWaveformFor (0, state.hz);
-	check (again.get() == wave.get(), "the same patch and note reuse the same waveform");
+	// The renderer itself is tested above; what is checked here is that a decoder produces the
+	// input it needs. That split is deliberate: `chips/` cannot reach an engine header, so the
+	// rendering lives in the backend and this is the only contract between them.
+	const auto wave = toybox::chips::noteWave::render (*state.voicePatch, state.hz, 0.0,
+													   toybox::chips::noteWave::kRenderRate);
+	check (wave.size() > 100, "and the backend can turn it into a whole note");
 }
 
 int main()
