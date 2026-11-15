@@ -180,7 +180,7 @@ namespace fm
 constexpr int minSustainMs = 500;
 constexpr int maxSustainMs = 10000;
 constexpr int sustainStepMs = 100;
-constexpr int defaultSustainMs = 2000;
+constexpr int defaultSustainMs = 1500;
 
 /** **How much tail to keep after the key comes up**, in milliseconds.
 
@@ -188,10 +188,10 @@ constexpr int defaultSustainMs = 2000;
 	on this chip. A driver never writes that for a note it means to end, so the register describes a
 	sound nobody plays - the length is a preference instead, and this is its default.
 */
-constexpr int minReleaseMs = 200;
+constexpr int minReleaseMs = 1;
 constexpr int maxReleaseMs = 5000;
 constexpr int releaseStepMs = 50;
-constexpr int defaultReleaseMs = 1000;
+constexpr int defaultReleaseMs = 100;
 
 /** **The note an export renders at, when the user asks for a fixed one.**
 
@@ -207,7 +207,7 @@ constexpr int defaultReleaseMs = 1000;
 	the reason someone turns this on only when they are cutting samples to be played back at a
 	matched level.
 */
-constexpr bool normalise = false;
+constexpr bool normalise = true;
 
 constexpr int minFixedNote = 21;
 constexpr int maxFixedNote = 108;

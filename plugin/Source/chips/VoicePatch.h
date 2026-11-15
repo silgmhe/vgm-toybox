@@ -64,8 +64,8 @@ constexpr double kNoteRate = 8000.0;
 	it rather than holding. The release is the tail after the key, which the patch does define, but
 	its rate code reaches four minutes at RR = 1, so the length is capped here rather than read.
 */
-constexpr double kDefaultSustainSeconds = 2.0;
-constexpr double kDefaultReleaseSeconds = 1.0;
+constexpr double kDefaultSustainSeconds = 1.5;
+constexpr double kDefaultReleaseSeconds = 0.1;
 
 /** **How many bits of magnitude a chip's FM core actually produces.**
 
