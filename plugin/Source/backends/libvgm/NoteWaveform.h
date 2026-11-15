@@ -36,7 +36,7 @@ constexpr double kRenderRate = chips::kNoteRate;
 */
 std::vector<float> render (const chips::VoicePatch& patch, double frequencyHz,
 						   double sustainSeconds = 0.0, double releaseSeconds = 0.0,
-						   double rate = 32000.0);
+						   double rate = 32000.0, bool normalise = false);
 
 /** The frequency of a MIDI note, equal temperament with A4 at 440. A convenience for callers
 	that think in notes - the generator itself takes Hz, because that is what a chip reports. */

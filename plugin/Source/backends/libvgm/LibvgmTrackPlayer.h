@@ -220,6 +220,7 @@ private:
 		double hz = 0.0;
 		double sustain = 0.0;		// both are part of the key: a setting can change under a
 		double release = 0.0;		// cached note, and the buffer's length with it
+		bool normalise = false;		// and so is this: it changes every sample's level
 		std::shared_ptr<const std::vector<float>> wave;
 	};
 

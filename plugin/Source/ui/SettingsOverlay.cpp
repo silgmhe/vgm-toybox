@@ -1241,6 +1241,14 @@ VisualiserSettingsPage::VisualiserSettingsPage (void)
 	setUpSlider (releaseSlider, "settings.visualiser.fmRelease", "visualiser.fmReleaseMs",
 				 &toybox::settings::SettingsStore::setFmReleaseMs);
 
+	normaliseButton.setComponentID ("settings.visualiser.fmNormalise");
+	normaliseButton.onClick = [this]
+	{
+		toybox::settings::SettingsStore::getInstance ()
+			.setFmNormalise (normaliseButton.getToggleState ());
+	};
+	addAndMakeVisible (normaliseButton);
+
 	refreshLanguage ();
 	refresh ();
 }
@@ -1251,6 +1259,7 @@ void VisualiserSettingsPage::refresh (void)
 
 	sustainSlider.setValue ((double) store.getFmSustainMs (), juce::dontSendNotification);
 	releaseSlider.setValue ((double) store.getFmReleaseMs (), juce::dontSendNotification);
+	normaliseButton.setToggleState (store.getFmNormalise (), juce::dontSendNotification);
 }
 
 void VisualiserSettingsPage::paint (juce::Graphics& g)
@@ -1273,6 +1282,9 @@ void VisualiserSettingsPage::resized (void)
 	releaseSlider.setBounds (area.removeFromTop (kFooterHeight));
 	area.removeFromTop (14);
 
+	normaliseButton.setBounds (area.removeFromTop (22));
+	area.removeFromTop (10);
+
 	hint.setBounds (area.removeFromTop (60));
 }
 
@@ -1293,6 +1305,7 @@ void VisualiserSettingsPage::refreshLanguage (void)
 		releaseCaption.setText (i18n::tr (setting->labelKey), juce::dontSendNotification);
 	}
 
+	normaliseButton.setButtonText (i18n::tr ("settings.visualiser.fmNormalise"));
 	hint.setText (i18n::tr ("settings.visualiser.explanation"), juce::dontSendNotification);
 }
 

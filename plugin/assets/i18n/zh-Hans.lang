@@ -280,6 +280,7 @@ language: 简体中文
 
 "settings.visualiser" = "FM";
 "settings.visualiser.explanation" = "绘制或导出 FM 通道时，音符保持多久、尾巴留多长。芯片无法回答这两个问题：它的延音是一个电平，释音速率则可达四分钟。";
+"settings.visualiser.fmNormalise" = "将每个音符缩放到满电平";
 "settings.visualiser.fmSustainLength" = "持续段长度";
 "settings.visualiser.fmReleaseLength" = "释音段长度";
 "settings.visualiser.fmFixedNote" = "按指定音高渲染";

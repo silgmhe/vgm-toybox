@@ -213,6 +213,11 @@ public:
 	int getFmReleaseMs (void) const;
 	void setFmReleaseMs (int milliseconds);
 
+	/** Whether a rendered FM note is scaled to full scale. Off by default: the level is part of the
+		patch, and normalising it makes every timbre look equally loud. */
+	bool getFmNormalise (void) const;
+	void setFmNormalise (bool shouldNormalise);
+
 	/** Whether an export renders at a pinned note rather than the one that was playing. */
 	bool getFmFixedNoteEnabled (void) const;
 	void setFmFixedNoteEnabled (bool enabled);

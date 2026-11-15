@@ -374,6 +374,7 @@ private:
 	juce::Slider sustainSlider;
 	juce::Label releaseCaption;
 	juce::Slider releaseSlider;
+	juce::ToggleButton normaliseButton;
 	juce::Label hint;
 };
 

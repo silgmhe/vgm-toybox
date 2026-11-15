@@ -284,6 +284,7 @@ language: English
 
 "settings.visualiser" = "FM";
 "settings.visualiser.explanation" = "How long a note is held and how much tail follows it, when an FM channel is drawn or exported. The chip cannot answer either: its sustain is a level, and its release rate reaches four minutes.";
+"settings.visualiser.fmNormalise" = "Scale each note to full level";
 "settings.visualiser.fmSustainLength" = "Sustain length";
 "settings.visualiser.fmReleaseLength" = "Release length";
 "settings.visualiser.fmFixedNote" = "Render at note";

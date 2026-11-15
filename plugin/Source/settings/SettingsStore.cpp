@@ -626,6 +626,20 @@ void SettingsStore::setFmReleaseMs (int milliseconds)
 	}
 }
 
+bool SettingsStore::getFmNormalise (void) const
+{
+	return file != nullptr ? file->getBoolValue ("visualiser.fmNormalise", visualiser::normalise)
+						   : visualiser::normalise;
+}
+
+void SettingsStore::setFmNormalise (bool shouldNormalise)
+{
+	if (file != nullptr)
+	{
+		file->setValue ("visualiser.fmNormalise", shouldNormalise);
+	}
+}
+
 bool SettingsStore::getFmFixedNoteEnabled (void) const
 {
 	return file != nullptr ? file->getBoolValue ("visualiser.fmFixedNoteEnabled",

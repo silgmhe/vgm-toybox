@@ -199,6 +199,16 @@ constexpr int defaultReleaseMs = 1000;
 	the pitch on is the deliberate act of asking for a different one. The range is a piano's - A0 to
 	C8 - because the point of the control is to pick a playable note, not to sweep the register.
 */
+/** **Whether a rendered note is scaled to full scale.**
+
+	Off by default, and that is a deliberate answer rather than an unset one: the level a patch
+	produces is part of what the chip sounds like, and normalising it away makes every timbre look
+	equally loud. A quiet carrier draws as a thin ribbon - which is the truth about that patch, and
+	the reason someone turns this on only when they are cutting samples to be played back at a
+	matched level.
+*/
+constexpr bool normalise = false;
+
 constexpr bool fixedNoteEnabled = false;
 constexpr int minFixedNote = 21;
 constexpr int maxFixedNote = 108;

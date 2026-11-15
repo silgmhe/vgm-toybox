@@ -1589,7 +1589,7 @@ void ContentSlot::beginExport (const ExportOptions& options)
 				{
 					channel.noteWaveform = std::make_shared<const std::vector<float>> (
 						chips::noteWave::render (*channel.voicePatch, hz, sustain, release,
-												 chips::noteWave::kRenderRate));
+												 chips::noteWave::kRenderRate, store.getFmNormalise ()));
 				}
 			}
 		}

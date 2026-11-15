@@ -958,17 +958,20 @@ bool LibvgmTrackPlayer::captureState (playback::ChipStateSnapshot& snapshot) con
 				const auto& store = settings::SettingsStore::getInstance ();
 				const double sustain = (double) juce::jmax (1, store.getFmSustainMs ()) / 1000.0;
 				const double release = (double) juce::jmax (1, store.getFmReleaseMs ()) / 1000.0;
+				const bool normalise = store.getFmNormalise ();
 
 				if (entry.wave == nullptr || entry.patch != state.voicePatch
-					|| entry.hz != hz || entry.sustain != sustain || entry.release != release)
+					|| entry.hz != hz || entry.sustain != sustain || entry.release != release
+					|| entry.normalise != normalise)
 				{
 					entry.patch = state.voicePatch;
 					entry.hz = hz;
 					entry.sustain = sustain;
 					entry.release = release;
+					entry.normalise = normalise;
 					entry.wave = std::make_shared<const std::vector<float>> (
 						chips::noteWave::render (*state.voicePatch, hz, sustain, release,
-												 chips::noteWave::kRenderRate));
+												 chips::noteWave::kRenderRate, normalise));
 				}
 
 				state.noteWaveform = entry.wave;
