@@ -86,7 +86,7 @@ void paintChannelRow (juce::Graphics& g,
 	const auto ink = audible ? theme::primaryText () : theme::secondaryText ();
 
 	g.setColour (ink);
-	g.setFont (juce::Font (juce::FontOptions (12.0f)));
+	g.setFont (juce::Font (juce::FontOptions (13.0f)));
 
 	// The type mark sits against the name, the same pairing the mixer strips use - the name is the
 	// anchor and the mark hangs off its left, so the two read as one label. Smaller than the mixer's
@@ -95,7 +95,7 @@ void paintChannelRow (juce::Graphics& g,
 
 	if (channel.channelKind != chips::ChannelKind::unknown)
 	{
-		constexpr int kMarkSize = 14;
+		constexpr int kMarkSize = 16;
 		constexpr int kMarkGap = 4;
 
 		const auto mark = nameArea.removeFromLeft (kMarkSize);
