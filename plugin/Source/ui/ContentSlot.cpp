@@ -148,11 +148,14 @@ public:
 		exportButton.onClick = [this] { if (onExport) { onExport (); } };
 		setComponentID ("view.keyboard");
 
-		// paint() fills the whole rectangle with the card colour, so nothing underneath shows
-		// through and the parent does not have to be redrawn behind it. The panel is inset by two
-		// pixels inside a card whose corners are rounder than that, which is the one thing to look
-		// at: a square fill can reach into the corner arcs. See the note in paint().
-		setOpaque (true);
+		// **Not opaque, because paint() draws a rounded rectangle.** An opaque component promises
+		// that the parent has nothing to draw behind it, and the four corners outside the arc would
+		// then keep whatever was there last frame - a card-coloured square nub poking out of each
+		// round corner, which is what the keyboard page showed. The parent's backdrop is a cached
+		// gradient image, so letting it through costs almost nothing.
+		//
+		// The panel inside is inset by three; see resized() for why that number.
+		setOpaque (false);
 
 		// The real thing, so its hover and drag behaviour come from the same look and feel the
 		// mixer's bar uses. An earlier attempt at this did not paint, and the reason was not the
@@ -1637,6 +1640,12 @@ void ContentSlot::paint (juce::Graphics& g)
 	}
 
 	// The other two are contents only, so the slot provides the card they sit in.
+	//
+	// **The four corners outside the arc are the window's, and this component is not opaque** so the
+	// parent can draw them. Filling them here was the first attempt and it cannot work: the window
+	// behind is a vertical gradient, and any single colour chosen for the corners matches it at one
+	// height and not at the other three. Letting the parent through costs one paint of a cached
+	// backdrop image, and is the only way the corners match the surface the card sits on.
 	g.setColour (theme::card ());
 	g.fillRoundedRectangle (getLocalBounds ().toFloat (), theme::cardRadius);
 	g.setColour (theme::cardBorder ());
@@ -1647,7 +1656,11 @@ void ContentSlot::resized (void)
 {
 	// The panels sit inside the card's rounded corners; the mixer brings its own card, so it takes
 	// the whole slot rather than an inset copy of it.
-	const auto inner = getLocalBounds ().reduced (2);
+	//
+	// **Three, not two.** A square corner stays inside a radius-r arc only when the rectangle is
+	// inset by at least `r * (1 - 1/sqrt(2))`, which at `cardRadius == 10` is 2.93 px. Two left
+	// 0.93 px of every corner outside the arc, drawn as a straight edge across the round one.
+	const auto inner = getLocalBounds ().reduced (3);
 
 	if (mixer != nullptr) { mixer->setBounds (getLocalBounds ()); }
 	if (keyboardPanel != nullptr) { keyboardPanel->setBounds (inner); }
