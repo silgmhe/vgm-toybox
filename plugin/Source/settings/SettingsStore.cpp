@@ -568,19 +568,6 @@ void SettingsStore::setKeyboardMiddleCOctave (int octave)
 	}
 }
 
-bool SettingsStore::getAudioDcBlock (void) const
-{
-	return file != nullptr && file->getBoolValue ("audio.dcBlock", audio::dcBlock);
-}
-
-void SettingsStore::setAudioDcBlock (bool shouldRemove)
-{
-	if (file != nullptr)
-	{
-		file->setValue ("audio.dcBlock", shouldRemove);
-	}
-}
-
 int SettingsStore::getNumericSetting (const NumericSetting& setting) const
 {
 	const int stored = file != nullptr ? file->getIntValue (setting.key, setting.defaultValue)

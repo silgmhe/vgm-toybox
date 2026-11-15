@@ -5,6 +5,7 @@
 
 #include <juce_gui_basics/juce_gui_basics.h>
 
+#include "SyncedComboBox.h"
 #include "playback/OutputRouting.h"
 #include "playback/SongBackend.h"
 
@@ -26,18 +27,6 @@ public:
 
 private:
 	playback::MidiCapability capability = playback::MidiCapability::unavailable;
-};
-
-/** The MIDI channel selector.
-
-	A plain ComboBox, except for its popup: every channel entry carries the MIDI mark in front of
-	"Ch.n", which `ComboBox::addItem` has no way to express (it stores text only). The menu is
-	rebuilt from the box's own items, so the item ids, the tick on the current channel and the
-	`set ...` path the window scripts use all stay the ComboBox's. */
-class MidiChannelBox final : public juce::ComboBox
-{
-public:
-	void showPopup (void) override;
 };
 
 /**
@@ -75,6 +64,15 @@ public:
 		track (the master keeps `mixer.master.midi`, it exists once).
 	*/
 	void setup (const juce::String& stripName, bool isMasterStrip, int trackIndex = -1);
+
+	/** **What this channel makes its sound with**, drawn as a mark left of the name.
+
+		The name alone is not enough to tell a C140 drum from an SCC wavetable - and for chips whose
+		driver names nothing the name is `Ch 3`, which says nothing at all. `unknown` (the
+		whole-device row, or a backend that cannot answer) draws no mark and the name centres as it
+		did before.
+	*/
+	void setChannelKind (chips::ChannelKind kind);
 
 	/** Updates every control without firing the callbacks; the meters are already decayed. */
 	void setValues (float gain, float pan, bool muted, bool soloed, float peakL, float peakR, float dim);
@@ -127,8 +125,10 @@ private:
 
 	juce::TextButton muteButton { "M" };
 	juce::TextButton soloButton { "S" };
-	juce::ComboBox outputBox;		// Master / Out 1/2 / Out 3/4 ... at the bottom of the strip
-	MidiChannelBox midiBox;			// Off / Ch.1-Ch.16, below the output selector
+	// Both selectors are SyncedComboBox: the panel's timer mirrors the engine into them, and a pick
+	// has to survive that mirroring (SyncedComboBox.h explains the race it exists for).
+	SyncedComboBox outputBox;		// Master / Out 1/2 / Out 3/4 ... at the bottom of the strip
+	SyncedComboBox midiBox;			// Off / Ch.1-Ch.16, below the output selector
 	MidiCapabilityBadge capabilityBadge;
 	juce::Slider gainSlider { juce::Slider::LinearVertical, juce::Slider::NoTextBox };
 	juce::Slider panKnob { juce::Slider::RotaryHorizontalVerticalDrag, juce::Slider::NoTextBox };
@@ -142,6 +142,7 @@ private:
 	bool mixerActive = true;
 	bool midiActive = true;		// usually mixerActive - the master keeps the two apart (see setMidiActive)
 	juce::String stripName;
+	chips::ChannelKind channelKind = chips::ChannelKind::unknown;	// drawn left of the name
 	int trackIndex = -1;	// only used to build the component IDs (see setup())
 	juce::Rectangle<int> nameBounds;
 	juce::Rectangle<int> meterBounds;

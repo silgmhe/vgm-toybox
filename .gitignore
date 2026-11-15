@@ -128,3 +128,7 @@ test_file/
 .serena/
 .codegraph/
 .learnings/
+
+# Preview sheets the UI test renders for a human to look at - see
+# UiButtonTest::renderChannelGlyphSheet(). Output, not source.
+shots/

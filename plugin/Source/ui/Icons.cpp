@@ -319,13 +319,22 @@ void drawMidiGlyph (juce::Graphics& g, juce::Rectangle<float> iconArea, juce::Co
 	g.strokePath (ring, juce::PathStrokeType (lineWidth, juce::PathStrokeType::curved,
 											  juce::PathStrokeType::rounded));
 
-	// 180, 135, 90, 45, 0 degrees: the five contacts, left to right across the top half.
-	const float contactAngles[] = { 180.0f, 135.0f, 90.0f, 45.0f, 0.0f };
-	const float contactRadius = juce::jmax (1.0f, radius * 0.19f);
+	// 180, 135, 90, 45, 0 degrees: the contacts, left to right across the top half. The DIN has
+	// five; below about twelve pixels five dots merge into a line, so three are drawn instead -
+	// the ring and the notch are what still make it read as a connector at that size.
+	const float fiveAngles[] = { 180.0f, 135.0f, 90.0f, 45.0f, 0.0f };
+	const float threeAngles[] = { 180.0f, 90.0f, 0.0f };
+
+	const bool roomForFive = juce::jmin (width, height) >= 12.0f;
+	const int contactCount = roomForFive ? 5 : 3;
+	const float* contactAngles = roomForFive ? fiveAngles : threeAngles;
+
+	const float contactRadius = juce::jmax (0.7f, radius * 0.19f);
 	juce::Path contacts;
-	for (const float degrees : contactAngles)
+
+	for (int i = 0; i < contactCount; ++i)
 	{
-		const float radians = juce::degreesToRadians (degrees);
+		const float radians = juce::degreesToRadians (contactAngles[i]);
 		const float x = centreX + std::cos (radians) * radius * 0.58f;
 		const float y = centreY - std::sin (radians) * radius * 0.58f;
 		contacts.addEllipse (x - contactRadius, y - contactRadius, contactRadius * 2.0f,
@@ -333,8 +342,101 @@ void drawMidiGlyph (juce::Graphics& g, juce::Rectangle<float> iconArea, juce::Co
 	}
 	g.fillPath (contacts);
 
-	g.fillRect (centreX - radius * 0.32f, centreY + radius * 0.70f, radius * 0.64f,
-				radius * 0.22f);
+	// The alignment notch: the one detail that says "DIN connector" rather than "circle with dots".
+	// Its height has a floor of its own - at badge size radius * 0.24 is under a pixel, and a notch
+	// that cannot be seen leaves a ring that could be anything.
+	g.fillRect (centreX - radius * 0.36f, centreY + radius * 0.66f, radius * 0.72f,
+				juce::jmax (1.2f, radius * 0.24f));
+}
+
+namespace
+{
+	/** How much of the box the overlay takes. The mark is the subject and gets the whole face; the
+		overlay is a subscript on its bottom-right corner. */
+	constexpr float kOverlayShare = 0.48f;
+
+	/** The corner the overlay sits in - the bottom-right `kOverlayShare` of the box. */
+	juce::Rectangle<float> overlayAreaOf (juce::Rectangle<float> iconArea)
+	{
+		const float size = iconArea.getWidth() * kOverlayShare;
+		return iconArea.removeFromRight (size).removeFromBottom (size);
+	}
+
+	/** A pad in the button's own colour under the overlay.
+
+		The overlay is drawn *on top of* the DIN mark, and both are thin lines in one colour: without
+		a pad the two read as a tangle rather than as two layers. The pad is the face the button
+		already has, so it disappears - except for the instant a press darkens that face, where a
+		slightly lighter square shows. That was judged better than giving up the layering.
+	*/
+	void drawOverlayPad (juce::Graphics& g, juce::Rectangle<float> overlayArea, juce::Colour backdrop)
+	{
+		// Just enough to separate the two layers: a pad that reaches past the overlay's own bounds
+		// cuts a visible square out of the ring, which reads as damage rather than as a layer.
+		g.setColour (backdrop);
+		g.fillRoundedRectangle (overlayArea.expanded (0.6f), 3.0f);
+	}
+
+	/** The standard "not this" mark: a ring with the diagonal through it. */
+	void drawProhibitedGlyph (juce::Graphics& g, juce::Rectangle<float> iconArea, juce::Colour colour)
+	{
+		g.setColour (colour);
+
+		const float lineWidth = juce::jmax (1.0f, juce::jmin (iconArea.getWidth(),
+															 iconArea.getHeight()) * 0.13f);
+		const float radius = juce::jmin (iconArea.getWidth(), iconArea.getHeight()) * 0.46f;
+		const float centreX = iconArea.getCentreX();
+		const float centreY = iconArea.getCentreY();
+
+		juce::Path ring;
+		ring.addEllipse (centreX - radius, centreY - radius, radius * 2.0f, radius * 2.0f);
+		g.strokePath (ring, juce::PathStrokeType (lineWidth, juce::PathStrokeType::curved,
+												  juce::PathStrokeType::rounded));
+
+		juce::Path slash;
+		slash.startNewSubPath (centreX - radius * 0.70f, centreY + radius * 0.70f);
+		slash.lineTo (centreX + radius * 0.70f, centreY - radius * 0.70f);
+		g.strokePath (slash, juce::PathStrokeType (lineWidth, juce::PathStrokeType::curved,
+												   juce::PathStrokeType::rounded));
+	}
+
+	/** The mark, filling most of the box - at this size it keeps all five contacts. */
+	void drawMidiMarkUnder (juce::Graphics& g, juce::Rectangle<float> iconArea, juce::Colour colour)
+	{
+		drawMidiGlyph (g, iconArea.reduced (iconArea.getWidth() * 0.10f), colour);
+	}
+}
+
+void drawMidiSequentialGlyph (juce::Graphics& g, juce::Rectangle<float> iconArea,
+							  juce::Colour colour, juce::Colour backdrop)
+{
+	// The mark underneath says *which protocol*; the fan-out on top says what happens to the signal.
+	// Same order as the reference: the mark is the subject, the arrows are the overlay.
+	drawMidiMarkUnder (g, iconArea, colour);
+
+	const auto overlay = overlayAreaOf (iconArea);
+	drawOverlayPad (g, overlay, backdrop);
+	drawSpreadOutputsGlyph (g, overlay, colour);
+}
+
+void drawMidiAllToOneGlyph (juce::Graphics& g, juce::Rectangle<float> iconArea,
+							juce::Colour colour, juce::Colour backdrop)
+{
+	drawMidiMarkUnder (g, iconArea, colour);
+
+	const auto overlay = overlayAreaOf (iconArea);
+	drawOverlayPad (g, overlay, backdrop);
+	drawMergeToMasterGlyph (g, overlay, colour);
+}
+
+void drawMidiOffGlyph (juce::Graphics& g, juce::Rectangle<float> iconArea,
+					   juce::Colour colour, juce::Colour backdrop)
+{
+	drawMidiMarkUnder (g, iconArea, colour);
+
+	const auto overlay = overlayAreaOf (iconArea);
+	drawOverlayPad (g, overlay, backdrop);
+	drawProhibitedGlyph (g, overlay, colour);
 }
 
 juce::Image midiGlyphImage (int pixels, juce::Colour colour)

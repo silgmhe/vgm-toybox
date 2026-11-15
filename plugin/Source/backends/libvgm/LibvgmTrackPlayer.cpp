@@ -482,6 +482,25 @@ namespace
 		the row paints 128 columns, so anything past 8 192 is decode cost with no picture to show for
 		it; the file still gets the whole run (`writeSamples` has its own, larger limits). */
 	constexpr std::size_t kDacDisplayPoints = 8192;
+
+	/** **A device the song reports under its parent's identity.**
+
+		libvgm gives a linked voice set - the YM2610's SSG is the one in this project - the parent's
+		device id *and* its type, so neither field separates them. The channel count is the one thing
+		the two do not share: three channels under a YM2610 is its SSG, and nothing else is.
+
+		One definition, because two copies drift: the copy in the kind table answered `channelKind
+		(0..2)` from the FM instance, whose FM count is above those indices, so the SSG's three rows
+		drew as `fm` while the keyboard drew them as squares.
+	*/
+	template <typename Instance>
+	bool isLinkedVoiceSet (const Instance& instance)
+	{
+		return instance.device != nullptr
+			   && instance.device->type == DEVID_YM2610
+			   && instance.decoder != nullptr
+			   && instance.decoder->channelCount () == 3;
+	}
 }
 
 void LibvgmTrackPlayer::applyDacHit (playback::ChannelState& state, uint32_t samples) const
@@ -563,6 +582,13 @@ void LibvgmTrackPlayer::setReplaySource (std::shared_ptr<const midi::SongIr> ir,
 	// time - about 200 ms of load time on `02 Green Hill Zone` for eleven tables nobody reads.
 	dacTable = std::move (table);
 	dacWaves.clear ();
+
+	// **The kind table belongs to the song this player is about to describe.** It is built once and
+	// never invalidated, which was safe only because a player is constructed per song - an implicit
+	// contract. Reusing a player would leave the previous song's kinds in place: no crash, no red
+	// test, just the wrong marks on every strip.
+	kindsCollected = false;
+	kindTable.clear ();
 
 	// A streamed sample player cannot be seeked - see the note in seekSeconds.
 	seekable = true;
@@ -675,6 +701,65 @@ void LibvgmTrackPlayer::Ledger::buildNotes (const midi::SongIr& ir)
 			notes[id] = nextNote++;
 		}
 	}
+}
+
+chips::ChannelKind LibvgmTrackPlayer::channelKindFor (playback::DeviceId deviceId, uint16_t sourceType,
+													   int deviceChannel) const
+{
+	// A whole-device row has no single channel, so no single kind either.
+	if (deviceChannel < 0 || replayIr == nullptr || replayDevices.empty ())
+	{
+		return chips::ChannelKind::unknown;
+	}
+
+	// On demand, the way captureState() creates it: enumerateTracks() runs before a block has been
+	// **The instances appear as their first command is replayed**, so asking at time zero answers
+	// with an empty list. The table is therefore built once, from a replayer of its own pushed a few
+	// seconds in, and thrown away - **not** the one captureState() drives, whose playhead must stay
+	// where the audio thread left it. One pass, not one per track.
+	if (! kindsCollected)
+	{
+		kindsCollected = true;
+
+		VgmReplayer probe (replayIr, replayDevices);
+		probe.advanceTo ((uint32_t) (probe.tickRate () * 2.0));
+
+		for (const auto& instance : probe.instances ())
+		{
+			if (instance.device == nullptr)
+			{
+				continue;
+			}
+
+			const int count = instance.decoder->channelCount ();
+			const bool isSsg = isLinkedVoiceSet (instance);
+
+			std::vector<chips::ChannelKind> kinds;
+			kinds.reserve ((size_t) juce::jmax (0, count));
+
+			for (int channel = 0; channel < count; ++channel)
+			{
+				kinds.push_back (instance.decoder->channelKind (channel));
+			}
+
+			kindTable[{ instance.device->id, isSsg }] = std::move (kinds);
+		}
+	}
+
+	// **The YM2610 answers with two instances under one handle.** Its SSG is a child device that
+	// libvgm reports with the parent's id *and* type, so the handle cannot separate them - three
+	// channels is what does, the same call captureState() makes at `voiceType`. A track whose
+	// `sourceDeviceType` is the AY is the SSG one.
+	const bool wantSsg = (sourceType == DEVID_AY8910);
+
+	const auto found = kindTable.find ({ (uint32_t) deviceId, wantSsg });
+
+	if (found == kindTable.end () || deviceChannel >= (int) found->second.size ())
+	{
+		return chips::ChannelKind::unknown;
+	}
+
+	return found->second[(size_t) deviceChannel];
 }
 
 int LibvgmTrackPlayer::trackForVoice (uint16_t deviceType, int deviceChannel) const
@@ -834,6 +919,7 @@ bool LibvgmTrackPlayer::captureState (playback::ChipStateSnapshot& snapshot) con
 
 			playback::ChipShapeHints hints;
 			hints.waveKind = playback::waveKindForChannelKind (kind);
+			hints.channelKind = kind;
 			hints.isDrum = instance.decoder->isDrum (channel);
 
 			// The chips that select a pulse width by a two-bit register. The others are always
@@ -870,16 +956,9 @@ bool LibvgmTrackPlayer::captureState (playback::ChipStateSnapshot& snapshot) con
 			// `deviceId` - `describeSong` creates them inside the head's loop - so filtering by id can
 			// never find them. That is the whole reason the SSG and PSG rows sat empty while the mixer,
 			// which does no such matching, drew them: it was not the block arithmetic at all.
-			// **The YM2610's SSG arrives under the chip's own device entry.** libvgm lists it as a child
-			// device, so `describeSong` creates its three tracks with the child's type (AY8910) - but the
-			// writes reach the router under the parent, so the instance reports type YM2610 and the same
-			// id. Neither field separates them; what does is the voice count, which is the one piece of
-			// information the two devices do not share. This is the chip-specific rule the whole OPN
-			// family needed: three channels under a YM2610 is its SSG, and nothing else is.
 			uint16_t voiceType = (device != nullptr) ? (uint16_t) device->type : 0;
 
-			if (device != nullptr && device->type == DEVID_YM2610
-				&& instance.decoder->channelCount () == 3)
+			if (isLinkedVoiceSet (instance))	// the SSG answers under the YM2610's identity
 			{
 				voiceType = DEVID_AY8910;
 			}

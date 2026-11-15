@@ -165,33 +165,39 @@ public:
 		playback::TrackId nextId = 1;
 		int channel = 0;
 
-		const auto addTrack = [&] (const char* name, const char* group, bool melodic, playback::DeviceId device)
+		// **`kind` is stamped after construction**, not added to the aggregate: the initialiser above
+		// lists eight fields positionally and is easy to misread, while `channelKind` sits at the end
+		// of the struct for exactly that reason.
+		const auto addTrack = [&] (const char* name, const char* group, bool melodic,
+								   playback::DeviceId device, chips::ChannelKind kind)
 		{
 			tracks_.push_back (playback::TrackInfo { nextId++, device, (int) device, channel++, true, name, group,
 												 melodic ? playback::MidiCapability::melodic
 														 : playback::MidiCapability::unavailable });
+			tracks_.back().channelKind = kind;
 		};
 
 		// The two sample voices answer with a note now: the noise channel's sixteen periods are
 		// laid out as sixteen semitones, and a DPCM sample keeps the slot the scan gave it. Neither
 		// carries a pitch to slide, so neither is melodic - what they are is a fixed set of notes a
 		// drum kit can be built on.
-		const auto addSampleTrack = [&] (const char* name, const char* group)
+		const auto addSampleTrack = [&] (const char* name, const char* group, chips::ChannelKind kind)
 		{
 			tracks_.push_back (playback::TrackInfo { nextId++, (playback::DeviceId) 0, 0, channel++, true, name,
 													  group, playback::MidiCapability::discrete });
+			tracks_.back().channelKind = kind;
 		};
 
-		for (const char* name : apuNames) { addTrack (name, "2A03", true, 0); }
+		for (const char* name : apuNames) { addTrack (name, "2A03", true, 0, chips::ChannelKind::nesPulse); }
 
 		// The triangle has a period register and a wavetable: it has a pitch, unlike the noise and
 		// the delta channel that share its object. Calling it unavailable kept the one 2A03 voice a
 		// bass line is written for out of every MIDI menu.
 		// "DPCM", not "DMC": the community names the voice after what it plays, and the DMC is
 		// the object that plays it. A strip labelled with the chip reads like a second device.
-		addTrack (dmcNames[0], "2A03", true, 0);
-		addSampleTrack (dmcNames[1], "2A03");
-		addSampleTrack (dmcNames[2], "2A03");
+		addTrack (dmcNames[0], "2A03", true, 0, chips::ChannelKind::nesTriangle);
+		addSampleTrack (dmcNames[1], "2A03", chips::ChannelKind::nesNoise);
+		addSampleTrack (dmcNames[2], "2A03", chips::ChannelKind::nesDmc);
 
 		switch (file.chip ())
 		{
@@ -200,35 +206,39 @@ public:
 				// into the first expansion track, and channel 0 is the first pulse. Listing the ramp
 				// first - as this did - put each track's name on a different voice than the one it
 				// carried, which the mute buttons and the keyboard both read.
-				addTrack ("Square 3", "VRC6", true, 1);
-				addTrack ("Square 4", "VRC6", true, 1);
-				addTrack ("Saw Wave", "VRC6", true, 1);
+				addTrack ("Square 3", "VRC6", true, 1, chips::ChannelKind::vrc6Pulse);
+				addTrack ("Square 4", "VRC6", true, 1, chips::ChannelKind::vrc6Pulse);
+				addTrack ("Saw Wave", "VRC6", true, 1, chips::ChannelKind::vrc6Saw);
 				break;
 
 			case formats::nsf::NsfChip::vrc7:
 				for (int i = 0; i < 6; ++i)
 				{
-					addTrack (juce::String ("FM " + juce::String (i + 1)).toRawUTF8 (), "VRC7", true, 1);
+					addTrack (juce::String ("FM " + juce::String (i + 1)).toRawUTF8 (), "VRC7", true, 1,
+							  chips::ChannelKind::vrc7Fm);
 				}
 				break;
 
 			case formats::nsf::NsfChip::n163:
 				for (int i = 0; i < 8; ++i)
 				{
-					addTrack (n163ChannelName (i).c_str (), "N163", true, 1);
+					addTrack (n163ChannelName (i).c_str (), "N163", true, 1, chips::ChannelKind::n163Wave);
 				}
 				break;
 
 			case formats::nsf::NsfChip::fds:
-				addTrack ("FDS", "FDS", true, 1);
+				addTrack ("FDS", "FDS", true, 1, chips::ChannelKind::fdsWave);
 				break;
 
 			case formats::nsf::NsfChip::mmc5:
 				// two pulse channels and the PCM voice; the nonlinear mixer in the chip is where
 				// the three outputs come from
-				addTrack ("Square 1", "MMC5", true, 1);
-				addTrack ("Square 2", "MMC5", true, 1);
-				addTrack ("PCM", "MMC5", false, 1);
+				addTrack ("Square 1", "MMC5", true, 1, chips::ChannelKind::mmc5Pulse);
+				addTrack ("Square 2", "MMC5", true, 1, chips::ChannelKind::mmc5Pulse);
+				// No `ChannelKind` describes an MMC5 PCM voice: it is a sample player the chip does
+				// on its own, and inventing one of the existing sampler kinds would make the icon
+				// say "C140". Unknown draws nothing, which is the honest answer.
+				addTrack ("PCM", "MMC5", false, 1, chips::ChannelKind::unknown);
 				break;
 
 			case formats::nsf::NsfChip::fme7:
@@ -236,7 +246,9 @@ public:
 				// are modes of those channels rather than voices with an output of their own.
 				for (int i = 0; i < 3; ++i)
 				{
-					addTrack (juce::String ("Square " + juce::String (i + 1)).toRawUTF8 (), "S5B", true, 1);
+					// The S5B is AY-compatible, so its squares are the same kind of voice.
+					addTrack (juce::String ("Square " + juce::String (i + 1)).toRawUTF8 (), "S5B", true, 1,
+							  chips::ChannelKind::aySquare);
 				}
 				break;
 

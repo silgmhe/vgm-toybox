@@ -29,6 +29,29 @@ DefaultRouting routingFromName (const juce::String& name, DefaultRouting fallbac
 	return (name == "master") ? DefaultRouting::master : fallback;
 }
 
+/** The three MIDI channeling schemes by name. Names rather than ordinals for the same reason the
+	routing uses names: reordering the enum must not silently reinterpret a saved project. */
+juce::String midiChannelingToName (DefaultMidiChanneling mode)
+{
+	switch (mode)
+	{
+	case DefaultMidiChanneling::sequential:      return "sequential";
+	case DefaultMidiChanneling::allToChannelOne: return "allToChannelOne";
+	case DefaultMidiChanneling::off:             break;
+	}
+
+	return "off";
+}
+
+DefaultMidiChanneling midiChannelingFromName (const juce::String& name, DefaultMidiChanneling fallback)
+{
+	if (name == "sequential")       return DefaultMidiChanneling::sequential;
+	if (name == "allToChannelOne")  return DefaultMidiChanneling::allToChannelOne;
+	if (name == "off")              return DefaultMidiChanneling::off;
+
+	return fallback;	// an older project has no such attribute - it starts where it always did
+}
+
 } // namespace
 
 void writeSessionState (const SessionState& state, juce::XmlElement& xml)
@@ -74,6 +97,7 @@ void writeSessionState (const SessionState& state, juce::XmlElement& xml)
 	mixer->setAttribute ("masterOutput", state.masterOutput);
 	mixer->setAttribute ("masterMidiChannel", state.masterMidiChannel);
 	mixer->setAttribute ("defaultRouting", routingToName (state.defaultRouting));
+	mixer->setAttribute ("defaultMidiChanneling", midiChannelingToName (state.defaultMidiChanneling));
 
 	for (const auto& track : state.tracks)
 	{
@@ -160,7 +184,10 @@ bool readSessionState (const juce::XmlElement& xml, SessionState& state, juce::S
 		state.masterMidiChannel = juce::jlimit (0, 16,
 												mixer->getIntAttribute ("masterMidiChannel", state.masterMidiChannel));
 		state.defaultRouting = routingFromName (mixer->getStringAttribute ("defaultRouting"),
-												state.defaultRouting);
+											   state.defaultRouting);
+		state.defaultMidiChanneling
+			= midiChannelingFromName (mixer->getStringAttribute ("defaultMidiChanneling"),
+									  state.defaultMidiChanneling);
 
 		for (int i = 0; i < mixer->getNumChildElements(); ++i)
 		{

@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cassert>
 #include <cstdint>
 #include <memory>
 #include <vector>
@@ -358,5 +359,111 @@ struct PitchEvent
 	int logicalChannel = 0;
 	int16_t cents = 0;
 };
+
+
+/** **What a channel is, in the seven pictures the panels draw.**
+
+	The 41 `ChannelKind` values name *which* generator a channel is; these name *what kind of thing*
+	it makes. Two consumers ask only the second question - the waveform drawer and the mixer's type
+	mark - and each used to carry a 41-case `switch` of its own. Adding a chip meant editing both,
+	with no compiler complaint if one was missed: this project builds without `/WX`, so an uncovered
+	`case` is a warning and both switches had a silent fallback.
+
+	`wavetable` and `pcm` are separate here, unlike `waveform::Kind` which merges them into `stored`.
+	For drawing a shape they are both "read out of memory", but a reader looking at a strip wants to
+	know whether the thing making that noise is a synth or a recording.
+*/
+enum class ChannelFamily : uint8_t
+{
+	none = 0,		// nothing to draw: the kind is unknown
+	pulse,
+	triangle,
+	saw,
+	noise,
+	fm,
+	wavetable,		// one cycle, scanned - the chip steps through a table it owns
+	pcm			// recorded (or delta-coded) material, played back
+};
+
+/** The family of a channel kind.
+
+	**Exhaustive over `ChannelKind`**, and the fallthrough asserts. A kind added to the enum without
+	a line here therefore stops a debug build rather than drawing as a square wave - which is what
+	the two switches this replaced did, silently.
+*/
+constexpr ChannelFamily familyOf (ChannelKind kind)
+{
+	switch (kind)
+	{
+	// Square waves. AY's envelope channel is a square wave wearing a hardware volume envelope, so
+	// it is a pulse: the envelope decides how loud, not what shape.
+	case ChannelKind::nesPulse:
+	case ChannelKind::gbPulse:
+	case ChannelKind::vrc6Pulse:
+	case ChannelKind::mmc5Pulse:
+	case ChannelKind::aySquare:
+	case ChannelKind::ayEnvelope:
+	case ChannelKind::sn76489Square:
+	case ChannelKind::saaSquare:
+	case ChannelKind::pokeySquare:
+		return ChannelFamily::pulse;
+
+	case ChannelKind::nesTriangle:
+		return ChannelFamily::triangle;
+
+	case ChannelKind::vrc6Saw:
+		return ChannelFamily::saw;
+
+	// An LFSR: audible, but with no period to name.
+	case ChannelKind::nesNoise:
+	case ChannelKind::gbNoise:
+	case ChannelKind::ayNoise:
+	case ChannelKind::sn76489Noise:
+	case ChannelKind::wsNoise:
+	case ChannelKind::c6280Noise:
+		return ChannelFamily::noise;
+
+	// Two operators, so the shape is the patch rather than the kind.
+	case ChannelKind::vrc7Fm:
+	case ChannelKind::fm:
+	case ChannelKind::fmDrum:
+		return ChannelFamily::fm;
+
+	// One cycle, read out of memory and scanned.
+	case ChannelKind::gbWave:
+	case ChannelKind::fdsWave:
+	case ChannelKind::n163Wave:
+	case ChannelKind::c6280Wave:
+	case ChannelKind::sccWave:
+	case ChannelKind::x1Wave:
+	case ChannelKind::wavetableWave:
+	case ChannelKind::wsWave:
+		return ChannelFamily::wavetable;
+
+	// Recorded material. The DMC belongs here for the mark even though it draws as `delta`: one bit
+	// is still a recording, and the staircase is a drawing decision rather than a family.
+	case ChannelKind::nesDmc:
+	case ChannelKind::rf5cPcm:
+	case ChannelKind::c140Pcm:
+	case ChannelKind::c352Pcm:
+	case ChannelKind::k053260Pcm:
+	case ChannelKind::k054539Pcm:
+	case ChannelKind::qsoundPcm:
+	case ChannelKind::ga20Pcm:
+	case ChannelKind::okimAdpcm:
+	case ChannelKind::segaPcm:
+	case ChannelKind::opnAdpcmB:
+	case ChannelKind::adpcmDrum:
+		return ChannelFamily::pcm;
+
+	case ChannelKind::unknown:
+		return ChannelFamily::none;
+	}
+
+	// Only reachable for a kind added after this table was written. `assert` rather than `jassert`:
+	// this header is pure C++ and does not know about JUCE.
+	assert (false && "ChannelKind has a new value; add it to familyOf()");
+	return ChannelFamily::none;
+}
 
 } // namespace toybox::chips

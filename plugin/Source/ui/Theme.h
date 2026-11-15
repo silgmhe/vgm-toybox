@@ -147,7 +147,8 @@ inline constexpr int margin = 14;			// window border
 inline constexpr int cardGap = 10;			// gap between two cards (or a card and the top row)
 inline constexpr int cardPadding = 12;		// padding inside a card
 inline constexpr int menuBarHeight = 24;	// the application menu above everything else
-inline constexpr int topRowHeight = 36;		// open button + status line (button face = 32)
+// (topRowHeight is gone: the row it measured held the open button and the status line, both of
+// which left - the cards now start directly under the menu bar. See PluginEditor's constructor.)
 inline constexpr int rowGap = 8;
 
 inline constexpr float cardRadius = 10.0f;

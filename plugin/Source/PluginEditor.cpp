@@ -96,25 +96,16 @@ ToyboxAudioProcessorEditor::ToyboxAudioProcessorEditor (ToyboxAudioProcessor& p)
 	// its paint routines look them up there, so there is nothing to set here.
 	addAndMakeVisible (menuBar);
 
-	// --- open button (primary action) + status line ---
 	// IDs for the harness: it addresses controls by name instead of guessing at bounds
 	// (docs/desgin/testing-architecture.md §3.1).
 	menuBar.setComponentID ("editor.menubar");
-	openButton.setComponentID ("editor.open");
-	statusLabel.setComponentID ("editor.status");
-	openButton.onClick = [this] { openFileChooser(); };
-	openButton.setButtonText (i18n::tr ("editor.open"));
-	// its accent colours are applied by lookAndFeelChanged(): they are copies, so they have to be
-	// re-applied whenever the palette changes
-	openButton.setTooltip (formatOpenPrompt());
-	addAndMakeVisible (openButton);
 
-	statusLabel.setFont (juce::Font (juce::FontOptions (12.5f)));
-	// its colour is applied by lookAndFeelChanged(), and updateStatusLine() overrides it when the
-	// line reports a failure - so it must not be set here (it would be the last word until the
-	// first timer tick otherwise)
-	statusLabel.setJustificationType (juce::Justification::centredRight);
-	addAndMakeVisible (statusLabel);
+	// **The top row is gone.** An open button and a status line shared it; the button was the
+	// largest thing on screen and the menu already carries File > Open (Ctrl+O), which is the way a
+	// DAW user reaches for anyway. Files also arrive by being dropped on the window, and the empty
+	// state says so. The status line moved onto the transport card, beside the controls it
+	// describes. What that buys is the whole row - 36 px plus the 10 px gap under it - given to the
+	// cards, which is the part of the window a user actually reads.
 
 	// --- the pages ---
 	// The window owns no cards any more: ui/PlayView.h is the playback page and
@@ -205,8 +196,8 @@ ToyboxAudioProcessorEditor::ToyboxAudioProcessorEditor (ToyboxAudioProcessor& p)
 
 	// A wavetable drag that could not write its file. A child of the window for the same reason
 	// the two above are: one card dimming would read as part of that card.
-	addChildComponent (dragFailedOverlay);
-	dragFailedOverlay.onDismiss = [this] { dragFailedOverlay.setVisible (false); };
+	addChildComponent (messageOverlay);
+	messageOverlay.onDismiss = [this] { messageOverlay.setVisible (false); };
 
 	// Options > Settings, the same shape as the About box and for the same reason. The two are
 	// never up together (showSettings/showAbout hide the other one), so the order they are added
@@ -318,8 +309,8 @@ void ToyboxAudioProcessorEditor::changeListenerCallback (juce::ChangeBroadcaster
 	// the theme was what changed) and let every control that owns text re-apply it.
 	i18n::LanguageManager::getInstance().applyStoredSelection();
 
-	openButton.setButtonText (i18n::tr ("editor.open"));
-	openButton.setTooltip (formatOpenPrompt());
+	// no open button to re-letter: its label was "editor.open", and the File menu's own entry is
+	// translated where it is built
 
 	// **The same build the constructor runs.** This used to assign `viewStack.getViewNames()`, which
 	// names the window's *pages* (one, "Play") rather than the content views the menu lists - so a
@@ -348,9 +339,9 @@ void ToyboxAudioProcessorEditor::lookAndFeelChanged (void)
 	// Everything this window colours itself, and nothing else: setColour() stores a copy, so it
 	// has to be applied again whenever the palette changes. This is the hook JUCE calls for it,
 	// both when the LookAndFeel is set (the constructor does that) and when it is broadcast.
-	openButton.setColour (juce::TextButton::buttonColourId, theme::accent());
-	openButton.setColour (juce::TextButton::textColourOffId, theme::onAccent());
-	statusLabel.setColour (juce::Label::textColourId, theme::secondaryText());
+	// Nothing of the window's own takes its colour here any more: the open button is gone and the
+	// status line is the transport card's, which colours itself. Kept as the seam where a future
+	// window-level control would go, and because the palette broadcast has to keep landing somewhere.
 }
 
 //==============================================================================
@@ -452,10 +443,8 @@ void ToyboxAudioProcessorEditor::paint (juce::Graphics& g)
 		page->paintCardShadows (g);
 	}
 
-	// What is left here is the window's own chrome: the open button and the accent glow that
-	// reaches past its bounds.
-	drawSoftShadow (g, openButton.getBounds().toFloat(), theme::buttonRadius,
-					theme::accentGlow(), theme::accentGlowBlur, { 0, theme::accentGlowOffsetY });
+	// Nothing of the window's own is painted below the menu bar any more: every card shadows itself
+	// through the page it belongs to.
 }
 
 void ToyboxAudioProcessorEditor::resized (void)
@@ -464,14 +453,8 @@ void ToyboxAudioProcessorEditor::resized (void)
 	menuBar.setBounds (area.removeFromTop (theme::menuBarHeight));
 	area = area.reduced (theme::margin);
 
-	// top row: open button + status
-	auto topRow = area.removeFromTop (theme::topRowHeight);
-	openButton.setBounds (topRow.removeFromLeft (140));
-	topRow.removeFromLeft (theme::cardGap);
-	statusLabel.setBounds (topRow);
-	area.removeFromTop (theme::cardGap);
-
-	// everything below the top row belongs to the current page, which lays itself out in there
+	// The cards start directly under the menu bar: there is no top row any more (see the
+	// constructor), so the page gets everything below the margin.
 	viewStack.setBounds (area);
 
 	dropHint.setBounds (getLocalBounds());
@@ -486,9 +469,9 @@ void ToyboxAudioProcessorEditor::resized (void)
 		exportOverlay.setBounds (getLocalBounds());
 	}
 
-	if (dragFailedOverlay.isVisible())
+	if (messageOverlay.isVisible())
 	{
-		dragFailedOverlay.setBounds (getLocalBounds());
+		messageOverlay.setBounds (getLocalBounds());
 	}
 
 	if (exportOptionsOverlay.isVisible())
@@ -638,13 +621,13 @@ void ToyboxAudioProcessorEditor::showDragFailure (void)
 	aboutOverlay.setVisible (false);
 	exportOverlay.setVisible (false);
 
-	dragFailedOverlay.setMessage ({ toybox::i18n::tr ("visualiser.dragFailed.title"),
+	messageOverlay.setMessage ({ toybox::i18n::tr ("visualiser.dragFailed.title"),
 									toybox::i18n::tr ("visualiser.dragFailed.body"),
 									juce::String () });
-	dragFailedOverlay.setBounds (getLocalBounds ());
-	dragFailedOverlay.setVisible (true);
-	dragFailedOverlay.toFront (false);
-	dragFailedOverlay.grabKeyboardFocus ();
+	messageOverlay.setBounds (getLocalBounds ());
+	messageOverlay.setVisible (true);
+	messageOverlay.toFront (false);
+	messageOverlay.grabKeyboardFocus ();
 }
 
 juce::File ToyboxAudioProcessorEditor::exportFolder (const juce::File& chosen)
@@ -993,19 +976,8 @@ void ToyboxAudioProcessorEditor::restoreLastSongIfNeeded (void)
 
 void ToyboxAudioProcessorEditor::timerCallback (void)
 {
-	// The visualisation page has no transport of its own - it shows what the chips are doing to a
-	// song that is already open - so the open button has nothing to act on there. Synchronised
-	// here rather than in the menu callback because the page can also change by shortcut.
-	{
-		const auto ids = viewStack.getViewIds ();
-		const int index = viewStack.getCurrentViewIndex ();
-		const bool onVisualiserPage = index >= 0 && index < ids.size () && ids[index] == "visualiser";
-
-		if (openButton.isVisible () == onVisualiserPage)
-		{
-			openButton.setVisible (! onVisualiserPage);
-		}
-	}
+	// (the open button used to hide itself on the visualisation page, which has no transport to act
+	// on; there is no button to hide any more - File > Open is there on every page)
 
 	// A song handed over by a second launch of the application (or, on macOS, by the Finder opening
 	// a document in the running window). It goes through loadFile() like a drop does, so the two
@@ -1090,26 +1062,31 @@ void ToyboxAudioProcessorEditor::updateStatusLine (void)
 	// hide it - and on success or failure the callback comes back through here.
 	if (loadInFlight)
 	{
-		statusLabel.setColour (juce::Label::textColourId, theme::secondaryText());
-		statusLabel.setText (i18n::tr ("status.loading", loadingName), juce::dontSendNotification);
+		updateTransportStatus (i18n::tr ("status.loading", loadingName));
 		return;
 	}
 
-	// The processor's message comes first among the non-error states: it is what a project that
-	// did not restore left behind, and the only clue the user has (review §6 H-1).
+	// **A failure is no longer a line of text.** It used to be written into the same right-aligned
+	// label that shows the play position, which meant an error and "playing 0:07 / 5:00" competed
+	// for one strip of pixels and neither could be read properly. It goes to the message box
+	// instead - once, with a title - and the line keeps saying what the transport is doing.
+	//
+	// The processor's message is the other kind of failure: what a project that did not restore
+	// left behind (review §6 H-1).
 	const juce::String stateMessage = processor.getStateMessage();
-	const bool hasProblem = lastError.isNotEmpty() || stateMessage.isNotEmpty();
+	const juce::String problem = lastError.isNotEmpty() ? lastError : stateMessage;
+
+	if (problem.isNotEmpty())
+	{
+		showMessage (i18n::tr ("status.problem.title"), problem);
+	}
+	else
+	{
+		errorShown.clear();		// a new attempt earns a fresh box
+	}
 
 	juce::String status;
-	if (lastError.isNotEmpty())
-	{
-		status = lastError;
-	}
-	else if (stateMessage.isNotEmpty())
-	{
-		status = stateMessage;
-	}
-	else if (! engine.isLoaded())
+	if (! engine.isLoaded())
 	{
 		status = i18n::tr ("status.noFile");
 	}
@@ -1139,6 +1116,33 @@ void ToyboxAudioProcessorEditor::updateStatusLine (void)
 		status << "   [" << paintReport << "]";
 	}
 
-	statusLabel.setColour (juce::Label::textColourId, hasProblem ? theme::error() : theme::secondaryText());
-	statusLabel.setText (status, juce::dontSendNotification);
+	updateTransportStatus (status);
+}
+
+void ToyboxAudioProcessorEditor::updateTransportStatus (const juce::String& text)
+{
+	// The line lives on the transport card now. Guarded because updateStatusLine() can run before
+	// the page exists (the constructor calls it once) - and a status with no transport to show it
+	// on is not an error worth a crash.
+	if (playView != nullptr)
+	{
+		playView->setStatus (text, false);
+	}
+}
+
+void ToyboxAudioProcessorEditor::showMessage (const juce::String& title, const juce::String& body)
+{
+	// **Once per error.** updateStatusLine() runs ten times a second; without this comparison a
+	// failed load would re-open the box on every tick and the user could never dismiss it.
+	if (body == errorShown)
+	{
+		return;
+	}
+
+	errorShown = body;
+
+	messageOverlay.setMessage ({ title, body, juce::String () });
+	messageOverlay.setBounds (getLocalBounds ());
+	messageOverlay.setVisible (true);
+	messageOverlay.toFront (false);
 }

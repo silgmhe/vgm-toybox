@@ -1222,13 +1222,6 @@ AudioSettingsPage::AudioSettingsPage (void)
 		}
 	};
 
-	dcBlock.setComponentID ("settings.audio.dcBlock");
-	dcBlock.setTooltip (i18n::tr ("settings.audio.dcBlockTooltip"));
-	dcBlock.onClick = [this]
-	{
-		toybox::settings::SettingsStore::getInstance ().setAudioDcBlock (dcBlock.getToggleState ());
-	};
-
 	hintLabel.setComponentID ("settings.audio.hint");
 	hintLabel.setFont (juce::Font (juce::FontOptions (12.0f)));
 	hintLabel.setJustificationType (juce::Justification::topLeft);
@@ -1236,7 +1229,6 @@ AudioSettingsPage::AudioSettingsPage (void)
 
 	addAndMakeVisible (deviceLabel);
 	addAndMakeVisible (settingsButton);
-	addAndMakeVisible (dcBlock);
 	addAndMakeVisible (hintLabel);
 
 	refreshLanguage();
@@ -1250,10 +1242,6 @@ AudioSettingsPage::AudioSettingsPage (void)
 
 void AudioSettingsPage::refresh (void)
 {
-	dcBlock.setToggleState (toybox::settings::SettingsStore::getInstance ().getAudioDcBlock (),
-							juce::dontSendNotification);
-
-
 	juce::String line;
 
 	if (auto& table = toybox::standalone::hooks(); table.describeAudioDevice != nullptr)
@@ -1286,8 +1274,6 @@ void AudioSettingsPage::timerCallback (void)
 void AudioSettingsPage::refreshLanguage (void)
 {
 	settingsButton.setButtonText (i18n::tr ("settings.audio.open"));
-	dcBlock.setButtonText (i18n::tr ("settings.audio.dcBlock"));
-	dcBlock.setTooltip (i18n::tr ("settings.audio.dcBlockTooltip"));
 	hintLabel.setText (i18n::tr ("settings.audio.hint"), juce::dontSendNotification);
 	shownLine.clear();		// force refresh() to re-apply the placeholder if it is showing
 	refresh();
@@ -1308,8 +1294,6 @@ void AudioSettingsPage::resized (void)
 	area.removeFromTop (theme::cardGap + 6);
 	settingsButton.setBounds (area.removeFromTop (kFooterHeight).removeFromLeft (196));
 	area.removeFromTop (theme::cardGap + 6);
-	dcBlock.setBounds (area.removeFromTop (24).removeFromLeft (320));
-	area.removeFromTop (theme::cardGap);
 	hintLabel.setBounds (area.removeFromTop (44));
 }
 

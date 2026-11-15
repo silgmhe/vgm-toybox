@@ -31,9 +31,12 @@
 #include <juce_gui_basics/juce_gui_basics.h>
 
 #include "ui/ButtonPaint.h"
+#include "ui/ChannelGlyphs.h"
+#include "ui/ChannelNameLayout.h"
 #include "ui/IconButton.h"
 #include "ui/Icons.h"
 #include "ui/MidiMenu.h"
+#include "ui/SyncedComboBox.h"
 #include "ui/Theme.h"
 
 #include "TestSettings.h"
@@ -420,6 +423,229 @@ namespace
 	}
 }
 
+/**
+	**The selector race, without a window.**
+
+	Every selector in the editor is mirrored from the engine by the editor's refresh timer. The bug
+	was that this mirror ran between a pick and the delivery of its queued notification, wrote back
+	the value the engine still held, and the user's choice vanished - "the dropdown sometimes does
+	nothing".
+
+	`SyncedComboBox` fixes it with two rules, and both are asserted here. The clock is injected, so a
+	grace window is stepped over rather than slept through, and no popup (a window) is needed.
+*/
+/**
+	**The three arrangements of a strip's name row**, as numbers instead of pixels.
+
+	The review's H-2: while this lived in `paint()` the only way to know which shape a name took was
+	to render a window and look, and the row was rewritten five times before it settled. The cases
+	below are the ones that actually bit - the boundary where the mark stops fitting, and
+	`ADPCM-A 1` at nine characters.
+
+	The arithmetic that decides it: the mark's left edge is `centreX - textWidth/2 - gap - size`, so
+	with a 76 px row and a 20 px mark-plus-gap it reaches the row's edge at `textWidth == 36`. That
+	number is what the boundary case below pins down.
+*/
+void checkChannelNameLayout (void)
+{
+	using namespace toybox::ui;
+
+	const juce::Rectangle<float> row { 0.0f, 0.0f, 76.0f, 22.0f };
+	const auto near = [] (float a, float b) { return std::abs (a - b) < 0.01f; };
+
+	// No mark: the name centres across the whole row, nothing shrinks.
+	{
+		const auto layout = channelName::layOut (row, 30.0f, false);
+
+		check (layout.mark.isEmpty (), "a row with no kind draws no mark");
+		check (layout.text == row, "and the name keeps the whole row");
+		check (layout.justification == juce::Justification::centred, "centred, as before");
+		check (! layout.shrink, "nothing to shrink");
+	}
+
+	// A short name: the mark hugs it, and the *name* stays where the eye expects it.
+	{
+		const auto layout = channelName::layOut (row, 30.0f, true);
+
+		check (near (layout.mark.getWidth (), (float) channelName::kMarkSize),
+			   "a name that fits gets the full-size mark");
+		check (near (layout.text.getX (), row.getCentreX () - 15.0f),
+			   "the name starts where its measured width says");
+		check (near (layout.mark.getRight () + (float) channelName::kMarkGap, layout.text.getX ()),
+			   "the mark's right edge is one gap from the first letter");
+		check (layout.justification == juce::Justification::centredLeft,
+			   "drawn from the measured box, not centred again");
+		check (! layout.shrink, "nothing to shrink");
+	}
+
+	// `ADPCM-A 1`: 55 px of text in 76 px of row leaves no room beside it.
+	{
+		const auto layout = channelName::layOut (row, 55.0f, true);
+
+		check (near (layout.mark.getWidth (), (float) channelName::kTightMark),
+			   "a long name gets the smaller mark");
+		check (layout.shrink, "and the name is allowed to shrink");
+		check (near (layout.text.getX (),
+					 row.getX () + (float) channelName::kTightMark + (float) channelName::kTightGap),
+			   "the name starts after the tighter mark and gap");
+	}
+
+	// The boundary: the mark's left edge lands exactly on the row's.
+	{
+		const float fits = row.getWidth ()
+						   - 2.0f * ((float) channelName::kMarkGap + (float) channelName::kMarkSize);
+		const auto layout = channelName::layOut (row, fits, true);
+
+		check (near (layout.mark.getX (), row.getX ()), "the exact fit keeps the full-size mark");
+		check (! layout.shrink, "and does not shrink");
+	}
+
+	// One pixel past it: the smaller mark takes over.
+	{
+		const float fits = row.getWidth ()
+						   - 2.0f * ((float) channelName::kMarkGap + (float) channelName::kMarkSize);
+		const auto layout = channelName::layOut (row, fits + 1.0f, true);
+
+		check (layout.shrink, "one pixel wider falls back");
+		check (near (layout.mark.getWidth (), (float) channelName::kTightMark), "to the smaller mark");
+	}
+}
+
+/**
+	**The seven marks, from the 41 kinds.** Two pairs must never merge: a C140 drum is a recording and
+	an SCC table is a cycle. Until this existed the only check was "load a song that uses that chip
+	and look at the strips", which is exactly what `code-quality.md` §7.5 says a mapping should not
+	need.
+*/
+void checkChannelGlyphMapping (void)
+{
+	using toybox::ui::ChannelGlyph;
+	using toybox::chips::ChannelKind;
+
+	check (toybox::chips::familyOf (ChannelKind::c140Pcm) == ChannelGlyph::pcm, "a C140 drum is a recording");
+	check (toybox::chips::familyOf (ChannelKind::sccWave) == ChannelGlyph::wavetable, "an SCC table is a cycle");
+	check (toybox::chips::familyOf (ChannelKind::nesDmc) == ChannelGlyph::pcm, "the DMC counts as sampled");
+	check (toybox::chips::familyOf (ChannelKind::vrc7Fm) == ChannelGlyph::fm, "the VRC7 is FM");
+	check (toybox::chips::familyOf (ChannelKind::aySquare) == ChannelGlyph::pulse, "an AY tone is a square");
+	check (toybox::chips::familyOf (ChannelKind::n163Wave) == ChannelGlyph::wavetable, "N163 is a wavetable");
+}
+
+/**
+	**The seven channel glyphs, at the two sizes they are actually drawn.**
+
+	Not an assertion: it writes `shots/channel-glyphs.png` so the shapes can be looked at. "Does a
+	triangle read differently from a saw at 13 px" is not a question a `check()` can answer, and
+	the answer changes what the icons should be - so it is a picture, both on the dark and the light
+	palette, rather than a boolean.
+*/
+void renderChannelGlyphSheet (void)
+{
+	const ChannelGlyph glyphs[] = { ChannelGlyph::pulse, ChannelGlyph::triangle, ChannelGlyph::saw,
+									ChannelGlyph::noise, ChannelGlyph::fm, ChannelGlyph::wavetable,
+									ChannelGlyph::pcm };
+	const char* names[] = { "Pulse", "Triangle", "Saw", "Noise", "FM", "Wavetable", "PCM" };
+
+	const int width = 7 * 130 + 40;
+	const int height = 380;
+
+	juce::Image image (juce::Image::ARGB, width, height, true);
+
+	// The braces matter: a software Graphics flushes into its image when it is destroyed, and
+	// writing the PNG before that writes a transparent page.
+	{
+		juce::Graphics g (image);
+
+		g.setColour (juce::Colour (0xff1b1d21));
+		g.fillRect (0, 0, width, 250);
+		g.setColour (juce::Colour (0xfff2f3f5));
+		g.fillRect (0, 250, width, height - 250);
+
+		const auto inkDark = juce::Colour (0xff9aa3ad);
+		const auto inkLight = juce::Colour (0xff5a636d);
+
+		const float sizes[] = { 14.0f, 18.0f, 24.0f };
+
+		for (int i = 0; i < 7; ++i)
+		{
+			const float x = 30.0f + 130.0f * (float) i;
+
+			// 40 px: what the shape is
+			drawChannelGlyph (g, glyphs[i], { x, 26.0f, 40.0f, 40.0f }, inkDark);
+
+			// the three sizes beside a name - the row that decides it
+			float y = 86.0f;
+
+			for (const float size : sizes)
+			{
+				drawChannelGlyph (g, glyphs[i], { x, y + (16.0f - size) * 0.5f, size, size }, inkDark);
+				g.setColour (inkDark);
+				g.setFont (juce::Font (juce::FontOptions (12.5f)));
+				g.drawText (names[i], juce::Rectangle<float> (x + size + 5.0f, y - 1.0f, 100.0f, 18.0f),
+							juce::Justification::centredLeft, false);
+				y += 25.0f;
+			}
+
+			// and the 14 px pair on the light palette
+			drawChannelGlyph (g, glyphs[i], { x, 267.0f, 14.0f, 14.0f }, inkLight);
+			g.setColour (inkLight);
+			g.setFont (juce::Font (juce::FontOptions (12.5f)));
+			g.drawText (names[i], juce::Rectangle<float> (x + 23.0f, 295.0f, 100.0f, 22.0f),
+						juce::Justification::centredLeft, false);
+		}
+	}
+
+	const auto file = juce::File::getCurrentWorkingDirectory().getChildFile ("shots/channel-glyphs.png");
+	file.getParentDirectory().createDirectory();
+	file.deleteFile();
+
+	juce::FileOutputStream stream (file);
+	juce::PNGImageFormat png;
+	png.writeImageToStream (image, stream);
+
+	std::printf ("  wrote %s\n", file.getFullPathName().toRawUTF8());
+}
+
+void checkTheSyncedCombo (void)
+{
+	juce::uint32 now = 1000;
+
+	SyncedComboBox box;
+	box.clock = [&now] { return now; };
+
+	for (int id = 1; id <= 3; ++id)
+	{
+		box.addItem ("item " + juce::String (id), id);
+	}
+
+	box.forceTo (1);
+	check (box.getSelectedId() == 1, "forceTo writes the selection");
+
+	// The pick: the box shows the new entry at once, the way the popup callback applies it.
+	box.noteUserPick (3);
+	check (box.getSelectedId() == 3, "a pick shows immediately");
+
+	// The refresh that used to undo it, arriving in the same instant.
+	box.syncTo (1);
+	check (box.getSelectedId() == 3, "a refresh right after a pick leaves the pick alone");
+
+	// Once the pick has landed, the mirror is what keeps the box true to the engine again.
+	now += SyncedComboBox::pickGraceMs;
+	box.syncTo (2);
+	check (box.getSelectedId() == 2, "after the grace window the engine's value wins again");
+
+	// An engine that produces its value asynchronously (a song switch builds in the background)
+	// vetoes the mirror outright - no grace window is long enough.
+	box.noteUserPick (1);
+	box.holdOff = [] { return true; };
+	now += SyncedComboBox::pickGraceMs * 4;
+	box.syncTo (3);
+	check (box.getSelectedId() == 1, "holdOff keeps the mirror off the box");
+
+	box.holdOff = nullptr;
+	box.syncTo (3);
+	check (box.getSelectedId() == 3, "and releasing it lets the mirror through");
+}
+
 int main()
 {
 	const juce::ScopedJuceInitialiser_GUI init;
@@ -435,6 +661,10 @@ int main()
 	checkTheWidget();
 	checkTheMidiGlyphs();
 	checkTheMidiMenu();
+	checkTheSyncedCombo();
+	checkChannelNameLayout();
+	checkChannelGlyphMapping();
+	renderChannelGlyphSheet();
 
 	std::printf ("Result    : %s\n", (toybox::test::failures() == 0) ? "all checks passed" : "FAILURES");
 	return (toybox::test::failures() == 0) ? 0 : 1;

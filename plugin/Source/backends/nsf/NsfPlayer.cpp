@@ -987,7 +987,8 @@ bool NsfPlayer::captureState (playback::ChipStateSnapshot& snapshot, bool includ
 	snapshot.valid = true;
 
 	const auto addChannel = [&snapshot, this] (const char* name, const char* chipName, int trackIndex,
-										 int waveKind, float duty, xgm::ITrackInfo* info) -> std::size_t
+										 int waveKind, float duty, xgm::ITrackInfo* info,
+										 chips::ChannelKind kind) -> std::size_t
 	{
 		playback::ChannelState state;
 		state.name = name;
@@ -995,6 +996,7 @@ bool NsfPlayer::captureState (playback::ChipStateSnapshot& snapshot, bool includ
 		state.trackIndex = trackIndex;
 		state.waveKind = waveKind;
 		state.duty = duty;
+		state.channelKind = kind;
 
 		if (info != nullptr)
 		{
@@ -1139,13 +1141,17 @@ bool NsfPlayer::captureState (playback::ChipStateSnapshot& snapshot, bool includ
 	{
 		const int setting = (apu->GetReg (i * kPulseRegisterStride) >> kDutyShift) & kDutyMask;
 		addChannel (pulseNames[i], kChipName2A03, i, kShapePulse, kDutySettings[setting],
-					apu->GetTrackInfo (i));
+					apu->GetTrackInfo (i), chips::ChannelKind::nesPulse);
 	}
 
 	for (int i = 0; i < kDmcChannels; ++i)
 	{
+		static constexpr chips::ChannelKind dmcKinds[] = { chips::ChannelKind::nesTriangle,
+															chips::ChannelKind::nesNoise,
+															chips::ChannelKind::nesDmc };
+
 		addChannel (dmcNames[i], kChipName2A03, kFirstDmcTrack + i, kShapeTriangle + i, kNoDuty,
-								dmc->GetTrackInfo (i));
+					dmc->GetTrackInfo (i), dmcKinds[i]);
 	}
 
 	// Four of the five expansion chips describe themselves through the same TrackInfo the 2A03
@@ -1171,6 +1177,11 @@ bool NsfPlayer::captureState (playback::ChipStateSnapshot& snapshot, bool includ
 
 		bool levelImpliesKey;	// true when the chip says key-on for a channel it is not sounding
 		float levelScale;		// the chip reports its volume against a wider register than it has
+
+		/** The chip's own name for this channel, for the type mark beside its name - the same value
+			the mixer's rows carry. Not inferable from `waveKind`: that has eight values and puts a
+			wavetable and a sample in the same one. */
+		chips::ChannelKind channelKind;
 	};
 
 	const auto addExpansionRows = [&] (const ExpansionRow* rows, int count, xgm::ISoundChip* chip)
@@ -1195,7 +1206,7 @@ bool NsfPlayer::captureState (playback::ChipStateSnapshot& snapshot, bool includ
 			}
 
 			const std::size_t index = addChannel (row.name, row.chipName, row.trackIndex,
-												  row.waveKind, duty, info);
+												  row.waveKind, duty, info, row.channelKind);
 
 			// The S5B reports key-on for any channel its tone mask lets through, whatever the
 			// volume register says - so a channel at zero volume lit a key nobody could hear.
@@ -1217,27 +1228,38 @@ bool NsfPlayer::captureState (playback::ChipStateSnapshot& snapshot, bool includ
 		// In the chip's own order, which is also the track order. The ramp's volume register is six
 		// bits wide while the chip reports it against 255, so its meter read a quarter of what it
 		// played; scaling by four puts the full 63 back at full scale.
-		{ "Square 3", "VRC6", kFirstExpansionTrack + 0, 0, kShapePulse, kVrc6DutySettings, 8, false, 1.0f },
-		{ "Square 4", "VRC6", kFirstExpansionTrack + 1, 1, kShapePulse, kVrc6DutySettings, 8, false, 1.0f },
-		{ "Saw Wave", "VRC6", kFirstExpansionTrack + 2, 2, kShapeSaw, nullptr, 0, false, 4.0f }
+		{ "Square 3", "VRC6", kFirstExpansionTrack + 0, 0, kShapePulse, kVrc6DutySettings, 8, false, 1.0f,
+		  chips::ChannelKind::vrc6Pulse },
+		{ "Square 4", "VRC6", kFirstExpansionTrack + 1, 1, kShapePulse, kVrc6DutySettings, 8, false, 1.0f,
+		  chips::ChannelKind::vrc6Pulse },
+		{ "Saw Wave", "VRC6", kFirstExpansionTrack + 2, 2, kShapeSaw, nullptr, 0, false, 4.0f,
+		  chips::ChannelKind::vrc6Saw }
 	};
 
 	static const ExpansionRow mmc5Rows[] =
 	{
-		{ "Square 1", "MMC5", kFirstExpansionTrack + 0, 0, kShapePulse, kDutySettings, 4, false, 1.0f },
-		{ "Square 2", "MMC5", kFirstExpansionTrack + 1, 1, kShapePulse, kDutySettings, 4, false, 1.0f },
+		{ "Square 1", "MMC5", kFirstExpansionTrack + 0, 0, kShapePulse, kDutySettings, 4, false, 1.0f,
+		  chips::ChannelKind::mmc5Pulse },
+		{ "Square 2", "MMC5", kFirstExpansionTrack + 1, 1, kShapePulse, kDutySettings, 4, false, 1.0f,
+		  chips::ChannelKind::mmc5Pulse },
 		// The PCM voice has neither pitch nor key: it plays whatever byte the CPU feeds it, and
 		// its output is the sample's own level rather than a tone.
-		{ "PCM", "MMC5", kFirstExpansionTrack + 2, 2, kShapeDelta, nullptr, 0, false, 1.0f }
+		// No `ChannelKind` describes the MMC5's PCM voice; `unknown` draws no mark, which is the
+		// honest answer and the one the track list already gives.
+		{ "PCM", "MMC5", kFirstExpansionTrack + 2, 2, kShapeDelta, nullptr, 0, false, 1.0f,
+		  chips::ChannelKind::unknown }
 	};
 
 	static const ExpansionRow s5bRows[] =
 	{
 		// Three tone channels. The chip's noise and envelope are modes of these three rather than
 		// voices of their own, which is why the track list has three rows and not five.
-		{ "Square 1", "S5B", kFirstExpansionTrack + 0, 0, kShapePulse, nullptr, 0, true, 1.0f },
-		{ "Square 2", "S5B", kFirstExpansionTrack + 1, 1, kShapePulse, nullptr, 0, true, 1.0f },
-		{ "Square 3", "S5B", kFirstExpansionTrack + 2, 2, kShapePulse, nullptr, 0, true, 1.0f }
+		{ "Square 1", "S5B", kFirstExpansionTrack + 0, 0, kShapePulse, nullptr, 0, true, 1.0f,
+		  chips::ChannelKind::aySquare },
+		{ "Square 2", "S5B", kFirstExpansionTrack + 1, 1, kShapePulse, nullptr, 0, true, 1.0f,
+		  chips::ChannelKind::aySquare },
+		{ "Square 3", "S5B", kFirstExpansionTrack + 2, 2, kShapePulse, nullptr, 0, true, 1.0f,
+		  chips::ChannelKind::aySquare }
 	};
 
 	if (vrc6 != nullptr) { addExpansionRows (vrc6Rows, 3, vrc6.get ()); }
@@ -1251,7 +1273,8 @@ bool NsfPlayer::captureState (playback::ChipStateSnapshot& snapshot, bool includ
 		auto* info = dynamic_cast<xgm::TrackInfoFDS*> (fds->GetTrackInfo (0));
 
 		const std::size_t index = snapshot.channels.size ();
-		addChannel ("FDS", "FDS", kFirstExpansionTrack + 0, kShapeStored, kNoDuty, info);
+		addChannel ("FDS", "FDS", kFirstExpansionTrack + 0, kShapeStored, kNoDuty, info,
+					chips::ChannelKind::fdsWave);
 
 		if (info != nullptr && includeWaves && snapshot.channels.size () > index)
 		{
@@ -1278,7 +1301,7 @@ bool NsfPlayer::captureState (playback::ChipStateSnapshot& snapshot, bool includ
 		{
 			const std::string name = "FM " + std::to_string (i + 1);
 			const auto index = addChannel (name.c_str (), "VRC7", kFirstExpansionTrack + i, kShapeFm,
-										   kNoDuty, vrc7->GetTrackInfo (i));
+										   kNoDuty, vrc7->GetTrackInfo (i), chips::ChannelKind::vrc7Fm);
 
 			int multiple = 0;
 			int level = 0;
@@ -1316,6 +1339,7 @@ bool NsfPlayer::captureState (playback::ChipStateSnapshot& snapshot, bool includ
 		state.chipName = kChipNameN163;
 		state.trackIndex = kFirstN163Track + channel;
 		state.waveKind = kShapeStored;
+		state.channelKind = chips::ChannelKind::n163Wave;
 
 		state.name = n163ChannelName (channel);
 		state.active = info->GetKeyStatus ();

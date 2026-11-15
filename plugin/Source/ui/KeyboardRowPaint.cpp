@@ -1,6 +1,7 @@
-﻿#include "KeyboardRowPaint.h"
+#include "KeyboardRowPaint.h"
 
 #include "ButtonPaint.h"
+#include "ChannelGlyphs.h"
 #include "KeyboardLayout.h"
 #include "i18n/LanguageManager.h"
 #include "SoftShadow.h"
@@ -82,9 +83,36 @@ void paintChannelRow (juce::Graphics& g,
 	g.setColour (theme::cardBorder ().withAlpha (kTileBorderAlpha));
 	g.drawRoundedRectangle (tile.reduced (0.5f), theme::buttonRadius, 1.0f);
 
-	g.setColour (audible ? theme::primaryText () : theme::secondaryText ());
+	const auto ink = audible ? theme::primaryText () : theme::secondaryText ();
+
+	g.setColour (ink);
 	g.setFont (juce::Font (juce::FontOptions (12.0f)));
-	g.drawText (juce::String (channel.name), row.name, juce::Justification::centredLeft, false);
+
+	// The type mark sits against the name, the same pairing the mixer strips use - the name is the
+	// anchor and the mark hangs off its left, so the two read as one label. Smaller than the mixer's
+	// 16 px because these rows are shorter and the name has to keep its room.
+	auto nameArea = row.name;
+
+	if (channel.channelKind != chips::ChannelKind::unknown)
+	{
+		constexpr int kMarkSize = 14;
+		constexpr int kMarkGap = 4;
+
+		const auto mark = nameArea.removeFromLeft (kMarkSize);
+
+		// **Not `ink`.** That follows the row's state - a silent channel's name is secondary grey -
+		// and a 1 px line in secondary grey on a light card is invisible, which read as "this row
+		// has no mark" for every channel that was not sounding. The mark keeps one colour of its
+		// own, the same one the mixer strips use.
+		drawChannelGlyph (g, chips::familyOf (channel.channelKind),
+						  { (float) mark.getX (), (float) mark.getCentreY () - (float) kMarkSize * 0.5f,
+							(float) kMarkSize, (float) kMarkSize },
+						  theme::primaryText ().withAlpha (0.75f));
+
+		nameArea.removeFromLeft (kMarkGap);
+	}
+
+	g.drawText (juce::String (channel.name), nameArea, juce::Justification::centredLeft, false);
 
 	paintToggle (g, row.mute, "M", muted, true, hover.mute);
 	paintToggle (g, row.solo, "S", soloed, false, hover.solo);

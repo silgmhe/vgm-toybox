@@ -275,6 +275,13 @@ TransportPanel::TransportPanel (toybox::PlaybackEngine& engineToUse, bool syncAv
 	};
 	addAndMakeVisible (positionSlider);
 
+	// The row's right-hand end: same size and colour as the line it replaces in the top row, so
+	// moving it here changes where it is, not how it reads.
+	statusLabel.setComponentID ("transport.status");
+	statusLabel.setFont (juce::Font (juce::FontOptions (12.5f)));
+	statusLabel.setJustificationType (juce::Justification::centredRight);
+	addAndMakeVisible (statusLabel);
+
 	// --- volume ---
 	volumeSlider.setSliderStyle (juce::Slider::LinearHorizontal);
 	// The slider's text box colours are applied by lookAndFeelChanged(), and they have to be in
@@ -312,8 +319,7 @@ TransportPanel::TransportPanel (toybox::PlaybackEngine& engineToUse, bool syncAv
 	};
 	addAndMakeVisible (fadeBox);
 
-	fadeBox.setSelectedId (transport::fadePresetIndex (engine.getFadeSeconds()) + 1,
-						   juce::dontSendNotification);
+	fadeBox.forceTo (transport::fadePresetIndex (engine.getFadeSeconds()) + 1);
 
 	refreshLanguage();
 }
@@ -346,7 +352,8 @@ void TransportPanel::refreshLanguage (void)
 
 	if (selectedLoop > 0)
 	{
-		loopBox.setSelectedId (selectedLoop, juce::dontSendNotification);
+		// the list was just rebuilt, so the selection is pinned rather than mirrored
+		loopBox.forceTo (selectedLoop);
 	}
 
 	const int selectedFade = fadeBox.getSelectedId();
@@ -359,7 +366,7 @@ void TransportPanel::refreshLanguage (void)
 
 	if (selectedFade > 0)
 	{
-		fadeBox.setSelectedId (selectedFade, juce::dontSendNotification);
+		fadeBox.forceTo (selectedFade);
 	}
 
 	if (syncGroup != nullptr)
@@ -439,6 +446,10 @@ void TransportPanel::resized (void)
 	row.removeFromLeft (6);
 	cursorButton.setBounds (row.removeFromLeft (kButtonSize));
 
+	// what is left of the button row is the status line - same baseline as the buttons it sits beside
+	row.removeFromLeft (12);
+	statusLabel.setBounds (row);
+
 	// the gap between the button row and the loop marker band
 	inner.removeFromTop (kGapBelowRow);
 	markerBandBounds = inner.removeFromTop (kLoopMarkerHeight);
@@ -460,6 +471,13 @@ void TransportPanel::resized (void)
 	{
 		entryOverlay->setBounds (getLocalBounds());
 	}
+}
+
+void TransportPanel::setStatus (const juce::String& text, bool isProblem)
+{
+	statusLabel.setColour (juce::Label::textColourId,
+						   isProblem ? theme::error() : theme::secondaryText());
+	statusLabel.setText (text, juce::dontSendNotification);
 }
 
 void TransportPanel::paintCardContent (juce::Graphics& g)
@@ -708,9 +726,11 @@ void TransportPanel::refresh (void)
 		// reaches past the button bounds
 		repaint (buttonGlowBounds (loopButton.getBounds()));
 	}
+	// Mirrored through `syncTo`, not written outright: a pick that is still travelling must survive
+	// this tick, and the repaint is explicit here because setSelectedId() skips it (see below).
 	if (loopBox.getSelectedId() != loopId)
 	{
-		loopBox.setSelectedId (loopId, juce::dontSendNotification);
+		loopBox.syncTo (loopId);
 		loopBox.repaint();
 	}
 
@@ -718,7 +738,7 @@ void TransportPanel::refresh (void)
 	const int fadeId = transport::fadePresetIndex (engine.getFadeSeconds()) + 1;
 	if (fadeBox.getSelectedId() != fadeId)
 	{
-		fadeBox.setSelectedId (fadeId, juce::dontSendNotification);
+		fadeBox.syncTo (fadeId);
 		fadeBox.repaint();
 	}
 

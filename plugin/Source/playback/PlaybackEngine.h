@@ -10,6 +10,7 @@
 #include <juce_core/juce_core.h>
 
 #include "playback/DawSync.h"
+#include "playback/MidiRouting.h"
 #include "playback/MidiSink.h"
 #include "playback/OutputRouting.h"
 #include <atomic>
@@ -314,6 +315,12 @@ public:
 	void setDefaultRouting (playback::DefaultRouting mode);
 	playback::DefaultRouting getDefaultRouting (void) const { return defaultRouting; }
 
+	/** The channeling scheme **newly loaded songs** start with - the mixer card's MIDI buttons set
+		it. Applying it also re-channels the song that is loaded right now, which is what keeps the
+		card's buttons and the per-strip selectors from disagreeing. */
+	void setDefaultMidiChanneling (playback::DefaultMidiChanneling mode);
+	playback::DefaultMidiChanneling getDefaultMidiChanneling (void) const { return defaultMidiChanneling; }
+
 	/** Destination of one track: `kMasterOutput` (the default) or a real bus index. Values
 		outside the declared range are clamped to the master bus. Lock-free (one atomic). */
 	void setTrackOutput (size_t trackIndex, playback::OutputTarget target);
@@ -408,6 +415,8 @@ private:
 	void applyChipMutes (void);							// caller must hold the lock
 	/** Sets every track (and a new song's tracks) to the current routing scheme. */
 	void applyDefaultRouting (void);					// caller must hold the lock
+	/** The same for MIDI channels: every track gets the channel the scheme names. */
+	void applyDefaultMidiChanneling (void);				// caller must hold the lock
 	void destroyPlayers (void);
 	void resetState (void);
 
@@ -442,6 +451,7 @@ private:
 		double fadeSeconds = 3.0;
 		bool mixerEnabled = true;
 		playback::DefaultRouting defaultRouting = playback::DefaultRouting::master;
+		playback::DefaultMidiChanneling defaultMidiChanneling = playback::DefaultMidiChanneling::off;
 		std::vector<ChipEntry> chips;
 
 		/** Which song of a multi-song file to build. Every caller supplies it; the default only keeps a
@@ -513,6 +523,8 @@ private:
 								  const std::vector<std::unique_ptr<playback::ITrackPlayer>>& players);
 	static void applyRoutingTo (playback::DefaultRouting routing,
 								std::vector<std::unique_ptr<TrackState>>& tracks);
+	static void applyMidiChannelingTo (playback::DefaultMidiChanneling mode,
+									   std::vector<std::unique_ptr<TrackState>>& tracks);
 	/** Copies the song's length facts into a timeline, repairing what a backend may not report
 		(see playback::makeSongTimeline()). The loop marker is derived from the *single* pass, so
 		it stays correct for N >= 2 as well. */
@@ -598,6 +610,9 @@ private:
 	// the routing scheme new songs start with (message thread only - the audio thread reads the
 	// per-track targets, never this)
 	playback::DefaultRouting defaultRouting = playback::DefaultRouting::master;
+	// the same for MIDI channels (message thread only - the audio thread reads the per-track
+	// channel atomics, never this)
+	playback::DefaultMidiChanneling defaultMidiChanneling = playback::DefaultMidiChanneling::off;
 
 	juce::MemoryBlock fileData;			// the song image; the backend loads its players from it
 	juce::File currentFile;

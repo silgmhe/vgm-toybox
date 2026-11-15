@@ -9,4 +9,4 @@
 
 sleep 500
 
-assert editor.status text contains "No file"
+assert transport.status text contains "No file"

@@ -273,13 +273,16 @@ target_sources(VGMToybox PRIVATE
 	Source/settings/NumericSettings.cpp
 	Source/settings/NumericSettings.cpp
 	Source/ui/CardComponent.cpp
+	Source/ui/ChannelGlyphs.generated.cpp
 	Source/ui/ChannelStrip.cpp
 	Source/ui/ChipPanel.cpp
 	Source/ui/DropHintOverlay.cpp
 	Source/ui/FontChooserDialog.cpp
 	Source/ui/IconButton.cpp
 	Source/ui/Icons.cpp
+	Source/ui/GroupFrame.cpp
 	Source/ui/MixerPanel.cpp
+	Source/ui/SyncedComboBox.cpp
 	Source/ui/PlayView.cpp
 	Source/ui/SettingsOverlay.cpp
 	Source/ui/SongInfoPanel.cpp
@@ -711,8 +714,10 @@ add_executable(vgm_ui_test EXCLUDE_FROM_ALL
 	Tests/UiButtonTest.cpp
 	Source/ui/IconButton.cpp
 	Source/ui/Icons.cpp
+	Source/ui/SyncedComboBox.cpp
+	Source/ui/ChannelGlyphs.generated.cpp
 	Source/ui/Theme.cpp
-)
+	)
 target_include_directories(vgm_ui_test PRIVATE Source)
 target_compile_definitions(vgm_ui_test PRIVATE
 	${TOYBOX_JUCE_DEFINITIONS}

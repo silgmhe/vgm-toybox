@@ -37,8 +37,21 @@ void IconButton::paintButton (juce::Graphics& g, bool isMouseOverButton, bool is
 	// caption. Without a caption this is the plain 0.28 inset every other icon button uses.
 	constexpr float kCaptionHeight = 8.0f;
 	const bool captioned = caption.isNotEmpty();
-	const float inset = captioned ? 0.20f : theme::iconInsetRatio;
+
+	// **The three MIDI glyphs need more of the face.** Each is an arrow (or the prohibited ring) with
+	// a DIN badge in the corner; at the usual inset the badge comes out four pixels wide, which is a
+	// smudge rather than a mark. Giving the pair the whole face is what makes the badge legible.
+	const bool badged = (icon == Icon::midiSequential || icon == Icon::midiAllToOne
+						 || icon == Icon::midiOff);
+
+	const float inset = captioned ? 0.20f : (badged ? 0.09f : theme::iconInsetRatio);
 	auto glyphBox = shape.reduced (shape.getWidth() * inset, shape.getHeight() * inset);
+
+	// **The colour the face was just painted with.** The MIDI glyphs draw an overlay on top of another
+	// shape and pad it out with the surface behind them, so they need it; every other glyph ignores it.
+	// It is not exact while pressed (drawButtonFace darkens the fill for the press), and that is the
+	// trade taken: a slightly lighter square for the instant of a click, against losing the layering.
+	const auto faceFill = toggled ? face.fill : theme::buttonMaterial();
 
 	const auto captionArea = captioned ? glyphBox.removeFromBottom (kCaptionHeight).toNearestInt()
 									   : juce::Rectangle<int>();
@@ -93,6 +106,18 @@ void IconButton::paintButton (juce::Graphics& g, bool isMouseOverButton, bool is
 	else if (icon == Icon::dcBlock)
 	{
 		drawDcBlockGlyph (g, glyphArea, iconColour);
+	}
+	else if (icon == Icon::midiSequential)
+	{
+		drawMidiSequentialGlyph (g, glyphArea, iconColour, faceFill);
+	}
+	else if (icon == Icon::midiAllToOne)
+	{
+		drawMidiAllToOneGlyph (g, glyphArea, iconColour, faceFill);
+	}
+	else if (icon == Icon::midiOff)
+	{
+		drawMidiOffGlyph (g, glyphArea, iconColour, faceFill);
 	}
 	else
 	{
