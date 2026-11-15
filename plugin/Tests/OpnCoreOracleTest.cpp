@@ -28,6 +28,7 @@
 
 #include "TestSettings.h"
 #include "chips/OpnDecoder.h"
+#include "playback/NoteWaveform.h"
 
 namespace
 {
@@ -315,6 +316,85 @@ void testPatchCapture (void)
 	check (! decoder.capturePatch (6, patch), "the ADPCM channels have no patch");
 }
 
+/** **A whole note, not a cycle.** The shape the keyboard's window wants.
+
+	The numbers here are not compared against the chip: `render()` is a structured approximation
+	and says so. What is checked is what a drawing depends on - a length that follows the envelope,
+	values inside the range the window can draw, and a difference between two algorithms that
+	share every other register.
+*/
+void testNoteWaveform (void)
+{
+	auto makePatch = [] (uint8_t algorithm)
+	{
+		toybox::chips::VoicePatch patch;
+		patch.model = toybox::chips::ChipModel::ym2612;
+
+		for (int op = 0; op < 4; ++op)
+		{
+			const uint8_t base = (uint8_t) (op << 2);
+			patch.regs.push_back ({ (uint8_t) (0x30 | base), 0x01 });			// multiple 1
+			patch.regs.push_back ({ (uint8_t) (0x40 | base), op == 3 ? 0x00 : 0x7F });
+			patch.regs.push_back ({ (uint8_t) (0x50 | base), 0x1A });			// a fast attack
+			patch.regs.push_back ({ (uint8_t) (0x60 | base), 0x08 });			// a slower decay
+			patch.regs.push_back ({ (uint8_t) (0x70 | base), 0x1F });			// hold
+			patch.regs.push_back ({ (uint8_t) (0x80 | base), 0x0A });			// SL 0, release 10
+		}
+
+		patch.regs.push_back ({ 0xB0, (uint8_t) (0x07 & algorithm) });
+		return patch;
+	};
+
+	const auto serial = makePatch (0);
+	const auto parallel = makePatch (7);
+
+	const double seconds = toybox::playback::noteWave::durationOf (serial, 60);
+	check (seconds > 0.01 && seconds < 20.0, "a note has a plausible length");
+
+	const auto wave = toybox::playback::noteWave::render (serial, 60, seconds, 8000.0);
+	check (wave.size() > 100, "the note has samples to draw");
+
+	double peak = 0.0;
+	for (float sample : wave)
+	{
+		peak = std::max (peak, (double) std::abs (sample));
+	}
+	check (peak > 0.01, "and they are not all silence");
+	check (peak <= 1.0, "and stay inside the range the window draws");
+
+	// The last tenth has to be quieter than the middle: the release stage is the thing the old
+	// one-cycle drawing could never show.
+	double tail = 0.0, middle = 0.0;
+	for (std::size_t i = wave.size() * 3 / 4; i < wave.size(); ++i)
+	{
+		tail += std::abs (wave[i]);
+	}
+	for (std::size_t i = wave.size() / 4; i < wave.size() / 2; ++i)
+	{
+		middle += std::abs (wave[i]);
+	}
+	// The tail has to be **silence**, not merely quieter: that is what a release is, and it is
+	// the one thing a cycle-on-loop drawing could never show.
+	check (std::abs (wave.back()) < 0.02f, "the note ends in silence, as a release does");
+	check (middle > 0.0, "and it made sound in the middle, so the tail is not silence by accident");
+
+	// Two algorithms, every other register identical: the drawing must be able to tell them apart.
+	const auto other = toybox::playback::noteWave::render (parallel, 60, seconds, 8000.0);
+	bool differs = other.size() != wave.size();
+	if (! differs)
+	{
+		for (std::size_t i = 0; i < wave.size(); ++i)
+		{
+			if (std::abs (wave[i] - other[i]) > 0.01f)
+			{
+				differs = true;
+				break;
+			}
+		}
+	}
+	check (differs, "algorithm 0 and algorithm 7 do not draw the same waveform");
+}
+
 int main()
 {
 	std::printf ("YM2612 decoder against libvgm's own core\n");
@@ -369,6 +449,7 @@ int main()
 	}
 
 	testPatchCapture();
+	testNoteWaveform();
 
 	Tally tally;
 
