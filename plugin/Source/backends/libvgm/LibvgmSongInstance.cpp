@@ -413,6 +413,16 @@ bool LibvgmSongInstance::prepare (double hostSampleRate, int newMaxBlockSize, ju
 	probe->setSamples (dpcmSamples);
 	probe->setReplaySource (songIr, deviceInfo, dacTable);
 	probe->setTrackList (&tracks);	// setTrackAudible() resolves the track through this list
+
+	// **What each channel makes its sound with**, for the mixer's type icon. Here and not in
+	// enumerate(): the tracks exist by then, but the replayer that knows the answer cannot be
+	// built until setReplaySource() has handed it the device list a few lines up. `TrackInfo::name`
+	// is free text from the driver, so the type has to come from the decoder.
+	for (auto& track : tracks)
+	{
+		track.channelKind = probe->channelKindFor (track.sourceDeviceId, track.deviceChannel);
+	}
+
 	refreshTimelineFacts();
 	return true;
 }

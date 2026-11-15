@@ -31,6 +31,7 @@
 #include <juce_gui_basics/juce_gui_basics.h>
 
 #include "ui/ButtonPaint.h"
+#include "ui/ChannelGlyphs.h"
 #include "ui/IconButton.h"
 #include "ui/Icons.h"
 #include "ui/MidiMenu.h"
@@ -432,6 +433,81 @@ namespace
 	`SyncedComboBox` fixes it with two rules, and both are asserted here. The clock is injected, so a
 	grace window is stepped over rather than slept through, and no popup (a window) is needed.
 */
+/**
+	**The seven channel glyphs, at the two sizes they are actually drawn.**
+
+	Not an assertion: it writes `shots/channel-glyphs.png` so the shapes can be looked at. "Does a
+	triangle read differently from a saw at 13 px" is not a question a `check()` can answer, and
+	the answer changes what the icons should be - so it is a picture, both on the dark and the light
+	palette, rather than a boolean.
+*/
+void renderChannelGlyphSheet (void)
+{
+	const ChannelGlyph glyphs[] = { ChannelGlyph::pulse, ChannelGlyph::triangle, ChannelGlyph::saw,
+									ChannelGlyph::noise, ChannelGlyph::fm, ChannelGlyph::wavetable,
+									ChannelGlyph::pcm };
+	const char* names[] = { "Pulse", "Triangle", "Saw", "Noise", "FM", "Wavetable", "PCM" };
+
+	const int width = 7 * 130 + 40;
+	const int height = 380;
+
+	juce::Image image (juce::Image::ARGB, width, height, true);
+
+	// The braces matter: a software Graphics flushes into its image when it is destroyed, and
+	// writing the PNG before that writes a transparent page.
+	{
+		juce::Graphics g (image);
+
+		g.setColour (juce::Colour (0xff1b1d21));
+		g.fillRect (0, 0, width, 250);
+		g.setColour (juce::Colour (0xfff2f3f5));
+		g.fillRect (0, 250, width, height - 250);
+
+		const auto inkDark = juce::Colour (0xff9aa3ad);
+		const auto inkLight = juce::Colour (0xff5a636d);
+
+		const float sizes[] = { 14.0f, 18.0f, 24.0f };
+
+		for (int i = 0; i < 7; ++i)
+		{
+			const float x = 30.0f + 130.0f * (float) i;
+
+			// 40 px: what the shape is
+			drawChannelGlyph (g, glyphs[i], { x, 26.0f, 40.0f, 40.0f }, inkDark);
+
+			// the three sizes beside a name - the row that decides it
+			float y = 86.0f;
+
+			for (const float size : sizes)
+			{
+				drawChannelGlyph (g, glyphs[i], { x, y + (16.0f - size) * 0.5f, size, size }, inkDark);
+				g.setColour (inkDark);
+				g.setFont (juce::Font (juce::FontOptions (12.5f)));
+				g.drawText (names[i], juce::Rectangle<float> (x + size + 5.0f, y - 1.0f, 100.0f, 18.0f),
+							juce::Justification::centredLeft, false);
+				y += 25.0f;
+			}
+
+			// and the 14 px pair on the light palette
+			drawChannelGlyph (g, glyphs[i], { x, 267.0f, 14.0f, 14.0f }, inkLight);
+			g.setColour (inkLight);
+			g.setFont (juce::Font (juce::FontOptions (12.5f)));
+			g.drawText (names[i], juce::Rectangle<float> (x + 23.0f, 295.0f, 100.0f, 22.0f),
+						juce::Justification::centredLeft, false);
+		}
+	}
+
+	const auto file = juce::File::getCurrentWorkingDirectory().getChildFile ("shots/channel-glyphs.png");
+	file.getParentDirectory().createDirectory();
+	file.deleteFile();
+
+	juce::FileOutputStream stream (file);
+	juce::PNGImageFormat png;
+	png.writeImageToStream (image, stream);
+
+	std::printf ("  wrote %s\n", file.getFullPathName().toRawUTF8());
+}
+
 void checkTheSyncedCombo (void)
 {
 	juce::uint32 now = 1000;
@@ -489,6 +565,7 @@ int main()
 	checkTheMidiGlyphs();
 	checkTheMidiMenu();
 	checkTheSyncedCombo();
+	renderChannelGlyphSheet();
 
 	std::printf ("Result    : %s\n", (toybox::test::failures() == 0) ? "all checks passed" : "FAILURES");
 	return (toybox::test::failures() == 0) ? 0 : 1;

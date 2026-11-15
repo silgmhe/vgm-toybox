@@ -3,6 +3,7 @@
 #include <cmath>
 
 #include "ButtonPaint.h"
+#include "ChannelGlyphs.h"
 #include "Icons.h"
 #include "MeterScale.h"
 #include "MidiMenu.h"
@@ -15,7 +16,7 @@ namespace toybox::ui
 {
 namespace
 {
-	constexpr int kNameHeight = 13;
+	constexpr int kNameHeight = 22;	// 20 px type mark + 2 px of air (was 13, name only)
 	constexpr int kKnobHeight = 30;
 	// The M/S buttons share the full strip width; the height is the face (24, as before) plus the
 	// shadow room each button reserves (ButtonPaint.h).
@@ -207,6 +208,17 @@ void ChannelStrip::setup (const juce::String& name, bool isMasterStrip, int trac
 
 	resized();
 	repaint();
+}
+
+void ChannelStrip::setChannelKind (chips::ChannelKind kind)
+{
+	if (channelKind == kind)
+	{
+		return;
+	}
+
+	channelKind = kind;
+	repaint (nameBounds);
 }
 
 void ChannelStrip::setStripName (const juce::String& name)
@@ -545,7 +557,27 @@ void ChannelStrip::paint (juce::Graphics& g)
 
 	g.setFont (juce::Font (juce::FontOptions (10.5f, juce::Font::bold)));
 	g.setColour (theme::primaryText());
-	g.drawText (stripName, nameBounds, juce::Justification::centred, true);
+
+	// The type mark shares the name's line: 20 px at the left, the name centred in what is left.
+	// Without a kind nothing is taken out of the row and the name centres across the whole width,
+	// which is what the master strip and the whole-device rows get.
+	auto nameRow = nameBounds;
+
+	if (channelKind != chips::ChannelKind::unknown)
+	{
+		constexpr int kMarkSize = 16;
+		constexpr int kMarkGap = 4;
+
+		const auto mark = nameRow.removeFromLeft (kMarkSize + kMarkGap);
+		drawChannelGlyph (g, channelGlyphFor (channelKind),
+						  { (float) mark.getX (), (float) mark.getCentreY () - kMarkSize * 0.5f,
+							(float) kMarkSize, (float) kMarkSize },
+						  theme::primaryText ().withAlpha (0.75f));
+
+		nameRow.removeFromLeft (kMarkGap);
+	}
+
+	g.drawText (stripName, nameRow, juce::Justification::centred, true);
 
 	drawMeter (g);
 	drawScale (g);

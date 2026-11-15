@@ -65,6 +65,15 @@ public:
 	*/
 	void setup (const juce::String& stripName, bool isMasterStrip, int trackIndex = -1);
 
+	/** **What this channel makes its sound with**, drawn as a mark left of the name.
+
+		The name alone is not enough to tell a C140 drum from an SCC wavetable - and for chips whose
+		driver names nothing the name is `Ch 3`, which says nothing at all. `unknown` (the
+		whole-device row, or a backend that cannot answer) draws no mark and the name centres as it
+		did before.
+	*/
+	void setChannelKind (chips::ChannelKind kind);
+
 	/** Updates every control without firing the callbacks; the meters are already decayed. */
 	void setValues (float gain, float pan, bool muted, bool soloed, float peakL, float peakR, float dim);
 
@@ -133,6 +142,7 @@ private:
 	bool mixerActive = true;
 	bool midiActive = true;		// usually mixerActive - the master keeps the two apart (see setMidiActive)
 	juce::String stripName;
+	chips::ChannelKind channelKind = chips::ChannelKind::unknown;	// drawn left of the name
 	int trackIndex = -1;	// only used to build the component IDs (see setup())
 	juce::Rectangle<int> nameBounds;
 	juce::Rectangle<int> meterBounds;

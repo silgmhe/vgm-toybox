@@ -273,6 +273,7 @@ target_sources(VGMToybox PRIVATE
 	Source/settings/NumericSettings.cpp
 	Source/settings/NumericSettings.cpp
 	Source/ui/CardComponent.cpp
+	Source/ui/ChannelGlyphs.generated.cpp
 	Source/ui/ChannelStrip.cpp
 	Source/ui/ChipPanel.cpp
 	Source/ui/DropHintOverlay.cpp
@@ -714,6 +715,7 @@ add_executable(vgm_ui_test EXCLUDE_FROM_ALL
 	Source/ui/IconButton.cpp
 	Source/ui/Icons.cpp
 	Source/ui/SyncedComboBox.cpp
+	Source/ui/ChannelGlyphs.generated.cpp
 	Source/ui/Theme.cpp
 	)
 target_include_directories(vgm_ui_test PRIVATE Source)

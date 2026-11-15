@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-labelledby="title desc">
+  <title id="title">Wavetable oscillator</title>
+  <desc id="desc">Several waveform frames arranged as a table with a scan direction.</desc>
+  <g fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M7 15 H49 M7 31 H49 M7 47 H49" opacity="0.28" stroke-width="1.7"/>
+    <path d="M7 15 C13 15 13 7 20 7 S27 23 34 15 S42 8 49 15"/>
+    <path d="M7 31 L15 24 L23 38 L31 27 L39 35 L49 31"/>
+    <path d="M7 47 C13 38 19 56 25 47 S37 38 43 47 S47 51 49 47"/>
+    <path d="M53 10 V53 M50 49 L53 53 L56 49" stroke-width="2.5"/>
+  </g>
+</svg>

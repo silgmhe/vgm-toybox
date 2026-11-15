@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-labelledby="title desc">
+  <title id="title">Saw oscillator</title>
+  <desc id="desc">A repeating rising ramp with an abrupt reset.</desc>
+  <path fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" d="M6 43 L6 19 L23 43 L23 19 L40 43 L40 19 L57 43"/>
+</svg>

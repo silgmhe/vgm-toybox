@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-labelledby="title desc">
+  <title id="title">Noise oscillator</title>
+  <desc id="desc">An irregular random-looking noise waveform.</desc>
+  <path fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" d="M6 34 L10 25 L14 39 L18 18 L22 30 L26 22 L30 45 L34 27 L38 36 L42 16 L46 31 L50 23 L54 40 L58 28"/>
+</svg>

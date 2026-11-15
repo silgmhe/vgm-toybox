@@ -196,6 +196,7 @@ void MixerPanel::rebuildStrips (void)
 	{
 		auto* strip = new ChannelStrip();
 		strip->setup (tracks[i].name, false, (int) i);
+		strip->setChannelKind (tracks[i].channelKind);
 
 		const size_t index = i;
 		strip->onGainChanged = [this, index] (float gain) { engine.setTrackGain (index, gain); };

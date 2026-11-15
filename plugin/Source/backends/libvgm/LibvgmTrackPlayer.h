@@ -44,6 +44,18 @@ public:
 	/** Loads a song image through a DataLoader over the shared memory. Message thread. */
 	bool load (const playback::SongMemory& memory, juce::String& errorMessage);
 
+	/** **The kind of one channel of one device**, or `unknown` when it cannot be named.
+
+		The mixer draws a type icon per strip and the channel *names* are free text from the driver,
+		so the type has to come from the decoder. Safe to call while the song is being enumerated:
+		the replayer is created on demand, the same way captureState() does it, because at that
+		point no block has been rendered yet but the device instances already exist.
+
+		Matched on the device handle, which is the same object the replayer was built from - the
+		declaration carries no device-type field to compare against.
+	*/
+	chips::ChannelKind channelKindFor (playback::DeviceId deviceId, int deviceChannel) const;
+
 	/** The track list of the song; setTrackAudible() looks the track up in it. */
 	void setTrackList (const std::vector<playback::TrackInfo>* trackList) { tracks = trackList; }
 
@@ -178,6 +190,11 @@ private:
 	std::shared_ptr<const midi::SongIr> replayIr;
 	std::vector<PLR_DEV_INFO> replayDevices;
 	mutable std::unique_ptr<VgmReplayer> replayer;
+
+	/** The type of every channel of every device, built once from a replayer pushed a couple of
+		seconds in (see channelKindFor). Keyed by libvgm's device id. */
+	mutable std::map<uint32_t, std::vector<chips::ChannelKind>> kindTable;
+	mutable bool kindsCollected = false;
 
 	/** What the display draws for each DPCM sample: the bytes the export collected, and the rate it
 		declares.

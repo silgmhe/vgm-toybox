@@ -677,6 +677,64 @@ void LibvgmTrackPlayer::Ledger::buildNotes (const midi::SongIr& ir)
 	}
 }
 
+chips::ChannelKind LibvgmTrackPlayer::channelKindFor (playback::DeviceId deviceId, int deviceChannel) const
+{
+	// A whole-device row has no single channel, so no single kind either.
+	if (deviceChannel < 0 || replayIr == nullptr || replayDevices.empty ())
+	{
+		return chips::ChannelKind::unknown;
+	}
+
+	// On demand, the way captureState() creates it: enumerateTracks() runs before a block has been
+	// rendered, but every device instance the map needs is already there.
+	if (replayer == nullptr)
+	{
+		replayer = std::make_unique<VgmReplayer> (replayIr, replayDevices);
+	}
+
+	// **The instances appear as their first command is replayed**, so asking at time zero answers
+	// with an empty list. The table is therefore built once, from a replayer pushed a few seconds in
+	// - far enough that every chip has been written at least once - and then rewound, which is where
+	// captureState() expects to find it. One pass, not one per track.
+	if (! kindsCollected)
+	{
+		kindsCollected = true;
+
+		const auto reach = (uint32_t) (replayer->tickRate () * 2.0);
+		replayer->advanceTo (reach);
+
+		for (const auto& instance : replayer->instances ())
+		{
+			if (instance.device == nullptr)
+			{
+				continue;
+			}
+
+			const int count = instance.decoder->channelCount ();
+			std::vector<chips::ChannelKind> kinds;
+			kinds.reserve ((size_t) juce::jmax (0, count));
+
+			for (int channel = 0; channel < count; ++channel)
+			{
+				kinds.push_back (instance.decoder->channelKind (channel));
+			}
+
+			kindTable[instance.device->id] = std::move (kinds);
+		}
+
+		replayer->rewind ();
+	}
+
+	const auto found = kindTable.find ((uint32_t) deviceId);
+
+	if (found == kindTable.end () || deviceChannel >= (int) found->second.size ())
+	{
+		return chips::ChannelKind::unknown;
+	}
+
+	return found->second[(size_t) deviceChannel];
+}
+
 int LibvgmTrackPlayer::trackForVoice (uint16_t deviceType, int deviceChannel) const
 {
 	if (tracks == nullptr)

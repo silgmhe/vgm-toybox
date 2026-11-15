@@ -8,6 +8,7 @@
 
 #include <juce_core/juce_core.h>
 
+#include "chips/ChipTypes.h"
 #include "midi/MidiCapability.h"
 #include "playback/MidiSequence.h"
 #include "playback/ChipState.h"
@@ -112,6 +113,15 @@ struct TrackInfo
 		same type is outside what this pairing can express.
 	*/
 	uint16_t sourceDeviceType = 0;
+
+	/** **What this channel makes its sound with**, for the mixer's type icon.
+
+		Read from the decoder while the tracks are enumerated, because that is the only thing that
+		knows: `name` above is free text from the driver, and the same square wave arrives as
+		`Square A` from one chip, `Pulse 1` from another, `Ch 3` when the driver names nothing.
+		`unknown` for a whole-device row (`deviceChannel < 0`), which has no single kind to draw.
+	*/
+	chips::ChannelKind channelKind = chips::ChannelKind::unknown;
 };
 
 /** Metadata and timeline facts of an open song, in seconds. */
