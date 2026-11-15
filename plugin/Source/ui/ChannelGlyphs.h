@@ -40,8 +40,11 @@ enum class ChannelGlyph
 	names do not say which is which.
 
 	`delta` (the NES DMC) lands on `pcm`: it is a 1-bit sampled channel. `fmDrum` / `adpcmDrum` ride
-	with `fm` / `pcm` because the channel name already says "drum". Exhaustive on purpose - no
-	`default`, so adding a kind to the enum fails to compile here rather than drawing nothing.
+	with `fm` / `pcm` because the channel name already says "drum".
+
+	Every kind is listed, and the fallthrough at the end asserts: this build has no `/WX`, so an
+	uncovered `case` is a warning rather than an error, and a new chip would have quietly drawn as a
+	square wave. `UiButtonTest::checkChannelGlyphMapping` covers the pairs that must not merge.
 */
 inline ChannelGlyph channelGlyphFor (chips::ChannelKind kind)
 {
@@ -107,7 +110,15 @@ inline ChannelGlyph channelGlyphFor (chips::ChannelKind kind)
 		break;
 	}
 
-	return ChannelGlyph::pulse;		// unreachable; the switch is exhaustive
+	// **Reached only by a kind this switch does not know**, which is what adding one to the enum
+	// without updating this file looks like. It used to say "unreachable; the switch is
+	// exhaustive" - and it was not: the project builds without `/WX`, so an uncovered `case` is a
+	// warning, and a new chip would have drawn as a square wave with nothing failing.
+	//
+	// The assert is the compile-time promise this was always meant to keep, made at run time
+	// instead: Debug stops here, and Release still draws something recognisable rather than nothing.
+	jassertfalse;
+	return ChannelGlyph::pulse;
 }
 
 /** Draws `glyph` inside `area`, stroked in `colour`.
