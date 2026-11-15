@@ -3,8 +3,6 @@
 #include <algorithm>
 #include <cmath>
 
-#include "chips/FmEnvelope.h"
-
 #include "emu/EmuStructs.h"
 #include "emu/SoundDevs.h"
 #include "emu/SoundEmu.h"
@@ -25,17 +23,13 @@ constexpr uint32_t kClock = 7670453;
 */
 constexpr double kSamplesToFloat = 1.0 / 32768.0;
 
-/** **The sustain stage's length, in seconds** - the one part of an envelope the chip cannot answer.
+/** **The length of a rendered note, in seconds.**
 
-	The chip's "S" is a *level*: it decays to it and then keeps decaying through it, so there is no
-	duration to read. How long to sit there while sampling the sound is a choice, and this is where
-	it lives until it becomes a setting.
+	Not derived from the envelope: see the comment where it is used. Four seconds holds a note and a
+	tail without holding the audio thread. It becomes a setting next, and nothing else changes when
+	it does.
 */
-constexpr double kSustainSeconds = 3.0;
-
-/** The floor on a rendered note, so a patch whose rates all resolve to milliseconds still produces
-	something a person can hear and cut a sample from. */
-constexpr double kMinimumSeconds = 1.0;
+constexpr double kNoteSeconds = 4.0;
 
 /** One YM2612, alive for the length of one render.
 
@@ -189,56 +183,26 @@ std::vector<float> render (const VoicePatch& patch, double frequencyHz,
 	core.write (0, 0x28, (uint8_t) (0xF0 | channelKey));
 	core.write (port, (uint8_t) (0xB4 + channelInPort), 0xC0);
 
-	// **The length comes from this patch's own envelope**, not from a fixed number: A, D and R are
-	// `sweepSeconds()` at this note's key scaling, and S is the one stage the chip cannot answer -
-	// it decays through the sustain rather than holding at it, so how long to sit there is the
-	// user's setting.
-	fm::NoteLength length;
-
-	auto registerAt = [&patch] (uint8_t offset) -> int
-	{
-		for (const auto& reg : patch.regs)
-		{
-			if ((reg.first & 0xFF) == offset)
-			{
-				return (int) reg.second;
-			}
-		}
-
-		return 0;
-	};
-
-	for (int op = 0; op < 4; ++op)
-	{
-		const auto base = (uint8_t) ((op << 2) | channelInPort);
-		const int ar = registerAt ((uint8_t) (0x50 | base));
-		const int dr = registerAt ((uint8_t) (0x60 | base));
-		const int rr = registerAt ((uint8_t) (0x80 | base));
-		const int ks = (ar >> 6) & 0x03;
-
-		length.attack = std::max (length.attack,
-								  fm::sweepSeconds (ar & 0x1F, block, (int) fnumBits, ks, rate));
-		length.decay = std::max (length.decay,
-								 fm::sweepSeconds (dr & 0x1F, block, (int) fnumBits, ks, rate));
-		length.release = std::max (length.release,
-								   fm::sweepSeconds (rr & 0x0F, block, (int) fnumBits, ks, rate));
-	}
-
-	length.sustain = kSustainSeconds;
-
-	// A caller may override the length outright; otherwise it is the envelope's, with a floor so a
-	// patch whose rates all come out at a few milliseconds still yields something a person can hear
-	// and cut a sample from.
+	// **A fixed length, not the envelope's, and the envelope is why.**
+	//
+	// The rates are honest and unusable: on this chip a release code of 1 is a sweep of four
+	// minutes, and an attack code of 2 is two seconds - both real, both far longer than any sample a
+	// person would cut, and long enough to stall the audio thread while the buffer fills. A driver
+	// writing cheap music never uses those codes for a note it intends to end; it keys off, or it
+	// rewrites `TL`. Reading the intent out of the registers cannot work, so the length is a number.
+	//
+	// The number is a setting in waiting (`kNoteSeconds`); when it becomes one, a longer note gets a
+	// longer sample and nothing here changes shape.
 	if (seconds <= 0.0)
 	{
-		seconds = std::max (kMinimumSeconds, length.total ());
+		seconds = kNoteSeconds;
 	}
 
 	const int cap = (int) std::lround (std::max (0.05, seconds) * rate);
 
-	// Key off where the sustain stage ends, so the tail is the release the patch asked for.
-	const double sustainEnd = length.attack + length.decay + length.sustain;
-	const int releaseAt = std::min (cap - 1, (int) std::lround (sustainEnd * rate));
+	// Key off at 70%: long enough to show the sustain, short enough that the release is a visible
+	// part of the picture rather than a cliff at the edge.
+	const int releaseAt = std::min (cap - 1, (int) std::lround (seconds * 0.7 * rate));
 
 	std::vector<float> out ((size_t) cap, 0.0f);
 	std::vector<DEV_SMPL> left (512, 0);
