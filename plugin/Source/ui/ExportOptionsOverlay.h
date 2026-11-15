@@ -3,6 +3,7 @@
 #include "Theme.h"
 
 #include "i18n/LanguageManager.h"
+#include "settings/SettingsDefaults.h"
 
 #include <juce_gui_basics/juce_gui_basics.h>
 
@@ -25,6 +26,15 @@ struct ExportOptions
 	bool looped = false;
 	int seconds = 2;
 	int bits = 0;
+
+	/** **The pitch an FM note is rendered at, or -1 for "whatever was playing".**
+
+		A note's waveform depends on the pitch - the operators' phases advance at the note's rate -
+		so a sample cut from a C2 is not the same file as one cut from a C5. Pinning it is how
+		someone collects a set of samples at one pitch instead of at whatever the song happened to
+		be doing when they dragged.
+	*/
+	int fixedNote = -1;
 };
 
 /**
@@ -71,6 +81,19 @@ public:
 		nativeBitsButton.onClick = [this] { refreshEnabled (); };
 		addAndMakeVisible (nativeBitsButton);
 
+		// **An FM note's pitch is part of the sample.** A C2 and a C5 of the same patch are different
+		// files, so a set collected for a sampler is usually wanted at one pitch rather than at
+		// whatever the song was playing.
+		fixedNoteButton.setComponentID ("export.options.fixedNote");
+		fixedNoteButton.onClick = [this] { refreshEnabled (); };
+		addAndMakeVisible (fixedNoteButton);
+
+		setUpRow (fixedNoteCaption, fixedNoteSlider, fixedNoteValue,
+				  (double) settings::visualiser::minFixedNote,
+				  (double) settings::visualiser::maxFixedNote);
+		fixedNoteSlider.setComponentID ("export.options.fixedNoteValue");
+		fixedNoteValue.setComponentID ("export.options.fixedNoteReadout");
+
 		cancelButton.setComponentID ("export.options.cancel");
 		cancelButton.onClick = [this] { if (onCancel != nullptr) { onCancel (); } };
 		addAndMakeVisible (cancelButton);
@@ -86,6 +109,12 @@ public:
 				options.bits = nativeBitsButton.getToggleState ()
 								   ? 0
 								   : (int) std::lround (bitsSlider.getValue ());
+
+				// -1 means "the note that was playing", which is the default and the right answer
+				// for an export of the row on screen.
+				options.fixedNote = fixedNoteButton.getToggleState ()
+										? (int) std::lround (fixedNoteSlider.getValue ())
+										: -1;
 
 				onConfirm (options);
 			}
@@ -105,6 +134,12 @@ public:
 		nativeBitsButton.setToggleState (native, juce::dontSendNotification);
 		bitsSlider.setValue ((double) (native ? 4 : options.bits), juce::dontSendNotification);
 
+		fixedNoteButton.setToggleState (options.fixedNote >= 0, juce::dontSendNotification);
+		fixedNoteSlider.setValue ((double) (options.fixedNote >= 0
+												? options.fixedNote
+												: settings::visualiser::defaultFixedNote),
+								   juce::dontSendNotification);
+
 		refreshValues ();
 		refreshEnabled ();
 		refreshLanguage ();
@@ -117,6 +152,8 @@ public:
 		secondsCaption.setText (i18n::tr ("export.options.seconds"), juce::dontSendNotification);
 		bitsCaption.setText (i18n::tr ("export.options.bits"), juce::dontSendNotification);
 		nativeBitsButton.setButtonText (i18n::tr ("export.options.nativeBits"));
+		fixedNoteButton.setButtonText (i18n::tr ("export.options.fixedNote"));
+		fixedNoteCaption.setText (i18n::tr ("settings.visualiser.fmFixedNote"), juce::dontSendNotification);
 		cancelButton.setButtonText (i18n::tr ("export.options.cancel"));
 		confirmButton.setButtonText (i18n::tr ("export.options.confirm"));
 
@@ -202,6 +239,15 @@ public:
 		inner.removeFromTop (8);
 
 		bitsHintArea = inner.removeFromTop (textHeight (i18n::tr ("export.options.bitsHint"), textWidth));
+		inner.removeFromTop (10);
+
+		fixedNoteButton.setBounds (inner.removeFromTop (22));
+		inner.removeFromTop (6);
+
+		auto noteRow = inner.removeFromTop (24);
+		fixedNoteCaption.setBounds (noteRow.removeFromLeft (64));
+		fixedNoteValue.setBounds (noteRow.removeFromRight (56));
+		fixedNoteSlider.setBounds (noteRow.reduced (8, 0));
 
 		confirmButton.setBounds (footer.removeFromRight (88));
 		footer.removeFromRight (8);
@@ -261,6 +307,9 @@ private:
 
 		bitsValue.setText (juce::String ((int) std::lround (bitsSlider.getValue ())) + " bit",
 						   juce::dontSendNotification);
+
+		fixedNoteValue.setText (juce::String ((int) std::lround (fixedNoteSlider.getValue ())),
+								juce::dontSendNotification);
 	}
 
 	void refreshEnabled (void)
@@ -335,6 +384,12 @@ private:
 	juce::Slider bitsSlider;
 	juce::Label bitsValue;
 	juce::ToggleButton nativeBitsButton;
+
+	juce::ToggleButton fixedNoteButton;
+	juce::Label fixedNoteCaption;
+	juce::Slider fixedNoteSlider;
+	juce::Label fixedNoteValue;
+
 	juce::TextButton cancelButton;
 	juce::TextButton confirmButton;
 

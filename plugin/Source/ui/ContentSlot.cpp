@@ -10,6 +10,7 @@
 #include "Theme.h"
 #include "i18n/LanguageManager.h"
 #include "playback/PlaybackEngine.h"
+#include "backends/libvgm/NoteWaveform.h"
 #include "playback/WaveExport.h"
 #include "settings/SettingsStore.h"
 
@@ -1567,9 +1568,31 @@ void ContentSlot::beginExport (const ExportOptions& options)
 		ExportReport report;
 		report.folder = parent.getChildFile (juce::File::createLegalFileName (folderName));
 
-		const auto& drawn = keyboardPanel->drawnSnapshot ();
+		// A copy, because a pinned pitch means rendering every FM channel again at that note - the
+		// snapshot itself belongs to the panel and is rebuilt on the next frame.
+		auto drawn = keyboardPanel->drawnSnapshot ();
 
 		report.channelsSeen = (int) drawn.channels.size ();
+
+		if (options.fixedNote >= 0)
+		{
+			const auto& store = settings::SettingsStore::getInstance ();
+			const double sustain = (double) store.getFmSustainMs () / 1000.0;
+			const double release = (double) store.getFmReleaseMs () / 1000.0;
+			const double hz = chips::noteWave::frequencyOf (options.fixedNote);
+
+			for (auto& channel : drawn.channels)
+			{
+				// Only the channels the renderer can speak for: a sampled or wavetable row has a
+				// waveform of its own and no patch to re-render from.
+				if (channel.voicePatch != nullptr && channel.noteWaveform != nullptr)
+				{
+					channel.noteWaveform = std::make_shared<const std::vector<float>> (
+						chips::noteWave::render (*channel.voicePatch, hz, sustain, release,
+												 chips::noteWave::kRenderRate));
+				}
+			}
+		}
 
 		if (report.folder.createDirectory ().wasOk ())
 		{
