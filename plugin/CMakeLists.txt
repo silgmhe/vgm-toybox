@@ -266,6 +266,7 @@ target_sources(VGMToybox PRIVATE
 	Source/backends/libvgm/NesDpcmBank.cpp
 	Source/backends/libvgm/LibvgmVgz.cpp
 	Source/backends/nsf/NsfBackend.cpp
+	Source/backends/nsf/Vrc7VoiceDriver.cpp
 	Source/backends/nsf/NsfPlayer.cpp
 	Source/backends/nsf/NsfBus.cpp
 	Source/chips/NesDpcmSample.cpp
@@ -452,6 +453,7 @@ add_executable(vgm_mixer_test EXCLUDE_FROM_ALL
 	Source/midi/ChipPlans.cpp
 	Source/backends/BuiltInBackends.cpp
 	Source/backends/nsf/NsfBackend.cpp
+	Source/backends/nsf/Vrc7VoiceDriver.cpp
 	Source/backends/nsf/NsfPlayer.cpp
 	Source/backends/nsf/NsfBus.cpp
 	Source/chips/NesDpcmSample.cpp
@@ -537,10 +539,10 @@ add_executable(vgm_nsf_probe EXCLUDE_FROM_ALL
 	Source/backends/nsf/NsfPlayer.cpp
 	Source/playback/WaveExport.cpp
 	Source/playback/NoteWaveform.cpp
-	Source/backends/libvgm/OpnVoiceDriver.cpp
+	Source/backends/nsf/Vrc7VoiceDriver.cpp
 	Source/playback/WaveformSource.cpp
 	Source/playback/WaveShape.cpp
-)
+	)
 target_link_libraries(vgm_nsf_probe PRIVATE nsfplay_core)
 target_include_directories(vgm_nsf_probe PRIVATE Source)
 target_compile_features(vgm_nsf_probe PRIVATE cxx_std_17)
@@ -552,11 +554,11 @@ add_executable(vgm_nsf_test EXCLUDE_FROM_ALL
 	Source/chips/NesDpcmSample.cpp
 	Source/backends/nsf/NsfPlayer.cpp
 	Source/playback/NoteWaveform.cpp
-	Source/backends/libvgm/OpnVoiceDriver.cpp
+	Source/backends/nsf/Vrc7VoiceDriver.cpp
 	Source/playback/WaveformSource.cpp
 	Source/playback/WaveShape.cpp
 	Source/playback/WaveExport.cpp
-)
+	)
 target_link_libraries(vgm_nsf_test PRIVATE nsfplay_core juce::juce_core juce::juce_recommended_config_flags)
 
 # The definitions the plugin gets from juce_add_plugin, applied by hand. Without them JUCE compiles

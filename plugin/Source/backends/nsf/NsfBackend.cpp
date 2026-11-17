@@ -48,7 +48,20 @@ public:
 	void setTimeline (int, double) override {}
 	bool captureState (playback::ChipStateSnapshot& snapshot) const override
 	{
+		// **Handed over rather than fetched.** `NsfPlayer` may not include a JUCE header - NSFPlay's
+		// macros collide with the toolkit's - so the three preferences a rendered note depends on are
+		// read here, where both are available, and pushed in.
+		const auto& store = settings::SettingsStore::getInstance ();
+		player.setWaveformSettings ((double) juce::jmax (1, store.getFmSustainMs ()) / 1000.0,
+									(double) juce::jmax (1, store.getFmReleaseMs ()) / 1000.0,
+									store.getFmNormalise ());
+
 		return player.captureState (snapshot);
+	}
+
+	std::shared_ptr<const std::vector<float>> renderNoteAt (int track, double hz) const override
+	{
+		return player.renderNoteAt (track, hz);
 	}
 
 	/** The song's own DPCM samples rather than this player's current one - see NsfPlayer. */

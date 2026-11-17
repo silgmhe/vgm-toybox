@@ -12,6 +12,8 @@
 #include "chips/NesDpcmSample.h"
 #include "backends/nsf/NsfBus.h"
 #include "backends/nsf/NsfChannelNaming.h"
+#include "backends/nsf/Vrc7VoiceDriver.h"
+#include "playback/NoteWaveform.h"
 #include "playback/WaveShape.h"
 
 namespace toybox::backends::nsf
@@ -129,6 +131,12 @@ NsfPlayer::NsfPlayer (const formats::nsf::NsfFile& image, double sampleRate)
 		vrc7 = std::make_unique<xgm::NES_VRC7> ();
 		vrc7->SetClock (clock);
 		vrc7->SetRate (rate);
+
+		// **A second OPLL, for drawing.** Not the player's: a waveform rendered through that one would
+		// key its voices and rewrite its registers while the song is playing. Same source file, same
+		// patch table, so what it produces is what the listener hears.
+		vrc7Clock = (double) clock;
+		vrc7Driver = makeVrc7VoiceDriver (vrc7Clock);
 	}
 
 	if (chip == formats::nsf::NsfChip::n163)
@@ -627,6 +635,18 @@ void NsfPlayer::writeSound (uint16_t address, uint8_t value)
 
 	if (vrc7 && (address == 0x9010 || address == 0x9030))
 	{
+		// **Mirrored before it is forwarded.** `$9010` latches a register address and `$9030` writes
+		// the byte for it; the chip keeps no readable copy, and a waveform needs the bytes.
+		if (address == 0x9010)
+		{
+			vrc7Latch = (uint8_t) (value & 0x3F);
+		}
+		else if (vrc7Latch < vrc7Regs.size ())
+		{
+			vrc7Regs[vrc7Latch] = (uint8_t) value;
+			++vrc7Version;
+		}
+
 		vrc7->Write (address, value);
 		return;
 	}
@@ -1293,27 +1313,65 @@ bool NsfPlayer::captureState (playback::ChipStateSnapshot& snapshot, bool includ
 
 	if (vrc7 != nullptr)
 	{
-		// Six FM voices. There is no waveform to read - the chip computes its own - so the panel
-		// synthesises one from the shape kind. The four numbers that make one patch look unlike
-		// the next live inside the emulator's slot array, which is why they are asked for here
-		// rather than derived from the registers ChannelState already carries.
+		// **Six FM voices, each with the whole note it is making.** The row used to synthesise a
+		// cycle from four numbers `GetFmParameters` could infer, because the chip keeps no readable
+		// waveform; the register mirror above is what makes a real one possible, and it is the same
+		// bargain the libvgm backend makes with its OPN decoder.
 		for (int i = 0; i < kVrc7Channels; ++i)
 		{
 			const std::string name = "FM " + std::to_string (i + 1);
 			const auto index = addChannel (name.c_str (), "VRC7", kFirstExpansionTrack + i, kShapeFm,
 										   kNoDuty, vrc7->GetTrackInfo (i), chips::ChannelKind::vrc7Fm);
 
-			int multiple = 0;
-			int level = 0;
-			int waveSelect = 0;
-			int feedback = 0;
-
-			if (vrc7->GetFmParameters (i, multiple, level, waveSelect, feedback)
-				&& index < snapshot.channels.size ())
+			if (index >= snapshot.channels.size ())
 			{
-				snapshot.channels[index].shapeParameter
-					= playback::waveform::packFm (multiple, level, waveSelect, feedback);
+				continue;
 			}
+
+			auto& state = snapshot.channels[index];
+
+			// The patch is six bytes - the pitch pair and the instrument-and-volume byte - so it is
+			// rebuilt rather than cached; `vrc7Version` is what says whether it has changed.
+			auto patch = std::make_shared<chips::VoicePatch> ();
+			patch->model = chips::ChipModel::vrc7;
+			patch->regs.push_back ({ (uint16_t) (0x10 + i), vrc7Regs[(size_t) (0x10 + i)] });
+			patch->regs.push_back ({ (uint16_t) (0x20 + i), vrc7Regs[(size_t) (0x20 + i)] });
+			patch->regs.push_back ({ (uint16_t) (0x30 + i), vrc7Regs[(size_t) (0x30 + i)] });
+
+			state.voicePatch = patch;
+
+			if (vrc7Driver == nullptr || state.frequency <= 0.0f)
+			{
+				continue;
+			}
+
+			Vrc7Wave& cached = vrc7Waves[(size_t) i];
+
+			// The same three settings the libvgm side caches on, plus the version: a patch that has
+			// changed under a cached note has to invalidate it, or a slider and a register write
+			// would both appear to do nothing. The settings arrive through `setWaveformSettings`
+			// rather than being read here - see its comment.
+			const double hz = (double) state.frequency;
+			const double sustain = sustainSeconds;
+			const double release = releaseSeconds;
+			const bool normalise = normaliseSamples;
+
+			if (cached.samples == nullptr || cached.version != vrc7Version || cached.hz != hz
+				|| cached.sustain != sustain || cached.release != release
+				|| cached.normalise != normalise)
+			{
+				cached.patch = patch;
+				cached.version = vrc7Version;
+				cached.hz = hz;
+				cached.sustain = sustain;
+				cached.release = release;
+				cached.normalise = normalise;
+				cached.samples = std::make_shared<const std::vector<float>> (
+					playback::noteWave::render (*vrc7Driver, *patch, hz, sustain, release, normalise));
+			}
+
+			state.noteWaveform = cached.samples;
+			state.noteWaveformRate = (float) chips::noteRateFor (chips::ChipModel::vrc7);
 		}
 	}
 
@@ -1552,6 +1610,40 @@ int NsfPlayer::renderChannels (float* const* dest, int channelCount, int frames)
 
 	rendered += (uint64_t) frames;
 	return frames;
+}
+
+std::shared_ptr<const std::vector<float>> NsfPlayer::renderNoteAt (int track, double hz) const
+{
+	if (vrc7Driver == nullptr || vrc7Clock <= 0.0 || hz <= 0.0)
+	{
+		return nullptr;
+	}
+
+	// Only the expansion's rows answer: the 2A03's five channels are shapes, not patches.
+	const int voice = track - kFirstExpansionTrack;
+
+	if (voice < 0 || voice >= kVrc7Channels)
+	{
+		return nullptr;
+	}
+
+	const Vrc7Wave& cached = vrc7Waves[(size_t) voice];
+
+	if (cached.patch == nullptr)
+	{
+		return nullptr;
+	}
+
+	// **Its own OPLL.** The one `captureState` uses is being keyed and advanced by the audio thread;
+	// re-rendering through it would rewrite the registers under a playing note.
+	if (vrc7ExportDriver == nullptr)
+	{
+		vrc7ExportDriver = makeVrc7VoiceDriver (vrc7Clock);
+	}
+
+	return std::make_shared<const std::vector<float>> (
+		playback::noteWave::render (*vrc7ExportDriver, *cached.patch, hz, sustainSeconds,
+									releaseSeconds, normaliseSamples));
 }
 
 } // namespace toybox::backends::nsf

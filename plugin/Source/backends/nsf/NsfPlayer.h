@@ -3,6 +3,7 @@
 #include "playback/ChipState.h"
 #include "playback/MidiSequence.h"
 #include "settings/SettingsDefaults.h"
+#include "playback/VoiceDriver.h"
 #include "playback/WaveExport.h"
 #include <array>
 #include <atomic>
@@ -193,6 +194,23 @@ public:
 		bulk of the cost - 64 floats for the FDS, up to 256 for each of the N163's eight rows. */
 	bool captureState (playback::ChipStateSnapshot& snapshot, bool includeWaves = true) const;
 
+	/** Re-renders a VRC7 voice at another pitch, for the export dialog's pinned-note option.
+		Null for every other row - an APU channel has no patch to render. */
+	std::shared_ptr<const std::vector<float>> renderNoteAt (int track, double hz) const;
+
+	/** **The three preferences a rendered note depends on**, pushed in by the backend.
+
+		Read here rather than fetched, because this file may not include a JUCE header: NSFPlay's
+		macros and the toolkit's headers do not coexist, and the one attempt to bring
+		`SettingsStore` in failed on `juce_ListenerList.h`. The backend already speaks both.
+	*/
+	void setWaveformSettings (double sustain, double release, bool normalise) const
+	{
+		sustainSeconds = sustain;
+		releaseSeconds = release;
+		normaliseSamples = normalise;
+	}
+
 	/** Scales the output. The NES mix table leaves a lot of headroom - five four-bit channels never
 		approach full scale - so a file played back unamplified sits eight to twelve decibels below a
 		VGM of the same music. The default is the +8 dB the settings page offers. */
@@ -348,6 +366,48 @@ private:
 	std::unique_ptr<xgm::NES_DMC> dmc;
 	std::unique_ptr<xgm::NES_VRC6> vrc6;
 	std::unique_ptr<xgm::NES_VRC7> vrc7;
+
+	/** **The VRC7's register file, mirrored as the driver writes it.**
+
+		The player forwards `$9010`/`$9030` to the chip and keeps nothing, which is why an FM row used
+		to have only the four numbers `GetFmParameters` could infer. The bytes are what a voice
+		actually is, so they are kept here - the same bargain `OpnDecoder` makes on the other backend.
+	*/
+	std::array<uint8_t, 0x40> vrc7Regs {};
+	uint8_t vrc7Latch = 0;
+
+	/** The OPLL instance the waveform is drawn from. Separate from the player's own, so drawing a
+		note cannot disturb what is being heard. */
+	std::unique_ptr<playback::IVoiceDriver> vrc7Driver;
+
+	/** One cached waveform per voice, keyed on everything `render` reads. */
+	struct Vrc7Wave
+	{
+		std::shared_ptr<const chips::VoicePatch> patch;
+		uint32_t version = 0;		// bumped by every register write, so a rebuild is detectable
+		double hz = 0.0;
+		double sustain = 0.0;
+		double release = 0.0;
+		bool normalise = false;
+		std::shared_ptr<const std::vector<float>> samples;
+	};
+
+	mutable std::array<Vrc7Wave, 6> vrc7Waves;
+
+	/** **A second OPLL, for renders that happen off the audio thread.** The one above is keyed and
+		advanced by `captureState` while the song plays; an export re-rendering through it would
+		overwrite the registers under that thread's feet. */
+	mutable std::unique_ptr<playback::IVoiceDriver> vrc7ExportDriver;
+	double vrc7Clock = 0.0;
+
+	/** See `setWaveformSettings`. Mutable because `captureState` is const by contract. */
+	mutable double sustainSeconds = 0.0;
+	mutable double releaseSeconds = 0.0;
+	mutable bool normaliseSamples = false;
+
+	/** Bumped by every write to the mirror above. The patch is rebuilt on each frame - it is six
+		bytes - so a cache keyed on its pointer would never hit; this number is the identity. */
+	uint32_t vrc7Version = 0;
 	std::unique_ptr<xgm::NES_N106> n106;
 	std::unique_ptr<xgm::NES_FDS> fds;
 	std::unique_ptr<xgm::NES_FME7> fme7;
