@@ -228,6 +228,15 @@ public:
 		lock, and answering "nothing right now" is better than making a block of audio wait. */
 	bool captureChipState (playback::ChipStateSnapshot& snapshot) const;
 
+	/** **One channel's note, re-rendered at another pitch.** The export dialog pins a note; the
+		snapshot holds each channel's patch; the chip driver lives in the backend. This is the
+		message from one to the other, and it is the message thread's - the backend gives it a core
+		of its own rather than sharing the one the audio thread is advancing.
+
+		Null when the backend computes no notes, or when this channel has never been drawn.
+	*/
+	std::shared_ptr<const std::vector<float>> renderNoteAt (int trackIndex, double hz) const;
+
 	/** Tells the engine whether anyone is looking. While true, each rendered block ends with a
 		capture; while false it costs one atomic read per block. A page that is not on screen must
 		turn this off, or the capture runs for nobody. */

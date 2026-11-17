@@ -15,7 +15,9 @@
 #include "playback/ChannelFromChip.h"
 #include "settings/SettingsStore.h"
 
-#include "NoteWaveform.h"
+#include "playback/NoteWaveform.h"
+
+#include "OpnVoiceDriver.h"
 
 namespace toybox::backends::libvgm
 {
@@ -63,6 +65,12 @@ namespace
 LibvgmTrackPlayer::LibvgmTrackPlayer (void)
 {
 	messageThreadId = juce::Thread::getCurrentThreadId();
+
+	// The libvgm side of the note renderer. Created up front rather than on first use: it holds
+	// no resources until it is loaded, and a lazily created unique_ptr on the audio thread would
+	// need a guard for no gain.
+	voiceDriver = makeOpnVoiceDriver ();
+
 	playerEngine.RegisterPlayerEngine (new VGMPlayer);
 	playerEngine.RegisterPlayerEngine (new S98Player);
 	playerEngine.RegisterPlayerEngine (new DROPlayer);
@@ -948,7 +956,7 @@ bool LibvgmTrackPlayer::captureState (playback::ChipStateSnapshot& snapshot) con
 			// **Rendered here, not in channelState()**: this runs while the keyboard page is on
 			// screen, and `channelState()` runs while a song is being scanned. The cache is keyed
 			// on the patch and the pitch, which is everything `render()` reads.
-			if (state.voicePatch != nullptr && state.frequency > 0.0f)
+			if (state.voicePatch != nullptr && state.frequency > 0.0f && voiceDriver != nullptr)
 			{
 				NoteWaveEntry& entry = noteWaves[channel];
 
@@ -958,7 +966,7 @@ bool LibvgmTrackPlayer::captureState (playback::ChipStateSnapshot& snapshot) con
 				// fast as it was made. What the row shows is the timbre, and a timbre is a shape: it
 				// has no pitch of its own until something plays it.
 				const auto& store = settings::SettingsStore::getInstance ();
-				const double hz = chips::noteWave::frequencyOf (store.getFmFixedNote ());
+				const double hz = playback::noteWave::frequencyOf (store.getFmFixedNote ());
 
 				// Both lengths are settings, so both belong in the cache key: changing either has to
 				// invalidate every cached note, or the slider would appear to do nothing.
@@ -975,10 +983,9 @@ bool LibvgmTrackPlayer::captureState (playback::ChipStateSnapshot& snapshot) con
 					entry.sustain = sustain;
 					entry.release = release;
 					entry.normalise = normalise;
-					// Rate 0 asks the renderer for the chip's own - see `noteRateFor`.
 					entry.wave = std::make_shared<const std::vector<float>> (
-						chips::noteWave::render (*state.voicePatch, hz, sustain, release,
-												 0.0, normalise));
+						playback::noteWave::render (*voiceDriver, *state.voicePatch, hz, sustain,
+													release, normalise));
 				}
 
 				state.noteWaveform = entry.wave;
@@ -1174,6 +1181,52 @@ bool LibvgmTrackPlayer::captureState (playback::ChipStateSnapshot& snapshot) con
 	}
 
 	return true;
+}
+
+std::shared_ptr<const std::vector<float>> LibvgmTrackPlayer::renderNoteAt (int track,
+																		  double hz) const
+{
+	if (hz <= 0.0)
+	{
+		return nullptr;
+	}
+
+	// **The cache is keyed on the decoder's channel, the caller knows the track.** The two are
+	// different numbering schemes - one counts chip channels, the other mixer rows - and this is
+	// the one place the exporter's question has to cross between them.
+	const chips::VoicePatch* patch = nullptr;
+
+	for (const auto& entry : noteWaves)
+	{
+		if (entry.second.patch != nullptr && trackFor (entry.first) == track)
+		{
+			patch = entry.second.patch.get ();
+			break;
+		}
+	}
+
+	// Absent when the row has never been drawn, which is the one case where there is nothing to pin
+	// a pitch onto.
+	if (patch == nullptr)
+	{
+		return nullptr;
+	}
+
+	// **Its own core.** The driver `captureState` uses is being advanced by the audio thread; an
+	// export that re-rendered through it would rewrite the registers under that thread's feet, and
+	// both the picture and the sound would change mid-note.
+	if (exportDriver == nullptr)
+	{
+		exportDriver = makeOpnVoiceDriver ();
+	}
+
+	const auto& store = settings::SettingsStore::getInstance ();
+	const double sustain = (double) juce::jmax (1, store.getFmSustainMs ()) / 1000.0;
+	const double release = (double) juce::jmax (1, store.getFmReleaseMs ()) / 1000.0;
+
+	return std::make_shared<const std::vector<float>> (
+		playback::noteWave::render (*exportDriver, *patch, hz, sustain, release,
+									store.getFmNormalise ()));
 }
 
 } // namespace toybox::backends::libvgm

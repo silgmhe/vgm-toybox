@@ -186,7 +186,8 @@ target_sources(VGMToybox PRIVATE
 	Source/playback/ChannelFromChip.cpp
 	Source/playback/PlaybackEngine.cpp
 	Source/playback/WaveExport.cpp
-	Source/backends/libvgm/NoteWaveform.cpp
+	Source/playback/NoteWaveform.cpp
+	Source/backends/libvgm/OpnVoiceDriver.cpp
 	Source/playback/WaveformSource.cpp
 	Source/playback/WaveShape.cpp
 	Source/playback/DawSync.cpp
@@ -297,7 +298,8 @@ target_sources(VGMToybox PRIVATE
 	Source/ui/KeyboardLayout.cpp
 	Source/ui/KeyboardRowLayout.cpp
 	Source/ui/KeyboardRowPaint.cpp
-	Source/backends/libvgm/NoteWaveform.cpp
+	Source/playback/NoteWaveform.cpp
+	Source/backends/libvgm/OpnVoiceDriver.cpp
 	Source/playback/WaveformSource.cpp
 	Source/playback/WaveShape.cpp
 )
@@ -407,7 +409,8 @@ add_executable(vgm_mixer_test EXCLUDE_FROM_ALL
 	Source/playback/ChannelFromChip.cpp
 	Source/playback/PlaybackEngine.cpp
 	Source/playback/WaveExport.cpp
-	Source/backends/libvgm/NoteWaveform.cpp
+	Source/playback/NoteWaveform.cpp
+	Source/backends/libvgm/OpnVoiceDriver.cpp
 	Source/playback/WaveformSource.cpp
 	Source/playback/WaveShape.cpp
 	Source/playback/DawSync.cpp
@@ -533,7 +536,8 @@ add_executable(vgm_nsf_probe EXCLUDE_FROM_ALL
 	Source/chips/NesDpcmSample.cpp
 	Source/backends/nsf/NsfPlayer.cpp
 	Source/playback/WaveExport.cpp
-	Source/backends/libvgm/NoteWaveform.cpp
+	Source/playback/NoteWaveform.cpp
+	Source/backends/libvgm/OpnVoiceDriver.cpp
 	Source/playback/WaveformSource.cpp
 	Source/playback/WaveShape.cpp
 )
@@ -547,7 +551,8 @@ add_executable(vgm_nsf_test EXCLUDE_FROM_ALL
 	Source/backends/nsf/NsfBus.cpp
 	Source/chips/NesDpcmSample.cpp
 	Source/backends/nsf/NsfPlayer.cpp
-	Source/backends/libvgm/NoteWaveform.cpp
+	Source/playback/NoteWaveform.cpp
+	Source/backends/libvgm/OpnVoiceDriver.cpp
 	Source/playback/WaveformSource.cpp
 	Source/playback/WaveShape.cpp
 	Source/playback/WaveExport.cpp
@@ -578,7 +583,8 @@ endif()
 add_executable(vgm_chip_test EXCLUDE_FROM_ALL
 	Source/playback/ChannelFromChip.cpp
 	Source/playback/WaveExport.cpp
-	Source/backends/libvgm/NoteWaveform.cpp
+	Source/playback/NoteWaveform.cpp
+	Source/backends/libvgm/OpnVoiceDriver.cpp
 	Source/playback/WaveformSource.cpp
 	Source/playback/WaveShape.cpp
 	Source/backends/libvgm/VgmCommandReader.cpp
@@ -666,7 +672,8 @@ target_compile_features(vgm_chip_test PRIVATE cxx_std_17)
 add_executable(vgm_opn_test EXCLUDE_FROM_ALL
 	Tests/OpnCoreOracleTest.cpp
 	Source/chips/OpnDecoder.cpp
-	Source/backends/libvgm/NoteWaveform.cpp
+	Source/playback/NoteWaveform.cpp
+	Source/backends/libvgm/OpnVoiceDriver.cpp
 )
 target_include_directories(vgm_opn_test PRIVATE Source)
 target_compile_features(vgm_opn_test PRIVATE cxx_std_17)
@@ -683,7 +690,8 @@ add_executable(vgm_core_test EXCLUDE_FROM_ALL
 	Source/playback/BackendRegistry.cpp
 	Source/playback/PlaybackEngine.cpp
 	Source/playback/WaveExport.cpp
-	Source/backends/libvgm/NoteWaveform.cpp
+	Source/playback/NoteWaveform.cpp
+	Source/backends/libvgm/OpnVoiceDriver.cpp
 	Source/playback/WaveformSource.cpp
 	Source/playback/WaveShape.cpp
 	Source/playback/DawSync.cpp
@@ -840,7 +848,8 @@ add_executable(vgm_keyboard_test EXCLUDE_FROM_ALL
 	Tests/KeyboardLayoutTest.cpp
 	Source/ui/KeyboardLayout.cpp
 	Source/ui/KeyboardRowLayout.cpp
-	Source/backends/libvgm/NoteWaveform.cpp
+	Source/playback/NoteWaveform.cpp
+	Source/backends/libvgm/OpnVoiceDriver.cpp
 	Source/playback/WaveformSource.cpp
 	Source/playback/WaveShape.cpp
 )

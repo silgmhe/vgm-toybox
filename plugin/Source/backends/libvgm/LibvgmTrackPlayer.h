@@ -13,6 +13,7 @@
 #include "utils/DataLoader.h"
 
 #include "playback/SongBackend.h"
+#include "playback/VoiceDriver.h"
 
 #include "VgmReplayer.h"
 
@@ -113,6 +114,9 @@ public:
 		and `captureState` is the only thing that touches it.
 	*/
 	bool captureState (playback::ChipStateSnapshot& snapshot) const override;
+
+	/** Re-renders this track's patch at the pitch the caller names. */
+	std::shared_ptr<const std::vector<float>> renderNoteAt (int track, double hz) const override;
 
 	/** The song's DPCM samples, as the song instance collected them. Empty for a file with no
 		data blocks, which is a file that carries no sample bytes at all. */
@@ -223,6 +227,18 @@ private:
 		bool normalise = false;		// and so is this: it changes every sample's level
 		std::shared_ptr<const std::vector<float>> wave;
 	};
+
+	/** **The chip instance the note waveforms are asked of.** One for the whole player, because one
+		core serves every channel in turn: `load` rewrites the registers and the previous note is
+		gone. Creating one per note would pay a core's start-up cost per key press.
+	*/
+	std::unique_ptr<playback::IVoiceDriver> voiceDriver;
+
+	/** **A second driver, for renders that happen off the audio thread.** The one above is used by
+		`captureState` while the song plays; an export that re-rendered at another pitch through it
+		would overwrite the registers under the audio thread's feet and hear the change. Two cores is
+		tens of kilobytes, paid once, and only when someone drags a channel out. */
+	mutable std::unique_ptr<playback::IVoiceDriver> exportDriver;
 
 	mutable std::map<int, NoteWaveEntry> noteWaves;
 

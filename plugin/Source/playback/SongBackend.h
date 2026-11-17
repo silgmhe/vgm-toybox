@@ -227,6 +227,22 @@ public:
 		juce::ignoreUnused (snapshot);
 		return false;
 	}
+
+	/** **The same note at a different pitch**, for the export dialog's pinned-note option.
+
+		The panel already holds every channel's patch, but re-rendering it there would need a chip
+		driver, and drivers live in the backends - `chips/` may not include an engine header, and
+		neither may `ui/`. So the question goes back to whoever owns one.
+
+		Default nullptr: a backend with no computed notes says so, and the exporter keeps the
+		waveform it already had rather than inventing one.
+	*/
+	virtual std::shared_ptr<const std::vector<float>> renderNoteAt (int track, double hz) const
+	{
+		(void) track;
+		(void) hz;
+		return nullptr;
+	}
 	/** Silences one device (the chips card). No-op when the backend cannot mute chips. */
 	virtual void setChipAudible (DeviceId device, bool audible) = 0;
 

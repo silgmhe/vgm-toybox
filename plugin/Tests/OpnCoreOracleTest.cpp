@@ -28,7 +28,9 @@
 
 #include "TestSettings.h"
 #include "chips/OpnDecoder.h"
-#include "backends/libvgm/NoteWaveform.h"
+#include "playback/NoteWaveform.h"
+
+#include "backends/libvgm/OpnVoiceDriver.h"
 
 namespace
 {
@@ -348,10 +350,13 @@ void testNoteWaveform (void)
 	const auto serial = makePatch (0);
 	const auto parallel = makePatch (7);
 
-	const double seconds = toybox::chips::noteWave::durationOf (serial);
+	const auto driver = toybox::backends::libvgm::makeOpnVoiceDriver ();
+
+	const double seconds = toybox::playback::noteWave::durationOf (serial);
 	check (seconds > 0.01 && seconds < 20.0, "a note has a plausible length");
 
-	const auto wave = toybox::chips::noteWave::render (serial, toybox::chips::noteWave::frequencyOf (60), seconds, 1.0, 8000.0, true);
+	const auto wave = toybox::playback::noteWave::render (
+		*driver, serial, toybox::playback::noteWave::frequencyOf (60), seconds, 1.0, true);
 	check (wave.size() > 100, "the note has samples to draw");
 
 	double peak = 0.0;
@@ -396,7 +401,8 @@ void testNoteWaveform (void)
 	check (middle > 1.0e-4, "and it made sound in the middle, so the tail is not silence by accident");
 
 	// Two algorithms, every other register identical: the drawing must be able to tell them apart.
-	const auto other = toybox::chips::noteWave::render (parallel, toybox::chips::noteWave::frequencyOf (60), seconds, 1.0, 8000.0, true);
+	const auto other = toybox::playback::noteWave::render (
+		*driver, parallel, toybox::playback::noteWave::frequencyOf (60), seconds, 1.0, true);
 	bool differs = other.size() != wave.size();
 	if (! differs)
 	{
@@ -450,8 +456,8 @@ void testNoteWaveformInState (void)
 	// The renderer itself is tested above; what is checked here is that a decoder produces the
 	// input it needs. That split is deliberate: `chips/` cannot reach an engine header, so the
 	// rendering lives in the backend and this is the only contract between them.
-	const auto wave = toybox::chips::noteWave::render (*state.voicePatch, state.hz, 0.0,
-													   toybox::chips::noteWave::kRenderRate);
+	const auto driver = toybox::backends::libvgm::makeOpnVoiceDriver ();
+	const auto wave = toybox::playback::noteWave::render (*driver, *state.voicePatch, state.hz);
 	check (wave.size() > 100, "and the backend can turn it into a whole note");
 }
 

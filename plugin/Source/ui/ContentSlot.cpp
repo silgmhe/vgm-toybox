@@ -10,7 +10,7 @@
 #include "Theme.h"
 #include "i18n/LanguageManager.h"
 #include "playback/PlaybackEngine.h"
-#include "backends/libvgm/NoteWaveform.h"
+#include "playback/NoteWaveform.h"
 #include "playback/WaveExport.h"
 #include "settings/SettingsStore.h"
 
@@ -1576,21 +1576,24 @@ void ContentSlot::beginExport (const ExportOptions& options)
 
 		if (options.fixedNote >= 0)
 		{
-			const auto& store = settings::SettingsStore::getInstance ();
-			const double sustain = (double) store.getFmSustainMs () / 1000.0;
-			const double release = (double) store.getFmReleaseMs () / 1000.0;
-			const double hz = chips::noteWave::frequencyOf (options.fixedNote);
+			const double hz = playback::noteWave::frequencyOf (options.fixedNote);
 
 			for (auto& channel : drawn.channels)
 			{
-				// Only the channels the renderer can speak for: a sampled or wavetable row has a
-				// waveform of its own and no patch to re-render from.
-				if (channel.voicePatch != nullptr && channel.noteWaveform != nullptr)
+				// Only the rows that carry a patch: a sampled or wavetable channel has a waveform of
+				// its own and nothing to re-render from.
+				if (channel.voicePatch == nullptr || channel.trackIndex < 0)
 				{
-					// Rate 0 asks for the chip's own; the result carries it so the file can say so.
-					channel.noteWaveform = std::make_shared<const std::vector<float>> (
-						chips::noteWave::render (*channel.voicePatch, hz, sustain, release,
-												 0.0, store.getFmNormalise ()));
+					continue;
+				}
+
+				// **The backend owns the chip driver**, so it does the render - `ui/` may not
+				// include an engine header. A backend that computes no notes answers null, and the
+				// channel keeps the waveform it was drawn with rather than losing it to a pitch that
+				// could not be applied.
+				if (auto wave = engine.renderNoteAt (channel.trackIndex, hz))
+				{
+					channel.noteWaveform = std::move (wave);
 					channel.noteWaveformRate =
 						(float) chips::noteRateFor (channel.voicePatch->model);
 				}
