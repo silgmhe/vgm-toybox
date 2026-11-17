@@ -106,8 +106,8 @@ language: English
 "settings.audio.hint" = "The same dialog JUCE's own window used to offer: device, sample rate, buffer size and MIDI input. A change takes effect at once.";
 "settings.audio.noDevice" = "No audio device is open.";
 "settings.audio.open" = "Audio/MIDI settings...";
-	"mixer.dcBlockOff" = "DC offset present (click to remove)";
-	"mixer.dcBlockOn" = "DC offset removed";
+"mixer.dcBlockOff" = "DC offset present (click to remove)";
+"mixer.dcBlockOn" = "DC offset removed";
 "settings.general" = "General";
 "settings.general.closeToTray" = "Keep running in the system tray";
 "settings.general.closeToTrayHint" = "The close button hides the window instead of quitting. Use the tray icon to reopen it, or Quit in its menu to exit.";
@@ -188,7 +188,7 @@ language: English
 
 "tag.artist" = "Artist";
 "tag.date" = "Date";
-	"tag.copyright" = "Copyright";
+"tag.copyright" = "Copyright";
 "tag.game" = "Game";
 "tag.system" = "System";
 
@@ -218,9 +218,9 @@ language: English
 "transport.stopTooltip" = "Stop - return to the playback start marker";
 "transport.volumeTooltip" = "Output volume - the last stage of the engine, after the mixer master";
 
-	"view.mixer" = "Mixer";
-	"view.keyboard" = "Keyboard";
-	"view.oscilloscope" = "Oscilloscope";
+"view.mixer" = "Mixer";
+"view.keyboard" = "Keyboard";
+"view.oscilloscope" = "Oscilloscope";
 "view.play" = "Play";
 
 "visualiser.footer" = "View > Play takes you back to the player.";
@@ -230,57 +230,57 @@ language: English
 "visualiser.item.waveform" = "the waveform of what you are hearing";
 "visualiser.subtitle" = "Not built yet - this page is where these will live:";
 "visualiser.title" = "Visualiser";
-	"visualiser.scopeIdle" = "Nothing is playing.";
-	"visualiser.scopeHint" = "The mix you are hearing, after the mixer and the output volume.";
-		"visualiser.keyboard" = "Keyboard";
-	"visualiser.keyboardUnavailable" = "This format does not report per-channel state yet.";
-	"visualiser.keyboardUnsupported" = "The channels of this chip cannot be shown yet.";
-	"visualiser.export" = "Export snapshot";
-	"visualiser.exportEmpty" = "Nothing to export yet.";
+"visualiser.scopeIdle" = "Nothing is playing.";
+"visualiser.scopeHint" = "The mix you are hearing, after the mixer and the output volume.";
+"visualiser.keyboard" = "Keyboard";
+"visualiser.keyboardUnavailable" = "This format does not report per-channel state yet.";
+"visualiser.keyboardUnsupported" = "The channels of this chip cannot be shown yet.";
+"visualiser.export" = "Export snapshot";
+"visualiser.exportEmpty" = "Nothing to export yet.";
 "visualiser.dragHint.wave" = "Drag into a wavetable synth (Serum, Vital, ...) to load it; drop it on a folder to save the snapshot";
 "visualiser.dragHint.sample" = "Drag into a sampler to load it; drop it on a folder to save the sample";
 "visualiser.dragFailed.title" = "Could not write the wavetable";
 "visualiser.dragFailed.body" = "The temporary file for this drag could not be created. Check that the system temp folder is writable, then try again.";
-	"export.title" = "Wavetables exported";
+"export.title" = "Wavetables exported";
 
-	"export.written" = "{0} written to";
+"export.written" = "{0} written to";
 
-	"export.skippedSample" = "{0} sampled channel(s) left out: no sample data was captured for them.";
+"export.skippedSample" = "{0} sampled channel(s) left out: no sample data was captured for them.";
 
-	"export.failed" = "{0} could not be written.";
+"export.failed" = "{0} could not be written.";
 
-	"export.none" = "Nothing was written.";
+"export.none" = "Nothing was written.";
 "export.samples.title" = "Samples exported";
 "export.samples.seen" = "Samples found: {0}";
 "export.samples.none" = "This file has no samples to export. Only chips that keep their samples in a ROM are collected; the coverage table in the design doc lists which ones.";
 
-	"export.noChannels" = "Nothing was written: the panel is not receiving channel state at all.";
-	"export.seen" = "Channels in the snapshot: {0}";
-	"export.options.title" = "Export wavetable snapshot";
-	"export.options.single" = "Single cycle - for a wavetable synth";
-	"export.options.bits" = "Depth";
-	"export.options.fixedNote" = "Render at a fixed note";
+"export.noChannels" = "Nothing was written: the panel is not receiving channel state at all.";
+"export.seen" = "Channels in the snapshot: {0}";
+"export.options.title" = "Export wavetable snapshot";
+"export.options.single" = "Single cycle - for a wavetable synth";
+"export.options.bits" = "Depth";
+"export.options.fixedNote" = "Render at a fixed note";
 "export.options.nativeBits" = "Use the chip's own depth";
-	"export.options.bitsHint" = "Extra quantisation on the way out. The chip's own depth is what the hardware produces - one bit for a pulse, four for a triangle - and forcing less makes the steps coarse enough to survive a wavetable synth's resampling. The depth only sets how many levels: the cycle's own steps are kept at every setting.";
-	"export.options.looped" = "Looped - for a sampler, at A4";
-	"export.options.seconds" = "Length";
-	"export.options.cancel" = "Cancel";
-	"export.options.confirm" = "Export";
-	"export.options.hint" = "A single cycle is what a wavetable synth reads: it plays the shape at whatever note you press. A loop is what a sampler reads: it has a pitch, and these are written at A4 whatever the channel was playing.";
-	"export.close" = "Close";
+"export.options.bitsHint" = "Extra quantisation on the way out. The chip's own depth is what the hardware produces - one bit for a pulse, four for a triangle - and forcing less makes the steps coarse enough to survive a wavetable synth's resampling. The depth only sets how many levels: the cycle's own steps are kept at every setting.";
+"export.options.looped" = "Looped - for a sampler, at A4";
+"export.options.seconds" = "Length";
+"export.options.cancel" = "Cancel";
+"export.options.confirm" = "Export";
+"export.options.hint" = "A single cycle is what a wavetable synth reads: it plays the shape at whatever note you press. A loop is what a sampler reads: it has a pitch, and these are written at A4 whatever the channel was playing.";
+"export.close" = "Close";
 
 "visualiser.scope" = "Waveform";
 "settings.nes" = "NSF";
 "settings.nes.duration" = "Song length";
 "settings.nes.seconds" = "s";
-	"settings.nes.outputGain" = "Output gain";
-	"settings.nes.outputGainHint" = "The NES mix leaves headroom, so files play quieter here than the same music does as a VGM. +8 dB is the default; past about +10 dB the loudest songs reach the ceiling.";
+"settings.nes.outputGain" = "Output gain";
+"settings.nes.outputGainHint" = "The NES mix leaves headroom, so files play quieter here than the same music does as a VGM. +8 dB is the default; past about +10 dB the loudest songs reach the ceiling.";
 "settings.nes.durationHint" = "An NSF has no length in its header and its driver never ends: it loops until it is stopped. This is the length the timeline, the seek bar and the end of the song are built on.";
 "settings.nes.explanation" = "An NSF has no length in its header and its driver never ends: it loops until it is stopped. This is the length the timeline, the seek bar and the end of the song are built on.";
-	"settings.keyboard.rangeHintsHint" = "A narrow window shows fewer octaves. When a channel plays a note outside them, the edge of its keyboard carries an arrow saying so. Turn this off for a quieter row.";
-	"settings.keyboard.rangeHintsOn" = "Show an arrow when a note is outside the keys";
-	"settings.keyboard.rangeHints" = "Out-of-range notes";
-	"settings.keyboard.noteHold" = "Note-off delay";
+"settings.keyboard.rangeHintsHint" = "A narrow window shows fewer octaves. When a channel plays a note outside them, the edge of its keyboard carries an arrow saying so. Turn this off for a quieter row.";
+"settings.keyboard.rangeHintsOn" = "Show an arrow when a note is outside the keys";
+"settings.keyboard.rangeHints" = "Out-of-range notes";
+"settings.keyboard.noteHold" = "Note-off delay";
 
 "settings.fm" = "FM";
 "settings.fm.explanation" = "How long a note is held and how much tail follows it, when an FM channel is drawn or exported. The chip cannot answer either: its sustain is a level, and its release rate reaches four minutes.";
@@ -288,9 +288,9 @@ language: English
 "settings.fm.sustainLength" = "Sustain length";
 "settings.fm.releaseLength" = "Release length";
 "settings.fm.note" = "Render pitch";
-	"settings.keyboard.middleC" = "Middle C is";
-	"settings.keyboard.explanation" = "What the keyboard draws. The octave range follows the window width; the arrow is a choice.";
-	"settings.keyboard" = "Keyboard";
+"settings.keyboard.middleC" = "Middle C is";
+"settings.keyboard.explanation" = "What the keyboard draws. The octave range follows the window width; the arrow is a choice.";
+"settings.keyboard" = "Keyboard";
 "settings.export" = "Export";
 "settings.export.explanation" = "What exporting leaves behind, and what to do about it.";
 "settings.export.cleanup" = "Clear the drag cache when the application starts";
@@ -304,5 +304,5 @@ language: English
 "settings.export.sampleRateChip" = "The chip's own rate";
 "settings.export.sampleRateHint" = "A host rate keeps an 8-bit DAC's steps: the project plays the file without resampling. A file at the chip's own 8-23 kHz is resampled on import, and that smooths the steps away.";
 "export.samples.writtenTruncated" = "{0} sample(s) written, {1} cut at the length limit";
-	"settings.keyboard.startAuto" = "Follow the song";
-	"settings.keyboard.startNote" = "Lowest key";
+"settings.keyboard.startAuto" = "Follow the song";
+"settings.keyboard.startNote" = "Lowest key";
