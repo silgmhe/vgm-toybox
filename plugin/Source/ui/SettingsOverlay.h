@@ -374,8 +374,9 @@ private:
 	juce::Slider sustainSlider;
 	juce::Label releaseCaption;
 	juce::Slider releaseSlider;
+	juce::Label noteCaption;
+	juce::Slider noteSlider;
 	juce::ToggleButton normaliseButton;
-	juce::Label hint;
 };
 
 class AudioSettingsPage : public View,

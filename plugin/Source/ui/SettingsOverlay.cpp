@@ -1206,7 +1206,7 @@ void KeyboardSettingsPage::refreshLanguage (void)
 
 VisualiserSettingsPage::VisualiserSettingsPage (void)
 {
-	for (auto* caption : { &sustainCaption, &releaseCaption, &hint })
+	for (auto* caption : { &sustainCaption, &releaseCaption, &noteCaption })
 	{
 		caption->setFont (juce::Font (juce::FontOptions (12.5f)));
 		caption->setJustificationType (juce::Justification::centredLeft);
@@ -1241,6 +1241,12 @@ VisualiserSettingsPage::VisualiserSettingsPage (void)
 	setUpSlider (releaseSlider, "settings.visualiser.fmRelease", "fm.releaseMs",
 				 &toybox::settings::SettingsStore::setFmReleaseMs);
 
+	// **The pitch every FM shape is rendered at.** Fixed rather than following the playing note - a
+	// timbre that slides would re-render every frame - so it has to be pickable somewhere, and this
+	// is the page that owns the other two numbers in the same calculation.
+	setUpSlider (noteSlider, "settings.visualiser.fmNote", "fm.note",
+				 &toybox::settings::SettingsStore::setFmFixedNote);
+
 	normaliseButton.setComponentID ("settings.visualiser.fmNormalise");
 	normaliseButton.onClick = [this]
 	{
@@ -1259,6 +1265,7 @@ void VisualiserSettingsPage::refresh (void)
 
 	sustainSlider.setValue ((double) store.getFmSustainMs (), juce::dontSendNotification);
 	releaseSlider.setValue ((double) store.getFmReleaseMs (), juce::dontSendNotification);
+	noteSlider.setValue ((double) store.getFmFixedNote (), juce::dontSendNotification);
 	normaliseButton.setToggleState (store.getFmNormalise (), juce::dontSendNotification);
 }
 
@@ -1282,10 +1289,12 @@ void VisualiserSettingsPage::resized (void)
 	releaseSlider.setBounds (area.removeFromTop (kFooterHeight));
 	area.removeFromTop (14);
 
-	normaliseButton.setBounds (area.removeFromTop (22));
-	area.removeFromTop (10);
+	noteCaption.setBounds (area.removeFromTop (18));
+	area.removeFromTop (4);
+	noteSlider.setBounds (area.removeFromTop (kFooterHeight));
+	area.removeFromTop (14);
 
-	hint.setBounds (area.removeFromTop (60));
+	normaliseButton.setBounds (area.removeFromTop (22));
 }
 
 void VisualiserSettingsPage::lookAndFeelChanged (void)
@@ -1305,8 +1314,12 @@ void VisualiserSettingsPage::refreshLanguage (void)
 		releaseCaption.setText (i18n::tr (setting->labelKey), juce::dontSendNotification);
 	}
 
+	if (const auto* setting = toybox::settings::numericSetting ("fm.note"))
+	{
+		noteCaption.setText (i18n::tr (setting->labelKey), juce::dontSendNotification);
+	}
+
 	normaliseButton.setButtonText (i18n::tr ("settings.visualiser.fmNormalise"));
-	hint.setText (i18n::tr ("settings.visualiser.explanation"), juce::dontSendNotification);
 }
 
 AudioSettingsPage::AudioSettingsPage (void)

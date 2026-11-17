@@ -283,8 +283,7 @@ language: 简体中文
 "settings.visualiser.fmNormalise" = "将每个音符缩放到满电平";
 "settings.visualiser.fmSustainLength" = "持续段长度";
 "settings.visualiser.fmReleaseLength" = "释音段长度";
-"settings.visualiser.fmFixedNote" = "按指定音高渲染";
-"settings.visualiser.fmFixedNoteHint" = "导出 FM 音符时使用的音高。关闭时使用正在播放的音符。";
+"settings.visualiser.fmFixedNote" = "渲染音高";
 	"settings.keyboard.middleC" = "中央 C 记作";
 	"settings.keyboard.explanation" = "键盘视图画什么。八度范围随窗口宽度自动调整；箭头则是一项选择。";
 	"settings.keyboard" = "键盘";
