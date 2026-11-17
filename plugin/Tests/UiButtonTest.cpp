@@ -33,6 +33,7 @@
 #include "ui/ButtonPaint.h"
 #include "ui/ChannelGlyphs.h"
 #include "ui/ChannelNameLayout.h"
+#include "ui/KeyboardLayout.h"
 #include "ui/IconButton.h"
 #include "ui/Icons.h"
 #include "ui/MidiMenu.h"
@@ -646,6 +647,42 @@ void checkTheSyncedCombo (void)
 	check (box.getSelectedId() == 3, "and releasing it lets the mirror through");
 }
 
+/**
+	**A note survives its own name.** The settings page prints with `midiNoteName` and parses with
+	`midiNoteFromName`; if the two disagree by an octave the slider would show C4 and store C3, which
+	is the kind of mismatch nobody notices until a sample sounds wrong.
+
+	`octaveShift` is the keyboard setting - which octave is called 4 - so the round trip is checked at
+	every shift the setting allows, not only at the default.
+*/
+void checkNoteNames (void)
+{
+	for (int shift = 0; shift <= 3; ++shift)
+	{
+		// One check per shift rather than one per note: 352 passing lines would bury the ones that
+		// matter, and a round trip is a single property, not a per-note fact.
+		bool roundTrips = true;
+
+		for (int note = 21; note <= 108 && roundTrips; ++note)
+		{
+			roundTrips = toybox::ui::midiNoteFromName (toybox::ui::midiNoteName (note, shift), shift)
+						 == note;
+		}
+
+		check (roundTrips, "every note survives its own name");
+	}
+
+	// **60 is C5 here, not C4.** The default `middleCOctave` is 5, so `octaveShiftForMiddleC` returns
+	// 0 and the printed octave is `note / 12`; a shift of one moves it to C4. The round trip above is
+	// what guarantees this pairing - these lines only pin the default so a change to the setting's
+	// default does not pass unnoticed.
+	check (toybox::ui::midiNoteFromName ("C5", 0) == 60, "60 is C5 with no shift");
+	check (toybox::ui::midiNoteFromName ("C4", 1) == 60, "and C4 with a shift of one");
+	check (toybox::ui::midiNoteFromName ("Db5", 0) == 61, "a flat names the same key as its sharp");
+	check (toybox::ui::midiNoteFromName ("c5", 0) == 60, "case is not part of a name");
+	check (toybox::ui::midiNoteFromName ("nonsense", 0) == -1, "and nonsense is refused, not guessed");
+}
+
 int main()
 {
 	const juce::ScopedJuceInitialiser_GUI init;
@@ -664,6 +701,7 @@ int main()
 	checkTheSyncedCombo();
 	checkChannelNameLayout();
 	checkChannelGlyphMapping();
+	checkNoteNames();
 	renderChannelGlyphSheet();
 
 	std::printf ("Result    : %s\n", (toybox::test::failures() == 0) ? "all checks passed" : "FAILURES");

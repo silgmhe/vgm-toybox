@@ -731,6 +731,7 @@ add_executable(vgm_ui_test EXCLUDE_FROM_ALL
 	Source/ui/Icons.cpp
 	Source/ui/SyncedComboBox.cpp
 	Source/ui/ChannelGlyphs.generated.cpp
+	Source/ui/KeyboardLayout.cpp
 	Source/ui/Theme.cpp
 	)
 target_include_directories(vgm_ui_test PRIVATE Source)

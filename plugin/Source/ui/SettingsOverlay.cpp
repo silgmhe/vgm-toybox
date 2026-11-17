@@ -1247,6 +1247,32 @@ FmSettingsPage::FmSettingsPage (void)
 	setUpSlider (noteSlider, "settings.fm.note", "fm.note",
 				 &toybox::settings::SettingsStore::setFmFixedNote);
 
+	// **A pitch reads as a note name, in both directions.** "60" is a number a MIDI driver prints;
+	// "C4" is what a person reads, and what they will type. The octave shift comes from the keyboard
+	// setting, because which octave is called 4 is a preference this project already has - a
+	// conversion that ignored it would show C4 and parse it as a different note.
+	noteSlider.textFromValueFunction = [] (double value)
+	{
+		const int shift = octaveShiftForMiddleC (
+			toybox::settings::SettingsStore::getInstance ().getKeyboardMiddleCOctave ());
+
+		return midiNoteName ((int) std::lround (value), shift);
+	};
+
+	noteSlider.valueFromTextFunction = [this] (const juce::String& text)
+	{
+		const int shift = octaveShiftForMiddleC (
+			toybox::settings::SettingsStore::getInstance ().getKeyboardMiddleCOctave ());
+
+		const int note = midiNoteFromName (text, shift);
+
+		// -1 means "not a note": keep what the slider had rather than snapping to the bottom, which
+		// is what returning the parsed value would do.
+		return note >= 0 ? (double) note : noteSlider.getValue ();
+	};
+
+	noteSlider.updateText ();
+
 	normaliseButton.setComponentID ("settings.fm.normalise");
 	normaliseButton.onClick = [this]
 	{

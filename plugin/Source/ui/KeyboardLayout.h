@@ -17,6 +17,17 @@ int octaveShiftForMiddleC (int middleCOctave);
 /** "C#3", "G8", "C-2" - or "-" for a channel that is not sounding. */
 juce::String midiNoteName (int note, int octaveShift);
 
+/** **The note a name means**, the inverse of `midiNoteName` - or -1 if it is not a name at all.
+
+	Accepts sharps and flats (`C#4`, `Db4`) because a keyboard player reads both, and takes the same
+	`octaveShift` as the forward direction: which octave is called 4 is a setting, and a conversion
+	that ignored it would name one note and parse another.
+
+	The parser is deliberately the other half of the printer rather than a general MIDI-name library:
+	`midiNoteName` writes `name + (note / 12 - shift)`, and this reads exactly that back.
+*/
+int midiNoteFromName (const juce::String& name, int octaveShift);
+
 // --- the keyboard's arithmetic ---------------------------------------------------------------
 namespace keyboard
 {

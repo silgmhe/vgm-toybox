@@ -21,6 +21,54 @@ juce::String midiNoteName (int note, int octaveShift)
 	return juce::String (names[note % 12]) + juce::String (note / 12 - octaveShift);
 }
 
+int midiNoteFromName (const juce::String& name, int octaveShift)
+{
+	static const char* const sharps[] = { "C", "C#", "D", "D#", "E", "F",
+										  "F#", "G", "G#", "A", "A#", "B" };
+	static const char* const flats[] = { "C", "DB", "D", "EB", "E", "F",
+										 "GB", "G", "AB", "A", "BB", "B" };
+
+	// Upper case throughout: `db4` and `DB4` are the same note, and nobody types the case on purpose.
+	const auto text = name.trim ().toUpperCase ();
+
+	if (text.isEmpty ())
+	{
+		return -1;
+	}
+
+	// The octave is the trailing run of digits, with room for a minus sign - a keyboard starts at A0,
+	// but the parser should not be the thing that decides that.
+	int split = text.length ();
+
+	while (split > 0 && (text[split - 1] >= '0' && text[split - 1] <= '9'))
+	{
+		--split;
+	}
+
+	if (split > 0 && text[split - 1] == '-')
+	{
+		--split;
+	}
+
+	if (split == 0 || split == text.length ())
+	{
+		return -1;		// no note, or no octave
+	}
+
+	const auto notePart = text.substring (0, split);
+	const int octave = text.substring (split).getIntValue ();
+
+	for (int index = 0; index < 12; ++index)
+	{
+		if (notePart == sharps[index] || notePart == flats[index])
+		{
+			return (octave + octaveShift) * 12 + index;
+		}
+	}
+
+	return -1;
+}
+
 namespace keyboard
 {
 

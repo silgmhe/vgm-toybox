@@ -4,6 +4,9 @@
 
 #include "i18n/LanguageManager.h"
 #include "settings/SettingsDefaults.h"
+#include "settings/SettingsStore.h"
+
+#include "KeyboardLayout.h"
 
 #include <juce_gui_basics/juce_gui_basics.h>
 
@@ -93,6 +96,26 @@ public:
 				  (double) settings::fm::maxFixedNote);
 		fixedNoteSlider.setComponentID ("export.options.fixedNoteValue");
 		fixedNoteValue.setComponentID ("export.options.fixedNoteReadout");
+
+		// The same note naming the settings page uses, octave shift included.
+		fixedNoteSlider.textFromValueFunction = [] (double value)
+		{
+			const int shift = octaveShiftForMiddleC (
+				settings::SettingsStore::getInstance ().getKeyboardMiddleCOctave ());
+
+			return midiNoteName ((int) std::lround (value), shift);
+		};
+
+		fixedNoteSlider.valueFromTextFunction = [this] (const juce::String& text)
+		{
+			const int shift = octaveShiftForMiddleC (
+				settings::SettingsStore::getInstance ().getKeyboardMiddleCOctave ());
+
+			const int note = midiNoteFromName (text, shift);
+			return note >= 0 ? (double) note : fixedNoteSlider.getValue ();
+		};
+
+		fixedNoteSlider.updateText ();
 
 		cancelButton.setComponentID ("export.options.cancel");
 		cancelButton.onClick = [this] { if (onCancel != nullptr) { onCancel (); } };
@@ -308,7 +331,8 @@ private:
 		bitsValue.setText (juce::String ((int) std::lround (bitsSlider.getValue ())) + " bit",
 						   juce::dontSendNotification);
 
-		fixedNoteValue.setText (juce::String ((int) std::lround (fixedNoteSlider.getValue ())),
+		fixedNoteValue.setText (midiNoteName ((int) std::lround (fixedNoteSlider.getValue ()),
+														octaveShiftForMiddleC (settings::SettingsStore::getInstance ().getKeyboardMiddleCOctave ())),
 								juce::dontSendNotification);
 	}
 
