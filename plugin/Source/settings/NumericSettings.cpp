@@ -29,17 +29,17 @@ const std::vector<NumericSetting>& numericSettings (void)
 
 		// The two stages of a rendered FM note. Milliseconds rather than seconds so they sit in
 		// this table with the others instead of needing one of their own.
-		{ "fm.sustainMs", "settings.visualiser.fmSustainLength", "",
+		{ "fm.sustainMs", "settings.fm.sustainLength", "",
 		  fm::minSustainMs, fm::maxSustainMs, fm::sustainStepMs,
 		  fm::defaultSustainMs, " ms" },
 
-		{ "fm.releaseMs", "settings.visualiser.fmReleaseLength", "",
+		{ "fm.releaseMs", "settings.fm.releaseLength", "",
 		  fm::minReleaseMs, fm::maxReleaseMs, fm::releaseStepMs,
 		  fm::defaultReleaseMs, " ms" },
 
 		// The note an export renders at when the user pins one. A piano's range, because the
 		// control exists to pick a playable note rather than to sweep the register.
-		{ "fm.note", "settings.visualiser.fmFixedNote", "",
+		{ "fm.note", "settings.fm.note", "",
 		  fm::minFixedNote, fm::maxFixedNote, 1,
 		  fm::defaultFixedNote, "" },
 	};

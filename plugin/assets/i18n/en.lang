@@ -282,12 +282,12 @@ language: English
 	"settings.keyboard.rangeHints" = "Out-of-range notes";
 	"settings.keyboard.noteHold" = "Note-off delay";
 
-"settings.visualiser" = "FM";
-"settings.visualiser.explanation" = "How long a note is held and how much tail follows it, when an FM channel is drawn or exported. The chip cannot answer either: its sustain is a level, and its release rate reaches four minutes.";
-"settings.visualiser.fmNormalise" = "Scale each note to full level";
-"settings.visualiser.fmSustainLength" = "Sustain length";
-"settings.visualiser.fmReleaseLength" = "Release length";
-"settings.visualiser.fmFixedNote" = "Render pitch";
+"settings.fm" = "FM";
+"settings.fm.explanation" = "How long a note is held and how much tail follows it, when an FM channel is drawn or exported. The chip cannot answer either: its sustain is a level, and its release rate reaches four minutes.";
+"settings.fm.normalise" = "Scale each note to full level";
+"settings.fm.sustainLength" = "Sustain length";
+"settings.fm.releaseLength" = "Release length";
+"settings.fm.note" = "Render pitch";
 	"settings.keyboard.middleC" = "Middle C is";
 	"settings.keyboard.explanation" = "What the keyboard draws. The octave range follows the window width; the arrow is a choice.";
 	"settings.keyboard" = "Keyboard";

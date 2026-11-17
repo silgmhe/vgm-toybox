@@ -153,7 +153,7 @@ public:
 		bitsCaption.setText (i18n::tr ("export.options.bits"), juce::dontSendNotification);
 		nativeBitsButton.setButtonText (i18n::tr ("export.options.nativeBits"));
 		fixedNoteButton.setButtonText (i18n::tr ("export.options.fixedNote"));
-		fixedNoteCaption.setText (i18n::tr ("settings.visualiser.fmFixedNote"), juce::dontSendNotification);
+		fixedNoteCaption.setText (i18n::tr ("settings.fm.note"), juce::dontSendNotification);
 		cancelButton.setButtonText (i18n::tr ("export.options.cancel"));
 		confirmButton.setButtonText (i18n::tr ("export.options.confirm"));
 

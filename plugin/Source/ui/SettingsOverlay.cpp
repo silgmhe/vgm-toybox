@@ -1204,7 +1204,7 @@ void KeyboardSettingsPage::refreshLanguage (void)
 	repaint ();
 }
 
-VisualiserSettingsPage::VisualiserSettingsPage (void)
+FmSettingsPage::FmSettingsPage (void)
 {
 	for (auto* caption : { &sustainCaption, &releaseCaption, &noteCaption })
 	{
@@ -1236,18 +1236,18 @@ VisualiserSettingsPage::VisualiserSettingsPage (void)
 		addAndMakeVisible (slider);
 	};
 
-	setUpSlider (sustainSlider, "settings.visualiser.fmSustain", "fm.sustainMs",
+	setUpSlider (sustainSlider, "settings.fm.sustain", "fm.sustainMs",
 				 &toybox::settings::SettingsStore::setFmSustainMs);
-	setUpSlider (releaseSlider, "settings.visualiser.fmRelease", "fm.releaseMs",
+	setUpSlider (releaseSlider, "settings.fm.release", "fm.releaseMs",
 				 &toybox::settings::SettingsStore::setFmReleaseMs);
 
 	// **The pitch every FM shape is rendered at.** Fixed rather than following the playing note - a
 	// timbre that slides would re-render every frame - so it has to be pickable somewhere, and this
 	// is the page that owns the other two numbers in the same calculation.
-	setUpSlider (noteSlider, "settings.visualiser.fmNote", "fm.note",
+	setUpSlider (noteSlider, "settings.fm.note", "fm.note",
 				 &toybox::settings::SettingsStore::setFmFixedNote);
 
-	normaliseButton.setComponentID ("settings.visualiser.fmNormalise");
+	normaliseButton.setComponentID ("settings.fm.normalise");
 	normaliseButton.onClick = [this]
 	{
 		toybox::settings::SettingsStore::getInstance ()
@@ -1259,7 +1259,7 @@ VisualiserSettingsPage::VisualiserSettingsPage (void)
 	refresh ();
 }
 
-void VisualiserSettingsPage::refresh (void)
+void FmSettingsPage::refresh (void)
 {
 	const auto& store = toybox::settings::SettingsStore::getInstance ();
 
@@ -1269,13 +1269,13 @@ void VisualiserSettingsPage::refresh (void)
 	normaliseButton.setToggleState (store.getFmNormalise (), juce::dontSendNotification);
 }
 
-void VisualiserSettingsPage::paint (juce::Graphics& g)
+void FmSettingsPage::paint (juce::Graphics& g)
 {
-	paintHeading (g, i18n::tr ("settings.visualiser"), i18n::tr ("settings.visualiser.explanation"),
+	paintHeading (g, i18n::tr ("settings.fm"), i18n::tr ("settings.fm.explanation"),
 				  getLocalBounds (), kTwoLineHeadingHeight, 2);
 }
 
-void VisualiserSettingsPage::resized (void)
+void FmSettingsPage::resized (void)
 {
 	auto area = pageContent (getLocalBounds (), kTwoLineHeadingHeight);
 
@@ -1297,12 +1297,12 @@ void VisualiserSettingsPage::resized (void)
 	normaliseButton.setBounds (area.removeFromTop (22));
 }
 
-void VisualiserSettingsPage::lookAndFeelChanged (void)
+void FmSettingsPage::lookAndFeelChanged (void)
 {
 	repaint ();
 }
 
-void VisualiserSettingsPage::refreshLanguage (void)
+void FmSettingsPage::refreshLanguage (void)
 {
 	if (const auto* setting = toybox::settings::numericSetting ("fm.sustainMs"))
 	{
@@ -1319,7 +1319,7 @@ void VisualiserSettingsPage::refreshLanguage (void)
 		noteCaption.setText (i18n::tr (setting->labelKey), juce::dontSendNotification);
 	}
 
-	normaliseButton.setButtonText (i18n::tr ("settings.visualiser.fmNormalise"));
+	normaliseButton.setButtonText (i18n::tr ("settings.fm.normalise"));
 }
 
 AudioSettingsPage::AudioSettingsPage (void)
@@ -1832,7 +1832,7 @@ namespace
 		{ "midi",       "settings.midi",       &makePage<MidiSettingsPage>,       false },
 		{ "nes",        "settings.nes",        &makePage<NesSettingsPage>,        false },
 		{ "keyboard",   "settings.keyboard",   &makePage<KeyboardSettingsPage>,   false },
-		{ "visualiser", "settings.visualiser", &makePage<VisualiserSettingsPage>, false },
+		{ "fm", "settings.fm", &makePage<FmSettingsPage>, false },
 		{ "export",     "settings.export",     &makePage<ExportSettingsPage>,     false },
 		{ "audio",      "settings.audio",      &makePage<AudioSettingsPage>,      true  },
 	};

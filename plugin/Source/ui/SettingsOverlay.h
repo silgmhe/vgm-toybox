@@ -355,13 +355,13 @@ private:
 	No controls here for the pinned export pitch: that belongs in the export dialog, where the person
 	choosing it is already deciding what the file should be.
 */
-class VisualiserSettingsPage : public View
+class FmSettingsPage : public View
 {
 public:
-	VisualiserSettingsPage (void);
+	FmSettingsPage (void);
 
-	juce::String getViewId (void) const override { return "settings-visualiser"; }
-	juce::String getViewName (void) const override { return i18n::tr ("settings.visualiser"); }
+	juce::String getViewId (void) const override { return "settings-fm"; }
+	juce::String getViewName (void) const override { return i18n::tr ("settings.fm"); }
 
 	void refresh (void) override;
 	void paint (juce::Graphics& g) override;
