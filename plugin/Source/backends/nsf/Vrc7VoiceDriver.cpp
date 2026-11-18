@@ -73,6 +73,19 @@ public:
 			}
 		}
 
+		// **The sustain switch, kept from the driver's own write.** Bit 5 of `0x20` decides whether
+		// this voice holds at its sustain level or decays through it like a struck instrument, and
+		// `noteOn` rewrites that whole byte - so the bit has to be carried across. Without this every
+		// patch came out percussive and went silent a few milliseconds in, which is what FM2 showed.
+		for (const auto& reg : patch.regs)
+		{
+			if ((uint8_t) (reg.first & 0xFF) == (uint8_t) (0x20 + channel))
+			{
+				sustainOn = ((uint8_t) reg.second & 0x20) != 0;
+				break;
+			}
+		}
+
 		// **Only the instrument and volume.** A VRC7 voice's attack, decay and release are not in
 		// these registers - the cartridge selects one of sixteen patches burned into the chip - so
 		// writing anything else here would be writing a value the chip does not read.
@@ -117,9 +130,11 @@ public:
 
 		write ((uint8_t) (0x10 + channel), (uint8_t) (fnumBits & 0xFF));
 
-		// 0x20 carries the f-number's top bit, the block, and the key. Bit 5 is the sustain switch,
-		// which a cartridge-driven voice leaves on so the note holds at its sustain level.
-		const auto high = (uint8_t) (((fnumBits >> 8) & 0x01) | (block << 1) | 0x10);
+		// 0x20 carries the f-number's top bit, the block, the key and the sustain switch. The switch
+		// is the driver's, carried over from `load`: forcing it on would turn a struck instrument
+		// into a held note, and forcing it off silences everything that is not percussive.
+		const auto high = (uint8_t) (((fnumBits >> 8) & 0x01) | (block << 1) | 0x10
+									 | (sustainOn ? 0x20 : 0x00));
 		write ((uint8_t) (0x20 + channel), high);
 	}
 
@@ -188,6 +203,9 @@ private:
 	double chipClock = 0.0;
 	double sampleRate = 0.0;
 	int channel = 0;
+
+	/** `0x20`'s bit 5, as the driver wrote it. See `load`. */
+	bool sustainOn = false;
 };
 
 } // namespace

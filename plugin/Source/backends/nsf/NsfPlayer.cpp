@@ -1351,10 +1351,11 @@ bool NsfPlayer::captureState (playback::ChipStateSnapshot& snapshot, bool includ
 
 			state.voicePatch = patch;
 
-			// **One pitch for every row**, the same rule the libvgm side follows: a shape is a
-			// property of the instrument, and keying it on the note being played means a vibrato
-			// re-renders four seconds of audio per frame.
-			if (vrc7Driver == nullptr || state.frequency <= 0.0f)
+			// **No pitch test here.** The shape is drawn at `pitchForDrawing`, so whether this voice
+			// is sounding right now has nothing to do with it - and `state.frequency` comes from the
+			// chip's current registers, which a driver only writes when it starts a note. Requiring
+			// one left every silent channel as a flat line, which is what FM3..FM6 showed.
+			if (vrc7Driver == nullptr)
 			{
 				continue;
 			}
