@@ -329,6 +329,16 @@ private:
 		this runs on the audio thread. */
 	void applyScan (std::shared_ptr<const ScanResult> scan);
 
+	/** **Looks for the scan's result, at most every `kScanPollIntervalSamples`.**
+
+		Called from the top of both render entry points. It used to live inside `render()` alone,
+		which was correct while every song mixed through one player - and stopped being correct when
+		`inPlaceChannelMix` made `renderChannels()` the only entry point that runs. The DPCM row
+		then said "analysing" for as long as the song played, and only a restart cleared it, because
+		`start()` is the other place that looks.
+	*/
+	void pollScan (int frames);
+
 	void resetToStart (void);
 	void scanSampleChannels (double seconds);
 	void observeDpcmSample (void);

@@ -199,6 +199,35 @@ void NsfPlayer::start (void)
 	resetToStart ();
 }
 
+void NsfPlayer::pollScan (int frames)
+{
+	// The scan is published by a thread that tells nobody, so this looks again on its own clock -
+	// every 4096 samples, about 93 ms. Not while scanning: that pass is trying to produce the very
+	// thing being waited for, and looking from inside it would only take the handle's lock between
+	// its own writes.
+	//
+	// "Crossed a poll boundary during this block" rather than a modulo on where the block starts:
+	// the same condition, said so that a reader does not have to convince themselves the interval
+	// is larger than a block for it to work.
+	if (! analysing.load (std::memory_order_relaxed) || scanning.load (std::memory_order_relaxed))
+	{
+		return;
+	}
+
+	const auto pollBoundary = rendered / kScanPollIntervalSamples;
+	const auto nextBoundary = (rendered + (uint64_t) frames) / kScanPollIntervalSamples;
+
+	if (pollBoundary == nextBoundary)
+	{
+		return;
+	}
+
+	if (auto scan = scanHandle != nullptr ? scanHandle->snapshot () : nullptr)
+	{
+		applyScan (std::move (scan));
+	}
+}
+
 void NsfPlayer::applyScan (std::shared_ptr<const ScanResult> scan)
 {
 	if (scan == nullptr)
@@ -716,25 +745,7 @@ int NsfPlayer::render (float* left, float* right, int frames)
 		return 0;
 	}
 
-	// The scan is published by a thread that tells nobody, so this looks again on its own clock -
-	// every 4096 samples, about 93 ms. Without it the DPCM row would say "analysing" until the
-	// song was reopened, because the only other place that checks runs from start().
-	// Not while scanning: that pass is trying to produce the very thing being waited for, and
-	// looking from inside it would only take the handle's lock between its own writes.
-	// "Crossed a poll boundary during this block" rather than a modulo on where the block starts:
-	// the same condition, said so that a reader does not have to convince themselves the interval
-	// is larger than a block for it to work.
-	const auto pollBoundary = rendered / kScanPollIntervalSamples;
-	const auto nextBoundary = (rendered + (uint64_t) frames) / kScanPollIntervalSamples;
-
-	if (analysing.load (std::memory_order_relaxed) && ! scanning.load (std::memory_order_relaxed)
-		&& pollBoundary != nextBoundary)
-	{
-		if (auto scan = scanHandle != nullptr ? scanHandle->snapshot () : nullptr)
-		{
-			applyScan (std::move (scan));
-		}
-	}
+	pollScan (frames);
 
 
 	const double clocksPerSample = (file.isPal () ? kPalClock : kNtscClock) / rate;
@@ -1594,6 +1605,11 @@ int NsfPlayer::renderChannels (float* const* dest, int channelCount, int frames)
 	{
 		return 0;
 	}
+
+	// **The same look `render()` makes.** This is the entry point `inPlaceChannelMix` uses, and
+	// the only one for those songs - a poll that lived in `render()` alone left the DPCM row
+	// saying "analysing" until the song was restarted.
+	pollScan (frames);
 
 	const double clocksPerSample = (file.isPal () ? kPalClock : kNtscClock) / rate;
 	const int usable = (std::min) (channelCount, 5);	// the two 2A03 objects, for now
