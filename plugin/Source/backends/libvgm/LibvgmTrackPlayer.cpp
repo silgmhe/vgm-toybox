@@ -583,10 +583,12 @@ void LibvgmTrackPlayer::applyDacHit (playback::ChannelState& state, uint32_t sam
 
 void LibvgmTrackPlayer::setReplaySource (std::shared_ptr<const midi::SongIr> ir,
 										 const std::vector<PLR_DEV_INFO>& devices,
-										 std::shared_ptr<const dac::Table> table)
+										 std::shared_ptr<const dac::Table> table,
+										 RomCache* romCache)
 {
 	replayIr = std::move (ir);
 	replayDevices = devices;
+	replayRomCache = romCache;
 
 	// **The table is built once by the backend that owns the song**, not here: this call happens once
 	// per track player (a dozen of them), and building it meant a pass over every `0x8n` byte each
@@ -852,7 +854,7 @@ bool LibvgmTrackPlayer::captureState (playback::ChipStateSnapshot& snapshot) con
 
 	if (replayer == nullptr)
 	{
-		replayer = std::make_unique<VgmReplayer> (replayIr, replayDevices);
+		replayer = std::make_unique<VgmReplayer> (replayIr, replayDevices, replayRomCache);
 	}
 
 	if (pendingRewind.exchange (false, std::memory_order_relaxed))

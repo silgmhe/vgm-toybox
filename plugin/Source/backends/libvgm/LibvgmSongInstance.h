@@ -77,6 +77,13 @@ private:
 	*/
 	std::shared_ptr<const midi::SongIr> songIr;
 
+	/** **One copy of each chip's memory, for every player in this song.**
+
+		A Neo Geo file's YM2610 image is eight megabytes, and `memory::forRequirements` returned a
+		fresh vector to every player that asked - sixteen of them for a sixteen-row mixer. The bytes
+		are the chip's, not the track's, so they live here and the players share them. */
+	RomCache romCache;
+
 	/** **The YM2612 DAC's table, built once for the whole song.**
 
 		Eleven track players and the export all need the same hits, and building them costs a pass over

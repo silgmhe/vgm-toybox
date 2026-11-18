@@ -411,7 +411,7 @@ bool LibvgmSongInstance::prepare (double hostSampleRate, int newMaxBlockSize, ju
 	}
 
 	probe->setSamples (dpcmSamples);
-	probe->setReplaySource (songIr, deviceInfo, dacTable);
+	probe->setReplaySource (songIr, deviceInfo, dacTable, &romCache);
 	probe->setTrackList (&tracks);	// setTrackAudible() resolves the track through this list
 
 	// **What each channel makes its sound with**, for the mixer's type icon. Here and not in
@@ -736,7 +736,7 @@ std::unique_ptr<playback::ITrackPlayer> LibvgmSongInstance::createPlayer (juce::
 
 	player->setTimeline (loopCount, fadeSeconds);
 	player->setSamples (dpcmSamples);
-	player->setReplaySource (songIr, deviceInfo, dacTable);
+	player->setReplaySource (songIr, deviceInfo, dacTable, &romCache);
 	player->setTrackList (&tracks);
 	return player;
 }

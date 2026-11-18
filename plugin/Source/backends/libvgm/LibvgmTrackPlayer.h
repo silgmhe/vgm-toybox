@@ -94,7 +94,8 @@ public:
 	*/
 	void setReplaySource (std::shared_ptr<const midi::SongIr> ir,
 						  const std::vector<PLR_DEV_INFO>& devices,
-						  std::shared_ptr<const dac::Table> table);
+						  std::shared_ptr<const dac::Table> table,
+						  RomCache* romCache = nullptr);
 
 	// --- playback::ITrackPlayer ---------------------------------------------------
 	void start (void) override;
@@ -199,6 +200,10 @@ private:
 	// captureState on the audio thread, after render, and this player owns the state.
 
 	std::shared_ptr<const midi::SongIr> replayIr;
+
+	/** The song's chip memory, shared with every other player - see `RomCache`. Null when the
+		backend did not supply one, in which case this player assembles its own. */
+	RomCache* replayRomCache = nullptr;
 	std::vector<PLR_DEV_INFO> replayDevices;
 	mutable std::unique_ptr<VgmReplayer> replayer;
 

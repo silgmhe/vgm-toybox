@@ -9,6 +9,8 @@
 #include "player/playera.hpp"
 
 #include "chips/IChipDecoder.h"
+
+#include <map>
 #include "midi/SongIr.h"
 
 #include "ChipWriteRouter.h"
@@ -32,6 +34,40 @@ namespace toybox::backends::libvgm
 	Audio thread. `advanceTo` allocates only when a device appears that it has not seen before, which
 	is the first frame after a song is opened; after that it is a walk over two maps.
 */
+/** **One copy of each chip's memory, shared by every player in a song.**
+
+	A song's sample ROM is the same bytes for every track that plays it, and `memory::forRequirements`
+	returned a fresh `std::vector` to each one - eight megabytes for the YM2610 in a Neo Geo file,
+	multiplied by the number of rows in the mixer. The data is read-only, so a shared pointer is the
+	whole fix.
+
+	Keyed on the device type: what a chip needs from the song is a property of the chip, not of the
+	track. Two players reading the same device therefore share one image.
+*/
+class RomCache
+{
+public:
+	struct Entry
+	{
+		std::shared_ptr<const std::vector<uint8_t>> image;
+		uint8_t banking = 0;
+	};
+
+	const Entry* find (uint32_t deviceId) const
+	{
+		const auto it = entries.find (deviceId);
+		return it != entries.end () ? &it->second : nullptr;
+	}
+
+	void add (uint32_t deviceId, std::shared_ptr<const std::vector<uint8_t>> image, uint8_t banking)
+	{
+		entries[deviceId] = Entry { std::move (image), banking };
+	}
+
+private:
+	std::map<uint32_t, Entry> entries;
+};
+
 class VgmReplayer
 {
 public:
@@ -41,7 +77,8 @@ public:
 		// A constructor rather than aggregate initialisation: `std::type_index` has no default, so
 		// the members cannot carry initialisers and still form an aggregate.
 		Instance (std::type_index decoderClass, uint32_t id, const PLR_DEV_INFO* dev,
-				  chips::IChipDecoder* dec, uint32_t clk, std::vector<uint8_t> mem, uint8_t bank,
+				  chips::IChipDecoder* dec, uint32_t clk,
+				  std::shared_ptr<const std::vector<uint8_t>> mem, uint8_t bank,
 				  uint32_t slotFlags = 0)
 			: type (decoderClass), deviceId (id), device (dev), decoder (dec), clock (clk),
 			  image (std::move (mem)), banking (bank), flags (slotFlags)
@@ -55,8 +92,9 @@ public:
 		uint32_t clock;		// kept for reset(): a rewind must not fall back to the chip's default
 
 		/** What `attachMemory` was given. Kept because `reset` rebuilds the decoder's state, image
-			included - and a rewind that forgot to put it back would silently lose every sample. */
-		std::vector<uint8_t> image;
+			included - and a rewind that forgot to put it back would silently lose every sample.
+			Shared, because the bytes belong to the chip rather than to this player - see `RomCache`. */
+		std::shared_ptr<const std::vector<uint8_t>> image;
 		uint8_t banking = 0;
 
 		/** The chip slot's flags: a header fact (the SegaPCM's bank shift and mask) that the
@@ -64,7 +102,11 @@ public:
 		uint32_t flags = 0;
 	};
 
-	VgmReplayer (std::shared_ptr<const midi::SongIr> song, const std::vector<PLR_DEV_INFO>& devices);
+	/** `romCache` is optional: without one each player assembles its own images, which is what a
+		single-player song does anyway. Passed in by whoever owns the players, so a sixteen-row mixer
+		shares one copy instead of sixteen. */
+	VgmReplayer (std::shared_ptr<const midi::SongIr> song, const std::vector<PLR_DEV_INFO>& devices,
+				 RomCache* romCache = nullptr);
 
 	/** Routes and feeds every write up to `sampleTime`, then moves the decoders to it.
 
@@ -94,6 +136,7 @@ private:
 	void adoptNewBuffers (void);
 
 	std::shared_ptr<const midi::SongIr> song;
+	RomCache* romCache = nullptr;
 	ChipWriteRouter router;
 	std::size_t nextWrite = 0;
 

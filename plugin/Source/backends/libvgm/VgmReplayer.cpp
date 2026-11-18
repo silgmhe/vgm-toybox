@@ -16,8 +16,8 @@ namespace toybox::backends::libvgm
 {
 
 VgmReplayer::VgmReplayer (std::shared_ptr<const midi::SongIr> ir,
-						   const std::vector<PLR_DEV_INFO>& devices)
-	: song (std::move (ir)), router (devices)
+						   const std::vector<PLR_DEV_INFO>& devices, RomCache* cache)
+	: song (std::move (ir)), romCache (cache), router (devices)
 {
 	// The three chips whose writes the router hands to a callback rather than queueing itself. The
 	// MIDI path keeps them apart because a note's length only exists once the whole song has been
@@ -139,17 +139,43 @@ void VgmReplayer::adoptNewBuffers (void)
 			// sampled chip measures nothing: the C352's pitch is its rate divided by a cycle length
 			// that only exists in the ROM, so an empty image puts every voice at C9 - a number that
 			// looks like a note and belongs to no sound.
-			std::vector<uint8_t> image;
+			// **Shared, because the bytes belong to the chip and not to this player.** Assembled
+			// once per device type and handed to every player that reads it: a Neo Geo's eight
+			// megabyte image used to be copied once per mixer row, which is where most of a
+			// sixteen-row song's memory went. See `RomCache`.
+			std::shared_ptr<const std::vector<uint8_t>> image;
 			uint8_t banking = 0;
 
 			if (requirements.hasMemory && song != nullptr)
 			{
-				image = memory::forRequirements (*song, requirements, banking);
+				if (romCache != nullptr)
+				{
+					if (const auto* cached = romCache->find (deviceId))
+					{
+						image = cached->image;
+						banking = cached->banking;
+					}
+				}
 
-				if (! image.empty ())
+				if (image == nullptr)
+				{
+					std::vector<uint8_t> fresh = memory::forRequirements (*song, requirements, banking);
+
+					if (! fresh.empty ())
+					{
+						image = std::make_shared<const std::vector<uint8_t>> (std::move (fresh));
+					}
+
+					if (romCache != nullptr && image != nullptr)
+					{
+						romCache->add (deviceId, image, banking);
+					}
+				}
+
+				if (image != nullptr && ! image->empty ())
 				{
 					chips::ChipMemory attached;
-					attached.bytes = &image;
+					attached.bytes = image.get ();
 					attached.banking = banking;
 					decoder->attachMemory (attached);	// the decoder copies what it needs
 				}
@@ -186,7 +212,7 @@ void VgmReplayer::adoptNewBuffers (void)
 			}
 
 			live.push_back (Instance { type, deviceId, device, decoder.get (), clock,
-									   std::move (image), banking, slotFlags });
+									   image, banking, slotFlags });
 			owned.push_back (std::move (decoder));
 		}
 	}
@@ -289,10 +315,10 @@ void VgmReplayer::rewind (void)
 		// `reset` rebuilds the decoder, so the image it was given is gone with the old state. A
 		// rewind that left it out would make every sample unreadable from the second pass on -
 		// and the rows would keep their notes, because those come from the registers.
-		if (! instance.image.empty ())
+		if (instance.image != nullptr && ! instance.image->empty ())
 		{
 			chips::ChipMemory attached;
-			attached.bytes = &instance.image;
+			attached.bytes = instance.image.get ();
 			attached.banking = instance.banking;
 			instance.decoder->attachMemory (attached);
 		}
