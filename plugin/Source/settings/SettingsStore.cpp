@@ -718,8 +718,9 @@ void SettingsStore::setNsfOutputGainDb (int decibels)
 
 bool SettingsStore::getNsfNonlinearMixer (void) const
 {
-	// Absent means on: a settings file written before this existed described a player that mixed
-	// non-linearly, and quietly changing how a song sounds on upgrade is the wrong default.
+	// Absent means off, like every other default in this file. Someone who wants the hardware's
+	// curve turns it on once and it is stored; someone who never touches the page gets rows that
+	// stand alone, which is what the split view is for.
 	return file != nullptr ? file->getBoolValue (kNsfNonlinearKey, nsf::nonlinearMixer)
 						   : nsf::nonlinearMixer;
 }

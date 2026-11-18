@@ -114,10 +114,14 @@ constexpr int defaultOutputGainDb = 8;
 
 	Off, the channels add linearly. Each row then stands alone - clearer for reading a mix - at the
 	cost of the compression the hardware applied, and with no headroom left for the sum of three
-	full-scale channels. Default on, because the emulation's job is the sound, and a split view that
-	disagrees slightly with the hardware is the smaller surprise.
+	full-scale channels.
+
+	**Off by default, which is the opposite of what the hardware does.** Split tracks are what this
+	player offers, and a scheme that makes one row depend on its neighbours reads as crosstalk
+	until the explanation is found - the first person to hear it reported it as a bug, twice. The
+	faithful mix is one switch away, and the page says what the switch costs.
 */
-constexpr bool nonlinearMixer = true;
+constexpr bool nonlinearMixer = false;
 
 } // namespace nsf
 

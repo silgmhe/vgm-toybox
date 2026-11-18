@@ -349,8 +349,11 @@ private:
 	bool silent = false;
 	float outputGain = 2.5119f;			// +8 dB
 
-	/** Both chips start with this on, so the initial value matches them and the first
-		`setNonlinearMixer(true)` costs nothing. See `setNonlinearMixer`. */
+	/** **The chips' own state, not the user's preference.** Both cores start with non-linear mixing
+		on, so this starts true as well - it is here to know when a call would be a no-op, and a
+		`false` initial value would make the first `setNonlinearMixer(false)` return early and leave
+		the chips on the curve. The preference is applied in `setNonlinearMixer`; see
+		`settings::nsf::nonlinearMixer` for what it defaults to and why. */
 	mutable bool nonlinearMixer = true;
 
 	const formats::nsf::NsfFile& file;
