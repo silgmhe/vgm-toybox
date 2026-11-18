@@ -762,7 +762,8 @@ target_link_libraries(vgm_ui_test PRIVATE
 #   <build dir>/plugin/vgm_app_test
 add_executable(vgm_app_test EXCLUDE_FROM_ALL
 	Tests/AppHarnessTest.cpp
-)
+	Tests/AllocProbe.cpp
+	)
 
 # --- measures what a channel renders and what its row would export (not built by default) ---
 # Written for the RF5C164 and grown past it: it now answers for any song on the libvgm backend -
