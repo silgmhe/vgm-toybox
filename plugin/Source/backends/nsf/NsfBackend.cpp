@@ -54,7 +54,7 @@ public:
 		const auto& store = settings::SettingsStore::getInstance ();
 		player.setWaveformSettings ((double) juce::jmax (1, store.getFmSustainMs ()) / 1000.0,
 									(double) juce::jmax (1, store.getFmReleaseMs ()) / 1000.0,
-									store.getFmNormalise ());
+									store.getFmNormalise (), store.getFmFixedNote ());
 
 		return player.captureState (snapshot);
 	}

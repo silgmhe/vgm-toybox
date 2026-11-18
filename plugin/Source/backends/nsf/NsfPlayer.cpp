@@ -643,8 +643,19 @@ void NsfPlayer::writeSound (uint16_t address, uint8_t value)
 		}
 		else if (vrc7Latch < vrc7Regs.size ())
 		{
+			// **Only a change of instrument bumps the version.** The pitch and key registers are
+			// written every frame by a driver with a vibrato, and the low nibble of 0x30 is the
+			// channel volume, which a software envelope rewrites just as often. Counting either
+			// would rebuild the waveform sixty times a second on the audio thread - which is exactly
+			// the stutter this line exists to prevent. What 0x30's *high* nibble selects is the
+			// patch, and a patch is the only thing that changes the shape.
+			if (vrc7Latch >= 0x30 && vrc7Latch <= 0x38
+				&& (vrc7Regs[vrc7Latch] & 0xF0) != ((uint8_t) value & 0xF0))
+			{
+				++vrc7Version;
+			}
+
 			vrc7Regs[vrc7Latch] = (uint8_t) value;
-			++vrc7Version;
 		}
 
 		vrc7->Write (address, value);
@@ -1340,6 +1351,9 @@ bool NsfPlayer::captureState (playback::ChipStateSnapshot& snapshot, bool includ
 
 			state.voicePatch = patch;
 
+			// **One pitch for every row**, the same rule the libvgm side follows: a shape is a
+			// property of the instrument, and keying it on the note being played means a vibrato
+			// re-renders four seconds of audio per frame.
 			if (vrc7Driver == nullptr || state.frequency <= 0.0f)
 			{
 				continue;
@@ -1351,7 +1365,7 @@ bool NsfPlayer::captureState (playback::ChipStateSnapshot& snapshot, bool includ
 			// changed under a cached note has to invalidate it, or a slider and a register write
 			// would both appear to do nothing. The settings arrive through `setWaveformSettings`
 			// rather than being read here - see its comment.
-			const double hz = (double) state.frequency;
+			const double hz = playback::noteWave::frequencyOf (pitchForDrawing);
 			const double sustain = sustainSeconds;
 			const double release = releaseSeconds;
 			const bool normalise = normaliseSamples;
@@ -1371,7 +1385,11 @@ bool NsfPlayer::captureState (playback::ChipStateSnapshot& snapshot, bool includ
 			}
 
 			state.noteWaveform = cached.samples;
-			state.noteWaveformRate = (float) chips::noteRateFor (chips::ChipModel::vrc7);
+
+			// **The driver's rate, not the chip's.** They are the same number today, but the file
+			// that declares 49 716 about samples made at 8 000 plays them six times too fast, and
+			// taking the answer from whoever produced them is the only way that cannot drift.
+			state.noteWaveformRate = (float) vrc7Driver->rate ();
 		}
 	}
 

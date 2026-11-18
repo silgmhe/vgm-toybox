@@ -204,11 +204,12 @@ public:
 		macros and the toolkit's headers do not coexist, and the one attempt to bring
 		`SettingsStore` in failed on `juce_ListenerList.h`. The backend already speaks both.
 	*/
-	void setWaveformSettings (double sustain, double release, bool normalise) const
+	void setWaveformSettings (double sustain, double release, bool normalise, int fixedNote) const
 	{
 		sustainSeconds = sustain;
 		releaseSeconds = release;
 		normaliseSamples = normalise;
+		pitchForDrawing = fixedNote;
 	}
 
 	/** Scales the output. The NES mix table leaves a lot of headroom - five four-bit channels never
@@ -404,6 +405,10 @@ private:
 	mutable double sustainSeconds = 0.0;
 	mutable double releaseSeconds = 0.0;
 	mutable bool normaliseSamples = false;
+
+	/** The pitch every VRC7 shape is drawn at. Fixed rather than the note being played: keyed on the
+		playing note, a channel with a vibrato would re-render on every frame. */
+	mutable int pitchForDrawing = 60;
 
 	/** Bumped by every write to the mirror above. The patch is rebuilt on each frame - it is six
 		bytes - so a cache keyed on its pointer would never hit; this number is the identity. */
