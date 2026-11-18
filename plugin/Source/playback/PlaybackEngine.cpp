@@ -598,11 +598,7 @@ void PlaybackEngine::stop (void)
 	const juce::ScopedLock sl (lock);
 	for (auto& player : trackPlayers)
 	{
-		// A track with nothing to play has no player - see `ISongInstance::createPlayer`.
-		if (player != nullptr)
-		{
-			player->seekSeconds (0.0);
-		}
+		player->seekSeconds (0.0);
 	}
 	positionSeconds = 0.0;
 }
@@ -672,11 +668,7 @@ void PlaybackEngine::seekAllPlayersTo (double target)
 						return;
 					}
 
-					// A track with nothing to play has no player and so nothing to seek.
-					if (trackPlayers[index] != nullptr)
-					{
-						trackPlayers[index]->seekSeconds (target);
-					}
+					trackPlayers[index]->seekSeconds (target);
 				}
 			});
 		}
@@ -690,10 +682,7 @@ void PlaybackEngine::seekAllPlayersTo (double target)
 	{
 		for (auto& player : trackPlayers)
 		{
-			if (player != nullptr)
-			{
-				player->seekSeconds (target);
-			}
+			player->seekSeconds (target);
 		}
 	}
 }
@@ -768,7 +757,7 @@ void PlaybackEngine::followDawTransport (void)
 		{
 			for (auto& player : trackPlayers)
 			{
-				if (player != nullptr) { player->start(); }
+				player->start();
 			}
 		}
 	}
@@ -776,7 +765,7 @@ void PlaybackEngine::followDawTransport (void)
 	{
 		for (auto& player : trackPlayers)
 		{
-			if (player != nullptr) { player->pause(); }
+			player->pause();
 		}
 	}
 
@@ -846,7 +835,7 @@ void PlaybackEngine::setSourceGain (float linear)
 
 	for (auto& player : trackPlayers)
 	{
-		if (player != nullptr) { player->setOutputGain (sourceGain.load ()); }
+		player->setOutputGain (sourceGain.load ());
 	}
 }
 
@@ -966,12 +955,6 @@ double PlaybackEngine::getTrackPositionSeconds (size_t trackIndex) const
 		return -1.0;
 	}
 
-	// A track with nothing to play has no player behind it, and therefore no position of its own.
-	if (trackPlayers[index] == nullptr)
-	{
-		return 0.0;
-	}
-
 	return trackPlayers[index]->positionSeconds();
 }
 
@@ -1044,11 +1027,7 @@ void PlaybackEngine::updatePlayerTimeline (void)
 	}
 	for (auto& player : trackPlayers)
 	{
-		// A null entry is a track with nothing to play - see `ISongInstance::createPlayer`.
-		if (player != nullptr)
-		{
-			player->setTimeline (loopCount, fadeSeconds);
-		}
+		player->setTimeline (loopCount, fadeSeconds);
 	}
 }
 
@@ -1062,12 +1041,6 @@ void PlaybackEngine::applyChipMutesTo (const std::vector<ChipEntry>& chips,
 {
 	for (const auto& player : players)
 	{
-		// Nothing to silence behind a track that has nothing to play.
-		if (player == nullptr)
-		{
-			continue;
-		}
-
 		for (const auto& chip : chips)
 		{
 			player->setChipAudible (chip.deviceId, ! chip.muted);
@@ -1129,9 +1102,7 @@ void PlaybackEngine::applyTrackIsolationTo (bool mixerEnabled,
 
 	for (size_t t = 0; t < players.size(); ++t)
 	{
-		// A null entry is a track the backend knew had nothing to play; there is no player to
-		// isolate, and its row stays silent by having nothing behind it.
-		if (players[t] != nullptr && t < layout.size())
+		if (t < layout.size())
 		{
 			players[t]->setTrackAudible (layout[t].id, true);
 		}
@@ -1245,20 +1216,14 @@ PlaybackEngine::LoadedSong PlaybackEngine::buildSong (const BuildConfig& config,
 	{
 		auto player = pending.song->createPlayer ((int) i, errorMessage);
 
+		// **Null now means one thing only: the load failed.** A track with nothing to play gets a
+		// `SilentTrackPlayer` from the backend instead, so every entry in this list is a real
+		// object and no caller has to ask whether one exists.
 		if (player == nullptr)
 		{
-			// **Two meanings, told apart by `errorMessage`.** A message means the load failed and
-			// the whole song is abandoned; no message means this track has nothing to play, which
-			// the backend decided from the song data - the row remains, the emulation does not.
-			if (errorMessage.isNotEmpty ())
-			{
-				pending.players.clear();
-				pending.song.reset();
-				return pending;
-			}
-
-			pending.players.push_back (nullptr);
-			continue;
+			pending.players.clear();
+			pending.song.reset();
+			return pending;
 		}
 
 		player->start();
@@ -1292,7 +1257,7 @@ void PlaybackEngine::installSong (LoadedSong&& built)
 
 	for (auto& player : trackPlayers)
 	{
-		if (player != nullptr) { player->setOutputGain (sourceGain.load ()); }
+		player->setOutputGain (sourceGain.load ());
 	}
 	trackLayout = std::move (built.layout);
 	tracks = std::move (built.tracks);
@@ -1709,7 +1674,7 @@ void PlaybackEngine::render (const playback::OutputBusBuffers* buses, int numBus
 		// `LibvgmTrackPlayer::pendingHits` and docs/memo/2026-11-01-visualisation-traps.md.
 		std::unique_lock<std::mutex> guard (stateMutex, std::try_to_lock);
 
-		if (guard.owns_lock () && ! trackPlayers.empty () && trackPlayers[0] != nullptr)
+		if (guard.owns_lock () && ! trackPlayers.empty ())
 		{
 			trackPlayers[0]->captureState (stateSnapshot);
 		}
@@ -2156,16 +2121,6 @@ void PlaybackEngine::mixTracks (const playback::OutputBusBuffers* buses, int bus
 		}
 		else
 		{
-			// **No player means the backend knew this track had nothing to play.** The row still
-			// exists - its meter reads zero, its mute and gain still work - there is simply no
-			// emulation behind it, which is where the memory saving comes from.
-			if (trackPlayers[t] == nullptr)
-			{
-				state.peakL.store (0.0f);
-				state.peakR.store (0.0f);
-				continue;
-			}
-
 			playback::ITrackPlayer& player = *trackPlayers[t];
 			rendered = player.render (mixLeft.data(), mixRight.data(), usable);
 			srcL = mixLeft.data();
@@ -2404,7 +2359,7 @@ std::shared_ptr<const std::vector<float>> PlaybackEngine::renderNoteAt (int trac
 
 	const auto* player = trackPlayers[(size_t) trackIndex].get ();
 
-	return player != nullptr ? player->renderNoteAt (trackIndex, hz) : nullptr;
+	return player->renderNoteAt (trackIndex, hz);
 }
 
 int PlaybackEngine::readScope (float* dest, int maxSamples) const

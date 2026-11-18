@@ -303,11 +303,14 @@ public:
 
 	/** **One player for `trackIndex`.** Prepared for the host and with the song loaded.
 
-		Returns nullptr and fills `errorMessage` when the song cannot be loaded - **and nullptr with
-		an empty `errorMessage` when this track has nothing to play.** The second case is the one
-		that matters for memory: a backend can tell from the song data that a track carries no
-		events at all, and an emulation built for it costs a chip's full private state - a sample
-		ROM included - to produce silence. The row stays; the player does not.
+		Returns nullptr - and fills `errorMessage` - only when the song cannot be loaded.
+
+		**Never null for a track that merely has nothing to play.** A backend can tell from the song
+		data that a track carries no events at all, and an emulation built for it would cost a chip's
+		full private state, a sample ROM included, to produce silence. Such a track gets a
+		`SilentTrackPlayer` instead of an emulation: the row stays, the cost does not, and - the part
+		that matters - every caller keeps the assumption that a player is always there. Returning
+		null for these moved "does this track have a player" into every place that walks the list.
 
 		Called once per track in multiInstance mode, once otherwise.
 	*/

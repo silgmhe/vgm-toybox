@@ -1,5 +1,7 @@
 #include "LibvgmSongInstance.h"
 
+#include "playback/SilentTrackPlayer.h"
+
 #include "X1010Samples.h"
 #include "C140Samples.h"
 #include "C352Samples.h"
@@ -752,10 +754,14 @@ std::unique_ptr<playback::ITrackPlayer> LibvgmSongInstance::createPlayer (int tr
 	// that player is what `captureState` asks for every channel's register state, which is how the
 	// keyboard page shows eighty rows while the mixer plays three. Skipping it would leave the
 	// display with no source at all, so track zero is built whatever it contains.
+	//
+	// **A silent track still gets a player.** Returning null would move "does this track have a
+	// player" into every caller, and those checks get found one crash at a time - see
+	// `SilentTrackPlayer` for the alternative that was chosen instead.
 	if (trackIndex > 0 && (size_t) trackIndex < trackHasEvents.size ()
 		&& ! trackHasEvents[(size_t) trackIndex])
 	{
-		return nullptr;
+		return std::make_unique<playback::SilentTrackPlayer> ();
 	}
 
 	auto player = std::make_unique<LibvgmTrackPlayer>();
