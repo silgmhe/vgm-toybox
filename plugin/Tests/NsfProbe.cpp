@@ -49,6 +49,38 @@ int main (int argc, char** argv)
 		return 1;
 	}
 
+	if (argc > 2 && std::string (argv[2]) == "--vrc7")
+	{
+		toybox::backends::nsf::NsfPlayer player (file, 44100.0);
+		player.start ();
+
+		std::vector<float> l (1024), r (1024);
+
+		for (int i = 0; i < 200; ++i)
+		{
+			player.render (l.data (), r.data (), 1024);
+		}
+
+		toybox::playback::ChipStateSnapshot snapshot;
+
+		if (! player.captureState (snapshot))
+		{
+			std::printf ("captureState reported nothing\n");
+			return 1;
+		}
+
+		for (const auto& channel : snapshot.channels)
+		{
+			std::printf ("  %-8s freq=%8.1f  noteWave=%s\n", channel.name.c_str (),
+						 (double) channel.frequency,
+						 channel.noteWaveform == nullptr
+							 ? "-"
+							 : std::to_string (channel.noteWaveform->size ()).c_str ());
+		}
+
+		return 0;
+	}
+
 	if (argc > 2 && std::string (argv[2]) == "--check")
 	{
 		// The channels must add up to what the mixed render produces. Run twice from the same

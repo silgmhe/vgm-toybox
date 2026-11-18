@@ -103,7 +103,7 @@ enum class ExportMode
 */
 bool writeCycleWav (const ChannelState& channel, const std::string& path,
 					ExportMode mode = ExportMode::single, double seconds = 2.0,
-					int bits = kNativeBits);
+					int bits = kNativeBits, double targetRate = 0.0);
 
 /** Whether this channel carries a sample rather than a shape.
 

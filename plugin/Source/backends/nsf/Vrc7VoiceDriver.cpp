@@ -73,6 +73,19 @@ public:
 			}
 		}
 
+		// **The cartridge's patch bytes, before the instrument is selected.** 0x00-0x07 is the one
+		// slot a cartridge can define itself, and a driver that uses instrument 0 is pointing at it.
+		// Written first because selecting the instrument is what makes the chip reload its patch.
+		for (const auto& reg : patch.regs)
+		{
+			const auto address = (uint8_t) (reg.first & 0xFF);
+
+			if (address < 0x08)
+			{
+				write (address, (uint8_t) reg.second);
+			}
+		}
+
 		// **The sustain switch, kept from the driver's own write.** Bit 5 of `0x20` decides whether
 		// this voice holds at its sustain level or decays through it like a struck instrument, and
 		// `noteOn` rewrites that whole byte - so the bit has to be carried across. Without this every

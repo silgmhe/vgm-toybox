@@ -643,14 +643,20 @@ void NsfPlayer::writeSound (uint16_t address, uint8_t value)
 		}
 		else if (vrc7Latch < vrc7Regs.size ())
 		{
-			// **Only a change of instrument bumps the version.** The pitch and key registers are
-			// written every frame by a driver with a vibrato, and the low nibble of 0x30 is the
-			// channel volume, which a software envelope rewrites just as often. Counting either
-			// would rebuild the waveform sixty times a second on the audio thread - which is exactly
-			// the stutter this line exists to prevent. What 0x30's *high* nibble selects is the
-			// patch, and a patch is the only thing that changes the shape.
-			if (vrc7Latch >= 0x30 && vrc7Latch <= 0x38
-				&& (vrc7Regs[vrc7Latch] & 0xF0) != ((uint8_t) value & 0xF0))
+			// **Only a change of patch bumps the version.** The pitch and key registers are written
+			// every frame by a driver with a vibrato, and the low nibble of 0x30 is the channel
+			// volume, which a software envelope rewrites just as often. Counting either would
+			// rebuild the waveform sixty times a second on the audio thread - which is exactly the
+			// stutter this line exists to prevent.
+			//
+			// Two things do change the shape: the instrument number in 0x30's high nibble, and the
+			// eight bytes of 0x00-0x07, which is the slot instrument 0 points at.
+			if (vrc7Latch < 0x08)
+			{
+				++vrc7Version;
+			}
+			else if (vrc7Latch >= 0x30 && vrc7Latch <= 0x38
+					 && (vrc7Regs[vrc7Latch] & 0xF0) != ((uint8_t) value & 0xF0))
 			{
 				++vrc7Version;
 			}
@@ -1345,6 +1351,16 @@ bool NsfPlayer::captureState (playback::ChipStateSnapshot& snapshot, bool includ
 			// rebuilt rather than cached; `vrc7Version` is what says whether it has changed.
 			auto patch = std::make_shared<chips::VoicePatch> ();
 			patch->model = chips::ChipModel::vrc7;
+
+			// **The cartridge's own eight bytes first.** A VRC7 driver that selects instrument 0 is
+			// pointing at the slot these bytes define, not at a ROM entry - and writing them is what
+			// such a driver does. Without them instrument 0 is an empty patch: `AR = 0`, which never
+			// attacks, which is why five of the six rows drew a flat line.
+			for (int r = 0; r < 8; ++r)
+			{
+				patch->regs.push_back ({ (uint16_t) r, vrc7Regs[(size_t) r] });
+			}
+
 			patch->regs.push_back ({ (uint16_t) (0x10 + i), vrc7Regs[(size_t) (0x10 + i)] });
 			patch->regs.push_back ({ (uint16_t) (0x20 + i), vrc7Regs[(size_t) (0x20 + i)] });
 			patch->regs.push_back ({ (uint16_t) (0x30 + i), vrc7Regs[(size_t) (0x30 + i)] });
