@@ -226,18 +226,43 @@ bool LibvgmSongInstance::prepare (double hostSampleRate, int newMaxBlockSize, ju
 	}
 	else
 	{
-		// **Which tracks the song writes to, decided from the parsed stream.** A track that never
-		// appears in it never plays, so nothing is built for it - and on a song with eighty
-		// channels of which three sound, that is the difference between eighty emulations and
-		// three. The row stays in the mixer; only the player behind it is skipped.
-		trackHasEvents.assign (tracks.size (), false);
+		// **Which tracks the song writes to, decided from the parsed stream - per device.**
+		//
+		// A track that never appears in the stream never plays, so nothing is built for it, and on
+		// a song with eighty channels of which three sound that is the difference between eighty
+		// emulations and three. The row stays in the mixer; only the player behind it is skipped.
+		//
+		// **Per device, not per track, and that is the correction.** The event stream is a note
+		// list: a channel that holds one pitch, or only changes volume, can sound for the whole
+		// song without producing a single event. Judging a track by its own event count silenced
+		// such a channel - `01 Good Morning` lost its Square 1 that way, with the mixer and the
+		// keyboard page both still showing it. A device that produced any event at all is a device
+		// this song drives, so every track on it is built. Only a device with no events anywhere is
+		// skipped whole, which is the case the saving was written for: a sample chip whose voices
+		// the driver never touches.
+		std::vector<bool> deviceHasEvents (deviceInfo.size (), false);
 
 		for (const auto& event : midiSequence->events)
 		{
-			if (event.sourceTrack < trackHasEvents.size ())
+			const size_t track = (size_t) event.sourceTrack;
+
+			if (track < tracks.size ())
 			{
-				trackHasEvents[(size_t) event.sourceTrack] = true;
+				const auto device = tracks[track].deviceId;
+
+				if (device < deviceHasEvents.size ())
+				{
+					deviceHasEvents[device] = true;
+				}
 			}
+		}
+
+		trackHasEvents.assign (tracks.size (), false);
+
+		for (size_t i = 0; i < tracks.size (); ++i)
+		{
+			const auto device = tracks[i].deviceId;
+			trackHasEvents[i] = device >= deviceHasEvents.size () || deviceHasEvents[device];
 		}
 	}
 	// The samples this song starts, taken from the same bytes the players load. A VGM says what it
