@@ -49,6 +49,35 @@ int main (int argc, char** argv)
 		return 1;
 	}
 
+	if (argc > 2 && std::string (argv[2]) == "--scan")
+	{
+		// **How long the walk actually takes.** The scan runs on its own thread, so it never blocks
+		// playback - but it is the thing the DPCM row waits for, and "analysing" lasts exactly that
+		// long. Measured here, synchronously, so the number is the pass itself rather than whatever
+		// a short test run happened to reach.
+		toybox::backends::nsf::NsfPlayer player (file, 44100.0);
+		auto handle = std::make_shared<toybox::backends::nsf::ScanHandle> ();
+		player.setScanHandle (handle);
+
+		const auto started = std::chrono::steady_clock::now ();
+		player.scanSong (300.0);
+		const auto elapsed = std::chrono::duration<double> (
+			std::chrono::steady_clock::now () - started).count ();
+
+		std::printf ("  scanSong(300 s) took %.2f s\n", elapsed);
+
+		if (auto result = handle->snapshot ())
+		{
+			const auto events = result->midiSequence != nullptr
+									? result->midiSequence->events.size () : 0;
+
+			std::printf ("  dpcm samples %zu  midi events %zu\n",
+						 result->sampleNotes.size (), events);
+		}
+
+		return 0;
+	}
+
 	if (argc > 2 && std::string (argv[2]) == "--vrc7")
 	{
 		toybox::backends::nsf::NsfPlayer player (file, 44100.0);
