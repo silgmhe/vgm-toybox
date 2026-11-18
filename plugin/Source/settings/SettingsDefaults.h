@@ -125,6 +125,34 @@ constexpr bool nonlinearMixer = false;
 
 } // namespace nsf
 
+namespace libvgm
+{
+
+/** **Whether a track the song never writes to gets no emulation.**
+
+	A VGM declares its channels in its command stream, so the whole song can be read before any
+	player exists. Most files use a fraction of what they declare: `07 Challenging Stage Clear`
+	names 88 channels across three sample chips and plays three of them, and without this the
+	player built all 88 - each with its own copy of the chip's ROM, 1.2 GB of address space spent
+	on the other 85 producing silence.
+
+	On, such a track gets a `SilentTrackPlayer` instead of an emulation. The mixer still lists the
+	row, its mute, gain and pan still work, and its meter reads zero - the row is there, the
+	emulation behind it is not.
+
+	**How it decides, because this is the switch to turn off when it guesses wrong.** The event
+	list is built at load time by replaying the command stream through each chip's decoder, and a
+	track that never appears in it is taken to have nothing to play. That list is a *note* list,
+	not a write log: a channel that holds one pitch, or only changes volume, can sound for the whole
+	song and produce no event at all. It happened once - a decoder left a pulse marked muted after
+	a sweep overflow - and a playing track was replaced with silence while the mixer and the keyboard
+	page both kept showing it. That decoder is fixed, but the shape of the mistake is worth a switch:
+	off, every declared channel gets an emulation, and the cost is memory a song may not need.
+*/
+constexpr bool skipSilentTracks = true;
+
+} // namespace libvgm
+
 namespace exporting
 {
 

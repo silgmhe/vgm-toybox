@@ -2,6 +2,9 @@
 
 #include "playback/SilentTrackPlayer.h"
 
+#include "settings/SettingsDefaults.h"
+#include "settings/SettingsStore.h"
+
 #include "X1010Samples.h"
 #include "C140Samples.h"
 #include "C352Samples.h"
@@ -766,7 +769,14 @@ std::unique_ptr<playback::ITrackPlayer> LibvgmSongInstance::createPlayer (int tr
 	// **A silent track still gets a player.** Returning null would move "does this track have a
 	// player" into every caller, and those checks get found one crash at a time - see
 	// `SilentTrackPlayer` for the alternative that was chosen instead.
-	if (trackIndex > 0 && (size_t) trackIndex < trackHasEvents.size ()
+	//
+	// **The decision is the user's to overrule.** This reads the note list, and a note list is a
+	// guess: a channel holding one pitch produces no events while it plays. That guess was wrong
+	// once and cost a track its sound with nothing on screen to say why, so the settings page can
+	// turn it off - and then every declared channel gets an emulation, at the cost this exists to
+	// avoid. Read here rather than baked in at load so the switch is applied by the next load.
+	if (trackIndex > 0 && settings::SettingsStore::getInstance ().getVgmSkipSilentTracks ()
+		&& (size_t) trackIndex < trackHasEvents.size ()
 		&& ! trackHasEvents[(size_t) trackIndex])
 	{
 		return std::make_unique<playback::SilentTrackPlayer> ();

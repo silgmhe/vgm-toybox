@@ -50,6 +50,7 @@ namespace
 	constexpr const char* kDragRetentionKey = "export.dragRetentionHours";
 	constexpr const char* kNsfOutputGainKey = "nsf.outputGainDb";
 	constexpr const char* kNsfNonlinearKey = "nsf.nonlinearMixer";
+	constexpr const char* kVgmSkipSilentKey = "vgm.skipSilentTracks";
 	constexpr const char* kContentViewKey = "ui.view";
 	constexpr const char* kKeyboardRangeHintsKey = "keyboard.rangeHints";
 	constexpr const char* kKeyboardStartNoteKey = "keyboard.startNote";
@@ -730,6 +731,22 @@ void SettingsStore::setNsfNonlinearMixer (bool enabled)
 	if (file != nullptr && enabled != getNsfNonlinearMixer ())
 	{
 		file->setValue (kNsfNonlinearKey, enabled);
+	}
+
+	broadcastChange ();
+}
+
+bool SettingsStore::getVgmSkipSilentTracks (void) const
+{
+	return file != nullptr ? file->getBoolValue (kVgmSkipSilentKey, libvgm::skipSilentTracks)
+						   : libvgm::skipSilentTracks;
+}
+
+void SettingsStore::setVgmSkipSilentTracks (bool enabled)
+{
+	if (file != nullptr && enabled != getVgmSkipSilentTracks ())
+	{
+		file->setValue (kVgmSkipSilentKey, enabled);
 	}
 
 	broadcastChange ();

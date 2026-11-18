@@ -822,6 +822,70 @@ void NesSettingsPage::lookAndFeelChanged (void)
 }
 
 //==============================================================================
+// VGM
+
+VgmSettingsPage::VgmSettingsPage (void)
+{
+	skipSwitch.setComponentID ("settings.vgm.skipSilentTracks");
+	skipSwitch.onClick = [this]
+	{
+		toybox::settings::SettingsStore::getInstance ()
+			.setVgmSkipSilentTracks (skipSwitch.getToggleState ());
+		refresh ();
+
+		// The backend reads this while it creates players, so the answer only reaches the song
+		// that is already open by loading it again.
+		if (onSkipSilentTracksChanged != nullptr)
+		{
+			onSkipSilentTracksChanged ();
+		}
+	};
+	addAndMakeVisible (skipSwitch);
+
+	skipHint.setFont (juce::Font (juce::FontOptions (12.5f)));
+	skipHint.setJustificationType (juce::Justification::topLeft);
+	skipHint.setMinimumHorizontalScale (1.0f);
+	addAndMakeVisible (skipHint);
+
+	refreshLanguage ();
+	lookAndFeelChanged ();
+}
+
+void VgmSettingsPage::refreshLanguage (void)
+{
+	skipSwitch.setButtonText (i18n::tr ("settings.vgm.skipSilentTracks"));
+	skipHint.setText (i18n::tr ("settings.vgm.skipSilentTracksHint"), juce::dontSendNotification);
+	refresh ();
+	repaint ();
+}
+
+void VgmSettingsPage::refresh (void)
+{
+	skipSwitch.setToggleState (toybox::settings::SettingsStore::getInstance ()
+									.getVgmSkipSilentTracks (), juce::dontSendNotification);
+}
+
+void VgmSettingsPage::paint (juce::Graphics& g)
+{
+	paintHeading (g, i18n::tr ("settings.vgm"), i18n::tr ("settings.vgm.explanation"),
+				  getLocalBounds(), kTwoLineHeadingHeight, 2);
+}
+
+void VgmSettingsPage::resized (void)
+{
+	auto area = pageContent (getLocalBounds(), kTwoLineHeadingHeight);
+
+	skipSwitch.setBounds (area.removeFromTop (24));
+	area.removeFromTop (6);
+	skipHint.setBounds (area.removeFromTop (160));
+}
+
+void VgmSettingsPage::lookAndFeelChanged (void)
+{
+	repaint ();
+}
+
+//==============================================================================
 // Export
 
 ExportSettingsPage::ExportSettingsPage (void)
@@ -1880,6 +1944,7 @@ namespace
 		{ "language",   "settings.language",   &makePage<LanguageSettingsPage>,   false },
 		{ "midi",       "settings.midi",       &makePage<MidiSettingsPage>,       false },
 		{ "nes",        "settings.nes",        &makePage<NesSettingsPage>,        false },
+		{ "vgm",        "settings.vgm",        &makePage<VgmSettingsPage>,        false },
 		{ "keyboard",   "settings.keyboard",   &makePage<KeyboardSettingsPage>,   false },
 		{ "fm", "settings.fm", &makePage<FmSettingsPage>, false },
 		{ "export",     "settings.export",     &makePage<ExportSettingsPage>,     false },
@@ -1940,6 +2005,17 @@ SettingsOverlay::SettingsOverlay (void)
 				if (onSampleRootChanged != nullptr)
 				{
 					onSampleRootChanged();
+				}
+			};
+		}
+
+		if (auto* vgm = dynamic_cast<VgmSettingsPage*> (view.get ()))
+		{
+			vgm->onSkipSilentTracksChanged = [this]
+			{
+				if (onSkipSilentTracksChanged != nullptr)
+				{
+					onSkipSilentTracksChanged();
 				}
 			};
 		}

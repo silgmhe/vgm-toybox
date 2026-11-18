@@ -267,6 +267,39 @@ private:
 };
 
 /**
+	What the libvgm backend does with a channel the song never writes to.
+
+	A page rather than a row on General because the switch is about memory, and the memory is only
+	saved by a guess: the backend reads the song's note list at load time and gives no emulation to
+	a track that never appears in it. A note list is not a write log, so the guess can be wrong -
+	and when it was, a track went silent with the mixer and the keyboard page both still showing it.
+	This page exists so that a user who meets the same thing can stop it themselves.
+*/
+class VgmSettingsPage : public View
+{
+public:
+	VgmSettingsPage (void);
+
+	juce::String getViewId (void) const override { return "settings-vgm"; }
+	juce::String getViewName (void) const override { return i18n::tr ("settings.vgm"); }
+
+	void refresh (void) override;
+	void paint (juce::Graphics& g) override;
+	void resized (void) override;
+	void lookAndFeelChanged (void) override;
+	void refreshLanguage (void) override;
+
+	/** **Called when the switch moves, because nothing takes effect until the song is loaded
+		again.** The decision is read while players are created, so the window reloads the current
+		song at the position it was at - the same answer the MIDI page's sample-root switch uses. */
+	std::function<void()> onSkipSilentTracksChanged;
+
+private:
+	juce::ToggleButton skipSwitch;
+	juce::Label skipHint;
+};
+
+/**
 	What the export leaves behind.
 
 	One group so far: the cache of wavetables dragged out of the keyboard page. Off by default and
@@ -487,6 +520,10 @@ public:
 		numbers and only a reload can apply it. The window reloads the current song at the position
 		it was at, so the switch takes effect without asking the user to reopen anything. */
 	std::function<void()> onSampleRootChanged;
+
+	/** Called when the VGM page's skip switch changes. Same reason as the line above: the answer is
+		applied while players are created, so only a reload can change it. */
+	std::function<void()> onSkipSilentTracksChanged;
 
 	/** Brings every page in step with the store and marks the page that is up in the sidebar. The
 		window calls this every time the overlay comes up, because the stored values can have been

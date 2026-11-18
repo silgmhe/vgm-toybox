@@ -191,6 +191,13 @@ public:
 	bool getNsfNonlinearMixer (void) const;
 	void setNsfNonlinearMixer (bool enabled);
 
+	/** Whether a VGM track the song never writes to is left without an emulation.
+
+		Read by the libvgm backend when it creates players, so a change reaches the song on the next
+		load. See `settings::libvgm::skipSilentTracks` for what it saves and how it decides. */
+	bool getVgmSkipSilentTracks (void) const;
+	void setVgmSkipSilentTracks (bool enabled);
+
 	/** Lowest key the keyboard starts at: -1 to follow the song, otherwise a MIDI note. */
 	int getKeyboardStartNote (void) const;
 	void setKeyboardStartNote (int note);

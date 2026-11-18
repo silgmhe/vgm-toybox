@@ -207,6 +207,10 @@ ToyboxAudioProcessorEditor::ToyboxAudioProcessorEditor (ToyboxAudioProcessor& p)
 	// The sample-root switch changes the note numbers, so it needs the song loaded again; doing that
 	// here keeps the settings page free of any knowledge of the engine.
 	settingsOverlay.onSampleRootChanged = [this] { reloadForPitchChange(); };
+	// Same reload, different setting: whether a silent track gets an emulation is decided while
+	// players are created, so the song that is open has to be built again for the switch to reach
+	// it. The reload keeps the position, so the switch costs nothing but a moment.
+	settingsOverlay.onSkipSilentTracksChanged = [this] { reloadForPitchChange(); };
 
 	updateStatusLine();
 
