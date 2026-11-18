@@ -261,6 +261,8 @@ private:
 	juce::Slider secondsSlider;
 	juce::Label gainCaption;
 	juce::Slider gainSlider;
+	juce::ToggleButton mixerSwitch;
+	juce::Label mixerHint;
 	juce::Label hint;
 };
 

@@ -49,6 +49,7 @@ namespace
 	constexpr const char* kDragCleanupKey = "export.dragCleanup";
 	constexpr const char* kDragRetentionKey = "export.dragRetentionHours";
 	constexpr const char* kNsfOutputGainKey = "nsf.outputGainDb";
+	constexpr const char* kNsfNonlinearKey = "nsf.nonlinearMixer";
 	constexpr const char* kContentViewKey = "ui.view";
 	constexpr const char* kKeyboardRangeHintsKey = "keyboard.rangeHints";
 	constexpr const char* kKeyboardStartNoteKey = "keyboard.startNote";
@@ -710,6 +711,24 @@ void SettingsStore::setNsfOutputGainDb (int decibels)
 	if (file != nullptr && clamped != getNsfOutputGainDb ())
 	{
 		file->setValue (kNsfOutputGainKey, clamped);
+	}
+
+	broadcastChange ();
+}
+
+bool SettingsStore::getNsfNonlinearMixer (void) const
+{
+	// Absent means on: a settings file written before this existed described a player that mixed
+	// non-linearly, and quietly changing how a song sounds on upgrade is the wrong default.
+	return file != nullptr ? file->getBoolValue (kNsfNonlinearKey, nsf::nonlinearMixer)
+						   : nsf::nonlinearMixer;
+}
+
+void SettingsStore::setNsfNonlinearMixer (bool enabled)
+{
+	if (file != nullptr && enabled != getNsfNonlinearMixer ())
+	{
+		file->setValue (kNsfNonlinearKey, enabled);
 	}
 
 	broadcastChange ();

@@ -184,6 +184,13 @@ public:
 	int getNsfOutputGainDb (void) const;
 	void setNsfOutputGainDb (int decibels);
 
+	/** Whether the NES mixes its channels through the hardware's non-linear curve.
+
+		Read by the backend when it hands the setting to the chip cores; see
+		`settings::nsf::nonlinearMixer` for what the choice changes. */
+	bool getNsfNonlinearMixer (void) const;
+	void setNsfNonlinearMixer (bool enabled);
+
 	/** Lowest key the keyboard starts at: -1 to follow the song, otherwise a MIDI note. */
 	int getKeyboardStartNote (void) const;
 	void setKeyboardStartNote (int note);

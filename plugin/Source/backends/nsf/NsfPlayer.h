@@ -217,6 +217,21 @@ public:
 		VGM of the same music. The default is the +8 dB the settings page offers. */
 	void setOutputGain (float linear);
 
+	/** **Whether the channels are added through the hardware's curve or summed flat.**
+
+		The two chips that own a mixer - the APU for the two pulses, the DMC for the triangle, noise
+		and DPCM - each carry the option, so both are set here rather than leaving half the mix on
+		the other path.
+
+		**Only applied when the value changes.** DMC's setter rebuilds its mixing table, which
+		allocates, and this can be reached from the audio thread; re-applying an unchanged value
+		once per block would rebuild that table sixty times a second for nothing.
+
+		`const` because it is called from `captureState`: the chips it writes to live behind
+		pointers, so the player's own shape is not what changes.
+	*/
+	void setNonlinearMixer (bool enabled) const;
+
 	/** True when the file declared an expansion chip and one was created. */
 	bool hasExpansion (void) const;
 
@@ -333,6 +348,10 @@ private:
 	int soloTrack = -1;
 	bool silent = false;
 	float outputGain = 2.5119f;			// +8 dB
+
+	/** Both chips start with this on, so the initial value matches them and the first
+		`setNonlinearMixer(true)` costs nothing. See `setNonlinearMixer`. */
+	mutable bool nonlinearMixer = true;
 
 	const formats::nsf::NsfFile& file;
 	double rate = 44100.0;

@@ -105,6 +105,20 @@ constexpr int maxOutputGainDb = 24;
 constexpr int outputGainStepDb = 1;
 constexpr int defaultOutputGainDb = 8;
 
+/** Whether the chips mix their channels the way the hardware did.
+
+	The NES adds its five channels through a measured non-linear curve rather than summing them:
+	the trio of triangle, noise and DPCM passes through one table, and each channel's share of the
+	result depends on what the other two are doing. That is what makes a real NES sound the way it
+	does, and it is why a DPCM row in the split view carries a little of the triangle.
+
+	Off, the channels add linearly. Each row then stands alone - clearer for reading a mix - at the
+	cost of the compression the hardware applied, and with no headroom left for the sum of three
+	full-scale channels. Default on, because the emulation's job is the sound, and a split view that
+	disagrees slightly with the hardware is the smaller surprise.
+*/
+constexpr bool nonlinearMixer = true;
+
 } // namespace nsf
 
 namespace exporting

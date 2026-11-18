@@ -738,6 +738,20 @@ NesSettingsPage::NesSettingsPage (void)
 	};
 	addAndMakeVisible (gainSlider);
 
+	mixerSwitch.setComponentID ("settings.nes.nonlinearMixer");
+	mixerSwitch.onClick = [this]
+	{
+		toybox::settings::SettingsStore::getInstance ()
+			.setNsfNonlinearMixer (mixerSwitch.getToggleState ());
+		refresh ();
+	};
+	addAndMakeVisible (mixerSwitch);
+
+	mixerHint.setFont (juce::Font (juce::FontOptions (12.5f)));
+	mixerHint.setJustificationType (juce::Justification::topLeft);
+	mixerHint.setMinimumHorizontalScale (1.0f);
+	addAndMakeVisible (mixerHint);
+
 	hint.setFont (juce::Font (juce::FontOptions (12.5f)));
 	hint.setJustificationType (juce::Justification::topLeft);
 	hint.setMinimumHorizontalScale (1.0f);
@@ -753,6 +767,8 @@ void NesSettingsPage::refreshLanguage (void)
 	gainCaption.setText (i18n::tr ("settings.nes.outputGain"), juce::dontSendNotification);
 	gainSlider.setTextValueSuffix (" dB");
 	secondsSlider.setTextValueSuffix (" " + i18n::tr ("settings.nes.seconds"));
+	mixerSwitch.setButtonText (i18n::tr ("settings.nes.nonlinearMixer"));
+	mixerHint.setText (i18n::tr ("settings.nes.nonlinearMixerHint"), juce::dontSendNotification);
 	hint.setText (i18n::tr ("settings.nes.durationHint"), juce::dontSendNotification);
 	refresh ();
 	repaint ();
@@ -763,7 +779,9 @@ void NesSettingsPage::refresh (void)
 	secondsSlider.setValue ((double) toybox::settings::SettingsStore::getInstance ()
 								.getNsfDurationSeconds (), juce::dontSendNotification);
 	gainSlider.setValue ((double) toybox::settings::SettingsStore::getInstance ()
-							 .getNsfOutputGainDb (), juce::dontSendNotification);
+						 .getNsfOutputGainDb (), juce::dontSendNotification);
+	mixerSwitch.setToggleState (toybox::settings::SettingsStore::getInstance ()
+									.getNsfNonlinearMixer (), juce::dontSendNotification);
 }
 
 void NesSettingsPage::paint (juce::Graphics& g)
@@ -789,7 +807,12 @@ void NesSettingsPage::resized (void)
 	auto gainRow = area.removeFromTop (kFooterHeight);
 	gainSlider.setBounds (gainRow.removeFromLeft (juce::jmin (300, gainRow.getWidth ())));
 
-	area.removeFromTop (6);
+	area.removeFromTop (14);
+	mixerSwitch.setBounds (area.removeFromTop (24));
+	area.removeFromTop (4);
+	mixerHint.setBounds (area.removeFromTop (86));
+
+	area.removeFromTop (8);
 	hint.setBounds (area.removeFromTop (72));
 }
 

@@ -1469,6 +1469,32 @@ void NsfPlayer::setOutputGain (float linear)
 	outputGain = linear > 0.0f ? linear : 0.0f;
 }
 
+void NsfPlayer::setNonlinearMixer (bool enabled) const
+{
+	// **Unchanged means no call.** DMC's setter rebuilds its mixing table, which allocates, and
+	// this is reached from `captureState` - once per block, on the audio thread. Rebuilding that
+	// table sixty times a second for a value nobody changed is exactly the kind of work the
+	// waveform path was already fixed for.
+	if (enabled == nonlinearMixer)
+	{
+		return;
+	}
+
+	nonlinearMixer = enabled;
+
+	// Both chips own half of the mix: the APU adds the two pulses, the DMC adds the triangle,
+	// noise and DPCM. Setting one and not the other would split the mix across two rules.
+	if (apu != nullptr)
+	{
+		apu->SetOption (xgm::NES_APU::OPT_NONLINEAR_MIXER, enabled ? 1 : 0);
+	}
+
+	if (dmc != nullptr)
+	{
+		dmc->SetOption (xgm::NES_DMC::OPT_NONLINEAR_MIXER, enabled ? 1 : 0);
+	}
+}
+
 void NsfPlayer::setSilent (bool value)
 {
 	silent = value;

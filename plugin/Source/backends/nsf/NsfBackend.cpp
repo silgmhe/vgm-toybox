@@ -56,6 +56,10 @@ public:
 									(double) juce::jmax (1, store.getFmReleaseMs ()) / 1000.0,
 									store.getFmNormalise (), store.getFmFixedNote ());
 
+		// The same handover for the mix rule: flipping the setting reaches the chips on the next
+		// block rather than on the next file.
+		player.setNonlinearMixer (store.getNsfNonlinearMixer ());
+
 		return player.captureState (snapshot);
 	}
 
@@ -74,6 +78,17 @@ public:
 	{
 		// The player already defaults to +8 dB; this is how the settings page overrides it.
 		player.setOutputGain (linear);
+	}
+
+	/** **The mix rule, handed in from the page that owns the choice.**
+
+		pushed in the same place the waveform preferences are, and for the same reason: `NsfPlayer`
+		may not include a JUCE header, so the setting is read here and passed across. The player
+		itself drops an unchanged value, so calling this every block costs a comparison.
+	*/
+	void setNonlinearMixer (bool enabled)
+	{
+		player.setNonlinearMixer (enabled);
 	}
 
 	void setTrackAudible (playback::TrackId track, bool audible) override
@@ -376,7 +391,15 @@ public:
 														 juce::String& errorMessage) override
 	{
 		errorMessage.clear ();
-		return std::make_unique<NsfTrackPlayer> (file, rate, length, scanHandle);
+
+		auto player = std::make_unique<NsfTrackPlayer> (file, rate, length, scanHandle);
+
+		// **Applied at load, not only on the first repaint.** `captureState` carries the setting
+		// for the case where it changes while a song is open; this line is what makes a freshly
+		// loaded file use whatever the page currently says, whichever view is on screen.
+		player->setNonlinearMixer (settings::SettingsStore::getInstance ().getNsfNonlinearMixer ());
+
+		return player;
 	}
 
 	/** Runs the driver for a moment and, if it writes to a chip its header never mentioned, turns
