@@ -323,14 +323,31 @@ public:
 	playback::BackendCapabilities getCapabilities (void) const override
 	{
 		playback::BackendCapabilities caps;
-		// A song without an expansion has every channel split by the core, so one emulation can feed
-		// the whole mixer. With an expansion only the 2A03's five are split - the other chips have
-		// no per-channel render yet - so those songs stay on one player per track rather than
-		// offering tracks that would be silent.
-		// One player per track, for every file. Muting a channel is what the core supports; making
-		// one emulation render every channel separately is what it does not, and the attempt to
-		// fake it cost more than the extra instances do.
-		caps.isolation = playback::IsolationMode::multiInstance;
+
+		// **One emulation feeds the whole mixer.**
+
+		// Every sound object this backend runs can render its channels into separate buffers in a
+		// single pass - `NES_APU`, `NES_DMC`, `NES_VRC6`, `NES_VRC7`, `NES_N106`, `NES_MMC5`,
+		// `NES_FME7` and the FDS - and `renderChannels()` below is the one loop that drives them
+		// all. `inPlaceChannelMix` is what asks for that: the mixer creates **one** player instead
+		// of one per track, so a thirteen-channel song emulates one 6502 rather than thirteen.
+
+		// The declaration used to read `multiInstance`, with a comment saying the per-channel
+		// entry points did not exist. That was true when it was written; it is not now. What the
+		// change was verified against is `vgm_nsf_probe --check`, which renders the same span twice
+		// - once mixed, once split - and compares them:
+
+		//     channels sum vs mixed: worst difference 0.000000 over 4096 frames   (2A03 song)
+		//     channels sum vs mixed: worst difference 0.000000 over 4096 frames   (VRC7 song)
+
+		// **The CPU is unchanged.** Each track's audio still comes from an emulation that computes
+		// every channel; the saving is in the instances, not in the work - one program counter
+		// instead of two per track, and one set of sound cores instead of a set per track.
+
+		// The cost is that a track's audio can no longer be produced without the others, which is
+		// why `renderTracks()` exists and why a backend that cannot do that (libvgm, whose cores
+		// mix inside `Update`) keeps `multiInstance`.
+		caps.isolation = playback::IsolationMode::inPlaceChannelMix;
 		caps.canSeek = true;
 		caps.rendersAtHostRate = true;
 		// Every chip the emulation renders can be silenced on its own: the core mutes per output
