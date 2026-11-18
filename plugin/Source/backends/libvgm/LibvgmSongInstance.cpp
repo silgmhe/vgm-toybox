@@ -222,6 +222,22 @@ bool LibvgmSongInstance::prepare (double hostSampleRate, int newMaxBlockSize, ju
 			track.midiCapability = playback::MidiCapability::unavailable;
 		}
 	}
+	else
+	{
+		// **Which tracks the song writes to, decided from the parsed stream.** A track that never
+		// appears in it never plays, so nothing is built for it - and on a song with eighty
+		// channels of which three sound, that is the difference between eighty emulations and
+		// three. The row stays in the mixer; only the player behind it is skipped.
+		trackHasEvents.assign (tracks.size (), false);
+
+		for (const auto& event : midiSequence->events)
+		{
+			if (event.sourceTrack < trackHasEvents.size ())
+			{
+				trackHasEvents[(size_t) event.sourceTrack] = true;
+			}
+		}
+	}
 	// The samples this song starts, taken from the same bytes the players load. A VGM says what it
 	// plays in its command stream, so this is one walk with no emulation - unlike the NSF path,
 	// which has to run the song to find out.
@@ -724,8 +740,24 @@ playback::BackendCapabilities LibvgmSongInstance::getCapabilities (void) const
 	return caps;
 }
 
-std::unique_ptr<playback::ITrackPlayer> LibvgmSongInstance::createPlayer (juce::String& errorMessage)
+std::unique_ptr<playback::ITrackPlayer> LibvgmSongInstance::createPlayer (int trackIndex,
+																		 juce::String& errorMessage)
 {
+	// **A track the song never writes to gets no player.** Null with an empty message is the
+	// "nothing to play" answer - see `ISongInstance::createPlayer`. The row stays, so the mixer
+	// still lists it and its controls still work; what is skipped is a whole emulation, every
+	// chip's private state and its sample ROM, spent on producing silence.
+	//
+	// **Except the first one.** `PlaybackEngine` reads `trackPlayers[0]` as the song's aggregate -
+	// that player is what `captureState` asks for every channel's register state, which is how the
+	// keyboard page shows eighty rows while the mixer plays three. Skipping it would leave the
+	// display with no source at all, so track zero is built whatever it contains.
+	if (trackIndex > 0 && (size_t) trackIndex < trackHasEvents.size ()
+		&& ! trackHasEvents[(size_t) trackIndex])
+	{
+		return nullptr;
+	}
+
 	auto player = std::make_unique<LibvgmTrackPlayer>();
 	player->prepare (sampleRate, maxBlockSize);
 

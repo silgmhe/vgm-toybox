@@ -39,7 +39,8 @@ public:
 	const std::vector<playback::TrackInfo>& getTracks (void) const override { return tracks; }
 	playback::BackendCapabilities getCapabilities (void) const override;
 	void setTimeline (int loopCount, double fadeSeconds) override;
-	std::unique_ptr<playback::ITrackPlayer> createPlayer (juce::String& errorMessage) override;
+	std::unique_ptr<playback::ITrackPlayer> createPlayer (int trackIndex,
+														 juce::String& errorMessage) override;
 
 private:
 	void enumerate (void);
@@ -76,6 +77,15 @@ private:
 		estimate of the write count, not from a measurement of a particular file.
 	*/
 	std::shared_ptr<const midi::SongIr> songIr;
+
+	/** **Which tracks the song actually writes to.** The register stream is parsed once at load,
+		so whether a track plays at all is knowable before any player exists - and a track with no
+		events is a track whose emulation would cost a chip's whole private state, a sample ROM
+		included, to output silence.
+
+		Empty means "do not skip anything", which is what a backend that cannot answer should say.
+	*/
+	std::vector<bool> trackHasEvents;
 
 	/** **One copy of each chip's memory, for every player in this song.**
 

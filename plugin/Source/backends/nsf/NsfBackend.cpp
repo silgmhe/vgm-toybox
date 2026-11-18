@@ -355,7 +355,8 @@ public:
 
 	void setTimeline (int, double) override {}
 
-	std::unique_ptr<playback::ITrackPlayer> createPlayer (juce::String& errorMessage) override
+	std::unique_ptr<playback::ITrackPlayer> createPlayer (int /*trackIndex*/,
+														 juce::String& errorMessage) override
 	{
 		errorMessage.clear ();
 		return std::make_unique<NsfTrackPlayer> (file, rate, length, scanHandle);
