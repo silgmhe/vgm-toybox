@@ -590,6 +590,12 @@ void LibvgmTrackPlayer::setReplaySource (std::shared_ptr<const midi::SongIr> ir,
 	replayDevices = devices;
 	replayRomCache = romCache;
 
+	// **A replayer built before this call has no cache.** `probe` is started before it is handed
+	// its source, and starting is enough to build the replayer - so the first note waveform asked
+	// for would assemble sixteen megabytes per device for the rest of the session. Dropping it
+	// here costs one advance and makes the next build pick the cache up.
+	replayer.reset ();
+
 	// **The table is built once by the backend that owns the song**, not here: this call happens once
 	// per track player (a dozen of them), and building it meant a pass over every `0x8n` byte each
 	// time - about 200 ms of load time on `02 Green Hill Zone` for eleven tables nobody reads.
