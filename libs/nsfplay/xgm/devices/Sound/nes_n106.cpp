@@ -369,11 +369,21 @@ inline void NES_N106::set_phase (uint32_t phase, int channel)
     // One Render() per channel with the others muted, then the mask put back. Correct, and it
     // keeps this file out of the chip's internal mixing - but it costs one render per channel, so
     // it is the shape to improve once the channels are exposed directly.
+    //
+    // **The bit is mirrored, and that is not a detail.** `mask` counts the chip's own channels,
+    // low bit first. The track list counts them the other way round - `GetTrackInfo(trk)` reads
+    // `trkinfo[7 - trk]`, because N163 waves are numbered downwards on the hardware - so muting
+    // bit `i` and writing `dest[i]` paired track 0 with the chip's channel 0, while the panel's
+    // track 0 is the chip's channel 7. Every row came out reflecting every other one: "Wave 8" in
+    // the mixer was "Wave 1" on the keyboard.
+    //
+    // `SetMask` hides this by reversing the mask it is handed, but this loop assigns to `mask`
+    // directly, so it has to do the reversal itself.
     const int saved = mask;
 
     for (int i = 0; i < 8; ++i)
     {
-      mask = ~(1 << i);
+      mask = ~(1 << (7 - i));
 
       int32_t b[2] = { 0, 0 };
       Render (b);
