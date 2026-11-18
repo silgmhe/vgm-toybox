@@ -323,14 +323,15 @@ public:
 	playback::BackendCapabilities getCapabilities (void) const override
 	{
 		playback::BackendCapabilities caps;
-		// A song without an expansion has every channel split by the core, so one emulation can feed
-		// the whole mixer. With an expansion only the 2A03's five are split - the other chips have
-		// no per-channel render yet - so those songs stay on one player per track rather than
-		// offering tracks that would be silent.
-		// One player per track, for every file. Muting a channel is what the core supports; making
-		// one emulation render every channel separately is what it does not, and the attempt to
-		// fake it cost more than the extra instances do.
-		caps.isolation = playback::IsolationMode::multiInstance;
+		// **One emulation renders every channel separately**, so the mixer asks for one player
+		// instead of one per track: the 6502 runs once, and so does every sound core.
+		//
+		// The paragraph here used to say the opposite - that muting was all the core supported, and
+		// that splitting a single emulation cost more than the extra instances. That was true when
+		// it was written: `RenderChannels` did not exist on these objects then, or existed for the
+		// 2A03 only. It now exists on every chip this backend runs, FME7 included, and
+		// `renderChannels()` below is the single pass that serves them all.
+		caps.isolation = playback::IsolationMode::inPlaceChannelMix;
 		caps.canSeek = true;
 		caps.rendersAtHostRate = true;
 		// Every chip the emulation renders can be silenced on its own: the core mutes per output
