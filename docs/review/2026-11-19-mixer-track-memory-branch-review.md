@@ -413,12 +413,36 @@ channels sum vs mixed: worst difference 0.000000 over 4096 frames
 缩小字号而不是报告溢出，所以 160 像素在英文下刚好、在中文下把字压小了。两个故障叠在一起，
 只有截图能同时看见它们。
 
+**已完成（第二批）**：
+
+| 项 | 提交 | 证据 |
+|---|---|---|
+| **P0-4** `vgm_chip_test` 能构建了 | `f35881c` | 删掉只被 `LibvgmTrackPlayer` 引用的 `OpnVoiceDriver.cpp`；第一次真构建，无既有失败 |
+| **P0-2a** sweep 静音每帧重算 | `f71b23d` | **把修复注释掉后该条 FAIL、退出码 1**；恢复后 PASS |
+
+P0-4 的修法是删一个源文件，不是补 include：那个文件只被 `LibvgmTrackPlayer.cpp` 用到，而后者
+不在这个 target 里。补 include 会让 `vgm_chip_test` 变成第二个 `vgm_opn_test`，与它自己注释里
+写的 "no libvgm" 相悖。
+
+**P0-2a 的断言是这样验证的**（规则 §12 第 4 条：断言里只写"应当"）：
+
+```
+OK    the pulse sounds until the sweep runs
+OK    a sweep that overflows silences the channel
+FAIL  and clearing the sweep brings it back - the flag describes this frame
+Result : FAILURES                              ← 退出码 1
+```
+
+**只有第三条能分辨对错**：sweep 开着时每一帧都会重新溢出，"仍然静音"是正确实现和粘滞实现给出
+的同一个答案。把 sweep 关掉，两者才分道。
+
 **未完成**：
 
 | 项 | 原因 |
 |---|---|
-| **P0-2** 三条回归测试 | **被 P0-4 挡住**：`vgm_chip_test` 构建不了，测试没有落脚点 |
-| **O1** 第三方改动表 | 文档工作，可以随时补 |
+| **P0-2b** N163 通道顺序 | 需要 `vgm_nsf_probe` 的新分支：比对 `captureState` 的频率与 `renderChannels` 各索引的能量 |
+| **P0-2c** 两条入口都轮询 | 同上：需要注入一个空的 `ScanHandle`，`publish()` 之后推进过 poll 边界 |
+| **O1** 第三方改动表 | 文档工作 |
 
-**P0-2 的测试已经写好了，但没有提交**——一条无法编译、无法运行的测试比没有测试更糟：它会让
-`54/54` 看起来覆盖了 `pulse.muted`。先修 P0-4，再加测试，顺序不能反。
+这两条落在 `NsfPlayer` 层而不是 `chips/` 层，所以不属于 `vgm_chip_test`——这也是它们当初没被
+想到的原因：`--check` 证明了求和正确，但一个一致的置换求和也正确。
