@@ -126,6 +126,42 @@ build\plugin\vgm_app_test <脚本>   # shot 到 build/shots/vgm-settings.png
 
 ---
 
+### P0-4 `vgm_chip_test` 构建不了，而 `ctest` 一直在跑它的旧二进制
+
+**这一条是在补 P0-2 时发现的，它把 P0-2 从"没写测试"变成"没有地方写测试"。**
+
+```
+vgm_chip_test 的源列表 : Source/backends/libvgm/OpnVoiceDriver.cpp 等
+target_include_directories(vgm_chip_test PRIVATE Source)      ← 只有 Source
+target_link_libraries      : 没有（vgm_opn_test 才有 ${LIBVGM_TARGETS}）
+```
+
+`OpnVoiceDriver.cpp` 第 6 行要 `emu/EmuStructs.h`，于是：
+
+```
+fatal error C1083: 无法打开包括文件: "emu/EmuStructs.h": No such file or directory
+```
+
+目标是 `EXCLUDE_FROM_ALL`，所以 `cmake --build` 全量时不会碰它；而 `ctest` **不构建**，所以
+`Test #1: chip` 跑的是一份更早的 `vgm_chip_test.exe`——**时间戳早于本分支对
+`NesApuDecoder.cpp` 的修改**。
+
+**结论**：`54/54` 里那一项从未验证过 `pulse.muted` 的修复，也从未验证过 N163 的镜像。
+它是绿的，因为它测的是旧代码。
+
+**这是本分支最该修的一条，也是"54/54 通过"这句话为什么不能单独作为证据。**
+
+**修法**（二选一，都需要单独一轮，因为它会改变回归基线）：
+
+1. 把 `backends/libvgm/` 的源从 `vgm_chip_test` 移出——它自己的注释就写着 "no libvgm"，
+   而列表里有七个 libvgm 源；
+2. 或者补 `libs/libvgm` 的 include 并链接 `${LIBVGM_TARGETS}`——但那样它就变成了第二个
+   `vgm_opn_test`。
+
+**无论选哪个，修完后第一次跑 `chip` 才算真的跑了这个分支的改动。**
+
+---
+
 ## 三、应修项
 
 ### S1 `setNonlinearMixer` 在音频线程重建 65536 项的表
@@ -359,4 +395,28 @@ channels sum vs mixed: worst difference 0.000000 over 4096 frames
 
 ## 八、整改状态
 
-*（待办）*
+**已完成**（`b129f09` … `d22fa4a`）：
+
+| 项 | 提交 | 证据 |
+|---|---|---|
+| **P0-1** 删 `visualiser.analysing` | `b129f09` | `Select-String` 无结果 |
+| **S6** `settings <pageId>` 命令 | `4e11b1f` | `OK  settings page vgm` |
+| **P0-3** `WrappedLabel` + 实测高度 | `f4e7931` | 中英两语言截图，字号与邻行一致 |
+| **S3** `reloadForPitchChange` → `reloadCurrentSong` | `ca2b4d4` | 纯改名 |
+| **S5** `trackHasEvents` → `trackProducedEvents` | `ca2b4d4` | 同上 |
+| **S2** `prepareBlock` 收拢两个入口 | `d22fa4a` | `--check` 0.000000 / 4096 帧 |
+| **S1** 补音频线程重建表的说明 | `d22fa4a` | 注释 |
+
+**P0-3 的结论与评审时写的相反**：不是截断，是**压缩**。`Label` 用 `drawFittedText`，放不下时
+缩小字号而不是报告溢出，所以 160 像素在英文下刚好、在中文下把字压小了。两个故障叠在一起，
+只有截图能同时看见它们。
+
+**未完成**：
+
+| 项 | 原因 |
+|---|---|
+| **P0-2** 三条回归测试 | **被 P0-4 挡住**：`vgm_chip_test` 构建不了，测试没有落脚点 |
+| **O1** 第三方改动表 | 文档工作，可以随时补 |
+
+**P0-2 的测试已经写好了，但没有提交**——一条无法编译、无法运行的测试比没有测试更糟：它会让
+`54/54` 看起来覆盖了 `pulse.muted`。先修 P0-4，再加测试，顺序不能反。
