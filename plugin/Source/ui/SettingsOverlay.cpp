@@ -815,7 +815,12 @@ void NesSettingsPage::resized (void)
 	area.removeFromTop (14);
 	mixerSwitch.setBounds (area.removeFromTop (24));
 	area.removeFromTop (4);
-	mixerHint.setBounds (area.removeFromTop (86));
+
+	// **Measured rather than budgeted** - the same lesson the MIDI page's hint records. A fixed
+	// height that fits the English text squeezes the Chinese one, and a squeezed Label draws its
+	// text smaller rather than admitting it did not fit.
+	mixerHint.setBounds (area.removeFromTop (
+		juce::jmax (18, wrappedHeight (mixerHint.getText (), mixerHint.getFont (), area.getWidth ()))));
 
 	area.removeFromTop (8);
 	hint.setBounds (area.removeFromTop (72));
@@ -882,7 +887,13 @@ void VgmSettingsPage::resized (void)
 
 	skipSwitch.setBounds (area.removeFromTop (24));
 	area.removeFromTop (6);
-	skipHint.setBounds (area.removeFromTop (160));
+
+	// **Measured rather than budgeted.** 160 was this hint's budget, and the screenshot showed what
+	// a budget does: the English text fitted in eight lines, and the Chinese - the same paragraph in
+	// a script with fewer glyphs per line - was drawn smaller so that its longer run of lines would
+	// still fit. A Label that cannot fit shrinks its text instead of saying so.
+	skipHint.setBounds (area.removeFromTop (
+		juce::jmax (18, wrappedHeight (skipHint.getText (), skipHint.getFont (), area.getWidth ()))));
 }
 
 void VgmSettingsPage::lookAndFeelChanged (void)

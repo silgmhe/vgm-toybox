@@ -11,6 +11,34 @@ namespace toybox::ui
 {
 
 /**
+	**A label that wraps at its width and keeps the font it was given.**
+
+	`juce::Label` draws through `drawFittedText`, which shrinks the type to fit whatever height the
+	layout allowed - so a hint long enough to need eight lines came out visibly smaller than the text
+	above it, and the screenshot showed it. This lays the same string out with `TextLayout`, which
+	wraps and never scales; the height it wants is `wrappedHeight()` of the same string, which is why
+	the two belong together.
+
+	Used by the pages whose explanation is a paragraph rather than a sentence.
+*/
+class WrappedLabel : public juce::Label
+{
+public:
+	void paint (juce::Graphics& g) override
+	{
+		juce::AttributedString block;
+		block.setFont (getFont ());
+		block.setJustification (getJustificationType ());
+		block.setColour (findColour (juce::Label::textColourId));
+		block.append (getText ());
+
+		juce::TextLayout layout;
+		layout.createLayout (block, (float) juce::jmax (1, getWidth ()));
+		layout.draw (g, getLocalBounds ().toFloat ());
+	}
+};
+
+/**
 	The Appearance page: the palette and the typeface the whole application draws with.
 
 	Light and Dark are two views of one stored value, and the store is the value - so this page,
@@ -262,7 +290,7 @@ private:
 	juce::Label gainCaption;
 	juce::Slider gainSlider;
 	juce::ToggleButton mixerSwitch;
-	juce::Label mixerHint;
+	WrappedLabel mixerHint;
 	juce::Label hint;
 };
 
@@ -296,7 +324,7 @@ public:
 
 private:
 	juce::ToggleButton skipSwitch;
-	juce::Label skipHint;
+	WrappedLabel skipHint;
 };
 
 /**
