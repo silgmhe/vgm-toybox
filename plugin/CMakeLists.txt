@@ -583,11 +583,10 @@ if (EXISTS "${_toybox_dpcm_song}")
 endif()
 
 add_executable(vgm_chip_test EXCLUDE_FROM_ALL
-	Source/playback/ChannelFromChip.cpp
-	Source/playback/WaveExport.cpp
-	Source/playback/NoteWaveform.cpp
-	Source/backends/libvgm/OpnVoiceDriver.cpp
-	Source/playback/WaveformSource.cpp
+Source/playback/ChannelFromChip.cpp
+Source/playback/WaveExport.cpp
+Source/playback/NoteWaveform.cpp
+Source/playback/WaveformSource.cpp
 	Source/playback/WaveShape.cpp
 	Source/backends/libvgm/VgmCommandReader.cpp
 	Source/formats/vgm/VgmSongLoader.cpp
