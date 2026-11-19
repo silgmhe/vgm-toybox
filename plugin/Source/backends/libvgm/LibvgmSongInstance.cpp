@@ -241,13 +241,13 @@ bool LibvgmSongInstance::prepare (double hostSampleRate, int newMaxBlockSize, ju
 		// producing no events, and the track was replaced with silence. That decoder is fixed. A
 		// future chip with the same kind of sticky state would fail the same way - if a song is ever
 		// seen with an empty row that should play, this is the first place to look.
-		trackHasEvents.assign (tracks.size (), false);
+		trackProducedEvents.assign (tracks.size (), false);
 
 		for (const auto& event : midiSequence->events)
 		{
-			if (event.sourceTrack < trackHasEvents.size ())
+			if (event.sourceTrack < trackProducedEvents.size ())
 			{
-				trackHasEvents[(size_t) event.sourceTrack] = true;
+				trackProducedEvents[(size_t) event.sourceTrack] = true;
 			}
 		}
 	}
@@ -776,8 +776,8 @@ std::unique_ptr<playback::ITrackPlayer> LibvgmSongInstance::createPlayer (int tr
 	// turn it off - and then every declared channel gets an emulation, at the cost this exists to
 	// avoid. Read here rather than baked in at load so the switch is applied by the next load.
 	if (trackIndex > 0 && settings::SettingsStore::getInstance ().getVgmSkipSilentTracks ()
-		&& (size_t) trackIndex < trackHasEvents.size ()
-		&& ! trackHasEvents[(size_t) trackIndex])
+		&& (size_t) trackIndex < trackProducedEvents.size ()
+		&& ! trackProducedEvents[(size_t) trackIndex])
 	{
 		return std::make_unique<playback::SilentTrackPlayer> ();
 	}

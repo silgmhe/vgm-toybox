@@ -93,7 +93,7 @@ private:
 	/** Loads the current song again at the position it is at, because `pitch.useSampleRoot` changed
 		the note numbers themselves. Does nothing when there is nothing loaded - the switch then only
 		applies to the next song. */
-	void reloadForPitchChange (void);
+	void reloadCurrentSong (void);
 
 	/** Unloads the song: chips, mixer and transport go back to their "nothing loaded" state. */
 	void closeSong (void);
