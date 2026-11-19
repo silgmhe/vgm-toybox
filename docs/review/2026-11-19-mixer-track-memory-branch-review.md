@@ -436,13 +436,35 @@ Result : FAILURES                              ← 退出码 1
 **只有第三条能分辨对错**：sweep 开着时每一帧都会重新溢出，"仍然静音"是正确实现和粘滞实现给出
 的同一个答案。把 sweep 关掉，两者才分道。
 
+**已完成（第三批）**：
+
+| 项 | 提交 | 证据 |
+|---|---|---|
+| **P0-2b** N163 通道顺序 | `6f08836` | `--order` 八行逐一对齐；去掉镜像后 row 6/11 MISMATCH |
+| **P0-2c** 两条入口都轮询 | `6f08836` | `--poll` 发布前后 `analysing` 1→0；绕过 `prepareBlock` 后保持 1 |
+
+这条落地在 `vgm_nsf_probe` 而不是 `vgm_chip_test`，因为两件事都发生在 `NsfPlayer` 层：N163 的
+顺序是 `renderChannels` 与 `captureState` 之间的事，轮询是渲染入口之间的事。**这正是它们当初
+没被想到的原因**——`--check` 证明了求和正确，而一个一致的置换求和也正确。
+
+**两条都验证过会失败**，数据记在提交说明里：
+
+```
+--order，镜像放回去：
+row 6  Wave 7  freq 1244.49  rms 0.000000  MISMATCH
+row 11 Wave 2  freq    0.00  rms 0.007355  MISMATCH      ← 6 + 11 = 17，镜像的两个位置
+
+--poll，绕过 prepareBlock：
+before publish: analysing=1
+after  publish: analysing=1
+poll: the per-channel path never saw the scan            exit 1
+```
+
 **未完成**：
 
 | 项 | 原因 |
 |---|---|
-| **P0-2b** N163 通道顺序 | 需要 `vgm_nsf_probe` 的新分支：比对 `captureState` 的频率与 `renderChannels` 各索引的能量 |
-| **P0-2c** 两条入口都轮询 | 同上：需要注入一个空的 `ScanHandle`，`publish()` 之后推进过 poll 边界 |
-| **O1** 第三方改动表 | 文档工作 |
+| **O1** 第三方改动表 | 文档工作，可以随时补 |
 
-这两条落在 `NsfPlayer` 层而不是 `chips/` 层，所以不属于 `vgm_chip_test`——这也是它们当初没被
-想到的原因：`--check` 证明了求和正确，但一个一致的置换求和也正确。
+**P0-2 的三条全部落地**；`54/54` 里的 `chip` 项现在跑的是当前代码，`--order` 与 `--poll` 是两个
+可以单独运行的断言。
