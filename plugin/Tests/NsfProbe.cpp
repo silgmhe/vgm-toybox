@@ -21,6 +21,7 @@
 
 #include "backends/nsf/NsfPlayer.h"
 #include "formats/nsf/NsfFile.h"
+#include "playback/ChipState.h"
 
 int main (int argc, char** argv)
 {
@@ -76,6 +77,152 @@ int main (int argc, char** argv)
 		}
 
 		return 0;
+	}
+
+	if (argc > 2 && std::string (argv[2]) == "--order")
+	{
+		// **Which buffer belongs to which row.** `captureState` names the channels in the order the
+		// mixer lists them and `renderChannels` writes them by index; if the two disagree, every row
+		// plays its mirror image and nothing else notices - a consistent permutation still sums to
+		// the same mix, so `--check` cannot see it. It did: N106's mask bits ran backwards, and
+		// "Wave 8" in the mixer was "Wave 1" on the keyboard.
+		toybox::backends::nsf::NsfPlayer player (file, 44100.0);
+		player.start ();
+
+		constexpr int kChannels = 13;		// five 2A03 channels, then the N163's eight
+		constexpr int kBlock = 1024;
+		constexpr int kBlocks = 200;
+		constexpr int kFirstN163 = 5;
+
+		std::vector<std::vector<float>> stereo ((size_t) kChannels,
+											   std::vector<float> ((size_t) kBlock * 2));
+		std::vector<float*> buffers ((size_t) kChannels);
+
+		for (int c = 0; c < kChannels; ++c)
+		{
+			buffers[(size_t) c] = stereo[(size_t) c].data ();
+		}
+
+		double sumSq[kChannels] = {};
+		float peakFrequency[kChannels] = {};
+		std::string channelNames[kChannels];
+
+		toybox::playback::ChipStateSnapshot snapshot;
+
+		for (int b = 0; b < kBlocks; ++b)
+		{
+			const int rendered = player.renderChannels (buffers.data (), kChannels, kBlock);
+
+			if (rendered <= 0)
+			{
+				continue;
+			}
+
+			for (int i = 0; i < rendered; ++i)
+			{
+				for (int c = 0; c < kChannels; ++c)
+				{
+					const double v = (double) stereo[(size_t) c][(size_t) i * 2];
+					sumSq[c] += v * v;
+				}
+			}
+
+			// The peak rather than the last value: a channel that sounds for a moment and then
+			// rests still belongs to its row. Every tenth block keeps the cost down - captureState
+			// is the expensive side of this probe.
+			if (b % 10 != 0 && b != kBlocks - 1)
+			{
+				continue;
+			}
+
+			player.captureState (snapshot, false);
+
+			for (const auto& channel : snapshot.channels)
+			{
+				const int t = channel.trackIndex;
+
+				if (t < 0 || t >= kChannels)
+				{
+					continue;
+				}
+
+				channelNames[t] = channel.name;
+
+				if (channel.frequency > peakFrequency[t])
+				{
+					peakFrequency[t] = channel.frequency;
+				}
+			}
+		}
+
+		int disagreements = 0;
+
+		for (int t = kFirstN163; t < kChannels; ++t)
+		{
+			const double rms = std::sqrt (sumSq[t] / (double) (kBlock * kBlocks));
+			const bool named = peakFrequency[t] > 0.0f;		// the row says this channel has a pitch
+			const bool heard = rms > 1e-9;					// its buffer says something came out
+
+			std::printf ("  row %-2d %-8s freq %8.2f  rms %.6f  %s\n", t, channelNames[t].c_str (),
+						 (double) peakFrequency[t], rms, named == heard ? "ok" : "MISMATCH");
+
+			if (named != heard)
+			{
+				++disagreements;
+			}
+		}
+
+		std::printf ("  %s\n", disagreements == 0
+								 ? "order: every row's audio is in its own buffer"
+								 : "order: a row's audio is somewhere else - check the mask bits");
+
+		return disagreements == 0 ? 0 : 1;
+	}
+
+	if (argc > 2 && std::string (argv[2]) == "--poll")
+	{
+		// **The per-channel entry point has to look for the scan too.** It is the only entry point
+		// `inPlaceChannelMix` uses, and the poll used to live in `render()` alone - so a song that
+		// played through the mixer waited for a restart before its DPCM row lost the word
+		// "analysing".
+		toybox::backends::nsf::NsfPlayer player (file, 44100.0);
+		auto handle = std::make_shared<toybox::backends::nsf::ScanHandle> ();
+
+		player.setScanHandle (handle);
+		player.start ();
+
+		const bool before = player.isAnalysing ();
+
+		handle->publish (std::make_shared<const toybox::backends::nsf::ScanResult> ());
+
+		constexpr int kChannels = 13;
+		constexpr int kBlock = 1024;
+
+		std::vector<std::vector<float>> stereo ((size_t) kChannels,
+											   std::vector<float> ((size_t) kBlock * 2));
+		std::vector<float*> buffers ((size_t) kChannels);
+
+		for (int c = 0; c < kChannels; ++c)
+		{
+			buffers[(size_t) c] = stereo[(size_t) c].data ();
+		}
+
+		// Five blocks: past the 4096-sample poll interval, so the boundary is crossed at least once.
+		for (int i = 0; i < 5; ++i)
+		{
+			player.renderChannels (buffers.data (), kChannels, kBlock);
+		}
+
+		const bool after = player.isAnalysing ();
+
+		std::printf ("  before publish: analysing=%d\n", (int) before);
+		std::printf ("  after  publish: analysing=%d\n", (int) after);
+
+		const bool ok = before && ! after;
+		std::printf ("  %s\n", ok ? "poll: the per-channel path looks for the scan"
+								  : "poll: the per-channel path never saw the scan");
+
+		return ok ? 0 : 1;
 	}
 
 	if (argc > 2 && std::string (argv[2]) == "--vrc7")
