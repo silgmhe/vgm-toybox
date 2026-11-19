@@ -223,9 +223,11 @@ public:
 		and DPCM - each carry the option, so both are set here rather than leaving half the mix on
 		the other path.
 
-		**Only applied when the value changes.** DMC's setter rebuilds its mixing table, which
-		allocates, and this can be reached from the audio thread; re-applying an unchanged value
-		once per block would rebuild that table sixty times a second for nothing.
+		**Only applied when the value changes.** DMC's setter recomputes its mixing table - 65536
+		entries of `tnd_table`, a floating-point divide each - and this is reached from
+		`captureState`, which runs once per block on the audio thread. Re-applying an unchanged value
+		would spend that in every block for nothing; the one block that does change it costs about a
+		millisecond, which is the trade for not needing a reload. See `settings::nsf::nonlinearMixer`.
 
 		`const` because it is called from `captureState`: the chips it writes to live behind
 		pointers, so the player's own shape is not what changes.
@@ -338,6 +340,16 @@ private:
 		`start()` is the other place that looks.
 	*/
 	void pollScan (int frames);
+
+	/** **What both render entry points do before their loop**, returning the clocks one sample of
+		this block is worth.
+
+		One function rather than two copies, because that is exactly how the poll above went missing
+		once: `renderChannels()` was added as a second entry point and did not know it had to poll,
+		so the DPCM row said "analysing" until the song was restarted. A third entry point should
+		call this, or not exist.
+	*/
+	double prepareBlock (int frames);
 
 	void resetToStart (void);
 	void scanSampleChannels (double seconds);

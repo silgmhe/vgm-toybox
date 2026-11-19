@@ -199,6 +199,13 @@ void NsfPlayer::start (void)
 	resetToStart ();
 }
 
+double NsfPlayer::prepareBlock (int frames)
+{
+	pollScan (frames);
+
+	return (file.isPal () ? kPalClock : kNtscClock) / rate;
+}
+
 void NsfPlayer::pollScan (int frames)
 {
 	// The scan is published by a thread that tells nobody, so this looks again on its own clock -
@@ -745,10 +752,7 @@ int NsfPlayer::render (float* left, float* right, int frames)
 		return 0;
 	}
 
-	pollScan (frames);
-
-
-	const double clocksPerSample = (file.isPal () ? kPalClock : kNtscClock) / rate;
+	const double clocksPerSample = prepareBlock (frames);
 
 	for (int i = 0; i < frames; ++i)
 	{
@@ -1606,12 +1610,9 @@ int NsfPlayer::renderChannels (float* const* dest, int channelCount, int frames)
 		return 0;
 	}
 
-	// **The same look `render()` makes.** This is the entry point `inPlaceChannelMix` uses, and
-	// the only one for those songs - a poll that lived in `render()` alone left the DPCM row
-	// saying "analysing" until the song was restarted.
-	pollScan (frames);
-
-	const double clocksPerSample = (file.isPal () ? kPalClock : kNtscClock) / rate;
+	// The same prefix `render()` uses - see `prepareBlock`, which exists because this entry point
+	// once forgot to poll for the scan and left the DPCM row saying "analysing" until a restart.
+	const double clocksPerSample = prepareBlock (frames);
 	const int usable = (std::min) (channelCount, 5);	// the two 2A03 objects, for now
 
 	for (int i = 0; i < frames; ++i)
