@@ -1657,9 +1657,9 @@ int NsfPlayer::renderChannels (float* const* dest, int channelCount, int frames)
 			dest[2 + c][2 * i + 1] = (float) tnd[c * 2 + 1] / 32768.0f * outputGain;
 		}
 
-		// The expansion's channels, in the order the track list uses. FME7 has no RenderChannels
-		// yet, so a song that declares one keeps its 2A03 tracks and leaves the rest silent here -
-		// which is why those songs still take the one-player-per-track path in the backend.
+		// The expansion's channels, in the order the track list uses: VRC6, N163, VRC7, MMC5, FME7.
+		// Every one of them has `RenderChannels`; the comment here used to say FME7 did not, and
+		// that sentence outlived the code by one line.
 		int32_t expansion[16] = {};
 
 		if (vrc6) { vrc6->RenderChannels (expansion, 2, 3); }

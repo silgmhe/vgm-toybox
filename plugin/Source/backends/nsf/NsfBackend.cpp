@@ -343,9 +343,10 @@ public:
 
 		// Every sound object this backend runs can render its channels into separate buffers in a
 		// single pass - `NES_APU`, `NES_DMC`, `NES_VRC6`, `NES_VRC7`, `NES_N106`, `NES_MMC5`,
-		// `NES_FME7` and the FDS - and `renderChannels()` below is the one loop that drives them
-		// all. `inPlaceChannelMix` is what asks for that: the mixer creates **one** player instead
-		// of one per track, so a thirteen-channel song emulates one 6502 rather than thirteen.
+		// `NES_FME7` - and `renderChannels()` below is the one loop that drives them all. The FDS
+		// needs no split: it is one voice, so its whole output is its single channel.
+		// `inPlaceChannelMix` is what asks for that: the mixer creates **one** player instead of
+		// one per track, so a thirteen-channel song emulates one 6502 rather than thirteen.
 
 		// The declaration used to read `multiInstance`, with a comment saying the per-channel
 		// entry points did not exist. That was true when it was written; it is not now. What the
