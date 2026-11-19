@@ -136,3 +136,40 @@ virtual void SetMask (int m) { mask = m; }
 
 - 源码注释是 **Shift-JIS**，已被本分支转成 **UTF-8 with BOM**（无 BOM 时 MSVC 按本地代码页解释，会把注释里的字节当成代码，`nes_mem.cpp` 会报 C2601）；
 - `xgm/devices/device.h` 会引用 `../xtypes.h`，`vcm.h` 会引用 `vcm_ui.h`——这两个头文件不参与编译，但必须留在树里。
+
+## 8. 我们对 NSFPlay 源码做了什么
+
+`libs/nsfplay` 是 vendored 源码，不是子模块。**升级时整个目录会被覆盖，下面这些改动会随之消失**，
+而其中两处不会以编译错误的形式暴露：
+
+| 文件 | 改动 | 为什么 | 丢了会怎样 |
+|---|---|---|---|
+| `nes_apu.h/.cpp` | 新增 `RenderChannels` | 一次 `Render` 拆出三个通道 | 编译错 |
+| `nes_dmc.h/.cpp` | 新增 `RenderChannels` + `chOut[2][3]` | 同上；`chOut` 在 `Render` 里填，让 anti-click 状态只推进一次 | 编译错 |
+| `nes_vrc6.h/.cpp` | 新增 `RenderChannels` | 同上 | 编译错 |
+| `nes_vrc7.h/.cpp` | 新增 `RenderChannels` | 同上 | 编译错 |
+| `nes_n106.h/.cpp` | 新增 `RenderChannels` | 同上 | 编译错 |
+| `nes_mmc5.h/.cpp` | 新增 `RenderChannels` | 同上 | 编译错 |
+| `nes_fme7.h/.cpp` | 新增 `RenderChannels` | 同上 | 编译错 |
+| **`nes_n106.cpp`** | `RenderChannels` 里 `mask = ~(1 << (7 - i))` | `GetTrackInfo(trk)` 读的是 `trkinfo[7 - trk]`，两边编号方向相反；`SetMask` 会反转，而这个循环直接写 `mask` | **编译通过、求和正确、通道全反**——`--check` 看不见 |
+
+**FDS 不在表里**：它是一个声部，整个输出就是它唯一的通道，`NsfPlayer::renderChannels` 直接调
+`Render()` 而不需要拆分。
+
+### 升级时的检查顺序
+
+```powershell
+# 1. 覆盖前，列出所有改动点
+Select-String -Path libs\nsfplay\**\*.h -Pattern 'RenderChannels|Added for VGMToybox'
+
+# 2. 覆盖后重跑这三条：编译错、顺序错、轮询丢
+build\plugin\vgm_nsf_probe <file.nsf> --check    # 期望 0.000000 / 4096 帧
+build\plugin\vgm_nsf_probe <file.nsf> --order    # 期望 exit 0，八行全 ok
+build\plugin\vgm_nsf_probe <file.nsf> --poll     # 期望 exit 0，analysing 1 -> 0
+
+# 3. 单测里那条 sweep 断言（N106 之外唯一依赖解码器语义的）
+build\plugin\vgm_chip_test                       # 期望 PASS
+```
+
+**`--check` 单独通过是没有意义的**：它比对的是各通道之和与混合输出，而一个一致的置换（正是镜像）
+求和结果相同。这就是上面最后一行的"丢了会怎样"一栏写"编译通过、求和正确、通道全反"的原因。
