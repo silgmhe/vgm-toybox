@@ -152,6 +152,11 @@ namespace
 		juce::String getUniqueName (void) const override { return "settings.category." + id; }
 		int getPageIndex (void) const { return page; }
 
+		/** The id this row was registered under, which is the one `settings/<id>` in a test script
+			reaches for. A `TreeViewItem` is not a Component, so there is no component id to click -
+			this is what takes its place. */
+		const juce::String& getItemId (void) const { return id; }
+
 		void setLabel (const juce::String& newName)
 		{
 			name = newName;
@@ -2066,6 +2071,31 @@ void SettingsOverlay::refreshLanguage (void)
 
 	pages.refreshLanguage();
 	repaint();
+}
+
+bool SettingsOverlay::showPage (const juce::String& pageId)
+{
+	auto* root = dynamic_cast<CategoryItem*> (rootItem.get ());
+
+	if (root == nullptr)
+	{
+		return false;
+	}
+
+	for (int i = 0; i < root->getNumSubItems (); ++i)
+	{
+		auto* row = dynamic_cast<CategoryItem*> (root->getSubItem (i));
+
+		if (row != nullptr && row->getItemId () == pageId)
+		{
+			// Through the stack rather than the tree: `page` is the index the row was given when
+			// its page was added, and the stack is what owns them.
+			pages.setCurrentView (row->getPageIndex ());
+			return true;
+		}
+	}
+
+	return false;
 }
 
 void SettingsOverlay::refreshFromStore (void)

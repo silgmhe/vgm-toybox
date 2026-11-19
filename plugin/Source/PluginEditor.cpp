@@ -910,7 +910,17 @@ void ToyboxAudioProcessorEditor::showSettings (void)
 	settingsOverlay.setVisible (true);
 	settingsOverlay.toFront (false);
 	settingsOverlay.grabKeyboardFocus();	// so escape works without clicking first
-}
+	}
+
+	bool ToyboxAudioProcessorEditor::showSettingsPage (const juce::String& pageId)
+	{
+		// `showSettings` brings the panel up on whichever page was last used; the caller asked for a
+		// particular one, so the page is chosen afterwards. `refreshFromStore` runs inside it and
+		// does not move the stack, so this order is what makes the request win.
+		showSettings ();
+
+		return settingsOverlay.showPage (pageId);
+	}
 
 void ToyboxAudioProcessorEditor::openStartupSong (void)
 {

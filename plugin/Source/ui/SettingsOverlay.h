@@ -525,6 +525,14 @@ public:
 		applied while players are created, so only a reload can change it. */
 	std::function<void()> onSkipSilentTracksChanged;
 
+	/** **Brings up the page registered under `pageId`** ("vgm", "nes", …), and says whether one
+		matched. The rows in the sidebar are `TreeViewItem`s rather than Components, so a test script
+		has no component id to click; this is the seam that lets a screenshot be taken of any page.
+
+		Returns false when no page carries that id - which is also how a script notices that a page
+		was renamed or dropped. */
+	bool showPage (const juce::String& pageId);
+
 	/** Brings every page in step with the store and marks the page that is up in the sidebar. The
 		window calls this every time the overlay comes up, because the stored values can have been
 		changed by the Theme menu while this was hidden. */
