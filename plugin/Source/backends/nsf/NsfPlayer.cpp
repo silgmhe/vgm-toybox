@@ -687,9 +687,18 @@ void NsfPlayer::writeSound (uint16_t address, uint8_t value)
 			//
 			// Two things do change the shape: the instrument number in 0x30's high nibble, and the
 			// eight bytes of 0x00-0x07, which is the slot instrument 0 points at.
+			//
+			// **Both compare the old byte, because a driver may rewrite the same value.** The
+			// eight custom bytes are resent periodically by some drivers - measured on
+			// `15_coffeezoneb`, six waveforms were rebuilt every hundred blocks with the value
+			// never changing, and each rebuild is six milliseconds on the audio thread. Writing
+			// the same byte changes nothing, so it must not cost a render.
 			if (vrc7Latch < 0x08)
 			{
-				++vrc7Version;
+				if (vrc7Regs[vrc7Latch] != (uint8_t) value)
+				{
+					++vrc7Version;
+				}
 			}
 			else if (vrc7Latch >= 0x30 && vrc7Latch <= 0x38
 					 && (vrc7Regs[vrc7Latch] & 0xF0) != ((uint8_t) value & 0xF0))
