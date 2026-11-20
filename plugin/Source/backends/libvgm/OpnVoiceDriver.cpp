@@ -37,6 +37,7 @@ constexpr DEV_ID deviceIdFor (chips::ChipModel model)
 {
 	switch (model)
 	{
+	case chips::ChipModel::ym2203:		return DEVID_YM2203;
 	case chips::ChipModel::ym2608:		return DEVID_YM2608;
 	case chips::ChipModel::ym2610:		return DEVID_YM2610;
 	case chips::ChipModel::ym2151:		return DEVID_YM2151;
@@ -64,6 +65,7 @@ constexpr uint32_t clockFor (chips::ChipModel model)
 {
 	switch (model)
 	{
+	case chips::ChipModel::ym2203:	return 3993600;
 	case chips::ChipModel::ym2608:
 	case chips::ChipModel::ym2610:	return 8000000;
 	case chips::ChipModel::ym2151:	return 3579545;

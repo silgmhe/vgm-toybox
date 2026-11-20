@@ -16,6 +16,7 @@ namespace toybox::chips
 enum class ChipModel : uint8_t
 {
 	unknown = 0,
+	ym2203,		// OPN, three FM channels and an SSG
 	ym2612,		// OPN2, six FM channels and a DAC
 	ym2608,		// OPNA, the PC-98 part
 	ym2610,		// OPNB, the Neo Geo part
@@ -111,6 +112,7 @@ constexpr double noteRateFor (ChipModel model)
 	switch (model)
 	{
 	case ChipModel::ym2612:		return 7670453.0 / 144.0;		// 53 267 Hz, the Mega Drive
+	case ChipModel::ym2203:		return 3993600.0 / 144.0;		// 27 733 Hz, the three-channel OPN
 	case ChipModel::ym2608:
 	case ChipModel::ym2610:		return 8000000.0 / 144.0;		// 55 556 Hz
 	case ChipModel::ym2151:		return 3579545.0 / 64.0;		// 55 930 Hz

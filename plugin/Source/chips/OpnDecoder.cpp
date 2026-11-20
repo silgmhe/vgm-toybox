@@ -1372,6 +1372,7 @@ bool OpnDecoder::capturePatch (int channel, VoicePatch& out) const
 	out = VoicePatch {};
 	out.model = impl->variant == Variant::ym2612	? ChipModel::ym2612
 				: impl->variant == Variant::ym2608	? ChipModel::ym2608
+				: impl->variant == Variant::ym2203	? ChipModel::ym2203
 													: ChipModel::ym2610;
 
 	// Seven banks of four operators, addressed the way the chip itself does: the bank in the high
