@@ -225,6 +225,57 @@ int main (int argc, char** argv)
 		return ok ? 0 : 1;
 	}
 
+	if (argc > 2 && std::string (argv[2]) == "--vrc7cost")
+	{
+		// **What the keyboard page costs per audio block.** `PlaybackEngine` calls `captureState`
+		// once per block from the audio thread, so every rebuild that happens inside it is time
+		// taken from the render. This drives the same two calls at the same rhythm, so the numbers
+		// are the ones the audio thread would see rather than a guess about them.
+		toybox::backends::nsf::NsfPlayer player (file, 44100.0);
+		player.start ();
+
+		constexpr int kChannels = 13;
+		constexpr int kBlock = 1024;
+		constexpr int kBlocks = 400;
+
+		std::vector<std::vector<float>> stereo ((size_t) kChannels,
+											   std::vector<float> ((size_t) kBlock * 2));
+		std::vector<float*> buffers ((size_t) kChannels);
+
+		for (int c = 0; c < kChannels; ++c)
+		{
+			buffers[(size_t) c] = stereo[(size_t) c].data ();
+		}
+
+		toybox::playback::ChipStateSnapshot snapshot;
+
+		const auto started = std::chrono::steady_clock::now ();
+
+		for (int b = 0; b < kBlocks; ++b)
+		{
+			player.renderChannels (buffers.data (), kChannels, kBlock);
+			player.captureState (snapshot);
+
+			// Per hundred blocks, so the first stretch - where every waveform is built for the
+			// first time - can be told apart from the steady state. A single total hides which.
+			if ((b + 1) % 100 == 0)
+			{
+				std::printf ("    %3d blocks: %.3f s\n", b + 1,
+							 std::chrono::duration<double> (
+								 std::chrono::steady_clock::now () - started).count ());
+			}
+		}
+
+		const double wall = std::chrono::duration<double> (
+			std::chrono::steady_clock::now () - started).count ();
+
+		std::printf ("  %d blocks: %.2f s of audio in %.2f s wall (%.1f%% of real time)\n",
+					 kBlocks, kBlocks * (double) kBlock / 44100.0, wall,
+					 100.0 * wall / (kBlocks * (double) kBlock / 44100.0));
+
+		return 0;
+	}
+
 	if (argc > 2 && std::string (argv[2]) == "--vrc7")
 	{
 		toybox::backends::nsf::NsfPlayer player (file, 44100.0);
