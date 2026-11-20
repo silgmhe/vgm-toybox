@@ -964,7 +964,16 @@ bool LibvgmTrackPlayer::captureState (playback::ChipStateSnapshot& snapshot) con
 			// **Rendered here, not in channelState()**: this runs while the keyboard page is on
 			// screen, and `channelState()` runs while a song is being scanned. The cache is keyed
 			// on the patch and the pitch, which is everything `render()` reads.
-			if (state.voicePatch != nullptr && state.frequency > 0.0f && voiceDriver != nullptr)
+			//
+			// **No pitch test on the row.** `state.frequency` comes from `GetFreqHz()`, and a
+			// driver writes the pitch register only when it starts a note - so a channel resting at
+			// this instant reports zero, and requiring one left its row drawing a single cycle
+			// instead of the note. On a YM2203 song that read as "Ch 1 and Ch 3 have the wrong
+			// timbre": they were simply the two channels not sounding at that moment.
+			//
+			// The NSF side dropped the same condition for the same reason - the shape is drawn at a
+			// fixed pitch, so whether this voice has one right now is not what decides it.
+			if (state.voicePatch != nullptr && voiceDriver != nullptr)
 			{
 				NoteWaveEntry& entry = noteWaves[channel];
 
