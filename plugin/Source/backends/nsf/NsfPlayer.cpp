@@ -1358,6 +1358,12 @@ bool NsfPlayer::captureState (playback::ChipStateSnapshot& snapshot, bool includ
 		// cycle from four numbers `GetFmParameters` could infer, because the chip keeps no readable
 		// waveform; the register mirror above is what makes a real one possible, and it is the same
 		// bargain the libvgm backend makes with its OPN decoder.
+		//
+		// **One rebuild per block at most.** Six at once is thirty-six milliseconds against a
+		// twenty-three millisecond block, which is a dropped frame; one is six, and the other five
+		// keep the waveform they already had until their turn comes. See `vrc7WaveBudget`.
+		vrc7WaveBudget = 1;
+
 		for (int i = 0; i < kVrc7Channels; ++i)
 		{
 			const std::string name = "FM " + std::to_string (i + 1);
@@ -1411,10 +1417,16 @@ bool NsfPlayer::captureState (playback::ChipStateSnapshot& snapshot, bool includ
 			const double release = releaseSeconds;
 			const bool normalise = normaliseSamples;
 
-			if (cached.samples == nullptr || cached.version != vrc7Version || cached.hz != hz
-				|| cached.sustain != sustain || cached.release != release
-				|| cached.normalise != normalise)
+			const bool stale = cached.samples == nullptr || cached.version != vrc7Version
+							   || cached.hz != hz || cached.sustain != sustain
+							   || cached.release != release || cached.normalise != normalise;
+
+			// The queue is this line: a voice that is stale and out of budget is left keyed on its
+			// old values, so it reports stale again next block and waits there.
+			if (stale && vrc7WaveBudget > 0)
 			{
+				--vrc7WaveBudget;
+
 				cached.patch = patch;
 				cached.version = vrc7Version;
 				cached.hz = hz;

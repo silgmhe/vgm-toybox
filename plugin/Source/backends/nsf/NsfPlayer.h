@@ -439,6 +439,19 @@ private:
 
 	mutable std::array<Vrc7Wave, 6> vrc7Waves;
 
+	/** **How many waveforms this block may still build.** One, so a batch that would cost six
+		renders thirty-six milliseconds is spread over six blocks at six apiece - and six is below
+		one audio block, which is the difference between a dropped frame and none.
+
+		The queue is implicit: an entry is only re-keyed after it is rebuilt, so a voice whose turn
+		has not come reports itself stale again next block and waits there. Reset at the top of
+		every `captureState`, which is the only caller.
+
+		A voice waiting its turn keeps the waveform it already had, so nothing goes blank; what it
+		keeps is up to a hundred and forty milliseconds old, and that is the trade this makes.
+	*/
+	mutable int vrc7WaveBudget = 0;
+
 	/** **A second OPLL, for renders that happen off the audio thread.** The one above is keyed and
 		advanced by `captureState` while the song plays; an export re-rendering through it would
 		overwrite the registers under that thread's feet. */
