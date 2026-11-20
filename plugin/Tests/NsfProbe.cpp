@@ -251,18 +251,26 @@ int main (int argc, char** argv)
 
 		const auto started = std::chrono::steady_clock::now ();
 
+		// **The worst block, not the total.** Spreading work across blocks leaves the total where it
+		// was - the same six renders happen - and only the peak moves. A total would report the
+		// change as nothing.
+		double worstMs = 0.0;
+		int worstBlock = 0;
+
 		for (int b = 0; b < kBlocks; ++b)
 		{
+			const auto blockStart = std::chrono::steady_clock::now ();
+
 			player.renderChannels (buffers.data (), kChannels, kBlock);
 			player.captureState (snapshot);
 
-			// Per hundred blocks, so the first stretch - where every waveform is built for the
-			// first time - can be told apart from the steady state. A single total hides which.
-			if ((b + 1) % 100 == 0)
+			const double ms = std::chrono::duration<double, std::milli> (
+				std::chrono::steady_clock::now () - blockStart).count ();
+
+			if (ms > worstMs)
 			{
-				std::printf ("    %3d blocks: %.3f s\n", b + 1,
-							 std::chrono::duration<double> (
-								 std::chrono::steady_clock::now () - started).count ());
+				worstMs = ms;
+				worstBlock = b;
 			}
 		}
 
@@ -272,6 +280,8 @@ int main (int argc, char** argv)
 		std::printf ("  %d blocks: %.2f s of audio in %.2f s wall (%.1f%% of real time)\n",
 					 kBlocks, kBlocks * (double) kBlock / 44100.0, wall,
 					 100.0 * wall / (kBlocks * (double) kBlock / 44100.0));
+		std::printf ("  worst block %d: %.2f ms  (one block is %.1f ms of audio)\n",
+					 worstBlock, worstMs, kBlock * 1000.0 / 44100.0);
 
 		return 0;
 	}
