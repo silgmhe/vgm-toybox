@@ -124,6 +124,25 @@ struct OpnVoiceDriver::Core
 	Core (const Core&) = delete;
 	Core& operator= (const Core&) = delete;
 
+	/** **Everything back to silence.**
+
+		One core serves every channel of a song, so the channel rendered before this one is still
+		keyed on - or still releasing - when the next patch arrives. Writing a new patch over it does
+		not stop it: the release keeps sounding, and its notes end up inside the next channel's
+		waveform. That is what "shared registers" looks like from the outside: two rows drawing the
+		same shape, or one drawing a mix of two timbres.
+
+		`Reset` rather than `SndEmu_Stop` + `SndEmu_Start`: it is the same call `SndEmu_Start` makes
+		once the core exists, and it costs a state clear rather than an allocation.
+	*/
+	void reset (void)
+	{
+		if (ready && info.devDef != nullptr && info.devDef->Reset != nullptr)
+		{
+			info.devDef->Reset (info.dataPtr);
+		}
+	}
+
 	/** An address byte then a data byte, which is how an A8D8 device is written. The port sits in
 		the address's bit 8, so `port * 2` selects either register latch. */
 	void write (int writePort, uint8_t reg, uint8_t value)
@@ -175,6 +194,10 @@ bool OpnVoiceDriver::load (const chips::VoicePatch& patch)
 	const uint16_t first = patch.regs.front ().first;
 	channelInPort = (int) (first & 0x03);
 	port = (first & 0x100) ? 1 : 0;
+
+	// **Start from silence, not from whatever the last channel left.** The core is shared, and the
+	// previous channel is still releasing when this patch arrives - see `reset`.
+	core->reset ();
 
 	// **The three registers a bare core needs before it will make a sound.** A freshly started
 	// YM2612 has the LFO and the timers in whatever state the core's constructor leaves them, and

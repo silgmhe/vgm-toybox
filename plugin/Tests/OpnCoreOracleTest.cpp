@@ -639,6 +639,74 @@ int main()
 		}
 	}
 
+	// --- a shared core must not let one channel into the next -----------------------------------
+	// One driver serves every row of a song, and the next patch arrives before the previous channel
+	// has finished releasing. Without a reset between them the second row carries the first row's
+	// tail, and two waveforms in one picture is what "the timbre is wrong" looks like from outside.
+	{
+		// Release rate 1 is a tail that lasts seconds - long enough to be caught in the act. The two
+		// notes go to **different channels**, which is the case that matters: one channel's key-on
+		// does not disturb another's, so nothing but a reset stops the first one sounding.
+		const auto longTailed = [] (int channel)
+		{
+			toybox::chips::VoicePatch patch;
+			patch.model = toybox::chips::ChipModel::ym2608;
+
+			for (int slot = 0; slot < 4; ++slot)
+			{
+				const int base = (slot << 2) | channel;
+
+				patch.regs.push_back ({ (uint16_t) (0x30 + base), 0x01 });		// MUL 1
+				patch.regs.push_back ({ (uint16_t) (0x40 + base), 0x00 });		// TL, loudest
+				patch.regs.push_back ({ (uint16_t) (0x50 + base), 0x1F });		// AR 31
+				patch.regs.push_back ({ (uint16_t) (0x60 + base), 0x00 });		// DR 0, holds
+				patch.regs.push_back ({ (uint16_t) (0x70 + base), 0x00 });
+				patch.regs.push_back ({ (uint16_t) (0x80 + base), 0x01 });		// SL 0, RR 1
+			}
+
+			patch.regs.push_back ({ (uint16_t) (0xB0 + channel), 0x07 });		// algorithm 7
+			patch.regs.push_back ({ (uint16_t) (0xB4 + channel), 0xC0 });
+			return patch;
+		};
+
+		const auto driver = toybox::backends::libvgm::makeOpnVoiceDriver ();
+
+		driver->load (longTailed (0));
+		driver->noteOn (440.0);
+
+		{
+			std::vector<float> warm ((size_t) 4096);
+			driver->render (warm.data (), 4096);
+		}
+
+		// The second note goes to channel 1 and is asked for 220 Hz. It has to come back as 220,
+		// not as a mixture with the first channel, which is still keyed on.
+		driver->load (longTailed (1));
+		driver->noteOn (220.0);
+
+		const int frames = 8192;
+		std::vector<float> samples ((size_t) frames);
+		driver->render (samples.data (), frames);
+
+		int crossings = 0;
+
+		for (int i = 1; i < frames; ++i)
+		{
+			if ((samples[(size_t) i - 1] < 0.0f) != (samples[(size_t) i] < 0.0f))
+			{
+				++crossings;
+			}
+		}
+
+		const double seconds = (double) frames / driver->rate ();
+		const double measured = (double) crossings / 2.0 / seconds;
+
+		std::printf ("    a 220 Hz note after a 440 Hz one: %.1f Hz measured\n", measured);
+
+		check (std::fabs (measured - 220.0) < 6.0,
+			   "a loaded patch does not carry the previous channel's tail");
+	}
+
 	std::printf ("\n%s\n", failures == 0 ? "All checks passed." : "FAILED.");
 	return failures == 0 ? 0 : 1;
 }
