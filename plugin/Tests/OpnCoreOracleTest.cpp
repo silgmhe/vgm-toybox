@@ -577,6 +577,68 @@ int main()
 	check (tally.audible > 100, "the patches make enough sound for the comparison to mean anything");
 	check (tally.disagreements == 0, "the decoder agrees with the chip on every channel");
 
+	// --- the clock each model is played at -----------------------------------------------------
+	// `noteRateFor` already divides by the chip's own clock - 144 for the OPN family, 64 for the
+	// OPM, 72 for the OPL - but the core used to be started at the Mega Drive's 7.67 MHz whichever
+	// model the patch named. A YM2608 patch carries f-numbers its driver wrote against 8 MHz, so
+	// the core resolved them four percent low. Playing a known pitch and counting zero crossings is
+	// the only way to ask which clock it actually used.
+	{
+		toybox::chips::VoicePatch patch;
+		patch.model = toybox::chips::ChipModel::ym2608;
+
+		// Algorithm 7: all four operators in parallel, so the output is a carrier and not the
+		// product of one. MUL 1 everywhere keeps them at the same frequency, and AR 31 with DR 0
+		// holds the note at full level for as long as the buffer lasts.
+		for (int slot = 0; slot < 4; ++slot)
+		{
+			patch.regs.push_back ({ (uint16_t) (0x30 + slot), 0x01 });		// DT 0, MUL 1
+			patch.regs.push_back ({ (uint16_t) (0x40 + slot), 0x00 });		// TL, loudest
+			patch.regs.push_back ({ (uint16_t) (0x50 + slot), 0x1F });		// AR 31, instant attack
+			patch.regs.push_back ({ (uint16_t) (0x60 + slot), 0x00 });		// DR 0, no decay
+			patch.regs.push_back ({ (uint16_t) (0x70 + slot), 0x00 });		// SR 0
+			patch.regs.push_back ({ (uint16_t) (0x80 + slot), 0x0F });		// SL 0, RR 15
+		}
+
+		patch.regs.push_back ({ (uint16_t) 0xB0, 0x07 });		// feedback 0, algorithm 7
+		patch.regs.push_back ({ (uint16_t) 0xB4, 0xC0 });		// both speakers
+
+		const auto driver = toybox::backends::libvgm::makeOpnVoiceDriver ();
+
+		if (driver->load (patch))
+		{
+			driver->noteOn (440.0);
+
+			const int frames = 8192;
+			std::vector<float> samples ((size_t) frames);
+			driver->render (samples.data (), frames);
+
+			int crossings = 0;
+
+			for (int i = 1; i < frames; ++i)
+			{
+				if ((samples[(size_t) i - 1] < 0.0f) != (samples[(size_t) i] < 0.0f))
+				{
+					++crossings;
+				}
+			}
+
+			const double seconds = (double) frames / driver->rate ();
+			const double measured = (double) crossings / 2.0 / seconds;
+
+			std::printf ("    YM2608 at 440 Hz: %.1f Hz measured\n", measured);
+
+			// Five hertz is wide enough for an eleven-bit f-number's quantisation and narrow enough
+			// that the 7.67/8.00 gap - about eighteen hertz - cannot pass through it.
+			check (std::fabs (measured - 440.0) < 5.0,
+				   "a YM2608 plays at the clock its model declares");
+		}
+		else
+		{
+			check (false, "the core starts for a YM2608 patch");
+		}
+	}
+
 	std::printf ("\n%s\n", failures == 0 ? "All checks passed." : "FAILED.");
 	return failures == 0 ? 0 : 1;
 }

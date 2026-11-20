@@ -50,6 +50,33 @@ constexpr DEV_ID deviceIdFor (chips::ChipModel model)
 	return DEVID_YM2612;
 }
 
+/** **The clock each model is normally run at**, and it has to agree with `noteRateFor`.
+
+	That function already divides by each chip's own divider - 144 for the OPN family, 64 for the
+	OPM, 72 for the OPL - but the core was started at the Mega Drive's clock whichever model it was.
+	A YM2608 rendered that way runs four percent slow: its f-numbers are written by a driver that
+	assumed 8 MHz, and the core resolves them against 7.67.
+
+	VRC7 is absent on purpose. It is not a libvgm device - the NSF side hands its own clock to its
+	own OPLL - so the fallback below is only ever the OPN2's.
+*/
+constexpr uint32_t clockFor (chips::ChipModel model)
+{
+	switch (model)
+	{
+	case chips::ChipModel::ym2608:
+	case chips::ChipModel::ym2610:	return 8000000;
+	case chips::ChipModel::ym2151:	return 3579545;
+	case chips::ChipModel::ym3812:	return 3579545;
+
+	case chips::ChipModel::ym2612:
+	case chips::ChipModel::vrc7:
+	case chips::ChipModel::unknown:	break;
+	}
+
+	return kClock;
+}
+
 } // namespace
 
 /** One core, alive across notes.
@@ -72,7 +99,7 @@ struct OpnVoiceDriver::Core
 		config.emuCore = 0;					// the default core: the one the plugin plays
 		config.srMode = DEVRI_SRMODE_CUSTOM;
 		config.flags = 0;
-		config.clock = kClock;
+		config.clock = clockFor (model);
 		config.smplRate = (uint32_t) std::lround (rate);
 
 		ready = SndEmu_Start (deviceIdFor (model), &config, &info) == EERR_OK;
@@ -174,19 +201,31 @@ void OpnVoiceDriver::noteOn (double hz)
 
 	// **The pitch.** The chip wants an f-number and a block; the block is chosen so the f-number
 	// lands inside its eleven bits, which is what a driver does with a note in any octave.
+	// **This chip's clock, not the Mega Drive's.** The f-number is a ratio against the core's own
+	// clock; burning 7.67 MHz into both sides made every model look like a YM2612, and a YM2608
+	// patch - whose f-numbers came from a driver assuming 8 MHz - played four percent flat.
+	const double clock = (double) clockFor (loadedModel);
+
+	// **144 for the OPN2, 288 for the OPNA/OPNB**, which is where the doubling hides. libvgm's
+	// OPNA core derives its frequency step from clock / 288 - the master clock halved before the
+	// prescaler - while `noteRateFor` reports clock / 144 as its output rate, because that core
+	// runs at twice the fundamental. Writing 144 here made every OPNA note an octave flat.
+	const double divisor = (loadedModel == chips::ChipModel::ym2608
+							|| loadedModel == chips::ChipModel::ym2610) ? 288.0 : 144.0;
+
 	int block = 4;
-	double fnum = hz * 144.0 * std::exp2 (20.0 - (double) block) / (double) kClock;
+	double fnum = hz * divisor * std::exp2 (20.0 - (double) block) / clock;
 
 	while (fnum >= 2048.0 && block < 7)
 	{
 		++block;
-		fnum = hz * 144.0 * std::exp2 (20.0 - (double) block) / (double) kClock;
+		fnum = hz * divisor * std::exp2 (20.0 - (double) block) / clock;
 	}
 
 	while (fnum < 1.0 && block > 0)
 	{
 		--block;
-		fnum = hz * 144.0 * std::exp2 (20.0 - (double) block) / (double) kClock;
+		fnum = hz * divisor * std::exp2 (20.0 - (double) block) / clock;
 	}
 
 	const auto fnumBits = (uint16_t) std::lround (std::clamp (fnum, 0.0, 2047.0));
