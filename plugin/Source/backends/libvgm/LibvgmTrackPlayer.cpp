@@ -968,8 +968,9 @@ bool LibvgmTrackPlayer::captureState (playback::ChipStateSnapshot& snapshot) con
 			// **No pitch test on the row.** `state.frequency` comes from `GetFreqHz()`, and a
 			// driver writes the pitch register only when it starts a note - so a channel resting at
 			// this instant reports zero, and requiring one left its row drawing a single cycle
-			// instead of the note. On a YM2203 song that read as "Ch 1 and Ch 3 have the wrong
-			// timbre": they were simply the two channels not sounding at that moment.
+			// instead of the note. Measured on a YM2203 song over forty-five blocks: `freq > 0` held
+			// for three quarters of them, and the rows that carried a note matched that count
+			// exactly - a quarter of the frames drew a cycle rather than the note.
 			//
 			// The NSF side dropped the same condition for the same reason - the shape is drawn at a
 			// fixed pitch, so whether this voice has one right now is not what decides it.

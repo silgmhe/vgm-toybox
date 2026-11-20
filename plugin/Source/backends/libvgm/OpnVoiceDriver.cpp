@@ -51,12 +51,22 @@ constexpr DEV_ID deviceIdFor (chips::ChipModel model)
 	return DEVID_YM2612;
 }
 
-/** **The clock each model is normally run at**, and it has to agree with `noteRateFor`.
+/** **The clock each model is normally run at**, so that this agrees with `noteRateFor`.
 
-	That function already divides by each chip's own divider - 144 for the OPN family, 64 for the
-	OPM, 72 for the OPL - but the core was started at the Mega Drive's clock whichever model it was.
-	A YM2608 rendered that way runs four percent slow: its f-numbers are written by a driver that
-	assumed 8 MHz, and the core resolves them against 7.67.
+	`noteRateFor` already divides by each chip's own divider - 144 for the OPN family, 64 for the
+	OPM, 72 for the OPL - while the core used to be started at the Mega Drive's clock whatever the
+	model named.
+
+	**That mismatch does not show in the pitch.** The clock scales both the f-number and the core's
+	own rate, so the two cancel: giving every model 7 670 453 Hz and re-running the pitch tests
+	leaves both of them passing. What it does reach is the things a core derives from its clock and
+	nothing else - the ADPCM playback rates on the OPNA and OPNB, the timers, the YM2612's DAC -
+	**and none of those has an assertion yet**.
+
+	So this corrects an inconsistency rather than a reported symptom. It is kept because a chip
+	claiming another chip's clock is the kind of thing that surfaces later as a sample playing at the
+	wrong speed, and because `noteRateFor` naming one number while this named another was already two
+	answers to one question.
 
 	VRC7 is absent on purpose. It is not a libvgm device - the NSF side hands its own clock to its
 	own OPLL - so the fallback below is only ever the OPN2's.
@@ -226,9 +236,10 @@ void OpnVoiceDriver::noteOn (double hz)
 
 	// **The pitch.** The chip wants an f-number and a block; the block is chosen so the f-number
 	// lands inside its eleven bits, which is what a driver does with a note in any octave.
-	// **This chip's clock, not the Mega Drive's.** The f-number is a ratio against the core's own
-	// clock; burning 7.67 MHz into both sides made every model look like a YM2612, and a YM2608
-	// patch - whose f-numbers came from a driver assuming 8 MHz - played four percent flat.
+	// **This chip's clock, not the Mega Drive's.** It cancels out of the pitch - the f-number and the
+	// core's own rate both scale with it - so this is not where a flat note would come from; the
+	// divisor below is. What it does carry is the rates and timers a core derives from its clock.
+	// See `clockFor` for what is measured and what is not.
 	const double clock = (double) clockFor (loadedModel);
 
 	// **144 for the OPN2, 288 for the OPNA/OPNB**, which is where the doubling hides. libvgm's
