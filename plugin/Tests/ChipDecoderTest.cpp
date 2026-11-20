@@ -6894,6 +6894,52 @@ void testWaveExport (void)
 			   "and every load counts - which is what a held note looks like from here");
 	}
 
+	/** **The sweep's silence lasts one frame, not the rest of the song.**
+
+		`clockSweep` used to write `pulse.muted = true` and nothing ever wrote `false`. The hardware
+		decides this every half frame: a sweep whose target period overflows 0x7FF silences the channel
+		*for that frame*, and the next frame re-evaluates. Sticky, one overflow early in a song removed
+		the channel from every note the extractor produced afterwards - which is how `01 Good Morning`'s
+		Square 1 lost its sound while the mixer and the keyboard page both still showed it.
+
+		Two claims, and the second is the one that matters: it goes silent, and it comes back.
+	*/
+	void testNesSweepSilenceIsPerFrame (void)
+	{
+		std::printf ("  the 2A03's sweep silences one frame at a time\n");
+
+		using toybox::chips::ChipConfig;
+		using toybox::chips::NesApuDecoder;
+		using toybox::chips::RegisterWrite;
+
+		NesApuDecoder decoder;
+		decoder.reset (ChipConfig { 1789773, 44100.0 });
+
+		const auto write = [&decoder] (uint8_t reg, uint8_t value)
+		{
+			decoder.write (RegisterWrite { 0, reg, value, 0, 0 });
+		};
+
+		write (0x00, 0x3F);		// duty 2, length halt, constant volume 15
+		write (0x01, 0x81);		// sweep on, divider period 0, shift 1
+		write (0x02, 0xF8);		// timer low
+		write (0x03, 0x07);		// timer high 7 -> 0x7F8, and the length load
+
+		// 0x7F8 + (0x7F8 >> 1) = 0xBF4, past the 11-bit range: the hardware mutes the channel.
+		check (decoder.channelState (0).gate, "the pulse sounds until the sweep runs");
+
+		// Two frame-sequencer steps; the second one is a half frame, which clocks the sweep.
+		decoder.advance (400);
+		check (! decoder.channelState (0).gate, "a sweep that overflows silences the channel");
+
+		// **Turning the sweep off brings it back on the next frame.** Without this line the flag
+		// could be sticky again and everything above would still pass.
+		write (0x01, 0x00);
+		decoder.advance (800);
+		check (decoder.channelState (0).gate,
+			   "and clearing the sweep brings it back - the flag describes this frame");
+	}
+
 	/** Which part of a recorded sample a row draws.
 
 		A sample's sounding part is not always at its start: a C140 voice's address is where the
@@ -8096,6 +8142,7 @@ int main (void){
 	testNesDpcmSampleIdentity();
 	testNesNoisePitch();
 	testNesPulseHitCount();
+	testNesSweepSilenceIsPerFrame();
 	testChannelFromChip();
 
 	std::printf ("Result    : %s\n", failures == 0 ? "PASS" : "FAILURES");

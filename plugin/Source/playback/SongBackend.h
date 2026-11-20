@@ -301,10 +301,20 @@ public:
 		created later already carry them (live players are updated by ITrackPlayer::setTimeline). */
 	virtual void setTimeline (int loopCount, double fadeSeconds) = 0;
 
-	/** Creates one player, prepared for the host and with the song loaded. Returns nullptr and
-		fills errorMessage when the song cannot be loaded. Called once per track in multiInstance
-		mode, once otherwise. */
-	virtual std::unique_ptr<ITrackPlayer> createPlayer (juce::String& errorMessage) = 0;
+	/** **One player for `trackIndex`.** Prepared for the host and with the song loaded.
+
+		Returns nullptr - and fills `errorMessage` - only when the song cannot be loaded.
+
+		**Never null for a track that merely has nothing to play.** A backend can tell from the song
+		data that a track carries no events at all, and an emulation built for it would cost a chip's
+		full private state, a sample ROM included, to produce silence. Such a track gets a
+		`SilentTrackPlayer` instead of an emulation: the row stays, the cost does not, and - the part
+		that matters - every caller keeps the assumption that a player is always there. Returning
+		null for these moved "does this track have a player" into every place that walks the list.
+
+		Called once per track in multiInstance mode, once otherwise.
+	*/
+	virtual std::unique_ptr<ITrackPlayer> createPlayer (int trackIndex, juce::String& errorMessage) = 0;
 };
 
 /** A format backend: recognises a song image and opens it. */

@@ -199,6 +199,42 @@ void NsfPlayer::start (void)
 	resetToStart ();
 }
 
+double NsfPlayer::prepareBlock (int frames)
+{
+	pollScan (frames);
+
+	return (file.isPal () ? kPalClock : kNtscClock) / rate;
+}
+
+void NsfPlayer::pollScan (int frames)
+{
+	// The scan is published by a thread that tells nobody, so this looks again on its own clock -
+	// every 4096 samples, about 93 ms. Not while scanning: that pass is trying to produce the very
+	// thing being waited for, and looking from inside it would only take the handle's lock between
+	// its own writes.
+	//
+	// "Crossed a poll boundary during this block" rather than a modulo on where the block starts:
+	// the same condition, said so that a reader does not have to convince themselves the interval
+	// is larger than a block for it to work.
+	if (! analysing.load (std::memory_order_relaxed) || scanning.load (std::memory_order_relaxed))
+	{
+		return;
+	}
+
+	const auto pollBoundary = rendered / kScanPollIntervalSamples;
+	const auto nextBoundary = (rendered + (uint64_t) frames) / kScanPollIntervalSamples;
+
+	if (pollBoundary == nextBoundary)
+	{
+		return;
+	}
+
+	if (auto scan = scanHandle != nullptr ? scanHandle->snapshot () : nullptr)
+	{
+		applyScan (std::move (scan));
+	}
+}
+
 void NsfPlayer::applyScan (std::shared_ptr<const ScanResult> scan)
 {
 	if (scan == nullptr)
@@ -716,28 +752,7 @@ int NsfPlayer::render (float* left, float* right, int frames)
 		return 0;
 	}
 
-	// The scan is published by a thread that tells nobody, so this looks again on its own clock -
-	// every 4096 samples, about 93 ms. Without it the DPCM row would say "analysing" until the
-	// song was reopened, because the only other place that checks runs from start().
-	// Not while scanning: that pass is trying to produce the very thing being waited for, and
-	// looking from inside it would only take the handle's lock between its own writes.
-	// "Crossed a poll boundary during this block" rather than a modulo on where the block starts:
-	// the same condition, said so that a reader does not have to convince themselves the interval
-	// is larger than a block for it to work.
-	const auto pollBoundary = rendered / kScanPollIntervalSamples;
-	const auto nextBoundary = (rendered + (uint64_t) frames) / kScanPollIntervalSamples;
-
-	if (analysing.load (std::memory_order_relaxed) && ! scanning.load (std::memory_order_relaxed)
-		&& pollBoundary != nextBoundary)
-	{
-		if (auto scan = scanHandle != nullptr ? scanHandle->snapshot () : nullptr)
-		{
-			applyScan (std::move (scan));
-		}
-	}
-
-
-	const double clocksPerSample = (file.isPal () ? kPalClock : kNtscClock) / rate;
+	const double clocksPerSample = prepareBlock (frames);
 
 	for (int i = 0; i < frames; ++i)
 	{
@@ -1469,6 +1484,32 @@ void NsfPlayer::setOutputGain (float linear)
 	outputGain = linear > 0.0f ? linear : 0.0f;
 }
 
+void NsfPlayer::setNonlinearMixer (bool enabled) const
+{
+	// **Unchanged means no call.** DMC's setter rebuilds its mixing table, which allocates, and
+	// this is reached from `captureState` - once per block, on the audio thread. Rebuilding that
+	// table sixty times a second for a value nobody changed is exactly the kind of work the
+	// waveform path was already fixed for.
+	if (enabled == nonlinearMixer)
+	{
+		return;
+	}
+
+	nonlinearMixer = enabled;
+
+	// Both chips own half of the mix: the APU adds the two pulses, the DMC adds the triangle,
+	// noise and DPCM. Setting one and not the other would split the mix across two rules.
+	if (apu != nullptr)
+	{
+		apu->SetOption (xgm::NES_APU::OPT_NONLINEAR_MIXER, enabled ? 1 : 0);
+	}
+
+	if (dmc != nullptr)
+	{
+		dmc->SetOption (xgm::NES_DMC::OPT_NONLINEAR_MIXER, enabled ? 1 : 0);
+	}
+}
+
 void NsfPlayer::setSilent (bool value)
 {
 	silent = value;
@@ -1569,7 +1610,9 @@ int NsfPlayer::renderChannels (float* const* dest, int channelCount, int frames)
 		return 0;
 	}
 
-	const double clocksPerSample = (file.isPal () ? kPalClock : kNtscClock) / rate;
+	// The same prefix `render()` uses - see `prepareBlock`, which exists because this entry point
+	// once forgot to poll for the scan and left the DPCM row saying "analysing" until a restart.
+	const double clocksPerSample = prepareBlock (frames);
 	const int usable = (std::min) (channelCount, 5);	// the two 2A03 objects, for now
 
 	for (int i = 0; i < frames; ++i)
@@ -1614,9 +1657,9 @@ int NsfPlayer::renderChannels (float* const* dest, int channelCount, int frames)
 			dest[2 + c][2 * i + 1] = (float) tnd[c * 2 + 1] / 32768.0f * outputGain;
 		}
 
-		// The expansion's channels, in the order the track list uses. FME7 has no RenderChannels
-		// yet, so a song that declares one keeps its 2A03 tracks and leaves the rest silent here -
-		// which is why those songs still take the one-player-per-track path in the backend.
+		// The expansion's channels, in the order the track list uses: VRC6, N163, VRC7, MMC5, FME7.
+		// Every one of them has `RenderChannels`; the comment here used to say FME7 did not, and
+		// that sentence outlived the code by one line.
 		int32_t expansion[16] = {};
 
 		if (vrc6) { vrc6->RenderChannels (expansion, 2, 3); }

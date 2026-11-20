@@ -835,7 +835,7 @@ void PlaybackEngine::setSourceGain (float linear)
 
 	for (auto& player : trackPlayers)
 	{
-		if (player != nullptr) { player->setOutputGain (sourceGain.load ()); }
+		player->setOutputGain (sourceGain.load ());
 	}
 }
 
@@ -1214,7 +1214,11 @@ PlaybackEngine::LoadedSong PlaybackEngine::buildSong (const BuildConfig& config,
 
 	for (size_t i = 0; i < playersWanted; ++i)
 	{
-		auto player = pending.song->createPlayer (errorMessage);
+		auto player = pending.song->createPlayer ((int) i, errorMessage);
+
+		// **Null now means one thing only: the load failed.** A track with nothing to play gets a
+		// `SilentTrackPlayer` from the backend instead, so every entry in this list is a real
+		// object and no caller has to ask whether one exists.
 		if (player == nullptr)
 		{
 			pending.players.clear();
@@ -1230,6 +1234,7 @@ PlaybackEngine::LoadedSong PlaybackEngine::buildSong (const BuildConfig& config,
 	{
 		applyTrackIsolationTo (config.mixerEnabled, pending.layout, pending.players);
 	}
+
 	applyChipMutesTo (pending.chips, pending.players);
 
 	return pending;
@@ -1252,7 +1257,7 @@ void PlaybackEngine::installSong (LoadedSong&& built)
 
 	for (auto& player : trackPlayers)
 	{
-		if (player != nullptr) { player->setOutputGain (sourceGain.load ()); }
+		player->setOutputGain (sourceGain.load ());
 	}
 	trackLayout = std::move (built.layout);
 	tracks = std::move (built.tracks);
@@ -1669,7 +1674,7 @@ void PlaybackEngine::render (const playback::OutputBusBuffers* buses, int numBus
 		// `LibvgmTrackPlayer::pendingHits` and docs/memo/2026-11-01-visualisation-traps.md.
 		std::unique_lock<std::mutex> guard (stateMutex, std::try_to_lock);
 
-		if (guard.owns_lock () && ! trackPlayers.empty () && trackPlayers[0] != nullptr)
+		if (guard.owns_lock () && ! trackPlayers.empty ())
 		{
 			trackPlayers[0]->captureState (stateSnapshot);
 		}
@@ -2354,7 +2359,7 @@ std::shared_ptr<const std::vector<float>> PlaybackEngine::renderNoteAt (int trac
 
 	const auto* player = trackPlayers[(size_t) trackIndex].get ();
 
-	return player != nullptr ? player->renderNoteAt (trackIndex, hz) : nullptr;
+	return player->renderNoteAt (trackIndex, hz);
 }
 
 int PlaybackEngine::readScope (float* dest, int maxSamples) const

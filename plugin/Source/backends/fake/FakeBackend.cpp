@@ -179,7 +179,8 @@ namespace
 
 		void setTimeline (int /*loopCount*/, double /*fadeSeconds*/) override {}
 
-		std::unique_ptr<playback::ITrackPlayer> createPlayer (juce::String& /*errorMessage*/) override
+		std::unique_ptr<playback::ITrackPlayer> createPlayer (int /*trackIndex*/,
+															 juce::String& /*errorMessage*/) override
 		{
 			return std::make_unique<FakeTrackPlayer> (sampleRate, playerIndex++);
 		}

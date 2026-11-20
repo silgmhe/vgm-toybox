@@ -152,6 +152,11 @@ namespace
 		juce::String getUniqueName (void) const override { return "settings.category." + id; }
 		int getPageIndex (void) const { return page; }
 
+		/** The id this row was registered under, which is the one `settings/<id>` in a test script
+			reaches for. A `TreeViewItem` is not a Component, so there is no component id to click -
+			this is what takes its place. */
+		const juce::String& getItemId (void) const { return id; }
+
 		void setLabel (const juce::String& newName)
 		{
 			name = newName;
@@ -738,6 +743,20 @@ NesSettingsPage::NesSettingsPage (void)
 	};
 	addAndMakeVisible (gainSlider);
 
+	mixerSwitch.setComponentID ("settings.nes.nonlinearMixer");
+	mixerSwitch.onClick = [this]
+	{
+		toybox::settings::SettingsStore::getInstance ()
+			.setNsfNonlinearMixer (mixerSwitch.getToggleState ());
+		refresh ();
+	};
+	addAndMakeVisible (mixerSwitch);
+
+	mixerHint.setFont (juce::Font (juce::FontOptions (12.5f)));
+	mixerHint.setJustificationType (juce::Justification::topLeft);
+	mixerHint.setMinimumHorizontalScale (1.0f);
+	addAndMakeVisible (mixerHint);
+
 	hint.setFont (juce::Font (juce::FontOptions (12.5f)));
 	hint.setJustificationType (juce::Justification::topLeft);
 	hint.setMinimumHorizontalScale (1.0f);
@@ -753,6 +772,8 @@ void NesSettingsPage::refreshLanguage (void)
 	gainCaption.setText (i18n::tr ("settings.nes.outputGain"), juce::dontSendNotification);
 	gainSlider.setTextValueSuffix (" dB");
 	secondsSlider.setTextValueSuffix (" " + i18n::tr ("settings.nes.seconds"));
+	mixerSwitch.setButtonText (i18n::tr ("settings.nes.nonlinearMixer"));
+	mixerHint.setText (i18n::tr ("settings.nes.nonlinearMixerHint"), juce::dontSendNotification);
 	hint.setText (i18n::tr ("settings.nes.durationHint"), juce::dontSendNotification);
 	refresh ();
 	repaint ();
@@ -763,7 +784,9 @@ void NesSettingsPage::refresh (void)
 	secondsSlider.setValue ((double) toybox::settings::SettingsStore::getInstance ()
 								.getNsfDurationSeconds (), juce::dontSendNotification);
 	gainSlider.setValue ((double) toybox::settings::SettingsStore::getInstance ()
-							 .getNsfOutputGainDb (), juce::dontSendNotification);
+						 .getNsfOutputGainDb (), juce::dontSendNotification);
+	mixerSwitch.setToggleState (toybox::settings::SettingsStore::getInstance ()
+									.getNsfNonlinearMixer (), juce::dontSendNotification);
 }
 
 void NesSettingsPage::paint (juce::Graphics& g)
@@ -789,11 +812,91 @@ void NesSettingsPage::resized (void)
 	auto gainRow = area.removeFromTop (kFooterHeight);
 	gainSlider.setBounds (gainRow.removeFromLeft (juce::jmin (300, gainRow.getWidth ())));
 
-	area.removeFromTop (6);
+	area.removeFromTop (14);
+	mixerSwitch.setBounds (area.removeFromTop (24));
+	area.removeFromTop (4);
+
+	// **Measured rather than budgeted** - the same lesson the MIDI page's hint records. A fixed
+	// height that fits the English text squeezes the Chinese one, and a squeezed Label draws its
+	// text smaller rather than admitting it did not fit.
+	mixerHint.setBounds (area.removeFromTop (
+		juce::jmax (18, wrappedHeight (mixerHint.getText (), mixerHint.getFont (), area.getWidth ()))));
+
+	area.removeFromTop (8);
 	hint.setBounds (area.removeFromTop (72));
 }
 
 void NesSettingsPage::lookAndFeelChanged (void)
+{
+	repaint ();
+}
+
+//==============================================================================
+// VGM
+
+VgmSettingsPage::VgmSettingsPage (void)
+{
+	skipSwitch.setComponentID ("settings.vgm.skipSilentTracks");
+	skipSwitch.onClick = [this]
+	{
+		toybox::settings::SettingsStore::getInstance ()
+			.setVgmSkipSilentTracks (skipSwitch.getToggleState ());
+		refresh ();
+
+		// The backend reads this while it creates players, so the answer only reaches the song
+		// that is already open by loading it again.
+		if (onSkipSilentTracksChanged != nullptr)
+		{
+			onSkipSilentTracksChanged ();
+		}
+	};
+	addAndMakeVisible (skipSwitch);
+
+	skipHint.setFont (juce::Font (juce::FontOptions (12.5f)));
+	skipHint.setJustificationType (juce::Justification::topLeft);
+	skipHint.setMinimumHorizontalScale (1.0f);
+	addAndMakeVisible (skipHint);
+
+	refreshLanguage ();
+	lookAndFeelChanged ();
+}
+
+void VgmSettingsPage::refreshLanguage (void)
+{
+	skipSwitch.setButtonText (i18n::tr ("settings.vgm.skipSilentTracks"));
+	skipHint.setText (i18n::tr ("settings.vgm.skipSilentTracksHint"), juce::dontSendNotification);
+	refresh ();
+	repaint ();
+}
+
+void VgmSettingsPage::refresh (void)
+{
+	skipSwitch.setToggleState (toybox::settings::SettingsStore::getInstance ()
+									.getVgmSkipSilentTracks (), juce::dontSendNotification);
+}
+
+void VgmSettingsPage::paint (juce::Graphics& g)
+{
+	paintHeading (g, i18n::tr ("settings.vgm"), i18n::tr ("settings.vgm.explanation"),
+				  getLocalBounds(), kTwoLineHeadingHeight, 2);
+}
+
+void VgmSettingsPage::resized (void)
+{
+	auto area = pageContent (getLocalBounds(), kTwoLineHeadingHeight);
+
+	skipSwitch.setBounds (area.removeFromTop (24));
+	area.removeFromTop (6);
+
+	// **Measured rather than budgeted.** 160 was this hint's budget, and the screenshot showed what
+	// a budget does: the English text fitted in eight lines, and the Chinese - the same paragraph in
+	// a script with fewer glyphs per line - was drawn smaller so that its longer run of lines would
+	// still fit. A Label that cannot fit shrinks its text instead of saying so.
+	skipHint.setBounds (area.removeFromTop (
+		juce::jmax (18, wrappedHeight (skipHint.getText (), skipHint.getFont (), area.getWidth ()))));
+}
+
+void VgmSettingsPage::lookAndFeelChanged (void)
 {
 	repaint ();
 }
@@ -1857,6 +1960,7 @@ namespace
 		{ "language",   "settings.language",   &makePage<LanguageSettingsPage>,   false },
 		{ "midi",       "settings.midi",       &makePage<MidiSettingsPage>,       false },
 		{ "nes",        "settings.nes",        &makePage<NesSettingsPage>,        false },
+		{ "vgm",        "settings.vgm",        &makePage<VgmSettingsPage>,        false },
 		{ "keyboard",   "settings.keyboard",   &makePage<KeyboardSettingsPage>,   false },
 		{ "fm", "settings.fm", &makePage<FmSettingsPage>, false },
 		{ "export",     "settings.export",     &makePage<ExportSettingsPage>,     false },
@@ -1921,6 +2025,17 @@ SettingsOverlay::SettingsOverlay (void)
 			};
 		}
 
+		if (auto* vgm = dynamic_cast<VgmSettingsPage*> (view.get ()))
+		{
+			vgm->onSkipSilentTracksChanged = [this]
+			{
+				if (onSkipSilentTracksChanged != nullptr)
+				{
+					onSkipSilentTracksChanged();
+				}
+			};
+		}
+
 		// The handover, at one visible point: before this line the local owns it, after it the
 		// stack does. There is no moment in between when it belongs to nobody.
 		pages.addView (view.release ());
@@ -1967,6 +2082,31 @@ void SettingsOverlay::refreshLanguage (void)
 
 	pages.refreshLanguage();
 	repaint();
+}
+
+bool SettingsOverlay::showPage (const juce::String& pageId)
+{
+	auto* root = dynamic_cast<CategoryItem*> (rootItem.get ());
+
+	if (root == nullptr)
+	{
+		return false;
+	}
+
+	for (int i = 0; i < root->getNumSubItems (); ++i)
+	{
+		auto* row = dynamic_cast<CategoryItem*> (root->getSubItem (i));
+
+		if (row != nullptr && row->getItemId () == pageId)
+		{
+			// Through the stack rather than the tree: `page` is the index the row was given when
+			// its page was added, and the stack is what owns them.
+			pages.setCurrentView (row->getPageIndex ());
+			return true;
+		}
+	}
+
+	return false;
 }
 
 void SettingsOverlay::refreshFromStore (void)

@@ -1,5 +1,10 @@
 #include "LibvgmSongInstance.h"
 
+#include "playback/SilentTrackPlayer.h"
+
+#include "settings/SettingsDefaults.h"
+#include "settings/SettingsStore.h"
+
 #include "X1010Samples.h"
 #include "C140Samples.h"
 #include "C352Samples.h"
@@ -220,6 +225,30 @@ bool LibvgmSongInstance::prepare (double hostSampleRate, int newMaxBlockSize, ju
 		for (auto& track : tracks)
 		{
 			track.midiCapability = playback::MidiCapability::unavailable;
+		}
+	}
+	else
+	{
+		// **Which tracks the song writes to, decided from the parsed stream.**
+		//
+		// A track that never appears in it never plays, so nothing is built for it - and on a song
+		// with eighty channels of which three sound, that is the difference between eighty
+		// emulations and three. The row stays in the mixer; only the player behind it is skipped.
+		//
+		// **This judges a track by whether the decoder produced any note for it**, which is only as
+		// trustworthy as the decoders are. It was wrong once: `NesApuDecoder` left a pulse channel
+		// marked muted after a single sweep overflow, so `01 Good Morning`'s Square 1 sounded while
+		// producing no events, and the track was replaced with silence. That decoder is fixed. A
+		// future chip with the same kind of sticky state would fail the same way - if a song is ever
+		// seen with an empty row that should play, this is the first place to look.
+		trackProducedEvents.assign (tracks.size (), false);
+
+		for (const auto& event : midiSequence->events)
+		{
+			if (event.sourceTrack < trackProducedEvents.size ())
+			{
+				trackProducedEvents[(size_t) event.sourceTrack] = true;
+			}
 		}
 	}
 	// The samples this song starts, taken from the same bytes the players load. A VGM says what it
@@ -724,8 +753,35 @@ playback::BackendCapabilities LibvgmSongInstance::getCapabilities (void) const
 	return caps;
 }
 
-std::unique_ptr<playback::ITrackPlayer> LibvgmSongInstance::createPlayer (juce::String& errorMessage)
+std::unique_ptr<playback::ITrackPlayer> LibvgmSongInstance::createPlayer (int trackIndex,
+																		 juce::String& errorMessage)
 {
+	// **A track the song never writes to gets no player.** Null with an empty message is the
+	// "nothing to play" answer - see `ISongInstance::createPlayer`. The row stays, so the mixer
+	// still lists it and its controls still work; what is skipped is a whole emulation, every
+	// chip's private state and its sample ROM, spent on producing silence.
+	//
+	// **Except the first one.** `PlaybackEngine` reads `trackPlayers[0]` as the song's aggregate -
+	// that player is what `captureState` asks for every channel's register state, which is how the
+	// keyboard page shows eighty rows while the mixer plays three. Skipping it would leave the
+	// display with no source at all, so track zero is built whatever it contains.
+	//
+	// **A silent track still gets a player.** Returning null would move "does this track have a
+	// player" into every caller, and those checks get found one crash at a time - see
+	// `SilentTrackPlayer` for the alternative that was chosen instead.
+	//
+	// **The decision is the user's to overrule.** This reads the note list, and a note list is a
+	// guess: a channel holding one pitch produces no events while it plays. That guess was wrong
+	// once and cost a track its sound with nothing on screen to say why, so the settings page can
+	// turn it off - and then every declared channel gets an emulation, at the cost this exists to
+	// avoid. Read here rather than baked in at load so the switch is applied by the next load.
+	if (trackIndex > 0 && settings::SettingsStore::getInstance ().getVgmSkipSilentTracks ()
+		&& (size_t) trackIndex < trackProducedEvents.size ()
+		&& ! trackProducedEvents[(size_t) trackIndex])
+	{
+		return std::make_unique<playback::SilentTrackPlayer> ();
+	}
+
 	auto player = std::make_unique<LibvgmTrackPlayer>();
 	player->prepare (sampleRate, maxBlockSize);
 

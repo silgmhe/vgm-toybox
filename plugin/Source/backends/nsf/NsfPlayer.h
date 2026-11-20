@@ -217,6 +217,23 @@ public:
 		VGM of the same music. The default is the +8 dB the settings page offers. */
 	void setOutputGain (float linear);
 
+	/** **Whether the channels are added through the hardware's curve or summed flat.**
+
+		The two chips that own a mixer - the APU for the two pulses, the DMC for the triangle, noise
+		and DPCM - each carry the option, so both are set here rather than leaving half the mix on
+		the other path.
+
+		**Only applied when the value changes.** DMC's setter recomputes its mixing table - 65536
+		entries of `tnd_table`, a floating-point divide each - and this is reached from
+		`captureState`, which runs once per block on the audio thread. Re-applying an unchanged value
+		would spend that in every block for nothing; the one block that does change it costs about a
+		millisecond, which is the trade for not needing a reload. See `settings::nsf::nonlinearMixer`.
+
+		`const` because it is called from `captureState`: the chips it writes to live behind
+		pointers, so the player's own shape is not what changes.
+	*/
+	void setNonlinearMixer (bool enabled) const;
+
 	/** True when the file declared an expansion chip and one was created. */
 	bool hasExpansion (void) const;
 
@@ -314,6 +331,26 @@ private:
 		this runs on the audio thread. */
 	void applyScan (std::shared_ptr<const ScanResult> scan);
 
+	/** **Looks for the scan's result, at most every `kScanPollIntervalSamples`.**
+
+		Called from the top of both render entry points. It used to live inside `render()` alone,
+		which was correct while every song mixed through one player - and stopped being correct when
+		`inPlaceChannelMix` made `renderChannels()` the only entry point that runs. The DPCM row
+		then said "analysing" for as long as the song played, and only a restart cleared it, because
+		`start()` is the other place that looks.
+	*/
+	void pollScan (int frames);
+
+	/** **What both render entry points do before their loop**, returning the clocks one sample of
+		this block is worth.
+
+		One function rather than two copies, because that is exactly how the poll above went missing
+		once: `renderChannels()` was added as a second entry point and did not know it had to poll,
+		so the DPCM row said "analysing" until the song was restarted. A third entry point should
+		call this, or not exist.
+	*/
+	double prepareBlock (int frames);
+
 	void resetToStart (void);
 	void scanSampleChannels (double seconds);
 	void observeDpcmSample (void);
@@ -333,6 +370,13 @@ private:
 	int soloTrack = -1;
 	bool silent = false;
 	float outputGain = 2.5119f;			// +8 dB
+
+	/** **The chips' own state, not the user's preference.** Both cores start with non-linear mixing
+		on, so this starts true as well - it is here to know when a call would be a no-op, and a
+		`false` initial value would make the first `setNonlinearMixer(false)` return early and leave
+		the chips on the curve. The preference is applied in `setNonlinearMixer`; see
+		`settings::nsf::nonlinearMixer` for what it defaults to and why. */
+	mutable bool nonlinearMixer = true;
 
 	const formats::nsf::NsfFile& file;
 	double rate = 44100.0;

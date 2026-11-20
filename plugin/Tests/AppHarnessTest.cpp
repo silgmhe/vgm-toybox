@@ -377,6 +377,7 @@ private:
 	else if (command == "samples") { commandSamples (tokens); }
 	else if (command == "sample-names") { commandSampleNames (tokens); }
 		else if (command == "tick") { commandTick (); }
+		else if (command == "settings") { commandSettings (tokens); }
 		else if (command == "shot") { commandShot (tokens); }
 		else if (command == "size") { commandSize (tokens); }
 		else if (command == "sleep") { commandSleep (tokens); }
@@ -911,6 +912,20 @@ private:
 		report (true, "engine " + action);
 	}
 
+	/** **Brings a settings page up by name**, so a script can photograph it. The sidebar's rows are
+		`TreeViewItem`s rather than Components, so there is no component id to click - `settings vgm`
+		is the seam that replaces the click. A false report means no page carries that id. */
+	void commandSettings (const juce::StringArray& tokens)
+	{
+		if (tokens.size() < 2)
+		{
+			report (false, "settings needs a page id");
+			return;
+		}
+
+		report (editor.showSettingsPage (tokens[1]), "settings page " + tokens[1]);
+	}
+
 	void commandShot (const juce::StringArray& tokens)
 	{
 		if (tokens.size() < 2)
@@ -1146,6 +1161,7 @@ private:
 	static void printHelp (void)
 	{
 		std::printf ("    load <path> | press <key> [unhandled] | click <id> | toggle <id> | set <id> <value>\n");
+		std::printf ("    settings <pageId>                 open Settings on that page, for a shot\n");
 		std::printf ("    unhandled: the key must leave the editor (it is the host's)\n");
 		std::printf ("    menu | menu invoke <entryId> | tick | shot <path.png> | size <w> <h>\n");
 		std::printf ("    host <seconds> [playing|stopped]   one process block with that host clock\n");

@@ -513,7 +513,14 @@ void NesApuDecoder::clockSweep (Pulse& pulse)
 {
 	Sweep& sweep = pulse.sweep;
 
-	if (sweep.divider == 0 && sweep.enabled && sweep.shift > 0 && ! pulse.muted)
+	// **Cleared every frame, because the hardware decides every frame.** This flag used to be set
+	// and never reset, so one sweep overflow - or one moment of a period under 8 - silenced the
+	// channel for the rest of the song. On `01 Good Morning` that removed Square 1 from the event
+	// stream entirely while the chip kept playing it, and the mixer's empty row was read as a bug
+	// in the mixer.
+	pulse.muted = false;
+
+	if (sweep.divider == 0 && sweep.enabled && sweep.shift > 0)
 	{
 		const int change = pulse.timerPeriod >> sweep.shift;
 		const int target = sweep.negate ? pulse.timerPeriod - change : pulse.timerPeriod + change;

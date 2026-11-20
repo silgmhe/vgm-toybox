@@ -118,22 +118,22 @@ void paintChannelRow (juce::Graphics& g,
 	paintToggle (g, row.solo, "S", soloed, false, hover.solo);
 
 	// The note, or a dash when the channel has no pitch to speak of.
-	if (channel.analysing)
-	{
-		// The row is playing and its shape is drawn from the registers, but its note is a sample
-		// slot and a slot means nothing until the walk over the song has numbered them. Saying so
-		// is better than a note that changes under the reader a second later.
-		g.setColour (theme::secondaryText ());
-		g.setFont (juce::Font (juce::FontOptions (11.0f)));
-		g.drawText (i18n::tr ("visualiser.analysing"), row.note, juce::Justification::centred, false);
-	}
-	else
-	{
-		g.setColour (channel.note >= 0 ? theme::primaryText () : theme::secondaryText ());
-		g.setFont (juce::Font (juce::FontOptions (12.5f, juce::Font::bold)));
-		g.drawText (midiNoteName (channel.note, octaveShift), row.note,
-					juce::Justification::centred, false);
-	}
+	//
+	// **Drawn while the walk is still running, in the quiet colour.** A DPCM note is named after the
+	// sample slot the scan assigns it, and that number does not exist until the walk over the song
+	// finishes - which is tens of seconds on a five-minute song, because it executes the driver for
+	// the whole length. This cell used to say "analysing" for that entire time, and a row holding
+	// one word for half a minute reads as stuck rather than busy.
+	//
+	// What the row does have before the scan lands is the sample's own pitch, taken from the
+	// address and rate it was started at. That is not a guess: it is the frequency the bytes are
+	// read at. Only the *name* is provisional - the slot - so the note is drawn in the secondary
+	// colour until the numbering arrives, and switches to the primary one after.
+	g.setColour (channel.note >= 0 && ! channel.analysing ? theme::primaryText ()
+														  : theme::secondaryText ());
+	g.setFont (juce::Font (juce::FontOptions (12.5f, juce::Font::bold)));
+	g.drawText (midiNoteName (channel.note, octaveShift), row.note,
+				juce::Justification::centred, false);
 
 	paintWave (g, row.wave, channel, cache.wave, waveHovered);
 

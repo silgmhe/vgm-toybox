@@ -206,7 +206,11 @@ ToyboxAudioProcessorEditor::ToyboxAudioProcessorEditor (ToyboxAudioProcessor& p)
 	settingsOverlay.onClose = [this] { settingsOverlay.setVisible (false); };
 	// The sample-root switch changes the note numbers, so it needs the song loaded again; doing that
 	// here keeps the settings page free of any knowledge of the engine.
-	settingsOverlay.onSampleRootChanged = [this] { reloadForPitchChange(); };
+	settingsOverlay.onSampleRootChanged = [this] { reloadCurrentSong(); };
+	// Same reload, different setting: whether a silent track gets an emulation is decided while
+	// players are created, so the song that is open has to be built again for the switch to reach
+	// it. The reload keeps the position, so the switch costs nothing but a moment.
+	settingsOverlay.onSkipSilentTracksChanged = [this] { reloadCurrentSong(); };
 
 	updateStatusLine();
 
@@ -806,10 +810,12 @@ void ToyboxAudioProcessorEditor::loadFile (const juce::File& file, bool startPla
 	}, startPlaying);
 }
 
-void ToyboxAudioProcessorEditor::reloadForPitchChange (void)
+void ToyboxAudioProcessorEditor::reloadCurrentSong (void)
 {
-	// The switch decides whether a sampled note carries its measured root, and that decision is
-	// baked into the note numbers when the sequence is built - there is nothing to re-send.
+	// **Two settings arrive here, for the same reason: neither can be re-sent to a running song.**
+	// The sample-root switch decides whether a sampled note carries its measured root, and that is
+	// baked into the note numbers when the sequence is built. The VGM page's skip switch decides
+	// which tracks get an emulation, and that is decided while the players are created.
 	//
 	// **Rebuilt from the image already in memory**, not by reading the file again: the file may have
 	// been dropped from a temporary folder, or moved, and turning the switch *off* used to do nothing
@@ -906,7 +912,17 @@ void ToyboxAudioProcessorEditor::showSettings (void)
 	settingsOverlay.setVisible (true);
 	settingsOverlay.toFront (false);
 	settingsOverlay.grabKeyboardFocus();	// so escape works without clicking first
-}
+	}
+
+	bool ToyboxAudioProcessorEditor::showSettingsPage (const juce::String& pageId)
+	{
+		// `showSettings` brings the panel up on whichever page was last used; the caller asked for a
+		// particular one, so the page is chosen afterwards. `refreshFromStore` runs inside it and
+		// does not move the stack, so this order is what makes the request win.
+		showSettings ();
+
+		return settingsOverlay.showPage (pageId);
+	}
 
 void ToyboxAudioProcessorEditor::openStartupSong (void)
 {

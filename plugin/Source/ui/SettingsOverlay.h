@@ -11,6 +11,34 @@ namespace toybox::ui
 {
 
 /**
+	**A label that wraps at its width and keeps the font it was given.**
+
+	`juce::Label` draws through `drawFittedText`, which shrinks the type to fit whatever height the
+	layout allowed - so a hint long enough to need eight lines came out visibly smaller than the text
+	above it, and the screenshot showed it. This lays the same string out with `TextLayout`, which
+	wraps and never scales; the height it wants is `wrappedHeight()` of the same string, which is why
+	the two belong together.
+
+	Used by the pages whose explanation is a paragraph rather than a sentence.
+*/
+class WrappedLabel : public juce::Label
+{
+public:
+	void paint (juce::Graphics& g) override
+	{
+		juce::AttributedString block;
+		block.setFont (getFont ());
+		block.setJustification (getJustificationType ());
+		block.setColour (findColour (juce::Label::textColourId));
+		block.append (getText ());
+
+		juce::TextLayout layout;
+		layout.createLayout (block, (float) juce::jmax (1, getWidth ()));
+		layout.draw (g, getLocalBounds ().toFloat ());
+	}
+};
+
+/**
 	The Appearance page: the palette and the typeface the whole application draws with.
 
 	Light and Dark are two views of one stored value, and the store is the value - so this page,
@@ -261,7 +289,42 @@ private:
 	juce::Slider secondsSlider;
 	juce::Label gainCaption;
 	juce::Slider gainSlider;
+	juce::ToggleButton mixerSwitch;
+	WrappedLabel mixerHint;
 	juce::Label hint;
+};
+
+/**
+	What the libvgm backend does with a channel the song never writes to.
+
+	A page rather than a row on General because the switch is about memory, and the memory is only
+	saved by a guess: the backend reads the song's note list at load time and gives no emulation to
+	a track that never appears in it. A note list is not a write log, so the guess can be wrong -
+	and when it was, a track went silent with the mixer and the keyboard page both still showing it.
+	This page exists so that a user who meets the same thing can stop it themselves.
+*/
+class VgmSettingsPage : public View
+{
+public:
+	VgmSettingsPage (void);
+
+	juce::String getViewId (void) const override { return "settings-vgm"; }
+	juce::String getViewName (void) const override { return i18n::tr ("settings.vgm"); }
+
+	void refresh (void) override;
+	void paint (juce::Graphics& g) override;
+	void resized (void) override;
+	void lookAndFeelChanged (void) override;
+	void refreshLanguage (void) override;
+
+	/** **Called when the switch moves, because nothing takes effect until the song is loaded
+		again.** The decision is read while players are created, so the window reloads the current
+		song at the position it was at - the same answer the MIDI page's sample-root switch uses. */
+	std::function<void()> onSkipSilentTracksChanged;
+
+private:
+	juce::ToggleButton skipSwitch;
+	WrappedLabel skipHint;
 };
 
 /**
@@ -485,6 +548,18 @@ public:
 		numbers and only a reload can apply it. The window reloads the current song at the position
 		it was at, so the switch takes effect without asking the user to reopen anything. */
 	std::function<void()> onSampleRootChanged;
+
+	/** Called when the VGM page's skip switch changes. Same reason as the line above: the answer is
+		applied while players are created, so only a reload can change it. */
+	std::function<void()> onSkipSilentTracksChanged;
+
+	/** **Brings up the page registered under `pageId`** ("vgm", "nes", …), and says whether one
+		matched. The rows in the sidebar are `TreeViewItem`s rather than Components, so a test script
+		has no component id to click; this is the seam that lets a screenshot be taken of any page.
+
+		Returns false when no page carries that id - which is also how a script notices that a page
+		was renamed or dropped. */
+	bool showPage (const juce::String& pageId);
 
 	/** Brings every page in step with the store and marks the page that is up in the sidebar. The
 		window calls this every time the overlay comes up, because the stored values can have been

@@ -49,6 +49,8 @@ namespace
 	constexpr const char* kDragCleanupKey = "export.dragCleanup";
 	constexpr const char* kDragRetentionKey = "export.dragRetentionHours";
 	constexpr const char* kNsfOutputGainKey = "nsf.outputGainDb";
+	constexpr const char* kNsfNonlinearKey = "nsf.nonlinearMixer";
+	constexpr const char* kVgmSkipSilentKey = "vgm.skipSilentTracks";
 	constexpr const char* kContentViewKey = "ui.view";
 	constexpr const char* kKeyboardRangeHintsKey = "keyboard.rangeHints";
 	constexpr const char* kKeyboardStartNoteKey = "keyboard.startNote";
@@ -710,6 +712,41 @@ void SettingsStore::setNsfOutputGainDb (int decibels)
 	if (file != nullptr && clamped != getNsfOutputGainDb ())
 	{
 		file->setValue (kNsfOutputGainKey, clamped);
+	}
+
+	broadcastChange ();
+}
+
+bool SettingsStore::getNsfNonlinearMixer (void) const
+{
+	// Absent means off, like every other default in this file. Someone who wants the hardware's
+	// curve turns it on once and it is stored; someone who never touches the page gets rows that
+	// stand alone, which is what the split view is for.
+	return file != nullptr ? file->getBoolValue (kNsfNonlinearKey, nsf::nonlinearMixer)
+						   : nsf::nonlinearMixer;
+}
+
+void SettingsStore::setNsfNonlinearMixer (bool enabled)
+{
+	if (file != nullptr && enabled != getNsfNonlinearMixer ())
+	{
+		file->setValue (kNsfNonlinearKey, enabled);
+	}
+
+	broadcastChange ();
+}
+
+bool SettingsStore::getVgmSkipSilentTracks (void) const
+{
+	return file != nullptr ? file->getBoolValue (kVgmSkipSilentKey, libvgm::skipSilentTracks)
+						   : libvgm::skipSilentTracks;
+}
+
+void SettingsStore::setVgmSkipSilentTracks (bool enabled)
+{
+	if (file != nullptr && enabled != getVgmSkipSilentTracks ())
+	{
+		file->setValue (kVgmSkipSilentKey, enabled);
 	}
 
 	broadcastChange ();

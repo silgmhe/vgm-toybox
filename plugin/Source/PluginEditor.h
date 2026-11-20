@@ -49,6 +49,14 @@ public:
 		(docs/desgin/testing-architecture.md §7, risk 2). */
 	void refreshUi (void);
 
+	/** **Opens Settings on the page registered under `pageId`**, and says whether one matched.
+
+		Public for the same reason `refreshUi` is: the console harness drives the window, and a
+		screenshot of a page needs that page up. The sidebar's rows are `TreeViewItem`s rather than
+		Components, so there is no component id for `click` to aim at.
+	*/
+	bool showSettingsPage (const juce::String& pageId);
+
 private:
 	void timerCallback (void) override;
 	void changeListenerCallback (juce::ChangeBroadcaster* source) override;
@@ -85,7 +93,7 @@ private:
 	/** Loads the current song again at the position it is at, because `pitch.useSampleRoot` changed
 		the note numbers themselves. Does nothing when there is nothing loaded - the switch then only
 		applies to the next song. */
-	void reloadForPitchChange (void);
+	void reloadCurrentSong (void);
 
 	/** Unloads the song: chips, mixer and transport go back to their "nothing loaded" state. */
 	void closeSong (void);
