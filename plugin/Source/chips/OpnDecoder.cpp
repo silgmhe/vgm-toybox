@@ -171,6 +171,13 @@ namespace
 		0x1d00, 0x1f7f,
 		0x1f80, 0x1fff
 	};
+
+	/** **The largest offset in the table is the largest index in the ROM.** That is what says these
+		are byte offsets and cannot be shifted: this one assertion is cheaper than the round that
+		found out by listening to the wrong drum.
+	*/
+	static_assert (kOpnaRhythmAddress[2 * 6 - 1] < 0x2000,
+				   "kOpnaRhythmAddress holds byte offsets into YM2608_ADPCM_ROM");
 }
 
 struct OpnDecoder::Impl
