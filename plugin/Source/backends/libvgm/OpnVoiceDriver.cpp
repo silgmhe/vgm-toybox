@@ -219,6 +219,18 @@ bool OpnVoiceDriver::load (const chips::VoicePatch& patch)
 	core->write (0, 0x27, 0x00);		// no timers, channel 3 in normal mode
 	core->write (0, 0x2B, 0x00);		// DAC off: this is a voice, not the sample channel
 
+	// **The OPNA and OPNB have to be told they are six-channel parts, and `reset` un-tells them.**
+	// 0x29 bit 7 is the "extend 3ch" switch: the core's own reset writes 0x29 = 0x1F, whose bit 7
+	// is clear, so the chip comes back as a three-channel OPN. The register writes still land in
+	// the right place - 0x30|0x100 reaches channel 4 because that path tests the address, not the
+	// mode - but 0x28 does not: its bank bit is ignored while the mode is off, so `0xF4` keys
+	// channel 1 instead of channel 4. Channels 4-6 then hold a patch nothing ever starts, and the
+	// three rows above sound as if only half the chip worked.
+	if (patch.model == chips::ChipModel::ym2608 || patch.model == chips::ChipModel::ym2610)
+	{
+		core->write (0, 0x29, 0x9F);	// six FM channels, IRQ mask at the reset default
+	}
+
 	for (const auto& reg : patch.regs)
 	{
 		core->write (port, (uint8_t) (reg.first & 0xFF), (uint8_t) reg.second);
