@@ -11,6 +11,39 @@
 #include "chips/Ay8910Decoder.h"
 #include "chips/GbcApuDecoder.h"
 #include "chips/NesApuDecoder.h"
+#include "chips/OpnDecoder.h"
+
+#include "emu/cores/fmopn_2608rom.h"
+
+namespace
+{
+	/** **The OPNA's rhythm samples are in the chip, not in the song.**
+
+		Its six ADPCM-A voices read a 16 KB ROM the core carries as `YM2608_ADPCM_ROM`; no VGM block
+		holds it. `kRequirements` therefore asks for `0x82` - the OPNB's separate bank - which a
+		YM2608 file does not have, so the decoder's bank stayed empty, the six rows drew nothing,
+		and the mixer played them anyway.
+
+		Handed over from here rather than included in `OpnDecoder.cpp`: `vgm_chip_test` compiles that
+		file without libvgm's include path, so pulling this header into it would break the target.
+
+		`2` is the ordinal `VgmReplayer` already puts in `ChipConfig::flags` for a YM2608.
+	*/
+	void attachRhythmRom (toybox::chips::IChipDecoder& decoder, uint8_t slotFlags)
+	{
+		if (slotFlags != 2 || typeid (decoder) != typeid (toybox::chips::OpnDecoder))
+		{
+			return;
+		}
+
+		static const std::vector<uint8_t> rhythm (YM2608_ADPCM_ROM,
+												  YM2608_ADPCM_ROM + sizeof (YM2608_ADPCM_ROM));
+
+		toybox::chips::ChipMemory memory;
+		memory.bytes = &rhythm;
+		decoder.attachMemory (memory);
+	}
+}
 
 namespace toybox::backends::libvgm
 {
@@ -180,6 +213,8 @@ void VgmReplayer::adoptNewBuffers (void)
 					decoder->attachMemory (attached);	// the decoder copies what it needs
 				}
 
+				attachRhythmRom (*decoder, slotFlags);
+
 				// **The images a decoder asked for beyond the first.** The OPN family wants its Delta-T
 				// ROM as well as the ADPCM-A bank, and VGM numbers that block per board (`0x83` on the
 				// OPNB, `0x81` on the OPNA) - so the decoder names both types and this serves whichever
@@ -322,6 +357,8 @@ void VgmReplayer::rewind (void)
 			attached.banking = instance.banking;
 			instance.decoder->attachMemory (attached);
 		}
+
+		attachRhythmRom (*instance.decoder, instance.flags);
 	}
 
 	router.clearWrites ();

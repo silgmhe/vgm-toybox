@@ -147,6 +147,27 @@ namespace
 	constexpr uint32_t kAdpcmAGate = 3528;		// 80 ms at 44.1 kHz
 	constexpr uint32_t kDacGate = 2205;			// 50 ms
 	constexpr uint32_t kDacInterval = 2205;		// one DAC marker per 50 ms at most
+
+	/** **Where the OPNA's six rhythm samples sit**, copied from `YM2608_ADPCM_ROM_addr` in
+		`fmopn.c` so the picture starts at the same byte the core reads.
+
+		The unit is two bytes, which is not the unit the address registers use: those reach the
+		core through `ADPCMA_ADDRESS_SHIFT` (8), so a written address counts 256-byte pages while
+		this table counts words. `latchStart` is kept in bytes, hence the `<< 1` at both call sites
+		and never an `<< 8`.
+
+		bass drum, snare drum, top cymbal, high hat, tom tom, rim shot - in that order, which is
+		also the order of the six channels.
+	*/
+	constexpr uint32_t kOpnaRhythmAddress[2 * 6]
+	{
+		0x0000, 0x01bf,
+		0x01c0, 0x043f,
+		0x0440, 0x1b7f,
+		0x1b80, 0x1cff,
+		0x1d00, 0x1f7f,
+		0x1f80, 0x1fff
+	};
 }
 
 struct OpnDecoder::Impl
@@ -871,6 +892,26 @@ void OpnDecoder::write (const RegisterWrite& write)
 		{
 			if (reg == 0x10)
 			{
+				// **The six rhythm samples have fixed addresses**, and the latch has to be filled
+				// from the same table the core uses. The OPNA's ADPCM-A is a drum kit: start and
+				// end come from `YM2608_ADPCM_ROM_addr`, not from registers - 0x18-0x1D reach no
+				// case in `FM_ADPCMAWrite`. Without this the latch stays at zero, `latchEnd >
+				// latchStart` is false, and the row draws nothing while the mixer plays the hit.
+				//
+				// The table is in two-byte units (`ADPCMA_ADDRESS_SHIFT` is 8 for the registers,
+				// which is a different unit); `latchStart` here is in bytes.
+				for (int channel = 0; channel < 6; ++channel)
+				{
+					if ((write.value & (1u << channel)) == 0)
+					{
+						continue;
+					}
+
+					Impl::AdpcmA& regs = impl->adpcmARegs[channel];
+					regs.latchStart = kOpnaRhythmAddress[channel * 2] << 1;
+					regs.latchEnd = (kOpnaRhythmAddress[channel * 2 + 1] << 1) + 1;
+				}
+
 				impl->keyAdpcmA (write.sampleTime, write.value);
 			}
 			return;
@@ -1197,6 +1238,8 @@ ChannelState OpnDecoder::channelState (int channel) const
 		state.period = kOneShotPeriod;
 		state.volume = 12;
 		state.gate = impl->now < impl->adpcmA[slot].end;
+
+
 
 		// **The shape is the bytes the hit reads, decoded exactly as `fmopn.c` does.** A nibble
 		// picks a delta out of `steps[]` scaled by the running step, and the nibble's low three bits
