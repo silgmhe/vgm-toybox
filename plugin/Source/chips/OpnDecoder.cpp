@@ -151,10 +151,13 @@ namespace
 	/** **Where the OPNA's six rhythm samples sit**, copied from `YM2608_ADPCM_ROM_addr` in
 		`fmopn.c` so the picture starts at the same byte the core reads.
 
-		The unit is two bytes, which is not the unit the address registers use: those reach the
-		core through `ADPCMA_ADDRESS_SHIFT` (8), so a written address counts 256-byte pages while
-		this table counts words. `latchStart` is kept in bytes, hence the `<< 1` at both call sites
-		and never an `<< 8`.
+		**The unit is a byte offset into the 8 KB internal ROM** - the table spans 0x0000-0x1FFF,
+		which is exactly `YM2608_ADPCM_ROM[0x2000]` end to end. It is not the unit the address
+		registers use: those reach the core through `ADPCMA_ADDRESS_SHIFT` (8), meaning 256-byte
+		pages, and they are unreachable on this chip anyway.
+
+		Shifting these by one wraps every sample past the halfway point: high hat's 0x1B80 would
+		become 14080, `& 0x1FFF` brings it back to 5888, and the row draws somebody else's drum.
 
 		bass drum, snare drum, top cymbal, high hat, tom tom, rim shot - in that order, which is
 		also the order of the six channels.
@@ -898,8 +901,10 @@ void OpnDecoder::write (const RegisterWrite& write)
 				// case in `FM_ADPCMAWrite`. Without this the latch stays at zero, `latchEnd >
 				// latchStart` is false, and the row draws nothing while the mixer plays the hit.
 				//
-				// The table is in two-byte units (`ADPCMA_ADDRESS_SHIFT` is 8 for the registers,
-				// which is a different unit); `latchStart` here is in bytes.
+				// **Both are byte offsets into the 8 KB ROM, and neither is shifted.** The table
+				// covers 0x0000-0x1FFF, which is that ROM end to end. `fmopn.c` shifts its copy by
+				// one when it loads `now_addr`, but that is a nibble cursor - half a byte per step
+				// - and this one indexes `adpcmARom` by the byte.
 				for (int channel = 0; channel < 6; ++channel)
 				{
 					if ((write.value & (1u << channel)) == 0)
@@ -908,8 +913,8 @@ void OpnDecoder::write (const RegisterWrite& write)
 					}
 
 					Impl::AdpcmA& regs = impl->adpcmARegs[channel];
-					regs.latchStart = kOpnaRhythmAddress[channel * 2] << 1;
-					regs.latchEnd = (kOpnaRhythmAddress[channel * 2 + 1] << 1) + 1;
+					regs.latchStart = kOpnaRhythmAddress[channel * 2];
+					regs.latchEnd = kOpnaRhythmAddress[channel * 2 + 1] + 1;
 				}
 
 				impl->keyAdpcmA (write.sampleTime, write.value);
