@@ -847,13 +847,12 @@ endif()
 # when a shift is allowed. Pure functions - which is the point of moving them out of the panel,
 # where they were private members of a nested class and could only be checked in a screenshot.
 add_executable(vgm_keyboard_test EXCLUDE_FROM_ALL
-	Tests/KeyboardLayoutTest.cpp
-	Source/ui/KeyboardLayout.cpp
-	Source/ui/KeyboardRowLayout.cpp
-	Source/playback/NoteWaveform.cpp
-	Source/backends/libvgm/OpnVoiceDriver.cpp
-	Source/playback/WaveformSource.cpp
-	Source/playback/WaveShape.cpp
+Tests/KeyboardLayoutTest.cpp
+Source/ui/KeyboardLayout.cpp
+Source/ui/KeyboardRowLayout.cpp
+Source/playback/NoteWaveform.cpp
+Source/playback/WaveformSource.cpp
+Source/playback/WaveShape.cpp
 )
 target_include_directories(vgm_keyboard_test PRIVATE Source)
 target_compile_definitions(vgm_keyboard_test PRIVATE ${TOYBOX_JUCE_DEFINITIONS})
