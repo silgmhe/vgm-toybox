@@ -30,7 +30,7 @@
 #include "chips/OpnDecoder.h"
 #include "playback/NoteWaveform.h"
 
-#include "backends/libvgm/OpnVoiceDriver.h"
+#include "backends/libvgm/FmVoiceDriver.h"
 
 namespace
 {
@@ -358,7 +358,7 @@ void testNoteWaveform (void)
 	const auto serial = makePatch (0);
 	const auto parallel = makePatch (7);
 
-	const auto driver = toybox::backends::libvgm::makeOpnVoiceDriver ();
+	const auto driver = toybox::backends::libvgm::makeFmVoiceDriver ();
 
 	const double seconds = toybox::playback::noteWave::durationOf (serial);
 	check (seconds > 0.01 && seconds < 20.0, "a note has a plausible length");
@@ -464,7 +464,7 @@ void testNoteWaveformInState (void)
 	// The renderer itself is tested above; what is checked here is that a decoder produces the
 	// input it needs. That split is deliberate: `chips/` cannot reach an engine header, so the
 	// rendering lives in the backend and this is the only contract between them.
-	const auto driver = toybox::backends::libvgm::makeOpnVoiceDriver ();
+	const auto driver = toybox::backends::libvgm::makeFmVoiceDriver ();
 	const auto wave = toybox::playback::noteWave::render (*driver, *state.voicePatch, state.hz);
 	check (wave.size() > 100, "and the backend can turn it into a whole note");
 }
@@ -476,7 +476,7 @@ void testNoteWaveformInState (void)
 	OPN's registers to an OPM, forgetting that `0x20` bit 6/7 gates the output (both clear by default,
 	and `render` mixes `(L+R)/2`), and keying with the wrong address.
 
-	The sequence is what `OpnVoiceDriver` writes for this chip: `0x20`, the six operator banks, KC/KF,
+	The sequence is what `FmVoiceDriver` writes for this chip: `0x20`, the six operator banks, KC/KF,
 	then the key register.
 */
 void testOpmCoreMakesSound (void)
@@ -658,7 +658,7 @@ int main()
 		patch.regs.push_back ({ (uint16_t) 0xB0, 0x07 });		// feedback 0, algorithm 7
 		patch.regs.push_back ({ (uint16_t) 0xB4, 0xC0 });		// both speakers
 
-		const auto driver = toybox::backends::libvgm::makeOpnVoiceDriver ();
+		const auto driver = toybox::backends::libvgm::makeFmVoiceDriver ();
 
 		if (driver->load (patch))
 		{
@@ -724,7 +724,7 @@ int main()
 			return patch;
 		};
 
-		const auto driver = toybox::backends::libvgm::makeOpnVoiceDriver ();
+		const auto driver = toybox::backends::libvgm::makeFmVoiceDriver ();
 
 		driver->load (longTailed (0));
 		driver->noteOn (440.0);
@@ -790,7 +790,7 @@ int main()
 		patch.regs.push_back ({ (uint16_t) 0x1B0, 0x07 });		// algorithm 7
 		patch.regs.push_back ({ (uint16_t) 0x1B4, 0xC0 });		// both speakers
 
-		const auto driver = toybox::backends::libvgm::makeOpnVoiceDriver ();
+		const auto driver = toybox::backends::libvgm::makeFmVoiceDriver ();
 
 		if (driver->load (patch))
 		{

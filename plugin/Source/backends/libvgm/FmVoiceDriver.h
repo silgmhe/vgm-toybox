@@ -21,18 +21,56 @@ namespace toybox::backends::libvgm
 	and the initialisation that goes with it, which is why the core is kept across calls and rebuilt
 	only when the chip model changes.
 */
-class OpnVoiceDriver final : public playback::IVoiceDriver
+struct Core;
+
+/** **What one FM family does differently**, and nothing else.
+
+	Everything that costs is shared: the libvgm device, `Core`, `render`, the rate decision. The OPN and
+	the OPM differ in five places, four of them code - which is why this is a struct of functions rather
+	than a table of numbers.
+
+	**Not a second driver class.** `LibvgmTrackPlayer` holds one `voiceDriver` for the whole song and a
+	song can carry both chips, so a facade would have to dispatch on the model - which is exactly the
+	branch this replaces, moved one level up.
+
+	Declared here rather than in the .cpp because the driver holds a pointer to one; `Core` is only
+	forward-declared, and the four functions that take it live in the .cpp with its definition.
+*/
+struct Dialect
+{
+	/** The channel is these bits of the patch's addresses: two on the OPN (operator stride four),
+		three on the OPM (stride eight). Reading one as the other puts channel 4's patch on channel 0. */
+	uint16_t channelMask;
+
+	/** Bring a freshly reset core to the point where it will make a sound. */
+	void ( *init ) ( Core& core, int channel, chips::ChipModel model );
+
+	/** Write the pitch and key the voice.
+
+		**Not split into pitch and key-on**: the OPN has to write 0xA4 before 0xA0 for the f-number to
+		latch, and the key follows in the same sequence; the OPM's KC/KF and key are equally one run.
+	*/
+	void ( *noteOn ) ( Core& core, int port, int channel, chips::ChipModel model, double hz );
+
+	void ( *noteOff ) ( Core& core, int port, int channel );
+
+	/** After the patch's registers are written. The OPM's pan has to come last, because the patch
+		carries `0x20|ch` and a song that never sets it leaves both bits clear - which is silence. */
+	void ( *afterPatch ) ( Core& core, int channel );
+};
+
+class FmVoiceDriver final : public playback::IVoiceDriver
 {
 public:
 	/** @param exportQuality true to run the core at the chip's own rate rather than the rate a
 		panel draws at. The two differ by a factor of seven on a YM2151, and the reason is in
 		`chips::kVisualNoteRate`.
 	*/
-	explicit OpnVoiceDriver (bool exportQuality = false);
-	~OpnVoiceDriver (void) override;
+	explicit FmVoiceDriver (bool exportQuality = false);
+	~FmVoiceDriver (void) override;
 
-	OpnVoiceDriver (const OpnVoiceDriver&) = delete;
-	OpnVoiceDriver& operator= (const OpnVoiceDriver&) = delete;
+	FmVoiceDriver (const FmVoiceDriver&) = delete;
+	FmVoiceDriver& operator= (const FmVoiceDriver&) = delete;
 
 	bool load (const chips::VoicePatch& patch) override;
 	void noteOn (double hz) override;
@@ -41,11 +79,11 @@ public:
 	double rate (void) const override;
 
 private:
-	struct Core;
-
 	/** Starts a core for `model` at `rate`, replacing whatever was running. */
 	bool startCore (chips::ChipModel model, double rate);
 
+	/** The namespace-level `Core`, not a nested one: `Dialect`'s functions take it, and those are
+		declared above the class. */
 	std::unique_ptr<Core> core;
 	chips::ChipModel loadedModel = chips::ChipModel::unknown;
 
@@ -55,6 +93,9 @@ private:
 	*/
 	double loadedRate = 0.0;
 	bool exportQuality = false;
+
+	/** Which family's registers this driver is speaking. Set by `load`, from the patch's model. */
+	const Dialect* dialect = nullptr;
 
 	/** Where this patch's channel lives: the port is bit 8 of the offsets, and the chip numbers the
 		channel key as `(bank << 2) | slot` rather than 0..5. Both are recovered in `load`. */
@@ -69,6 +110,6 @@ private:
 	pointer to an incomplete type cannot be created or destroyed outside that .cpp, so the factory
 	is the door: callers get a `unique_ptr` to the interface and never need the definition.
 */
-std::unique_ptr<playback::IVoiceDriver> makeOpnVoiceDriver (bool exportQuality = false);
+std::unique_ptr<playback::IVoiceDriver> makeFmVoiceDriver (bool exportQuality = false);
 
 } // namespace toybox::backends::libvgm

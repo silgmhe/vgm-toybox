@@ -17,7 +17,7 @@
 
 #include "playback/NoteWaveform.h"
 
-#include "OpnVoiceDriver.h"
+#include "FmVoiceDriver.h"
 
 namespace toybox::backends::libvgm
 {
@@ -69,7 +69,7 @@ LibvgmTrackPlayer::LibvgmTrackPlayer (void)
 	// The libvgm side of the note renderer. Created up front rather than on first use: it holds
 	// no resources until it is loaded, and a lazily created unique_ptr on the audio thread would
 	// need a guard for no gain.
-	voiceDriver = makeOpnVoiceDriver ();
+	voiceDriver = makeFmVoiceDriver ();
 
 	playerEngine.RegisterPlayerEngine (new VGMPlayer);
 	playerEngine.RegisterPlayerEngine (new S98Player);
@@ -1271,7 +1271,7 @@ chips::RenderedNote LibvgmTrackPlayer::renderNoteAt (int track, double hz) const
 		// **Export quality, so the core runs at the chip's own rate.** A dragged file is a timbre,
 		// and above 4 kHz the corners of a waveform are what make it recognisable; the panel can
 		// afford 8 kHz because a row is ninety pixels wide.
-		exportDriver = makeOpnVoiceDriver (true);
+		exportDriver = makeFmVoiceDriver (true);
 	}
 
 	const auto& store = settings::SettingsStore::getInstance ();

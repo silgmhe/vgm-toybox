@@ -187,7 +187,7 @@ target_sources(VGMToybox PRIVATE
 	Source/playback/PlaybackEngine.cpp
 	Source/playback/WaveExport.cpp
 	Source/playback/NoteWaveform.cpp
-	Source/backends/libvgm/OpnVoiceDriver.cpp
+	Source/backends/libvgm/FmVoiceDriver.cpp
 	Source/playback/WaveformSource.cpp
 	Source/playback/WaveShape.cpp
 	Source/playback/DawSync.cpp
@@ -300,7 +300,7 @@ target_sources(VGMToybox PRIVATE
 	Source/ui/KeyboardRowLayout.cpp
 	Source/ui/KeyboardRowPaint.cpp
 	Source/playback/NoteWaveform.cpp
-	Source/backends/libvgm/OpnVoiceDriver.cpp
+	Source/backends/libvgm/FmVoiceDriver.cpp
 	Source/playback/WaveformSource.cpp
 	Source/playback/WaveShape.cpp
 )
@@ -411,7 +411,7 @@ add_executable(vgm_mixer_test EXCLUDE_FROM_ALL
 	Source/playback/PlaybackEngine.cpp
 	Source/playback/WaveExport.cpp
 	Source/playback/NoteWaveform.cpp
-	Source/backends/libvgm/OpnVoiceDriver.cpp
+	Source/backends/libvgm/FmVoiceDriver.cpp
 	Source/playback/WaveformSource.cpp
 	Source/playback/WaveShape.cpp
 	Source/playback/DawSync.cpp
@@ -674,7 +674,7 @@ add_executable(vgm_opn_test EXCLUDE_FROM_ALL
 	Tests/OpnCoreOracleTest.cpp
 	Source/chips/OpnDecoder.cpp
 	Source/playback/NoteWaveform.cpp
-	Source/backends/libvgm/OpnVoiceDriver.cpp
+	Source/backends/libvgm/FmVoiceDriver.cpp
 )
 target_include_directories(vgm_opn_test PRIVATE Source)
 target_compile_features(vgm_opn_test PRIVATE cxx_std_17)
@@ -692,7 +692,7 @@ add_executable(vgm_core_test EXCLUDE_FROM_ALL
 	Source/playback/PlaybackEngine.cpp
 	Source/playback/WaveExport.cpp
 	Source/playback/NoteWaveform.cpp
-	Source/backends/libvgm/OpnVoiceDriver.cpp
+	Source/backends/libvgm/FmVoiceDriver.cpp
 	Source/playback/WaveformSource.cpp
 	Source/playback/WaveShape.cpp
 	Source/playback/DawSync.cpp
