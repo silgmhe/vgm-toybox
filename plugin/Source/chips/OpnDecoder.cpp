@@ -148,6 +148,18 @@ namespace
 	constexpr uint32_t kDacGate = 2205;			// 50 ms
 	constexpr uint32_t kDacInterval = 2205;		// one DAC marker per 50 ms at most
 
+	/** The six ADPCM-A voices the OPNA and OPNB share. Named once: the tables below, the latch and
+		the channel-state reader all size themselves by it.
+	*/
+	constexpr int kAdpcmAVoices = 6;
+
+	/** **One rhythm sample's span in the chip's own ROM**, in bytes. */
+	struct RhythmRange
+	{
+		uint32_t start;
+		uint32_t end;
+	};
+
 	/** **Where the OPNA's six rhythm samples sit**, copied from `YM2608_ADPCM_ROM_addr` in
 		`fmopn.c` so the picture starts at the same byte the core reads.
 
@@ -159,25 +171,37 @@ namespace
 		Shifting these by one wraps every sample past the halfway point: high hat's 0x1B80 would
 		become 14080, `& 0x1FFF` brings it back to 5888, and the row draws somebody else's drum.
 
-		bass drum, snare drum, top cymbal, high hat, tom tom, rim shot - in that order, which is
-		also the order of the six channels.
+		**A range per voice rather than a flat array of pairs.** The six channels index this by
+		channel, and `[channel * 2]` / `[channel * 2 + 1]` is one multiplication away from drawing
+		the neighbour's drum - which is the shape of the mistake this table already caused once.
 	*/
-	constexpr uint32_t kOpnaRhythmAddress[2 * 6]
+	constexpr RhythmRange kOpnaRhythm[kAdpcmAVoices]
 	{
-		0x0000, 0x01bf,
-		0x01c0, 0x043f,
-		0x0440, 0x1b7f,
-		0x1b80, 0x1cff,
-		0x1d00, 0x1f7f,
-		0x1f80, 0x1fff
+		{ 0x0000, 0x01bf },		// bass drum
+		{ 0x01c0, 0x043f },		// snare drum
+		{ 0x0440, 0x1b7f },		// top cymbal
+		{ 0x1b80, 0x1cff },		// high hat
+		{ 0x1d00, 0x1f7f },		// tom tom
+		{ 0x1f80, 0x1fff }		// rim shot
 	};
 
-	/** **The largest offset in the table is the largest index in the ROM.** That is what says these
-		are byte offsets and cannot be shifted: this one assertion is cheaper than the round that
-		found out by listening to the wrong drum.
+	/** **The last offset is the ROM's last index**, which is what says these are bytes and cannot be
+		shifted. This one assertion is cheaper than the round that found out by listening to the
+		wrong drum.
 	*/
-	static_assert (kOpnaRhythmAddress[2 * 6 - 1] < 0x2000,
-				   "kOpnaRhythmAddress holds byte offsets into YM2608_ADPCM_ROM");
+	static_assert (kOpnaRhythm[kAdpcmAVoices - 1].end < 0x2000,
+				   "kOpnaRhythm holds byte offsets into YM2608_ADPCM_ROM");
+
+	/** **And they tile the ROM end to end.** A mistyped bound compiles and silently shortens one
+		drum, which no assertion above would notice - `0x1bff` in place of `0x1cff` is still below
+		0x2000.
+	*/
+	static_assert (kOpnaRhythm[1].start == kOpnaRhythm[0].end + 1
+				   && kOpnaRhythm[2].start == kOpnaRhythm[1].end + 1
+				   && kOpnaRhythm[3].start == kOpnaRhythm[2].end + 1
+				   && kOpnaRhythm[4].start == kOpnaRhythm[3].end + 1
+				   && kOpnaRhythm[5].start == kOpnaRhythm[4].end + 1,
+				   "the six rhythm samples are contiguous");
 }
 
 struct OpnDecoder::Impl
@@ -270,9 +294,12 @@ struct OpnDecoder::Impl
 		uint32_t latchEnd = 0;
 	};
 
-	/** The largest counts the tables below hold. A `Layout` must stay inside them. */
+	/** The largest counts the tables below hold. A `Layout` must stay inside them.
+
+		`kAdpcmAVoices` is not here: it sizes `kOpnaRhythm` too, and that table sits above this
+		struct, so the number is named once in the anonymous namespace and both read it.
+	*/
 	static constexpr int kFmVoices = 6;
-	static constexpr int kAdpcmAVoices = 6;
 
 	/** **Where each voice family sits in the flat channel numbering the decoder reports.**
 
@@ -711,7 +738,7 @@ struct OpnDecoder::Impl
 	{
 		// Bit 7 stops every channel, bits 0..5 start one each.
 		const bool allOff = (data & 0x80) != 0;
-		for (int channel = 0; channel < 6; ++channel)
+		for (int channel = 0; channel < kAdpcmAVoices; ++channel)
 		{
 			const bool on = ! allOff && (data & (1u << channel)) != 0;
 			if (on && ! adpcmA[channel].active)
@@ -912,7 +939,7 @@ void OpnDecoder::write (const RegisterWrite& write)
 				// covers 0x0000-0x1FFF, which is that ROM end to end. `fmopn.c` shifts its copy by
 				// one when it loads `now_addr`, but that is a nibble cursor - half a byte per step
 				// - and this one indexes `adpcmARom` by the byte.
-				for (int channel = 0; channel < 6; ++channel)
+				for (int channel = 0; channel < kAdpcmAVoices; ++channel)
 				{
 					if ((write.value & (1u << channel)) == 0)
 					{
@@ -920,8 +947,8 @@ void OpnDecoder::write (const RegisterWrite& write)
 					}
 
 					Impl::AdpcmA& regs = impl->adpcmARegs[channel];
-					regs.latchStart = kOpnaRhythmAddress[channel * 2];
-					regs.latchEnd = kOpnaRhythmAddress[channel * 2 + 1] + 1;
+					regs.latchStart = kOpnaRhythm[channel].start;
+					regs.latchEnd = kOpnaRhythm[channel].end + 1;
 				}
 
 				impl->keyAdpcmA (write.sampleTime, write.value);
@@ -947,7 +974,7 @@ void OpnDecoder::write (const RegisterWrite& write)
 				// end for the next hit before the next start bit - the same reason ADPCM-B latches.
 				const bool allOff = (write.value & 0x80) != 0;
 
-				for (int channel = 0; channel < 6; ++channel)
+				for (int channel = 0; channel < kAdpcmAVoices; ++channel)
 				{
 					if (allOff || (write.value & (1u << channel)) == 0)
 					{
@@ -1240,7 +1267,7 @@ ChannelState OpnDecoder::channelState (int channel) const
 	{
 		const std::size_t slot = (std::size_t) (channel - impl->layout.fm);
 
-		if (slot >= (std::size_t) Impl::kAdpcmAVoices)
+		if (slot >= (std::size_t) kAdpcmAVoices)
 		{
 			return state;
 		}

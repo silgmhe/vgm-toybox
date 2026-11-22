@@ -2,6 +2,8 @@
 
 #include <juce_gui_basics/juce_gui_basics.h>
 
+#include "ChannelButtonMetrics.h"
+
 #include <cmath>
 #include <cstddef>
 #include <string>
@@ -38,12 +40,15 @@ struct RowMetrics
 	*/
 	int nameWidth = 80;
 
-	/** **The mixer's button height and gap**, so the two views agree - which the comment here has
-		claimed since the field was added, while the numbers had drifted to 30 and 8. Narrowing them
-		to match is also what paid for the name column above.
+	/** **The mixer's button size and gap**, read from the one place that defines them
+		(`ChannelButtonMetrics.h`). Narrowing these to match is also what paid for the name column
+		above.
+
+		The fields stay fields - a test hands in its own metrics - but their defaults are no longer a
+		second copy of the mixer's numbers.
 	*/
-	int buttonSize = 28;
-	int buttonGap = 6;
+	int buttonSize = channelButtonHeight;
+	int buttonGap = channelButtonGap;
 	int noteWidth = 56;
 	int waveWidth = 88;
 	int waveHeight = 26;

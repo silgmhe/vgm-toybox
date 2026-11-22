@@ -329,11 +329,12 @@ void testRowLayout (void)
 		check (row.note.getRight () <= row.wave.getX (), "the note column then the waveform");
 		check (row.wave.getRight () <= row.keys.getX (), "the waveform then the keyboard");
 		check (row.keys.getRight () <= row.meter.getX (), "and the keyboard before the meter");
-		// **Twenty-eight is `ChannelStrip`'s `kButtonHeight`**, and the row's `buttonSize` follows
-		// it so the two views draw their buttons at the same size. This said thirty for a while,
-		// which is what the field actually held: the comment above that field had been right about
-		// the intent and wrong about the number, and this assertion copied the number.
-		check (row.mute.getHeight () == 28 && row.mute.getWidth () == 28,
+		// **Against the shared constant, not a number.** This said 30 for a while - the value the
+		// row's field happened to hold - and then 28, which is right today and would be wrong again
+		// the moment the mixer's buttons change size. `ChannelButtonMetrics.h` is where that number
+		// lives now, and both sides read it from there.
+		check (row.mute.getHeight () == toybox::ui::channelButtonHeight
+			   && row.mute.getWidth () == toybox::ui::channelButtonHeight,
 			   "the mute button is the mixer's size");
 	}
 

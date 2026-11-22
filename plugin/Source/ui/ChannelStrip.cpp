@@ -3,6 +3,7 @@
 #include <cmath>
 
 #include "ButtonPaint.h"
+#include "ChannelButtonMetrics.h"
 #include "ChannelGlyphs.h"
 #include "ChannelNameLayout.h"
 #include "Icons.h"
@@ -19,10 +20,6 @@ namespace
 {
 	constexpr int kNameHeight = 22;	// 20 px type mark + 2 px of air (was 13, name only)
 	constexpr int kKnobHeight = 30;
-	// The M/S buttons share the full strip width; the height is the face (24, as before) plus the
-	// shadow room each button reserves (ButtonPaint.h).
-	constexpr int kButtonHeight = 28;
-	constexpr int kButtonGap = 6;
 	// the output selector sits at the very bottom (26 = its 22 px face plus the shadow room the
 	// combo box reserves, ButtonPaint.h)
 	constexpr int kOutputHeight = 26;
@@ -496,10 +493,10 @@ void ChannelStrip::resized (void)
 	if (! master)
 	{
 		// M and S split the strip width, like the buttons of a hardware console
-		auto buttons = inner.removeFromBottom (kButtonHeight);
-		const int buttonWidth = (buttons.getWidth() - kButtonGap) / 2;
+		auto buttons = inner.removeFromBottom (channelButtonHeight);
+		const int buttonWidth = (buttons.getWidth() - channelButtonGap) / 2;
 		muteButton.setBounds (buttons.removeFromLeft (buttonWidth));
-		buttons.removeFromLeft (kButtonGap);
+		buttons.removeFromLeft (channelButtonGap);
 		soloButton.setBounds (buttons.removeFromLeft (buttonWidth));
 		inner.removeFromBottom (6);
 	}
@@ -508,8 +505,8 @@ void ChannelStrip::resized (void)
 		// The master strip has no solo, but its mute (it silences what the master bus
 		// contributes) sits exactly where the tracks' M/S row is, so the fader and graduations
 		// stay aligned between strips.
-		auto buttons = inner.removeFromBottom (kButtonHeight);
-		const int buttonWidth = (buttons.getWidth() - kButtonGap) / 2;
+		auto buttons = inner.removeFromBottom (channelButtonHeight);
+		const int buttonWidth = (buttons.getWidth() - channelButtonGap) / 2;
 		muteButton.setBounds (buttons.removeFromLeft (buttonWidth));
 		inner.removeFromBottom (6);
 	}
