@@ -919,8 +919,6 @@ bool LibvgmTrackPlayer::captureState (playback::ChipStateSnapshot& snapshot) con
 		const auto* device = instance.device;
 		const bool hasDeclaration = device != nullptr && device->devDecl != nullptr;
 
-
-
 		std::string chipName = "Chip";
 
 		if (hasDeclaration && device->devDecl->name != nullptr)

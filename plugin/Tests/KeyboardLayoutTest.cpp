@@ -501,42 +501,42 @@ void testRowChangeDecision (void)
 		   "volume spans 0 to 255");
 }
 
-	/** **The name column has to hold the longest name a chip reports.**
+/** **The name column has to hold the longest name a chip reports.**
 
-		`ADPCM-A 6` is nine characters at the 12 px the row draws in, and the type mark takes
-		eighteen pixels of the column before the text starts (14 for the glyph, 4 for the gap, both
-		in `KeyboardRowPaint.cpp`). When this fails, a name is being cut - and the character that goes
-		first is the channel number, the one part that says which row you are looking at.
+	`ADPCM-A 6` is nine characters at the 12 px the row draws in, and the type mark takes
+	eighteen pixels of the column before the text starts (14 for the glyph, 4 for the gap, both
+	in `KeyboardRowPaint.cpp`). When this fails, a name is being cut - and the character that goes
+	first is the channel number, the one part that says which row you are looking at.
 
-		Measured rather than estimated. The estimate that set this to 72 px was two pixels short, and
-		nothing noticed across two chips: the row kept drawing `ADPCM-A` and the digit was simply
-		absent, which reads as a name rather than as a truncation.
-	*/
-	void testNameColumnFitsLongestChannelName (void)
+	Measured rather than estimated. The estimate that set this to 72 px was two pixels short, and
+	nothing noticed across two chips: the row kept drawing `ADPCM-A` and the digit was simply
+	absent, which reads as a name rather than as a truncation.
+*/
+void testNameColumnFitsLongestChannelName (void)
+{
+	using namespace toybox::ui::keyboard;
+
+	std::printf ("  the name column fits the longest channel name\n");
+
+	const RowMetrics metrics;
+
+	// From `paintChannelRow`: the glyph and the gap that precede the text.
+	constexpr int kMarkSize = 14;
+	constexpr int kMarkGap = 4;
+
+	const juce::Font font (juce::FontOptions (12.0f));
+	const int available = metrics.nameWidth - kMarkSize - kMarkGap;
+
+	for (const char* name : { "ADPCM-A 1", "ADPCM-A 6", "ADPCM-B", "FM 6", "SSG 3" })
 	{
-		using namespace toybox::ui::keyboard;
+		const auto needed = font.getStringWidthFloat (juce::String (name));
 
-		std::printf ("  the name column fits the longest channel name\n");
+		std::printf ("    %-10s needs %5.1f, has %3d\n", name, needed, available);
 
-		const RowMetrics metrics;
-
-		// From `paintChannelRow`: the glyph and the gap that precede the text.
-		constexpr int kMarkSize = 14;
-		constexpr int kMarkGap = 4;
-
-		const juce::Font font (juce::FontOptions (12.0f));
-		const int available = metrics.nameWidth - kMarkSize - kMarkGap;
-
-		for (const char* name : { "ADPCM-A 1", "ADPCM-A 6", "ADPCM-B", "FM 6", "SSG 3" })
-		{
-			const auto needed = font.getStringWidthFloat (juce::String (name));
-
-			std::printf ("    %-10s needs %5.1f, has %3d\n", name, needed, available);
-
-			check ((float) available >= needed,
-				   "the name column fits the longest name a chip reports");
-		}
+		check ((float) available >= needed,
+			   "the name column fits the longest name a chip reports");
 	}
+}
 
 int main (void)
 {

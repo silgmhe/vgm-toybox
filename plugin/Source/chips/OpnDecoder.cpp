@@ -1251,8 +1251,6 @@ ChannelState OpnDecoder::channelState (int channel) const
 		state.volume = 12;
 		state.gate = impl->now < impl->adpcmA[slot].end;
 
-
-
 		// **The shape is the bytes the hit reads, decoded exactly as `fmopn.c` does.** A nibble
 		// picks a delta out of `steps[]` scaled by the running step, and the nibble's low three bits
 		// move the step by `step_inc`; the accumulator is **twelve bits and wraps** (unlike
