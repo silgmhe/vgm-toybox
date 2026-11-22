@@ -256,26 +256,41 @@ void opnNoteOn ( Core& core, int port, int channel, chips::ChipModel model, doub
 {
 	const double clock = (double) clockFor (model);
 
-	// **144 for the OPN2, 288 for the OPNA/OPNB**, which is where the doubling hides. libvgm's OPNA
-	// core derives its frequency step from clock / 288 - the master clock halved before the prescaler
-	// - while `noteRateFor` reports clock / 144 as its output rate, because that core runs at twice
-	// the fundamental. Writing 144 here made every OPNA note an octave flat.
-	const double divisor = (model == chips::ChipModel::ym2608
-							|| model == chips::ChipModel::ym2610) ? 288.0 : 144.0;
+	// **The divisor is per *core*, not per family** - and that is the thing that took two rounds to
+	// see. `testNotePitchIsWhatWasAsked` holds each part to C4 and reports:
+	//
+	//     YM2612  144 -> 130.8 Hz   288 -> 261.5 Hz    (fmopn)
+	//     YM2608  144 -> 130.8 Hz   288 -> 261.5 Hz    (fmopn)
+	//     YM2203  144 -> 261.5 Hz   288 -> 523.0 Hz    (fmopn)
+	//     YM2610  either -> 0.000    (MAME core, silent without a ROM)
+	//
+	// So the two six-channel fmopn parts double and the three-channel one does not, which is the
+	// `pres` disagreement inside `fmopn.c`: `OPNCheckNativeSampleRate` doubles the prescaler for
+	// `TYPE_6CH` (so `rate = clock / 144`, agreeing with `noteRateFor`) while the frequency step
+	// stays at the undoubled 144.
+	//
+	// **YM2610 is a different core** - `sndDev_YM2610` declares only `devDef_MAME_2610`
+	// (`opnintf.c:262`), where YM2608 gets the fmopn one - and a YM2610 export heard an octave high
+	// at the fnopn figure puts it at 144. That answer has **no assertion behind it**: the MAME core
+	// produces `peak 0.000` from a standalone `SndEmu_Start`, so the fixture cannot measure it and
+	// this comment is the only record. If a YM2610 file is ever heard an octave off again, this
+	// line is what to change.
+	const double kOpnDivisor
+		= (model == chips::ChipModel::ym2612 || model == chips::ChipModel::ym2608) ? 288.0 : 144.0;
 
 	int block = 4;
-	double fnum = hz * divisor * std::exp2 (20.0 - (double) block) / clock;
+	double fnum = hz * kOpnDivisor * std::exp2 (20.0 - (double) block) / clock;
 
 	while (fnum >= 2048.0 && block < 7)
 	{
 		++block;
-		fnum = hz * divisor * std::exp2 (20.0 - (double) block) / clock;
+		fnum = hz * kOpnDivisor * std::exp2 (20.0 - (double) block) / clock;
 	}
 
 	while (fnum < 1.0 && block > 0)
 	{
 		--block;
-		fnum = hz * divisor * std::exp2 (20.0 - (double) block) / clock;
+		fnum = hz * kOpnDivisor * std::exp2 (20.0 - (double) block) / clock;
 	}
 
 	const auto fnumBits = (uint16_t) std::lround (std::clamp (fnum, 0.0, 2047.0));

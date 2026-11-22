@@ -516,6 +516,122 @@ void testOpmCoreMakesSound (void)
 		   "the OPM core sounds a note written the way the driver writes it");
 }
 
+/** **An OPN note really is the pitch it was asked for.**
+
+	`peak` was the only thing measured on this family, and it cannot see this: a f-number twice too
+	large gives a waveform of exactly the same height, one octave up. The OPNA and OPNB carried a
+	divisor of 288 instead of 144 for as long as anyone looked - a YM2610 export was audibly an
+	octave high with `peak 0.9971` green.
+
+	Measured by counting zero crossings in the middle half. The patch is four carriers at multiple 1,
+	so the fundamental is the note and the extra crossings are one waveform's shape, not a different
+	pitch; two per period is enough to see a factor of two, and no FFT is needed for that.
+
+	All four parts, because the divisor is one number they share - the two that were wrong are the
+	two that no test of level could tell apart.
+*/
+void testNotePitchIsWhatWasAsked (void)
+{
+	// CON 7: four carriers, all at multiple 1, so the mix keeps the note's fundamental.
+	auto makePatch = [] (toybox::chips::ChipModel model)
+	{
+		toybox::chips::VoicePatch patch;
+		patch.model = model;
+
+		for (int op = 0; op < 4; ++op)
+		{
+			const uint8_t base = (uint8_t) (op << 2);
+			patch.regs.push_back ({ (uint8_t) (0x30 | base), 0x01 });		// multiple 1
+			patch.regs.push_back ({ (uint8_t) (0x40 | base), 0x00 });		// audible
+			patch.regs.push_back ({ (uint8_t) (0x50 | base), 0x1F });		// attack at once
+			patch.regs.push_back ({ (uint8_t) (0x60 | base), 0x00 });		// hold
+			patch.regs.push_back ({ (uint8_t) (0x70 | base), 0x00 });
+			patch.regs.push_back ({ (uint8_t) (0x80 | base), 0x0F });
+		}
+
+		// **Both pan bits as well as the connection.** `0x07` alone is connection 7 with L and R
+		// clear, which on the stereo parts is silence - the first version of this test measured
+		// 0.0 Hz on a YM2610 and half the pitch on a YM2612, and neither was the divisor.
+		patch.regs.push_back ({ 0xB0, 0xC7 });
+		return patch;
+	};
+
+	struct Case
+	{
+		toybox::chips::ChipModel model;
+		const char* name;
+	};
+
+	// **Three of the four parts.** `sndDev_YM2610` declares only `devDef_MAME_2610` as its core
+	// (`opnintf.c:262`), and that one does not produce a note from a standalone `SndEmu_Start` with
+	// no ROM attached - measured here as `peak 0.000`. A song that plays a YM2610 goes through the
+	// player's own setup, which is a different path; its pitch is not something this fixture can
+	// assert, so it is not listed rather than listed and guessed at.
+	const Case cases[] = {
+		{ toybox::chips::ChipModel::ym2612, "YM2612" },
+		{ toybox::chips::ChipModel::ym2203, "YM2203" },
+		{ toybox::chips::ChipModel::ym2608, "YM2608" },
+	};
+
+	// C4. Low enough that every part can reach it, high enough that an octave either way is obvious.
+	const double wanted = toybox::playback::noteWave::frequencyOf (60);
+
+	for (const auto& testCase : cases)
+	{
+		// Export quality, so the core runs at the chip's own rate and `rate` is worth reading.
+		const auto driver = toybox::backends::libvgm::makeFmVoiceDriver (true);
+
+		const auto wave = toybox::playback::noteWave::render (*driver, makePatch (testCase.model),
+															 wanted, 0.6, 0.05, false);
+
+		const auto rate = driver->rate ();
+
+		// Built here rather than inline: `check` takes a `const char*`, and the string has to outlive
+		// the call.
+		const std::string named = testCase.name;
+
+		if (wave.size () < 1000 || rate <= 0.0)
+		{
+			const std::string message = named + " renders a note to measure";
+			check (false, message.c_str ());
+			continue;
+		}
+
+		// The middle half: the attack and the release both move the level through zero.
+		const std::size_t begin = wave.size () / 4;
+		const std::size_t end = wave.size () * 3 / 4;
+
+		int crossings = 0;
+
+		for (std::size_t i = begin + 1; i < end; ++i)
+		{
+			if ((wave[i - 1] < 0.0f) != (wave[i] < 0.0f))
+			{
+				++crossings;
+			}
+		}
+
+		const double seconds = (double) (end - begin) / rate;
+		const double measured = (double) crossings / 2.0 / seconds;
+
+		double peak = 0.0;
+
+		for (const float sample : wave)
+		{
+			peak = std::max (peak, (double) std::abs (sample));
+		}
+
+		std::printf ("    %-7s asked %6.1f Hz, measured %6.1f Hz  (rate %.0f, %zu samples, "
+					 "peak %.3f, %d crossings)\n",
+					 testCase.name, wanted, measured, rate, wave.size (), peak, crossings);
+
+		// Eight percent: an octave is a hundred. Well inside that, one waveform's harmonics are noise
+		// around the zero; outside it, the divisor is wrong.
+		const std::string message = named + " sounds the pitch it was asked for";
+		check (std::abs (measured - wanted) / wanted < 0.08, message.c_str ());
+	}
+}
+
 int main()
 {
 	std::printf ("YM2612 decoder against libvgm's own core\n");
@@ -571,6 +687,7 @@ int main()
 
 	testPatchCapture();
 	testNoteWaveform();
+	testNotePitchIsWhatWasAsked();
 	testNoteWaveformInState();
 
 	Tally tally;
