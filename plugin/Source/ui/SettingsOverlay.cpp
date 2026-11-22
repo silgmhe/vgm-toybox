@@ -1384,6 +1384,14 @@ FmSettingsPage::FmSettingsPage (void)
 	};
 	addAndMakeVisible (normaliseButton);
 
+	exportPitchButton.setComponentID ("settings.fm.exportAtPlayedPitch");
+	exportPitchButton.onClick = [this]
+	{
+		toybox::settings::SettingsStore::getInstance ()
+			.setFmExportAtPlayedPitch (exportPitchButton.getToggleState ());
+	};
+	addAndMakeVisible (exportPitchButton);
+
 	refreshLanguage ();
 	refresh ();
 }
@@ -1396,6 +1404,8 @@ void FmSettingsPage::refresh (void)
 	releaseSlider.setValue ((double) store.getFmReleaseMs (), juce::dontSendNotification);
 	noteSlider.setValue ((double) store.getFmFixedNote (), juce::dontSendNotification);
 	normaliseButton.setToggleState (store.getFmNormalise (), juce::dontSendNotification);
+	exportPitchButton.setToggleState (store.getFmExportAtPlayedPitch (),
+									  juce::dontSendNotification);
 }
 
 void FmSettingsPage::paint (juce::Graphics& g)
@@ -1424,6 +1434,7 @@ void FmSettingsPage::resized (void)
 	area.removeFromTop (14);
 
 	normaliseButton.setBounds (area.removeFromTop (22));
+	exportPitchButton.setBounds (area.removeFromTop (22));
 }
 
 void FmSettingsPage::lookAndFeelChanged (void)
@@ -1449,6 +1460,7 @@ void FmSettingsPage::refreshLanguage (void)
 	}
 
 	normaliseButton.setButtonText (i18n::tr ("settings.fm.normalise"));
+	exportPitchButton.setButtonText (i18n::tr ("settings.fm.exportAtPlayedPitch"));
 }
 
 AudioSettingsPage::AudioSettingsPage (void)

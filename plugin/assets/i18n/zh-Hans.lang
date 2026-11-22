@@ -289,6 +289,7 @@ language: 简体中文
 "settings.fm.sustainLength" = "持续段长度";
 "settings.fm.releaseLength" = "释音段长度";
 "settings.fm.note" = "渲染音高";
+"settings.fm.exportAtPlayedPitch" = "导出时按该通道实际播放的音高渲染";
 "settings.keyboard.middleC" = "中央 C 记作";
 "settings.keyboard.explanation" = "键盘视图画什么。八度范围随窗口宽度自动调整；箭头则是一项选择。";
 "settings.keyboard" = "键盘";

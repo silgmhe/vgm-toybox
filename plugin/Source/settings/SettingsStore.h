@@ -230,6 +230,10 @@ public:
 	/** Whether a rendered FM note is scaled to full scale. Off by default: the level is part of the
 		patch, and normalising it makes every timbre look equally loud. */
 	bool getFmNormalise (void) const;
+
+	/** Whether an export renders at the pitch the row is playing. See `fm::exportAtPlayedPitch`. */
+	bool getFmExportAtPlayedPitch (void) const;
+	void setFmExportAtPlayedPitch (bool atPlayedPitch);
 	void setFmNormalise (bool shouldNormalise);
 
 	/** The MIDI note every FM waveform is rendered at. */

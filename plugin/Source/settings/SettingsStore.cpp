@@ -642,6 +642,20 @@ void SettingsStore::setFmNormalise (bool shouldNormalise)
 	}
 }
 
+bool SettingsStore::getFmExportAtPlayedPitch (void) const
+{
+	return file != nullptr ? file->getBoolValue ("fm.exportAtPlayedPitch", fm::exportAtPlayedPitch)
+						   : fm::exportAtPlayedPitch;
+}
+
+void SettingsStore::setFmExportAtPlayedPitch (bool atPlayedPitch)
+{
+	if (file != nullptr)
+	{
+		file->setValue ("fm.exportAtPlayedPitch", atPlayedPitch);
+	}
+}
+
 int SettingsStore::getFmFixedNote (void) const
 {
 	const auto* setting = numericSetting ("fm.note");

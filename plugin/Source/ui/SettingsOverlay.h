@@ -440,6 +440,10 @@ private:
 	juce::Label noteCaption;
 	juce::Slider noteSlider;
 	juce::ToggleButton normaliseButton;
+
+	/** Whether an export follows each row's own pitch. Off uses `noteSlider`'s, which is what the
+		panel always draws at. */
+	juce::ToggleButton exportPitchButton;
 };
 
 class AudioSettingsPage : public View,

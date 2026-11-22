@@ -1376,13 +1376,22 @@ private:
 		// gesture.
 		auto state = snapshot.channels[(std::size_t) channel];
 
-		if (state.voicePatch != nullptr && state.trackIndex >= 0 && state.frequency > 0.0f)
+		if (state.voicePatch != nullptr && state.trackIndex >= 0)
 		{
-			if (auto rendered = engine.renderNoteAt (state.trackIndex, (double) state.frequency);
-				rendered.wave != nullptr)
+			const auto& dragSettings = settings::SettingsStore::getInstance ();
+			const double hz = dragSettings.getFmExportAtPlayedPitch ()
+								  ? (double) state.frequency
+								  : playback::noteWave::frequencyOf (dragSettings.getFmFixedNote ());
+
+			// A row with no pitch keeps the shape it was drawn with.
+			if (hz > 0.0)
 			{
-				state.noteWaveform = std::move (rendered.wave);
-				state.noteWaveformRate = (float) rendered.rate;
+				if (auto rendered = engine.renderNoteAt (state.trackIndex, hz);
+					rendered.wave != nullptr)
+				{
+					state.noteWaveform = std::move (rendered.wave);
+					state.noteWaveformRate = (float) rendered.rate;
+				}
 			}
 		}
 
@@ -1610,7 +1619,15 @@ void ContentSlot::beginExport (const ExportOptions& options)
 		const ExportOptions chosen = options;
 		juce::Component::SafePointer<ContentSlot> safe (this);
 
-		exportPool.addJob ([lifetime, enginePtr, drawn = std::move (drawn), chosen, report, safe] () mutable
+		// **Read here, on the message thread**, because the job may not touch the settings store - and
+		// because both answers are needed by every row it renders.
+		const auto& exportSettings = settings::SettingsStore::getInstance ();
+		const bool atPlayedPitch = exportSettings.getFmExportAtPlayedPitch ();
+		const double fixedNoteHz
+			= playback::noteWave::frequencyOf (exportSettings.getFmFixedNote ());
+
+		exportPool.addJob ([lifetime, enginePtr, drawn = std::move (drawn), chosen, report, safe,
+							atPlayedPitch, fixedNoteHz] () mutable
 		{
 			// **Every row that carries a patch is rendered again, not only a pinned one.**
 			//
@@ -1630,9 +1647,11 @@ void ContentSlot::beginExport (const ExportOptions& options)
 					continue;
 				}
 
+				// **Three answers, in order of who asked for it.** A pinned note wins; otherwise the
+				// setting decides between the pitch the row is playing and the panel's fixed note.
 				const double hz = (chosen.fixedNote >= 0)
 									  ? playback::noteWave::frequencyOf (chosen.fixedNote)
-									  : (double) channel.frequency;
+									  : (atPlayedPitch ? (double) channel.frequency : fixedNoteHz);
 
 				// A row resting with no pitch keeps the shape it was drawn with, which is the honest
 				// answer - there is nothing to re-render it at.

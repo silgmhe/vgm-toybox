@@ -259,6 +259,18 @@ constexpr int minFixedNote = 21;
 constexpr int maxFixedNote = 108;
 constexpr int defaultFixedNote = 60;
 
+/** **Whether an export renders at the pitch the row is playing, or at the fixed note above.**
+
+	On by default, because a chip's timbre depends on the pitch: key scaling sets the envelope's rate
+	from the note, so a C4 render of an A2 note is not that note's sound. That is the answer a
+	listener expects from "export this row".
+
+	Off gives every export the fixed note, which is what comparing patches across a song wants - and it
+	is what the panel always does, because a shape that re-renders on every note change costs the audio
+	thread. Only the panel's fixed note is affected by `fm.note`; this decides whether export follows it.
+*/
+constexpr bool exportAtPlayedPitch = true;
+
 } // namespace fm
 
 namespace window
