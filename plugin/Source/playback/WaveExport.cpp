@@ -383,6 +383,28 @@ bool writeNoteFile (const ChannelState& channel, const std::string& path, int bi
 	// filtering after would round twice, and the second rounding is not the one the depth asked for.
 	values = lowPassedForDecimation (values, source, target);
 
+	// **A mono chip sounds twice as loud as one channel of it.** The YM2203 has a single output; the
+	// player fans it out to both channels, so the same patch measured in a mixer reads 6 dB above a
+	// file that holds one channel - reported as "playback is louder than the export", and confirmed by
+	// comparing two exports: a YM2203 and a YM2151 of the same kind both peaked at 0.175, and only the
+	// mono one sounded quiet.
+	//
+	// **A fixed gain, not normalisation.** It does not follow the note's peak, so a quiet patch stays
+	// quiet relative to a loud one - the reason normalisation was removed from this path.
+	//
+	// The OPL2 family is mono as well and will need this when it can export a computed note at all;
+	// it is listed by model rather than by "channels == 1" because the engine has no such field.
+	const bool monoChip = channel.voicePatch != nullptr
+						  && channel.voicePatch->model == chips::ChipModel::ym2203;
+
+	if (monoChip)
+	{
+		for (auto& sample : values)
+		{
+			sample *= 2.0f;
+		}
+	}
+
 	if (depth > 0)
 	{
 		for (auto& sample : values)
