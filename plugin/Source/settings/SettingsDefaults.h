@@ -245,13 +245,19 @@ constexpr int defaultReleaseMs = 100;
 	the pitch on is the deliberate act of asking for a different one. The range is a piano's - A0 to
 	C8 - because the point of the control is to pick a playable note, not to sweep the register.
 */
-/** **Whether a rendered note is scaled to full scale.**
+/** **Whether a drawn note is scaled to fill the row.**
 
-	Off by default, and that is a deliberate answer rather than an unset one: the level a patch
-	produces is part of what the chip sounds like, and normalising it away makes every timbre look
-	equally loud. A quiet carrier draws as a thin ribbon - which is the truth about that patch, and
-	the reason someone turns this on only when they are cutting samples to be played back at a
-	matched level.
+	On by default. A carrier at total level 48 is -36 dB by design, and drawn at that level the row is
+	a flat line - the shape is what the window is showing, so the shape fills the range. The operator
+	ratios inside the patch are untouched; this is one gain for the whole note.
+
+	**The panel only.** An export carries the level the chip produced, because the gain is chosen from
+	the note's own peak: a quiet patch comes up seventeen-fold, and residual aliasing and quantisation
+	noise come up with it. A level that changes per note is also not a level - it is this drawing
+	convention leaking into a file. See the export path in `ContentSlot`.
+
+	**The old wording said "off by default" beside a `true`**, and it claimed to govern both paths
+	long after it stopped.
 */
 constexpr bool normalise = true;
 
