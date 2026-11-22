@@ -17,6 +17,21 @@
 
 namespace
 {
+	/** **The ordinal `ChipConfig::flags` carries for an OPN variant.**
+
+		`OpnDecoder::reset` reads it back as `Variant (flags - 1)`, so this is that expression from
+		the other end. Written once instead of as four literals in the device `switch` plus a fifth
+		in the rhythm-ROM check: adding a variant there means adding its enum value, not working out
+		its position again.
+	*/
+	constexpr uint32_t opnSlotFlag (toybox::chips::OpnDecoder::Variant variant)
+	{
+		return (uint32_t) variant + 1u;
+	}
+
+	/** The YM2608, which is the only OPN whose rhythm bank lives inside the part. */
+	constexpr uint32_t kOpnaSlotFlag = opnSlotFlag (toybox::chips::OpnDecoder::Variant::ym2608);
+
 	/** **The OPNA's rhythm samples are in the chip, not in the song.**
 
 		Its six ADPCM-A voices read a 16 KB ROM the core carries as `YM2608_ADPCM_ROM`; no VGM block
@@ -31,7 +46,7 @@ namespace
 	*/
 	void attachRhythmRom (toybox::chips::IChipDecoder& decoder, uint8_t slotFlags)
 	{
-		if (slotFlags != 2 || typeid (decoder) != typeid (toybox::chips::OpnDecoder))
+		if (slotFlags != kOpnaSlotFlag || typeid (decoder) != typeid (toybox::chips::OpnDecoder))
 		{
 			return;
 		}
@@ -134,10 +149,10 @@ void VgmReplayer::adoptNewBuffers (void)
 			{
 				switch (device->type)
 				{
-				case DEVID_YM2203: slotFlags = 1; break;
-				case DEVID_YM2608: slotFlags = 2; break;
-				case DEVID_YM2610: slotFlags = 3; break;
-				case DEVID_YM2612: slotFlags = 5; break;
+				case DEVID_YM2203: slotFlags = opnSlotFlag (chips::OpnDecoder::Variant::ym2203); break;
+				case DEVID_YM2608: slotFlags = kOpnaSlotFlag; break;
+				case DEVID_YM2610: slotFlags = opnSlotFlag (chips::OpnDecoder::Variant::ym2610); break;
+				case DEVID_YM2612: slotFlags = opnSlotFlag (chips::OpnDecoder::Variant::ym2612); break;
 
 				// The OPL family shares one decoder, and only the Y8950 has a Delta-T unit: bit 0
 				// says so, which is what gives it a fifteenth row (and the ROM it draws from).

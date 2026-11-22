@@ -11,12 +11,10 @@
 
 #include <algorithm>
 #include <cmath>
-#include <typeindex>
 
 #include "playback/ChannelFromChip.h"
 #include "settings/SettingsStore.h"
 
-#include "chips/Ay8910Decoder.h"
 #include "playback/NoteWaveform.h"
 
 #include "OpnVoiceDriver.h"
@@ -508,8 +506,11 @@ namespace
 		the keyboard (its state looked up an FM track) while the FM rows were drawn as squares (the
 		kind table's SSG slot overwrote theirs). One device type, three failures below it.
 
-		What separates them is the decoder: the SSG is an AY8910 with three square channels, and
-		that is also what keeps a YM2203's FM out - three channels as well, but no squares.
+		**The decoder answers it now** (`IChipDecoder::isLinkedVoiceSet`), which is where the
+		knowledge belongs: the SSG is an `Ay8910Decoder`, and a YM2203's FM - three channels as well -
+		is not. Not a `typeid` here, because that puts a class name in playback code and goes quietly
+		wrong the day a subclass appears; not a channel count either, because `DEV_CHN_COUNT_YM2203`
+		is three.
 
 		One definition, because two copies drift: the copy in the kind table answered `channelKind
 		(0..2)` from the FM instance, whose FM count is above those indices, so the SSG's three rows
@@ -523,14 +524,13 @@ namespace
 			return false;
 		}
 
-		// The parent test keeps a standalone AY8910 out: there the device type is the AY itself.
+		// **The parent test keeps a standalone AY8910 out**: there the device type is the AY itself,
+		// and its decoder answers true for the same reason a linked one does.
 		const bool opnParent = instance.device->type == DEVID_YM2203
 							   || instance.device->type == DEVID_YM2608
 							   || instance.device->type == DEVID_YM2610;
 
-		return opnParent
-			   && instance.type == std::type_index (typeid (chips::Ay8910Decoder))
-			   && instance.decoder->channelCount () == 3;
+		return opnParent && instance.decoder->isLinkedVoiceSet ();
 	}
 }
 

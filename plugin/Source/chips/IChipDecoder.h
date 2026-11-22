@@ -112,6 +112,23 @@ public:
 	/** True when the channel should be treated as a drum track (GM drum key mapping). */
 	virtual bool isDrum (int channel) const { return false; }
 
+	/** **True when this decoder stands in for a voice set linked behind another device.**
+
+		libvgm reports a linked voice set - the three SSG squares of a YM2203, YM2608 or YM2610 -
+		under the parent's device id *and* its type, so the caller cannot tell the two instances
+		apart from the device alone. What it can tell is which decoder it is holding, and this is
+		where that decoder answers.
+
+		**Asked here rather than inferred by the caller.** The player used to decide with a
+		`typeid` comparison against `Ay8910Decoder`, which put a class name into playback code and
+		would have failed silently if a subclass were ever added. A YM2203's FM is also three
+		channels, so a channel count alone cannot answer it either - that was the trap the first
+		version of this fell into.
+
+		False by default: a decoder that does not say so is the chip it is reported under.
+	*/
+	virtual bool isLinkedVoiceSet (void) const { return false; }
+
 	/** Hand over the image `kRequirements` asked for. Called once, before the first write.
 		The default ignores it, which is right for every chip that names a pitch from registers. */
 	virtual void attachMemory (const ChipMemory&) {}
