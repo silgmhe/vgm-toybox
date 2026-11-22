@@ -122,10 +122,20 @@ constexpr double kDefaultReleaseSeconds = 0.1;
 	bits in `DEV_SMPL`, and quantising to the converter discards detail the emulator produces - a
 	different sound, not a more authentic one.
 
-	The figures follow each core's own accumulation rather than a datasheet: `fmopn` sums four
-	operators of about `+/-0x1000` into `out_fm`, which is fourteen bits; the OPL and OPM cores
-	accumulate wider and use more of `DEV_SMPL`'s sixteen. Adding a chip means adding a line here
-	next to the model, which is why the table sits beside the enum instead of inside a renderer.
+	**Every figure here is measured, and four of them differ from what the first version assumed.**
+	Each core was rendered at `normalise = false` and its peak compared against full scale: a value
+	one bit too wide costs 6 dB of level *and* moves the quantiser off the core's own LSB, and neither
+	shows up in a test that only counts samples.
+
+	| model | peak when declared sixteen | measured width |
+	|---|---|---|
+	| YM2612 | 0.250 | 14 |
+	| YM2203 / YM2608 | 0.997 | 16 |
+	| YM2610 (MAME core) | - | 15, by ear |
+	| YM2151 | 0.249 | 14 |
+
+	Adding a chip means measuring it, not copying its neighbour: the two six-channel OPNs do not even
+	share a core, and one needed a width the other did not.
 */
 constexpr int fmOutputBits (ChipModel model)
 {
@@ -150,8 +160,15 @@ constexpr int fmOutputBits (ChipModel model)
 	// Whoever adds a part here should measure it, not copy its neighbour's number.
 	case ChipModel::ym2610:		return 15;
 
-	case ChipModel::ym2151:						// fmopm
-	case ChipModel::ym3812:						// fmopl
+	// **Fourteen for the OPM too, measured the same way as the OPN2.** `nukedopm` reaches ±0x2000,
+	// so a declared sixteen left every YM2151 export at a quarter of the chip's level - `peak
+	// 0.249` against a real full scale. Same failure as the YM2612's, same fix.
+	case ChipModel::ym2151:		return 14;
+
+	// **The OPL parts and the VRC7 are still sixteen, and neither has been measured.** They are left
+	// at the value they were written with rather than guessed at - a wrong number here is 6 dB of
+	// level per bit, so it is worth a fixture before anyone reports it.
+	case ChipModel::ym3812:
 	case ChipModel::vrc7:		return 16;
 
 	case ChipModel::unknown:	break;

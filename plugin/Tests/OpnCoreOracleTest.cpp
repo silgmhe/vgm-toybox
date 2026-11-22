@@ -723,6 +723,71 @@ void testNoteDecimationRemovesWhatWouldAlias (void)
 	check (std::abs (kept[512] - 1.0f) < 0.01f, "and the pass band comes through at unity");
 }
 
+/** **What a YM2151 actually reaches, so its output width is measured rather than assumed.**
+
+	The same question the OPN parts each answered differently - 14 bits for the YM2612, 16 for the
+	YM2203 and YM2608, 15 for the YM2610 - asked of the OPM. Its patch is four operators with total
+	level at zero on all of them, so the peak is the chip's full scale and nothing else.
+*/
+void testOpmReachesFullScale (void)
+{
+	auto makePatch = []
+	{
+		toybox::chips::VoicePatch patch;
+		patch.model = toybox::chips::ChipModel::ym2151;
+
+		for (int op = 0; op < 4; ++op)
+		{
+			const auto base = (uint16_t) (op * 8);
+			patch.regs.push_back ({ (uint16_t) (0x40 + base), 0x01 });	// DT1/MUL: ratio 1
+			patch.regs.push_back ({ (uint16_t) (0x60 + base), 0x00 });	// TL: full
+			patch.regs.push_back ({ (uint16_t) (0x80 + base), 0x1F });	// AR: at once
+			patch.regs.push_back ({ (uint16_t) (0xA0 + base), 0x00 });	// D1R
+			patch.regs.push_back ({ (uint16_t) (0xC0 + base), 0x00 });	// D2R
+			patch.regs.push_back ({ (uint16_t) (0xE0 + base), 0xF0 });	// D1L/RR: loud, slow release
+		}
+
+		patch.regs.push_back ({ 0x20, 0xC0 });		// connection 0, both pan bits
+		return patch;
+	};
+
+	const double wanted = toybox::playback::noteWave::frequencyOf (60);
+
+	struct Rate
+	{
+		double rate;
+		const char* label;
+	};
+
+	const Rate rates[] = {
+		{ 0.0, "chip" },
+		{ 48000.0, "48k" },
+	};
+
+	for (const auto& rateCase : rates)
+	{
+		const auto driver = toybox::backends::libvgm::makeFmVoiceDriver (true, rateCase.rate);
+		const auto wave = toybox::playback::noteWave::render (*driver, makePatch (), wanted, 0.6, 0.05,
+															 false);
+
+		double peak = 0.0;
+
+		for (const float sample : wave)
+		{
+			peak = std::max (peak, (double) std::abs (sample));
+		}
+
+		std::printf ("    YM2151 %-5s peak %.3f  (rate %.0f, %zu samples)\n", rateCase.label, peak,
+					 driver->rate (), wave.size ());
+
+		// **The scale the file will carry.** A declared width six bits too wide leaves the level at a
+		// quarter and the quantiser three steps off the core's own LSB - the failure the YM2612 and
+		// the YM2610 both had, and this is what tells the OPM apart from them.
+		const std::string message = std::string ("the YM2151 reaches full scale at ") + rateCase.label;
+		check (peak > 0.9, message.c_str ());
+	}
+}
+
 int main()
 {
 	std::printf ("YM2612 decoder against libvgm's own core\n");
@@ -780,6 +845,7 @@ int main()
 	testNoteWaveform();
 	testNotePitchIsWhatWasAsked();
 	testNoteDecimationRemovesWhatWouldAlias();
+	testOpmReachesFullScale();
 	testNoteWaveformInState();
 
 	Tally tally;
