@@ -1366,7 +1366,26 @@ private:
 			return;
 		}
 
-		const auto& state = snapshot.channels[(std::size_t) channel];
+		// **A copy, because the shape is re-rendered below.** The panel's copy is 8 kHz, at the fixed
+		// note its settings ask for. A file is a timbre: it has to be sampled at the chip's own rate
+		// and at the pitch the row is playing, or the same gesture produces a different sound than
+		// File > Export does for the same row.
+		//
+		// `Export snapshot` does this on a pool. A drag cannot wait for one - the drop target needs a
+		// path before the pointer is released - so it pays the render inline: one channel, once per
+		// gesture.
+		auto state = snapshot.channels[(std::size_t) channel];
+
+		if (state.voicePatch != nullptr && state.trackIndex >= 0 && state.frequency > 0.0f)
+		{
+			if (auto rendered = engine.renderNoteAt (state.trackIndex, (double) state.frequency);
+				rendered.wave != nullptr)
+			{
+				state.noteWaveform = std::move (rendered.wave);
+				state.noteWaveformRate = (float) rendered.rate;
+			}
+		}
+
 		const auto folder = toybox::playback::dragExportFolder ();
 
 		// Made on demand: a start-up that created it would leave an empty folder for everyone who
