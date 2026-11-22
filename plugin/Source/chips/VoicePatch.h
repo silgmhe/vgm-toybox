@@ -118,6 +118,9 @@ constexpr int fmOutputBits (ChipModel model)
 	case ChipModel::unknown:	break;
 	}
 
+	// Same rule as `noteRateFor` below: this is `unknown`'s answer, not a guess for a chip that has
+	// no case. Sixteen is what the OPL and OPM cores accumulate, so an unfilled model silently reads
+	// as "wide" and its quantisation would be wrong by up to four bits.
 	return 16;
 }
 
@@ -146,7 +149,12 @@ constexpr double noteRateFor (ChipModel model)
 	case ChipModel::unknown:	break;
 	}
 
-	return 7670453.0 / 144.0;		// the OPN, for the same reason `fmOutputBits` falls back to it
+	// **The OPN's figure is for `unknown`, not for "a chip nobody filled in yet".** A model added to
+	// the enum without a case here lands on this number, which is plausible enough to survive review
+	// and wrong for anything that is not an OPN. `ymf271` is in that state today: it has no
+	// `capturePatch`, so nothing calls this - see
+	// `docs/issue/2026-11-22-the-drag-that-kept-the-panels-shape.md` §5.
+	return 7670453.0 / 144.0;
 }
 
 struct VoicePatch
