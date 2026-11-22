@@ -615,25 +615,23 @@ void PlaybackEngine::requestPositionSeconds (double seconds)
 	const double target = duration > 0.0 ? juce::jlimit (0.0, duration, seconds)
 										 : juce::jmax (0.0, seconds);
 
-	// One player per track means one replay per track, and an NSF cannot be seeked into - the
-	// driver has to run from its beginning to the target. On a thirteen-track file that is seconds
-	// of work, so it happens on the worker: the request is published, the transport draws it, and
-	// the audio thread renders silence until the players have caught up (it cannot take the lock
-	// while the worker holds it, which is the same behaviour as before - minus the frozen window).
-	if (playerCount.load () > 1)
-	{
-		positionSeconds.store (target);
-		finished.store (false);
-		midiResetGeneration.fetch_add (1);
+	// **Always on the worker, because "one player" does not mean "cheap".** A backend that cannot be
+	// seeked into has to run the driver from its beginning to the target, and an in-place backend
+	// does that with a single player - so the count says nothing about the cost. It used to be
+	// `playerCount > 1`, which left every NSF seek on the message thread: dragging the bar across a
+	// long song froze the window for seconds and then jumped, and the in-place path is exactly the
+	// one-player case.
+	//
+	// The request is published, the transport draws the target immediately, and the audio thread
+	// renders silence until the player has caught up - it cannot take the lock while the worker
+	// holds it, which is what a frozen window was buying instead.
+	positionSeconds.store (target);
+	finished.store (false);
+	midiResetGeneration.fetch_add (1);
 
-		seekTargetSeconds.store (target);
-		seekRequested.store (true);
-		seekCv.notify_one ();
-		return;
-	}
-
-	const juce::ScopedLock sl (lock);
-	setPositionSecondsLocked (target);
+	seekTargetSeconds.store (target);
+	seekRequested.store (true);
+	seekCv.notify_one ();
 }
 
 void PlaybackEngine::seekAllPlayersTo (double target)
