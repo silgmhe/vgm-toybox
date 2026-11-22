@@ -11,6 +11,7 @@
 #include "chips/Ay8910Decoder.h"
 #include "chips/GbcApuDecoder.h"
 #include "chips/NesApuDecoder.h"
+#include "chips/OplDecoder.h"
 #include "chips/OpnDecoder.h"
 
 #include "emu/cores/fmopn_2608rom.h"
@@ -154,9 +155,35 @@ void VgmReplayer::adoptNewBuffers (void)
 				case DEVID_YM2610: slotFlags = opnSlotFlag (chips::OpnDecoder::Variant::ym2610); break;
 				case DEVID_YM2612: slotFlags = opnSlotFlag (chips::OpnDecoder::Variant::ym2612); break;
 
-				// The OPL family shares one decoder, and only the Y8950 has a Delta-T unit: bit 0
-				// says so, which is what gives it a fifteenth row (and the ROM it draws from).
-				case DEVID_Y8950: slotFlags = 1; break;
+				// **The OPL family shares one decoder, and which member it is has to be said too.**
+				// It arrives as the default `opl2`, so a YM2413 was decoded through OPL2's register
+				// map - `0xA0`/`0xB0` for pitch and key-on, where an OPLL writes `0x10..0x18` and
+				// `0x20..0x28`. Its rows therefore had no period, no block and no gate: no note in
+				// the keyboard row and no key highlighted, while the MIDI was correct because
+				// `MidiSequenceBuilder` builds a decoder of its own with the variant it works out.
+				// The OPL3s lost the second nine-channel bank the same way.
+				case DEVID_YM2413:
+					slotFlags = chips::OplDecoder::slotFlag (chips::OplDecoder::Variant::opll);
+					break;
+
+				case DEVID_YMF262:
+				case DEVID_YMF278B:
+					slotFlags = chips::OplDecoder::slotFlag (chips::OplDecoder::Variant::opl3);
+					break;
+
+				// Named rather than left to the default, so the set of variants the replayer can
+				// produce is visible in one place.
+				case DEVID_YM3812:
+				case DEVID_YM3526:
+					slotFlags = chips::OplDecoder::slotFlag (chips::OplDecoder::Variant::opl2);
+					break;
+
+				// Only the Y8950 has a Delta-T unit: bit 0 says so, which is what gives it a
+				// fifteenth row (and the ROM it draws from).
+				case DEVID_Y8950:
+					slotFlags = chips::OplDecoder::deltaTFlag
+								| chips::OplDecoder::slotFlag (chips::OplDecoder::Variant::opl2);
+					break;
 
 				// **SCC or SCC+.** The VGM clock field's bit 31 selects the second one, and the two
 				// address their waveform RAM differently: SCC shares one table between channels 3

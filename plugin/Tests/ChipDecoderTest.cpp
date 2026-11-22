@@ -619,6 +619,89 @@ namespace
 		check (same, "and the exporter's decoder produces the same levels as the panel");
 	}
 
+	/** **The device's variant reaches a decoder the registry made.**
+
+		`DecoderRegistry::makeDecoder` default-constructs, and `OplDecoder`'s default is `opl2`. Four
+		kinds share that decoder, so the variant has to travel through `ChipConfig::flags` - and it
+		did not: a YM2413 was decoded through OPL2's register map, reading `0xA0`/`0xB0` for pitch and
+		key-on while an OPLL writes `0x10..0x18` and `0x20..0x28`.
+
+		The visible result was a keyboard row with no note and no key highlight, on a chip whose
+		MIDI was correct - because `MidiSequenceBuilder` builds a decoder of its own with the right
+		variant, which is why nothing caught this.
+
+		Both halves are asserted: with the flag the row lives, without it the same stream says
+		nothing. The second is the one that would have failed before the flag existed.
+	*/
+	void testOpllVariantReachesTheDecoder (void)
+	{
+		using toybox::chips::ChipConfig;
+		using toybox::chips::OplDecoder;
+		using toybox::chips::RegisterWrite;
+
+		const auto write = [] (OplDecoder& decoder, uint32_t time, uint8_t reg, uint8_t value)
+		{
+			RegisterWrite w;
+			w.sampleTime = time;
+			w.port = 0;
+			w.reg = reg;
+			w.value = value;
+			decoder.write (w);
+		};
+
+		// The OPLL puts its pitch on 0x10..0x18, its block and key-on on 0x20..0x28, and the
+		// instrument number on 0x30..0x38. Channel 2 here: fnum 0x169, block 6, key on.
+		const auto stream = [] (OplDecoder& decoder)
+		{
+			return [&decoder] (uint32_t time, uint8_t reg, uint8_t value)
+			{
+				RegisterWrite w;
+				w.sampleTime = time;
+				w.port = 0;
+				w.reg = reg;
+				w.value = value;
+				decoder.write (w);
+			};
+		};
+
+		{
+			OplDecoder decoder (OplDecoder::Variant::opl2, false);		// what the registry builds
+			decoder.reset (ChipConfig { 3579545u, 44100.0,
+										OplDecoder::slotFlag (OplDecoder::Variant::opll), 0.0 });
+
+			const auto at = stream (decoder);
+			at (0, 0x32, 0x10);		// channel 2: instrument 1, volume 0
+			at (1, 0x12, 0x69);		// FNUM low
+			at (2, 0x22, 0x1D);		// key on, block 6, FNUM bit 8
+
+			const auto state = decoder.channelState (2);
+
+			check (state.present, "the flagged decoder has a row for an OPLL channel");
+			check (state.gate, "and its 0x20 key-on bit opens the gate");
+			check (state.period != 0 && state.block == 6,
+				   "with the pitch registers read from 0x10 and 0x20");
+		}
+
+		{
+			// The same stream against the default: an OPL2 has no registers at those addresses, so
+			// the row stays silent. This is the state the YM2413 was shipped in.
+			OplDecoder decoder;
+			decoder.reset (ChipConfig { 3579545u, 44100.0, 0, 0.0 });
+
+			const auto at = stream (decoder);
+			at (0, 0x32, 0x10);
+			at (1, 0x12, 0x69);
+			at (2, 0x22, 0x1D);
+
+			const auto state = decoder.channelState (2);
+
+			check (state.period == 0 && ! state.gate,
+				   "an unflagged decoder reads those addresses as OPL2 operator registers");
+		}
+
+		(void) write;
+	}
+
 	/** A three-channel OPN (YM2203) has no second port: register 0x28 with the port-select bit
 		set addresses channel 3 of a six-channel OPN, which this chip does not have, while the
 		low two bits still select one of its three. */
@@ -8056,6 +8139,7 @@ int main (void){
 	testYm2612DacWindow();
 	testY8950CpuFedStream();
 	testY8950AdpcmRow();
+	testOpllVariantReachesTheDecoder();
 	testOpnThreeChannels();
 	testOpnChannelFamilies();
 	testOpnAdpcmBShape();

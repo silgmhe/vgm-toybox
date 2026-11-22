@@ -41,6 +41,28 @@ public:
 		opl3	// YMF262 / YMF278B FM: two nine-channel banks, rhythm on 0xBD
 	};
 
+	/** **The value `ChipConfig::flags` carries for one of these variants**, in bits 1-2.
+
+		Bit 0 is taken by the Y8950's Delta-T unit (`deltaTFlag`), so the variant sits above it.
+
+		**Why it has to travel at all.** The decoder registry makes its instances with the default
+		constructor, and that constructor is `opl2` - correct for the OPL2s, wrong for everything
+		else that shares this decoder. A YM2413 therefore had its `0x10..0x18` / `0x20..0x28` pitch
+		and key-on registers parsed as an OPL2's operator registers: no period, no block, no gate. The
+		row showed no note and no key highlight, while its MIDI was right - `MidiSequenceBuilder`
+		builds a decoder of its own, with the variant it worked out. The OPL3s lost their second
+		nine-channel bank the same way.
+
+		Same shape as `opnSlotFlag` in `VgmReplayer`, and read back in `reset`.
+	*/
+	static constexpr uint32_t slotFlag (Variant variant)
+	{
+		return ((uint32_t) variant + 1u) << 1;
+	}
+
+	/** Bit 0: this device is a Y8950, whose Delta-T unit adds a fifteenth row. */
+	static constexpr uint32_t deltaTFlag = 1u;
+
 	/** @param adpcm true for the Y8950, whose Delta-T unit is a sample player on channel 14 */
 	explicit OplDecoder (Variant variant = Variant::opl2, bool adpcm = false);
 	~OplDecoder() override;

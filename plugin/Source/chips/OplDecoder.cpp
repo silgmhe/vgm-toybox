@@ -295,13 +295,18 @@ void OplDecoder::reset (const ChipConfig& config)
 {
 	[[maybe_unused]] const uint32_t clock = config.clockHz;
 	[[maybe_unused]] const double sampleRate = config.timeBaseHz;
-	const Variant variant = impl->variant;
 
-	// **The replayer makes decoders with the default constructor**, so the Y8950 has to say which
-	// OPL it is the same way the OPN family does: through `ChipConfig::flags` (bit 0 = Y8950, whose
-	// Delta-T unit gives the chip a fifteenth row). Without this the unit had no row at all - the
-	// notes were in the file and the table never listed them.
-	const bool adpcm = impl->adpcm || (config.flags & 1u) != 0;
+	// **The replayer makes decoders with the default constructor**, so the device has to say which
+	// OPL it is the same way the OPN family does: through `ChipConfig::flags`. Bit 0 says the Y8950
+	// (whose Delta-T unit gives the chip a fifteenth row); bits 1-2 carry the variant, because the
+	// default is `opl2` and three kinds share this decoder.
+	//
+	// **Zero in those bits means "the constructor already said"**, which keeps the callers that
+	// build a decoder with a variant - `MidiSequenceBuilder`, and the tests - working unchanged.
+	const uint32_t flaggedVariant = (config.flags >> 1) & 3u;
+	const Variant variant = (flaggedVariant != 0) ? (Variant) (flaggedVariant - 1) : impl->variant;
+
+	const bool adpcm = impl->adpcm || (config.flags & deltaTFlag) != 0;
 	*impl = Impl();
 	impl->variant = variant;
 	impl->adpcm = adpcm;
