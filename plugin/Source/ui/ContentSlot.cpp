@@ -1376,7 +1376,12 @@ private:
 		// gesture.
 		auto state = snapshot.channels[(std::size_t) channel];
 
-		if (state.voicePatch != nullptr && state.trackIndex >= 0)
+		// **A sampled row is written from its own bytes**, so a re-render for it would be work the
+		// writer ignores - and on the OPM that is 89 489 samples thrown away per gesture. This is
+		// the same test `writeChannelShape` makes one call later, so the two cannot disagree about
+		// which rows are recordings: the YM2612's DAC row is one, and so is every ADPCM voice.
+		if (state.voicePatch != nullptr && state.trackIndex >= 0
+			&& ! playback::isSampledChannel (state))
 		{
 			const auto& dragSettings = settings::SettingsStore::getInstance ();
 			const double hz = dragSettings.getFmExportAtPlayedPitch ()
@@ -1641,9 +1646,12 @@ void ContentSlot::beginExport (const ExportOptions& options)
 			// comes back is the chip's own.
 			for (auto& channel : drawn.channels)
 			{
-				// Only the rows that carry a patch: a sampled or wavetable channel has a waveform of
-				// its own and nothing to re-render from.
-				if (channel.voicePatch == nullptr || channel.trackIndex < 0)
+				// Only the rows that carry a patch, and only the ones the writer will not read from
+				// their own bytes: a sampled or wavetable channel has a waveform of its own, and
+				// `writeChannelShape` decides that with `isSampledChannel` - the same test here, so
+				// the render and the write cannot disagree about which rows are recordings.
+				if (channel.voicePatch == nullptr || channel.trackIndex < 0
+					|| playback::isSampledChannel (channel))
 				{
 					continue;
 				}
