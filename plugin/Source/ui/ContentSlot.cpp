@@ -1396,7 +1396,9 @@ private:
 			const chips::NoteRenderShape shape {
 				(double) juce::jmax (1, dragSettings.getFmSustainMs ()) / 1000.0,
 				(double) juce::jmax (1, dragSettings.getFmReleaseMs ()) / 1000.0,
-				false
+				false,
+				// The same rate the file below is written at, so the core runs there directly.
+				dragSettings.getExportSampleRateHz (engine.outputSampleRate ())
 			};
 
 			// A row with no pitch keeps the shape it was drawn with.
@@ -1661,7 +1663,11 @@ void ContentSlot::beginExport (const ExportOptions& options)
 		const chips::NoteRenderShape shape {
 			(double) juce::jmax (1, exportSettings.getFmSustainMs ()) / 1000.0,
 			(double) juce::jmax (1, exportSettings.getFmReleaseMs ()) / 1000.0,
-			false
+			false,
+			// **The rate the file will be written at**, so the core can run there and no resampling
+			// is needed afterwards. Zero means "at the chip's own rate", which is what the setting
+			// asks for when it is set to `sampleRateChip`.
+			exportSettings.getExportSampleRateHz (engine.outputSampleRate ())
 		};
 
 		exportPool.addJob ([lifetime, enginePtr, drawn = std::move (drawn), chosen, report, safe,

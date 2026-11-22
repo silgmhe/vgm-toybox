@@ -415,15 +415,16 @@ void opmAfterPatch ( Core& core, int channel )
 constexpr Dialect kOpnDialect { 0x03, &opnInit, &opnNoteOn, &opnNoteOff, &opnAfterPatch };
 constexpr Dialect kOpmDialect { 0x07, &opmInit, &opmNoteOn, &opmNoteOff, &opmAfterPatch };
 
-FmVoiceDriver::FmVoiceDriver (bool exportQualityToUse) : exportQuality (exportQualityToUse)
+FmVoiceDriver::FmVoiceDriver (bool exportQualityToUse, double exportRateToUse)
+	: exportQuality (exportQualityToUse), exportRate (exportRateToUse)
 {
 }
 
 FmVoiceDriver::~FmVoiceDriver () = default;
 
-std::unique_ptr<playback::IVoiceDriver> makeFmVoiceDriver (bool exportQuality)
+std::unique_ptr<playback::IVoiceDriver> makeFmVoiceDriver (bool exportQuality, double exportRate)
 {
-	return std::make_unique<FmVoiceDriver> (exportQuality);
+	return std::make_unique<FmVoiceDriver> (exportQuality, exportRate);
 }
 
 bool FmVoiceDriver::startCore (chips::ChipModel model, double rate)
@@ -445,10 +446,16 @@ bool FmVoiceDriver::load (const chips::VoicePatch& patch)
 	// Rebuild only when the chip changes. A driver serving six channels of one YM2612 keeps one
 	// core; a backend with an OPN and an OPM rebuilds when the patch names a different chip.
 	// **The rate is part of "the same chip".** A panel opened after an export would otherwise keep
-	// the export's high-rate core, because the model had not changed - and every drawn note would
-	// be seven times the size it needs to be.
-	const double wantedRate = exportQuality ? chips::noteRateFor (patch.model)
-											: chips::kVisualNoteRate;
+	// the export's core, because the model had not changed - and every drawn note would be the wrong
+	// size.
+	//
+	// **An export runs at the rate the file will be written at**, not at the chip's own rate. The
+	// player does exactly the same thing - it starts every core at the host's rate - and the reason
+	// is that resampling afterwards is a step nobody needs: the core times itself from `freqbase`, so
+	// the pitch and the timbre are the same at any rate, and only the top of the spectrum moves.
+	const double wantedRate = exportQuality
+								  ? (exportRate > 0.0 ? exportRate : chips::noteRateFor (patch.model))
+								  : chips::kVisualNoteRate;
 
 	if (core == nullptr || ! core->ready || loadedModel != patch.model
 		|| loadedRate != wantedRate)

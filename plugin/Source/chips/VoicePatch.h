@@ -90,6 +90,15 @@ struct NoteRenderShape
 	double sustainSeconds = 0.0;
 	double releaseSeconds = 0.0;
 	bool normalise = false;
+
+	/** **The rate the file will be written at**, or 0 to render at the chip's own rate.
+
+		An export renders at this rate rather than resampling down to it afterwards. The player starts
+		every core at the host's rate for the same reason: the core times itself from `freqbase`, so
+		pitch and timbre are unchanged, while resampling costs the top of the spectrum and adds the
+		step that `heldAt` would otherwise have to paper over.
+	*/
+	double rate = 0.0;
 };
 
 /** **The rate a note falls back to when nothing names the chip**, for a caller holding samples and

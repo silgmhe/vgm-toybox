@@ -1272,12 +1272,16 @@ chips::RenderedNote LibvgmTrackPlayer::renderNoteAt (int track, double hz,
 	// **Its own core.** The driver `captureState` uses is being advanced by the audio thread; an
 	// export that re-rendered through it would rewrite the registers under that thread's feet, and
 	// both the picture and the sound would change mid-note.
-	if (exportDriver == nullptr)
+	//
+	// **Rebuilt when the file's rate changes**, because the core is started at that rate rather than
+	// at the chip's - see `NoteRenderShape::rate`. A settings change between two exports would
+	// otherwise keep the first one's core.
+	const bool wrongRate = exportDriver != nullptr && shape.rate > 0.0
+						   && std::abs (exportDriver->rate () - shape.rate) > 0.5;
+
+	if (exportDriver == nullptr || wrongRate)
 	{
-		// **Export quality, so the core runs at the chip's own rate.** A dragged file is a timbre,
-		// and above 4 kHz the corners of a waveform are what make it recognisable; the panel can
-		// afford 8 kHz because a row is ninety pixels wide.
-		exportDriver = makeFmVoiceDriver (true);
+		exportDriver = makeFmVoiceDriver (true, shape.rate);
 	}
 
 	// **The shape arrives, it is not looked up.** This runs on the export pool or on a drag;

@@ -586,15 +586,32 @@ void testNotePitchIsWhatWasAsked (void)
 	// C4. Low enough that every part can reach it, high enough that an octave either way is obvious.
 	const double wanted = toybox::playback::noteWave::frequencyOf (60);
 
-	// **Both rates, because one part needs a different divisor for each.** The panel draws at
-	// `kVisualNoteRate` and an export renders at the chip's own rate; `fmopn.c` forces `freqbase` to
-	// `1.0` at the latter, so a divisor that is right for one can be an octave off for the other.
-	// That is exactly how a YM2612 came to sound an octave high on the panel while its export was
-	// an octave low, with each individual fix looking correct.
-	for (const bool exportQuality : { false, true })
+	// **Three rates, because the divisor follows how the core is running, not which chip it is.**
+	// `fmopn.c` forces `freqbase` to `1.0` at the core's native rate and uses `(clock / rate) / pres`
+	// everywhere else, so a divisor that is right for one path is an octave off for the other - which
+	// is exactly how a YM2612 came to sound an octave high on the panel while its export was an
+	// octave low, each fix looking correct on its own.
+	//
+	// The third entry is the one that matters now: an export renders at the rate the file will be
+	// written at (48 kHz), not at the chip's rate, so no resampling is needed afterwards.
+	struct Rate
+	{
+		bool exportQuality;
+		double rate;
+		const char* label;
+	};
+
+	const Rate rates[] = {
+		{ false, 0.0, "panel" },		// 8 kHz, `kVisualNoteRate`
+		{ true, 0.0, "chip" },			// the chip's own rate
+		{ true, 48000.0, "48k" },		// what a file is written at
+	};
+
+	for (const auto& rateCase : rates)
 	for (const auto& testCase : cases)
 	{
-		const auto driver = toybox::backends::libvgm::makeFmVoiceDriver (exportQuality);
+		const auto driver
+			= toybox::backends::libvgm::makeFmVoiceDriver (rateCase.exportQuality, rateCase.rate);
 
 		const auto wave = toybox::playback::noteWave::render (*driver, makePatch (testCase.model),
 															 wanted, 0.6, 0.05, false);
@@ -638,12 +655,12 @@ void testNotePitchIsWhatWasAsked (void)
 
 		std::printf ("    %-7s %-6s asked %6.1f Hz, measured %6.1f Hz  (rate %.0f, %zu samples, "
 					 "peak %.3f, %d crossings)\n",
-					 testCase.name, exportQuality ? "export" : "panel", wanted, measured, rate,
+					 testCase.name, rateCase.label, wanted, measured, rate,
 					 wave.size (), peak, crossings);
 
 		// Eight percent: an octave is a hundred. Well inside that, one waveform's harmonics are noise
 		// around the zero; outside it, the divisor is wrong.
-		const std::string message = named + (exportQuality ? " export" : " panel")
+		const std::string message = named + " " + rateCase.label
 									+ " sounds the pitch it was asked for";
 		check (std::abs (measured - wanted) / wanted < 0.08, message.c_str ());
 	}

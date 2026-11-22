@@ -66,7 +66,12 @@ public:
 		panel draws at. The two differ by a factor of seven on a YM2151, and the reason is in
 		`chips::kVisualNoteRate`.
 	*/
-	explicit FmVoiceDriver (bool exportQuality = false);
+	/** @param exportQuality true to render for a file rather than for a panel.
+		@param exportRate the rate that file will be written at, or 0 to run the core at the chip's own
+		rate. **A file written at 48 kHz is rendered at 48 kHz** - resampling it afterwards is a step
+		the player never takes, and it costs the top of the spectrum for nothing.
+	*/
+	explicit FmVoiceDriver (bool exportQuality = false, double exportRate = 0.0);
 	~FmVoiceDriver (void) override;
 
 	FmVoiceDriver (const FmVoiceDriver&) = delete;
@@ -94,6 +99,9 @@ private:
 	double loadedRate = 0.0;
 	bool exportQuality = false;
 
+	/** The rate an export is written at, or 0 to use the chip's own - see `load`. */
+	double exportRate = 0.0;
+
 	/** Which family's registers this driver is speaking. Set by `load`, from the patch's model. */
 	const Dialect* dialect = nullptr;
 
@@ -110,6 +118,7 @@ private:
 	pointer to an incomplete type cannot be created or destroyed outside that .cpp, so the factory
 	is the door: callers get a `unique_ptr` to the interface and never need the definition.
 */
-std::unique_ptr<playback::IVoiceDriver> makeFmVoiceDriver (bool exportQuality = false);
+std::unique_ptr<playback::IVoiceDriver> makeFmVoiceDriver (bool exportQuality = false,
+														   double exportRate = 0.0);
 
 } // namespace toybox::backends::libvgm
