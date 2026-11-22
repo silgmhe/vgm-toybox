@@ -63,9 +63,10 @@ public:
 		return player.captureState (snapshot);
 	}
 
-	chips::RenderedNote renderNoteAt (int track, double hz) const override
+	chips::RenderedNote renderNoteAt (int track, double hz,
+									  const chips::VoicePatch* patch) const override
 	{
-		return player.renderNoteAt (track, hz);
+		return player.renderNoteAt (track, hz, patch);
 	}
 
 	/** The song's own DPCM samples rather than this player's current one - see NsfPlayer. */

@@ -1711,7 +1711,8 @@ int NsfPlayer::renderChannels (float* const* dest, int channelCount, int frames)
 	return frames;
 }
 
-chips::RenderedNote NsfPlayer::renderNoteAt (int track, double hz) const
+chips::RenderedNote NsfPlayer::renderNoteAt (int track, double hz,
+											 const chips::VoicePatch* patch) const
 {
 	if (vrc7Driver == nullptr || vrc7Clock <= 0.0 || hz <= 0.0)
 	{
@@ -1726,9 +1727,13 @@ chips::RenderedNote NsfPlayer::renderNoteAt (int track, double hz) const
 		return {};
 	}
 
+	// **The caller's patch wins**, for the reason `ITrackPlayer::RenderedNote` gives: it holds the
+	// `ChannelState` it wants rendered, and looking the same voice up again under a different
+	// numbering is how a vrc7 export would silently fall back to the panel's shape.
 	const Vrc7Wave& cached = vrc7Waves[(size_t) voice];
+	const chips::VoicePatch* chosen = patch != nullptr ? patch : cached.patch.get ();
 
-	if (cached.patch == nullptr)
+	if (chosen == nullptr)
 	{
 		return {};
 	}
@@ -1741,7 +1746,7 @@ chips::RenderedNote NsfPlayer::renderNoteAt (int track, double hz) const
 	}
 
 	auto wave = std::make_shared<const std::vector<float>> (
-		playback::noteWave::render (*vrc7ExportDriver, *cached.patch, hz, sustainSeconds,
+		playback::noteWave::render (*vrc7ExportDriver, *chosen, hz, sustainSeconds,
 									releaseSeconds, normaliseSamples));
 
 	// The rate travels with the samples - see `chips::RenderedNote`.

@@ -1386,7 +1386,8 @@ private:
 			// A row with no pitch keeps the shape it was drawn with.
 			if (hz > 0.0)
 			{
-				if (auto rendered = engine.renderNoteAt (state.trackIndex, hz);
+				if (auto rendered = engine.renderNoteAt (state.trackIndex, hz,
+														 state.voicePatch.get ());
 					rendered.wave != nullptr)
 				{
 					state.noteWaveform = std::move (rendered.wave);
@@ -1663,7 +1664,11 @@ void ContentSlot::beginExport (const ExportOptions& options)
 				// **The backend owns the chip driver**, so it does the render - `ui/` may not include
 				// an engine header. A backend that computes no notes answers null, and the channel
 				// keeps the waveform it was drawn with rather than losing it.
-				if (auto rendered = enginePtr->renderNoteAt (channel.trackIndex, hz);
+				// **The patch is passed, not looked up.** This row's `voicePatch` is right here;
+				// letting the backend find it again is what produced an empty note and a staircase
+				// file for a dragged YM2610 voice.
+				if (auto rendered = enginePtr->renderNoteAt (channel.trackIndex, hz,
+															 channel.voicePatch.get ());
 					rendered.wave != nullptr)
 				{
 					channel.noteWaveform = std::move (rendered.wave);

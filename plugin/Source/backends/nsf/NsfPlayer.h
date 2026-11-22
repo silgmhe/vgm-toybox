@@ -196,7 +196,8 @@ public:
 
 	/** Re-renders a VRC7 voice at another pitch, for the export dialog's pinned-note option.
 		An empty `wave` for every other row - an APU channel has no patch to render. */
-	chips::RenderedNote renderNoteAt (int track, double hz) const;
+	chips::RenderedNote renderNoteAt (int track, double hz,
+									  const chips::VoicePatch* patch = nullptr) const;
 
 	/** **The three preferences a rendered note depends on**, pushed in by the backend.
 

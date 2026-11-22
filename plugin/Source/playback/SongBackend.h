@@ -240,10 +240,20 @@ public:
 		Default: a backend with no computed notes says so by leaving `wave` null, and the exporter
 		keeps the waveform it already had rather than inventing one.
 	*/
-	virtual chips::RenderedNote renderNoteAt (int track, double hz) const
+	/** @param patch the voice to render, or null to look it up from the row.
+
+		**Passing it is the reliable form.** A caller that holds the `ChannelState` already has its
+		`voicePatch`; leaving the backend to find it again means matching a chip channel against a
+		mixer row, and when that match fails the answer is an empty note - which the exporter cannot
+		tell from "this row has nothing", so it keeps the panels' 8 kHz shape and the file comes out a
+		staircase. That is exactly what happened to a dragged YM2610 voice.
+	*/
+	virtual chips::RenderedNote renderNoteAt (int track, double hz,
+											  const chips::VoicePatch* patch = nullptr) const
 	{
 		(void) track;
 		(void) hz;
+		(void) patch;
 		return {};
 	}
 	/** Silences one device (the chips card). No-op when the backend cannot mute chips. */

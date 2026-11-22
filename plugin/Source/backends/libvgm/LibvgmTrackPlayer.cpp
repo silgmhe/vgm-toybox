@@ -1235,30 +1235,35 @@ bool LibvgmTrackPlayer::captureState (playback::ChipStateSnapshot& snapshot) con
 	return true;
 }
 
-chips::RenderedNote LibvgmTrackPlayer::renderNoteAt (int track, double hz) const
+chips::RenderedNote LibvgmTrackPlayer::renderNoteAt (int track, double hz,
+													 const chips::VoicePatch* patch) const
 {
 	if (hz <= 0.0)
 	{
 		return {};
 	}
 
-	// **The cache is keyed on the decoder's channel, the caller knows the track.** The two are
-	// different numbering schemes - one counts chip channels, the other mixer rows - and this is
-	// the one place the exporter's question has to cross between them.
-	const chips::VoicePatch* patch = nullptr;
+	// **The caller's patch wins.** It already holds the `ChannelState` it wants rendered, so asking
+	// this function to find the same voice again was a second lookup over a second numbering scheme -
+	// chip channels against mixer rows - and when it missed, the empty answer was indistinguishable
+	// from "nothing here". The exporter then kept the panel's 8 kHz shape, and a dragged YM2610 voice
+	// came out as a staircase while the same row exported correctly from the batch path.
+	const chips::VoicePatch* chosen = patch;
 
-	for (const auto& entry : noteWaves)
+	if (chosen == nullptr)
 	{
-		if (entry.second.patch != nullptr && trackFor (entry.first) == track)
+		// The old lookup, kept for a caller with nothing but a track number.
+		for (const auto& entry : noteWaves)
 		{
-			patch = entry.second.patch.get ();
-			break;
+			if (entry.second.patch != nullptr && trackFor (entry.first) == track)
+			{
+				chosen = entry.second.patch.get ();
+				break;
+			}
 		}
 	}
 
-	// Absent when the row has never been drawn, which is the one case where there is nothing to pin
-	// a pitch onto.
-	if (patch == nullptr)
+	if (chosen == nullptr)
 	{
 		return {};
 	}
@@ -1279,7 +1284,7 @@ chips::RenderedNote LibvgmTrackPlayer::renderNoteAt (int track, double hz) const
 	const double release = (double) juce::jmax (1, store.getFmReleaseMs ()) / 1000.0;
 
 	auto wave = std::make_shared<const std::vector<float>> (
-		playback::noteWave::render (*exportDriver, *patch, hz, sustain, release,
+		playback::noteWave::render (*exportDriver, *chosen, hz, sustain, release,
 									store.getFmNormalise ()));
 
 	// **The rate travels with the samples.** `exportDriver` was created with `exportQuality`, so
