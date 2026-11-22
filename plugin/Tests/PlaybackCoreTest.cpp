@@ -19,11 +19,16 @@
 	Run: <build dir>/plugin/vgm_core_test
 */
 
+#include <array>
 #include <atomic>
 #include <cmath>
+#include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+#include <filesystem>
+#include <fstream>
 #include <limits>
+#include <memory>
 #include <thread>
 #include <vector>
 
@@ -39,6 +44,7 @@
 #include "playback/SessionState.h"
 #include "playback/StartupSong.h"
 #include "playback/TransportPresets.h"
+#include "playback/WaveExport.h"
 #include "settings/SettingsStore.h"
 
 #include "TestSupport.h"
@@ -1635,9 +1641,138 @@ int main (int /*argc*/, char* /*argv*/[])
 		file.deleteFile();
 	}
 
-	// The note-filter assertion lives in `vgm_opn_test`: this target does not link libvgm and has not
-	// built since `FmVoiceDriver.cpp` joined its sources, so anything added here would never run. See
-	// `testNoteDecimationRemovesWhatWouldAlias`.
+	// --- a note file declares the rate it was written at -----------------------------------------
+	// **The one thing three of this branch's four regressions had in common**: the file said one
+	// thing about its rate and held samples made at another. The panel's 8 kHz shape exported as a
+	// file (`2c8a7f3`), the drag that kept it (`e0c4662`), the batch path that ignored the setting
+	// (`40ffc53`) - none of them caught by anything, all found by a listener.
+	//
+	// So the writer's contract is asserted at the writer: ask for 48 kHz, read the header back.
+	{
+		namespace fs = std::filesystem;
+
+		const auto dir = fs::temp_directory_path () / "vgmtoybox-note-export";
+		fs::remove_all (dir);
+		fs::create_directories (dir);
+
+		auto patch = std::make_shared<toybox::chips::VoicePatch> ();
+		patch->model = toybox::chips::ChipModel::ym2610;
+
+		// A note as the exporter leaves it: rendered at the chip's own rate, and the rate travelling
+		// with the samples.
+		const double sourceRate = toybox::chips::noteRateFor (toybox::chips::ChipModel::ym2610);
+		constexpr double kSeconds = 0.72;		// 40 000 samples at 55 556
+		const std::size_t sampleCount = (std::size_t) (kSeconds * sourceRate);
+
+		std::vector<float> samples (sampleCount);
+
+		for (std::size_t i = 0; i < samples.size (); ++i)
+		{
+			samples[i] = (float) (0.5 * std::sin (2.0 * 3.14159265358979323846 * 440.0
+												 * (double) i / sourceRate));
+		}
+
+		toybox::playback::ChipStateSnapshot snapshot;
+		toybox::playback::ChannelState channel;
+		channel.name = "FM 1";
+		channel.chipName = "YM2610";
+		channel.voicePatch = patch;
+		channel.noteWaveform = std::make_shared<const std::vector<float>> (std::move (samples));
+		channel.noteWaveformRate = (float) sourceRate;
+		snapshot.channels.push_back (channel);
+
+		// The header fields a reader trusts: the sample rate, and how many bytes of samples follow.
+		const auto readHeader = [] (const fs::path& path, std::uint32_t& rate, std::uint32_t& dataBytes)
+		{
+			std::ifstream in (path, std::ios::binary);
+
+			if (! in)
+			{
+				return false;
+			}
+
+			std::array<unsigned char, 44> header {};
+
+			if (! in.read (reinterpret_cast<char*> (header.data ()), 44))
+			{
+				return false;
+			}
+
+			const auto word = [&header] (std::size_t at)
+			{
+				return (std::uint32_t) header[at] | ((std::uint32_t) header[at + 1] << 8)
+					   | ((std::uint32_t) header[at + 2] << 16) | ((std::uint32_t) header[at + 3] << 24);
+			};
+
+			rate = word (24);
+			dataBytes = word (40);
+			return true;
+		};
+
+		const auto onlyFileIn = [] (const fs::path& folder)
+		{
+			for (const auto& entry : fs::directory_iterator (folder))
+			{
+				if (entry.is_regular_file () && entry.path ().extension () == ".wav")
+				{
+					return entry.path ();
+				}
+			}
+
+			return fs::path ();
+		};
+
+		// 1. Asked for 48 kHz.
+		{
+			const auto outcome = toybox::playback::exportWavetables (snapshot, dir.string (),
+																	 toybox::playback::ExportMode::single,
+																	 2.0, toybox::playback::kNativeBits,
+																	 48000.0);
+			check (outcome.written == 1, "an FM note exports to exactly one file");
+
+			std::uint32_t rate = 0;
+			std::uint32_t dataBytes = 0;
+			const auto path = onlyFileIn (dir);
+
+			check (! path.empty () && readHeader (path, rate, dataBytes),
+				   "and the file it wrote can be read back");
+
+			check (rate == 48000, "the header declares the rate the export asked for");
+
+			// The duration comes from the samples, not from the `seconds` argument - which is what
+			// a note is: as long as the note, whatever a cycle would be.
+			const double writtenSeconds = (double) dataBytes / 4.0 / (double) rate;
+			check (std::abs (writtenSeconds - kSeconds) < 0.02,
+				   "and its length is the note's, not the seconds setting's");
+		}
+
+		// 2. Asked for the chip's own rate: no conversion, so the sample count is the original. This
+		//    is the `sampleRateChip` setting, and it must not be silently ignored.
+		{
+			fs::remove_all (dir);
+			fs::create_directories (dir);
+
+			const auto outcome = toybox::playback::exportWavetables (snapshot, dir.string (),
+																	 toybox::playback::ExportMode::single,
+																	 2.0, toybox::playback::kNativeBits,
+																	 0.0);
+			check (outcome.written == 1, "the same note exports at the chip's own rate");
+
+			std::uint32_t rate = 0;
+			std::uint32_t dataBytes = 0;
+			const auto path = onlyFileIn (dir);
+
+			check (! path.empty () && readHeader (path, rate, dataBytes),
+				   "and that file can be read back too");
+
+			check (std::abs ((double) rate - sourceRate) < 1.0,
+				   "with the rate the samples were made at");
+			check (dataBytes == (std::uint32_t) (sampleCount * 4),
+				   "and every sample, nothing decimated");
+		}
+
+		fs::remove_all (dir);
+	}
 
 	std::printf ("Result    : %s\n", (toybox::test::failures() == 0) ? "all checks passed" : "FAILURES");
 	return (toybox::test::failures() == 0) ? 0 : 1;

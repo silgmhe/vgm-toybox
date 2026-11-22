@@ -229,13 +229,31 @@ const auto source = (channel.noteWaveformRate > 0.0f) ? (double) channel.noteWav
 
 | 缺口 | 现状 |
 |---|---|
-| **两条导出路径都没有断言** | `exportWavetables` 与 `startWaveDrag` 都没被任何测试驱动；「选目录」与「导出」尚未拆开 |
+| ~~**两条导出路径都没有断言**~~ | ✅ **已补写入器一侧**（`vgm_core_test`，§6）；「选目录」与「导出」仍未拆开，所以 UI 那一段还够不到 |
 | **`core` 测试是空的** | 见 HIGH-2，占 54 项的 1 项 |
 | **OPL 家族与 VRC7 的位宽未测** | 表里写着"未测"，是诚实的；接 OPL 时按 `nukedopm` 的结论一起处理 |
 | **OPX 不在两表里** | `noteRateFor`/`fmOutputBits` 都落到 OPN/16 的兜底，注释已说明 |
 | **两条导出路径速率一致性无断言** | MEDIUM-1 修好后应当有一条 |
 
-## 6. 规范对照
+## 6. 补上的那条断言（写入器一侧）
+
+`PlaybackCoreTest` 里新增一段，直接驱动 `exportWavetables` 并**读回 wav 头**：
+
+| 断言 | 抓的是什么 |
+|---|---|
+| `an FM note exports to exactly one file` | 通道被判为"没有可写的东西" |
+| `the header declares the rate the export asked for` | **文件头与样本不一致**——这一分支四次回归里有三次 |
+| `and its length is the note's, not the seconds setting's` | 时长来源错（`seconds` 而不是样本数） |
+| `the same note exports at the chip's own rate` | `targetRate = 0`（`sampleRateChip`）被忽略 |
+| `and every sample, nothing decimated` | 该不重采样时被重采样了 |
+
+**验证方式是故意打破**：把 `exportWavetables` 里的 `targetRate` 换成 `0.0`（即 MEDIUM-1 修好前的样子），
+`the header declares the rate the export asked for` 立刻变红。
+
+**它守的是写入器，不是 `ContentSlot` 的调用点**——后者仍然要拆开目录选择才能测。但四次回归的
+共同症状（文件头与内容不符）在写入器这一层就能被抓住，而这一层现在有断言了。
+
+## 7. 规范对照
 
 | 条款 | 结果 |
 |---|---|
