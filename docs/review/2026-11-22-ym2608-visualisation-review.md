@@ -6,6 +6,28 @@
 >
 > 结论：**可以合并，但先还三笔小债。** 逻辑是对的，注释质量高于本仓库的平均水平；问题集中在**格式噪音**和**同一语义的第二个来源**——后者是这个项目已经付过四次账的那一类。
 
+## 修复进度
+
+| 编号 | 内容 | 状态 | 提交 |
+|---|---|---|---|
+| P1-1 | 测试函数多一级缩进 | ✅ | `bc83810` |
+| P1-2 | 两处各 3 行空行 | ✅ | `bc83810` |
+| P1-3 | CMake 整块重写（且丢了 tab） | ✅ | `bc83810` |
+| P2-5 | 按钮尺寸收进一个来源 | ✅ | `8c134db` |
+| P2-4 | 地址表改区间 + 连续性断言 | ✅ | `8c134db` |
+| P2-1 | `isLinkedVoiceSet` 接口化 | ⬜ 下一颗芯片之前 | — |
+| P2-2 | 六通道型号名单具名 | ⬜ 与 P2-1 同批 | — |
+| P2-3 | `slotFlags` 序号具名 | ⬜ 与 P2-1 同批 | — |
+| P3-2 | `isLinkedVoiceSet` / `attachRhythmRom` 的断言 | ⬜ 与 P2-1 同批 | — |
+
+**两批已完成的验证**（每条都做过"改回去会不会红"）：
+
+```
+P1  54/54 · vgm_opn_test 0.9971 · vgm_keyboard_test all checks passed
+P2-5  buttonSize 写回字面量 30 → FAIL the mute button is the mixer's size (exit 3)
+P2-4  high hat 的 end 改成 0x1bff → error C2338: the six rhythm samples are contiguous
+```
+
 ## 一、审查范围
 
 | 文件 | 变更 | 性质 |
@@ -32,9 +54,9 @@
 2. **A/B 双向验证**。四条修复都做过"去掉它是否变红"，且 `OpnCoreOracleTest` 的新断言在去掉 `0x29` 后确实 `exit 1`。
 3. **`static_assert` 锁住单位**（`OpnDecoder.cpp:179`）。这是本分支最便宜的一条防线：它把"表是字节还是 word"从"听一遍鼓声"变成"编译期"。
 
-## 三、阻塞项（合并前修）
+## 三、阻塞项（已修，`bc83810`）
 
-### P1-1 新增的测试函数多一级缩进
+### P1-1 新增的测试函数多一级缩进 `✅`
 
 ```515:515:plugin/Tests/KeyboardLayoutTest.cpp
 	void testNameColumnFitsLongestChannelName (void)
@@ -46,7 +68,7 @@
 
 **修法**：整块左移一个 tab。
 
-### P1-2 临时打印清掉了，空行留下了
+### P1-2 临时打印清掉了，空行留下了 `✅`
 
 ```921:924:plugin/Source/backends/libvgm/LibvgmTrackPlayer.cpp
 		const bool hasDeclaration = device != nullptr && device->devDecl != nullptr;
@@ -70,7 +92,7 @@
 
 **修法**：各删一行。**建议把"提交前 `git diff` 看一遍自己的删除"写进检查清单**——两条空行不会自己出现。
 
-### P1-3 `CMakeLists.txt` 的 `add_executable` 整块重写
+### P1-3 `CMakeLists.txt` 的 `add_executable` 整块重写 `✅`
 
 ```849:857:plugin/CMakeLists.txt
 ```
@@ -180,7 +202,7 @@ constexpr bool hasSixChannelMode (chips::ChipModel model)
 
 **修法**：给序号一个具名常量（`constexpr uint8_t kOpnaSlotFlag = 2;`）放在 `VgmReplayer.cpp`，两边都引它；或者让 `attachRhythmRom` 收 `Variant` 而不是 `uint8_t`。
 
-### P2-4 地址表的索引方式容易错位
+### P2-4 地址表的索引方式容易错位 `✅`
 
 ```165:174:plugin/Source/chips/OpnDecoder.cpp
 	constexpr uint32_t kOpnaRhythmAddress[2 * 6]
@@ -229,7 +251,15 @@ static_assert (kOpnaRhythm[1].start == kOpnaRhythm[0].end + 1, "the samples are 
 
 `channel < kAdpcmAVoices` 之后，索引是 `kOpnaRhythm[channel].start`——**"第几个通道的起止"不再需要读者做乘法**。
 
-### P2-5 `buttonSize` 与 mixer 仍是两个来源
+### P2-4 的落实 `✅`
+
+`OpnDecoder.cpp:157-205`：`struct RhythmRange { uint32_t start, end; }`，`kOpnaRhythm[kAdpcmAVoices]`，latch 循环读 `kOpnaRhythm[channel].start`。
+
+`kAdpcmAVoices` 顺带从 `Impl` 提到了匿名命名空间——表要按它定长，而表在 `Impl` 之前。`Impl` 里那一行删掉后，三处 `channel < 6` 也一并用它。
+
+**第二条断言抓住的东西值得记一笔**：把 high hat 的 end 写成 `0x1bff` 时，原来的上界断言**毫无反应**（`0x1bff < 0x2000` 成立），只有新加的连续性断言报 `error C2338: the six rhythm samples are contiguous`。
+
+### P2-5 `buttonSize` 与 mixer 仍是两个来源 `✅`
 
 ```40:45:plugin/Source/ui/KeyboardRowLayout.h
 	/** **The mixer's button height and gap**, so the two views agree - which the comment here has
@@ -244,6 +274,21 @@ static_assert (kOpnaRhythm[1].start == kOpnaRhythm[0].end + 1, "the samples are 
 `KeyboardLayoutTest` 里的 `check (row.mute.getHeight () == 28, ...)` 是**第三个副本**——它现在能抓住"键盘页改了但 mixer 没改"，但抓不住"两边一起偏"。
 
 **修法**：把这两个数搬到一个共享头（例如 `ui/LayoutMetrics.h`），或把 `kButtonHeight`/`kButtonGap` 从 `ChannelStrip.cpp` 提到 `ChannelStrip.h` 并让 `RowMetrics` 引它。规则 §13 的判据对这条完全适用。
+
+### P2-5 的落实 `✅`
+
+实际建的是 `ui/ChannelButtonMetrics.h`——名字比 `LayoutMetrics` 窄，因为它只管这一对按钮，不是"布局度量"的公共池：
+
+```cpp
+inline constexpr int channelButtonHeight = 28;
+inline constexpr int channelButtonGap = 6;
+```
+
+- `ChannelStrip.cpp` 删掉两个本地 `constexpr`，五处引用改名；
+- `RowMetrics::buttonSize` / `buttonGap` 以它初始化，字段本身保留（测试可以传自己的 metrics）；
+- `KeyboardLayoutTest` 的断言改成 `== toybox::ui::channelButtonHeight`。
+
+**三个副本收敛成一个。** 把 `buttonSize` 写回字面量 `30` 时断言报 `FAIL the mute button is the mixer's size`、`exit 3`——所以它测的仍然是"`layoutRows` 真的用了那个字段"，而不只是"数字是 28"。
 
 ## 五、建议项（不阻塞）
 
