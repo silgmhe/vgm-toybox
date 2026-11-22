@@ -148,6 +148,38 @@ OK  the seek reaches the players that can still move
 
 **在那之前，这 16 个红不能当作"回归"，也不能当作"通过"。**
 
+## 十、这 16 个红不是静音，是"每轨隔离没有声音"
+
+`[2]` 那一段本来就打印电平，所以不用探针：
+
+```
+engine.ym2610   peak 0.1870, rms 0.1187     ← 有声音
+engine.mmc5     peak 0.1290, rms 0.0946     ← 有声音
+```
+
+**混音本身有声音。** 但同一份输出里：
+
+```
+the mixer checks use track 5 (Square 1)
+solo: rms 0.000000 vs mute-others: rms 0.000000
+0 of 8 tracks are audible; 0 of them describe themselves
+```
+
+**每一条轨道单独拿出来都是 0。** 所以 `solo`、`mute`、`gain 0.5`、`master gain`、`left channel`
+这些断言全在同一件事上失败：**它们要的是"某一条轨道的声音"，而每轨的 tap 没有声音。**
+
+**按 fixture 分，剩下 16 个正好是两族，都早于本分支**（基线里 mmc5 就是同 5 条失败）：
+
+| 族 | fixture | 断言 |
+|---|---|---|
+| **NSF 的每轨隔离无声** | fds / vrc6 / fme7 / mmc5 / n163 / vrc7（6 个） | `solo` / `mute` / `gain` / `master` / `left` / `audible tracks` |
+| **`note 0 exists` 失败** | psg / opl4 / c352 / es5503 / segapcm / k054539 / ga20 / wswan / k053260（9 个） | 该通道被标为 melodic 却解不出音符 |
+| **seek 不阻塞消息线程** | 7 个 | 计时 |
+
+**两族都不是"渲染坏了"，也不是"同步坏了"。** 它们各自需要一轮独立调查，且与本分支的 FM 导出
+没有交集。**在它们被处理之前，`vgm_mixer_test` 的 16 个红应当读作"这份测试有三处已知的坑"，
+而不是"引擎坏了"。**
+
 ## 九、这个问题的形状
 
 **和 HIGH-2 同源**：`ctest` 里有一个测试（`core`）编译不了、跑的是七天前的二进制；这次是 26 个。
