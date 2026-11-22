@@ -496,9 +496,21 @@ namespace
 
 	/** **A device the song reports under its parent's identity.**
 
-		libvgm gives a linked voice set - the YM2610's SSG is the one in this project - the parent's
-		device id *and* its type, so neither field separates them. The channel count is the one thing
-		the two do not share: three channels under a YM2610 is its SSG, and nothing else is.
+		libvgm gives a linked voice set - the SSG behind a YM2203, a YM2608 or a YM2610 - the
+		parent's device id *and* its type, so neither field separates them. Measured on
+		`82 Ruins.vgz`, the two instances of one YM2608 both carry `type=0x07` and `id=0`; only
+		their channel counts differ, thirteen against three.
+
+		**Which is why this must not be a test on one `DEVID_`.** It used to be, naming the YM2610,
+		and that is the chip it was written for - so a YM2608's SSG answered as FM channels 1-3 on
+		the keyboard (its state looked up an FM track) while the FM rows were drawn as squares (the
+		kind table's SSG slot overwrote theirs). One device type, three failures below it.
+
+		**The decoder answers it now** (`IChipDecoder::isLinkedVoiceSet`), which is where the
+		knowledge belongs: the SSG is an `Ay8910Decoder`, and a YM2203's FM - three channels as well -
+		is not. Not a `typeid` here, because that puts a class name in playback code and goes quietly
+		wrong the day a subclass appears; not a channel count either, because `DEV_CHN_COUNT_YM2203`
+		is three.
 
 		One definition, because two copies drift: the copy in the kind table answered `channelKind
 		(0..2)` from the FM instance, whose FM count is above those indices, so the SSG's three rows
@@ -507,10 +519,18 @@ namespace
 	template <typename Instance>
 	bool isLinkedVoiceSet (const Instance& instance)
 	{
-		return instance.device != nullptr
-			   && instance.device->type == DEVID_YM2610
-			   && instance.decoder != nullptr
-			   && instance.decoder->channelCount () == 3;
+		if (instance.device == nullptr || instance.decoder == nullptr)
+		{
+			return false;
+		}
+
+		// **The parent test keeps a standalone AY8910 out**: there the device type is the AY itself,
+		// and its decoder answers true for the same reason a linked one does.
+		const bool opnParent = instance.device->type == DEVID_YM2203
+							   || instance.device->type == DEVID_YM2608
+							   || instance.device->type == DEVID_YM2610;
+
+		return opnParent && instance.decoder->isLinkedVoiceSet ();
 	}
 }
 

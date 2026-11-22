@@ -89,6 +89,38 @@ constexpr uint32_t clockFor (chips::ChipModel model)
 	return kClock;
 }
 
+/** **Which parts have to be told they are six-channel, and how.**
+
+	`0x29` bit 7 is the "extend 3ch" switch. `reset` leaves it clear, so an OPNA or OPNB comes back
+	as a three-channel part - the reason channels 4-6 held a complete patch that nothing ever started
+	(see `load`).
+
+	**A YM2612 has six without being told** and **a YM2203 has three**, so neither is written to: on
+	the first the register means nothing, on the second setting the bit would open channels that do
+	not exist.
+
+	A named function rather than an `if` in `load`, because the same set of variants decides the
+	divisor in `OpnDecoder::addressShiftFor`. Adding a part means editing both, and this at least
+	makes the second edit a search away rather than a guess.
+*/
+constexpr bool hasSixChannelMode (chips::ChipModel model)
+{
+	switch (model)
+	{
+	case chips::ChipModel::ym2608:
+	case chips::ChipModel::ym2610:
+		return true;
+
+	default:
+		return false;
+	}
+}
+
+/** Bit 7 sets six channels; the low five are the reset value of the IRQ mask, written back
+	unchanged so that nothing masked becomes enabled.
+*/
+constexpr uint8_t sixChannelMode = 0x80 | 0x1F;
+
 } // namespace
 
 /** One core, alive across notes.
@@ -218,6 +250,18 @@ bool OpnVoiceDriver::load (const chips::VoicePatch& patch)
 	core->write (0, 0x22, 0x00);		// LFO off: a tremolo would make the level time-dependent
 	core->write (0, 0x27, 0x00);		// no timers, channel 3 in normal mode
 	core->write (0, 0x2B, 0x00);		// DAC off: this is a voice, not the sample channel
+
+	// **The OPNA and OPNB have to be told they are six-channel parts, and `reset` un-tells them.**
+	// 0x29 bit 7 is the "extend 3ch" switch: the core's own reset writes 0x29 = 0x1F, whose bit 7
+	// is clear, so the chip comes back as a three-channel OPN. The register writes still land in
+	// the right place - 0x30|0x100 reaches channel 4 because that path tests the address, not the
+	// mode - but 0x28 does not: its bank bit is ignored while the mode is off, so `0xF4` keys
+	// channel 1 instead of channel 4. Channels 4-6 then hold a patch nothing ever starts, and the
+	// three rows above sound as if only half the chip worked.
+	if (hasSixChannelMode (patch.model))
+	{
+		core->write (0, 0x29, sixChannelMode);	// six channels, IRQ mask at the reset default
+	}
 
 	for (const auto& reg : patch.regs)
 	{

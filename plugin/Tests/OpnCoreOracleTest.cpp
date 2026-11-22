@@ -707,6 +707,63 @@ int main()
 			   "a loaded patch does not carry the previous channel's tail");
 	}
 
+	// --- the sixth-channel mode has to survive the reset ------------------------------------
+	// `reset` ends with `YM2608IRQMaskWrite(OPN, F2608, 0x1F)`, and 0x29's bit 7 is the "extend
+	// 3ch" switch - clear, so the core comes back as a three-channel OPN. A patch written to
+	// 0x30|0x100 still reaches channel 4, because that path tests the address rather than the
+	// mode. 0x28 does not: its bank bit is ignored, so a key-on meant for channel 4 starts
+	// channel 1, and the top half of the chip renders silence while holding a complete patch.
+	//
+	// The two assertions above cannot see this. Both play a patch on the first port, which is the
+	// half that keeps working, so they passed for as long as this was broken.
+	{
+		toybox::chips::VoicePatch patch;
+		patch.model = toybox::chips::ChipModel::ym2608;
+
+		for (int slot = 0; slot < 4; ++slot)
+		{
+			const int base = slot << 2;
+
+			patch.regs.push_back ({ (uint16_t) (0x130 | base), 0x01 });		// MUL 1
+			patch.regs.push_back ({ (uint16_t) (0x140 | base), 0x00 });		// TL, loudest
+			patch.regs.push_back ({ (uint16_t) (0x150 | base), 0x1F });		// AR 31
+			patch.regs.push_back ({ (uint16_t) (0x160 | base), 0x00 });		// DR 0, holds
+			patch.regs.push_back ({ (uint16_t) (0x170 | base), 0x00 });
+			patch.regs.push_back ({ (uint16_t) (0x180 | base), 0x0F });		// SL 0, RR 15
+		}
+
+		patch.regs.push_back ({ (uint16_t) 0x1B0, 0x07 });		// algorithm 7
+		patch.regs.push_back ({ (uint16_t) 0x1B4, 0xC0 });		// both speakers
+
+		const auto driver = toybox::backends::libvgm::makeOpnVoiceDriver ();
+
+		if (driver->load (patch))
+		{
+			driver->noteOn (440.0);
+
+			const int frames = 4096;
+			std::vector<float> samples ((size_t) frames);
+			driver->render (samples.data (), frames);
+
+			float peak = 0.0f;
+
+			for (const float v : samples)
+			{
+				peak = std::max (peak, std::fabs (v));
+			}
+
+			std::printf ("    YM2608 second-port peak: %.4f\n", (double) peak);
+
+			// The patch is at full level on every operator and the algorithm is four carriers in
+			// parallel, so a working key-on cannot produce anything near zero.
+			check (peak > 0.5f, "a patch written to the second port reaches its channel");
+		}
+		else
+		{
+			check (false, "the core starts for a second-port patch");
+		}
+	}
+
 	std::printf ("\n%s\n", failures == 0 ? "All checks passed." : "FAILED.");
 	return failures == 0 ? 0 : 1;
 }

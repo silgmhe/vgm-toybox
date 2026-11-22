@@ -7894,6 +7894,76 @@ void testWaveExport (void)
 		}
 	}
 
+/** **A linked voice set is asked of the decoder, not inferred from the device.**
+
+	libvgm reports an OPN's SSG under the parent's id *and* its type, so the two instances of one
+	YM2608 differ only in which decoder they hold. The player used to decide with a `typeid`
+	comparison against `Ay8910Decoder`; this is the property it reads now.
+
+	The YM2203 line is the one worth having: its FM is three channels as well, so a channel count
+	cannot answer the question - which is exactly how the first attempt at that fix could have gone
+	wrong.
+*/
+void testLinkedVoiceSetIsAskedOfTheDecoder (void)
+{
+	using namespace toybox::chips;
+
+	check (Ay8910Decoder ().isLinkedVoiceSet (), "an AY8910 is a linked voice set");
+	check (! OpnDecoder (OpnDecoder::Variant::ym2612).isLinkedVoiceSet (),
+		   "an OPN2 FM decoder is not");
+	check (! OpnDecoder (OpnDecoder::Variant::ym2203).isLinkedVoiceSet (),
+		   "nor a three-channel OPN's FM, which a channel count alone would confuse");
+	check (! OpnDecoder (OpnDecoder::Variant::ym2608).isLinkedVoiceSet (),
+		   "nor the OPNA's six-channel FM");
+}
+
+/** **The OPNA's rhythm rows need a ROM no song carries**, and their byte range comes from the
+	core's own table rather than from registers.
+
+	`82 Ruins.vgz` showed six ADPCM-A rows empty while the mixer played the drums: the chip's 8 KB
+	bank lives inside the part, and the six addresses live in `YM2608_ADPCM_ROM_addr`. This drives
+	that path without a file - a silenced bank is enough, because the row only has to be cut at the
+	right offsets.
+
+	Bass drum is `0x0000..0x01bf`, so the range is 448 bytes and the row 896 samples. The stray
+	`<< 1` this table once carried would have produced 1792, starting at the wrong byte.
+*/
+void testOpnaRhythmRowIsCutFromItsRom (void)
+{
+	using namespace toybox::chips;
+
+	OpnDecoder decoder (OpnDecoder::Variant::ym2608);
+	decoder.reset (ChipConfig { 8000000u, 44100.0, 2u });
+
+	// Silence, but real bytes: the decoder has to hold a bank before it will cut anything.
+	std::vector<uint8_t> rom (0x2000, 0x00);
+
+	ChipMemory memory;
+	memory.bytes = &rom;
+	decoder.attachMemory (memory);
+
+	RegisterWrite keyOn;
+	keyOn.reg = 0x10;		// port 0, the rhythm key-on register
+	keyOn.value = 0x01;		// start the first voice
+	keyOn.port = 0;
+	keyOn.sampleTime = 0;
+	decoder.write (keyOn);
+
+	decoder.advance (64u);
+
+	// Six FM rows come first, so ADPCM-A 1 is channel 6.
+	const auto state = decoder.channelState (6);
+
+	check (state.wave != nullptr, "the first rhythm row has a waveform");
+	check (state.wave != nullptr && ! state.wave->empty (), "and it is not empty");
+
+	if (state.wave != nullptr)
+	{
+		check (state.wave->size () == 896,
+			   "the bass drum spans 0x0000-0x01bf: 448 bytes, 896 samples");
+	}
+}
+
 int main (void){
 	std::printf ("chip decoder test\n");
 
@@ -7918,6 +7988,9 @@ int main (void){
 	testSilenceProducesNoNotes();
 
 	testFmNote();
+
+	testLinkedVoiceSetIsAskedOfTheDecoder();
+	testOpnaRhythmRowIsCutFromItsRom();
 	testFmSilentCarrier();
 	testFmAlgorithmDecidesTheCarrier();
 	testFmBlockIsAnOctave();

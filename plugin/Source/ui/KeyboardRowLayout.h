@@ -2,6 +2,8 @@
 
 #include <juce_gui_basics/juce_gui_basics.h>
 
+#include "ChannelButtonMetrics.h"
+
 #include <cmath>
 #include <cstddef>
 #include <string>
@@ -31,9 +33,22 @@ struct RowMetrics
 
 	int rowInsetLeft = 14;		// where the columns start inside the card
 	int rowInsetRight = 14;
-	int nameWidth = 72;
-	int buttonSize = 30;		// the mixer's button height, so the two views agree
-	int buttonGap = 8;
+	/** **Wide enough for the longest channel name a chip reports**, which is `"ADPCM-A 6"` - nine
+		characters at 12 px, about fifty-six pixels. The type mark takes eighteen of these (14 + 4),
+		so the text gets the difference; at 72 it had fifty-four and lost the trailing digit, which
+		is the one part of the name that says which channel it is.
+	*/
+	int nameWidth = 80;
+
+	/** **The mixer's button size and gap**, read from the one place that defines them
+		(`ChannelButtonMetrics.h`). Narrowing these to match is also what paid for the name column
+		above.
+
+		The fields stay fields - a test hands in its own metrics - but their defaults are no longer a
+		second copy of the mixer's numbers.
+	*/
+	int buttonSize = channelButtonHeight;
+	int buttonGap = channelButtonGap;
 	int noteWidth = 56;
 	int waveWidth = 88;
 	int waveHeight = 26;
@@ -43,7 +58,7 @@ struct RowMetrics
 	int meterGap = 18;
 
 	// The gaps between the columns, in drawing order.
-	int nameToButton = 6;
+	int nameToButton = 4;
 	int noteToWave = 8;
 	int waveToKeys = 10;
 	int buttonToNote = 10;

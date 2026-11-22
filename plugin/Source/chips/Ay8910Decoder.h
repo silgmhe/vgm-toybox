@@ -48,6 +48,12 @@ public:
 	const NoteTable& noteTable (int channel) const override;
 	ChannelKind channelKind (int channel) const override;
 
+	/** **Always a linked set when it appears under a YM2203, YM2608 or YM2610** - which is the only
+		way libvgm reports one. A standalone AY8910 also uses this decoder, and for it the answer is
+		harmless: the caller checks the parent's type as well, and there the parent *is* the AY.
+	*/
+	bool isLinkedVoiceSet (void) const override { return true; }
+
 private:
 	struct Impl;
 	std::unique_ptr<Impl> impl;

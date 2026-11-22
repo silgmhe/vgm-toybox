@@ -131,9 +131,16 @@ public:
 		}
 	}
 
-	/** **The images this decoder wants.** `0x82` is the ADPCM-A ROM the six voices page through;
-		Delta-T reads a block of its own, and VGM numbers it per board (`0x83` on the OPNB, `0x81` on
-		the OPNA), so both types are named and the replayer hands over whichever the song carries.
+	/** **The images this decoder wants.**
+
+		`0x82` is the ADPCM-A bank the six voices page through - **on the OPNB, where the song carries
+		it.** An OPNA file has no such block: that chip's six rhythm samples are sixteen kilobytes
+		*inside* the part, and `VgmReplayer` hands them over through `attachMemory` instead. Not done
+		here because this file is compiled into `vgm_chip_test` without libvgm's include path, so
+		`fmopn_2608rom.h` is out of reach.
+
+		Delta-T reads a block of its own, numbered per board (`0x83` on the OPNB, `0x81` on the
+		OPNA), so both types are named and the replayer serves whichever the song carries.
 
 		The requirement is on the class rather than the variant because the buffer makes every OPN
 		decoder from one table - a YM2612 song has neither block and gets empty images.

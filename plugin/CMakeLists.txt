@@ -851,7 +851,6 @@ add_executable(vgm_keyboard_test EXCLUDE_FROM_ALL
 	Source/ui/KeyboardLayout.cpp
 	Source/ui/KeyboardRowLayout.cpp
 	Source/playback/NoteWaveform.cpp
-	Source/backends/libvgm/OpnVoiceDriver.cpp
 	Source/playback/WaveformSource.cpp
 	Source/playback/WaveShape.cpp
 )
