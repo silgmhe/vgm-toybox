@@ -379,11 +379,17 @@ inline void NES_N106::set_phase (uint32_t phase, int channel)
     //
     // `SetMask` hides this by reversing the mask it is handed, but this loop assigns to `mask`
     // directly, so it has to do the reversal itself.
+    //
+    // **The caller's mask has to be kept, not replaced.** `saved` was restored after the loop but
+    // never *consulted* inside it, so a chip muted through `SetMask` still rendered here: the mixer
+    // went on sounding with the N163 card switched off (measured: `all muted  0.2760 -> 0.2760`).
+    // `saved` already is the internal form, low bit per the chip's own numbering, so setting the
+    // bit of every *other* channel is all it takes - a muted channel stays muted.
     const int saved = mask;
 
     for (int i = 0; i < 8; ++i)
     {
-      mask = ~(1 << (7 - i));
+      mask = saved | (1 << (7 - i));
 
       int32_t b[2] = { 0, 0 };
       Render (b);
