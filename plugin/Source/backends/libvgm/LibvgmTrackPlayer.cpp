@@ -1286,14 +1286,15 @@ chips::RenderedNote LibvgmTrackPlayer::renderNoteAt (int track, double hz,
 	// whatever rate they are asked for, and they should keep the file's rate.
 	const double wantedRate = (chosen->model == chips::ChipModel::ym2151) ? 0.0 : shape.rate;
 
-	// **Rebuilt when the rate changes**, because the core is started at that rate. A settings change
-	// between two exports would otherwise keep the first one's core.
-	const bool wrongRate = exportDriver != nullptr && wantedRate > 0.0
-						   && std::abs (exportDriver->rate () - wantedRate) > 0.5;
-
-	if (exportDriver == nullptr || wrongRate)
+	// **Rebuilt whenever the requested rate changes, and `0` is a rate.** This compared `> 0.0`
+	// before, which read 0 as "do not care" - so a YM2151 export after any other model kept the
+	// 48 kHz core and got `nukedopm`'s unfiltered interpolation back, and switching the export-rate
+	// setting to `sampleRateChip` was silently ignored. Both are the same mistake: one value with
+	// two meanings. `exportRateRequested` keeps the request itself, so 0 compares like any other.
+	if (exportDriver == nullptr || exportRateRequested != wantedRate)
 	{
 		exportDriver = makeFmVoiceDriver (true, wantedRate);
+		exportRateRequested = wantedRate;
 	}
 
 	// **The shape arrives, it is not looked up.** This runs on the export pool or on a drag;

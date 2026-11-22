@@ -246,6 +246,17 @@ private:
 		tens of kilobytes, paid once, and only when someone drags a channel out. */
 	mutable std::unique_ptr<playback::IVoiceDriver> exportDriver;
 
+	/** **The rate `exportDriver` was built for, as it was asked for** - `0` included, and that is the
+		whole reason this is a separate value rather than a read-back of `exportDriver->rate ()`.
+
+		`0` is a legal request: it means "run the core at the chip's own rate", which is what the
+		`sampleRateChip` setting asks for and what the OPM always gets. Comparing against
+		`> 0.0` therefore treated it as "do not care", skipped the rebuild, and left whatever core was
+		there before - a 48 kHz one, which for `nukedopm` means its unfiltered internal interpolation
+		comes back and the hiss with it. `-1` means no core yet.
+	*/
+	mutable double exportRateRequested = -1.0;
+
 	/** **One export at a time, because `exportDriver` is one core.** A batch export runs on
 		`ContentSlot::exportPool` and a drag runs on the message thread; both call `renderNoteAt`,
 		and without this they would rewrite the same registers from two threads - a data race whose

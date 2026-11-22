@@ -692,7 +692,6 @@ add_executable(vgm_core_test EXCLUDE_FROM_ALL
 	Source/playback/PlaybackEngine.cpp
 	Source/playback/WaveExport.cpp
 	Source/playback/NoteWaveform.cpp
-	Source/backends/libvgm/FmVoiceDriver.cpp
 	Source/playback/WaveformSource.cpp
 	Source/playback/WaveShape.cpp
 	Source/playback/DawSync.cpp

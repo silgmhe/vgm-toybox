@@ -20,6 +20,7 @@
 
 	  // the linked-device policy: the isolation and the MIDI capability both read it
 #include "backends/libvgm/LibvgmMuteIsolation.h"
+#include "backends/libvgm/LibvgmTrackPlayer.h"
 #include "playback/ChipState.h"
 #include "playback/WaveShape.h"
 #include <algorithm>
@@ -2620,6 +2621,72 @@ int main (int argc, char* argv[])
 		else
 		{
 			std::printf ("      this backend reports no per-channel state, nothing to clear\n");
+		}
+	}
+
+	// --- an export core is rebuilt for the rate it is asked for ---------------------------------
+	// `renderNoteAt` treated "rate 0" as "do not care", so a YM2151 export that followed any other
+	// model kept the previous core at the file's 48 kHz. `nukedopm` resamples internally without a
+	// filter at anything but its native rate, so the hiss this branch spent a day removing came back.
+	// The same `> 0.0` also swallowed a change of the export-rate setting to `sampleRateChip`.
+	//
+	// Driven through the real `renderNoteAt`: it needs a patch and a shape and nothing else - no
+	// song - because the rate decision is the whole subject.
+	{
+		auto makePatch = [] (toybox::chips::ChipModel model)
+		{
+			toybox::chips::VoicePatch patch;
+			patch.model = model;
+
+			for (int op = 0; op < 4; ++op)
+			{
+				const auto base = (uint16_t) (op * 8);
+				patch.regs.push_back ({ (uint16_t) (0x40 + base), 0x01 });		// DT1/MUL
+				patch.regs.push_back ({ (uint16_t) (0x60 + base), 0x00 });		// TL
+				patch.regs.push_back ({ (uint16_t) (0x80 + base), 0x1F });		// AR
+				patch.regs.push_back ({ (uint16_t) (0xE0 + base), 0xF0 });		// D1L/RR
+			}
+
+			patch.regs.push_back ({ 0x20, 0xC0 });		// connection 0, both pan bits
+			return patch;
+		};
+
+		toybox::backends::libvgm::LibvgmTrackPlayer player;
+
+		const toybox::chips::VoicePatch opn = makePatch (toybox::chips::ChipModel::ym2612);
+		const toybox::chips::VoicePatch opm = makePatch (toybox::chips::ChipModel::ym2151);
+
+		// The chip's own rate, read from the same table the export reads - not a literal, so this
+		// cannot go stale when one of them is corrected.
+		const double opmRate = toybox::chips::noteRateFor (toybox::chips::ChipModel::ym2151);
+
+		auto shapeFor = [] (double rate)
+		{
+			toybox::chips::NoteRenderShape shape;
+			shape.sustainSeconds = 0.1;
+			shape.releaseSeconds = 0.02;
+			shape.rate = rate;
+			return shape;
+		};
+
+		{
+			const auto rendered = player.renderNoteAt (0, 261.6, &opn, shapeFor (48000.0));
+			check (std::abs (rendered.rate - 48000.0) < 0.5,
+				   "an export written at 48 kHz renders its core at 48 kHz");
+		}
+
+		// **The case that was wrong.** The OPM always asks for 0, and 0 was read as "do not care".
+		{
+			const auto rendered = player.renderNoteAt (0, 261.6, &opm, shapeFor (0.0));
+			check (std::abs (rendered.rate - opmRate) < 0.5,
+				   "a YM2151 export runs at the chip's own rate after a 48 kHz one");
+		}
+
+		// And back, so the rebuild is not one-way.
+		{
+			const auto rendered = player.renderNoteAt (0, 261.6, &opn, shapeFor (48000.0));
+			check (std::abs (rendered.rate - 48000.0) < 0.5,
+				   "and asking for 48 kHz again rebuilds it back");
 		}
 	}
 
