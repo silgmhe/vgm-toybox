@@ -151,14 +151,16 @@ inline std::vector<float> lowPassedForDecimation (const std::vector<float>& valu
 		return values;
 	}
 
-	constexpr int kTaps = 15;		// odd, so the kernel has a centre
+	constexpr int kTaps = 31;		// odd, so the kernel has a centre
 	constexpr double kPi = 3.14159265358979323846;
 
 	// Cut-off in cycles per *source* sample, which is what the sinc below is expressed in.
 	const double normalised = (0.40 * targetRate) / rate;
 
-	// A raised-cosine window over the kernel; its width sets the transition band, and fifteen taps
-	// put that near 11 kHz - enough to have 26 kHz down by roughly 25 dB before it is dropped.
+	// **Blackman rather than Hann.** A raised cosine leaves its first side lobe at about -31 dB, and
+	// the ripple that comes with it is audible as a roughness on the FM parts whose energy sits just
+	// under the cut-off - measured as "the panel is clean, the file is not" on a YM2610. Blackman's
+	// side lobes are near -60 dB, and thirty-one taps keep the transition band at about 5 kHz.
 	const double half = 0.5 * (double) (kTaps - 1);
 
 	std::vector<float> out (values.size (), 0.0f);
@@ -179,7 +181,12 @@ inline std::vector<float> lowPassedForDecimation (const std::vector<float>& valu
 
 			const double x = 2.0 * normalised * (double) t;
 			const double sinc = (std::abs (x) < 1e-9) ? 1.0 : std::sin (kPi * x) / (kPi * x);
-			const double window = 0.5 + 0.5 * std::cos (kPi * (double) t / half);
+
+			// Blackman, evaluated around the centre: 1 at `position = 0`, 0 at both ends.
+			const double position = (double) t / half;
+			const double window = 0.42 + 0.5 * std::cos (kPi * position)
+								  + 0.08 * std::cos (2.0 * kPi * position);
+
 			const double weightHere = sinc * window;
 
 			sum += (double) values[(std::size_t) index] * weightHere;
