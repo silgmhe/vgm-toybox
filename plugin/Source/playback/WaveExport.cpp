@@ -408,13 +408,14 @@ bool writeNoteFile (const ChannelState& channel, const std::string& path, int bi
 
 	if (monoChip)
 	{
-		// **Clamped, because the gain can take a loud patch past full scale.** A float file will
-		// happily hold 1.2, and every player then clips it - so a patch that was already peaking
-		// above half would come out distorted rather than louder. Above that point the two-channel
-		// sum really does exceed what one channel can carry, so saturating is the honest answer.
+		// **Not clamped, and that is deliberate.** These files are 32-bit float, which carries values
+		// past full scale exactly; a patch that already peaked above half therefore writes above
+		// 0 dBFS and comes back with one fader move in the DAW. Clamping would instead bake in
+		// saturation distortion, which nothing downstream can undo - a loss traded for a gain that
+		// was never lost.
 		for (auto& sample : values)
 		{
-			sample = std::clamp (sample * 2.0f, -1.0f, 1.0f);
+			sample *= 2.0f;
 		}
 	}
 

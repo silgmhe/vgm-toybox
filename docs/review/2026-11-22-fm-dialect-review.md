@@ -17,7 +17,7 @@
 | MEDIUM-2 | FIR 每样本每抽头重算 `sin`/`cos` | ✅ 同上 |
 | MEDIUM-3 | `kExportNoteRateFallback = 8000` 是"谎报"的默认值 | ✅ 同上（常量已删） |
 | MEDIUM-4 | `fmOutputBits` 被两处以不同对象为键各读一次 | ✅ 同上（`IVoiceDriver::noteWidth`） |
-| MEDIUM-5 | 单声道 ×2 无钳位 | ✅ 同上 |
+| MEDIUM-5 | 单声道 ×2 无钳位 | ✅ **不改，见 §3.5** |
 | LOW-1..5 | 见 §4 | ✅ 同上 |
 
 **HIGH-1 与 HIGH-2 已修并有断言**：`vgm_mixer_test` 里新增三条驱动真实 `renderNoteAt` 的检查
@@ -198,6 +198,18 @@ const auto source = (channel.noteWaveformRate > 0.0f) ? (double) channel.noteWav
 但它把样本直接乘 2 而不钳位——**一个峰值 0.6 的 YM2203 patch 会写出 >1.0 的 float 样本**，
 在 DAW 里就是削波。既然这里是"补一个声道差额"，补完以后超出满幅的部分应当就地告诉调用者
 （钳位 + 计数，或退回 1.5 倍这类保守值）。
+
+### 3.5 MEDIUM-5 收回了：不钳位才对
+
+我最初把它写成"乘 2 以后没有钳位，可能写出 >1.0 的样本"。**用户指出这条判断是反的**：
+导出是 32-bit float，超过 0 dBFS 的值**本来就能表示**，在 DAW 里降一次增益就还原；
+**钳位反而把可逆的过冲变成不可逆的饱和失真。**
+
+**"为安全钳一下"是错的直觉**：它保护的是"readback 到 16-bit"的场景，而这里没有那个场景
+（`writeNoteFile` 始终走 `writeFloat32Wav`，`bits` 只决定量化栅格，不改文件格式）。
+判断依据应当先问**输出的容器能不能装下**，而不是先问"会不会超过 1"。
+
+代码里现在写着这个理由，免得下一个人再把 clamp 加回来。
 
 ## 4. LOW
 
