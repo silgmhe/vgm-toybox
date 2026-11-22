@@ -1631,6 +1631,11 @@ void ContentSlot::refresh (void)
 	{
 		mixer->refresh ();
 	}
+
+	// **The keyboard's frame comes from here too**, not only from the timer: the headless harness
+	// has no message loop to run a `Timer`, and a harness that cannot see a channel cannot be used
+	// to check one. Idempotent - a second capture in the same frame replaces the same snapshot.
+	refreshChipState ();
 }
 
 void ContentSlot::refreshLanguage (void)
@@ -1710,6 +1715,11 @@ void ContentSlot::timerCallback (void)
 		}
 	}
 
+	refreshChipState ();
+}
+
+void ContentSlot::refreshChipState (void)
+{
 	if (current != ContentView::keyboard || ! keyboardPanel->isVisible ())
 	{
 		return;

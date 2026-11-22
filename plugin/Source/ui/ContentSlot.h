@@ -109,6 +109,18 @@ private:
 
 	void timerCallback (void) override;
 
+	/** **One frame of chip-state capture**, whichever clock asked for it.
+
+		Split out of `timerCallback` because there are two clocks and only one of them is the
+		window's: the headless harness has no message loop, so `tick` goes through
+		`ToyboxAudioProcessorEditor::refreshUi` → `ViewStack::refresh` → `refresh()` and never
+		reaches a `Timer`. The panel then painted whatever snapshot the load left behind - empty -
+		and every screenshot showed "this format does not report per-channel state" for a song that
+		has eight of them. Measured on a YM2151 file: `captureState` returned eight rows every
+		call while the panel had none, because nobody had asked it.
+	*/
+	void refreshChipState (void);
+
 	toybox::PlaybackEngine& engine;
 	ContentView current = ContentView::mixer;
 
