@@ -43,6 +43,7 @@ public:
 	void resized (void) override;
 	void refresh (void) override;
 	void refreshLanguage (void) override;
+	int channelRowCount (void) const override;
 	void songChanged (void) override;
 	bool handleKey (const juce::KeyPress& key) override;
 

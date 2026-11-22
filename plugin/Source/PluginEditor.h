@@ -49,6 +49,20 @@ public:
 		(docs/desgin/testing-architecture.md §7, risk 2). */
 	void refreshUi (void);
 
+	/** **How many channel rows the visible page is drawing**, or -1 when the page has no such
+		thing.
+
+		Public for the same reason `refreshUi` is: the harness needs it. `shot` holds a screenshot
+		to this number, because a blank keyboard photographed as a success once already - the
+		capture lived in a `Timer` the headless build never ran, and the picture said "no state" for
+		a chip that had eight rows. See `docs/issue/2026-11-22-the-instrument-that-said-no-state.md`.
+	*/
+	int visibleChannelRowCount (void) const;
+
+	/** Whether a song is loaded. Same reason: `shot` has to tell "no rows because nothing is
+		loaded" from "no rows because the capture is broken". */
+	bool isSongLoaded (void) const;
+
 	/** **Opens Settings on the page registered under `pageId`**, and says whether one matched.
 
 		Public for the same reason `refreshUi` is: the console harness drives the window, and a

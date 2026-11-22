@@ -1042,6 +1042,17 @@ void ToyboxAudioProcessorEditor::timerCallback (void)
 	}
 }
 
+int ToyboxAudioProcessorEditor::visibleChannelRowCount (void) const
+{
+	const auto* view = viewStack.getCurrentView ();
+	return view != nullptr ? view->channelRowCount () : -1;
+}
+
+bool ToyboxAudioProcessorEditor::isSongLoaded (void) const
+{
+	return engine.isLoaded ();
+}
+
 void ToyboxAudioProcessorEditor::refreshUi (void)
 {
 	// A song can appear (or go away) without anything in this window being clicked: the host

@@ -146,6 +146,11 @@ void PlayView::refresh (void)
 	contentSlot.refresh();
 }
 
+int PlayView::channelRowCount (void) const
+{
+	return contentSlot.channelRowCount();
+}
+
 void PlayView::refreshLanguage (void)
 {
 	transportPanel.refreshLanguage();

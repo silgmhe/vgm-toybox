@@ -39,6 +39,16 @@ public:
 		runs 10-15 times a second, and the controls inside decide what actually repaints. */
 	virtual void refresh (void) {}
 
+	/** **A count the harness can hold a screenshot to**, or -1 when this view has no such thing.
+
+		Only the play view has channel rows, and only the keyboard page of it. Every other answer is
+		"not applicable" rather than zero, because zero is what a broken capture looks like - and the
+		difference between "this page shows no rows" and "this page should show eight and shows
+		none" is the whole point of the query. See
+		`docs/issue/2026-11-22-the-instrument-that-said-no-state.md`.
+	*/
+	virtual int channelRowCount (void) const { return -1; }
+
 	/** A song was loaded, closed or replaced. Sent to every view, visible or not, so a hidden
 		page is already current when it is switched to. */
 	virtual void songChanged (void) {}

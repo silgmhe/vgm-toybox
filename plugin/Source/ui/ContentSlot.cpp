@@ -1625,6 +1625,22 @@ void ContentSlot::beginExport (const ExportOptions& options)
 	});
 }
 
+int ContentSlot::channelRowCount (void) const
+{
+	if (current != ContentView::keyboard)
+	{
+		return -1;
+	}
+
+	// **Not `snapshot.channels`**, which is what `refreshChipState` hands the panel *by move* -
+	// by the time anyone asks, that member is empty. This is the number the panel was given, read
+	// the same way the call site reads it: before the move, into `lastChannelCount`.
+	//
+	// The first version of this query returned `snapshot.channels.size ()` and answered zero for a
+	// page showing eight rows, which is the same moved-from mistake §11 of the rules describes.
+	return lastChannelCount < 0 ? 0 : lastChannelCount;
+}
+
 void ContentSlot::refresh (void)
 {
 	if (mixer != nullptr)

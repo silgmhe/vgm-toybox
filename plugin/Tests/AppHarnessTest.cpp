@@ -952,6 +952,23 @@ private:
 
 		juce::PNGImageFormat png;
 		const bool written = png.writeImageToStream (image, *stream);
+
+		// **A keyboard page with a song and no rows is a broken instrument, not a quiet song.**
+
+		// Every format in `ChipPlans` has at least one channel except `unknown`, so zero with a
+		// song loaded cannot be the music. It happened once: the capture lived in a `Timer` the
+		// headless build never ran, and a whole survey read the blank picture as "the chip reports
+		// no state". Failing here turns that into a red line instead of a plausible screenshot.
+		const int rows = editor.visibleChannelRowCount ();
+
+		if (rows == 0 && editor.isSongLoaded ())
+		{
+			report (false, "shot " + file.getFullPathName ()
+							   + "  (no channel rows with a song loaded - the capture is not reaching"
+								 " the page; see docs/issue/2026-11-22-the-instrument-that-said-no-state.md)");
+			return;
+		}
+
 		report (written, "shot " + file.getFullPathName() + "  (" + juce::String (image.getWidth())
 						   + "x" + juce::String (image.getHeight()) + ")");
 	}

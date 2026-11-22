@@ -93,6 +93,19 @@ public:
 	void beginExport (const ExportOptions& options);
 	ContentView getView (void) const { return current; }
 
+	/** **How many channel rows the keyboard is showing**, or -1 when that is not the question.
+
+		Exists for the harness, and for one bug in particular: the keyboard painted an empty
+		snapshot for a whole survey while `captureState` was returning eight correct rows, because
+		the capture lived in a `Timer` the headless build never ran. A screenshot of a blank panel
+		was reported as a success. With this the harness can fail instead - see
+		`docs/issue/2026-11-22-the-instrument-that-said-no-state.md`.
+
+		-1 on the other pages: the mixer and the scope show different things, and "no rows" there
+		means nothing.
+	*/
+	int channelRowCount (void) const;
+
 	void refresh (void);
 	void refreshLanguage (void);
 	void songChanged (void);
