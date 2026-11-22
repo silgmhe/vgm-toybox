@@ -15,10 +15,11 @@
 | P1-3 | CMake 整块重写（且丢了 tab） | ✅ | `bc83810` |
 | P2-5 | 按钮尺寸收进一个来源 | ✅ | `8c134db` |
 | P2-4 | 地址表改区间 + 连续性断言 | ✅ | `8c134db` |
-| P2-1 | `isLinkedVoiceSet` 接口化 | ⬜ 下一颗芯片之前 | — |
-| P2-2 | 六通道型号名单具名 | ⬜ 与 P2-1 同批 | — |
-| P2-3 | `slotFlags` 序号具名 | ⬜ 与 P2-1 同批 | — |
-| P3-2 | `isLinkedVoiceSet` / `attachRhythmRom` 的断言 | ⬜ 与 P2-1 同批 | — |
+| P2-1 | `isLinkedVoiceSet` 接口化 | ✅ | `71e800c` |
+| P2-2 | 六通道型号名单具名 | ✅ | `71e800c` |
+| P2-3 | `slotFlags` 序号具名 | ✅ | `71e800c` |
+| P3-2 | 两个函数的断言 | ✅ | `71e800c` |
+| P3-3 | 两处 `typeid` 两种写法 | ✅ 随 P2-1 消失 | `71e800c` |
 
 **两批已完成的验证**（每条都做过"改回去会不会红"）：
 
@@ -26,6 +27,8 @@
 P1  54/54 · vgm_opn_test 0.9971 · vgm_keyboard_test all checks passed
 P2-5  buttonSize 写回字面量 30 → FAIL the mute button is the mixer's size (exit 3)
 P2-4  high hat 的 end 改成 0x1bff → error C2338: the six rhythm samples are contiguous
+P3-2  Ay8910Decoder 返回 false → FAIL an AY8910 is a linked voice set (exit 1)
+P3-2  latchStart 左移一位 → FAIL ... 448 bytes, 896 samples (exit 1)
 ```
 
 ## 一、审查范围
@@ -105,7 +108,7 @@ P2-4  high hat 的 end 改成 0x1bff → error C2338: the six rhythm samples are
 
 ## 四、重要项（下一次动这块之前）
 
-### P2-1 `isLinkedVoiceSet` 用 `typeid` 做行为分派
+### P2-1 `isLinkedVoiceSet` 用 `typeid` 做行为分派 `✅`
 
 ```519:537:plugin/Source/backends/libvgm/LibvgmTrackPlayer.cpp
 	template <typename Instance>
@@ -150,7 +153,25 @@ bool isLinkedVoiceSet (void) const override { return true; }
 
 **为什么不是现在就做**：这是一个接口变更，值得单独一个提交，且需要为"独立 AY8910 不返回 true"补一条断言（见 P3-2）。**但它应该排在下一个 YM2608 相邻工作之前**——否则下一次加芯片会再复制一遍这段判定。
 
-### P2-2 `0x29` 的型号列表是硬编码
+### P2-1 的落实 `✅`
+
+`IChipDecoder` 新增一个默认 false 的虚函数，`Ay8910Decoder` 声明 true：
+
+```cpp
+// IChipDecoder.h
+virtual bool isLinkedVoiceSet (void) const { return false; }
+
+// Ay8910Decoder.h
+bool isLinkedVoiceSet (void) const override { return true; }
+```
+
+调用方退化成 `instance.decoder->isLinkedVoiceSet ()`，父设备类型那半留着——它挡的是独立 AY8910。
+
+**`LibvgmTrackPlayer.cpp` 从此不认识任何具体解码器**：`typeid`、`<typeindex>`、`#include "chips/Ay8910Decoder.h"` 三样一并消失。P3-3 说的"两处 `typeid` 两种写法"也因此只剩 `attachRhythmRom` 一处。
+
+断言（`ChipDecoderTest`）：AY8910 为真，YM2612 / YM2203 / YM2608 的 FM 全为假。**YM2203 那行是关键**——它也是三通道，只按通道数判会错。
+
+### P2-2 `0x29` 的型号列表是硬编码 `✅`
 
 ```229:233:plugin/Source/backends/libvgm/OpnVoiceDriver.cpp
 	if (patch.model == chips::ChipModel::ym2608 || patch.model == chips::ChipModel::ym2610)
@@ -185,7 +206,18 @@ constexpr bool hasSixChannelMode (chips::ChipModel model)
 
 **顺带**：`0x9F` 也是一个魔数。它由"bit 7 开六通道"和"低五位取复位默认的 `0x1F`"拼成，位含义写在注释里，但值是拼出来的。可以写成 `0x80 | 0x1F`，让两个来源在代码里可见。
 
-### P2-3 `slotFlags != 2` 是枚举的第二个来源
+### P2-2 的落实 `✅`
+
+```cpp
+constexpr bool hasSixChannelMode (chips::ChipModel model)   // switch, next to clockFor
+constexpr uint8_t sixChannelMode = 0x80 | 0x1F;             // bit 7 + the reset IRQ mask
+```
+
+`load` 里剩 `if (hasSixChannelMode (patch.model)) { core->write (0, 0x29, sixChannelMode); }`。
+
+`0x9F` 拆成 `0x80 | 0x1F` 之后，两个来源在代码里各自可见——**评审时它只是一个数**。
+
+### P2-3 `slotFlags != 2` 是枚举的第二个来源 `✅`
 
 ```32:38:plugin/Source/backends/libvgm/VgmReplayer.cpp
 	void attachRhythmRom (toybox::chips::IChipDecoder& decoder, uint8_t slotFlags)
@@ -201,6 +233,27 @@ constexpr bool hasSixChannelMode (chips::ChipModel model)
 这正是规则 §13 判据说的："这份数据有几个写入点？"序号 `2` 的定义在 `VgmReplayer::adoptNewBuffers` 的 `switch` 里，而它的消费者要自己记住这个字面量。
 
 **修法**：给序号一个具名常量（`constexpr uint8_t kOpnaSlotFlag = 2;`）放在 `VgmReplayer.cpp`，两边都引它；或者让 `attachRhythmRom` 收 `Variant` 而不是 `uint8_t`。
+
+### P2-3 的落实 `✅`
+
+```cpp
+constexpr uint32_t opnSlotFlag (chips::OpnDecoder::Variant variant)
+{
+    return (uint32_t) variant + 1u;
+}
+```
+
+`OpnDecoder::reset` 读的是 `Variant (flags - 1)`，所以这是同一个表达式的另一端：四处 `switch`、一处 `!= 2`、一处 `kOpnaSlotFlag` 全走它。
+
+**顺带确认了映射本身没错**。评审时我一度怀疑四个数字错位，查了枚举才确认是对的：
+
+```
+ym2203 = 0,  ym2608 = 1,  ym2610 = 2,  ym2610b = 3,  ym2612 = 4
+       ↓            ↓            ↓                          ↓
+flags  1            2            3                          5
+```
+
+记在这里，免得下一个人再怀疑一次。
 
 ### P2-4 地址表的索引方式容易错位 `✅`
 
@@ -368,24 +421,19 @@ virtual const uint8_t* builtinRom (std::size_t& size) const { return nullptr; }
 
 **若采纳建议 1**，这个函数整个消失——ROM 由 `OpnDecoder::builtinRom()` 返回，注入点变成一句通用调用。
 
-## 八、修复顺序
+## 八、修复顺序（全部完成）
 
-**合并前**（约 10 分钟）：
+原本分三批，实际按这个顺序做完了：
 
-1. P1-1 左移那 16 行
-2. P1-2 删两处双空行
-3. P1-3 `CMakeLists.txt` 只删一行
+| 批 | 内容 | 提交 |
+|---|---|---|
+| 一（合并前，10 分钟） | P1-1 / P1-2 / P1-3 格式噪音 | `bc83810` |
+| 二（40 分钟） | P2-5 按钮尺寸、P2-4 地址表 | `8c134db` |
+| 三（这批提前做了） | P2-1 接口化、P2-2 型号名单、P2-3 序号、P3-2 断言 | `71e800c` |
 
-**合并后第一件事**（约 40 分钟）：
+**第三批原本挂在"下一颗芯片之前"**，提前做完的原因是它只碰 `IChipDecoder` 与三个静态函数——等下一颗芯片开工时再动，就要在写新解码器的同时验证旧路径。
 
-4. P2-5 按钮尺寸收进共享常量（最小，且能防止下一次漂移）
-5. P2-4 地址表改 `struct` + 加单调断言
-
-**下次动 OPN 之前**：
-
-6. P2-1 接口化（连带 P3-3、架构建议 1）
-7. P2-2 型号名单收进具名函数
-8. P2-3 序号具名
+未做的两项都在第五节，且都是**取舍而非欠债**：P3-4（构建缺陷写进了领域注释，有 issue 文档兜底）、P3-5（8 KB 副本，当前量级无所谓）。
 
 **验收标准**：`git diff` 里不再有无内容变化的行；`vgm_keyboard_test` 与 `vgm_opn_test` 各自至少有一条断言能在**功能被移除时变红**（现在 `OpnCoreOracleTest` 满足，`vgm_keyboard_test` 满足，`isLinkedVoiceSet` 不满足）。
 
