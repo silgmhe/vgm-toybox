@@ -975,7 +975,15 @@ bool LibvgmTrackPlayer::captureState (playback::ChipStateSnapshot& snapshot) con
 			}
 			else
 			{
-				channelName = "Ch " + std::to_string (channel + 1);
+				// **A chip without a name table still gets a useful name.** `kind` is the
+				// decoder's own answer about what this channel is, so the fallback can use it
+				// rather than numbering everything `Ch n`. The Nuked OPM ships no `channelNames`,
+				// and its eight rows read `Ch 1`-`Ch 8` for exactly that reason.
+				//
+				// Keyed on the kind, not on a device id: the OPL family and the OPX will arrive
+				// the same way, and each of them should say `FM n` without another edit here.
+				const bool fm = kind == chips::ChannelKind::fm || kind == chips::ChannelKind::fmDrum;
+				channelName = (fm ? "FM " : "Ch ") + std::to_string (channel + 1);
 			}
 
 			auto state = playback::channelFromChip (
@@ -1027,7 +1035,13 @@ bool LibvgmTrackPlayer::captureState (playback::ChipStateSnapshot& snapshot) con
 				}
 
 				state.noteWaveform = entry.wave;
-				state.noteWaveformRate = (float) chips::noteRateFor (state.voicePatch->model);
+
+				// **The rate the samples are actually at**, not the chip's output rate. `startCore`
+				// runs the core at `kNoteRate` (8 kHz) so that one note is 12 800 points rather than
+				// 89 489; declaring the chip's own 55 930 here made the exporter play those samples
+				// seven times too fast - the exact failure `VoicePatch.h` warns about with "a file
+				// that declares 44 100 over 8 000-rate samples plays four octaves too high".
+				state.noteWaveformRate = (float) chips::kNoteRate;
 			}
 
 

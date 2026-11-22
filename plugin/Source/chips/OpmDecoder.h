@@ -41,6 +41,14 @@ public:
 	const NoteTable& noteTable (int channel) const override;
 	ChannelKind channelKind (int channel) const override;
 
+	/** **The registers behind one channel's voice**, for a caller that wants to replay it.
+
+		Six banks of four operators plus the channel's control byte - 25 pairs. The offsets are the
+		chip's own, and `0x40 + op*8 + ch` rather than the OPN's `0x40 + op*4 + ch`: an encoder that
+		reused the OPN's stride would write channel 4's patch over channel 0's.
+	*/
+	bool capturePatch (int channel, VoicePatch& out) const override;
+
 private:
 	struct Impl;
 	std::unique_ptr<Impl> impl;

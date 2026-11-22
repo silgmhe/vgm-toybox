@@ -103,6 +103,17 @@ constexpr uint32_t clockFor (chips::ChipModel model)
 	divisor in `OpnDecoder::addressShiftFor`. Adding a part means editing both, and this at least
 	makes the second edit a search away rather than a guess.
 */
+/** **The one FM family whose registers the OPN's sequence must not touch.**
+
+	`load` writes 0x22/0x27/0x2B/0x29 to bring a bare OPN to life. The OPM has none of them: `0x22`
+	sits inside its operator banks and `0x27` inside the last channel's, so the writes would corrupt
+	two patches rather than configure anything.
+*/
+constexpr bool isOpm (chips::ChipModel model)
+{
+	return model == chips::ChipModel::ym2151;
+}
+
 constexpr bool hasSixChannelMode (chips::ChipModel model)
 {
 	switch (model)
@@ -210,7 +221,15 @@ std::unique_ptr<playback::IVoiceDriver> makeOpnVoiceDriver (void)
 
 bool OpnVoiceDriver::startCore (chips::ChipModel model)
 {
-	core = std::make_unique<Core> (chips::noteRateFor (model), model);
+	// **`kNoteRate`, not `noteRateFor`.** The core's own output rate is what `noteWave::render`
+	// turns into `sustain + release` seconds of samples, so running it at 55 930 Hz on the OPM
+	// made one note 89 489 points - and `captureState` rebuilds that whenever the patch changes,
+	// which on this chip is every frame the song rewrites a total level. That was the stutter.
+	//
+	// 8 kHz is the rate `VoicePatch.h` documents for exactly this purpose ("the window draws it at
+	// seventy pixels ... neither wants 44 100 points"). The cost is aliasing above 4 kHz in a
+	// *picture* of a timbre; the alternative was a stream that could not keep up.
+	core = std::make_unique<Core> (chips::kNoteRate, model);
 	loadedModel = model;
 
 	return core != nullptr && core->ready;
@@ -233,39 +252,69 @@ bool OpnVoiceDriver::load (const chips::VoicePatch& patch)
 		}
 	}
 
-	// The channel is the low two bits of the addresses the patch came back with, and the port is in
+	// The channel is the low bits of the addresses the patch came back with, and the port is in
 	// bit 8 - see VoicePatch.h for why both are needed.
+	//
+	// **Three on the OPN, three on the OPM.** The OPN's operator stride is four, so the channel is
+	// the low two bits; the OPM's is eight, so it is the low three. Reading one as the other puts
+	// channel 4-7's patch on channel 0-3.
 	const uint16_t first = patch.regs.front ().first;
-	channelInPort = (int) (first & 0x03);
+	channelInPort = (int) (first & (isOpm (patch.model) ? 0x07 : 0x03));
 	port = (first & 0x100) ? 1 : 0;
 
 	// **Start from silence, not from whatever the last channel left.** The core is shared, and the
 	// previous channel is still releasing when this patch arrives - see `reset`.
 	core->reset ();
 
-	// **The three registers a bare core needs before it will make a sound.** A freshly started
-	// YM2612 has the LFO and the timers in whatever state the core's constructor leaves them, and
-	// channel 3 may be in special mode. Without them every note came out silent, which is what "all
-	// zero samples" looks like from the outside.
-	core->write (0, 0x22, 0x00);		// LFO off: a tremolo would make the level time-dependent
-	core->write (0, 0x27, 0x00);		// no timers, channel 3 in normal mode
-	core->write (0, 0x2B, 0x00);		// DAC off: this is a voice, not the sample channel
-
-	// **The OPNA and OPNB have to be told they are six-channel parts, and `reset` un-tells them.**
-	// 0x29 bit 7 is the "extend 3ch" switch: the core's own reset writes 0x29 = 0x1F, whose bit 7
-	// is clear, so the chip comes back as a three-channel OPN. The register writes still land in
-	// the right place - 0x30|0x100 reaches channel 4 because that path tests the address, not the
-	// mode - but 0x28 does not: its bank bit is ignored while the mode is off, so `0xF4` keys
-	// channel 1 instead of channel 4. Channels 4-6 then hold a patch nothing ever starts, and the
-	// three rows above sound as if only half the chip worked.
-	if (hasSixChannelMode (patch.model))
+	if (isOpm (patch.model))
 	{
-		core->write (0, 0x29, sixChannelMode);	// six channels, IRQ mask at the reset default
+		// **Pan, and only pan.** `0x20` bits 6 and 7 are L and R, and `render` mixes `(L+R)/2`, so
+		// a channel with both clear is silent however good its patch is. Connection 0 keeps the
+		// four operators in series, which is what a song's patch normally assumes.
+		//
+		// **None of the OPN's four registers are written here.** 0x22/0x27/0x2B/0x29 do not exist
+		// on this chip: `0x22` is inside the operator banks (it would land on channel 2's DT1/MUL
+		// under a different mapping), and `0x27` would corrupt channel 7's. The OPM's own LFO and
+		// timer registers are already zero after the core's reset.
+		core->write (0, (uint8_t) (0x20 + channelInPort), 0xC0);
+	}
+	else
+	{
+		// **The three registers a bare core needs before it will make a sound.** A freshly started
+		// YM2612 has the LFO and the timers in whatever state the core's constructor leaves them,
+		// and channel 3 may be in special mode. Without them every note came out silent, which is
+		// what "all zero samples" looks like from the outside.
+		core->write (0, 0x22, 0x00);		// LFO off: a tremolo would make the level time-dependent
+		core->write (0, 0x27, 0x00);		// no timers, channel 3 in normal mode
+		core->write (0, 0x2B, 0x00);		// DAC off: this is a voice, not the sample channel
+
+		// **The OPNA and OPNB have to be told they are six-channel parts, and `reset` un-tells
+		// them.** 0x29 bit 7 is the "extend 3ch" switch: the core's own reset writes 0x29 = 0x1F,
+		// whose bit 7 is clear, so the chip comes back as a three-channel OPN. The register writes
+		// still land in the right place - 0x30|0x100 reaches channel 4 because that path tests the
+		// address, not the mode - but 0x28 does not: its bank bit is ignored while the mode is off,
+		// so `0xF4` keys channel 1 instead of channel 4. Channels 4-6 then hold a patch nothing
+		// ever starts, and the three rows above sound as if only half the chip worked.
+		if (hasSixChannelMode (patch.model))
+		{
+			core->write (0, 0x29, sixChannelMode);	// six channels, IRQ mask at the reset default
+		}
 	}
 
 	for (const auto& reg : patch.regs)
 	{
 		core->write (port, (uint8_t) (reg.first & 0xFF), (uint8_t) reg.second);
+	}
+
+	if (isOpm (patch.model))
+	{
+		// **After the patch, not before.** The patch carries `0x20|ch` with whatever pan the song
+		// chose, and a song that never sets it leaves both bits clear - which is silence, because
+		// `render` mixes `(L+R)/2`. Writing this first (it was) is overwritten by the loop above.
+		//
+		// The pan is a mix position, not a timbre: forcing both sides changes where the note sits,
+		// not what it sounds like, and a rendered note has no stereo image to preserve.
+		core->write (0, (uint8_t) (0x20 + channelInPort), 0xC0);
 	}
 
 	return true;
@@ -284,6 +333,38 @@ void OpnVoiceDriver::noteOn (double hz)
 	// core's own rate both scale with it - so this is not where a flat note would come from; the
 	// divisor below is. What it does carry is the rates and timers a core derives from its clock.
 	// See `clockFor` for what is measured and what is not.
+	if (isOpm (loadedModel))
+	{
+		// **The OPM has no f-number.** `0x28` carries the octave in bits 6-4 and a note code in
+		// bits 3-0, `0x30` adds 1/64 of a semitone in its top six bits. The code layout skips
+		// four values per octave - 3, 7, 11 and 15 repeat the previous semitone - so the inverse
+		// needs a table rather than an arithmetic step.
+		//
+		// The forward direction is `OpmNoteTable::noteFor`, which fourteen songs' pitches already
+		// agree with; this is its other end, and `ChipDecoderTest` holds the two to a round trip.
+		const double semitones = 69.0 + 12.0 * std::log2 (hz / 440.0);
+		const double x = semitones - 13.0;		// 0 is C#0, which is the code table's origin
+
+		const int block = std::clamp ((int) std::floor (x / 12.0), 0, 7);
+		const double r = x - 12.0 * (double) block;			// 0..12, the semitone inside the octave
+		const int delta = std::clamp ((int) std::floor (r), 0, 11);
+		const int kf = (int) std::lround ((r - (double) delta) * 64.0);
+
+		// `code - (code >> 2) == delta`, smallest code first.
+		static constexpr int kCodeForDelta[12] = { 0, 1, 2, 4, 5, 6, 8, 9, 10, 12, 13, 14 };
+
+		const uint8_t kc = (uint8_t) ((block << 4) | kCodeForDelta[delta]);
+		const uint8_t kfField = (uint8_t) ((kf & 0x3F) << 2);
+
+		core->write (0, (uint8_t) (0x28 + channelInPort), kc);
+		core->write (0, (uint8_t) (0x30 + channelInPort), kfField);
+
+		// **One key register for the whole chip**: the channel is in the value's low three bits,
+		// 0x78 being "all four operators". A key-off is the same address with a zero mask.
+		core->write (0, 0x08, (uint8_t) (0x78 | channelInPort));
+		return;
+	}
+
 	const double clock = (double) clockFor (loadedModel);
 
 	// **144 for the OPN2, 288 for the OPNA/OPNB**, which is where the doubling hides. libvgm's
@@ -341,6 +422,13 @@ void OpnVoiceDriver::noteOff (void)
 {
 	if (core == nullptr || ! core->ready)
 	{
+		return;
+	}
+
+	if (isOpm (loadedModel))
+	{
+		// The same address as key-on, with a zero operator mask.
+		core->write (0, 0x08, (uint8_t) channelInPort);
 		return;
 	}
 

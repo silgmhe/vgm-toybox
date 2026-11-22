@@ -45,26 +45,58 @@ namespace
 
 struct OpmDecoder::Impl
 {
+	/** **The six operator banks, kept as the chip wrote them.**
+
+		`op[operator][bank]`, banks in register order: 0x40 (DT1/MUL), 0x60 (TL), 0x80 (KS/AR),
+		0xA0 (AMS-EN/D1R), 0xC0 (DT2/D2R), 0xE0 (D1L/RR).
+
+		Stored raw rather than decoded, because `VoicePatch` is a list of register writes: a struct of
+		named fields would have to be turned back into writes before a note could be played, and that
+		encoder would be a second authority over the same numbers - the shape this project has paid
+		for twice.
+
+		**The operator stride is eight, the channel is the low three bits** (`0x40 + op*8 + ch`).
+		The OPN puts the operator in the same nibble as the channel (`0x40 + op*4 + ch`), and reading
+		one layout as the other silently addresses a different operator's register.
+	*/
 	struct Channel
 	{
+		Channel()
+		{
+			// Total level powers up fully attenuated: a channel with no patch must be silent, not
+			// loud. This is the one bank whose reset value is not zero.
+			for (int op = 0; op < 4; ++op)
+			{
+				op_[op][1] = 0x7F;
+			}
+		}
+
 		int kc = 0;
 		int kf = 0;
 		bool havePitch = false;
 		bool keyed = false;
 
-		/** The patch, for the display only - the note comes from kc/kf above.
+		uint8_t op_[4][6] {};	// the name `op` is the loop variable everywhere below
+		uint8_t control = 0;	// 0x20-0x27: pan in 6-7, feedback in 3-5, connection in 0-2
 
-			Operator addresses on this chip advance by eight and the channel is the low three bits
-			(`0x40 + op*8 + ch`), where the OPN puts the operator in the same nibble as the channel
-			(`0x40 + op*4 + ch`). Guessing one layout from the other silently reads the wrong
-			operator's registers. */
-		int multiple[4] = { 1, 1, 1, 1 };		// 0x40-0x5F, low four bits
-		uint8_t totalLevel[4] = { 0x7F, 0x7F, 0x7F, 0x7F };	// 0x60-0x7F, seven bits
-		int algorithm = 0;		// 0x20-0x27, low three bits
-		int feedback = 0;		// 0x20-0x27, bits 3-5
+		uint8_t& reg (int operatorIndex, int bank) { return op_[operatorIndex][bank]; }
+		uint8_t reg (int operatorIndex, int bank) const { return op_[operatorIndex][bank]; }
+	};
+
+	/** **One captured patch per channel, rebuilt only when a register moved.** `channelState` runs
+		once per channel per snapshot, and a patch is 25 pairs - building it every time would be a
+		thousand allocations a second for numbers that change a few times per note. The version is
+		bumped by every write that can change a patch.
+	*/
+	struct PatchCache
+	{
+		unsigned version = 0;
+		std::shared_ptr<const VoicePatch> patch;
 	};
 
 	Channel channels[kChannels];
+	unsigned version = 0;
+	mutable PatchCache cache[kChannels];
 	OpmNoteTable table;
 };
 
@@ -109,31 +141,33 @@ void OpmDecoder::write (const RegisterWrite& write)
 		return;
 	}
 
-	// 0x20-0x27: feedback in bits 3-5, connection (the algorithm that decides which operators
-	// reach the output) in the low three. The pan bits above them change the stereo image only.
+	// 0x20-0x27: pan in bits 6-7, feedback in bits 3-5, connection (the algorithm that decides
+	// which operators reach the output) in the low three.
 	if (reg >= 0x20 && reg < 0x28)
 	{
-		Impl::Channel& channel = impl->channels[reg & 0x07];
-		channel.algorithm = (int) (write.value & 0x07);
-		channel.feedback = (int) ((write.value >> 3) & 0x07);
+		impl->channels[reg & 0x07].control = (uint8_t) write.value;
+		++impl->version;
 		return;
 	}
 
-	// 0x40-0x5F: DT1 in the high nibble, MULTI in the low four.
-	if (reg >= 0x40 && reg < 0x60)
+	// **0x40-0xFF: six banks of four operators.** The bank is the top three bits, counting from
+	// 0x40; the operator is bits 3-4; the channel is the low three. One branch for all six
+	// because the decoder keeps them raw - a field per bank would be six copies of this mapping.
+	if (reg >= 0x40)
 	{
-		const int channel = reg & 0x07;
-		const int op = (reg >> 3) & 0x03;
-		impl->channels[channel].multiple[op] = (int) (write.value & 0x0F);
-		return;
-	}
+		const int bank = (int) ((reg >> 5) & 0x07) - 2;	// 0x40 -> 0 ... 0xE0 -> 5
+		const int op = (int) ((reg >> 3) & 0x03);
+		impl->channels[reg & 0x07].op_[op][bank] = (uint8_t) write.value;
 
-	// 0x60-0x7F: total level, seven bits of attenuation.
-	if (reg >= 0x60 && reg < 0x80)
-	{
-		const int channel = reg & 0x07;
-		const int op = (reg >> 3) & 0x03;
-		impl->channels[channel].totalLevel[op] = (uint8_t) (write.value & 0x7F);
+		// **Total level is a volume, not a shape, and it does not invalidate the picture.** The
+		// other five banks decide the envelope and the timbre; `0x60` only decides how loud the
+		// result comes out, which `noteWave::render` normalises away. Bumping the version for it
+		// meant rebuilding eight 12 800-sample waveforms whenever a song rewrote a level - and on
+		// this chip that is every frame. Measured as audio-thread stutter before this line.
+		if (bank != 1)
+		{
+			++impl->version;
+		}
 	}
 }
 
@@ -159,16 +193,68 @@ ChannelState OpmDecoder::channelState (int channel) const
 	state.present = true;
 	state.gate = voice.keyed && voice.havePitch;
 	state.period = (uint32_t) ((voice.kc << 6) | voice.kf);
-	state.volume = 15;
 
-	// The patch, for the display only. Operator 1 is the modulator on every algorithm but 7, and
+	// **A level, not a flag.** This was the constant 15, so every row's meter sat at full for the
+	// whole song. The OPNA's version reads the loudest *carrier*, which needs the algorithm;
+	// operator 4 (C2) is the carrier under CON 0-4 and one of them under 5-7, so its level is a
+	// close enough answer here - and it is a display quantity, because the patch carries the TL
+	// registers and the core does the arithmetic.
+	state.volume = 15 - ((int) voice.reg (3, 1) * 15) / 127;
+
+	// The patch, for the display only. Operator 2 is the modulator on every algorithm but 7, and
 	// the YM2151's operators have one waveform each, so `fmWaveform` stays zero.
 	state.fmKnown = true;
-	state.fmMultiple = voice.multiple[1];
-	state.fmLevel = (voice.totalLevel[1] * 63) / 127;
-	state.fmFeedback = voice.feedback;
+	state.fmMultiple = (int) (voice.reg (1, 0) & 0x0F);
+	state.fmLevel = ((int) voice.reg (1, 1) * 63) / 127;
+	state.fmFeedback = (int) ((voice.control >> 3) & 0x07);
 	state.fmWaveform = 0;
+
+	// **The patch, rebuilt only when a register moved.** This function is called once per channel
+	// per snapshot - a fresh 25-pair vector every time would be a thousand allocations a second
+	// for numbers that change a few times per note.
+	Impl::PatchCache& cache = impl->cache[channel];
+
+	if (cache.version != impl->version || cache.patch == nullptr)
+	{
+		chips::VoicePatch captured;
+		cache.patch = capturePatch (channel, captured)
+						  ? std::make_shared<const chips::VoicePatch> (std::move (captured))
+						  : nullptr;
+		cache.version = impl->version;
+	}
+
+	state.voicePatch = cache.patch;
 	return state;
+}
+
+bool OpmDecoder::capturePatch (int channel, VoicePatch& out) const
+{
+	if (channel < 0 || channel >= kChannels)
+	{
+		return false;
+	}
+
+	const Impl::Channel& voice = impl->channels[channel];
+
+	out = VoicePatch {};
+	out.model = ChipModel::ym2151;
+
+	// **25 pairs: six banks of four operators, then the channel's control byte.** The offsets are
+	// the chip's own, so `load()` writes them back in order with nothing to encode in between.
+	//
+	// `+ op * 8`, not the OPN's `+ op * 4`: the operator stride differs between the two families
+	// and reusing the OPN's would send channel 4's patch over channel 0's registers.
+	for (int op = 0; op < 4; ++op)
+	{
+		for (int bank = 0; bank < 6; ++bank)
+		{
+			out.regs.push_back ({ (uint16_t) (0x40 + bank * 0x20 + op * 8 + channel),
+								  voice.reg (op, bank) });
+		}
+	}
+
+	out.regs.push_back ({ (uint16_t) (0x20 + channel), voice.control });
+	return true;
 }
 
 const NoteTable& OpmDecoder::noteTable (int) const

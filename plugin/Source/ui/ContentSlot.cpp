@@ -1594,8 +1594,12 @@ void ContentSlot::beginExport (const ExportOptions& options)
 				if (auto wave = engine.renderNoteAt (channel.trackIndex, hz))
 				{
 					channel.noteWaveform = std::move (wave);
-					channel.noteWaveformRate =
-						(float) chips::noteRateFor (channel.voicePatch->model);
+
+					// **`kNoteRate`, matching `OpnVoiceDriver::startCore`.** This is the rate the
+					// exporter writes into the file's header, so it has to be the rate the samples
+					// were produced at - the chip's own 55 930 would make a dragged note seven times
+					// too short.
+					channel.noteWaveformRate = (float) chips::kNoteRate;
 				}
 			}
 		}

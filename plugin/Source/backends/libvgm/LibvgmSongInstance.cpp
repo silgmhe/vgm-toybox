@@ -644,6 +644,12 @@ SongDescription describeSong (LibvgmTrackPlayer* probe)
 		const char** channelNames = (decl != nullptr && decl->channelNames != nullptr)
 									  ? decl->channelNames (device.devCfg) : nullptr;
 
+		// **How many of this device's channels are FM**, for the fallback name below. The plan is
+		// already the one authority on that (`ChipPlans`, and `ChipPlansTest` holds it to what the
+		// decoder produces), so this reads it instead of naming device ids here.
+		const int melodicChannels
+			= midi::channelPlanFor (chipKindForDevice (device.type)).melodicCount;
+
 		juce::String groupName = [&device]
 		{
 			const char* deviceName = SndEmu_GetDevName (device.type, 0x01, device.devCfg);
@@ -690,9 +696,14 @@ SongDescription describeSong (LibvgmTrackPlayer* probe)
 		{
 			for (int channel = 0; channel < channelCount; ++channel)
 			{
+				// **A chip with no name table still gets a useful name.** The Nuked OPM ships no
+				// `channelNames`, so its eight rows read `Ch 1`-`Ch 8`; the plan says they are all
+				// FM, which is what the row is really about. Keyed on the plan rather than on a
+				// device id, so the OPL family and the OPX arrive here the same way.
 				const juce::String name = (channelNames != nullptr && channelNames[channel] != nullptr)
 											? juce::String (channelNames[channel])
-											: ("Ch " + juce::String (channel + 1));
+											: ((channel < melodicChannels ? "FM " : "Ch ")
+											   + juce::String (channel + 1));
 				addTrack (channel, name, true, device.id, channel, device.type);
 			}
 		}
