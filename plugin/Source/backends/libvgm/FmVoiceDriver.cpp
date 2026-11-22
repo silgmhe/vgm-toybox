@@ -146,6 +146,43 @@ constexpr uint8_t sixChannelMode = 0x80 | 0x1F;
 	functions take it and `Dialect` is declared in the header. The header only forward-declares it; its
 	members are the engine's own types, which this file exists to keep out of everyone else.
 */
+/** **Give a chip its sample banks, silent.** Only the YM2610 needs this - its sole core is the MAME
+	one, and it renders nothing at all until the ADPCM banks exist, the FM voices included. Measured
+	as `peak 0.000` from a standalone `SndEmu_Start`, which is why its output width could never be
+	calibrated from a test.
+
+	`DEV_GEN_CFG` has no ROM field, so this goes through the core's own `rwFuncs`: allocate with
+	`DEVRW_MEMSIZE`, then fill with `DEVRW_BLOCK`. Two passes rather than one, because the table lists
+	them in the opposite order and the allocation has to come first.
+*/
+void attachSilentPcmBanks (DEV_INFO& info)
+{
+	if (info.devDef == nullptr || info.devDef->rwFuncs == nullptr)
+	{
+		return;
+	}
+
+	constexpr uint32_t kBankSize = 0x100000;		// 1 MiB: the ADPCM-A bank's usual size
+	const std::vector<uint8_t> silence (kBankSize, 0x00);
+
+	for (const DEVDEF_RWFUNC* rw = info.devDef->rwFuncs; rw->funcPtr != nullptr; ++rw)
+	{
+		if (rw->funcType == (RWF_MEMORY | RWF_WRITE) && rw->rwType == DEVRW_MEMSIZE)
+		{
+			reinterpret_cast<DEVFUNC_WRITE_MEMSIZE> (rw->funcPtr) (info.dataPtr, kBankSize);
+		}
+	}
+
+	for (const DEVDEF_RWFUNC* rw = info.devDef->rwFuncs; rw->funcPtr != nullptr; ++rw)
+	{
+		if (rw->funcType == (RWF_MEMORY | RWF_WRITE) && rw->rwType == DEVRW_BLOCK)
+		{
+			reinterpret_cast<DEVFUNC_WRITE_BLOCK> (rw->funcPtr) (info.dataPtr, 0, kBankSize,
+																 silence.data ());
+		}
+	}
+}
+
 struct Core
 {
 	DEV_INFO info {};
@@ -167,6 +204,9 @@ struct Core
 
 		if (ready)
 		{
+			// Only the YM2610 needs banks before it will run - see `attachSilentPcmBanks`.
+			attachSilentPcmBanks (info);
+
 			ready = SndEmu_GetDeviceFunc (info.devDef, RWF_REGISTER | RWF_WRITE, DEVRW_A8D8, 0,
 										   (void**) &writeFn) == EERR_OK;
 		}
@@ -484,8 +524,9 @@ void FmVoiceDriver::render (float* out, int frames)
 	// model by the same constant therefore did two things to the YM2612 at once: it made an export
 	// 12 dB quiet, and it left `noteWave`'s quantiser working at a step four times the core's own
 	// LSB - so the quantisation noise sat 12 dB higher relative to the signal than it should.
+	// The upper bound is 24, not 16, because one chip needs more than sixteen - see `fmOutputBits`.
 	const int bits = chips::fmOutputBits (loadedModel);
-	const double scale = 1.0 / (double) (1 << (std::clamp (bits, 2, 16) - 1));
+	const double scale = 1.0 / (double) (1 << (std::clamp (bits, 2, 24) - 1));
 
 	if ((int) left.size () < kBlock)
 	{

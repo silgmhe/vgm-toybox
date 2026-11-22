@@ -129,8 +129,14 @@ constexpr int fmOutputBits (ChipModel model)
 	case ChipModel::ym2612:		return 14;
 
 	case ChipModel::ym2608:
-	case ChipModel::ym2610:
 	case ChipModel::ym2203:		return 16;
+
+	// **Fifteen, and it is the one value here taken from a listener rather than a fixture.** The
+	// YM2610's only core is the MAME one, which renders `peak 0.000` from a standalone `SndEmu_Start`
+	// even with silent PCM banks attached - so its width cannot be measured the way the other three
+	// were. An export heard quieter than playback at sixteen is the evidence, and one bit is 6 dB, so
+	// the value goes *down* to scale the signal up.
+	case ChipModel::ym2610:		return 15;
 
 	case ChipModel::ym2151:						// fmopm
 	case ChipModel::ym3812:						// fmopl
