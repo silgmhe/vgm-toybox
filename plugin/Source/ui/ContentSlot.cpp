@@ -1388,12 +1388,15 @@ private:
 								  ? (double) state.frequency
 								  : playback::noteWave::frequencyOf (dragSettings.getFmFixedNote ());
 
-			// The note's length and normalisation, read here for the same reason the pitch is:
-			// this is the message thread, and `renderNoteAt` is where it would otherwise be read.
+			// The note's length, read here for the same reason the pitch is: this is the message
+			// thread, and `renderNoteAt` is where it would otherwise be read.
+			//
+			// **No normalisation** - see the batch path for why: the gain is chosen from the note's
+			// own peak, so a quiet patch scales up along with whatever else is in the buffer.
 			const chips::NoteRenderShape shape {
 				(double) juce::jmax (1, dragSettings.getFmSustainMs ()) / 1000.0,
 				(double) juce::jmax (1, dragSettings.getFmReleaseMs ()) / 1000.0,
-				dragSettings.getFmNormalise ()
+				false
 			};
 
 			// A row with no pitch keeps the shape it was drawn with.
@@ -1646,13 +1649,19 @@ void ContentSlot::beginExport (const ExportOptions& options)
 		const double fixedNoteHz
 			= playback::noteWave::frequencyOf (exportSettings.getFmFixedNote ());
 
-		// The note's length and normalisation, read once for the whole job. `renderNoteAt` used to
-		// read them itself, which made the store a second source of the same three values - and a
-		// file-backed read from a worker while the message thread may be writing it.
+		// The note's length, read once for the whole job. `renderNoteAt` used to read them itself,
+		// which made the store a second source of the same three values - and a file-backed read from
+		// a worker while the message thread may be writing it.
+		//
+		// **Normalisation off for an export, on for the panel.** The gain is one number and cannot
+		// distort anything, but it is chosen from the note's own peak - so a quiet patch is scaled up
+		// by whatever it takes, and everything else in the buffer comes up with it: residual aliasing,
+		// quantisation noise, the lot. A file should carry the level the chip produced; a row at
+		// ninety pixels needs the shape to reach the edges or there is nothing to see.
 		const chips::NoteRenderShape shape {
 			(double) juce::jmax (1, exportSettings.getFmSustainMs ()) / 1000.0,
 			(double) juce::jmax (1, exportSettings.getFmReleaseMs ()) / 1000.0,
-			exportSettings.getFmNormalise ()
+			false
 		};
 
 		exportPool.addJob ([lifetime, enginePtr, drawn = std::move (drawn), chosen, report, safe,
