@@ -66,16 +66,23 @@ namespace
 	class Core
 	{
 	public:
-		Core()
+		/** @param devId which libvgm device to start - the family, not the variant.
+			@param clock its clock, which the OPM does not share with the OPN.
+			@param allChannels the mute mask covering every channel this device has: six for the OPN's
+			families, eight for the OPM. `soloRms` clears one bit from it.
+		*/
+		explicit Core (DEV_ID devId = DEVID_YM2612, uint32_t clock = kClock,
+					   uint32_t allChannels = 0x7Fu)
+			: channels (allChannels)
 		{
 			DEV_GEN_CFG config {};
 			config.emuCore = 0;						// the default core: the one the plugin plays
 			config.srMode = DEVRI_SRMODE_CUSTOM;
 			config.flags = 0;
-			config.clock = kClock;
+			config.clock = clock;
 			config.smplRate = kRate;
 
-			started = SndEmu_Start (DEVID_YM2612, &config, &info) == EERR_OK;
+			started = SndEmu_Start (devId, &config, &info) == EERR_OK;
 			if (started)
 			{
 				usable = SndEmu_GetDeviceFunc (info.devDef, RWF_REGISTER | RWF_WRITE, DEVRW_A8D8, 0,
@@ -110,7 +117,7 @@ namespace
 		/** Renders one window with every channel muted but one, and returns that channel's rms. */
 		double soloRms (int channel)
 		{
-			info.devDef->SetMuteMask (info.dataPtr, 0x7Fu & ~(1u << channel));
+			info.devDef->SetMuteMask (info.dataPtr, channels & ~(1u << channel));
 			std::fill (left.begin(), left.end(), 0);
 			std::fill (right.begin(), right.end(), 0);
 
@@ -133,6 +140,7 @@ namespace
 		DEVFUNC_WRITE_A8D8 writeFn = nullptr;
 		bool started = false;
 		bool usable = false;
+		uint32_t channels = 0x7Fu;
 		std::vector<DEV_SMPL> left;
 		std::vector<DEV_SMPL> right;
 	};
@@ -461,6 +469,53 @@ void testNoteWaveformInState (void)
 	check (wave.size() > 100, "and the backend can turn it into a whole note");
 }
 
+/** **The OPM's core produces sound from the registers the driver writes for it.**
+
+	This is the assertion the OPM shipped without: `peak = 1.0` was measured by hand on one song and
+	nothing held it. Three ways to get silence that look identical at ninety pixels wide - writing an
+	OPN's registers to an OPM, forgetting that `0x20` bit 6/7 gates the output (both clear by default,
+	and `render` mixes `(L+R)/2`), and keying with the wrong address.
+
+	The sequence is what `OpnVoiceDriver` writes for this chip: `0x20`, the six operator banks, KC/KF,
+	then the key register.
+*/
+void testOpmCoreMakesSound (void)
+{
+	Core core (DEVID_YM2151, 3579545u, 0xFFu);
+
+	check (core.isValid (), "libvgm's YM2151 core starts");
+
+	if (! core.isValid ())
+	{
+		return;
+	}
+
+	// Connection 0 (four operators in series) and both pan bits - the pan first, because a patch
+	// that does not set it leaves the channel silent whatever else is right.
+	core.reg (0, 0x20, 0xC0);
+
+	for (int op = 0; op < 4; ++op)
+	{
+		const auto base = (uint8_t) (op * 8);
+
+		core.reg (0, (uint8_t) (0x40 + base), 0x01);	// DT1/MUL: ratio 1
+		core.reg (0, (uint8_t) (0x60 + base), 0x00);	// TL: no attenuation
+		core.reg (0, (uint8_t) (0x80 + base), 0x1F);	// KS/AR: the fastest attack
+		core.reg (0, (uint8_t) (0xE0 + base), 0xF0);	// D1L/RR: loudest, slowest release
+	}
+
+	// KC = block 4, code 10 -> A4; KF = 0.
+	core.reg (0, 0x28, 0x4A);
+	core.reg (0, 0x30, 0x00);
+
+	// **One key register for the chip**: channel in bits 2-0, operator mask in 6-3. 0x78 keys all.
+	core.reg (0, 0x08, 0x78);
+
+	// Ten times the silence floor, so a channel that renders a few units of leak does not pass.
+	check (core.soloRms (0) > 10.0,
+		   "the OPM core sounds a note written the way the driver writes it");
+}
+
 int main()
 {
 	std::printf ("YM2612 decoder against libvgm's own core\n");
@@ -763,6 +818,11 @@ int main()
 			check (false, "the core starts for a second-port patch");
 		}
 	}
+
+	// --- the OPM -------------------------------------------------------------------------------
+	// The chip this suite had nothing to say about, while its `peak` was verified by hand.
+	std::printf ("\nOPM\n");
+	testOpmCoreMakesSound ();
 
 	std::printf ("\n%s\n", failures == 0 ? "All checks passed." : "FAILED.");
 	return failures == 0 ? 0 : 1;

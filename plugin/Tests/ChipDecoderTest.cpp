@@ -7964,6 +7964,61 @@ void testOpnaRhythmRowIsCutFromItsRom (void)
 	}
 }
 
+/** **The OPM's patch is six banks of four operators at the chip's own addresses.**
+
+	The check that matters is the stride: `0x40 + bank*0x20 + op*8 + ch`. The OPN's is
+	`0x40 + op*4 + ch`, and an encoder that reused it would put channel 4's patch over channel 0's -
+	silently, because both are legal addresses.
+
+	Written after the OPM's first working render, whose `peak` was verified by hand and by nothing
+	else. If the stride breaks, this fails before a waveform has to be listened to.
+*/
+void testOpmPatchUsesTheChipsOwnStride (void)
+{
+	using namespace toybox::chips;
+
+	OpmDecoder decoder;
+	decoder.reset (ChipConfig { 3579545u, 44100.0, 0u });
+
+	// Two recognisable writes: op 0's DT1/MUL and op 3's total level, channel 0.
+	RegisterWrite mul;
+	mul.reg = 0x40;		// 0x40 + op0*8 + ch0
+	mul.value = 0x05;
+	decoder.write (mul);
+
+	RegisterWrite level;
+	level.reg = (uint8_t) (0x60 + 3 * 8 + 0);	// op3, ch0 -> 0x78
+	level.value = 0x20;
+	decoder.write (level);
+
+	VoicePatch patch;
+	check (decoder.capturePatch (0, patch), "the OPM can serialise its voice");
+	check (patch.model == ChipModel::ym2151, "and it names its model");
+	check (patch.regs.size () == 25, "25 pairs: six banks of four operators, plus control");
+
+	bool foundMul = false;
+	bool foundLevel = false;
+
+	for (const auto& reg : patch.regs)
+	{
+		if (reg.first == 0x40)
+		{
+			foundMul = reg.second == 0x05;
+		}
+
+		if (reg.first == 0x78)
+		{
+			foundLevel = reg.second == 0x20;
+		}
+	}
+
+	check (foundMul, "op 0's DT1/MUL is at 0x40 and holds what was written");
+
+	// **The stride.** 0x78 is `0x60 + 3*8 + 0`; with the OPN's stride of four it would be 0x6C,
+	// and an encoder using that would write channel 4's patch over channel 0's.
+	check (foundLevel, "op 3's total level is at 0x78 - the stride is eight, not four");
+}
+
 int main (void){
 	std::printf ("chip decoder test\n");
 
@@ -7991,6 +8046,7 @@ int main (void){
 
 	testLinkedVoiceSetIsAskedOfTheDecoder();
 	testOpnaRhythmRowIsCutFromItsRom();
+	testOpmPatchUsesTheChipsOwnStride();
 	testFmSilentCarrier();
 	testFmAlgorithmDecidesTheCarrier();
 	testFmBlockIsAnOctave();
