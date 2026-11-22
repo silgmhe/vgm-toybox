@@ -108,11 +108,24 @@ struct OplDecoder::Impl
 		int block = 0;
 		bool keyed = false;
 
+		/** The OPLL's voice selection: `0x30 + ch`'s two halves.
+
+			**The instrument number is the whole patch on this chip** - it is a pointer into the ROM
+			table the core already carries, so `capturePatch` hands that byte back instead of copying
+			the table (`docs/desgin/2026-11-22-opl-visualisation.md`). Zero means "the user voice",
+			whose eight registers are global and live in `Impl::userPatch`. */
+		uint8_t instrument = 0;
+
+		/** **0 is the loudest**, the same way round as an OPN's total level: the byte is an
+			attenuation, and `emu2413`'s `set_volume` adds it straight into the carrier's TL
+			(`emu2413.c:679`). The panel wants the other direction, so `channelState` inverts it. */
+		uint8_t volume = 0;
+
 		/** The patch, for the display only, and only on the variants that have registers for it.
 
-			The OPLL (YM2413) plays pre-set instruments selected by a number; there is no multiplier
-			or total level to read, so its channels leave `fmKnown` false and draw the generic sine.
-			That is not a gap to fill later - the chip genuinely does not say. */
+			There is no multiplier or total level to read on an OPLL, so its channels leave `fmKnown`
+			false: the operators are inside the chip's ROM and it does not say. The shape comes from
+			`capturePatch` and `noteWaveform` instead. */
 		int multiple = 1;		// 0x20 + slot, low four bits, of the modulator
 		uint8_t totalLevel = 0x3F;	// 0x40 + slot, low six bits, of the modulator
 		int feedback = 0;		// 0xC0 + channel, bits 1-3
@@ -127,6 +140,16 @@ struct OplDecoder::Impl
 
 	Variant variant = Variant::opl2;
 	bool adpcm = false;
+
+	/** The OPLL's eight global registers for instrument 0 - `0x00..0x07`, in chip order. */
+	uint8_t userPatch[8] = {};
+
+	/** Which model a captured patch names: the OPLL is the only one this decoder renders today. */
+	ChipModel patchModel (void) const
+	{
+		return variant == Variant::opll ? ChipModel::ym2413 : ChipModel::ym3812;
+	}
+
 	Channel channels[18];
 	Pulse rhythm[5];
 	Pulse deltaT;
@@ -428,6 +451,16 @@ void OplDecoder::write (const RegisterWrite& write)
 
 	if (impl->variant == Variant::opll)
 	{
+		// **The user voice, which is eight global registers.** An OPLL has no per-channel operator
+		// registers, but it does have this: instruments numbered 0 use these eight bytes, and any
+		// channel can ask for them. `capturePatch` copies them so a song that never uses a preset
+		// still gets its own timbre instead of a generic sine.
+		if (reg < 8)
+		{
+			impl->userPatch[reg] = write.value;
+			return;
+		}
+
 		if (reg >= kFnumLowBase && reg < kFnumLowBase + kChannelRun)
 		{
 			Impl::Channel& voice = impl->channels[reg - kFnumLowBase];
@@ -457,6 +490,14 @@ void OplDecoder::write (const RegisterWrite& write)
 			{
 				impl->keyChannel (reg - 0x30, false);
 			}
+
+			// **Both halves are kept, because `capturePatch` needs the byte back.** The high nibble
+			// selects one of the chip's ROM instruments (or 0 for the eight registers below), and the
+			// low nibble is this channel's volume - which `channelState` used to report as a constant
+			// fifteen, so every OPLL row's meter was full whatever the song asked for.
+			Impl::Channel& voice = impl->channels[reg - 0x30];
+			voice.instrument = (uint8_t) ((write.value >> 4) & 0x0F);
+			voice.volume = (uint8_t) (write.value & 0x0F);
 			return;
 		}
 
@@ -581,7 +622,12 @@ ChannelState OplDecoder::channelState (int channel) const
 		state.period = (uint32_t) voice.fnum;
 		state.block = voice.block;
 		state.gate = voice.keyed;
-		state.volume = 15;
+
+		// **The channel's own volume, not a constant, and inverted.** `0x30`'s low nibble is an
+		// attenuation (0 = loudest), while `ChannelFromChip` normalises against `volumeMaximum = 15`
+		// where 15 means full - so the meter needs `15 - volume`. Reporting a constant fifteen made
+		// every OPLL row read full whatever the song asked for.
+		state.volume = (impl->variant == Variant::opll) ? (15 - (int) voice.volume) : 15;
 
 		// The OPLL has no per-operator registers - its instruments are pre-sets chosen by number -
 		// so it says nothing rather than saying "multiplier 1, level 0", which is a patch that
@@ -658,6 +704,40 @@ bool OplDecoder::isDrum (int channel) const
 
 	return (channel >= impl->rhythmBase && channel < impl->rhythmBase + 5)
 		   || (impl->adpcm && channel == 14);
+}
+
+bool OplDecoder::capturePatch (int channel, VoicePatch& out) const
+{
+	const int melodic = impl->twoBanks ? 18 : 9;
+
+	if (channel < 0 || channel >= melodic || impl->variant != Variant::opll)
+	{
+		return false;		// the drums are pulses, and the OPL2/OPL3 have no case yet
+	}
+
+	const Impl::Channel& voice = impl->channels[channel];
+
+	out = VoicePatch {};
+	out.model = impl->patchModel ();
+
+	// **The user voice first, and it has to be first.** Instrument 0 means "the eight global
+	// registers", and the core copies that patch into the channel at the moment `0x30` is written -
+	// so writing the registers afterwards would leave the channel holding the previous ones.
+	if (voice.instrument == 0)
+	{
+		for (int i = 0; i < 8; ++i)
+		{
+			out.regs.push_back ({ (uint16_t) i, impl->userPatch[i] });
+		}
+	}
+
+	// The selector, for channel 0: the high nibble picks the ROM instrument (or 0 for the eight bytes
+	// above) and the low nibble is this channel's volume **as the chip takes it** - an attenuation
+	// where zero is loudest. Copied rather than inverted, because the patch is the register, and a
+	// quiet channel should export quiet.
+	out.regs.push_back ({ (uint16_t) 0x30, (uint16_t) ((voice.instrument << 4) | voice.volume) });
+
+	return true;
 }
 
 } // namespace toybox::chips

@@ -43,6 +43,7 @@ constexpr DEV_ID deviceIdFor (chips::ChipModel model)
 	case chips::ChipModel::ym2608:		return DEVID_YM2608;
 	case chips::ChipModel::ym2610:		return DEVID_YM2610;
 	case chips::ChipModel::ym2151:		return DEVID_YM2151;
+	case chips::ChipModel::ym2413:		return DEVID_YM2413;
 	case chips::ChipModel::ym3812:		return DEVID_YM3812;
 
 	case chips::ChipModel::ym2612:
@@ -114,6 +115,14 @@ constexpr uint32_t clockFor (chips::ChipModel model)
 constexpr bool isOpm (chips::ChipModel model)
 {
 	return model == chips::ChipModel::ym2151;
+}
+
+/** **The OPLL, for now the only two-operator part with a patch.** The OPL2 and the VRC7 need the same
+	dialect and will join this predicate when `OplDecoder::capturePatch` has cases for them; naming them
+	here early would route them to a dialect whose registers nothing produces yet. */
+constexpr bool isOpll (chips::ChipModel model)
+{
+	return model == chips::ChipModel::ym2413;
 }
 
 constexpr bool hasSixChannelMode (chips::ChipModel model)
@@ -189,6 +198,10 @@ struct Core
 	DEVFUNC_WRITE_A8D8 writeFn = nullptr;
 	double rate = 0.0;
 	bool ready = false;
+
+	/** The OPLL's last `0x20` write: key bit, block and the f-number's ninth bit. A key-off has to
+		clear bit 4 without moving the pitch the note was played at. */
+	uint8_t oplKey = 0;
 
 	Core (double sampleRate, chips::ChipModel model)
 		: rate (sampleRate)
@@ -409,8 +422,83 @@ void opmAfterPatch ( Core& core, int channel )
 	core.write (0, (uint8_t) (0x20 + channel), 0xC0);
 }
 
+/** **An OPLL patch is a number, so there is nothing to configure before it.** Writing `0x30 + ch` with
+	the instrument in the high nibble makes the core load its own ROM preset (`emu2413.c:1419`), which
+	is why `capturePatch` needs no table and this function needs no register. */
+void oplInit ( Core&, int, chips::ChipModel )
+{
+}
+
+/** **The OPLL's pitch and key, in two writes.**
+
+	`0x10 + ch` is the f-number's low eight bits and `0x20 + ch` carries everything else: the block in
+	bits 3-1, the ninth f-number bit in bit 0 and the key in bit 4. `OplNoteTable::noteFor` reads the
+	same three fields, so this is its inverse - `f = fnum * clock / 72 * 2^(block - 19)`.
+
+	The f-number is nine bits, so the block is chosen to keep it inside that range; the loop bounds
+	match `opnNoteOn`'s, which does the same for a ten-bit f-number.
+
+	**Channel 0, always.** An OPLL patch is captured for channel 0 (`OplDecoder::capturePatch`), so the
+	registers and the key land on the same channel the patch was written to.
+*/
+void opllNoteOn ( Core& core, int port, int channel, chips::ChipModel model, double hz )
+{
+	(void) port;
+	(void) channel;
+
+	const double clock = (double) clockFor (model);
+
+	auto fnumFor = [hz, clock] (int block)
+	{
+		return hz * 72.0 * std::exp2 (19.0 - (double) block) / clock;
+	};
+
+	int block = 4;
+	double fnum = fnumFor (block);
+
+	while (fnum >= 512.0 && block < 7)
+	{
+		++block;
+		fnum = fnumFor (block);
+	}
+
+	while (fnum < 1.0 && block > 0)
+	{
+		--block;
+		fnum = fnumFor (block);
+	}
+
+	const auto fnumBits = (uint16_t) std::lround (std::clamp (fnum, 0.0, 511.0));
+
+	// Low byte first, then the byte that latches the rest - the same order the chip expects and the
+	// same reason `opnNoteOn` writes 0xA4 before 0xA0.
+	core.write (0, 0x10, (uint8_t) (fnumBits & 0xFF));
+
+	core.oplKey = (uint8_t) (0x10 | ((block & 0x07) << 1) | ((fnumBits >> 8) & 0x01));
+	core.write (0, 0x20, core.oplKey);
+}
+
+/** Clearing bit 4 of the key byte releases the voice; the block and f-number stay where they were, so
+	the release tail keeps its pitch. */
+void opllNoteOff ( Core& core, int port, int channel )
+{
+	(void) port;
+	(void) channel;
+
+	core.write (0, 0x20, (uint8_t) (core.oplKey & ~0x10));
+}
+
+void opllAfterPatch ( Core&, int )
+{
+	// Nothing: the OPLL has no pan and no second register to fix after the patch.
+}
+
 constexpr Dialect kOpnDialect { 0x03, &opnInit, &opnNoteOn, &opnNoteOff, &opnAfterPatch };
 constexpr Dialect kOpmDialect { 0x07, &opmInit, &opmNoteOn, &opmNoteOff, &opmAfterPatch };
+
+// The channel is the low nibble of `0x30 + ch` (or of `0x00`, the user patch's first register, which
+// is also channel 0 - see `OplDecoder::capturePatch` for why an OPLL patch is always channel 0).
+constexpr Dialect kOpllDialect { 0x0F, &oplInit, &opllNoteOn, &opllNoteOff, &opllAfterPatch };
 
 FmVoiceDriver::FmVoiceDriver (bool exportQualityToUse, double exportRateToUse)
 	: exportQuality (exportQualityToUse), exportRate (exportRateToUse)
@@ -469,7 +557,9 @@ bool FmVoiceDriver::load (const chips::VoicePatch& patch)
 	// **The dialect follows the model, and it decides the channel mask too.** The channel is the low
 	// bits of the addresses the patch came back with; the port is in bit 8 - see VoicePatch.h. The
 	// OPN's operator stride is four, so its channel is two bits; the OPM's is eight, so it is three.
-	dialect = isOpm (patch.model) ? &kOpmDialect : &kOpnDialect;
+	dialect = isOpm (patch.model)  ? &kOpmDialect
+			  : isOpll (patch.model) ? &kOpllDialect
+									 : &kOpnDialect;
 	channelInPort = (int) (patch.regs.front ().first & dialect->channelMask);
 	port = (patch.regs.front ().first & 0x100) ? 1 : 0;
 

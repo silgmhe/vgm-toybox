@@ -702,6 +702,66 @@ namespace
 		(void) write;
 	}
 
+	/** **An OPLL patch is the instrument byte**, not a transcription of the chip's ROM table.
+
+		The chip selects one of fifteen presets by number and the core carries the parameters, so
+		capturing the voice means handing back `0x30`'s two halves - which is also why
+		`docs/desgin/2026-11-22-opl-visualisation.md` says a table would be an unnecessary risk.
+
+		The user voice is the other case: instrument 0 means the eight global registers, and they have
+		to travel *before* the selector, because the core copies them into the channel at the moment
+		`0x30` is written.
+	*/
+	void testOpllPatchIsTheInstrumentByte (void)
+	{
+		using toybox::chips::ChipConfig;
+		using toybox::chips::OplDecoder;
+		using toybox::chips::RegisterWrite;
+		using toybox::chips::VoicePatch;
+
+		OplDecoder decoder;
+		decoder.reset (ChipConfig { 3579545u, 44100.0,
+									OplDecoder::slotFlag (OplDecoder::Variant::opll), 0.0 });
+
+		const auto write = [&decoder] (uint8_t reg, uint8_t value)
+		{
+			RegisterWrite w;
+			w.sampleTime = 0;
+			w.port = 0;
+			w.reg = reg;
+			w.value = value;
+			decoder.write (w);
+		};
+
+		VoicePatch patch;
+
+		// A preset: instrument 5, volume 3.
+		write (0x32, 0x53);
+
+		check (decoder.capturePatch (2, patch), "an OPLL voice is captured");
+		check (patch.model == toybox::chips::ChipModel::ym2413, "and names the chip");
+		check (patch.regs.size () == 1, "as a single register: the preset lives in the chip's own ROM");
+		check (patch.regs[0].first == 0x30 && patch.regs[0].second == 0x53,
+			   "the selector for channel 0, exactly as the song wrote it");
+
+		// The user voice: instrument 0, so the eight global registers come with it.
+		write (0x00, 0x11);
+		write (0x04, 0xF0);
+		write (0x33, 0x0C);
+
+		check (decoder.capturePatch (3, patch), "the user voice is captured too");
+		check (patch.regs.size () == 9, "eight global registers and a selector");
+		check (patch.regs[0].first == 0x00 && patch.regs[0].second == 0x11,
+			   "the global bytes come first...");
+		check (patch.regs[4].first == 0x04 && patch.regs[4].second == 0xF0,
+			   "...in register order, so 0x04 stays 0x04");
+		check (patch.regs[8].first == 0x30 && patch.regs[8].second == 0x0C,
+			   "and the selector last, because the core copies the voice when it is written");
+
+		// A rhythm row is a pulse, not a voice.
+		check (! decoder.capturePatch (9, patch), "a rhythm row has no patch to capture");
+	}
+
 	/** A three-channel OPN (YM2203) has no second port: register 0x28 with the port-select bit
 		set addresses channel 3 of a six-channel OPN, which this chip does not have, while the
 		low two bits still select one of its three. */
@@ -8140,6 +8200,7 @@ int main (void){
 	testY8950CpuFedStream();
 	testY8950AdpcmRow();
 	testOpllVariantReachesTheDecoder();
+	testOpllPatchIsTheInstrumentByte();
 	testOpnThreeChannels();
 	testOpnChannelFamilies();
 	testOpnAdpcmBShape();

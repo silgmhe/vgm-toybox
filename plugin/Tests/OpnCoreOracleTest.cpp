@@ -788,6 +788,72 @@ void testOpmReachesFullScale (void)
 	}
 }
 
+/** **What an OPLL actually reaches, so its output width is measured rather than assumed.**
+
+	The user voice (`instrument 0`) with total level zero on both operators and the fastest attack -
+	the loudest this chip can be asked for. Its patch is nine registers, not seventeen: an OPLL's
+	instruments are a number pointing into the chip's own ROM, and this is the one that is not.
+*/
+void testOpllReachesFullScale (void)
+{
+	auto makePatch = []
+	{
+		toybox::chips::VoicePatch patch;
+		patch.model = toybox::chips::ChipModel::ym2413;
+
+		// **The eight bytes are interleaved by register, not by operator** - `EOPLL_patchToDump`
+		// (`emu2413.c:1487`) writes dump[0]/[1] from the two operators' 0x00, dump[2]/[3] from their
+		// 0x20, and so on. Reading them as "operator 0 then operator 1" (the OPL2 order) leaves every
+		// attack rate at zero, which is silence.
+		patch.regs.push_back ({ 0x00, 0x01 });		// modulator: AM/PM/EG/VIB/KSR off, multiple 1
+		patch.regs.push_back ({ 0x01, 0x01 });		// carrier: the same
+		patch.regs.push_back ({ 0x02, 0x00 });		// modulator: KSL 0, TL 0
+		patch.regs.push_back ({ 0x03, 0x00 });		// carrier: the same
+		patch.regs.push_back ({ 0x04, 0xF0 });		// modulator: attack at once, decay slow
+		patch.regs.push_back ({ 0x05, 0xF0 });		// carrier: the same
+		patch.regs.push_back ({ 0x06, 0x00 });		// modulator: sustain 0, release slow
+		patch.regs.push_back ({ 0x07, 0x00 });		// carrier: the same
+		patch.regs.push_back ({ 0x30, 0x00 });		// instrument 0 (the eight above), volume 0 = loudest
+		return patch;
+	};
+
+	const double wanted = toybox::playback::noteWave::frequencyOf (60);
+
+	struct Rate
+	{
+		double rate;
+		const char* label;
+	};
+
+	// **Only the chip's own rate here.** The core resamples internally with two taps at anything
+	// else, so a 48 kHz peak would be measuring that converter as much as the core.
+	const Rate rates[] = {
+		{ 0.0, "chip" },
+	};
+
+	for (const auto& rateCase : rates)
+	{
+		const auto driver = toybox::backends::libvgm::makeFmVoiceDriver (true, rateCase.rate);
+		const auto wave = toybox::playback::noteWave::render (*driver, makePatch (), wanted, 0.6, 0.05,
+															 false);
+
+		double peak = 0.0;
+
+		for (const float sample : wave)
+		{
+			peak = std::max (peak, (double) std::abs (sample));
+		}
+
+		std::printf ("    YM2413 %-5s peak %.3f  (rate %.0f, %zu samples)\n", rateCase.label, peak,
+					 driver->rate (), wave.size ());
+
+		// **The scale the file will carry.** Measured `0.063` at a declared sixteen, which is a
+		// sixteenth of the chip's level - the YM2612's failure one octave worse.
+		const std::string message = std::string ("the YM2413 reaches full scale at ") + rateCase.label;
+		check (peak > 0.9, message.c_str ());
+	}
+}
+
 int main()
 {
 	std::printf ("YM2612 decoder against libvgm's own core\n");
@@ -846,6 +912,7 @@ int main()
 	testNotePitchIsWhatWasAsked();
 	testNoteDecimationRemovesWhatWouldAlias();
 	testOpmReachesFullScale();
+	testOpllReachesFullScale();
 	testNoteWaveformInState();
 
 	Tally tally;

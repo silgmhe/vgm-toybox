@@ -77,6 +77,19 @@ public:
 	ChannelKind channelKind (int channel) const override;
 	bool isDrum (int channel) const override;
 
+	/** **The OPLL's voice, as the byte the chip takes.** An OPLL patch is not a set of operator
+		registers - it is an instrument number pointing into the chip's own ROM table - so this
+		returns one register for a preset and nine for the user voice (eight global operator
+		registers plus the selector). See `docs/desgin/2026-11-22-opl-visualisation.md`.
+
+		Always captured for **channel 0**: the patch is rendered by a core of its own, and the driver's
+		OPLL dialect writes `0x10`/`0x20`, so the registers and the key land together.
+
+		The OPL2 and the OPL3 have real operator registers and would need their own case; they return
+		false, which is what they did before.
+	*/
+	bool capturePatch (int channel, VoicePatch& out) const override;
+
 	/** **The Y8950's Delta-T ROM, in a block of its own.** `0x88` is VGM's "Y8950 DELTA-T ROM data";
 		the unit addresses it as pages of 32 bytes (or 4, when control2 asks for a DRAM part), so an
 		image is at most `0x10000 << 5` = 2 MB. The fallback clock is the 3.58 MHz part the unit was

@@ -1273,18 +1273,21 @@ chips::RenderedNote LibvgmTrackPlayer::renderNoteAt (int track, double hz,
 	// export that re-rendered through it would rewrite the registers under that thread's feet, and
 	// both the picture and the sound would change mid-note.
 	//
-	// **The OPM keeps its own rate, and the FIR does the conversion.**
+	// **The cores that resample themselves keep their own rate, and the FIR does the conversion.**
 	//
-	// `nukedopm` resamples internally when it is asked for a rate other than `clock / 64`: it keeps a
-	// fractional `rateratio` and interpolates linearly between its own samples, with no filter. Asking
-	// it for 48 kHz therefore folds the top band in *before* we ever see the samples - heard as the
-	// roughness on YM2151 exports, on a chip whose playback is clean because `PlayerA` resamples it
-	// properly.
+	// `nukedopm` and `emu2413` both resample internally when they are asked for a rate other than
+	// their native one: they keep a fractional ratio and interpolate linearly between their own
+	// samples, with no filter. Asking either for 48 kHz therefore folds the top band in *before* we
+	// ever see the samples - heard as the roughness on YM2151 exports, on chips whose playback is
+	// clean because `PlayerA` resamples them properly.
 	//
-	// So this one core runs at its own rate and the low-pass in `WaveExport` converts it, which is the
+	// So those cores run at their own rate and the low-pass in `WaveExport` converts, which is the
 	// only path here that has a filter at all. The other cores generate their samples directly at
-	// whatever rate they are asked for, and they should keep the file's rate.
-	const double wantedRate = (chosen->model == chips::ChipModel::ym2151) ? 0.0 : shape.rate;
+	// whatever rate they are asked for, and they keep the file's rate.
+	const double wantedRate
+		= (chosen->model == chips::ChipModel::ym2151 || chosen->model == chips::ChipModel::ym2413)
+			  ? 0.0
+			  : shape.rate;
 
 	// **Rebuilt whenever the requested rate changes, and `0` is a rate.** This compared `> 0.0`
 	// before, which read 0 as "do not care" - so a YM2151 export after any other model kept the

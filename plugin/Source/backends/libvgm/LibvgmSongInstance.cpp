@@ -711,10 +711,16 @@ SongDescription describeSong (LibvgmTrackPlayer* probe)
 				// not decoded - so channels 23..41 are the 24 PCM voices, and calling them `Ch 24`
 				// upwards would put "Ch 1" nowhere in the mixer. Every other chip's channels fall
 				// inside the plan, so this branch is inert for them.
+				// **The OPLL's own name table is bare numbers** ("1".."9"), which tells a reader less
+				// than the fallback below does. Every other FM chip here either ships no table or
+				// ships names this code would not improve on, so the table is used only where it
+				// says more than "FM 1".
+				const bool tableNames = channelNames != nullptr && deviceKind != midi::ChipKind::ym2413;
+
 				const int plannedChannels = plan.melodicCount + plan.oneShotCount + plan.tailMelodicCount;
 				const int beyondPlan = channel - plannedChannels;
 
-				const juce::String name = (channelNames != nullptr && channelNames[channel] != nullptr)
+				const juce::String name = (tableNames && channelNames[channel] != nullptr)
 					? juce::String (channelNames[channel])
 					: (channel < fmChannels ? ("FM " + juce::String (channel + 1))
 					   : (beyondPlan >= 0 ? ("Ch " + juce::String (beyondPlan + 1))

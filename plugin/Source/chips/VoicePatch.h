@@ -22,6 +22,7 @@ enum class ChipModel : uint8_t
 	ym2608,		// OPNA, the PC-98 part
 	ym2610,		// OPNB, the Neo Geo part
 	ym2151,		// OPM, eight four-operator channels with a different envelope layout
+	ym2413,		// OPLL, nine two-operator channels whose voice is a *preset number*, not registers
 	ym3812,		// OPL2, two operators, eight registers per voice
 	vrc7		// the NES expansion chip, an OPL2 relative
 };
@@ -160,9 +161,15 @@ constexpr int fmOutputBits (ChipModel model)
 	// 0.249` against a real full scale. Same failure as the YM2612's, same fix.
 	case ChipModel::ym2151:		return 14;
 
-	// **The OPL parts and the VRC7 are still sixteen, and neither has been measured.** They are left
-	// at the value they were written with rather than guessed at - a wrong number here is 6 dB of
-	// level per bit, so it is worth a fixture before anyone reports it.
+	// **Twelve for the OPLL, measured off `emu2413` with its own user voice at total level zero.**
+	// Its mixer sums fourteen channel buffers with no shift and one voice reaches about ±2048, so a
+	// declared sixteen left every YM2413 export at a sixteenth of the chip's level - worse than the
+	// quarter the YM2612 had, and the same class of mistake.
+	case ChipModel::ym2413:		return 12;
+
+	// **The OPL2 and the VRC7 are still sixteen, and neither has been measured.** They are left at the
+	// value they were written with rather than guessed at - a wrong number here is 6 dB of level per
+	// bit, so it is worth a fixture before anyone reports it.
 	case ChipModel::ym3812:
 	case ChipModel::vrc7:		return 16;
 
@@ -194,6 +201,9 @@ constexpr double noteRateFor (ChipModel model)
 	case ChipModel::ym2608:
 	case ChipModel::ym2610:		return 8000000.0 / 144.0;		// 55 556 Hz
 	case ChipModel::ym2151:		return 3579545.0 / 64.0;		// 55 930 Hz
+	// **The OPLL and the OPL2 divide the same nominal clock by 72**, and both cores generate at that
+	// rate when they are asked for it - `emu2413.c` starts at `clock / 72` (`:1563`).
+	case ChipModel::ym2413:
 	case ChipModel::ym3812:		return 3579545.0 / 72.0;		// 49 716 Hz
 
 	case ChipModel::vrc7:
