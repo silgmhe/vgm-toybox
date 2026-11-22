@@ -2350,7 +2350,8 @@ bool PlaybackEngine::captureChipState (playback::ChipStateSnapshot& snapshot) co
 }
 
 chips::RenderedNote PlaybackEngine::renderNoteAt (int trackIndex, double hz,
-												  const chips::VoicePatch* patch) const
+												  const chips::VoicePatch* patch,
+												  const chips::NoteRenderShape& shape) const
 {
 	if (trackIndex < 0 || trackIndex >= (int) trackPlayers.size ())
 	{
@@ -2359,7 +2360,7 @@ chips::RenderedNote PlaybackEngine::renderNoteAt (int trackIndex, double hz,
 
 	const auto* player = trackPlayers[(size_t) trackIndex].get ();
 
-	return player->renderNoteAt (trackIndex, hz, patch);
+	return player->renderNoteAt (trackIndex, hz, patch, shape);
 }
 
 int PlaybackEngine::readScope (float* dest, int maxSamples) const

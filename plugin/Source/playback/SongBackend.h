@@ -240,20 +240,26 @@ public:
 		Default: a backend with no computed notes says so by leaving `wave` null, and the exporter
 		keeps the waveform it already had rather than inventing one.
 	*/
-	/** @param patch the voice to render, or null to look it up from the row.
+	/** @param patch the voice to render; required, because the caller already holds it.
+		@param shape the note's length and normalisation, read where the settings live.
 
-		**Passing it is the reliable form.** A caller that holds the `ChannelState` already has its
-		`voicePatch`; leaving the backend to find it again means matching a chip channel against a
-		mixer row, and when that match fails the answer is an empty note - which the exporter cannot
-		tell from "this row has nothing", so it keeps the panels' 8 kHz shape and the file comes out a
+		**Both are passed rather than looked up.** A caller that holds the `ChannelState` already has
+		its `voicePatch`; leaving the backend to find it again means matching a chip channel against
+		a mixer row, and when that match fails the answer is an empty note - which the exporter cannot
+		tell from "this row has nothing", so it keeps the panel's 8 kHz shape and the file comes out a
 		staircase. That is exactly what happened to a dragged YM2610 voice.
+
+		`shape` is the same rule one step out: this runs on the export pool, and reading
+		`SettingsStore` here would be a second source of three values the message thread knows.
 	*/
 	virtual chips::RenderedNote renderNoteAt (int track, double hz,
-											  const chips::VoicePatch* patch = nullptr) const
+											  const chips::VoicePatch* patch,
+											  const chips::NoteRenderShape& shape) const
 	{
 		(void) track;
 		(void) hz;
 		(void) patch;
+		(void) shape;
 		return {};
 	}
 	/** Silences one device (the chips card). No-op when the backend cannot mute chips. */

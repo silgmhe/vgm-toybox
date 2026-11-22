@@ -1236,37 +1236,38 @@ bool LibvgmTrackPlayer::captureState (playback::ChipStateSnapshot& snapshot) con
 }
 
 chips::RenderedNote LibvgmTrackPlayer::renderNoteAt (int track, double hz,
-													 const chips::VoicePatch* patch) const
+													 const chips::VoicePatch* patch,
+													 const chips::NoteRenderShape& shape) const
 {
 	if (hz <= 0.0)
 	{
 		return {};
 	}
 
-	// **The caller's patch wins.** It already holds the `ChannelState` it wants rendered, so asking
-	// this function to find the same voice again was a second lookup over a second numbering scheme -
-	// chip channels against mixer rows - and when it missed, the empty answer was indistinguishable
-	// from "nothing here". The exporter then kept the panel's 8 kHz shape, and a dragged YM2610 voice
-	// came out as a staircase while the same row exported correctly from the batch path.
-	const chips::VoicePatch* chosen = patch;
+	// **The caller's patch, always.** It already holds the `ChannelState` it wants rendered, so
+	// asking this function to find the same voice again was a second lookup over a second numbering
+	// scheme - chip channels against mixer rows - and when it missed, the empty answer was
+	// indistinguishable from "nothing here". The exporter then kept the panel's 8 kHz shape, and a
+	// dragged YM2610 voice came out as a staircase while the same row exported correctly from the
+	// batch path.
+	//
+	// **The fallback lookup is gone.** It read `noteWaves`, which `captureState` writes on the
+	// message thread, and this runs on the export pool - a data race nobody could reproduce, kept
+	// alive for a caller that does not exist: both export paths now pass the patch.
+	(void) track;
 
-	if (chosen == nullptr)
-	{
-		// The old lookup, kept for a caller with nothing but a track number.
-		for (const auto& entry : noteWaves)
-		{
-			if (entry.second.patch != nullptr && trackFor (entry.first) == track)
-			{
-				chosen = entry.second.patch.get ();
-				break;
-			}
-		}
-	}
-
-	if (chosen == nullptr)
+	if (patch == nullptr)
 	{
 		return {};
 	}
+
+	const chips::VoicePatch* chosen = patch;
+
+	// **One export at a time.** A batch export runs on `ContentSlot::exportPool` and a drag on the
+	// message thread; both arrive here, and the driver below is a single mutable core. Without the
+	// lock they would rewrite the same registers from two threads, and the symptom - a garbled
+	// waveform, an occasional crash - is not reproducible on demand.
+	const juce::ScopedLock lock (exportLock);
 
 	// **Its own core.** The driver `captureState` uses is being advanced by the audio thread; an
 	// export that re-rendered through it would rewrite the registers under that thread's feet, and
@@ -1279,13 +1280,12 @@ chips::RenderedNote LibvgmTrackPlayer::renderNoteAt (int track, double hz,
 		exportDriver = makeFmVoiceDriver (true);
 	}
 
-	const auto& store = settings::SettingsStore::getInstance ();
-	const double sustain = (double) juce::jmax (1, store.getFmSustainMs ()) / 1000.0;
-	const double release = (double) juce::jmax (1, store.getFmReleaseMs ()) / 1000.0;
-
+	// **The shape arrives, it is not looked up.** This runs on the export pool or on a drag;
+	// reading `SettingsStore` here would be a second source of the same three values, and a read of
+	// a file-backed store from a worker while the message thread may be writing it.
 	auto wave = std::make_shared<const std::vector<float>> (
-		playback::noteWave::render (*exportDriver, *chosen, hz, sustain, release,
-									store.getFmNormalise ()));
+		playback::noteWave::render (*exportDriver, *chosen, hz, shape.sustainSeconds,
+									shape.releaseSeconds, shape.normalise));
 
 	// **The rate travels with the samples.** `exportDriver` was created with `exportQuality`, so
 	// its rate is the chip's own - reading it back here is what keeps the file's header honest

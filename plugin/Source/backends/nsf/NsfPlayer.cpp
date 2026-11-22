@@ -1712,7 +1712,8 @@ int NsfPlayer::renderChannels (float* const* dest, int channelCount, int frames)
 }
 
 chips::RenderedNote NsfPlayer::renderNoteAt (int track, double hz,
-											 const chips::VoicePatch* patch) const
+											 const chips::VoicePatch* patch,
+											 const chips::NoteRenderShape& shape) const
 {
 	if (vrc7Driver == nullptr || vrc7Clock <= 0.0 || hz <= 0.0)
 	{
@@ -1745,9 +1746,12 @@ chips::RenderedNote NsfPlayer::renderNoteAt (int track, double hz,
 		vrc7ExportDriver = makeVrc7VoiceDriver (vrc7Clock);
 	}
 
+	// **The shape arrives, like the patch.** `sustainSeconds` and its two neighbours are set from
+	// the message thread for `captureState` to draw with; reading them here would be the second
+	// source of a value the caller already has, and this runs on the export pool.
 	auto wave = std::make_shared<const std::vector<float>> (
-		playback::noteWave::render (*vrc7ExportDriver, *chosen, hz, sustainSeconds,
-									releaseSeconds, normaliseSamples));
+		playback::noteWave::render (*vrc7ExportDriver, *chosen, hz, shape.sustainSeconds,
+									shape.releaseSeconds, shape.normalise));
 
 	// The rate travels with the samples - see `chips::RenderedNote`.
 	return { std::move (wave), vrc7ExportDriver->rate () };

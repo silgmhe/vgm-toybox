@@ -117,8 +117,8 @@ public:
 	bool captureState (playback::ChipStateSnapshot& snapshot) const override;
 
 	/** Re-renders this track's patch at the pitch the caller names, at the chip's own rate. */
-	chips::RenderedNote renderNoteAt (int track, double hz,
-									  const chips::VoicePatch* patch = nullptr) const override;
+	chips::RenderedNote renderNoteAt (int track, double hz, const chips::VoicePatch* patch,
+									  const chips::NoteRenderShape& shape) const override;
 
 	/** The song's DPCM samples, as the song instance collected them. Empty for a file with no
 		data blocks, which is a file that carries no sample bytes at all. */
@@ -245,6 +245,16 @@ private:
 		would overwrite the registers under the audio thread's feet and hear the change. Two cores is
 		tens of kilobytes, paid once, and only when someone drags a channel out. */
 	mutable std::unique_ptr<playback::IVoiceDriver> exportDriver;
+
+	/** **One export at a time, because `exportDriver` is one core.** A batch export runs on
+		`ContentSlot::exportPool` and a drag runs on the message thread; both call `renderNoteAt`,
+		and without this they would rewrite the same registers from two threads - a data race whose
+		symptom (a garbled waveform, an occasional crash) cannot be reproduced on demand.
+
+		The cost is that a drag waits for one note of a running export. That is bounded and visible,
+		which a register-level race is not.
+	*/
+	mutable juce::CriticalSection exportLock;
 
 	mutable std::map<int, NoteWaveEntry> noteWaves;
 

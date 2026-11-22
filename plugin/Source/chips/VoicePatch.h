@@ -77,6 +77,21 @@ struct RenderedNote
 	double rate = 0.0;
 };
 
+/** **How long a rendered note is, and whether it is normalised**, read once where the settings
+	live and handed to whoever renders.
+
+	**Read on the message thread, not where the render happens.** `renderNoteAt` runs on the export
+	pool or on a drag, and reading `SettingsStore` there is a second source of the same three values
+	- the same shape this project has paid for more than once. It is also a read of a file-backed
+	`PropertiesFile` from a worker while the message thread may be writing one.
+*/
+struct NoteRenderShape
+{
+	double sustainSeconds = 0.0;
+	double releaseSeconds = 0.0;
+	bool normalise = false;
+};
+
 /** **The rate a note falls back to when nothing names the chip**, for a caller holding samples and
 	no idea what produced them. Never a substitute for `chips::noteRateFor` when the patch does say.
 */

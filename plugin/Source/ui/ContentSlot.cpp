@@ -1388,11 +1388,19 @@ private:
 								  ? (double) state.frequency
 								  : playback::noteWave::frequencyOf (dragSettings.getFmFixedNote ());
 
+			// The note's length and normalisation, read here for the same reason the pitch is:
+			// this is the message thread, and `renderNoteAt` is where it would otherwise be read.
+			const chips::NoteRenderShape shape {
+				(double) juce::jmax (1, dragSettings.getFmSustainMs ()) / 1000.0,
+				(double) juce::jmax (1, dragSettings.getFmReleaseMs ()) / 1000.0,
+				dragSettings.getFmNormalise ()
+			};
+
 			// A row with no pitch keeps the shape it was drawn with.
 			if (hz > 0.0)
 			{
 				if (auto rendered = engine.renderNoteAt (state.trackIndex, hz,
-														 state.voicePatch.get ());
+														 state.voicePatch.get (), shape);
 					rendered.wave != nullptr)
 				{
 					state.noteWaveform = std::move (rendered.wave);
@@ -1545,6 +1553,12 @@ ContentSlot::ContentSlot (toybox::PlaybackEngine& engineToUse)
 
 ContentSlot::~ContentSlot (void)
 {
+	// **Before the timer and before `exportPool` is destroyed.** A pending export checks this and
+	// drops its report; without the store it read `true` forever, so the early return it guarded
+	// was dead code while its comment claimed otherwise. `exportPool`'s destructor still waits for
+	// the job, but the job now sees `false` and stops before reaching `callAsync`.
+	exportAlive->store (false);
+
 	stopTimer ();
 	engine.setStateCaptureWanted (false);
 }
@@ -1626,14 +1640,23 @@ void ContentSlot::beginExport (const ExportOptions& options)
 		juce::Component::SafePointer<ContentSlot> safe (this);
 
 		// **Read here, on the message thread**, because the job may not touch the settings store - and
-		// because both answers are needed by every row it renders.
+		// because these are needed by every row it renders.
 		const auto& exportSettings = settings::SettingsStore::getInstance ();
 		const bool atPlayedPitch = exportSettings.getFmExportAtPlayedPitch ();
 		const double fixedNoteHz
 			= playback::noteWave::frequencyOf (exportSettings.getFmFixedNote ());
 
+		// The note's length and normalisation, read once for the whole job. `renderNoteAt` used to
+		// read them itself, which made the store a second source of the same three values - and a
+		// file-backed read from a worker while the message thread may be writing it.
+		const chips::NoteRenderShape shape {
+			(double) juce::jmax (1, exportSettings.getFmSustainMs ()) / 1000.0,
+			(double) juce::jmax (1, exportSettings.getFmReleaseMs ()) / 1000.0,
+			exportSettings.getFmNormalise ()
+		};
+
 		exportPool.addJob ([lifetime, enginePtr, drawn = std::move (drawn), chosen, report, safe,
-							atPlayedPitch, fixedNoteHz] () mutable
+							atPlayedPitch, fixedNoteHz, shape] () mutable
 		{
 			// **Every row that carries a patch is rendered again, not only a pinned one.**
 			//
@@ -1676,7 +1699,7 @@ void ContentSlot::beginExport (const ExportOptions& options)
 				// letting the backend find it again is what produced an empty note and a staircase
 				// file for a dragged YM2610 voice.
 				if (auto rendered = enginePtr->renderNoteAt (channel.trackIndex, hz,
-															 channel.voicePatch.get ());
+															 channel.voicePatch.get (), shape);
 					rendered.wave != nullptr)
 				{
 					channel.noteWaveform = std::move (rendered.wave);
