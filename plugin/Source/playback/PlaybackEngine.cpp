@@ -2349,12 +2349,11 @@ bool PlaybackEngine::captureChipState (playback::ChipStateSnapshot& snapshot) co
 	return snapshot.valid;
 }
 
-std::shared_ptr<const std::vector<float>> PlaybackEngine::renderNoteAt (int trackIndex,
-																	  double hz) const
+chips::RenderedNote PlaybackEngine::renderNoteAt (int trackIndex, double hz) const
 {
 	if (trackIndex < 0 || trackIndex >= (int) trackPlayers.size ())
 	{
-		return nullptr;
+		return {};
 	}
 
 	const auto* player = trackPlayers[(size_t) trackIndex].get ();

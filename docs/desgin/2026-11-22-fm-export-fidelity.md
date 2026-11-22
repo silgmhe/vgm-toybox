@@ -149,13 +149,38 @@ struct RenderedNote
 
 ## 六、实施顺序
 
+**第 3 步把"提高导出精度"和"移到后台"合成一步**，理由：8 kHz 时同步导出只需几十毫秒，改成芯片速率后是 8 个通道 × 89 489 样本——**一落地界面就会冻住**。分开做等于先制造一个中间状态再修它。
+
 | 步 | 内容 | 验收 |
 |---|---|---|
 | **1** | `kNoteRate` → `kVisualNoteRate`，新增 `kExportNoteRateFallback` | 编译通过；`grep kNoteRate` 为空 |
 | **2** | `startCore(model, rate)` + `loadedRate` 判断 | 面板仍是 8 kHz（`peak` 不变） |
-| **3** | `renderNoteAt` 返回速率；导出驱动用芯片速率 | **拖出的文件时长 = sustain + release**，波形比面板细腻 |
-| **4** | 导出移到后台 + `exporting` 标志 | 导出期间界面可响应；连点两次只有一次生效 |
-| **5** | 断言 | 见下 |
+| **3** | `renderNoteAt` 返回速率 **+ 导出移到 `exportPool`** | **拖出的时长 = sustain + release**；导出期间界面可响应 |
+| **4** | 断言 | 见下 |
+
+### 后台化的形状：照 `loadFileAsync`
+
+`PlaybackEngine` 已有一台线程池，加载就是用它：
+
+```568:571:plugin/Source/playback/PlaybackEngine.h
+juce::ThreadPool loadPool { juce::ThreadPool::Options{}.withThreadName ("VGMToybox load")
+                                .withNumberOfThreads (1) };
+std::atomic<int> loadGeneration { 0 };
+std::shared_ptr<std::atomic<bool>> alive = std::make_shared<std::atomic<bool>> (true);
+```
+
+四条它做对的事，导出照抄：
+
+| 做法 | 为什么 |
+|---|---|
+| 消息线程上快照，工作线程只碰副本 | `drawn` 已是副本，`options` 是值 |
+| `alive` 共享标志 | 编辑器关了之后回调不能写已释放的对象 |
+| 回到消息线程再交结果 | `MessageManager::callAsync` 里调 `onExportReport` |
+| `generation` 计数 | 连点两次导出，旧结果作废 |
+
+**新建 `exportPool` 而不是共用 `loadPool`**：导出和加载会互相堵，而加载是用户等得更久的那件事。
+
+**另加一个 `exporting` 标志**：`exportDriver` 是 `mutable` 的，两个导出并发会写同一个核心。
 
 ### 断言（三条）
 

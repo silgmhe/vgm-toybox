@@ -1711,11 +1711,11 @@ int NsfPlayer::renderChannels (float* const* dest, int channelCount, int frames)
 	return frames;
 }
 
-std::shared_ptr<const std::vector<float>> NsfPlayer::renderNoteAt (int track, double hz) const
+chips::RenderedNote NsfPlayer::renderNoteAt (int track, double hz) const
 {
 	if (vrc7Driver == nullptr || vrc7Clock <= 0.0 || hz <= 0.0)
 	{
-		return nullptr;
+		return {};
 	}
 
 	// Only the expansion's rows answer: the 2A03's five channels are shapes, not patches.
@@ -1723,14 +1723,14 @@ std::shared_ptr<const std::vector<float>> NsfPlayer::renderNoteAt (int track, do
 
 	if (voice < 0 || voice >= kVrc7Channels)
 	{
-		return nullptr;
+		return {};
 	}
 
 	const Vrc7Wave& cached = vrc7Waves[(size_t) voice];
 
 	if (cached.patch == nullptr)
 	{
-		return nullptr;
+		return {};
 	}
 
 	// **Its own OPLL.** The one `captureState` uses is being keyed and advanced by the audio thread;
@@ -1740,9 +1740,12 @@ std::shared_ptr<const std::vector<float>> NsfPlayer::renderNoteAt (int track, do
 		vrc7ExportDriver = makeVrc7VoiceDriver (vrc7Clock);
 	}
 
-	return std::make_shared<const std::vector<float>> (
+	auto wave = std::make_shared<const std::vector<float>> (
 		playback::noteWave::render (*vrc7ExportDriver, *cached.patch, hz, sustainSeconds,
 									releaseSeconds, normaliseSamples));
+
+	// The rate travels with the samples - see `chips::RenderedNote`.
+	return { std::move (wave), vrc7ExportDriver->rate () };
 }
 
 } // namespace toybox::backends::nsf

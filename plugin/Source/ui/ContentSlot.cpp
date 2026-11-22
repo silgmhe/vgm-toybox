@@ -1569,63 +1569,99 @@ void ContentSlot::beginExport (const ExportOptions& options)
 		report.folder = parent.getChildFile (juce::File::createLegalFileName (folderName));
 
 		// A copy, because a pinned pitch means rendering every FM channel again at that note - the
-		// snapshot itself belongs to the panel and is rebuilt on the next frame.
+		// snapshot itself belongs to the panel and is rebuilt on the next frame. Taking it here, on
+		// the message thread, is what lets the job below touch nothing else of this slot.
 		auto drawn = keyboardPanel->drawnSnapshot ();
 
 		report.channelsSeen = (int) drawn.channels.size ();
 
-		if (options.fixedNote >= 0)
+		// **Nothing below runs on the message thread.** At the chip's own rate one note is 89 489
+		// samples and there are as many notes as there are rows, so an inline export froze the
+		// window for its whole duration - the audio kept playing, the picture did not move.
+		//
+		// The shape is `PlaybackEngine::loadFileAsync`: snapshot here, work on the pool, come back
+		// through `callAsync` with the report.
+		if (exporting.exchange (true))
 		{
-			const double hz = playback::noteWave::frequencyOf (options.fixedNote);
+			return;		// one at a time: `exportDriver` is shared and mutable
+		}
 
-			for (auto& channel : drawn.channels)
+		const auto lifetime = exportAlive;
+		auto* const enginePtr = &engine;
+		const ExportOptions chosen = options;
+		juce::Component::SafePointer<ContentSlot> safe (this);
+
+		exportPool.addJob ([lifetime, enginePtr, drawn = std::move (drawn), chosen, report, safe] () mutable
+		{
+			if (chosen.fixedNote >= 0)
 			{
-				// Only the rows that carry a patch: a sampled or wavetable channel has a waveform of
-				// its own and nothing to re-render from.
-				if (channel.voicePatch == nullptr || channel.trackIndex < 0)
-				{
-					continue;
-				}
+				const double hz = playback::noteWave::frequencyOf (chosen.fixedNote);
 
-				// **The backend owns the chip driver**, so it does the render - `ui/` may not
-				// include an engine header. A backend that computes no notes answers null, and the
-				// channel keeps the waveform it was drawn with rather than losing it to a pitch that
-				// could not be applied.
-				if (auto wave = engine.renderNoteAt (channel.trackIndex, hz))
+				for (auto& channel : drawn.channels)
 				{
-					channel.noteWaveform = std::move (wave);
+					// Only the rows that carry a patch: a sampled or wavetable channel has a waveform
+					// of its own and nothing to re-render from.
+					if (channel.voicePatch == nullptr || channel.trackIndex < 0)
+					{
+						continue;
+					}
 
-					// **`kNoteRate`, matching `OpnVoiceDriver::startCore`.** This is the rate the
-					// exporter writes into the file's header, so it has to be the rate the samples
-					// were produced at - the chip's own 55 930 would make a dragged note seven times
-					// too short.
-					channel.noteWaveformRate = (float) chips::kNoteRate;
+					// **The backend owns the chip driver**, so it does the render - `ui/` may not
+					// include an engine header. A backend that computes no notes answers null, and
+					// the channel keeps the waveform it was drawn with rather than losing it to a
+					// pitch that could not be applied.
+					if (auto rendered = enginePtr->renderNoteAt (channel.trackIndex, hz);
+						rendered.wave != nullptr)
+					{
+						channel.noteWaveform = std::move (rendered.wave);
+
+						// **The rate came back with the samples**, from the driver that made them. It
+						// is the chip's own here, not the panel's 8 kHz - a dragged file is a timbre,
+						// and above 4 kHz the corners of a waveform are what make it recognisable.
+						channel.noteWaveformRate = (float) rendered.rate;
+					}
 				}
 			}
-		}
 
-		if (report.folder.createDirectory ().wasOk ())
-		{
-			const auto mode = options.looped ? playback::ExportMode::looped : playback::ExportMode::single;
+			if (report.folder.createDirectory ().wasOk ())
+			{
+				const auto mode = chosen.looped ? playback::ExportMode::looped
+												: playback::ExportMode::single;
 
-			const auto outcome = playback::exportWavetables (drawn,
-															 report.folder.getFullPathName ().toStdString (),
-															 mode, (double) options.seconds,
-															 options.bits);
+				const auto outcome = playback::exportWavetables (drawn,
+																 report.folder.getFullPathName ().toStdString (),
+																 mode, (double) chosen.seconds,
+																 chosen.bits);
 
-			report.written = outcome.written;
-			report.skippedSample = outcome.skippedSample;
-			report.failed = outcome.failed;
-		}
-		else
-		{
-			report.failed = report.channelsSeen;
-		}
+				report.written = outcome.written;
+				report.skippedSample = outcome.skippedSample;
+				report.failed = outcome.failed;
+			}
+			else
+			{
+				report.failed = report.channelsSeen;
+			}
 
-		if (onExportReport != nullptr)
-		{
-			onExportReport (report);
-		}
+			if (! lifetime->load ())
+			{
+				return;		// the slot is gone; the report has nowhere to go
+			}
+
+			juce::MessageManager::getInstance ()->callAsync ([safe, report] () mutable
+			{
+				if (safe == nullptr)
+				{
+					return;
+				}
+
+				safe->exporting.store (false);
+
+				if (safe->onExportReport != nullptr)
+				{
+					safe->onExportReport (report);
+				}
+			});
+		});
 	});
 }
 

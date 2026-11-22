@@ -63,7 +63,7 @@ public:
 		return player.captureState (snapshot);
 	}
 
-	std::shared_ptr<const std::vector<float>> renderNoteAt (int track, double hz) const override
+	chips::RenderedNote renderNoteAt (int track, double hz) const override
 	{
 		return player.renderNoteAt (track, hz);
 	}

@@ -234,14 +234,17 @@ public:
 		driver, and drivers live in the backends - `chips/` may not include an engine header, and
 		neither may `ui/`. So the question goes back to whoever owns one.
 
-		Default nullptr: a backend with no computed notes says so, and the exporter keeps the
-		waveform it already had rather than inventing one.
+		The rate comes back with the samples - `chips::RenderedNote` - because export runs at the
+		chip's own rate while the panel draws at `chips::kVisualNoteRate`, and the two differ.
+
+		Default: a backend with no computed notes says so by leaving `wave` null, and the exporter
+		keeps the waveform it already had rather than inventing one.
 	*/
-	virtual std::shared_ptr<const std::vector<float>> renderNoteAt (int track, double hz) const
+	virtual chips::RenderedNote renderNoteAt (int track, double hz) const
 	{
 		(void) track;
 		(void) hz;
-		return nullptr;
+		return {};
 	}
 	/** Silences one device (the chips card). No-op when the backend cannot mute chips. */
 	virtual void setChipAudible (DeviceId device, bool audible) = 0;

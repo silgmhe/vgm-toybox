@@ -235,7 +235,7 @@ public:
 
 		Null when the backend computes no notes, or when this channel has never been drawn.
 	*/
-	std::shared_ptr<const std::vector<float>> renderNoteAt (int trackIndex, double hz) const;
+	chips::RenderedNote renderNoteAt (int trackIndex, double hz) const;
 
 	/** Tells the engine whether anyone is looking. While true, each rendered block ends with a
 		capture; while false it costs one atomic read per block. A page that is not on screen must

@@ -116,8 +116,8 @@ public:
 	*/
 	bool captureState (playback::ChipStateSnapshot& snapshot) const override;
 
-	/** Re-renders this track's patch at the pitch the caller names. */
-	std::shared_ptr<const std::vector<float>> renderNoteAt (int track, double hz) const override;
+	/** Re-renders this track's patch at the pitch the caller names, at the chip's own rate. */
+	chips::RenderedNote renderNoteAt (int track, double hz) const override;
 
 	/** The song's DPCM samples, as the song instance collected them. Empty for a file with no
 		data blocks, which is a file that carries no sample bytes at all. */

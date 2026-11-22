@@ -195,8 +195,8 @@ public:
 	bool captureState (playback::ChipStateSnapshot& snapshot, bool includeWaves = true) const;
 
 	/** Re-renders a VRC7 voice at another pitch, for the export dialog's pinned-note option.
-		Null for every other row - an APU channel has no patch to render. */
-	std::shared_ptr<const std::vector<float>> renderNoteAt (int track, double hz) const;
+		An empty `wave` for every other row - an APU channel has no patch to render. */
+	chips::RenderedNote renderNoteAt (int track, double hz) const;
 
 	/** **The three preferences a rendered note depends on**, pushed in by the backend.
 

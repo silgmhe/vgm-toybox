@@ -212,24 +212,21 @@ struct OpnVoiceDriver::Core
 	}
 };
 
-OpnVoiceDriver::~OpnVoiceDriver () = default;
-
-std::unique_ptr<playback::IVoiceDriver> makeOpnVoiceDriver (void)
+OpnVoiceDriver::OpnVoiceDriver (bool exportQualityToUse) : exportQuality (exportQualityToUse)
 {
-	return std::make_unique<OpnVoiceDriver> ();
 }
 
-bool OpnVoiceDriver::startCore (chips::ChipModel model)
+OpnVoiceDriver::~OpnVoiceDriver () = default;
+
+std::unique_ptr<playback::IVoiceDriver> makeOpnVoiceDriver (bool exportQuality)
 {
-	// **`kNoteRate`, not `noteRateFor`.** The core's own output rate is what `noteWave::render`
-	// turns into `sustain + release` seconds of samples, so running it at 55 930 Hz on the OPM
-	// made one note 89 489 points - and `captureState` rebuilds that whenever the patch changes,
-	// which on this chip is every frame the song rewrites a total level. That was the stutter.
-	//
-	// 8 kHz is the rate `VoicePatch.h` documents for exactly this purpose ("the window draws it at
-	// seventy pixels ... neither wants 44 100 points"). The cost is aliasing above 4 kHz in a
-	// *picture* of a timbre; the alternative was a stream that could not keep up.
-	core = std::make_unique<Core> (chips::kNoteRate, model);
+	return std::make_unique<OpnVoiceDriver> (exportQuality);
+}
+
+bool OpnVoiceDriver::startCore (chips::ChipModel model, double rate)
+{
+	core = std::make_unique<Core> (rate, model);
+	loadedRate = rate;
 	loadedModel = model;
 
 	return core != nullptr && core->ready;
@@ -244,9 +241,16 @@ bool OpnVoiceDriver::load (const chips::VoicePatch& patch)
 
 	// Rebuild only when the chip changes. A driver serving six channels of one YM2612 keeps one
 	// core; a backend with an OPN and an OPM rebuilds when the patch names a different chip.
-	if (core == nullptr || ! core->ready || loadedModel != patch.model)
+	// **The rate is part of "the same chip".** A panel opened after an export would otherwise keep
+	// the export's high-rate core, because the model had not changed - and every drawn note would
+	// be seven times the size it needs to be.
+	const double wantedRate = exportQuality ? chips::noteRateFor (patch.model)
+											: chips::kVisualNoteRate;
+
+	if (core == nullptr || ! core->ready || loadedModel != patch.model
+		|| loadedRate != wantedRate)
 	{
-		if (! startCore (patch.model))
+		if (! startCore (patch.model, wantedRate))
 		{
 			return false;
 		}

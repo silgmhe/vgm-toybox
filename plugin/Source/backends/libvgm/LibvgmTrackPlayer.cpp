@@ -1036,12 +1036,10 @@ bool LibvgmTrackPlayer::captureState (playback::ChipStateSnapshot& snapshot) con
 
 				state.noteWaveform = entry.wave;
 
-				// **The rate the samples are actually at**, not the chip's output rate. `startCore`
-				// runs the core at `kNoteRate` (8 kHz) so that one note is 12 800 points rather than
-				// 89 489; declaring the chip's own 55 930 here made the exporter play those samples
-				// seven times too fast - the exact failure `VoicePatch.h` warns about with "a file
-				// that declares 44 100 over 8 000-rate samples plays four octaves too high".
-				state.noteWaveformRate = (float) chips::kNoteRate;
+				// **This is the panel's copy, so it carries the panel's rate.** Export renders its
+				// own through `renderNoteAt`, at the chip's rate, and says so in `noteWaveformRate`
+				// when it hands the channel over - see `RenderedNote`.
+				state.noteWaveformRate = (float) chips::kVisualNoteRate;
 			}
 
 
@@ -1237,12 +1235,11 @@ bool LibvgmTrackPlayer::captureState (playback::ChipStateSnapshot& snapshot) con
 	return true;
 }
 
-std::shared_ptr<const std::vector<float>> LibvgmTrackPlayer::renderNoteAt (int track,
-																		  double hz) const
+chips::RenderedNote LibvgmTrackPlayer::renderNoteAt (int track, double hz) const
 {
 	if (hz <= 0.0)
 	{
-		return nullptr;
+		return {};
 	}
 
 	// **The cache is keyed on the decoder's channel, the caller knows the track.** The two are
@@ -1263,7 +1260,7 @@ std::shared_ptr<const std::vector<float>> LibvgmTrackPlayer::renderNoteAt (int t
 	// a pitch onto.
 	if (patch == nullptr)
 	{
-		return nullptr;
+		return {};
 	}
 
 	// **Its own core.** The driver `captureState` uses is being advanced by the audio thread; an
@@ -1271,16 +1268,24 @@ std::shared_ptr<const std::vector<float>> LibvgmTrackPlayer::renderNoteAt (int t
 	// both the picture and the sound would change mid-note.
 	if (exportDriver == nullptr)
 	{
-		exportDriver = makeOpnVoiceDriver ();
+		// **Export quality, so the core runs at the chip's own rate.** A dragged file is a timbre,
+		// and above 4 kHz the corners of a waveform are what make it recognisable; the panel can
+		// afford 8 kHz because a row is ninety pixels wide.
+		exportDriver = makeOpnVoiceDriver (true);
 	}
 
 	const auto& store = settings::SettingsStore::getInstance ();
 	const double sustain = (double) juce::jmax (1, store.getFmSustainMs ()) / 1000.0;
 	const double release = (double) juce::jmax (1, store.getFmReleaseMs ()) / 1000.0;
 
-	return std::make_shared<const std::vector<float>> (
+	auto wave = std::make_shared<const std::vector<float>> (
 		playback::noteWave::render (*exportDriver, *patch, hz, sustain, release,
 									store.getFmNormalise ()));
+
+	// **The rate travels with the samples.** `exportDriver` was created with `exportQuality`, so
+	// its rate is the chip's own - reading it back here is what keeps the file's header honest
+	// instead of a second guess at what the samples were made at.
+	return { std::move (wave), exportDriver->rate () };
 }
 
 } // namespace toybox::backends::libvgm

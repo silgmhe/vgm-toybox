@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+#include <memory>
 #include <utility>
 #include <vector>
 
@@ -46,17 +47,40 @@ enum class ChipModel : uint8_t
 	`model` of `unknown` are the two ways of saying "no patch". A decoder that cannot serialise
 	its voice says so by returning false from `capturePatch()` rather than inventing one.
 */
-/** **The rate a computed note is sampled at.**
+/** **The rate a *picture* of a note is sampled at.**
 
-	Low on purpose: the window draws it at seventy pixels and the exporter writes it as a file, and
-	neither wants 44 100 points for a note whose whole point is its envelope. It lives here rather
-	than beside the renderer because the *exporter* needs it too, and `playback/` may not include an
-	engine header - the build enforces that.
+	Low on purpose: the row is about ninety pixels wide, and 1.6 seconds at 8 kHz is already more
+	points than that width can show. It lives here rather than beside the renderer because
+	`playback/` may not include an engine header - the build enforces that.
 
-	It has to be shared: a file that declares 44 100 over 8 000-rate samples plays four octaves high
-	and five times too short, which is exactly what the first export of a note sounded like.
+	**Export does not use this.** A dragged file keeps the chip's own rate, because above 4 kHz the
+	corners of a waveform are what make its timbre recognisable - see `chips::noteRateFor`.
+
+	**The two were one constant until this rename**, and that is why the name matters: "the rate of
+	a note" read as if it applied to both, so when a YM2151 stutter forced the visual rate down the
+	export came down with it - seven times too fast, and no test looked at the file's header.
 */
-constexpr double kNoteRate = 8000.0;
+constexpr double kVisualNoteRate = 8000.0;
+
+/** **A note rendered for export: the samples and the rate they are at.**
+
+	The rate travels with the samples because they are one fact. Keeping them apart is what let a
+	YM2151 export declare 55 930 over samples made at 8 000 - seven times too fast, and invisible to
+	every test that only looked at the length of the vector.
+
+	Here rather than beside `ITrackPlayer`, because `backends/nsf/NsfPlayer.h` renders notes too and
+	may not include a JUCE-bearing header. This struct is standard library only.
+*/
+struct RenderedNote
+{
+	std::shared_ptr<const std::vector<float>> wave;
+	double rate = 0.0;
+};
+
+/** **The rate a note falls back to when nothing names the chip**, for a caller holding samples and
+	no idea what produced them. Never a substitute for `chips::noteRateFor` when the patch does say.
+*/
+constexpr double kExportNoteRateFallback = 8000.0;
 
 /** The two stages of a rendered note, in seconds. Both are settings; these are the fallbacks.
 

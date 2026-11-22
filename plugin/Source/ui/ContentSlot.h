@@ -122,6 +122,25 @@ private:
 
 	void timerCallback (void) override;
 
+	/** **The export runs here, not on the message thread.** Rendering a note is a chip simulation
+		and writing sixteen wav files is disk IO; at the chip's own rate a single note is 89 489
+		samples, so doing it inline froze the window for as long as it took.
+
+		Its own pool rather than the engine's `loadPool`: an export and a load would otherwise queue
+		behind each other, and loading is the one the user is waiting for.
+	*/
+	juce::ThreadPool exportPool { juce::ThreadPool::Options{}.withThreadName ("VGMToybox export")
+									  .withNumberOfThreads (1) };
+
+	/** Shared with the pending job: the destructor clears it, so a result that arrives after this
+		slot is gone is dropped instead of writing into freed state. Same shape as
+		`PlaybackEngine::alive`. */
+	std::shared_ptr<std::atomic<bool>> exportAlive = std::make_shared<std::atomic<bool>> (true);
+
+	/** One export at a time. `LibvgmTrackPlayer::exportDriver` is mutable and shared, so two
+		concurrent exports would rewrite the same core's registers. */
+	std::atomic<bool> exporting { false };
+
 	/** **One frame of chip-state capture**, whichever clock asked for it.
 
 		Split out of `timerCallback` because there are two clocks and only one of them is the
