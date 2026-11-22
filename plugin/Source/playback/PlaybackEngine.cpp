@@ -1100,12 +1100,23 @@ void PlaybackEngine::applyTrackIsolationTo (bool mixerEnabled,
 		return;
 	}
 
+	// **Only when there really is one player per track.** `setTrackAudible (id, true)` means "this
+	// instance is that one track", which is only true for `IsolationMode::multiInstance`. An
+	// in-place backend hands every track to a single player, so telling that player "you are track
+	// 1" makes it solo channel 0 and mute the rest - and nothing ever tells it otherwise, because
+	// solo is applied at the mix stage and never pushed back down.
+	//
+	// Measured on an NSF: the whole mix went silent the moment the mixer was switched on, and the
+	// player's `soloTrack` stayed at 0 for the rest of the session. The load path guarded this with
+	// `perTrack`; the rebuild path did not, which is why it took a mode switch to trigger.
+	if (players.size() != layout.size())
+	{
+		return;
+	}
+
 	for (size_t t = 0; t < players.size(); ++t)
 	{
-		if (t < layout.size())
-		{
-			players[t]->setTrackAudible (layout[t].id, true);
-		}
+		players[t]->setTrackAudible (layout[t].id, true);
 	}
 }
 
