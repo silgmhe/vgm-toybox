@@ -2,6 +2,7 @@
 
 #include "playback/ChipState.h"
 
+#include <cmath>
 #include <cstddef>
 #include <ctime>
 #include <functional>
@@ -124,6 +125,74 @@ bool writeCycleWav (const ChannelState& channel, const std::string& path,
 	gate and fail the second, silently.
 */
 bool isSampledChannel (const ChannelState& channel);
+
+/** **The low-pass a computed note gets before it is thinned down to the file's rate.**
+
+	`heldAt` is nearest-neighbour on purpose - for a recording the code values *are* the truth.
+	**A chip simulation is the opposite case**: its samples describe a continuous waveform, and
+	dropping two thirds of them to reach 48 000 folds everything above 24 kHz back into the audible
+	band. Rendered at 55 556 and written at 48 000, that is 24 - 27.8 kHz landing on top of the note:
+	a hiss, and one reported on every FM export.
+
+	A windowed sinc rather than a moving average: the aliasing band is narrow (about 3.8 kHz), and a
+	box filter wide enough to reach it would take the top two octaves with it. Forty percent of the
+	target rate is the cut-off.
+
+	**Inline so a test can call it without linking `WaveExport.cpp`** - the console test that covers
+	notes already links libvgm, and pulling this file in would drag `cycleOf` and its neighbours with
+	it. Not used by `writeSampleWav`, which keeps the nearest-neighbour rule.
+*/
+inline std::vector<float> lowPassedForDecimation (const std::vector<float>& values, double rate,
+												 double targetRate)
+{
+	// Nothing to remove when the file is written at or above the rate it was made at.
+	if (values.size () < 8 || rate <= 0.0 || targetRate <= 0.0 || targetRate >= rate)
+	{
+		return values;
+	}
+
+	constexpr int kTaps = 15;		// odd, so the kernel has a centre
+	constexpr double kPi = 3.14159265358979323846;
+
+	// Cut-off in cycles per *source* sample, which is what the sinc below is expressed in.
+	const double normalised = (0.40 * targetRate) / rate;
+
+	// A raised-cosine window over the kernel; its width sets the transition band, and fifteen taps
+	// put that near 11 kHz - enough to have 26 kHz down by roughly 25 dB before it is dropped.
+	const double half = 0.5 * (double) (kTaps - 1);
+
+	std::vector<float> out (values.size (), 0.0f);
+
+	for (std::size_t i = 0; i < values.size (); ++i)
+	{
+		double sum = 0.0;
+		double weight = 0.0;
+
+		for (int t = -(kTaps / 2); t <= kTaps / 2; ++t)
+		{
+			const auto index = (long) i + t;
+
+			if (index < 0 || index >= (long) values.size ())
+			{
+				continue;
+			}
+
+			const double x = 2.0 * normalised * (double) t;
+			const double sinc = (std::abs (x) < 1e-9) ? 1.0 : std::sin (kPi * x) / (kPi * x);
+			const double window = 0.5 + 0.5 * std::cos (kPi * (double) t / half);
+			const double weightHere = sinc * window;
+
+			sum += (double) values[(std::size_t) index] * weightHere;
+			weight += weightHere;
+		}
+
+		// Normalised by the kernel's own sum: DC and the low band come through at unity gain, so this
+		// cannot change a note's level - only what is above its cut-off.
+		out[i] = (float) (std::abs (weight) > 1e-9 ? sum / weight : values[i]);
+	}
+
+	return out;
+}
 
 /** Whether this channel would produce a file at all.
 

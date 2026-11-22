@@ -39,6 +39,7 @@
 #include "playback/SessionState.h"
 #include "playback/StartupSong.h"
 #include "playback/TransportPresets.h"
+#include "playback/WaveExport.h"
 #include "settings/SettingsStore.h"
 
 #include "TestSupport.h"
@@ -1634,6 +1635,10 @@ int main (int /*argc*/, char* /*argv*/[])
 
 		file.deleteFile();
 	}
+
+	// The note-filter assertion lives in `vgm_opn_test`: this target does not link libvgm and has not
+	// built since `FmVoiceDriver.cpp` joined its sources, so anything added here would never run. See
+	// `testNoteDecimationRemovesWhatWouldAlias`.
 
 	std::printf ("Result    : %s\n", (toybox::test::failures() == 0) ? "all checks passed" : "FAILURES");
 	return (toybox::test::failures() == 0) ? 0 : 1;

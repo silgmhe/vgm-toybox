@@ -29,6 +29,7 @@
 #include "TestSettings.h"
 #include "chips/OpnDecoder.h"
 #include "playback/NoteWaveform.h"
+#include "playback/WaveExport.h"
 
 #include "backends/libvgm/FmVoiceDriver.h"
 
@@ -648,6 +649,60 @@ void testNotePitchIsWhatWasAsked (void)
 	}
 }
 
+/** **A computed note is filtered before it is thinned to the file's rate.**
+
+	The export used to drop every third sample without a filter, which folds 24 - 27.8 kHz back into
+	the audible band at 48 kHz. Heard as a hiss on every FM export, and invisible to any test that
+	counted samples instead of looking at what they contain.
+
+	Two properties, both cheap: what would alias is attenuated, and what should survive does.
+*/
+void testNoteDecimationRemovesWhatWouldAlias (void)
+{
+	constexpr double kSource = 55556.0;		// a YM2610's own rate
+	constexpr double kTarget = 48000.0;		// what the file asks for
+	constexpr double kTone = 26000.0;		// above the target's Nyquist, so it would fold back
+	constexpr double kPi = 3.14159265358979323846;
+
+	std::vector<float> tone (4096);
+
+	for (std::size_t i = 0; i < tone.size (); ++i)
+	{
+		tone[i] = (float) std::sin (2.0 * kPi * kTone * (double) i / kSource);
+	}
+
+	const auto filtered = toybox::playback::lowPassedForDecimation (tone, kSource, kTarget);
+
+	check (filtered.size () == tone.size (), "the note filter keeps the sample count");
+
+	// The middle, away from the taper the kernel leaves at both ends.
+	const auto middleRms = [] (const std::vector<float>& values)
+	{
+		const std::size_t begin = values.size () / 4;
+		const std::size_t end = values.size () * 3 / 4;
+		double sum = 0.0;
+
+		for (std::size_t i = begin; i < end; ++i)
+		{
+			sum += (double) values[i] * (double) values[i];
+		}
+
+		return std::sqrt (sum / (double) (end - begin));
+	};
+
+	const double before = middleRms (tone);
+	const double after = middleRms (filtered);
+
+	std::printf ("    26 kHz through the note filter: %.3f -> %.3f\n", before, after);
+
+	check (after < before * 0.3, "26 kHz is attenuated before it can fold back");
+
+	// **And DC comes through untouched**, so the filter cannot change a note's level.
+	std::vector<float> flat (1024, 1.0f);
+	const auto kept = toybox::playback::lowPassedForDecimation (flat, kSource, kTarget);
+	check (std::abs (kept[512] - 1.0f) < 0.01f, "and the pass band comes through at unity");
+}
+
 int main()
 {
 	std::printf ("YM2612 decoder against libvgm's own core\n");
@@ -704,6 +759,7 @@ int main()
 	testPatchCapture();
 	testNoteWaveform();
 	testNotePitchIsWhatWasAsked();
+	testNoteDecimationRemovesWhatWouldAlias();
 	testNoteWaveformInState();
 
 	Tally tally;

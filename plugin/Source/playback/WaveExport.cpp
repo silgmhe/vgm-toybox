@@ -118,6 +118,24 @@ namespace
 
 		return out;
 	}
+
+	/** **A low-pass for computed notes, run before the decimation above.**
+
+		`heldAt` is nearest-neighbour on purpose - for a recording, the code values *are* the truth and
+		interpolating between them invents levels the hardware never produced. **A chip simulation is
+		the opposite case**: its samples are a dense description of a continuous waveform, and dropping
+		every handler of them without filtering folds everything above the new Nyquist back into the
+		audible band. Rendered at 55 556 Hz and written at 48 000, that is 24 - 27.8 kHz landing on top
+		of the note: a hiss, reported as one on every FM export.
+
+		A windowed sinc rather than a moving average: the aliasing band is narrow (about 3.8 kHz), and a
+		box filter wide enough to reach it would also take the top two octaves of the timbre with it.
+		Forty percent of the target rate is the cut-off - below the 24 kHz Nyquist of a 48 kHz file, and
+		above anything an FM patch puts real energy in.
+
+		**Only the note path uses this.** `writeSampleWav` keeps `heldAt` alone, which is the whole
+		reason the two paths exist apart.
+	*/
 }
 
 std::vector<float> cycleOf (const ChannelState& channel)
@@ -349,6 +367,22 @@ bool writeNoteFile (const ChannelState& channel, const std::string& path, int bi
 	const auto depth = (bits == kNativeBits) ? 16 : std::clamp (bits, 1, kMaxBits);
 	auto values = *channel.noteWaveform;
 
+	// The rate the note was actually rendered at, which is the chip's own unless something said
+	// otherwise. Falling back to `kNoteRate` would declare 8 000 about samples made at 53 267.
+	const auto source = (channel.noteWaveformRate > 0.0f) ? (double) channel.noteWaveformRate
+														  : chips::kExportNoteRateFallback;
+	const auto target = (targetRate > 0.0) ? targetRate : source;
+
+	// **Filtered before it is thinned, and this is where a note differs from a recording.** A chip
+	// simulation at 55 556 Hz carries harmonics up to 27.8 kHz; dropping two thirds of the samples
+	// to reach 48 000 folds everything above 24 kHz back into the audible band, which is the hiss
+	// every FM export had. `writeSampleWav` keeps the nearest-neighbour rule - for a recording the
+	// code values are the truth.
+	//
+	// **Before quantisation**, because the filter works on the continuous values: rounding first and
+	// filtering after would round twice, and the second rounding is not the one the depth asked for.
+	values = lowPassedForDecimation (values, source, target);
+
 	if (depth > 0)
 	{
 		for (auto& sample : values)
@@ -357,15 +391,8 @@ bool writeNoteFile (const ChannelState& channel, const std::string& path, int bi
 		}
 	}
 
-	// **Held, not resampled** - the same rule `writeSampleWav` follows, for the same reason. A note
-	// rendered at 8 kHz is a staircase, and a player that interpolates it on import smooths the steps
-	// away: the thing that makes an eight-bit converter sound like one is the corners, and a filter
-	// takes exactly those. Writing the levels out at the play-back rate keeps them.
-	// The rate the note was actually rendered at, which is the chip's own unless something said
-	// otherwise. Falling back to `kNoteRate` would declare 8 000 about samples made at 53 267.
-	const auto source = (channel.noteWaveformRate > 0.0f) ? (double) channel.noteWaveformRate
-														  : chips::kExportNoteRateFallback;
-	const auto target = (targetRate > 0.0) ? targetRate : source;
+	// Still held rather than interpolated on the way down - the filter above has already removed what
+	// would alias, and inventing points between the survivors would soften the attack for nothing.
 	const auto held = heldAt (values, source, target);
 
 	return writeFloat32Wav (path, held, (uint32_t) std::lround (target), std::string ());
