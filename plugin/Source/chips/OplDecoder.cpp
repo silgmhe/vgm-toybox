@@ -144,6 +144,29 @@ struct OplDecoder::Impl
 	/** The OPLL's eight global registers for instrument 0 - `0x00..0x07`, in chip order. */
 	uint8_t userPatch[8] = {};
 
+	/** Bumped whenever those eight change, so a cached patch for an `instrument 0` channel knows it
+		is stale. Nothing else can change a user voice. */
+	uint32_t userPatchVersion = 0;
+
+	/** **The patch the panel draws from**, handed out by `channelState` the way `OpnDecoder` does.
+
+		`capturePatch` is cheap on this chip, but `channelState` runs thirty times a second per row
+		and each capture allocates a `shared_ptr`, so the result is cached against the three values
+		it depends on. **Without this the panel had no patch at all** and every OPLL row fell back to
+		the synthetic single cycle - the shape this file's owner described as "one period, the old
+		scheme", on rows whose notes and keys were already correct.
+	*/
+	struct NoteCache
+	{
+		bool valid = false;
+		uint8_t instrument = 0;
+		uint8_t volume = 0;
+		uint32_t userVersion = 0;
+		std::shared_ptr<const VoicePatch> patch;
+	};
+
+	NoteCache noteCache[18];
+
 	/** Which model a captured patch names: the OPLL is the only one this decoder renders today. */
 	ChipModel patchModel (void) const
 	{
@@ -458,6 +481,7 @@ void OplDecoder::write (const RegisterWrite& write)
 		if (reg < 8)
 		{
 			impl->userPatch[reg] = write.value;
+			++impl->userPatchVersion;
 			return;
 		}
 
@@ -639,6 +663,31 @@ ChannelState OplDecoder::channelState (int channel) const
 			state.fmLevel = voice.totalLevel;		// already 0..63, the packed form's range
 			state.fmFeedback = voice.feedback;
 			state.fmWaveform = voice.waveform;
+		}
+		else
+		{
+			// **The patch the panel renders a note from**, handed out the way `OpnDecoder` does. An
+			// OPLL's shape is the whole note - attack, decay, release - and it only exists if the
+			// caller is given a patch to render; without one the row falls back to a single
+			// synthetic cycle, which is what it did before this was here.
+			Impl::NoteCache& cache = impl->noteCache[channel];
+			const uint32_t userVersion = voice.instrument == 0 ? impl->userPatchVersion : 0u;
+
+			if (! cache.valid || cache.instrument != voice.instrument
+				|| cache.volume != voice.volume || cache.userVersion != userVersion)
+			{
+				cache.valid = true;
+				cache.instrument = voice.instrument;
+				cache.volume = voice.volume;
+				cache.userVersion = userVersion;
+
+				VoicePatch captured;
+				cache.patch = capturePatch (channel, captured)
+								  ? std::make_shared<const VoicePatch> (std::move (captured))
+								  : nullptr;
+			}
+
+			state.voicePatch = cache.patch;
 		}
 
 		return state;
