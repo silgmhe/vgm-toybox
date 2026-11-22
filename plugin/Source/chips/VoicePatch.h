@@ -122,9 +122,15 @@ constexpr int fmOutputBits (ChipModel model)
 {
 	switch (model)
 	{
-	case ChipModel::ym2612:
+	// **Fourteen for the OPN2, sixteen for the rest of the family.** One core serves all four, but it
+	// does not accumulate to the same width: measured off `normalise = false` renders, a YM2612 peaks
+	// at ±0x2000 while a YM2203 and YM2608 reach ±0x8000. Saying fourteen for all of them made the
+	// YM2612's exports 12 dB quiet and shifted its quantiser off the core's own LSB.
+	case ChipModel::ym2612:		return 14;
+
 	case ChipModel::ym2608:
-	case ChipModel::ym2610:		return 14;		// fmopn, one core for the whole OPN family
+	case ChipModel::ym2610:
+	case ChipModel::ym2203:		return 16;
 
 	case ChipModel::ym2151:						// fmopm
 	case ChipModel::ym3812:						// fmopl

@@ -24,7 +24,9 @@ constexpr int kBlock = 512;
 	which is where the playback path's `2^31` comes from. Reading `devDef->Update` directly gives the
 	core's own numbers, and the oracle test's silence floor of `1.0` is that same scale.
 */
-constexpr double kSamplesToFloat = 1.0 / 32768.0;
+// The 16-bit scale that used to live here is now computed per model from `chips::fmOutputBits` -
+// see `render`. A single constant served the OPN2 and the OPNA alike, and the two do not accumulate
+// to the same width.
 
 /** **The core that renders a model.** Not a property of the patch - the patch only names the chip -
 	so it lives with the other translation from a model to an emulator concept, and `fmOutputBits`
@@ -476,6 +478,15 @@ void FmVoiceDriver::render (float* out, int frames)
 	static thread_local std::vector<DEV_SMPL> left;
 	static thread_local std::vector<DEV_SMPL> right;
 
+	// **Scaled by what this chip actually accumulates, not by sixteen bits.** `fmopn` reaches
+	// ±0x8000 on the three-channel and six-channel parts but only ±0x2000 on the OPN2 - measured as
+	// `peak 0.250` for a YM2612 at the old `1/32768`, against `0.997` for a YM2608. Dividing every
+	// model by the same constant therefore did two things to the YM2612 at once: it made an export
+	// 12 dB quiet, and it left `noteWave`'s quantiser working at a step four times the core's own
+	// LSB - so the quantisation noise sat 12 dB higher relative to the signal than it should.
+	const int bits = chips::fmOutputBits (loadedModel);
+	const double scale = 1.0 / (double) (1 << (std::clamp (bits, 2, 16) - 1));
+
 	if ((int) left.size () < kBlock)
 	{
 		left.resize ((size_t) kBlock);
@@ -493,7 +504,7 @@ void FmVoiceDriver::render (float* out, int frames)
 		for (int i = 0; i < count; ++i)
 		{
 			const double value = ((double) left[(size_t) i] + (double) right[(size_t) i]) * 0.5;
-			out[done + i] = (float) (value * kSamplesToFloat);
+			out[done + i] = (float) (value * scale);
 		}
 
 		done += count;
