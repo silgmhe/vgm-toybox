@@ -645,10 +645,16 @@ SongDescription describeSong (LibvgmTrackPlayer* probe)
 									  ? decl->channelNames (device.devCfg) : nullptr;
 
 		// **How many of this device's channels are FM**, for the fallback name below. The plan is
-		// already the one authority on that (`ChipPlans`, and `ChipPlansTest` holds it to what the
-		// decoder produces), so this reads it instead of naming device ids here.
-		const int melodicChannels
-			= midi::channelPlanFor (chipKindForDevice (device.type)).melodicCount;
+		// already the one authority on the channel counts, so this reads it instead of naming device
+		// ids here.
+		//
+		// **`melodicCount` alone is not that number.** It answers "carries a pitch", and a sample
+		// voice with a pitch register carries one too - C352's plan is `{32, 0, 0}`, so every one of
+		// its 32 sample voices was drawn as `FM 1..32` on a chip with no FM in it. `carriesFm` is the
+		// separate question, and the two are multiplied rather than assumed equal.
+		const midi::ChipKind deviceKind = chipKindForDevice (device.type);
+		const midi::ChannelPlan plan = midi::channelPlanFor (deviceKind);
+		const int fmChannels = midi::carriesFm (deviceKind) ? plan.melodicCount : 0;
 
 		juce::String groupName = [&device]
 		{
@@ -700,10 +706,19 @@ SongDescription describeSong (LibvgmTrackPlayer* probe)
 				// `channelNames`, so its eight rows read `Ch 1`-`Ch 8`; the plan says they are all
 				// FM, which is what the row is really about. Keyed on the plan rather than on a
 				// device id, so the OPL family and the OPX arrive here the same way.
+				// **A channel past the plan's coverage is a second half and numbers itself from
+				// one.** The YMF278B declares 18 FM plus five rhythm and says the wavetable half is
+				// not decoded - so channels 23..41 are the 24 PCM voices, and calling them `Ch 24`
+				// upwards would put "Ch 1" nowhere in the mixer. Every other chip's channels fall
+				// inside the plan, so this branch is inert for them.
+				const int plannedChannels = plan.melodicCount + plan.oneShotCount + plan.tailMelodicCount;
+				const int beyondPlan = channel - plannedChannels;
+
 				const juce::String name = (channelNames != nullptr && channelNames[channel] != nullptr)
-											? juce::String (channelNames[channel])
-											: ((channel < melodicChannels ? "FM " : "Ch ")
-											   + juce::String (channel + 1));
+					? juce::String (channelNames[channel])
+					: (channel < fmChannels ? ("FM " + juce::String (channel + 1))
+					   : (beyondPlan >= 0 ? ("Ch " + juce::String (beyondPlan + 1))
+										  : ("Ch " + juce::String (channel + 1))));
 				addTrack (channel, name, true, device.id, channel, device.type);
 			}
 		}

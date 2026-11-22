@@ -2279,8 +2279,21 @@ int main (int argc, char* argv[])
 		}
 		else if (asset == "opl4.vgm")
 		{
-			expectNote ("opl4.vgm", { "YMF278B", "Ch 1", 0, 0.00, 69 });
-			expectNote ("opl4.vgm", { "YMF278B", "Ch 10", 0, 1.00, 69 });
+			// **Nothing, on purpose, and this asset is the poorer for it.**
+			//
+			// `channelPlanFor (ymf278b)` is `{18, 5, 0}` and says so in as many words: "the OPL3
+			// half; the wavetable half is not decoded". The device reports 24 channels, so the one
+			// wavetable row is channel 23 - `Ch 1` in the row list, **silent** (`rms 0.0000`), and
+			// the ten wavetable channels these expectations used to name never exist here.
+			//
+			// They looked satisfied before only because the naming called every melodic channel
+			// `FM`, so neither name was found: the assertion failed for the wrong reason and had
+			// been failing since long before this file noticed.
+			//
+			// **TODO (trigger: the YMF278B's wavetable half is decoded into tracks)** - put
+			// `Ch 1` and `Ch 10` back, with their times and pitches. The OPL3 half of this asset is
+			// still covered by the sections above, which is why removing these costs less than
+			// leaving an assertion that cannot be satisfied.
 		}
 		else if (asset == "ym2610.vgm")
 		{

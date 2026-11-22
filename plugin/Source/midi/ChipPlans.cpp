@@ -104,4 +104,35 @@ ChannelPlan channelPlanFor (ChipKind kind)
 	return kPlans[index];
 }
 
+bool carriesFm (ChipKind kind)
+{
+	// **The Yamaha FM block of `ChipKind`, and nothing else.** Written out rather than inferred from
+	// `melodicCount`, because that number is also non-zero for every sample player.
+	//
+	// `ymz280b` sits in that block of the enum and is **not** here: it is a sample player, and its
+	// "real pitch register" is what put it there. `ymf278b` and `y8950` are their FM halves only -
+	// their PCM halves have kinds of their own.
+	switch (kind)
+	{
+	case ChipKind::ym2413:
+	case ChipKind::ym3812:
+	case ChipKind::ym3526:
+	case ChipKind::y8950:
+	case ChipKind::ymf262:
+	case ChipKind::ymf278b:
+	case ChipKind::ym2612:
+	case ChipKind::ym2203:
+	case ChipKind::ym2608:
+	case ChipKind::ym2610:
+	case ChipKind::ym2151:
+	case ChipKind::ymf271:
+		return true;
+
+	default:
+		break;
+	}
+
+	return false;
+}
+
 } // namespace toybox::midi

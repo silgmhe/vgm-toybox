@@ -30,6 +30,19 @@ struct ChannelPlan
 	playback::MidiCapability at (int index) const;
 };
 
+/** **Whether this chip's channels are FM operators**, as opposed to sample voices, PSG squares or
+	noise.
+
+	`ChannelPlan::melodicCount` answers a different question - "how many channels carry a pitch" - and
+	the two are equal only for chips that have nothing but FM. A sample voice with a pitch register is
+	melodic and is not an FM operator, which is why a C352's 32 voices were labelled `FM 1..32` on a
+	chip with no FM in it.
+
+	**One table, keyed on the same `ChipKind`** as `channelPlanFor`, so the two cannot answer
+	differently about the same chip.
+*/
+bool carriesFm (ChipKind kind);
+
 /** The plan for a chip, or an empty one when nothing is known about it.
 
 	Keyed on `ChipKind` rather than on libvgm's `DEVID_*`, which is what this used to be keyed on.
