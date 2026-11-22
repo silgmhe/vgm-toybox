@@ -131,11 +131,14 @@ constexpr int fmOutputBits (ChipModel model)
 	case ChipModel::ym2608:
 	case ChipModel::ym2203:		return 16;
 
-	// **Fifteen, and it is the one value here taken from a listener rather than a fixture.** The
-	// YM2610's only core is the MAME one, which renders `peak 0.000` from a standalone `SndEmu_Start`
-	// even with silent PCM banks attached - so its width cannot be measured the way the other three
-	// were. An export heard quieter than playback at sixteen is the evidence, and one bit is 6 dB, so
-	// the value goes *down* to scale the signal up.
+	// **Fifteen, and it is the one value here that a fixture cannot check.** The YM2610's only core is
+	// the MAME one, which renders `peak 0.000` from a standalone `SndEmu_Start` even with silent PCM
+	// banks attached through `rwFuncs` - so its width was settled by comparing an export against
+	// playback, where sixteen was audibly quiet and fifteen matches.
+	//
+	// **Two sibling parts, two different widths, and that is not a mistake**: `sndDev_YM2610` declares
+	// only the MAME core while the YM2608 gets fmopn, and the two do not accumulate to the same scale.
+	// Whoever adds a part here should measure it, not copy its neighbour's number.
 	case ChipModel::ym2610:		return 15;
 
 	case ChipModel::ym2151:						// fmopm
