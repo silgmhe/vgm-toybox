@@ -117,8 +117,12 @@ std::vector<float> render (IVoiceDriver& driver, const chips::VoicePatch& patch,
 	//
 	// `2^(bits-1) - 1` for whatever this patch's chip accumulates, applied last so full scale stays
 	// full scale.
+	//
+	// **The width comes from the driver, not from the patch.** Both would name the same model today,
+	// but the driver is the one that scaled the samples by it - asking it is what keeps the scale and
+	// the quantiser from drifting into two values.
 	// The upper bound is 24, not 16, because one chip needs more than sixteen - see `fmOutputBits`.
-	const int bits = chips::fmOutputBits (patch.model);
+	const int bits = driver.noteWidth ();
 	const float quantiseSteps = (float) ((1 << (std::clamp (bits, 2, 24) - 1)) - 1);
 
 	for (auto& sample : out)

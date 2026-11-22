@@ -454,8 +454,11 @@ bool FmVoiceDriver::load (const chips::VoicePatch& patch)
 								  ? (exportRate > 0.0 ? exportRate : chips::noteRateFor (patch.model))
 								  : chips::kVisualNoteRate;
 
+	// A tolerance rather than `!=`, matching the check that decides whether to rebuild the export
+	// core in `LibvgmTrackPlayer`: the two rates are built from the same expression here, but a
+	// setting that arrives through `std::lround` need not compare exactly to its own source.
 	if (core == nullptr || ! core->ready || loadedModel != patch.model
-		|| loadedRate != wantedRate)
+		|| std::abs (loadedRate - wantedRate) > 0.5)
 	{
 		if (! startCore (patch.model, wantedRate))
 		{
@@ -529,7 +532,7 @@ void FmVoiceDriver::render (float* out, int frames)
 	// 12 dB quiet, and it left `noteWave`'s quantiser working at a step four times the core's own
 	// LSB - so the quantisation noise sat 12 dB higher relative to the signal than it should.
 	// The upper bound is 24, not 16, because one chip needs more than sixteen - see `fmOutputBits`.
-	const int bits = chips::fmOutputBits (loadedModel);
+	const int bits = noteWidth ();
 	const double scale = 1.0 / (double) (1 << (std::clamp (bits, 2, 24) - 1));
 
 	if ((int) left.size () < kBlock)
@@ -564,6 +567,13 @@ double FmVoiceDriver::rate (void) const
 	}
 
 	return chips::noteRateFor (loadedModel);
-}
+	}
 
-} // namespace toybox::backends::libvgm
+	int FmVoiceDriver::noteWidth (void) const
+	{
+	// From the model the core is running, which `load` keeps equal to the last patch's - the same
+	// value `render` scales by, so a caller that quantises with it cannot disagree about the width.
+	return chips::fmOutputBits (loadedModel);
+	}
+
+	} // namespace toybox::backends::libvgm

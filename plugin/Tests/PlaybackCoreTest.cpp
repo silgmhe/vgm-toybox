@@ -39,7 +39,6 @@
 #include "playback/SessionState.h"
 #include "playback/StartupSong.h"
 #include "playback/TransportPresets.h"
-#include "playback/WaveExport.h"
 #include "settings/SettingsStore.h"
 
 #include "TestSupport.h"

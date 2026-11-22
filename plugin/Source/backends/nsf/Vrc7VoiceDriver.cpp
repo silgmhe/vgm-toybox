@@ -182,6 +182,10 @@ public:
 
 	double rate (void) const override { return sampleRate; }
 
+	/** Stated rather than inherited: this driver's samples come from `emu2413.c`, and the width it
+		accumulates to is the VRC7's entry in the table - the same one `render` scales by here. */
+	int noteWidth (void) const override { return chips::fmOutputBits (chips::ChipModel::vrc7); }
+
 private:
 	bool ensureStarted (void)
 	{

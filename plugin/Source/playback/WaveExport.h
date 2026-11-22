@@ -2,6 +2,7 @@
 
 #include "playback/ChipState.h"
 
+#include <array>
 #include <cmath>
 #include <cstddef>
 #include <ctime>
@@ -163,6 +164,25 @@ inline std::vector<float> lowPassedForDecimation (const std::vector<float>& valu
 	// side lobes are near -60 dB, and thirty-one taps keep the transition band at about 5 kHz.
 	const double half = 0.5 * (double) (kTaps - 1);
 
+	// **The weights do not depend on the sample**, so they are computed once. They used to be
+	// evaluated inside the sample loop - two `cos` and one `sin` per tap per sample, which on a
+	// 89 489-sample note at the chip's own rate is eight million transcendental calls for thirty-one
+	// numbers. Same values, same output, and the export stops being the slowest thing in a drag.
+	std::array<double, (std::size_t) kTaps> weights {};
+
+	for (int t = -(kTaps / 2); t <= kTaps / 2; ++t)
+	{
+		const double x = 2.0 * normalised * (double) t;
+		const double sinc = (std::abs (x) < 1e-9) ? 1.0 : std::sin (kPi * x) / (kPi * x);
+
+		// Blackman, evaluated around the centre: 1 at `position = 0`, 0 at both ends.
+		const double position = (double) t / half;
+		const double window = 0.42 + 0.5 * std::cos (kPi * position)
+							  + 0.08 * std::cos (2.0 * kPi * position);
+
+		weights[(std::size_t) (t + kTaps / 2)] = sinc * window;
+	}
+
 	std::vector<float> out (values.size (), 0.0f);
 
 	for (std::size_t i = 0; i < values.size (); ++i)
@@ -176,18 +196,11 @@ inline std::vector<float> lowPassedForDecimation (const std::vector<float>& valu
 
 			if (index < 0 || index >= (long) values.size ())
 			{
+				// Past an edge there is no sample, so its weight is left out of the normaliser too.
 				continue;
 			}
 
-			const double x = 2.0 * normalised * (double) t;
-			const double sinc = (std::abs (x) < 1e-9) ? 1.0 : std::sin (kPi * x) / (kPi * x);
-
-			// Blackman, evaluated around the centre: 1 at `position = 0`, 0 at both ends.
-			const double position = (double) t / half;
-			const double window = 0.42 + 0.5 * std::cos (kPi * position)
-								  + 0.08 * std::cos (2.0 * kPi * position);
-
-			const double weightHere = sinc * window;
+			const double weightHere = weights[(std::size_t) (t + kTaps / 2)];
 
 			sum += (double) values[(std::size_t) index] * weightHere;
 			weight += weightHere;
@@ -289,7 +302,7 @@ struct ExportOutcome
 */
 ExportOutcome exportWavetables (const ChipStateSnapshot& snapshot, const std::string& folder,
 								ExportMode mode = ExportMode::single, double seconds = 2.0,
-								int bits = kNativeBits);
+								int bits = kNativeBits, double targetRate = 0.0);
 
 /** A filename for a wavetable dragged out of the window: `<stem>_<YYYY_MMDD_HHMMSS>.wav`.
 

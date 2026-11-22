@@ -367,10 +367,19 @@ bool writeNoteFile (const ChannelState& channel, const std::string& path, int bi
 	const auto depth = (bits == kNativeBits) ? 16 : std::clamp (bits, 1, kMaxBits);
 	auto values = *channel.noteWaveform;
 
-	// The rate the note was actually rendered at, which is the chip's own unless something said
-	// otherwise. Falling back to `kNoteRate` would declare 8 000 about samples made at 53 267.
+	// **The rate the note was actually rendered at**, and if nobody recorded one, the rate its chip
+	// produces - not a guess. The fallback used to be a constant 8 000, which is the panel's rate and
+	// therefore exactly the lie the comment on this line warns about: a file declaring 8 kHz about
+	// samples made at 53 267 is not a small mistake, and the chip's own rate is knowable from the
+	// patch standing right there.
 	const auto source = (channel.noteWaveformRate > 0.0f) ? (double) channel.noteWaveformRate
-														  : chips::kExportNoteRateFallback;
+		: (channel.voicePatch != nullptr ? chips::noteRateFor (channel.voicePatch->model) : 0.0);
+
+	// Nothing to declare: writing it anyway would put a number in the header that no one chose.
+	if (source <= 0.0)
+	{
+		return false;
+	}
 	const auto target = (targetRate > 0.0) ? targetRate : source;
 
 	// **Filtered before it is thinned, and this is where a note differs from a recording.** A chip
@@ -399,9 +408,13 @@ bool writeNoteFile (const ChannelState& channel, const std::string& path, int bi
 
 	if (monoChip)
 	{
+		// **Clamped, because the gain can take a loud patch past full scale.** A float file will
+		// happily hold 1.2, and every player then clips it - so a patch that was already peaking
+		// above half would come out distorted rather than louder. Above that point the two-channel
+		// sum really does exceed what one channel can carry, so saturating is the honest answer.
 		for (auto& sample : values)
 		{
-			sample *= 2.0f;
+			sample = std::clamp (sample * 2.0f, -1.0f, 1.0f);
 		}
 	}
 
@@ -665,7 +678,7 @@ ShapeWrite writeChannelShape (const ChannelState& channel, const std::string& pa
 }
 
 ExportOutcome exportWavetables (const ChipStateSnapshot& snapshot, const std::string& folder,
-								ExportMode mode, double seconds, int bits)
+								 ExportMode mode, double seconds, int bits, double targetRate)
 {
 	ExportOutcome outcome;
 	outcome.channelsSeen = (int) snapshot.channels.size ();
@@ -705,7 +718,11 @@ ExportOutcome exportWavetables (const ChipStateSnapshot& snapshot, const std::st
 
 		// `nothingToWrite` cannot happen here: the check above already took that branch, which is
 		// what keeps it from taking a name on the way out.
-		if (writeChannelShape (channel, path, mode, seconds, bits) == ShapeWrite::written)
+		//
+		// **The same `targetRate` the drag path passes.** Without it this wrote at whatever rate the
+		// samples happened to be made at, so a YM2151 row exported at 55 930 from here and 48 000
+		// from a drag - and the drag's own comment claimed the two could not differ.
+		if (writeChannelShape (channel, path, mode, seconds, bits, targetRate) == ShapeWrite::written)
 		{
 			++outcome.written;
 		}

@@ -62,10 +62,6 @@ struct Dialect
 class FmVoiceDriver final : public playback::IVoiceDriver
 {
 public:
-	/** @param exportQuality true to run the core at the chip's own rate rather than the rate a
-		panel draws at. The two differ by a factor of seven on a YM2151, and the reason is in
-		`chips::kVisualNoteRate`.
-	*/
 	/** @param exportQuality true to render for a file rather than for a panel.
 		@param exportRate the rate that file will be written at, or 0 to run the core at the chip's own
 		rate. **A file written at 48 kHz is rendered at 48 kHz** - resampling it afterwards is a step
@@ -82,6 +78,9 @@ public:
 	void noteOff (void) override;
 	void render (float* out, int frames) override;
 	double rate (void) const override;
+
+	/** `chips::fmOutputBits` for the model the core is running - the value `render` scales by. */
+	int noteWidth (void) const override;
 
 private:
 	/** Starts a core for `model` at `rate`, replacing whatever was running. */

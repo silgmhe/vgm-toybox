@@ -101,11 +101,6 @@ struct NoteRenderShape
 	double rate = 0.0;
 };
 
-/** **The rate a note falls back to when nothing names the chip**, for a caller holding samples and
-	no idea what produced them. Never a substitute for `chips::noteRateFor` when the patch does say.
-*/
-constexpr double kExportNoteRateFallback = 8000.0;
-
 /** The two stages of a rendered note, in seconds. Both are settings; these are the fallbacks.
 
 	They are separate because they answer different questions. The sustain is how long the sound is
@@ -141,10 +136,10 @@ constexpr int fmOutputBits (ChipModel model)
 {
 	switch (model)
 	{
-	// **Fourteen for the OPN2, sixteen for the rest of the family.** One core serves all four, but it
-	// does not accumulate to the same width: measured off `normalise = false` renders, a YM2612 peaks
-	// at ±0x2000 while a YM2203 and YM2608 reach ±0x8000. Saying fourteen for all of them made the
-	// YM2612's exports 12 dB quiet and shifted its quantiser off the core's own LSB.
+	// **Fourteen for both four-operator-with-own-core parts, sixteen for the two that share fmopn.**
+	// Measured, not assumed: a YM2612 peaks at ±0x2000 and a YM2151 at ±0x2000, while a YM2203 and a
+	// YM2608 reach ±0x8000. Saying fourteen for all of them made the YM2612's exports 12 dB quiet and
+	// shifted its quantiser off the core's own LSB.
 	case ChipModel::ym2612:		return 14;
 
 	case ChipModel::ym2608:

@@ -1729,10 +1729,12 @@ void ContentSlot::beginExport (const ExportOptions& options)
 				const auto mode = chosen.looped ? playback::ExportMode::looped
 												: playback::ExportMode::single;
 
+				// **The rate the drag path uses**, resolved the same way and from the same setting, so
+				// the two gestures cannot produce files that differ only in their header.
 				const auto outcome = playback::exportWavetables (drawn,
 																 report.folder.getFullPathName ().toStdString (),
 																 mode, (double) chosen.seconds,
-																 chosen.bits);
+																 chosen.bits, shape.rate);
 
 				report.written = outcome.written;
 				report.skippedSample = outcome.skippedSample;

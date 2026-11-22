@@ -13,12 +13,12 @@
 | HIGH-1 | `exportDriver` 在"请求速率为 0"时复用旧核 | ✅ `e55ac81` |
 | HIGH-2 | `vgm_core_test` 编译不了，`core` 测试跑陈旧二进制 | ✅ `e55ac81` |
 | **HIGH-3** | **`vgm_mixer_test` 26/28 红，`54/54` 一直是空的** | **待决定（见 §2.5）** |
-| MEDIUM-1 | 批量导出不传 `targetRate`，与拖拽不一致 | 待修 |
-| MEDIUM-2 | FIR 每样本每抽头重算 `sin`/`cos` | 待修 |
-| MEDIUM-3 | `kExportNoteRateFallback = 8000` 是"谎报"的默认值 | 待修 |
-| MEDIUM-4 | `fmOutputBits` 被两处以不同对象为键各读一次 | 待修 |
-| MEDIUM-5 | 单声道 ×2 无钳位 | 待修 |
-| LOW-1..5 | 见 §4 | 待修 |
+| MEDIUM-1 | 批量导出不传 `targetRate`，与拖拽不一致 | ✅ `quality` 提交 |
+| MEDIUM-2 | FIR 每样本每抽头重算 `sin`/`cos` | ✅ 同上 |
+| MEDIUM-3 | `kExportNoteRateFallback = 8000` 是"谎报"的默认值 | ✅ 同上（常量已删） |
+| MEDIUM-4 | `fmOutputBits` 被两处以不同对象为键各读一次 | ✅ 同上（`IVoiceDriver::noteWidth`） |
+| MEDIUM-5 | 单声道 ×2 无钳位 | ✅ 同上 |
+| LOW-1..5 | 见 §4 | ✅ 同上 |
 
 **HIGH-1 与 HIGH-2 已修并有断言**：`vgm_mixer_test` 里新增三条驱动真实 `renderNoteAt` 的检查
 （48 kHz 档、YM2151 转芯片速率、再切回 48 kHz），中间那条在旧代码上会红。

@@ -43,6 +43,16 @@ public:
 	/** The rate `render` produces at. Valid once a patch has loaded; before that, the chip's nominal
 		rate for whatever model the driver was built for. */
 	virtual double rate (void) const = 0;
+
+	/** **How many bits of magnitude this chip's core produces**, which is what `render` scales its
+		samples by and what the caller quantises to.
+
+		Asked here rather than looked up from the patch, because there is one right answer and it
+		belongs to the core that made the samples. `chips::fmOutputBits` was read at both ends - once
+		in the driver keyed on the model it had loaded, once in `noteWave` keyed on the patch's model -
+		and those two are equal only by construction.
+	*/
+	virtual int noteWidth (void) const { return 16; }
 };
 
 } // namespace toybox::playback
