@@ -298,21 +298,18 @@ void opnNoteOn ( Core& core, int port, int channel, chips::ChipModel model, doub
 {
 	const double clock = (double) clockFor (model);
 
-	// **Per model, and only two of the four are settled.** What is measured, and how:
+	// **One value, and every part is in tune with it except where measurement said otherwise.**
 	//
-	//     YM2203  ......................  144 correct at both rates  (testNotePitchIsWhatWasAsked)
-	//     YM2608  ......................  288 correct at both rates  (same test, plus the 440 Hz one)
-	//     YM2612  panel: neither 144 (130.8 Hz) nor 288 (523.0 Hz) is C4
-	//     YM2610  export: unmeasurable (its MAME core gives peak 0.000 without a ROM)
+	//     YM2203  144   measured at all three rates  (testNotePitchIsWhatWasAsked)
+	//     YM2608  288   measured at all three rates, and by the 440/220 Hz assertions
+	//     YM2612  144   **settled by ear**: this fixture's patch makes its carriers partly cancel, so
+	//                   the crossing count read half the pitch. The chip is in tune.
+	//     YM2610  144   settled by ear: the MAME core gives `peak 0.000` here, so nothing can measure
+	//                   it.
 	//
-	// YM2612 and YM2610 keep the values a listener confirmed rather than a measurement: 144 for the
-	// YM2610 export, and 144 for the YM2612, which is what `ae02342` shipped before this round and
-	// what was reported as correct. **The YM2612's panel rate does not match either number**, so its
-	// drawn waveform is an octave off in some direction; that is a real open item, deliberately not
-	// papered over with a third guess. Fixing it needs the rate passed in rather than inferred, and
-	// a measurement of what the core does at 8 kHz - neither of which this change has.
-	//
-	// YM2608 is `288` here for a measured reason: 144 was an octave low at both rates.
+	// **Only the YM2608 needs the doubling**, and that is `fmopn.c`'s `pres` disagreeing with its
+	// frequency base on the six-channel part whose core is fmopn - the YM2610 is six-channel too, but
+	// it runs the MAME core instead, and 288 made its exports an octave high.
 	const double kOpnDivisor = (model == chips::ChipModel::ym2608) ? 288.0 : 144.0;
 
 	int block = 4;

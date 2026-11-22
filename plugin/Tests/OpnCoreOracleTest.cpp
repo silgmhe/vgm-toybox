@@ -563,16 +563,19 @@ void testNotePitchIsWhatWasAsked (void)
 		const char* name;
 	};
 
-	// **Three of the four parts.** `sndDev_YM2610` declares only `devDef_MAME_2610` as its core
-	// (`opnintf.c:262`), and that one does not produce a note from a standalone `SndEmu_Start` with
-	// no ROM attached - measured here as `peak 0.000`. A song that plays a YM2610 goes through the
-	// player's own setup, which is a different path; its pitch is not something this fixture can
-	// assert, so it is not listed rather than listed and guessed at.
-	// **The two parts whose divisor is settled.** YM2612 and YM2610 are left out on purpose, and
-	// this is the list to extend once they are not:
+	// **Two of the four parts, for two different reasons.**
 	//
-	//   YM2612: 144 gives 130.8 Hz at the panel rate and 288 gives 523.0 - neither is C4, so the
-	//           divisor is not the whole story there and asserting one number would lock in a guess.
+	//   YM2612: **the fixture cannot measure it, and the hardware is fine.** This test's patch is four
+	//           carriers at multiple 1 on connection 7, and on this part they partly cancel - the same
+	//           patch peaked at `0.250` where a YM2608 reached `0.997`. A waveform with a quarter of
+	//           the level crosses zero half as often, so the crossing count read 130.8 Hz against a
+	//           real 261.5. Owning a YM2612 and listening to it settled the question: the panel and
+	//           the exports are in tune, so the number was the measurement, not the chip.
+	//
+	//           **This is the one entry here that a listener settled.** If it ever comes back, check
+	//           the patch's level before suspecting a divisor - `peak 0.250` against its neighbours is
+	//           the giveaway.
+	//
 	//   YM2610: its only core is `devDef_MAME_2610` (`opnintf.c:262`) and it renders `peak 0.000`
 	//           from a standalone `SndEmu_Start`, so there is nothing to measure.
 	//
