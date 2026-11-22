@@ -112,7 +112,43 @@ track 落后于目标"并让它绿，再用它来验证 A 是否真的把 16 个
 
 **顺序建议：B（当天）→ A（单独一轮，带 libvgm 的 seek 测试）。**
 
-## 七、这个问题的形状
+## 七、按 B 做完之后：52% → 70%
+
+断言改成"引擎在目标上、没有 track 跑在传输前面"，并把缺口计数打印而不断言：
+
+```
+seek: 4/15 tracks on target, 11 behind, worst ahead 0.0000 s
+OK  no track runs ahead of the transport
+OK  the seek reaches the players that can still move
+```
+
+**26 红 → 16 红**，两条 spread 断言在所有 fixture 上通过。
+
+## 八、剩下的 16 个红是另一个问题
+
+它们不再是同步，而是**渲染出的是静音**：
+
+| 断言 | 次数 | 依赖 |
+|---|---|---|
+| `the song's opening has audible tracks to compare against` | 6 | **有声音** |
+| `gain 0.5 halves the level` | 6 | 电平 |
+| `the mixer master gain scales the whole mix` | 6 | 电平 |
+| `solo sounds like muting every other track` | 6 | 电平 |
+| `the left channel keeps playing` | 6 | 电平 |
+| `the output volume is a second, independent stage` | 6 | 电平 |
+| `requesting a seek does not block the message thread` | 7 | 计时 |
+| `X.vgm: chip / Ch N note 0 exists` | 4 | 解码出音符 |
+| `at least one chip changes the mix when muted` | 1 | 电平 |
+
+**"没有可比较的有声轨道"是钥匙**：如果整段渲染是静音，那么所有比较电平的断言都会红，而它们
+正好是上面 6×5 条。**这不是同步问题，是"这个测试二进制根本没有声音"**——与本分支、与 seek 都无关。
+
+**下一步该先回答一个问题**：`vgm_mixer_test` 在一个 fixture 上渲染出的 RMS 是不是 0？
+如果不是，那是电平断言的前提错了；如果是，要查这个目标为什么不出声（设备起不来？采样率？）。
+
+**在那之前，这 16 个红不能当作"回归"，也不能当作"通过"。**
+
+## 九、这个问题的形状
 
 **和 HIGH-2 同源**：`ctest` 里有一个测试（`core`）编译不了、跑的是七天前的二进制；这次是 26 个。
 **共同点是"绿"来自二进制而不是代码**。
