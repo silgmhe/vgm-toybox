@@ -382,14 +382,21 @@ inline void NES_N106::set_phase (uint32_t phase, int channel)
     //
     // **The caller's mask has to be kept, not replaced.** `saved` was restored after the loop but
     // never *consulted* inside it, so a chip muted through `SetMask` still rendered here: the mixer
-    // went on sounding with the N163 card switched off (measured: `all muted  0.2760 -> 0.2760`).
-    // `saved` already is the internal form, low bit per the chip's own numbering, so setting the
-    // bit of every *other* channel is all it takes - a muted channel stays muted.
+    // went on sounding with the N163 card switched off (measured: `all muted  1.93 -> 1.93`).
+    //
+    // A **set bit means muted**, so "only channel i is heard" is `~(1 << (7 - i))` - every bit set
+    // but one. The caller's own mutes are added to that, which leaves a muted channel muted and
+    // silences the chip outright when `saved` is all ones.
+    //
+    // **`|` and `~` are not symmetric here**: `saved | (1 << (7 - i))` looks like the same idea and
+    // means the opposite - it mutes only channel i and leaves the other seven audible, so every
+    // track carried the whole chip. Heard immediately as "each N163 channel has all the others in
+    // it"; the arithmetic is one character apart.
     const int saved = mask;
 
     for (int i = 0; i < 8; ++i)
     {
-      mask = saved | (1 << (7 - i));
+      mask = saved | ~(1 << (7 - i));
 
       int32_t b[2] = { 0, 0 };
       Render (b);
