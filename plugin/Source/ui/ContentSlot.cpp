@@ -1593,33 +1593,45 @@ void ContentSlot::beginExport (const ExportOptions& options)
 
 		exportPool.addJob ([lifetime, enginePtr, drawn = std::move (drawn), chosen, report, safe] () mutable
 		{
-			if (chosen.fixedNote >= 0)
+			// **Every row that carries a patch is rendered again, not only a pinned one.**
+			//
+			// `Export snapshot` is named for what it takes from the panel - which rows, at which
+			// pitches - but a row's *samples* are not what the panel shows: the panel's copy is 8 kHz
+			// because a row is ninety pixels wide, and a file is a timbre whose corners live above
+			// 4 kHz. So the snapshot decides the shape and this decides how finely it is sampled.
+			//
+			// It runs on `exportDriver`, which was created with `exportQuality`, so the rate that
+			// comes back is the chip's own.
+			for (auto& channel : drawn.channels)
 			{
-				const double hz = playback::noteWave::frequencyOf (chosen.fixedNote);
-
-				for (auto& channel : drawn.channels)
+				// Only the rows that carry a patch: a sampled or wavetable channel has a waveform of
+				// its own and nothing to re-render from.
+				if (channel.voicePatch == nullptr || channel.trackIndex < 0)
 				{
-					// Only the rows that carry a patch: a sampled or wavetable channel has a waveform
-					// of its own and nothing to re-render from.
-					if (channel.voicePatch == nullptr || channel.trackIndex < 0)
-					{
-						continue;
-					}
+					continue;
+				}
 
-					// **The backend owns the chip driver**, so it does the render - `ui/` may not
-					// include an engine header. A backend that computes no notes answers null, and
-					// the channel keeps the waveform it was drawn with rather than losing it to a
-					// pitch that could not be applied.
-					if (auto rendered = enginePtr->renderNoteAt (channel.trackIndex, hz);
-						rendered.wave != nullptr)
-					{
-						channel.noteWaveform = std::move (rendered.wave);
+				const double hz = (chosen.fixedNote >= 0)
+									  ? playback::noteWave::frequencyOf (chosen.fixedNote)
+									  : (double) channel.frequency;
 
-						// **The rate came back with the samples**, from the driver that made them. It
-						// is the chip's own here, not the panel's 8 kHz - a dragged file is a timbre,
-						// and above 4 kHz the corners of a waveform are what make it recognisable.
-						channel.noteWaveformRate = (float) rendered.rate;
-					}
+				// A row resting with no pitch keeps the shape it was drawn with, which is the honest
+				// answer - there is nothing to re-render it at.
+				if (hz <= 0.0)
+				{
+					continue;
+				}
+
+				// **The backend owns the chip driver**, so it does the render - `ui/` may not include
+				// an engine header. A backend that computes no notes answers null, and the channel
+				// keeps the waveform it was drawn with rather than losing it.
+				if (auto rendered = enginePtr->renderNoteAt (channel.trackIndex, hz);
+					rendered.wave != nullptr)
+				{
+					channel.noteWaveform = std::move (rendered.wave);
+
+					// **The rate came back with the samples**, from the driver that made them.
+					channel.noteWaveformRate = (float) rendered.rate;
 				}
 			}
 
