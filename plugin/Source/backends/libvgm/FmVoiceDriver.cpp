@@ -256,27 +256,22 @@ void opnNoteOn ( Core& core, int port, int channel, chips::ChipModel model, doub
 {
 	const double clock = (double) clockFor (model);
 
-	// **The divisor is per *core*, not per family** - and that is the thing that took two rounds to
-	// see. `testNotePitchIsWhatWasAsked` holds each part to C4 and reports:
+	// **Per model, and only two of the four are settled.** What is measured, and how:
 	//
-	//     YM2612  144 -> 130.8 Hz   288 -> 261.5 Hz    (fmopn)
-	//     YM2608  144 -> 130.8 Hz   288 -> 261.5 Hz    (fmopn)
-	//     YM2203  144 -> 261.5 Hz   288 -> 523.0 Hz    (fmopn)
-	//     YM2610  either -> 0.000    (MAME core, silent without a ROM)
+	//     YM2203  ......................  144 correct at both rates  (testNotePitchIsWhatWasAsked)
+	//     YM2608  ......................  288 correct at both rates  (same test, plus the 440 Hz one)
+	//     YM2612  panel: neither 144 (130.8 Hz) nor 288 (523.0 Hz) is C4
+	//     YM2610  export: unmeasurable (its MAME core gives peak 0.000 without a ROM)
 	//
-	// So the two six-channel fmopn parts double and the three-channel one does not, which is the
-	// `pres` disagreement inside `fmopn.c`: `OPNCheckNativeSampleRate` doubles the prescaler for
-	// `TYPE_6CH` (so `rate = clock / 144`, agreeing with `noteRateFor`) while the frequency step
-	// stays at the undoubled 144.
+	// YM2612 and YM2610 keep the values a listener confirmed rather than a measurement: 144 for the
+	// YM2610 export, and 144 for the YM2612, which is what `ae02342` shipped before this round and
+	// what was reported as correct. **The YM2612's panel rate does not match either number**, so its
+	// drawn waveform is an octave off in some direction; that is a real open item, deliberately not
+	// papered over with a third guess. Fixing it needs the rate passed in rather than inferred, and
+	// a measurement of what the core does at 8 kHz - neither of which this change has.
 	//
-	// **YM2610 is a different core** - `sndDev_YM2610` declares only `devDef_MAME_2610`
-	// (`opnintf.c:262`), where YM2608 gets the fmopn one - and a YM2610 export heard an octave high
-	// at the fnopn figure puts it at 144. That answer has **no assertion behind it**: the MAME core
-	// produces `peak 0.000` from a standalone `SndEmu_Start`, so the fixture cannot measure it and
-	// this comment is the only record. If a YM2610 file is ever heard an octave off again, this
-	// line is what to change.
-	const double kOpnDivisor
-		= (model == chips::ChipModel::ym2612 || model == chips::ChipModel::ym2608) ? 288.0 : 144.0;
+	// YM2608 is `288` here for a measured reason: 144 was an octave low at both rates.
+	const double kOpnDivisor = (model == chips::ChipModel::ym2608) ? 288.0 : 144.0;
 
 	int block = 4;
 	double fnum = hz * kOpnDivisor * std::exp2 (20.0 - (double) block) / clock;
