@@ -1034,7 +1034,7 @@ bool LibvgmTrackPlayer::captureState (playback::ChipStateSnapshot& snapshot) con
 													release, normalise));
 				}
 
-								state.noteWaveform = entry.wave;
+				state.noteWaveform = entry.wave;
 
 				// **This is the panel's copy, so it carries the panel's rate.** Export renders its
 				// own through `renderNoteAt`, at the chip's rate, and says so in `noteWaveformRate`
@@ -1273,24 +1273,28 @@ chips::RenderedNote LibvgmTrackPlayer::renderNoteAt (int track, double hz,
 	// export that re-rendered through it would rewrite the registers under that thread's feet, and
 	// both the picture and the sound would change mid-note.
 	//
-	// **Per chip, because "what the player does" is not one thing.**
+	// **The cores that resample themselves keep their own rate, and the FIR does the conversion.**
 	//
-	// `nukedopm` has a fractional resampler of its own: asked for a rate other than `clock / 64` it
-	// interpolates **linearly, with no filter** (`nukedopm.c:2367`), so 48 kHz folds the top band in
-	// before we see the samples. That is the hiss this chip was fixed for once already
-	// (`docs/issue/2026-11-22-the-opm-resamples-itself.md`), and the fix is the one the player uses:
-	// `PlayerA` runs the core at its **native** rate and converts with its own filtered resampler. So
-	// the export does the same - native here, the low-pass in `WaveExport` after.
+	// `nukedopm` and `emu2413` both resample internally when they are asked for a rate other than
+	// their native one: they keep a fractional ratio and interpolate linearly between their own
+	// samples, with no filter. Asking either for 48 kHz therefore folds the top band in *before* we
+	// ever see the samples - heard as the roughness on YM2151 exports, on chips whose playback is
+	// clean because `PlayerA` resamples them properly.
 	//
-	// **The other two were put on the file's rate on purpose**, and both for a listening reason rather
-	// than a numerical one: with the FIR in the path the OPL2 came out 1.15 dB quieter and darker at
-	// the top than the timeline (`peak 1.000` against `0.874` direct), so the file did not sound like
-	// what had just been heard. Their cores interpolate too, but no one has reported hiss on them; if
-	// one does, it belongs here beside the OPM.
-	//
-	// Zero still means the chip's own rate: that is the export setting that asks for it, and the
-	// driver reads it as "no conversion".
-	const double wantedRate = (chosen->model == chips::ChipModel::ym2151) ? 0.0 : shape.rate;
+	// So those cores run at their own rate and the low-pass in `WaveExport` converts, which is the
+	// only path here that has a filter at all. The other cores generate their samples directly at
+	// whatever rate they are asked for, and they keep the file's rate.
+	// **The OPL2 renders at the file's rate, the way the player runs it.** The native-rate trick -
+	// run at `clock/72` and let the low-pass in `WaveExport` convert - buys a filter the core does
+	// not have, and it was used for the YM2151 and the YM2413 for exactly that reason. For an OPL2
+	// it also makes the file **not match the app**: the player runs the core at the host rate, so its
+	// own interpolation is part of what a listener hears, and the exporter's filtered version came
+	// out slightly darker at the top. The row's own owner put it plainly - *what I hear in the player
+	// is what the export should sound like* - so this one runs where the player runs.
+	const double wantedRate = (chosen->model == chips::ChipModel::ym2151
+							   || chosen->model == chips::ChipModel::ym2413)
+								  ? 0.0
+								  : shape.rate;
 
 	// **Rebuilt whenever the requested rate changes, and `0` is a rate.** This compared `> 0.0`
 	// before, which read 0 as "do not care" - so a YM2151 export after any other model kept the
@@ -1306,28 +1310,9 @@ chips::RenderedNote LibvgmTrackPlayer::renderNoteAt (int track, double hz,
 	// **The shape arrives, it is not looked up.** This runs on the export pool or on a drag;
 	// reading `SettingsStore` here would be a second source of the same three values, and a read of
 	// a file-backed store from a worker while the message thread may be writing it.
-	auto rendered = playback::noteWave::render (*exportDriver, *chosen, hz, shape.sustainSeconds,
-											  shape.releaseSeconds, shape.normalise);
-
-	// **The OPM's filtered path loses about 4 dB, and the timeline is the reference.** Measured on the
-	// same patch: `rms 0.176` rendered at the chip's rate, `0.145` after `WaveExport`'s low-pass - the
-	// band above `0.40 * targetRate` is what the filter is there to remove - and decimation costs the
-	// rest. A DAW then put the file 4 dB under the channel, which is this number.
-	//
-	// **Only when the filter will actually run**: exporting at the chip's own rate bypasses it, and
-	// making that case louder would overshoot by the same amount.
-	if (chosen->model == chips::ChipModel::ym2151 && wantedRate == 0.0 && shape.rate > 0.0
-		&& shape.rate < chips::noteRateFor (chosen->model))
-	{
-		constexpr float kOpmFilterMakeup = 1.585f;		// +4.0 dB
-
-		for (auto& sample : rendered)
-		{
-			sample *= kOpmFilterMakeup;
-		}
-	}
-
-	auto wave = std::make_shared<const std::vector<float>> (std::move (rendered));
+	auto wave = std::make_shared<const std::vector<float>> (
+		playback::noteWave::render (*exportDriver, *chosen, hz, shape.sustainSeconds,
+									shape.releaseSeconds, shape.normalise));
 
 	// **The rate travels with the samples.** `exportDriver` was created with `exportQuality`, so
 	// its rate is the chip's own - reading it back here is what keeps the file's header honest

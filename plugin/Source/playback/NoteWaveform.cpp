@@ -84,41 +84,6 @@ std::vector<float> render (IVoiceDriver& driver, const chips::VoicePatch& patch,
 		done += count;
 	}
 
-	// **The note's DC is removed, which is what the chip's output capacitor does.**
-	//
-	// Some voices are unipolar *by design*: an OPLL preset whose carrier selects waveform 1 is a half
-	// sine, and so are four of the fifteen presets in `emu2413`'s table (Violin, Organ, Synthesizer,
-	// Harpsichord - the `WS` bit in `dump[3]`). The chip emits that as an offset wave and the
-	// capacitor in front of the amplifier is what turns it into sound; this chain has no capacitor, so
-	// a rendered note kept the offset and a DAW showed **half a wave**, reading as a broken timbre.
-	//
-	// **Before the normalisation, so that step still means what it says** - a normalised note has to
-	// stay inside the range the window draws, and shifting it afterwards pushed it past ±1.
-	//
-	// **The mean, not a high-pass filter.** `docs/memo/2026-10-25-nsf-dc-offset.md` records four
-	// attempts at a filter for the *whole song*, and the constraint that defeated them - the per-track
-	// mix has to sum to the plain mix - does not exist for one note. Subtracting the mean has no state,
-	// no transient at the attack, and leaves a symmetric voice untouched because its mean is already
-	// zero.
-	{
-		double sum = 0.0;
-
-		for (const float sample : out)
-		{
-			sum += (double) sample;
-		}
-
-		const auto mean = (float) (sum / (double) std::max<std::size_t> (1, out.size ()));
-
-		if (std::abs (mean) > 1.0e-6f)
-		{
-			for (auto& sample : out)
-			{
-				sample -= mean;
-			}
-		}
-	}
-
 	// **Normalised to its own peak.** The absolute level a patch produces is meaningless outside the
 	// song: a carrier at total level 48 is -36 dB by design, and a modulator at 0x7F is inaudible.
 	// Drawn at that level the window shows a flat line, and the exported file is a whisper - both
