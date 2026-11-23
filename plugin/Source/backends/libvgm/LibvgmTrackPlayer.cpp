@@ -1273,23 +1273,24 @@ chips::RenderedNote LibvgmTrackPlayer::renderNoteAt (int track, double hz,
 	// export that re-rendered through it would rewrite the registers under that thread's feet, and
 	// both the picture and the sound would change mid-note.
 	//
-	// **Every model renders at the file's rate, the way the player runs it.**
+	// **Per chip, because "what the player does" is not one thing.**
 	//
-	// Three of these cores resample themselves when asked for a rate other than their native one:
-	// `nukedopm`, `emu2413` and `AdLibEmu` all keep a fractional ratio and interpolate linearly
-	// between their own samples, with no filter. Running them at `clock/72` and letting the low-pass
-	// in `WaveExport` convert therefore *sounds better on paper* - it is the only path here that has
-	// a filter at all - and it was done that way for the YM2151 and the YM2413.
+	// `nukedopm` has a fractional resampler of its own: asked for a rate other than `clock / 64` it
+	// interpolates **linearly, with no filter** (`nukedopm.c:2367`), so 48 kHz folds the top band in
+	// before we see the samples. That is the hiss this chip was fixed for once already
+	// (`docs/issue/2026-11-22-the-opm-resamples-itself.md`), and the fix is the one the player uses:
+	// `PlayerA` runs the core at its **native** rate and converts with its own filtered resampler. So
+	// the export does the same - native here, the low-pass in `WaveExport` after.
 	//
-	// **It is not what the player does**, and that is what decides it. The player asks for the host
-	// rate, so the core's own interpolation is part of what a listener hears; filtering the export
-	// instead made it come out 1.15 dB quieter and slightly darker at the top, which reads as "the
-	// file is not what I just heard". Measured on the OPL2 - `peak 1.000` through the FIR against
-	// `0.874` direct - and the YM2151 and the YM2413 were moved onto the same rule afterwards.
+	// **The other two were put on the file's rate on purpose**, and both for a listening reason rather
+	// than a numerical one: with the FIR in the path the OPL2 came out 1.15 dB quieter and darker at
+	// the top than the timeline (`peak 1.000` against `0.874` direct), so the file did not sound like
+	// what had just been heard. Their cores interpolate too, but no one has reported hiss on them; if
+	// one does, it belongs here beside the OPM.
 	//
 	// Zero still means the chip's own rate: that is the export setting that asks for it, and the
 	// driver reads it as "no conversion".
-	const double wantedRate = shape.rate;
+	const double wantedRate = (chosen->model == chips::ChipModel::ym2151) ? 0.0 : shape.rate;
 
 	// **Rebuilt whenever the requested rate changes, and `0` is a rate.** This compared `> 0.0`
 	// before, which read 0 as "do not care" - so a YM2151 export after any other model kept the
