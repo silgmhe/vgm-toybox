@@ -905,10 +905,14 @@ bool OplDecoder::capturePatch (int channel, VoicePatch& out) const
 		// the drawing into a spike at the left edge followed by a flat line.
 		out.lengthSeconds = 0.15;
 
-		// **Measured, not assumed**: a full-level bass drum peaks at about seven times a melodic
-		// voice at the same register scale, because the rhythm slots sum more than one operator.
-		// `0.12` brings the loudest hit to roughly the level a melodic note has.
-		out.trim = 0.12f;
+		// **Measured against a melodic note, because that is what a reader compares it to.** With
+		// this song's own registers the hit peaks at `1.92` untrimmed; `0.5` puts it at `0.98`, which
+		// is where a full-level melodic voice sits (`1.01`). `0.12` - the first guess - left it at
+		// `0.235`, a quarter of a note, which reads as "the drum is missing" in a DAW.
+		//
+		// The chip's own level bytes carry the differences between the five voices; this constant only
+		// puts the family where the notes are.
+		out.trim = 0.5f;
 
 		// **Six registers, read from the channel fields the melodic path already fills.** That path
 		// receives `0x16-0x18` (f-number) and `0x26-0x28` (block and the ninth bit) as well as
