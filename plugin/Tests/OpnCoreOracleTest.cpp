@@ -780,11 +780,16 @@ void testOpmReachesFullScale (void)
 		std::printf ("    YM2151 %-5s peak %.3f  (rate %.0f, %zu samples)\n", rateCase.label, peak,
 					 driver->rate (), wave.size ());
 
-		// **The scale the file will carry.** A declared width six bits too wide leaves the level at a
-		// quarter and the quantiser three steps off the core's own LSB - the failure the YM2612 and
-		// the YM2610 both had, and this is what tells the OPM apart from them.
-		const std::string message = std::string ("the YM2151 reaches full scale at ") + rateCase.label;
-		check (peak > 0.9, message.c_str ());
+		// **The scale the file will carry, and it is not full scale.** libvgm presents the device as
+		// int16 and sums six to eight voices into that range, so one voice belongs at
+		// `0x2000 / 32768 = 0.25` - measured `0.249`, at the chip's rate and at 48 kHz alike.
+		//
+		// This assertion used to demand `> 0.9`, because the table's convention was "the chip's DAC".
+		// It is now "one voice in the mix", which is what makes a stem paste back into the timeline.
+		const std::string message = std::string ("a YM2151 note exports at the level one voice has in "
+												 "the mix at ")
+									+ rateCase.label;
+		check (peak > 0.20 && peak < 0.30, message.c_str ());
 	}
 }
 
@@ -847,10 +852,13 @@ void testOpllReachesFullScale (void)
 		std::printf ("    YM2413 %-5s peak %.3f  (rate %.0f, %zu samples)\n", rateCase.label, peak,
 					 driver->rate (), wave.size ());
 
-		// **The scale the file will carry.** Measured `0.063` at a declared sixteen, which is a
-		// sixteenth of the chip's level - the YM2612's failure one octave worse.
-		const std::string message = std::string ("the YM2413 reaches full scale at ") + rateCase.label;
-		check (peak > 0.9, message.c_str ());
+		// **The scale the file will carry.** `emu2413` sums fourteen channel buffers into int16, so
+		// one voice at total level zero is `2048 / 32768 = 0.0625` - measured `0.063`, which is where
+		// the timeline plays it. Twelve bits, the previous value, was 8 dB louder.
+		const std::string message = std::string ("a YM2413 note exports at the level one voice has in "
+												 "the mix at ")
+									+ rateCase.label;
+		check (peak > 0.05 && peak < 0.08, message.c_str ());
 	}
 }
 

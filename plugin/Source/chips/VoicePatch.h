@@ -156,16 +156,18 @@ constexpr int fmOutputBits (ChipModel model)
 	// Whoever adds a part here should measure it, not copy its neighbour's number.
 	case ChipModel::ym2610:		return 15;
 
-	// **Fourteen for the OPM too, measured the same way as the OPN2.** `nukedopm` reaches ±0x2000,
-	// so a declared sixteen left every YM2151 export at a quarter of the chip's level - `peak
-	// 0.249` against a real full scale. Same failure as the YM2612's, same fix.
-	case ChipModel::ym2151:		return 14;
+	// **Sixteen for the OPM, the same scale the mixer uses.** This entry was fourteen, chosen so the
+	// chip's own ±0x2000 reached full scale - the "DAC full scale" convention. The mixer's is the
+	// other one: libvgm presents the device as int16 and sums six to eight voices into that range, so
+	// one voice belongs at `0x2000 / 32768 = 0.25` and a fourteen-bit export was 4 dB louder than the
+	// timeline. See `docs/issue/2026-11-23-the-two-conventions-in-one-number.md`.
+	case ChipModel::ym2151:		return 16;
 
-	// **Twelve for the OPLL, measured off `emu2413` with its own user voice at total level zero.**
-	// Its mixer sums fourteen channel buffers with no shift and one voice reaches about ±2048, so a
-	// declared sixteen left every YM2413 export at a sixteenth of the chip's level - worse than the
-	// quarter the YM2612 had, and the same class of mistake.
-	case ChipModel::ym2413:		return 12;
+	// **Sixteen for the OPLL, the mixer's scale.** This entry was twelve, measured from the core's own
+	// ceiling (`emu2413` sums fourteen buffers and one voice reaches about ±2048) - which is right
+	// under the "DAC full scale" convention and 8 dB loud under the mixer's. See the OPM note above
+	// and `docs/issue/2026-11-23-the-two-conventions-in-one-number.md`.
+	case ChipModel::ym2413:		return 16;
 
 	// **Sixteen for the OPL2, because that is the scale the mixer uses, and the export is now
 	// required to sound like the mixer.**
