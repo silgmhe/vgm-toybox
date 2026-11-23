@@ -1034,7 +1034,7 @@ bool LibvgmTrackPlayer::captureState (playback::ChipStateSnapshot& snapshot) con
 													release, normalise));
 				}
 
-				state.noteWaveform = entry.wave;
+								state.noteWaveform = entry.wave;
 
 				// **This is the panel's copy, so it carries the panel's rate.** Export renders its
 				// own through `renderNoteAt`, at the chip's rate, and says so in `noteWaveformRate`

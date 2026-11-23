@@ -163,11 +163,15 @@ constexpr int fmOutputBits (ChipModel model)
 	// timeline. See `docs/issue/2026-11-23-the-two-conventions-in-one-number.md`.
 	case ChipModel::ym2151:		return 16;
 
-	// **Sixteen for the OPLL, the mixer's scale.** This entry was twelve, measured from the core's own
-	// ceiling (`emu2413` sums fourteen buffers and one voice reaches about ±2048) - which is right
-	// under the "DAC full scale" convention and 8 dB loud under the mixer's. See the OPM note above
-	// and `docs/issue/2026-11-23-the-two-conventions-in-one-number.md`.
-	case ChipModel::ym2413:		return 16;
+	// **Fifteen for the OPLL, which is sixteen plus the 6 dB the timeline turned out to be above it.**
+	// Sixteen was derived from `emu2413`'s own arithmetic - fourteen buffers into int16, one voice
+	// about ±2048 - and a listener in a DAW measured the export **6 dB under** the channel. The
+	// arithmetic did not account for the player summing this device a second time somewhere; the ear
+	// did. Measured now `0.126` for the loudest patch, `rms ~0.09` for a real one.
+	//
+	// **A number from the code lost to a number from a DAW**, which is the whole lesson of
+	// `docs/issue/2026-11-23-the-two-conventions-in-one-number.md` in one line.
+	case ChipModel::ym2413:		return 15;
 
 	// **Sixteen for the OPL2, because that is the scale the mixer uses, and the export is now
 	// required to sound like the mixer.**

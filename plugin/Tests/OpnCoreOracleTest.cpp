@@ -852,13 +852,13 @@ void testOpllReachesFullScale (void)
 		std::printf ("    YM2413 %-5s peak %.3f  (rate %.0f, %zu samples)\n", rateCase.label, peak,
 					 driver->rate (), wave.size ());
 
-		// **The scale the file will carry.** `emu2413` sums fourteen channel buffers into int16, so
-		// one voice at total level zero is `2048 / 32768 = 0.0625` - measured `0.063`, which is where
-		// the timeline plays it. Twelve bits, the previous value, was 8 dB louder.
+		// **The scale the file will carry.** Fifteen bits - measured `0.126`, which is the sixteen-bit
+		// arithmetic value doubled, because a DAW comparison put the export 6 dB under the channel and
+		// the timeline is the reference.
 		const std::string message = std::string ("a YM2413 note exports at the level one voice has in "
 												 "the mix at ")
 									+ rateCase.label;
-		check (peak > 0.05 && peak < 0.08, message.c_str ());
+		check (peak > 0.10 && peak < 0.16, message.c_str ());
 	}
 }
 
