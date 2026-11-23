@@ -910,12 +910,22 @@ bool OplDecoder::capturePatch (int channel, VoicePatch& out) const
 		// `0.12` brings the loudest hit to roughly the level a melodic note has.
 		out.trim = 0.12f;
 
-		static constexpr uint16_t kRhythmRegisters[] = { 0x16, 0x17, 0x18, 0x26, 0x27, 0x28,
-														 0x36, 0x37, 0x38 };
-
-		for (const uint16_t reg : kRhythmRegisters)
+		// **Six registers, read from the channel fields the melodic path already fills.** That path
+		// receives `0x16-0x18` (f-number) and `0x26-0x28` (block and the ninth bit) as well as
+		// `0x36-0x38` (instrument and volume), and a second store beside it did not.
+		//
+		// **The block is what makes a drum audible.** Without `0x26` the bass drum sits at block 0,
+		// f-number 0 - measured `peak 0.0059`, i.e. a DC step rather than a hit - while the song
+		// writes block 2 for it.
+		for (int i = 0; i < 3; ++i)
 		{
-			out.regs.push_back ({ reg, impl->rhythmRegs[reg & 0x0F] });
+			const Impl::Channel& voice = impl->channels[impl->rhythmBase - 3 + i];
+
+			out.regs.push_back ({ (uint16_t) (0x16 + i), (uint16_t) (voice.fnum & 0xFF) });
+			out.regs.push_back ({ (uint16_t) (0x26 + i),
+								  (uint16_t) (((voice.block & 0x07) << 1) | ((voice.fnum >> 8) & 0x01)) });
+			out.regs.push_back ({ (uint16_t) (0x36 + i),
+								  (uint16_t) ((voice.instrument << 4) | voice.volume) });
 		}
 
 		return true;

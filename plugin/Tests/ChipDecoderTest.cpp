@@ -764,7 +764,8 @@ namespace
 		// and the chip ends the hit by itself. This assertion used to demand `false`.
 		check (decoder.capturePatch (9, patch), "a rhythm row captures a one-shot patch");
 		check (patch.oneShot && patch.triggerMask == 0x10, "...keyed by the bit for the bass drum");
-		check (patch.regs.size () == 9, "...with the nine rhythm registers, not a melodic voice");
+		check (patch.regs.size () == 9,
+			   "...with three drums' worth of f-number, block and level, not a melodic voice");
 	}
 
 	/** **An OPL2 patch is nine registers: both operators, four banks each, plus the connection.**
