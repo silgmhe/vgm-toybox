@@ -91,6 +91,14 @@ private:
 	std::unique_ptr<Core> core;
 	chips::ChipModel loadedModel = chips::ChipModel::unknown;
 
+	/** **A one-shot patch has no pitch.** `noteOn` normally refuses a frequency of zero, which is what
+		the caller has for a drum, so the loaded patch decides whether that guard applies. */
+	bool loadedOneShot = false;
+
+	/** The loaded one-shot's level trim, applied in `render` - a drum is several times louder than a
+		melodic voice at the same register scale, measured in `VoicePatch::trim`. */
+	float loadedTrim = 1.0f;
+
 	/** The rate the running core was started at. Kept because `load` has to rebuild when the
 		requested rate changes, not only when the model does - otherwise a panel opened after an
 		export would keep the high-rate core.

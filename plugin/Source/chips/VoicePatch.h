@@ -235,6 +235,22 @@ struct VoicePatch
 {
 	ChipModel model = ChipModel::unknown;
 	std::vector<std::pair<uint16_t, uint16_t>> regs;
+
+	/** **A one-shot voice has no pitch.** The OPL family's rhythm section is triggered by a bit in a
+		control register rather than by a frequency, so the driver must not try to key it with `hz`.
+
+		`triggerMask` is that bit (OPLL: `0x0E` bits 4-0 for BD, SD, TOM, CYM, HH). `lengthSeconds`
+		is how long the hit is rendered, because the chip ends it by itself - there is no release to
+		ask for.
+
+		With `oneShot` set, the `regs` are the rhythm parameters (`0x16-0x18`, `0x26-0x28`,
+		`0x36-0x38` on an OPLL) and `trim` scales the result: a drum hit is several times louder than
+		a melodic voice at the same register scale, measured rather than assumed.
+	*/
+	bool oneShot = false;
+	uint8_t triggerMask = 0;
+	double lengthSeconds = 0.30;
+	float trim = 1.0f;
 };
 
 } // namespace toybox::chips

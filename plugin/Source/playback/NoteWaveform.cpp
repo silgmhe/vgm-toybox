@@ -21,7 +21,9 @@ double durationOf (const chips::VoicePatch& patch)
 std::vector<float> render (IVoiceDriver& driver, const chips::VoicePatch& patch, double frequencyHz,
 						   double sustainSeconds, double releaseSeconds, bool normalise)
 {
-	if (patch.regs.empty () || frequencyHz <= 0.0)
+	// **A one-shot has no frequency, and that is not a reason to refuse it.** The rhythm voices are
+	// started by a trigger bit; the pitched guard applies to everything else.
+	if (patch.regs.empty () || (frequencyHz <= 0.0 && ! patch.oneShot))
 	{
 		return {};
 	}
@@ -39,12 +41,20 @@ std::vector<float> render (IVoiceDriver& driver, const chips::VoicePatch& patch,
 	// level the envelope decays *through* rather than holds at, so it has no duration to read at
 	// all. How long to hold and how long a tail to keep are choices - the caller brings them, and
 	// the defaults stand in when it brings nothing.
-	if (sustainSeconds <= 0.0)
+	// **A drum brings its own length and needs no tail**: the chip's rhythm envelope decays by itself,
+	// and a "release" after it would only render silence. The caller's settings describe a held note.
+	if (patch.oneShot)
+	{
+		sustainSeconds = patch.lengthSeconds > 0.0 ? patch.lengthSeconds
+												   : chips::kDefaultSustainSeconds;
+		releaseSeconds = 0.0;
+	}
+	else if (sustainSeconds <= 0.0)
 	{
 		sustainSeconds = chips::kDefaultSustainSeconds;
 	}
 
-	if (releaseSeconds <= 0.0)
+	if (releaseSeconds <= 0.0 && ! patch.oneShot)
 	{
 		releaseSeconds = chips::kDefaultReleaseSeconds;
 	}

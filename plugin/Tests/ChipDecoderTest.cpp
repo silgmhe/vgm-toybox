@@ -759,7 +759,12 @@ namespace
 			   "and the selector last, because the core copies the voice when it is written");
 
 		// A rhythm row is a pulse, not a voice.
-		check (! decoder.capturePatch (9, patch), "a rhythm row has no patch to capture");
+		// **A rhythm row does capture now, and it captures a different kind of thing.** It has no
+		// pitch and no release: the patch is the trigger bit plus the three level/instrument bytes,
+		// and the chip ends the hit by itself. This assertion used to demand `false`.
+		check (decoder.capturePatch (9, patch), "a rhythm row captures a one-shot patch");
+		check (patch.oneShot && patch.triggerMask == 0x10, "...keyed by the bit for the bass drum");
+		check (patch.regs.size () == 9, "...with the nine rhythm registers, not a melodic voice");
 	}
 
 	/** **An OPL2 patch is nine registers: both operators, four banks each, plus the connection.**
@@ -825,7 +830,9 @@ namespace
 			   "no OPLL selector and no OPL3 waveform: neither register exists on this chip");
 
 		// A rhythm row is a pulse, not a voice.
-		check (! decoder.capturePatch (9, patch), "a percussion row has no patch to capture");
+		// The OPL2's rhythm voices are the borrowed channels' operator registers, which is a different
+		// capture and not done yet - so this one still says no.
+		check (! decoder.capturePatch (9, patch), "an OPL2 percussion row is not captured yet");
 	}
 
 	/** A three-channel OPN (YM2203) has no second port: register 0x28 with the port-select bit

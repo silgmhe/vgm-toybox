@@ -212,6 +212,9 @@ struct Core
 	/** The same for an OPL2's `0xB0`: key in bit 5, block in 4-2, the f-number's top two bits in 1-0. */
 	uint8_t opl2Key = 0;
 
+	/** Which bit of `0x0E` starts the loaded rhythm voice. Zero for everything else. */
+	uint8_t rhythmTrigger = 0;
+
 	Core (double sampleRate, chips::ChipModel model)
 		: rate (sampleRate)
 	{
@@ -568,6 +571,37 @@ void opl2AfterPatch ( Core&, int )
 constexpr Dialect kOpnDialect { 0x03, &opnInit, &opnNoteOn, &opnNoteOff, &opnAfterPatch };
 constexpr Dialect kOpmDialect { 0x07, &opmInit, &opmNoteOn, &opmNoteOff, &opmAfterPatch };
 
+/** **The OPLL's rhythm section: a trigger bit, not a frequency.**
+
+	`0x0E` bit 5 turns rhythm mode on and bits 4-0 are BD, SD, TOM, CYM and HH; a rising edge starts
+	the hit and the chip ends it by itself, so there is no pitch to write and no release to ask for.
+	The trigger to pulse arrives in `Core::rhythmTrigger`, put there by `load`.
+*/
+void opllRhythmInit ( Core& core, int, chips::ChipModel )
+{
+	core.write (0, 0x0E, 0x20);		// rhythm mode on, nothing triggered
+}
+
+void opllRhythmNoteOn ( Core& core, int port, int channel, chips::ChipModel model, double )
+{
+	(void) port;
+	(void) channel;
+	(void) model;
+
+	core.write (0, 0x0E, (uint8_t) (0x20 | core.rhythmTrigger));
+}
+
+void opllRhythmNoteOff ( Core& core, int port, int channel )
+{
+	(void) port;
+	(void) channel;
+
+	core.write (0, 0x0E, 0x20);		// drop the trigger; the voice is already decaying
+}
+
+constexpr Dialect kOpllRhythmDialect { 0x0F, &opllRhythmInit, &opllRhythmNoteOn,
+									   &opllRhythmNoteOff, &opllAfterPatch };
+
 // Channel 0, and the low nibble of `0x20` / `0x40` / `0x60` / `0x80` is zero for it, so any of the
 // nine registers can answer which channel this patch is for.
 constexpr Dialect kOpl2Dialect { 0x1F, &opl2Init, &opl2NoteOn, &opl2NoteOff, &opl2AfterPatch };
@@ -633,10 +667,17 @@ bool FmVoiceDriver::load (const chips::VoicePatch& patch)
 	// **The dialect follows the model, and it decides the channel mask too.** The channel is the low
 	// bits of the addresses the patch came back with; the port is in bit 8 - see VoicePatch.h. The
 	// OPN's operator stride is four, so its channel is two bits; the OPM's is eight, so it is three.
-	dialect = isOpm (patch.model)  ? &kOpmDialect
-			  : isOpll (patch.model) ? &kOpllDialect
-			  : isOpl2 (patch.model) ? &kOpl2Dialect
-									 : &kOpnDialect;
+	// **A one-shot carries its own dialect**, because its note-on is a trigger bit rather than a
+	// frequency: the OPL family's rhythm voices have no pitch at all.
+	loadedOneShot = patch.oneShot;
+	loadedTrim = patch.oneShot ? patch.trim : 1.0f;
+	core->rhythmTrigger = patch.triggerMask;
+
+	dialect = (patch.oneShot && isOpll (patch.model)) ? &kOpllRhythmDialect
+			  : isOpm (patch.model)					  ? &kOpmDialect
+			  : isOpll (patch.model)				  ? &kOpllDialect
+			  : isOpl2 (patch.model)				  ? &kOpl2Dialect
+													  : &kOpnDialect;
 	channelInPort = (int) (patch.regs.front ().first & dialect->channelMask);
 	port = (patch.regs.front ().first & 0x100) ? 1 : 0;
 
@@ -659,7 +700,9 @@ bool FmVoiceDriver::load (const chips::VoicePatch& patch)
 
 void FmVoiceDriver::noteOn (double hz)
 {
-	if (core == nullptr || ! core->ready || hz <= 0.0)
+	// **A one-shot has no frequency to check.** Its note-on is the trigger bit the patch carried, so
+	// the guard on `hz` belongs to the pitched voices only.
+	if (core == nullptr || ! core->ready || (hz <= 0.0 && ! loadedOneShot))
 	{
 		return;
 	}
@@ -700,7 +743,12 @@ void FmVoiceDriver::render (float* out, int frames)
 	// LSB - so the quantisation noise sat 12 dB higher relative to the signal than it should.
 	// The upper bound is 24, not 16, because one chip needs more than sixteen - see `fmOutputBits`.
 	const int bits = noteWidth ();
-	const double scale = 1.0 / (double) (1 << (std::clamp (bits, 2, 24) - 1));
+
+	// **A one-shot brings its own trim.** The rhythm slots sum more than one operator, so a drum hit
+	// at the same register scale is several times a melodic voice; `VoicePatch::trim` is where that
+	// measured ratio lives, and it is one for everything that is not a drum.
+	const double scale = (1.0 / (double) (1 << (std::clamp (bits, 2, 24) - 1)))
+						 * (double) (loadedOneShot ? loadedTrim : 1.0f);
 
 	if ((int) left.size () < kBlock)
 	{

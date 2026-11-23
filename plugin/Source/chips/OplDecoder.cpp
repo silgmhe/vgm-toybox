@@ -157,6 +157,13 @@ struct OplDecoder::Impl
 	/** The OPLL's eight global registers for instrument 0 - `0x00..0x07`, in chip order. */
 	uint8_t userPatch[8] = {};
 
+	/** **The rhythm voices' parameters, by low nibble**: `0x16-0x18` instrument, `0x26-0x28`
+		block/f-number, `0x36-0x38` level. They are the same addresses the sixth to eighth melodic
+		channels use, so they are kept separately: while rhythm mode is on those channels are drums
+		and their melodic fields mean nothing. */
+	uint8_t rhythmRegs[16] = {};
+	uint32_t rhythmVersion = 0;
+
 	/** Bumped whenever those eight change, so a cached patch for an `instrument 0` channel knows it
 		is stale. Nothing else can change a user voice. */
 	uint32_t userPatchVersion = 0;
@@ -491,6 +498,19 @@ void OplDecoder::write (const RegisterWrite& write)
 
 	if (impl->variant == Variant::opll)
 	{
+		// **The rhythm voices' three parameters each.** Kept here rather than in the channel fields
+		// because these addresses belong to channels 6-8, which the drums borrow.
+		//
+		// **Captured whether or not rhythm mode is on yet.** A driver may set the instruments first
+		// and enable rhythm afterwards - this song does - and gating on `rhythmEnabled` left every
+		// value at zero, which rendered as a silent patch.
+		if ((reg >= 0x16 && reg <= 0x18) || (reg >= 0x26 && reg <= 0x28)
+			|| (reg >= 0x36 && reg <= 0x38))
+		{
+			impl->rhythmRegs[reg & 0x0F] = write.value;
+			++impl->rhythmVersion;
+		}
+
 		// **The user voice, which is eight global registers.** An OPLL has no per-channel operator
 		// registers, but it does have this: instruments numbered 0 use these eight bytes, and any
 		// channel can ask for them. `capturePatch` copies them so a song that never uses a preset
@@ -785,6 +805,28 @@ ChannelState OplDecoder::channelState (int channel) const
 		state.period = kOneShotPeriod;
 		state.volume = 12;
 		state.gate = impl->now < impl->rhythm[channel - impl->rhythmBase].end;
+
+		// **The row needs the patch too.** Without it the panel falls back to a synthetic cycle that
+		// belongs to no drum, which is what these five rows drew before this was here.
+		if (impl->variant == Variant::opll)
+		{
+			Impl::NoteCache& cache = impl->noteCache[channel];
+
+			if (! cache.valid || cache.version != impl->rhythmVersion)
+			{
+				cache.valid = true;
+				cache.version = impl->rhythmVersion;
+				cache.userVersion = 0;
+
+				VoicePatch captured;
+				cache.patch = capturePatch (channel, captured)
+								  ? std::make_shared<const VoicePatch> (std::move (captured))
+								  : nullptr;
+			}
+
+			state.voicePatch = cache.patch;
+		}
+
 		return state;
 	}
 
@@ -845,8 +887,41 @@ bool OplDecoder::capturePatch (int channel, VoicePatch& out) const
 {
 	const int melodic = impl->twoBanks ? 18 : 9;
 
-	// The drums are pulses, not voices, and the OPL3 needs a second case - its second bank and its
-	// `0xE0` waveform registers - so neither is captured here.
+	// **A rhythm voice is a one-shot with no pitch.** Its parameters are the nine registers the song
+	// wrote in rhythm mode; the trigger is one bit of `0x0E`, so the driver never needs a frequency.
+	//
+	// The five are ordered BD, SD, TOM, CYM, HH from bit 4 down - `emu2413.c:616` `update_key_status`
+	// is the table this mirrors.
+	if (impl->variant == Variant::opll && channel >= impl->rhythmBase
+		&& channel < impl->rhythmBase + 5)
+	{
+		out = VoicePatch {};
+		out.model = ChipModel::ym2413;
+		out.oneShot = true;
+		out.triggerMask = (uint8_t) (0x10u >> (channel - impl->rhythmBase));
+
+		// **Long enough to hold the whole hit, short enough to fill the row.** The bass drum's own
+		// envelope was measured at about 41 ms; 150 leaves room for the slower voices without turning
+		// the drawing into a spike at the left edge followed by a flat line.
+		out.lengthSeconds = 0.15;
+
+		// **Measured, not assumed**: a full-level bass drum peaks at about seven times a melodic
+		// voice at the same register scale, because the rhythm slots sum more than one operator.
+		// `0.12` brings the loudest hit to roughly the level a melodic note has.
+		out.trim = 0.12f;
+
+		static constexpr uint16_t kRhythmRegisters[] = { 0x16, 0x17, 0x18, 0x26, 0x27, 0x28,
+														 0x36, 0x37, 0x38 };
+
+		for (const uint16_t reg : kRhythmRegisters)
+		{
+			out.regs.push_back ({ reg, impl->rhythmRegs[reg & 0x0F] });
+		}
+
+		return true;
+	}
+
+	// The OPL3 needs a second case - its second bank and its `0xE0` waveform registers.
 	if (channel < 0 || channel >= melodic || impl->variant == Variant::opl3)
 	{
 		return false;
