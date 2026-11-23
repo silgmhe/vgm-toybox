@@ -36,6 +36,14 @@ namespace toybox::backends::libvgm
 
 namespace
 {
+	/** **One panel wave per this many milliseconds, and no more.** Captured frames arrive thirty to
+		sixty times a second and a song can invalidate a dozen rows at once (every register write bumps
+		the patch version), so without a budget the message thread spent a quarter of a second inside
+		one `captureState` - heard as the playback stuttering, on a chip whose rows had only just
+		started to have a patch at all. A row that misses its turn keeps the shape it had and tries
+		again on the next frame, so a full set fills in over about half a second and nothing blocks. */
+	constexpr double kPanelRenderIntervalMs = 33.0;
+
 	// libvgm renders 24-bit samples internally and shifts them left by 8 bit when packing to
 	// 32-bit output, so full scale is +/- 2^31.
 	constexpr float kInt32ToFloat = 1.0f / 2147483648.0f;
@@ -1016,22 +1024,43 @@ bool LibvgmTrackPlayer::captureState (playback::ChipStateSnapshot& snapshot) con
 
 				// Both lengths are settings, so both belong in the cache key: changing either has to
 				// invalidate every cached note, or the slider would appear to do nothing.
-				const double sustain = (double) juce::jmax (1, store.getFmSustainMs ()) / 1000.0;
+				double sustain = (double) juce::jmax (1, store.getFmSustainMs ()) / 1000.0;
 				const double release = (double) juce::jmax (1, store.getFmReleaseMs ()) / 1000.0;
 				const bool normalise = store.getFmNormalise ();
+
+				// **A note's worth of drawing is bounded per model, because the cores differ by two
+				// orders of magnitude.** Measured at the panel's 8 kHz: an AdLibEmu note costs 0.4 ms
+				// and an `emu2413` one 26 ms - it runs its own rate converter over the whole note
+				// whatever rate it is asked for. Fourteen rows invalidating together therefore cost a
+				// quarter of a second in one frame, which is the stutter this fixes: the OPLL rows draw
+				// half a second of their envelope instead of the setting's full length.
+				if (state.voicePatch->model == chips::ChipModel::ym2413)
+				{
+					sustain = std::min (sustain, 0.5);
+				}
 
 				if (entry.wave == nullptr || entry.patch != state.voicePatch
 					|| entry.hz != hz || entry.sustain != sustain || entry.release != release
 					|| entry.normalise != normalise)
 				{
+					// **The budget, and the cache key, are the same condition.** If this render is
+					// not allowed yet the entry is left untouched - key included - so the row stays
+					// stale and is picked up on a later frame rather than being marked fresh without
+					// a shape to show for it.
+					const double nowMs = juce::Time::getMillisecondCounterHiRes ();
+
+					if (nowMs - lastPanelRenderMs >= kPanelRenderIntervalMs)
+					{
+						lastPanelRenderMs = nowMs;
 					entry.patch = state.voicePatch;
-					entry.hz = hz;
-					entry.sustain = sustain;
-					entry.release = release;
-					entry.normalise = normalise;
-					entry.wave = std::make_shared<const std::vector<float>> (
-						playback::noteWave::render (*voiceDriver, *state.voicePatch, hz, sustain,
-													release, normalise));
+						entry.hz = hz;
+						entry.sustain = sustain;
+						entry.release = release;
+						entry.normalise = normalise;
+						entry.wave = std::make_shared<const std::vector<float>> (
+							playback::noteWave::render (*voiceDriver, *state.voicePatch, hz, sustain,
+														release, normalise));
+					}
 				}
 
 				state.noteWaveform = entry.wave;

@@ -269,6 +269,12 @@ private:
 
 	mutable std::map<int, NoteWaveEntry> noteWaves;
 
+	/** **When the last panel wave was rendered**, on `juce::Time`'s clock. One per
+		`kPanelRenderIntervalMs` is the budget: a song invalidates a dozen rows at once (every
+		register write bumps the patch version), and rendering them all in one frame put a quarter of
+		a second on the message thread - the stutter this exists to prevent. */
+	mutable double lastPanelRenderMs = 0.0;
+
 	/** What the display draws for each DPCM sample: the bytes the export collected, and the rate it
 		declares.
 
