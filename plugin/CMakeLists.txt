@@ -680,6 +680,22 @@ target_include_directories(vgm_opn_test PRIVATE Source)
 target_compile_features(vgm_opn_test PRIVATE cxx_std_17)
 target_link_libraries(vgm_opn_test PRIVATE ${LIBVGM_TARGETS})
 
+# --- what each FM chip reaches with its loudest patch (not built by default) ---
+#
+# **A different question from the oracle above**, which is why it has its own target: a failure
+# there means the decoder and the chip disagree, and a failure here means a number in
+# `chips::fmOutputBits` is wrong. Every entry in that table that was guessed rather than measured
+# has been wrong, so the fixtures that measure them are worth keeping apart from the ones that
+# compare two implementations.
+add_executable(vgm_fm_level_test EXCLUDE_FROM_ALL
+	Tests/FmLevelTest.cpp
+	Source/playback/NoteWaveform.cpp
+	Source/backends/libvgm/FmVoiceDriver.cpp
+)
+target_include_directories(vgm_fm_level_test PRIVATE Source)
+target_compile_features(vgm_fm_level_test PRIVATE cxx_std_17)
+target_link_libraries(vgm_fm_level_test PRIVATE ${LIBVGM_TARGETS})
+
 # --- console test for the playback core (not built by default) ---
 # Drives PlaybackEngine through the fake tone backend, and the settings store through a temporary
 # directory. Deliberately links **no libvgm code**: if the core still depended on the format
@@ -876,8 +892,9 @@ toybox_console_test(core vgm_core_test)
 toybox_console_test(ui vgm_ui_test)
 toybox_console_test(keyboard-layout vgm_keyboard_test)
 toybox_console_test(opn vgm_opn_test)
+toybox_console_test(fm-level vgm_fm_level_test)
 set_tests_properties(core ui keyboard-layout PROPERTIES LABELS "unit" TIMEOUT 120)
-set_tests_properties(opn PROPERTIES LABELS "unit" TIMEOUT 300)
+set_tests_properties(opn fm-level PROPERTIES LABELS "unit" TIMEOUT 300)
 
 if(_toybox_test_env)
 	toybox_console_test(engine vgm_mixer_test "${_toybox_test_song}" 3)
