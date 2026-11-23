@@ -1306,9 +1306,28 @@ chips::RenderedNote LibvgmTrackPlayer::renderNoteAt (int track, double hz,
 	// **The shape arrives, it is not looked up.** This runs on the export pool or on a drag;
 	// reading `SettingsStore` here would be a second source of the same three values, and a read of
 	// a file-backed store from a worker while the message thread may be writing it.
-	auto wave = std::make_shared<const std::vector<float>> (
-		playback::noteWave::render (*exportDriver, *chosen, hz, shape.sustainSeconds,
-									shape.releaseSeconds, shape.normalise));
+	auto rendered = playback::noteWave::render (*exportDriver, *chosen, hz, shape.sustainSeconds,
+											  shape.releaseSeconds, shape.normalise);
+
+	// **The OPM's filtered path loses about 4 dB, and the timeline is the reference.** Measured on the
+	// same patch: `rms 0.176` rendered at the chip's rate, `0.145` after `WaveExport`'s low-pass - the
+	// band above `0.40 * targetRate` is what the filter is there to remove - and decimation costs the
+	// rest. A DAW then put the file 4 dB under the channel, which is this number.
+	//
+	// **Only when the filter will actually run**: exporting at the chip's own rate bypasses it, and
+	// making that case louder would overshoot by the same amount.
+	if (chosen->model == chips::ChipModel::ym2151 && wantedRate == 0.0 && shape.rate > 0.0
+		&& shape.rate < chips::noteRateFor (chosen->model))
+	{
+		constexpr float kOpmFilterMakeup = 1.585f;		// +4.0 dB
+
+		for (auto& sample : rendered)
+		{
+			sample *= kOpmFilterMakeup;
+		}
+	}
+
+	auto wave = std::make_shared<const std::vector<float>> (std::move (rendered));
 
 	// **The rate travels with the samples.** `exportDriver` was created with `exportQuality`, so
 	// its rate is the chip's own - reading it back here is what keeps the file's header honest
