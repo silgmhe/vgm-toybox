@@ -167,10 +167,14 @@ constexpr int fmOutputBits (ChipModel model)
 	// quarter the YM2612 had, and the same class of mistake.
 	case ChipModel::ym2413:		return 12;
 
-	// **The OPL2 and the VRC7 are still sixteen, and neither has been measured.** They are left at the
-	// value they were written with rather than guessed at - a wrong number here is 6 dB of level per
-	// bit, so it is worth a fixture before anyone reports it.
-	case ChipModel::ym3812:
+	// **Ten for the OPL2, measured off AdLibEmu with both operators at total level zero.** Sixteen -
+	// the value this entry carried unmeasured since the table was written - left one voice at
+	// `peak 0.030`, a thirty-second of the chip's level: the worst of the family so far, and the same
+	// mistake the YM2612, the YM2610, the YM2151 and the YM2413 each paid for once.
+	case ChipModel::ym3812:		return 10;
+
+	// **The VRC7 is still sixteen, and has not been measured.** Its notes are rendered by
+	// `Vrc7VoiceDriver`, not by this table's core, so it needs its own fixture.
 	case ChipModel::vrc7:		return 16;
 
 	case ChipModel::unknown:	break;

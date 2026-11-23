@@ -117,12 +117,18 @@ constexpr bool isOpm (chips::ChipModel model)
 	return model == chips::ChipModel::ym2151;
 }
 
-/** **The OPLL, for now the only two-operator part with a patch.** The OPL2 and the VRC7 need the same
-	dialect and will join this predicate when `OplDecoder::capturePatch` has cases for them; naming them
-	here early would route them to a dialect whose registers nothing produces yet. */
+/** **The OPLL, whose patch is a preset number.** */
 constexpr bool isOpll (chips::ChipModel model)
 {
 	return model == chips::ChipModel::ym2413;
+}
+
+/** **The OPL2 family, whose patch is nine real registers.** `ym3526` and `y8950` are captured under
+	this model too - their FM halves are the same part, and `OplDecoder` decodes all three with one
+	branch (`docs/desgin/2026-11-23-opl2-visualisation.md`, D1). */
+constexpr bool isOpl2 (chips::ChipModel model)
+{
+	return model == chips::ChipModel::ym3812;
 }
 
 constexpr bool hasSixChannelMode (chips::ChipModel model)
@@ -202,6 +208,9 @@ struct Core
 	/** The OPLL's last `0x20` write: key bit, block and the f-number's ninth bit. A key-off has to
 		clear bit 4 without moving the pitch the note was played at. */
 	uint8_t oplKey = 0;
+
+	/** The same for an OPL2's `0xB0`: key in bit 5, block in 4-2, the f-number's top two bits in 1-0. */
+	uint8_t opl2Key = 0;
 
 	Core (double sampleRate, chips::ChipModel model)
 		: rate (sampleRate)
@@ -493,8 +502,75 @@ void opllAfterPatch ( Core&, int )
 	// Nothing: the OPLL has no pan and no second register to fix after the patch.
 }
 
+/** **An OPL2 needs no setup before its patch**: the nine registers in `capturePatch` are the whole
+	voice, there is no LFO to switch off and no pan register to open. */
+void opl2Init ( Core&, int, chips::ChipModel )
+{
+}
+
+/** **The OPL2's pitch and key, in two writes, and the order is the chip's.**
+
+	`0xA0 + ch` carries the f-number's low eight bits and `0xB0 + ch` the rest: the top two bits of a
+	ten-bit f-number in 1-0, the block in 4-2, and the key in **bit 5** - which is the OPN's bit, not
+	the OPLL's `0x20` bit 4. `OplNoteTable::noteFor` reads the same three fields, so this is its
+	inverse at its reference of 20: `f = fnum * clock / 72 * 2^(block - 20)`.
+*/
+void opl2NoteOn ( Core& core, int port, int channel, chips::ChipModel model, double hz )
+{
+	(void) port;
+	(void) channel;
+
+	const double clock = (double) clockFor (model);
+
+	auto fnumFor = [hz, clock] (int block)
+	{
+		return hz * 72.0 * std::exp2 (20.0 - (double) block) / clock;
+	};
+
+	int block = 4;
+	double fnum = fnumFor (block);
+
+	// Ten bits, not the OPLL's nine: `kFnumHighTwoBits` is two bits wide and this is the bound that
+	// matches it.
+	while (fnum >= 1024.0 && block < 7)
+	{
+		++block;
+		fnum = fnumFor (block);
+	}
+
+	while (fnum < 1.0 && block > 0)
+	{
+		--block;
+		fnum = fnumFor (block);
+	}
+
+	const auto fnumBits = (uint16_t) std::lround (std::clamp (fnum, 0.0, 1023.0));
+
+	core.write (0, 0xA0, (uint8_t) (fnumBits & 0xFF));
+
+	core.opl2Key = (uint8_t) (0x20 | ((block & 0x07) << 2) | ((fnumBits >> 8) & 0x03));
+	core.write (0, 0xB0, core.opl2Key);
+}
+
+void opl2NoteOff ( Core& core, int port, int channel )
+{
+	(void) port;
+	(void) channel;
+
+	core.write (0, 0xB0, (uint8_t) (core.opl2Key & ~0x20));
+}
+
+void opl2AfterPatch ( Core&, int )
+{
+	// Nothing: an OPL2 has no pan, and its nine registers are the whole voice.
+}
+
 constexpr Dialect kOpnDialect { 0x03, &opnInit, &opnNoteOn, &opnNoteOff, &opnAfterPatch };
 constexpr Dialect kOpmDialect { 0x07, &opmInit, &opmNoteOn, &opmNoteOff, &opmAfterPatch };
+
+// Channel 0, and the low nibble of `0x20` / `0x40` / `0x60` / `0x80` is zero for it, so any of the
+// nine registers can answer which channel this patch is for.
+constexpr Dialect kOpl2Dialect { 0x1F, &opl2Init, &opl2NoteOn, &opl2NoteOff, &opl2AfterPatch };
 
 // The channel is the low nibble of `0x30 + ch` (or of `0x00`, the user patch's first register, which
 // is also channel 0 - see `OplDecoder::capturePatch` for why an OPLL patch is always channel 0).
@@ -559,6 +635,7 @@ bool FmVoiceDriver::load (const chips::VoicePatch& patch)
 	// OPN's operator stride is four, so its channel is two bits; the OPM's is eight, so it is three.
 	dialect = isOpm (patch.model)  ? &kOpmDialect
 			  : isOpll (patch.model) ? &kOpllDialect
+			  : isOpl2 (patch.model) ? &kOpl2Dialect
 									 : &kOpnDialect;
 	channelInPort = (int) (patch.regs.front ().first & dialect->channelMask);
 	port = (patch.regs.front ().first & 0x100) ? 1 : 0;

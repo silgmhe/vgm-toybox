@@ -854,6 +854,53 @@ void testOpllReachesFullScale (void)
 	}
 }
 
+/** **What an OPL2 actually reaches.** Sixteen has been the declared width for this chip since the
+	table was written and nobody had measured it; the four OPN/OPM entries above show what an
+	unmeasured value costs, so this prints the number before anything is asserted about it.
+
+	The patch is the chip's nine registers at their loudest: total level zero on both operators,
+	attack rate fifteen, additive connection.
+*/
+void testOpl2ReachesFullScale (void)
+{
+	auto makePatch = []
+	{
+		toybox::chips::VoicePatch patch;
+		patch.model = toybox::chips::ChipModel::ym3812;
+
+		patch.regs.push_back ({ 0x20, 0x01 });		// modulator: AM/PM/EG/VIB/KSR off, multiple 1
+		patch.regs.push_back ({ 0x40, 0x00 });		// modulator: KSL 0, TL 0
+		patch.regs.push_back ({ 0x60, 0xF0 });		// modulator: attack at once
+		patch.regs.push_back ({ 0x80, 0x0F });		// modulator: sustain 0, release 15
+		patch.regs.push_back ({ 0x23, 0x01 });		// the carrier, the same
+		patch.regs.push_back ({ 0x43, 0x00 });
+		patch.regs.push_back ({ 0x63, 0xF0 });
+		patch.regs.push_back ({ 0x83, 0x0F });
+		patch.regs.push_back ({ 0xC0, 0x01 });		// no feedback, additive
+		return patch;
+	};
+
+	const double wanted = toybox::playback::noteWave::frequencyOf (60);
+
+	const auto driver = toybox::backends::libvgm::makeFmVoiceDriver (true, 0.0);
+	const auto wave = toybox::playback::noteWave::render (*driver, makePatch (), wanted, 0.6, 0.05,
+														 false);
+
+	double peak = 0.0;
+
+	for (const float sample : wave)
+	{
+		peak = std::max (peak, (double) std::abs (sample));
+	}
+
+	std::printf ("    YM3812 chip  peak %.3f  (rate %.0f, %zu samples)\n", peak, driver->rate (),
+				 wave.size ());
+
+	// **The scale the file will carry.** Measured `0.030` at a declared sixteen; ten is what makes one
+	// voice reach the chip's own full scale.
+	check (peak > 0.9, "the YM3812 reaches full scale at chip");
+}
+
 int main()
 {
 	std::printf ("YM2612 decoder against libvgm's own core\n");
@@ -913,6 +960,7 @@ int main()
 	testNoteDecimationRemovesWhatWouldAlias();
 	testOpmReachesFullScale();
 	testOpllReachesFullScale();
+	testOpl2ReachesFullScale();
 	testNoteWaveformInState();
 
 	Tally tally;

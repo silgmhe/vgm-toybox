@@ -121,13 +121,26 @@ struct OplDecoder::Impl
 			(`emu2413.c:679`). The panel wants the other direction, so `channelState` inverts it. */
 		uint8_t volume = 0;
 
-		/** The patch, for the display only, and only on the variants that have registers for it.
+		/** **The chip's own operator registers, both operators, as the song wrote them.**
 
-			There is no multiplier or total level to read on an OPLL, so its channels leave `fmKnown`
-			false: the operators are inside the chip's ROM and it does not say. The shape comes from
-			`capturePatch` and `noteWaveform` instead. */
-		int multiple = 1;		// 0x20 + slot, low four bits, of the modulator
-		uint8_t totalLevel = 0x3F;	// 0x40 + slot, low six bits, of the modulator
+			`[operator][bank]`, where the banks are `0x20` (AM/VIB/EG/KSR/MULT), `0x40` (KSL/TL),
+			`0x60` (AR/DR) and `0x80` (SL/RR). An OPL2 patch is these eight bytes plus
+			`feedbackConnection`, which is what `capturePatch` hands back - unlike the OPLL, where a
+			patch is a preset number.
+
+			The envelope lives in banks 2 and 3, and **neither was read before this**: a patch built
+			from the two multifplier/level bytes alone has a zero attack rate and renders as silence.
+		*/
+		uint8_t opRegs[2][4] = {};
+
+		uint8_t feedbackConnection = 0;		// 0xC0: feedback bits 1-3, connection bit 0
+
+		/** Bumped by every write that changes the patch, so `NoteCache` can tell when it is stale. */
+		uint32_t patchVersion = 0;
+
+		/** The modulator's ratio and level, kept for the packed `fmKnown` shape and for nothing else. */
+		int multiple = 1;		// 0x20 + slot, low four bits
+		uint8_t totalLevel = 0x3F;	// 0x40 + slot, low six bits
 		int feedback = 0;		// 0xC0 + channel, bits 1-3
 		int waveform = 0;		// 0xE0 + slot, low two bits (OPL3; OPL2 has one sine)
 	};
@@ -159,9 +172,13 @@ struct OplDecoder::Impl
 	struct NoteCache
 	{
 		bool valid = false;
-		uint8_t instrument = 0;
-		uint8_t volume = 0;
+
+		/** The channel's own `patchVersion`, and the global user-voice one. The second only matters
+			on an OPLL channel using instrument 0, where the eight global registers are part of the
+			answer; everywhere else it stays zero and never invalidates anything. */
+		uint32_t version = 0;
 		uint32_t userVersion = 0;
+
 		std::shared_ptr<const VoicePatch> patch;
 	};
 
@@ -522,6 +539,7 @@ void OplDecoder::write (const RegisterWrite& write)
 			Impl::Channel& voice = impl->channels[reg - 0x30];
 			voice.instrument = (uint8_t) ((write.value >> 4) & 0x0F);
 			voice.volume = (uint8_t) (write.value & 0x0F);
+			++voice.patchVersion;
 			return;
 		}
 
@@ -532,8 +550,10 @@ void OplDecoder::write (const RegisterWrite& write)
 		return;
 	}
 
-	// The patch registers are addressed by slot, not by channel, and only the modulator is kept:
-	// it is the operator whose ratio and level make this sound unlike its neighbour.
+	// The patch registers are addressed by slot, not by channel. **Both operators are kept now**:
+	// the modulator's ratio and level make this sound unlike its neighbour, and the carrier's
+	// attack, decay, sustain and release are the envelope the row draws - a patch with only half of
+	// it renders as silence, because a zero attack rate never starts.
 	const bool twoBanks = impl->twoBanks;
 	const auto modulatorChannel = [twoBanks, port] (uint8_t patchRegister) -> int
 	{
@@ -546,16 +566,53 @@ void OplDecoder::write (const RegisterWrite& write)
 		return (twoBanks ? port * 9 : 0) + op / 2;
 	};
 
+	/** The slot an operator register belongs to: `index` is 0..17 with the modulator even, so the
+		channel is `index / 2` within its bank and the operator is `index & 1`. */
+	const auto operatorSlot = [twoBanks, port] (uint8_t patchRegister, int& channelOut,
+												int& opOut) -> bool
+	{
+		const int index = kOperatorOfRegister[patchRegister & 0x1F];
+		if (index < 0)
+		{
+			return false;		// one of the chip's six unused windows
+		}
+
+		channelOut = (twoBanks ? port * 9 : 0) + index / 2;
+		opOut = index & 1;
+		return true;
+	};
+
+	/** The four register banks in the order `Impl::Channel::opRegs` keeps them. */
+	const auto keepOperatorRegister = [&operatorSlot, impl = impl.get (), &write] (uint8_t base,
+																					int block) -> bool
+	{
+		int channel = -1;
+		int op = -1;
+
+		if (! operatorSlot ((uint8_t) (base + (write.reg & 0x1F)), channel, op))
+		{
+			return false;
+		}
+
+		Impl::Channel& voice = impl->channels[channel];
+		voice.opRegs[op][block] = write.value;
+		++voice.patchVersion;
+		return true;
+	};
+
 	// 0x20-0x35: AM/VIB/EG/KSR/MULTI, the multiplier in the low four bits. The range stops at 0x36
 	// because that is where the eighteen slots end - `kOperatorOfRegister` is indexed by
 	// `reg & 0x1F`, so a wider range would fold 0x38 back onto slot 0x18 and write channel 6's
 	// multiplier from a register the chip does not define.
 	if (reg >= 0x20 && reg < 0x36)
 	{
-		const int channel = modulatorChannel (reg);
-		if (channel >= 0)
+		if (keepOperatorRegister (0x20, 0))
 		{
-			impl->channels[channel].multiple = (int) (write.value & 0x0F);
+			const int channel = modulatorChannel (reg);
+			if (channel >= 0)
+			{
+				impl->channels[channel].multiple = (int) (write.value & 0x0F);
+			}
 		}
 		return;
 	}
@@ -563,11 +620,29 @@ void OplDecoder::write (const RegisterWrite& write)
 	// 0x40-0x55: KSL and total level, six bits of attenuation
 	if (reg >= 0x40 && reg < 0x56)
 	{
-		const int channel = modulatorChannel (reg);
-		if (channel >= 0)
+		if (keepOperatorRegister (0x40, 1))
 		{
-			impl->channels[channel].totalLevel = (uint8_t) (write.value & 0x3F);
+			const int channel = modulatorChannel (reg);
+			if (channel >= 0)
+			{
+				impl->channels[channel].totalLevel = (uint8_t) (write.value & 0x3F);
+			}
 		}
+		return;
+	}
+
+	// **0x60-0x75 and 0x80-0x95 were not read at all before this**, so every captured patch would
+	// have had a zero attack rate on both operators - a voice that never starts. They hold AR/DR and
+	// SL/RR, the two halves of the envelope the row draws.
+	if (reg >= 0x60 && reg < 0x76)
+	{
+		keepOperatorRegister (0x60, 2);
+		return;
+	}
+
+	if (reg >= 0x80 && reg < 0x96)
+	{
+		keepOperatorRegister (0x80, 3);
 		return;
 	}
 
@@ -576,6 +651,8 @@ void OplDecoder::write (const RegisterWrite& write)
 	{
 		const int channel = (impl->twoBanks ? port * 9 : 0) + (reg - 0xC0);
 		impl->channels[channel].feedback = (int) ((write.value >> 1) & 0x07);
+		impl->channels[channel].feedbackConnection = write.value;
+		++impl->channels[channel].patchVersion;
 		return;
 	}
 
@@ -647,11 +724,20 @@ ChannelState OplDecoder::channelState (int channel) const
 		state.block = voice.block;
 		state.gate = voice.keyed;
 
-		// **The channel's own volume, not a constant, and inverted.** `0x30`'s low nibble is an
-		// attenuation (0 = loudest), while `ChannelFromChip` normalises against `volumeMaximum = 15`
-		// where 15 means full - so the meter needs `15 - volume`. Reporting a constant fifteen made
-		// every OPLL row read full whatever the song asked for.
-		state.volume = (impl->variant == Variant::opll) ? (15 - (int) voice.volume) : 15;
+		// **The channel's own volume, and inverted.** Both families store an attenuation -
+		// `0x30`'s low nibble on an OPLL, the carrier's total level on an OPL2 - while
+		// `ChannelFromChip` normalises against `volumeMaximum = 15` where 15 means full. Reporting a
+		// constant fifteen made every row read full whatever the song asked for, which is what this
+		// did before either family had a level to report.
+		if (impl->variant == Variant::opll)
+		{
+			state.volume = 15 - (int) voice.volume;
+		}
+		else
+		{
+			const int carrierLevel = voice.opRegs[1][1] & 0x3F;		// 0 loudest, 63 silent
+			state.volume = 15 - (carrierLevel * 15 + 31) / 63;
+		}
 
 		// The OPLL has no per-operator registers - its instruments are pre-sets chosen by number -
 		// so it says nothing rather than saying "multiplier 1, level 0", which is a patch that
@@ -664,21 +750,21 @@ ChannelState OplDecoder::channelState (int channel) const
 			state.fmFeedback = voice.feedback;
 			state.fmWaveform = voice.waveform;
 		}
-		else
-		{
-			// **The patch the panel renders a note from**, handed out the way `OpnDecoder` does. An
-			// OPLL's shape is the whole note - attack, decay, release - and it only exists if the
-			// caller is given a patch to render; without one the row falls back to a single
-			// synthetic cycle, which is what it did before this was here.
-			Impl::NoteCache& cache = impl->noteCache[channel];
-			const uint32_t userVersion = voice.instrument == 0 ? impl->userPatchVersion : 0u;
 
-			if (! cache.valid || cache.instrument != voice.instrument
-				|| cache.volume != voice.volume || cache.userVersion != userVersion)
+		// **The patch the panel renders a note from**, handed out the way `OpnDecoder` does. A row's
+		// shape is the whole note - attack, decay, release - and it only exists if the caller is
+		// given a patch to render; without one the row falls back to a single synthetic cycle, which
+		// is what both families did before this was here.
+		{
+			Impl::NoteCache& cache = impl->noteCache[channel];
+			const uint32_t userVersion
+				= (impl->variant == Variant::opll && voice.instrument == 0) ? impl->userPatchVersion : 0u;
+
+			if (! cache.valid || cache.version != voice.patchVersion
+				|| cache.userVersion != userVersion)
 			{
 				cache.valid = true;
-				cache.instrument = voice.instrument;
-				cache.volume = voice.volume;
+				cache.version = voice.patchVersion;
 				cache.userVersion = userVersion;
 
 				VoicePatch captured;
@@ -759,15 +845,43 @@ bool OplDecoder::capturePatch (int channel, VoicePatch& out) const
 {
 	const int melodic = impl->twoBanks ? 18 : 9;
 
-	if (channel < 0 || channel >= melodic || impl->variant != Variant::opll)
+	// The drums are pulses, not voices, and the OPL3 needs a second case - its second bank and its
+	// `0xE0` waveform registers - so neither is captured here.
+	if (channel < 0 || channel >= melodic || impl->variant == Variant::opl3)
 	{
-		return false;		// the drums are pulses, and the OPL2/OPL3 have no case yet
+		return false;
 	}
 
 	const Impl::Channel& voice = impl->channels[channel];
 
 	out = VoicePatch {};
 	out.model = impl->patchModel ();
+
+	if (impl->variant != Variant::opll)
+	{
+		// **The chip's own nine registers, for channel 0.** Nine rather than eight because the
+		// connection bit is what makes a two-operator voice additive or serial, and that changes the
+		// shape more than any single level does.
+		//
+		// **Channel 0, not the song's channel**: the slot formula is
+		// `slot = (ch/3)*6 + ch%3 + 3*op`, so recovering the channel from a register means walking
+		// `kOperatorOfRegister` backwards. A patch is rendered on a core of its own and only ever
+		// portrays one voice, which is what makes the fixed addresses correct rather than lossy.
+		static constexpr uint16_t kBankBase[4] = { 0x20, 0x40, 0x60, 0x80 };
+		static constexpr uint16_t kSlotOf[2] = { 0, 3 };		// modulator, carrier, for channel 0
+
+		for (int op = 0; op < 2; ++op)
+		{
+			for (int bank = 0; bank < 4; ++bank)
+			{
+				out.regs.push_back ({ (uint16_t) (kBankBase[bank] + kSlotOf[op]),
+									  voice.opRegs[op][bank] });
+			}
+		}
+
+		out.regs.push_back ({ (uint16_t) 0xC0, voice.feedbackConnection });
+		return true;
+	}
 
 	// **The user voice first, and it has to be first.** Instrument 0 means "the eight global
 	// registers", and the core copies that patch into the channel at the moment `0x30` is written -

@@ -711,11 +711,17 @@ SongDescription describeSong (LibvgmTrackPlayer* probe)
 				// not decoded - so channels 23..41 are the 24 PCM voices, and calling them `Ch 24`
 				// upwards would put "Ch 1" nowhere in the mixer. Every other chip's channels fall
 				// inside the plan, so this branch is inert for them.
-				// **The OPLL's own name table is bare numbers** ("1".."9"), which tells a reader less
-				// than the fallback below does. Every other FM chip here either ships no table or
-				// ships names this code would not improve on, so the table is used only where it
-				// says more than "FM 1".
-				const bool tableNames = channelNames != nullptr && deviceKind != midi::ChipKind::ym2413;
+				// **The OPL family's own name table is bare numbers** ("1".."9"), which tells a reader
+				// less than the fallback below does. Every other FM chip here either ships no table
+				// or ships names this code would not improve on, so the table is used only where it
+				// says more than "FM 1". The percussion rows keep whatever the table calls them -
+				// "Bass Drum" is a name, "10" is not.
+				const bool tableNames
+					= channelNames != nullptr
+					  && deviceKind != midi::ChipKind::ym2413
+					  && deviceKind != midi::ChipKind::ym3812
+					  && deviceKind != midi::ChipKind::ym3526
+					  && deviceKind != midi::ChipKind::y8950;
 
 				const int plannedChannels = plan.melodicCount + plan.oneShotCount + plan.tailMelodicCount;
 				const int beyondPlan = channel - plannedChannels;

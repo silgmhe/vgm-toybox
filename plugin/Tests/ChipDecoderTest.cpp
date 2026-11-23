@@ -762,6 +762,72 @@ namespace
 		check (! decoder.capturePatch (9, patch), "a rhythm row has no patch to capture");
 	}
 
+	/** **An OPL2 patch is nine registers: both operators, four banks each, plus the connection.**
+
+		The envelope lives in `0x60` (attack/decay) and `0x80` (sustain/release), and **the decoder
+		read neither before this** - so a patch assembled from the two bytes it did keep would have had
+		a zero attack rate on both operators and rendered as silence, with nothing anywhere saying so.
+	*/
+	void testOpl2PatchIsBothOperators (void)
+	{
+		using toybox::chips::ChipConfig;
+		using toybox::chips::OplDecoder;
+		using toybox::chips::RegisterWrite;
+		using toybox::chips::VoicePatch;
+
+		OplDecoder decoder;		// the default is opl2, which is what the registry builds
+		decoder.reset (ChipConfig { 3579545u, 44100.0, 0, 0.0 });
+
+		const auto write = [&decoder] (uint8_t reg, uint8_t value)
+		{
+			RegisterWrite w;
+			w.sampleTime = 0;
+			w.port = 0;
+			w.reg = reg;
+			w.value = value;
+			decoder.write (w);
+		};
+
+		write (0x20, 0xA1);		// modulator: 0x20 bank
+		write (0x23, 0xB2);		// carrier:   the same bank, slot 3
+		write (0x40, 0x11);
+		write (0x43, 0x22);
+		write (0x60, 0x33);		// attack 3, decay 3
+		write (0x63, 0x44);
+		write (0x80, 0x55);
+		write (0x83, 0x66);
+		write (0xC0, 0x0F);		// feedback 7, connection 1
+
+		VoicePatch patch;
+		check (decoder.capturePatch (0, patch), "an OPL2 voice is captured");
+		check (patch.model == toybox::chips::ChipModel::ym3812, "and names the chip");
+		check (patch.regs.size () == 9, "as nine registers: eight operator bytes and the connection");
+
+		const auto at = [&patch] (uint16_t address) -> int
+		{
+			for (const auto& reg : patch.regs)
+			{
+				if (reg.first == address)
+				{
+					return (int) reg.second;
+				}
+			}
+
+			return -1;
+		};
+
+		check (at (0x20) == 0xA1 && at (0x23) == 0xB2, "both operators' 0x20 bank, at channel 0's slots");
+		check (at (0x40) == 0x11 && at (0x43) == 0x22, "both operators' level");
+		check (at (0x60) == 0x33 && at (0x63) == 0x44, "and the envelope, which was not read before");
+		check (at (0x80) == 0x55 && at (0x83) == 0x66, "sustain and release, likewise");
+		check (at (0xC0) == 0x0F, "the connection byte, so additive and serial stay different");
+		check (at (0x30) == -1 && at (0xE0) == -1,
+			   "no OPLL selector and no OPL3 waveform: neither register exists on this chip");
+
+		// A rhythm row is a pulse, not a voice.
+		check (! decoder.capturePatch (9, patch), "a percussion row has no patch to capture");
+	}
+
 	/** A three-channel OPN (YM2203) has no second port: register 0x28 with the port-select bit
 		set addresses channel 3 of a six-channel OPN, which this chip does not have, while the
 		low two bits still select one of its three. */
@@ -8201,6 +8267,7 @@ int main (void){
 	testY8950AdpcmRow();
 	testOpllVariantReachesTheDecoder();
 	testOpllPatchIsTheInstrumentByte();
+	testOpl2PatchIsBothOperators();
 	testOpnThreeChannels();
 	testOpnChannelFamilies();
 	testOpnAdpcmBShape();

@@ -1285,7 +1285,8 @@ chips::RenderedNote LibvgmTrackPlayer::renderNoteAt (int track, double hz,
 	// only path here that has a filter at all. The other cores generate their samples directly at
 	// whatever rate they are asked for, and they keep the file's rate.
 	const double wantedRate
-		= (chosen->model == chips::ChipModel::ym2151 || chosen->model == chips::ChipModel::ym2413)
+		= (chosen->model == chips::ChipModel::ym2151 || chosen->model == chips::ChipModel::ym2413
+		   || chosen->model == chips::ChipModel::ym3812)
 			  ? 0.0
 			  : shape.rate;
 
