@@ -167,11 +167,16 @@ constexpr int fmOutputBits (ChipModel model)
 	// quarter the YM2612 had, and the same class of mistake.
 	case ChipModel::ym2413:		return 12;
 
-	// **Ten for the OPL2, measured off AdLibEmu with both operators at total level zero.** Sixteen -
-	// the value this entry carried unmeasured since the table was written - left one voice at
-	// `peak 0.030`, a thirty-second of the chip's level: the worst of the family so far, and the same
-	// mistake the YM2612, the YM2610, the YM2151 and the YM2413 each paid for once.
-	case ChipModel::ym3812:		return 10;
+	// **Thirteen for the OPL2, and the first attempt at this number was wrong in the other
+	// direction.** It was measured from one patch - additive connection, no feedback - which is the
+	// *quietest* way to ask AdLibEmu for loudness (`peak 0.030` at a declared sixteen, `0.96` at ten).
+	// A sweep of both connections against feedback 0 and 7 puts the core's ceiling at four times that
+	// patch, so ten made every voice with feedback eight times too loud: an export clipped into
+	// distortion while the panel looked right, because the panel normalises and the file does not.
+	//
+	// **Thirteen maps the loudest thing the core can be told to do to full scale** - measured
+	// `0.999` - which is the convention the other entries here follow.
+	case ChipModel::ym3812:		return 13;
 
 	// **The VRC7 is still sixteen, and has not been measured.** Its notes are rendered by
 	// `Vrc7VoiceDriver`, not by this table's core, so it needs its own fixture.

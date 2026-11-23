@@ -863,7 +863,10 @@ void testOpllReachesFullScale (void)
 */
 void testOpl2ReachesFullScale (void)
 {
-	auto makePatch = []
+	// **A sweep, because one patch is not the chip's ceiling.** The first measurement used additive
+	// connection and no feedback - the quietest way to ask for loudness - and every real voice with
+	// feedback goes past it. The width has to cover the loudest thing the core can be told to do.
+	auto makePatch = [] (int feedback, int connection)
 	{
 		toybox::chips::VoicePatch patch;
 		patch.model = toybox::chips::ChipModel::ym3812;
@@ -876,29 +879,40 @@ void testOpl2ReachesFullScale (void)
 		patch.regs.push_back ({ 0x43, 0x00 });
 		patch.regs.push_back ({ 0x63, 0xF0 });
 		patch.regs.push_back ({ 0x83, 0x0F });
-		patch.regs.push_back ({ 0xC0, 0x01 });		// no feedback, additive
+		patch.regs.push_back ({ 0xC0, (uint16_t) ((feedback << 1) | connection) });
 		return patch;
 	};
 
 	const double wanted = toybox::playback::noteWave::frequencyOf (60);
 
 	const auto driver = toybox::backends::libvgm::makeFmVoiceDriver (true, 0.0);
-	const auto wave = toybox::playback::noteWave::render (*driver, makePatch (), wanted, 0.6, 0.05,
-														 false);
 
-	double peak = 0.0;
+	double loudest = 0.0;
 
-	for (const float sample : wave)
+	for (const int connection : { 0, 1 })
 	{
-		peak = std::max (peak, (double) std::abs (sample));
+		for (const int feedback : { 0, 7 })
+		{
+			const auto wave = toybox::playback::noteWave::render (*driver, makePatch (feedback, connection),
+																 wanted, 0.6, 0.05, false);
+
+			double peak = 0.0;
+
+			for (const float sample : wave)
+			{
+				peak = std::max (peak, (double) std::abs (sample));
+			}
+
+			std::printf ("    YM3812 con %d fb %d  peak %.3f\n", connection, feedback, peak);
+			loudest = std::max (loudest, peak);
+		}
 	}
 
-	std::printf ("    YM3812 chip  peak %.3f  (rate %.0f, %zu samples)\n", peak, driver->rate (),
-				 wave.size ());
+	std::printf ("    YM3812 chip  peakiest %.3f  (rate %.0f)\n", loudest, driver->rate ());
 
-	// **The scale the file will carry.** Measured `0.030` at a declared sixteen; ten is what makes one
-	// voice reach the chip's own full scale.
-	check (peak > 0.9, "the YM3812 reaches full scale at chip");
+	// **The scale the file will carry.** The declared width has to make the loudest voice the core
+	// can be asked for reach full scale, or every voice with feedback clips on export.
+	check (loudest > 0.9 && loudest < 1.35, "the YM3812 reaches full scale at chip");
 }
 
 int main()
