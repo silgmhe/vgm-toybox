@@ -1284,11 +1284,17 @@ chips::RenderedNote LibvgmTrackPlayer::renderNoteAt (int track, double hz,
 	// So those cores run at their own rate and the low-pass in `WaveExport` converts, which is the
 	// only path here that has a filter at all. The other cores generate their samples directly at
 	// whatever rate they are asked for, and they keep the file's rate.
-	const double wantedRate
-		= (chosen->model == chips::ChipModel::ym2151 || chosen->model == chips::ChipModel::ym2413
-		   || chosen->model == chips::ChipModel::ym3812)
-			  ? 0.0
-			  : shape.rate;
+	// **The OPL2 renders at the file's rate, the way the player runs it.** The native-rate trick -
+	// run at `clock/72` and let the low-pass in `WaveExport` convert - buys a filter the core does
+	// not have, and it was used for the YM2151 and the YM2413 for exactly that reason. For an OPL2
+	// it also makes the file **not match the app**: the player runs the core at the host rate, so its
+	// own interpolation is part of what a listener hears, and the exporter's filtered version came
+	// out slightly darker at the top. The row's own owner put it plainly - *what I hear in the player
+	// is what the export should sound like* - so this one runs where the player runs.
+	const double wantedRate = (chosen->model == chips::ChipModel::ym2151
+							   || chosen->model == chips::ChipModel::ym2413)
+								  ? 0.0
+								  : shape.rate;
 
 	// **Rebuilt whenever the requested rate changes, and `0` is a rate.** This compared `> 0.0`
 	// before, which read 0 as "do not care" - so a YM2151 export after any other model kept the

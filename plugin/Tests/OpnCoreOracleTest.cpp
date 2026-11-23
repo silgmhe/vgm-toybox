@@ -910,9 +910,15 @@ void testOpl2ReachesFullScale (void)
 
 	std::printf ("    YM3812 chip  peakiest %.3f  (rate %.0f)\n", loudest, driver->rate ());
 
-	// **The scale the file will carry.** The declared width has to make the loudest voice the core
-	// can be asked for reach full scale, or every voice with feedback clips on export.
-	check (loudest > 0.9 && loudest < 1.35, "the YM3812 reaches full scale at chip");
+	// **The scale the file will carry, and it is not full scale.** libvgm presents this device as
+	// int16 and its nine-voice mix fills that range, so one voice belongs at about a ninth of it:
+	// the loudest patch here must land near `0x0FFE / 32768 = 0.125`, not at 1.0.
+	//
+	// Measured against the app on `ym3812/02`: a track renders at `rms 0.069`, and this patch's rms
+	// is `~0.05` - the same level, which is the point. A thirteen-bit export was two to three times
+	// louder than the timeline, and it took a listener to hear it rather than a fixture.
+	check (loudest > 0.10 && loudest < 0.16,
+		   "a YM3812 note exports at the level one voice has in the mix");
 }
 
 int main()

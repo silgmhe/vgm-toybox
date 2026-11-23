@@ -167,16 +167,20 @@ constexpr int fmOutputBits (ChipModel model)
 	// quarter the YM2612 had, and the same class of mistake.
 	case ChipModel::ym2413:		return 12;
 
-	// **Thirteen for the OPL2, and the first attempt at this number was wrong in the other
-	// direction.** It was measured from one patch - additive connection, no feedback - which is the
-	// *quietest* way to ask AdLibEmu for loudness (`peak 0.030` at a declared sixteen, `0.96` at ten).
-	// A sweep of both connections against feedback 0 and 7 puts the core's ceiling at four times that
-	// patch, so ten made every voice with feedback eight times too loud: an export clipped into
-	// distortion while the panel looked right, because the panel normalises and the file does not.
+	// **Sixteen for the OPL2, because that is the scale the mixer uses, and the export is now
+	// required to sound like the mixer.**
 	//
-	// **Thirteen maps the loudest thing the core can be told to do to full scale** - measured
-	// `0.999` - which is the convention the other entries here follow.
-	case ChipModel::ym3812:		return 13;
+	// Two conventions live in this table and they disagree. "The chip's DAC full scale" (13 here:
+	// one voice at total level zero peaks at `0x0FFE`) makes a stem fill the range, and it is what
+	// the entries below were written for. But libvgm presents the same device as int16 (`1/32768`),
+	// and its **nine-voice mix** is what fills that range - so a single voice sits at about a ninth
+	// of it. Measured against the app on `ym3812/02`: a track renders at `rms 0.069`, while a
+	// thirteen-bit export of the same voice is `rms 0.15-0.20`, two to three times louder.
+	//
+	// Sixteen puts an exported note at `peak 0.125` for its loudest patch - `rms ~0.05` for a real
+	// one - which is where the timeline plays it. **An export is a stem, and a stem is at the level
+	// the mix gives it.**
+	case ChipModel::ym3812:		return 16;
 
 	// **The VRC7 is still sixteen, and has not been measured.** Its notes are rendered by
 	// `Vrc7VoiceDriver`, not by this table's core, so it needs its own fixture.
