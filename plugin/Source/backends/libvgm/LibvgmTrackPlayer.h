@@ -280,6 +280,12 @@ private:
 	/** Which half this capture may serve: false = melodic, true = rhythm. Toggled per capture. */
 	mutable bool panelSecondHalf = false;
 
+	/** **How much rendering this capture has already spent**, in milliseconds. A row that has no shape
+		yet is drawn regardless of the interval above, but only while this stays under the budget - which
+		makes a cheap chip fill the whole page in one frame and an expensive one fill in over several,
+		without either of them blocking. */
+	mutable double panelFrameRenderMs = 0.0;
+
 	/** What the display draws for each DPCM sample: the bytes the export collected, and the rate it
 		declares.
 

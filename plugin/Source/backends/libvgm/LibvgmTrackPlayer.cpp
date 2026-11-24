@@ -44,6 +44,11 @@ namespace
 		again on the next frame, so a full set fills in over about half a second and nothing blocks. */
 	constexpr double kPanelRenderIntervalMs = 33.0;
 
+	/** **How much of one frame may go into first shapes.** Measured: an OPL2 row costs 0.4 ms and an
+		OPLL one 26 ms, so eight milliseconds fills nine cheap rows in one frame and lets the expensive
+		page fill in two rows at a time instead of stalling. */
+	constexpr double kPanelFirstFillBudgetMs = 8.0;
+
 	// libvgm renders 24-bit samples internally and shifts them left by 8 bit when packing to
 	// 32-bit output, so full scale is +/- 2^31.
 	constexpr float kInt32ToFloat = 1.0f / 2147483648.0f;
@@ -888,6 +893,7 @@ bool LibvgmTrackPlayer::captureState (playback::ChipStateSnapshot& snapshot) con
 
 	// One capture serves half the rows: see the two clocks in the render branch.
 	panelSecondHalf = ! panelSecondHalf;
+	panelFrameRenderMs = 0.0;
 
 	if (replayer == nullptr)
 	{
@@ -1056,13 +1062,28 @@ bool LibvgmTrackPlayer::captureState (playback::ChipStateSnapshot& snapshot) con
 					// drums' frame was always inside the interval the melodic row had just spent, and
 					// the five rhythm rows stayed at `wave 0` for a whole run. Each half now has its
 					// own clock.
+					// **A row with no shape at all is drawn now, whatever the clock says.** The budget
+					// exists to stop a burst of re-renders, and it was also holding back the first
+					// fill: a page with fourteen rows took a third of a second to stop drawing
+					// single cycles, which reads as a regression even though the shapes arrive. The
+					// cost is bounded per frame instead - see `kPanelFirstFillBudgetMs` - so a cheap
+					// chip fills in one frame and an expensive one still fills in over several.
 					const double nowMs = juce::Time::getMillisecondCounterHiRes ();
 					const int half = (channel >= 9) ? 1 : 0;
-					const bool allowed = (half == 0 || panelSecondHalf)
-										  && nowMs - lastPanelRenderMs[half] >= kPanelRenderIntervalMs;
 
-					if (allowed)
+					// **A row that has no shape, or one for a different patch, is drawn now.** The
+					// clock is for re-renders of the same voice; a page whose rows are still empty -
+					// or still showing the silence captured before the song wrote its registers -
+					// filled in a third of a second late, which reads as "the panel starts wrong".
+					const bool urgent = (entry.wave == nullptr || entry.patch != state.voicePatch)
+										&& panelFrameRenderMs < kPanelFirstFillBudgetMs;
+					const bool refresh = entry.wave != nullptr && (half == 0 || panelSecondHalf)
+										 && nowMs - lastPanelRenderMs[half] >= kPanelRenderIntervalMs;
+
+					if (urgent || refresh)
 					{
+						const auto beforeMs = juce::Time::getMillisecondCounterHiRes ();
+
 						lastPanelRenderMs[half] = nowMs;
 						entry.patch = state.voicePatch;
 						entry.hz = hz;
@@ -1072,6 +1093,8 @@ bool LibvgmTrackPlayer::captureState (playback::ChipStateSnapshot& snapshot) con
 						entry.wave = std::make_shared<const std::vector<float>> (
 							playback::noteWave::render (*voiceDriver, *state.voicePatch, hz, sustain,
 														release, normalise));
+
+						panelFrameRenderMs += juce::Time::getMillisecondCounterHiRes () - beforeMs;
 					}
 				}
 
