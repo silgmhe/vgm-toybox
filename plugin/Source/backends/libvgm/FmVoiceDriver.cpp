@@ -602,6 +602,37 @@ void opllRhythmNoteOff ( Core& core, int port, int channel )
 constexpr Dialect kOpllRhythmDialect { 0x0F, &opllRhythmInit, &opllRhythmNoteOn,
 									   &opllRhythmNoteOff, &opllAfterPatch };
 
+/** **The OPL2 family's rhythm section: the same five trigger bits at `0xBD`.**
+
+	Bit 5 turns rhythm mode on, bits 4-0 are BD, SD, TOM, CYM and HH. Unlike the OPLL there is no ROM
+	preset behind them: each drum is the borrowed channels' own operator registers, which the patch
+	carries.
+*/
+void opl2RhythmInit ( Core& core, int, chips::ChipModel )
+{
+	core.write (0, 0xBD, 0x20);
+}
+
+void opl2RhythmNoteOn ( Core& core, int port, int channel, chips::ChipModel model, double )
+{
+	(void) port;
+	(void) channel;
+	(void) model;
+
+	core.write (0, 0xBD, (uint8_t) (0x20 | core.rhythmTrigger));
+}
+
+void opl2RhythmNoteOff ( Core& core, int port, int channel )
+{
+	(void) port;
+	(void) channel;
+
+	core.write (0, 0xBD, 0x20);
+}
+
+constexpr Dialect kOpl2RhythmDialect { 0x1F, &opl2RhythmInit, &opl2RhythmNoteOn,
+									   &opl2RhythmNoteOff, &opl2AfterPatch };
+
 // Channel 0, and the low nibble of `0x20` / `0x40` / `0x60` / `0x80` is zero for it, so any of the
 // nine registers can answer which channel this patch is for.
 constexpr Dialect kOpl2Dialect { 0x1F, &opl2Init, &opl2NoteOn, &opl2NoteOff, &opl2AfterPatch };
@@ -673,11 +704,13 @@ bool FmVoiceDriver::load (const chips::VoicePatch& patch)
 	loadedTrim = patch.oneShot ? patch.trim : 1.0f;
 	core->rhythmTrigger = patch.triggerMask;
 
-	dialect = (patch.oneShot && isOpll (patch.model)) ? &kOpllRhythmDialect
-			  : isOpm (patch.model)					  ? &kOpmDialect
-			  : isOpll (patch.model)				  ? &kOpllDialect
-			  : isOpl2 (patch.model)				  ? &kOpl2Dialect
-													  : &kOpnDialect;
+	dialect = (patch.oneShot && isOpll (patch.model))  ? &kOpllRhythmDialect
+			  : (patch.oneShot && isOpl2 (patch.model)) ? &kOpl2RhythmDialect
+			  : isOpm (patch.model)						? &kOpmDialect
+			  : isOpll (patch.model)					? &kOpllDialect
+			  : isOpl2 (patch.model)					? &kOpl2Dialect
+														: &kOpnDialect;
+
 	channelInPort = (int) (patch.regs.front ().first & dialect->channelMask);
 	port = (patch.regs.front ().first & 0x100) ? 1 : 0;
 

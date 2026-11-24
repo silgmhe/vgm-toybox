@@ -831,9 +831,12 @@ namespace
 			   "no OPLL selector and no OPL3 waveform: neither register exists on this chip");
 
 		// A rhythm row is a pulse, not a voice.
-		// The OPL2's rhythm voices are the borrowed channels' operator registers, which is a different
-		// capture and not done yet - so this one still says no.
-		check (! decoder.capturePatch (9, patch), "an OPL2 percussion row is not captured yet");
+		// **The OPL2's rhythm voices borrow channels 6-8.** Their patch is those operators, addressed
+		// through the bank's offset windows - so a drum is a one-shot whose registers are the
+		// operator set the chip reads for it, not a preset number.
+		check (decoder.capturePatch (9, patch), "an OPL2 percussion row captures a one-shot patch");
+		check (patch.oneShot && patch.triggerMask == 0x10, "...keyed by the bit for the bass drum");
+		check (patch.model == toybox::chips::ChipModel::ym3812, "...and named for the chip");
 	}
 
 	/** A three-channel OPN (YM2203) has no second port: register 0x28 with the port-select bit

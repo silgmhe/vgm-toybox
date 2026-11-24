@@ -886,6 +886,9 @@ bool LibvgmTrackPlayer::captureState (playback::ChipStateSnapshot& snapshot) con
 		return false;		// nothing to describe; the panel drawing nothing is the honest answer
 	}
 
+	// One capture serves half the rows: see the two clocks in the render branch.
+	panelSecondHalf = ! panelSecondHalf;
+
 	if (replayer == nullptr)
 	{
 		replayer = std::make_unique<VgmReplayer> (replayIr, replayDevices, replayRomCache);
@@ -1047,12 +1050,21 @@ bool LibvgmTrackPlayer::captureState (playback::ChipStateSnapshot& snapshot) con
 					// not allowed yet the entry is left untouched - key included - so the row stays
 					// stale and is picked up on a later frame rather than being marked fresh without
 					// a shape to show for it.
+					//
+					// **Two budgets, not one.** The loop runs channel 0 upwards, so a single one was
+					// taken by the melodic rows on every frame that could serve either half - the
+					// drums' frame was always inside the interval the melodic row had just spent, and
+					// the five rhythm rows stayed at `wave 0` for a whole run. Each half now has its
+					// own clock.
 					const double nowMs = juce::Time::getMillisecondCounterHiRes ();
+					const int half = (channel >= 9) ? 1 : 0;
+					const bool allowed = (half == 0 || panelSecondHalf)
+										  && nowMs - lastPanelRenderMs[half] >= kPanelRenderIntervalMs;
 
-					if (nowMs - lastPanelRenderMs >= kPanelRenderIntervalMs)
+					if (allowed)
 					{
-						lastPanelRenderMs = nowMs;
-					entry.patch = state.voicePatch;
+						lastPanelRenderMs[half] = nowMs;
+						entry.patch = state.voicePatch;
 						entry.hz = hz;
 						entry.sustain = sustain;
 						entry.release = release;

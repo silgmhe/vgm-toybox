@@ -273,7 +273,12 @@ private:
 		`kPanelRenderIntervalMs` is the budget: a song invalidates a dozen rows at once (every
 		register write bumps the patch version), and rendering them all in one frame put a quarter of
 		a second on the message thread - the stutter this exists to prevent. */
-	mutable double lastPanelRenderMs = 0.0;
+	/** **One clock per half of the rows**: melodic and rhythm. A single one was spent by the melodic
+		rows every frame that could have served either half, so the five rhythm rows never rendered. */
+	mutable double lastPanelRenderMs[2] = { 0.0, 0.0 };
+
+	/** Which half this capture may serve: false = melodic, true = rhythm. Toggled per capture. */
+	mutable bool panelSecondHalf = false;
 
 	/** What the display draws for each DPCM sample: the bytes the export collected, and the rate it
 		declares.

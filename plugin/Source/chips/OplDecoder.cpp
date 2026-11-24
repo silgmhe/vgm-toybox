@@ -412,6 +412,14 @@ void OplDecoder::write (const RegisterWrite& write)
 	const int port = write.port != 0 ? 1 : 0;
 	const uint32_t time = write.sampleTime;
 
+	// **Any write while the OPL2's rhythm is on can change a drum.** The five rows cache their patch
+	// against this counter; without the bump they kept whatever was there when the row was first
+	// drawn, which on this path was a patch assembled from untouched registers.
+	if (impl->rhythmEnabled && impl->variant != Variant::opll)
+	{
+		++impl->rhythmVersion;
+	}
+
 	if (impl->adpcm && port == 0 && reg >= 0x07 && reg <= 0x12)
 	{
 		// **Delta-T's whole register block, which is a sample player**: `0x08` picks the address
@@ -699,9 +707,19 @@ void OplDecoder::write (const RegisterWrite& write)
 	if (reg >= 0xB0 && reg < 0xB9)
 	{
 		const int channel = (impl->twoBanks ? port * 9 : 0) + (reg - 0xB0);
+
+		// **The borrowed channels still have a pitch, and the drums need it.** `0xB6` and `0xB8` carry
+		// the bass drum's and the tom's block and f-number. Kept whether or not rhythm mode is on yet:
+		// a driver may write the pitch before enabling, and discarding it left both at block 0 - a
+		// DC step instead of a hit, which is the failure measurement found on this path.
 		if (impl->rhythmEnabled && port == 0 && channel >= 6 && channel < 9)
 		{
-			return;		// borrowed by the rhythm instruments
+			Impl::Channel& borrowed = impl->channels[channel];
+			borrowed.fnum = (borrowed.fnum & kFnumLowMask)
+							| ((int) (write.value & kFnumHighTwoBits) << kFnumHighShift);
+			borrowed.block = (int) ((write.value >> 2) & 0x07);
+			borrowed.keyed = (write.value & 0x20) != 0;		// melodic 6-8 still need this
+			return;
 		}
 
 		Impl::Channel& voice = impl->channels[channel];
@@ -826,6 +844,15 @@ ChannelState OplDecoder::channelState (int channel) const
 
 			state.voicePatch = cache.patch;
 		}
+		else
+		{
+			VoicePatch captured;
+
+			if (capturePatch (channel, captured))
+			{
+				state.voicePatch = std::make_shared<const VoicePatch> (std::move (captured));
+			}
+		}
 
 		return state;
 	}
@@ -930,6 +957,82 @@ bool OplDecoder::capturePatch (int channel, VoicePatch& out) const
 								  (uint16_t) (((voice.block & 0x07) << 1) | ((voice.fnum >> 8) & 0x01)) });
 			out.regs.push_back ({ (uint16_t) (0x36 + i),
 								  (uint16_t) ((voice.instrument << 4) | voice.volume) });
+		}
+
+		return true;
+	}
+
+	// **The OPL2 family's drums borrow channels 6-8.** Their parameters are those channels' operator
+	// registers, addressed through the bank's offset windows - `regbase2modop`
+	// (`adlibemu_opl_inc.c:89`) is the table, and the drum each window feeds is read off
+	// `operator_advance_drums` (`:1439`): BD is ch6's two operators, SD ch6's carrier ... see `kDrums`.
+	if (impl->variant != Variant::opll && impl->variant != Variant::opl3
+		&& channel >= impl->rhythmBase && channel < impl->rhythmBase + 5)
+	{
+		// Each drum's slots, as `regbase2modop` numbers them where the chip reads them:
+		// `op[6]`/`op[15]` are ch6's modulator and carrier (offset 16 and 19 -> `0x30`/`0x33`),
+		// `op[7]`/`op[16]` ch7's (`0x31`/`0x34`), `op[8]`/`op[17]` ch8's (`0x32`/`0x35`).
+		struct DrumSlots
+		{
+			uint8_t slots[2];
+			int count;
+		};
+
+		static constexpr DrumSlots kDrums[5] = {
+			{ { 6, 15 }, 2 },		// BD: ch6 modulator and carrier
+			{ { 16, 7 }, 2 },		// SD: ch7 carrier, and the modulator that shares it
+			{ { 8, 17 }, 2 },		// TOM: ch8 modulator and carrier
+			{ { 17, 0 }, 1 },		// CYM: ch8 carrier
+			{ { 7, 0 }, 1 },		// HH: ch7 modulator
+		};
+
+		const int drum = channel - impl->rhythmBase;
+		const Impl::Channel& owner = impl->channels[6 + (drum == 0 ? 0 : (drum == 1 ? 1 : 2))];
+
+		out = VoicePatch {};
+		out.model = ChipModel::ym3812;
+		out.oneShot = true;
+		out.triggerMask = (uint8_t) (0x10u >> drum);
+		out.lengthSeconds = 0.30;
+
+		// **Measured against a melodic note**, the same way the OPLL's `0.5` was: one hit at trim 1.0
+		// peaks at `0.25` on a sixteen-bit file, so a hit and a note sit at the same level.
+		out.trim = 1.0f;
+
+		// **The core's operator index is not the register offset.** `regbase2modop`
+		// (`adlibemu_opl_inc.c:89`) is the table: ops 6, 7, 8 are the modulators of channels 6-8 and
+		// are addressed at offsets 16, 17, 18; ops 15, 16, 17 are their carriers, at 19, 20, 21.
+		static constexpr int kOffsetOfOp[18] = { -1, -1, -1, -1, -1, -1, 16, 17, 18,
+												 -1, -1, -1, -1, -1, -1, 19, 20, 21 };
+		static constexpr int kOperatorOfOp[18] = { 0, 0, 0, 0, 0, 0, 0, 0, 0,
+												  0, 0, 0, 0, 0, 0, 1, 1, 1 };
+
+		for (int i = 0; i < kDrums[drum].count; ++i)
+		{
+			const int op = kDrums[drum].slots[i];
+
+			if (op < 0 || op > 17 || kOffsetOfOp[op] < 0)
+			{
+				continue;
+			}
+
+			const int offset = kOffsetOfOp[op];
+			const Impl::Channel& voice = impl->channels[6 + ((offset - 16) % 3)];
+
+			out.regs.push_back ({ (uint16_t) (0x20 + offset), voice.opRegs[kOperatorOfOp[op]][0] });
+			out.regs.push_back ({ (uint16_t) (0x40 + offset), voice.opRegs[kOperatorOfOp[op]][1] });
+			out.regs.push_back ({ (uint16_t) (0x60 + offset), voice.opRegs[kOperatorOfOp[op]][2] });
+			out.regs.push_back ({ (uint16_t) (0x80 + offset), voice.opRegs[kOperatorOfOp[op]][3] });
+		}
+
+		// The two drums with a pitch, from the writes that used to be discarded.
+		if (drum == 0 || drum == 2)
+		{
+			const int ch = (drum == 0) ? 6 : 8;
+
+			out.regs.push_back ({ (uint16_t) (0xA0 + ch), (uint16_t) (owner.fnum & 0xFF) });
+			out.regs.push_back ({ (uint16_t) (0xB0 + ch),
+								  (uint16_t) (((owner.block & 0x07) << 2) | ((owner.fnum >> 8) & 0x03)) });
 		}
 
 		return true;
