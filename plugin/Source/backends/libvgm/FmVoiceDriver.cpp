@@ -534,9 +534,16 @@ void opl2NoteOn ( Core& core, int port, int channel, chips::ChipModel model, dou
 
 	const double clock = (double) clockFor (model);
 
-	auto fnumFor = [hz, clock] (int block)
+	// **The divisor is the chip's own step, and the OPL3's is four times the OPL2's.** The phase
+	// accumulator advances `(f_num << block) >> 1` per internal step and an OPL3 takes four of
+	// those per output sample, so the same f-number produces a quarter of the frequency. Measured
+	// before this: a requested 440 Hz came out at **110.0** on the YMF262 against 440.0 on the
+	// YM3812, and an exported note played two octaves under the timeline.
+	const double divisor = isOpl3 (model) ? 288.0 : 72.0;
+
+	auto fnumFor = [hz, clock, divisor] (int block)
 	{
-		return hz * 72.0 * std::exp2 (20.0 - (double) block) / clock;
+		return hz * divisor * std::exp2 (20.0 - (double) block) / clock;
 	};
 
 	int block = 4;

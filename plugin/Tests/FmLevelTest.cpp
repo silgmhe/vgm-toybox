@@ -240,6 +240,56 @@ void testOpl2ReachesFullScale (void)
 		   "a YM3812 note exports at the level one voice has in the mix");
 }
 
+/** **A requested pitch comes out at that pitch, on every chip that computes one.**
+
+	The OPL3 divides the phase step by 288 where the OPL2 uses 72 - four internal steps per output
+	sample - so a formula written for one is two octaves out on the other. Measured before this
+	existed: 440.0 Hz requested, **110.0** heard, and an exported note played under the timeline while
+	the panel looked right, because a panel draws a shape rather than a frequency.
+*/
+void testRequestedPitchIsWhatComesOut (void)
+{
+	for (const auto model : { toybox::chips::ChipModel::ym3812, toybox::chips::ChipModel::ymf262 })
+	{
+		toybox::chips::VoicePatch patch;
+		patch.model = model;
+
+		patch.regs.push_back ({ 0x20, 0x21 });		// modulator: sustained, mult 1
+		patch.regs.push_back ({ 0x40, 0x3F });		// modulator: silent
+		patch.regs.push_back ({ 0x60, 0xF0 });
+		patch.regs.push_back ({ 0x80, 0x0F });
+		patch.regs.push_back ({ 0x23, 0x21 });		// carrier: the same
+		patch.regs.push_back ({ 0x43, 0x00 });
+		patch.regs.push_back ({ 0x63, 0xF0 });
+		patch.regs.push_back ({ 0x83, 0x0F });
+		patch.regs.push_back ({ 0xC0, 0x01 });		// no feedback, additive
+
+		const auto driver = toybox::backends::libvgm::makeFmVoiceDriver (true, 48000.0);
+		const auto wave = toybox::playback::noteWave::render (*driver, patch, 440.0, 0.5, 0.0, false);
+
+		int crossings = 0;
+		const std::size_t from = wave.size () / 4;
+		const std::size_t to = wave.size () - wave.size () / 4;
+
+		for (std::size_t i = from + 1; i < to; ++i)
+		{
+			if (wave[i - 1] <= 0.0f && wave[i] > 0.0f)
+			{
+				++crossings;
+			}
+		}
+
+		const double seconds = (double) (to - from) / 48000.0;
+
+		const double measured = (double) crossings / seconds;
+		const std::string message = std::string ("a requested 440 Hz comes out at 440 Hz on model ")
+									+ std::to_string ((int) model);
+
+		std::printf ("    model %d  requested 440.0  measured %.1f\n", (int) model, measured);
+		check (measured > 431.0 && measured < 449.0, message.c_str ());
+	}
+}
+
 int main()
 {
 	std::printf ("FM level fixtures: what each chip reaches, measured off libvgm's core\n");
@@ -251,6 +301,7 @@ int main()
 	testOpmReachesFullScale ();
 	testOpllReachesFullScale ();
 	testOpl2ReachesFullScale ();
+	testRequestedPitchIsWhatComesOut ();
 
 	std::printf ("\n  %d check(s) failed\n", failures);
 	return failures == 0 ? 0 : 1;
