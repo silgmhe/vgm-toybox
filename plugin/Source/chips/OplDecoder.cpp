@@ -293,6 +293,12 @@ struct OplDecoder::Impl
 		playback and exports flat. */
 	uint8_t lfoDepth = 0;
 	uint8_t noteSelect = 0;
+
+	/** **The OPL3's 4-operator map**, `0x104`: one bit per pair, pairs being (0,3), (1,4), (2,5) and,
+		in the second bank, (9,12), (10,13), (11,14). `newm` is `0x105` bit 0 - it enables 4-op mode and,
+		in the core, is also what makes the second bank reachable at all (`nukedopl3.c:1450`). */
+	uint8_t fourOpPairs = 0;
+	bool newm = false;
 	uint32_t now = 0;
 	OplNoteTable table;
 
@@ -766,6 +772,27 @@ void OplDecoder::write (const RegisterWrite& write)
 	if (reg == 0x08 && port == 0)
 	{
 		impl->noteSelect = (uint8_t) (write.value & 0x40);
+		return;
+	}
+
+	// **`0x104` and `0x105` live above the first bank**, so they arrive on port 1 as `0x04` / `0x05`.
+	// They change which channels are one voice, so every channel's cached patch goes stale.
+	if (port == 1 && (reg == 0x04 || reg == 0x05))
+	{
+		if (reg == 0x04)
+		{
+			impl->fourOpPairs = write.value;
+		}
+		else
+		{
+			impl->newm = (write.value & 0x01) != 0;
+		}
+
+		for (auto& channel : impl->channels)
+		{
+			++channel.patchVersion;
+		}
+
 		return;
 	}
 

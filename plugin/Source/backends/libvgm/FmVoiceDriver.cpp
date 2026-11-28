@@ -742,7 +742,13 @@ bool FmVoiceDriver::load (const chips::VoicePatch& patch)
 
 	for (const auto& reg : patch.regs)
 	{
-		core->write (port, (uint8_t) (reg.first & 0xFF), (uint8_t) reg.second);
+		// **The port is per register, not per patch.** A patch is mostly one bank, but `0x104` and
+		// `0x105` live above it - and writing those to port 0 sends bank-0 `0x04`/`0x05`, which the
+		// chip drops. Measured: a 4-op patch rendered **identically** to the same operators taken two
+		// at a time, because the pairing never reached the core.
+		const int registerPort = (reg.first & 0x100) ? 1 : port;
+
+		core->write (registerPort, (uint8_t) (reg.first & 0xFF), (uint8_t) reg.second);
 	}
 
 	// The OPM's pan has to come after the patch, which carries `0x20|ch` with the song's value.
