@@ -45,6 +45,7 @@ constexpr DEV_ID deviceIdFor (chips::ChipModel model)
 	case chips::ChipModel::ym2151:		return DEVID_YM2151;
 	case chips::ChipModel::ym2413:		return DEVID_YM2413;
 	case chips::ChipModel::ym3812:		return DEVID_YM3812;
+	case chips::ChipModel::ymf262:		return DEVID_YMF262;
 
 	case chips::ChipModel::ym2612:
 	case chips::ChipModel::vrc7:
@@ -129,6 +130,14 @@ constexpr bool isOpll (chips::ChipModel model)
 constexpr bool isOpl2 (chips::ChipModel model)
 {
 	return model == chips::ChipModel::ym3812;
+}
+
+/** **The OPL3: the OPL2's nine-register voice, twice, plus four waveforms.** It shares the OPL2's
+	key-on and its register banks, so the dialect is shared too; only the patch and the channel count
+	differ. */
+constexpr bool isOpl3 (chips::ChipModel model)
+{
+	return model == chips::ChipModel::ymf262;
 }
 
 constexpr bool hasSixChannelMode (chips::ChipModel model)
@@ -708,7 +717,11 @@ bool FmVoiceDriver::load (const chips::VoicePatch& patch)
 			  : (patch.oneShot && isOpl2 (patch.model)) ? &kOpl2RhythmDialect
 			  : isOpm (patch.model)						? &kOpmDialect
 			  : isOpll (patch.model)					? &kOpllDialect
-			  : isOpl2 (patch.model)					? &kOpl2Dialect
+			  // **The OPL3 keys a channel exactly the way the OPL2 does** - `0xA0` then `0xB0`, key
+			  // in bit 5 - and a patch is always rendered on channel 0 of port 0, so the OPL2 dialect
+			  // is the right one. What differs is inside the patch (the `0xE0` waveforms) and in which
+			  // registers the decoder hands over, not in how a note starts.
+			  : (isOpl2 (patch.model) || isOpl3 (patch.model)) ? &kOpl2Dialect
 														: &kOpnDialect;
 
 	channelInPort = (int) (patch.regs.front ().first & dialect->channelMask);

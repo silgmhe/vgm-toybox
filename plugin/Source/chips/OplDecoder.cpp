@@ -133,6 +133,12 @@ struct OplDecoder::Impl
 		*/
 		uint8_t opRegs[2][4] = {};
 
+		/** **The waveform of each operator** - `0xE0`, two bits. An OPL3 has four of them and the
+			carrier's choice changes the timbre as much as its level does, so this is per operator:
+			keeping only the modulator's was half a voice. An OPL2 has no such register and leaves
+			these zero, which is the sine it does have. */
+		uint8_t opWaveform[2] = {};
+
 		uint8_t feedbackConnection = 0;		// 0xC0: feedback bits 1-3, connection bit 0
 
 		/** Bumped by every write that changes the patch, so `NoteCache` can tell when it is stale. */
@@ -194,7 +200,13 @@ struct OplDecoder::Impl
 	/** Which model a captured patch names: the OPLL is the only one this decoder renders today. */
 	ChipModel patchModel (void) const
 	{
-		return variant == Variant::opll ? ChipModel::ym2413 : ChipModel::ym3812;
+		switch (variant)
+		{
+		case Variant::opll:		return ChipModel::ym2413;
+		case Variant::opl3:		return ChipModel::ymf262;
+		case Variant::opl2:
+		default:				return ChipModel::ym3812;
+		}
 	}
 
 	Channel channels[18];
@@ -686,12 +698,25 @@ void OplDecoder::write (const RegisterWrite& write)
 
 	// 0xE0-0xF5: the operator's waveform select, same eighteen slots. OPL2 has no such register -
 	// the write is harmless and never read - while OPL3 uses it for four choices.
+	//
+	// **Both operators, not just the modulator.** `modulatorChannel` returns -1 for a carrier, so the
+	// first version of this stored half a voice: the carrier's waveform is what decides whether a
+	// patch sounds like a sine, a half sine, a rectified sine or a pulse.
 	if (reg >= 0xE0 && reg < 0xF6)
 	{
-		const int channel = modulatorChannel (reg);
-		if (channel >= 0)
+		int channel = -1;
+		int op = 0;
+
+		if (operatorSlot ((uint8_t) (0xE0 + (write.reg & 0x1F)), channel, op))
 		{
-			impl->channels[channel].waveform = (int) (write.value & 0x03);
+			Impl::Channel& voice = impl->channels[channel];
+			voice.opWaveform[op] = (uint8_t) (write.value & 0x03);
+			++voice.patchVersion;
+
+			if (op == 0)
+			{
+				voice.waveform = (int) (voice.opWaveform[0]);
+			}
 		}
 		return;
 	}
@@ -1039,7 +1064,7 @@ bool OplDecoder::capturePatch (int channel, VoicePatch& out) const
 	}
 
 	// The OPL3 needs a second case - its second bank and its `0xE0` waveform registers.
-	if (channel < 0 || channel >= melodic || impl->variant == Variant::opl3)
+	if (channel < 0 || channel >= melodic)
 	{
 		return false;
 	}
@@ -1069,6 +1094,15 @@ bool OplDecoder::capturePatch (int channel, VoicePatch& out) const
 				out.regs.push_back ({ (uint16_t) (kBankBase[bank] + kSlotOf[op]),
 									  voice.opRegs[op][bank] });
 			}
+		}
+
+		// **The OPL3's four waveforms are two more registers**, and they belong in the patch: a voice
+		// whose carrier selects the pulse waveform is a different sound, not a different level. An
+		// OPL2 has no such register and never reaches here with `0xE0` written.
+		if (impl->variant == Variant::opl3)
+		{
+			out.regs.push_back ({ (uint16_t) 0xE0, voice.opWaveform[0] });
+			out.regs.push_back ({ (uint16_t) 0xE3, voice.opWaveform[1] });
 		}
 
 		out.regs.push_back ({ (uint16_t) 0xC0, voice.feedbackConnection });

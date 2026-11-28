@@ -24,6 +24,7 @@ enum class ChipModel : uint8_t
 	ym2151,		// OPM, eight four-operator channels with a different envelope layout
 	ym2413,		// OPLL, nine two-operator channels whose voice is a *preset number*, not registers
 	ym3812,		// OPL2, two operators, eight registers per voice
+	ymf262,		// OPL3, the same voice twice over: two banks of nine, plus `0xE0` waveforms
 	vrc7		// the NES expansion chip, an OPL2 relative
 };
 
@@ -182,6 +183,14 @@ constexpr int fmOutputBits (ChipModel model)
 	// the mix gives it.**
 	case ChipModel::ym3812:		return 16;
 
+	// **Sixteen for the OPL3 as well, and for the same reason rather than by copying.** Measured on
+	// `nukedopl3` with both operators at total level zero: the loudest of the four feedback/connection
+	// corners peaks at `0.1182` on this scale, against the YM3812's `0.125` - the two cores present a
+	// single voice at the same place in int16, so a stem pasted back into the mix lands where the
+	// other one does. Thirteen would be this chip's own DAC full scale and, exactly as on the OPL2,
+	// eight times too loud for a stem.
+	case ChipModel::ymf262:		return 16;
+
 	// **The VRC7 is still sixteen, and has not been measured.** Its notes are rendered by
 	// `Vrc7VoiceDriver`, not by this table's core, so it needs its own fixture.
 	case ChipModel::vrc7:		return 16;
@@ -218,6 +227,11 @@ constexpr double noteRateFor (ChipModel model)
 	// rate when they are asked for it - `emu2413.c` starts at `clock / 72` (`:1563`).
 	case ChipModel::ym2413:
 	case ChipModel::ym3812:		return 3579545.0 / 72.0;		// 49 716 Hz
+
+	// **The OPL3 runs at `clock / 288`**: the same 3.58 MHz crystal but four times the internal
+	// resolution per output sample, which is why its rhythm and waveform logic could be added without
+	// raising the output rate. A 14.3 MHz YMF262 therefore lands on the same 49 716 Hz as the OPL2.
+	case ChipModel::ymf262:		return 14318180.0 / 288.0;
 
 	case ChipModel::vrc7:
 	case ChipModel::unknown:	break;

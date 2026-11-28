@@ -721,7 +721,9 @@ SongDescription describeSong (LibvgmTrackPlayer* probe)
 					  && deviceKind != midi::ChipKind::ym2413
 					  && deviceKind != midi::ChipKind::ym3812
 					  && deviceKind != midi::ChipKind::ym3526
-					  && deviceKind != midi::ChipKind::y8950;
+					  && deviceKind != midi::ChipKind::y8950
+					  && deviceKind != midi::ChipKind::ymf262
+					  && deviceKind != midi::ChipKind::ymf278b;
 
 				const int plannedChannels = plan.melodicCount + plan.oneShotCount + plan.tailMelodicCount;
 				const int beyondPlan = channel - plannedChannels;

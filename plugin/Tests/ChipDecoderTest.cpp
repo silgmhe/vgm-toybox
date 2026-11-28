@@ -8239,6 +8239,66 @@ void testOpmPatchUsesTheChipsOwnStride (void)
 	check (foundLevel, "op 3's total level is at 0x78 - the stride is eight, not four");
 }
 
+	/** **An OPL3 patch is the OPL2's nine registers plus two waveforms.** The `0xE0` bytes are what
+		the second half of the timbre lives in, and they are stored per operator now - an earlier
+		version kept only the modulator's and silently dropped the carrier's. */
+	void testOpl3PatchCarriesBothWaveforms (void)
+	{
+		using toybox::chips::ChipConfig;
+		using toybox::chips::OplDecoder;
+		using toybox::chips::RegisterWrite;
+		using toybox::chips::VoicePatch;
+
+		OplDecoder decoder;
+		// Bits 1-2 carry `variant + 1`; zero means "the constructor already said".
+		decoder.reset (ChipConfig { 14318180u, 44100.0,
+									  ((uint32_t) OplDecoder::Variant::opl3 + 1u) << 1, 0.0 });
+
+		const auto write = [&decoder] (uint8_t reg, uint8_t value)
+		{
+			RegisterWrite w;
+			w.sampleTime = 0;
+			w.port = 0;
+			w.reg = reg;
+			w.value = value;
+			decoder.write (w);
+		};
+
+		write (0x20, 0xA1);
+		write (0x23, 0xB2);
+		write (0x40, 0x11);
+		write (0x43, 0x22);
+		write (0x60, 0x33);
+		write (0x63, 0x44);
+		write (0x80, 0x55);
+		write (0x83, 0x66);
+		write (0xE0, 0x02);
+		write (0xE3, 0x03);
+		write (0xC0, 0x0F);
+
+		VoicePatch patch;
+		check (decoder.capturePatch (0, patch), "an OPL3 voice is captured");
+		check (patch.model == toybox::chips::ChipModel::ymf262, "and names the chip, not the OPL2");
+		check (patch.regs.size () == 11, "eleven registers: eight operator bytes, two waveforms, one connection");
+
+		const auto at = [&patch] (uint16_t address) -> int
+		{
+			for (const auto& reg : patch.regs)
+			{
+				if (reg.first == address)
+				{
+					return (int) reg.second;
+				}
+			}
+
+			return -1;
+		};
+
+		check (at (0xE0) == 0x02 && at (0xE3) == 0x03,
+			   "both waveforms, which an earlier version dropped for the carrier");
+		check (at (0x60) == 0x33 && at (0x83) == 0x66, "and the envelope the OPL2 already had");
+	}
+
 int main (void){
 	std::printf ("chip decoder test\n");
 
@@ -8279,6 +8339,7 @@ int main (void){
 	testOpllVariantReachesTheDecoder();
 	testOpllPatchIsTheInstrumentByte();
 	testOpl2PatchIsBothOperators();
+	testOpl3PatchCarriesBothWaveforms();
 	testOpnThreeChannels();
 	testOpnChannelFamilies();
 	testOpnAdpcmBShape();
