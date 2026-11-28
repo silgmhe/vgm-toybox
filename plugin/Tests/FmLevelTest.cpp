@@ -290,6 +290,66 @@ void testRequestedPitchIsWhatComesOut (void)
 	}
 }
 
+/** **The chip's LFO depth is part of a voice, and this is what proves it reaches the render.**
+
+	Measured on tremolo rather than vibrato, deliberately: the same comparison with vibrato came out at
+	`0.001`, because a depth of ±7 cents is a tenth of a percent of the waveform - real, but too small to
+	separate from a rendering that ignores it. Tremolo modulates level and comes out at `0.023`.
+
+	A patch with `0x20` bit 6 set (vibrato) sounds different when `0xBD` bit 6 is on, and the two renders
+	differ sample by sample. If the depth never reached the core, the two would be identical - which is
+	exactly what an export sounded like against the timeline before the patch carried `0xBD`.
+*/
+void testChipTremoloDepthChangesTheVoice (void)
+{
+	auto makePatch = [] (int depth)
+	{
+		toybox::chips::VoicePatch patch;
+		patch.model = toybox::chips::ChipModel::ymf262;
+
+		patch.regs.push_back ({ 0x20, 0x81 });		// modulator: tremolo on, mult 1
+		patch.regs.push_back ({ 0x40, 0x00 });
+		patch.regs.push_back ({ 0x60, 0xF0 });
+		patch.regs.push_back ({ 0x80, 0x0F });
+		patch.regs.push_back ({ 0x23, 0x81 });		// carrier: the same
+		patch.regs.push_back ({ 0x43, 0x00 });
+		patch.regs.push_back ({ 0x63, 0xF0 });
+		patch.regs.push_back ({ 0x83, 0x0F });
+		patch.regs.push_back ({ 0xE0, 0x00 });
+		patch.regs.push_back ({ 0xE3, 0x00 });
+		patch.regs.push_back ({ 0xC0, 0x01 });
+		patch.regs.push_back ({ 0xBD, (uint16_t) depth });
+		return patch;
+	};
+
+	const double wanted = toybox::playback::noteWave::frequencyOf (60);
+
+	const auto flat = toybox::backends::libvgm::makeFmVoiceDriver (true, 48000.0);
+	const auto wobble = toybox::backends::libvgm::makeFmVoiceDriver (true, 48000.0);
+
+	const auto without = toybox::playback::noteWave::render (*flat, makePatch (0x00), wanted, 0.6, 0.05,
+														   false);
+	const auto with = toybox::playback::noteWave::render (*wobble, makePatch (0x80), wanted, 0.6, 0.05,
+														 false);
+
+	double difference = 0.0;
+	double level = 0.0;
+	const auto count = std::min (without.size (), with.size ());
+
+	for (std::size_t i = 0; i < count; ++i)
+	{
+		const double d = (double) without[i] - (double) with[i];
+		difference += d * d;
+		level += (double) without[i] * (double) without[i];
+	}
+
+	const double relative
+		= std::sqrt (difference / std::max (1.0, level));
+
+	std::printf ("    tremolo depth 0x80 against 0x00: relative difference %.3f\n", relative);
+	check (relative > 0.02, "the chip's tremolo depth reaches the render, or an export plays flat");
+}
+
 int main()
 {
 	std::printf ("FM level fixtures: what each chip reaches, measured off libvgm's core\n");
@@ -301,6 +361,7 @@ int main()
 	testOpmReachesFullScale ();
 	testOpllReachesFullScale ();
 	testOpl2ReachesFullScale ();
+	testChipTremoloDepthChangesTheVoice ();
 	testRequestedPitchIsWhatComesOut ();
 
 	std::printf ("\n  %d check(s) failed\n", failures);

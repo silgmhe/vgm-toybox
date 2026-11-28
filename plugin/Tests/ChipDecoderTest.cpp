@@ -8276,10 +8276,15 @@ void testOpmPatchUsesTheChipsOwnStride (void)
 		write (0xE3, 0x03);
 		write (0xC0, 0x0F);
 
+		// The chip's own state: note-select, and both LFO depths with rhythm off.
+		write (0x08, 0x40);
+		write (0xBD, 0xC0);
+
 		VoicePatch patch;
 		check (decoder.capturePatch (0, patch), "an OPL3 voice is captured");
 		check (patch.model == toybox::chips::ChipModel::ymf262, "and names the chip, not the OPL2");
-		check (patch.regs.size () == 11, "eleven registers: eight operator bytes, two waveforms, one connection");
+		check (patch.regs.size () == 13,
+			   "thirteen registers: eight operator bytes, two waveforms, one connection, and the chip's two");
 
 		const auto at = [&patch] (uint16_t address) -> int
 		{
@@ -8297,6 +8302,12 @@ void testOpmPatchUsesTheChipsOwnStride (void)
 		check (at (0xE0) == 0x02 && at (0xE3) == 0x03,
 			   "both waveforms, which an earlier version dropped for the carrier");
 		check (at (0x60) == 0x33 && at (0x83) == 0x66, "and the envelope the OPL2 already had");
+
+		// **A voice is partly what the chip was told globally.** Without these two an exported note
+		// starts on a fresh core with both LFO depths at zero and the note-select bit clear, so a
+		// voice that uses AM or VIB plays modulated during playback and flat in the file.
+		check (at (0x08) == 0x40, "the note-select bit, or the key scaling differs from playback");
+		check (at (0xBD) == 0xC0, "and both LFO depths, with rhythm left off");
 	}
 
 int main (void){

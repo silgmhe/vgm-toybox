@@ -286,6 +286,13 @@ struct OplDecoder::Impl
 	}
 	uint8_t rhythmBits = 0;
 	bool rhythmEnabled = false;
+
+	/** **Chip state that every voice inherits**, not a property of one channel. `0xBD` bits 7 and 6
+		are the tremolo and vibrato depths and `0x08` bit 6 is the note-select bit; a patch rendered on
+		a fresh core starts with all of them clear, so a voice using AM or VIB plays modulated during
+		playback and exports flat. */
+	uint8_t lfoDepth = 0;
+	uint8_t noteSelect = 0;
 	uint32_t now = 0;
 	OplNoteTable table;
 
@@ -754,8 +761,21 @@ void OplDecoder::write (const RegisterWrite& write)
 		return;
 	}
 
+	// **`0x08` bit 6 is the note-select bit**, and it changes both the key scaling and the envelope
+	// timing - another piece of chip state a voice needs and a fresh core does not have.
+	if (reg == 0x08 && port == 0)
+	{
+		impl->noteSelect = (uint8_t) (write.value & 0x40);
+		return;
+	}
+
 	if (reg == 0xBD && port == 0)
 	{
+		// **The depth bits are chip state, not a drum parameter.** `0xBD` carries the tremolo and
+		// vibrato depths in bits 7 and 6, and a voice whose `0x20` has AM or VIB set sounds modulated
+		// during playback while an exported note - rendered on a fresh core - is flat. Kept here so
+		// `capturePatch` can take them with the voice.
+		impl->lfoDepth = (uint8_t) (write.value & 0xC0);
 		impl->rhythmWrite (time, write.value, (write.value & 0x20) != 0);
 	}
 }
@@ -1101,6 +1121,17 @@ bool OplDecoder::capturePatch (int channel, VoicePatch& out) const
 		// OPL2 has no such register and never reaches here with `0xE0` written.
 		if (impl->variant == Variant::opl3)
 		{
+			// **The chip's own state first**, because a voice is partly what the chip was told
+			// globally: the LFO depths in `0xBD` and the note-select bit in `0x08`. Without them a
+			// voice with AM or VIB set plays modulated and exports flat - measured as "a few voices
+			// sound wrong" rather than all of them, which is exactly the shape of the report.
+			//
+			// Rhythm's enable bit is carried so writing `0xBD` here cannot switch the section off, but
+			// no trigger bit is set: this is the melodic patch.
+			out.regs.push_back ({ (uint16_t) 0x08, impl->noteSelect });
+			out.regs.push_back ({ (uint16_t) 0xBD,
+								  (uint16_t) (impl->lfoDepth | (impl->rhythmEnabled ? 0x20u : 0x00u)) });
+
 			out.regs.push_back ({ (uint16_t) 0xE0, voice.opWaveform[0] });
 			out.regs.push_back ({ (uint16_t) 0xE3, voice.opWaveform[1] });
 		}
